@@ -311,13 +311,15 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
   ): ConstructionIrregularQuadGrid | undefined {
     let raw: string;
     try {
-      const { relaxStrength, ...rest } = request;
-      raw = this.#require().irregular_quad_grid_json(
-        // `relax` only when there is something to say: the engine fills in
-        // every knob the caller left out, so an absent block is its standard
-        // rather than a set of values this side would have to keep in step.
-        JSON.stringify(relaxStrength === undefined ? rest : { ...rest, relax: { strength: relaxStrength } }),
-      );
+      const { relaxStrength, maxAdditionalVertices, ...rest } = request;
+      const wireRequest: Record<string, unknown> = { ...rest };
+      // `relax`/`refinement` only when there is something to say: the engine
+      // fills in every knob the caller left out, so an absent block is its
+      // standard rather than a set of values this side would have to keep in
+      // step.
+      if (relaxStrength !== undefined) wireRequest.relax = { strength: relaxStrength };
+      if (maxAdditionalVertices !== undefined) wireRequest.refinement = { maxAdditionalVertices };
+      raw = this.#require().irregular_quad_grid_json(JSON.stringify(wireRequest));
     } catch {
       // A refusal, not a failure. The engine answers this way when the
       // contours describe no ground it can triangulate -- degenerate rings,

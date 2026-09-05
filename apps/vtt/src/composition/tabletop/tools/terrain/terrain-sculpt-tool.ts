@@ -1,11 +1,16 @@
-import { DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
 import type { TerrainSculptParams } from "@/features/edit-construction";
 import type {
   ConstructionCoveredRegion,
   ConstructionPosition,
+  ConstructionRegionTopology,
 } from "@/ports";
-import type { MultiPolygon } from "polygon-clipping";
+import polygonClipping from "polygon-clipping";
+import type { MultiPolygon, Polygon, Ring } from "polygon-clipping";
 
+// Relative, not `@/...`: the test runner resolves no aliases, so a module a
+// test reaches has to spell out any import it needs at run time. The type-only
+// `@/` imports above are fine -- those are erased.
+import { DEFAULT_TOOL_PARAMS, outwardPerimeterRings } from "../../../../features/edit-construction/index.ts";
 import { brushSweptOutlinePolygons, brushSweptRegionFill } from "../shapes/preview-shapes.ts";
 import { dirtLoadOver, restackTerrain } from "./terrain-restack.ts";
 import {
@@ -124,8 +129,34 @@ function sampleHeightmapBilinear(
  * plans cells across it, and the engine refuses every one of them -- "no room
  * on edge". And the person at the table paints one shape and gets another.
  */
-function strokeChord(params: TerrainSculptParams): number {
-  return params.faceSize * OUTLINE_CHORD_PER_FACE;
+function strokeChord(faceSize: number): number {
+  return faceSize * OUTLINE_CHORD_PER_FACE;
+}
+
+/**
+ * How big a face this stroke actually asks the generator for, folding
+ * `irregularity` into the nominal `faceSize` -- never `faceSize` alone.
+ *
+ * `irregularity` already meant "how far from square", but a plain and a
+ * mountain painted at one `faceSize` come back costing the same regardless
+ * of how little the plain actually needed: flat ground reads the same at
+ * cells twice the nominal size, and reads *better* there, cheaper, than at
+ * the size a knobbly hill wants. So low irregularity scales the nominal size
+ * up (cheap, mostly-square cells for a plain) and high irregularity scales
+ * it down (finer detail for a peak) -- one slider doing double duty as both
+ * "how irregular" and "how big", because on this table the two questions
+ * have always had the same answer.
+ *
+ * `minFaceSize` is the floor that scaling never crosses: shrinking a cell
+ * size roughly quadruples the faces a stroke registers each time it halves,
+ * and nothing here would otherwise stop irregularity 1 on a small nominal
+ * `faceSize` from asking for that every time.
+ */
+function effectiveFaceSize(params: TerrainSculptParams): number {
+  const scaleAtSquare = 2;
+  const scaleAtIrregular = 0.5;
+  const scale = scaleAtSquare + (scaleAtIrregular - scaleAtSquare) * params.irregularity;
+  return Math.max(params.minFaceSize, params.faceSize * scale);
 }
 
 function coveredByStroke(
@@ -204,6 +235,291 @@ function boundsOf(swept: MultiPolygon): TerrainStrokeBounds {
   return { minX, minZ, maxX, maxZ };
 }
 
+/**
+ * Rounds one coordinate to a fixed decimal precision -- far below anything
+ * this pipeline treats as a meaningfully different point (the engine's own
+ * weld epsilon is `1e-6`) and far above ordinary float noise.
+ *
+ * `polygon-clipping`'s sweep-line union is not robust to two polygons that
+ * run almost, but not exactly, coincident along a long shared boundary --
+ * exactly what unioning `swept` against the previous stroke's own outer
+ * perimeter at the same position produces: the same circle, described by a
+ * different vertex count each time (10-odd raw points for the brush, 20-odd
+ * once quadrangulation has midpointed every one of them), landing a few
+ * units of float error apart everywhere along what is otherwise one curve.
+ * Reproduced against the live engine on the second stroke painted at one
+ * spot: `Unable to find segment ... in SweepLine tree`. Snapping every
+ * coordinate to this precision first removes exactly that noise before
+ * `polygon-clipping` ever sees it, without moving anything a person could
+ * see.
+ */
+function snapForUnion(ring: Ring): Ring {
+  const snap = (value: number): number => Math.round(value * 1e6) / 1e6;
+  return ring.map(([x, z]): [number, number] => [snap(x), snap(z)]);
+}
+
+function snapMultiPolygon(polygons: MultiPolygon): MultiPolygon {
+  return polygons.map((polygon) => polygon.map(snapForUnion));
+}
+
+/**
+ * The one or two rings bounding *all* of `standing`, walked by topology --
+ * shared edge counts -- rather than by polygon geometry.
+ *
+ * This exists to keep `polygon-clipping` away from real generated meshes.
+ * Handed one raw polygon per face -- dozens, on ground painted even a
+ * handful of times -- its sweep-line union throws ("Unable to find segment
+ * ... in SweepLine tree"), reproduced against the live engine by painting
+ * one spot twenty times in a row; not a rare degenerate input, the ordinary
+ * case this tool exists for. `outwardPerimeterRings` already does the exact
+ * cancellation a union of touching faces would do -- an edge two faces in
+ * the set share is interior and drops out, only the true outer walk
+ * survives -- entirely as graph bookkeeping, without comparing a single
+ * floating-point coordinate. `fillArea`'s own `polygon-clipping` call then
+ * only ever has to reconcile `swept` against the one or two rings this
+ * collapses to, never against every individual face's own corners.
+ */
+function standingOuterRings(standing: readonly ConstructionRegionTopology[]): readonly Ring[] {
+  const positions = new Map<string, ConstructionPosition>();
+  for (const topology of standing) {
+    for (const node of topology.nodes) positions.set(node.id, node.position);
+  }
+  const rings: Ring[] = [];
+  for (const loop of outwardPerimeterRings(standing)) {
+    const ring: Ring = [];
+    let complete = true;
+    for (const edge of loop) {
+      const position = positions.get(edge.startNodeId);
+      if (position === undefined) { complete = false; break; }
+      ring.push([position.x, position.z]);
+    }
+    if (complete && ring.length >= 3) rings.push(ring);
+  }
+  return rings;
+}
+
+function topologyKey(topology: ConstructionRegionTopology): string {
+  return topology.surfaceKey.join(" ");
+}
+
+/** `pool`, indexed by every node id any member of it carries. */
+function byNodeIndex(
+  pool: readonly ConstructionRegionTopology[],
+): Map<string, ConstructionRegionTopology[]> {
+  const byNode = new Map<string, ConstructionRegionTopology[]>();
+  for (const topology of pool) {
+    for (const node of topology.nodes) {
+      const sharing = byNode.get(node.id);
+      if (sharing) sharing.push(topology);
+      else byNode.set(node.id, [topology]);
+    }
+  }
+  return byNode;
+}
+
+/**
+ * `pool`, narrowed to whatever a chain of shared nodes actually connects
+ * back to `seeds` -- restated here in JS rather than trusted from whatever
+ * the engine call already claims to guarantee.
+ *
+ * The real engine's own seeded walk (`region_topologies_in_bounds` in Rust)
+ * only ever crosses to a candidate by a real shared node, so for it this is
+ * a no-op restating a guarantee already held. It is not a no-op for a test
+ * double standing in for that engine, and defending against a caller that
+ * cannot make the same promise is cheaper than a bug that only a fixture
+ * too honest to fake it would ever catch.
+ */
+function touchingComponent(
+  pool: readonly ConstructionRegionTopology[],
+  seeds: readonly ConstructionRegionTopology[],
+): readonly ConstructionRegionTopology[] {
+  const byNode = byNodeIndex(pool);
+  const reachable = new Map<string, ConstructionRegionTopology>();
+  const frontier = [...seeds];
+  for (const topology of seeds) reachable.set(topologyKey(topology), topology);
+  while (frontier.length > 0) {
+    const topology = frontier.pop()!;
+    for (const node of topology.nodes) {
+      for (const neighbour of byNode.get(node.id) ?? []) {
+        const key = topologyKey(neighbour);
+        if (reachable.has(key)) continue;
+        reachable.set(key, neighbour);
+        frontier.push(neighbour);
+      }
+    }
+  }
+  return [...reachable.values()];
+}
+
+/**
+ * `pool`, narrowed to whatever shares a node with at least one *other*
+ * member of `pool` -- a lone topology touching nothing else in it is
+ * dropped.
+ *
+ * **This is only for the engine's unseeded fallback**, where nothing was
+ * covered directly or by halo and the engine answers with a plain scan of
+ * its own padded bounds box: every region reaching it, connected to
+ * nothing, unlike the seeded walk `touchingComponent` restates above.
+ * Reproduced against the real engine: a mound with a genuine gap to
+ * everything else, placed only far enough that its own footprint still
+ * lands in that padded box, came back as part of `nearby` on an unrelated
+ * stroke's *own* unseeded lookup and got folded into that stroke's
+ * `fillArea` union -- a real cross-cloud leak, not the "gap between two
+ * already-touching pieces" case the unseeded scan exists to serve. That
+ * case always hands back *two or more* pieces that touch each other (that
+ * is what "already-touching" means); a singleton the box merely happened to
+ * also reach is the leak, not the feature, and dropping it costs that real
+ * case nothing.
+ */
+function multiTouchingMembers(pool: readonly ConstructionRegionTopology[]): readonly ConstructionRegionTopology[] {
+  const byNode = byNodeIndex(pool);
+  const touchesAnother = (topology: ConstructionRegionTopology): boolean =>
+    topology.nodes.some((node) => (byNode.get(node.id) ?? []).some((other) => topologyKey(other) !== topologyKey(topology)));
+  return pool.filter(touchesAnother);
+}
+
+/**
+ * The standing ground `joinHalo` reclaims -- deletes and regenerates as part
+ * of this same fill, rather than merely meeting: fully inside `probeArea`,
+ * matching the painted type, *and* reachable by a chain of touching faces
+ * that ends at one the brush itself actually overlaps.
+ *
+ * That last part is a deliberate restraint, not a correctness requirement --
+ * `fillArea`'s own union folds in every standing neighbour regardless (see
+ * its comment), and a retained neighbour's matching hole ring cancels it back
+ * out wherever it lands, connected or not. What a broken chain buys is
+ * scope: reclaiming, and so deleting and rebuilding, a face with no real
+ * relationship to anything else this stroke touches is pure waste -- a
+ * pointless separate patch generated in the same call for no benefit anyone
+ * asked for. Requiring the chain keeps `joinHalo`'s reach proportional to
+ * what the brush is actually doing.
+ *
+ * Walking the touching chain here, in the already-local `standing` set,
+ * costs nothing new: it is the same neighbourhood query already paid for.
+ */
+/**
+ * A topology's own mean edge length -- the cheapest available reading of how
+ * fine ground actually is, since a region here is always one quad and its
+ * four edges are the only edges it has.
+ */
+function averageEdgeLength(topology: ConstructionRegionTopology): number {
+  const loop = topology.outerLoops[0];
+  if (loop === undefined || loop.length === 0) return Infinity;
+  const positions = new Map(topology.nodes.map((node) => [node.id, node.position] as const));
+  let total = 0;
+  let count = 0;
+  for (const edge of loop) {
+    const a = positions.get(edge.startNodeId);
+    const b = positions.get(edge.endNodeId);
+    if (a === undefined || b === undefined) continue;
+    total += Math.hypot(a.x - b.x, a.z - b.z);
+    count += 1;
+  }
+  return count > 0 ? total / count : Infinity;
+}
+
+/**
+ * Below this fraction of the requested face size, a face counts as ground a
+ * *past* regeneration already left finer than this stroke asks for.
+ *
+ * Loose on purpose: `relaxStrength` deliberately leaves an irregular mesh's
+ * own edge lengths spread wide at nominal size, and this only has to catch
+ * ground that is systematically finer, not merely on the small side of
+ * normal.
+ */
+const ALREADY_FINE_FRACTION = 0.75;
+
+function reclaimedTopologies(
+  standing: readonly ConstructionRegionTopology[],
+  targetSurface: string,
+  swept: MultiPolygon,
+  probeArea: MultiPolygon,
+  faceSize: number,
+  haloActive: boolean,
+): readonly ConstructionRegionTopology[] {
+  const sameType = standing.filter((topology) => topology.surfaceType === targetSurface && topology.nodes.length > 0);
+  const insideProbe = new Set(
+    sameType.filter((topology) => topology.nodes.every((node) => insideSwept(node.position, probeArea))).map((topology) => topology.surfaceKey.join(" ")),
+  );
+  const isFine = (topology: ConstructionRegionTopology): boolean =>
+    averageEdgeLength(topology) < faceSize * ALREADY_FINE_FRACTION;
+
+  const byNode = new Map<string, ConstructionRegionTopology[]>();
+  for (const topology of sameType) {
+    for (const node of topology.nodes) {
+      const sharing = byNode.get(node.id);
+      if (sharing) sharing.push(topology);
+      else byNode.set(node.id, [topology]);
+    }
+  }
+
+  const reachable = new Map<string, ConstructionRegionTopology>();
+  const walk = (seeds: readonly ConstructionRegionTopology[], allow: (topology: ConstructionRegionTopology) => boolean): void => {
+    const frontier = [...seeds];
+    for (const topology of seeds) reachable.set(topology.surfaceKey.join(" "), topology);
+    while (frontier.length > 0) {
+      const topology = frontier.pop()!;
+      for (const node of topology.nodes) {
+        for (const neighbour of byNode.get(node.id) ?? []) {
+          const key = neighbour.surfaceKey.join(" ");
+          if (reachable.has(key) || !allow(neighbour)) continue;
+          reachable.set(key, neighbour);
+          frontier.push(neighbour);
+        }
+      }
+    }
+  };
+
+  // Chain one: anything reachable, by touching same-type ground, from what
+  // the brush itself overlaps -- unchanged from before, bounded to
+  // `probeArea` as it always was.
+  walk(
+    sameType.filter(
+      (topology) => insideProbe.has(topology.surfaceKey.join(" ")) && topology.nodes.some((node) => insideSwept(node.position, swept)),
+    ),
+    (topology) => insideProbe.has(topology.surfaceKey.join(" ")),
+  );
+
+  // Chain two: ground a past regeneration already left finer than this
+  // stroke's own nominal size, swept up whole -- however far that fineness
+  // reaches, restricted to *only* other fine ground, so it stops exactly at
+  // the first neighbour that is still coarse enough to leave alone.
+  //
+  // **Gated on `haloActive`.** With no halo, `probeArea` is `swept` and the
+  // contract is the narrowest one this tool keeps: a face the brush only
+  // grazes is met, never reclaimed, whatever its own edge lengths are --
+  // `joinHalo 0 only meets a seam face, never reclaims it` pins exactly
+  // this. Fineness is a reason to widen how far an *already widened* reach
+  // goes back and cleans up after itself; it is not itself a reason to
+  // widen reach that was never asked for.
+  //
+  // **Deliberately not bounded to `probeArea`.** A face just past that
+  // edge is still folded into `fillArea`'s own silhouette as a hole today
+  // (`standingOuterRings` already reads all of `standing`, out to
+  // `reachArea`) -- so its boundary is already going to be adopted against
+  // whether or not it is ever reclaimed. Adoption alone is what a past
+  // stroke used to leave it fine in the first place, and nothing about
+  // `probeArea` protects it from being adopted against *again* right here.
+  // Only reclaiming it, so the regeneration replaces it at nominal size
+  // instead of adopting yet another split onto it, actually stops that.
+  //
+  // **Why this has to exist at all.** Every corner this stroke's own new
+  // mesh lands along a retained neighbour's edge has to split that edge, or
+  // the seam is a T-junction -- that is not negotiable, and nothing here
+  // changes it. But the neighbour's edges were themselves laid by whatever
+  // regenerated *it* last, and if that reached this same seam, splitting
+  // them again leaves them finer still -- and quadrangulation's own `ortho`
+  // step splits *every* edge it is handed, constraint or not, so this is
+  // not a quality setting that can be dialled away, only a boundary that
+  // can be regenerated back to nominal. Left alone this ratchets without a
+  // ceiling: reproduced against the real engine, two mounds twelve units
+  // apart, repainting one eight times, grew the untouched one from 35 faces
+  // to 2163, entirely on ground this stroke never directly touched.
+  if (haloActive) walk(sameType.filter(isFine), isFine);
+
+  return [...reachable.values()];
+}
+
 /** Terrain-sculpt's own effect: the brush hands over the whole gesture, once, on release. */
 export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   id: "terrain-sculpt",
@@ -217,7 +533,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       0.35,
       // The same chord the commit will sweep with, so the ghost is the shape
       // the engine is actually asked about.
-      strokeChord(params),
+      strokeChord(effectiveFaceSize(params)),
     );
   },
 
@@ -227,11 +543,32 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   onPointerUp(ctx: ToolContext, gesture: ToolGesture, params: TerrainSculptParams): void {
     const salt = ctx.nextSequence();
     const causeId = `${ctx.tableId}:terrain-sculpt:${salt}`;
+    // Everything below scales off this, not off `params.faceSize` directly --
+    // see `effectiveFaceSize`'s own comment for why `irregularity` and
+    // `minFaceSize` both feed into it.
+    const faceSize = effectiveFaceSize(params);
     const swept = brushSweptOutlinePolygons(
       gesture.samples.map((sample) => sample.point),
       params.brushRadius,
-      strokeChord(params),
+      strokeChord(faceSize),
     );
+    // How far out to *look* for standing ground worth reclaiming -- never how
+    // far out to *generate*. `probeArea` only decides which nearby faces are
+    // close enough to fold into this stroke; the actual fill boundary built
+    // below (also named `fillArea`, once it exists) is the brush's own
+    // outline plus the real footprint of whatever `probeArea` found, and
+    // never anything wider than that. The preview promised the brush's own
+    // shape, and nothing this stroke does may generate ground beyond it --
+    // ground already standing can be reclaimed and re-laid, since that space
+    // was never empty, but empty space past the brush stays empty.
+    const probeArea =
+      params.joinHalo > 0
+        ? brushSweptOutlinePolygons(
+            gesture.samples.map((sample) => sample.point),
+            params.brushRadius + faceSize * params.joinHalo,
+            strokeChord(faceSize),
+          )
+        : swept;
 
     // One stroke does both, per area -- it is not a choice between them.
     // Where ground already exists the covered faces are raised; where it does
@@ -254,19 +591,6 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
           )
         : { raisedFaces: 0, movedVertices: 0, skipped: [] };
 
-    // What the stroke asks to fill, and what is already standing in it. The
-    // second becomes holes: ground somebody already holds is not regenerated,
-    // it is met.
-    // The cell size goes into the sweep, so the outline is never described
-    // more finely than the mesh it is about to bound. A boundary point is a
-    // cell corner, and a patch comes back with about twice as many faces as
-    // its boundary has points.
-    const weld = params.faceSize * OUTLINE_WELD_PER_FACE;
-    const outline = outlineConstraints(swept.flatMap((polygon) => polygon.slice(0, 1)), weld);
-    if (outline.length === 0) {
-      ctx.reportFeedback({ tone: "info", message: "Nada a fazer aqui." });
-      return;
-    }
     // Ground the stroke covers *whole* is not met, it is regenerated: the
     // faces go away and the area they held is laid again as part of this one
     // generation.
@@ -282,30 +606,115 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     // the face instead and neither arises: nothing to refuse, nothing to
     // subdivide, and the ground comes back in one piece at one size.
     //
-    // Whole, not merely touched. A face the stroke only clips keeps ground
-    // outside the swept outline, and the fill stops at that outline -- so
+    // Whole, not merely touched. A face `probeArea` only clips keeps ground
+    // outside that outline, and the fill stops at that outline -- so
     // consuming it would leave a gap exactly as wide as the part that stuck
     // out. Those stay, and their contour is what the new ground meets.
-    const extent = boundsOf(swept);
-    const standing = terrainStandingAround(ctx.runtime, covered, extent, params.faceSize * 2);
-    const consumed = standing.filter(
-      (topology) =>
-        topology.surfaceType === params.targetSurface &&
-        topology.nodes.length > 0 &&
-        topology.nodes.every((node) => insideSwept(node.position, swept)),
-    );
+    // Seeded with what the *halo* covers, not just the brush's own footprint
+    // (`covered`, above). `joinHalo`'s entire point is reaching ground the
+    // brush itself never overlaps, so when it is the only thing nearby,
+    // `covered` is empty. `probeArea` already is `swept` when there is no
+    // halo, so this only costs a second engine crossing while `joinHalo` is
+    // actually widening the reach.
+    //
+    // The engine call itself is never skipped, empty seed list or not: with
+    // nothing to seed, it falls back to an unfiltered scan of its own
+    // *rectangular* bounds box, and that box is the one thing standing
+    // between a genuinely touching neighbour (a stroke landing in the gap
+    // between two already-touching pieces of ground routinely seeds nothing
+    // directly, yet still needs both handed back so their shared seam
+    // becomes a hole -- skipping there once caused a hard patch-replacement
+    // refusal) and an unrelated cloud that merely shares the box.
+    const probeExtent = boundsOf(probeArea);
+    const haloCovered = params.joinHalo > 0 ? coveredByStroke(ctx, probeArea) : covered;
+    // Only how far the *engine's own bounds box* is padded when it looks for
+    // candidates -- a safety margin against that box being a rectangle
+    // narrower on its diagonal than it looks, never a distance this tool
+    // itself treats as "close enough to matter".
+    const reach = faceSize * 2;
+    const nearby = terrainStandingAround(ctx.runtime, haloCovered, probeExtent, reach);
+
+    // Seeded from exactly what was handed to the engine as a seed -- the
+    // same real coverage, never a separate geometric re-check -- and walked
+    // out through `nearby` by touching. Unseeded, there is no coverage to
+    // seed from at all, so a lone hit sharing nothing but the padded box
+    // with the rest is dropped instead (see `multiTouchingMembers`'s own
+    // comment).
+    const haloCoveredKeys = new Set(haloCovered.map((region) => region.surfaceKey.join(" ")));
+    const standing =
+      haloCoveredKeys.size > 0
+        ? touchingComponent(nearby, nearby.filter((topology) => haloCoveredKeys.has(topologyKey(topology))))
+        : multiTouchingMembers(nearby);
+    const consumed = reclaimedTopologies(standing, params.targetSurface, swept, probeArea, faceSize, params.joinHalo > 0);
+
+    // The generator is never asked for ground beyond the brush's own outline
+    // plus the real shape of everything standing nearby -- reclaimed or not
+    // -- folded in, never by the halo distance that found it. Empty space
+    // past the brush is never included, whatever `joinHalo` is set to.
+    //
+    // **All of `standing`, not just `consumed`.** A face this stroke reclaims
+    // sits right next to faces it does not -- the retained layer just past
+    // the seam -- and a shared edge between the two is a real edge in the
+    // graph today. Folding in only the reclaimed side would describe that
+    // edge twice: once as part of *this* outer boundary (the reclaimed
+    // face's own far side), and once as part of the retained neighbour's own
+    // outward perimeter, which becomes a hole below. The same segment as both
+    // "the edge of the ground" and "the edge of a hole in it" is a
+    // contradiction the CDT resolves by treating it as a self-cancelling
+    // sliver of zero ground -- a real hole, exactly along the seam this
+    // stroke just reclaimed. Reported on the table right after the fix that
+    // first folded reclaimed ground in this way.
+    //
+    // Folding retained ground into this too does not add it to the final
+    // mesh -- `holeRings` below still carves it back out, exactly as it
+    // always has. It only makes the *outer* silhouette self-consistent with
+    // the holes it is about to carry: the reclaim/retain seam becomes
+    // internal and disappears from the boundary entirely, leaving the hole
+    // ring as the sole authority for where it runs -- the same contract the
+    // swept/retained seam has always kept.
+    //
+    // **Why `standingOuterRings`, not one `polygon-clipping` polygon per
+    // face.** That was the next thing tried, and it does not survive contact
+    // with a real table: handed one raw polygon per standing face -- dozens,
+    // on ground painted even a handful of times -- `polygon-clipping`'s
+    // sweep-line union reliably throws ("Unable to find segment ... in
+    // SweepLine tree"), reproduced by painting one spot twenty times in a
+    // row. `standingOuterRings` collapses that same cancellation down to the
+    // one or two rings it was always going to reduce to first, by topology,
+    // so the one `polygon-clipping` call left only ever reconciles `swept`
+    // against those -- never against every individual face's own corners.
+    const outerRings = standingOuterRings(standing);
+    const fillArea: MultiPolygon =
+      outerRings.length === 0
+        ? swept
+        : polygonClipping.union(snapMultiPolygon(swept), ...outerRings.map((ring): Polygon => [snapForUnion(ring)]));
+
+    // What the stroke (now widened by whatever it just reclaimed) asks to
+    // fill, and what is already standing in it. The second becomes holes:
+    // ground somebody already holds is not regenerated, it is met.
+    // The cell size goes into the sweep, so the outline is never described
+    // more finely than the mesh it is about to bound. A boundary point is a
+    // cell corner, and a patch comes back with about twice as many faces as
+    // its boundary has points.
+    const weld = faceSize * OUTLINE_WELD_PER_FACE;
+    const outline = outlineConstraints(fillArea.flatMap((polygon) => polygon.slice(0, 1)), weld);
+    if (outline.length === 0) {
+      ctx.reportFeedback({ tone: "info", message: "Nada a fazer aqui." });
+      return;
+    }
     const consumedKeys = new Set(consumed.map((topology) => topology.surfaceKey.join(" ")));
     const retained = standing.filter((topology) => !consumedKeys.has(topology.surfaceKey.join(" ")));
     const perimeters = perimeterConstraints(retained, 0);
     const contourBefore = perimeters.sources.length;
-    // A stroke that curls back on itself leaves a real hole in its own swept
-    // shape, and `polygon-clipping` reports it as an inner ring. Ground there
-    // was never painted, so it is subtracted like any other hole -- it simply
-    // has no edges, and so owes nobody an adopted node.
+    // A stroke that curls back on itself leaves a real hole in `fillArea`'s
+    // own shape, and `polygon-clipping` reports it as an inner ring. Ground
+    // there was never painted, so it is subtracted like any other hole -- it
+    // simply has no edges, and so owes nobody an adopted node.
     const holeRings: readonly ConstraintRing[] = [
-      ...outlineConstraints(swept.flatMap((polygon) => polygon.slice(1)), weld),
+      ...outlineConstraints(fillArea.flatMap((polygon) => polygon.slice(1)), weld),
       ...perimeters.rings,
     ];
+    const extent = boundsOf(fillArea);
 
     // Height comes from the noise field over the area the fill actually
     // covers, so it is asked for the extent the generator settled on rather
@@ -343,7 +752,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     // than raise it.
     const kept = heightFieldOf(
       consumed.flatMap((topology) => topology.nodes.map((node) => node.position)),
-      params.faceSize * 2,
+      faceSize * 2,
     );
     const heightAt = (point: { readonly x: number; readonly z: number }): number =>
       kept.at(point) ?? noiseAt(point);
@@ -355,7 +764,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       tableId: ctx.tableId,
       causeId,
       seed: Math.floor(params.seed) || 1,
-      faceSide: params.faceSize,
+      faceSide: faceSize,
       relaxStrength: params.irregularity,
       surfaceType: params.targetSurface,
       boundary: outline,
@@ -378,6 +787,20 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     // `nosNoContorno` for what the new mesh planted on it, which is the
     // accumulation the growth number was there to expose.
     void contourBefore;
+
+    // The generation this stroke asked for was refused outright, rather than
+    // merely losing some faces to it -- see `fillTerrain`'s own comment on
+    // why a replacement can throw where a plain add cannot. The transaction
+    // never published, so every face this stroke would have touched is
+    // exactly where it stood before; the only thing left to do is say so,
+    // rather than let the exception that used to reach here crash the table.
+    if (filled.rejected !== undefined) {
+      ctx.reportFeedback({
+        tone: "error",
+        message: `Pincelada recusada, nada mudou: ${filled.rejected}`,
+      });
+      return;
+    }
 
     report(ctx, filled.built, filled.refused, filled.unadopted, raised, filled.refinementComplete);
   },

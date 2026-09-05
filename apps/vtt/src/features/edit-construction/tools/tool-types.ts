@@ -108,7 +108,11 @@ export interface InteriorGenerateParams {
  */
 export interface TerrainSculptParams {
   /**
-   * How wide one terrain face should be, in world units.
+   * How wide one terrain face should be, in world units -- the nominal size
+   * {@link irregularity} scales up or down from, not the size every stroke
+   * actually gets. See `effectiveFaceSize` in
+   * `composition/tabletop/tools/terrain/terrain-sculpt-tool.ts` for the
+   * scaling itself.
    *
    * A face, not a lattice triangle: the engine converts. Bigger is cheaper in
    * a way that is felt rather than measured -- halving it roughly quadruples
@@ -138,6 +142,60 @@ export interface TerrainSculptParams {
    * `strength`, handed across the port as `relaxStrength`.
    */
   readonly irregularity: number;
+  /**
+   * The smallest a face is ever allowed to come back at, in world units,
+   * whatever {@link irregularity} would otherwise scale {@link faceSize}
+   * down to.
+   *
+   * `irregularity` pushes the face size two ways at once, by design: a flat
+   * plain wants big, cheap, mostly-square cells, so low irregularity scales
+   * `faceSize` *up*; a mountain's own knobbliness reads better at a finer
+   * scale, so high irregularity scales it *down*. Left unchecked that second
+   * direction has no floor -- an irregularity of 1 with a small `faceSize`
+   * to begin with would keep shrinking, and shrinking a cell size roughly
+   * quadruples the faces a stroke registers each time it halves. This is
+   * that floor, dialled in the same way `faceSize` and `irregularity`
+   * already are rather than hidden as a constant, because how much detail is
+   * worth the extra faces is exactly the same table-by-table judgement call
+   * those two already are.
+   */
+  readonly minFaceSize: number;
+  /**
+   * How far past the brush's own footprint a stroke *looks* for ground
+   * already standing to reclaim, as a multiple of {@link faceSize}. Never
+   * how far past the brush it *generates* -- see the guarantee below.
+   *
+   * Only a face fully inside the swept outline is regenerated with the new
+   * fill (see `composition/tabletop/tools/terrain/terrain-sculpt-tool.ts`);
+   * everything else standing nearby is kept exactly as it is and becomes a
+   * hard boundary the new mesh has to meet. That is right the first time a
+   * stroke lands next to old ground, and wrong every time after: the seam is
+   * the previous stroke's own outline, so it is already a curved band of
+   * small cells, and a stroke that only ever meets it -- never reclaims it --
+   * leaves that band standing forever while stacking a fresh one of its own
+   * beside it. Repeated strokes over one growing patch accumulate concentric
+   * scars instead of converging on one mesh.
+   *
+   * `joinHalo` widens the *search* for standing ground worth folding in. What
+   * the generator is actually asked to fill is the brush's own outline
+   * unioned with the exact footprint of whatever that search found -- never
+   * the raw halo distance itself, and never empty ground the brush never
+   * touched. The preview shown while dragging is a promise: nothing appears
+   * outside it. Ground can be *reclaimed* because it was never empty --
+   * folding its own already-standing shape into this generation costs the
+   * stroke nothing it did not already own.
+   *
+   * The scar does not vanish -- there is always some edge where the new fill
+   * meets ground it still has to leave alone -- but there is only ever the
+   * *current* one, refreshed each stroke, instead of one fossil per stroke
+   * that ever touched that ground.
+   *
+   * `0` reproduces the old behaviour exactly. The cost this buys scales with
+   * the stroke's own perimeter, not the size of whatever patch it is
+   * touching, because the region query it widens is already local (see
+   * `terrainStandingAround`).
+   */
+  readonly joinHalo: number;
   /** Multiplies the sampled Perlin noise (native `[-1, 1]`) into world-space height units. */
   readonly heightScale: number;
   /** Perlin `scale` -- smaller values are smoother/larger-scale terrain features. */
@@ -222,6 +280,8 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
     faceSize: 2,
     brushRadius: 6,
     irregularity: 0.7,
+    minFaceSize: 1,
+    joinHalo: 1,
     heightScale: 1.5,
     noiseScale: 0.15,
     targetSurface: "terrain-grass",

@@ -434,6 +434,20 @@ export interface ConstructionIrregularQuadGridRequest {
    * takes the generator's own standard.
    */
   readonly relaxStrength?: number;
+  /**
+   * Hard ceiling on the extra vertices the refinement may invent chasing
+   * quality, so a pathological pair of contours costs a coarser patch rather
+   * than tens of thousands of points to adopt. Omitted takes the generator's
+   * own standard (a ceiling generous enough it is rarely the binding limit).
+   *
+   * Reproduced against the real engine: two boundary rings meeting at a
+   * shallow, near-tangent angle -- the exact shape a stroke's own halo draws
+   * around a neighbour it barely reaches -- made the refinement invent over
+   * 23,000 points for a contour of 10. The points themselves generate fast;
+   * adopting that many, one failed batch away from one `applyRegionEdit` per
+   * node, is what actually stalls the stroke.
+   */
+  readonly maxAdditionalVertices?: number;
 }
 
 /** One corner the generator put along a contour the caller supplied. */
