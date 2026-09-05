@@ -49,6 +49,7 @@ function paramsWith(joinHalo) {
     faceSize: 2,
     brushRadius: 4,
     irregularity: 0.7,
+    minFaceSize: 1,
     joinHalo,
     heightScale: 0,
     noiseScale: 0.15,
@@ -179,4 +180,26 @@ test("with nothing standing nearby, joinHalo never asks the generator for ground
       `boundary point at distance ${distance} from the click reaches past brushRadius 4 -- generated beyond the preview`,
     );
   }
+});
+
+test("low irregularity scales the face size up past its nominal value", () => {
+  const capture = {};
+  const ctx = buildCtx([], capture);
+  terrainSculptTool.onPointerUp(ctx, clickAtOrigin(), { ...paramsWith(0), irregularity: 0, faceSize: 2, minFaceSize: 0.1 });
+  assert.equal(capture.gridRequests[0].faceSide, 4, "irregularity 0 scales faceSize by 2x");
+});
+
+test("high irregularity scales the face size down, floored at minFaceSize", () => {
+  const capture = {};
+  const ctx = buildCtx([], capture);
+  terrainSculptTool.onPointerUp(ctx, clickAtOrigin(), { ...paramsWith(0), irregularity: 1, faceSize: 2, minFaceSize: 1.5 });
+  // Unfloored this would be faceSize * 0.5 = 1, but minFaceSize 1.5 wins.
+  assert.equal(capture.gridRequests[0].faceSide, 1.5, "the floor beats the irregularity-1 scale");
+});
+
+test("high irregularity with a permissive floor reaches the full scaled-down size", () => {
+  const capture = {};
+  const ctx = buildCtx([], capture);
+  terrainSculptTool.onPointerUp(ctx, clickAtOrigin(), { ...paramsWith(0), irregularity: 1, faceSize: 2, minFaceSize: 0.1 });
+  assert.equal(capture.gridRequests[0].faceSide, 1, "irregularity 1 scales faceSize by 0.5x when the floor allows it");
 });

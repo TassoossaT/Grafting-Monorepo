@@ -108,7 +108,11 @@ export interface InteriorGenerateParams {
  */
 export interface TerrainSculptParams {
   /**
-   * How wide one terrain face should be, in world units.
+   * How wide one terrain face should be, in world units -- the nominal size
+   * {@link irregularity} scales up or down from, not the size every stroke
+   * actually gets. See `effectiveFaceSize` in
+   * `composition/tabletop/tools/terrain/terrain-sculpt-tool.ts` for the
+   * scaling itself.
    *
    * A face, not a lattice triangle: the engine converts. Bigger is cheaper in
    * a way that is felt rather than measured -- halving it roughly quadruples
@@ -138,6 +142,24 @@ export interface TerrainSculptParams {
    * `strength`, handed across the port as `relaxStrength`.
    */
   readonly irregularity: number;
+  /**
+   * The smallest a face is ever allowed to come back at, in world units,
+   * whatever {@link irregularity} would otherwise scale {@link faceSize}
+   * down to.
+   *
+   * `irregularity` pushes the face size two ways at once, by design: a flat
+   * plain wants big, cheap, mostly-square cells, so low irregularity scales
+   * `faceSize` *up*; a mountain's own knobbliness reads better at a finer
+   * scale, so high irregularity scales it *down*. Left unchecked that second
+   * direction has no floor -- an irregularity of 1 with a small `faceSize`
+   * to begin with would keep shrinking, and shrinking a cell size roughly
+   * quadruples the faces a stroke registers each time it halves. This is
+   * that floor, dialled in the same way `faceSize` and `irregularity`
+   * already are rather than hidden as a constant, because how much detail is
+   * worth the extra faces is exactly the same table-by-table judgement call
+   * those two already are.
+   */
+  readonly minFaceSize: number;
   /**
    * How far past the brush's own footprint a stroke *looks* for ground
    * already standing to reclaim, as a multiple of {@link faceSize}. Never
@@ -258,6 +280,7 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
     faceSize: 2,
     brushRadius: 6,
     irregularity: 0.7,
+    minFaceSize: 1,
     joinHalo: 1,
     heightScale: 1.5,
     noiseScale: 0.15,

@@ -105,6 +105,7 @@ test(
       faceSize: 2,
       brushRadius: 6,
       irregularity: 0.7,
+      minFaceSize: 1,
       joinHalo: 1,
       heightScale: 1.5,
       noiseScale: 0.15,

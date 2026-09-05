@@ -129,8 +129,34 @@ function sampleHeightmapBilinear(
  * plans cells across it, and the engine refuses every one of them -- "no room
  * on edge". And the person at the table paints one shape and gets another.
  */
-function strokeChord(params: TerrainSculptParams): number {
-  return params.faceSize * OUTLINE_CHORD_PER_FACE;
+function strokeChord(faceSize: number): number {
+  return faceSize * OUTLINE_CHORD_PER_FACE;
+}
+
+/**
+ * How big a face this stroke actually asks the generator for, folding
+ * `irregularity` into the nominal `faceSize` -- never `faceSize` alone.
+ *
+ * `irregularity` already meant "how far from square", but a plain and a
+ * mountain painted at one `faceSize` come back costing the same regardless
+ * of how little the plain actually needed: flat ground reads the same at
+ * cells twice the nominal size, and reads *better* there, cheaper, than at
+ * the size a knobbly hill wants. So low irregularity scales the nominal size
+ * up (cheap, mostly-square cells for a plain) and high irregularity scales
+ * it down (finer detail for a peak) -- one slider doing double duty as both
+ * "how irregular" and "how big", because on this table the two questions
+ * have always had the same answer.
+ *
+ * `minFaceSize` is the floor that scaling never crosses: shrinking a cell
+ * size roughly quadruples the faces a stroke registers each time it halves,
+ * and nothing here would otherwise stop irregularity 1 on a small nominal
+ * `faceSize` from asking for that every time.
+ */
+function effectiveFaceSize(params: TerrainSculptParams): number {
+  const scaleAtSquare = 2;
+  const scaleAtIrregular = 0.5;
+  const scale = scaleAtSquare + (scaleAtIrregular - scaleAtSquare) * params.irregularity;
+  return Math.max(params.minFaceSize, params.faceSize * scale);
 }
 
 function coveredByStroke(
@@ -343,7 +369,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       0.35,
       // The same chord the commit will sweep with, so the ghost is the shape
       // the engine is actually asked about.
-      strokeChord(params),
+      strokeChord(effectiveFaceSize(params)),
     );
   },
 
@@ -353,10 +379,14 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   onPointerUp(ctx: ToolContext, gesture: ToolGesture, params: TerrainSculptParams): void {
     const salt = ctx.nextSequence();
     const causeId = `${ctx.tableId}:terrain-sculpt:${salt}`;
+    // Everything below scales off this, not off `params.faceSize` directly --
+    // see `effectiveFaceSize`'s own comment for why `irregularity` and
+    // `minFaceSize` both feed into it.
+    const faceSize = effectiveFaceSize(params);
     const swept = brushSweptOutlinePolygons(
       gesture.samples.map((sample) => sample.point),
       params.brushRadius,
-      strokeChord(params),
+      strokeChord(faceSize),
     );
     // How far out to *look* for standing ground worth reclaiming -- never how
     // far out to *generate*. `probeArea` only decides which nearby faces are
@@ -371,8 +401,8 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       params.joinHalo > 0
         ? brushSweptOutlinePolygons(
             gesture.samples.map((sample) => sample.point),
-            params.brushRadius + params.faceSize * params.joinHalo,
-            strokeChord(params),
+            params.brushRadius + faceSize * params.joinHalo,
+            strokeChord(faceSize),
           )
         : swept;
 
@@ -417,7 +447,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     // consuming it would leave a gap exactly as wide as the part that stuck
     // out. Those stay, and their contour is what the new ground meets.
     const probeExtent = boundsOf(probeArea);
-    const standing = terrainStandingAround(ctx.runtime, covered, probeExtent, params.faceSize * 2);
+    const standing = terrainStandingAround(ctx.runtime, covered, probeExtent, faceSize * 2);
     const consumed = reclaimedTopologies(standing, params.targetSurface, swept, probeArea);
 
     // The generator is never asked for ground beyond the brush's own outline
@@ -469,7 +499,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     // more finely than the mesh it is about to bound. A boundary point is a
     // cell corner, and a patch comes back with about twice as many faces as
     // its boundary has points.
-    const weld = params.faceSize * OUTLINE_WELD_PER_FACE;
+    const weld = faceSize * OUTLINE_WELD_PER_FACE;
     const outline = outlineConstraints(fillArea.flatMap((polygon) => polygon.slice(0, 1)), weld);
     if (outline.length === 0) {
       ctx.reportFeedback({ tone: "info", message: "Nada a fazer aqui." });
@@ -525,7 +555,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     // than raise it.
     const kept = heightFieldOf(
       consumed.flatMap((topology) => topology.nodes.map((node) => node.position)),
-      params.faceSize * 2,
+      faceSize * 2,
     );
     const heightAt = (point: { readonly x: number; readonly z: number }): number =>
       kept.at(point) ?? noiseAt(point);
@@ -537,7 +567,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       tableId: ctx.tableId,
       causeId,
       seed: Math.floor(params.seed) || 1,
-      faceSide: params.faceSize,
+      faceSide: faceSize,
       relaxStrength: params.irregularity,
       surfaceType: params.targetSurface,
       boundary: outline,
