@@ -10,7 +10,7 @@ import type { MultiPolygon, Polygon, Ring } from "polygon-clipping";
 // Relative, not `@/...`: the test runner resolves no aliases, so a module a
 // test reaches has to spell out any import it needs at run time. The type-only
 // `@/` imports above are fine -- those are erased.
-import { DEFAULT_TOOL_PARAMS } from "../../../../features/edit-construction/index.ts";
+import { DEFAULT_TOOL_PARAMS, outwardPerimeterRings } from "../../../../features/edit-construction/index.ts";
 import { brushSweptOutlinePolygons, brushSweptRegionFill } from "../shapes/preview-shapes.ts";
 import { dirtLoadOver, restackTerrain } from "./terrain-restack.ts";
 import {
@@ -210,24 +210,66 @@ function boundsOf(swept: MultiPolygon): TerrainStrokeBounds {
 }
 
 /**
- * The exact XZ footprint one already-standing topology occupies, as a
- * polygon ring -- not the halo distance that found it.
+ * Rounds one coordinate to a fixed decimal precision -- far below anything
+ * this pipeline treats as a meaningfully different point (the engine's own
+ * weld epsilon is `1e-6`) and far above ordinary float noise.
  *
- * This is what {@link terrainSculptTool} unions into the brush's own outline
- * before asking the generator for anything: a face this stroke reclaims
- * costs exactly its own shape, never the wider probe radius used to notice
- * it. `undefined` only when a corner's position could not be resolved, which
- * leaves the caller nothing safe to fold in.
+ * `polygon-clipping`'s sweep-line union is not robust to two polygons that
+ * run almost, but not exactly, coincident along a long shared boundary --
+ * exactly what unioning `swept` against the previous stroke's own outer
+ * perimeter at the same position produces: the same circle, described by a
+ * different vertex count each time (10-odd raw points for the brush, 20-odd
+ * once quadrangulation has midpointed every one of them), landing a few
+ * units of float error apart everywhere along what is otherwise one curve.
+ * Reproduced against the live engine on the second stroke painted at one
+ * spot: `Unable to find segment ... in SweepLine tree`. Snapping every
+ * coordinate to this precision first removes exactly that noise before
+ * `polygon-clipping` ever sees it, without moving anything a person could
+ * see.
  */
-function footprintRingOf(topology: ConstructionRegionTopology): Ring | undefined {
-  const positions = new Map(topology.nodes.map((node) => [node.id, node.position]));
-  const ring: Ring = [];
-  for (const edge of topology.outerLoops[0] ?? []) {
-    const position = positions.get(edge.startNodeId);
-    if (position === undefined) return undefined;
-    ring.push([position.x, position.z]);
+function snapForUnion(ring: Ring): Ring {
+  const snap = (value: number): number => Math.round(value * 1e6) / 1e6;
+  return ring.map(([x, z]): [number, number] => [snap(x), snap(z)]);
+}
+
+function snapMultiPolygon(polygons: MultiPolygon): MultiPolygon {
+  return polygons.map((polygon) => polygon.map(snapForUnion));
+}
+
+/**
+ * The one or two rings bounding *all* of `standing`, walked by topology --
+ * shared edge counts -- rather than by polygon geometry.
+ *
+ * This exists to keep `polygon-clipping` away from real generated meshes.
+ * Handed one raw polygon per face -- dozens, on ground painted even a
+ * handful of times -- its sweep-line union throws ("Unable to find segment
+ * ... in SweepLine tree"), reproduced against the live engine by painting
+ * one spot twenty times in a row; not a rare degenerate input, the ordinary
+ * case this tool exists for. `outwardPerimeterRings` already does the exact
+ * cancellation a union of touching faces would do -- an edge two faces in
+ * the set share is interior and drops out, only the true outer walk
+ * survives -- entirely as graph bookkeeping, without comparing a single
+ * floating-point coordinate. `fillArea`'s own `polygon-clipping` call then
+ * only ever has to reconcile `swept` against the one or two rings this
+ * collapses to, never against every individual face's own corners.
+ */
+function standingOuterRings(standing: readonly ConstructionRegionTopology[]): readonly Ring[] {
+  const positions = new Map<string, ConstructionPosition>();
+  for (const topology of standing) {
+    for (const node of topology.nodes) positions.set(node.id, node.position);
   }
-  return ring.length >= 3 ? ring : undefined;
+  const rings: Ring[] = [];
+  for (const loop of outwardPerimeterRings(standing)) {
+    const ring: Ring = [];
+    let complete = true;
+    for (const edge of loop) {
+      const position = positions.get(edge.startNodeId);
+      if (position === undefined) { complete = false; break; }
+      ring.push([position.x, position.z]);
+    }
+    if (complete && ring.length >= 3) rings.push(ring);
+  }
+  return rings;
 }
 
 /**
@@ -379,36 +421,46 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     const consumed = reclaimedTopologies(standing, params.targetSurface, swept, probeArea);
 
     // The generator is never asked for ground beyond the brush's own outline
-    // plus the real footprint of every standing face nearby -- reclaimed or
-    // not -- unioned in, never by the halo distance that found them. Empty
-    // space past the brush is never included, whatever `joinHalo` is set to.
+    // plus the real shape of everything standing nearby -- reclaimed or not
+    // -- folded in, never by the halo distance that found it. Empty space
+    // past the brush is never included, whatever `joinHalo` is set to.
     //
     // **All of `standing`, not just `consumed`.** A face this stroke reclaims
     // sits right next to faces it does not -- the retained layer just past
     // the seam -- and a shared edge between the two is a real edge in the
-    // graph today. Union in only the reclaimed side and that edge is
-    // described twice: once as part of *this* outer boundary (the reclaimed
-    // face's own far side, now on the union's silhouette), and once as part
-    // of the retained neighbour's own outward perimeter, which becomes a
-    // hole below. The same segment as both "the edge of the ground" and "the
-    // edge of a hole in it" is a contradiction the CDT resolves by treating
-    // it as a self-cancelling sliver of zero ground -- a real hole, exactly
-    // along the seam this stroke just reclaimed. Reported on the table right
-    // after the fix that introduced the union in the first place.
+    // graph today. Folding in only the reclaimed side would describe that
+    // edge twice: once as part of *this* outer boundary (the reclaimed
+    // face's own far side), and once as part of the retained neighbour's own
+    // outward perimeter, which becomes a hole below. The same segment as both
+    // "the edge of the ground" and "the edge of a hole in it" is a
+    // contradiction the CDT resolves by treating it as a self-cancelling
+    // sliver of zero ground -- a real hole, exactly along the seam this
+    // stroke just reclaimed. Reported on the table right after the fix that
+    // first folded reclaimed ground in this way.
     //
-    // Folding retained ground into this union too does not add it to the
-    // final mesh -- `holeRings` below still carves it back out, exactly as
-    // it always has. It only makes the *outer* silhouette self-consistent
-    // with the holes it is about to carry: union cancels an edge shared by
-    // two of its own inputs, so the reclaim/retain seam becomes an internal
-    // edge that disappears from the boundary entirely, and the hole ring is
-    // once again the sole authority for where it runs -- the same contract
-    // the swept/retained seam has always kept.
-    const standingFootprints = standing.map(footprintRingOf).filter((ring): ring is Ring => ring !== undefined);
+    // Folding retained ground into this too does not add it to the final
+    // mesh -- `holeRings` below still carves it back out, exactly as it
+    // always has. It only makes the *outer* silhouette self-consistent with
+    // the holes it is about to carry: the reclaim/retain seam becomes
+    // internal and disappears from the boundary entirely, leaving the hole
+    // ring as the sole authority for where it runs -- the same contract the
+    // swept/retained seam has always kept.
+    //
+    // **Why `standingOuterRings`, not one `polygon-clipping` polygon per
+    // face.** That was the next thing tried, and it does not survive contact
+    // with a real table: handed one raw polygon per standing face -- dozens,
+    // on ground painted even a handful of times -- `polygon-clipping`'s
+    // sweep-line union reliably throws ("Unable to find segment ... in
+    // SweepLine tree"), reproduced by painting one spot twenty times in a
+    // row. `standingOuterRings` collapses that same cancellation down to the
+    // one or two rings it was always going to reduce to first, by topology,
+    // so the one `polygon-clipping` call left only ever reconciles `swept`
+    // against those -- never against every individual face's own corners.
+    const outerRings = standingOuterRings(standing);
     const fillArea: MultiPolygon =
-      standingFootprints.length === 0
+      outerRings.length === 0
         ? swept
-        : polygonClipping.union(swept, ...standingFootprints.map((ring): Polygon => [ring]));
+        : polygonClipping.union(snapMultiPolygon(swept), ...outerRings.map((ring): Polygon => [snapForUnion(ring)]));
 
     // What the stroke (now widened by whatever it just reclaimed) asks to
     // fill, and what is already standing in it. The second becomes holes:
