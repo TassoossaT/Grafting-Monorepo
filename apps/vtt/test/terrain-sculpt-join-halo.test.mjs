@@ -216,24 +216,31 @@ test("with nothing standing nearby, joinHalo never asks the generator for ground
   }
 });
 
-test("a cloud only inside the wider bounds box, never inside the halo itself, is left out entirely", () => {
-  // x 9-11: outside probeArea's own radius (brushRadius 4 + faceSize 2 *
-  // joinHalo 2 = 8) by a good margin, but inside the box
-  // `terrainStandingAround` queries once its own `faceSize * 2` padding is
-  // added on top (up to x 12). Nothing stands under the brush itself on this
-  // fresh stroke, so there is nothing this cloud could ever be reached from.
-  const UNRELATED_CLOUD = [
-    { id: "u0", x: 9, z: -1 },
-    { id: "u1", x: 11, z: -1 },
-    { id: "u2", x: 11, z: 1 },
-    { id: "u3", x: 9, z: 1 },
+test("the neighbourhood lookup still runs, and still finds a retained neighbour, when nothing overlaps the halo either", () => {
+  // x 9-11 sits outside even the joinHalo-2 probe's own reach (brushRadius 4
+  // + faceSize 2 * joinHalo 2 = 8), so nothing here is ever handed over as a
+  // seed -- `covered` and the halo's own coverage are both empty. An earlier
+  // version of this lookup took an empty seed list as license to skip the
+  // engine call outright and return `[]`. That is also the one case where a
+  // stroke can land in a gap between two *already-touching* pieces of
+  // ground without covering either directly: skipping there dropped a real
+  // retained neighbour, its shared seam was never carved out as a hole, and
+  // the fresh grid planted a face on an edge two existing faces already
+  // shared -- a hard "already used 2 times" refusal, not a cosmetic slip.
+  // The call must still go out and let the engine's own bounds scan answer,
+  // same as it always could before seeding from the halo was added.
+  const RETAINED_NEIGHBOUR = [
+    { id: "n0", x: 9, z: -1 },
+    { id: "n1", x: 11, z: -1 },
+    { id: "n2", x: 11, z: 1 },
+    { id: "n3", x: 9, z: 1 },
   ];
   const capture = {};
-  const ctx = buildCtx([squareTopology(["unrelated"], "terrain", UNRELATED_CLOUD)], capture);
+  const ctx = buildCtx([squareTopology(["neighbour"], "terrain", RETAINED_NEIGHBOUR)], capture);
   terrainSculptTool.onPointerUp(ctx, clickAtOrigin(), paramsWith(2));
   const [{ boundary, holes }] = capture.gridRequests;
-  assert.equal(boundary.length, 1, "the unrelated cloud is not folded into the fill boundary");
-  assert.equal(holes.length, 0, "nor carved into it as a hole -- it was never part of this stroke");
+  assert.equal(boundary.length, 2, "the neighbour's own footprint is folded into the outer boundary");
+  assert.equal(holes.length, 1, "and carved back out as a hole -- dropping it here is what caused the crash");
 });
 
 test("low irregularity scales the face size up past its nominal value", () => {
