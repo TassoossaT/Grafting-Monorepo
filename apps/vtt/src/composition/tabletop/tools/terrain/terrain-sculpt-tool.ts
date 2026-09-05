@@ -317,21 +317,55 @@ function standingOuterRings(standing: readonly ConstructionRegionTopology[]): re
  * Walking the touching chain here, in the already-local `standing` set,
  * costs nothing new: it is the same neighbourhood query already paid for.
  */
+/**
+ * A topology's own mean edge length -- the cheapest available reading of how
+ * fine ground actually is, since a region here is always one quad and its
+ * four edges are the only edges it has.
+ */
+function averageEdgeLength(topology: ConstructionRegionTopology): number {
+  const loop = topology.outerLoops[0];
+  if (loop === undefined || loop.length === 0) return Infinity;
+  const positions = new Map(topology.nodes.map((node) => [node.id, node.position] as const));
+  let total = 0;
+  let count = 0;
+  for (const edge of loop) {
+    const a = positions.get(edge.startNodeId);
+    const b = positions.get(edge.endNodeId);
+    if (a === undefined || b === undefined) continue;
+    total += Math.hypot(a.x - b.x, a.z - b.z);
+    count += 1;
+  }
+  return count > 0 ? total / count : Infinity;
+}
+
+/**
+ * Below this fraction of the requested face size, a face counts as ground a
+ * *past* regeneration already left finer than this stroke asks for.
+ *
+ * Loose on purpose: `relaxStrength` deliberately leaves an irregular mesh's
+ * own edge lengths spread wide at nominal size, and this only has to catch
+ * ground that is systematically finer, not merely on the small side of
+ * normal.
+ */
+const ALREADY_FINE_FRACTION = 0.75;
+
 function reclaimedTopologies(
   standing: readonly ConstructionRegionTopology[],
   targetSurface: string,
   swept: MultiPolygon,
   probeArea: MultiPolygon,
+  faceSize: number,
+  haloActive: boolean,
 ): readonly ConstructionRegionTopology[] {
-  const candidates = standing.filter(
-    (topology) =>
-      topology.surfaceType === targetSurface &&
-      topology.nodes.length > 0 &&
-      topology.nodes.every((node) => insideSwept(node.position, probeArea)),
+  const sameType = standing.filter((topology) => topology.surfaceType === targetSurface && topology.nodes.length > 0);
+  const insideProbe = new Set(
+    sameType.filter((topology) => topology.nodes.every((node) => insideSwept(node.position, probeArea))).map((topology) => topology.surfaceKey.join(" ")),
   );
+  const isFine = (topology: ConstructionRegionTopology): boolean =>
+    averageEdgeLength(topology) < faceSize * ALREADY_FINE_FRACTION;
 
   const byNode = new Map<string, ConstructionRegionTopology[]>();
-  for (const topology of candidates) {
+  for (const topology of sameType) {
     for (const node of topology.nodes) {
       const sharing = byNode.get(node.id);
       if (sharing) sharing.push(topology);
@@ -340,19 +374,69 @@ function reclaimedTopologies(
   }
 
   const reachable = new Map<string, ConstructionRegionTopology>();
-  const frontier = candidates.filter((topology) => topology.nodes.some((node) => insideSwept(node.position, swept)));
-  for (const topology of frontier) reachable.set(topology.surfaceKey.join(" "), topology);
-  while (frontier.length > 0) {
-    const topology = frontier.pop()!;
-    for (const node of topology.nodes) {
-      for (const neighbour of byNode.get(node.id) ?? []) {
-        const key = neighbour.surfaceKey.join(" ");
-        if (reachable.has(key)) continue;
-        reachable.set(key, neighbour);
-        frontier.push(neighbour);
+  const walk = (seeds: readonly ConstructionRegionTopology[], allow: (topology: ConstructionRegionTopology) => boolean): void => {
+    const frontier = [...seeds];
+    for (const topology of seeds) reachable.set(topology.surfaceKey.join(" "), topology);
+    while (frontier.length > 0) {
+      const topology = frontier.pop()!;
+      for (const node of topology.nodes) {
+        for (const neighbour of byNode.get(node.id) ?? []) {
+          const key = neighbour.surfaceKey.join(" ");
+          if (reachable.has(key) || !allow(neighbour)) continue;
+          reachable.set(key, neighbour);
+          frontier.push(neighbour);
+        }
       }
     }
-  }
+  };
+
+  // Chain one: anything reachable, by touching same-type ground, from what
+  // the brush itself overlaps -- unchanged from before, bounded to
+  // `probeArea` as it always was.
+  walk(
+    sameType.filter(
+      (topology) => insideProbe.has(topology.surfaceKey.join(" ")) && topology.nodes.some((node) => insideSwept(node.position, swept)),
+    ),
+    (topology) => insideProbe.has(topology.surfaceKey.join(" ")),
+  );
+
+  // Chain two: ground a past regeneration already left finer than this
+  // stroke's own nominal size, swept up whole -- however far that fineness
+  // reaches, restricted to *only* other fine ground, so it stops exactly at
+  // the first neighbour that is still coarse enough to leave alone.
+  //
+  // **Gated on `haloActive`.** With no halo, `probeArea` is `swept` and the
+  // contract is the narrowest one this tool keeps: a face the brush only
+  // grazes is met, never reclaimed, whatever its own edge lengths are --
+  // `joinHalo 0 only meets a seam face, never reclaims it` pins exactly
+  // this. Fineness is a reason to widen how far an *already widened* reach
+  // goes back and cleans up after itself; it is not itself a reason to
+  // widen reach that was never asked for.
+  //
+  // **Deliberately not bounded to `probeArea`.** A face just past that
+  // edge is still folded into `fillArea`'s own silhouette as a hole today
+  // (`standingOuterRings` already reads all of `standing`, out to
+  // `reachArea`) -- so its boundary is already going to be adopted against
+  // whether or not it is ever reclaimed. Adoption alone is what a past
+  // stroke used to leave it fine in the first place, and nothing about
+  // `probeArea` protects it from being adopted against *again* right here.
+  // Only reclaiming it, so the regeneration replaces it at nominal size
+  // instead of adopting yet another split onto it, actually stops that.
+  //
+  // **Why this has to exist at all.** Every corner this stroke's own new
+  // mesh lands along a retained neighbour's edge has to split that edge, or
+  // the seam is a T-junction -- that is not negotiable, and nothing here
+  // changes it. But the neighbour's edges were themselves laid by whatever
+  // regenerated *it* last, and if that reached this same seam, splitting
+  // them again leaves them finer still -- and quadrangulation's own `ortho`
+  // step splits *every* edge it is handed, constraint or not, so this is
+  // not a quality setting that can be dialled away, only a boundary that
+  // can be regenerated back to nominal. Left alone this ratchets without a
+  // ceiling: reproduced against the real engine, two mounds twelve units
+  // apart, repainting one eight times, grew the untouched one from 35 faces
+  // to 2163, entirely on ground this stroke never directly touched.
+  if (haloActive) walk(sameType.filter(isFine), isFine);
+
   return [...reachable.values()];
 }
 
@@ -482,7 +566,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       strokeChord(faceSize),
     );
     const standing = nearby.filter((topology) => topology.nodes.some((node) => insideSwept(node.position, reachArea)));
-    const consumed = reclaimedTopologies(standing, params.targetSurface, swept, probeArea);
+    const consumed = reclaimedTopologies(standing, params.targetSurface, swept, probeArea, faceSize, params.joinHalo > 0);
 
     // The generator is never asked for ground beyond the brush's own outline
     // plus the real shape of everything standing nearby -- reclaimed or not
