@@ -1,4 +1,28 @@
 import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+/**
+ * Runs a `gh` subcommand whose body/comment text must reach it as a file,
+ * never inline: `execFileSync` still assembles one Windows command line
+ * under the hood, and CreateProcess caps that around 32K characters --
+ * comfortably exceeded by a design doc pasted into an issue body (#247 hit
+ * this at ~35K, ENAMETOOLONG, past the point where `--body <text>` had
+ * worked for a smaller draft of the same issue). `gh` itself reads
+ * `--body-file` off disk, so routing every long-text flag through a real
+ * temp file sidesteps the OS limit regardless of how large the text is.
+ */
+function ghWithTextFile(args: readonly string[], flag: string, text: string): string {
+  const dir = mkdtempSync(join(tmpdir(), "ia-graft-"));
+  const filePath = join(dir, "body.md");
+  try {
+    writeFileSync(filePath, text, "utf8");
+    return execFileSync("gh", [...args, flag, filePath], { encoding: "utf8" });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
 
 export interface IssueListInput {
   type?: string;
@@ -28,6 +52,7 @@ export interface IssueUpdateInput {
   status?: string;
   priority?: string;
   comment?: string;
+  body?: string;
 }
 
 export interface CompactIssue {
@@ -157,8 +182,8 @@ export async function issueView(_repoRoot: string, input: IssueViewInput) {
 export async function issueNew(_repoRoot: string, input: IssueNewInput) {
   if (!input || !input.title) return { ok: false as const, error: "missing issue title" };
   try {
-    const args = ["issue", "create", "--title", input.title, "--body", input.body || ""];
-    
+    const args = ["issue", "create", "--title", input.title];
+
     // Add type label
     const type = input.type ? (input.type.startsWith("type: ") ? input.type : `type: ${input.type}`) : "type: task";
     args.push("--label", type);
@@ -189,7 +214,7 @@ export async function issueNew(_repoRoot: string, input: IssueNewInput) {
       args.push("--parent", String(input.parent));
     }
 
-    const output = execFileSync("gh", args, { encoding: "utf8" }).trim();
+    const output = ghWithTextFile(args, "--body-file", input.body || "").trim();
     const match = output.match(/\/issues\/(\d+)$/);
     const id = match ? Number(match[1]) : undefined;
 
@@ -213,7 +238,14 @@ export async function issueUpdate(_repoRoot: string, input: IssueUpdateInput) {
 
     // Add comment if provided
     if (input.comment) {
-      execFileSync("gh", ["issue", "comment", id, "--body", input.comment], { encoding: "utf8" });
+      ghWithTextFile(["issue", "comment", id], "--body-file", input.comment);
+    }
+
+    // Replace the body outright if provided -- the caller already has the
+    // full new body (readTextValue merges the file/inline mutual exclusion);
+    // this never merges with the old body.
+    if (input.body !== undefined) {
+      ghWithTextFile(["issue", "edit", id], "--body-file", input.body);
     }
 
     // Update status or priority if provided

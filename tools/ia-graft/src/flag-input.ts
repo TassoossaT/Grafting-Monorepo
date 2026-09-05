@@ -193,6 +193,7 @@ export function flagInput(
       status: readValue(argv, "--status"),
       priority: readValue(argv, "--priority"),
       comment: readTextValue(argv, "--comment"),
+      body: readTextValue(argv, "--body"),
     };
   }
   return undefined;
