@@ -45,14 +45,26 @@ pub struct CellCoordDto
 pub struct GenerateAndApplyRegionPartitionRequest
 pub fn generate_and_apply_region_partition(
 
+// src/grid_generation.rs
+pub struct ConstraintPointDto
+pub struct RefinementDto
+pub struct RelaxDto
+pub struct IrregularQuadGridRequest
+pub struct GridVertexDto
+pub struct ContourNodeDto
+pub struct IrregularQuadGridResponse
+pub fn irregular_quad_grid(
+
 // src/mesh.rs
 pub const REGION_SURFACE_KEY_PREFIX: &str = "@region";
 pub fn region_id_to_wire(id: &RegionId) -> Vec<String>
 pub fn region_id_from_wire(wire: &[String]) -> Result<RegionId, String>
 pub struct SurfaceMeshDto
 pub struct SurfaceMeshRequest
+pub struct SurfaceMeshesRequest
 pub fn all_surface_meshes(
 pub fn surface_mesh(
+pub fn surface_meshes(
 
 // src/patch_replacement.rs
 pub struct ApplyPatchReplacementRequest
@@ -85,7 +97,7 @@ pub fn apply_region_overlay(
 // src/session.rs
 pub struct ConstructionSession
 pub fn new() -> ConstructionSession
-pub fn remove_surface_json(&mut self, request_json: &str) -> Result<(), JsValue>
+pub fn remove_surface_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn move_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn insert_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn remove_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue>
@@ -192,7 +204,8 @@ pub fn decode_snapshot(bytes: &[u8]) -> Result<Snapshot, WireError>
 // src/lib.rs
 pub const MAX_SCALE: f64 = 0.5;
 pub const MAX_CELLS: u64 = 4096 * 4096;
-pub fn generate_heightmap(
+pub fn generate_heightmap(width: u32, height: u32, seed: u32, scale: f64) -> Result<Vec<f32>, JsValue>
+pub fn generate_heightmap_at(
 pub struct WasmPrismMesh
 pub fn positions(&self) -> Vec<f32>
 pub fn cell_corners(&self) -> Vec<u32>
@@ -2060,6 +2073,7 @@ export interface IssueUpdateInput {
   status?: string;
   priority?: string;
   comment?: string;
+  body?: string;
   }
 export interface CompactIssue {
   id: number;
@@ -3193,120 +3207,15 @@ export type { ConstructionToolId, ToolParamsByTool, ToolParamsFor } from "../../
 export type { ConstructionPointerHandlers, UseConstructionPointerOptions } from "./use-construction-pointer.ts";
 export type { ConstructionToolFeedback } from "./tools/index.ts";
 
-// src/composition/tabletop/path/contour/spine-contour/apply-spine-contour.ts
-export function applySpineContour(
-  ctx: ToolContext,
-  operationId: string,
-  result: PlanSpineContourResult,
-  graphPatch?: ConstructionGraphPatch,
-  ): ConstructionPatchOutcome {
-  return ctx.runtime.applyPatchReplacement(
-  {
-
-// src/composition/tabletop/path/contour/spine-contour/catmull-rom.ts
-export function sampleCatmullRom(
-  controlPoints: readonly ConstructionPosition[],
-  tolerance: number,
-  ): readonly ConstructionPosition[] {
-  if (controlPoints.length < 2) return controlPoints;
-  const last = controlPoints.length - 1;
-  const clampedTolerance = Math.max(tolerance, 1e-6);
-
-// src/composition/tabletop/path/contour/spine-contour/contour-patch.ts
-export interface ExistingNode {
-  readonly id: string;
-  readonly position: ConstructionPosition;
-  }
-export interface ContourPatchResult {
-  readonly patch: ConstructionPatch;
-  readonly regionIds: readonly string[];
-  }
-export function buildContourPatch(
-  tableId: string,
-  operationId: string,
-  surfaceType: string,
-  bandIndex: number,
-  shapes: MultiPolygon,
-  heightSamples: readonly ConstructionPosition[],
-  existingNodes: readonly ExistingNode[],
-
-// src/composition/tabletop/path/contour/spine-contour/index.ts
-export type { ExistingNode } from "./contour-patch.ts";
-export type { BandRibbon } from "./offset-bands.ts";
-export type { PlanSpineContourInput, PlanSpineContourResult, SpineChainInput } from "./plan-spine-contour.ts";
-
-// src/composition/tabletop/path/contour/spine-contour/offset-bands.ts
-export interface BandRibbon {
-  readonly bandIndex: number;
-  /** Closed ring in the sweep's own winding, first curve forward then the next reversed. */
-  readonly outer: readonly ConstructionPosition[];
-  }
-export function offsetBands(
-  polyline: readonly ConstructionPosition[],
-  bandOffsets: readonly number[],
-  miterLimit: number,
-  ): readonly BandRibbon[] {
-  if (polyline.length < 2 || bandOffsets.length < 2) return [];
-  const frames = stationFrames(polyline, Math.max(miterLimit, 1));
-
-// src/composition/tabletop/path/contour/spine-contour/plan-spine-contour.ts
-export interface SpineChainInput {
-  readonly chainId: string;
-  readonly controlPoints: readonly ConstructionPosition[];
-  /** Lateral offsets defining the bands, e.g. `[-2.1, 0, 2.1]` for contour/spine/contour. */
-  readonly bandOffsets: readonly number[];
-  readonly miterLimit: number;
-  /** Curve flattening tolerance, world units (XZ). */
-  readonly tolerance: number;
-export interface PlanSpineContourInput {
-  readonly tableId: string;
-  /** Scopes every node/region id this call mints -- one edit, one operation. */
-  readonly operationId: string;
-  readonly surfaceType: string;
-  /**
-  * Every chain of the touched spine cloud -- not just the one a stroke or a
-  * control-node drag directly changed, but every chain the caller's own
-export interface PlanSpineContourResult {
-  readonly patch: ConstructionPatch;
-  /**
-  * Every one of `input.standingRegions`, unconditionally -- their faces are
-  * superseded by the freshly unioned ones in `patch.regions`, even where
-  * most of their own nodes were welded back unchanged. The caller replaces
-  * them in one atomic transaction with the unioned patch; a refused target
-  * can never leave the standing faces deleted.
-export function planSpineContour(input: PlanSpineContourInput): PlanSpineContourResult | undefined {
-  if (input.editedChains.length === 0) return undefined;
-
-  const ribbonsByBand = new Map<number, BandRibbon[]>();
-
-// src/composition/tabletop/path/contour/spine-contour/union-bands.ts
-export function unionBandLayer(ribbons: readonly BandRibbon[]): MultiPolygon {
-  const polygons: Polygon[] = ribbons.map((ribbon) => [ringOf(ribbon.outer)]);
-export function nearestSampleY(x: number, z: number, samples: readonly ConstructionPosition[]): number {
-  let bestY = samples[0]?.y ?? 0;
-  let bestDistanceSq = Infinity;
-  for (const sample of samples) {
-  const dx = sample.x - x;
-  const dz = sample.z - z;
-  const distanceSq = dx * dx + dz * dz;
-  if (distanceSq < bestDistanceSq) {
-
-// src/composition/tabletop/path/path-effect-executor.ts
-export const PATH_COLOR = 0xc084fc;
-export function referenceLineFrom(
-  fitted: readonly FittedEdge[],
-  stroke: readonly ConstructionPosition[],
-  ridesTerrain: boolean,
-  ): { readonly line: readonly ConstructionPosition[]; readonly arcs: readonly (SweptArc | undefined)[] } {
-  const track = groundTrack(fitted);
-export function applyPathBrushEffect(
+// src/composition/tabletop/path/path-cloud-transaction.ts
+export function commitPathCloudIntent(
   ctx: ToolContext,
   effect: PathBrushEffect,
   tolerance: number,
   ): void {
-  const stroke = effect.brushRegion.samples;
-  if (stroke.length === 0) return;
-  const operationId = effect.operationId;
+  try {
+  const plan = planPathCloudMutation({
+  tableId: ctx.tableId,
 
 // src/composition/tabletop/tabletop-runtime.ts
 export type TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed";
@@ -3335,29 +3244,8 @@ export class AppTabletopRuntime implements TabletopRuntime {
   readonly #listeners = new Set<TabletopRuntimeListener>();
 
 // src/composition/tabletop/tools/core/boundary-edges.ts
-export function sharedEdgeId(
-  tableId: string,
-  from: ConstructionNodeId,
-  to: ConstructionNodeId,
-  ): ConstructionEdgeId {
-  return from < to ? `${tableId}:seg:${from}~${to}` : `${tableId}:seg:${to}~${from}`;
-  }
-export type EdgeSharing =
 export function boundaryUsage(ctx: ToolContext): ReadonlyMap<ConstructionEdgeId, readonly boolean[]> {
   const uses = new Map<ConstructionEdgeId, boolean[]>();
-export interface BoundaryEdges {
-  /** Declares (or reuses) the edge between `from` and `to`, given that edge's geometry walked `from` -> `to`, and returns the use that walks it in that direction. Geometry defaults to a straight chord. */
-  use(
-  from: ConstructionNodeId,
-  to: ConstructionNodeId,
-  geometry?: ConstructionEdgeGeometry,
-  ): ConstructionOrientedEdgeUse;
-  /** Every edge declared so far, each exactly once. */
-export function reverseGeometry(geometry: ConstructionEdgeGeometry): ConstructionEdgeGeometry {
-  if (geometry.kind === "line") return geometry;
-  return { kind: "arc", center: geometry.center, clockwise: !geometry.clockwise };
-export function createBoundaryEdges(tableId: string, sharing: EdgeSharing): BoundaryEdges {
-  const edges = new Map<ConstructionEdgeId, ConstructionPatchEdge>();
 
 // src/composition/tabletop/tools/core/brush-tool.ts
 export interface BrushRegion {
@@ -3444,6 +3332,7 @@ export interface EdgeOverlayGroup {
   }
 export function edgeOverlayOf(
   topologies: readonly ConstructionRegionTopology[],
+  graphSnapshot?: ConstructionGraphSnapshot,
   ): readonly EdgeOverlayGroup[] {
   const byRole = new Map<string, number[]>();
 export function edgeOverlayDescriptor(group: EdgeOverlayGroup): PreviewDescriptor {
@@ -3465,70 +3354,7 @@ export const navigateTool: ConstructionTool<"navigate"> = {
   };
 
 // src/composition/tabletop/tools/core/stroke-fitting.ts
-export interface FittedEdge {
-  readonly start: ConstructionPosition;
-  readonly end: ConstructionPosition;
-  readonly geometry: ConstructionEdgeGeometry;
-  }
-export interface FitOptions {
-  /** When false, every span is fitted as a straight chord and no circle is ever considered. */
-  readonly arcs?: boolean;
-  }
-export function fitPath(
-  points: readonly ConstructionPosition[],
-  tolerance: number,
-  options: FitOptions = {},
-  ): readonly FittedEdge[] {
-  if (points.length < 2) return [];
-  const arcs = options.arcs ?? true;
-  const budget = Math.max(0, tolerance);
-
-// src/composition/tabletop/tools/core/sweep-formation.ts
-export interface TransverseProfilePoint {
-  /** Signed world distance from the reference line, left to right. */
-  readonly lateralOffset: number;
-  /** Height above the reference line's own height at that station. */
-  readonly elevation: number;
-  }
-export interface SweptArc {
-  readonly center: readonly [number, number];
-  readonly clockwise: boolean;
-  }
-export function withoutCoincidentStations(
-  samples: readonly ConstructionPosition[],
-  ): readonly ConstructionPosition[] {
-  const distinct: ConstructionPosition[] = [];
-  for (const sample of samples) {
-  const previous = distinct[distinct.length - 1];
-  if (previous === undefined || xzDistance(previous, sample) > COINCIDENT_EPSILON) {
-  distinct.push(sample);
-export function stationFrame(
-  line: readonly ConstructionPosition[],
-  index: number,
-  miterLimit: number,
-  arcs: readonly (SweptArc | undefined)[] = [],
-  ): readonly [number, number] {
-  const outgoing = normalLeaving(line, index, arcs);
-export function sweptBoundary(stationCount: number, profileLength: number): readonly number[] {
-  const last = stationCount - 1;
-  const boundary: number[] = [];
-  for (let station = 0; station < stationCount; station += 1) boundary.push(station * profileLength);
-export class SweepFormationError extends Error {}
-
-  /**
-  * Samples a transverse profile along a reference line into connected quads.
-  *
-  * Vertices are station-major: every consecutive `profile.length` entries form
-  * one transverse station, which is what lets `pathPatch` read a station
-  * address straight off a vertex index. Quads reference those shared vertices,
-export function sweepFormation(
-  referenceLine: readonly ConstructionPosition[],
-  profile: readonly TransverseProfilePoint[],
-  miterLimit: number,
-  options: {
-  /** The curve each span runs on; one shorter than `referenceLine`. */
-  readonly arcs?: readonly (SweptArc | undefined)[];
-  } = {},
+export type { FittedEdge, FitOptions } from "../../../../features/edit-construction/index.ts";
 
 // src/composition/tabletop/tools/core/tool-context.ts
 export interface PointerSample {
@@ -3596,6 +3422,32 @@ export function reportToolWarning(
 export function toolFor<Id extends ConstructionToolId>(id: Id): ConstructionTool<Id> {
   return TOOL_REGISTRY[id];
   }
+
+// src/composition/tabletop/tools/cut-repair-dispatch.ts
+export type CutRepairExecutor = (
+  runtime: TerrainRegenerateRuntime,
+  fallout: CutFallout,
+  causeId: string,
+  tableId: string,
+  ) => number;
+
+  /**
+export const CUT_REPAIR_EXECUTORS: Readonly<Record<string, CutRepairExecutor>> = Object.freeze({
+  terrain: repairTerrainCut,
+  "terrain-grass": repairTerrainCut,
+  });
+export function paintedNodesOf(
+  runtime: Pick<TabletopRuntime, "getAllRegionTopologies" | "getSnapshot">,
+  paintedType: string,
+  ): Pick<CutFallout, "paintedNodes" | "paintedLoops"> {
+  const painted = runtime.getAllRegionTopologies().filter((topology) => topology.surfaceType === paintedType);
+export function dispatchCutRepairs(runtime: TabletopRuntime, request: ApplyPatchReplacementRequest, causeId: string): void {
+  const outline = request.footprintOutline;
+  if (outline === undefined || outline.length === 0) return;
+  const paintedType = request.patch.regions[0]?.surfaceType;
+  if (paintedType === undefined) return;
+
+  const coverage = runtime.getFootprintCoverage(outline);
 
 // src/composition/tabletop/tools/house/house-room-delete-tool.ts
 export const houseRoomDeleteTool: ConstructionTool<"house-room-delete"> = {
@@ -3724,6 +3576,14 @@ export function distanceToPolygonBoundaryXZ(point: PointXZ, polygon: readonly Po
   const b = polygon[(i + 1) % polygon.length];
   if (a === undefined || b === undefined) continue;
   best = Math.min(best, distanceToSegmentXZ(point, a, b));
+export function nearestPointOnPolygonBoundaryXZ(point: PointXZ, polygon: readonly PointXZ[]): PointXZ {
+  let best: PointXZ | undefined;
+  let bestDistanceSq = Infinity;
+  for (let i = 0; i < polygon.length; i += 1) {
+  const a = polygon[i];
+  const b = polygon[(i + 1) % polygon.length];
+  if (a === undefined || b === undefined) continue;
+  const abx = b.x - a.x;
 export function angleFromToXZ(a: PointXZ, b: PointXZ): number {
   return Math.atan2(b.z - a.z, b.x - a.x);
 export function polygonAreaXZ(polygon: readonly PointXZ[]): number {
@@ -3788,18 +3648,19 @@ export function brushStrokeOutline(
 export function brushSweptOutlinePolygons(
   samples: readonly ConstructionPosition[],
   radius: number,
-  ): MultiPolygon {
-  const first = samples[0];
-  if (first === undefined) return [];
-  const capsules = strokeCapsules(samples, radius);
+  /**
+  * How far apart the points of the result may be, for a caller that is going
+  * to turn this outline into a mesh. Omitted keeps the fixed resolution every
+  * other caller has always had.
+  */
 export function brushSweptRegionFill(
   samples: readonly ConstructionPosition[],
   shape: BrushOutlineShape,
   color: number,
   opacity = 0.3,
-  ): PreviewDescriptor {
-  const first = samples[0];
-  if (first === undefined) return { kind: "mesh", color, opacity, positions: new Float32Array(), indices: new Uint16Array() };
+  /**
+  * Must match whatever the same stroke passes to
+  * {@link brushSweptOutlinePolygons}, or the ghost stops being the shape the
 export function circleOutline(
   center: ConstructionPosition,
   radius: number,
@@ -3816,67 +3677,204 @@ export function circularBrushStrokeOutline(
   const positions: number[] = [];
   if (samples.length === 0) return { kind: "segments", color, opacity, positions: new Float32Array() };
 
-// src/composition/tabletop/tools/terrain/irregular-grid.ts
-export interface Vec2 {
-  readonly x: number;
-  readonly y: number;
-  }
-export type Face = readonly number[];
-export type Quad = readonly [number, number, number, number];
-export interface FaceMesh {
-  readonly vertices: readonly Vec2[];
-  readonly faces: readonly Face[];
-  }
-export interface QuadMesh {
-  readonly vertices: readonly Vec2[];
-  readonly quads: readonly Quad[];
-  }
-export type Random = () => number;
-export function createRandom(seed: number): Random {
-  let state = seed >>> 0;
-  return () => {
-  state = (state + 0x6d2b79f5) >>> 0;
-  let t = state;
-  t = Math.imul(t ^ (t >>> 15), t | 1);
-export interface TriangleHexOptions {
-  /** Triangles along one hexagon edge. Sylves' walkthrough uses `4`. */
-  readonly trianglesPerSide: number;
-  /** Edge length of one equilateral triangle. Defaults to `0.5`. */
-  readonly triangleSide?: number;
-  }
-export function buildTriangleHex(options: TriangleHexOptions): FaceMesh {
-  const side = options.triangleSide ?? 0.5;
-  const perSide = options.trianglesPerSide;
-  if (!Number.isInteger(perSide) || perSide < 1) {
-  throw new RangeError(`trianglesPerSide must be a positive integer; received ${perSide}`);
-export function pairTriangles(mesh: FaceMesh, random: Random): FaceMesh {
-  const edgeOwners = new Map<string, number[]>();
-export function ortho(mesh: FaceMesh): QuadMesh {
-  const vertices: Vec2[] = [...mesh.vertices];
-  const quads: Quad[] = [];
-
-  for (const face of mesh.faces) {
-  const points = face.map((vertex) => mesh.vertices[vertex]).filter(isVec2);
-export function weld(mesh: QuadMesh, epsilon = 1e-6): QuadMesh {
-  const vertices: Vec2[] = [];
-  const lookup = new Map<string, number>();
-export interface RelaxOptions {
-  /** Smoothing passes. Around `10`-`20` settles this grid. Defaults to `12`. */
-  readonly iterations?: number;
-  /** Fraction of the way to the target each pass moves a vertex. Defaults to `0.5`. */
-  readonly strength?: number;
+// src/composition/tabletop/tools/terrain/terrain-constraints.ts
+export interface ConstraintRing {
+  /** What the generator receives. */
+  readonly points: readonly ConstructionGridConstraintPoint[];
   /**
-  * Whether vertices on the outer boundary stay put. Defaults to `true`.
+  * The edge each segment of `points` runs along, index-aligned: `edges[i]`
+  * spans `points[i]` to `points[i + 1]`, wrapping.
   *
-export function relax(mesh: QuadMesh, options: RelaxOptions = {}): QuadMesh {
-  const iterations = options.iterations ?? 12;
-  const strength = options.strength ?? 0.5;
-  const pinned = options.pinBoundary === false ? new Set<number>() : boundaryVertices(mesh);
-export function boundaryVertices(mesh: QuadMesh): Set<number> {
-  const counts = new Map<string, number>();
+  * A segment may own no edge, and that is a real state rather than an error:
+export interface ConstraintTable {
+  readonly rings: readonly ConstraintRing[];
+  /** `sources[i]` is the node id handed out as `source: i`. */
+  readonly sources: readonly ConstructionNodeId[];
+  }
+export function perimeterConstraints(
+  topologies: readonly ConstructionRegionTopology[],
+  startingIndex: number,
+  ): ConstraintTable {
+  const positions = new Map<ConstructionNodeId, { x: number; z: number }>();
+export function constraintsFromRings(
+  rings: readonly (readonly ConstructionRegionEdge[])[],
+  positionOf: (nodeId: ConstructionNodeId) => { readonly x: number; readonly z: number } | undefined,
+  startingIndex: number,
+  ): ConstraintTable {
+  const sources: ConstructionNodeId[] = [];
+  const index = new Map<ConstructionNodeId, number>();
+export function outlineConstraints(
+  rings: readonly (readonly (readonly [number, number])[])[],
+  /** Consecutive points nearer than this collapse to one. `0` welds nothing. */
+  weld = 0,
+  ): readonly ConstraintRing[] {
+  const weldSq = weld * weld;
+  return rings
+  .map((ring) => {
+export interface ContourAdoption {
+  readonly vertex: number;
+  readonly edge: ConstructionRegionEdge;
+  /** Where along that edge it sits, `0` at its start and `1` at its end. */
+  readonly along: number;
+  }
+export interface ContourSnap {
+  readonly vertex: number;
+  /** The `source` index of the ring corner it takes the identity of. */
+  readonly source: number;
+  /** Split to perform when that corner identity is already claimed elsewhere. */
+  readonly fallback?: ContourAdoption;
+  }
+export interface ResolvedAdoptions {
+  readonly adoptions: readonly ContourAdoption[];
+  readonly snaps: readonly ContourSnap[];
+  }
+export const SHORTEST_USEFUL_FRACTION = 0.2;
+export const OUTLINE_CHORD_PER_FACE = 2;
+export const OUTLINE_WELD_PER_FACE = 0.5;
+export function resolveAdoptions(
+  holeRings: readonly ConstraintRing[],
+  boundaryRings: readonly ConstraintRing[],
+  reported: readonly ConstructionGridContourNode[],
+  positionOf: (vertex: number) => { readonly x: number; readonly z: number } | undefined,
+  /** Fragments shorter than this are not created; see {@link SHORTEST_USEFUL_FRACTION}. */
+  shortestUseful = 0,
+  ): ResolvedAdoptions {
+export interface AdoptionRuntime {
+  applyRegionEdit(ops: readonly AtomicEditOp[], origin: "local", causeId: string): unknown;
+  }
+export function adoptContourNodes(
+  runtime: AdoptionRuntime,
+  /** Which table the edges belong to; the pair, not this, is what names them. */
+  tableId: string,
+  causeId: string,
+  adoptions: readonly ContourAdoption[],
+  nodeIdFor: (vertex: number) => ConstructionNodeId,
+  positionOf: (vertex: number) => ConstructionPosition | undefined,
+
+// src/composition/tabletop/tools/terrain/terrain-diagnostics.ts
+export interface TerrainCommitReport {
+  /** Which operation this was: a stroke, a cut repair. */
+  readonly what: string;
+  readonly faceSideAsked: number;
+  readonly boundary: readonly ConstraintRing[];
+  readonly holes: readonly ConstraintRing[];
+  readonly grid: ConstructionIrregularQuadGrid | undefined;
+  readonly adopted: number;
+export function logTerrainCommit(report: TerrainCommitReport): void {
+  try {
+  describe(report);
+export function logContourGrowth(what: string, before: number, after: number): void {
+  if (!Number.isFinite(before) || !Number.isFinite(after)) return;
+  const delta = after - before;
+  const line = `${TERRAIN_PREFIX} ${what}: contorno ${before} -> ${after} nós (${delta >= 0 ? "+" : ""}${delta})`;
+  if (delta > 0) console.warn(line, { antes: before, depois: after, delta });
+
+// src/composition/tabletop/tools/terrain/terrain-fill.ts
+export interface TerrainFillRuntime {
+  generateIrregularQuadGrid(
+  request: ConstructionIrregularQuadGridRequest,
+  ): ConstructionIrregularQuadGrid | undefined;
+  addPatch(patch: ConstructionPatch, origin: "local", causeId: string): ConstructionPatchOutcome;
+  applyPatchReplacement(
+  request: ApplyPatchReplacementRequest,
+  origin: "local",
+export interface FillBounds {
+  readonly minX: number;
+  readonly minZ: number;
+  readonly maxX: number;
+  readonly maxZ: number;
+  }
+export interface TerrainFillRequest {
+  /**
+  * Prefix every node and edge this fill mints is named under. Whatever the
+  * caller passes has to be unique to this fill: two fills sharing a prefix
+  * would mint the same node id for different ground.
+  */
+  readonly mint: string;
+  /** Which table the shared boundary edges belong to. */
+export interface TerrainFillOutcome {
+  readonly built: number;
+  /** Faces the engine refused: ground that already has a face on both sides. */
+  readonly refused: number;
+  /** Nodes that wanted a neighbour's edge split and did not get it -- one T-junction each. */
+  readonly unadopted: number;
+  /** `false` when refinement hit its vertex ceiling and part of the area came back coarser. */
+  readonly refinementComplete: boolean;
+export const DEFAULT_FACE_SIDE = 2;
+export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillRequest): TerrainFillOutcome {
+  if (request.boundary.length === 0) return NOTHING;
+
+  const grid = runtime.generateIrregularQuadGrid({
+  seed: request.seed,
+  faceSide: request.faceSide,
+  relaxStrength: request.relaxStrength,
+  boundary: request.boundary.map((ring) => ring.points),
+
+// src/composition/tabletop/tools/terrain/terrain-neighborhood.ts
+export interface TerrainStrokeBounds {
+  readonly minX: number;
+  readonly minZ: number;
+  readonly maxX: number;
+  readonly maxZ: number;
+  }
+export interface TerrainNeighbourhoodRuntime {
+  getRegionTopologiesInBounds(bounds: TerrainStrokeBounds & {
+  readonly seeds?: readonly { readonly seed: ConstructionSurfaceKey; readonly surfaceType: string }[];
+  }): readonly ConstructionRegionTopology[];
+  }
+export function terrainStandingAround(
+  runtime: TerrainNeighbourhoodRuntime,
+  covered: readonly ConstructionCoveredRegion[],
+  within: TerrainStrokeBounds,
+  reach: number,
+  ): readonly ConstructionRegionTopology[] {
+  return runtime.getRegionTopologiesInBounds({
+  minX: within.minX - reach,
+
+// src/composition/tabletop/tools/terrain/terrain-regenerate.ts
+export interface TerrainRegenerateRuntime extends TerrainFillRuntime {
+  getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined;
+  }
+export interface HeightField {
+  at(point: { readonly x: number; readonly z: number }): number | undefined;
+  }
+export function heightFieldOf(anchors: readonly ConstructionPosition[], reach: number): HeightField {
+  const buckets = new Map<string, ConstructionPosition[]>();
+export interface RegenerateRequest {
+  /** The faces to throw away and lay again. */
+  readonly consumedSurfaceKeys: readonly ConstructionSurfaceKey[];
+  /**
+  * Contours of other clouds standing inside that ground -- a road, a wall
+  * footing. Met exactly, never regenerated, and never generated over.
+  */
+  readonly otherLoops: readonly (readonly ConstructionRegionEdge[])[];
+export function regenerateNeighbourhood(
+  runtime: TerrainRegenerateRuntime,
+  request: RegenerateRequest,
+  ): number {
+  if (request.consumedSurfaceKeys.length === 0) return 0;
+  if (request.consumedSurfaceKeys.length > MOST_FACES_WORTH_REGENERATING) return 0;
+
+  // Read before deleting: the rim of the hole is the perimeter of the faces
+export function repairTerrainCut(
+  runtime: TerrainRegenerateRuntime,
+  fallout: CutFallout,
+  causeId: string,
+  tableId: string,
+  ): number {
+  return regenerateNeighbourhood(runtime, {
+  consumedSurfaceKeys: fallout.consumedSurfaceKeys,
 
 // src/composition/tabletop/tools/terrain/terrain-restack.ts
 export const ELEVATION_STEP = 0.5;
+export function dirtProfile(normalizedDistance: number): number {
+  const t = 1 - Math.min(Math.max(normalizedDistance, 0), 1);
+export function dirtLoadOver(
+  path: readonly ConstructionPosition[],
+  radius: number,
+  ): (point: ConstructionPosition) => number {
+  if (path.length === 0 || !(radius > 0)) return () => 0;
+  const segments = path.map((from, index) => ({ from, to: path[index + 1] ?? from }));
 export interface RestackOutcome {
   readonly raisedFaces: number;
   /** Distinct nodes actually moved -- shared corners count once. */
@@ -3894,8 +3892,9 @@ export function restackTerrain(
   paintedType: string,
   covered: readonly ConstructionCoveredRegion[],
   causeId: string,
+  /** How much of a full step lands on a given node. Defaults to all of it. */
+  loadAt: (point: ConstructionPosition) => number = () => 1,
   ): RestackOutcome {
-  const resolved = resolveCoverage(paintedType, covered);
 
 // src/composition/tabletop/tools/terrain/terrain-sculpt-tool.ts
 export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
@@ -3905,7 +3904,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   previewFor(gesture: ToolGesture, params: TerrainSculptParams) {
   return brushSweptRegionFill(
   gesture.samples.map((sample) => sample.point),
-  { kind: "circle", radius: REVEAL_RADIUS },
+  { kind: "circle", radius: params.brushRadius },
 
 // src/composition/tabletop/tools/tower/tower-geometry.ts
 export function circleContour(center: ConstructionPosition, radius: number): readonly FittedEdge[] {
@@ -4081,10 +4080,15 @@ export function applyMapProjectionDelta(
   current: MapProjection,
   delta: MapProjectionDelta,
   ): MapProjection {
-  if (delta.type === "node-moved") {
-  const entry = createNodePositionEntry({
-  nodeRef: delta.nodeRef,
-  position: delta.position,
+  return applyMapProjectionDeltas(current, [delta]);
+export function applyMapProjectionDeltas(
+  current: MapProjection,
+  deltas: readonly MapProjectionDelta[],
+  ): MapProjection {
+  let byId: Map<SurfaceRef, SurfaceProjection> | undefined;
+  let nodePositions: Map<NodeRef, NodePositionEntry> | undefined;
+  let revision = current.revision;
+
 
 // src/entities/map/surface-covering.ts
 export type CoveringKind = string;
@@ -4311,7 +4315,11 @@ export const HEIGHT_AXIS: readonly EditAxis[] = Object.freeze(["y"] as const);
 
 // src/features/edit-construction/orchestration/edit-orchestrator.ts
 export type EditPlan =
-export function planEdit(cloud: CloudTopology, gesture: EditGesture): EditPlan {
+export function planEdit(
+  cloud: CloudTopology,
+  gesture: EditGesture,
+  graphSnapshot?: ConstructionGraphSnapshot,
+  ): EditPlan {
   const policy = resolvePolicy(cloud.seed, gesture.target);
 export interface EditOpSink {
   moveVertex(nodeId: string, position: { x: number; y: number; z: number }): RegionEditOutcome;
@@ -4379,6 +4387,8 @@ export function resolveCreationInteraction(
   paintedSubtype?: string,
   ): CreationInteraction {
   const definition = structureTypeFor(paintedType);
+export function resolveCutRepair(coveredType: string): CutRepair {
+  const definition = structureTypeFor(coveredType);
 export interface ResolvedCoverage {
   readonly covered: ConstructionCoveredRegion;
   readonly interaction: CreationInteraction;
@@ -4465,6 +4475,100 @@ export function panelStructureType(
   surfaceType,
   label,
 
+// src/features/edit-construction/structure-types/path/contour/catmull-rom.ts
+export function sampleCatmullRom(
+  controlPoints: readonly ConstructionPosition[],
+  tolerance: number,
+  ): readonly ConstructionPosition[] {
+  if (controlPoints.length < 2) return controlPoints;
+  const last = controlPoints.length - 1;
+  const closed = isClosedLoop(controlPoints);
+
+// src/features/edit-construction/structure-types/path/contour/contour-patch.ts
+export interface ExistingNode {
+  readonly id: string;
+  readonly position: ConstructionPosition;
+  }
+export interface ContourPatchResult {
+  readonly patch: ConstructionPatch;
+  readonly regionIds: readonly string[];
+  }
+export function buildContourPatch(
+  tableId: string,
+  operationId: string,
+  surfaceType: string,
+  bandIndex: number,
+  shapes: MultiPolygon,
+  heightSamples: readonly ConstructionPosition[],
+  existingNodes: readonly ExistingNode[],
+
+// src/features/edit-construction/structure-types/path/contour/index.ts
+export type { ExistingNode } from "./contour-patch.ts";
+export type { BandRibbon } from "./offset-bands.ts";
+export type { PlanSpineContourInput, PlanSpineContourResult, SpineChainInput } from "./plan-spine-contour.ts";
+
+// src/features/edit-construction/structure-types/path/contour/offset-bands.ts
+export interface BandRibbon {
+  readonly bandIndex: number;
+  /** Closed ring in the sweep's own winding, first curve forward then the next reversed. */
+  readonly outer: readonly ConstructionPosition[];
+  }
+export function offsetBands(
+  polyline: readonly ConstructionPosition[],
+  bandOffsets: readonly number[],
+  miterLimit: number,
+  ): readonly BandRibbon[] {
+  if (polyline.length < 2 || bandOffsets.length < 2) return [];
+  const clampedMiter = Math.max(miterLimit, 1);
+
+// src/features/edit-construction/structure-types/path/contour/plan-spine-contour.ts
+export interface SpineChainInput {
+  readonly chainId: string;
+  readonly controlPoints: readonly ConstructionPosition[];
+  /** Lateral offsets defining the bands, e.g. `[-2.1, 0, 2.1]` for contour/spine/contour. */
+  readonly bandOffsets: readonly number[];
+  readonly miterLimit: number;
+  /** Curve flattening tolerance, world units (XZ). */
+  readonly tolerance: number;
+export interface PlanSpineContourInput {
+  readonly tableId: string;
+  /** Scopes every node/region id this call mints -- one edit, one operation. */
+  readonly operationId: string;
+  readonly surfaceType: string;
+  /**
+  * Every chain of the touched spine cloud -- not just the one a stroke or a
+  * control-node drag directly changed, but every chain the caller's own
+export interface PlanSpineContourResult {
+  readonly patch: ConstructionPatch;
+  /**
+  * Every one of `input.standingRegions`, unconditionally -- their faces are
+  * superseded by the freshly unioned ones in `patch.regions`, even where
+  * most of their own nodes were welded back unchanged. The caller replaces
+  * them in one atomic transaction with the unioned patch; a refused target
+  * can never leave the standing faces deleted.
+export function planSpineContour(input: PlanSpineContourInput): PlanSpineContourResult | undefined {
+  if (input.editedChains.length === 0) return undefined;
+
+  const ribbons: BandRibbon[] = [];
+  for (const chain of input.editedChains) {
+  const polyline = sampleCatmullRom(chain.controlPoints, chain.tolerance);
+
+// src/features/edit-construction/structure-types/path/contour/union-bands.ts
+export function unionBandLayer(ribbons: readonly BandRibbon[]): MultiPolygon {
+  const polygons: Polygon[] = ribbons
+  .map((ribbon) => [ringOf(ribbon.outer)])
+  .filter(([ring]) => ring.length >= 4);
+export function ringOf(outer: readonly ConstructionPosition[]): Ring {
+  const points = outer.map((point): [number, number] => [point.x, point.z]);
+export function nearestSampleY(x: number, z: number, samples: readonly ConstructionPosition[]): number {
+  let bestY = samples[0]?.y ?? 0;
+  let bestDistanceSq = Infinity;
+  for (const sample of samples) {
+  const dx = sample.x - x;
+  const dz = sample.z - z;
+  const distanceSq = dx * dx + dz * dz;
+  if (distanceSq < bestDistanceSq) {
+
 // src/features/edit-construction/structure-types/path/index.ts
 export type { PathFormationRecipe, PathProfilePoint } from "./path-recipe.ts";
 export type { PathSpineDraft } from "./path-spine-draft.ts";
@@ -4477,6 +4581,42 @@ export type {
   PathRunRib,
   } from "./path-cloud.ts";
 
+export type { PathCloudMutationInput, PathCloudMutationPlan } from "./path-cloud-mutation.ts";
+
+// src/features/edit-construction/structure-types/path/path-cloud-mutation.ts
+export interface PathCloudMutationInput {
+  readonly tableId: string;
+  readonly snapToGrid: boolean;
+  readonly graphSnapshot: ConstructionGraphSnapshot;
+  readonly regionTopologies: readonly ConstructionRegionTopology[];
+  readonly coverageFor: (outline: readonly (readonly [number, number])[]) => readonly ConstructionCoveredRegion[];
+  readonly effect: PathBrushEffect;
+  readonly tolerance: number;
+export type PathCloudMutationPlan =
+export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudMutationPlan {
+  const { effect, tolerance } = input;
+  const stroke = effect.brushRegion.samples;
+  if (stroke.length === 0) return { kind: "noop", message: "Nenhuma alteração: o traço está vazio." };
+
+// src/features/edit-construction/structure-types/path/path-cloud-scope.ts
+export interface ChangedSpineCloud {
+  readonly chains: readonly (readonly ConstructionPosition[])[];
+  /**
+  * Every spine control point position in the touched component -- used to
+  * decide which standing contour faces this edit replaces.
+  */
+  readonly positions: readonly ConstructionPosition[];
+  /** Every corridor/operation id participating in this connected spine cluster. */
+export function changedSpineCloud(snapshot: ConstructionGraphSnapshot, patch: ConstructionGraphPatch): ChangedSpineCloud {
+  const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
+export function standingRegionsForCloud(
+  topologies: readonly ConstructionRegionTopology[],
+  cloudPositions: readonly ConstructionPosition[],
+  corridorIds: ReadonlySet<string> = new Set(),
+  ): readonly ConstructionRegionTopology[] {
+  if (corridorIds.size === 0) return [];
+  return topologies.filter((topology) => {
+  if (topology.surfaceType !== "path") return false;
 
 // src/features/edit-construction/structure-types/path/path-cloud.ts
 export interface PathRunNode {
@@ -4570,6 +4710,14 @@ export function pathHalfWidth(params: PathBrushParams): number {
   0,
   );
 
+// src/features/edit-construction/structure-types/path/path-reference-line.ts
+export function referenceLineFrom(
+  fitted: readonly FittedEdge[],
+  stroke: readonly ConstructionPosition[],
+  ridesTerrain: boolean,
+  ): { readonly line: readonly ConstructionPosition[] } {
+  const track = groundTrack(fitted);
+
 // src/features/edit-construction/structure-types/path/path-spine-draft.ts
 export interface PathSpineDraft {
   readonly corridorId: string;
@@ -4617,8 +4765,21 @@ export function pathStructureType(
 
 // src/features/edit-construction/structure-types/path/spine-graph/index.ts
 export type { SpineChain } from "./spine-chains.ts";
+export type { MaterializedSpine } from "./materialize-spine.ts";
 export type { SpineControlNode, SpineCurveEdge, SpineGraph } from "./spine-graph.ts";
 export type { SpineControlNodeAddress } from "./spine-node-id.ts";
+
+// src/features/edit-construction/structure-types/path/spine-graph/materialize-spine.ts
+export interface MaterializedSpine {
+  readonly graphPatch: ConstructionGraphPatch;
+  readonly controlPoints: readonly ConstructionPosition[];
+  }
+export function graphPatchForSpine(
+  snapshot: ConstructionGraphSnapshot,
+  spine: NonNullable<ReturnType<typeof pathSpineDraftFor>>,
+  snapTolerance: number,
+  ): MaterializedSpine {
+  const spineNodes = snapshot.nodes.filter((node) => node.id.startsWith("spine:"));
 
 // src/features/edit-construction/structure-types/path/spine-graph/spine-chains.ts
 export interface SpineChain {
@@ -4719,6 +4880,15 @@ export interface CascadeContext {
   readonly target: EditTarget;
   /** The delta already constrained by the role's own axes. */
   readonly delta: { readonly x: number; readonly y: number; readonly z: number };
+export type CutRepair =
+export interface CutFallout {
+  /**
+  * Every live node of the painter's own type, real graph nodes with real
+  * ids -- not a bare outline of numbers, and not only the handful *this one
+  * submission* happened to (re)declare.
+  *
+  * A repair needs these to name the far side of the hole. The engine
+  * considers an edge free-boundary only when **both** of its nodes are in
 export interface StructureTypeDefinition {
   /** The `surfaceType` the engine reports for regions of this kind. */
   readonly surfaceType: string;
@@ -4795,13 +4965,13 @@ export interface InteriorGenerateParams {
   /** Drives the split layout's jitter -- the same enclosed footprint always reproduces the same rooms for a given seed. */
   readonly seed: number;
 export interface TerrainSculptParams {
-  /** Triangles per hexagon edge -- sizes the one whole-stroke lattice built on `onPointerDown` (`composition/tabletop/tools/terrain/terrain-sculpt-tool.ts`). Bigger means more room to paint before running past the precomputed area, at a one-time (not per-tick) JS cost. */
-  readonly trianglesPerSide: number;
   /**
-  * `0` = cells relaxed hard toward square (regular-looking, like a normal
-  * grid); `1` = minimal relaxation, cells keep the raw irregular shape/size
-  * variety `pairTriangles`'s random rhombus merge produces. `irregular-grid.ts`'s
-  * own `relax()` step is what pulls cells toward square in the first place --
+  * How wide one terrain face should be, in world units.
+  *
+  * A face, not a lattice triangle: the engine converts. Bigger is cheaper in
+  * a way that is felt rather than measured -- halving it roughly quadruples
+  * the faces a stroke registers, and the graph, the render sync and the
+  * scene all carry every one of them.
 export const TOWER_RADIUS_PRESETS = [1.5, 2.5, 4] as const;
 export interface TowerStampParams extends WallParams {
   readonly radius: (typeof TOWER_RADIUS_PRESETS)[number];
@@ -4824,6 +4994,29 @@ export interface ToolParamsByTool {
   readonly "interior-wall": InteriorGenerateParams;
   readonly "tower-stamp": TowerStampParams;
 export type ToolParamsFor<Id extends ConstructionToolId> = ToolParamsByTool[Id];
+
+// src/features/edit-construction/topology/boundary-edges.ts
+export function sharedEdgeId(
+  tableId: string,
+  from: ConstructionNodeId,
+  to: ConstructionNodeId,
+  ): ConstructionEdgeId {
+  return from < to ? `${tableId}:seg:${from}~${to}` : `${tableId}:seg:${to}~${from}`;
+  }
+export type EdgeSharing =
+export interface BoundaryEdges {
+  /** Declares (or reuses) the edge between `from` and `to`, given that edge's geometry walked `from` -> `to`, and returns the use that walks it in that direction. Geometry defaults to a straight chord. */
+  use(
+  from: ConstructionNodeId,
+  to: ConstructionNodeId,
+  geometry?: ConstructionEdgeGeometry,
+  ): ConstructionOrientedEdgeUse;
+  /** Every edge declared so far, each exactly once. */
+export function reverseGeometry(geometry: ConstructionEdgeGeometry): ConstructionEdgeGeometry {
+  if (geometry.kind === "line") return geometry;
+  return { kind: "arc", center: geometry.center, clockwise: !geometry.clockwise };
+export function createBoundaryEdges(tableId: string, sharing: EdgeSharing): BoundaryEdges {
+  const edges = new Map<ConstructionEdgeId, ConstructionPatchEdge>();
 
 // src/features/edit-construction/topology/construction-cloud.ts
 export interface ConstructionCloud {
@@ -4851,7 +5044,7 @@ export function resolveCloud(
   source: CloudSource,
   seed: ConstructionSurfaceKey,
   ): ConstructionCloud | undefined {
-  const topology = source.getRegionTopology(seed);
+  const seedTopology = source.getRegionTopology(seed);
 export function resolveCloudTopology(
   source: CloudSource,
   seed: ConstructionSurfaceKey,
@@ -4866,12 +5059,44 @@ export function refreshCloudTopology(
   .filter((topology): topology is ConstructionRegionTopology => topology !== undefined);
 export function cloudNodes(
   topology: CloudTopology,
+  graphSnapshot?: ConstructionGraphSnapshot,
   ): readonly { readonly id: string; readonly position: { readonly x: number; readonly y: number; readonly z: number } }[] {
   const byId = new Map<string, { readonly id: string; readonly position: { readonly x: number; readonly y: number; readonly z: number } }>();
 
 // src/features/edit-construction/topology/index.ts
 export type { CloudSource, CloudTopology, ConstructionCloud } from "./construction-cloud.ts";
 export type { PerimeterLoop } from "./surface-perimeter.ts";
+export type { FittedEdge, FitOptions } from "./stroke-fitting.ts";
+export type { BoundaryEdges, EdgeSharing } from "./boundary-edges.ts";
+export type { SweptArc, TransverseProfilePoint } from "./sweep-formation.ts";
+
+// src/features/edit-construction/topology/ring-simplify.ts
+export function simplifyClosedRing(
+  points: readonly ConstructionPosition[],
+  geometryFor: (fromIndex: number, toIndex: number) => ConstructionEdgeGeometry | undefined,
+  ): readonly number[] {
+  if (points.length < 3) return points.map((_point, index) => index); // nothing spare to drop below a real edge pair.
+
+  let indices = points.map((_point, index) => index);
+
+// src/features/edit-construction/topology/stroke-fitting.ts
+export interface FittedEdge {
+  readonly start: ConstructionPosition;
+  readonly end: ConstructionPosition;
+  readonly geometry: ConstructionEdgeGeometry;
+  }
+export interface FitOptions {
+  /** When false, every span is fitted as a straight chord and no circle is ever considered. */
+  readonly arcs?: boolean;
+  }
+export function fitPath(
+  points: readonly ConstructionPosition[],
+  tolerance: number,
+  options: FitOptions = {},
+  ): readonly FittedEdge[] {
+  if (points.length < 2) return [];
+  const arcs = options.arcs ?? true;
+  const budget = Math.max(0, tolerance);
 
 // src/features/edit-construction/topology/surface-perimeter.ts
 export interface PerimeterLoop {
@@ -4890,6 +5115,57 @@ export function perimeterOf(
   topologies: readonly ConstructionRegionTopology[],
   ): readonly PerimeterLoop[] {
   const counts = edgeUseCounts(topologies);
+export function outwardPerimeterRings(
+  topologies: readonly ConstructionRegionTopology[],
+  ): readonly (readonly ConstructionRegionEdge[])[] {
+  const counts = edgeUseCounts(topologies);
+
+// src/features/edit-construction/topology/sweep-formation.ts
+export interface TransverseProfilePoint {
+  /** Signed world distance from the reference line, left to right. */
+  readonly lateralOffset: number;
+  /** Height above the reference line's own height at that station. */
+  readonly elevation: number;
+  }
+export interface SweptArc {
+  readonly center: readonly [number, number];
+  readonly clockwise: boolean;
+  }
+export function withoutCoincidentStations(
+  samples: readonly ConstructionPosition[],
+  ): readonly ConstructionPosition[] {
+  const distinct: ConstructionPosition[] = [];
+  for (const sample of samples) {
+  const previous = distinct[distinct.length - 1];
+  if (previous === undefined || xzDistance(previous, sample) > COINCIDENT_EPSILON) {
+  distinct.push(sample);
+export function stationFrame(
+  line: readonly ConstructionPosition[],
+  index: number,
+  miterLimit: number,
+  arcs: readonly (SweptArc | undefined)[] = [],
+  ): readonly [number, number] {
+  const outgoing = normalLeaving(line, index, arcs);
+export function sweptBoundary(stationCount: number, profileLength: number): readonly number[] {
+  const last = stationCount - 1;
+  const boundary: number[] = [];
+  for (let station = 0; station < stationCount; station += 1) boundary.push(station * profileLength);
+export class SweepFormationError extends Error {}
+
+  /**
+  * Samples a transverse profile along a reference line into connected quads.
+  *
+  * Vertices are station-major: every consecutive `profile.length` entries form
+  * one transverse station, which is what lets `pathPatch` read a station
+  * address straight off a vertex index. Quads reference those shared vertices,
+export function sweepFormation(
+  referenceLine: readonly ConstructionPosition[],
+  profile: readonly TransverseProfilePoint[],
+  miterLimit: number,
+  options: {
+  /** The curve each span runs on; one shorter than `referenceLine`. */
+  readonly arcs?: readonly (SweptArc | undefined)[];
+  } = {},
 
 // src/features/navigate-camera/attach-camera-navigation.ts
 export interface CameraControllable {
@@ -4981,6 +5257,15 @@ export interface ConstructionPosition {
   readonly y: number;
   readonly z: number;
   }
+export interface ConstructionBoundsXZ {
+  readonly minX: number;
+  readonly minZ: number;
+  readonly maxX: number;
+  readonly maxZ: number;
+  }
+export interface ConstructionTopologyBoundsQuery extends ConstructionBoundsXZ {
+  readonly seeds?: readonly CloudRequest[];
+  }
 export interface ConstructionSurfaceSpec {
   readonly cycle: readonly ConstructionNodeId[];
   readonly surfaceType: string;
@@ -5024,17 +5309,6 @@ export interface ConstructionPatchRegion {
   * Absent means a solid face, which is what almost every patch declares.
   *
   * An opening leaves one use free on every edge of its own rim, so a
-export interface ConstructionPatchEdge {
-  readonly edgeId: ConstructionEdgeId;
-  readonly startNodeId: ConstructionNodeId;
-  readonly endNodeId: ConstructionNodeId;
-  readonly geometry?: ConstructionEdgeGeometry;
-  }
-export interface ConstructionPatch {
-  readonly nodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[];
-  readonly edges: readonly ConstructionPatchEdge[];
-  readonly regions: readonly ConstructionPatchRegion[];
-  }
 
 // src/ports/index.ts
 export type {

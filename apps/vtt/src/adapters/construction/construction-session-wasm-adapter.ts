@@ -438,8 +438,10 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     return this.#diffOutcome(this.#require().generate_and_apply_region_partition_json(JSON.stringify(wire)));
   }
 
-  removeSurface(request: RemoveSurfaceRequest): void {
-    this.#require().remove_surface_json(JSON.stringify({ surfaceKey: request.surfaceKey }));
+  removeSurface(request: RemoveSurfaceRequest): RegionEditOutcome {
+    return this.#regionEdit(
+      this.#require().remove_surface_json(JSON.stringify({ surfaceKey: request.surfaceKey })),
+    );
   }
 
   cloudFor(request: CloudRequest): CloudOutcome {
