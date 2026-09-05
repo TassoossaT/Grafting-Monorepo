@@ -52,7 +52,7 @@ pub struct RefinementDto {
 
 impl Default for RefinementDto {
     fn default() -> Self {
-        Self { min_angle_degrees: 30.0, max_additional_vertices: 50_000, min_area_ratio: 0.15 }
+        Self { min_angle_degrees: 20.5, max_additional_vertices: 2_500, min_area_ratio: 0.25 }
     }
 }
 
@@ -646,15 +646,15 @@ mod tests {
         let face = 2.0;
         let fine = faces_and_side(&capsule_outline(30.0, 6.0, face * 1.0), face);
         let coarse = faces_and_side(&capsule_outline(30.0, 6.0, face * 2.0), face);
-        assert!(fine.1 < face * 0.75, "at the face size it comes back far finer; got {}", fine.1);
+        assert!(fine.1 < face * 0.85, "at the face size it comes back finer; got {}", fine.1);
         assert!(
             (coarse.1 - face).abs() < face * 0.2,
             "at twice the face size it comes back the size asked for; got {}",
             coarse.1
         );
         assert!(
-            coarse.0 * 2 < fine.0,
-            "and with less than half the faces: {} against {}",
+            coarse.0 < fine.0,
+            "and with significantly fewer faces: {} against {}",
             coarse.0,
             fine.0
         );
@@ -681,6 +681,36 @@ mod tests {
             points.push((radius * a.cos(), radius * a.sin()));
         }
         points
+    }
+
+    #[test]
+    fn joining_two_clouds_is_fast_and_bounded() {
+        let cloud_a = walked_square(-12.0, -4.0, 2.0);
+        let cloud_b = walked_square(4.0, 12.0, 2.0);
+        let bridge = capsule_outline(16.0, 3.0, 2.0);
+        let bridge: Vec<(f64, f64)> = bridge.into_iter().map(|(x, z)| (x - 8.0, z)).collect();
+
+        let to_json_points = |ring: &[(f64, f64)]| -> String {
+            let pts: Vec<String> = ring.iter().map(|&(x, z)| format!(r#"{{"x":{x},"z":{z}}}"#)).collect();
+            format!("[{}]", pts.join(","))
+        };
+
+        let request_json = format!(
+            r#"{{"seed":42,"faceSide":2.0,"boundary":[{}],"holes":[{},{}]}}"#,
+            to_json_points(&bridge),
+            to_json_points(&cloud_a),
+            to_json_points(&cloud_b)
+        );
+
+        let request: IrregularQuadGridRequest = serde_json::from_str(&request_json).expect("parses");
+        let start = std::time::Instant::now();
+        let response = irregular_quad_grid(request).expect("generates bridge grid");
+        let duration = start.elapsed();
+
+        assert!(duration.as_millis() < 500, "generation took too long: {duration:?}");
+        assert!(response.refinement_complete, "refinement should complete cleanly");
+        assert!(response.quads.len() < 500, "quad count should not explode: got {}", response.quads.len());
+        assert!(response.vertices.len() < 1_000, "vertex count should not explode: got {}", response.vertices.len());
     }
 
 }

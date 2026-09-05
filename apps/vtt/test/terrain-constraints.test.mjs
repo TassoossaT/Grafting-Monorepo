@@ -458,3 +458,25 @@ test("several nodes on a ring-reversed edge still split from the stored start ou
   assert.equal(ops[1].edgeId, ops[0].secondEdgeId, "the second takes what the first left");
   assert.equal(ops[1].nodeId, "m1");
 });
+
+test("consecutive nodes on the same edge closer than shortestUseful do not subdivide into slivers", () => {
+  const table = perimeterConstraints([squareTopology(["s", "0"], SQUARE)], 0);
+  const positions = new Map([
+    [1, { x: 1.8, z: 0 }],
+    [2, { x: 2.0, z: 0 }],
+  ]);
+  const { adoptions } = resolveAdoptions(
+    table.rings,
+    [],
+    [
+      { vertex: 1, ringKind: "hole", ring: 0, segment: 0 },
+      { vertex: 2, ringKind: "hole", ring: 0, segment: 0 },
+    ],
+    (vertex) => positions.get(vertex),
+    0.5,
+  );
+
+  assert.equal(adoptions.length, 1, "the second split is filtered out because it is within 0.2 < 0.5 of the first");
+  assert.equal(adoptions[0].vertex, 2);
+});
+
