@@ -3935,7 +3935,7 @@ export function restackTerrain(
   causeId: string,
   /** How much of a full step lands on a given node. Defaults to all of it. */
   loadAt: (point: ConstructionPosition) => number = () => 1,
-  ): RestackOutcome {
+  mode: TerrainSculptMode = "elevate",
 
 // src/composition/tabletop/tools/terrain/terrain-sculpt-tool.ts
 export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
@@ -3943,9 +3943,9 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   defaultParams: () => DEFAULT_TOOL_PARAMS["terrain-sculpt"],
 
   previewFor(gesture: ToolGesture, params: TerrainSculptParams) {
+  const targetSurface = params.targetSurface ?? "terrain";
+  const color = TERRAIN_COLOR[targetSurface] ?? 0x334155;
   return brushSweptRegionFill(
-  gesture.samples.map((sample) => sample.point),
-  { kind: "circle", radius: params.brushRadius },
 
 // src/composition/tabletop/tools/tower/tower-geometry.ts
 export function circleContour(center: ConstructionPosition, radius: number): readonly FittedEdge[] {
@@ -5011,14 +5011,19 @@ export interface InteriorGenerateParams {
   readonly maxRegionCells: number;
   /** Drives the split layout's jitter -- the same enclosed footprint always reproduces the same rooms for a given seed. */
   readonly seed: number;
+export type TerrainSculptMode = "elevate" | "lower" | "flatten";
+export function deriveFaceSize(brushRadius: number, faceSizeOverride?: number): number {
+  if (faceSizeOverride !== undefined && faceSizeOverride > 0) {
+  return faceSizeOverride;
+  }
 export interface TerrainSculptParams {
   /**
   * How wide one terrain face should be, in world units.
-  *
-  * A face, not a lattice triangle: the engine converts. Bigger is cheaper in
-  * a way that is felt rather than measured -- halving it roughly quadruples
-  * the faces a stroke registers, and the graph, the render sync and the
-  * scene all carry every one of them.
+  * If omitted or undefined, derived proportionally from {@link brushRadius}.
+  */
+  readonly faceSize: number;
+  /**
+  * How wide a band the stroke paints, as a radius in world units.
 export const TOWER_RADIUS_PRESETS = [1.5, 2.5, 4] as const;
 export interface TowerStampParams extends WallParams {
   readonly radius: (typeof TOWER_RADIUS_PRESETS)[number];
@@ -5032,15 +5037,6 @@ export interface OpeningParams {
   readonly sill: number;
   }
 export type NoToolParams = Record<string, never>;
-export interface ToolParamsByTool {
-  readonly navigate: NoToolParams;
-  readonly "edit-region": NoToolParams;
-  readonly "path-brush": PathBrushParams;
-  readonly "wall-brush": WallBrushParams;
-  readonly "wall-line": WallParams;
-  readonly "interior-wall": InteriorGenerateParams;
-  readonly "tower-stamp": TowerStampParams;
-export type ToolParamsFor<Id extends ConstructionToolId> = ToolParamsByTool[Id];
 
 // src/features/edit-construction/topology/boundary-edges.ts
 export function sharedEdgeId(

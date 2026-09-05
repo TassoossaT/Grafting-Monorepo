@@ -1,4 +1,4 @@
-import type { AtomicEditOp, ResolvedCoverage } from "@/features/edit-construction";
+import type { AtomicEditOp, ResolvedCoverage, TerrainSculptMode } from "@/features/edit-construction";
 import type { ConstructionCoveredRegion, ConstructionNodeId, ConstructionPosition } from "@/ports";
 
 // Relative, not `@/...`: the test runner resolves no aliases, so a module a
@@ -161,6 +161,8 @@ export function restackTerrain(
   causeId: string,
   /** How much of a full step lands on a given node. Defaults to all of it. */
   loadAt: (point: ConstructionPosition) => number = () => 1,
+  mode: TerrainSculptMode = "elevate",
+  step = ELEVATION_STEP,
 ): RestackOutcome {
   const resolved = resolveCoverage(paintedType, covered);
   // Only a face the brush actually covers can be refused; one it merely
@@ -185,18 +187,43 @@ export function restackTerrain(
   }
 
   const nodePositions = ctx.runtime.getSnapshot().map.nodePositions;
+
+  // Flatten mode averages the height across target nodes
+  let averageY = 0;
+  if (mode === "flatten") {
+    let sumY = 0;
+    let count = 0;
+    for (const nodeId of targets) {
+      const entry = nodePositions.get(nodeId);
+      if (entry !== undefined) {
+        sumY += entry.position.y;
+        count += 1;
+      }
+    }
+    averageY = count > 0 ? sumY / count : 0;
+  }
+
   const ops: AtomicEditOp[] = [];
   for (const nodeId of targets) {
     const entry = nodePositions.get(nodeId);
     if (entry === undefined) continue;
-    const lift = ELEVATION_STEP * loadAt(entry.position);
-    // A node the load does not reach is not moved at all. Emitting a zero
-    // move would still mark its faces dirty and cost a render fold for a
-    // change nobody can see.
-    if (lift <= 1e-6) continue;
+    const load = loadAt(entry.position);
+    if (load <= 1e-6) continue;
+
+    let targetY = entry.position.y;
+    if (mode === "elevate") {
+      targetY = entry.position.y + step * load;
+    } else if (mode === "lower") {
+      targetY = Math.max(0, entry.position.y - step * load);
+    } else if (mode === "flatten") {
+      targetY = entry.position.y + (averageY - entry.position.y) * load * 0.5;
+    }
+
+    if (Math.abs(targetY - entry.position.y) <= 1e-6) continue;
+
     const position: ConstructionPosition = {
       x: entry.position.x,
-      y: entry.position.y + lift,
+      y: targetY,
       z: entry.position.z,
     };
     ops.push({ kind: "move-vertex", nodeId, position });
@@ -206,3 +233,4 @@ export function restackTerrain(
   ctx.runtime.applyRegionEdit(ops, "local", causeId);
   return { raisedFaces: raising.length, movedVertices: ops.length, skipped };
 }
+
