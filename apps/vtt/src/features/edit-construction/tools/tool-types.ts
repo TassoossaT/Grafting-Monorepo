@@ -101,9 +101,9 @@ export interface InteriorGenerateParams {
   readonly seed: number;
 }
 /**
- * Sculpt mode determining whether a stroke adds height, subtracts height, or smooths toward local average.
+ * Sculpt mode determining whether a stroke adds terrain/height ("add"), digs/removes terrain ("dig"), or flattens ("flatten").
  */
-export type TerrainSculptMode = "elevate" | "lower" | "flatten";
+export type TerrainSculptMode = "add" | "dig" | "flatten" | "elevate" | "lower";
 
 /**
  * Derives a recommended face size proportionally from the brush radius.
@@ -236,7 +236,7 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   "terrain-sculpt": Object.freeze({
     faceSize: 2,
     brushRadius: 6,
-    mode: "elevate",
+    mode: "add",
     elevationStep: 0.5,
     irregularity: 0.7,
     heightScale: 1.5,

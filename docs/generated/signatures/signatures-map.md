@@ -5011,7 +5011,7 @@ export interface InteriorGenerateParams {
   readonly maxRegionCells: number;
   /** Drives the split layout's jitter -- the same enclosed footprint always reproduces the same rooms for a given seed. */
   readonly seed: number;
-export type TerrainSculptMode = "elevate" | "lower" | "flatten";
+export type TerrainSculptMode = "add" | "dig" | "flatten" | "elevate" | "lower";
 export function deriveFaceSize(brushRadius: number, faceSizeOverride?: number): number {
   if (faceSizeOverride !== undefined && faceSizeOverride > 0) {
   return faceSizeOverride;

@@ -2,7 +2,10 @@ import { DEFAULT_TOOL_PARAMS, deriveFaceSize } from "@/features/edit-constructio
 import type { TerrainSculptParams } from "@/features/edit-construction";
 import type {
   ConstructionCoveredRegion,
+  ConstructionGridConstraintPoint,
   ConstructionPosition,
+  ConstructionRegionEdge,
+  ConstructionRegionTopology,
 } from "@/ports";
 import polygonClipping, { type MultiPolygon, type Polygon } from "polygon-clipping";
 
@@ -14,6 +17,7 @@ import {
   outlineConstraints,
   perimeterConstraints,
   type ConstraintRing,
+  type ConstraintTable,
 } from "./terrain-constraints.ts";
 import { fillTerrain } from "./terrain-fill.ts";
 import { terrainStandingAround, type TerrainStrokeBounds } from "./terrain-neighborhood.ts";
@@ -210,6 +214,109 @@ function insideSwept(point: ConstructionPosition, swept: MultiPolygon): boolean 
  * The bound is the stroke's own extent, widened by `reach` so nothing the
  * outline can meet is dropped by a rounding of the box.
  */
+function centroidOf(nodes: readonly { readonly position: ConstructionPosition }[]): ConstructionPosition {
+  if (nodes.length === 0) return { x: 0, y: 0, z: 0 };
+  let x = 0;
+  let y = 0;
+  let z = 0;
+  for (const n of nodes) {
+    x += n.position.x;
+    y += n.position.y;
+    z += n.position.z;
+  }
+  return { x: x / nodes.length, y: y / nodes.length, z: z / nodes.length };
+}
+
+function faceIntersectsSwept(topology: ConstructionRegionTopology, swept: MultiPolygon): boolean {
+  for (const node of topology.nodes) {
+    if (insideSwept(node.position, swept)) return true;
+  }
+  return insideSwept(centroidOf(topology.nodes), swept);
+}
+
+function topologyToPolygon(topology: ConstructionRegionTopology): Polygon {
+  const nodes = topology.nodes;
+  if (nodes.length < 3) return [];
+  const ring: [number, number][] = nodes.map((n) => [n.position.x, n.position.z]);
+  ring.push([nodes[0]!.position.x, nodes[0]!.position.z]);
+  return [ring];
+}
+
+function buildConstraintRings(
+  targetPolygon: MultiPolygon,
+  faceSize: number,
+  perimeters: ConstraintTable,
+): readonly (ConstraintRing & { readonly isHole: boolean })[] {
+  const rings: (ConstraintRing & { readonly isHole: boolean })[] = [];
+  const snapDist = Math.max(0.25, faceSize * 0.18);
+  const minStep = Math.max(0.08, faceSize * 0.08);
+
+  for (const polygon of targetPolygon) {
+    for (let rIdx = 0; rIdx < polygon.length; rIdx++) {
+      const isHole = rIdx > 0;
+      const rawRing = polygon[rIdx]!;
+      const pts = rawRing.slice(0, -1);
+      const welded: [number, number][] = [];
+      for (const [x, z] of pts) {
+        const prev = welded[welded.length - 1];
+        if (!prev || Math.hypot(x - prev[0], z - prev[1]) >= minStep) {
+          welded.push([x, z]);
+        }
+      }
+      if (welded.length < 3) continue;
+
+      const points: ConstructionGridConstraintPoint[] = [];
+      for (let i = 0; i < welded.length; i++) {
+        const [x, z] = welded[i]!;
+        let bestSnap: { x: number; z: number; source: number } | undefined;
+        let bestDist = snapDist;
+        for (const r of perimeters.rings) {
+          for (const pt of r.points) {
+            if (pt.source !== undefined) {
+              const d = Math.hypot(x - pt.x, z - pt.z);
+              if (d < bestDist) {
+                bestDist = d;
+                bestSnap = { x: pt.x, z: pt.z, source: pt.source };
+              }
+            }
+          }
+        }
+        if (bestSnap) {
+          points.push({ x: bestSnap.x, z: bestSnap.z, source: bestSnap.source });
+        } else {
+          points.push({ x, z });
+        }
+      }
+
+      const edges: (ConstructionRegionEdge | undefined)[] = [];
+      for (let i = 0; i < points.length; i++) {
+        const cur = points[i]!;
+        const next = points[(i + 1) % points.length]!;
+        let matchedEdge: ConstructionRegionEdge | undefined;
+        if (cur.source !== undefined && next.source !== undefined) {
+          for (const r of perimeters.rings) {
+            for (let j = 0; j < r.points.length; j++) {
+              const p1 = r.points[j]!;
+              const p2 = r.points[(j + 1) % r.points.length]!;
+              if (
+                (p1.source === cur.source && p2.source === next.source) ||
+                (p1.source === next.source && p2.source === cur.source)
+              ) {
+                matchedEdge = r.edges[j];
+                break;
+              }
+            }
+            if (matchedEdge) break;
+          }
+        }
+        edges.push(matchedEdge);
+      }
+      rings.push({ points, edges, isHole });
+    }
+  }
+  return rings;
+}
+
 /** The axis-aligned extent of a swept stroke, in XZ. */
 function boundsOf(swept: MultiPolygon): TerrainStrokeBounds {
   let minX = Infinity;
@@ -262,78 +369,148 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       strokeChord(params),
     );
 
-    const covered = coveredByStroke(ctx, swept);
-    const mode = params.mode ?? "elevate";
+    const mode = params.mode ?? "add";
+    const isAdd = mode === "add" || mode === "elevate";
+    const isDig = mode === "dig" || mode === "lower";
+    const isFlatten = mode === "flatten";
     const elevationStep = params.elevationStep ?? 0.5;
     const targetSurface = params.targetSurface ?? "terrain";
 
-    const raised =
-      covered.length > 0
-        ? restackTerrain(
-            ctx,
-            targetSurface,
-            covered,
-            causeId,
-            dirtLoadOver(gesture.samples.map((sample) => sample.point), brushRadius),
-            mode,
-            elevationStep,
-          )
-        : { raisedFaces: 0, movedVertices: 0, skipped: [] };
+    const covered = coveredByStroke(ctx, swept);
 
-    const weld = faceSize * OUTLINE_WELD_PER_FACE;
-    const outline = outlineConstraints(swept.flatMap((polygon) => polygon.slice(0, 1)), weld);
-    if (outline.length === 0) {
-      ctx.reportFeedback({ tone: "info", message: "Nada a fazer aqui." });
+    if (isFlatten) {
+      const raised =
+        covered.length > 0
+          ? restackTerrain(
+              ctx,
+              targetSurface,
+              covered,
+              causeId,
+              dirtLoadOver(gesture.samples.map((sample) => sample.point), brushRadius),
+              "flatten",
+              elevationStep,
+            )
+          : { raisedFaces: 0, movedVertices: 0, skipped: [] };
+      report(ctx, 0, 0, 0, raised, true, raised.raisedFaces > 0 ? `${raised.raisedFaces} faces niveladas` : undefined);
       return;
     }
 
     const extent = boundsOf(swept);
     const standing = terrainStandingAround(ctx.runtime, covered, extent, faceSize * 2);
 
-    // If standing terrain already exists, determine which portion of the swept stroke
-    // covers unoccupied ground via 2D boolean difference.
-    let uncovered: MultiPolygon = swept;
-    if (standing.length > 0) {
-      const standingPolygons: Polygon[] = standing
-        .filter((topology) => topology.nodes.length >= 3)
-        .map((topology) => [
-          [
-            ...topology.nodes.map((n) => [n.position.x, n.position.z] as [number, number]),
-            [topology.nodes[0]!.position.x, topology.nodes[0]!.position.z] as [number, number],
-          ],
-        ]);
-      if (standingPolygons.length > 0) {
+    // Identify which standing faces are affected (touched) by the brush stroke
+    const affected = standing.filter(
+      (topology) => topology.surfaceType === targetSurface && faceIntersectsSwept(topology, swept),
+    );
+    const affectedKeys = new Set(affected.map((t) => t.surfaceKey.join(" ")));
+    const retained = standing.filter((t) => !affectedKeys.has(t.surfaceKey.join(" ")));
+
+    // Extract 2D polygon of affected faces
+    const affectedPolygons: Polygon[] = affected
+      .map(topologyToPolygon)
+      .filter((p) => p.length > 0);
+    const affectedMerged: MultiPolygon =
+      affectedPolygons.length > 0
+        ? polygonClipping.union(affectedPolygons[0]!, ...affectedPolygons.slice(1))
+        : [];
+
+    let targetPolygon: MultiPolygon;
+    let effectiveFaceSide = faceSize;
+
+    if (isDig) {
+      if (affectedMerged.length === 0 || standing.length === 0) {
+        ctx.reportFeedback({ tone: "info", message: "Nada a cavar aqui." });
+        return;
+      }
+      try {
+        targetPolygon = polygonClipping.difference(affectedMerged, swept);
+      } catch {
+        targetPolygon = [];
+      }
+      const remainingArea = totalMultiPolygonArea(targetPolygon);
+      if (remainingArea < faceSize * faceSize * 0.1) {
+        // Complete excavation of touched faces
+        ctx.runtime.applyPatchReplacement(
+          {
+            operationId: `${causeId}:terrain-dig`,
+            sourceSurfaceKeys: affected.map((f) => f.surfaceKey),
+            patch: { nodes: [], edges: [], regions: [] },
+          },
+          "local",
+          causeId,
+        );
+        report(
+          ctx,
+          0,
+          0,
+          0,
+          { raisedFaces: 0, movedVertices: 0, skipped: [] },
+          true,
+          `${affected.length} faces escavadas`,
+        );
+        return;
+      }
+
+      // Scale preservation: small brush on a giant face does not explode into thousands of minifaces
+      const origArea = totalMultiPolygonArea(affectedMerged);
+      const origFaceSide = affected.length > 0 ? Math.sqrt(origArea / affected.length) : faceSize;
+      effectiveFaceSide = Math.max(faceSize, Math.min(origFaceSide * 0.8, brushRadius * 1.5));
+      effectiveFaceSide = Math.max(1.0, effectiveFaceSide);
+    } else {
+      // isAdd
+      if (affectedMerged.length === 0) {
+        targetPolygon = swept;
+      } else {
+        // Check if stroke extends into empty ground or bridges clouds:
+        let uncovered: MultiPolygon = swept;
         try {
-          const standingMerged = polygonClipping.union(standingPolygons[0]!, ...standingPolygons.slice(1));
-          uncovered = polygonClipping.difference(swept, standingMerged);
+          uncovered = polygonClipping.difference(swept, affectedMerged);
         } catch {
           uncovered = swept;
+        }
+        const uncoveredArea = totalMultiPolygonArea(uncovered);
+        const minUsefulArea = faceSize * faceSize * 0.25;
+
+        if (uncoveredArea < minUsefulArea) {
+          // Entirely inside existing terrain: elevate height smoothly without rebuilding mesh!
+          const raised = restackTerrain(
+            ctx,
+            targetSurface,
+            covered,
+            causeId,
+            dirtLoadOver(gesture.samples.map((sample) => sample.point), brushRadius),
+            "elevate",
+            elevationStep,
+          );
+          report(
+            ctx,
+            0,
+            0,
+            0,
+            raised,
+            true,
+            raised.raisedFaces > 0 ? `${raised.raisedFaces} faces elevadas` : undefined,
+          );
+          return;
+        }
+
+        try {
+          targetPolygon = polygonClipping.union(affectedMerged, swept);
+        } catch {
+          targetPolygon = swept;
         }
       }
     }
 
-    const uncoveredArea = totalMultiPolygonArea(uncovered);
-    const minUsefulArea = faceSize * faceSize * 0.25;
+    const perimeters = perimeterConstraints(retained, 0);
+    const targetRings = buildConstraintRings(targetPolygon, effectiveFaceSide, perimeters);
+    const boundaryRings = targetRings.filter((r) => !r.isHole && r.points.length >= 3);
+    const holeRings = targetRings.filter((r) => r.isHole && r.points.length >= 3);
 
-    // When the brush stroke is entirely inside existing terrain, height sculpting
-    // (elevation / lowering / flattening) is completely finished: we never delete
-    // standing faces, never rebuild redundant mesh, and never split perimeter edges.
-    if (uncoveredArea < minUsefulArea) {
-      report(ctx, 0, 0, 0, raised, true);
+    if (boundaryRings.length === 0) {
+      ctx.reportFeedback({ tone: "info", message: "Nada a fazer aqui." });
       return;
     }
-
-    const emptyOutline = outlineConstraints(uncovered.flatMap((polygon) => polygon.slice(0, 1)), weld);
-    if (emptyOutline.length === 0) {
-      report(ctx, 0, 0, 0, raised, true);
-      return;
-    }
-
-    const perimeters = perimeterConstraints(standing, 0);
-    const holeRings: readonly ConstraintRing[] = [
-      ...outlineConstraints(uncovered.flatMap((polygon) => polygon.slice(1)), weld),
-      ...perimeters.rings,
-    ];
 
     const { minX, minZ, maxX, maxZ } = extent;
     const originX = Math.floor(minX / NOISE_SPACING) - 1;
@@ -358,28 +535,49 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       ) * (params.heightScale ?? 1.5);
 
     const standingNodes = standing.flatMap((topology) => topology.nodes.map((node) => node.position));
-    const kept = heightFieldOf(standingNodes, faceSize * 2);
+    const kept = heightFieldOf(standingNodes, effectiveFaceSide * 2);
     const heightAt = (point: { readonly x: number; readonly z: number }): number =>
       kept.at(point) ?? noiseAt(point);
 
     const filled = fillTerrain(ctx.runtime, {
-      what: "pincelada",
+      what: isDig ? "escavação" : "pincelada",
       mint: `${ctx.tableId}:terrain-sculpt-${salt}`,
       tableId: ctx.tableId,
       causeId,
       seed: Math.floor(params.seed ?? 1) || 1,
-      faceSide: faceSize,
+      faceSide: effectiveFaceSide,
       relaxStrength: params.irregularity ?? 0.7,
       surfaceType: targetSurface,
-      boundary: emptyOutline,
+      boundary: boundaryRings,
       holes: holeRings,
       sources: perimeters.sources,
-      replaceSurfaceKeys: undefined,
-      topologySeeds: standing.map((topology) => ({ seed: topology.surfaceKey, surfaceType: topology.surfaceType })),
+      replaceSurfaceKeys: affected.length > 0 ? affected.map((f) => f.surfaceKey) : undefined,
+      topologySeeds: retained.map((topology) => ({ seed: topology.surfaceKey, surfaceType: topology.surfaceType })),
       heightAt,
     });
 
-    report(ctx, filled.built, filled.refused, filled.unadopted, raised, filled.refinementComplete);
+    const raisedInfo =
+      isAdd && covered.length > 0
+        ? restackTerrain(
+            ctx,
+            targetSurface,
+            covered,
+            causeId,
+            dirtLoadOver(gesture.samples.map((sample) => sample.point), brushRadius),
+            "elevate",
+            elevationStep,
+          )
+        : { raisedFaces: 0, movedVertices: 0, skipped: [] };
+
+    report(
+      ctx,
+      filled.built,
+      filled.refused,
+      filled.unadopted,
+      raisedInfo,
+      filled.refinementComplete,
+      isDig ? `${filled.built} faces restantes pós-escavação` : undefined,
+    );
   },
 };
 
@@ -390,9 +588,11 @@ function report(
   unadopted: number,
   raised: { readonly raisedFaces: number; readonly movedVertices: number; readonly skipped: readonly string[] },
   refinementComplete = true,
+  customMsg?: string,
 ): void {
   const parts: string[] = [];
-  if (built > 0) parts.push(`${built} faces novas`);
+  if (customMsg) parts.push(customMsg);
+  else if (built > 0) parts.push(`${built} faces novas`);
   if (refused > 0) parts.push(`${refused} faces perdidas (aresta sem lado livre)`);
   if (raised.raisedFaces > 0) parts.push(`${raised.raisedFaces} ajustadas (${raised.movedVertices} vértices)`);
   if (unadopted > 0) parts.push(`${unadopted} junções não costuradas`);

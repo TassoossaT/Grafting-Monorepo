@@ -206,21 +206,21 @@ function TerrainSculptFields(props: {
   readonly onChange: (next: TerrainSculptParams) => void;
 }) {
   const { params, onChange } = props;
-  const currentMode = params.mode ?? "elevate";
+  const currentMode = params.mode ?? "add";
   return (
     <div style={{ display: "grid", gap: "0.6rem" }}>
       <div className="gm-material-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
         <SelectableChip
-          label="Elevar (+)"
+          label="Adicionar (+)"
           swatchColor="#22c55e"
-          selected={currentMode === "elevate"}
-          onSelect={() => onChange({ ...params, mode: "elevate" })}
+          selected={currentMode === "add" || currentMode === "elevate"}
+          onSelect={() => onChange({ ...params, mode: "add" })}
         />
         <SelectableChip
-          label="Rebaixar (-)"
+          label="Cavar (-)"
           swatchColor="#ef4444"
-          selected={currentMode === "lower"}
-          onSelect={() => onChange({ ...params, mode: "lower" })}
+          selected={currentMode === "dig" || currentMode === "lower"}
+          onSelect={() => onChange({ ...params, mode: "dig" })}
         />
         <SelectableChip
           label="Nivelar (=)"
