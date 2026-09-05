@@ -110,6 +110,23 @@ pub fn delete_region_json(&mut self, request_json: &str) -> Result<String, JsVal
 pub fn footprint_coverage_json(&self, request_json: &str) -> Result<String, JsValue>
 pub fn add_patch_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn apply_patch_replacement_json(&mut self, request_json: &str) -> Result<String, JsValue>
+
+// src/spatial_index.rs
+pub const DEFAULT_GRID_CELL_SIZE: f32 = 4.0;
+pub struct RegionBounds
+pub fn new(min_x: f32, min_z: f32, max_x: f32, max_z: f32) -> Self
+pub fn intersects(&self, other: &RegionBounds) -> bool
+pub fn contains_point(&self, x: f32, z: f32) -> bool
+pub fn from_points<I>(points: I) -> Option<Self>
+pub fn of_region(
+pub struct UniformGridIndex
+pub fn new(cell_size: f32) -> Self
+pub fn cell_size(&self) -> f32
+pub fn len(&self) -> usize
+pub fn is_empty(&self) -> bool
+pub fn bounds_of(&self, region_id: &RegionId) -> Option<&RegionBounds>
+pub fn insert(&mut self, region_id: RegionId, bounds: RegionBounds)
+pub fn remove(&mut self, region_id: &RegionId) -> Option<RegionBounds>
 ```
 
 ### `discretize` (`libs/domains/procgen/discretize`)
@@ -3437,10 +3454,13 @@ export const CUT_REPAIR_EXECUTORS: Readonly<Record<string, CutRepairExecutor>> =
   "terrain-grass": repairTerrainCut,
   });
 export function paintedNodesOf(
-  runtime: Pick<TabletopRuntime, "getAllRegionTopologies" | "getSnapshot">,
+  runtime: Pick<TabletopRuntime, "getAllRegionTopologies" | "getRegionTopologiesInBounds" | "getSnapshot">,
   paintedType: string,
+  bounds?: ConstructionTopologyBoundsQuery,
   ): Pick<CutFallout, "paintedNodes" | "paintedLoops"> {
-  const painted = runtime.getAllRegionTopologies().filter((topology) => topology.surfaceType === paintedType);
+  const topologies = bounds !== undefined && typeof runtime.getRegionTopologiesInBounds === "function"
+  ? runtime.getRegionTopologiesInBounds(bounds)
+  : runtime.getAllRegionTopologies();
 export function dispatchCutRepairs(runtime: TabletopRuntime, request: ApplyPatchReplacementRequest, causeId: string): void {
   const outline = request.footprintOutline;
   if (outline === undefined || outline.length === 0) return;
@@ -4389,6 +4409,12 @@ export function resolveCreationInteraction(
   const definition = structureTypeFor(paintedType);
 export function resolveCutRepair(coveredType: string): CutRepair {
   const definition = structureTypeFor(coveredType);
+export function resolveConformance(
+  structureType: string,
+  surfaceType: string,
+  subtype?: string,
+  ): boolean {
+  const definition = structureTypeFor(structureType);
 export interface ResolvedCoverage {
   readonly covered: ConstructionCoveredRegion;
   readonly interaction: CreationInteraction;
@@ -4611,12 +4637,12 @@ export function changedSpineCloud(snapshot: ConstructionGraphSnapshot, patch: Co
   const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
 export function standingRegionsForCloud(
   topologies: readonly ConstructionRegionTopology[],
-  cloudPositions: readonly ConstructionPosition[],
+  cloudPositions: readonly ConstructionPosition[] = [],
   corridorIds: ReadonlySet<string> = new Set(),
   ): readonly ConstructionRegionTopology[] {
-  if (corridorIds.size === 0) return [];
-  return topologies.filter((topology) => {
-  if (topology.surfaceType !== "path") return false;
+  if (corridorIds.size === 0 && cloudPositions.length === 0) return [];
+
+  const pathTopologies = topologies.filter((topology) => topology.surfaceType === "path");
 
 // src/features/edit-construction/structure-types/path/path-cloud.ts
 export interface PathRunNode {
