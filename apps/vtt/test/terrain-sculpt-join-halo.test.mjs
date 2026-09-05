@@ -157,14 +157,24 @@ test("a mismatched surface type at the seam is never reclaimed, whatever the hal
   assert.equal(capture.replacedSurfaceKeys, undefined);
 });
 
-test("a face inside the search radius but disconnected from the brush is left retained, not reclaimed", () => {
-  // A face far from everything -- shares no node with SEAM_QUAD or with
-  // anything touching swept, so it can never be reclaimed. A normal
+test("a face outside the halo and disconnected from the brush is left completely alone", () => {
+  // A face far from everything -- shares no node with SEAM_QUAD, and none of
+  // its own corners land inside this stroke's `probeArea` either. A normal
   // faceSize-scale square (side 2), not the sub-cell sliver a tighter one
   // would be: `outlineConstraints`'s own weld (faceSize * 0.5 = 1 here)
   // exists to drop slivers a real stroke's outline leaves behind, and would
   // just as happily collapse a test fixture smaller than that -- this one is
   // sized to survive it, the same as real terrain would.
+  //
+  // **This used to be folded in anyway**, on the reasoning that every
+  // standing face the (padded) search radius reached had to join the outer
+  // union or a reclaimed neighbour's edge might coincide with its hole ring.
+  // Reproduced against the real engine: two mounds with a genuine gap
+  // between their own painted edges, neither touching nor overlapping
+  // either one's halo, still folded into each other's `fillArea` union this
+  // way -- and lost faces re-adopting against it on every later repaint of
+  // the *other* mound, never stabilizing. A face this disconnected has to be
+  // left out of the union entirely, not merely out of `replacedSurfaceKeys`.
   const FAR_ISLAND = [
     { id: "f0", x: 9, z: -1 },
     { id: "f1", x: 11, z: -1 },
@@ -179,12 +189,6 @@ test("a face inside the search radius but disconnected from the brush is left re
   terrainSculptTool.onPointerUp(ctx, clickAtOrigin(), paramsWith(1));
   assert.deepEqual(capture.replacedSurfaceKeys, [["seam"]], "only the touching face is reclaimed, not the far island");
 
-  // The far island is folded into the outer boundary too (every standing
-  // face nearby is, so a reclaimed face's own edges never coincide with a
-  // retained neighbour's hole ring -- see the union's own comment). Left
-  // there alone it would add real new ground the brush never touched; what
-  // makes that safe is that its own footprint is *also* carved back out as a
-  // hole, at the exact same four corners, so the two cancel to net zero.
   const [{ boundary, holes }] = capture.gridRequests;
   const asKeySet = (ring) => new Set(ring.map((point) => `${point.x.toFixed(6)}:${point.z.toFixed(6)}`));
   const islandKeys = asKeySet(FAR_ISLAND.map((corner) => ({ x: corner.x, z: corner.z })));
@@ -196,8 +200,8 @@ test("a face inside the search radius but disconnected from the brush is left re
     const keys = asKeySet(ring);
     return [...islandKeys].every((key) => keys.has(key));
   });
-  assert.ok(boundaryHasIsland, "the island's own footprint is folded into the outer boundary");
-  assert.ok(holeHasIsland, "and carved back out as a hole at the same corners, cancelling it to no net ground");
+  assert.ok(!boundaryHasIsland, "the island's own footprint never enters the outer boundary -- it is untouched");
+  assert.ok(!holeHasIsland, "and is never carved out as a hole either -- there is nothing here for it to cancel");
 });
 
 test("with nothing standing nearby, joinHalo never asks the generator for ground beyond the brush", () => {
@@ -216,19 +220,16 @@ test("with nothing standing nearby, joinHalo never asks the generator for ground
   }
 });
 
-test("the neighbourhood lookup still runs, and still finds a retained neighbour, when nothing overlaps the halo either", () => {
+test("a lone neighbour outside the halo, touching nothing, is left alone even though the lookup still runs", () => {
   // x 9-11 sits outside even the joinHalo-2 probe's own reach (brushRadius 4
   // + faceSize 2 * joinHalo 2 = 8), so nothing here is ever handed over as a
-  // seed -- `covered` and the halo's own coverage are both empty. An earlier
-  // version of this lookup took an empty seed list as license to skip the
-  // engine call outright and return `[]`. That is also the one case where a
-  // stroke can land in a gap between two *already-touching* pieces of
-  // ground without covering either directly: skipping there dropped a real
-  // retained neighbour, its shared seam was never carved out as a hole, and
-  // the fresh grid planted a face on an edge two existing faces already
-  // shared -- a hard "already used 2 times" refusal, not a cosmetic slip.
-  // The call must still go out and let the engine's own bounds scan answer,
-  // same as it always could before seeding from the halo was added.
+  // seed -- `covered` and the halo's own coverage are both empty, and this
+  // fixture has nothing for it to touch either. The engine call still has to
+  // go out regardless (an earlier version skipped it outright on an empty
+  // seed list, which is its own bug -- see the next test for the real seam
+  // that regression actually broke), but a lone, disconnected face the scan
+  // merely turns up sharing its padded box is not reason enough to fold it
+  // into this stroke's own boundary or holes.
   const RETAINED_NEIGHBOUR = [
     { id: "n0", x: 9, z: -1 },
     { id: "n1", x: 11, z: -1 },
@@ -239,8 +240,45 @@ test("the neighbourhood lookup still runs, and still finds a retained neighbour,
   const ctx = buildCtx([squareTopology(["neighbour"], "terrain", RETAINED_NEIGHBOUR)], capture);
   terrainSculptTool.onPointerUp(ctx, clickAtOrigin(), paramsWith(2));
   const [{ boundary, holes }] = capture.gridRequests;
-  assert.equal(boundary.length, 2, "the neighbour's own footprint is folded into the outer boundary");
-  assert.equal(holes.length, 1, "and carved back out as a hole -- dropping it here is what caused the crash");
+  assert.equal(boundary.length, 1, "the neighbour never enters the outer boundary -- it is untouched");
+  assert.equal(holes.length, 0, "and is never carved out as a hole either");
+});
+
+test("a seam stroke covering neither of two already-touching pieces still carves out their shared edge", () => {
+  // The real crash this pair of pieces guards against: a stroke landing in
+  // the gap between two pieces that already touch *each other* covers
+  // neither directly, so `covered` and the halo's own footprint coverage are
+  // both empty for both of them. `NEAR_HALF` pokes one corner (x: 5) inside
+  // this joinHalo-2 stroke's own probe (brushRadius 4 + faceSize 2 * 2 = 8,
+  // so anything at x <= 8 qualifies) -- that is what seeds it. `FAR_HALF`
+  // shares node ids "m1"/"m2" with it at x: 7 -- the two already-touching
+  // pieces -- and reaches out to x: 13, well past the probe on its own.
+  // Dropping `FAR_HALF` here is exactly what used to plant a face on an
+  // edge two existing faces already shared: "already used 2 times".
+  const NEAR_HALF = [
+    { id: "m0", x: 5, z: -1 },
+    { id: "m1", x: 7, z: -1 },
+    { id: "m2", x: 7, z: 1 },
+    { id: "m3", x: 5, z: 1 },
+  ];
+  const FAR_HALF = [
+    { id: "m1", x: 7, z: -1 },
+    { id: "m4", x: 13, z: -1 },
+    { id: "m5", x: 13, z: 1 },
+    { id: "m2", x: 7, z: 1 },
+  ];
+  const capture = {};
+  const ctx = buildCtx(
+    [squareTopology(["near"], "terrain", NEAR_HALF), squareTopology(["far"], "terrain", FAR_HALF)],
+    capture,
+  );
+  terrainSculptTool.onPointerUp(ctx, clickAtOrigin(), paramsWith(2));
+  const [{ boundary, holes }] = capture.gridRequests;
+  // The two pieces share an edge, so `outwardPerimeterRings` cancels it and
+  // walks their combined outline as one ring -- not two: `swept`'s own
+  // circle plus that one merged rectangle.
+  assert.equal(boundary.length, 2, "the merged, already-touching pair folds into the outer boundary as one ring");
+  assert.equal(holes.length, 1, "and carves back out as one hole -- dropping it is what caused the crash");
 });
 
 test("low irregularity scales the face size up past its nominal value", () => {

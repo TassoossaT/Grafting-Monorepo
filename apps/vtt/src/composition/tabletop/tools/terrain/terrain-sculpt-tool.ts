@@ -299,6 +299,65 @@ function standingOuterRings(standing: readonly ConstructionRegionTopology[]): re
 }
 
 /**
+ * `pool`, narrowed to whatever a chain of shared nodes actually connects back
+ * to `seeds` -- never merely whatever sits within some distance of them.
+ *
+ * **Why membership in `standing` cannot be a padded circle.** It used to be:
+ * every topology `nearby` returned with *any* node inside a halo circle
+ * widened by `reach` on top of its own radius, on the reasoning that the
+ * engine's own bounds box is a rectangle wider than `reach` means on its
+ * diagonal, so the circle had to be at least that generous to not drop a
+ * real match near the box's edge. It was that generous *everywhere*, not
+ * only near the box's edge -- reproduced against the real engine, two
+ * mounds with a genuine three-unit gap between their own painted edges (no
+ * shared node, nothing touching, comfortably wider than one face), both
+ * default `joinHalo`: the second mound's halo circle still reached past
+ * that gap, folded the first mound's outline into its own `fillArea` union
+ * as if adjacent, and lost faces re-adopting against it -- shrinking on
+ * every later repaint of the *other* mound, never stabilizing. A gap is a
+ * gap, and no distance threshold this function could be handed instead
+ * would both keep it and still catch the one case padding was ever added
+ * for.
+ *
+ * **That one case survives here anyway.** A stroke landing in the gap
+ * between two pieces that already touch *each other* routinely covers
+ * neither directly -- but the first piece only has to poke a single node
+ * into `probeArea` to seed this walk, and the second is then pulled in by
+ * the shared node the two pieces already carry, however far its own far
+ * corner sits from the stroke. Nothing here is distance-gated past that
+ * first seed; a chain of real shared nodes is the only thing that extends
+ * it, and two unconnected mounds never have one to share.
+ */
+function touchingComponent(
+  pool: readonly ConstructionRegionTopology[],
+  seeds: readonly ConstructionRegionTopology[],
+): readonly ConstructionRegionTopology[] {
+  const byNode = new Map<string, ConstructionRegionTopology[]>();
+  for (const topology of pool) {
+    for (const node of topology.nodes) {
+      const sharing = byNode.get(node.id);
+      if (sharing) sharing.push(topology);
+      else byNode.set(node.id, [topology]);
+    }
+  }
+  const reachable = new Map<string, ConstructionRegionTopology>();
+  const frontier = [...seeds];
+  for (const topology of seeds) reachable.set(topology.surfaceKey.join(" "), topology);
+  while (frontier.length > 0) {
+    const topology = frontier.pop()!;
+    for (const node of topology.nodes) {
+      for (const neighbour of byNode.get(node.id) ?? []) {
+        const key = neighbour.surfaceKey.join(" ");
+        if (reachable.has(key)) continue;
+        reachable.set(key, neighbour);
+        frontier.push(neighbour);
+      }
+    }
+  }
+  return [...reachable.values()];
+}
+
+/**
  * The standing ground `joinHalo` reclaims -- deletes and regenerates as part
  * of this same fill, rather than merely meeting: fully inside `probeArea`,
  * matching the painted type, *and* reachable by a chain of touching faces
@@ -547,25 +606,23 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     // refusal) and an unrelated cloud that merely shares the box.
     const probeExtent = boundsOf(probeArea);
     const haloCovered = params.joinHalo > 0 ? coveredByStroke(ctx, probeArea) : covered;
+    // Only how far the *engine's own bounds box* is padded when it looks for
+    // candidates -- a safety margin against that box being a rectangle
+    // narrower on its diagonal than it looks, never a distance this tool
+    // itself treats as "close enough to matter". See `touchingComponent`'s
+    // own comment for why membership in `standing` is decided by graph
+    // adjacency instead, once the candidates come back.
     const reach = faceSize * 2;
     const nearby = terrainStandingAround(ctx.runtime, haloCovered, probeExtent, reach);
 
-    // The bounds box above is deliberately coarse and over-inclusive -- a
-    // rectangle, wide enough on its diagonal to reach noticeably farther
-    // than `reach` actually means everywhere except along its own axes.
-    // Reproduced live: a cloud comfortably outside this stroke's real halo
-    // circle, placed only along that diagonal, still came back as
-    // "standing" and picked up stray split nodes on its own untouched seam.
-    // `reachArea` is the same shape the halo itself already is -- a swept
-    // circle, not a box -- widened by that same `reach`, so this is the one
-    // place membership in `standing` is actually decided: never by whatever
-    // box shape the engine happened to search.
-    const reachArea = brushSweptOutlinePolygons(
-      gesture.samples.map((sample) => sample.point),
-      params.brushRadius + faceSize * params.joinHalo + reach,
-      strokeChord(faceSize),
+    // Only what the halo actually overlaps directly seeds this -- any
+    // topology with a node inside `probeArea`, the same shape the preview
+    // promised. Everything else in `nearby` joins `standing` only if a chain
+    // of shared nodes actually connects it back to one of those seeds.
+    const standing = touchingComponent(
+      nearby,
+      nearby.filter((topology) => topology.nodes.some((node) => insideSwept(node.position, probeArea))),
     );
-    const standing = nearby.filter((topology) => topology.nodes.some((node) => insideSwept(node.position, reachArea)));
     const consumed = reclaimedTopologies(standing, params.targetSurface, swept, probeArea, faceSize, params.joinHalo > 0);
 
     // The generator is never asked for ground beyond the brush's own outline
