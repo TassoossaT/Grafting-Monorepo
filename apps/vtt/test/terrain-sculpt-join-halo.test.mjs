@@ -30,18 +30,18 @@ function squareTopology(surfaceKey, surfaceType, corners) {
 }
 
 /**
- * A face just outside a `brushRadius: 4` click's own footprint (a circle,
- * chord 4, inscribed -- so nothing on it ever sits farther than 4 from the
- * centre) and, once `joinHalo: 1` widens the fill to radius 6 (chord 4, ten
- * sides -- nothing on it ever sits nearer than `6 * cos(pi/10) ≈ 5.7`),
- * comfortably inside that too. The margin on both sides is about half a unit,
- * regardless of which way the polygon happens to facet.
+ * A face straddling a `brushRadius: 4` click's own edge -- two corners
+ * (x: 3.7) inside the brush's swept circle, two (x: 4.3) outside it, along
+ * the +x axis where that circle's polygon approximation sits exactly on a
+ * vertex (so it tracks the true radius closely, unlike a facet midpoint).
+ * Reclaiming this quad is the ordinary case `joinHalo` exists for: the brush
+ * actually overlaps it, it is not merely nearby.
  */
 const SEAM_QUAD = [
-  { id: "q0", x: 4.95, z: -0.05 },
-  { id: "q1", x: 5.05, z: -0.05 },
-  { id: "q2", x: 5.05, z: 0.05 },
-  { id: "q3", x: 4.95, z: 0.05 },
+  { id: "q0", x: 3.7, z: -0.1 },
+  { id: "q1", x: 4.3, z: -0.1 },
+  { id: "q2", x: 4.3, z: 0.1 },
+  { id: "q3", x: 3.7, z: 0.1 },
 ];
 
 function paramsWith(joinHalo) {
@@ -120,6 +120,34 @@ test("a mismatched surface type at the seam is never reclaimed, whatever the hal
   terrainSculptTool.onPointerUp(ctx, clickAtOrigin(), paramsWith(1));
   assert.equal(capture.addPatchCalled, true);
   assert.equal(capture.replacedSurfaceKeys, undefined);
+});
+
+test("a face inside the search radius but disconnected from the brush is left retained, not unioned as a floating island", () => {
+  // A far quad sits entirely inside probeArea (radius 6) but nowhere near
+  // swept (radius 4) -- and, critically, nothing bridges it back: it shares
+  // no node with SEAM_QUAD or with anything touching swept. Reclaiming it
+  // anyway would hand outlineConstraints a second, disconnected outer ring,
+  // which is exactly the malformed boundary that produced real holes in the
+  // generated mesh once the boundary-outside-brush bug was fixed by simply
+  // widening the search radius without also requiring a touching chain.
+  // At 90 degrees from SEAM_QUAD, distance 4.9-5.1: outside swept (radius 4)
+  // but comfortably inside probeArea's worst-case reach (radius 6, chord 4,
+  // ten sides -- nothing on it sits nearer than 6 * cos(pi/10) ~= 5.7).
+  const FAR_ISLAND = [
+    { id: "f0", x: -0.1, z: 4.9 },
+    { id: "f1", x: 0.1, z: 4.9 },
+    { id: "f2", x: 0.1, z: 5.1 },
+    { id: "f3", x: -0.1, z: 5.1 },
+  ];
+  const capture = {};
+  const ctx = buildCtx(
+    [squareTopology(["seam"], "terrain", SEAM_QUAD), squareTopology(["island"], "terrain", FAR_ISLAND)],
+    capture,
+  );
+  terrainSculptTool.onPointerUp(ctx, clickAtOrigin(), paramsWith(1));
+  assert.deepEqual(capture.replacedSurfaceKeys, [["seam"]], "only the touching face is reclaimed, not the far island");
+  const [{ boundary }] = capture.gridRequests;
+  assert.equal(boundary.length, 1, "one connected outer ring, never a disconnected second one");
 });
 
 test("with nothing standing nearby, joinHalo never asks the generator for ground beyond the brush", () => {

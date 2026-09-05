@@ -230,6 +230,64 @@ function footprintRingOf(topology: ConstructionRegionTopology): Ring | undefined
   return ring.length >= 3 ? ring : undefined;
 }
 
+/**
+ * The standing ground `joinHalo` reclaims: fully inside `probeArea`, matching
+ * the painted type, *and* reachable by a chain of touching faces that ends
+ * at one the brush itself actually overlaps.
+ *
+ * That last part is not optional. A face can sit entirely inside the search
+ * radius while every path back to the brush runs through some larger
+ * neighbour that itself pokes outside it -- `probeArea` is a distance, not a
+ * connectivity guarantee, and the two disagree exactly there. Reclaiming
+ * that face anyway would union a piece into `fillArea` with no shared edge
+ * to the brush's own shape: a second, disconnected ring in what
+ * `outlineConstraints` hands the generator as "the boundary", floating apart
+ * from the first. That is a real hole waiting to happen, not a cosmetic
+ * oddity -- ground the CDT is asked to bound by two separate loops with
+ * nothing between them, one of which the brush never actually reaches.
+ *
+ * Walking the touching chain here, in the already-local `standing` set,
+ * costs nothing new: it is the same neighbourhood query already paid for.
+ */
+function reclaimedTopologies(
+  standing: readonly ConstructionRegionTopology[],
+  targetSurface: string,
+  swept: MultiPolygon,
+  probeArea: MultiPolygon,
+): readonly ConstructionRegionTopology[] {
+  const candidates = standing.filter(
+    (topology) =>
+      topology.surfaceType === targetSurface &&
+      topology.nodes.length > 0 &&
+      topology.nodes.every((node) => insideSwept(node.position, probeArea)),
+  );
+
+  const byNode = new Map<string, ConstructionRegionTopology[]>();
+  for (const topology of candidates) {
+    for (const node of topology.nodes) {
+      const sharing = byNode.get(node.id);
+      if (sharing) sharing.push(topology);
+      else byNode.set(node.id, [topology]);
+    }
+  }
+
+  const reachable = new Map<string, ConstructionRegionTopology>();
+  const frontier = candidates.filter((topology) => topology.nodes.some((node) => insideSwept(node.position, swept)));
+  for (const topology of frontier) reachable.set(topology.surfaceKey.join(" "), topology);
+  while (frontier.length > 0) {
+    const topology = frontier.pop()!;
+    for (const node of topology.nodes) {
+      for (const neighbour of byNode.get(node.id) ?? []) {
+        const key = neighbour.surfaceKey.join(" ");
+        if (reachable.has(key)) continue;
+        reachable.set(key, neighbour);
+        frontier.push(neighbour);
+      }
+    }
+  }
+  return [...reachable.values()];
+}
+
 /** Terrain-sculpt's own effect: the brush hands over the whole gesture, once, on release. */
 export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   id: "terrain-sculpt",
@@ -318,12 +376,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     // out. Those stay, and their contour is what the new ground meets.
     const probeExtent = boundsOf(probeArea);
     const standing = terrainStandingAround(ctx.runtime, covered, probeExtent, params.faceSize * 2);
-    const consumed = standing.filter(
-      (topology) =>
-        topology.surfaceType === params.targetSurface &&
-        topology.nodes.length > 0 &&
-        topology.nodes.every((node) => insideSwept(node.position, probeArea)),
-    );
+    const consumed = reclaimedTopologies(standing, params.targetSurface, swept, probeArea);
 
     // The generator is never asked for ground beyond the brush's own outline
     // plus the exact shape of what `consumed` just reclaimed -- unioned in by
