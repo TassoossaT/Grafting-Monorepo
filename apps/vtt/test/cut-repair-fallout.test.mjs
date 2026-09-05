@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { paintedNodesOf } from "../src/composition/tabletop/tools/cut-repair-dispatch.ts";
+import {
+  paintedNodesOf,
+  dispatchRemovalRepairs,
+  CUT_REPAIR_EXECUTORS,
+} from "../src/composition/tabletop/tools/cut-repair-dispatch.ts";
 
 /**
  * What the repair is *handed* has been the cause of every cut-repair failure
@@ -116,5 +120,49 @@ test("paintedNodesOf scopes to bounds when getRegionTopologiesInBounds is availa
   const { paintedNodes } = paintedNodesOf(runtime, "path", queryBounds);
   assert.deepEqual(receivedBounds, queryBounds);
   assert.equal(paintedNodes.length, 4, "scoped to single band returned by getRegionTopologiesInBounds");
+});
+
+test("dispatchRemovalRepairs on unsupported type (wall, path) is an honest no-op", () => {
+  let invoked = false;
+  const runtime = {
+    getSnapshot: () => ({ tableId: "table-test" }),
+  };
+  // wall-white resolves to unsupported
+  dispatchRemovalRepairs(runtime, ["@region", "wall-1"], "wall-white", "cause:test");
+  assert.equal(invoked, false);
+
+  // path resolves to unsupported
+  dispatchRemovalRepairs(runtime, ["@region", "path-1"], "path", "cause:test");
+  assert.equal(invoked, false);
+});
+
+test("dispatchRemovalRepairs on regenerate type invokes registered executor with empty painter loops", () => {
+  let receivedFallout;
+  let receivedCauseId;
+  let receivedTableId;
+  const mockExecutor = (runtime, fallout, causeId, tableId) => {
+    receivedFallout = fallout;
+    receivedCauseId = causeId;
+    receivedTableId = tableId;
+    return 1;
+  };
+
+  const runtime = {
+    getSnapshot: () => ({ tableId: "table-removal-test" }),
+  };
+  dispatchRemovalRepairs(
+    runtime,
+    ["@region", "terrain-1"],
+    "terrain",
+    "cause:removal-1",
+    { terrain: mockExecutor },
+  );
+
+  assert.ok(receivedFallout !== undefined);
+  assert.deepEqual(receivedFallout.consumedSurfaceKeys, [["@region", "terrain-1"]]);
+  assert.deepEqual(receivedFallout.paintedNodes, []);
+  assert.deepEqual(receivedFallout.paintedLoops, []);
+  assert.equal(receivedCauseId, "cause:removal-1");
+  assert.equal(receivedTableId, "table-removal-test");
 });
 

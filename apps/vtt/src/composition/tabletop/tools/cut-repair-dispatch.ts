@@ -184,3 +184,41 @@ export function dispatchCutRepairs(runtime: TabletopRuntime, request: ApplyPatch
     }
   }
 }
+
+/**
+ * Resolves post-removal cut repair for a directly removed surface.
+ *
+ * Consults `resolveCutRepair(surfaceType)` for the removed surface's type.
+ * For types declaring `"regenerate"` (e.g. `terrain`, `terrain-grass`),
+ * delegates to their registered executor in `CUT_REPAIR_EXECUTORS`.
+ * For types declaring `"unsupported"` (e.g. `panel`, `path`), honestly
+ * does nothing (existing backlog, not an error).
+ */
+export function dispatchRemovalRepairs(
+  runtime: TabletopRuntime,
+  surfaceKey: ConstructionSurfaceKey,
+  surfaceType: string,
+  causeId: string,
+  executors: Readonly<Record<string, CutRepairExecutor>> = CUT_REPAIR_EXECUTORS,
+): void {
+  const repair = resolveCutRepair(surfaceType);
+  if (repair.kind !== "regenerate") return;
+
+  const executor = executors[surfaceType];
+  if (executor === undefined) return;
+
+  try {
+    executor(
+      runtime,
+      {
+        consumedSurfaceKeys: [surfaceKey],
+        paintedNodes: [],
+        paintedLoops: [],
+      },
+      causeId,
+      runtime.getSnapshot().tableId,
+    );
+  } catch (error) {
+    reportToolFailure("cut-repair", `repair ${surfaceType} after removal`, { causeId, surfaceKey }, error);
+  }
+}

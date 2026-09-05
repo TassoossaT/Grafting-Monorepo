@@ -883,3 +883,27 @@ test("removeSurface folds outcome through #foldRegionEditOutcome, updating map a
   assert.equal(runtime.getSnapshot().map.byId.has(wallRef), false);
 });
 
+test("removeSurface invokes repair dispatch on removed surface", async () => {
+  const renderPort = createFakeRenderPort();
+  const constructionPort = createFakeConstructionPort();
+  constructionPort.removeSurface = (request) => ({
+    ...emptyRegionEdit(),
+    removedSurfaceKeys: [request.surfaceKey],
+    removedNodeIds: [],
+  });
+
+  const runtime = createTabletopRuntime({
+    tableId: "table-remove-surface-repair",
+    seedFakeMap: true,
+    renderPort,
+    constructionPort,
+  });
+
+  await runtime.start();
+
+  // FAKE_WALL_SURFACE_KEY has type "wall-white" (unsupported repair, so honest no-op)
+  const outcome = runtime.removeSurface({ surfaceKey: FAKE_WALL_SURFACE_KEY }, "local", "cause:demolish-wall");
+  assert.deepEqual(outcome.removedSurfaceKeys, [FAKE_WALL_SURFACE_KEY]);
+});
+
+

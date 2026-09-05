@@ -61,7 +61,7 @@ import {
   mergeOutcomes,
   type AtomicEditOp,
 } from "../../features/edit-construction/index.ts";
-import { dispatchCutRepairs } from "./tools/cut-repair-dispatch.ts";
+import { dispatchCutRepairs, dispatchRemovalRepairs } from "./tools/cut-repair-dispatch.ts";
 
 export type TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed";
 
@@ -1020,8 +1020,23 @@ export class AppTabletopRuntime implements TabletopRuntime {
   removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): RegionEditOutcome {
     this.#requireReady("removing a surface");
 
+    const surfaceProjection = this.#snapshot.map.byId.get(surfaceRefFromNodeSet(request.surfaceKey));
+    let surfaceType: string | undefined = surfaceProjection?.type;
+    if (surfaceType === undefined && typeof this.#construction.getRegionTopology === "function") {
+      try {
+        surfaceType = this.#construction.getRegionTopology(request.surfaceKey)?.surfaceType;
+      } catch {
+        // Best effort lookup before removal
+      }
+    }
+
     const outcome = this.#construction.removeSurface(request);
     this.#foldRegionEditOutcome(outcome, origin, causeId);
+
+    if (surfaceType !== undefined) {
+      dispatchRemovalRepairs(this, request.surfaceKey, surfaceType, causeId);
+    }
+
     return outcome;
   }
 
