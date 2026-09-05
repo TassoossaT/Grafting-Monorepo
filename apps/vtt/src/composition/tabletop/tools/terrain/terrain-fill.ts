@@ -156,6 +156,23 @@ export interface TerrainFillOutcome {
  */
 export const DEFAULT_FACE_SIDE = 2;
 
+/**
+ * Hard ceiling on the extra vertices one fill's own refinement may invent.
+ *
+ * The generator's own standard (50,000) is sized for a whole-map generation,
+ * not one stroke. Reproduced against the real engine: two boundary rings
+ * meeting at a shallow, near-tangent angle -- the exact shape a halo draws
+ * around a neighbour it barely reaches -- made the refinement invent over
+ * 23,000 points for a contour of 10, and adopting that many, one failed
+ * batch away from one `applyRegionEdit` per node, is what actually stalled
+ * the stroke; the points themselves generate fast. A ceiling here trades
+ * mesh quality in that one pathological wedge for a stroke that always
+ * returns -- `refinementComplete: false` already reports exactly this
+ * degradation to the person at the table, so this is not a silent trade.
+ * Comfortably above what any ordinary stroke's own boundary asks for.
+ */
+const MAX_ADDITIONAL_VERTICES = 1000;
+
 /** Nothing to do, reported as an outcome rather than as a failure. */
 const NOTHING: TerrainFillOutcome = { built: 0, refused: 0, unadopted: 0, refinementComplete: true };
 
@@ -263,6 +280,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     relaxStrength: request.relaxStrength,
     boundary: request.boundary.map((ring) => ring.points),
     holes: request.holes.map((ring) => ring.points),
+    maxAdditionalVertices: MAX_ADDITIONAL_VERTICES,
   });
   if (grid === undefined) {
     logTerrainCommit({
