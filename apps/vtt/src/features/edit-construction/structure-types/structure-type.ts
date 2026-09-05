@@ -240,6 +240,11 @@ export interface StructureTypeDefinition {
    * not.
    */
   readonly repairAfterCut: CutRepair;
+  /**
+   * Whether regions of this type vertically conform to a surface of `surfaceType` beneath them
+   * (e.g. taking height from ground / terrain), optionally parameterized by `subtype`.
+   */
+  readonly conformsTo?: (surfaceType: string, subtype?: string) => boolean;
 }
 
 /** The policy every unknown role falls back to: refuse rather than guess. */

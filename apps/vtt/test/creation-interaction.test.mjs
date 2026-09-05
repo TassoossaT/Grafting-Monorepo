@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   firstRefusal,
+  resolveConformance,
   resolveCoverage,
   resolveCreationInteraction,
 } from "../src/features/edit-construction/index.ts";
@@ -100,3 +101,14 @@ test("firstRefusal surfaces why a stroke must be abandoned whole", () => {
 test("firstRefusal is undefined when every region resolved", () => {
   assert.equal(firstRefusal(resolveCoverage("terrain", [covered("terrain")])), undefined);
 });
+
+test("resolveConformance checks vertical conformance capability across structure types", () => {
+  assert.equal(resolveConformance("path", "terrain"), true, "path rides terrain by default");
+  assert.equal(resolveConformance("path", "terrain-grass"), true, "path rides terrain-grass");
+  assert.equal(resolveConformance("path", "terrain", "road"), true, "road subtype rides terrain");
+  assert.equal(resolveConformance("path", "terrain", "bridge"), false, "bridge subtype does not ride terrain");
+  assert.equal(resolveConformance("path", "wall-white"), false, "path does not conform to walls");
+  assert.equal(resolveConformance("wall-white", "terrain"), false, "walls do not declare vertical conformance");
+  assert.equal(resolveConformance("unknown-type", "terrain"), false, "unknown type defaults to false");
+});
+

@@ -128,6 +128,23 @@ export function resolveCutRepair(coveredType: string): CutRepair {
   return definition.repairAfterCut;
 }
 
+/**
+ * Whether `structureType` vertically conforms to `surfaceType` (e.g. riding on top and sampling height).
+ *
+ * Consults `definition.conformsTo` if declared on the structure type. Defaults to `false`.
+ */
+export function resolveConformance(
+  structureType: string,
+  surfaceType: string,
+  subtype?: string,
+): boolean {
+  const definition = structureTypeFor(structureType);
+  if (definition === undefined || definition.conformsTo === undefined) {
+    return false;
+  }
+  return definition.conformsTo(surfaceType, subtype);
+}
+
 /** One covered region, paired with what the painted type wants to do about it. */
 export interface ResolvedCoverage {
   readonly covered: ConstructionCoveredRegion;
