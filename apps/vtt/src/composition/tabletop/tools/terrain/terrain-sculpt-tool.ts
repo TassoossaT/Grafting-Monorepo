@@ -709,6 +709,20 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     // accumulation the growth number was there to expose.
     void contourBefore;
 
+    // The generation this stroke asked for was refused outright, rather than
+    // merely losing some faces to it -- see `fillTerrain`'s own comment on
+    // why a replacement can throw where a plain add cannot. The transaction
+    // never published, so every face this stroke would have touched is
+    // exactly where it stood before; the only thing left to do is say so,
+    // rather than let the exception that used to reach here crash the table.
+    if (filled.rejected !== undefined) {
+      ctx.reportFeedback({
+        tone: "error",
+        message: `Pincelada recusada, nada mudou: ${filled.rejected}`,
+      });
+      return;
+    }
+
     report(ctx, filled.built, filled.refused, filled.unadopted, raised, filled.refinementComplete);
   },
 };

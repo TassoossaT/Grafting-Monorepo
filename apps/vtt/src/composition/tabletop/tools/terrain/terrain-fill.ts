@@ -136,6 +136,14 @@ export interface TerrainFillOutcome {
   readonly unadopted: number;
   /** `false` when refinement hit its vertex ceiling and part of the area came back coarser. */
   readonly refinementComplete: boolean;
+  /**
+   * Set when registering the generated grid was refused outright, rather
+   * than merely losing some faces to it -- see {@link fillTerrain}'s own
+   * comment on why a replacement can throw where a plain add cannot.
+   * `built`/`refused`/`unadopted` are all `0` alongside this: nothing this
+   * fill generated was registered, so nothing standing changed.
+   */
+  readonly rejected?: string;
 }
 
 /**
@@ -434,17 +442,59 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     }
   }
 
-  const outcome = request.replaceSurfaceKeys === undefined
-    ? runtime.addPatch(patch, "local", request.causeId)
-    : runtime.applyPatchReplacement(
-        {
-          operationId: `${request.causeId}:terrain-fill`,
-          sourceSurfaceKeys: request.replaceSurfaceKeys,
-          patch,
-        },
-        "local",
-        request.causeId,
-      );
+  // **A replacement can refuse the whole patch; a plain add never does.**
+  //
+  // `addPatch` skips a face that finds no room and reports it -- the graceful
+  // path `report()` already reads as "N faces perdidas". `applyPatchReplacement`
+  // is transactional (it clones the graph, tries every face, and only
+  // publishes if all of them land), so the one case this branch cannot avoid
+  // -- quadrangulation occasionally minting two faces of one fill that both
+  // want the same edge, a self-collision distinct from and rarer than an
+  // ordinary refusal -- comes back not as a skip but as a hard `Err`, which
+  // the wasm boundary throws as a JS exception. Nothing upstream of here ever
+  // caught that: it reached the tool's own caller as an uncaught exception,
+  // which is a crashed table, not a failed stroke. The transaction itself
+  // already did its job by never publishing -- every face this fill would
+  // have replaced is still exactly where it was. All that is missing is
+  // treating that thrown rejection as the same kind of outcome a refusal
+  // already is, instead of letting it escape.
+  let outcome: ConstructionPatchOutcome;
+  try {
+    outcome = request.replaceSurfaceKeys === undefined
+      ? runtime.addPatch(patch, "local", request.causeId)
+      : runtime.applyPatchReplacement(
+          {
+            operationId: `${request.causeId}:terrain-fill`,
+            sourceSurfaceKeys: request.replaceSurfaceKeys,
+            patch,
+          },
+          "local",
+          request.causeId,
+        );
+  } catch (error) {
+    logTerrainCommit({
+      what: request.what,
+      faceSideAsked: request.faceSide,
+      boundary: request.boundary,
+      holes: request.holes,
+      grid,
+      adopted: adoption.adopted.size,
+      unadopted: adoption.refused.length,
+      built: 0,
+      refusedFaces: 0,
+      refusals: [String(error instanceof Error ? error.message : error)],
+      declaredNodes: nodes.length,
+      regenerated: request.regenerated,
+      selfClashes: clashes,
+    });
+    return {
+      built: 0,
+      refused: 0,
+      unadopted: 0,
+      refinementComplete: grid.refinementComplete,
+      rejected: error instanceof Error ? error.message : String(error),
+    };
+  }
   const cleared = request.replaceSurfaceKeys === undefined
     ? clearedBeforePatch
     : { deleted: outcome.removedSurfaceKeys.length, failed: [] };
