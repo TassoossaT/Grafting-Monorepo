@@ -2,8 +2,10 @@ import type { TerrainSculptParams } from "@/features/edit-construction";
 import type {
   ConstructionCoveredRegion,
   ConstructionPosition,
+  ConstructionRegionTopology,
 } from "@/ports";
-import type { MultiPolygon } from "polygon-clipping";
+import polygonClipping from "polygon-clipping";
+import type { MultiPolygon, Polygon, Ring } from "polygon-clipping";
 
 // Relative, not `@/...`: the test runner resolves no aliases, so a module a
 // test reaches has to spell out any import it needs at run time. The type-only
@@ -207,6 +209,27 @@ function boundsOf(swept: MultiPolygon): TerrainStrokeBounds {
   return { minX, minZ, maxX, maxZ };
 }
 
+/**
+ * The exact XZ footprint one already-standing topology occupies, as a
+ * polygon ring -- not the halo distance that found it.
+ *
+ * This is what {@link terrainSculptTool} unions into the brush's own outline
+ * before asking the generator for anything: a face this stroke reclaims
+ * costs exactly its own shape, never the wider probe radius used to notice
+ * it. `undefined` only when a corner's position could not be resolved, which
+ * leaves the caller nothing safe to fold in.
+ */
+function footprintRingOf(topology: ConstructionRegionTopology): Ring | undefined {
+  const positions = new Map(topology.nodes.map((node) => [node.id, node.position]));
+  const ring: Ring = [];
+  for (const edge of topology.outerLoops[0] ?? []) {
+    const position = positions.get(edge.startNodeId);
+    if (position === undefined) return undefined;
+    ring.push([position.x, position.z]);
+  }
+  return ring.length >= 3 ? ring : undefined;
+}
+
 /** Terrain-sculpt's own effect: the brush hands over the whole gesture, once, on release. */
 export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   id: "terrain-sculpt",
@@ -235,14 +258,16 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       params.brushRadius,
       strokeChord(params),
     );
-    // The area the *fill* is asked to cover: the brush's own footprint,
-    // widened by `joinHalo` so a band of ground already standing at the seam
-    // is reclaimed and regenerated with the new mesh instead of merely met.
-    // See `TerrainSculptParams.joinHalo`. Raising (`coveredByStroke`,
-    // `dirtLoadOver` below) stays on `swept` -- only ground actually under
-    // the brush ever moves in Y -- and so does the preview, which shows what
-    // the brush paints, not this generation-side margin.
-    const fillArea =
+    // How far out to *look* for standing ground worth reclaiming -- never how
+    // far out to *generate*. `probeArea` only decides which nearby faces are
+    // close enough to fold into this stroke; the actual fill boundary built
+    // below (also named `fillArea`, once it exists) is the brush's own
+    // outline plus the real footprint of whatever `probeArea` found, and
+    // never anything wider than that. The preview promised the brush's own
+    // shape, and nothing this stroke does may generate ground beyond it --
+    // ground already standing can be reclaimed and re-laid, since that space
+    // was never empty, but empty space past the brush stays empty.
+    const probeArea =
       params.joinHalo > 0
         ? brushSweptOutlinePolygons(
             gesture.samples.map((sample) => sample.point),
@@ -272,19 +297,6 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
           )
         : { raisedFaces: 0, movedVertices: 0, skipped: [] };
 
-    // What the stroke asks to fill, and what is already standing in it. The
-    // second becomes holes: ground somebody already holds is not regenerated,
-    // it is met.
-    // The cell size goes into the sweep, so the outline is never described
-    // more finely than the mesh it is about to bound. A boundary point is a
-    // cell corner, and a patch comes back with about twice as many faces as
-    // its boundary has points.
-    const weld = params.faceSize * OUTLINE_WELD_PER_FACE;
-    const outline = outlineConstraints(fillArea.flatMap((polygon) => polygon.slice(0, 1)), weld);
-    if (outline.length === 0) {
-      ctx.reportFeedback({ tone: "info", message: "Nada a fazer aqui." });
-      return;
-    }
     // Ground the stroke covers *whole* is not met, it is regenerated: the
     // faces go away and the area they held is laid again as part of this one
     // generation.
@@ -300,18 +312,46 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     // the face instead and neither arises: nothing to refuse, nothing to
     // subdivide, and the ground comes back in one piece at one size.
     //
-    // Whole, not merely touched. A face `fillArea` only clips keeps ground
+    // Whole, not merely touched. A face `probeArea` only clips keeps ground
     // outside that outline, and the fill stops at that outline -- so
     // consuming it would leave a gap exactly as wide as the part that stuck
     // out. Those stay, and their contour is what the new ground meets.
-    const extent = boundsOf(fillArea);
-    const standing = terrainStandingAround(ctx.runtime, covered, extent, params.faceSize * 2);
+    const probeExtent = boundsOf(probeArea);
+    const standing = terrainStandingAround(ctx.runtime, covered, probeExtent, params.faceSize * 2);
     const consumed = standing.filter(
       (topology) =>
         topology.surfaceType === params.targetSurface &&
         topology.nodes.length > 0 &&
-        topology.nodes.every((node) => insideSwept(node.position, fillArea)),
+        topology.nodes.every((node) => insideSwept(node.position, probeArea)),
     );
+
+    // The generator is never asked for ground beyond the brush's own outline
+    // plus the exact shape of what `consumed` just reclaimed -- unioned in by
+    // its real footprint, not by the halo distance that found it. A face just
+    // outside the paint stroke is real standing ground, so folding its own
+    // shape in costs the stroke nothing it did not already own; empty space
+    // past the brush is never included, whatever `joinHalo` is set to.
+    const consumedFootprints = consumed
+      .map(footprintRingOf)
+      .filter((ring): ring is Ring => ring !== undefined);
+    const fillArea: MultiPolygon =
+      consumedFootprints.length === 0
+        ? swept
+        : polygonClipping.union(swept, ...consumedFootprints.map((ring): Polygon => [ring]));
+
+    // What the stroke (now widened by whatever it just reclaimed) asks to
+    // fill, and what is already standing in it. The second becomes holes:
+    // ground somebody already holds is not regenerated, it is met.
+    // The cell size goes into the sweep, so the outline is never described
+    // more finely than the mesh it is about to bound. A boundary point is a
+    // cell corner, and a patch comes back with about twice as many faces as
+    // its boundary has points.
+    const weld = params.faceSize * OUTLINE_WELD_PER_FACE;
+    const outline = outlineConstraints(fillArea.flatMap((polygon) => polygon.slice(0, 1)), weld);
+    if (outline.length === 0) {
+      ctx.reportFeedback({ tone: "info", message: "Nada a fazer aqui." });
+      return;
+    }
     const consumedKeys = new Set(consumed.map((topology) => topology.surfaceKey.join(" ")));
     const retained = standing.filter((topology) => !consumedKeys.has(topology.surfaceKey.join(" ")));
     const perimeters = perimeterConstraints(retained, 0);
@@ -324,6 +364,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       ...outlineConstraints(fillArea.flatMap((polygon) => polygon.slice(1)), weld),
       ...perimeters.rings,
     ];
+    const extent = boundsOf(fillArea);
 
     // Height comes from the noise field over the area the fill actually
     // covers, so it is asked for the extent the generator settled on rather

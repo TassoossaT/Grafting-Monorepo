@@ -139,8 +139,9 @@ export interface TerrainSculptParams {
    */
   readonly irregularity: number;
   /**
-   * How far past the brush's own footprint a stroke reaches back into ground
-   * already standing, as a multiple of {@link faceSize}.
+   * How far past the brush's own footprint a stroke *looks* for ground
+   * already standing to reclaim, as a multiple of {@link faceSize}. Never
+   * how far past the brush it *generates* -- see the guarantee below.
    *
    * Only a face fully inside the swept outline is regenerated with the new
    * fill (see `composition/tabletop/tools/terrain/terrain-sculpt-tool.ts`);
@@ -153,13 +154,19 @@ export interface TerrainSculptParams {
    * beside it. Repeated strokes over one growing patch accumulate concentric
    * scars instead of converging on one mesh.
    *
-   * Widening the boundary the fill actually asks for -- by this much, in
-   * world units -- pulls a thin band of that old seam back into "fully
-   * inside" too, so it is deleted and regenerated together with the new
-   * ground rather than merely met. The scar does not vanish -- there is
-   * always some edge where the new fill meets ground it still has to
-   * leave alone -- but there is only ever the *current* one, refreshed each
-   * stroke, instead of one fossil per stroke that ever touched that ground.
+   * `joinHalo` widens the *search* for standing ground worth folding in. What
+   * the generator is actually asked to fill is the brush's own outline
+   * unioned with the exact footprint of whatever that search found -- never
+   * the raw halo distance itself, and never empty ground the brush never
+   * touched. The preview shown while dragging is a promise: nothing appears
+   * outside it. Ground can be *reclaimed* because it was never empty --
+   * folding its own already-standing shape into this generation costs the
+   * stroke nothing it did not already own.
+   *
+   * The scar does not vanish -- there is always some edge where the new fill
+   * meets ground it still has to leave alone -- but there is only ever the
+   * *current* one, refreshed each stroke, instead of one fossil per stroke
+   * that ever touched that ground.
    *
    * `0` reproduces the old behaviour exactly. The cost this buys scales with
    * the stroke's own perimeter, not the size of whatever patch it is

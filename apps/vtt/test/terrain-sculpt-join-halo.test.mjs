@@ -63,7 +63,10 @@ function buildCtx(topologies, capture) {
       getFootprintCoverage: () => [],
       getRegionTopologiesInBounds: () => topologies,
       generateHeightmap: (columns, rows) => new Float32Array(columns * rows),
-      generateIrregularQuadGrid: () => ({ vertices: [], quads: [], onContour: [], refinementComplete: true }),
+      generateIrregularQuadGrid: (request) => {
+        capture.gridRequests = [...(capture.gridRequests ?? []), request];
+        return { vertices: [], quads: [], onContour: [], refinementComplete: true };
+      },
       addPatch: () => {
         capture.addPatchCalled = true;
         return {
@@ -117,4 +120,20 @@ test("a mismatched surface type at the seam is never reclaimed, whatever the hal
   terrainSculptTool.onPointerUp(ctx, clickAtOrigin(), paramsWith(1));
   assert.equal(capture.addPatchCalled, true);
   assert.equal(capture.replacedSurfaceKeys, undefined);
+});
+
+test("with nothing standing nearby, joinHalo never asks the generator for ground beyond the brush", () => {
+  const capture = {};
+  const ctx = buildCtx([], capture);
+  terrainSculptTool.onPointerUp(ctx, clickAtOrigin(), paramsWith(3));
+  assert.equal(capture.gridRequests.length, 1);
+  const [{ boundary }] = capture.gridRequests;
+  assert.equal(boundary.length, 1, "one ring: the brush's own outline, nothing unioned in");
+  for (const point of boundary[0]) {
+    const distance = Math.hypot(point.x, point.z);
+    assert.ok(
+      distance <= 4 + 1e-6,
+      `boundary point at distance ${distance} from the click reaches past brushRadius 4 -- generated beyond the preview`,
+    );
+  }
 });
