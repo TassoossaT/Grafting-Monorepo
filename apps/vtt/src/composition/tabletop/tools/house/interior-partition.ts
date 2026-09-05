@@ -67,10 +67,28 @@ export function idPrefixForRoom(tableId: string, bottomCycle: readonly Construct
  * ordinary wall-to-wall partition, since both its ends are expected to
  * touch the boundary.
  */
-export function isRedundantPerimeterWall(ctx: ToolContext, surfaceKey: readonly ConstructionNodeId[], polygon: readonly Vec2[], tolerance: number): boolean {
-  const map = ctx.runtime.getSnapshot().map;
-  const positions = surfaceKey.map((id) => map.nodePositions.get(id)?.position).filter((position): position is ConstructionPosition => position !== undefined);
-  if (positions.length !== 4) return false;
+export function isRedundantPerimeterWall(
+  ctx: { readonly runtime: Pick<import("../../tabletop-runtime.ts").TabletopRuntime, "getSnapshot"> & Partial<Pick<import("../../tabletop-runtime.ts").TabletopRuntime, "getAllRegionTopologies">> },
+  surfaceKey: readonly string[],
+  polygon: readonly Vec2[],
+  tolerance: number,
+): boolean {
+  let positions: ConstructionPosition[] = [];
+  if (typeof ctx.runtime.getAllRegionTopologies === "function") {
+    const topology = ctx.runtime.getAllRegionTopologies().find(
+      (t) => t.surfaceKey.length === surfaceKey.length && t.surfaceKey.every((part, i) => part === surfaceKey[i]),
+    );
+    if (topology !== undefined) {
+      positions = topology.nodes.map((node) => node.position);
+    }
+  }
+  if (positions.length === 0) {
+    const map = ctx.runtime.getSnapshot().map;
+    positions = surfaceKey
+      .map((id) => map.nodePositions.get(id as ConstructionNodeId)?.position)
+      .filter((position): position is ConstructionPosition => position !== undefined);
+  }
+  if (positions.length < 2) return false;
 
   const [first, ...rest] = positions;
   if (first === undefined) return false;

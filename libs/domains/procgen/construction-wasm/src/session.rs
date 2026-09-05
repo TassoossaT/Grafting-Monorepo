@@ -44,6 +44,7 @@ struct ConstructionState {
     surfaces: SurfaceRegistry,
     topology: ContourTopology,
     known_regions: HashSet<RegionId>,
+    spatial_index: crate::spatial_index::UniformGridIndex,
 }
 
 struct RegionOverlayHistoryEntry {
@@ -61,6 +62,7 @@ pub struct ConstructionSession {
     pub(crate) surfaces: SurfaceRegistry,
     pub(crate) topology: ContourTopology,
     pub(crate) known_regions: HashSet<RegionId>,
+    pub(crate) spatial_index: crate::spatial_index::UniformGridIndex,
     region_overlay_undo: Vec<RegionOverlayHistoryEntry>,
     region_overlay_redo: Vec<RegionOverlayHistoryEntry>,
 }
@@ -83,38 +85,61 @@ impl ConstructionSession {
             surfaces: SurfaceRegistry::new(),
             topology: ContourTopology::new(),
             known_regions: HashSet::new(),
+            spatial_index: crate::spatial_index::UniformGridIndex::default(),
             region_overlay_undo: Vec::new(),
             region_overlay_redo: Vec::new(),
         }
     }
 
-    /// Keeps `known_regions` in step with whatever an atomic edit created or
-    /// removed, so `all_surface_meshes_json`/`snapshot_json` never enumerate
-    /// a region that no longer exists (or miss one that now does).
+    /// Keeps `known_regions` and `spatial_index` in step with whatever an atomic edit created,
+    /// affected, or removed, so queries never enumerate stale regions or miss newly created ones.
     fn track(&mut self, outcome: &region_editing::RegionEditOutcomeDto) {
         for key in &outcome.created_surface_keys {
             if let Ok(id) = mesh::region_id_from_wire(key) {
-                self.known_regions.insert(id);
+                self.known_regions.insert(id.clone());
+                if let Some(bounds) = crate::spatial_index::RegionBounds::of_region(
+                    &self.graph,
+                    &self.topology,
+                    &id,
+                ) {
+                    self.spatial_index.insert(id, bounds);
+                }
+            }
+        }
+        for key in &outcome.affected_surface_keys {
+            if let Ok(id) = mesh::region_id_from_wire(key) {
+                if let Some(bounds) = crate::spatial_index::RegionBounds::of_region(
+                    &self.graph,
+                    &self.topology,
+                    &id,
+                ) {
+                    self.spatial_index.insert(id, bounds);
+                }
             }
         }
         for key in &outcome.removed_surface_keys {
             if let Ok(id) = mesh::region_id_from_wire(key) {
                 self.known_regions.remove(&id);
+                self.spatial_index.remove(&id);
             }
         }
     }
 
     // ---- Bootstrapping ----
 
-    /// Unregisters a surface outright -- no hole-repair, no cascading. See
+    /// Unregisters a surface outright and prunes any nodes it orphaned. See
     /// `editing::remove_surface`.
-    pub fn remove_surface_json(&mut self, request_json: &str) -> Result<(), JsValue> {
+    pub fn remove_surface_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request: editing::RemoveSurfaceRequest = parse(request_json)?;
-        let region_id = mesh::region_id_from_wire(&request.surface_key).map_err(to_js_error)?;
-        editing::remove_surface(&mut self.surfaces, &mut self.topology, request)
-            .map_err(to_js_error)?;
-        self.known_regions.remove(&region_id);
-        Ok(())
+        let response = editing::remove_surface(
+            &mut self.graph,
+            &mut self.surfaces,
+            &mut self.topology,
+            request,
+        )
+        .map_err(to_js_error)?;
+        self.track(&response);
+        serialize(&response)
     }
 
     // ---- Atomic region edits (the analytic edit vocabulary) ----
@@ -216,9 +241,14 @@ impl ConstructionSession {
     /// do about it. See `footprint::footprint_coverage`.
     pub fn footprint_coverage_json(&self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let response =
-            footprint::footprint_coverage(&self.graph, &self.topology, &self.surfaces, request)
-                .map_err(to_js_error)?;
+        let response = footprint::footprint_coverage(
+            &self.graph,
+            &self.topology,
+            &self.surfaces,
+            Some(&self.spatial_index),
+            request,
+        )
+        .map_err(to_js_error)?;
         serialize(&response)
     }
 
@@ -251,6 +281,7 @@ impl ConstructionSession {
             surfaces: self.surfaces.clone(),
             topology: self.topology.clone(),
             known_regions: self.known_regions.clone(),
+            spatial_index: self.spatial_index.clone(),
         };
         let response = patch_replacement::apply_patch_replacement(
             &mut self.graph,
@@ -260,11 +291,13 @@ impl ConstructionSession {
             request,
         )
         .map_err(to_js_error)?;
+        self.track(&response.outcome);
         let after = ConstructionState {
             graph: self.graph.clone(),
             surfaces: self.surfaces.clone(),
             topology: self.topology.clone(),
             known_regions: self.known_regions.clone(),
+            spatial_index: self.spatial_index.clone(),
         };
         self.region_overlay_undo.push(RegionOverlayHistoryEntry {
             operation_id,
@@ -307,9 +340,14 @@ impl ConstructionSession {
     /// `footprint::classify_points`.
     pub fn classify_points_json(&self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let response =
-            footprint::classify_points(&self.graph, &self.topology, &self.surfaces, request)
-                .map_err(to_js_error)?;
+        let response = footprint::classify_points(
+            &self.graph,
+            &self.topology,
+            &self.surfaces,
+            Some(&self.spatial_index),
+            request,
+        )
+        .map_err(to_js_error)?;
         serialize(&response)
     }
 
@@ -355,6 +393,7 @@ impl ConstructionSession {
             &self.topology,
             &self.surfaces,
             &self.known_regions,
+            Some(&self.spatial_index),
             &request,
         )
         .map_err(to_js_error)?;
@@ -376,6 +415,7 @@ impl ConstructionSession {
             surfaces: self.surfaces.clone(),
             topology: self.topology.clone(),
             known_regions: self.known_regions.clone(),
+            spatial_index: self.spatial_index.clone(),
         };
         let response = region_overlay::apply_region_overlay(
             &mut self.graph,
@@ -385,11 +425,13 @@ impl ConstructionSession {
             request,
         )
         .map_err(to_js_error)?;
+        self.track(&response.outcome);
         let after = ConstructionState {
             graph: self.graph.clone(),
             surfaces: self.surfaces.clone(),
             topology: self.topology.clone(),
             known_regions: self.known_regions.clone(),
+            spatial_index: self.spatial_index.clone(),
         };
         self.region_overlay_undo.push(RegionOverlayHistoryEntry {
             operation_id,
@@ -415,6 +457,7 @@ impl ConstructionSession {
         self.surfaces = entry.before.surfaces.clone();
         self.topology = entry.before.topology.clone();
         self.known_regions = entry.before.known_regions.clone();
+        self.spatial_index = entry.before.spatial_index.clone();
         self.region_overlay_redo.push(entry);
         Ok(())
     }
@@ -434,6 +477,7 @@ impl ConstructionSession {
         self.surfaces = entry.after.surfaces.clone();
         self.topology = entry.after.topology.clone();
         self.known_regions = entry.after.known_regions.clone();
+        self.spatial_index = entry.after.spatial_index.clone();
         self.region_overlay_undo.push(entry);
         Ok(())
     }

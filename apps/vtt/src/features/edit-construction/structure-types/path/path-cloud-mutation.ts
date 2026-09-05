@@ -11,11 +11,11 @@ import type {
 // `@/` import is fine -- those are erased.
 import {
   firstRefusal,
+  resolveConformance,
   resolveCoverage,
 } from "../index.ts";
 import { graphPatchForSpine } from "./spine-graph/index.ts";
 import { changedSpineCloud, standingRegionsForCloud } from "./path-cloud-scope.ts";
-import { pathRidesTerrain } from "./path-recipe.ts";
 import { referenceLineFrom } from "./path-reference-line.ts";
 import { pathSpineDraftFor } from "./path-spine-draft.ts";
 
@@ -106,7 +106,7 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
   const operationId = effect.operationId;
 
   const fitted = fitPath(stroke, tolerance, { arcs: !input.snapToGrid });
-  const swept = fitted.length === 0 ? { line: stroke } : referenceLineFrom(fitted, stroke, pathRidesTerrain(effect.parameters.kind));
+  const swept = fitted.length === 0 ? { line: stroke } : referenceLineFrom(fitted, stroke, resolveConformance("path", "terrain", effect.parameters.kind));
   const spine = pathSpineDraftFor(effect, swept.line);
   if (spine === undefined) return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente." };
 

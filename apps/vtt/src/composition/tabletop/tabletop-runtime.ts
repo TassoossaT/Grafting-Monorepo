@@ -61,7 +61,7 @@ import {
   mergeOutcomes,
   type AtomicEditOp,
 } from "../../features/edit-construction/index.ts";
-import { dispatchCutRepairs } from "./tools/cut-repair-dispatch.ts";
+import { dispatchCutRepairs, dispatchRemovalRepairs } from "./tools/cut-repair-dispatch.ts";
 
 export type TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed";
 
@@ -172,8 +172,8 @@ export interface TabletopRuntime {
    * `ConstructionSessionPort.generateRegionPartition`.
    */
   generateRegionPartition(request: GenerateRegionPartitionRequest, origin: ChangeOrigin, causeId: string): DiffOutcome;
-  /** Unregisters a surface outright -- no hole-repair, no cascading. A caller composing a bigger removal (e.g. "Apagar Cômodo") calls this once per surface it already knows belongs to that removal. See `ConstructionSessionPort.removeSurface`. */
-  removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): void;
+  /** Unregisters a surface outright, prunes orphaned nodes, and folds the outcome into the running map. See `ConstructionSessionPort.removeSurface`. */
+  removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): RegionEditOutcome;
   /** `ADR-0022`'s "cloud" query -- a pure read, never touches the map. See `ConstructionSessionPort.cloudFor`. */
   cloudFor(request: CloudRequest): CloudOutcome;
   /**
@@ -1017,16 +1017,27 @@ export class AppTabletopRuntime implements TabletopRuntime {
     return outcome;
   }
 
-  removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): void {
+  removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): RegionEditOutcome {
     this.#requireReady("removing a surface");
 
-    this.#construction.removeSurface(request);
-    const surfaceRef = surfaceRefFromNodeSet(request.surfaceKey);
-    this.#applyConstructionMutation([], [surfaceRef], origin, causeId, (map) => {
-      const previous = map.byId.get(surfaceRef);
-      if (previous === undefined) return map;
-      return applyMapProjectionDelta(map, { type: "surface-removed", surfaceRef, revision: previous.revision + 1 });
-    });
+    const surfaceProjection = this.#snapshot.map.byId.get(surfaceRefFromNodeSet(request.surfaceKey));
+    let surfaceType: string | undefined = surfaceProjection?.type;
+    if (surfaceType === undefined && typeof this.#construction.getRegionTopology === "function") {
+      try {
+        surfaceType = this.#construction.getRegionTopology(request.surfaceKey)?.surfaceType;
+      } catch {
+        // Best effort lookup before removal
+      }
+    }
+
+    const outcome = this.#construction.removeSurface(request);
+    this.#foldRegionEditOutcome(outcome, origin, causeId);
+
+    if (surfaceType !== undefined) {
+      dispatchRemovalRepairs(this, request.surfaceKey, surfaceType, causeId);
+    }
+
+    return outcome;
   }
 
   cloudFor(request: CloudRequest): CloudOutcome {

@@ -218,5 +218,7 @@ export function pathStructureType(
     policyFor: pathPolicyFor,
     interactionOver,
     repairAfterCut: PATH_CUT_REPAIR,
+    conformsTo: (coveredSurfaceType: string, subtype?: string) =>
+      (coveredSurfaceType === "terrain" || coveredSurfaceType === "terrain-grass") && subtype !== "bridge",
   });
 }

@@ -7,6 +7,7 @@ import type {
   ConstructionPosition,
   ConstructionRegionEdge,
   ConstructionSurfaceKey,
+  ConstructionTopologyBoundsQuery,
 } from "@/ports";
 import {
   outwardPerimeterRings,
@@ -76,10 +77,14 @@ export const CUT_REPAIR_EXECUTORS: Readonly<Record<string, CutRepairExecutor>> =
  * what this function hands over, never from the repair's own arithmetic.
  */
 export function paintedNodesOf(
-  runtime: Pick<TabletopRuntime, "getAllRegionTopologies" | "getSnapshot">,
+  runtime: Pick<TabletopRuntime, "getAllRegionTopologies" | "getRegionTopologiesInBounds" | "getSnapshot">,
   paintedType: string,
+  bounds?: ConstructionTopologyBoundsQuery,
 ): Pick<CutFallout, "paintedNodes" | "paintedLoops"> {
-  const painted = runtime.getAllRegionTopologies().filter((topology) => topology.surfaceType === paintedType);
+  const topologies = bounds !== undefined && typeof runtime.getRegionTopologiesInBounds === "function"
+    ? runtime.getRegionTopologiesInBounds(bounds)
+    : runtime.getAllRegionTopologies();
+  const painted = topologies.filter((topology) => topology.surfaceType === paintedType);
   const nodesById = new Map<ConstructionNodeId, ConstructionPosition>();
   for (const topology of painted) {
     for (const node of topology.nodes) nodesById.set(node.id, node.position);
@@ -151,19 +156,23 @@ export function dispatchCutRepairs(runtime: TabletopRuntime, request: ApplyPatch
   }
   if (consumedByType.size === 0) return;
 
-  // Every node belonging to the painter's *own* type wherever this
-  // footprint reaches -- not `request.patch.nodes`, which is only what
-  // *this one submission* happened to (re)declare. A continuous brush
-  // stroke resubmits only its latest increment each tick (a handful of
-  // nodes), while `outline` -- the same footprint `getFootprintCoverage`
-  // above already resolved -- reaches the stroke's whole accumulated area;
-  // most of an established path's own boundary near a hole was welded in
-  // from an earlier tick and never named again. `getFootprintCoverage`
-  // already reports every region of *any* type the footprint touches, with
-  // its own node ids, for free -- filtered here to the painter's own type
-  // instead of thrown away, which is what starved a repair's own weld
-  // candidates down to only the newest few nodes.
-  const { paintedNodes, paintedLoops } = paintedNodesOf(runtime, paintedType);
+  // Compute bounding box of footprint outline to scope topology query
+  let bounds: ConstructionTopologyBoundsQuery | undefined = undefined;
+  if (outline.length > 0) {
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minZ = Infinity;
+    let maxZ = -Infinity;
+    for (const [x, z] of outline) {
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (z < minZ) minZ = z;
+      if (z > maxZ) maxZ = z;
+    }
+    const margin = 2.0;
+    bounds = { minX: minX - margin, maxX: maxX + margin, minZ: minZ - margin, maxZ: maxZ + margin };
+  }
+  const { paintedNodes, paintedLoops } = paintedNodesOf(runtime, paintedType, bounds);
 
   for (const [surfaceType, consumedSurfaceKeys] of consumedByType) {
     const executor = CUT_REPAIR_EXECUTORS[surfaceType];
@@ -173,5 +182,43 @@ export function dispatchCutRepairs(runtime: TabletopRuntime, request: ApplyPatch
     } catch (error) {
       reportToolFailure("cut-repair", `repair ${surfaceType} after a cut`, { causeId, consumedSurfaceKeys }, error);
     }
+  }
+}
+
+/**
+ * Resolves post-removal cut repair for a directly removed surface.
+ *
+ * Consults `resolveCutRepair(surfaceType)` for the removed surface's type.
+ * For types declaring `"regenerate"` (e.g. `terrain`, `terrain-grass`),
+ * delegates to their registered executor in `CUT_REPAIR_EXECUTORS`.
+ * For types declaring `"unsupported"` (e.g. `panel`, `path`), honestly
+ * does nothing (existing backlog, not an error).
+ */
+export function dispatchRemovalRepairs(
+  runtime: TabletopRuntime,
+  surfaceKey: ConstructionSurfaceKey,
+  surfaceType: string,
+  causeId: string,
+  executors: Readonly<Record<string, CutRepairExecutor>> = CUT_REPAIR_EXECUTORS,
+): void {
+  const repair = resolveCutRepair(surfaceType);
+  if (repair.kind !== "regenerate") return;
+
+  const executor = executors[surfaceType];
+  if (executor === undefined) return;
+
+  try {
+    executor(
+      runtime,
+      {
+        consumedSurfaceKeys: [surfaceKey],
+        paintedNodes: [],
+        paintedLoops: [],
+      },
+      causeId,
+      runtime.getSnapshot().tableId,
+    );
+  } catch (error) {
+    reportToolFailure("cut-repair", `repair ${surfaceType} after removal`, { causeId, surfaceKey }, error);
   }
 }

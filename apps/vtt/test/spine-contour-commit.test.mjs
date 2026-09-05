@@ -234,7 +234,15 @@ function createFakeConstructionSession() {
     generateRegionPartition() {
       throw new Error("not exercised by this fake");
     },
-    removeSurface() {},
+    removeSurface() {
+      return {
+        affectedSurfaceKeys: [],
+        createdSurfaceKeys: [],
+        removedSurfaceKeys: [],
+        createdNodeIds: [],
+        removedNodeIds: [],
+      };
+    },
     cloudFor(request) {
       const all = [...regions.values()]
         .filter((region) => region.surfaceType === request.surfaceType)

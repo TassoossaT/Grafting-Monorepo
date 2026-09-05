@@ -83,6 +83,17 @@ commit. See `generation::generate_and_apply_region_partition`.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::into_abi(self) -> Self::Abi`
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::irregular_quad_grid_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+One irregular quad grid, generated against the contours the request
+names as constraints. Pure -- reads nothing from this session and
+mutates nothing in it.
+
+The caller applies the result itself through `add_patch`, because
+doing it here would mean minting node ids and sampling a height for
+every new corner, neither of which this bridge has any business
+deciding. See `grid_generation::irregular_quad_grid`.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::is_none(abi: &Self::Abi) -> bool`
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::move_edge_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
@@ -107,6 +118,10 @@ Creates an empty session.
 
 Restores the state immediately after one undone generic overlay.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::region_topologies_in_bounds_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Region boundaries intersecting a local XZ extent, serialized once.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::region_topology_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 One region's live boundary, in this crate's own deterministic order.
@@ -117,9 +132,9 @@ See `region_editing::region_topology`.
 `RemoveHole` -- closes one back up. See
 `region_editing::apply_remove_hole`.
 
-### `pub fn grafting_procgen_construction_wasm::ConstructionSession::remove_surface_json(&mut self, request_json: &str) -> core::result::Result<(), wasm_bindgen::JsValue>`
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::remove_surface_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
-Unregisters a surface outright -- no hole-repair, no cascading. See
+Unregisters a surface outright and prunes any nodes it orphaned. See
 `editing::remove_surface`.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::remove_vertex_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
@@ -142,6 +157,10 @@ re-fetches for each entry in an operation's `affectedSurfaceKeys`
 after a mutation, instead of re-fetching everything. An analytic
 region key can legitimately return more than one piece; a plain
 surface key always returns exactly one. See `mesh::surface_mesh`.
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::surface_meshes_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+A mutation's known surface meshes through one JSON/Wasm crossing.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::try_from_js_value(value: wasm_bindgen::JsValue) -> core::result::Result<Self, wasm_bindgen::JsValue>`
 

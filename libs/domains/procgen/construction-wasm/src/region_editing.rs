@@ -519,6 +519,7 @@ pub fn region_topologies_in_bounds(
     topology: &ContourTopology,
     surfaces: &SurfaceRegistry,
     known_regions: &HashSet<RegionId>,
+    spatial_index: Option<&crate::spatial_index::UniformGridIndex>,
     bounds: &RegionBoundsRequest,
 ) -> Result<Vec<RegionTopologyDto>, String> {
     if !bounds.min_x.is_finite()
@@ -547,11 +548,21 @@ pub fn region_topologies_in_bounds(
     };
 
     let candidates = if bounds.seeds.is_empty() {
-        topology
-            .region_ids()
-            .into_iter()
-            .filter(|id| reaches_bounds(id))
-            .collect::<Vec<_>>()
+        if let Some(index) = spatial_index {
+            let query = crate::spatial_index::RegionBounds::new(
+                bounds.min_x,
+                bounds.min_z,
+                bounds.max_x,
+                bounds.max_z,
+            );
+            index.query_bounds(&query)
+        } else {
+            topology
+                .region_ids()
+                .into_iter()
+                .filter(|id| reaches_bounds(id))
+                .collect::<Vec<_>>()
+        }
     } else {
         // All footprint-covered faces arrive as seeds. Walk only their local
         // same-type components instead of materializing each entire terrain
@@ -761,6 +772,7 @@ mod tests {
             &topology,
             &surfaces,
             &known_regions,
+            None,
             &RegionBoundsRequest {
                 min_x: -0.1,
                 min_z: -0.1,
@@ -777,6 +789,7 @@ mod tests {
             &topology,
             &surfaces,
             &known_regions,
+            None,
             &RegionBoundsRequest {
                 min_x: -0.1,
                 min_z: -0.1,
@@ -796,6 +809,7 @@ mod tests {
             &topology,
             &surfaces,
             &known_regions,
+            None,
             &RegionBoundsRequest {
                 min_x: -0.1,
                 min_z: -0.1,
@@ -815,6 +829,7 @@ mod tests {
             &topology,
             &surfaces,
             &known_regions,
+            None,
             &RegionBoundsRequest {
                 min_x: 5.0,
                 min_z: 5.0,
@@ -825,6 +840,28 @@ mod tests {
         )
         .unwrap();
         assert!(far.is_empty());
+
+        let mut index = crate::spatial_index::UniformGridIndex::new(4.0);
+        let quad_id = RegionId::new("quad").unwrap();
+        let bounds = crate::spatial_index::RegionBounds::of_region(&graph, &topology, &quad_id).unwrap();
+        index.insert(quad_id, bounds);
+
+        let indexed_near = region_topologies_in_bounds(
+            &graph,
+            &topology,
+            &surfaces,
+            &known_regions,
+            Some(&index),
+            &RegionBoundsRequest {
+                min_x: -0.1,
+                min_z: -0.1,
+                max_x: 0.1,
+                max_z: 0.1,
+                seeds: Vec::new(),
+            },
+        )
+        .unwrap();
+        assert_eq!(indexed_near.len(), 1);
     }
 
     #[test]

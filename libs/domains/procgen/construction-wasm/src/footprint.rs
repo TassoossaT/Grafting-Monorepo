@@ -204,6 +204,7 @@ pub fn footprint_coverage(
     graph: &SessionGraph,
     topology: &ContourTopology,
     surfaces: &SurfaceRegistry,
+    spatial_index: Option<&crate::spatial_index::UniformGridIndex>,
     request: FootprintCoverageRequest,
 ) -> Result<FootprintCoverageResponse, String> {
     if request.polygon.len() < 3 {
@@ -212,7 +213,20 @@ pub fn footprint_coverage(
     let footprint_bounds = PolygonBounds::of(&request.polygon)
         .ok_or_else(|| "a footprint polygon needs at least three points".to_owned())?;
     let mut covered = Vec::new();
-    for region_id in topology.region_ids() {
+
+    let candidate_ids: Vec<RegionId> = if let Some(index) = spatial_index {
+        let query = crate::spatial_index::RegionBounds::new(
+            footprint_bounds.min_x,
+            footprint_bounds.min_z,
+            footprint_bounds.max_x,
+            footprint_bounds.max_z,
+        );
+        index.query_bounds(&query)
+    } else {
+        topology.region_ids()
+    };
+
+    for region_id in candidate_ids {
         let Some(dto) = covered_region(
             graph,
             topology,
@@ -330,40 +344,52 @@ pub fn classify_points(
     graph: &SessionGraph,
     topology: &ContourTopology,
     surfaces: &SurfaceRegistry,
+    spatial_index: Option<&crate::spatial_index::UniformGridIndex>,
     request: ClassifyPointsRequest,
 ) -> Result<ClassifyPointsResponse, String> {
     let mut hits = Vec::new();
-    let mut polygons: Vec<(RegionId, String, Vec<Vec<[f32; 2]>>)> = Vec::new();
-    for region_id in topology.region_ids() {
-        let (Some(region), Some(surface)) = (
-            topology.region(&region_id),
-            surfaces.region_surface(&region_id),
-        ) else {
-            continue;
-        };
-        let rings: Vec<Vec<[f32; 2]>> = region
-            .outer_loops()
-            .iter()
-            .filter_map(|loop_| loop_polygon(topology, graph, loop_))
-            .collect();
-        if rings.is_empty() {
-            continue;
-        }
-        polygons.push((region_id, surface.surface_type().as_str().to_owned(), rings));
-    }
+    let mut polygons: std::collections::HashMap<RegionId, (String, Vec<Vec<[f32; 2]>>)> =
+        std::collections::HashMap::new();
 
     for (index, point) in request.points.iter().enumerate() {
-        for (region_id, surface_type, rings) in &polygons {
-            if rings
-                .iter()
-                .any(|ring| polygon_contains_point(ring, *point))
-            {
-                hits.push(PointHitDto {
-                    index,
-                    surface_key: region_id_to_wire(region_id),
-                    surface_type: surface_type.clone(),
-                });
-                break;
+        let candidates: Vec<RegionId> = if let Some(index) = spatial_index {
+            index.query_point(point[0], point[1])
+        } else {
+            topology.region_ids()
+        };
+
+        for region_id in candidates {
+            if !polygons.contains_key(&region_id) {
+                let Some(region) = topology.region(&region_id) else {
+                    continue;
+                };
+                let Some(surface) = surfaces.region_surface(&region_id) else {
+                    continue;
+                };
+                let rings: Vec<Vec<[f32; 2]>> = region
+                    .outer_loops()
+                    .iter()
+                    .filter_map(|loop_| loop_polygon(topology, graph, loop_))
+                    .collect();
+                if !rings.is_empty() {
+                    polygons.insert(
+                        region_id.clone(),
+                        (surface.surface_type().as_str().to_owned(), rings),
+                    );
+                }
+            }
+            if let Some((surface_type, rings)) = polygons.get(&region_id) {
+                if rings
+                    .iter()
+                    .any(|ring| polygon_contains_point(ring, *point))
+                {
+                    hits.push(PointHitDto {
+                        index,
+                        surface_key: region_id_to_wire(&region_id),
+                        surface_type: surface_type.clone(),
+                    });
+                    break;
+                }
             }
         }
     }
@@ -412,6 +438,7 @@ mod tests {
             &graph,
             &topology,
             &surfaces,
+            None,
             FootprintCoverageRequest { polygon },
         )
         .unwrap()
@@ -474,6 +501,7 @@ mod tests {
             &graph,
             &topology,
             &surfaces,
+            None,
             FootprintCoverageRequest {
                 polygon: vec![[0.1, 0.1], [0.9, 0.1], [0.9, 0.9], [0.1, 0.9]],
             },
@@ -494,6 +522,7 @@ mod tests {
             &graph,
             &topology,
             &surfaces,
+            None,
             ClassifyPointsRequest {
                 points: vec![[0.5, 0.5], [9.0, 9.0], [1.5, 0.5]],
             },
@@ -519,6 +548,7 @@ mod tests {
             &graph,
             &topology,
             &surfaces,
+            None,
             ClassifyPointsRequest {
                 points: vec![[50.0, 50.0]],
             },
@@ -528,12 +558,50 @@ mod tests {
     }
 
     #[test]
+    fn classify_points_and_coverage_with_spatial_index() {
+        let (graph, topology, surfaces) = two_faces();
+        let mut index = crate::spatial_index::UniformGridIndex::new(4.0);
+        for id in topology.region_ids() {
+            let bounds = crate::spatial_index::RegionBounds::of_region(&graph, &topology, &id).unwrap();
+            index.insert(id, bounds);
+        }
+
+        let response = classify_points(
+            &graph,
+            &topology,
+            &surfaces,
+            Some(&index),
+            ClassifyPointsRequest {
+                points: vec![[0.5, 0.5], [9.0, 9.0]],
+            },
+        )
+        .unwrap();
+        assert_eq!(response.hits.len(), 1);
+        assert_eq!(response.hits[0].surface_key[1], "face0");
+
+        let covered = footprint_coverage(
+            &graph,
+            &topology,
+            &surfaces,
+            Some(&index),
+            FootprintCoverageRequest {
+                polygon: vec![[0.1, 0.1], [0.9, 0.1], [0.9, 0.9], [0.1, 0.9]],
+            },
+        )
+        .unwrap()
+        .covered;
+        assert_eq!(covered.len(), 1);
+        assert_eq!(covered[0].surface_key[1], "face0");
+    }
+
+    #[test]
     fn a_degenerate_footprint_is_rejected_rather_than_matching_everything() {
         let (graph, topology, surfaces) = two_faces();
         let error = footprint_coverage(
             &graph,
             &topology,
             &surfaces,
+            None,
             FootprintCoverageRequest {
                 polygon: vec![[0.0, 0.0], [1.0, 0.0]],
             },
