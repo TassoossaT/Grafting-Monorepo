@@ -230,6 +230,9 @@ function TerrainSculptFields(props: {
       {sliderRow("Irregularidade", params.irregularity, 0, 1, 0.05, (irregularity) =>
         onChange({ ...params, irregularity }),
       )}
+      {sliderRow("Fusão com terreno vizinho", params.joinHalo, 0, 3, 0.25, (joinHalo) =>
+        onChange({ ...params, joinHalo }),
+      )}
       {sliderRow("Altura", params.heightScale, 0, 5, 0.25, (heightScale) => onChange({ ...params, heightScale }))}
       {sliderRow("Suavidade do relevo", params.noiseScale, 0.02, 0.4, 0.01, (noiseScale) =>
         onChange({ ...params, noiseScale }),

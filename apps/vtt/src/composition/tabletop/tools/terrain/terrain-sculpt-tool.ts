@@ -1,4 +1,3 @@
-import { DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
 import type { TerrainSculptParams } from "@/features/edit-construction";
 import type {
   ConstructionCoveredRegion,
@@ -6,6 +5,10 @@ import type {
 } from "@/ports";
 import type { MultiPolygon } from "polygon-clipping";
 
+// Relative, not `@/...`: the test runner resolves no aliases, so a module a
+// test reaches has to spell out any import it needs at run time. The type-only
+// `@/` imports above are fine -- those are erased.
+import { DEFAULT_TOOL_PARAMS } from "../../../../features/edit-construction/index.ts";
 import { brushSweptOutlinePolygons, brushSweptRegionFill } from "../shapes/preview-shapes.ts";
 import { dirtLoadOver, restackTerrain } from "./terrain-restack.ts";
 import {
@@ -232,6 +235,21 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       params.brushRadius,
       strokeChord(params),
     );
+    // The area the *fill* is asked to cover: the brush's own footprint,
+    // widened by `joinHalo` so a band of ground already standing at the seam
+    // is reclaimed and regenerated with the new mesh instead of merely met.
+    // See `TerrainSculptParams.joinHalo`. Raising (`coveredByStroke`,
+    // `dirtLoadOver` below) stays on `swept` -- only ground actually under
+    // the brush ever moves in Y -- and so does the preview, which shows what
+    // the brush paints, not this generation-side margin.
+    const fillArea =
+      params.joinHalo > 0
+        ? brushSweptOutlinePolygons(
+            gesture.samples.map((sample) => sample.point),
+            params.brushRadius + params.faceSize * params.joinHalo,
+            strokeChord(params),
+          )
+        : swept;
 
     // One stroke does both, per area -- it is not a choice between them.
     // Where ground already exists the covered faces are raised; where it does
@@ -262,7 +280,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     // cell corner, and a patch comes back with about twice as many faces as
     // its boundary has points.
     const weld = params.faceSize * OUTLINE_WELD_PER_FACE;
-    const outline = outlineConstraints(swept.flatMap((polygon) => polygon.slice(0, 1)), weld);
+    const outline = outlineConstraints(fillArea.flatMap((polygon) => polygon.slice(0, 1)), weld);
     if (outline.length === 0) {
       ctx.reportFeedback({ tone: "info", message: "Nada a fazer aqui." });
       return;
@@ -282,28 +300,28 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     // the face instead and neither arises: nothing to refuse, nothing to
     // subdivide, and the ground comes back in one piece at one size.
     //
-    // Whole, not merely touched. A face the stroke only clips keeps ground
-    // outside the swept outline, and the fill stops at that outline -- so
+    // Whole, not merely touched. A face `fillArea` only clips keeps ground
+    // outside that outline, and the fill stops at that outline -- so
     // consuming it would leave a gap exactly as wide as the part that stuck
     // out. Those stay, and their contour is what the new ground meets.
-    const extent = boundsOf(swept);
+    const extent = boundsOf(fillArea);
     const standing = terrainStandingAround(ctx.runtime, covered, extent, params.faceSize * 2);
     const consumed = standing.filter(
       (topology) =>
         topology.surfaceType === params.targetSurface &&
         topology.nodes.length > 0 &&
-        topology.nodes.every((node) => insideSwept(node.position, swept)),
+        topology.nodes.every((node) => insideSwept(node.position, fillArea)),
     );
     const consumedKeys = new Set(consumed.map((topology) => topology.surfaceKey.join(" ")));
     const retained = standing.filter((topology) => !consumedKeys.has(topology.surfaceKey.join(" ")));
     const perimeters = perimeterConstraints(retained, 0);
     const contourBefore = perimeters.sources.length;
-    // A stroke that curls back on itself leaves a real hole in its own swept
-    // shape, and `polygon-clipping` reports it as an inner ring. Ground there
-    // was never painted, so it is subtracted like any other hole -- it simply
-    // has no edges, and so owes nobody an adopted node.
+    // A stroke that curls back on itself leaves a real hole in `fillArea`'s
+    // own shape, and `polygon-clipping` reports it as an inner ring. Ground
+    // there was never painted, so it is subtracted like any other hole -- it
+    // simply has no edges, and so owes nobody an adopted node.
     const holeRings: readonly ConstraintRing[] = [
-      ...outlineConstraints(swept.flatMap((polygon) => polygon.slice(1)), weld),
+      ...outlineConstraints(fillArea.flatMap((polygon) => polygon.slice(1)), weld),
       ...perimeters.rings,
     ];
 
