@@ -163,6 +163,13 @@ function createFakeConstructionPort() {
       requireStarted();
       return emptyRegionEdit();
     },
+    removeSurface(request) {
+      requireStarted();
+      return {
+        ...emptyRegionEdit(),
+        removedSurfaceKeys: [request.surfaceKey],
+      };
+    },
     duplicateRegion() {
       requireStarted();
       return emptyRegionEdit();
@@ -849,3 +856,30 @@ test("startup publishes one SurfaceRef pick proxy per semantic surface", async (
     surfaceRefFromNodeSet(FAKE_WALL_SURFACE_KEY),
   ].sort());
 });
+
+test("removeSurface folds outcome through #foldRegionEditOutcome, updating map and removing pruned nodes", async () => {
+  const renderPort = createFakeRenderPort();
+  const constructionPort = createFakeConstructionPort();
+  constructionPort.removeSurface = (request) => ({
+    ...emptyRegionEdit(),
+    removedSurfaceKeys: [request.surfaceKey],
+    removedNodeIds: ["node-orphaned-1"],
+  });
+
+  const runtime = createTabletopRuntime({
+    tableId: "table-remove-surface",
+    seedFakeMap: true,
+    renderPort,
+    constructionPort,
+  });
+
+  await runtime.start();
+
+  const outcome = runtime.removeSurface({ surfaceKey: FAKE_WALL_SURFACE_KEY }, "local", "cause:demolish");
+
+  assert.deepEqual(outcome.removedSurfaceKeys, [FAKE_WALL_SURFACE_KEY]);
+  assert.deepEqual(outcome.removedNodeIds, ["node-orphaned-1"]);
+  const wallRef = surfaceRefFromNodeSet(FAKE_WALL_SURFACE_KEY);
+  assert.equal(runtime.getSnapshot().map.byId.has(wallRef), false);
+});
+

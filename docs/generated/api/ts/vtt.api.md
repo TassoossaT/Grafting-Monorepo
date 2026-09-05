@@ -283,236 +283,16 @@ single-ghost behaviour every tool already relies on.
 
 ### `function vtt.create-tabletop-runtime.createTabletopRuntime(input: CreateTabletopRuntimeInput): TabletopRuntime`
 
-### `function vtt.apply-spine-contour.applySpineContour(ctx: ToolContext, operationId: string, result: PlanSpineContourResult, graphPatch?: ConstructionGraphPatch): ConstructionPatchOutcome`
-
-Registers a planned spine contour patch against the live session: the
-standing regions it replaces and the freshly unioned patch are committed
-by the generic runtime replacement transaction. The clone-and-publish
-executor validates the target first, so a refused face cannot make a
-nearby standing road disappear.
-
-### `function vtt.catmull-rom.sampleCatmullRom(controlPoints: readonly ConstructionPosition[], tolerance: number): readonly ConstructionPosition[]`
-
-Samples a centripetal Catmull-Rom curve through `controlPoints`,
-flattened so no chord strays from the true curve (in XZ) by more than
-`tolerance`. Collinear control points flatten to their own straight
-chords regardless of how unevenly they are spaced -- collinear is
-collinear under any parametrization -- so the result is exactly
-`controlPoints` back.
-
-### `interface vtt.contour-patch.ContourPatchResult`
-
-### `property vtt.contour-patch.ContourPatchResult.patch: ConstructionPatch`
-
-### `property vtt.contour-patch.ContourPatchResult.regionIds: readonly string[]`
-
-### `interface vtt.contour-patch.ExistingNode`
-
-### `property vtt.contour-patch.ExistingNode.id: string`
-
-### `property vtt.contour-patch.ExistingNode.position: ConstructionPosition`
-
-### `function vtt.contour-patch.buildContourPatch(tableId: string, operationId: string, surfaceType: string, bandIndex: number, shapes: MultiPolygon, heightSamples: readonly ConstructionPosition[], existingNodes: readonly ExistingNode[], existingEdgeUses: ReadonlyMap<string, readonly boolean[]>): ContourPatchResult`
-
-Turns one band layer's unioned shapes into a `ConstructionPatch` -- the
-same kind of conversion the retired station-sweep engine's own patch
-builder used to do, but from a union's boundary loops instead of a
-sweep's quad grid, and welding by **position** rather than by a station
-address, because a union vertex has no station: it may be a genuine spine
-point, or a brand new intersection the union itself created where two
-ribbons crossed.
-
-A vertex within WELD_TOLERANCE of a node already on the table
-reuses that node's id -- which is what keeps everything **outside** the
-region this call was scoped to untouched: those nodes are simply never
-candidates for a fresh id, because they were never inside any ribbon this
-call was handed.
-
-`heightSamples` supplies `y` for a vertex the union minted (a crossing
-point no original ribbon vertex sits exactly on) via nearest-neighbour
-lookup -- the same approximation `preview-shapes.ts` already uses for its
-own union output, and the same shape of approximation `groundHeightNear`
-uses elsewhere in this codebase for "the height nearest sample said."
-
-### `interface vtt.offset-bands.BandRibbon`
-
-One band's ribbon: the ring between two consecutive `bandOffsets`.
-
-### `property vtt.offset-bands.BandRibbon.bandIndex: number`
-
-### `property vtt.offset-bands.BandRibbon.outer: readonly ConstructionPosition[]`
-
-Closed ring in the sweep's own winding, first curve forward then the next reversed.
-
-### `function vtt.offset-bands.offsetBands(polyline: readonly ConstructionPosition[], bandOffsets: readonly number[], miterLimit: number): readonly BandRibbon[]`
-
-One ribbon per consecutive pair of `bandOffsets`, following `polyline`'s
-own shape. Returns no bands for a polyline shorter than two points or a
-profile with fewer than two offsets.
-
-### `interface vtt.plan-spine-contour.PlanSpineContourInput`
-
-### `property vtt.plan-spine-contour.PlanSpineContourInput.editedChains: readonly SpineChainInput[]`
-
-Every chain of the touched spine cloud -- not just the one a stroke or a
-control-node drag directly changed, but every chain the caller's own
-connectivity walk (`changedSpineCloud` in `path-effect-executor.ts`)
-found reachable from it. Each is resampled fresh from its own *current*
-control points every time this function runs; nothing here ever reads
-a chain's own previous contour back as input, which is what keeps
-floating-point noise from one union pass compounding into the next.
-
-### `property vtt.plan-spine-contour.PlanSpineContourInput.existingEdgeUses?: ReadonlyMap<string, readonly boolean[]>`
-
-All currently live contour uses, including faces outside this local edit.
-
-### `property vtt.plan-spine-contour.PlanSpineContourInput.existingNodes: readonly ExistingNode[]`
-
-Every node already standing on the table, for welding by position.
-
-### `property vtt.plan-spine-contour.PlanSpineContourInput.operationId: string`
-
-Scopes every node/region id this call mints -- one edit, one operation.
-
-### `property vtt.plan-spine-contour.PlanSpineContourInput.standingRegions: readonly ConstructionRegionTopology[]`
-
-Every standing region of `surfaceType` belonging to this same cloud --
-always replaced in full. *Which* regions belong to the cloud is decided
-once, by the caller, from the spine graph itself (exact node-id
-membership); this function does not re-derive or filter that answer by
-geometry -- there is no partial, "only what actually overlaps" version
-of this list any more. A road duplicating or a face going missing was
-always this file and the caller silently disagreeing about which faces
-belonged together; giving the caller's answer nothing left to second-
-guess is what closes that gap for good.
-
-### `property vtt.plan-spine-contour.PlanSpineContourInput.surfaceType: string`
-
-### `property vtt.plan-spine-contour.PlanSpineContourInput.tableId: string`
-
-### `interface vtt.plan-spine-contour.PlanSpineContourResult`
-
-### `property vtt.plan-spine-contour.PlanSpineContourResult.consumedSurfaceKeys: readonly ConstructionSurfaceKey[]`
-
-Every one of `input.standingRegions`, unconditionally -- their faces are
-superseded by the freshly unioned ones in `patch.regions`, even where
-most of their own nodes were welded back unchanged. The caller replaces
-them in one atomic transaction with the unioned patch; a refused target
-can never leave the standing faces deleted.
-
-### `property vtt.plan-spine-contour.PlanSpineContourResult.patch: ConstructionPatch`
-
-### `interface vtt.plan-spine-contour.SpineChainInput`
-
-One curve chain's spine, already resolved to an ordered list of control
-points. Kept decoupled from `spine-graph.ts`'s own types (and from
-`PathKind`/`pathFormationFor`) on purpose: this module only knows "a
-curve, a band profile," never a corridor, a subtype, or a station -- the
-same genericity the Rust primitives themselves keep.
-
-### `property vtt.plan-spine-contour.SpineChainInput.bandOffsets: readonly number[]`
-
-Lateral offsets defining the bands, e.g. `[-2.1, 0, 2.1]` for contour/spine/contour.
-
-### `property vtt.plan-spine-contour.SpineChainInput.chainId: string`
-
-### `property vtt.plan-spine-contour.SpineChainInput.controlPoints: readonly ConstructionPosition[]`
-
-### `property vtt.plan-spine-contour.SpineChainInput.miterLimit: number`
-
-### `property vtt.plan-spine-contour.SpineChainInput.tolerance: number`
-
-Curve flattening tolerance, world units (XZ).
-
-### `function vtt.plan-spine-contour.planSpineContour(input: PlanSpineContourInput): PlanSpineContourResult | undefined`
-
-Derives the contour patch for one spine edit: Catmull-Rom sample -> banded
-offset -> union each band layer, across every chain of the touched cloud
-at once -> `ConstructionPatch`.
-
-**The whole cloud, derived fresh, every time -- never patched onto what
-was already there.** `input.editedChains` is every chain the touched
-cloud has; `input.standingRegions` is every face that cloud currently
-owns. This function reads the *first* for geometry and the *second* only
-for which surface keys to retire -- a standing region's own boundary is
-never fed back into a union as input. A T, an X, or an L are not cases
-this function knows about, they are whatever unionBandLayer
-happens to produce when two chains' ribbons overlap.
-
-Returns `undefined` when `editedChains` is empty -- nothing changed, so
-nothing to regenerate.
-
-### `function vtt.union-bands.nearestSampleY(x: number, z: number, samples: readonly ConstructionPosition[]): number`
-
-The `y` of whichever `samples` point is nearest `(x, z)` -- same lookup `preview-shapes.ts`'s `nearestSampleY` already uses to give a union's new vertices a height.
-
-### `function vtt.union-bands.unionBandLayer(ribbons: readonly BandRibbon[]): MultiPolygon`
-
-Unions every ribbon of one band layer into its own outer loop(s) and
-hole(s) -- the same `polygon-clipping` union `preview-shapes.ts`'s
-`unionCapsules` already proves works in this codebase, including its
-incremental fallback for the rare case the library throws on a whole
-batch at once.
-
-**Union only, deliberately no triangulation here.** The construction graph
-stores a region as a boundary *cycle*, not a mesh -- triangulating a face
-is `grafting-procgen-surface-mesh`'s job, done later from that cycle at
-render time (see that crate's own doc: "turning that into geometry is the
-caller's job", read at mesh-generation time, never at patch-authoring
-time). `grafting-procgen-curve-offset`'s Rust `union_and_triangulate`
-(Estágio 1) triangulates too, which is the wrong shape for *this* step --
-a design note carried forward for whenever that crate is wired in: the
-Rust primitive this function will eventually call needs a union-only
-variant (or the boundary loop exposed before triangulation), not the
-`TriangulatedMesh` it hands back today.
-
-A T, an X, or an L of overlapping ribbons all fall out of this one call
-with no per-topology branch: the union either merges two ribbons into one
-loop or it doesn't, and both are the same code path.
-
-### `variable vtt.path-effect-executor.PATH_COLOR: 12616956`
-
-### `function vtt.path-effect-executor.applyPathBrushEffect(ctx: ToolContext, effect: PathBrushEffect, tolerance: number): void`
-
-Applies one immutable path-brush effect, in one transaction.
-
-This is the only path a path is ever built by. A free stroke, and any
-straight drag or preset that comes later, differ in nothing but the
-reference line they hand over: they all resolve to the same spine, go
-through the same whole-cloud contour engine, and declare the same faces.
-
-**What changed from the station-sweep engine this replaces.** There is no
-mouth, no wedge, no mitre, no crossing-preparation sweep here any more. A
-T, an X, and an L are not cases this function distinguishes -- they are
-whatever `planSpineContour`'s per-band union happens to produce once this
-stroke's own ribbons are unioned against an explicitly selected standing
-continuation. `pathCorridorId`/`pathFormationFor` still decide the
-subtype's profile; everything past that is derived, not hand-closed.
-
-**Two things this stage deliberately did not carry over**, both flagged
-rather than silently dropped:
-- Dragging an already-committed road's own nodes still resolves roles
-  through `station-node-id.ts`'s address scheme (`path-structure.ts`),
-  which a contour node minted by this engine does not carry. A newly
-  drawn road commits correctly; editing it interactively afterwards is a
-  follow-up, not something this function attempts.
-- The old engine cut the exact remainder of any terrain patch a road's
-  footprint partially overlapped (`applyRegionOverlay`'s own
-  overlap-planning). This function only refuses a stroke that overlaps
-  something it must not touch; it does not cut or consume terrain underneath
-  it. Drawing a road over terrain leaves that terrain standing rather than
-  risking an imprecise cut.
-
-### `function vtt.path-effect-executor.referenceLineFrom(fitted: readonly FittedEdge[], stroke: readonly ConstructionPosition[], ridesTerrain: boolean): { arcs: readonly (SweptArc | undefined)[]; line: readonly ConstructionPosition[] }`
-
-The reference line to build the spine from: where the fit decided the
-road goes, at the height the ground was actually picked at.
-
-These points become the spine's own Catmull-Rom control points --
-`planSpineContour` samples a smooth curve through them, so a corner this
-function keeps as one point still reads as a genuine bend, and a run of
-points along a straight, flat stretch still flattens back to the straight
-chord it was drawn as (`sampleCatmullRom`'s own collinear case).
+### `function vtt.path-cloud-transaction.commitPathCloudIntent(ctx: ToolContext, effect: PathBrushEffect, tolerance: number): void`
+
+Runtime boundary for a PathCloud decision. This file deliberately contains
+no path geometry or topology policy: it reads snapshots, invokes the type,
+and submits the generic replacement transaction it returns. It has no
+opinion, and no code, for what happens when that replacement cuts into
+another type -- `plan.request.footprintOutline` rides along on the request
+itself, and `TabletopRuntime.applyPatchReplacement` is what notices a
+consumed region needs repairing and dispatches it, the same for any caller
+of that method, not a path-specific step this file performs.
 
 ### `class vtt.tabletop-runtime.AppTabletopRuntime`
 
@@ -532,6 +312,16 @@ the faces over them -- in one transaction. See `ConstructionPatch`.
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void`
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.applyPatchReplacement(request: ApplyPatchReplacementRequest, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome`
+
+Replaces `sourceSurfaceKeys` with `patch`, then lets whichever *other*
+type this patch's own footprint cuts into repair itself, via
+`dispatchCutRepairs` (`tools/cut-repair-dispatch.ts`) -- the runtime's
+own choke point for `CUT`'s repair half, so any caller of this one
+method gets it, not only whichever tool happens to import a repair
+function by name. See `CutRepair`/`CutFallout`
+(`structure-types/structure-type.ts`) for the contract; the decision of
+*what* got cut and *who* repairs it is entirely `dispatchCutRepairs`'s
+and `resolveCutRepair`'s, not this method's.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.applyRegionEdit(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
@@ -574,9 +364,15 @@ Hides the active tool preview, if any.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.dispose(): Promise<void>`
 
-### `method vtt.tabletop-runtime.AppTabletopRuntime.generateHeightmap(width: number, height: number, seed: number, scale: number): Float32Array`
+### `method vtt.tabletop-runtime.AppTabletopRuntime.generateHeightmap(width: number, height: number, seed: number, scale: number, originX: number, originY: number): Float32Array`
 
 Passthrough to `TerrainNoisePort.generateHeightmap` -- see that port for parameter meaning.
+
+### `method vtt.tabletop-runtime.AppTabletopRuntime.generateIrregularQuadGrid(request: ConstructionIrregularQuadGridRequest): ConstructionIrregularQuadGrid | undefined`
+
+One irregular quad grid, generated against the contours given -- what
+ground is made of, whether it is being created or regenerated. Pure: it
+reads nothing from the live graph and changes nothing in it.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.generateRegionPartition(request: GenerateRegionPartitionRequest, origin: ChangeOrigin, causeId: string): DiffOutcome`
 
@@ -598,6 +394,10 @@ What a brush footprint currently covers, before anything is generated.
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.getGraphSnapshot(): ConstructionGraphSnapshot`
 
 Generic graph primitives, including edges not owned by a region boundary.
+
+### `method vtt.tabletop-runtime.AppTabletopRuntime.getRegionTopologiesInBounds(bounds: ConstructionTopologyBoundsQuery): readonly ConstructionRegionTopology[]`
+
+Region boundaries near a local edit, resolved in one engine call.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined`
 
@@ -621,9 +421,9 @@ policy pass a live gesture goes through.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.redoPathBrush(operationId: string, origin: ChangeOrigin): void`
 
-### `method vtt.tabletop-runtime.AppTabletopRuntime.removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): void`
+### `method vtt.tabletop-runtime.AppTabletopRuntime.removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
-Unregisters a surface outright -- no hole-repair, no cascading. A caller composing a bigger removal (e.g. "Apagar Cômodo") calls this once per surface it already knows belongs to that removal. See `ConstructionSessionPort.removeSurface`.
+Unregisters a surface outright, prunes orphaned nodes, and folds the outcome into the running map. See `ConstructionSessionPort.removeSurface`.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.resizeView(viewId: string, width: number, height: number): void`
 
@@ -700,9 +500,15 @@ Hides the active tool preview, if any.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.dispose(): Promise<void>`
 
-### `method vtt.tabletop-runtime.TabletopRuntime.generateHeightmap(width: number, height: number, seed: number, scale: number): Float32Array`
+### `method vtt.tabletop-runtime.TabletopRuntime.generateHeightmap(width: number, height: number, seed: number, scale: number, originX: number, originY: number): Float32Array`
 
 Passthrough to `TerrainNoisePort.generateHeightmap` -- see that port for parameter meaning.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.generateIrregularQuadGrid(request: ConstructionIrregularQuadGridRequest): ConstructionIrregularQuadGrid | undefined`
+
+One irregular quad grid, generated against the contours given -- what
+ground is made of, whether it is being created or regenerated. Pure: it
+reads nothing from the live graph and changes nothing in it.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.generateRegionPartition(request: GenerateRegionPartitionRequest, origin: ChangeOrigin, causeId: string): DiffOutcome`
 
@@ -724,6 +530,10 @@ What a brush footprint currently covers, before anything is generated.
 ### `method vtt.tabletop-runtime.TabletopRuntime.getGraphSnapshot(): ConstructionGraphSnapshot`
 
 Generic graph primitives, including edges not owned by a region boundary.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.getRegionTopologiesInBounds(bounds: ConstructionTopologyBoundsQuery): readonly ConstructionRegionTopology[]`
+
+Region boundaries near a local edit, resolved in one engine call.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined`
 
@@ -747,9 +557,9 @@ policy pass a live gesture goes through.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.redoPathBrush(operationId: string, origin: ChangeOrigin): void`
 
-### `method vtt.tabletop-runtime.TabletopRuntime.removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): void`
+### `method vtt.tabletop-runtime.TabletopRuntime.removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
-Unregisters a surface outright -- no hole-repair, no cascading. A caller composing a bigger removal (e.g. "Apagar Cômodo") calls this once per surface it already knows belongs to that removal. See `ConstructionSessionPort.removeSurface`.
+Unregisters a surface outright, prunes orphaned nodes, and folds the outcome into the running map. See `ConstructionSessionPort.removeSurface`.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.resizeView(viewId: string, width: number, height: number): void`
 
@@ -781,53 +591,9 @@ Shows a construction tool's not-yet-committed ghost. Purely visual -- passthroug
 
 ### `reference vtt.tools.HouseVec2 -> vtt.interior-partition.Vec2`
 
-### `reference vtt.tools.IrregularGridVec2 -> vtt.irregular-grid.Vec2`
-
-### `interface vtt.boundary-edges.BoundaryEdges`
-
-Collects the boundary edges one patch declares, and the uses that walk them.
-
-### `method vtt.boundary-edges.BoundaryEdges.all(): readonly ConstructionPatchEdge[]`
-
-Every edge declared so far, each exactly once.
-
-### `method vtt.boundary-edges.BoundaryEdges.use(from: string, to: string, geometry?: ConstructionEdgeGeometry): ConstructionOrientedEdgeUse`
-
-Declares (or reuses) the edge between `from` and `to`, given that edge's geometry walked `from` -> `to`, and returns the use that walks it in that direction. Geometry defaults to a straight chord.
-
-### `type vtt.boundary-edges.EdgeSharing = { existingUses: ReadonlyMap<ConstructionEdgeId, readonly boolean[]>; kind: "private-when-full"; runPrefix: string } | { kind: "refuse-when-full" }`
-
-What a generator does when the shared edge it wants has no room left.
-
-An edge bounds two faces, one on each side, and the engine refuses a
-third use or a second one facing the same way. Whether that refusal is
-correct depends entirely on what the type means by it, so the type says.
-
 ### `function vtt.boundary-edges.boundaryUsage(ctx: ToolContext): ReadonlyMap<string, readonly boolean[]>`
 
-Every direction each boundary edge on the table is currently walked in.
-
-Read once per commit by a `"private-when-full"` generator, so it can tell
-which boundary it may join from which it has to keep to itself. A
-`"refuse-when-full"` generator never needs this and should not pay for
-the scan.
-
-### `function vtt.boundary-edges.createBoundaryEdges(tableId: string, sharing: EdgeSharing): BoundaryEdges`
-
-### `function vtt.boundary-edges.reverseGeometry(geometry: ConstructionEdgeGeometry): ConstructionEdgeGeometry`
-
-The same physical curve seen from the other end -- an arc keeps its center and flips its sweep, a chord is symmetric.
-
-### `function vtt.boundary-edges.sharedEdgeId(tableId: string, from: string, to: string): string`
-
-The name the edge between two nodes carries, wherever it is named.
-
-Exported because declaring a patch is not the only way an edge comes into
-being: splitting one at a node mints two more, and if those are named any
-other way then a face declared later over the same pair of nodes gets a
-second, coincident edge instead of the one already there. One rule, one
-name, everywhere -- which is what lets a junction share a spine seam with
-the run it split.
+Reads live edge use; the geometry policy itself remains feature-owned.
 
 ### `interface vtt.brush-tool.BrushRegion`
 
@@ -1034,7 +800,7 @@ The preview channel one role's edges are drawn on.
 
 One group as the descriptor that draws it.
 
-### `function vtt.edge-overlay.edgeOverlayOf(topologies: readonly ConstructionRegionTopology[]): readonly EdgeOverlayGroup[]`
+### `function vtt.edge-overlay.edgeOverlayOf(topologies: readonly ConstructionRegionTopology[], graphSnapshot?: ConstructionGraphSnapshot): readonly EdgeOverlayGroup[]`
 
 Groups every edge of every region in `topologies` by role.
 
@@ -1056,124 +822,6 @@ No-op: in `navigate` mode the pointer drives camera orbit/pan
 not any construction effect. Exists so `tool-registry.ts` has an entry for
 every `ConstructionToolId` and `use-construction-pointer.ts` never needs a
 "no tool selected" special case.
-
-### `interface vtt.stroke-fitting.FitOptions`
-
-What a caller may vary about a fit. `arcs` defaults to on.
-
-### `property vtt.stroke-fitting.FitOptions.arcs?: boolean`
-
-When false, every span is fitted as a straight chord and no circle is ever considered.
-
-### `interface vtt.stroke-fitting.FittedEdge`
-
-One fitted edge of a stroke: an endpoint pair plus the contour geometry
-that actually explains the samples between them -- a straight chord, or a
-true circular arc through them. This is the graph's own edge vocabulary
-(`ConstructionEdgeGeometry`), not a private tag a generator has to
-translate, so a fitted edge is already the thing that gets declared.
-
-### `property vtt.stroke-fitting.FittedEdge.end: ConstructionPosition`
-
-### `property vtt.stroke-fitting.FittedEdge.geometry: ConstructionEdgeGeometry`
-
-### `property vtt.stroke-fitting.FittedEdge.start: ConstructionPosition`
-
-### `function vtt.stroke-fitting.fitPath(points: readonly ConstructionPosition[], tolerance: number, options: FitOptions): readonly FittedEdge[]`
-
-Turns a raw, hand-drawn stroke (every pointer sample, wobble included)
-into a short list of fitted edges: corners are found first
-(Ramer-Douglas-Peucker, cornerIndices), then each run between
-corners is classified (classifySegment) as a straight chord or
-the true circle through it.
-
-`tolerance` (world units) is the whole correction dial -- how far the raw
-stroke must wander off *both* a straight line and its best-fit arc before
-that counts as a real corner rather than hand tremor or ordinary
-curvature. At `0` the contour is committed literally; the larger it gets,
-the more freely a shaky stroke is straightened into clean runs. Fewer
-than 2 points fits to nothing.
-
-With `arcs` off every span is a chord, however round the samples look.
-That is for a caller whose samples are no longer a hand -- points landing
-on exact grid intersections, say -- where the circle through any three of
-them is a real circle that nobody drew.
-
-### `class vtt.sweep-formation.SweepFormationError`
-
-Why a sweep could not be planned.
-
-### `constructor vtt.sweep-formation.SweepFormationError.constructor(message?: string): SweepFormationError`
-
-### `constructor vtt.sweep-formation.SweepFormationError.constructor(message?: string, options?: ErrorOptions): SweepFormationError`
-
-### `interface vtt.sweep-formation.SweptArc`
-
-The curve a stretch of a formation runs on, if it is not straight.
-
-### `property vtt.sweep-formation.SweptArc.center: readonly [number, number]`
-
-### `property vtt.sweep-formation.SweptArc.clockwise: boolean`
-
-### `interface vtt.sweep-formation.TransverseProfilePoint`
-
-One sample of a formation's transverse profile.
-
-### `property vtt.sweep-formation.TransverseProfilePoint.elevation: number`
-
-Height above the reference line's own height at that station.
-
-### `property vtt.sweep-formation.TransverseProfilePoint.lateralOffset: number`
-
-Signed world distance from the reference line, left to right.
-
-### `function vtt.sweep-formation.stationFrame(line: readonly ConstructionPosition[], index: number, miterLimit: number, arcs: readonly (SweptArc | undefined)[]): readonly [number, number]`
-
-The direction one station offsets its profile along.
-
-At a corner it is the mitre: the bisector of the two neighbouring normals,
-lengthened so the offset rim still meets both straight stretches, and
-bounded so a hairpin gets a corner rather than a spike. Same rule the
-junction mitre follows between two runs -- this one is within one run.
-
-Where a stretch curves, its normal comes from the curve rather than from
-the chord standing in for it. A station in the middle of an arc then has
-the *same* normal arriving and leaving, so the mitre resolves to no corner
-at all -- correctly, because there is none: a circle does not have corners,
-only the polygon that approximates it does. That is what lets a curved road
-be smooth instead of faceted, and it is why the rim of one can be declared
-as a single arc.
-
-### `function vtt.sweep-formation.sweepFormation(referenceLine: readonly ConstructionPosition[], profile: readonly TransverseProfilePoint[], miterLimit: number, options: { arcs?: readonly (SweptArc | undefined)[] }): ConstructionSweepPlan`
-
-Samples a transverse profile along a reference line into connected quads.
-
-Vertices are station-major: every consecutive `profile.length` entries form
-one transverse station, which is what lets `pathPatch` read a station
-address straight off a vertex index. Quads reference those shared vertices,
-so neighbouring strips are connected by construction rather than by welding
-coincident geometry afterwards.
-
-### `function vtt.sweep-formation.sweptBoundary(stationCount: number, profileLength: number): readonly number[]`
-
-The rim of a plain formation, as vertex indices.
-
-Down the first column, across the last station, back up the last column,
-and across the first station to close. True of a formation standing on its
-own, which is the only thing a sweep can know -- everything that makes it
-*untrue*, a junction above all, is known only where clouds and surface
-types are. Exported so that side can walk it, compare against it, or
-replace it outright.
-
-### `function vtt.sweep-formation.withoutCoincidentStations(samples: readonly ConstructionPosition[]): readonly ConstructionPosition[]`
-
-The caller's stations with any coincident repeat dropped.
-
-Hygiene, not resampling: it only ever removes, never places. Two stations
-at one spot give the frame maths no direction to read, and a pointer held
-still or a grid snap folding samples onto one intersection both produce
-exactly that. Where the stations go is the caller's decision, because it
-depends on what the formation runs over.
 
 ### `interface vtt.tool-context.ConstructionTool`
 
@@ -1214,7 +862,7 @@ The tool's not-yet-committed ghost for the current gesture (or stationary hover,
 
 ### `property vtt.tool-context.ConstructionToolFeedback.surfaceRef?: string`
 
-### `property vtt.tool-context.ConstructionToolFeedback.tone: "error" | "info" | "success"`
+### `property vtt.tool-context.ConstructionToolFeedback.tone: "info" | "success" | "error"`
 
 ### `interface vtt.tool-context.PointerSample`
 
@@ -1292,6 +940,81 @@ One failed stage, on the console, with everything known about it.
 Something a commit survived but should not have had to.
 
 ### `function vtt.tool-registry.toolFor(id: Id): ConstructionTool<Id>`
+
+### `type vtt.cut-repair-dispatch.CutRepairExecutor = (runtime: TerrainRegenerateRuntime, fallout: CutFallout, causeId: string, tableId: string) => number`
+
+One covered type's own answer to being cut -- `resolveCutRepair`'s
+`"regenerate"`, made real. The type itself owns the whole thing, decision
+and execution both (`repairTerrainCut`, `tools/terrain/terrain-regenerate.ts`);
+this only needs to know it by a runtime-shaped signature, never a
+concrete `TabletopRuntime` import, so this table stays as thin as the
+types it points at.
+
+### `variable vtt.cut-repair-dispatch.CUT_REPAIR_EXECUTORS: Readonly<Record<string, CutRepairExecutor>>`
+
+Every structure type that has actually implemented `resolveCutRepair`'s
+`"regenerate"` answer, keyed by `surfaceType`.
+
+`dispatchCutRepairs` is this table's only reader: it already knows, from
+`resolveCutRepair` itself, which consumed region's type is entitled to a
+repair -- this is only where it finds *whose* code to call for one. A
+type absent here despite `resolveCutRepair` answering `"regenerate"` for
+it is a declaration nobody has built yet, not a contradiction; a missing
+entry is treated as nothing to do.
+
+### `function vtt.cut-repair-dispatch.dispatchCutRepairs(runtime: TabletopRuntime, request: ApplyPatchReplacementRequest, causeId: string): void`
+
+Resolves what `request`'s own footprint cuts into, and dispatches each
+covered type's own repair -- called once `TabletopRuntime.applyPatchReplacement`
+has already landed `request`, so a painted node a repair wants to weld
+onto is real and live by the time this runs.
+
+Neither side is named here: coverage is resolved fresh from
+`request.footprintOutline` and `resolveCutRepair` decides who is
+entitled, the same table any other caller of `resolveCoverage` reads.
+This is the runtime's own choke point for `CUT`'s repair half, so any
+caller of `applyPatchReplacement` gets it, not only whichever tool
+happens to import a repair function by name.
+
+Deliberately does not read `request.sourceSurfaceKeys` at all: that list
+is `request.patch`'s own painter consuming its own kind (a road absorbing
+an adjoining road), never another type's regions. A covered type this
+cuts into deletes those itself, inside its own executor -- this only
+tells it which ones and hands it real nodes to weld onto, never deletes
+on its behalf.
+
+A repair that throws is reported, never rethrown: by the time this runs,
+`request` itself already landed -- the painter's own stroke succeeded.
+A covered type's best-effort repair failing is that repair's own problem,
+not a reason to tell the person at the table their stroke did not land
+when it did. One covered type's failure does not stop another's repair
+either, for the same reason.
+
+### `function vtt.cut-repair-dispatch.paintedNodesOf(runtime: Pick<TabletopRuntime, "getAllRegionTopologies" | "getSnapshot">, paintedType: string): Pick<CutFallout, "paintedNodes" | "paintedLoops">`
+
+The painter's own ground, as the repair needs it: its real nodes to weld
+onto, and one closed ring per face it owns so the area it occupies can be
+taken out of the hole.
+
+Read from **every live face of the painter's type**, not from the stroke's
+own footprint coverage. `getFootprintCoverage` answers "what does this
+outline touch", which is a different question: a brush resubmits only its
+latest increment each tick, and coverage of that increment named as little
+as one face and four nodes of a road that really had dozens. The area
+subtracted from the hole was then a fraction of the road, so the fill was
+computed over ground the road genuinely occupies -- and the engine refused
+the whole face for trying to take a side of an edge the road already
+holds, which is the "cut happens but nothing regenerates" the table saw. A
+face of the same type nowhere near the hole costs nothing here: it cannot
+intersect what the cut removed, so it cannot change the difference.
+
+Loops are whole face boundaries in the engine's own order, never a walk
+over the painter's loose edge set -- neighbouring band regions share
+interior edges, so that graph is no simple cycle and a walk returns an
+arbitrary path, a different one per run. See `CutFallout.paintedLoops`.
+
+Exported for its own test: every cut-repair failure so far has come from
+what this function hands over, never from the repair's own arithmetic.
 
 ### `variable vtt.house-room-delete-tool.houseRoomDeleteTool: ConstructionTool<"house-room-delete">`
 
@@ -1445,11 +1168,9 @@ A free path stroke, built on the same brush every other brush uses: press,
 drag, and on release the whole swept region is handed over once.
 
 Path creation follows the same ownership split as walls: this tool only
-chooses the interaction and emits a `PathBrushEffect`. The path effect
-executor owns the single commit every path goes through;
-`spine-contour/` derives the contour from the spine and declares the
-graph, while Rust executes the resolved overlay without ever being told
-any of it is a path.
+chooses the interaction and emits a `PathBrushEffect`. The PathCloud owns
+the resulting graph and contour plan; the composition boundary commits its
+generic transaction without interpreting path topology.
 
 ### `interface vtt.geometry-2d.PointXZ`
 
@@ -1471,6 +1192,12 @@ Minimum distance from `point` to the boundary edges of a polygon on the XZ plane
 ### `function vtt.geometry-2d.distanceToSegmentXZ(point: PointXZ, a: PointXZ, b: PointXZ): number`
 
 Shortest distance from `point` to the clamped finite segment `[a, b]` on the XZ plane.
+
+### `function vtt.geometry-2d.nearestPointOnPolygonBoundaryXZ(point: PointXZ, polygon: readonly PointXZ[]): PointXZ`
+
+The closest point on a polygon's own boundary edges to `point`, on the XZ
+plane -- the point form of distanceToPolygonBoundaryXZ, for a
+caller that needs somewhere to move *to*, not just how far away it is.
 
 ### `function vtt.geometry-2d.pinnedToBaseline(baseline: { y: number }, point: T): T`
 
@@ -1514,7 +1241,7 @@ Squared 2D Euclidean distance on the XZ plane (avoids square root for comparison
 
 Preview-only outline for any convex brush shape supported by the Rust contract.
 
-### `function vtt.preview-shapes.brushSweptOutlinePolygons(samples: readonly ConstructionPosition[], radius: number): MultiPolygon`
+### `function vtt.preview-shapes.brushSweptOutlinePolygons(samples: readonly ConstructionPosition[], radius: number, chord: number): MultiPolygon`
 
 The swept area of a circular brush stroke, as real 2D polygons (XZ).
 
@@ -1523,7 +1250,7 @@ saw while dragging and the footprint the engine is then asked about must
 be the identical shape, or the stroke would affect ground the preview
 never highlighted.
 
-### `function vtt.preview-shapes.brushSweptRegionFill(samples: readonly ConstructionPosition[], shape: BrushOutlineShape, color: number, opacity: number): PreviewDescriptor`
+### `function vtt.preview-shapes.brushSweptRegionFill(samples: readonly ConstructionPosition[], shape: BrushOutlineShape, color: number, opacity: number, chord: number): PreviewDescriptor`
 
 ### `function vtt.preview-shapes.circleOutline(center: ConstructionPosition, radius: number, color: number, opacity: number): PreviewDescriptor`
 
@@ -1555,171 +1282,563 @@ An open line ghost from `start` to `end` -- a wall-brush's centerline while drag
 
 Builds a PreviewDescriptor for a set of straight segment pairs (e.g. wall centerline ghost).
 
-### `interface vtt.irregular-grid.FaceMesh`
+### `interface vtt.terrain-constraints.AdoptionRuntime`
 
-A mesh of arbitrary faces, the intermediate form before quadrangulation.
+What adoptContourNodes needs of the runtime.
 
-### `property vtt.irregular-grid.FaceMesh.faces: readonly Face[]`
+The atomic op rather than the port call directly, so a split goes through
+the same transaction and render-sync path every other edit does. A node
+appearing on a live edge changes the mesh of the face that owns it, and a
+split that skipped that fold would leave the neighbour drawn with its old
+boundary.
 
-### `property vtt.irregular-grid.FaceMesh.vertices: readonly Vec2[]`
+### `method vtt.terrain-constraints.AdoptionRuntime.applyRegionEdit(ops: readonly AtomicEditOp[], origin: "local", causeId: string): unknown`
 
-### `interface vtt.irregular-grid.IrregularQuadGridOptions`
+### `interface vtt.terrain-constraints.ConstraintRing`
 
-Options for buildIrregularQuadGrid.
+A ring of constraint points, together with the graph edges it was built from.
 
-### `property vtt.irregular-grid.IrregularQuadGridOptions.iterations?: number`
+### `property vtt.terrain-constraints.ConstraintRing.edges: readonly (ConstructionRegionEdge | undefined)[]`
 
-Smoothing passes. Around `10`-`20` settles this grid. Defaults to `12`.
+The edge each segment of `points` runs along, index-aligned: `edges[i]`
+spans `points[i]` to `points[i + 1]`, wrapping.
 
-### `property vtt.irregular-grid.IrregularQuadGridOptions.pinBoundary?: boolean`
+A segment may own no edge, and that is a real state rather than an error:
+the stroke's own outline is nobody's boundary until this stroke registers
+it, and the rim of a hole left by a cut can run through a node the
+deletion took with it. Either way there is nothing to split there, so a
+node landing on that segment is declared as ordinary new geometry.
 
-Whether vertices on the outer boundary stay put. Defaults to `true`.
+### `property vtt.terrain-constraints.ConstraintRing.points: readonly ConstructionGridConstraintPoint[]`
 
-A single chunk relaxed without pinning rounds off, because nothing outside
-pulls back. Townscaper avoids this by relaxing across overlapping
-neighbourhoods instead; pinning is the honest single-chunk stand-in, and
-what a chunked implementation replaces.
+What the generator receives.
 
-### `property vtt.irregular-grid.IrregularQuadGridOptions.seed: number`
+### `interface vtt.terrain-constraints.ConstraintTable`
 
-### `property vtt.irregular-grid.IrregularQuadGridOptions.strength?: number`
+The node ids a set of rings referred to, by the index they were given.
 
-Fraction of the way to the target each pass moves a vertex. Defaults to `0.5`.
+### `property vtt.terrain-constraints.ConstraintTable.rings: readonly ConstraintRing[]`
 
-### `property vtt.irregular-grid.IrregularQuadGridOptions.triangleSide?: number`
+### `property vtt.terrain-constraints.ConstraintTable.sources: readonly string[]`
 
-Edge length of one equilateral triangle. Defaults to `0.5`.
+`sources[i]` is the node id handed out as `source: i`.
 
-### `property vtt.irregular-grid.IrregularQuadGridOptions.trianglesPerSide: number`
+### `interface vtt.terrain-constraints.ContourAdoption`
 
-Triangles along one hexagon edge. Sylves' walkthrough uses `4`.
+One node to be adopted, resolved to the edge it splits.
 
-### `interface vtt.irregular-grid.QuadMesh`
+### `property vtt.terrain-constraints.ContourAdoption.along: number`
 
-The finished all-quad grid.
+Where along that edge it sits, `0` at its start and `1` at its end.
 
-### `property vtt.irregular-grid.QuadMesh.quads: readonly Quad[]`
+### `property vtt.terrain-constraints.ContourAdoption.edge: ConstructionRegionEdge`
 
-### `property vtt.irregular-grid.QuadMesh.vertices: readonly Vec2[]`
+### `property vtt.terrain-constraints.ContourAdoption.vertex: number`
 
-### `interface vtt.irregular-grid.RelaxOptions`
+### `interface vtt.terrain-constraints.ContourSnap`
 
-Options for relax.
+One generated corner that resolves to a node already standing, rather than splitting anything.
 
-### `property vtt.irregular-grid.RelaxOptions.iterations?: number`
+### `property vtt.terrain-constraints.ContourSnap.fallback?: ContourAdoption`
 
-Smoothing passes. Around `10`-`20` settles this grid. Defaults to `12`.
+Split to perform when that corner identity is already claimed elsewhere.
 
-### `property vtt.irregular-grid.RelaxOptions.pinBoundary?: boolean`
+### `property vtt.terrain-constraints.ContourSnap.source: number`
 
-Whether vertices on the outer boundary stay put. Defaults to `true`.
+The `source` index of the ring corner it takes the identity of.
 
-A single chunk relaxed without pinning rounds off, because nothing outside
-pulls back. Townscaper avoids this by relaxing across overlapping
-neighbourhoods instead; pinning is the honest single-chunk stand-in, and
-what a chunked implementation replaces.
+### `property vtt.terrain-constraints.ContourSnap.vertex: number`
 
-### `property vtt.irregular-grid.RelaxOptions.strength?: number`
+### `interface vtt.terrain-constraints.ResolvedAdoptions`
 
-Fraction of the way to the target each pass moves a vertex. Defaults to `0.5`.
+### `property vtt.terrain-constraints.ResolvedAdoptions.adoptions: readonly ContourAdoption[]`
 
-### `interface vtt.irregular-grid.TriangleHexOptions`
+### `property vtt.terrain-constraints.ResolvedAdoptions.snaps: readonly ContourSnap[]`
 
-Options for buildTriangleHex.
+### `variable vtt.terrain-constraints.OUTLINE_CHORD_PER_FACE: 2`
 
-### `property vtt.irregular-grid.TriangleHexOptions.triangleSide?: number`
+How coarsely a stroke describes its own swept outline, as a multiple of the
+face size.
 
-Edge length of one equilateral triangle. Defaults to `0.5`.
+**This is what decides how many faces a stroke costs.** A patch comes back
+with about twice as many faces as its boundary has points, so describing the
+outline finely does not buy a finer *shape* -- it buys a finer *mesh*, which
+is the opposite of what the caller asked for. Measured on the capsule the
+brush actually hands over, 30 long and 6 across, asking for faces of 2:
 
-### `property vtt.irregular-grid.TriangleHexOptions.trianglesPerSide: number`
+| chord | outline points | faces | mean side |
+|-------|----------------|-------|-----------|
+| 0.5x  | 98             | 312   | 1.27      |
+| 1x    | 50             | 308   | 1.28      |
+| 2x    | 26             | 120   | 2.04      |
+| 3x    | 18             | 104   | 2.20      |
 
-Triangles along one hexagon edge. Sylves' walkthrough uses `4`.
+Below 1x the extra points are pure waste -- 98 of them give the same mesh
+50 do. At 2x the mesh finally comes back the size it was asked for, with two
+and a half times fewer faces. Pinned in the engine's own tests as
+`an_outline_described_at_twice_the_face_size_gives_the_size_asked_for`.
 
-### `interface vtt.irregular-grid.Vec2`
+### `variable vtt.terrain-constraints.OUTLINE_WELD_PER_FACE: 0.5`
 
-A point on the grid plane.
+How near two points of a swept outline have to be before they are one point,
+as a multiple of the face size.
 
-### `property vtt.irregular-grid.Vec2.x: number`
+Deliberately *not* SHORTEST_USEFUL_FRACTION, though the two started
+as one number. That one governs node identity and has to stay small; this one
+only drops points from a ring nobody owns yet, and has to be large enough to
+catch what the union leaves behind.
+
+The brush's swept shape is the union of one capsule per stroke segment, each
+far wider than the step between them, so consecutive capsules cross and every
+crossing puts a vertex on the outline at a position the chord never chose.
+Measured on a wobbling 30-long stroke of radius 6, outline described at twice
+a face of 2:
+
+| weld  | outline points | shortest segment |
+|-------|----------------|------------------|
+| 0.2x  | 31             | 0.40             |
+| 0.5x  | 26             | 1.99             |
+| 1x    | 25             | 2.02             |
+
+At 0.2x the crossings survive and drag the mesh back down; at 0.5x they are
+gone and the outline is exactly the clean capsule the engine measures 2.04
+from. Past that there is nothing left to win.
+
+### `variable vtt.terrain-constraints.SHORTEST_USEFUL_FRACTION: 0.2`
+
+The shortest piece of an edge worth keeping, as a fraction of the face size.
+
+**This is the number that was missing, and its absence is what degraded the
+mesh over strokes.** A split used to be accepted anywhere strictly inside an
+edge, so a corner landing half a percent from an end left a fragment a
+hundredth of a face long -- permanently, as a real edge in the graph. The
+next stroke reads that fragment as a constraint, the triangulation has to
+honour it, and it comes back as a cluster of slivers whose winding is
+numerically ambiguous; then the ortho step midpoints it and the piece halves
+again. Measured on the table: a first stroke's contour had no segment under
+1.98, and the second stroke, reading that stroke's own mesh, found one of
+0.01 and lost 76 faces to "no room on edge".
+
+Below this, the corner takes the identity of the end it is near instead. The
+cell moves by at most this much -- a nudge on the scale the relax step
+already applies -- and no edge shorter than this can ever enter the graph.
 
-### `property vtt.irregular-grid.Vec2.y: number`
+### `function vtt.terrain-constraints.adoptContourNodes(runtime: AdoptionRuntime, tableId: string, causeId: string, adoptions: readonly ContourAdoption[], nodeIdFor: (vertex: number) => string, positionOf: (vertex: number) => ConstructionPosition | undefined): { adopted: ReadonlySet<number>; refused: readonly number[] }`
 
-### `type vtt.irregular-grid.Face = readonly number[]`
+Splits every neighbour edge that owes a node, so the ground about to be
+registered shares real edges with what was already there.
 
-A face as indices into a vertex list, in cyclic order.
+This is the decision recorded on this task made real: the cloud owning a
+contour accepts the nodes the grid puts along it. Skipping it would leave
+the new ground touching the old at a point without sharing the edge through
+it -- a T-junction, which is a seam that looks joined, renders as a crack,
+and is exactly the "gap along the path" the mend before this could never
+close.
 
-### `type vtt.irregular-grid.Quad = readonly [number, number, number, number]`
+Each split replaces one edge with two, so a second node on the same edge has
+to split whichever fragment now contains it. Tracked by parameter rather
+than re-queried: `along` is exact and monotonic within an edge, so the tail
+fragment is always the one to split next.
 
-A face known to have exactly four vertices.
+Fail-soft per node, and the refusals are named rather than counted: a node
+whose edge would not split still has to exist for the face that references
+it, so the caller declares it as ordinary new geometry instead. That costs
+one T-junction; dropping it would cost the face.
 
-### `type vtt.irregular-grid.Random = () => number`
+### `function vtt.terrain-constraints.constraintsFromRings(rings: readonly (readonly ConstructionRegionEdge[])[], positionOf: (nodeId: string) => { x: number; z: number } | undefined, startingIndex: number): ConstraintTable`
 
-Deterministic 0..1 source, so a given seed always yields the same grid.
+The same thing one step lower: rings of oriented edges, already walked,
+turned into constraint rings that carry a node id per corner.
 
-### `function vtt.irregular-grid.boundaryVertices(mesh: QuadMesh): Set<number>`
+Separate from perimeterConstraints because a cut's repair holds its
+rings before it holds any topology to read them from -- it walks the
+perimeter of the faces it is about to delete, and asks the graph for the
+positions afterwards. Both callers must be able to share one numbering, so
+`startingIndex` is where this table's `source` values begin.
 
-Vertices on an edge belonging to exactly one quad.
+A corner whose position cannot be found leaves the ring unusable and the
+ring is dropped: keeping it would put a constraint through a point nobody
+stands at, which is worse than losing the seam it would have met.
 
-### `function vtt.irregular-grid.buildIrregularQuadGrid(options: IrregularQuadGridOptions): QuadMesh`
+### `function vtt.terrain-constraints.outlineConstraints(rings: readonly (readonly (readonly [number, number])[])[], weld: number): readonly ConstraintRing[]`
 
-Runs the five steps in order. The whole technique, start to finish.
+A stroke's own swept outline: real ground to fill, owned by nobody yet.
 
-### `function vtt.irregular-grid.buildTriangleHex(options: TriangleHexOptions): FaceMesh`
+**Handed over whole, and an attempt to simplify it was reverted.** The cells
+do bunch at the round ends of a stroke, and the cap segments there are a
+fraction of a face long, so coarsening the outline looked like the fix.
+Ramer-Douglas-Peucker at 0.3 of the face size made it measurably worse: 279
+faces of 0.70 where the unsimplified outline gave 215 of 1.02, and the
+ground generated shrank from 224 square units to 137.
 
-Step 1 — a hexagon filled with equilateral triangles.
+The reason is that RDP cuts corners *globally*. A real drag wobbles, so its
+swept outline is full of shallow concavities, and a chord drawn across one
+of them leaves the ring self-intersecting. The generator then splits every
+crossing, fills the slivers, and classifies part of the interior as outside.
+Any future attempt has to preserve the ring's simplicity -- a local
+collinearity test, or a simplification checked for self-intersection and
+dropped when it fails -- and not merely its shape within a tolerance.
 
-A hexagon rather than a square because hexagons tile the plane while each
-one stays a self-contained chunk, which is what later lets the grid extend
-indefinitely with each chunk seeded from its own coordinates.
+**Welding coincident points is not that, and is done here.** `weld` drops a
+point only when it sits nearer than the tolerance to the point before it, and
+moves nothing. It cannot cut a corner wider than the tolerance and so cannot
+introduce a crossing the way a chord across a concavity does. It exists
+because the union of the brush's capsules leaves near-duplicate points where
+two capsules meet, and a segment a hundredth of a face long forces the
+triangulation into slivers exactly the way a split fragment does.
 
-### `function vtt.irregular-grid.createRandom(seed: number): Random`
+### `function vtt.terrain-constraints.perimeterConstraints(topologies: readonly ConstructionRegionTopology[], startingIndex: number): ConstraintTable`
 
-Seeded generator.
+The outward perimeter of everything already standing, as rings whose every
+corner carries the real node id sitting there.
 
-Determinism is not a convenience here. The map is replicated authoritative
-state, so two hosts generating "the same" grid must produce identical
-vertices, and a grid that depends on `Math.random` cannot be regenerated
-from a saved seed.
+One ring per *cloud* of touching faces, never one per face: the faces of an
+established patch of ground share edges, so handing over each face's own
+boundary describes a shape overlapping itself along every shared edge.
+outwardPerimeterRings already resolves that.
 
-### `function vtt.irregular-grid.ortho(mesh: FaceMesh): QuadMesh`
+### `function vtt.terrain-constraints.resolveAdoptions(holeRings: readonly ConstraintRing[], boundaryRings: readonly ConstraintRing[], reported: readonly ConstructionGridContourNode[], positionOf: (vertex: number) => { x: number; z: number } | undefined, shortestUseful: number): ResolvedAdoptions`
 
-Step 3 — Conway's ortho operator: every face becomes quads.
+Resolves each reported contour node either to the graph edge it splits or to
+a node already standing that it is too close to be distinct from.
 
-A face of `n` sides yields `n` quads, each spanning one corner, the two
-adjacent edge midpoints, and the face centre. A triangle becomes three
-quads and a rhombus four, so nothing has to be done about faces that never
-found a partner — the mesh is all-quad regardless of how the pairing went.
+Nodes on a segment that owns no edge -- the stroke's own outline -- can still
+snap, because a corner of that outline may land on top of a node the ring
+carries; there is simply nothing there to split.
 
-### `function vtt.irregular-grid.pairTriangles(mesh: FaceMesh, random: Random): FaceMesh`
+Adoptions are sorted along each edge, because several nodes routinely land on
+one. The triangulation may already have split a supplied segment before
+quadrangulation put a midpoint on each of the pieces, so an edge of the
+neighbour can owe two or three nodes, and they have to be inserted in the
+order they sit -- each split shortens what is left to split.
 
-Step 2 — randomly merge adjacent triangles into rhombi.
+### `interface vtt.terrain-diagnostics.TerrainCommitReport`
 
-This is the step that makes the result irregular, and it is purely
-aesthetic: whatever stays unpaired is handled by ortho anyway. The
-matching is greedy over a shuffled order, which leaves some triangles
-unpaired by construction — that variation is the point, so no attempt is
-made to maximise the matching.
+### `property vtt.terrain-diagnostics.TerrainCommitReport.adopted: number`
 
-### `function vtt.irregular-grid.relax(mesh: QuadMesh, options: RelaxOptions): QuadMesh`
+### `property vtt.terrain-diagnostics.TerrainCommitReport.boundary: readonly ConstraintRing[]`
 
-Step 5 — pull every cell toward a square without regularising the grid.
+### `property vtt.terrain-diagnostics.TerrainCommitReport.built: number`
 
-For each quad the best-fit square sharing its centre is found by rotating
-each corner back by its own quarter-turn and averaging: in a true square all
-four land on the same point, so how far they disagree is exactly how far the
-cell is from square. Corners then move toward where that square puts them.
+### `property vtt.terrain-diagnostics.TerrainCommitReport.builtClockwise?: number`
 
-Because every vertex is pulled by all the cells it belongs to, the result is
-a compromise — cells become square-ish while the irregular layout survives.
-Averaging positions toward neighbours instead (ordinary Laplacian smoothing)
-would shrink the mesh and say nothing about the shape of a cell.
+### `property vtt.terrain-diagnostics.TerrainCommitReport.declaredNodes: number`
 
-### `function vtt.irregular-grid.weld(mesh: QuadMesh, epsilon: number): QuadMesh`
+### `property vtt.terrain-diagnostics.TerrainCommitReport.faceSideAsked: number`
 
-Step 4 — merge coincident vertices.
+### `property vtt.terrain-diagnostics.TerrainCommitReport.grid: ConstructionIrregularQuadGrid | undefined`
 
-Required before relaxation rather than merely tidy: each face produced its
-own copy of every shared edge midpoint, and until those are one vertex,
-smoothing moves each copy independently and tears the mesh apart.
+### `property vtt.terrain-diagnostics.TerrainCommitReport.holes: readonly ConstraintRing[]`
+
+### `property vtt.terrain-diagnostics.TerrainCommitReport.refusals: readonly string[]`
+
+Why the engine refused, in its own words, first few only.
+
+### `property vtt.terrain-diagnostics.TerrainCommitReport.refusedClockwise?: number`
+
+Winding of the refused faces against the winding of the ones that landed.
+
+Two faces sharing an edge walk it in opposite directions *when they agree
+on which way round they run*. A face wound against the grain walks it the
+same way as its neighbour and is refused for exactly the reason the log
+reports -- while sitting perfectly beside it, overlapping nothing. It
+leaves no self-clash either, as long as it only ever touches ground that
+was already standing, which is where every refusal in the log lands.
+
+So a split reading here -- refused faces wound one way, built faces the
+other -- is the whole diagnosis, and it needs the opposite fix from
+`refusedInHole`.
+
+### `property vtt.terrain-diagnostics.TerrainCommitReport.refusedFaces: number`
+
+### `property vtt.terrain-diagnostics.TerrainCommitReport.refusedInHole?: number`
+
+Refused faces whose centre lies inside a hole ring -- ground planned on
+top of ground that was declared as still standing. Non-zero means the
+generator's ground rule let it through, and the fault is in what the rings
+said, not in how the patch was stitched.
+
+### `property vtt.terrain-diagnostics.TerrainCommitReport.regenerated?: number`
+
+Faces of this stroke's own type that were thrown away and laid again.
+
+### `property vtt.terrain-diagnostics.TerrainCommitReport.regeneratedCleared?: number`
+
+Faces the stroke *meant* to clear against the faces it actually cleared.
+
+`regenerated` is counted before the deletions run, so the two diverging
+silently is a fault with no other signature. Ground promised as gone is
+left out of the hole rings deliberately -- so a face laid over ground the
+deletion missed is not inside any hole, is not wound the wrong way, and
+clashes with nothing this side declared. It simply collides, and every
+other reading says the patch is fine.
+
+### `property vtt.terrain-diagnostics.TerrainCommitReport.regenerateFailures?: readonly string[]`
+
+### `property vtt.terrain-diagnostics.TerrainCommitReport.selfClashes?: readonly string[]`
+
+Edges the patch walks twice the same way *before* the engine sees it.
+
+Non-empty means this side built the clash; empty with faces refused means
+the edge was already standing. The two need opposite fixes.
+
+### `property vtt.terrain-diagnostics.TerrainCommitReport.unadopted: number`
+
+### `property vtt.terrain-diagnostics.TerrainCommitReport.what: string`
+
+Which operation this was: a stroke, a cut repair.
+
+### `function vtt.terrain-diagnostics.logContourGrowth(what: string, before: number, after: number): void`
+
+How many nodes the perimeter of the ground around the stroke carries, before
+and after.
+
+The one number that says whether the mesh is degrading over time. Every
+generation laid against a contour puts a vertex at the midpoint of each of
+its segments, so this grows unless something stops it -- and a stroke that
+leaves it unchanged is the fixed point the tool is trying to reach.
+
+### `function vtt.terrain-diagnostics.logTerrainCommit(report: TerrainCommitReport): void`
+
+Never throws, whatever it is handed.
+
+A diagnostic that costs the stroke is worse than no diagnostic: the commit
+itself was fine, and the person at the table loses their work to the code
+that was supposed to explain it. Every reader below is defensive for that
+reason, and the whole thing is wrapped as well.
+
+### `interface vtt.terrain-fill.FillBounds`
+
+The extent of the generated grid, for a height rule that wants to span it.
+
+### `property vtt.terrain-fill.FillBounds.maxX: number`
+
+### `property vtt.terrain-fill.FillBounds.maxZ: number`
+
+### `property vtt.terrain-fill.FillBounds.minX: number`
+
+### `property vtt.terrain-fill.FillBounds.minZ: number`
+
+### `interface vtt.terrain-fill.TerrainFillOutcome`
+
+### `property vtt.terrain-fill.TerrainFillOutcome.built: number`
+
+### `property vtt.terrain-fill.TerrainFillOutcome.refinementComplete: boolean`
+
+`false` when refinement hit its vertex ceiling and part of the area came back coarser.
+
+### `property vtt.terrain-fill.TerrainFillOutcome.refused: number`
+
+Faces the engine refused: ground that already has a face on both sides.
+
+### `property vtt.terrain-fill.TerrainFillOutcome.unadopted: number`
+
+Nodes that wanted a neighbour's edge split and did not get it -- one T-junction each.
+
+### `interface vtt.terrain-fill.TerrainFillRequest`
+
+### `property vtt.terrain-fill.TerrainFillRequest.boundary: readonly ConstraintRing[]`
+
+The area to fill.
+
+### `property vtt.terrain-fill.TerrainFillRequest.causeId: string`
+
+### `property vtt.terrain-fill.TerrainFillRequest.faceSide: number`
+
+How wide one finished face should be; see the port's own `faceSide`.
+
+### `property vtt.terrain-fill.TerrainFillRequest.heightAt: (point: { x: number; z: number }, bounds: FillBounds) => number`
+
+How high a corner sits, for the corners this fill has to invent. A corner
+that arrived carrying a source is never asked -- it is a node already
+standing, and moving it would drag the ground it already belongs to.
+
+### `property vtt.terrain-fill.TerrainFillRequest.holes: readonly ConstraintRing[]`
+
+Ground inside that area somebody already holds: met, never regenerated.
+
+### `property vtt.terrain-fill.TerrainFillRequest.mint: string`
+
+Prefix every node and edge this fill mints is named under. Whatever the
+caller passes has to be unique to this fill: two fills sharing a prefix
+would mint the same node id for different ground.
+
+### `property vtt.terrain-fill.TerrainFillRequest.onGenerated?: () => void | { deleted: number; failed: readonly string[] }`
+
+Run once the generator has answered and before anything is registered.
+
+Returns what it managed to clear, because the caller's own count is what
+it *meant* to clear. Those two silently diverging is indistinguishable
+from every other cause of a refused face -- ground that was supposed to
+be gone is excluded from the hole rings on purpose, so a face landing on
+it is neither inside a hole nor wound wrongly. It just collides.
+
+### `property vtt.terrain-fill.TerrainFillRequest.regenerated?: number`
+
+Faces this fill replaced, for the log only.
+
+### `property vtt.terrain-fill.TerrainFillRequest.relaxStrength?: number`
+
+Passed straight through; see the port's own `relaxStrength`.
+
+### `property vtt.terrain-fill.TerrainFillRequest.replaceSurfaceKeys?: readonly ConstructionSurfaceKey[]`
+
+Existing faces replaced atomically with this fill. An empty list still makes the patch all-or-nothing.
+
+### `property vtt.terrain-fill.TerrainFillRequest.seed: number`
+
+### `property vtt.terrain-fill.TerrainFillRequest.sources: readonly string[]`
+
+`sources[i]` is the node id the rings handed out as `source: i`, across both lists.
+
+### `property vtt.terrain-fill.TerrainFillRequest.surfaceType: string`
+
+### `property vtt.terrain-fill.TerrainFillRequest.tableId: string`
+
+Which table the shared boundary edges belong to.
+
+### `property vtt.terrain-fill.TerrainFillRequest.topologySeeds?: readonly CloudRequest[]`
+
+Retained clouds whose post-adoption edge directions this fill can meet.
+
+### `property vtt.terrain-fill.TerrainFillRequest.what: string`
+
+Names this commit in the console log -- "pincelada", "reparo de corte".
+
+### `interface vtt.terrain-fill.TerrainFillRuntime`
+
+What fillTerrain needs of the runtime, structurally.
+
+### `method vtt.terrain-fill.TerrainFillRuntime.addPatch(patch: ConstructionPatch, origin: "local", causeId: string): ConstructionPatchOutcome`
+
+### `method vtt.terrain-fill.TerrainFillRuntime.applyPatchReplacement(request: ApplyPatchReplacementRequest, origin: "local", causeId: string): ConstructionPatchOutcome`
+
+### `method vtt.terrain-fill.TerrainFillRuntime.applyRegionEdit(ops: readonly AtomicEditOp[], origin: "local", causeId: string): unknown`
+
+### `method vtt.terrain-fill.TerrainFillRuntime.generateIrregularQuadGrid(request: ConstructionIrregularQuadGridRequest): ConstructionIrregularQuadGrid | undefined`
+
+### `method vtt.terrain-fill.TerrainFillRuntime.getRegionTopologiesInBounds(bounds: FillBounds & { seeds?: readonly CloudRequest[] }): readonly ConstructionRegionTopology[]`
+
+### `method vtt.terrain-fill.TerrainFillRuntime.getSnapshot(): { map: { nodePositions: ReadonlyMap<string, { position: ConstructionPosition }> } }`
+
+### `variable vtt.terrain-fill.DEFAULT_FACE_SIDE: 2`
+
+The face size terrain is laid at when nobody says otherwise.
+
+A repair has no brush params to read -- it is regrowing ground somebody else
+cut -- so it takes this. Keeping it here rather than in either caller is
+what stops the sculpted ground and the regrown ground from drifting to
+different scales.
+
+### `function vtt.terrain-fill.fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillRequest): TerrainFillOutcome`
+
+Generates ground for `boundary` minus `holes`, adopts the nodes it lands on
+the neighbours' edges, and registers the result.
+
+The order is not arbitrary: adoption runs **before** the patch, because a
+face about to be registered names a node partway along a neighbour's edge,
+and that node does not exist until the split creates it.
+
+### `interface vtt.terrain-neighborhood.TerrainNeighbourhoodRuntime`
+
+### `method vtt.terrain-neighborhood.TerrainNeighbourhoodRuntime.getRegionTopologiesInBounds(bounds: TerrainStrokeBounds & { seeds?: readonly { seed: ConstructionSurfaceKey; surfaceType: string }[] }): readonly ConstructionRegionTopology[]`
+
+### `interface vtt.terrain-neighborhood.TerrainStrokeBounds`
+
+### `property vtt.terrain-neighborhood.TerrainStrokeBounds.maxX: number`
+
+### `property vtt.terrain-neighborhood.TerrainStrokeBounds.maxZ: number`
+
+### `property vtt.terrain-neighborhood.TerrainStrokeBounds.minX: number`
+
+### `property vtt.terrain-neighborhood.TerrainStrokeBounds.minZ: number`
+
+### `function vtt.terrain-neighborhood.terrainStandingAround(runtime: TerrainNeighbourhoodRuntime, covered: readonly ConstructionCoveredRegion[], within: TerrainStrokeBounds, reach: number): readonly ConstructionRegionTopology[]`
+
+Local topology belonging only to connected terrain the stroke touched.
+
+### `interface vtt.terrain-regenerate.HeightField`
+
+Heights sampled from ground that is about to be deleted, so what replaces it
+lands at the same height.
+
+Bucketed by a cell the size of the query radius, so a lookup reads nine
+buckets rather than every anchor. Locality is the point and not only the
+speed: a global inverse-distance blend drags every new corner toward the
+mean height of the whole neighbourhood, which flattens relief that was
+there. Only anchors within a couple of faces get a say, and the relief
+survives.
+
+### `method vtt.terrain-regenerate.HeightField.at(point: { x: number; z: number }): number | undefined`
+
+### `interface vtt.terrain-regenerate.RegenerateRequest`
+
+### `property vtt.terrain-regenerate.RegenerateRequest.causeId: string`
+
+### `property vtt.terrain-regenerate.RegenerateRequest.consumedSurfaceKeys: readonly ConstructionSurfaceKey[]`
+
+The faces to throw away and lay again.
+
+### `property vtt.terrain-regenerate.RegenerateRequest.faceSide: number`
+
+### `property vtt.terrain-regenerate.RegenerateRequest.heightOfNewGround: (point: { x: number; z: number }) => number`
+
+Height for a corner no anchor of the old ground reaches -- genuinely new
+ground. A repair has none of that and can pass a constant; a stroke hands
+over its noise field.
+
+### `property vtt.terrain-regenerate.RegenerateRequest.otherLoops: readonly (readonly ConstructionRegionEdge[])[]`
+
+Contours of other clouds standing inside that ground -- a road, a wall
+footing. Met exactly, never regenerated, and never generated over.
+
+### `property vtt.terrain-regenerate.RegenerateRequest.otherNodes: readonly { id: string; position: ConstructionPosition }[]`
+
+Where the positions of otherLoops' nodes are read from.
+
+### `property vtt.terrain-regenerate.RegenerateRequest.tableId: string`
+
+### `interface vtt.terrain-regenerate.TerrainRegenerateRuntime`
+
+What regenerateNeighbourhood needs of the runtime, structurally.
+
+### `method vtt.terrain-regenerate.TerrainRegenerateRuntime.addPatch(patch: ConstructionPatch, origin: "local", causeId: string): ConstructionPatchOutcome`
+
+### `method vtt.terrain-regenerate.TerrainRegenerateRuntime.applyPatchReplacement(request: ApplyPatchReplacementRequest, origin: "local", causeId: string): ConstructionPatchOutcome`
+
+### `method vtt.terrain-regenerate.TerrainRegenerateRuntime.applyRegionEdit(ops: readonly AtomicEditOp[], origin: "local", causeId: string): unknown`
+
+### `method vtt.terrain-regenerate.TerrainRegenerateRuntime.generateIrregularQuadGrid(request: ConstructionIrregularQuadGridRequest): ConstructionIrregularQuadGrid | undefined`
+
+### `method vtt.terrain-regenerate.TerrainRegenerateRuntime.getRegionTopologiesInBounds(bounds: FillBounds & { seeds?: readonly CloudRequest[] }): readonly ConstructionRegionTopology[]`
+
+### `method vtt.terrain-regenerate.TerrainRegenerateRuntime.getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined`
+
+### `method vtt.terrain-regenerate.TerrainRegenerateRuntime.getSnapshot(): { map: { nodePositions: ReadonlyMap<string, { position: ConstructionPosition }> } }`
+
+### `function vtt.terrain-regenerate.heightFieldOf(anchors: readonly ConstructionPosition[], reach: number): HeightField`
+
+### `function vtt.terrain-regenerate.regenerateNeighbourhood(runtime: TerrainRegenerateRuntime, request: RegenerateRequest): number`
+
+Faces laid. `0` means nothing was regenerated, for any reason.
+
+### `function vtt.terrain-regenerate.repairTerrainCut(runtime: TerrainRegenerateRuntime, fallout: CutFallout, causeId: string, tableId: string): number`
+
+Terrain's `CutRepairExecutor`: grow the ground back around the thing that
+cut it.
+
+The hole a cut leaves is bounded on one side by the terrain that survived
+and on the other by the road standing in the middle of it. Handing the
+generator only the outer rim lays ground straight across the road -- the two
+banks joined over the top of the path. Both sides go down carrying their own
+node ids, so the ground that comes back shares real nodes and real edges
+with the terrain it grew from *and* with the road it stops at: one graph,
+terrain-road-terrain, without either side welding onto the other.
+
+What comes back is not what was there. The mesh is regenerated, not
+restored, so a road drawn and erased leaves terrain of a different shape
+than before. That is the accepted trade rather than keeping a shadow copy of
+the ground a cut removed.
 
 ### `interface vtt.terrain-restack.RestackOutcome`
 
@@ -1739,7 +1858,26 @@ terrain and therefore always overlaps it in XZ.
 
 ### `variable vtt.terrain-restack.ELEVATION_STEP: 0.5`
 
-How far one stroke raises the ground it covers.
+How far one stroke raises the ground under the middle of the brush.
+
+### `function vtt.terrain-restack.dirtLoadOver(path: readonly ConstructionPosition[], radius: number): (point: ConstructionPosition) => number`
+
+How much earth lands on a given point: the profile, measured from the path
+the brush actually travelled.
+
+From the path rather than from the covered faces' own extent, because the
+brush is what the person moved -- a face clipped by the very edge of the
+stroke should barely rise, whoever else it touches.
+
+### `function vtt.terrain-restack.dirtProfile(normalizedDistance: number): number`
+
+The shape of one load of earth: `1` under the brush, easing to `0` at its
+rim.
+
+Smoothstep rather than a straight taper because the derivative matters more
+than the value here -- a linear falloff leaves a visible crease where the
+mound meets flat ground, since the slope jumps from something to nothing at
+a point. Smoothstep arrives flat.
 
 ### `function vtt.terrain-restack.facesToRaise(resolved: readonly ResolvedCoverage[]): readonly ConstructionCoveredRegion[]`
 
@@ -1747,7 +1885,7 @@ The faces a terrain stroke should raise: those the brush covers whole.
 A face the brush merely clips is left alone -- raising it would drag
 ground the user never painted over.
 
-### `function vtt.terrain-restack.restackTerrain(ctx: ToolContext, paintedType: string, covered: readonly ConstructionCoveredRegion[], causeId: string): RestackOutcome`
+### `function vtt.terrain-restack.restackTerrain(ctx: ToolContext, paintedType: string, covered: readonly ConstructionCoveredRegion[], causeId: string, loadAt: (point: ConstructionPosition) => number): RestackOutcome`
 
 Raises every covered face the type table allows.
 
@@ -1757,7 +1895,7 @@ else it was asked to.
 
 ### `variable vtt.terrain-sculpt-tool.terrainSculptTool: ConstructionTool<"terrain-sculpt">`
 
-Terrain-sculpt's own effect: the brush hands over the whole gesture, once, on release -- this resolves every quad any sample along the path touched into one mesh and submits it in a single batch, mirroring `terrain-brush`'s own (deleted) commit-once contract for its cell-by-cell Rust calls.
+Terrain-sculpt's own effect: the brush hands over the whole gesture, once, on release.
 
 ### `function vtt.tower-geometry.circleContour(center: ConstructionPosition, radius: number): readonly FittedEdge[]`
 
@@ -2050,6 +2188,10 @@ current by `node-moved` deltas.
 ### `type vtt.map-projection.SurfaceRef = string`
 
 ### `function vtt.map-projection.applyMapProjectionDelta(current: MapProjection, delta: MapProjectionDelta): MapProjection`
+
+### `function vtt.map-projection.applyMapProjectionDeltas(current: MapProjection, deltas: readonly MapProjectionDelta[]): MapProjection`
+
+Applies one mutation's deltas while cloning each backing map at most once.
 
 ### `function vtt.map-projection.createMapProjection(surfaces: readonly SurfaceProjection[], nodePositions: readonly NodePositionEntry[]): MapProjection`
 
@@ -2496,7 +2638,7 @@ this layer's.
 
 Folds two outcomes, so a whole transaction reports one combined result.
 
-### `function vtt.edit-orchestrator.planEdit(cloud: CloudTopology, gesture: EditGesture): EditPlan`
+### `function vtt.edit-orchestrator.planEdit(cloud: CloudTopology, gesture: EditGesture, graphSnapshot?: ConstructionGraphSnapshot): EditPlan`
 
 Resolves `gesture` against the structure type's own role table. The
 returned ops are already constrained -- a height-only role's horizontal
@@ -2556,6 +2698,14 @@ What painting `paintedType` over one already-present region means.
 An unrecognized covered type is refused rather than defaulting to
 `"ignore"`: silently stacking on top of something nobody declared is
 exactly how geometry accumulates unnoticed.
+
+### `function vtt.structure-types.resolveCutRepair(coveredType: string): CutRepair`
+
+How `coveredType` repairs itself once a `"cut"` has consumed part of it.
+
+An unrecognized covered type has no table to consult, so it is reported
+`"unsupported"` for the same reason `resolveCreationInteraction` refuses
+one outright: there is nothing to defer to but a guess.
 
 ### `function vtt.structure-types.resolvePolicy(topology: ConstructionRegionTopology, target: EditTarget): RolePolicy`
 
@@ -2674,6 +2824,205 @@ That is the whole of the panel side of the interaction table.
 ### `function vtt.panel-structure.panelStructureType(surfaceType: string, label: string, creation: string): StructureTypeDefinition`
 
 Builds one `extrude_path`-generated structure type on the shared panel model.
+
+### `function vtt.catmull-rom.sampleCatmullRom(controlPoints: readonly ConstructionPosition[], tolerance: number): readonly ConstructionPosition[]`
+
+Samples a centripetal Catmull-Rom curve through `controlPoints`,
+flattened so no chord strays from the true curve (in XZ) by more than
+`tolerance`. Collinear control points flatten to their own straight
+chords regardless of how unevenly they are spaced -- collinear is
+collinear under any parametrization -- so the result is exactly
+`controlPoints` back.
+
+A closed loop (first and last point coincide) is walked with wraparound
+neighbours at that seam -- the point one step before the start is the
+loop's own second-to-last point, and the point one step after the end is
+its own second point -- rather than reflect's fabricated free
+end. `reflect` assumes the run stops there; a loop's own closing point is
+not a stop, and treating it as one gives the two spans that meet there
+two different, wrong tangents at what is physically one single point,
+which is what left an O-shaped road not actually closed around its own
+seam.
+
+### `interface vtt.contour-patch.ContourPatchResult`
+
+### `property vtt.contour-patch.ContourPatchResult.patch: ConstructionPatch`
+
+### `property vtt.contour-patch.ContourPatchResult.regionIds: readonly string[]`
+
+### `interface vtt.contour-patch.ExistingNode`
+
+### `property vtt.contour-patch.ExistingNode.id: string`
+
+### `property vtt.contour-patch.ExistingNode.position: ConstructionPosition`
+
+### `function vtt.contour-patch.buildContourPatch(tableId: string, operationId: string, surfaceType: string, bandIndex: number, shapes: MultiPolygon, heightSamples: readonly ConstructionPosition[], existingNodes: readonly ExistingNode[], existingEdgeUses: ReadonlyMap<string, readonly boolean[]>): ContourPatchResult`
+
+Turns one band layer's unioned shapes into a `ConstructionPatch` -- the
+same kind of conversion the retired station-sweep engine's own patch
+builder used to do, but from a union's boundary loops instead of a
+sweep's quad grid, and welding by **position** rather than by a station
+address, because a union vertex has no station: it may be a genuine spine
+point, or a brand new intersection the union itself created where two
+ribbons crossed.
+
+A vertex within WELD_TOLERANCE of a node already on the table
+reuses that node's id -- which is what keeps everything **outside** the
+region this call was scoped to untouched: those nodes are simply never
+candidates for a fresh id, because they were never inside any ribbon this
+call was handed.
+
+`heightSamples` supplies `y` for a vertex the union minted (a crossing
+point no original ribbon vertex sits exactly on) via nearest-neighbour
+lookup -- the same approximation `preview-shapes.ts` already uses for its
+own union output, and the same shape of approximation `groundHeightNear`
+uses elsewhere in this codebase for "the height nearest sample said."
+
+### `interface vtt.offset-bands.BandRibbon`
+
+One band's ribbon: the ring between two consecutive `bandOffsets`.
+
+### `property vtt.offset-bands.BandRibbon.bandIndex: number`
+
+### `property vtt.offset-bands.BandRibbon.outer: readonly ConstructionPosition[]`
+
+Closed ring in the sweep's own winding, first curve forward then the next reversed.
+
+### `function vtt.offset-bands.offsetBands(polyline: readonly ConstructionPosition[], bandOffsets: readonly number[], miterLimit: number): readonly BandRibbon[]`
+
+One band per consecutive pair of `bandOffsets`, following `polyline`'s
+own shape. Returns no bands for a polyline shorter than two points or a
+profile with fewer than two offsets.
+
+A closed loop's first and last station are the same physical point, but
+`stationFrame` reads each end of the array it is handed as a free end --
+treated separately, they would offset that one seam point two different
+ways, leaving a gap or an overlap right where the loop closes. Framed
+instead through a tiny wraparound window (its own neighbour on the far
+side of the loop, standing in for the "next"/"previous" station an open
+run would not have), both ends get the identical, correctly mitred frame.
+
+### `interface vtt.plan-spine-contour.PlanSpineContourInput`
+
+### `property vtt.plan-spine-contour.PlanSpineContourInput.editedChains: readonly SpineChainInput[]`
+
+Every chain of the touched spine cloud -- not just the one a stroke or a
+control-node drag directly changed, but every chain the caller's own
+connectivity walk (`changedSpineCloud` in `path-cloud-scope.ts`)
+found reachable from it. Each is resampled fresh from its own *current*
+control points every time this function runs; nothing here ever reads
+a chain's own previous contour back as input, which is what keeps
+floating-point noise from one union pass compounding into the next.
+
+### `property vtt.plan-spine-contour.PlanSpineContourInput.existingEdgeUses?: ReadonlyMap<string, readonly boolean[]>`
+
+All currently live contour uses, including faces outside this local edit.
+
+### `property vtt.plan-spine-contour.PlanSpineContourInput.existingNodes: readonly ExistingNode[]`
+
+Every node already standing on the table, for welding by position.
+
+### `property vtt.plan-spine-contour.PlanSpineContourInput.operationId: string`
+
+Scopes every node/region id this call mints -- one edit, one operation.
+
+### `property vtt.plan-spine-contour.PlanSpineContourInput.standingRegions: readonly ConstructionRegionTopology[]`
+
+Every standing region of `surfaceType` belonging to this same cloud --
+always replaced in full. *Which* regions belong to the cloud is decided
+once, by the caller, from the spine graph itself (exact node-id
+membership); this function does not re-derive or filter that answer by
+geometry -- there is no partial, "only what actually overlaps" version
+of this list any more. A road duplicating or a face going missing was
+always this file and the caller silently disagreeing about which faces
+belonged together; giving the caller's answer nothing left to second-
+guess is what closes that gap for good.
+
+### `property vtt.plan-spine-contour.PlanSpineContourInput.surfaceType: string`
+
+### `property vtt.plan-spine-contour.PlanSpineContourInput.tableId: string`
+
+### `interface vtt.plan-spine-contour.PlanSpineContourResult`
+
+### `property vtt.plan-spine-contour.PlanSpineContourResult.consumedSurfaceKeys: readonly ConstructionSurfaceKey[]`
+
+Every one of `input.standingRegions`, unconditionally -- their faces are
+superseded by the freshly unioned ones in `patch.regions`, even where
+most of their own nodes were welded back unchanged. The caller replaces
+them in one atomic transaction with the unioned patch; a refused target
+can never leave the standing faces deleted.
+
+### `property vtt.plan-spine-contour.PlanSpineContourResult.patch: ConstructionPatch`
+
+### `interface vtt.plan-spine-contour.SpineChainInput`
+
+One curve chain's spine, already resolved to an ordered list of control
+points. Kept decoupled from `spine-graph.ts`'s own types (and from
+`PathKind`/`pathFormationFor`) on purpose: this module only knows "a
+curve, a band profile," never a corridor, a subtype, or a station -- the
+same genericity the Rust primitives themselves keep.
+
+### `property vtt.plan-spine-contour.SpineChainInput.bandOffsets: readonly number[]`
+
+Lateral offsets defining the bands, e.g. `[-2.1, 0, 2.1]` for contour/spine/contour.
+
+### `property vtt.plan-spine-contour.SpineChainInput.chainId: string`
+
+### `property vtt.plan-spine-contour.SpineChainInput.controlPoints: readonly ConstructionPosition[]`
+
+### `property vtt.plan-spine-contour.SpineChainInput.miterLimit: number`
+
+### `property vtt.plan-spine-contour.SpineChainInput.tolerance: number`
+
+Curve flattening tolerance, world units (XZ).
+
+### `function vtt.plan-spine-contour.planSpineContour(input: PlanSpineContourInput): PlanSpineContourResult | undefined`
+
+Derives the contour patch for one spine edit: Catmull-Rom sample -> banded
+offset -> union each band layer, across every chain of the touched cloud
+at once -> `ConstructionPatch`.
+
+**The whole cloud, derived fresh, every time -- never patched onto what
+was already there.** `input.editedChains` is every chain the touched
+cloud has; `input.standingRegions` is every face that cloud currently
+owns. This function reads the *first* for geometry and the *second* only
+for which surface keys to retire -- a standing region's own boundary is
+never fed back into a union as input. A T, an X, or an L are not cases
+this function knows about, they are whatever unionBandLayer
+happens to produce when two chains' ribbons overlap.
+
+Returns `undefined` when `editedChains` is empty -- nothing changed, so
+nothing to regenerate.
+
+### `function vtt.union-bands.nearestSampleY(x: number, z: number, samples: readonly ConstructionPosition[]): number`
+
+The `y` of whichever `samples` point is nearest `(x, z)` -- same lookup `preview-shapes.ts`'s `nearestSampleY` already uses to give a union's new vertices a height.
+
+### `function vtt.union-bands.ringOf(outer: readonly ConstructionPosition[]): Ring`
+
+### `function vtt.union-bands.unionBandLayer(ribbons: readonly BandRibbon[]): MultiPolygon`
+
+Unions every ribbon of one band layer into its own outer loop(s) and
+hole(s) -- the same `polygon-clipping` union `preview-shapes.ts`'s
+`unionCapsules` already proves works in this codebase, including its
+incremental fallback for the rare case the library throws on a whole
+batch at once.
+
+**Union only, deliberately no triangulation here.** The construction graph
+stores a region as a boundary *cycle*, not a mesh -- triangulating a face
+is `grafting-procgen-surface-mesh`'s job, done later from that cycle at
+render time (see that crate's own doc: "turning that into geometry is the
+caller's job", read at mesh-generation time, never at patch-authoring
+time). `grafting-procgen-curve-offset`'s Rust `union_and_triangulate`
+(Estágio 1) triangulates too, which is the wrong shape for *this* step --
+a design note carried forward for whenever that crate is wired in: the
+Rust primitive this function will eventually call needs a union-only
+variant (or the boundary loop exposed before triangulation), not the
+`TriangulatedMesh` it hands back today.
+
+A T, an X, or an L of overlapping ribbons all fall out of this one call
+with no per-topology branch: the union either merges two ribbons into one
+loop or it doesn't, and both are the same code path.
 
 ### `interface vtt.path-cloud.PathRun`
 
@@ -2804,6 +3153,99 @@ Editing dispatches by cloud, so anything asking "what is this road made
 of" is asking about the cloud under the pointer, not about a face and not
 about the whole table.
 
+### `interface vtt.path-cloud-mutation.PathCloudMutationInput`
+
+The table facts supplied to the PathCloud before it plans a mutation.
+
+### `property vtt.path-cloud-mutation.PathCloudMutationInput.coverageFor: (outline: readonly (readonly [number, number])[]) => readonly ConstructionCoveredRegion[]`
+
+### `property vtt.path-cloud-mutation.PathCloudMutationInput.effect: PathBrushEffect`
+
+### `property vtt.path-cloud-mutation.PathCloudMutationInput.graphSnapshot: ConstructionGraphSnapshot`
+
+### `property vtt.path-cloud-mutation.PathCloudMutationInput.regionTopologies: readonly ConstructionRegionTopology[]`
+
+### `property vtt.path-cloud-mutation.PathCloudMutationInput.snapToGrid: boolean`
+
+### `property vtt.path-cloud-mutation.PathCloudMutationInput.tableId: string`
+
+### `property vtt.path-cloud-mutation.PathCloudMutationInput.tolerance: number`
+
+### `type vtt.path-cloud-mutation.PathCloudMutationPlan = { kind: "noop"; message: string } | { kind: "refused"; reason: string } | { kind: "ready"; plannedRegionCount: number; request: ApplyPatchReplacementRequest }`
+
+The PathCloud's decision; the runtime only executes the ready request.
+
+### `function vtt.path-cloud-mutation.planPathCloudMutation(input: PathCloudMutationInput): PathCloudMutationPlan`
+
+Turns a draw intent into the next state of the entire touched PathCloud.
+Junction resolution, spine splitting, face ownership and contour rebuild
+all live here; callers merely provide snapshots and apply the result.
+
+This is the only path a path is ever built by. A free stroke, and any
+straight drag or preset that comes later, differ in nothing but the
+reference line they hand over: they all resolve to the same spine, go
+through the same whole-cloud contour engine, and declare the same faces.
+
+**What changed from the station-sweep engine this replaces.** There is no
+mouth, no wedge, no mitre, no crossing-preparation sweep here any more. A
+T, an X, and an L are not cases this function distinguishes -- they are
+whatever `planSpineContour`'s per-band union happens to produce once this
+stroke's own ribbons are unioned against an explicitly selected standing
+continuation. `pathCorridorId`/`pathFormationFor` still decide the
+subtype's profile; everything past that is derived, not hand-closed.
+
+**What this stage deliberately did not carry over**, flagged rather than
+silently dropped:
+- Dragging an already-committed road's own nodes still resolves roles
+  through `station-node-id.ts`'s address scheme (`path-structure.ts`),
+  which a contour node minted by this engine does not carry. A newly
+  drawn road commits correctly; editing it interactively afterwards is a
+  follow-up, not something this function attempts.
+- This function decides nothing about what its own footprint cuts into.
+  `sourceSurfaceKeys` on the request below names only what a *path*
+  consumes of its own kind (`planned.consumedSurfaceKeys` -- absorbing an
+  adjoining road); `footprintOutline` is the one thing a foreign type
+  needs from this stroke, and `TabletopRuntime.applyPatchReplacement` is
+  what resolves coverage against it, decides what got cut, and lets the
+  covered type repair -- and delete -- itself, generically, for whichever
+  type painted the cut, this one or any other that calls the same method.
+- `graphPatchForSpine`'s own welding and crossing checks read a real arc
+  span by its chord (`spine.controlPoints` no longer carries intermediate
+  samples along one -- see `groundTrack`), the same way every other span
+  here always has. A gentle curve's chord and its true arc barely differ;
+  a very tight, wide-swinging one could weld or cross slightly off from
+  where the curve itself actually runs. Not a case this stage resolves,
+  only one it accepts in exchange for never chopping a real arc into
+  graph nodes it does not need.
+
+### `interface vtt.path-cloud-scope.ChangedSpineCloud`
+
+The connected spine component changed by this stroke, after its graph patch, and every node id in it.
+
+### `property vtt.path-cloud-scope.ChangedSpineCloud.chains: readonly (readonly ConstructionPosition[])[]`
+
+### `property vtt.path-cloud-scope.ChangedSpineCloud.corridorIds: ReadonlySet<string>`
+
+Every corridor/operation id participating in this connected spine cluster.
+
+### `property vtt.path-cloud-scope.ChangedSpineCloud.positions: readonly ConstructionPosition[]`
+
+Every spine control point position in the touched component -- used to
+decide which standing contour faces this edit replaces.
+
+### `function vtt.path-cloud-scope.changedSpineCloud(snapshot: ConstructionGraphSnapshot, patch: ConstructionGraphPatch): ChangedSpineCloud`
+
+The connected spine component a graph patch touches, walked out from the
+patch's own nodes across the *prospective* graph (snapshot plus patch) --
+this is what `planPathCloudMutation` reads to decide which standing
+contour faces one edit replaces (`standingRegionsForCloud`, below).
+
+### `function vtt.path-cloud-scope.standingRegionsForCloud(topologies: readonly ConstructionRegionTopology[], cloudPositions: readonly ConstructionPosition[], corridorIds: ReadonlySet<string>): readonly ConstructionRegionTopology[]`
+
+Every standing "path" face that belongs to the touched spine cloud.
+Matched by corridor/operation identity first, node identity second, and
+geometric proximity as a fallback.
+
 ### `function vtt.path-corridor.pathCorridorId(operationId: string, kind: PathKind): string`
 
 ### `function vtt.path-corridor.pathSubtypeOf(corridorId: string): PathKind | undefined`
@@ -2895,6 +3337,17 @@ Node identity is minted relative to this slot, so that "outward" is a fact
 an id carries rather than something a later edit has to infer from
 geometry that has since moved.
 
+### `function vtt.path-reference-line.referenceLineFrom(fitted: readonly FittedEdge[], stroke: readonly ConstructionPosition[], ridesTerrain: boolean): { line: readonly ConstructionPosition[] }`
+
+The reference line to build the spine from: where the fit decided the
+road goes, at the height the ground was actually picked at.
+
+These points become the spine's own Catmull-Rom control points --
+`planSpineContour` samples a smooth curve through them, so a corner this
+function keeps as one point still reads as a genuine bend, and a run of
+points along a straight, flat stretch still flattens back to the straight
+chord it was drawn as (`sampleCatmullRom`'s own collinear case).
+
 ### `interface vtt.path-spine-draft.PathSpineDraft`
 
 The path-owned input to contour generation.
@@ -2950,6 +3403,16 @@ anything.
 ### `function vtt.path-structure.pathStructureType(surfaceType: string, label: string, creation: string, interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction): StructureTypeDefinition`
 
 Builds one swept-product structure type on the shared spine model.
+
+### `interface vtt.materialize-spine.MaterializedSpine`
+
+### `property vtt.materialize-spine.MaterializedSpine.controlPoints: readonly ConstructionPosition[]`
+
+### `property vtt.materialize-spine.MaterializedSpine.graphPatch: ConstructionGraphPatch`
+
+### `function vtt.materialize-spine.graphPatchForSpine(snapshot: ConstructionGraphSnapshot, spine: PathSpineDraft, snapTolerance: number): MaterializedSpine`
+
+Materializes and locally snaps the type-owned spine against its own network.
 
 ### `interface vtt.spine-chains.SpineChain`
 
@@ -3116,6 +3579,61 @@ The delta already constrained by the role's own axes.
 
 The face the gesture landed on -- `cloud.seed`, offered directly for the common case.
 
+### `interface vtt.structure-type.CutFallout`
+
+What a `"cut"` actually did to one covered type -- the seam a
+`"regenerate"`-capable covered type now needs to close by welding onto
+the painter's own geometry, not merely echoing its position.
+
+Deliberately painter-agnostic: this is assembled by whichever generic
+layer already sees both sides of a `"cut"` (`TabletopRuntime`, not any one
+tool -- see its own `applyPatchReplacement`), from a fact neither side
+privately owns -- what the paint actually registered, and what it
+resolved to consume. The covered type reads this and repairs itself
+entirely on its own, in its own module, outside `structure-types/`: this
+shape is the contract, not the repair, which needs a runtime this pure
+layer does not have.
+
+### `property vtt.structure-type.CutFallout.consumedSurfaceKeys: readonly ConstructionSurfaceKey[]`
+
+Exactly the regions this cut consumed -- the covered type's own to delete and repair around.
+
+### `property vtt.structure-type.CutFallout.paintedLoops: readonly (readonly ConstructionRegionEdge[])[]`
+
+The painter's own faces, each as its own boundary loop of real oriented
+edges, in that face's own walk order.
+
+A cut can leave the painter standing *inside* the ground it removed --
+a road drawn across the middle of a field, reaching none of its borders.
+The engine reports the hole's outer rim and stops there, correctly: it
+tells a gap from an outline by which side the neighbouring faces lie on,
+and a face alone in the middle of a hole reads as an outline, not as
+something to fill. A repair mending the outer rim alone therefore lays
+ground straight across the painter -- the two banks joined over the top
+of the road instead of stopping at its contour. These are what let it
+open around the painter instead, and they are edges rather than
+positions because the mend has to *reuse* them: the painter already holds
+one side of each, and the repair takes the other.
+
+### `property vtt.structure-type.CutFallout.paintedNodes: readonly { id: string; position: ConstructionPosition }[]`
+
+Every live node of the painter's own type, real graph nodes with real
+ids -- not a bare outline of numbers, and not only the handful *this one
+submission* happened to (re)declare.
+
+A repair needs these to name the far side of the hole. The engine
+considers an edge free-boundary only when **both** of its nodes are in
+the scope it was asked about, and the hole a cut leaves is bounded by the
+covered type's surviving rim on one side and the painter's own contour on
+the other -- so a repair naming only its own nodes finds no closed loop
+at all, and the cut visibly happens while nothing regenerates.
+
+Every live node of the type, not the current submission's own: a brush
+resubmits only its latest increment each tick, and most of an
+established cloud's boundary near a given hole was registered several
+ticks ago and never named again. Scoping to the increment leaves most of
+the hole's far side unnamed, which is the same failure by a slower route.
+
 ### `interface vtt.structure-type.RolePolicy`
 
 One role's complete editing policy: what it allows, how far it reaches,
@@ -3191,6 +3709,13 @@ and its own logic to keep in step.
 
 The policy for one role.
 
+### `property vtt.structure-type.StructureTypeDefinition.repairAfterCut: CutRepair`
+
+How this type repairs itself after `"cut"` has consumed part of it.
+Required rather than optional so a new structure type has to say where
+it stands -- `"unsupported"` is a legitimate, honest answer, silence is
+not.
+
 ### `property vtt.structure-type.StructureTypeDefinition.roleFor: (topology: ConstructionRegionTopology, target: EditTarget) => string`
 
 Resolves what the grabbed part of this region means.
@@ -3198,6 +3723,28 @@ Resolves what the grabbed part of this region means.
 ### `property vtt.structure-type.StructureTypeDefinition.surfaceType: string`
 
 The `surfaceType` the engine reports for regions of this kind.
+
+### `type vtt.structure-type.CutRepair = { kind: "regenerate"; reason: string } | { kind: "unsupported"; reason: string }`
+
+How a type fixes itself once `"cut"` has consumed part of it and left a
+rim exposed where the consumed piece used to be.
+
+This is deliberately not folded into `EditResolution`'s own `"regenerate"`
+kind, even though the organic case answers it the same way: that kind
+resolves a *gesture* against a role the type already named, where a cut is
+not a gesture on this type's own geometry at all -- it is a side effect of
+*another* type's stroke landing on top of it. There is no role, no target,
+nothing for `roleFor` to classify; only a leftover shape and the rim the
+removal exposed.
+
+`"unsupported"` is not a permanent design choice the way `EditResolution`'s
+`"deny"` is -- it is a declared gap, present so every structure type states
+its position instead of one silently doing nothing when cut. The organic
+doc comment already lists cutting alongside subdividing and welding as
+structural work that escalates to regeneration; a type built on that same
+capability answers `"regenerate"`, and a type that has never had a repair
+path designed says so honestly rather than pretending the geometry stayed
+valid.
 
 ### `type vtt.structure-type.EditResolution = { kind: "allow" } | { kind: "deny"; reason: string } | { kind: "regenerate"; reason: string }`
 
@@ -3337,9 +3884,32 @@ Width of each optional raised shoulder, in world units.
 
 ### `interface vtt.tool-types.TerrainSculptParams`
 
-A single seeded, self-contained hexagon of irregular terrain, submitted as
-graph nodes/surfaces in one shot -- see
+Ground generated for the area a stroke sweeps, constrained by whatever
+already stands inside it and submitted as graph nodes/surfaces in one shot -- see
 `composition/tabletop/tools/terrain/terrain-sculpt-tool.ts`.
+
+### `property vtt.tool-types.TerrainSculptParams.brushRadius: number`
+
+How wide a band the stroke paints, as a radius in world units.
+
+Not cosmetic, and not independent of faceSize: a patch comes back
+with about twice as many faces as its outline has points, and an outline
+needs a point every cell around its whole perimeter. So a narrow brush
+spends nearly all of its faces describing its own edge and comes back
+far finer than the cell size asked for, whatever the generator does.
+
+Measured, at a face size of 2: a radius of 3 yields cells of about 1.3,
+a radius of 6 yields 2.2. Roughly, the radius wants to be three times the
+face size or more before the interior of the stroke outweighs its rim.
+
+### `property vtt.tool-types.TerrainSculptParams.faceSize: number`
+
+How wide one terrain face should be, in world units.
+
+A face, not a lattice triangle: the engine converts. Bigger is cheaper in
+a way that is felt rather than measured -- halving it roughly quadruples
+the faces a stroke registers, and the graph, the render sync and the
+scene all carry every one of them.
 
 ### `property vtt.tool-types.TerrainSculptParams.heightScale: number`
 
@@ -3349,9 +3919,9 @@ Multiplies the sampled Perlin noise (native `[-1, 1]`) into world-space height u
 
 `0` = cells relaxed hard toward square (regular-looking, like a normal
 grid); `1` = minimal relaxation, cells keep the raw irregular shape/size
-variety `pairTriangles`'s random rhombus merge produces. `irregular-grid.ts`'s
-own `relax()` step is what pulls cells toward square in the first place --
-this maps directly onto its `strength` option.
+variety the random rhombus merge produces. The generator's own relaxation
+step is what pulls cells toward square in the first place; this is its
+`strength`, handed across the port as `relaxStrength`.
 
 ### `property vtt.tool-types.TerrainSculptParams.noiseScale: number`
 
@@ -3360,10 +3930,6 @@ Perlin `scale` -- smaller values are smoother/larger-scale terrain features.
 ### `property vtt.tool-types.TerrainSculptParams.seed: number`
 
 ### `property vtt.tool-types.TerrainSculptParams.targetSurface: "terrain" | "terrain-grass"`
-
-### `property vtt.tool-types.TerrainSculptParams.trianglesPerSide: number`
-
-Triangles per hexagon edge -- sizes the one whole-stroke lattice built on `onPointerDown` (`composition/tabletop/tools/terrain/terrain-sculpt-tool.ts`). Bigger means more room to paint before running past the precomputed area, at a one-time (not per-tick) JS cost.
 
 ### `interface vtt.tool-types.ToolParamsByTool`
 
@@ -3497,6 +4063,43 @@ closed catalog, not a free numeric field -- so every tower on a table is
 one of a few known sizes a later room-generation pass (Note 0008) can
 reason about, not an arbitrary one a careless drag produced.
 
+### `interface vtt.boundary-edges.BoundaryEdges`
+
+Collects the boundary edges one patch declares, and the uses that walk them.
+
+### `method vtt.boundary-edges.BoundaryEdges.all(): readonly ConstructionPatchEdge[]`
+
+Every edge declared so far, each exactly once.
+
+### `method vtt.boundary-edges.BoundaryEdges.use(from: string, to: string, geometry?: ConstructionEdgeGeometry): ConstructionOrientedEdgeUse`
+
+Declares (or reuses) the edge between `from` and `to`, given that edge's geometry walked `from` -> `to`, and returns the use that walks it in that direction. Geometry defaults to a straight chord.
+
+### `type vtt.boundary-edges.EdgeSharing = { existingUses: ReadonlyMap<ConstructionEdgeId, readonly boolean[]>; kind: "private-when-full"; runPrefix: string } | { kind: "refuse-when-full" }`
+
+What a generator does when the shared edge it wants has no room left.
+
+An edge bounds two faces, one on each side, and the engine refuses a
+third use or a second one facing the same way. Whether that refusal is
+correct depends entirely on what the type means by it, so the type says.
+
+### `function vtt.boundary-edges.createBoundaryEdges(tableId: string, sharing: EdgeSharing): BoundaryEdges`
+
+### `function vtt.boundary-edges.reverseGeometry(geometry: ConstructionEdgeGeometry): ConstructionEdgeGeometry`
+
+The same physical curve seen from the other end -- an arc keeps its center and flips its sweep, a chord is symmetric.
+
+### `function vtt.boundary-edges.sharedEdgeId(tableId: string, from: string, to: string): string`
+
+The name the edge between two nodes carries, wherever it is named.
+
+Exported because declaring a patch is not the only way an edge comes into
+being: splitting one at a node mints two more, and if those are named any
+other way then a face declared later over the same pair of nodes gets a
+second, coincident edge instead of the one already there. One rule, one
+name, everywhere -- which is what lets a junction share a spine seam with
+the run it split.
+
 ### `interface vtt.construction-cloud.CloudSource`
 
 The slice of the runtime a cloud resolution needs, named here so
@@ -3515,7 +4118,7 @@ A cloud together with the live boundary of every member.
 
 ### `property vtt.construction-cloud.CloudTopology.members: readonly ConstructionRegionTopology[]`
 
-Every member's boundary, the seed included.
+Every member, the seed included.
 
 ### `property vtt.construction-cloud.CloudTopology.seed: ConstructionRegionTopology`
 
@@ -3561,7 +4164,7 @@ The member the gesture actually landed on.
 
 The one type every member shares; a cloud never spans two.
 
-### `function vtt.construction-cloud.cloudNodes(topology: CloudTopology): readonly { id: string; position: { x: number; y: number; z: number } }[]`
+### `function vtt.construction-cloud.cloudNodes(topology: CloudTopology, graphSnapshot?: ConstructionGraphSnapshot): readonly { id: string; position: { x: number; y: number; z: number } }[]`
 
 Every distinct boundary node across a cloud, deduplicated by id -- members share nodes wherever they are welded.
 
@@ -3577,23 +4180,77 @@ geometry the gesture never grabbed. Membership is settled once, on press.
 
 ### `function vtt.construction-cloud.resolveCloud(source: CloudSource, seed: ConstructionSurfaceKey): ConstructionCloud | undefined`
 
-The cloud the surface at `seed` belongs to.
+Resolves which surfaces belong to the same cloud as `seed`.
 
-The engine answers which surfaces are connected and share the type; it is
-never asked what the type *means*. `undefined` only when the key is stale
--- a live surface always belongs to at least its own cloud, so an empty
-membership is treated as the seed alone rather than as an error, which is
-what keeps a component of size one on the same path as any other.
+Pure read-through to the engine query (`ADR-0022`), returning the
+cloud-level view the rest of the layer plans against. Returns `undefined`
+when `seed` is not a registered surface -- an uncommitted gesture or a
+stale pick target cannot seed a cloud.
 
 ### `function vtt.construction-cloud.resolveCloudTopology(source: CloudSource, seed: ConstructionSurfaceKey): CloudTopology | undefined`
 
-resolveCloud plus every member's live boundary, which is what a
-gesture is actually planned against.
+Resolves the whole cloud topology -- the cloud and every member's current
+boundary -- in one call.
 
-A member whose topology has since gone stale is dropped rather than
-failing the whole resolution: the cloud query and the topology reads are
-separate calls, and a surface that disappeared between them is exactly the
-case where continuing with what is still there is right.
+Fails as a whole when any member cannot be read: a cloud in the middle of
+changing is not in a state to plan an edit against.
+
+### `function vtt.ring-simplify.simplifyClosedRing(points: readonly ConstructionPosition[], geometryFor: (fromIndex: number, toIndex: number) => ConstructionEdgeGeometry | undefined): readonly number[]`
+
+The indices of `points` (a closed ring, no repeated closing vertex) that
+still carry real shape, in order -- every other index is redundant and
+may be dropped from the ring without changing what it bounds.
+
+`geometryFor(fromIndex, toIndex)` reports the geometry the edge from
+`points[fromIndex]` to `points[toIndex]` actually runs on (`undefined` a
+straight chord, the same convention BoundaryEdges.use already
+takes) -- indices rather than positions, so a caller that keeps its own
+parallel array (node ids, say) never has to search `points` back for
+which entry a position belonged to. Read fresh for each candidate pair
+rather than cached, since dropping a vertex changes which pairs are
+adjacent.
+
+### `interface vtt.stroke-fitting.FitOptions`
+
+What a caller may vary about a fit. `arcs` defaults to on.
+
+### `property vtt.stroke-fitting.FitOptions.arcs?: boolean`
+
+When false, every span is fitted as a straight chord and no circle is ever considered.
+
+### `interface vtt.stroke-fitting.FittedEdge`
+
+One fitted edge of a stroke: an endpoint pair plus the contour geometry
+that actually explains the samples between them -- a straight chord, or a
+true circular arc through them. This is the graph's own edge vocabulary
+(`ConstructionEdgeGeometry`), not a private tag a generator has to
+translate, so a fitted edge is already the thing that gets declared.
+
+### `property vtt.stroke-fitting.FittedEdge.end: ConstructionPosition`
+
+### `property vtt.stroke-fitting.FittedEdge.geometry: ConstructionEdgeGeometry`
+
+### `property vtt.stroke-fitting.FittedEdge.start: ConstructionPosition`
+
+### `function vtt.stroke-fitting.fitPath(points: readonly ConstructionPosition[], tolerance: number, options: FitOptions): readonly FittedEdge[]`
+
+Turns a raw, hand-drawn stroke (every pointer sample, wobble included)
+into a short list of fitted edges: corners are found first
+(Ramer-Douglas-Peucker, cornerIndices), then each run between
+corners is classified (classifySegment) as a straight chord or
+the true circle through it.
+
+`tolerance` (world units) is the whole correction dial -- how far the raw
+stroke must wander off *both* a straight line and its best-fit arc before
+that counts as a real corner rather than hand tremor or ordinary
+curvature. At `0` the contour is committed literally; the larger it gets,
+the more freely a shaky stroke is straightened into clean runs. Fewer
+than 2 points fits to nothing.
+
+With `arcs` off every span is a chord, however round the samples look.
+That is for a caller whose samples are no longer a hand -- points landing
+on exact grid intersections, say -- where the circle through any three of
+them is a real circle that nobody drew.
 
 ### `interface vtt.surface-perimeter.PerimeterLoop`
 
@@ -3617,6 +4274,28 @@ In walk order, `nodeIds[i]` starting `edgeIds[i]`.
 
 How many faces each edge bounds, across the whole set.
 
+### `function vtt.surface-perimeter.outwardPerimeterRings(topologies: readonly ConstructionRegionTopology[]): readonly (readonly ConstructionRegionEdge[])[]`
+
+The same perimeter, as closed rings of edges **already oriented for
+whatever stands on the other side** -- the outside.
+
+perimeterOf answers "where is the rim, and where does it run", for
+drawing it. This answers "how would a face meeting this rim have to walk
+it", which is a different question with a strict answer: a perimeter edge
+has one face on it already, so its one free side is the other one, and a
+face walking it the same way as the face already there is refused.
+
+Derived per edge from the use the set itself makes of it, never from the
+ring's own walk direction -- which is arbitrary, since a walk may be
+assembled either way round. Each step is therefore reversed relative to the
+set's own use, and the ring is chained by those directions rather than
+re-walked.
+
+Taking the whole set at once is the point: the perimeter of a cloud of
+touching faces is one ring around all of them, and the individual faces'
+own boundaries are not it. Handing those over one by one instead describes
+a shape that overlaps itself along every edge two of them share.
+
 ### `function vtt.surface-perimeter.perimeterOf(topologies: readonly ConstructionRegionTopology[]): readonly PerimeterLoop[]`
 
 Every perimeter loop of `topologies`, as closed walks.
@@ -3631,6 +4310,82 @@ surface touches itself -- is walked by taking whichever edge has not been
 walked yet. That yields loops that partition the perimeter rather than the
 one canonical figure-of-eight, which is the right answer for drawing it and
 an arbitrary one for reasoning about winding.
+
+### `class vtt.sweep-formation.SweepFormationError`
+
+Why a sweep could not be planned.
+
+### `constructor vtt.sweep-formation.SweepFormationError.constructor(message?: string): SweepFormationError`
+
+### `constructor vtt.sweep-formation.SweepFormationError.constructor(message?: string, options?: ErrorOptions): SweepFormationError`
+
+### `interface vtt.sweep-formation.SweptArc`
+
+The curve a stretch of a formation runs on, if it is not straight.
+
+### `property vtt.sweep-formation.SweptArc.center: readonly [number, number]`
+
+### `property vtt.sweep-formation.SweptArc.clockwise: boolean`
+
+### `interface vtt.sweep-formation.TransverseProfilePoint`
+
+One sample of a formation's transverse profile.
+
+### `property vtt.sweep-formation.TransverseProfilePoint.elevation: number`
+
+Height above the reference line's own height at that station.
+
+### `property vtt.sweep-formation.TransverseProfilePoint.lateralOffset: number`
+
+Signed world distance from the reference line, left to right.
+
+### `function vtt.sweep-formation.stationFrame(line: readonly ConstructionPosition[], index: number, miterLimit: number, arcs: readonly (SweptArc | undefined)[]): readonly [number, number]`
+
+The direction one station offsets its profile along.
+
+At a corner it is the mitre: the bisector of the two neighbouring normals,
+lengthened so the offset rim still meets both straight stretches, and
+bounded so a hairpin gets a corner rather than a spike. Same rule the
+junction mitre follows between two runs -- this one is within one run.
+
+Where a stretch curves, its normal comes from the curve rather than from
+the chord standing in for it. A station in the middle of an arc then has
+the *same* normal arriving and leaving, so the mitre resolves to no corner
+at all -- correctly, because there is none: a circle does not have corners,
+only the polygon that approximates it does. That is what lets a curved road
+be smooth instead of faceted, and it is why the rim of one can be declared
+as a single arc.
+
+### `function vtt.sweep-formation.sweepFormation(referenceLine: readonly ConstructionPosition[], profile: readonly TransverseProfilePoint[], miterLimit: number, options: { arcs?: readonly (SweptArc | undefined)[] }): ConstructionSweepPlan`
+
+Samples a transverse profile along a reference line into connected quads.
+
+Vertices are station-major: every consecutive `profile.length` entries form
+one transverse station, which is what lets `pathPatch` read a station
+address straight off a vertex index. Quads reference those shared vertices,
+so neighbouring strips are connected by construction rather than by welding
+coincident geometry afterwards.
+
+### `function vtt.sweep-formation.sweptBoundary(stationCount: number, profileLength: number): readonly number[]`
+
+The rim of a plain formation, as vertex indices.
+
+Down the first column, across the last station, back up the last column,
+and across the first station to close. True of a formation standing on its
+own, which is the only thing a sweep can know -- everything that makes it
+*untrue*, a junction above all, is known only where clouds and surface
+types are. Exported so that side can walk it, compare against it, or
+replace it outright.
+
+### `function vtt.sweep-formation.withoutCoincidentStations(samples: readonly ConstructionPosition[]): readonly ConstructionPosition[]`
+
+The caller's stations with any coincident repeat dropped.
+
+Hygiene, not resampling: it only ever removes, never places. Two stations
+at one spot give the frame maths no direction to read, and a pointer held
+still or a grid snap folding samples onto one intersection both produce
+exactly that. Where the stations go is the caller's decision, because it
+depends on what the formation runs over.
 
 ### `interface vtt.attach-camera-navigation.CameraControllable`
 
@@ -3731,6 +4486,15 @@ Replaces an exact set of application-selected regions with one generated
 patch. The executor performs the removal and addition as one all-or-nothing
 transaction; it has no product or contour policy of its own.
 
+### `property vtt.construction-session-port.ApplyPatchReplacementRequest.footprintOutline?: readonly (readonly [number, number])[]`
+
+This patch's own flat footprint, XZ, offered back for the runtime's own
+use -- never sent to the engine. A `sourceSurfaceKey` this replaces may
+belong to a type that needs to conform its own leftover to this outline
+once the swap lands (`resolveCutRepair`'s `"regenerate"`); the runtime
+is what checks for that and dispatches it, generically, for any caller
+of this method, not a concern this port or any one caller decides.
+
 ### `property vtt.construction-session-port.ApplyPatchReplacementRequest.graphPatch?: ConstructionGraphPatch`
 
 ### `property vtt.construction-session-port.ApplyPatchReplacementRequest.operationId: string`
@@ -3779,6 +4543,18 @@ surfaces reachable from `seed` by shared graph nodes.
 
 ### `property vtt.construction-session-port.CloudRequest.surfaceType: string`
 
+### `interface vtt.construction-session-port.ConstructionBoundsXZ`
+
+Axis-aligned world-space extent in the construction plane.
+
+### `property vtt.construction-session-port.ConstructionBoundsXZ.maxX: number`
+
+### `property vtt.construction-session-port.ConstructionBoundsXZ.maxZ: number`
+
+### `property vtt.construction-session-port.ConstructionBoundsXZ.minX: number`
+
+### `property vtt.construction-session-port.ConstructionBoundsXZ.minZ: number`
+
 ### `interface vtt.construction-session-port.ConstructionCoveredRegion`
 
 One existing region a footprint touches, with what a per-type rule needs to decide.
@@ -3826,6 +4602,112 @@ The durable generic graph; semantic types decide what its primitives mean.
 ### `property vtt.construction-session-port.ConstructionGraphSnapshot.edges: readonly ConstructionEdgeSnapshot[]`
 
 ### `property vtt.construction-session-port.ConstructionGraphSnapshot.nodes: readonly ConstructionNodeSnapshot[]`
+
+### `interface vtt.construction-session-port.ConstructionGridConstraintPoint`
+
+One point of a contour handed to the grid generator as a constraint.
+
+`source` is an index into a table the *caller* keeps, never a node id.
+The engine forwards it untouched and never looks inside it, which is what
+lets a node come back identified instead of being matched to a position by
+proximity -- the guess that minted a second node on top of a real one in
+every fill this generator replaces.
+
+### `property vtt.construction-session-port.ConstructionGridConstraintPoint.source?: number`
+
+### `property vtt.construction-session-port.ConstructionGridConstraintPoint.x: number`
+
+### `property vtt.construction-session-port.ConstructionGridConstraintPoint.z: number`
+
+### `interface vtt.construction-session-port.ConstructionGridContourNode`
+
+One corner the generator put along a contour the caller supplied.
+
+### `property vtt.construction-session-port.ConstructionGridContourNode.ring: number`
+
+### `property vtt.construction-session-port.ConstructionGridContourNode.ringKind: "boundary" | "hole"`
+
+Which of the two request lists ring indexes.
+
+### `property vtt.construction-session-port.ConstructionGridContourNode.segment: number`
+
+The segment running from point `segment` of that ring to the next.
+
+### `property vtt.construction-session-port.ConstructionGridContourNode.vertex: number`
+
+Index into ConstructionIrregularQuadGrid.vertices.
+
+### `interface vtt.construction-session-port.ConstructionIrregularQuadGrid`
+
+A generated grid, and what each of its corners already is.
+
+Handed back rather than applied, because registering it needs two decisions
+this layer owns and the engine does not: a node id for every new corner,
+and a height for it. The engine has no idea what a `ConstructionNodeId`
+looks like, and height is sampled from the heightmap here.
+
+### `property vtt.construction-session-port.ConstructionIrregularQuadGrid.onContour: readonly ConstructionGridContourNode[]`
+
+Corners sitting *on* a supplied contour that arrived with no source --
+nodes the cloud owning that contour has to adopt.
+
+They exist because the refinement splits a constraint segment where a
+nearby point encroaches on it, and because quadrangulation puts a
+midpoint on every edge, a contour edge included. Both are wanted: the
+alternative to a shared node here is a terrain corner resting against
+the middle of a road edge without sharing it, which reads as a gap along
+the path.
+
+Each names the segment it landed on, addressed back into the request.
+That is the difference between adopting it and guessing: the caller
+supplied the rings, so a ring and segment index already identifies one
+of its own edges by id, and the node is adopted by splitting that edge
+rather than by finding the nearest one to a position.
+
+### `property vtt.construction-session-port.ConstructionIrregularQuadGrid.quads: readonly (readonly [number, number, number, number])[]`
+
+### `property vtt.construction-session-port.ConstructionIrregularQuadGrid.refinementComplete: boolean`
+
+`false` where the refinement stopped at its vertex budget. The grid is
+still usable, just coarser somewhere -- worth logging, never worth
+discarding the result over.
+
+### `property vtt.construction-session-port.ConstructionIrregularQuadGrid.vertices: readonly { source?: number; x: number; z: number }[]`
+
+### `interface vtt.construction-session-port.ConstructionIrregularQuadGridRequest`
+
+What bounds the ground to generate, and at what scale.
+
+### `property vtt.construction-session-port.ConstructionIrregularQuadGridRequest.boundary: readonly (readonly ConstructionGridConstraintPoint[])[]`
+
+Closed rings bounding the ground. Points in ring order; the closing edge is implicit.
+
+### `property vtt.construction-session-port.ConstructionIrregularQuadGridRequest.faceSide: number`
+
+How wide one finished terrain face should be, in world units.
+
+The face, not the lattice triangle behind it. Two subdivision stages sit
+between the two, so asking in lattice terms yields faces about a third of
+the size meant -- which is how a stroke asking for cells of 2 came back
+with roughly seven times the faces it wanted. The engine owns that
+conversion; this side says what it wants to see.
+
+### `property vtt.construction-session-port.ConstructionIrregularQuadGridRequest.holes?: readonly (readonly ConstructionGridConstraintPoint[])[]`
+
+Closed rings of ground another cloud already holds -- a road contour, a
+building footprint -- subtracted from `boundary`.
+
+Every ring is a constraint either way: no cell crosses one, whichever
+list it came from. This only decides which of the resulting cells come
+back as ground.
+
+### `property vtt.construction-session-port.ConstructionIrregularQuadGridRequest.relaxStrength?: number`
+
+How hard the relaxation pulls cells toward square, `0` hardest and `1`
+leaving the raw irregular variety the rhombus pairing produced. Omitted
+takes the generator's own standard.
+
+### `property vtt.construction-session-port.ConstructionIrregularQuadGridRequest.seed: number`
 
 ### `interface vtt.construction-session-port.ConstructionNodeSnapshot`
 
@@ -3904,6 +4786,14 @@ under them already has a face on both sides of an edge they wanted.
 Reported rather than thrown: one refused face must not cost the whole
 stroke.
 
+### `property vtt.construction-session-port.ConstructionPatchOutcome.skippedRegionReasons: readonly string[]`
+
+Why each of `skippedRegionIds` was refused, in the same order and naming
+the edge that decided it. A refusal is not one thing -- an edge already
+interior, an edge whose one free side faces the other way, a loop that
+never closes -- and those want opposite fixes, so a caller reading only
+the ids is left to guess.
+
 ### `interface vtt.construction-session-port.ConstructionPatchRegion`
 
 One face of a generated patch, over edges the same request declares.
@@ -3969,12 +4859,6 @@ end asked for a specific generated shape, so it already knows what
 
 ### `interface vtt.construction-session-port.ConstructionSessionPort`
 
-Hides `grafting-procgen-construction-wasm`'s `ConstructionSession` ABI
-(Rust panics are uncatchable on `wasm32-unknown-unknown`, so an adapter
-must validate at this boundary, not rely on recovering from one) behind
-app-owned types. Mirrors the whole session ABI, not only the slice the
-current runtime wiring calls.
-
 ### `method vtt.construction-session-port.ConstructionSessionPort.addHole(request: { hole: readonly ConstructionOrientedEdgeUse[]; surfaceKey: ConstructionSurfaceKey }): RegionEditOutcome`
 
 Opens one more inner loop on an existing face -- what a door or a
@@ -4021,6 +4905,21 @@ Unregisters a region, leaving zero orphaned nodes or edges behind.
 
 Mints a parallel copy; the same `suffix` always reproduces the same copy.
 
+### `method vtt.construction-session-port.ConstructionSessionPort.generateIrregularQuadGrid(request: ConstructionIrregularQuadGridRequest): ConstructionIrregularQuadGrid | undefined`
+
+One irregular quad grid, generated against the contours the request
+names -- what ground is *made of*, whether it is being created on empty
+land or regenerated beside something that moved.
+
+Pure: it reads nothing from the live graph and changes nothing in it.
+The caller mints ids for the new corners, samples their height, and
+registers the result through addPatch -- see
+ConstructionIrregularQuadGrid for why that split is deliberate.
+
+`undefined` where the contours describe no ground that can be
+triangulated. That is a refusal, not an error: a caller that gets one
+leaves what is standing alone rather than substituting something.
+
 ### `method vtt.construction-session-port.ConstructionSessionPort.generateRegionPartition(request: GenerateRegionPartitionRequest): DiffOutcome`
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.getAllRegionTopologies(): readonly ConstructionRegionTopology[]`
@@ -4050,6 +4949,10 @@ session's own `snapshot_json`, which already carries node positions;
 this method exposes only that slice (edges/surfaces are unused by any
 caller so far).
 
+### `method vtt.construction-session-port.ConstructionSessionPort.getRegionTopologiesInBounds(bounds: ConstructionTopologyBoundsQuery): readonly ConstructionRegionTopology[]`
+
+Region boundaries with at least one node inside an XZ extent, returned in one engine crossing.
+
 ### `method vtt.construction-session-port.ConstructionSessionPort.getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined`
 
 One region's live boundary, or `undefined` for a stale key.
@@ -4060,6 +4963,10 @@ One surface's mesh piece(s), by key. Almost always one piece -- but an
 analytic-region key (a merged path-brush source/target region) can
 legitimately triangulate into several disjoint pieces (one per outer
 loop), and every one of them must be rendered, not just the first.
+
+### `method vtt.construction-session-port.ConstructionSessionPort.getSurfaceMeshes(surfaceKeys: readonly ConstructionSurfaceKey[]): readonly SurfaceMeshResult[]`
+
+A known mutation set's meshes in one engine crossing.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.getUnfilledLoops(scope: readonly string[]): readonly ConstructionUnfilledLoop[]`
 
@@ -4102,9 +5009,9 @@ Moves one boundary node to an absolute position.
 
 Closes one of a face's openings back up, by index, reclaiming whatever rim nothing stands on anymore.
 
-### `method vtt.construction-session-port.ConstructionSessionPort.removeSurface(request: RemoveSurfaceRequest): void`
+### `method vtt.construction-session-port.ConstructionSessionPort.removeSurface(request: RemoveSurfaceRequest): RegionEditOutcome`
 
-Unregisters a surface outright -- no hole-repair, no cascading.
+Unregisters a surface outright and prunes orphaned nodes from the graph.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.removeVertex(nodeId: string, weldedEdgeId: string): RegionEditOutcome`
 
@@ -4162,6 +5069,20 @@ the spine and both rims.
 The stations the formation actually used, carrying the height each one rides at.
 
 ### `property vtt.construction-session-port.ConstructionSweepPlan.vertices: readonly ConstructionPosition[]`
+
+### `interface vtt.construction-session-port.ConstructionTopologyBoundsQuery`
+
+Local topology query, optionally restricted to clouds reached from seeds.
+
+### `property vtt.construction-session-port.ConstructionTopologyBoundsQuery.maxX: number`
+
+### `property vtt.construction-session-port.ConstructionTopologyBoundsQuery.maxZ: number`
+
+### `property vtt.construction-session-port.ConstructionTopologyBoundsQuery.minX: number`
+
+### `property vtt.construction-session-port.ConstructionTopologyBoundsQuery.minZ: number`
+
+### `property vtt.construction-session-port.ConstructionTopologyBoundsQuery.seeds?: readonly CloudRequest[]`
 
 ### `interface vtt.construction-session-port.ConstructionUnfilledLoop`
 
@@ -4532,7 +5453,7 @@ separate Wasm module (`@grafting/procgen-generation-wasm`) with no shared
 state: this is a pure function behind an async-init lifecycle, not a
 stateful session.
 
-### `method vtt.terrain-noise-port.TerrainNoisePort.generateHeightmap(width: number, height: number, seed: number, scale: number): Float32Array`
+### `method vtt.terrain-noise-port.TerrainNoisePort.generateHeightmap(width: number, height: number, seed: number, scale: number, originX: number, originY: number): Float32Array`
 
 Samples a real Perlin-noise heightmap on a `width` x `height` grid,
 seeded deterministically. Returns a flat row-major array of one height
@@ -4540,6 +5461,13 @@ value per cell, in Perlin's native `[-1, 1]` range. `scale` is the
 distance between samples in the noise's own space -- smaller values
 produce smoother, larger-scale features (useful range roughly `0.05`
 to `0.2`, per the underlying Wasm binding's own doc comment).
+
+`originX` / `originY` place the grid's first cell in the noise's own
+coordinates. A caller that anchors them to the world gets one height per
+world point however large or small a window it asks for; a caller that
+always passes `0` and stretches the result over its own extent gets a
+different height for the same point every time that extent changes, and
+two patches of ground made that way meet along a crease.
 
 ### `method vtt.terrain-noise-port.TerrainNoisePort.start(): Promise<void>`
 

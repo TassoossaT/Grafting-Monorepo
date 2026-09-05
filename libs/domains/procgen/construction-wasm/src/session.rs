@@ -106,15 +106,19 @@ impl ConstructionSession {
 
     // ---- Bootstrapping ----
 
-    /// Unregisters a surface outright -- no hole-repair, no cascading. See
+    /// Unregisters a surface outright and prunes any nodes it orphaned. See
     /// `editing::remove_surface`.
-    pub fn remove_surface_json(&mut self, request_json: &str) -> Result<(), JsValue> {
+    pub fn remove_surface_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request: editing::RemoveSurfaceRequest = parse(request_json)?;
-        let region_id = mesh::region_id_from_wire(&request.surface_key).map_err(to_js_error)?;
-        editing::remove_surface(&mut self.surfaces, &mut self.topology, request)
-            .map_err(to_js_error)?;
-        self.known_regions.remove(&region_id);
-        Ok(())
+        let response = editing::remove_surface(
+            &mut self.graph,
+            &mut self.surfaces,
+            &mut self.topology,
+            request,
+        )
+        .map_err(to_js_error)?;
+        self.track(&response);
+        serialize(&response)
     }
 
     // ---- Atomic region edits (the analytic edit vocabulary) ----

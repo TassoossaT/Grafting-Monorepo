@@ -629,8 +629,8 @@ export interface ConstructionSessionPort {
   undoRegionOverlay(operationId: string): void;
   redoRegionOverlay(operationId: string): void;
   generateRegionPartition(request: GenerateRegionPartitionRequest): DiffOutcome;
-  /** Unregisters a surface outright -- no hole-repair, no cascading. */
-  removeSurface(request: RemoveSurfaceRequest): void;
+  /** Unregisters a surface outright and prunes orphaned nodes from the graph. */
+  removeSurface(request: RemoveSurfaceRequest): RegionEditOutcome;
   /** `ADR-0022`'s "cloud" query. */
   cloudFor(request: CloudRequest): CloudOutcome;
 
