@@ -3468,8 +3468,22 @@ export function dispatchCutRepairs(runtime: TabletopRuntime, request: ApplyPatch
   if (paintedType === undefined) return;
 
   const coverage = runtime.getFootprintCoverage(outline);
+export function dispatchRemovalRepairs(
+  runtime: TabletopRuntime,
+  surfaceKey: ConstructionSurfaceKey,
+  surfaceType: string,
+  causeId: string,
+  executors: Readonly<Record<string, CutRepairExecutor>> = CUT_REPAIR_EXECUTORS,
+  ): void {
+  const repair = resolveCutRepair(surfaceType);
 
 // src/composition/tabletop/tools/house/house-room-delete-tool.ts
+export function roomSurfaceKeys(
+  ctx: Pick<ToolContext, "runtime">,
+  room: DerivedRoom,
+  ): readonly ConstructionSurfaceKey[] {
+  const keys: ConstructionSurfaceKey[] = [];
+  const seen = new Set<string>();
 export const houseRoomDeleteTool: ConstructionTool<"house-room-delete"> = {
   id: "house-room-delete",
   defaultParams: () => ({}),
@@ -3489,9 +3503,14 @@ export function cellsInPolygon(polygon: readonly Vec2[], cellSize: number): { re
 export function idPrefixForRoom(tableId: string, bottomCycle: readonly ConstructionNodeId[]): string {
   return `${tableId}:interior:${hashString([...bottomCycle].sort().join("|"))}`;
   }
-export function isRedundantPerimeterWall(ctx: ToolContext, surfaceKey: readonly ConstructionNodeId[], polygon: readonly Vec2[], tolerance: number): boolean {
-  const map = ctx.runtime.getSnapshot().map;
-  const positions = surfaceKey.map((id) => map.nodePositions.get(id)?.position).filter((position): position is ConstructionPosition => position !== undefined);
+export function isRedundantPerimeterWall(
+  ctx: { readonly runtime: Pick<import("../../tabletop-runtime.ts").TabletopRuntime, "getSnapshot"> & Partial<Pick<import("../../tabletop-runtime.ts").TabletopRuntime, "getAllRegionTopologies">> },
+  surfaceKey: readonly string[],
+  polygon: readonly Vec2[],
+  tolerance: number,
+  ): boolean {
+  let positions: ConstructionPosition[] = [];
+  if (typeof ctx.runtime.getAllRegionTopologies === "function") {
 
 // src/composition/tabletop/tools/house/interior-wall-tool.ts
 export const interiorWallTool: ConstructionTool<"interior-wall"> = {
