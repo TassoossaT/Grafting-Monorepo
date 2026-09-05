@@ -53,6 +53,12 @@ pub struct SurfaceMeshRequest {
     pub surface_key: Vec<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SurfaceMeshesRequest {
+    pub surface_keys: Vec<Vec<String>>,
+}
+
 /// Every currently-known region's mesh, in stable id order -- the
 /// bootstrap call a caller uses once to render everything already in the
 /// session. Skips (does not error on) any region that cannot currently be
@@ -140,6 +146,32 @@ pub fn surface_mesh(
         "not an analytic region key: {:?}",
         request.surface_key
     ))
+}
+
+/// Meshes for a known mutation set, serialized through one Wasm crossing.
+/// Stale keys are skipped exactly like the runtime's former per-key loop.
+pub fn surface_meshes(
+    graph: &SessionGraph,
+    surfaces: &SurfaceRegistry,
+    topology: &ContourTopology,
+    request: SurfaceMeshesRequest,
+) -> Vec<SurfaceMeshDto> {
+    let mut seen = std::collections::HashSet::new();
+    let mut meshes = Vec::new();
+    for surface_key in request.surface_keys {
+        if !seen.insert(surface_key.clone()) {
+            continue;
+        }
+        if let Ok(mut pieces) = surface_mesh(
+            graph,
+            surfaces,
+            topology,
+            SurfaceMeshRequest { surface_key },
+        ) {
+            meshes.append(&mut pieces);
+        }
+    }
+    meshes
 }
 
 #[cfg(test)]

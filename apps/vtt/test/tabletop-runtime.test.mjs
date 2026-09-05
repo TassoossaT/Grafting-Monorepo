@@ -100,6 +100,7 @@ function emptyRegionEdit() {
 
 function createFakeConstructionPort() {
   let started = false;
+  let nodePositionReads = 0;
   /** What the next `addPatch` reports as created. Unset means the fake's own two surfaces. */
   let nextCreatedSurfaceKeys;
   const livePositions = new Map([
@@ -133,10 +134,8 @@ function createFakeConstructionPort() {
     },
     moveVertex(nodeId, position) {
       requireStarted();
-      // The real engine holds the positions, so the fake must too: the
-      // runtime re-scans `getNodePositions()` after every edit rather than
-      // trusting the caller's own target, since a cascade moves nodes the
-      // caller never named.
+      // The real engine holds the positions, so the fake must too even though
+      // this exact move can now be folded from the request without a re-scan.
       livePositions.set(nodeId, position);
       return emptyRegionEdit();
     },
@@ -176,7 +175,18 @@ function createFakeConstructionPort() {
       requireStarted();
       return [];
     },
+    getRegionTopologiesInBounds() {
+      requireStarted();
+      return [];
+    },
     applyRegionOverlay() {
+      requireStarted();
+      return {
+        ...emptyRegionEdit(),
+        skippedRegionIds: [],
+      };
+    },
+    applyPatchReplacement() {
       requireStarted();
       return {
         ...emptyRegionEdit(),
@@ -202,6 +212,9 @@ function createFakeConstructionPort() {
           mesh: { positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 0, 1]) },
         },
       ];
+    },
+    getSurfaceMeshes(surfaceKeys) {
+      return surfaceKeys.flatMap((surfaceKey) => this.getSurfaceMesh(surfaceKey));
     },
     getAllSurfaceMeshes() {
       requireStarted();
@@ -230,7 +243,11 @@ function createFakeConstructionPort() {
     },
     getNodePositions() {
       requireStarted();
+      nodePositionReads += 1;
       return [...livePositions].map(([id, position]) => ({ id, position }));
+    },
+    getNodePositionReadCount() {
+      return nodePositionReads;
     },
     async dispose() {
       if (!started) return;
@@ -331,6 +348,7 @@ test("moving a vertex updates its position and re-uploads the map chunk it belon
     constructionPort,
   });
   await runtime.start();
+  const positionReadsBefore = constructionPort.getNodePositionReadCount();
   const before = runtime.getSnapshot();
   const uploadsBefore = renderPort.changes.filter((change) => change.type === "map-chunk-upserted").length;
 
@@ -352,6 +370,11 @@ test("moving a vertex updates its position and re-uploads the map chunk it belon
   assert.ok(uploadsAfter.length > uploadsBefore, "moving a vertex re-uploads its chunk");
   assert.equal(uploadsAfter.at(-1).origin, "local");
   assert.equal(uploadsAfter.at(-1).causeId, "drag-1");
+  assert.equal(
+    constructionPort.getNodePositionReadCount(),
+    positionReadsBefore,
+    "an exact vertex move does not serialize every node in the session",
+  );
 });
 
 test("moving a vertex bumps the revision of every surface the engine reports as affected", async () => {
@@ -627,6 +650,56 @@ test("applyRegionOverlay folds generic surface and node deltas into the map", as
   assert.equal(map.byId.has(surfaceRefFromNodeSet(FAKE_TERRAIN_SURFACE_KEY)), false);
   assert.equal(map.byId.get(surfaceRefFromNodeSet(pathKey)).type, "path");
   assert.deepEqual(map.nodePositions.get("fake:path:c").position, { x: 0, y: -0.1, z: 1 });
+});
+
+test("applyPatchReplacement folds supplied nodes without scanning every live node", async () => {
+  const constructionPort = createFakeConstructionPort();
+  const runtime = createTabletopRuntime({
+    tableId: "table-terrain-replacement",
+    renderPort: createFakeRenderPort(),
+    constructionPort,
+  });
+  await runtime.start();
+  const readsBefore = constructionPort.getNodePositionReadCount();
+  const replacementKey = ["replacement:a", "replacement:b", "replacement:c"];
+  constructionPort.applyPatchReplacement = () => ({
+    ...emptyRegionEdit(),
+    createdSurfaceKeys: [replacementKey],
+    skippedRegionIds: [],
+  });
+  let batchMeshReads = 0;
+  constructionPort.getSurfaceMesh = () => {
+    throw new Error("replacement projection must use the batch mesh query");
+  };
+  constructionPort.getSurfaceMeshes = (surfaceKeys) => {
+    batchMeshReads += 1;
+    assert.deepEqual(surfaceKeys, [replacementKey]);
+    return [{
+      surfaceKey: replacementKey,
+      surfaceType: "terrain",
+      physical: true,
+      mesh: { positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 0, 1]), indices: new Uint32Array([0, 1, 2]) },
+    }];
+  };
+  const patch = {
+    nodes: [
+      { id: "replacement:a", position: { x: 10, y: 1, z: 10 } },
+      { id: "replacement:b", position: { x: 11, y: 1, z: 10 } },
+      { id: "replacement:c", position: { x: 10, y: 1, z: 11 } },
+    ],
+    edges: [],
+    regions: [],
+  };
+
+  runtime.applyPatchReplacement(
+    { operationId: "replace-1", sourceSurfaceKeys: [], patch },
+    "local",
+    "replace-1",
+  );
+
+  assert.equal(constructionPort.getNodePositionReadCount(), readsBefore);
+  assert.equal(batchMeshReads, 1, "all changed faces are triangulated through one engine crossing");
+  assert.deepEqual(runtime.getSnapshot().map.nodePositions.get("replacement:c").position, { x: 10, y: 1, z: 11 });
 });
 test("registering a patch requires a ready tabletop runtime", async () => {
   const runtime = createTabletopRuntime({

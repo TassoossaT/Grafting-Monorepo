@@ -87,6 +87,40 @@ pub(crate) fn polygon_contains_point(polygon: &[[f32; 2]], point: [f32; 2]) -> b
     inside
 }
 
+#[derive(Clone, Copy)]
+struct PolygonBounds {
+    min_x: f32,
+    min_z: f32,
+    max_x: f32,
+    max_z: f32,
+}
+
+impl PolygonBounds {
+    fn of(polygon: &[[f32; 2]]) -> Option<Self> {
+        let first = *polygon.first()?;
+        let mut bounds = Self {
+            min_x: first[0],
+            min_z: first[1],
+            max_x: first[0],
+            max_z: first[1],
+        };
+        for point in &polygon[1..] {
+            bounds.min_x = bounds.min_x.min(point[0]);
+            bounds.min_z = bounds.min_z.min(point[1]);
+            bounds.max_x = bounds.max_x.max(point[0]);
+            bounds.max_z = bounds.max_z.max(point[1]);
+        }
+        Some(bounds)
+    }
+
+    fn intersects(self, other: Self) -> bool {
+        self.min_x <= other.max_x
+            && self.max_x >= other.min_x
+            && self.min_z <= other.max_z
+            && self.max_z >= other.min_z
+    }
+}
+
 /// One loop's boundary sampled into an XZ polygon, walking each edge in the
 /// loop's own direction so a curve contributes its real shape rather than
 /// its chord.
@@ -132,19 +166,33 @@ pub(crate) fn xz(graph: &SessionGraph, id: &NodeId) -> Option<[f32; 2]> {
     })
 }
 
-fn centroid_of(graph: &SessionGraph, nodes: &[NodeId]) -> Option<[f32; 3]> {
+fn centroid_and_bounds(
+    graph: &SessionGraph,
+    nodes: &[NodeId],
+) -> Option<([f32; 3], PolygonBounds)> {
     if nodes.is_empty() {
         return None;
     }
     let mut sum = [0.0_f32; 3];
+    let first = *graph.node(&nodes[0])?.data();
+    let mut bounds = PolygonBounds {
+        min_x: first[0],
+        min_z: first[2],
+        max_x: first[0],
+        max_z: first[2],
+    };
     for id in nodes {
         let position = graph.node(id)?.data();
         for axis in 0..3 {
             sum[axis] += position[axis];
         }
+        bounds.min_x = bounds.min_x.min(position[0]);
+        bounds.min_z = bounds.min_z.min(position[2]);
+        bounds.max_x = bounds.max_x.max(position[0]);
+        bounds.max_z = bounds.max_z.max(position[2]);
     }
     let count = nodes.len() as f32;
-    Some([sum[0] / count, sum[1] / count, sum[2] / count])
+    Some(([sum[0] / count, sum[1] / count, sum[2] / count], bounds))
 }
 
 /// Every registered region the footprint touches.
@@ -161,9 +209,18 @@ pub fn footprint_coverage(
     if request.polygon.len() < 3 {
         return Err("a footprint polygon needs at least three points".into());
     }
+    let footprint_bounds = PolygonBounds::of(&request.polygon)
+        .ok_or_else(|| "a footprint polygon needs at least three points".to_owned())?;
     let mut covered = Vec::new();
     for region_id in topology.region_ids() {
-        let Some(dto) = covered_region(graph, topology, surfaces, &region_id, &request.polygon)?
+        let Some(dto) = covered_region(
+            graph,
+            topology,
+            surfaces,
+            &region_id,
+            &request.polygon,
+            footprint_bounds,
+        )?
         else {
             continue;
         };
@@ -178,6 +235,7 @@ fn covered_region(
     surfaces: &SurfaceRegistry,
     region_id: &RegionId,
     footprint: &[[f32; 2]],
+    footprint_bounds: PolygonBounds,
 ) -> Result<Option<CoveredRegionDto>, String> {
     let (Some(region), Some(surface)) = (
         topology.region(region_id),
@@ -188,15 +246,21 @@ fn covered_region(
     let nodes = topology
         .region_nodes(region_id)
         .map_err(|error| error.to_string())?;
-    let Some(centroid) = centroid_of(graph, &nodes) else {
+    let Some((centroid, region_bounds)) = centroid_and_bounds(graph, &nodes) else {
         return Ok(None);
     };
+    if !region_bounds.intersects(footprint_bounds) {
+        return Ok(None);
+    }
 
     let mut overlaps = false;
     for loop_ in region.outer_loops() {
         let Some(polygon) = loop_polygon(topology, graph, loop_) else {
             continue;
         };
+        if !PolygonBounds::of(&polygon).is_some_and(|bounds| bounds.intersects(footprint_bounds)) {
+            continue;
+        }
         // Overlap in either direction: a small face wholly inside the brush
         // has no vertex outside it, and a brush wholly inside a huge face
         // has no vertex inside the face -- checking only one direction

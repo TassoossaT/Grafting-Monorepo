@@ -1,5 +1,6 @@
 export {
   applyMapProjectionDelta,
+  applyMapProjectionDeltas,
   createMapProjection,
   createSurfaceProjection,
   surfaceRefFromNodeSet,

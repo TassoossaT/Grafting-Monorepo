@@ -3,8 +3,6 @@ import type { TerrainSculptParams } from "@/features/edit-construction";
 import type {
   ConstructionCoveredRegion,
   ConstructionPosition,
-  ConstructionRegionTopology,
-  ConstructionSurfaceKey,
 } from "@/ports";
 import type { MultiPolygon } from "polygon-clipping";
 
@@ -18,6 +16,7 @@ import {
   type ConstraintRing,
 } from "./terrain-constraints.ts";
 import { fillTerrain } from "./terrain-fill.ts";
+import { terrainStandingAround, type TerrainStrokeBounds } from "./terrain-neighborhood.ts";
 import { heightFieldOf } from "./terrain-regenerate.ts";
 import { logContourGrowth } from "./terrain-diagnostics.ts";
 import type { ConstructionTool, ToolContext, ToolGesture } from "../core/tool-context.ts";
@@ -131,15 +130,10 @@ function strokeChord(params: TerrainSculptParams): number {
 
 function coveredByStroke(
   ctx: ToolContext,
-  gesture: ToolGesture,
-  params: TerrainSculptParams,
+  swept: MultiPolygon,
 ): readonly ConstructionCoveredRegion[] {
   const merged = new Map<string, ConstructionCoveredRegion>();
-  for (const polygon of brushSweptOutlinePolygons(
-    gesture.samples.map((sample) => sample.point),
-    params.brushRadius,
-    strokeChord(params),
-  )) {
+  for (const polygon of swept) {
     const ring = polygon[0];
     if (ring === undefined || ring.length < 3) continue;
     for (const region of ctx.runtime.getFootprintCoverage(ring)) {
@@ -178,71 +172,21 @@ function insideSwept(point: ConstructionPosition, swept: MultiPolygon): boolean 
 }
 
 /**
- * Everything already standing that the stroke reaches, as **whole clouds**.
+ * Everything already standing close enough for the stroke to meet it.
  *
- * Reached through the cloud, and then **cut back to the ground the stroke can
- * actually touch**.
- *
- * The cloud is the connected component of same-type surfaces sharing nodes, so
- * once two strokes weld, every later stroke anywhere on the map pulls the
- * whole continent: a topology read per face, a point-in-polygon test per node
- * of every one of them, and a perimeter walked around the lot. The cost of one
- * stroke becomes the size of the map rather than the size of the brush, and it
- * only ever grows.
- *
- * It was written whole for a reason worth stating, because the reason has a
- * hole in it. The perimeter of a *subset* of a cloud is not that cloud's
- * boundary -- it runs partly through the cloud's own interior, over edges that
- * already carry a face on both sides -- so handing it over as the outline of
- * occupied ground appears to say the far side of those edges is free. But the
- * generator can only lay cells **inside the swept outline**. If the far side
- * of one of those interior edges is within the stroke, the face there was
- * touched by the footprint and is in this set already; if it was not touched,
- * it is outside the outline and unreachable. So the faces the footprint covers
- * are sufficient, and the whole cloud is a safe over-approximation that costs
- * the map.
+ * This used to expand every covered face to its whole connected cloud before
+ * cutting it back to the brush. Joining two large clouds consequently walked
+ * each entire cloud once per covered face and performed one JSON Wasm call per
+ * member. The engine now does one bounds query and serializes only this local
+ * neighbourhood. A subset perimeter is safe here because the generator can
+ * only lay cells inside the swept outline: the far side of an interior edge is
+ * either also in this neighbourhood or unreachable by the fill.
  *
  * The bound is the stroke's own extent, widened by `reach` so nothing the
  * outline can meet is dropped by a rounding of the box.
  */
-interface StrokeBounds {
-  readonly minX: number;
-  readonly minZ: number;
-  readonly maxX: number;
-  readonly maxZ: number;
-}
-
-function standingAround(
-  ctx: ToolContext,
-  covered: readonly ConstructionCoveredRegion[],
-  within: StrokeBounds,
-  reach: number,
-): readonly ConstructionRegionTopology[] {
-  const keys = new Map<string, ConstructionSurfaceKey>();
-  for (const region of covered) {
-    const cloud = ctx.runtime.cloudFor({ seed: region.surfaceKey, surfaceType: region.surfaceType });
-    for (const surfaceKey of cloud.surfaceKeys) keys.set(surfaceKey.join(" "), surfaceKey);
-  }
-  const near: ConstructionRegionTopology[] = [];
-  for (const surfaceKey of keys.values()) {
-    const topology = ctx.runtime.getRegionTopology(surfaceKey);
-    if (topology === undefined) continue;
-    // One corner within the widened box is enough: a face is kept if any part
-    // of it could meet the stroke, and dropped only when all of it is clear.
-    const reaches = topology.nodes.some(
-      (node) =>
-        node.position.x >= within.minX - reach &&
-        node.position.x <= within.maxX + reach &&
-        node.position.z >= within.minZ - reach &&
-        node.position.z <= within.maxZ + reach,
-    );
-    if (reaches) near.push(topology);
-  }
-  return near;
-}
-
 /** The axis-aligned extent of a swept stroke, in XZ. */
-function boundsOf(swept: MultiPolygon): StrokeBounds {
+function boundsOf(swept: MultiPolygon): TerrainStrokeBounds {
   let minX = Infinity;
   let minZ = Infinity;
   let maxX = -Infinity;
@@ -283,6 +227,11 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   onPointerUp(ctx: ToolContext, gesture: ToolGesture, params: TerrainSculptParams): void {
     const salt = ctx.nextSequence();
     const causeId = `${ctx.tableId}:terrain-sculpt:${salt}`;
+    const swept = brushSweptOutlinePolygons(
+      gesture.samples.map((sample) => sample.point),
+      params.brushRadius,
+      strokeChord(params),
+    );
 
     // One stroke does both, per area -- it is not a choice between them.
     // Where ground already exists the covered faces are raised; where it does
@@ -293,7 +242,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     // height: a corner shared with the rim wants the raised Y, not the stale
     // one. Occupancy is unaffected either way -- the raise moves ground in Y,
     // never in XZ.
-    const covered = coveredByStroke(ctx, gesture, params);
+    const covered = coveredByStroke(ctx, swept);
     const raised =
       covered.length > 0
         ? restackTerrain(
@@ -312,11 +261,6 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     // more finely than the mesh it is about to bound. A boundary point is a
     // cell corner, and a patch comes back with about twice as many faces as
     // its boundary has points.
-    const swept = brushSweptOutlinePolygons(
-      gesture.samples.map((sample) => sample.point),
-      params.brushRadius,
-      strokeChord(params),
-    );
     const weld = params.faceSize * OUTLINE_WELD_PER_FACE;
     const outline = outlineConstraints(swept.flatMap((polygon) => polygon.slice(0, 1)), weld);
     if (outline.length === 0) {
@@ -343,7 +287,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     // consuming it would leave a gap exactly as wide as the part that stuck
     // out. Those stay, and their contour is what the new ground meets.
     const extent = boundsOf(swept);
-    const standing = standingAround(ctx, covered, extent, params.faceSize * 2);
+    const standing = terrainStandingAround(ctx.runtime, covered, extent, params.faceSize * 2);
     const consumed = standing.filter(
       (topology) =>
         topology.surfaceType === params.targetSurface &&
@@ -351,10 +295,8 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
         topology.nodes.every((node) => insideSwept(node.position, swept)),
     );
     const consumedKeys = new Set(consumed.map((topology) => topology.surfaceKey.join(" ")));
-    const perimeters = perimeterConstraints(
-      standing.filter((topology) => !consumedKeys.has(topology.surfaceKey.join(" "))),
-      0,
-    );
+    const retained = standing.filter((topology) => !consumedKeys.has(topology.surfaceKey.join(" ")));
+    const perimeters = perimeterConstraints(retained, 0);
     const contourBefore = perimeters.sources.length;
     // A stroke that curls back on itself leaves a real hole in its own swept
     // shape, and `polygon-clipping` reports it as an inner ring. Ground there
@@ -419,7 +361,11 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       boundary: outline,
       holes: holeRings,
       sources: perimeters.sources,
-      replaceSurfaceKeys: consumed.map((topology) => topology.surfaceKey),
+      // A pure creation has nothing whose deletion needs transactional
+      // rollback. Let it use the direct add path instead of cloning the whole
+      // construction session solely to replace an empty set.
+      replaceSurfaceKeys: consumed.length === 0 ? undefined : consumed.map((topology) => topology.surfaceKey),
+      topologySeeds: retained.map((topology) => ({ seed: topology.surfaceKey, surfaceType: topology.surfaceType })),
       heightAt,
     });
 

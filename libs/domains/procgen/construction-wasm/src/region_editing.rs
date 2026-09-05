@@ -14,6 +14,8 @@
 //! What this layer owes that split is the deterministic ordering
 //! [`region_topology`] reports.
 
+use std::collections::{HashSet, VecDeque};
+
 use serde::{Deserialize, Serialize};
 
 use grafting_graph_core::{
@@ -397,6 +399,33 @@ pub struct RegionTopologyDto {
     pub nodes: Vec<RegionNodeDto>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegionBoundsRequest {
+    pub min_x: f32,
+    pub min_z: f32,
+    pub max_x: f32,
+    pub max_z: f32,
+    #[serde(default)]
+    pub seeds: Vec<RegionBoundsSeed>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegionBoundsSeed {
+    pub seed: Vec<String>,
+    pub surface_type: String,
+}
+
+impl RegionBoundsRequest {
+    fn contains(&self, position: [f32; 3]) -> bool {
+        position[0] >= self.min_x
+            && position[0] <= self.max_x
+            && position[2] >= self.min_z
+            && position[2] <= self.max_z
+    }
+}
+
 fn loop_dto(topology: &ContourTopology, loop_: &ContourLoop) -> Result<Vec<RegionEdgeDto>, String> {
     loop_
         .iter()
@@ -472,6 +501,102 @@ pub fn all_region_topologies(
 ) -> Result<Vec<RegionTopologyDto>, String> {
     let mut result = Vec::new();
     for id in topology.region_ids() {
+        if let Some(dto) = region_topology(graph, topology, surfaces, &id)? {
+            result.push(dto);
+        }
+    }
+    Ok(result)
+}
+
+/// Region boundaries near a local edit.
+///
+/// The lookup stays inside Rust and only matching DTOs cross the Wasm
+/// boundary. Seeded edits walk only local same-type neighbors; unseeded
+/// callers retain the full bounds scan. A persistent spatial index can later
+/// replace that fallback without changing the wire contract.
+pub fn region_topologies_in_bounds(
+    graph: &SessionGraph,
+    topology: &ContourTopology,
+    surfaces: &SurfaceRegistry,
+    known_regions: &HashSet<RegionId>,
+    bounds: &RegionBoundsRequest,
+) -> Result<Vec<RegionTopologyDto>, String> {
+    if !bounds.min_x.is_finite()
+        || !bounds.min_z.is_finite()
+        || !bounds.max_x.is_finite()
+        || !bounds.max_z.is_finite()
+        || bounds.min_x > bounds.max_x
+        || bounds.min_z > bounds.max_z
+    {
+        return Err("region topology bounds must be finite and ordered".into());
+    }
+
+    let reaches_bounds = |id: &RegionId| {
+        let Some(region) = topology.region(&id) else {
+            return false;
+        };
+        region
+            .outer_loops()
+            .iter()
+            .chain(region.holes().iter())
+            .flatten()
+            .filter_map(|use_| topology.edge(use_.edge()))
+            .flat_map(|edge| [edge.start_node(), edge.end_node()])
+            .filter_map(|node_id| graph.node(node_id))
+            .any(|node| bounds.contains(*node.data()))
+    };
+
+    let candidates = if bounds.seeds.is_empty() {
+        topology
+            .region_ids()
+            .into_iter()
+            .filter(|id| reaches_bounds(id))
+            .collect::<Vec<_>>()
+    } else {
+        // All footprint-covered faces arrive as seeds. Walk only their local
+        // same-type components instead of materializing each entire terrain
+        // continent merely to discard its far-away members afterwards.
+        let mut local = HashSet::new();
+        let mut queue = VecDeque::new();
+        for seed in &bounds.seeds {
+            let id = region_id_from_wire(&seed.seed)?;
+            let surface_type = SurfaceType::new(&seed.surface_type);
+            let matches = known_regions.contains(&id)
+                && surfaces
+                    .region_surface(&id)
+                    .is_some_and(|surface| surface.surface_type() == &surface_type);
+            if matches && reaches_bounds(&id) && local.insert(id.clone()) {
+                queue.push_back((id, surface_type));
+            }
+        }
+
+        while let Some((current, surface_type)) = queue.pop_front() {
+            let Ok(nodes) = topology.region_nodes(&current) else {
+                continue;
+            };
+            for node_id in &nodes {
+                for candidate in topology.regions_touching_node(node_id) {
+                    if local.contains(&candidate)
+                        || !known_regions.contains(&candidate)
+                        || !reaches_bounds(&candidate)
+                        || !surfaces
+                            .region_surface(&candidate)
+                            .is_some_and(|surface| surface.surface_type() == &surface_type)
+                    {
+                        continue;
+                    }
+                    local.insert(candidate.clone());
+                    queue.push_back((candidate, surface_type.clone()));
+                }
+            }
+        }
+        let mut local = local.into_iter().collect::<Vec<_>>();
+        local.sort_by(|left, right| left.as_str().cmp(right.as_str()));
+        local
+    };
+
+    let mut result = Vec::with_capacity(candidates.len());
+    for id in candidates {
         if let Some(dto) = region_topology(graph, topology, surfaces, &id)? {
             result.push(dto);
         }
@@ -625,6 +750,81 @@ mod tests {
         )
         .unwrap();
         assert!(dto.is_none());
+    }
+
+    #[test]
+    fn topology_bounds_only_serializes_regions_reaching_the_local_extent() {
+        let (graph, topology, surfaces, region) = quad();
+        let known_regions = HashSet::from([region]);
+        let near = region_topologies_in_bounds(
+            &graph,
+            &topology,
+            &surfaces,
+            &known_regions,
+            &RegionBoundsRequest {
+                min_x: -0.1,
+                min_z: -0.1,
+                max_x: 0.1,
+                max_z: 0.1,
+                seeds: Vec::new(),
+            },
+        )
+        .unwrap();
+        assert_eq!(near.len(), 1);
+
+        let seeded = region_topologies_in_bounds(
+            &graph,
+            &topology,
+            &surfaces,
+            &known_regions,
+            &RegionBoundsRequest {
+                min_x: -0.1,
+                min_z: -0.1,
+                max_x: 0.1,
+                max_z: 0.1,
+                seeds: vec![RegionBoundsSeed {
+                    seed: region_id_to_wire(&RegionId::new("quad").unwrap()),
+                    surface_type: "wall".into(),
+                }],
+            },
+        )
+        .unwrap();
+        assert_eq!(seeded.len(), 1, "a matching touched cloud remains local");
+
+        let wrong_cloud = region_topologies_in_bounds(
+            &graph,
+            &topology,
+            &surfaces,
+            &known_regions,
+            &RegionBoundsRequest {
+                min_x: -0.1,
+                min_z: -0.1,
+                max_x: 0.1,
+                max_z: 0.1,
+                seeds: vec![RegionBoundsSeed {
+                    seed: region_id_to_wire(&RegionId::new("quad").unwrap()),
+                    surface_type: "terrain".into(),
+                }],
+            },
+        )
+        .unwrap();
+        assert!(wrong_cloud.is_empty(), "an unrelated type inside the box is not serialized");
+
+        let far = region_topologies_in_bounds(
+            &graph,
+            &topology,
+            &surfaces,
+            &known_regions,
+            &RegionBoundsRequest {
+                min_x: 5.0,
+                min_z: 5.0,
+                max_x: 6.0,
+                max_z: 6.0,
+                seeds: Vec::new(),
+            },
+        )
+        .unwrap();
+        assert!(far.is_empty());
     }
 
     #[test]

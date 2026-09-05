@@ -38,7 +38,10 @@ function runtimeWith(grid, nodePositions = [], regionTopologies = []) {
       };
     },
     getSnapshot: () => ({ map: { nodePositions: new Map(nodePositions) } }),
-    getAllRegionTopologies: () => regionTopologies,
+    getAllRegionTopologies() {
+      throw new Error("a local terrain fill must not serialize the whole map");
+    },
+    getRegionTopologiesInBounds: () => regionTopologies,
   };
 }
 
@@ -154,8 +157,8 @@ test("a generated sheet walks a retained contour on its already-free side", () =
   const runtime = runtimeWith(grid, positions, [{
     surfaceKey: ["retained"],
     outerLoops: [[
-      { edgeId: "t:seg:n9~z:v1", reversed: true, startNodeId: "n9", endNodeId: "z:v1", geometry: { kind: "line" } },
-      { edgeId: "t:seg:n0~z:v1", reversed: true, startNodeId: "z:v1", endNodeId: "n0", geometry: { kind: "line" } },
+      { edgeId: "t:seg:n9~z:v1", reversed: true, startNodeId: "z:v1", endNodeId: "n9", geometry: { kind: "line" } },
+      { edgeId: "t:seg:n0~z:v1", reversed: false, startNodeId: "n0", endNodeId: "z:v1", geometry: { kind: "line" } },
     ]],
     holes: [],
   }]);
@@ -180,6 +183,87 @@ test("a generated sheet walks a retained contour on its already-free side", () =
     .flatMap((region) => region.boundary)
     .find((use) => use.edgeId === "t:seg:n9~z:v1");
   assert.equal(split?.reversed, false, "the fragment takes the side opposite the retained face");
+});
+
+test("a cell on the occupied side of a retained edge is culled instead of becoming a malformed loop", () => {
+  const grid = {
+    vertices: [
+      { x: 0, z: 0, source: 0 },
+      { x: 2, z: 0, source: 1 },
+      { x: 2, z: 2 },
+      { x: 0, z: 2 },
+    ],
+    quads: [[0, 1, 2, 3]],
+    onContour: [],
+    refinementComplete: true,
+  };
+  const retained = {
+    surfaceKey: ["retained"],
+    surfaceType: "terrain",
+    physical: true,
+    nodes: [],
+    outerLoops: [[{
+      edgeId: "t:seg:new~old",
+      reversed: false,
+      startNodeId: "old",
+      endNodeId: "new",
+      geometry: { kind: "line" },
+    }]],
+    holes: [],
+  };
+  const runtime = runtimeWith(grid, [
+    ["old", { position: { x: 0, y: 0, z: 0 } }],
+    ["new", { position: { x: 2, y: 0, z: 0 } }],
+  ], [retained]);
+
+  fillTerrain(runtime, {
+    what: "teste",
+    mint: "m",
+    tableId: "t",
+    causeId: "c",
+    seed: 1,
+    faceSide: 2,
+    surfaceType: "terrain",
+    boundary: [{ points: [{ x: 0, z: 0 }, { x: 2, z: 0 }, { x: 2, z: 2 }, { x: 0, z: 2 }], edges: [] }],
+    holes: [],
+    sources: ["old", "new"],
+    replaceSurfaceKeys: [["replaced"]],
+    heightAt: () => 0,
+  });
+
+  assert.equal(runtime.replacements[0].patch.regions.length, 0, "occupied-side cell never reaches the engine");
+  assert.equal(runtime.replacements[0].patch.nodes.length, 0, "culled cells leave no orphan nodes");
+});
+
+test("a cell touching an edge already used twice is culled before patch replacement", () => {
+  const grid = {
+    vertices: [
+      { x: 0, z: 0, source: 0 },
+      { x: 2, z: 0, source: 1 },
+      { x: 2, z: 2 },
+      { x: 0, z: 2 },
+    ],
+    quads: [[0, 1, 2, 3]],
+    onContour: [],
+    refinementComplete: true,
+  };
+  const use = { edgeId: "t:seg:new~old", reversed: false, startNodeId: "old", endNodeId: "new", geometry: { kind: "line" } };
+  const topologies = ["left", "right"].map((id) => ({
+    surfaceKey: [id], surfaceType: "terrain", physical: true, nodes: [], outerLoops: [[use]], holes: [],
+  }));
+  const runtime = runtimeWith(grid, [
+    ["old", { position: { x: 0, y: 0, z: 0 } }],
+    ["new", { position: { x: 2, y: 0, z: 0 } }],
+  ], topologies);
+
+  fillTerrain(runtime, {
+    what: "teste", mint: "m", tableId: "t", causeId: "c", seed: 1, faceSide: 2,
+    surfaceType: "terrain",
+    boundary: [{ points: [{ x: 0, z: 0 }, { x: 2, z: 0 }, { x: 2, z: 2 }, { x: 0, z: 2 }], edges: [] }],
+    holes: [], sources: ["old", "new"], replaceSurfaceKeys: [["replaced"]], heightAt: () => 0,
+  });
+
+  assert.equal(runtime.replacements[0].patch.regions.length, 0, "a third edge use never reaches the engine");
 });
 
 test("a contour midpoint falls back to splitting when its nearby endpoint is already claimed", () => {

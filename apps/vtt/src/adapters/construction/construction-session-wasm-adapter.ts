@@ -14,6 +14,7 @@ import type {
   ApplyRegionOverlayRequest,
   CloudOutcome,
   CloudRequest,
+  ConstructionTopologyBoundsQuery,
   ConstructionCoverageKind,
   ConstructionCoveredRegion,
   ConstructionEdgeGeometry,
@@ -358,6 +359,14 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     return wire.map(fromWireTopology);
   }
 
+  getRegionTopologiesInBounds(bounds: ConstructionTopologyBoundsQuery): readonly ConstructionRegionTopology[] {
+    const session = this.#require() as ConstructionSession & {
+      region_topologies_in_bounds_json(requestJson: string): string;
+    };
+    const wire = JSON.parse(session.region_topologies_in_bounds_json(JSON.stringify(bounds))) as readonly RegionTopologyWire[];
+    return wire.map(fromWireTopology);
+  }
+
   #regionEdit(responseJson: string): RegionEditOutcome {
     return fromWireOutcome(JSON.parse(responseJson) as RegionEditOutcomeWire);
   }
@@ -458,6 +467,14 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     const wire = JSON.parse(
       this.#require().surface_mesh_json(JSON.stringify({ surfaceKey })),
     ) as readonly SurfaceMeshWire[];
+    return wire.map(toMeshResult);
+  }
+
+  getSurfaceMeshes(surfaceKeys: readonly ConstructionSurfaceKey[]): readonly SurfaceMeshResult[] {
+    const session = this.#require() as ConstructionSession & {
+      surface_meshes_json(requestJson: string): string;
+    };
+    const wire = JSON.parse(session.surface_meshes_json(JSON.stringify({ surfaceKeys }))) as readonly SurfaceMeshWire[];
     return wire.map(toMeshResult);
   }
 

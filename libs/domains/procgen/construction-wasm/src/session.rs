@@ -347,6 +347,20 @@ impl ConstructionSession {
         serialize(&dtos)
     }
 
+    /// Region boundaries intersecting a local XZ extent, serialized once.
+    pub fn region_topologies_in_bounds_json(&self, request_json: &str) -> Result<String, JsValue> {
+        let request: region_editing::RegionBoundsRequest = parse(request_json)?;
+        let dtos = region_editing::region_topologies_in_bounds(
+            &self.graph,
+            &self.topology,
+            &self.surfaces,
+            &self.known_regions,
+            &request,
+        )
+        .map_err(to_js_error)?;
+        serialize(&dtos)
+    }
+
     // ---- Terrain mesh lifecycle ----
 
     // ---- Generate-and-apply ----
@@ -500,6 +514,17 @@ impl ConstructionSession {
         let dtos = mesh::surface_mesh(&self.graph, &self.surfaces, &self.topology, request)
             .map_err(to_js_error)?;
         serialize(&dtos)
+    }
+
+    /// A mutation's known surface meshes through one JSON/Wasm crossing.
+    pub fn surface_meshes_json(&self, request_json: &str) -> Result<String, JsValue> {
+        let request: mesh::SurfaceMeshesRequest = parse(request_json)?;
+        serialize(&mesh::surface_meshes(
+            &self.graph,
+            &self.surfaces,
+            &self.topology,
+            request,
+        ))
     }
 
     // ---- Introspection ----
