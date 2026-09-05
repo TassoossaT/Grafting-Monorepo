@@ -63,40 +63,86 @@ export function changedSpineCloud(snapshot: ConstructionGraphSnapshot, patch: Co
 
 /**
  * Every standing "path" face that belongs to the touched spine cloud.
- * Matched by corridor/operation identity first, node identity second, and
- * geometric proximity as a fallback.
+ * Identified by starting from path regions whose identity or node references
+ * match the touched corridor/operation ids, and walking the topological
+ * connectivity graph of shared nodes across path faces.
  */
 export function standingRegionsForCloud(
   topologies: readonly ConstructionRegionTopology[],
-  cloudPositions: readonly ConstructionPosition[],
+  cloudPositions: readonly ConstructionPosition[] = [],
   corridorIds: ReadonlySet<string> = new Set(),
 ): readonly ConstructionRegionTopology[] {
-  if (corridorIds.size === 0) return [];
-  return topologies.filter((topology) => {
-    if (topology.surfaceType !== "path") return false;
+  if (corridorIds.size === 0 && cloudPositions.length === 0) return [];
+
+  const pathTopologies = topologies.filter((topology) => topology.surfaceType === "path");
+  if (pathTopologies.length === 0) return [];
+
+  // Index path topologies by each node id they reference
+  const topologiesByNodeId = new Map<string, ConstructionRegionTopology[]>();
+  for (const topology of pathTopologies) {
+    for (const node of topology.nodes) {
+      const list = topologiesByNodeId.get(node.id);
+      if (list !== undefined) {
+        list.push(topology);
+      } else {
+        topologiesByNodeId.set(node.id, [topology]);
+      }
+    }
+  }
+
+  // Identify seed topologies directly touched by the corridorIds
+  const seeds = new Set<ConstructionRegionTopology>();
+  for (const topology of pathTopologies) {
     const regionId = topology.surfaceKey[1] ?? "";
+    let matched = false;
     for (const corridorId of corridorIds) {
       if (
         regionId === corridorId ||
         regionId.startsWith(`${corridorId}:`) ||
         regionId.startsWith(`${corridorId}#`)
       ) {
-        return true;
+        matched = true;
+        break;
       }
     }
-    for (const node of topology.nodes) {
-      for (const corridorId of corridorIds) {
-        if (
-          node.id.startsWith(`contour:${corridorId}:`) ||
-          node.id.startsWith(`contour:${corridorId}#`) ||
-          node.id.startsWith(`along:${corridorId}:`) ||
-          node.id.startsWith(`across:${corridorId}:`) ||
-          node.id.startsWith(`${corridorId}:`)
-        ) {
-          return true;
+    if (!matched) {
+      for (const node of topology.nodes) {
+        for (const corridorId of corridorIds) {
+          if (
+            node.id.startsWith(`contour:${corridorId}:`) ||
+            node.id.startsWith(`contour:${corridorId}#`) ||
+            node.id.startsWith(`along:${corridorId}:`) ||
+            node.id.startsWith(`across:${corridorId}:`) ||
+            node.id.startsWith(`${corridorId}:`)
+          ) {
+            matched = true;
+            break;
+          }
+        }
+        if (matched) break;
+      }
+    }
+    if (matched) {
+      seeds.add(topology);
+    }
+  }
+
+  // BFS across shared nodes to find the entire connected component of path faces
+  const visited = new Set<ConstructionRegionTopology>(seeds);
+  const queue: ConstructionRegionTopology[] = [...seeds];
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    for (const node of current.nodes) {
+      const neighbors = topologiesByNodeId.get(node.id) ?? [];
+      for (const neighbor of neighbors) {
+        if (!visited.has(neighbor)) {
+          visited.add(neighbor);
+          queue.push(neighbor);
         }
       }
     }
-    return false;
-  });
+  }
+
+  return [...visited];
 }

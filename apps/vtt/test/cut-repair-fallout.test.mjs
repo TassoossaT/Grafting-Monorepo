@@ -100,3 +100,21 @@ test("only the painter's own type is handed over", () => {
 test("a type with no faces on the table hands over nothing, rather than failing", () => {
   assert.deepEqual(paintedNodesOf(createRoadGraph(), "wall"), { paintedNodes: [], paintedLoops: [] });
 });
+
+test("paintedNodesOf scopes to bounds when getRegionTopologiesInBounds is available", () => {
+  const base = createRoadGraph();
+  let receivedBounds;
+  const runtime = {
+    ...base,
+    getRegionTopologiesInBounds: (bounds) => {
+      receivedBounds = bounds;
+      // Return only the first band
+      return [base.getAllRegionTopologies()[0]];
+    },
+  };
+  const queryBounds = { minX: -5, maxX: 5, minZ: -5, maxZ: 5 };
+  const { paintedNodes } = paintedNodesOf(runtime, "path", queryBounds);
+  assert.deepEqual(receivedBounds, queryBounds);
+  assert.equal(paintedNodes.length, 4, "scoped to single band returned by getRegionTopologiesInBounds");
+});
+
