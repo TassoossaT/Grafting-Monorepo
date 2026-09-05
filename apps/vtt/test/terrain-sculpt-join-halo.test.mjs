@@ -58,10 +58,44 @@ function paramsWith(joinHalo) {
   };
 }
 
+/** Even-odd point-in-ring test, XZ -- a minimal stand-in for the engine's own. */
+function pointInRing(ring, x, z) {
+  let inside = false;
+  for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index, index += 1) {
+    const [ax, az] = ring[index];
+    const [bx, bz] = ring[previous];
+    if (az > z !== bz > z && x < ((bx - ax) * (z - az)) / (bz - az) + ax) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * A footprint query answered from the same fixtures `getRegionTopologiesInBounds`
+ * serves, rather than hard-coded empty -- `terrain-sculpt-tool` now seeds its
+ * neighbourhood query from this, so a fixture where it always reports nothing
+ * would make every stroke look seedless and hide exactly the bug these tests
+ * guard against.
+ */
+function footprintCoverageOf(topologies, ring) {
+  return topologies
+    .filter((topology) => topology.nodes.some((node) => pointInRing(ring, node.position.x, node.position.z)))
+    .map((topology) => ({
+      surfaceKey: topology.surfaceKey,
+      surfaceType: topology.surfaceType,
+      physical: true,
+      // Never "centroid" here: these fixtures exist to exercise the seam/halo
+      // logic, not the separate raise-on-self-overlap path, which only acts
+      // on a "centroid" coverage.
+      coverage: "overlap",
+      centroid: topology.nodes[0].position,
+      nodeIds: topology.nodes.map((node) => node.id),
+    }));
+}
+
 function buildCtx(topologies, capture) {
   return {
     runtime: {
-      getFootprintCoverage: () => [],
+      getFootprintCoverage: (ring) => footprintCoverageOf(topologies, ring),
       getRegionTopologiesInBounds: () => topologies,
       generateHeightmap: (columns, rows) => new Float32Array(columns * rows),
       generateIrregularQuadGrid: (request) => {
@@ -180,6 +214,26 @@ test("with nothing standing nearby, joinHalo never asks the generator for ground
       `boundary point at distance ${distance} from the click reaches past brushRadius 4 -- generated beyond the preview`,
     );
   }
+});
+
+test("a cloud only inside the wider bounds box, never inside the halo itself, is left out entirely", () => {
+  // x 9-11: outside probeArea's own radius (brushRadius 4 + faceSize 2 *
+  // joinHalo 2 = 8) by a good margin, but inside the box
+  // `terrainStandingAround` queries once its own `faceSize * 2` padding is
+  // added on top (up to x 12). Nothing stands under the brush itself on this
+  // fresh stroke, so there is nothing this cloud could ever be reached from.
+  const UNRELATED_CLOUD = [
+    { id: "u0", x: 9, z: -1 },
+    { id: "u1", x: 11, z: -1 },
+    { id: "u2", x: 11, z: 1 },
+    { id: "u3", x: 9, z: 1 },
+  ];
+  const capture = {};
+  const ctx = buildCtx([squareTopology(["unrelated"], "terrain", UNRELATED_CLOUD)], capture);
+  terrainSculptTool.onPointerUp(ctx, clickAtOrigin(), paramsWith(2));
+  const [{ boundary, holes }] = capture.gridRequests;
+  assert.equal(boundary.length, 1, "the unrelated cloud is not folded into the fill boundary");
+  assert.equal(holes.length, 0, "nor carved into it as a hole -- it was never part of this stroke");
 });
 
 test("low irregularity scales the face size up past its nominal value", () => {

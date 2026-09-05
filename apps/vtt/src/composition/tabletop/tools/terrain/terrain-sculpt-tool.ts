@@ -446,8 +446,19 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     // outside that outline, and the fill stops at that outline -- so
     // consuming it would leave a gap exactly as wide as the part that stuck
     // out. Those stay, and their contour is what the new ground meets.
+    // Seeded with what the *halo* covers, not just the brush's own footprint
+    // (`covered`, above). `joinHalo`'s entire point is reaching ground the
+    // brush itself never overlaps, so when it is the only thing nearby,
+    // `covered` is empty -- and an empty seed list is what sends
+    // `terrainStandingAround` looking at every region in the box, joinHalo's
+    // intended neighbour included but also anything else that happens to
+    // share the box without sharing so much as a node with this stroke.
+    // `probeArea` already is `swept` when there is no halo, so this only
+    // costs a second engine crossing while `joinHalo` is actually widening
+    // the reach.
     const probeExtent = boundsOf(probeArea);
-    const standing = terrainStandingAround(ctx.runtime, covered, probeExtent, faceSize * 2);
+    const haloCovered = params.joinHalo > 0 ? coveredByStroke(ctx, probeArea) : covered;
+    const standing = terrainStandingAround(ctx.runtime, haloCovered, probeExtent, faceSize * 2);
     const consumed = reclaimedTopologies(standing, params.targetSurface, swept, probeArea);
 
     // The generator is never asked for ground beyond the brush's own outline
