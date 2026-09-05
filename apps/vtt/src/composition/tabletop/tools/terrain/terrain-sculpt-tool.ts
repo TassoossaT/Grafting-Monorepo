@@ -231,20 +231,20 @@ function footprintRingOf(topology: ConstructionRegionTopology): Ring | undefined
 }
 
 /**
- * The standing ground `joinHalo` reclaims: fully inside `probeArea`, matching
- * the painted type, *and* reachable by a chain of touching faces that ends
- * at one the brush itself actually overlaps.
+ * The standing ground `joinHalo` reclaims -- deletes and regenerates as part
+ * of this same fill, rather than merely meeting: fully inside `probeArea`,
+ * matching the painted type, *and* reachable by a chain of touching faces
+ * that ends at one the brush itself actually overlaps.
  *
- * That last part is not optional. A face can sit entirely inside the search
- * radius while every path back to the brush runs through some larger
- * neighbour that itself pokes outside it -- `probeArea` is a distance, not a
- * connectivity guarantee, and the two disagree exactly there. Reclaiming
- * that face anyway would union a piece into `fillArea` with no shared edge
- * to the brush's own shape: a second, disconnected ring in what
- * `outlineConstraints` hands the generator as "the boundary", floating apart
- * from the first. That is a real hole waiting to happen, not a cosmetic
- * oddity -- ground the CDT is asked to bound by two separate loops with
- * nothing between them, one of which the brush never actually reaches.
+ * That last part is a deliberate restraint, not a correctness requirement --
+ * `fillArea`'s own union folds in every standing neighbour regardless (see
+ * its comment), and a retained neighbour's matching hole ring cancels it back
+ * out wherever it lands, connected or not. What a broken chain buys is
+ * scope: reclaiming, and so deleting and rebuilding, a face with no real
+ * relationship to anything else this stroke touches is pure waste -- a
+ * pointless separate patch generated in the same call for no benefit anyone
+ * asked for. Requiring the chain keeps `joinHalo`'s reach proportional to
+ * what the brush is actually doing.
  *
  * Walking the touching chain here, in the already-local `standing` set,
  * costs nothing new: it is the same neighbourhood query already paid for.
@@ -379,18 +379,36 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     const consumed = reclaimedTopologies(standing, params.targetSurface, swept, probeArea);
 
     // The generator is never asked for ground beyond the brush's own outline
-    // plus the exact shape of what `consumed` just reclaimed -- unioned in by
-    // its real footprint, not by the halo distance that found it. A face just
-    // outside the paint stroke is real standing ground, so folding its own
-    // shape in costs the stroke nothing it did not already own; empty space
-    // past the brush is never included, whatever `joinHalo` is set to.
-    const consumedFootprints = consumed
-      .map(footprintRingOf)
-      .filter((ring): ring is Ring => ring !== undefined);
+    // plus the real footprint of every standing face nearby -- reclaimed or
+    // not -- unioned in, never by the halo distance that found them. Empty
+    // space past the brush is never included, whatever `joinHalo` is set to.
+    //
+    // **All of `standing`, not just `consumed`.** A face this stroke reclaims
+    // sits right next to faces it does not -- the retained layer just past
+    // the seam -- and a shared edge between the two is a real edge in the
+    // graph today. Union in only the reclaimed side and that edge is
+    // described twice: once as part of *this* outer boundary (the reclaimed
+    // face's own far side, now on the union's silhouette), and once as part
+    // of the retained neighbour's own outward perimeter, which becomes a
+    // hole below. The same segment as both "the edge of the ground" and "the
+    // edge of a hole in it" is a contradiction the CDT resolves by treating
+    // it as a self-cancelling sliver of zero ground -- a real hole, exactly
+    // along the seam this stroke just reclaimed. Reported on the table right
+    // after the fix that introduced the union in the first place.
+    //
+    // Folding retained ground into this union too does not add it to the
+    // final mesh -- `holeRings` below still carves it back out, exactly as
+    // it always has. It only makes the *outer* silhouette self-consistent
+    // with the holes it is about to carry: union cancels an edge shared by
+    // two of its own inputs, so the reclaim/retain seam becomes an internal
+    // edge that disappears from the boundary entirely, and the hole ring is
+    // once again the sole authority for where it runs -- the same contract
+    // the swept/retained seam has always kept.
+    const standingFootprints = standing.map(footprintRingOf).filter((ring): ring is Ring => ring !== undefined);
     const fillArea: MultiPolygon =
-      consumedFootprints.length === 0
+      standingFootprints.length === 0
         ? swept
-        : polygonClipping.union(swept, ...consumedFootprints.map((ring): Polygon => [ring]));
+        : polygonClipping.union(swept, ...standingFootprints.map((ring): Polygon => [ring]));
 
     // What the stroke (now widened by whatever it just reclaimed) asks to
     // fill, and what is already standing in it. The second becomes holes:

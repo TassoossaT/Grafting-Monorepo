@@ -122,22 +122,19 @@ test("a mismatched surface type at the seam is never reclaimed, whatever the hal
   assert.equal(capture.replacedSurfaceKeys, undefined);
 });
 
-test("a face inside the search radius but disconnected from the brush is left retained, not unioned as a floating island", () => {
-  // A far quad sits entirely inside probeArea (radius 6) but nowhere near
-  // swept (radius 4) -- and, critically, nothing bridges it back: it shares
-  // no node with SEAM_QUAD or with anything touching swept. Reclaiming it
-  // anyway would hand outlineConstraints a second, disconnected outer ring,
-  // which is exactly the malformed boundary that produced real holes in the
-  // generated mesh once the boundary-outside-brush bug was fixed by simply
-  // widening the search radius without also requiring a touching chain.
-  // At 90 degrees from SEAM_QUAD, distance 4.9-5.1: outside swept (radius 4)
-  // but comfortably inside probeArea's worst-case reach (radius 6, chord 4,
-  // ten sides -- nothing on it sits nearer than 6 * cos(pi/10) ~= 5.7).
+test("a face inside the search radius but disconnected from the brush is left retained, not reclaimed", () => {
+  // A face far from everything -- shares no node with SEAM_QUAD or with
+  // anything touching swept, so it can never be reclaimed. A normal
+  // faceSize-scale square (side 2), not the sub-cell sliver a tighter one
+  // would be: `outlineConstraints`'s own weld (faceSize * 0.5 = 1 here)
+  // exists to drop slivers a real stroke's outline leaves behind, and would
+  // just as happily collapse a test fixture smaller than that -- this one is
+  // sized to survive it, the same as real terrain would.
   const FAR_ISLAND = [
-    { id: "f0", x: -0.1, z: 4.9 },
-    { id: "f1", x: 0.1, z: 4.9 },
-    { id: "f2", x: 0.1, z: 5.1 },
-    { id: "f3", x: -0.1, z: 5.1 },
+    { id: "f0", x: 9, z: -1 },
+    { id: "f1", x: 11, z: -1 },
+    { id: "f2", x: 11, z: 1 },
+    { id: "f3", x: 9, z: 1 },
   ];
   const capture = {};
   const ctx = buildCtx(
@@ -146,8 +143,26 @@ test("a face inside the search radius but disconnected from the brush is left re
   );
   terrainSculptTool.onPointerUp(ctx, clickAtOrigin(), paramsWith(1));
   assert.deepEqual(capture.replacedSurfaceKeys, [["seam"]], "only the touching face is reclaimed, not the far island");
-  const [{ boundary }] = capture.gridRequests;
-  assert.equal(boundary.length, 1, "one connected outer ring, never a disconnected second one");
+
+  // The far island is folded into the outer boundary too (every standing
+  // face nearby is, so a reclaimed face's own edges never coincide with a
+  // retained neighbour's hole ring -- see the union's own comment). Left
+  // there alone it would add real new ground the brush never touched; what
+  // makes that safe is that its own footprint is *also* carved back out as a
+  // hole, at the exact same four corners, so the two cancel to net zero.
+  const [{ boundary, holes }] = capture.gridRequests;
+  const asKeySet = (ring) => new Set(ring.map((point) => `${point.x.toFixed(6)}:${point.z.toFixed(6)}`));
+  const islandKeys = asKeySet(FAR_ISLAND.map((corner) => ({ x: corner.x, z: corner.z })));
+  const boundaryHasIsland = boundary.some((ring) => {
+    const keys = asKeySet(ring);
+    return [...islandKeys].every((key) => keys.has(key));
+  });
+  const holeHasIsland = holes.some((ring) => {
+    const keys = asKeySet(ring);
+    return [...islandKeys].every((key) => keys.has(key));
+  });
+  assert.ok(boundaryHasIsland, "the island's own footprint is folded into the outer boundary");
+  assert.ok(holeHasIsland, "and carved back out as a hole at the same corners, cancelling it to no net ground");
 });
 
 test("with nothing standing nearby, joinHalo never asks the generator for ground beyond the brush", () => {
