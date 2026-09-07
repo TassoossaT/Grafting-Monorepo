@@ -148,6 +148,56 @@ export function distanceAndElevationOnPath(
 }
 
 /**
+ * Calculates the 3D displacement vector for a point along a surface normal,
+ * supporting multi-directional cavity carving and hill extrusion.
+ */
+export function calculateProfileDisplacement(
+  point: { readonly x: number; readonly z: number },
+  profile: CutProfile,
+  centerOrPath:
+    | { readonly x: number; readonly z: number }
+    | readonly { readonly x: number; readonly y?: number; readonly z: number }[],
+  radius: number,
+  normal: { readonly x: number; readonly y: number; readonly z: number } = { x: 0, y: 1, z: 0 },
+): { readonly dx: number; readonly dy: number; readonly dz: number } {
+  if (radius <= 1e-6) return { dx: 0, dy: 0, dz: 0 };
+  if (profile.kind === "regenerate" || profile.kind === "hole") return { dx: 0, dy: 0, dz: 0 };
+
+  let dist: number;
+  if (Array.isArray(centerOrPath)) {
+    const path = centerOrPath as readonly { readonly x: number; readonly y?: number; readonly z: number }[];
+    if (path.length === 0) return { dx: 0, dy: 0, dz: 0 };
+    const { distance } = distanceAndElevationOnPath(point.x, point.z, path);
+    dist = distance;
+  } else {
+    const center = centerOrPath as { readonly x: number; readonly z: number };
+    const dx = point.x - center.x;
+    const dz = point.z - center.z;
+    dist = Math.hypot(dx, dz);
+  }
+
+  if (dist >= radius) return { dx: 0, dy: 0, dz: 0 };
+
+  const normalized = dist / radius;
+  const rawFalloff = (Math.cos(normalized * Math.PI) + 1) / 2;
+  const curvature = profile.curvature ?? 1;
+  const falloff = curvature === 1 ? rawFalloff : Math.pow(rawFalloff, Math.max(0.1, curvature));
+
+  const magnitude =
+    profile.kind === "concave"
+      ? -profile.depth * falloff
+      : profile.kind === "convex"
+        ? profile.height * falloff
+        : 0;
+
+  return {
+    dx: (magnitude * normal.x) || 0,
+    dy: (magnitude * normal.y) || 0,
+    dz: (magnitude * normal.z) || 0,
+  };
+}
+
+/**
  * Calculates the target elevation for a point given the base height, the profile,
  * a center point or polyline stroke path, and radius.
  *
@@ -163,36 +213,6 @@ export function calculateProfileHeight(
     | readonly { readonly x: number; readonly y?: number; readonly z: number }[],
   radius: number,
 ): number {
-  if (radius <= 1e-6) return baseHeight;
-  if (profile.kind === "regenerate" || profile.kind === "hole") return baseHeight;
-
-  let dist: number;
-  if (Array.isArray(centerOrPath)) {
-    const path = centerOrPath as readonly { readonly x: number; readonly y?: number; readonly z: number }[];
-    if (path.length === 0) return baseHeight;
-    const { distance } = distanceAndElevationOnPath(point.x, point.z, path);
-    dist = distance;
-  } else {
-    const center = centerOrPath as { readonly x: number; readonly z: number };
-    const dx = point.x - center.x;
-    const dz = point.z - center.z;
-    dist = Math.hypot(dx, dz);
-  }
-
-  if (dist >= radius) return baseHeight;
-
-  const normalized = dist / radius;
-  // Cosine bell: 1 at center/spine, 0 at perimeter, horizontal tangent at both ends
-  const rawFalloff = (Math.cos(normalized * Math.PI) + 1) / 2;
-  const curvature = profile.curvature ?? 1;
-  const falloff = curvature === 1 ? rawFalloff : Math.pow(rawFalloff, Math.max(0.1, curvature));
-
-  if (profile.kind === "concave") {
-    return baseHeight - profile.depth * falloff;
-  }
-  if (profile.kind === "convex") {
-    return baseHeight + profile.height * falloff;
-  }
-
-  return baseHeight;
+  const disp = calculateProfileDisplacement(point, profile, centerOrPath, radius, { x: 0, y: 1, z: 0 });
+  return baseHeight + disp.dy;
 }

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  calculateProfileDisplacement,
   calculateProfileHeight,
   distanceSqToSegment2D,
   distanceAndElevationOnPath,
@@ -396,4 +397,60 @@ test("executeTerrainCut: matches terrain variants (e.g. terrain-grass) and prese
   assert.deepEqual(replacementRequest.sourceSurfaceKeys, [["terrain-grass", "f1"]]);
   assert.equal(replacementRequest.patch.regions[0].surfaceType, "terrain-grass");
 });
+
+test("calculateProfileDisplacement: deforms along surface normal in all directions", () => {
+  const center = { x: 0, z: 0 };
+  const radius = 5;
+
+  // 1. Upward normal (flat floor):
+  const upDisp = calculateProfileDisplacement(
+    { x: 0, z: 0 },
+    { kind: "convex", height: 4 },
+    center,
+    radius,
+    { x: 0, y: 1, z: 0 },
+  );
+  assert.equal(upDisp.dx, 0);
+  assert.ok(Math.abs(upDisp.dy - 4) < 1e-6);
+  assert.equal(upDisp.dz, 0);
+
+  // 2. Lateral normal (steep wall along X):
+  const lateralDisp = calculateProfileDisplacement(
+    { x: 0, z: 0 },
+    { kind: "concave", depth: 3 },
+    center,
+    radius,
+    { x: 1, y: 0, z: 0 },
+  );
+  // Concave along +X moves in -X (carving cavity into the wall):
+  assert.ok(Math.abs(lateralDisp.dx - -3) < 1e-6);
+  assert.equal(lateralDisp.dy, 0);
+  assert.equal(lateralDisp.dz, 0);
+
+  // 3. Angled slope normal (45 deg):
+  const slopeNormal = { x: 0.6, y: 0.8, z: 0 };
+  const slopeDisp = calculateProfileDisplacement(
+    { x: 0, z: 0 },
+    { kind: "convex", height: 5 },
+    center,
+    radius,
+    slopeNormal,
+  );
+  assert.ok(Math.abs(slopeDisp.dx - 3.0) < 1e-6);
+  assert.ok(Math.abs(slopeDisp.dy - 4.0) < 1e-6);
+  assert.equal(slopeDisp.dz, 0);
+
+  // 4. Perimeter zero-seam:
+  const perimeterDisp = calculateProfileDisplacement(
+    { x: 5, z: 0 },
+    { kind: "convex", height: 5 },
+    center,
+    radius,
+    slopeNormal,
+  );
+  assert.equal(perimeterDisp.dx, 0);
+  assert.equal(perimeterDisp.dy, 0);
+  assert.equal(perimeterDisp.dz, 0);
+});
+
 

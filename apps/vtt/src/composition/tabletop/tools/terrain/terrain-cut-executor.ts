@@ -12,6 +12,7 @@ import type {
   StructuralCutArea,
 } from "@/features/edit-construction";
 import {
+  calculateProfileDisplacement,
   calculateProfileHeight,
   distanceAndElevationOnPath,
 } from "../../../../features/edit-construction/index.ts";
@@ -386,7 +387,23 @@ export function executeTerrainCut(
   const strokePath = request.area.path;
   const centerOrPath = strokePath && strokePath.length > 0 ? strokePath : center;
 
-  const heightAt = (point: { readonly x: number; readonly z: number }): number => {
+  const normalAt = (point: { readonly x: number; readonly z: number }): { readonly x: number; readonly y: number; readonly z: number } => {
+    const eps = Math.max(0.15, effectiveFaceSide * 0.15);
+    const hCenter = localKept.at(point) ?? wideKept.at(point);
+    if (hCenter === undefined) return { x: 0, y: 1, z: 0 };
+    const hXPlus = localKept.at({ x: point.x + eps, z: point.z }) ?? wideKept.at({ x: point.x + eps, z: point.z }) ?? hCenter;
+    const hXMinus = localKept.at({ x: point.x - eps, z: point.z }) ?? wideKept.at({ x: point.x - eps, z: point.z }) ?? hCenter;
+    const hZPlus = localKept.at({ x: point.x, z: point.z + eps }) ?? wideKept.at({ x: point.x, z: point.z + eps }) ?? hCenter;
+    const hZMinus = localKept.at({ x: point.x, z: point.z - eps }) ?? wideKept.at({ x: point.x, z: point.z - eps }) ?? hCenter;
+
+    const gx = (hXPlus - hXMinus) / (2 * eps);
+    const gz = (hZPlus - hZMinus) / (2 * eps);
+
+    const len = Math.hypot(-gx, 1, -gz);
+    return len > 1e-6 ? { x: -gx / len, y: 1 / len, z: -gz / len } : { x: 0, y: 1, z: 0 };
+  };
+
+  const sampleBase = (point: { readonly x: number; readonly z: number }): number => {
     let base = localKept.at(point);
     if (base === undefined) {
       base = wideKept.at(point);
@@ -403,7 +420,23 @@ export function executeTerrainCut(
         base += request.noiseAt(point);
       }
     }
+    return base;
+  };
+
+  const heightAt = (point: { readonly x: number; readonly z: number }): number => {
+    const base = sampleBase(point);
     return calculateProfileHeight(point, base, request.profile, centerOrPath, radius);
+  };
+
+  const positionAt = (point: { readonly x: number; readonly z: number }): ConstructionPosition => {
+    const base = sampleBase(point);
+    const norm = normalAt(point);
+    const disp = calculateProfileDisplacement(point, request.profile, centerOrPath, radius, norm);
+    return {
+      x: point.x + disp.dx,
+      y: base + disp.dy,
+      z: point.z + disp.dz,
+    };
   };
 
   const filled = fillTerrain(runtime, {
@@ -424,6 +457,7 @@ export function executeTerrainCut(
     replaceSurfaceKeys: affected.length > 0 ? affected.map((f) => f.surfaceKey) : undefined,
     topologySeeds: retained.map((topology) => ({ seed: topology.surfaceKey, surfaceType: topology.surfaceType })),
     heightAt,
+    positionAt,
   });
 
   return {

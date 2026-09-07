@@ -101,6 +101,14 @@ export interface TerrainFillRequest {
    */
   readonly heightAt: (point: { readonly x: number; readonly z: number }, bounds: FillBounds) => number;
   /**
+   * Optional full 3D positioning/displacement for interior nodes.
+   * If provided, overrides `{ x: point.x, y: heightAt(point), z: point.z }`.
+   */
+  readonly positionAt?: (
+    point: { readonly x: number; readonly z: number },
+    bounds: FillBounds,
+  ) => ConstructionPosition;
+  /**
    * Called once the generator has answered and before anything is registered.
    *
    * This is where a caller that is *replacing* ground takes the old ground
@@ -371,7 +379,11 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     // of one missing cell.
     nodes.push({
       id,
-      position: adoptionPositions.get(vertex) ?? { x: point.x, y: request.heightAt(point, bounds), z: point.z },
+      position:
+        adoptionPositions.get(vertex) ??
+        (request.positionAt
+          ? request.positionAt(point, bounds)
+          : { x: point.x, y: request.heightAt(point, bounds), z: point.z }),
     });
   }
 
