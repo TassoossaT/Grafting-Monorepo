@@ -64,6 +64,11 @@ export interface StructuralCutRequest {
   readonly faceSide?: number;
   readonly seed?: number;
   readonly irregularity?: number;
+  /** Pre-computed covered regions from tool gesture or brush. */
+  readonly coveredRegions?: readonly {
+    readonly surfaceKey: readonly string[];
+    readonly surfaceType: string;
+  }[];
   /** Optional noise function for base terrain when expanding onto empty ground. */
   readonly noiseAt?: (point: { readonly x: number; readonly z: number }) => number;
 }

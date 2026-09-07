@@ -197,10 +197,9 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     const isAdd = mode === "add" || mode === "elevate";
     const isDig = mode === "dig" || mode === "lower";
     const isFlatten = mode === "flatten";
-    const elevationStep = params.elevationStep ?? 0.5;
-    const targetSurface = params.targetSurface ?? "terrain";
-
+    const elevationStep = params.elevationStep ?? 2.0;
     const covered = coveredByStroke(ctx, swept);
+    const targetSurface = covered[0]?.surfaceType ?? params.targetSurface ?? "terrain";
 
     if (isFlatten) {
       const raised =
@@ -233,6 +232,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
           path: strokePoints,
           radius: brushRadius,
         },
+        coveredRegions: covered,
         targetSurfaceType: targetSurface,
         profile: { kind: "concave", depth: elevationStep },
         causeId,
@@ -282,6 +282,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
           path: strokePoints,
           radius: brushRadius,
         },
+        coveredRegions: covered,
         targetSurfaceType: targetSurface,
         profile: { kind: "convex", height: elevationStep },
         causeId,

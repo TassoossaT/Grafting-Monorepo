@@ -263,15 +263,26 @@ export function executeTerrainCut(
   // Ask runtime what surfaces are covered by outline / footprint
   const coveredOutline = outline.length >= 3 ? outline : outlineMultiPolygon[0]?.[0] ?? [];
   const covered: readonly ConstructionCoveredRegion[] =
-    coveredOutline.length >= 3 &&
+    (request.coveredRegions as readonly ConstructionCoveredRegion[] | undefined) ??
+    (coveredOutline.length >= 3 &&
     typeof (runtime as unknown as { getFootprintCoverage?: (outline: readonly (readonly [number, number])[]) => readonly ConstructionCoveredRegion[] }).getFootprintCoverage === "function"
       ? (runtime as unknown as { getFootprintCoverage: (outline: readonly (readonly [number, number])[]) => readonly ConstructionCoveredRegion[] }).getFootprintCoverage(coveredOutline)
-      : [];
+      : []);
 
   const standing = terrainStandingAround(runtime, covered, extent, effectiveFaceSide * 2);
 
+  const isTerrainMatch = (st: string, target: string): boolean => {
+    if (st === target) return true;
+    if (st.startsWith("terrain") && target.startsWith("terrain")) return true;
+    return false;
+  };
+
+  const coveredKeys = new Set(covered.map((c) => c.surfaceKey.join(" ")));
+
   const affected = standing.filter(
-    (topology) => topology.surfaceType === request.targetSurfaceType && faceIntersectsArea(topology, request.area, coveredOutline),
+    (topology) =>
+      isTerrainMatch(topology.surfaceType, request.targetSurfaceType) &&
+      (coveredKeys.has(topology.surfaceKey.join(" ")) || faceIntersectsArea(topology, request.area, coveredOutline)),
   );
   const affectedKeys = new Set(affected.map((t) => t.surfaceKey.join(" ")));
   const retained = standing.filter((t) => !affectedKeys.has(t.surfaceKey.join(" ")));
@@ -367,14 +378,19 @@ export function executeTerrainCut(
   const radius = request.area.radius ?? extentRadius;
 
   const standingNodes = standing.flatMap((topology) => topology.nodes.map((node) => node.position));
-  const reach = Math.max(effectiveFaceSide * 3, radius);
-  const kept = heightFieldOf(standingNodes, reach);
+  const localReach = effectiveFaceSide * 2.0;
+  const wideReach = Math.max(effectiveFaceSide * 3, radius);
+  const localKept = heightFieldOf(standingNodes, localReach);
+  const wideKept = heightFieldOf(standingNodes, wideReach);
 
   const strokePath = request.area.path;
   const centerOrPath = strokePath && strokePath.length > 0 ? strokePath : center;
 
   const heightAt = (point: { readonly x: number; readonly z: number }): number => {
-    let base = kept.at(point);
+    let base = localKept.at(point);
+    if (base === undefined) {
+      base = wideKept.at(point);
+    }
     if (base === undefined) {
       if (strokePath && strokePath.length > 0) {
         const { pathY } = distanceAndElevationOnPath(point.x, point.z, strokePath);
@@ -398,7 +414,10 @@ export function executeTerrainCut(
     seed: request.seed ?? 1,
     faceSide: effectiveFaceSide,
     relaxStrength: request.irregularity ?? 0.7,
-    surfaceType: request.targetSurfaceType,
+    surfaceType:
+      affected.length > 0
+        ? affected[0]!.surfaceType
+        : (retained.length > 0 ? retained[0]!.surfaceType : request.targetSurfaceType),
     boundary: boundaryRings,
     holes: holeRings,
     sources: perimeters.sources,

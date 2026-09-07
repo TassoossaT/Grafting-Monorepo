@@ -237,7 +237,7 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
     faceSize: 2,
     brushRadius: 6,
     mode: "add",
-    elevationStep: 0.5,
+    elevationStep: 2.0,
     irregularity: 0.7,
     heightScale: 1.5,
     noiseScale: 0.15,

@@ -201,25 +201,37 @@ function TowerStampFields(props: {
   );
 }
 
+const HEIGHT_PRESETS = [0.5, 1, 2, 5, 10] as const;
+
 function TerrainSculptFields(props: {
   readonly params: TerrainSculptParams;
   readonly onChange: (next: TerrainSculptParams) => void;
 }) {
   const { params, onChange } = props;
   const currentMode = params.mode ?? "add";
+  const isDig = currentMode === "dig" || currentMode === "lower";
+  const isAdd = currentMode === "add" || currentMode === "elevate";
+  const elevationStep = params.elevationStep ?? 2.0;
+
+  const elevationLabel = isAdd
+    ? "Incremento de altura (+m)"
+    : isDig
+      ? "Profundidade do corte (-m)"
+      : "Intensidade do nivelamento";
+
   return (
     <div style={{ display: "grid", gap: "0.6rem" }}>
       <div className="gm-material-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
         <SelectableChip
           label="Adicionar (+)"
           swatchColor="#22c55e"
-          selected={currentMode === "add" || currentMode === "elevate"}
+          selected={isAdd}
           onSelect={() => onChange({ ...params, mode: "add" })}
         />
         <SelectableChip
           label="Cavar (-)"
           swatchColor="#ef4444"
-          selected={currentMode === "dig" || currentMode === "lower"}
+          selected={isDig}
           onSelect={() => onChange({ ...params, mode: "dig" })}
         />
         <SelectableChip
@@ -229,13 +241,29 @@ function TerrainSculptFields(props: {
           onSelect={() => onChange({ ...params, mode: "flatten" })}
         />
       </div>
-      {sliderRow("Alcance da pincelada", params.brushRadius, 1.5, 15, 0.5, (brushRadius) =>
+      {sliderRow("Alcance da pincelada", params.brushRadius, 1.5, 20, 0.5, (brushRadius) =>
         onChange({ ...params, brushRadius, faceSize: deriveFaceSize(brushRadius) }),
       )}
-      {sliderRow("Intensidade do relevo", params.elevationStep ?? 0.5, 0.1, 10.0, 0.1, (elevationStep) =>
-        onChange({ ...params, elevationStep }),
+      {sliderRow(elevationLabel, elevationStep, 0.2, 20.0, 0.2, (step) =>
+        onChange({ ...params, elevationStep: step }),
       )}
-      {sliderRow("Altura inicial", params.heightScale, 0, 5, 0.25, (heightScale) =>
+      <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", alignItems: "center" }}>
+        <span style={{ fontSize: "0.72rem", opacity: 0.7, marginRight: "0.15rem" }}>Atalhos:</span>
+        {HEIGHT_PRESETS.map((preset) => {
+          const prefix = isDig ? "-" : "+";
+          const label = `${prefix}${preset}m`;
+          const isSelected = Math.abs(elevationStep - preset) < 0.05;
+          return (
+            <SelectableChip
+              key={preset}
+              label={label}
+              selected={isSelected}
+              onSelect={() => onChange({ ...params, elevationStep: preset })}
+            />
+          );
+        })}
+      </div>
+      {sliderRow("Rugosidade do chão novo (ruído)", params.heightScale, 0, 5, 0.25, (heightScale) =>
         onChange({ ...params, heightScale }),
       )}
       {sliderRow("Suavidade do relevo", params.noiseScale, 0.02, 0.4, 0.01, (noiseScale) =>

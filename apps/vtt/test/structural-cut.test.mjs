@@ -317,3 +317,83 @@ test("calculateProfileHeight: successive strokes cumulatively elevate to form hi
   assert.ok(Math.abs(height - 7.0) < 1e-6, `expected 7.0, got ${height}`);
 });
 
+test("executeTerrainCut: matches terrain variants (e.g. terrain-grass) and preserves surfaceType in patch", () => {
+  const at = {
+    n0: { x: 0, y: 2, z: 0 },
+    n1: { x: 4, y: 2, z: 0 },
+    n2: { x: 4, y: 2, z: 4 },
+    n3: { x: 0, y: 2, z: 4 },
+  };
+
+  const grassFace = {
+    surfaceKey: ["terrain-grass", "f1"],
+    surfaceType: "terrain-grass",
+    physical: true,
+    outerLoops: [
+      [
+        { edgeId: "e:n0~n1", reversed: false, startNodeId: "n0", endNodeId: "n1", geometry: { kind: "line" } },
+        { edgeId: "e:n1~n2", reversed: false, startNodeId: "n1", endNodeId: "n2", geometry: { kind: "line" } },
+        { edgeId: "e:n2~n3", reversed: false, startNodeId: "n2", endNodeId: "n3", geometry: { kind: "line" } },
+        { edgeId: "e:n3~n0", reversed: false, startNodeId: "n3", endNodeId: "n0", geometry: { kind: "line" } },
+      ],
+    ],
+    holes: [],
+    nodes: Object.entries(at).map(([id, position]) => ({ id, position })),
+  };
+
+  const nodePositions = new Map(Object.entries(at).map(([id, position]) => [id, { position }]));
+  let replacementRequest = null;
+
+  const mockRuntime = {
+    getFootprintCoverage: () => [{ surfaceKey: ["terrain-grass", "f1"], surfaceType: "terrain-grass" }],
+    getAllRegionTopologies: () => [grassFace],
+    getRegionTopologiesInBounds: () => [grassFace],
+    getSnapshot: () => ({ tableId: "t", map: { nodePositions } }),
+    generateIrregularQuadGrid: () => ({
+      vertices: [
+        { x: 0, z: 0 },
+        { x: 4, z: 0 },
+        { x: 4, z: 4 },
+        { x: 0, z: 4 },
+        { x: 2, z: 2 },
+      ],
+      quads: [[0, 1, 4, 3]],
+      onContour: [],
+      refinementComplete: true,
+    }),
+    applyPatchReplacement: (request) => {
+      replacementRequest = request;
+      return {
+        createdSurfaceKeys: request.patch.regions.map((r) => r.regionId),
+        removedSurfaceKeys: request.sourceSurfaceKeys,
+        skippedRegionIds: [],
+      };
+    },
+  };
+
+  // Calling with generic targetSurfaceType: "terrain", standing face is "terrain-grass"
+  const outcome = executeTerrainCut(mockRuntime, {
+    area: {
+      outline: [
+        [0, 0],
+        [4, 0],
+        [4, 4],
+        [0, 4],
+      ],
+      center: { x: 2, y: 2, z: 2 },
+      radius: 3,
+    },
+    coveredRegions: [{ surfaceKey: ["terrain-grass", "f1"], surfaceType: "terrain-grass" }],
+    targetSurfaceType: "terrain",
+    profile: { kind: "convex", height: 3 },
+    causeId: "cause-grass-elevate",
+    tableId: "t",
+  });
+
+  assert.equal(outcome.success, true);
+  assert.equal(outcome.removedFaces, 1);
+  assert.ok(replacementRequest !== null);
+  assert.deepEqual(replacementRequest.sourceSurfaceKeys, [["terrain-grass", "f1"]]);
+  assert.equal(replacementRequest.patch.regions[0].surfaceType, "terrain-grass");
+});
+
