@@ -23,6 +23,7 @@ import { fillTerrain } from "./terrain-fill.ts";
 import { terrainStandingAround, type TerrainStrokeBounds } from "./terrain-neighborhood.ts";
 import { heightFieldOf } from "./terrain-regenerate.ts";
 import { logContourGrowth } from "./terrain-diagnostics.ts";
+import { stepTerrain } from "./terrain-stepped.ts";
 import type { ConstructionTool, ToolContext, ToolGesture } from "../core/tool-context.ts";
 
 /**
@@ -342,13 +343,29 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   defaultParams: () => DEFAULT_TOOL_PARAMS["terrain-sculpt"],
 
   previewFor(gesture: ToolGesture, params: TerrainSculptParams) {
-    const targetSurface = params.targetSurface ?? "terrain";
-    const color = TERRAIN_COLOR[targetSurface] ?? 0x334155;
+    const mode = params.mode ?? "add";
+    let color: number;
+    let opacity = 0.35;
+    if (mode === "dig") {
+      color = 0xef4444;
+      opacity = 0.45;
+    } else if (mode === "add") {
+      color = 0x22c55e;
+    } else if (mode === "elevate") {
+      color = 0x10b981;
+    } else if (mode === "lower") {
+      color = 0xf97316;
+    } else if (mode === "flatten") {
+      color = 0x3b82f6;
+    } else {
+      const targetSurface = params.targetSurface ?? "terrain";
+      color = TERRAIN_COLOR[targetSurface] ?? 0x334155;
+    }
     return brushSweptRegionFill(
       gesture.samples.map((sample) => sample.point),
       { kind: "circle", radius: params.brushRadius },
       color,
-      0.35,
+      opacity,
       // The same chord the commit will sweep with, so the ghost is the shape
       // the engine is actually asked about.
       strokeChord(params),
@@ -370,28 +387,42 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     );
 
     const mode = params.mode ?? "add";
-    const isAdd = mode === "add" || mode === "elevate";
-    const isDig = mode === "dig" || mode === "lower";
+    const isDig = mode === "dig";
+    const isAdd = mode === "add";
+    const isElevate = mode === "elevate";
+    const isLower = mode === "lower";
     const isFlatten = mode === "flatten";
-    const elevationStep = params.elevationStep ?? 0.5;
+    const elevationStep = params.elevationStep ?? 1.0;
     const targetSurface = params.targetSurface ?? "terrain";
 
     const covered = coveredByStroke(ctx, swept);
 
-    if (isFlatten) {
-      const raised =
-        covered.length > 0
-          ? restackTerrain(
-              ctx,
-              targetSurface,
-              covered,
-              causeId,
-              dirtLoadOver(gesture.samples.map((sample) => sample.point), brushRadius),
-              "flatten",
-              elevationStep,
-            )
-          : { raisedFaces: 0, movedVertices: 0, skipped: [] };
-      report(ctx, 0, 0, 0, raised, true, raised.raisedFaces > 0 ? `${raised.raisedFaces} faces niveladas` : undefined);
+    // Smooth relief deformation (hills, valleys, flattening)
+    if (isElevate || isLower || isFlatten) {
+      if (covered.length === 0) {
+        ctx.reportFeedback({ tone: "info", message: "Nada a deformar aqui." });
+        return;
+      }
+      const deformMode = isElevate ? "elevate" : isLower ? "lower" : "flatten";
+      const raised = restackTerrain(
+        ctx,
+        targetSurface,
+        covered,
+        causeId,
+        dirtLoadOver(gesture.samples.map((sample) => sample.point), brushRadius),
+        deformMode,
+        elevationStep,
+      );
+      const actionDesc = isElevate ? "elevadas" : isLower ? "rebaixadas" : "niveladas";
+      report(
+        ctx,
+        0,
+        0,
+        0,
+        raised,
+        true,
+        raised.raisedFaces > 0 ? `${raised.raisedFaces} faces ${actionDesc} suavemente` : undefined,
+      );
       return;
     }
 
@@ -418,30 +449,15 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     let effectiveFaceSide = faceSize;
 
     if (isDig) {
-      if (covered.length === 0 || standing.length === 0) {
+      if (affected.length === 0 || standing.length === 0) {
         ctx.reportFeedback({ tone: "info", message: "Nada a cavar aqui." });
         return;
       }
-      const lowered = restackTerrain(
-        ctx,
-        targetSurface,
-        covered,
-        causeId,
-        dirtLoadOver(gesture.samples.map((sample) => sample.point), brushRadius),
-        "dig",
-        elevationStep,
-      );
-      report(
-        ctx,
-        0,
-        0,
-        0,
-        lowered,
-        true,
-        lowered.raisedFaces > 0
-          ? `${lowered.raisedFaces} faces escavadas (${lowered.movedVertices} vértices rebaixados)`
-          : undefined,
-      );
+      const outcome = stepTerrain(ctx, targetSurface, affected, retained, -elevationStep, causeId);
+      ctx.reportFeedback({
+        tone: "success",
+        message: `Escavação: ${outcome.floorFaces} faces escavadas (-${elevationStep.toFixed(1)}m) com ${outcome.sidewallFaces} paredes de barranco/pedra.`,
+      });
       return;
     }
 
@@ -449,7 +465,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     if (affectedMerged.length === 0) {
       targetPolygon = swept;
     } else {
-      // Check if stroke extends into empty ground or bridges clouds:
+      // Check if stroke extends into empty ground or is on top of existing terrain:
       let uncovered: MultiPolygon = swept;
       try {
         uncovered = polygonClipping.difference(swept, affectedMerged);
@@ -460,25 +476,12 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
       const minUsefulArea = faceSize * faceSize * 0.25;
 
       if (uncoveredArea < minUsefulArea) {
-        // Entirely inside existing terrain: elevate height smoothly without rebuilding mesh!
-        const raised = restackTerrain(
-          ctx,
-          targetSurface,
-          covered,
-          causeId,
-          dirtLoadOver(gesture.samples.map((sample) => sample.point), brushRadius),
-          "elevate",
-          elevationStep,
-        );
-        report(
-          ctx,
-          0,
-          0,
-          0,
-          raised,
-          true,
-          raised.raisedFaces > 0 ? `${raised.raisedFaces} faces elevadas` : undefined,
-        );
+        // Entirely inside existing terrain: build an elevated plateau with vertical retaining walls!
+        const outcome = stepTerrain(ctx, targetSurface, affected, retained, elevationStep, causeId);
+        ctx.reportFeedback({
+          tone: "success",
+          message: `Platô: ${outcome.floorFaces} faces elevadas (+${elevationStep.toFixed(1)}m) com ${outcome.sidewallFaces} paredes de contenção.`,
+        });
         return;
       }
 

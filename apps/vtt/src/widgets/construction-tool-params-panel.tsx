@@ -209,18 +209,38 @@ function TerrainSculptFields(props: {
   const currentMode = params.mode ?? "add";
   return (
     <div style={{ display: "grid", gap: "0.6rem" }}>
-      <div className="gm-material-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+      <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "#94a3b8", textTransform: "uppercase" }}>
+        Cortes e Camadas
+      </div>
+      <div className="gm-material-grid" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
         <SelectableChip
-          label="Adicionar (+)"
-          swatchColor="#22c55e"
-          selected={currentMode === "add" || currentMode === "elevate"}
-          onSelect={() => onChange({ ...params, mode: "add" })}
+          label="Escavar (-)"
+          swatchColor="#ef4444"
+          selected={currentMode === "dig"}
+          onSelect={() => onChange({ ...params, mode: "dig" })}
         />
         <SelectableChip
-          label="Cavar (-)"
-          swatchColor="#ef4444"
-          selected={currentMode === "dig" || currentMode === "lower"}
-          onSelect={() => onChange({ ...params, mode: "dig" })}
+          label="Platô (+)"
+          swatchColor="#22c55e"
+          selected={currentMode === "add"}
+          onSelect={() => onChange({ ...params, mode: "add" })}
+        />
+      </div>
+      <div style={{ fontSize: "0.75rem", fontWeight: 600, color: "#94a3b8", textTransform: "uppercase", marginTop: "0.2rem" }}>
+        Deformação Suave (Relevo)
+      </div>
+      <div className="gm-material-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
+        <SelectableChip
+          label="Relevo (+)"
+          swatchColor="#10b981"
+          selected={currentMode === "elevate"}
+          onSelect={() => onChange({ ...params, mode: "elevate" })}
+        />
+        <SelectableChip
+          label="Relevo (-)"
+          swatchColor="#f97316"
+          selected={currentMode === "lower"}
+          onSelect={() => onChange({ ...params, mode: "lower" })}
         />
         <SelectableChip
           label="Nivelar (=)"
@@ -232,7 +252,7 @@ function TerrainSculptFields(props: {
       {sliderRow("Alcance da pincelada", params.brushRadius, 1.5, 15, 0.5, (brushRadius) =>
         onChange({ ...params, brushRadius, faceSize: deriveFaceSize(brushRadius) }),
       )}
-      {sliderRow("Intensidade do relevo", params.elevationStep ?? 0.5, 0.1, 2.0, 0.1, (elevationStep) =>
+      {sliderRow("Degrau / Altura", params.elevationStep ?? 1.0, 0.25, 4.0, 0.25, (elevationStep) =>
         onChange({ ...params, elevationStep }),
       )}
       {sliderRow("Altura inicial", params.heightScale, 0, 5, 0.25, (heightScale) =>
