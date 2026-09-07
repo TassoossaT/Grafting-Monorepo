@@ -103,5 +103,65 @@ test("stepTerrain excavates affected faces and stitches vertical sidewalls to re
   // The top edge of the wall should use "tbl:seg:v10~v11" in direction v11 -> v10 (the free side)
   const topUse = wall.boundary.find((u) => u.edgeId === "tbl:seg:v10~v11");
   assert.ok(topUse !== null);
-  assert.equal(topUse.reversed, true);
+  assert.equal(topUse.reversed, true, "reversed=true when retained was reversed=false");
 });
+
+test("stepTerrain correctly sets reversed=false when retained edge is reversed=true", () => {
+  const nodePositions = new Map([
+    ["v00", { position: { x: 0, y: 0, z: 0 } }],
+    ["v10", { position: { x: 1, y: 0, z: 0 } }],
+    ["v01", { position: { x: 0, y: 0, z: 1 } }],
+    ["v11", { position: { x: 1, y: 0, z: 1 } }],
+  ]);
+
+  // Q0 retained where shared edge tbl:seg:v00~v10 was walked with reversed=true
+  const q0 = createMockTopology(
+    ["v00", "v10", "v11", "v01"],
+    ["v00", "v10", "v11", "v01"],
+    [
+      { edgeId: "tbl:seg:v00~v10", startNodeId: "v10", endNodeId: "v00", reversed: true, geometry: { kind: "line" } },
+    ],
+  );
+
+  // Q1 affected using the same edge
+  const q1 = createMockTopology(
+    ["v00", "v10"],
+    ["v00", "v10"],
+    [
+      { edgeId: "tbl:seg:v00~v10", startNodeId: "v00", endNodeId: "v10", reversed: false, geometry: { kind: "line" } },
+      { edgeId: "tbl:seg:dummy1", startNodeId: "v10", endNodeId: "v00", reversed: false, geometry: { kind: "line" } },
+      { edgeId: "tbl:seg:dummy2", startNodeId: "v00", endNodeId: "v00", reversed: false, geometry: { kind: "line" } },
+    ],
+  );
+
+  let captured = null;
+  const mockRuntime = {
+    getSnapshot: () => ({ map: { nodePositions } }),
+    applyPatchReplacement: (req) => {
+      captured = req;
+      return {
+        affectedSurfaceKeys: [],
+        createdSurfaceKeys: req.patch.regions.map((r) => [r.regionId]),
+        removedSurfaceKeys: req.sourceSurfaceKeys,
+        createdNodeIds: req.patch.nodes.map((n) => n.id),
+        removedNodeIds: [],
+        skippedRegionIds: [],
+        skippedRegionReasons: [],
+      };
+    },
+  };
+
+  const ctx = {
+    tableId: "tbl",
+    runtime: mockRuntime,
+    nextSequence: () => 1,
+  };
+
+  stepTerrain(ctx, "terrain", [q1], [q0], -1.0, "cause-2");
+  const wall = captured.patch.regions.find((r) => r.regionId.includes(":wall:"));
+  assert.ok(wall !== null);
+  const topUse = wall.boundary.find((u) => u.edgeId === "tbl:seg:v00~v10");
+  assert.ok(topUse !== null);
+  assert.equal(topUse.reversed, false, "reversed=false when retained was reversed=true");
+});
+

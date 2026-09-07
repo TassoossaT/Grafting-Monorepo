@@ -160,8 +160,13 @@ export function stepTerrain(
           continue;
         }
 
-        // In retained ground, the edge walked from retainedEdge.startNodeId to retainedEdge.endNodeId.
-        // The free direction for the sidewall is the opposite direction!
+        // In retained ground, the edge walked with reversed = retainedEdge.reversed.
+        // The one free side of that edge faces the opposite way:
+        const groundEdgeUse: ConstructionOrientedEdgeUse = {
+          edgeId: retainedEdge.edgeId,
+          reversed: !retainedEdge.reversed,
+        };
+
         const rimStart = retainedEdge.endNodeId;
         const rimEnd = retainedEdge.startNodeId;
 
@@ -172,9 +177,13 @@ export function stepTerrain(
 
         if (deltaY < 0) {
           // Excavation: rim is at Y_top, floor is at Y_bottom
-          // Sidewall quad cycle: rimStart -> rimEnd -> floorEnd -> floorStart
+          // Sidewall quad cycle:
+          // 1. Top edge (along retained ground, free side of retainedEdge): groundEdgeUse
+          // 2. Right vertical edge (rimEnd -> floorEnd): edges.use(rimEnd, floorEnd)
+          // 3. Bottom edge (floorEnd -> floorStart): edges.use(floorEnd, floorStart, retainedEdge.geometry)
+          // 4. Left vertical edge (floorStart -> rimStart): edges.use(floorStart, rimStart)
           const sidewallBoundary: ConstructionOrientedEdgeUse[] = [
-            edges.use(rimStart, rimEnd, reverseGeometry(retainedEdge.geometry)),
+            groundEdgeUse,
             edges.use(rimEnd, floorEnd),
             edges.use(floorEnd, floorStart, retainedEdge.geometry),
             edges.use(floorStart, rimStart),
@@ -187,12 +196,16 @@ export function stepTerrain(
           });
         } else {
           // Plateau: rim is at Y_base, plateau is at Y_top
-          // Sidewall quad cycle: rimEnd -> rimStart -> floorStart -> floorEnd
+          // Sidewall quad cycle:
+          // 1. Base edge (along ground, free side of retainedEdge): groundEdgeUse
+          // 2. Right vertical edge (rimEnd -> floorEnd): edges.use(rimEnd, floorEnd)
+          // 3. Top edge (floorEnd -> floorStart): edges.use(floorEnd, floorStart, reverseGeometry(retainedEdge.geometry))
+          // 4. Left vertical edge (floorStart -> rimStart): edges.use(floorStart, rimStart)
           const sidewallBoundary: ConstructionOrientedEdgeUse[] = [
-            edges.use(rimEnd, rimStart, retainedEdge.geometry),
-            edges.use(rimStart, floorStart),
-            edges.use(floorStart, floorEnd, reverseGeometry(retainedEdge.geometry)),
-            edges.use(floorEnd, rimEnd),
+            groundEdgeUse,
+            edges.use(rimEnd, floorEnd),
+            edges.use(floorEnd, floorStart, reverseGeometry(retainedEdge.geometry)),
+            edges.use(floorStart, rimStart),
           ];
           regions.push({
             regionId: `${mint}:wall:${sidewallCount++}`,
