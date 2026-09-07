@@ -181,6 +181,7 @@ export function firstRefusal(resolved: readonly ResolvedCoverage[]): string | un
 
 export * from "./structure-type.ts";
 export * from "./creation-interaction.ts";
+export * from "./structural-cut.ts";
 export * from "./panel/index.ts";
 export * from "./organic/index.ts";
 export * from "./path/index.ts";
