@@ -1,5 +1,5 @@
 export { resolveBrushShape } from "./brush-shape-params.ts";
-export { DEFAULT_TOOL_PARAMS, TOWER_RADIUS_PRESETS } from "./tool-types.ts";
+export { DEFAULT_TOOL_PARAMS, TOWER_RADIUS_PRESETS, deriveFaceSize } from "./tool-types.ts";
 export type {
   BrushShapeKind,
   BrushShapeParams,
@@ -10,6 +10,7 @@ export type {
   PathBrushParams,
   PathKind,
   PreviewDescriptor,
+  TerrainSculptMode,
   TerrainSculptParams,
   ToolParamsByTool,
   ToolParamsFor,

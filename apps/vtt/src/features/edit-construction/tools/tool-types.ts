@@ -100,6 +100,23 @@ export interface InteriorGenerateParams {
   /** Drives the split layout's jitter -- the same enclosed footprint always reproduces the same rooms for a given seed. */
   readonly seed: number;
 }
+/**
+ * Sculpt mode determining whether a stroke adds terrain/height ("add"), digs/removes terrain ("dig"), or flattens ("flatten").
+ */
+export type TerrainSculptMode = "add" | "dig" | "flatten" | "elevate" | "lower";
+
+/**
+ * Derives a recommended face size proportionally from the brush radius.
+ * Larger brush = broader/macro work = larger faces (fewer quads/vertices).
+ * Smaller brush = finer detail work = smaller faces.
+ */
+export function deriveFaceSize(brushRadius: number, faceSizeOverride?: number): number {
+  if (faceSizeOverride !== undefined && faceSizeOverride > 0) {
+    return faceSizeOverride;
+  }
+  const derived = brushRadius / 3;
+  return Math.max(1, Math.min(6, Math.round(derived * 4) / 4));
+}
 
 /**
  * Ground generated for the area a stroke sweeps, constrained by whatever
@@ -109,27 +126,24 @@ export interface InteriorGenerateParams {
 export interface TerrainSculptParams {
   /**
    * How wide one terrain face should be, in world units.
-   *
-   * A face, not a lattice triangle: the engine converts. Bigger is cheaper in
-   * a way that is felt rather than measured -- halving it roughly quadruples
-   * the faces a stroke registers, and the graph, the render sync and the
-   * scene all carry every one of them.
+   * If omitted or undefined, derived proportionally from {@link brushRadius}.
    */
   readonly faceSize: number;
   /**
    * How wide a band the stroke paints, as a radius in world units.
-   *
-   * Not cosmetic, and not independent of {@link faceSize}: a patch comes back
-   * with about twice as many faces as its outline has points, and an outline
-   * needs a point every cell around its whole perimeter. So a narrow brush
-   * spends nearly all of its faces describing its own edge and comes back
-   * far finer than the cell size asked for, whatever the generator does.
-   *
-   * Measured, at a face size of 2: a radius of 3 yields cells of about 1.3,
-   * a radius of 6 yields 2.2. Roughly, the radius wants to be three times the
-   * face size or more before the interior of the stroke outweighs its rim.
    */
   readonly brushRadius: number;
+  /**
+   * Relief manipulation mode:
+   * - `"elevate"`: smoothly adds height (+Y) under the brush.
+   * - `"lower"`: smoothly subtracts height (-Y) under the brush.
+   * - `"flatten"`: normalizes / levels height toward the local average under the brush.
+   */
+  readonly mode?: TerrainSculptMode;
+  /**
+   * Height step / intensity applied per stroke (in world Y units). Defaults to 0.5.
+   */
+  readonly elevationStep?: number;
   /**
    * `0` = cells relaxed hard toward square (regular-looking, like a normal
    * grid); `1` = minimal relaxation, cells keep the raw irregular shape/size
@@ -145,6 +159,7 @@ export interface TerrainSculptParams {
   readonly targetSurface: "terrain" | "terrain-grass";
   readonly seed: number;
 }
+
 
 /**
  * A closed circular wall footprint, stamped in one click at a known radius
@@ -221,10 +236,12 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   "terrain-sculpt": Object.freeze({
     faceSize: 2,
     brushRadius: 6,
+    mode: "add",
+    elevationStep: 2.0,
     irregularity: 0.7,
     heightScale: 1.5,
     noiseScale: 0.15,
-    targetSurface: "terrain-grass",
+    targetSurface: "terrain",
     seed: 1,
   }),
 });

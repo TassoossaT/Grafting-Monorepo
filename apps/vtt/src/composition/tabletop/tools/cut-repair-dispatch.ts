@@ -156,23 +156,8 @@ export function dispatchCutRepairs(runtime: TabletopRuntime, request: ApplyPatch
   }
   if (consumedByType.size === 0) return;
 
-  // Compute bounding box of footprint outline to scope topology query
-  let bounds: ConstructionTopologyBoundsQuery | undefined = undefined;
-  if (outline.length > 0) {
-    let minX = Infinity;
-    let maxX = -Infinity;
-    let minZ = Infinity;
-    let maxZ = -Infinity;
-    for (const [x, z] of outline) {
-      if (x < minX) minX = x;
-      if (x > maxX) maxX = x;
-      if (z < minZ) minZ = z;
-      if (z > maxZ) maxZ = z;
-    }
-    const margin = 2.0;
-    bounds = { minX: minX - margin, maxX: maxX + margin, minZ: minZ - margin, maxZ: maxZ + margin };
-  }
-  const { paintedNodes, paintedLoops } = paintedNodesOf(runtime, paintedType, bounds);
+  // Read whole cloud of painted type so outwardPerimeterRings yields complete closed rings
+  const { paintedNodes, paintedLoops } = paintedNodesOf(runtime, paintedType);
 
   for (const [surfaceType, consumedSurfaceKeys] of consumedByType) {
     const executor = CUT_REPAIR_EXECUTORS[surfaceType];

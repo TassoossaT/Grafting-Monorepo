@@ -1,24 +1,15 @@
-import { DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
+import { DEFAULT_TOOL_PARAMS, deriveFaceSize } from "@/features/edit-construction";
 import type { TerrainSculptParams } from "@/features/edit-construction";
 import type {
   ConstructionCoveredRegion,
-  ConstructionPosition,
 } from "@/ports";
 import type { MultiPolygon } from "polygon-clipping";
 
 import { brushSweptOutlinePolygons, brushSweptRegionFill } from "../shapes/preview-shapes.ts";
 import { dirtLoadOver, restackTerrain } from "./terrain-restack.ts";
-import {
-  OUTLINE_CHORD_PER_FACE,
-  OUTLINE_WELD_PER_FACE,
-  outlineConstraints,
-  perimeterConstraints,
-  type ConstraintRing,
-} from "./terrain-constraints.ts";
-import { fillTerrain } from "./terrain-fill.ts";
-import { terrainStandingAround, type TerrainStrokeBounds } from "./terrain-neighborhood.ts";
-import { heightFieldOf } from "./terrain-regenerate.ts";
-import { logContourGrowth } from "./terrain-diagnostics.ts";
+import { OUTLINE_CHORD_PER_FACE } from "./terrain-constraints.ts";
+import type { TerrainStrokeBounds } from "./terrain-neighborhood.ts";
+import { executeTerrainCut } from "./terrain-cut-executor.ts";
 import type { ConstructionTool, ToolContext, ToolGesture } from "../core/tool-context.ts";
 
 /**
@@ -54,7 +45,7 @@ import type { ConstructionTool, ToolContext, ToolGesture } from "../core/tool-co
  * splitting a known edge, never finding one by position.
  */
 
-const TERRAIN_COLOR: Record<TerrainSculptParams["targetSurface"], number> = {
+const TERRAIN_COLOR: Record<"terrain" | "terrain-grass", number> = {
   terrain: 0x334155,
   "terrain-grass": 0x4a7a4a,
 };
@@ -124,9 +115,15 @@ function sampleHeightmapBilinear(
  * plans cells across it, and the engine refuses every one of them -- "no room
  * on edge". And the person at the table paints one shape and gets another.
  */
-function strokeChord(params: TerrainSculptParams): number {
-  return params.faceSize * OUTLINE_CHORD_PER_FACE;
+function strokeFaceSize(params: TerrainSculptParams): number {
+  return deriveFaceSize(params.brushRadius, params.faceSize);
 }
+
+function strokeChord(params: TerrainSculptParams): number {
+  return strokeFaceSize(params) * OUTLINE_CHORD_PER_FACE;
+}
+
+
 
 function coveredByStroke(
   ctx: ToolContext,
@@ -143,48 +140,7 @@ function coveredByStroke(
   return [...merged.values()];
 }
 
-/**
- * Whether a point lies inside the swept area, holes included.
- *
- * Even-odd against each polygon's outer ring, then against its inner rings, so
- * a stroke that curls back on itself does not count the ground it left
- * unpainted in the middle.
- */
-function insideSwept(point: ConstructionPosition, swept: MultiPolygon): boolean {
-  const inRing = (ring: readonly (readonly [number, number])[]): boolean => {
-    let inside = false;
-    for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index, index += 1) {
-      const [ax, az] = ring[index]!;
-      const [bx, bz] = ring[previous]!;
-      if (az > point.z !== bz > point.z && point.x < ((bx - ax) * (point.z - az)) / (bz - az) + ax) {
-        inside = !inside;
-      }
-    }
-    return inside;
-  };
-  for (const polygon of swept) {
-    const outer = polygon[0];
-    if (outer === undefined || !inRing(outer)) continue;
-    if (polygon.slice(1).some((hole) => inRing(hole))) continue;
-    return true;
-  }
-  return false;
-}
 
-/**
- * Everything already standing close enough for the stroke to meet it.
- *
- * This used to expand every covered face to its whole connected cloud before
- * cutting it back to the brush. Joining two large clouds consequently walked
- * each entire cloud once per covered face and performed one JSON Wasm call per
- * member. The engine now does one bounds query and serializes only this local
- * neighbourhood. A subset perimeter is safe here because the generator can
- * only lay cells inside the swept outline: the far side of an interior edge is
- * either also in this neighbourhood or unreachable by the fill.
- *
- * The bound is the stroke's own extent, widened by `reach` so nothing the
- * outline can meet is dropped by a rounding of the box.
- */
 /** The axis-aligned extent of a swept stroke, in XZ. */
 function boundsOf(swept: MultiPolygon): TerrainStrokeBounds {
   let minX = Infinity;
@@ -210,10 +166,12 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   defaultParams: () => DEFAULT_TOOL_PARAMS["terrain-sculpt"],
 
   previewFor(gesture: ToolGesture, params: TerrainSculptParams) {
+    const targetSurface = params.targetSurface ?? "terrain";
+    const color = TERRAIN_COLOR[targetSurface] ?? 0x334155;
     return brushSweptRegionFill(
       gesture.samples.map((sample) => sample.point),
       { kind: "circle", radius: params.brushRadius },
-      TERRAIN_COLOR[params.targetSurface],
+      color,
       0.35,
       // The same chord the commit will sweep with, so the ghost is the shape
       // the engine is actually asked about.
@@ -227,159 +185,123 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   onPointerUp(ctx: ToolContext, gesture: ToolGesture, params: TerrainSculptParams): void {
     const salt = ctx.nextSequence();
     const causeId = `${ctx.tableId}:terrain-sculpt:${salt}`;
+    const faceSize = strokeFaceSize(params);
+    const brushRadius = params.brushRadius;
     const swept = brushSweptOutlinePolygons(
       gesture.samples.map((sample) => sample.point),
-      params.brushRadius,
+      brushRadius,
       strokeChord(params),
     );
 
-    // One stroke does both, per area -- it is not a choice between them.
-    // Where ground already exists the covered faces are raised; where it does
-    // not, terrain is generated. A stroke uniting two patches spans exactly
-    // that mix.
-    //
-    // The raise goes first so generation meets ground already at its final
-    // height: a corner shared with the rim wants the raised Y, not the stale
-    // one. Occupancy is unaffected either way -- the raise moves ground in Y,
-    // never in XZ.
+    const mode = params.mode ?? "add";
+    const isAdd = mode === "add" || mode === "elevate";
+    const isDig = mode === "dig" || mode === "lower";
+    const isFlatten = mode === "flatten";
+    const elevationStep = params.elevationStep ?? 2.0;
     const covered = coveredByStroke(ctx, swept);
-    const raised =
-      covered.length > 0
-        ? restackTerrain(
-            ctx,
-            params.targetSurface,
-            covered,
-            causeId,
-            dirtLoadOver(gesture.samples.map((sample) => sample.point), params.brushRadius),
-          )
-        : { raisedFaces: 0, movedVertices: 0, skipped: [] };
+    const targetSurface = covered[0]?.surfaceType ?? params.targetSurface ?? "terrain";
 
-    // What the stroke asks to fill, and what is already standing in it. The
-    // second becomes holes: ground somebody already holds is not regenerated,
-    // it is met.
-    // The cell size goes into the sweep, so the outline is never described
-    // more finely than the mesh it is about to bound. A boundary point is a
-    // cell corner, and a patch comes back with about twice as many faces as
-    // its boundary has points.
-    const weld = params.faceSize * OUTLINE_WELD_PER_FACE;
-    const outline = outlineConstraints(swept.flatMap((polygon) => polygon.slice(0, 1)), weld);
-    if (outline.length === 0) {
-      ctx.reportFeedback({ tone: "info", message: "Nada a fazer aqui." });
+    if (isFlatten) {
+      const raised =
+        covered.length > 0
+          ? restackTerrain(
+              ctx,
+              targetSurface,
+              covered,
+              causeId,
+              dirtLoadOver(gesture.samples.map((sample) => sample.point), brushRadius),
+              "flatten",
+              elevationStep,
+            )
+          : { raisedFaces: 0, movedVertices: 0, skipped: [] };
+      report(ctx, 0, 0, 0, raised, true, raised.raisedFaces > 0 ? `${raised.raisedFaces} faces niveladas` : undefined);
       return;
     }
-    // Ground the stroke covers *whole* is not met, it is regenerated: the
-    // faces go away and the area they held is laid again as part of this one
-    // generation.
-    //
-    // This is what stops the two failures the table reported together. A face
-    // left standing under the stroke is ground the generator is then told to
-    // work around, so it plans cells against edges that already carry a face
-    // on both sides and the engine refuses them -- 53 faces lost on one
-    // stroke, which is the band along the join simply never registering. And
-    // being told to stop at that face's contour is what put a vertex in the
-    // middle of every one of its edges, because the ortho step midpoints every
-    // segment it is given and the seam then has to adopt the result. Delete
-    // the face instead and neither arises: nothing to refuse, nothing to
-    // subdivide, and the ground comes back in one piece at one size.
-    //
-    // Whole, not merely touched. A face the stroke only clips keeps ground
-    // outside the swept outline, and the fill stops at that outline -- so
-    // consuming it would leave a gap exactly as wide as the part that stuck
-    // out. Those stay, and their contour is what the new ground meets.
-    const extent = boundsOf(swept);
-    const standing = terrainStandingAround(ctx.runtime, covered, extent, params.faceSize * 2);
-    const consumed = standing.filter(
-      (topology) =>
-        topology.surfaceType === params.targetSurface &&
-        topology.nodes.length > 0 &&
-        topology.nodes.every((node) => insideSwept(node.position, swept)),
-    );
-    const consumedKeys = new Set(consumed.map((topology) => topology.surfaceKey.join(" ")));
-    const retained = standing.filter((topology) => !consumedKeys.has(topology.surfaceKey.join(" ")));
-    const perimeters = perimeterConstraints(retained, 0);
-    const contourBefore = perimeters.sources.length;
-    // A stroke that curls back on itself leaves a real hole in its own swept
-    // shape, and `polygon-clipping` reports it as an inner ring. Ground there
-    // was never painted, so it is subtracted like any other hole -- it simply
-    // has no edges, and so owes nobody an adopted node.
-    const holeRings: readonly ConstraintRing[] = [
-      ...outlineConstraints(swept.flatMap((polygon) => polygon.slice(1)), weld),
-      ...perimeters.rings,
-    ];
 
-    // Height comes from the noise field over the area the fill actually
-    // covers, so it is asked for the extent the generator settled on rather
-    // than the one this side guessed before generating.
-    // The noise window is anchored to the world and sized to the stroke, never
-    // the other way round: one world point has one height, whichever stroke
-    // asks for it, so ground laid now and ground laid later are the same
-    // surface where they meet.
-    const { minX, minZ, maxX, maxZ } = extent;
-    const originX = Math.floor(minX / NOISE_SPACING) - 1;
-    const originZ = Math.floor(minZ / NOISE_SPACING) - 1;
-    const columns = Math.ceil(maxX / NOISE_SPACING) - originX + 2;
-    const rows = Math.ceil(maxZ / NOISE_SPACING) - originZ + 2;
-    const heightmap = ctx.runtime.generateHeightmap(
-      columns,
-      rows,
-      Math.floor(params.seed) || 1,
-      params.noiseScale,
-      originX,
-      originZ,
-    );
-    const noiseAt = (point: { readonly x: number; readonly z: number }): number =>
-      sampleHeightmapBilinear(
-        heightmap,
+    const strokePoints = gesture.samples.map((sample) => sample.point);
+
+    if (isDig) {
+      if (covered.length === 0) {
+        ctx.reportFeedback({ tone: "info", message: "Nada a cavar aqui." });
+        return;
+      }
+      const outcome = executeTerrainCut(ctx.runtime, {
+        area: {
+          outline: swept[0]?.[0] ?? [],
+          sweptPolygon: swept,
+          path: strokePoints,
+          radius: brushRadius,
+        },
+        coveredRegions: covered,
+        targetSurfaceType: targetSurface,
+        profile: { kind: "concave", depth: elevationStep },
+        causeId,
+        tableId: ctx.tableId,
+        faceSide: faceSize,
+        seed: Math.floor(params.seed ?? 1) || 1,
+        irregularity: params.irregularity ?? 0.7,
+      });
+      if (!outcome.success) {
+        ctx.reportFeedback({ tone: "info", message: outcome.message ?? "Nada a cavar aqui." });
+        return;
+      }
+      ctx.reportFeedback({
+        tone: "success",
+        message: `Terreno: ${outcome.builtFaces} faces escavadas (${outcome.removedFaces} faces substituídas).`,
+      });
+      return;
+    }
+
+    if (isAdd) {
+      const { minX, minZ, maxX, maxZ } = boundsOf(swept);
+      const originX = Math.floor(minX / NOISE_SPACING) - 1;
+      const originZ = Math.floor(minZ / NOISE_SPACING) - 1;
+      const columns = Math.ceil(maxX / NOISE_SPACING) - originX + 2;
+      const rows = Math.ceil(maxZ / NOISE_SPACING) - originZ + 2;
+      const heightmap = ctx.runtime.generateHeightmap(
         columns,
         rows,
-        point.x / NOISE_SPACING - originX,
-        point.z / NOISE_SPACING - originZ,
-      ) * params.heightScale;
+        Math.floor(params.seed ?? 1) || 1,
+        params.noiseScale ?? 0.15,
+        originX,
+        originZ,
+      );
+      const noiseAt = (point: { readonly x: number; readonly z: number }): number =>
+        sampleHeightmapBilinear(
+          heightmap,
+          columns,
+          rows,
+          point.x / NOISE_SPACING - originX,
+          point.z / NOISE_SPACING - originZ,
+        ) * (params.heightScale ?? 1.5);
 
-    // Ground being regenerated keeps the height it had, read from the corners
-    // about to be deleted -- the raise this very stroke just applied
-    // included. Sampling the noise there instead would flatten the relief a
-    // person built up, and painting the same hill twice would reset it rather
-    // than raise it.
-    const kept = heightFieldOf(
-      consumed.flatMap((topology) => topology.nodes.map((node) => node.position)),
-      params.faceSize * 2,
-    );
-    const heightAt = (point: { readonly x: number; readonly z: number }): number =>
-      kept.at(point) ?? noiseAt(point);
-
-    const filled = fillTerrain(ctx.runtime, {
-      what: "pincelada",
-      regenerated: consumed.length,
-      mint: `${ctx.tableId}:terrain-sculpt-${salt}`,
-      tableId: ctx.tableId,
-      causeId,
-      seed: Math.floor(params.seed) || 1,
-      faceSide: params.faceSize,
-      relaxStrength: params.irregularity,
-      surfaceType: params.targetSurface,
-      boundary: outline,
-      holes: holeRings,
-      sources: perimeters.sources,
-      // A pure creation has nothing whose deletion needs transactional
-      // rollback. Let it use the direct add path instead of cloning the whole
-      // construction session solely to replace an empty set.
-      replaceSurfaceKeys: consumed.length === 0 ? undefined : consumed.map((topology) => topology.surfaceKey),
-      topologySeeds: retained.map((topology) => ({ seed: topology.surfaceKey, surfaceType: topology.surfaceType })),
-      heightAt,
-    });
-
-    // The growth of the contour was measured here, by scanning the
-    // neighbourhood a second time once the stroke had landed. It cost a full
-    // repeat of the three most expensive steps of the gesture -- the coverage
-    // query, the neighbourhood walk and the perimeter -- on every stroke, for
-    // one console line. It is gone, and nothing is lost with it: the commit
-    // line already carries `contorno N pts (M com nó)` for what went down and
-    // `nosNoContorno` for what the new mesh planted on it, which is the
-    // accumulation the growth number was there to expose.
-    void contourBefore;
-
-    report(ctx, filled.built, filled.refused, filled.unadopted, raised, filled.refinementComplete);
+      const outcome = executeTerrainCut(ctx.runtime, {
+        area: {
+          outline: swept[0]?.[0] ?? [],
+          sweptPolygon: swept,
+          path: strokePoints,
+          radius: brushRadius,
+        },
+        coveredRegions: covered,
+        targetSurfaceType: targetSurface,
+        profile: { kind: "convex", height: elevationStep },
+        causeId,
+        tableId: ctx.tableId,
+        faceSide: faceSize,
+        seed: Math.floor(params.seed ?? 1) || 1,
+        irregularity: params.irregularity ?? 0.7,
+        noiseAt,
+      });
+      if (!outcome.success) {
+        ctx.reportFeedback({ tone: "info", message: outcome.message ?? "Nada a adicionar aqui." });
+        return;
+      }
+      ctx.reportFeedback({
+        tone: "success",
+        message: `Terreno: ${outcome.builtFaces} faces elevadas (${outcome.removedFaces} faces substituídas).`,
+      });
+      return;
+    }
   },
 };
 
@@ -390,17 +312,15 @@ function report(
   unadopted: number,
   raised: { readonly raisedFaces: number; readonly movedVertices: number; readonly skipped: readonly string[] },
   refinementComplete = true,
+  customMsg?: string,
 ): void {
   const parts: string[] = [];
-  if (built > 0) parts.push(`${built} faces novas`);
-  // Named as a loss rather than as a note. A refusal means the generator
-  // planned a face over ground that was already occupied, which is a fault in
-  // what it was told, not a normal outcome -- and reading it as one is how a
-  // mesh full of holes went unnoticed.
+  if (customMsg) parts.push(customMsg);
+  else if (built > 0) parts.push(`${built} faces novas`);
   if (refused > 0) parts.push(`${refused} faces perdidas (aresta sem lado livre)`);
-  if (raised.raisedFaces > 0) parts.push(`${raised.raisedFaces} elevadas (${raised.movedVertices} vértices)`);
-  if (unadopted > 0) parts.push(`${unadopted} junções não costuradas`);
-  if (!refinementComplete) parts.push("malha mais grossa em parte da área");
+  if (raised.raisedFaces > 0) parts.push(`${raised.raisedFaces} ajustadas (${raised.movedVertices} v├®rtices)`);
+  if (unadopted > 0) parts.push(`${unadopted} jun├º├Áes n├úo costuradas`);
+  if (!refinementComplete) parts.push("malha mais grossa em parte da ├írea");
 
   if (parts.length === 0) {
     ctx.reportFeedback({
@@ -414,3 +334,4 @@ function report(
     message: `Terreno: ${parts.join(", ")}.${raised.skipped.length > 0 ? ` ${raised.skipped[0]}` : ""}`,
   });
 }
+

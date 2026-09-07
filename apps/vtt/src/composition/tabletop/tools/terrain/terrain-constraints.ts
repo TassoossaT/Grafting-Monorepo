@@ -195,6 +195,8 @@ export interface ContourAdoption {
   readonly edge: ConstructionRegionEdge;
   /** Where along that edge it sits, `0` at its start and `1` at its end. */
   readonly along: number;
+  /** Length of the edge being split, for spacing checks. */
+  readonly edgeLength?: number;
 }
 
 /** One generated corner that resolves to a node already standing, rather than splitting anything. */
@@ -229,7 +231,7 @@ export interface ResolvedAdoptions {
  * cell moves by at most this much -- a nudge on the scale the relax step
  * already applies -- and no edge shorter than this can ever enter the graph.
  */
-export const SHORTEST_USEFUL_FRACTION = 0.2;
+export const SHORTEST_USEFUL_FRACTION = 0.25;
 
 /**
  * How coarsely a stroke describes its own swept outline, as a multiple of the
@@ -332,7 +334,7 @@ export function resolveAdoptions(
       snaps.push({
         vertex: node.vertex,
         source: from.source,
-        fallback: edge === undefined ? undefined : { vertex: node.vertex, edge, along },
+        fallback: edge === undefined ? undefined : { vertex: node.vertex, edge, along, edgeLength: length },
       });
       continue;
     }
@@ -340,17 +342,35 @@ export function resolveAdoptions(
       snaps.push({
         vertex: node.vertex,
         source: to.source,
-        fallback: edge === undefined ? undefined : { vertex: node.vertex, edge, along },
+        fallback: edge === undefined ? undefined : { vertex: node.vertex, edge, along, edgeLength: length },
       });
       continue;
     }
 
     if (edge === undefined) continue;
-    adoptions.push({ vertex: node.vertex, edge, along });
+    adoptions.push({ vertex: node.vertex, edge, along, edgeLength: length });
   }
 
   adoptions.sort((a, b) => (a.edge.edgeId === b.edge.edgeId ? a.along - b.along : a.edge.edgeId < b.edge.edgeId ? -1 : 1));
-  return { adoptions, snaps };
+
+  const filteredAdoptions: ContourAdoption[] = [];
+  let prevEdgeId: string | undefined;
+  let prevAlong = 0;
+  for (const adoption of adoptions) {
+    if (adoption.edge.edgeId !== prevEdgeId) {
+      prevEdgeId = adoption.edge.edgeId;
+      prevAlong = adoption.along;
+      filteredAdoptions.push(adoption);
+    } else {
+      const length = adoption.edgeLength ?? 0;
+      if (shortestUseful <= 0 || length <= 0 || (adoption.along - prevAlong) * length >= shortestUseful) {
+        prevAlong = adoption.along;
+        filteredAdoptions.push(adoption);
+      }
+    }
+  }
+
+  return { adoptions: filteredAdoptions, snaps };
 }
 
 /**

@@ -7,13 +7,14 @@ import type {
   InteriorGenerateParams,
   OpeningParams,
   PathBrushParams,
+  TerrainSculptMode,
   TerrainSculptParams,
   ToolParamsByTool,
   TowerStampParams,
   WallBrushParams,
   WallParams,
 } from "@/features/edit-construction";
-import { TOWER_RADIUS_PRESETS } from "@/features/edit-construction";
+import { TOWER_RADIUS_PRESETS, deriveFaceSize } from "@/features/edit-construction";
 
 export interface ConstructionToolParamsPanelProps {
   readonly activeTool: ConstructionToolId;
@@ -205,36 +206,51 @@ function TerrainSculptFields(props: {
   readonly onChange: (next: TerrainSculptParams) => void;
 }) {
   const { params, onChange } = props;
+  const currentMode = params.mode ?? "add";
+  const isDig = currentMode === "dig" || currentMode === "lower";
+  const isAdd = currentMode === "add" || currentMode === "elevate";
+  const elevationStep = params.elevationStep ?? 2.0;
+
+  const elevationLabel = isAdd
+    ? "Incremento de altura (+m)"
+    : isDig
+      ? "Profundidade do corte (-m)"
+      : "Intensidade do nivelamento";
+
   return (
     <div style={{ display: "grid", gap: "0.6rem" }}>
-      <div className="gm-material-grid">
+      <div className="gm-material-grid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
         <SelectableChip
-          label="Terreno"
-          swatchColor="#334155"
-          selected={params.targetSurface === "terrain"}
-          onSelect={() => onChange({ ...params, targetSurface: "terrain" })}
+          label="Adicionar (+)"
+          swatchColor="#22c55e"
+          selected={isAdd}
+          onSelect={() => onChange({ ...params, mode: "add" })}
         />
         <SelectableChip
-          label="Grama"
-          swatchColor="#4a7a4a"
-          selected={params.targetSurface === "terrain-grass"}
-          onSelect={() => onChange({ ...params, targetSurface: "terrain-grass" })}
+          label="Cavar (-)"
+          swatchColor="#ef4444"
+          selected={isDig}
+          onSelect={() => onChange({ ...params, mode: "dig" })}
+        />
+        <SelectableChip
+          label="Nivelar (=)"
+          swatchColor="#3b82f6"
+          selected={currentMode === "flatten"}
+          onSelect={() => onChange({ ...params, mode: "flatten" })}
         />
       </div>
-      {sliderRow("Alcance da pincelada", params.brushRadius, 1.5, 15, 0.5, (brushRadius) =>
-        onChange({ ...params, brushRadius }),
+      {sliderRow("Alcance da pincelada", params.brushRadius, 1.5, 20, 0.5, (brushRadius) =>
+        onChange({ ...params, brushRadius, faceSize: deriveFaceSize(brushRadius) }),
       )}
-      {sliderRow("Tamanho da face", params.faceSize, 0.5, 6, 0.25, (faceSize) =>
-        onChange({ ...params, faceSize }),
+      {sliderRow(elevationLabel, elevationStep, 0.2, 20.0, 0.2, (step) =>
+        onChange({ ...params, elevationStep: step }),
       )}
-      {sliderRow("Irregularidade", params.irregularity, 0, 1, 0.05, (irregularity) =>
-        onChange({ ...params, irregularity }),
+      {sliderRow("Rugosidade do chão novo (ruído)", params.heightScale, 0, 5, 0.25, (heightScale) =>
+        onChange({ ...params, heightScale }),
       )}
-      {sliderRow("Altura", params.heightScale, 0, 5, 0.25, (heightScale) => onChange({ ...params, heightScale }))}
       {sliderRow("Suavidade do relevo", params.noiseScale, 0.02, 0.4, 0.01, (noiseScale) =>
         onChange({ ...params, noiseScale }),
       )}
-      {sliderRow("Seed", params.seed, 1, 999, 1, (seed) => onChange({ ...params, seed }))}
     </div>
   );
 }

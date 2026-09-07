@@ -318,3 +318,79 @@ test("a contour midpoint falls back to splitting when its nearby endpoint is alr
   assert.equal(runtime.edits[0].edgeId, "t:seg:n0~n1");
   assert.equal(runtime.edits[0].nodeId, "m:v1");
 });
+
+test("joining two clouds through fillTerrain executes fast and with bounded subdivisions", () => {
+  const grid = {
+    vertices: [
+      { x: -4, z: -1, source: 0 },
+      { x: -4, z: 1, source: 1 },
+      { x: 4, z: -1, source: 4 },
+      { x: 4, z: 1, source: 5 },
+      { x: 0, z: -1 },
+      { x: 0, z: 1 },
+    ],
+    quads: [
+      [0, 4, 5, 1],
+      [4, 2, 3, 5],
+    ],
+    onContour: [],
+    refinementComplete: true,
+  };
+
+  const cloudA = {
+    points: [
+      { x: -6, z: -2, source: 2 },
+      { x: -4, z: -1, source: 0 },
+      { x: -4, z: 1, source: 1 },
+      { x: -6, z: 2, source: 3 },
+    ],
+    edges: [
+      { edgeId: "t:seg:n2~n0", reversed: false, startNodeId: "n2", endNodeId: "n0", geometry: { kind: "line" } },
+      { edgeId: "t:seg:n0~n1", reversed: false, startNodeId: "n0", endNodeId: "n1", geometry: { kind: "line" } },
+      { edgeId: "t:seg:n1~n3", reversed: false, startNodeId: "n1", endNodeId: "n3", geometry: { kind: "line" } },
+      undefined,
+    ],
+  };
+
+  const cloudB = {
+    points: [
+      { x: 4, z: -1, source: 4 },
+      { x: 6, z: -2, source: 6 },
+      { x: 6, z: 2, source: 7 },
+      { x: 4, z: 1, source: 5 },
+    ],
+    edges: [
+      { edgeId: "t:seg:n4~n6", reversed: false, startNodeId: "n4", endNodeId: "n6", geometry: { kind: "line" } },
+      undefined,
+      { edgeId: "t:seg:n7~n5", reversed: false, startNodeId: "n7", endNodeId: "n5", geometry: { kind: "line" } },
+      { edgeId: "t:seg:n5~n4", reversed: false, startNodeId: "n5", endNodeId: "n4", geometry: { kind: "line" } },
+    ],
+  };
+
+  const runtime = runtimeWith(grid, [
+    ["n0", { position: { x: -4, y: 0, z: -1 } }],
+    ["n1", { position: { x: -4, y: 0, z: 1 } }],
+    ["n4", { position: { x: 4, y: 0, z: -1 } }],
+    ["n5", { position: { x: 4, y: 0, z: 1 } }],
+  ]);
+
+  const outcome = fillTerrain(runtime, {
+    what: "teste",
+    mint: "m",
+    tableId: "t",
+    causeId: "c",
+    seed: 1,
+    faceSide: 2,
+    surfaceType: "terrain",
+    boundary: [{ points: [{ x: -5, z: -2 }, { x: 5, z: -2 }, { x: 5, z: 2 }, { x: -5, z: 2 }], edges: [] }],
+    holes: [cloudA, cloudB],
+    sources: ["n0", "n1", "n2", "n3", "n4", "n5", "n6", "n7"],
+    heightAt: () => 0,
+  });
+
+  assert.equal(outcome.built, 2, "creates bridge quads");
+  assert.equal(outcome.refused, 0, "no rejected faces");
+  assert.equal(outcome.unadopted, 0, "no unstitched junctions");
+  assert.equal(outcome.refinementComplete, true);
+});
+
