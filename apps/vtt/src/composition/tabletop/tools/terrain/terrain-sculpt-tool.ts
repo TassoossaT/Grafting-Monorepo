@@ -418,87 +418,74 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     let effectiveFaceSide = faceSize;
 
     if (isDig) {
-      if (affectedMerged.length === 0 || standing.length === 0) {
+      if (covered.length === 0 || standing.length === 0) {
         ctx.reportFeedback({ tone: "info", message: "Nada a cavar aqui." });
         return;
       }
+      const lowered = restackTerrain(
+        ctx,
+        targetSurface,
+        covered,
+        causeId,
+        dirtLoadOver(gesture.samples.map((sample) => sample.point), brushRadius),
+        "dig",
+        elevationStep,
+      );
+      report(
+        ctx,
+        0,
+        0,
+        0,
+        lowered,
+        true,
+        lowered.raisedFaces > 0
+          ? `${lowered.raisedFaces} faces escavadas (${lowered.movedVertices} vértices rebaixados)`
+          : undefined,
+      );
+      return;
+    }
+
+    // isAdd:
+    if (affectedMerged.length === 0) {
+      targetPolygon = swept;
+    } else {
+      // Check if stroke extends into empty ground or bridges clouds:
+      let uncovered: MultiPolygon = swept;
       try {
-        targetPolygon = polygonClipping.difference(affectedMerged, swept);
+        uncovered = polygonClipping.difference(swept, affectedMerged);
       } catch {
-        targetPolygon = [];
+        uncovered = swept;
       }
-      const remainingArea = totalMultiPolygonArea(targetPolygon);
-      if (remainingArea < faceSize * faceSize * 0.1) {
-        // Complete excavation of touched faces
-        ctx.runtime.applyPatchReplacement(
-          {
-            operationId: `${causeId}:terrain-dig`,
-            sourceSurfaceKeys: affected.map((f) => f.surfaceKey),
-            patch: { nodes: [], edges: [], regions: [] },
-          },
-          "local",
+      const uncoveredArea = totalMultiPolygonArea(uncovered);
+      const minUsefulArea = faceSize * faceSize * 0.25;
+
+      if (uncoveredArea < minUsefulArea) {
+        // Entirely inside existing terrain: elevate height smoothly without rebuilding mesh!
+        const raised = restackTerrain(
+          ctx,
+          targetSurface,
+          covered,
           causeId,
+          dirtLoadOver(gesture.samples.map((sample) => sample.point), brushRadius),
+          "elevate",
+          elevationStep,
         );
         report(
           ctx,
           0,
           0,
           0,
-          { raisedFaces: 0, movedVertices: 0, skipped: [] },
+          raised,
           true,
-          `${affected.length} faces escavadas`,
+          raised.raisedFaces > 0 ? `${raised.raisedFaces} faces elevadas` : undefined,
         );
         return;
       }
 
-      // Scale preservation: small brush on a giant face does not explode into thousands of minifaces
-      const origArea = totalMultiPolygonArea(affectedMerged);
-      const origFaceSide = affected.length > 0 ? Math.sqrt(origArea / affected.length) : faceSize;
-      effectiveFaceSide = Math.max(faceSize, Math.min(origFaceSide * 0.8, brushRadius * 1.5));
-      effectiveFaceSide = Math.max(1.0, effectiveFaceSide);
-    } else {
-      // isAdd
-      if (affectedMerged.length === 0) {
+      try {
+        targetPolygon = polygonClipping.union(affectedMerged, swept);
+      } catch {
         targetPolygon = swept;
-      } else {
-        // Check if stroke extends into empty ground or bridges clouds:
-        let uncovered: MultiPolygon = swept;
-        try {
-          uncovered = polygonClipping.difference(swept, affectedMerged);
-        } catch {
-          uncovered = swept;
-        }
-        const uncoveredArea = totalMultiPolygonArea(uncovered);
-        const minUsefulArea = faceSize * faceSize * 0.25;
-
-        if (uncoveredArea < minUsefulArea) {
-          // Entirely inside existing terrain: elevate height smoothly without rebuilding mesh!
-          const raised = restackTerrain(
-            ctx,
-            targetSurface,
-            covered,
-            causeId,
-            dirtLoadOver(gesture.samples.map((sample) => sample.point), brushRadius),
-            "elevate",
-            elevationStep,
-          );
-          report(
-            ctx,
-            0,
-            0,
-            0,
-            raised,
-            true,
-            raised.raisedFaces > 0 ? `${raised.raisedFaces} faces elevadas` : undefined,
-          );
-          return;
-        }
-
-        try {
-          targetPolygon = polygonClipping.union(affectedMerged, swept);
-        } catch {
-          targetPolygon = swept;
-        }
       }
     }
 

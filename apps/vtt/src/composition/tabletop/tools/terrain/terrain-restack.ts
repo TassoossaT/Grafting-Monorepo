@@ -211,10 +211,10 @@ export function restackTerrain(
     if (load <= 1e-6) continue;
 
     let targetY = entry.position.y;
-    if (mode === "elevate") {
-      targetY = entry.position.y + step * load;
-    } else if (mode === "lower") {
-      targetY = Math.max(0, entry.position.y - step * load);
+    if (mode === "elevate" || mode === "add") {
+      targetY = Math.min(20, entry.position.y + step * load);
+    } else if (mode === "lower" || mode === "dig") {
+      targetY = Math.max(-10, entry.position.y - step * load);
     } else if (mode === "flatten") {
       targetY = entry.position.y + (averageY - entry.position.y) * load * 0.5;
     }
