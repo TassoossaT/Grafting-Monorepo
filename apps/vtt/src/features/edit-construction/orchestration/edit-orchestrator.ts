@@ -119,7 +119,7 @@ export function planEdit(
       reason: `the gesture's target is not part of the ${cloud.cloud.surfaceType} cloud seeded at ${cloud.cloud.seed.join(":")}`,
     };
   }
-  const cascade = policy.cascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta }) ?? [];
+  const cascade = policy.cascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot }) ?? [];
   return {
     kind: "apply",
     role: policy.role,

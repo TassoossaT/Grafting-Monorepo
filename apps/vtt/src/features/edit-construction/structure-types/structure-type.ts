@@ -1,4 +1,5 @@
 import type {
+  ConstructionGraphSnapshot,
   ConstructionNodeId,
   ConstructionRegionEdge,
   ConstructionPosition,
@@ -94,6 +95,7 @@ export interface CascadeContext {
   readonly target: EditTarget;
   /** The delta already constrained by the role's own axes. */
   readonly delta: { readonly x: number; readonly y: number; readonly z: number };
+  readonly graphSnapshot?: ConstructionGraphSnapshot;
 }
 
 /**

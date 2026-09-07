@@ -1,4 +1,5 @@
 import type {
+  ConstructionGridConstraintPoint,
   ConstructionNodeId,
   ConstructionPosition,
   ConstructionRegionEdge,
@@ -142,6 +143,62 @@ function pruneToLive(
   }));
 }
 
+/**
+ * Collapses consecutive points in a constraint ring that sit closer than
+ * `minDistance`, avoiding micro-segments that cause spade Delaunay refinement
+ * to explode into thousands of tiny faces.
+ */
+function weldConstraintRing(
+  ring: ConstraintRing,
+  minDistance: number,
+): ConstraintRing {
+  if (ring.points.length <= 3) return ring;
+  const minDistSq = minDistance * minDistance;
+  const keptPoints: ConstructionGridConstraintPoint[] = [ring.points[0]!];
+  const keptEdges: (ConstructionRegionEdge | undefined)[] = [];
+
+  let lastKeptIndex = 0;
+  for (let i = 1; i < ring.points.length; i += 1) {
+    const pt = ring.points[i]!;
+    const prev = keptPoints[keptPoints.length - 1]!;
+    const distSq = (pt.x - prev.x) ** 2 + (pt.z - prev.z) ** 2;
+    if (distSq >= minDistSq) {
+      keptPoints.push(pt);
+      keptEdges.push(i === lastKeptIndex + 1 ? ring.edges[lastKeptIndex] : undefined);
+      lastKeptIndex = i;
+    }
+  }
+
+  // Ensure closing segment back to first point is not too short
+  if (keptPoints.length >= 3) {
+    const first = keptPoints[0]!;
+    const last = keptPoints[keptPoints.length - 1]!;
+    const closeDistSq = (first.x - last.x) ** 2 + (first.z - last.z) ** 2;
+    if (closeDistSq < minDistSq && keptPoints.length > 3) {
+      keptPoints.pop();
+      keptEdges.pop();
+    }
+  }
+
+  if (keptPoints.length < 3) {
+    if (ring.points.length <= 4) return ring;
+    const step = ring.points.length / 4;
+    const reducedPoints: ConstructionGridConstraintPoint[] = [];
+    const reducedEdges: (ConstructionRegionEdge | undefined)[] = [];
+    for (let k = 0; k < 4; k += 1) {
+      const idx = Math.floor(k * step);
+      reducedPoints.push(ring.points[idx]!);
+      reducedEdges.push(undefined);
+    }
+    return { points: reducedPoints, edges: reducedEdges };
+  }
+
+  const originalLast = ring.points.length - 1;
+  keptEdges.push(lastKeptIndex === originalLast ? ring.edges[originalLast] : undefined);
+
+  return { points: keptPoints, edges: keptEdges };
+}
+
 export interface RegenerateRequest {
   /** The faces to throw away and lay again. */
   readonly consumedSurfaceKeys: readonly ConstructionSurfaceKey[];
@@ -225,6 +282,8 @@ export function regenerateNeighbourhood(
 
   const stamp = Math.abs(hashOf(request.consumedSurfaceKeys));
   const live = runtime.getSnapshot().map.nodePositions;
+  const minWeld = Math.min(0.8, request.faceSide * 0.4);
+  const weldedHoles = others.rings.map((ring) => weldConstraintRing(ring, minWeld));
 
   return fillTerrain(runtime, {
     // Deterministic in the ground itself rather than in the clock, so the same
@@ -240,7 +299,7 @@ export function regenerateNeighbourhood(
     // side having to know that.
     surfaceType,
     boundary: pruneToLive(rim.rings, sources, (nodeId) => live.has(nodeId)),
-    holes: others.rings,
+    holes: weldedHoles,
     sources,
     heightAt: (point) => heights.at(point) ?? request.heightOfNewGround(point),
   }).built;

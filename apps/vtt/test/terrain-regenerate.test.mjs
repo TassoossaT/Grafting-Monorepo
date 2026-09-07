@@ -202,3 +202,36 @@ test("sitting exactly on an anchor takes its height rather than dividing by zero
   const field = heightFieldOf([{ x: 3, y: 7, z: 4 }], 2);
   assert.equal(field.at({ x: 3, z: 4 }), 7);
 });
+
+test("dense road loops are welded before being passed as generator hole constraints to prevent face explosion", () => {
+  const context = field();
+  const denseNodes = [];
+  const denseEdges = [];
+  const count = 40;
+  for (let i = 0; i < count; i += 1) {
+    const id = `dense_r${i}`;
+    const nextId = `dense_r${(i + 1) % count}`;
+    const angle = (i / count) * 2 * Math.PI;
+    const pos = { x: 1 + 0.3 * Math.cos(angle), y: 1, z: 1 + 0.3 * Math.sin(angle) };
+    denseNodes.push({ id, position: pos });
+    denseEdges.push({
+      edgeId: `e:${id}~${nextId}`,
+      reversed: false,
+      startNodeId: id,
+      endNodeId: nextId,
+      geometry: { kind: "line" },
+    });
+  }
+
+  const denseFallout = {
+    paintedNodes: denseNodes,
+    paintedLoops: [denseEdges],
+    consumedSurfaceKeys: [["terrain", "L"]],
+  };
+
+  repairTerrainCut(context.runtime, denseFallout, "cause-dense", "t");
+  const request = context.requests[context.requests.length - 1];
+  assert.ok(request, "a request was sent to the generator");
+  const hole = request.holes[0];
+  assert.ok(hole.length < 10, `dense hole points (${count}) should be welded, got ${hole.length}`);
+});

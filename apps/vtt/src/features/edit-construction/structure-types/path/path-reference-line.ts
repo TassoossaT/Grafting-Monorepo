@@ -19,27 +19,48 @@ import type { FittedEdge } from "../../topology/index.ts";
  * has to earn its place by the ground under it actually differing from what
  * the stretch either side of it already says.
  */
-const TERRAIN_HEIGHT_TOLERANCE = 0.15;
+const TERRAIN_HEIGHT_TOLERANCE = 0.2;
 
 /** How finely the ground is read while deciding whether it needs a station. */
-const TERRAIN_PROBE_STEP = 0.5;
+const TERRAIN_PROBE_STEP = 1.0;
 
-/** The height the stroke recorded nearest this ground position. */
+/** The height interpolated along the stroke polyline nearest this ground position. */
 function groundHeightNear(
   stroke: readonly ConstructionPosition[],
   x: number,
   z: number,
 ): number {
-  let closest: ConstructionPosition | undefined;
-  let closestDistance = Infinity;
-  for (const sample of stroke) {
-    const distance = (sample.x - x) ** 2 + (sample.z - z) ** 2;
-    if (distance < closestDistance) {
-      closestDistance = distance;
-      closest = sample;
+  if (stroke.length === 0) return 0;
+  if (stroke.length === 1) return stroke[0]!.y;
+
+  let minDistanceSq = Infinity;
+  let interpolatedY = stroke[0]!.y;
+
+  for (let i = 0; i + 1 < stroke.length; i += 1) {
+    const a = stroke[i]!;
+    const b = stroke[i + 1]!;
+    const abx = b.x - a.x;
+    const abz = b.z - a.z;
+    const lenSq = abx * abx + abz * abz;
+    if (lenSq < 1e-9) {
+      const dSq = (a.x - x) ** 2 + (a.z - z) ** 2;
+      if (dSq < minDistanceSq) {
+        minDistanceSq = dSq;
+        interpolatedY = a.y;
+      }
+      continue;
+    }
+    const t = Math.max(0, Math.min(1, ((x - a.x) * abx + (z - a.z) * abz) / lenSq));
+    const projX = a.x + t * abx;
+    const projZ = a.z + t * abz;
+    const dSq = (projX - x) ** 2 + (projZ - z) ** 2;
+    if (dSq < minDistanceSq) {
+      minDistanceSq = dSq;
+      interpolatedY = a.y + t * (b.y - a.y);
     }
   }
-  return closest?.y ?? 0;
+
+  return interpolatedY;
 }
 
 /** One point of the sampled track: where it sits, and whether the run genuinely turns there. */
