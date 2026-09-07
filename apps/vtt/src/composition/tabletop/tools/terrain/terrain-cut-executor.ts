@@ -387,22 +387,6 @@ export function executeTerrainCut(
   const strokePath = request.area.path;
   const centerOrPath = strokePath && strokePath.length > 0 ? strokePath : center;
 
-  const normalAt = (point: { readonly x: number; readonly z: number }): { readonly x: number; readonly y: number; readonly z: number } => {
-    const eps = Math.max(0.15, effectiveFaceSide * 0.15);
-    const hCenter = localKept.at(point) ?? wideKept.at(point);
-    if (hCenter === undefined) return { x: 0, y: 1, z: 0 };
-    const hXPlus = localKept.at({ x: point.x + eps, z: point.z }) ?? wideKept.at({ x: point.x + eps, z: point.z }) ?? hCenter;
-    const hXMinus = localKept.at({ x: point.x - eps, z: point.z }) ?? wideKept.at({ x: point.x - eps, z: point.z }) ?? hCenter;
-    const hZPlus = localKept.at({ x: point.x, z: point.z + eps }) ?? wideKept.at({ x: point.x, z: point.z + eps }) ?? hCenter;
-    const hZMinus = localKept.at({ x: point.x, z: point.z - eps }) ?? wideKept.at({ x: point.x, z: point.z - eps }) ?? hCenter;
-
-    const gx = (hXPlus - hXMinus) / (2 * eps);
-    const gz = (hZPlus - hZMinus) / (2 * eps);
-
-    const len = Math.hypot(-gx, 1, -gz);
-    return len > 1e-6 ? { x: -gx / len, y: 1 / len, z: -gz / len } : { x: 0, y: 1, z: 0 };
-  };
-
   const sampleBase = (point: { readonly x: number; readonly z: number }): number => {
     let base = localKept.at(point);
     if (base === undefined) {
@@ -423,6 +407,20 @@ export function executeTerrainCut(
     return base;
   };
 
+  // Determine ONE unified normal direction from the brush stroke center:
+  // Uses a wide baseline (1.5x face side) to ignore micro-noise and capture the overall slope.
+  const eps = Math.max(1.0, effectiveFaceSide * 1.5);
+  const hXPlus = sampleBase({ x: center.x + eps, z: center.z });
+  const hXMinus = sampleBase({ x: center.x - eps, z: center.z });
+  const hZPlus = sampleBase({ x: center.x, z: center.z + eps });
+  const hZMinus = sampleBase({ x: center.x, z: center.z - eps });
+
+  const gx = (hXPlus - hXMinus) / (2 * eps);
+  const gz = (hZPlus - hZMinus) / (2 * eps);
+  const gradLen = Math.hypot(-gx, 1, -gz);
+  const brushNormal: { readonly x: number; readonly y: number; readonly z: number } =
+    gradLen > 1e-6 ? { x: -gx / gradLen, y: 1 / gradLen, z: -gz / gradLen } : { x: 0, y: 1, z: 0 };
+
   const heightAt = (point: { readonly x: number; readonly z: number }): number => {
     const base = sampleBase(point);
     return calculateProfileHeight(point, base, request.profile, centerOrPath, radius);
@@ -430,8 +428,7 @@ export function executeTerrainCut(
 
   const positionAt = (point: { readonly x: number; readonly z: number }): ConstructionPosition => {
     const base = sampleBase(point);
-    const norm = normalAt(point);
-    const disp = calculateProfileDisplacement(point, request.profile, centerOrPath, radius, norm);
+    const disp = calculateProfileDisplacement(point, request.profile, centerOrPath, radius, brushNormal);
     return {
       x: point.x + disp.dx,
       y: base + disp.dy,
