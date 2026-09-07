@@ -359,7 +359,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
         profile: { kind: "concave", depth: elevationStep },
         causeId,
         tableId: ctx.tableId,
-        faceSide,
+        faceSide: faceSize,
         seed: Math.floor(params.seed ?? 1) || 1,
         irregularity: params.irregularity ?? 0.7,
       });
@@ -401,7 +401,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
           profile: { kind: "convex", height: elevationStep },
           causeId,
           tableId: ctx.tableId,
-          faceSide,
+          faceSide: faceSize,
           seed: Math.floor(params.seed ?? 1) || 1,
           irregularity: params.irregularity ?? 0.7,
         });
