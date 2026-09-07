@@ -232,7 +232,7 @@ function TerrainSculptFields(props: {
       {sliderRow("Alcance da pincelada", params.brushRadius, 1.5, 15, 0.5, (brushRadius) =>
         onChange({ ...params, brushRadius, faceSize: deriveFaceSize(brushRadius) }),
       )}
-      {sliderRow("Intensidade do relevo", params.elevationStep ?? 0.5, 0.1, 2.0, 0.1, (elevationStep) =>
+      {sliderRow("Intensidade do relevo", params.elevationStep ?? 0.5, 0.1, 10.0, 0.1, (elevationStep) =>
         onChange({ ...params, elevationStep }),
       )}
       {sliderRow("Altura inicial", params.heightScale, 0, 5, 0.25, (heightScale) =>

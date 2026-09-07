@@ -9,8 +9,12 @@ import type {
 import type {
   StructuralCutRequest,
   StructuralCutOutcome,
+  StructuralCutArea,
 } from "@/features/edit-construction";
-import { calculateProfileHeight } from "../../../../features/edit-construction/index.ts";
+import {
+  calculateProfileHeight,
+  distanceAndElevationOnPath,
+} from "../../../../features/edit-construction/index.ts";
 import polygonClipping, { type MultiPolygon, type Polygon } from "polygon-clipping";
 
 import {
@@ -49,7 +53,38 @@ function insidePolygon(point: ConstructionPosition, polygon: readonly (readonly 
   return inside;
 }
 
-function faceIntersectsOutline(topology: ConstructionRegionTopology, outline: readonly (readonly [number, number])[]): boolean {
+function insideSwept(point: ConstructionPosition, swept: MultiPolygon): boolean {
+  const inRing = (ring: readonly (readonly [number, number])[]): boolean => {
+    let inside = false;
+    for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index, index += 1) {
+      const [ax, az] = ring[index]!;
+      const [bx, bz] = ring[previous]!;
+      if (az > point.z !== bz > point.z && point.x < ((bx - ax) * (point.z - az)) / (bz - az) + ax) {
+        inside = !inside;
+      }
+    }
+    return inside;
+  };
+  for (const polygon of swept) {
+    const outer = polygon[0];
+    if (outer === undefined || !inRing(outer)) continue;
+    if (polygon.slice(1).some((hole) => inRing(hole))) continue;
+    return true;
+  }
+  return false;
+}
+
+function faceIntersectsArea(
+  topology: ConstructionRegionTopology,
+  area: StructuralCutArea,
+  outline: readonly (readonly [number, number])[],
+): boolean {
+  if (area.sweptPolygon && area.sweptPolygon.length > 0) {
+    for (const node of topology.nodes) {
+      if (insideSwept(node.position, area.sweptPolygon)) return true;
+    }
+    return insideSwept(centroidOf(topology.nodes), area.sweptPolygon);
+  }
   for (const node of topology.nodes) {
     if (insidePolygon(node.position, outline)) return true;
   }
@@ -139,17 +174,42 @@ export function buildConstraintRings(
   return rings;
 }
 
-function boundsOfOutline(outline: readonly (readonly [number, number])[]): TerrainStrokeBounds {
+function boundsOfArea(area: StructuralCutArea): TerrainStrokeBounds {
   let minX = Infinity;
   let minZ = Infinity;
   let maxX = -Infinity;
   let maxZ = -Infinity;
-  for (const [x, z] of outline) {
+
+  const update = (x: number, z: number) => {
     minX = Math.min(minX, x);
     minZ = Math.min(minZ, z);
     maxX = Math.max(maxX, x);
     maxZ = Math.max(maxZ, z);
+  };
+
+  if (area.sweptPolygon) {
+    for (const poly of area.sweptPolygon) {
+      for (const ring of poly) {
+        for (const [x, z] of ring) update(x, z);
+      }
+    }
   }
+  if (area.outline) {
+    for (const [x, z] of area.outline) update(x, z);
+  }
+  if (area.path) {
+    const r = area.radius ?? 0;
+    for (const p of area.path) {
+      update(p.x - r, p.z - r);
+      update(p.x + r, p.z + r);
+    }
+  }
+  if (area.center) {
+    const r = area.radius ?? 0;
+    update(area.center.x - r, area.center.z - r);
+    update(area.center.x + r, area.center.z + r);
+  }
+
   if (!Number.isFinite(minX)) {
     minX = 0;
     minZ = 0;
@@ -163,35 +223,55 @@ function boundsOfOutline(outline: readonly (readonly [number, number])[]): Terra
  * Executes a generic structural cut / excavation / addition / hole operation on terrain.
  *
  * Follows the unified operational cycle:
- * 1. Find affected faces inside `request.area.outline`.
+ * 1. Find affected faces inside `request.area.outline` or `request.area.sweptPolygon`.
  * 2. If `profile.kind === "hole"`, directly removes the faces and leaves the boundary intact.
  * 3. For `concave`, `convex`, or `regenerate`, rebuilds the mesh within the boundary:
- *    - `concave`: calculates depression profile (excavating crater/cavity)
- *    - `convex`: calculates elevation profile (depositing earth mound)
+ *    - `concave`: calculates depression profile (excavating crater/cavity) along center point or path
+ *    - `convex`: calculates elevation profile (depositing earth mound or mountain ridge) along center point or path
  *    - `regenerate`: fills seamlessly connecting to surrounding terrain and optional `connectTo` structure
  */
 export function executeTerrainCut(
   runtime: TerrainRegenerateRuntime,
   request: StructuralCutRequest,
 ): StructuralCutOutcome {
-  const outline = request.area.outline;
-  if (outline.length < 3) {
+  const rawOutline = request.area.outline ?? request.area.sweptPolygon?.[0]?.[0] ?? [];
+  const outline = rawOutline.length >= 3 ? rawOutline : [];
+
+  const closedOutlineRing: [number, number][] = outline.map(([x, z]) => [x, z]);
+  if (
+    closedOutlineRing.length > 0 &&
+    (closedOutlineRing[0]![0] !== closedOutlineRing[closedOutlineRing.length - 1]![0] ||
+      closedOutlineRing[0]![1] !== closedOutlineRing[closedOutlineRing.length - 1]![1])
+  ) {
+    closedOutlineRing.push([closedOutlineRing[0]![0], closedOutlineRing[0]![1]]);
+  }
+
+  const outlineMultiPolygon: MultiPolygon =
+    request.area.sweptPolygon && request.area.sweptPolygon.length > 0
+      ? request.area.sweptPolygon
+      : closedOutlineRing.length >= 4
+        ? [[closedOutlineRing]]
+        : [];
+
+  if (outlineMultiPolygon.length === 0 && outline.length < 3) {
     return { builtFaces: 0, removedFaces: 0, refusedFaces: 0, success: false, message: "Área de corte inválida." };
   }
 
   const effectiveFaceSide = request.faceSide ?? DEFAULT_FACE_SIDE;
-  const extent = boundsOfOutline(outline);
+  const extent = boundsOfArea(request.area);
 
-  // Ask runtime what surfaces are covered by outline
+  // Ask runtime what surfaces are covered by outline / footprint
+  const coveredOutline = outline.length >= 3 ? outline : outlineMultiPolygon[0]?.[0] ?? [];
   const covered: readonly ConstructionCoveredRegion[] =
+    coveredOutline.length >= 3 &&
     typeof (runtime as unknown as { getFootprintCoverage?: (outline: readonly (readonly [number, number])[]) => readonly ConstructionCoveredRegion[] }).getFootprintCoverage === "function"
-      ? (runtime as unknown as { getFootprintCoverage: (outline: readonly (readonly [number, number])[]) => readonly ConstructionCoveredRegion[] }).getFootprintCoverage(outline)
+      ? (runtime as unknown as { getFootprintCoverage: (outline: readonly (readonly [number, number])[]) => readonly ConstructionCoveredRegion[] }).getFootprintCoverage(coveredOutline)
       : [];
 
   const standing = terrainStandingAround(runtime, covered, extent, effectiveFaceSide * 2);
 
   const affected = standing.filter(
-    (topology) => topology.surfaceType === request.targetSurfaceType && faceIntersectsOutline(topology, outline),
+    (topology) => topology.surfaceType === request.targetSurfaceType && faceIntersectsArea(topology, request.area, coveredOutline),
   );
   const affectedKeys = new Set(affected.map((t) => t.surfaceKey.join(" ")));
   const retained = standing.filter((t) => !affectedKeys.has(t.surfaceKey.join(" ")));
@@ -224,15 +304,6 @@ export function executeTerrainCut(
     affectedPolygons.length > 0
       ? polygonClipping.union(affectedPolygons[0]!, ...affectedPolygons.slice(1))
       : [];
-
-  const closedOutlineRing: [number, number][] = outline.map(([x, z]) => [x, z]);
-  if (
-    closedOutlineRing[0]![0] !== closedOutlineRing[closedOutlineRing.length - 1]![0] ||
-    closedOutlineRing[0]![1] !== closedOutlineRing[closedOutlineRing.length - 1]![1]
-  ) {
-    closedOutlineRing.push([closedOutlineRing[0]![0], closedOutlineRing[0]![1]]);
-  }
-  const outlineMultiPolygon: MultiPolygon = [[closedOutlineRing]];
 
   let targetPolygon: MultiPolygon;
 
@@ -288,17 +359,35 @@ export function executeTerrainCut(
   }
 
   const affectedNodes = affected.flatMap((t) => t.nodes);
-  const center3D = request.area.center ?? centroidOf(affectedNodes.length > 0 ? affectedNodes : outline.map(([x, z]) => ({ position: { x, y: 0, z } })));
+  const center3D =
+    request.area.center ??
+    centroidOf(affectedNodes.length > 0 ? affectedNodes : coveredOutline.map(([x, z]) => ({ position: { x, y: 0, z } })));
   const center = { x: center3D.x, z: center3D.z };
   const extentRadius = Math.max((extent.maxX - extent.minX) / 2, (extent.maxZ - extent.minZ) / 2, effectiveFaceSide);
   const radius = request.area.radius ?? extentRadius;
 
   const standingNodes = standing.flatMap((topology) => topology.nodes.map((node) => node.position));
-  const kept = heightFieldOf(standingNodes, effectiveFaceSide * 2);
+  const reach = Math.max(effectiveFaceSide * 3, radius);
+  const kept = heightFieldOf(standingNodes, reach);
+
+  const strokePath = request.area.path;
+  const centerOrPath = strokePath && strokePath.length > 0 ? strokePath : center;
 
   const heightAt = (point: { readonly x: number; readonly z: number }): number => {
-    const base = kept.at(point) ?? center3D.y;
-    return calculateProfileHeight(point, base, request.profile, center, radius);
+    let base = kept.at(point);
+    if (base === undefined) {
+      if (strokePath && strokePath.length > 0) {
+        const { pathY } = distanceAndElevationOnPath(point.x, point.z, strokePath);
+        base = pathY;
+      }
+      if (base === undefined) {
+        base = center3D.y;
+      }
+      if (request.noiseAt) {
+        base += request.noiseAt(point);
+      }
+    }
+    return calculateProfileHeight(point, base, request.profile, centerOrPath, radius);
   };
 
   const filled = fillTerrain(runtime, {

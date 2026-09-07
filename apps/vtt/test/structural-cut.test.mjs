@@ -3,6 +3,8 @@ import test from "node:test";
 
 import {
   calculateProfileHeight,
+  distanceSqToSegment2D,
+  distanceAndElevationOnPath,
 } from "../src/features/edit-construction/structure-types/structural-cut.ts";
 import {
   executeTerrainCut,
@@ -225,3 +227,93 @@ test("executeTerrainCut: concave profile replaces affected faces atomically with
   assert.ok(centerNode !== undefined, "center node should exist in patch");
   assert.ok(centerNode.position.y < 4.0, `expected depressed height around 3, got ${centerNode.position.y}`);
 });
+
+test("distanceAndElevationOnPath: calculates 2D distance and interpolates elevation along polyline", () => {
+  const path = [
+    { x: 0, y: 10, z: 0 },
+    { x: 10, y: 20, z: 0 },
+  ];
+
+  // Exactly on segment midway:
+  const mid = distanceAndElevationOnPath(5, 0, path);
+  assert.equal(mid.distance, 0);
+  assert.equal(mid.pathY, 15);
+
+  // Perpendicular to segment at (5, 3):
+  const perp = distanceAndElevationOnPath(5, 3, path);
+  assert.equal(perp.distance, 3);
+  assert.equal(perp.pathY, 15);
+
+  // Past the end:
+  const pastEnd = distanceAndElevationOnPath(14, 0, path);
+  assert.equal(pastEnd.distance, 4);
+  assert.equal(pastEnd.pathY, 20);
+});
+
+test("calculateProfileHeight: polyline stroke path creates a continuous mountain ridge with zero seam", () => {
+  const ridgePath = [
+    { x: 0, z: 5 },
+    { x: 10, z: 5 },
+    { x: 20, z: 5 },
+  ];
+  const radius = 4;
+  const baseHeight = 2;
+  const mountainHeight = 6;
+
+  // Along the entire spine of the ridge, height is baseHeight + mountainHeight = 8
+  for (const spineX of [0, 5, 10, 15, 20]) {
+    const h = calculateProfileHeight(
+      { x: spineX, z: 5 },
+      baseHeight,
+      { kind: "convex", height: mountainHeight },
+      ridgePath,
+      radius,
+    );
+    assert.ok(Math.abs(h - 8) < 1e-6, `spine at x=${spineX} expected 8, got ${h}`);
+  }
+
+  // At distance = radius (z = 5 + 4 = 9): zero seam, height is exactly baseHeight = 2
+  const rimHeight = calculateProfileHeight(
+    { x: 10, z: 9 },
+    baseHeight,
+    { kind: "convex", height: mountainHeight },
+    ridgePath,
+    radius,
+  );
+  assert.ok(Math.abs(rimHeight - 2) < 1e-6, `rim expected 2, got ${rimHeight}`);
+
+  // Beyond distance = radius: height is baseHeight = 2
+  const outsideHeight = calculateProfileHeight(
+    { x: 10, z: 12 },
+    baseHeight,
+    { kind: "convex", height: mountainHeight },
+    ridgePath,
+    radius,
+  );
+  assert.equal(outsideHeight, 2);
+});
+
+test("calculateProfileHeight: successive strokes cumulatively elevate to form higher peaks", () => {
+  const center = { x: 5, z: 5 };
+  const radius = 5;
+
+  // Initial flat terrain height = 1.0
+  let height = 1.0;
+
+  // Stroke 1: Add elevation 2.5
+  height = calculateProfileHeight({ x: 5, z: 5 }, height, { kind: "convex", height: 2.5 }, center, radius);
+  assert.ok(Math.abs(height - 3.5) < 1e-6, `expected 3.5, got ${height}`);
+
+  // Stroke 2: Add elevation 2.5 again over the existing peak
+  height = calculateProfileHeight({ x: 5, z: 5 }, height, { kind: "convex", height: 2.5 }, center, radius);
+  assert.ok(Math.abs(height - 6.0) < 1e-6, `expected 6.0, got ${height}`);
+
+  // Stroke 3: Add elevation 4.0
+  height = calculateProfileHeight({ x: 5, z: 5 }, height, { kind: "convex", height: 4.0 }, center, radius);
+  assert.ok(Math.abs(height - 10.0) < 1e-6, `expected 10.0, got ${height}`);
+
+  // Now dig 3.0 out of the peak
+  height = calculateProfileHeight({ x: 5, z: 5 }, height, { kind: "concave", depth: 3.0 }, center, radius);
+  assert.ok(Math.abs(height - 7.0) < 1e-6, `expected 7.0, got ${height}`);
+});
+
