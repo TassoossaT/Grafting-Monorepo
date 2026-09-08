@@ -3,15 +3,20 @@
 // `@/` import is fine -- those are erased.
 import type {
   ApplyPatchReplacementRequest,
+  ConstructionEdge,
   ConstructionNodeId,
+  ConstructionPatch,
+  ConstructionPatchOutcome,
   ConstructionPosition,
   ConstructionRegionEdge,
+  ConstructionRegionTopology,
   ConstructionSurfaceKey,
   ConstructionTopologyBoundsQuery,
 } from "@/ports";
 import {
   outwardPerimeterRings,
   resolveCoverage,
+  resolveCreationInteraction,
   resolveCutRepair,
   type CutFallout,
 } from "../../../features/edit-construction/index.ts";
@@ -52,29 +57,90 @@ export const CUT_REPAIR_EXECUTORS: Readonly<Record<string, CutRepairExecutor>> =
 });
 
 /**
+ * Reconstructs region topologies from a patch directly when they are not yet
+ * retrievable from the engine or runtime queries.
+ */
+function topologiesFromPatch(
+  patch: ConstructionPatch,
+  runtime: Pick<TabletopRuntime, "getSnapshot">,
+): readonly ConstructionRegionTopology[] {
+  const edgeById = new Map<string, ConstructionEdge>();
+  for (const edge of patch.edges) edgeById.set(edge.id, edge);
+  const nodeById = new Map<string, ConstructionPosition>();
+  for (const node of patch.nodes) nodeById.set(node.id, node.position);
+  const liveNodes = runtime.getSnapshot().map.nodePositions;
+
+  return patch.regions.map((region) => {
+    const regionEdges: ConstructionRegionEdge[] = [];
+    const regionNodes = new Map<string, ConstructionPosition>();
+    for (const use of region.boundary) {
+      const edge = edgeById.get(use.edgeId);
+      const startId = edge ? (use.reversed ? edge.endNodeId : edge.startNodeId) : "";
+      const endId = edge ? (use.reversed ? edge.startNodeId : edge.endNodeId) : "";
+      const startPos = startId ? (nodeById.get(startId) ?? liveNodes.get(startId)?.position) : undefined;
+      const endPos = endId ? (nodeById.get(endId) ?? liveNodes.get(endId)?.position) : undefined;
+      if (startId && startPos) regionNodes.set(startId, startPos);
+      if (endId && endPos) regionNodes.set(endId, endPos);
+      regionEdges.push({
+        edgeId: use.edgeId,
+        reversed: use.reversed,
+        startNodeId: startId,
+        endNodeId: endId,
+        geometry: edge?.geometry,
+      });
+    }
+    return {
+      surfaceKey: ["@region", region.regionId],
+      surfaceType: region.surfaceType,
+      nodes: [...regionNodes].map(([id, position]) => ({ id, position })),
+      outerLoops: [regionEdges],
+      holes: [],
+    };
+  });
+}
+
+/**
+ * Fast spatial bucketing for proximity queries against road points.
+ */
+function pointBucketIndex(points: readonly ConstructionPosition[], cellSize: number) {
+  const buckets = new Map<string, ConstructionPosition[]>();
+  const key = (x: number, z: number) => `${Math.floor(x / cellSize)}:${Math.floor(z / cellSize)}`;
+  for (const pt of points) {
+    const k = key(pt.x, pt.z);
+    const list = buckets.get(k);
+    if (list === undefined) buckets.set(k, [pt]);
+    else list.push(pt);
+  }
+  const maxDistSq = cellSize * cellSize;
+
+  return {
+    isNear(x: number, z: number): boolean {
+      const col = Math.floor(x / cellSize);
+      const row = Math.floor(z / cellSize);
+      for (let dx = -1; dx <= 1; dx += 1) {
+        for (let dz = -1; dz <= 1; dz += 1) {
+          const list = buckets.get(`${col + dx}:${row + dz}`);
+          if (list !== undefined) {
+            for (const pt of list) {
+              const ddx = x - pt.x;
+              const ddz = z - pt.z;
+              if (ddx * ddx + ddz * ddz <= maxDistSq) return true;
+            }
+          }
+        }
+      }
+      return false;
+    },
+  };
+}
+
+/**
  * The painter's own ground, as the repair needs it: its real nodes to weld
  * onto, and one closed ring per face it owns so the area it occupies can be
  * taken out of the hole.
  *
- * Read from **every live face of the painter's type**, not from the stroke's
- * own footprint coverage. `getFootprintCoverage` answers "what does this
- * outline touch", which is a different question: a brush resubmits only its
- * latest increment each tick, and coverage of that increment named as little
- * as one face and four nodes of a road that really had dozens. The area
- * subtracted from the hole was then a fraction of the road, so the fill was
- * computed over ground the road genuinely occupies -- and the engine refused
- * the whole face for trying to take a side of an edge the road already
- * holds, which is the "cut happens but nothing regenerates" the table saw. A
- * face of the same type nowhere near the hole costs nothing here: it cannot
- * intersect what the cut removed, so it cannot change the difference.
- *
- * Loops are whole face boundaries in the engine's own order, never a walk
- * over the painter's loose edge set -- neighbouring band regions share
- * interior edges, so that graph is no simple cycle and a walk returns an
- * arbitrary path, a different one per run. See `CutFallout.paintedLoops`.
- *
- * Exported for its own test: every cut-repair failure so far has come from
- * what this function hands over, never from the repair's own arithmetic.
+ * Read from **every live face of the painter's type**, optionally scoped
+ * to bounds.
  */
 export function paintedNodesOf(
   runtime: Pick<TabletopRuntime, "getAllRegionTopologies" | "getRegionTopologiesInBounds" | "getSnapshot">,
@@ -91,76 +157,160 @@ export function paintedNodesOf(
   }
   return {
     paintedNodes: [...nodesById].map(([id, position]) => ({ id, position })),
-    // The perimeter of the painter's whole cloud, not each face's own
-    // boundary: a road is many faces that touch, and its outline is the one
-    // ring around all of them. Face-by-face describes a shape overlapping
-    // itself along every shared edge.
     paintedLoops: outwardPerimeterRings(painted),
   };
 }
 
 /**
- * Resolves what `request`'s own footprint cuts into, and dispatches each
- * covered type's own repair -- called once `TabletopRuntime.applyPatchReplacement`
- * has already landed `request`, so a painted node a repair wants to weld
- * onto is real and live by the time this runs.
+ * Resolves type interference between an acting structure (e.g. `path`) and any
+ * covered structures (e.g. `terrain`) that declare `repairAfterCut: "regenerate"`.
  *
- * Neither side is named here: coverage is resolved fresh from
- * `request.footprintOutline` and `resolveCutRepair` decides who is
- * entitled, the same table any other caller of `resolveCoverage` reads.
- * This is the runtime's own choke point for `CUT`'s repair half, so any
- * caller of `applyPatchReplacement` gets it, not only whichever tool
- * happens to import a repair function by name.
- *
- * Deliberately does not read `request.sourceSurfaceKeys` at all: that list
- * is `request.patch`'s own painter consuming its own kind (a road absorbing
- * an adjoining road), never another type's regions. A covered type this
- * cuts into deletes those itself, inside its own executor -- this only
- * tells it which ones and hands it real nodes to weld onto, never deletes
- * on its behalf.
- *
- * A repair that throws is reported, never rethrown: by the time this runs,
- * `request` itself already landed -- the painter's own stroke succeeded.
- * A covered type's best-effort repair failing is that repair's own problem,
- * not a reason to tell the person at the table their stroke did not land
- * when it did. One covered type's failure does not stop another's repair
- * either, for the same reason.
+ * Fully decoupled from UI tools: operates purely on structure types, topologies,
+ * and geometric footprints. Handles full-road creations, replacements, movements,
+ * and deletions where the entire affected terrain corridor is regenerated cleanly,
+ * filling vacated voids and stitching seamlessly along the entire new road perimeter.
  */
-export function dispatchCutRepairs(runtime: TabletopRuntime, request: ApplyPatchReplacementRequest, causeId: string): void {
-  const outline = request.footprintOutline;
-  if (outline === undefined || outline.length === 0) return;
-  const paintedType = request.patch.regions[0]?.surfaceType;
+export function dispatchCutRepairs(
+  runtime: TabletopRuntime,
+  request: ApplyPatchReplacementRequest,
+  causeId: string,
+  replacedTopologies: readonly ConstructionRegionTopology[] = [],
+  outcome?: ConstructionPatchOutcome,
+  executors: Readonly<Record<string, CutRepairExecutor>> = CUT_REPAIR_EXECUTORS,
+): void {
+  const paintedType = request.patch.regions[0]?.surfaceType ?? replacedTopologies[0]?.surfaceType;
   if (paintedType === undefined) return;
 
-  const coverage = runtime.getFootprintCoverage(outline);
+  const targetTypes = ["terrain", "terrain-grass"].filter((coveredType) => {
+    const interaction = resolveCreationInteraction(paintedType, coveredType);
+    const repair = resolveCutRepair(coveredType);
+    return interaction.kind === "cut" && repair.kind === "regenerate";
+  });
+  if (targetTypes.length === 0) return;
 
-  // Both `"centroid"` and `"overlap"` are consumed for a `"cut"` -- not
-  // `"centroid"` alone. A cell the road only clips (its own centroid still
-  // outside the footprint) used to survive untouched, whole, sitting under
-  // or beside the road's real rendered edge: real terrain, in real 3D
-  // space, occupying ground the road now also occupies -- the "faces still
-  // under the road" a cut is supposed to prevent in the first place. This
-  // repair's own regeneration already treats "what got consumed" as one
-  // hole to fill around, regardless of how ragged its original boundary
-  // was; consuming the clipped cells too just hands it the *whole* true
-  // hole instead of only the fully-covered middle of it, which is also why
-  // a margin that used to be a handful of quads now regenerates as the many
-  // more it always should have been.
-  const consumedByType = new Map<string, ConstructionSurfaceKey[]>();
-  for (const entry of resolveCoverage(paintedType, coverage)) {
-    if (entry.interaction.kind !== "cut") continue;
-    if (resolveCutRepair(entry.covered.surfaceType).kind !== "regenerate") continue;
-    const keys = consumedByType.get(entry.covered.surfaceType) ?? [];
-    keys.push(entry.covered.surfaceKey);
-    consumedByType.set(entry.covered.surfaceType, keys);
+  // Retrieve new road topologies
+  let newRoadTopologies: readonly ConstructionRegionTopology[] = [];
+  if (outcome?.createdSurfaceKeys && outcome.createdSurfaceKeys.length > 0 && typeof runtime.getRegionTopology === "function") {
+    newRoadTopologies = outcome.createdSurfaceKeys
+      .map((k) => {
+        try {
+          return runtime.getRegionTopology(k);
+        } catch {
+          return undefined;
+        }
+      })
+      .filter((t): t is ConstructionRegionTopology => t !== undefined && t.surfaceType === paintedType);
   }
+  if (newRoadTopologies.length === 0 && request.patch.regions.length > 0) {
+    newRoadTopologies = topologiesFromPatch(request.patch, runtime);
+  }
+
+  // Collect all road positions and node IDs across both new and replaced geometry
+  const allRoadPositions: ConstructionPosition[] = [];
+  const roadNodeIds = new Set<string>();
+  for (const t of newRoadTopologies) {
+    for (const n of t.nodes) {
+      allRoadPositions.push(n.position);
+      roadNodeIds.add(n.id);
+    }
+  }
+  for (const t of replacedTopologies) {
+    for (const n of t.nodes) {
+      allRoadPositions.push(n.position);
+      roadNodeIds.add(n.id);
+    }
+  }
+  for (const n of request.patch.nodes) {
+    allRoadPositions.push(n.position);
+    roadNodeIds.add(n.id);
+  }
+  for (const n of request.graphPatch?.nodes ?? []) {
+    allRoadPositions.push(n.position);
+    roadNodeIds.add(n.id);
+  }
+  if (request.footprintOutline) {
+    for (const [x, z] of request.footprintOutline) {
+      allRoadPositions.push({ x, y: 0, z });
+    }
+  }
+
+  if (allRoadPositions.length === 0) return;
+
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+  for (const pos of allRoadPositions) {
+    if (pos.x < minX) minX = pos.x;
+    if (pos.x > maxX) maxX = pos.x;
+    if (pos.z < minZ) minZ = pos.z;
+    if (pos.z > maxZ) maxZ = pos.z;
+  }
+
+  const margin = 4.0;
+  const bounds: ConstructionTopologyBoundsQuery = {
+    minX: minX - margin,
+    minZ: minZ - margin,
+    maxX: maxX + margin,
+    maxZ: maxZ + margin,
+  };
+
+  const topologiesInBounds = typeof runtime.getRegionTopologiesInBounds === "function"
+    ? runtime.getRegionTopologiesInBounds(bounds)
+    : runtime.getAllRegionTopologies();
+
+  const candidateTerrain = topologiesInBounds.filter((t) => targetTypes.includes(t.surfaceType));
+  if (candidateTerrain.length === 0) return;
+
+  const outlineCoverageKeys = new Set<string>();
+  if (request.footprintOutline && request.footprintOutline.length >= 3 && typeof runtime.getFootprintCoverage === "function") {
+    try {
+      for (const entry of runtime.getFootprintCoverage(request.footprintOutline)) {
+        if (targetTypes.includes(entry.surfaceType)) {
+          outlineCoverageKeys.add(entry.surfaceKey.join("/"));
+        }
+      }
+    } catch {
+      // best-effort coverage query
+    }
+  }
+
+  const indexer = pointBucketIndex(allRoadPositions, 3.5);
+  const consumedByType = new Map<string, ConstructionSurfaceKey[]>();
+
+  for (const t of candidateTerrain) {
+    const sharesNode = t.nodes.some((n) => roadNodeIds.has(n.id));
+    const inCoverage = outlineCoverageKeys.has(t.surfaceKey.join("/"));
+    const cx = t.nodes.length > 0 ? t.nodes.reduce((sum, n) => sum + n.position.x, 0) / t.nodes.length : 0;
+    const cz = t.nodes.length > 0 ? t.nodes.reduce((sum, n) => sum + n.position.z, 0) / t.nodes.length : 0;
+    const nearRoad = indexer.isNear(cx, cz) || t.nodes.some((n) => indexer.isNear(n.position.x, n.position.z));
+
+    if (sharesNode || inCoverage || nearRoad) {
+      const keys = consumedByType.get(t.surfaceType) ?? [];
+      keys.push(t.surfaceKey);
+      consumedByType.set(t.surfaceType, keys);
+    }
+  }
+
   if (consumedByType.size === 0) return;
 
-  // Read whole cloud of painted type so outwardPerimeterRings yields complete closed rings
-  const { paintedNodes, paintedLoops } = paintedNodesOf(runtime, paintedType);
+  // Derive painted loops and nodes scoped to the affected road
+  let paintedLoops: readonly (readonly ConstructionRegionEdge[])[] = [];
+  let paintedNodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[] = [];
+
+  if (newRoadTopologies.length > 0) {
+    const roadInBounds = topologiesInBounds.filter((t) => t.surfaceType === paintedType);
+    const roadToUse = roadInBounds.length > 0 ? roadInBounds : newRoadTopologies;
+    paintedLoops = outwardPerimeterRings(roadToUse);
+    const nodesById = new Map<ConstructionNodeId, ConstructionPosition>();
+    for (const t of roadToUse) {
+      for (const n of t.nodes) nodesById.set(n.id, n.position);
+    }
+    paintedNodes = [...nodesById].map(([id, position]) => ({ id, position }));
+  }
 
   for (const [surfaceType, consumedSurfaceKeys] of consumedByType) {
-    const executor = CUT_REPAIR_EXECUTORS[surfaceType];
+    const executor = executors[surfaceType];
     if (executor === undefined) continue;
     try {
       executor(runtime, { paintedNodes, paintedLoops, consumedSurfaceKeys }, causeId, runtime.getSnapshot().tableId);
@@ -173,37 +323,66 @@ export function dispatchCutRepairs(runtime: TabletopRuntime, request: ApplyPatch
 /**
  * Resolves post-removal cut repair for a directly removed surface.
  *
- * Consults `resolveCutRepair(surfaceType)` for the removed surface's type.
- * For types declaring `"regenerate"` (e.g. `terrain`, `terrain-grass`),
- * delegates to their registered executor in `CUT_REPAIR_EXECUTORS`.
- * For types declaring `"unsupported"` (e.g. `panel`, `path`), honestly
- * does nothing (existing backlog, not an error).
+ * If the removed surface is a regenerating type (e.g. `terrain`), regenerates its hole.
+ * If the removed surface is an acting cutter (e.g. `path`) that was cutting a regenerating
+ * type, heals the vacated terrain hole.
  */
 export function dispatchRemovalRepairs(
   runtime: TabletopRuntime,
   surfaceKey: ConstructionSurfaceKey,
   surfaceType: string,
   causeId: string,
-  executors: Readonly<Record<string, CutRepairExecutor>> = CUT_REPAIR_EXECUTORS,
+  removedTopologyOrExecutors?: ConstructionRegionTopology | Readonly<Record<string, CutRepairExecutor>>,
+  maybeExecutors: Readonly<Record<string, CutRepairExecutor>> = CUT_REPAIR_EXECUTORS,
 ): void {
+  const removedTopology = (removedTopologyOrExecutors !== undefined && "surfaceKey" in removedTopologyOrExecutors)
+    ? removedTopologyOrExecutors
+    : undefined;
+  const executors = (removedTopologyOrExecutors !== undefined && !("surfaceKey" in removedTopologyOrExecutors))
+    ? (removedTopologyOrExecutors as Readonly<Record<string, CutRepairExecutor>>)
+    : maybeExecutors;
+
   const repair = resolveCutRepair(surfaceType);
-  if (repair.kind !== "regenerate") return;
+  if (repair.kind === "regenerate") {
+    const executor = executors[surfaceType];
+    if (executor === undefined) return;
 
-  const executor = executors[surfaceType];
-  if (executor === undefined) return;
+    try {
+      executor(
+        runtime,
+        {
+          consumedSurfaceKeys: [surfaceKey],
+          paintedNodes: [],
+          paintedLoops: [],
+        },
+        causeId,
+        runtime.getSnapshot().tableId,
+      );
+    } catch (error) {
+      reportToolFailure("cut-repair", `repair ${surfaceType} after removal`, { causeId, surfaceKey }, error);
+    }
+    return;
+  }
 
-  try {
-    executor(
-      runtime,
-      {
-        consumedSurfaceKeys: [surfaceKey],
-        paintedNodes: [],
-        paintedLoops: [],
-      },
-      causeId,
-      runtime.getSnapshot().tableId,
-    );
-  } catch (error) {
-    reportToolFailure("cut-repair", `repair ${surfaceType} after removal`, { causeId, surfaceKey }, error);
+  if (removedTopology !== undefined) {
+    const targetTypes = ["terrain", "terrain-grass"].filter((coveredType) => {
+      const interaction = resolveCreationInteraction(surfaceType, coveredType);
+      const rep = resolveCutRepair(coveredType);
+      return interaction.kind === "cut" && rep.kind === "regenerate";
+    });
+    if (targetTypes.length > 0) {
+      dispatchCutRepairs(
+        runtime,
+        {
+          operationId: causeId,
+          sourceSurfaceKeys: [surfaceKey],
+          patch: { nodes: [], edges: [], regions: [] },
+        },
+        causeId,
+        [removedTopology],
+        undefined,
+        executors,
+      );
+    }
   }
 }
