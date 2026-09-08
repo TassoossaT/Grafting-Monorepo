@@ -1,4 +1,4 @@
-import type { ConstructionRegionTopology } from "@/ports";
+import type { ConstructionRegionTopology, ConstructionMotionInfluence, ConstructionPosition } from "@/ports";
 
 import type { AtomicEditOp, EditTarget } from "../../orchestration/atomic-edit.ts";
 import { HEIGHT_AXIS, HORIZONTAL_AXES } from "../../orchestration/atomic-edit.ts";
@@ -55,6 +55,7 @@ function edgeOf(topology: ConstructionRegionTopology, edgeId: string) {
 export function panelRoleFor(topology: ConstructionRegionTopology, target: EditTarget): EditRole {
   if (target.kind === "region") return PANEL_ROLES.body;
   if (target.kind === "vertex") {
+    if (!topology.nodes.some((node) => node.id === target.nodeId)) return PANEL_ROLES.unknown;
     return isAtBaseline(topology, target.nodeId) ? PANEL_ROLES.bottomCorner : PANEL_ROLES.topCorner;
   }
   const edge = edgeOf(topology, target.edgeId);
@@ -66,42 +67,58 @@ export function panelRoleFor(topology: ConstructionRegionTopology, target: EditT
   return PANEL_ROLES.post;
 }
 
-/**
- * A panel's bottom corner drags its own paired top corner along by the
- * **same** delta, so the panel stays upright instead of shearing. The pair
- * is the boundary node directly above it (same XZ, greater Y) -- the very
- * relationship `extrude_path` created it with.
- *
- * Searched across the whole cloud, not the grabbed face. Two panels welded
- * at a column reference one pair of nodes, so reading either face alone
- * happens to give the same answer today -- but a column standing taller on
- * one side than the other is the same corner with two pairs, and which of
- * them a drag found would otherwise depend on which panel the pointer
- * landed on. The cloud is the run; the run is what a corner belongs to.
- */
+/** Only actual upright boundary edges transmit movement upwards. Subdivided
+ * posts work through successive edges in the shared Rust solver. */
+export function panelMotionInfluences(topology: ConstructionRegionTopology, transport = false): readonly ConstructionMotionInfluence[] {
+  const nodes = new Map(topology.nodes.map((node) => [node.id, node.position]));
+  const links: ConstructionMotionInfluence[] = [...topology.outerLoops, ...topology.holes].flatMap((loop) => loop.flatMap((edge) => {
+    const a = nodes.get(edge.startNodeId), b = nodes.get(edge.endNodeId);
+    if (!a || !b || Math.abs(a.x - b.x) > 1e-3 || Math.abs(a.z - b.z) > 1e-3 || Math.abs(a.y - b.y) < 1e-4) return [];
+    return [{ from: a.y < b.y ? edge.startNodeId : edge.endNodeId, to: a.y < b.y ? edge.endNodeId : edge.startNodeId, axes: [true, true, true] as const }];
+  }));
+  // Openings retain their sill offset when their supporting rail is raised.
+  // A whole-object translation carries the aperture horizontally as well.
+  const base = baselineY(topology);
+  const supports = topology.nodes.filter((node) => Math.abs(node.position.y - base) < 1e-4);
+  const holeNodes = new Set(topology.holes.flatMap((loop) => loop.map((edge) => edge.startNodeId)));
+  for (const support of supports) for (const target of holeNodes) {
+    if (target !== support.id) links.push({ from: support.id, to: target, axes: [transport, true, transport] });
+  }
+  return links;
+}
+
+export function validatePanelMotion(topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>): string | undefined {
+  const original = new Map(topology.nodes.map((node) => [node.id, node.position]));
+  for (const link of panelMotionInfluences(topology)) {
+    const lower = positions.get(link.from) ?? original.get(link.from)!;
+    const upper = positions.get(link.to) ?? original.get(link.to)!;
+    if (upper.y - lower.y <= 1e-4) return "O movimento colapsaria ou inverteria uma parede conectada.";
+    const originalLower = original.get(link.from)!;
+    const originalUpper = original.get(link.to)!;
+    if (Math.abs(originalLower.x - originalUpper.x) < 1e-3 && Math.abs(originalLower.z - originalUpper.z) < 1e-3
+      && (Math.abs(lower.x - upper.x) > 1e-3 || Math.abs(lower.z - upper.z) > 1e-3)) {
+      return "O movimento inclinaria uma parede vertical. Mova sua base ou ajuste apenas a elevacao.";
+    }
+  }
+  const outerIds = topology.outerLoops.flatMap((loop) => loop.map((edge) => edge.startNodeId));
+  const outerY = outerIds.map((id) => (positions.get(id) ?? original.get(id)!).y);
+  const bottom = Math.min(...outerY), top = Math.max(...outerY);
+  for (const edge of topology.holes.flat()) {
+    const y = (positions.get(edge.startNodeId) ?? original.get(edge.startNodeId)!).y;
+    if (y < bottom - 1e-4 || y > top + 1e-4) return "O movimento colocaria uma abertura fora da parede.";
+  }
+  return undefined;
+}
+
 function pairedTopCorners(context: CascadeContext): readonly AtomicEditOp[] {
-  const { cloud, target, delta } = context;
-  if (target.kind !== "vertex") return [];
-  const nodes = cloudNodes(cloud);
-  const moved = nodes.find((node) => node.id === target.nodeId);
-  if (moved === undefined) return [];
-  return nodes
-    .filter(
-      (node) =>
-        node.id !== moved.id &&
-        Math.abs(node.position.x - moved.position.x) < 1e-3 &&
-        Math.abs(node.position.z - moved.position.z) < 1e-3 &&
-        node.position.y > moved.position.y,
-    )
-    .map((node) => ({
-      kind: "move-vertex" as const,
-      nodeId: node.id,
-      position: {
-        x: node.position.x + delta.x,
-        y: node.position.y + delta.y,
-        z: node.position.z + delta.z,
-      },
-    }));
+  const ids = context.target.kind === "vertex" ? [context.target.nodeId]
+    : context.target.kind === "edge" ? context.cloud.members.flatMap((member) => [...member.outerLoops, ...member.holes].flat().filter((edge) => edge.edgeId === (context.target as { edgeId: string }).edgeId).flatMap((edge) => [edge.startNodeId, edge.endNodeId])) : [];
+  const nodes = new Map(cloudNodes(context.cloud).map((node) => [node.id, node.position]));
+  const paired = new Set(context.cloud.members.flatMap((member) => panelMotionInfluences(member)).filter((link) => ids.includes(link.from)).map((link) => link.to));
+  return [...paired].map((nodeId) => {
+    const p = nodes.get(nodeId)!;
+    return { kind: "move-vertex", nodeId, position: { x: p.x + context.delta.x, y: p.y + context.delta.y, z: p.z + context.delta.z } };
+  });
 }
 
 export function panelPolicyFor(role: EditRole): RolePolicy {
@@ -117,7 +134,7 @@ export function panelPolicyFor(role: EditRole): RolePolicy {
       // A whole bottom run drags horizontally; its own two corners each
       // carry their paired top corner through the same cascade the corner
       // role uses, so this needs no separate rule.
-      return allowed(role, HORIZONTAL_AXES, "surface");
+      return allowed(role, HORIZONTAL_AXES, "surface", pairedTopCorners);
     case PANEL_ROLES.topEdge:
       return allowed(role, HEIGHT_AXIS, "surface");
     case PANEL_ROLES.post:
@@ -170,6 +187,8 @@ export function panelStructureType(
     label,
     creation,
     roleFor: panelRoleFor,
+    motionInfluences: panelMotionInfluences,
+    validateMotion: validatePanelMotion,
     policyFor: panelPolicyFor,
     interactionOver: panelInteractionOver,
     repairAfterCut: PANEL_CUT_REPAIR,

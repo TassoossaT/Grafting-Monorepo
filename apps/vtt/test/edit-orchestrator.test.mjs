@@ -54,6 +54,7 @@ function recordingSink() {
   return {
     calls,
     sink: {
+      moveVertices: (moves) => (calls.push(["moveVertices", moves]), outcome),
       moveVertex: (nodeId, position) => (calls.push(["moveVertex", nodeId, position]), outcome),
       moveEdge: (edgeId, delta) => (calls.push(["moveEdge", edgeId, delta]), outcome),
       moveRegion: (surfaceKey, delta) => (calls.push(["moveRegion", surfaceKey, delta]), outcome),
@@ -240,19 +241,11 @@ test("a terrain boundary vertex still slides on its own -- reach is per role, no
   ]);
 });
 
-test("applying a plan issues every op in order, primary before cascade", () => {
+test("applying a motion plan submits one atomic batch", () => {
   const { calls, sink } = recordingSink();
   const plan = planEdit(LONE_WALL, gesture({ kind: "vertex", nodeId: BOTTOM_A }, { x: 1, y: 0, z: 0 }));
-
   applyEditPlan(sink, plan);
-
-  assert.deepEqual(
-    calls.map((call) => [call[0], call[1]]),
-    [
-      ["moveVertex", BOTTOM_A],
-      ["moveVertex", TOP_A],
-    ],
-  );
+  assert.deepEqual(calls, [["moveVertices", plan.ops]]);
 });
 
 test("a denied plan never reaches the engine", () => {

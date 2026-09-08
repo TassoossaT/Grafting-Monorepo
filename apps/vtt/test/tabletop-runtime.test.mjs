@@ -132,6 +132,12 @@ function createFakeConstructionPort() {
     createsNext(keys) {
       nextCreatedSurfaceKeys = keys;
     },
+    moveVertices(moves) {
+      const outcomes = moves.map((move) => this.moveVertex(move.nodeId, move.position));
+      const merged = emptyRegionEdit();
+      for (const outcome of outcomes) for (const key of Object.keys(merged)) merged[key] = [...new Set([...merged[key], ...outcome[key]])];
+      return merged;
+    },
     moveVertex(nodeId, position) {
       requireStarted();
       // The real engine holds the positions, so the fake must too even though

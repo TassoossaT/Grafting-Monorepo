@@ -108,11 +108,23 @@ deciding. See `grid_generation::irregular_quad_grid`.
 
 `MoveVertex`. See `region_editing::apply_move_vertex`.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::move_vertices_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Validates and applies all vertex positions atomically, tracking regions once.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::new() -> grafting_procgen_construction_wasm::ConstructionSession`
 
 Creates an empty session.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::none() -> Self::Abi`
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::plan_motion_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Resolves a complete directed motion cascade without mutating the session.
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::planar_boolean_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Generic closed-contour union/subtraction. Product selection stays in the caller.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::redo_region_overlay(&mut self, operation_id: &str) -> core::result::Result<(), wasm_bindgen::JsValue>`
 

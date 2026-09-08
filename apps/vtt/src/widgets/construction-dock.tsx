@@ -128,6 +128,15 @@ export function ConstructionDock(props: ConstructionDockProps) {
       onClick: () => onToolChange("opening"),
     },
     {
+      key: "platform",
+      label: "Plataforma",
+      icon: "?",
+      tooltip: "Criar, ampliar ou recortar plataformas",
+      active: activeTool === "platform-contour",
+      disabled: !ready,
+      onClick: () => onToolChange("platform-contour"),
+    },
+    {
       key: "stairs",
       label: "Escadas",
       icon: "🪜",

@@ -168,7 +168,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       if (viewId === undefined) return undefined;
       const { x, y } = pointerOffset(event);
       const hit = runtime.pick(viewId, x, y);
-      return hit === undefined ? undefined : applySnap(hit, snapToGrid);
+      return hit === undefined ? undefined : { ...applySnap(hit, snapToGrid), screenY: event.clientY };
     },
     [],
   );

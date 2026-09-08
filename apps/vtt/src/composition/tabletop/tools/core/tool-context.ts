@@ -7,6 +7,8 @@ import type { TabletopRuntime } from "../../tabletop-runtime.ts";
 /** What the pointer resolved to at one instant -- `nodeId` present only when it hit a node handle. */
 export interface PointerSample {
   readonly point: ConstructionPosition;
+  /** Screen coordinate used by explicit elevation gestures. */
+  readonly screenY?: number;
   readonly nodeId?: string;
   readonly surfaceRef?: string;
 }

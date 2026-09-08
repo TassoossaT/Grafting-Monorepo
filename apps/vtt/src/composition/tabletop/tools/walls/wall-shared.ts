@@ -85,6 +85,7 @@ function existingColumnAt(
   let best: { readonly column: WallColumn; readonly distance: number } | undefined;
   for (const span of wallSpans(ctx)) {
     for (const column of columnsOf(span)) {
+      if (Math.abs(point.y - column.bottom.y) > 1e-3) continue;
       const distance = xzDistance(point, column.bottom);
       if (distance > weldTolerance) continue;
       if (best === undefined || distance < best.distance) best = { column, distance };
@@ -111,6 +112,7 @@ function insertedColumnAt(
   crossingTolerance: number,
 ): WallColumn | undefined {
   for (const span of wallSpans(ctx)) {
+    if (Math.abs(point.y - span.a.y) > 1e-3) continue;
     const spanLength = xzDistance(span.a, span.b);
     if (spanLength < 1e-6) continue;
 
@@ -187,11 +189,16 @@ function resolveColumn(
   const inserted = insertedColumnAt(ctx, point, mint, causeId, Math.max(CROSSING_TOLERANCE, correction));
   if (inserted !== undefined) return inserted;
   const { bottomNodeId, topNodeId } = mint();
+  const top = { x: point.x, y: point.y + height, z: point.z };
+  // Endpoint welding is three-dimensional: never reuse a lower storey merely by XZ.
+  const platformNodes = ctx.runtime.getAllRegionTopologies().filter((region) => region.surfaceType === "platform").flatMap((region) => region.nodes);
+  const at = (position: ConstructionPosition) => platformNodes.find((node) => Math.abs(node.position.x - position.x) < 1e-4 && Math.abs(node.position.y - position.y) < 1e-4 && Math.abs(node.position.z - position.z) < 1e-4);
+  const lower = at(point), upper = at(top);
   return {
-    bottomNodeId,
-    topNodeId,
-    bottom: point,
-    top: { x: point.x, y: point.y + height, z: point.z },
+    bottomNodeId: lower?.id ?? bottomNodeId,
+    topNodeId: upper?.id ?? topNodeId,
+    bottom: lower?.position ?? point,
+    top: upper?.position ?? top,
   };
 }
 

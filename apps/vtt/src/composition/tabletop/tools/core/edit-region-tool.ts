@@ -4,8 +4,8 @@ import {
   refreshCloudTopology,
   resolveCloudTopology,
   resolvePolicy,
-} from "@/features/edit-construction";
-import type { AtomicEditOp, CloudTopology, EditTarget } from "@/features/edit-construction";
+} from "../../../../features/edit-construction/index.ts";
+import type { AtomicEditOp, CloudTopology, EditTarget } from "../../../../features/edit-construction/index.ts";
 import type {
   ConstructionGraphSnapshot,
   ConstructionPosition,
@@ -60,12 +60,15 @@ const xzDistanceToSegment = distanceToSegmentXZ;
  * resolved here: it is a question about what a shared node means, not about
  * scope.
  */
-function grabbedTarget(ctx: ToolContext, sample: PointerSample): GrabbedTarget | undefined {
+function grabbedTarget(ctx: ToolContext, sample: PointerSample, elevation = false): GrabbedTarget | undefined {
   const topologies = ctx.runtime.getAllRegionTopologies();
 
   if (sample.nodeId !== undefined) {
     const target: EditTarget = { kind: "vertex", nodeId: sample.nodeId };
-    let topology = topologies.find((candidate) => candidate.nodes.some((node) => node.id === sample.nodeId));
+    const incident = topologies.filter((candidate) => candidate.nodes.some((node) => node.id === sample.nodeId));
+    let topology: ConstructionRegionTopology | undefined = incident.find((candidate) => sample.surfaceRef === surfaceRefFromNodeSet(candidate.surfaceKey))
+      ?? (elevation ? incident.find((candidate) => resolvePolicy(candidate, target).axes.includes("y")) : undefined)
+      ?? incident[0];
     if (topology === undefined) {
       topology = topologies.find((candidate) => resolvePolicy(candidate, target).resolve.kind !== "deny");
     }
@@ -122,7 +125,7 @@ function restoreOps(
 ): { readonly undo: readonly AtomicEditOp[]; readonly redo: readonly AtomicEditOp[] } {
   const undo: AtomicEditOp[] = [];
   const redo: AtomicEditOp[] = [];
-  for (const node of cloudNodes(after, graphSnapshot)) {
+  for (const node of graphSnapshot?.nodes ?? cloudNodes(after)) {
     const original = before.get(node.id);
     if (original === undefined) continue;
     if (
@@ -141,19 +144,20 @@ function restoreOps(
 interface ActiveDrag {
   readonly cloud: CloudTopology;
   readonly target: EditTarget;
-  readonly before: ReadonlyMap<string, ConstructionPosition>;
+  readonly before: Map<string, ConstructionPosition>;
   previous: ConstructionPosition;
+  screenY?: number;
 }
 
 let active: ActiveDrag | undefined;
 
 export const editRegionTool: ConstructionTool<"edit-region"> = {
   id: "edit-region",
-  defaultParams: () => ({}),
+  defaultParams: () => ({ mode: "shape" }),
 
-  onPointerDown(ctx: ToolContext, sample: PointerSample): void {
+  onPointerDown(ctx: ToolContext, sample: PointerSample, params): void {
     active = undefined;
-    const grabbed = grabbedTarget(ctx, sample);
+    const grabbed = grabbedTarget(ctx, sample, params?.mode === "elevation");
     if (grabbed === undefined) {
       ctx.reportSelection(undefined);
       ctx.reportFeedback(undefined);
@@ -164,24 +168,27 @@ export const editRegionTool: ConstructionTool<"edit-region"> = {
       ctx.reportSelection(undefined);
       return;
     }
-    const snapshot = ctx.runtime.getGraphSnapshot();
     active = {
       cloud,
       target: grabbed.target,
-      before: new Map(cloudNodes(cloud, snapshot).map((node) => [node.id, node.position])),
+      before: new Map(),
       previous: sample.point,
+      screenY: sample.screenY,
     };
     if (grabbed.target.kind === "vertex") {
       ctx.reportSelection({ id: grabbed.target.nodeId, point: sample.point });
     }
   },
 
-  onPointerMove(ctx: ToolContext, gesture: ToolGesture): void {
+  onPointerMove(ctx: ToolContext, gesture: ToolGesture, params): void {
     if (active === undefined) return;
     // Per-tick delta, not gesture-total: every op the plan produces applies
     // on top of the cloud's *current* state, so a cumulative delta would
     // move everything again on each tick.
-    const step = delta(active.previous, gesture.current.point);
+    const step = params?.mode === "elevation" && active.screenY !== undefined && gesture.current.screenY !== undefined
+      ? { x: 0, y: (active.screenY - gesture.current.screenY) / 40, z: 0 }
+      : delta(active.previous, gesture.current.point);
+    active.screenY = gesture.current.screenY;
     if (step.x === 0 && step.y === 0 && step.z === 0) return;
     active.previous = gesture.current.point;
 
@@ -195,18 +202,27 @@ export const editRegionTool: ConstructionTool<"edit-region"> = {
       surfaceKey: cloud.cloud.seed,
       target: active.target,
       delta: step,
-    }, snapshot);
+    }, snapshot, ctx.runtime);
     if (plan.kind === "deny") {
       ctx.reportFeedback({ tone: "error", message: plan.reason });
-      active = undefined;
       return;
     }
     if (plan.kind === "regenerate") {
       ctx.reportFeedback({ tone: "info", message: plan.reason });
-      active = undefined;
       return;
     }
-    ctx.runtime.applyRegionEdit(plan.ops, "local", `edit:${plan.role}`);
+    const beforeTick = new Map(snapshot.nodes.map((node) => [node.id, node.position]));
+    try {
+      ctx.runtime.applyRegionEdit(plan.ops, "local", `edit:${plan.role}`);
+    } catch (error) {
+      ctx.reportFeedback({ tone: "error", message: String(error) });
+      return;
+    }
+    for (const op of plan.ops) {
+      if (op.kind !== "move-vertex" || active.before.has(op.nodeId)) continue;
+      const original = beforeTick.get(op.nodeId);
+      if (original) active.before.set(op.nodeId, original);
+    }
 
     // The handle-design notes call out that a drag gives no signal of how
     // much it is about to affect. The plan already knows, so say it.

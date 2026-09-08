@@ -1583,3 +1583,29 @@ fn boundary_refusal(topology: &ContourTopology, boundary: &ContourLoop) -> Optio
     }
     None
 }
+
+// Consolidated movement: semantic influence links are declared by the caller.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MotionSeedDto { pub node_id: String, pub delta: [f32; 3] }
+#[derive(Debug, Deserialize)]
+pub struct MotionInfluenceDto { pub from: String, pub to: String, pub axes: [bool; 3] }
+#[derive(Debug, Deserialize)]
+pub struct MotionRequest { pub seeds: Vec<MotionSeedDto>, pub influences: Vec<MotionInfluenceDto> }
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NodeMotionDto { pub node_id: String, pub position: [f32; 3] }
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MotionPlanDto { pub moves: Vec<NodeMotionDto>, pub resolved_axes: usize, pub visited_influences: usize }
+
+pub fn plan_motion(graph: &SessionGraph, request: MotionRequest) -> Result<MotionPlanDto, String> {
+    let seeds = request.seeds.into_iter().map(|s| Ok(grafting_graph_core::RequestedMotion { node_id: parse_node_id(&s.node_id)?, delta: s.delta })).collect::<Result<Vec<_>, String>>()?;
+    let influences = request.influences.into_iter().map(|r| Ok(grafting_graph_core::MotionInfluence { from: parse_node_id(&r.from)?, to: parse_node_id(&r.to)?, axes: r.axes })).collect::<Result<Vec<_>, String>>()?;
+    let plan = grafting_graph_core::plan_motion(graph, &seeds, &influences).map_err(|e| e.to_string())?;
+    Ok(MotionPlanDto { moves: plan.moves.into_iter().map(|m| NodeMotionDto { node_id: m.node_id.to_string(), position: m.position }).collect(), resolved_axes: plan.resolved_axes, visited_influences: plan.visited_influences })
+}
+pub fn apply_move_vertices(graph: &mut SessionGraph, topology: &mut ContourTopology, request: Vec<NodeMotionDto>) -> Result<RegionEditOutcomeDto, String> {
+    let moves = request.into_iter().map(|m| Ok(grafting_graph_core::NodeMotion { node_id: parse_node_id(&m.node_id)?, position: m.position })).collect::<Result<Vec<_>, String>>()?;
+    grafting_graph_core::move_vertices(graph, topology, &moves).map(Into::into).map_err(|e| e.to_string())
+}

@@ -39,6 +39,14 @@ Failure to construct a stable graph identifier.
 
 Invalid input or arithmetic failure from the grouped-grid heuristic.
 
+### `pub enum grafting_graph_core::MotionError`
+
+A motion rejected before any mutation.
+
+### `pub enum grafting_graph_core::PlanarBoolean`
+
+Operation on closed planar shapes.
+
 ### `pub enum grafting_graph_core::RegionEditError`
 
 Structural failure of an atomic region edit.
@@ -697,6 +705,24 @@ construction, since both regions reference the very same edges.
 region whose boundary touches it. Topology is untouched, so this can only
 fail when the node does not exist.
 
+### `pub fn grafting_graph_core::move_vertices<E>(graph: &mut grafting_graph_core::Graph<[f32; 3], E>, topology: &mut grafting_graph_core::ContourTopology, moves: &[grafting_graph_core::NodeMotion]) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::MotionError>`
+
+Validates the whole batch before writing; invalid batches leave the graph
+untouched. Contours are scanned once for the entire batch, so outcome
+collection does not repeat a global incidence query for each moved node.
+
+### `pub fn grafting_graph_core::plan_motion<E>(graph: &grafting_graph_core::Graph<[f32; 3], E>, seeds: &[grafting_graph_core::RequestedMotion], influences: &[grafting_graph_core::MotionInfluence]) -> core::result::Result<grafting_graph_core::MotionPlan, grafting_graph_core::MotionError>`
+
+Resolves directed influences without mutating the graph.
+Each node/axis is queued once. Equal cycles converge, conflicting cycles
+fail. Exact equality is deliberate: copied displacements are identical,
+whereas approximate equality would make convergence order-dependent.
+
+### `pub fn grafting_graph_core::planar_boolean(subject: &[grafting_graph_core::PlanarShape], clip: &[grafting_graph_core::PlanarShape], operation: grafting_graph_core::PlanarBoolean) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::PlanarShape>, alloc::string::String>`
+
+Returns disconnected components separately; each component retains its holes.
+Rejects malformed/nonfinite contours before invoking the geometry backend.
+
 ### `pub fn grafting_graph_core::prune_orphans<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, candidates: &[grafting_graph_core::NodeId]) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::NodeId>, grafting_graph_core::RegionEditError>`
 
 The one shared end-of-transaction cleanup every removing primitive runs:
@@ -1023,6 +1049,66 @@ A grouping edge identity was not present in the graph.
 
 Missing grouping edge identity.
 
+### `pub grafting_graph_core::MotionError::Conflict(grafting_graph_core::NodeId)`
+
+Two paths demand different displacements or positions.
+
+### `pub grafting_graph_core::MotionError::InvalidTopology(alloc::string::String)`
+
+A registered contour is invalid.
+
+### `pub grafting_graph_core::MotionError::NonFinite(grafting_graph_core::NodeId)`
+
+A displacement or resulting coordinate is not finite.
+
+### `pub grafting_graph_core::MotionError::UnknownNode(grafting_graph_core::NodeId)`
+
+A request references an absent node.
+
+### `pub grafting_graph_core::MotionInfluence::axes: [bool; 3]`
+
+X, Y, Z propagation mask.
+
+### `pub grafting_graph_core::MotionInfluence::from: grafting_graph_core::NodeId`
+
+Node receiving a displacement.
+
+### `pub grafting_graph_core::MotionInfluence::to: grafting_graph_core::NodeId`
+
+Node which must receive that displacement on selected axes.
+
+### `pub grafting_graph_core::MotionPlan::moves: alloc::vec::Vec<grafting_graph_core::NodeMotion>`
+
+Each affected node appears exactly once.
+
+### `pub grafting_graph_core::MotionPlan::resolved_axes: usize`
+
+Resolved node/axis pairs (at most three per affected node).
+
+### `pub grafting_graph_core::MotionPlan::visited_influences: usize`
+
+Influence/axis visits, including converging paths.
+
+### `pub grafting_graph_core::NodeMotion::node_id: grafting_graph_core::NodeId`
+
+Existing graph identity.
+
+### `pub grafting_graph_core::NodeMotion::position: [f32; 3]`
+
+Requested spatial position.
+
+### `pub grafting_graph_core::PlanarBoolean::Difference`
+
+Remove the clip operand from the subject.
+
+### `pub grafting_graph_core::PlanarBoolean::Extend`
+
+Keep subject faces and add only uncovered clip area, retaining structural seams.
+
+### `pub grafting_graph_core::PlanarBoolean::Union`
+
+Preserve either operand.
+
 ### `pub grafting_graph_core::PrismGridMesh::cell_corners: alloc::vec::Vec<[u32; 8]>`
 
 8 corner vertex indices per cell [V0..V7].
@@ -1165,6 +1251,14 @@ Empty when the removal opened no hole (nothing neighboured it).
 
 Affected neighbours, removed regions, reclaimed nodes.
 
+### `pub grafting_graph_core::RequestedMotion::delta: [f32; 3]`
+
+Displacement from the consistent input state.
+
+### `pub grafting_graph_core::RequestedMotion::node_id: grafting_graph_core::NodeId`
+
+Existing graph identity.
+
 ### `pub grafting_graph_core::SurfaceCurvature::bulge: grafting_graph_core::ArcBulge`
 
 Which of the two arcs a shared center and two endpoints could
@@ -1290,6 +1384,14 @@ Position assigned to one stable node by a graph layout snapshot.
 
 Immutable deterministic output from a grouped-grid layout operation.
 
+### `pub struct grafting_graph_core::MotionInfluence`
+
+A caller-declared response; no product type is stored here.
+
+### `pub struct grafting_graph_core::MotionPlan`
+
+Immutable result, sorted by identity, with work counters for profiling.
+
 ### `pub struct grafting_graph_core::Node<N>`
 
 A graph node with a stable identity and caller-chosen calculation payload.
@@ -1297,6 +1399,10 @@ A graph node with a stable identity and caller-chosen calculation payload.
 ### `pub struct grafting_graph_core::NodeId(_)`
 
 Stable Grafting node identity.
+
+### `pub struct grafting_graph_core::NodeMotion`
+
+An absolute position in a consolidated edit.
 
 ### `pub struct grafting_graph_core::OrientedEdgeUse`
 
@@ -1335,6 +1441,10 @@ This record deliberately has no node-cycle identity: its stable identity
 is the [`RegionId`] registered by [`ContourTopology`]. A face is what its
 boundary says it is, so nothing here re-derives identity from the set of
 nodes that boundary happens to touch.
+
+### `pub struct grafting_graph_core::RequestedMotion`
+
+A seed displacement. Zero axes carry no displacement demand.
 
 ### `pub struct grafting_graph_core::SurfaceCurvature`
 
@@ -1411,3 +1521,7 @@ An ordered, closed sequence of oriented edge uses -- one boundary of a
 
 A point in a surface's own XZ plane -- see this module's own doc for why
 contour geometry commits to XZ instead of an arbitrary 3D plane.
+
+### `pub type grafting_graph_core::PlanarShape = alloc::vec::Vec<alloc::vec::Vec<[f32; 2]>>`
+
+One outer ring followed by its holes, without repeated closing points.

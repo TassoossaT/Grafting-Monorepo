@@ -489,7 +489,36 @@ export interface ConstructionIrregularQuadGrid {
   readonly refinementComplete: boolean;
 }
 
+/** Semantic response links supplied to the Rust motion solver. */
+export interface ConstructionMotionInfluence {
+  readonly from: string;
+  readonly to: string;
+  readonly axes: readonly [boolean, boolean, boolean];
+}
+export interface ConstructionNodeMotion { readonly nodeId: string; readonly position: ConstructionPosition }
+export interface ConstructionMotionRequest {
+  readonly seeds: readonly { readonly nodeId: string; readonly delta: ConstructionPosition }[];
+  readonly influences: readonly ConstructionMotionInfluence[];
+}
+export interface ConstructionMotionPlan {
+  readonly moves: readonly ConstructionNodeMotion[];
+  readonly resolvedAxes: number;
+  readonly visitedInfluences: number;
+}
+
+export type ConstructionPlanarShape = readonly (readonly (readonly [number, number])[])[];
+export interface ConstructionPlanarRequest {
+  readonly subject: readonly ConstructionPlanarShape[];
+  readonly clip: readonly ConstructionPlanarShape[];
+  readonly operation: "union" | "difference" | "extend";
+}
 export interface ConstructionSessionPort {
+  planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[];
+  /** Pure cascade resolution, using one consistent engine state. */
+  planMotion(request: ConstructionMotionRequest): ConstructionMotionPlan;
+  /** Full validation before any position changes, with one affected-region scan. */
+  moveVertices(moves: readonly ConstructionNodeMotion[]): RegionEditOutcome;
+
   /**
    * Loads the underlying Wasm module and starts an empty session. Every
    * other method requires this to have resolved first, mirroring

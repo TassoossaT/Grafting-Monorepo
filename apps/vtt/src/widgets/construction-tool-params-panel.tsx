@@ -284,6 +284,8 @@ function OpeningFields(props: { readonly params: OpeningParams; readonly onChang
 }
 
 const TOOL_LABELS: Partial<Record<ConstructionToolId, string>> = {
+  "platform-contour": "Plataforma",
+  "edit-region": "Editar estrutura",
   "path-brush": "Parâmetros: Caminho",
   "wall-brush": "Parâmetros: Parede (Pincel Livre)",
   "wall-line": "Parâmetros: Parede (Linha Reta)",
@@ -320,7 +322,21 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
     key: activeTool,
     header: label,
     content:
-      activeTool === "path-brush" ? (<PathBrushFields params={params["path-brush"]} onChange={(next) => onParamsChange("path-brush", next)} />) : activeTool === "wall-brush" ? (
+      activeTool === "platform-contour" ? (
+        <div style={{ display: "grid", gap: "0.6rem" }}>
+          <label>Elevacao <input type="number" step="0.1" value={params["platform-contour"].elevation} onChange={(event) => onParamsChange("platform-contour", { ...params["platform-contour"], elevation: Number(event.currentTarget.value) })} /></label>
+          <div className="gm-material-grid">
+            {(["create", "extend", "cut"] as const).map((mode, i) => <SelectableChip key={mode} label={["Criar", "Ampliar / juntar", "Recortar / separar"][i]!} swatchColor="#79b8e8" selected={params["platform-contour"].mode === mode} onSelect={() => onParamsChange("platform-contour", { ...params["platform-contour"], mode })} />)}
+          </div>
+          <p>Marque os cantos e clique no primeiro para fechar, ou arraste um contorno. Uniao e recorte usam somente a elevacao escolhida. Clique em vertices existentes para conectar.</p>
+        </div>
+      ) : activeTool === "edit-region" ? (
+        <div>
+          <SelectableChip label="Formato / posicao" swatchColor="#79b8e8" selected={params["edit-region"].mode === "shape"} onSelect={() => onParamsChange("edit-region", { mode: "shape" })} />
+          <SelectableChip label="Elevar / baixar" swatchColor="#79b8e8" selected={params["edit-region"].mode === "elevation"} onSelect={() => onParamsChange("edit-region", { mode: "elevation" })} />
+          <p>No modo de elevacao, arraste para cima ou para baixo. A plataforma leva a estrutura conectada acima.</p>
+        </div>
+      ) : activeTool === "path-brush" ? (<PathBrushFields params={params["path-brush"]} onChange={(next) => onParamsChange("path-brush", next)} />) : activeTool === "wall-brush" ? (
         <WallBrushFields params={params["wall-brush"]} onChange={(next) => onParamsChange("wall-brush", next)} />
       ) : activeTool === "wall-line" ? (
         <WallLineFields params={params["wall-line"]} onChange={(next) => onParamsChange("wall-line", next)} />
