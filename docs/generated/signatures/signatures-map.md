@@ -2038,6 +2038,7 @@ export function remoteBranchDeletionPlan(
   openDependentPrNumbers: number[] | undefined,
   ): RemoteBranchDeletionPlan {
   if (!branch.startsWith('task/')) throw new Error(`refusing remote deletion outside task/*: ${branch}`);
+export const GENERATED_WORKSPACE_ARTIFACT_DIRS = [
 export function parseDependencySpec(dep: string): { name: string; version: string } {
   let trimmed = dep.trim();
 export class GitWorktreeSession {
@@ -2196,6 +2197,7 @@ export interface TaskDoneInput {
   title: string;
   body: string;
   base?: string;
+  skipDocGen?: boolean;
   }
 export interface TaskCleanupInput {
   taskId: string;
