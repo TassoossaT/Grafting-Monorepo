@@ -171,6 +171,30 @@ export function findWallSurfaceAt(ctx: ToolContext, point: ConstructionPosition)
  * them was actually resolved onto the other's nodes, which is the rule the
  * whole type is built on.
  */
+/**
+ * The closest platform vertex within `weldTolerance` (XZ) at the same
+ * elevation (Y, `1e-3`) as `position`, or `undefined` -- the XZ half of
+ * endpoint welding is a magnet, same tolerance a wall corner snaps onto
+ * another wall's column with, never a reuse of a lower storey merely by XZ.
+ */
+function nearestPlatformNodeAt(
+  ctx: ToolContext,
+  position: ConstructionPosition,
+  weldTolerance: number,
+): { readonly id: ConstructionNodeId; readonly position: ConstructionPosition } | undefined {
+  let best: { readonly node: { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }; readonly distance: number } | undefined;
+  for (const region of ctx.runtime.getAllRegionTopologies()) {
+    if (region.surfaceType !== "platform") continue;
+    for (const node of region.nodes) {
+      if (Math.abs(node.position.y - position.y) > 1e-3) continue;
+      const distance = xzDistance(node.position, position);
+      if (distance > weldTolerance) continue;
+      if (best === undefined || distance < best.distance) best = { node, distance };
+    }
+  }
+  return best?.node;
+}
+
 function resolveColumn(
   ctx: ToolContext,
   point: ConstructionPosition,
@@ -190,29 +214,28 @@ function resolveColumn(
   if (inserted !== undefined) return inserted;
   const { bottomNodeId, topNodeId } = mint();
   const top = { x: point.x, y: point.y + height, z: point.z };
-  // Endpoint welding is three-dimensional: never reuse a lower storey merely by XZ.
-  // The XZ half is a magnet, same tolerance a wall corner snaps onto another
-  // wall's column with -- a stroke drawn a few centimeters off a platform's
-  // own vertex still has to land on it, not mint a coincident, unconnected node.
   const weldTolerance = Math.max(CORNER_WELD_TOLERANCE, correction);
-  const platformNodes = ctx.runtime.getAllRegionTopologies().filter((region) => region.surfaceType === "platform").flatMap((region) => region.nodes);
-  const at = (position: ConstructionPosition) => {
-    let best: { readonly node: (typeof platformNodes)[number]; readonly distance: number } | undefined;
-    for (const node of platformNodes) {
-      if (Math.abs(node.position.y - position.y) > 1e-3) continue;
-      const distance = xzDistance(node.position, position);
-      if (distance > weldTolerance) continue;
-      if (best === undefined || distance < best.distance) best = { node, distance };
-    }
-    return best?.node;
-  };
-  const lower = at(point), upper = at(top);
+  const lower = nearestPlatformNodeAt(ctx, point, weldTolerance);
+  const upper = nearestPlatformNodeAt(ctx, top, weldTolerance);
   return {
     bottomNodeId: lower?.id ?? bottomNodeId,
     topNodeId: upper?.id ?? topNodeId,
     bottom: lower?.position ?? point,
     top: upper?.position ?? top,
   };
+}
+
+/**
+ * A read-only echo of {@link resolveColumn}'s own corner magnets -- an
+ * existing wall column first, then a platform vertex -- for showing where a
+ * run will actually land before it commits. Never mints or inserts anything
+ * (unlike {@link resolveColumn}, it must stay safe to call every frame of a
+ * drag), so a corner that would only resolve by T-junction insertion still
+ * previews at the raw point; the commit itself is unaffected.
+ */
+export function snappedEndpoint(ctx: ToolContext, point: ConstructionPosition, correction = 0): ConstructionPosition {
+  const tolerance = Math.max(CORNER_WELD_TOLERANCE, correction);
+  return existingColumnAt(ctx, point, tolerance)?.bottom ?? nearestPlatformNodeAt(ctx, point, tolerance)?.position ?? point;
 }
 
 /**

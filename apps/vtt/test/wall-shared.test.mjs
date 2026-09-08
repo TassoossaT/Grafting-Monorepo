@@ -5,6 +5,7 @@ import {
   commitWallContour,
   commitWallStroke,
   findWallSurfaceAt,
+  snappedEndpoint,
 } from "../src/composition/tabletop/tools/walls/wall-shared.ts";
 import { panelTopology } from "./wall-spans-fixture.mjs";
 
@@ -401,3 +402,18 @@ test("findWallSurfaceAt picks the closest panel when more than one qualifies", (
 
   assert.deepEqual(findWallSurfaceAt(ctx, { x: 2, y: 0, z: 0.06 }), ["@region", "wall-2"]);
 });
+
+test("snappedEndpoint magnets a nearby point onto an existing column, and falls through untouched otherwise", () => {
+  const { ctx } = contextFor([WALL]);
+
+  assert.deepEqual(snappedEndpoint(ctx, { x: 0.05, y: 0, z: -0.05 }), { x: 0, y: 0, z: 0 });
+  assert.deepEqual(snappedEndpoint(ctx, { x: 2, y: 0, z: 5 }), { x: 2, y: 0, z: 5 });
+});
+
+test("snappedEndpoint magnets onto a platform vertex when no wall column is closer", () => {
+  const platform = panelTopology("platform-0", { from: { x: 8, z: 8 }, to: { x: 12, z: 8 } }, undefined, "platform");
+  const { ctx } = contextFor([WALL, platform]);
+
+  assert.deepEqual(snappedEndpoint(ctx, { x: 8.05, y: 0, z: 7.95 }), { x: 8, y: 0, z: 8 });
+});
+

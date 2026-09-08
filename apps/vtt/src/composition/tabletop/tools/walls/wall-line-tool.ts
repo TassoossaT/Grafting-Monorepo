@@ -4,7 +4,7 @@ import type { ConstructionPosition } from "@/ports";
 
 import { segmentBetween } from "../shapes/preview-shapes.ts";
 import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "../core/tool-context.ts";
-import { WALL_COLOR, commitWallContour, pinnedToBaseline } from "./wall-shared.ts";
+import { WALL_COLOR, commitWallContour, pinnedToBaseline, snappedEndpoint } from "./wall-shared.ts";
 
 /**
  * The pressed drag's own anchor, or `undefined` before a press. Cleared the
@@ -32,9 +32,15 @@ export const wallLineTool: ConstructionTool<"wall-line"> = {
   id: "wall-line",
   defaultParams: () => DEFAULT_TOOL_PARAMS["wall-line"],
 
-  previewFor(gesture: ToolGesture, params: WallParams) {
+  previewFor(gesture: ToolGesture, params: WallParams, ctx: ToolContext) {
     if (anchor === undefined) return undefined;
-    return segmentBetween(anchor, gesture.current.point, WALL_COLOR[params.wallType]);
+    // The raw press/cursor points never showed where the run will actually
+    // land -- a corner a few centimeters off an existing column or a
+    // platform vertex commits welded onto it, but drew as a floating
+    // endpoint the whole drag, which is what read as "not snapping."
+    const from = snappedEndpoint(ctx, anchor);
+    const to = snappedEndpoint(ctx, pinnedToBaseline(anchor, gesture.current.point));
+    return segmentBetween(from, to, WALL_COLOR[params.wallType]);
   },
 
   onPointerDown(_ctx: ToolContext, sample: PointerSample): void {
