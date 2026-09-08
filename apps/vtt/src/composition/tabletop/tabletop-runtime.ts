@@ -1,4 +1,4 @@
-import type { ConstructionCurvedRequest, ConstructionCurvedShape, ConstructionPlanarRequest, ConstructionPlanarShape, ConstructionMotionRequest, ConstructionMotionPlan, ConstructionNodeMotion } from "../../ports/index.ts";
+import type { ConstructionPlanarRequest, ConstructionPlanarShape, ConstructionMotionRequest, ConstructionMotionPlan, ConstructionNodeMotion } from "../../ports/index.ts";
 import { chunkKeyForSurface, CONSTRUCTION_GRID_EXTENT, mergeChunkBucket, mergeSurfaceMeshes } from "../../adapters/rendering/index.ts";
 import {
   applyTokenProjectionDelta,
@@ -93,7 +93,6 @@ export interface TabletopRuntime {
    * before calling here.
    */
   planMotion(request: ConstructionMotionRequest): ConstructionMotionPlan;
-  curvedPlanarBoolean(request: ConstructionCurvedRequest): readonly ConstructionCurvedShape[];
   planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[];
 
   applyRegionEdit(
@@ -764,6 +763,13 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#notify();
   }
 
+  planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[] { return this.#construction.planarBoolean(request); }
+
+  planMotion(request: ConstructionMotionRequest): ConstructionMotionPlan {
+    this.#requireReady("planning structural movement");
+    return this.#construction.planMotion(request);
+  }
+
   /**
    * Applies a resolved sequence of atomic edit ops as one transaction, then
    * re-derives and re-uploads every chunk and folds the whole merged
@@ -774,14 +780,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
    * it only performs what was already decided -- see
    * `docs/architecture/vtt-atomic-edit-and-cloud-policy-design.md`.
    */
-  curvedPlanarBoolean(request: ConstructionCurvedRequest): readonly ConstructionCurvedShape[] { return this.#construction.curvedPlanarBoolean(request); }
-  planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[] { return this.#construction.planarBoolean(request); }
-
-  planMotion(request: ConstructionMotionRequest): ConstructionMotionPlan {
-    this.#requireReady("planning structural movement");
-    return this.#construction.planMotion(request);
-  }
-
   applyRegionEdit(
     ops: readonly AtomicEditOp[],
     origin: ChangeOrigin,

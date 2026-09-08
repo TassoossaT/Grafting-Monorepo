@@ -1,4 +1,4 @@
-import type { ConstructionCurvedRequest, ConstructionCurvedShape, ConstructionPlanarRequest, ConstructionPlanarShape, ConstructionMotionRequest, ConstructionMotionPlan, ConstructionNodeMotion } from "../../ports/index.ts";
+import type { ConstructionPlanarRequest, ConstructionPlanarShape, ConstructionMotionRequest, ConstructionMotionPlan, ConstructionNodeMotion } from "../../ports/index.ts";
 // Wraps `@grafting/procgen-construction-wasm`'s `ConstructionSession` (a
 // stateful Wasm class, JSON-request/response methods) behind
 // `ConstructionSessionPort`. Runs on the main thread for this task -- see
@@ -168,7 +168,6 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     this.#session = new ConstructionSession();
   }
 
-  curvedPlanarBoolean(request: ConstructionCurvedRequest): readonly ConstructionCurvedShape[] { return JSON.parse(this.#require().curved_planar_boolean_json(JSON.stringify(request))) as ConstructionCurvedShape[]; }
   planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[] { return JSON.parse(this.#require().planar_boolean_json(JSON.stringify(request))) as ConstructionPlanarShape[]; }
 
   planMotion(request: ConstructionMotionRequest): ConstructionMotionPlan {

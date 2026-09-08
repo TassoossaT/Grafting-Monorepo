@@ -98,7 +98,6 @@ pub fn apply_region_overlay(
 pub struct ConstructionSession
 pub fn new() -> ConstructionSession
 pub fn remove_surface_json(&mut self, request_json: &str) -> Result<String, JsValue>
-pub fn curved_planar_boolean_json(&self, request_json: &str) -> Result<String, JsValue>
 pub fn planar_boolean_json(&self, request_json: &str) -> Result<String, JsValue>
 pub fn plan_motion_json(&self, request_json: &str) -> Result<String, JsValue>
 pub fn move_vertices_json(&mut self, request_json: &str) -> Result<String, JsValue>
@@ -110,6 +109,7 @@ pub fn move_edge_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn move_region_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn add_hole_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn remove_hole_json(&mut self, request_json: &str) -> Result<String, JsValue>
+pub fn delete_region_json(&mut self, request_json: &str) -> Result<String, JsValue>
 
 // src/spatial_index.rs
 pub const DEFAULT_GRID_CELL_SIZE: f32 = 4.0;
@@ -3567,6 +3567,41 @@ export const pathBrushTool = createBrushTool<"path-brush">({
   // what is left over may be spent straightening the stroke.
   halfWidth: pathHalfWidth,
 
+
+// src/composition/tabletop/tools/platform/platform-contour-merge.ts
+export interface DirectedContourEdge {
+  readonly a: string;
+  readonly b: string;
+  readonly geometry: ConstructionEdgeGeometry;
+  }
+export type WeldedMergeResult =
+export function weldedMerge(
+  standing: readonly DirectedContourEdge[],
+  stroke: readonly DirectedContourEdge[],
+  ): WeldedMergeResult {
+  const declared = [...standing, ...stroke];
+  const buckets = new Map<string, { instances: DirectedContourEdge[]; canonical: ConstructionEdgeGeometry }>();
+export function loopSignedArea(loop: readonly DirectedContourEdge[], positionOf: (id: string) => readonly [number, number]): number {
+  let area = 0;
+  for (const edge of loop) {
+  const [ax, az] = positionOf(edge.a);
+export function pointInLoop(
+  loop: readonly DirectedContourEdge[],
+  positionOf: (id: string) => readonly [number, number],
+  point: readonly [number, number],
+  ): boolean {
+  let inside = false;
+  const [px, pz] = point;
+  for (const edge of loop) {
+export interface LoopGroup {
+  readonly boundary: readonly DirectedContourEdge[];
+  readonly holes: readonly (readonly DirectedContourEdge[])[];
+  }
+export function groupLoopsByContainment(
+  loops: readonly (readonly DirectedContourEdge[])[],
+  positionOf: (id: string) => readonly [number, number],
+  ): readonly LoopGroup[] {
+  const areas = loops.map((loop) => Math.abs(loopSignedArea(loop, positionOf)));
 
 // src/composition/tabletop/tools/platform/platform-contour-tool.ts
 export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: Params, pickedSamples: readonly PointerSample[] = []): void {

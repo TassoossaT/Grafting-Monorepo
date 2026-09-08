@@ -48,11 +48,6 @@ The connected component of same-`type` regions reachable from
 `seed` by shared graph nodes -- `ADR-0022`'s "cloud" query. See
 `geometry::connected_component`.
 
-### `pub fn grafting_procgen_construction_wasm::ConstructionSession::curved_planar_boolean_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
-
-Generic closed-contour union/subtraction. Product selection stays in the caller.
-Analytic line/arc boolean query; input and output retain directed geometry.
-
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::delete_region_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 `DeleteRegion`. See `region_editing::apply_delete_region`.
@@ -128,6 +123,8 @@ Creates an empty session.
 Resolves a complete directed motion cascade without mutating the session.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::planar_boolean_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Generic closed-contour union/subtraction. Product selection stays in the caller.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::redo_region_overlay(&mut self, operation_id: &str) -> core::result::Result<(), wasm_bindgen::JsValue>`
 

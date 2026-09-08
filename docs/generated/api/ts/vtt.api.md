@@ -325,6 +325,15 @@ and `resolveCutRepair`'s, not this method's.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.applyRegionEdit(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
+Applies a resolved sequence of atomic edit ops as one transaction, then
+re-derives and re-uploads every chunk and folds the whole merged
+outcome into the cached `MapProjection`.
+
+Policy resolution deliberately happens *before* this call, in
+`features/edit-construction`: this method never asks what a wall allows,
+it only performs what was already decided -- see
+`docs/architecture/vtt-atomic-edit-and-cloud-policy-design.md`.
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.applyRegionOverlay(request: ApplyRegionOverlayRequest, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome`
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.applyWallCrossingWeld(inserts: readonly { edgeId: string; firstEdgeId: string; nodeId: string; position: ConstructionPosition; secondEdgeId: string }[], origin: ChangeOrigin, causeId: string): RegionEditOutcome`
@@ -350,17 +359,6 @@ Hides the active tool preview, if any.
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.cloudFor(request: CloudRequest): CloudOutcome`
 
 `ADR-0022`'s "cloud" query -- a pure read, never touches the map. See `ConstructionSessionPort.cloudFor`.
-
-### `method vtt.tabletop-runtime.AppTabletopRuntime.curvedPlanarBoolean(request: ConstructionCurvedRequest): readonly ConstructionCurvedShape[]`
-
-Applies a resolved sequence of atomic edit ops as one transaction, then
-re-derives and re-uploads every chunk and folds the whole merged
-outcome into the cached `MapProjection`.
-
-Policy resolution deliberately happens *before* this call, in
-`features/edit-construction`: this method never asks what a wall allows,
-it only performs what was already decided -- see
-`docs/architecture/vtt-atomic-edit-and-cloud-policy-design.md`.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.detachView(viewId: string): void`
 
@@ -501,8 +499,6 @@ Hides the active tool preview, if any.
 ### `method vtt.tabletop-runtime.TabletopRuntime.cloudFor(request: CloudRequest): CloudOutcome`
 
 `ADR-0022`'s "cloud" query -- a pure read, never touches the map. See `ConstructionSessionPort.cloudFor`.
-
-### `method vtt.tabletop-runtime.TabletopRuntime.curvedPlanarBoolean(request: ConstructionCurvedRequest): readonly ConstructionCurvedShape[]`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.detachView(viewId: string): void`
 
@@ -1226,6 +1222,73 @@ chooses the interaction and emits a `PathBrushEffect`. The PathCloud owns
 the resulting graph and contour plan; the composition boundary commits its
 generic transaction without interpreting path topology.
 
+### `interface vtt.platform-contour-merge.DirectedContourEdge`
+
+Replaces the analytic curved-boolean engine platform extend/cut used to
+run against. That engine could combine any two crossing shapes, arcs
+included, but paid for it with 350+ lines of exact-geometry intersection
+math no other tool in this codebase needed -- and let a stroke redraw a
+platform's shape by crossing its interior anywhere, which is exactly the
+"too free for a controlled edit mode" behavior the owner asked to remove
+(2026-09-08 review of #242).
+
+The replacement never computes an intersection. A stroke may only extend
+or cut a platform by welding onto its existing boundary -- reusing the
+same node wherever a drawn point lands within tolerance, the same way a
+wall run welds onto an existing column. Where the new stroke and the old
+boundary then share an edge walked in opposite directions, that edge
+cancels (it is now interior); what survives assembles back into the
+result loop(s) by simple endpoint matching, no angle sorting or
+interior/exterior sampling required, because a clean weld never leaves a
+node with more than one surviving outgoing edge. A node that *does* end
+up ambiguous (the stroke only touched the boundary at a single point
+without running along a real edge) is refused rather than guessed --
+see WeldedMergeResult's `error` case.
+
+### `property vtt.platform-contour-merge.DirectedContourEdge.a: string`
+
+### `property vtt.platform-contour-merge.DirectedContourEdge.b: string`
+
+### `property vtt.platform-contour-merge.DirectedContourEdge.geometry: ConstructionEdgeGeometry`
+
+### `interface vtt.platform-contour-merge.LoopGroup`
+
+### `property vtt.platform-contour-merge.LoopGroup.boundary: readonly DirectedContourEdge[]`
+
+### `property vtt.platform-contour-merge.LoopGroup.holes: readonly (readonly DirectedContourEdge[])[]`
+
+### `type vtt.platform-contour-merge.WeldedMergeResult = { kind: "ok"; loops: readonly (readonly DirectedContourEdge[])[] } | { kind: "error"; message: string }`
+
+### `function vtt.platform-contour-merge.groupLoopsByContainment(loops: readonly (readonly DirectedContourEdge[])[], positionOf: (id: string) => readonly [number, number]): readonly LoopGroup[]`
+
+Nests each loop under the smallest other loop that contains it (a hole
+inside its owning face); a loop nothing contains is its own face.
+
+Tested by one representative vertex rather than the whole loop, since a
+hole produced by this weld model only ever touches its owner at isolated
+weld points, never runs along its boundary -- an interior span run twice
+already cancelled out in weldedMerge.
+
+### `function vtt.platform-contour-merge.loopSignedArea(loop: readonly DirectedContourEdge[], positionOf: (id: string) => readonly [number, number]): number`
+
+Signed XZ area of a closed directed loop, arcs included -- positive winds counter-clockwise.
+
+### `function vtt.platform-contour-merge.pointInLoop(loop: readonly DirectedContourEdge[], positionOf: (id: string) => readonly [number, number], point: readonly [number, number]): boolean`
+
+Whether `point` lies inside `loop` (even-odd ray cast; arc spans are chorded for the test, which is exact enough at the ~1e-3 scale these loops are welded at).
+
+### `function vtt.platform-contour-merge.weldedMerge(standing: readonly DirectedContourEdge[], stroke: readonly DirectedContourEdge[]): WeldedMergeResult`
+
+Cancels every edge the two edge sets share in opposite directions (an
+edge welded onto by both the old boundary and the new stroke), then
+reassembles what is left into closed loops by following each edge's `b`
+to the next edge's `a`.
+
+Refuses -- rather than guessing -- whenever cancellation leaves any node
+with more than one surviving outgoing or incoming edge (an ambiguous
+branch: the stroke only touched the boundary at a point, not along a
+shared run), or when the survivors do not close into whole loops.
+
 ### `variable vtt.platform-contour-tool.platformContourTool: ConstructionTool<"platform-contour">`
 
 ### `function vtt.platform-contour-tool.commitPlatformContour(ctx: ToolContext, samples: readonly PointerSample[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "circle" | "rectangle" | "polygon" | "freehand"; tolerance?: number }): void`
@@ -1234,7 +1297,12 @@ Polygon entry point retained for callers that already have explicit corners.
 
 ### `function vtt.platform-contour-tool.commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "circle" | "rectangle" | "polygon" | "freehand"; tolerance?: number }, pickedSamples: readonly PointerSample[]): void`
 
-Commits the same directed line/arc contour vocabulary consumed by wall construction.
+Commits the same directed line/arc contour vocabulary consumed by wall
+construction. Ampliar/juntar and recortar/separar no longer run an
+analytic boolean against the standing platform: the stroke has to weld
+onto the existing boundary (within WELD_TOLERANCE, the same one a
+wall run snaps onto a column with) and the result is assembled from
+shared/cancelled edges -- see `platform-contour-merge.ts` for why.
 
 ### `interface vtt.geometry-2d.PointXZ`
 
@@ -4804,14 +4872,6 @@ World-space centroid; `y` is the height the face currently sits at.
 
 ### `property vtt.construction-session-port.ConstructionCoveredRegion.surfaceType: string`
 
-### `interface vtt.construction-session-port.ConstructionCurvedRequest`
-
-### `property vtt.construction-session-port.ConstructionCurvedRequest.clip: readonly ConstructionCurvedShape[]`
-
-### `property vtt.construction-session-port.ConstructionCurvedRequest.operation: "union" | "difference" | "extend"`
-
-### `property vtt.construction-session-port.ConstructionCurvedRequest.subject: readonly ConstructionCurvedShape[]`
-
 ### `interface vtt.construction-session-port.ConstructionEdgeSnapshot`
 
 One generic graph edge, including edges deliberately not used by a face.
@@ -5085,16 +5145,6 @@ wall with an opening nobody is standing in.
 
 ### `property vtt.construction-session-port.ConstructionPatchRegion.surfaceType: string`
 
-### `interface vtt.construction-session-port.ConstructionPlanarCurve`
-
-Directed span in the horizontal construction plane, including true circular arcs.
-
-### `property vtt.construction-session-port.ConstructionPlanarCurve.end: readonly [number, number]`
-
-### `property vtt.construction-session-port.ConstructionPlanarCurve.geometry: ConstructionEdgeGeometry`
-
-### `property vtt.construction-session-port.ConstructionPlanarCurve.start: readonly [number, number]`
-
 ### `interface vtt.construction-session-port.ConstructionPlanarRequest`
 
 ### `property vtt.construction-session-port.ConstructionPlanarRequest.clip: readonly ConstructionPlanarShape[]`
@@ -5181,8 +5231,6 @@ Indexed back to the request; a point over open ground is simply absent.
 ### `method vtt.construction-session-port.ConstructionSessionPort.cloudFor(request: CloudRequest): CloudOutcome`
 
 `ADR-0022`'s "cloud" query.
-
-### `method vtt.construction-session-port.ConstructionSessionPort.curvedPlanarBoolean(request: ConstructionCurvedRequest): readonly ConstructionCurvedShape[]`
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.deleteRegion(surfaceKey: ConstructionSurfaceKey): RegionEditOutcome`
 
@@ -5518,10 +5566,6 @@ How a brush footprint touches one existing region.
 Reported as data rather than resolved by the engine: a type that swaps
 whole faces (terrain restacking onto itself) and a type that cuts (a path
 carved through) need different rules from the very same answer.
-
-### `type vtt.construction-session-port.ConstructionCurvedShape = readonly (readonly ConstructionPlanarCurve[])[]`
-
-An outer boundary followed by holes.
 
 ### `type vtt.construction-session-port.ConstructionEdgeGeometry = { kind: "line" } | { center: readonly [number, number]; clockwise: boolean; kind: "arc" }`
 

@@ -141,28 +141,6 @@ impl ConstructionSession {
     // ---- Atomic region edits (the analytic edit vocabulary) ----
 
     /// Generic closed-contour union/subtraction. Product selection stays in the caller.
-    /// Analytic line/arc boolean query; input and output retain directed geometry.
-    pub fn curved_planar_boolean_json(&self, request_json: &str) -> Result<String, JsValue> {
-        #[derive(serde::Deserialize)]
-        struct Request {
-            subject: Vec<Vec<Vec<crate::region_editing::PlanarCurveDto>>>,
-            clip: Vec<Vec<Vec<crate::region_editing::PlanarCurveDto>>>,
-            operation: String,
-        }
-        let request: Request =
-            serde_json::from_str(request_json).map_err(|error| to_js_error(error.to_string()))?;
-        let operation = match request.operation.as_str() {
-            "union" => grafting_graph_core::PlanarBoolean::Union,
-            "difference" => grafting_graph_core::PlanarBoolean::Difference,
-            "extend" => grafting_graph_core::PlanarBoolean::Extend,
-            _ => return Err(to_js_error("unknown planar operation".into())),
-        };
-        serialize(
-            &crate::region_editing::curved_planar_boolean(request.subject, request.clip, operation)
-                .map_err(to_js_error)?,
-        )
-    }
-
     pub fn planar_boolean_json(&self, request_json: &str) -> Result<String, JsValue> {
         #[derive(serde::Deserialize)]
         struct Request {

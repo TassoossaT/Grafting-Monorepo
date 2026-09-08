@@ -131,55 +131,86 @@ test("wall openings follow the base and remain inside a wall when its top is low
     assert.equal(plan(runtime,1,{x:0,y:-1.5,z:0}).kind,"deny");
   } finally {session.free();}
 });
-test("platform creation, extension retaining supports, hole, separation and topology history", () => {
+test("platform extension welds onto a shared edge instead of crossing it, and topology history covers the whole gesture", () => {
   const {ctx,runtime,session,calls} = sessionFixture();
   try {
     commitPlatformContour(ctx,square(0,0,4,4),{mode:"create",elevation:3});
     assert.equal(runtime.getAllRegionTopologies().length,1,JSON.stringify(calls.feedback));
     const original = runtime.getAllRegionTopologies()[0].nodes.map((n)=>n.id);
-    commitPlatformContour(ctx,square(-1,-1,5,5),{mode:"extend",elevation:3});
-    const topologies = runtime.getAllRegionTopologies();
-    for (const id of original) assert.ok(topologies.some((t)=>t.nodes.some((n)=>n.id===id)), id);
-    assert.equal(runtime.cloudFor({seed:topologies[0].surfaceKey,surfaceType:"platform"}).surfaceKeys.length,topologies.length);
-    commitPlatformContour(ctx,square(1,1,2,2),{mode:"cut",elevation:3});
-    assert.ok(runtime.getAllRegionTopologies().some((t)=>t.holes.length),JSON.stringify(calls.feedback));
-    commitPlatformContour(ctx,square(2.5,-2,3.5,6),{mode:"cut",elevation:3});
-    const separated = runtime.getAllRegionTopologies();
-    assert.ok(runtime.cloudFor({seed:separated[0].surfaceKey,surfaceType:"platform"}).surfaceKeys.length < separated.length,JSON.stringify(calls.feedback));
+    // Shares the whole x=4 edge with the original square -- a weld run, not a crossing.
+    commitPlatformContour(ctx,square(4,0,8,4),{mode:"extend",elevation:3});
+    const merged = runtime.getAllRegionTopologies();
+    assert.equal(merged.length,1,JSON.stringify(calls.feedback));
+    for (const id of original) assert.ok(merged[0].nodes.some((n)=>n.id===id), id);
+    assert.ok(merged[0].nodes.some((n)=>n.position.x===8));
     const after = session.snapshot_json();
     const operationId = ctx.history.undo().operationId;
     session.undo_region_overlay(operationId);
+    assert.equal(runtime.getAllRegionTopologies().length,1);
+    assert.ok(!runtime.getAllRegionTopologies()[0].nodes.some((n)=>n.position.x===8));
     session.redo_region_overlay(operationId);
     assert.equal(session.snapshot_json(),after);
     assert.ok(runtime.getAllRegionTopologies().flatMap((t)=>t.nodes).every((n)=>n.position.y===3));
   } finally { session.free(); }
 });
 
+test("platform cut welds onto two boundary vertices to carve off a strip, and a fully disjoint cut becomes a hole", () => {
+  const {ctx,runtime,session,calls} = sessionFixture();
+  try {
+    commitPlatformContour(ctx,square(0,0,4,4),{mode:"create",elevation:3});
+    // Shares the (4,4)-(0,4) top edge -- welds at both corners, carves the top strip off.
+    commitPlatformContour(ctx,square(0,3,4,4),{mode:"cut",elevation:3});
+    const cut = runtime.getAllRegionTopologies();
+    assert.equal(cut.length,1,JSON.stringify(calls.feedback));
+    assert.ok(!cut[0].nodes.some((n)=>n.position.z>3.001));
+    // Entirely interior, welds onto nothing -- a hole, not an error.
+    commitPlatformContour(ctx,square(1,1,2,1.5),{mode:"cut",elevation:3});
+    assert.ok(runtime.getAllRegionTopologies().some((t)=>t.holes.length),JSON.stringify(calls.feedback));
+  } finally { session.free(); }
+});
 
-test("platform rectangle gesture extends overlapping and adjacent areas at the picked floor", () => {
+test("a stroke touching the boundary at only one point is refused, and extend refuses a stroke that never touches the target", () => {
+  const {ctx,runtime,session,calls} = sessionFixture();
+  try {
+    commitPlatformContour(ctx,square(0,0,4,4),{mode:"create",elevation:3});
+    const before = session.snapshot_json();
+    // Shares only the single corner (4,4) with the original -- no full edge to weld.
+    commitPlatformContour(ctx,square(4,4,8,8),{mode:"extend",elevation:3});
+    assert.equal(session.snapshot_json(),before);
+    assert.ok(calls.feedback.at(-1).message.includes("aresta inteira"),JSON.stringify(calls.feedback));
+    // Shares nothing at all with the target platform.
+    commitPlatformContour(ctx,square(20,20,24,24),{mode:"extend",elevation:3});
+    assert.equal(session.snapshot_json(),before);
+    assert.ok(calls.feedback.at(-1).message.includes("Encoste"),JSON.stringify(calls.feedback));
+  } finally { session.free(); }
+});
+
+test("platform rectangle gesture welds onto the picked floor's own edge, resolving elevation from the pick", () => {
   const {ctx,runtime,session,calls}=sessionFixture();
   try {
     commitPlatformContour(ctx,square(0,0,4,4),{mode:"create",elevation:3});
     const original=runtime.getAllRegionTopologies()[0];
-    const from={point:{x:3,y:3,z:1},surfaceRef:surfaceRefFromNodeSet(original.surfaceKey)};
-    const to={point:{x:6,y:0,z:3}};
+    // `elevation:0` in params is deliberately wrong -- the pick on the
+    // existing platform (elevation 3) has to win. The dragged rectangle
+    // itself lands exactly on the original's x=4 edge, corner to corner.
+    const from={point:{x:4,y:3,z:0},surfaceRef:surfaceRefFromNodeSet(original.surfaceKey)};
+    const to={point:{x:8,y:0,z:4}};
     const params={mode:"extend",elevation:0,shape:"rectangle"};
     platformContourTool.onPointerUp(ctx,{start:from,current:to,samples:[from,to]},params);
     const tops=runtime.getAllRegionTopologies();
-    assert.equal(tops.length,2,JSON.stringify(calls.feedback));
+    assert.equal(tops.length,1,JSON.stringify(calls.feedback));
     assert.ok(tops.flatMap(t=>t.nodes).every(n=>n.position.y===3));
-    assert.ok(tops.flatMap(t=>t.nodes).some(n=>n.position.x===6));
-    assert.equal(runtime.cloudFor({seed:tops[0].surfaceKey,surfaceType:"platform"}).surfaceKeys.length,2);
+    assert.ok(tops.flatMap(t=>t.nodes).some(n=>n.position.x===8));
     const snapshot=session.snapshot_json();
     const entry=ctx.history.undo();
     session.undo_region_overlay(entry.operationId);
-    assert.equal(runtime.getAllRegionTopologies().length,1);
+    assert.equal(runtime.getAllRegionTopologies()[0].nodes.length,4);
     session.redo_region_overlay(entry.operationId);
     assert.equal(session.snapshot_json(),snapshot);
   } finally {session.free();}
 });
 
-test("platform circle shares the tower contour and retains arcs through extension and cutting", async () => {
+test("platform circle shares the tower contour, welds cut holes, and refuses a freely crossing extend", async () => {
   const {circleContour}=await import("../src/composition/tabletop/tools/tower/tower-geometry.ts");
   const {ctx,runtime,session,calls}=sessionFixture();
   const curves=()=>runtime.getAllRegionTopologies().flatMap(t=>[...t.outerLoops,...t.holes].flat());
@@ -187,19 +218,16 @@ test("platform circle shares the tower contour and retains arcs through extensio
     platformContourTool.onClick(ctx,{point:{x:0,y:0,z:0}},{mode:"create",elevation:3,shape:"circle",radius:2.5});
     assert.equal(curves().length,4,JSON.stringify(calls.feedback));
     assert.ok(curves().every(c=>c.geometry.kind==="arc"));
-    const originalIds=new Set(runtime.getAllRegionTopologies()[0].nodes.map(n=>n.id));
+    const before = session.snapshot_json();
+    // Two independently drawn circles almost never share a whole arc span --
+    // crossing without welding is exactly what this tool no longer does.
     commitPlatformShape(ctx,circleContour({x:3,y:3,z:0},2.5),{mode:"extend",elevation:3});
-    assert.ok(curves().every(c=>c.geometry.kind==="arc"),JSON.stringify(calls.feedback));
-    const tops=runtime.getAllRegionTopologies();
-    assert.equal(tops.length,2,JSON.stringify(calls.feedback));
-    assert.equal(runtime.cloudFor({seed:tops[0].surfaceKey,surfaceType:"platform"}).surfaceKeys.length,2);
-    for(const id of originalIds)assert.ok(tops.some(t=>t.nodes.some(n=>n.id===id)));
+    assert.equal(session.snapshot_json(),before,JSON.stringify(calls.feedback));
+    assert.equal(runtime.getAllRegionTopologies().length,1);
+    // A smaller, fully interior circle still cuts a hole -- that case never needed welding.
     commitPlatformShape(ctx,circleContour({x:0,y:3,z:0},1),{mode:"cut",elevation:3});
     assert.ok(runtime.getAllRegionTopologies().some(t=>t.holes.length),JSON.stringify(calls.feedback));
     assert.ok(curves().every(c=>c.geometry.kind==="arc"));
-    commitPlatformContour(ctx,square(-0.2,-4,0.2,4),{mode:"cut",elevation:3});
-    assert.ok(curves().some(c=>c.geometry.kind==="arc"));
-    assert.ok(curves().some(c=>c.geometry.kind==="line"));
     const snapshot=session.snapshot_json();
     const entry=ctx.history.undo();session.undo_region_overlay(entry.operationId);session.redo_region_overlay(entry.operationId);
     assert.equal(session.snapshot_json(),snapshot);
@@ -226,7 +254,7 @@ test("platform freehand fits curves, polygon cancellation clears corners, lower 
   }finally{session.free();}
 });
 
-test("editing an arc endpoint keeps a valid circle and distant platform identities survive extension", async () => {
+test("editing an arc endpoint keeps a valid circle, and a freely crossing extend leaves distant identities untouched", async () => {
   const {circleContour}=await import("../src/composition/tabletop/tools/tower/tower-geometry.ts");
   const {ctx,runtime,session,calls}=sessionFixture();
   try {
@@ -252,8 +280,10 @@ test("editing an arc endpoint keeps a valid circle and distant platform identiti
     assert.equal(session.snapshot_json(),before);
     commitPlatformShape(ctx,circleContour({x:3,y:3,z:0},2.5),{mode:"extend",elevation:3});
     assert.deepEqual(runtime.getRegionTopology(far.surfaceKey),far,JSON.stringify(calls.feedback));
-    const revised=runtime.getRegionTopology(disk.surfaceKey);
-    assert.equal(revised,null); // the attached seam gained intersection vertices
+    // Crosses without welding onto a shared arc -- refused, disk untouched (same node set, still a circle).
+    const stillDisk=runtime.getRegionTopology(disk.surfaceKey);
+    assert.deepEqual(new Set(stillDisk.nodes.map(n=>n.id)),new Set(disk.nodes.map(n=>n.id)),JSON.stringify(calls.feedback));
+    assert.ok(stillDisk.outerLoops.flat().every(e=>e.geometry.kind==="arc"));
   } finally {session.free();}
 });
 

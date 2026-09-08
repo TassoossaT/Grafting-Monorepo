@@ -21,30 +21,56 @@ walls or compose a house.
 
 **Criar** uses the chosen elevation. **Ampliar / juntar** and **Recortar /
 separar** use the elevation of the platform where the gesture starts, or the
-chosen elevation when starting elsewhere. To enlarge, draw across the existing
-boundary into the new area. Empty/degenerate gestures and absent target levels
-produce feedback; a fully covered extension is a no-op.
+chosen elevation when starting elsewhere. Empty/degenerate gestures and absent
+target levels produce feedback; a fully covered extension is a no-op.
 
 Surviving vertices retain their identities. Explicitly picked vertices at the
 drawing elevation may connect; picking the ground below never welds floors.
 Wall creation welds endpoints to platform vertices in XYZ, including the upper
 endpoint, without selecting another storey by XZ alone.
 
-The analytic boolean query lives in graph-core and uses the existing contour
-intersection primitives for line/line, line/arc and arc/arc crossings. It retains
-arc centers and sweep directions instead of tessellating the graph into chords.
-Outer/hole winding is accepted in either direction; coincident boundaries and
-tangent contacts are handled. Its positional tolerance is 1e-5 world units.
-No new geometry dependency is introduced. The older polygon-only query remains
-available to its existing callers.
+**Ampliar/juntar and recortar/separar no longer run an analytic boolean.**
+Revised 2026-09-08: the stroke must weld onto the standing platform's own
+boundary within the same corner-weld tolerance a wall run already snaps onto a
+column with (0.25 world units), the same way a wall welds onto an existing
+node rather than crossing it. `platform-contour-merge.ts` builds the result by
+declaring every standing-boundary edge and every stroke edge by the node pair
+it runs between; a span declared by both (in either direction -- which way the
+stroke happens to trace it does not matter) is now interior and cancels; a
+span declared once survives. What survives reassembles into closed loop(s) by
+following each edge's end to the next edge's start -- deterministic, because a
+clean weld never leaves a node with more than one surviving edge in or out. A
+stroke that only touches the boundary at an isolated point, without running
+along a real shared span, is refused rather than guessed: "encoste... uma
+aresta inteira, não só tocando um vértice." **Ampliar** additionally refuses
+outright if the stroke shares no node at all with the target platform. A
+disjoint **recortar** loop is not an error -- it nests as a hole via point
+containment, the same outcome the old boolean's `Difference` gave a fully
+interior clip. No line/arc intersection math runs at all; the previous
+`curved_planar_boolean` analytic engine (arc-aware union/difference/extend
+over arbitrary crossing shapes, `graph-core::curved_planar`) is deleted.
+
+**What this narrows, accepted deliberately:** a stroke that crosses the
+standing boundary's interior anywhere, without tracing along it, no longer
+merges or cuts automatically -- the owner's call, in favor of predictable
+graph identities over free-form crossing. Multiple disjoint standing
+platforms at the same elevation still merge correctly if the one stroke welds
+onto more than one of them. Splitting into several disconnected remainders
+still falls out of the same loop decomposition when a cut's welds separate
+the standing perimeter into more than one closed chain; it is not a special
+case. The straight-polygon `planar_boolean` in `graph-core::planar` (i_overlay-
+backed) predates none of this platform work either -- it was added alongside
+`curved_planar_boolean` in the same PR and, as of this revision, has no
+caller of its own; it is left in place undisturbed rather than removed as
+part of this narrower change.
 
 Extension retains source faces as structural seams and adds uncovered area.
-Cutting supports holes and disconnected remainders. Splitting includes original
-vertices and analytic crossings, so support vertices remain cloud members after
-enlargement. Candidate faces are restricted to the target elevation; faces whose
-directed boundary spans do not change keep their identities and render items.
-Other types are never cut or moved by contour booleans. Removed platform nodes
-stay alive if another type still uses them.
+Cutting supports holes and, when the weld separates the perimeter into more
+than one closed chain, disconnected remainders. Candidate faces are
+restricted to the target elevation; faces whose directed boundary spans do
+not change keep their identities and render items. Other types are never cut
+or moved by contour edits. Removed platform nodes stay alive if another type
+still uses them.
 
 Each completed gesture applies one atomic replacement with one undo/redo entry.
 The dispatcher consumes the release position, suppresses the native click after
@@ -117,17 +143,26 @@ always supplies it.
 the levels 0/3/6 with distinct footprints, base/intermediate/top elevation,
 descending limits, shared-node convergence, disconnected overlap, horizontal
 transport versus local shape edits, atomic failure, drag history, wall creation
-across storeys, bottom edges, apertures, extension, holes and splitting.
-It also covers circular/freehand creation, mixed line/arc cuts, extension from
-a picked elevated floor, endpoint editing, and untouched distant identities.
+across storeys, bottom edges and apertures.
+
+The contour-editing cases exercise the weld model directly: extension across a
+whole shared edge merging into one face; a cut welded onto two boundary
+vertices carving a strip off (including the mid-span split that turns a weld
+landing partway along a long standing edge into a real shared node, not just
+one at an existing corner); a fully disjoint cut nesting as a hole with no
+weld at all; a stroke touching the boundary at one isolated point refused as
+ambiguous; an extend refused outright when it shares no node with the target
+platform; a rectangle gesture resolving its elevation from a pick on the
+existing floor; circular creation retaining true arcs; and a freely crossing
+circle extend -- two independently drawn circles essentially never share a
+whole arc span -- refused rather than silently merged. The same file's
+polygon/freehand creation and two-distinct-arcs-between-the-same-vertices
+cases are unaffected by the weld model, since creation never runs it.
 
 The pointer lifecycle test runs the actual hook and platform tool against WASM
 with only React scheduling and render/pick adapters substituted. It verifies
 the final release sample, one commit per drag, suppressed trailing clicks,
 Escape, draft reset, unmount and capture release.
-
-Rust curved boolean tests exercise coincident/tangent circles, winding reversal,
-exact intersections, structural seams, holes and a grid of rotated crossings.
 
 `motion_planning.rs` covers axis masks usable by other types, conflicting and
 equal cycles, order independence, nonfinite/unknown-node rejection, atomic

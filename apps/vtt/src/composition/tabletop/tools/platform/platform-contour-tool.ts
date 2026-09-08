@@ -1,14 +1,17 @@
 import { DEFAULT_TOOL_PARAMS, fitPath } from "../../../../features/edit-construction/index.ts";
 import type { FittedEdge, ToolParamsByTool } from "../../../../features/edit-construction/index.ts";
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
-import type { ConstructionCurvedShape, ConstructionPosition, ConstructionRegionTopology } from "../../../../ports/index.ts";
+import type { ConstructionPosition, ConstructionRegionTopology } from "../../../../ports/index.ts";
 import { createBoundaryEdges, reverseGeometry } from "../core/boundary-edges.ts";
 import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext } from "../core/tool-context.ts";
 import { polylineSegmentsPreview, segmentsPreview } from "../shapes/preview-shapes.ts";
 import { circleContour, previewOutline } from "../tower/tower-geometry.ts";
+import { groupLoopsByContainment, splitContourAtPoints, weldedMerge, type DirectedContourEdge } from "./platform-contour-merge.ts";
 
 type Params = ToolParamsByTool["platform-contour"];
 const COLOR = 0x79b8e8;
+/** Same corner-weld tolerance a wall run already snaps onto an existing column with. */
+const WELD_TOLERANCE = 0.25;
 const drafts = new WeakMap<object, { key: string; points: PointerSample[] }>();
 function draft(ctx: ToolContext, params: Params): PointerSample[] {
   const key = JSON.stringify(params);
@@ -22,13 +25,22 @@ function parametersAt(ctx: ToolContext, first: PointerSample | undefined, params
     (first.surfaceRef ? surfaceRefFromNodeSet(t.surfaceKey) === first.surfaceRef : first.nodeId && t.nodes.some((n) => n.id === first.nodeId)));
   return target?.nodes[0] ? { ...params, elevation: target.nodes[0].position.y } : params;
 }
-function shapeOf(topology: ConstructionRegionTopology): ConstructionCurvedShape {
-  const nodes = new Map(topology.nodes.map((node) => [node.id, node.position]));
-  return [...topology.outerLoops, ...topology.holes].map((loop) => loop.map((edge) => {
-    const a = nodes.get(edge.startNodeId)!;
-    const b = nodes.get(edge.endNodeId)!;
-    return { start: [a.x, a.z], end: [b.x, b.z], geometry: edge.reversed ? reverseGeometry(edge.geometry) : edge.geometry };
-  }));
+/** A source region's own boundary/hole edges, by node id -- the identities a stroke has to weld onto, not the position it happens to occupy. */
+function sourceEdges(topology: ConstructionRegionTopology): readonly (readonly DirectedContourEdge[])[] {
+  return [...topology.outerLoops, ...topology.holes].map((loop) => loop.map((edge) => ({
+    a: edge.startNodeId,
+    b: edge.endNodeId,
+    geometry: edge.reversed ? reverseGeometry(edge.geometry) : edge.geometry,
+  })));
+}
+function ringSignature(edges: readonly DirectedContourEdge[]): string {
+  return edges
+    .map((e) => `${e.a}>${e.b}:${e.geometry.kind === "arc" ? `arc:${e.geometry.clockwise}:${e.geometry.center[0]}:${e.geometry.center[1]}` : "line"}`)
+    .sort()
+    .join("|");
+}
+function regionSignature(rings: readonly (readonly DirectedContourEdge[])[]): string {
+  return rings.map(ringSignature).sort().join("#");
 }
 function lines(samples: readonly PointerSample[], elevation: number): readonly FittedEdge[] {
   const points = samples.map((s) => ({ ...s.point, y: elevation })).filter((p, i, all) => i === 0 || p.x !== all[i-1]!.x || p.z !== all[i-1]!.z);
@@ -38,7 +50,14 @@ function lines(samples: readonly PointerSample[], elevation: number): readonly F
 function rectangle(a: PointerSample, b: PointerSample, elevation: number): readonly PointerSample[] {
   return [a, { point: { x: b.point.x, y: elevation, z: a.point.z } }, b, { point: { x: a.point.x, y: elevation, z: b.point.z } }];
 }
-/** Commits the same directed line/arc contour vocabulary consumed by wall construction. */
+/**
+ * Commits the same directed line/arc contour vocabulary consumed by wall
+ * construction. Ampliar/juntar and recortar/separar no longer run an
+ * analytic boolean against the standing platform: the stroke has to weld
+ * onto the existing boundary (within {@link WELD_TOLERANCE}, the same one a
+ * wall run snaps onto a column with) and the result is assembled from
+ * shared/cancelled edges -- see `platform-contour-merge.ts` for why.
+ */
 export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: Params, pickedSamples: readonly PointerSample[] = []): void {
   try {
     if (!Number.isFinite(params.elevation)) throw new Error("A elevação deve ser finita.");
@@ -49,37 +68,76 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
     const picked = new Set(pickedSamples.flatMap((s) => s.nodeId ? [s.nodeId] : []));
     const sources = params.mode === "create" ? [] : all.filter((t) => t.surfaceType === "platform" && t.nodes.every((n) => Math.abs(n.position.y - params.elevation) < 1e-4));
     if (params.mode !== "create" && sources.length === 0) throw new Error("Nenhuma plataforma nessa elevação. Comece sobre a plataforma ou escolha a elevação correta.");
-    const clip: ConstructionCurvedShape = [contour.map((c) => ({ start: [c.start.x,c.start.z], end: [c.end.x,c.end.z], geometry: c.geometry }))];
-    const subject = sources.map(shapeOf);
-    const shapes = ctx.runtime.curvedPlanarBoolean({ subject, clip: [clip], operation: params.mode === "cut" ? "difference" : params.mode === "extend" ? "extend" : "union" });
-    if (params.mode !== "cut" && shapes.length === 0) throw new Error("O contorno precisa delimitar uma área.");
-    // Preserve the identities and render items of faces the operation did not change.
-    const signature = (shape: ConstructionCurvedShape) => JSON.stringify(shape.map((r) => r.map((c) => JSON.stringify(c)).sort()).sort());
-    const remaining = sources.map((source,i) => ({ source,signature:signature(subject[i]!) }));
-    const changedShapes = shapes.filter((shape) => {
-      const match = remaining.findIndex((item) => item.signature === signature(shape));
-      if (match < 0) return true;
-      remaining.splice(match,1); return false;
-    });
-    if (params.mode !== "create" && remaining.length === 0 && changedShapes.length === 0) {
-      ctx.reportFeedback({ tone: "info", message: params.mode === "extend" ? "A área já está coberta. Desenhe além da borda para ampliar." : "O recorte não removeu nenhuma área." }); return;
-    }
+
     const operationId = scopedToolId(ctx, "platform", ctx.nextSequence());
     const retained = new Map(sources.flatMap((t) => t.nodes.map((n) => [n.id,n] as const)));
     for (const n of graph.nodes) if (picked.has(n.id) && Math.abs(n.position.y - params.elevation) < 1e-4) retained.set(n.id,n);
     const nodes = new Map<string, { id: string; position: ConstructionPosition }>();
-    // New boundary identities avoid borrowing an unrelated wall's geometry.
-    // Shared graph vertices, rather than endpoint-only edge names, carry support.
-    const builder = createBoundaryEdges(operationId, { kind: "private-when-full", runPrefix: operationId, existingUses: new Map() });
     function nodeAt(p: readonly [number,number]): string {
-      const existing = [...retained.values(),...nodes.values()].find((n) => Math.abs(n.position.x-p[0]) < 1e-5 && Math.abs(n.position.z-p[1]) < 1e-5);
+      const existing = [...retained.values(),...nodes.values()].find((n) => Math.abs(n.position.x-p[0]) < WELD_TOLERANCE && Math.abs(n.position.z-p[1]) < WELD_TOLERANCE);
       const node = existing ?? { id: `${operationId}:node:${nodes.size}`, position: { x: p[0], y: params.elevation, z: p[1] } };
       nodes.set(node.id,node); return node.id;
     }
-    const regions = changedShapes.map((shape,index) => {
-      const loops = shape.map((ring) => ring.map((c) => builder.use(nodeAt(c.start),nodeAt(c.end),c.geometry)));
-      return { regionId: `${operationId}:face:${index}`, boundary: loops[0]!, holes: loops.slice(1), surfaceType: "platform", physical: true };
+    const positionOf = (id: string): readonly [number, number] => {
+      const n = nodes.get(id) ?? retained.get(id)!;
+      return [n.position.x, n.position.z];
+    };
+
+    // A cut stroke is wound like every other outer boundary here (never
+    // pre-reversed by the caller), but subtracting means it has to meet a
+    // shared span from the *opposite* side a merge would -- the same
+    // relationship an outer ring and its own hole always have. Reversing it
+    // once here is what keeps the surviving edges after cancellation
+    // decomposable into a single walk instead of a node with two ways in.
+    const clipEdges: DirectedContourEdge[] = contour.map((c) => params.mode === "cut"
+      ? { a: nodeAt([c.end.x,c.end.z]), b: nodeAt([c.start.x,c.start.z]), geometry: reverseGeometry(c.geometry) }
+      : { a: nodeAt([c.start.x,c.start.z]), b: nodeAt([c.end.x,c.end.z]), geometry: c.geometry });
+    const sourceNodeIds = new Set(sources.flatMap((t) => t.nodes.map((n) => n.id)));
+    if (params.mode === "extend" && !clipEdges.some((e) => sourceNodeIds.has(e.a) || sourceNodeIds.has(e.b))) {
+      ctx.reportFeedback({ tone: "error", message: "Encoste o traço na borda da plataforma existente para ampliar." }); return;
+    }
+
+    // A weld can land mid-span rather than on an existing corner (the stroke
+    // touches partway along a long standing edge, say) -- split both sides
+    // at every point the other side actually declares, so a mid-span weld
+    // becomes a real shared node before edges are ever compared.
+    const standingRaw = sources.flatMap((t) => sourceEdges(t).flat());
+    const clipPoints = [...new Set(clipEdges.flatMap((e) => [e.a,e.b]))].map((id) => ({ id, position: positionOf(id) }));
+    const standingPoints = [...new Set(standingRaw.flatMap((e) => [e.a,e.b]))].map((id) => ({ id, position: positionOf(id) }));
+    const standing = splitContourAtPoints(standingRaw, clipPoints, positionOf, WELD_TOLERANCE);
+    const splitClipEdges = splitContourAtPoints(clipEdges, standingPoints, positionOf, WELD_TOLERANCE);
+    const merged = weldedMerge(standing, splitClipEdges);
+    if (merged.kind === "error") { ctx.reportFeedback({ tone: "error", message: merged.message }); return; }
+    let groups = groupLoopsByContainment(merged.loops, positionOf);
+    // A cut clip that never touches or nests inside any standing platform
+    // removed nothing -- its own loop must not be promoted into a new face.
+    if (params.mode === "cut") {
+      groups = groups.filter((group) => [group.boundary, ...group.holes].some((loop) => loop.some((e) => sourceNodeIds.has(e.a) || sourceNodeIds.has(e.b))));
+    }
+    if (params.mode !== "cut" && groups.length === 0) throw new Error("O contorno precisa delimitar uma área.");
+
+    // Preserve the identities and render items of faces the operation did not change.
+    const remaining = sources.map((source) => ({ source, signature: regionSignature(sourceEdges(source)) }));
+    const changedGroups = groups.filter((group) => {
+      const signature = regionSignature([group.boundary, ...group.holes]);
+      const match = remaining.findIndex((item) => item.signature === signature);
+      if (match < 0) return true;
+      remaining.splice(match,1); return false;
     });
+    if (params.mode !== "create" && remaining.length === 0 && changedGroups.length === 0) {
+      ctx.reportFeedback({ tone: "info", message: params.mode === "extend" ? "A área já está coberta. Desenhe além da borda para ampliar." : "O recorte não removeu nenhuma área." }); return;
+    }
+
+    // New boundary identities avoid borrowing an unrelated wall's geometry.
+    // Shared graph vertices, rather than endpoint-only edge names, carry support.
+    const builder = createBoundaryEdges(operationId, { kind: "private-when-full", runPrefix: operationId, existingUses: new Map() });
+    const regions = changedGroups.map((group,index) => ({
+      regionId: `${operationId}:face:${index}`,
+      boundary: group.boundary.map((e) => builder.use(e.a,e.b,e.geometry)),
+      holes: group.holes.map((hole) => hole.map((e) => builder.use(e.a,e.b,e.geometry))),
+      surfaceType: "platform",
+      physical: true,
+    }));
     ctx.runtime.applyPatchReplacement({ operationId, sourceSurfaceKeys: remaining.map(({ source }) => source.surfaceKey), patch: { nodes: [...nodes.values()], edges: builder.all(), regions } }, "local", operationId);
     ctx.history.record({ kind: "path-brush", operationId });
     ctx.reportFeedback({ tone: "success", message: `Plataforma: ${regions.length} face(s) na elevação ${params.elevation}.` });

@@ -10,11 +10,9 @@
 
 mod construction;
 mod contour;
-mod curved_planar;
 mod layout;
 mod model;
 mod motion;
-pub use curved_planar::{CurvedPlanarShape, PlanarCurve, curved_planar_boolean};
 mod planar;
 pub use planar::{PlanarBoolean, PlanarShape, planar_boolean};
 mod region_edit;
