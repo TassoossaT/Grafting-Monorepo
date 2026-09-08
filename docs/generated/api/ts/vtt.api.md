@@ -664,6 +664,15 @@ instead of being a rule of its own.
 
 ### `method vtt.brush-tool.BrushToolSpec.previewColor(params: ToolParamsFor<Id>): number`
 
+### `method vtt.brush-tool.BrushToolSpec.previewContour(region: BrushRegion, ctx: ToolContext, params: ToolParamsFor<Id>): PreviewDescriptor | undefined`
+
+An honest preview of what `applyRegion` will actually produce -- the
+corrected/welded result, not the raw swept envelope. Optional: a brush
+whose product has no such correction (nothing to fit, nothing to weld)
+is well represented by the default sweep fill and needs no override.
+Generic here, not a wall special case, so any brush gets the same real
+preview by supplying one.
+
 ### `type vtt.brush-tool.BrushableToolId = "path-brush" | "wall-brush"`
 
 Tool ids whose parameters carry a brush shape (radius/rotation/footprint) -- the only ids createBrushTool can wire up.
@@ -1276,6 +1285,19 @@ Signed XZ area of a closed directed loop, arcs included -- positive winds counte
 ### `function vtt.platform-contour-merge.pointInLoop(loop: readonly DirectedContourEdge[], positionOf: (id: string) => readonly [number, number], point: readonly [number, number]): boolean`
 
 Whether `point` lies inside `loop` (even-odd ray cast; arc spans are chorded for the test, which is exact enough at the ~1e-3 scale these loops are welded at).
+
+### `function vtt.platform-contour-merge.splitContourAtPoints(edges: readonly DirectedContourEdge[], points: readonly { id: string; position: readonly [number, number] }[], positionOf: (id: string) => readonly [number, number], tolerance: number): readonly DirectedContourEdge[]`
+
+Subdivides every edge in `edges` at any of `points` that lands on its span
+(not at either endpoint) -- the mid-edge counterpart to node welding.
+
+Without this, a stroke that welds onto a boundary vertex at one end and a
+point *along* an untouched standing edge at the other would cancel nothing
+there (that standing edge has no node to match), and the surviving edges
+would reconnect through the standing edge's own far corner instead of the
+weld point -- a valid-looking loop that silently traces the wrong shape.
+Splitting first turns every weld, corner or mid-span, into a real shared
+node before weldedMerge ever compares edges.
 
 ### `function vtt.platform-contour-merge.weldedMerge(standing: readonly DirectedContourEdge[], stroke: readonly DirectedContourEdge[]): WeldedMergeResult`
 
@@ -2177,6 +2199,10 @@ Everything about what a wall *is* lives here, in TypeScript. The engine is
 told which nodes exist, which edges connect them, and which faces sit over
 those edges -- it is never told that any of it is a wall.
 
+### `variable vtt.wall-shared.CORNER_WELD_TOLERANCE: 0.25`
+
+How close (world units, XZ) a new corner may sit to an existing wall's own corner and still be treated as that same corner -- the point at which the run being drawn stops minting nodes and references the existing ones instead.
+
 ### `variable vtt.wall-shared.WALL_COLOR: Record<WallParams["wallType"], number>`
 
 ### `variable vtt.wall-shared.WALL_HEIGHT: 3`
@@ -2207,6 +2233,17 @@ three staircase points is a real circle that was never drawn. Arcs are
 off in that mode for that reason -- snapped means deliberate, and what
 was placed deliberately is what gets built.
 
+### `function vtt.wall-shared.correctedWallCorners(ctx: ToolContext, samples: readonly ConstructionPosition[], tolerance: number): readonly ConstructionPosition[]`
+
+The corner-to-corner skeleton a stroke will actually commit as: the same
+fit commitWallStroke runs, each resulting corner echoed through
+snappedEndpoint. This is what a preview is for -- showing the
+correction and the weld before release, not a decoration on top of the raw
+hand -- so both wall tools draw from this one function rather than each
+approximating it their own way. An arc corrects the same as a straight
+run; only its two endpoints are shown here, not its curvature, the same
+simplification every other preview in this codebase already makes.
+
 ### `function vtt.wall-shared.findWallSurfaceAt(ctx: ToolContext, point: ConstructionPosition): ConstructionSurfaceKey | undefined`
 
 The wall panel whose own centerline `point` lands closest to (XZ only,
@@ -2214,6 +2251,23 @@ within WALL_PICK_TOLERANCE), or `undefined` if none qualify --
 `house-room-delete-tool.ts`'s single-surface delete: a click that lands
 directly on a wall removes just that one panel, distinct from a click on
 open floor inside a room, which removes every wall bounding it instead.
+
+### `function vtt.wall-shared.snappedEndpoint(ctx: ToolContext, point: ConstructionPosition, correction: number): ConstructionPosition`
+
+A read-only echo of resolveColumn's own corner magnet, for showing
+where a run will actually land before it commits. Never mints or inserts
+anything (unlike resolveColumn, it must stay safe to call every
+frame of a drag), so a corner that would only resolve by T-junction
+insertion still previews at the raw point; the commit itself is unaffected.
+
+### `function vtt.wall-shared.wallCorrectionPreview(ctx: ToolContext, samples: readonly ConstructionPosition[], tolerance: number, color: number): PreviewDescriptor`
+
+The one wall preview, both tools draw it: a filled band along
+correctedWallCorners, wide enough to read as the budget that let
+the hand drift this far and still weld -- a thin centerline alone showed
+the correct result but not *why* it was correct, which is what read as
+"not really snapping." The floor is CORNER_WELD_TOLERANCE itself,
+so a zero-tolerance straight line still shows its own magnet reach.
 
 ### `interface vtt.wall-spans.WallSpan`
 

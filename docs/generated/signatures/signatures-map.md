@@ -1998,9 +1998,8 @@ export function flagInput(
   subcommand: string | undefined,
   argv: string[],
   ): unknown | undefined {
-  if (!argv.some((arg) => arg.startsWith("--") && arg !== "--force")) return undefined;
   const route = subcommand === undefined ? group : `${group} ${subcommand}`;
-  const taskId = readValue(argv, "--id");
+  const zeroFlagRoutes = new Set(["issue doctor", "issue tree", "issue list", "pr list", "pr checks", "pr diff", "pr view"]);
 
 // src/git-client.ts
 export function worktreePathForTask(repoPath: string, taskId: string): string {
@@ -2039,6 +2038,7 @@ export function remoteBranchDeletionPlan(
   openDependentPrNumbers: number[] | undefined,
   ): RemoteBranchDeletionPlan {
   if (!branch.startsWith('task/')) throw new Error(`refusing remote deletion outside task/*: ${branch}`);
+export const GENERATED_WORKSPACE_ARTIFACT_DIRS = [
 export function parseDependencySpec(dep: string): { name: string; version: string } {
   let trimmed = dep.trim();
 export class GitWorktreeSession {
@@ -2067,13 +2067,33 @@ export interface GuardCheckInput {
   }
 
 // src/issue-commands.ts
+export interface IssueParentRef {
+  id?: string;
+  number: number;
+  title: string;
+  state: string;
+  url?: string;
+  }
+export interface IssueSubIssueRef {
+  id?: string;
+  number: number;
+  title: string;
+  state: string;
+  url?: string;
+  }
+export interface IssueSubIssuesSummary {
+  completed: number;
+  percentCompleted: number;
+  total: number;
+  }
 export interface IssueListInput {
   type?: string;
   area?: string;
   status?: string;
   priority?: string;
   limit?: number;
-  }
+  parent?: number | string;
+  orphan?: boolean;
 export interface IssueViewInput {
   id: number | string;
   }
@@ -2091,7 +2111,8 @@ export interface IssueUpdateInput {
   priority?: string;
   comment?: string;
   body?: string;
-  }
+  state?: "open" | "closed";
+  reason?: "completed" | "not_planned";
 export interface CompactIssue {
   id: number;
   title: string;
@@ -2099,7 +2120,66 @@ export interface CompactIssue {
   area?: string;
   priority?: string;
   status?: string;
-  milestone?: string;
+  state?: string;
+export function parseLabels(labels: Array<{ name: string }>): {
+  type?: string;
+  area?: string;
+  priority?: string;
+  status?: string;
+  } {
+  const result: { type?: string; area?: string; priority?: string; status?: string } = {};
+export interface IssueCloseInput {
+  id: number | string;
+  reason?: "completed" | "not_planned";
+  comment?: string;
+  }
+export interface IssueReopenInput {
+  id: number | string;
+  comment?: string;
+  }
+export interface IssueTreeInput {
+  epic?: number | string;
+  limit?: number;
+  }
+export interface IssueTreeNode {
+  id: number;
+  title: string;
+  type?: string;
+  area?: string;
+  priority?: string;
+  status?: string;
+  state: string;
+export interface IssueDoctorInput {
+  limit?: number;
+  }
+export interface IssueDiagnostic {
+  issueId: number;
+  title: string;
+  severity: "error" | "warning";
+  code:
+  | "ORPHAN_TASK"
+  | "MISSING_AREA"
+  | "MISSING_PRIORITY"
+
+// src/pr-commands.ts
+export interface PrListInput {
+  limit?: number;
+  state?: "open" | "closed" | "all";
+  }
+export interface PrViewInput {
+  id?: number | string;
+  task?: string;
+  }
+export interface PrChecksInput {
+  id?: number | string;
+  task?: string;
+  failedOnly?: boolean;
+  }
+export interface PrDiffInput {
+  id?: number | string;
+  task?: string;
+  stat?: boolean;
+  }
 
 // src/task-commands.ts
 export interface CliError {
@@ -2147,6 +2227,7 @@ export interface TaskDoneInput {
   title: string;
   body: string;
   base?: string;
+  skipDocGen?: boolean;
   }
 export interface TaskCleanupInput {
   taskId: string;
@@ -3575,12 +3656,20 @@ export interface DirectedContourEdge {
   readonly geometry: ConstructionEdgeGeometry;
   }
 export type WeldedMergeResult =
+export function splitContourAtPoints(
+  edges: readonly DirectedContourEdge[],
+  points: readonly { readonly id: string; readonly position: readonly [number, number] }[],
+  positionOf: (id: string) => readonly [number, number],
+  tolerance: number,
+  ): readonly DirectedContourEdge[] {
+  let result = edges;
+  for (const point of points) {
 export function weldedMerge(
   standing: readonly DirectedContourEdge[],
   stroke: readonly DirectedContourEdge[],
   ): WeldedMergeResult {
   const declared = [...standing, ...stroke];
-  const buckets = new Map<string, { instances: DirectedContourEdge[]; canonical: ConstructionEdgeGeometry }>();
+  const buckets = new Map<string, DirectedContourEdge[]>();
 export function loopSignedArea(loop: readonly DirectedContourEdge[], positionOf: (id: string) => readonly [number, number]): number {
   let area = 0;
   for (const edge of loop) {
@@ -4051,9 +4140,10 @@ export const wallLineTool: ConstructionTool<"wall-line"> = {
   id: "wall-line",
   defaultParams: () => DEFAULT_TOOL_PARAMS["wall-line"],
 
-  previewFor(gesture: ToolGesture, params: WallParams) {
+  previewFor(gesture: ToolGesture, params: WallParams, ctx: ToolContext) {
   if (anchor === undefined) return undefined;
-  return segmentBetween(anchor, gesture.current.point, WALL_COLOR[params.wallType]);
+  // Same correction-and-weld band the brush preview draws from -- the raw
+  // press/cursor points never showed where the run will actually land, or
 
 // src/composition/tabletop/tools/walls/wall-patch.ts
 export interface WallColumn {
@@ -4078,12 +4168,31 @@ export function wallPatch(
   const { columns, geometries, closed } = contour;
 
 // src/composition/tabletop/tools/walls/wall-shared.ts
+export const CORNER_WELD_TOLERANCE = 0.25;
 export const WALL_HEIGHT = 3;
 export const WALL_COLOR: Record<WallParams["wallType"], number> = { "wall-white": 0xe2e8f0, "wall-gray": 0x64748b };
 export function findWallSurfaceAt(ctx: ToolContext, point: ConstructionPosition): ConstructionSurfaceKey | undefined {
   let best: { readonly surfaceKey: ConstructionSurfaceKey; readonly perp: number } | undefined;
   for (const span of wallSpans(ctx)) {
   const { perp } = projectOntoSegment(point, span.a, span.b);
+export function snappedEndpoint(ctx: ToolContext, point: ConstructionPosition, correction = 0): ConstructionPosition {
+  return nearestCornerAt(ctx, point, Math.max(CORNER_WELD_TOLERANCE, correction))?.bottom ?? point;
+  }
+export function correctedWallCorners(
+  ctx: ToolContext,
+  samples: readonly ConstructionPosition[],
+  tolerance = 0,
+  ): readonly ConstructionPosition[] {
+  const first = samples[0];
+  if (first === undefined) return [];
+  const pinned = samples.map((sample) => pinnedToBaseline(first, sample));
+export function wallCorrectionPreview(
+  ctx: ToolContext,
+  samples: readonly ConstructionPosition[],
+  tolerance: number,
+  color: number,
+  ): PreviewDescriptor {
+  const corners = correctedWallCorners(ctx, samples, tolerance);
 export function commitWallContour(
   ctx: ToolContext,
   fitted: readonly FittedEdge[],

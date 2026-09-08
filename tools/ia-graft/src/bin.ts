@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { delegateRun } from "./delegate-commands.ts";
@@ -8,8 +9,9 @@ import { delegateResearch } from "./delegate-research-commands.ts";
 import { runDocCheck } from "./doc-check.ts";
 import { flagInput } from "./flag-input.ts";
 import { runGuardCheck } from "./guard-command.ts";
-import { issueList, issueNew, issueUpdate, issueView } from "./issue-commands.ts";
+import { issueClose, issueDoctor, issueList, issueNew, issueReopen, issueTree, issueUpdate, issueView } from "./issue-commands.ts";
 import { runMcpServer } from "./mcp-server.ts";
+import { prChecks, prDiff, prList, prView } from "./pr-commands.ts";
 import { taskCheckout, taskCleanup, taskCommit, taskContext, taskDependencies, taskDoctor, taskDone, taskGraph, taskNew, taskResume, taskStatus, taskSweep, taskSync, taskTest } from "./task-commands.ts";
 
 /**
@@ -51,6 +53,9 @@ function readInputFlag(argv: string[]): unknown | undefined {
   if (index === -1) return undefined;
   const raw = argv[index + 1];
   if (raw === undefined) throw new Error("--input requires a JSON string argument");
+  if (existsSync(raw)) {
+    return JSON.parse(readFileSync(raw, "utf8"));
+  }
   return JSON.parse(raw);
 }
 
@@ -95,6 +100,18 @@ async function main(argv: string[]): Promise<void> {
       if (subcommand === "view") printAndExit(await issueView(root, input as Parameters<typeof issueView>[1]));
       if (subcommand === "new") printAndExit(await issueNew(root, input as Parameters<typeof issueNew>[1]));
       if (subcommand === "update") printAndExit(await issueUpdate(root, input as Parameters<typeof issueUpdate>[1]));
+      if (subcommand === "close") printAndExit(await issueClose(root, input as Parameters<typeof issueClose>[1]));
+      if (subcommand === "reopen") printAndExit(await issueReopen(root, input as Parameters<typeof issueReopen>[1]));
+      if (subcommand === "tree") printAndExit(await issueTree(root, input as Parameters<typeof issueTree>[1]));
+      if (subcommand === "doctor") printAndExit(await issueDoctor(root, input as Parameters<typeof issueDoctor>[1]));
+    }
+
+    if (group === "pr") {
+      const input = readInputFlag(argv) ?? flagInput(group, subcommand, argv) ?? (await readStdin());
+      if (subcommand === "list") printAndExit(await prList(root, input as Parameters<typeof prList>[1]));
+      if (subcommand === "view") printAndExit(await prView(root, input as Parameters<typeof prView>[1]));
+      if (subcommand === "checks") printAndExit(await prChecks(root, input as Parameters<typeof prChecks>[1]));
+      if (subcommand === "diff") printAndExit(await prDiff(root, input as Parameters<typeof prDiff>[1]));
     }
 
     if (group === "delegate") {
@@ -124,7 +141,7 @@ async function main(argv: string[]): Promise<void> {
 
     printAndExit({
       ok: false,
-      error: `usage: ia-graft guard-check | ia-graft context [--query <q> | --scope <s> | --map] | ia-graft issue <list|view|new|update> | ia-graft task <new|resume|sync|deps|commit|test|done|cleanup|status|doctor|checkout|graph|sweep|context> | ia-graft delegate run --prompt <p> [--effort low|medium|high] [--file <path>]... [--json-schema <json>] | ia-graft delegate edit --id <TASK-ID> --prompt <p> [--effort low|medium|high] [--scope <prefix>]... [--context <text>] | ia-graft delegate research --id <TASK-ID> --topic <t> --output-file <path.md> [--effort low|medium|high]
+      error: `usage: ia-graft guard-check | ia-graft context [--query <q> | --scope <s> | --map] | ia-graft issue <list|view|new|update|close|reopen|tree|doctor> | ia-graft pr <list|view|checks|diff> | ia-graft task <new|resume|sync|deps|commit|test|done|cleanup|status|doctor|checkout|graph|sweep|context> | ia-graft delegate run --prompt <p> [--effort low|medium|high] [--file <path>]... [--json-schema <json>] | ia-graft delegate edit --id <TASK-ID> --prompt <p> [--effort low|medium|high] [--scope <prefix>]... [--context <text>] | ia-graft delegate research --id <TASK-ID> --topic <t> --output-file <path.md> [--effort low|medium|high]
 
 Any prose flag (--message, --title, --body, --prompt, --context, --topic, --comment) also accepts --<flag>-file <path>. Prefer it: ia-graft.cmd forwards argv with %*, and cmd.exe cuts an argument at its first newline, so a multi-line value passed inline is silently truncated. JSON on stdin, or --input <json>, works for every command.`,
     });

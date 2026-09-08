@@ -80,8 +80,9 @@ export function flagInput(
   subcommand: string | undefined,
   argv: string[],
 ): unknown | undefined {
-  if (!argv.some((arg) => arg.startsWith("--") && arg !== "--force")) return undefined;
   const route = subcommand === undefined ? group : `${group} ${subcommand}`;
+  const zeroFlagRoutes = new Set(["issue doctor", "issue tree", "issue list", "pr list", "pr checks", "pr diff", "pr view"]);
+  if (!zeroFlagRoutes.has(route ?? "") && !argv.some((arg) => arg.startsWith("--") && arg !== "--force")) return undefined;
   const taskId = readValue(argv, "--id");
   if (route === "task new") return { taskId, base: readValue(argv, "--base"), parent: readValue(argv, "--parent") };
   if (route === "task resume") {
@@ -97,6 +98,7 @@ export function flagInput(
       agent: readValue(argv, "--agent"),
       amend: argv.includes("--amend"),
       dryRun: argv.includes("--dry-run") || argv.includes("--check"),
+      generateDocs: argv.includes("--generate-docs") || argv.includes("--docs"),
     };
   }
   if (route === "task test") {
@@ -121,6 +123,7 @@ export function flagInput(
       title: readTextValue(argv, "--title"),
       body: readTextValue(argv, "--body"),
       base: readValue(argv, "--base"),
+      skipDocGen: argv.includes("--skip-doc-gen") || argv.includes("--skip-docs"),
     };
   }
   if (route === "task cleanup") return { taskId, force: argv.includes("--force") };
@@ -170,10 +173,25 @@ export function flagInput(
       status: readValue(argv, "--status"),
       priority: readValue(argv, "--priority"),
       limit: rawLimit ? Number(rawLimit) : undefined,
+      parent: readValue(argv, "--parent"),
+      orphan: argv.includes("--orphan"),
     };
   }
   if (route === "issue view") {
     return { id: readValue(argv, "--id") ?? argv[2] };
+  }
+  if (route === "issue tree") {
+    const rawLimit = readValue(argv, "--limit");
+    return {
+      epic: readValue(argv, "--epic") ?? readValue(argv, "--id") ?? argv[2],
+      limit: rawLimit ? Number(rawLimit) : undefined,
+    };
+  }
+  if (route === "issue doctor") {
+    const rawLimit = readValue(argv, "--limit");
+    return {
+      limit: rawLimit ? Number(rawLimit) : undefined,
+    };
   }
   if (route === "issue new") {
     return {
@@ -194,6 +212,48 @@ export function flagInput(
       priority: readValue(argv, "--priority"),
       comment: readTextValue(argv, "--comment"),
       body: readTextValue(argv, "--body"),
+      state: readValue(argv, "--state") as any,
+      reason: readValue(argv, "--reason") as any,
+    };
+  }
+  if (route === "issue close") {
+    return {
+      id: readValue(argv, "--id") ?? argv[2],
+      reason: readValue(argv, "--reason") as any,
+      comment: readTextValue(argv, "--comment"),
+    };
+  }
+  if (route === "issue reopen") {
+    return {
+      id: readValue(argv, "--id") ?? argv[2],
+      comment: readTextValue(argv, "--comment"),
+    };
+  }
+  if (route === "pr list") {
+    const rawLimit = readValue(argv, "--limit");
+    return {
+      limit: rawLimit ? Number(rawLimit) : undefined,
+      state: readValue(argv, "--state") as any,
+    };
+  }
+  if (route === "pr view") {
+    return {
+      id: readValue(argv, "--id") ?? readValue(argv, "--pr") ?? argv[2],
+      task: readValue(argv, "--task"),
+    };
+  }
+  if (route === "pr checks") {
+    return {
+      id: readValue(argv, "--id") ?? readValue(argv, "--pr") ?? argv[2],
+      task: readValue(argv, "--task"),
+      failedOnly: argv.includes("--failed-only"),
+    };
+  }
+  if (route === "pr diff") {
+    return {
+      id: readValue(argv, "--id") ?? readValue(argv, "--pr") ?? argv[2],
+      task: readValue(argv, "--task"),
+      stat: argv.includes("--stat"),
     };
   }
   return undefined;

@@ -2,7 +2,9 @@ import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { GitClient } from "./git-client.ts";
+import { runDocCheck } from "./doc-check.ts";
+import { GitClient, mirrorGeneratedArtifacts } from "./git-client.ts";
+import { issueView } from "./issue-commands.ts";
 
 export interface CliError {
   ok: false;
@@ -118,6 +120,7 @@ export interface TaskCommitInput {
   amend?: boolean;
   dryRun?: boolean;
   check?: boolean;
+  generateDocs?: boolean;
 }
 
 /** Stages (all files, or a given subset) and commits inside the task's worktree. */
@@ -138,6 +141,29 @@ export async function taskCommit(repoRoot: string, input: TaskCommitInput) {
   const unmerged = await session.unmergedPaths();
   const marked = await session.conflictMarkerPaths(unmerged);
   if (marked.length > 0) return { ok: false as const, error: "conflict markers remain in unresolved files", conflicts: marked };
+
+  const agentsMd = join(session.worktreePath, "AGENTS.md");
+  if (existsSync(agentsMd)) {
+    const docCheck = await runDocCheck(session.worktreePath);
+    if (!docCheck.passed) {
+      const failures = docCheck.checks.filter((c) => !c.passed).map((c) => `${c.file}: ${c.reason}`).join("; ");
+      return fail(`doc-check failed: ${failures}`);
+    }
+  }
+
+  if (input.generateDocs) {
+    await mirrorGeneratedArtifacts(repoRoot, session.worktreePath);
+    const pkgJsonPath = join(session.worktreePath, "package.json");
+    if (existsSync(pkgJsonPath)) {
+      const pkg = JSON.parse(await readFile(pkgJsonPath, "utf8"));
+      if (pkg.scripts?.["docs:generate"]) {
+        const genResult = await session.runTests("pnpm run docs:generate");
+        if (!genResult.passed) return fail(`pre-commit docs:generate failed: ${genResult.summary}`);
+        await session.add("docs/generated");
+      }
+    }
+  }
+
   await session.add(input.files && input.files.length > 0 ? input.files : ".");
   const remaining = await session.unmergedPaths();
   if (remaining.length > 0) return { ok: false as const, error: "unresolved merge conflicts remain", conflicts: remaining };
@@ -191,12 +217,15 @@ export interface TaskDoneInput {
   title: string;
   body: string;
   base?: string;
+  skipDocGen?: boolean;
 }
 
 /**
  * Pushes the task's branch and opens a pull request. Leaves the worktree in place for
- * review follow-up. If `gh` is unavailable or fails, the push still happens and the
- * result names a manual compare URL instead of failing the whole call.
+ * review follow-up. Automatically validates doc-check, mirrors generated artifacts,
+ * runs docs:generate, and commits fresh derived artifacts for CI before pushing.
+ * If `gh` is unavailable or fails, the push still happens and the result names a manual
+ * compare URL instead of failing the whole call.
  */
 export async function taskDone(repoRoot: string, input: TaskDoneInput) {
   if (!input || !isValidTaskId(input.taskId)) return fail(`invalid task id: ${input?.taskId}`);
@@ -204,6 +233,73 @@ export async function taskDone(repoRoot: string, input: TaskDoneInput) {
   const client = new GitClient(repoRoot);
   const session = await client.openSession(input.taskId);
   const base = await client.resolveTaskBase(input.taskId, input.base);
+
+  const unmerged = await session.unmergedPaths();
+  const marked = await session.conflictMarkerPaths(unmerged);
+  if (marked.length > 0) return { ok: false as const, error: "conflict markers remain in unresolved files", conflicts: marked };
+
+  // Validate instruction size limits (doc-check) if instruction files are present in the worktree
+  const agentsMd = join(session.worktreePath, "AGENTS.md");
+  if (existsSync(agentsMd)) {
+    const docCheck = await runDocCheck(session.worktreePath);
+    if (!docCheck.passed) {
+      const failures = docCheck.checks.filter((c) => !c.passed).map((c) => `${c.file}: ${c.reason}`).join("; ");
+      return fail(`doc-check failed before PR push: ${failures}`);
+    }
+  }
+
+  // Pre-commit hook: ensure gitignored generated workspace artifacts are mirrored into the worktree
+  await mirrorGeneratedArtifacts(repoRoot, session.worktreePath);
+
+  // Pre-commit hook: automatically run docs:generate if workspace script is present BEFORE committing
+  let docsRegenerated = false;
+  let docsCommitted = false;
+  const pkgJsonPath = join(session.worktreePath, "package.json");
+  if (existsSync(pkgJsonPath) && !input.skipDocGen) {
+    try {
+      const pkg = JSON.parse(await readFile(pkgJsonPath, "utf8"));
+      if (pkg.scripts?.["docs:generate"]) {
+        const genResult = await session.runTests("pnpm run docs:generate");
+        if (!genResult.passed) {
+          return fail(`automatic docs:generate failed before PR push: ${genResult.summary}`);
+        }
+        docsRegenerated = true;
+
+        // Verify artifact manifest check passes
+        if (pkg.scripts?.["graph:manifest:check"]) {
+          const manifestCheck = await session.runTests("pnpm run graph:manifest:check");
+          if (!manifestCheck.passed) {
+            return fail(`graph:manifest:check failed: ${manifestCheck.summary}`);
+          }
+        }
+      }
+    } catch (error) {
+      return fail(`error during docs regeneration: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  // Pre-commit hook: stage and commit all dirty changes (feature files + freshly generated docs) in ONE unified commit
+  const dirty = (await session.git(["status", "--porcelain"])).trim();
+  if (dirty.length > 0) {
+    const nonDocsDirty = (await session.git(["status", "--porcelain", "--", ":!docs/generated"])).trim();
+    const headSha = (await session.git(["rev-parse", "HEAD"])).trim();
+    const baseSha = (await session.git(["rev-parse", base])).trim();
+    const hasCommitsOnBranch = headSha !== baseSha;
+
+    if (nonDocsDirty.length === 0 && hasCommitsOnBranch) {
+      // Pre-commit amend: fold newly generated docs directly into the last commit on the task branch
+      await session.add("docs/generated");
+      const lastMsg = (await session.git(["log", "-1", "--format=%B"])).trim();
+      await session.commit(lastMsg, true);
+      docsCommitted = true;
+    } else {
+      // Unified single commit: stage feature files and generated docs together
+      await session.add(".");
+      await session.commit(input.title);
+      docsCommitted = docsRegenerated;
+    }
+  }
+
   await session.push();
   const pr = await session.createPullRequest(input.title, input.body, base);
   return {
@@ -211,6 +307,8 @@ export async function taskDone(repoRoot: string, input: TaskDoneInput) {
     prUrl: pr.url,
     prState: pr.state,
     base,
+    docsRegenerated,
+    docsCommitted,
     // Reported on every call, so a caller never has to open GitHub to find out
     // whether the prose it just wrote actually landed.
     bodyAppended: pr.bodyAppended ?? pr.state === "created",
@@ -400,16 +498,47 @@ export interface TaskContextInput {
 
 export async function taskContext(repoRoot: string, input: TaskContextInput = {}) {
   if (input.pack || input.taskId || (input.paths && input.paths.length > 0)) {
-    // @ts-ignore - dynamic import of context-resolver.mjs script
-    const { resolveContext } = await import("../../scripts/context-resolver.mjs");
-    const packSummary = resolveContext({
-      root: repoRoot,
-      taskId: input.taskId ?? null,
-      paths: input.paths ?? null,
-    });
+    let packSummary: unknown = null;
+    try {
+      // @ts-ignore - dynamic import of context-resolver.mjs script
+      const { resolveContext } = await import("../../scripts/context-resolver.mjs");
+      packSummary = resolveContext({
+        root: repoRoot,
+        taskId: input.taskId ?? null,
+        paths: input.paths ?? null,
+      });
+    } catch {
+      packSummary = null;
+    }
+
+    let issueContext:
+      | {
+          id: number;
+          title: string;
+          type?: string;
+          milestone?: string;
+          parent?: { number: number; title: string };
+        }
+      | undefined;
+
+    const issueMatch = input.taskId?.match(/^TASK-(\d+)/i);
+    if (issueMatch && issueMatch[1]) {
+      const issueRes = await issueView(repoRoot, { id: issueMatch[1] }).catch(() => undefined);
+      if (issueRes && issueRes.ok) {
+        issueContext = {
+          id: issueRes.id,
+          title: issueRes.title,
+          type: issueRes.type,
+          milestone: issueRes.milestone,
+          parent: issueRes.parent ? { number: issueRes.parent.number, title: issueRes.parent.title } : undefined,
+        };
+      }
+    }
+
     return {
       ok: true as const,
       pack: packSummary,
+      issueContext,
     };
   }
 

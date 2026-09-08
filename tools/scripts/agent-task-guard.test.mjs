@@ -164,6 +164,21 @@ test("rejects history-rewriting and merge operations", () => {
   }
 });
 
+test("rejects direct raw gh commands in favor of ia-graft", () => {
+  const rawGhCommands = [
+    "gh issue list",
+    "gh issue view 224",
+    "gh issue create --title 'x' --body 'y'",
+    "gh pr create --title 'x' --body 'y'",
+    "gh repo view",
+  ];
+  for (const command of rawGhCommands) {
+    const decision = evaluateAgentGitCommand(command);
+    assert.equal(decision.allowed, false, command);
+    assert.match(decision.reason, /direct raw 'gh' commands are forbidden/);
+  }
+});
+
 test("allows only fast-forward pulls", () => {
   assert.equal(evaluateAgentGitCommand("git pull --ff-only origin main").allowed, true);
   assert.equal(evaluateAgentGitCommand("git pull --rebase origin main").allowed, false);

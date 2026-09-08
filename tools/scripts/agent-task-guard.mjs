@@ -132,8 +132,15 @@ export function evaluateAgentGitCommand(command) {
     );
   }
 
-  if (/\bgh\s+pr\s+merge\b/i.test(command)) {
+  if (/\bgh(?:\.exe)?\s+pr\s+merge\b/i.test(command)) {
     return denied("AI agents may prepare or open a pull request via 'ia-graft task done' but must not merge it (human merges only)");
+  }
+
+  const rawGh = /\bgh(?:\.exe)?\s+(?:issue|pr|repo|api|workflow|run)\b/i;
+  if (rawGh.test(command)) {
+    return denied(
+      "direct raw 'gh' commands are forbidden for AI agents; use 'ia-graft issue <list|view|new|update|tree|doctor>' or 'ia-graft task <done|status>' instead",
+    );
   }
 
   const pullSegments = command.match(/\bgit(?:\.exe)?\s+pull\b[^;&|\r\n]*/gi) ?? [];

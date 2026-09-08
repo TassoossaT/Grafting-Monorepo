@@ -87,6 +87,18 @@ when `scale` is out of range or the requested grid does not fit in memory.
 Validation happens here because panics are not catchable on
 `wasm32-unknown-unknown`, so an invalid argument would otherwise abort the
 caller's worker instead of rejecting.
+Samples the window starting at the noise's own origin. See
+[`generate_heightmap_at`] for why a caller laying ground in a world wants
+to place that window itself.
+
+### `pub fn grafting_procgen_generation_wasm::generate_heightmap_at(width: u32, height: u32, seed: u32, scale: f64, origin_x: i32, origin_y: i32) -> core::result::Result<alloc::vec::Vec<f32>, wasm_bindgen::JsValue>`
+
+[`generate_heightmap`], with the window placed anywhere in the noise rather
+than always at its origin.
+
+A separate entry point rather than two more parameters on the original,
+because `wasm_bindgen` has no defaults and every existing caller would
+otherwise have to be edited to say it wants what it already had.
 
 ### `pub fn grafting_procgen_generation_wasm::generate_prism_mesh(width: u32, height: u32, layers: u32, primitive_u8: u8, deformation_xy: f32, deformation_z: f32) -> core::result::Result<grafting_procgen_generation_wasm::WasmPrismMesh, wasm_bindgen::JsValue>`
 
