@@ -82,7 +82,7 @@ function existingColumnAt(
   ctx: ToolContext,
   point: ConstructionPosition,
   weldTolerance: number,
-): WallColumn | undefined {
+): { readonly column: WallColumn; readonly distance: number } | undefined {
   let best: { readonly column: WallColumn; readonly distance: number } | undefined;
   for (const span of wallSpans(ctx)) {
     for (const column of columnsOf(span)) {
@@ -92,7 +92,7 @@ function existingColumnAt(
       if (best === undefined || distance < best.distance) best = { column, distance };
     }
   }
-  return best?.column;
+  return best;
 }
 
 /**
@@ -182,7 +182,7 @@ function nearestPlatformNodeAt(
   ctx: ToolContext,
   position: ConstructionPosition,
   weldTolerance: number,
-): { readonly id: ConstructionNodeId; readonly position: ConstructionPosition } | undefined {
+): { readonly node: { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }; readonly distance: number } | undefined {
   let best: { readonly node: { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }; readonly distance: number } | undefined;
   for (const region of ctx.runtime.getAllRegionTopologies()) {
     if (region.surfaceType !== "platform") continue;
@@ -193,7 +193,32 @@ function nearestPlatformNodeAt(
       if (best === undefined || distance < best.distance) best = { node, distance };
     }
   }
-  return best?.node;
+  return best;
+}
+
+/**
+ * The single corner magnet both `resolveColumn` and its read-only preview
+ * echo pull from: an existing wall column and a platform vertex are the same
+ * strength, so whichever actually sits closer wins, rather than a wall
+ * column shadowing a nearer platform vertex just by being checked first --
+ * that priority order was the whole bug this fixes. Reusing a wall's own
+ * column still carries its paired top id along; a platform vertex only ever
+ * supplies one elevation, so its top is resolved separately by the caller.
+ */
+function nearestCornerAt(
+  ctx: ToolContext,
+  point: ConstructionPosition,
+  weldTolerance: number,
+): { readonly bottomNodeId: ConstructionNodeId; readonly topNodeId: ConstructionNodeId | undefined; readonly bottom: ConstructionPosition; readonly top: ConstructionPosition | undefined } | undefined {
+  const wall = existingColumnAt(ctx, point, weldTolerance);
+  const platform = nearestPlatformNodeAt(ctx, point, weldTolerance);
+  if (wall !== undefined && (platform === undefined || wall.distance <= platform.distance)) {
+    return { bottomNodeId: wall.column.bottomNodeId, topNodeId: wall.column.topNodeId, bottom: wall.column.bottom, top: wall.column.top };
+  }
+  if (platform !== undefined) {
+    return { bottomNodeId: platform.node.id, topNodeId: undefined, bottom: platform.node.position, top: undefined };
+  }
+  return undefined;
 }
 
 function resolveColumn(
@@ -209,34 +234,36 @@ function resolveColumn(
     bottomNodeId: `${idPrefix}:c${index}:bottom`,
     topNodeId: `${idPrefix}:c${index}:top`,
   });
-  const existing = existingColumnAt(ctx, point, Math.max(CORNER_WELD_TOLERANCE, correction));
-  if (existing !== undefined) return existing;
+  const weldTolerance = Math.max(CORNER_WELD_TOLERANCE, correction);
+  const corner = nearestCornerAt(ctx, point, weldTolerance);
+  if (corner !== undefined) {
+    const top = { x: point.x, y: point.y + height, z: point.z };
+    // The corner's own paired top (an existing wall column) wins outright;
+    // only a bare platform vertex (no top of its own) falls through to a
+    // second, independent magnet search at the post's actual top elevation.
+    const upperCorner = corner.topNodeId !== undefined ? corner : nearestCornerAt(ctx, top, weldTolerance);
+    return {
+      bottomNodeId: corner.bottomNodeId,
+      topNodeId: (corner.topNodeId ?? upperCorner?.bottomNodeId) ?? mint().topNodeId,
+      bottom: corner.bottom,
+      top: (corner.top ?? upperCorner?.bottom) ?? top,
+    };
+  }
   const inserted = insertedColumnAt(ctx, point, mint, causeId, Math.max(CROSSING_TOLERANCE, correction));
   if (inserted !== undefined) return inserted;
   const { bottomNodeId, topNodeId } = mint();
-  const top = { x: point.x, y: point.y + height, z: point.z };
-  const weldTolerance = Math.max(CORNER_WELD_TOLERANCE, correction);
-  const lower = nearestPlatformNodeAt(ctx, point, weldTolerance);
-  const upper = nearestPlatformNodeAt(ctx, top, weldTolerance);
-  return {
-    bottomNodeId: lower?.id ?? bottomNodeId,
-    topNodeId: upper?.id ?? topNodeId,
-    bottom: lower?.position ?? point,
-    top: upper?.position ?? top,
-  };
+  return { bottomNodeId, topNodeId, bottom: point, top: { x: point.x, y: point.y + height, z: point.z } };
 }
 
 /**
- * A read-only echo of {@link resolveColumn}'s own corner magnets -- an
- * existing wall column first, then a platform vertex -- for showing where a
- * run will actually land before it commits. Never mints or inserts anything
- * (unlike {@link resolveColumn}, it must stay safe to call every frame of a
- * drag), so a corner that would only resolve by T-junction insertion still
- * previews at the raw point; the commit itself is unaffected.
+ * A read-only echo of {@link resolveColumn}'s own corner magnet, for showing
+ * where a run will actually land before it commits. Never mints or inserts
+ * anything (unlike {@link resolveColumn}, it must stay safe to call every
+ * frame of a drag), so a corner that would only resolve by T-junction
+ * insertion still previews at the raw point; the commit itself is unaffected.
  */
 export function snappedEndpoint(ctx: ToolContext, point: ConstructionPosition, correction = 0): ConstructionPosition {
-  const tolerance = Math.max(CORNER_WELD_TOLERANCE, correction);
-  return existingColumnAt(ctx, point, tolerance)?.bottom ?? nearestPlatformNodeAt(ctx, point, tolerance)?.position ?? point;
+  return nearestCornerAt(ctx, point, Math.max(CORNER_WELD_TOLERANCE, correction))?.bottom ?? point;
 }
 
 /**

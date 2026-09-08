@@ -419,6 +419,31 @@ test("snappedEndpoint magnets onto a platform vertex when no wall column is clos
   assert.deepEqual(snappedEndpoint(ctx, { x: 8.05, y: 0, z: 7.95 }), { x: 8, y: 0, z: 8 });
 });
 
+test("a platform vertex wins over a farther existing wall column -- both magnets are the same strength, nearest decides", () => {
+  // WALL's own corner sits at (0,0,0), 0.2 world units from the click below --
+  // inside the weld tolerance on its own, so the old wall-column-checked-first
+  // order would have won here even though the platform vertex is far closer.
+  const platform = panelTopology("platform-0", { from: { x: 0.05, z: 0.05 }, to: { x: 4, z: 4 } }, undefined, "platform");
+  const { ctx } = contextFor([WALL, platform]);
+
+  assert.deepEqual(snappedEndpoint(ctx, { x: 0.08, y: 0, z: 0.08 }), { x: 0.05, y: 0, z: 0.05 });
+});
+
+test("a second wall-line run meeting the first at a platform vertex welds onto that same vertex, not onto the first run's own separate corner", () => {
+  const platform = panelTopology("platform-0", { from: { x: 0, z: 0 }, to: { x: 4, z: 0 } }, undefined, "platform");
+  const platformCorner = "platform-0:a-bottom";
+
+  const first = contextFor([platform]);
+  commitWallContour(first.ctx, [line({ x: 0.02, y: 0, z: -0.01 }, { x: 4, y: 0, z: 0.03 })], PARAMS, "wall-line");
+  const wallA = first.patches[0].patch;
+  assert.ok(wallA.nodes.some((node) => node.id === platformCorner), "the first run must already weld its own corner onto the platform vertex");
+
+  const second = contextFor([...topologiesFrom(wallA), platform]);
+  commitWallContour(second.ctx, [line({ x: -0.03, y: 0, z: 0.02 }, { x: -0.03, y: 0, z: 4 })], PARAMS, "wall-line");
+  const wallB = second.patches[0].patch;
+  assert.ok(wallB.nodes.some((node) => node.id === platformCorner), "the corner (\"quina\") must weld onto the platform's own vertex, not mint a coincident node of its own");
+});
+
 test("correctedWallCorners is the same fit-and-weld skeleton both wall tools preview from", () => {
   const { ctx } = contextFor([WALL]);
 
