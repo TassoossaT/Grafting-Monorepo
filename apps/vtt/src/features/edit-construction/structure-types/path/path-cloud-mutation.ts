@@ -178,6 +178,14 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
       }
     }
 
+    const existingNodesMap = new Map<string, ConstructionPosition>();
+    for (const topology of topologies) {
+      for (const node of topology.nodes) {
+        if (!existingNodesMap.has(node.id)) existingNodesMap.set(node.id, node.position);
+      }
+    }
+    const existingNodes = [...existingNodesMap].map(([id, position]) => ({ id, position }));
+
     const planned = planSpineContour({
         tableId: input.tableId,
         operationId,
@@ -188,7 +196,7 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
         // junction component.
         editedChains: regeneratedChains.length === 0 ? [chain] : regeneratedChains,
         standingRegions,
-        existingNodes: [],
+        existingNodes,
         existingEdgeUses,
       });
     if (planned === undefined) return { kind: "noop", message: "Nenhuma alteração: a nuvem não produziu contorno." };

@@ -193,12 +193,12 @@ export function planTerrainCloudCutRepair(
     // 2. Explicitly covered by the engine's footprint coverage query
     const inCoverage = coverageKeys.has(t.surfaceKey.join("/")) || coverageKeys.has(t.surfaceKey.join(":"));
 
-    // 3. Centroid or any vertex inside or on the footprint outline polygon
+    // 3. Centroid inside or on the footprint outline polygon
     let insideOutline = false;
     if (outline !== undefined && !inCoverage) {
       const cx = t.nodes.length > 0 ? t.nodes.reduce((sum, n) => sum + n.position.x, 0) / t.nodes.length : 0;
       const cz = t.nodes.length > 0 ? t.nodes.reduce((sum, n) => sum + n.position.z, 0) / t.nodes.length : 0;
-      insideOutline = pointInOrOnPolygon(cx, cz, outline) || t.nodes.some((n) => pointInOrOnPolygon(n.position.x, n.position.z, outline));
+      insideOutline = pointInOrOnPolygon(cx, cz, outline);
     }
 
     // 4. Tight fallback proximity (only when neither coverage query nor outline is available)

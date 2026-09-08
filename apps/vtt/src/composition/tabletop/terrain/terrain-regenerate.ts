@@ -212,9 +212,31 @@ export function regenerateNeighbourhood(
   );
   const sources = [...rim.sources, ...others.sources];
 
+  // Derive faceSide naturally from the consumed terrain topologies to preserve
+  // the organic scale of the terrain and prevent micro-face fragmentation.
+  let effectiveFaceSide = request.faceSide;
+  if (consumed.length > 0) {
+    let totalArea = 0;
+    for (const t of consumed) {
+      if (t.nodes.length >= 3) {
+        let area = 0;
+        for (let i = 0; i < t.nodes.length; i++) {
+          const p1 = t.nodes[i]!.position;
+          const p2 = t.nodes[(i + 1) % t.nodes.length]!.position;
+          area += p1.x * p2.z - p2.x * p1.z;
+        }
+        totalArea += Math.abs(area) / 2;
+      }
+    }
+    const avgFaceArea = totalArea / consumed.length;
+    if (avgFaceArea > 1.0) {
+      effectiveFaceSide = Math.max(request.faceSide, Math.sqrt(avgFaceArea));
+    }
+  }
+
   const heights = heightFieldOf(
     [...consumedPositions.values(), ...otherPositions.values()],
-    request.faceSide * 2,
+    effectiveFaceSide * 2,
   );
 
   // One region at a time: a key the engine no longer knows -- a face some
@@ -243,7 +265,8 @@ export function regenerateNeighbourhood(
     tableId: request.tableId,
     causeId: request.causeId,
     seed: Math.max(1, stamp),
-    faceSide: request.faceSide,
+    faceSide: effectiveFaceSide,
+    relaxStrength: 0.7,
     // The consumed type, so ground made of slate comes back slate without this
     // side having to know that.
     surfaceType,

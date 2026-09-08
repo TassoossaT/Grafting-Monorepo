@@ -34,7 +34,7 @@ function signedRingArea(ring: Ring): number {
   for (let index = 0; index < ring.length; index += 1) {
     const [x1, z1] = ring[index]!;
     const [x2, z2] = ring[(index + 1) % ring.length]!;
-    total += z1 * x2 - x1 * z2;
+    total += x1 * z2 - x2 * z1;
   }
   return total / 2;
 }

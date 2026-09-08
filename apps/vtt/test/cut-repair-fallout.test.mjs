@@ -735,5 +735,47 @@ test("dispatchCutRepairs extracts complete closed paintedLoops from newRoadTopol
   assert.equal(receivedFallout.paintedNodes.length, 4, "all 4 nodes of the new road are present");
 });
 
+test("adjacent terrain faces bordering the road footprint without centroid inside are not marked as cut", () => {
+  // Road outline from x=8 to 12, z=0 to 20
+  const roadOutline = [[8, 0], [12, 0], [12, 20], [8, 20]];
+
+  // Terrain face A is inside the road: x=9 to 11, z=5 to 15 (centroid at 10, 10)
+  const faceInside = {
+    surfaceKey: ["@region", "inside"],
+    surfaceType: "terrain",
+    nodes: [
+      { id: "i1", position: { x: 9, y: 0, z: 5 } },
+      { id: "i2", position: { x: 11, y: 0, z: 5 } },
+      { id: "i3", position: { x: 11, y: 0, z: 15 } },
+      { id: "i4", position: { x: 9, y: 0, z: 15 } },
+    ],
+  };
+
+  // Terrain face B borders the road: shares vertices on x=8, but centroid is at x=4 (outside!)
+  const faceBordering = {
+    surfaceKey: ["@region", "bordering"],
+    surfaceType: "terrain",
+    nodes: [
+      { id: "b1", position: { x: 0, y: 0, z: 0 } },
+      { id: "b2", position: { x: 8, y: 0, z: 0 } },
+      { id: "b3", position: { x: 8, y: 0, z: 20 } },
+      { id: "b4", position: { x: 0, y: 0, z: 20 } },
+    ],
+  };
+
+  const plan = planTerrainCloudCutRepair({
+    candidateTerrain: [faceInside, faceBordering],
+    cutterPositions: [{ x: 10, y: 0, z: 10 }],
+    cutterNodeIds: new Set(), // no replaced geometry
+    coverageSurfaceKeys: new Set(),
+    footprintOutline: roadOutline,
+  });
+
+  const consumedKeys = plan.consumedByType.get("terrain") ?? [];
+  assert.equal(consumedKeys.length, 1, "only the face inside the outline is consumed");
+  assert.equal(consumedKeys[0]?.[1], "inside", "bordering face outside outline is NOT consumed or fragmented");
+});
+
+
 
 

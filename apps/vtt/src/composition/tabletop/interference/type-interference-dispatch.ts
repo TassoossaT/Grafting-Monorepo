@@ -64,8 +64,8 @@ function topologiesFromPatch(
   patch: ConstructionPatch,
   runtime: Pick<TabletopRuntime, "getSnapshot">,
 ): readonly ConstructionRegionTopology[] {
-  const edgeById = new Map<string, ConstructionEdge>();
-  for (const edge of patch.edges) edgeById.set(edge.id, edge);
+  const edgeById = new Map<string, ConstructionPatchEdge | ConstructionEdge>();
+  for (const edge of patch.edges) edgeById.set(edge.edgeId ?? (edge as unknown as { id: string }).id, edge);
   const nodeById = new Map<string, ConstructionPosition>();
   for (const node of patch.nodes) nodeById.set(node.id, node.position);
   const liveNodes = runtime.getSnapshot().map.nodePositions;
@@ -205,28 +205,25 @@ export function dispatchCutRepairs(
     newRoadTopologies = topologiesFromPatch(request.patch, runtime);
   }
 
-  // Collect all road positions and node IDs across both new and replaced geometry
+  // Collect all road positions across both new and replaced geometry
   const allRoadPositions: ConstructionPosition[] = [];
-  const roadNodeIds = new Set<string>();
+  const replacedNodeIds = new Set<string>();
   for (const t of newRoadTopologies) {
     for (const n of t.nodes) {
       allRoadPositions.push(n.position);
-      roadNodeIds.add(n.id);
     }
   }
   for (const t of replacedTopologies) {
     for (const n of t.nodes) {
       allRoadPositions.push(n.position);
-      roadNodeIds.add(n.id);
+      replacedNodeIds.add(n.id);
     }
   }
   for (const n of request.patch.nodes) {
     allRoadPositions.push(n.position);
-    roadNodeIds.add(n.id);
   }
   for (const n of request.graphPatch?.nodes ?? []) {
     allRoadPositions.push(n.position);
-    roadNodeIds.add(n.id);
   }
   if (request.footprintOutline) {
     for (const [x, z] of request.footprintOutline) {
@@ -280,7 +277,7 @@ export function dispatchCutRepairs(
   const repairPlan = planTerrainCloudCutRepair({
     candidateTerrain,
     cutterPositions: allRoadPositions,
-    cutterNodeIds: roadNodeIds,
+    cutterNodeIds: replacedNodeIds,
     coverageSurfaceKeys: outlineCoverageKeys,
     footprintOutline: request.footprintOutline,
   });
