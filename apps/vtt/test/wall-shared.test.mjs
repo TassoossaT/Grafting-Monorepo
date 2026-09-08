@@ -7,6 +7,7 @@ import {
   correctedWallCorners,
   findWallSurfaceAt,
   snappedEndpoint,
+  wallCorrectionPreview,
 } from "../src/composition/tabletop/tools/walls/wall-shared.ts";
 import { panelTopology } from "./wall-spans-fixture.mjs";
 
@@ -437,5 +438,14 @@ test("correctedWallCorners is the same fit-and-weld skeleton both wall tools pre
   );
   assert.deepEqual(stroke[0], { x: 0, y: 0, z: 0 });
   assert.deepEqual(stroke.at(-1), { x: 4, y: 0, z: 4 });
+});
+
+test("wallCorrectionPreview is a filled band along the corrected skeleton, not a bare line", () => {
+  const { ctx } = contextFor([WALL]);
+
+  const preview = wallCorrectionPreview(ctx, [{ x: 0.05, y: 0, z: -0.05 }, { x: 4, y: 0, z: 5 }], 0, 0xffffff);
+  assert.equal(preview.kind, "mesh");
+  assert.ok(preview.positions.length > 0, "expected a filled correction band, not an empty preview");
+  assert.ok(preview.indices.length > 0);
 });
 

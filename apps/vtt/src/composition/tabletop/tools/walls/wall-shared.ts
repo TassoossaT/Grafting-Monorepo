@@ -1,4 +1,4 @@
-import type { WallParams } from "@/features/edit-construction";
+import type { PreviewDescriptor, WallParams } from "@/features/edit-construction";
 import type {
   ConstructionEdgeGeometry,
   ConstructionEdgeId,
@@ -11,6 +11,7 @@ import { projectOntoLineXZ, xzDistance, pinnedToBaseline } from "../shapes/geome
 import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
 import { fitPath, type FittedEdge } from "../core/stroke-fitting.ts";
 import { boundaryUsage, type EdgeSharing } from "../core/boundary-edges.ts";
+import { brushSweptRegionFill } from "../shapes/preview-shapes.ts";
 import { wallPatch, type WallColumn, type WallContour } from "./wall-patch.ts";
 import { wallSpans, type WallSpan } from "./wall-spans.ts";
 
@@ -35,7 +36,7 @@ const CROSSING_TOLERANCE = 0.15;
 /** How close (as a fraction of the wall's own length) a point may get to either of that wall's own corners and still count as a genuine mid-span crossing -- any closer and it is really landing on the corner, which welds onto that corner's own nodes instead of splitting anything. */
 const CROSSING_END_MARGIN = 0.3;
 /** How close (world units, XZ) a new corner may sit to an existing wall's own corner and still be treated as that same corner -- the point at which the run being drawn stops minting nodes and references the existing ones instead. */
-const CORNER_WELD_TOLERANCE = 0.25;
+export const CORNER_WELD_TOLERANCE = 0.25;
 /** Perpendicular distance (world units) within which a click counts as picking a wall panel directly, for `findWallSurfaceAt` -- a bit more forgiving than {@link CROSSING_TOLERANCE} since this is a deliberate click on the panel itself, not a drawing snap, and (unlike crossing detection) there is no exclusion near a panel's own corners: picking right at a corner should still delete whichever panel is closest. */
 const WALL_PICK_TOLERANCE = 0.2;
 /** How close (world units, XZ) two consecutive corners may be before the step between them is no wall at all -- a stroke held still, or a grid snap folding several samples onto one intersection. */
@@ -259,6 +260,24 @@ export function correctedWallCorners(
   const fitted = fitPath(pinned, tolerance, { arcs: !ctx.snapToGrid });
   const corners = fitted.length > 0 ? [fitted[0]!.start, ...fitted.map((edge) => edge.end)] : pinned;
   return corners.map((corner) => snappedEndpoint(ctx, corner, tolerance));
+}
+
+/**
+ * The one wall preview, both tools draw it: a filled band along
+ * {@link correctedWallCorners}, wide enough to read as the budget that let
+ * the hand drift this far and still weld -- a thin centerline alone showed
+ * the correct result but not *why* it was correct, which is what read as
+ * "not really snapping." The floor is {@link CORNER_WELD_TOLERANCE} itself,
+ * so a zero-tolerance straight line still shows its own magnet reach.
+ */
+export function wallCorrectionPreview(
+  ctx: ToolContext,
+  samples: readonly ConstructionPosition[],
+  tolerance: number,
+  color: number,
+): PreviewDescriptor {
+  const corners = correctedWallCorners(ctx, samples, tolerance);
+  return brushSweptRegionFill(corners, { kind: "circle", radius: Math.max(tolerance, CORNER_WELD_TOLERANCE) }, color);
 }
 
 /**

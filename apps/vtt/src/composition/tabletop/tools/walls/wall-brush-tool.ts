@@ -3,8 +3,7 @@ import type { WallBrushParams } from "@/features/edit-construction";
 
 import { createBrushTool, type BrushRegion } from "../core/brush-tool.ts";
 import type { ToolContext } from "../core/tool-context.ts";
-import { polylineSegmentsPreview } from "../shapes/preview-shapes.ts";
-import { WALL_COLOR, commitWallStroke, correctedWallCorners } from "./wall-shared.ts";
+import { WALL_COLOR, commitWallStroke, wallCorrectionPreview } from "./wall-shared.ts";
 
 /**
  * A free wall stroke, built on the same brush every other brush uses: press,
@@ -37,6 +36,6 @@ export const wallBrushTool = createBrushTool<"wall-brush">({
   },
 
   previewContour(region: BrushRegion, ctx: ToolContext, params: WallBrushParams) {
-    return polylineSegmentsPreview(correctedWallCorners(ctx, region.samples, region.tolerance), WALL_COLOR[params.wallType]);
+    return wallCorrectionPreview(ctx, region.samples, region.tolerance, WALL_COLOR[params.wallType]);
   },
 });
