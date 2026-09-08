@@ -104,6 +104,21 @@ test("wall construction welds both platform levels without reusing the floor bel
     assert.deepEqual(heights(runtime),[1,4,7]);
   } finally {session.free();}
 });
+test("wall endpoint drawn a few centimeters off a platform vertex still welds onto it",()=>{
+  const {ctx,runtime,session} = sessionFixture();
+  try {
+    addFace(runtime,"platform-0","platform",[[0,0],[4,0],[4,4],[0,4]].map(([x,z],c)=>({id:`p0:${c}`,position:{x,y:3,z}})));
+    // 0.1 world units off p0:0/p0:1 -- inside the corner-weld tolerance, well
+    // outside the old exact-match check this regression guards against.
+    commitWallContour(ctx,[{start:{x:0.05,y:3,z:0.05},end:{x:3.95,y:3,z:-0.05},geometry:{kind:"line"}}],{height:3,wallType:"wall-white"},"wall-line");
+    const wall=runtime.getAllRegionTopologies().find((t)=>t.surfaceType==="wall-white");
+    assert.ok(wall,"wall was not created");
+    assert.ok(wall.nodes.some((n)=>n.id==="p0:0"),"lower-left endpoint did not weld onto the platform vertex");
+    assert.ok(wall.nodes.some((n)=>n.id==="p0:1"),"lower-right endpoint did not weld onto the platform vertex");
+    const moved=plan(runtime,0,{x:0,y:1,z:0});
+    assert.equal(moved.kind,"apply",moved.reason);
+  } finally {session.free();}
+});
 test("bottom wall edge moves both paired posts and propagates through actual incident types", () => {
   const {runtime,session}=building();
   try {

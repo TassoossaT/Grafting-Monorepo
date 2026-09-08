@@ -191,8 +191,21 @@ function resolveColumn(
   const { bottomNodeId, topNodeId } = mint();
   const top = { x: point.x, y: point.y + height, z: point.z };
   // Endpoint welding is three-dimensional: never reuse a lower storey merely by XZ.
+  // The XZ half is a magnet, same tolerance a wall corner snaps onto another
+  // wall's column with -- a stroke drawn a few centimeters off a platform's
+  // own vertex still has to land on it, not mint a coincident, unconnected node.
+  const weldTolerance = Math.max(CORNER_WELD_TOLERANCE, correction);
   const platformNodes = ctx.runtime.getAllRegionTopologies().filter((region) => region.surfaceType === "platform").flatMap((region) => region.nodes);
-  const at = (position: ConstructionPosition) => platformNodes.find((node) => Math.abs(node.position.x - position.x) < 1e-4 && Math.abs(node.position.y - position.y) < 1e-4 && Math.abs(node.position.z - position.z) < 1e-4);
+  const at = (position: ConstructionPosition) => {
+    let best: { readonly node: (typeof platformNodes)[number]; readonly distance: number } | undefined;
+    for (const node of platformNodes) {
+      if (Math.abs(node.position.y - position.y) > 1e-3) continue;
+      const distance = xzDistance(node.position, position);
+      if (distance > weldTolerance) continue;
+      if (best === undefined || distance < best.distance) best = { node, distance };
+    }
+    return best?.node;
+  };
   const lower = at(point), upper = at(top);
   return {
     bottomNodeId: lower?.id ?? bottomNodeId,

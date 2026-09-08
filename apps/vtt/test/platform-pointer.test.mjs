@@ -57,6 +57,7 @@ test("real pointer lifecycle: final release sample, one drag commit, Escape and 
     assert.equal(tops.length,1,JSON.stringify(calls.feedback));
     assert.equal(Math.max(...tops[0].nodes.map(n=>n.position.x)),5);
     assert.equal(Math.max(...tops[0].nodes.map(n=>n.position.z)),4);
+    assert.ok(tops[0].nodes.every(n=>n.position.y===3),"drag commit must honor the chosen elevation, not the ground pick's own y");
     const feedbackCount=calls.feedback.length;
     handlers.onClick(event(50,40));
     assert.equal(calls.feedback.length,feedbackCount,"native trailing click must not reach the tool");
