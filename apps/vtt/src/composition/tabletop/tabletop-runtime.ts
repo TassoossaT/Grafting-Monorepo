@@ -61,7 +61,7 @@ import {
   mergeOutcomes,
   type AtomicEditOp,
 } from "../../features/edit-construction/index.ts";
-import { dispatchCutRepairs, dispatchRemovalRepairs } from "./tools/cut-repair-dispatch.ts";
+import { dispatchCutRepairs, dispatchRemovalRepairs } from "./interference/type-interference-dispatch.ts";
 
 export type TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed";
 
@@ -985,7 +985,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
   /**
    * Replaces `sourceSurfaceKeys` with `patch`, then lets whichever *other*
    * type this patch's own footprint cuts into repair itself, via
-   * `dispatchCutRepairs` (`tools/cut-repair-dispatch.ts`) -- the runtime's
+   * `dispatchCutRepairs` (`interference/type-interference-dispatch.ts`) -- the runtime's
    * own choke point for `CUT`'s repair half, so any caller of this one
    * method gets it, not only whichever tool happens to import a repair
    * function by name. See `CutRepair`/`CutFallout`

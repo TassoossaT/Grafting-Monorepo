@@ -6,10 +6,10 @@ import type {
 import type { MultiPolygon } from "polygon-clipping";
 
 import { brushSweptOutlinePolygons, brushSweptRegionFill } from "../shapes/preview-shapes.ts";
-import { dirtLoadOver, restackTerrain } from "./terrain-restack.ts";
-import { OUTLINE_CHORD_PER_FACE } from "./terrain-constraints.ts";
-import type { TerrainStrokeBounds } from "./terrain-neighborhood.ts";
-import { executeTerrainCut } from "./terrain-cut-executor.ts";
+import { dirtLoadOver, restackTerrain } from "../../terrain/terrain-restack.ts";
+import { OUTLINE_CHORD_PER_FACE } from "../../terrain/terrain-constraints.ts";
+import type { TerrainStrokeBounds } from "../../terrain/terrain-neighborhood.ts";
+import { executeTerrainCut } from "../../terrain/terrain-cut-executor.ts";
 import type { ConstructionTool, ToolContext, ToolGesture } from "../core/tool-context.ts";
 
 /**

@@ -6,3 +6,11 @@ export {
   pathInteractionOver,
   terrainInteractionOver,
 } from "./organic-structure.ts";
+export {
+  isTerrainSurface,
+  terrainCloudPerimeter,
+  terrainTopologiesBounds,
+  planTerrainCloudCutRepair,
+  type TerrainCloudCutRepairInput,
+  type TerrainCloudCutRepairPlan,
+} from "./terrain-cloud.ts";

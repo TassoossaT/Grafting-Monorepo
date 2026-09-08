@@ -6,7 +6,12 @@ import {
   dispatchCutRepairs,
   dispatchRemovalRepairs,
   CUT_REPAIR_EXECUTORS,
-} from "../src/composition/tabletop/tools/cut-repair-dispatch.ts";
+} from "../src/composition/tabletop/interference/type-interference-dispatch.ts";
+import {
+  isTerrainSurface,
+  planTerrainCloudCutRepair,
+  terrainTopologiesBounds,
+} from "../src/features/edit-construction/index.ts";
 
 /**
  * What the repair is *handed* has been the cause of every cut-repair failure
@@ -488,6 +493,67 @@ test("dispatchRemovalRepairs on path with removedTopology heals the vacated terr
   assert.ok(receivedFallout !== undefined, "cut repair was triggered on road removal");
   assert.deepEqual(receivedFallout.consumedSurfaceKeys, [["@region", "T_heal"]]);
   assert.deepEqual(receivedFallout.paintedLoops, [], "no road hole left: void is healed cleanly");
+});
+
+test("TerrainCloud: planTerrainCloudCutRepair identifies consumed terrain in corridor cleanly", () => {
+  const terrainTopologies = [
+    {
+      surfaceKey: ["@region", "t_near"],
+      surfaceType: "terrain",
+      nodes: [
+        { id: "tn1", position: { x: 1, y: 0, z: 1 } },
+        { id: "tn2", position: { x: 3, y: 0, z: 1 } },
+      ],
+      outerLoops: [],
+      holes: [],
+    },
+    {
+      surfaceKey: ["@region", "t_far"],
+      surfaceType: "terrain",
+      nodes: [
+        { id: "tf1", position: { x: 50, y: 0, z: 50 } },
+        { id: "tf2", position: { x: 52, y: 0, z: 50 } },
+      ],
+      outerLoops: [],
+      holes: [],
+    },
+  ];
+
+  const plan = planTerrainCloudCutRepair({
+    candidateTerrain: terrainTopologies,
+    cutterPositions: [{ x: 1.5, y: 0, z: 1.5 }],
+    cutterNodeIds: new Set(),
+    reach: 3.5,
+  });
+
+  assert.equal(plan.requiresRepair, true);
+  assert.equal(plan.affectedTerrainCount, 1);
+  assert.deepEqual(plan.consumedByType.get("terrain"), [["@region", "t_near"]]);
+});
+
+test("TerrainCloud: helper functions recognize terrain surface types and bounds", () => {
+  assert.equal(isTerrainSurface("terrain"), true);
+  assert.equal(isTerrainSurface("terrain-grass"), true);
+  assert.equal(isTerrainSurface("path"), false);
+  assert.equal(isTerrainSurface("wall-white"), false);
+
+  const bounds = terrainTopologiesBounds([
+    {
+      surfaceKey: ["@region", "t1"],
+      surfaceType: "terrain",
+      nodes: [
+        { id: "n1", position: { x: 10, y: 0, z: 20 } },
+        { id: "n2", position: { x: 30, y: 0, z: 40 } },
+      ],
+      outerLoops: [],
+      holes: [],
+    },
+  ], 2.0);
+
+  assert.equal(bounds.minX, 8);
+  assert.equal(bounds.maxX, 32);
+  assert.equal(bounds.minZ, 18);
+  assert.equal(bounds.maxZ, 42);
 });
 
 
