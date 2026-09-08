@@ -71,6 +71,59 @@ function openRing(ring: Ring): Ring {
   return closed ? ring.slice(0, -1) : ring;
 }
 
+function distanceToSegmentXZ(
+  p: ConstructionPosition,
+  a: readonly [number, number],
+  b: readonly [number, number],
+): { readonly dist: number; readonly t: number } {
+  const dx = b[0] - a[0];
+  const dz = b[1] - a[1];
+  const lenSq = dx * dx + dz * dz;
+  if (lenSq < 1e-9) return { dist: Math.hypot(p.x - a[0], p.z - a[1]), t: 0 };
+  const t = ((p.x - a[0]) * dx + (p.z - a[1]) * dz) / lenSq;
+  if (t < 1e-4 || t > 1 - 1e-4) return { dist: Infinity, t };
+  const projX = a[0] + t * dx;
+  const projZ = a[1] + t * dz;
+  return { dist: Math.hypot(p.x - projX, p.z - projZ), t };
+}
+
+/**
+ * Re-inserts intermediate ribbon samples along straight 2D edges produced by
+ * polygon clipping so elevation stations are not lost before 3D simplification.
+ */
+function restoreHeightVertices(
+  ring: Ring,
+  heightSamples: readonly ConstructionPosition[],
+): Ring {
+  if (heightSamples.length === 0 || ring.length < 2) return ring;
+  const restored: [number, number][] = [];
+  for (let i = 0; i < ring.length - 1; i += 1) {
+    const a = ring[i]!;
+    const b = ring[i + 1]!;
+    restored.push(a);
+
+    const matching: { readonly x: number; readonly z: number; readonly t: number }[] = [];
+    for (const sample of heightSamples) {
+      const { dist, t } = distanceToSegmentXZ(sample, a, b);
+      if (dist < 1e-3) {
+        matching.push({ x: sample.x, z: sample.z, t });
+      }
+    }
+    if (matching.length > 0) {
+      matching.sort((l, r) => l.t - r.t);
+      let lastT = 0;
+      for (const pt of matching) {
+        if (pt.t - lastT >= 1e-4 && 1 - pt.t >= 1e-4) {
+          restored.push([pt.x, pt.z]);
+          lastT = pt.t;
+        }
+      }
+    }
+  }
+  restored.push(ring[ring.length - 1]!);
+  return restored;
+}
+
 export interface ExistingNode {
   readonly id: string;
   readonly position: ConstructionPosition;
@@ -166,10 +219,12 @@ export function buildContourPatch(
         const kept = simplifyClosedRing(positions, () => undefined);
         return kept.map((index) => ids[index]!);
       };
-      const outerIds = simplifyRing(idsFor(ensureUpwardWinding(outerRing ?? [], false), 0));
+      const restoredOuter = restoreHeightVertices(outerRing ?? [], heightSamples);
+      const outerIds = simplifyRing(idsFor(ensureUpwardWinding(restoredOuter, false), 0));
       const boundary = outerIds.map((id, index) => edges.use(id, outerIds[(index + 1) % outerIds.length]!));
       const holes = holeRings.map((holeRing, holeIndex) => {
-        const holeIds = simplifyRing(idsFor(ensureUpwardWinding(holeRing, true), holeIndex + 1));
+        const restoredHole = restoreHeightVertices(holeRing, heightSamples);
+        const holeIds = simplifyRing(idsFor(ensureUpwardWinding(restoredHole, true), holeIndex + 1));
         return holeIds.map((id, index) => edges.use(id, holeIds[(index + 1) % holeIds.length]!));
       });
       return {

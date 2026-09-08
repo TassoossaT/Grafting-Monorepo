@@ -267,3 +267,69 @@ test("a complex network of 6 intersecting streets produces valid non-empty regio
     assert.ok(region.boundary.length >= 3, "every generated region has a valid boundary");
   }
 });
+
+test("a road crossing uneven terrain preserves intermediate 3D contour vertices conforming to the relief", () => {
+  // A straight road in XZ passing over a 3-meter high hill at x=5
+  const hillPoints = [
+    { x: 0, y: 0, z: 0 },
+    { x: 5, y: 3, z: 0 },
+    { x: 10, y: 0, z: 0 },
+  ];
+  const chain = {
+    chainId: "hill-run",
+    controlPoints: hillPoints,
+    bandOffsets: [-2, 0, 2],
+    miterLimit: 4,
+    tolerance: 0.05,
+  };
+  const result = planSpineContour({
+    tableId: "table",
+    operationId: "op-hill-road",
+    surfaceType: "path",
+    editedChains: [chain],
+    standingRegions: [],
+    existingNodes: [],
+  });
+
+  assert.ok(result !== undefined);
+  assert.equal(result.patch.regions.length, 1);
+  const region = result.patch.regions[0];
+  // Must have more than 4 vertices so the road conforms in 3D to the hill
+  assert.ok(
+    region.boundary.length > 4,
+    `expected intermediate elevation vertices along hill, got ${region.boundary.length}`,
+  );
+  // Verify that nodes include the hill elevation height (y > 2)
+  const peakNodes = result.patch.nodes.filter((node) => node.position.y >= 2);
+  assert.ok(peakNodes.length >= 2, "left and right edges must carry the hill crest elevation");
+});
+
+test("a flat straight road with collinear intermediate points simplifies to a 4-vertex quad", () => {
+  const flatPoints = [
+    { x: 0, y: 0, z: 0 },
+    { x: 2.5, y: 0, z: 0 },
+    { x: 5, y: 0, z: 0 },
+    { x: 7.5, y: 0, z: 0 },
+    { x: 10, y: 0, z: 0 },
+  ];
+  const chain = {
+    chainId: "flat-run",
+    controlPoints: flatPoints,
+    bandOffsets: [-2, 0, 2],
+    miterLimit: 4,
+    tolerance: 0.05,
+  };
+  const result = planSpineContour({
+    tableId: "table",
+    operationId: "op-flat-road",
+    surfaceType: "path",
+    editedChains: [chain],
+    standingRegions: [],
+    existingNodes: [],
+  });
+
+  assert.ok(result !== undefined);
+  assert.equal(result.patch.regions.length, 1);
+  assert.equal(result.patch.regions[0].boundary.length, 4, "flat straight road collapses to 4 quad corners");
+});
+

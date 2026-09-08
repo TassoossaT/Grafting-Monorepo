@@ -414,3 +414,40 @@ test("referenceLineFrom smoothly interpolates height along stroke slope without 
   assert.equal(line[1].y, 5);
 });
 
+test("referenceLineFrom over a hill produces a clean crest control point without zig-zag or step lag", () => {
+  const stroke = [
+    { x: 0, y: 0, z: 0 },
+    { x: 5, y: 3, z: 0 },
+    { x: 10, y: 0, z: 0 },
+  ];
+  const fitted = [
+    { start: { x: 0, y: 0, z: 0 }, end: { x: 10, y: 0, z: 0 } },
+  ];
+  const { line } = referenceLineFrom(fitted, stroke, true);
+  // Ridge from 0 to 5 (rising) and 5 to 10 (falling) should place control point at peak (x=5)
+  assert.equal(line.length, 3, "a triangular hill produces exactly start, crest, and end stations");
+  assert.equal(line[0].x, 0);
+  assert.equal(line[0].y, 0);
+  assert.equal(line[1].x, 5);
+  assert.equal(line[1].y, 3);
+  assert.equal(line[2].x, 10);
+  assert.equal(line[2].y, 0);
+});
+
+test("referenceLineFrom over flat ground produces only start and end points", () => {
+  const stroke = [
+    { x: 0, y: 0, z: 0 },
+    { x: 3, y: 0, z: 0 },
+    { x: 7, y: 0, z: 0 },
+    { x: 10, y: 0, z: 0 },
+  ];
+  const fitted = [
+    { start: { x: 0, y: 0, z: 0 }, end: { x: 10, y: 0, z: 0 } },
+  ];
+  const { line } = referenceLineFrom(fitted, stroke, true);
+  assert.equal(line.length, 2, "flat ground produces only endpoints");
+  assert.equal(line[0].x, 0);
+  assert.equal(line[1].x, 10);
+});
+
+

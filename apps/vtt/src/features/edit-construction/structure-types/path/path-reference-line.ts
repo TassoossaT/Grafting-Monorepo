@@ -89,6 +89,39 @@ function groundTrack(fitted: readonly FittedEdge[]): readonly TrackPoint[] {
 }
 
 /**
+ * Simplifies a sequence of samples in the vertical plane using Ramer-Douglas-Peucker:
+ * keeps endpoints and any intermediate sample whose height deviates from the chord
+ * by more than `tolerance`.
+ */
+function rdpHeight(
+  samples: readonly ConstructionPosition[],
+  tolerance: number,
+): readonly ConstructionPosition[] {
+  if (samples.length <= 2) return samples;
+  const first = samples[0]!;
+  const last = samples[samples.length - 1]!;
+  let maxDist = 0;
+  let maxIndex = 0;
+  const run = Math.hypot(last.x - first.x, last.z - first.z);
+  for (let i = 1; i < samples.length - 1; i += 1) {
+    const pt = samples[i]!;
+    const reach = Math.hypot(pt.x - first.x, pt.z - first.z);
+    const expectedY = run < 1e-9 ? first.y : first.y + (last.y - first.y) * (reach / run);
+    const dist = Math.abs(pt.y - expectedY);
+    if (dist > maxDist) {
+      maxDist = dist;
+      maxIndex = i;
+    }
+  }
+  if (maxDist > tolerance) {
+    const left = rdpHeight(samples.slice(0, maxIndex + 1), tolerance);
+    const right = rdpHeight(samples.slice(maxIndex), tolerance);
+    return [...left.slice(0, -1), ...right];
+  }
+  return [first, last];
+}
+
+/**
  * The reference line to build the spine from: where the fit decided the
  * road goes, at the height the ground was actually picked at.
  *
@@ -154,36 +187,23 @@ export function referenceLineFrom(
     if (span < 1e-9) continue;
 
     if (ridesTerrain && span > TERRAIN_PROBE_STEP) {
-      const anchor = line[line.length - 1]!;
-      let anchored = travelled;
-      let lastProbe = 0;
-      for (let probe = TERRAIN_PROBE_STEP; probe < span; probe += TERRAIN_PROBE_STEP) {
-        const ratio = probe / span;
+      const samples: ConstructionPosition[] = [];
+      for (let d = 0; d < span; d += TERRAIN_PROBE_STEP) {
+        const ratio = d / span;
         const x = from.x + (to.x - from.x) * ratio;
         const z = from.z + (to.z - from.z) * ratio;
-        const ground = groundHeightNear(stroke, x, z);
-        // What the road would be doing here if the last station were the
-        // only thing holding it up.
-        const reach = Math.hypot(x - anchor.x, z - anchor.z);
-        const run = Math.hypot(to.x - anchor.x, to.z - anchor.z);
-        const carried =
-          run < 1e-9
-            ? anchor.y
-            : anchor.y + (groundHeightNear(stroke, to.x, to.z) - anchor.y) * (reach / run);
-        if (Math.abs(ground - carried) <= TERRAIN_HEIGHT_TOLERANCE) continue;
-        // It strays here, so the stretch buys a station at the last place it
-        // did not -- the road stays on the ground either side of the fault
-        // rather than being dragged through it.
-        const backRatio = Math.max(lastProbe, 0) / span;
-        travelled = anchored + span * backRatio;
-        push(from.x + (to.x - from.x) * backRatio, from.z + (to.z - from.z) * backRatio);
-        anchored = travelled;
-        lastProbe = probe;
+        samples.push({ x, y: groundHeightNear(stroke, x, z), z });
       }
+      samples.push({ x: to.x, y: groundHeightNear(stroke, to.x, to.z), z: to.z });
+      const simplified = rdpHeight(samples, TERRAIN_HEIGHT_TOLERANCE);
+      for (let i = 1; i < simplified.length; i += 1) {
+        const pt = simplified[i]!;
+        push(pt.x, pt.z);
+      }
+    } else {
+      travelled += span;
+      push(to.x, to.z);
     }
-
-    travelled += span;
-    push(to.x, to.z);
   }
   // The run has to end where it was drawn, corner or not.
   push(last.x, last.z);
