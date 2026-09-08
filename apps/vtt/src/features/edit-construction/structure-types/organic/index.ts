@@ -8,6 +8,7 @@ export {
 } from "./organic-structure.ts";
 export {
   isTerrainSurface,
+  pointInOrOnPolygon,
   terrainCloudPerimeter,
   terrainTopologiesBounds,
   planTerrainCloudCutRepair,

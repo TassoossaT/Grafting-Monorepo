@@ -95,6 +95,39 @@ function pointBucketIndex(points: readonly ConstructionPosition[], cellSize: num
   };
 }
 
+/**
+ * Fast ray-casting point-in-polygon test with boundary tolerance for XZ plane.
+ */
+export function pointInOrOnPolygon(
+  x: number,
+  z: number,
+  polygon: readonly (readonly [number, number])[],
+): boolean {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i]![0];
+    const zi = polygon[i]![1];
+    const xj = polygon[j]![0];
+    const zj = polygon[j]![1];
+
+    const dx = xj - xi;
+    const dz = zj - zi;
+    const lenSq = dx * dx + dz * dz;
+    if (lenSq > 1e-9) {
+      const t = Math.max(0, Math.min(1, ((x - xi) * dx + (z - zi) * dz) / lenSq));
+      const projX = xi + t * dx;
+      const projZ = zi + t * dz;
+      const ddx = x - projX;
+      const ddz = z - projZ;
+      if (ddx * ddx + ddz * ddz < 1e-4) return true;
+    }
+
+    const intersect = (zi > z !== zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
+
 export interface TerrainCloudCutRepairInput {
   /** Candidate terrain topologies in the neighborhood/bounds. */
   readonly candidateTerrain: readonly ConstructionRegionTopology[];
@@ -104,7 +137,9 @@ export interface TerrainCloudCutRepairInput {
   readonly cutterNodeIds?: ReadonlySet<string>;
   /** Surface keys already confirmed covered by footprint coverage query. */
   readonly coverageSurfaceKeys?: ReadonlySet<string>;
-  /** Search reach for proximity bucketing (default: 3.5). */
+  /** Footprint outline polygon (XZ) if available. */
+  readonly footprintOutline?: readonly (readonly [number, number])[];
+  /** Search reach for proximity bucketing in fallback mode (default: 1.2). */
   readonly reach?: number;
 }
 
@@ -136,22 +171,45 @@ export function planTerrainCloudCutRepair(
     };
   }
 
-  const reach = input.reach ?? 3.5;
-  const indexer = pointBucketIndex(input.cutterPositions, reach);
   const cutterNodeIds = input.cutterNodeIds ?? new Set<string>();
   const coverageKeys = input.coverageSurfaceKeys ?? new Set<string>();
+  const outline = input.footprintOutline && input.footprintOutline.length >= 3 ? input.footprintOutline : undefined;
+  const hasExactTargeting = coverageKeys.size > 0 || outline !== undefined;
+
+  // Proximity bucketing is ONLY used as a tight fallback when neither coverage query
+  // nor footprint outline is provided (e.g. synthetic test harnesses).
+  // When exact targeting is available, broad proximity bucketing is skipped to avoid
+  // deleting innocent terrain faces, which causes fragmentation and lag.
+  const reach = input.reach ?? (hasExactTargeting ? 0 : 1.2);
+  const indexer = !hasExactTargeting && reach > 0 ? pointBucketIndex(input.cutterPositions, reach) : undefined;
 
   let totalCount = 0;
   for (const t of input.candidateTerrain) {
     if (!isTerrainSurface(t.surfaceType)) continue;
 
+    // 1. Shares a node with the cutter (or replaced geometry)
     const sharesNode = t.nodes.some((n) => cutterNodeIds.has(n.id));
-    const inCoverage = coverageKeys.has(t.surfaceKey.join("/")) || coverageKeys.has(t.surfaceKey.join(":"));
-    const cx = t.nodes.length > 0 ? t.nodes.reduce((sum, n) => sum + n.position.x, 0) / t.nodes.length : 0;
-    const cz = t.nodes.length > 0 ? t.nodes.reduce((sum, n) => sum + n.position.z, 0) / t.nodes.length : 0;
-    const nearCutter = indexer.isNear(cx, cz) || t.nodes.some((n) => indexer.isNear(n.position.x, n.position.z));
 
-    if (sharesNode || inCoverage || nearCutter) {
+    // 2. Explicitly covered by the engine's footprint coverage query
+    const inCoverage = coverageKeys.has(t.surfaceKey.join("/")) || coverageKeys.has(t.surfaceKey.join(":"));
+
+    // 3. Centroid or any vertex inside or on the footprint outline polygon
+    let insideOutline = false;
+    if (outline !== undefined && !inCoverage) {
+      const cx = t.nodes.length > 0 ? t.nodes.reduce((sum, n) => sum + n.position.x, 0) / t.nodes.length : 0;
+      const cz = t.nodes.length > 0 ? t.nodes.reduce((sum, n) => sum + n.position.z, 0) / t.nodes.length : 0;
+      insideOutline = pointInOrOnPolygon(cx, cz, outline) || t.nodes.some((n) => pointInOrOnPolygon(n.position.x, n.position.z, outline));
+    }
+
+    // 4. Tight fallback proximity (only when neither coverage query nor outline is available)
+    let nearCutter = false;
+    if (!hasExactTargeting && indexer !== undefined) {
+      const cx = t.nodes.length > 0 ? t.nodes.reduce((sum, n) => sum + n.position.x, 0) / t.nodes.length : 0;
+      const cz = t.nodes.length > 0 ? t.nodes.reduce((sum, n) => sum + n.position.z, 0) / t.nodes.length : 0;
+      nearCutter = indexer.isNear(cx, cz) || t.nodes.some((n) => indexer.isNear(n.position.x, n.position.z));
+    }
+
+    if (sharesNode || inCoverage || insideOutline || nearCutter) {
       const keys = consumedByType.get(t.surfaceType) ?? [];
       keys.push(t.surfaceKey);
       consumedByType.set(t.surfaceType, keys);

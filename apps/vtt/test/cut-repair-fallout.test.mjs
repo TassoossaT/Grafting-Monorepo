@@ -10,6 +10,7 @@ import {
 import {
   isTerrainSurface,
   planTerrainCloudCutRepair,
+  pointInOrOnPolygon,
   terrainTopologiesBounds,
 } from "../src/features/edit-construction/index.ts";
 
@@ -555,5 +556,184 @@ test("TerrainCloud: helper functions recognize terrain surface types and bounds"
   assert.equal(bounds.minZ, 18);
   assert.equal(bounds.maxZ, 42);
 });
+
+test("TerrainCloud: surgical consumption with footprintOutline/coverage does NOT consume innocent terrain 2-3m away", () => {
+  // Road polygon at x = 0..2, z = 0..10
+  const roadOutline = [
+    [0, 0],
+    [2, 0],
+    [2, 10],
+    [0, 10],
+  ];
+
+  const terrainTopologies = [
+    // Under road (covered): x = 0..2, z = 2..4
+    {
+      surfaceKey: ["@region", "t_covered"],
+      surfaceType: "terrain",
+      nodes: [
+        { id: "tc1", position: { x: 0, y: 0, z: 2 } },
+        { id: "tc2", position: { x: 2, y: 0, z: 2 } },
+        { id: "tc3", position: { x: 2, y: 0, z: 4 } },
+        { id: "tc4", position: { x: 0, y: 0, z: 4 } },
+      ],
+      outerLoops: [],
+      holes: [],
+    },
+    // Innocent terrain 2.5m away from road: x = 4.5..6.5, z = 2..4 (outside road!)
+    {
+      surfaceKey: ["@region", "t_innocent_near"],
+      surfaceType: "terrain",
+      nodes: [
+        { id: "ti1", position: { x: 4.5, y: 0, z: 2 } },
+        { id: "ti2", position: { x: 6.5, y: 0, z: 2 } },
+        { id: "ti3", position: { x: 6.5, y: 0, z: 4 } },
+        { id: "ti4", position: { x: 4.5, y: 0, z: 4 } },
+      ],
+      outerLoops: [],
+      holes: [],
+    },
+  ];
+
+  const plan = planTerrainCloudCutRepair({
+    candidateTerrain: terrainTopologies,
+    cutterPositions: [
+      { x: 0, y: 0, z: 0 },
+      { x: 2, y: 0, z: 0 },
+      { x: 2, y: 0, z: 10 },
+      { x: 0, y: 0, z: 10 },
+    ],
+    cutterNodeIds: new Set(["rn0", "rn1"]),
+    footprintOutline: roadOutline,
+  });
+
+  assert.equal(plan.requiresRepair, true);
+  assert.equal(plan.affectedTerrainCount, 1, "only the covered terrain is affected");
+  const consumed = plan.consumedByType.get("terrain")?.map((k) => k.join("/"));
+  assert.ok(consumed?.includes("@region/t_covered"), "covered face is consumed");
+  assert.ok(!consumed?.includes("@region/t_innocent_near"), "innocent face 2.5m away is preserved, preventing fragmentation!");
+});
+
+test("dispatchCutRepairs extracts complete closed paintedLoops from newRoadTopologies despite partial roadInBounds", () => {
+  let receivedFallout;
+  const positions = new Map();
+
+  // Long existing road spanning from z = -100 to z = 100
+  // Sliced in bounds: only parts between z = 0..10 are in bounds
+  const partialRoadFace = {
+    surfaceKey: ["@region", "R_existing_partial"],
+    surfaceType: "path",
+    nodes: [
+      { id: "ex0", position: { x: 0, y: 0, z: -10 } },
+      { id: "ex1", position: { x: 2, y: 0, z: -10 } },
+      { id: "ex2", position: { x: 2, y: 0, z: 50 } },
+      { id: "ex3", position: { x: 0, y: 0, z: 50 } },
+    ],
+    outerLoops: [[
+      // An open chain representing a slice across a bounding box
+      { edgeId: "e:slice0", reversed: false, startNodeId: "ex0", endNodeId: "ex1" },
+      { edgeId: "e:slice1", reversed: false, startNodeId: "ex1", endNodeId: "ex2" },
+    ]],
+    holes: [],
+  };
+
+  // The newly created road patch (a clean, closed 4-node quad)
+  for (const [id, pos] of [
+    ["rn0", { x: 0, y: 0, z: 0 }],
+    ["rn1", { x: 2, y: 0, z: 0 }],
+    ["rn2", { x: 2, y: 0, z: 4 }],
+    ["rn3", { x: 0, y: 0, z: 4 }],
+  ]) {
+    positions.set(id, pos);
+  }
+
+  const newRoadPatch = {
+    nodes: ["rn0", "rn1", "rn2", "rn3"].map((id) => ({ id, position: positions.get(id) })),
+    edges: [
+      { id: "e:rn0", startNodeId: "rn0", endNodeId: "rn1" },
+      { id: "e:rn1", startNodeId: "rn1", endNodeId: "rn2" },
+      { id: "e:rn2", startNodeId: "rn2", endNodeId: "rn3" },
+      { id: "e:rn3", startNodeId: "rn3", endNodeId: "rn0" },
+    ],
+    regions: [{
+      regionId: "R_new_stroke",
+      surfaceType: "path",
+      boundary: [
+        { edgeId: "e:rn0", reversed: false },
+        { edgeId: "e:rn1", reversed: false },
+        { edgeId: "e:rn2", reversed: false },
+        { edgeId: "e:rn3", reversed: false },
+      ],
+    }],
+  };
+
+  const terrainFace = {
+    surfaceKey: ["@region", "T_covered_face"],
+    surfaceType: "terrain",
+    nodes: ["rn0", "rn1", "rn2", "rn3"].map((id) => ({ id, position: positions.get(id) })),
+    outerLoops: [[
+      { edgeId: "e:t0", reversed: false, startNodeId: "rn0", endNodeId: "rn1" },
+      { edgeId: "e:t1", reversed: false, startNodeId: "rn1", endNodeId: "rn2" },
+      { edgeId: "e:t2", reversed: false, startNodeId: "rn2", endNodeId: "rn3" },
+      { edgeId: "e:t3", reversed: false, startNodeId: "rn3", endNodeId: "rn0" },
+    ]],
+    holes: [],
+  };
+
+  const runtime = {
+    getAllRegionTopologies: () => [partialRoadFace, terrainFace],
+    getRegionTopologiesInBounds: () => [partialRoadFace, terrainFace],
+    getRegionTopology: (key) => {
+      if (key[1] === "R_new_stroke") {
+        return {
+          surfaceKey: key,
+          surfaceType: "path",
+          nodes: newRoadPatch.nodes,
+          outerLoops: [[
+            { edgeId: "e:rn0", reversed: false, startNodeId: "rn0", endNodeId: "rn1" },
+            { edgeId: "e:rn1", reversed: false, startNodeId: "rn1", endNodeId: "rn2" },
+            { edgeId: "e:rn2", reversed: false, startNodeId: "rn2", endNodeId: "rn3" },
+            { edgeId: "e:rn3", reversed: false, startNodeId: "rn3", endNodeId: "rn0" },
+          ]],
+          holes: [],
+        };
+      }
+      return undefined;
+    },
+    getSnapshot: () => ({
+      tableId: "tbl-road-bounds-test",
+      map: { nodePositions: new Map([...positions].map(([id, pos]) => [id, { position: pos }])) },
+    }),
+  };
+
+  const mockExecutor = (rt, fallout) => {
+    receivedFallout = fallout;
+    return 1;
+  };
+
+  dispatchCutRepairs(
+    runtime,
+    {
+      operationId: "op:road-patch-bounds",
+      sourceSurfaceKeys: [],
+      patch: newRoadPatch,
+      footprintOutline: [[0, 0], [2, 0], [2, 4], [0, 4]],
+    },
+    "cause:road-bounds",
+    [],
+    {
+      createdSurfaceKeys: [["@region", "R_new_stroke"]],
+      deletedSurfaceKeys: [],
+      createdEdges: [],
+      deletedEdgeIds: [],
+    },
+    { terrain: mockExecutor },
+  );
+
+  assert.ok(receivedFallout !== undefined);
+  assert.equal(receivedFallout.paintedLoops.length, 1, "paintedLoops is a closed ring from newRoadTopologies, NOT empty []!");
+  assert.equal(receivedFallout.paintedNodes.length, 4, "all 4 nodes of the new road are present");
+});
+
 
 

@@ -282,7 +282,7 @@ export function dispatchCutRepairs(
     cutterPositions: allRoadPositions,
     cutterNodeIds: roadNodeIds,
     coverageSurfaceKeys: outlineCoverageKeys,
-    reach: 3.5,
+    footprintOutline: request.footprintOutline,
   });
 
   if (!repairPlan.requiresRepair) return;
@@ -291,10 +291,26 @@ export function dispatchCutRepairs(
   let paintedLoops: readonly (readonly ConstructionRegionEdge[])[] = [];
   let paintedNodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[] = [];
 
-  if (newRoadTopologies.length > 0) {
-    const roadInBounds = topologiesInBounds.filter((t) => t.surfaceType === paintedType);
-    const roadToUse = roadInBounds.length > 0 ? roadInBounds : newRoadTopologies;
-    paintedLoops = outwardPerimeterRings(roadToUse);
+  const roadToUse = newRoadTopologies.length > 0
+    ? newRoadTopologies
+    : (request.patch.regions.length > 0 ? topologiesFromPatch(request.patch, runtime) : []);
+
+  if (roadToUse.length > 0) {
+    let rings = outwardPerimeterRings(roadToUse);
+    if (rings.length === 0) {
+      // Fallback: if multi-face perimeter walk didn't produce a closed ring,
+      // take closed outer loops from each region directly so hole constraints and adoptions are never lost!
+      const candidateRings: (readonly ConstructionRegionEdge[])[] = [];
+      for (const t of roadToUse) {
+        for (const loop of t.outerLoops) {
+          if (loop.length >= 3 && loop[loop.length - 1]!.endNodeId === loop[0]!.startNodeId) {
+            candidateRings.push(loop);
+          }
+        }
+      }
+      rings = candidateRings;
+    }
+    paintedLoops = rings;
     const nodesById = new Map<ConstructionNodeId, ConstructionPosition>();
     for (const t of roadToUse) {
       for (const n of t.nodes) nodesById.set(n.id, n.position);

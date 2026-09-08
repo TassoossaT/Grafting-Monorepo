@@ -192,15 +192,22 @@ export function regenerateNeighbourhood(
   // One numbering across both lists, because the generator answers with a
   // single `source` index per corner and knows nothing of which ring it came
   // from.
+  const liveMap = runtime.getSnapshot().map.nodePositions;
+  let rimRings = outwardPerimeterRings(consumed);
+  if (rimRings.length === 0 && consumed.length > 0) {
+    rimRings = consumed.flatMap((t) =>
+      t.outerLoops.filter((loop) => loop.length >= 3 && loop[loop.length - 1]!.endNodeId === loop[0]!.startNodeId),
+    );
+  }
   const rim = constraintsFromRings(
-    outwardPerimeterRings(consumed),
-    (nodeId) => consumedPositions.get(nodeId),
+    rimRings,
+    (nodeId) => consumedPositions.get(nodeId) ?? liveMap.get(nodeId)?.position,
     0,
   );
   if (rim.rings.length === 0) return 0;
   const others = constraintsFromRings(
     request.otherLoops,
-    (nodeId) => otherPositions.get(nodeId),
+    (nodeId) => otherPositions.get(nodeId) ?? liveMap.get(nodeId)?.position,
     rim.sources.length,
   );
   const sources = [...rim.sources, ...others.sources];
