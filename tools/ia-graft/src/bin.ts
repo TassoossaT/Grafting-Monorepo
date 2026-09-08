@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { delegateRun } from "./delegate-commands.ts";
@@ -51,6 +52,9 @@ function readInputFlag(argv: string[]): unknown | undefined {
   if (index === -1) return undefined;
   const raw = argv[index + 1];
   if (raw === undefined) throw new Error("--input requires a JSON string argument");
+  if (existsSync(raw)) {
+    return JSON.parse(readFileSync(raw, "utf8"));
+  }
   return JSON.parse(raw);
 }
 
