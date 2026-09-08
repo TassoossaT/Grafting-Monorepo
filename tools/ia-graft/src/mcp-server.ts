@@ -1,5 +1,5 @@
 import { createInterface } from "node:readline";
-import { taskCommit, taskContext, taskResume, taskStatus, taskTest } from "./task-commands.ts";
+import { findCommandByMcpName, getAllMcpTools } from "./command-registry.ts";
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";
@@ -14,69 +14,6 @@ interface JsonRpcResponse {
   result?: unknown;
   error?: { code: number; message: string; data?: unknown };
 }
-
-const TOOLS = [
-  {
-    name: "graft_context_pack",
-    description: "Resolves a token-efficient context pack containing affected Nx projects, AGENTS.md rules, and applicable ADRs.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        paths: { type: "array", items: { type: "string" }, description: "List of modified or target file paths" },
-        taskId: { type: "string", description: "Target task ID" },
-      },
-    },
-  },
-  {
-    name: "graft_task_resume",
-    description: "Resumes or opens a task worktree and retrieves complete state recovery context (commits, diffs, dirty files, context pack).",
-    inputSchema: {
-      type: "object",
-      properties: {
-        taskId: { type: "string", description: "Target task ID (e.g. G-TOOLING-CONTEXT-PACK)" },
-      },
-      required: ["taskId"],
-    },
-  },
-  {
-    name: "graft_task_status",
-    description: "Checks health, branch, and worktree status for a task.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        taskId: { type: "string", description: "Target task ID" },
-      },
-      required: ["taskId"],
-    },
-  },
-  {
-    name: "graft_task_commit",
-    description: "Stages and commits changes inside the specified task worktree.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        taskId: { type: "string", description: "Target task ID" },
-        message: { type: "string", description: "Conventional commit message" },
-        files: { type: "array", items: { type: "string" }, description: "Optional subset of files to commit" },
-        amend: { type: "boolean", description: "Amend previous commit" },
-        dryRun: { type: "boolean", description: "Validate input without making a commit" },
-      },
-      required: ["taskId", "message"],
-    },
-  },
-  {
-    name: "graft_task_test",
-    description: "Runs verification command inside the specified task worktree.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        taskId: { type: "string", description: "Target task ID" },
-        command: { type: "string", description: "Command to execute (e.g. pnpm test)" },
-      },
-      required: ["taskId"],
-    },
-  },
-];
 
 export async function runMcpServer(repoRoot: string): Promise<void> {
   const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: false });
@@ -98,7 +35,7 @@ export async function runMcpServer(repoRoot: string): Promise<void> {
           result: {
             protocolVersion: "2024-11-05",
             capabilities: { tools: {} },
-            serverInfo: { name: "ia-graft-mcp", version: "0.1.0" },
+            serverInfo: { name: "ia-graft-mcp", version: "0.2.0" },
           },
         });
       }
@@ -111,7 +48,7 @@ export async function runMcpServer(repoRoot: string): Promise<void> {
         return sendResponse({
           jsonrpc: "2.0",
           id: req.id,
-          result: { tools: TOOLS },
+          result: { tools: getAllMcpTools() },
         });
       }
 
@@ -120,36 +57,16 @@ export async function runMcpServer(repoRoot: string): Promise<void> {
         const toolName = params?.name;
         const args = params?.arguments ?? {};
 
-        let toolResult: unknown;
+        if (!toolName) {
+          return sendResponse({
+            jsonrpc: "2.0",
+            id: req.id,
+            error: { code: -32602, message: "Missing tool name in params" },
+          });
+        }
 
-        if (toolName === "graft_context_pack") {
-          toolResult = await taskContext(repoRoot, {
-            pack: true,
-            paths: Array.isArray(args.paths) ? (args.paths as string[]) : undefined,
-            taskId: typeof args.taskId === "string" ? args.taskId : undefined,
-          });
-        } else if (toolName === "graft_task_resume") {
-          toolResult = await taskResume(repoRoot, {
-            taskId: String(args.taskId),
-          });
-        } else if (toolName === "graft_task_status") {
-          toolResult = await taskStatus(repoRoot, {
-            taskId: String(args.taskId),
-          });
-        } else if (toolName === "graft_task_commit") {
-          toolResult = await taskCommit(repoRoot, {
-            taskId: String(args.taskId),
-            message: String(args.message),
-            files: Array.isArray(args.files) ? (args.files as string[]) : undefined,
-            amend: typeof args.amend === "boolean" ? args.amend : undefined,
-            dryRun: typeof args.dryRun === "boolean" ? args.dryRun : typeof args.check === "boolean" ? args.check : undefined,
-          });
-        } else if (toolName === "graft_task_test") {
-          toolResult = await taskTest(repoRoot, {
-            taskId: String(args.taskId),
-            command: typeof args.command === "string" ? args.command : undefined,
-          });
-        } else {
+        const cmd = findCommandByMcpName(toolName);
+        if (!cmd) {
           return sendResponse({
             jsonrpc: "2.0",
             id: req.id,
@@ -157,18 +74,38 @@ export async function runMcpServer(repoRoot: string): Promise<void> {
           });
         }
 
-        return sendResponse({
-          jsonrpc: "2.0",
-          id: req.id,
-          result: {
-            content: [
-              {
-                type: "text",
-                text: JSON.stringify(toolResult, null, 2),
-              },
-            ],
-          },
-        });
+        try {
+          const toolResult = await cmd.handler(repoRoot, args);
+          return sendResponse({
+            jsonrpc: "2.0",
+            id: req.id,
+            result: {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify(toolResult, null, 2),
+                },
+              ],
+            },
+          });
+        } catch (execErr) {
+          return sendResponse({
+            jsonrpc: "2.0",
+            id: req.id,
+            result: {
+              isError: true,
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify({
+                    ok: false,
+                    error: execErr instanceof Error ? execErr.message : String(execErr),
+                  }),
+                },
+              ],
+            },
+          });
+        }
       }
 
       sendResponse({

@@ -1922,6 +1922,36 @@ export function isHarnessManagedPath(candidate: unknown): boolean;
 export function isReadOnlyInspectionCommand(command: unknown): boolean;
 export function evaluateAgentGitCommand(command: unknown): GuardDecision;
 
+// src/command-registry.ts
+export interface CommandParameter {
+  type: "string" | "number" | "boolean" | "array" | "object";
+  description: string;
+  required?: boolean;
+  items?: { type: "string" };
+export interface CommandDefinition {
+  name: string;
+  group: string;
+  subcommand?: string;
+  description: string;
+  parameters: Record<string, CommandParameter>;
+  aliases?: string[];
+  handler: (repoRoot: string, input: any) => Promise<any>;
+export const COMMAND_REGISTRY: CommandDefinition[] = [
+export function commandToMcpTool(cmd: CommandDefinition, overrideName?: string) {
+  const properties: Record<string, unknown> = {};
+export function getAllMcpTools(): Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> {
+  const tools: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> = [];
+  for (const cmd of COMMAND_REGISTRY) {
+  tools.push(commandToMcpTool(cmd));
+export function findCommandByMcpName(name: string): CommandDefinition | undefined {
+  return COMMAND_REGISTRY.find((cmd) => cmd.name === name || (cmd.aliases && cmd.aliases.includes(name)));
+export function findCommandByCliRoute(group: string, subcommand?: string): CommandDefinition | undefined {
+  return COMMAND_REGISTRY.find((cmd) => {
+  if (cmd.group !== group) return false;
+  if (cmd.subcommand === undefined && (subcommand === undefined || subcommand === "")) return true;
+  return cmd.subcommand === subcommand;
+  });
+
 // src/delegate-commands.ts
 export interface DelegateRunInput {
   prompt: string;
@@ -1999,7 +2029,8 @@ export function flagInput(
   argv: string[],
   ): unknown | undefined {
   const route = subcommand === undefined ? group : `${group} ${subcommand}`;
-  const zeroFlagRoutes = new Set(["issue doctor", "issue tree", "issue list", "pr list", "pr checks", "pr diff", "pr view"]);
+  const zeroFlagRoutes = new Set([
+  "doc-check",
 
 // src/git-client.ts
 export function worktreePathForTask(repoPath: string, taskId: string): string {

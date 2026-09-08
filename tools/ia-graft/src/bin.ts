@@ -3,16 +3,9 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { delegateRun } from "./delegate-commands.ts";
-import { delegateEdit } from "./delegate-edit-commands.ts";
-import { delegateResearch } from "./delegate-research-commands.ts";
-import { runDocCheck } from "./doc-check.ts";
+import { findCommandByCliRoute } from "./command-registry.ts";
 import { flagInput } from "./flag-input.ts";
-import { runGuardCheck } from "./guard-command.ts";
-import { issueClose, issueDoctor, issueList, issueNew, issueReopen, issueTree, issueUpdate, issueView } from "./issue-commands.ts";
 import { runMcpServer } from "./mcp-server.ts";
-import { prChecks, prDiff, prList, prView } from "./pr-commands.ts";
-import { taskCheckout, taskCleanup, taskCommit, taskContext, taskDependencies, taskDoctor, taskDone, taskGraph, taskNew, taskResume, taskStatus, taskSweep, taskSync, taskTest } from "./task-commands.ts";
 
 /**
  * Resolves the MAIN repository root, never a task worktree's own root, even
@@ -47,6 +40,7 @@ async function readStdin(): Promise<unknown> {
  * `--input '<json>'` is available when the caller can preserve JSON quoting.
  * JSON stdin is the portable form for PowerShell and other shells that may
  * strip quotes from a JSON value passed through an argument variable.
+ * Also supports `--input <file.json>` path directly.
  */
 function readInputFlag(argv: string[]): unknown | undefined {
   const index = argv.indexOf("--input");
@@ -59,7 +53,7 @@ function readInputFlag(argv: string[]): unknown | undefined {
   return JSON.parse(raw);
 }
 
-function printAndExit(result: { ok: boolean;[key: string]: unknown }): never {
+function printAndExit(result: { ok: boolean; [key: string]: unknown }): never {
   process.stdout.write(`${JSON.stringify(result)}\n`);
   process.exit(result.ok && result.passed !== false ? 0 : 1);
 }
@@ -80,63 +74,10 @@ async function main(argv: string[]): Promise<void> {
       return;
     }
 
-    if (group === "guard-check") {
-      const input = (readInputFlag(argv) ?? (await readStdin())) as Parameters<typeof runGuardCheck>[1];
-      printAndExit(await runGuardCheck(root, input));
-    }
-
-    if (group === "doc-check") {
-      printAndExit(await runDocCheck(root));
-    }
-
-    if (group === "context") {
-      const input = readInputFlag(argv) ?? flagInput("context", undefined, argv) ?? (await readStdin());
-      printAndExit(await taskContext(root, input as Parameters<typeof taskContext>[1]));
-    }
-
-    if (group === "issue") {
+    const cmd = group ? findCommandByCliRoute(group, subcommand) : undefined;
+    if (cmd) {
       const input = readInputFlag(argv) ?? flagInput(group, subcommand, argv) ?? (await readStdin());
-      if (subcommand === "list") printAndExit(await issueList(root, input as Parameters<typeof issueList>[1]));
-      if (subcommand === "view") printAndExit(await issueView(root, input as Parameters<typeof issueView>[1]));
-      if (subcommand === "new") printAndExit(await issueNew(root, input as Parameters<typeof issueNew>[1]));
-      if (subcommand === "update") printAndExit(await issueUpdate(root, input as Parameters<typeof issueUpdate>[1]));
-      if (subcommand === "close") printAndExit(await issueClose(root, input as Parameters<typeof issueClose>[1]));
-      if (subcommand === "reopen") printAndExit(await issueReopen(root, input as Parameters<typeof issueReopen>[1]));
-      if (subcommand === "tree") printAndExit(await issueTree(root, input as Parameters<typeof issueTree>[1]));
-      if (subcommand === "doctor") printAndExit(await issueDoctor(root, input as Parameters<typeof issueDoctor>[1]));
-    }
-
-    if (group === "pr") {
-      const input = readInputFlag(argv) ?? flagInput(group, subcommand, argv) ?? (await readStdin());
-      if (subcommand === "list") printAndExit(await prList(root, input as Parameters<typeof prList>[1]));
-      if (subcommand === "view") printAndExit(await prView(root, input as Parameters<typeof prView>[1]));
-      if (subcommand === "checks") printAndExit(await prChecks(root, input as Parameters<typeof prChecks>[1]));
-      if (subcommand === "diff") printAndExit(await prDiff(root, input as Parameters<typeof prDiff>[1]));
-    }
-
-    if (group === "delegate") {
-      const input = readInputFlag(argv) ?? flagInput(group, subcommand, argv) ?? (await readStdin());
-      if (subcommand === "run") printAndExit(await delegateRun(root, input as Parameters<typeof delegateRun>[1]));
-      if (subcommand === "edit") printAndExit(await delegateEdit(root, input as Parameters<typeof delegateEdit>[1]));
-      if (subcommand === "research") printAndExit(await delegateResearch(root, input as Parameters<typeof delegateResearch>[1]));
-    }
-
-    if (group === "task") {
-      const input = readInputFlag(argv) ?? flagInput(group, subcommand, argv) ?? (await readStdin());
-      if (subcommand === "new") printAndExit(await taskNew(root, input as Parameters<typeof taskNew>[1]));
-      if (subcommand === "resume") printAndExit(await taskResume(root, input as Parameters<typeof taskResume>[1]));
-      if (subcommand === "commit") printAndExit(await taskCommit(root, input as Parameters<typeof taskCommit>[1]));
-      if (subcommand === "test") printAndExit(await taskTest(root, input as Parameters<typeof taskTest>[1]));
-      if (subcommand === "sync") printAndExit(await taskSync(root, input as Parameters<typeof taskSync>[1]));
-      if (subcommand === "deps") printAndExit(await taskDependencies(root, input as Parameters<typeof taskDependencies>[1]));
-      if (subcommand === "done") printAndExit(await taskDone(root, input as Parameters<typeof taskDone>[1]));
-      if (subcommand === "cleanup") printAndExit(await taskCleanup(root, input as Parameters<typeof taskCleanup>[1]));
-      if (subcommand === "status") printAndExit(await taskStatus(root, input as Parameters<typeof taskStatus>[1]));
-      if (subcommand === "doctor") printAndExit(await taskDoctor(root, input as Parameters<typeof taskDoctor>[1]));
-      if (subcommand === "checkout") printAndExit(await taskCheckout(root, input as Parameters<typeof taskCheckout>[1]));
-      if (subcommand === "graph") printAndExit(await taskGraph(root));
-      if (subcommand === "sweep") printAndExit(await taskSweep(root));
-      if (subcommand === "context") printAndExit(await taskContext(root, input as Parameters<typeof taskContext>[1]));
+      printAndExit(await cmd.handler(root, input));
     }
 
     printAndExit({
