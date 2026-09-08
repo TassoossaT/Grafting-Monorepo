@@ -44,7 +44,7 @@ All non-prose changes MUST execute exclusively through the root `ia-graft` launc
   3. Work inside `.worktrees/<TASK-ID>/` isolated worktree.
   4. Incremental commits: `ia-graft task commit --id <TASK-ID> --message "<msg>" [--amend] [--agent <name>]`
   5. Run verification: `ia-graft task test --id <TASK-ID> --command "<cmd>"`
-  6. Submit for review: `ia-graft task done --id <TASK-ID> --title "<title>" --body "Closes #<ISSUE-ID>\n\n<details>"` (auto-regenerates docs/signatures and commits derived artifacts for CI).
+  6. Submit for review: `ia-graft task done --id <TASK-ID> --title "<title>" --body "Closes #<ISSUE-ID>\n\n<details>"` (pre-commit hook: auto-regenerates docs/signatures into a single atomic commit for CI).
   7. Clean up after merge: `ia-graft task cleanup --id <TASK-ID>`
 
 ## 3. TOKEN ECONOMY & DELEGATION (`ia-graft`)

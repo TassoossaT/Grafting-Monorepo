@@ -379,6 +379,7 @@ test("taskDone auto-regenerates docs and commits generated changes", async () =>
   await taskNew(root, { taskId: "DOCGEN-TASK", base: "main" });
   const worktree = join(root, ".worktrees", "DOCGEN-TASK");
   await mkdir(join(worktree, "docs", "generated"), { recursive: true });
+  await writeFile(join(worktree, ".gitignore"), "node_modules/\npnpm-lock.yaml\n", "utf8");
   await writeFile(join(worktree, "docs", "generated", "repo-map.md"), "initial\n", "utf8");
   await writeFile(join(worktree, "package.json"), JSON.stringify({
     scripts: {
@@ -399,6 +400,12 @@ test("taskDone auto-regenerates docs and commits generated changes", async () =>
   }
   const content = await readFile(join(worktree, "docs", "generated", "repo-map.md"), "utf8");
   assert.equal(content, "updated\n");
+
+  const client = new (await import("./git-client.ts")).GitClient(root);
+  const session = await client.openSession("DOCGEN-TASK");
+  const logOutput = await session.git(["log", "--oneline", "main..HEAD"]);
+  const commitLines = logOutput.trim().split(/\r?\n/).filter(Boolean);
+  assert.equal(commitLines.length, 1);
 });
 
 test("mirrorGeneratedArtifacts mirrors missing artifacts into worktree", async () => {

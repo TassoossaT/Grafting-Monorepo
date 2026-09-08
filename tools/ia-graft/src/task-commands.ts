@@ -120,6 +120,7 @@ export interface TaskCommitInput {
   amend?: boolean;
   dryRun?: boolean;
   check?: boolean;
+  generateDocs?: boolean;
 }
 
 /** Stages (all files, or a given subset) and commits inside the task's worktree. */
@@ -147,6 +148,19 @@ export async function taskCommit(repoRoot: string, input: TaskCommitInput) {
     if (!docCheck.passed) {
       const failures = docCheck.checks.filter((c) => !c.passed).map((c) => `${c.file}: ${c.reason}`).join("; ");
       return fail(`doc-check failed: ${failures}`);
+    }
+  }
+
+  if (input.generateDocs) {
+    await mirrorGeneratedArtifacts(repoRoot, session.worktreePath);
+    const pkgJsonPath = join(session.worktreePath, "package.json");
+    if (existsSync(pkgJsonPath)) {
+      const pkg = JSON.parse(await readFile(pkgJsonPath, "utf8"));
+      if (pkg.scripts?.["docs:generate"]) {
+        const genResult = await session.runTests("pnpm run docs:generate");
+        if (!genResult.passed) return fail(`pre-commit docs:generate failed: ${genResult.summary}`);
+        await session.add("docs/generated");
+      }
     }
   }
 
@@ -234,17 +248,10 @@ export async function taskDone(repoRoot: string, input: TaskDoneInput) {
     }
   }
 
-  // Stage and commit any dirty changes present in the worktree before doc generation
-  const dirtyBefore = (await session.git(["status", "--porcelain"])).trim();
-  if (dirtyBefore.length > 0) {
-    await session.add(".");
-    await session.commit(input.title);
-  }
-
-  // Ensure gitignored generated workspace artifacts are mirrored into the worktree
+  // Pre-commit hook: ensure gitignored generated workspace artifacts are mirrored into the worktree
   await mirrorGeneratedArtifacts(repoRoot, session.worktreePath);
 
-  // Automatically run docs:generate if workspace script is present
+  // Pre-commit hook: automatically run docs:generate if workspace script is present BEFORE committing
   let docsRegenerated = false;
   let docsCommitted = false;
   const pkgJsonPath = join(session.worktreePath, "package.json");
@@ -258,15 +265,6 @@ export async function taskDone(repoRoot: string, input: TaskDoneInput) {
         }
         docsRegenerated = true;
 
-        // Check for changes in docs/generated (excluding artifact-manifest.json, matching CI logic)
-        const diff = (await session.git(["diff", "--name-only", "--", "docs/generated", ":!docs/generated/artifact-manifest.json"])).trim();
-        const untracked = (await session.git(["status", "--porcelain", "--", "docs/generated"])).trim();
-        if (diff.length > 0 || untracked.length > 0) {
-          await session.add("docs/generated");
-          await session.commit("chore: regenerate derived docs and signatures for CI");
-          docsCommitted = true;
-        }
-
         // Verify artifact manifest check passes
         if (pkg.scripts?.["graph:manifest:check"]) {
           const manifestCheck = await session.runTests("pnpm run graph:manifest:check");
@@ -277,6 +275,28 @@ export async function taskDone(repoRoot: string, input: TaskDoneInput) {
       }
     } catch (error) {
       return fail(`error during docs regeneration: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  // Pre-commit hook: stage and commit all dirty changes (feature files + freshly generated docs) in ONE unified commit
+  const dirty = (await session.git(["status", "--porcelain"])).trim();
+  if (dirty.length > 0) {
+    const nonDocsDirty = (await session.git(["status", "--porcelain", "--", ":!docs/generated"])).trim();
+    const headSha = (await session.git(["rev-parse", "HEAD"])).trim();
+    const baseSha = (await session.git(["rev-parse", base])).trim();
+    const hasCommitsOnBranch = headSha !== baseSha;
+
+    if (nonDocsDirty.length === 0 && hasCommitsOnBranch) {
+      // Pre-commit amend: fold newly generated docs directly into the last commit on the task branch
+      await session.add("docs/generated");
+      const lastMsg = (await session.git(["log", "-1", "--format=%B"])).trim();
+      await session.commit(lastMsg, true);
+      docsCommitted = true;
+    } else {
+      // Unified single commit: stage feature files and generated docs together
+      await session.add(".");
+      await session.commit(input.title);
+      docsCommitted = docsRegenerated;
     }
   }
 

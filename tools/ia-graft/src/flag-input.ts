@@ -98,6 +98,7 @@ export function flagInput(
       agent: readValue(argv, "--agent"),
       amend: argv.includes("--amend"),
       dryRun: argv.includes("--dry-run") || argv.includes("--check"),
+      generateDocs: argv.includes("--generate-docs") || argv.includes("--docs"),
     };
   }
   if (route === "task test") {

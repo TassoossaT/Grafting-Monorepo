@@ -18,7 +18,7 @@ All task execution MUST use `tools/ia-graft`.
 - `task new --id <ID> [--base <branch>]` — Creates or resumes isolated Git worktree (`.worktrees/<ID>`). `--parent` exists but MUST NOT be used; stacked PRs get no CI and conflict once the parent is squash-merged (`AGENTS.md` §2, #202). Continuing work goes on the same branch.
 - `task commit --id <ID> --message "<m>" [--amend] [--dry-run] [--agent <a>]` — Stages and commits inside task worktree with AI co-authorship.
 - `task test --id <ID> --command "<c>"` — Runs verification commands inside worktree with capped summary output.
-- `task done --id <ID> --title "<t>" --body "<b>" [--skip-doc-gen]` — Auto-runs doc-check, mirrors generated artifacts, regenerates docs/signatures, commits derived artifacts, verifies graph manifest, pushes task branch, and opens/updates the PR via `gh`.
+- `task done --id <ID> --title "<t>" --body "<b>" [--skip-doc-gen]` — Pre-commit hook: runs doc-check, mirrors generated artifacts, regenerates docs/signatures, unifies feature edits and derived artifacts into a single commit for CI, verifies graph manifest, pushes branch, and opens/updates the PR.
 - `task sync --id <ID> [--fetch]` — Integrates forward-only base updates without rebase.
 - `task deps --id <ID> [--install] [--update-lockfile] [--add <pkg>]` — Managed dependency overlay and lockfile updates.
 - `task cleanup --id <ID> [--force]` — Removes merged worktree and deletes task branch after PR merge.
