@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { planEdit, resolveCloudTopology } from "../src/features/edit-construction/index.ts";
 import { editRegionTool } from "../src/composition/tabletop/tools/core/edit-region-tool.ts";
-import { commitPlatformContour } from "../src/composition/tabletop/tools/platform/platform-contour-tool.ts";
+import { commitPlatformContour, commitPlatformShape, platformContourTool } from "../src/composition/tabletop/tools/platform/platform-contour-tool.ts";
 import { commitWallContour } from "../src/composition/tabletop/tools/walls/wall-shared.ts";
 import { surfaceRefFromNodeSet } from "../src/entities/map/index.ts";
 import { building, sessionFixture } from "./platform-session-fixture.mjs";
@@ -153,4 +153,122 @@ test("platform creation, extension retaining supports, hole, separation and topo
     assert.equal(session.snapshot_json(),after);
     assert.ok(runtime.getAllRegionTopologies().flatMap((t)=>t.nodes).every((n)=>n.position.y===3));
   } finally { session.free(); }
+});
+
+
+test("platform rectangle gesture extends overlapping and adjacent areas at the picked floor", () => {
+  const {ctx,runtime,session,calls}=sessionFixture();
+  try {
+    commitPlatformContour(ctx,square(0,0,4,4),{mode:"create",elevation:3});
+    const original=runtime.getAllRegionTopologies()[0];
+    const from={point:{x:3,y:3,z:1},surfaceRef:surfaceRefFromNodeSet(original.surfaceKey)};
+    const to={point:{x:6,y:0,z:3}};
+    const params={mode:"extend",elevation:0,shape:"rectangle"};
+    platformContourTool.onPointerUp(ctx,{start:from,current:to,samples:[from,to]},params);
+    const tops=runtime.getAllRegionTopologies();
+    assert.equal(tops.length,2,JSON.stringify(calls.feedback));
+    assert.ok(tops.flatMap(t=>t.nodes).every(n=>n.position.y===3));
+    assert.ok(tops.flatMap(t=>t.nodes).some(n=>n.position.x===6));
+    assert.equal(runtime.cloudFor({seed:tops[0].surfaceKey,surfaceType:"platform"}).surfaceKeys.length,2);
+    const snapshot=session.snapshot_json();
+    const entry=ctx.history.undo();
+    session.undo_region_overlay(entry.operationId);
+    assert.equal(runtime.getAllRegionTopologies().length,1);
+    session.redo_region_overlay(entry.operationId);
+    assert.equal(session.snapshot_json(),snapshot);
+  } finally {session.free();}
+});
+
+test("platform circle shares the tower contour and retains arcs through extension and cutting", async () => {
+  const {circleContour}=await import("../src/composition/tabletop/tools/tower/tower-geometry.ts");
+  const {ctx,runtime,session,calls}=sessionFixture();
+  const curves=()=>runtime.getAllRegionTopologies().flatMap(t=>[...t.outerLoops,...t.holes].flat());
+  try {
+    platformContourTool.onClick(ctx,{point:{x:0,y:0,z:0}},{mode:"create",elevation:3,shape:"circle",radius:2.5});
+    assert.equal(curves().length,4,JSON.stringify(calls.feedback));
+    assert.ok(curves().every(c=>c.geometry.kind==="arc"));
+    const originalIds=new Set(runtime.getAllRegionTopologies()[0].nodes.map(n=>n.id));
+    commitPlatformShape(ctx,circleContour({x:3,y:3,z:0},2.5),{mode:"extend",elevation:3});
+    assert.ok(curves().every(c=>c.geometry.kind==="arc"),JSON.stringify(calls.feedback));
+    const tops=runtime.getAllRegionTopologies();
+    assert.equal(tops.length,2,JSON.stringify(calls.feedback));
+    assert.equal(runtime.cloudFor({seed:tops[0].surfaceKey,surfaceType:"platform"}).surfaceKeys.length,2);
+    for(const id of originalIds)assert.ok(tops.some(t=>t.nodes.some(n=>n.id===id)));
+    commitPlatformShape(ctx,circleContour({x:0,y:3,z:0},1),{mode:"cut",elevation:3});
+    assert.ok(runtime.getAllRegionTopologies().some(t=>t.holes.length),JSON.stringify(calls.feedback));
+    assert.ok(curves().every(c=>c.geometry.kind==="arc"));
+    commitPlatformContour(ctx,square(-0.2,-4,0.2,4),{mode:"cut",elevation:3});
+    assert.ok(curves().some(c=>c.geometry.kind==="arc"));
+    assert.ok(curves().some(c=>c.geometry.kind==="line"));
+    const snapshot=session.snapshot_json();
+    const entry=ctx.history.undo();session.undo_region_overlay(entry.operationId);session.redo_region_overlay(entry.operationId);
+    assert.equal(session.snapshot_json(),snapshot);
+  } finally {session.free();}
+});
+
+test("platform freehand fits curves, polygon cancellation clears corners, lower picks never weld", () => {
+  const {ctx,runtime,session,calls}=sessionFixture();
+  try {
+    addFace(runtime,"ground","terrain",square(-1,-1,1,1).map((s,i)=>({id:`ground-${i}`,position:{...s.point,y:0}})));
+    const polygon={mode:"create",elevation:3,shape:"polygon"};
+    platformContourTool.onClick(ctx,{point:{x:50,y:0,z:50}},polygon);
+    platformContourTool.onCancel(ctx);
+    const corners=square(0,0,4,4);
+    for(const p of [...corners,corners[0]])platformContourTool.onClick(ctx,p,polygon);
+    assert.ok(runtime.getAllRegionTopologies().filter(t=>t.surfaceType==="platform").flatMap(t=>t.nodes).every(n=>n.position.x<10));
+    const samples=Array.from({length:65},(_,i)=>({point:{x:10+3*Math.cos(i*Math.PI/32),y:0,z:3*Math.sin(i*Math.PI/32)}}));
+    platformContourTool.onPointerUp(ctx,{start:samples[0],current:samples.at(-1),samples},{mode:"create",elevation:3,shape:"freehand",tolerance:0.1});
+    assert.ok(runtime.getAllRegionTopologies().filter(t=>t.surfaceType==="platform").some(t=>t.outerLoops.flat().some(e=>e.geometry.kind==="arc")),JSON.stringify(calls.feedback));
+    commitPlatformContour(ctx,corners.map(s=>({...s,nodeId:"ground-0"})),{mode:"create",elevation:6});
+    const upper=runtime.getAllRegionTopologies().filter(t=>t.surfaceType==="platform"&&t.nodes[0].position.y===6);
+    assert.equal(upper.length,1,JSON.stringify(calls.feedback));
+    assert.ok(upper[0].nodes.every(n=>!n.id.startsWith("ground")));
+  }finally{session.free();}
+});
+
+test("editing an arc endpoint keeps a valid circle and distant platform identities survive extension", async () => {
+  const {circleContour}=await import("../src/composition/tabletop/tools/tower/tower-geometry.ts");
+  const {ctx,runtime,session,calls}=sessionFixture();
+  try {
+    commitPlatformContour(ctx,square(100,100,104,104),{mode:"create",elevation:3});
+    const far=runtime.getAllRegionTopologies()[0];
+    commitPlatformShape(ctx,circleContour({x:0,y:3,z:0},2.5),{mode:"create",elevation:3});
+    const disk=runtime.getAllRegionTopologies().find(t=>t.nodes[0].position.x<10);
+    const node=disk.nodes[0];
+    const before=session.snapshot_json();
+    runtime.applyRegionEdit([{kind:"move-vertex",nodeId:node.id,position:{...node.position,x:node.position.x+1}}]);
+    const deformed=runtime.getRegionTopology(disk.surfaceKey);
+    const positions=new Map(deformed.nodes.map(n=>[n.id,n.position]));
+    for(const edge of deformed.outerLoops.flat()) {
+      const a=positions.get(edge.startNodeId),b=positions.get(edge.endNodeId);
+      const center=edge.geometry.center;
+      assert.ok(Math.abs(Math.hypot(a.x-center[0],a.z-center[1])-Math.hypot(b.x-center[0],b.z-center[1]))<1e-4);
+    }
+    runtime.applyRegionEdit([{kind:"move-vertex",nodeId:node.id,position:node.position}]);
+    assert.equal(session.snapshot_json(),before);
+    const edge=disk.outerLoops.flat().find(e=>e.startNodeId===node.id);
+    const neighbor=disk.nodes.find(n=>n.id===edge.endNodeId);
+    assert.throws(()=>runtime.applyRegionEdit([{kind:"move-vertex",nodeId:node.id,position:neighbor.position}]),/collapse/);
+    assert.equal(session.snapshot_json(),before);
+    commitPlatformShape(ctx,circleContour({x:3,y:3,z:0},2.5),{mode:"extend",elevation:3});
+    assert.deepEqual(runtime.getRegionTopology(far.surfaceKey),far,JSON.stringify(calls.feedback));
+    const revised=runtime.getRegionTopology(disk.surfaceKey);
+    assert.equal(revised,null); // the attached seam gained intersection vertices
+  } finally {session.free();}
+});
+
+test("two different arcs between the same vertices remain distinct platform boundaries",()=>{
+  const {ctx,runtime,session,calls}=sessionFixture();
+  const a={x:3,y:3,z:4},b={x:3,y:3,z:-4};
+  try {
+    commitPlatformShape(ctx,[
+      {start:a,end:b,geometry:{kind:"arc",center:[0,0],clockwise:true}},
+      {start:b,end:a,geometry:{kind:"arc",center:[6,0],clockwise:true}},
+    ],{mode:"create",elevation:3});
+    const tops=runtime.getAllRegionTopologies();
+    assert.equal(tops.length,1,JSON.stringify(calls.feedback));
+    const edges=tops[0].outerLoops.flat();
+    assert.equal(new Set(edges.map(e=>e.edgeId)).size,2);
+    assert.deepEqual(new Set(edges.map(e=>e.geometry.center[0])),new Set([0,6]));
+  }finally{session.free();}
 });

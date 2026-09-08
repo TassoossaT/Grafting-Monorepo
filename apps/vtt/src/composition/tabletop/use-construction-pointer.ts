@@ -58,6 +58,7 @@ export interface ConstructionPointerHandlers {
 
 interface ActiveGesture {
   readonly pointerId: number;
+  readonly captureTarget: HTMLElement;
   readonly start: PointerSample;
   last: PointerSample;
   readonly samples: PointerSample[];
@@ -81,6 +82,7 @@ function pointerOffset(event: { currentTarget: HTMLElement; clientX: number; cli
  */
 export function useConstructionPointer(options: UseConstructionPointerOptions): ConstructionPointerHandlers {
   const gestureRef = useRef<ActiveGesture | null>(null);
+  const suppressClickRef = useRef(false);
   const sequenceRef = useRef(0);
   const lastCommitAtRef = useRef(0);
   const lastPreviewAtRef = useRef(0);
@@ -92,6 +94,8 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
   const nextSequence = useCallback(() => ++sequenceRef.current, []);
 
   useEffect(() => {
+    const active = gestureRef.current;
+    if (active?.captureTarget.hasPointerCapture(active.pointerId)) active.captureTarget.releasePointerCapture(active.pointerId);
     gestureRef.current = null;
     lastCommitAtRef.current = 0;
     lastPreviewAtRef.current = 0;
@@ -120,6 +124,26 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     }),
     [nextSequence],
   );
+
+  useEffect(() => {
+    const tool = toolFor(options.activeTool);
+    const cancel = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || !tool.onCancel) return;
+      tool.onCancel(ctx);
+      const active = gestureRef.current;
+      if (active?.captureTarget.hasPointerCapture(active.pointerId)) active.captureTarget.releasePointerCapture(active.pointerId);
+      gestureRef.current = null;
+      suppressClickRef.current = true;
+      options.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
+    };
+    window.addEventListener("keydown",cancel);
+    return () => {
+      window.removeEventListener("keydown",cancel); tool.onCancel?.(ctx);
+      const active = gestureRef.current;
+      if (active?.captureTarget.hasPointerCapture(active.pointerId)) active.captureTarget.releasePointerCapture(active.pointerId);
+      gestureRef.current = null;
+    };
+  },[options.activeTool,options.runtime,ctx]);
 
   /**
    * Redraws the construction-edge overlay from whatever is now standing.
@@ -168,7 +192,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       if (viewId === undefined) return undefined;
       const { x, y } = pointerOffset(event);
       const hit = runtime.pick(viewId, x, y);
-      return hit === undefined ? undefined : { ...applySnap(hit, snapToGrid), screenY: event.clientY };
+      return hit === undefined ? undefined : { ...applySnap(hit, snapToGrid), screenY: event.clientY, screenX: event.clientX };
     },
     [],
   );
@@ -206,6 +230,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       // The right and middle buttons are reserved for camera orbit/pan
       // (see `features/navigate-camera`) -- only the left button drives tools.
       if (event.button !== 0) return;
+      suppressClickRef.current = false;
       const sample = sampleAt(event);
       if (sample === undefined) return;
 
@@ -217,7 +242,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       // Only tools that actually react to a drag capture the pointer --
       // a click-only tool leaves the native click gesture alone.
       if (tool.onPointerMove !== undefined || tool.onPointerUp !== undefined) {
-        gestureRef.current = { pointerId: event.pointerId, start: sample, last: sample, samples: [sample] };
+        gestureRef.current = { pointerId: event.pointerId, captureTarget: event.currentTarget, start: sample, last: sample, samples: [sample] };
         event.currentTarget.setPointerCapture(event.pointerId);
       }
       tool.onPointerDown?.(ctx, sample, params);
@@ -233,10 +258,13 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       const tool = toolFor(activeTool);
       const params = toolParams[activeTool] as never;
 
-      // No button down -- idle hovering never shows a preview, only an
-      // actual drag does (see `showStartPreview`'s own doc for why).
+      // Most brushes preview only an active drag. Contour tools may opt in
+      // to a circle footprint or unfinished polygon preview between clicks.
       if (gesture === null || gesture.pointerId !== event.pointerId) {
-        optionsRef.current.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
+        const sample = tool.previewOnHover ? sampleAt(event) : undefined;
+        const descriptor = sample ? tool.previewFor?.({ start: sample,current: sample,samples: [sample] },params,ctx) : undefined;
+        if (descriptor) optionsRef.current.runtime.showPreview(descriptor,TOOL_GHOST_PREVIEW_CHANNEL);
+        else optionsRef.current.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
         return;
       }
 
@@ -271,6 +299,13 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       const tool = toolFor(activeTool);
       const params = toolParams[activeTool] as never;
 
+      const released = sampleAt(event);
+      if (released && (released.point.x !== gesture.last.point.x || released.point.y !== gesture.last.point.y || released.point.z !== gesture.last.point.z)) {
+        gesture.last = released; gesture.samples.push(released);
+      }
+      suppressClickRef.current = gesture.samples.some((s) => s.screenX !== undefined && s.screenY !== undefined && gesture.start.screenX !== undefined && gesture.start.screenY !== undefined
+        ? Math.hypot(s.screenX-gesture.start.screenX,s.screenY-gesture.start.screenY)>3
+        : Math.hypot(s.point.x-gesture.start.point.x,s.point.y-gesture.start.point.y,s.point.z-gesture.start.point.z)>0.05);
       tool.onPointerUp?.(ctx, { start: gesture.start, current: gesture.last, samples: gesture.samples }, params);
       gestureRef.current = null;
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
@@ -279,20 +314,23 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       optionsRef.current.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
       refreshEdgeOverlay();
     },
-    [ctx, refreshEdgeOverlay],
+    [ctx, refreshEdgeOverlay, sampleAt],
   );
 
   const cancelGesture = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
     const gesture = gestureRef.current;
     if (gesture === null || gesture.pointerId !== event.pointerId) return;
     gestureRef.current = null;
+    toolFor(optionsRef.current.activeTool).onCancel?.(ctx);
+    suppressClickRef.current = true;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     optionsRef.current.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
-  }, []);
+  }, [ctx]);
   const onClick = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
+      if (suppressClickRef.current) { suppressClickRef.current = false; return; }
       const { activeTool, toolParams } = optionsRef.current;
       const tool = toolFor(activeTool);
       if (tool.onClick === undefined) return;

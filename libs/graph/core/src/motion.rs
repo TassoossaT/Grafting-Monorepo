@@ -177,21 +177,44 @@ pub fn move_vertices<E>(
         let ContourGeometry::CircularArc { center, clockwise } = edge.geometry() else {
             continue;
         };
-        let (Some(start), Some(end)) = (
-            positions.get(edge.start_node()),
-            positions.get(edge.end_node()),
-        ) else {
+        if !positions.contains_key(edge.start_node()) && !positions.contains_key(edge.end_node()) {
             continue;
-        };
+        }
         let original_start = graph.node(edge.start_node()).unwrap().data();
         let original_end = graph.node(edge.end_node()).unwrap().data();
-        let delta = [start[0] - original_start[0], start[2] - original_start[2]];
-        if (delta[0] - (end[0] - original_end[0])).abs() > 1e-4
-            || (delta[1] - (end[2] - original_end[2])).abs() > 1e-4
+        let start = positions.get(edge.start_node()).unwrap_or(original_start);
+        let end = positions.get(edge.end_node()).unwrap_or(original_end);
+        if start[0] == original_start[0]
+            && start[2] == original_start[2]
+            && end[0] == original_end[0]
+            && end[2] == original_end[2]
         {
             continue;
         }
-        let center = [center[0] + delta[0], center[1] + delta[1]];
+        let old = [
+            (original_end[0] - original_start[0]) as f64,
+            (original_end[2] - original_start[2]) as f64,
+        ];
+        let new = [(end[0] - start[0]) as f64, (end[2] - start[2]) as f64];
+        let length_sq = old[0] * old[0] + old[1] * old[1];
+        if length_sq < 1e-10 || new[0] * new[0] + new[1] * new[1] < 1e-10 {
+            return Err(MotionError::InvalidTopology(
+                "an arc cannot collapse to a zero-length chord".into(),
+            ));
+        }
+        // Similarity of the old chord to the new one preserves the arc's sweep.
+        // This also handles a single endpoint edit; rigid translation is its
+        // scale=1, rotation=0 case. Undo applies the inverse similarity.
+        let scale_cos = (old[0] * new[0] + old[1] * new[1]) / length_sq;
+        let scale_sin = (old[0] * new[1] - old[1] * new[0]) / length_sq;
+        let relative = [
+            (center[0] - original_start[0]) as f64,
+            (center[1] - original_start[2]) as f64,
+        ];
+        let center = [
+            (start[0] as f64 + scale_cos * relative[0] - scale_sin * relative[1]) as f32,
+            (start[2] as f64 + scale_sin * relative[0] + scale_cos * relative[1]) as f32,
+        ];
         if !center.iter().all(|v| v.is_finite()) {
             return Err(MotionError::NonFinite(edge.start_node().clone()));
         }

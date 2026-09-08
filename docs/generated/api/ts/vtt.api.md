@@ -351,6 +351,17 @@ Hides the active tool preview, if any.
 
 `ADR-0022`'s "cloud" query -- a pure read, never touches the map. See `ConstructionSessionPort.cloudFor`.
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.curvedPlanarBoolean(request: ConstructionCurvedRequest): readonly ConstructionCurvedShape[]`
+
+Applies a resolved sequence of atomic edit ops as one transaction, then
+re-derives and re-uploads every chunk and folds the whole merged
+outcome into the cached `MapProjection`.
+
+Policy resolution deliberately happens *before* this call, in
+`features/edit-construction`: this method never asks what a wall allows,
+it only performs what was already decided -- see
+`docs/architecture/vtt-atomic-edit-and-cloud-policy-design.md`.
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.detachView(viewId: string): void`
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.dispose(): Promise<void>`
@@ -411,15 +422,6 @@ policy pass a live gesture goes through.
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.pick(viewId: string, x: number, y: number): ScenePickResult | undefined`
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[]`
-
-Applies a resolved sequence of atomic edit ops as one transaction, then
-re-derives and re-uploads every chunk and folds the whole merged
-outcome into the cached `MapProjection`.
-
-Policy resolution deliberately happens *before* this call, in
-`features/edit-construction`: this method never asks what a wall allows,
-it only performs what was already decided -- see
-`docs/architecture/vtt-atomic-edit-and-cloud-policy-design.md`.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.planMotion(request: ConstructionMotionRequest): ConstructionMotionPlan`
 
@@ -499,6 +501,8 @@ Hides the active tool preview, if any.
 ### `method vtt.tabletop-runtime.TabletopRuntime.cloudFor(request: CloudRequest): CloudOutcome`
 
 `ADR-0022`'s "cloud" query -- a pure read, never touches the map. See `ConstructionSessionPort.cloudFor`.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.curvedPlanarBoolean(request: ConstructionCurvedRequest): readonly ConstructionCurvedShape[]`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.detachView(viewId: string): void`
 
@@ -848,7 +852,15 @@ the active tool defines.
 
 ### `property vtt.tool-context.ConstructionTool.id: Id`
 
+### `property vtt.tool-context.ConstructionTool.previewOnHover?: boolean`
+
+Opt in to a stationary drawing preview between gestures.
+
 ### `method vtt.tool-context.ConstructionTool.defaultParams(): ToolParamsFor<Id>`
+
+### `method vtt.tool-context.ConstructionTool.onCancel(ctx: ToolContext): void`
+
+Discards an unfinished tool draft on Escape, cancellation or tool switch.
 
 ### `method vtt.tool-context.ConstructionTool.onClick(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void`
 
@@ -885,6 +897,8 @@ What the pointer resolved to at one instant -- `nodeId` present only when it hit
 ### `property vtt.tool-context.PointerSample.nodeId?: string`
 
 ### `property vtt.tool-context.PointerSample.point: ConstructionPosition`
+
+### `property vtt.tool-context.PointerSample.screenX?: number`
 
 ### `property vtt.tool-context.PointerSample.screenY?: number`
 
@@ -1214,11 +1228,13 @@ generic transaction without interpreting path topology.
 
 ### `variable vtt.platform-contour-tool.platformContourTool: ConstructionTool<"platform-contour">`
 
-### `function vtt.platform-contour-tool.commitPlatformContour(ctx: ToolContext, samples: readonly PointerSample[], params: { elevation: number; mode: "extend" | "cut" | "create" }): void`
+### `function vtt.platform-contour-tool.commitPlatformContour(ctx: ToolContext, samples: readonly PointerSample[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "circle" | "rectangle" | "polygon" | "freehand"; tolerance?: number }): void`
 
-Creates, extends or cuts only the explicitly chosen horizontal level.
-Existing structural seams survive extension, so enclosed support vertices
-retain their real membership instead of becoming detached interior points.
+Polygon entry point retained for callers that already have explicit corners.
+
+### `function vtt.platform-contour-tool.commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "circle" | "rectangle" | "polygon" | "freehand"; tolerance?: number }, pickedSamples: readonly PointerSample[]): void`
+
+Commits the same directed line/arc contour vocabulary consumed by wall construction.
 
 ### `interface vtt.geometry-2d.PointXZ`
 
@@ -4148,7 +4164,7 @@ Perlin `scale` -- smaller values are smoother/larger-scale terrain features.
 
 ### `property vtt.tool-types.ToolParamsByTool.path-brush: PathBrushParams`
 
-### `property vtt.tool-types.ToolParamsByTool.platform-contour: { elevation: number; mode: "extend" | "cut" | "create" }`
+### `property vtt.tool-types.ToolParamsByTool.platform-contour: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "circle" | "rectangle" | "polygon" | "freehand"; tolerance?: number }`
 
 ### `property vtt.tool-types.ToolParamsByTool.terrain-sculpt: TerrainSculptParams`
 
@@ -4788,6 +4804,14 @@ World-space centroid; `y` is the height the face currently sits at.
 
 ### `property vtt.construction-session-port.ConstructionCoveredRegion.surfaceType: string`
 
+### `interface vtt.construction-session-port.ConstructionCurvedRequest`
+
+### `property vtt.construction-session-port.ConstructionCurvedRequest.clip: readonly ConstructionCurvedShape[]`
+
+### `property vtt.construction-session-port.ConstructionCurvedRequest.operation: "union" | "difference" | "extend"`
+
+### `property vtt.construction-session-port.ConstructionCurvedRequest.subject: readonly ConstructionCurvedShape[]`
+
 ### `interface vtt.construction-session-port.ConstructionEdgeSnapshot`
 
 One generic graph edge, including edges deliberately not used by a face.
@@ -5061,6 +5085,16 @@ wall with an opening nobody is standing in.
 
 ### `property vtt.construction-session-port.ConstructionPatchRegion.surfaceType: string`
 
+### `interface vtt.construction-session-port.ConstructionPlanarCurve`
+
+Directed span in the horizontal construction plane, including true circular arcs.
+
+### `property vtt.construction-session-port.ConstructionPlanarCurve.end: readonly [number, number]`
+
+### `property vtt.construction-session-port.ConstructionPlanarCurve.geometry: ConstructionEdgeGeometry`
+
+### `property vtt.construction-session-port.ConstructionPlanarCurve.start: readonly [number, number]`
+
 ### `interface vtt.construction-session-port.ConstructionPlanarRequest`
 
 ### `property vtt.construction-session-port.ConstructionPlanarRequest.clip: readonly ConstructionPlanarShape[]`
@@ -5147,6 +5181,8 @@ Indexed back to the request; a point over open ground is simply absent.
 ### `method vtt.construction-session-port.ConstructionSessionPort.cloudFor(request: CloudRequest): CloudOutcome`
 
 `ADR-0022`'s "cloud" query.
+
+### `method vtt.construction-session-port.ConstructionSessionPort.curvedPlanarBoolean(request: ConstructionCurvedRequest): readonly ConstructionCurvedShape[]`
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.deleteRegion(surfaceKey: ConstructionSurfaceKey): RegionEditOutcome`
 
@@ -5482,6 +5518,10 @@ How a brush footprint touches one existing region.
 Reported as data rather than resolved by the engine: a type that swaps
 whole faces (terrain restacking onto itself) and a type that cuts (a path
 carved through) need different rules from the very same answer.
+
+### `type vtt.construction-session-port.ConstructionCurvedShape = readonly (readonly ConstructionPlanarCurve[])[]`
+
+An outer boundary followed by holes.
 
 ### `type vtt.construction-session-port.ConstructionEdgeGeometry = { kind: "line" } | { center: readonly [number, number]; clockwise: boolean; kind: "arc" }`
 

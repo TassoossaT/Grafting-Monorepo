@@ -328,7 +328,13 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
           <div className="gm-material-grid">
             {(["create", "extend", "cut"] as const).map((mode, i) => <SelectableChip key={mode} label={["Criar", "Ampliar / juntar", "Recortar / separar"][i]!} swatchColor="#79b8e8" selected={params["platform-contour"].mode === mode} onSelect={() => onParamsChange("platform-contour", { ...params["platform-contour"], mode })} />)}
           </div>
-          <p>Marque os cantos e clique no primeiro para fechar, ou arraste um contorno. Uniao e recorte usam somente a elevacao escolhida. Clique em vertices existentes para conectar.</p>
+          <div className="gm-material-grid">
+            {(["rectangle", "circle", "polygon", "freehand"] as const).map((shape,i) => <SelectableChip key={shape} label={["Retângulo", "Círculo", "Polígono", "Livre / curvas"][i]!} swatchColor="#79b8e8" selected={(params["platform-contour"].shape ?? "rectangle") === shape} onSelect={() => onParamsChange("platform-contour",{ ...params["platform-contour"],shape })} />)}
+          </div>
+          {params["platform-contour"].shape === "circle" && <div className="gm-material-grid">{TOWER_RADIUS_PRESETS.map((radius) => <SelectableChip key={radius} label={`Raio ${radius}`} swatchColor="#79b8e8" selected={(params["platform-contour"].radius ?? 2.5) === radius} onSelect={() => onParamsChange("platform-contour",{ ...params["platform-contour"],radius })} />)}</div>}
+          {params["platform-contour"].shape === "freehand" && <label>Correção <input type="number" min="0" max="1" step="0.05" value={params["platform-contour"].tolerance ?? 0.15} onChange={(event) => onParamsChange("platform-contour",{ ...params["platform-contour"],tolerance:Number(event.currentTarget.value) })} /></label>}
+          <p>Retângulo: arraste na diagonal. Círculo: clique no centro. Polígono: clique nos cantos e no primeiro para fechar. Livre: arraste o contorno. Esc cancela.</p>
+          <p>Para ampliar, desenhe sobre a borda e a área nova. Começar sobre uma plataforma usa a elevação dela; fora dela, vale a elevação escolhida. Vértices de outro andar não são conectados.</p>
         </div>
       ) : activeTool === "edit-region" ? (
         <div>

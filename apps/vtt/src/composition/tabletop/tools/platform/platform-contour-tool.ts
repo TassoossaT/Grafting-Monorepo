@@ -1,97 +1,144 @@
-import { DEFAULT_TOOL_PARAMS } from "../../../../features/edit-construction/index.ts";
-import type { ToolParamsByTool } from "../../../../features/edit-construction/index.ts";
-import type { ConstructionPlanarShape, ConstructionPosition, ConstructionRegionTopology } from "../../../../ports/index.ts";
-import { boundaryUsage, createBoundaryEdges } from "../core/boundary-edges.ts";
+import { DEFAULT_TOOL_PARAMS, fitPath } from "../../../../features/edit-construction/index.ts";
+import type { FittedEdge, ToolParamsByTool } from "../../../../features/edit-construction/index.ts";
+import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
+import type { ConstructionCurvedShape, ConstructionPosition, ConstructionRegionTopology } from "../../../../ports/index.ts";
+import { createBoundaryEdges, reverseGeometry } from "../core/boundary-edges.ts";
 import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext } from "../core/tool-context.ts";
-import { polylineSegmentsPreview } from "../shapes/preview-shapes.ts";
+import { polylineSegmentsPreview, segmentsPreview } from "../shapes/preview-shapes.ts";
+import { circleContour, previewOutline } from "../tower/tower-geometry.ts";
 
 type Params = ToolParamsByTool["platform-contour"];
+const COLOR = 0x79b8e8;
 const drafts = new WeakMap<object, { key: string; points: PointerSample[] }>();
 function draft(ctx: ToolContext, params: Params): PointerSample[] {
-  const key = `${params.mode}:${params.elevation}`;
+  const key = JSON.stringify(params);
   let current = drafts.get(ctx.runtime);
   if (!current || current.key !== key) { current = { key, points: [] }; drafts.set(ctx.runtime, current); }
   return current.points;
 }
-function shapeOf(topology: ConstructionRegionTopology): ConstructionPlanarShape {
+function parametersAt(ctx: ToolContext, first: PointerSample | undefined, params: Params): Params {
+  if (params.mode === "create" || !first) return params;
+  const target = ctx.runtime.getAllRegionTopologies().find((t) => t.surfaceType === "platform" &&
+    (first.surfaceRef ? surfaceRefFromNodeSet(t.surfaceKey) === first.surfaceRef : first.nodeId && t.nodes.some((n) => n.id === first.nodeId)));
+  return target?.nodes[0] ? { ...params, elevation: target.nodes[0].position.y } : params;
+}
+function shapeOf(topology: ConstructionRegionTopology): ConstructionCurvedShape {
   const nodes = new Map(topology.nodes.map((node) => [node.id, node.position]));
   return [...topology.outerLoops, ...topology.holes].map((loop) => loop.map((edge) => {
-    const p = nodes.get(edge.startNodeId)!;
-    return [p.x, p.z] as const;
+    const a = nodes.get(edge.startNodeId)!;
+    const b = nodes.get(edge.endNodeId)!;
+    return { start: [a.x, a.z], end: [b.x, b.z], geometry: edge.reversed ? reverseGeometry(edge.geometry) : edge.geometry };
   }));
 }
-
-/** Creates, extends or cuts only the explicitly chosen horizontal level.
- * Existing structural seams survive extension, so enclosed support vertices
- * retain their real membership instead of becoming detached interior points. */
-export function commitPlatformContour(ctx: ToolContext, samples: readonly PointerSample[], params: Params): void {
-  if (samples.length < 3) return;
+function lines(samples: readonly PointerSample[], elevation: number): readonly FittedEdge[] {
+  const points = samples.map((s) => ({ ...s.point, y: elevation })).filter((p, i, all) => i === 0 || p.x !== all[i-1]!.x || p.z !== all[i-1]!.z);
+  if (points.length > 1 && points[0]!.x === points.at(-1)!.x && points[0]!.z === points.at(-1)!.z) points.pop();
+  return points.map((start, i) => ({ start, end: points[(i+1)%points.length]!, geometry: { kind: "line" } }));
+}
+function rectangle(a: PointerSample, b: PointerSample, elevation: number): readonly PointerSample[] {
+  return [a, { point: { x: b.point.x, y: elevation, z: a.point.z } }, b, { point: { x: a.point.x, y: elevation, z: b.point.z } }];
+}
+/** Commits the same directed line/arc contour vocabulary consumed by wall construction. */
+export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: Params, pickedSamples: readonly PointerSample[] = []): void {
   try {
-    if (!Number.isFinite(params.elevation)) throw new Error("A elevacao deve ser finita.");
+    if (!Number.isFinite(params.elevation)) throw new Error("A elevação deve ser finita.");
+    if (contour.length < 2) throw new Error("Desenhe uma área com largura e comprimento.");
     const all = ctx.runtime.getAllRegionTopologies();
     const graph = ctx.runtime.getGraphSnapshot();
-    const picked = new Set(samples.flatMap((sample) => sample.nodeId ? [sample.nodeId] : []));
-    for (const node of graph.nodes) {
-      if (picked.has(node.id) && Math.abs(node.position.y - params.elevation) > 1e-4) {
-        throw new Error("Escolha vertices na elevacao da plataforma; andares diferentes nao sao soldados.");
-      }
-    }
-    const outline = samples.map((sample) => [sample.point.x, sample.point.z] as const);
-    const xs = outline.map((p) => p[0]), zs = outline.map((p) => p[1]);
-    const minX = Math.min(...xs), maxX = Math.max(...xs), minZ = Math.min(...zs), maxZ = Math.max(...zs);
-    const sources = params.mode === "create" ? [] : all.filter((topology) => {
-      if (topology.surfaceType !== "platform" || topology.nodes.some((node) => Math.abs(node.position.y - params.elevation) > 1e-4)) return false;
-      const x = topology.nodes.map((n) => n.position.x), z = topology.nodes.map((n) => n.position.z);
-      return Math.min(...x) <= maxX && Math.max(...x) >= minX && Math.min(...z) <= maxZ && Math.max(...z) >= minZ;
+    // Picking the terrain below a drawing plane is not an instruction to weld floors.
+    const picked = new Set(pickedSamples.flatMap((s) => s.nodeId ? [s.nodeId] : []));
+    const sources = params.mode === "create" ? [] : all.filter((t) => t.surfaceType === "platform" && t.nodes.every((n) => Math.abs(n.position.y - params.elevation) < 1e-4));
+    if (params.mode !== "create" && sources.length === 0) throw new Error("Nenhuma plataforma nessa elevação. Comece sobre a plataforma ou escolha a elevação correta.");
+    const clip: ConstructionCurvedShape = [contour.map((c) => ({ start: [c.start.x,c.start.z], end: [c.end.x,c.end.z], geometry: c.geometry }))];
+    const subject = sources.map(shapeOf);
+    const shapes = ctx.runtime.curvedPlanarBoolean({ subject, clip: [clip], operation: params.mode === "cut" ? "difference" : params.mode === "extend" ? "extend" : "union" });
+    if (params.mode !== "cut" && shapes.length === 0) throw new Error("O contorno precisa delimitar uma área.");
+    // Preserve the identities and render items of faces the operation did not change.
+    const signature = (shape: ConstructionCurvedShape) => JSON.stringify(shape.map((r) => r.map((c) => JSON.stringify(c)).sort()).sort());
+    const remaining = sources.map((source,i) => ({ source,signature:signature(subject[i]!) }));
+    const changedShapes = shapes.filter((shape) => {
+      const match = remaining.findIndex((item) => item.signature === signature(shape));
+      if (match < 0) return true;
+      remaining.splice(match,1); return false;
     });
-    if (params.mode === "cut" && sources.length === 0) throw new Error("Nenhuma plataforma nessa elevacao para recortar.");
-    const shapes = ctx.runtime.planarBoolean({ subject: sources.map(shapeOf), clip: [[outline]], operation: params.mode === "cut" ? "difference" : params.mode === "extend" ? "extend" : "union" });
-    if (params.mode !== "cut" && shapes.length === 0) throw new Error("O contorno precisa delimitar uma area.");
-    const operationId = scopedToolId(ctx, "platform", ctx.nextSequence());
-    const retained = new Map(sources.flatMap((topology) => topology.nodes.map((node) => [node.id, node] as const)));
-    for (const node of graph.nodes) if (picked.has(node.id)) retained.set(node.id, node);
-    const nodes = new Map<string, { id: string; position: ConstructionPosition }>();
-    const edgeBuilder = createBoundaryEdges(ctx.tableId, { kind: "private-when-full", runPrefix: operationId, existingUses: boundaryUsage(ctx) });
-    function nodeAt(point: readonly [number, number]): string {
-      const existing = [...retained.values(), ...nodes.values()].find((node) => Math.abs(node.position.x - point[0]) < 1e-5 && Math.abs(node.position.z - point[1]) < 1e-5);
-      const node = existing ?? { id: `${operationId}:node:${nodes.size}`, position: { x: point[0], y: params.elevation, z: point[1] } };
-      nodes.set(node.id, node);
-      return node.id;
+    if (params.mode !== "create" && remaining.length === 0 && changedShapes.length === 0) {
+      ctx.reportFeedback({ tone: "info", message: params.mode === "extend" ? "A área já está coberta. Desenhe além da borda para ampliar." : "O recorte não removeu nenhuma área." }); return;
     }
-    const regions = shapes.map((shape, index) => {
-      const loops = shape.map((ring) => {
-        const ids = ring.map(nodeAt);
-        return ids.map((id, i) => edgeBuilder.use(id, ids[(i + 1) % ids.length]!));
-      });
+    const operationId = scopedToolId(ctx, "platform", ctx.nextSequence());
+    const retained = new Map(sources.flatMap((t) => t.nodes.map((n) => [n.id,n] as const)));
+    for (const n of graph.nodes) if (picked.has(n.id) && Math.abs(n.position.y - params.elevation) < 1e-4) retained.set(n.id,n);
+    const nodes = new Map<string, { id: string; position: ConstructionPosition }>();
+    // New boundary identities avoid borrowing an unrelated wall's geometry.
+    // Shared graph vertices, rather than endpoint-only edge names, carry support.
+    const builder = createBoundaryEdges(operationId, { kind: "private-when-full", runPrefix: operationId, existingUses: new Map() });
+    function nodeAt(p: readonly [number,number]): string {
+      const existing = [...retained.values(),...nodes.values()].find((n) => Math.abs(n.position.x-p[0]) < 1e-5 && Math.abs(n.position.z-p[1]) < 1e-5);
+      const node = existing ?? { id: `${operationId}:node:${nodes.size}`, position: { x: p[0], y: params.elevation, z: p[1] } };
+      nodes.set(node.id,node); return node.id;
+    }
+    const regions = changedShapes.map((shape,index) => {
+      const loops = shape.map((ring) => ring.map((c) => builder.use(nodeAt(c.start),nodeAt(c.end),c.geometry)));
       return { regionId: `${operationId}:face:${index}`, boundary: loops[0]!, holes: loops.slice(1), surfaceType: "platform", physical: true };
     });
-    ctx.runtime.applyPatchReplacement({ operationId, sourceSurfaceKeys: sources.map((source) => source.surfaceKey), patch: { nodes: [...nodes.values()], edges: edgeBuilder.all(), regions } }, "local", operationId);
+    ctx.runtime.applyPatchReplacement({ operationId, sourceSurfaceKeys: remaining.map(({ source }) => source.surfaceKey), patch: { nodes: [...nodes.values()], edges: builder.all(), regions } }, "local", operationId);
     ctx.history.record({ kind: "path-brush", operationId });
-    ctx.reportFeedback({ tone: "success", message: `Plataforma: ${regions.length} face(s) na elevacao ${params.elevation}.` });
+    ctx.reportFeedback({ tone: "success", message: `Plataforma: ${regions.length} face(s) na elevação ${params.elevation}.` });
   } catch (error) { ctx.reportFeedback({ tone: "error", message: error instanceof Error ? error.message : String(error) }); }
 }
-
+/** Polygon entry point retained for callers that already have explicit corners. */
+export function commitPlatformContour(ctx: ToolContext, samples: readonly PointerSample[], params: Params): void {
+  commitPlatformShape(ctx, lines(samples,params.elevation),params,samples);
+}
 export const platformContourTool: ConstructionTool<"platform-contour"> = {
   id: "platform-contour",
+  previewOnHover: true,
   defaultParams: () => DEFAULT_TOOL_PARAMS["platform-contour"],
+  onCancel(ctx) { drafts.delete(ctx.runtime); },
   previewFor(gesture, params, ctx) {
-    const points = [...draft(ctx, params), ...gesture.samples].map((sample) => ({ ...sample.point, y: params.elevation }));
-    return polylineSegmentsPreview(points.length > 2 ? [...points, points[0]!] : points, 0x79b8e8);
+    const points = draft(ctx,params);
+    const effective = parametersAt(ctx,points[0] ?? gesture.start,params);
+    const shape = params.shape ?? "rectangle";
+    if (shape === "rectangle" && gesture.start.point.x === gesture.current.point.x && gesture.start.point.z === gesture.current.point.z) return undefined;
+    if (shape === "circle") return segmentsPreview(previewOutline({ ...gesture.current.point, y: effective.elevation },params.radius ?? 2.5,48),COLOR);
+    const samples = shape === "rectangle" ? rectangle(gesture.start,gesture.current,effective.elevation) : [...points,...gesture.samples];
+    const outline = samples.map((s) => ({ ...s.point,y: effective.elevation }));
+    return polylineSegmentsPreview(outline.length > 2 ? [...outline,outline[0]!] : outline,COLOR);
   },
-  onClick(ctx, sample, params) {
-    const points = draft(ctx, params);
-    const first = points[0];
-    if (first && points.length >= 3 && Math.hypot(first.point.x - sample.point.x, first.point.z - sample.point.z) < 0.25) {
-      commitPlatformContour(ctx, points, params); points.length = 0;
+  onClick(ctx,sample,params) {
+    const shape = params.shape ?? "rectangle";
+    if (shape === "circle") {
+      const effective = parametersAt(ctx,sample,params);
+      commitPlatformShape(ctx,circleContour({ ...sample.point,y:effective.elevation },params.radius ?? 2.5),effective);
+    } else if (shape === "polygon") {
+      const points = draft(ctx,params);
+      const first = points[0];
+      if (first && points.length >= 3 && Math.hypot(first.point.x-sample.point.x,first.point.z-sample.point.z)<0.25) {
+        commitPlatformContour(ctx,points,parametersAt(ctx,first,params)); points.length = 0;
+      } else {
+        points.push(sample);
+        ctx.reportFeedback({ tone: "info", message: "Marque os cantos e clique no primeiro para fechar. Esc cancela." });
+      }
     } else {
-      points.push(sample);
-      ctx.reportFeedback({ tone: "info", message: "Marque os cantos e clique no primeiro para fechar, ou arraste um contorno livre." });
+      ctx.reportFeedback({ tone: "info", message: shape === "rectangle" ? "Arraste de um canto ao canto oposto. Para ampliar, cubra a borda e a área nova." : "Arraste um contorno fechado; a correção ajusta retas e curvas." });
     }
   },
-  onPointerUp(ctx, gesture, params) {
-    const points = gesture.samples.filter((sample, i, array) => i === 0 || Math.hypot(sample.point.x - array[i - 1]!.point.x, sample.point.z - array[i - 1]!.point.z) > 0.05);
-    if (points.length < 3) return;
-    commitPlatformContour(ctx, points, params);
-    draft(ctx, params).length = 0;
+  onPointerUp(ctx,gesture,params) {
+    const shape = params.shape ?? "rectangle";
+    if (shape === "circle" || shape === "polygon") return;
+    if (gesture.samples.length < 2) return;
+    const effective = parametersAt(ctx,gesture.start,params);
+    if (shape === "rectangle") {
+      if (Math.abs(gesture.start.point.x-gesture.current.point.x)<1e-5 || Math.abs(gesture.start.point.z-gesture.current.point.z)<1e-5) {
+        ctx.reportFeedback({ tone: "error", message: "Arraste na diagonal para desenhar uma área." }); return;
+      }
+      commitPlatformContour(ctx,rectangle(gesture.start,gesture.current,effective.elevation),effective);
+    } else {
+      const points = gesture.samples.map((s) => ({ ...s.point,y:effective.elevation }));
+      const first = points[0]!, last = points.at(-1)!;
+      if (Math.hypot(first.x-last.x,first.z-last.z)>1e-5) points.push(first);
+      const fitted = fitPath(points,params.tolerance ?? 0.15,{ arcs: !ctx.snapToGrid });
+      commitPlatformShape(ctx,fitted,effective,gesture.samples);
+    }
+    drafts.delete(ctx.runtime);
   },
 };

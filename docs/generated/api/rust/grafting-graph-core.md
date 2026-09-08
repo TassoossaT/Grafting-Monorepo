@@ -643,6 +643,17 @@ second region take the opening as its own outer boundary. A hole and the
 face filling it are then joined the same way any two faces are: they
 share the rim.
 
+### `pub fn grafting_graph_core::curved_planar_boolean(subject: &[grafting_graph_core::CurvedPlanarShape], clip: &[grafting_graph_core::CurvedPlanarShape], operation: grafting_graph_core::PlanarBoolean) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::CurvedPlanarShape>, alloc::string::String>`
+
+Applies a boolean without converting circular arcs to polygonal chords.
+
+Outer/hole winding may be supplied in either direction. Intersections are
+analytic; original vertices and structural seams in `Extend` are retained.
+Coincident spans are deduplicated. Malformed, nonfinite, discontinuous or
+inconsistent-radius input returns an error before calculation.
+Features below the positional tolerance of 1e-5 world units are not retained.
+This pure query leaves atomic application of the result to the caller.
+
 ### `pub fn grafting_graph_core::delete_region<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, surfaces: &mut grafting_graph_core::SurfaceRegistry, region: &grafting_graph_core::RegionId) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
 
 `DeleteRegion` for a single region -- [`delete_regions`] with one entry,
@@ -1109,6 +1120,18 @@ Keep subject faces and add only uncovered clip area, retaining structural seams.
 
 Preserve either operand.
 
+### `pub grafting_graph_core::PlanarCurve::end: [f32; 2]`
+
+End position in the plane.
+
+### `pub grafting_graph_core::PlanarCurve::geometry: grafting_graph_core::ContourGeometry`
+
+Geometry walked from start to end.
+
+### `pub grafting_graph_core::PlanarCurve::start: [f32; 2]`
+
+Start position in the plane.
+
 ### `pub grafting_graph_core::PrismGridMesh::cell_corners: alloc::vec::Vec<[u32; 8]>`
 
 8 corner vertex indices per cell [V0..V7].
@@ -1409,6 +1432,10 @@ An absolute position in a consolidated edit.
 A single edge-use inside a [`SurfaceRegion`] loop: which [`ContourEdge`]
 and whether it is walked in its own declared direction or reversed.
 
+### `pub struct grafting_graph_core::PlanarCurve`
+
+A directed span in a closed planar boundary.
+
 ### `pub struct grafting_graph_core::PrismGridMesh`
 
 A 3D prism grid mesh representing cells with 6 contiguous neighbor slots
@@ -1521,6 +1548,10 @@ An ordered, closed sequence of oriented edge uses -- one boundary of a
 
 A point in a surface's own XZ plane -- see this module's own doc for why
 contour geometry commits to XZ instead of an arbitrary 3D plane.
+
+### `pub type grafting_graph_core::CurvedPlanarShape = alloc::vec::Vec<alloc::vec::Vec<grafting_graph_core::PlanarCurve>>`
+
+An outer boundary followed by holes, each made of continuous closed spans.
 
 ### `pub type grafting_graph_core::PlanarShape = alloc::vec::Vec<alloc::vec::Vec<[f32; 2]>>`
 

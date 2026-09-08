@@ -506,6 +506,19 @@ export interface ConstructionMotionPlan {
   readonly visitedInfluences: number;
 }
 
+/** Directed span in the horizontal construction plane, including true circular arcs. */
+export interface ConstructionPlanarCurve {
+  readonly start: readonly [number, number];
+  readonly end: readonly [number, number];
+  readonly geometry: ConstructionEdgeGeometry;
+}
+/** An outer boundary followed by holes. */
+export type ConstructionCurvedShape = readonly (readonly ConstructionPlanarCurve[])[];
+export interface ConstructionCurvedRequest {
+  readonly subject: readonly ConstructionCurvedShape[];
+  readonly clip: readonly ConstructionCurvedShape[];
+  readonly operation: "union" | "difference" | "extend";
+}
 export type ConstructionPlanarShape = readonly (readonly (readonly [number, number])[])[];
 export interface ConstructionPlanarRequest {
   readonly subject: readonly ConstructionPlanarShape[];
@@ -513,6 +526,7 @@ export interface ConstructionPlanarRequest {
   readonly operation: "union" | "difference" | "extend";
 }
 export interface ConstructionSessionPort {
+  curvedPlanarBoolean(request: ConstructionCurvedRequest): readonly ConstructionCurvedShape[];
   planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[];
   /** Pure cascade resolution, using one consistent engine state. */
   planMotion(request: ConstructionMotionRequest): ConstructionMotionPlan;

@@ -124,10 +124,18 @@ export function createBoundaryEdges(tableId: string, sharing: EdgeSharing): Boun
       const end = forward ? to : from;
       const reversed = !forward;
 
+      const stored = forward ? geometry : reverseGeometry(geometry);
+      const accepts = (id: ConstructionEdgeId): boolean => {
+        const existing = edges.get(id)?.geometry ?? LINE;
+        const sameGeometry = !edges.has(id) || (existing.kind === stored.kind &&
+          (existing.kind === "line" || (stored.kind === "arc" && existing.clockwise === stored.clockwise &&
+            existing.center[0] === stored.center[0] && existing.center[1] === stored.center[1])));
+        return hasRoom(id, reversed) && sameGeometry;
+      };
       let edgeId: ConstructionEdgeId = sharedEdgeId(tableId, start, end);
-      if (sharing.kind === "private-when-full" && !hasRoom(edgeId, reversed)) {
+      if (sharing.kind === "private-when-full" && !accepts(edgeId)) {
         edgeId = `${sharing.runPrefix}:seg:${start}~${end}`;
-        for (let suffix = 2; !hasRoom(edgeId, reversed); suffix += 1) {
+        for (let suffix = 2; !accepts(edgeId); suffix += 1) {
           edgeId = `${sharing.runPrefix}:seg:${start}~${end}:${suffix}`;
         }
       }
@@ -136,7 +144,6 @@ export function createBoundaryEdges(tableId: string, sharing: EdgeSharing): Boun
       if (!edges.has(edgeId)) {
         // Absent geometry already means a straight chord, so a flat patch
         // stays as small on the wire as it always was.
-        const stored = forward ? geometry : reverseGeometry(geometry);
         edges.set(
           edgeId,
           stored.kind === "line"

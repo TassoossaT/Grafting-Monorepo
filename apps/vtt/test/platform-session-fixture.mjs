@@ -23,6 +23,7 @@ export function sessionFixture() {
       const result = JSON.parse(session.plan_motion_json(JSON.stringify({ ...request, seeds: request.seeds.map((s) => ({ ...s, delta: vector(s.delta) })) })));
       return { ...result, moves: result.moves.map((m) => ({ ...m, position: position(m.position) })) };
     },
+    curvedPlanarBoolean: (request) => JSON.parse(session.curved_planar_boolean_json(JSON.stringify(request))),
     planarBoolean: (request) => JSON.parse(session.planar_boolean_json(JSON.stringify(request))),
     applyRegionEdit(ops) { calls.batches++; return JSON.parse(session.move_vertices_json(JSON.stringify(ops.map((m) => ({ nodeId: m.nodeId, position: vector(m.position) }))))); },
     addPatch(patch) { const result = JSON.parse(session.add_patch_json(JSON.stringify(wirePatch(patch)))); if (result.skippedRegionIds.length) throw new Error(JSON.stringify(result)); return result; },

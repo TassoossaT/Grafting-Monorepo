@@ -63,7 +63,8 @@ export function ConstructionDock(props: ConstructionDockProps) {
   const isWallLineActive = activeTool === "wall-line";
   const isInteriorWallActive = activeTool === "interior-wall";
   const isTowerStampActive = activeTool === "tower-stamp";
-  const isWallChildActive = isWallBrushActive || isWallLineActive || isInteriorWallActive || isTowerStampActive;
+  const isPlatformActive = activeTool === "platform-contour";
+  const isWallChildActive = isWallBrushActive || isWallLineActive || isInteriorWallActive || isTowerStampActive || isPlatformActive;
   const isOpeningActive = activeTool === "opening";
   const isDemolishActive = activeTool === "house-room-delete";
 
@@ -72,13 +73,14 @@ export function ConstructionDock(props: ConstructionDockProps) {
       key: "building",
       label: "Edifícios",
       icon: "🏠",
-      tooltip: "Edifícios (paredes)",
+      tooltip: "Edifícios (paredes e plataformas)",
       shortcut: "P",
       active: isWallBrushActive,
       childActive: isWallChildActive,
       disabled: !ready,
       onClick: () => onToolChange("wall-brush"),
       subItems: [
+        { key: "platform", label: "Plataforma", icon: "▱", tooltip: "Pisos, tetos e bases: criar, ampliar ou recortar", active: isPlatformActive, disabled: !ready, onClick: () => onToolChange("platform-contour") },
         {
           key: "wall-brush",
           label: "Pincel Livre",
@@ -126,15 +128,6 @@ export function ConstructionDock(props: ConstructionDockProps) {
       active: isOpeningActive,
       disabled: !ready,
       onClick: () => onToolChange("opening"),
-    },
-    {
-      key: "platform",
-      label: "Plataforma",
-      icon: "?",
-      tooltip: "Criar, ampliar ou recortar plataformas",
-      active: activeTool === "platform-contour",
-      disabled: !ready,
-      onClick: () => onToolChange("platform-contour"),
     },
     {
       key: "stairs",

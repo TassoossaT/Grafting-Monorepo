@@ -7,28 +7,53 @@ There is no support tree or automatic association based on overlap.
 
 ## Creation and contour editing
 
-The **Plataforma** tool accepts a freehand closed contour or successive corner
-clicks, closed by clicking the first corner. Its elevation is explicit. **Criar**
-creates an independent platform; clicking an existing vertex at the same
-elevation deliberately reuses that identity. Wall creation also welds endpoints
-to platform vertices in XYZ, including the upper endpoint. Wall welding never
-selects a lower storey using XZ alone.
+**Edifícios → Plataforma** shares directed line/arc contours with wall
+construction. The circle preset consumes exactly the Tower contour and radius
+presets; freehand uses the existing wall stroke fitter (with arcs disabled when
+grid snapping is on). Rectangle drag and explicit polygon corners create lines.
+Platforms stay independent structural types; selecting this tool does not create
+walls or compose a house.
 
-**Ampliar / juntar** adds the uncovered part of the drawn contour to platforms
-at the selected elevation. It preserves existing faces as structural seams,
-including support vertices that become interior after enlargement. **Recortar /
-separar** subtracts the contour and retains holes or disconnected remainders.
-Both operations use the existing atomic patch replacement and its history.
-Geometry boolean operations run in graph-core, using the existing workspace
-version of `i_overlay` behind Grafting-owned types. Boolean simplification
-retains original boundary vertices and subdivides seams at intersections.
+- **Retângulo**: drag from one corner to the opposite corner.
+- **Círculo**: select a radius and click the center.
+- **Polígono**: click corners, then the first corner to close.
+- **Livre / curvas**: drag a closed outline; correction controls fitting.
 
-Only platform faces at the chosen elevation are eligible. Other elevations and
-other types are not cut or moved. Surviving shared vertices retain their IDs;
-vertices no longer used by a platform remain alive if another type uses them.
-Joining different elevations requires moving them first; the tool does not
-choose a height for the user. A platform cut does not generate a wall opening
-or invoke the still-unsupported wall framing repair.
+**Criar** uses the chosen elevation. **Ampliar / juntar** and **Recortar /
+separar** use the elevation of the platform where the gesture starts, or the
+chosen elevation when starting elsewhere. To enlarge, draw across the existing
+boundary into the new area. Empty/degenerate gestures and absent target levels
+produce feedback; a fully covered extension is a no-op.
+
+Surviving vertices retain their identities. Explicitly picked vertices at the
+drawing elevation may connect; picking the ground below never welds floors.
+Wall creation welds endpoints to platform vertices in XYZ, including the upper
+endpoint, without selecting another storey by XZ alone.
+
+The analytic boolean query lives in graph-core and uses the existing contour
+intersection primitives for line/line, line/arc and arc/arc crossings. It retains
+arc centers and sweep directions instead of tessellating the graph into chords.
+Outer/hole winding is accepted in either direction; coincident boundaries and
+tangent contacts are handled. Its positional tolerance is 1e-5 world units.
+No new geometry dependency is introduced. The older polygon-only query remains
+available to its existing callers.
+
+Extension retains source faces as structural seams and adds uncovered area.
+Cutting supports holes and disconnected remainders. Splitting includes original
+vertices and analytic crossings, so support vertices remain cloud members after
+enlargement. Candidate faces are restricted to the target elevation; faces whose
+directed boundary spans do not change keep their identities and render items.
+Other types are never cut or moved by contour booleans. Removed platform nodes
+stay alive if another type still uses them.
+
+Each completed gesture applies one atomic replacement with one undo/redo entry.
+The dispatcher consumes the release position, suppresses the native click after
+a drag, and clears unfinished polygon drafts on Escape, cancellation, tool
+switch or unmount while releasing capture.
+
+A platform cut does not create a wall opening or invoke wall framing repair.
+Different elevations must be moved together before joining; the tool never
+flattens several storeys to a height of its choosing.
 
 ## Gesture and structural response are separate contracts
 
@@ -71,9 +96,9 @@ identity. Unknown identities and nonfinite values are errors.
 
 After type validation, `moveVertices` validates the complete position batch
 before writing. Every node changes once, affected contours are collected once
-for the batch, rigidly translated arc centers follow their endpoints, and the
+for the batch, arc centers follow the similarity between the old and new endpoint chords, and the
 session updates its spatial index once per affected region. The runtime folds
-one combined projection/render outcome. The atomic guarantee applies to motion
+one combined projection/render outcome. A single-endpoint shape edit retains a valid circular arc and its sweep; collapsed arc chords reject the batch. The atomic guarantee applies to motion
 batches; unrelated legacy mixed topology-op sequences retain their existing
 ordered execution contract.
 
@@ -93,6 +118,16 @@ the levels 0/3/6 with distinct footprints, base/intermediate/top elevation,
 descending limits, shared-node convergence, disconnected overlap, horizontal
 transport versus local shape edits, atomic failure, drag history, wall creation
 across storeys, bottom edges, apertures, extension, holes and splitting.
+It also covers circular/freehand creation, mixed line/arc cuts, extension from
+a picked elevated floor, endpoint editing, and untouched distant identities.
+
+The pointer lifecycle test runs the actual hook and platform tool against WASM
+with only React scheduling and render/pick adapters substituted. It verifies
+the final release sample, one commit per drag, suppressed trailing clicks,
+Escape, draft reset, unmount and capture release.
+
+Rust curved boolean tests exercise coincident/tangent circles, winding reversal,
+exact intersections, structural seams, holes and a grid of rotated crossings.
 
 `motion_planning.rs` covers axis masks usable by other types, conflicting and
 equal cycles, order independence, nonfinite/unknown-node rejection, atomic
