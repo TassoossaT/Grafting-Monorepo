@@ -81,9 +81,23 @@ export function flagInput(
   argv: string[],
 ): unknown | undefined {
   const route = subcommand === undefined ? group : `${group} ${subcommand}`;
-  const zeroFlagRoutes = new Set(["issue doctor", "issue tree", "issue list", "pr list", "pr checks", "pr diff", "pr view"]);
+  const zeroFlagRoutes = new Set([
+    "doc-check",
+    "task graph",
+    "task sweep",
+    "issue doctor",
+    "issue tree",
+    "issue list",
+    "pr list",
+    "pr checks",
+    "pr diff",
+    "pr view",
+  ]);
   if (!zeroFlagRoutes.has(route ?? "") && !argv.some((arg) => arg.startsWith("--") && arg !== "--force")) return undefined;
   const taskId = readValue(argv, "--id");
+  if (route === "doc-check") return {};
+  if (route === "task graph") return {};
+  if (route === "task sweep") return {};
   if (route === "task new") return { taskId, base: readValue(argv, "--base"), parent: readValue(argv, "--parent") };
   if (route === "task resume") {
     const pr = readValue(argv, "--pr");

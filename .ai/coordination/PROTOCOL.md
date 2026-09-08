@@ -27,6 +27,7 @@ All task execution MUST use `tools/ia-graft`.
 - `delegate research --id <ID> --topic "<t>" --output-file <f.md>` — Researches and writes Markdown docs directly.
 - `doc-check` — Validates instruction file size limits (`AGENTS.md` ≤ 100 lines).
 - `guard-check` — Deterministic tool permission check.
+- `mcp` — JSON-RPC 2.0 stdio MCP server deriving all `graft_*` tools dynamically from the unified command registry.
 
 ## 3. RUNTIME SAFETY GUARDS & HOOKS
 

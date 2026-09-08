@@ -54,7 +54,7 @@ All non-prose changes MUST execute exclusively through the root `ia-graft` launc
 - **Mandatory Sub-Agent Delegation (`ia-graft delegate`):**
   - **Fact Lookup & Research:** MUST offload web searches, broad codebase surveys, or schema extraction via `ia-graft delegate run` or `ia-graft delegate research`.
   - **Sandboxed Code Editing:** MUST delegate repetitive code edits inside a task worktree via `ia-graft delegate edit`.
-  - **Stdio MCP Integration:** Prefer native `graft_context_pack`, `graft_task_resume`, and `graft_task_status` MCP tools.
+  - **Stdio MCP Integration:** Prefer native `graft_*` MCP tools (`graft_context_pack`, `graft_task_resume`, `graft_task_status`, `graft_task_done`, `graft_pr_checks`, etc.) over shell commands.
 
 ## 4. STOP CONDITIONS
 
