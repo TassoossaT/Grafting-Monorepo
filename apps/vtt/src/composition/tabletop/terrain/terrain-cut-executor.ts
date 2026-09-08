@@ -100,6 +100,45 @@ function topologyToPolygon(topology: ConstructionRegionTopology): Polygon {
   return [ring];
 }
 
+/**
+ * A connecting structure's own loops (e.g. a road), as polygons to subtract.
+ *
+ * This is the piece that was missing: {@link buildConstraintRings} can only
+ * reattach a node id to a boundary point that already sits at that node's
+ * exact position. For terrain retained around the cut that is true by
+ * construction -- its perimeter never left the union. A road's perimeter
+ * never entered it at all; it was handed over afterward as a hole appended to
+ * the result, geometrically unrelated to the boundary `targetPolygon` had
+ * just settled on. Two independently-produced boundaries sharing a border
+ * only by convention is exactly the seam the commits on this cut kept
+ * patching one symptom of at a time. Subtracting the road here, before any
+ * ring is built, makes the boundary and the hole one polygon-clipping
+ * operation's output -- so the corner where they meet is the same point
+ * twice, not two points that are merely supposed to agree.
+ */
+function loopsToPolygons(
+  loops: readonly (readonly ConstructionRegionEdge[])[],
+  positionOf: (nodeId: ConstructionNodeId) => { readonly x: number; readonly z: number } | undefined,
+): Polygon[] {
+  const polygons: Polygon[] = [];
+  for (const loop of loops) {
+    const ring: [number, number][] = [];
+    let complete = true;
+    for (const edge of loop) {
+      const position = positionOf(edge.startNodeId);
+      if (position === undefined) {
+        complete = false;
+        break;
+      }
+      ring.push([position.x, position.z]);
+    }
+    if (!complete || ring.length < 3) continue;
+    ring.push([ring[0]![0], ring[0]![1]]);
+    polygons.push([ring]);
+  }
+  return polygons;
+}
+
 export function buildConstraintRings(
   targetPolygon: MultiPolygon,
   faceSize: number,
@@ -339,8 +378,10 @@ export function executeTerrainCut(
 
   let perimeters = perimeterConstraints(retained, 0);
 
-  // If regenerating to connect to another structure (e.g. road)
-  let extraHoleRings: ConstraintRing[] = [];
+  // If regenerating to connect to another structure (e.g. road), its loops are
+  // subtracted from targetPolygon itself -- not appended afterward as an
+  // unrelated hole -- so the boundary polygon-clipping settles on already
+  // excludes the road's footprint. See loopsToPolygons.
   if (request.profile.kind === "regenerate" && request.profile.connectTo) {
     const { paintedNodes, paintedLoops } = paintedNodesOf(
       runtime as unknown as Parameters<typeof paintedNodesOf>[0],
@@ -354,17 +395,26 @@ export function executeTerrainCut(
         (nodeId) => nodePosMap.get(nodeId),
         perimeters.sources.length,
       );
-      extraHoleRings = [...connectHoles.rings];
       perimeters = {
-        rings: perimeters.rings,
+        rings: [...perimeters.rings, ...connectHoles.rings],
         sources: [...perimeters.sources, ...connectHoles.sources],
       };
+
+      const roadPolygons = loopsToPolygons(paintedLoops, (nodeId) => nodePosMap.get(nodeId));
+      if (roadPolygons.length > 0) {
+        try {
+          targetPolygon = polygonClipping.difference(targetPolygon, roadPolygons[0]!, ...roadPolygons.slice(1));
+        } catch {
+          // Malformed road loop (self-touching, degenerate): fall back to the
+          // pre-subtraction boundary rather than losing the fill outright.
+        }
+      }
     }
   }
 
   const targetRings = buildConstraintRings(targetPolygon, effectiveFaceSide, perimeters);
   const boundaryRings = targetRings.filter((r) => !r.isHole && r.points.length >= 3);
-  const holeRings = [...targetRings.filter((r) => r.isHole && r.points.length >= 3), ...extraHoleRings];
+  const holeRings = targetRings.filter((r) => r.isHole && r.points.length >= 3);
 
   if (boundaryRings.length === 0) {
     return { builtFaces: 0, removedFaces: 0, refusedFaces: 0, success: false, message: "Nenhum contorno válido gerado." };
