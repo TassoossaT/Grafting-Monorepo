@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   commitWallContour,
   commitWallStroke,
+  correctedWallCorners,
   findWallSurfaceAt,
   snappedEndpoint,
 } from "../src/composition/tabletop/tools/walls/wall-shared.ts";
@@ -415,5 +416,26 @@ test("snappedEndpoint magnets onto a platform vertex when no wall column is clos
   const { ctx } = contextFor([WALL, platform]);
 
   assert.deepEqual(snappedEndpoint(ctx, { x: 8.05, y: 0, z: 7.95 }), { x: 8, y: 0, z: 8 });
+});
+
+test("correctedWallCorners is the same fit-and-weld skeleton both wall tools preview from", () => {
+  const { ctx } = contextFor([WALL]);
+
+  // A straight two-point run, its start a few centimeters off the existing
+  // wall's own corner -- the same shape wall-line's previewFor now feeds in.
+  assert.deepEqual(
+    correctedWallCorners(ctx, [{ x: 0.05, y: 0, z: -0.05 }, { x: 4, y: 0, z: 5 }]),
+    [{ x: 0, y: 0, z: 0 }, { x: 4, y: 0, z: 5 }],
+  );
+
+  // A multi-sample stroke -- the shape wall-brush's own preview feeds in --
+  // still corrects into straight runs and welds its own first corner.
+  const stroke = correctedWallCorners(
+    ctx,
+    [{ x: 0.02, y: 0, z: -0.01 }, { x: 2, y: 0, z: 0 }, { x: 4, y: 0, z: 4 }],
+    0.3,
+  );
+  assert.deepEqual(stroke[0], { x: 0, y: 0, z: 0 });
+  assert.deepEqual(stroke.at(-1), { x: 4, y: 0, z: 4 });
 });
 

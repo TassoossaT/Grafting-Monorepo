@@ -239,6 +239,29 @@ export function snappedEndpoint(ctx: ToolContext, point: ConstructionPosition, c
 }
 
 /**
+ * The corner-to-corner skeleton a stroke will actually commit as: the same
+ * fit {@link commitWallStroke} runs, each resulting corner echoed through
+ * {@link snappedEndpoint}. This is what a preview is for -- showing the
+ * correction and the weld before release, not a decoration on top of the raw
+ * hand -- so both wall tools draw from this one function rather than each
+ * approximating it their own way. An arc corrects the same as a straight
+ * run; only its two endpoints are shown here, not its curvature, the same
+ * simplification every other preview in this codebase already makes.
+ */
+export function correctedWallCorners(
+  ctx: ToolContext,
+  samples: readonly ConstructionPosition[],
+  tolerance = 0,
+): readonly ConstructionPosition[] {
+  const first = samples[0];
+  if (first === undefined) return [];
+  const pinned = samples.map((sample) => pinnedToBaseline(first, sample));
+  const fitted = fitPath(pinned, tolerance, { arcs: !ctx.snapToGrid });
+  const corners = fitted.length > 0 ? [fitted[0]!.start, ...fitted.map((edge) => edge.end)] : pinned;
+  return corners.map((corner) => snappedEndpoint(ctx, corner, tolerance));
+}
+
+/**
  * The columns a fitted run passes through and the geometry of each step
  * between them, with degenerate steps dropped and closure resolved.
  *

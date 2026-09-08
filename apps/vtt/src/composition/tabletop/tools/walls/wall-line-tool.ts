@@ -2,9 +2,9 @@ import { DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
 import type { WallParams } from "@/features/edit-construction";
 import type { ConstructionPosition } from "@/ports";
 
-import { segmentBetween } from "../shapes/preview-shapes.ts";
+import { polylineSegmentsPreview } from "../shapes/preview-shapes.ts";
 import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "../core/tool-context.ts";
-import { WALL_COLOR, commitWallContour, pinnedToBaseline, snappedEndpoint } from "./wall-shared.ts";
+import { WALL_COLOR, commitWallContour, correctedWallCorners, pinnedToBaseline } from "./wall-shared.ts";
 
 /**
  * The pressed drag's own anchor, or `undefined` before a press. Cleared the
@@ -34,13 +34,10 @@ export const wallLineTool: ConstructionTool<"wall-line"> = {
 
   previewFor(gesture: ToolGesture, params: WallParams, ctx: ToolContext) {
     if (anchor === undefined) return undefined;
-    // The raw press/cursor points never showed where the run will actually
-    // land -- a corner a few centimeters off an existing column or a
-    // platform vertex commits welded onto it, but drew as a floating
-    // endpoint the whole drag, which is what read as "not snapping."
-    const from = snappedEndpoint(ctx, anchor);
-    const to = snappedEndpoint(ctx, pinnedToBaseline(anchor, gesture.current.point));
-    return segmentBetween(from, to, WALL_COLOR[params.wallType]);
+    // Same correction+weld skeleton the brush preview draws from -- the raw
+    // press/cursor points never showed where the run will actually land.
+    const corners = correctedWallCorners(ctx, [anchor, pinnedToBaseline(anchor, gesture.current.point)]);
+    return polylineSegmentsPreview(corners, WALL_COLOR[params.wallType]);
   },
 
   onPointerDown(_ctx: ToolContext, sample: PointerSample): void {
