@@ -238,15 +238,18 @@ function resolveColumn(
   const corner = nearestCornerAt(ctx, point, weldTolerance);
   if (corner !== undefined) {
     const top = { x: point.x, y: point.y + height, z: point.z };
-    // The corner's own paired top (an existing wall column) wins outright;
-    // only a bare platform vertex (no top of its own) falls through to a
-    // second, independent magnet search at the post's actual top elevation.
-    const upperCorner = corner.topNodeId !== undefined ? corner : nearestCornerAt(ctx, top, weldTolerance);
+    // The corner's own paired top (an existing wall column) wins outright.
+    // A bare platform vertex has no top of its own -- what it welds the
+    // post's *top* onto is still only ever another platform vertex, never
+    // another wall's unrelated base that merely happens to sit at the same
+    // height: two walls at different elevations lining up by coincidence is
+    // not the same intention as a post actually landing on a floor.
+    const upper = corner.topNodeId !== undefined ? undefined : nearestPlatformNodeAt(ctx, top, weldTolerance);
     return {
       bottomNodeId: corner.bottomNodeId,
-      topNodeId: (corner.topNodeId ?? upperCorner?.bottomNodeId) ?? mint().topNodeId,
+      topNodeId: corner.topNodeId ?? upper?.node.id ?? mint().topNodeId,
       bottom: corner.bottom,
-      top: (corner.top ?? upperCorner?.bottom) ?? top,
+      top: corner.top ?? upper?.node.position ?? top,
     };
   }
   const inserted = insertedColumnAt(ctx, point, mint, causeId, Math.max(CROSSING_TOLERANCE, correction));
