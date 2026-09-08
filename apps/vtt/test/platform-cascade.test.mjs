@@ -119,6 +119,22 @@ test("wall endpoint drawn a few centimeters off a platform vertex still welds on
     assert.equal(moved.kind,"apply",moved.reason);
   } finally {session.free();}
 });
+test("a second wall-line run started a few centimeters off an existing wall's own corner still welds onto it",()=>{
+  const {ctx,runtime,session,calls} = sessionFixture();
+  try {
+    commitWallContour(ctx,[{start:{x:0,y:0,z:0},end:{x:4,y:0,z:0},geometry:{kind:"line"}}],{height:3,wallType:"wall-white"},"wall-line");
+    const first=runtime.getAllRegionTopologies().find((t)=>t.surfaceType==="wall-white");
+    const corner=first.nodes.find((n)=>n.position.x===4&&n.position.y===0&&n.position.z===0);
+    assert.ok(corner,"first wall's own corner column not found");
+    // 0.05/0.07 off the first wall's own corner -- the exact offsets
+    // wall-line's own onPointerDown/onPointerUp path hands resolveColumn,
+    // no fitting or grid snap involved.
+    commitWallContour(ctx,[{start:{x:4.05,y:0,z:0.05},end:{x:4,y:0,z:4},geometry:{kind:"line"}}],{height:3,wallType:"wall-white"},"wall-line");
+    const walls=runtime.getAllRegionTopologies().filter((t)=>t.surfaceType==="wall-white");
+    assert.equal(walls.length,2,JSON.stringify(calls.feedback));
+    assert.ok(walls[1].nodes.some((n)=>n.id===corner.id),"second run did not weld onto the first wall's own corner column");
+  } finally {session.free();}
+});
 test("platform creation started on a wall's own top vertex inherits its elevation and welds onto it",()=>{
   const {ctx,runtime,session,calls} = sessionFixture();
   try {
