@@ -1999,7 +1999,7 @@ export function flagInput(
   argv: string[],
   ): unknown | undefined {
   const route = subcommand === undefined ? group : `${group} ${subcommand}`;
-  const zeroFlagRoutes = new Set(["issue doctor", "issue tree", "issue list"]);
+  const zeroFlagRoutes = new Set(["issue doctor", "issue tree", "issue list", "pr list", "pr checks", "pr diff", "pr view"]);
 
 // src/git-client.ts
 export function worktreePathForTask(repoPath: string, taskId: string): string {
@@ -2111,7 +2111,8 @@ export interface IssueUpdateInput {
   priority?: string;
   comment?: string;
   body?: string;
-  }
+  state?: "open" | "closed";
+  reason?: "completed" | "not_planned";
 export interface CompactIssue {
   id: number;
   title: string;
@@ -2127,6 +2128,15 @@ export function parseLabels(labels: Array<{ name: string }>): {
   status?: string;
   } {
   const result: { type?: string; area?: string; priority?: string; status?: string } = {};
+export interface IssueCloseInput {
+  id: number | string;
+  reason?: "completed" | "not_planned";
+  comment?: string;
+  }
+export interface IssueReopenInput {
+  id: number | string;
+  comment?: string;
+  }
 export interface IssueTreeInput {
   epic?: number | string;
   limit?: number;
@@ -2150,6 +2160,26 @@ export interface IssueDiagnostic {
   | "ORPHAN_TASK"
   | "MISSING_AREA"
   | "MISSING_PRIORITY"
+
+// src/pr-commands.ts
+export interface PrListInput {
+  limit?: number;
+  state?: "open" | "closed" | "all";
+  }
+export interface PrViewInput {
+  id?: number | string;
+  task?: string;
+  }
+export interface PrChecksInput {
+  id?: number | string;
+  task?: string;
+  failedOnly?: boolean;
+  }
+export interface PrDiffInput {
+  id?: number | string;
+  task?: string;
+  stat?: boolean;
+  }
 
 // src/task-commands.ts
 export interface CliError {
