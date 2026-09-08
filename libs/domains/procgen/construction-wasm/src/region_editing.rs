@@ -822,7 +822,10 @@ mod tests {
             },
         )
         .unwrap();
-        assert!(wrong_cloud.is_empty(), "an unrelated type inside the box is not serialized");
+        assert!(
+            wrong_cloud.is_empty(),
+            "an unrelated type inside the box is not serialized"
+        );
 
         let far = region_topologies_in_bounds(
             &graph,
@@ -843,7 +846,8 @@ mod tests {
 
         let mut index = crate::spatial_index::UniformGridIndex::new(4.0);
         let quad_id = RegionId::new("quad").unwrap();
-        let bounds = crate::spatial_index::RegionBounds::of_region(&graph, &topology, &quad_id).unwrap();
+        let bounds =
+            crate::spatial_index::RegionBounds::of_region(&graph, &topology, &quad_id).unwrap();
         index.insert(quad_id, bounds);
 
         let indexed_near = region_topologies_in_bounds(
@@ -1021,7 +1025,8 @@ mod tests {
     /// treating its failure as a skip -- exactly like "no room" -- is safe:
     /// nothing about this region's own failure touches what came before it.
     #[test]
-    fn a_region_whose_boundary_does_not_close_is_skipped_not_fatal_to_an_earlier_region_in_the_same_batch() {
+    fn a_region_whose_boundary_does_not_close_is_skipped_not_fatal_to_an_earlier_region_in_the_same_batch()
+     {
         let mut graph: SessionGraph = Graph::try_from_parts(Vec::new(), Vec::new()).unwrap();
         let mut topology = ContourTopology::new();
         let mut surfaces = SurfaceRegistry::new();
@@ -1060,10 +1065,22 @@ mod tests {
         // "expected next edge to start at X, found Y" mismatch a wrongly
         // paired real-to-real weld produces.
         let broken_boundary = vec![
-            OrientedEdgeUseDto { edge_id: "bad-0".into(), reversed: false },
-            OrientedEdgeUseDto { edge_id: "bad-2".into(), reversed: false },
-            OrientedEdgeUseDto { edge_id: "bad-1".into(), reversed: false },
-            OrientedEdgeUseDto { edge_id: "bad-3".into(), reversed: false },
+            OrientedEdgeUseDto {
+                edge_id: "bad-0".into(),
+                reversed: false,
+            },
+            OrientedEdgeUseDto {
+                edge_id: "bad-2".into(),
+                reversed: false,
+            },
+            OrientedEdgeUseDto {
+                edge_id: "bad-1".into(),
+                reversed: false,
+            },
+            OrientedEdgeUseDto {
+                edge_id: "bad-3".into(),
+                reversed: false,
+            },
         ];
 
         let response = apply_add_patch(
@@ -1487,8 +1504,11 @@ pub fn apply_add_patch(
         // Every loop the face declares has to fit, inner ones included: an
         // opening consumes a use on its rim exactly the way an outer
         // boundary does.
-        let no_room = boundary_refusal(topology, &boundary)
-            .or_else(|| holes.iter().find_map(|hole| boundary_refusal(topology, hole)));
+        let no_room = boundary_refusal(topology, &boundary).or_else(|| {
+            holes
+                .iter()
+                .find_map(|hole| boundary_refusal(topology, hole))
+        });
         // A malformed loop (`add_region`'s own `validate_loop`, e.g. a caller
         // whose declared boundary does not actually close) is *also* just
         // this one region's problem, never the rest of the batch's --
@@ -1577,9 +1597,98 @@ fn boundary_refusal(topology: &ContourTopology, boundary: &ContourLoop) -> Optio
             _ => {
                 return Some(format!(
                     "no room on edge {edge} -- already used {count} times, so it is interior ground"
-                ))
+                ));
             }
         }
     }
     None
 }
+
+// Consolidated movement: semantic influence links are declared by the caller.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MotionSeedDto {
+    pub node_id: String,
+    pub delta: [f32; 3],
+}
+#[derive(Debug, Deserialize)]
+pub struct MotionInfluenceDto {
+    pub from: String,
+    pub to: String,
+    pub axes: [bool; 3],
+}
+#[derive(Debug, Deserialize)]
+pub struct MotionRequest {
+    pub seeds: Vec<MotionSeedDto>,
+    pub influences: Vec<MotionInfluenceDto>,
+}
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NodeMotionDto {
+    pub node_id: String,
+    pub position: [f32; 3],
+}
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MotionPlanDto {
+    pub moves: Vec<NodeMotionDto>,
+    pub resolved_axes: usize,
+    pub visited_influences: usize,
+}
+
+pub fn plan_motion(graph: &SessionGraph, request: MotionRequest) -> Result<MotionPlanDto, String> {
+    let seeds = request
+        .seeds
+        .into_iter()
+        .map(|s| {
+            Ok(grafting_graph_core::RequestedMotion {
+                node_id: parse_node_id(&s.node_id)?,
+                delta: s.delta,
+            })
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    let influences = request
+        .influences
+        .into_iter()
+        .map(|r| {
+            Ok(grafting_graph_core::MotionInfluence {
+                from: parse_node_id(&r.from)?,
+                to: parse_node_id(&r.to)?,
+                axes: r.axes,
+            })
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    let plan =
+        grafting_graph_core::plan_motion(graph, &seeds, &influences).map_err(|e| e.to_string())?;
+    Ok(MotionPlanDto {
+        moves: plan
+            .moves
+            .into_iter()
+            .map(|m| NodeMotionDto {
+                node_id: m.node_id.to_string(),
+                position: m.position,
+            })
+            .collect(),
+        resolved_axes: plan.resolved_axes,
+        visited_influences: plan.visited_influences,
+    })
+}
+pub fn apply_move_vertices(
+    graph: &mut SessionGraph,
+    topology: &mut ContourTopology,
+    request: Vec<NodeMotionDto>,
+) -> Result<RegionEditOutcomeDto, String> {
+    let moves = request
+        .into_iter()
+        .map(|m| {
+            Ok(grafting_graph_core::NodeMotion {
+                node_id: parse_node_id(&m.node_id)?,
+                position: m.position,
+            })
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    grafting_graph_core::move_vertices(graph, topology, &moves)
+        .map(Into::into)
+        .map_err(|e| e.to_string())
+}
+

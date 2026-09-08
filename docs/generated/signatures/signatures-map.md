@@ -98,6 +98,9 @@ pub fn apply_region_overlay(
 pub struct ConstructionSession
 pub fn new() -> ConstructionSession
 pub fn remove_surface_json(&mut self, request_json: &str) -> Result<String, JsValue>
+pub fn planar_boolean_json(&self, request_json: &str) -> Result<String, JsValue>
+pub fn plan_motion_json(&self, request_json: &str) -> Result<String, JsValue>
+pub fn move_vertices_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn move_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn insert_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn remove_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue>
@@ -107,9 +110,6 @@ pub fn move_region_json(&mut self, request_json: &str) -> Result<String, JsValue
 pub fn add_hole_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn remove_hole_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn delete_region_json(&mut self, request_json: &str) -> Result<String, JsValue>
-pub fn footprint_coverage_json(&self, request_json: &str) -> Result<String, JsValue>
-pub fn add_patch_json(&mut self, request_json: &str) -> Result<String, JsValue>
-pub fn apply_patch_replacement_json(&mut self, request_json: &str) -> Result<String, JsValue>
 
 // src/spatial_index.rs
 pub const DEFAULT_GRID_CELL_SIZE: f32 = 4.0;
@@ -3358,11 +3358,11 @@ export function edgeOverlayDescriptor(group: EdgeOverlayGroup): PreviewDescripto
 // src/composition/tabletop/tools/core/edit-region-tool.ts
 export const editRegionTool: ConstructionTool<"edit-region"> = {
   id: "edit-region",
-  defaultParams: () => ({}),
+  defaultParams: () => ({ mode: "shape" }),
 
-  onPointerDown(ctx: ToolContext, sample: PointerSample): void {
+  onPointerDown(ctx: ToolContext, sample: PointerSample, params): void {
   active = undefined;
-  const grabbed = grabbedTarget(ctx, sample);
+  const grabbed = grabbedTarget(ctx, sample, params?.mode === "elevation");
 
 // src/composition/tabletop/tools/core/navigate-tool.ts
 export const navigateTool: ConstructionTool<"navigate"> = {
@@ -3376,6 +3376,9 @@ export type { FittedEdge, FitOptions } from "../../../../features/edit-construct
 // src/composition/tabletop/tools/core/tool-context.ts
 export interface PointerSample {
   readonly point: ConstructionPosition;
+  /** Screen coordinate used by explicit elevation gestures. */
+  readonly screenY?: number;
+  readonly screenX?: number;
   readonly nodeId?: string;
   readonly surfaceRef?: string;
   }
@@ -3401,11 +3404,11 @@ export interface ToolContext {
 export interface ConstructionTool<Id extends ConstructionToolId> {
   readonly id: Id;
   defaultParams(): ToolParamsFor<Id>;
+  /** Opt in to a stationary drawing preview between gestures. */
+  readonly previewOnHover?: boolean;
   /** The tool's not-yet-committed ghost for the current gesture (or stationary hover, when `gesture.start === gesture.current`). */
   previewFor?(gesture: ToolGesture, params: ToolParamsFor<Id>, ctx: ToolContext): PreviewDescriptor | undefined;
   /** Left-button press. Continuous tools (brushes, move-node) start their gesture here. */
-  onPointerDown?(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void;
-  /** Called while a gesture is active (left button held). Brushes that paint continuously (terrain) commit here, throttled by the dispatcher. */
 export function scopedToolId(ctx: ToolContext | string, domain: string, suffix?: string | number): string {
   const tableId = typeof ctx === "string" ? ctx : ctx.tableId;
   return suffix !== undefined ? `${tableId}:${domain}:${suffix}` : `${tableId}:${domain}`;
@@ -3564,6 +3567,55 @@ export const pathBrushTool = createBrushTool<"path-brush">({
   // what is left over may be spent straightening the stroke.
   halfWidth: pathHalfWidth,
 
+
+// src/composition/tabletop/tools/platform/platform-contour-merge.ts
+export interface DirectedContourEdge {
+  readonly a: string;
+  readonly b: string;
+  readonly geometry: ConstructionEdgeGeometry;
+  }
+export type WeldedMergeResult =
+export function weldedMerge(
+  standing: readonly DirectedContourEdge[],
+  stroke: readonly DirectedContourEdge[],
+  ): WeldedMergeResult {
+  const declared = [...standing, ...stroke];
+  const buckets = new Map<string, { instances: DirectedContourEdge[]; canonical: ConstructionEdgeGeometry }>();
+export function loopSignedArea(loop: readonly DirectedContourEdge[], positionOf: (id: string) => readonly [number, number]): number {
+  let area = 0;
+  for (const edge of loop) {
+  const [ax, az] = positionOf(edge.a);
+export function pointInLoop(
+  loop: readonly DirectedContourEdge[],
+  positionOf: (id: string) => readonly [number, number],
+  point: readonly [number, number],
+  ): boolean {
+  let inside = false;
+  const [px, pz] = point;
+  for (const edge of loop) {
+export interface LoopGroup {
+  readonly boundary: readonly DirectedContourEdge[];
+  readonly holes: readonly (readonly DirectedContourEdge[])[];
+  }
+export function groupLoopsByContainment(
+  loops: readonly (readonly DirectedContourEdge[])[],
+  positionOf: (id: string) => readonly [number, number],
+  ): readonly LoopGroup[] {
+  const areas = loops.map((loop) => Math.abs(loopSignedArea(loop, positionOf)));
+
+// src/composition/tabletop/tools/platform/platform-contour-tool.ts
+export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: Params, pickedSamples: readonly PointerSample[] = []): void {
+  try {
+  if (!Number.isFinite(params.elevation)) throw new Error("A elevação deve ser finita.");
+export function commitPlatformContour(ctx: ToolContext, samples: readonly PointerSample[], params: Params): void {
+  commitPlatformShape(ctx, lines(samples,params.elevation),params,samples);
+export const platformContourTool: ConstructionTool<"platform-contour"> = {
+  id: "platform-contour",
+  previewOnHover: true,
+  defaultParams: () => DEFAULT_TOOL_PARAMS["platform-contour"],
+  onCancel(ctx) { drafts.delete(ctx.runtime); },
+  previewFor(gesture, params, ctx) {
+  const points = draft(ctx,params);
 
 // src/composition/tabletop/tools/shapes/geometry-2d.ts
 export interface PointXZ {
@@ -3791,6 +3843,23 @@ export function adoptContourNodes(
   adoptions: readonly ContourAdoption[],
   nodeIdFor: (vertex: number) => ConstructionNodeId,
   positionOf: (vertex: number) => ConstructionPosition | undefined,
+
+// src/composition/tabletop/tools/terrain/terrain-cut-executor.ts
+export function buildConstraintRings(
+  targetPolygon: MultiPolygon,
+  faceSize: number,
+  perimeters: ConstraintTable,
+  ): readonly (ConstraintRing & { readonly isHole: boolean })[] {
+  const rings: (ConstraintRing & { readonly isHole: boolean })[] = [];
+  const snapDist = Math.max(0.25, faceSize * 0.18);
+export function executeTerrainCut(
+  runtime: TerrainRegenerateRuntime,
+  request: StructuralCutRequest,
+  ): StructuralCutOutcome {
+  const rawOutline = request.area.outline ?? request.area.sweptPolygon?.[0]?.[0] ?? [];
+  const outline = rawOutline.length >= 3 ? rawOutline : [];
+
+  const closedOutlineRing: [number, number][] = outline.map(([x, z]) => [x, z]);
 
 // src/composition/tabletop/tools/terrain/terrain-diagnostics.ts
 export interface TerrainCommitReport {
@@ -4360,16 +4429,17 @@ export function planEdit(
   cloud: CloudTopology,
   gesture: EditGesture,
   graphSnapshot?: ConstructionGraphSnapshot,
+  source?: Pick<ConstructionSessionPort, "planMotion" | "getAllRegionTopologies">,
   ): EditPlan {
   const policy = resolvePolicy(cloud.seed, gesture.target);
 export interface EditOpSink {
+  moveVertices(moves: readonly { readonly nodeId: string; readonly position: ConstructionPosition }[]): RegionEditOutcome;
   moveVertex(nodeId: string, position: { x: number; y: number; z: number }): RegionEditOutcome;
   moveEdge(edgeId: string, delta: { x: number; y: number; z: number }): RegionEditOutcome;
   moveRegion(
   surfaceKey: readonly string[],
   delta: { x: number; y: number; z: number },
   ): RegionEditOutcome;
-  insertVertex(request: {
 export function applyEditOp(sink: EditOpSink, op: AtomicEditOp): RegionEditOutcome {
   switch (op.kind) {
   case "move-vertex":
@@ -4390,11 +4460,8 @@ export function mergeOutcomes(left: RegionEditOutcome, right: RegionEditOutcome)
   removedNodeIds: mergeIds(left.removedNodeIds, right.removedNodeIds),
   };
 export function applyEditPlan(sink: EditOpSink, plan: EditPlan): RegionEditOutcome {
-  if (plan.kind !== "apply") return EMPTY_OUTCOME;
-  return plan.ops.reduce(
-  (outcome, op) => mergeOutcomes(outcome, applyEditOp(sink, op)),
-  EMPTY_OUTCOME,
-  );
+  if (plan.kind !== "apply" || plan.ops.length === 0) return EMPTY_OUTCOME;
+  const movements = plan.ops.filter((op) => op.kind === "move-vertex");
 
 // src/features/edit-construction/orchestration/index.ts
 export type {
@@ -4501,8 +4568,13 @@ export const PANEL_ROLES = {
 export function panelRoleFor(topology: ConstructionRegionTopology, target: EditTarget): EditRole {
   if (target.kind === "region") return PANEL_ROLES.body;
   if (target.kind === "vertex") {
+  if (!topology.nodes.some((node) => node.id === target.nodeId)) return PANEL_ROLES.unknown;
   return isAtBaseline(topology, target.nodeId) ? PANEL_ROLES.bottomCorner : PANEL_ROLES.topCorner;
   }
+export function panelMotionInfluences(topology: ConstructionRegionTopology, transport = false): readonly ConstructionMotionInfluence[] {
+  const nodes = new Map(topology.nodes.map((node) => [node.id, node.position]));
+export function validatePanelMotion(topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>): string | undefined {
+  const original = new Map(topology.nodes.map((node) => [node.id, node.position]));
 export function panelPolicyFor(role: EditRole): RolePolicy {
   switch (role) {
   case PANEL_ROLES.bottomCorner:
@@ -4908,6 +4980,71 @@ export function followsOutward(moved: StationNodeAddress, candidate: StationNode
   return Math.sign(candidate.across) === Math.sign(moved.across)
   && Math.abs(candidate.across) > Math.abs(moved.across);
 
+// src/features/edit-construction/structure-types/platform/platform-structure.ts
+export const platformStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
+  surfaceType: "platform", label: "Plataforma", creation: "a flat closed contour, without thickness",
+  roleFor: (topology, target) => target.kind === "vertex" && !topology.nodes.some((node) => node.id === target.nodeId) ? "platform-unknown" : `platform-${target.kind}`,
+  policyFor: (role) => role === "platform-unknown" ? denied(role, "Vertice fora da plataforma.") : ({ ...allowed(role, ALL_AXES, role === "platform-region" ? "cloud" : "surface"), transport: role === "platform-region" }),
+  interactionOver: () => IGNORE,
+  repairAfterCut: { kind: "preserve", reason: "Structural contour subtraction preserves the remaining planar faces and shared identities." },
+  motionInfluences: (topology, transport): readonly ConstructionMotionInfluence[] => {
+  const anchor = topology.nodes[0];
+
+// src/features/edit-construction/structure-types/structural-cut.ts
+export type CutProfile =
+export interface StructuralCutArea {
+  /** The 2D outline of the cut area on the XZ plane. */
+  readonly outline?: readonly (readonly [number, number])[];
+  /** Optional pre-computed MultiPolygon for the cut or brush area. */
+  readonly sweptPolygon?: MultiPolygon;
+  /** 3D center point of the cut/brush/explosion in world coordinates. */
+  readonly center?: { readonly x: number; readonly y: number; readonly z: number };
+export interface StructuralCutRequest {
+  readonly area: StructuralCutArea;
+  readonly targetSurfaceType: string;
+  readonly profile: CutProfile;
+  readonly causeId: string;
+  readonly tableId: string;
+  readonly faceSide?: number;
+  readonly seed?: number;
+export interface StructuralCutOutcome {
+  readonly builtFaces: number;
+  readonly removedFaces: number;
+  readonly refusedFaces: number;
+  readonly success: boolean;
+  readonly message?: string;
+  }
+export function distanceSqToSegment2D(
+  px: number,
+  pz: number,
+  ax: number,
+  az: number,
+  bx: number,
+  bz: number,
+  ): { readonly distSq: number; readonly t: number } {
+export function distanceAndElevationOnPath(
+  px: number,
+  pz: number,
+  path: readonly { readonly x: number; readonly y?: number; readonly z: number }[],
+  ): { readonly distance: number; readonly pathY?: number } {
+  if (path.length === 0) return { distance: Infinity };
+export function calculateProfileDisplacement(
+  point: { readonly x: number; readonly z: number },
+  profile: CutProfile,
+  centerOrPath:
+  | { readonly x: number; readonly z: number }
+  | readonly { readonly x: number; readonly y?: number; readonly z: number }[],
+  radius: number,
+  normal: { readonly x: number; readonly y: number; readonly z: number } = { x: 0, y: 1, z: 0 },
+export function calculateProfileHeight(
+  point: { readonly x: number; readonly z: number },
+  baseHeight: number,
+  profile: CutProfile,
+  centerOrPath:
+  | { readonly x: number; readonly z: number }
+  | readonly { readonly x: number; readonly y?: number; readonly z: number }[],
+  radius: number,
+
 // src/features/edit-construction/structure-types/structure-type.ts
 export type EditRole = string;
 export type EditResolution =
@@ -4940,10 +5077,10 @@ export interface StructureTypeDefinition {
   /** The `surfaceType` the engine reports for regions of this kind. */
   readonly surfaceType: string;
   readonly label: string;
-  /**
-  * How this type is generated, recorded next to the roles it implies --
-  * the doc's whole point is that these two halves must not drift apart.
-  */
+  /** Responses to received motion, independent of direct gesture constraints. */
+  readonly motionInfluences?: (topology: ConstructionRegionTopology, transport: boolean) => readonly ConstructionMotionInfluence[];
+  /** Returns a reason when a proposed position batch violates this type. */
+  readonly validateMotion?: (topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>) => string | undefined;
 export function denied(role: EditRole, reason: string): RolePolicy {
   return { role, resolve: { kind: "deny", reason }, axes: [], scope: "surface" };
 export function allowed(

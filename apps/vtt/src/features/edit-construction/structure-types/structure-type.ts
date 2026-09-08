@@ -1,3 +1,4 @@
+import type { ConstructionMotionInfluence } from "@/ports";
 import type {
   ConstructionNodeId,
   ConstructionRegionEdge,
@@ -63,6 +64,8 @@ export interface RolePolicy {
    * happened to be cheaper -- the same posture the axes list already takes.
    */
   readonly scope: EditScope;
+  /** Whole-object translation also transports connected support clouds horizontally. */
+  readonly transport?: boolean;
   /**
    * Extra ops fired alongside the primary one, as one transaction -- e.g.
    * moving a wall's bottom corner moves its paired top corner by the *same*
@@ -118,6 +121,7 @@ export interface CascadeContext {
  * valid.
  */
 export type CutRepair =
+  | { readonly kind: "preserve"; readonly reason: string }
   /**
    * Regenerate the region from scratch, pinned to the rim the cut exposed --
    * the same mechanism a structural interactive edit already escalates to
@@ -208,6 +212,10 @@ export interface StructureTypeDefinition {
   /** The `surfaceType` the engine reports for regions of this kind. */
   readonly surfaceType: string;
   readonly label: string;
+  /** Responses to received motion, independent of direct gesture constraints. */
+  readonly motionInfluences?: (topology: ConstructionRegionTopology, transport: boolean) => readonly ConstructionMotionInfluence[];
+  /** Returns a reason when a proposed position batch violates this type. */
+  readonly validateMotion?: (topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>) => string | undefined;
   /**
    * How this type is generated, recorded next to the roles it implies --
    * the doc's whole point is that these two halves must not drift apart.

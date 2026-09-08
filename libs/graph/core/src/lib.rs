@@ -12,6 +12,9 @@ mod construction;
 mod contour;
 mod layout;
 mod model;
+mod motion;
+mod planar;
+pub use planar::{PlanarBoolean, PlanarShape, planar_boolean};
 mod region_edit;
 mod surface;
 
@@ -25,6 +28,10 @@ pub use layout::{GroupedGridOptions, LayoutError, LayoutPosition, LayoutSnapshot
 pub use model::{
     Edge, EdgeId, FormationInputs, Graph, GraphError, GraphOps, GraphPrimitive, GraphSnapshot,
     IdentifierError, Node, NodeId, PrismGridMesh,
+};
+pub use motion::{
+    MotionError, MotionInfluence, MotionPlan, NodeMotion, RequestedMotion, move_vertices,
+    plan_motion,
 };
 pub use region_edit::{
     DuplicateRegionSpec, RegionEditError, RegionEditOutcome, RegionRemoval, add_hole,

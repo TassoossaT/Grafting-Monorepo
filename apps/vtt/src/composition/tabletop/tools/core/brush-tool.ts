@@ -96,6 +96,15 @@ export interface BrushToolSpec<Id extends BrushableToolId> {
    * fine; the brush never tracks what was already applied.
    */
   applyRegion(region: BrushRegion, ctx: ToolContext, params: ToolParamsFor<Id>): void;
+  /**
+   * An honest preview of what `applyRegion` will actually produce -- the
+   * corrected/welded result, not the raw swept envelope. Optional: a brush
+   * whose product has no such correction (nothing to fit, nothing to weld)
+   * is well represented by the default sweep fill and needs no override.
+   * Generic here, not a wall special case, so any brush gets the same real
+   * preview by supplying one.
+   */
+  previewContour?(region: BrushRegion, ctx: ToolContext, params: ToolParamsFor<Id>): PreviewDescriptor | undefined;
 }
 
 /**
@@ -126,9 +135,12 @@ export function createBrushTool<Id extends BrushableToolId>(spec: BrushToolSpec<
     id: spec.id,
     defaultParams: spec.defaultParams,
 
-    previewFor(gesture: ToolGesture, params: ToolParamsFor<Id>): PreviewDescriptor | undefined {
+    previewFor(gesture: ToolGesture, params: ToolParamsFor<Id>, ctx: ToolContext): PreviewDescriptor | undefined {
       const region = regionFor(gesture, params);
-      return brushSweptRegionFill(region.samples, outlineShapeFor(region.shape), spec.previewColor(params));
+      return (
+        spec.previewContour?.(region, ctx, params) ??
+        brushSweptRegionFill(region.samples, outlineShapeFor(region.shape), spec.previewColor(params))
+      );
     },
 
     // Presence of this hook makes the generic dispatcher capture and sample the drag; the region is only ever read on release.

@@ -1,3 +1,4 @@
+import type { ConstructionPlanarRequest, ConstructionPlanarShape, ConstructionMotionRequest, ConstructionMotionPlan, ConstructionNodeMotion } from "../../ports/index.ts";
 import { chunkKeyForSurface, CONSTRUCTION_GRID_EXTENT, mergeChunkBucket, mergeSurfaceMeshes } from "../../adapters/rendering/index.ts";
 import {
   applyTokenProjectionDelta,
@@ -91,6 +92,9 @@ export interface TabletopRuntime {
    * that belongs to `features/edit-construction`, and the tool layer runs it
    * before calling here.
    */
+  planMotion(request: ConstructionMotionRequest): ConstructionMotionPlan;
+  planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[];
+
   applyRegionEdit(
     ops: readonly AtomicEditOp[],
     origin: ChangeOrigin,
@@ -759,6 +763,13 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#notify();
   }
 
+  planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[] { return this.#construction.planarBoolean(request); }
+
+  planMotion(request: ConstructionMotionRequest): ConstructionMotionPlan {
+    this.#requireReady("planning structural movement");
+    return this.#construction.planMotion(request);
+  }
+
   /**
    * Applies a resolved sequence of atomic edit ops as one transaction, then
    * re-derives and re-uploads every chunk and folds the whole merged
@@ -777,10 +788,10 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#requireReady("editing a region");
     if (ops.length === 0) return EMPTY_OUTCOME;
 
-    const outcome = ops.reduce(
-      (merged, op) => mergeOutcomes(merged, applyEditOp(this.#construction, op)),
-      EMPTY_OUTCOME,
-    );
+    const movements = ops.filter((op) => op.kind === "move-vertex");
+    const outcome = movements.length === ops.length
+      ? this.#construction.moveVertices(movements)
+      : ops.reduce((merged, op) => mergeOutcomes(merged, applyEditOp(this.#construction, op)), EMPTY_OUTCOME);
     const positionsAreKnown = ops.every(
       (op) => op.kind !== "move-edge" && op.kind !== "move-region" && op.kind !== "duplicate-region",
     );

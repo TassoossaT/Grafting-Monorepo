@@ -97,22 +97,18 @@ impl ConstructionSession {
         for key in &outcome.created_surface_keys {
             if let Ok(id) = mesh::region_id_from_wire(key) {
                 self.known_regions.insert(id.clone());
-                if let Some(bounds) = crate::spatial_index::RegionBounds::of_region(
-                    &self.graph,
-                    &self.topology,
-                    &id,
-                ) {
+                if let Some(bounds) =
+                    crate::spatial_index::RegionBounds::of_region(&self.graph, &self.topology, &id)
+                {
                     self.spatial_index.insert(id, bounds);
                 }
             }
         }
         for key in &outcome.affected_surface_keys {
             if let Ok(id) = mesh::region_id_from_wire(key) {
-                if let Some(bounds) = crate::spatial_index::RegionBounds::of_region(
-                    &self.graph,
-                    &self.topology,
-                    &id,
-                ) {
+                if let Some(bounds) =
+                    crate::spatial_index::RegionBounds::of_region(&self.graph, &self.topology, &id)
+                {
                     self.spatial_index.insert(id, bounds);
                 }
             }
@@ -143,6 +139,46 @@ impl ConstructionSession {
     }
 
     // ---- Atomic region edits (the analytic edit vocabulary) ----
+
+    /// Generic closed-contour union/subtraction. Product selection stays in the caller.
+    pub fn planar_boolean_json(&self, request_json: &str) -> Result<String, JsValue> {
+        #[derive(serde::Deserialize)]
+        struct Request {
+            subject: Vec<grafting_graph_core::PlanarShape>,
+            clip: Vec<grafting_graph_core::PlanarShape>,
+            operation: String,
+        }
+        let request: Request = parse(request_json)?;
+        let operation = match request.operation.as_str() {
+            "union" => grafting_graph_core::PlanarBoolean::Union,
+            "difference" => grafting_graph_core::PlanarBoolean::Difference,
+            "extend" => grafting_graph_core::PlanarBoolean::Extend,
+            _ => return Err(to_js_error("unknown planar operation".to_string())),
+        };
+        serialize(
+            &grafting_graph_core::planar_boolean(&request.subject, &request.clip, operation)
+                .map_err(to_js_error)?,
+        )
+    }
+
+    /// Resolves a complete directed motion cascade without mutating the session.
+    pub fn plan_motion_json(&self, request_json: &str) -> Result<String, JsValue> {
+        serialize(
+            &region_editing::plan_motion(&self.graph, parse(request_json)?).map_err(to_js_error)?,
+        )
+    }
+
+    /// Validates and applies all vertex positions atomically, tracking regions once.
+    pub fn move_vertices_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let response = region_editing::apply_move_vertices(
+            &mut self.graph,
+            &mut self.topology,
+            parse(request_json)?,
+        )
+        .map_err(to_js_error)?;
+        self.track(&response);
+        serialize(&response)
+    }
 
     /// `MoveVertex`. See `region_editing::apply_move_vertex`.
     pub fn move_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue> {
