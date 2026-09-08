@@ -13,10 +13,11 @@ All task execution MUST use `tools/ia-graft`.
 
 ## 2. IA-GRAFT COMMAND FAMILY SUMMARY
 
+- `issue <list|view|new|update|tree|doctor>` — Manages backlog issues, hierarchy tree, and issue graph health.
 - `task new --id <ID> [--base <branch>]` — Creates or resumes isolated Git worktree (`.worktrees/<ID>`). `--parent` exists but MUST NOT be used; stacked PRs get no CI and conflict once the parent is squash-merged (`AGENTS.md` §2, #202). Continuing work goes on the same branch.
 - `task commit --id <ID> --message "<m>" [--amend] [--dry-run] [--agent <a>]` — Stages and commits inside task worktree with AI co-authorship.
 - `task test --id <ID> --command "<c>"` — Runs verification commands inside worktree with capped summary output.
-- `task done --id <ID> --title "<t>" --body "<b>"` — Pushes task branch and opens/updates the PR via `gh`. Re-run it after further commits to update the same PR.
+- `task done --id <ID> --title "<t>" --body "<b>" [--skip-doc-gen]` — Auto-runs doc-check, mirrors generated artifacts, regenerates docs/signatures, commits derived artifacts, verifies graph manifest, pushes task branch, and opens/updates the PR via `gh`.
 - `task sync --id <ID> [--fetch]` — Integrates forward-only base updates without rebase.
 - `task deps --id <ID> [--install] [--update-lockfile] [--add <pkg>]` — Managed dependency overlay and lockfile updates.
 - `task cleanup --id <ID> [--force]` — Removes merged worktree and deletes task branch after PR merge.
@@ -28,14 +29,13 @@ All task execution MUST use `tools/ia-graft`.
 
 ## 3. RUNTIME SAFETY GUARDS & HOOKS
 
-- `tools/scripts/agent-task-guard.mjs` and `.codex/rules/ia-graft.rules` intercept and block manual mutating Git commands (`git commit/add/checkout/push/reset`).
+- `tools/scripts/agent-task-guard.mjs` and `.codex/rules/ia-graft.rules` intercept and block manual mutating Git commands (`git commit/add/checkout/push/reset`) and direct `gh` CLI commands (`gh issue/pr/repo/api`).
 - **Autonomous Execution:** Agents have global pre-approval to run all `ia-graft` commands through `task done` without asking.
-- **Forbidden Operations:** Direct commits on `master`/`main` (except 100% Markdown prose), manual Git mutations, direct package manager installs, and agent-side PR merges (`gh pr merge` — human merges only).
+- **Forbidden Operations:** Direct commits on `master`/`main` (except 100% Markdown prose), manual Git mutations, direct `gh` CLI invocations, direct package manager installs, and agent-side PR merges (`gh pr merge` — human merges only).
 
 ## 4. PRE-PULL REQUEST CHECKLIST
 
 1. Run formatting, linting, typechecking, and tests via `ia-graft task test`.
-2. If modifying `src/` in TypeScript or Rust packages, regenerate API reference docs:
-   `node tools/scripts/generate-api-docs.mjs <name>` / `node tools/scripts/generate-rust-api-docs.mjs <name>`.
+2. API reference docs and signatures: `ia-graft task done` automatically regenerates `docs:generate` and commits derived artifacts for CI. Manual generation can be pre-verified via `pnpm run docs:generate`.
 3. If adding 3rd party code, add attribution header, update `THIRD_PARTY_NOTICES.md`, and run `check-third-party-notices.mjs`.
 4. Validate instruction file sizes with `ia-graft doc-check`.

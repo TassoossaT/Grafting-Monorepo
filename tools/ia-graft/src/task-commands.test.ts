@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { appendPullRequestSection, deleteRemoteBranchWithLease, GitClient, parseDependencySpec, remoteBranchDeletionPlan } from "./git-client.ts";
+import { appendPullRequestSection, deleteRemoteBranchWithLease, GitClient, mirrorGeneratedArtifacts, parseDependencySpec, remoteBranchDeletionPlan } from "./git-client.ts";
 import { formatCommitMessageWithCoAuthors, isValidTaskId, resolveCoAuthor, taskCheckout, taskCleanup, taskCommit, taskContext, taskDependencies, taskDoctor, taskDone, taskGraph, taskNew, taskResume, taskSweep, taskSync, taskTest } from "./task-commands.ts";
 
 const roots: string[] = [];
@@ -359,6 +359,59 @@ test("taskDone distinguishes unavailable gh from a real PR creation failure", as
   } catch (error) {
     assert.match(String(error), /gh pr create failed for base main/);
   }
+});
+
+test("taskDone rejects when AGENTS.md exceeds line limit", async () => {
+  const root = await makeRepoWithBareRemote();
+  await taskNew(root, { taskId: "LIMIT-TASK", base: "main" });
+  const worktree = join(root, ".worktrees", "LIMIT-TASK");
+  await writeFile(join(worktree, "AGENTS.md"), Array.from({ length: 105 }, (_, i) => `line ${i}`).join("\n"), "utf8");
+
+  const result = await taskDone(root, { taskId: "LIMIT-TASK", title: "t", body: "b", base: "main" });
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.match(result.error, /doc-check failed/);
+  }
+});
+
+test("taskDone auto-regenerates docs and commits generated changes", async () => {
+  const root = await makeRepoWithBareRemote();
+  await taskNew(root, { taskId: "DOCGEN-TASK", base: "main" });
+  const worktree = join(root, ".worktrees", "DOCGEN-TASK");
+  await mkdir(join(worktree, "docs", "generated"), { recursive: true });
+  await writeFile(join(worktree, "docs", "generated", "repo-map.md"), "initial\n", "utf8");
+  await writeFile(join(worktree, "package.json"), JSON.stringify({
+    scripts: {
+      "docs:generate": "node -e \"const fs = require('fs'); fs.writeFileSync('docs/generated/repo-map.md', 'updated\\n');\"",
+    },
+  }), "utf8");
+  await taskCommit(root, { taskId: "DOCGEN-TASK", message: "initial setup" });
+
+  try {
+    const result = await taskDone(root, { taskId: "DOCGEN-TASK", title: "t", body: "b", base: "main" });
+    assert.equal(result.ok, true);
+    if (result.ok) {
+      assert.equal(result.docsRegenerated, true);
+      assert.equal(result.docsCommitted, true);
+    }
+  } catch (error) {
+    assert.match(String(error), /gh pr create failed for base main/);
+  }
+  const content = await readFile(join(worktree, "docs", "generated", "repo-map.md"), "utf8");
+  assert.equal(content, "updated\n");
+});
+
+test("mirrorGeneratedArtifacts mirrors missing artifacts into worktree", async () => {
+  const root = await makeRoot();
+  const worktree = join(root, ".worktrees", "ARTIFACT-TASK");
+  const dummyArtifact = join(root, "libs", "engine", "domain-core", "src", "generated");
+  await mkdir(dummyArtifact, { recursive: true });
+  await writeFile(join(dummyArtifact, "command_generated.rs"), "// generated\n", "utf8");
+
+  await mirrorGeneratedArtifacts(root, worktree);
+  const targetFile = join(worktree, "libs", "engine", "domain-core", "src", "generated", "command_generated.rs");
+  const content = await readFile(targetFile, "utf8");
+  assert.equal(content, "// generated\n");
 });
 
 test("taskNew resumes an existing task and taskStatus derives its state", async () => {
@@ -827,7 +880,7 @@ test("taskContext resolves pack mode using context-resolver", async () => {
   const repoRoot = resolve(fileURLToPath(new URL(".", import.meta.url)), "../../..");
   const pack = await taskContext(repoRoot, { pack: true, paths: ["packages/ui/src/index.ts"] });
   assert.equal(pack.ok, true);
-  assert.match(pack.pack!, /Context resolution/);
+  assert.match(JSON.stringify(pack.pack), /Context resolution/);
 });
 
 test("taskResume resolves state recovery context", async () => {

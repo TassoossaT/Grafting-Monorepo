@@ -122,6 +122,7 @@ export function flagInput(
       title: readTextValue(argv, "--title"),
       body: readTextValue(argv, "--body"),
       base: readValue(argv, "--base"),
+      skipDocGen: argv.includes("--skip-doc-gen") || argv.includes("--skip-docs"),
     };
   }
   if (route === "task cleanup") return { taskId, force: argv.includes("--force") };

@@ -333,6 +333,46 @@ async function prepareDependencyOverlays(
     return { linked: true, mode: 'workspace-aware', overlays: relativeDirs.length, ...counts };
 }
 
+export const GENERATED_WORKSPACE_ARTIFACT_DIRS = [
+    // FlatBuffers generated contracts
+    'libs/engine/domain-core/src/generated',
+    'packages/isekai-web-client/src/generated',
+    'dotnet/Grafting.Isekai.Protocol/Generated',
+    // Wasm packages
+    'libs/domains/procgen/construction-wasm/pkg',
+    'libs/domains/procgen/discretize/pkg',
+    'libs/domains/procgen/generation-wasm/pkg',
+    'libs/domains/procgen/terrain-quantization/pkg',
+    'libs/domains/procgen/tileset-wfc/pkg',
+    'libs/isekai/wasm-bridge/pkg',
+    // Package dist builds needed by sibling workspace packages
+    'packages/render-3d/dist',
+    'packages/ui/dist',
+    'packages/x6-canvas/dist',
+];
+
+/**
+ * Ensures gitignored generated artifacts from the main checkout are mirrored
+ * into the task worktree so build tools and doc generators do not fail on missing
+ * contracts, Wasm packages, or sibling package dist directories.
+ */
+export async function mirrorGeneratedArtifacts(repoPath: string, worktreePath: string): Promise<void> {
+    for (const rel of GENERATED_WORKSPACE_ARTIFACT_DIRS) {
+        const source = path.join(repoPath, rel);
+        const target = path.join(worktreePath, rel);
+        if (!await pathExists(source) || await pathExists(target)) continue;
+        await fs.mkdir(path.dirname(target), { recursive: true });
+        try {
+            const stat = await fs.stat(source);
+            await fs.symlink(source, target, stat.isDirectory() ? 'junction' : 'file');
+        } catch {
+            try {
+                await fs.cp(source, target, { recursive: true });
+            } catch { /* best-effort fallback */ }
+        }
+    }
+}
+
 /**
  * Retries a recursive removal a few times with backoff before giving up.
  * Windows can hold a directory handle open briefly after a process that ran
@@ -845,6 +885,11 @@ export class GitWorktreeSession {
         this.nodeModulesLinked = nodeModulesLinked;
     }
 
+    /** Executes a git command within the task worktree. */
+    async git(args: string[]): Promise<string> {
+        return executeGit(args, this.worktreePath);
+    }
+
     /**
      * Stages a file or files for the next commit.
      * @param filePaths A single file path or an array of file paths.
@@ -1266,6 +1311,7 @@ export class GitClient {
         if (!dependencies.linked && dependencies.reason !== 'main checkout has no node_modules; run pnpm install there first') {
             throw new Error(`worktree created but failed to prepare node_modules: ${dependencies.reason}`);
         }
+        await mirrorGeneratedArtifacts(this.repoPath, worktree);
         return {
             session: GitWorktreeSession.open(this.repoPath, taskId, dependencies.linked),
             resumed: status.branchLocal || status.branchRemote,
@@ -1502,9 +1548,11 @@ export class GitClient {
             throw new Error(`task worktree is not healthy: ${status.issues.join('; ') || status.checkoutMode}`);
         }
         const shouldInstall = options.install || Boolean(options.updateLockfile) || Boolean(options.add);
-        return shouldInstall
-            ? materializeTaskDependencies(this.repoPath, status.worktreePath, taskId, options)
-            : prepareDependencyOverlays(this.repoPath, status.worktreePath, false);
+        const result = shouldInstall
+            ? await materializeTaskDependencies(this.repoPath, status.worktreePath, taskId, options)
+            : await prepareDependencyOverlays(this.repoPath, status.worktreePath, false);
+        await mirrorGeneratedArtifacts(this.repoPath, status.worktreePath);
+        return result;
     }
 
     async syncTask(taskId: string, options: { fetch?: boolean; abort?: boolean } = {}) {
