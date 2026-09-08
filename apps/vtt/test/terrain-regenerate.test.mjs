@@ -203,7 +203,7 @@ test("sitting exactly on an anchor takes its height rather than dividing by zero
   assert.equal(field.at({ x: 3, z: 4 }), 7);
 });
 
-test("dense road loops are welded before being passed as generator hole constraints to prevent face explosion", () => {
+test("road loops preserve all constraint points and boundary edges for seamless cut repair stitching", () => {
   const context = field();
   const denseNodes = [];
   const denseEdges = [];
@@ -233,5 +233,44 @@ test("dense road loops are welded before being passed as generator hole constrai
   const request = context.requests[context.requests.length - 1];
   assert.ok(request, "a request was sent to the generator");
   const hole = request.holes[0];
-  assert.ok(hole.length < 10, `dense hole points (${count}) should be welded, got ${hole.length}`);
+  assert.equal(hole.length, count, `hole points should retain all ${count} road boundary vertices`);
+  assert.ok(hole.every((point) => typeof point.source === "number"), "every hole point must have a valid source index");
+});
+
+test("contour nodes landing on road hole boundary edges are adopted to split the road edge", () => {
+  const context = field();
+  let splitOps = [];
+  const runtime = {
+    ...context.runtime,
+    applyRegionEdit(ops) {
+      context.runtime.applyRegionEdit(ops);
+      for (const op of ops) {
+        if (op.kind === "insert-vertex") splitOps.push(op);
+      }
+      return {};
+    },
+    generateIrregularQuadGrid(request) {
+      context.requests.push(request);
+      return {
+        vertices: [
+          { x: 0, z: 0, source: 0 },
+          { x: 2, z: 0, source: 1 },
+          { x: 1.0, z: 0.5 }, // point on road top edge r0-r1
+          { x: 0, z: 2 },
+        ],
+        quads: [[0, 1, 2, 3]],
+        onContour: [
+          { vertex: 2, ringKind: "hole", ring: 0, segment: 0 },
+        ],
+        refinementComplete: true,
+      };
+    },
+  };
+
+  const built = repairTerrainCut(runtime, context.fallout, "cause-adopt", "t");
+  assert.equal(built, 1);
+  assert.equal(splitOps.length, 1, "road boundary edge should be split by adoption");
+  assert.equal(splitOps[0].edgeId, "e:r0~r1");
+  assert.ok(splitOps[0].nodeId.startsWith("cause-adopt:regen-"));
+  assert.ok(splitOps[0].nodeId.endsWith(":v2"));
 });
