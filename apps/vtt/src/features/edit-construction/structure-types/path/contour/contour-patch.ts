@@ -87,13 +87,9 @@ function distanceToSegmentXZ(
   return { dist: Math.hypot(p.x - projX, p.z - projZ), t };
 }
 
-const MIN_STATION_DISTANCE = 1.0;
-
 /**
  * Re-inserts intermediate ribbon samples along straight 2D edges produced by
  * polygon clipping so elevation stations are not lost before 3D simplification.
- * Enforces a minimum distance between stations so micro-spaced samples do not
- * over-constrain the terrain Delaunay triangulation.
  */
 function restoreHeightVertices(
   ring: Ring,
@@ -106,52 +102,26 @@ function restoreHeightVertices(
     const b = ring[i + 1]!;
     restored.push(a);
 
-    const segDx = b[0] - a[0];
-    const segDz = b[1] - a[1];
-    const segLen = Math.hypot(segDx, segDz);
-    if (segLen >= MIN_STATION_DISTANCE) {
-      const matching: { readonly x: number; readonly z: number; readonly t: number }[] = [];
-      for (const sample of heightSamples) {
-        const { dist, t } = distanceToSegmentXZ(sample, a, b);
-        if (dist < 1e-3) {
-          matching.push({ x: sample.x, z: sample.z, t });
-        }
+    const matching: { readonly x: number; readonly z: number; readonly t: number }[] = [];
+    for (const sample of heightSamples) {
+      const { dist, t } = distanceToSegmentXZ(sample, a, b);
+      if (dist < 1e-3) {
+        matching.push({ x: sample.x, z: sample.z, t });
       }
-      if (matching.length > 0) {
-        matching.sort((l, r) => l.t - r.t);
-        let lastT = 0;
-        for (const pt of matching) {
-          const distFromLast = (pt.t - lastT) * segLen;
-          const distToEnd = (1 - pt.t) * segLen;
-          if (distFromLast >= MIN_STATION_DISTANCE && distToEnd >= MIN_STATION_DISTANCE * 0.5) {
-            restored.push([pt.x, pt.z]);
-            lastT = pt.t;
-          }
+    }
+    if (matching.length > 0) {
+      matching.sort((l, r) => l.t - r.t);
+      let lastT = 0;
+      for (const pt of matching) {
+        if (pt.t - lastT >= 1e-4 && 1 - pt.t >= 1e-4) {
+          restored.push([pt.x, pt.z]);
+          lastT = pt.t;
         }
       }
     }
   }
   restored.push(ring[ring.length - 1]!);
   return restored;
-}
-
-/**
- * Collapses consecutive vertices in a ring that are spaced closer than `minDistance`,
- * avoiding micro-chords that cause Delaunay refinement face explosions.
- */
-function decimateClosedRing(ring: Ring, minDistance: number = 0.4): Ring {
-  if (ring.length <= 4) return ring;
-  const result: [number, number][] = [ring[0]!];
-  for (let i = 1; i < ring.length; i++) {
-    const prev = result[result.length - 1]!;
-    const curr = ring[i]!;
-    const isLast = i === ring.length - 1;
-    const dist = Math.hypot(curr[0] - prev[0], curr[1] - prev[1]);
-    if (dist >= minDistance || isLast) {
-      result.push(curr);
-    }
-  }
-  return result.length >= 4 ? result : ring;
 }
 
 export interface ExistingNode {
@@ -249,11 +219,11 @@ export function buildContourPatch(
         const kept = simplifyClosedRing(positions, () => undefined);
         return kept.map((index) => ids[index]!);
       };
-      const restoredOuter = decimateClosedRing(restoreHeightVertices(outerRing ?? [], heightSamples));
+      const restoredOuter = restoreHeightVertices(outerRing ?? [], heightSamples);
       const outerIds = simplifyRing(idsFor(ensureUpwardWinding(restoredOuter, false), 0));
       const boundary = outerIds.map((id, index) => edges.use(id, outerIds[(index + 1) % outerIds.length]!));
       const holes = holeRings.map((holeRing, holeIndex) => {
-        const restoredHole = decimateClosedRing(restoreHeightVertices(holeRing, heightSamples));
+        const restoredHole = restoreHeightVertices(holeRing, heightSamples);
         const holeIds = simplifyRing(idsFor(ensureUpwardWinding(restoredHole, true), holeIndex + 1));
         return holeIds.map((id, index) => edges.use(id, holeIds[(index + 1) % holeIds.length]!));
       });

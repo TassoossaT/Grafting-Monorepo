@@ -239,22 +239,63 @@ export function regenerateNeighbourhood(
     effectiveFaceSide * 2,
   );
 
-  // One region at a time: a key the engine no longer knows -- a face some
-  // other pass already took -- is that key's own problem, never a reason to
-  // leave the rest standing.
-  let deleted = 0;
-  for (const surfaceKey of request.consumedSurfaceKeys) {
-    try {
-      runtime.applyRegionEdit([{ kind: "delete-region", surfaceKey }], "local", request.causeId);
-      deleted += 1;
-    } catch {
-      // Counted by its absence; the rim prune below sees the consequence.
+  // Identify nodes that belong to surviving ground (surviving topologies or nodes outside consumed)
+  const consumedKeysSet = new Set(request.consumedSurfaceKeys.map((k) => k.join(":")));
+  const allTopologies = typeof runtime.getAllRegionTopologies === "function" ? runtime.getAllRegionTopologies() : [];
+  const survivingNodes = new Set<string>();
+  for (const topology of allTopologies) {
+    if (!consumedKeysSet.has(topology.surfaceKey.join(":"))) {
+      for (const node of topology.nodes) survivingNodes.add(node.id);
     }
   }
-  if (deleted === 0) return 0;
+  if (survivingNodes.size === 0) {
+    for (const [id] of liveMap) {
+      if (!consumedPositions.has(id)) survivingNodes.add(id);
+    }
+  }
+
+  // Filter hole rings so we don't pass far-away road loops into local terrain fill
+  let cMinX = Infinity, cMaxX = -Infinity, cMinZ = Infinity, cMaxZ = -Infinity;
+  for (const pos of consumedPositions.values()) {
+    if (pos.x < cMinX) cMinX = pos.x;
+    if (pos.x > cMaxX) cMaxX = pos.x;
+    if (pos.z < cMinZ) cMinZ = pos.z;
+    if (pos.z > cMaxZ) cMaxZ = pos.z;
+  }
+  const cMargin = Math.max(4.0, effectiveFaceSide * 2.0);
+  const relevantHoleRings = others.rings.filter((ring) =>
+    ring.points.some(
+      (p) => p.x >= cMinX - cMargin && p.x <= cMaxX + cMargin && p.z >= cMinZ - cMargin && p.z <= cMaxZ + cMargin,
+    ),
+  );
+
+  const supportsPatchReplacement = typeof (runtime as unknown as { applyPatchReplacement?: unknown }).applyPatchReplacement === "function";
+
+  if (!supportsPatchReplacement) {
+    let deleted = 0;
+    for (const surfaceKey of request.consumedSurfaceKeys) {
+      try {
+        runtime.applyRegionEdit([{ kind: "delete-region", surfaceKey }], "local", request.causeId);
+        deleted += 1;
+      } catch {}
+    }
+    if (deleted === 0) return 0;
+  }
+
+  const live = runtime.getSnapshot().map.nodePositions;
+  const isLive = (nodeId: ConstructionNodeId): boolean => {
+    if (!live.has(nodeId)) return false;
+    if (supportsPatchReplacement && survivingNodes.size > 0) {
+      return survivingNodes.has(nodeId);
+    }
+    return true;
+  };
 
   const stamp = Math.abs(hashOf(request.consumedSurfaceKeys));
-  const live = runtime.getSnapshot().map.nodePositions;
+  const topologySeeds = allTopologies
+    .filter((t) => !consumedKeysSet.has(t.surfaceKey.join(":")) && t.surfaceType === surfaceType)
+    .slice(0, 8)
+    .map((t) => ({ seed: t.surfaceKey, surfaceType: t.surfaceType }));
 
   return fillTerrain(runtime, {
     // Deterministic in the ground itself rather than in the clock, so the same
@@ -270,9 +311,11 @@ export function regenerateNeighbourhood(
     // The consumed type, so ground made of slate comes back slate without this
     // side having to know that.
     surfaceType,
-    boundary: pruneToLive(rim.rings, sources, (nodeId) => live.has(nodeId)),
-    holes: others.rings,
+    boundary: pruneToLive(rim.rings, sources, isLive),
+    holes: relevantHoleRings.length > 0 ? relevantHoleRings : others.rings,
     sources,
+    replaceSurfaceKeys: supportsPatchReplacement ? request.consumedSurfaceKeys : undefined,
+    topologySeeds,
     heightAt: (point) => heights.at(point) ?? request.heightOfNewGround(point),
   }).built;
 }

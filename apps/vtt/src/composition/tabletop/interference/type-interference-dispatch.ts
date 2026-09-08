@@ -238,14 +238,23 @@ export function dispatchCutRepairs(
   let maxX = -Infinity;
   let minZ = Infinity;
   let maxZ = -Infinity;
-  for (const pos of allRoadPositions) {
-    if (pos.x < minX) minX = pos.x;
-    if (pos.x > maxX) maxX = pos.x;
-    if (pos.z < minZ) minZ = pos.z;
-    if (pos.z > maxZ) maxZ = pos.z;
+  if (request.footprintOutline && request.footprintOutline.length >= 3) {
+    for (const [x, z] of request.footprintOutline) {
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (z < minZ) minZ = z;
+      if (z > maxZ) maxZ = z;
+    }
+  } else {
+    for (const pos of allRoadPositions) {
+      if (pos.x < minX) minX = pos.x;
+      if (pos.x > maxX) maxX = pos.x;
+      if (pos.z < minZ) minZ = pos.z;
+      if (pos.z > maxZ) maxZ = pos.z;
+    }
   }
 
-  const margin = 4.0;
+  const margin = 2.5;
   const bounds: ConstructionTopologyBoundsQuery = {
     minX: minX - margin,
     minZ: minZ - margin,
@@ -257,7 +266,15 @@ export function dispatchCutRepairs(
     ? runtime.getRegionTopologiesInBounds(bounds)
     : runtime.getAllRegionTopologies();
 
-  const candidateTerrain = topologiesInBounds.filter((t) => targetTypes.includes(t.surfaceType));
+  const candidateTerrain = topologiesInBounds.filter((t) => {
+    if (!targetTypes.includes(t.surfaceType)) return false;
+    if (request.footprintOutline && request.footprintOutline.length >= 3) {
+      return t.nodes.some(
+        (n) => n.position.x >= bounds.minX && n.position.x <= bounds.maxX && n.position.z >= bounds.minZ && n.position.z <= bounds.maxZ,
+      );
+    }
+    return true;
+  });
   if (candidateTerrain.length === 0) return;
 
   const outlineCoverageKeys = new Set<string>();
@@ -277,7 +294,9 @@ export function dispatchCutRepairs(
   // Pure domain planning via TerrainCloud:
   const repairPlan = planTerrainCloudCutRepair({
     candidateTerrain,
-    cutterPositions: allRoadPositions,
+    cutterPositions: request.footprintOutline && request.footprintOutline.length >= 3
+      ? request.footprintOutline.map(([x, z]) => ({ x, y: 0, z }))
+      : allRoadPositions,
     cutterNodeIds: replacedNodeIds,
     coverageSurfaceKeys: outlineCoverageKeys,
     footprintOutline: request.footprintOutline,
@@ -289,9 +308,17 @@ export function dispatchCutRepairs(
   let paintedLoops: readonly (readonly ConstructionRegionEdge[])[] = [];
   let paintedNodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[] = [];
 
-  const roadToUse = newRoadTopologies.length > 0
+  const allRoads = newRoadTopologies.length > 0
     ? newRoadTopologies
     : (request.patch.regions.length > 0 ? topologiesFromPatch(request.patch, runtime) : []);
+
+  const roadToUse = request.footprintOutline && request.footprintOutline.length >= 3
+    ? allRoads.filter((r) =>
+        r.nodes.some(
+          (n) => n.position.x >= bounds.minX && n.position.x <= bounds.maxX && n.position.z >= bounds.minZ && n.position.z <= bounds.maxZ,
+        ),
+      )
+    : allRoads;
 
   if (roadToUse.length > 0) {
     let rings = outwardPerimeterRings(roadToUse);
