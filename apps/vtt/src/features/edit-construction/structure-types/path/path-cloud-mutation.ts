@@ -3,6 +3,7 @@ import type {
   ApplyPatchReplacementRequest,
   ConstructionCoveredRegion,
   ConstructionGraphSnapshot,
+  ConstructionPosition,
   ConstructionRegionTopology,
 } from "@/ports";
 
@@ -38,7 +39,7 @@ import {
  * one span is a literal circle; a smooth spline through the right corners
  * already looks right).
  */
-const CURVE_FLATTENING_TOLERANCE = 0.20;
+const CURVE_FLATTENING_TOLERANCE = 0.50;
 
 /** The table facts supplied to the PathCloud before it plans a mutation. */
 export interface PathCloudMutationInput {

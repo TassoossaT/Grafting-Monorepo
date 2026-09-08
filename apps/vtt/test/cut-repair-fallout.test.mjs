@@ -776,6 +776,41 @@ test("adjacent terrain faces bordering the road footprint without centroid insid
   assert.equal(consumedKeys[0]?.[1], "inside", "bordering face outside outline is NOT consumed or fragmented");
 });
 
+test("joining multiple path clouds protects foreign road faces from erasure", () => {
+  // Road 1 (corridor 1)
+  const road1 = {
+    surfaceKey: ["@region", "op-1:band-0:0"],
+    surfaceType: "path",
+    nodes: [
+      { id: "contour:op-1:0", position: { x: 0, y: 0, z: 0 } },
+      { id: "contour:op-1:1", position: { x: 10, y: 0, z: 0 } },
+      { id: "shared-weld", position: { x: 10, y: 0, z: 2 } },
+      { id: "contour:op-1:2", position: { x: 0, y: 0, z: 2 } },
+    ],
+  };
+
+  // Road 2 (corridor 2) which was joined to Road 1 at shared-weld
+  const road2 = {
+    surfaceKey: ["@region", "op-2:band-0:0"],
+    surfaceType: "path",
+    nodes: [
+      { id: "shared-weld", position: { x: 10, y: 0, z: 2 } },
+      { id: "contour:op-2:0", position: { x: 20, y: 0, z: 2 } },
+      { id: "contour:op-2:1", position: { x: 20, y: 0, z: 4 } },
+      { id: "contour:op-2:2", position: { x: 10, y: 0, z: 4 } },
+    ],
+  };
+
+  // When a new stroke edits or continues corridor 2 only:
+  // planTerrainCloudCutRepair only targets terrain, never path faces!
+  const terrainPlan = planTerrainCloudCutRepair({
+    candidateTerrain: [road1, road2],
+    cutterPositions: [{ x: 15, y: 0, z: 3 }],
+    footprintOutline: [[10, 2], [20, 2], [20, 4], [10, 4]],
+  });
+  assert.equal(terrainPlan.affectedTerrainCount, 0, "path surfaces are never consumed by terrain repair");
+});
+
 
 
 

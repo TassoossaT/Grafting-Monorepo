@@ -3,9 +3,9 @@
 // `@/` import is fine -- those are erased.
 import type {
   ApplyPatchReplacementRequest,
-  ConstructionEdge,
   ConstructionNodeId,
   ConstructionPatch,
+  ConstructionPatchEdge,
   ConstructionPatchOutcome,
   ConstructionPosition,
   ConstructionRegionEdge,
@@ -64,7 +64,7 @@ function topologiesFromPatch(
   patch: ConstructionPatch,
   runtime: Pick<TabletopRuntime, "getSnapshot">,
 ): readonly ConstructionRegionTopology[] {
-  const edgeById = new Map<string, ConstructionPatchEdge | ConstructionEdge>();
+  const edgeById = new Map<string, ConstructionPatchEdge>();
   for (const edge of patch.edges) edgeById.set(edge.edgeId ?? (edge as unknown as { id: string }).id, edge);
   const nodeById = new Map<string, ConstructionPosition>();
   for (const node of patch.nodes) nodeById.set(node.id, node.position);
@@ -86,12 +86,13 @@ function topologiesFromPatch(
         reversed: use.reversed,
         startNodeId: startId,
         endNodeId: endId,
-        geometry: edge?.geometry,
+        geometry: edge?.geometry ?? { kind: "line" },
       });
     }
     return {
       surfaceKey: ["@region", region.regionId],
       surfaceType: region.surfaceType,
+      physical: region.physical,
       nodes: [...regionNodes].map(([id, position]) => ({ id, position })),
       outerLoops: [regionEdges],
       holes: [],
@@ -342,7 +343,7 @@ export function dispatchRemovalRepairs(
   maybeExecutors: Readonly<Record<string, CutRepairExecutor>> = CUT_REPAIR_EXECUTORS,
 ): void {
   const removedTopology = (removedTopologyOrExecutors !== undefined && "surfaceKey" in removedTopologyOrExecutors)
-    ? removedTopologyOrExecutors
+    ? (removedTopologyOrExecutors as ConstructionRegionTopology)
     : undefined;
   const executors = (removedTopologyOrExecutors !== undefined && !("surfaceKey" in removedTopologyOrExecutors))
     ? (removedTopologyOrExecutors as Readonly<Record<string, CutRepairExecutor>>)

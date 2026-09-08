@@ -90,21 +90,46 @@ export function standingRegionsForCloud(
     }
   }
 
+  function matchesAnyCorridor(id: string, ids: ReadonlySet<string>): boolean {
+    for (const corridorId of ids) {
+      if (
+        id === corridorId ||
+        id.startsWith(`${corridorId}:`) ||
+        id.startsWith(`${corridorId}#`) ||
+        corridorId.startsWith(`${id}:`) ||
+        corridorId.startsWith(`${id}#`)
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function extractCorridorId(regionId: string): string | undefined {
+    const bandAt = regionId.indexOf(":band-");
+    if (bandAt >= 0) return regionId.slice(0, bandAt);
+    const hashAt = regionId.indexOf("#");
+    if (hashAt >= 0) return regionId.slice(0, hashAt);
+    return regionId.length > 0 ? regionId : undefined;
+  }
+
+  function isForeignTopology(topology: ConstructionRegionTopology): boolean {
+    if (corridorIds.size === 0) return false;
+    const regionId = topology.surfaceKey[1] ?? "";
+    const corridor = extractCorridorId(regionId);
+    if (corridor !== undefined && corridor !== "adjoining-face" && !matchesAnyCorridor(corridor, corridorIds)) {
+      return true;
+    }
+    return false;
+  }
+
   // Identify seed topologies directly touched by the corridorIds
   const seeds = new Set<ConstructionRegionTopology>();
   for (const topology of pathTopologies) {
+    if (isForeignTopology(topology)) continue;
+
     const regionId = topology.surfaceKey[1] ?? "";
-    let matched = false;
-    for (const corridorId of corridorIds) {
-      if (
-        regionId === corridorId ||
-        regionId.startsWith(`${corridorId}:`) ||
-        regionId.startsWith(`${corridorId}#`)
-      ) {
-        matched = true;
-        break;
-      }
-    }
+    let matched = matchesAnyCorridor(regionId, corridorIds);
     if (!matched) {
       for (const node of topology.nodes) {
         for (const corridorId of corridorIds) {
@@ -128,6 +153,7 @@ export function standingRegionsForCloud(
   }
 
   // BFS across shared nodes to find the entire connected component of path faces
+  // belonging to the touched cloud. It MUST NOT cross into foreign path corridors.
   const visited = new Set<ConstructionRegionTopology>(seeds);
   const queue: ConstructionRegionTopology[] = [...seeds];
 
@@ -136,7 +162,7 @@ export function standingRegionsForCloud(
     for (const node of current.nodes) {
       const neighbors = topologiesByNodeId.get(node.id) ?? [];
       for (const neighbor of neighbors) {
-        if (!visited.has(neighbor)) {
+        if (!visited.has(neighbor) && !isForeignTopology(neighbor)) {
           visited.add(neighbor);
           queue.push(neighbor);
         }

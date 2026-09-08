@@ -214,7 +214,7 @@ export function regenerateNeighbourhood(
 
   // Derive faceSide naturally from the consumed terrain topologies to preserve
   // the organic scale of the terrain and prevent micro-face fragmentation.
-  let effectiveFaceSide = request.faceSide;
+  let effectiveFaceSide = Math.max(request.faceSide, DEFAULT_FACE_SIDE);
   if (consumed.length > 0) {
     let totalArea = 0;
     for (const t of consumed) {
@@ -230,7 +230,7 @@ export function regenerateNeighbourhood(
     }
     const avgFaceArea = totalArea / consumed.length;
     if (avgFaceArea > 1.0) {
-      effectiveFaceSide = Math.max(request.faceSide, Math.sqrt(avgFaceArea));
+      effectiveFaceSide = Math.max(effectiveFaceSide, Math.sqrt(avgFaceArea));
     }
   }
 
