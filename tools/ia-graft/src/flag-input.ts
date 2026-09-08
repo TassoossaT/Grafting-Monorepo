@@ -81,7 +81,7 @@ export function flagInput(
   argv: string[],
 ): unknown | undefined {
   const route = subcommand === undefined ? group : `${group} ${subcommand}`;
-  const zeroFlagRoutes = new Set(["issue doctor", "issue tree", "issue list"]);
+  const zeroFlagRoutes = new Set(["issue doctor", "issue tree", "issue list", "pr list", "pr checks", "pr diff", "pr view"]);
   if (!zeroFlagRoutes.has(route ?? "") && !argv.some((arg) => arg.startsWith("--") && arg !== "--force")) return undefined;
   const taskId = readValue(argv, "--id");
   if (route === "task new") return { taskId, base: readValue(argv, "--base"), parent: readValue(argv, "--parent") };
@@ -211,6 +211,48 @@ export function flagInput(
       priority: readValue(argv, "--priority"),
       comment: readTextValue(argv, "--comment"),
       body: readTextValue(argv, "--body"),
+      state: readValue(argv, "--state") as any,
+      reason: readValue(argv, "--reason") as any,
+    };
+  }
+  if (route === "issue close") {
+    return {
+      id: readValue(argv, "--id") ?? argv[2],
+      reason: readValue(argv, "--reason") as any,
+      comment: readTextValue(argv, "--comment"),
+    };
+  }
+  if (route === "issue reopen") {
+    return {
+      id: readValue(argv, "--id") ?? argv[2],
+      comment: readTextValue(argv, "--comment"),
+    };
+  }
+  if (route === "pr list") {
+    const rawLimit = readValue(argv, "--limit");
+    return {
+      limit: rawLimit ? Number(rawLimit) : undefined,
+      state: readValue(argv, "--state") as any,
+    };
+  }
+  if (route === "pr view") {
+    return {
+      id: readValue(argv, "--id") ?? readValue(argv, "--pr") ?? argv[2],
+      task: readValue(argv, "--task"),
+    };
+  }
+  if (route === "pr checks") {
+    return {
+      id: readValue(argv, "--id") ?? readValue(argv, "--pr") ?? argv[2],
+      task: readValue(argv, "--task"),
+      failedOnly: argv.includes("--failed-only"),
+    };
+  }
+  if (route === "pr diff") {
+    return {
+      id: readValue(argv, "--id") ?? readValue(argv, "--pr") ?? argv[2],
+      task: readValue(argv, "--task"),
+      stat: argv.includes("--stat"),
     };
   }
   return undefined;

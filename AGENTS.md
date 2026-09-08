@@ -35,7 +35,7 @@ All non-prose changes MUST execute exclusively through the root `ia-graft` launc
 ## 2. TASK LIFECYCLE & ISSUE GOVERNANCE (`tools/ia-graft`)
 
 - **Autonomous Execution:** User requests pre-authorize all necessary `ia-graft` commands through `task done` without pausing for confirmation; merging PRs remains human-only.
-- **Issue & Backlog Governance:** Manage backlog, refinements, and tasks via `ia-graft issue <list|view|new|update|tree|doctor>`. Do NOT invent unversioned markdown backlogs.
+- **Issue & PR Governance:** Manage backlog, issues, and PRs via `ia-graft issue <list|view|new|update|close|reopen|tree|doctor>` and `ia-graft pr <list|view|checks|diff>`. Do NOT invent unversioned markdown backlogs.
 - On Windows invoke `.\ia-graft.cmd` followed by the command; `.codex/rules/ia-graft.rules` pre-authorizes the launcher.
 - **Documentation-Only Edits (100% Markdown prose):** Commit directly to `master`/`main` (no task branch needed). Protocol/policy changes require owner approval before commit.
 - **Code, Config, Contract & Script Edits:**

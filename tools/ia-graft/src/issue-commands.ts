@@ -77,6 +77,8 @@ export interface IssueUpdateInput {
   priority?: string;
   comment?: string;
   body?: string;
+  state?: "open" | "closed";
+  reason?: "completed" | "not_planned";
 }
 
 export interface CompactIssue {
@@ -339,10 +341,37 @@ export async function issueUpdate(_repoRoot: string, input: IssueUpdateInput) {
       }
     }
 
-    return { ok: true as const, id: Number(id) };
+    if (input.state === "closed") {
+      const closeArgs = ["issue", "close", id];
+      if (input.reason) closeArgs.push("--reason", input.reason);
+      execFileSync("gh", closeArgs, { encoding: "utf8" });
+    } else if (input.state === "open") {
+      execFileSync("gh", ["issue", "reopen", id], { encoding: "utf8" });
+    }
+
+    return { ok: true as const, id: Number(id), state: input.state };
   } catch (error) {
     return { ok: false as const, error: error instanceof Error ? error.message : String(error) };
   }
+}
+
+export interface IssueCloseInput {
+  id: number | string;
+  reason?: "completed" | "not_planned";
+  comment?: string;
+}
+
+export interface IssueReopenInput {
+  id: number | string;
+  comment?: string;
+}
+
+export async function issueClose(repoRoot: string, input: IssueCloseInput) {
+  return issueUpdate(repoRoot, { id: input.id, state: "closed", reason: input.reason, comment: input.comment });
+}
+
+export async function issueReopen(repoRoot: string, input: IssueReopenInput) {
+  return issueUpdate(repoRoot, { id: input.id, state: "open", comment: input.comment });
 }
 
 export interface IssueTreeInput {

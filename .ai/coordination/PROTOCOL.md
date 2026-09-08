@@ -13,7 +13,8 @@ All task execution MUST use `tools/ia-graft`.
 
 ## 2. IA-GRAFT COMMAND FAMILY SUMMARY
 
-- `issue <list|view|new|update|tree|doctor>` — Manages backlog issues, hierarchy tree, and issue graph health.
+- `issue <list|view|new|update|close|reopen|tree|doctor>` — Manages backlog issues, hierarchy tree, issue lifecycle, and health.
+- `pr <list|view|checks|diff>` — Token-compact PR inspections, CI failure diagnosis with log tail filtering, and diff summaries.
 - `task new --id <ID> [--base <branch>]` — Creates or resumes isolated Git worktree (`.worktrees/<ID>`). `--parent` exists but MUST NOT be used; stacked PRs get no CI and conflict once the parent is squash-merged (`AGENTS.md` §2, #202). Continuing work goes on the same branch.
 - `task commit --id <ID> --message "<m>" [--amend] [--dry-run] [--agent <a>]` — Stages and commits inside task worktree with AI co-authorship.
 - `task test --id <ID> --command "<c>"` — Runs verification commands inside worktree with capped summary output.

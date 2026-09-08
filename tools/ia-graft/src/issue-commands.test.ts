@@ -44,3 +44,12 @@ test("issue doctor audits open issues without throwing", async () => {
   }
 });
 
+test("issue close validates required id", async () => {
+  const result = await (await import("./issue-commands.ts")).issueClose(process.cwd(), { id: "" });
+  assert.equal(result.ok, false);
+});
+
+test("issue reopen validates required id", async () => {
+  const result = await (await import("./issue-commands.ts")).issueReopen(process.cwd(), { id: "" });
+  assert.equal(result.ok, false);
+});
