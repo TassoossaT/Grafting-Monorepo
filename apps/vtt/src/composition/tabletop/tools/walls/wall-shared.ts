@@ -37,6 +37,18 @@ const CROSSING_TOLERANCE = 0.15;
 const CROSSING_END_MARGIN = 0.3;
 /** How close (world units, XZ) a new corner may sit to an existing wall's own corner and still be treated as that same corner -- the point at which the run being drawn stops minting nodes and references the existing ones instead. */
 export const CORNER_WELD_TOLERANCE = 0.25;
+/**
+ * How close (world units, Y) two elevations count as "the same floor" for
+ * corner welding. A press/click's own Y comes from a real pointer pick, not
+ * a typed number -- sub-millimeter camera/projection noise is routine, and
+ * the old `1e-3` floor rejected exactly that noise, silently minting a
+ * coincident-but-unwelded node a hair off the real surface instead of
+ * welding onto it (reported as a wall landing "higher, lower, or
+ * displaced"). `0.01` still stays two full orders of magnitude under any
+ * real storey spacing (`vtt-platform-motion.md`'s own examples are metres
+ * apart), so it cannot confuse two distinct floors.
+ */
+const ELEVATION_WELD_TOLERANCE = 0.01;
 /** Perpendicular distance (world units) within which a click counts as picking a wall panel directly, for `findWallSurfaceAt` -- a bit more forgiving than {@link CROSSING_TOLERANCE} since this is a deliberate click on the panel itself, not a drawing snap, and (unlike crossing detection) there is no exclusion near a panel's own corners: picking right at a corner should still delete whichever panel is closest. */
 const WALL_PICK_TOLERANCE = 0.2;
 /** How close (world units, XZ) two consecutive corners may be before the step between them is no wall at all -- a stroke held still, or a grid snap folding several samples onto one intersection. */
@@ -86,7 +98,7 @@ function existingColumnAt(
   let best: { readonly column: WallColumn; readonly distance: number } | undefined;
   for (const span of wallSpans(ctx)) {
     for (const column of columnsOf(span)) {
-      if (Math.abs(point.y - column.bottom.y) > 1e-3) continue;
+      if (Math.abs(point.y - column.bottom.y) > ELEVATION_WELD_TOLERANCE) continue;
       const distance = xzDistance(point, column.bottom);
       if (distance > weldTolerance) continue;
       if (best === undefined || distance < best.distance) best = { column, distance };
@@ -113,7 +125,7 @@ function insertedColumnAt(
   crossingTolerance: number,
 ): WallColumn | undefined {
   for (const span of wallSpans(ctx)) {
-    if (Math.abs(point.y - span.a.y) > 1e-3) continue;
+    if (Math.abs(point.y - span.a.y) > ELEVATION_WELD_TOLERANCE) continue;
     const spanLength = xzDistance(span.a, span.b);
     if (spanLength < 1e-6) continue;
 
@@ -174,9 +186,10 @@ export function findWallSurfaceAt(ctx: ToolContext, point: ConstructionPosition)
  */
 /**
  * The closest platform vertex within `weldTolerance` (XZ) at the same
- * elevation (Y, `1e-3`) as `position`, or `undefined` -- the XZ half of
- * endpoint welding is a magnet, same tolerance a wall corner snaps onto
- * another wall's column with, never a reuse of a lower storey merely by XZ.
+ * elevation ({@link ELEVATION_WELD_TOLERANCE}) as `position`, or `undefined`
+ * -- the XZ half of endpoint welding is a magnet, same tolerance a wall
+ * corner snaps onto another wall's column with, never a reuse of a lower
+ * storey merely by XZ.
  */
 function nearestPlatformNodeAt(
   ctx: ToolContext,
@@ -187,7 +200,7 @@ function nearestPlatformNodeAt(
   for (const region of ctx.runtime.getAllRegionTopologies()) {
     if (region.surfaceType !== "platform") continue;
     for (const node of region.nodes) {
-      if (Math.abs(node.position.y - position.y) > 1e-3) continue;
+      if (Math.abs(node.position.y - position.y) > ELEVATION_WELD_TOLERANCE) continue;
       const distance = xzDistance(node.position, position);
       if (distance > weldTolerance) continue;
       if (best === undefined || distance < best.distance) best = { node, distance };

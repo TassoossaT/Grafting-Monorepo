@@ -412,6 +412,26 @@ test("snappedEndpoint magnets a nearby point onto an existing column, and falls 
   assert.deepEqual(snappedEndpoint(ctx, { x: 2, y: 0, z: 5 }), { x: 2, y: 0, z: 5 });
 });
 
+test("a corner still welds through a few millimeters of Y noise -- a real pointer pick, not a typed number, is never bit-exact", () => {
+  const platform = panelTopology("platform-0", { from: { x: 0, z: 0 }, to: { x: 4, z: 0 } }, undefined, "platform");
+  const { ctx } = contextFor([WALL, platform]);
+
+  // 2mm off the wall's own corner (y=0) and off the platform's own corner
+  // (y=3, the fixture's forced "top") -- past the old 1e-3 gate that used to
+  // silently mint a coincident-but-unwelded node here instead.
+  assert.deepEqual(snappedEndpoint(ctx, { x: 0.05, y: 0.002, z: -0.05 }), { x: 0, y: 0, z: 0 });
+  assert.deepEqual(snappedEndpoint(ctx, { x: 0.05, y: 2.998, z: 0.05 }), { x: 0, y: 3, z: 0 });
+});
+
+test("Y noise still cannot confuse two genuinely distinct floors", () => {
+  const lower = panelTopology("platform-lo", { from: { x: 0, z: 0 }, to: { x: 4, z: 0 } }, undefined, "platform");
+  const { ctx } = contextFor([lower]);
+
+  // 3cm off -- past ELEVATION_WELD_TOLERANCE, so this still falls through
+  // rather than welding onto a floor it was never actually drawn on.
+  assert.deepEqual(snappedEndpoint(ctx, { x: 0.02, y: 0.03, z: -0.01 }), { x: 0.02, y: 0.03, z: -0.01 });
+});
+
 test("snappedEndpoint magnets onto a platform vertex when no wall column is closer", () => {
   const platform = panelTopology("platform-0", { from: { x: 8, z: 8 }, to: { x: 12, z: 8 } }, undefined, "platform");
   const { ctx } = contextFor([WALL, platform]);
