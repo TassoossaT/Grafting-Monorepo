@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { GitClient } from "./git-client.ts";
+import { issueView } from "./issue-commands.ts";
 
 export interface CliError {
   ok: false;
@@ -400,16 +401,47 @@ export interface TaskContextInput {
 
 export async function taskContext(repoRoot: string, input: TaskContextInput = {}) {
   if (input.pack || input.taskId || (input.paths && input.paths.length > 0)) {
-    // @ts-ignore - dynamic import of context-resolver.mjs script
-    const { resolveContext } = await import("../../scripts/context-resolver.mjs");
-    const packSummary = resolveContext({
-      root: repoRoot,
-      taskId: input.taskId ?? null,
-      paths: input.paths ?? null,
-    });
+    let packSummary: unknown = null;
+    try {
+      // @ts-ignore - dynamic import of context-resolver.mjs script
+      const { resolveContext } = await import("../../scripts/context-resolver.mjs");
+      packSummary = resolveContext({
+        root: repoRoot,
+        taskId: input.taskId ?? null,
+        paths: input.paths ?? null,
+      });
+    } catch {
+      packSummary = null;
+    }
+
+    let issueContext:
+      | {
+          id: number;
+          title: string;
+          type?: string;
+          milestone?: string;
+          parent?: { number: number; title: string };
+        }
+      | undefined;
+
+    const issueMatch = input.taskId?.match(/^TASK-(\d+)/i);
+    if (issueMatch) {
+      const issueRes = await issueView(repoRoot, { id: issueMatch[1] }).catch(() => undefined);
+      if (issueRes && issueRes.ok) {
+        issueContext = {
+          id: issueRes.id,
+          title: issueRes.title,
+          type: issueRes.type,
+          milestone: issueRes.milestone,
+          parent: issueRes.parent ? { number: issueRes.parent.number, title: issueRes.parent.title } : undefined,
+        };
+      }
+    }
+
     return {
       ok: true as const,
       pack: packSummary,
+      issueContext,
     };
   }
 

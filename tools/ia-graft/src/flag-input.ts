@@ -80,8 +80,9 @@ export function flagInput(
   subcommand: string | undefined,
   argv: string[],
 ): unknown | undefined {
-  if (!argv.some((arg) => arg.startsWith("--") && arg !== "--force")) return undefined;
   const route = subcommand === undefined ? group : `${group} ${subcommand}`;
+  const zeroFlagRoutes = new Set(["issue doctor", "issue tree", "issue list"]);
+  if (!zeroFlagRoutes.has(route ?? "") && !argv.some((arg) => arg.startsWith("--") && arg !== "--force")) return undefined;
   const taskId = readValue(argv, "--id");
   if (route === "task new") return { taskId, base: readValue(argv, "--base"), parent: readValue(argv, "--parent") };
   if (route === "task resume") {
@@ -170,10 +171,25 @@ export function flagInput(
       status: readValue(argv, "--status"),
       priority: readValue(argv, "--priority"),
       limit: rawLimit ? Number(rawLimit) : undefined,
+      parent: readValue(argv, "--parent"),
+      orphan: argv.includes("--orphan"),
     };
   }
   if (route === "issue view") {
     return { id: readValue(argv, "--id") ?? argv[2] };
+  }
+  if (route === "issue tree") {
+    const rawLimit = readValue(argv, "--limit");
+    return {
+      epic: readValue(argv, "--epic") ?? readValue(argv, "--id") ?? argv[2],
+      limit: rawLimit ? Number(rawLimit) : undefined,
+    };
+  }
+  if (route === "issue doctor") {
+    const rawLimit = readValue(argv, "--limit");
+    return {
+      limit: rawLimit ? Number(rawLimit) : undefined,
+    };
   }
   if (route === "issue new") {
     return {

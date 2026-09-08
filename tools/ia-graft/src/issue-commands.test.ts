@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { issueList, issueNew, issueUpdate, issueView } from "./issue-commands.ts";
+import { issueDoctor, issueList, issueNew, issueTree, issueUpdate, issueView } from "./issue-commands.ts";
 
 test("issue list runs cleanly without throwing", async () => {
   const result = await issueList(process.cwd(), { limit: 5 });
@@ -25,3 +25,22 @@ test("issue update validates required id", async () => {
   const result = await issueUpdate(process.cwd(), { id: "" });
   assert.equal(result.ok, false);
 });
+
+test("issue tree runs cleanly and returns tree array", async () => {
+  const result = await issueTree(process.cwd(), { limit: 10 });
+  assert.equal(typeof result.ok, "boolean");
+  if (result.ok) {
+    assert(Array.isArray(result.tree));
+    assert(Array.isArray(result.orphans));
+  }
+});
+
+test("issue doctor audits open issues without throwing", async () => {
+  const result = await issueDoctor(process.cwd(), { limit: 10 });
+  assert.equal(typeof result.ok, "boolean");
+  if (result.ok) {
+    assert(typeof result.passed === "boolean");
+    assert(Array.isArray(result.diagnostics));
+  }
+});
+
