@@ -119,6 +119,41 @@ test("wall endpoint drawn a few centimeters off a platform vertex still welds on
     assert.equal(moved.kind,"apply",moved.reason);
   } finally {session.free();}
 });
+test("platform creation started on a wall's own top vertex inherits its elevation and welds onto it",()=>{
+  const {ctx,runtime,session,calls} = sessionFixture();
+  try {
+    commitWallContour(ctx,[{start:{x:0,y:0,z:0},end:{x:4,y:0,z:0},geometry:{kind:"line"}}],{height:3,wallType:"wall-white"},"wall-line");
+    const wall=runtime.getAllRegionTopologies().find((t)=>t.surfaceType==="wall-white");
+    const top=wall.nodes.find((n)=>Math.abs(n.position.y-3)<1e-6&&n.position.x===0&&n.position.z===0);
+    assert.ok(top,"wall top vertex not found");
+    // `elevation:0` in params is deliberately wrong -- the pointer landing on
+    // the wall's own top node has to win, the way it already does for a pick
+    // on an existing platform.
+    const from={point:{x:0,y:3,z:0},nodeId:top.id};
+    const to={point:{x:4,y:3,z:4}};
+    platformContourTool.onPointerUp(ctx,{start:from,current:to,samples:[from,to]},{mode:"create",elevation:0,shape:"rectangle"});
+    const created=runtime.getAllRegionTopologies().find((t)=>t.surfaceType==="platform");
+    assert.ok(created,JSON.stringify(calls.feedback));
+    assert.ok(created.nodes.every((n)=>n.position.y===3));
+    assert.ok(created.nodes.some((n)=>n.id===top.id),"platform corner did not weld onto the wall's own vertex");
+  } finally {session.free();}
+});
+test("platform corner drawn a few centimeters off a wall's top vertex still magnets onto it",()=>{
+  const {ctx,runtime,session,calls} = sessionFixture();
+  try {
+    commitWallContour(ctx,[{start:{x:0,y:0,z:0},end:{x:4,y:0,z:0},geometry:{kind:"line"}}],{height:3,wallType:"wall-white"},"wall-line");
+    const wall=runtime.getAllRegionTopologies().find((t)=>t.surfaceType==="wall-white");
+    const top=wall.nodes.find((n)=>Math.abs(n.position.y-3)<1e-6&&n.position.x===0&&n.position.z===0);
+    assert.ok(top,"wall top vertex not found");
+    // 0.05 world units off the wall's own vertex -- no nodeId on the pick,
+    // inside the weld tolerance, so only distance-based magnetism (not an
+    // exact pick match) can resolve this onto the wall's node.
+    commitPlatformContour(ctx,[{point:{x:0.05,y:3,z:-0.05}},{point:{x:4,y:3,z:-0.05}},{point:{x:4,y:3,z:4}},{point:{x:0.05,y:3,z:4}}],{mode:"create",elevation:3});
+    const created=runtime.getAllRegionTopologies().find((t)=>t.surfaceType==="platform");
+    assert.ok(created,JSON.stringify(calls.feedback));
+    assert.ok(created.nodes.some((n)=>n.id===top.id),"platform corner did not magnet onto the wall's own vertex");
+  } finally {session.free();}
+});
 test("bottom wall edge moves both paired posts and propagates through actual incident types", () => {
   const {runtime,session}=building();
   try {

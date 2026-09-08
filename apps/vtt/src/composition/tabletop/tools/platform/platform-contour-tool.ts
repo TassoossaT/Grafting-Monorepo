@@ -19,11 +19,21 @@ function draft(ctx: ToolContext, params: Params): PointerSample[] {
   if (!current || current.key !== key) { current = { key, points: [] }; drafts.set(ctx.runtime, current); }
   return current.points;
 }
+/**
+ * A platform floor for a new storey usually starts by pointing at the top of
+ * whatever is already there -- a wall, not necessarily another platform. Any
+ * structural node the pointer actually touched is a valid elevation source,
+ * not only an existing platform's; `create` used to skip this lookup
+ * entirely, which is why starting a new floor on a wall silently kept
+ * whatever elevation the field happened to hold instead of the wall's own.
+ */
 function parametersAt(ctx: ToolContext, first: PointerSample | undefined, params: Params): Params {
-  if (params.mode === "create" || !first) return params;
-  const target = ctx.runtime.getAllRegionTopologies().find((t) => t.surfaceType === "platform" &&
+  if (!first) return params;
+  const target = params.mode === "create" ? undefined : ctx.runtime.getAllRegionTopologies().find((t) => t.surfaceType === "platform" &&
     (first.surfaceRef ? surfaceRefFromNodeSet(t.surfaceKey) === first.surfaceRef : first.nodeId && t.nodes.some((n) => n.id === first.nodeId)));
-  return target?.nodes[0] ? { ...params, elevation: target.nodes[0].position.y } : params;
+  if (target?.nodes[0]) return { ...params, elevation: target.nodes[0].position.y };
+  const node = first.nodeId ? ctx.runtime.getGraphSnapshot().nodes.find((n) => n.id === first.nodeId) : undefined;
+  return node ? { ...params, elevation: node.position.y } : params;
 }
 /** A source region's own boundary/hole edges, by node id -- the identities a stroke has to weld onto, not the position it happens to occupy. */
 function sourceEdges(topology: ConstructionRegionTopology): readonly (readonly DirectedContourEdge[])[] {
@@ -75,7 +85,19 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
     const nodes = new Map<string, { id: string; position: ConstructionPosition }>();
     function nodeAt(p: readonly [number,number]): string {
       const existing = [...retained.values(),...nodes.values()].find((n) => Math.abs(n.position.x-p[0]) < WELD_TOLERANCE && Math.abs(n.position.z-p[1]) < WELD_TOLERANCE);
-      const node = existing ?? { id: `${operationId}:node:${nodes.size}`, position: { x: p[0], y: params.elevation, z: p[1] } };
+      // A corner landing near any node at the same elevation -- a wall's own
+      // vertex included, not only this operation's own platform sources --
+      // is a magnet by distance, the same tolerance a wall run already snaps
+      // onto a column with. Nearest wins so two nearby candidates never
+      // resolve arbitrarily.
+      let nearest: { readonly node: (typeof graph.nodes)[number]; readonly distance: number } | undefined;
+      if (!existing) for (const n of graph.nodes) {
+        if (Math.abs(n.position.y-params.elevation) > 1e-3) continue;
+        const distance = Math.hypot(n.position.x-p[0],n.position.z-p[1]);
+        if (distance > WELD_TOLERANCE) continue;
+        if (nearest === undefined || distance < nearest.distance) nearest = { node:n, distance };
+      }
+      const node = existing ?? nearest?.node ?? { id: `${operationId}:node:${nodes.size}`, position: { x: p[0], y: params.elevation, z: p[1] } };
       nodes.set(node.id,node); return node.id;
     }
     const positionOf = (id: string): readonly [number, number] => {
