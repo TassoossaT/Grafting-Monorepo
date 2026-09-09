@@ -97,21 +97,91 @@ function faceIntersectsArea(
 }
 
 /**
- * A constraint ring as `polygon-clipping` wants it: closed, and nothing else.
+ * How many rings of neighbouring faces a regenerate may take in before it
+ * gives up trying to find room, and the ceiling on what it may hold at once.
  *
- * The ring itself carries node ids per corner; the polygon deliberately does
- * not. It exists only to be subtracted, and what comes back out of the
- * subtraction gets its identity again from {@link buildConstraintRings}, which
- * matches it against the same rings this was built from.
+ * Both are here to bound the cost, not to express a rule: the loop stops as
+ * soon as the ground it is about to lay is wide enough to lay in, which on
+ * ordinary ground is after one ring or none at all.
  */
-function ringToPolygon(ring: ConstraintRing): Polygon {
-  if (ring.points.length < 3) return [];
-  const closed: [number, number][] = ring.points.map((point) => [point.x, point.z]);
-  closed.push([ring.points[0]!.x, ring.points[0]!.z]);
-  return [closed];
+const MOST_RINGS_WORTH_ABSORBING = 3;
+const MOST_FACES_WORTH_ABSORBING = 512;
+
+/**
+ * How much of a face has to fit across the ground being laid before it counts
+ * as layable, as a fraction of the face size.
+ *
+ * Calibrated against what {@link widthOf} actually reports rather than against
+ * intuition: it answers the strip's true width but only half the side of a
+ * square, so asking for a whole face here would demand a region two faces
+ * across and grow into ground nothing was wrong with. Three quarters is the
+ * point where the corridor a road leaves behind -- about half a face wide --
+ * asks for one ring of neighbours and, having got it, stops.
+ */
+const NARROW_ENOUGH_TO_GROW = 0.75;
+
+/**
+ * One face's boundary as `polygon-clipping` wants it: closed, in walk order.
+ *
+ * Walk order, not node order. A topology's `nodes` array is a set with an
+ * order, not a ring; reading a polygon out of it produces a bowtie for any
+ * face whose nodes were not stored in the order its boundary happens to visit
+ * them. The oriented edges *are* the walk.
+ */
+function loopToPolygon(
+  loop: readonly ConstructionRegionEdge[],
+  positionOf: ReadonlyMap<ConstructionNodeId, { readonly x: number; readonly z: number }>,
+): Polygon {
+  const ring: [number, number][] = [];
+  for (const edge of loop) {
+    const position = positionOf.get(edge.startNodeId);
+    if (position === undefined) return [];
+    ring.push([position.x, position.z]);
+  }
+  if (ring.length < 3) return [];
+  ring.push([ring[0]![0], ring[0]![1]]);
+  return [ring];
+}
+
+/**
+ * Roughly how wide a shape is, in the only sense that matters here: whether a
+ * face of a given size fits inside it.
+ *
+ * `2 * area / perimeter` is the width of a long strip and half the side of a
+ * square, so it under-reports a chunky shape and reports a seam honestly --
+ * which is the direction to be wrong in when the question is "is this too
+ * narrow to lay ground in".
+ */
+function widthOf(polygon: MultiPolygon): number {
+  let area = 0;
+  let perimeter = 0;
+  for (const piece of polygon) {
+    for (const ring of piece) {
+      for (let index = 0; index < ring.length - 1; index += 1) {
+        const [ax, az] = ring[index]!;
+        const [bx, bz] = ring[index + 1]!;
+        area += ax * bz - bx * az;
+        perimeter += Math.hypot(bx - ax, bz - az);
+      }
+    }
+  }
+  if (perimeter <= 1e-9) return 0;
+  return (2 * Math.abs(area / 2)) / perimeter;
 }
 
 function topologyToPolygon(topology: ConstructionRegionTopology): Polygon {
+  const positions = new Map<ConstructionNodeId, { x: number; z: number }>();
+  for (const node of topology.nodes) positions.set(node.id, { x: node.position.x, z: node.position.z });
+
+  // The face's own walk, when it has one. Falling back to node order is only
+  // right for a face whose nodes happen to be stored in ring order, which a
+  // quad from the generator is and a face the graph rebuilt need not be.
+  const loop = topology.outerLoops[0];
+  if (loop !== undefined && loop.length >= 3) {
+    const walked = loopToPolygon(loop, positions);
+    if (walked.length > 0) return walked;
+  }
+
   const nodes = topology.nodes;
   if (nodes.length < 3) return [];
   const ring: [number, number][] = nodes.map((n) => [n.position.x, n.position.z]);
@@ -289,7 +359,11 @@ export function executeTerrainCut(
       ? (runtime as unknown as { getFootprintCoverage: (outline: readonly (readonly [number, number])[]) => readonly ConstructionCoveredRegion[] }).getFootprintCoverage(coveredOutline)
       : []);
 
-  const standing = terrainStandingAround(runtime, covered, extent, effectiveFaceSide * 2);
+  // A regenerate has to be able to absorb a ring or two of neighbours (see the
+  // growth loop below), so it reaches further out than a stroke needs to.
+  const standingReach =
+    request.profile.kind === "regenerate" ? effectiveFaceSide * 5 : effectiveFaceSide * 2;
+  const standing = terrainStandingAround(runtime, covered, extent, standingReach);
 
   const isTerrainMatch = (st: string, target: string): boolean => {
     if (st === target) return true;
@@ -299,13 +373,16 @@ export function executeTerrainCut(
 
   const coveredKeys = new Set(covered.map((c) => c.surfaceKey.join(" ")));
 
-  const affected = standing.filter(
-    (topology) =>
-      isTerrainMatch(topology.surfaceType, request.targetSurfaceType) &&
-      (coveredKeys.has(topology.surfaceKey.join(" ")) || faceIntersectsArea(topology, request.area, coveredOutline)),
+  const terrainStanding = standing.filter((topology) =>
+    isTerrainMatch(topology.surfaceType, request.targetSurfaceType),
   );
-  const affectedKeys = new Set(affected.map((t) => t.surfaceKey.join(" ")));
-  const retained = standing.filter((t) => !affectedKeys.has(t.surfaceKey.join(" ")));
+  let affected = terrainStanding.filter(
+    (topology) =>
+      coveredKeys.has(topology.surfaceKey.join(" ")) ||
+      faceIntersectsArea(topology, request.area, coveredOutline),
+  );
+  let affectedKeys = new Set(affected.map((t) => t.surfaceKey.join(" ")));
+  let retained = standing.filter((t) => !affectedKeys.has(t.surfaceKey.join(" ")));
 
   // If hole profile: simply delete affected faces
   if (request.profile.kind === "hole") {
@@ -328,56 +405,20 @@ export function executeTerrainCut(
     };
   }
 
-  const affectedPolygons: Polygon[] = affected
-    .map(topologyToPolygon)
-    .filter((p) => p.length > 0);
-  const affectedMerged: MultiPolygon =
-    affectedPolygons.length > 0
-      ? polygonClipping.union(affectedPolygons[0]!, ...affectedPolygons.slice(1))
-      : [];
-
-  let targetPolygon: MultiPolygon;
-
-  if (affectedMerged.length === 0) {
-    if (request.profile.kind === "convex") {
-      targetPolygon = outlineMultiPolygon;
-    } else {
-      return { builtFaces: 0, removedFaces: 0, refusedFaces: 0, success: false, message: "Nada a cortar aqui." };
-    }
-  } else {
-    if (request.profile.kind === "convex") {
-      try {
-        targetPolygon = polygonClipping.union(affectedMerged, outlineMultiPolygon);
-      } catch {
-        targetPolygon = affectedMerged;
-      }
-    } else {
-      targetPolygon = affectedMerged;
-    }
-  }
-
-  let perimeters = perimeterConstraints(retained, 0);
-
-  // **Connecting to another structure standing in this ground -- a road.**
+  // **The structure standing in this ground, when there is one -- a road.**
   //
-  // The thing being connected to is not a hole. A hole is ground somebody else
-  // holds *inside* the area being filled; a road is a ribbon that runs across
-  // the area and out the other side. Handing it over as a hole ring asks the
-  // generator to avoid a shape that pierces its own boundary, and it answers
-  // with cells laid over the road's own contour edges -- which the engine then
-  // refuses one by one, "no room on edge", taking the whole atomic replacement
-  // with them.
-  //
-  // So it is *subtracted*, exactly as the affected faces are unioned: one
-  // boolean, and boundary and holes both fall out of its result rather than
-  // being assembled from two independently-derived sources that have nothing
-  // forcing them to agree.
-  let extraHoleRings: ConstraintRing[] = [];
+  // Read before anything is decided about the shape, because what it occupies
+  // is what makes the shape: the ground being laid is the affected faces
+  // *minus* this, and how much ground has to be taken in for that remainder to
+  // be layable depends on it.
+  let connectArea: MultiPolygon = [];
+  let connectLoops: readonly (readonly ConstructionRegionEdge[])[] = [];
+  const connectPositions = new Map<ConstructionNodeId, { x: number; z: number }>();
   let connectSeeds: { readonly seed: readonly string[]; readonly surfaceType: string }[] = [];
   if (request.profile.kind === "regenerate" && request.profile.connectTo) {
     // Scoped to the work area. Unscoped, this reads every road on the table
     // and constrains a one-metre repair with the whole network's contour.
-    const connectReach = Math.max(effectiveFaceSide * 2, DEFAULT_FACE_SIDE * 2);
+    const connectReach = Math.max(standingReach, DEFAULT_FACE_SIDE * 2);
     const connectTopologies = paintedTopologiesOf(
       runtime as unknown as Parameters<typeof paintedTopologiesOf>[0],
       request.profile.connectTo.surfaceType,
@@ -389,44 +430,120 @@ export function executeTerrainCut(
       },
     );
     const { paintedNodes, paintedLoops } = paintedFalloutOf(connectTopologies);
-    if (paintedLoops.length > 0) {
-      const nodePosMap = new Map<ConstructionNodeId, { x: number; z: number }>();
-      for (const n of paintedNodes) nodePosMap.set(n.id, { x: n.position.x, z: n.position.z });
-      const connectHoles = constraintsFromRings(
-        paintedLoops,
-        (nodeId) => nodePosMap.get(nodeId),
-        perimeters.sources.length,
-      );
-      // Its rings join the perimeter table, not only its sources. Without the
-      // rings there is nothing for the subtraction's output to be matched
-      // against, and the ground would come back meeting the road at coincident
-      // positions instead of at its actual nodes and edges.
-      perimeters = {
-        rings: [...perimeters.rings, ...connectHoles.rings],
-        sources: [...perimeters.sources, ...connectHoles.sources],
-      };
-      connectSeeds = connectTopologies.map((topology) => ({
-        seed: topology.surfaceKey,
-        surfaceType: topology.surfaceType,
-      }));
+    for (const n of paintedNodes) connectPositions.set(n.id, { x: n.position.x, z: n.position.z });
 
-      const connectPolygons = connectHoles.rings.map(ringToPolygon).filter((polygon) => polygon.length > 0);
-      if (connectPolygons.length > 0) {
-        try {
-          const remaining = polygonClipping.difference(targetPolygon, ...connectPolygons);
-          // Nothing left means the road covers this ground entirely: there is
-          // no terrain to regrow, and laying the un-subtracted area instead
-          // would put ground straight over the road.
-          if (remaining.length > 0) targetPolygon = remaining;
-          else targetPolygon = [];
-        } catch {
-          // A degenerate ring is not worth losing the repair over. Falling
-          // back to the old shape is worse geometry, not no geometry.
-          extraHoleRings = [...connectHoles.rings];
-        }
+    // **The area it occupies is a union of its faces, never its perimeter
+    // rings.** `outwardPerimeterRings` answers with every free-boundary ring
+    // of the set undifferentiated -- the cloud's outer contour and any ring
+    // around a gap *inside* it, with nothing saying which is which. Subtracting
+    // each of those as a solid polygon carves the gaps out of the terrain too,
+    // and a gap inside a road that also gets no ground is a hole in the road.
+    // Unioning the faces themselves produces the same outline with its holes
+    // correctly holes.
+    const facePolygons = connectTopologies
+      .flatMap((topology) => topology.outerLoops.map((loop) => loopToPolygon(loop, connectPositions)))
+      .filter((polygon) => polygon.length > 0);
+    if (facePolygons.length > 0) {
+      try {
+        connectArea = polygonClipping.union(facePolygons[0]!, ...facePolygons.slice(1));
+      } catch {
+        connectArea = [];
       }
     }
+
+    // The loops stay, separately, for identity: they are what the subtraction's
+    // bare-float output is matched back against, so the ground comes back
+    // meeting the road at its actual nodes and edges rather than at coincident
+    // positions. They are numbered later, once, alongside the retained rim --
+    // the generator answers with a single index per corner and knows nothing
+    // of which ring it came from.
+    connectLoops = paintedLoops;
+    connectSeeds = connectTopologies.map((topology) => ({
+      seed: topology.surfaceKey,
+      surfaceType: topology.surfaceType,
+    }));
   }
+
+  /** The affected faces as one polygon, with `connectArea` taken out of it. */
+  const groundFor = (faces: readonly ConstructionRegionTopology[]): MultiPolygon => {
+    const polygons = faces.map(topologyToPolygon).filter((p) => p.length > 0);
+    if (polygons.length === 0) return [];
+    let merged: MultiPolygon;
+    try {
+      merged = polygonClipping.union(polygons[0]!, ...polygons.slice(1));
+    } catch {
+      return [];
+    }
+    if (request.profile.kind === "convex") {
+      try {
+        merged = polygonClipping.union(merged, outlineMultiPolygon);
+      } catch {
+        // Keep the un-unioned shape rather than losing the stroke.
+      }
+    }
+    if (connectArea.length === 0) return merged;
+    try {
+      return polygonClipping.difference(merged, connectArea);
+    } catch {
+      return merged;
+    }
+  };
+
+  // **Growing until there is room to lay a face.**
+  //
+  // A road covers nearly the full width of the faces it runs over, so
+  // subtracting it from exactly those faces leaves a ribbon a fraction of a
+  // face wide and tens of faces long. The generator cannot lay a 2-unit cell in
+  // a 1-unit strip, so it subdivides until it can -- which is how a repair that
+  // refused nothing and clashed with nothing still came back with two hundred
+  // faces at a fifth of the size asked for, in seven disconnected pieces.
+  //
+  // The remedy is the one the sculpt brush gets for free by covering whole
+  // faces: take in enough ground that the remainder is a region rather than a
+  // seam. Neighbours are absorbed by *shared node*, one ring at a time, and
+  // only while the result is still too narrow to lay in -- so ordinary strokes
+  // and cuts that barely clip a face never pay for it.
+  let targetPolygon = groundFor(affected);
+  if (connectArea.length > 0) {
+    for (let ring = 0; ring < MOST_RINGS_WORTH_ABSORBING; ring += 1) {
+      if (affected.length === 0) break;
+      if (widthOf(targetPolygon) >= effectiveFaceSide * NARROW_ENOUGH_TO_GROW) break;
+      if (affected.length >= MOST_FACES_WORTH_ABSORBING) break;
+
+      const touched = new Set(affected.flatMap((t) => t.nodes.map((n) => n.id)));
+      const absorbed = retained.filter(
+        (t) => isTerrainMatch(t.surfaceType, request.targetSurfaceType) && t.nodes.some((n) => touched.has(n.id)),
+      );
+      if (absorbed.length === 0) break;
+
+      affected = [...affected, ...absorbed];
+      affectedKeys = new Set(affected.map((t) => t.surfaceKey.join(" ")));
+      retained = standing.filter((t) => !affectedKeys.has(t.surfaceKey.join(" ")));
+      targetPolygon = groundFor(affected);
+    }
+  }
+
+  if (targetPolygon.length === 0) {
+    if (request.profile.kind === "convex" && affected.length === 0) {
+      targetPolygon = outlineMultiPolygon;
+    } else {
+      return { builtFaces: 0, removedFaces: 0, refusedFaces: 0, success: false, message: "Nada a cortar aqui." };
+    }
+  }
+
+  // One numbering across the retained rim and the connected structure, because
+  // the generator answers with one `source` index per corner.
+  const retainedPerimeters = perimeterConstraints(retained, 0);
+  const connectTable = constraintsFromRings(
+    connectLoops,
+    (nodeId) => connectPositions.get(nodeId),
+    retainedPerimeters.sources.length,
+  );
+  const perimeters: ConstraintTable = {
+    rings: [...retainedPerimeters.rings, ...connectTable.rings],
+    sources: [...retainedPerimeters.sources, ...connectTable.sources],
+  };
+  const extraHoleRings: ConstraintRing[] = [];
 
   const targetRings = buildConstraintRings(targetPolygon, effectiveFaceSide, perimeters);
   const boundaryRings = targetRings.filter((r) => !r.isHole && r.points.length >= 3);

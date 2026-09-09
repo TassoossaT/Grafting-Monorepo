@@ -25,19 +25,27 @@ import {
  * from another.
  */
 function field({ road = "crossing" } = {}) {
+  // Faces of 8, comfortably larger than the 2 a repair asks for, so the ground
+  // a road leaves behind is layable and the growth rule stays out of the way.
+  // The `devouring` road is the case where it does not.
   const at = {
     n0: { x: 0, y: 1, z: 0 },
-    n1: { x: 2, y: 1, z: 0 },
-    n2: { x: 4, y: 1, z: 0 },
-    n3: { x: 0, y: 1, z: 2 },
-    n4: { x: 2, y: 1, z: 2 },
-    n5: { x: 4, y: 1, z: 2 },
+    n1: { x: 8, y: 1, z: 0 },
+    n2: { x: 16, y: 1, z: 0 },
+    n3: { x: 0, y: 1, z: 8 },
+    n4: { x: 8, y: 1, z: 8 },
+    n5: { x: 16, y: 1, z: 8 },
   };
-  // A ribbon spanning L from rim to rim, or an island sitting inside it.
+  // A ribbon spanning L from rim to rim, an island sitting inside it, or a
+  // ribbon so wide it leaves only a seam on either side.
+  const band = (z0, z1, x0 = 0, x1 = 8) => ({
+    r0: { x: x0, y: 1, z: z0 },
+    r1: { x: x1, y: 1, z: z0 },
+    r2: { x: x1, y: 1, z: z1 },
+    r3: { x: x0, y: 1, z: z1 },
+  });
   const roadCorners =
-    road === "crossing"
-      ? { r0: { x: 0, y: 1, z: 0.5 }, r1: { x: 2, y: 1, z: 0.5 }, r2: { x: 2, y: 1, z: 1.5 }, r3: { x: 0, y: 1, z: 1.5 } }
-      : { r0: { x: 0.5, y: 1, z: 0.5 }, r1: { x: 1.5, y: 1, z: 0.5 }, r2: { x: 1.5, y: 1, z: 1.5 }, r3: { x: 0.5, y: 1, z: 1.5 } };
+    road === "crossing" ? band(3, 5) : road === "devouring" ? band(0.3, 7.7) : band(3, 5, 3, 5);
   Object.assign(at, roadCorners);
 
   const face = (surfaceKey, ids) => ({
@@ -180,10 +188,37 @@ test("a road that crosses the face is subtracted from the ground, not handed ove
   assert.equal(request.boundary.length, 2, "what is left of the face is its two banks");
 
   // No ring may enclose the middle of the road, or ground would be laid over it.
-  const middleOfRoad = { x: 1, z: 1 };
+  const middleOfRoad = { x: 4, z: 4 };
   for (const ring of request.boundary) {
     assert.ok(!encloses(ring, middleOfRoad), "no bank reaches across the road");
   }
+});
+
+test("a road that leaves only a seam takes in a neighbour, so there is room to lay a face", () => {
+  const context = field({ road: "devouring" });
+  repairTerrainCut(context.runtime, context.fallout, "cause-1", "t");
+
+  // The road covers all but 0.3 on either side of the face it runs over.
+  // Regenerating exactly that leaves two ribbons a seventh of a face wide and
+  // eight long, and the generator can only answer by subdividing until its
+  // cells fit -- hundreds of faces a fraction of the size asked for. Taking in
+  // the neighbour is what gives it room.
+  assert.deepEqual(
+    context.replacements[0].sourceSurfaceKeys.map((key) => key.join(" ")).sort(),
+    ["terrain L", "terrain R"],
+    "the neighbour is absorbed rather than the seam being handed over as-is",
+  );
+});
+
+test("a road that leaves a layable strip absorbs nothing, so ordinary cuts stay local", () => {
+  const context = field({ road: "crossing" });
+  repairTerrainCut(context.runtime, context.fallout, "cause-1", "t");
+
+  assert.deepEqual(
+    context.replacements[0].sourceSurfaceKeys.map((key) => key.join(" ")),
+    ["terrain L"],
+    "growth is the remedy for a seam, not a habit",
+  );
 });
 
 test("a road sitting inside the face leaves a hole, because that is what the subtraction leaves", () => {
@@ -193,7 +228,7 @@ test("a road sitting inside the face leaves a hole, because that is what the sub
 
   assert.equal(request.boundary.length, 1, "the face is still one piece");
   assert.equal(request.holes.length, 1, "with the road taken out of the middle of it");
-  assert.ok(encloses(request.holes[0], { x: 1, z: 1 }), "the hole is where the road stands");
+  assert.ok(encloses(request.holes[0], { x: 4, z: 4 }), "the hole is where the road stands");
 });
 
 test("the road's own corners survive the subtraction still naming a node", () => {
@@ -346,6 +381,109 @@ test("contour nodes landing on the road's contour are adopted, splitting the roa
   assert.ok(splits[0].nodeId.startsWith("t:cut-cause-adopt"));
 });
 
+/**
+ * A road cloud shaped like a donut: four faces around a gap that is not road.
+ *
+ * `outwardPerimeterRings` answers with every free-boundary ring of a set
+ * undifferentiated -- here the donut's outer contour *and* the ring around its
+ * gap, with nothing marking which is which. Treating each as a solid shape to
+ * subtract takes the gap out of the terrain too, and a gap that is neither road
+ * nor ground is a hole in the road.
+ */
+function donutField() {
+  const at = {
+    t0: { x: 0, y: 1, z: 0 },
+    t1: { x: 8, y: 1, z: 0 },
+    t2: { x: 8, y: 1, z: 8 },
+    t3: { x: 0, y: 1, z: 8 },
+    o0: { x: 2, y: 1, z: 2 },
+    o1: { x: 6, y: 1, z: 2 },
+    o2: { x: 6, y: 1, z: 6 },
+    o3: { x: 2, y: 1, z: 6 },
+    i0: { x: 3, y: 1, z: 3 },
+    i1: { x: 5, y: 1, z: 3 },
+    i2: { x: 5, y: 1, z: 5 },
+    i3: { x: 3, y: 1, z: 5 },
+  };
+  // Canonical edge naming, so two faces meeting on one edge name it the same
+  // way and the perimeter walk can tell an interior edge from a free one.
+  const edgeId = (a, b) => (a < b ? `e:${a}~${b}` : `e:${b}~${a}`);
+  const face = (surfaceKey, ids) => ({
+    surfaceKey,
+    surfaceType: surfaceKey[0] === "road" ? "path" : "terrain",
+    physical: true,
+    outerLoops: [
+      ids.map((id, index) => {
+        const next = ids[(index + 1) % ids.length];
+        return { edgeId: edgeId(id, next), reversed: false, startNodeId: id, endNodeId: next, geometry: { kind: "line" } };
+      }),
+    ],
+    holes: [],
+    nodes: ids.map((id) => ({ id, position: at[id] })),
+  });
+
+  const ground = face(["terrain", "L"], ["t0", "t1", "t2", "t3"]);
+  const roads = [
+    face(["road", "N"], ["o0", "o1", "i1", "i0"]),
+    face(["road", "E"], ["o1", "o2", "i2", "i1"]),
+    face(["road", "S"], ["o2", "o3", "i3", "i2"]),
+    face(["road", "W"], ["o3", "o0", "i0", "i3"]),
+  ];
+
+  const requests = [];
+  const nodePositions = new Map(Object.entries(at).map(([id, position]) => [id, { position }]));
+
+  const runtime = {
+    getRegionTopology: (key) => (key.join(" ") === "terrain L" ? ground : undefined),
+    getRegionTopologiesInBounds: (query) => (query.seeds !== undefined ? [ground] : [ground, ...roads]),
+    getAllRegionTopologies: () => [ground, ...roads],
+    applyRegionEdit: () => ({}),
+    getSnapshot: () => ({ tableId: "t", map: { nodePositions } }),
+    generateIrregularQuadGrid(request) {
+      requests.push(request);
+      return { vertices: [], quads: [], onContour: [], refinementComplete: true };
+    },
+    applyPatchReplacement: (request) => ({
+      createdSurfaceKeys: request.patch.regions.map((region) => region.regionId),
+      skippedRegionIds: [],
+      skippedRegionReasons: [],
+      removedSurfaceKeys: request.sourceSurfaceKeys,
+    }),
+  };
+
+  const fallout = {
+    paintedNodes: ["o0", "o1", "o2", "o3", "i0", "i1", "i2", "i3"].map((id) => ({ id, position: at[id] })),
+    paintedLoops: [],
+    consumedSurfaceKeys: [["terrain", "L"]],
+    footprintOutline: [
+      [2, 2],
+      [6, 2],
+      [6, 6],
+      [2, 6],
+    ],
+    painterSurfaceType: "path",
+  };
+
+  return { runtime, fallout, requests };
+}
+
+test("a gap inside the road still gets ground, because only the road's faces are subtracted", () => {
+  const context = donutField();
+  repairTerrainCut(context.runtime, context.fallout, "cause-donut", "t");
+  const request = context.requests[0];
+  assert.ok(request !== undefined, "the generator was reached");
+
+  assert.ok(
+    getsGround(request, { x: 4, z: 4 }),
+    "the gap inside the road is ground to lay, not road to avoid",
+  );
+  assert.ok(
+    !getsGround(request, { x: 4, z: 2.5 }),
+    "and the road itself still gets none",
+  );
+  assert.ok(getsGround(request, { x: 1, z: 1 }), "nor is the ground outside the road lost");
+});
+
 test("the height field keeps relief instead of averaging it away", () => {
   // A ridge: high on the left, low on the right, far enough apart that a
   // global blend would meet in the middle.
@@ -369,6 +507,17 @@ test("sitting exactly on an anchor takes its height rather than dividing by zero
   const field = heightFieldOf([{ x: 3, y: 7, z: 4 }], 2);
   assert.equal(field.at({ x: 3, z: 4 }), 7);
 });
+
+/**
+ * Whether a point ends up with ground on it, read the way the generator reads
+ * the request: boundary rings add, hole rings take away. Ring-by-ring
+ * enclosure is not the same question -- the rings nest, and a solid island
+ * inside a hole is exactly how a gap inside a road comes back.
+ */
+function getsGround(request, point) {
+  const inside = (rings) => rings.filter((ring) => encloses(ring, point)).length;
+  return inside(request.boundary) - inside(request.holes) > 0;
+}
 
 /** Ray-cast point-in-ring, for asserting what a constraint ring covers. */
 function encloses(points, point) {
