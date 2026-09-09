@@ -189,77 +189,168 @@ function topologyToPolygon(topology: ConstructionRegionTopology): Polygon {
   return [ring];
 }
 
+/** Two nodes name one edge whichever way round they are given. */
+function pairKey(a: number, b: number): string {
+  return a < b ? `${a}:${b}` : `${b}:${a}`;
+}
+
+/**
+ * Giving the boolean's output its identity back.
+ *
+ * `polygon-clipping` answers in bare floats: a corner that was a node going in
+ * comes out as a pair of numbers with nothing attached. So every corner of the
+ * result is matched against the corners that *did* carry a node -- the retained
+ * terrain's rim and the painter's contour -- and takes that node's id.
+ *
+ * **This is the one place a position is matched back to a node, and it is here
+ * under protest.** `terrain-constraints.ts` states the invariant it breaks. It
+ * survives because the alternative is threading identity through a third-party
+ * boolean that has no room for it; what it must not do is *guess badly*, and
+ * three things it used to do were guesses:
+ *
+ * 1. **Two corners could take the same node.** Nothing checked. The engine's
+ *    answer to that is not a duplicate but a collapse -- two distinct mesh
+ *    edges become one, two faces walk it the same way, and the second is
+ *    refused ("no room on edge"), or the cell is dropped outright for naming
+ *    one node twice. Every road junction puts more nodes within snapping
+ *    distance of each other, so this went from rare to routine as the network
+ *    grew. Each node is now claimed at most once.
+ * 2. **First come, first served.** Corners were matched in ring order, so a
+ *    corner a third of a face away could take a node before the corner sitting
+ *    exactly on it was ever considered. Matching is now global and ordered by
+ *    distance: the true coincidence always wins, whatever order it is in.
+ * 3. **Welding ran first and threw corners away before they could be
+ *    matched.** A corner dropped for being close to its neighbour took its
+ *    identity with it. Welding now runs last and never drops a corner that
+ *    names a node.
+ *
+ * The search is bucketed rather than exhaustive, which is why the whole thing
+ * stays linear as the road network grows instead of squaring with it.
+ */
 export function buildConstraintRings(
   targetPolygon: MultiPolygon,
   faceSize: number,
   perimeters: ConstraintTable,
 ): readonly (ConstraintRing & { readonly isHole: boolean })[] {
-  const rings: (ConstraintRing & { readonly isHole: boolean })[] = [];
   const snapDist = Math.max(0.25, faceSize * 0.18);
   const minStep = Math.max(0.08, faceSize * 0.08);
 
-  for (const polygon of targetPolygon) {
-    for (let rIdx = 0; rIdx < polygon.length; rIdx++) {
-      const isHole = rIdx > 0;
-      const rawRing = polygon[rIdx]!;
-      const pts = rawRing.slice(0, -1);
-      const welded: [number, number][] = [];
-      for (const [x, z] of pts) {
-        const prev = welded[welded.length - 1];
-        if (!prev || Math.hypot(x - prev[0], z - prev[1]) >= minStep) {
-          welded.push([x, z]);
-        }
+  // One position per node, and a bucket index over them. A node appearing in
+  // two rings is one candidate, not two.
+  const candidateAt = new Map<number, { readonly x: number; readonly z: number }>();
+  for (const ring of perimeters.rings) {
+    for (const point of ring.points) {
+      if (point.source !== undefined && !candidateAt.has(point.source)) {
+        candidateAt.set(point.source, { x: point.x, z: point.z });
       }
-      if (welded.length < 3) continue;
-
-      const points: ConstructionGridConstraintPoint[] = [];
-      for (let i = 0; i < welded.length; i++) {
-        const [x, z] = welded[i]!;
-        let bestSnap: { x: number; z: number; source: number } | undefined;
-        let bestDist = snapDist;
-        for (const r of perimeters.rings) {
-          for (const pt of r.points) {
-            if (pt.source !== undefined) {
-              const d = Math.hypot(x - pt.x, z - pt.z);
-              if (d < bestDist) {
-                bestDist = d;
-                bestSnap = { x: pt.x, z: pt.z, source: pt.source };
-              }
-            }
-          }
-        }
-        if (bestSnap) {
-          points.push({ x: bestSnap.x, z: bestSnap.z, source: bestSnap.source });
-        } else {
-          points.push({ x, z });
-        }
-      }
-
-      const edges: (ConstructionRegionEdge | undefined)[] = [];
-      for (let i = 0; i < points.length; i++) {
-        const cur = points[i]!;
-        const next = points[(i + 1) % points.length]!;
-        let matchedEdge: ConstructionRegionEdge | undefined;
-        if (cur.source !== undefined && next.source !== undefined) {
-          for (const r of perimeters.rings) {
-            for (let j = 0; j < r.points.length; j++) {
-              const p1 = r.points[j]!;
-              const p2 = r.points[(j + 1) % r.points.length]!;
-              if (
-                (p1.source === cur.source && p2.source === next.source) ||
-                (p1.source === next.source && p2.source === cur.source)
-              ) {
-                matchedEdge = r.edges[j];
-                break;
-              }
-            }
-            if (matchedEdge) break;
-          }
-        }
-        edges.push(matchedEdge);
-      }
-      rings.push({ points, edges, isHole });
     }
+  }
+  const cell = Math.max(snapDist, 1e-6);
+  const buckets = new Map<string, number[]>();
+  for (const [source, position] of candidateAt) {
+    const key = `${Math.floor(position.x / cell)}:${Math.floor(position.z / cell)}`;
+    const bucket = buckets.get(key);
+    if (bucket === undefined) buckets.set(key, [source]);
+    else bucket.push(source);
+  }
+
+  // The edge standing between two nodes, looked up once rather than searched
+  // for per corner. A pair appearing in more than one ring is the same edge
+  // seen from both sides, so the first answer is the answer.
+  const edgeBetween = new Map<string, ConstructionRegionEdge>();
+  for (const ring of perimeters.rings) {
+    for (let index = 0; index < ring.points.length; index += 1) {
+      const from = ring.points[index]!.source;
+      const to = ring.points[(index + 1) % ring.points.length]!.source;
+      const edge = ring.edges[index];
+      if (from === undefined || to === undefined || edge === undefined) continue;
+      const key = pairKey(from, to);
+      if (!edgeBetween.has(key)) edgeBetween.set(key, edge);
+    }
+  }
+
+  // Every ring of the result, before any identity or welding.
+  const raw: { readonly isHole: boolean; readonly points: [number, number][] }[] = [];
+  for (const polygon of targetPolygon) {
+    for (let rIdx = 0; rIdx < polygon.length; rIdx += 1) {
+      const rawRing = polygon[rIdx]!;
+      const points = rawRing.slice(0, -1).map(([x, z]) => [x, z] as [number, number]);
+      if (points.length >= 3) raw.push({ isHole: rIdx > 0, points });
+    }
+  }
+
+  // Every match anyone could make, then the closest ones first, each node and
+  // each corner taken at most once.
+  const proposals: { ring: number; point: number; source: number; distance: number }[] = [];
+  for (let ring = 0; ring < raw.length; ring += 1) {
+    const points = raw[ring]!.points;
+    for (let point = 0; point < points.length; point += 1) {
+      const [x, z] = points[point]!;
+      const column = Math.floor(x / cell);
+      const row = Math.floor(z / cell);
+      for (let dx = -1; dx <= 1; dx += 1) {
+        for (let dz = -1; dz <= 1; dz += 1) {
+          for (const source of buckets.get(`${column + dx}:${row + dz}`) ?? []) {
+            const at = candidateAt.get(source)!;
+            const distance = Math.hypot(x - at.x, z - at.z);
+            if (distance < snapDist) proposals.push({ ring, point, source, distance });
+          }
+        }
+      }
+    }
+  }
+  proposals.sort((a, b) => a.distance - b.distance);
+
+  const takenSource = new Set<number>();
+  const takenPoint = new Set<string>();
+  const matched = new Map<string, number>();
+  for (const proposal of proposals) {
+    const at = `${proposal.ring}:${proposal.point}`;
+    if (takenSource.has(proposal.source) || takenPoint.has(at)) continue;
+    takenSource.add(proposal.source);
+    takenPoint.add(at);
+    matched.set(at, proposal.source);
+  }
+
+  const rings: (ConstraintRing & { readonly isHole: boolean })[] = [];
+  for (let ring = 0; ring < raw.length; ring += 1) {
+    const { isHole, points: rawPoints } = raw[ring]!;
+
+    // Welded last, and never over a corner that names a node: the whole reason
+    // to shorten a ring is that its segments are far below the face size, and
+    // a corner the ground has to meet exactly is not that.
+    const points: ConstructionGridConstraintPoint[] = [];
+    for (let index = 0; index < rawPoints.length; index += 1) {
+      const source = matched.get(`${ring}:${index}`);
+      const at = source !== undefined ? candidateAt.get(source)! : { x: rawPoints[index]![0], z: rawPoints[index]![1] };
+      if (source === undefined) {
+        const previous = points[points.length - 1];
+        if (previous !== undefined && Math.hypot(at.x - previous.x, at.z - previous.z) < minStep) continue;
+      }
+      points.push(source !== undefined ? { x: at.x, z: at.z, source } : { x: at.x, z: at.z });
+    }
+    // The ring closes on its first point, so the last segment answers to the
+    // same rule -- unless dropping it would lose a node.
+    while (points.length >= 3) {
+      const last = points[points.length - 1]!;
+      const first = points[0]!;
+      if (last.source !== undefined) break;
+      if (Math.hypot(last.x - first.x, last.z - first.z) >= minStep) break;
+      points.pop();
+    }
+    if (points.length < 3) continue;
+
+    const edges: (ConstructionRegionEdge | undefined)[] = [];
+    for (let i = 0; i < points.length; i++) {
+      const cur = points[i]!;
+      const next = points[(i + 1) % points.length]!;
+      edges.push(
+        cur.source !== undefined && next.source !== undefined
+          ? edgeBetween.get(pairKey(cur.source, next.source))
+          : undefined,
+      );
+    }
+    rings.push({ points, edges, isHole });
   }
   return rings;
 }
