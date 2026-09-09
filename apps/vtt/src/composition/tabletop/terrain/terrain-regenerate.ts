@@ -232,57 +232,12 @@ export function regenerateNeighbourhood(
   // about to go, and it is knowable only while they still stand. So are the
   // heights -- every corner of the old ground, not only the rim that survives
   // it, or the relief inside the neighbourhood is blended away.
-  const directlyConsumed = request.consumedSurfaceKeys
+  const consumed = request.consumedSurfaceKeys
     .map((surfaceKey) => runtime.getRegionTopology(surfaceKey))
     .filter((topology): topology is ConstructionRegionTopology => topology !== undefined);
-  if (directlyConsumed.length === 0) return 0;
-  const surfaceType = directlyConsumed[0]!.surfaceType;
-
-  // Grown to the faces bordering the hole, not just the hole itself, the same
-  // way a stroke's own affected set is read through a padded box
-  // (`terrainStandingAround`) rather than exactly the footprint it swept.
-  // A repair that regenerates only the torn face has to fit its new mesh
-  // into that exact, tightly bounded shape -- there is no room in it to lay
-  // a face the size the rest of the ground uses, so the patch comes back
-  // smaller and more irregular than anything the brush would produce. Tearing
-  // down a ring of standing neighbours too gives the generator a boundary big
-  // enough to lay ground the same way it lays ground anywhere else: one
-  // contiguous surface regenerated in mass, not a sliver patched into a hole
-  // the shape of what a road happened to remove.
-  let directMinX = Infinity;
-  let directMinZ = Infinity;
-  let directMaxX = -Infinity;
-  let directMaxZ = -Infinity;
-  for (const topology of directlyConsumed) {
-    for (const node of topology.nodes) {
-      directMinX = Math.min(directMinX, node.position.x);
-      directMinZ = Math.min(directMinZ, node.position.z);
-      directMaxX = Math.max(directMaxX, node.position.x);
-      directMaxZ = Math.max(directMaxZ, node.position.z);
-    }
-  }
-  const growReach = Math.max(request.faceSide * 2, DEFAULT_FACE_SIDE * 2);
-  const directKeys = new Set(request.consumedSurfaceKeys.map((key) => key.join(":")));
-  const neighbourTopologies =
-    typeof runtime.getRegionTopologiesInBounds === "function"
-      ? runtime
-          .getRegionTopologiesInBounds({
-            minX: directMinX - growReach,
-            minZ: directMinZ - growReach,
-            maxX: directMaxX + growReach,
-            maxZ: directMaxZ + growReach,
-          })
-          .filter(
-            (topology) =>
-              topology.surfaceType === surfaceType && !directKeys.has(topology.surfaceKey.join(":")),
-          )
-      : [];
-  const grown = neighbourTopologies.slice(
-    0,
-    Math.max(0, MOST_FACES_WORTH_REGENERATING - directlyConsumed.length),
-  );
-  const consumed = [...directlyConsumed, ...grown];
-  const consumedSurfaceKeys = consumed.map((topology) => topology.surfaceKey);
+  if (consumed.length === 0) return 0;
+  const surfaceType = consumed[0]!.surfaceType;
+  const consumedSurfaceKeys = request.consumedSurfaceKeys;
 
   const consumedPositions = new Map<ConstructionNodeId, ConstructionPosition>();
   for (const topology of consumed) {

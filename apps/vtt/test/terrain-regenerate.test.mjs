@@ -237,29 +237,6 @@ test("road loops preserve all constraint points and boundary edges for seamless 
   assert.ok(hole.every((point) => typeof point.source === "number"), "every hole point must have a valid source index");
 });
 
-test("the repair grows into standing terrain neighbours, not just the exact hole, so the generator has room to lay a normal-sized face", () => {
-  const context = field();
-  const runtime = {
-    ...context.runtime,
-    getRegionTopologiesInBounds() {
-      // The right face is standing terrain bordering the hole -- exactly what
-      // a brush stroke's own affected set would pull in via
-      // terrainStandingAround, and what this repair used to leave standing
-      // and regenerate around instead of with.
-      return [context.runtime.getRegionTopology(["terrain", "R"])];
-    },
-  };
-
-  const built = repairTerrainCut(runtime, context.fallout, "cause-grow", "t");
-
-  assert.equal(built, 1);
-  assert.deepEqual(
-    context.deleted.sort(),
-    ["terrain L", "terrain R"],
-    "the neighbour is torn down and regenerated together with the hole, not left standing as a tight boundary around it",
-  );
-});
-
 test("a road loop that only grazes the rim's bounding box, without the rim's shape actually containing it, is dropped rather than handed to the generator", () => {
   const context = field();
   // A second, unrelated road square sitting well clear of the consumed L
