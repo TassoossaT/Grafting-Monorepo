@@ -14,7 +14,6 @@ import type { CutFallout } from "@/features/edit-construction";
 import { outwardPerimeterRings } from "../../../features/edit-construction/index.ts";
 import { constraintsFromRings, type ConstraintRing } from "./terrain-constraints.ts";
 import { DEFAULT_FACE_SIDE, fillTerrain, type TerrainFillRuntime } from "./terrain-fill.ts";
-import polygonClipping, { type Polygon } from "polygon-clipping";
 
 /**
  * Throwing a neighbourhood of ground away and generating it again as one
@@ -144,61 +143,6 @@ function pruneToLive(
   }));
 }
 
-/** Shoelace area of a ring's own points, ignoring winding direction. */
-function ringArea(points: readonly { readonly x: number; readonly z: number }[]): number {
-  let area = 0;
-  for (let index = 0; index < points.length; index += 1) {
-    const a = points[index]!;
-    const b = points[(index + 1) % points.length]!;
-    area += a.x * b.z - b.x * a.z;
-  }
-  return Math.abs(area) / 2;
-}
-
-function ringToPolygon(ring: ConstraintRing): Polygon | undefined {
-  if (ring.points.length < 3) return undefined;
-  const closed: [number, number][] = ring.points.map((point) => [point.x, point.z]);
-  closed.push([ring.points[0]!.x, ring.points[0]!.z]);
-  return [closed];
-}
-
-/**
- * Whether a connecting structure's hole (e.g. a road loop) actually belongs to
- * *this* patch of ground, checked by real overlap rather than a bounding-box
- * guess.
- *
- * The rim and a road's loop are produced by two unrelated walks of the graph
- * -- one from the faces just deleted, one from whatever the road happens to
- * stand on nearby -- so nothing before this point ever confirmed the two
- * agree. A loop that only grazes this rim's box (two road segments meeting
- * near, not inside, this cut) used to be handed to the generator as if it
- * were fully interior, which is the shape of "no room on edge" and duplicated
- * faces the commits on this cut kept re-discovering under different names.
- *
- * `0.5` rather than exact equality: the rim and a road loop are decimated
- * independently, so their shared border is never bit-identical, only close.
- * A loop mostly outside this rim is a foreign loop, not an imprecise one.
- */
-function isMostlyContained(hole: Polygon, boundaries: readonly Polygon[]): boolean {
-  if (boundaries.length === 0) return false;
-  const holePoints = hole[0]!.slice(0, -1).map(([x, z]) => ({ x, z }));
-  const holeArea = ringArea(holePoints);
-  if (holeArea <= 1e-6) return false;
-  let overlap = 0;
-  try {
-    const result = polygonClipping.intersection(hole, boundaries[0]!, ...boundaries.slice(1));
-    for (const polygon of result) {
-      overlap += ringArea(polygon[0]!.slice(0, -1).map(([x, z]) => ({ x, z })));
-    }
-  } catch {
-    // A degenerate rim (self-touching, from faces the deletion left in a
-    // strange shape) cannot be checked -- fall through rather than discard a
-    // loop that was never actually shown to be wrong.
-    return true;
-  }
-  return overlap >= holeArea * 0.5;
-}
-
 export interface RegenerateRequest {
   /** The faces to throw away and lay again. */
   readonly consumedSurfaceKeys: readonly ConstructionSurfaceKey[];
@@ -237,7 +181,6 @@ export function regenerateNeighbourhood(
     .filter((topology): topology is ConstructionRegionTopology => topology !== undefined);
   if (consumed.length === 0) return 0;
   const surfaceType = consumed[0]!.surfaceType;
-  const consumedSurfaceKeys = request.consumedSurfaceKeys;
 
   const consumedPositions = new Map<ConstructionNodeId, ConstructionPosition>();
   for (const topology of consumed) {
@@ -297,7 +240,7 @@ export function regenerateNeighbourhood(
   );
 
   // Identify nodes that belong to surviving ground (surviving topologies or nodes outside consumed)
-  const consumedKeysSet = new Set(consumedSurfaceKeys.map((k) => k.join(":")));
+  const consumedKeysSet = new Set(request.consumedSurfaceKeys.map((k) => k.join(":")));
   const allTopologies = typeof runtime.getAllRegionTopologies === "function" ? runtime.getAllRegionTopologies() : [];
   const survivingNodes = new Set<string>();
   for (const topology of allTopologies) {
@@ -320,25 +263,17 @@ export function regenerateNeighbourhood(
     if (pos.z > cMaxZ) cMaxZ = pos.z;
   }
   const cMargin = Math.max(4.0, effectiveFaceSide * 2.0);
-  const nearbyHoleRings = others.rings.filter((ring) =>
+  const relevantHoleRings = others.rings.filter((ring) =>
     ring.points.some(
       (p) => p.x >= cMinX - cMargin && p.x <= cMaxX + cMargin && p.z >= cMinZ - cMargin && p.z <= cMaxZ + cMargin,
     ),
   );
-  // The bounding-box pass above is cheap and only ever over-includes; this one
-  // resolves the cases it can't: two road loops whose boxes both graze this
-  // rim, only one of which the rim's real shape encloses. See isMostlyContained.
-  const rimPolygons = rim.rings.map(ringToPolygon).filter((polygon): polygon is Polygon => polygon !== undefined);
-  const relevantHoleRings = nearbyHoleRings.filter((ring) => {
-    const holePolygon = ringToPolygon(ring);
-    return holePolygon !== undefined && isMostlyContained(holePolygon, rimPolygons);
-  });
 
   const supportsPatchReplacement = typeof (runtime as unknown as { applyPatchReplacement?: unknown }).applyPatchReplacement === "function";
 
   if (!supportsPatchReplacement) {
     let deleted = 0;
-    for (const surfaceKey of consumedSurfaceKeys) {
+    for (const surfaceKey of request.consumedSurfaceKeys) {
       try {
         runtime.applyRegionEdit([{ kind: "delete-region", surfaceKey }], "local", request.causeId);
         deleted += 1;
@@ -356,7 +291,7 @@ export function regenerateNeighbourhood(
     return true;
   };
 
-  const stamp = Math.abs(hashOf(consumedSurfaceKeys));
+  const stamp = Math.abs(hashOf(request.consumedSurfaceKeys));
   const topologySeeds = allTopologies
     .filter((t) => !consumedKeysSet.has(t.surfaceKey.join(":")) && t.surfaceType === surfaceType)
     .slice(0, 8)
@@ -379,7 +314,7 @@ export function regenerateNeighbourhood(
     boundary: pruneToLive(rim.rings, sources, isLive),
     holes: relevantHoleRings.length > 0 ? relevantHoleRings : others.rings,
     sources,
-    replaceSurfaceKeys: supportsPatchReplacement ? consumedSurfaceKeys : undefined,
+    replaceSurfaceKeys: supportsPatchReplacement ? request.consumedSurfaceKeys : undefined,
     topologySeeds,
     heightAt: (point) => heights.at(point) ?? request.heightOfNewGround(point),
   }).built;

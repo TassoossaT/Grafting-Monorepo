@@ -237,43 +237,6 @@ test("road loops preserve all constraint points and boundary edges for seamless 
   assert.ok(hole.every((point) => typeof point.source === "number"), "every hole point must have a valid source index");
 });
 
-test("a road loop that only grazes the rim's bounding box, without the rim's shape actually containing it, is dropped rather than handed to the generator", () => {
-  const context = field();
-  // A second, unrelated road square sitting well clear of the consumed L
-  // face (x in [0,2], z in [0,2]) but still inside the bounding-box margin
-  // the old filter alone would have let through.
-  const foreignAt = {
-    f0: { x: 4.5, y: 1, z: 0.5 },
-    f1: { x: 5.5, y: 1, z: 0.5 },
-    f2: { x: 5.5, y: 1, z: 1.5 },
-    f3: { x: 4.5, y: 1, z: 1.5 },
-  };
-  const foreignIds = ["f0", "f1", "f2", "f3"];
-  const foreignLoop = foreignIds.map((id, index) => {
-    const next = foreignIds[(index + 1) % foreignIds.length];
-    return { edgeId: `e:${id}~${next}`, reversed: false, startNodeId: id, endNodeId: next, geometry: { kind: "line" } };
-  });
-
-  const fallout = {
-    paintedNodes: [...context.fallout.paintedNodes, ...foreignIds.map((id) => ({ id, position: foreignAt[id] }))],
-    paintedLoops: [...context.fallout.paintedLoops, foreignLoop],
-    consumedSurfaceKeys: context.fallout.consumedSurfaceKeys,
-  };
-
-  repairTerrainCut(context.runtime, fallout, "cause-foreign", "t");
-  const request = context.requests[context.requests.length - 1];
-
-  assert.equal(request.holes.length, 1, "only the road loop the rim's own shape contains is kept");
-  const hole = request.holes[0];
-  assert.equal(hole.length, 4);
-  for (const point of hole) {
-    assert.ok(
-      ["r0", "r1", "r2", "r3"].some((id) => Math.abs(context.at[id].x - point.x) < 1e-9 && Math.abs(context.at[id].z - point.z) < 1e-9),
-      "the surviving hole is the road actually standing on the consumed face, not the foreign one",
-    );
-  }
-});
-
 test("contour nodes landing on road hole boundary edges are adopted to split the road edge", () => {
   const context = field();
   let splitOps = [];
