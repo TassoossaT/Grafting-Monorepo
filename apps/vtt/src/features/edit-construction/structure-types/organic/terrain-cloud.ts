@@ -139,6 +139,11 @@ export interface TerrainCloudCutRepairInput {
   readonly coverageSurfaceKeys?: ReadonlySet<string>;
   /** Footprint outline polygon (XZ) if available. */
   readonly footprintOutline?: readonly (readonly [number, number])[];
+  /** Solid polygons of the cutter (outer loop and holes) to detect faces covered by cutter geometry. */
+  readonly cutterPolygons?: readonly {
+    readonly outer: readonly (readonly [number, number])[];
+    readonly holes: readonly (readonly (readonly [number, number])[])[];
+  }[];
   /** Search reach for proximity bucketing in fallback mode (default: 1.2). */
   readonly reach?: number;
 }
@@ -174,6 +179,7 @@ export function planTerrainCloudCutRepair(
   const cutterNodeIds = input.cutterNodeIds ?? new Set<string>();
   const coverageKeys = input.coverageSurfaceKeys ?? new Set<string>();
   const outline = input.footprintOutline && input.footprintOutline.length >= 3 ? input.footprintOutline : undefined;
+  const cutterPolygons = input.cutterPolygons && input.cutterPolygons.length > 0 ? input.cutterPolygons : undefined;
   const hasExactTargeting = coverageKeys.size > 0 || outline !== undefined;
 
   // Proximity bucketing is ONLY used as a tight fallback when neither coverage query
@@ -215,7 +221,22 @@ export function planTerrainCloudCutRepair(
       insideOutline = pointInOrOnPolygon(cx, cz, outline);
     }
 
-    // 4. Tight fallback proximity (only when neither coverage query nor outline is available)
+    // 4. Centroid inside any solid cutter polygon (road surface)
+    let insideCutter = false;
+    if (cutterPolygons !== undefined && !inCoverage && !insideOutline) {
+      const cx = t.nodes.length > 0 ? t.nodes.reduce((sum, n) => sum + n.position.x, 0) / t.nodes.length : 0;
+      const cz = t.nodes.length > 0 ? t.nodes.reduce((sum, n) => sum + n.position.z, 0) / t.nodes.length : 0;
+      for (const poly of cutterPolygons) {
+        if (pointInOrOnPolygon(cx, cz, poly.outer)) {
+          if (!poly.holes.some((h) => pointInOrOnPolygon(cx, cz, h))) {
+            insideCutter = true;
+            break;
+          }
+        }
+      }
+    }
+
+    // 5. Tight fallback proximity (only when neither coverage query nor outline is available)
     let nearCutter = false;
     if (!hasExactTargeting && indexer !== undefined) {
       const cx = t.nodes.length > 0 ? t.nodes.reduce((sum, n) => sum + n.position.x, 0) / t.nodes.length : 0;
@@ -223,7 +244,7 @@ export function planTerrainCloudCutRepair(
       nearCutter = indexer.isNear(cx, cz) || t.nodes.some((n) => indexer.isNear(n.position.x, n.position.z));
     }
 
-    if (sharesNode || inCoverage || insideOutline || nearCutter) {
+    if (sharesNode || inCoverage || insideOutline || insideCutter || nearCutter) {
       const keys = consumedByType.get(t.surfaceType) ?? [];
       keys.push(t.surfaceKey);
       consumedByType.set(t.surfaceType, keys);

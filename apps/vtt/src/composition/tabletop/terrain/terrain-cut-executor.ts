@@ -105,8 +105,8 @@ function faceIntersectsArea(
  * soon as the ground it is about to lay is wide enough to lay in, which on
  * ordinary ground is after one ring or none at all.
  */
-const MOST_RINGS_WORTH_ABSORBING = 3;
-const MOST_FACES_WORTH_ABSORBING = 512;
+const MOST_RINGS_WORTH_ABSORBING = 1;
+const MOST_FACES_WORTH_ABSORBING = 48;
 
 /**
  * How much of a face has to fit across the ground being laid before it counts
@@ -129,20 +129,44 @@ const NARROW_ENOUGH_TO_GROW = 0.75;
  * face whose nodes were not stored in the order its boundary happens to visit
  * them. The oriented edges *are* the walk.
  */
+function loopToRing(
+  loop: readonly ConstructionRegionEdge[],
+  positionOf: ReadonlyMap<ConstructionNodeId, { readonly x: number; readonly z: number }>,
+): [number, number][] | undefined {
+  const ring: [number, number][] = [];
+  for (const edge of loop) {
+    const position = positionOf.get(edge.startNodeId);
+    if (position === undefined) return undefined;
+    ring.push([position.x, position.z]);
+  }
+  if (ring.length < 3) return undefined;
+  ring.push([ring[0]![0], ring[0]![1]]);
+  return ring;
+}
+
 function loopToPolygon(
   loop: readonly ConstructionRegionEdge[],
   positionOf: ReadonlyMap<ConstructionNodeId, { readonly x: number; readonly z: number }>,
 ): Polygon {
-  const ring: [number, number][] = [];
-  for (const edge of loop) {
-    const position = positionOf.get(edge.startNodeId);
-    if (position === undefined) return [];
-    ring.push([position.x, position.z]);
-  }
-  if (ring.length < 3) return [];
-  ring.push([ring[0]![0], ring[0]![1]]);
-  return [ring];
+  const ring = loopToRing(loop, positionOf);
+  return ring ? [ring] : [];
 }
+
+function topologyToPolygonWithHoles(
+  topology: ConstructionRegionTopology,
+  positionOf: ReadonlyMap<ConstructionNodeId, { readonly x: number; readonly z: number }>,
+): Polygon {
+  if (topology.outerLoops.length === 0) return [];
+  const outer = loopToRing(topology.outerLoops[0]!, positionOf);
+  if (!outer) return [];
+  const rings: [number, number][][] = [outer];
+  for (const holeLoop of topology.holes) {
+    const hole = loopToRing(holeLoop, positionOf);
+    if (hole) rings.push(hole);
+  }
+  return rings;
+}
+
 
 /**
  * Roughly how wide a shape is, in the only sense that matters here: whether a
@@ -169,6 +193,23 @@ function widthOf(polygon: MultiPolygon): number {
   if (perimeter <= 1e-9) return 0;
   return (2 * Math.abs(area / 2)) / perimeter;
 }
+
+function pieceMetrics(piece: MultiPolygon[number]): { readonly area: number; readonly width: number } {
+  let area = 0;
+  let perimeter = 0;
+  for (const ring of piece) {
+    for (let index = 0; index < ring.length - 1; index += 1) {
+      const [ax, az] = ring[index]!;
+      const [bx, bz] = ring[index + 1]!;
+      area += ax * bz - bx * az;
+      perimeter += Math.hypot(bx - ax, bz - az);
+    }
+  }
+  const absArea = Math.abs(area / 2);
+  const width = perimeter > 1e-9 ? (2 * absArea) / perimeter : 0;
+  return { area: absArea, width };
+}
+
 
 function topologyToPolygon(topology: ConstructionRegionTopology): Polygon {
   const positions = new Map<ConstructionNodeId, { x: number; z: number }>();
@@ -298,7 +339,7 @@ export function buildConstraintRings(
   perimeters: ConstraintTable,
 ): readonly (ConstraintRing & { readonly isHole: boolean })[] {
   const snapDist = Math.max(0.25, faceSize * 0.18);
-  const minStep = Math.max(0.08, faceSize * 0.08);
+  const minStep = Math.max(0.4, faceSize * 0.3);
 
   // One position per node, and a bucket index over them. A node appearing in
   // two rings is one candidate, not two.
@@ -384,18 +425,24 @@ export function buildConstraintRings(
     // Welded last, and never over a corner that names a node: the whole reason
     // to shorten a ring is that its segments are far below the face size, and
     // a corner the ground has to meet exactly is not that.
+    const minStep = Math.max(0.18, faceSize * 0.1);
     const points: ConstructionGridConstraintPoint[] = [];
     for (let index = 0; index < rawPoints.length; index += 1) {
       const source = matched.get(`${ring}:${index}`);
       const at = source !== undefined ? candidateAt.get(source)! : { x: rawPoints[index]![0], z: rawPoints[index]![1] };
-      if (source === undefined) {
-        const previous = points[points.length - 1];
-        if (previous !== undefined && Math.hypot(at.x - previous.x, at.z - previous.z) < minStep) continue;
+      const previous = points[points.length - 1];
+      if (previous !== undefined) {
+        const dist = Math.hypot(at.x - previous.x, at.z - previous.z);
+        if (dist < minStep) {
+          if (source !== undefined && previous.source === undefined) {
+            points[points.length - 1] = { x: at.x, z: at.z, source };
+            continue;
+          }
+          if (source === undefined) continue;
+        }
       }
       points.push(source !== undefined ? { x: at.x, z: at.z, source } : { x: at.x, z: at.z });
     }
-    // The ring closes on its first point, so the last segment answers to the
-    // same rule -- unless dropping it would lose a node.
     while (points.length >= 3) {
       const last = points[points.length - 1]!;
       const first = points[0]!;
@@ -405,11 +452,38 @@ export function buildConstraintRings(
     }
     if (points.length < 3) continue;
 
+    // Drop collinear unnamed points that add no shape
+    let collinearCleaned = points;
+    if (points.length > 3) {
+      const cleaned: ConstructionGridConstraintPoint[] = [];
+      for (let i = 0; i < points.length; i++) {
+        const prev = points[(i - 1 + points.length) % points.length]!;
+        const curr = points[i]!;
+        const next = points[(i + 1) % points.length]!;
+        if (curr.source === undefined) {
+          const dx = next.x - prev.x;
+          const dz = next.z - prev.z;
+          const len = Math.hypot(dx, dz);
+          if (len > 1e-6) {
+            const off = Math.abs((curr.x - prev.x) * dz - (curr.z - prev.z) * dx) / len;
+            const along = ((curr.x - prev.x) * dx + (curr.z - prev.z) * dz) / (len * len);
+            if (off < 0.08 && along > 0 && along < 1) {
+              continue;
+            }
+          }
+        }
+        cleaned.push(curr);
+      }
+      if (cleaned.length >= 3) collinearCleaned = cleaned;
+    }
+
+
     const stitched = dropInventedCorners(
-      points,
+      collinearCleaned,
       (a, b) => edgeBetween.has(pairKey(a, b)),
       Math.max(1e-6, faceSize * 0.01),
     );
+
 
     const edges: (ConstructionRegionEdge | undefined)[] = [];
     for (let i = 0; i < stitched.length; i++) {
@@ -604,14 +678,26 @@ export function executeTerrainCut(
     // Scoped to the work area. Unscoped, this reads every road on the table
     // and constrains a one-metre repair with the whole network's contour.
     const connectReach = Math.max(standingReach, DEFAULT_FACE_SIDE * 2);
+    let connMinX = extent.minX;
+    let connMaxX = extent.maxX;
+    let connMinZ = extent.minZ;
+    let connMaxZ = extent.maxZ;
+    for (const f of affected) {
+      for (const n of f.nodes) {
+        if (n.position.x < connMinX) connMinX = n.position.x;
+        if (n.position.x > connMaxX) connMaxX = n.position.x;
+        if (n.position.z < connMinZ) connMinZ = n.position.z;
+        if (n.position.z > connMaxZ) connMaxZ = n.position.z;
+      }
+    }
     const connectTopologies = paintedTopologiesOf(
       runtime as unknown as Parameters<typeof paintedTopologiesOf>[0],
       request.profile.connectTo.surfaceType,
       {
-        minX: extent.minX - connectReach,
-        minZ: extent.minZ - connectReach,
-        maxX: extent.maxX + connectReach,
-        maxZ: extent.maxZ + connectReach,
+        minX: connMinX - connectReach,
+        minZ: connMinZ - connectReach,
+        maxX: connMaxX + connectReach,
+        maxZ: connMaxZ + connectReach,
       },
     );
     const { paintedNodes, paintedLoops } = paintedFalloutOf(connectTopologies);
@@ -626,7 +712,7 @@ export function executeTerrainCut(
     // Unioning the faces themselves produces the same outline with its holes
     // correctly holes.
     const facePolygons = connectTopologies
-      .flatMap((topology) => topology.outerLoops.map((loop) => loopToPolygon(loop, connectPositions)))
+      .map((topology) => topologyToPolygonWithHoles(topology, connectPositions))
       .filter((polygon) => polygon.length > 0);
     if (facePolygons.length > 0) {
       try {
@@ -635,6 +721,7 @@ export function executeTerrainCut(
         connectArea = [];
       }
     }
+
 
     // The loops stay, separately, for identity: they are what the subtraction's
     // bare-float output is matched back against, so the ground comes back
@@ -708,6 +795,18 @@ export function executeTerrainCut(
     }
   }
 
+  // Discard detached slivers that are too narrow or too small to hold a face
+  const minPieceWidth = Math.max(0.6, effectiveFaceSide * 0.35);
+  const minPieceArea = Math.max(3.0, effectiveFaceSide * effectiveFaceSide * 0.75);
+  targetPolygon = targetPolygon.filter((piece) => {
+    const { area, width } = pieceMetrics(piece);
+    return width >= minPieceWidth && area >= minPieceArea;
+  });
+
+
+
+
+
   if (targetPolygon.length === 0) {
     if (request.profile.kind === "convex" && affected.length === 0) {
       targetPolygon = outlineMultiPolygon;
@@ -733,6 +832,7 @@ export function executeTerrainCut(
   const targetRings = buildConstraintRings(targetPolygon, effectiveFaceSide, perimeters);
   const boundaryRings = targetRings.filter((r) => !r.isHole && r.points.length >= 3);
   const holeRings = [...targetRings.filter((r) => r.isHole && r.points.length >= 3), ...extraHoleRings];
+
 
   if (boundaryRings.length === 0) {
     return { builtFaces: 0, removedFaces: 0, refusedFaces: 0, success: false, message: "Nenhum contorno válido gerado." };
@@ -829,9 +929,11 @@ export function executeTerrainCut(
       ...retained.map((topology) => ({ seed: topology.surfaceKey, surfaceType: topology.surfaceType })),
       ...connectSeeds,
     ],
+    avoidArea: connectArea,
     heightAt,
     positionAt,
   });
+
 
   return {
     builtFaces: filled.built,

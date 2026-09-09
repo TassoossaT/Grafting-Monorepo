@@ -353,6 +353,37 @@ export function dispatchCutRepairs(
     return true;
   });
 
+  // Build solid polygons of new road topologies so any terrain face covered by the road is consumed
+  const liveNodes = runtime.getSnapshot().map.nodePositions;
+  const cutterPolygons: {
+    outer: [number, number][];
+    holes: [number, number][][];
+  }[] = [];
+  for (const road of newRoadTopologies) {
+    if (road.outerLoops.length === 0) continue;
+    const outer: [number, number][] = [];
+    for (const edge of road.outerLoops[0]!) {
+      const p = liveNodes.get(edge.startNodeId)?.position ?? road.nodes.find((n) => n.id === edge.startNodeId)?.position;
+      if (p) outer.push([p.x, p.z]);
+    }
+    if (outer.length < 3) continue;
+    outer.push([outer[0]![0], outer[0]![1]]);
+
+    const holes: [number, number][][] = [];
+    for (const holeLoop of road.holes) {
+      const hole: [number, number][] = [];
+      for (const edge of holeLoop) {
+        const p = liveNodes.get(edge.startNodeId)?.position ?? road.nodes.find((n) => n.id === edge.startNodeId)?.position;
+        if (p) hole.push([p.x, p.z]);
+      }
+      if (hole.length >= 3) {
+        hole.push([hole[0]![0], hole[0]![1]]);
+        holes.push(hole);
+      }
+    }
+    cutterPolygons.push({ outer, holes });
+  }
+
   // **Ground the painter is about to orphan, wherever it stands.**
   //
   // A stroke's footprint is what that stroke claims. What it *destroys* is a
@@ -363,27 +394,43 @@ export function dispatchCutRepairs(
   // mostly nowhere near the stroke -- so scoping the search to the footprint
   // meant it was never looked for. It kept naming dead nodes, and the road
   // visibly came apart from the ground as the network filled in.
-  //
-  // This is the exact set and not a sweep: terrain holding a node that is
-  // going away. It costs what the contact between the two actually is, and it
-  // shrinks on its own the day a path stops regenerating more than it changed.
   const orphaned: ConstructionRegionTopology[] = [];
   const changed = groundThePainterMovedOff(replacedTopologies, newRoadTopologies);
-  if (replacedNodeIds.size > 0 && changed.length > 0) {
+  if (replacedTopologies.length > 0) {
     const replacedBounds = terrainTopologiesBounds(replacedTopologies, margin);
     const near = typeof runtime.getRegionTopologiesInBounds === "function"
       ? runtime.getRegionTopologiesInBounds(replacedBounds)
       : runtime.getAllRegionTopologies();
     for (const t of near) {
       if (!targetTypes.includes(t.surfaceType)) continue;
-      if (!t.nodes.some((n) => replacedNodeIds.has(n.id))) continue;
-      if (!t.nodes.some((n) => insideAny(n.position.x, n.position.z, changed))) continue;
-      orphaned.push(t);
+      const insideChanged = changed.length > 0 && (
+        t.nodes.some((n) => insideAny(n.position.x, n.position.z, changed)) ||
+        (t.nodes.length > 0 &&
+          insideAny(
+            t.nodes.reduce((sum, n) => sum + n.position.x, 0) / t.nodes.length,
+            t.nodes.reduce((sum, n) => sum + n.position.z, 0) / t.nodes.length,
+            changed,
+          ))
+      );
+      let insideRoad = false;
+      if (cutterPolygons.length > 0 && t.nodes.length > 0) {
+        const cx = t.nodes.reduce((sum, n) => sum + n.position.x, 0) / t.nodes.length;
+        const cz = t.nodes.reduce((sum, n) => sum + n.position.z, 0) / t.nodes.length;
+        for (const poly of cutterPolygons) {
+          if (pointInOrOnPolygon(cx, cz, poly.outer) && !poly.holes.some((h) => pointInOrOnPolygon(cx, cz, h))) {
+            insideRoad = true;
+            break;
+          }
+        }
+      }
+      if (insideChanged || insideRoad) {
+        orphaned.push(t);
+      }
     }
   }
 
   const byKey = new Map<string, ConstructionRegionTopology>();
-  for (const t of [...underFootprint, ...orphaned]) byKey.set(t.surfaceKey.join(" "), t);
+  for (const t of [...underFootprint, ...orphaned]) byKey.set(t.surfaceKey.join(" "), t);
   const candidateTerrain = [...byKey.values()];
   if (candidateTerrain.length === 0) return;
 
@@ -410,6 +457,7 @@ export function dispatchCutRepairs(
     cutterNodeIds: replacedNodeIds,
     coverageSurfaceKeys: outlineCoverageKeys,
     footprintOutline: request.footprintOutline,
+    cutterPolygons,
   });
 
   if (!repairPlan.requiresRepair) return;
@@ -422,13 +470,7 @@ export function dispatchCutRepairs(
     ? newRoadTopologies
     : (request.patch.regions.length > 0 ? topologiesFromPatch(request.patch, runtime) : []);
 
-  const roadToUse = request.footprintOutline && request.footprintOutline.length >= 3
-    ? allRoads.filter((r) =>
-        r.nodes.some(
-          (n) => n.position.x >= bounds.minX && n.position.x <= bounds.maxX && n.position.z >= bounds.minZ && n.position.z <= bounds.maxZ,
-        ),
-      )
-    : allRoads;
+  const roadToUse = allRoads;
 
   if (roadToUse.length > 0) {
     const painter = paintedFalloutOf(roadToUse);

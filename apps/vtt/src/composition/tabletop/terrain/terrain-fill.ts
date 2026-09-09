@@ -15,6 +15,7 @@ import type {
 
 import type { AtomicEditOp } from "@/features/edit-construction";
 
+import type { MultiPolygon } from "polygon-clipping";
 import {
   SHORTEST_USEFUL_FRACTION,
   adoptContourNodes,
@@ -22,7 +23,8 @@ import {
   type ConstraintRing,
 } from "./terrain-constraints.ts";
 import { logTerrainCommit } from "./terrain-diagnostics.ts";
-import { createBoundaryEdges, sharedEdgeId } from "../../../features/edit-construction/index.ts";
+import { createBoundaryEdges, pointInOrOnPolygon, sharedEdgeId } from "../../../features/edit-construction/index.ts";
+
 
 /**
  * Laying ground into an area bounded by what is already standing.
@@ -92,6 +94,8 @@ export interface TerrainFillRequest {
   readonly boundary: readonly ConstraintRing[];
   /** Ground inside that area somebody already holds: met, never regenerated. */
   readonly holes: readonly ConstraintRing[];
+  /** Obstacle or road polygons whose interior must never contain any generated terrain face. */
+  readonly avoidArea?: MultiPolygon;
   /** `sources[i]` is the node id the rings handed out as `source: i`, across both lists. */
   readonly sources: readonly ConstructionNodeId[];
   /**
@@ -198,6 +202,19 @@ type FreeEdgeUse = ConstructionOrientedEdgeUse & {
  * ground, and terrain is never laid above anything -- a face that finds its
  * edge full is meant to be refused, not rescued with an edge of its own.
  */
+function insideAnyMultiPolygon(x: number, z: number, multiPolygon: MultiPolygon): boolean {
+  for (const piece of multiPolygon) {
+    if (piece.length === 0) continue;
+    const [outer, ...holes] = piece;
+    if (outer !== undefined && pointInOrOnPolygon(x, z, outer)) {
+      if (!holes.some((hole) => pointInOrOnPolygon(x, z, hole))) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 function gridPatch(
   tableId: string,
   grid: ConstructionIrregularQuadGrid,
@@ -206,12 +223,29 @@ function gridPatch(
   surfaceType: string,
   edgeRooms: ReadonlyMap<string, FreeEdgeUse | null>,
   quadOf?: Map<string, readonly number[]>,
+  avoidArea?: MultiPolygon,
 ): ConstructionPatch {
   const edges = createBoundaryEdges(tableId, { kind: "refuse-when-full" });
   const regions: ConstructionPatchRegion[] = [];
 
   quad: for (const quad of grid.quads) {
+    if (avoidArea !== undefined && avoidArea.length > 0) {
+      let cx = 0;
+      let cz = 0;
+      for (const vIdx of quad) {
+        const pt = grid.vertices[vIdx]!;
+        cx += pt.x;
+        cz += pt.z;
+      }
+      cx /= quad.length;
+      cz /= quad.length;
+      if (insideAnyMultiPolygon(cx, cz, avoidArea)) {
+        continue quad;
+      }
+    }
+
     const cycle = quad.map(idFor).filter((id): id is ConstructionNodeId => id !== undefined);
+
     if (cycle.length !== quad.length) continue;
     if (new Set(cycle).size !== cycle.length) continue;
 
@@ -432,7 +466,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
       });
     } else edgeRooms.set(edgeId, null);
   }
-  const patch = gridPatch(request.tableId, grid, idFor, nodes, request.surfaceType, edgeRooms, quadOf);
+  const patch = gridPatch(request.tableId, grid, idFor, nodes, request.surfaceType, edgeRooms, quadOf, request.avoidArea);
 
   // **Does the patch itself already contain the clash?**
   //

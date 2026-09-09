@@ -11,7 +11,7 @@ import { nearestSampleY } from "./union-bands.ts";
  * station-sweep engine, kept exact for the same reason: a generous tolerance
  * would drag a vertex sideways onto whichever node happened to be near.
  */
-const WELD_TOLERANCE = 1e-3; // PathCloud contour weld tolerance.
+const WELD_TOLERANCE = 0.05; // PathCloud contour weld tolerance (5 cm).
 
 /**
  * Below this area (world units squared), a shape is a sliver, not a face.
@@ -97,11 +97,16 @@ function restoreHeightVertices(
 ): Ring {
   if (heightSamples.length === 0 || ring.length < 2) return ring;
   const restored: [number, number][] = [];
+  const minInterval = 0.8;
   for (let i = 0; i < ring.length - 1; i += 1) {
     const a = ring[i]!;
     const b = ring[i + 1]!;
     restored.push(a);
 
+    const segLen = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (segLen < minInterval * 1.5) continue;
+
+    const minTStep = minInterval / segLen;
     const matching: { readonly x: number; readonly z: number; readonly t: number }[] = [];
     for (const sample of heightSamples) {
       const { dist, t } = distanceToSegmentXZ(sample, a, b);
@@ -113,7 +118,7 @@ function restoreHeightVertices(
       matching.sort((l, r) => l.t - r.t);
       let lastT = 0;
       for (const pt of matching) {
-        if (pt.t - lastT >= 1e-4 && 1 - pt.t >= 1e-4) {
+        if (pt.t - lastT >= minTStep && 1 - pt.t >= minTStep) {
           restored.push([pt.x, pt.z]);
           lastT = pt.t;
         }
