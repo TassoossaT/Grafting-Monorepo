@@ -780,7 +780,6 @@ export function executeTerrainCut(
     for (let ring = 0; ring < MOST_RINGS_WORTH_ABSORBING; ring += 1) {
       if (affected.length === 0) break;
       if (widthOf(targetPolygon) >= effectiveFaceSide * NARROW_ENOUGH_TO_GROW) break;
-      if (affected.length >= MOST_FACES_WORTH_ABSORBING) break;
 
       const touched = new Set(affected.flatMap((t) => t.nodes.map((n) => n.id)));
       const absorbed = retained.filter(
@@ -795,17 +794,8 @@ export function executeTerrainCut(
     }
   }
 
-  // Discard detached slivers that are too narrow or too small to hold a face
-  const minPieceWidth = Math.max(0.6, effectiveFaceSide * 0.35);
-  const minPieceArea = Math.max(3.0, effectiveFaceSide * effectiveFaceSide * 0.75);
-  targetPolygon = targetPolygon.filter((piece) => {
-    const { area, width } = pieceMetrics(piece);
-    return width >= minPieceWidth && area >= minPieceArea;
-  });
-
-
-
-
+  // Do not discard pieces: discarding pieces deletes terrain without regenerating it,
+  // creating holes and causing the terrain to recede from roads.
 
   if (targetPolygon.length === 0) {
     if (request.profile.kind === "convex" && affected.length === 0) {
@@ -832,7 +822,6 @@ export function executeTerrainCut(
   const targetRings = buildConstraintRings(targetPolygon, effectiveFaceSide, perimeters);
   const boundaryRings = targetRings.filter((r) => !r.isHole && r.points.length >= 3);
   const holeRings = [...targetRings.filter((r) => r.isHole && r.points.length >= 3), ...extraHoleRings];
-
 
   if (boundaryRings.length === 0) {
     return { builtFaces: 0, removedFaces: 0, refusedFaces: 0, success: false, message: "Nenhum contorno válido gerado." };

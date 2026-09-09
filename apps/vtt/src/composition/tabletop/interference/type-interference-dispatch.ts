@@ -448,13 +448,22 @@ export function dispatchCutRepairs(
     }
   }
 
+  const newNodeIds = new Set(newRoadTopologies.flatMap((t) => t.nodes.map((n) => n.id)));
+  const trulyDestroyedNodeIds = new Set<string>();
+  for (const id of replacedNodeIds) {
+    if (!newNodeIds.has(id)) trulyDestroyedNodeIds.add(id);
+  }
+  if (outcome?.removedNodeIds) {
+    for (const id of outcome.removedNodeIds) trulyDestroyedNodeIds.add(id);
+  }
+
   // Pure domain planning via TerrainCloud:
   const repairPlan = planTerrainCloudCutRepair({
     candidateTerrain,
     cutterPositions: request.footprintOutline && request.footprintOutline.length >= 3
       ? request.footprintOutline.map(([x, z]) => ({ x, y: 0, z }))
       : allRoadPositions,
-    cutterNodeIds: replacedNodeIds,
+    cutterNodeIds: trulyDestroyedNodeIds,
     coverageSurfaceKeys: outlineCoverageKeys,
     footprintOutline: request.footprintOutline,
     cutterPolygons,
