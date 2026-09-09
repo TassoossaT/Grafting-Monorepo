@@ -69,6 +69,8 @@ export interface StructuralCutRequest {
     readonly surfaceKey: readonly string[];
     readonly surfaceType: string;
   }[];
+  /** Ground vacated by an acting structure (e.g. road moved off) to be restored as terrain. */
+  readonly vacatedArea?: MultiPolygon;
   /** Optional noise function for base terrain when expanding onto empty ground. */
   readonly noiseAt?: (point: { readonly x: number; readonly z: number }) => number;
 }

@@ -75,3 +75,37 @@ test("standingRegionsForCloud walks connected path faces via shared nodes", () =
   assert.ok(!keys.has("disconnected-path"), "excludes disconnected path face");
   assert.ok(!keys.has("terrain-face"), "excludes non-path face");
 });
+
+test("standingRegionsForCloud does not traverse into or consume a foreign path corridor sharing weld nodes", () => {
+  const road1 = {
+    surfaceKey: ["@region", "corridor-1:band-0:0"],
+    surfaceType: "path",
+    physical: true,
+    outerLoops: [],
+    holes: [],
+    nodes: [
+      { id: "contour:corridor-1:0", position: { x: 0, y: 0, z: 0 } },
+      { id: "contour:corridor-1:1", position: { x: 10, y: 0, z: 0 } },
+      { id: "shared-weld-node", position: { x: 10, y: 0, z: 2 } },
+      { id: "contour:corridor-1:2", position: { x: 0, y: 0, z: 2 } },
+    ],
+  };
+
+  const road2 = {
+    surfaceKey: ["@region", "corridor-2:band-0:0"],
+    surfaceType: "path",
+    physical: true,
+    outerLoops: [],
+    holes: [],
+    nodes: [
+      { id: "shared-weld-node", position: { x: 10, y: 0, z: 2 } },
+      { id: "contour:corridor-2:0", position: { x: 20, y: 0, z: 2 } },
+      { id: "contour:corridor-2:1", position: { x: 20, y: 0, z: 4 } },
+      { id: "contour:corridor-2:2", position: { x: 10, y: 0, z: 4 } },
+    ],
+  };
+
+  const standing = standingRegionsForCloud([road1, road2], [], new Set(["corridor-2"]));
+  assert.equal(standing.length, 1, "only road2's face is returned");
+  assert.equal(standing[0]?.surfaceKey[1], "corridor-2:band-0:0");
+});

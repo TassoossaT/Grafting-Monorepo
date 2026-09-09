@@ -11,7 +11,7 @@ import { nearestSampleY } from "./union-bands.ts";
  * station-sweep engine, kept exact for the same reason: a generous tolerance
  * would drag a vertex sideways onto whichever node happened to be near.
  */
-const WELD_TOLERANCE = 1e-3; // PathCloud contour weld tolerance.
+const WELD_TOLERANCE = 0.05; // PathCloud contour weld tolerance (5 cm).
 
 /**
  * Below this area (world units squared), a shape is a sliver, not a face.
@@ -34,7 +34,7 @@ function signedRingArea(ring: Ring): number {
   for (let index = 0; index < ring.length; index += 1) {
     const [x1, z1] = ring[index]!;
     const [x2, z2] = ring[(index + 1) % ring.length]!;
-    total += z1 * x2 - x1 * z2;
+    total += x1 * z2 - x2 * z1;
   }
   return total / 2;
 }
@@ -69,6 +69,64 @@ function openRing(ring: Ring): Ring {
   const [lastX, lastZ] = ring[ring.length - 1]!;
   const closed = Math.hypot(firstX - lastX, firstZ - lastZ) < 1e-9;
   return closed ? ring.slice(0, -1) : ring;
+}
+
+function distanceToSegmentXZ(
+  p: ConstructionPosition,
+  a: readonly [number, number],
+  b: readonly [number, number],
+): { readonly dist: number; readonly t: number } {
+  const dx = b[0] - a[0];
+  const dz = b[1] - a[1];
+  const lenSq = dx * dx + dz * dz;
+  if (lenSq < 1e-9) return { dist: Math.hypot(p.x - a[0], p.z - a[1]), t: 0 };
+  const t = ((p.x - a[0]) * dx + (p.z - a[1]) * dz) / lenSq;
+  if (t < 1e-4 || t > 1 - 1e-4) return { dist: Infinity, t };
+  const projX = a[0] + t * dx;
+  const projZ = a[1] + t * dz;
+  return { dist: Math.hypot(p.x - projX, p.z - projZ), t };
+}
+
+/**
+ * Re-inserts intermediate ribbon samples along straight 2D edges produced by
+ * polygon clipping so elevation stations are not lost before 3D simplification.
+ */
+function restoreHeightVertices(
+  ring: Ring,
+  heightSamples: readonly ConstructionPosition[],
+): Ring {
+  if (heightSamples.length === 0 || ring.length < 2) return ring;
+  const restored: [number, number][] = [];
+  const minInterval = 0.8;
+  for (let i = 0; i < ring.length - 1; i += 1) {
+    const a = ring[i]!;
+    const b = ring[i + 1]!;
+    restored.push(a);
+
+    const segLen = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (segLen < minInterval * 1.5) continue;
+
+    const minTStep = minInterval / segLen;
+    const matching: { readonly x: number; readonly z: number; readonly t: number }[] = [];
+    for (const sample of heightSamples) {
+      const { dist, t } = distanceToSegmentXZ(sample, a, b);
+      if (dist < 1e-3) {
+        matching.push({ x: sample.x, z: sample.z, t });
+      }
+    }
+    if (matching.length > 0) {
+      matching.sort((l, r) => l.t - r.t);
+      let lastT = 0;
+      for (const pt of matching) {
+        if (pt.t - lastT >= minTStep && 1 - pt.t >= minTStep) {
+          restored.push([pt.x, pt.z]);
+          lastT = pt.t;
+        }
+      }
+    }
+  }
+  restored.push(ring[ring.length - 1]!);
+  return restored;
 }
 
 export interface ExistingNode {
@@ -166,10 +224,12 @@ export function buildContourPatch(
         const kept = simplifyClosedRing(positions, () => undefined);
         return kept.map((index) => ids[index]!);
       };
-      const outerIds = simplifyRing(idsFor(ensureUpwardWinding(outerRing ?? [], false), 0));
+      const restoredOuter = restoreHeightVertices(outerRing ?? [], heightSamples);
+      const outerIds = simplifyRing(idsFor(ensureUpwardWinding(restoredOuter, false), 0));
       const boundary = outerIds.map((id, index) => edges.use(id, outerIds[(index + 1) % outerIds.length]!));
       const holes = holeRings.map((holeRing, holeIndex) => {
-        const holeIds = simplifyRing(idsFor(ensureUpwardWinding(holeRing, true), holeIndex + 1));
+        const restoredHole = restoreHeightVertices(holeRing, heightSamples);
+        const holeIds = simplifyRing(idsFor(ensureUpwardWinding(restoredHole, true), holeIndex + 1));
         return holeIds.map((id, index) => edges.use(id, holeIds[(index + 1) % holeIds.length]!));
       });
       return {

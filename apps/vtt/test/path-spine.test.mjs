@@ -13,6 +13,7 @@ import {
 } from "../src/features/edit-construction/structure-types/path/station-node-id.ts";
 import { PATH_ROLES, pathRoleFor } from "../src/features/edit-construction/structure-types/path/path-structure.ts";
 import { planPathCloudMutation } from "../src/features/edit-construction/structure-types/path/path-cloud-mutation.ts";
+import { referenceLineFrom } from "../src/features/edit-construction/structure-types/path/path-reference-line.ts";
 
 const ROAD = Object.freeze({
   shape: "circle",
@@ -234,12 +235,65 @@ test("planEdit moves a spine control node when graphSnapshot is provided", () =>
 
   assert.equal(plan.kind, "apply");
   assert.equal(plan.role, PATH_ROLES.spine);
-  assert.equal(plan.ops.length, 1);
+  assert.equal(plan.ops.length, 3, "moving spine node cascades to cross-section contour nodes");
   assert.deepEqual(plan.ops[0], {
     kind: "move-vertex",
     nodeId: "spine:op1#road:0",
     position: { x: 2, y: 1, z: -3 },
   });
+  const movedMap = new Map(plan.ops.map((op) => [op.nodeId, op.position]));
+  const node1 = movedMap.get("contour:op1#road:band-0:0:1");
+  assert.equal(node1.x, 2);
+  assert.equal(node1.y, 1);
+  assert.ok(Math.abs(node1.z - (-5.1)) < 1e-6);
+
+  const node4 = movedMap.get("contour:op1#road:band-0:0:4");
+  assert.equal(node4.x, 2);
+  assert.equal(node4.y, 1);
+  assert.ok(Math.abs(node4.z - (-0.9)) < 1e-6);
+  assert.ok(!movedMap.has("contour:op1#road:band-0:0:2"), "station 1 contour nodes remain unmoved");
+  assert.ok(!movedMap.has("contour:op1#road:band-0:0:3"), "station 1 contour nodes remain unmoved");
+});
+
+test("dragging a contour node smooths adjacent boundary loop nodes", () => {
+  const dummyTopology = {
+    surfaceKey: ["@region", "op1#road:band-0:0"],
+    surfaceType: "path",
+    nodes: [
+      { id: "contour:op1#road:band-0:0:1", position: { x: 0, y: 0, z: -2.1 } },
+      { id: "contour:op1#road:band-0:0:2", position: { x: 10, y: 0, z: -2.1 } },
+      { id: "contour:op1#road:band-0:0:3", position: { x: 10, y: 0, z: 2.1 } },
+      { id: "contour:op1#road:band-0:0:4", position: { x: 0, y: 0, z: 2.1 } },
+    ],
+    outerLoops: [
+      [
+        { edgeId: "e1", startNodeId: "contour:op1#road:band-0:0:1", endNodeId: "contour:op1#road:band-0:0:2" },
+        { edgeId: "e2", startNodeId: "contour:op1#road:band-0:0:2", endNodeId: "contour:op1#road:band-0:0:3" },
+        { edgeId: "e3", startNodeId: "contour:op1#road:band-0:0:3", endNodeId: "contour:op1#road:band-0:0:4" },
+        { edgeId: "e4", startNodeId: "contour:op1#road:band-0:0:4", endNodeId: "contour:op1#road:band-0:0:1" },
+      ],
+    ],
+    holes: [],
+  };
+
+  const plan = planEdit(cloudOf(dummyTopology), {
+    surfaceKey: dummyTopology.surfaceKey,
+    target: { kind: "vertex", nodeId: "contour:op1#road:band-0:0:1" },
+    delta: { x: 2, y: 0, z: -1 },
+  });
+
+  assert.equal(plan.kind, "apply");
+  assert.equal(plan.role, PATH_ROLES.across);
+  assert.equal(plan.ops.length, 3, "primary dragged node + 2 adjacent loop neighbours");
+  assert.deepEqual(plan.ops[0], {
+    kind: "move-vertex",
+    nodeId: "contour:op1#road:band-0:0:1",
+    position: { x: 2, y: 0, z: -3.1 },
+  });
+  const movedMap = new Map(plan.ops.map((op) => [op.nodeId, op.position]));
+  // Neighbours move with 0.5 falloff
+  assert.deepEqual(movedMap.get("contour:op1#road:band-0:0:2"), { x: 11, y: 0, z: -2.6 });
+  assert.deepEqual(movedMap.get("contour:op1#road:band-0:0:4"), { x: 1, y: 0, z: 1.6 });
 });
 
 test("planPathCloudMutation does not consume standing regions of unrelated path clouds with similar ID prefixes", () => {
@@ -345,3 +399,55 @@ test("planPathCloudMutation never consumes another type's regions itself, whatev
   assert.deepEqual(plan.request.sourceSurfaceKeys, [], "a foreign region is never in this function's own sourceSurfaceKeys");
   assert.ok(plan.request.footprintOutline.length >= 3, "the road's own footprint rides along on the request regardless");
 });
+
+test("referenceLineFrom smoothly interpolates height along stroke slope without stepping", () => {
+  const stroke = [
+    { x: 0, y: 0, z: 0 },
+    { x: 10, y: 5, z: 0 },
+  ];
+  const fitted = [
+    { start: { x: 0, y: 0, z: 0 }, end: { x: 10, y: 5, z: 0 } },
+  ];
+  const { line } = referenceLineFrom(fitted, stroke, true);
+  assert.equal(line.length, 2, "a uniform slope does not introduce spurious steps or extra stations");
+  assert.equal(line[0].y, 0);
+  assert.equal(line[1].y, 5);
+});
+
+test("referenceLineFrom over a hill produces a clean crest control point without zig-zag or step lag", () => {
+  const stroke = [
+    { x: 0, y: 0, z: 0 },
+    { x: 5, y: 3, z: 0 },
+    { x: 10, y: 0, z: 0 },
+  ];
+  const fitted = [
+    { start: { x: 0, y: 0, z: 0 }, end: { x: 10, y: 0, z: 0 } },
+  ];
+  const { line } = referenceLineFrom(fitted, stroke, true);
+  // Ridge from 0 to 5 (rising) and 5 to 10 (falling) should place control point at peak (x=5)
+  assert.equal(line.length, 3, "a triangular hill produces exactly start, crest, and end stations");
+  assert.equal(line[0].x, 0);
+  assert.equal(line[0].y, 0);
+  assert.equal(line[1].x, 5);
+  assert.equal(line[1].y, 3);
+  assert.equal(line[2].x, 10);
+  assert.equal(line[2].y, 0);
+});
+
+test("referenceLineFrom over flat ground produces only start and end points", () => {
+  const stroke = [
+    { x: 0, y: 0, z: 0 },
+    { x: 3, y: 0, z: 0 },
+    { x: 7, y: 0, z: 0 },
+    { x: 10, y: 0, z: 0 },
+  ];
+  const fitted = [
+    { start: { x: 0, y: 0, z: 0 }, end: { x: 10, y: 0, z: 0 } },
+  ];
+  const { line } = referenceLineFrom(fitted, stroke, true);
+  assert.equal(line.length, 2, "flat ground produces only endpoints");
+  assert.equal(line[0].x, 0);
+  assert.equal(line[1].x, 10);
+});
+
+
