@@ -1,3 +1,4 @@
+import type { ConstructionPlanarRequest, ConstructionPlanarShape, ConstructionMotionRequest, ConstructionMotionPlan, ConstructionNodeMotion } from "../../ports/index.ts";
 // Wraps `@grafting/procgen-construction-wasm`'s `ConstructionSession` (a
 // stateful Wasm class, JSON-request/response methods) behind
 // `ConstructionSessionPort`. Runs on the main thread for this task -- see
@@ -167,6 +168,20 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     if (this.#session !== undefined) throw new Error("construction session is already started");
     await initConstructionWasm();
     this.#session = new ConstructionSession();
+  }
+
+  planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[] { return JSON.parse(this.#require().planar_boolean_json(JSON.stringify(request))) as ConstructionPlanarShape[]; }
+
+  planMotion(request: ConstructionMotionRequest): ConstructionMotionPlan {
+    const result = JSON.parse(this.#require().plan_motion_json(JSON.stringify({
+      seeds: request.seeds.map((seed) => ({ ...seed, delta: toWirePosition(seed.delta) })),
+      influences: request.influences,
+    }))) as { moves: { nodeId: string; position: [number, number, number] }[]; resolvedAxes: number; visitedInfluences: number };
+    return { ...result, moves: result.moves.map((move) => ({ ...move, position: { x: move.position[0], y: move.position[1], z: move.position[2] } })) };
+  }
+
+  moveVertices(moves: readonly ConstructionNodeMotion[]): RegionEditOutcome {
+    return this.#regionEdit(this.#require().move_vertices_json(JSON.stringify(moves.map((move) => ({ ...move, position: toWirePosition(move.position) })))));
   }
 
   // ---- The atomic edit vocabulary ----

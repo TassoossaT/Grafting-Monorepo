@@ -22,8 +22,10 @@ prefix_rule(
         ["yarn add"],
         ["pip install"],
         ["uv add"],
+        ["gh "],
+        ["gh.exe "],
     ],
     decision = "forbidden",
-    justification = "Direct manual git and package installations are forbidden. Use .\\ia-graft.cmd task/deps/delegate commands instead.",
+    justification = "Direct manual git, raw gh, and package installations are forbidden. Use .\\ia-graft.cmd task/issue/pr/deps/delegate commands instead.",
 )
 

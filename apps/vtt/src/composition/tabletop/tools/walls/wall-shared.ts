@@ -1,4 +1,4 @@
-import type { WallParams } from "@/features/edit-construction";
+import type { PreviewDescriptor, WallParams } from "@/features/edit-construction";
 import type {
   ConstructionEdgeGeometry,
   ConstructionEdgeId,
@@ -11,6 +11,7 @@ import { projectOntoLineXZ, xzDistance, pinnedToBaseline } from "../shapes/geome
 import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
 import { fitPath, type FittedEdge } from "../core/stroke-fitting.ts";
 import { boundaryUsage, type EdgeSharing } from "../core/boundary-edges.ts";
+import { brushSweptRegionFill } from "../shapes/preview-shapes.ts";
 import { wallPatch, type WallColumn, type WallContour } from "./wall-patch.ts";
 import { wallSpans, type WallSpan } from "./wall-spans.ts";
 
@@ -35,7 +36,19 @@ const CROSSING_TOLERANCE = 0.15;
 /** How close (as a fraction of the wall's own length) a point may get to either of that wall's own corners and still count as a genuine mid-span crossing -- any closer and it is really landing on the corner, which welds onto that corner's own nodes instead of splitting anything. */
 const CROSSING_END_MARGIN = 0.3;
 /** How close (world units, XZ) a new corner may sit to an existing wall's own corner and still be treated as that same corner -- the point at which the run being drawn stops minting nodes and references the existing ones instead. */
-const CORNER_WELD_TOLERANCE = 0.25;
+export const CORNER_WELD_TOLERANCE = 0.25;
+/**
+ * How close (world units, Y) two elevations count as "the same floor" for
+ * corner welding. A press/click's own Y comes from a real pointer pick, not
+ * a typed number -- sub-millimeter camera/projection noise is routine, and
+ * the old `1e-3` floor rejected exactly that noise, silently minting a
+ * coincident-but-unwelded node a hair off the real surface instead of
+ * welding onto it (reported as a wall landing "higher, lower, or
+ * displaced"). `0.01` still stays two full orders of magnitude under any
+ * real storey spacing (`vtt-platform-motion.md`'s own examples are metres
+ * apart), so it cannot confuse two distinct floors.
+ */
+const ELEVATION_WELD_TOLERANCE = 0.01;
 /** Perpendicular distance (world units) within which a click counts as picking a wall panel directly, for `findWallSurfaceAt` -- a bit more forgiving than {@link CROSSING_TOLERANCE} since this is a deliberate click on the panel itself, not a drawing snap, and (unlike crossing detection) there is no exclusion near a panel's own corners: picking right at a corner should still delete whichever panel is closest. */
 const WALL_PICK_TOLERANCE = 0.2;
 /** How close (world units, XZ) two consecutive corners may be before the step between them is no wall at all -- a stroke held still, or a grid snap folding several samples onto one intersection. */
@@ -81,16 +94,17 @@ function existingColumnAt(
   ctx: ToolContext,
   point: ConstructionPosition,
   weldTolerance: number,
-): WallColumn | undefined {
+): { readonly column: WallColumn; readonly distance: number } | undefined {
   let best: { readonly column: WallColumn; readonly distance: number } | undefined;
   for (const span of wallSpans(ctx)) {
     for (const column of columnsOf(span)) {
+      if (Math.abs(point.y - column.bottom.y) > ELEVATION_WELD_TOLERANCE) continue;
       const distance = xzDistance(point, column.bottom);
       if (distance > weldTolerance) continue;
       if (best === undefined || distance < best.distance) best = { column, distance };
     }
   }
-  return best?.column;
+  return best;
 }
 
 /**
@@ -111,6 +125,7 @@ function insertedColumnAt(
   crossingTolerance: number,
 ): WallColumn | undefined {
   for (const span of wallSpans(ctx)) {
+    if (Math.abs(point.y - span.a.y) > ELEVATION_WELD_TOLERANCE) continue;
     const spanLength = xzDistance(span.a, span.b);
     if (spanLength < 1e-6) continue;
 
@@ -169,6 +184,56 @@ export function findWallSurfaceAt(ctx: ToolContext, point: ConstructionPosition)
  * them was actually resolved onto the other's nodes, which is the rule the
  * whole type is built on.
  */
+/**
+ * The closest platform vertex within `weldTolerance` (XZ) at the same
+ * elevation ({@link ELEVATION_WELD_TOLERANCE}) as `position`, or `undefined`
+ * -- the XZ half of endpoint welding is a magnet, same tolerance a wall
+ * corner snaps onto another wall's column with, never a reuse of a lower
+ * storey merely by XZ.
+ */
+function nearestPlatformNodeAt(
+  ctx: ToolContext,
+  position: ConstructionPosition,
+  weldTolerance: number,
+): { readonly node: { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }; readonly distance: number } | undefined {
+  let best: { readonly node: { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }; readonly distance: number } | undefined;
+  for (const region of ctx.runtime.getAllRegionTopologies()) {
+    if (region.surfaceType !== "platform") continue;
+    for (const node of region.nodes) {
+      if (Math.abs(node.position.y - position.y) > ELEVATION_WELD_TOLERANCE) continue;
+      const distance = xzDistance(node.position, position);
+      if (distance > weldTolerance) continue;
+      if (best === undefined || distance < best.distance) best = { node, distance };
+    }
+  }
+  return best;
+}
+
+/**
+ * The single corner magnet both `resolveColumn` and its read-only preview
+ * echo pull from: an existing wall column and a platform vertex are the same
+ * strength, so whichever actually sits closer wins, rather than a wall
+ * column shadowing a nearer platform vertex just by being checked first --
+ * that priority order was the whole bug this fixes. Reusing a wall's own
+ * column still carries its paired top id along; a platform vertex only ever
+ * supplies one elevation, so its top is resolved separately by the caller.
+ */
+function nearestCornerAt(
+  ctx: ToolContext,
+  point: ConstructionPosition,
+  weldTolerance: number,
+): { readonly bottomNodeId: ConstructionNodeId; readonly topNodeId: ConstructionNodeId | undefined; readonly bottom: ConstructionPosition; readonly top: ConstructionPosition | undefined } | undefined {
+  const wall = existingColumnAt(ctx, point, weldTolerance);
+  const platform = nearestPlatformNodeAt(ctx, point, weldTolerance);
+  if (wall !== undefined && (platform === undefined || wall.distance <= platform.distance)) {
+    return { bottomNodeId: wall.column.bottomNodeId, topNodeId: wall.column.topNodeId, bottom: wall.column.bottom, top: wall.column.top };
+  }
+  if (platform !== undefined) {
+    return { bottomNodeId: platform.node.id, topNodeId: undefined, bottom: platform.node.position, top: undefined };
+  }
+  return undefined;
+}
+
 function resolveColumn(
   ctx: ToolContext,
   point: ConstructionPosition,
@@ -182,17 +247,80 @@ function resolveColumn(
     bottomNodeId: `${idPrefix}:c${index}:bottom`,
     topNodeId: `${idPrefix}:c${index}:top`,
   });
-  const existing = existingColumnAt(ctx, point, Math.max(CORNER_WELD_TOLERANCE, correction));
-  if (existing !== undefined) return existing;
+  const weldTolerance = Math.max(CORNER_WELD_TOLERANCE, correction);
+  const corner = nearestCornerAt(ctx, point, weldTolerance);
+  if (corner !== undefined) {
+    const top = { x: point.x, y: point.y + height, z: point.z };
+    // The corner's own paired top (an existing wall column) wins outright.
+    // A bare platform vertex has no top of its own -- what it welds the
+    // post's *top* onto is still only ever another platform vertex, never
+    // another wall's unrelated base that merely happens to sit at the same
+    // height: two walls at different elevations lining up by coincidence is
+    // not the same intention as a post actually landing on a floor.
+    const upper = corner.topNodeId !== undefined ? undefined : nearestPlatformNodeAt(ctx, top, weldTolerance);
+    return {
+      bottomNodeId: corner.bottomNodeId,
+      topNodeId: corner.topNodeId ?? upper?.node.id ?? mint().topNodeId,
+      bottom: corner.bottom,
+      top: corner.top ?? upper?.node.position ?? top,
+    };
+  }
   const inserted = insertedColumnAt(ctx, point, mint, causeId, Math.max(CROSSING_TOLERANCE, correction));
   if (inserted !== undefined) return inserted;
   const { bottomNodeId, topNodeId } = mint();
-  return {
-    bottomNodeId,
-    topNodeId,
-    bottom: point,
-    top: { x: point.x, y: point.y + height, z: point.z },
-  };
+  return { bottomNodeId, topNodeId, bottom: point, top: { x: point.x, y: point.y + height, z: point.z } };
+}
+
+/**
+ * A read-only echo of {@link resolveColumn}'s own corner magnet, for showing
+ * where a run will actually land before it commits. Never mints or inserts
+ * anything (unlike {@link resolveColumn}, it must stay safe to call every
+ * frame of a drag), so a corner that would only resolve by T-junction
+ * insertion still previews at the raw point; the commit itself is unaffected.
+ */
+export function snappedEndpoint(ctx: ToolContext, point: ConstructionPosition, correction = 0): ConstructionPosition {
+  return nearestCornerAt(ctx, point, Math.max(CORNER_WELD_TOLERANCE, correction))?.bottom ?? point;
+}
+
+/**
+ * The corner-to-corner skeleton a stroke will actually commit as: the same
+ * fit {@link commitWallStroke} runs, each resulting corner echoed through
+ * {@link snappedEndpoint}. This is what a preview is for -- showing the
+ * correction and the weld before release, not a decoration on top of the raw
+ * hand -- so both wall tools draw from this one function rather than each
+ * approximating it their own way. An arc corrects the same as a straight
+ * run; only its two endpoints are shown here, not its curvature, the same
+ * simplification every other preview in this codebase already makes.
+ */
+export function correctedWallCorners(
+  ctx: ToolContext,
+  samples: readonly ConstructionPosition[],
+  tolerance = 0,
+): readonly ConstructionPosition[] {
+  const first = samples[0];
+  if (first === undefined) return [];
+  const pinned = samples.map((sample) => pinnedToBaseline(first, sample));
+  const fitted = fitPath(pinned, tolerance, { arcs: !ctx.snapToGrid });
+  const corners = fitted.length > 0 ? [fitted[0]!.start, ...fitted.map((edge) => edge.end)] : pinned;
+  return corners.map((corner) => snappedEndpoint(ctx, corner, tolerance));
+}
+
+/**
+ * The one wall preview, both tools draw it: a filled band along
+ * {@link correctedWallCorners}, wide enough to read as the budget that let
+ * the hand drift this far and still weld -- a thin centerline alone showed
+ * the correct result but not *why* it was correct, which is what read as
+ * "not really snapping." The floor is {@link CORNER_WELD_TOLERANCE} itself,
+ * so a zero-tolerance straight line still shows its own magnet reach.
+ */
+export function wallCorrectionPreview(
+  ctx: ToolContext,
+  samples: readonly ConstructionPosition[],
+  tolerance: number,
+  color: number,
+): PreviewDescriptor {
+  const corners = correctedWallCorners(ctx, samples, tolerance);
+  return brushSweptRegionFill(corners, { kind: "circle", radius: Math.max(tolerance, CORNER_WELD_TOLERANCE) }, color);
 }
 
 /**

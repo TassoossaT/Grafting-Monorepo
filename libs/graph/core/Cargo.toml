@@ -12,6 +12,7 @@ graph-ir-cli = ["dep:serde", "dep:serde_json"]
 
 [dependencies]
 petgraph = "=0.8.3"
+i_overlay = "=8.1.0"
 serde = { version = "=1.0.229", features = ["derive"], optional = true }
 serde_json = { version = "=1.0.151", optional = true }
 

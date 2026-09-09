@@ -9,6 +9,7 @@
 export type ConstructionToolId =
   | "navigate"
   | "edit-region"
+  | "platform-contour"
   | "path-brush"
   | "wall-brush"
   | "wall-line"
@@ -201,7 +202,8 @@ export type NoToolParams = Record<string, never>;
 
 export interface ToolParamsByTool {
   readonly navigate: NoToolParams;
-  readonly "edit-region": NoToolParams;
+  readonly "edit-region": { readonly mode: "shape" | "elevation" };
+  readonly "platform-contour": { readonly elevation: number; readonly mode: "create" | "extend" | "cut"; readonly shape?: "rectangle" | "polygon" | "freehand" | "circle"; readonly radius?: number; readonly tolerance?: number };
   readonly "path-brush": PathBrushParams;
   readonly "wall-brush": WallBrushParams;
   readonly "wall-line": WallParams;
@@ -216,7 +218,8 @@ export type ToolParamsFor<Id extends ConstructionToolId> = ToolParamsByTool[Id];
 
 export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   navigate: Object.freeze({}),
-  "edit-region": Object.freeze({}),
+  "edit-region": Object.freeze({ mode: "shape" }),
+  "platform-contour": Object.freeze({ elevation: 0, mode: "create", shape: "rectangle", radius: 2.5, tolerance: 0.15 }),
   "path-brush": Object.freeze({
     // The brush has to hold the road: half of a 3-wide bed reaches 1.5 from
     // the centerline, so a radius of 2.5 leaves a full metre of correction.

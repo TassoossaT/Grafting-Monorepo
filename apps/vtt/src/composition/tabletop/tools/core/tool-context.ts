@@ -7,6 +7,9 @@ import type { TabletopRuntime } from "../../tabletop-runtime.ts";
 /** What the pointer resolved to at one instant -- `nodeId` present only when it hit a node handle. */
 export interface PointerSample {
   readonly point: ConstructionPosition;
+  /** Screen coordinate used by explicit elevation gestures. */
+  readonly screenY?: number;
+  readonly screenX?: number;
   readonly nodeId?: string;
   readonly surfaceRef?: string;
 }
@@ -55,6 +58,8 @@ export interface ToolContext {
 export interface ConstructionTool<Id extends ConstructionToolId> {
   readonly id: Id;
   defaultParams(): ToolParamsFor<Id>;
+  /** Opt in to a stationary drawing preview between gestures. */
+  readonly previewOnHover?: boolean;
   /** The tool's not-yet-committed ghost for the current gesture (or stationary hover, when `gesture.start === gesture.current`). */
   previewFor?(gesture: ToolGesture, params: ToolParamsFor<Id>, ctx: ToolContext): PreviewDescriptor | undefined;
   /** Left-button press. Continuous tools (brushes, move-node) start their gesture here. */
@@ -63,6 +68,8 @@ export interface ConstructionTool<Id extends ConstructionToolId> {
   onPointerMove?(ctx: ToolContext, gesture: ToolGesture, params: ToolParamsFor<Id>): void;
   /** Gesture end. Tools that commit a single shape from a drag (wall, move-node's history entry) act here. */
   onPointerUp?(ctx: ToolContext, gesture: ToolGesture, params: ToolParamsFor<Id>): void;
+  /** Discards an unfinished tool draft on Escape, cancellation or tool switch. */
+  onCancel?(ctx: ToolContext): void;
   /** A press+release with no intervening drag. Batch/stamp tools (room) commit here instead of `onPointerUp`. */
   onClick?(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void;
 }

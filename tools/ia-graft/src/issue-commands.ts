@@ -24,12 +24,36 @@ function ghWithTextFile(args: readonly string[], flag: string, text: string): st
   }
 }
 
+export interface IssueParentRef {
+  id?: string;
+  number: number;
+  title: string;
+  state: string;
+  url?: string;
+}
+
+export interface IssueSubIssueRef {
+  id?: string;
+  number: number;
+  title: string;
+  state: string;
+  url?: string;
+}
+
+export interface IssueSubIssuesSummary {
+  completed: number;
+  percentCompleted: number;
+  total: number;
+}
+
 export interface IssueListInput {
   type?: string;
   area?: string;
   status?: string;
   priority?: string;
   limit?: number;
+  parent?: number | string;
+  orphan?: boolean;
 }
 
 export interface IssueViewInput {
@@ -53,6 +77,8 @@ export interface IssueUpdateInput {
   priority?: string;
   comment?: string;
   body?: string;
+  state?: "open" | "closed";
+  reason?: "completed" | "not_planned";
 }
 
 export interface CompactIssue {
@@ -62,11 +88,13 @@ export interface CompactIssue {
   area?: string;
   priority?: string;
   status?: string;
+  state?: string;
   milestone?: string;
   url: string;
+  parent?: IssueParentRef;
 }
 
-function parseLabels(labels: Array<{ name: string }>): {
+export function parseLabels(labels: Array<{ name: string }>): {
   type?: string;
   area?: string;
   priority?: string;
@@ -83,11 +111,11 @@ function parseLabels(labels: Array<{ name: string }>): {
 }
 
 /**
- * Lists issues from GitHub in a token-compact format.
+ * Lists issues from GitHub in a token-compact format with hierarchical parent metadata.
  */
 export async function issueList(_repoRoot: string, input: IssueListInput = {}) {
   try {
-    const limit = String(input.limit || 30);
+    const limit = String(input.limit || 50);
     const raw = execFileSync(
       "gh",
       [
@@ -96,7 +124,7 @@ export async function issueList(_repoRoot: string, input: IssueListInput = {}) {
         "--limit",
         limit,
         "--json",
-        "number,title,labels,milestone,url,state",
+        "number,title,labels,milestone,url,state,parent",
       ],
       { encoding: "utf8" },
     );
@@ -107,6 +135,13 @@ export async function issueList(_repoRoot: string, input: IssueListInput = {}) {
       milestone?: { title: string };
       url: string;
       state: string;
+      parent?: {
+        id?: string;
+        number: number;
+        title: string;
+        state: string;
+        url?: string;
+      } | null;
     }>;
 
     let issues: CompactIssue[] = parsed.map((item) => {
@@ -118,8 +153,18 @@ export async function issueList(_repoRoot: string, input: IssueListInput = {}) {
         area: parsedLabels.area,
         priority: parsedLabels.priority,
         status: parsedLabels.status,
+        state: item.state,
         milestone: item.milestone?.title,
         url: item.url,
+        parent: item.parent
+          ? {
+              id: item.parent.id,
+              number: item.parent.number,
+              title: item.parent.title,
+              state: item.parent.state,
+              url: item.parent.url,
+            }
+          : undefined,
       };
     });
 
@@ -127,6 +172,12 @@ export async function issueList(_repoRoot: string, input: IssueListInput = {}) {
     if (input.area) issues = issues.filter((i) => i.area === input.area);
     if (input.status) issues = issues.filter((i) => i.status === input.status);
     if (input.priority) issues = issues.filter((i) => i.priority === input.priority);
+    if (input.parent !== undefined) {
+      issues = issues.filter((i) => i.parent && String(i.parent.number) === String(input.parent));
+    }
+    if (input.orphan) {
+      issues = issues.filter((i) => !i.parent && i.type !== "epic");
+    }
 
     return {
       ok: true as const,
@@ -139,7 +190,7 @@ export async function issueList(_repoRoot: string, input: IssueListInput = {}) {
 }
 
 /**
- * Views a single issue in detail.
+ * Views a single issue in detail, including sub-issues, summary, and parent link.
  */
 export async function issueView(_repoRoot: string, input: IssueViewInput) {
   if (!input || !input.id) return { ok: false as const, error: "missing issue id" };
@@ -151,7 +202,7 @@ export async function issueView(_repoRoot: string, input: IssueViewInput) {
         "view",
         String(input.id),
         "--json",
-        "number,title,body,labels,milestone,state,url,comments",
+        "number,title,body,labels,milestone,state,url,comments,parent,subIssues,subIssuesSummary",
       ],
       { encoding: "utf8" },
     );
@@ -170,6 +221,17 @@ export async function issueView(_repoRoot: string, input: IssueViewInput) {
       body: parsed.body,
       url: parsed.url,
       commentCount: parsed.comments?.length || 0,
+      parent: parsed.parent
+        ? {
+            id: parsed.parent.id,
+            number: parsed.parent.number,
+            title: parsed.parent.title,
+            state: parsed.parent.state,
+            url: parsed.parent.url,
+          }
+        : undefined,
+      subIssues: (parsed.subIssues?.nodes as IssueSubIssueRef[] | undefined) || [],
+      subIssuesSummary: (parsed.subIssuesSummary as IssueSubIssuesSummary | undefined) || undefined,
     };
   } catch (error) {
     return { ok: false as const, error: error instanceof Error ? error.message : String(error) };
@@ -229,7 +291,7 @@ export async function issueNew(_repoRoot: string, input: IssueNewInput) {
 }
 
 /**
- * Updates an existing issue (status/priority label swap, comment).
+ * Updates an existing issue (status/priority label swap, comment, body).
  */
 export async function issueUpdate(_repoRoot: string, input: IssueUpdateInput) {
   if (!input || !input.id) return { ok: false as const, error: "missing issue id" };
@@ -241,9 +303,7 @@ export async function issueUpdate(_repoRoot: string, input: IssueUpdateInput) {
       ghWithTextFile(["issue", "comment", id], "--body-file", input.comment);
     }
 
-    // Replace the body outright if provided -- the caller already has the
-    // full new body (readTextValue merges the file/inline mutual exclusion);
-    // this never merges with the old body.
+    // Replace the body outright if provided
     if (input.body !== undefined) {
       ghWithTextFile(["issue", "edit", id], "--body-file", input.body);
     }
@@ -281,7 +341,237 @@ export async function issueUpdate(_repoRoot: string, input: IssueUpdateInput) {
       }
     }
 
-    return { ok: true as const, id: Number(id) };
+    if (input.state === "closed") {
+      const closeArgs = ["issue", "close", id];
+      if (input.reason) closeArgs.push("--reason", input.reason);
+      execFileSync("gh", closeArgs, { encoding: "utf8" });
+    } else if (input.state === "open") {
+      execFileSync("gh", ["issue", "reopen", id], { encoding: "utf8" });
+    }
+
+    return { ok: true as const, id: Number(id), state: input.state };
+  } catch (error) {
+    return { ok: false as const, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+export interface IssueCloseInput {
+  id: number | string;
+  reason?: "completed" | "not_planned";
+  comment?: string;
+}
+
+export interface IssueReopenInput {
+  id: number | string;
+  comment?: string;
+}
+
+export async function issueClose(repoRoot: string, input: IssueCloseInput) {
+  return issueUpdate(repoRoot, { id: input.id, state: "closed", reason: input.reason, comment: input.comment });
+}
+
+export async function issueReopen(repoRoot: string, input: IssueReopenInput) {
+  return issueUpdate(repoRoot, { id: input.id, state: "open", comment: input.comment });
+}
+
+export interface IssueTreeInput {
+  epic?: number | string;
+  limit?: number;
+}
+
+export interface IssueTreeNode {
+  id: number;
+  title: string;
+  type?: string;
+  area?: string;
+  priority?: string;
+  status?: string;
+  state: string;
+  milestone?: string;
+  subIssuesCount?: number;
+  children: IssueTreeNode[];
+}
+
+/**
+ * Returns a structured hierarchical tree of epics, parent-child links, and orphan issues.
+ */
+export async function issueTree(repoRoot: string, input: IssueTreeInput = {}) {
+  try {
+    const listRes = await issueList(repoRoot, { limit: input.limit || 100 });
+    if (!listRes.ok) return listRes;
+
+    const allIssues = listRes.issues;
+    const nodeMap = new Map<number, IssueTreeNode>();
+
+    for (const issue of allIssues) {
+      nodeMap.set(issue.id, {
+        id: issue.id,
+        title: issue.title,
+        type: issue.type,
+        area: issue.area,
+        priority: issue.priority,
+        status: issue.status,
+        state: issue.state || "OPEN",
+        milestone: issue.milestone,
+        children: [],
+      });
+    }
+
+    const epics: IssueTreeNode[] = [];
+    const orphans: IssueTreeNode[] = [];
+
+    for (const issue of allIssues) {
+      const node = nodeMap.get(issue.id)!;
+      if (issue.parent && nodeMap.has(issue.parent.number)) {
+        const parentNode = nodeMap.get(issue.parent.number)!;
+        parentNode.children.push(node);
+      } else if (issue.type === "epic") {
+        epics.push(node);
+      } else if (!issue.parent) {
+        orphans.push(node);
+      }
+    }
+
+    for (const epic of epics) {
+      epic.subIssuesCount = epic.children.length;
+    }
+
+    if (input.epic !== undefined) {
+      const targetEpicId = Number(input.epic);
+      const matched = epics.find((e) => e.id === targetEpicId) || nodeMap.get(targetEpicId);
+      if (!matched) {
+        return { ok: false as const, error: `epic #${input.epic} not found in recent issues` };
+      }
+      return {
+        ok: true as const,
+        tree: [matched],
+        orphansCount: 0,
+        orphans: [],
+      };
+    }
+
+    return {
+      ok: true as const,
+      epicsCount: epics.length,
+      orphansCount: orphans.length,
+      tree: epics,
+      orphans,
+    };
+  } catch (error) {
+    return { ok: false as const, error: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+export interface IssueDoctorInput {
+  limit?: number;
+}
+
+export interface IssueDiagnostic {
+  issueId: number;
+  title: string;
+  severity: "error" | "warning";
+  code:
+    | "ORPHAN_TASK"
+    | "MISSING_AREA"
+    | "MISSING_PRIORITY"
+    | "MISSING_MILESTONE"
+    | "MILESTONE_MISMATCH"
+    | "PARENT_CLOSED";
+  message: string;
+}
+
+/**
+ * Audits open issues for broken links, missing metadata, and loose ends.
+ */
+export async function issueDoctor(repoRoot: string, input: IssueDoctorInput = {}) {
+  try {
+    const listRes = await issueList(repoRoot, { limit: input.limit || 100 });
+    if (!listRes.ok) return listRes;
+
+    const issues = listRes.issues;
+    const issueById = new Map<number, CompactIssue>(issues.map((i) => [i.id, i]));
+    const diagnostics: IssueDiagnostic[] = [];
+
+    for (const issue of issues) {
+      // Check 1: Tasks/Bugs without parent epic
+      if (!issue.parent && (issue.type === "task" || issue.type === "bug")) {
+        diagnostics.push({
+          issueId: issue.id,
+          title: issue.title,
+          severity: "warning",
+          code: "ORPHAN_TASK",
+          message: `Issue #${issue.id} (${issue.type}) has no parent Epic assigned.`,
+        });
+      }
+
+      // Check 2: Missing area label
+      if (!issue.area) {
+        diagnostics.push({
+          issueId: issue.id,
+          title: issue.title,
+          severity: "warning",
+          code: "MISSING_AREA",
+          message: `Issue #${issue.id} is missing an 'area:' label.`,
+        });
+      }
+
+      // Check 3: Missing priority label
+      if (!issue.priority) {
+        diagnostics.push({
+          issueId: issue.id,
+          title: issue.title,
+          severity: "warning",
+          code: "MISSING_PRIORITY",
+          message: `Issue #${issue.id} is missing a 'priority:' label.`,
+        });
+      }
+
+      // Check 4: Missing milestone
+      if (!issue.milestone) {
+        diagnostics.push({
+          issueId: issue.id,
+          title: issue.title,
+          severity: "warning",
+          code: "MISSING_MILESTONE",
+          message: `Issue #${issue.id} is not assigned to any milestone.`,
+        });
+      }
+
+      // Check 5: Milestone mismatch between child and parent
+      if (issue.parent) {
+        const parentIssue = issueById.get(issue.parent.number);
+        if (parentIssue && parentIssue.milestone && issue.milestone && parentIssue.milestone !== issue.milestone) {
+          diagnostics.push({
+            issueId: issue.id,
+            title: issue.title,
+            severity: "warning",
+            code: "MILESTONE_MISMATCH",
+            message: `Issue #${issue.id} milestone ('${issue.milestone}') does not match parent Epic #${parentIssue.id} ('${parentIssue.milestone}').`,
+          });
+        }
+        if (parentIssue && parentIssue.state === "CLOSED" && issue.state !== "CLOSED") {
+          diagnostics.push({
+            issueId: issue.id,
+            title: issue.title,
+            severity: "error",
+            code: "PARENT_CLOSED",
+            message: `Issue #${issue.id} is OPEN but parent Epic #${parentIssue.id} is CLOSED.`,
+          });
+        }
+      }
+    }
+
+    const errorCount = diagnostics.filter((d) => d.severity === "error").length;
+    const warningCount = diagnostics.filter((d) => d.severity === "warning").length;
+
+    return {
+      ok: true as const,
+      passed: errorCount === 0,
+      totalIssuesAudited: issues.length,
+      errorCount,
+      warningCount,
+      diagnostics,
+    };
   } catch (error) {
     return { ok: false as const, error: error instanceof Error ? error.message : String(error) };
   }

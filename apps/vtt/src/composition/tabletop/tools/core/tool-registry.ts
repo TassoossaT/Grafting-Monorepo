@@ -1,3 +1,4 @@
+import { platformContourTool } from "../platform/platform-contour-tool.ts";
 import type { ConstructionToolId } from "@/features/edit-construction";
 
 import type { ConstructionTool } from "./tool-context.ts";
@@ -19,6 +20,7 @@ import { wallLineTool } from "../walls/wall-line-tool.ts";
  */
 const TOOL_REGISTRY: { readonly [Id in ConstructionToolId]: ConstructionTool<Id> } = {
   navigate: navigateTool,
+  "platform-contour": platformContourTool,
   "path-brush": pathBrushTool,
   "edit-region": editRegionTool,
   "wall-brush": wallBrushTool,

@@ -1,10 +1,10 @@
-import type { ConstructionGraphSnapshot, RegionEditOutcome } from "@/ports";
+import type { ConstructionGraphSnapshot, RegionEditOutcome, ConstructionSessionPort, ConstructionPosition } from "@/ports";
 
 import type { AtomicEditOp, EditGesture } from "./atomic-edit.ts";
 import { addPosition, constrainToAxes } from "./atomic-edit.ts";
 import type { CloudTopology } from "../topology/construction-cloud.ts";
 import { cloudNodes } from "../topology/construction-cloud.ts";
-import { resolvePolicy } from "../structure-types/index.ts";
+import { resolvePolicy, structureTypeFor } from "../structure-types/index.ts";
 import type { EditRole, EditScope } from "../structure-types/index.ts";
 
 /**
@@ -101,6 +101,7 @@ export function planEdit(
   cloud: CloudTopology,
   gesture: EditGesture,
   graphSnapshot?: ConstructionGraphSnapshot,
+  source?: Pick<ConstructionSessionPort, "planMotion" | "getAllRegionTopologies">,
 ): EditPlan {
   const policy = resolvePolicy(cloud.seed, gesture.target);
   if (policy.resolve.kind === "deny") {
@@ -119,6 +120,48 @@ export function planEdit(
       reason: `the gesture's target is not part of the ${cloud.cloud.surfaceType} cloud seeded at ${cloud.cloud.seed.join(":")}`,
     };
   }
+  if (source !== undefined) {
+    try {
+      const topologies = source.getAllRegionTopologies();
+      const positions = new Map(topologies.flatMap((topology) => topology.nodes.map((node) => [node.id, node.position] as const)));
+      for (const node of graphSnapshot?.nodes ?? []) positions.set(node.id, node.position);
+      const seeds: { nodeId: string; delta: ConstructionPosition }[] = [];
+      const primarySet = new Set(primary);
+      const extras = structureTypeFor(cloud.seed.surfaceType)?.motionInfluences ? []
+        : policy.cascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot }) ?? [];
+      for (const op of [...primary, ...extras]) {
+        if (op.kind === "move-vertex") {
+          const before = positions.get(op.nodeId);
+          if (!before) throw new Error(`Vertice ausente: ${op.nodeId}`);
+          // Primary displacement is copied, not reconstructed from rounded coordinates.
+          seeds.push({ nodeId: op.nodeId, delta: primarySet.has(op) ? delta : { x: op.position.x - before.x, y: op.position.y - before.y, z: op.position.z - before.z } });
+        } else if (op.kind === "move-edge") {
+          const edge = cloud.members.flatMap((member) => [...member.outerLoops, ...member.holes].flat()).find((candidate) => candidate.edgeId === op.edgeId);
+          if (!edge) throw new Error(`Aresta ausente: ${op.edgeId}`);
+          seeds.push({ nodeId: edge.startNodeId, delta: op.delta }, { nodeId: edge.endNodeId, delta: op.delta });
+        } else if (op.kind === "move-region") {
+          for (const node of cloud.seed.nodes) seeds.push({ nodeId: node.id, delta: op.delta });
+        } else throw new Error("A resposta de movimento deve produzir apenas deslocamentos.");
+      }
+      const influences = topologies.flatMap((topology) => structureTypeFor(topology.surfaceType)?.motionInfluences?.(topology, policy.transport === true) ?? []);
+      const resolved = source.planMotion({ seeds, influences });
+      const moved = new Map(resolved.moves.map((move) => [move.nodeId, move.position]));
+      let surfaceCount = 0;
+      for (const topology of topologies) {
+        if (!topology.nodes.some((node) => moved.has(node.id))) continue;
+        surfaceCount += 1;
+        const reason = structureTypeFor(topology.surfaceType)?.validateMotion?.(topology, moved);
+        if (reason) return { kind: "deny", role: policy.role, reason };
+      }
+      return { kind: "apply", role: policy.role, scope: policy.scope, surfaceCount,
+        ops: resolved.moves.map((move) => ({ kind: "move-vertex", ...move })) };
+    } catch (error) {
+      return { kind: "deny", role: policy.role, reason: error instanceof Error ? error.message : String(error) };
+    }
+  }
+  if (cloud.seed.surfaceType === "platform") {
+    return { kind: "deny", role: policy.role, reason: "A plataforma requer o resolvedor estrutural da sessao." };
+  }
   const cascade = policy.cascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot }) ?? [];
   return {
     kind: "apply",
@@ -131,6 +174,7 @@ export function planEdit(
 
 /** The slice of `ConstructionSessionPort` an edit plan actually needs. */
 export interface EditOpSink {
+  moveVertices(moves: readonly { readonly nodeId: string; readonly position: ConstructionPosition }[]): RegionEditOutcome;
   moveVertex(nodeId: string, position: { x: number; y: number; z: number }): RegionEditOutcome;
   moveEdge(edgeId: string, delta: { x: number; y: number; z: number }): RegionEditOutcome;
   moveRegion(
@@ -219,7 +263,9 @@ export function mergeOutcomes(left: RegionEditOutcome, right: RegionEditOutcome)
  * this layer's.
  */
 export function applyEditPlan(sink: EditOpSink, plan: EditPlan): RegionEditOutcome {
-  if (plan.kind !== "apply") return EMPTY_OUTCOME;
+  if (plan.kind !== "apply" || plan.ops.length === 0) return EMPTY_OUTCOME;
+  const movements = plan.ops.filter((op) => op.kind === "move-vertex");
+  if (movements.length === plan.ops.length) return sink.moveVertices(movements);
   return plan.ops.reduce(
     (outcome, op) => mergeOutcomes(outcome, applyEditOp(sink, op)),
     EMPTY_OUTCOME,

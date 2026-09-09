@@ -2,9 +2,8 @@ import { DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
 import type { WallParams } from "@/features/edit-construction";
 import type { ConstructionPosition } from "@/ports";
 
-import { segmentBetween } from "../shapes/preview-shapes.ts";
 import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "../core/tool-context.ts";
-import { WALL_COLOR, commitWallContour, pinnedToBaseline } from "./wall-shared.ts";
+import { WALL_COLOR, commitWallContour, pinnedToBaseline, wallCorrectionPreview } from "./wall-shared.ts";
 
 /**
  * The pressed drag's own anchor, or `undefined` before a press. Cleared the
@@ -32,9 +31,12 @@ export const wallLineTool: ConstructionTool<"wall-line"> = {
   id: "wall-line",
   defaultParams: () => DEFAULT_TOOL_PARAMS["wall-line"],
 
-  previewFor(gesture: ToolGesture, params: WallParams) {
+  previewFor(gesture: ToolGesture, params: WallParams, ctx: ToolContext) {
     if (anchor === undefined) return undefined;
-    return segmentBetween(anchor, gesture.current.point, WALL_COLOR[params.wallType]);
+    // Same correction-and-weld band the brush preview draws from -- the raw
+    // press/cursor points never showed where the run will actually land, or
+    // the reach that let it land there.
+    return wallCorrectionPreview(ctx, [anchor, pinnedToBaseline(anchor, gesture.current.point)], 0, WALL_COLOR[params.wallType]);
   },
 
   onPointerDown(_ctx: ToolContext, sample: PointerSample): void {

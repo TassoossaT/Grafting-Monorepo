@@ -394,6 +394,7 @@ dependencies = [
 name = "grafting-graph-core"
 version = "0.0.0"
 dependencies = [
+ "i_overlay",
  "petgraph",
  "public-api",
  "rustdoc-json",

@@ -27,6 +27,7 @@ All non-prose changes MUST execute exclusively through the root `ia-graft` launc
 
 - **Git & PR Governance:**
   - MUST NOT execute direct mutating git commands (`git commit`, `git add`, `git checkout`, `git switch`, `git branch`, `git push`, `git merge`, `git rebase`, `git reset`, `git stash`). All Git operations MUST execute through `ia-graft`.
+  - MUST NOT execute direct GitHub CLI commands (`gh issue`, `gh pr`, `gh repo`, `gh api`, etc.); all issue, PR, and repo operations MUST execute through `ia-graft`.
   - MUST NOT execute direct package installs (`pnpm/npm/yarn install/add`); use `ia-graft task deps`.
   - MUST NOT merge a pull request (human merges only, DEC-053, [ADR-0015](docs/adr/ADR-0015-agent-git-write-policy.md)).
   - MUST NOT commit directly on `master`/`main` for any change touching non-Markdown files.
@@ -34,7 +35,7 @@ All non-prose changes MUST execute exclusively through the root `ia-graft` launc
 ## 2. TASK LIFECYCLE & ISSUE GOVERNANCE (`tools/ia-graft`)
 
 - **Autonomous Execution:** User requests pre-authorize all necessary `ia-graft` commands through `task done` without pausing for confirmation; merging PRs remains human-only.
-- **Issue & Backlog Governance:** Manage backlog, refinements, and tasks via `ia-graft issue <list|view|new|update>`. Do NOT invent unversioned markdown backlogs.
+- **Issue & PR Governance:** Manage backlog, issues, and PRs via `ia-graft issue <list|view|new|update|close|reopen|tree|doctor>` and `ia-graft pr <list|view|checks|diff>`. Do NOT invent unversioned markdown backlogs.
 - On Windows invoke `.\ia-graft.cmd` followed by the command; `.codex/rules/ia-graft.rules` pre-authorizes the launcher.
 - **Documentation-Only Edits (100% Markdown prose):** Commit directly to `master`/`main` (no task branch needed). Protocol/policy changes require owner approval before commit.
 - **Code, Config, Contract & Script Edits:**
@@ -43,7 +44,7 @@ All non-prose changes MUST execute exclusively through the root `ia-graft` launc
   3. Work inside `.worktrees/<TASK-ID>/` isolated worktree.
   4. Incremental commits: `ia-graft task commit --id <TASK-ID> --message "<msg>" [--amend] [--agent <name>]`
   5. Run verification: `ia-graft task test --id <TASK-ID> --command "<cmd>"`
-  6. Submit for review: `ia-graft task done --id <TASK-ID> --title "<title>" --body "Closes #<ISSUE-ID>\n\n<details>"`
+  6. Submit for review: `ia-graft task done --id <TASK-ID> --title "<title>" --body "Closes #<ISSUE-ID>\n\n<details>"` (pre-commit hook: auto-regenerates docs/signatures into a single atomic commit for CI).
   7. Clean up after merge: `ia-graft task cleanup --id <TASK-ID>`
 
 ## 3. TOKEN ECONOMY & DELEGATION (`ia-graft`)
@@ -53,7 +54,7 @@ All non-prose changes MUST execute exclusively through the root `ia-graft` launc
 - **Mandatory Sub-Agent Delegation (`ia-graft delegate`):**
   - **Fact Lookup & Research:** MUST offload web searches, broad codebase surveys, or schema extraction via `ia-graft delegate run` or `ia-graft delegate research`.
   - **Sandboxed Code Editing:** MUST delegate repetitive code edits inside a task worktree via `ia-graft delegate edit`.
-  - **Stdio MCP Integration:** Prefer native `graft_context_pack`, `graft_task_resume`, and `graft_task_status` MCP tools.
+  - **Stdio MCP Integration:** Prefer native `graft_*` MCP tools (`graft_context_pack`, `graft_task_resume`, `graft_task_status`, `graft_task_done`, `graft_pr_checks`, etc.) over shell commands.
 
 ## 4. STOP CONDITIONS
 

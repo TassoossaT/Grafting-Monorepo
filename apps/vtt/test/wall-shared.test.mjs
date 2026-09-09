@@ -4,7 +4,10 @@ import test from "node:test";
 import {
   commitWallContour,
   commitWallStroke,
+  correctedWallCorners,
   findWallSurfaceAt,
+  snappedEndpoint,
+  wallCorrectionPreview,
 } from "../src/composition/tabletop/tools/walls/wall-shared.ts";
 import { panelTopology } from "./wall-spans-fixture.mjs";
 
@@ -401,3 +404,93 @@ test("findWallSurfaceAt picks the closest panel when more than one qualifies", (
 
   assert.deepEqual(findWallSurfaceAt(ctx, { x: 2, y: 0, z: 0.06 }), ["@region", "wall-2"]);
 });
+
+test("snappedEndpoint magnets a nearby point onto an existing column, and falls through untouched otherwise", () => {
+  const { ctx } = contextFor([WALL]);
+
+  assert.deepEqual(snappedEndpoint(ctx, { x: 0.05, y: 0, z: -0.05 }), { x: 0, y: 0, z: 0 });
+  assert.deepEqual(snappedEndpoint(ctx, { x: 2, y: 0, z: 5 }), { x: 2, y: 0, z: 5 });
+});
+
+test("a corner still welds through a few millimeters of Y noise -- a real pointer pick, not a typed number, is never bit-exact", () => {
+  const platform = panelTopology("platform-0", { from: { x: 0, z: 0 }, to: { x: 4, z: 0 } }, undefined, "platform");
+  const { ctx } = contextFor([WALL, platform]);
+
+  // 2mm off the wall's own corner (y=0) and off the platform's own corner
+  // (y=3, the fixture's forced "top") -- past the old 1e-3 gate that used to
+  // silently mint a coincident-but-unwelded node here instead.
+  assert.deepEqual(snappedEndpoint(ctx, { x: 0.05, y: 0.002, z: -0.05 }), { x: 0, y: 0, z: 0 });
+  assert.deepEqual(snappedEndpoint(ctx, { x: 0.05, y: 2.998, z: 0.05 }), { x: 0, y: 3, z: 0 });
+});
+
+test("Y noise still cannot confuse two genuinely distinct floors", () => {
+  const lower = panelTopology("platform-lo", { from: { x: 0, z: 0 }, to: { x: 4, z: 0 } }, undefined, "platform");
+  const { ctx } = contextFor([lower]);
+
+  // 3cm off -- past ELEVATION_WELD_TOLERANCE, so this still falls through
+  // rather than welding onto a floor it was never actually drawn on.
+  assert.deepEqual(snappedEndpoint(ctx, { x: 0.02, y: 0.03, z: -0.01 }), { x: 0.02, y: 0.03, z: -0.01 });
+});
+
+test("snappedEndpoint magnets onto a platform vertex when no wall column is closer", () => {
+  const platform = panelTopology("platform-0", { from: { x: 8, z: 8 }, to: { x: 12, z: 8 } }, undefined, "platform");
+  const { ctx } = contextFor([WALL, platform]);
+
+  assert.deepEqual(snappedEndpoint(ctx, { x: 8.05, y: 0, z: 7.95 }), { x: 8, y: 0, z: 8 });
+});
+
+test("a platform vertex wins over a farther existing wall column -- both magnets are the same strength, nearest decides", () => {
+  // WALL's own corner sits at (0,0,0), 0.2 world units from the click below --
+  // inside the weld tolerance on its own, so the old wall-column-checked-first
+  // order would have won here even though the platform vertex is far closer.
+  const platform = panelTopology("platform-0", { from: { x: 0.05, z: 0.05 }, to: { x: 4, z: 4 } }, undefined, "platform");
+  const { ctx } = contextFor([WALL, platform]);
+
+  assert.deepEqual(snappedEndpoint(ctx, { x: 0.08, y: 0, z: 0.08 }), { x: 0.05, y: 0, z: 0.05 });
+});
+
+test("a second wall-line run meeting the first at a platform vertex welds onto that same vertex, not onto the first run's own separate corner", () => {
+  const platform = panelTopology("platform-0", { from: { x: 0, z: 0 }, to: { x: 4, z: 0 } }, undefined, "platform");
+  const platformCorner = "platform-0:a-bottom";
+
+  const first = contextFor([platform]);
+  commitWallContour(first.ctx, [line({ x: 0.02, y: 0, z: -0.01 }, { x: 4, y: 0, z: 0.03 })], PARAMS, "wall-line");
+  const wallA = first.patches[0].patch;
+  assert.ok(wallA.nodes.some((node) => node.id === platformCorner), "the first run must already weld its own corner onto the platform vertex");
+
+  const second = contextFor([...topologiesFrom(wallA), platform]);
+  commitWallContour(second.ctx, [line({ x: -0.03, y: 0, z: 0.02 }, { x: -0.03, y: 0, z: 4 })], PARAMS, "wall-line");
+  const wallB = second.patches[0].patch;
+  assert.ok(wallB.nodes.some((node) => node.id === platformCorner), "the corner (\"quina\") must weld onto the platform's own vertex, not mint a coincident node of its own");
+});
+
+test("correctedWallCorners is the same fit-and-weld skeleton both wall tools preview from", () => {
+  const { ctx } = contextFor([WALL]);
+
+  // A straight two-point run, its start a few centimeters off the existing
+  // wall's own corner -- the same shape wall-line's previewFor now feeds in.
+  assert.deepEqual(
+    correctedWallCorners(ctx, [{ x: 0.05, y: 0, z: -0.05 }, { x: 4, y: 0, z: 5 }]),
+    [{ x: 0, y: 0, z: 0 }, { x: 4, y: 0, z: 5 }],
+  );
+
+  // A multi-sample stroke -- the shape wall-brush's own preview feeds in --
+  // still corrects into straight runs and welds its own first corner.
+  const stroke = correctedWallCorners(
+    ctx,
+    [{ x: 0.02, y: 0, z: -0.01 }, { x: 2, y: 0, z: 0 }, { x: 4, y: 0, z: 4 }],
+    0.3,
+  );
+  assert.deepEqual(stroke[0], { x: 0, y: 0, z: 0 });
+  assert.deepEqual(stroke.at(-1), { x: 4, y: 0, z: 4 });
+});
+
+test("wallCorrectionPreview is a filled band along the corrected skeleton, not a bare line", () => {
+  const { ctx } = contextFor([WALL]);
+
+  const preview = wallCorrectionPreview(ctx, [{ x: 0.05, y: 0, z: -0.05 }, { x: 4, y: 0, z: 5 }], 0, 0xffffff);
+  assert.equal(preview.kind, "mesh");
+  assert.ok(preview.positions.length > 0, "expected a filled correction band, not an empty preview");
+  assert.ok(preview.indices.length > 0);
+});
+
