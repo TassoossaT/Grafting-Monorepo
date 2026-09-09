@@ -291,10 +291,36 @@ function gridPatch(
 export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillRequest): TerrainFillOutcome {
   if (request.boundary.length === 0) return NOTHING;
 
+  let bMinX = Infinity;
+  let bMinZ = Infinity;
+  let bMaxX = -Infinity;
+  let bMaxZ = -Infinity;
+  for (const ring of request.boundary) {
+    for (const pt of ring.points) {
+      if (pt.x < bMinX) bMinX = pt.x;
+      if (pt.x > bMaxX) bMaxX = pt.x;
+      if (pt.z < bMinZ) bMinZ = pt.z;
+      if (pt.z > bMaxZ) bMaxZ = pt.z;
+    }
+  }
+  const spanX = Math.max(1, bMaxX - bMinX);
+  const spanZ = Math.max(1, bMaxZ - bMinZ);
+  const bboxArea = spanX * spanZ;
+  const faceArea = Math.max(0.25, request.faceSide * request.faceSide);
+  const expectedFaces = Math.max(8, Math.ceil(bboxArea / faceArea));
+  // Bound Steiner points during Delaunay refinement to prevent runaway subdivision cascades
+  // on acute junctions or narrow boundary corridors while leaving room for healthy refinement.
+  const maxAdditionalVertices = Math.min(1500, Math.max(80, expectedFaces * 6));
+
   const grid = runtime.generateIrregularQuadGrid({
     seed: request.seed,
     faceSide: request.faceSide,
     relaxStrength: request.relaxStrength,
+    refinement: {
+      minAngleDegrees: 20.5,
+      maxAdditionalVertices,
+      minAreaRatio: 0.25,
+    },
     boundary: request.boundary.map((ring) => ring.points),
     holes: request.holes.map((ring) => ring.points),
   });

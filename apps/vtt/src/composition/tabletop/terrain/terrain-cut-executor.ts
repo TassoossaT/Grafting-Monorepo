@@ -339,7 +339,6 @@ export function buildConstraintRings(
   perimeters: ConstraintTable,
 ): readonly (ConstraintRing & { readonly isHole: boolean })[] {
   const snapDist = Math.max(0.25, faceSize * 0.18);
-  const minStep = Math.max(0.4, faceSize * 0.3);
 
   // One position per node, and a bucket index over them. A node appearing in
   // two rings is one candidate, not two.
@@ -381,7 +380,17 @@ export function buildConstraintRings(
     for (let rIdx = 0; rIdx < polygon.length; rIdx += 1) {
       const rawRing = polygon[rIdx]!;
       const points = rawRing.slice(0, -1).map(([x, z]) => [x, z] as [number, number]);
-      if (points.length >= 3) raw.push({ isHole: rIdx > 0, points });
+      if (points.length >= 3) {
+        let area = 0;
+        for (let i = 0; i < points.length; i++) {
+          const [x1, z1] = points[i]!;
+          const [x2, z2] = points[(i + 1) % points.length]!;
+          area += x1 * z2 - x2 * z1;
+        }
+        if (Math.abs(area * 0.5) >= 0.05) {
+          raw.push({ isHole: rIdx > 0, points });
+        }
+      }
     }
   }
 
@@ -439,6 +448,9 @@ export function buildConstraintRings(
             continue;
           }
           if (source === undefined) continue;
+          if (source !== undefined && previous.source !== undefined && dist < 0.05 && !edgeBetween.has(pairKey(previous.source, source))) {
+            continue;
+          }
         }
       }
       points.push(source !== undefined ? { x: at.x, z: at.z, source } : { x: at.x, z: at.z });
