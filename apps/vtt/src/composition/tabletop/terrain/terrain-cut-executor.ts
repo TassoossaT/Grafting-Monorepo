@@ -5,6 +5,7 @@ import type {
   ConstructionPosition,
   ConstructionRegionEdge,
   ConstructionRegionTopology,
+  ConstructionSurfaceKey,
 } from "@/ports";
 import type {
   StructuralCutRequest,
@@ -450,11 +451,34 @@ export function executeTerrainCut(
       ? (runtime as unknown as { getFootprintCoverage: (outline: readonly (readonly [number, number])[]) => readonly ConstructionCoveredRegion[] }).getFootprintCoverage(coveredOutline)
       : []);
 
+  // **The neighbourhood has to contain the ground being replaced.**
+  //
+  // The area names where the work is, and for a stroke that is the same place
+  // as the ground it covers. For a repair it need not be: a path regenerates
+  // its whole connected component, so the ground orphaned by one stroke can
+  // stand a long way from that stroke's own footprint. A seeded topology query
+  // drops any seed that does not reach the bounds it was given, so an extent
+  // taken from the area alone would silently discard exactly the faces this
+  // call exists to replace.
+  const coveredExtent = { ...extent };
+  for (const region of covered) {
+    const topology =
+      typeof runtime.getRegionTopology === "function"
+        ? runtime.getRegionTopology(region.surfaceKey as ConstructionSurfaceKey)
+        : undefined;
+    for (const node of topology?.nodes ?? []) {
+      coveredExtent.minX = Math.min(coveredExtent.minX, node.position.x);
+      coveredExtent.minZ = Math.min(coveredExtent.minZ, node.position.z);
+      coveredExtent.maxX = Math.max(coveredExtent.maxX, node.position.x);
+      coveredExtent.maxZ = Math.max(coveredExtent.maxZ, node.position.z);
+    }
+  }
+
   // A regenerate has to be able to absorb a ring or two of neighbours (see the
   // growth loop below), so it reaches further out than a stroke needs to.
   const standingReach =
     request.profile.kind === "regenerate" ? effectiveFaceSide * 5 : effectiveFaceSide * 2;
-  const standing = terrainStandingAround(runtime, covered, extent, standingReach);
+  const standing = terrainStandingAround(runtime, covered, coveredExtent, standingReach);
 
   const isTerrainMatch = (st: string, target: string): boolean => {
     if (st === target) return true;

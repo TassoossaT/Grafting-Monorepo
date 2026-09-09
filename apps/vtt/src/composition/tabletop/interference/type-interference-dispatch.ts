@@ -241,7 +241,7 @@ export function dispatchCutRepairs(
     ? runtime.getRegionTopologiesInBounds(bounds)
     : runtime.getAllRegionTopologies();
 
-  const candidateTerrain = topologiesInBounds.filter((t) => {
+  const underFootprint = topologiesInBounds.filter((t) => {
     if (!targetTypes.includes(t.surfaceType)) return false;
     if (request.footprintOutline && request.footprintOutline.length >= 3) {
       return t.nodes.some(
@@ -250,6 +250,36 @@ export function dispatchCutRepairs(
     }
     return true;
   });
+
+  // **Ground the painter is about to orphan, wherever it stands.**
+  //
+  // A stroke's footprint is what that stroke claims. What it *destroys* is a
+  // different set and a much larger one: a path regenerates its whole
+  // connected component and re-mints every node in it, including the ones a
+  // terrain repair split into its edges so the two could share a corner. Every
+  // one of those corners stops existing, and the terrain holding them is
+  // mostly nowhere near the stroke -- so scoping the search to the footprint
+  // meant it was never looked for. It kept naming dead nodes, and the road
+  // visibly came apart from the ground as the network filled in.
+  //
+  // This is the exact set and not a sweep: terrain holding a node that is
+  // going away. It costs what the contact between the two actually is, and it
+  // shrinks on its own the day a path stops regenerating more than it changed.
+  const orphaned: ConstructionRegionTopology[] = [];
+  if (replacedNodeIds.size > 0 && replacedTopologies.length > 0) {
+    const replacedBounds = terrainTopologiesBounds(replacedTopologies, margin);
+    const near = typeof runtime.getRegionTopologiesInBounds === "function"
+      ? runtime.getRegionTopologiesInBounds(replacedBounds)
+      : runtime.getAllRegionTopologies();
+    for (const t of near) {
+      if (!targetTypes.includes(t.surfaceType)) continue;
+      if (t.nodes.some((n) => replacedNodeIds.has(n.id))) orphaned.push(t);
+    }
+  }
+
+  const byKey = new Map<string, ConstructionRegionTopology>();
+  for (const t of [...underFootprint, ...orphaned]) byKey.set(t.surfaceKey.join(" "), t);
+  const candidateTerrain = [...byKey.values()];
   if (candidateTerrain.length === 0) return;
 
   const outlineCoverageKeys = new Set<string>();

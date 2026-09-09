@@ -814,3 +814,96 @@ test("joining multiple path clouds protects foreign road faces from erasure", ()
 
 
 
+
+/**
+ * A road regenerates its whole connected component on every stroke, re-minting
+ * every node in it -- including the ones a terrain repair split into its edges
+ * so the two could share a corner. The terrain holding those corners is mostly
+ * nowhere near the stroke that triggered the regeneration, and scoping the
+ * search to that stroke's footprint meant it was never looked for: it went on
+ * naming nodes that no longer existed, and the ground visibly came away from
+ * the road as the network filled in.
+ */
+test("terrain welded to road the stroke re-mints is repaired, however far from the stroke", () => {
+  const consumed = [];
+  const positions = new Map();
+  const put = (id, x, z) => positions.set(id, { x, y: 0, z });
+
+  // The stroke, down at z = 0.
+  for (const [id, x, z] of [["s0", 0, 0], ["s1", 2, 0], ["s2", 2, 4], ["s3", 0, 4]]) put(id, x, z);
+  // The far end of the same road component, forty units away, and the corner
+  // a previous repair split into its edge for the ground to share.
+  for (const [id, x, z] of [["f0", 0, 36], ["f1", 2, 36], ["f2", 2, 40], ["f3", 0, 40]]) put(id, x, z);
+  // Terrain standing against that far end, holding "f1" and "f2" with it.
+  for (const [id, x, z] of [["g0", 4, 36], ["g1", 4, 40]]) put(id, x, z);
+
+  const loopOf = (ids) =>
+    ids.map((id, index) => {
+      const next = ids[(index + 1) % ids.length];
+      return { edgeId: `e:${id}~${next}`, reversed: false, startNodeId: id, endNodeId: next, geometry: { kind: "line" } };
+    });
+  const faceOf = (key, type, ids) => ({
+    surfaceKey: key,
+    surfaceType: type,
+    physical: true,
+    outerLoops: [loopOf(ids)],
+    holes: [],
+    nodes: ids.map((id) => ({ id, position: positions.get(id) })),
+  });
+
+  // The road faces this stroke replaces: its own, and the far one it re-mints
+  // for no reason other than being in the same component.
+  const replaced = [
+    faceOf(["@region", "road-near"], "path", ["s0", "s1", "s2", "s3"]),
+    faceOf(["@region", "road-far"], "path", ["f0", "f1", "f2", "f3"]),
+  ];
+  // The ground welded to the far end -- it shares f1 and f2 by node id.
+  const farGround = faceOf(["terrain", "far"], "terrain", ["f1", "g0", "g1", "f2"]);
+
+  const inBounds = (topology, bounds) =>
+    topology.nodes.some(
+      (node) =>
+        node.position.x >= bounds.minX &&
+        node.position.x <= bounds.maxX &&
+        node.position.z >= bounds.minZ &&
+        node.position.z <= bounds.maxZ,
+    );
+
+  const runtime = {
+    getAllRegionTopologies: () => [farGround, ...replaced],
+    getRegionTopologiesInBounds: (bounds) => [farGround, ...replaced].filter((t) => inBounds(t, bounds)),
+    getRegionTopology: () => undefined,
+    getSnapshot: () => ({ tableId: "t", map: { nodePositions: positions } }),
+  };
+
+  const request = {
+    operationId: "op",
+    sourceSurfaceKeys: replaced.map((t) => t.surfaceKey),
+    patch: { nodes: [], edges: [], regions: [{ regionId: "new", surfaceType: "path", physical: true, boundary: [] }] },
+    // Only the stroke. This is what a path actually reports -- see
+    // path-cloud-mutation.ts, "the footprint this stroke alone claims".
+    footprintOutline: [
+      [0, 0],
+      [2, 0],
+      [2, 4],
+      [0, 4],
+    ],
+  };
+
+  dispatchCutRepairs(runtime, request, "cause", replaced, undefined, {
+    terrain: (_runtime, fallout) => {
+      consumed.push(...fallout.consumedSurfaceKeys.map((key) => key.join(" ")));
+      return 1;
+    },
+  });
+
+  // The stroke's own footprint reaches z = 4 at most; this ground starts at 36.
+  assert.ok(
+    !inBounds(farGround, { minX: -2.5, minZ: -2.5, maxX: 4.5, maxZ: 6.5 }),
+    "the ground really is outside the stroke's footprint",
+  );
+  assert.ok(
+    consumed.includes("terrain far"),
+    `ground holding a node the stroke destroys is repaired, got ${JSON.stringify(consumed)}`,
+  );
+});

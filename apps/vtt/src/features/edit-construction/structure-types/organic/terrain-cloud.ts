@@ -187,30 +187,22 @@ export function planTerrainCloudCutRepair(
   for (const t of input.candidateTerrain) {
     if (!isTerrainSurface(t.surfaceType)) continue;
 
-    // 1. Shares a node with the cutter (or replaced geometry), scoped to active footprint when outline is present
-    let sharesNode = false;
-    if (cutterNodeIds.size > 0) {
-      if (outline !== undefined) {
-        let oMinX = Infinity, oMaxX = -Infinity, oMinZ = Infinity, oMaxZ = -Infinity;
-        for (const [ox, oz] of outline) {
-          if (ox < oMinX) oMinX = ox;
-          if (ox > oMaxX) oMaxX = ox;
-          if (oz < oMinZ) oMinZ = oz;
-          if (oz > oMaxZ) oMaxZ = oz;
-        }
-        const oMargin = 2.5;
-        sharesNode = t.nodes.some(
-          (n) =>
-            cutterNodeIds.has(n.id) &&
-            n.position.x >= oMinX - oMargin &&
-            n.position.x <= oMaxX + oMargin &&
-            n.position.z >= oMinZ - oMargin &&
-            n.position.z <= oMaxZ + oMargin,
-        );
-      } else {
-        sharesNode = t.nodes.some((n) => cutterNodeIds.has(n.id));
-      }
-    }
+    // 1. Holds a node the cutter is about to destroy.
+    //
+    // **Not scoped to the footprint, and it used to be.** A stroke's footprint
+    // is the ground that stroke claims; the nodes it destroys are another
+    // matter entirely, because a path regenerates its whole connected
+    // component and re-mints every node in it, however far from the stroke
+    // that reaches. Terrain welded to the far end of a road holds nodes that
+    // are about to stop existing, and clipping this test to the footprint
+    // meant it was never told -- so it kept naming dead nodes and visibly came
+    // apart from the road as the network filled in.
+    //
+    // Scoping was right for the proximity test below, which guesses. This one
+    // does not: a shared node id is exact, and a face holding one has to be
+    // regenerated whether it is under the stroke or a hundred metres away.
+    const sharesNode =
+      cutterNodeIds.size > 0 && t.nodes.some((n) => cutterNodeIds.has(n.id));
 
     // 2. Explicitly covered by the engine's footprint coverage query
     const inCoverage = coverageKeys.has(t.surfaceKey.join("/")) || coverageKeys.has(t.surfaceKey.join(":"));
