@@ -10,6 +10,7 @@ import type {
 import type { AtomicEditOp, EditAxis, EditGesture, EditTarget } from "../orchestration/atomic-edit.ts";
 import type { CloudTopology } from "../topology/construction-cloud.ts";
 import type { CreationInteraction } from "./creation-interaction.ts";
+import type { MultiPolygon } from "polygon-clipping";
 
 /**
  * A role is this app's own name for "what a particular node/edge of a
@@ -202,6 +203,8 @@ export interface CutFallout {
    * may reach further than the ground being regrown.
    */
   readonly painterSurfaceType?: string;
+  /** Ground vacated by the painter that should be restored to terrain. */
+  readonly vacatedGround?: MultiPolygon;
 }
 
 /**

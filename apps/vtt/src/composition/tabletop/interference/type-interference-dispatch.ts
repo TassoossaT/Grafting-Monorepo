@@ -100,7 +100,21 @@ function areaPolygonsOf(topologies: readonly ConstructionRegionTopology[]): Poly
       }
       if (!complete || ring.length < 3) continue;
       ring.push([ring[0]![0], ring[0]![1]]);
-      polygons.push([ring]);
+      const holes: [number, number][][] = [];
+      for (const holeLoop of topology.holes) {
+        const holeRing: [number, number][] = [];
+        let holeComplete = true;
+        for (const use of holeLoop) {
+          const position = at.get(use.startNodeId);
+          if (position === undefined) { holeComplete = false; break; }
+          holeRing.push([position.x, position.z]);
+        }
+        if (holeComplete && holeRing.length >= 3) {
+          holeRing.push([holeRing[0]![0], holeRing[0]![1]]);
+          holes.push(holeRing);
+        }
+      }
+      polygons.push([ring, ...holes]);
     }
   }
   return polygons;
@@ -136,10 +150,11 @@ function groundThePainterMovedOff(
 ): MultiPolygon {
   const was = unionOf(areaPolygonsOf(before));
   const is = unionOf(areaPolygonsOf(after));
-  if (was.length === 0 || is.length === 0) return was.length === 0 ? is : was;
+  if (was.length === 0) return [];
+  if (is.length === 0) return was;
   let moved: MultiPolygon;
   try {
-    moved = polygonClipping.xor(was, is);
+    moved = polygonClipping.difference(was, is);
   } catch {
     return was;
   }
@@ -384,6 +399,30 @@ export function dispatchCutRepairs(
     cutterPolygons.push({ outer, holes });
   }
 
+  const newNodeIds = new Set(newRoadTopologies.flatMap((t) => t.nodes.map((n) => n.id)));
+  const trulyDestroyedNodeIds = new Set<string>();
+  for (const id of replacedNodeIds) {
+    if (!newNodeIds.has(id)) trulyDestroyedNodeIds.add(id);
+  }
+  if (outcome?.removedNodeIds) {
+    for (const id of outcome.removedNodeIds) trulyDestroyedNodeIds.add(id);
+  }
+
+  // A destroyed node that no new road node stands near (>= ROAD_REALLY_MOVED)
+  // was genuinely moved or abandoned by the road. Any terrain face holding it
+  // has to be regenerated to meet the new road contour. A node whose position
+  // did not move was merely re-minted, which is no reason to regenerate ground.
+  const newRoadPositions = newRoadTopologies.flatMap((t) => t.nodes.map((n) => n.position));
+  const newRoadSpatial = pointBucketIndex(newRoadPositions, ROAD_REALLY_MOVED);
+  const abandonedNodeIds = new Set<string>();
+  for (const t of replacedTopologies) {
+    for (const n of t.nodes) {
+      if (trulyDestroyedNodeIds.has(n.id) && !newRoadSpatial.isNear(n.position.x, n.position.z)) {
+        abandonedNodeIds.add(n.id);
+      }
+    }
+  }
+
   // **Ground the painter is about to orphan, wherever it stands.**
   //
   // A stroke's footprint is what that stroke claims. What it *destroys* is a
@@ -397,12 +436,13 @@ export function dispatchCutRepairs(
   const orphaned: ConstructionRegionTopology[] = [];
   const changed = groundThePainterMovedOff(replacedTopologies, newRoadTopologies);
   if (replacedTopologies.length > 0) {
-    const replacedBounds = terrainTopologiesBounds(replacedTopologies, margin);
+    const replacedBounds = terrainTopologiesBounds(replacedTopologies, 4.0);
     const near = typeof runtime.getRegionTopologiesInBounds === "function"
       ? runtime.getRegionTopologiesInBounds(replacedBounds)
       : runtime.getAllRegionTopologies();
     for (const t of near) {
       if (!targetTypes.includes(t.surfaceType)) continue;
+      const sharesAbandoned = abandonedNodeIds.size > 0 && t.nodes.some((n) => abandonedNodeIds.has(n.id));
       const insideChanged = changed.length > 0 && (
         t.nodes.some((n) => insideAny(n.position.x, n.position.z, changed)) ||
         (t.nodes.length > 0 &&
@@ -423,7 +463,7 @@ export function dispatchCutRepairs(
           }
         }
       }
-      if (insideChanged || insideRoad) {
+      if (insideChanged || insideRoad || sharesAbandoned) {
         orphaned.push(t);
       }
     }
@@ -448,15 +488,6 @@ export function dispatchCutRepairs(
     }
   }
 
-  const newNodeIds = new Set(newRoadTopologies.flatMap((t) => t.nodes.map((n) => n.id)));
-  const trulyDestroyedNodeIds = new Set<string>();
-  for (const id of replacedNodeIds) {
-    if (!newNodeIds.has(id)) trulyDestroyedNodeIds.add(id);
-  }
-  if (outcome?.removedNodeIds) {
-    for (const id of outcome.removedNodeIds) trulyDestroyedNodeIds.add(id);
-  }
-
   // Pure domain planning via TerrainCloud:
   const repairPlan = planTerrainCloudCutRepair({
     candidateTerrain,
@@ -469,7 +500,7 @@ export function dispatchCutRepairs(
     cutterPolygons,
   });
 
-  if (!repairPlan.requiresRepair) return;
+  if (!repairPlan.requiresRepair && changed.length === 0) return;
 
   // Derive painted loops and nodes scoped to the affected road
   let paintedLoops: readonly (readonly ConstructionRegionEdge[])[] = [];
@@ -487,7 +518,12 @@ export function dispatchCutRepairs(
     paintedNodes = painter.paintedNodes;
   }
 
-  for (const [surfaceType, consumedSurfaceKeys] of repairPlan.consumedByType) {
+  const consumedByType = new Map(repairPlan.consumedByType);
+  if (consumedByType.size === 0 && changed.length > 0) {
+    consumedByType.set("terrain", []);
+  }
+
+  for (const [surfaceType, consumedSurfaceKeys] of consumedByType) {
     const executor = executors[surfaceType];
     if (executor === undefined) continue;
     try {
@@ -503,6 +539,7 @@ export function dispatchCutRepairs(
           // instead of laying ground over it and hoping a hole ring saves it.
           footprintOutline: request.footprintOutline,
           painterSurfaceType: paintedType,
+          vacatedGround: changed,
         },
         causeId,
         runtime.getSnapshot().tableId,

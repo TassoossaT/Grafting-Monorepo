@@ -21,6 +21,8 @@ import type {
   ConstructionNodeId,
   ConstructionNodeSnapshot,
   ConstructionGraphSnapshot,
+  ConstructionGridConstraintPoint,
+  ConstructionGridContourNode,
   ConstructionIrregularQuadGrid,
   ConstructionIrregularQuadGridRequest,
   ConstructionOrientedEdgeUse,
@@ -307,6 +309,140 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
   }
 
   generateIrregularQuadGrid(
+    request: ConstructionIrregularQuadGridRequest,
+  ): ConstructionIrregularQuadGrid | undefined {
+    const holes = request.holes ?? [];
+    if (request.boundary.length > 1 && holes.length > 0) {
+      const isPointInRing = (x: number, z: number, ring: readonly ConstructionGridConstraintPoint[]): boolean => {
+        let inside = false;
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+          const xi = ring[i]!.x, zi = ring[i]!.z;
+          const xj = ring[j]!.x, zj = ring[j]!.z;
+          if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) {
+            inside = !inside;
+          }
+        }
+        return inside;
+      };
+
+      const isRingInRing = (
+        child: readonly ConstructionGridConstraintPoint[],
+        parent: readonly ConstructionGridConstraintPoint[],
+      ): boolean => {
+        if (child.length === 0 || parent.length < 3) return false;
+        const cx = child.reduce((s, p) => s + p.x, 0) / child.length;
+        const cz = child.reduce((s, p) => s + p.z, 0) / child.length;
+        return isPointInRing(cx, cz, parent) || (child[0] !== undefined && isPointInRing(child[0].x, child[0].z, parent));
+      };
+
+      const islandBoundaryIndices = new Set<number>();
+      for (let bIdx = 0; bIdx < request.boundary.length; bIdx++) {
+        const b = request.boundary[bIdx]!;
+        if (holes.some((h) => isRingInRing(b, h))) {
+          islandBoundaryIndices.add(bIdx);
+        }
+      }
+
+      if (islandBoundaryIndices.size > 0) {
+        interface Component {
+          boundaries: { ring: readonly ConstructionGridConstraintPoint[]; originalIndex: number }[];
+          holes: { ring: readonly ConstructionGridConstraintPoint[]; originalIndex: number }[];
+        }
+
+        const components: Component[] = [];
+        // Component 0: outer boundaries (not inside any hole)
+        const outerComp: Component = { boundaries: [], holes: [] };
+        for (let bIdx = 0; bIdx < request.boundary.length; bIdx++) {
+          if (!islandBoundaryIndices.has(bIdx)) {
+            outerComp.boundaries.push({ ring: request.boundary[bIdx]!, originalIndex: bIdx });
+          }
+        }
+        components.push(outerComp);
+
+        // Island components: each island boundary gets its own component
+        const islandComps: { comp: Component; boundaryRing: readonly ConstructionGridConstraintPoint[] }[] = [];
+        for (const bIdx of islandBoundaryIndices) {
+          const islandComp: Component = {
+            boundaries: [{ ring: request.boundary[bIdx]!, originalIndex: bIdx }],
+            holes: [],
+          };
+          components.push(islandComp);
+          islandComps.push({ comp: islandComp, boundaryRing: request.boundary[bIdx]! });
+        }
+
+        // Distribute holes: a hole inside an island boundary belongs to that island; otherwise to outerComp
+        for (let hIdx = 0; hIdx < holes.length; hIdx++) {
+          const h = holes[hIdx]!;
+          let assigned = false;
+          for (const { comp, boundaryRing } of islandComps) {
+            if (isRingInRing(h, boundaryRing)) {
+              comp.holes.push({ ring: h, originalIndex: hIdx });
+              assigned = true;
+              break;
+            }
+          }
+          if (!assigned) {
+            outerComp.holes.push({ ring: h, originalIndex: hIdx });
+          }
+        }
+
+        // Generate each component and combine
+        const combinedVertices: { readonly x: number; readonly z: number; readonly source?: number }[] = [];
+        const combinedQuads: (readonly [number, number, number, number])[] = [];
+        const combinedOnContour: ConstructionGridContourNode[] = [];
+        let refinementComplete = true;
+
+        for (let cIdx = 0; cIdx < components.length; cIdx++) {
+          const comp = components[cIdx]!;
+          if (comp.boundaries.length === 0) continue;
+
+          const compGrid = this.#generateSingleGrid({
+            ...request,
+            seed: request.seed + cIdx * 17,
+            boundary: comp.boundaries.map((b) => b.ring),
+            holes: comp.holes.map((h) => h.ring),
+          });
+
+          if (compGrid !== undefined) {
+            const vOffset = combinedVertices.length;
+            combinedVertices.push(...compGrid.vertices);
+            for (const q of compGrid.quads) {
+              combinedQuads.push([q[0] + vOffset, q[1] + vOffset, q[2] + vOffset, q[3] + vOffset]);
+            }
+            for (const c of compGrid.onContour) {
+              const origRing =
+                c.ringKind === "boundary"
+                  ? (comp.boundaries[c.ring]?.originalIndex ?? c.ring)
+                  : (comp.holes[c.ring]?.originalIndex ?? c.ring);
+              combinedOnContour.push({
+                vertex: c.vertex + vOffset,
+                ringKind: c.ringKind,
+                ring: origRing,
+                segment: c.segment,
+              });
+            }
+            if (!compGrid.refinementComplete) {
+              refinementComplete = false;
+            }
+          }
+        }
+
+        if (combinedVertices.length > 0) {
+          return {
+            vertices: combinedVertices,
+            quads: combinedQuads,
+            onContour: combinedOnContour,
+            refinementComplete,
+          };
+        }
+        return undefined;
+      }
+    }
+
+    return this.#generateSingleGrid(request);
+  }
+
+  #generateSingleGrid(
     request: ConstructionIrregularQuadGridRequest,
   ): ConstructionIrregularQuadGrid | undefined {
     let raw: string;

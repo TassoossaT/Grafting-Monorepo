@@ -83,6 +83,32 @@ function outlineAroundConsumed(
   ];
 }
 
+function outlineAroundMultiPolygon(
+  polygon: readonly (readonly (readonly (readonly [number, number])[])[])[],
+): readonly (readonly [number, number])[] {
+  let minX = Infinity;
+  let minZ = Infinity;
+  let maxX = -Infinity;
+  let maxZ = -Infinity;
+  for (const piece of polygon) {
+    for (const ring of piece) {
+      for (const [x, z] of ring) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (z < minZ) minZ = z;
+        if (z > maxZ) maxZ = z;
+      }
+    }
+  }
+  if (!Number.isFinite(minX)) return [];
+  return [
+    [minX, minZ],
+    [maxX, minZ],
+    [maxX, maxZ],
+    [minX, maxZ],
+  ];
+}
+
 /**
  * Terrain's `CutRepairExecutor`: grow the ground back around the thing that
  * cut it.
@@ -100,19 +126,21 @@ export function repairTerrainCut(
   causeId: string,
   tableId: string,
 ): number {
-  if (fallout.consumedSurfaceKeys.length === 0) return 0;
+  if (fallout.consumedSurfaceKeys.length === 0 && (!fallout.vacatedGround || fallout.vacatedGround.length === 0)) return 0;
 
   // Read while they still stand: a key the engine no longer knows is a stale
   // key, and repairing on the strength of one deletes ground nobody asked for.
   const consumed = fallout.consumedSurfaceKeys
     .map((surfaceKey) => runtime.getRegionTopology(surfaceKey))
     .filter((topology): topology is ConstructionRegionTopology => topology !== undefined);
-  if (consumed.length === 0) return 0;
+  if (consumed.length === 0 && (!fallout.vacatedGround || fallout.vacatedGround.length === 0)) return 0;
 
   const outline =
     fallout.footprintOutline !== undefined && fallout.footprintOutline.length >= 3
       ? fallout.footprintOutline
-      : outlineAroundConsumed(consumed);
+      : (consumed.length > 0
+          ? outlineAroundConsumed(consumed)
+          : (fallout.vacatedGround ? outlineAroundMultiPolygon(fallout.vacatedGround) : []));
   if (outline.length < 3) return 0;
 
   const outcome = executeTerrainCut(runtime, {
@@ -124,7 +152,7 @@ export function repairTerrainCut(
       surfaceKey: topology.surfaceKey,
       surfaceType: topology.surfaceType,
     })),
-    targetSurfaceType: consumed[0]!.surfaceType,
+    targetSurfaceType: consumed[0]?.surfaceType ?? "terrain",
     profile: {
       kind: "regenerate",
       connectTo:
@@ -132,6 +160,7 @@ export function repairTerrainCut(
           ? { surfaceType: fallout.painterSurfaceType }
           : undefined,
     },
+    vacatedArea: fallout.vacatedGround,
     causeId,
     tableId,
     faceSide: DEFAULT_FACE_SIDE,

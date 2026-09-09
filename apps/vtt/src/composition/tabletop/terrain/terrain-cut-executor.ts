@@ -416,13 +416,14 @@ export function buildConstraintRings(
   }
   proposals.sort((a, b) => a.distance - b.distance);
 
-  const takenSource = new Set<number>();
+  const takenSourceInRing = new Set<string>();
   const takenPoint = new Set<string>();
   const matched = new Map<string, number>();
   for (const proposal of proposals) {
     const at = `${proposal.ring}:${proposal.point}`;
-    if (takenSource.has(proposal.source) || takenPoint.has(at)) continue;
-    takenSource.add(proposal.source);
+    const ringSource = `${proposal.ring}:${proposal.source}`;
+    if (takenSourceInRing.has(ringSource) || takenPoint.has(at)) continue;
+    takenSourceInRing.add(ringSource);
     takenPoint.add(at);
     matched.set(at, proposal.source);
   }
@@ -629,6 +630,18 @@ export function executeTerrainCut(
       coveredExtent.maxZ = Math.max(coveredExtent.maxZ, node.position.z);
     }
   }
+  if (request.vacatedArea) {
+    for (const piece of request.vacatedArea) {
+      for (const ring of piece) {
+        for (const [x, z] of ring) {
+          coveredExtent.minX = Math.min(coveredExtent.minX, x);
+          coveredExtent.minZ = Math.min(coveredExtent.minZ, z);
+          coveredExtent.maxX = Math.max(coveredExtent.maxX, x);
+          coveredExtent.maxZ = Math.max(coveredExtent.maxZ, z);
+        }
+      }
+    }
+  }
 
   // A regenerate has to be able to absorb a ring or two of neighbours (see the
   // growth loop below), so it reaches further out than a stroke needs to.
@@ -702,6 +715,18 @@ export function executeTerrainCut(
         if (n.position.z > connMaxZ) connMaxZ = n.position.z;
       }
     }
+    if (request.vacatedArea) {
+      for (const piece of request.vacatedArea) {
+        for (const ring of piece) {
+          for (const [x, z] of ring) {
+            connMinX = Math.min(connMinX, x);
+            connMinZ = Math.min(connMinZ, z);
+            connMaxX = Math.max(connMaxX, x);
+            connMaxZ = Math.max(connMaxZ, z);
+          }
+        }
+      }
+    }
     const connectTopologies = paintedTopologiesOf(
       runtime as unknown as Parameters<typeof paintedTopologiesOf>[0],
       request.profile.connectTo.surfaceType,
@@ -751,10 +776,14 @@ export function executeTerrainCut(
   /** The affected faces as one polygon, with `connectArea` taken out of it. */
   const groundFor = (faces: readonly ConstructionRegionTopology[]): MultiPolygon => {
     const polygons = faces.map(topologyToPolygon).filter((p) => p.length > 0);
-    if (polygons.length === 0) return [];
+    const allPolygons =
+      request.vacatedArea && request.vacatedArea.length > 0
+        ? [...polygons, ...request.vacatedArea]
+        : polygons;
+    if (allPolygons.length === 0) return [];
     let merged: MultiPolygon;
     try {
-      merged = polygonClipping.union(polygons[0]!, ...polygons.slice(1));
+      merged = polygonClipping.union(allPolygons[0]!, ...allPolygons.slice(1));
     } catch {
       return [];
     }
@@ -844,7 +873,7 @@ export function executeTerrainCut(
     request.area.center ??
     centroidOf(affectedNodes.length > 0 ? affectedNodes : coveredOutline.map(([x, z]) => ({ position: { x, y: 0, z } })));
   const center = { x: center3D.x, z: center3D.z };
-  const extentRadius = Math.max((extent.maxX - extent.minX) / 2, (extent.maxZ - extent.minZ) / 2, effectiveFaceSide);
+  const extentRadius = Math.max((coveredExtent.maxX - coveredExtent.minX) / 2, (coveredExtent.maxZ - coveredExtent.minZ) / 2, effectiveFaceSide);
   const radius = request.area.radius ?? extentRadius;
 
   const standingNodes = standing.flatMap((topology) => topology.nodes.map((node) => node.position));

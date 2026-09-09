@@ -6,7 +6,7 @@ import type { ConstructionCoveredRegion, ConstructionNodeId, ConstructionPositio
 // `@/` imports above are fine -- those are erased.
 import { resolveCoverage } from "../../../features/edit-construction/index.ts";
 
-import type { ToolContext } from "../core/tool-context.ts";
+import type { ToolContext } from "../tools/core/tool-context.ts";
 
 /**
  * Painting terrain over terrain **adds ground to it** -- by moving the vertices
