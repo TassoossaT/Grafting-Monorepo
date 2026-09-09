@@ -182,6 +182,26 @@ export interface CutFallout {
   readonly paintedLoops: readonly (readonly ConstructionRegionEdge[])[];
   /** Exactly the regions this cut consumed -- the covered type's own to delete and repair around. */
   readonly consumedSurfaceKeys: readonly ConstructionSurfaceKey[];
+  /**
+   * The XZ shape the cut was asked about -- the painter's own footprint.
+   *
+   * A repair that regrows ground through the same generator the sculpt brush
+   * uses needs an *area*, because that generator is driven by one: it asks the
+   * engine what the area covers, gathers the connected ground around it, and
+   * bounds everything it does by that extent. Without it a repair can only
+   * guess an extent from the faces it was handed, which is the hole and not
+   * the cut.
+   */
+  readonly footprintOutline?: readonly (readonly [number, number])[];
+  /**
+   * The painter's `surfaceType`.
+   *
+   * The repair reads the painter's standing contour again for itself, scoped
+   * to its own working extent, rather than trusting {@link paintedLoops} to be
+   * the right *scope* -- those are assembled by whoever dispatched the cut and
+   * may reach further than the ground being regrown.
+   */
+  readonly painterSurfaceType?: string;
 }
 
 /**

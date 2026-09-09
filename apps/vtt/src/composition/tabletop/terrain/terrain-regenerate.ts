@@ -1,341 +1,98 @@
-import type {
-  ConstructionGridConstraintPoint,
-  ConstructionNodeId,
-  ConstructionPosition,
-  ConstructionRegionEdge,
-  ConstructionRegionTopology,
-  ConstructionSurfaceKey,
-} from "@/ports";
+import type { ConstructionRegionTopology, ConstructionSurfaceKey } from "@/ports";
 import type { CutFallout } from "@/features/edit-construction";
 
 // Relative, not `@/...`: the test runner resolves no aliases, so a module a
 // test reaches has to spell out any import it needs at run time. The type-only
 // `@/` imports above are fine -- those are erased.
-import { outwardPerimeterRings } from "../../../features/edit-construction/index.ts";
-import { constraintsFromRings, type ConstraintRing } from "./terrain-constraints.ts";
-import { DEFAULT_FACE_SIDE, fillTerrain, type TerrainFillRuntime } from "./terrain-fill.ts";
+import { executeTerrainCut } from "./terrain-cut-executor.ts";
+import { DEFAULT_FACE_SIDE } from "./terrain-fill.ts";
+import type { TerrainCutRuntime } from "./terrain-neighborhood.ts";
 
 /**
- * Throwing a neighbourhood of ground away and generating it again as one
- * piece.
+ * Growing terrain back where something cut through it.
  *
- * Used by one caller: repairing terrain a cut consumed. It was briefly used by
- * a second -- a pass that relaid the neighbourhood of every stroke, to erase
- * the seam where new ground met old and to shed the nodes that accumulate
- * there. That was tried and reverted, and the reason is worth keeping so it is
- * not tried again the same way.
+ * **This is not its own generator any more, and that is the whole change.**
+ * For a long time a repair had a pipeline of its own: it took the perimeter of
+ * the faces it was told to consume straight from the graph, took the painter's
+ * contour from a second, independent walk of the graph, and handed the first
+ * down as a boundary and the second down as holes. Nothing reconciled the two,
+ * because nothing ever put them through one operation. So they disagreed, and
+ * the shape of the disagreement was always the same: the painter is a *ribbon*
+ * that runs across the ground and out the far side, not an island inside it, so
+ * "boundary here, hole there" describes a figure whose hole pierces its own
+ * rim. The generator answered that with cells laid over the painter's own
+ * contour edges, and the engine refused each of them -- "no room on edge, its
+ * one free side faces the other way" -- which, because the replacement is
+ * atomic, cost the entire repair while the edge splits its adoption pass had
+ * already committed stayed behind. Ground did not come back, and vertices piled
+ * up along the rim of the hole that was supposed to have disappeared.
  *
- * **Why regenerating a neighbourhood does not shed accumulated nodes.** The
- * rim of the regenerated patch is a hard constraint built from the *existing*
- * mesh's edges, so whatever fineness that boundary had is imprinted on the new
- * mesh exactly -- and then the ortho step puts a midpoint on every one of
- * those segments, doubling it again. The seam is not removed, it is moved
- * outward onto a longer rim and made finer. Measured against expectation, this
- * made every symptom worse: more nodes, tighter cells clustered along the new
- * join, and two generations of cost per stroke.
+ * The sculpt brush never had that problem, and not because it is luckier: it
+ * unions the faces it is replacing into one polygon and derives boundary *and*
+ * holes from that single result, so there is nothing for two derivations to
+ * disagree about. A repair is the same operation with the painter subtracted
+ * rather than nothing subtracted. So it is now literally the same call --
+ * {@link executeTerrainCut} with a `regenerate` profile, whose displacement is
+ * zero, so the ground comes back at the height of the ground around it.
  *
- * The second failure was worse than slow. The faces are deleted before the
- * generator is asked, so a rim it refuses -- disjoint components, degenerate
- * segments, a self-touching perimeter -- costs the ground outright: deleted,
- * with nothing laid back. Any future version has to generate first and delete
- * only on success, or hold the deletion in the same transaction.
+ * What that buys beyond the bug: the repair gets the brush's connected
+ * neighbourhood query for free, so it is constrained by the terrain that
+ * survived instead of by the terrain being deleted, and it samples heights
+ * from ground that will still be standing afterwards. Both were backwards
+ * before.
  *
- * Accumulation has to be attacked where it starts: the contour handed to the
- * generator, decimated to the target face size *before* it becomes a
- * constraint. `remove-vertex` already exists for that and dissolves a node
- * into the edge that spans it.
+ * What it still does not do is restore. The mesh is regenerated, so a road
+ * drawn and erased leaves terrain of a different shape than before -- the
+ * accepted trade rather than keeping a shadow copy of the ground a cut removed.
  */
 
-/** What {@link regenerateNeighbourhood} needs of the runtime, structurally. */
-export interface TerrainRegenerateRuntime extends TerrainFillRuntime {
-  getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined;
-}
+export type { HeightField } from "./terrain-neighborhood.ts";
+export { heightFieldOf } from "./terrain-neighborhood.ts";
+
+/** @deprecated Name kept for existing importers; see {@link TerrainCutRuntime}. */
+export type TerrainRegenerateRuntime = TerrainCutRuntime;
 
 /**
- * A neighbourhood is bounded by the brush, not by the terrain, so it should
- * stay small however large the map grows. A stroke that names more faces than
- * this is not a normal stroke, and regenerating that much ground would cost
- * more than the seam it removes.
- */
-const MOST_FACES_WORTH_REGENERATING = 4000;
-
-/**
- * Heights sampled from ground that is about to be deleted, so what replaces it
- * lands at the same height.
+ * The extent to work in when the dispatcher had no footprint to give.
  *
- * Bucketed by a cell the size of the query radius, so a lookup reads nine
- * buckets rather than every anchor. Locality is the point and not only the
- * speed: a global inverse-distance blend drags every new corner toward the
- * mean height of the whole neighbourhood, which flattens relief that was
- * there. Only anchors within a couple of faces get a say, and the relief
- * survives.
+ * A removal repair -- ground regrowing because the thing standing in it was
+ * deleted -- has no painter and therefore no footprint. The hole itself is the
+ * only area there is, so it becomes the area.
  */
-export interface HeightField {
-  at(point: { readonly x: number; readonly z: number }): number | undefined;
-}
-
-export function heightFieldOf(anchors: readonly ConstructionPosition[], reach: number): HeightField {
-  const buckets = new Map<string, ConstructionPosition[]>();
-  const key = (x: number, z: number) => `${Math.floor(x / reach)}:${Math.floor(z / reach)}`;
-  for (const anchor of anchors) {
-    const at = key(anchor.x, anchor.z);
-    const bucket = buckets.get(at);
-    if (bucket === undefined) buckets.set(at, [anchor]);
-    else bucket.push(anchor);
-  }
-
-  return {
-    at(point) {
-      const column = Math.floor(point.x / reach);
-      const row = Math.floor(point.z / reach);
-      let weighted = 0;
-      let total = 0;
-      for (let dx = -1; dx <= 1; dx += 1) {
-        for (let dz = -1; dz <= 1; dz += 1) {
-          for (const anchor of buckets.get(`${column + dx}:${row + dz}`) ?? []) {
-            const ax = anchor.x - point.x;
-            const az = anchor.z - point.z;
-            const distanceSq = ax * ax + az * az;
-            // Sitting on an anchor is that anchor's height, not a division by zero.
-            if (distanceSq < 1e-9) return anchor.y;
-            if (distanceSq > reach * reach) continue;
-            const weight = 1 / distanceSq;
-            weighted += anchor.y * weight;
-            total += weight;
-          }
-        }
-      }
-      // Nothing near enough to have an opinion -- this is new ground, and the
-      // caller's own rule decides.
-      return total > 0 ? weighted / total : undefined;
-    },
-  };
-}
-
-/**
- * Drops what the deletion took with it.
- *
- * A rim node shared with ground that survived is still there; one belonging
- * only to faces just deleted is gone. The *position* stays either way -- the
- * shape of the hole did not change -- but a point that no longer names a live
- * node is an ordinary point, and an edge missing an endpoint is an edge
- * nothing can split.
- */
-function pruneToLive(
-  rings: readonly ConstraintRing[],
-  sources: readonly ConstructionNodeId[],
-  isLive: (nodeId: ConstructionNodeId) => boolean,
-): readonly ConstraintRing[] {
-  const livePoint = (source: number | undefined): boolean => {
-    if (source === undefined) return false;
-    const nodeId = sources[source];
-    return nodeId !== undefined && isLive(nodeId);
-  };
-  return rings.map((ring) => ({
-    points: ring.points.map((point) => (livePoint(point.source) ? point : { x: point.x, z: point.z })),
-    edges: ring.edges.map((edge, index) =>
-      edge !== undefined &&
-      livePoint(ring.points[index]?.source) &&
-      livePoint(ring.points[(index + 1) % ring.points.length]?.source)
-        ? edge
-        : undefined,
-    ),
-  }));
-}
-
-export interface RegenerateRequest {
-  /** The faces to throw away and lay again. */
-  readonly consumedSurfaceKeys: readonly ConstructionSurfaceKey[];
-  /**
-   * Contours of other clouds standing inside that ground -- a road, a wall
-   * footing. Met exactly, never regenerated, and never generated over.
-   */
-  readonly otherLoops: readonly (readonly ConstructionRegionEdge[])[];
-  /** Where the positions of {@link otherLoops}' nodes are read from. */
-  readonly otherNodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[];
-  readonly faceSide: number;
-  readonly causeId: string;
-  readonly tableId: string;
-  /**
-   * Height for a corner no anchor of the old ground reaches -- genuinely new
-   * ground. A repair has none of that and can pass a constant; a stroke hands
-   * over its noise field.
-   */
-  readonly heightOfNewGround: (point: { readonly x: number; readonly z: number }) => number;
-}
-
-/** Faces laid. `0` means nothing was regenerated, for any reason. */
-export function regenerateNeighbourhood(
-  runtime: TerrainRegenerateRuntime,
-  request: RegenerateRequest,
-): number {
-  if (request.consumedSurfaceKeys.length === 0) return 0;
-  if (request.consumedSurfaceKeys.length > MOST_FACES_WORTH_REGENERATING) return 0;
-
-  // Read before deleting: the rim of the hole is the perimeter of the faces
-  // about to go, and it is knowable only while they still stand. So are the
-  // heights -- every corner of the old ground, not only the rim that survives
-  // it, or the relief inside the neighbourhood is blended away.
-  const consumed = request.consumedSurfaceKeys
-    .map((surfaceKey) => runtime.getRegionTopology(surfaceKey))
-    .filter((topology): topology is ConstructionRegionTopology => topology !== undefined);
-  if (consumed.length === 0) return 0;
-  const surfaceType = consumed[0]!.surfaceType;
-
-  const consumedPositions = new Map<ConstructionNodeId, ConstructionPosition>();
+function outlineAroundConsumed(
+  consumed: readonly ConstructionRegionTopology[],
+): readonly (readonly [number, number])[] {
+  let minX = Infinity;
+  let minZ = Infinity;
+  let maxX = -Infinity;
+  let maxZ = -Infinity;
   for (const topology of consumed) {
-    for (const node of topology.nodes) consumedPositions.set(node.id, node.position);
-  }
-  const otherPositions = new Map<ConstructionNodeId, ConstructionPosition>();
-  for (const node of request.otherNodes) otherPositions.set(node.id, node.position);
-
-  // One numbering across both lists, because the generator answers with a
-  // single `source` index per corner and knows nothing of which ring it came
-  // from.
-  const liveMap = runtime.getSnapshot().map.nodePositions;
-  let rimRings = outwardPerimeterRings(consumed);
-  if (rimRings.length === 0 && consumed.length > 0) {
-    rimRings = consumed.flatMap((t) =>
-      t.outerLoops.filter((loop) => loop.length >= 3 && loop[loop.length - 1]!.endNodeId === loop[0]!.startNodeId),
-    );
-  }
-  const rim = constraintsFromRings(
-    rimRings,
-    (nodeId) => consumedPositions.get(nodeId) ?? liveMap.get(nodeId)?.position,
-    0,
-  );
-  if (rim.rings.length === 0) return 0;
-  const others = constraintsFromRings(
-    request.otherLoops,
-    (nodeId) => otherPositions.get(nodeId) ?? liveMap.get(nodeId)?.position,
-    rim.sources.length,
-  );
-  const sources = [...rim.sources, ...others.sources];
-
-  // Derive faceSide naturally from the consumed terrain topologies to preserve
-  // the organic scale of the terrain and prevent micro-face fragmentation.
-  let effectiveFaceSide = Math.max(request.faceSide, DEFAULT_FACE_SIDE);
-  if (consumed.length > 0) {
-    let totalArea = 0;
-    for (const t of consumed) {
-      if (t.nodes.length >= 3) {
-        let area = 0;
-        for (let i = 0; i < t.nodes.length; i++) {
-          const p1 = t.nodes[i]!.position;
-          const p2 = t.nodes[(i + 1) % t.nodes.length]!.position;
-          area += p1.x * p2.z - p2.x * p1.z;
-        }
-        totalArea += Math.abs(area) / 2;
-      }
-    }
-    const avgFaceArea = totalArea / consumed.length;
-    if (avgFaceArea > 1.0) {
-      effectiveFaceSide = Math.max(effectiveFaceSide, Math.sqrt(avgFaceArea));
+    for (const node of topology.nodes) {
+      if (node.position.x < minX) minX = node.position.x;
+      if (node.position.x > maxX) maxX = node.position.x;
+      if (node.position.z < minZ) minZ = node.position.z;
+      if (node.position.z > maxZ) maxZ = node.position.z;
     }
   }
-
-  const heights = heightFieldOf(
-    [...consumedPositions.values(), ...otherPositions.values()],
-    effectiveFaceSide * 2,
-  );
-
-  // Identify nodes that belong to surviving ground (surviving topologies or nodes outside consumed)
-  const consumedKeysSet = new Set(request.consumedSurfaceKeys.map((k) => k.join(":")));
-  const allTopologies = typeof runtime.getAllRegionTopologies === "function" ? runtime.getAllRegionTopologies() : [];
-  const survivingNodes = new Set<string>();
-  for (const topology of allTopologies) {
-    if (!consumedKeysSet.has(topology.surfaceKey.join(":"))) {
-      for (const node of topology.nodes) survivingNodes.add(node.id);
-    }
-  }
-  if (survivingNodes.size === 0) {
-    for (const [id] of liveMap) {
-      if (!consumedPositions.has(id)) survivingNodes.add(id);
-    }
-  }
-
-  // Filter hole rings so we don't pass far-away road loops into local terrain fill
-  let cMinX = Infinity, cMaxX = -Infinity, cMinZ = Infinity, cMaxZ = -Infinity;
-  for (const pos of consumedPositions.values()) {
-    if (pos.x < cMinX) cMinX = pos.x;
-    if (pos.x > cMaxX) cMaxX = pos.x;
-    if (pos.z < cMinZ) cMinZ = pos.z;
-    if (pos.z > cMaxZ) cMaxZ = pos.z;
-  }
-  const cMargin = Math.max(4.0, effectiveFaceSide * 2.0);
-  const relevantHoleRings = others.rings.filter((ring) =>
-    ring.points.some(
-      (p) => p.x >= cMinX - cMargin && p.x <= cMaxX + cMargin && p.z >= cMinZ - cMargin && p.z <= cMaxZ + cMargin,
-    ),
-  );
-
-  const supportsPatchReplacement = typeof (runtime as unknown as { applyPatchReplacement?: unknown }).applyPatchReplacement === "function";
-
-  if (!supportsPatchReplacement) {
-    let deleted = 0;
-    for (const surfaceKey of request.consumedSurfaceKeys) {
-      try {
-        runtime.applyRegionEdit([{ kind: "delete-region", surfaceKey }], "local", request.causeId);
-        deleted += 1;
-      } catch {}
-    }
-    if (deleted === 0) return 0;
-  }
-
-  const live = runtime.getSnapshot().map.nodePositions;
-  const isLive = (nodeId: ConstructionNodeId): boolean => {
-    if (!live.has(nodeId)) return false;
-    if (supportsPatchReplacement && survivingNodes.size > 0) {
-      return survivingNodes.has(nodeId);
-    }
-    return true;
-  };
-
-  const stamp = Math.abs(hashOf(request.consumedSurfaceKeys));
-  const topologySeeds = allTopologies
-    .filter((t) => !consumedKeysSet.has(t.surfaceKey.join(":")) && t.surfaceType === surfaceType)
-    .slice(0, 8)
-    .map((t) => ({ seed: t.surfaceKey, surfaceType: t.surfaceType }));
-
-  return fillTerrain(runtime, {
-    // Deterministic in the ground itself rather than in the clock, so the same
-    // neighbourhood regenerated twice comes back the same: replayable from the
-    // same log.
-    what: "reparo de corte",
-    mint: `${request.causeId}:regen-${stamp}`,
-    tableId: request.tableId,
-    causeId: request.causeId,
-    seed: Math.max(1, stamp),
-    faceSide: effectiveFaceSide,
-    relaxStrength: 0.7,
-    // The consumed type, so ground made of slate comes back slate without this
-    // side having to know that.
-    surfaceType,
-    boundary: pruneToLive(rim.rings, sources, isLive),
-    holes: relevantHoleRings.length > 0 ? relevantHoleRings : others.rings,
-    sources,
-    replaceSurfaceKeys: supportsPatchReplacement ? request.consumedSurfaceKeys : undefined,
-    topologySeeds,
-    heightAt: (point) => heights.at(point) ?? request.heightOfNewGround(point),
-  }).built;
+  if (!Number.isFinite(minX)) return [];
+  return [
+    [minX, minZ],
+    [maxX, minZ],
+    [maxX, maxZ],
+    [minX, maxZ],
+  ];
 }
 
 /**
  * Terrain's `CutRepairExecutor`: grow the ground back around the thing that
  * cut it.
  *
- * The hole a cut leaves is bounded on one side by the terrain that survived
- * and on the other by the road standing in the middle of it. Handing the
- * generator only the outer rim lays ground straight across the road -- the two
- * banks joined over the top of the path. Both sides go down carrying their own
- * node ids, so the ground that comes back shares real nodes and real edges
- * with the terrain it grew from *and* with the road it stops at: one graph,
- * terrain-road-terrain, without either side welding onto the other.
- *
- * What comes back is not what was there. The mesh is regenerated, not
- * restored, so a road drawn and erased leaves terrain of a different shape
- * than before. That is the accepted trade rather than keeping a shadow copy of
- * the ground a cut removed.
+ * Everything this decides is which *request* the shared executor gets. The
+ * consumed faces become the covered regions, so they are what gets replaced;
+ * the painter's footprint becomes the area, so the neighbourhood is gathered
+ * around the cut rather than around the hole; and `connectTo` names the
+ * painter's type, so its standing contour is subtracted from the ground being
+ * laid and its faces go down as seeds the fill can read edge directions from.
  */
 export function repairTerrainCut(
   runtime: TerrainRegenerateRuntime,
@@ -343,18 +100,49 @@ export function repairTerrainCut(
   causeId: string,
   tableId: string,
 ): number {
-  return regenerateNeighbourhood(runtime, {
-    consumedSurfaceKeys: fallout.consumedSurfaceKeys,
-    otherLoops: fallout.paintedLoops,
-    otherNodes: fallout.paintedNodes,
-    faceSide: DEFAULT_FACE_SIDE,
+  if (fallout.consumedSurfaceKeys.length === 0) return 0;
+
+  // Read while they still stand: a key the engine no longer knows is a stale
+  // key, and repairing on the strength of one deletes ground nobody asked for.
+  const consumed = fallout.consumedSurfaceKeys
+    .map((surfaceKey) => runtime.getRegionTopology(surfaceKey))
+    .filter((topology): topology is ConstructionRegionTopology => topology !== undefined);
+  if (consumed.length === 0) return 0;
+
+  const outline =
+    fallout.footprintOutline !== undefined && fallout.footprintOutline.length >= 3
+      ? fallout.footprintOutline
+      : outlineAroundConsumed(consumed);
+  if (outline.length < 3) return 0;
+
+  const outcome = executeTerrainCut(runtime, {
+    area: { outline },
+    // The planner already resolved which ground this cut consumed. Handing it
+    // over rather than letting the executor re-derive it from the outline
+    // keeps one answer to that question instead of two.
+    coveredRegions: consumed.map((topology) => ({
+      surfaceKey: topology.surfaceKey,
+      surfaceType: topology.surfaceType,
+    })),
+    targetSurfaceType: consumed[0]!.surfaceType,
+    profile: {
+      kind: "regenerate",
+      connectTo:
+        fallout.painterSurfaceType !== undefined
+          ? { surfaceType: fallout.painterSurfaceType }
+          : undefined,
+    },
     causeId,
     tableId,
-    // A repair invents no ground of its own: everything it lays replaces
-    // ground that stood there, so the height field always has an opinion.
-    // Level is the honest answer for the corner case where it does not.
-    heightOfNewGround: () => 0,
+    faceSide: DEFAULT_FACE_SIDE,
+    // Deterministic in the ground itself rather than in the clock, so the same
+    // neighbourhood regenerated twice comes back the same: replayable from the
+    // same log.
+    seed: Math.max(1, Math.abs(hashOf(fallout.consumedSurfaceKeys))),
+    irregularity: 0.7,
   });
+
+  return outcome.builtFaces;
 }
 
 /** A stable small integer for a set of keys -- a seed, not a checksum. */

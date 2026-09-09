@@ -14,7 +14,6 @@ import type {
   ConstructionTopologyBoundsQuery,
 } from "@/ports";
 import {
-  outwardPerimeterRings,
   planTerrainCloudCutRepair,
   resolveCreationInteraction,
   resolveCutRepair,
@@ -22,6 +21,7 @@ import {
   type CutFallout,
 } from "../../../features/edit-construction/index.ts";
 import { repairTerrainCut, type TerrainRegenerateRuntime } from "../terrain/terrain-regenerate.ts";
+import { paintedFalloutOf } from "./painted-topologies.ts";
 
 import type { TabletopRuntime } from "../tabletop-runtime.ts";
 
@@ -135,32 +135,7 @@ export function pointBucketIndex(points: readonly ConstructionPosition[], cellSi
   };
 }
 
-/**
- * The painter's own ground, as the repair needs it: its real nodes to weld
- * onto, and one closed ring per face it owns so the area it occupies can be
- * taken out of the hole.
- *
- * Read from **every live face of the painter's type**, optionally scoped
- * to bounds.
- */
-export function paintedNodesOf(
-  runtime: Pick<TabletopRuntime, "getAllRegionTopologies" | "getRegionTopologiesInBounds" | "getSnapshot">,
-  paintedType: string,
-  bounds?: ConstructionTopologyBoundsQuery,
-): Pick<CutFallout, "paintedNodes" | "paintedLoops"> {
-  const topologies = bounds !== undefined && typeof runtime.getRegionTopologiesInBounds === "function"
-    ? runtime.getRegionTopologiesInBounds(bounds)
-    : runtime.getAllRegionTopologies();
-  const painted = topologies.filter((topology) => topology.surfaceType === paintedType);
-  const nodesById = new Map<ConstructionNodeId, ConstructionPosition>();
-  for (const topology of painted) {
-    for (const node of topology.nodes) nodesById.set(node.id, node.position);
-  }
-  return {
-    paintedNodes: [...nodesById].map(([id, position]) => ({ id, position })),
-    paintedLoops: outwardPerimeterRings(painted),
-  };
-}
+export { paintedFalloutOf, paintedNodesOf, paintedTopologiesOf } from "./painted-topologies.ts";
 
 /**
  * Resolves type interference between an acting structure (e.g. `path`) and any
@@ -321,33 +296,31 @@ export function dispatchCutRepairs(
     : allRoads;
 
   if (roadToUse.length > 0) {
-    let rings = outwardPerimeterRings(roadToUse);
-    if (rings.length === 0) {
-      // Fallback: if multi-face perimeter walk didn't produce a closed ring,
-      // take closed outer loops from each region directly so hole constraints and adoptions are never lost!
-      const candidateRings: (readonly ConstructionRegionEdge[])[] = [];
-      for (const t of roadToUse) {
-        for (const loop of t.outerLoops) {
-          if (loop.length >= 3 && loop[loop.length - 1]!.endNodeId === loop[0]!.startNodeId) {
-            candidateRings.push(loop);
-          }
-        }
-      }
-      rings = candidateRings;
-    }
-    paintedLoops = rings;
-    const nodesById = new Map<ConstructionNodeId, ConstructionPosition>();
-    for (const t of roadToUse) {
-      for (const n of t.nodes) nodesById.set(n.id, n.position);
-    }
-    paintedNodes = [...nodesById].map(([id, position]) => ({ id, position }));
+    const painter = paintedFalloutOf(roadToUse);
+    paintedLoops = painter.paintedLoops;
+    paintedNodes = painter.paintedNodes;
   }
 
   for (const [surfaceType, consumedSurfaceKeys] of repairPlan.consumedByType) {
     const executor = executors[surfaceType];
     if (executor === undefined) continue;
     try {
-      executor(runtime, { paintedNodes, paintedLoops, consumedSurfaceKeys }, causeId, runtime.getSnapshot().tableId);
+      executor(
+        runtime,
+        {
+          paintedNodes,
+          paintedLoops,
+          consumedSurfaceKeys,
+          // The shape the cut was actually asked about, and whose type the
+          // repair has to read again for itself. Handing these over is what
+          // lets the repair subtract the painter from the ground it lays
+          // instead of laying ground over it and hoping a hole ring saves it.
+          footprintOutline: request.footprintOutline,
+          painterSurfaceType: paintedType,
+        },
+        causeId,
+        runtime.getSnapshot().tableId,
+      );
     } catch (error) {
       console.warn(`[type-interference] Failed to repair cut for ${surfaceType} (cause: ${causeId}):`, error);
     }

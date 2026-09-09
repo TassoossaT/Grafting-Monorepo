@@ -25,9 +25,13 @@ import {
   type ConstraintTable,
 } from "./terrain-constraints.ts";
 import { DEFAULT_FACE_SIDE, fillTerrain } from "./terrain-fill.ts";
-import { terrainStandingAround, type TerrainStrokeBounds } from "./terrain-neighborhood.ts";
-import { heightFieldOf, type TerrainRegenerateRuntime } from "./terrain-regenerate.ts";
-import { paintedNodesOf } from "../interference/type-interference-dispatch.ts";
+import {
+  heightFieldOf,
+  terrainStandingAround,
+  type TerrainCutRuntime,
+  type TerrainStrokeBounds,
+} from "./terrain-neighborhood.ts";
+import { paintedFalloutOf, paintedTopologiesOf } from "../interference/painted-topologies.ts";
 
 function centroidOf(nodes: readonly { readonly position: ConstructionPosition }[]): { x: number; y: number; z: number } {
   if (nodes.length === 0) return { x: 0, y: 0, z: 0 };
@@ -90,6 +94,21 @@ function faceIntersectsArea(
     if (insidePolygon(node.position, outline)) return true;
   }
   return insidePolygon(centroidOf(topology.nodes), outline);
+}
+
+/**
+ * A constraint ring as `polygon-clipping` wants it: closed, and nothing else.
+ *
+ * The ring itself carries node ids per corner; the polygon deliberately does
+ * not. It exists only to be subtracted, and what comes back out of the
+ * subtraction gets its identity again from {@link buildConstraintRings}, which
+ * matches it against the same rings this was built from.
+ */
+function ringToPolygon(ring: ConstraintRing): Polygon {
+  if (ring.points.length < 3) return [];
+  const closed: [number, number][] = ring.points.map((point) => [point.x, point.z]);
+  closed.push([ring.points[0]!.x, ring.points[0]!.z]);
+  return [closed];
 }
 
 function topologyToPolygon(topology: ConstructionRegionTopology): Polygon {
@@ -232,7 +251,7 @@ function boundsOfArea(area: StructuralCutArea): TerrainStrokeBounds {
  *    - `regenerate`: fills seamlessly connecting to surrounding terrain and optional `connectTo` structure
  */
 export function executeTerrainCut(
-  runtime: TerrainRegenerateRuntime,
+  runtime: TerrainCutRuntime,
   request: StructuralCutRequest,
 ): StructuralCutOutcome {
   const rawOutline = request.area.outline ?? request.area.sweptPolygon?.[0]?.[0] ?? [];
@@ -339,13 +358,37 @@ export function executeTerrainCut(
 
   let perimeters = perimeterConstraints(retained, 0);
 
-  // If regenerating to connect to another structure (e.g. road)
+  // **Connecting to another structure standing in this ground -- a road.**
+  //
+  // The thing being connected to is not a hole. A hole is ground somebody else
+  // holds *inside* the area being filled; a road is a ribbon that runs across
+  // the area and out the other side. Handing it over as a hole ring asks the
+  // generator to avoid a shape that pierces its own boundary, and it answers
+  // with cells laid over the road's own contour edges -- which the engine then
+  // refuses one by one, "no room on edge", taking the whole atomic replacement
+  // with them.
+  //
+  // So it is *subtracted*, exactly as the affected faces are unioned: one
+  // boolean, and boundary and holes both fall out of its result rather than
+  // being assembled from two independently-derived sources that have nothing
+  // forcing them to agree.
   let extraHoleRings: ConstraintRing[] = [];
+  let connectSeeds: { readonly seed: readonly string[]; readonly surfaceType: string }[] = [];
   if (request.profile.kind === "regenerate" && request.profile.connectTo) {
-    const { paintedNodes, paintedLoops } = paintedNodesOf(
-      runtime as unknown as Parameters<typeof paintedNodesOf>[0],
+    // Scoped to the work area. Unscoped, this reads every road on the table
+    // and constrains a one-metre repair with the whole network's contour.
+    const connectReach = Math.max(effectiveFaceSide * 2, DEFAULT_FACE_SIDE * 2);
+    const connectTopologies = paintedTopologiesOf(
+      runtime as unknown as Parameters<typeof paintedTopologiesOf>[0],
       request.profile.connectTo.surfaceType,
+      {
+        minX: extent.minX - connectReach,
+        minZ: extent.minZ - connectReach,
+        maxX: extent.maxX + connectReach,
+        maxZ: extent.maxZ + connectReach,
+      },
     );
+    const { paintedNodes, paintedLoops } = paintedFalloutOf(connectTopologies);
     if (paintedLoops.length > 0) {
       const nodePosMap = new Map<ConstructionNodeId, { x: number; z: number }>();
       for (const n of paintedNodes) nodePosMap.set(n.id, { x: n.position.x, z: n.position.z });
@@ -354,11 +397,34 @@ export function executeTerrainCut(
         (nodeId) => nodePosMap.get(nodeId),
         perimeters.sources.length,
       );
-      extraHoleRings = [...connectHoles.rings];
+      // Its rings join the perimeter table, not only its sources. Without the
+      // rings there is nothing for the subtraction's output to be matched
+      // against, and the ground would come back meeting the road at coincident
+      // positions instead of at its actual nodes and edges.
       perimeters = {
-        rings: perimeters.rings,
+        rings: [...perimeters.rings, ...connectHoles.rings],
         sources: [...perimeters.sources, ...connectHoles.sources],
       };
+      connectSeeds = connectTopologies.map((topology) => ({
+        seed: topology.surfaceKey,
+        surfaceType: topology.surfaceType,
+      }));
+
+      const connectPolygons = connectHoles.rings.map(ringToPolygon).filter((polygon) => polygon.length > 0);
+      if (connectPolygons.length > 0) {
+        try {
+          const remaining = polygonClipping.difference(targetPolygon, ...connectPolygons);
+          // Nothing left means the road covers this ground entirely: there is
+          // no terrain to regrow, and laying the un-subtracted area instead
+          // would put ground straight over the road.
+          if (remaining.length > 0) targetPolygon = remaining;
+          else targetPolygon = [];
+        } catch {
+          // A degenerate ring is not worth losing the repair over. Falling
+          // back to the old shape is worse geometry, not no geometry.
+          extraHoleRings = [...connectHoles.rings];
+        }
+      }
     }
   }
 
@@ -452,7 +518,15 @@ export function executeTerrainCut(
     holes: holeRings,
     sources: perimeters.sources,
     replaceSurfaceKeys: affected.length > 0 ? affected.map((f) => f.surfaceKey) : undefined,
-    topologySeeds: retained.map((topology) => ({ seed: topology.surfaceKey, surfaceType: topology.surfaceType })),
+    // The road belongs here as much as the retained terrain does. These seeds
+    // are what `fillTerrain` reads back to learn which edges already have a
+    // face on them and which way that face walks; a road left out of them is a
+    // road whose contour edges look free, and every cell laid along the bank
+    // is refused for walking one the wrong way.
+    topologySeeds: [
+      ...retained.map((topology) => ({ seed: topology.surfaceKey, surfaceType: topology.surfaceType })),
+      ...connectSeeds,
+    ],
     heightAt,
     positionAt,
   });
