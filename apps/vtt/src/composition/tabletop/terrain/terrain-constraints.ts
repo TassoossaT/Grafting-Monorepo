@@ -208,9 +208,32 @@ export interface ContourSnap {
   readonly fallback?: ContourAdoption;
 }
 
+/**
+ * Contour landings that became neither a split nor a snap, by reason.
+ *
+ * **These used to be dropped in silence, and that is why the mesh could come
+ * back visibly toothed while the log reported no open junctions at all.** The
+ * `unadopted` count only ever meant "splits the runtime refused"; a landing
+ * discarded before a split was even attempted was never counted anywhere, so
+ * the one number anyone would look at to find this said zero.
+ *
+ * `atCorner` is not a fault -- a landing exactly on a ring corner is already a
+ * shared node and has nothing to split. `noEdge` is the one that shows as
+ * teeth: the ground wanted to meet a neighbour partway along a segment, and
+ * this side did not know which edge that segment was, so nothing was split and
+ * the two sides met at a coincident position instead of at a node.
+ */
+export interface AdoptionDrops {
+  readonly noEdge: number;
+  readonly atCorner: number;
+  readonly degenerate: number;
+  readonly unknownRing: number;
+}
+
 export interface ResolvedAdoptions {
   readonly adoptions: readonly ContourAdoption[];
   readonly snaps: readonly ContourSnap[];
+  readonly dropped: AdoptionDrops;
 }
 
 /**
@@ -308,22 +331,32 @@ export function resolveAdoptions(
 ): ResolvedAdoptions {
   const adoptions: ContourAdoption[] = [];
   const snaps: ContourSnap[] = [];
+  const dropped = { noEdge: 0, atCorner: 0, degenerate: 0, unknownRing: 0 };
   for (const node of reported) {
     const rings = node.ringKind === "hole" ? holeRings : boundaryRings;
     const ring = rings[node.ring];
     const from = ring?.points[node.segment];
     const to = ring?.points[(node.segment + 1) % (ring?.points.length ?? 1)];
     const point = positionOf(node.vertex);
-    if (ring === undefined || from === undefined || to === undefined || point === undefined) continue;
+    if (ring === undefined || from === undefined || to === undefined || point === undefined) {
+      dropped.unknownRing += 1;
+      continue;
+    }
 
     const dx = to.x - from.x;
     const dz = to.z - from.z;
     const lengthSq = dx * dx + dz * dz;
-    if (lengthSq <= 0) continue;
+    if (lengthSq <= 0) {
+      dropped.degenerate += 1;
+      continue;
+    }
     const along = ((point.x - from.x) * dx + (point.z - from.z) * dz) / lengthSq;
     // Exactly the ends are the corners themselves, which are already shared
     // nodes and have nothing to split.
-    if (!(along > 1e-9 && along < 1 - 1e-9)) continue;
+    if (!(along > 1e-9 && along < 1 - 1e-9)) {
+      dropped.atCorner += 1;
+      continue;
+    }
 
     // Too near an end to be a corner of its own. Take that end's identity --
     // whether or not this segment owns an edge, because the damage a sliver
@@ -347,7 +380,10 @@ export function resolveAdoptions(
       continue;
     }
 
-    if (edge === undefined) continue;
+    if (edge === undefined) {
+      dropped.noEdge += 1;
+      continue;
+    }
     adoptions.push({ vertex: node.vertex, edge, along, edgeLength: length });
   }
 
@@ -370,7 +406,7 @@ export function resolveAdoptions(
     }
   }
 
-  return { adoptions: filteredAdoptions, snaps };
+  return { adoptions: filteredAdoptions, snaps, dropped };
 }
 
 /**

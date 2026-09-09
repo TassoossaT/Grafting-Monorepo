@@ -111,7 +111,29 @@ export interface TerrainCommitReport {
   readonly holes: readonly ConstraintRing[];
   readonly grid: ConstructionIrregularQuadGrid | undefined;
   readonly adopted: number;
+  /** Splits the runtime was asked for and refused. */
   readonly unadopted: number;
+  /** Contour nodes the generator reported as landing on a constraint segment. */
+  readonly landings?: number;
+  /**
+   * Landings that ended as neither a split nor a shared corner.
+   *
+   * **This is the number that was missing.** `unadopted` only ever counted
+   * splits the runtime refused, so a landing thrown away before a split was
+   * attempted appeared nowhere -- and the mesh could come back visibly toothed
+   * along a seam while the log reported no open junctions at all. Each of
+   * these is one tooth: ground meeting its neighbour at a coincident position
+   * rather than at a node.
+   */
+  readonly unstitched?: number;
+  /** Of those, the ones whose segment named no edge to split. */
+  readonly droppedNoEdge?: number;
+  /** Landings exactly on a ring corner: already a shared node, nothing to split. */
+  readonly droppedAtCorner?: number;
+  /** Landings on a segment of zero length, or on a ring that was not there. */
+  readonly droppedDegenerate?: number;
+  /** Corners that wanted a node another corner had already taken, with no edge to fall back on. */
+  readonly snapsLost?: number;
   readonly built: number;
   readonly refusedFaces: number;
   /** Why the engine refused, in its own words, first few only. */
@@ -226,6 +248,12 @@ function describe(report: TerrainCommitReport): void {
   const mescla = {
     nosAdotados: report.adopted,
     nosNaoCosturados: report.unadopted,
+    pousosNoContorno: report.landings ?? 0,
+    dentesNaCostura: report.unstitched ?? 0,
+    dentesSemAresta: report.droppedNoEdge ?? 0,
+    dentesPorCantoTomado: report.snapsLost ?? 0,
+    pousosEmCantoJaCompartilhado: report.droppedAtCorner ?? 0,
+    pousosDegenerados: report.droppedDegenerate ?? 0,
     nosNovosDeclarados: report.declaredNodes,
     facesRegistradas: report.built,
     facesRegeneradas: report.regenerated ?? 0,
@@ -239,7 +267,11 @@ function describe(report: TerrainCommitReport): void {
     motivos: [...(report.refusals ?? [])].slice(0, 3),
   };
 
-  const wrong = report.refusedFaces > 0 || report.unadopted > 0 || contorno.razaoSegmentoPorFace < 2;
+  const wrong =
+    report.refusedFaces > 0 ||
+    report.unadopted > 0 ||
+    (report.unstitched ?? 0) > 0 ||
+    contorno.razaoSegmentoPorFace < 2;
   // In the text of the line, not only in the object beside it. A console
   // collapses the object, and every number that decides anything here was
   // being read by someone who had to expand it first -- which meant the
@@ -247,7 +279,9 @@ function describe(report: TerrainCommitReport): void {
   const line =
     `${TERRAIN_PREFIX} ${report.what}: ${geracao.faces} faces de ~${geracao.faceLadoObtido} ` +
     `(pedido ${report.faceSideAsked}), ${mescla.facesPerdidas} perdidas, ` +
-    `${mescla.nosNaoCosturados} junções abertas, ${mescla.facesRegeneradas} regeneradas (${mescla.regeneradasApagadas} apagadas de fato), ` +
+    `${mescla.nosNaoCosturados} junções abertas, ${mescla.dentesNaCostura} dentes ` +
+    `(${mescla.dentesSemAresta} sem aresta, ${mescla.dentesPorCantoTomado} canto tomado, de ${mescla.pousosNoContorno} pousos), ` +
+    `${mescla.facesRegeneradas} regeneradas (${mescla.regeneradasApagadas} apagadas de fato), ` +
     `${mescla.colisoesNoProprioPatch} colisões no próprio patch ` +
     `| perdidas: ${mescla.perdidasDentroDeFuro} dentro de furo, ` +
     `${mescla.perdidasHorarias}/${report.refusedFaces} horárias ` +

@@ -196,6 +196,70 @@ function pairKey(a: number, b: number): string {
 }
 
 /**
+ * Dropping corners the boolean invented in the middle of an edge that already
+ * existed.
+ *
+ * Where the ground's own rim crosses the painter's contour, `polygon-clipping`
+ * splits both and hands back a vertex at the crossing. That vertex names no
+ * node -- it never was one -- and its presence breaks one segment into two,
+ * *neither* of which runs between a pair of adjacent nodes any more. So neither
+ * knows which edge it lies on, and every corner the generator later lands there
+ * is discarded with nothing split: the ground meets the painter at a coincident
+ * position instead of at a node, once per crossing. That is the tooth.
+ *
+ * A corner sitting on the straight line between two nodes that really are
+ * joined by an edge adds nothing the ring did not already say. Removing it
+ * restores the segment to the pair it belongs to, and the split lands where it
+ * should. Only a corner that is genuinely *on* that line goes -- one where the
+ * rim leaves the contour is a real corner and stays.
+ */
+function dropInventedCorners(
+  points: readonly ConstructionGridConstraintPoint[],
+  hasEdge: (a: number, b: number) => boolean,
+  tolerance: number,
+): readonly ConstructionGridConstraintPoint[] {
+  const total = points.length;
+  const named: number[] = [];
+  for (let index = 0; index < total; index += 1) {
+    if (points[index]!.source !== undefined) named.push(index);
+  }
+  if (named.length < 2) return points;
+
+  const keep = new Array<boolean>(total).fill(true);
+  for (let step = 0; step < named.length; step += 1) {
+    const from = named[step]!;
+    const to = named[(step + 1) % named.length]!;
+    const between: number[] = [];
+    for (let index = (from + 1) % total; index !== to; index = (index + 1) % total) between.push(index);
+    if (between.length === 0) continue;
+
+    const a = points[from]!;
+    const b = points[to]!;
+    if (a.source === undefined || b.source === undefined || !hasEdge(a.source, b.source)) continue;
+    const dx = b.x - a.x;
+    const dz = b.z - a.z;
+    const length = Math.hypot(dx, dz);
+    if (length <= 1e-9) continue;
+
+    let allOnTheEdge = true;
+    for (const index of between) {
+      const point = points[index]!;
+      const along = ((point.x - a.x) * dx + (point.z - a.z) * dz) / (length * length);
+      const off = Math.abs((point.x - a.x) * dz - (point.z - a.z) * dx) / length;
+      if (along <= 0 || along >= 1 || off > tolerance) {
+        allOnTheEdge = false;
+        break;
+      }
+    }
+    if (!allOnTheEdge) continue;
+    for (const index of between) keep[index] = false;
+  }
+
+  const kept = points.filter((_, index) => keep[index]);
+  return kept.length >= 3 ? kept : points;
+}
+
+/**
  * Giving the boolean's output its identity back.
  *
  * `polygon-clipping` answers in bare floats: a corner that was a node going in
@@ -341,17 +405,23 @@ export function buildConstraintRings(
     }
     if (points.length < 3) continue;
 
+    const stitched = dropInventedCorners(
+      points,
+      (a, b) => edgeBetween.has(pairKey(a, b)),
+      Math.max(1e-6, faceSize * 0.01),
+    );
+
     const edges: (ConstructionRegionEdge | undefined)[] = [];
-    for (let i = 0; i < points.length; i++) {
-      const cur = points[i]!;
-      const next = points[(i + 1) % points.length]!;
+    for (let i = 0; i < stitched.length; i++) {
+      const cur = stitched[i]!;
+      const next = stitched[(i + 1) % stitched.length]!;
       edges.push(
         cur.source !== undefined && next.source !== undefined
           ? edgeBetween.get(pairKey(cur.source, next.source))
           : undefined,
       );
     }
-    rings.push({ points, edges, isHole });
+    rings.push({ points: stitched, edges, isHole });
   }
   return rings;
 }

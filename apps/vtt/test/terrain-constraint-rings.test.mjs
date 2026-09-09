@@ -176,3 +176,62 @@ test("matching stays linear as the standing network grows", () => {
   assert.equal(sourcesOf(rings[0]).filter((source) => source !== undefined).length, 1);
   assert.ok(elapsed < 250, `matching took ${elapsed.toFixed(0)}ms`);
 });
+
+test("a corner the boolean invented mid-edge is dropped, so the segment can name its edge again", () => {
+  // Where the ground's rim crosses the painter's contour, polygon-clipping
+  // hands back a vertex at the crossing. It names no node, and it splits one
+  // segment into two that each run between a node and a nobody -- so neither
+  // knows its edge, and every corner landing there is discarded with nothing
+  // split. One tooth per crossing.
+  const edge = { edgeId: "e:n0~n1", reversed: false, startNodeId: "n0", endNodeId: "n1", geometry: { kind: "line" } };
+  const perimeters = standing([[0, 0], [4, 0], [4, 4], [0, 4]], [edge]);
+
+  // The same square, but with an extra vertex sitting halfway along n0 -> n1.
+  const withInvented = [
+    [
+      [
+        [0, 0],
+        [2, 0],
+        [4, 0],
+        [4, 4],
+        [0, 4],
+        [0, 0],
+      ],
+    ],
+  ];
+  const rings = buildConstraintRings(withInvented, FACE, perimeters);
+  const points = rings[0].points;
+
+  assert.ok(
+    !points.some((point) => point.x === 2 && point.z === 0),
+    "the invented corner is gone",
+  );
+  const at = points.findIndex((point) => point.source === 0);
+  assert.equal(points[(at + 1) % points.length].source, 1, "n0 and n1 are consecutive again");
+  assert.equal(rings[0].edges[at].edgeId, "e:n0~n1", "so the segment names the edge it lies on");
+});
+
+test("a real corner between two nodes is not mistaken for an invented one", () => {
+  const edge = { edgeId: "e:n0~n1", reversed: false, startNodeId: "n0", endNodeId: "n1", geometry: { kind: "line" } };
+  const perimeters = standing([[0, 0], [4, 0], [4, 4], [0, 4]], [edge]);
+
+  // The rim leaves the contour and comes back: the middle corner is a metre
+  // off the line between the two nodes, and dropping it would change the shape.
+  const withDetour = [
+    [
+      [
+        [0, 0],
+        [2, -1],
+        [4, 0],
+        [4, 4],
+        [0, 4],
+        [0, 0],
+      ],
+    ],
+  ];
+  const rings = buildConstraintRings(withDetour, FACE, perimeters);
+  assert.ok(
+    rings[0].points.some((point) => point.x === 2 && point.z === -1),
+    "a corner off the line is a real corner and stays",
+  );
+});

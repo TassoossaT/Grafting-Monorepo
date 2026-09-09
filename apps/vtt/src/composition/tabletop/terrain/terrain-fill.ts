@@ -297,7 +297,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
   // A corner being adopted onto a neighbour's edge takes the height of that
   // edge rather than the height rule's, so the seam has no vertical kink.
   const live = runtime.getSnapshot().map.nodePositions;
-  const { adoptions, snaps } = resolveAdoptions(
+  const { adoptions, snaps, dropped } = resolveAdoptions(
     request.holes,
     request.boundary,
     grid.onContour,
@@ -326,10 +326,17 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
   }
   const snapped = new Map<number, ConstructionNodeId>();
   const effectiveAdoptions = [...adoptions];
+  // A snap that loses its claim and has no edge to fall back onto is a corner
+  // that will meet its neighbour at a coincident position instead of at a
+  // node -- one tooth along the seam. Counted rather than dropped in silence:
+  // this and `dropped.noEdge` are the two ways the mesh can come back visibly
+  // unstitched while every other number in this log reads zero.
+  let snapsLost = 0;
   for (const snap of snaps) {
     const id = request.sources[snap.source];
     if (id === undefined || claimed.has(id)) {
       if (snap.fallback !== undefined) effectiveAdoptions.push(snap.fallback);
+      else snapsLost += 1;
       continue;
     }
     claimed.add(id);
@@ -505,6 +512,12 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     grid,
     adopted: adoption.adopted.size,
     unadopted: adoption.refused.length,
+    landings: grid.onContour.length,
+    unstitched: dropped.noEdge + snapsLost,
+    droppedNoEdge: dropped.noEdge,
+    droppedAtCorner: dropped.atCorner,
+    droppedDegenerate: dropped.degenerate + dropped.unknownRing,
+    snapsLost,
     built: outcome.createdSurfaceKeys.length,
     refusedFaces: outcome.skippedRegionIds.length,
     refusals: outcome.skippedRegionReasons,
