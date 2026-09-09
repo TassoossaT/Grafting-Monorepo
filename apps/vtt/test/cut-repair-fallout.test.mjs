@@ -816,26 +816,36 @@ test("joining multiple path clouds protects foreign road faces from erasure", ()
 
 
 /**
- * A road regenerates its whole connected component on every stroke, re-minting
- * every node in it -- including the ones a terrain repair split into its edges
- * so the two could share a corner. The terrain holding those corners is mostly
- * nowhere near the stroke that triggered the regeneration, and scoping the
- * search to that stroke's footprint meant it was never looked for: it went on
- * naming nodes that no longer existed, and the ground visibly came away from
- * the road as the network filled in.
+ * A road regenerates its whole connected component on every stroke and mints
+ * every contour node from the operation id, so *every* node in the component
+ * gets a new one however far from the stroke. "Terrain holding a node the
+ * painter replaced" is therefore true of the entire corridor, every time, and
+ * cannot on its own decide what to repair -- doing so regenerates the whole
+ * terrain cloud for a metre of road.
+ *
+ * What can decide it is the shape: ground the road came back over unchanged
+ * needs nothing; ground it actually moved off does.
  */
-test("terrain welded to road the stroke re-mints is repaired, however far from the stroke", () => {
+function reminting({ farEndMovesBy = 0 } = {}) {
   const consumed = [];
   const positions = new Map();
   const put = (id, x, z) => positions.set(id, { x, y: 0, z });
 
-  // The stroke, down at z = 0.
+  // The stroke, down at z = 0, and the far end of the same component at z = 36.
   for (const [id, x, z] of [["s0", 0, 0], ["s1", 2, 0], ["s2", 2, 4], ["s3", 0, 4]]) put(id, x, z);
-  // The far end of the same road component, forty units away, and the corner
-  // a previous repair split into its edge for the ground to share.
   for (const [id, x, z] of [["f0", 0, 36], ["f1", 2, 36], ["f2", 2, 40], ["f3", 0, 40]]) put(id, x, z);
-  // Terrain standing against that far end, holding "f1" and "f2" with it.
+  // Ground standing against that far end, sharing f1 and f2 with it by node id.
   for (const [id, x, z] of [["g0", 4, 36], ["g1", 4, 40]]) put(id, x, z);
+  // The same road after regeneration: new ids throughout, and the far end
+  // either back exactly where it was or shifted sideways.
+  const shift = farEndMovesBy;
+  for (const [id, x, z] of [["S0", 0, 0], ["S1", 2, 0], ["S2", 2, 4], ["S3", 0, 4]]) put(id, x, z);
+  for (const [id, x, z] of [
+    ["F0", 0, 36],
+    ["F1", 2 + shift, 36],
+    ["F2", 2 + shift, 40],
+    ["F3", 0, 40],
+  ]) put(id, x, z);
 
   const loopOf = (ids) =>
     ids.map((id, index) => {
@@ -851,13 +861,14 @@ test("terrain welded to road the stroke re-mints is repaired, however far from t
     nodes: ids.map((id) => ({ id, position: positions.get(id) })),
   });
 
-  // The road faces this stroke replaces: its own, and the far one it re-mints
-  // for no reason other than being in the same component.
   const replaced = [
     faceOf(["@region", "road-near"], "path", ["s0", "s1", "s2", "s3"]),
     faceOf(["@region", "road-far"], "path", ["f0", "f1", "f2", "f3"]),
   ];
-  // The ground welded to the far end -- it shares f1 and f2 by node id.
+  const rebuilt = [
+    faceOf(["@region", "road-near-2"], "path", ["S0", "S1", "S2", "S3"]),
+    faceOf(["@region", "road-far-2"], "path", ["F0", "F1", "F2", "F3"]),
+  ];
   const farGround = faceOf(["terrain", "far"], "terrain", ["f1", "g0", "g1", "f2"]);
 
   const inBounds = (topology, bounds) =>
@@ -868,11 +879,12 @@ test("terrain welded to road the stroke re-mints is repaired, however far from t
         node.position.z >= bounds.minZ &&
         node.position.z <= bounds.maxZ,
     );
+  const all = [farGround, ...replaced, ...rebuilt];
 
   const runtime = {
-    getAllRegionTopologies: () => [farGround, ...replaced],
-    getRegionTopologiesInBounds: (bounds) => [farGround, ...replaced].filter((t) => inBounds(t, bounds)),
-    getRegionTopology: () => undefined,
+    getAllRegionTopologies: () => all,
+    getRegionTopologiesInBounds: (bounds) => all.filter((t) => inBounds(t, bounds)),
+    getRegionTopology: (key) => rebuilt.find((t) => t.surfaceKey.join(" ") === key.join(" ")),
     getSnapshot: () => ({ tableId: "t", map: { nodePositions: positions } }),
   };
 
@@ -880,8 +892,7 @@ test("terrain welded to road the stroke re-mints is repaired, however far from t
     operationId: "op",
     sourceSurfaceKeys: replaced.map((t) => t.surfaceKey),
     patch: { nodes: [], edges: [], regions: [{ regionId: "new", surfaceType: "path", physical: true, boundary: [] }] },
-    // Only the stroke. This is what a path actually reports -- see
-    // path-cloud-mutation.ts, "the footprint this stroke alone claims".
+    // Only the stroke -- what a path actually reports.
     footprintOutline: [
       [0, 0],
       [2, 0],
@@ -889,21 +900,39 @@ test("terrain welded to road the stroke re-mints is repaired, however far from t
       [0, 4],
     ],
   };
+  const outcome = { createdSurfaceKeys: rebuilt.map((t) => t.surfaceKey), skippedRegionIds: [], skippedRegionReasons: [], removedSurfaceKeys: [] };
 
-  dispatchCutRepairs(runtime, request, "cause", replaced, undefined, {
+  dispatchCutRepairs(runtime, request, "cause", replaced, outcome, {
     terrain: (_runtime, fallout) => {
       consumed.push(...fallout.consumedSurfaceKeys.map((key) => key.join(" ")));
       return 1;
     },
   });
 
-  // The stroke's own footprint reaches z = 4 at most; this ground starts at 36.
-  assert.ok(
-    !inBounds(farGround, { minX: -2.5, minZ: -2.5, maxX: 4.5, maxZ: 6.5 }),
-    "the ground really is outside the stroke's footprint",
+  return consumed;
+}
+
+test("a road that comes back over the same ground leaves the terrain beside it alone", () => {
+  // Every node id changed. Nothing moved. Regenerating the terrain here would
+  // re-mesh the whole cloud for a stroke that happened forty units away.
+  assert.deepEqual(
+    reminting({ farEndMovesBy: 0 }),
+    [],
+    "re-minting is not a reason to regenerate ground",
   );
+});
+
+test("terrain is repaired where the road actually moved, however far from the stroke", () => {
   assert.ok(
-    consumed.includes("terrain far"),
-    `ground holding a node the stroke destroys is repaired, got ${JSON.stringify(consumed)}`,
+    reminting({ farEndMovesBy: 1.5 }).includes("terrain far"),
+    "ground the road moved off is regenerated even though the stroke is forty units away",
   );
+});
+
+test("re-sampling jitter is not movement, so a curve laid again does not drag the ground with it", () => {
+  // Re-flattening a curve lands its samples fractionally off the last ones all
+  // along its length. The difference of two runs of the same road is a hairline
+  // following the whole network, and treating that as movement is the same as
+  // treating re-minting as movement: everything, every stroke.
+  assert.deepEqual(reminting({ farEndMovesBy: 0.01 }), [], "a hairline is noise, not a road that went somewhere");
 });

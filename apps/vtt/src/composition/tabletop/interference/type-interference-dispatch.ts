@@ -22,6 +22,8 @@ import {
 } from "../../../features/edit-construction/index.ts";
 import { repairTerrainCut, type TerrainRegenerateRuntime } from "../terrain/terrain-regenerate.ts";
 import { paintedFalloutOf } from "./painted-topologies.ts";
+import { pointInOrOnPolygon } from "../../../features/edit-construction/index.ts";
+import polygonClipping, { type MultiPolygon, type Polygon } from "polygon-clipping";
 
 import type { TabletopRuntime } from "../tabletop-runtime.ts";
 
@@ -55,6 +57,106 @@ export const CUT_REPAIR_EXECUTORS: Readonly<Record<string, CutRepairExecutor>> =
   terrain: repairTerrainCut,
   "terrain-grass": repairTerrainCut,
 });
+
+/**
+ * Ground the painter used to stand on and no longer does, or the other way
+ * round -- the places its shape actually changed.
+ *
+ * **Why this is a shape question and not an identity one.** A path mints every
+ * contour node from the operation id (`contour-patch.ts`), so regenerating its
+ * cloud re-mints *every* node in the whole connected component, however far
+ * from the stroke. "Terrain holding a node the painter replaced" is therefore
+ * true of every metre of ground the road touches, on every stroke, and using it
+ * to decide what to repair means regenerating the entire terrain corridor each
+ * time. Identity cannot contain this while the painter throws its own away.
+ *
+ * The shape can. Where the road came back over exactly the ground it left, the
+ * terrain beside it still meets the same boundary in the same place and has
+ * nothing to fix; where the road actually moved, it does. This is a geometric
+ * question answered geometrically -- it decides *how much* to regenerate and
+ * never which node is which, so it is not the proximity matching this pipeline
+ * bans.
+ *
+ * Slivers are discarded. Re-flattening a curve lands its samples fractionally
+ * off the last ones all along its length, so the difference of two runs of the
+ * same road is a hairline following the whole network. `2*area/perimeter` is a
+ * strip's width, and anything thinner than {@link ROAD_REALLY_MOVED} is
+ * re-sampling noise rather than a road that went somewhere.
+ */
+const ROAD_REALLY_MOVED = 0.05;
+
+function areaPolygonsOf(topologies: readonly ConstructionRegionTopology[]): Polygon[] {
+  const polygons: Polygon[] = [];
+  for (const topology of topologies) {
+    const at = new Map<string, { x: number; z: number }>();
+    for (const node of topology.nodes) at.set(node.id, { x: node.position.x, z: node.position.z });
+    for (const loop of topology.outerLoops) {
+      const ring: [number, number][] = [];
+      let complete = true;
+      for (const use of loop) {
+        const position = at.get(use.startNodeId);
+        if (position === undefined) { complete = false; break; }
+        ring.push([position.x, position.z]);
+      }
+      if (!complete || ring.length < 3) continue;
+      ring.push([ring[0]![0], ring[0]![1]]);
+      polygons.push([ring]);
+    }
+  }
+  return polygons;
+}
+
+function unionOf(polygons: readonly Polygon[]): MultiPolygon {
+  if (polygons.length === 0) return [];
+  try {
+    return polygonClipping.union(polygons[0]!, ...polygons.slice(1));
+  } catch {
+    return [];
+  }
+}
+
+function widthOfPiece(piece: MultiPolygon[number]): number {
+  let area = 0;
+  let perimeter = 0;
+  for (const ring of piece) {
+    for (let index = 0; index < ring.length - 1; index += 1) {
+      const [ax, az] = ring[index]!;
+      const [bx, bz] = ring[index + 1]!;
+      area += ax * bz - bx * az;
+      perimeter += Math.hypot(bx - ax, bz - az);
+    }
+  }
+  if (perimeter <= 1e-9) return 0;
+  return Math.abs(area) / perimeter;
+}
+
+function groundThePainterMovedOff(
+  before: readonly ConstructionRegionTopology[],
+  after: readonly ConstructionRegionTopology[],
+): MultiPolygon {
+  const was = unionOf(areaPolygonsOf(before));
+  const is = unionOf(areaPolygonsOf(after));
+  if (was.length === 0 || is.length === 0) return was.length === 0 ? is : was;
+  let moved: MultiPolygon;
+  try {
+    moved = polygonClipping.xor(was, is);
+  } catch {
+    return was;
+  }
+  return moved.filter((piece) => widthOfPiece(piece) >= ROAD_REALLY_MOVED);
+}
+
+/** Even-odd across every ring of a multipolygon, holes included. */
+function insideAny(x: number, z: number, polygon: MultiPolygon): boolean {
+  for (const piece of polygon) {
+    let crossings = 0;
+    for (const ring of piece) {
+      if (pointInOrOnPolygon(x, z, ring)) crossings += 1;
+    }
+    if (crossings % 2 === 1) return true;
+  }
+  return false;
+}
 
 /**
  * Reconstructs region topologies from a patch directly when they are not yet
@@ -266,14 +368,17 @@ export function dispatchCutRepairs(
   // going away. It costs what the contact between the two actually is, and it
   // shrinks on its own the day a path stops regenerating more than it changed.
   const orphaned: ConstructionRegionTopology[] = [];
-  if (replacedNodeIds.size > 0 && replacedTopologies.length > 0) {
+  const changed = groundThePainterMovedOff(replacedTopologies, newRoadTopologies);
+  if (replacedNodeIds.size > 0 && changed.length > 0) {
     const replacedBounds = terrainTopologiesBounds(replacedTopologies, margin);
     const near = typeof runtime.getRegionTopologiesInBounds === "function"
       ? runtime.getRegionTopologiesInBounds(replacedBounds)
       : runtime.getAllRegionTopologies();
     for (const t of near) {
       if (!targetTypes.includes(t.surfaceType)) continue;
-      if (t.nodes.some((n) => replacedNodeIds.has(n.id))) orphaned.push(t);
+      if (!t.nodes.some((n) => replacedNodeIds.has(n.id))) continue;
+      if (!t.nodes.some((n) => insideAny(n.position.x, n.position.z, changed))) continue;
+      orphaned.push(t);
     }
   }
 
