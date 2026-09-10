@@ -11,13 +11,16 @@ pub type Point = [f32; 2];
 /// straight segments.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Polyline {
+    /// Ordered curve samples.
     pub points: Vec<Point>,
 }
 
 /// A simple closed ring plus any holes it encloses.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Polygon {
+    /// Outer boundary.
     pub outer: Vec<Point>,
+    /// Interior holes.
     pub holes: Vec<Vec<Point>>,
 }
 
@@ -27,6 +30,8 @@ pub struct Polygon {
 /// has been decided.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct TriangulatedMesh {
+    /// Vertex coordinates.
     pub positions: Vec<Point>,
+    /// Triangle indices.
     pub indices: Vec<u32>,
 }

@@ -25,7 +25,7 @@
       "executor": "nx:run-commands",
       "options": { "command": "wasm-pack build --target web --out-dir pkg", "cwd": "libs/domains/procgen/construction-wasm" },
       "cache": true,
-      "inputs": ["{projectRoot}/src/**/*", "{projectRoot}/Cargo.toml", "{projectRoot}/package.json", "^default", "{workspaceRoot}/Cargo.toml", "{workspaceRoot}/Cargo.lock", "{workspaceRoot}/rust-toolchain.toml"],
+      "inputs": ["{projectRoot}/src/**/*", "{projectRoot}/Cargo.toml", "{projectRoot}/package.json", "{workspaceRoot}/libs/graph/core/src/**/*", "{workspaceRoot}/libs/graph/core/Cargo.toml", "^default", "{workspaceRoot}/Cargo.toml", "{workspaceRoot}/Cargo.lock", "{workspaceRoot}/rust-toolchain.toml"],
       "outputs": ["{projectRoot}/pkg"]
     },
     "check": {

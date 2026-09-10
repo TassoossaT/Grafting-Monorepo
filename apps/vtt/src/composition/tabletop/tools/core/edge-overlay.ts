@@ -90,6 +90,7 @@ export interface EdgeOverlayGroup {
 export function edgeOverlayOf(
   topologies: readonly ConstructionRegionTopology[],
   graphSnapshot?: ConstructionGraphSnapshot,
+  curves?: import("../../../../ports/bezier-port.ts").BezierPort,
 ): readonly EdgeOverlayGroup[] {
   const byRole = new Map<string, number[]>();
   const drawn = new Set<string>();
@@ -127,7 +128,20 @@ export function edgeOverlayOf(
       const from = nodeById.get(edge.fromNodeId);
       const to = nodeById.get(edge.toNodeId);
       if (from === undefined || to === undefined) continue;
-      spineInto.push(from.x, from.y, from.z, to.x, to.y, to.z);
+      const source = graphSnapshot.edges.find((e) => e.edgeId === edge.edgeId);
+      if (source?.curve && curves) {
+        const result = curves.curveBatch({ tolerance: 0.025, commands: [{
+          kind: "resolve", handles: source.curve, start: [from.x, from.y, from.z], end: [to.x, to.y, to.z],
+        }] })[0]!;
+        const samples = result.samples[0]!;
+        for (let i = 1; i < samples.length; i += 1) spineInto.push(...samples[i - 1]!.position, ...samples[i]!.position);
+        const p = result.curves[0]!.points;
+        const guides = byRole.get("bezier-handle") ?? [];
+        guides.push(...p[0], ...p[1], ...p[2], ...p[3]);
+        byRole.set("bezier-handle", guides);
+      } else {
+        spineInto.push(from.x, from.y, from.z, to.x, to.y, to.z);
+      }
     }
     if (spineInto.length > 0) {
       byRole.set("path-spine-edge", spineInto);

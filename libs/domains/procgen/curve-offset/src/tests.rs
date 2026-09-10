@@ -1,4 +1,7 @@
-use crate::{offset_bands, sample_catmull_rom, union_and_triangulate, Point, Polygon, Polyline, TriangulatedMesh};
+use crate::{
+    Point, Polygon, Polyline, TriangulatedMesh, offset_bands, sample_catmull_rom,
+    union_and_triangulate,
+};
 
 fn distance(a: Point, b: Point) -> f32 {
     ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2)).sqrt()
@@ -19,7 +22,12 @@ fn mesh_area(mesh: &TriangulatedMesh) -> f32 {
 /// A rectangle polygon spanning `[min_x, max_x] x [min_y, max_y]`.
 fn rect(min_x: f32, max_x: f32, min_y: f32, max_y: f32) -> Polygon {
     Polygon {
-        outer: vec![[min_x, min_y], [max_x, min_y], [max_x, max_y], [min_x, max_y]],
+        outer: vec![
+            [min_x, min_y],
+            [max_x, min_y],
+            [max_x, max_y],
+            [min_x, max_y],
+        ],
         holes: Vec::new(),
     }
 }
@@ -53,9 +61,15 @@ fn a_long_straight_run_into_a_tight_corner_does_not_loop_or_overshoot() {
     let sampled = sample_catmull_rom(&control, 0.02);
 
     let min_x = control.iter().map(|p| p[0]).fold(f32::INFINITY, f32::min);
-    let max_x = control.iter().map(|p| p[0]).fold(f32::NEG_INFINITY, f32::max);
+    let max_x = control
+        .iter()
+        .map(|p| p[0])
+        .fold(f32::NEG_INFINITY, f32::max);
     let min_y = control.iter().map(|p| p[1]).fold(f32::INFINITY, f32::min);
-    let max_y = control.iter().map(|p| p[1]).fold(f32::NEG_INFINITY, f32::max);
+    let max_y = control
+        .iter()
+        .map(|p| p[1])
+        .fold(f32::NEG_INFINITY, f32::max);
     let margin = 3.0 * distance(b, c);
 
     for point in &sampled.points {
@@ -97,7 +111,9 @@ fn a_finer_tolerance_samples_an_s_curve_more_densely() {
 
 #[test]
 fn two_parallel_bands_stay_a_constant_width_apart() {
-    let polyline = Polyline { points: vec![[0.0, 0.0], [10.0, 0.0]] };
+    let polyline = Polyline {
+        points: vec![[0.0, 0.0], [10.0, 0.0]],
+    };
     let bands = offset_bands(&polyline, &[-1.0, 0.0, 1.0], 4.0);
     assert_eq!(bands.len(), 2);
     // Endpoints of the run: the offset curve at -1 and at +1 should sit
@@ -113,7 +129,9 @@ fn two_parallel_bands_stay_a_constant_width_apart() {
 
 #[test]
 fn a_sharp_corner_is_mitred_within_the_miter_limit() {
-    let polyline = Polyline { points: vec![[0.0, 0.0], [5.0, 0.0], [5.0, 5.0]] };
+    let polyline = Polyline {
+        points: vec![[0.0, 0.0], [5.0, 0.0], [5.0, 5.0]],
+    };
     let miter_limit = 2.0;
     let bands = offset_bands(&polyline, &[-1.0, 1.0], miter_limit);
     assert_eq!(bands.len(), 1);
@@ -130,10 +148,14 @@ fn a_sharp_corner_is_mitred_within_the_miter_limit() {
 
 #[test]
 fn offset_bands_needs_at_least_two_points_and_two_offsets() {
-    let single_point = Polyline { points: vec![[0.0, 0.0]] };
+    let single_point = Polyline {
+        points: vec![[0.0, 0.0]],
+    };
     assert!(offset_bands(&single_point, &[-1.0, 1.0], 4.0).is_empty());
 
-    let line = Polyline { points: vec![[0.0, 0.0], [1.0, 0.0]] };
+    let line = Polyline {
+        points: vec![[0.0, 0.0], [1.0, 0.0]],
+    };
     assert!(offset_bands(&line, &[0.0], 4.0).is_empty());
 }
 
@@ -179,5 +201,9 @@ fn union_indices_always_come_in_complete_triangles() {
     let vertical = rect(4.0, 6.0, -4.0, 1.0);
     let mesh = union_and_triangulate(&[horizontal, vertical]);
     assert_eq!(mesh.indices.len() % 3, 0);
-    assert!(mesh.indices.iter().all(|&index| (index as usize) < mesh.positions.len()));
+    assert!(
+        mesh.indices
+            .iter()
+            .all(|&index| (index as usize) < mesh.positions.len())
+    );
 }

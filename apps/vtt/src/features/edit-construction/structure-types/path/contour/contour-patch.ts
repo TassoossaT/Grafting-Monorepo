@@ -183,11 +183,11 @@ export function buildContourPatch(
   });
   const nodePositions = new Map<string, ConstructionPosition>();
 
-  const nearestExisting = (x: number, z: number): ExistingNode | undefined => {
+  const nearestExisting = (x: number, y: number, z: number): ExistingNode | undefined => {
     let best: { readonly node: ExistingNode; readonly distance: number } | undefined;
     for (const node of existingNodes) {
       const distance = Math.hypot(node.position.x - x, node.position.z - z);
-      if (distance > WELD_TOLERANCE) continue;
+      if (distance > WELD_TOLERANCE || Math.abs(node.position.y - y) > WELD_TOLERANCE) continue;
       if (best === undefined || distance < best.distance) best = { node, distance };
     }
     return best?.node;
@@ -196,14 +196,15 @@ export function buildContourPatch(
   let mintedCounter = 0;
   const idsFor = (ring: Ring, ringIndex: number): readonly string[] =>
     openRing(ring).map(([x, z]) => {
-      const welded = nearestExisting(x, z);
+      const y = nearestSampleY(x, z, heightSamples);
+      const welded = nearestExisting(x, y, z);
       if (welded !== undefined) {
         nodePositions.set(welded.id, welded.position);
         return welded.id;
       }
       const id = `contour:${operationId}:band-${bandIndex}:${ringIndex}:${mintedCounter}`;
       mintedCounter += 1;
-      nodePositions.set(id, { x, y: nearestSampleY(x, z, heightSamples), z });
+      nodePositions.set(id, { x, y, z });
       return id;
     });
 

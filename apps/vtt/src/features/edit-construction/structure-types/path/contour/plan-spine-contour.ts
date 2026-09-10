@@ -22,6 +22,9 @@ import { buildContourPatch, type ExistingNode } from "./contour-patch.ts";
  */
 export interface SpineChainInput {
   readonly chainId: string;
+  /** Canonical Rust sampling of explicit authoring curves. */
+  readonly sampledPoints?: readonly ConstructionPosition[];
+  readonly ribbons?: readonly BandRibbon[];
   readonly controlPoints: readonly ConstructionPosition[];
   /** Lateral offsets defining the bands, e.g. `[-2.1, 0, 2.1]` for contour/spine/contour. */
   readonly bandOffsets: readonly number[];
@@ -31,6 +34,7 @@ export interface SpineChainInput {
 }
 
 export interface PlanSpineContourInput {
+  readonly union?: (ribbons: readonly BandRibbon[]) => [number, number][][][];
   readonly tableId: string;
   /** Scopes every node/region id this call mints -- one edit, one operation. */
   readonly operationId: string;
@@ -97,7 +101,8 @@ export function planSpineContour(input: PlanSpineContourInput): PlanSpineContour
 
   const ribbons: BandRibbon[] = [];
   for (const chain of input.editedChains) {
-    const polyline = sampleCatmullRom(chain.controlPoints, chain.tolerance);
+    if (chain.ribbons) { ribbons.push(...chain.ribbons); continue; }
+    const polyline = chain.sampledPoints ?? sampleCatmullRom(chain.controlPoints, chain.tolerance);
     const minOffset = Math.min(...chain.bandOffsets);
     const maxOffset = Math.max(...chain.bandOffsets);
     for (const ribbon of offsetBands(polyline, [minOffset, maxOffset], chain.miterLimit)) {
@@ -124,7 +129,8 @@ export function planSpineContour(input: PlanSpineContourInput): PlanSpineContour
     }
   }
 
-  let shapes = unionBandLayer(ribbons);
+  let shapes = input.union ? input.union(ribbons) : unionBandLayer(ribbons);
+  if (input.union && shapes.length === 0 && ribbons.length > 0) throw Error("O contorno da curva é degenerado; ajuste a forma ou a largura.");
   if (shapes.length === 0 && ribbons.length > 0) {
     shapes = ribbons.map((ribbon) => [ringOf(ribbon.outer)]);
   }

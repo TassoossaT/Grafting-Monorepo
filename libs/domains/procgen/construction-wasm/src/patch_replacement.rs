@@ -13,7 +13,7 @@ use grafting_graph_core::{ContourTopology, Edge, EdgeId, Node, NodeId, RegionId,
 
 use crate::editing::SessionGraph;
 use crate::mesh::{region_id_from_wire, region_id_to_wire};
-use crate::region_editing::{apply_add_patch, AddPatchRequest, AddPatchResponse};
+use crate::region_editing::{AddPatchRequest, AddPatchResponse, apply_add_patch};
 
 /// One application-selected, whole-region replacement.
 #[derive(Debug, Deserialize)]
@@ -47,6 +47,8 @@ pub struct GraphPatchNode {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GraphPatchEdge {
+    #[serde(default)]
+    pub curve: Option<grafting_graph_core::bezier::CurveHandles>,
     pub edge_id: String,
     pub start_node_id: String,
     pub end_node_id: String,
@@ -78,10 +80,13 @@ pub fn apply_patch_replacement(
     let mut next_topology = topology.clone();
     let mut next_known_regions = known_regions.clone();
 
+    let mut candidate_nodes = HashSet::<NodeId>::new();
     if let Some(graph_patch) = request.graph_patch {
         for edge_id in graph_patch.removed_edge_ids {
             let id = EdgeId::new(edge_id).map_err(|error| error.to_string())?;
-            if next_graph.edge(&id).is_some() {
+            if let Some(edge) = next_graph.edge(&id) {
+                candidate_nodes.insert(edge.source().clone());
+                candidate_nodes.insert(edge.target().clone());
                 next_graph
                     .remove_edge(&id)
                     .map_err(|error| error.to_string())?;
@@ -89,6 +94,12 @@ pub fn apply_patch_replacement(
         }
         for node in graph_patch.nodes {
             let id = NodeId::new(node.id).map_err(|error| error.to_string())?;
+            if !node.position.iter().all(|v| v.is_finite()) {
+                return Err("node position must be finite".into());
+            }
+            if let Some(existing) = next_graph.node_mut(&id) {
+                *existing.data_mut() = node.position;
+            }
             if next_graph.node(&id).is_none() {
                 next_graph
                     .add_node(Node::new(id, node.position))
@@ -102,13 +113,27 @@ pub fn apply_patch_replacement(
             }
             let source = NodeId::new(edge.start_node_id).map_err(|error| error.to_string())?;
             let target = NodeId::new(edge.end_node_id).map_err(|error| error.to_string())?;
+            if let Some(handles) = &edge.curve {
+                let from = next_graph
+                    .node(&source)
+                    .ok_or("missing curve start")?
+                    .data()
+                    .map(f64::from);
+                let to = next_graph
+                    .node(&target)
+                    .ok_or("missing curve end")?
+                    .data()
+                    .map(f64::from);
+                handles.resolve(from, to).validate()?;
+                handles.profile_at(0.0)?;
+                handles.profile_at(1.0)?;
+            }
             next_graph
-                .add_edge(Edge::new(id, source, target, ()))
+                .add_edge(Edge::new(id, source, target, edge.curve))
                 .map_err(|error| error.to_string())?;
         }
     }
 
-    let mut candidate_nodes = HashSet::<NodeId>::new();
     for region_id in &selected {
         if next_topology.region(region_id).is_none() {
             return Err(format!(
@@ -158,7 +183,13 @@ pub fn apply_patch_replacement(
     next_topology.prune_unused_edges();
     let nodes_in_use = next_topology.nodes_in_use();
     for node_id in candidate_nodes {
-        if nodes_in_use.contains(&node_id) {
+        if nodes_in_use.contains(&node_id)
+            || next_graph
+                .snapshot()
+                .edges()
+                .iter()
+                .any(|e| e.source() == &node_id || e.target() == &node_id)
+        {
             continue;
         }
         next_graph
@@ -180,7 +211,7 @@ pub fn apply_patch_replacement(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use grafting_graph_core::{straight_cycle_region, Graph, Node, SurfaceType};
+    use grafting_graph_core::{Graph, Node, SurfaceType, straight_cycle_region};
 
     use crate::region_editing::{OrientedEdgeUseDto, PatchRegionDto};
 
@@ -245,14 +276,16 @@ mod tests {
             graph_patch: None,
         };
 
-        assert!(apply_patch_replacement(
-            &mut graph,
-            &mut surfaces,
-            &mut topology,
-            &mut known,
-            request
-        )
-        .is_err());
+        assert!(
+            apply_patch_replacement(
+                &mut graph,
+                &mut surfaces,
+                &mut topology,
+                &mut known,
+                request
+            )
+            .is_err()
+        );
         assert!(
             topology.region(&source).is_some(),
             "the source region remains live"
@@ -288,6 +321,7 @@ mod tests {
                 ],
                 removed_edge_ids: vec![],
                 edges: vec![GraphPatchEdge {
+                    curve: None,
                     edge_id: "spine-edge:one:0".into(),
                     start_node_id: "spine:one:0".into(),
                     end_node_id: "spine:one:1".into(),
@@ -305,8 +339,10 @@ mod tests {
         .unwrap();
 
         assert!(graph.node(&NodeId::new("spine:one:0").unwrap()).is_some());
-        assert!(graph
-            .edge(&EdgeId::new("spine-edge:one:0").unwrap())
-            .is_some());
+        assert!(
+            graph
+                .edge(&EdgeId::new("spine-edge:one:0").unwrap())
+                .is_some()
+        );
     }
 }

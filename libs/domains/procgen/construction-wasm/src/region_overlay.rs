@@ -80,8 +80,26 @@ fn apply_inner(
         .map(|key| region_id_from_wire(key))
         .collect::<Result<HashSet<_>, _>>()?;
     let contour = polygonal_contour(request.outline).map_err(|error| error.to_string())?;
+    // The surface-only query does not consume authored edge metadata.
+    let snapshot = graph.snapshot();
+    let spatial_graph = grafting_graph_core::Graph::try_from_parts(
+        snapshot.nodes().to_vec(),
+        snapshot
+            .edges()
+            .iter()
+            .map(|e| {
+                grafting_graph_core::Edge::new(
+                    e.id().clone(),
+                    e.source().clone(),
+                    e.target().clone(),
+                    (),
+                )
+            })
+            .collect(),
+    )
+    .map_err(|error| error.to_string())?;
     let plan = plan_region_merge_regions(
-        graph,
+        &spatial_graph,
         surfaces,
         topology,
         contour,

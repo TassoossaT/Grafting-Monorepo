@@ -1,11 +1,11 @@
 {
   "schemaVersion": "1.0.0",
   "graphId": "grafting.workspace",
-  "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+  "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
   "generator": {
     "id": "extractor:nx-graph-ir",
     "version": "1.0.0",
-    "inputHash": "a41c228c0ed0baac13a27e09db7a34099d5bc91da23002cf038e50153f412e58"
+    "inputHash": "67d42fa9028d3afda9a716d452af4d5b076bdfaebbbb2b9547f6cf63e52844a5"
   },
   "nodes": [
     {
@@ -26,7 +26,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -56,7 +56,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -86,14 +86,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/domains/procgen/construction-wasm/project.json",
             "pointer": "/name",
-            "sha256": "efd8ccff8641ab8cf69fbcef68528736b50a2fd1914f13e4aef3a4c0585b364c"
+            "sha256": "aed21678e8653be6797aed41475870f3879503d12607768be91cebb348d8921a"
           }
         ]
       }
@@ -116,7 +116,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -145,7 +145,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -174,7 +174,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -203,7 +203,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -233,7 +233,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -261,7 +261,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -290,14 +290,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/graph/core/project.json",
             "pointer": "/name",
-            "sha256": "afbaeedcd599e932789f1e18cdaa5d33ee29c593eb9275c6ee0aa3f079805a86"
+            "sha256": "932c15d27d4b28ab32b53d0e364095f7107616a32c02db66221c510427717a81"
           }
         ]
       }
@@ -320,7 +320,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -349,7 +349,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -378,7 +378,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -407,7 +407,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -437,7 +437,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -467,7 +467,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -497,7 +497,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -526,7 +526,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -555,7 +555,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -584,7 +584,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -613,7 +613,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -643,7 +643,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -673,7 +673,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -703,7 +703,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -734,7 +734,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -757,7 +757,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -780,7 +780,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -803,7 +803,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -826,7 +826,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -849,7 +849,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -872,7 +872,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -895,7 +895,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -918,7 +918,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -941,7 +941,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -964,7 +964,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -987,7 +987,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1010,7 +1010,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1033,7 +1033,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1056,7 +1056,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1079,7 +1079,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1102,7 +1102,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1125,7 +1125,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1148,14 +1148,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/domains/procgen/construction-wasm/project.json",
             "pointer": "/targets/build",
-            "sha256": "efd8ccff8641ab8cf69fbcef68528736b50a2fd1914f13e4aef3a4c0585b364c"
+            "sha256": "aed21678e8653be6797aed41475870f3879503d12607768be91cebb348d8921a"
           }
         ]
       }
@@ -1171,14 +1171,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/domains/procgen/construction-wasm/project.json",
             "pointer": "/targets/check",
-            "sha256": "efd8ccff8641ab8cf69fbcef68528736b50a2fd1914f13e4aef3a4c0585b364c"
+            "sha256": "aed21678e8653be6797aed41475870f3879503d12607768be91cebb348d8921a"
           }
         ]
       }
@@ -1194,14 +1194,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/domains/procgen/construction-wasm/project.json",
             "pointer": "/targets/docs-check",
-            "sha256": "efd8ccff8641ab8cf69fbcef68528736b50a2fd1914f13e4aef3a4c0585b364c"
+            "sha256": "aed21678e8653be6797aed41475870f3879503d12607768be91cebb348d8921a"
           }
         ]
       }
@@ -1217,14 +1217,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/domains/procgen/construction-wasm/project.json",
             "pointer": "/targets/docs-generate",
-            "sha256": "efd8ccff8641ab8cf69fbcef68528736b50a2fd1914f13e4aef3a4c0585b364c"
+            "sha256": "aed21678e8653be6797aed41475870f3879503d12607768be91cebb348d8921a"
           }
         ]
       }
@@ -1240,14 +1240,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/construction-wasm/data/targets/postinstall",
-            "sha256": "22169b05e79cf15e2f195b2d490d70b08273d7e1aaea9fb79843e5694e5241e2"
+            "sha256": "7854c5bc896336ffd4935ecd597197a4fa661c150dc6dc737008bb49310faf10"
           }
         ]
       }
@@ -1263,14 +1263,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/domains/procgen/construction-wasm/project.json",
             "pointer": "/targets/test",
-            "sha256": "efd8ccff8641ab8cf69fbcef68528736b50a2fd1914f13e4aef3a4c0585b364c"
+            "sha256": "aed21678e8653be6797aed41475870f3879503d12607768be91cebb348d8921a"
           }
         ]
       }
@@ -1286,7 +1286,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1309,7 +1309,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1332,7 +1332,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1355,7 +1355,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1378,14 +1378,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/discretize/data/targets/postinstall",
-            "sha256": "22169b05e79cf15e2f195b2d490d70b08273d7e1aaea9fb79843e5694e5241e2"
+            "sha256": "7854c5bc896336ffd4935ecd597197a4fa661c150dc6dc737008bb49310faf10"
           }
         ]
       }
@@ -1401,7 +1401,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1424,7 +1424,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1447,7 +1447,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1470,7 +1470,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1493,7 +1493,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1516,7 +1516,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1539,7 +1539,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1562,7 +1562,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1585,7 +1585,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1608,7 +1608,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1631,7 +1631,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1654,7 +1654,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1677,7 +1677,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1700,7 +1700,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1723,7 +1723,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1746,7 +1746,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1769,7 +1769,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1792,7 +1792,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1815,14 +1815,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/generation-wasm/data/targets/postinstall",
-            "sha256": "22169b05e79cf15e2f195b2d490d70b08273d7e1aaea9fb79843e5694e5241e2"
+            "sha256": "7854c5bc896336ffd4935ecd597197a4fa661c150dc6dc737008bb49310faf10"
           }
         ]
       }
@@ -1838,7 +1838,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1861,7 +1861,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1884,7 +1884,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1907,7 +1907,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1930,7 +1930,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1953,7 +1953,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1976,7 +1976,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -1999,7 +1999,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2022,7 +2022,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2045,7 +2045,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2068,7 +2068,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2091,7 +2091,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2114,7 +2114,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2137,7 +2137,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2160,7 +2160,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2183,7 +2183,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2206,7 +2206,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2229,7 +2229,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2252,7 +2252,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2275,7 +2275,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2298,7 +2298,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2321,7 +2321,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2344,14 +2344,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/graph/core/project.json",
             "pointer": "/targets/api-check",
-            "sha256": "afbaeedcd599e932789f1e18cdaa5d33ee29c593eb9275c6ee0aa3f079805a86"
+            "sha256": "932c15d27d4b28ab32b53d0e364095f7107616a32c02db66221c510427717a81"
           }
         ]
       }
@@ -2367,14 +2367,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/graph/core/project.json",
             "pointer": "/targets/check",
-            "sha256": "afbaeedcd599e932789f1e18cdaa5d33ee29c593eb9275c6ee0aa3f079805a86"
+            "sha256": "932c15d27d4b28ab32b53d0e364095f7107616a32c02db66221c510427717a81"
           }
         ]
       }
@@ -2390,14 +2390,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/graph/core/project.json",
             "pointer": "/targets/docs-check",
-            "sha256": "afbaeedcd599e932789f1e18cdaa5d33ee29c593eb9275c6ee0aa3f079805a86"
+            "sha256": "932c15d27d4b28ab32b53d0e364095f7107616a32c02db66221c510427717a81"
           }
         ]
       }
@@ -2413,14 +2413,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/graph/core/project.json",
             "pointer": "/targets/docs-generate",
-            "sha256": "afbaeedcd599e932789f1e18cdaa5d33ee29c593eb9275c6ee0aa3f079805a86"
+            "sha256": "932c15d27d4b28ab32b53d0e364095f7107616a32c02db66221c510427717a81"
           }
         ]
       }
@@ -2436,14 +2436,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/graph/core/project.json",
             "pointer": "/targets/format",
-            "sha256": "afbaeedcd599e932789f1e18cdaa5d33ee29c593eb9275c6ee0aa3f079805a86"
+            "sha256": "932c15d27d4b28ab32b53d0e364095f7107616a32c02db66221c510427717a81"
           }
         ]
       }
@@ -2459,14 +2459,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/graph/core/project.json",
             "pointer": "/targets/graph-ir-check",
-            "sha256": "afbaeedcd599e932789f1e18cdaa5d33ee29c593eb9275c6ee0aa3f079805a86"
+            "sha256": "932c15d27d4b28ab32b53d0e364095f7107616a32c02db66221c510427717a81"
           }
         ]
       }
@@ -2482,14 +2482,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/graph/core/project.json",
             "pointer": "/targets/lint",
-            "sha256": "afbaeedcd599e932789f1e18cdaa5d33ee29c593eb9275c6ee0aa3f079805a86"
+            "sha256": "932c15d27d4b28ab32b53d0e364095f7107616a32c02db66221c510427717a81"
           }
         ]
       }
@@ -2505,14 +2505,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/graph/core/project.json",
             "pointer": "/targets/test",
-            "sha256": "afbaeedcd599e932789f1e18cdaa5d33ee29c593eb9275c6ee0aa3f079805a86"
+            "sha256": "932c15d27d4b28ab32b53d0e364095f7107616a32c02db66221c510427717a81"
           }
         ]
       }
@@ -2528,14 +2528,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/ia-graft/data/targets/ia-graft",
-            "sha256": "22169b05e79cf15e2f195b2d490d70b08273d7e1aaea9fb79843e5694e5241e2"
+            "sha256": "7854c5bc896336ffd4935ecd597197a4fa661c150dc6dc737008bb49310faf10"
           }
         ]
       }
@@ -2551,7 +2551,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2574,14 +2574,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/ia-graft/data/targets/typecheck",
-            "sha256": "22169b05e79cf15e2f195b2d490d70b08273d7e1aaea9fb79843e5694e5241e2"
+            "sha256": "7854c5bc896336ffd4935ecd597197a4fa661c150dc6dc737008bb49310faf10"
           }
         ]
       }
@@ -2597,7 +2597,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2620,7 +2620,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2643,7 +2643,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2666,7 +2666,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2689,7 +2689,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2712,7 +2712,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2735,7 +2735,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2758,7 +2758,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2781,7 +2781,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2804,7 +2804,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2827,7 +2827,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2850,7 +2850,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2873,14 +2873,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/isekai-wasm-bridge/data/targets/postinstall",
-            "sha256": "22169b05e79cf15e2f195b2d490d70b08273d7e1aaea9fb79843e5694e5241e2"
+            "sha256": "7854c5bc896336ffd4935ecd597197a4fa661c150dc6dc737008bb49310faf10"
           }
         ]
       }
@@ -2896,7 +2896,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2919,7 +2919,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2942,7 +2942,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2965,7 +2965,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -2988,7 +2988,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3011,7 +3011,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3034,7 +3034,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3057,7 +3057,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3080,7 +3080,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3103,7 +3103,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3126,7 +3126,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3149,7 +3149,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3172,7 +3172,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3195,7 +3195,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3218,7 +3218,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3241,7 +3241,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3264,7 +3264,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3287,7 +3287,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3310,7 +3310,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3333,7 +3333,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3356,7 +3356,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3379,7 +3379,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3402,7 +3402,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3425,7 +3425,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3448,7 +3448,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3471,7 +3471,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3494,7 +3494,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3517,7 +3517,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3540,7 +3540,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3563,7 +3563,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3586,7 +3586,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3609,7 +3609,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3632,7 +3632,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3655,14 +3655,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/tileset-wfc/data/targets/postinstall",
-            "sha256": "22169b05e79cf15e2f195b2d490d70b08273d7e1aaea9fb79843e5694e5241e2"
+            "sha256": "7854c5bc896336ffd4935ecd597197a4fa661c150dc6dc737008bb49310faf10"
           }
         ]
       }
@@ -3678,7 +3678,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3701,7 +3701,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3724,7 +3724,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3747,7 +3747,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3770,7 +3770,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3793,7 +3793,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3816,7 +3816,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3839,7 +3839,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3862,7 +3862,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3885,7 +3885,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3908,7 +3908,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3931,7 +3931,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3954,7 +3954,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -3977,7 +3977,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4000,7 +4000,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4023,7 +4023,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4046,7 +4046,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4069,7 +4069,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4092,7 +4092,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4115,7 +4115,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4140,7 +4140,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4163,7 +4163,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4186,7 +4186,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4209,7 +4209,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4232,7 +4232,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4255,7 +4255,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4278,7 +4278,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4301,7 +4301,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4324,7 +4324,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4347,7 +4347,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4355,6 +4355,29 @@
             "path": "apps/architecture-studio/project.json",
             "pointer": "/targets/test",
             "sha256": "559a3916703d9254574ed5b238c51025b97efc635b407ad7d76b269dba503e5b"
+          }
+        ]
+      }
+    },
+    {
+      "id": "edge:project%3Aarchitecture-studio--depends_on--project%3Aconstruction-wasm",
+      "kind": "depends_on",
+      "source": "project:architecture-studio",
+      "target": "project:construction-wasm",
+      "relationClass": "derived",
+      "provenance": {
+        "extractor": {
+          "id": "extractor:nx-graph-ir",
+          "version": "1.0.0"
+        },
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
+        "confidence": 0.95,
+        "evidence": [
+          {
+            "kind": "generated",
+            "path": "docs/generated/project-graph.json",
+            "pointer": "/graph/dependencies/architecture-studio",
+            "sha256": "7854c5bc896336ffd4935ecd597197a4fa661c150dc6dc737008bb49310faf10"
           }
         ]
       }
@@ -4370,7 +4393,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4393,7 +4416,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4416,7 +4439,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4439,14 +4462,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/dependencies/architecture-studio",
-            "sha256": "22169b05e79cf15e2f195b2d490d70b08273d7e1aaea9fb79843e5694e5241e2"
+            "sha256": "7854c5bc896336ffd4935ecd597197a4fa661c150dc6dc737008bb49310faf10"
           }
         ]
       }
@@ -4462,14 +4485,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/dependencies/architecture-studio",
-            "sha256": "22169b05e79cf15e2f195b2d490d70b08273d7e1aaea9fb79843e5694e5241e2"
+            "sha256": "7854c5bc896336ffd4935ecd597197a4fa661c150dc6dc737008bb49310faf10"
           }
         ]
       }
@@ -4485,7 +4508,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4508,7 +4531,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4531,7 +4554,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4554,7 +4577,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4577,7 +4600,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4600,7 +4623,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4623,7 +4646,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4646,7 +4669,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4669,14 +4692,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/domains/procgen/construction-wasm/project.json",
             "pointer": "/targets/build",
-            "sha256": "efd8ccff8641ab8cf69fbcef68528736b50a2fd1914f13e4aef3a4c0585b364c"
+            "sha256": "aed21678e8653be6797aed41475870f3879503d12607768be91cebb348d8921a"
           }
         ]
       }
@@ -4692,14 +4715,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/domains/procgen/construction-wasm/project.json",
             "pointer": "/targets/check",
-            "sha256": "efd8ccff8641ab8cf69fbcef68528736b50a2fd1914f13e4aef3a4c0585b364c"
+            "sha256": "aed21678e8653be6797aed41475870f3879503d12607768be91cebb348d8921a"
           }
         ]
       }
@@ -4715,14 +4738,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/domains/procgen/construction-wasm/project.json",
             "pointer": "/targets/docs-check",
-            "sha256": "efd8ccff8641ab8cf69fbcef68528736b50a2fd1914f13e4aef3a4c0585b364c"
+            "sha256": "aed21678e8653be6797aed41475870f3879503d12607768be91cebb348d8921a"
           }
         ]
       }
@@ -4738,14 +4761,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/domains/procgen/construction-wasm/project.json",
             "pointer": "/targets/docs-generate",
-            "sha256": "efd8ccff8641ab8cf69fbcef68528736b50a2fd1914f13e4aef3a4c0585b364c"
+            "sha256": "aed21678e8653be6797aed41475870f3879503d12607768be91cebb348d8921a"
           }
         ]
       }
@@ -4761,14 +4784,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/construction-wasm/data/targets/postinstall",
-            "sha256": "22169b05e79cf15e2f195b2d490d70b08273d7e1aaea9fb79843e5694e5241e2"
+            "sha256": "7854c5bc896336ffd4935ecd597197a4fa661c150dc6dc737008bb49310faf10"
           }
         ]
       }
@@ -4784,14 +4807,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/domains/procgen/construction-wasm/project.json",
             "pointer": "/targets/test",
-            "sha256": "efd8ccff8641ab8cf69fbcef68528736b50a2fd1914f13e4aef3a4c0585b364c"
+            "sha256": "aed21678e8653be6797aed41475870f3879503d12607768be91cebb348d8921a"
           }
         ]
       }
@@ -4807,7 +4830,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4830,7 +4853,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4853,7 +4876,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4876,7 +4899,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4899,14 +4922,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/discretize/data/targets/postinstall",
-            "sha256": "22169b05e79cf15e2f195b2d490d70b08273d7e1aaea9fb79843e5694e5241e2"
+            "sha256": "7854c5bc896336ffd4935ecd597197a4fa661c150dc6dc737008bb49310faf10"
           }
         ]
       }
@@ -4922,7 +4945,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4945,7 +4968,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4968,7 +4991,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -4991,7 +5014,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5014,7 +5037,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5037,7 +5060,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5060,7 +5083,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5083,7 +5106,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5106,7 +5129,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5129,7 +5152,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5152,7 +5175,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5175,7 +5198,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5198,7 +5221,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5221,7 +5244,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5244,7 +5267,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5267,7 +5290,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5290,7 +5313,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5313,7 +5336,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5336,7 +5359,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5359,14 +5382,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/generation-wasm/data/targets/postinstall",
-            "sha256": "22169b05e79cf15e2f195b2d490d70b08273d7e1aaea9fb79843e5694e5241e2"
+            "sha256": "7854c5bc896336ffd4935ecd597197a4fa661c150dc6dc737008bb49310faf10"
           }
         ]
       }
@@ -5382,7 +5405,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5405,7 +5428,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5428,7 +5451,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5451,7 +5474,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5474,7 +5497,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5497,7 +5520,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5520,7 +5543,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5543,7 +5566,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5566,7 +5589,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5589,7 +5612,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5612,7 +5635,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5635,7 +5658,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5658,7 +5681,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5681,7 +5704,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5704,7 +5727,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5727,7 +5750,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5750,7 +5773,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5773,7 +5796,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5796,7 +5819,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5819,7 +5842,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5842,7 +5865,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5865,7 +5888,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -5888,14 +5911,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/graph/core/project.json",
             "pointer": "/targets/api-check",
-            "sha256": "afbaeedcd599e932789f1e18cdaa5d33ee29c593eb9275c6ee0aa3f079805a86"
+            "sha256": "932c15d27d4b28ab32b53d0e364095f7107616a32c02db66221c510427717a81"
           }
         ]
       }
@@ -5911,14 +5934,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/graph/core/project.json",
             "pointer": "/targets/check",
-            "sha256": "afbaeedcd599e932789f1e18cdaa5d33ee29c593eb9275c6ee0aa3f079805a86"
+            "sha256": "932c15d27d4b28ab32b53d0e364095f7107616a32c02db66221c510427717a81"
           }
         ]
       }
@@ -5934,14 +5957,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/graph/core/project.json",
             "pointer": "/targets/docs-check",
-            "sha256": "afbaeedcd599e932789f1e18cdaa5d33ee29c593eb9275c6ee0aa3f079805a86"
+            "sha256": "932c15d27d4b28ab32b53d0e364095f7107616a32c02db66221c510427717a81"
           }
         ]
       }
@@ -5957,14 +5980,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/graph/core/project.json",
             "pointer": "/targets/docs-generate",
-            "sha256": "afbaeedcd599e932789f1e18cdaa5d33ee29c593eb9275c6ee0aa3f079805a86"
+            "sha256": "932c15d27d4b28ab32b53d0e364095f7107616a32c02db66221c510427717a81"
           }
         ]
       }
@@ -5980,14 +6003,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/graph/core/project.json",
             "pointer": "/targets/format",
-            "sha256": "afbaeedcd599e932789f1e18cdaa5d33ee29c593eb9275c6ee0aa3f079805a86"
+            "sha256": "932c15d27d4b28ab32b53d0e364095f7107616a32c02db66221c510427717a81"
           }
         ]
       }
@@ -6003,14 +6026,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/graph/core/project.json",
             "pointer": "/targets/graph-ir-check",
-            "sha256": "afbaeedcd599e932789f1e18cdaa5d33ee29c593eb9275c6ee0aa3f079805a86"
+            "sha256": "932c15d27d4b28ab32b53d0e364095f7107616a32c02db66221c510427717a81"
           }
         ]
       }
@@ -6026,14 +6049,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/graph/core/project.json",
             "pointer": "/targets/lint",
-            "sha256": "afbaeedcd599e932789f1e18cdaa5d33ee29c593eb9275c6ee0aa3f079805a86"
+            "sha256": "932c15d27d4b28ab32b53d0e364095f7107616a32c02db66221c510427717a81"
           }
         ]
       }
@@ -6049,14 +6072,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
             "kind": "manifest",
             "path": "libs/graph/core/project.json",
             "pointer": "/targets/test",
-            "sha256": "afbaeedcd599e932789f1e18cdaa5d33ee29c593eb9275c6ee0aa3f079805a86"
+            "sha256": "932c15d27d4b28ab32b53d0e364095f7107616a32c02db66221c510427717a81"
           }
         ]
       }
@@ -6072,14 +6095,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/ia-graft/data/targets/ia-graft",
-            "sha256": "22169b05e79cf15e2f195b2d490d70b08273d7e1aaea9fb79843e5694e5241e2"
+            "sha256": "7854c5bc896336ffd4935ecd597197a4fa661c150dc6dc737008bb49310faf10"
           }
         ]
       }
@@ -6095,7 +6118,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6118,14 +6141,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/ia-graft/data/targets/typecheck",
-            "sha256": "22169b05e79cf15e2f195b2d490d70b08273d7e1aaea9fb79843e5694e5241e2"
+            "sha256": "7854c5bc896336ffd4935ecd597197a4fa661c150dc6dc737008bb49310faf10"
           }
         ]
       }
@@ -6141,7 +6164,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6164,7 +6187,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6187,7 +6210,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6210,7 +6233,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6233,7 +6256,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6256,7 +6279,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6279,7 +6302,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6302,7 +6325,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6325,7 +6348,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6348,7 +6371,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6371,7 +6394,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6394,7 +6417,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6417,7 +6440,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6440,7 +6463,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6463,7 +6486,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6486,14 +6509,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/isekai-wasm-bridge/data/targets/postinstall",
-            "sha256": "22169b05e79cf15e2f195b2d490d70b08273d7e1aaea9fb79843e5694e5241e2"
+            "sha256": "7854c5bc896336ffd4935ecd597197a4fa661c150dc6dc737008bb49310faf10"
           }
         ]
       }
@@ -6509,7 +6532,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6532,7 +6555,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6555,7 +6578,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6578,7 +6601,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6601,7 +6624,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6624,7 +6647,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6647,7 +6670,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6670,7 +6693,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6693,7 +6716,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6716,7 +6739,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6739,7 +6762,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6762,7 +6785,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6785,7 +6808,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6808,7 +6831,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6831,7 +6854,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6854,7 +6877,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6877,7 +6900,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6900,7 +6923,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6923,7 +6946,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6946,7 +6969,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6969,7 +6992,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -6992,7 +7015,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7015,7 +7038,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7038,7 +7061,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7061,7 +7084,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7084,7 +7107,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7107,7 +7130,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7130,7 +7153,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7153,7 +7176,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7176,7 +7199,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7199,7 +7222,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7222,7 +7245,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7245,7 +7268,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7268,7 +7291,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7291,7 +7314,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7314,7 +7337,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7337,14 +7360,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/nodes/tileset-wfc/data/targets/postinstall",
-            "sha256": "22169b05e79cf15e2f195b2d490d70b08273d7e1aaea9fb79843e5694e5241e2"
+            "sha256": "7854c5bc896336ffd4935ecd597197a4fa661c150dc6dc737008bb49310faf10"
           }
         ]
       }
@@ -7360,7 +7383,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7383,7 +7406,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7406,7 +7429,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7429,7 +7452,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7452,7 +7475,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7475,7 +7498,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7498,7 +7521,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7521,7 +7544,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7544,7 +7567,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7567,7 +7590,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7590,7 +7613,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7613,14 +7636,14 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 0.95,
         "evidence": [
           {
             "kind": "generated",
             "path": "docs/generated/project-graph.json",
             "pointer": "/graph/dependencies/ui",
-            "sha256": "22169b05e79cf15e2f195b2d490d70b08273d7e1aaea9fb79843e5694e5241e2"
+            "sha256": "7854c5bc896336ffd4935ecd597197a4fa661c150dc6dc737008bb49310faf10"
           }
         ]
       }
@@ -7636,7 +7659,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7659,7 +7682,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7682,7 +7705,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7705,7 +7728,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7728,7 +7751,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7751,7 +7774,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7774,7 +7797,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7797,7 +7820,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7820,7 +7843,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7843,7 +7866,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7866,7 +7889,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7889,7 +7912,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {
@@ -7912,7 +7935,7 @@
           "id": "extractor:nx-graph-ir",
           "version": "1.0.0"
         },
-        "sourceRevision": "workspace:sha256:0aabe5a4532b9e936c7a6e1f557289346b723345376c95f28b5b2c1f8ebe8d25",
+        "sourceRevision": "workspace:sha256:0ede19971d959970ad8f5a89c87cffcb3fd4b501886f3dfce693e4db5c616614",
         "confidence": 1,
         "evidence": [
           {

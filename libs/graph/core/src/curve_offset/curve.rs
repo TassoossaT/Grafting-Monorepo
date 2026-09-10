@@ -1,6 +1,6 @@
 //! Catmull-Rom curve sampling.
 
-use crate::types::{Point, Polyline};
+use super::types::{Point, Polyline};
 
 /// Recursion cap on curve flattening, so a degenerate curve (near-zero
 /// tolerance, or control points that never converge under the sagitta test)
@@ -112,10 +112,7 @@ fn sagitta(p0: Point, p1: Point, p2: Point, p3: Point, from: f32, to: f32) -> f3
 }
 
 fn flatten(
-    p0: Point,
-    p1: Point,
-    p2: Point,
-    p3: Point,
+    [p0, p1, p2, p3]: [Point; 4],
     from: f32,
     to: f32,
     tolerance: f32,
@@ -124,8 +121,8 @@ fn flatten(
 ) {
     if depth < MAX_DEPTH && sagitta(p0, p1, p2, p3, from, to) > tolerance {
         let mid = (from + to) / 2.0;
-        flatten(p0, p1, p2, p3, from, mid, tolerance, depth + 1, out);
-        flatten(p0, p1, p2, p3, mid, to, tolerance, depth + 1, out);
+        flatten([p0, p1, p2, p3], from, mid, tolerance, depth + 1, out);
+        flatten([p0, p1, p2, p3], mid, to, tolerance, depth + 1, out);
     } else {
         out.push(catmull_rom_point(p0, p1, p2, p3, to));
     }
@@ -147,7 +144,7 @@ fn reflect(known: Point, neighbour: Point) -> Point {
 /// flattened so no chord strays from the true curve by more than
 /// `tolerance`. The curve passes through every control point in order; the
 /// phantom point beyond either end is a reflection of that end's own last
-/// chord (see [`reflect`]), not a loop and not a duplicate, so the curve
+/// chord (using endpoint reflection), not a loop and not a duplicate, so the curve
 /// does not overshoot past either end.
 ///
 /// Collinear control points flatten to their own straight chords, however
@@ -155,7 +152,9 @@ fn reflect(known: Point, neighbour: Point) -> Point {
 /// parametrization -- so the result is exactly `control_points` back.
 pub fn sample_catmull_rom(control_points: &[Point], tolerance: f32) -> Polyline {
     if control_points.len() < 2 {
-        return Polyline { points: control_points.to_vec() };
+        return Polyline {
+            points: control_points.to_vec(),
+        };
     }
     let last = control_points.len() - 1;
     let clamped_tolerance = tolerance.max(1e-6);
@@ -163,9 +162,24 @@ pub fn sample_catmull_rom(control_points: &[Point], tolerance: f32) -> Polyline 
     for index in 0..last {
         let p1 = control_points[index];
         let p2 = control_points[index + 1];
-        let p0 = if index == 0 { reflect(p1, p2) } else { control_points[index - 1] };
-        let p3 = if index + 1 == last { reflect(p2, p1) } else { control_points[index + 2] };
-        flatten(p0, p1, p2, p3, 0.0, 1.0, clamped_tolerance, 0, &mut points);
+        let p0 = if index == 0 {
+            reflect(p1, p2)
+        } else {
+            control_points[index - 1]
+        };
+        let p3 = if index + 1 == last {
+            reflect(p2, p1)
+        } else {
+            control_points[index + 2]
+        };
+        flatten(
+            [p0, p1, p2, p3],
+            0.0,
+            1.0,
+            clamped_tolerance,
+            0,
+            &mut points,
+        );
     }
     Polyline { points }
 }

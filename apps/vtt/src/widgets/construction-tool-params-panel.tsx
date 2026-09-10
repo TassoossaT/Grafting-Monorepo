@@ -338,8 +338,18 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
         </div>
       ) : activeTool === "edit-region" ? (
         <div>
-          <SelectableChip label="Formato / posicao" swatchColor="#79b8e8" selected={params["edit-region"].mode === "shape"} onSelect={() => onParamsChange("edit-region", { mode: "shape" })} />
-          <SelectableChip label="Elevar / baixar" swatchColor="#79b8e8" selected={params["edit-region"].mode === "elevation"} onSelect={() => onParamsChange("edit-region", { mode: "elevation" })} />
+          <label>Ação na rua <select value={params["edit-region"].curveAction ?? "edit"} onChange={(event) => onParamsChange("edit-region", { ...params["edit-region"], curveAction: event.currentTarget.value as "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width" })}>
+            <option value="edit">Editar curva</option><option value="remove-anchor">Remover âncora</option><option value="disconnect">Desconectar junção</option><option value="delete-segment">Excluir trecho</option><option value="close">Fechar caminho</option><option value="width">Alterar largura</option>
+          </select></label>
+          {params["edit-region"].curveAction === "width" && <label>Largura <input type="number" min="0.1" step="0.1" value={params["edit-region"].curveWidth ?? 4} onChange={(event) => onParamsChange("edit-region", {...params["edit-region"],curveWidth:Number(event.currentTarget.value)})}/></label>}
+          {params["edit-region"].curveAction === "width" && <label>Largura no fim <input type="number" min="0.1" step="0.1" value={params["edit-region"].curveEndWidth ?? params["edit-region"].curveWidth ?? 4} onChange={(event) => onParamsChange("edit-region", {...params["edit-region"],curveEndWidth:Number(event.currentTarget.value)})}/></label>}
+          <p>Para remover, desconectar ou fechar, clique na âncora. Para excluir um trecho ou mudar sua largura, clique no ponto central.</p>
+          <label>Alças da rua <select value={params["edit-region"].curveMode ?? "free"} onChange={(event) => onParamsChange("edit-region", { ...params["edit-region"], curveMode: event.currentTarget.value as "automatic" | "aligned" | "mirrored" | "free" })}>
+            <option value="free">Livres</option><option value="aligned">Alinhadas</option><option value="mirrored">Espelhadas</option><option value="automatic">Automáticas</option>
+          </select></label>
+          <p>Arraste uma alça para ajustar a curva. Arraste o ponto central para puxar o trecho; clique nele para inserir uma âncora.</p>
+          <SelectableChip label="Formato / posicao" swatchColor="#79b8e8" selected={params["edit-region"].mode === "shape"} onSelect={() => onParamsChange("edit-region", { ...params["edit-region"], mode: "shape" })} />
+          <SelectableChip label="Elevar / baixar" swatchColor="#79b8e8" selected={params["edit-region"].mode === "elevation"} onSelect={() => onParamsChange("edit-region", { ...params["edit-region"], mode: "elevation" })} />
           <p>No modo de elevacao, arraste para cima ou para baixo. A plataforma leva a estrutura conectada acima.</p>
         </div>
       ) : activeTool === "path-brush" ? (<PathBrushFields params={params["path-brush"]} onChange={(next) => onParamsChange("path-brush", next)} />) : activeTool === "wall-brush" ? (

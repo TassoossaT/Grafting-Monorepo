@@ -21,6 +21,7 @@ export function commitPathCloudIntent(
 ): void {
   try {
     const plan = planPathCloudMutation({
+      bezier: ctx.runtime,
       tableId: ctx.tableId,
       snapToGrid: ctx.snapToGrid,
       graphSnapshot: ctx.runtime.getGraphSnapshot(),

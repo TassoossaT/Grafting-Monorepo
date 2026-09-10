@@ -11,16 +11,14 @@
 
 use serde::Deserialize;
 
-use grafting_graph_core::{prune_orphans, ContourTopology, Graph, SurfaceRegistry};
+use grafting_graph_core::{ContourTopology, Graph, SurfaceRegistry, prune_orphans};
 
 use crate::mesh::region_id_from_wire;
 use crate::region_editing::RegionEditOutcomeDto;
 
-/// The concrete graph payload every construction-wasm session uses -- bare
-/// 3D position, no edge payload -- matching `construction.rs`'s own
-/// `pyramid()` test fixture and `ADR-0022`'s "each node carries its spatial
-/// position as payload."
-pub type SessionGraph = Graph<[f32; 3], ()>;
+/// Construction anchors carry XYZ positions; edges optionally carry authored
+/// relative curve controls and profiles. Missing controls identify legacy data.
+pub type SessionGraph = Graph<[f32; 3], Option<grafting_graph_core::bezier::CurveHandles>>;
 
 // ---- Bootstrapping: first-time creation, outside construction.rs's scope ----
 
@@ -54,8 +52,8 @@ pub fn remove_surface(
     topology
         .remove_region(&region_id)
         .map_err(|error| error.to_string())?;
-    let removed_nodes = prune_orphans(graph, topology, &candidate_nodes)
-        .map_err(|error| error.to_string())?;
+    let removed_nodes =
+        prune_orphans(graph, topology, &candidate_nodes).map_err(|error| error.to_string())?;
     let removed_node_ids = removed_nodes
         .into_iter()
         .map(|id| id.as_str().to_owned())
@@ -124,7 +122,10 @@ mod tests {
 
         assert!(surfaces.region_surface(&region_id).is_none());
         assert!(topology.region(&region_id).is_none());
-        assert_eq!(outcome.removed_surface_keys, vec![vec!["@region", "triangle"]]);
+        assert_eq!(
+            outcome.removed_surface_keys,
+            vec![vec!["@region", "triangle"]]
+        );
         assert_eq!(outcome.removed_node_ids.len(), 3);
         assert!(graph.node(&NodeId::new("a").unwrap()).is_none());
         assert!(graph.node(&NodeId::new("b").unwrap()).is_none());

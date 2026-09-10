@@ -356,6 +356,8 @@ type, heals the vacated terrain hole.
 
 Fast spatial bucketing for proximity queries against road points.
 
+### `function vtt.bezier-edit-gesture.beginBezierGesture(ctx: ToolContext, sample: PointerSample, params?: { curveAction?: "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"; curveEndWidth?: number; curveMode?: "automatic" | "aligned" | "mirrored" | "free"; curveWidth?: number; mode: "shape" | "elevation" }): { cancel: any; commit: any; move: any } | undefined`
+
 ### `function vtt.path-cloud-transaction.commitPathCloudIntent(ctx: ToolContext, effect: PathBrushEffect, tolerance: number): void`
 
 Runtime boundary for a PathCloud decision. This file deliberately contains
@@ -432,6 +434,10 @@ Hides the active tool preview, if any.
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.cloudFor(request: CloudRequest): CloudOutcome`
 
 `ADR-0022`'s "cloud" query -- a pure read, never touches the map. See `ConstructionSessionPort.cloudFor`.
+
+### `method vtt.tabletop-runtime.AppTabletopRuntime.curveBatch(request: CurveBatch): readonly CurveResult[]`
+
+### `method vtt.tabletop-runtime.AppTabletopRuntime.curveNetwork(request: CurveNetworkRequest): CurveNetworkPatch`
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.detachView(viewId: string): void`
 
@@ -572,6 +578,10 @@ Hides the active tool preview, if any.
 ### `method vtt.tabletop-runtime.TabletopRuntime.cloudFor(request: CloudRequest): CloudOutcome`
 
 `ADR-0022`'s "cloud" query -- a pure read, never touches the map. See `ConstructionSessionPort.cloudFor`.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.curveBatch(request: CurveBatch): readonly CurveResult[]`
+
+### `method vtt.tabletop-runtime.TabletopRuntime.curveNetwork(request: CurveNetworkRequest): CurveNetworkPatch`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.detachView(viewId: string): void`
 
@@ -1600,7 +1610,7 @@ The preview channel one role's edges are drawn on.
 
 One group as the descriptor that draws it.
 
-### `function vtt.edge-overlay.edgeOverlayOf(topologies: readonly ConstructionRegionTopology[], graphSnapshot?: ConstructionGraphSnapshot): readonly EdgeOverlayGroup[]`
+### `function vtt.edge-overlay.edgeOverlayOf(topologies: readonly ConstructionRegionTopology[], graphSnapshot?: ConstructionGraphSnapshot, curves?: BezierPort): readonly EdgeOverlayGroup[]`
 
 Groups every edge of every region in `topologies` by role.
 
@@ -2759,7 +2769,7 @@ App-owned metadata for a mode, without renderer or Rust types.
 
 ### `property vtt.surface-edit-contract.SurfaceEditModeDefinition.label: string`
 
-### `property vtt.surface-edit-contract.SurfaceEditModeDefinition.previewPolicy: "none" | "gesture-preview"`
+### `property vtt.surface-edit-contract.SurfaceEditModeDefinition.previewPolicy: "gesture-preview" | "none"`
 
 ### `property vtt.surface-edit-contract.SurfaceEditModeDefinition.scopePolicy: "local" | "explicit-global"`
 
@@ -3175,6 +3185,40 @@ Builds one `extrude_path`-generated structure type on the shared panel model.
 
 ### `function vtt.panel-structure.validatePanelMotion(topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>): string | undefined`
 
+### `type vtt.bezier-road-actions.BezierRoadAction = "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"`
+
+### `function vtt.bezier-road-actions.planBezierAction(snapshot: ConstructionGraphSnapshot, port: BezierPort, action: BezierRoadAction, targetId: string, edgeId: string | undefined, operationId: string, width?: number, endWidth?: number): ConstructionGraphPatch`
+
+### `function vtt.bezier-road-edit.bezierPickHandles(snapshot: ConstructionGraphSnapshot, port: BezierPort): { id: string; position: ConstructionPosition }[]`
+
+Pick handles are presentation projections, not extra graph anchors.
+
+### `function vtt.bezier-road-edit.curvePickId(edgeId: string, index: 2 | 1 | "midpoint"): string`
+
+### `function vtt.bezier-road-edit.isBezierEditTarget(snapshot: ConstructionGraphSnapshot, id: string): boolean`
+
+### `function vtt.bezier-road-edit.planBezierEdit(input: { action?: BezierRoadAction; endWidth?: number; insert?: boolean; mode?: CurveHandleMode; operationId: string; port: BezierPort; position: ConstructionPosition; snapshot: ConstructionGraphSnapshot; tableId: string; targetId: string; topologies: readonly ConstructionRegionTopology[]; width?: number }): { preview: Float32Array; request: ApplyPatchReplacementRequest; selectedId: string } | undefined`
+
+One complete gesture plan; the caller commits it once or discards it.
+
+### `function vtt.bezier-road-plan.bezierChains(snapshot: ConstructionGraphSnapshot, port: BezierPort, offsets: readonly number[], miterLimit: number): readonly SpineChainInput[]`
+
+Converts graph-owned authoring data to sampled ribbons through the Rust port.
+
+### `function vtt.bezier-road-plan.curvePoint(p: ConstructionPosition): CurvePoint`
+
+### `function vtt.bezier-road-plan.curvePosition(p: CurvePoint): ConstructionPosition`
+
+### `function vtt.bezier-road-plan.explicitSpineSnapshot(snapshot: ConstructionGraphSnapshot, port: BezierPort, offsets: readonly number[]): ConstructionGraphSnapshot`
+
+Resolve legacy authorship once using the canonical Rust conversion.
+
+### `function vtt.bezier-road-plan.planBezierRoad(input: { corridorId: string; miterLimit: number; offsets: readonly number[]; port: BezierPort; snapReach: number; snapshot: ConstructionGraphSnapshot; stroke: readonly ConstructionPosition[]; tolerance: number; topologies?: readonly ConstructionRegionTopology[] }): { chains: readonly SpineChainInput[]; controlPoints: ConstructionPosition[]; footprint: [number, number][][][]; graphPatch: ConstructionGraphPatch; polyline: ConstructionPosition[]; snapshot: ConstructionGraphSnapshot }`
+
+Product identities and profile policy surround generic Rust fitting and connections.
+
+### `function vtt.bezier-road-plan.unionBezierRibbons(port: BezierPort, ribbons: readonly BandRibbon[]): [number, number][][][]`
+
 ### `function vtt.catmull-rom.sampleCatmullRom(controlPoints: readonly ConstructionPosition[], tolerance: number): readonly ConstructionPosition[]`
 
 Samples a centripetal Catmull-Rom curve through `controlPoints`,
@@ -3292,6 +3336,8 @@ guess is what closes that gap for good.
 
 ### `property vtt.plan-spine-contour.PlanSpineContourInput.tableId: string`
 
+### `property vtt.plan-spine-contour.PlanSpineContourInput.union?: (ribbons: readonly BandRibbon[]) => [number, number][][][]`
+
 ### `interface vtt.plan-spine-contour.PlanSpineContourResult`
 
 ### `property vtt.plan-spine-contour.PlanSpineContourResult.consumedSurfaceKeys: readonly ConstructionSurfaceKey[]`
@@ -3321,6 +3367,12 @@ Lateral offsets defining the bands, e.g. `[-2.1, 0, 2.1]` for contour/spine/cont
 ### `property vtt.plan-spine-contour.SpineChainInput.controlPoints: readonly ConstructionPosition[]`
 
 ### `property vtt.plan-spine-contour.SpineChainInput.miterLimit: number`
+
+### `property vtt.plan-spine-contour.SpineChainInput.ribbons?: readonly BandRibbon[]`
+
+### `property vtt.plan-spine-contour.SpineChainInput.sampledPoints?: readonly ConstructionPosition[]`
+
+Canonical Rust sampling of explicit authoring curves.
 
 ### `property vtt.plan-spine-contour.SpineChainInput.tolerance: number`
 
@@ -3507,6 +3559,8 @@ about the whole table.
 
 The table facts supplied to the PathCloud before it plans a mutation.
 
+### `property vtt.path-cloud-mutation.PathCloudMutationInput.bezier?: BezierPort`
+
 ### `property vtt.path-cloud-mutation.PathCloudMutationInput.coverageFor: (outline: readonly (readonly [number, number])[]) => readonly ConstructionCoveredRegion[]`
 
 ### `property vtt.path-cloud-mutation.PathCloudMutationInput.effect: PathBrushEffect`
@@ -3583,14 +3637,20 @@ Every corridor/operation id participating in this connected spine cluster.
 Every spine control point position in the touched component -- used to
 decide which standing contour faces this edit replaces.
 
-### `function vtt.path-cloud-scope.changedSpineCloud(snapshot: ConstructionGraphSnapshot, patch: ConstructionGraphPatch): ChangedSpineCloud`
+### `property vtt.path-cloud-scope.ChangedSpineCloud.snapshot: ConstructionGraphSnapshot`
+
+### `function vtt.path-cloud-scope.bezierContourId(corridorIds: ReadonlySet<string>, operationId: string): string`
+
+Persistent regeneration membership, independent of the latest gesture or a disconnect.
+
+### `function vtt.path-cloud-scope.changedSpineCloud(snapshot: ConstructionGraphSnapshot, patch: ConstructionGraphPatch, topologies: readonly ConstructionRegionTopology[]): ChangedSpineCloud`
 
 The connected spine component a graph patch touches, walked out from the
 patch's own nodes across the *prospective* graph (snapshot plus patch) --
 this is what `planPathCloudMutation` reads to decide which standing
 contour faces one edit replaces (`standingRegionsForCloud`, below).
 
-### `function vtt.path-cloud-scope.standingRegionsForCloud(topologies: readonly ConstructionRegionTopology[], cloudPositions: readonly ConstructionPosition[], corridorIds: ReadonlySet<string>): readonly ConstructionRegionTopology[]`
+### `function vtt.path-cloud-scope.standingRegionsForCloud(topologies: readonly ConstructionRegionTopology[], cloudPositions: readonly ConstructionPosition[], corridorIds: ReadonlySet<string>, spineOwned: boolean): readonly ConstructionRegionTopology[]`
 
 Every standing "path" face that belongs to the touched spine cloud.
 Identified by starting from path regions whose identity or node references
@@ -4430,7 +4490,7 @@ Perlin `scale` -- smaller values are smoother/larger-scale terrain features.
 
 ### `interface vtt.tool-types.ToolParamsByTool`
 
-### `property vtt.tool-types.ToolParamsByTool.edit-region: { mode: "shape" | "elevation" }`
+### `property vtt.tool-types.ToolParamsByTool.edit-region: { curveAction?: "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"; curveEndWidth?: number; curveMode?: "automatic" | "aligned" | "mirrored" | "free"; curveWidth?: number; mode: "shape" | "elevation" }`
 
 ### `property vtt.tool-types.ToolParamsByTool.house-room-delete: NoToolParams`
 
@@ -4985,6 +5045,102 @@ callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 
 ### `function vtt.token-operations.createPlaceTokenOperation(intent: PlaceTokenIntent, context: TokenOperationContext): PlaceTokenOperation`
 
+### `interface vtt.bezier-port.BezierPort`
+
+### `method vtt.bezier-port.BezierPort.curveBatch(request: CurveBatch): readonly CurveResult[]`
+
+### `method vtt.bezier-port.BezierPort.curveNetwork(request: CurveNetworkRequest): CurveNetworkPatch`
+
+### `method vtt.bezier-port.BezierPort.planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[]`
+
+### `interface vtt.bezier-port.CubicBezier`
+
+### `property vtt.bezier-port.CubicBezier.points: readonly [CurvePoint, CurvePoint, CurvePoint, CurvePoint]`
+
+### `interface vtt.bezier-port.CurveBatch`
+
+### `property vtt.bezier-port.CurveBatch.commands: readonly CurveCommand[]`
+
+### `property vtt.bezier-port.CurveBatch.tolerance: number`
+
+### `interface vtt.bezier-port.CurveHandles`
+
+### `property vtt.bezier-port.CurveHandles.bandOffsets: readonly number[]`
+
+### `property vtt.bezier-port.CurveHandles.end: CurvePoint`
+
+### `property vtt.bezier-port.CurveHandles.endBandOffsets?: readonly number[]`
+
+### `property vtt.bezier-port.CurveHandles.mode: CurveHandleMode`
+
+### `property vtt.bezier-port.CurveHandles.start: CurvePoint`
+
+### `interface vtt.bezier-port.CurveNetworkEdge`
+
+### `property vtt.bezier-port.CurveNetworkEdge.curve: CurveHandles`
+
+### `property vtt.bezier-port.CurveNetworkEdge.edgeId: string`
+
+### `property vtt.bezier-port.CurveNetworkEdge.endNodeId: string`
+
+### `property vtt.bezier-port.CurveNetworkEdge.startNodeId: string`
+
+### `interface vtt.bezier-port.CurveNetworkNode`
+
+### `property vtt.bezier-port.CurveNetworkNode.id: string`
+
+### `property vtt.bezier-port.CurveNetworkNode.position: CurvePoint`
+
+### `interface vtt.bezier-port.CurveNetworkPatch`
+
+### `property vtt.bezier-port.CurveNetworkPatch.edges: readonly CurveNetworkEdge[]`
+
+### `property vtt.bezier-port.CurveNetworkPatch.nodes: readonly CurveNetworkNode[]`
+
+### `property vtt.bezier-port.CurveNetworkPatch.removedEdgeIds: readonly string[]`
+
+### `interface vtt.bezier-port.CurveNetworkRequest`
+
+### `property vtt.bezier-port.CurveNetworkRequest.addedEdges: readonly CurveNetworkEdge[]`
+
+### `property vtt.bezier-port.CurveNetworkRequest.addedNodes: readonly CurveNetworkNode[]`
+
+### `property vtt.bezier-port.CurveNetworkRequest.edges: readonly CurveNetworkEdge[]`
+
+### `property vtt.bezier-port.CurveNetworkRequest.heightTolerance: number`
+
+### `property vtt.bezier-port.CurveNetworkRequest.nodePrefix: string`
+
+### `property vtt.bezier-port.CurveNetworkRequest.nodes: readonly CurveNetworkNode[]`
+
+### `property vtt.bezier-port.CurveNetworkRequest.snapTolerance: number`
+
+### `property vtt.bezier-port.CurveNetworkRequest.tolerance: number`
+
+### `interface vtt.bezier-port.CurveResult`
+
+### `property vtt.bezier-port.CurveResult.curves: readonly CubicBezier[]`
+
+### `property vtt.bezier-port.CurveResult.handles: readonly CurveHandles[]`
+
+### `property vtt.bezier-port.CurveResult.lengths: readonly number[]`
+
+### `property vtt.bezier-port.CurveResult.opposite: CurvePoint | null`
+
+### `property vtt.bezier-port.CurveResult.parameter: number | null`
+
+### `property vtt.bezier-port.CurveResult.ribbon: { outer: readonly CurvePoint[] } | null`
+
+### `property vtt.bezier-port.CurveResult.samples: readonly (readonly { position: CurvePoint; t: number }[])[]`
+
+### `type vtt.bezier-port.CurveCommand = { kind: "automatic" | "fit"; points: readonly CurvePoint[] } | { kind: "join"; sections: readonly (readonly [CurvePoint, CurvePoint])[] } | { curve: CubicBezier; endOffsets?: readonly [number, number]; kind: "ribbon"; offsets: readonly [number, number] } | { curves: readonly CubicBezier[]; kind: "sample" } | { curve: CubicBezier; kind: "split"; profile?: CurveHandles; t: number } | { curve: CubicBezier; kind: "merge"; next: CubicBezier } | { curve: CubicBezier; kind: "pull"; t: number; target: CurvePoint } | { curve: CubicBezier; index: 1 | 2; kind: "handle"; mode: CurveHandleMode; opposite: CurvePoint | null; target: CurvePoint } | { curve: CubicBezier; kind: "nearest"; point: CurvePoint } | { end: CurvePoint; handles: CurveHandles; kind: "resolve"; start: CurvePoint }`
+
+### `type vtt.bezier-port.CurveHandleMode = "automatic" | "aligned" | "mirrored" | "free"`
+
+### `type vtt.bezier-port.CurvePoint = readonly [number, number, number]`
+
+Explicit wire values owned by Grafting; all curve calculations run in Rust.
+
 ### `interface vtt.construction-session-port.AffectedSurfaces`
 
 ### `property vtt.construction-session-port.AffectedSurfaces.affectedSurfaceKeys: readonly ConstructionSurfaceKey[]`
@@ -5086,6 +5242,8 @@ World-space centroid; `y` is the height the face currently sits at.
 
 One generic graph edge, including edges deliberately not used by a face.
 
+### `property vtt.construction-session-port.ConstructionEdgeSnapshot.curve?: CurveHandles`
+
 ### `property vtt.construction-session-port.ConstructionEdgeSnapshot.edgeId: string`
 
 ### `property vtt.construction-session-port.ConstructionEdgeSnapshot.endNodeId: string`
@@ -5096,7 +5254,7 @@ One generic graph edge, including edges deliberately not used by a face.
 
 Generic graph primitives committed with a surface replacement.
 
-### `property vtt.construction-session-port.ConstructionGraphPatch.edges: readonly { edgeId: string; endNodeId: string; startNodeId: string }[]`
+### `property vtt.construction-session-port.ConstructionGraphPatch.edges: readonly ConstructionEdgeSnapshot[]`
 
 ### `property vtt.construction-session-port.ConstructionGraphPatch.nodes: readonly { id: string; position: ConstructionPosition }[]`
 
@@ -5461,6 +5619,10 @@ Indexed back to the request; a point over open ground is simply absent.
 ### `method vtt.construction-session-port.ConstructionSessionPort.cloudFor(request: CloudRequest): CloudOutcome`
 
 `ADR-0022`'s "cloud" query.
+
+### `method vtt.construction-session-port.ConstructionSessionPort.curveBatch(request: CurveBatch): readonly CurveResult[]`
+
+### `method vtt.construction-session-port.ConstructionSessionPort.curveNetwork(request: CurveNetworkRequest): CurveNetworkPatch`
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.deleteRegion(surfaceKey: ConstructionSurfaceKey): RegionEditOutcome`
 

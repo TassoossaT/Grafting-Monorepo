@@ -1,3 +1,6 @@
+import { planBezierRoad, unionBezierRibbons } from "./bezier-road-plan.ts";
+import { pathCorridorId } from "./path-corridor.ts";
+import type { BezierPort } from "@/ports";
 import type { PathBrushEffect } from "../../modes/surface-edit-contract.ts";
 import type {
   ApplyPatchReplacementRequest,
@@ -16,7 +19,7 @@ import {
   resolveCoverage,
 } from "../index.ts";
 import { graphPatchForSpine } from "./spine-graph/index.ts";
-import { changedSpineCloud, standingRegionsForCloud } from "./path-cloud-scope.ts";
+import { bezierContourId, changedSpineCloud, standingRegionsForCloud } from "./path-cloud-scope.ts";
 import { referenceLineFrom } from "./path-reference-line.ts";
 import { pathSpineDraftFor } from "./path-spine-draft.ts";
 
@@ -43,6 +46,7 @@ const CURVE_FLATTENING_TOLERANCE = 0.40;
 
 /** The table facts supplied to the PathCloud before it plans a mutation. */
 export interface PathCloudMutationInput {
+  readonly bezier?: BezierPort;
   readonly tableId: string;
   readonly snapToGrid: boolean;
   readonly graphSnapshot: ConstructionGraphSnapshot;
@@ -106,8 +110,16 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
   if (stroke.length === 0) return { kind: "noop", message: "Nenhuma alteração: o traço está vazio." };
   const operationId = effect.operationId;
 
-  const fitted = fitPath(stroke, tolerance, { arcs: !input.snapToGrid });
-  const swept = fitted.length === 0 ? { line: stroke } : referenceLineFrom(fitted, stroke, resolveConformance("path", "terrain", effect.parameters.kind));
+  const bezier = input.bezier && stroke.length > 1 ? planBezierRoad({
+    snapshot: input.graphSnapshot, topologies: input.regionTopologies, port: input.bezier, stroke,
+    corridorId: pathCorridorId(operationId, effect.parameters.kind),
+    offsets: effect.parameters.profile.map((p) => p.lateralOffset),
+    miterLimit: effect.parameters.miterLimit, tolerance,
+    snapReach: Math.max(tolerance, effect.brushShape.kind === "square" ? effect.brushShape.size / 2 : effect.brushShape.radius),
+  }) : undefined;
+  if (bezier && bezier.graphPatch.edges.length === 0) return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente após o encaixe." };
+  const fitted = bezier ? [] : fitPath(stroke, tolerance, { arcs: !input.snapToGrid });
+  const swept = bezier ? { line: bezier.controlPoints } : fitted.length === 0 ? { line: stroke } : referenceLineFrom(fitted, stroke, resolveConformance("path", "terrain", effect.parameters.kind));
   const spine = pathSpineDraftFor(effect, swept.line);
   if (spine === undefined) return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente." };
 
@@ -116,7 +128,7 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
     // helps identify the neighbourhood; snapping is a geometric decision
     // made against the PathCloud's spine, never an endpoint permission.
     const correctionReach = effect.brushShape.kind === "square" ? effect.brushShape.size / 2 : effect.brushShape.radius;
-    const materialized = graphPatchForSpine(input.graphSnapshot, spine, Math.max(correctionReach, tolerance, 1e-4));
+    const materialized = bezier ?? graphPatchForSpine(input.graphSnapshot, spine, Math.max(correctionReach, tolerance, 1e-4));
     const correctedSpine = { ...spine, controlPoints: materialized.controlPoints };
 
     const chain: SpineChainInput = {
@@ -127,8 +139,8 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
       tolerance: CURVE_FLATTENING_TOLERANCE,
     };
     const graphPatch = materialized.graphPatch;
-    const touchedCloud = changedSpineCloud(input.graphSnapshot, graphPatch);
-    const regeneratedChains = touchedCloud.chains
+    const touchedCloud = changedSpineCloud(bezier?.snapshot ?? input.graphSnapshot, graphPatch, input.regionTopologies);
+    const regeneratedChains = bezier?.chains ?? touchedCloud.chains
       .filter((controlPoints) => controlPoints.length >= 2)
       .map((controlPoints, index): SpineChainInput => ({
         ...chain,
@@ -141,14 +153,14 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
     // It is not the patch: the patch is banded and unioned band by band
     // against whatever standing road it meets, but a query about what lies
     // underneath only cares how far the road reaches in total.
-    const flatPolyline = sampleCatmullRom(correctedSpine.controlPoints, CURVE_FLATTENING_TOLERANCE);
+    const flatPolyline = bezier?.polyline ?? sampleCatmullRom(correctedSpine.controlPoints, CURVE_FLATTENING_TOLERANCE);
     const flatLength = flatPolyline.slice(0, -1).reduce((sum, p, i) => sum + Math.hypot(p.x - flatPolyline[i + 1]!.x, p.z - flatPolyline[i + 1]!.z), 0);
     if (flatLength < 1e-4) {
       return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente." };
     }
     const outerOffset = correctedSpine.bandOffsets[0]!;
     const innerOffset = correctedSpine.bandOffsets[correctedSpine.bandOffsets.length - 1]!;
-    const footprintShapes = unionBandLayer(offsetBands(flatPolyline, [outerOffset, innerOffset], correctedSpine.miterLimit));
+    const footprintShapes = bezier?.footprint ?? unionBandLayer(offsetBands(flatPolyline, [outerOffset, innerOffset], correctedSpine.miterLimit));
     const outline = (footprintShapes[0]?.[0] ?? []).map(([x, z]) => [x, z] as const);
     // A stroke that survived the earlier tap check can still collapse to a
     // degenerate footprint once its own ends snap onto existing spine
@@ -171,7 +183,7 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
     }
 
     const topologies = input.regionTopologies;
-    const standingRegions = standingRegionsForCloud(topologies, touchedCloud.positions, touchedCloud.corridorIds);
+    const standingRegions = standingRegionsForCloud(topologies, touchedCloud.positions, touchedCloud.corridorIds, !!input.bezier);
     const existingEdgeUses = new Map<string, boolean[]>();
     for (const topology of topologies) {
       for (const loop of [...topology.outerLoops, ...topology.holes]) {
@@ -188,8 +200,9 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
     const existingNodes = [...existingNodesMap].map(([id, position]) => ({ id, position }));
 
     const planned = planSpineContour({
+      union: input.bezier ? (ribbons) => unionBezierRibbons(input.bezier!, ribbons) : undefined,
         tableId: input.tableId,
-        operationId,
+        operationId: input.bezier ? bezierContourId(touchedCloud.corridorIds, operationId) : operationId,
         surfaceType: "path",
         // The changed component is read from the prospective spine graph,
         // not inferred from its old contour faces. A continuation therefore
@@ -197,7 +210,7 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
         // junction component.
         editedChains: regeneratedChains.length === 0 ? [chain] : regeneratedChains,
         standingRegions,
-        existingNodes,
+        existingNodes: input.bezier ? [] : existingNodes,
         existingEdgeUses,
       });
     if (planned === undefined) return { kind: "noop", message: "Nenhuma alteração: a nuvem não produziu contorno." };

@@ -8,9 +8,12 @@ description = "Generic graph structures and deterministic algorithms owned by Gr
 
 [features]
 default = []
+curve-serde = ["dep:serde"]
 graph-ir-cli = ["dep:serde", "dep:serde_json"]
 
 [dependencies]
+kurbo = "=0.13.1"
+earcut = "0.4"
 petgraph = "=0.8.3"
 i_overlay = "=8.1.0"
 serde = { version = "=1.0.229", features = ["derive"], optional = true }

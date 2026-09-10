@@ -75,6 +75,19 @@ impl Default for ConstructionSession {
 
 #[wasm_bindgen]
 impl ConstructionSession {
+    /// Evaluates a batch of generic curve-authoring commands without mutation.
+    pub fn bezier_batch_json(&self, json: &str) -> Result<String, JsValue> {
+        let request = parse::<grafting_graph_core::bezier_commands::CurveBatch>(json)?;
+        let result = grafting_graph_core::bezier_commands::execute(request).map_err(to_js_error)?;
+        serialize(&result)
+    }
+
+    /// Plans a generic curve graph insertion without changing the session.
+    pub fn bezier_network_json(&self, json: &str) -> Result<String, JsValue> {
+        let request = parse::<grafting_graph_core::bezier_network::NetworkRequest>(json)?;
+        serialize(&grafting_graph_core::bezier_network::plan(request).map_err(to_js_error)?)
+    }
+
     /// Creates an empty session.
     #[wasm_bindgen(constructor)]
     pub fn new() -> ConstructionSession {
@@ -628,6 +641,7 @@ impl ConstructionSession {
                 id: edge.id().as_str().to_owned(),
                 source: edge.source().as_str().to_owned(),
                 target: edge.target().as_str().to_owned(),
+                curve: edge.data().clone(),
             })
             .collect();
         let mut surfaces: Vec<SurfaceSnapshot> = Vec::new();
@@ -660,6 +674,8 @@ struct NodeSnapshot {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct EdgeSnapshot {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    curve: Option<grafting_graph_core::bezier::CurveHandles>,
     id: String,
     source: String,
     target: String,

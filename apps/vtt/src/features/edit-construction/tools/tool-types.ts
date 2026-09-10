@@ -202,7 +202,7 @@ export type NoToolParams = Record<string, never>;
 
 export interface ToolParamsByTool {
   readonly navigate: NoToolParams;
-  readonly "edit-region": { readonly mode: "shape" | "elevation" };
+  readonly "edit-region": { readonly mode: "shape" | "elevation"; readonly curveMode?: "automatic" | "aligned" | "mirrored" | "free"; readonly curveAction?: "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"; readonly curveWidth?: number; readonly curveEndWidth?: number };
   readonly "platform-contour": { readonly elevation: number; readonly mode: "create" | "extend" | "cut"; readonly shape?: "rectangle" | "polygon" | "freehand" | "circle"; readonly radius?: number; readonly tolerance?: number };
   readonly "path-brush": PathBrushParams;
   readonly "wall-brush": WallBrushParams;

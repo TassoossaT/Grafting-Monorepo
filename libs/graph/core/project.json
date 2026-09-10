@@ -66,7 +66,7 @@
       },
       "cache": true,
       "inputs": [
-        "{projectRoot}/src/lib.rs",
+        "{projectRoot}/src/**/*",
         "{projectRoot}/src/contour.rs",
         "{projectRoot}/src/layout.rs",
         "{projectRoot}/src/model.rs",

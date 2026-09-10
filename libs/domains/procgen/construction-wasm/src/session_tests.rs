@@ -792,7 +792,12 @@ fn a_crossing_consumes_the_crossed_runs_spine_and_keeps_only_its_rim() {
     overlay_path_stroke(
         &mut session,
         "road-a",
-        &[[0.0, 0.0, 0.0], [2.0, 0.0, 0.0], [4.0, 0.0, 0.0], [6.0, 0.0, 0.0]],
+        &[
+            [0.0, 0.0, 0.0],
+            [2.0, 0.0, 0.0],
+            [4.0, 0.0, 0.0],
+            [6.0, 0.0, 0.0],
+        ],
         &formation,
         &[],
     );
@@ -821,5 +826,8 @@ fn a_crossing_consumes_the_crossed_runs_spine_and_keeps_only_its_rim() {
         vec![4, 7],
         "only the crossed spine stations inside the crossing are consumed"
     );
-    assert!(gone.iter().all(|index| index % 3 == 1), "every loss is a spine node");
+    assert!(
+        gone.iter().all(|index| index % 3 == 1),
+        "every loss is a spine node"
+    );
 }

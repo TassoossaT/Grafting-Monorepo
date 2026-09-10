@@ -1,3 +1,4 @@
+import type { BezierPort, CurveHandles } from "./bezier-port.ts";
 import type { RenderMeshData } from "./scene-render-port.ts";
 
 export type ConstructionNodeId = string;
@@ -363,6 +364,7 @@ export interface ConstructionNodeSnapshot {
 
 /** One generic graph edge, including edges deliberately not used by a face. */
 export interface ConstructionEdgeSnapshot {
+  readonly curve?: CurveHandles;
   readonly edgeId: ConstructionEdgeId;
   readonly startNodeId: ConstructionNodeId;
   readonly endNodeId: ConstructionNodeId;
@@ -379,7 +381,7 @@ export interface ConstructionGraphPatch {
   readonly nodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[];
   /** Generic edges superseded by this patch, e.g. one spine segment split at a new junction. */
   readonly removedEdgeIds?: readonly ConstructionEdgeId[];
-  readonly edges: readonly { readonly edgeId: ConstructionEdgeId; readonly startNodeId: ConstructionNodeId; readonly endNodeId: ConstructionNodeId }[];
+  readonly edges: readonly ConstructionEdgeSnapshot[];
 }
 
 /**
@@ -524,7 +526,7 @@ export interface ConstructionPlanarRequest {
   readonly clip: readonly ConstructionPlanarShape[];
   readonly operation: "union" | "difference" | "extend";
 }
-export interface ConstructionSessionPort {
+export interface ConstructionSessionPort extends BezierPort {
   planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[];
   /** Pure cascade resolution, using one consistent engine state. */
   planMotion(request: ConstructionMotionRequest): ConstructionMotionPlan;

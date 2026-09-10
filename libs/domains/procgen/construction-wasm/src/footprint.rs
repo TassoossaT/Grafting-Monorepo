@@ -562,7 +562,8 @@ mod tests {
         let (graph, topology, surfaces) = two_faces();
         let mut index = crate::spatial_index::UniformGridIndex::new(4.0);
         for id in topology.region_ids() {
-            let bounds = crate::spatial_index::RegionBounds::of_region(&graph, &topology, &id).unwrap();
+            let bounds =
+                crate::spatial_index::RegionBounds::of_region(&graph, &topology, &id).unwrap();
             index.insert(id, bounds);
         }
 
