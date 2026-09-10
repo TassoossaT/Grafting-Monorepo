@@ -314,6 +314,8 @@
                 "{projectRoot}/src/**/*",
                 "{projectRoot}/Cargo.toml",
                 "{projectRoot}/package.json",
+                "{workspaceRoot}/libs/graph/core/src/**/*",
+                "{workspaceRoot}/libs/graph/core/Cargo.toml",
                 "^default",
                 "{workspaceRoot}/Cargo.toml",
                 "{workspaceRoot}/Cargo.lock",
@@ -2485,7 +2487,7 @@
               "executor": "nx:run-commands",
               "cache": true,
               "inputs": [
-                "{projectRoot}/src/lib.rs",
+                "{projectRoot}/src/**/*",
                 "{projectRoot}/src/contour.rs",
                 "{projectRoot}/src/layout.rs",
                 "{projectRoot}/src/model.rs",
@@ -3368,6 +3370,11 @@
         {
           "source": "architecture-studio",
           "target": "tileset-wfc",
+          "type": "static"
+        },
+        {
+          "source": "architecture-studio",
+          "target": "construction-wasm",
           "type": "static"
         }
       ],
