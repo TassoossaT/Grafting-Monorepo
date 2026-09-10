@@ -18,7 +18,7 @@ import {
   resolveCoverage,
 } from "../index.ts";
 import { graphPatchForSpine } from "./spine-graph/index.ts";
-import { changedSpineCloud, standingRegionsForCloud } from "./path-cloud-scope.ts";
+import { bezierContourId, changedSpineCloud, standingRegionsForCloud } from "./path-cloud-scope.ts";
 import { referenceLineFrom } from "./path-reference-line.ts";
 import { pathSpineDraftFor } from "./path-spine-draft.ts";
 
@@ -110,7 +110,7 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
   const operationId = effect.operationId;
 
   const bezier = input.bezier && stroke.length > 1 ? planBezierRoad({
-    snapshot: input.graphSnapshot, port: input.bezier, stroke,
+    snapshot: input.graphSnapshot, topologies: input.regionTopologies, port: input.bezier, stroke,
     corridorId: pathCorridorId(operationId, effect.parameters.kind),
     offsets: effect.parameters.profile.map((p) => p.lateralOffset),
     miterLimit: effect.parameters.miterLimit, tolerance,
@@ -138,7 +138,7 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
       tolerance: CURVE_FLATTENING_TOLERANCE,
     };
     const graphPatch = materialized.graphPatch;
-    const touchedCloud = changedSpineCloud(bezier?.snapshot ?? input.graphSnapshot, graphPatch);
+    const touchedCloud = changedSpineCloud(bezier?.snapshot ?? input.graphSnapshot, graphPatch, input.regionTopologies);
     const regeneratedChains = bezier?.chains ?? touchedCloud.chains
       .filter((controlPoints) => controlPoints.length >= 2)
       .map((controlPoints, index): SpineChainInput => ({
@@ -182,7 +182,7 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
     }
 
     const topologies = input.regionTopologies;
-    const standingRegions = standingRegionsForCloud(topologies, touchedCloud.positions, touchedCloud.corridorIds);
+    const standingRegions = standingRegionsForCloud(topologies, touchedCloud.positions, touchedCloud.corridorIds, !!input.bezier);
     const existingEdgeUses = new Map<string, boolean[]>();
     for (const topology of topologies) {
       for (const loop of [...topology.outerLoops, ...topology.holes]) {
@@ -193,7 +193,7 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
     const planned = planSpineContour({
       union: input.bezier ? (ribbons) => unionBezierRibbons(input.bezier!, ribbons) : undefined,
         tableId: input.tableId,
-        operationId,
+        operationId: input.bezier ? bezierContourId(touchedCloud.corridorIds, operationId) : operationId,
         surfaceType: "path",
         // The changed component is read from the prospective spine graph,
         // not inferred from its old contour faces. A continuation therefore

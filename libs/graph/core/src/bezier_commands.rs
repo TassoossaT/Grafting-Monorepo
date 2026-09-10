@@ -28,6 +28,11 @@ pub enum CurveCommand {
         #[cfg_attr(feature = "curve-serde", serde(default, rename = "endOffsets"))]
         end_offsets: Option<[f64; 2]>,
     },
+    /// Fill the bevel between cross-sections at a shared anchor.
+    Join {
+        /// Coplanar endpoint pairs from incident ribbons.
+        sections: Vec<[CurvePoint; 2]>,
+    },
     /// Evaluate several explicit segments.
     Sample {
         /// Ordered cubics.
@@ -147,6 +152,10 @@ pub fn execute(batch: CurveBatch) -> Result<Vec<CurveResult>, String> {
                     batch.tolerance,
                 )?);
                 vec![curve]
+            }
+            CurveCommand::Join { sections } => {
+                ribbon = Some(crate::bezier_surface::ribbon_join(&sections)?);
+                Vec::new()
             }
             CurveCommand::Split { curve, t, profile } => {
                 let curves = curve.split(t)?;

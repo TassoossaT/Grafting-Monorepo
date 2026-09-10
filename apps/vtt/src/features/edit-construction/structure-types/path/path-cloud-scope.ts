@@ -2,6 +2,20 @@ import type { ConstructionGraphPatch, ConstructionGraphSnapshot, ConstructionPos
 
 import { chainsOf, parseSpineControlNodeId, spineGraphFromSnapshot } from "./spine-graph/index.ts";
 
+const OWNED_CONTOUR = "road-cloud:";
+function surfaceCorridors(regionId: string): readonly string[] | undefined {
+  if (!regionId.startsWith(OWNED_CONTOUR)) return undefined;
+  try {
+    const ids: unknown = JSON.parse(decodeURIComponent(regionId.slice(OWNED_CONTOUR.length).split(":")[0]!));
+    return Array.isArray(ids) && ids.every((id) => typeof id === "string") ? ids : undefined;
+  } catch { return undefined; }
+}
+
+/** Persistent regeneration membership, independent of the latest gesture or a disconnect. */
+export function bezierContourId(corridorIds: ReadonlySet<string>, operationId: string): string {
+  return `road-cloud:${encodeURIComponent(JSON.stringify([...corridorIds].sort()))}:${encodeURIComponent(operationId)}`;
+}
+
 /** The connected spine component changed by this stroke, after its graph patch, and every node id in it. */
 export interface ChangedSpineCloud {
   readonly snapshot: ConstructionGraphSnapshot;
@@ -21,7 +35,7 @@ export interface ChangedSpineCloud {
  * this is what `planPathCloudMutation` reads to decide which standing
  * contour faces one edit replaces (`standingRegionsForCloud`, below).
  */
-export function changedSpineCloud(snapshot: ConstructionGraphSnapshot, patch: ConstructionGraphPatch): ChangedSpineCloud {
+export function changedSpineCloud(snapshot: ConstructionGraphSnapshot, patch: ConstructionGraphPatch, topologies: readonly ConstructionRegionTopology[] = []): ChangedSpineCloud {
   const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
   for (const node of patch.nodes) nodes.set(node.id, node);
   const edges = new Map(snapshot.edges.map((edge) => [edge.edgeId, edge]));
@@ -34,10 +48,43 @@ export function changedSpineCloud(snapshot: ConstructionGraphSnapshot, patch: Co
     adjacent.set(edge.toNodeId, [...(adjacent.get(edge.toNodeId) ?? []), edge.fromNodeId]);
   }
   const connected = new Set([...patch.nodes.map((node) => node.id), ...patch.edges.flatMap((edge) => [edge.startNodeId, edge.endNodeId])]);
+  // A surface may contain disconnected remnants of one authored corridor
+  // after deleting a segment. Regenerate all of those remnants together:
+  // their shared surface ownership outlives graph connectivity.
+  const corridorNodes = new Map<string, string[]>();
+  const corridorOf = (id: string): string | undefined => parseSpineControlNodeId(id)?.operationId;
+  for (const node of graph.nodes) {
+    const corridor = corridorOf(node.nodeId);
+    if (corridor !== undefined) corridorNodes.set(corridor, [...(corridorNodes.get(corridor) ?? []), node.nodeId]);
+  }
+  const coOwners = new Map<string, Set<string>>();
+  for (const topology of topologies) {
+    if (topology.surfaceType !== "path") continue;
+    const owners = surfaceCorridors(topology.surfaceKey[1] ?? "") ?? [];
+    for (const owner of owners) {
+      const peers = coOwners.get(owner) ?? new Set<string>();
+      for (const peer of owners) peers.add(peer);
+      coOwners.set(owner, peers);
+    }
+  }
+  // Alias the base operation used by legacy corridor ids with a #road suffix.
+  for (const [corridor, ids] of [...corridorNodes]) {
+    const at = corridor.lastIndexOf("#");
+    if (at >= 0) {
+      const base = corridor.slice(0, at);
+      corridorNodes.set(base, [...(corridorNodes.get(base) ?? []), ...ids]);
+    }
+  }
+  const visitedCorridors = new Set<string>();
   const pending = [...connected];
   while (pending.length > 0) {
     const nodeId = pending.pop()!;
-    for (const neighbor of adjacent.get(nodeId) ?? []) {
+    const corridor = corridorOf(nodeId);
+    const owners = corridor === undefined ? [] : [corridor, ...(coOwners.get(corridor) ?? [])];
+    const siblings = owners.flatMap((owner) => visitedCorridors.has(owner) ? [] : corridorNodes.get(owner) ?? []);
+    for (const owner of owners) visitedCorridors.add(owner);
+    if (corridor !== undefined) visitedCorridors.add(corridor);
+    for (const neighbor of [...(adjacent.get(nodeId) ?? []), ...siblings]) {
       if (connected.has(neighbor)) continue;
       connected.add(neighbor);
       pending.push(neighbor);
@@ -73,6 +120,7 @@ export function standingRegionsForCloud(
   topologies: readonly ConstructionRegionTopology[],
   cloudPositions: readonly ConstructionPosition[] = [],
   corridorIds: ReadonlySet<string> = new Set(),
+  spineOwned = false,
 ): readonly ConstructionRegionTopology[] {
   if (corridorIds.size === 0 && cloudPositions.length === 0) return [];
 
@@ -96,6 +144,11 @@ export function standingRegionsForCloud(
   const seeds = new Set<ConstructionRegionTopology>();
   for (const topology of pathTopologies) {
     const regionId = topology.surfaceKey[1] ?? "";
+    const owners = surfaceCorridors(regionId);
+    if (owners !== undefined) {
+      if (owners.some((id) => corridorIds.has(id))) seeds.add(topology);
+      continue;
+    }
     let matched = false;
     for (const corridorId of corridorIds) {
       if (
@@ -107,7 +160,7 @@ export function standingRegionsForCloud(
         break;
       }
     }
-    if (!matched) {
+    if (!matched && !spineOwned) {
       for (const node of topology.nodes) {
         for (const corridorId of corridorIds) {
           if (
@@ -128,6 +181,9 @@ export function standingRegionsForCloud(
       seeds.add(topology);
     }
   }
+
+  // Explicit roads are owned by the spine, not by incidental contour welding.
+  if (spineOwned) return [...seeds];
 
   // BFS across shared nodes to find the entire connected component of path faces
   const visited = new Set<ConstructionRegionTopology>(seeds);

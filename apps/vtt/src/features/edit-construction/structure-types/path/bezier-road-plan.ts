@@ -1,4 +1,4 @@
-import type { BezierPort, CurvePoint, CurveHandles, ConstructionGraphSnapshot, ConstructionGraphPatch, ConstructionPosition } from "@/ports";
+import type { BezierPort, CurvePoint, CurveHandles, ConstructionGraphSnapshot, ConstructionGraphPatch, ConstructionRegionTopology, ConstructionPosition } from "@/ports";
 import { chainsOf, spineGraphFromSnapshot, spineControlNodeId } from "./spine-graph/index.ts";
 import { changedSpineCloud } from "./path-cloud-scope.ts";
 import type { SpineChainInput, BandRibbon } from "./contour/index.ts";
@@ -37,20 +37,40 @@ export function bezierChains(snapshot: ConstructionGraphSnapshot, port: BezierPo
   const results = port.curveBatch({ tolerance: 0.025, commands: edges.map((e) => ({
     kind: "resolve", handles: e.curve!, start: curvePoint(nodes.get(e.startNodeId)!), end: curvePoint(nodes.get(e.endNodeId)!),
   })) });
-  return edges.map((e, i) => {
+  const sections = new Map<string, { chain: number; points: readonly [CurvePoint, CurvePoint] }[]>();
+  const chains = edges.map((e, i) => {
     const samples = results[i]!.samples[0]!.map((p) => curvePosition(p.position));
     const profile = e.curve!.bandOffsets.length ? e.curve!.bandOffsets : offsets;
     const endProfile = e.curve!.endBandOffsets?.length ? e.curve!.endBandOffsets! : profile;
     const derived = port.curveBatch({ tolerance: 0.025, commands: [{ kind: "ribbon", curve: results[i]!.curves[0]!, offsets: [Math.min(...profile), Math.max(...profile)], endOffsets: [Math.min(...endProfile), Math.max(...endProfile)] }] })[0]!;
-    const ribbons = [{ bandIndex: 0, outer: derived.ribbon!.outer.map(curvePosition) }];
+    const outer = derived.ribbon!.outer;
+    const half = outer.length / 2;
+    for (const [id, points] of [
+      [e.startNodeId, [outer[0]!, outer.at(-1)!]],
+      [e.endNodeId, [outer[half - 1]!, outer[half]!]],
+    ] as const) {
+      sections.set(id, [...(sections.get(id) ?? []), { chain: i, points }]);
+    }
+    const ribbons = [{ bandIndex: 0, outer: outer.map(curvePosition) }];
     return { chainId: e.edgeId, controlPoints: samples, sampledPoints: samples, ribbons,
       bandOffsets: e.curve!.bandOffsets.length ? e.curve!.bandOffsets : offsets, miterLimit, tolerance: 0.025 };
   });
+  // Connectivity, not proximity: disconnected or grade-separated anchors never join.
+  const junctions = [...sections.values()].filter((incident) => incident.length > 1);
+  const joins = port.curveBatch({ tolerance: 0.025, commands: junctions.map((incident) => ({
+    kind: "join", sections: incident.map((entry) => entry.points),
+  })) });
+  junctions.forEach((incident, index) => {
+    const outer = joins[index]!.ribbon!.outer;
+    if (outer.length >= 3) chains[incident[0]!.chain]!.ribbons.push({ bandIndex: 0, outer: outer.map(curvePosition) });
+  });
+  return chains;
 }
 
 /** Product identities and profile policy surround generic Rust fitting and connections. */
 export function planBezierRoad(input: {
   readonly snapshot: ConstructionGraphSnapshot;
+  readonly topologies?: readonly ConstructionRegionTopology[];
   readonly port: BezierPort;
   readonly stroke: readonly ConstructionPosition[];
   readonly corridorId: string;
@@ -77,7 +97,7 @@ export function planBezierRoad(input: {
     snapTolerance: input.snapReach, heightTolerance: 0.15, tolerance: 0.005,
   });
   const initialPatch: ConstructionGraphPatch = { ...network, nodes: network.nodes.map((n) => ({ id: n.id, position: curvePosition(n.position) })) };
-  const cloud = changedSpineCloud(snapshot, initialPatch);
+  const cloud = changedSpineCloud(snapshot, initialPatch, input.topologies);
   const originalEdges = new Map(input.snapshot.edges.map((e) => [e.edgeId, e]));
   const migrations = cloud.snapshot.edges.filter((e) => !originalEdges.get(e.edgeId)?.curve && originalEdges.has(e.edgeId) && !network.edges.some((n) => n.edgeId === e.edgeId));
   const graphPatch: ConstructionGraphPatch = {

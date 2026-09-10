@@ -170,3 +170,82 @@ test("real WASM: stacked parallel roads keep separate surface vertices", () => {
     assert.equal(new Set(faces.flatMap(t=>t.nodes.map(n=>n.id))).size,faces.reduce((n,t)=>n+t.nodes.length,0));
   } finally { f.session.free(); }
 });
+
+test("real WASM: angled joins keep the contour away from the spine", () => {
+  const f=sessionFixture();
+  try {
+    draw(f,[point(-5,0),point(0,0)],"angle:1");
+    draw(f,[point(0,0),point(0,5)],"angle:2");
+    const faces=f.runtime.getAllRegionTopologies();
+    assert.equal(faces.length,1);
+    assert.ok(faces[0].nodes.every(n=>Math.hypot(n.position.x,n.position.z)>.2), "outside join must not cut down to the anchor");
+  } finally { f.session.free(); }
+});
+
+test("real WASM: closed corners retain the island without cuts to the anchors", () => {
+  const f=sessionFixture();
+  try {
+    const corners=[point(0,0),point(5,0),point(5,5),point(0,5)];
+    for(let i=0;i<4;i++)draw(f,[corners[i],corners[(i+1)%4]],"corner:"+i);
+    const faces=f.runtime.getAllRegionTopologies();
+    assert.equal(faces.length,1);
+    assert.equal(faces[0].holes.length,1);
+    assert.ok(faces[0].nodes.every(n=>corners.every(p=>Math.hypot(n.position.x-p.x,n.position.z-p.z)>.2)));
+    const count=faces.length;
+    for(let i=0;i<3;i++){
+      edit(f,pick(curves(f)[0]),point(0,0),"corner-width:"+i,{action:"width",width:.8+i*.1});
+      assert.equal(f.runtime.getAllRegionTopologies().length,count);
+      assert.equal(f.runtime.getAllRegionTopologies()[0].holes.length,1);
+    }
+  } finally { f.session.free(); }
+});
+
+test("real WASM: editing one disconnected remnant preserves the other surface", () => {
+  const f=sessionFixture();
+  try {
+    draw(f,[point(-9,0),point(9,0)],"remnant");
+    edit(f,pick(curves(f)[0]),point(0,0),"remnant-split:1",{insert:true});
+    const left=curves(f).find(e=>f.runtime.getGraphSnapshot().nodes.find(n=>n.id===e.startNodeId).position.x===-9);
+    edit(f,pick(left),point(-4.5,0),"remnant-split:2",{insert:true});
+    const middle=curves(f).find(e=>{
+      const nodes=new Map(f.runtime.getGraphSnapshot().nodes.map(n=>[n.id,n.position]));
+      return nodes.get(e.startNodeId).x===-4.5 && nodes.get(e.endNodeId).x===0;
+    });
+    edit(f,pick(middle),point(0,0),"remnant-delete",{action:"delete-segment"});
+    assert.equal(f.runtime.getAllRegionTopologies().length,2);
+    for(let i=0;i<3;i++){
+      const before=JSON.parse(f.session.snapshot_json());
+      const edge=curves(f).find(e=>f.runtime.getGraphSnapshot().nodes.find(n=>n.id===e.startNodeId).position.x===-9);
+      edit(f,pick(edge),point(0,0),"remnant-width:"+i,{action:"width",width:1+i*.1});
+      const faces=f.runtime.getAllRegionTopologies();
+      assert.equal(faces.length,2);
+      assert.ok(faces.some(t=>t.nodes.some(n=>n.position.x>=8.99)), "remote remnant disappeared");
+      const after=JSON.parse(f.session.snapshot_json());
+      f.session.undo_region_overlay("remnant-width:"+i);
+      assert.deepEqual(JSON.parse(f.session.snapshot_json()),before);
+      f.session.redo_region_overlay("remnant-width:"+i);
+      assert.deepEqual(JSON.parse(f.session.snapshot_json()),after);
+    }
+  } finally { f.session.free(); }
+});
+
+test("real WASM: disconnected corridors retain shared surface ownership across later edits", () => {
+  const f=sessionFixture();
+  try {
+    draw(f,[point(-5,0),point(0,0)],"owner:a");
+    draw(f,[point(0,0),point(0,5)],"owner:b");
+    const original=f.runtime.getGraphSnapshot().nodes.find(n=>n.id.startsWith("spine:") && n.position.x===0 && n.position.z===0);
+    edit(f,original.id,point(0,0),"owner:disconnect",{action:"disconnect"});
+    const copy=f.runtime.getGraphSnapshot().nodes.find(n=>n.id.startsWith("spine:owner:disconnect:"));
+    assert.ok(copy);
+    edit(f,copy.id,point(2,0),"owner:move");
+    for(let i=0;i<3;i++){
+      const edge=curves(f).find(e=>e.startNodeId===copy.id || e.endNodeId===copy.id);
+      edit(f,pick(edge),point(0,0),"owner:width:"+i,{action:"width",width:.8+i*.1});
+      const faces=f.runtime.getAllRegionTopologies();
+      assert.equal(faces.length,2);
+      assert.ok(faces.some(t=>t.nodes.some(n=>n.position.x < -4.99)));
+      assert.ok(faces.some(t=>t.nodes.some(n=>n.position.z > 4.9)));
+    }
+  } finally { f.session.free(); }
+});

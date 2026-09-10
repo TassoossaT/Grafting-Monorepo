@@ -121,3 +121,23 @@ Final verification includes the affected Rust tests, API checks, WASM build,
 VTT tests/type checks/docs, Studio checks and generated dependency metadata.
 A connected browser was unavailable in this automation session; interactive
 visual inspection is not claimed.
+
+## Contour stability
+
+Incident cubics contribute a coplanar bevel join computed in Rust from their
+endpoint cross-sections. This fills the outside corner of an L or a closed
+circuit instead of leaving a notch down to its shared spine anchor. Joins use
+exact graph connectivity; coincident disconnected anchors and bridge levels
+remain separate. Straight collinear sections need no additional polygon.
+
+Generated Bézier region IDs encode their contributing corridor IDs separately
+from gesture IDs. Regeneration follows both current spine connectivity and the
+ownership of standing surfaces, including disconnected remnants. Replacing one
+face therefore reconstructs all of its surviving authorship. Bézier scope does
+not spread through incidental contour welding, and regenerated contour vertices
+are kept separate from authoring anchors and unrelated standing surfaces.
+
+Regression coverage includes angled joins, closed corners with an island,
+repeated width edits after segment deletion and after disconnecting separately
+authored corridors, plus exact undo/redo of disconnected remnants.
+
