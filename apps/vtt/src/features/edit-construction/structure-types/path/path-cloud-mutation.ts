@@ -190,7 +190,16 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
     // keep the old cloud-wide behaviour because they can change ownership at
     // a junction or leave disconnected remnants behind.
     const hasStructuralChange = graphPatch.edges.length > 0 || (graphPatch.removedEdgeIds?.length ?? 0) > 0 || !!input.bezier;
-    const localContourEdit = !hasStructuralChange;
+    const degree = new Map<string, number>();
+    for (const edge of touchedCloud.snapshot.edges) {
+      degree.set(edge.startNodeId, (degree.get(edge.startNodeId) ?? 0) + 1);
+      degree.set(edge.endNodeId, (degree.get(edge.endNodeId) ?? 0) + 1);
+    }
+    const touchesJunction = [...touchedCloud.snapshot.nodes].some((node) => (degree.get(node.id) ?? 0) !== 2);
+    // A partial contour has no neighbouring samples with which to preserve
+    // tangent continuity. Keep curves and junctions on the cloud-wide path;
+    // the local fast path is intentionally limited to a simple straight run.
+    const localContourEdit = !hasStructuralChange && !touchesJunction && chain.controlPoints.length <= 2;
     const standingRegions = standingRegionsForCloud(
       topologies,
       touchedCloud.positions,
