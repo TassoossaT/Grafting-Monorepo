@@ -121,18 +121,62 @@ function outwardOfGrabbed(context: CascadeContext): readonly AtomicEditOp[] {
   if (moved === undefined) {
     if (isSpineControlNodeId(target.nodeId)) {
       const ops = new Map<string, AtomicEditOp>();
-      const nodePos = cloud.members
-        .flatMap((region) => region.nodes)
-        .find((n) => n.id === target.nodeId)?.position;
+      const nodePos = context.graphSnapshot?.nodes.find((n) => n.id === target.nodeId)?.position
+        ?? cloud.members.flatMap((region) => region.nodes).find((n) => n.id === target.nodeId)?.position;
       if (nodePos !== undefined) {
+        const otherSpineNodes = (context.graphSnapshot?.nodes ?? [])
+          .filter((n) => n.id !== target.nodeId && isSpineControlNodeId(n.id));
         for (const region of cloud.members) {
           for (const node of region.nodes) {
             if (node.id === target.nodeId || ops.has(node.id)) continue;
-            if (Math.hypot(node.position.x - nodePos.x, node.position.z - nodePos.z) <= 2.5) {
+            const distToGrabbed = Math.hypot(node.position.x - nodePos.x, node.position.z - nodePos.z);
+            if (distToGrabbed > 10.0) continue;
+            const closerToOther = otherSpineNodes.some((other) => {
+              const distToOther = Math.hypot(node.position.x - other.position.x, node.position.z - other.position.z);
+              return distToOther < distToGrabbed;
+            });
+            if (!closerToOther) {
               ops.set(node.id, {
                 kind: "move-vertex",
                 nodeId: node.id,
                 position: addPosition(node.position, delta),
+              });
+            }
+          }
+        }
+      }
+      return [...ops.values()];
+    }
+    if (target.nodeId.startsWith("contour:")) {
+      const ops = new Map<string, AtomicEditOp>();
+      for (const region of cloud.members) {
+        for (const loop of [...region.outerLoops, ...region.holes]) {
+          const index = loop.findIndex((edge) => edge.startNodeId === target.nodeId);
+          if (index >= 0) {
+            const prevEdge = loop[(index - 1 + loop.length) % loop.length]!;
+            const nextEdge = loop[(index + 1) % loop.length]!;
+            const prevNode = region.nodes.find((n) => n.id === prevEdge.startNodeId);
+            const nextNode = region.nodes.find((n) => n.id === nextEdge.startNodeId);
+            if (prevNode !== undefined && !ops.has(prevNode.id)) {
+              ops.set(prevNode.id, {
+                kind: "move-vertex",
+                nodeId: prevNode.id,
+                position: addPosition(prevNode.position, {
+                  x: delta.x * 0.5,
+                  y: delta.y * 0.5,
+                  z: delta.z * 0.5,
+                }),
+              });
+            }
+            if (nextNode !== undefined && !ops.has(nextNode.id)) {
+              ops.set(nextNode.id, {
+                kind: "move-vertex",
+                nodeId: nextNode.id,
+                position: addPosition(nextNode.position, {
+                  x: delta.x * 0.5,
+                  y: delta.y * 0.5,
+                  z: delta.z * 0.5,
+                }),
               });
             }
           }

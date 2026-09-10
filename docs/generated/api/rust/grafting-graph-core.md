@@ -793,6 +793,12 @@ Computes a ribbon from an explicit cubic and independently specified widths.
 The raw offset may overlap at tight turns; normalize it with the planar union before meshing.
 Stationary ground-plane tangents are rejected.
 
+### `pub fn grafting_graph_core::bezier_surface::ribbon_join(sections: &[[grafting_graph_core::bezier::CurvePoint; 2]]) -> core::result::Result<grafting_graph_core::bezier_surface::CurveRibbon, alloc::string::String>`
+
+Bevel join of incident ribbon cross-sections at one shared anchor.
+Sections must be coplanar. Collinear sections need no additional surface.
+The convex boundary fills the outside corner without a spike or a cut to the anchor.
+
 ### `pub fn grafting_graph_core::bezier_surface::ribbon_profile(curve: grafting_graph_core::bezier::CubicBezier, offsets: [f64; 2], end_offsets: [f64; 2], accuracy: f64) -> core::result::Result<grafting_graph_core::bezier_surface::CurveRibbon, alloc::string::String>`
 
 Samples a ribbon with linearly varying start/end lateral offsets.
@@ -1598,6 +1604,14 @@ Optional paired handle on another incident edge.
 ### `pub grafting_graph_core::bezier_commands::CurveCommand::Handle::target: grafting_graph_core::bezier::CurvePoint`
 
 Desired control position.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Join`
+
+Fill the bevel between cross-sections at a shared anchor.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Join::sections: alloc::vec::Vec<[grafting_graph_core::bezier::CurvePoint; 2]>`
+
+Coplanar endpoint pairs from incident ribbons.
 
 ### `pub grafting_graph_core::bezier_commands::CurveCommand::Merge`
 

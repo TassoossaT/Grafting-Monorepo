@@ -29,6 +29,30 @@ export interface ChangedSpineCloud {
   readonly corridorIds: ReadonlySet<string>;
 }
 
+function extractCorridorsFromEdgeId(edgeId: string): string[] {
+  const result: string[] = [];
+  let current: string | undefined = edgeId;
+  while (current) {
+    if (current.startsWith("spine-edge:")) {
+      const match = /^spine-edge:(.+):\d+$/.exec(current);
+      if (match && match[1]) {
+        result.push(match[1]);
+      }
+      break;
+    } else if (current.startsWith("spine-split:")) {
+      const match = /^spine-split:(.+):\d+$/.exec(current);
+      if (match && match[1]) {
+        current = match[1];
+      } else {
+        break;
+      }
+    } else {
+      break;
+    }
+  }
+  return result;
+}
+
 /**
  * The connected spine component a graph patch touches, walked out from the
  * patch's own nodes across the *prospective* graph (snapshot plus patch) --
@@ -92,9 +116,10 @@ export function changedSpineCloud(snapshot: ConstructionGraphSnapshot, patch: Co
   }
   for (const id of connected) if (!adjacent.has(id)) connected.delete(id);
   const clusterNodes = graph.nodes.filter((node) => connected.has(node.nodeId));
+  const clusterEdges = graph.edges.filter((edge) => connected.has(edge.fromNodeId) && connected.has(edge.toNodeId));
   const chains = chainsOf({
     nodes: clusterNodes,
-    edges: graph.edges.filter((edge) => connected.has(edge.fromNodeId) && connected.has(edge.toNodeId)),
+    edges: clusterEdges,
   }).map((chain) => chain.nodes.map((node) => node.position));
 
   const corridorIds = new Set<string>();
@@ -104,6 +129,20 @@ export function changedSpineCloud(snapshot: ConstructionGraphSnapshot, patch: Co
       corridorIds.add(address.operationId);
       const at = address.operationId.lastIndexOf("#");
       if (at >= 0) corridorIds.add(address.operationId.slice(0, at));
+    }
+  }
+  for (const edge of clusterEdges) {
+    for (const corridorId of extractCorridorsFromEdgeId(edge.edgeId)) {
+      corridorIds.add(corridorId);
+      const at = corridorId.lastIndexOf("#");
+      if (at >= 0) corridorIds.add(corridorId.slice(0, at));
+    }
+  }
+  for (const edge of patch.edges) {
+    for (const corridorId of extractCorridorsFromEdgeId(edge.edgeId)) {
+      corridorIds.add(corridorId);
+      const at = corridorId.lastIndexOf("#");
+      if (at >= 0) corridorIds.add(corridorId.slice(0, at));
     }
   }
 
@@ -140,6 +179,39 @@ export function standingRegionsForCloud(
     }
   }
 
+  function matchesAnyCorridor(id: string, ids: ReadonlySet<string>): boolean {
+    for (const corridorId of ids) {
+      if (
+        id === corridorId ||
+        id.startsWith(`${corridorId}:`) ||
+        id.startsWith(`${corridorId}#`) ||
+        corridorId.startsWith(`${id}:`) ||
+        corridorId.startsWith(`${id}#`)
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function extractCorridorId(regionId: string): string | undefined {
+    const bandAt = regionId.indexOf(":band-");
+    if (bandAt >= 0) return regionId.slice(0, bandAt);
+    const hashAt = regionId.indexOf("#");
+    if (hashAt >= 0) return regionId.slice(0, hashAt);
+    return regionId.length > 0 ? regionId : undefined;
+  }
+
+  function isForeignTopology(topology: ConstructionRegionTopology): boolean {
+    if (corridorIds.size === 0) return false;
+    const regionId = topology.surfaceKey[1] ?? "";
+    const corridor = extractCorridorId(regionId);
+    if (corridor !== undefined && corridor !== "adjoining-face" && !matchesAnyCorridor(corridor, corridorIds)) {
+      return true;
+    }
+    return false;
+  }
+
   // Identify seed topologies directly touched by the corridorIds
   const seeds = new Set<ConstructionRegionTopology>();
   for (const topology of pathTopologies) {
@@ -149,17 +221,8 @@ export function standingRegionsForCloud(
       if (owners.some((id) => corridorIds.has(id))) seeds.add(topology);
       continue;
     }
-    let matched = false;
-    for (const corridorId of corridorIds) {
-      if (
-        regionId === corridorId ||
-        regionId.startsWith(`${corridorId}:`) ||
-        regionId.startsWith(`${corridorId}#`)
-      ) {
-        matched = true;
-        break;
-      }
-    }
+    if (isForeignTopology(topology)) continue;
+    let matched = matchesAnyCorridor(regionId, corridorIds);
     if (!matched && !spineOwned) {
       for (const node of topology.nodes) {
         for (const corridorId of corridorIds) {
@@ -186,6 +249,7 @@ export function standingRegionsForCloud(
   if (spineOwned) return [...seeds];
 
   // BFS across shared nodes to find the entire connected component of path faces
+  // belonging to the touched cloud. It MUST NOT cross into foreign path corridors.
   const visited = new Set<ConstructionRegionTopology>(seeds);
   const queue: ConstructionRegionTopology[] = [...seeds];
 
@@ -194,7 +258,7 @@ export function standingRegionsForCloud(
     for (const node of current.nodes) {
       const neighbors = topologiesByNodeId.get(node.id) ?? [];
       for (const neighbor of neighbors) {
-        if (!visited.has(neighbor)) {
+        if (!visited.has(neighbor) && !isForeignTopology(neighbor)) {
           visited.add(neighbor);
           queue.push(neighbor);
         }

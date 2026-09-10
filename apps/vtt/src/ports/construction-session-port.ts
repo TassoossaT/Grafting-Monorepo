@@ -406,6 +406,16 @@ export interface ConstructionGridConstraintPoint {
   readonly source?: number;
 }
 
+/** Options controlling Delaunay refinement during irregular grid generation. */
+export interface ConstructionGridRefinementOptions {
+  /** Minimum angle in degrees for triangles (default 20.5). */
+  readonly minAngleDegrees?: number;
+  /** Hard cap on additional Steiner vertices during Delaunay refinement (default 2500). */
+  readonly maxAdditionalVertices?: number;
+  /** Minimum triangle area ratio relative to maximum allowed area (default 0.25). */
+  readonly minAreaRatio?: number;
+}
+
 /** What bounds the ground to generate, and at what scale. */
 export interface ConstructionIrregularQuadGridRequest {
   readonly seed: number;
@@ -436,6 +446,8 @@ export interface ConstructionIrregularQuadGridRequest {
    * takes the generator's own standard.
    */
   readonly relaxStrength?: number;
+  /** Refinement knobs. Omitted takes the engine's defaults. */
+  readonly refinement?: ConstructionGridRefinementOptions;
 }
 
 /** One corner the generator put along a contour the caller supplied. */

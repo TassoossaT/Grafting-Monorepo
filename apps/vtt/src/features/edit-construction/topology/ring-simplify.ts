@@ -18,6 +18,7 @@ import type { ConstructionEdgeGeometry, ConstructionPosition } from "@/ports";
  */
 
 const COLLINEAR_COSINE_EPSILON = 1e-6;
+const COLLINEAR_HEIGHT_EPSILON = 0.02;
 const ARC_CENTER_EPSILON = 1e-3;
 
 function isStraight(geometry: ConstructionEdgeGeometry | undefined): boolean {
@@ -31,7 +32,7 @@ function sameArc(a: ConstructionEdgeGeometry | undefined, b: ConstructionEdgeGeo
   return Math.hypot(a.center[0] - b.center[0], a.center[1] - b.center[1]) <= ARC_CENTER_EPSILON;
 }
 
-/** Whether `current` sits on the straight line through `previous` and `after` -- a scale-invariant angular check, not a distance one. */
+/** Whether `current` sits on the straight line through `previous` and `after` in 3D (XZ collinearity and linear Y height). */
 function collinear(previous: ConstructionPosition, current: ConstructionPosition, after: ConstructionPosition): boolean {
   const inX = current.x - previous.x;
   const inZ = current.z - previous.z;
@@ -41,7 +42,10 @@ function collinear(previous: ConstructionPosition, current: ConstructionPosition
   const outLength = Math.hypot(outX, outZ);
   if (inLength < 1e-9 || outLength < 1e-9) return true; // a coincident neighbour carries no shape either.
   const cross = inX * outZ - inZ * outX;
-  return Math.abs(cross) / (inLength * outLength) <= COLLINEAR_COSINE_EPSILON;
+  if (Math.abs(cross) / (inLength * outLength) > COLLINEAR_COSINE_EPSILON) return false;
+  const totalLength = inLength + outLength;
+  const expectedY = previous.y + (after.y - previous.y) * (inLength / totalLength);
+  return Math.abs(current.y - expectedY) <= COLLINEAR_HEIGHT_EPSILON;
 }
 
 /**

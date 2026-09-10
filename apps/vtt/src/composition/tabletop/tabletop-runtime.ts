@@ -64,7 +64,7 @@ import {
   mergeOutcomes,
   type AtomicEditOp,
 } from "../../features/edit-construction/index.ts";
-import { dispatchCutRepairs, dispatchRemovalRepairs } from "./tools/cut-repair-dispatch.ts";
+import { dispatchCutRepairs, dispatchRemovalRepairs } from "./interference/type-interference-dispatch.ts";
 
 export type TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed";
 
@@ -886,12 +886,21 @@ export class AppTabletopRuntime implements TabletopRuntime {
 
   getAllRegionTopologies(): readonly ConstructionRegionTopology[] {
     this.#requireReady("reading every region's topology");
-    return this.#construction.getAllRegionTopologies();
+    if (typeof this.#construction.getAllRegionTopologies === "function") {
+      return this.#construction.getAllRegionTopologies();
+    }
+    return [];
   }
 
   getRegionTopologiesInBounds(bounds: ConstructionTopologyBoundsQuery): readonly ConstructionRegionTopology[] {
     this.#requireReady("reading nearby region topologies");
-    return this.#construction.getRegionTopologiesInBounds(bounds);
+    if (typeof this.#construction.getRegionTopologiesInBounds === "function") {
+      return this.#construction.getRegionTopologiesInBounds(bounds);
+    }
+    if (typeof this.#construction.getAllRegionTopologies === "function") {
+      return this.#construction.getAllRegionTopologies();
+    }
+    return [];
   }
 
   curveBatch(request: import("../../ports/bezier-port.ts").CurveBatch): readonly import("../../ports/bezier-port.ts").CurveResult[] {
@@ -1010,7 +1019,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
   /**
    * Replaces `sourceSurfaceKeys` with `patch`, then lets whichever *other*
    * type this patch's own footprint cuts into repair itself, via
-   * `dispatchCutRepairs` (`tools/cut-repair-dispatch.ts`) -- the runtime's
+   * `dispatchCutRepairs` (`interference/type-interference-dispatch.ts`) -- the runtime's
    * own choke point for `CUT`'s repair half, so any caller of this one
    * method gets it, not only whichever tool happens to import a repair
    * function by name. See `CutRepair`/`CutFallout`
@@ -1024,12 +1033,23 @@ export class AppTabletopRuntime implements TabletopRuntime {
     causeId: string,
   ): ConstructionPatchOutcome {
     this.#requireReady("replacing generated regions");
+    const replacedTopologies: ConstructionRegionTopology[] = [];
+    if (request.sourceSurfaceKeys.length > 0 && typeof this.#construction.getRegionTopology === "function") {
+      for (const key of request.sourceSurfaceKeys) {
+        try {
+          const topology = this.#construction.getRegionTopology(key);
+          if (topology !== undefined) replacedTopologies.push(topology);
+        } catch {
+          // best-effort lookup
+        }
+      }
+    }
     const outcome = this.#construction.applyPatchReplacement(request);
     const knownNodePositions = new Map<ConstructionNodeId, ConstructionPosition>();
     for (const node of request.patch.nodes) knownNodePositions.set(node.id, node.position);
     for (const node of request.graphPatch?.nodes ?? []) knownNodePositions.set(node.id, node.position);
     this.#foldRegionEditOutcome(outcome, origin, causeId, knownNodePositions);
-    dispatchCutRepairs(this, request, causeId);
+    dispatchCutRepairs(this, request, causeId, replacedTopologies, outcome);
     return outcome;
   }
   undoPathBrush(operationId: string, origin: ChangeOrigin): void {
@@ -1056,9 +1076,11 @@ export class AppTabletopRuntime implements TabletopRuntime {
 
     const surfaceProjection = this.#snapshot.map.byId.get(surfaceRefFromNodeSet(request.surfaceKey));
     let surfaceType: string | undefined = surfaceProjection?.type;
-    if (surfaceType === undefined && typeof this.#construction.getRegionTopology === "function") {
+    let removedTopology: ConstructionRegionTopology | undefined;
+    if (typeof this.#construction.getRegionTopology === "function") {
       try {
-        surfaceType = this.#construction.getRegionTopology(request.surfaceKey)?.surfaceType;
+        removedTopology = this.#construction.getRegionTopology(request.surfaceKey);
+        surfaceType = surfaceType ?? removedTopology?.surfaceType;
       } catch {
         // Best effort lookup before removal
       }
@@ -1068,7 +1090,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#foldRegionEditOutcome(outcome, origin, causeId);
 
     if (surfaceType !== undefined) {
-      dispatchRemovalRepairs(this, request.surfaceKey, surfaceType, causeId);
+      dispatchRemovalRepairs(this, request.surfaceKey, surfaceType, causeId, removedTopology);
     }
 
     return outcome;

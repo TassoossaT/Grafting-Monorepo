@@ -128,7 +128,7 @@ export function planEdit(
       const seeds: { nodeId: string; delta: ConstructionPosition }[] = [];
       const primarySet = new Set(primary);
       const extras = structureTypeFor(cloud.seed.surfaceType)?.motionInfluences ? []
-        : policy.cascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta }) ?? [];
+        : policy.cascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot }) ?? [];
       for (const op of [...primary, ...extras]) {
         if (op.kind === "move-vertex") {
           const before = positions.get(op.nodeId);
@@ -162,7 +162,7 @@ export function planEdit(
   if (cloud.seed.surfaceType === "platform") {
     return { kind: "deny", role: policy.role, reason: "A plataforma requer o resolvedor estrutural da sessao." };
   }
-  const cascade = policy.cascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta }) ?? [];
+  const cascade = policy.cascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot }) ?? [];
   return {
     kind: "apply",
     role: policy.role,
