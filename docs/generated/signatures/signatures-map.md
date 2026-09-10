@@ -1901,7 +1901,71 @@ export function invalidReason(candidate: AssetDefinition): string | undefined {
 ### `ia-graft` (`tools/ia-graft`)
 
 ```ts
-// src/agent-task-guard.d.ts
+// src/cli/argv.ts
+export function readValue(argv: string[], names: string | string[]): string | undefined {
+  for (const name of asList(names)) {
+  const index = argv.indexOf(name);
+export function readTextValue(argv: string[], names: string | string[]): string | undefined {
+  const flags = asList(names);
+export function readValues(argv: string[], names: string | string[]): string[] {
+  const flags = new Set(asList(names));
+export function parseCommandInput(command: AnyCommand, args: string[]): Record<string, unknown> {
+  const input: Record<string, unknown> = {};
+
+// src/command-registry.ts
+export type NoInput = Record<never, never>;
+export interface ParameterSpec {
+  /** JSON Schema type published to MCP, and the coercion applied to the raw argv string. */
+  type: "string" | "number" | "boolean" | "array" | "object";
+  description: string;
+  /** Element type for `array`. Defaults to string. */
+  items?: { type: "string" };
+export interface CommandRoute {
+  group: string;
+  subcommand?: string;
+  }
+export interface CommandDefinition<TInput> extends CommandRoute {
+  /** MCP tool name, and the command's identity in error messages. */
+  name: string;
+  description: string;
+  /** Extra CLI spellings of the same command, e.g. `task context` for `context`. */
+  routeAliases?: CommandRoute[];
+  parameters: ParametersOf<TInput>;
+  handler: (repoRoot: string, input: TInput) => Promise<unknown>;
+export interface AnyCommand extends CommandRoute {
+  name: string;
+  description: string;
+  routeAliases?: CommandRoute[];
+  parameters: Record<string, ParameterSpec & { required?: boolean }>;
+  handler: (repoRoot: string, input: any) => Promise<any>;
+  }
+export const COMMAND_REGISTRY: AnyCommand[] = [
+export function parameterFlag(key: string, spec: ParameterSpec): string {
+  return spec.flag ?? `--${key.replace(CAMEL_BOUNDARY, "-").toLowerCase()}`;
+  }
+export function parameterFlags(key: string, spec: ParameterSpec): string[] {
+  return [parameterFlag(key, spec), ...(spec.flagAliases ?? [])];
+  }
+export function commandRoutes(cmd: AnyCommand): CommandRoute[] {
+  return [{ group: cmd.group, subcommand: cmd.subcommand }, ...(cmd.routeAliases ?? [])];
+  }
+export function routeLabel(route: CommandRoute): string {
+  return route.subcommand ? `${route.group} ${route.subcommand}` : route.group;
+  }
+export function commandToMcpTool(cmd: AnyCommand) {
+  const properties: Record<string, unknown> = {};
+export function getAllMcpTools(): Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> {
+  return COMMAND_REGISTRY.map((cmd) => commandToMcpTool(cmd));
+export function findCommandByMcpName(name: string): AnyCommand | undefined {
+  return COMMAND_REGISTRY.find((cmd) => cmd.name === name);
+export function findCommandByCliRoute(group: string, subcommand?: string): AnyCommand | undefined {
+  return COMMAND_REGISTRY.find((cmd) =>
+  commandRoutes(cmd).some(
+  (route) => route.group === group && (route.subcommand ?? undefined) === (subcommand || undefined),
+  ),
+  );
+
+// src/commands/agent-task-guard.d.ts
 export interface GuardDecision {
   allowed: boolean;
   reason: string;
@@ -1922,47 +1986,7 @@ export function isHarnessManagedPath(candidate: unknown): boolean;
 export function isReadOnlyInspectionCommand(command: unknown): boolean;
 export function evaluateAgentGitCommand(command: unknown): GuardDecision;
 
-// src/command-registry.ts
-export interface CommandParameter {
-  type: "string" | "number" | "boolean" | "array" | "object";
-  description: string;
-  required?: boolean;
-  items?: { type: "string" };
-export interface CommandDefinition {
-  name: string;
-  group: string;
-  subcommand?: string;
-  description: string;
-  parameters: Record<string, CommandParameter>;
-  aliases?: string[];
-  handler: (repoRoot: string, input: any) => Promise<any>;
-export const COMMAND_REGISTRY: CommandDefinition[] = [
-export function commandToMcpTool(cmd: CommandDefinition, overrideName?: string) {
-  const properties: Record<string, unknown> = {};
-export function getAllMcpTools(): Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> {
-  const tools: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> = [];
-  for (const cmd of COMMAND_REGISTRY) {
-  tools.push(commandToMcpTool(cmd));
-export function findCommandByMcpName(name: string): CommandDefinition | undefined {
-  return COMMAND_REGISTRY.find((cmd) => cmd.name === name || (cmd.aliases && cmd.aliases.includes(name)));
-export function findCommandByCliRoute(group: string, subcommand?: string): CommandDefinition | undefined {
-  return COMMAND_REGISTRY.find((cmd) => {
-  if (cmd.group !== group) return false;
-  if (cmd.subcommand === undefined && (subcommand === undefined || subcommand === "")) return true;
-  return cmd.subcommand === subcommand;
-  });
-
-// src/delegate-commands.ts
-export interface DelegateRunInput {
-  prompt: string;
-  effort?: Effort;
-  /**
-  * One or more paths whose content is appended to the prompt, each
-  * relative to the MAIN checkout root (or absolute-but-inside-it) --
-  * `bin.ts` always resolves `repoRoot` to the main checkout, never a task
-  * worktree, even when this command runs from inside one. Combined
-
-// src/delegate-edit-commands.ts
+// src/commands/delegate/edit.ts
 export interface DelegateEditInput {
   taskId: string;
   prompt: string;
@@ -1972,7 +1996,7 @@ export interface DelegateEditInput {
   /**
   * Extra grounding prepended ON TOP OF the automatic `.ai/INDEX.md`
 
-// src/delegate-profiles.ts
+// src/commands/delegate/profiles.ts
 export type Effort = "low" | "medium" | "high";
 export interface DelegateCallOptions {
   outputFormat: "text" | "json";
@@ -1994,7 +2018,7 @@ export const DELEGATE_PROFILES: Record<Effort, DelegateProfile> = {
   };
 export const EFFORTS = Object.keys(DELEGATE_PROFILES) as Effort[];
 
-// src/delegate-research-commands.ts
+// src/commands/delegate/research.ts
 export interface DelegateResearchInput {
   taskId: string;
   /** What to research. Kept separate from a free-form `prompt` on purpose -- this command is deliberately narrower than `delegate edit`. */
@@ -2004,7 +2028,17 @@ export interface DelegateResearchInput {
   effort?: Effort;
   }
 
-// src/doc-check.ts
+// src/commands/delegate/run.ts
+export interface DelegateRunInput {
+  prompt: string;
+  effort?: Effort;
+  /**
+  * One or more paths whose content is appended to the prompt, each
+  * relative to the MAIN checkout root (or absolute-but-inside-it) --
+  * `bin.ts` always resolves `repoRoot` to the main checkout, never a task
+  * worktree, even when this command runs from inside one. Combined
+
+// src/commands/doc-check.ts
 export interface DocCheckResult {
   [key: string]: unknown;
   ok: true;
@@ -2012,84 +2046,7 @@ export interface DocCheckResult {
   checks: Array<{ file: string; lineCount: number; maxLines: number; passed: boolean; reason?: string }>;
   }
 
-// src/flag-input.ts
-export function readValue(argv: string[], name: string): string | undefined {
-  const index = argv.indexOf(name);
-export function readTextValue(argv: string[], name: string): string | undefined {
-  const filePath = readValue(argv, `${name}-file`);
-export function readValues(argv: string[], name: string): string[] {
-  const values: string[] = [];
-  for (let index = 0; index < argv.length; index += 1) {
-  if (argv[index] !== name) continue;
-  const value = argv[index + 1];
-  if (!value || value.startsWith("--")) throw new Error(`${name} requires a value`);
-export function flagInput(
-  group: string | undefined,
-  subcommand: string | undefined,
-  argv: string[],
-  ): unknown | undefined {
-  const route = subcommand === undefined ? group : `${group} ${subcommand}`;
-  const zeroFlagRoutes = new Set([
-  "doc-check",
-
-// src/git-client.ts
-export function worktreePathForTask(repoPath: string, taskId: string): string {
-  return path.join(repoPath, '.worktrees', taskId);
-export function branchNameForTask(taskId: string): string {
-  return `task/${taskId}`;
-  }
-export function appendPullRequestSection(existingBody: string, addition: string): string {
-  const current = existingBody.trimEnd();
-export type DependencyMode = 'none' | 'legacy-shared' | 'workspace-aware' | 'unmanaged';
-export interface DependencyPreparation {
-  linked: boolean;
-  mode: DependencyMode;
-  overlays: number;
-  workspaceLinks: number;
-  externalLinks: number;
-  copiedFiles: number;
-  materialized?: boolean;
-export interface PrepareTaskDependenciesOptions {
-  install?: boolean;
-  updateLockfile?: boolean;
-  add?: string;
-  workspace?: string;
-  dev?: boolean;
-  }
-export interface MergedBranchProof {
-  number: number;
-  headRefName: string;
-  headRefOid: string;
-  }
-export type RemoteBranchDeletionPlan =
-export function remoteBranchDeletionPlan(
-  branch: string,
-  remoteHead: string | undefined,
-  mergedProof: MergedBranchProof,
-  openDependentPrNumbers: number[] | undefined,
-  ): RemoteBranchDeletionPlan {
-  if (!branch.startsWith('task/')) throw new Error(`refusing remote deletion outside task/*: ${branch}`);
-export const GENERATED_WORKSPACE_ARTIFACT_DIRS = [
-export function parseDependencySpec(dep: string): { name: string; version: string } {
-  let trimmed = dep.trim();
-export class GitWorktreeSession {
-  public readonly repoPath: string;
-  public readonly worktreePath: string;
-  public readonly branchName: string;
-  public readonly nodeModulesLinked: boolean;
-
-  private constructor(repoPath: string, worktreePath: string, branchName: string, nodeModulesLinked: boolean) {
-  this.repoPath = repoPath;
-export class GitClient {
-  /**
-  * @param repoPath The absolute path to the root of the Git repository.
-  */
-  private readonly repoPath: string;
-
-  constructor(repoPath: string) {
-  if (!path.isAbsolute(repoPath)) {
-
-// src/guard-command.ts
+// src/commands/guard.ts
 export interface GuardCheckInput {
   agent: string;
   tool: "Write" | "Edit" | "Bash";
@@ -2097,7 +2054,7 @@ export interface GuardCheckInput {
   command?: string;
   }
 
-// src/issue-commands.ts
+// src/commands/issue.ts
 export interface IssueParentRef {
   id?: string;
   number: number;
@@ -2192,7 +2149,7 @@ export interface IssueDiagnostic {
   | "MISSING_AREA"
   | "MISSING_PRIORITY"
 
-// src/pr-commands.ts
+// src/commands/pr.ts
 export interface PrListInput {
   limit?: number;
   state?: "open" | "closed" | "all";
@@ -2212,7 +2169,7 @@ export interface PrDiffInput {
   stat?: boolean;
   }
 
-// src/task-commands.ts
+// src/commands/task.ts
 export interface CliError {
   ok: false;
   error: string;
@@ -2264,6 +2221,12 @@ export interface TaskCleanupInput {
   taskId: string;
   force?: boolean;
   }
+export interface TaskStatusInput {
+  taskId: string;
+  }
+export interface TaskDoctorInput {
+  taskId: string;
+  }
 export interface TaskDependenciesInput {
   taskId: string;
   install?: boolean;
@@ -2272,18 +2235,141 @@ export interface TaskDependenciesInput {
   workspace?: string;
   dev?: boolean;
   }
+export interface TaskSyncInput {
+  taskId: string;
+  fetch?: boolean;
+  abort?: boolean;
+  }
 export interface TaskResumeInput {
   taskId?: string;
   pr?: number;
   }
-export interface TaskContextInput {
-  query?: string;
-  scope?: string;
-  map?: boolean;
-  pack?: boolean;
-  taskId?: string;
-  paths?: string[];
+
+// src/git/client.ts
+export class GitClient {
+  /**
+  * @param repoPath The absolute path to the root of the Git repository.
+  */
+  private readonly repoPath: string;
+
+  constructor(repoPath: string) {
+  if (!path.isAbsolute(repoPath)) {
+
+// src/git/dependencies.ts
+export type DependencyMode = 'none' | 'legacy-shared' | 'workspace-aware' | 'unmanaged';
+export interface DependencyPreparation {
+  linked: boolean;
+  mode: DependencyMode;
+  overlays: number;
+  workspaceLinks: number;
+  externalLinks: number;
+  copiedFiles: number;
+  materialized?: boolean;
+export interface PrepareTaskDependenciesOptions {
+  install?: boolean;
+  updateLockfile?: boolean;
+  add?: string;
+  workspace?: string;
+  dev?: boolean;
   }
+export interface DependencyOverlayMarker {
+  version: 1 | 2 | 3;
+  source: string;
+  materialized?: boolean;
+  lockfileHash?: string;
+  workspaceConfigHash?: string;
+  virtualStore?: string;
+  workspaceLinks?: number;
+export const GENERATED_WORKSPACE_ARTIFACT_DIRS = [
+export function parseDependencySpec(dep: string): { name: string; version: string } {
+  let trimmed = dep.trim();
+
+// src/git/exec.ts
+export const execFileAsync = promisify(execFile);
+export const execAsync = promisify(exec);
+export function envWithGhFallbackPath(): NodeJS.ProcessEnv {
+  const fallbackDir = 'C:\\Program Files\\GitHub CLI';
+  const currentPath = process.env.PATH ?? process.env.Path ?? '';
+  if (currentPath.includes(fallbackDir)) return process.env;
+  return { ...process.env, PATH: `${currentPath}${path.delimiter}${fallbackDir}` };
+export const TAP_SUMMARY_LINE = /^# (tests|suites|pass|fail|cancelled|skipped|todo|duration_ms)\b/;
+export const TAP_FAILURE_LINE = /^not ok\b/;
+export const MAX_SUMMARY_CHARS = 6_000;
+export const MAX_SUMMARY_LINE_CHARS = 1_000;
+export function capSummary(lines: string[]): string {
+  const bounded = lines.map((line) => line.length <= MAX_SUMMARY_LINE_CHARS
+  ? line
+  : `${line.slice(0, MAX_SUMMARY_LINE_CHARS)}...[line truncated]`);
+export function summarizeTestOutput(output: string): string {
+  const lines = output.split(/\r?\n/).filter((line) => line.length > 0);
+
+// src/git/naming.ts
+export function worktreePathForTask(repoPath: string, taskId: string): string {
+  return path.join(repoPath, '.worktrees', taskId);
+export function branchNameForTask(taskId: string): string {
+  return `task/${taskId}`;
+  }
+export function appendPullRequestSection(existingBody: string, addition: string): string {
+  const current = existingBody.trimEnd();
+export function relativeInside(parent: string, child: string): string | undefined {
+  const relative = path.relative(canonicalPath(parent), canonicalPath(child));
+export function workspaceRelativeTarget(repoPath: string, resolvedTarget: string): string | undefined {
+  const relative = relativeInside(repoPath, resolvedTarget);
+export function canonicalPath(target: string): string {
+  const resolved = path.resolve(target);
+export function samePath(left: string, right: string): boolean {
+  return path.relative(canonicalPath(left), canonicalPath(right)) === '';
+  }
+export function assertSafeTaskPath(repoPath: string, target: string): void {
+  const root = path.resolve(repoPath, '.worktrees');
+export const DEPENDENCY_OVERLAY_MARKER = '.ia-graft-overlay.json';
+export const DEPENDENCY_CACHE_DIR = '.ia-graft-task-deps';
+export function dependencyCachePath(repoPath: string, taskId: string): string {
+  return path.join(repoPath, 'node_modules', DEPENDENCY_CACHE_DIR, taskId);
+export function assertSafeDependencyCachePath(repoPath: string, target: string): void {
+  const root = path.resolve(repoPath, 'node_modules', DEPENDENCY_CACHE_DIR);
+export interface WorktreeRecord { path: string; branch?: string; head?: string }
+
+export function parseWorktrees(output: string): WorktreeRecord[] {
+  const records: WorktreeRecord[] = [];
+  let current: WorktreeRecord | undefined;
+  for (const field of output.split('\0')) {
+  if (!field) { if (current) records.push(current); current = undefined; continue; }
+  const separator = field.indexOf(' ');
+export function commandError(error: unknown): string {
+  const value = error as { stderr?: string; stdout?: string; message?: string; code?: string };
+
+// src/git/remote-branches.ts
+export interface MergedBranchProof {
+  number: number;
+  headRefName: string;
+  headRefOid: string;
+  }
+export type RemoteBranchDeletionPlan =
+export function remoteBranchDeletionPlan(
+  branch: string,
+  remoteHead: string | undefined,
+  mergedProof: MergedBranchProof,
+  openDependentPrNumbers: number[] | undefined,
+  ): RemoteBranchDeletionPlan {
+  if (!branch.startsWith('task/')) throw new Error(`refusing remote deletion outside task/*: ${branch}`);
+
+// src/git/session.ts
+export interface ExistingPullRequest {
+  number: number;
+  url: string;
+  baseRefName: string;
+  title: string;
+  body: string;
+  }
+export class GitWorktreeSession {
+  public readonly repoPath: string;
+  public readonly worktreePath: string;
+  public readonly branchName: string;
+  public readonly nodeModulesLinked: boolean;
+
+  private constructor(repoPath: string, worktreePath: string, branchName: string, nodeModulesLinked: boolean) {
+  this.repoPath = repoPath;
 ```
 
 ### `isekai-web-client` (`packages/isekai-web-client`)

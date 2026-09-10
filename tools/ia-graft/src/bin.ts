@@ -3,9 +3,16 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { findCommandByCliRoute } from "./command-registry.ts";
-import { flagInput } from "./flag-input.ts";
-import { runMcpServer } from "./mcp-server.ts";
+import {
+  COMMAND_REGISTRY,
+  commandRoutes,
+  findCommandByCliRoute,
+  parameterFlag,
+  routeLabel,
+  type AnyCommand,
+} from "./command-registry.ts";
+import { parseCommandInput } from "./cli/argv.ts";
+import { runMcpServer } from "./mcp/server.ts";
 
 /**
  * Resolves the MAIN repository root, never a task worktree's own root, even
@@ -30,6 +37,10 @@ function repoRoot(): string {
 }
 
 async function readStdin(): Promise<unknown> {
+  // An interactive terminal never reaches EOF on its own, so a command that
+  // legitimately takes no arguments -- `task graph`, `task sweep`, `doc-check`
+  // -- would sit there waiting for a JSON body nobody is going to type.
+  if (process.stdin.isTTY) return {};
   let input = "";
   for await (const chunk of process.stdin) input += chunk;
   if (input.trim().length === 0) return {};
@@ -53,13 +64,89 @@ function readInputFlag(argv: string[]): unknown | undefined {
   return JSON.parse(raw);
 }
 
+/** One line per command, rendered from the registry so it can never go stale. */
+function usageText(): string {
+  const lines = COMMAND_REGISTRY.map((cmd) => {
+    const routes = commandRoutes(cmd).map(routeLabel).join(" | ");
+    return `  ia-graft ${routes}${commandFlagSummary(cmd)}`;
+  });
+  return [
+    "usage: ia-graft <command> [--flags]",
+    "",
+    ...lines,
+    "  ia-graft mcp",
+    "",
+    "Add --help after any command for its full flag list.",
+    "",
+    "Any prose flag also accepts --<flag>-file <path>. Prefer it: ia-graft.cmd forwards argv with %*,",
+    "and cmd.exe cuts an argument at its first newline, so a multi-line value passed inline is silently",
+    "truncated. JSON on stdin, or --input <json|file.json>, works for every command.",
+  ].join("\n");
+}
+
+function commandFlagSummary(cmd: AnyCommand): string {
+  const parts = Object.entries(cmd.parameters)
+    .filter(([, spec]) => spec.mcpOnly !== true)
+    .map(([key, spec]) => {
+      const flag = parameterFlag(key, spec);
+      const token = spec.type === "boolean" ? flag : `${flag} <${key}>`;
+      return spec.required && spec.default === undefined ? ` ${token}` : ` [${token}]`;
+    });
+  return parts.join("");
+}
+
+/** The full flag list for one command, for `ia-graft <command> --help`. */
+function helpText(cmd: AnyCommand): string {
+  const rows = Object.entries(cmd.parameters).map(([key, spec]) => {
+    const flags = spec.mcpOnly
+      ? `(${key}, MCP only)`
+      : [parameterFlag(key, spec), ...(spec.flagAliases ?? [])].join(", ");
+    const marks = [
+      spec.required && spec.default === undefined ? "required" : undefined,
+      spec.default !== undefined ? `default ${spec.default}` : undefined,
+      spec.prose ? "accepts --<flag>-file" : undefined,
+      spec.type === "array" ? "repeatable" : undefined,
+      spec.positional ? "also positional" : undefined,
+    ].filter(Boolean);
+    return `  ${flags}${marks.length > 0 ? ` [${marks.join(", ")}]` : ""}\n      ${spec.description}`;
+  });
+  return [
+    `ia-graft ${commandRoutes(cmd).map(routeLabel).join(" | ")}`,
+    `MCP tool: ${cmd.name}`,
+    "",
+    cmd.description,
+    ...(rows.length > 0 ? ["", ...rows] : []),
+  ].join("\n");
+}
+
 function printAndExit(result: { ok: boolean; [key: string]: unknown }): never {
   process.stdout.write(`${JSON.stringify(result)}\n`);
   process.exit(result.ok && result.passed !== false ? 0 : 1);
 }
 
+/**
+ * Splits argv into a command route and the arguments that follow it.
+ *
+ * The subcommand slot is only filled by an argument that is not a flag: the
+ * router used to take argv[1] unconditionally, so every group without a
+ * subcommand broke the moment a flag was passed -- `ia-graft context --scope x`
+ * answered with the usage text although the usage text documents it (#260).
+ * A group that has both a subcommand-less command and a positional argument
+ * still resolves, because a failed two-part lookup falls back to one part.
+ */
+function resolveCommand(argv: string[]): { cmd: AnyCommand; args: string[] } | undefined {
+  const group = argv[0];
+  if (!group) return undefined;
+  const candidate = argv[1];
+  if (candidate !== undefined && !candidate.startsWith("-")) {
+    const withSubcommand = findCommandByCliRoute(group, candidate);
+    if (withSubcommand) return { cmd: withSubcommand, args: argv.slice(2) };
+  }
+  const bare = findCommandByCliRoute(group);
+  return bare ? { cmd: bare, args: argv.slice(1) } : undefined;
+}
+
 async function main(argv: string[]): Promise<void> {
-  const [group, subcommand] = argv;
   const root = repoRoot();
 
   // Commands are intentionally runnable from inside a task worktree. Move the
@@ -69,23 +156,30 @@ async function main(argv: string[]): Promise<void> {
   process.chdir(root);
 
   try {
-    if (group === "mcp") {
+    if (argv[0] === "mcp") {
       await runMcpServer(root);
       return;
     }
 
-    const cmd = group ? findCommandByCliRoute(group, subcommand) : undefined;
-    if (cmd) {
-      const input = readInputFlag(argv) ?? flagInput(group, subcommand, argv) ?? (await readStdin());
-      printAndExit(await cmd.handler(root, input));
+    const resolved = resolveCommand(argv);
+    if (!resolved) {
+      printAndExit({ ok: false, error: usageText() });
     }
 
-    printAndExit({
-      ok: false,
-      error: `usage: ia-graft guard-check | ia-graft context [--query <q> | --scope <s> | --map] | ia-graft issue <list|view|new|update|close|reopen|tree|doctor> | ia-graft pr <list|view|checks|diff> | ia-graft task <new|resume|sync|deps|commit|test|done|cleanup|status|doctor|checkout|graph|sweep|context> | ia-graft delegate run --prompt <p> [--effort low|medium|high] [--file <path>]... [--json-schema <json>] | ia-graft delegate edit --id <TASK-ID> --prompt <p> [--effort low|medium|high] [--scope <prefix>]... [--context <text>] | ia-graft delegate research --id <TASK-ID> --topic <t> --output-file <path.md> [--effort low|medium|high]
+    const { cmd, args } = resolved;
+    if (args.includes("--help") || args.includes("-h")) {
+      process.stdout.write(`${helpText(cmd)}\n`);
+      process.exit(0);
+    }
 
-Any prose flag (--message, --title, --body, --prompt, --context, --topic, --comment) also accepts --<flag>-file <path>. Prefer it: ia-graft.cmd forwards argv with %*, and cmd.exe cuts an argument at its first newline, so a multi-line value passed inline is silently truncated. JSON on stdin, or --input <json>, works for every command.`,
-    });
+    // Precedence: an explicit --input wins, then the flags actually typed,
+    // and only a command invoked with no arguments at all waits on stdin --
+    // which is why `guard-check --tool Bash --command X` no longer hangs
+    // there instead of being parsed (#260).
+    const explicit = readInputFlag(args);
+    const input = explicit ?? (args.length > 0 ? parseCommandInput(cmd, args) : await readStdin());
+
+    printAndExit((await cmd.handler(root, input)) as { ok: boolean });
   } catch (error) {
     printAndExit({ ok: false, error: error instanceof Error ? error.message : String(error) });
   }

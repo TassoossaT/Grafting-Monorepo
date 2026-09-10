@@ -6,4 +6,4 @@ Read and follow in precedence order:
 3. [`.ai/coordination/PROTOCOL.md`](.ai/coordination/PROTOCOL.md) — Coordination protocol.
 4. Applicable ADRs in `docs/adr/`.
 
-All task creation, execution, commits, dependencies, issues, and PRs MUST execute exclusively via `tools/ia-graft` (`.\ia-graft.cmd` on Windows). Direct manual git mutations, raw `gh` commands, and raw package installations are forbidden. Full autonomous execution is pre-approved through `task done`.
+All task creation, execution, commits, dependencies, issues, and PRs MUST execute exclusively via the `ia-graft` MCP server's `graft_*` tools (see `.mcp.json`). Claude reaches `ia-graft` through MCP only; the guard denies the `.\ia-graft.cmd` launcher over Bash and names the tool to call instead. Direct manual git mutations, raw `gh` commands, and raw package installations are forbidden. Full autonomous execution is pre-approved through `graft_task_done`.

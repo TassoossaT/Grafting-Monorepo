@@ -51,11 +51,54 @@ export function isReadOnlyInspectionCommand(command) {
   );
 }
 
+/**
+ * Blanks out single- and double-quoted spans so a rule only ever matches a
+ * command the shell would actually run.
+ *
+ * Every rule below is a substring match over the whole command line, so a
+ * phrase merely *mentioned* inside an argument was denied as though it were
+ * being executed: an `echo` explaining the policy, or an `ia-graft task
+ * commit` whose message quotes the very command it replaces. The quotes are
+ * overwritten rather than removed so offsets, and with them the word
+ * boundaries around each span, survive.
+ */
+export function withoutQuotedSpans(command) {
+  return command.replace(/'[^']*'|"[^"]*"/g, (span) => span[0].repeat(span.length));
+}
+
 const gitSubcommandPattern = (subcommands) =>
   new RegExp(
     `\\bgit(?:\\.exe)?\\s+(?:(?:-C|-c|--git-dir|--work-tree)\\s+\\S+\\s+)*(?:${subcommands.join("|")})\\b`,
     "i",
   );
+
+/**
+ * Agents that reach ia-graft through the registered MCP server, and therefore
+ * must not reach it over Bash.
+ *
+ * One path, one schema: the MCP manifest is generated from the command
+ * registry, so a tool call is validated against the same declarations the CLI
+ * parses, while a hand-typed command line is validated against nothing until
+ * it fails. Add an agent here only once it actually has the ia-graft MCP
+ * server registered -- Codex drives the launcher through
+ * `.codex/rules/ia-graft.rules` and would simply lose access (#260).
+ */
+export const MCP_ONLY_AGENTS = new Set(["claude"]);
+
+const IA_GRAFT_LAUNCHER = /^(?:\.\\|\.\/)?ia-graft(?:\.cmd)?\b/i;
+const IA_GRAFT_DIRECT_BIN = /\bnode\s+(?:\S+[\\/])?tools[\\/]ia-graft[\\/]src[\\/]bin\.ts\b/i;
+
+/** The MCP tool an ia-graft command line corresponds to, named in the deny message. */
+const mcpToolFor = (command) => {
+  const route = command
+    .trim()
+    .replace(IA_GRAFT_LAUNCHER, "")
+    .trim()
+    .split(/\s+/)
+    .filter((word) => word.length > 0 && !word.startsWith("-"))
+    .slice(0, 2);
+  return route.length > 0 ? `mcp__ia-graft__graft_${route.join("_").replaceAll("-", "_")}` : "the ia-graft MCP server";
+};
 
 /**
  * Coordination is handled by tools/ia-graft (worktree per task, PR via `gh`).
@@ -65,51 +108,54 @@ const gitSubcommandPattern = (subcommands) =>
  * to the recorded base. Raw merge/history rewriting, default-branch pushes,
  * force operations and agent-side PR merge remain denied.
  */
-export function evaluateAgentGitCommand(command) {
+export function evaluateAgentGitCommand(command, agent) {
   if (typeof command !== "string" || command.trim().length === 0) return allowed();
+  const bare = withoutQuotedSpans(command);
 
-  // Explicitly allow ia-graft CLI invocations
-  if (/^(?:\.\\|\.\/)?ia-graft(?:\.cmd)?\b/i.test(command.trim()) || /\bnode\s+(?:\S+[\\/])?tools[\\/]ia-graft[\\/]src[\\/]bin\.ts\b/i.test(command)) {
-    return allowed();
+  if (IA_GRAFT_LAUNCHER.test(command.trim()) || IA_GRAFT_DIRECT_BIN.test(bare)) {
+    if (!MCP_ONLY_AGENTS.has(agent)) return allowed();
+    return denied(
+      `ia-graft over Bash is disabled for ${agent}; call it through the registered ia-graft MCP server instead, e.g. ${mcpToolFor(command)}. The MCP manifest is generated from the same command registry the CLI parses, so a tool call is checked against the declared schema and a hand-typed command line is not.`,
+    );
   }
 
   const packageInstall = /\b(?:pnpm|npm|yarn|bun|uv|pip)\s+(?:install|add|i)\b/i;
-  if (packageInstall.test(command)) {
+  if (packageInstall.test(bare)) {
     return denied(
       "direct package-manager installation is forbidden; use 'ia-graft task deps --install' or 'ia-graft task deps --add' instead to prevent lockfile drift and context noise",
     );
   }
 
   const directCommit = gitSubcommandPattern(["commit"]);
-  if (directCommit.test(command)) {
+  if (directCommit.test(bare)) {
     return denied(
       "direct 'git commit' is forbidden; use 'ia-graft task commit --id <TASK-ID> --message \"...\"' to ensure managed worktree tracking and AI attribution",
     );
   }
 
   const directAdd = gitSubcommandPattern(["add"]);
-  if (directAdd.test(command)) {
+  if (directAdd.test(bare)) {
     return denied(
       "direct 'git add' is forbidden; 'ia-graft task commit' automatically stages and tracks changes inside the task worktree",
     );
   }
 
   const directCheckoutOrBranch = gitSubcommandPattern(["checkout", "switch", "branch"]);
-  if (directCheckoutOrBranch.test(command)) {
+  if (directCheckoutOrBranch.test(bare)) {
     return denied(
       "direct 'git checkout/switch/branch' is forbidden; use 'ia-graft task new --id <TASK-ID> [--parent <PARENT-ID>]' to manage tasks or 'ia-graft task checkout' to test in main",
     );
   }
 
   const directResetOrStash = gitSubcommandPattern(["reset", "clean", "stash"]);
-  if (directResetOrStash.test(command)) {
+  if (directResetOrStash.test(bare)) {
     return denied(
       "direct raw git state mutation ('git reset/clean/stash') is forbidden; work exclusively inside the isolated task worktree via ia-graft",
     );
   }
 
   const directPush = gitSubcommandPattern(["push"]);
-  if (directPush.test(command)) {
+  if (directPush.test(bare)) {
     return denied(
       "direct 'git push' is forbidden; use 'ia-graft task done --id <TASK-ID> --title \"...\" --body \"...\"' to push and open/update the PR",
     );
@@ -126,7 +172,7 @@ export function evaluateAgentGitCommand(command) {
     "fast-import",
     "filter-branch",
   ]);
-  if (historyRewriting.test(command)) {
+  if (historyRewriting.test(bare)) {
     return denied(
       "raw Git merge/history rewriting is forbidden; use 'ia-graft task sync' only for the task's recorded base",
     );
@@ -137,13 +183,13 @@ export function evaluateAgentGitCommand(command) {
   }
 
   const rawGh = /\bgh(?:\.exe)?\s+(?:issue|pr|repo|api|workflow|run)\b/i;
-  if (rawGh.test(command)) {
+  if (rawGh.test(bare)) {
     return denied(
       "direct raw 'gh' commands are forbidden for AI agents; use 'ia-graft issue <list|view|new|update|tree|doctor>' or 'ia-graft task <done|status>' instead",
     );
   }
 
-  const pullSegments = command.match(/\bgit(?:\.exe)?\s+pull\b[^;&|\r\n]*/gi) ?? [];
+  const pullSegments = bare.match(/\bgit(?:\.exe)?\s+pull\b[^;&|\r\n]*/gi) ?? [];
   for (const segment of pullSegments) {
     if (!/(?:^|\s)--ff-only(?:\s|$)/i.test(segment)) {
       return denied("AI agents may run git pull only with --ff-only so it cannot create a merge commit; prefer 'ia-graft task sync'");
@@ -171,7 +217,7 @@ export async function evaluateHook({ root, agent, hookInput }) {
   }
 
   if (tool === "Bash") {
-    return evaluateAgentGitCommand(hookInput.tool_input?.command);
+    return evaluateAgentGitCommand(hookInput.tool_input?.command, agent);
   }
 
   return denied(`unsupported mutating tool: ${tool ?? "missing"}`);

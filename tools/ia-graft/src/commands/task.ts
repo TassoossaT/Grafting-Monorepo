@@ -3,8 +3,9 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { runDocCheck } from "./doc-check.ts";
-import { GitClient, mirrorGeneratedArtifacts } from "./git-client.ts";
-import { issueView } from "./issue-commands.ts";
+import { issueView } from "./issue.ts";
+import { GitClient } from "../git/client.ts";
+import { dependencyMode, mirrorGeneratedArtifacts } from "../git/dependencies.ts";
 
 export interface CliError {
   ok: false;
@@ -119,7 +120,6 @@ export interface TaskCommitInput {
   agent?: string;
   amend?: boolean;
   dryRun?: boolean;
-  check?: boolean;
   generateDocs?: boolean;
 }
 
@@ -128,7 +128,7 @@ export async function taskCommit(repoRoot: string, input: TaskCommitInput) {
   if (!input || !isValidTaskId(input.taskId)) return fail(`invalid task id: ${input?.taskId}`);
   if (!input.message) return fail("message is required");
   const messageWithCoAuthors = formatCommitMessageWithCoAuthors(input.message, input.coAuthors, input.agent);
-  if (input.dryRun || input.check) {
+  if (input.dryRun) {
     return {
       ok: true as const,
       dryRun: true as const,
@@ -202,7 +202,7 @@ export async function taskTest(repoRoot: string, input: TaskTestInput) {
     results.push({ command, passed: result.passed, summary: commands.length > 1 ? compactBatchSummary(result.summary) : result.summary });
     if (!result.passed && !input.keepGoing) break;
   }
-  if (input.command && !input.commands) return { ok: true as const, passed: results[0]!.passed, summary: results[0]!.summary };
+  if (commands.length === 1) return { ok: true as const, passed: results[0]!.passed, summary: results[0]!.summary };
   const passed = results.length === commands.length && results.every((result) => result.passed);
   return {
     ok: true as const,
@@ -330,12 +330,20 @@ export async function taskCleanup(repoRoot: string, input: TaskCleanupInput) {
   return { ok: true as const, ...result };
 }
 
-export async function taskStatus(repoRoot: string, input: { taskId: string }) {
+export interface TaskStatusInput {
+  taskId: string;
+}
+
+export async function taskStatus(repoRoot: string, input: TaskStatusInput) {
   if (!input || !isValidTaskId(input.taskId)) return fail(`invalid task id: ${input?.taskId}`);
   return { ok: true as const, ...(await new GitClient(repoRoot).taskStatus(input.taskId)) };
 }
 
-export async function taskDoctor(repoRoot: string, input: { taskId: string }) {
+export interface TaskDoctorInput {
+  taskId: string;
+}
+
+export async function taskDoctor(repoRoot: string, input: TaskDoctorInput) {
   if (!input || !isValidTaskId(input.taskId)) return fail(`invalid task id: ${input?.taskId}`);
   const diagnosis = await new GitClient(repoRoot).taskStatus(input.taskId);
   const dependenciesReady = diagnosis.dependencyMode === "workspace-aware";
@@ -376,7 +384,13 @@ export async function taskDependencies(repoRoot: string, input: TaskDependencies
   };
 }
 
-export async function taskSync(repoRoot: string, input: { taskId: string; fetch?: boolean; abort?: boolean }) {
+export interface TaskSyncInput {
+  taskId: string;
+  fetch?: boolean;
+  abort?: boolean;
+}
+
+export async function taskSync(repoRoot: string, input: TaskSyncInput) {
   if (!input || !isValidTaskId(input.taskId)) return fail(`invalid task id: ${input?.taskId}`);
   return { ok: true as const, ...(await new GitClient(repoRoot).syncTask(input.taskId, { fetch: input.fetch, abort: input.abort })) };
 }
@@ -429,7 +443,7 @@ export async function taskResume(repoRoot: string, input: TaskResumeInput = {}) 
   let contextPack: string | undefined;
   try {
     // @ts-ignore - dynamic import of context-resolver.mjs script
-    const { resolveContext } = await import("../../scripts/context-resolver.mjs");
+    const { resolveContext } = await import("../../../scripts/context-resolver.mjs");
     contextPack = resolveContext({
       root: repoRoot,
       taskId: taskId,
@@ -462,7 +476,13 @@ export async function taskResume(repoRoot: string, input: TaskResumeInput = {}) 
   };
 }
 
-export async function taskCheckout(repoRoot: string, input: { taskId?: string; restore?: boolean; force?: boolean }) {
+export interface TaskCheckoutInput {
+  taskId?: string;
+  restore?: boolean;
+  force?: boolean;
+}
+
+export async function taskCheckout(repoRoot: string, input: TaskCheckoutInput) {
   const client = new GitClient(repoRoot);
   if (input?.restore) return { ok: true as const, ...(await client.restoreCheckout(input.force ?? false)) };
   if (!input?.taskId || !isValidTaskId(input.taskId)) return fail(`invalid task id: ${input?.taskId}`);
@@ -490,7 +510,6 @@ export async function taskSweep(repoRoot: string) {
 export interface TaskContextInput {
   query?: string;
   scope?: string;
-  map?: boolean;
   pack?: boolean;
   taskId?: string;
   paths?: string[];
@@ -501,7 +520,7 @@ export async function taskContext(repoRoot: string, input: TaskContextInput = {}
     let packSummary: unknown = null;
     try {
       // @ts-ignore - dynamic import of context-resolver.mjs script
-      const { resolveContext } = await import("../../scripts/context-resolver.mjs");
+      const { resolveContext } = await import("../../../scripts/context-resolver.mjs");
       packSummary = resolveContext({
         root: repoRoot,
         taskId: input.taskId ?? null,
