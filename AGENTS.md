@@ -54,6 +54,7 @@ All non-prose changes MUST execute exclusively through `ia-graft`. Agents with t
 - **Surgical Inspection:** Agents MUST use pattern search (`grep`, `glob`) and targeted line ranges (`view_file`), never reading full files (>100 lines) unnecessarily.
 - **Mandatory Sub-Agent Delegation (`ia-graft delegate`):**
   - **Fact Lookup & Research:** MUST offload web searches, broad codebase surveys, or schema extraction via `ia-graft delegate run` or `ia-graft delegate research`.
+  - **Out-of-Scope Code Editing:** MUST delegate peripheral, boilerplate, or out-of-scope code modifications via `ia-graft delegate edit` to prevent main context pollution; edits strictly within the primary task scope MUST remain in the active agent context.S
   - **Sandboxed Code Editing:** MUST delegate repetitive code edits inside a task worktree via `ia-graft delegate edit`.
   - **Stdio MCP Integration:** Every command is exposed as exactly one `graft_*` tool, with no aliases. `graft_context_pack` is gone; use `graft_context`.
 
