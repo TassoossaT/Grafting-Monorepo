@@ -60,7 +60,8 @@ test("MCP server handles initialize, tools/list, and tools/call over stdio JSON-
   assert.ok(toolNames.includes("graft_task_done"), "tools/list must include graft_task_done");
   assert.ok(toolNames.includes("graft_pr_checks"), "tools/list must include graft_pr_checks");
   assert.ok(toolNames.includes("graft_issue_tree"), "tools/list must include graft_issue_tree");
-  assert.ok(toolNames.includes("graft_context_pack"), "tools/list must include graft_context_pack");
+  assert.ok(toolNames.includes("graft_context"), "tools/list must include graft_context");
+  assert.equal(new Set(toolNames).size, toolNames.length, "tools/list must not repeat a tool name");
 
   // Verify tools/call response
   const callRes = responses.find((r) => r.id === 3);

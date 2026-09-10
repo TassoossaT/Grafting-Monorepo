@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "ia-graft": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["--experimental-strip-types", "tools/ia-graft/src/bin.ts", "mcp"],
+      "env": {}
+    }
+  }
+}

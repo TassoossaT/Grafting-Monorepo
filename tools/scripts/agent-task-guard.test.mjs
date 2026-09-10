@@ -8,6 +8,7 @@ import {
   evaluateHook,
   isHarnessManagedPath,
   isReadOnlyInspectionCommand,
+  MCP_ONLY_AGENTS,
   normalizeRepositoryPath,
 } from "./agent-task-guard.mjs";
 
@@ -115,10 +116,51 @@ test("allows Bash with no claim at all, as long as it is not a forbidden git ope
   assert.equal(decision.allowed, true);
 });
 
-test("allows ia-graft launcher commands and controlled task sync", () => {
-  assert.equal(evaluateAgentGitCommand('.\\ia-graft.cmd task commit --id DEMO-TASK --message "progress"').allowed, true);
-  assert.equal(evaluateAgentGitCommand("./ia-graft.cmd task test --id DEMO-TASK --command \"pnpm test\"").allowed, true);
-  assert.equal(evaluateAgentGitCommand("node tools/ia-graft/src/bin.ts task sync --id DEMO-TASK").allowed, true);
+test("allows the ia-graft launcher for an agent that has no MCP client", () => {
+  for (const agent of ["codex", "gemini"]) {
+    assert.equal(evaluateAgentGitCommand('.\\ia-graft.cmd task commit --id DEMO-TASK --message "progress"', agent).allowed, true);
+    assert.equal(evaluateAgentGitCommand('./ia-graft.cmd task test --id DEMO-TASK --command "pnpm test"', agent).allowed, true);
+    assert.equal(evaluateAgentGitCommand("node tools/ia-graft/src/bin.ts task sync --id DEMO-TASK", agent).allowed, true);
+  }
+});
+
+/**
+ * An agent with the MCP server registered has exactly one ia-graft path, so
+ * the schema it is checked against is the one the registry generates rather
+ * than none at all (#260). The deny message names the tool to call, derived
+ * from the route rather than kept in a second table here.
+ */
+test("denies the ia-graft launcher for an MCP-only agent, naming the tool to use instead", () => {
+  for (const agent of MCP_ONLY_AGENTS) {
+    const decision = evaluateAgentGitCommand('.\\ia-graft.cmd task done --id DEMO-TASK --title "t" --body "b"', agent);
+    assert.equal(decision.allowed, false);
+    assert.match(decision.reason, /mcp__ia-graft__graft_task_done/);
+
+    assert.equal(evaluateAgentGitCommand("node tools/ia-graft/src/bin.ts task sync --id DEMO-TASK", agent).allowed, false);
+    assert.match(
+      evaluateAgentGitCommand(".\\ia-graft.cmd guard-check --tool Bash", agent).reason,
+      /mcp__ia-graft__graft_guard_check/,
+    );
+  }
+});
+
+/**
+ * Every rule is a substring match over the command line, so a forbidden
+ * phrase quoted inside an argument used to be denied as though it were being
+ * run -- which blocked, among other things, writing about the policy.
+ */
+test("a forbidden phrase quoted inside an argument is not treated as a command", () => {
+  const quoted = [
+    'echo "direct git commit is forbidden"',
+    "echo 'run git push through ia-graft instead'",
+    'node -e "console.log(\'gh issue create\')"',
+  ];
+  for (const command of quoted) {
+    assert.equal(evaluateAgentGitCommand(command, "codex").allowed, true, command);
+  }
+
+  // The unquoted command itself is still denied.
+  assert.equal(evaluateAgentGitCommand('git commit -m "direct git commit is forbidden"', "codex").allowed, false);
 });
 
 test("rejects direct package manager installation commands", () => {

@@ -1923,34 +1923,57 @@ export function isReadOnlyInspectionCommand(command: unknown): boolean;
 export function evaluateAgentGitCommand(command: unknown): GuardDecision;
 
 // src/command-registry.ts
-export interface CommandParameter {
+export type NoInput = Record<never, never>;
+export interface ParameterSpec {
+  /** JSON Schema type published to MCP, and the coercion applied to the raw argv string. */
   type: "string" | "number" | "boolean" | "array" | "object";
   description: string;
-  required?: boolean;
+  /** Element type for `array`. Defaults to string. */
   items?: { type: "string" };
-export interface CommandDefinition {
-  name: string;
+export interface CommandRoute {
   group: string;
   subcommand?: string;
+  }
+export interface CommandDefinition<TInput> extends CommandRoute {
+  /** MCP tool name, and the command's identity in error messages. */
+  name: string;
   description: string;
-  parameters: Record<string, CommandParameter>;
-  aliases?: string[];
+  /** Extra CLI spellings of the same command, e.g. `task context` for `context`. */
+  routeAliases?: CommandRoute[];
+  parameters: ParametersOf<TInput>;
+  handler: (repoRoot: string, input: TInput) => Promise<unknown>;
+export interface AnyCommand extends CommandRoute {
+  name: string;
+  description: string;
+  routeAliases?: CommandRoute[];
+  parameters: Record<string, ParameterSpec & { required?: boolean }>;
   handler: (repoRoot: string, input: any) => Promise<any>;
-export const COMMAND_REGISTRY: CommandDefinition[] = [
-export function commandToMcpTool(cmd: CommandDefinition, overrideName?: string) {
+  }
+export const COMMAND_REGISTRY: AnyCommand[] = [
+export function parameterFlag(key: string, spec: ParameterSpec): string {
+  return spec.flag ?? `--${key.replace(CAMEL_BOUNDARY, "-").toLowerCase()}`;
+  }
+export function parameterFlags(key: string, spec: ParameterSpec): string[] {
+  return [parameterFlag(key, spec), ...(spec.flagAliases ?? [])];
+  }
+export function commandRoutes(cmd: AnyCommand): CommandRoute[] {
+  return [{ group: cmd.group, subcommand: cmd.subcommand }, ...(cmd.routeAliases ?? [])];
+  }
+export function routeLabel(route: CommandRoute): string {
+  return route.subcommand ? `${route.group} ${route.subcommand}` : route.group;
+  }
+export function commandToMcpTool(cmd: AnyCommand) {
   const properties: Record<string, unknown> = {};
 export function getAllMcpTools(): Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> {
-  const tools: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> = [];
-  for (const cmd of COMMAND_REGISTRY) {
-  tools.push(commandToMcpTool(cmd));
-export function findCommandByMcpName(name: string): CommandDefinition | undefined {
-  return COMMAND_REGISTRY.find((cmd) => cmd.name === name || (cmd.aliases && cmd.aliases.includes(name)));
-export function findCommandByCliRoute(group: string, subcommand?: string): CommandDefinition | undefined {
-  return COMMAND_REGISTRY.find((cmd) => {
-  if (cmd.group !== group) return false;
-  if (cmd.subcommand === undefined && (subcommand === undefined || subcommand === "")) return true;
-  return cmd.subcommand === subcommand;
-  });
+  return COMMAND_REGISTRY.map((cmd) => commandToMcpTool(cmd));
+export function findCommandByMcpName(name: string): AnyCommand | undefined {
+  return COMMAND_REGISTRY.find((cmd) => cmd.name === name);
+export function findCommandByCliRoute(group: string, subcommand?: string): AnyCommand | undefined {
+  return COMMAND_REGISTRY.find((cmd) =>
+  commandRoutes(cmd).some(
+  (route) => route.group === group && (route.subcommand ?? undefined) === (subcommand || undefined),
+  ),
+  );
 
 // src/delegate-commands.ts
 export interface DelegateRunInput {
@@ -2013,24 +2036,15 @@ export interface DocCheckResult {
   }
 
 // src/flag-input.ts
-export function readValue(argv: string[], name: string): string | undefined {
+export function readValue(argv: string[], names: string | string[]): string | undefined {
+  for (const name of asList(names)) {
   const index = argv.indexOf(name);
-export function readTextValue(argv: string[], name: string): string | undefined {
-  const filePath = readValue(argv, `${name}-file`);
-export function readValues(argv: string[], name: string): string[] {
-  const values: string[] = [];
-  for (let index = 0; index < argv.length; index += 1) {
-  if (argv[index] !== name) continue;
-  const value = argv[index + 1];
-  if (!value || value.startsWith("--")) throw new Error(`${name} requires a value`);
-export function flagInput(
-  group: string | undefined,
-  subcommand: string | undefined,
-  argv: string[],
-  ): unknown | undefined {
-  const route = subcommand === undefined ? group : `${group} ${subcommand}`;
-  const zeroFlagRoutes = new Set([
-  "doc-check",
+export function readTextValue(argv: string[], names: string | string[]): string | undefined {
+  const flags = asList(names);
+export function readValues(argv: string[], names: string | string[]): string[] {
+  const flags = new Set(asList(names));
+export function parseCommandInput(command: AnyCommand, args: string[]): Record<string, unknown> {
+  const input: Record<string, unknown> = {};
 
 // src/git-client.ts
 export function worktreePathForTask(repoPath: string, taskId: string): string {
@@ -2264,6 +2278,12 @@ export interface TaskCleanupInput {
   taskId: string;
   force?: boolean;
   }
+export interface TaskStatusInput {
+  taskId: string;
+  }
+export interface TaskDoctorInput {
+  taskId: string;
+  }
 export interface TaskDependenciesInput {
   taskId: string;
   install?: boolean;
@@ -2272,17 +2292,14 @@ export interface TaskDependenciesInput {
   workspace?: string;
   dev?: boolean;
   }
+export interface TaskSyncInput {
+  taskId: string;
+  fetch?: boolean;
+  abort?: boolean;
+  }
 export interface TaskResumeInput {
   taskId?: string;
   pr?: number;
-  }
-export interface TaskContextInput {
-  query?: string;
-  scope?: string;
-  map?: boolean;
-  pack?: boolean;
-  taskId?: string;
-  paths?: string[];
   }
 ```
 
@@ -3336,6 +3353,62 @@ export type { ConstructionToolId, ToolParamsByTool, ToolParamsFor } from "../../
 export type { ConstructionPointerHandlers, UseConstructionPointerOptions } from "./use-construction-pointer.ts";
 export type { ConstructionToolFeedback } from "./tools/index.ts";
 
+// src/composition/tabletop/interference/painted-topologies.ts
+export interface PaintedTopologyRuntime {
+  getAllRegionTopologies(): readonly ConstructionRegionTopology[];
+  getRegionTopologiesInBounds?(bounds: ConstructionTopologyBoundsQuery): readonly ConstructionRegionTopology[];
+  }
+export function paintedTopologiesOf(
+  runtime: PaintedTopologyRuntime,
+  paintedType: string,
+  bounds?: ConstructionTopologyBoundsQuery,
+  ): readonly ConstructionRegionTopology[] {
+  const topologies =
+  bounds !== undefined && typeof runtime.getRegionTopologiesInBounds === "function"
+  ? runtime.getRegionTopologiesInBounds(bounds)
+export function paintedFalloutOf(
+  painted: readonly ConstructionRegionTopology[],
+  ): Pick<CutFallout, "paintedNodes" | "paintedLoops"> {
+  const nodesById = new Map<ConstructionNodeId, ConstructionPosition>();
+export function paintedNodesOf(
+  runtime: PaintedTopologyRuntime,
+  paintedType: string,
+  bounds?: ConstructionTopologyBoundsQuery,
+  ): Pick<CutFallout, "paintedNodes" | "paintedLoops"> {
+  return paintedFalloutOf(paintedTopologiesOf(runtime, paintedType, bounds));
+
+// src/composition/tabletop/interference/type-interference-dispatch.ts
+export type CutRepairExecutor = (
+  runtime: TerrainRegenerateRuntime,
+  fallout: CutFallout,
+  causeId: string,
+  tableId: string,
+  ) => number;
+
+  /**
+export const CUT_REPAIR_EXECUTORS: Readonly<Record<string, CutRepairExecutor>> = Object.freeze({
+  terrain: repairTerrainCut,
+  "terrain-grass": repairTerrainCut,
+  });
+export function pointBucketIndex(points: readonly ConstructionPosition[], cellSize: number) {
+  const buckets = new Map<string, ConstructionPosition[]>();
+export function dispatchCutRepairs(
+  runtime: TabletopRuntime,
+  request: ApplyPatchReplacementRequest,
+  causeId: string,
+  replacedTopologies: readonly ConstructionRegionTopology[] = [],
+  outcome?: ConstructionPatchOutcome,
+  executors: Readonly<Record<string, CutRepairExecutor>> = CUT_REPAIR_EXECUTORS,
+  ): void {
+export function dispatchRemovalRepairs(
+  runtime: TabletopRuntime,
+  surfaceKey: ConstructionSurfaceKey,
+  surfaceType: string,
+  causeId: string,
+  removedTopologyOrExecutors?: ConstructionRegionTopology | Readonly<Record<string, CutRepairExecutor>>,
+  maybeExecutors: Readonly<Record<string, CutRepairExecutor>> = CUT_REPAIR_EXECUTORS,
+  ): void {
+
 // src/composition/tabletop/path/path-cloud-transaction.ts
 export function commitPathCloudIntent(
   ctx: ToolContext,
@@ -3371,6 +3444,236 @@ export interface TabletopRuntime {
   * that belongs to `features/edit-construction`, and the tool layer runs it
 export class AppTabletopRuntime implements TabletopRuntime {
   readonly #listeners = new Set<TabletopRuntimeListener>();
+
+// src/composition/tabletop/terrain/terrain-constraints.ts
+export interface ConstraintRing {
+  /** What the generator receives. */
+  readonly points: readonly ConstructionGridConstraintPoint[];
+  /**
+  * The edge each segment of `points` runs along, index-aligned: `edges[i]`
+  * spans `points[i]` to `points[i + 1]`, wrapping.
+  *
+  * A segment may own no edge, and that is a real state rather than an error:
+export interface ConstraintTable {
+  readonly rings: readonly ConstraintRing[];
+  /** `sources[i]` is the node id handed out as `source: i`. */
+  readonly sources: readonly ConstructionNodeId[];
+  }
+export function perimeterConstraints(
+  topologies: readonly ConstructionRegionTopology[],
+  startingIndex: number,
+  ): ConstraintTable {
+  const positions = new Map<ConstructionNodeId, { x: number; z: number }>();
+export function constraintsFromRings(
+  rings: readonly (readonly ConstructionRegionEdge[])[],
+  positionOf: (nodeId: ConstructionNodeId) => { readonly x: number; readonly z: number } | undefined,
+  startingIndex: number,
+  ): ConstraintTable {
+  const sources: ConstructionNodeId[] = [];
+  const index = new Map<ConstructionNodeId, number>();
+export function outlineConstraints(
+  rings: readonly (readonly (readonly [number, number])[])[],
+  /** Consecutive points nearer than this collapse to one. `0` welds nothing. */
+  weld = 0,
+  ): readonly ConstraintRing[] {
+  const weldSq = weld * weld;
+  return rings
+  .map((ring) => {
+export interface ContourAdoption {
+  readonly vertex: number;
+  readonly edge: ConstructionRegionEdge;
+  /** Where along that edge it sits, `0` at its start and `1` at its end. */
+  readonly along: number;
+  /** Length of the edge being split, for spacing checks. */
+  readonly edgeLength?: number;
+  }
+export interface ContourSnap {
+  readonly vertex: number;
+  /** The `source` index of the ring corner it takes the identity of. */
+  readonly source: number;
+  /** Split to perform when that corner identity is already claimed elsewhere. */
+  readonly fallback?: ContourAdoption;
+  }
+export interface AdoptionDrops {
+  readonly noEdge: number;
+  readonly atCorner: number;
+  readonly degenerate: number;
+  readonly unknownRing: number;
+  }
+export interface ResolvedAdoptions {
+  readonly adoptions: readonly ContourAdoption[];
+  readonly snaps: readonly ContourSnap[];
+  readonly dropped: AdoptionDrops;
+  }
+export const SHORTEST_USEFUL_FRACTION = 0.25;
+export const OUTLINE_CHORD_PER_FACE = 2;
+export const OUTLINE_WELD_PER_FACE = 0.5;
+export function resolveAdoptions(
+  holeRings: readonly ConstraintRing[],
+  boundaryRings: readonly ConstraintRing[],
+  reported: readonly ConstructionGridContourNode[],
+  positionOf: (vertex: number) => { readonly x: number; readonly z: number } | undefined,
+  /** Fragments shorter than this are not created; see {@link SHORTEST_USEFUL_FRACTION}. */
+  shortestUseful = 0,
+  ): ResolvedAdoptions {
+export interface AdoptionRuntime {
+  applyRegionEdit(ops: readonly AtomicEditOp[], origin: "local", causeId: string): unknown;
+  }
+export function adoptContourNodes(
+  runtime: AdoptionRuntime,
+  /** Which table the edges belong to; the pair, not this, is what names them. */
+  tableId: string,
+  causeId: string,
+  adoptions: readonly ContourAdoption[],
+  nodeIdFor: (vertex: number) => ConstructionNodeId,
+  positionOf: (vertex: number) => ConstructionPosition | undefined,
+
+// src/composition/tabletop/terrain/terrain-cut-executor.ts
+export function buildConstraintRings(
+  targetPolygon: MultiPolygon,
+  faceSize: number,
+  perimeters: ConstraintTable,
+  ): readonly (ConstraintRing & { readonly isHole: boolean })[] {
+  const snapDist = Math.max(0.25, faceSize * 0.18);
+export function executeTerrainCut(
+  runtime: TerrainCutRuntime,
+  request: StructuralCutRequest,
+  ): StructuralCutOutcome {
+  const rawOutline = request.area.outline ?? request.area.sweptPolygon?.[0]?.[0] ?? [];
+  const outline = rawOutline.length >= 3 ? rawOutline : [];
+
+  const closedOutlineRing: [number, number][] = outline.map(([x, z]) => [x, z]);
+
+// src/composition/tabletop/terrain/terrain-diagnostics.ts
+export interface TerrainCommitReport {
+  /** Which operation this was: a stroke, a cut repair. */
+  readonly what: string;
+  readonly faceSideAsked: number;
+  readonly boundary: readonly ConstraintRing[];
+  readonly holes: readonly ConstraintRing[];
+  readonly grid: ConstructionIrregularQuadGrid | undefined;
+  readonly adopted: number;
+export function logTerrainCommit(report: TerrainCommitReport): void {
+  try {
+  describe(report);
+export function logContourGrowth(what: string, before: number, after: number): void {
+  if (!Number.isFinite(before) || !Number.isFinite(after)) return;
+  const delta = after - before;
+  const line = `${TERRAIN_PREFIX} ${what}: contorno ${before} -> ${after} nós (${delta >= 0 ? "+" : ""}${delta})`;
+  if (delta > 0) console.warn(line, { antes: before, depois: after, delta });
+
+// src/composition/tabletop/terrain/terrain-fill.ts
+export interface TerrainFillRuntime {
+  generateIrregularQuadGrid(
+  request: ConstructionIrregularQuadGridRequest,
+  ): ConstructionIrregularQuadGrid | undefined;
+  addPatch(patch: ConstructionPatch, origin: "local", causeId: string): ConstructionPatchOutcome;
+  applyPatchReplacement(
+  request: ApplyPatchReplacementRequest,
+  origin: "local",
+export interface FillBounds {
+  readonly minX: number;
+  readonly minZ: number;
+  readonly maxX: number;
+  readonly maxZ: number;
+  }
+export interface TerrainFillRequest {
+  /**
+  * Prefix every node and edge this fill mints is named under. Whatever the
+  * caller passes has to be unique to this fill: two fills sharing a prefix
+  * would mint the same node id for different ground.
+  */
+  readonly mint: string;
+  /** Which table the shared boundary edges belong to. */
+export interface TerrainFillOutcome {
+  readonly built: number;
+  /** Faces the engine refused: ground that already has a face on both sides. */
+  readonly refused: number;
+  /** Nodes that wanted a neighbour's edge split and did not get it -- one T-junction each. */
+  readonly unadopted: number;
+  /** `false` when refinement hit its vertex ceiling and part of the area came back coarser. */
+  readonly refinementComplete: boolean;
+export const DEFAULT_FACE_SIDE = 2;
+export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillRequest): TerrainFillOutcome {
+  if (request.boundary.length === 0) return NOTHING;
+
+  let bMinX = Infinity;
+  let bMinZ = Infinity;
+  let bMaxX = -Infinity;
+  let bMaxZ = -Infinity;
+  for (const ring of request.boundary) {
+
+// src/composition/tabletop/terrain/terrain-neighborhood.ts
+export interface TerrainStrokeBounds {
+  readonly minX: number;
+  readonly minZ: number;
+  readonly maxX: number;
+  readonly maxZ: number;
+  }
+export interface TerrainNeighbourhoodRuntime {
+  getRegionTopologiesInBounds(bounds: TerrainStrokeBounds & {
+  readonly seeds?: readonly { readonly seed: ConstructionSurfaceKey; readonly surfaceType: string }[];
+  }): readonly ConstructionRegionTopology[];
+  }
+export interface TerrainCutRuntime extends TerrainFillRuntime {
+  getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined;
+  }
+export function terrainStandingAround(
+  runtime: TerrainNeighbourhoodRuntime,
+  covered: readonly ConstructionCoveredRegion[],
+  within: TerrainStrokeBounds,
+  reach: number,
+  ): readonly ConstructionRegionTopology[] {
+  return runtime.getRegionTopologiesInBounds({
+  minX: within.minX - reach,
+export interface HeightField {
+  at(point: { readonly x: number; readonly z: number }): number | undefined;
+  }
+export function heightFieldOf(anchors: readonly ConstructionPosition[], reach: number): HeightField {
+  const buckets = new Map<string, ConstructionPosition[]>();
+
+// src/composition/tabletop/terrain/terrain-regenerate.ts
+export type { HeightField } from "./terrain-neighborhood.ts";
+export type TerrainRegenerateRuntime = TerrainCutRuntime;
+export function repairTerrainCut(
+  runtime: TerrainRegenerateRuntime,
+  fallout: CutFallout,
+  causeId: string,
+  tableId: string,
+  ): number {
+  if (fallout.consumedSurfaceKeys.length === 0 && (!fallout.vacatedGround || fallout.vacatedGround.length === 0)) return 0;
+
+
+// src/composition/tabletop/terrain/terrain-restack.ts
+export const ELEVATION_STEP = 0.5;
+export function dirtProfile(normalizedDistance: number): number {
+  const t = 1 - Math.min(Math.max(normalizedDistance, 0), 1);
+export function dirtLoadOver(
+  path: readonly ConstructionPosition[],
+  radius: number,
+  ): (point: ConstructionPosition) => number {
+  if (path.length === 0 || !(radius > 0)) return () => 0;
+  const segments = path.map((from, index) => ({ from, to: path[index + 1] ?? from }));
+export interface RestackOutcome {
+  readonly raisedFaces: number;
+  /** Distinct nodes actually moved -- shared corners count once. */
+  readonly movedVertices: number;
+  /**
+  * Why some covered faces were left alone -- a wall the brush centred on,
+  * most commonly. Reported rather than thrown: refusing the *whole* stroke
+  * over one such face was the earlier behaviour, and it meant painting
+export function facesToRaise(resolved: readonly ResolvedCoverage[]): readonly ConstructionCoveredRegion[] {
+  return resolved
+  .filter((entry) => entry.interaction.kind === "restack" && entry.covered.coverage === "centroid")
+  .map((entry) => entry.covered);
+export function restackTerrain(
+  ctx: ToolContext,
+  paintedType: string,
+  covered: readonly ConstructionCoveredRegion[],
+  causeId: string,
+  /** How much of a full step lands on a given node. Defaults to all of it. */
+  loadAt: (point: ConstructionPosition) => number = () => 1,
+  mode: TerrainSculptMode = "elevate",
 
 // src/composition/tabletop/tools/core/boundary-edges.ts
 export function boundaryUsage(ctx: ToolContext): ReadonlyMap<ConstructionEdgeId, readonly boolean[]> {
@@ -3554,43 +3857,6 @@ export function reportToolWarning(
 export function toolFor<Id extends ConstructionToolId>(id: Id): ConstructionTool<Id> {
   return TOOL_REGISTRY[id];
   }
-
-// src/composition/tabletop/tools/cut-repair-dispatch.ts
-export type CutRepairExecutor = (
-  runtime: TerrainRegenerateRuntime,
-  fallout: CutFallout,
-  causeId: string,
-  tableId: string,
-  ) => number;
-
-  /**
-export const CUT_REPAIR_EXECUTORS: Readonly<Record<string, CutRepairExecutor>> = Object.freeze({
-  terrain: repairTerrainCut,
-  "terrain-grass": repairTerrainCut,
-  });
-export function paintedNodesOf(
-  runtime: Pick<TabletopRuntime, "getAllRegionTopologies" | "getRegionTopologiesInBounds" | "getSnapshot">,
-  paintedType: string,
-  bounds?: ConstructionTopologyBoundsQuery,
-  ): Pick<CutFallout, "paintedNodes" | "paintedLoops"> {
-  const topologies = bounds !== undefined && typeof runtime.getRegionTopologiesInBounds === "function"
-  ? runtime.getRegionTopologiesInBounds(bounds)
-  : runtime.getAllRegionTopologies();
-export function dispatchCutRepairs(runtime: TabletopRuntime, request: ApplyPatchReplacementRequest, causeId: string): void {
-  const outline = request.footprintOutline;
-  if (outline === undefined || outline.length === 0) return;
-  const paintedType = request.patch.regions[0]?.surfaceType;
-  if (paintedType === undefined) return;
-
-  const coverage = runtime.getFootprintCoverage(outline);
-export function dispatchRemovalRepairs(
-  runtime: TabletopRuntime,
-  surfaceKey: ConstructionSurfaceKey,
-  surfaceType: string,
-  causeId: string,
-  executors: Readonly<Record<string, CutRepairExecutor>> = CUT_REPAIR_EXECUTORS,
-  ): void {
-  const repair = resolveCutRepair(surfaceType);
 
 // src/composition/tabletop/tools/house/house-room-delete-tool.ts
 export function roomSurfaceKeys(
@@ -3887,244 +4153,6 @@ export function circularBrushStrokeOutline(
   ): PreviewDescriptor {
   const positions: number[] = [];
   if (samples.length === 0) return { kind: "segments", color, opacity, positions: new Float32Array() };
-
-// src/composition/tabletop/tools/terrain/terrain-constraints.ts
-export interface ConstraintRing {
-  /** What the generator receives. */
-  readonly points: readonly ConstructionGridConstraintPoint[];
-  /**
-  * The edge each segment of `points` runs along, index-aligned: `edges[i]`
-  * spans `points[i]` to `points[i + 1]`, wrapping.
-  *
-  * A segment may own no edge, and that is a real state rather than an error:
-export interface ConstraintTable {
-  readonly rings: readonly ConstraintRing[];
-  /** `sources[i]` is the node id handed out as `source: i`. */
-  readonly sources: readonly ConstructionNodeId[];
-  }
-export function perimeterConstraints(
-  topologies: readonly ConstructionRegionTopology[],
-  startingIndex: number,
-  ): ConstraintTable {
-  const positions = new Map<ConstructionNodeId, { x: number; z: number }>();
-export function constraintsFromRings(
-  rings: readonly (readonly ConstructionRegionEdge[])[],
-  positionOf: (nodeId: ConstructionNodeId) => { readonly x: number; readonly z: number } | undefined,
-  startingIndex: number,
-  ): ConstraintTable {
-  const sources: ConstructionNodeId[] = [];
-  const index = new Map<ConstructionNodeId, number>();
-export function outlineConstraints(
-  rings: readonly (readonly (readonly [number, number])[])[],
-  /** Consecutive points nearer than this collapse to one. `0` welds nothing. */
-  weld = 0,
-  ): readonly ConstraintRing[] {
-  const weldSq = weld * weld;
-  return rings
-  .map((ring) => {
-export interface ContourAdoption {
-  readonly vertex: number;
-  readonly edge: ConstructionRegionEdge;
-  /** Where along that edge it sits, `0` at its start and `1` at its end. */
-  readonly along: number;
-  /** Length of the edge being split, for spacing checks. */
-  readonly edgeLength?: number;
-  }
-export interface ContourSnap {
-  readonly vertex: number;
-  /** The `source` index of the ring corner it takes the identity of. */
-  readonly source: number;
-  /** Split to perform when that corner identity is already claimed elsewhere. */
-  readonly fallback?: ContourAdoption;
-  }
-export interface ResolvedAdoptions {
-  readonly adoptions: readonly ContourAdoption[];
-  readonly snaps: readonly ContourSnap[];
-  }
-export const SHORTEST_USEFUL_FRACTION = 0.25;
-export const OUTLINE_CHORD_PER_FACE = 2;
-export const OUTLINE_WELD_PER_FACE = 0.5;
-export function resolveAdoptions(
-  holeRings: readonly ConstraintRing[],
-  boundaryRings: readonly ConstraintRing[],
-  reported: readonly ConstructionGridContourNode[],
-  positionOf: (vertex: number) => { readonly x: number; readonly z: number } | undefined,
-  /** Fragments shorter than this are not created; see {@link SHORTEST_USEFUL_FRACTION}. */
-  shortestUseful = 0,
-  ): ResolvedAdoptions {
-export interface AdoptionRuntime {
-  applyRegionEdit(ops: readonly AtomicEditOp[], origin: "local", causeId: string): unknown;
-  }
-export function adoptContourNodes(
-  runtime: AdoptionRuntime,
-  /** Which table the edges belong to; the pair, not this, is what names them. */
-  tableId: string,
-  causeId: string,
-  adoptions: readonly ContourAdoption[],
-  nodeIdFor: (vertex: number) => ConstructionNodeId,
-  positionOf: (vertex: number) => ConstructionPosition | undefined,
-
-// src/composition/tabletop/tools/terrain/terrain-cut-executor.ts
-export function buildConstraintRings(
-  targetPolygon: MultiPolygon,
-  faceSize: number,
-  perimeters: ConstraintTable,
-  ): readonly (ConstraintRing & { readonly isHole: boolean })[] {
-  const rings: (ConstraintRing & { readonly isHole: boolean })[] = [];
-  const snapDist = Math.max(0.25, faceSize * 0.18);
-export function executeTerrainCut(
-  runtime: TerrainRegenerateRuntime,
-  request: StructuralCutRequest,
-  ): StructuralCutOutcome {
-  const rawOutline = request.area.outline ?? request.area.sweptPolygon?.[0]?.[0] ?? [];
-  const outline = rawOutline.length >= 3 ? rawOutline : [];
-
-  const closedOutlineRing: [number, number][] = outline.map(([x, z]) => [x, z]);
-
-// src/composition/tabletop/tools/terrain/terrain-diagnostics.ts
-export interface TerrainCommitReport {
-  /** Which operation this was: a stroke, a cut repair. */
-  readonly what: string;
-  readonly faceSideAsked: number;
-  readonly boundary: readonly ConstraintRing[];
-  readonly holes: readonly ConstraintRing[];
-  readonly grid: ConstructionIrregularQuadGrid | undefined;
-  readonly adopted: number;
-export function logTerrainCommit(report: TerrainCommitReport): void {
-  try {
-  describe(report);
-export function logContourGrowth(what: string, before: number, after: number): void {
-  if (!Number.isFinite(before) || !Number.isFinite(after)) return;
-  const delta = after - before;
-  const line = `${TERRAIN_PREFIX} ${what}: contorno ${before} -> ${after} nós (${delta >= 0 ? "+" : ""}${delta})`;
-  if (delta > 0) console.warn(line, { antes: before, depois: after, delta });
-
-// src/composition/tabletop/tools/terrain/terrain-fill.ts
-export interface TerrainFillRuntime {
-  generateIrregularQuadGrid(
-  request: ConstructionIrregularQuadGridRequest,
-  ): ConstructionIrregularQuadGrid | undefined;
-  addPatch(patch: ConstructionPatch, origin: "local", causeId: string): ConstructionPatchOutcome;
-  applyPatchReplacement(
-  request: ApplyPatchReplacementRequest,
-  origin: "local",
-export interface FillBounds {
-  readonly minX: number;
-  readonly minZ: number;
-  readonly maxX: number;
-  readonly maxZ: number;
-  }
-export interface TerrainFillRequest {
-  /**
-  * Prefix every node and edge this fill mints is named under. Whatever the
-  * caller passes has to be unique to this fill: two fills sharing a prefix
-  * would mint the same node id for different ground.
-  */
-  readonly mint: string;
-  /** Which table the shared boundary edges belong to. */
-export interface TerrainFillOutcome {
-  readonly built: number;
-  /** Faces the engine refused: ground that already has a face on both sides. */
-  readonly refused: number;
-  /** Nodes that wanted a neighbour's edge split and did not get it -- one T-junction each. */
-  readonly unadopted: number;
-  /** `false` when refinement hit its vertex ceiling and part of the area came back coarser. */
-  readonly refinementComplete: boolean;
-export const DEFAULT_FACE_SIDE = 2;
-export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillRequest): TerrainFillOutcome {
-  if (request.boundary.length === 0) return NOTHING;
-
-  const grid = runtime.generateIrregularQuadGrid({
-  seed: request.seed,
-  faceSide: request.faceSide,
-  relaxStrength: request.relaxStrength,
-  boundary: request.boundary.map((ring) => ring.points),
-
-// src/composition/tabletop/tools/terrain/terrain-neighborhood.ts
-export interface TerrainStrokeBounds {
-  readonly minX: number;
-  readonly minZ: number;
-  readonly maxX: number;
-  readonly maxZ: number;
-  }
-export interface TerrainNeighbourhoodRuntime {
-  getRegionTopologiesInBounds(bounds: TerrainStrokeBounds & {
-  readonly seeds?: readonly { readonly seed: ConstructionSurfaceKey; readonly surfaceType: string }[];
-  }): readonly ConstructionRegionTopology[];
-  }
-export function terrainStandingAround(
-  runtime: TerrainNeighbourhoodRuntime,
-  covered: readonly ConstructionCoveredRegion[],
-  within: TerrainStrokeBounds,
-  reach: number,
-  ): readonly ConstructionRegionTopology[] {
-  return runtime.getRegionTopologiesInBounds({
-  minX: within.minX - reach,
-
-// src/composition/tabletop/tools/terrain/terrain-regenerate.ts
-export interface TerrainRegenerateRuntime extends TerrainFillRuntime {
-  getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined;
-  }
-export interface HeightField {
-  at(point: { readonly x: number; readonly z: number }): number | undefined;
-  }
-export function heightFieldOf(anchors: readonly ConstructionPosition[], reach: number): HeightField {
-  const buckets = new Map<string, ConstructionPosition[]>();
-export interface RegenerateRequest {
-  /** The faces to throw away and lay again. */
-  readonly consumedSurfaceKeys: readonly ConstructionSurfaceKey[];
-  /**
-  * Contours of other clouds standing inside that ground -- a road, a wall
-  * footing. Met exactly, never regenerated, and never generated over.
-  */
-  readonly otherLoops: readonly (readonly ConstructionRegionEdge[])[];
-export function regenerateNeighbourhood(
-  runtime: TerrainRegenerateRuntime,
-  request: RegenerateRequest,
-  ): number {
-  if (request.consumedSurfaceKeys.length === 0) return 0;
-  if (request.consumedSurfaceKeys.length > MOST_FACES_WORTH_REGENERATING) return 0;
-
-  // Read before deleting: the rim of the hole is the perimeter of the faces
-export function repairTerrainCut(
-  runtime: TerrainRegenerateRuntime,
-  fallout: CutFallout,
-  causeId: string,
-  tableId: string,
-  ): number {
-  return regenerateNeighbourhood(runtime, {
-  consumedSurfaceKeys: fallout.consumedSurfaceKeys,
-
-// src/composition/tabletop/tools/terrain/terrain-restack.ts
-export const ELEVATION_STEP = 0.5;
-export function dirtProfile(normalizedDistance: number): number {
-  const t = 1 - Math.min(Math.max(normalizedDistance, 0), 1);
-export function dirtLoadOver(
-  path: readonly ConstructionPosition[],
-  radius: number,
-  ): (point: ConstructionPosition) => number {
-  if (path.length === 0 || !(radius > 0)) return () => 0;
-  const segments = path.map((from, index) => ({ from, to: path[index + 1] ?? from }));
-export interface RestackOutcome {
-  readonly raisedFaces: number;
-  /** Distinct nodes actually moved -- shared corners count once. */
-  readonly movedVertices: number;
-  /**
-  * Why some covered faces were left alone -- a wall the brush centred on,
-  * most commonly. Reported rather than thrown: refusing the *whole* stroke
-  * over one such face was the earlier behaviour, and it meant painting
-export function facesToRaise(resolved: readonly ResolvedCoverage[]): readonly ConstructionCoveredRegion[] {
-  return resolved
-  .filter((entry) => entry.interaction.kind === "restack" && entry.covered.coverage === "centroid")
-  .map((entry) => entry.covered);
-export function restackTerrain(
-  ctx: ToolContext,
-  paintedType: string,
-  covered: readonly ConstructionCoveredRegion[],
-  causeId: string,
-  /** How much of a full step lands on a given node. Defaults to all of it. */
-  loadAt: (point: ConstructionPosition) => number = () => 1,
-  mode: TerrainSculptMode = "elevate",
 
 // src/composition/tabletop/tools/terrain/terrain-sculpt-tool.ts
 export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
@@ -4695,6 +4723,52 @@ export function pathInteractionOver(
   ): CreationInteraction {
   return paintedSubtype === "bridge" ? IGNORE : CUT;
   }
+
+// src/features/edit-construction/structure-types/organic/terrain-cloud.ts
+export function isTerrainSurface(surfaceType: string): boolean {
+  return (
+  surfaceType === "terrain" ||
+  surfaceType === "terrain-grass" ||
+  surfaceType.startsWith("terrain")
+  );
+export function terrainCloudPerimeter(cloud: CloudTopology): readonly PerimeterLoop[] {
+  return perimeterOf(cloud.members);
+export function terrainTopologiesBounds(
+  topologies: readonly ConstructionRegionTopology[],
+  margin = 4.0,
+  ): ConstructionTopologyBoundsQuery {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minZ = Infinity;
+  let maxZ = -Infinity;
+export function pointInOrOnPolygon(
+  x: number,
+  z: number,
+  polygon: readonly (readonly [number, number])[],
+  ): boolean {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+  const xi = polygon[i]![0];
+export interface TerrainCloudCutRepairInput {
+  /** Candidate terrain topologies in the neighborhood/bounds. */
+  readonly candidateTerrain: readonly ConstructionRegionTopology[];
+  /** Positions belonging to the cutter (new geometry, replaced geometry, patch nodes, outline). */
+  readonly cutterPositions: readonly ConstructionPosition[];
+  /** Node IDs belonging to the cutter. */
+  readonly cutterNodeIds?: ReadonlySet<string>;
+  /** Surface keys already confirmed covered by footprint coverage query. */
+export interface TerrainCloudCutRepairPlan {
+  /** The terrain surface keys grouped by surface type to be consumed and repaired. */
+  readonly consumedByType: ReadonlyMap<string, readonly ConstructionSurfaceKey[]>;
+  /** Total number of affected terrain faces. */
+  readonly affectedTerrainCount: number;
+  /** Whether any repair is required. */
+  readonly requiresRepair: boolean;
+  }
+export function planTerrainCloudCutRepair(
+  input: TerrainCloudCutRepairInput,
+  ): TerrainCloudCutRepairPlan {
+  const consumedByType = new Map<string, ConstructionSurfaceKey[]>();
 
 // src/features/edit-construction/structure-types/panel/panel-structure.ts
 export const PANEL_ROLES = {
