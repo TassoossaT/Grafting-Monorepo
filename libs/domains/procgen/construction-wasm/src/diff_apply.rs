@@ -246,7 +246,12 @@ pub fn diff_and_apply(
     for (id, edge) in &unique_edges {
         if graph.edge(id).is_none() {
             graph
-                .add_edge(edge.clone())
+                .add_edge(grafting_graph_core::Edge::new(
+                    edge.id().clone(),
+                    edge.source().clone(),
+                    edge.target().clone(),
+                    None,
+                ))
                 .map_err(|error| error.to_string())?;
         }
     }

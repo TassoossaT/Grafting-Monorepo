@@ -1,3 +1,5 @@
+import { bezierPickHandles } from "../../features/edit-construction/index.ts";
+import type { BezierPort } from "../../ports/bezier-port.ts";
 import type { ConstructionPlanarRequest, ConstructionPlanarShape, ConstructionMotionRequest, ConstructionMotionPlan, ConstructionNodeMotion } from "../../ports/index.ts";
 import { chunkKeyForSurface, CONSTRUCTION_GRID_EXTENT, mergeChunkBucket, mergeSurfaceMeshes } from "../../adapters/rendering/index.ts";
 import {
@@ -82,7 +84,7 @@ export interface ConfirmedTokenDeltaEnvelope {
 
 export type TabletopRuntimeListener = () => void;
 
-export interface TabletopRuntime {
+export interface TabletopRuntime extends BezierPort {
   start(): Promise<void>;
   applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void;
   /**
@@ -301,6 +303,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
   readonly #surfacePickRevisions = new Map<string, number>();
   /** Last uploaded revision per node handle, mirroring `#chunkRevisions` but for the `"handles"` render layer. */
   readonly #nodeHandleRevisions = new Map<string, number>();
+  #bezierHandleIds = new Set<string>();
   #generation = 0;
   #snapshot: TabletopSnapshot;
 
@@ -582,6 +585,15 @@ export class AppTabletopRuntime implements TabletopRuntime {
     });
   }
 
+  #syncBezierHandles(origin: ChangeOrigin, causeId: string, generation: number): void {
+    if (typeof this.#construction.curveBatch !== "function") return;
+    const handles = bezierPickHandles(this.#construction.getGraphSnapshot(), this.#construction);
+    const live = new Set(handles.map((h) => h.id));
+    for (const id of this.#bezierHandleIds) if (!live.has(id)) this.#removeNodeHandle(id, origin, causeId, generation);
+    for (const handle of handles) this.#uploadNodeHandle(handle.id, handle.position, origin, causeId, generation);
+    this.#bezierHandleIds = live;
+  }
+
   /** Removes one node's pickable handle -- the counterpart to {@link AppTabletopRuntime.#uploadNodeHandle}, needed once a mutation deletes a node outright. */
   #removeNodeHandle(nodeId: ConstructionNodeId, origin: ChangeOrigin, causeId: string, generation: number): void {
     const revision = (this.#nodeHandleRevisions.get(nodeId) ?? 0) + 1;
@@ -661,6 +673,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
       });
       this.#uploadNodeHandle(node.id, node.position, origin, causeId, generation);
     }
+    this.#syncBezierHandles(origin, causeId, generation);
     return applyMapProjectionDeltas(map, deltas);
   }
 
@@ -879,6 +892,16 @@ export class AppTabletopRuntime implements TabletopRuntime {
   getRegionTopologiesInBounds(bounds: ConstructionTopologyBoundsQuery): readonly ConstructionRegionTopology[] {
     this.#requireReady("reading nearby region topologies");
     return this.#construction.getRegionTopologiesInBounds(bounds);
+  }
+
+  curveBatch(request: import("../../ports/bezier-port.ts").CurveBatch): readonly import("../../ports/bezier-port.ts").CurveResult[] {
+    this.#requireReady("planning curves");
+    return this.#construction.curveBatch(request);
+  }
+
+  curveNetwork(request: import("../../ports/bezier-port.ts").CurveNetworkRequest): import("../../ports/bezier-port.ts").CurveNetworkPatch {
+    this.#requireReady("planning curve connections");
+    return this.#construction.curveNetwork(request);
   }
 
   getGraphSnapshot(): ConstructionGraphSnapshot {

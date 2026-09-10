@@ -1,6 +1,6 @@
 //! Offsets a flattened polyline into a set of banded ribbon polygons.
 
-use crate::types::{Point, Polygon, Polyline};
+use super::types::{Point, Polygon, Polyline};
 
 fn edge_normal(from: Point, to: Point) -> Point {
     let d = [to[0] - from[0], to[1] - from[1]];
@@ -49,7 +49,10 @@ fn offset_curve(points: &[Point], frames: &[(Point, f32)], offset: f32) -> Vec<P
         .iter()
         .zip(frames)
         .map(|(point, (normal, scale))| {
-            [point[0] + normal[0] * scale * offset, point[1] + normal[1] * scale * offset]
+            [
+                point[0] + normal[0] * scale * offset,
+                point[1] + normal[1] * scale * offset,
+            ]
         })
         .collect()
 }
@@ -69,14 +72,19 @@ pub fn offset_bands(polyline: &Polyline, band_offsets: &[f32], miter_limit: f32)
         return Vec::new();
     }
     let frames = station_frames(points, miter_limit.max(1.0));
-    let curves: Vec<Vec<Point>> =
-        band_offsets.iter().map(|&offset| offset_curve(points, &frames, offset)).collect();
+    let curves: Vec<Vec<Point>> = band_offsets
+        .iter()
+        .map(|&offset| offset_curve(points, &frames, offset))
+        .collect();
     curves
         .windows(2)
         .map(|pair| {
             let mut outer = pair[0].clone();
             outer.extend(pair[1].iter().rev().copied());
-            Polygon { outer, holes: Vec::new() }
+            Polygon {
+                outer,
+                holes: Vec::new(),
+            }
         })
         .collect()
 }

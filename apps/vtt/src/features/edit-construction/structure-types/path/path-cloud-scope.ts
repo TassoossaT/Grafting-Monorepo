@@ -4,6 +4,7 @@ import { chainsOf, parseSpineControlNodeId, spineGraphFromSnapshot } from "./spi
 
 /** The connected spine component changed by this stroke, after its graph patch, and every node id in it. */
 export interface ChangedSpineCloud {
+  readonly snapshot: ConstructionGraphSnapshot;
   readonly chains: readonly (readonly ConstructionPosition[])[];
   /**
    * Every spine control point position in the touched component -- used to
@@ -32,7 +33,7 @@ export function changedSpineCloud(snapshot: ConstructionGraphSnapshot, patch: Co
     adjacent.set(edge.fromNodeId, [...(adjacent.get(edge.fromNodeId) ?? []), edge.toNodeId]);
     adjacent.set(edge.toNodeId, [...(adjacent.get(edge.toNodeId) ?? []), edge.fromNodeId]);
   }
-  const connected = new Set(patch.nodes.map((node) => node.id));
+  const connected = new Set([...patch.nodes.map((node) => node.id), ...patch.edges.flatMap((edge) => [edge.startNodeId, edge.endNodeId])]);
   const pending = [...connected];
   while (pending.length > 0) {
     const nodeId = pending.pop()!;
@@ -42,6 +43,7 @@ export function changedSpineCloud(snapshot: ConstructionGraphSnapshot, patch: Co
       pending.push(neighbor);
     }
   }
+  for (const id of connected) if (!adjacent.has(id)) connected.delete(id);
   const clusterNodes = graph.nodes.filter((node) => connected.has(node.nodeId));
   const chains = chainsOf({
     nodes: clusterNodes,
@@ -58,7 +60,7 @@ export function changedSpineCloud(snapshot: ConstructionGraphSnapshot, patch: Co
     }
   }
 
-  return { chains, positions: clusterNodes.map((node) => node.position), corridorIds };
+  return { snapshot: { nodes: [...nodes.values()].filter((n) => connected.has(n.id)), edges: [...edges.values()].filter((e) => connected.has(e.startNodeId) && connected.has(e.endNodeId)) }, chains, positions: clusterNodes.map((node) => node.position), corridorIds };
 }
 
 /**

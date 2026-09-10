@@ -16,8 +16,8 @@ mod patch_replacement;
 mod region_editing;
 mod region_overlay;
 mod session;
-pub(crate) mod spatial_index;
 #[cfg(test)]
 mod session_tests;
+pub(crate) mod spatial_index;
 
 pub use session::ConstructionSession;

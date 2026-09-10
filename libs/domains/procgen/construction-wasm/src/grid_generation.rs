@@ -52,7 +52,11 @@ pub struct RefinementDto {
 
 impl Default for RefinementDto {
     fn default() -> Self {
-        Self { min_angle_degrees: 20.5, max_additional_vertices: 2_500, min_area_ratio: 0.25 }
+        Self {
+            min_angle_degrees: 20.5,
+            max_additional_vertices: 2_500,
+            min_area_ratio: 0.25,
+        }
     }
 }
 
@@ -69,7 +73,10 @@ pub struct RelaxDto {
 impl Default for RelaxDto {
     fn default() -> Self {
         let standard = RelaxOptions::standard();
-        Self { iterations: standard.iterations, strength: standard.strength }
+        Self {
+            iterations: standard.iterations,
+            strength: standard.strength,
+        }
     }
 }
 
@@ -248,7 +255,11 @@ pub fn irregular_quad_grid(
             .iter()
             .map(|node| ContourNodeDto {
                 vertex: node.vertex,
-                ring_kind: if node.location.in_holes { "hole" } else { "boundary" },
+                ring_kind: if node.location.in_holes {
+                    "hole"
+                } else {
+                    "boundary"
+                },
                 ring: node.location.ring,
                 segment: node.location.segment,
             })
@@ -304,12 +315,20 @@ mod tests {
         let response = generate("[]");
         assert!(
             response.vertices.iter().all(|vertex| {
-                vertex.x >= -1e-9 && vertex.x <= 10.0 + 1e-9 && vertex.z >= -1e-9 && vertex.z <= 10.0 + 1e-9
+                vertex.x >= -1e-9
+                    && vertex.x <= 10.0 + 1e-9
+                    && vertex.z >= -1e-9
+                    && vertex.z <= 10.0 + 1e-9
             }),
             "a corner left the field it was asked to fill"
         );
         // The four named corners come back at the corners they went in at.
-        for (source, x, z) in [(0, 0.0, 0.0), (1, 10.0, 0.0), (2, 10.0, 10.0), (3, 0.0, 10.0)] {
+        for (source, x, z) in [
+            (0, 0.0, 0.0),
+            (1, 10.0, 0.0),
+            (2, 10.0, 10.0),
+            (3, 0.0, 10.0),
+        ] {
             let found = response
                 .vertices
                 .iter()
@@ -343,24 +362,34 @@ mod tests {
             "the nodes the road has to adopt are reported"
         );
         assert!(
-            response.on_contour.iter().all(|node| response.vertices[node.vertex].source.is_none()),
+            response
+                .on_contour
+                .iter()
+                .all(|node| response.vertices[node.vertex].source.is_none()),
             "a reported node is one nobody already owned"
         );
         assert!(
-            response.on_contour.iter().any(|node| node.ring_kind == "hole"),
+            response
+                .on_contour
+                .iter()
+                .any(|node| node.ring_kind == "hole"),
             "the road contour is quadrangulated too, so it gains nodes it must adopt"
         );
         assert!(
-            response.on_contour.iter().all(|node| node.ring_kind == "hole" || node.ring_kind == "boundary"),
+            response
+                .on_contour
+                .iter()
+                .all(|node| node.ring_kind == "hole" || node.ring_kind == "boundary"),
             "ringKind is one of exactly two strings"
         );
     }
 
     #[test]
     fn the_cell_scale_follows_face_side() {
-        let coarse: IrregularQuadGridRequest =
-            serde_json::from_str(&request_json("[]").replace("\"faceSide\": 0.5", "\"faceSide\": 1.5"))
-                .expect("parses");
+        let coarse: IrregularQuadGridRequest = serde_json::from_str(
+            &request_json("[]").replace("\"faceSide\": 0.5", "\"faceSide\": 1.5"),
+        )
+        .expect("parses");
         let fine: IrregularQuadGridRequest =
             serde_json::from_str(&request_json("[]")).expect("parses");
 
@@ -401,13 +430,18 @@ mod tests {
     /// near-parallel -- and has to cost nothing everywhere else.
     #[test]
     fn the_minimum_area_floor_leaves_an_ordinary_field_alone() {
-        let mut request: IrregularQuadGridRequest = serde_json::from_str(&request_json("[]")).expect("parses");
+        let mut request: IrregularQuadGridRequest =
+            serde_json::from_str(&request_json("[]")).expect("parses");
         request.refinement.min_area_ratio = 0.0;
         let without = irregular_quad_grid(request).expect("a grid");
-        let with = irregular_quad_grid(serde_json::from_str(&request_json("[]")).expect("parses")).expect("a grid");
-        assert_eq!(with.quads.len(), without.quads.len(), "no wedge here, so nothing for the floor to skip");
+        let with = irregular_quad_grid(serde_json::from_str(&request_json("[]")).expect("parses"))
+            .expect("a grid");
+        assert_eq!(
+            with.quads.len(),
+            without.quads.len(),
+            "no wedge here, so nothing for the floor to skip"
+        );
     }
-
 
     /// A square ring walked in `step`-long segments -- the shape a hole cut
     /// out of an existing quad mesh actually arrives in, one segment per face
@@ -415,19 +449,33 @@ mod tests {
     fn walked_square(low: f64, high: f64, step: f64) -> Vec<(f64, f64)> {
         let mut points = Vec::new();
         let mut at = low;
-        while at < high { points.push((at, low)); at += step; }
+        while at < high {
+            points.push((at, low));
+            at += step;
+        }
         let mut at = low;
-        while at < high { points.push((high, at)); at += step; }
+        while at < high {
+            points.push((high, at));
+            at += step;
+        }
         let mut at = high;
-        while at > low { points.push((at, high)); at -= step; }
+        while at > low {
+            points.push((at, high));
+            at -= step;
+        }
         let mut at = high;
-        while at > low { points.push((low, at)); at -= step; }
+        while at > low {
+            points.push((low, at));
+            at -= step;
+        }
         points
     }
 
     fn mean_face_side(boundary: &[(f64, f64)], face_side: f64) -> f64 {
-        let body: Vec<String> =
-            boundary.iter().map(|&(x, z)| format!(r#"{{"x":{x},"z":{z}}}"#)).collect();
+        let body: Vec<String> = boundary
+            .iter()
+            .map(|&(x, z)| format!(r#"{{"x":{x},"z":{z}}}"#))
+            .collect();
         let request: IrregularQuadGridRequest = serde_json::from_str(&format!(
             r#"{{"seed":7,"faceSide":{face_side},"boundary":[[{}]]}}"#,
             body.join(",")
@@ -436,8 +484,10 @@ mod tests {
         let grid = irregular_quad_grid(request).expect("a grid");
         let (mut min_x, mut min_z, mut max_x, mut max_z) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
         for &(x, z) in boundary {
-            min_x = min_x.min(x); min_z = min_z.min(z);
-            max_x = max_x.max(x); max_z = max_z.max(z);
+            min_x = min_x.min(x);
+            min_z = min_z.min(z);
+            max_x = max_x.max(x);
+            max_z = max_z.max(z);
         }
         ((max_x - min_x) * (max_z - min_z) / grid.quads.len() as f64).sqrt()
     }
@@ -477,8 +527,10 @@ mod tests {
     /// to stop driving the interior -- which, for a rim walked at the face
     /// size, is dropping every other point.
     fn faces_and_side(boundary: &[(f64, f64)], face_side: f64) -> (usize, f64) {
-        let body: Vec<String> =
-            boundary.iter().map(|&(x, z)| format!(r#"{{"x":{x},"z":{z}}}"#)).collect();
+        let body: Vec<String> = boundary
+            .iter()
+            .map(|&(x, z)| format!(r#"{{"x":{x},"z":{z}}}"#))
+            .collect();
         let request: IrregularQuadGridRequest = serde_json::from_str(&format!(
             r#"{{"seed":7,"faceSide":{face_side},"boundary":[[{}]]}}"#,
             body.join(",")
@@ -487,8 +539,10 @@ mod tests {
         let grid = irregular_quad_grid(request).expect("a grid");
         let (mut min_x, mut min_z, mut max_x, mut max_z) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
         for &(x, z) in boundary {
-            min_x = min_x.min(x); min_z = min_z.min(z);
-            max_x = max_x.max(x); max_z = max_z.max(z);
+            min_x = min_x.min(x);
+            min_z = min_z.min(z);
+            max_x = max_x.max(x);
+            max_z = max_z.max(z);
         }
         let area = (max_x - min_x) * (max_z - min_z);
         (grid.quads.len(), (area / grid.quads.len() as f64).sqrt())
@@ -499,13 +553,15 @@ mod tests {
     fn capsule(length: f64, radius: f64, cap_steps: usize) -> Vec<(f64, f64)> {
         let mut points = vec![(0.0, -radius), (length, -radius)];
         for step in 1..cap_steps {
-            let angle = -std::f64::consts::FRAC_PI_2 + std::f64::consts::PI * step as f64 / cap_steps as f64;
+            let angle = -std::f64::consts::FRAC_PI_2
+                + std::f64::consts::PI * step as f64 / cap_steps as f64;
             points.push((length + radius * angle.cos(), radius * angle.sin()));
         }
         points.push((length, radius));
         points.push((0.0, radius));
         for step in 1..cap_steps {
-            let angle = std::f64::consts::FRAC_PI_2 + std::f64::consts::PI * step as f64 / cap_steps as f64;
+            let angle =
+                std::f64::consts::FRAC_PI_2 + std::f64::consts::PI * step as f64 / cap_steps as f64;
             points.push((radius * angle.cos(), radius * angle.sin()));
         }
         points
@@ -540,8 +596,10 @@ mod tests {
     }
 
     fn faces_with(boundary: &[(f64, f64)], face_side: f64, extra: &str) -> (usize, f64) {
-        let body: Vec<String> =
-            boundary.iter().map(|&(x, z)| format!(r#"{{"x":{x},"z":{z}}}"#)).collect();
+        let body: Vec<String> = boundary
+            .iter()
+            .map(|&(x, z)| format!(r#"{{"x":{x},"z":{z}}}"#))
+            .collect();
         let request: IrregularQuadGridRequest = serde_json::from_str(&format!(
             r#"{{"seed":7,"faceSide":{face_side},"boundary":[[{}]]{extra}}}"#,
             body.join(",")
@@ -570,12 +628,20 @@ mod tests {
         }
         println!("-- 16 segments, varying the angle limit");
         for angle in [30.0, 25.0, 20.0, 15.0] {
-            let (f, s) = faces_with(&disc(3.0, 16), 2.0, &format!(r#","refinement":{{"minAngleDegrees":{angle}}}"#));
+            let (f, s) = faces_with(
+                &disc(3.0, 16),
+                2.0,
+                &format!(r#","refinement":{{"minAngleDegrees":{angle}}}"#),
+            );
             println!("  angle {angle:>5}: {f} faces of ~{s:.2}");
         }
         println!("-- 16 segments, varying the minimum-area floor");
         for ratio in [0.15, 0.4, 0.7, 1.0] {
-            let (f, s) = faces_with(&disc(3.0, 16), 2.0, &format!(r#","refinement":{{"minAreaRatio":{ratio}}}"#));
+            let (f, s) = faces_with(
+                &disc(3.0, 16),
+                2.0,
+                &format!(r#","refinement":{{"minAreaRatio":{ratio}}}"#),
+            );
             println!("  minArea {ratio:>4}: {f} faces of ~{s:.2}");
         }
     }
@@ -598,7 +664,10 @@ mod tests {
     fn a_walked_boundary_makes_a_finer_mesh_than_the_same_region_asked_for_plainly() {
         let plain = mean_face_side(&[(0.0, 0.0), (8.0, 0.0), (8.0, 8.0), (0.0, 8.0)], 2.0);
         let walked = mean_face_side(&walked_square(0.0, 8.0, 2.0), 2.0);
-        assert!((plain - 2.0).abs() < 0.2, "four corners give the size asked for; got {plain}");
+        assert!(
+            (plain - 2.0).abs() < 0.2,
+            "four corners give the size asked for; got {plain}"
+        );
         assert!(
             walked < plain * 0.7,
             "the same region, walked, comes back much finer: {walked} against {plain}"
@@ -611,13 +680,25 @@ mod tests {
         // come back as an error string.
         for (name, json) in [
             ("no boundary", r#"{"seed":1,"faceSide":0.5,"boundary":[]}"#),
-            ("a boundary of two points", r#"{"seed":1,"faceSide":0.5,"boundary":[[{"x":0,"z":0},{"x":1,"z":1}]]}"#),
-            ("a zero side", r#"{"seed":1,"faceSide":0,"boundary":[[{"x":0,"z":0},{"x":1,"z":0},{"x":0,"z":1}]]}"#),
-            ("a negative side", r#"{"seed":1,"faceSide":-1,"boundary":[[{"x":0,"z":0},{"x":1,"z":0},{"x":0,"z":1}]]}"#),
+            (
+                "a boundary of two points",
+                r#"{"seed":1,"faceSide":0.5,"boundary":[[{"x":0,"z":0},{"x":1,"z":1}]]}"#,
+            ),
+            (
+                "a zero side",
+                r#"{"seed":1,"faceSide":0,"boundary":[[{"x":0,"z":0},{"x":1,"z":0},{"x":0,"z":1}]]}"#,
+            ),
+            (
+                "a negative side",
+                r#"{"seed":1,"faceSide":-1,"boundary":[[{"x":0,"z":0},{"x":1,"z":0},{"x":0,"z":1}]]}"#,
+            ),
         ] {
             let request: IrregularQuadGridRequest =
                 serde_json::from_str(json).unwrap_or_else(|error| panic!("{name}: {error}"));
-            assert!(irregular_quad_grid(request).is_err(), "{name} should be refused");
+            assert!(
+                irregular_quad_grid(request).is_err(),
+                "{name} should be refused"
+            );
         }
     }
 
@@ -646,7 +727,11 @@ mod tests {
         let face = 2.0;
         let fine = faces_and_side(&capsule_outline(30.0, 6.0, face * 1.0), face);
         let coarse = faces_and_side(&capsule_outline(30.0, 6.0, face * 2.0), face);
-        assert!(fine.1 < face * 0.85, "at the face size it comes back finer; got {}", fine.1);
+        assert!(
+            fine.1 < face * 0.85,
+            "at the face size it comes back finer; got {}",
+            fine.1
+        );
         assert!(
             (coarse.1 - face).abs() < face * 0.2,
             "at twice the face size it comes back the size asked for; got {}",
@@ -691,7 +776,10 @@ mod tests {
         let bridge: Vec<(f64, f64)> = bridge.into_iter().map(|(x, z)| (x - 8.0, z)).collect();
 
         let to_json_points = |ring: &[(f64, f64)]| -> String {
-            let pts: Vec<String> = ring.iter().map(|&(x, z)| format!(r#"{{"x":{x},"z":{z}}}"#)).collect();
+            let pts: Vec<String> = ring
+                .iter()
+                .map(|&(x, z)| format!(r#"{{"x":{x},"z":{z}}}"#))
+                .collect();
             format!("[{}]", pts.join(","))
         };
 
@@ -702,15 +790,29 @@ mod tests {
             to_json_points(&cloud_b)
         );
 
-        let request: IrregularQuadGridRequest = serde_json::from_str(&request_json).expect("parses");
+        let request: IrregularQuadGridRequest =
+            serde_json::from_str(&request_json).expect("parses");
         let start = std::time::Instant::now();
         let response = irregular_quad_grid(request).expect("generates bridge grid");
         let duration = start.elapsed();
 
-        assert!(duration.as_millis() < 500, "generation took too long: {duration:?}");
-        assert!(response.refinement_complete, "refinement should complete cleanly");
-        assert!(response.quads.len() < 500, "quad count should not explode: got {}", response.quads.len());
-        assert!(response.vertices.len() < 1_000, "vertex count should not explode: got {}", response.vertices.len());
+        assert!(
+            duration.as_millis() < 500,
+            "generation took too long: {duration:?}"
+        );
+        assert!(
+            response.refinement_complete,
+            "refinement should complete cleanly"
+        );
+        assert!(
+            response.quads.len() < 500,
+            "quad count should not explode: got {}",
+            response.quads.len()
+        );
+        assert!(
+            response.vertices.len() < 1_000,
+            "vertex count should not explode: got {}",
+            response.vertices.len()
+        );
     }
-
 }

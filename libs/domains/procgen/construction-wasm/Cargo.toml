@@ -9,7 +9,7 @@ description = "Wasm bridge exposing grafting-graph-core's construction operation
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-grafting-graph-core = { path = "../../../graph/core" }
+grafting-graph-core = { path = "../../../graph/core", features = ["curve-serde"] }
 grafting-procgen-terrain-generation = { path = "../terrain-generation" }
 grafting-procgen-structure-generation = { path = "../structure-generation" }
 grafting-procgen-irregular-grid = { path = "../irregular-grid" }

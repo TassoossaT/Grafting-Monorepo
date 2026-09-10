@@ -1691,4 +1691,3 @@ pub fn apply_move_vertices(
         .map(Into::into)
         .map_err(|e| e.to_string())
 }
-

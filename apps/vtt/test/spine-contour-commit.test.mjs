@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { sessionFixture } from "./platform-session-fixture.mjs";
 
 import { AppTabletopRuntime } from "../src/composition/tabletop/tabletop-runtime.ts";
 import { commitPathCloudIntent } from "../src/composition/tabletop/path/path-cloud-transaction.ts";
@@ -25,6 +26,7 @@ import {
  * `SurfaceError::UnknownRegion` shape the real Rust session throws.
  */
 function createFakeConstructionSession() {
+  const geometry = sessionFixture();
   const nodes = new Map();
   const edges = new Map();
   const regions = new Map();
@@ -78,6 +80,9 @@ function createFakeConstructionSession() {
   const emptyMesh = () => ({ positions: new Float32Array(), normals: new Float32Array(), uvs: new Float32Array(), indices: new Uint32Array() });
 
   return {
+    curveBatch: geometry.runtime.curveBatch,
+    curveNetwork: geometry.runtime.curveNetwork,
+    planarBoolean: geometry.runtime.planarBoolean,
     async start() {
       started = true;
     },
@@ -207,12 +212,9 @@ function createFakeConstructionSession() {
       // guarantee by rolling the removal back on any failure below.
       const removed = request.sourceSurfaceKeys.map((surfaceKey) => [surfaceKey.join(":"), regions.get(surfaceKey.join(":"))]);
       for (const [key] of removed) regions.delete(key);
-      for (const node of request.graphPatch?.nodes ?? []) {
-        if (!nodes.has(node.id)) nodes.set(node.id, node.position);
-      }
-      for (const edge of request.graphPatch?.edges ?? []) {
-        if (!edges.has(edge.edgeId)) edges.set(edge.edgeId, edge);
-      }
+      for (const node of request.graphPatch?.nodes ?? []) nodes.set(node.id, node.position);
+      for (const id of request.graphPatch?.removedEdgeIds ?? []) edges.delete(id);
+      for (const edge of request.graphPatch?.edges ?? []) edges.set(edge.edgeId, edge);
       let outcome;
       try {
         outcome = this.addPatch(request.patch);
@@ -520,7 +522,7 @@ test("a selected union splits the touched spine edge and makes one shared juncti
   );
 
   const spine = ctx.runtime.getGraphSnapshot();
-  const junction = spine.nodes.filter((node) => node.id.startsWith("spine:") && node.position.x === 0 && node.position.z === 0);
+  const junction = spine.nodes.filter((node) => node.id.startsWith("spine:") && Math.abs(node.position.x) < 0.005 && Math.abs(node.position.z) < 0.005);
   assert.equal(junction.length, 1, "the intersection is represented by one graph node");
   assert.equal(
     spine.edges.filter((edge) => edge.startNodeId === junction[0].id || edge.endNodeId === junction[0].id).length,
@@ -550,7 +552,7 @@ test("a T where the second road ends inside the first commits without throwing",
     `no error feedback expected: ${JSON.stringify(ctx.feedback)}`,
   );
   const spine = ctx.runtime.getGraphSnapshot();
-  const junction = spine.nodes.filter((node) => node.id.startsWith("spine:") && node.position.x === 0 && node.position.z === 0);
+  const junction = spine.nodes.filter((node) => node.id.startsWith("spine:") && Math.abs(node.position.x) < 0.005 && Math.abs(node.position.z) < 0.005);
   assert.equal(junction.length, 1, "a geometric contact inside the brush snaps automatically, without a connection flag");
   assert.equal(spine.edges.filter((edge) => edge.startNodeId === junction[0].id || edge.endNodeId === junction[0].id).length, 3);
 });
@@ -621,7 +623,7 @@ test("an interior-to-interior crossing splits both spines into one connected roa
   ], 0.1);
 
   const spine = ctx.runtime.getGraphSnapshot();
-  const junction = spine.nodes.filter((node) => node.id.startsWith("spine:") && node.position.x === 0 && node.position.z === 0);
+  const junction = spine.nodes.filter((node) => node.id.startsWith("spine:") && Math.abs(node.position.x) < 0.005 && Math.abs(node.position.z) < 0.005);
   assert.equal(junction.length, 1, "the crossing has one shared spine node");
   assert.equal(
     spine.edges.filter((edge) => edge.startNodeId === junction[0].id || edge.endNodeId === junction[0].id).length,

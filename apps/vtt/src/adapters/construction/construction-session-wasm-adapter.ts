@@ -10,6 +10,7 @@ import type { ConstructionPlanarRequest, ConstructionPlanarShape, ConstructionMo
 
 import initConstructionWasm, { ConstructionSession } from "@grafting/procgen-construction-wasm";
 
+import type { CurveBatch, CurveResult, CurveNetworkRequest, CurveNetworkPatch } from "../../ports/bezier-port.ts";
 import type {
   ApplyPatchReplacementRequest,
   ApplyRegionOverlayRequest,
@@ -81,7 +82,7 @@ function fromWirePosition(position: WirePosition): ConstructionPosition {
 
 interface SnapshotWire {
   readonly nodes: readonly { readonly id: string; readonly position: WirePosition }[];
-  readonly edges: readonly { readonly id: string; readonly source: string; readonly target: string }[];
+  readonly edges: readonly { readonly id: string; readonly source: string; readonly target: string; readonly curve?: import("../../ports/bezier-port.ts").CurveHandles }[];
 }
 
 /** The engine tags an arc `"arc"`; its center is an XZ pair, never a 3D normal. */
@@ -504,11 +505,19 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     return this.getGraphSnapshot().nodes;
   }
 
+  curveBatch(request: CurveBatch): readonly CurveResult[] {
+    return JSON.parse(this.#require().bezier_batch_json(JSON.stringify(request))) as readonly CurveResult[];
+  }
+
+  curveNetwork(request: CurveNetworkRequest): CurveNetworkPatch {
+    return JSON.parse(this.#require().bezier_network_json(JSON.stringify(request))) as CurveNetworkPatch;
+  }
+
   getGraphSnapshot(): ConstructionGraphSnapshot {
     const wire = JSON.parse(this.#require().snapshot_json()) as SnapshotWire;
     return {
       nodes: wire.nodes.map((node) => ({ id: node.id, position: fromWirePosition(node.position) })),
-      edges: wire.edges.map((edge) => ({ edgeId: edge.id, startNodeId: edge.source, endNodeId: edge.target })),
+      edges: wire.edges.map((edge) => ({ edgeId: edge.id, startNodeId: edge.source, endNodeId: edge.target, curve: edge.curve })),
     };
   }
 

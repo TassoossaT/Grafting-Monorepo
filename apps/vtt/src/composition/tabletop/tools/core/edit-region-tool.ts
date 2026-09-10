@@ -1,3 +1,4 @@
+import { beginBezierGesture } from "../../path/bezier-edit-gesture.ts";
 import {
   cloudNodes,
   planEdit,
@@ -150,6 +151,7 @@ interface ActiveDrag {
 }
 
 let active: ActiveDrag | undefined;
+let curveGesture: ReturnType<typeof beginBezierGesture>;
 
 export const editRegionTool: ConstructionTool<"edit-region"> = {
   id: "edit-region",
@@ -157,6 +159,9 @@ export const editRegionTool: ConstructionTool<"edit-region"> = {
 
   onPointerDown(ctx: ToolContext, sample: PointerSample, params): void {
     active = undefined;
+    curveGesture?.cancel();
+    curveGesture = beginBezierGesture(ctx, sample, params);
+    if (curveGesture) return;
     const grabbed = grabbedTarget(ctx, sample, params?.mode === "elevation");
     if (grabbed === undefined) {
       ctx.reportSelection(undefined);
@@ -181,6 +186,7 @@ export const editRegionTool: ConstructionTool<"edit-region"> = {
   },
 
   onPointerMove(ctx: ToolContext, gesture: ToolGesture, params): void {
+    if (curveGesture) { curveGesture.move(gesture); return; }
     if (active === undefined) return;
     // Per-tick delta, not gesture-total: every op the plan produces applies
     // on top of the cloud's *current* state, so a cumulative delta would
@@ -238,7 +244,10 @@ export const editRegionTool: ConstructionTool<"edit-region"> = {
     }
   },
 
+  onCancel(): void { curveGesture?.cancel(); curveGesture = undefined; active = undefined; },
+
   onPointerUp(ctx: ToolContext): void {
+    if (curveGesture) { curveGesture.commit(); curveGesture = undefined; return; }
     const drag = active;
     active = undefined;
     if (drag === undefined) return;

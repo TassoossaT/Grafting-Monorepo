@@ -169,7 +169,10 @@ fn grid_string_edges(spec: &GridSpec) -> (Vec<String>, Vec<(String, String)>) {
 /// (no engine change), swap only the identity map from `BTreeMap<String, _>`
 /// to `std::collections::HashMap<String, _>`. Isolates whether the
 /// *ordered-map* choice, not the graph engine, is the dominant cost.
-fn build_hashmap_stablegraph(ids: &[String], pairs: &[(String, String)]) -> (StableDiGraph<(), ()>, Duration) {
+fn build_hashmap_stablegraph(
+    ids: &[String],
+    pairs: &[(String, String)],
+) -> (StableDiGraph<(), ()>, Duration) {
     let start = Instant::now();
     let mut graph: StableDiGraph<(), ()> = StableDiGraph::with_capacity(ids.len(), pairs.len());
     let mut index: HashMap<&str, PetNodeIndex> = HashMap::with_capacity(ids.len());
@@ -209,7 +212,12 @@ fn build_hashmap_csr(ids: &[String], pairs: &[(String, String)]) -> Duration {
     elapsed
 }
 
-fn bench_point_lookup_existing(graph: &Graph<(), ()>, spec: &GridSpec, rng: &mut Rng, iterations: usize) -> Duration {
+fn bench_point_lookup_existing(
+    graph: &Graph<(), ()>,
+    spec: &GridSpec,
+    rng: &mut Rng,
+    iterations: usize,
+) -> Duration {
     let start = Instant::now();
     for _ in 0..iterations {
         let idx = rng.next_usize(spec.cell_count());
@@ -306,7 +314,11 @@ fn bench_neighbor_query_existing_dispersed(
     start.elapsed()
 }
 
-fn bench_neighbor_query_dense_dispersed(dense: &DenseGrid, rng: &mut Rng, iterations: usize) -> Duration {
+fn bench_neighbor_query_dense_dispersed(
+    dense: &DenseGrid,
+    rng: &mut Rng,
+    iterations: usize,
+) -> Duration {
     let start = Instant::now();
     for _ in 0..iterations {
         let idx = rng.next_usize(dense.neighbors.len());
@@ -374,7 +386,13 @@ fn bench_neighbor_query_indexed_dispersed(
 }
 
 fn run_preset(name: &str, spec: GridSpec) {
-    println!("\n=== {name}: {}x{}x{} = {} cells ===", spec.width, spec.height, spec.layers, spec.cell_count());
+    println!(
+        "\n=== {name}: {}x{}x{} = {} cells ===",
+        spec.width,
+        spec.height,
+        spec.layers,
+        spec.cell_count()
+    );
 
     let (graph, existing_build) = build_existing(&spec);
     let (dense, dense_build) = build_dense(&spec);
@@ -406,7 +424,8 @@ fn run_preset(name: &str, spec: GridSpec) {
 
     let strokes = 200;
     let radius = 7; // ~49 cells/stroke, a plausible single brush-stroke footprint
-    let (existing_neighbor, touched) = bench_neighbor_query_existing(&graph, &spec, &mut rng, strokes, radius);
+    let (existing_neighbor, touched) =
+        bench_neighbor_query_existing(&graph, &spec, &mut rng, strokes, radius);
     let (dense_neighbor, _) = bench_neighbor_query_dense(&dense, &spec, &mut rng, strokes, radius);
     println!(
         "neighbor query x{strokes} strokes ({touched} cell-recomputes)  existing={:>10.3?}  dense={:>10.3?}  ratio={:.1}x  (existing/stroke={:.1}us)",
@@ -417,8 +436,10 @@ fn run_preset(name: &str, spec: GridSpec) {
     );
 
     let dispersed_iterations = 20_000;
-    let existing_dispersed = bench_neighbor_query_existing_dispersed(&graph, &spec, &mut rng, dispersed_iterations);
-    let dense_dispersed = bench_neighbor_query_dense_dispersed(&dense, &mut rng, dispersed_iterations);
+    let existing_dispersed =
+        bench_neighbor_query_existing_dispersed(&graph, &spec, &mut rng, dispersed_iterations);
+    let dense_dispersed =
+        bench_neighbor_query_dense_dispersed(&dense, &mut rng, dispersed_iterations);
     println!(
         "dispersed query x{dispersed_iterations}  existing={:>10.3?}  dense={:>10.3?}  ratio={:.1}x  (existing/op={:.0}ns)",
         existing_dispersed,
@@ -427,8 +448,14 @@ fn run_preset(name: &str, spec: GridSpec) {
         existing_dispersed.as_nanos() as f64 / dispersed_iterations as f64
     );
 
-    let indexed_clustered = bench_neighbor_query_indexed_clustered(&indexed_graph, &spec, &mut rng, strokes, radius);
-    let indexed_dispersed = bench_neighbor_query_indexed_dispersed(&indexed_graph, &spec, &mut rng, dispersed_iterations);
+    let indexed_clustered =
+        bench_neighbor_query_indexed_clustered(&indexed_graph, &spec, &mut rng, strokes, radius);
+    let indexed_dispersed = bench_neighbor_query_indexed_dispersed(
+        &indexed_graph,
+        &spec,
+        &mut rng,
+        dispersed_iterations,
+    );
     println!(
         "indexed (no String) clustered={:>10.3?} ({:.1}x vs existing/stroke)  dispersed={:>10.3?} ({:.1}x vs existing/op, {:.0}ns/op)",
         indexed_clustered,
@@ -440,8 +467,36 @@ fn run_preset(name: &str, spec: GridSpec) {
 }
 
 fn main() {
-    run_preset("small (~1k)", GridSpec { width: 18, height: 18, layers: 3 });
-    run_preset("medium (~10k)", GridSpec { width: 58, height: 58, layers: 3 });
-    run_preset("large (~100k)", GridSpec { width: 183, height: 183, layers: 3 });
-    run_preset("huge (~1M)", GridSpec { width: 577, height: 577, layers: 3 });
+    run_preset(
+        "small (~1k)",
+        GridSpec {
+            width: 18,
+            height: 18,
+            layers: 3,
+        },
+    );
+    run_preset(
+        "medium (~10k)",
+        GridSpec {
+            width: 58,
+            height: 58,
+            layers: 3,
+        },
+    );
+    run_preset(
+        "large (~100k)",
+        GridSpec {
+            width: 183,
+            height: 183,
+            layers: 3,
+        },
+    );
+    run_preset(
+        "huge (~1M)",
+        GridSpec {
+            width: 577,
+            height: 577,
+            layers: 3,
+        },
+    );
 }

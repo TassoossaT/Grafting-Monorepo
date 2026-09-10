@@ -14,7 +14,7 @@ export function sessionFixture() {
   let sequence = 0;
   const calls = { plans: 0, batches: 0, feedback: [] };
   const runtime = {
-    getGraphSnapshot() { const s = JSON.parse(session.snapshot_json()); return { nodes: s.nodes.map((n) => ({ ...n, position: position(n.position) })), edges: s.edges }; },
+    getGraphSnapshot() { const s = JSON.parse(session.snapshot_json()); return { nodes: s.nodes.map((n) => ({ ...n, position: position(n.position) })), edges: s.edges.map((e) => ({ edgeId: e.id, startNodeId: e.source, endNodeId: e.target, curve: e.curve ?? undefined })) }; },
     getAllRegionTopologies: () => JSON.parse(session.all_region_topologies_json()).map(topology),
     getRegionTopology: (surfaceKey) => topology(JSON.parse(session.region_topology_json(JSON.stringify({ surfaceKey })))),
     cloudFor: (request) => JSON.parse(session.cloud_json(JSON.stringify(request))),
@@ -23,10 +23,12 @@ export function sessionFixture() {
       const result = JSON.parse(session.plan_motion_json(JSON.stringify({ ...request, seeds: request.seeds.map((s) => ({ ...s, delta: vector(s.delta) })) })));
       return { ...result, moves: result.moves.map((m) => ({ ...m, position: position(m.position) })) };
     },
+    curveBatch: (request) => JSON.parse(session.bezier_batch_json(JSON.stringify(request))),
+    curveNetwork: (request) => JSON.parse(session.bezier_network_json(JSON.stringify(request))),
     planarBoolean: (request) => JSON.parse(session.planar_boolean_json(JSON.stringify(request))),
     applyRegionEdit(ops) { calls.batches++; return JSON.parse(session.move_vertices_json(JSON.stringify(ops.map((m) => ({ nodeId: m.nodeId, position: vector(m.position) }))))); },
     addPatch(patch) { const result = JSON.parse(session.add_patch_json(JSON.stringify(wirePatch(patch)))); if (result.skippedRegionIds.length) throw new Error(JSON.stringify(result)); return result; },
-    applyPatchReplacement(request) { return JSON.parse(session.apply_patch_replacement_json(JSON.stringify({ ...request, patch: wirePatch(request.patch) }))); },
+    applyPatchReplacement(request) { return JSON.parse(session.apply_patch_replacement_json(JSON.stringify({ ...request, patch: wirePatch(request.patch), graphPatch: request.graphPatch && wirePatch(request.graphPatch) }))); },
   };
   const ctx = { runtime, history: createEditHistoryStack(), tableId: "platform-test", snapToGrid: false, nextSequence: () => ++sequence, reportSelection() {}, reportFeedback: (f) => calls.feedback.push(f) };
   return { session, runtime, ctx, calls };

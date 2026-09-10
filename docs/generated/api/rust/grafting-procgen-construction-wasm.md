@@ -36,6 +36,14 @@ Applies an application-generated patch over an exact, already-resolved
 set of source regions. Geometry and product policy are caller-owned;
 this method only executes the generic overlay atomically.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::bezier_batch_json(&self, json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Evaluates a batch of generic curve-authoring commands without mutation.
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::bezier_network_json(&self, json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Plans a generic curve graph insertion without changing the session.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::classify_points_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 Which of the given XZ points already sit inside a region -- what a

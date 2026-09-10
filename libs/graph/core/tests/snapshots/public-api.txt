@@ -8,6 +8,365 @@ Documentation policy: `#![deny(missing_docs)]`
 
 ```text
 pub mod grafting_graph_core
+pub mod grafting_graph_core::bezier
+pub enum grafting_graph_core::bezier::HandleMode
+pub grafting_graph_core::bezier::HandleMode::Aligned
+pub grafting_graph_core::bezier::HandleMode::Automatic
+pub grafting_graph_core::bezier::HandleMode::Free
+pub grafting_graph_core::bezier::HandleMode::Mirrored
+impl core::clone::Clone for grafting_graph_core::bezier::HandleMode
+pub fn grafting_graph_core::bezier::HandleMode::clone(&self) -> grafting_graph_core::bezier::HandleMode
+impl core::cmp::Eq for grafting_graph_core::bezier::HandleMode
+impl core::cmp::PartialEq for grafting_graph_core::bezier::HandleMode
+pub fn grafting_graph_core::bezier::HandleMode::eq(&self, other: &grafting_graph_core::bezier::HandleMode) -> bool
+impl core::fmt::Debug for grafting_graph_core::bezier::HandleMode
+pub fn grafting_graph_core::bezier::HandleMode::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for grafting_graph_core::bezier::HandleMode
+impl core::marker::StructuralPartialEq for grafting_graph_core::bezier::HandleMode
+impl serde_core::ser::Serialize for grafting_graph_core::bezier::HandleMode
+pub fn grafting_graph_core::bezier::HandleMode::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for grafting_graph_core::bezier::HandleMode
+pub fn grafting_graph_core::bezier::HandleMode::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for grafting_graph_core::bezier::HandleMode
+impl core::marker::Send for grafting_graph_core::bezier::HandleMode
+impl core::marker::Sync for grafting_graph_core::bezier::HandleMode
+impl core::marker::Unpin for grafting_graph_core::bezier::HandleMode
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::bezier::HandleMode
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::bezier::HandleMode
+pub struct grafting_graph_core::bezier::CubicBezier
+pub grafting_graph_core::bezier::CubicBezier::points: [grafting_graph_core::bezier::CurvePoint; 4]
+impl grafting_graph_core::bezier::CubicBezier
+pub fn grafting_graph_core::bezier::CubicBezier::curvature(&self, t: f64) -> core::result::Result<core::option::Option<f64>, alloc::string::String>
+pub fn grafting_graph_core::bezier::CubicBezier::derivative(&self, t: f64) -> core::result::Result<grafting_graph_core::bezier::CurvePoint, alloc::string::String>
+pub fn grafting_graph_core::bezier::CubicBezier::evaluate(&self, t: f64) -> core::result::Result<grafting_graph_core::bezier::CurvePoint, alloc::string::String>
+pub fn grafting_graph_core::bezier::CubicBezier::length(&self, accuracy: f64) -> core::result::Result<f64, alloc::string::String>
+pub fn grafting_graph_core::bezier::CubicBezier::merge(&self, next: Self, accuracy: f64) -> core::result::Result<Self, alloc::string::String>
+pub fn grafting_graph_core::bezier::CubicBezier::nearest(&self, p: grafting_graph_core::bezier::CurvePoint, accuracy: f64) -> core::result::Result<f64, alloc::string::String>
+pub fn grafting_graph_core::bezier::CubicBezier::parameter_at_distance(&self, distance: f64, accuracy: f64) -> core::result::Result<f64, alloc::string::String>
+pub fn grafting_graph_core::bezier::CubicBezier::pull(&self, t: f64, target: grafting_graph_core::bezier::CurvePoint) -> core::result::Result<Self, alloc::string::String>
+pub fn grafting_graph_core::bezier::CubicBezier::reversed(&self) -> Self
+pub fn grafting_graph_core::bezier::CubicBezier::sample(&self, accuracy: f64) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::bezier::CurveSample>, alloc::string::String>
+pub fn grafting_graph_core::bezier::CubicBezier::split(&self, t: f64) -> core::result::Result<[Self; 2], alloc::string::String>
+pub fn grafting_graph_core::bezier::CubicBezier::validate(&self) -> core::result::Result<(), alloc::string::String>
+impl core::clone::Clone for grafting_graph_core::bezier::CubicBezier
+pub fn grafting_graph_core::bezier::CubicBezier::clone(&self) -> grafting_graph_core::bezier::CubicBezier
+impl core::cmp::PartialEq for grafting_graph_core::bezier::CubicBezier
+pub fn grafting_graph_core::bezier::CubicBezier::eq(&self, other: &grafting_graph_core::bezier::CubicBezier) -> bool
+impl core::fmt::Debug for grafting_graph_core::bezier::CubicBezier
+pub fn grafting_graph_core::bezier::CubicBezier::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for grafting_graph_core::bezier::CubicBezier
+impl core::marker::StructuralPartialEq for grafting_graph_core::bezier::CubicBezier
+impl serde_core::ser::Serialize for grafting_graph_core::bezier::CubicBezier
+pub fn grafting_graph_core::bezier::CubicBezier::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for grafting_graph_core::bezier::CubicBezier
+pub fn grafting_graph_core::bezier::CubicBezier::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for grafting_graph_core::bezier::CubicBezier
+impl core::marker::Send for grafting_graph_core::bezier::CubicBezier
+impl core::marker::Sync for grafting_graph_core::bezier::CubicBezier
+impl core::marker::Unpin for grafting_graph_core::bezier::CubicBezier
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::bezier::CubicBezier
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::bezier::CubicBezier
+pub struct grafting_graph_core::bezier::CurveHandles
+pub grafting_graph_core::bezier::CurveHandles::band_offsets: alloc::vec::Vec<f64>
+pub grafting_graph_core::bezier::CurveHandles::end: grafting_graph_core::bezier::CurvePoint
+pub grafting_graph_core::bezier::CurveHandles::end_band_offsets: alloc::vec::Vec<f64>
+pub grafting_graph_core::bezier::CurveHandles::mode: grafting_graph_core::bezier::HandleMode
+pub grafting_graph_core::bezier::CurveHandles::start: grafting_graph_core::bezier::CurvePoint
+impl grafting_graph_core::bezier::CurveHandles
+pub fn grafting_graph_core::bezier::CurveHandles::from_curve(curve: grafting_graph_core::bezier::CubicBezier, mode: grafting_graph_core::bezier::HandleMode, band_offsets: alloc::vec::Vec<f64>) -> Self
+pub fn grafting_graph_core::bezier::CurveHandles::profile_at(&self, t: f64) -> core::result::Result<alloc::vec::Vec<f64>, alloc::string::String>
+pub fn grafting_graph_core::bezier::CurveHandles::resolve(&self, start: grafting_graph_core::bezier::CurvePoint, end: grafting_graph_core::bezier::CurvePoint) -> grafting_graph_core::bezier::CubicBezier
+impl core::clone::Clone for grafting_graph_core::bezier::CurveHandles
+pub fn grafting_graph_core::bezier::CurveHandles::clone(&self) -> grafting_graph_core::bezier::CurveHandles
+impl core::cmp::PartialEq for grafting_graph_core::bezier::CurveHandles
+pub fn grafting_graph_core::bezier::CurveHandles::eq(&self, other: &grafting_graph_core::bezier::CurveHandles) -> bool
+impl core::fmt::Debug for grafting_graph_core::bezier::CurveHandles
+pub fn grafting_graph_core::bezier::CurveHandles::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for grafting_graph_core::bezier::CurveHandles
+impl serde_core::ser::Serialize for grafting_graph_core::bezier::CurveHandles
+pub fn grafting_graph_core::bezier::CurveHandles::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for grafting_graph_core::bezier::CurveHandles
+pub fn grafting_graph_core::bezier::CurveHandles::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for grafting_graph_core::bezier::CurveHandles
+impl core::marker::Send for grafting_graph_core::bezier::CurveHandles
+impl core::marker::Sync for grafting_graph_core::bezier::CurveHandles
+impl core::marker::Unpin for grafting_graph_core::bezier::CurveHandles
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::bezier::CurveHandles
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::bezier::CurveHandles
+pub struct grafting_graph_core::bezier::CurveSample
+pub grafting_graph_core::bezier::CurveSample::position: grafting_graph_core::bezier::CurvePoint
+pub grafting_graph_core::bezier::CurveSample::t: f64
+impl core::clone::Clone for grafting_graph_core::bezier::CurveSample
+pub fn grafting_graph_core::bezier::CurveSample::clone(&self) -> grafting_graph_core::bezier::CurveSample
+impl core::cmp::PartialEq for grafting_graph_core::bezier::CurveSample
+pub fn grafting_graph_core::bezier::CurveSample::eq(&self, other: &grafting_graph_core::bezier::CurveSample) -> bool
+impl core::fmt::Debug for grafting_graph_core::bezier::CurveSample
+pub fn grafting_graph_core::bezier::CurveSample::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for grafting_graph_core::bezier::CurveSample
+impl core::marker::StructuralPartialEq for grafting_graph_core::bezier::CurveSample
+impl serde_core::ser::Serialize for grafting_graph_core::bezier::CurveSample
+pub fn grafting_graph_core::bezier::CurveSample::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for grafting_graph_core::bezier::CurveSample
+pub fn grafting_graph_core::bezier::CurveSample::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for grafting_graph_core::bezier::CurveSample
+impl core::marker::Send for grafting_graph_core::bezier::CurveSample
+impl core::marker::Sync for grafting_graph_core::bezier::CurveSample
+impl core::marker::Unpin for grafting_graph_core::bezier::CurveSample
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::bezier::CurveSample
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::bezier::CurveSample
+pub fn grafting_graph_core::bezier::automatic_path(points: &[grafting_graph_core::bezier::CurvePoint]) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::bezier::CubicBezier>, alloc::string::String>
+pub fn grafting_graph_core::bezier::constrain_handle(anchor: grafting_graph_core::bezier::CurvePoint, moved: grafting_graph_core::bezier::CurvePoint, opposite: grafting_graph_core::bezier::CurvePoint, mode: grafting_graph_core::bezier::HandleMode) -> core::result::Result<grafting_graph_core::bezier::CurvePoint, alloc::string::String>
+pub fn grafting_graph_core::bezier::fit_path(points: &[grafting_graph_core::bezier::CurvePoint], accuracy: f64) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::bezier::CubicBezier>, alloc::string::String>
+pub type grafting_graph_core::bezier::CurvePoint = [f64; 3]
+pub mod grafting_graph_core::bezier_commands
+pub enum grafting_graph_core::bezier_commands::CurveCommand
+pub grafting_graph_core::bezier_commands::CurveCommand::Automatic
+pub grafting_graph_core::bezier_commands::CurveCommand::Automatic::points: alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>
+pub grafting_graph_core::bezier_commands::CurveCommand::Fit
+pub grafting_graph_core::bezier_commands::CurveCommand::Fit::points: alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>
+pub grafting_graph_core::bezier_commands::CurveCommand::Handle
+pub grafting_graph_core::bezier_commands::CurveCommand::Handle::curve: grafting_graph_core::bezier::CubicBezier
+pub grafting_graph_core::bezier_commands::CurveCommand::Handle::index: usize
+pub grafting_graph_core::bezier_commands::CurveCommand::Handle::mode: grafting_graph_core::bezier::HandleMode
+pub grafting_graph_core::bezier_commands::CurveCommand::Handle::opposite: core::option::Option<grafting_graph_core::bezier::CurvePoint>
+pub grafting_graph_core::bezier_commands::CurveCommand::Handle::target: grafting_graph_core::bezier::CurvePoint
+pub grafting_graph_core::bezier_commands::CurveCommand::Merge
+pub grafting_graph_core::bezier_commands::CurveCommand::Merge::curve: grafting_graph_core::bezier::CubicBezier
+pub grafting_graph_core::bezier_commands::CurveCommand::Merge::next: grafting_graph_core::bezier::CubicBezier
+pub grafting_graph_core::bezier_commands::CurveCommand::Nearest
+pub grafting_graph_core::bezier_commands::CurveCommand::Nearest::curve: grafting_graph_core::bezier::CubicBezier
+pub grafting_graph_core::bezier_commands::CurveCommand::Nearest::point: grafting_graph_core::bezier::CurvePoint
+pub grafting_graph_core::bezier_commands::CurveCommand::Pull
+pub grafting_graph_core::bezier_commands::CurveCommand::Pull::curve: grafting_graph_core::bezier::CubicBezier
+pub grafting_graph_core::bezier_commands::CurveCommand::Pull::t: f64
+pub grafting_graph_core::bezier_commands::CurveCommand::Pull::target: grafting_graph_core::bezier::CurvePoint
+pub grafting_graph_core::bezier_commands::CurveCommand::Resolve
+pub grafting_graph_core::bezier_commands::CurveCommand::Resolve::end: grafting_graph_core::bezier::CurvePoint
+pub grafting_graph_core::bezier_commands::CurveCommand::Resolve::handles: grafting_graph_core::bezier::CurveHandles
+pub grafting_graph_core::bezier_commands::CurveCommand::Resolve::start: grafting_graph_core::bezier::CurvePoint
+pub grafting_graph_core::bezier_commands::CurveCommand::Ribbon
+pub grafting_graph_core::bezier_commands::CurveCommand::Ribbon::curve: grafting_graph_core::bezier::CubicBezier
+pub grafting_graph_core::bezier_commands::CurveCommand::Ribbon::end_offsets: core::option::Option<[f64; 2]>
+pub grafting_graph_core::bezier_commands::CurveCommand::Ribbon::offsets: [f64; 2]
+pub grafting_graph_core::bezier_commands::CurveCommand::Sample
+pub grafting_graph_core::bezier_commands::CurveCommand::Sample::curves: alloc::vec::Vec<grafting_graph_core::bezier::CubicBezier>
+pub grafting_graph_core::bezier_commands::CurveCommand::Split
+pub grafting_graph_core::bezier_commands::CurveCommand::Split::curve: grafting_graph_core::bezier::CubicBezier
+pub grafting_graph_core::bezier_commands::CurveCommand::Split::profile: core::option::Option<grafting_graph_core::bezier::CurveHandles>
+pub grafting_graph_core::bezier_commands::CurveCommand::Split::t: f64
+impl core::clone::Clone for grafting_graph_core::bezier_commands::CurveCommand
+pub fn grafting_graph_core::bezier_commands::CurveCommand::clone(&self) -> grafting_graph_core::bezier_commands::CurveCommand
+impl core::fmt::Debug for grafting_graph_core::bezier_commands::CurveCommand
+pub fn grafting_graph_core::bezier_commands::CurveCommand::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for grafting_graph_core::bezier_commands::CurveCommand
+pub fn grafting_graph_core::bezier_commands::CurveCommand::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for grafting_graph_core::bezier_commands::CurveCommand
+pub fn grafting_graph_core::bezier_commands::CurveCommand::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for grafting_graph_core::bezier_commands::CurveCommand
+impl core::marker::Send for grafting_graph_core::bezier_commands::CurveCommand
+impl core::marker::Sync for grafting_graph_core::bezier_commands::CurveCommand
+impl core::marker::Unpin for grafting_graph_core::bezier_commands::CurveCommand
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::bezier_commands::CurveCommand
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::bezier_commands::CurveCommand
+pub struct grafting_graph_core::bezier_commands::CurveBatch
+pub grafting_graph_core::bezier_commands::CurveBatch::commands: alloc::vec::Vec<grafting_graph_core::bezier_commands::CurveCommand>
+pub grafting_graph_core::bezier_commands::CurveBatch::tolerance: f64
+impl core::clone::Clone for grafting_graph_core::bezier_commands::CurveBatch
+pub fn grafting_graph_core::bezier_commands::CurveBatch::clone(&self) -> grafting_graph_core::bezier_commands::CurveBatch
+impl core::fmt::Debug for grafting_graph_core::bezier_commands::CurveBatch
+pub fn grafting_graph_core::bezier_commands::CurveBatch::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for grafting_graph_core::bezier_commands::CurveBatch
+pub fn grafting_graph_core::bezier_commands::CurveBatch::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for grafting_graph_core::bezier_commands::CurveBatch
+pub fn grafting_graph_core::bezier_commands::CurveBatch::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for grafting_graph_core::bezier_commands::CurveBatch
+impl core::marker::Send for grafting_graph_core::bezier_commands::CurveBatch
+impl core::marker::Sync for grafting_graph_core::bezier_commands::CurveBatch
+impl core::marker::Unpin for grafting_graph_core::bezier_commands::CurveBatch
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::bezier_commands::CurveBatch
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::bezier_commands::CurveBatch
+pub struct grafting_graph_core::bezier_commands::CurveResult
+pub grafting_graph_core::bezier_commands::CurveResult::curves: alloc::vec::Vec<grafting_graph_core::bezier::CubicBezier>
+pub grafting_graph_core::bezier_commands::CurveResult::handles: alloc::vec::Vec<grafting_graph_core::bezier::CurveHandles>
+pub grafting_graph_core::bezier_commands::CurveResult::lengths: alloc::vec::Vec<f64>
+pub grafting_graph_core::bezier_commands::CurveResult::opposite: core::option::Option<grafting_graph_core::bezier::CurvePoint>
+pub grafting_graph_core::bezier_commands::CurveResult::parameter: core::option::Option<f64>
+pub grafting_graph_core::bezier_commands::CurveResult::ribbon: core::option::Option<grafting_graph_core::bezier_surface::CurveRibbon>
+pub grafting_graph_core::bezier_commands::CurveResult::samples: alloc::vec::Vec<alloc::vec::Vec<grafting_graph_core::bezier::CurveSample>>
+impl core::clone::Clone for grafting_graph_core::bezier_commands::CurveResult
+pub fn grafting_graph_core::bezier_commands::CurveResult::clone(&self) -> grafting_graph_core::bezier_commands::CurveResult
+impl core::fmt::Debug for grafting_graph_core::bezier_commands::CurveResult
+pub fn grafting_graph_core::bezier_commands::CurveResult::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for grafting_graph_core::bezier_commands::CurveResult
+pub fn grafting_graph_core::bezier_commands::CurveResult::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for grafting_graph_core::bezier_commands::CurveResult
+pub fn grafting_graph_core::bezier_commands::CurveResult::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for grafting_graph_core::bezier_commands::CurveResult
+impl core::marker::Send for grafting_graph_core::bezier_commands::CurveResult
+impl core::marker::Sync for grafting_graph_core::bezier_commands::CurveResult
+impl core::marker::Unpin for grafting_graph_core::bezier_commands::CurveResult
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::bezier_commands::CurveResult
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::bezier_commands::CurveResult
+pub fn grafting_graph_core::bezier_commands::execute(batch: grafting_graph_core::bezier_commands::CurveBatch) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::bezier_commands::CurveResult>, alloc::string::String>
+pub mod grafting_graph_core::bezier_network
+pub struct grafting_graph_core::bezier_network::CurveEdge
+pub grafting_graph_core::bezier_network::CurveEdge::curve: grafting_graph_core::bezier::CurveHandles
+pub grafting_graph_core::bezier_network::CurveEdge::edge_id: alloc::string::String
+pub grafting_graph_core::bezier_network::CurveEdge::end_node_id: alloc::string::String
+pub grafting_graph_core::bezier_network::CurveEdge::start_node_id: alloc::string::String
+impl core::clone::Clone for grafting_graph_core::bezier_network::CurveEdge
+pub fn grafting_graph_core::bezier_network::CurveEdge::clone(&self) -> grafting_graph_core::bezier_network::CurveEdge
+impl core::fmt::Debug for grafting_graph_core::bezier_network::CurveEdge
+pub fn grafting_graph_core::bezier_network::CurveEdge::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for grafting_graph_core::bezier_network::CurveEdge
+pub fn grafting_graph_core::bezier_network::CurveEdge::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for grafting_graph_core::bezier_network::CurveEdge
+pub fn grafting_graph_core::bezier_network::CurveEdge::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for grafting_graph_core::bezier_network::CurveEdge
+impl core::marker::Send for grafting_graph_core::bezier_network::CurveEdge
+impl core::marker::Sync for grafting_graph_core::bezier_network::CurveEdge
+impl core::marker::Unpin for grafting_graph_core::bezier_network::CurveEdge
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::bezier_network::CurveEdge
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::bezier_network::CurveEdge
+pub struct grafting_graph_core::bezier_network::CurveNode
+pub grafting_graph_core::bezier_network::CurveNode::id: alloc::string::String
+pub grafting_graph_core::bezier_network::CurveNode::position: grafting_graph_core::bezier::CurvePoint
+impl core::clone::Clone for grafting_graph_core::bezier_network::CurveNode
+pub fn grafting_graph_core::bezier_network::CurveNode::clone(&self) -> grafting_graph_core::bezier_network::CurveNode
+impl core::fmt::Debug for grafting_graph_core::bezier_network::CurveNode
+pub fn grafting_graph_core::bezier_network::CurveNode::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for grafting_graph_core::bezier_network::CurveNode
+pub fn grafting_graph_core::bezier_network::CurveNode::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for grafting_graph_core::bezier_network::CurveNode
+pub fn grafting_graph_core::bezier_network::CurveNode::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for grafting_graph_core::bezier_network::CurveNode
+impl core::marker::Send for grafting_graph_core::bezier_network::CurveNode
+impl core::marker::Sync for grafting_graph_core::bezier_network::CurveNode
+impl core::marker::Unpin for grafting_graph_core::bezier_network::CurveNode
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::bezier_network::CurveNode
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::bezier_network::CurveNode
+pub struct grafting_graph_core::bezier_network::NetworkPatch
+pub grafting_graph_core::bezier_network::NetworkPatch::edges: alloc::vec::Vec<grafting_graph_core::bezier_network::CurveEdge>
+pub grafting_graph_core::bezier_network::NetworkPatch::nodes: alloc::vec::Vec<grafting_graph_core::bezier_network::CurveNode>
+pub grafting_graph_core::bezier_network::NetworkPatch::removed_edge_ids: alloc::vec::Vec<alloc::string::String>
+impl core::clone::Clone for grafting_graph_core::bezier_network::NetworkPatch
+pub fn grafting_graph_core::bezier_network::NetworkPatch::clone(&self) -> grafting_graph_core::bezier_network::NetworkPatch
+impl core::fmt::Debug for grafting_graph_core::bezier_network::NetworkPatch
+pub fn grafting_graph_core::bezier_network::NetworkPatch::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for grafting_graph_core::bezier_network::NetworkPatch
+pub fn grafting_graph_core::bezier_network::NetworkPatch::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for grafting_graph_core::bezier_network::NetworkPatch
+pub fn grafting_graph_core::bezier_network::NetworkPatch::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for grafting_graph_core::bezier_network::NetworkPatch
+impl core::marker::Send for grafting_graph_core::bezier_network::NetworkPatch
+impl core::marker::Sync for grafting_graph_core::bezier_network::NetworkPatch
+impl core::marker::Unpin for grafting_graph_core::bezier_network::NetworkPatch
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::bezier_network::NetworkPatch
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::bezier_network::NetworkPatch
+pub struct grafting_graph_core::bezier_network::NetworkRequest
+pub grafting_graph_core::bezier_network::NetworkRequest::added_edges: alloc::vec::Vec<grafting_graph_core::bezier_network::CurveEdge>
+pub grafting_graph_core::bezier_network::NetworkRequest::added_nodes: alloc::vec::Vec<grafting_graph_core::bezier_network::CurveNode>
+pub grafting_graph_core::bezier_network::NetworkRequest::edges: alloc::vec::Vec<grafting_graph_core::bezier_network::CurveEdge>
+pub grafting_graph_core::bezier_network::NetworkRequest::height_tolerance: f64
+pub grafting_graph_core::bezier_network::NetworkRequest::node_prefix: alloc::string::String
+pub grafting_graph_core::bezier_network::NetworkRequest::nodes: alloc::vec::Vec<grafting_graph_core::bezier_network::CurveNode>
+pub grafting_graph_core::bezier_network::NetworkRequest::snap_tolerance: f64
+pub grafting_graph_core::bezier_network::NetworkRequest::tolerance: f64
+impl core::clone::Clone for grafting_graph_core::bezier_network::NetworkRequest
+pub fn grafting_graph_core::bezier_network::NetworkRequest::clone(&self) -> grafting_graph_core::bezier_network::NetworkRequest
+impl core::fmt::Debug for grafting_graph_core::bezier_network::NetworkRequest
+pub fn grafting_graph_core::bezier_network::NetworkRequest::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for grafting_graph_core::bezier_network::NetworkRequest
+pub fn grafting_graph_core::bezier_network::NetworkRequest::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for grafting_graph_core::bezier_network::NetworkRequest
+pub fn grafting_graph_core::bezier_network::NetworkRequest::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for grafting_graph_core::bezier_network::NetworkRequest
+impl core::marker::Send for grafting_graph_core::bezier_network::NetworkRequest
+impl core::marker::Sync for grafting_graph_core::bezier_network::NetworkRequest
+impl core::marker::Unpin for grafting_graph_core::bezier_network::NetworkRequest
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::bezier_network::NetworkRequest
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::bezier_network::NetworkRequest
+pub fn grafting_graph_core::bezier_network::intersections(a: grafting_graph_core::bezier::CubicBezier, b: grafting_graph_core::bezier::CubicBezier, tolerance: f64, height: f64) -> core::result::Result<alloc::vec::Vec<[f64; 2]>, alloc::string::String>
+pub fn grafting_graph_core::bezier_network::plan(request: grafting_graph_core::bezier_network::NetworkRequest) -> core::result::Result<grafting_graph_core::bezier_network::NetworkPatch, alloc::string::String>
+pub mod grafting_graph_core::bezier_surface
+pub struct grafting_graph_core::bezier_surface::CurveRibbon
+pub grafting_graph_core::bezier_surface::CurveRibbon::outer: alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>
+impl core::clone::Clone for grafting_graph_core::bezier_surface::CurveRibbon
+pub fn grafting_graph_core::bezier_surface::CurveRibbon::clone(&self) -> grafting_graph_core::bezier_surface::CurveRibbon
+impl core::fmt::Debug for grafting_graph_core::bezier_surface::CurveRibbon
+pub fn grafting_graph_core::bezier_surface::CurveRibbon::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for grafting_graph_core::bezier_surface::CurveRibbon
+pub fn grafting_graph_core::bezier_surface::CurveRibbon::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for grafting_graph_core::bezier_surface::CurveRibbon
+pub fn grafting_graph_core::bezier_surface::CurveRibbon::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for grafting_graph_core::bezier_surface::CurveRibbon
+impl core::marker::Send for grafting_graph_core::bezier_surface::CurveRibbon
+impl core::marker::Sync for grafting_graph_core::bezier_surface::CurveRibbon
+impl core::marker::Unpin for grafting_graph_core::bezier_surface::CurveRibbon
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::bezier_surface::CurveRibbon
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::bezier_surface::CurveRibbon
+pub fn grafting_graph_core::bezier_surface::ribbon(curve: grafting_graph_core::bezier::CubicBezier, offsets: [f64; 2], accuracy: f64) -> core::result::Result<grafting_graph_core::bezier_surface::CurveRibbon, alloc::string::String>
+pub fn grafting_graph_core::bezier_surface::ribbon_profile(curve: grafting_graph_core::bezier::CubicBezier, offsets: [f64; 2], end_offsets: [f64; 2], accuracy: f64) -> core::result::Result<grafting_graph_core::bezier_surface::CurveRibbon, alloc::string::String>
+pub fn grafting_graph_core::bezier_surface::union_ribbons(ribbons: &[grafting_graph_core::bezier_surface::CurveRibbon]) -> alloc::vec::Vec<grafting_graph_core::curve_offset::Polygon>
+pub mod grafting_graph_core::curve_offset
+pub struct grafting_graph_core::curve_offset::Polygon
+pub grafting_graph_core::curve_offset::Polygon::holes: alloc::vec::Vec<alloc::vec::Vec<grafting_graph_core::curve_offset::Point>>
+pub grafting_graph_core::curve_offset::Polygon::outer: alloc::vec::Vec<grafting_graph_core::curve_offset::Point>
+impl core::clone::Clone for grafting_graph_core::curve_offset::Polygon
+pub fn grafting_graph_core::curve_offset::Polygon::clone(&self) -> grafting_graph_core::curve_offset::Polygon
+impl core::cmp::PartialEq for grafting_graph_core::curve_offset::Polygon
+pub fn grafting_graph_core::curve_offset::Polygon::eq(&self, other: &grafting_graph_core::curve_offset::Polygon) -> bool
+impl core::default::Default for grafting_graph_core::curve_offset::Polygon
+pub fn grafting_graph_core::curve_offset::Polygon::default() -> grafting_graph_core::curve_offset::Polygon
+impl core::fmt::Debug for grafting_graph_core::curve_offset::Polygon
+pub fn grafting_graph_core::curve_offset::Polygon::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for grafting_graph_core::curve_offset::Polygon
+impl core::marker::Freeze for grafting_graph_core::curve_offset::Polygon
+impl core::marker::Send for grafting_graph_core::curve_offset::Polygon
+impl core::marker::Sync for grafting_graph_core::curve_offset::Polygon
+impl core::marker::Unpin for grafting_graph_core::curve_offset::Polygon
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::curve_offset::Polygon
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::curve_offset::Polygon
+pub struct grafting_graph_core::curve_offset::Polyline
+pub grafting_graph_core::curve_offset::Polyline::points: alloc::vec::Vec<grafting_graph_core::curve_offset::Point>
+impl core::clone::Clone for grafting_graph_core::curve_offset::Polyline
+pub fn grafting_graph_core::curve_offset::Polyline::clone(&self) -> grafting_graph_core::curve_offset::Polyline
+impl core::cmp::PartialEq for grafting_graph_core::curve_offset::Polyline
+pub fn grafting_graph_core::curve_offset::Polyline::eq(&self, other: &grafting_graph_core::curve_offset::Polyline) -> bool
+impl core::default::Default for grafting_graph_core::curve_offset::Polyline
+pub fn grafting_graph_core::curve_offset::Polyline::default() -> grafting_graph_core::curve_offset::Polyline
+impl core::fmt::Debug for grafting_graph_core::curve_offset::Polyline
+pub fn grafting_graph_core::curve_offset::Polyline::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for grafting_graph_core::curve_offset::Polyline
+impl core::marker::Freeze for grafting_graph_core::curve_offset::Polyline
+impl core::marker::Send for grafting_graph_core::curve_offset::Polyline
+impl core::marker::Sync for grafting_graph_core::curve_offset::Polyline
+impl core::marker::Unpin for grafting_graph_core::curve_offset::Polyline
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::curve_offset::Polyline
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::curve_offset::Polyline
+pub struct grafting_graph_core::curve_offset::TriangulatedMesh
+pub grafting_graph_core::curve_offset::TriangulatedMesh::indices: alloc::vec::Vec<u32>
+pub grafting_graph_core::curve_offset::TriangulatedMesh::positions: alloc::vec::Vec<grafting_graph_core::curve_offset::Point>
+impl core::clone::Clone for grafting_graph_core::curve_offset::TriangulatedMesh
+pub fn grafting_graph_core::curve_offset::TriangulatedMesh::clone(&self) -> grafting_graph_core::curve_offset::TriangulatedMesh
+impl core::cmp::PartialEq for grafting_graph_core::curve_offset::TriangulatedMesh
+pub fn grafting_graph_core::curve_offset::TriangulatedMesh::eq(&self, other: &grafting_graph_core::curve_offset::TriangulatedMesh) -> bool
+impl core::default::Default for grafting_graph_core::curve_offset::TriangulatedMesh
+pub fn grafting_graph_core::curve_offset::TriangulatedMesh::default() -> grafting_graph_core::curve_offset::TriangulatedMesh
+impl core::fmt::Debug for grafting_graph_core::curve_offset::TriangulatedMesh
+pub fn grafting_graph_core::curve_offset::TriangulatedMesh::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for grafting_graph_core::curve_offset::TriangulatedMesh
+impl core::marker::Freeze for grafting_graph_core::curve_offset::TriangulatedMesh
+impl core::marker::Send for grafting_graph_core::curve_offset::TriangulatedMesh
+impl core::marker::Sync for grafting_graph_core::curve_offset::TriangulatedMesh
+impl core::marker::Unpin for grafting_graph_core::curve_offset::TriangulatedMesh
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::curve_offset::TriangulatedMesh
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::curve_offset::TriangulatedMesh
+pub fn grafting_graph_core::curve_offset::offset_bands(polyline: &grafting_graph_core::curve_offset::Polyline, band_offsets: &[f32], miter_limit: f32) -> alloc::vec::Vec<grafting_graph_core::curve_offset::Polygon>
+pub fn grafting_graph_core::curve_offset::sample_catmull_rom(control_points: &[grafting_graph_core::curve_offset::Point], tolerance: f32) -> grafting_graph_core::curve_offset::Polyline
+pub fn grafting_graph_core::curve_offset::union_and_triangulate(polygons: &[grafting_graph_core::curve_offset::Polygon]) -> grafting_graph_core::curve_offset::TriangulatedMesh
+pub fn grafting_graph_core::curve_offset::union_polygons(polygons: &[grafting_graph_core::curve_offset::Polygon]) -> alloc::vec::Vec<grafting_graph_core::curve_offset::Polygon>
+pub type grafting_graph_core::curve_offset::Point = [f32; 2]
 pub enum grafting_graph_core::ArcBulge
 pub grafting_graph_core::ArcBulge::Left
 pub grafting_graph_core::ArcBulge::Right
@@ -1045,6 +1404,14 @@ Structural failure of an atomic region edit.
 
 Structural error from surface registration or lookup.
 
+### `pub enum grafting_graph_core::bezier::HandleMode`
+
+Handle continuity policy.
+
+### `pub enum grafting_graph_core::bezier_commands::CurveCommand`
+
+A generic authored-curve operation.
+
 ### `pub fn grafting_graph_core::ContourEdge::bounds(&self, from: grafting_graph_core::ContourPoint, to: grafting_graph_core::ContourPoint) -> grafting_graph_core::ContourBounds`
 
 Axis-aligned bounding box between `from` and `to`.
@@ -1594,6 +1961,142 @@ The loop is left with one use free on every edge, which is what lets a
 second region take the opening as its own outer boundary. A hole and the
 face filling it are then joined the same way any two faces are: they
 share the rim.
+
+### `pub fn grafting_graph_core::bezier::CubicBezier::curvature(&self, t: f64) -> core::result::Result<core::option::Option<f64>, alloc::string::String>`
+
+Signed XZ curvature, undefined at stationary points.
+
+### `pub fn grafting_graph_core::bezier::CubicBezier::derivative(&self, t: f64) -> core::result::Result<grafting_graph_core::bezier::CurvePoint, alloc::string::String>`
+
+Returns the XYZ parameter derivative; stationary points return zero.
+
+### `pub fn grafting_graph_core::bezier::CubicBezier::evaluate(&self, t: f64) -> core::result::Result<grafting_graph_core::bezier::CurvePoint, alloc::string::String>`
+
+Evaluates a validated parameter.
+
+### `pub fn grafting_graph_core::bezier::CubicBezier::length(&self, accuracy: f64) -> core::result::Result<f64, alloc::string::String>`
+
+Ground-plane arc length.
+
+### `pub fn grafting_graph_core::bezier::CubicBezier::merge(&self, next: Self, accuracy: f64) -> core::result::Result<Self, alloc::string::String>`
+
+Removes a shared anchor only when a control-hull error certificate fits the tolerance.
+
+### `pub fn grafting_graph_core::bezier::CubicBezier::nearest(&self, p: grafting_graph_core::bezier::CurvePoint, accuracy: f64) -> core::result::Result<f64, alloc::string::String>`
+
+Nearest ground-plane parameter.
+
+### `pub fn grafting_graph_core::bezier::CubicBezier::parameter_at_distance(&self, distance: f64, accuracy: f64) -> core::result::Result<f64, alloc::string::String>`
+
+Ground-plane parameter at a clamped distance.
+
+### `pub fn grafting_graph_core::bezier::CubicBezier::pull(&self, t: f64, target: grafting_graph_core::bezier::CurvePoint) -> core::result::Result<Self, alloc::string::String>`
+
+Pulls an interior point with fixed anchors and minimum squared handle displacement.
+
+### `pub fn grafting_graph_core::bezier::CubicBezier::reversed(&self) -> Self`
+
+Reverses traversal, preserving shape.
+
+### `pub fn grafting_graph_core::bezier::CubicBezier::sample(&self, accuracy: f64) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::bezier::CurveSample>, alloc::string::String>`
+
+Adaptive XYZ sampling using the control-hull distance bound.
+Budget exhaustion returns an error, never an inaccurate success.
+
+### `pub fn grafting_graph_core::bezier::CubicBezier::split(&self, t: f64) -> core::result::Result<[Self; 2], alloc::string::String>`
+
+Exact de Casteljau subdivision preserving the locus.
+
+### `pub fn grafting_graph_core::bezier::CubicBezier::validate(&self) -> core::result::Result<(), alloc::string::String>`
+
+Validates finite, bounded coordinates before calculation.
+
+### `pub fn grafting_graph_core::bezier::CurveHandles::from_curve(curve: grafting_graph_core::bezier::CubicBezier, mode: grafting_graph_core::bezier::HandleMode, band_offsets: alloc::vec::Vec<f64>) -> Self`
+
+Captures a cubic without duplicating its anchor positions.
+
+### `pub fn grafting_graph_core::bezier::CurveHandles::profile_at(&self, t: f64) -> core::result::Result<alloc::vec::Vec<f64>, alloc::string::String>`
+
+Interpolates an independently authored width profile.
+
+### `pub fn grafting_graph_core::bezier::CurveHandles::resolve(&self, start: grafting_graph_core::bezier::CurvePoint, end: grafting_graph_core::bezier::CurvePoint) -> grafting_graph_core::bezier::CubicBezier`
+
+Resolves authored relative controls against current graph anchors.
+
+### `pub fn grafting_graph_core::bezier::automatic_path(points: &[grafting_graph_core::bezier::CurvePoint]) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::bezier::CubicBezier>, alloc::string::String>`
+
+Converts a legacy centripetal chain to explicit cubics using XZ knot spacing.
+Endpoint reflection matches legacy evaluation; duplicate anchors are rejected.
+
+### `pub fn grafting_graph_core::bezier::constrain_handle(anchor: grafting_graph_core::bezier::CurvePoint, moved: grafting_graph_core::bezier::CurvePoint, opposite: grafting_graph_core::bezier::CurvePoint, mode: grafting_graph_core::bezier::HandleMode) -> core::result::Result<grafting_graph_core::bezier::CurvePoint, alloc::string::String>`
+
+Constrains the paired opposite handle.
+
+### `pub fn grafting_graph_core::bezier::fit_path(points: &[grafting_graph_core::bezier::CurvePoint], accuracy: f64) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::bezier::CubicBezier>, alloc::string::String>`
+
+Fits captured samples with a deterministic error bound at each captured point.
+Original anchors are retained whenever a cubic cannot meet that bound.
+
+### `pub fn grafting_graph_core::bezier_commands::execute(batch: grafting_graph_core::bezier_commands::CurveBatch) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::bezier_commands::CurveResult>, alloc::string::String>`
+
+Validates and executes a bounded batch without changing caller state.
+
+### `pub fn grafting_graph_core::bezier_network::intersections(a: grafting_graph_core::bezier::CubicBezier, b: grafting_graph_core::bezier::CubicBezier, tolerance: f64, height: f64) -> core::result::Result<alloc::vec::Vec<[f64; 2]>, alloc::string::String>`
+
+Finds same-level intersections using adaptive candidates and Newton refinement.
+Nearly tangent/coincident spans do not manufacture arbitrary crossings.
+
+### `pub fn grafting_graph_core::bezier_network::plan(request: grafting_graph_core::bezier_network::NetworkRequest) -> core::result::Result<grafting_graph_core::bezier_network::NetworkPatch, alloc::string::String>`
+
+Inserts and splits curves transactionally, enforcing independent height tolerance.
+
+### `pub fn grafting_graph_core::bezier_surface::ribbon(curve: grafting_graph_core::bezier::CubicBezier, offsets: [f64; 2], accuracy: f64) -> core::result::Result<grafting_graph_core::bezier_surface::CurveRibbon, alloc::string::String>`
+
+Computes a ribbon from an explicit cubic and independently specified widths.
+The raw offset may overlap at tight turns; normalize it with the planar union before meshing.
+Stationary ground-plane tangents are rejected.
+
+### `pub fn grafting_graph_core::bezier_surface::ribbon_profile(curve: grafting_graph_core::bezier::CubicBezier, offsets: [f64; 2], end_offsets: [f64; 2], accuracy: f64) -> core::result::Result<grafting_graph_core::bezier_surface::CurveRibbon, alloc::string::String>`
+
+Samples a ribbon with linearly varying start/end lateral offsets.
+
+### `pub fn grafting_graph_core::bezier_surface::union_ribbons(ribbons: &[grafting_graph_core::bezier_surface::CurveRibbon]) -> alloc::vec::Vec<grafting_graph_core::curve_offset::Polygon>`
+
+Unions coplanar ribbon contours, retaining islands as holes.
+The caller partitions grade-separated connections before this operation.
+
+### `pub fn grafting_graph_core::curve_offset::offset_bands(polyline: &grafting_graph_core::curve_offset::Polyline, band_offsets: &[f32], miter_limit: f32) -> alloc::vec::Vec<grafting_graph_core::curve_offset::Polygon>`
+
+One ribbon polygon per consecutive pair of `band_offsets` -- the band
+between offset `k` and offset `k + 1`, following `polyline`'s own shape.
+`band_offsets` need not be sorted by sign, only ordered the way the
+caller wants its bands to read (mirrors a cross-section profile's list of
+lateral offsets, left-to-right across the run).
+
+Returns no bands for a polyline with fewer than two points or a profile
+with fewer than two offsets -- there is no span to sweep along, or no gap
+between offsets to call a band.
+
+### `pub fn grafting_graph_core::curve_offset::sample_catmull_rom(control_points: &[grafting_graph_core::curve_offset::Point], tolerance: f32) -> grafting_graph_core::curve_offset::Polyline`
+
+Samples a centripetal Catmull-Rom curve through `control_points`,
+flattened so no chord strays from the true curve by more than
+`tolerance`. The curve passes through every control point in order; the
+phantom point beyond either end is a reflection of that end's own last
+chord (using endpoint reflection), not a loop and not a duplicate, so the curve
+does not overshoot past either end.
+
+Collinear control points flatten to their own straight chords, however
+unevenly they are spaced -- collinear is collinear under any
+parametrization -- so the result is exactly `control_points` back.
+
+### `pub fn grafting_graph_core::curve_offset::union_and_triangulate(polygons: &[grafting_graph_core::curve_offset::Polygon]) -> grafting_graph_core::curve_offset::TriangulatedMesh`
+
+Unions contours and triangulates their interiors, leaving holes empty.
+
+### `pub fn grafting_graph_core::curve_offset::union_polygons(polygons: &[grafting_graph_core::curve_offset::Polygon]) -> alloc::vec::Vec<grafting_graph_core::curve_offset::Polygon>`
+
+Unions oriented outer rings and holes, preserving the resulting holes.
 
 ### `pub fn grafting_graph_core::delete_region<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, surfaces: &mut grafting_graph_core::SurfaceRegistry, region: &grafting_graph_core::RegionId) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
 
@@ -2263,6 +2766,318 @@ Whether the new surface blocks movement or acts as ground.
 
 The new surface's open, extensible type identifier.
 
+### `pub grafting_graph_core::bezier::CubicBezier::points: [grafting_graph_core::bezier::CurvePoint; 4]`
+
+The four authored coordinates.
+
+### `pub grafting_graph_core::bezier::CurveHandles::band_offsets: alloc::vec::Vec<f64>`
+
+Independent cross-section offsets; empty means caller default.
+
+### `pub grafting_graph_core::bezier::CurveHandles::end: grafting_graph_core::bezier::CurvePoint`
+
+Incoming vector relative to the end anchor.
+
+### `pub grafting_graph_core::bezier::CurveHandles::end_band_offsets: alloc::vec::Vec<f64>`
+
+Optional cross-section at the end; empty keeps a constant profile.
+
+### `pub grafting_graph_core::bezier::CurveHandles::mode: grafting_graph_core::bezier::HandleMode`
+
+Constraint used when editing paired handles.
+
+### `pub grafting_graph_core::bezier::CurveHandles::start: grafting_graph_core::bezier::CurvePoint`
+
+Outgoing vector relative to the start anchor.
+
+### `pub grafting_graph_core::bezier::CurveSample::position: grafting_graph_core::bezier::CurvePoint`
+
+XYZ position.
+
+### `pub grafting_graph_core::bezier::CurveSample::t: f64`
+
+Original parameter.
+
+### `pub grafting_graph_core::bezier::HandleMode::Aligned`
+
+Opposite direction, independent length.
+
+### `pub grafting_graph_core::bezier::HandleMode::Automatic`
+
+Derived from neighboring anchors.
+
+### `pub grafting_graph_core::bezier::HandleMode::Free`
+
+Independent control.
+
+### `pub grafting_graph_core::bezier::HandleMode::Mirrored`
+
+Opposite direction and equal length.
+
+### `pub grafting_graph_core::bezier_commands::CurveBatch::commands: alloc::vec::Vec<grafting_graph_core::bezier_commands::CurveCommand>`
+
+Ordered operations; errors reject the entire batch.
+
+### `pub grafting_graph_core::bezier_commands::CurveBatch::tolerance: f64`
+
+World-space approximation tolerance.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Automatic`
+
+Convert a legacy/automatic anchor chain.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Automatic::points: alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>`
+
+Ordered anchors.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Fit`
+
+Fit a captured stroke within the batch tolerance at its samples.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Fit::points: alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>`
+
+Captured XYZ samples.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Handle`
+
+Move a handle, applying its paired continuity constraint.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Handle::curve: grafting_graph_core::bezier::CubicBezier`
+
+Authored segment.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Handle::index: usize`
+
+Index 1 or 2.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Handle::mode: grafting_graph_core::bezier::HandleMode`
+
+Constraint for the opposite handle at this anchor.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Handle::opposite: core::option::Option<grafting_graph_core::bezier::CurvePoint>`
+
+Optional paired handle on another incident edge.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Handle::target: grafting_graph_core::bezier::CurvePoint`
+
+Desired control position.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Merge`
+
+Remove a shared anchor with a certified shape tolerance.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Merge::curve: grafting_graph_core::bezier::CubicBezier`
+
+First oriented cubic.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Merge::next: grafting_graph_core::bezier::CubicBezier`
+
+Next oriented cubic.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Nearest`
+
+Query a point against a segment.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Nearest::curve: grafting_graph_core::bezier::CubicBezier`
+
+Authored segment.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Nearest::point: grafting_graph_core::bezier::CurvePoint`
+
+Query position.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Pull`
+
+Manipulate an interior point.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Pull::curve: grafting_graph_core::bezier::CubicBezier`
+
+Authored segment.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Pull::t: f64`
+
+Parameter to pull.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Pull::target: grafting_graph_core::bezier::CurvePoint`
+
+Desired position.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Resolve`
+
+Resolve graph-owned controls against updated anchors.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Resolve::end: grafting_graph_core::bezier::CurvePoint`
+
+End anchor.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Resolve::handles: grafting_graph_core::bezier::CurveHandles`
+
+Relative controls.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Resolve::start: grafting_graph_core::bezier::CurvePoint`
+
+Start anchor.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Ribbon`
+
+Derive a ribbon from independent lateral offsets.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Ribbon::curve: grafting_graph_core::bezier::CubicBezier`
+
+Authored cubic.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Ribbon::end_offsets: core::option::Option<[f64; 2]>`
+
+Optional ending profile.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Ribbon::offsets: [f64; 2]`
+
+Left and right offsets.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Sample`
+
+Evaluate several explicit segments.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Sample::curves: alloc::vec::Vec<grafting_graph_core::bezier::CubicBezier>`
+
+Ordered cubics.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Split`
+
+Insert an anchor exactly.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Split::curve: grafting_graph_core::bezier::CubicBezier`
+
+Authored segment.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Split::profile: core::option::Option<grafting_graph_core::bezier::CurveHandles>`
+
+Optional authored profile to subdivide together with the curve.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Split::t: f64`
+
+Insertion parameter.
+
+### `pub grafting_graph_core::bezier_commands::CurveResult::curves: alloc::vec::Vec<grafting_graph_core::bezier::CubicBezier>`
+
+Resulting authored cubics.
+
+### `pub grafting_graph_core::bezier_commands::CurveResult::handles: alloc::vec::Vec<grafting_graph_core::bezier::CurveHandles>`
+
+Relative controls suitable for durable graph edge payloads.
+
+### `pub grafting_graph_core::bezier_commands::CurveResult::lengths: alloc::vec::Vec<f64>`
+
+Ground-plane lengths.
+
+### `pub grafting_graph_core::bezier_commands::CurveResult::opposite: core::option::Option<grafting_graph_core::bezier::CurvePoint>`
+
+Optional paired handle after applying the constraint.
+
+### `pub grafting_graph_core::bezier_commands::CurveResult::parameter: core::option::Option<f64>`
+
+Optional nearest parameter.
+
+### `pub grafting_graph_core::bezier_commands::CurveResult::ribbon: core::option::Option<grafting_graph_core::bezier_surface::CurveRibbon>`
+
+Optional derived ribbon polygon.
+
+### `pub grafting_graph_core::bezier_commands::CurveResult::samples: alloc::vec::Vec<alloc::vec::Vec<grafting_graph_core::bezier::CurveSample>>`
+
+Samples grouped by cubic, including original parameters.
+
+### `pub grafting_graph_core::bezier_network::CurveEdge::curve: grafting_graph_core::bezier::CurveHandles`
+
+Explicit authored controls.
+
+### `pub grafting_graph_core::bezier_network::CurveEdge::edge_id: alloc::string::String`
+
+Stable identity.
+
+### `pub grafting_graph_core::bezier_network::CurveEdge::end_node_id: alloc::string::String`
+
+End anchor.
+
+### `pub grafting_graph_core::bezier_network::CurveEdge::start_node_id: alloc::string::String`
+
+Start anchor.
+
+### `pub grafting_graph_core::bezier_network::CurveNode::id: alloc::string::String`
+
+Stable identity.
+
+### `pub grafting_graph_core::bezier_network::CurveNode::position: grafting_graph_core::bezier::CurvePoint`
+
+XYZ anchor.
+
+### `pub grafting_graph_core::bezier_network::NetworkPatch::edges: alloc::vec::Vec<grafting_graph_core::bezier_network::CurveEdge>`
+
+New intervals with exact controls.
+
+### `pub grafting_graph_core::bezier_network::NetworkPatch::nodes: alloc::vec::Vec<grafting_graph_core::bezier_network::CurveNode>`
+
+Newly introduced or snapped anchors.
+
+### `pub grafting_graph_core::bezier_network::NetworkPatch::removed_edge_ids: alloc::vec::Vec<alloc::string::String>`
+
+Superseded edge identities.
+
+### `pub grafting_graph_core::bezier_network::NetworkRequest::added_edges: alloc::vec::Vec<grafting_graph_core::bezier_network::CurveEdge>`
+
+Proposed edges.
+
+### `pub grafting_graph_core::bezier_network::NetworkRequest::added_nodes: alloc::vec::Vec<grafting_graph_core::bezier_network::CurveNode>`
+
+Proposed anchors.
+
+### `pub grafting_graph_core::bezier_network::NetworkRequest::edges: alloc::vec::Vec<grafting_graph_core::bezier_network::CurveEdge>`
+
+Existing authored edges.
+
+### `pub grafting_graph_core::bezier_network::NetworkRequest::height_tolerance: f64`
+
+Maximum allowed height difference for connection.
+
+### `pub grafting_graph_core::bezier_network::NetworkRequest::node_prefix: alloc::string::String`
+
+Prefix for deterministic new junction identities.
+
+### `pub grafting_graph_core::bezier_network::NetworkRequest::nodes: alloc::vec::Vec<grafting_graph_core::bezier_network::CurveNode>`
+
+Existing anchors.
+
+### `pub grafting_graph_core::bezier_network::NetworkRequest::snap_tolerance: f64`
+
+Planar snap reach.
+
+### `pub grafting_graph_core::bezier_network::NetworkRequest::tolerance: f64`
+
+Curve approximation tolerance.
+
+### `pub grafting_graph_core::bezier_surface::CurveRibbon::outer: alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>`
+
+Closed polygon boundary, without a repeated closing vertex.
+
+### `pub grafting_graph_core::curve_offset::Polygon::holes: alloc::vec::Vec<alloc::vec::Vec<grafting_graph_core::curve_offset::Point>>`
+
+Interior holes.
+
+### `pub grafting_graph_core::curve_offset::Polygon::outer: alloc::vec::Vec<grafting_graph_core::curve_offset::Point>`
+
+Outer boundary.
+
+### `pub grafting_graph_core::curve_offset::Polyline::points: alloc::vec::Vec<grafting_graph_core::curve_offset::Point>`
+
+Ordered curve samples.
+
+### `pub grafting_graph_core::curve_offset::TriangulatedMesh::indices: alloc::vec::Vec<u32>`
+
+Triangle indices.
+
+### `pub grafting_graph_core::curve_offset::TriangulatedMesh::positions: alloc::vec::Vec<grafting_graph_core::curve_offset::Point>`
+
+Vertex coordinates.
+
 ### `pub mod grafting_graph_core`
 
 Generic graph structures and deterministic algorithms owned by Grafting.
@@ -2271,6 +3086,27 @@ The public contract deliberately exposes only Grafting types. [`Graph`]
 currently uses `petgraph` privately, but consumers cannot depend on that
 implementation detail. Presentation data remains in callers; calculation
 inputs belong in node or edge payloads and cross explicit contracts.
+
+### `pub mod grafting_graph_core::bezier`
+
+Generic cubic authoring. XYZ coordinates; distance queries use XZ.
+Vendor types stay private. Approximation requires explicit tolerances.
+
+### `pub mod grafting_graph_core::bezier_commands`
+
+Batched curve operations for runtime adapters.
+
+### `pub mod grafting_graph_core::bezier_network`
+
+Curve-aware graph insertion. Topology remains in caller-owned graph primitives.
+
+### `pub mod grafting_graph_core::bezier_surface`
+
+Curve-derived ribbon contours. No product materials or rendering policy.
+
+### `pub mod grafting_graph_core::curve_offset`
+
+Canonical reusable sampling, offset and contour union primitives.
 
 ### `pub struct grafting_graph_core::ContourBounds`
 
@@ -2444,6 +3280,62 @@ corrected for `map_state.fbs`'s `BoundaryKind` (`ADR-0022`,
 `DEC-052`/`ADR-0014`'s "no product concept hardcoded into
 infrastructure").
 
+### `pub struct grafting_graph_core::bezier::CubicBezier`
+
+Anchor, outgoing handle, incoming handle, anchor in absolute coordinates.
+
+### `pub struct grafting_graph_core::bezier::CurveHandles`
+
+Relative controls stored on a graph edge, independent of generated vertices.
+
+### `pub struct grafting_graph_core::bezier::CurveSample`
+
+An adaptive sample with its original parameter.
+
+### `pub struct grafting_graph_core::bezier_commands::CurveBatch`
+
+A batch with one explicit approximation tolerance.
+
+### `pub struct grafting_graph_core::bezier_commands::CurveResult`
+
+One operation result.
+
+### `pub struct grafting_graph_core::bezier_network::CurveEdge`
+
+One graph edge with independent incident controls.
+
+### `pub struct grafting_graph_core::bezier_network::CurveNode`
+
+One graph anchor.
+
+### `pub struct grafting_graph_core::bezier_network::NetworkPatch`
+
+Atomic graph replacement; original state is not mutated.
+
+### `pub struct grafting_graph_core::bezier_network::NetworkRequest`
+
+Generic insertion into an existing curve graph.
+
+### `pub struct grafting_graph_core::bezier_surface::CurveRibbon`
+
+A sampled ribbon with its source heights.
+
+### `pub struct grafting_graph_core::curve_offset::Polygon`
+
+A simple closed ring plus any holes it encloses.
+
+### `pub struct grafting_graph_core::curve_offset::Polyline`
+
+An ordered, open sequence of points -- a curve already flattened to
+straight segments.
+
+### `pub struct grafting_graph_core::curve_offset::TriangulatedMesh`
+
+A flat 2D triangulated mesh: no separate `normals`/`uvs`, unlike
+`grafting-procgen-surface-mesh`'s `TriangulatedMesh` -- those are a
+world-position concern a caller adds once the union's own planar shape
+has been decided.
+
 ### `pub trait grafting_graph_core::GraphOps<N, E>`
 
 Minimal read/traversal capability graph algorithms need, independent of
@@ -2477,3 +3369,15 @@ contour geometry commits to XZ instead of an arbitrary 3D plane.
 ### `pub type grafting_graph_core::PlanarShape = alloc::vec::Vec<alloc::vec::Vec<[f32; 2]>>`
 
 One outer ring followed by its holes, without repeated closing points.
+
+### `pub type grafting_graph_core::bezier::CurvePoint = [f64; 3]`
+
+An XYZ coordinate.
+
+### `pub type grafting_graph_core::curve_offset::Point = [f32; 2]`
+
+A point on the plane the caller is working in. Height is not this
+crate's concern -- a caller that rides terrain or spans a deck
+interpolates elevation separately, the same way `apps/vtt`'s
+`sweep-formation.ts` already keeps height off its own reference line's
+planar math.

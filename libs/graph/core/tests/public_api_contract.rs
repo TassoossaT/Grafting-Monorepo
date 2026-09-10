@@ -28,7 +28,10 @@ fn public_names_and_signatures_remain_consumable() {
     let _: Result<Vec<NodeId>, GraphError> = graph.predecessors(&target_id);
     let _: Result<Vec<NodeId>, GraphError> = graph.topological_order();
 
-    fn via_graph_ops<'a, N, E, G: GraphOps<N, E>>(graph: &'a G, id: &NodeId) -> Option<&'a Node<N>> {
+    fn via_graph_ops<'a, N, E, G: GraphOps<N, E>>(
+        graph: &'a G,
+        id: &NodeId,
+    ) -> Option<&'a Node<N>> {
         graph.node(id)
     }
     let _: Option<&Node<u32>> = via_graph_ops(&graph, &node_id);

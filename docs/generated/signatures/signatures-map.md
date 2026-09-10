@@ -16,7 +16,7 @@ pub fn diff_and_apply(
 pub fn region_id_from_cycle(cycle: &[NodeId]) -> Result<RegionId, String>
 
 // src/editing.rs
-pub type SessionGraph = Graph<[f32; 3], ()>;
+pub type SessionGraph = Graph<[f32; 3], Option<grafting_graph_core::bezier::CurveHandles>>;
 pub struct RemoveSurfaceRequest
 pub fn remove_surface(
 
@@ -96,6 +96,8 @@ pub fn apply_region_overlay(
 
 // src/session.rs
 pub struct ConstructionSession
+pub fn bezier_batch_json(&self, json: &str) -> Result<String, JsValue>
+pub fn bezier_network_json(&self, json: &str) -> Result<String, JsValue>
 pub fn new() -> ConstructionSession
 pub fn remove_surface_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn planar_boolean_json(&self, request_json: &str) -> Result<String, JsValue>
@@ -108,8 +110,6 @@ pub fn retype_edge_json(&mut self, request_json: &str) -> Result<String, JsValue
 pub fn move_edge_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn move_region_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn add_hole_json(&mut self, request_json: &str) -> Result<String, JsValue>
-pub fn remove_hole_json(&mut self, request_json: &str) -> Result<String, JsValue>
-pub fn delete_region_json(&mut self, request_json: &str) -> Result<String, JsValue>
 
 // src/spatial_index.rs
 pub const DEFAULT_GRID_CELL_SIZE: f32 = 4.0;
@@ -239,40 +239,40 @@ pub fn generate_prism_mesh(
 ```rust
 // tests/snapshots/public-api.txt
 pub mod grafting_graph_core
-pub enum grafting_graph_core::ArcBulge
-pub grafting_graph_core::ArcBulge::Left
-pub grafting_graph_core::ArcBulge::Right
-pub fn grafting_graph_core::ArcBulge::clone(&self) -> grafting_graph_core::ArcBulge
-pub fn grafting_graph_core::ArcBulge::eq(&self, other: &grafting_graph_core::ArcBulge) -> bool
-pub fn grafting_graph_core::ArcBulge::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub enum grafting_graph_core::ContourError
-pub grafting_graph_core::ContourError::DuplicateEdge
-pub grafting_graph_core::ContourError::DuplicateEdge::id: grafting_graph_core::ContourEdgeId
-pub grafting_graph_core::ContourError::DuplicateRegion
-pub grafting_graph_core::ContourError::DuplicateRegion::id: grafting_graph_core::RegionId
-pub grafting_graph_core::ContourError::EmptyLoop
-pub grafting_graph_core::ContourError::NoOuterLoop
-pub grafting_graph_core::ContourError::NonManifoldEdge
-pub grafting_graph_core::ContourError::NonManifoldEdge::id: grafting_graph_core::ContourEdgeId
-pub grafting_graph_core::ContourError::OpenLoop
-pub grafting_graph_core::ContourError::OpenLoop::expected: grafting_graph_core::NodeId
-pub grafting_graph_core::ContourError::OpenLoop::found: grafting_graph_core::NodeId
-pub grafting_graph_core::ContourError::UnknownEdge
-pub grafting_graph_core::ContourError::UnknownEdge::id: grafting_graph_core::ContourEdgeId
-pub grafting_graph_core::ContourError::UnknownEdgeIdentity
-pub grafting_graph_core::ContourError::UnknownEdgeIdentity::id: grafting_graph_core::ContourEdgeId
-pub grafting_graph_core::ContourError::UnknownNode
-pub grafting_graph_core::ContourError::UnknownNode::id: grafting_graph_core::NodeId
-pub grafting_graph_core::ContourError::UnknownRegion
-pub grafting_graph_core::ContourError::UnknownRegion::id: grafting_graph_core::RegionId
-pub fn grafting_graph_core::ContourError::clone(&self) -> grafting_graph_core::ContourError
-pub fn grafting_graph_core::ContourError::eq(&self, other: &grafting_graph_core::ContourError) -> bool
-pub fn grafting_graph_core::RegionEditError::from(error: grafting_graph_core::ContourError) -> Self
-pub fn grafting_graph_core::ContourError::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn grafting_graph_core::ContourError::fmt(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub enum grafting_graph_core::ContourGeometry
-pub grafting_graph_core::ContourGeometry::CircularArc
-pub grafting_graph_core::ContourGeometry::CircularArc::center: grafting_graph_core::ContourPoint
+pub mod grafting_graph_core::bezier
+pub enum grafting_graph_core::bezier::HandleMode
+pub grafting_graph_core::bezier::HandleMode::Aligned
+pub grafting_graph_core::bezier::HandleMode::Automatic
+pub grafting_graph_core::bezier::HandleMode::Free
+pub grafting_graph_core::bezier::HandleMode::Mirrored
+pub fn grafting_graph_core::bezier::HandleMode::clone(&self) -> grafting_graph_core::bezier::HandleMode
+pub fn grafting_graph_core::bezier::HandleMode::eq(&self, other: &grafting_graph_core::bezier::HandleMode) -> bool
+pub fn grafting_graph_core::bezier::HandleMode::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn grafting_graph_core::bezier::HandleMode::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn grafting_graph_core::bezier::HandleMode::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub struct grafting_graph_core::bezier::CubicBezier
+pub grafting_graph_core::bezier::CubicBezier::points: [grafting_graph_core::bezier::CurvePoint; 4]
+pub fn grafting_graph_core::bezier::CubicBezier::curvature(&self, t: f64) -> core::result::Result<core::option::Option<f64>, alloc::string::String>
+pub fn grafting_graph_core::bezier::CubicBezier::derivative(&self, t: f64) -> core::result::Result<grafting_graph_core::bezier::CurvePoint, alloc::string::String>
+pub fn grafting_graph_core::bezier::CubicBezier::evaluate(&self, t: f64) -> core::result::Result<grafting_graph_core::bezier::CurvePoint, alloc::string::String>
+pub fn grafting_graph_core::bezier::CubicBezier::length(&self, accuracy: f64) -> core::result::Result<f64, alloc::string::String>
+pub fn grafting_graph_core::bezier::CubicBezier::merge(&self, next: Self, accuracy: f64) -> core::result::Result<Self, alloc::string::String>
+pub fn grafting_graph_core::bezier::CubicBezier::nearest(&self, p: grafting_graph_core::bezier::CurvePoint, accuracy: f64) -> core::result::Result<f64, alloc::string::String>
+pub fn grafting_graph_core::bezier::CubicBezier::parameter_at_distance(&self, distance: f64, accuracy: f64) -> core::result::Result<f64, alloc::string::String>
+pub fn grafting_graph_core::bezier::CubicBezier::pull(&self, t: f64, target: grafting_graph_core::bezier::CurvePoint) -> core::result::Result<Self, alloc::string::String>
+pub fn grafting_graph_core::bezier::CubicBezier::reversed(&self) -> Self
+pub fn grafting_graph_core::bezier::CubicBezier::sample(&self, accuracy: f64) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::bezier::CurveSample>, alloc::string::String>
+pub fn grafting_graph_core::bezier::CubicBezier::split(&self, t: f64) -> core::result::Result<[Self; 2], alloc::string::String>
+pub fn grafting_graph_core::bezier::CubicBezier::validate(&self) -> core::result::Result<(), alloc::string::String>
+pub fn grafting_graph_core::bezier::CubicBezier::clone(&self) -> grafting_graph_core::bezier::CubicBezier
+pub fn grafting_graph_core::bezier::CubicBezier::eq(&self, other: &grafting_graph_core::bezier::CubicBezier) -> bool
+pub fn grafting_graph_core::bezier::CubicBezier::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn grafting_graph_core::bezier::CubicBezier::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn grafting_graph_core::bezier::CubicBezier::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub struct grafting_graph_core::bezier::CurveHandles
+pub grafting_graph_core::bezier::CurveHandles::band_offsets: alloc::vec::Vec<f64>
+pub grafting_graph_core::bezier::CurveHandles::end: grafting_graph_core::bezier::CurvePoint
+pub grafting_graph_core::bezier::CurveHandles::end_band_offsets: alloc::vec::Vec<f64>
 ```
 
 ### `isekai-capi-bridge` (`libs/isekai/capi-bridge`)
@@ -3336,6 +3336,10 @@ export type { ConstructionToolId, ToolParamsByTool, ToolParamsFor } from "../../
 export type { ConstructionPointerHandlers, UseConstructionPointerOptions } from "./use-construction-pointer.ts";
 export type { ConstructionToolFeedback } from "./tools/index.ts";
 
+// src/composition/tabletop/path/bezier-edit-gesture.ts
+export function beginBezierGesture(ctx: ToolContext, sample: PointerSample, params?: ToolParamsFor<"edit-region">) {
+  const snapshot = ctx.runtime.getGraphSnapshot();
+
 // src/composition/tabletop/path/path-cloud-transaction.ts
 export function commitPathCloudIntent(
   ctx: ToolContext,
@@ -3344,7 +3348,7 @@ export function commitPathCloudIntent(
   ): void {
   try {
   const plan = planPathCloudMutation({
-  tableId: ctx.tableId,
+  bezier: ctx.runtime,
 
 // src/composition/tabletop/tabletop-runtime.ts
 export type TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed";
@@ -3361,7 +3365,7 @@ export interface ConfirmedTokenDeltaEnvelope {
   readonly delta: TokenProjectionDelta;
   }
 export type TabletopRuntimeListener = () => void;
-export interface TabletopRuntime {
+export interface TabletopRuntime extends BezierPort {
   start(): Promise<void>;
   applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void;
   /**
@@ -3462,6 +3466,7 @@ export interface EdgeOverlayGroup {
 export function edgeOverlayOf(
   topologies: readonly ConstructionRegionTopology[],
   graphSnapshot?: ConstructionGraphSnapshot,
+  curves?: import("../../../../ports/bezier-port.ts").BezierPort,
   ): readonly EdgeOverlayGroup[] {
   const byRole = new Map<string, number[]>();
 export function edgeOverlayDescriptor(group: EdgeOverlayGroup): PreviewDescriptor {
@@ -3474,7 +3479,7 @@ export const editRegionTool: ConstructionTool<"edit-region"> = {
 
   onPointerDown(ctx: ToolContext, sample: PointerSample, params): void {
   active = undefined;
-  const grabbed = grabbedTarget(ctx, sample, params?.mode === "elevation");
+  curveGesture?.cancel();
 
 // src/composition/tabletop/tools/core/navigate-tool.ts
 export const navigateTool: ConstructionTool<"navigate"> = {
@@ -4734,6 +4739,45 @@ export function panelStructureType(
   surfaceType,
   label,
 
+// src/features/edit-construction/structure-types/path/bezier-road-actions.ts
+export type BezierRoadAction = "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width";
+export function planBezierAction(snapshot: ConstructionGraphSnapshot, port: BezierPort, action: BezierRoadAction,
+
+// src/features/edit-construction/structure-types/path/bezier-road-edit.ts
+export function curvePickId(edgeId: string, index: 1 | 2 | "midpoint"): string {
+  return index === "midpoint" ? MIDPOINT + encodeURIComponent(edgeId) : HANDLE + index + ":" + encodeURIComponent(edgeId);
+export function bezierPickHandles(snapshot: ConstructionGraphSnapshot, port: BezierPort) {
+  const nodes = new Map(snapshot.nodes.map((n) => [n.id, n.position]));
+export function isBezierEditTarget(snapshot: ConstructionGraphSnapshot, id: string): boolean {
+  const pick = curvePick(id);
+export function planBezierEdit(input: {
+  readonly snapshot: ConstructionGraphSnapshot;
+  readonly topologies: readonly ConstructionRegionTopology[];
+  readonly port: BezierPort;
+  readonly targetId: string;
+  readonly position: ConstructionPosition;
+  readonly operationId: string;
+  readonly tableId: string;
+
+// src/features/edit-construction/structure-types/path/bezier-road-plan.ts
+export function unionBezierRibbons(port: BezierPort, ribbons: readonly BandRibbon[]): [number, number][][][] {
+  return port.planarBoolean({ operation: "union", subject: ribbons.map((r) => [r.outer.map((p) => [p.x, p.z] as const)]), clip: [] }).map((shape) => shape.map((ring) => ring.map((p) => [p[0], p[1]] as [number, number])));
+export const curvePoint = (p: ConstructionPosition): CurvePoint => [p.x, p.y, p.z];
+export const curvePosition = (p: CurvePoint): ConstructionPosition => ({ x: p[0], y: p[1], z: p[2] });
+export function explicitSpineSnapshot(snapshot: ConstructionGraphSnapshot, port: BezierPort, offsets: readonly number[]): ConstructionGraphSnapshot {
+  if (!snapshot.edges.some((e) => !e.curve && e.startNodeId.startsWith("spine:") && e.endNodeId.startsWith("spine:"))) return snapshot;
+  const graph = spineGraphFromSnapshot(snapshot);
+export function bezierChains(snapshot: ConstructionGraphSnapshot, port: BezierPort, offsets: readonly number[], miterLimit: number): readonly SpineChainInput[] {
+  const nodes = new Map(snapshot.nodes.map((n) => [n.id, n.position]));
+export function planBezierRoad(input: {
+  readonly snapshot: ConstructionGraphSnapshot;
+  readonly port: BezierPort;
+  readonly stroke: readonly ConstructionPosition[];
+  readonly corridorId: string;
+  readonly offsets: readonly number[];
+  readonly miterLimit: number;
+  readonly tolerance: number;
+
 // src/features/edit-construction/structure-types/path/contour/catmull-rom.ts
 export function sampleCatmullRom(
   controlPoints: readonly ConstructionPosition[],
@@ -4783,20 +4827,20 @@ export function offsetBands(
 // src/features/edit-construction/structure-types/path/contour/plan-spine-contour.ts
 export interface SpineChainInput {
   readonly chainId: string;
+  /** Canonical Rust sampling of explicit authoring curves. */
+  readonly sampledPoints?: readonly ConstructionPosition[];
+  readonly ribbons?: readonly BandRibbon[];
   readonly controlPoints: readonly ConstructionPosition[];
   /** Lateral offsets defining the bands, e.g. `[-2.1, 0, 2.1]` for contour/spine/contour. */
   readonly bandOffsets: readonly number[];
-  readonly miterLimit: number;
-  /** Curve flattening tolerance, world units (XZ). */
-  readonly tolerance: number;
 export interface PlanSpineContourInput {
+  readonly union?: (ribbons: readonly BandRibbon[]) => [number, number][][][];
   readonly tableId: string;
   /** Scopes every node/region id this call mints -- one edit, one operation. */
   readonly operationId: string;
   readonly surfaceType: string;
   /**
   * Every chain of the touched spine cloud -- not just the one a stroke or a
-  * control-node drag directly changed, but every chain the caller's own
 export interface PlanSpineContourResult {
   readonly patch: ConstructionPatch;
   /**
@@ -4810,7 +4854,8 @@ export function planSpineContour(input: PlanSpineContourInput): PlanSpineContour
 
   const ribbons: BandRibbon[] = [];
   for (const chain of input.editedChains) {
-  const polyline = sampleCatmullRom(chain.controlPoints, chain.tolerance);
+  if (chain.ribbons) { ribbons.push(...chain.ribbons); continue; }
+  const polyline = chain.sampledPoints ?? sampleCatmullRom(chain.controlPoints, chain.tolerance);
 
 // src/features/edit-construction/structure-types/path/contour/union-bands.ts
 export function unionBandLayer(ribbons: readonly BandRibbon[]): MultiPolygon {
@@ -4844,13 +4889,13 @@ export type { PathCloudMutationInput, PathCloudMutationPlan } from "./path-cloud
 
 // src/features/edit-construction/structure-types/path/path-cloud-mutation.ts
 export interface PathCloudMutationInput {
+  readonly bezier?: BezierPort;
   readonly tableId: string;
   readonly snapToGrid: boolean;
   readonly graphSnapshot: ConstructionGraphSnapshot;
   readonly regionTopologies: readonly ConstructionRegionTopology[];
   readonly coverageFor: (outline: readonly (readonly [number, number])[]) => readonly ConstructionCoveredRegion[];
   readonly effect: PathBrushEffect;
-  readonly tolerance: number;
 export type PathCloudMutationPlan =
 export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudMutationPlan {
   const { effect, tolerance } = input;
@@ -4859,13 +4904,13 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
 
 // src/features/edit-construction/structure-types/path/path-cloud-scope.ts
 export interface ChangedSpineCloud {
+  readonly snapshot: ConstructionGraphSnapshot;
   readonly chains: readonly (readonly ConstructionPosition[])[];
   /**
   * Every spine control point position in the touched component -- used to
   * decide which standing contour faces this edit replaces.
   */
   readonly positions: readonly ConstructionPosition[];
-  /** Every corridor/operation id participating in this connected spine cluster. */
 export function changedSpineCloud(snapshot: ConstructionGraphSnapshot, patch: ConstructionGraphPatch): ChangedSpineCloud {
   const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
 export function standingRegionsForCloud(
@@ -5568,6 +5613,48 @@ export function createBindTokenSubjectOperation(
   if (!Number.isInteger(intent.expectedTokenRevision) || intent.expectedTokenRevision < 0) {
   throw new Error("expectedTokenRevision must be a non-negative integer");
 
+// src/ports/bezier-port.ts
+export type CurvePoint = readonly [number, number, number];
+export interface CubicBezier { readonly points: readonly [CurvePoint, CurvePoint, CurvePoint, CurvePoint] }
+export type CurveHandleMode = "automatic" | "aligned" | "mirrored" | "free";
+export interface CurveHandles {
+  readonly start: CurvePoint;
+  readonly end: CurvePoint;
+  readonly mode: CurveHandleMode;
+  readonly bandOffsets: readonly number[];
+  readonly endBandOffsets?: readonly number[];
+  }
+export type CurveCommand =
+export interface CurveBatch { readonly tolerance: number; readonly commands: readonly CurveCommand[] }
+export interface CurveResult {
+  readonly ribbon: { readonly outer: readonly CurvePoint[] } | null;
+  readonly curves: readonly CubicBezier[];
+  readonly handles: readonly CurveHandles[];
+  readonly samples: readonly (readonly { readonly t: number; readonly position: CurvePoint }[])[];
+  readonly lengths: readonly number[];
+  readonly parameter: number | null;
+  readonly opposite: CurvePoint | null;
+export interface CurveNetworkNode { readonly id: string; readonly position: CurvePoint }
+export interface CurveNetworkEdge { readonly edgeId: string; readonly startNodeId: string; readonly endNodeId: string; readonly curve: CurveHandles }
+export interface CurveNetworkRequest {
+  readonly nodes: readonly CurveNetworkNode[];
+  readonly edges: readonly CurveNetworkEdge[];
+  readonly addedNodes: readonly CurveNetworkNode[];
+  readonly addedEdges: readonly CurveNetworkEdge[];
+  readonly nodePrefix: string;
+  readonly snapTolerance: number;
+  readonly heightTolerance: number;
+export interface CurveNetworkPatch {
+  readonly nodes: readonly CurveNetworkNode[];
+  readonly edges: readonly CurveNetworkEdge[];
+  readonly removedEdgeIds: readonly string[];
+  }
+export interface BezierPort {
+  planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[];
+  curveBatch(request: CurveBatch): readonly CurveResult[];
+  curveNetwork(request: CurveNetworkRequest): CurveNetworkPatch;
+  }
+
 // src/ports/construction-session-port.ts
 export type ConstructionNodeId = string;
 export type ConstructionEdgeId = string;
@@ -5631,6 +5718,7 @@ export interface ConstructionPatchRegion {
   * An opening leaves one use free on every edge of its own rim, so a
 
 // src/ports/index.ts
+export type { BezierPort, CurveBatch, CurveCommand, CurveResult, CurveHandles, CurvePoint, CubicBezier, CurveHandleMode, CurveNetworkRequest, CurveNetworkPatch } from "./bezier-port.ts";
 export type {
   CameraControlHandle,
   CameraControlOptions,

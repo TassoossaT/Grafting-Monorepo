@@ -8,8 +8,13 @@
 #![deny(missing_docs)]
 #![deny(rustdoc::broken_intra_doc_links)]
 
+pub mod bezier;
+pub mod bezier_commands;
+pub mod bezier_network;
+pub mod bezier_surface;
 mod construction;
 mod contour;
+pub mod curve_offset;
 mod layout;
 mod model;
 mod motion;

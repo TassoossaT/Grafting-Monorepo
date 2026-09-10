@@ -1,167 +1,123 @@
-# Bezier road authoring and junction refinement — issue #257
+# Bézier road authoring and junction refinement — #257
 
-Status: implementation proposal, prepared before code changes. This document
-does not close an OPEN decision or assert that the acceptance scenarios pass.
+The initial refinement was committed as `89a143b` before implementation.
+This document records the resulting implementation and its boundaries.
+No OPEN decision or future persistence/traffic gate is closed here.
 
-## Observed problem
+## Problem and authority
 
-`apps/vtt/src/features/edit-construction/structure-types/path/path-reference-line.ts`
-reduces each fitted edge to its endpoints in `groundTrack`. An arc on flat
-terrain can consequently become two controls. `plan-spine-contour.ts` then
-uses Catmull-Rom, so that input produces a straight chord. `spine-graph.ts`
-explicitly stores no edge curvature, and `materialize-spine.ts` computes
-intersections and snapping against straight chords in XZ. Its proximity
-queries do not enforce a separate height tolerance.
+The previous path pipeline reduced fitted arcs to endpoint controls in
+`groundTrack`, then reconstructed a Catmull-Rom curve. A flat arc reduced to
+two controls consequently became a straight chord. The spine stored no edge
+curvature, and intersection queries operated on straight chords.
 
-Fixing only display tessellation cannot supply durable authoring handles or
-make those connectivity queries follow the actual curve.
+Dedicated Bézier modules now live inside `grafting-graph-core`, following
+ADR-0013 and the crate's existing authority. They own curve evaluation,
+nearest points, lengths, fitting, subdivision, handle constraints, bounded
+removal, network insertion and ribbon derivation. Grafting-owned XYZ arrays
+and structs form the public API; vendor types remain private. The existing
+construction WASM bridge exposes batched JSON commands. VTT and the lab
+consume those commands rather than reimplementing curve calculations.
 
-## Capability boundary
+Reusable offset code formerly owned by procgen curve-offset now lives in
+graph-core. The old package remains a compatibility facade. Polygon union
+reuses graph-core's existing i_overlay implementation and triangulation uses
+the existing earcut dependency. There is one mathematical authority.
 
-Implement a dedicated public Bezier module inside the existing
-`grafting-graph-core` crate. Its local AGENTS.md requires one coherent crate
-until a measured deployment/versioning boundary justifies separation. The
-module owns generic curve calculations; no road, material, UI or terrain
-vocabulary belongs in its API. Public values use Grafting-owned types, with
-any third-party curve implementation private.
+## Library evaluation
 
-Expose batched authoring/planning commands through the existing construction
-WASM bridge. The bridge parses and validates wire data and calls Rust. VTT
-ports and adapters translate those commands; TypeScript must not reimplement
-evaluation, fitting, nearest-point queries, subdivision or intersections.
-The lab must call the same capability as the product.
+| Candidate | Evaluation and disposition |
+| --- | --- |
+| [Kurbo](https://github.com/linebender/kurbo) | Selected at exactly 0.13.1. MIT OR Apache-2.0. Its f64 primitives and accuracy-controlled nearest/length/inverse-length APIs fit the boundary. Native and WASM integration compile. The README warns that APIs and MSRV may evolve, so the dependency is private and pinned behind Grafting contracts. |
+| [flo_curves](https://github.com/Logicalshift/flo_curves) | Apache-2.0. Generic coordinate traits, cubic collision queries and path arithmetic make it a credible alternative. Evaluated from its API, not installed or benchmarked. Adding it alongside Kurbo would duplicate primitives without measured benefit. Reconsider if intersection degeneracies require another backend. |
+| [Cavalier Contours](https://github.com/jbuckmccready/cavalier_contours) | MIT OR Apache-2.0. Supports offsets, booleans and WASM, using line/circular-arc polylines. This is complementary to cubic authoring. Existing planar union already serves the implementation, so no overlapping dependency is added. |
 
-Kurbo is the first dependency candidate and flo_curves the alternative named
-in #257. A source-backed evaluation of licensing, numerical accuracy,
-degeneracies, WASM cost and maintenance remains required before selection.
-Cavalier Contours is only a candidate for a demonstrated missing offset or
-boolean capability. No dependency is selected by this document.
+Sources were checked on 2026-09-09. These observations do not promise future
+maintenance of any dependency. No comparative latency or binary-size advantage
+over uninstalled alternatives is claimed. Curve command counts, adaptive
+sample/depth budgets and network candidate/sample-pair budgets bound resource
+consumption; they are not a real-time performance guarantee.
 
-## Source of truth and editing
+## Authorship and editing
 
-Retain the existing construction graph as the topology authority. Each
-authored cubic edge refers to two existing anchor IDs and stores its own two
-control vectors relative to the respective anchors. Junction degree does not
-limit the number of independent incident handles. Moving an anchor carries
-its incident handles without refitting the rest of a path.
+The existing graph remains the topology authority. Each edge stores two
+control vectors relative to its anchor IDs, its handle mode and independent
+start/end lateral profiles. Surface vertices are derived data. Elevation
+changes preserve XZ controls; changing width preserves the authored curve.
 
-Automatic, aligned, mirrored and free modes are explicit authoring state.
-For a degree-two continuation, aligned means opposite collinear vectors;
-mirrored additionally means equal magnitudes. Automatic mode calculates
-handles in Rust. A manual drag leaves automatic mode. At a higher-degree
-junction, continuity constraints name an explicit pair of incident ends;
-there is no global handle pair shared by all branches. G1/C1 constraints do
-not imply G2 or exact circular arcs.
+- Free handles move independently. Aligned controls share a tangent direction
+  with independent lengths; mirrored controls also have equal lengths.
+- Automatic anchors recalculate automatic spans in Rust. Explicit manual spans
+  are not refitted when adjacent geometry regenerates.
+- The paired-handle interaction is limited to unambiguous degree-two
+  continuations. Higher-degree junctions retain independent incident handles;
+  the implementation does not infer a traffic continuation pair.
+- Dragging a segment's midpoint pulls the cubic with fixed endpoints.
+  Clicking it inserts an anchor using exact de Casteljau subdivision.
+- Removal requires a control-hull error certificate within 0.025 world units.
+  It is refused for incompatible profiles, junction anchors or excess error.
+- Start/end widths interpolate along the segment. A taper can join different
+  approach widths without rewriting curvature. Splitting also splits the
+  width profile.
+- Closing connects the two ends of an open path. Disconnecting a shared
+  anchor opens a loop or separates branches; deleting a segment removes it.
 
-Widths and elevation profiles belong to separate authored attributes, not
-to tessellation vertices. Cubic parameters locate elevation/width samples;
-geometric evaluation must consult those profiles during intersection and
-surface generation. A width change does not rewrite curvature handles.
+The editor's shape and elevation gestures are separate. Preview does not
+mutate confirmed state. Release submits one replacement containing graph
+changes and regenerated dependent surfaces; cancel submits none. The same
+history entry restores controls, profiles, topology and surfaces.
 
-Inserting a point uses de Casteljau at the selected parameter. Preserve the
-old edge ID for one resulting interval, mint the other interval and anchor
-IDs deterministically from the operation, and return an explicit selection
-remap. Removal may fit a replacement only within a supplied error bound;
-otherwise refuse and retain the original. Pulling a point on a segment is a
-constrained Rust operation with fixed endpoints and deterministic control
-adjustment, rather than a whole-path fit on every pointer move.
+Legacy implicit chains are converted using the canonical Rust centripetal
+conversion, including endpoint reflection. IDs remain stable. Conversion is
+persisted with the first accepted edit, not on document inspection. Snapshots
+include optional curve payloads; the absence of a payload still identifies
+legacy data. This is snapshot/history round-trip support, not a new multiplayer
+storage protocol or a decision on GATE-009.
 
-Preview stays separate from confirmed state. Pointer release submits one
-operation containing authored geometry, topology changes and regenerated
-surfaces. Cancel submits none. Rejection leaves the previous state intact.
-Undo/redo restores handles, profiles, IDs, constraints and generated surfaces
-together through the existing history mechanism.
+## Connections and surfaces
 
-## Legacy data
+Insertion queries the actual cubics with explicit position and height
+tolerances. Broad snapping uses the brush reach against standing geometry;
+new stroke anchors only coalesce within numerical tolerance, preserving tight
+authored turns. Candidate intersections are refined against the original
+curves. Same-level crossings split both curves and share an anchor; a bridge
+at another height remains disconnected. Self-crossings use separate curve
+parameters and preserve the loop interval.
 
-Distinguish legacy implicit Catmull-Rom edges from explicit cubic geometry.
-Convert the legacy chain using the existing evaluator's actual endpoint and
-parameterization rules, preserving its shape and anchor IDs. Do not treat a
-legacy curved chain as independent straight segments. Persist the converted
-handles with the first accepted edit, never merely because a document was
-opened. Existing snapshot/history adapters need round-trip coverage for the
-new optional data. This does not select a future multiplayer persistence
-protocol or close GATE-009.
+Split intervals retain exact controls, with one retaining the original edge
+ID. New interval/junction IDs derive deterministically from the operation.
+An endpoint snap may move an anchor within the caller's declared reach;
+the retained absolute controls are re-anchored accordingly.
 
-Authorship anchors and handle IDs remain separate from regenerated surface
-vertices. Rendering, picking and selections must use that distinction.
+The affected connected spine component determines surface replacement.
+Ribbon contours are normalized by the existing nonzero planar union before
+meshing, including overlap at tight turns. Roundabout surfaces preserve holes.
+Nonfinite/unordered widths, stationary tangents and empty normalized contours
+are rejected before commit. Splits, removals and deletions prune orphan graph
+anchors while preserving nodes referenced by remaining edges or topology.
 
-## Network and surface rules
+The implementation does not promise G2, exact circular arcs, unrestricted
+sloping-junction height solving or exact classification of coincident/tangent
+degeneracies. Numerical intersection candidates and Newton refinement have
+those limits. Surface union is separate from connectivity and does not define
+traffic lanes, permitted turns, materials or future traffic semantics.
 
-All query inputs include finite, positive position and height tolerances.
-The editor supplies its snapping reach independently from numerical curve
-accuracy. Curve bounds and subdivision support candidate queries; XZ overlap
-alone never creates connectivity.
+## Lab and evidence
 
-1. Detect an intentional endpoint snap or a crossing of actual curves.
-   Evaluate both elevation profiles at the candidate parameters. Reject a
-   connection outside the height tolerance. Coincident spans require an
-   explicit overlap result, not an arbitrary collection of intersection hits.
-2. Split interior hits exactly, reuse or mint a shared junction anchor, and
-   retain independent handles on each incident end. Deduplicate repeated hits
-   by parameter and position tolerances in a stable order. Preserve a chosen
-   smooth continuation when splitting one existing branch.
-3. Compute approach directions and widths from the curves/profiles. Order
-   approaches deterministically around the junction and derive trim limits
-   from the shared approach footprints. Sample elevation on the same limits.
-4. Reuse the existing band contour union and hole-aware triangulation pipeline
-   where its contracts suffice. Union only connected, same-level approaches.
-   One common junction patch replaces overlap, so branch interiors do not
-   leave duplicate coplanar faces. Shared seam vertices use identical position,
-   height and normal data. Material/UV policy stays with the product.
-5. Regenerate the connected affected neighborhood from authoring data. Never
-   feed a previously unioned boundary back as an authored axis. Retire replaced
-   surfaces atomically and reclaim only unreferenced generated geometry.
+The route is `/lab/trials/bezier-roads`. Fixtures cover arc, S, hairpin, T/X/Y,
+roundabout, bridge and width transition. Axes, handles, margins and resulting
+junction topology are inspectable. Authored JSON saves/restores locally;
+saving also stores a gallery preview through the existing preview storage.
 
-A two-branch connection with different widths uses a bounded transition zone
-on the adjacent spans; the zone must fit before neighboring junctions. A
-short span that cannot accommodate it produces a diagnostic and refuses the
-edit, rather than silently creating an inverted ribbon. The same principle
-applies when adjacent junction trim regions overlap: merge a valid shared
-junction region or reject the proposed geometry as unsupported.
+Tests cover subdivision, inflections, length/inverse distance, handle
+constraints, certified removal, self-intersection and height separation.
+Real WASM session tests additionally cover a roundabout island, crossing and
+bridge identity, tapered subdivision, paired controls, invalid-edit rollback,
+removal/disconnect/deletion and complete undo/redo. Existing road regressions
+cover hairpins, T/X contact, continuation and collapsed snaps.
 
-T, X and Y connections use the same incident-edge model. Bridges and tunnels
-whose elevations exceed the connection tolerance remain separate even when
-their projected ribbon polygons overlap. A roundabout is a closed authored
-path with access branches; its surface is an annulus and the interior island
-remains a hole. Closing a path must not imply filling its interior.
-
-Detect offset cusps, inversions and self-intersections before committing a
-surface. More tessellation does not repair an invalid offset. Until an
-explicit topology repair is supported, return an actionable diagnostic and
-keep the last valid geometry. Multi-level or incompatible sloping junctions
-must likewise be refused rather than flattened implicitly.
-
-Disconnect and delete operations update both connectivity and dependent
-surface ownership. A junction surface is not a traffic turn-permission graph;
-lane movements remain additional product semantics.
-
-## Acceptance and verification
-
-- Curve contracts: finite-input validation, degenerate spans, endpoints,
-  tangents, arc length/inverse distance, nearest-point and intersection error,
-  deterministic fitting, handle constraints and bounded removal.
-- Shape tests: arc-like curve, S inflection, hairpin and closed loop; exact
-  insertion across several parameters and sampling tolerances. Midpoint-only
-  flatness is insufficient for an S curve.
-- Network tests: T/X/Y, oblique approaches, unequal widths, roundabout island,
-  bridge separation, coincident spans, short approaches, overlapping junction
-  areas and invalid offsets. Assert topology and surface ownership as well as
-  positions; count orphan/duplicate faces and verify shared seams.
-- Editor tests: move anchor/handle, pull segment, insert/remove, close/open,
-  disconnect/delete, cancel, reject and undo/redo; verify stable selection
-  remaps and save/restore of manual edits.
-- `/lab` exposes editable axes, handles, margins, junction trim limits and
-  diagnostics using the production Rust capability. The acceptance fixtures
-  above must be inspectable there.
-- Update reviewed public API snapshots and wire contracts; run graph-core
-  tests, api-check, WASM checks/build, VTT check/test/build/docs generation and
-  checking, applicable Studio checks, and Graph IR generation/checks when
-  topology or project metadata changes. No check is claimed by this proposal.
-
-## Current implementation state
-
-This refinement is recorded before implementation as requested by #257.
-Code changes and dependency evaluation remain outstanding. The mandatory
-`ia-graft delegate` research/edit provider returned RESOURCE_EXHAUSTED on
-2026-09-08; this is a tooling availability problem, not an architecture gate.
+Public API snapshots and wire contracts are updated alongside bridge changes.
+Final verification includes the affected Rust tests, API checks, WASM build,
+VTT tests/type checks/docs, Studio checks and generated dependency metadata.
+A connected browser was unavailable in this automation session; interactive
+visual inspection is not claimed.

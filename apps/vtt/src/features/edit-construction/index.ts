@@ -10,6 +10,7 @@
  * - `structure-types/`: Semantic structure families (panel, organic, path) & interaction policies.
  */
 
+export { bezierPickHandles, isBezierEditTarget, planBezierEdit } from "./structure-types/path/bezier-road-edit.ts";
 export * from "./history/index.ts";
 export * from "./orchestration/index.ts";
 export * from "./topology/index.ts";
