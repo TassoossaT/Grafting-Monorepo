@@ -183,7 +183,20 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
     }
 
     const topologies = input.regionTopologies;
-    const standingRegions = standingRegionsForCloud(topologies, touchedCloud.positions, touchedCloud.corridorIds, !!input.bezier);
+    // A patch containing only node updates is a positional edit.  It cannot
+    // change connectivity, so rebuilding the whole connected cloud is both
+    // unnecessary and expensive: the replacement would also cause terrain
+    // coverage to be repaired for every distant road face. Structural edits
+    // keep the old cloud-wide behaviour because they can change ownership at
+    // a junction or leave disconnected remnants behind.
+    const hasStructuralChange = graphPatch.edges.length > 0 || (graphPatch.removedEdgeIds?.length ?? 0) > 0 || !!input.bezier;
+    const localContourEdit = !hasStructuralChange;
+    const standingRegions = standingRegionsForCloud(
+      topologies,
+      touchedCloud.positions,
+      touchedCloud.corridorIds,
+      localContourEdit,
+    );
     const existingEdgeUses = new Map<string, boolean[]>();
     for (const topology of topologies) {
       for (const loop of [...topology.outerLoops, ...topology.holes]) {
@@ -208,7 +221,9 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
         // not inferred from its old contour faces. A continuation therefore
         // regenerates one continuous road; a branch regenerates its whole
         // junction component.
-        editedChains: regeneratedChains.length === 0 ? [chain] : regeneratedChains,
+        // Positional edits invalidate only the authored chain.  Topology
+        // changes still regenerate every chain in the affected cloud.
+        editedChains: localContourEdit ? [chain] : (regeneratedChains.length === 0 ? [chain] : regeneratedChains),
         standingRegions,
         existingNodes: input.bezier ? [] : existingNodes,
         existingEdgeUses,
