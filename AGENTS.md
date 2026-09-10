@@ -1,7 +1,7 @@
 # AGENTS.md — Grafting Monorepo Agent Operational Contract
 
 Canonical, machine-first operational rules for AI agents (Claude, Gemini, Codex) in Grafting Monorepo.
-All non-prose changes MUST execute exclusively through the root `ia-graft` launcher (`.\ia-graft.cmd` on Windows).
+All non-prose changes MUST execute exclusively through `ia-graft`. Agents with the `ia-graft` MCP server registered (see `.mcp.json`) MUST call its `graft_*` tools and MUST NOT shell out to the launcher; the guard denies that. Agents without an MCP client use the root launcher (`.\ia-graft.cmd` on Windows).
 
 ## 1. MANDATORY CONSTRAINTS (MUST NOT)
 
@@ -36,7 +36,8 @@ All non-prose changes MUST execute exclusively through the root `ia-graft` launc
 
 - **Autonomous Execution:** User requests pre-authorize all necessary `ia-graft` commands through `task done` without pausing for confirmation; merging PRs remains human-only.
 - **Issue & PR Governance:** Manage backlog, issues, and PRs via `ia-graft issue <list|view|new|update|close|reopen|tree|doctor>` and `ia-graft pr <list|view|checks|diff>`. Do NOT invent unversioned markdown backlogs.
-- On Windows invoke `.\ia-graft.cmd` followed by the command; `.codex/rules/ia-graft.rules` pre-authorizes the launcher.
+- **One path per agent:** the MCP manifest is generated from `tools/ia-graft/src/command-registry.ts`, the same table the CLI parses, so a `graft_*` tool call is checked against the declared schema; a typed command line is not. MCP-capable agents are listed in `MCP_ONLY_AGENTS` (`tools/scripts/agent-task-guard.mjs`). Others invoke `.\ia-graft.cmd` on Windows; `.codex/rules/ia-graft.rules` pre-authorizes the launcher.
+- Flags below name the CLI form. The MCP field is the same name in camelCase, except `--id`, which is `taskId` for a task and `id` for an issue or PR. `ia-graft <command> --help` lists both.
 - **Documentation-Only Edits (100% Markdown prose):** Commit directly to `master`/`main` (no task branch needed). Protocol/policy changes require owner approval before commit.
 - **Code, Config, Contract & Script Edits:**
   1. Start task: `ia-graft task new --id TASK-<ISSUE-ID>-<SLUG> [--base <branch>]`
@@ -49,12 +50,12 @@ All non-prose changes MUST execute exclusively through the root `ia-graft` launc
 
 ## 3. TOKEN ECONOMY & DELEGATION (`ia-graft`)
 
-- **Mandatory Context Packing:** Agents MUST run `ia-graft context --pack` or `ia-graft task resume` when starting/resuming tasks to load scoped context and avoid token waste.
+- **Mandatory Context Packing:** Agents MUST run `ia-graft context --pack` (`graft_context`) or `ia-graft task resume` when starting/resuming tasks to load scoped context and avoid token waste.
 - **Surgical Inspection:** Agents MUST use pattern search (`grep`, `glob`) and targeted line ranges (`view_file`), never reading full files (>100 lines) unnecessarily.
 - **Mandatory Sub-Agent Delegation (`ia-graft delegate`):**
   - **Fact Lookup & Research:** MUST offload web searches, broad codebase surveys, or schema extraction via `ia-graft delegate run` or `ia-graft delegate research`.
   - **Sandboxed Code Editing:** MUST delegate repetitive code edits inside a task worktree via `ia-graft delegate edit`.
-  - **Stdio MCP Integration:** Prefer native `graft_*` MCP tools (`graft_context_pack`, `graft_task_resume`, `graft_task_status`, `graft_task_done`, `graft_pr_checks`, etc.) over shell commands.
+  - **Stdio MCP Integration:** Every command is exposed as exactly one `graft_*` tool, with no aliases. `graft_context_pack` is gone; use `graft_context`.
 
 ## 4. STOP CONDITIONS
 

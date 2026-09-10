@@ -1,16 +1,32 @@
 /**
- * Single Source of Truth (SSOT) Command Registry.
+ * Single source of truth for every ia-graft command.
  *
- * Defines all ia-graft operations once. Both the CLI router (bin.ts) and the
- * Model Context Protocol server (mcp-server.ts) derive their routes, schemas,
- * tool manifests, and execution handlers from this single table.
+ * A command is declared exactly once, here, and three consumers are derived
+ * from that one declaration:
+ *
+ *   - the MCP tool manifest and its JSON Schema (`mcp-server.ts`),
+ *   - the `--flag value` argv parser (`flag-input.ts`),
+ *   - the CLI route table and usage text (`bin.ts`).
+ *
+ * The declaration is bound to the handler's own input interface by
+ * `defineCommand<TInput>`: `parameters` is a mapped type over `keyof
+ * Required<TInput>`, so a field the handler accepts but nobody declared, a
+ * declared field the handler does not have, and a required/optional mismatch
+ * are all *compile* errors. Drift is caught by `pnpm typecheck`, not by
+ * review -- which is the whole reason this table exists (#260: the schema had
+ * silently diverged from ten handlers, and `graft_guard_check` was uncallable
+ * because its required `agent` was missing from the manifest).
+ *
+ * Adding a command therefore means: write the handler and its `*Input`
+ * interface, then add one `defineCommand<ThatInput>({...})` entry. There is
+ * no second place to update.
  */
 
-import { delegateRun } from "./delegate-commands.ts";
-import { delegateEdit } from "./delegate-edit-commands.ts";
-import { delegateResearch } from "./delegate-research-commands.ts";
-import { runDocCheck } from "./doc-check.ts";
-import { runGuardCheck } from "./guard-command.ts";
+import { delegateRun, type DelegateRunInput } from "./commands/delegate/run.ts";
+import { delegateEdit, type DelegateEditInput } from "./commands/delegate/edit.ts";
+import { delegateResearch, type DelegateResearchInput } from "./commands/delegate/research.ts";
+import { runDocCheck } from "./commands/doc-check.ts";
+import { runGuardCheck, type GuardCheckInput } from "./commands/guard.ts";
 import {
   issueClose,
   issueDoctor,
@@ -20,8 +36,25 @@ import {
   issueTree,
   issueUpdate,
   issueView,
-} from "./issue-commands.ts";
-import { prChecks, prDiff, prList, prView } from "./pr-commands.ts";
+  type IssueCloseInput,
+  type IssueDoctorInput,
+  type IssueListInput,
+  type IssueNewInput,
+  type IssueReopenInput,
+  type IssueTreeInput,
+  type IssueUpdateInput,
+  type IssueViewInput,
+} from "./commands/issue.ts";
+import {
+  prChecks,
+  prDiff,
+  prList,
+  prView,
+  type PrChecksInput,
+  type PrDiffInput,
+  type PrListInput,
+  type PrViewInput,
+} from "./commands/pr.ts";
 import {
   taskCheckout,
   taskCleanup,
@@ -37,451 +70,632 @@ import {
   taskSweep,
   taskSync,
   taskTest,
-} from "./task-commands.ts";
+  type TaskCheckoutInput,
+  type TaskCleanupInput,
+  type TaskCommitInput,
+  type TaskContextInput,
+  type TaskDependenciesInput,
+  type TaskDoctorInput,
+  type TaskDoneInput,
+  type TaskNewInput,
+  type TaskResumeInput,
+  type TaskStatusInput,
+  type TaskSyncInput,
+  type TaskTestInput,
+} from "./commands/task.ts";
 
-export interface CommandParameter {
+/** A command whose handler takes no input at all. */
+export type NoInput = Record<never, never>;
+
+export interface ParameterSpec {
+  /** JSON Schema type published to MCP, and the coercion applied to the raw argv string. */
   type: "string" | "number" | "boolean" | "array" | "object";
   description: string;
-  required?: boolean;
+  /** Element type for `array`. Defaults to string. */
   items?: { type: "string" };
-  properties?: Record<string, unknown>;
+  /**
+   * Primary CLI flag. Defaults to `--<kebab-case of the key>`, which is right
+   * for most parameters; declare it only where the established flag differs
+   * from the field name (`taskId` is `--id`, `files` is `--file`).
+   */
+  flag?: string;
+  /** Further accepted spellings of the same flag, for back-compatibility. */
+  flagAliases?: string[];
+  /** Also bind the first non-flag argument after the route to this parameter. */
+  positional?: true;
+  /**
+   * The value carries prose, so `--<flag>-file <path>` is accepted beside it.
+   * Prefer the file form: `ia-graft.cmd` forwards argv with `%*` and
+   * `cmd.exe` ends the command at a literal newline, so a multi-line value
+   * passed inline is silently truncated.
+   */
+  prose?: true;
+  /** `array` only: additionally split each occurrence on commas. */
+  csv?: true;
+  /** Parse the raw CLI string as JSON before handing it to the handler. */
+  json?: true;
+  /** Exposed over MCP but never read from argv, so no flag is derived. */
+  mcpOnly?: true;
+  /** Applied by the CLI when the flag is absent. A defaulted parameter is not reported as MCP-required. */
+  default?: string | number | boolean;
 }
 
-export interface CommandDefinition {
-  name: string;
+type RequiredSpec = ParameterSpec & { required: true };
+type OptionalSpec = ParameterSpec & { required?: false };
+
+/**
+ * Forces the declared parameters to be exactly the handler's input fields:
+ * a field the handler accepts but nobody declared, a declared field the
+ * handler does not have, and a required/optional mismatch are all errors.
+ */
+type ParametersOf<TInput> = {
+  [K in keyof Required<TInput>]-?: undefined extends TInput[K] ? OptionalSpec : RequiredSpec;
+};
+
+/** A command route: a group, and optionally a subcommand under it. */
+export interface CommandRoute {
   group: string;
   subcommand?: string;
+}
+
+export interface CommandDefinition<TInput> extends CommandRoute {
+  /** MCP tool name, and the command's identity in error messages. */
+  name: string;
   description: string;
-  parameters: Record<string, CommandParameter>;
-  aliases?: string[];
+  /** Extra CLI spellings of the same command, e.g. `task context` for `context`. */
+  routeAliases?: CommandRoute[];
+  parameters: ParametersOf<TInput>;
+  handler: (repoRoot: string, input: TInput) => Promise<unknown>;
+}
+
+/** The registry's element type, with the per-command input type erased. */
+export interface AnyCommand extends CommandRoute {
+  name: string;
+  description: string;
+  routeAliases?: CommandRoute[];
+  parameters: Record<string, ParameterSpec & { required?: boolean }>;
   handler: (repoRoot: string, input: any) => Promise<any>;
 }
 
-export const COMMAND_REGISTRY: CommandDefinition[] = [
+function defineCommand<TInput>(definition: CommandDefinition<TInput>): AnyCommand {
+  return definition as unknown as AnyCommand;
+}
+
+export const COMMAND_REGISTRY: AnyCommand[] = [
   // ---------------------------------------------------------------------------
   // TASK COMMANDS
   // ---------------------------------------------------------------------------
-  {
+  defineCommand<TaskNewInput>({
     name: "graft_task_new",
     group: "task",
     subcommand: "new",
     description: "Creates an isolated task worktree under .worktrees/<ID> branched from the base branch.",
     parameters: {
-      taskId: { type: "string", description: "Task ID (e.g. TASK-123-FEATURE)", required: true },
-      base: { type: "string", description: "Optional base branch name (defaults to repository default branch)" },
+      taskId: { type: "string", description: "Task ID, e.g. TASK-123-FEATURE", required: true, flag: "--id" },
+      base: { type: "string", description: "Base branch name, defaulting to the repository default branch" },
+      parent: {
+        type: "string",
+        description:
+          "Parent task ID to branch from. Do not use: a PR targeting task/** matches no CI trigger, and squash-merging the parent conflicts every child. See AGENTS.md section 2.",
+      },
     },
-    handler: (root, input) => taskNew(root, input ?? {}),
-  },
-  {
+    handler: (root, input) => taskNew(root, input),
+  }),
+  defineCommand<TaskResumeInput>({
     name: "graft_task_resume",
     group: "task",
     subcommand: "resume",
-    description: "Resumes or opens a task worktree and retrieves complete recovery context (commits, diffs, dirty files, dependencies).",
+    description:
+      "Resumes or opens a task worktree and retrieves complete recovery context: commits, diffs, dirty files, dependencies.",
     parameters: {
-      taskId: { type: "string", description: "Target task ID" },
-      pr: { type: "number", description: "Optional PR number to resume from" },
+      taskId: { type: "string", description: "Target task ID", flag: "--id" },
+      pr: { type: "number", description: "PR number to resume from, when the task ID is unknown" },
     },
-    handler: (root, input) => taskResume(root, input ?? {}),
-  },
-  {
+    handler: (root, input) => taskResume(root, input),
+  }),
+  defineCommand<TaskStatusInput>({
     name: "graft_task_status",
     group: "task",
     subcommand: "status",
     description: "Checks health, branch, dirty files, and worktree status for a task.",
     parameters: {
-      taskId: { type: "string", description: "Target task ID", required: true },
+      taskId: { type: "string", description: "Target task ID", required: true, flag: "--id" },
     },
-    handler: (root, input) => taskStatus(root, input ?? {}),
-  },
-  {
+    handler: (root, input) => taskStatus(root, input),
+  }),
+  defineCommand<TaskDoctorInput>({
     name: "graft_task_doctor",
     group: "task",
     subcommand: "doctor",
     description: "Diagnoses task worktree issues, merge conflicts, orphaned directories, or broken dependency overlays.",
     parameters: {
-      taskId: { type: "string", description: "Target task ID", required: true },
+      taskId: { type: "string", description: "Target task ID", required: true, flag: "--id" },
     },
-    handler: (root, input) => taskDoctor(root, input ?? {}),
-  },
-  {
+    handler: (root, input) => taskDoctor(root, input),
+  }),
+  defineCommand<TaskCommitInput>({
     name: "graft_task_commit",
     group: "task",
     subcommand: "commit",
     description: "Stages and commits changes inside the task worktree with AI co-authorship.",
     parameters: {
-      taskId: { type: "string", description: "Target task ID", required: true },
-      message: { type: "string", description: "Conventional commit message", required: true },
-      files: { type: "array", description: "Optional list of specific files to stage", items: { type: "string" } },
+      taskId: { type: "string", description: "Target task ID", required: true, flag: "--id" },
+      message: { type: "string", description: "Conventional commit message", required: true, prose: true },
+      files: { type: "array", description: "Specific files to stage, instead of everything dirty", flag: "--file" },
+      coAuthors: {
+        type: "array",
+        description:
+          "Co-authored-by trailers to append. The presets gemini, claude, codex and copilot expand to full identities.",
+        flag: "--co-author",
+      },
+      agent: { type: "string", description: "Primary AI agent identifier, e.g. claude, gemini, codex" },
       amend: { type: "boolean", description: "Amend the previous commit" },
-      dryRun: { type: "boolean", description: "Validate without writing a commit" },
-      generateDocs: { type: "boolean", description: "Run docs:generate and include derived signatures in commit" },
-      agent: { type: "string", description: "AI agent identifier" },
+      dryRun: { type: "boolean", description: "Validate without writing a commit", flagAliases: ["--check"] },
+      generateDocs: {
+        type: "boolean",
+        description: "Run docs:generate and include derived signatures in the commit",
+        flagAliases: ["--docs"],
+      },
     },
-    handler: (root, input) => taskCommit(root, input ?? {}),
-  },
-  {
+    handler: (root, input) => taskCommit(root, input),
+  }),
+  defineCommand<TaskTestInput>({
     name: "graft_task_test",
     group: "task",
     subcommand: "test",
     description: "Runs verification command(s) inside the task worktree with token-capped summary output.",
     parameters: {
-      taskId: { type: "string", description: "Target task ID", required: true },
-      command: { type: "string", description: "Single verification command (e.g. pnpm test)" },
-      commands: { type: "array", description: "List of verification commands to run sequentially", items: { type: "string" } },
-      keepGoing: { type: "boolean", description: "Continue running remaining commands if one fails" },
+      taskId: { type: "string", description: "Target task ID", required: true, flag: "--id" },
+      command: {
+        type: "string",
+        description: "A single verification command, e.g. pnpm test. Mutually exclusive with commands.",
+        mcpOnly: true,
+      },
+      commands: {
+        type: "array",
+        description: "Verification commands to run in order. Over the CLI, repeat --command.",
+        flag: "--command",
+      },
+      keepGoing: { type: "boolean", description: "Continue running the remaining commands after one fails" },
     },
-    handler: (root, input) => taskTest(root, input ?? {}),
-  },
-  {
+    handler: (root, input) => taskTest(root, input),
+  }),
+  defineCommand<TaskDoneInput>({
     name: "graft_task_done",
     group: "task",
     subcommand: "done",
-    description: "Pre-commit hook & PR submission: runs doc-check, mirrors artifacts, regenerates docs/signatures, creates single atomic commit, pushes branch, and opens/updates PR.",
+    description:
+      "Submits the task: runs doc-check, regenerates docs and signatures into one atomic commit, pushes the branch, and opens or updates the PR.",
     parameters: {
-      taskId: { type: "string", description: "Target task ID", required: true },
-      title: { type: "string", description: "Pull request title and commit message", required: true },
-      body: { type: "string", description: "Pull request description markdown", required: true },
-      base: { type: "string", description: "Target base branch (defaults to task base)" },
-      skipDocGen: { type: "boolean", description: "Skip automatic docs:generate step" },
+      taskId: { type: "string", description: "Target task ID", required: true, flag: "--id" },
+      title: { type: "string", description: "Pull request title and commit message", required: true, prose: true },
+      body: {
+        type: "string",
+        description: "Pull request description markdown, e.g. Closes #<ISSUE-ID>",
+        required: true,
+        prose: true,
+      },
+      base: { type: "string", description: "Target base branch, defaulting to the task base" },
+      skipDocGen: { type: "boolean", description: "Skip the automatic docs:generate step", flagAliases: ["--skip-docs"] },
     },
-    handler: (root, input) => taskDone(root, input ?? {}),
-  },
-  {
+    handler: (root, input) => taskDone(root, input),
+  }),
+  defineCommand<TaskSyncInput>({
     name: "graft_task_sync",
     group: "task",
     subcommand: "sync",
-    description: "Integrates base updates forward-only without rebasing to keep task branch synchronized.",
+    description: "Integrates base updates forward-only, without rebasing, to keep the task branch synchronized.",
     parameters: {
-      taskId: { type: "string", description: "Target task ID", required: true },
-      fetch: { type: "boolean", description: "Fetch origin before merging base" },
+      taskId: { type: "string", description: "Target task ID", required: true, flag: "--id" },
+      fetch: { type: "boolean", description: "Fetch origin before merging the base" },
       abort: { type: "boolean", description: "Abort an in-progress merge conflict" },
     },
-    handler: (root, input) => taskSync(root, input ?? {}),
-  },
-  {
+    handler: (root, input) => taskSync(root, input),
+  }),
+  defineCommand<TaskDependenciesInput>({
     name: "graft_task_deps",
     group: "task",
     subcommand: "deps",
-    description: "Manages package dependencies in task worktree via directory overlays and lockfile sync without raw pnpm install.",
+    description:
+      "Manages package dependencies in the task worktree through directory overlays and lockfile sync, without a raw install.",
     parameters: {
-      taskId: { type: "string", description: "Target task ID", required: true },
+      taskId: { type: "string", description: "Target task ID", required: true, flag: "--id" },
       install: { type: "boolean", description: "Materialize workspace dependency overlays" },
-      updateLockfile: { type: "boolean", description: "Update lockfile with modified dependencies" },
-      add: { type: "string", description: "Package spec to add (e.g. @scope/lib@workspace:*)" },
-      workspace: { type: "string", description: "Target workspace package directory" },
-      dev: { type: "boolean", description: "Add as devDependency" },
+      updateLockfile: {
+        type: "boolean",
+        description: "Update the lockfile with modified dependencies",
+        flagAliases: ["--update"],
+      },
+      add: { type: "string", description: "Package spec to add, e.g. @scope/lib@workspace:*", flagAliases: ["--pkg"] },
+      workspace: { type: "string", description: "Target workspace package directory", flagAliases: ["--filter"] },
+      dev: { type: "boolean", description: "Add as a devDependency", flagAliases: ["-D"] },
     },
-    handler: (root, input) => taskDependencies(root, input ?? {}),
-  },
-  {
+    handler: (root, input) => taskDependencies(root, input),
+  }),
+  defineCommand<TaskCleanupInput>({
     name: "graft_task_cleanup",
     group: "task",
     subcommand: "cleanup",
-    description: "Safely removes merged worktree and deletes task branch after PR merge.",
+    description: "Safely removes a merged worktree and deletes the task branch after the PR merges.",
     parameters: {
-      taskId: { type: "string", description: "Target task ID", required: true },
-      force: { type: "boolean", description: "Force cleanup even if PR is not detected as merged" },
+      taskId: { type: "string", description: "Target task ID", required: true, flag: "--id" },
+      force: { type: "boolean", description: "Clean up even when the PR is not detected as merged" },
     },
-    handler: (root, input) => taskCleanup(root, input ?? {}),
-  },
-  {
+    handler: (root, input) => taskCleanup(root, input),
+  }),
+  defineCommand<TaskCheckoutInput>({
     name: "graft_task_checkout",
     group: "task",
     subcommand: "checkout",
-    description: "Temporarily checks out task branch in main tree or restores previous checkout.",
+    description: "Temporarily checks out a task branch in the main tree, or restores the previous checkout.",
     parameters: {
-      taskId: { type: "string", description: "Target task ID" },
-      restore: { type: "boolean", description: "Restore main checkout to previous branch" },
-      force: { type: "boolean", description: "Force restore discarding untracked changes" },
+      taskId: { type: "string", description: "Target task ID", flag: "--id" },
+      restore: { type: "boolean", description: "Restore the main checkout to its previous branch" },
+      force: { type: "boolean", description: "Force the restore, discarding untracked changes" },
     },
-    handler: (root, input) => taskCheckout(root, input ?? {}),
-  },
-  {
+    handler: (root, input) => taskCheckout(root, input),
+  }),
+  defineCommand<NoInput>({
     name: "graft_task_graph",
     group: "task",
     subcommand: "graph",
     description: "Returns the active task worktree dependency hierarchy graph.",
     parameters: {},
     handler: (root) => taskGraph(root),
-  },
-  {
+  }),
+  defineCommand<NoInput>({
     name: "graft_task_sweep",
     group: "task",
     subcommand: "sweep",
-    description: "Sweeps and cleans all task worktrees whose pull requests have already merged.",
+    description: "Sweeps and cleans every task worktree whose pull request has already merged.",
     parameters: {},
     handler: (root) => taskSweep(root),
-  },
+  }),
 
   // ---------------------------------------------------------------------------
-  // CONTEXT COMMANDS
+  // CONTEXT
   // ---------------------------------------------------------------------------
-  {
+  defineCommand<TaskContextInput>({
     name: "graft_context",
     group: "context",
-    description: "Resolves token-efficient architectural context pack, project dependencies, and rules.",
+    routeAliases: [{ group: "task", subcommand: "context" }],
+    description:
+      "Resolves a token-efficient architectural context pack, project dependencies, and rules. Run this when starting or resuming a task. With no arguments it returns the repository structure map.",
     parameters: {
-      pack: { type: "boolean", description: "Resolve structured context pack for active task" },
-      taskId: { type: "string", description: "Target task ID to scope context resolution" },
-      paths: { type: "array", description: "Target file paths to scope context resolution", items: { type: "string" } },
-      query: { type: "string", description: "Search query across index and signatures" },
-      scope: { type: "string", description: "Filter index by package or path prefix" },
-      map: { type: "boolean", description: "Return repository structure map" },
+      pack: { type: "boolean", description: "Resolve the structured context pack for the active task" },
+      taskId: {
+        type: "string",
+        description: "Task ID to scope context resolution to. Implies pack.",
+        flag: "--id",
+        flagAliases: ["--task"],
+      },
+      paths: { type: "array", description: "File paths to scope context resolution to", csv: true },
+      query: { type: "string", description: "Search query across the index and extracted signatures" },
+      scope: { type: "string", description: "Filter the index by package or path prefix" },
     },
-    aliases: ["graft_context_pack"],
-    handler: (root, input) => {
-      // If called via legacy graft_context_pack alias, default pack to true
-      const effectiveInput = input?.pack === undefined && (input?.taskId || input?.paths)
-        ? { ...input, pack: true }
-        : (input ?? {});
-      return taskContext(root, effectiveInput);
-    },
-  },
+    handler: (root, input) => taskContext(root, input),
+  }),
 
   // ---------------------------------------------------------------------------
   // ISSUE COMMANDS
   // ---------------------------------------------------------------------------
-  {
+  defineCommand<IssueListInput>({
     name: "graft_issue_list",
     group: "issue",
     subcommand: "list",
-    description: "Lists GitHub issues filtered by state, milestone, area, priority, or type with parent-child metadata.",
+    description: "Lists GitHub issues filtered by type, area, status, priority, or parent, with parent-child metadata.",
     parameters: {
-      limit: { type: "number", description: "Maximum issues to return (default 30)" },
-      state: { type: "string", description: "Filter by issue state: open, closed, or all" },
-      milestone: { type: "string", description: "Filter by milestone title" },
+      type: { type: "string", description: "Filter by type label: task, epic, bug, decision" },
       area: { type: "string", description: "Filter by area label" },
-      priority: { type: "string", description: "Filter by priority label (P0-crit, P1-high, etc.)" },
-      type: { type: "string", description: "Filter by type label (task, epic, bug, decision)" },
+      status: {
+        type: "string",
+        description: "Filter by status label: backlog, in-progress, in-review, blocked, done",
+      },
+      priority: {
+        type: "string",
+        description: "Filter by priority label: P0-critical, P1-high, P2-medium, P3-low",
+      },
+      limit: { type: "number", description: "Maximum issues to return, default 30" },
+      parent: { type: "number", description: "Only issues under this parent epic" },
+      orphan: { type: "boolean", description: "Only issues with no parent epic" },
     },
-    handler: (root, input) => issueList(root, input ?? {}),
-  },
-  {
+    handler: (root, input) => issueList(root, input),
+  }),
+  defineCommand<IssueViewInput>({
     name: "graft_issue_view",
     group: "issue",
     subcommand: "view",
-    description: "Views detailed GitHub issue including parent epic, sub-issues summary, labels, and state.",
+    description: "Views one issue in detail, including parent epic, sub-issue summary, labels, and state.",
     parameters: {
-      id: { type: "number", description: "Issue number", required: true },
+      id: { type: "number", description: "Issue number", required: true, positional: true },
     },
-    handler: (root, input) => issueView(root, input ?? {}),
-  },
-  {
+    handler: (root, input) => issueView(root, input),
+  }),
+  defineCommand<IssueNewInput>({
     name: "graft_issue_new",
     group: "issue",
     subcommand: "new",
-    description: "Creates a new issue with standardized metadata labels and optional parent link.",
+    description: "Creates a new issue with standardized metadata labels and an optional parent link.",
     parameters: {
-      title: { type: "string", description: "Issue title", required: true },
-      body: { type: "string", description: "Issue description markdown" },
-      type: { type: "string", description: "Type label (task, epic, bug, decision)" },
+      title: { type: "string", description: "Issue title", required: true, prose: true },
+      type: {
+        type: "string",
+        description: "Type label: task, refinement, chore, bug, epic",
+        required: true,
+        default: "task",
+      },
       area: { type: "string", description: "Area label" },
-      priority: { type: "string", description: "Priority label (P0-crit, P1-high, P2-medium, P3-low)" },
+      priority: { type: "string", description: "Priority label: P0-critical, P1-high, P2-medium, P3-low" },
+      status: { type: "string", description: "Status label: backlog, in-progress, in-review, blocked, done" },
       milestone: { type: "string", description: "Milestone title" },
-      parent: { type: "number", description: "Parent epic/issue number" },
+      body: { type: "string", description: "Issue description markdown", prose: true },
+      parent: { type: "number", description: "Parent epic or issue number" },
     },
-    handler: (root, input) => issueNew(root, input ?? {}),
-  },
-  {
+    handler: (root, input) => issueNew(root, input),
+  }),
+  defineCommand<IssueUpdateInput>({
     name: "graft_issue_update",
     group: "issue",
     subcommand: "update",
-    description: "Updates issue title, body, status, priority, area, milestone, or parent.",
+    description: "Updates an issue's status, priority, or body, changes its open/closed state, and can add a comment.",
     parameters: {
-      id: { type: "number", description: "Issue number to update", required: true },
-      title: { type: "string", description: "New title" },
-      body: { type: "string", description: "New body markdown" },
-      status: { type: "string", description: "Status label (backlog, in-progress, in-review, blocked, done)" },
+      id: { type: "number", description: "Issue number to update", required: true, positional: true },
+      status: { type: "string", description: "Status label: backlog, in-progress, in-review, blocked, done" },
       priority: { type: "string", description: "Priority label" },
-      area: { type: "string", description: "Area label" },
-      milestone: { type: "string", description: "Milestone title" },
-      parent: { type: "number", description: "Parent issue number" },
+      comment: { type: "string", description: "Comment to post on the issue", prose: true },
+      body: { type: "string", description: "Replacement body markdown", prose: true },
+      state: { type: "string", description: "New state: open or closed" },
+      reason: { type: "string", description: "Close reason: completed or not_planned" },
     },
-    handler: (root, input) => issueUpdate(root, input ?? {}),
-  },
-  {
+    handler: (root, input) => issueUpdate(root, input),
+  }),
+  defineCommand<IssueCloseInput>({
     name: "graft_issue_close",
     group: "issue",
     subcommand: "close",
-    description: "Closes an issue with optional reason (completed, not_planned) and comment.",
+    description: "Closes an issue with an optional reason and comment.",
     parameters: {
-      id: { type: "number", description: "Issue number to close", required: true },
+      id: { type: "number", description: "Issue number to close", required: true, positional: true },
       reason: { type: "string", description: "Close reason: completed or not_planned" },
-      comment: { type: "string", description: "Optional closing comment" },
+      comment: { type: "string", description: "Closing comment", prose: true },
     },
-    handler: (root, input) => issueClose(root, input ?? {}),
-  },
-  {
+    handler: (root, input) => issueClose(root, input),
+  }),
+  defineCommand<IssueReopenInput>({
     name: "graft_issue_reopen",
     group: "issue",
     subcommand: "reopen",
-    description: "Reopens a closed issue with optional comment.",
+    description: "Reopens a closed issue with an optional comment.",
     parameters: {
-      id: { type: "number", description: "Issue number to reopen", required: true },
-      comment: { type: "string", description: "Optional reopening comment" },
+      id: { type: "number", description: "Issue number to reopen", required: true, positional: true },
+      comment: { type: "string", description: "Reopening comment", prose: true },
     },
-    handler: (root, input) => issueReopen(root, input ?? {}),
-  },
-  {
+    handler: (root, input) => issueReopen(root, input),
+  }),
+  defineCommand<IssueTreeInput>({
     name: "graft_issue_tree",
     group: "issue",
     subcommand: "tree",
-    description: "Returns hierarchical tree of epics, parent-child links, progress stats, and orphan tasks.",
+    description: "Returns a hierarchical tree of epics, parent-child links, progress stats, and orphan tasks.",
     parameters: {
-      epic: { type: "number", description: "Optional parent epic ID to scope the tree" },
+      epic: {
+        type: "number",
+        description: "Parent epic ID to scope the tree to",
+        flagAliases: ["--id"],
+        positional: true,
+      },
+      limit: { type: "number", description: "Maximum issues to scan" },
     },
-    handler: (root, input) => issueTree(root, input ?? {}),
-  },
-  {
+    handler: (root, input) => issueTree(root, input),
+  }),
+  defineCommand<IssueDoctorInput>({
     name: "graft_issue_doctor",
     group: "issue",
     subcommand: "doctor",
-    description: "Audits repository issues for orphan tasks, missing metadata, cycles, and invalid parent-child links.",
-    parameters: {},
-    handler: (root) => issueDoctor(root),
-  },
+    description: "Audits issues for orphan tasks, missing metadata, and invalid parent-child links.",
+    parameters: {
+      limit: { type: "number", description: "Maximum issues to scan" },
+    },
+    handler: (root, input) => issueDoctor(root, input),
+  }),
 
   // ---------------------------------------------------------------------------
   // PULL REQUEST COMMANDS
   // ---------------------------------------------------------------------------
-  {
+  defineCommand<PrListInput>({
     name: "graft_pr_list",
     group: "pr",
     subcommand: "list",
     description: "Lists pull requests with branch, state, draft status, and CI check summary.",
     parameters: {
-      limit: { type: "number", description: "Maximum PRs to return (default 30)" },
-      state: { type: "string", description: "Filter by state: open, closed, merged, or all" },
-      base: { type: "string", description: "Filter by target base branch" },
+      limit: { type: "number", description: "Maximum PRs to return, default 30" },
+      state: { type: "string", description: "Filter by state: open, closed, or all" },
     },
-    handler: (root, input) => prList(root, input ?? {}),
-  },
-  {
+    handler: (root, input) => prList(root, input),
+  }),
+  defineCommand<PrViewInput>({
     name: "graft_pr_view",
     group: "pr",
     subcommand: "view",
-    description: "Views pull request details including mergeability, CI checks rollup, and truncated body.",
+    description: "Views a pull request, including mergeability, CI checks rollup, and truncated body.",
     parameters: {
-      id: { type: "number", description: "Pull request number", required: true },
+      id: {
+        type: "number",
+        description: "Pull request number. Omit it and pass task instead to resolve the PR from a task branch.",
+        positional: true,
+        flagAliases: ["--pr"],
+      },
+      task: { type: "string", description: "Task ID whose branch's PR should be resolved" },
     },
-    handler: (root, input) => prView(root, input ?? {}),
-  },
-  {
+    handler: (root, input) => prView(root, input),
+  }),
+  defineCommand<PrChecksInput>({
     name: "graft_pr_checks",
     group: "pr",
     subcommand: "checks",
-    description: "Inspects CI check run details and extracts tailored log failure summaries without dumping full logs.",
+    description: "Inspects CI check runs and extracts tailored failure summaries without dumping full logs.",
     parameters: {
-      id: { type: "number", description: "Pull request number", required: true },
+      id: {
+        type: "number",
+        description: "Pull request number. Omit it and pass task instead.",
+        positional: true,
+        flagAliases: ["--pr"],
+      },
+      task: { type: "string", description: "Task ID whose branch's PR should be resolved" },
       failedOnly: { type: "boolean", description: "Only return failing check runs" },
     },
-    handler: (root, input) => prChecks(root, input ?? {}),
-  },
-  {
+    handler: (root, input) => prChecks(root, input),
+  }),
+  defineCommand<PrDiffInput>({
     name: "graft_pr_diff",
     group: "pr",
     subcommand: "diff",
-    description: "Returns token-compact diff summary or stat for a pull request.",
+    description: "Returns a token-compact diff summary or diffstat for a pull request.",
     parameters: {
-      id: { type: "number", description: "Pull request number", required: true },
-      stat: { type: "boolean", description: "Only return diffstat line counts per file" },
+      id: {
+        type: "number",
+        description: "Pull request number. Omit it and pass task instead.",
+        positional: true,
+        flagAliases: ["--pr"],
+      },
+      task: { type: "string", description: "Task ID whose branch's PR should be resolved" },
+      stat: { type: "boolean", description: "Only return per-file diffstat line counts" },
     },
-    handler: (root, input) => prDiff(root, input ?? {}),
-  },
+    handler: (root, input) => prDiff(root, input),
+  }),
 
   // ---------------------------------------------------------------------------
   // DELEGATE COMMANDS
   // ---------------------------------------------------------------------------
-  {
+  defineCommand<DelegateRunInput>({
     name: "graft_delegate_run",
     group: "delegate",
     subcommand: "run",
-    description: "Executes a headless CLI prompt for web searches or broad surveys.",
+    description: "Runs a headless prompt on the cheaper delegate model, for web searches and broad surveys.",
     parameters: {
-      prompt: { type: "string", description: "Instruction prompt", required: true },
+      prompt: { type: "string", description: "Instruction prompt", required: true, prose: true },
       effort: { type: "string", description: "Effort level: low, medium, or high" },
-      file: { type: "array", description: "Context files to pass", items: { type: "string" } },
-      jsonSchema: { type: "string", description: "Optional JSON schema string for structured output" },
+      files: { type: "array", description: "Repo files whose content is appended to the prompt", flag: "--file" },
+      jsonSchema: {
+        type: "object",
+        description: "JSON Schema requesting structured output instead of free text",
+        json: true,
+      },
     },
-    handler: (root, input) => delegateRun(root, input ?? {}),
-  },
-  {
+    handler: (root, input) => delegateRun(root, input),
+  }),
+  defineCommand<DelegateEditInput>({
     name: "graft_delegate_edit",
     group: "delegate",
     subcommand: "edit",
-    description: "Delegates sandboxed code editing within a task worktree with revert-on-escape protection.",
+    description:
+      "Delegates sandboxed code editing inside a task worktree, reverting any edit outside the declared scope.",
     parameters: {
-      taskId: { type: "string", description: "Target task ID", required: true },
-      prompt: { type: "string", description: "Editing prompt", required: true },
+      taskId: { type: "string", description: "Target task ID", required: true, flag: "--id" },
+      prompt: { type: "string", description: "Editing prompt", required: true, prose: true },
       effort: { type: "string", description: "Effort level: low, medium, or high" },
-      scope: { type: "array", description: "Allowed file/directory path prefixes", items: { type: "string" } },
-      context: { type: "string", description: "Additional grounding context" },
+      scope: {
+        type: "array",
+        description: "Path prefixes the edit may touch. Anything changed outside them is reverted.",
+      },
+      context: {
+        type: "string",
+        description:
+          "Extra grounding on top of the automatic .ai/INDEX.md grounding. Usually leave it unset: composing it spends the caller's own tokens.",
+        prose: true,
+      },
+      groundInRepoContext: {
+        type: "boolean",
+        description:
+          "Ground the prompt in .ai/INDEX.md automatically. Default true; disable with --no-ground-in-repo-context for work unrelated to this repo.",
+        default: true,
+      },
     },
-    handler: (root, input) => delegateEdit(root, input ?? {}),
-  },
-  {
+    handler: (root, input) => delegateEdit(root, input),
+  }),
+  defineCommand<DelegateResearchInput>({
     name: "graft_delegate_research",
     group: "delegate",
     subcommand: "research",
-    description: "Delegates a deep research topic and writes the findings directly to a markdown file.",
+    description: "Delegates a research topic and writes the findings straight to a markdown file in the task worktree.",
     parameters: {
-      taskId: { type: "string", description: "Target task ID", required: true },
-      topic: { type: "string", description: "Research topic", required: true },
-      outputFile: { type: "string", description: "Destination markdown file path (must end with .md)", required: true },
+      taskId: { type: "string", description: "Target task ID", required: true, flag: "--id" },
+      topic: { type: "string", description: "Research topic", required: true, prose: true },
+      outputFile: {
+        type: "string",
+        description: "Destination markdown path, which must end in .md",
+        required: true,
+      },
       effort: { type: "string", description: "Effort level: low, medium, or high" },
     },
-    handler: (root, input) => delegateResearch(root, input ?? {}),
-  },
+    handler: (root, input) => delegateResearch(root, input),
+  }),
 
   // ---------------------------------------------------------------------------
   // SYSTEM & GUARD COMMANDS
   // ---------------------------------------------------------------------------
-  {
+  defineCommand<NoInput>({
     name: "graft_doc_check",
     group: "doc-check",
-    description: "Validates instruction file line count limits (AGENTS.md <= 100 lines, adapters <= 30 lines).",
+    description: "Validates instruction-file size budgets: AGENTS.md at most 100 lines, agent adapters at most 30.",
     parameters: {},
     handler: (root) => runDocCheck(root),
-  },
-  {
+  }),
+  defineCommand<GuardCheckInput>({
     name: "graft_guard_check",
     group: "guard-check",
-    description: "Validates deterministic tool permissions and blocks unsafe raw git or gh executions.",
+    description:
+      "Returns the guard's verdict for a prospective Write, Edit, or Bash call, using the exact rules the PreToolUse hook enforces.",
     parameters: {
-      tool: { type: "string", description: "Tool name (e.g. run_command)" },
-      command: { type: "string", description: "Command line to check" },
+      agent: { type: "string", description: "Calling agent identifier, e.g. claude, gemini, codex", required: true },
+      tool: { type: "string", description: "Tool to check: Write, Edit, or Bash", required: true },
+      path: { type: "string", description: "Target file path, for Write or Edit" },
+      command: { type: "string", description: "Command line, for Bash", prose: true },
     },
-    handler: (root, input) => runGuardCheck(root, input ?? {}),
-  },
+    handler: (root, input) => runGuardCheck(root, input),
+  }),
 ];
 
-/**
- * Converts a CommandDefinition into the standard Model Context Protocol tool schema.
- */
-export function commandToMcpTool(cmd: CommandDefinition, overrideName?: string) {
+const CAMEL_BOUNDARY = /(?<=[a-z0-9])(?=[A-Z])/g;
+
+/** The CLI flag a parameter is read from, derived from its key unless declared. */
+export function parameterFlag(key: string, spec: ParameterSpec): string {
+  return spec.flag ?? `--${key.replace(CAMEL_BOUNDARY, "-").toLowerCase()}`;
+}
+
+/** Every flag spelling a parameter accepts, primary first. */
+export function parameterFlags(key: string, spec: ParameterSpec): string[] {
+  return [parameterFlag(key, spec), ...(spec.flagAliases ?? [])];
+}
+
+/** All routes a command answers on, primary first. */
+export function commandRoutes(cmd: AnyCommand): CommandRoute[] {
+  return [{ group: cmd.group, subcommand: cmd.subcommand }, ...(cmd.routeAliases ?? [])];
+}
+
+/** Renders one route the way it is typed on the command line. */
+export function routeLabel(route: CommandRoute): string {
+  return route.subcommand ? `${route.group} ${route.subcommand}` : route.group;
+}
+
+/** Converts a command into its Model Context Protocol tool schema. */
+export function commandToMcpTool(cmd: AnyCommand) {
   const properties: Record<string, unknown> = {};
   const required: string[] = [];
 
-  for (const [paramName, paramDef] of Object.entries(cmd.parameters)) {
-    if (paramDef.type === "array") {
-      properties[paramName] = {
-        type: "array",
-        items: paramDef.items ?? { type: "string" },
-        description: paramDef.description,
-      };
-    } else {
-      properties[paramName] = {
-        type: paramDef.type,
-        description: paramDef.description,
-      };
-    }
-    if (paramDef.required) {
-      required.push(paramName);
-    }
+  for (const [key, spec] of Object.entries(cmd.parameters)) {
+    properties[key] =
+      spec.type === "array"
+        ? { type: "array", items: spec.items ?? { type: "string" }, description: spec.description }
+        : { type: spec.type, description: spec.description };
+    // A parameter carrying a default is satisfiable without the caller, so it
+    // is not advertised as required even though the handler's field is not
+    // optional.
+    if (spec.required && spec.default === undefined) required.push(key);
   }
 
   return {
-    name: overrideName ?? cmd.name,
+    name: cmd.name,
     description: cmd.description,
     inputSchema: {
       type: "object",
@@ -492,35 +706,35 @@ export function commandToMcpTool(cmd: CommandDefinition, overrideName?: string) 
 }
 
 /**
- * Returns all active MCP tools, including both primary command names and backwards-compatible aliases.
+ * The full MCP tool manifest: exactly one tool per registered command.
+ *
+ * There are deliberately no aliases. A second name for the same command is a
+ * duplicate an agent has to choose between, and the heuristic that used to
+ * tell `graft_context_pack` apart from `graft_context` guessed at the
+ * caller's intent from which fields happened to be set (#260).
  */
 export function getAllMcpTools(): Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> {
-  const tools: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> = [];
-  for (const cmd of COMMAND_REGISTRY) {
-    tools.push(commandToMcpTool(cmd));
-    if (cmd.aliases) {
-      for (const alias of cmd.aliases) {
-        tools.push(commandToMcpTool(cmd, alias));
-      }
-    }
-  }
-  return tools;
+  return COMMAND_REGISTRY.map((cmd) => commandToMcpTool(cmd));
+}
+
+/** Finds a command by its MCP tool name. */
+export function findCommandByMcpName(name: string): AnyCommand | undefined {
+  return COMMAND_REGISTRY.find((cmd) => cmd.name === name);
 }
 
 /**
- * Finds a command definition by its MCP tool name or alias.
+ * Finds a command by CLI route, matching a route alias too.
+ *
+ * A group whose command takes no subcommand matches when `subcommand` is
+ * absent. `bin.ts` never passes a flag in here, so an argument that looks
+ * like a flag can no longer be mistaken for a subcommand and strand the
+ * command -- which is what made `ia-graft context --map` answer with the
+ * usage text even though the usage text documents it (#260).
  */
-export function findCommandByMcpName(name: string): CommandDefinition | undefined {
-  return COMMAND_REGISTRY.find((cmd) => cmd.name === name || (cmd.aliases && cmd.aliases.includes(name)));
-}
-
-/**
- * Finds a command definition by CLI group and subcommand route.
- */
-export function findCommandByCliRoute(group: string, subcommand?: string): CommandDefinition | undefined {
-  return COMMAND_REGISTRY.find((cmd) => {
-    if (cmd.group !== group) return false;
-    if (cmd.subcommand === undefined && (subcommand === undefined || subcommand === "")) return true;
-    return cmd.subcommand === subcommand;
-  });
+export function findCommandByCliRoute(group: string, subcommand?: string): AnyCommand | undefined {
+  return COMMAND_REGISTRY.find((cmd) =>
+    commandRoutes(cmd).some(
+      (route) => route.group === group && (route.subcommand ?? undefined) === (subcommand || undefined),
+    ),
+  );
 }

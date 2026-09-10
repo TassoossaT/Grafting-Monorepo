@@ -1,5 +1,5 @@
 import { createInterface } from "node:readline";
-import { findCommandByMcpName, getAllMcpTools } from "./command-registry.ts";
+import { findCommandByMcpName, getAllMcpTools } from "../command-registry.ts";
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";

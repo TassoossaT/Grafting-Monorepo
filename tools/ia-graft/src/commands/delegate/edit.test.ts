@@ -5,8 +5,8 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { delegateEdit } from "./delegate-edit-commands.ts";
-import { taskNew } from "./task-commands.ts";
+import { delegateEdit } from "./edit.ts";
+import { taskNew } from "../task.ts";
 
 interface ChangedFileStat {
   path: string;

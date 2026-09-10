@@ -4,8 +4,8 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { delegateResearch } from "./delegate-research-commands.ts";
-import { taskNew } from "./task-commands.ts";
+import { delegateResearch } from "./research.ts";
+import { taskNew } from "../task.ts";
 
 const roots: string[] = [];
 test.after(async () => {

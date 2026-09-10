@@ -2,9 +2,9 @@ import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { DELEGATE_PROFILES, EFFORTS, type Effort } from "./delegate-profiles.ts";
-import { GitClient } from "./git-client.ts";
-import { isValidTaskId, taskContext, type CliError } from "./task-commands.ts";
+import { DELEGATE_PROFILES, EFFORTS, type Effort } from "./profiles.ts";
+import { isValidTaskId, taskContext, type CliError } from "../task.ts";
+import { GitClient } from "../../git/client.ts";
 
 const execFileAsync = promisify(execFile);
 type ExecFile = typeof execFileAsync;

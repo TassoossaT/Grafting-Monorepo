@@ -5,8 +5,11 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { appendPullRequestSection, deleteRemoteBranchWithLease, GitClient, mirrorGeneratedArtifacts, parseDependencySpec, remoteBranchDeletionPlan } from "./git-client.ts";
-import { formatCommitMessageWithCoAuthors, isValidTaskId, resolveCoAuthor, taskCheckout, taskCleanup, taskCommit, taskContext, taskDependencies, taskDoctor, taskDone, taskGraph, taskNew, taskResume, taskSweep, taskSync, taskTest } from "./task-commands.ts";
+import { formatCommitMessageWithCoAuthors, isValidTaskId, resolveCoAuthor, taskCheckout, taskCleanup, taskCommit, taskContext, taskDependencies, taskDoctor, taskDone, taskGraph, taskNew, taskResume, taskSweep, taskSync, taskTest } from "./task.ts";
+import { GitClient } from "../git/client.ts";
+import { dependencyMode, mirrorGeneratedArtifacts, parseDependencySpec } from "../git/dependencies.ts";
+import { appendPullRequestSection } from "../git/naming.ts";
+import { deleteRemoteBranchWithLease, remoteBranchDeletionPlan } from "../git/remote-branches.ts";
 
 const roots: string[] = [];
 
@@ -401,7 +404,7 @@ test("taskDone auto-regenerates docs and commits generated changes", async () =>
   const content = await readFile(join(worktree, "docs", "generated", "repo-map.md"), "utf8");
   assert.equal(content, "updated\n");
 
-  const client = new (await import("./git-client.ts")).GitClient(root);
+  const client = new (await import("../git/client.ts")).GitClient(root);
   const session = await client.openSession("DOCGEN-TASK");
   const logOutput = await session.git(["log", "--oneline", "main..HEAD"]);
   const commitLines = logOutput.trim().split(/\r?\n/).filter(Boolean);
@@ -431,7 +434,7 @@ test("taskNew resumes an existing task and taskStatus derives its state", async 
   assert.equal(second.ok, true);
   if (!second.ok) return;
   assert.equal(second.resumed, true);
-  const status = await (await import("./task-commands.ts")).taskStatus(root, { taskId: "RESUME-TASK" });
+  const status = await (await import("./task.ts")).taskStatus(root, { taskId: "RESUME-TASK" });
   assert.equal(status.ok, true);
   if (status.ok) assert.equal(status.exists, true);
 });
@@ -884,7 +887,7 @@ test("taskContext resolves context sitemap and queries cleanly", async () => {
 });
 
 test("taskContext resolves pack mode using context-resolver", async () => {
-  const repoRoot = resolve(fileURLToPath(new URL(".", import.meta.url)), "../../..");
+  const repoRoot = resolve(fileURLToPath(new URL(".", import.meta.url)), "../../../..");
   const pack = await taskContext(repoRoot, { pack: true, paths: ["packages/ui/src/index.ts"] });
   assert.equal(pack.ok, true);
   assert.match(JSON.stringify(pack.pack), /Context resolution/);

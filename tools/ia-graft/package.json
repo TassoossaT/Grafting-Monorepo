@@ -9,7 +9,7 @@
   },
   "scripts": {
     "ia-graft": "node --experimental-strip-types src/bin.ts",
-    "test": "node --experimental-strip-types --test src/*.test.ts",
+    "test": "node --experimental-strip-types --test \"src/**/*.test.ts\"",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
