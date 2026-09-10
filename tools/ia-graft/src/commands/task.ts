@@ -3,8 +3,9 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { runDocCheck } from "./doc-check.ts";
-import { GitClient, mirrorGeneratedArtifacts } from "./git-client.ts";
-import { issueView } from "./issue-commands.ts";
+import { issueView } from "./issue.ts";
+import { GitClient } from "../git/client.ts";
+import { dependencyMode, mirrorGeneratedArtifacts } from "../git/dependencies.ts";
 
 export interface CliError {
   ok: false;
@@ -442,7 +443,7 @@ export async function taskResume(repoRoot: string, input: TaskResumeInput = {}) 
   let contextPack: string | undefined;
   try {
     // @ts-ignore - dynamic import of context-resolver.mjs script
-    const { resolveContext } = await import("../../scripts/context-resolver.mjs");
+    const { resolveContext } = await import("../../../scripts/context-resolver.mjs");
     contextPack = resolveContext({
       root: repoRoot,
       taskId: taskId,
@@ -519,7 +520,7 @@ export async function taskContext(repoRoot: string, input: TaskContextInput = {}
     let packSummary: unknown = null;
     try {
       // @ts-ignore - dynamic import of context-resolver.mjs script
-      const { resolveContext } = await import("../../scripts/context-resolver.mjs");
+      const { resolveContext } = await import("../../../scripts/context-resolver.mjs");
       packSummary = resolveContext({
         root: repoRoot,
         taskId: input.taskId ?? null,

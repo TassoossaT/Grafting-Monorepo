@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { prChecks, prDiff, prList, prView } from "./pr-commands.ts";
+import { prChecks, prDiff, prList, prView } from "./pr.ts";
 
 test("pr list runs cleanly without throwing", async () => {
   const result = await prList(process.cwd(), { limit: 5 });

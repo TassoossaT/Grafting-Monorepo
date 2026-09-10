@@ -22,11 +22,11 @@
  * no second place to update.
  */
 
-import { delegateRun, type DelegateRunInput } from "./delegate-commands.ts";
-import { delegateEdit, type DelegateEditInput } from "./delegate-edit-commands.ts";
-import { delegateResearch, type DelegateResearchInput } from "./delegate-research-commands.ts";
-import { runDocCheck } from "./doc-check.ts";
-import { runGuardCheck, type GuardCheckInput } from "./guard-command.ts";
+import { delegateRun, type DelegateRunInput } from "./commands/delegate/run.ts";
+import { delegateEdit, type DelegateEditInput } from "./commands/delegate/edit.ts";
+import { delegateResearch, type DelegateResearchInput } from "./commands/delegate/research.ts";
+import { runDocCheck } from "./commands/doc-check.ts";
+import { runGuardCheck, type GuardCheckInput } from "./commands/guard.ts";
 import {
   issueClose,
   issueDoctor,
@@ -44,7 +44,7 @@ import {
   type IssueTreeInput,
   type IssueUpdateInput,
   type IssueViewInput,
-} from "./issue-commands.ts";
+} from "./commands/issue.ts";
 import {
   prChecks,
   prDiff,
@@ -54,7 +54,7 @@ import {
   type PrDiffInput,
   type PrListInput,
   type PrViewInput,
-} from "./pr-commands.ts";
+} from "./commands/pr.ts";
 import {
   taskCheckout,
   taskCleanup,
@@ -82,7 +82,7 @@ import {
   type TaskStatusInput,
   type TaskSyncInput,
   type TaskTestInput,
-} from "./task-commands.ts";
+} from "./commands/task.ts";
 
 /** A command whose handler takes no input at all. */
 export type NoInput = Record<never, never>;

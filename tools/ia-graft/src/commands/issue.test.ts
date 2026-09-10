@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { issueDoctor, issueList, issueNew, issueTree, issueUpdate, issueView } from "./issue-commands.ts";
+import { issueDoctor, issueList, issueNew, issueTree, issueUpdate, issueView } from "./issue.ts";
 
 test("issue list runs cleanly without throwing", async () => {
   const result = await issueList(process.cwd(), { limit: 5 });
@@ -45,11 +45,11 @@ test("issue doctor audits open issues without throwing", async () => {
 });
 
 test("issue close validates required id", async () => {
-  const result = await (await import("./issue-commands.ts")).issueClose(process.cwd(), { id: "" });
+  const result = await (await import("./issue.ts")).issueClose(process.cwd(), { id: "" });
   assert.equal(result.ok, false);
 });
 
 test("issue reopen validates required id", async () => {
-  const result = await (await import("./issue-commands.ts")).issueReopen(process.cwd(), { id: "" });
+  const result = await (await import("./issue.ts")).issueReopen(process.cwd(), { id: "" });
   assert.equal(result.ok, false);
 });

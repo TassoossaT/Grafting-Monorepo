@@ -18,8 +18,8 @@ Every command is declared exactly once, in `src/command-registry.ts`. Three cons
 
 | Derived from the registry | Where |
 |---|---|
-| MCP tool manifest and JSON Schema | `src/mcp-server.ts` |
-| `--flag value` argv parser | `src/flag-input.ts` |
+| MCP tool manifest and JSON Schema | `src/mcp/server.ts` |
+| `--flag value` argv parser | `src/cli/argv.ts` |
 | CLI routes, usage text and `--help` | `src/bin.ts` |
 
 `defineCommand<TInput>` binds a declaration to its handler's own input interface: `parameters` is a mapped type over `keyof Required<TInput>`, so a field the handler accepts but nobody declared, a declared field the handler does not have, and a required/optional mismatch are all **compile** errors. Drift is caught by `pnpm typecheck`, not by review.
@@ -27,6 +27,30 @@ Every command is declared exactly once, in `src/command-registry.ts`. Three cons
 Adding a command means writing the handler and its `*Input` interface, then adding one `defineCommand<ThatInput>({...})` entry. There is no second place to update, and no command is exposed under more than one name.
 
 The CLI flag is derived from the field name (`--<kebab-case>`), so only an established exception is declared: `taskId` reads `--id`, `files` reads `--file`. `flagAliases` carries the back-compatible spellings, `prose: true` adds the `--<flag>-file` form, and `mcpOnly: true` marks a field with no command-line form at all.
+
+## Layout
+
+```
+src/
+  bin.ts                 CLI entry: routing, usage, --help
+  command-registry.ts    every command declared once
+  cli/argv.ts            argv -> input, derived from the registry
+  mcp/server.ts          stdio JSON-RPC, tools derived from the registry
+  commands/              one module per command family; each owns its *Input types
+    task.ts  issue.ts  pr.ts  doc-check.ts  guard.ts
+    delegate/            run.ts  edit.ts  research.ts  profiles.ts
+  git/                   the only place that touches the repository
+    exec.ts              child processes, output summarizing
+    naming.ts            task paths and branch names, path safety, safe removal
+    dependencies.ts      worktree dependency overlays and the lockfile
+    remote-branches.ts   merge proof and remote branch deletion
+    session.ts           GitWorktreeSession: one open task worktree
+    client.ts            GitClient: everything not scoped to one worktree
+```
+
+Tests sit beside what they test. The `git/` layer is strictly ordered -- `exec` depends on nothing, `naming` on `exec`, `dependencies` and `session` on both, and only `client` on everything -- so there are no cycles to unpick when reading it.
+
+Nothing above `git/` runs a git or `gh` command directly, and nothing below `commands/` knows what a command is.
 
 ## MCP server
 
@@ -65,7 +89,7 @@ ia-graft doc-check
 ia-graft delegate run --prompt "<p>" [--effort low|medium|high] [--file <path>]... [--json-schema <json>]
 ```
 
-- `--effort` selects the model tier (`delegate-profiles.ts`).
+- `--effort` selects the model tier (`src/commands/delegate/profiles.ts`).
 - `--file` (repeatable, combined content capped at 28k chars) embeds repo files directly into prompt.
 - `--json-schema` requests structured output matching the schema.
 

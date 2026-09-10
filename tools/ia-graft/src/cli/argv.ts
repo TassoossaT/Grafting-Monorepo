@@ -16,7 +16,7 @@
  */
 
 import { readFileSync } from "node:fs";
-import { parameterFlags, type AnyCommand, type ParameterSpec } from "./command-registry.ts";
+import { parameterFlags, type AnyCommand, type ParameterSpec } from "../command-registry.ts";
 
 const asList = (names: string | string[]): string[] => (typeof names === "string" ? [names] : names);
 

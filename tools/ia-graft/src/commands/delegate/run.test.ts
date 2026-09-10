@@ -3,7 +3,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { delegateRun } from "./delegate-commands.ts";
+import { delegateRun } from "./run.ts";
 
 const fakeExec = (stdout: string) => async (_cmd: string, _args: string[]) => ({ stdout, stderr: "" });
 const failingExec = (message: string) => async (_cmd: string, _args: string[]) => {

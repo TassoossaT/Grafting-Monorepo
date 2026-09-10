@@ -1,6 +1,6 @@
-import { delegateEdit } from "./delegate-edit-commands.ts";
-import type { Effort } from "./delegate-profiles.ts";
-import type { CliError } from "./task-commands.ts";
+import { delegateEdit } from "./edit.ts";
+import type { Effort } from "./profiles.ts";
+import type { CliError } from "../task.ts";
 
 const fail = (error: string): CliError => ({ ok: false, error });
 

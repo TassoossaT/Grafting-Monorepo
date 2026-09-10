@@ -1,4 +1,4 @@
-import { evaluateHook } from "../../scripts/agent-task-guard.mjs";
+import { evaluateHook } from "../../../scripts/agent-task-guard.mjs";
 
 export interface GuardCheckInput {
   agent: string;

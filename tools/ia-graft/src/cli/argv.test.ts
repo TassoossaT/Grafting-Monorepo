@@ -3,8 +3,8 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { findCommandByCliRoute } from "./command-registry.ts";
-import { parseCommandInput, readTextValue } from "./flag-input.ts";
+import { findCommandByCliRoute } from "../command-registry.ts";
+import { parseCommandInput, readTextValue } from "./argv.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "ia-graft-flag-input-"));
 test.after(() => rmSync(scratch, { recursive: true, force: true }));

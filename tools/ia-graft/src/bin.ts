@@ -11,8 +11,8 @@ import {
   routeLabel,
   type AnyCommand,
 } from "./command-registry.ts";
-import { parseCommandInput } from "./flag-input.ts";
-import { runMcpServer } from "./mcp-server.ts";
+import { parseCommandInput } from "./cli/argv.ts";
+import { runMcpServer } from "./mcp/server.ts";
 
 /**
  * Resolves the MAIN repository root, never a task worktree's own root, even
@@ -129,7 +129,7 @@ function printAndExit(result: { ok: boolean; [key: string]: unknown }): never {
  *
  * The subcommand slot is only filled by an argument that is not a flag: the
  * router used to take argv[1] unconditionally, so every group without a
- * subcommand broke the moment a flag was passed -- `ia-graft context --map`
+ * subcommand broke the moment a flag was passed -- `ia-graft context --scope x`
  * answered with the usage text although the usage text documents it (#260).
  * A group that has both a subcommand-less command and a positional argument
  * still resolves, because a failed two-part lookup falls back to one part.

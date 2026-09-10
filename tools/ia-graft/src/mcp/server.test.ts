@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 test("MCP server handles initialize, tools/list, and tools/call over stdio JSON-RPC", async () => {
-  const binPath = resolve(fileURLToPath(new URL(".", import.meta.url)), "bin.ts");
+  const binPath = resolve(fileURLToPath(new URL(".", import.meta.url)), "../bin.ts");
 
   const child = spawn(process.execPath, ["--experimental-strip-types", binPath, "mcp"], {
     stdio: ["pipe", "pipe", "pipe"],

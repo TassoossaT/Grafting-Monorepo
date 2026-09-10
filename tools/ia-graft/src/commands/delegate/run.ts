@@ -2,8 +2,8 @@ import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { isAbsolute, relative, resolve as resolvePath } from "node:path";
 import { promisify } from "node:util";
-import { DELEGATE_PROFILES, EFFORTS, type Effort } from "./delegate-profiles.ts";
-import type { CliError } from "./task-commands.ts";
+import { DELEGATE_PROFILES, EFFORTS, type Effort } from "./profiles.ts";
+import type { CliError } from "../task.ts";
 
 const execFileAsync = promisify(execFile);
 type ExecFile = typeof execFileAsync;

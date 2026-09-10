@@ -1,4 +1,4 @@
-declare module "../../scripts/agent-task-guard.mjs" {
+declare module "../../../scripts/agent-task-guard.mjs" {
   export interface GuardDecision {
     allowed: boolean;
     reason: string;
