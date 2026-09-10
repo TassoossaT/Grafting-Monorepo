@@ -61,3 +61,5 @@ Thumbs.db
 
 .tmp.driveupload
 .tmp.drivedownload
+
+apps/vtt/next-env.d.ts
