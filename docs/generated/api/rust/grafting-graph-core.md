@@ -1836,6 +1836,18 @@ Prefix for deterministic new junction identities.
 
 Existing anchors.
 
+### `pub grafting_graph_core::bezier_network::NetworkRequest::smooth_welds: bool`
+
+Whether a weld this call makes may give the two curves it joins a
+shared tangent.
+
+On -- the default, and what a *drawn* run wants -- because a stroke is
+a reading of a gesture and two strokes meant as one road should come
+back as one road however the hand happened to pause. Off for a run
+whose anchors were authored rather than read: there the shape is not
+an inference to be improved, it is what the caller said, and bending
+it to meet a neighbour answers a question nobody asked.
+
 ### `pub grafting_graph_core::bezier_network::NetworkRequest::snap_tolerance: f64`
 
 Planar snap reach.

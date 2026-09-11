@@ -65,6 +65,8 @@ export function ConstructionDock(props: ConstructionDockProps) {
   const isTowerStampActive = activeTool === "tower-stamp";
   const isPlatformActive = activeTool === "platform-contour";
   const isWallChildActive = isWallBrushActive || isWallLineActive || isInteriorWallActive || isTowerStampActive || isPlatformActive;
+  const isPathLineActive = activeTool === "path-line";
+  const isPathBrushActive = activeTool === "path-brush";
   const isOpeningActive = activeTool === "opening";
   const isDemolishActive = activeTool === "house-room-delete";
 
@@ -140,10 +142,31 @@ export function ConstructionDock(props: ConstructionDockProps) {
       key: "paths",
       label: "Caminhos",
       icon: "⌁",
-      tooltip: "Pincel de Caminhos",
-      active: activeTool === "path-brush",
+      tooltip: "Ruas e caminhos (clique de ponto a ponto)",
+      active: isPathLineActive,
+      childActive: isPathLineActive || isPathBrushActive,
       disabled: !ready,
-      onClick: () => onToolChange("path-brush"),
+      onClick: () => onToolChange("path-line"),
+      subItems: [
+        {
+          key: "path-line",
+          label: "Ponto a Ponto",
+          icon: "⌁",
+          tooltip: "Clique na origem, clique no destino, siga clicando para continuar; clique no mesmo ponto para encerrar",
+          active: isPathLineActive,
+          disabled: !ready,
+          onClick: () => onToolChange("path-line"),
+        },
+        {
+          key: "path-brush",
+          label: "Pincel Livre",
+          icon: "🖌️",
+          tooltip: "Pincel Livre (arraste continuamente)",
+          active: isPathBrushActive,
+          disabled: !ready,
+          onClick: () => onToolChange("path-brush"),
+        },
+      ],
     },
     {
       key: "terrain",

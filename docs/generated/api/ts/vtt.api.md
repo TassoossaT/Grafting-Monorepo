@@ -371,7 +371,7 @@ Fast spatial bucketing for proximity queries against road points.
 
 ### `function vtt.bezier-edit-gesture.beginBezierGesture(ctx: ToolContext, sample: PointerSample, params?: { curveAction?: "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"; curveEndWidth?: number; curveMode?: "automatic" | "aligned" | "mirrored" | "free"; curveWidth?: number; mode: "shape" | "elevation" }): { cancel: any; commit: any; move: any } | undefined`
 
-### `function vtt.path-cloud-transaction.commitPathCloudIntent(ctx: ToolContext, effect: PathBrushEffect, tolerance: number): void`
+### `function vtt.path-cloud-transaction.commitPathCloudIntent(ctx: ToolContext, effect: PathBrushEffect, tolerance: number): boolean`
 
 Runtime boundary for a PathCloud decision. This file deliberately contains
 no path geometry or topology policy: it reads snapshots, invokes the type,
@@ -1939,6 +1939,10 @@ another wall onto its side -- is still the same panel. `undefined` for
 anything that is not one, which is the whole of "you cannot put an opening
 here".
 
+### `variable vtt.path-brush-tool.PATH_COLOR: 12616956`
+
+Shared with the click-to-click tool -- one road, one ghost colour.
+
 ### `variable vtt.path-brush-tool.pathBrushTool: ConstructionTool<"path-brush">`
 
 A free path stroke, built on the same brush every other brush uses: press,
@@ -1948,6 +1952,36 @@ Path creation follows the same ownership split as walls: this tool only
 chooses the interaction and emits a `PathBrushEffect`. The PathCloud owns
 the resulting graph and contour plan; the composition boundary commits its
 generic transaction without interpreting path topology.
+
+### `variable vtt.path-line-tool.pathLineTool: ConstructionTool<"path-line">`
+
+A road drawn click by click: press once for the origin, once for each
+turn, and again on the last point to finish.
+
+**Why this exists next to the brush.** A painted road's shape is a
+*fitting artifact* -- the stroke is a gesture, and curve fitting decides
+from it how many anchors the run deserves and where they sit, so the road
+that reaches the graph is the fit's reading of the hand rather than the
+hand. Here the anchors are the clicks. Nothing is inferred, so nothing can
+be inferred wrongly, and the same two clicks produce the same road every
+time.
+
+**Why each click commits.** The alternative is accumulating a whole chain
+and committing it at the end, which makes the work per gesture depend on
+how long the chain got. Committing per span keeps the change set at one
+edge, plus whatever it welds onto -- bounded by construction rather than
+by a budget someone has to tune, which is the whole cost argument for
+drawing this way.
+
+**What makes the corner smooth.** Nothing here. Each span is authored
+straight, and `curveNetwork`'s own weld smoothing gives the two spans
+meeting at a turn a shared tangent, exactly as it does for two separate
+strokes. An L drawn with three clicks and an L drawn as one gesture round
+the same way because they end up in the same code.
+
+Junctions are likewise not this tool's business: an endpoint landing on a
+standing road is snapped, and split into a T, by the same network plan any
+other road goes through.
 
 ### `interface vtt.platform-contour-merge.DirectedContourEdge`
 
@@ -2757,6 +2791,26 @@ Raw brush observations, never pre-interpreted as path topology.
 
 ### `property vtt.surface-edit-contract.PathBrushEffect.parameters: PathFormationRecipe`
 
+### `property vtt.surface-edit-contract.PathBrushEffect.referenceLine?: "fitted" | "authored"`
+
+What `brushRegion.samples` actually is.
+
+`"fitted"` -- the default, and what a free stroke hands over: a raw
+gesture, to be run through curve fitting, which decides for itself how
+many anchors the run deserves and where they sit. The shape that reaches
+the graph is therefore the fit's opinion of the gesture, never the
+gesture.
+
+`"authored"` -- the samples *are* the anchors, in order, and are taken
+exactly. Nothing is inferred, nothing is dropped, and a run of two
+clicks produces exactly one span between exactly those two points.
+
+This is the only thing that separates a click-to-click road from a
+painted one. Everything downstream -- snapping, junction splitting,
+welding, the contour union, the faces -- is the same code on the same
+spine, which is the point: a second way to *say* where a road goes, not
+a second kind of road.
+
 ### `property vtt.surface-edit-contract.PathBrushEffect.tableId: string`
 
 ### `property vtt.surface-edit-contract.PathBrushEffect.targetScope: "brush-region"`
@@ -3229,7 +3283,7 @@ Converts graph-owned authoring data to sampled ribbons through the Rust port.
 
 Resolve legacy authorship once using the canonical Rust conversion.
 
-### `function vtt.bezier-road-plan.planBezierRoad(input: { corridorId: string; miterLimit: number; offsets: readonly number[]; port: BezierPort; snapReach: number; snapshot: ConstructionGraphSnapshot; stroke: readonly ConstructionPosition[]; tolerance: number; topologies?: readonly ConstructionRegionTopology[] }): { chains: readonly SpineChainInput[]; controlPoints: ConstructionPosition[]; droppedChainEdgeIds: string[]; footprint: [number, number][][][]; graphPatch: ConstructionGraphPatch; polyline: ConstructionPosition[]; snapshot: ConstructionGraphSnapshot }`
+### `function vtt.bezier-road-plan.planBezierRoad(input: { authored?: boolean; corridorId: string; miterLimit: number; offsets: readonly number[]; port: BezierPort; snapReach: number; snapshot: ConstructionGraphSnapshot; stroke: readonly ConstructionPosition[]; tolerance: number; topologies?: readonly ConstructionRegionTopology[] }): { chains: readonly SpineChainInput[]; controlPoints: ConstructionPosition[]; droppedChainEdgeIds: string[]; footprint: [number, number][][][]; graphPatch: ConstructionGraphPatch; polyline: ConstructionPosition[]; snapshot: ConstructionGraphSnapshot }`
 
 Product identities and profile policy surround generic Rust fitting and connections.
 
@@ -4541,6 +4595,10 @@ Perlin `scale` -- smaller values are smoother/larger-scale terrain features.
 
 ### `property vtt.tool-types.ToolParamsByTool.path-brush: PathBrushParams`
 
+### `property vtt.tool-types.ToolParamsByTool.path-line: PathBrushParams`
+
+Same recipe as the brush; only the gesture that authors the spine differs.
+
 ### `property vtt.tool-types.ToolParamsByTool.platform-contour: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "circle" | "rectangle" | "polygon" | "freehand"; tolerance?: number }`
 
 ### `property vtt.tool-types.ToolParamsByTool.terrain-sculpt: TerrainSculptParams`
@@ -4615,7 +4673,7 @@ Length of a panel's own vertical edge, in world units.
 
 ### `type vtt.tool-types.BrushShapeKind = "circle" | "square" | "hexagon"`
 
-### `type vtt.tool-types.ConstructionToolId = "navigate" | "edit-region" | "platform-contour" | "path-brush" | "wall-brush" | "wall-line" | "interior-wall" | "tower-stamp" | "opening" | "house-room-delete" | "terrain-sculpt"`
+### `type vtt.tool-types.ConstructionToolId = "navigate" | "edit-region" | "platform-contour" | "path-brush" | "path-line" | "wall-brush" | "wall-line" | "interior-wall" | "tower-stamp" | "opening" | "house-room-delete" | "terrain-sculpt"`
 
 The construction-tool vocabulary every layer (widgets, composition) needs
 to agree on: which tools exist, what each one's parameters look like, and
@@ -5151,6 +5209,14 @@ callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 ### `property vtt.bezier-port.CurveNetworkRequest.nodePrefix: string`
 
 ### `property vtt.bezier-port.CurveNetworkRequest.nodes: readonly CurveNetworkNode[]`
+
+### `property vtt.bezier-port.CurveNetworkRequest.smoothWelds?: boolean`
+
+Whether a weld this call makes may give the two curves it joins a shared
+tangent. Defaults to on: a drawn run is a reading of a gesture, and two
+strokes meant as one road should come back as one road. Off for a run
+whose anchors were authored, where the shape is not an inference to be
+improved.
 
 ### `property vtt.bezier-port.CurveNetworkRequest.snapTolerance: number`
 

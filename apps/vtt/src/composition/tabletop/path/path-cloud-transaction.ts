@@ -19,15 +19,20 @@ export function commitPathCloudIntent(
   ctx: ToolContext,
   effect: PathBrushEffect,
   tolerance: number,
-): void {
-  timeCommit("rua", () => commitUntimed(ctx, effect, tolerance));
+): boolean {
+  return timeCommit("rua", () => commitUntimed(ctx, effect, tolerance));
 }
 
+/**
+ * Whether anything actually reached the table. A chained tool needs to know:
+ * carrying on from a click whose span was refused would leave the next span
+ * starting at a point no road runs to.
+ */
 function commitUntimed(
   ctx: ToolContext,
   effect: PathBrushEffect,
   tolerance: number,
-): void {
+): boolean {
   try {
     const plan = timePhase("plano da nuvem", () => planPathCloudMutation({
       bezier: ctx.runtime,
@@ -41,11 +46,11 @@ function commitUntimed(
     }));
     if (plan.kind === "noop") {
       ctx.reportFeedback({ tone: "info", message: plan.message });
-      return;
+      return false;
     }
     if (plan.kind === "refused") {
       ctx.reportFeedback({ tone: "error", message: `Caminho não aplicado: ${plan.reason}` });
-      return;
+      return false;
     }
 
     const outcome = ctx.runtime.applyPatchReplacement(plan.request, "local", effect.operationId);
@@ -58,16 +63,18 @@ function commitUntimed(
     const changedSurfaceCount = outcome.createdSurfaceKeys.length + outcome.affectedSurfaceKeys.length;
     if (changedSurfaceCount === 0 && outcome.removedSurfaceKeys.length === 0) {
       ctx.reportFeedback({ tone: "info", message: "Nenhuma alteração: o traço não cobriu nenhuma área válida." });
-      return;
+      return false;
     }
     ctx.history.record({ kind: "path-brush", operationId: effect.operationId });
     ctx.reportFeedback({
       tone: "success",
       message: `Caminho aplicado: ${changedSurfaceCount} superfícies alteradas e ${outcome.createdNodeIds.length} nós novos.`,
     });
+    return true;
   } catch (error) {
     reportToolFailure("path-cloud", "commit the PathCloud transaction", { operationId: effect.operationId }, error);
     const message = error instanceof Error ? error.message : String(error);
     ctx.reportFeedback({ tone: "error", message: `Caminho não aplicado: ${message}` });
+    return false;
   }
 }

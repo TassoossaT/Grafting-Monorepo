@@ -286,7 +286,8 @@ function OpeningFields(props: { readonly params: OpeningParams; readonly onChang
 const TOOL_LABELS: Partial<Record<ConstructionToolId, string>> = {
   "platform-contour": "Plataforma",
   "edit-region": "Editar estrutura",
-  "path-brush": "Parâmetros: Caminho",
+  "path-brush": "Parâmetros: Caminho (Pincel Livre)",
+  "path-line": "Parâmetros: Caminho (Ponto a Ponto)",
   "wall-brush": "Parâmetros: Parede (Pincel Livre)",
   "wall-line": "Parâmetros: Parede (Linha Reta)",
   "interior-wall": "Parâmetros: Parede (Gerar Interiores)",
@@ -352,7 +353,12 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
           <SelectableChip label="Elevar / baixar" swatchColor="#79b8e8" selected={params["edit-region"].mode === "elevation"} onSelect={() => onParamsChange("edit-region", { ...params["edit-region"], mode: "elevation" })} />
           <p>No modo de elevacao, arraste para cima ou para baixo. A plataforma leva a estrutura conectada acima.</p>
         </div>
-      ) : activeTool === "path-brush" ? (<PathBrushFields params={params["path-brush"]} onChange={(next) => onParamsChange("path-brush", next)} />) : activeTool === "wall-brush" ? (
+      ) : activeTool === "path-brush" ? (<PathBrushFields params={params["path-brush"]} onChange={(next) => onParamsChange("path-brush", next)} />) : activeTool === "path-line" ? (
+        <div style={{ display: "grid", gap: "0.6rem" }}>
+          <PathBrushFields params={params["path-line"]} onChange={(next) => onParamsChange("path-line", next)} />
+          <p>Clique na origem e depois no destino. Siga clicando para continuar a rua; clique de novo no último ponto, ou pressione Esc, para encerrar.</p>
+        </div>
+      ) : activeTool === "wall-brush" ? (
         <WallBrushFields params={params["wall-brush"]} onChange={(next) => onParamsChange("wall-brush", next)} />
       ) : activeTool === "wall-line" ? (
         <WallLineFields params={params["wall-line"]} onChange={(next) => onParamsChange("wall-line", next)} />

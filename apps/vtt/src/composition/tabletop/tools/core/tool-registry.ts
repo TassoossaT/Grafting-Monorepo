@@ -8,6 +8,7 @@ import { editRegionTool } from "./edit-region-tool.ts";
 import { navigateTool } from "./navigate-tool.ts";
 import { openingTool } from "../openings/opening-tool.ts";
 import { pathBrushTool } from "../paths/path-brush-tool.ts";
+import { pathLineTool } from "../paths/path-line-tool.ts";
 import { terrainSculptTool } from "../terrain/terrain-sculpt-tool.ts";
 import { towerStampTool } from "../tower/tower-stamp-tool.ts";
 import { wallBrushTool } from "../walls/wall-brush-tool.ts";
@@ -22,6 +23,7 @@ const TOOL_REGISTRY: { readonly [Id in ConstructionToolId]: ConstructionTool<Id>
   navigate: navigateTool,
   "platform-contour": platformContourTool,
   "path-brush": pathBrushTool,
+  "path-line": pathLineTool,
   "edit-region": editRegionTool,
   "wall-brush": wallBrushTool,
   "wall-line": wallLineTool,
