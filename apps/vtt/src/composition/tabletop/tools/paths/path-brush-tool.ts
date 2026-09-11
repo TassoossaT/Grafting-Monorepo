@@ -9,7 +9,6 @@ import { createBrushTool, type BrushRegion } from "../core/brush-tool.ts";
 import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
 import type { PathBrushParams } from "@/features/edit-construction";
 import { commitPathCloudIntent } from "../../path/path-cloud-transaction.ts";
-import { pathStrokePreview } from "../../path/path-preview.ts";
 
 const PATH_COLOR = 0xc084fc;
 
@@ -42,15 +41,5 @@ export const pathBrushTool = createBrushTool<"path-brush">({
       { operationId, tableId: ctx.tableId, initiatedBy: "path-brush" },
     );
     commitPathCloudIntent(ctx, effect, region.tolerance);
-  },
-
-  previewContour(region: BrushRegion, ctx: ToolContext, params: PathBrushParams) {
-    return pathStrokePreview(
-      ctx.runtime,
-      region.samples,
-      region.tolerance,
-      pathHalfWidth(params),
-      PATH_COLOR,
-    );
   },
 });

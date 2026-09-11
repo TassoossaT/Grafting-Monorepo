@@ -382,29 +382,6 @@ itself, and `TabletopRuntime.applyPatchReplacement` is what notices a
 consumed region needs repairing and dispatches it, the same for any caller
 of that method, not a path-specific step this file performs.
 
-### `function vtt.path-preview.pathStrokePreview(port: BezierPort, samples: readonly ConstructionPosition[], tolerance: number, halfWidth: number, color: number): PreviewDescriptor | undefined`
-
-The ghost for a road stroke: the run as it will be built, not the disc the
-hand swept.
-
-**What this replaces.** A road brush is drawn like an area brush -- press,
-drag a circle -- but a road is not an area. It is a centre line with a
-cross-section the subtype fixes, and the brush's own radius has nothing to
-do with how wide it comes out. Showing the swept disc therefore previewed
-a shape the tool never builds: the user aimed at a fat smear of hand
-tremor and received a fitted curve at the road's own width, and the two
-could differ by a long way on a shaky stroke. That mismatch is most of why
-the tool reads as "built from an area instead of from the spine".
-
-So the ghost is built the way the commit is: the same fit the commit runs,
-swept at the road's own half-width. What you aim at is what you get, and
-the brush radius goes back to meaning only what it should -- how literally
-to take the hand.
-
-Returns `undefined` for a stroke the fit cannot take yet (a tap, or one
-that has not travelled), leaving the generic swept ghost to stand in until
-there is a curve to show.
-
 ### `class vtt.tabletop-runtime.AppTabletopRuntime`
 
 ### `constructor vtt.tabletop-runtime.AppTabletopRuntime.constructor(tableId: string, render: SceneRenderPort, construction: ConstructionSessionPort, terrainNoise: TerrainNoisePort, initialTokens: readonly TokenProjection[]): AppTabletopRuntime`
@@ -1457,18 +1434,8 @@ what makes the ghost an honest envelope rather than a decoration.
 ### `property vtt.brush-tool.BrushRegion.tolerance: number`
 
 How far the committed product may be moved off the drawn stroke to
-straighten it: the brush's own reach, as the user set it.
-
-**Not the reach left over after the product takes its share.** That older
-reading made the brush do two jobs at once, and they pulled against each
-other: a road two metres wide drawn with a two-metre brush had nothing
-left and came out following every tremor, so asking for a smoother road
-meant drawing with a brush far wider than the road for reasons no one
-could see on screen. The envelope job is gone -- a brush that previews
-its real product (see BrushToolSpec.previewContour) shows the
-truth without having to contain it -- which leaves reach with the single
-meaning it has for every brush: how literally to take the hand. At zero
-the stroke is committed as drawn.
+straighten it: whatever of the brush's own reach the product does not
+occupy. See BrushToolSpec.halfWidth.
 
 ### `interface vtt.brush-tool.BrushToolSpec`
 
@@ -1490,10 +1457,13 @@ How far this brush's own product reaches from the stroke it is drawn
 along -- half a road's full width, shoulders included; zero for a
 product with no width of its own.
 
-Used to keep the brush shape at least as wide as what it builds, so the
-fallback ghost and the junction snap reach are never narrower than the
-product. It no longer rations the straightening budget: see
-BrushRegion.tolerance for why those two jobs were separated.
+This is the one number that gives the brush's reach a meaning, and it
+gives every brush the *same* meaning: the reach is the envelope the
+product must fit inside, and whatever the product leaves unused is the
+budget for straightening the hand. A wall is columns and shared edges,
+with no thickness in plan, so its whole reach is correction budget --
+the behaviour it already had, now falling out of the general rule
+instead of being a rule of its own.
 
 ### `method vtt.brush-tool.BrushToolSpec.previewColor(params: ToolParamsFor<Id>): number`
 
@@ -3259,7 +3229,7 @@ Converts graph-owned authoring data to sampled ribbons through the Rust port.
 
 Resolve legacy authorship once using the canonical Rust conversion.
 
-### `function vtt.bezier-road-plan.planBezierRoad(input: { corridorId: string; miterLimit: number; offsets: readonly number[]; port: BezierPort; snapReach: number; snapshot: ConstructionGraphSnapshot; stroke: readonly ConstructionPosition[]; tolerance: number; topologies?: readonly ConstructionRegionTopology[] }): { chains: readonly SpineChainInput[]; controlPoints: ConstructionPosition[]; footprint: [number, number][][][]; graphPatch: ConstructionGraphPatch; polyline: ConstructionPosition[]; snapshot: ConstructionGraphSnapshot }`
+### `function vtt.bezier-road-plan.planBezierRoad(input: { corridorId: string; miterLimit: number; offsets: readonly number[]; port: BezierPort; snapReach: number; snapshot: ConstructionGraphSnapshot; stroke: readonly ConstructionPosition[]; tolerance: number; topologies?: readonly ConstructionRegionTopology[] }): { chains: readonly SpineChainInput[]; controlPoints: ConstructionPosition[]; droppedChainEdgeIds: string[]; footprint: [number, number][][][]; graphPatch: ConstructionGraphPatch; polyline: ConstructionPosition[]; snapshot: ConstructionGraphSnapshot }`
 
 Product identities and profile policy surround generic Rust fitting and connections.
 
@@ -3719,40 +3689,6 @@ patch's own nodes across the *prospective* graph (snapshot plus patch) --
 this is what `planPathCloudMutation` reads to decide which standing
 contour faces one edit replaces (`standingRegionsForCloud`, below).
 
-### `function vtt.path-cloud-scope.regeneratedCorridorIds(chainIds: readonly string[]): ReadonlySet<string>`
-
-Every corridor whose chains a regeneration is actually about to redraw,
-read from the chain ids themselves.
-
-`#`-suffixed corridors report their base as well, matching how
-changedSpineCloud aliases them, so the set can be compared against
-a face's declared owners without one spelling missing the other.
-
-### `function vtt.path-cloud-scope.retireableRegions(standing: readonly ConstructionRegionTopology[], regenerated: ReadonlySet<string>): readonly ConstructionRegionTopology[]`
-
-The subset of `standing` a regeneration is entitled to retire: those whose
-every declared owner is a corridor it is redrawing.
-
-**The gap this closes.** Which faces belong to the touched cloud and which
-chains get resampled are two separate readings -- the first by identity
-(`standingRegionsForCloud` above), the second by walking the graph for
-edges that carry curve handles (`bezierChains`). They usually agree. When
-they do not -- an edge left without handles at a junction, a corridor whose
-chains the walk could not reach -- a face was still retired on the first
-reading while the second put nothing in its place, and the road lost a
-piece of itself permanently. That is the recurring disappearance, and no
-amount of care inside the contour builder could have seen it: by the time
-the union runs, the chain that was supposed to redraw that face is simply
-not there to be missed.
-
-Retiring only what is actually being redrawn makes the two readings agree
-by construction. A face left standing because one of its owners went
-missing may overlap the new contour, which is visible and can be edited
-away; deleting it is neither.
-
-A face that declares no owners is left to the caller's own selection, as
-before -- there is nothing here to check it against.
-
 ### `function vtt.path-cloud-scope.standingRegionsForCloud(topologies: readonly ConstructionRegionTopology[], cloudPositions: readonly ConstructionPosition[], corridorIds: ReadonlySet<string>, spineOwned: boolean): readonly ConstructionRegionTopology[]`
 
 Every standing "path" face that belongs to the touched spine cloud.
@@ -3765,26 +3701,6 @@ connectivity graph of shared nodes across path faces.
 ### `function vtt.path-corridor.pathSubtypeOf(corridorId: string): PathKind | undefined`
 
 The subtype `corridorId` was built from, or `undefined` if it carries none.
-
-### `function vtt.path-overlap.lengthInsideStandingPath(spine: readonly ConstructionPosition[], topologies: readonly ConstructionRegionTopology[]): number`
-
-How much of `spine` runs inside standing path surface, in world units.
-
-Measured on the centre line rather than by intersecting footprints,
-because the centre line is what distinguishes the two cases. Two roads
-crossing overlap in area exactly as much as two roads sharing a route do
-for a short enough stroke; only the spine says whether the new run passed
-*through* the old one or went *along* it.
-
-### `function vtt.path-overlap.overlapRefusal(spine: readonly ConstructionPosition[], topologies: readonly ConstructionRegionTopology[], width: number): string | undefined`
-
-Why this stroke may not be committed over what is already there, or
-`undefined` when it may.
-
-A crossing is not refused: two runs meeting is a junction, and the whole
-contour engine is built to fuse them. What is refused is a run laid
-*along* one already standing, which builds a second road in the same place
-as the first and leaves the pair stacked.
 
 ### `interface vtt.path-recipe.PathFormationRecipe`
 

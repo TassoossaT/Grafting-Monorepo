@@ -359,16 +359,6 @@ Looks up an edge without exposing the storage engine's index type.
 
 Number of edges in the graph.
 
-### `pub fn grafting_graph_core::Graph<N, E>::edges(&self) -> alloc::vec::Vec<&grafting_graph_core::Edge<E>>`
-
-Every edge, in stable identity order, borrowed rather than cloned.
-
-[`Self::snapshot`] already answers "what is in this graph", but it
-answers it by copying the whole thing, which is the wrong price for a
-caller that only wants to read every edge once -- deriving meshes on
-each refresh, say. Same ordering contract as the snapshot, so the two
-never disagree about what "every edge" means.
-
 ### `pub fn grafting_graph_core::Graph<N, E>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result`
 
 ### `pub fn grafting_graph_core::Graph<N, E>::grouped_grid_layout(&self, grouping_edges: &[grafting_graph_core::EdgeId], options: grafting_graph_core::GroupedGridOptions) -> core::result::Result<grafting_graph_core::LayoutSnapshot, grafting_graph_core::LayoutError>`

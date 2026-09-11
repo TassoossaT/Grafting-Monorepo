@@ -105,8 +105,30 @@ export function planBezierRoad(input: {
     removedEdgeIds: [...network.removedEdgeIds, ...migrations.map((e) => e.edgeId)],
     edges: [...network.edges, ...migrations],
   };
+  // **The chains this regeneration cannot draw.** `bezierChains` reads only
+  // edges that carry handles, so a spine edge without them is skipped in
+  // silence -- and the face it was holding up gets consumed by the
+  // regeneration with nothing put back. That is the road losing a piece of
+  // itself, and it is invisible from anywhere downstream: by the time the
+  // union runs, the chain that was supposed to redraw that face is simply
+  // not there to be missed.
+  //
+  // Reported rather than worked around. Guessing which faces to spare from
+  // their names was tried and was wrong in both directions -- too strict
+  // doubled every junction, too loose deleted again -- because the names
+  // were never the problem. This is the structural condition itself, so the
+  // caller can refuse the whole edit and say which edge caused it instead of
+  // committing a partial one.
+  const droppedChainEdgeIds = cloud.snapshot.edges
+    .filter(
+      (edge) =>
+        edge.curve === undefined &&
+        edge.startNodeId.startsWith("spine:") &&
+        edge.endNodeId.startsWith("spine:"),
+    )
+    .map((edge) => edge.edgeId);
   const chains = bezierChains(cloud.snapshot, port, offsets, input.miterLimit);
   const footprint = unionBezierRibbons(port, chains.filter((c) => c.chainId.startsWith(`spine-edge:${corridorId}:`)).flatMap((c) => c.ribbons ?? []));
-  return { graphPatch, controlPoints, snapshot, chains, footprint,
+  return { graphPatch, controlPoints, snapshot, chains, footprint, droppedChainEdgeIds,
     polyline: fitted.samples.flatMap((span, i) => (i ? span.slice(1) : span).map((p) => curvePosition(p.position))) };
 }

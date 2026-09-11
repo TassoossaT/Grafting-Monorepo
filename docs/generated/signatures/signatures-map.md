@@ -57,7 +57,6 @@ pub fn irregular_quad_grid(
 
 // src/mesh.rs
 pub const REGION_SURFACE_KEY_PREFIX: &str = "@region";
-pub fn reference_field(graph: &SessionGraph) -> ReferenceField
 pub fn region_id_to_wire(id: &RegionId) -> Vec<String>
 pub fn region_id_from_wire(wire: &[String]) -> Result<RegionId, String>
 pub struct SurfaceMeshDto
@@ -3511,16 +3510,6 @@ export function commitPathCloudIntent(
   ): void {
   timeCommit("rua", () => commitUntimed(ctx, effect, tolerance));
 
-// src/composition/tabletop/path/path-preview.ts
-export function pathStrokePreview(
-  port: BezierPort,
-  samples: readonly ConstructionPosition[],
-  tolerance: number,
-  halfWidth: number,
-  color: number,
-  ): PreviewDescriptor | undefined {
-  if (samples.length < 2) return undefined;
-
 // src/composition/tabletop/tabletop-runtime.ts
 export type TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed";
 export interface TabletopSnapshot {
@@ -3805,7 +3794,7 @@ export interface BrushToolSpec<Id extends BrushableToolId> {
   * product with no width of its own.
 export function createBrushTool<Id extends BrushableToolId>(spec: BrushToolSpec<Id>): ConstructionTool<Id> {
   const regionFor = (gesture: ToolGesture, params: ToolParamsFor<Id>): BrushRegion => {
-  const drawn = resolveBrushShape(params);
+  const halfWidth = spec.halfWidth(params);
 
 // src/composition/tabletop/tools/core/contour-fusion.ts
 export interface FusionPolyline {
@@ -5111,14 +5100,6 @@ export function standingRegionsForCloud(
   ): readonly ConstructionRegionTopology[] {
   if (corridorIds.size === 0 && cloudPositions.length === 0) return [];
 
-export function regeneratedCorridorIds(chainIds: readonly string[]): ReadonlySet<string> {
-  const corridors = new Set<string>();
-export function retireableRegions(
-  standing: readonly ConstructionRegionTopology[],
-  regenerated: ReadonlySet<string>,
-  ): readonly ConstructionRegionTopology[] {
-  return standing.filter((topology) => {
-  const owners = surfaceCorridors(topology.surfaceKey[1] ?? "");
 
 // src/features/edit-construction/structure-types/path/path-cloud.ts
 export interface PathRunNode {
@@ -5178,23 +5159,6 @@ export function pathCorridorId(operationId: string, kind: PathKind): string {
   }
 export function pathSubtypeOf(corridorId: string): PathKind | undefined {
   const at = corridorId.lastIndexOf(MARKER);
-
-// src/features/edit-construction/structure-types/path/path-overlap.ts
-export function lengthInsideStandingPath(
-  spine: readonly ConstructionPosition[],
-  topologies: readonly ConstructionRegionTopology[],
-  ): number {
-  const faces = topologies
-  .filter((topology) => topology.surfaceType === "path")
-  .map(ringsOf)
-  .filter((face): face is Face => face !== undefined);
-export function overlapRefusal(
-  spine: readonly ConstructionPosition[],
-  topologies: readonly ConstructionRegionTopology[],
-  width: number,
-  ): string | undefined {
-  if (spine.length < 2 || width <= 0) return undefined;
-  const inside = lengthInsideStandingPath(spine, topologies);
 
 // src/features/edit-construction/structure-types/path/path-recipe.ts
 export const PATH_SPINE_OFFSET = 0;

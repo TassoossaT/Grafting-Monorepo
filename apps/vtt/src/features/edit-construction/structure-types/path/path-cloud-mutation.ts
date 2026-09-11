@@ -19,8 +19,7 @@ import {
   resolveCoverage,
 } from "../index.ts";
 import { graphPatchForSpine } from "./spine-graph/index.ts";
-import { bezierContourId, changedSpineCloud, regeneratedCorridorIds, retireableRegions, standingRegionsForCloud } from "./path-cloud-scope.ts";
-import { overlapRefusal } from "./path-overlap.ts";
+import { bezierContourId, changedSpineCloud, standingRegionsForCloud } from "./path-cloud-scope.ts";
 import { referenceLineFrom } from "./path-reference-line.ts";
 import { pathSpineDraftFor } from "./path-spine-draft.ts";
 
@@ -119,6 +118,16 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
     snapReach: Math.max(tolerance, effect.brushShape.kind === "square" ? effect.brushShape.size / 2 : effect.brushShape.radius),
   }) : undefined;
   if (bezier && bezier.graphPatch.edges.length === 0) return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente após o encaixe." };
+  // A regeneration that cannot redraw every chain of the cloud it is about to
+  // replace would consume faces and put nothing back. Refused whole: a
+  // visible failure naming the chain is recoverable, a silently deleted road
+  // is not.
+  if (bezier && bezier.droppedChainEdgeIds.length > 0) {
+    return {
+      kind: "refused",
+      reason: `parte desta nuvem não pôde ser redesenhada e seria apagada: ${bezier.droppedChainEdgeIds.join(", ")}`,
+    };
+  }
   const fitted = bezier ? [] : fitPath(stroke, tolerance, { arcs: !input.snapToGrid });
   const swept = bezier ? { line: bezier.controlPoints } : fitted.length === 0 ? { line: stroke } : referenceLineFrom(fitted, stroke, resolveConformance("path", "terrain", effect.parameters.kind));
   const spine = pathSpineDraftFor(effect, swept.line);
@@ -173,17 +182,6 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
       return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente." };
     }
 
-    // A crossing is welcome -- two runs meeting is a junction, and the
-    // contour engine exists to fuse them. A run laid *along* one already
-    // standing is not: it builds a second road in the same place as the
-    // first and leaves the pair stacked with no way to tell them apart.
-    const stacked = overlapRefusal(
-      flatPolyline,
-      input.regionTopologies,
-      outerOffset - innerOffset === 0 ? 0 : Math.abs(outerOffset - innerOffset),
-    );
-    if (stacked !== undefined) return { kind: "refused", reason: stacked };
-
     const resolved = resolveCoverage(
       "path",
       input.coverageFor(outline),
@@ -195,14 +193,7 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
     }
 
     const topologies = input.regionTopologies;
-    // Retire only what this regeneration is actually redrawing. The chain
-    // ids carry that provenance on the explicit-curve path; the legacy path
-    // resamples from bare positions and has none to check, so it keeps the
-    // caller's selection whole. See `retireableRegions`.
-    const selected = standingRegionsForCloud(topologies, touchedCloud.positions, touchedCloud.corridorIds, !!input.bezier);
-    const standingRegions = input.bezier
-      ? retireableRegions(selected, regeneratedCorridorIds(regeneratedChains.map((chain) => chain.chainId)))
-      : selected;
+    const standingRegions = standingRegionsForCloud(topologies, touchedCloud.positions, touchedCloud.corridorIds, !!input.bezier);
     const existingEdgeUses = new Map<string, boolean[]>();
     for (const topology of topologies) {
       for (const loop of [...topology.outerLoops, ...topology.holes]) {

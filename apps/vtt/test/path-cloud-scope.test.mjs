@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { bezierContourId, regeneratedCorridorIds, retireableRegions, standingRegionsForCloud } from "../src/features/edit-construction/structure-types/path/path-cloud-scope.ts";
+import { standingRegionsForCloud } from "../src/features/edit-construction/structure-types/path/path-cloud-scope.ts";
 
 test("standingRegionsForCloud returns empty when corridorIds and cloudPositions are empty", () => {
   const result = standingRegionsForCloud([], []);
@@ -108,86 +108,4 @@ test("standingRegionsForCloud does not traverse into or consume a foreign path c
   const standing = standingRegionsForCloud([road1, road2], [], new Set(["corridor-2"]));
   assert.equal(standing.length, 1, "only road2's face is returned");
   assert.equal(standing[0]?.surfaceKey[1], "corridor-2:band-0:0");
-});
-
-/** A committed contour face, named the way `bezierContourId` names one. */
-function ownedFace(owners, operationId) {
-  return {
-    surfaceKey: ["@region", `${bezierContourId(new Set(owners), operationId)}:band-0:0`],
-    surfaceType: "path",
-    physical: true,
-    outerLoops: [],
-    holes: [],
-    nodes: [],
-  };
-}
-
-test("regeneratedCorridorIds reads a corridor out of its chain's edge id, base alias included", () => {
-  const corridors = regeneratedCorridorIds([
-    "spine-edge:op-a#road:0",
-    "spine-split:spine-edge:op-b:3:1",
-  ]);
-  assert.ok(corridors.has("op-a#road"));
-  assert.ok(corridors.has("op-a"), "the #-suffixed corridor also answers to its base");
-  assert.ok(corridors.has("op-b"));
-});
-
-test("a face is retired only when every corridor that owns it is being redrawn", () => {
-  const face = ownedFace(["op-a", "op-b"], "commit-1");
-  assert.deepEqual(
-    retireableRegions([face], regeneratedCorridorIds(["spine-edge:op-a:0", "spine-edge:op-b:0"])),
-    [face],
-    "the ordinary case: the whole cloud is redrawn, so the whole cloud is retired",
-  );
-});
-
-test("a face whose co-owner lost its chain is left standing instead of deleted", () => {
-  // The recurring disappearance, reduced: the face belongs to two corridors,
-  // the regeneration only reaches one of them, and retiring it anyway would
-  // take op-b's half of the road with it and put nothing back.
-  const face = ownedFace(["op-a", "op-b"], "commit-1");
-  assert.deepEqual(
-    retireableRegions([face], regeneratedCorridorIds(["spine-edge:op-a:0"])),
-    [],
-    "half a regeneration must not retire a whole face",
-  );
-});
-
-test("a face that declares no owners is left to the caller's own selection", () => {
-  // Legacy `<opId>:band-N:i` faces carry no owner list, so there is nothing
-  // to check them against and the gate must not silently drop them.
-  const legacy = {
-    surfaceKey: ["@region", "corridor-1:band-0:0"],
-    surfaceType: "path",
-    physical: true,
-    outerLoops: [],
-    holes: [],
-    nodes: [],
-  };
-  assert.deepEqual(retireableRegions([legacy], new Set()), [legacy]);
-});
-
-test("a cloud carrying a junction anchor is still retired, so the road is not doubled", () => {
-  // The real id shapes, not tidied ones. `pathCorridorId` appends the subtype
-  // (`<op>#road`), and `curveNetwork` mints a junction anchor beneath that
-  // again (`spine:<op>#road#junction:<n>`), which `parseSpineControlNodeId`
-  // reads back as a corridor named `<op>#road#junction`. That name lands in
-  // the face's owner list while no chain id can ever produce it.
-  //
-  // Comparing the two sets literally retired nothing here, so every stroke
-  // over a junction left the standing road under the new one.
-  const face = ownedFace(
-    ["run-a#road", "run-a#road#junction", "run-a"],
-    "commit-1",
-  );
-  const regenerated = regeneratedCorridorIds(["spine-edge:run-a#road:0", "spine-edge:run-a#road:1"]);
-  assert.deepEqual(retireableRegions([face], regenerated), [face]);
-});
-
-test("a genuinely foreign corridor is still not retired", () => {
-  // The suffix walk must not become a way to satisfy any owner at all: a
-  // corridor nobody is redrawing shares no prefix with one that is.
-  const face = ownedFace(["run-a#road", "run-b#road"], "commit-1");
-  const regenerated = regeneratedCorridorIds(["spine-edge:run-a#road:0"]);
-  assert.deepEqual(retireableRegions([face], regenerated), []);
 });
