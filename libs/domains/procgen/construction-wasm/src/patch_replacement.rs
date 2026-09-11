@@ -54,6 +54,16 @@ pub struct GraphPatchEdge {
     pub end_node_id: String,
 }
 
+/// The state a successful replacement superseded, handed back rather than
+/// dropped so a caller keeping undo history does not have to copy the whole
+/// map beforehand to get it.
+pub struct ReplacedState {
+    pub graph: SessionGraph,
+    pub surfaces: SurfaceRegistry,
+    pub topology: ContourTopology,
+    pub known_regions: HashSet<RegionId>,
+}
+
 /// Runs the replacement on cloned state and publishes it only when every
 /// replacement face registered. `skipped_region_ids` is therefore an error,
 /// not a partial success: preserving the standing geometry is safer than
@@ -64,7 +74,7 @@ pub fn apply_patch_replacement(
     topology: &mut ContourTopology,
     known_regions: &mut HashSet<RegionId>,
     request: ApplyPatchReplacementRequest,
-) -> Result<AddPatchResponse, String> {
+) -> Result<(AddPatchResponse, ReplacedState), String> {
     if request.operation_id.is_empty() {
         return Err("patch replacement requires an operation identity".into());
     }
@@ -183,12 +193,12 @@ pub fn apply_patch_replacement(
     next_topology.prune_unused_edges();
     let nodes_in_use = next_topology.nodes_in_use();
     for node_id in candidate_nodes {
+        // A node some graph edge still reaches stays. Asked of the node itself:
+        // reading it off a snapshot copied and sorted the whole graph once
+        // per candidate.
         if nodes_in_use.contains(&node_id)
-            || next_graph
-                .snapshot()
-                .edges()
-                .iter()
-                .any(|e| e.source() == &node_id || e.target() == &node_id)
+            || next_graph.successors(&node_id).is_ok_and(|ids| !ids.is_empty())
+            || next_graph.predecessors(&node_id).is_ok_and(|ids| !ids.is_empty())
         {
             continue;
         }
@@ -201,11 +211,13 @@ pub fn apply_patch_replacement(
             .push(node_id.as_str().to_owned());
     }
 
-    *graph = next_graph;
-    *surfaces = next_surfaces;
-    *topology = next_topology;
-    *known_regions = next_known_regions;
-    Ok(response)
+    let previous = ReplacedState {
+        graph: std::mem::replace(graph, next_graph),
+        surfaces: std::mem::replace(surfaces, next_surfaces),
+        topology: std::mem::replace(topology, next_topology),
+        known_regions: std::mem::replace(known_regions, next_known_regions),
+    };
+    Ok((response, previous))
 }
 
 #[cfg(test)]

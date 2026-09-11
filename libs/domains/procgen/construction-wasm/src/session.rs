@@ -47,10 +47,14 @@ struct ConstructionState {
     spatial_index: crate::spatial_index::UniformGridIndex,
 }
 
+/// One undoable replacement, holding the *other* state: the one before it
+/// while it sits on the undo stack, the one it was undone from while it sits
+/// on the redo stack. Undo and redo swap it with the live state, so neither
+/// copies the map -- keeping a full `before` and `after` per entry cost two
+/// whole-map copies on every road commit and one more on every undo or redo.
 struct RegionOverlayHistoryEntry {
     operation_id: String,
-    before: ConstructionState,
-    after: ConstructionState,
+    state: ConstructionState,
 }
 /// One live editing session: a `Graph<[f32; 3], ()>` + `SurfaceRegistry`,
 /// plus an optional `PrismGridMesh` terrain generation reads from. In-memory
@@ -132,6 +136,15 @@ impl ConstructionSession {
                 self.spatial_index.remove(&id);
             }
         }
+    }
+
+    /// Exchanges the live construction state with a history entry's.
+    fn swap_state(&mut self, state: &mut ConstructionState) {
+        std::mem::swap(&mut self.graph, &mut state.graph);
+        std::mem::swap(&mut self.surfaces, &mut state.surfaces);
+        std::mem::swap(&mut self.topology, &mut state.topology);
+        std::mem::swap(&mut self.known_regions, &mut state.known_regions);
+        std::mem::swap(&mut self.spatial_index, &mut state.spatial_index);
     }
 
     // ---- Bootstrapping ----
@@ -325,14 +338,7 @@ impl ConstructionSession {
     pub fn apply_patch_replacement_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request: patch_replacement::ApplyPatchReplacementRequest = parse(request_json)?;
         let operation_id = request.operation_id.clone();
-        let before = ConstructionState {
-            graph: self.graph.clone(),
-            surfaces: self.surfaces.clone(),
-            topology: self.topology.clone(),
-            known_regions: self.known_regions.clone(),
-            spatial_index: self.spatial_index.clone(),
-        };
-        let response = patch_replacement::apply_patch_replacement(
+        let (response, previous) = patch_replacement::apply_patch_replacement(
             &mut self.graph,
             &mut self.surfaces,
             &mut self.topology,
@@ -340,18 +346,19 @@ impl ConstructionSession {
             request,
         )
         .map_err(to_js_error)?;
+        // The index is updated in place by `track`, so its previous state is
+        // the one piece still copied.
+        let spatial_index = self.spatial_index.clone();
         self.track(&response.outcome);
-        let after = ConstructionState {
-            graph: self.graph.clone(),
-            surfaces: self.surfaces.clone(),
-            topology: self.topology.clone(),
-            known_regions: self.known_regions.clone(),
-            spatial_index: self.spatial_index.clone(),
-        };
         self.region_overlay_undo.push(RegionOverlayHistoryEntry {
             operation_id,
-            before,
-            after,
+            state: ConstructionState {
+                graph: previous.graph,
+                surfaces: previous.surfaces,
+                topology: previous.topology,
+                known_regions: previous.known_regions,
+                spatial_index,
+            },
         });
         self.region_overlay_redo.clear();
         serialize(&response)
@@ -475,17 +482,9 @@ impl ConstructionSession {
         )
         .map_err(to_js_error)?;
         self.track(&response.outcome);
-        let after = ConstructionState {
-            graph: self.graph.clone(),
-            surfaces: self.surfaces.clone(),
-            topology: self.topology.clone(),
-            known_regions: self.known_regions.clone(),
-            spatial_index: self.spatial_index.clone(),
-        };
         self.region_overlay_undo.push(RegionOverlayHistoryEntry {
             operation_id,
-            before,
-            after,
+            state: before,
         });
         self.region_overlay_redo.clear();
         serialize(&response)
@@ -493,7 +492,7 @@ impl ConstructionSession {
 
     /// Restores the state immediately before one generic overlay.
     pub fn undo_region_overlay(&mut self, operation_id: &str) -> Result<(), JsValue> {
-        let Some(entry) = self.region_overlay_undo.pop() else {
+        let Some(mut entry) = self.region_overlay_undo.pop() else {
             return Err(JsValue::from_str("no region overlay is available to undo"));
         };
         if entry.operation_id != operation_id {
@@ -502,18 +501,14 @@ impl ConstructionSession {
                 "region overlay undo order does not match session history",
             ));
         }
-        self.graph = entry.before.graph.clone();
-        self.surfaces = entry.before.surfaces.clone();
-        self.topology = entry.before.topology.clone();
-        self.known_regions = entry.before.known_regions.clone();
-        self.spatial_index = entry.before.spatial_index.clone();
+        self.swap_state(&mut entry.state);
         self.region_overlay_redo.push(entry);
         Ok(())
     }
 
     /// Restores the state immediately after one undone generic overlay.
     pub fn redo_region_overlay(&mut self, operation_id: &str) -> Result<(), JsValue> {
-        let Some(entry) = self.region_overlay_redo.pop() else {
+        let Some(mut entry) = self.region_overlay_redo.pop() else {
             return Err(JsValue::from_str("no region overlay is available to redo"));
         };
         if entry.operation_id != operation_id {
@@ -522,11 +517,7 @@ impl ConstructionSession {
                 "region overlay redo order does not match session history",
             ));
         }
-        self.graph = entry.after.graph.clone();
-        self.surfaces = entry.after.surfaces.clone();
-        self.topology = entry.after.topology.clone();
-        self.known_regions = entry.after.known_regions.clone();
-        self.spatial_index = entry.after.spatial_index.clone();
+        self.swap_state(&mut entry.state);
         self.region_overlay_undo.push(entry);
         Ok(())
     }
