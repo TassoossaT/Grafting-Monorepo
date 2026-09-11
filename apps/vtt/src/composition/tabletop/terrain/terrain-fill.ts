@@ -377,11 +377,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     request.boundary,
     grid.onContour,
     (vertex) => grid.vertices[vertex],
-    // Do not split a standing edge for every sampled contour point. A terrain
-    // repair only needs a useful boundary interval; accepting the old tiny
-    // fraction turned each regenerated grid sample into another permanent
-    // edge vertex and made the next repair denser again.
-    Math.max(request.faceSide * 0.5, request.faceSide * SHORTEST_USEFUL_FRACTION),
+    request.faceSide * SHORTEST_USEFUL_FRACTION,
   );
   // A corner that landed too near an existing node *is* that node. Resolving
   // it here rather than splitting is what keeps sliver edges out of the graph

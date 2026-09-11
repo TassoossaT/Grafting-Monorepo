@@ -105,6 +105,8 @@ function faceIntersectsArea(
  * soon as the ground it is about to lay is wide enough to lay in, which on
  * ordinary ground is after one ring or none at all.
  */
+const MOST_RINGS_WORTH_ABSORBING = 1;
+const MOST_FACES_WORTH_ABSORBING = 48;
 
 /**
  * How much of a face has to fit across the ground being laid before it counts
@@ -117,6 +119,7 @@ function faceIntersectsArea(
  * point where the corridor a road leaves behind -- about half a face wide --
  * asks for one ring of neighbours and, having got it, stops.
  */
+const NARROW_ENOUGH_TO_GROW = 0.75;
 
 /**
  * One face's boundary as `polygon-clipping` wants it: closed, in walk order.
@@ -174,6 +177,23 @@ function topologyToPolygonWithHoles(
  * which is the direction to be wrong in when the question is "is this too
  * narrow to lay ground in".
  */
+function widthOf(polygon: MultiPolygon): number {
+  let area = 0;
+  let perimeter = 0;
+  for (const piece of polygon) {
+    for (const ring of piece) {
+      for (let index = 0; index < ring.length - 1; index += 1) {
+        const [ax, az] = ring[index]!;
+        const [bx, bz] = ring[index + 1]!;
+        area += ax * bz - bx * az;
+        perimeter += Math.hypot(bx - ax, bz - az);
+      }
+    }
+  }
+  if (perimeter <= 1e-9) return 0;
+  return (2 * Math.abs(area / 2)) / perimeter;
+}
+
 function pieceMetrics(piece: MultiPolygon[number]): { readonly area: number; readonly width: number } {
   let area = 0;
   let perimeter = 0;
@@ -576,7 +596,7 @@ export function executeTerrainCut(
     return { builtFaces: 0, removedFaces: 0, refusedFaces: 0, success: false, message: "Área de corte inválida." };
   }
 
-  let effectiveFaceSide = request.faceSide ?? DEFAULT_FACE_SIDE;
+  const effectiveFaceSide = request.faceSide ?? DEFAULT_FACE_SIDE;
   const extent = boundsOfArea(request.area);
 
   // Ask runtime what surfaces are covered by outline / footprint
@@ -647,20 +667,6 @@ export function executeTerrainCut(
   );
   let affectedKeys = new Set(affected.map((t) => t.surfaceKey.join(" ")));
   let retained = standing.filter((t) => !affectedKeys.has(t.surfaceKey.join(" ")));
-
-  // Regeneration must not refine the terrain merely because the replacement
-  // grid has a fixed nominal resolution. If the old repair area occupied N
-  // faces, choose a face size whose coarse estimate cannot produce more than
-  // N cells (with a small allowance for the new boundary). This keeps a
-  // repeated cut from turning one large face into an ever-growing cascade of
-  // smaller faces while still allowing a genuinely complex boundary to add
-  // the few cells it needs.
-  if (request.profile.kind === "regenerate" && affected.length > 0) {
-    const area = Math.max(1, (coveredExtent.maxX - coveredExtent.minX) * (coveredExtent.maxZ - coveredExtent.minZ));
-    const targetCells = Math.max(1, affected.length);
-    const minimumSide = Math.sqrt(area / targetCells);
-    effectiveFaceSide = Math.max(effectiveFaceSide, minimumSide);
-  }
 
   // If hole profile: simply delete affected faces
   if (request.profile.kind === "hole") {
@@ -796,12 +802,38 @@ export function executeTerrainCut(
     }
   };
 
-  // Keep the repair scope geometric. Earlier versions absorbed neighbouring
-  // terrain faces by shared node until the remainder was wide enough for the
-  // generator. That topological growth escaped the actual road footprint and
-  // made each subsequent repair consume a larger cloud, causing mesh growth.
-  // Neighbours remain available below as boundary constraints only.
+  // **Growing until there is room to lay a face.**
+  //
+  // A road covers nearly the full width of the faces it runs over, so
+  // subtracting it from exactly those faces leaves a ribbon a fraction of a
+  // face wide and tens of faces long. The generator cannot lay a 2-unit cell in
+  // a 1-unit strip, so it subdivides until it can -- which is how a repair that
+  // refused nothing and clashed with nothing still came back with two hundred
+  // faces at a fifth of the size asked for, in seven disconnected pieces.
+  //
+  // The remedy is the one the sculpt brush gets for free by covering whole
+  // faces: take in enough ground that the remainder is a region rather than a
+  // seam. Neighbours are absorbed by *shared node*, one ring at a time, and
+  // only while the result is still too narrow to lay in -- so ordinary strokes
+  // and cuts that barely clip a face never pay for it.
   let targetPolygon = groundFor(affected);
+  if (connectArea.length > 0) {
+    for (let ring = 0; ring < MOST_RINGS_WORTH_ABSORBING; ring += 1) {
+      if (affected.length === 0) break;
+      if (widthOf(targetPolygon) >= effectiveFaceSide * NARROW_ENOUGH_TO_GROW) break;
+
+      const touched = new Set(affected.flatMap((t) => t.nodes.map((n) => n.id)));
+      const absorbed = retained.filter(
+        (t) => isTerrainMatch(t.surfaceType, request.targetSurfaceType) && t.nodes.some((n) => touched.has(n.id)),
+      );
+      if (absorbed.length === 0) break;
+
+      affected = [...affected, ...absorbed];
+      affectedKeys = new Set(affected.map((t) => t.surfaceKey.join(" ")));
+      retained = standing.filter((t) => !affectedKeys.has(t.surfaceKey.join(" ")));
+      targetPolygon = groundFor(affected);
+    }
+  }
 
   // Do not discard pieces: discarding pieces deletes terrain without regenerating it,
   // creating holes and causing the terrain to recede from roads.
@@ -918,7 +950,6 @@ export function executeTerrainCut(
     holes: holeRings,
     sources: perimeters.sources,
     replaceSurfaceKeys: affected.length > 0 ? affected.map((f) => f.surfaceKey) : undefined,
-    maxGeneratedFaces: request.profile.kind === "regenerate" && affected.length > 0 ? affected.length : undefined,
     // The road belongs here as much as the retained terrain does. These seeds
     // are what `fillTerrain` reads back to learn which edges already have a
     // face on them and which way that face walks; a road left out of them is a
