@@ -38,16 +38,25 @@ test("the road's half width is the outermost lateral offset its own profile reac
   assert.equal(pathHalfWidth({ ...ROAD, pathKind: "street" }), 1.5);
 });
 
-test("a product wider than the brush pushes the brush open instead of spilling past it", () => {
+test("a product wider than the brush still pushes the brush shape open", () => {
   const region = regionFor({ ...ROAD, radius: 0.75 }, pathHalfWidth(ROAD));
-  assert.equal(region.shape.radius, 2.1, "the ghost grows to hold the road it will paint");
-  assert.equal(region.tolerance, 0, "a brush no wider than its product has nothing left to correct with");
+  assert.equal(region.shape.radius, 2.1, "the shape grows to hold the road it will paint");
 });
 
-test("the correction budget is exactly the reach the product leaves unused", () => {
-  const region = regionFor(ROAD, pathHalfWidth(ROAD));
-  assert.equal(region.shape.radius, 2.5);
-  assert.ok(Math.abs(region.tolerance - 0.4) < 1e-9);
+test("the correction budget is the reach the hand asked for, not what the product left over", () => {
+  // The brush does one job now, not two. Tying the budget to the slack
+  // between brush and road meant a road drawn with a brush its own width
+  // could not be straightened at all, so asking for a smoother road meant
+  // widening the brush for reasons nothing on screen explained.
+  const wide = regionFor(ROAD, pathHalfWidth(ROAD));
+  assert.equal(wide.shape.radius, 2.5);
+  assert.equal(wide.tolerance, 2.5);
+
+  const narrow = regionFor({ ...ROAD, radius: 0.75 }, pathHalfWidth(ROAD));
+  assert.equal(narrow.tolerance, 0.75, "growing the shape must not grant a budget nobody asked for");
+
+  const literal = regionFor({ ...ROAD, radius: 0 }, pathHalfWidth(ROAD));
+  assert.equal(literal.tolerance, 0, "at zero reach the stroke is committed as drawn");
 });
 
 test("a product with no width of its own spends the whole reach on correction", () => {
@@ -60,7 +69,7 @@ test("a square brush is widened by its own half-size, not its radius", () => {
   const region = regionFor({ ...ROAD, shape: "square", radius: 0.5 }, 2.1);
   assert.equal(region.shape.kind, "square");
   assert.equal(region.shape.size, 4.2);
-  assert.equal(region.tolerance, 0);
+  assert.equal(region.tolerance, 0.5, "half the drawn square's own size, before it was widened");
 });
 
 test("a span held together by its arc is never committed as a chord outside the budget", () => {

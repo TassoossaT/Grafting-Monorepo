@@ -28,8 +28,18 @@ export interface BrushRegion {
   readonly shape: BrushShape;
   /**
    * How far the committed product may be moved off the drawn stroke to
-   * straighten it: whatever of the brush's own reach the product does not
-   * occupy. See {@link BrushToolSpec.halfWidth}.
+   * straighten it: the brush's own reach, as the user set it.
+   *
+   * **Not the reach left over after the product takes its share.** That older
+   * reading made the brush do two jobs at once, and they pulled against each
+   * other: a road two metres wide drawn with a two-metre brush had nothing
+   * left and came out following every tremor, so asking for a smoother road
+   * meant drawing with a brush far wider than the road for reasons no one
+   * could see on screen. The envelope job is gone -- a brush that previews
+   * its real product (see {@link BrushToolSpec.previewContour}) shows the
+   * truth without having to contain it -- which leaves reach with the single
+   * meaning it has for every brush: how literally to take the hand. At zero
+   * the stroke is committed as drawn.
    */
   readonly tolerance: number;
 }
@@ -79,13 +89,10 @@ export interface BrushToolSpec<Id extends BrushableToolId> {
    * along -- half a road's full width, shoulders included; zero for a
    * product with no width of its own.
    *
-   * This is the one number that gives the brush's reach a meaning, and it
-   * gives every brush the *same* meaning: the reach is the envelope the
-   * product must fit inside, and whatever the product leaves unused is the
-   * budget for straightening the hand. A wall is columns and shared edges,
-   * with no thickness in plan, so its whole reach is correction budget --
-   * the behaviour it already had, now falling out of the general rule
-   * instead of being a rule of its own.
+   * Used to keep the brush shape at least as wide as what it builds, so the
+   * fallback ghost and the junction snap reach are never narrower than the
+   * product. It no longer rations the straightening budget: see
+   * {@link BrushRegion.tolerance} for why those two jobs were separated.
    */
   halfWidth(params: ToolParamsFor<Id>): number;
   /**
@@ -121,13 +128,15 @@ export interface BrushToolSpec<Id extends BrushableToolId> {
  */
 export function createBrushTool<Id extends BrushableToolId>(spec: BrushToolSpec<Id>): ConstructionTool<Id> {
   const regionFor = (gesture: ToolGesture, params: ToolParamsFor<Id>): BrushRegion => {
-    const halfWidth = spec.halfWidth(params);
-    const shape = expandedToHold(resolveBrushShape(params), halfWidth);
+    const drawn = resolveBrushShape(params);
     return {
       samples: gesture.samples.map((sample) => sample.point),
       observations: [gesture.start, ...gesture.samples, gesture.current],
-      shape,
-      tolerance: Math.max(0, brushReach(shape) - halfWidth),
+      shape: expandedToHold(drawn, spec.halfWidth(params)),
+      // The reach the user actually set, not what the expansion grew it to:
+      // a product wider than the brush must not silently buy itself a
+      // straightening budget the hand never asked for.
+      tolerance: Math.max(0, brushReach(drawn)),
     };
   };
 

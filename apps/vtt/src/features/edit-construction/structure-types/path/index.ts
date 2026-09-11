@@ -8,6 +8,7 @@ export {
 } from "./path-recipe.ts";
 export type { PathFormationRecipe, PathProfilePoint } from "./path-recipe.ts";
 
+export { lengthInsideStandingPath, overlapRefusal } from "./path-overlap.ts";
 export { pathCorridorId, pathSubtypeOf } from "./path-corridor.ts";
 
 export { pathSpineDraftFor } from "./path-spine-draft.ts";

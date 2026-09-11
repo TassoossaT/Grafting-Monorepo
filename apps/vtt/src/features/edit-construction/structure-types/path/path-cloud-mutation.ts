@@ -20,6 +20,7 @@ import {
 } from "../index.ts";
 import { graphPatchForSpine } from "./spine-graph/index.ts";
 import { bezierContourId, changedSpineCloud, regeneratedCorridorIds, retireableRegions, standingRegionsForCloud } from "./path-cloud-scope.ts";
+import { overlapRefusal } from "./path-overlap.ts";
 import { referenceLineFrom } from "./path-reference-line.ts";
 import { pathSpineDraftFor } from "./path-spine-draft.ts";
 
@@ -171,6 +172,17 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
     if (outline.length < 3) {
       return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente." };
     }
+
+    // A crossing is welcome -- two runs meeting is a junction, and the
+    // contour engine exists to fuse them. A run laid *along* one already
+    // standing is not: it builds a second road in the same place as the
+    // first and leaves the pair stacked with no way to tell them apart.
+    const stacked = overlapRefusal(
+      flatPolyline,
+      input.regionTopologies,
+      outerOffset - innerOffset === 0 ? 0 : Math.abs(outerOffset - innerOffset),
+    );
+    if (stacked !== undefined) return { kind: "refused", reason: stacked };
 
     const resolved = resolveCoverage(
       "path",

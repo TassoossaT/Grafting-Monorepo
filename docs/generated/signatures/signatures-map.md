@@ -3511,6 +3511,16 @@ export function commitPathCloudIntent(
   ): void {
   timeCommit("rua", () => commitUntimed(ctx, effect, tolerance));
 
+// src/composition/tabletop/path/path-preview.ts
+export function pathStrokePreview(
+  port: BezierPort,
+  samples: readonly ConstructionPosition[],
+  tolerance: number,
+  halfWidth: number,
+  color: number,
+  ): PreviewDescriptor | undefined {
+  if (samples.length < 2) return undefined;
+
 // src/composition/tabletop/tabletop-runtime.ts
 export type TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed";
 export interface TabletopSnapshot {
@@ -3795,7 +3805,7 @@ export interface BrushToolSpec<Id extends BrushableToolId> {
   * product with no width of its own.
 export function createBrushTool<Id extends BrushableToolId>(spec: BrushToolSpec<Id>): ConstructionTool<Id> {
   const regionFor = (gesture: ToolGesture, params: ToolParamsFor<Id>): BrushRegion => {
-  const halfWidth = spec.halfWidth(params);
+  const drawn = resolveBrushShape(params);
 
 // src/composition/tabletop/tools/core/contour-fusion.ts
 export interface FusionPolyline {
@@ -5168,6 +5178,23 @@ export function pathCorridorId(operationId: string, kind: PathKind): string {
   }
 export function pathSubtypeOf(corridorId: string): PathKind | undefined {
   const at = corridorId.lastIndexOf(MARKER);
+
+// src/features/edit-construction/structure-types/path/path-overlap.ts
+export function lengthInsideStandingPath(
+  spine: readonly ConstructionPosition[],
+  topologies: readonly ConstructionRegionTopology[],
+  ): number {
+  const faces = topologies
+  .filter((topology) => topology.surfaceType === "path")
+  .map(ringsOf)
+  .filter((face): face is Face => face !== undefined);
+export function overlapRefusal(
+  spine: readonly ConstructionPosition[],
+  topologies: readonly ConstructionRegionTopology[],
+  width: number,
+  ): string | undefined {
+  if (spine.length < 2 || width <= 0) return undefined;
+  const inside = lengthInsideStandingPath(spine, topologies);
 
 // src/features/edit-construction/structure-types/path/path-recipe.ts
 export const PATH_SPINE_OFFSET = 0;
