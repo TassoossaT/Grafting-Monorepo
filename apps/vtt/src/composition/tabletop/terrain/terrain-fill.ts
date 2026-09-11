@@ -494,6 +494,28 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
   }
   const patch = gridPatch(request.tableId, grid, idFor, nodes, request.surfaceType, edgeRooms, quadOf, request.avoidArea);
 
+  // A replacement must not refine the mesh indefinitely. If the generated
+  // patch has more faces than the surfaces it replaces, applying it would
+  // leave a denser terrain partition behind and make the next repair even
+  // larger. Refuse before touching the runtime so the old terrain remains
+  // intact and the operation is retryable with a coarser strategy.
+  if (request.replaceSurfaceKeys !== undefined && patch.regions.length > request.replaceSurfaceKeys.length) {
+    logTerrainCommit({
+      what: request.what,
+      faceSideAsked: request.faceSide,
+      boundary: request.boundary,
+      holes: request.holes,
+      grid,
+      adopted: adoption.adopted.size,
+      unadopted: adoption.refused.length,
+      built: patch.regions.length,
+      refusedFaces: patch.regions.length,
+      refusals: [`patch recusado: ${patch.regions.length} faces geradas para ${request.replaceSurfaceKeys.length} substituídas`],
+      declaredNodes: nodes.length,
+    });
+    return NOTHING;
+  }
+
   // **Does the patch itself already contain the clash?**
   //
   // The engine refuses a face with "no room on edge -- its one free side faces
