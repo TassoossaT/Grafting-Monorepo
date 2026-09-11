@@ -132,6 +132,8 @@ export interface TerrainFillRequest {
   readonly onGenerated?: () => { readonly deleted: number; readonly failed: readonly string[] } | void;
   /** Existing faces replaced atomically with this fill. An empty list still makes the patch all-or-nothing. */
   readonly replaceSurfaceKeys?: readonly ConstructionSurfaceKey[];
+  /** Optional preflight limit; checked before any live contour adoption. */
+  readonly maxGeneratedFaces?: number;
   /** Retained clouds whose post-adoption edge directions this fill can meet. */
   readonly topologySeeds?: readonly CloudRequest[];
   /** Names this commit in the console log -- "pincelada", "reparo de corte". */
@@ -340,6 +342,19 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     });
     return NOTHING;
   }
+  // Preflight before onGenerated or adoptContourNodes can mutate live topology.
+  // This is a conservative grid budget, not an exact count of surviving cells.
+  if (request.maxGeneratedFaces !== undefined && grid.quads.length > request.maxGeneratedFaces) {
+    logTerrainCommit({
+      what: request.what, faceSideAsked: request.faceSide,
+      boundary: request.boundary, holes: request.holes, grid,
+      adopted: 0, unadopted: 0, built: 0,
+      refusedFaces: grid.quads.length,
+      refusals: [`preflight: ${grid.quads.length} cells exceed replacement budget ${request.maxGeneratedFaces}`],
+      declaredNodes: 0,
+    });
+    return NOTHING;
+  }
   const clearedBeforePatch = request.replaceSurfaceKeys === undefined ? request.onGenerated?.() : undefined;
 
   let minX = Infinity;
@@ -498,27 +513,6 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
   }
   const patch = gridPatch(request.tableId, grid, idFor, nodes, request.surfaceType, edgeRooms, quadOf, request.avoidArea);
 
-  // A replacement must not refine the mesh indefinitely. If the generated
-  // patch has more faces than the surfaces it replaces, applying it would
-  // leave a denser terrain partition behind and make the next repair even
-  // larger. Refuse before touching the runtime so the old terrain remains
-  // intact and the operation is retryable with a coarser strategy.
-  if (request.replaceSurfaceKeys !== undefined && patch.regions.length > request.replaceSurfaceKeys.length) {
-    logTerrainCommit({
-      what: request.what,
-      faceSideAsked: request.faceSide,
-      boundary: request.boundary,
-      holes: request.holes,
-      grid,
-      adopted: adoption.adopted.size,
-      unadopted: adoption.refused.length,
-      built: patch.regions.length,
-      refusedFaces: patch.regions.length,
-      refusals: [`patch recusado: ${patch.regions.length} faces geradas para ${request.replaceSurfaceKeys.length} substituídas`],
-      declaredNodes: nodes.length,
-    });
-    return NOTHING;
-  }
 
   // **Does the patch itself already contain the clash?**
   //

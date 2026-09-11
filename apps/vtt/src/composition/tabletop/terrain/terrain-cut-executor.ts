@@ -918,6 +918,7 @@ export function executeTerrainCut(
     holes: holeRings,
     sources: perimeters.sources,
     replaceSurfaceKeys: affected.length > 0 ? affected.map((f) => f.surfaceKey) : undefined,
+    maxGeneratedFaces: request.profile.kind === "regenerate" && affected.length > 0 ? affected.length : undefined,
     // The road belongs here as much as the retained terrain does. These seeds
     // are what `fillTerrain` reads back to learn which edges already have a
     // face on them and which way that face walks; a road left out of them is a
