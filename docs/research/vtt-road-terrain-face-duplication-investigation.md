@@ -1,107 +1,124 @@
-# VTT road/terrain face duplication investigation
+# VTT road/terrain face duplication and commit cost
 
-Status: growth root cause found and fixed in the engine, 2026-09-10. Atomic
-splits+replacement and in-app verification still open.
+Status: RESOLVED in PR #262 (merged 2026-09-11). Owner verified in-app: mesh
+growth gone, road commits faster. Follow-ups open: #263-#269.
 
-## Verdict: the engine halved every seam it regenerated against
+## Verdict 1: terrain growth came from the grid engine, not face selection
 
-Root cause, measured against the real Rust engine
+Symptom: every road create/edit grew terrain faces/edges/vertices, mostly in
+neighbouring regions. Many TS-side attempts (limit regeneration, face budgets,
+resolution, wider consumed regions, corner-only neighbour exclusion) did not
+converge -- they could not, because the engine grew the rim itself.
+
+Root cause, reproduced against the real Rust engine
 (`libs/domains/procgen/irregular-grid/tests/seam_stability.rs`):
 
-- Constrained triangulation used lattice side = 3x `faceSide`; a standing
-  terrain rim arrives walked at ~1x `faceSide`. Ruppert split contour
-  segments, then `ortho` put a midpoint on every contour edge.
-- Every such point came back in `onContour` -> TS adopted it -> the retained
-  neighbour's edge split in two. The next fill beside that neighbour read the
-  halved rim as its contour and halved it again.
-- Two 12x12 regions regenerated in turn: seam 7 -> 13 -> 25 nodes, cells
-  76 -> 82 -> 110 for the same ground. Stopped only at the TS
-  `SHORTEST_USEFUL_FRACTION` floor, at 4x the density.
-- Group/lineage metadata was never the cause; face selection fixes could not
-  converge while the engine grew the rim itself.
+- Constrained triangulation lattice side = 3x `faceSide`; a standing terrain
+  rim arrives walked at ~1x `faceSide`.
+- Ruppert refinement split contour segments; `ortho` put a midpoint on every
+  contour edge. Each point came back in `onContour`, TS adopted it
+  (`adoptContourNodes` -> `insert-vertex`), splitting the retained neighbour.
+- The next fill beside that neighbour read the halved rim as its contour and
+  halved it again. Two 12x12 regions regenerated in turn: seam 7 -> 13 -> 25
+  nodes, cells 76 -> 82 -> 110 for identical ground. Only the TS
+  `SHORTEST_USEFUL_FRACTION` (0.25 x faceSide) floor stopped it, at 4x density.
+- Group/lineage metadata was never needed.
 
-Fix (engine, no TS contract change except cells may exceed 4 corners):
+Fix (engine):
 
 - `constrained::triangulate_keeping_seams`: cut contour segments longer than
   `SHORTEST_SPLIT` (0.375 lattice side) into an even number of pieces; hold out
-  every point lying near the middle of its neighbours' chord (chord <=
-  `LONGEST_SEAM` 0.75 side, off-chord <= 0.1 side); refine with
-  `keep_constraint_edges`; fall back to the old path when a seam edge does not
-  survive (crossing contours).
-- `ortho::ortho_along`: a seam edge takes its held points as the shared
-  "midpoint"; a seam holding none merges its two corner cells into a polygon.
-  `pair_triangles_keeping` never merges across a seam. `relax_faces` relaxes
-  n-gons; quads bit-identical (parity fixture passes).
-- Result: seam stays 7 nodes over 6 alternating rounds, cells 44-46 stable.
-  Mesh density no longer follows boundary point count (24x24 walked at 1:
-  1.27 -> 1.59 mean side; brush outline at 1x chord: 308 -> 115 faces).
-- Wire: `quads` is now `number[][]`; `construction-session-wasm-adapter.ts`
-  multi-component merge no longer assumes 4 indices.
+  every point near the middle of its neighbours' chord (chord <= `LONGEST_SEAM`
+  0.75 side, off-chord <= `SEAM_STRAYING` 0.1 side); refine with spade
+  `keep_constraint_edges`. If a seam edge does not survive (crossing contours,
+  duplicate claim), `build_constrained_quad_grid` falls back to the old
+  midpoint-per-edge path and reports `seams_kept: false`.
+- `ortho::ortho_along`: a seam edge uses its held nodes as the shared corner;
+  a seam holding none merges its two corner cells into one polygon.
+  `pair::pair_triangles_keeping` never merges across a seam. `relax_faces`
+  relaxes n-gons; quad path bit-identical (parity fixture passes).
+- Wire contract change: grid `quads` is `number[][]` (cells may have 5+
+  corners). `construction-session-wasm-adapter.ts` multi-component merge no
+  longer assumes 4 indices; `gridPatch` already accepted any length.
 
-Remaining:
+Result: seam stays 7 nodes and cells 44-46 over 6 alternating regenerations.
+Mesh density stops following boundary point count: 24x24 walked at 1 -> mean
+side 1.27 became 1.59; brush outline at 1x chord 308 -> 115 faces
+(`construction-wasm/src/grid_generation.rs` tests hold the new tables).
 
-- Long road contour edges are still cut once per road regeneration; the road
-  re-mints its contour, so terrain holding those nodes is re-orphaned.
-- `adoptContourNodes` commits splits before `applyPatchReplacement`; a refused
-  replacement still leaves splits. Rarer now, not atomic yet.
-- `construction-wasm/pkg` must be rebuilt for the app to use the fix.
+## Verdict 2: slow road commits were engine calls scaling with map size
 
-## Observed failure
+Symptom: some road commits took 0.8-1.4 s. The grid generator was NOT it:
+5-13 ms for a dense 60x60 fill in release, seams path no slower.
 
-Generating or editing a road removes the connected surfaces and triggers terrain
-repair. A single repair can produce multiple terrain faces. On the next edit,
-only part of the previously generated area is selected for removal. The
-remaining face is left alive and the next repair generates over it again. After
-repeated edits this produces a large, growing number of terrain vertices and
-edges.
+Measured with the always-on commit log (see Tools): ~1.2 s of 1.4 s inside
+engine calls, TS geometry negligible. Native benchmark reproduced it on fields
+of 1 600 / 6 400 / 14 400 faces:
 
-The failure is not limited to repeating the exact same pointer location. It is
-an ownership/coverage mismatch: the faces selected for replacement are not the
-same set as all old faces geometrically intersecting the repair area.
+| call                                    | before            | after (#262)   |
+|-----------------------------------------|-------------------|----------------|
+| seeded `region_topologies_in_bounds`    | 39 / 157 / 945 ms | 5 / 9 / 6 ms   |
+| `apply_patch_replacement` of one face   | 17 / 70 / 190 ms  | 8 / 43 / 95 ms |
+| `insert_vertex`                         | 0.3 / 1.8 / 7 ms  | unchanged      |
 
-## Important non-solution
+Causes and fixes:
 
-Regenerating a larger area, or storing a persistent set/group of generated
-faces, is not the first fix. If an old overlapping face survives the
-replacement transaction, a larger regeneration can still leave fragments and
-repeat the problem. The first invariant must be enforced at the geometry
-boundary.
+- `ContourTopology::edges_incident_to` scanned every edge per call; the seeded
+  neighbourhood BFS calls it per node (quadratic). Fix: `edges_at_node` index
+  maintained in `add_edge` / `remove_edge` / `prune_unused_edges`; same sorted
+  output. Invariant for future edits: any new code mutating `edges` must keep
+  the index in step.
+- `apply_patch_replacement_json` cloned the whole state three times: undo
+  `before`, undo `after`, and the atomic working copy. Fix: history entry holds
+  one `state`; undo/redo `swap_state` with live state; replacement returns the
+  superseded `ReplacedState` instead of dropping it. Remaining: one working
+  copy + `spatial_index` clone per call (#269). Behaviour change: redo restores
+  the state live when undo was pressed, not a snapshot taken at commit time.
+- Orphan node pruning called `Graph::snapshot()` (clone+sort whole graph) once
+  per candidate node. Fix: `successors`/`predecessors` on the node.
 
-## Required invariant
+## Tools left in place
 
-Before inserting a terrain repair patch:
+- `apps/vtt/src/composition/tabletop/commit-timing.ts`: `timeCommit` /
+  `timePhase` / `countInCommit`. Prints a nested `[tempo]` phase tree only for
+  commits >= 80 ms. Wired through `commitPathCloudIntent`,
+  `TabletopRuntime.applyPatchReplacement` / `applyRegionEdit`,
+  `dispatchCutRepairs`, `executeTerrainCut`, `fillTerrain`; counter
+  `splits refeitos um a um (lote recusado)` in `adoptContourNodes`.
+  First step for any future slowness report: ask the owner for this block.
+- `construction-wasm/src/session_cost_probe.rs` (ignored test): `cargo test
+  --release -p grafting-procgen-construction-wasm --lib session_cost_probe --
+  --ignored --nocapture`.
+- `irregular-grid/tests/seam_stability.rs`: regression for seam growth.
 
-```text
-every old terrain face intersecting the repair area has been removed
-```
+## Open follow-ups
 
-The new patch may contain multiple polygons, but no old face may remain
-overlapping the replacement area. The operation must be atomic from the
-terrain graph's perspective.
+- #269 patch replacement: undo diff instead of one whole-map copy per call.
+- #263 undo history unbounded: one full map state per entry, two per road
+  commit (P1).
+- #264 `insert_vertex` prunes every unused edge per split.
+- #265 adoption splits commit before the replacement; refusal leaves them.
+- #266 road regeneration re-mints its contour, orphaning terrain nodes cut onto
+  long road edges every edit.
+- #267 suspected, unverified: undoing a road may fail because the terrain
+  repair pushes its own history entry on top.
+- #268 tooling: `docs:generate` fails in task worktrees (architecture-studio
+  missing `@grafting/procgen-construction-wasm` link); worktree
+  `construction-wasm/pkg` is a symlink to the main checkout's.
 
-## Suspected code path
+## Lessons
 
-The investigation should focus on:
+- Mock-validated TS fixes did not converge for weeks; one real-engine probe
+  found the cause in minutes. Reproduce geometry growth against the engine
+  first.
+- For intermittent slowness, instrument phases before optimising; the first
+  suspects (generator, fallback triangulation, TS quadratics) were all wrong.
+- A local edit must cost what it touches; audit engine calls for whole-map
+  scans or clones (`snapshot()`, `edges.values()` filters, `state.clone()`).
 
-- `dispatchCutRepairs` — candidate selection and `underFootprint` filtering;
-- `planTerrainCloudCutRepair` — centroid/vertex/coverage admission rules;
-- `executeTerrainCut` — covered-region and neighbourhood derivation;
-- `fillTerrain` / `gridPatch` — cells, boundary edge reuse, and patch output;
-- `applyPatchReplacement` — whether every selected old region is actually
-  consumed before the new terrain patch is registered.
+## Original acceptance checks (all met by #262)
 
-Centroid-only tests are insufficient: a large terrain polygon can intersect a
-repair polygon while its centroid and all but one vertices remain outside.
-Selection must use actual polygon intersection (or an equivalent exact graph
-boundary test), not only an AABB, centroid, or node proximity test.
-
-## Acceptance checks
-
-- Repeating an overlapping road edit does not increase terrain face/vertex/edge
-  counts except for genuinely changed boundary geometry.
-- A repair that produces two polygons consumes every old polygon intersecting
-  the repair area on the next edit.
+- Repeated overlapping road edits do not grow terrain counts except for
+  genuinely changed boundary geometry.
 - Faces outside the repair area remain untouched.
-- Curved roads and T junctions preserve their existing road quality.
-- The replacement is atomic: no partially consumed old faces remain if patch
-  construction or registration refuses.
+- Curved roads and T junctions keep their road quality.
