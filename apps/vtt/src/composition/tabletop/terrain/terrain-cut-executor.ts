@@ -822,9 +822,14 @@ export function executeTerrainCut(
       if (affected.length === 0) break;
       if (widthOf(targetPolygon) >= effectiveFaceSide * NARROW_ENOUGH_TO_GROW) break;
 
-      const touched = new Set(affected.flatMap((t) => t.nodes.map((n) => n.id)));
+      // Only a shared side adds width to the repair. A corner contact must
+      // not pull an otherwise untouched terrain face into regeneration.
+      const touched = affected.flatMap((t) => [...t.outerLoops, ...t.holes].flat());
       const absorbed = retained.filter(
-        (t) => isTerrainMatch(t.surfaceType, request.targetSurfaceType) && t.nodes.some((n) => touched.has(n.id)),
+        (t) => isTerrainMatch(t.surfaceType, request.targetSurfaceType) &&
+          [...t.outerLoops, ...t.holes].some((loop) => loop.some((edge) => touched.some((other) =>
+            (edge.startNodeId === other.startNodeId && edge.endNodeId === other.endNodeId) ||
+            (edge.startNodeId === other.endNodeId && edge.endNodeId === other.startNodeId)))),
       );
       if (absorbed.length === 0) break;
 

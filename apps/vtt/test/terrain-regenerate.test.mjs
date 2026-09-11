@@ -160,6 +160,27 @@ function pointAt(request, position) {
   return undefined;
 }
 
+test("a narrow road repair does not absorb a terrain face connected only at a corner", () => {
+  const context = field({road:"devouring"});
+  const query = context.runtime.getRegionTopologiesInBounds;
+  const ids = ["n3","c1","c2","c3"];
+  const points = [{x:0,y:1,z:8},{x:0,y:1,z:12},{x:-4,y:1,z:12},{x:-4,y:1,z:8}];
+  const corner = {
+    surfaceKey:["terrain","corner"],surfaceType:"terrain",physical:true,holes:[],
+    nodes:ids.map((id,i)=>({id,position:points[i]})),
+    outerLoops:[ids.map((id,i)=>({edgeId:`corner${i}`,startNodeId:id,endNodeId:ids[(i+1)%4],reversed:false,geometry:{kind:"line"}}))],
+  };
+  context.runtime.getRegionTopologiesInBounds = (q) => [...query(q),corner];
+  for(let i=0;i<3;i++) repairTerrainCut(context.runtime,context.fallout,`repeat${i}`,"t");
+  assert.equal(context.replacements.length,3);
+  for(const replacement of context.replacements) {
+    assert.deepEqual(replacement.sourceSurfaceKeys.map(k=>k.join(" ")).sort(),["terrain L","terrain R"]);
+  }
+  assert.equal(context.edits.length,0,"this generated fixture requires no boundary splits");
+  assert.equal(corner.nodes.length,4);
+  assert.equal(corner.outerLoops[0].length,4);
+});
+
 test("the consumed face is replaced atomically, in the same call that lays the new ground", () => {
   const context = field();
   const built = repairTerrainCut(context.runtime, context.fallout, "cause-1", "t");
