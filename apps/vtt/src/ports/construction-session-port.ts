@@ -476,7 +476,13 @@ export interface ConstructionIrregularQuadGrid {
     /** The `source` this corner arrived with; absent where it is new ground. */
     readonly source?: number;
   }[];
-  readonly quads: readonly (readonly [number, number, number, number])[];
+  /**
+   * Cells, as vertex indices in walk order. Four each, except where a contour
+   * segment too short for a node of its own joined the cells at its two
+   * corners into one polygon: a node there would be one more the contour's
+   * owner has to adopt, every time the ground beside it is regenerated.
+   */
+  readonly quads: readonly (readonly number[])[];
   /**
    * Corners sitting *on* a supplied contour that arrived with no source --
    * nodes the cloud owning that contour has to adopt.

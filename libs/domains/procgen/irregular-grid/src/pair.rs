@@ -1,6 +1,6 @@
 //! Step 2 -- randomly merge adjacent triangles into rhombi.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::mesh::{Face, FaceMesh, edge_key, edges_of};
 use crate::random::Random;
@@ -11,6 +11,21 @@ use crate::random::Random;
 /// triangles unpaired by construction -- that variation is the point, so no
 /// attempt is made to maximise the matching.
 pub fn pair_triangles(mesh: &FaceMesh, random: &mut Random) -> FaceMesh {
+    pair_triangles_keeping(mesh, random, &HashSet::new())
+}
+
+/// [`pair_triangles`], never merging across an edge in `kept`.
+///
+/// Merging two triangles erases the edge between them, and an edge standing
+/// for a stretch of someone else's contour has to survive to the ortho step,
+/// which is where the nodes along it are put back (see
+/// [`crate::ortho::ortho_along`]). The shuffle draws the same numbers whatever
+/// is kept, so an empty set pairs exactly as `pair_triangles` always has.
+pub fn pair_triangles_keeping(
+    mesh: &FaceMesh,
+    random: &mut Random,
+    kept: &HashSet<(usize, usize)>,
+) -> FaceMesh {
     let mut edge_owners: HashMap<(usize, usize), Vec<usize>> = HashMap::new();
     for (face_index, face) in mesh.faces.iter().enumerate() {
         for (a, b) in edges_of(face) {
@@ -30,7 +45,7 @@ pub fn pair_triangles(mesh: &FaceMesh, random: &mut Random) -> FaceMesh {
         let mut candidates = edges_of(face);
         random.shuffle(&mut candidates);
 
-        let partner = candidates.into_iter().find_map(|(a, b)| {
+        let partner = candidates.into_iter().filter(|&(a, b)| !kept.contains(&edge_key(a, b))).find_map(|(a, b)| {
             edge_owners
                 .get(&edge_key(a, b))
                 .and_then(|owners| {

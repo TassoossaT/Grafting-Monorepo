@@ -134,7 +134,11 @@ pub struct ContourNodeDto {
 #[serde(rename_all = "camelCase")]
 pub struct IrregularQuadGridResponse {
     pub vertices: Vec<GridVertexDto>,
-    pub quads: Vec<[usize; 4]>,
+    /// Cells, as vertex indices in walk order. Four each, except where a
+    /// contour segment too short for a node of its own joined the two cells at
+    /// its corners into one polygon -- the name predates that, and stays
+    /// because it is the wire contract.
+    pub quads: Vec<Vec<usize>>,
     /// Corners sitting on a supplied contour that had no source -- nodes the
     /// cloud owning that contour has to adopt, each naming its segment.
     pub on_contour: Vec<ContourNodeDto>,
@@ -249,7 +253,7 @@ pub fn irregular_quad_grid(
                 source: grid.sources[index],
             })
             .collect(),
-        quads: grid.mesh.quads,
+        quads: grid.mesh.faces,
         on_contour: grid
             .on_contour
             .iter()
@@ -350,8 +354,8 @@ mod tests {
         );
 
         for quad in &response.quads {
-            let x = quad.iter().map(|&i| response.vertices[i].x).sum::<f64>() / 4.0;
-            let z = quad.iter().map(|&i| response.vertices[i].z).sum::<f64>() / 4.0;
+            let x = quad.iter().map(|&i| response.vertices[i].x).sum::<f64>() / quad.len() as f64;
+            let z = quad.iter().map(|&i| response.vertices[i].z).sum::<f64>() / quad.len() as f64;
             assert!(
                 !(x > 3.0 && x < 7.0 && z > 4.0 && z < 6.0),
                 "a cell centred at ({x}, {z}) sits on the road"
@@ -492,40 +496,32 @@ mod tests {
         ((max_x - min_x) * (max_z - min_z) / grid.quads.len() as f64).sqrt()
     }
 
-    /// **A known limitation, pinned so a fix moves it.**
+    /// **A limitation that used to be pinned here, and the fix that moved it.**
     ///
-    /// How fine the result comes back is driven by how many points the
-    /// *boundary* has, not by the area it encloses. The same 8x8 region asked
-    /// for with four corners comes back at the face size requested; asked for
-    /// with its boundary walked in 2.0-unit segments -- which is exactly how a
-    /// hole cut out of a standing quad mesh arrives -- comes back at about
-    /// half that, three times as many faces, for the same ground.
+    /// How fine the result came back was driven by how many points the
+    /// *boundary* had, not by the area it enclosed: every boundary segment was
+    /// a constraint the refinement satisfied an angle bound against, and ortho
+    /// then put a midpoint on each one. A region filled inside existing
+    /// terrain inherited that terrain's edge spacing halved -- and, adopted
+    /// into the neighbour, that halved spacing was what the next fill beside
+    /// it read back. That is how repeated road edits kept growing the terrain.
     ///
-    /// Every boundary segment is a constraint the refinement has to satisfy an
-    /// angle bound against, and then ortho puts a midpoint on each one. So a
-    /// region filled *inside* existing terrain inherits that terrain's edge
-    /// spacing instead of the size the caller asked for, and the smaller the
-    /// region the larger the share of it that is near the boundary -- which is
-    /// why a small hole comes back visibly finer than the ground around it.
+    /// The contour is now decimated before it becomes a constraint and the
+    /// skipped nodes restored as the cells beside it are built
+    /// (`triangulate_keeping_seams`, `ortho_along`). Measured, on a 24x24
+    /// region asking for faces of 2, by the length of the segments its
+    /// boundary is walked in:
     ///
-    /// The fix is to decimate the contour before it becomes a constraint and
-    /// to restore the skipped nodes when the patch is built, so the generator
-    /// sees a coarse boundary while the graph still gets the fine chain.
+    /// | segment | before | after |
+    /// |---------|--------|-------|
+    /// | 1       | 1.27   | 1.59  |
+    /// | 2       | 1.33   | 1.92  |
+    /// | 3       | 1.80   | 1.84  |
+    /// | 4       | 1.92   | 1.92  |
+    /// | 8       | 1.90   | 1.92  |
     ///
-    /// Measured, on a 24x24 region asking for faces of 2, by the length of the
-    /// segments its boundary is walked in:
-    ///
-    /// | segment | mean face side |
-    /// |---------|----------------|
-    /// | 1       | 1.27           |
-    /// | 2       | 1.33           |
-    /// | 3       | 1.80           |
-    /// | 4       | 1.92           |
-    /// | 8       | 1.90           |
-    ///
-    /// So the boundary only has to be coarsened to about twice the face size
-    /// to stop driving the interior -- which, for a rim walked at the face
-    /// size, is dropping every other point.
+    /// A rim walked at 1 still comes back somewhat finer: its nodes are real
+    /// and have to be met, and a pair of them is still only 2 long.
     fn faces_and_side(boundary: &[(f64, f64)], face_side: f64) -> (usize, f64) {
         let body: Vec<String> = boundary
             .iter()
@@ -571,21 +567,22 @@ mod tests {
     ///
     /// The brush hands over a capsule: two long straight flanks and two arc
     /// caps chopped into short segments. Those cap segments are a fraction of
-    /// a face long, and the refinement answers to the shortest feature near
-    /// it, so the ends come back dense while the middle comes back right.
+    /// a face long, and the triangulation answers to the shortest feature near
+    /// it, so the ends come back denser than the middle.
     ///
-    /// Measured over the same ground, by how finely the caps are described:
+    /// Measured over the same ground, by how finely the caps are described,
+    /// before and after short contour runs were handed over as seams:
     ///
-    /// | cap segments | faces | mean side |
-    /// |--------------|-------|-----------|
-    /// | 8            | 88    | 1.61      |
-    /// | 4            | 80    | 1.69      |
-    /// | 2            | 67    | 1.84      |
-    /// | none         | 55    | 1.87      |
+    /// | cap segments | faces before | faces after | mean side after |
+    /// |--------------|--------------|-------------|-----------------|
+    /// | 8            | 88           | 74          | 1.76            |
+    /// | 4            | 80           | 74          | 1.76            |
+    /// | 2            | 67           | 64          | 1.89            |
+    /// | none         | 55           | 60          | 1.79            |
     ///
-    /// Sixty percent of the faces of a straight stroke are bought by its two
-    /// round ends. Simplifying the outline before it becomes a constraint is
-    /// what `outlineConstraints` does about it.
+    /// Round ends used to buy sixty percent of a straight stroke's faces; now
+    /// about a quarter. Simplifying the outline before it becomes a constraint
+    /// is what `outlineConstraints` does about the rest.
     fn disc(radius: f64, steps: usize) -> Vec<(f64, f64)> {
         (0..steps)
             .map(|i| {
@@ -609,9 +606,9 @@ mod tests {
         let mut area = 0.0;
         for q in &grid.quads {
             let mut twice = 0.0;
-            for i in 0..4 {
+            for i in 0..q.len() {
                 let a = &grid.vertices[q[i]];
-                let b = &grid.vertices[q[(i + 1) % 4]];
+                let b = &grid.vertices[q[(i + 1) % q.len()]];
                 twice += a.x * b.z - b.x * a.z;
             }
             area += twice.abs() / 2.0;
@@ -647,30 +644,31 @@ mod tests {
     }
 
     #[test]
-    fn the_round_ends_of_a_stroke_cost_more_than_all_the_rest_of_it() {
+    fn the_round_ends_of_a_stroke_cost_only_a_little_more_than_its_flanks() {
         let (fine, fine_side) = faces_and_side(&capsule(32.0, 3.0, 8), 2.0);
         let (coarse, coarse_side) = faces_and_side(&capsule(32.0, 3.0, 1), 2.0);
         assert!(
-            fine as f64 > coarse as f64 * 1.4,
-            "finely described ends cost far more faces: {fine} against {coarse}"
+            (fine as f64) < coarse as f64 * 1.3,
+            "finely described ends no longer cost half as many faces again: {fine} against {coarse}"
         );
         assert!(
-            fine_side < coarse_side * 0.9,
-            "and the cells come back smaller than asked: {fine_side} against {coarse_side}"
+            (fine_side - coarse_side).abs() < coarse_side * 0.1,
+            "and the cells come back the same size: {fine_side} against {coarse_side}"
         );
     }
 
     #[test]
-    fn a_walked_boundary_makes_a_finer_mesh_than_the_same_region_asked_for_plainly() {
+    fn a_walked_boundary_comes_back_as_coarse_as_the_same_region_asked_for_plainly() {
         let plain = mean_face_side(&[(0.0, 0.0), (8.0, 0.0), (8.0, 8.0), (0.0, 8.0)], 2.0);
         let walked = mean_face_side(&walked_square(0.0, 8.0, 2.0), 2.0);
         assert!(
             (plain - 2.0).abs() < 0.2,
             "four corners give the size asked for; got {plain}"
         );
+        // Measured 1.89 against 1.89; before seams were kept, 1.3 against 1.9.
         assert!(
-            walked < plain * 0.7,
-            "the same region, walked, comes back much finer: {walked} against {plain}"
+            (walked - plain).abs() < plain * 0.1,
+            "the same region, walked at the face size, comes back the same: {walked} against {plain}"
         );
     }
 
@@ -702,47 +700,34 @@ mod tests {
         }
     }
 
-    /// **The number the brush has to describe its outline at.**
+    /// **The chord the brush describes its outline at.**
     ///
-    /// A stroke's swept outline used to be described at the face size, and the
-    /// table above already says what that costs: a boundary walked at 1x the
-    /// face gives cells at about two thirds of it. Measured on the shape the
-    /// brush actually hands over -- a 30-long capsule of radius 6, asking for
-    /// faces of 2 -- by the chord its outline is described at:
+    /// Measured on the shape the brush actually hands over -- a 30-long
+    /// capsule of radius 6, asking for faces of 2 -- by the chord its outline
+    /// is described at, before and after short contour runs were handed over
+    /// as seams:
     ///
-    /// | chord | outline points | faces | mean side |
-    /// |-------|----------------|-------|-----------|
-    /// | 0.5x  | 98             | 312   | 1.27      |
-    /// | 1x    | 50             | 308   | 1.28      |
-    /// | 1.5x  | 34             | 196   | 1.60      |
-    /// | 2x    | 26             | 120   | 2.04      |
-    /// | 3x    | 18             | 104   | 2.20      |
+    /// | chord | outline points | faces before | side before | faces after | side after |
+    /// |-------|----------------|--------------|-------------|-------------|------------|
+    /// | 0.5x  | 98             | 312          | 1.27        | 201         | 1.58       |
+    /// | 1x    | 50             | 308          | 1.28        | 115         | 2.09       |
+    /// | 1.5x  | 34             | 196          | 1.60        | 136         | 1.92       |
+    /// | 2x    | 26             | 120          | 2.04        | 120         | 2.04       |
+    /// | 3x    | 18             | 104          | 2.20        | 140         | 1.90       |
     ///
-    /// Describing it more finely than 1x buys nothing at all -- 98 points and
-    /// 50 points give the same mesh -- because below that the angle bound, not
-    /// the boundary, is what is binding. At 2x the mesh finally comes back the
-    /// size it was asked for, with two and a half times fewer faces.
+    /// Before, only a chord of twice the face size came back the size asked
+    /// for; describing the outline at the face size itself cost two and a half
+    /// times the faces. Now anything from 1x up does.
     #[test]
-    fn an_outline_described_at_twice_the_face_size_gives_the_size_asked_for() {
+    fn an_outline_described_at_the_face_size_or_coarser_gives_the_size_asked_for() {
         let face = 2.0;
-        let fine = faces_and_side(&capsule_outline(30.0, 6.0, face * 1.0), face);
-        let coarse = faces_and_side(&capsule_outline(30.0, 6.0, face * 2.0), face);
-        assert!(
-            fine.1 < face * 0.85,
-            "at the face size it comes back finer; got {}",
-            fine.1
-        );
-        assert!(
-            (coarse.1 - face).abs() < face * 0.2,
-            "at twice the face size it comes back the size asked for; got {}",
-            coarse.1
-        );
-        assert!(
-            coarse.0 < fine.0,
-            "and with significantly fewer faces: {} against {}",
-            coarse.0,
-            fine.0
-        );
+        for chord in [1.0, 2.0] {
+            let (faces, side) = faces_and_side(&capsule_outline(30.0, 6.0, face * chord), face);
+            assert!(
+                (side - face).abs() < face * 0.2,
+                "at {chord}x the face size it comes back the size asked for; got {side} across {faces} faces"
+            );
+        }
     }
 
     /// The brush's swept shape, described at `chord`: straight flanks and arc

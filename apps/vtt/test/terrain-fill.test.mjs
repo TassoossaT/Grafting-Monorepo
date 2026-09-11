@@ -45,6 +45,27 @@ function runtimeWith(grid, nodePositions = [], regionTopologies = []) {
   };
 }
 
+test("repeated budget refusal never splits retained edges or deletes terrain", () => {
+  const grid = {
+    vertices: [{x:0,z:0,source:0},{x:2,z:0},{x:4,z:0,source:1},{x:0,z:4},{x:2,z:4},{x:4,z:4}],
+    quads: [[0,1,4,3],[1,2,5,4]],
+    onContour: [{vertex:1,ringKind:"boundary",ring:0,segment:0}],
+    refinementComplete:true,
+  };
+  const runtime = runtimeWith(grid, [["a",{position:{x:0,y:0,z:0}}],["b",{position:{x:4,y:0,z:0}}]]);
+  const request = {
+    what:"regression", mint:"m",tableId:"t",causeId:"c",seed:1,faceSide:2,
+    surfaceType:"terrain", sources:["a","b"], holes:[],heightAt:()=>0,
+    replaceSurfaceKeys:[["old"]], maxGeneratedFaces:1,
+    boundary:[{points:[{x:0,z:0,source:0},{x:4,z:0,source:1},{x:4,z:4},{x:0,z:4}],
+      edges:[{edgeId:"ab",startNodeId:"a",endNodeId:"b",reversed:false,geometry:{kind:"line"}},undefined,undefined,undefined]}],
+  };
+  for(let i=0;i<5;i++) fillTerrain(runtime,{...request,mint:`m${i}`});
+  assert.equal(runtime.edits.length,0,"refused attempts must never execute insert-vertex");
+  assert.equal(runtime.replacements.length,0);
+  assert.equal(runtime.patches.length,0);
+});
+
 test("two corners never resolve to one node, so two faces cannot claim one edge", () => {
   // The shape of the bug this guards. `old` is a ring corner, so the corner
   // carrying it as a `source` already exists; a second corner lands close
@@ -393,4 +414,3 @@ test("joining two clouds through fillTerrain executes fast and with bounded subd
   assert.equal(outcome.unadopted, 0, "no unstitched junctions");
   assert.equal(outcome.refinementComplete, true);
 });
-

@@ -404,7 +404,7 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
 
         // Generate each component and combine
         const combinedVertices: { readonly x: number; readonly z: number; readonly source?: number }[] = [];
-        const combinedQuads: (readonly [number, number, number, number])[] = [];
+        const combinedQuads: (readonly number[])[] = [];
         const combinedOnContour: ConstructionGridContourNode[] = [];
         let refinementComplete = true;
 
@@ -423,7 +423,7 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
             const vOffset = combinedVertices.length;
             combinedVertices.push(...compGrid.vertices);
             for (const q of compGrid.quads) {
-              combinedQuads.push([q[0] + vOffset, q[1] + vOffset, q[2] + vOffset, q[3] + vOffset]);
+              combinedQuads.push(q.map((vertex) => vertex + vOffset));
             }
             for (const c of compGrid.onContour) {
               const origRing =
@@ -480,7 +480,7 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     }
     const wire = JSON.parse(raw) as {
       readonly vertices: readonly { readonly x: number; readonly z: number; readonly source: number | null }[];
-      readonly quads: readonly (readonly [number, number, number, number])[];
+      readonly quads: readonly (readonly number[])[];
       readonly onContour: readonly {
         readonly vertex: number;
         readonly ringKind: "boundary" | "hole";

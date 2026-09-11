@@ -23,6 +23,7 @@ import {
   type ConstraintRing,
 } from "./terrain-constraints.ts";
 import { logTerrainCommit } from "./terrain-diagnostics.ts";
+import { countInCommit, timePhase } from "../commit-timing.ts";
 import { createBoundaryEdges, pointInOrOnPolygon, sharedEdgeId } from "../../../features/edit-construction/index.ts";
 
 
@@ -132,6 +133,8 @@ export interface TerrainFillRequest {
   readonly onGenerated?: () => { readonly deleted: number; readonly failed: readonly string[] } | void;
   /** Existing faces replaced atomically with this fill. An empty list still makes the patch all-or-nothing. */
   readonly replaceSurfaceKeys?: readonly ConstructionSurfaceKey[];
+  /** Optional preflight limit; checked before any live contour adoption. */
+  readonly maxGeneratedFaces?: number;
   /** Retained clouds whose post-adoption edge directions this fill can meet. */
   readonly topologySeeds?: readonly CloudRequest[];
   /** Names this commit in the console log -- "pincelada", "reparo de corte". */
@@ -312,7 +315,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
   // on acute junctions or narrow boundary corridors while leaving room for healthy refinement.
   const maxAdditionalVertices = Math.min(1500, Math.max(80, expectedFaces * 6));
 
-  const grid = runtime.generateIrregularQuadGrid({
+  const grid = timePhase("gerador wasm", () => runtime.generateIrregularQuadGrid({
     seed: request.seed,
     faceSide: request.faceSide,
     relaxStrength: request.relaxStrength,
@@ -323,7 +326,8 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     },
     boundary: request.boundary.map((ring) => ring.points),
     holes: request.holes.map((ring) => ring.points),
-  });
+  }));
+  if (grid !== undefined) countInCommit("células geradas", grid.quads.length);
   if (grid === undefined) {
     logTerrainCommit({
       what: request.what,
@@ -336,6 +340,19 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
       built: 0,
       refusedFaces: 0,
       refusals: [],
+      declaredNodes: 0,
+    });
+    return NOTHING;
+  }
+  // Preflight before onGenerated or adoptContourNodes can mutate live topology.
+  // This is a conservative grid budget, not an exact count of surviving cells.
+  if (request.maxGeneratedFaces !== undefined && grid.quads.length > request.maxGeneratedFaces) {
+    logTerrainCommit({
+      what: request.what, faceSideAsked: request.faceSide,
+      boundary: request.boundary, holes: request.holes, grid,
+      adopted: 0, unadopted: 0, built: 0,
+      refusedFaces: grid.quads.length,
+      refusals: [`preflight: ${grid.quads.length} cells exceed replacement budget ${request.maxGeneratedFaces}`],
       declaredNodes: 0,
     });
     return NOTHING;
@@ -415,14 +432,14 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     adoptionPositions.set(adoption.vertex, { x: vertex.x, y, z: vertex.z });
   }
 
-  const adoption = adoptContourNodes(
+  const adoption = timePhase(`adoção de nós (${effectiveAdoptions.length})`, () => adoptContourNodes(
     runtime,
     request.tableId,
     request.causeId,
     effectiveAdoptions,
     (vertex) => nodeId(request.mint, vertex),
     (vertex) => adoptionPositions.get(vertex),
-  );
+  ));
 
   // Which node id every corner resolves to, and which of those this fill still
   // has to declare. A corner that arrived with a source is a node already
@@ -458,10 +475,9 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
   // Read after adoption: splitting a contour replaces one edge with fragments,
   // and only live topology knows which side of every fragment remains free.
   // Query only the generated extent instead of serializing the entire map.
-  const replaced = new Set((request.replaceSurfaceKeys ?? []).map((key) => key.join("\u0000")));
   const occupied = new Map<string, ConstructionRegionTopology["outerLoops"][number][number][]>();
   const reach = request.faceSide;
-  const nearbyTopologies = request.topologySeeds?.length === 0
+  const nearbyTopologies = timePhase("topologias vizinhas", () => request.topologySeeds?.length === 0
     ? []
     : runtime.getRegionTopologiesInBounds({
         minX: bounds.minX - reach,
@@ -469,7 +485,8 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
         maxX: bounds.maxX + reach,
         maxZ: bounds.maxZ + reach,
         seeds: request.topologySeeds,
-      });
+      }));
+  const replaced = new Set((request.replaceSurfaceKeys ?? []).map((key) => key.join("\u0000")));
   for (const topology of nearbyTopologies) {
     if (replaced.has(topology.surfaceKey.join("\u0000"))) continue;
     for (const loop of [...topology.outerLoops, ...topology.holes]) {
@@ -492,7 +509,8 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
       });
     } else edgeRooms.set(edgeId, null);
   }
-  const patch = gridPatch(request.tableId, grid, idFor, nodes, request.surfaceType, edgeRooms, quadOf, request.avoidArea);
+  const patch = timePhase("montagem do patch", () => gridPatch(request.tableId, grid, idFor, nodes, request.surfaceType, edgeRooms, quadOf, request.avoidArea));
+
 
   // **Does the patch itself already contain the clash?**
   //
@@ -513,7 +531,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     }
   }
 
-  const outcome = request.replaceSurfaceKeys === undefined
+  const outcome = timePhase("registro do terreno", () => request.replaceSurfaceKeys === undefined
     ? runtime.addPatch(patch, "local", request.causeId)
     : runtime.applyPatchReplacement(
         {
@@ -523,7 +541,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
         },
         "local",
         request.causeId,
-      );
+      ));
   const cleared = request.replaceSurfaceKeys === undefined
     ? clearedBeforePatch
     : { deleted: outcome.removedSurfaceKeys.length, failed: [] };

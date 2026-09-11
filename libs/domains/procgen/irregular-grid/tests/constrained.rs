@@ -359,10 +359,10 @@ fn constraints_that_cannot_form_a_triangulation_are_refused_rather_than_approxim
 
 // ------------------------------------------- the whole pipeline, constrained
 
-fn quad_centre(grid: &grafting_procgen_irregular_grid::ConstrainedQuadGrid, quad: [usize; 4]) -> Vec2 {
+fn cell_centre(grid: &grafting_procgen_irregular_grid::ConstrainedQuadGrid, cell: &[usize]) -> Vec2 {
     Vec2::new(
-        quad.iter().map(|&index| grid.mesh.vertices[index].x).sum::<f64>() / 4.0,
-        quad.iter().map(|&index| grid.mesh.vertices[index].y).sum::<f64>() / 4.0,
+        cell.iter().map(|&index| grid.mesh.vertices[index].x).sum::<f64>() / cell.len() as f64,
+        cell.iter().map(|&index| grid.mesh.vertices[index].y).sum::<f64>() / cell.len() as f64,
     )
 }
 
@@ -376,9 +376,9 @@ fn the_finished_grid_still_stops_at_the_road_after_relaxing() {
     )
     .expect("a grid");
 
-    assert!(!grid.mesh.quads.is_empty());
-    for &quad in &grid.mesh.quads {
-        let centre = quad_centre(&grid, quad);
+    assert!(!grid.mesh.faces.is_empty());
+    for cell in &grid.mesh.faces {
+        let centre = cell_centre(&grid, cell);
         assert!(
             !(centre.x > 3.0 && centre.x < 7.0 && centre.y > 4.0 && centre.y < 6.0),
             "a cell centred at ({}, {}) drifted onto the road during relaxation",

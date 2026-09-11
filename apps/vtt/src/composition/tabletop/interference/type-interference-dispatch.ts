@@ -23,9 +23,49 @@ import {
 import { repairTerrainCut, type TerrainRegenerateRuntime } from "../terrain/terrain-regenerate.ts";
 import { paintedFalloutOf } from "./painted-topologies.ts";
 import { pointInOrOnPolygon } from "../../../features/edit-construction/index.ts";
+import { timePhase } from "../commit-timing.ts";
 import polygonClipping, { type MultiPolygon, type Polygon } from "polygon-clipping";
 
 import type { TabletopRuntime } from "../tabletop-runtime.ts";
+
+function segmentsIntersect(a: readonly [number, number], b: readonly [number, number], c: readonly [number, number], d: readonly [number, number]): boolean {
+  const cross = (p: readonly [number, number], q: readonly [number, number], r: readonly [number, number]) =>
+    (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
+  const between = (p: readonly [number, number], q: readonly [number, number], r: readonly [number, number]) =>
+    Math.min(p[0], q[0]) - 1e-7 <= r[0] && r[0] <= Math.max(p[0], q[0]) + 1e-7 &&
+    Math.min(p[1], q[1]) - 1e-7 <= r[1] && r[1] <= Math.max(p[1], q[1]) + 1e-7;
+  const abC = cross(a, b, c);
+  const abD = cross(a, b, d);
+  const cdA = cross(c, d, a);
+  const cdB = cross(c, d, b);
+  return (abC === 0 && between(a, b, c)) || (abD === 0 && between(a, b, d)) ||
+    (cdA === 0 && between(c, d, a)) || (cdB === 0 && between(c, d, b)) ||
+    ((abC > 0) !== (abD > 0) && (cdA > 0) !== (cdB > 0));
+}
+
+function topologyIntersectsPolygon(topology: ConstructionRegionTopology, polygon: readonly (readonly [number, number])[]): boolean {
+  if (polygon.length < 3 || topology.nodes.length === 0) return false;
+  const positions = new Map(topology.nodes.map((node) => [node.id, [node.position.x, node.position.z] as [number, number]]));
+  const rings = [...topology.outerLoops, ...topology.holes];
+  for (const loop of rings) {
+    for (let i = 0; i < loop.length; i += 1) {
+      const from = positions.get(loop[i]!.startNodeId);
+      const to = positions.get(loop[(i + 1) % loop.length]!.startNodeId);
+      if (from === undefined || to === undefined) continue;
+      for (let j = 0; j < polygon.length; j += 1) {
+        const edgeFrom = polygon[j]!;
+        const edgeTo = polygon[(j + 1) % polygon.length]!;
+        if (segmentsIntersect(from, to, edgeFrom, edgeTo)) return true;
+      }
+    }
+  }
+  const center = topology.nodes.reduce((sum, node) => ({ x: sum.x + node.position.x, z: sum.z + node.position.z }), { x: 0, z: 0 });
+  center.x /= topology.nodes.length;
+  center.z /= topology.nodes.length;
+  return pointInOrOnPolygon(center.x, center.z, polygon) || polygon.some(([x, z]) => {
+    return topology.nodes.some((node) => Math.hypot(node.position.x - x, node.position.z - z) < 1e-7);
+  });
+}
 
 /**
  * One covered type's own answer to being cut -- `resolveCutRepair`'s
@@ -354,16 +394,21 @@ export function dispatchCutRepairs(
     maxZ: maxZ + margin,
   };
 
-  const topologiesInBounds = typeof runtime.getRegionTopologiesInBounds === "function"
+  const topologiesInBounds = timePhase("terreno sob a rua", () => typeof runtime.getRegionTopologiesInBounds === "function"
     ? runtime.getRegionTopologiesInBounds(bounds)
-    : runtime.getAllRegionTopologies();
+    : runtime.getAllRegionTopologies());
 
   const underFootprint = topologiesInBounds.filter((t) => {
     if (!targetTypes.includes(t.surfaceType)) return false;
     if (request.footprintOutline && request.footprintOutline.length >= 3) {
-      return t.nodes.some(
-        (n) => n.position.x >= bounds.minX && n.position.x <= bounds.maxX && n.position.z >= bounds.minZ && n.position.z <= bounds.maxZ,
-      );
+      // The query above is deliberately broad (an AABB), but it must not
+      // become the repair scope. Using any node in the box pulled in large
+      // terrain faces beside long/curved roads and caused their whole cloud
+      // to be split and re-minted. Use the actual footprint for the final
+      // admission test; the terrain planner will still include faces that
+      // are truly covered through its coverage/edge checks.
+      const footprint = request.footprintOutline.map(([x, z]) => [x, z] as [number, number]);
+      return topologyIntersectsPolygon(t, footprint);
     }
     return true;
   });
@@ -434,12 +479,12 @@ export function dispatchCutRepairs(
   // meant it was never looked for. It kept naming dead nodes, and the road
   // visibly came apart from the ground as the network filled in.
   const orphaned: ConstructionRegionTopology[] = [];
-  const changed = groundThePainterMovedOff(replacedTopologies, newRoadTopologies);
+  const changed = timePhase("área deixada pela rua", () => groundThePainterMovedOff(replacedTopologies, newRoadTopologies));
   if (replacedTopologies.length > 0) {
     const replacedBounds = terrainTopologiesBounds(replacedTopologies, 4.0);
-    const near = typeof runtime.getRegionTopologiesInBounds === "function"
+    const near = timePhase("terreno perto da rua antiga", () => typeof runtime.getRegionTopologiesInBounds === "function"
       ? runtime.getRegionTopologiesInBounds(replacedBounds)
-      : runtime.getAllRegionTopologies();
+      : runtime.getAllRegionTopologies());
     for (const t of near) {
       if (!targetTypes.includes(t.surfaceType)) continue;
       const sharesAbandoned = abandonedNodeIds.size > 0 && t.nodes.some((n) => abandonedNodeIds.has(n.id));
@@ -489,7 +534,7 @@ export function dispatchCutRepairs(
   }
 
   // Pure domain planning via TerrainCloud:
-  const repairPlan = planTerrainCloudCutRepair({
+  const repairPlan = timePhase("plano do reparo", () => planTerrainCloudCutRepair({
     candidateTerrain,
     cutterPositions: request.footprintOutline && request.footprintOutline.length >= 3
       ? request.footprintOutline.map(([x, z]) => ({ x, y: 0, z }))
@@ -498,7 +543,7 @@ export function dispatchCutRepairs(
     coverageSurfaceKeys: outlineCoverageKeys,
     footprintOutline: request.footprintOutline,
     cutterPolygons,
-  });
+  }));
 
   if (!repairPlan.requiresRepair && changed.length === 0) return;
 
@@ -513,7 +558,7 @@ export function dispatchCutRepairs(
   const roadToUse = allRoads;
 
   if (roadToUse.length > 0) {
-    const painter = paintedFalloutOf(roadToUse);
+    const painter = timePhase("perímetro da rua nova", () => paintedFalloutOf(roadToUse));
     paintedLoops = painter.paintedLoops;
     paintedNodes = painter.paintedNodes;
   }
@@ -527,7 +572,7 @@ export function dispatchCutRepairs(
     const executor = executors[surfaceType];
     if (executor === undefined) continue;
     try {
-      executor(
+      timePhase(`regeneração de ${surfaceType}`, () => executor(
         runtime,
         {
           paintedNodes,
@@ -543,7 +588,7 @@ export function dispatchCutRepairs(
         },
         causeId,
         runtime.getSnapshot().tableId,
-      );
+      ));
     } catch (error) {
       console.warn(`[type-interference] Failed to repair cut for ${surfaceType} (cause: ${causeId}):`, error);
     }

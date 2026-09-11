@@ -65,6 +65,7 @@ import {
   type AtomicEditOp,
 } from "../../features/edit-construction/index.ts";
 import { dispatchCutRepairs, dispatchRemovalRepairs } from "./interference/type-interference-dispatch.ts";
+import { timeCommit, timePhase } from "./commit-timing.ts";
 
 export type TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed";
 
@@ -802,9 +803,9 @@ export class AppTabletopRuntime implements TabletopRuntime {
     if (ops.length === 0) return EMPTY_OUTCOME;
 
     const movements = ops.filter((op) => op.kind === "move-vertex");
-    const outcome = movements.length === ops.length
+    const outcome = timePhase(`motor: edição (${ops.length} ops)`, () => movements.length === ops.length
       ? this.#construction.moveVertices(movements)
-      : ops.reduce((merged, op) => mergeOutcomes(merged, applyEditOp(this.#construction, op)), EMPTY_OUTCOME);
+      : ops.reduce((merged, op) => mergeOutcomes(merged, applyEditOp(this.#construction, op)), EMPTY_OUTCOME));
     const positionsAreKnown = ops.every(
       (op) => op.kind !== "move-edge" && op.kind !== "move-region" && op.kind !== "duplicate-region",
     );
@@ -814,7 +815,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
         if (op.kind === "move-vertex" || op.kind === "insert-vertex") knownPositions.set(op.nodeId, op.position);
       }
     }
-    this.#foldRegionEditOutcome(outcome, origin, causeId, knownPositions);
+    timePhase("render da edição", () => this.#foldRegionEditOutcome(outcome, origin, causeId, knownPositions));
     return outcome;
   }
 
@@ -1033,24 +1034,28 @@ export class AppTabletopRuntime implements TabletopRuntime {
     causeId: string,
   ): ConstructionPatchOutcome {
     this.#requireReady("replacing generated regions");
-    const replacedTopologies: ConstructionRegionTopology[] = [];
-    if (request.sourceSurfaceKeys.length > 0 && typeof this.#construction.getRegionTopology === "function") {
-      for (const key of request.sourceSurfaceKeys) {
-        try {
-          const topology = this.#construction.getRegionTopology(key);
-          if (topology !== undefined) replacedTopologies.push(topology);
-        } catch {
-          // best-effort lookup
-        }
+    return timeCommit(`substituição de ${request.patch.regions[0]?.surfaceType ?? "patch"}`, () => {
+      const replacedTopologies: ConstructionRegionTopology[] = [];
+      if (request.sourceSurfaceKeys.length > 0 && typeof this.#construction.getRegionTopology === "function") {
+        timePhase(`leitura das substituídas (${request.sourceSurfaceKeys.length})`, () => {
+          for (const key of request.sourceSurfaceKeys) {
+            try {
+              const topology = this.#construction.getRegionTopology(key);
+              if (topology !== undefined) replacedTopologies.push(topology);
+            } catch {
+              // best-effort lookup
+            }
+          }
+        });
       }
-    }
-    const outcome = this.#construction.applyPatchReplacement(request);
-    const knownNodePositions = new Map<ConstructionNodeId, ConstructionPosition>();
-    for (const node of request.patch.nodes) knownNodePositions.set(node.id, node.position);
-    for (const node of request.graphPatch?.nodes ?? []) knownNodePositions.set(node.id, node.position);
-    this.#foldRegionEditOutcome(outcome, origin, causeId, knownNodePositions);
-    dispatchCutRepairs(this, request, causeId, replacedTopologies, outcome);
-    return outcome;
+      const outcome = timePhase(`motor: substituição (${request.patch.regions.length} faces)`, () => this.#construction.applyPatchReplacement(request));
+      const knownNodePositions = new Map<ConstructionNodeId, ConstructionPosition>();
+      for (const node of request.patch.nodes) knownNodePositions.set(node.id, node.position);
+      for (const node of request.graphPatch?.nodes ?? []) knownNodePositions.set(node.id, node.position);
+      timePhase("render", () => this.#foldRegionEditOutcome(outcome, origin, causeId, knownNodePositions));
+      timePhase("reparo de corte", () => dispatchCutRepairs(this, request, causeId, replacedTopologies, outcome));
+      return outcome;
+    });
   }
   undoPathBrush(operationId: string, origin: ChangeOrigin): void {
     this.#requireReady("undoing a path brush");

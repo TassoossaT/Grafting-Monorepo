@@ -26,6 +26,7 @@ import {
   type ConstraintTable,
 } from "./terrain-constraints.ts";
 import { DEFAULT_FACE_SIDE, fillTerrain } from "./terrain-fill.ts";
+import { timePhase } from "../commit-timing.ts";
 import {
   heightFieldOf,
   terrainStandingAround,
@@ -647,7 +648,7 @@ export function executeTerrainCut(
   // growth loop below), so it reaches further out than a stroke needs to.
   const standingReach =
     request.profile.kind === "regenerate" ? effectiveFaceSide * 5 : effectiveFaceSide * 2;
-  const standing = terrainStandingAround(runtime, covered, coveredExtent, standingReach);
+  const standing = timePhase("vizinhança do terreno", () => terrainStandingAround(runtime, covered, coveredExtent, standingReach));
 
   const isTerrainMatch = (st: string, target: string): boolean => {
     if (st === target) return true;
@@ -727,17 +728,18 @@ export function executeTerrainCut(
         }
       }
     }
-    const connectTopologies = paintedTopologiesOf(
+    const connectType = request.profile.connectTo.surfaceType;
+    const connectTopologies = timePhase("topologias da rua", () => paintedTopologiesOf(
       runtime as unknown as Parameters<typeof paintedTopologiesOf>[0],
-      request.profile.connectTo.surfaceType,
+      connectType,
       {
         minX: connMinX - connectReach,
         minZ: connMinZ - connectReach,
         maxX: connMaxX + connectReach,
         maxZ: connMaxZ + connectReach,
       },
-    );
-    const { paintedNodes, paintedLoops } = paintedFalloutOf(connectTopologies);
+    ));
+    const { paintedNodes, paintedLoops } = timePhase("perímetro da rua", () => paintedFalloutOf(connectTopologies));
     for (const n of paintedNodes) connectPositions.set(n.id, { x: n.position.x, z: n.position.z });
 
     // **The area it occupies is a union of its faces, never its perimeter
@@ -753,7 +755,7 @@ export function executeTerrainCut(
       .filter((polygon) => polygon.length > 0);
     if (facePolygons.length > 0) {
       try {
-        connectArea = polygonClipping.union(facePolygons[0]!, ...facePolygons.slice(1));
+        connectArea = timePhase(`união da rua (${facePolygons.length} faces)`, () => polygonClipping.union(facePolygons[0]!, ...facePolygons.slice(1)));
       } catch {
         connectArea = [];
       }
@@ -816,22 +818,27 @@ export function executeTerrainCut(
   // seam. Neighbours are absorbed by *shared node*, one ring at a time, and
   // only while the result is still too narrow to lay in -- so ordinary strokes
   // and cuts that barely clip a face never pay for it.
-  let targetPolygon = groundFor(affected);
+  let targetPolygon = timePhase(`chão a regerar (${affected.length} faces)`, () => groundFor(affected));
   if (connectArea.length > 0) {
     for (let ring = 0; ring < MOST_RINGS_WORTH_ABSORBING; ring += 1) {
       if (affected.length === 0) break;
       if (widthOf(targetPolygon) >= effectiveFaceSide * NARROW_ENOUGH_TO_GROW) break;
 
-      const touched = new Set(affected.flatMap((t) => t.nodes.map((n) => n.id)));
-      const absorbed = retained.filter(
-        (t) => isTerrainMatch(t.surfaceType, request.targetSurfaceType) && t.nodes.some((n) => touched.has(n.id)),
-      );
+      // Only a shared side adds width to the repair. A corner contact must
+      // not pull an otherwise untouched terrain face into regeneration.
+      const touched = affected.flatMap((t) => [...t.outerLoops, ...t.holes].flat());
+      const absorbed = timePhase("vizinhas por aresta", () => retained.filter(
+        (t) => isTerrainMatch(t.surfaceType, request.targetSurfaceType) &&
+          [...t.outerLoops, ...t.holes].some((loop) => loop.some((edge) => touched.some((other) =>
+            (edge.startNodeId === other.startNodeId && edge.endNodeId === other.endNodeId) ||
+            (edge.startNodeId === other.endNodeId && edge.endNodeId === other.startNodeId)))),
+      ));
       if (absorbed.length === 0) break;
 
       affected = [...affected, ...absorbed];
       affectedKeys = new Set(affected.map((t) => t.surfaceKey.join(" ")));
       retained = standing.filter((t) => !affectedKeys.has(t.surfaceKey.join(" ")));
-      targetPolygon = groundFor(affected);
+      targetPolygon = timePhase(`chão a regerar com vizinhas (${affected.length} faces)`, () => groundFor(affected));
     }
   }
 
@@ -848,7 +855,7 @@ export function executeTerrainCut(
 
   // One numbering across the retained rim and the connected structure, because
   // the generator answers with one `source` index per corner.
-  const retainedPerimeters = perimeterConstraints(retained, 0);
+  const retainedPerimeters = timePhase(`perímetro do terreno retido (${retained.length} faces)`, () => perimeterConstraints(retained, 0));
   const connectTable = constraintsFromRings(
     connectLoops,
     (nodeId) => connectPositions.get(nodeId),
@@ -860,7 +867,7 @@ export function executeTerrainCut(
   };
   const extraHoleRings: ConstraintRing[] = [];
 
-  const targetRings = buildConstraintRings(targetPolygon, effectiveFaceSide, perimeters);
+  const targetRings = timePhase("anéis de restrição", () => buildConstraintRings(targetPolygon, effectiveFaceSide, perimeters));
   const boundaryRings = targetRings.filter((r) => !r.isHole && r.points.length >= 3);
   const holeRings = [...targetRings.filter((r) => r.isHole && r.points.length >= 3), ...extraHoleRings];
 
@@ -934,7 +941,7 @@ export function executeTerrainCut(
     };
   };
 
-  const filled = fillTerrain(runtime, {
+  const filled = timePhase("preenchimento", () => fillTerrain(runtime, {
     what: request.profile.kind === "concave" ? "escavação" : request.profile.kind === "convex" ? "adição" : "regeneração",
     mint: `${request.tableId}:cut-${request.causeId}`,
     tableId: request.tableId,
@@ -962,7 +969,7 @@ export function executeTerrainCut(
     avoidArea: connectArea,
     heightAt,
     positionAt,
-  });
+  }));
 
 
   return {
