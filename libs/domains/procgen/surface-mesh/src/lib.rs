@@ -48,6 +48,7 @@
 pub mod frame;
 pub mod math;
 pub mod planar;
+pub mod refine;
 pub mod tessellation;
 pub mod types;
 pub mod upright;
@@ -55,12 +56,13 @@ pub mod upright;
 #[cfg(test)]
 mod tests;
 
-pub use types::{ARC_TESSELLATION_TOLERANCE, TriangulatedMesh, VERTICAL_SIDE_EPSILON};
+pub use types::{ARC_TESSELLATION_TOLERANCE, PlanarFill, TriangulatedMesh, VERTICAL_SIDE_EPSILON};
 
 use grafting_graph_core::{ContourTopology, NodeId, SurfaceRegion};
 
 use math::point_in_loop_xz;
 use planar::triangulate_contour_loops;
+use refine::{field_owns_loops, needs_interior, refined_planar_mesh};
 use tessellation::tessellate_contour_loop;
 use upright::upright_face_mesh;
 
@@ -75,7 +77,27 @@ use upright::upright_face_mesh;
 pub fn triangulate_region(
     topology: &ContourTopology,
     region: &SurfaceRegion,
+    resolve_position: impl FnMut(&NodeId) -> Option<[f32; 3]>,
+) -> Option<Vec<TriangulatedMesh>> {
+    triangulate_region_with(topology, region, resolve_position, None)
+}
+
+/// [`triangulate_region`], with the option of filling a planar face's
+/// interior rather than covering it from its own corners alone.
+///
+/// `fill` is the whole difference. Without it this is the function it always
+/// was. With it, a planar face large enough to warrant an interior, and
+/// whose every corner the field claims, is refined to a bounded triangle
+/// size instead of ear-clipped -- which is what stops a ribbon swept along a
+/// curve from being covered by diagonals running margin to margin, twisting
+/// the surface and digging troughs the contour never had. See
+/// [`refine`] for why that is a property of the face's shape rather than of
+/// what kind of surface anybody thinks it is.
+pub fn triangulate_region_with(
+    topology: &ContourTopology,
+    region: &SurfaceRegion,
     mut resolve_position: impl FnMut(&NodeId) -> Option<[f32; 3]>,
+    fill: Option<PlanarFill<'_>>,
 ) -> Option<Vec<TriangulatedMesh>> {
     // An upright face is unrolled, not projected: its ring lies on no plane
     // once it curves, and it carries its own openings through with it. See
@@ -129,11 +151,24 @@ pub fn triangulate_region(
         .iter()
         .enumerate()
         .map(|(index, outer)| {
-            let owned_holes = holes
-                .iter()
-                .zip(owners.iter())
-                .filter_map(|(hole, owner)| (*owner == Some(index)).then_some(hole));
-            triangulate_contour_loops(outer, owned_holes)
+            let owned_holes = || {
+                holes
+                    .iter()
+                    .zip(owners.iter())
+                    .filter_map(|(hole, owner)| (*owner == Some(index)).then_some(hole))
+            };
+            // Refinement is attempted, never insisted on: a face the field
+            // does not claim, one small enough to gain nothing, and one whose
+            // constraints refuse to triangulate at all each fall through to
+            // exactly the mesh this function produced before `fill` existed.
+            let refined = fill.as_ref().and_then(|fill| {
+                let rings = std::iter::once(outer.as_slice())
+                    .chain(owned_holes().map(|hole| hole.as_slice()));
+                (needs_interior(outer, fill) && field_owns_loops(fill, rings))
+                    .then(|| refined_planar_mesh(outer, &owned_holes().collect::<Vec<_>>(), fill))
+                    .flatten()
+            });
+            refined.or_else(|| triangulate_contour_loops(outer, owned_holes()))
         })
         .collect()
 }

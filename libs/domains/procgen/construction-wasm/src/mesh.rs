@@ -6,13 +6,80 @@
 
 use serde::{Deserialize, Serialize};
 
+use grafting_graph_core::curve_offset::{ReferenceCurve, ReferenceField};
 use grafting_graph_core::{ContourTopology, RegionId, SurfaceRegistry};
-use grafting_procgen_surface_mesh::triangulate_region;
+use grafting_procgen_surface_mesh::{PlanarFill, triangulate_region_with};
 
 use crate::editing::SessionGraph;
 
 /// Reserved wire marker for a stable analytic-region identity.
 pub const REGION_SURFACE_KEY_PREFIX: &str = "@region";
+
+/// How finely a graph curve is flattened before it becomes a reference
+/// curve. Tighter than the contour's own flattening on purpose: this is the
+/// height and parametrization authority for everything swept from it, so its
+/// own approximation error should be well under the mesh detail it answers
+/// for.
+const FIELD_SAMPLE_ACCURACY: f64 = 0.02;
+
+/// Largest triangle left standing inside a refined planar face, in square
+/// metres.
+///
+/// One square metre is a cell a few of which fit across an ordinary run,
+/// which is what it takes for the surface to follow a slope instead of
+/// spanning it, and coarse enough that a long run stays well inside the
+/// refinement's own vertex budget.
+const PLANAR_FILL_MAX_AREA: f32 = 1.0;
+
+/// Every curve the graph carries, as the field that elevates and
+/// parametrizes whatever was swept from it.
+///
+/// **A curve-carrying edge is the whole test.** Not an id prefix, not a
+/// surface type -- an edge that stores handles is, by construction, an edge
+/// something was generated along, and its own band offsets say how far that
+/// generation reached. So this needs no list of which kinds of surface have
+/// curves under them, and a future one that does inherits the correct mesh
+/// without anybody revisiting this function.
+///
+/// Rebuilt per mesh request rather than cached: the graph is the only copy
+/// of this, and a cache would be one more thing that can disagree with it.
+pub fn reference_field(graph: &SessionGraph) -> ReferenceField {
+    ReferenceField::new(graph.edges().into_iter().filter_map(|edge| {
+        let handles = edge.data().as_ref()?;
+        let reach = handles
+            .band_offsets
+            .iter()
+            .fold(0.0_f64, |widest, offset| widest.max(offset.abs()));
+        if reach <= 0.0 {
+            return None;
+        }
+        let start = graph.node(edge.source())?.data().map(f64::from);
+        let end = graph.node(edge.target())?.data().map(f64::from);
+        let samples = handles
+            .resolve(start, end)
+            .sample(FIELD_SAMPLE_ACCURACY)
+            .ok()?;
+        Some(ReferenceCurve {
+            points: samples
+                .iter()
+                .map(|sample| {
+                    [
+                        sample.position[0] as f32,
+                        sample.position[1] as f32,
+                        sample.position[2] as f32,
+                    ]
+                })
+                .collect(),
+            reach: reach as f32,
+        })
+    }))
+}
+
+/// The fill a region mesh is derived with, or `None` when the graph carries
+/// no curve at all and there is nothing to refine against.
+fn planar_fill(field: &ReferenceField) -> Option<PlanarFill<'_>> {
+    (!field.is_empty()).then(|| PlanarFill::new(field, PLANAR_FILL_MAX_AREA))
+}
 
 /// Converts a stable analytic region id to the existing surface-key wire
 /// slot without changing legacy node-set callers.
@@ -70,6 +137,8 @@ pub fn all_surface_meshes(
     topology: &ContourTopology,
     known_regions: &std::collections::HashSet<RegionId>,
 ) -> Vec<SurfaceMeshDto> {
+    let field = reference_field(graph);
+    let fill = planar_fill(&field);
     let mut meshes = Vec::new();
     let mut regions = known_regions.iter().collect::<Vec<_>>();
     regions.sort();
@@ -80,9 +149,12 @@ pub fn all_surface_meshes(
         let Some(surface) = surfaces.region_surface(region_id) else {
             continue;
         };
-        let Some(region_meshes) = triangulate_region(topology, region, |id| {
-            graph.node(id).map(|node| *node.data())
-        }) else {
+        let Some(region_meshes) = triangulate_region_with(
+            topology,
+            region,
+            |id| graph.node(id).map(|node| *node.data()),
+            fill,
+        ) else {
             continue;
         };
         meshes.extend(region_meshes.into_iter().map(|mesh| SurfaceMeshDto {
@@ -112,6 +184,22 @@ pub fn surface_mesh(
     topology: &ContourTopology,
     request: SurfaceMeshRequest,
 ) -> Result<Vec<SurfaceMeshDto>, String> {
+    let field = reference_field(graph);
+    surface_mesh_with(graph, surfaces, topology, request, planar_fill(&field))
+}
+
+/// [`surface_mesh`] against a field the caller already built.
+///
+/// Deriving the field walks every curve in the graph, so a caller asking for
+/// many keys at once builds it once and passes it down rather than paying
+/// that walk per face.
+fn surface_mesh_with(
+    graph: &SessionGraph,
+    surfaces: &SurfaceRegistry,
+    topology: &ContourTopology,
+    request: SurfaceMeshRequest,
+    fill: Option<PlanarFill<'_>>,
+) -> Result<Vec<SurfaceMeshDto>, String> {
     if let [prefix, region_id] = request.surface_key.as_slice()
         && prefix == REGION_SURFACE_KEY_PREFIX
     {
@@ -122,9 +210,12 @@ pub fn surface_mesh(
         let surface = surfaces
             .region_surface(&region_id)
             .ok_or_else(|| format!("unknown analytic region surface {region_id}"))?;
-        let meshes = triangulate_region(topology, region, |id| {
-            graph.node(id).map(|node| *node.data())
-        })
+        let meshes = triangulate_region_with(
+            topology,
+            region,
+            |id| graph.node(id).map(|node| *node.data()),
+            fill,
+        )
         .ok_or_else(|| format!("no mesh derivable for analytic region {region_id}"))?;
         if meshes.is_empty() {
             return Err(format!("no mesh derivable for analytic region {region_id}"));
@@ -156,17 +247,20 @@ pub fn surface_meshes(
     topology: &ContourTopology,
     request: SurfaceMeshesRequest,
 ) -> Vec<SurfaceMeshDto> {
+    let field = reference_field(graph);
+    let fill = planar_fill(&field);
     let mut seen = std::collections::HashSet::new();
     let mut meshes = Vec::new();
     for surface_key in request.surface_keys {
         if !seen.insert(surface_key.clone()) {
             continue;
         }
-        if let Ok(mut pieces) = surface_mesh(
+        if let Ok(mut pieces) = surface_mesh_with(
             graph,
             surfaces,
             topology,
             SurfaceMeshRequest { surface_key },
+            fill,
         ) {
             meshes.append(&mut pieces);
         }
