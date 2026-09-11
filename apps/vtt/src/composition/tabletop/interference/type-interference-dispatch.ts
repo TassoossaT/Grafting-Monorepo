@@ -23,6 +23,7 @@ import {
 import { repairTerrainCut, type TerrainRegenerateRuntime } from "../terrain/terrain-regenerate.ts";
 import { paintedFalloutOf } from "./painted-topologies.ts";
 import { pointInOrOnPolygon } from "../../../features/edit-construction/index.ts";
+import { timePhase } from "../commit-timing.ts";
 import polygonClipping, { type MultiPolygon, type Polygon } from "polygon-clipping";
 
 import type { TabletopRuntime } from "../tabletop-runtime.ts";
@@ -393,9 +394,9 @@ export function dispatchCutRepairs(
     maxZ: maxZ + margin,
   };
 
-  const topologiesInBounds = typeof runtime.getRegionTopologiesInBounds === "function"
+  const topologiesInBounds = timePhase("terreno sob a rua", () => typeof runtime.getRegionTopologiesInBounds === "function"
     ? runtime.getRegionTopologiesInBounds(bounds)
-    : runtime.getAllRegionTopologies();
+    : runtime.getAllRegionTopologies());
 
   const underFootprint = topologiesInBounds.filter((t) => {
     if (!targetTypes.includes(t.surfaceType)) return false;
@@ -478,12 +479,12 @@ export function dispatchCutRepairs(
   // meant it was never looked for. It kept naming dead nodes, and the road
   // visibly came apart from the ground as the network filled in.
   const orphaned: ConstructionRegionTopology[] = [];
-  const changed = groundThePainterMovedOff(replacedTopologies, newRoadTopologies);
+  const changed = timePhase("área deixada pela rua", () => groundThePainterMovedOff(replacedTopologies, newRoadTopologies));
   if (replacedTopologies.length > 0) {
     const replacedBounds = terrainTopologiesBounds(replacedTopologies, 4.0);
-    const near = typeof runtime.getRegionTopologiesInBounds === "function"
+    const near = timePhase("terreno perto da rua antiga", () => typeof runtime.getRegionTopologiesInBounds === "function"
       ? runtime.getRegionTopologiesInBounds(replacedBounds)
-      : runtime.getAllRegionTopologies();
+      : runtime.getAllRegionTopologies());
     for (const t of near) {
       if (!targetTypes.includes(t.surfaceType)) continue;
       const sharesAbandoned = abandonedNodeIds.size > 0 && t.nodes.some((n) => abandonedNodeIds.has(n.id));
@@ -533,7 +534,7 @@ export function dispatchCutRepairs(
   }
 
   // Pure domain planning via TerrainCloud:
-  const repairPlan = planTerrainCloudCutRepair({
+  const repairPlan = timePhase("plano do reparo", () => planTerrainCloudCutRepair({
     candidateTerrain,
     cutterPositions: request.footprintOutline && request.footprintOutline.length >= 3
       ? request.footprintOutline.map(([x, z]) => ({ x, y: 0, z }))
@@ -542,7 +543,7 @@ export function dispatchCutRepairs(
     coverageSurfaceKeys: outlineCoverageKeys,
     footprintOutline: request.footprintOutline,
     cutterPolygons,
-  });
+  }));
 
   if (!repairPlan.requiresRepair && changed.length === 0) return;
 
@@ -557,7 +558,7 @@ export function dispatchCutRepairs(
   const roadToUse = allRoads;
 
   if (roadToUse.length > 0) {
-    const painter = paintedFalloutOf(roadToUse);
+    const painter = timePhase("perímetro da rua nova", () => paintedFalloutOf(roadToUse));
     paintedLoops = painter.paintedLoops;
     paintedNodes = painter.paintedNodes;
   }
@@ -571,7 +572,7 @@ export function dispatchCutRepairs(
     const executor = executors[surfaceType];
     if (executor === undefined) continue;
     try {
-      executor(
+      timePhase(`regeneração de ${surfaceType}`, () => executor(
         runtime,
         {
           paintedNodes,
@@ -587,7 +588,7 @@ export function dispatchCutRepairs(
         },
         causeId,
         runtime.getSnapshot().tableId,
-      );
+      ));
     } catch (error) {
       console.warn(`[type-interference] Failed to repair cut for ${surfaceType} (cause: ${causeId}):`, error);
     }

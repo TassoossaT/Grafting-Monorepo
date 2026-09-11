@@ -23,6 +23,7 @@ import {
   type ConstraintRing,
 } from "./terrain-constraints.ts";
 import { logTerrainCommit } from "./terrain-diagnostics.ts";
+import { countInCommit, timePhase } from "../commit-timing.ts";
 import { createBoundaryEdges, pointInOrOnPolygon, sharedEdgeId } from "../../../features/edit-construction/index.ts";
 
 
@@ -314,7 +315,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
   // on acute junctions or narrow boundary corridors while leaving room for healthy refinement.
   const maxAdditionalVertices = Math.min(1500, Math.max(80, expectedFaces * 6));
 
-  const grid = runtime.generateIrregularQuadGrid({
+  const grid = timePhase("gerador wasm", () => runtime.generateIrregularQuadGrid({
     seed: request.seed,
     faceSide: request.faceSide,
     relaxStrength: request.relaxStrength,
@@ -325,7 +326,8 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     },
     boundary: request.boundary.map((ring) => ring.points),
     holes: request.holes.map((ring) => ring.points),
-  });
+  }));
+  if (grid !== undefined) countInCommit("células geradas", grid.quads.length);
   if (grid === undefined) {
     logTerrainCommit({
       what: request.what,
@@ -430,14 +432,14 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     adoptionPositions.set(adoption.vertex, { x: vertex.x, y, z: vertex.z });
   }
 
-  const adoption = adoptContourNodes(
+  const adoption = timePhase(`adoção de nós (${effectiveAdoptions.length})`, () => adoptContourNodes(
     runtime,
     request.tableId,
     request.causeId,
     effectiveAdoptions,
     (vertex) => nodeId(request.mint, vertex),
     (vertex) => adoptionPositions.get(vertex),
-  );
+  ));
 
   // Which node id every corner resolves to, and which of those this fill still
   // has to declare. A corner that arrived with a source is a node already
@@ -475,7 +477,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
   // Query only the generated extent instead of serializing the entire map.
   const occupied = new Map<string, ConstructionRegionTopology["outerLoops"][number][number][]>();
   const reach = request.faceSide;
-  const nearbyTopologies = request.topologySeeds?.length === 0
+  const nearbyTopologies = timePhase("topologias vizinhas", () => request.topologySeeds?.length === 0
     ? []
     : runtime.getRegionTopologiesInBounds({
         minX: bounds.minX - reach,
@@ -483,7 +485,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
         maxX: bounds.maxX + reach,
         maxZ: bounds.maxZ + reach,
         seeds: request.topologySeeds,
-      });
+      }));
   const replaced = new Set((request.replaceSurfaceKeys ?? []).map((key) => key.join("\u0000")));
   for (const topology of nearbyTopologies) {
     if (replaced.has(topology.surfaceKey.join("\u0000"))) continue;
@@ -507,7 +509,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
       });
     } else edgeRooms.set(edgeId, null);
   }
-  const patch = gridPatch(request.tableId, grid, idFor, nodes, request.surfaceType, edgeRooms, quadOf, request.avoidArea);
+  const patch = timePhase("montagem do patch", () => gridPatch(request.tableId, grid, idFor, nodes, request.surfaceType, edgeRooms, quadOf, request.avoidArea));
 
 
   // **Does the patch itself already contain the clash?**
@@ -529,7 +531,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     }
   }
 
-  const outcome = request.replaceSurfaceKeys === undefined
+  const outcome = timePhase("registro do terreno", () => request.replaceSurfaceKeys === undefined
     ? runtime.addPatch(patch, "local", request.causeId)
     : runtime.applyPatchReplacement(
         {
@@ -539,7 +541,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
         },
         "local",
         request.causeId,
-      );
+      ));
   const cleared = request.replaceSurfaceKeys === undefined
     ? clearedBeforePatch
     : { deleted: outcome.removedSurfaceKeys.length, failed: [] };

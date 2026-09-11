@@ -3,6 +3,7 @@ import { planPathCloudMutation } from "../../../features/edit-construction/index
 
 import type { ToolContext } from "../tools/core/tool-context.ts";
 import { reportToolFailure, reportToolWarning } from "../tools/core/tool-diagnostics.ts";
+import { timeCommit, timePhase } from "../commit-timing.ts";
 
 /**
  * Runtime boundary for a PathCloud decision. This file deliberately contains
@@ -19,17 +20,25 @@ export function commitPathCloudIntent(
   effect: PathBrushEffect,
   tolerance: number,
 ): void {
+  timeCommit("rua", () => commitUntimed(ctx, effect, tolerance));
+}
+
+function commitUntimed(
+  ctx: ToolContext,
+  effect: PathBrushEffect,
+  tolerance: number,
+): void {
   try {
-    const plan = planPathCloudMutation({
+    const plan = timePhase("plano da nuvem", () => planPathCloudMutation({
       bezier: ctx.runtime,
       tableId: ctx.tableId,
       snapToGrid: ctx.snapToGrid,
-      graphSnapshot: ctx.runtime.getGraphSnapshot(),
-      regionTopologies: ctx.runtime.getAllRegionTopologies(),
-      coverageFor: (outline) => ctx.runtime.getFootprintCoverage(outline),
+      graphSnapshot: timePhase("leitura do grafo", () => ctx.runtime.getGraphSnapshot()),
+      regionTopologies: timePhase("leitura de todas as topologias", () => ctx.runtime.getAllRegionTopologies()),
+      coverageFor: (outline) => timePhase("cobertura do traço", () => ctx.runtime.getFootprintCoverage(outline)),
       effect,
       tolerance,
-    });
+    }));
     if (plan.kind === "noop") {
       ctx.reportFeedback({ tone: "info", message: plan.message });
       return;

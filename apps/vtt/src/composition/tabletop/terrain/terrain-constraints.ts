@@ -13,6 +13,7 @@ import type {
 // test reaches has to spell out any import it needs at run time. The type-only
 // `@/` imports above are fine -- those are erased.
 import { outwardPerimeterRings, sharedEdgeId } from "../../../features/edit-construction/index.ts";
+import { countInCommit } from "../commit-timing.ts";
 
 /**
  * Turning the live graph into constraints for the grid generator, and turning
@@ -551,6 +552,7 @@ export function adoptContourNodes(
     return { adopted, refused };
   } catch {
     // Fall through and pay per node, so one refusal loses one node.
+    countInCommit("splits refeitos um a um (lote recusado)", planned.length);
   }
 
   for (const entry of planned) {
