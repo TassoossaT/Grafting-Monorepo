@@ -469,19 +469,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
         maxZ: bounds.maxZ + reach,
         seeds: request.topologySeeds,
       });
-  const replacementKeys = [...(request.replaceSurfaceKeys ?? [])];
-  if (replacementKeys.length > 0) {
-    const replacementSet = new Set(replacementKeys.map((key) => key.join("\u0000")));
-    for (const topology of nearbyTopologies) {
-      if (topology.surfaceType !== request.surfaceType || replacementSet.has(topology.surfaceKey.join("\u0000")) || topology.nodes.length === 0) continue;
-      const inside = topology.nodes.some((node) => node.position.x >= bounds.minX && node.position.x <= bounds.maxX && node.position.z >= bounds.minZ && node.position.z <= bounds.maxZ);
-      if (inside) {
-        replacementKeys.push(topology.surfaceKey);
-        replacementSet.add(topology.surfaceKey.join("\u0000"));
-      }
-    }
-  }
-  const replaced = new Set(replacementKeys.map((key) => key.join("\u0000")));
+  const replaced = new Set((request.replaceSurfaceKeys ?? []).map((key) => key.join("\u0000")));
   for (const topology of nearbyTopologies) {
     if (replaced.has(topology.surfaceKey.join("\u0000"))) continue;
     for (const loop of [...topology.outerLoops, ...topology.holes]) {
@@ -530,7 +518,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     : runtime.applyPatchReplacement(
         {
           operationId: `${request.causeId}:terrain-fill`,
-          sourceSurfaceKeys: replacementKeys,
+          sourceSurfaceKeys: request.replaceSurfaceKeys,
           patch,
         },
         "local",
