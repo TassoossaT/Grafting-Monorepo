@@ -268,3 +268,57 @@ export function standingRegionsForCloud(
 
   return [...visited];
 }
+
+/**
+ * Every corridor whose chains a regeneration is actually about to redraw,
+ * read from the chain ids themselves.
+ *
+ * `#`-suffixed corridors report their base as well, matching how
+ * {@link changedSpineCloud} aliases them, so the set can be compared against
+ * a face's declared owners without one spelling missing the other.
+ */
+export function regeneratedCorridorIds(chainIds: readonly string[]): ReadonlySet<string> {
+  const corridors = new Set<string>();
+  for (const chainId of chainIds) {
+    for (const corridorId of extractCorridorsFromEdgeId(chainId)) {
+      corridors.add(corridorId);
+      const at = corridorId.lastIndexOf("#");
+      if (at >= 0) corridors.add(corridorId.slice(0, at));
+    }
+  }
+  return corridors;
+}
+
+/**
+ * The subset of `standing` a regeneration is entitled to retire: those whose
+ * every declared owner is a corridor it is redrawing.
+ *
+ * **The gap this closes.** Which faces belong to the touched cloud and which
+ * chains get resampled are two separate readings -- the first by identity
+ * (`standingRegionsForCloud` above), the second by walking the graph for
+ * edges that carry curve handles (`bezierChains`). They usually agree. When
+ * they do not -- an edge left without handles at a junction, a corridor whose
+ * chains the walk could not reach -- a face was still retired on the first
+ * reading while the second put nothing in its place, and the road lost a
+ * piece of itself permanently. That is the recurring disappearance, and no
+ * amount of care inside the contour builder could have seen it: by the time
+ * the union runs, the chain that was supposed to redraw that face is simply
+ * not there to be missed.
+ *
+ * Retiring only what is actually being redrawn makes the two readings agree
+ * by construction. A face left standing because one of its owners went
+ * missing may overlap the new contour, which is visible and can be edited
+ * away; deleting it is neither.
+ *
+ * A face that declares no owners is left to the caller's own selection, as
+ * before -- there is nothing here to check it against.
+ */
+export function retireableRegions(
+  standing: readonly ConstructionRegionTopology[],
+  regenerated: ReadonlySet<string>,
+): readonly ConstructionRegionTopology[] {
+  return standing.filter((topology) => {
+    const owners = surfaceCorridors(topology.surfaceKey[1] ?? "");
+    return owners === undefined || owners.every((owner) => regenerated.has(owner));
+  });
+}

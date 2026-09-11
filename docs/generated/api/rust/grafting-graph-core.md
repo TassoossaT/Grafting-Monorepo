@@ -359,6 +359,16 @@ Looks up an edge without exposing the storage engine's index type.
 
 Number of edges in the graph.
 
+### `pub fn grafting_graph_core::Graph<N, E>::edges(&self) -> alloc::vec::Vec<&grafting_graph_core::Edge<E>>`
+
+Every edge, in stable identity order, borrowed rather than cloned.
+
+[`Self::snapshot`] already answers "what is in this graph", but it
+answers it by copying the whole thing, which is the wrong price for a
+caller that only wants to read every edge once -- deriving meshes on
+each refresh, say. Same ordering contract as the snapshot, so the two
+never disagree about what "every edge" means.
+
 ### `pub fn grafting_graph_core::Graph<N, E>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result`
 
 ### `pub fn grafting_graph_core::Graph<N, E>::grouped_grid_layout(&self, grouping_edges: &[grafting_graph_core::EdgeId], options: grafting_graph_core::GroupedGridOptions) -> core::result::Result<grafting_graph_core::LayoutSnapshot, grafting_graph_core::LayoutError>`
@@ -807,6 +817,45 @@ Samples a ribbon with linearly varying start/end lateral offsets.
 
 Unions coplanar ribbon contours, retaining islands as holes.
 The caller partitions grade-separated connections before this operation.
+
+### `pub fn grafting_graph_core::curve_offset::ReferenceField::is_empty(&self) -> bool`
+
+Whether the field holds no curve, in which case it answers nothing.
+
+### `pub fn grafting_graph_core::curve_offset::ReferenceField::len(&self) -> usize`
+
+How many curves the field holds -- the range [`FieldSample::curve`]
+indexes into.
+
+### `pub fn grafting_graph_core::curve_offset::ReferenceField::new(curves: impl core::iter::traits::collect::IntoIterator<Item = grafting_graph_core::curve_offset::ReferenceCurve>) -> Self`
+
+Builds the field, dropping any curve too short to project onto.
+
+### `pub fn grafting_graph_core::curve_offset::ReferenceField::sample(&self, x: f32, z: f32) -> core::option::Option<grafting_graph_core::curve_offset::FieldSample>`
+
+The nearest curve's reading of `(x, z)`, or `None` when the field
+holds no curve at all.
+
+A point past a curve's end projects onto that end: `s` saturates at
+the curve's length and `y` is the end's own height, which is what a
+surface overshooting its curve -- an end cap -- should read.
+
+### `pub fn grafting_graph_core::curve_offset::ReferenceField::sample_owned(&self, x: f32, z: f32, slack: f32) -> core::option::Option<grafting_graph_core::curve_offset::FieldSample>`
+
+[`Self::sample`], refused unless the point lies inside the matched
+curve's own [`ReferenceCurve::reach`] -- "is this ground mine?".
+
+This is the gate that keeps a field from answering for ground it
+never generated. A face nowhere near a curve gets `None` for every
+one of its corners and is meshed the way it always was, with no
+caller anywhere having to ask what *kind* of surface it is looking
+at: the geometry decides, and any future surface swept from a curve
+inherits the same answer for free.
+
+`slack` widens the reach for the one vertex that legitimately sits a
+hair outside it -- a mitre overshooting a corner, a union vertex
+pushed out by float round-off. Multiplicative, so a wide curve gets
+proportionally more of it than a narrow one.
 
 ### `pub fn grafting_graph_core::curve_offset::offset_bands(polyline: &grafting_graph_core::curve_offset::Polyline, band_offsets: &[f32], miter_limit: f32) -> alloc::vec::Vec<grafting_graph_core::curve_offset::Polygon>`
 
@@ -1809,6 +1858,23 @@ Curve approximation tolerance.
 
 Closed polygon boundary, without a repeated closing vertex.
 
+### `pub grafting_graph_core::curve_offset::FieldSample::curve: usize`
+
+Index into the field's own curve list.
+
+### `pub grafting_graph_core::curve_offset::FieldSample::s: f32`
+
+Distance travelled along the curve to the projection, in world units
+measured on the ground plane.
+
+### `pub grafting_graph_core::curve_offset::FieldSample::t: f32`
+
+Signed distance off the curve; positive to the left of travel.
+
+### `pub grafting_graph_core::curve_offset::FieldSample::y: f32`
+
+The curve's own height at the projection.
+
 ### `pub grafting_graph_core::curve_offset::Polygon::holes: alloc::vec::Vec<alloc::vec::Vec<grafting_graph_core::curve_offset::Point>>`
 
 Interior holes.
@@ -1820,6 +1886,23 @@ Outer boundary.
 ### `pub grafting_graph_core::curve_offset::Polyline::points: alloc::vec::Vec<grafting_graph_core::curve_offset::Point>`
 
 Ordered curve samples.
+
+### `pub grafting_graph_core::curve_offset::ReferenceCurve::points: alloc::vec::Vec<[f32; 3]>`
+
+Ordered samples, `[x, y, z]`.
+
+### `pub grafting_graph_core::curve_offset::ReferenceCurve::reach: f32`
+
+How far off this curve the surface it generated actually reaches --
+its widest band offset.
+
+This is what lets the field say "not mine" instead of answering for
+ground it never generated. A point further off than `reach` was swept
+from some other curve, or from nothing at all, and reading this
+curve's height there would be the same category of mistake
+nearest-neighbour makes. Per curve rather than one figure for the
+whole field because a footpath and an avenue are the same kind of
+thing at different widths, and a shared cap would be wrong for both.
 
 ### `pub grafting_graph_core::curve_offset::TriangulatedMesh::indices: alloc::vec::Vec<u32>`
 
@@ -2071,6 +2154,10 @@ Generic insertion into an existing curve graph.
 
 A sampled ribbon with its source heights.
 
+### `pub struct grafting_graph_core::curve_offset::FieldSample`
+
+Where a point sits relative to the curve it projected onto.
+
 ### `pub struct grafting_graph_core::curve_offset::Polygon`
 
 A simple closed ring plus any holes it encloses.
@@ -2079,6 +2166,22 @@ A simple closed ring plus any holes it encloses.
 
 An ordered, open sequence of points -- a curve already flattened to
 straight segments.
+
+### `pub struct grafting_graph_core::curve_offset::ReferenceCurve`
+
+One reference curve, already flattened to segments, carrying elevation.
+
+`y` is world height; `x`/`z` are the ground plane. Height rides along
+rather than being a separate array because the whole point of this type
+is that the curve is the elevation authority for whatever was swept from
+it.
+
+### `pub struct grafting_graph_core::curve_offset::ReferenceField`
+
+Every reference curve a generated surface may have come from, queried
+together so a point lands on whichever one is actually nearest -- which
+is what makes a junction work without anybody having to decide in
+advance which curve owns which part of it.
 
 ### `pub struct grafting_graph_core::curve_offset::TriangulatedMesh`
 

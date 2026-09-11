@@ -19,7 +19,7 @@ import {
   resolveCoverage,
 } from "../index.ts";
 import { graphPatchForSpine } from "./spine-graph/index.ts";
-import { bezierContourId, changedSpineCloud, standingRegionsForCloud } from "./path-cloud-scope.ts";
+import { bezierContourId, changedSpineCloud, regeneratedCorridorIds, retireableRegions, standingRegionsForCloud } from "./path-cloud-scope.ts";
 import { referenceLineFrom } from "./path-reference-line.ts";
 import { pathSpineDraftFor } from "./path-spine-draft.ts";
 
@@ -183,7 +183,14 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
     }
 
     const topologies = input.regionTopologies;
-    const standingRegions = standingRegionsForCloud(topologies, touchedCloud.positions, touchedCloud.corridorIds, !!input.bezier);
+    // Retire only what this regeneration is actually redrawing. The chain
+    // ids carry that provenance on the explicit-curve path; the legacy path
+    // resamples from bare positions and has none to check, so it keeps the
+    // caller's selection whole. See `retireableRegions`.
+    const selected = standingRegionsForCloud(topologies, touchedCloud.positions, touchedCloud.corridorIds, !!input.bezier);
+    const standingRegions = input.bezier
+      ? retireableRegions(selected, regeneratedCorridorIds(regeneratedChains.map((chain) => chain.chainId)))
+      : selected;
     const existingEdgeUses = new Map<string, boolean[]>();
     for (const topology of topologies) {
       for (const loop of [...topology.outerLoops, ...topology.holes]) {

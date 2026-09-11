@@ -57,6 +57,7 @@ pub fn irregular_quad_grid(
 
 // src/mesh.rs
 pub const REGION_SURFACE_KEY_PREFIX: &str = "@region";
+pub fn reference_field(graph: &SessionGraph) -> ReferenceField
 pub fn region_id_to_wire(id: &RegionId) -> Vec<String>
 pub fn region_id_from_wire(wire: &[String]) -> Result<RegionId, String>
 pub struct SurfaceMeshDto
@@ -71,6 +72,7 @@ pub struct ApplyPatchReplacementRequest
 pub struct GraphPatchRequest
 pub struct GraphPatchNode
 pub struct GraphPatchEdge
+pub struct ReplacedState
 pub fn apply_patch_replacement(
 
 // src/region_editing.rs
@@ -415,10 +417,12 @@ pub fn normal_at(&self, point: [f32; 3]) -> [f32; 3]
 pub mod frame;
 pub mod math;
 pub mod planar;
+pub mod refine;
 pub mod tessellation;
 pub mod types;
 pub mod upright;
 pub fn triangulate_region(
+pub fn triangulate_region_with(
 
 // src/math.rs
 pub fn dot(a: [f32; 3], b: [f32; 3]) -> f32
@@ -434,6 +438,11 @@ pub fn point_in_loop_xz(point: [f32; 2], loop_: &[[f32; 3]]) -> bool
 // src/planar.rs
 pub fn triangulate_contour_loops<'a>(
 
+// src/refine.rs
+pub fn field_owns_loops<'a>(
+pub fn needs_interior(outer: &[[f32; 3]], fill: &PlanarFill<'_>) -> bool
+pub fn refined_planar_mesh(
+
 // src/tessellation.rs
 pub fn traversed_edge(topology: &ContourTopology, use_: &OrientedEdgeUse) -> Option<ContourEdge>
 pub fn tessellate_contour_loop(
@@ -441,6 +450,8 @@ pub fn tessellate_contour_loop(
 // src/types.rs
 pub const ARC_TESSELLATION_TOLERANCE: f32 = 0.03;
 pub const VERTICAL_SIDE_EPSILON: f32 = 1e-4;
+pub struct PlanarFill<'a>
+pub fn new(
 pub struct TriangulatedMesh
 
 // src/upright.rs
@@ -3389,6 +3400,16 @@ export function tokenSceneItem(token: RenderToken): SceneItem<TokenVisualParams>
   params: { color: token.appearance.color },
   },
 
+// src/composition/tabletop/commit-timing.ts
+export function timeCommit<T>(label: string, run: () => T): T {
+  if (current !== undefined) return timePhase(label, run);
+export function timePhase<T>(label: string, run: () => T): T {
+  const trace = current;
+  if (trace === undefined) return run();
+export function countInCommit(label: string, by = 1): void {
+  if (current === undefined) return;
+  current.counters.set(label, (current.counters.get(label) ?? 0) + by);
+
 // src/composition/tabletop/create-tabletop-runtime.ts
 export interface CreateTabletopRuntimeInput {
   readonly tableId: string;
@@ -3488,9 +3509,7 @@ export function commitPathCloudIntent(
   effect: PathBrushEffect,
   tolerance: number,
   ): void {
-  try {
-  const plan = planPathCloudMutation({
-  bezier: ctx.runtime,
+  timeCommit("rua", () => commitUntimed(ctx, effect, tolerance));
 
 // src/composition/tabletop/tabletop-runtime.ts
 export type TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed";
@@ -4946,12 +4965,26 @@ export function buildContourPatch(
   bandIndex: number,
   shapes: MultiPolygon,
   heightSamples: readonly ConstructionPosition[],
-  existingNodes: readonly ExistingNode[],
+  referenceCurves: readonly ReferenceCurve[],
+
+// src/features/edit-construction/structure-types/path/contour/curve-projection.ts
+export interface ReferenceCurve {
+  readonly points: readonly ConstructionPosition[];
+  }
+export function heightOnCurves(
+  x: number,
+  z: number,
+  curves: readonly ReferenceCurve[],
+  fallback = 0,
+  ): number {
+  let bestDistanceSq = Infinity;
+  let bestY = fallback;
 
 // src/features/edit-construction/structure-types/path/contour/index.ts
 export type { ExistingNode } from "./contour-patch.ts";
 export type { BandRibbon } from "./offset-bands.ts";
 export type { PlanSpineContourInput, PlanSpineContourResult, SpineChainInput } from "./plan-spine-contour.ts";
+export type { ReferenceCurve } from "./curve-projection.ts";
 
 // src/features/edit-construction/structure-types/path/contour/offset-bands.ts
 export interface BandRibbon {
@@ -4996,9 +5029,10 @@ export function planSpineContour(input: PlanSpineContourInput): PlanSpineContour
   if (input.editedChains.length === 0) return undefined;
 
   const ribbons: BandRibbon[] = [];
-  for (const chain of input.editedChains) {
-  if (chain.ribbons) { ribbons.push(...chain.ribbons); continue; }
-  const polyline = chain.sampledPoints ?? sampleCatmullRom(chain.controlPoints, chain.tolerance);
+  // The curves themselves, kept rather than discarded once their ribbons are
+  // offset: they are the height authority for every vertex the union is
+  // about to mint, and the same curves the engine reads back out of the
+  // graph to elevate the interior of the faces built here.
 
 // src/features/edit-construction/structure-types/path/contour/union-bands.ts
 export function unionBandLayer(ribbons: readonly BandRibbon[]): MultiPolygon {
@@ -5067,6 +5101,14 @@ export function standingRegionsForCloud(
   ): readonly ConstructionRegionTopology[] {
   if (corridorIds.size === 0 && cloudPositions.length === 0) return [];
 
+export function regeneratedCorridorIds(chainIds: readonly string[]): ReadonlySet<string> {
+  const corridors = new Set<string>();
+export function retireableRegions(
+  standing: readonly ConstructionRegionTopology[],
+  regenerated: ReadonlySet<string>,
+  ): readonly ConstructionRegionTopology[] {
+  return standing.filter((topology) => {
+  const owners = surfaceCorridors(topology.surfaceKey[1] ?? "");
 
 // src/features/edit-construction/structure-types/path/path-cloud.ts
 export interface PathRunNode {

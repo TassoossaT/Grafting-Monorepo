@@ -119,7 +119,7 @@ test("a sliver shape from a self-intersecting union never becomes a region", () 
   // is exactly why area, not node count, is what has to catch it.
   const real = [[[0, 0], [10, 0], [10, 2], [0, 2], [0, 0]]];
   const sliver = [[[5, 1], [5.0001, 1], [5, 1.0001], [5, 1]]];
-  const result = buildContourPatch("table", "op-sliver", "path", 0, [real, sliver], [], []);
+  const result = buildContourPatch("table", "op-sliver", "path", 0, [real, sliver], [], [], []);
   assert.equal(result.patch.regions.length, 1, "the sliver was filtered out before it became a region");
   assert.equal(result.regionIds.length, 1);
 });
@@ -139,6 +139,7 @@ test("a local contour rebuild gives a full retained edge a private identity", ()
     "path",
     0,
     [shape],
+    [],
     [],
     nodes,
     new Map([[fullEdge, [false, true]]]),

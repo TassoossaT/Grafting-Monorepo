@@ -9,6 +9,7 @@ import type {
 } from "@/ports";
 
 import { sampleCatmullRom } from "./catmull-rom.ts";
+import type { ReferenceCurve } from "./curve-projection.ts";
 import { type BandRibbon, offsetBands } from "./offset-bands.ts";
 import { ringOf, unionBandLayer } from "./union-bands.ts";
 import { buildContourPatch, type ExistingNode } from "./contour-patch.ts";
@@ -100,9 +101,15 @@ export function planSpineContour(input: PlanSpineContourInput): PlanSpineContour
   if (input.editedChains.length === 0) return undefined;
 
   const ribbons: BandRibbon[] = [];
+  // The curves themselves, kept rather than discarded once their ribbons are
+  // offset: they are the height authority for every vertex the union is
+  // about to mint, and the same curves the engine reads back out of the
+  // graph to elevate the interior of the faces built here.
+  const referenceCurves: ReferenceCurve[] = [];
   for (const chain of input.editedChains) {
-    if (chain.ribbons) { ribbons.push(...chain.ribbons); continue; }
     const polyline = chain.sampledPoints ?? sampleCatmullRom(chain.controlPoints, chain.tolerance);
+    if (polyline.length >= 2) referenceCurves.push({ points: polyline });
+    if (chain.ribbons) { ribbons.push(...chain.ribbons); continue; }
     const minOffset = Math.min(...chain.bandOffsets);
     const maxOffset = Math.max(...chain.bandOffsets);
     for (const ribbon of offsetBands(polyline, [minOffset, maxOffset], chain.miterLimit)) {
@@ -110,6 +117,11 @@ export function planSpineContour(input: PlanSpineContourInput): PlanSpineContour
     }
   }
 
+  let shapes = input.union ? input.union(ribbons) : unionBandLayer(ribbons);
+  if (input.union && shapes.length === 0 && ribbons.length > 0) throw Error("O contorno da curva é degenerado; ajuste a forma ou a largura.");
+  if (shapes.length === 0 && ribbons.length > 0) {
+    shapes = ribbons.map((ribbon) => [ringOf(ribbon.outer)]);
+  }
   const consumed = input.standingRegions.map((topology) => topology.surfaceKey);
 
   // `applyPatchReplacement` removes these faces before it registers the new
@@ -129,11 +141,6 @@ export function planSpineContour(input: PlanSpineContourInput): PlanSpineContour
     }
   }
 
-  let shapes = input.union ? input.union(ribbons) : unionBandLayer(ribbons);
-  if (input.union && shapes.length === 0 && ribbons.length > 0) throw Error("O contorno da curva é degenerado; ajuste a forma ou a largura.");
-  if (shapes.length === 0 && ribbons.length > 0) {
-    shapes = ribbons.map((ribbon) => [ringOf(ribbon.outer)]);
-  }
   const heightSamples = ribbons.flatMap((ribbon) => ribbon.outer);
   const built = buildContourPatch(
     input.tableId,
@@ -142,6 +149,7 @@ export function planSpineContour(input: PlanSpineContourInput): PlanSpineContour
     0,
     shapes,
     heightSamples,
+    referenceCurves,
     input.existingNodes,
     retainedEdgeUses,
   );
