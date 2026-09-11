@@ -166,3 +166,28 @@ test("a face that declares no owners is left to the caller's own selection", () 
   };
   assert.deepEqual(retireableRegions([legacy], new Set()), [legacy]);
 });
+
+test("a cloud carrying a junction anchor is still retired, so the road is not doubled", () => {
+  // The real id shapes, not tidied ones. `pathCorridorId` appends the subtype
+  // (`<op>#road`), and `curveNetwork` mints a junction anchor beneath that
+  // again (`spine:<op>#road#junction:<n>`), which `parseSpineControlNodeId`
+  // reads back as a corridor named `<op>#road#junction`. That name lands in
+  // the face's owner list while no chain id can ever produce it.
+  //
+  // Comparing the two sets literally retired nothing here, so every stroke
+  // over a junction left the standing road under the new one.
+  const face = ownedFace(
+    ["run-a#road", "run-a#road#junction", "run-a"],
+    "commit-1",
+  );
+  const regenerated = regeneratedCorridorIds(["spine-edge:run-a#road:0", "spine-edge:run-a#road:1"]);
+  assert.deepEqual(retireableRegions([face], regenerated), [face]);
+});
+
+test("a genuinely foreign corridor is still not retired", () => {
+  // The suffix walk must not become a way to satisfy any owner at all: a
+  // corridor nobody is redrawing shares no prefix with one that is.
+  const face = ownedFace(["run-a#road", "run-b#road"], "commit-1");
+  const regenerated = regeneratedCorridorIds(["spine-edge:run-a#road:0"]);
+  assert.deepEqual(retireableRegions([face], regenerated), []);
+});

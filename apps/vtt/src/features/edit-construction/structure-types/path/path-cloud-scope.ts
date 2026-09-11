@@ -319,6 +319,34 @@ export function retireableRegions(
 ): readonly ConstructionRegionTopology[] {
   return standing.filter((topology) => {
     const owners = surfaceCorridors(topology.surfaceKey[1] ?? "");
-    return owners === undefined || owners.every((owner) => regenerated.has(owner));
+    return owners === undefined || owners.every((owner) => corridorCovered(owner, regenerated));
   });
+}
+
+/**
+ * Whether redrawing `regenerated` redraws whatever `owner` names.
+ *
+ * Directly, or through the corridor `owner` was minted under. A corridor id
+ * grows `#`-separated suffixes as it goes -- `pathCorridorId` appends the
+ * subtype, and a junction anchor is minted beneath that again, which
+ * `parseSpineControlNodeId` reads back as a corridor of its own -- so the
+ * owner list of a face routinely carries names no chain id can produce.
+ * Comparing those two sets literally made every cloud containing a junction
+ * fail the test, which retired nothing and left the standing road under the
+ * new one: the doubled road, not a saved one.
+ *
+ * Walking the suffixes is the honest reading of what those names mean. An
+ * anchor minted beneath a corridor belongs to that corridor's edit, so
+ * redrawing the corridor redraws it, and the deeper name is a detail of
+ * provenance rather than a separate owner that has to be satisfied on its
+ * own.
+ */
+function corridorCovered(owner: string, regenerated: ReadonlySet<string>): boolean {
+  let candidate = owner;
+  for (;;) {
+    if (regenerated.has(candidate)) return true;
+    const at = candidate.lastIndexOf("#");
+    if (at < 0) return false;
+    candidate = candidate.slice(0, at);
+  }
 }
