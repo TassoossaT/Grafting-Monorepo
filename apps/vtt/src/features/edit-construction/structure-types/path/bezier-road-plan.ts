@@ -38,12 +38,28 @@ export function bezierChains(snapshot: ConstructionGraphSnapshot, port: BezierPo
     kind: "resolve", handles: e.curve!, start: curvePoint(nodes.get(e.startNodeId)!), end: curvePoint(nodes.get(e.endNodeId)!),
   })) });
   const sections = new Map<string, { chain: number; points: readonly [CurvePoint, CurvePoint] }[]>();
+  // One crossing for every ribbon, not one crossing each. `resolve` and
+  // `join` around it were already batched; this was the odd one out, issued
+  // from inside the loop, so a network of three hundred streets paid three
+  // hundred serialise/parse round trips to the engine every time any one of
+  // them was touched. The commands and their results are identical -- this
+  // only stops paying the toll per chain.
+  const derived = port.curveBatch({
+    tolerance: 0.025,
+    commands: edges.map((e, i) => {
+      const profile = e.curve!.bandOffsets.length ? e.curve!.bandOffsets : offsets;
+      const endProfile = e.curve!.endBandOffsets?.length ? e.curve!.endBandOffsets! : profile;
+      return {
+        kind: "ribbon" as const,
+        curve: results[i]!.curves[0]!,
+        offsets: [Math.min(...profile), Math.max(...profile)] as const,
+        endOffsets: [Math.min(...endProfile), Math.max(...endProfile)] as const,
+      };
+    }),
+  });
   const chains = edges.map((e, i) => {
     const samples = results[i]!.samples[0]!.map((p) => curvePosition(p.position));
-    const profile = e.curve!.bandOffsets.length ? e.curve!.bandOffsets : offsets;
-    const endProfile = e.curve!.endBandOffsets?.length ? e.curve!.endBandOffsets! : profile;
-    const derived = port.curveBatch({ tolerance: 0.025, commands: [{ kind: "ribbon", curve: results[i]!.curves[0]!, offsets: [Math.min(...profile), Math.max(...profile)], endOffsets: [Math.min(...endProfile), Math.max(...endProfile)] }] })[0]!;
-    const outer = derived.ribbon!.outer;
+    const outer = derived[i]!.ribbon!.outer;
     const half = outer.length / 2;
     for (const [id, points] of [
       [e.startNodeId, [outer[0]!, outer.at(-1)!]],
