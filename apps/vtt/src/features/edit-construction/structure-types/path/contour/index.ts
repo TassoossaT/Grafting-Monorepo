@@ -5,4 +5,6 @@ export { offsetBands } from "./offset-bands.ts";
 export type { BandRibbon } from "./offset-bands.ts";
 export { planSpineContour } from "./plan-spine-contour.ts";
 export type { PlanSpineContourInput, PlanSpineContourResult, SpineChainInput } from "./plan-spine-contour.ts";
-export { nearestSampleY, unionBandLayer } from "./union-bands.ts";
+export { unionBandLayer } from "./union-bands.ts";
+export { heightOnCurves } from "./curve-projection.ts";
+export type { ReferenceCurve } from "./curve-projection.ts";

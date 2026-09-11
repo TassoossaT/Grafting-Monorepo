@@ -139,6 +139,141 @@ pub fn intersections(
     out.sort_by(|a, b| a[0].total_cmp(&b[0]).then(a[1].total_cmp(&b[1])));
     Ok(out)
 }
+/// Largest direction change, in degrees, a weld still reads as one road
+/// carrying on rather than two meeting at a corner.
+///
+/// Above ninety on purpose. Drawing an L as one gesture already comes back
+/// rounded, because the fit runs a single smooth spline through its anchors;
+/// drawing the same L as two gestures has to land in the same place or the
+/// tool is answering the same intent two different ways depending on whether
+/// the hand paused. What is left above the threshold is the switchback --
+/// a run doubling back on itself, where a corner is the only honest reading.
+const MAX_SMOOTHED_WELD_DEGREES: f64 = 120.;
+
+fn norm(v: CurvePoint) -> Option<CurvePoint> {
+    let length = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+    (length > 1e-12).then(|| std::array::from_fn(|i| v[i] / length))
+}
+
+fn length_of(v: CurvePoint) -> f64 {
+    (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt()
+}
+
+/// Gives the two curves meeting at a freshly welded anchor a shared tangent.
+///
+/// **Why the tool needs this.** Snapping a new stroke onto a standing anchor
+/// joins the two runs in position and stops there: each edge keeps whatever
+/// controls its own fit produced, so the pair meets at whatever angle the
+/// hand happened to leave and the road has a crease in it. The machinery to
+/// avoid that already existed for dragging a handle by hand
+/// ([`crate::bezier::constrain_handle`]) and was simply never reached at the
+/// moment the weld is made.
+///
+/// Both sides give way, half each, so the join is symmetric: the standing run
+/// bends as much toward the new one as the new one bends toward it. That does
+/// alter a run already committed, which is the deliberate trade -- a weld the
+/// user asked for is a change to both roads, and a join that only the newer
+/// road respects still looks like a crease from the older one's side.
+///
+/// Only welds this call actually made are touched, and only where exactly two
+/// curves meet. A junction of three or more has no continuation to be
+/// continuous with, and an anchor whose curves were both already standing was
+/// accepted in its current shape long ago.
+///
+/// Idempotent: a joint already sharing a tangent averages to the direction it
+/// is already pointing, so regenerating a cloud over and over cannot make it
+/// drift.
+fn smooth_welds(
+    output: &mut Vec<CurveEdge>,
+    all_edges: &[CurveEdge],
+    old_ids: &BTreeSet<String>,
+) {
+    let emitted: BTreeSet<String> = output.iter().map(|e| e.edge_id.clone()).collect();
+    // The originals the patch would otherwise leave untouched, carried along
+    // so a weld onto one can still be smoothed. Each is re-emitted only if
+    // this pass actually changes it.
+    let carried: Vec<CurveEdge> = all_edges
+        .iter()
+        .filter(|e| old_ids.contains(&e.edge_id) && !emitted.contains(&e.edge_id))
+        .cloned()
+        .collect();
+    let emitted_count = output.len();
+    let mut work: Vec<CurveEdge> = std::mem::take(output);
+    work.extend(carried);
+
+    let mut incident: BTreeMap<&str, Vec<(usize, bool)>> = BTreeMap::new();
+    for (index, e) in work.iter().enumerate() {
+        if e.start_node_id == e.end_node_id {
+            continue; // a closed loop meets itself; there is no other curve to agree with.
+        }
+        incident
+            .entry(e.start_node_id.as_str())
+            .or_default()
+            .push((index, true));
+        incident
+            .entry(e.end_node_id.as_str())
+            .or_default()
+            .push((index, false));
+    }
+
+    let limit = MAX_SMOOTHED_WELD_DEGREES.to_radians().cos();
+    let mut touched = vec![false; work.len()];
+    let mut alignments: Vec<(usize, bool, CurvePoint)> = Vec::new();
+    for uses in incident.values() {
+        let [(first, first_start), (second, second_start)] = uses[..] else {
+            continue; // not a two-curve joint.
+        };
+        if first >= emitted_count && second >= emitted_count {
+            continue; // nothing here was welded by this call.
+        }
+        let near = |index: usize, is_start: bool| {
+            let handles = &work[index].curve;
+            if is_start { handles.start } else { handles.end }
+        };
+        let (u, v) = (near(first, first_start), near(second, second_start));
+        let (Some(u_hat), Some(v_hat)) = (norm(u), norm(v)) else {
+            continue;
+        };
+        // The two near controls should sit on opposite sides of the anchor,
+        // so `u` is compared against the reverse of `v`.
+        let opposed: CurvePoint = std::array::from_fn(|i| -v_hat[i]);
+        let deviation = u_hat[0] * opposed[0] + u_hat[1] * opposed[1] + u_hat[2] * opposed[2];
+        if deviation < limit {
+            continue; // a corner, not a continuation.
+        }
+        let Some(shared) = norm(std::array::from_fn(|i| u_hat[i] + opposed[i])) else {
+            continue;
+        };
+        alignments.push((
+            first,
+            first_start,
+            std::array::from_fn(|i| shared[i] * length_of(u)),
+        ));
+        alignments.push((
+            second,
+            second_start,
+            std::array::from_fn(|i| -shared[i] * length_of(v)),
+        ));
+        touched[first] = true;
+        touched[second] = true;
+    }
+
+    for (index, is_start, handle) in alignments {
+        let handles = &mut work[index].curve;
+        if is_start {
+            handles.start = handle;
+        } else {
+            handles.end = handle;
+        }
+    }
+
+    for (index, edge) in work.into_iter().enumerate() {
+        if index < emitted_count || touched[index] {
+            output.push(edge);
+        }
+    }
+}
+
 /// Inserts and splits curves transactionally, enforcing independent height tolerance.
 pub fn plan(request: NetworkRequest) -> Result<NetworkPatch, String> {
     if !request.tolerance.is_finite() || request.tolerance <= 0. {
@@ -406,6 +541,7 @@ pub fn plan(request: NetworkRequest) -> Result<NetworkPatch, String> {
             changed.insert(w[1].1.clone());
         }
     }
+    smooth_welds(&mut output, &edges, &old_ids);
     Ok(NetworkPatch {
         nodes: changed
             .into_iter()
@@ -424,6 +560,87 @@ mod tests {
     fn line(a: CurvePoint, b: CurvePoint) -> CubicBezier {
         crate::bezier::automatic_path(&[a, b]).unwrap()[0]
     }
+    fn node(id: &str, position: CurvePoint) -> CurveNode {
+        CurveNode { id: id.into(), position }
+    }
+
+    fn edge(id: &str, from: &str, to: &str, a: CurvePoint, b: CurvePoint) -> CurveEdge {
+        CurveEdge {
+            edge_id: id.into(),
+            start_node_id: from.into(),
+            end_node_id: to.into(),
+            curve: CurveHandles::from_curve(line(a, b), crate::bezier::HandleMode::Aligned, vec![-2., 2.]),
+        }
+    }
+
+    fn request(added_nodes: Vec<CurveNode>, added_edges: Vec<CurveEdge>) -> NetworkRequest {
+        NetworkRequest {
+            nodes: vec![node("a", [0., 0., 0.]), node("b", [10., 0., 0.])],
+            edges: vec![edge("first", "a", "b", [0., 0., 0.], [10., 0., 0.])],
+            added_nodes,
+            added_edges,
+            node_prefix: "j:".into(),
+            snap_tolerance: 1.,
+            height_tolerance: 0.5,
+            tolerance: 0.01,
+        }
+    }
+
+    /// The near control of `edge` at the anchor it shares, as a unit vector.
+    fn near_direction(patch: &NetworkPatch, edge_id: &str, at_start: bool) -> CurvePoint {
+        let e = patch.edges.iter().find(|e| e.edge_id == edge_id).expect("edge in patch");
+        let v = if at_start { e.curve.start } else { e.curve.end };
+        norm(v).expect("a handle with length")
+    }
+
+    #[test]
+    fn an_l_drawn_as_two_strokes_welds_into_one_shared_tangent() {
+        // The standing run travels +x and stops at `b`; the new stroke leaves
+        // `b` travelling +z. Drawn as one gesture this corner comes back
+        // rounded, and drawing it as two must not answer differently.
+        let patch = plan(request(
+            vec![node("c", [10., 0., 0.]), node("d", [10., 0., 10.])],
+            vec![edge("second", "c", "d", [10., 0., 0.], [10., 0., 10.])],
+        ))
+        .expect("the weld plans");
+
+        let standing = near_direction(&patch, "first", false);
+        let fresh = near_direction(&patch, "second", true);
+        // Opposite sides of the shared anchor is what makes the join smooth.
+        let dot = standing[0] * fresh[0] + standing[1] * fresh[1] + standing[2] * fresh[2];
+        assert!(dot < -0.999, "controls are not collinear through the anchor: {dot}");
+        // Half each: the standing run gave way as much as the new one did, so
+        // the shared tangent bisects the corner rather than adopting a side.
+        assert!((fresh[0] - fresh[2]).abs() < 1e-6, "the tangent did not bisect: {fresh:?}");
+    }
+
+    #[test]
+    fn a_switchback_keeps_its_corner() {
+        // The new stroke leaves almost back the way the standing run came.
+        // There is no continuation to be continuous with here, and forcing one
+        // would swing the road through a curve nobody drew.
+        let patch = plan(request(
+            vec![node("c", [10., 0., 0.]), node("d", [1., 0., 2.])],
+            vec![edge("second", "c", "d", [10., 0., 0.], [1., 0., 2.])],
+        ))
+        .expect("the weld plans");
+        let fresh = near_direction(&patch, "second", true);
+        assert!(fresh[0] < -0.9, "the stroke was bent away from where it was drawn: {fresh:?}");
+    }
+
+    #[test]
+    fn a_straight_continuation_is_left_exactly_where_it_was() {
+        // Already collinear, so the average is the direction it already had.
+        // Regenerating a cloud repeatedly must not creep.
+        let patch = plan(request(
+            vec![node("c", [10., 0., 0.]), node("d", [20., 0., 0.])],
+            vec![edge("second", "c", "d", [10., 0., 0.], [20., 0., 0.])],
+        ))
+        .expect("the weld plans");
+        let fresh = near_direction(&patch, "second", true);
+        assert!((fresh[0] - 1.).abs() < 1e-6, "a straight run was bent: {fresh:?}");
+    }
+
     #[test]
     fn self_crossing_has_two_distinct_parameters() {
         let c = CubicBezier {

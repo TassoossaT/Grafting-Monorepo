@@ -1048,7 +1048,20 @@ export class AppTabletopRuntime implements TabletopRuntime {
           }
         });
       }
-      const outcome = timePhase(`motor: substituição (${request.patch.regions.length} faces)`, () => this.#construction.applyPatchReplacement(request));
+      // Boundary size, not just face count. A path regeneration unions the
+      // whole touched cloud, so a connected road network comes back as *one*
+      // region whose ring is the perimeter of everything joined to it --
+      // "1 faces" that is nothing like one small face. Without this the log
+      // reads as a cheap edit that is inexplicably slow.
+      const boundaryEdges = request.patch.regions.reduce(
+        (total, region) =>
+          total + region.boundary.length + (region.holes ?? []).reduce((held, hole) => held + hole.length, 0),
+        0,
+      );
+      const outcome = timePhase(
+        `motor: substituição (${request.patch.regions.length} faces, ${boundaryEdges} arestas de contorno, ${request.patch.nodes.length} nós)`,
+        () => this.#construction.applyPatchReplacement(request),
+      );
       const knownNodePositions = new Map<ConstructionNodeId, ConstructionPosition>();
       for (const node of request.patch.nodes) knownNodePositions.set(node.id, node.position);
       for (const node of request.graphPatch?.nodes ?? []) knownNodePositions.set(node.id, node.position);

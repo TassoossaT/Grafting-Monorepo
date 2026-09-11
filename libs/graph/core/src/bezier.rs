@@ -403,9 +403,22 @@ pub fn fit_path(points: &[CurvePoint], accuracy: f64) -> Result<Vec<CubicBezier>
     if points.len() > 4096 {
         return Err("stroke sample budget exceeded".into());
     }
-    let mut clean = Vec::new();
+    // Distinct **in XZ**, which is the metric `automatic_path` measures its
+    // knots with -- not 3D distance. Two samples sharing a ground position
+    // and differing only in height are one station of the path, however far
+    // apart they sit vertically, and keeping both leaves `automatic_path`
+    // with a zero knot and nothing to do but refuse the whole stroke.
+    //
+    // A pointer produces that pair readily: snap the ground position to a
+    // grid and every sample inside one cell lands on the same XZ while the
+    // height under the cursor goes on varying with the surface. Deduplicating
+    // in 3D let every one of those through.
+    let mut clean: Vec<CurvePoint> = Vec::new();
     for p in points {
-        if clean.last().is_none_or(|q| distance(*p, *q) > 1e-8) {
+        if clean
+            .last()
+            .is_none_or(|q| ((p[0] - q[0]).powi(2) + (p[2] - q[2]).powi(2)).sqrt() > 1e-8)
+        {
             clean.push(*p);
         }
     }
@@ -519,6 +532,32 @@ mod tests {
         deformed.points[1][2] += 1.;
         assert!(parts[0].merge(deformed, 0.001).is_err());
     }
+    #[test]
+    fn a_stroke_that_paused_over_a_slope_still_fits() {
+        // A snapped pointer holding still inside one grid cell: the ground
+        // position repeats exactly while the height under the cursor keeps
+        // moving. Deduplicated in 3D these all survive, and `automatic_path`
+        // then refuses the whole stroke over a zero knot -- which reached the
+        // user as "adjacent anchors coincide in XZ" and lost the road.
+        let stroke = [
+            [0., 0., 0.],
+            [4., 0.3, 0.],
+            [4., 0.9, 0.],
+            [4., 1.4, 0.],
+            [8., 2., 0.],
+        ];
+        let curves = fit_path(&stroke, 0.05).expect("a paused stroke is still one path");
+        assert!(!curves.is_empty());
+    }
+
+    #[test]
+    fn a_stroke_with_no_ground_extent_is_still_refused() {
+        // Collapsing every repeated station must not collapse the refusal
+        // too: a stroke that never travelled is not a path.
+        let stroke = [[3., 0., 7.], [3., 1., 7.], [3., 2., 7.]];
+        assert!(fit_path(&stroke, 0.05).is_err());
+    }
+
     #[test]
     fn closed_automatic_path_has_a_shared_tangent() {
         let curves = automatic_path(&[

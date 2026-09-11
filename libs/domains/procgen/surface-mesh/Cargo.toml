@@ -11,4 +11,5 @@ crate-type = ["rlib"]
 [dependencies]
 earcut = "0.4"
 grafting-graph-core = { path = "../../../graph/core" }
+grafting-procgen-irregular-grid = { path = "../irregular-grid" }
 i_triangle = "0.47"

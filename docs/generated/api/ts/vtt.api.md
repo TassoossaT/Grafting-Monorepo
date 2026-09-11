@@ -269,6 +269,19 @@ single-ghost behaviour every tool already relies on.
 
 ### `function vtt.token-scene-item.tokenTransform(token: RenderToken): Transform`
 
+### `function vtt.commit-timing.countInCommit(label: string, by: number): void`
+
+Adds to a named counter of the running commit; nothing outside one.
+
+### `function vtt.commit-timing.timeCommit(label: string, run: () => T): T`
+
+Times `run` as a whole commit, or as a phase of the commit already running.
+Either way it returns what `run` returns, and rethrows what it throws.
+
+### `function vtt.commit-timing.timePhase(label: string, run: () => T): T`
+
+Times `run` as a phase of the running commit; untimed outside one.
+
 ### `interface vtt.create-tabletop-runtime.CreateTabletopRuntimeInput`
 
 ### `property vtt.create-tabletop-runtime.CreateTabletopRuntimeInput.constructionPort?: ConstructionSessionPort`
@@ -794,23 +807,22 @@ The `source` index of the ring corner it takes the identity of.
 How coarsely a stroke describes its own swept outline, as a multiple of the
 face size.
 
-**This is what decides how many faces a stroke costs.** A patch comes back
-with about twice as many faces as its boundary has points, so describing the
-outline finely does not buy a finer *shape* -- it buys a finer *mesh*, which
-is the opposite of what the caller asked for. Measured on the capsule the
-brush actually hands over, 30 long and 6 across, asking for faces of 2:
+Describing the outline finely does not buy a finer *shape* -- it buys a
+finer *mesh*. Measured on the capsule the brush actually hands over, 30 long
+and 6 across, asking for faces of 2, once the engine began handing short
+contour runs over as seams:
 
 | chord | outline points | faces | mean side |
 |-------|----------------|-------|-----------|
-| 0.5x  | 98             | 312   | 1.27      |
-| 1x    | 50             | 308   | 1.28      |
+| 0.5x  | 98             | 201   | 1.58      |
+| 1x    | 50             | 115   | 2.09      |
 | 2x    | 26             | 120   | 2.04      |
-| 3x    | 18             | 104   | 2.20      |
+| 3x    | 18             | 140   | 1.90      |
 
-Below 1x the extra points are pure waste -- 98 of them give the same mesh
-50 do. At 2x the mesh finally comes back the size it was asked for, with two
-and a half times fewer faces. Pinned in the engine's own tests as
-`an_outline_described_at_twice_the_face_size_gives_the_size_asked_for`.
+Before seams, 1x cost 308 faces and only 2x came back the size asked for;
+now both do, and 2x stays for describing the same ground in half the
+points. Pinned in the engine's own tests as
+`an_outline_described_at_the_face_size_or_coarser_gives_the_size_asked_for`.
 
 ### `variable vtt.terrain-constraints.OUTLINE_WELD_PER_FACE: 0.5`
 
@@ -1173,6 +1185,10 @@ standing, and moving it would drag the ground it already belongs to.
 ### `property vtt.terrain-fill.TerrainFillRequest.holes: readonly ConstraintRing[]`
 
 Ground inside that area somebody already holds: met, never regenerated.
+
+### `property vtt.terrain-fill.TerrainFillRequest.maxGeneratedFaces?: number`
+
+Optional preflight limit; checked before any live contour adoption.
 
 ### `property vtt.terrain-fill.TerrainFillRequest.mint: string`
 
@@ -3213,7 +3229,7 @@ Converts graph-owned authoring data to sampled ribbons through the Rust port.
 
 Resolve legacy authorship once using the canonical Rust conversion.
 
-### `function vtt.bezier-road-plan.planBezierRoad(input: { corridorId: string; miterLimit: number; offsets: readonly number[]; port: BezierPort; snapReach: number; snapshot: ConstructionGraphSnapshot; stroke: readonly ConstructionPosition[]; tolerance: number; topologies?: readonly ConstructionRegionTopology[] }): { chains: readonly SpineChainInput[]; controlPoints: ConstructionPosition[]; footprint: [number, number][][][]; graphPatch: ConstructionGraphPatch; polyline: ConstructionPosition[]; snapshot: ConstructionGraphSnapshot }`
+### `function vtt.bezier-road-plan.planBezierRoad(input: { corridorId: string; miterLimit: number; offsets: readonly number[]; port: BezierPort; snapReach: number; snapshot: ConstructionGraphSnapshot; stroke: readonly ConstructionPosition[]; tolerance: number; topologies?: readonly ConstructionRegionTopology[] }): { chains: readonly SpineChainInput[]; controlPoints: ConstructionPosition[]; droppedChainEdgeIds: string[]; footprint: [number, number][][][]; graphPatch: ConstructionGraphPatch; polyline: ConstructionPosition[]; snapshot: ConstructionGraphSnapshot }`
 
 Product identities and profile policy surround generic Rust fitting and connections.
 
@@ -3250,7 +3266,7 @@ seam.
 
 ### `property vtt.contour-patch.ExistingNode.position: ConstructionPosition`
 
-### `function vtt.contour-patch.buildContourPatch(tableId: string, operationId: string, surfaceType: string, bandIndex: number, shapes: MultiPolygon, heightSamples: readonly ConstructionPosition[], existingNodes: readonly ExistingNode[], existingEdgeUses: ReadonlyMap<string, readonly boolean[]>): ContourPatchResult`
+### `function vtt.contour-patch.buildContourPatch(tableId: string, operationId: string, surfaceType: string, bandIndex: number, shapes: MultiPolygon, heightSamples: readonly ConstructionPosition[], referenceCurves: readonly ReferenceCurve[], existingNodes: readonly ExistingNode[], existingEdgeUses: ReadonlyMap<string, readonly boolean[]>): ContourPatchResult`
 
 Turns one band layer's unioned shapes into a `ConstructionPatch` -- the
 same kind of conversion the retired station-sweep engine's own patch
@@ -3266,11 +3282,34 @@ region this call was scoped to untouched: those nodes are simply never
 candidates for a fresh id, because they were never inside any ribbon this
 call was handed.
 
-`heightSamples` supplies `y` for a vertex the union minted (a crossing
-point no original ribbon vertex sits exactly on) via nearest-neighbour
-lookup -- the same approximation `preview-shapes.ts` already uses for its
-own union output, and the same shape of approximation `groundHeightNear`
-uses elsewhere in this codebase for "the height nearest sample said."
+`referenceCurves` supplies `y` for every vertex, by projecting it onto the
+curve the contour was swept from and reading that curve's own height at
+the station the vertex lands on. See `curve-projection.ts` for why this
+replaced a nearest-sample lookup, and why it has to keep agreeing with the
+Rust field that elevates the same surface's interior -- the two answer for
+the margin and the middle of one face, and a disagreement between them is
+a seam right where they meet.
+
+`heightSamples` is now only what `restoreHeightVertices` densifies a long
+clipped edge against; it no longer decides any height.
+
+### `interface vtt.curve-projection.ReferenceCurve`
+
+One curve the contour was swept from, flattened to segments and carrying height.
+
+### `property vtt.curve-projection.ReferenceCurve.points: readonly ConstructionPosition[]`
+
+### `function vtt.curve-projection.heightOnCurves(x: number, z: number, curves: readonly ReferenceCurve[], fallback: number): number`
+
+The height of whichever curve in `curves` runs nearest `(x, z)`, at the
+station the point projects onto.
+
+A point past a curve's end reads that end's height rather than an
+extrapolation, which is what a surface overshooting its curve -- an end
+cap, a mitre past a corner -- should get.
+
+Falls back to `fallback` when no curve has a segment to project onto, so a
+degenerate chain mid-edit produces a flat vertex rather than a NaN.
 
 ### `interface vtt.offset-bands.BandRibbon`
 
@@ -5334,12 +5373,17 @@ looks like, and height is sampled from the heightmap here.
 Corners sitting *on* a supplied contour that arrived with no source --
 nodes the cloud owning that contour has to adopt.
 
-They exist because the refinement splits a constraint segment where a
-nearby point encroaches on it, and because quadrangulation puts a
-midpoint on every edge, a contour edge included. Both are wanted: the
-alternative to a shared node here is a terrain corner resting against
-the middle of a road edge without sharing it, which reads as a gap along
-the path.
+The engine keeps these rare on purpose. Each one is adopted into the
+neighbour, and the next fill beside that neighbour reads it back as
+contour -- so a grid that put a midpoint on every contour edge halved the
+shared seam on every regeneration (7 -> 13 -> 25 nodes). Short contour
+runs are therefore handed to the triangulation as seams and come back as
+the nodes already standing; only a segment long enough to be cut before
+triangulation yields new nodes here, once. Where two contours cross
+through a seam the engine falls back to the old midpoint-per-edge grid.
+A shared node is still the point: the alternative is a terrain corner
+resting against the middle of a road edge without sharing it, which reads
+as a gap along the path.
 
 Each names the segment it landed on, addressed back into the request.
 That is the difference between adopting it and guessing: the caller
@@ -5347,7 +5391,12 @@ supplied the rings, so a ring and segment index already identifies one
 of its own edges by id, and the node is adopted by splitting that edge
 rather than by finding the nearest one to a position.
 
-### `property vtt.construction-session-port.ConstructionIrregularQuadGrid.quads: readonly (readonly [number, number, number, number])[]`
+### `property vtt.construction-session-port.ConstructionIrregularQuadGrid.quads: readonly (readonly number[])[]`
+
+Cells, as vertex indices in walk order. Four each, except where a contour
+segment too short for a node of its own joined the cells at its two
+corners into one polygon: a node there would be one more the contour's
+owner has to adopt, every time the ground beside it is regenerated.
 
 ### `property vtt.construction-session-port.ConstructionIrregularQuadGrid.refinementComplete: boolean`
 
