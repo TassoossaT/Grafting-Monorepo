@@ -1,6 +1,50 @@
 # VTT road/terrain face duplication investigation
 
-Status: active implementation investigation, 2026-09-10.
+Status: growth root cause found and fixed in the engine, 2026-09-10. Atomic
+splits+replacement and in-app verification still open.
+
+## Verdict: the engine halved every seam it regenerated against
+
+Root cause, measured against the real Rust engine
+(`libs/domains/procgen/irregular-grid/tests/seam_stability.rs`):
+
+- Constrained triangulation used lattice side = 3x `faceSide`; a standing
+  terrain rim arrives walked at ~1x `faceSide`. Ruppert split contour
+  segments, then `ortho` put a midpoint on every contour edge.
+- Every such point came back in `onContour` -> TS adopted it -> the retained
+  neighbour's edge split in two. The next fill beside that neighbour read the
+  halved rim as its contour and halved it again.
+- Two 12x12 regions regenerated in turn: seam 7 -> 13 -> 25 nodes, cells
+  76 -> 82 -> 110 for the same ground. Stopped only at the TS
+  `SHORTEST_USEFUL_FRACTION` floor, at 4x the density.
+- Group/lineage metadata was never the cause; face selection fixes could not
+  converge while the engine grew the rim itself.
+
+Fix (engine, no TS contract change except cells may exceed 4 corners):
+
+- `constrained::triangulate_keeping_seams`: cut contour segments longer than
+  `SHORTEST_SPLIT` (0.375 lattice side) into an even number of pieces; hold out
+  every point lying near the middle of its neighbours' chord (chord <=
+  `LONGEST_SEAM` 0.75 side, off-chord <= 0.1 side); refine with
+  `keep_constraint_edges`; fall back to the old path when a seam edge does not
+  survive (crossing contours).
+- `ortho::ortho_along`: a seam edge takes its held points as the shared
+  "midpoint"; a seam holding none merges its two corner cells into a polygon.
+  `pair_triangles_keeping` never merges across a seam. `relax_faces` relaxes
+  n-gons; quads bit-identical (parity fixture passes).
+- Result: seam stays 7 nodes over 6 alternating rounds, cells 44-46 stable.
+  Mesh density no longer follows boundary point count (24x24 walked at 1:
+  1.27 -> 1.59 mean side; brush outline at 1x chord: 308 -> 115 faces).
+- Wire: `quads` is now `number[][]`; `construction-session-wasm-adapter.ts`
+  multi-component merge no longer assumes 4 indices.
+
+Remaining:
+
+- Long road contour edges are still cut once per road regeneration; the road
+  re-mints its contour, so terrain holding those nodes is re-orphaned.
+- `adoptContourNodes` commits splits before `applyPatchReplacement`; a refused
+  replacement still leaves splits. Rarer now, not atomic yet.
+- `construction-wasm/pkg` must be rebuilt for the app to use the fix.
 
 ## Observed failure
 

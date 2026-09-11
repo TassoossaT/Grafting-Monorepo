@@ -72,6 +72,22 @@ predicates refuse (infinite, NaN, or beyond the representable range). A
 caller that gets `None` has ground it cannot describe, and should leave
 what is standing alone rather than substitute something.
 
+### `pub fn grafting_procgen_irregular_grid::constrained::triangulate_keeping_seams(options: &grafting_procgen_irregular_grid::constrained::ConstrainedOptions) -> core::option::Option<(grafting_procgen_irregular_grid::constrained::ConstrainedTriangles, alloc::vec::Vec<grafting_procgen_irregular_grid::constrained::Seam>)>`
+
+[`triangulate_constrained`], with every supplied contour's short, nearly
+straight runs handed over as one segment and returned as [`Seam`]s.
+
+This is the half of keeping a contour's node count stable that happens
+before quadrangulation; [`crate::ortho::ortho_along`] is the other. Every
+point is kept in the finished grid either way -- what changes is only that
+the triangulation is built at the scale the contour was originally laid at.
+
+Refinement never splits a seam here, for the same reason a midpoint never
+lands on one: that point would be a node the contour's owner has to adopt.
+`None` where the contours describe no ground, and also where a seam did not
+survive as one edge -- two contours crossing through it -- in which case
+the caller has to triangulate without seams.
+
 ### `pub fn grafting_procgen_irregular_grid::geometry::centroid_of(points: &[grafting_procgen_irregular_grid::mesh::Vec2]) -> grafting_procgen_irregular_grid::mesh::Vec2`
 
 The average of a set of points.
@@ -152,6 +168,30 @@ adjacent edge midpoints, and the face centre. A triangle becomes three
 quads and a rhombus four, so nothing has to be done about faces that never
 found a partner -- the mesh is all-quad regardless of how the pairing went.
 
+### `pub fn grafting_procgen_irregular_grid::ortho::ortho_along(mesh: &grafting_procgen_irregular_grid::mesh::FaceMesh, seams: &std::collections::hash::map::HashMap<(usize, usize), alloc::vec::Vec<usize>>) -> grafting_procgen_irregular_grid::mesh::FaceMesh`
+
+[`ortho`], except along the edges named in `seams`.
+
+**Why a seam must not get a midpoint.** A seam is an edge standing for a
+stretch of a contour someone else already owns, and every node on it is
+already there. A fresh midpoint on it is a node the owner has to adopt --
+and the owner's next regeneration reads that node back as part of its own
+contour, puts a midpoint on each half, and so on: two neighbours
+regenerating in turn halve the segments of the edge between them every
+time. Measured on two 12x12 regions sharing one side walked at the face
+size, the side went 7 -> 13 -> 25 nodes and the cells beside it from 76 to
+110 for the same ground, stopping only where the caller refused splits
+shorter than a quarter face.
+
+So a seam brings its own: `seams[(from, to)]` lists the vertices already
+standing strictly between the two corners, in walk order, and the two
+cells either side of them share the middle one instead of a new midpoint.
+That is how a contour held out of the triangulation one point in two comes
+back exactly as it went in. An empty list is a seam too short to be worth a
+node of its own: the cells at both of its corners merge into one polygon,
+which is why this returns faces rather than quads. Either direction may be
+named; the other is read reversed.
+
 ### `pub fn grafting_procgen_irregular_grid::ortho::weld(mesh: &grafting_procgen_irregular_grid::mesh::QuadMesh, epsilon: f64) -> grafting_procgen_irregular_grid::mesh::QuadMesh`
 
 Step 4 -- merge coincident vertices.
@@ -159,6 +199,11 @@ Step 4 -- merge coincident vertices.
 Required before relaxation rather than merely tidy: each face produced its
 own copy of every shared edge midpoint, and until those are one vertex,
 smoothing moves each copy independently and tears the mesh apart.
+
+### `pub fn grafting_procgen_irregular_grid::ortho::weld_faces_tracked(mesh: &grafting_procgen_irregular_grid::mesh::FaceMesh, epsilon: f64) -> (grafting_procgen_irregular_grid::mesh::FaceMesh, alloc::vec::Vec<usize>)`
+
+[`weld_tracked`] for cells of any number of sides -- what
+[`ortho_along`] produces.
 
 ### `pub fn grafting_procgen_irregular_grid::ortho::weld_tracked(mesh: &grafting_procgen_irregular_grid::mesh::QuadMesh, epsilon: f64) -> (grafting_procgen_irregular_grid::mesh::QuadMesh, alloc::vec::Vec<usize>)`
 
@@ -176,6 +221,16 @@ aesthetic: whatever stays unpaired is handled by [`crate::ortho::ortho`]
 anyway. The matching is greedy over a shuffled order, which leaves some
 triangles unpaired by construction -- that variation is the point, so no
 attempt is made to maximise the matching.
+
+### `pub fn grafting_procgen_irregular_grid::pair::pair_triangles_keeping(mesh: &grafting_procgen_irregular_grid::mesh::FaceMesh, random: &mut grafting_procgen_irregular_grid::random::Random, kept: &std::collections::hash::set::HashSet<(usize, usize)>) -> grafting_procgen_irregular_grid::mesh::FaceMesh`
+
+[`pair_triangles`], never merging across an edge in `kept`.
+
+Merging two triangles erases the edge between them, and an edge standing
+for a stretch of someone else's contour has to survive to the ortho step,
+which is where the nodes along it are put back (see
+[`crate::ortho::ortho_along`]). The shuffle draws the same numbers whatever
+is kept, so an empty set pairs exactly as `pair_triangles` always has.
 
 ### `pub fn grafting_procgen_irregular_grid::random::Random::new(seed: u32) -> Self`
 
@@ -228,7 +283,30 @@ survives. Averaging positions toward neighbours instead (ordinary
 Laplacian smoothing) would shrink the mesh and say nothing about the shape
 of a cell.
 
-### `pub grafting_procgen_irregular_grid::ConstrainedQuadGrid::mesh: grafting_procgen_irregular_grid::mesh::QuadMesh`
+### `pub fn grafting_procgen_irregular_grid::relax::relax_faces(mesh: &grafting_procgen_irregular_grid::mesh::FaceMesh, options: &grafting_procgen_irregular_grid::relax::RelaxOptions) -> grafting_procgen_irregular_grid::mesh::FaceMesh`
+
+[`relax`] for cells of any number of sides.
+
+An `n`-sided cell is pulled toward the regular `n`-gon sharing its centre,
+the same rule with a turn of `1/n` in place of the quarter-turn -- which is
+the quarter-turn exactly when `n` is four, so quads relax identically
+either way.
+
+### `pub fn grafting_procgen_irregular_grid::relax_faces(mesh: &grafting_procgen_irregular_grid::mesh::FaceMesh, options: &grafting_procgen_irregular_grid::relax::RelaxOptions) -> grafting_procgen_irregular_grid::mesh::FaceMesh`
+
+[`relax`] for cells of any number of sides.
+
+An `n`-sided cell is pulled toward the regular `n`-gon sharing its centre,
+the same rule with a turn of `1/n` in place of the quarter-turn -- which is
+the quarter-turn exactly when `n` is four, so quads relax identically
+either way.
+
+### `pub grafting_procgen_irregular_grid::ConstrainedQuadGrid::mesh: grafting_procgen_irregular_grid::mesh::FaceMesh`
+
+Quads, except where a contour segment too short for a node of its own
+joined the two cells at its corners into one polygon -- see
+[`ortho::ortho_along`] for why that beats a node the contour's owner
+would have to adopt.
 
 ### `pub grafting_procgen_irregular_grid::ConstrainedQuadGrid::on_contour: alloc::vec::Vec<grafting_procgen_irregular_grid::ContourNode>`
 
@@ -236,12 +314,13 @@ Corners that sit *on* a contour the caller supplied but arrived with
 no source of their own, each with the segment it landed on.
 
 These are the nodes the owning cloud has to accept along its own
-boundary. Two things make them: the refinement splitting a constraint
-segment, and `ortho` putting a midpoint on every edge it
-quadrangulates -- a contour edge included. Both are wanted. The
-alternative to a shared node here is a terrain corner resting against
-the middle of a road edge without sharing it, which is the T-junction
-that reads as a gap along the path.
+boundary. With seams kept, only a contour segment long enough to be cut
+before triangulation makes them, and its pieces are short enough never
+to be cut again. Where seams were lost, the refinement splitting a
+constraint and `ortho` putting a midpoint on every contour edge make
+them too. The alternative to a shared node here is a terrain corner
+resting against the middle of a road edge without sharing it, which is
+the T-junction that reads as a gap along the path.
 
 The segment is named rather than left for the caller to find, because
 finding it means matching a position to an edge, which is the guess
@@ -251,6 +330,12 @@ and segment index is already an edge it knows by id.
 ### `pub grafting_procgen_irregular_grid::ConstrainedQuadGrid::refinement_complete: bool`
 
 `false` where the refinement stopped at its vertex budget.
+
+### `pub grafting_procgen_irregular_grid::ConstrainedQuadGrid::seams_kept: bool`
+
+`false` where two contours crossed through a seam and the grid was
+generated with a midpoint on every contour edge instead -- the way that
+grows a contour by a node per segment each time it is regenerated.
 
 ### `pub grafting_procgen_irregular_grid::ConstrainedQuadGrid::sources: alloc::vec::Vec<core::option::Option<u32>>`
 
@@ -434,6 +519,19 @@ Index of the ring within whichever of the two lists.
 
 Index of the segment within that ring, by the point it starts at.
 
+### `pub grafting_procgen_irregular_grid::constrained::Seam::from: usize`
+
+The edge's corners, as indices into the triangles' own vertices, in the
+order the ring walks them.
+
+### `pub grafting_procgen_irregular_grid::constrained::Seam::held: alloc::vec::Vec<grafting_procgen_irregular_grid::constrained::ConstraintPoint>`
+
+The contour points strictly between them, in the same order, that the
+triangulation never saw. Empty for a segment too short to be worth a
+node of its own (see [`SHORTEST_SPLIT`]).
+
+### `pub grafting_procgen_irregular_grid::constrained::Seam::to: usize`
+
 ### `pub grafting_procgen_irregular_grid::hex::TriangleHexOptions::triangle_side: f64`
 
 Edge length of one equilateral triangle.
@@ -551,13 +649,17 @@ get wrong. A vertex that comes back with `None` is genuinely new ground --
 interior the refinement invented, or a junction where two contours cross --
 and the caller mints a node for it knowing exactly that.
 
-**Refinement may split a contour.** Ruppert's algorithm inserts points on a
-constraint segment when a nearby vertex encroaches on it. That is wanted,
-not tolerated: the alternative is a terrain vertex sitting against the
-middle of a road edge without sharing it, which is a T-junction -- the
-precise shape of the "gap along the path" this whole approach exists to
-remove. The cloud that owns the contour has to accept nodes appearing
-along its boundary; in exchange nothing is ever merely near anything.
+**A contour gains a node only where it converges.** Any corner the grid
+puts along a contour has to be shared by the cloud owning it -- the
+alternative is a terrain vertex sitting against the middle of a road edge
+without sharing it, which is a T-junction, the precise shape of the "gap
+along the path" this whole approach exists to remove. But a node the owner
+adopts is a node the next fill beside it reads back as contour, and a grid
+that put a midpoint on every contour segment it met halved that contour on
+each regeneration. [`triangulate_keeping_seams`] hands short runs of a
+contour over as one segment each and never lets the refinement split them,
+so the nodes already standing come back as the corners the grid needed;
+only a segment longer than [`SHORTEST_SPLIT`] is cut, once.
 
 ### `pub mod grafting_procgen_irregular_grid::geometry`
 
@@ -684,6 +786,10 @@ somewhere" would send the caller back to finding that edge by position,
 which is the proximity guess this whole design exists to remove: the
 segment is named here, and the caller supplied the rings, so it already
 knows which of its own edges that is.
+
+### `pub struct grafting_procgen_irregular_grid::constrained::Seam`
+
+A stretch of a supplied contour the triangulation saw as a single edge.
 
 ### `pub struct grafting_procgen_irregular_grid::hex::TriangleHexOptions`
 

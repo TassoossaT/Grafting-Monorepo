@@ -43,10 +43,12 @@ pub mod pair;
 pub mod random;
 pub mod relax;
 
+use std::collections::{HashMap, HashSet};
+
 pub use hex::{TriangleHexOptions, build_triangle_hex};
 pub use mesh::{Face, FaceMesh, Quad, QuadMesh, Vec2};
 pub use random::Random;
-pub use relax::{RelaxOptions, boundary_vertices, relax};
+pub use relax::{RelaxOptions, boundary_vertices, relax, relax_faces};
 
 /// The epsilon [`ortho::weld`] merges coincident vertices at.
 ///
@@ -99,7 +101,11 @@ pub struct ContourNode {
 /// A grid, and what each of its corners already is.
 #[derive(Debug, Clone)]
 pub struct ConstrainedQuadGrid {
-    pub mesh: QuadMesh,
+    /// Quads, except where a contour segment too short for a node of its own
+    /// joined the two cells at its corners into one polygon -- see
+    /// [`ortho::ortho_along`] for why that beats a node the contour's owner
+    /// would have to adopt.
+    pub mesh: FaceMesh,
     /// Index-aligned with `mesh.vertices`: the caller own identity for that
     /// corner, where it had one. `None` is new ground.
     pub sources: Vec<Option<u32>>,
@@ -107,12 +113,13 @@ pub struct ConstrainedQuadGrid {
     /// no source of their own, each with the segment it landed on.
     ///
     /// These are the nodes the owning cloud has to accept along its own
-    /// boundary. Two things make them: the refinement splitting a constraint
-    /// segment, and `ortho` putting a midpoint on every edge it
-    /// quadrangulates -- a contour edge included. Both are wanted. The
-    /// alternative to a shared node here is a terrain corner resting against
-    /// the middle of a road edge without sharing it, which is the T-junction
-    /// that reads as a gap along the path.
+    /// boundary. With seams kept, only a contour segment long enough to be cut
+    /// before triangulation makes them, and its pieces are short enough never
+    /// to be cut again. Where seams were lost, the refinement splitting a
+    /// constraint and `ortho` putting a midpoint on every contour edge make
+    /// them too. The alternative to a shared node here is a terrain corner
+    /// resting against the middle of a road edge without sharing it, which is
+    /// the T-junction that reads as a gap along the path.
     ///
     /// The segment is named rather than left for the caller to find, because
     /// finding it means matching a position to an edge, which is the guess
@@ -121,6 +128,10 @@ pub struct ConstrainedQuadGrid {
     pub on_contour: Vec<ContourNode>,
     /// `false` where the refinement stopped at its vertex budget.
     pub refinement_complete: bool,
+    /// `false` where two contours crossed through a seam and the grid was
+    /// generated with a midpoint on every contour edge instead -- the way that
+    /// grows a contour by a node per segment each time it is regenerated.
+    pub seams_kept: bool,
 }
 
 /// The whole technique against contours somebody else already owns.
@@ -141,24 +152,50 @@ pub fn build_constrained_quad_grid(
     seed: u32,
     relax_options: &RelaxOptions,
 ) -> Option<ConstrainedQuadGrid> {
-    let triangles = constrained::triangulate_constrained(options)?;
+    let (triangles, seams, seams_kept) = match constrained::triangulate_keeping_seams(options) {
+        Some((triangles, seams)) => (triangles, seams, true),
+        None => (constrained::triangulate_constrained(options)?, Vec::new(), false),
+    };
     let mut random = Random::new(seed);
 
-    let paired = pair::pair_triangles(&triangles.mesh, &mut random);
-    let quadrangulated = ortho::ortho(&paired);
+    // The contour points each seam held out of the triangulation go back in as
+    // vertices of their own, carrying their sources, so the ortho step can
+    // hand them to the cells beside the seam instead of inventing midpoints.
+    let mut triangulated = triangles.mesh;
+    let mut before_weld = triangles.sources;
+    let mut chains: HashMap<(usize, usize), Vec<usize>> = HashMap::new();
+    let mut kept: HashSet<(usize, usize)> = HashSet::new();
+    for seam in seams {
+        let chain = seam
+            .held
+            .iter()
+            .map(|point| {
+                triangulated.vertices.push(point.position);
+                before_weld.push(point.source);
+                triangulated.vertices.len() - 1
+            })
+            .collect();
+        kept.insert(mesh::edge_key(seam.from, seam.to));
+        chains.insert((seam.from, seam.to), chain);
+    }
+
+    let paired = pair::pair_triangles_keeping(&triangulated, &mut random, &kept);
+    let quadrangulated = ortho::ortho_along(&paired, &chains);
     // `ortho` copies the triangulation vertices through unchanged and appends
     // its own centres and midpoints, so an index below the original count
     // still means what it meant.
-    let mut before_weld = triangles.sources.clone();
     before_weld.resize(quadrangulated.vertices.len(), None);
 
-    let (welded, remap) = ortho::weld_tracked(&quadrangulated, WELD_EPSILON);
+    let (welded, remap) = ortho::weld_faces_tracked(&quadrangulated, WELD_EPSILON);
     let mut sources: Vec<Option<u32>> = vec![None; welded.vertices.len()];
     for (before, source) in before_weld.iter().enumerate() {
         if let Some(id) = source {
             sources[remap[before]] = Some(*id);
         }
     }
+    // A face left whole needs no centre, and a seam bordering no ground puts
+    // its held points nowhere; neither is a node anyone should declare.
+    let (welded, sources) = without_unused_vertices(welded, sources);
 
     let on_contour: Vec<ContourNode> = (0..welded.vertices.len())
         .filter(|&index| sources[index].is_none())
@@ -176,9 +213,34 @@ pub fn build_constrained_quad_grid(
     }
 
     Some(ConstrainedQuadGrid {
-        mesh: relax(&welded, &pinned),
+        mesh: relax_faces(&welded, &pinned),
         sources,
         on_contour,
         refinement_complete: triangles.refinement_complete,
+        seams_kept,
     })
+}
+
+/// Drops every vertex no face uses, keeping the rest in their original order.
+fn without_unused_vertices(mesh: FaceMesh, sources: Vec<Option<u32>>) -> (FaceMesh, Vec<Option<u32>>) {
+    let mut used = vec![false; mesh.vertices.len()];
+    for &vertex in mesh.faces.iter().flatten() {
+        used[vertex] = true;
+    }
+    let mut remap = vec![usize::MAX; mesh.vertices.len()];
+    let mut vertices = Vec::new();
+    let mut kept_sources = Vec::new();
+    for (index, vertex) in mesh.vertices.iter().enumerate() {
+        if used[index] {
+            remap[index] = vertices.len();
+            vertices.push(*vertex);
+            kept_sources.push(sources[index]);
+        }
+    }
+    let faces = mesh
+        .faces
+        .iter()
+        .map(|face| face.iter().map(|&vertex| remap[vertex]).collect())
+        .collect();
+    (FaceMesh { vertices, faces }, kept_sources)
 }

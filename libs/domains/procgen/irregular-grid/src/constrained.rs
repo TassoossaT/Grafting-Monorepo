@@ -22,23 +22,28 @@
 //! interior the refinement invented, or a junction where two contours cross --
 //! and the caller mints a node for it knowing exactly that.
 //!
-//! **Refinement may split a contour.** Ruppert's algorithm inserts points on a
-//! constraint segment when a nearby vertex encroaches on it. That is wanted,
-//! not tolerated: the alternative is a terrain vertex sitting against the
-//! middle of a road edge without sharing it, which is a T-junction -- the
-//! precise shape of the "gap along the path" this whole approach exists to
-//! remove. The cloud that owns the contour has to accept nodes appearing
-//! along its boundary; in exchange nothing is ever merely near anything.
+//! **A contour gains a node only where it converges.** Any corner the grid
+//! puts along a contour has to be shared by the cloud owning it -- the
+//! alternative is a terrain vertex sitting against the middle of a road edge
+//! without sharing it, which is a T-junction, the precise shape of the "gap
+//! along the path" this whole approach exists to remove. But a node the owner
+//! adopts is a node the next fill beside it reads back as contour, and a grid
+//! that put a midpoint on every contour segment it met halved that contour on
+//! each regeneration. [`triangulate_keeping_seams`] hands short runs of a
+//! contour over as one segment each and never lets the refinement split them,
+//! so the nodes already standing come back as the corners the grid needed;
+//! only a segment longer than [`SHORTEST_SPLIT`] is cut, once.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
+use spade::handles::FixedVertexHandle;
 use spade::{
     AngleLimit, ConstrainedDelaunayTriangulation, HasPosition, Point2, RefinementParameters,
     Triangulation,
 };
 
 use crate::geometry::{centroid_of, distance_to_segment, inside_ring, signed_area};
-use crate::mesh::{FaceMesh, Vec2};
+use crate::mesh::{FaceMesh, Vec2, edge_key};
 
 /// One point of a contour handed over as a constraint.
 #[derive(Debug, Clone, Copy)]
@@ -166,18 +171,176 @@ impl From<Point2<f64>> for GridVertex {
 /// caller that gets `None` has ground it cannot describe, and should leave
 /// what is standing alone rather than substitute something.
 pub fn triangulate_constrained(options: &ConstrainedOptions) -> Option<ConstrainedTriangles> {
-    let boundary_winding = RingWinding::of(&options.boundary);
-    let hole_winding = RingWinding::of(&options.holes);
+    triangulate(options, false).map(|(triangles, _)| triangles)
+}
+
+/// A stretch of a supplied contour the triangulation saw as a single edge.
+#[derive(Debug, Clone)]
+pub struct Seam {
+    /// The edge's corners, as indices into the triangles' own vertices, in the
+    /// order the ring walks them.
+    pub from: usize,
+    pub to: usize,
+    /// The contour points strictly between them, in the same order, that the
+    /// triangulation never saw. Empty for a segment too short to be worth a
+    /// node of its own (see [`SHORTEST_SPLIT`]).
+    pub held: Vec<ConstraintPoint>,
+}
+
+/// How long a stretch of contour may be handed over as one segment, as a
+/// fraction of the lattice triangle side.
+///
+/// Ortho halves every edge it quadrangulates, so the contour a finished grid
+/// leaves behind is walked at half the length of the segments it was
+/// triangulated against. Reading that contour back as-is is what doubled a
+/// seam's nodes on every regeneration. Two of its segments together are one
+/// segment of the length the grid was built from, so that is what the
+/// triangulation is given; three quarters of a triangle side takes in two
+/// face-length segments with room to spare and stops short of ever joining
+/// three.
+const LONGEST_SEAM: f64 = 0.75;
+
+/// How far a held-out point may stand off the chord replacing it, as a fraction
+/// of the lattice triangle side. A real corner of the contour is further off
+/// than this and stays a corner the triangulation sees.
+const SEAM_STRAYING: f64 = 0.1;
+
+/// The longest contour segment handed to the triangulation undivided, as a
+/// fraction of the lattice triangle side.
+///
+/// A seam's edge is never split by the refinement, so a long segment has to be
+/// divided before it goes in or the cells along it come out as long as it is.
+/// It is cut into an even number of equal pieces no longer than this: new
+/// nodes the contour's owner adopts once, which the next regeneration reads
+/// back in pairs and hands over as seams. That is the one place new nodes
+/// still reach a contour, and it converges -- nothing it produces is long
+/// enough to be cut again. A piece no pair takes in gets no node of its own:
+/// the cells at its two corners merge into one polygon instead.
+const SHORTEST_SPLIT: f64 = 0.375;
+
+/// `ring` with every segment longer than `longest` cut into an even number of
+/// equal pieces no longer than it. The new points name no node.
+fn subdivided(ring: &[ConstraintPoint], longest: f64) -> Vec<ConstraintPoint> {
+    if ring.len() < 3 {
+        return ring.to_vec();
+    }
+    let mut points = Vec::with_capacity(ring.len());
+    for (index, point) in ring.iter().enumerate() {
+        points.push(*point);
+        let from = point.position;
+        let to = ring[(index + 1) % ring.len()].position;
+        let length = (to.x - from.x).hypot(to.y - from.y);
+        if !(length > longest) {
+            continue;
+        }
+        let mut pieces = (length / longest).ceil() as usize;
+        pieces += pieces % 2;
+        for piece in 1..pieces {
+            let along = piece as f64 / pieces as f64;
+            points.push(ConstraintPoint {
+                position: Vec2::new(from.x + (to.x - from.x) * along, from.y + (to.y - from.y) * along),
+                source: None,
+            });
+        }
+    }
+    points
+}
+
+/// [`triangulate_constrained`], with every supplied contour's short, nearly
+/// straight runs handed over as one segment and returned as [`Seam`]s.
+///
+/// This is the half of keeping a contour's node count stable that happens
+/// before quadrangulation; [`crate::ortho::ortho_along`] is the other. Every
+/// point is kept in the finished grid either way -- what changes is only that
+/// the triangulation is built at the scale the contour was originally laid at.
+///
+/// Refinement never splits a seam here, for the same reason a midpoint never
+/// lands on one: that point would be a node the contour's owner has to adopt.
+/// `None` where the contours describe no ground, and also where a seam did not
+/// survive as one edge -- two contours crossing through it -- in which case
+/// the caller has to triangulate without seams.
+pub fn triangulate_keeping_seams(options: &ConstrainedOptions) -> Option<(ConstrainedTriangles, Vec<Seam>)> {
+    triangulate(options, true)
+}
+
+/// The side of the lattice triangle whose area is `area`.
+fn lattice_side_of(area: f64) -> f64 {
+    (area * 4.0 / 3f64.sqrt()).sqrt()
+}
+
+/// Which points of `ring` the triangulation sees, in ring order.
+///
+/// A point is held out when it lies near the middle of the chord joining its
+/// two neighbours, and those neighbours are both kept. Holding out every such
+/// point greedily from one that cannot be held is the largest set possible
+/// along a closed walk, so the triangulation's segments come out as long as
+/// the rules allow.
+fn kept_points(ring: &[ConstraintPoint], longest: f64, straying: f64) -> Vec<usize> {
+    let count = ring.len();
+    let all = || (0..count).collect::<Vec<usize>>();
+    if count < 4 {
+        return all();
+    }
+    let holdable = |index: usize| {
+        let before = ring[(index + count - 1) % count].position;
+        let point = ring[index].position;
+        let after = ring[(index + 1) % count].position;
+        let dx = after.x - before.x;
+        let dy = after.y - before.y;
+        let chord_squared = dx * dx + dy * dy;
+        if chord_squared <= f64::EPSILON || chord_squared > longest * longest {
+            return false;
+        }
+        let along = ((point.x - before.x) * dx + (point.y - before.y) * dy) / chord_squared;
+        (0.2..=0.8).contains(&along) && distance_to_segment(point, before, after) <= straying
+    };
+    let start = (0..count).find(|&index| !holdable(index)).unwrap_or(0);
+    let mut held = vec![false; count];
+    for step in 1..count {
+        let index = (start + step) % count;
+        held[index] = !held[(index + count - 1) % count] && holdable(index);
+    }
+    let kept: Vec<usize> = (0..count).filter(|&index| !held[index]).collect();
+    if kept.len() < 3 { all() } else { kept }
+}
+
+fn triangulate(options: &ConstrainedOptions, keep_seams: bool) -> Option<(ConstrainedTriangles, Vec<Seam>)> {
+    let side = lattice_side_of(options.max_area);
+    let rings: Vec<Vec<ConstraintPoint>> = options
+        .boundary
+        .iter()
+        .chain(options.holes.iter())
+        .map(|ring| if keep_seams { subdivided(ring, side * SHORTEST_SPLIT) } else { ring.clone() })
+        .collect();
+    let kept: Vec<Vec<usize>> = rings
+        .iter()
+        .map(|ring| {
+            if keep_seams {
+                kept_points(ring, side * LONGEST_SEAM, side * SEAM_STRAYING)
+            } else {
+                (0..ring.len()).collect()
+            }
+        })
+        .collect();
+    // Ground is classified against the rings as triangulated, since those are
+    // the edges the triangles actually stop at.
+    let coarse = |range: std::ops::Range<usize>| -> Vec<Vec<ConstraintPoint>> {
+        range.map(|index| kept[index].iter().map(|&point| rings[index][point]).collect()).collect()
+    };
+    let boundary_winding = RingWinding::of(&coarse(0..options.boundary.len()));
+    let hole_winding = RingWinding::of(&coarse(options.boundary.len()..rings.len()));
     let mut cdt: ConstrainedDelaunayTriangulation<GridVertex> =
         ConstrainedDelaunayTriangulation::new();
 
+    let mut pending: Vec<(FixedVertexHandle, FixedVertexHandle, Vec<ConstraintPoint>)> = Vec::new();
     let mut segments: Vec<(Vec2, Vec2)> = Vec::new();
-    for ring in options.boundary.iter().chain(options.holes.iter()) {
-        if ring.len() < 3 {
+    for (ring, kept) in rings.iter().zip(&kept) {
+        if kept.len() < 3 {
             continue;
         }
-        let mut handles = Vec::with_capacity(ring.len());
-        for point in ring {
+        let mut handles = Vec::with_capacity(kept.len());
+        for &index in kept {
+            let point = ring[index];
             let vertex = GridVertex {
                 position: Point2::new(point.position.x, point.position.y),
                 source: point.source,
@@ -185,8 +348,23 @@ pub fn triangulate_constrained(options: &ConstrainedOptions) -> Option<Constrain
             handles.push(cdt.insert(vertex).ok()?);
         }
         for (position, &from) in handles.iter().enumerate() {
-            let to = handles[(position + 1) % handles.len()];
+            let next = (position + 1) % handles.len();
+            let to = handles[next];
+            let held: Vec<ConstraintPoint> = if keep_seams {
+                (1..ring.len())
+                    .map(|step| (kept[position] + step) % ring.len())
+                    .take_while(|&index| index != kept[next])
+                    .map(|index| ring[index])
+                    .collect()
+            } else {
+                Vec::new()
+            };
             if from == to {
+                // Two kept points at one position with nodes between them:
+                // there is no edge to carry those nodes on.
+                if !held.is_empty() {
+                    return None;
+                }
                 continue;
             }
             // `_and_split`, because two contours may genuinely cross -- one
@@ -194,9 +372,12 @@ pub fn triangulate_constrained(options: &ConstrainedOptions) -> Option<Constrain
             // constraints then run through, which is what a junction is. An
             // unsplit `add_constraint` would refuse the second one instead.
             cdt.add_constraint_and_split(from, to, |position| GridVertex { position, source: None });
+            if keep_seams {
+                pending.push((from, to, held));
+            }
         }
-        for (position, point) in ring.iter().enumerate() {
-            segments.push((point.position, ring[(position + 1) % ring.len()].position));
+        for (position, &index) in kept.iter().enumerate() {
+            segments.push((ring[index].position, ring[kept[(position + 1) % kept.len()]].position));
         }
     }
 
@@ -223,11 +404,25 @@ pub fn triangulate_constrained(options: &ConstrainedOptions) -> Option<Constrain
     if options.min_area > 0.0 {
         parameters = parameters.with_min_required_area(options.min_area);
     }
+    if keep_seams {
+        parameters = parameters.keep_constraint_edges();
+    }
     let outcome = cdt.refine(
         parameters
             .with_max_additional_vertices(options.max_additional_vertices)
             .exclude_outer_faces(true),
     );
+
+    // A seam another contour crossed was split into pieces, and the nodes it
+    // held have no single edge left to go back onto. So does one the same
+    // stretch of two rings claims twice.
+    let mut claimed: HashSet<(usize, usize)> = HashSet::new();
+    for (from, to, _) in &pending {
+        cdt.get_edge_from_neighbors(*from, *to)?;
+        if !claimed.insert(edge_key(from.index(), to.index())) {
+            return None;
+        }
+    }
 
     // Only the vertices the kept faces actually use, compacted -- the
     // triangulation holds every seed that was dropped as an outer face
@@ -282,11 +477,23 @@ pub fn triangulate_constrained(options: &ConstrainedOptions) -> Option<Constrain
         return None;
     }
 
-    Some(ConstrainedTriangles {
-        mesh: FaceMesh { vertices, faces },
-        sources,
-        refinement_complete: outcome.refinement_complete,
-    })
+    // A seam with a corner no ground face uses borders no ground, and the
+    // nodes it held have nothing to be put back into.
+    let seams = pending
+        .into_iter()
+        .filter_map(|(from, to, held)| {
+            Some(Seam { from: *remap.get(&from.index())?, to: *remap.get(&to.index())?, held })
+        })
+        .collect();
+
+    Some((
+        ConstrainedTriangles {
+            mesh: FaceMesh { vertices, faces },
+            sources,
+            refinement_complete: outcome.refinement_complete,
+        },
+        seams,
+    ))
 }
 
 /// Where on a supplied contour a point sits.

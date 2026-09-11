@@ -3,7 +3,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::geometry::centroid_of;
-use crate::mesh::{QuadMesh, Vec2, edge_key, edges_of};
+use crate::mesh::{FaceMesh, QuadMesh, Vec2, edge_key, edges_of};
 
 /// Options for [`relax`].
 #[derive(Debug, Clone, Default)]
@@ -54,35 +54,53 @@ impl RelaxOptions {
 /// Laplacian smoothing) would shrink the mesh and say nothing about the shape
 /// of a cell.
 pub fn relax(mesh: &QuadMesh, options: &RelaxOptions) -> QuadMesh {
-    let pinned: HashSet<usize> =
-        if options.pin_boundary { boundary_vertices(mesh) } else { HashSet::new() };
+    let cells: Vec<&[usize]> = mesh.quads.iter().map(|quad| quad.as_slice()).collect();
+    QuadMesh { vertices: relax_cells(&mesh.vertices, &cells, options), quads: mesh.quads.clone() }
+}
 
-    let mut current = mesh.vertices.clone();
+/// [`relax`] for cells of any number of sides.
+///
+/// An `n`-sided cell is pulled toward the regular `n`-gon sharing its centre,
+/// the same rule with a turn of `1/n` in place of the quarter-turn -- which is
+/// the quarter-turn exactly when `n` is four, so quads relax identically
+/// either way.
+pub fn relax_faces(mesh: &FaceMesh, options: &RelaxOptions) -> FaceMesh {
+    let cells: Vec<&[usize]> = mesh.faces.iter().map(|face| face.as_slice()).collect();
+    FaceMesh { vertices: relax_cells(&mesh.vertices, &cells, options), faces: mesh.faces.clone() }
+}
+
+fn relax_cells(vertices: &[Vec2], cells: &[&[usize]], options: &RelaxOptions) -> Vec<Vec2> {
+    let pinned: HashSet<usize> =
+        if options.pin_boundary { boundary_of(cells) } else { HashSet::new() };
+
+    let mut current = vertices.to_vec();
 
     for _ in 0..options.iterations {
         let mut sum_x = vec![0.0_f64; current.len()];
         let mut sum_y = vec![0.0_f64; current.len()];
         let mut counts = vec![0_u32; current.len()];
 
-        for quad in &mesh.quads {
-            let corners: [Vec2; 4] = quad.map(|index| current[index]);
+        for cell in cells {
+            let corners: Vec<Vec2> = cell.iter().map(|&index| current[index]).collect();
             let centre = centroid_of(&corners);
+            let sides = corners.len() as f64;
+            let turn = std::f64::consts::TAU / sides;
 
-            // Average the corners after undoing each one's quarter-turn.
+            // Average the corners after undoing each one's turn.
             let mut frame_x = 0.0;
             let mut frame_y = 0.0;
             for (position, corner) in corners.iter().enumerate() {
                 let dx = corner.x - centre.x;
                 let dy = corner.y - centre.y;
-                let angle = position as f64 * std::f64::consts::FRAC_PI_2;
+                let angle = position as f64 * turn;
                 frame_x += dx * angle.cos() - dy * angle.sin();
                 frame_y += dx * angle.sin() + dy * angle.cos();
             }
-            frame_x /= 4.0;
-            frame_y /= 4.0;
+            frame_x /= sides;
+            frame_y /= sides;
 
-            for (position, &index) in quad.iter().enumerate() {
-                let angle = -(position as f64) * std::f64::consts::FRAC_PI_2;
+            for (position, &index) in cell.iter().enumerate() {
+                let angle = -(position as f64) * turn;
                 sum_x[index] += centre.x + (frame_x * angle.cos() - frame_y * angle.sin());
                 sum_y[index] += centre.y + (frame_x * angle.sin() + frame_y * angle.cos());
                 counts[index] += 1;
@@ -109,21 +127,26 @@ pub fn relax(mesh: &QuadMesh, options: &RelaxOptions) -> QuadMesh {
             .collect();
     }
 
-    QuadMesh { vertices: current, quads: mesh.quads.clone() }
+    current
 }
 
 /// Vertices on an edge belonging to exactly one quad.
 pub fn boundary_vertices(mesh: &QuadMesh) -> HashSet<usize> {
+    let cells: Vec<&[usize]> = mesh.quads.iter().map(|quad| quad.as_slice()).collect();
+    boundary_of(&cells)
+}
+
+fn boundary_of(cells: &[&[usize]]) -> HashSet<usize> {
     let mut counts: HashMap<(usize, usize), u32> = HashMap::new();
-    for quad in &mesh.quads {
-        for (a, b) in edges_of(quad) {
+    for cell in cells {
+        for (a, b) in edges_of(cell) {
             *counts.entry(edge_key(a, b)).or_insert(0) += 1;
         }
     }
 
     let mut boundary = HashSet::new();
-    for quad in &mesh.quads {
-        for (a, b) in edges_of(quad) {
+    for cell in cells {
+        for (a, b) in edges_of(cell) {
             if counts.get(&edge_key(a, b)) == Some(&1) {
                 boundary.insert(a);
                 boundary.insert(b);

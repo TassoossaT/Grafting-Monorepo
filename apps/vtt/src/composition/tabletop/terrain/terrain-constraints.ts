@@ -260,23 +260,22 @@ export const SHORTEST_USEFUL_FRACTION = 0.25;
  * How coarsely a stroke describes its own swept outline, as a multiple of the
  * face size.
  *
- * **This is what decides how many faces a stroke costs.** A patch comes back
- * with about twice as many faces as its boundary has points, so describing the
- * outline finely does not buy a finer *shape* -- it buys a finer *mesh*, which
- * is the opposite of what the caller asked for. Measured on the capsule the
- * brush actually hands over, 30 long and 6 across, asking for faces of 2:
+ * Describing the outline finely does not buy a finer *shape* -- it buys a
+ * finer *mesh*. Measured on the capsule the brush actually hands over, 30 long
+ * and 6 across, asking for faces of 2, once the engine began handing short
+ * contour runs over as seams:
  *
  * | chord | outline points | faces | mean side |
  * |-------|----------------|-------|-----------|
- * | 0.5x  | 98             | 312   | 1.27      |
- * | 1x    | 50             | 308   | 1.28      |
+ * | 0.5x  | 98             | 201   | 1.58      |
+ * | 1x    | 50             | 115   | 2.09      |
  * | 2x    | 26             | 120   | 2.04      |
- * | 3x    | 18             | 104   | 2.20      |
+ * | 3x    | 18             | 140   | 1.90      |
  *
- * Below 1x the extra points are pure waste -- 98 of them give the same mesh
- * 50 do. At 2x the mesh finally comes back the size it was asked for, with two
- * and a half times fewer faces. Pinned in the engine's own tests as
- * `an_outline_described_at_twice_the_face_size_gives_the_size_asked_for`.
+ * Before seams, 1x cost 308 faces and only 2x came back the size asked for;
+ * now both do, and 2x stays for describing the same ground in half the
+ * points. Pinned in the engine's own tests as
+ * `an_outline_described_at_the_face_size_or_coarser_gives_the_size_asked_for`.
  */
 export const OUTLINE_CHORD_PER_FACE = 2;
 
