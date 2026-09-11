@@ -361,9 +361,21 @@ export function dispatchCutRepairs(
   const underFootprint = topologiesInBounds.filter((t) => {
     if (!targetTypes.includes(t.surfaceType)) return false;
     if (request.footprintOutline && request.footprintOutline.length >= 3) {
-      return t.nodes.some(
-        (n) => n.position.x >= bounds.minX && n.position.x <= bounds.maxX && n.position.z >= bounds.minZ && n.position.z <= bounds.maxZ,
+      // The query above is deliberately broad (an AABB), but it must not
+      // become the repair scope. Using any node in the box pulled in large
+      // terrain faces beside long/curved roads and caused their whole cloud
+      // to be split and re-minted. Use the actual footprint for the final
+      // admission test; the terrain planner will still include faces that
+      // are truly covered through its coverage/edge checks.
+      const center = t.nodes.reduce(
+        (sum, n) => ({ x: sum.x + n.position.x, z: sum.z + n.position.z }),
+        { x: 0, z: 0 },
       );
+      if (t.nodes.length === 0) return false;
+      center.x /= t.nodes.length;
+      center.z /= t.nodes.length;
+      const footprint = request.footprintOutline.map(([x, z]) => [x, z] as [number, number]);
+      return pointInOrOnPolygon(center.x, center.z, footprint) || t.nodes.some((n) => pointInOrOnPolygon(n.position.x, n.position.z, footprint));
     }
     return true;
   });
