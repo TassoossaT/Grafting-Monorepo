@@ -334,3 +334,37 @@ test("a flat straight road with collinear intermediate points simplifies to a 4-
   assert.equal(result.patch.regions[0].boundary.length, 4, "flat straight road collapses to 4 quad corners");
 });
 
+
+test("regenerating the same boundary reuses the nodes it already had", () => {
+  // The cost the owner named: a road re-issued in full because one of its
+  // streets was extended. A regeneration re-derives the same boundary from
+  // the same curves, so almost every vertex lands back where it already was
+  // and must keep the id it already had -- otherwise every stroke hands the
+  // engine a patch in which nothing is recognisable as what it already held.
+  const shape = [[[0, 0], [40, 0], [40, 4], [0, 4], [0, 0]]];
+  const first = buildContourPatch("table", "op-a", "path", 0, [shape], [], [], []);
+  assert.ok(first.patch.nodes.length >= 4);
+
+  const standing = first.patch.nodes.map((node) => ({ id: node.id, position: node.position }));
+  const second = buildContourPatch("table", "op-b", "path", 0, [shape], [], [], standing);
+
+  const reused = second.patch.nodes.filter((node) => standing.some((was) => was.id === node.id));
+  assert.equal(
+    reused.length,
+    second.patch.nodes.length,
+    "an unchanged boundary must mint no new node at all",
+  );
+});
+
+test("a vertex that really moved still mints its own node", () => {
+  // Welding must not become a way to drag new geometry onto old ids: only a
+  // vertex landing back where a node already stands may adopt one.
+  const before = [[[0, 0], [40, 0], [40, 4], [0, 4], [0, 0]]];
+  const after = [[[0, 0], [40, 0], [40, 9], [0, 9], [0, 0]]];
+  const first = buildContourPatch("table", "op-a", "path", 0, [before], [], [], []);
+  const standing = first.patch.nodes.map((node) => ({ id: node.id, position: node.position }));
+  const second = buildContourPatch("table", "op-b", "path", 0, [after], [], [], standing);
+
+  const minted = second.patch.nodes.filter((node) => !standing.some((was) => was.id === node.id));
+  assert.equal(minted.length, 2, "the two corners that moved are new; the two that did not are not");
+});

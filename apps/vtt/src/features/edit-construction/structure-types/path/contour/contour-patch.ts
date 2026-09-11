@@ -189,12 +189,36 @@ export function buildContourPatch(
   });
   const nodePositions = new Map<string, ConstructionPosition>();
 
+  // **Bucketed, not scanned.** Welding asks "is a node already standing
+  // here", and asking it by walking every node on the table costs the whole
+  // table once per ring vertex -- quadratic in the size of the road network,
+  // which is precisely the cost that made welding unaffordable and left the
+  // engine re-minting every node of the cloud on every stroke instead. A
+  // vertex can only weld to a node within {@link WELD_TOLERANCE}, so only
+  // the buckets that reach that far need looking at, and there are nine of
+  // them however big the table is.
+  const buckets = new Map<string, ExistingNode[]>();
+  const bucketKey = (x: number, z: number): string =>
+    `${Math.floor(x / WELD_TOLERANCE)}:${Math.floor(z / WELD_TOLERANCE)}`;
+  for (const node of existingNodes) {
+    const key = bucketKey(node.position.x, node.position.z);
+    const held = buckets.get(key);
+    if (held === undefined) buckets.set(key, [node]);
+    else held.push(node);
+  }
+
   const nearestExisting = (x: number, y: number, z: number): ExistingNode | undefined => {
     let best: { readonly node: ExistingNode; readonly distance: number } | undefined;
-    for (const node of existingNodes) {
-      const distance = Math.hypot(node.position.x - x, node.position.z - z);
-      if (distance > WELD_TOLERANCE || Math.abs(node.position.y - y) > WELD_TOLERANCE) continue;
-      if (best === undefined || distance < best.distance) best = { node, distance };
+    const column = Math.floor(x / WELD_TOLERANCE);
+    const row = Math.floor(z / WELD_TOLERANCE);
+    for (let dx = -1; dx <= 1; dx += 1) {
+      for (let dz = -1; dz <= 1; dz += 1) {
+        for (const node of buckets.get(`${column + dx}:${row + dz}`) ?? []) {
+          const distance = Math.hypot(node.position.x - x, node.position.z - z);
+          if (distance > WELD_TOLERANCE || Math.abs(node.position.y - y) > WELD_TOLERANCE) continue;
+          if (best === undefined || distance < best.distance) best = { node, distance };
+        }
+      }
     }
     return best?.node;
   };

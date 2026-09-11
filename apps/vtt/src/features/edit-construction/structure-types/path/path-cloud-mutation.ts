@@ -201,13 +201,32 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
       }
     }
 
-    const existingNodesMap = new Map<string, ConstructionPosition>();
-    for (const topology of topologies) {
+    // **What the contour may weld back onto.**
+    //
+    // The legacy path offers the whole table, because its stroke is welding
+    // into whatever it was drawn across. The explicit-curve path offers only
+    // the faces it is about to replace, and that is the difference between
+    // regenerating a road and rebuilding it: a regeneration re-derives the
+    // same boundary from the same curves, so almost every vertex lands back
+    // where it already was, and welding lets those keep the node ids they
+    // already had. What actually moved is all the patch then carries as new.
+    //
+    // Handing it `[]`, as this did, meant every node of the road was minted
+    // fresh on every stroke -- a network of three hundred streets re-issued
+    // in full because one of them was extended, and the engine given a patch
+    // where nothing is recognisable as what it already held. That is the
+    // cost the owner named: not recalculating a face, copying an entire road.
+    //
+    // Scoped to the replaced faces rather than the table so a road vertex can
+    // never adopt a terrain node that happens to sit under it; the two types
+    // meet through the cut-and-repair flow, not by sharing an id.
+    const weldableNodes = new Map<string, ConstructionPosition>();
+    for (const topology of input.bezier ? standingRegions : topologies) {
       for (const node of topology.nodes) {
-        if (!existingNodesMap.has(node.id)) existingNodesMap.set(node.id, node.position);
+        if (!weldableNodes.has(node.id)) weldableNodes.set(node.id, node.position);
       }
     }
-    const existingNodes = [...existingNodesMap].map(([id, position]) => ({ id, position }));
+    const existingNodes = [...weldableNodes].map(([id, position]) => ({ id, position }));
 
     const planned = planSpineContour({
       union: input.bezier ? (ribbons) => unionBezierRibbons(input.bezier!, ribbons) : undefined,
@@ -220,7 +239,7 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
         // junction component.
         editedChains: regeneratedChains.length === 0 ? [chain] : regeneratedChains,
         standingRegions,
-        existingNodes: input.bezier ? [] : existingNodes,
+        existingNodes,
         existingEdgeUses,
       });
     if (planned === undefined) return { kind: "noop", message: "Nenhuma alteração: a nuvem não produziu contorno." };
