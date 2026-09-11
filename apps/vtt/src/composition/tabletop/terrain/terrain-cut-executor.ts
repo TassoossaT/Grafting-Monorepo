@@ -596,7 +596,7 @@ export function executeTerrainCut(
     return { builtFaces: 0, removedFaces: 0, refusedFaces: 0, success: false, message: "Área de corte inválida." };
   }
 
-  const effectiveFaceSide = request.faceSide ?? DEFAULT_FACE_SIDE;
+  let effectiveFaceSide = request.faceSide ?? DEFAULT_FACE_SIDE;
   const extent = boundsOfArea(request.area);
 
   // Ask runtime what surfaces are covered by outline / footprint
@@ -667,6 +667,20 @@ export function executeTerrainCut(
   );
   let affectedKeys = new Set(affected.map((t) => t.surfaceKey.join(" ")));
   let retained = standing.filter((t) => !affectedKeys.has(t.surfaceKey.join(" ")));
+
+  // Regeneration must not refine the terrain merely because the replacement
+  // grid has a fixed nominal resolution. If the old repair area occupied N
+  // faces, choose a face size whose coarse estimate cannot produce more than
+  // N cells (with a small allowance for the new boundary). This keeps a
+  // repeated cut from turning one large face into an ever-growing cascade of
+  // smaller faces while still allowing a genuinely complex boundary to add
+  // the few cells it needs.
+  if (request.profile.kind === "regenerate" && affected.length > 0) {
+    const area = Math.max(1, (coveredExtent.maxX - coveredExtent.minX) * (coveredExtent.maxZ - coveredExtent.minZ));
+    const targetCells = Math.max(1, affected.length);
+    const minimumSide = Math.sqrt(area / targetCells);
+    effectiveFaceSide = Math.max(effectiveFaceSide, minimumSide);
+  }
 
   // If hole profile: simply delete affected faces
   if (request.profile.kind === "hole") {
