@@ -487,12 +487,17 @@ export interface ConstructionIrregularQuadGrid {
    * Corners sitting *on* a supplied contour that arrived with no source --
    * nodes the cloud owning that contour has to adopt.
    *
-   * They exist because the refinement splits a constraint segment where a
-   * nearby point encroaches on it, and because quadrangulation puts a
-   * midpoint on every edge, a contour edge included. Both are wanted: the
-   * alternative to a shared node here is a terrain corner resting against
-   * the middle of a road edge without sharing it, which reads as a gap along
-   * the path.
+   * The engine keeps these rare on purpose. Each one is adopted into the
+   * neighbour, and the next fill beside that neighbour reads it back as
+   * contour -- so a grid that put a midpoint on every contour edge halved the
+   * shared seam on every regeneration (7 -> 13 -> 25 nodes). Short contour
+   * runs are therefore handed to the triangulation as seams and come back as
+   * the nodes already standing; only a segment long enough to be cut before
+   * triangulation yields new nodes here, once. Where two contours cross
+   * through a seam the engine falls back to the old midpoint-per-edge grid.
+   * A shared node is still the point: the alternative is a terrain corner
+   * resting against the middle of a road edge without sharing it, which reads
+   * as a gap along the path.
    *
    * Each names the segment it landed on, addressed back into the request.
    * That is the difference between adopting it and guessing: the caller
