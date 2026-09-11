@@ -447,11 +447,6 @@ export function dispatchCutRepairs(
   // visibly came apart from the ground as the network filled in.
   const orphaned: ConstructionRegionTopology[] = [];
   const changed = groundThePainterMovedOff(replacedTopologies, newRoadTopologies);
-  // Re-minting an unchanged road contour is not a terrain event. In
-  // particular, curve resampling can replace all node ids while leaving the
-  // road in the same place; feeding that identity churn to the terrain cut
-  // splitter repeatedly grows the mesh without changing coverage.
-  if (replacedTopologies.length > 0 && changed.length === 0) return;
   if (replacedTopologies.length > 0) {
     const replacedBounds = terrainTopologiesBounds(replacedTopologies, 4.0);
     const near = typeof runtime.getRegionTopologiesInBounds === "function"

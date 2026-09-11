@@ -183,29 +183,7 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
     }
 
     const topologies = input.regionTopologies;
-    // A patch containing only node updates is a positional edit.  It cannot
-    // change connectivity, so rebuilding the whole connected cloud is both
-    // unnecessary and expensive: the replacement would also cause terrain
-    // coverage to be repaired for every distant road face. Structural edits
-    // keep the old cloud-wide behaviour because they can change ownership at
-    // a junction or leave disconnected remnants behind.
-    const hasStructuralChange = graphPatch.edges.length > 0 || (graphPatch.removedEdgeIds?.length ?? 0) > 0 || !!input.bezier;
-    const degree = new Map<string, number>();
-    for (const edge of touchedCloud.snapshot.edges) {
-      degree.set(edge.startNodeId, (degree.get(edge.startNodeId) ?? 0) + 1);
-      degree.set(edge.endNodeId, (degree.get(edge.endNodeId) ?? 0) + 1);
-    }
-    const touchesJunction = [...touchedCloud.snapshot.nodes].some((node) => (degree.get(node.id) ?? 0) !== 2);
-    // A partial contour has no neighbouring samples with which to preserve
-    // tangent continuity. Keep curves and junctions on the cloud-wide path;
-    // the local fast path is intentionally limited to a simple straight run.
-    const localContourEdit = !hasStructuralChange && !touchesJunction && chain.controlPoints.length <= 2;
-    const standingRegions = standingRegionsForCloud(
-      topologies,
-      touchedCloud.positions,
-      touchedCloud.corridorIds,
-      localContourEdit,
-    );
+    const standingRegions = standingRegionsForCloud(topologies, touchedCloud.positions, touchedCloud.corridorIds, !!input.bezier);
     const existingEdgeUses = new Map<string, boolean[]>();
     for (const topology of topologies) {
       for (const loop of [...topology.outerLoops, ...topology.holes]) {
@@ -230,9 +208,7 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
         // not inferred from its old contour faces. A continuation therefore
         // regenerates one continuous road; a branch regenerates its whole
         // junction component.
-        // Positional edits invalidate only the authored chain.  Topology
-        // changes still regenerate every chain in the affected cloud.
-        editedChains: localContourEdit ? [chain] : (regeneratedChains.length === 0 ? [chain] : regeneratedChains),
+        editedChains: regeneratedChains.length === 0 ? [chain] : regeneratedChains,
         standingRegions,
         existingNodes: input.bezier ? [] : existingNodes,
         existingEdgeUses,
