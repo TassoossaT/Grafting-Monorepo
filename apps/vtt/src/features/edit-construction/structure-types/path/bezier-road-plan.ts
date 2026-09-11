@@ -94,56 +94,14 @@ export function planBezierRoad(input: {
   readonly miterLimit: number;
   readonly tolerance: number;
   readonly snapReach: number;
-  /**
-   * Take `stroke` as the anchors themselves rather than as a gesture to fit.
-   *
-   * Fitting exists to recover intent from a shaky hand: it decides how many
-   * anchors a run deserves, moves them off the samples, and can refuse the
-   * whole stroke when two of them land on the same ground position. None of
-   * that is wanted when the anchors were clicked -- there is no noise to
-   * remove and no intent to recover, and a fit here would only be free to
-   * disagree with what was authored.
-   *
-   * The spans come out straight, and stay straight until something asks
-   * otherwise: either the caller editing a handle, or `curveNetwork`'s own
-   * weld smoothing rounding a joint where two spans continue into each
-   * other. A straight span is the honest starting shape for a clicked one --
-   * it is exactly what the two clicks said and nothing more.
-   */
-  readonly authored?: boolean;
 }) {
   const { port, offsets, corridorId } = input;
-  const authored = input.authored === true && input.stroke.length >= 2;
-  const fitted = authored ? undefined : port.curveBatch({ tolerance: Math.max(input.tolerance, 0.025), commands: [
+  const fitted = port.curveBatch({ tolerance: Math.max(input.tolerance, 0.025), commands: [
     { kind: "fit", points: input.stroke.map(curvePoint) },
   ] })[0]!;
-  const controlPoints = fitted
-    ? [...fitted.curves.map((c) => curvePosition(c.points[0])), curvePosition(fitted.curves.at(-1)!.points[3])]
-    : [...input.stroke];
+  const controlPoints = [...fitted.curves.map((c) => curvePosition(c.points[0])), curvePosition(fitted.curves.at(-1)!.points[3])];
   const addedNodes = controlPoints.map((p, i) => ({ id: spineControlNodeId(corridorId, i), position: curvePoint(p) }));
-  const spanHandles: readonly CurveHandles[] = fitted
-    ? fitted.handles
-    : controlPoints.slice(0, -1).map((a, i) => {
-        const b = controlPoints[i + 1]!;
-        // A cubic is straight exactly when both controls lie a third of the
-        // way along its own chord, so this is a line the rest of the engine
-        // can treat as any other curve -- no straight-segment special case
-        // anywhere downstream, and a handle drag bends it without first
-        // having to convert it into something else.
-        const third: CurvePoint = [(b.x - a.x) / 3, (b.y - a.y) / 3, (b.z - a.z) / 3];
-        return {
-          start: third,
-          end: [-third[0], -third[1], -third[2]] as CurvePoint,
-          // Aligned, so that once the caller does start bending this span,
-          // dragging one control keeps the opposite one collinear instead of
-          // creasing the run at the anchor. It says nothing about the shape
-          // the span starts in -- that is straight, and stays straight until
-          // something is dragged.
-          mode: "aligned" as const,
-          bandOffsets: offsets,
-        };
-      });
-  const addedEdges = spanHandles.map((h, i) => ({
+  const addedEdges = fitted.handles.map((h, i) => ({
     edgeId: `spine-edge:${corridorId}:${i}`, startNodeId: addedNodes[i]!.id, endNodeId: addedNodes[i + 1]!.id,
     curve: { ...h, bandOffsets: offsets },
   }));
@@ -153,12 +111,6 @@ export function planBezierRoad(input: {
     edges: snapshot.edges.filter((e) => e.curve !== undefined).map((e) => ({ ...e, curve: e.curve! })),
     addedNodes, addedEdges, nodePrefix: `spine:${corridorId}#junction:`,
     snapTolerance: input.snapReach, heightTolerance: 0.15, tolerance: 0.005,
-    // An authored run stays where it was authored. Welding still happens --
-    // the endpoint still snaps, still splits a road it lands on, still shares
-    // the anchor -- only the tangent is left alone, because straight is what
-    // the clicks said and rounding it is the caller's next decision, not this
-    // one's.
-    smoothWelds: !authored,
   });
   const initialPatch: ConstructionGraphPatch = { ...network, nodes: network.nodes.map((n) => ({ id: n.id, position: curvePosition(n.position) })) };
   const cloud = changedSpineCloud(snapshot, initialPatch, input.topologies);
@@ -194,9 +146,5 @@ export function planBezierRoad(input: {
   const chains = bezierChains(cloud.snapshot, port, offsets, input.miterLimit);
   const footprint = unionBezierRibbons(port, chains.filter((c) => c.chainId.startsWith(`spine-edge:${corridorId}:`)).flatMap((c) => c.ribbons ?? []));
   return { graphPatch, controlPoints, snapshot, chains, footprint, droppedChainEdgeIds,
-    // An authored run is its own flattening: its spans are straight, so the
-    // anchors already describe the polyline exactly.
-    polyline: fitted
-      ? fitted.samples.flatMap((span, i) => (i ? span.slice(1) : span).map((p) => curvePosition(p.position)))
-      : controlPoints };
+    polyline: fitted.samples.flatMap((span, i) => (i ? span.slice(1) : span).map((p) => curvePosition(p.position))) };
 }

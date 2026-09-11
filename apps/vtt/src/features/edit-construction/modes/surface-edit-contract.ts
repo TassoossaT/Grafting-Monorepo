@@ -81,26 +81,6 @@ export interface PathBrushEffect extends ConstructionOperationContext {
   /** Raw brush observations, never pre-interpreted as path topology. */
   readonly observedElements: readonly BrushElementObservation[];
   readonly parameters: PathFormationParameters;
-  /**
-   * What `brushRegion.samples` actually is.
-   *
-   * `"fitted"` -- the default, and what a free stroke hands over: a raw
-   * gesture, to be run through curve fitting, which decides for itself how
-   * many anchors the run deserves and where they sit. The shape that reaches
-   * the graph is therefore the fit's opinion of the gesture, never the
-   * gesture.
-   *
-   * `"authored"` -- the samples *are* the anchors, in order, and are taken
-   * exactly. Nothing is inferred, nothing is dropped, and a run of two
-   * clicks produces exactly one span between exactly those two points.
-   *
-   * This is the only thing that separates a click-to-click road from a
-   * painted one. Everything downstream -- snapping, junction splitting,
-   * welding, the contour union, the faces -- is the same code on the same
-   * spine, which is the point: a second way to *say* where a road goes, not
-   * a second kind of road.
-   */
-  readonly referenceLine?: "fitted" | "authored";
   readonly expected: readonly RevisionPrecondition[];
 }
 
@@ -182,7 +162,6 @@ export function createPathBrushEffect(
     brushRegion: Object.freeze({ samples: Object.freeze(samples) }),
     observedElements: freezeObservedElements(payload.observedElements),
     parameters: freezeFormation(payload.parameters),
-    referenceLine: payload.referenceLine ?? "fitted",
     expected: Object.freeze(revisions),
   });
 }

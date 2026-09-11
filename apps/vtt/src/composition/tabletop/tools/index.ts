@@ -47,8 +47,7 @@ export { panelRailOf, type PanelRail } from "./openings/panel-rail.ts";
 export { towerStampTool } from "./tower/tower-stamp-tool.ts";
 export { circleContour, previewOutline } from "./tower/tower-geometry.ts";
 
-export { PATH_COLOR, pathBrushTool } from "./paths/path-brush-tool.ts";
-export { pathLineTool } from "./paths/path-line-tool.ts";
+export { pathBrushTool } from "./paths/path-brush-tool.ts";
 
 export {
   brushSweptOutlinePolygons,

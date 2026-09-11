@@ -3507,8 +3507,8 @@ export function commitPathCloudIntent(
   ctx: ToolContext,
   effect: PathBrushEffect,
   tolerance: number,
-  ): boolean {
-  return timeCommit("rua", () => commitUntimed(ctx, effect, tolerance));
+  ): void {
+  timeCommit("rua", () => commitUntimed(ctx, effect, tolerance));
 
 // src/composition/tabletop/tabletop-runtime.ts
 export type TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed";
@@ -4029,7 +4029,6 @@ export function panelRailOf(topology: ConstructionRegionTopology): PanelRail | u
   const walked = outer.map((edge) => ({
 
 // src/composition/tabletop/tools/paths/path-brush-tool.ts
-export const PATH_COLOR = 0xc084fc;
 export const pathBrushTool = createBrushTool<"path-brush">({
   id: "path-brush",
   defaultParams: () => DEFAULT_TOOL_PARAMS["path-brush"],
@@ -4038,16 +4037,6 @@ export const pathBrushTool = createBrushTool<"path-brush">({
   // what is left over may be spent straightening the stroke.
   halfWidth: pathHalfWidth,
 
-
-// src/composition/tabletop/tools/paths/path-line-tool.ts
-export const pathLineTool: ConstructionTool<"path-line"> = {
-  id: "path-line",
-  defaultParams: () => DEFAULT_TOOL_PARAMS["path-line"],
-  previewOnHover: true,
-
-  previewFor(gesture: ToolGesture, params: PathBrushParams) {
-  if (anchor === undefined) return undefined;
-  return spanPreview(anchor, gesture.current.point, params);
 
 // src/composition/tabletop/tools/platform/platform-contour-merge.ts
 export interface DirectedContourEdge {
@@ -5064,7 +5053,6 @@ export function nearestSampleY(x: number, z: number, samples: readonly Construct
 export type { PathFormationRecipe, PathProfilePoint } from "./path-recipe.ts";
 export type { PathSpineDraft } from "./path-spine-draft.ts";
 export type { StationNodeAddress } from "./station-node-id.ts";
-export type { BandRibbon } from "./contour/index.ts";
 export type {
   PathRun,
   PathRunBand,

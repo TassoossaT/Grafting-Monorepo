@@ -11,7 +11,6 @@ export type ConstructionToolId =
   | "edit-region"
   | "platform-contour"
   | "path-brush"
-  | "path-line"
   | "wall-brush"
   | "wall-line"
   | "interior-wall"
@@ -206,8 +205,6 @@ export interface ToolParamsByTool {
   readonly "edit-region": { readonly mode: "shape" | "elevation"; readonly curveMode?: "automatic" | "aligned" | "mirrored" | "free"; readonly curveAction?: "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"; readonly curveWidth?: number; readonly curveEndWidth?: number };
   readonly "platform-contour": { readonly elevation: number; readonly mode: "create" | "extend" | "cut"; readonly shape?: "rectangle" | "polygon" | "freehand" | "circle"; readonly radius?: number; readonly tolerance?: number };
   readonly "path-brush": PathBrushParams;
-  /** Same recipe as the brush; only the gesture that authors the spine differs. */
-  readonly "path-line": PathBrushParams;
   readonly "wall-brush": WallBrushParams;
   readonly "wall-line": WallParams;
   readonly "interior-wall": InteriorGenerateParams;
@@ -229,15 +226,6 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
     // `street` is the only preset the UI still writes -- its own bed-only
     // profile is the one everything else in the recipe (shoulder width and
     // height, the still-unbuilt raised rim) is deliberately left inert for.
-    shape: "circle", radius: 2.5, rotationDegrees: 0,
-    pathKind: "street", bedWidth: 3, shoulderWidth: 0.6, shoulderHeight: 0.15,
-    miterLimit: 4,
-  }),
-  // The clicked road wants the same cross-section as the painted one and
-  // makes no use of the brush footprint -- `radius` here describes nothing,
-  // because no brush sweeps this road; see `path-line-tool.ts`, which
-  // decides its own snap reach.
-  "path-line": Object.freeze({
     shape: "circle", radius: 2.5, rotationDegrees: 0,
     pathKind: "street", bedWidth: 3, shoulderWidth: 0.6, shoulderHeight: 0.15,
     miterLimit: 4,

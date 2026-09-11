@@ -116,8 +116,6 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
     offsets: effect.parameters.profile.map((p) => p.lateralOffset),
     miterLimit: effect.parameters.miterLimit, tolerance,
     snapReach: Math.max(tolerance, effect.brushShape.kind === "square" ? effect.brushShape.size / 2 : effect.brushShape.radius),
-    // The one thing a clicked road says differently from a painted one.
-    authored: effect.referenceLine === "authored",
   }) : undefined;
   if (bezier && bezier.graphPatch.edges.length === 0) return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente após o encaixe." };
   // A regeneration that cannot redraw every chain of the cloud it is about to

@@ -10,8 +10,7 @@ import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
 import type { PathBrushParams } from "@/features/edit-construction";
 import { commitPathCloudIntent } from "../../path/path-cloud-transaction.ts";
 
-/** Shared with the click-to-click tool -- one road, one ghost colour. */
-export const PATH_COLOR = 0xc084fc;
+const PATH_COLOR = 0xc084fc;
 
 /**
  * A free path stroke, built on the same brush every other brush uses: press,

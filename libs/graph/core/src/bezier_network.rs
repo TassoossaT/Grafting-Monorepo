@@ -45,22 +45,6 @@ pub struct NetworkRequest {
     pub height_tolerance: f64,
     /// Curve approximation tolerance.
     pub tolerance: f64,
-    /// Whether a weld this call makes may give the two curves it joins a
-    /// shared tangent.
-    ///
-    /// On -- the default, and what a *drawn* run wants -- because a stroke is
-    /// a reading of a gesture and two strokes meant as one road should come
-    /// back as one road however the hand happened to pause. Off for a run
-    /// whose anchors were authored rather than read: there the shape is not
-    /// an inference to be improved, it is what the caller said, and bending
-    /// it to meet a neighbour answers a question nobody asked.
-    #[cfg_attr(feature = "curve-serde", serde(default = "yes"))]
-    pub smooth_welds: bool,
-}
-
-#[cfg(feature = "curve-serde")]
-fn yes() -> bool {
-    true
 }
 /// Atomic graph replacement; original state is not mutated.
 #[derive(Debug, Clone)]
@@ -557,9 +541,7 @@ pub fn plan(request: NetworkRequest) -> Result<NetworkPatch, String> {
             changed.insert(w[1].1.clone());
         }
     }
-    if request.smooth_welds {
-        smooth_welds(&mut output, &edges, &old_ids);
-    }
+    smooth_welds(&mut output, &edges, &old_ids);
     Ok(NetworkPatch {
         nodes: changed
             .into_iter()
@@ -601,7 +583,6 @@ mod tests {
             snap_tolerance: 1.,
             height_tolerance: 0.5,
             tolerance: 0.01,
-            smooth_welds: true,
         }
     }
 
@@ -631,26 +612,6 @@ mod tests {
         // Half each: the standing run gave way as much as the new one did, so
         // the shared tangent bisects the corner rather than adopting a side.
         assert!((fresh[0] - fresh[2]).abs() < 1e-6, "the tangent did not bisect: {fresh:?}");
-    }
-
-    #[test]
-    fn an_authored_corner_is_left_exactly_as_it_was_authored() {
-        // The same L, from a caller that placed both anchors deliberately.
-        // Smoothing it would be an improvement to a shape that was never a
-        // guess, and would move a run the caller already committed to.
-        let mut r = request(
-            vec![node("c", [10., 0., 0.]), node("d", [10., 0., 10.])],
-            vec![edge("second", "c", "d", [10., 0., 0.], [10., 0., 10.])],
-        );
-        r.smooth_welds = false;
-        let patch = plan(r).expect("the weld plans");
-
-        let fresh = near_direction(&patch, "second", true);
-        assert!(fresh[2] > 0.999, "the authored span was bent: {fresh:?}");
-        assert!(
-            !patch.edges.iter().any(|e| e.edge_id == "first"),
-            "the standing run was re-authored by a weld that was switched off",
-        );
     }
 
     #[test]

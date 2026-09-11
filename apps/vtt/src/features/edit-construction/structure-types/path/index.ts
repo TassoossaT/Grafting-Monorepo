@@ -28,8 +28,7 @@ export {
   spineGraphFromSnapshot,
 } from "./spine-graph/index.ts";
 
-export { offsetBands, planSpineContour } from "./contour/index.ts";
-export type { BandRibbon } from "./contour/index.ts";
+export { planSpineContour } from "./contour/index.ts";
 
 export {
   pathCloudPerimeter,

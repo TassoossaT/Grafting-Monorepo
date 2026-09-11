@@ -47,8 +47,7 @@ function statusToUiStatus(status: TabletopRuntimeStatus): "neutral" | "info" | "
 
 const TOOL_LABEL: Record<ConstructionToolId, string> = {
   "platform-contour": "Plataforma",
-  "path-brush": "Caminho (Pincel Livre)",
-  "path-line": "Caminho (Ponto a Ponto)",
+  "path-brush": "Caminho",
   navigate: "Navegação da Câmera",
   "edit-region": "Editar Região",
   "wall-brush": "Pincel de Parede (Livre)",

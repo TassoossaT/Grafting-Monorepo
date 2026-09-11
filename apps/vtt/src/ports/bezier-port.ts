@@ -42,14 +42,6 @@ export interface CurveNetworkRequest {
   readonly snapTolerance: number;
   readonly heightTolerance: number;
   readonly tolerance: number;
-  /**
-   * Whether a weld this call makes may give the two curves it joins a shared
-   * tangent. Defaults to on: a drawn run is a reading of a gesture, and two
-   * strokes meant as one road should come back as one road. Off for a run
-   * whose anchors were authored, where the shape is not an inference to be
-   * improved.
-   */
-  readonly smoothWelds?: boolean;
 }
 export interface CurveNetworkPatch {
   readonly nodes: readonly CurveNetworkNode[];
