@@ -48,6 +48,7 @@
 pub mod frame;
 pub mod math;
 pub mod planar;
+pub mod profile;
 pub mod tessellation;
 pub mod types;
 pub mod upright;

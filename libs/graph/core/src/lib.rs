@@ -19,6 +19,8 @@ mod layout;
 mod model;
 mod motion;
 mod planar;
+pub mod profile_cap;
+pub mod profile_surface;
 pub use planar::{PlanarBoolean, PlanarShape, planar_boolean};
 mod region_edit;
 mod surface;

@@ -71,6 +71,7 @@ pub struct ApplyPatchReplacementRequest
 pub struct GraphPatchRequest
 pub struct GraphPatchNode
 pub struct GraphPatchEdge
+pub struct ReplacedState
 pub fn apply_patch_replacement(
 
 // src/region_editing.rs
@@ -415,6 +416,7 @@ pub fn normal_at(&self, point: [f32; 3]) -> [f32; 3]
 pub mod frame;
 pub mod math;
 pub mod planar;
+pub mod profile;
 pub mod tessellation;
 pub mod types;
 pub mod upright;
@@ -433,6 +435,9 @@ pub fn point_in_loop_xz(point: [f32; 2], loop_: &[[f32; 3]]) -> bool
 
 // src/planar.rs
 pub fn triangulate_contour_loops<'a>(
+
+// src/profile.rs
+pub fn triangulate_profile_sheet(
 
 // src/tessellation.rs
 pub fn traversed_edge(topology: &ContourTopology, use_: &OrientedEdgeUse) -> Option<ContourEdge>
@@ -3389,6 +3394,16 @@ export function tokenSceneItem(token: RenderToken): SceneItem<TokenVisualParams>
   params: { color: token.appearance.color },
   },
 
+// src/composition/tabletop/commit-timing.ts
+export function timeCommit<T>(label: string, run: () => T): T {
+  if (current !== undefined) return timePhase(label, run);
+export function timePhase<T>(label: string, run: () => T): T {
+  const trace = current;
+  if (trace === undefined) return run();
+export function countInCommit(label: string, by = 1): void {
+  if (current === undefined) return;
+  current.counters.set(label, (current.counters.get(label) ?? 0) + by);
+
 // src/composition/tabletop/create-tabletop-runtime.ts
 export interface CreateTabletopRuntimeInput {
   readonly tableId: string;
@@ -3488,9 +3503,7 @@ export function commitPathCloudIntent(
   effect: PathBrushEffect,
   tolerance: number,
   ): void {
-  try {
-  const plan = planPathCloudMutation({
-  bezier: ctx.runtime,
+  timeCommit("rua", () => commitUntimed(ctx, effect, tolerance));
 
 // src/composition/tabletop/tabletop-runtime.ts
 export type TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed";

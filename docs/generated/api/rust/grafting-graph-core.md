@@ -63,6 +63,14 @@ Handle continuity policy.
 
 A generic authored-curve operation.
 
+### `pub enum grafting_graph_core::profile_cap::CapBase`
+
+Analytic base shape for a four-sheet cap.
+
+### `pub enum grafting_graph_core::profile_surface::Section`
+
+An analytic horizontal cross-section, in XYZ coordinates.
+
 ### `pub fn grafting_graph_core::ContourEdge::bounds(&self, from: grafting_graph_core::ContourPoint, to: grafting_graph_core::ContourPoint) -> grafting_graph_core::ContourBounds`
 
 Axis-aligned bounding box between `from` and `to`.
@@ -920,6 +928,42 @@ whereas approximate equality would make convergence order-dependent.
 
 Returns disconnected components separately; each component retains its holes.
 Rejects malformed/nonfinite contours before invoking the geometry backend.
+
+### `pub fn grafting_graph_core::profile_cap::four_sheet_cap(base: grafting_graph_core::profile_cap::CapBase, elevation: f64, height: f64, curvatures: [f64; 4]) -> core::result::Result<[grafting_graph_core::profile_surface::ProfileSheet; 4], alloc::string::String>`
+
+Generates four analytic sheets with independently authored curvature.
+
+Rectangular caps use a ridge along the longer axis, with equal horizontal
+run on all sides. Circular caps retain four quarter-circle lower sections
+meeting at one apex. No mesh vertices are introduced by this operation.
+
+### `pub fn grafting_graph_core::profile_surface::ProfileSheet::point(&self, u: f64, v: f64) -> core::result::Result<[f64; 3], alloc::string::String>`
+
+Evaluates the surface without replacing its analytic source by vertices.
+XZ follows the ruled section; elevation follows the bounded profile.
+
+### `pub fn grafting_graph_core::profile_surface::Section::point(&self, u: f64) -> core::result::Result<[f64; 3], alloc::string::String>`
+
+Evaluates the exact cross-section at a parameter in `[0, 1]`.
+
+### `pub fn grafting_graph_core::profile_surface::Section::validate(&self) -> core::result::Result<(), alloc::string::String>`
+
+Validates finite coordinates and a nonempty circular arc.
+
+### `pub fn grafting_graph_core::profile_surface::SheetProfile::elevation(&self, u: f64, v: f64) -> core::result::Result<f64, alloc::string::String>`
+
+Returns normalized elevation at cross-section parameter `u` and rise `v`.
+A smooth interpolation reaches the authored middle value exactly.
+
+### `pub fn grafting_graph_core::profile_surface::SheetProfile::validate(&self) -> core::result::Result<(), alloc::string::String>`
+
+Validates the profile without clamping malformed input.
+
+### `pub fn grafting_graph_core::profile_surface::closed_sheet_profiles(curvatures: &[f64]) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::profile_surface::SheetProfile>, alloc::string::String>`
+
+Resolves a closed ring of independently authored sheet curvatures.
+Each shared side receives the mean of its two incident sheets. This gives
+both sheets identical boundary profiles while preserving their middle values.
 
 ### `pub fn grafting_graph_core::prune_orphans<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, candidates: &[grafting_graph_core::NodeId]) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::NodeId>, grafting_graph_core::RegionEditError>`
 
@@ -1829,6 +1873,86 @@ Triangle indices.
 
 Vertex coordinates.
 
+### `pub grafting_graph_core::profile_cap::CapBase::Circle`
+
+Exact circular base, divided at the four cardinal angles.
+
+### `pub grafting_graph_core::profile_cap::CapBase::Circle::center: [f64; 2]`
+
+Center in XZ.
+
+### `pub grafting_graph_core::profile_cap::CapBase::Circle::radius: f64`
+
+Positive radius.
+
+### `pub grafting_graph_core::profile_cap::CapBase::Rectangle`
+
+Axis-aligned rectangle in XZ. Coordinates must be strictly ordered.
+
+### `pub grafting_graph_core::profile_cap::CapBase::Rectangle::max: [f64; 2]`
+
+Maximum XZ corner.
+
+### `pub grafting_graph_core::profile_cap::CapBase::Rectangle::min: [f64; 2]`
+
+Minimum XZ corner.
+
+### `pub grafting_graph_core::profile_surface::ProfileSheet::lower: grafting_graph_core::profile_surface::Section`
+
+Lower analytic section.
+
+### `pub grafting_graph_core::profile_surface::ProfileSheet::profile: grafting_graph_core::profile_surface::SheetProfile`
+
+Independent interior and shared side profile values.
+
+### `pub grafting_graph_core::profile_surface::ProfileSheet::upper: grafting_graph_core::profile_surface::Section`
+
+Upper analytic section; may collapse to an apex.
+
+### `pub grafting_graph_core::profile_surface::Section::Arc`
+
+A circular arc preserving its exact radius and angular interval.
+
+### `pub grafting_graph_core::profile_surface::Section::Arc::center: [f64; 3]`
+
+Circle center, including its elevation.
+
+### `pub grafting_graph_core::profile_surface::Section::Arc::radius: f64`
+
+Positive radius.
+
+### `pub grafting_graph_core::profile_surface::Section::Arc::start_angle: f64`
+
+Starting angle in radians in XZ.
+
+### `pub grafting_graph_core::profile_surface::Section::Arc::sweep: f64`
+
+Signed angular sweep in radians, at most one revolution.
+
+### `pub grafting_graph_core::profile_surface::Section::Line`
+
+A straight segment, including a collapsed segment at an apex.
+
+### `pub grafting_graph_core::profile_surface::Section::Line::end: [f64; 3]`
+
+Second endpoint.
+
+### `pub grafting_graph_core::profile_surface::Section::Line::start: [f64; 3]`
+
+First endpoint.
+
+### `pub grafting_graph_core::profile_surface::SheetProfile::end: f64`
+
+Curvature at the second shared side.
+
+### `pub grafting_graph_core::profile_surface::SheetProfile::middle: f64`
+
+Curvature in the middle of this sheet.
+
+### `pub grafting_graph_core::profile_surface::SheetProfile::start: f64`
+
+Curvature at the first shared side.
+
 ### `pub mod grafting_graph_core`
 
 Generic graph structures and deterministic algorithms owned by Grafting.
@@ -1858,6 +1982,18 @@ Curve-derived ribbon contours. No product materials or rendering policy.
 ### `pub mod grafting_graph_core::curve_offset`
 
 Canonical reusable sampling, offset and contour union primitives.
+
+### `pub mod grafting_graph_core::profile_cap`
+
+Four-sheet caps with one shared base and maximum elevation.
+
+### `pub mod grafting_graph_core::profile_surface`
+
+Curved sheets between two analytic cross-sections.
+
+The source sections and profile are authoritative; tessellation is only a
+derived approximation. Adjacent sheets share endpoint profile values, so
+independently authored interiors do not open cracks along their seam.
 
 ### `pub struct grafting_graph_core::ContourBounds`
 
@@ -2086,6 +2222,16 @@ A flat 2D triangulated mesh: no separate `normals`/`uvs`, unlike
 `grafting-procgen-surface-mesh`'s `TriangulatedMesh` -- those are a
 world-position concern a caller adds once the union's own planar shape
 has been decided.
+
+### `pub struct grafting_graph_core::profile_surface::ProfileSheet`
+
+A sheet whose lateral boundaries can be shared by neighboring sheets.
+
+### `pub struct grafting_graph_core::profile_surface::SheetProfile`
+
+A monotone elevation profile with independent interior and seam controls.
+Values in `[-1, 1]` bend the sheet without moving either cross-section or
+overshooting their elevations. Zero describes a straight profile.
 
 ### `pub trait grafting_graph_core::GraphOps<N, E>`
 
