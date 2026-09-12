@@ -149,3 +149,70 @@ fn probe_engine_call_cost_by_map_size() {
         }
     }
 }
+
+/// What the parametrized interior costs, and what it costs when nothing on
+/// the map has a curve under it.
+///
+/// The second number is the one that decides whether this can be wired at
+/// all: a map with no roads, or a road over level ground, must pay nothing
+/// for a capability it cannot use.
+#[test]
+#[ignore = "benchmark: run with --release -- --ignored"]
+fn probe_mesh_cost_with_and_without_a_curve() {
+    for width in [40, 80] {
+        println!("PROBE {width}x{width} = {} faces", width * width);
+        let mut session = field(width);
+        let centre = width / 2;
+        let start_x = centre.saturating_sub(15);
+        let count = 30.min(width.saturating_sub(start_x));
+        let batch = |session: &ConstructionSession| {
+            let keys: Vec<_> = (0..count)
+                .map(|step| key(session, &format!("cell:{}:{centre}", start_x + step)))
+                .collect();
+            json!({ "surfaceKeys": keys }).to_string()
+        };
+
+        let request = batch(&session);
+        timed("surface_meshes_json, 30 faces, no curve on the map", || {
+            session.surface_meshes_json(&request).expect("batch meshes").len()
+        });
+        timed("all_surface_meshes_json, no curve on the map", || {
+            session.all_surface_meshes_json().expect("all meshes").len()
+        });
+
+        // A run crossing the same ground, climbing as it goes: curve-carrying
+        // edges with a real width, which is the whole test for whether a
+        // face is swept from something.
+        let mut nodes = Vec::new();
+        let mut edges = Vec::new();
+        for step in 0..10 {
+            let (x, y) = ((start_x + step * 2) as f32, step as f32 * 0.6);
+            nodes.push(json!({"id": format!("spine:probe:{step}"), "position": [x, y, centre as f32]}));
+            if step > 0 {
+                edges.push(json!({
+                    "edgeId": format!("spine-edge:probe:{step}"),
+                    "startNodeId": format!("spine:probe:{}", step - 1),
+                    "endNodeId": format!("spine:probe:{step}"),
+                    "curve": {"start": [1.0, 0.2, 0.0], "end": [-1.0, -0.2, 0.0],
+                              "mode": "aligned", "bandOffsets": [-2.0, 0.0, 2.0]},
+                }));
+            }
+        }
+        session
+            .apply_patch_replacement_json(
+                &json!({
+                    "operationId": "probe-spine",
+                    "sourceSurfaceKeys": [],
+                    "patch": {"nodes": [], "edges": [], "regions": []},
+                    "graphPatch": {"nodes": nodes, "edges": edges},
+                })
+                .to_string(),
+            )
+            .expect("the spine registers");
+
+        let request = batch(&session);
+        timed("surface_meshes_json, 30 faces, a climbing run over them", || {
+            session.surface_meshes_json(&request).expect("batch meshes").len()
+        });
+    }
+}

@@ -68,12 +68,35 @@ pub fn field_owns_loops<'a>(
     any
 }
 
-/// The largest triangle the ring could be covered by without any interior
-/// vertex at all -- its own area. Below `fill.max_area` the refinement would
-/// add nothing, so the cheap boundary-only path is not merely adequate, it
-/// is identical, and this is what lets the caller skip straight past.
+/// Whether this face has anything an interior could express.
+///
+/// Two questions, and a face has to fail neither. It must be bigger than one
+/// cell -- below that the refinement adds nothing and the boundary-only path
+/// is not merely adequate but identical. And the field must actually *go*
+/// somewhere across it: a level face is covered exactly by its own corners,
+/// so refining it buys triangles and no shape. The defect being answered is
+/// a face that follows a slope, where covering the middle from the margins
+/// alone twists it, and this is the test for whether there is a slope to
+/// follow.
+///
+/// The relief test is what lets a flat map pay nothing. It costs one field
+/// sample per contour point, against a refinement pass per face.
 pub fn needs_interior(outer: &[[f32; 3]], fill: &PlanarFill<'_>) -> bool {
-    ground_area(outer) > fill.max_area
+    if ground_area(outer) <= fill.max_area {
+        return false;
+    }
+    if fill.min_relief <= 0.0 {
+        return true;
+    }
+    let (mut lowest, mut highest) = (f32::INFINITY, f32::NEG_INFINITY);
+    for point in outer {
+        let Some(sample) = fill.field.sample(point[0], point[2]) else {
+            continue;
+        };
+        lowest = lowest.min(sample.y);
+        highest = highest.max(sample.y);
+    }
+    highest - lowest > fill.min_relief
 }
 
 fn ground_area(ring: &[[f32; 3]]) -> f32 {
@@ -130,14 +153,28 @@ pub fn refined_planar_mesh(
     let triangles = triangulate_constrained(&ConstrainedOptions {
         boundary,
         holes: hole_rings,
-        // No lattice to agree with here. The unconstrained generator seeds
-        // its own points so the interior matches the rest of the world's
-        // spacing; a face swept from a curve has no such neighbour to match,
-        // and letting the refinement place every interior vertex itself
-        // keeps the result symmetric about the curve rather than about some
-        // lattice origin the curve never knew about.
-        seeds: Vec::new(),
-        seed_clearance: 0.0,
+        // The curve's own `(s, t)` lattice: stations along it, rungs
+        // across it. This is the difference between a quality mesh and
+        // *this* mesh -- seeded, a straight run comes out as a regular grid
+        // whose rows follow the curve and whose columns cross it, which is
+        // the strip the surface actually is. Unseeded, the refinement
+        // produces triangles that are well shaped and oriented to nothing,
+        // and a long face on a slope is exactly where that shows.
+        //
+        // There is no world lattice to match against instead, and matching
+        // one would be wrong here anyway: a swept face's own symmetry is
+        // about its curve, not about a grid origin the curve never knew.
+        seeds: fill
+            .field
+            .lattice(fill.station_step, fill.max_lattice_points)
+            .into_iter()
+            .map(|point| Vec2::new(point[0] as f64, point[1] as f64))
+            .collect(),
+        // Half a cell. A lattice point landing all but on the contour makes
+        // a sliver the refinement then has to work to remove; the margin of
+        // a swept face is precisely where the lattice reaches its own edge,
+        // so this case is the rule rather than the exception here.
+        seed_clearance: (fill.station_step * 0.5) as f64,
         max_area,
         min_area: max_area * fill.min_area_ratio,
         min_angle_degrees: fill.min_angle_degrees,
@@ -401,6 +438,72 @@ mod tests {
         }
         let widest = refined.uvs.iter().fold(0.0_f32, |worst, uv| worst.max(uv[1].abs()));
         assert!(widest > HALF_WIDTH - 1e-2, "t never reached the margins");
+    }
+
+    #[test]
+    fn the_interior_is_a_strip_laid_out_along_the_run() {
+        let ring = ribbon_ring();
+        let field = spine_field();
+        let fill = fill_at(&field, 1.0);
+        let refined = refined_planar_mesh(&ring, &[], &fill).unwrap();
+
+        // Every vertex the fill invented sits on the curve's own lattice --
+        // a whole number of stations along, a whole number of rungs across.
+        // That is what makes the interior a grid that follows the run rather
+        // than a well-shaped mesh pointing nowhere in particular.
+        let on_contour = |p: &[f32; 3]| ring.iter().any(|c| (c[0] - p[0]).abs() < 1e-3 && (c[2] - p[2]).abs() < 1e-3);
+        let mut invented = 0;
+        for position in &refined.positions {
+            if on_contour(position) {
+                continue;
+            }
+            invented += 1;
+            let sample = field.sample(position[0], position[2]).expect("on the field");
+            let off_station = (sample.s / fill.station_step).fract();
+            let off_rung = (sample.t / fill.station_step).fract();
+            assert!(
+                off_station.min(1.0 - off_station) < 0.05 && off_rung.abs().min(1.0 - off_rung.abs()) < 0.05,
+                "an interior vertex left the lattice: {sample:?}",
+            );
+        }
+        assert!(invented > 100, "the strip was never laid down: {invented}");
+
+        // And no triangle spans the run lengthwise. A diagonal running from
+        // one margin to the other across several stations is exactly the
+        // shape that twists a sloped face, and there is no longer any reason
+        // for the triangulator to draw one: it has vertices in between.
+        for triangle in refined.indices.chunks_exact(3) {
+            let corners = [
+                refined.positions[triangle[0] as usize],
+                refined.positions[triangle[1] as usize],
+                refined.positions[triangle[2] as usize],
+            ];
+            let longest = corners
+                .iter()
+                .enumerate()
+                .flat_map(|(i, a)| corners.iter().skip(i + 1).map(|b| (a[0] - b[0]).hypot(a[2] - b[2])))
+                .fold(0.0_f32, f32::max);
+            assert!(longest < STATION, "a triangle spans {longest} m of run");
+        }
+    }
+
+    #[test]
+    fn a_level_face_is_left_to_the_cheap_path() {
+        // Same ribbon, no slope under it. Its corners already say everything
+        // there is to say about where the surface is, so there is nothing an
+        // interior could add and nothing it should cost -- which is what
+        // keeps a flat map paying nothing for this.
+        let ring: Vec<[f32; 3]> = ribbon_ring().iter().map(|p| [p[0], 0.0, p[2]]).collect();
+        let field = ReferenceField::new([ReferenceCurve {
+            points: stations().iter().map(|&x| [x, 0.0, 0.0]).collect(),
+            reach: HALF_WIDTH,
+        }]);
+        let fill = fill_at(&field, 1.0);
+        assert!(field_owns_loops(&fill, [ring.as_slice()]));
+        assert!(!needs_interior(&ring, &fill), "a level face was refined for nothing");
+        // The slope is the whole difference: the same ring over the same
+        // sized face, with a run that climbs, does want one.
+        assert!(needs_interior(&ribbon_ring(), &fill_at(&spine_field(), 1.0)));
     }
 
     #[test]

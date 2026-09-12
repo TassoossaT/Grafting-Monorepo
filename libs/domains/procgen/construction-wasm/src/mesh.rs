@@ -6,13 +6,177 @@
 
 use serde::{Deserialize, Serialize};
 
-use grafting_graph_core::{ContourTopology, RegionId, SurfaceRegistry};
-use grafting_procgen_surface_mesh::triangulate_region;
+use grafting_graph_core::curve_offset::{ReferenceCurve, ReferenceField};
+use grafting_graph_core::{ContourTopology, RegionId, SurfaceRegion, SurfaceRegistry};
+use grafting_procgen_surface_mesh::{PlanarFill, triangulate_region_with};
 
 use crate::editing::SessionGraph;
 
 /// Reserved wire marker for a stable analytic-region identity.
 pub const REGION_SURFACE_KEY_PREFIX: &str = "@region";
+
+/// How finely a graph curve is flattened before it becomes a reference
+/// curve. Tighter than the contour's own flattening on purpose: this is the
+/// height and parametrization authority for everything swept from it, so its
+/// own approximation error should be well under the mesh detail it answers
+/// for.
+const FIELD_SAMPLE_ACCURACY: f64 = 0.02;
+
+/// Largest triangle left standing inside a filled planar face, in square
+/// metres.
+const PLANAR_FILL_MAX_AREA: f32 = 1.0;
+
+/// A ground-plane extent.
+type Bounds = [f32; 4];
+
+fn grown(bounds: Bounds, by: f32) -> Bounds {
+    [
+        bounds[0] - by,
+        bounds[1] - by,
+        bounds[2] + by,
+        bounds[3] + by,
+    ]
+}
+
+fn overlaps(a: Bounds, b: Bounds) -> bool {
+    a[0] <= b[2] && b[0] <= a[2] && a[1] <= b[3] && b[1] <= a[3]
+}
+
+fn enclosing(points: impl IntoIterator<Item = [f32; 3]>) -> Option<Bounds> {
+    let mut bounds: Option<Bounds> = None;
+    for point in points {
+        bounds = Some(match bounds {
+            None => [point[0], point[2], point[0], point[2]],
+            Some(b) => [
+                b[0].min(point[0]),
+                b[1].min(point[2]),
+                b[2].max(point[0]),
+                b[3].max(point[2]),
+            ],
+        });
+    }
+    bounds
+}
+
+/// The ground-plane extent of a region's own boundary, from the graph
+/// positions its loops are drawn between.
+fn region_bounds(
+    graph: &SessionGraph,
+    topology: &ContourTopology,
+    region: &SurfaceRegion,
+) -> Option<Bounds> {
+    let mut points = Vec::new();
+    for loop_ in region.outer_loops().iter().chain(region.holes()) {
+        for use_ in loop_ {
+            let Some(edge) = topology.edge(use_.edge()) else {
+                continue;
+            };
+            for node in [edge.start_node(), edge.end_node()] {
+                if let Some(node) = graph.node(node) {
+                    points.push(*node.data());
+                }
+            }
+        }
+    }
+    enclosing(points)
+}
+
+/// The extent covering every one of these regions -- what a batch scopes its
+/// field to, so the curve walk is paid once for the whole batch instead of
+/// once per face. Per face it would be work proportional to (roads on the
+/// map) x (faces being meshed), which is the wrong shape twice over.
+fn regions_bounds<'a>(
+    graph: &SessionGraph,
+    topology: &ContourTopology,
+    regions: impl IntoIterator<Item = &'a SurfaceRegion>,
+) -> Option<Bounds> {
+    let mut total: Option<Bounds> = None;
+    for region in regions {
+        let Some(bounds) = region_bounds(graph, topology, region) else {
+            continue;
+        };
+        total = Some(match total {
+            None => bounds,
+            Some(t) => [
+                t[0].min(bounds[0]),
+                t[1].min(bounds[1]),
+                t[2].max(bounds[2]),
+                t[3].max(bounds[3]),
+            ],
+        });
+    }
+    total
+}
+
+/// The curves near `bounds`, as the field that elevates and parametrizes
+/// whatever was swept from them.
+///
+/// **A curve-carrying edge is the whole test.** Not an id prefix, not a
+/// surface type -- an edge that stores handles is, by construction, an edge
+/// something was generated along, and its own band offsets say how far that
+/// generation reached. So this needs no list of which kinds of surface have
+/// curves under them, and a future one that does inherits the correct mesh
+/// without anybody revisiting this function.
+///
+/// **Scoped, which is the difference between this being affordable and
+/// not.** Built for every curve on the map, the walk is proportional to how
+/// much road exists rather than to how much is being meshed, and it is paid
+/// again on every mesh batch -- which is what made this unusable the first
+/// time it was wired up. A curve can only answer for ground within its own
+/// reach of itself, so one further away than that from everything being
+/// meshed cannot contribute to the answer and is skipped before it is ever
+/// sampled. The cheap test is the curve's control polygon, which contains
+/// the curve itself, so nothing that could matter is skipped.
+///
+/// Rebuilt per mesh request rather than cached: the graph is the only copy
+/// of this, and a cache would be one more thing that can disagree with it.
+pub fn reference_field_near(graph: &SessionGraph, bounds: Option<Bounds>) -> ReferenceField {
+    let Some(bounds) = bounds else {
+        return ReferenceField::default();
+    };
+    ReferenceField::new(graph.edges().into_iter().filter_map(|edge| {
+        let handles = edge.data().as_ref()?;
+        let reach = handles
+            .band_offsets
+            .iter()
+            .fold(0.0_f64, |widest, offset| widest.max(offset.abs()));
+        if reach <= 0.0 {
+            return None;
+        }
+        let start = graph.node(edge.source())?.data().map(f64::from);
+        let end = graph.node(edge.target())?.data().map(f64::from);
+        let curve = handles.resolve(start, end);
+        let hull = enclosing(
+            curve
+                .points
+                .iter()
+                .map(|point| [point[0] as f32, point[1] as f32, point[2] as f32]),
+        )?;
+        if !overlaps(grown(hull, reach as f32), bounds) {
+            return None;
+        }
+        let samples = curve.sample(FIELD_SAMPLE_ACCURACY).ok()?;
+        Some(ReferenceCurve {
+            points: samples
+                .iter()
+                .map(|sample| {
+                    [
+                        sample.position[0] as f32,
+                        sample.position[1] as f32,
+                        sample.position[2] as f32,
+                    ]
+                })
+                .collect(),
+            reach: reach as f32,
+        })
+    }))
+}
+
+/// The fill a region mesh is derived with, or `None` when no curve reaches
+/// it and there is nothing to fill against.
+fn planar_fill(field: &ReferenceField) -> Option<PlanarFill<'_>> {
+    (!field.is_empty()).then(|| PlanarFill::new(field, PLANAR_FILL_MAX_AREA))
+}
 
 /// Converts a stable analytic region id to the existing surface-key wire
 /// slot without changing legacy node-set callers.
@@ -73,6 +237,15 @@ pub fn all_surface_meshes(
     let mut meshes = Vec::new();
     let mut regions = known_regions.iter().collect::<Vec<_>>();
     regions.sort();
+    let field = reference_field_near(
+        graph,
+        regions_bounds(
+            graph,
+            topology,
+            regions.iter().filter_map(|id| topology.region(id)),
+        ),
+    );
+    let fill = planar_fill(&field);
     for region_id in regions {
         let Some(region) = topology.region(region_id) else {
             continue;
@@ -80,9 +253,12 @@ pub fn all_surface_meshes(
         let Some(surface) = surfaces.region_surface(region_id) else {
             continue;
         };
-        let Some(region_meshes) = triangulate_region(topology, region, |id| {
-            graph.node(id).map(|node| *node.data())
-        }) else {
+        let Some(region_meshes) = triangulate_region_with(
+            topology,
+            region,
+            |id| graph.node(id).map(|node| *node.data()),
+            fill,
+        ) else {
             continue;
         };
         meshes.extend(region_meshes.into_iter().map(|mesh| SurfaceMeshDto {
@@ -112,6 +288,28 @@ pub fn surface_mesh(
     topology: &ContourTopology,
     request: SurfaceMeshRequest,
 ) -> Result<Vec<SurfaceMeshDto>, String> {
+    let field = reference_field_near(
+        graph,
+        region_id_from_wire(&request.surface_key)
+            .ok()
+            .and_then(|id| topology.region(&id))
+            .and_then(|region| region_bounds(graph, topology, region)),
+    );
+    surface_mesh_with(graph, surfaces, topology, request, planar_fill(&field))
+}
+
+/// [`surface_mesh`] against a field the caller already built.
+///
+/// Deriving the field walks the graph's curves once, so a caller asking for
+/// several keys at a time builds it once for the whole batch rather than
+/// paying that walk per face.
+fn surface_mesh_with(
+    graph: &SessionGraph,
+    surfaces: &SurfaceRegistry,
+    topology: &ContourTopology,
+    request: SurfaceMeshRequest,
+    fill: Option<PlanarFill<'_>>,
+) -> Result<Vec<SurfaceMeshDto>, String> {
     if let [prefix, region_id] = request.surface_key.as_slice()
         && prefix == REGION_SURFACE_KEY_PREFIX
     {
@@ -122,9 +320,12 @@ pub fn surface_mesh(
         let surface = surfaces
             .region_surface(&region_id)
             .ok_or_else(|| format!("unknown analytic region surface {region_id}"))?;
-        let meshes = triangulate_region(topology, region, |id| {
-            graph.node(id).map(|node| *node.data())
-        })
+        let meshes = triangulate_region_with(
+            topology,
+            region,
+            |id| graph.node(id).map(|node| *node.data()),
+            fill,
+        )
         .ok_or_else(|| format!("no mesh derivable for analytic region {region_id}"))?;
         if meshes.is_empty() {
             return Err(format!("no mesh derivable for analytic region {region_id}"));
@@ -158,15 +359,30 @@ pub fn surface_meshes(
 ) -> Vec<SurfaceMeshDto> {
     let mut seen = std::collections::HashSet::new();
     let mut meshes = Vec::new();
+    // One field for the whole batch, scoped to the batch's own extent. A
+    // refresh after a stroke asks for the handful of faces that stroke
+    // touched, so this is the neighbourhood of the stroke -- not the map.
+    let field = reference_field_near(
+        graph,
+        regions_bounds(
+            graph,
+            topology,
+            request.surface_keys.iter().filter_map(|key| {
+                topology.region(&region_id_from_wire(key).ok()?)
+            }),
+        ),
+    );
+    let fill = planar_fill(&field);
     for surface_key in request.surface_keys {
         if !seen.insert(surface_key.clone()) {
             continue;
         }
-        if let Ok(mut pieces) = surface_mesh(
+        if let Ok(mut pieces) = surface_mesh_with(
             graph,
             surfaces,
             topology,
             SurfaceMeshRequest { surface_key },
+            fill,
         ) {
             meshes.append(&mut pieces);
         }

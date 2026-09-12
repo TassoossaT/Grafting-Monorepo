@@ -140,6 +140,61 @@ impl ReferenceField {
         best.map(|(_, sample)| sample)
     }
 
+    /// Ground positions on every curve's own `(s, t)` lattice: stations
+    /// every `step` metres along each curve, and at each station a rung of
+    /// points every `step` metres off it, out to that curve's reach.
+    ///
+    /// **This is the quad strip, expressed as points.** A triangulation
+    /// seeded with these covers a straight run with a regular grid whose
+    /// rows follow the curve and whose columns cross it, which is the one
+    /// thing ear clipping cannot do and the reason a swept face twists on a
+    /// slope: diagonals spanning from one margin to the other make the
+    /// interior a blend between two points tens of metres apart lengthwise.
+    /// Laid out in `(s, t)`, every triangle is local in both directions,
+    /// elevation follows the curve station by station, and the parametrized
+    /// coordinate the mesh reports is the one the lattice was built from.
+    ///
+    /// Points, rather than a strip built facet by facet, because a junction
+    /// is then free. Where two curves meet, their lattices simply overlap
+    /// and the triangulation resolves the overlap into the patch between
+    /// them -- no incidence counting, no deciding in advance where a strip
+    /// should stop and a junction should start, and nothing to get wrong
+    /// when three roads meet instead of two.
+    ///
+    /// `budget` caps the total returned, so a very long or very wide field
+    /// costs a coarser interior rather than an unbounded one. Both the
+    /// station walk and the rung stop at `t = 0` when `reach` is zero, so a
+    /// curve with no width still contributes its own centre line.
+    pub fn lattice(&self, step: f32, budget: usize) -> Vec<[f32; 2]> {
+        let mut out = Vec::new();
+        if !(step.is_finite() && step > 0.0) || budget == 0 {
+            return out;
+        }
+        for curve in &self.curves {
+            let Some(length) = curve.stations.last().copied() else {
+                continue;
+            };
+            let mut station = 0.0;
+            while station <= length {
+                if let Some((position, normal)) = curve.frame_at(station) {
+                    let rungs = (curve.reach / step).floor() as i32;
+                    for rung in -rungs..=rungs {
+                        if out.len() >= budget {
+                            return out;
+                        }
+                        let offset = rung as f32 * step;
+                        out.push([
+                            position[0] + normal[0] * offset,
+                            position[1] + normal[1] * offset,
+                        ]);
+                    }
+                }
+                station += step;
+            }
+        }
+        out
+    }
+
     /// [`Self::sample`], refused unless the point lies inside the matched
     /// curve's own [`ReferenceCurve::reach`] -- "is this ground mine?".
     ///
@@ -168,6 +223,32 @@ fn ground_distance(from: [f32; 3], to: [f32; 3]) -> f32 {
 }
 
 impl CurveData {
+    /// Ground position and left-hand unit normal at arclength `station`, or
+    /// `None` past the curve's own end.
+    fn frame_at(&self, station: f32) -> Option<([f32; 2], [f32; 2])> {
+        let segment = self
+            .stations
+            .windows(2)
+            .position(|pair| station <= pair[1])
+            .unwrap_or(self.stations.len().checked_sub(2)?);
+        let (from, to) = (self.points[segment], self.points[segment + 1]);
+        let span = self.stations[segment + 1] - self.stations[segment];
+        if span <= 1e-6 {
+            return None;
+        }
+        let along = ((station - self.stations[segment]) / span).clamp(0.0, 1.0);
+        let (dx, dz) = (to[0] - from[0], to[2] - from[2]);
+        let length = (dx * dx + dz * dz).sqrt();
+        if length <= 1e-6 {
+            return None;
+        }
+        Some((
+            [from[0] + dx * along, from[2] + dz * along],
+            // Left of travel, matching the sign `project` gives `t`.
+            [dz / length, -dx / length],
+        ))
+    }
+
     /// The nearest point of this curve to `(x, z)`, as `(distance, sample)`.
     fn project(&self, index: usize, x: f32, z: f32) -> Option<(f32, FieldSample)> {
         let mut best: Option<(f32, FieldSample)> = None;
@@ -290,6 +371,50 @@ mod tests {
         ]);
         assert!(field.sample_owned(5.0, 5.0, 1.0).is_none());
         assert!(field.sample_owned(5.0, 33.0, 1.0).is_some());
+    }
+
+    #[test]
+    fn the_lattice_of_a_straight_curve_is_a_grid_aligned_to_it() {
+        // Ten metres of curve, four wide either side, at one metre: eleven
+        // stations of nine rungs each, every one of them landing back on the
+        // curve at the station and offset it was placed at.
+        let field = ReferenceField::new([ReferenceCurve {
+            points: vec![[0.0, 0.0, 0.0], [10.0, 0.0, 0.0]],
+            reach: 4.0,
+        }]);
+        let points = field.lattice(1.0, 10_000);
+        assert_eq!(points.len(), 11 * 9);
+        for point in &points {
+            let sample = field.sample(point[0], point[1]).expect("on the field");
+            assert!((sample.s - sample.s.round()).abs() < 1e-4, "off station: {sample:?}");
+            assert!((sample.t - sample.t.round()).abs() < 1e-4, "off rung: {sample:?}");
+            assert!(sample.t.abs() <= 4.0);
+        }
+    }
+
+    #[test]
+    fn the_lattice_rides_the_curve_uphill() {
+        // The whole point of laying points out in (s, t): an interior vertex
+        // takes the curve's height at its own station, so a run climbing a
+        // slope is covered by a surface that climbs with it.
+        let field = ReferenceField::new([ReferenceCurve {
+            points: vec![[0.0, 0.0, 0.0], [10.0, 5.0, 0.0]],
+            reach: 2.0,
+        }]);
+        for point in field.lattice(1.0, 10_000) {
+            let sample = field.sample(point[0], point[1]).expect("on the field");
+            assert!((sample.y - point[0] * 0.5).abs() < 1e-3, "height left the curve: {sample:?}");
+        }
+    }
+
+    #[test]
+    fn the_lattice_is_bounded_by_its_budget() {
+        let field = ReferenceField::new([ReferenceCurve {
+            points: vec![[0.0, 0.0, 0.0], [1000.0, 0.0, 0.0]],
+            reach: 10.0,
+        }]);
+        assert_eq!(field.lattice(0.1, 512).len(), 512);
+        assert!(field.lattice(0.0, 512).is_empty());
     }
 
     #[test]

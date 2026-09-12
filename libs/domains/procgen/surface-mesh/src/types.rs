@@ -48,6 +48,35 @@ pub struct PlanarFill<'a> {
     /// claims a corner, absorbing a mitre or a union vertex sitting a hair
     /// outside the swept width.
     pub reach_slack: f32,
+    /// Spacing, in world units, of the `(s, t)` lattice the interior is
+    /// seeded with -- the length of a quad along the curve and across it.
+    ///
+    /// Seeding rather than letting the refinement place its own points is
+    /// what makes the interior a *strip*: rows that follow the curve and
+    /// columns that cross it, so every triangle is local in both directions
+    /// and a slope is followed station by station instead of spanned. Where
+    /// two curves meet, their lattices overlap and the triangulation makes
+    /// the patch between them out of what is already there, which is a
+    /// junction for free.
+    ///
+    /// Zero disables seeding, leaving the unstructured refinement that was
+    /// here before.
+    pub station_step: f32,
+    /// Ceiling on lattice points, so a very long or very wide field costs a
+    /// coarser interior rather than an unbounded one.
+    pub max_lattice_points: usize,
+    /// How far the field's height may vary across a face before the face is
+    /// worth giving an interior at all, in world units.
+    ///
+    /// A level face gains nothing: its corners already say everything there
+    /// is to say about where the surface is, ear clipping puts no vertex
+    /// anywhere the surface is not, and refining it buys triangles and
+    /// nothing else. The defect being answered here is a face that *follows*
+    /// something -- a run crossing a slope, where covering the middle from
+    /// the margins alone twists it -- so this is the test for whether there
+    /// is anything to follow. A flat map pays the cost of sampling its
+    /// corners and nothing more.
+    pub min_relief: f32,
 }
 
 impl<'a> PlanarFill<'a> {
@@ -66,6 +95,16 @@ impl<'a> PlanarFill<'a> {
             min_angle_degrees: 20.5,
             max_additional_vertices: 2_500,
             reach_slack: 1.25,
+            // A metre square: a few of them fit across an ordinary run,
+            // which is what it takes for the surface to follow a slope
+            // rather than span it, and coarse enough that a long run stays
+            // well inside the vertex budget.
+            station_step: 1.0,
+            max_lattice_points: 4_000,
+            // Two centimetres over a whole face is flat for any purpose a
+            // mesh has, and well above the noise a curve's own flattening
+            // leaves behind.
+            min_relief: 0.02,
         }
     }
 }
