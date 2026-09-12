@@ -142,13 +142,17 @@ pub fn intersections(
 /// Largest direction change, in degrees, a weld still reads as one road
 /// carrying on rather than two meeting at a corner.
 ///
-/// Above ninety on purpose. Drawing an L as one gesture already comes back
-/// rounded, because the fit runs a single smooth spline through its anchors;
-/// drawing the same L as two gestures has to land in the same place or the
-/// tool is answering the same intent two different ways depending on whether
-/// the hand paused. What is left above the threshold is the switchback --
-/// a run doubling back on itself, where a corner is the only honest reading.
-const MAX_SMOOTHED_WELD_DEGREES: f64 = 120.;
+/// The same threshold the fit itself uses, and for the same reason. Two
+/// gestures meeting at a right angle and one gesture drawn through a right
+/// angle are the same intent, so they have to reach the same geometry --
+/// that requirement has not changed, only the answer it points at. It used
+/// to point at rounding both, because a single fitted run could not express
+/// a corner at all and the weld had to match it. Now that
+/// [`crate::bezier::fit_gesture`] breaks a run where the hand turns, the
+/// honest common answer is the corner, and one constant governs both sides
+/// of it: below this, a road bends and the weld carries the tangent through;
+/// above it, a road turns and the crease is what was drawn.
+const MAX_SMOOTHED_WELD_DEGREES: f64 = crate::bezier::GESTURE_CORNER_DEGREES;
 
 fn norm(v: CurvePoint) -> Option<CurvePoint> {
     let length = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
@@ -183,6 +187,16 @@ fn length_of(v: CurvePoint) -> f64 {
 /// Idempotent: a joint already sharing a tangent averages to the direction it
 /// is already pointing, so regenerating a cloud over and over cannot make it
 /// drift.
+/// The identity an output edge descends from -- a split piece carries its
+/// parent's id with a suffix, and is the same authored curve for the purpose
+/// of deciding who authored it.
+fn authoring_root(edge_id: &str) -> &str {
+    match edge_id.find(":split:") {
+        Some(at) => &edge_id[..at],
+        None => edge_id,
+    }
+}
+
 fn smooth_welds(
     output: &mut Vec<CurveEdge>,
     all_edges: &[CurveEdge],
@@ -225,6 +239,18 @@ fn smooth_welds(
         };
         if first >= emitted_count && second >= emitted_count {
             continue; // nothing here was welded by this call.
+        }
+        // Both sides authored by this same call: not a weld at all, but an
+        // interior joint of the run being inserted. Its tangent is already
+        // the caller's own answer -- a corner the fit deliberately broke, or
+        // a bend it deliberately carried through -- and there is no second
+        // opinion here to reconcile it with. Smoothing it would overwrite an
+        // authored corner with a tangent nobody asked for, which is exactly
+        // what a weld threshold exists to avoid doing to standing geometry.
+        if !old_ids.contains(authoring_root(&work[first].edge_id))
+            && !old_ids.contains(authoring_root(&work[second].edge_id))
+        {
+            continue;
         }
         let near = |index: usize, is_start: bool| {
             let handles = &work[index].curve;
@@ -594,13 +620,35 @@ mod tests {
     }
 
     #[test]
-    fn an_l_drawn_as_two_strokes_welds_into_one_shared_tangent() {
+    fn an_l_drawn_as_two_strokes_keeps_the_corner_it_was_drawn_with() {
         // The standing run travels +x and stops at `b`; the new stroke leaves
-        // `b` travelling +z. Drawn as one gesture this corner comes back
-        // rounded, and drawing it as two must not answer differently.
+        // `b` travelling +z. Drawn as one gesture this now comes back as a
+        // corner, and drawing it as two must not answer differently -- which
+        // is the same requirement as before, pointing the other way now that
+        // a single fitted gesture can express a corner at all.
         let patch = plan(request(
             vec![node("c", [10., 0., 0.]), node("d", [10., 0., 10.])],
             vec![edge("second", "c", "d", [10., 0., 0.], [10., 0., 10.])],
+        ))
+        .expect("the weld plans");
+
+        let fresh = near_direction(&patch, "second", true);
+        assert!(fresh[2] > 0.999, "the stroke was bent off the corner: {fresh:?}");
+        // The standing run is not re-emitted at all, because nothing about it
+        // changed: a corner costs neither side anything.
+        assert!(patch.edges.iter().all(|e| e.edge_id != "first"));
+    }
+
+    #[test]
+    fn a_bend_short_of_a_corner_still_welds_into_one_shared_tangent() {
+        // Thirty degrees off: a road carrying on, not a road turning. The
+        // crease here is an artefact of where the hand happened to lift, and
+        // smoothing it is what makes a run drawn in two goes indistinguishable
+        // from the same run drawn in one.
+        let far = [10. + 10. * 0.866_025_4, 0., 5.];
+        let patch = plan(request(
+            vec![node("c", [10., 0., 0.]), node("d", far)],
+            vec![edge("second", "c", "d", [10., 0., 0.], far)],
         ))
         .expect("the weld plans");
 
@@ -610,8 +658,38 @@ mod tests {
         let dot = standing[0] * fresh[0] + standing[1] * fresh[1] + standing[2] * fresh[2];
         assert!(dot < -0.999, "controls are not collinear through the anchor: {dot}");
         // Half each: the standing run gave way as much as the new one did, so
-        // the shared tangent bisects the corner rather than adopting a side.
-        assert!((fresh[0] - fresh[2]).abs() < 1e-6, "the tangent did not bisect: {fresh:?}");
+        // the shared tangent bisects the bend rather than adopting a side.
+        assert!(fresh[2] > 0. && fresh[2] < 0.5, "the tangent did not bisect: {fresh:?}");
+    }
+
+    #[test]
+    fn a_corner_authored_inside_one_gesture_is_never_smoothed() {
+        // Both sides come from this same call, so there is no second opinion
+        // to reconcile: the fit broke the run here on purpose and the weld
+        // pass has nothing to say about it, at any angle.
+        let patch = plan(NetworkRequest {
+            nodes: Vec::new(),
+            edges: Vec::new(),
+            added_nodes: vec![
+                node("p", [0., 0., 0.]),
+                node("q", [10., 0., 0.]),
+                node("r", [10., 0., 10.]),
+            ],
+            added_edges: vec![
+                edge("run:0", "p", "q", [0., 0., 0.], [10., 0., 0.]),
+                edge("run:1", "q", "r", [10., 0., 0.], [10., 0., 10.]),
+            ],
+            node_prefix: "j:".into(),
+            snap_tolerance: 1.,
+            height_tolerance: 0.5,
+            tolerance: 0.01,
+        })
+        .expect("the run plans");
+
+        let incoming = near_direction(&patch, "run:0", false);
+        let outgoing = near_direction(&patch, "run:1", true);
+        assert!(incoming[0] < -0.999, "the incoming run was bent: {incoming:?}");
+        assert!(outgoing[2] > 0.999, "the outgoing run was bent: {outgoing:?}");
     }
 
     #[test]

@@ -1,4 +1,4 @@
-import { planBezierRoad, unionBezierRibbons } from "./bezier-road-plan.ts";
+import { planBezierRoad, unionBezierRibbons, PATH_CORNER_DEGREES } from "./bezier-road-plan.ts";
 import { pathCorridorId } from "./path-corridor.ts";
 import type { BezierPort } from "@/ports";
 import type { PathBrushEffect } from "../../modes/surface-edit-contract.ts";
@@ -114,7 +114,7 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
     snapshot: input.graphSnapshot, topologies: input.regionTopologies, port: input.bezier, stroke,
     corridorId: pathCorridorId(operationId, effect.parameters.kind),
     offsets: effect.parameters.profile.map((p) => p.lateralOffset),
-    miterLimit: effect.parameters.miterLimit, tolerance,
+    miterLimit: effect.parameters.miterLimit, tolerance, cornerDegrees: PATH_CORNER_DEGREES,
     snapReach: Math.max(tolerance, effect.brushShape.kind === "square" ? effect.brushShape.size / 2 : effect.brushShape.radius),
   }) : undefined;
   if (bezier && bezier.graphPatch.edges.length === 0) return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente após o encaixe." };

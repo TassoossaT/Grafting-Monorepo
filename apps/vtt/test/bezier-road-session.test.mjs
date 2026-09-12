@@ -249,3 +249,33 @@ test("real WASM: disconnected corridors retain shared surface ownership across l
     }
   } finally { f.session.free(); }
 });
+
+test("real WASM: an L drawn in one stroke keeps the corner it was drawn with", () => {
+  const f=sessionFixture();
+  try {
+    // Ten metres east, then ten north, sampled like a hand would. The fit
+    // used to carry a tangent through the turn and hand back a rounded
+    // shoulder; the corner is now a break, so an anchor lands on it exactly.
+    const stroke=[];
+    for(let d=0;d<=10;d+=0.5) stroke.push(point(d-10,-10));
+    for(let d=0.5;d<=10;d+=0.5) stroke.push(point(0,d-10));
+    draw(f,stroke,"road:L");
+    const nodes=f.runtime.getGraphSnapshot().nodes.filter((n)=>n.id.startsWith("spine:"));
+    const onCorner=nodes.filter((n)=>Math.hypot(n.position.x-0,n.position.z-(-10))<1e-6);
+    assert.equal(onCorner.length,1,"the drawn corner is an anchor of the spine");
+
+    const edges=curves(f);
+    const at=edges.filter((e)=>e.startNodeId===onCorner[0].id||e.endNodeId===onCorner[0].id);
+    assert.equal(at.length,2,"two runs meet there");
+    // Tangents at the corner, each taken on the side that touches it.
+    const tangent=(e)=>{
+      const h=e.startNodeId===onCorner[0].id?e.curve.start:e.curve.end;
+      const l=Math.hypot(h[0],h[2]);
+      return [h[0]/l,h[2]/l];
+    };
+    const [a,b]=at.map(tangent);
+    // Two handles leaving one anchor at ninety degrees: the corner as drawn,
+    // not one tangent shared across it (which would read as -1 here).
+    assert.ok(Math.abs(a[0]*b[0]+a[1]*b[1])<1e-3,`corner tangents are independent, got ${a[0]*b[0]+a[1]*b[1]}`);
+  } finally { f.session.free(); }
+});

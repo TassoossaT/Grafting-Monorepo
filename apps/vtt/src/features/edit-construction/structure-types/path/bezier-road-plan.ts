@@ -83,6 +83,17 @@ export function bezierChains(snapshot: ConstructionGraphSnapshot, port: BezierPo
   return chains;
 }
 
+/**
+ * The turn, in degrees, past which a stroke is read as two runs meeting at a
+ * corner rather than one road bending.
+ *
+ * Mirrors `grafting_graph_core::bezier::GESTURE_CORNER_DEGREES`, and is
+ * passed explicitly rather than left to the engine's default so that the
+ * value a road is authored with is visible on this side too -- the same
+ * reason every other tolerance in this plan is named here.
+ */
+export const PATH_CORNER_DEGREES = 75;
+
 /** Product identities and profile policy surround generic Rust fitting and connections. */
 export function planBezierRoad(input: {
   readonly snapshot: ConstructionGraphSnapshot;
@@ -94,10 +105,17 @@ export function planBezierRoad(input: {
   readonly miterLimit: number;
   readonly tolerance: number;
   readonly snapReach: number;
+  /**
+   * Turn past which the stroke breaks into separate runs. Omitted, the
+   * stroke is fitted as one smooth run however sharply it was drawn --
+   * which is what every road did before, and is still what a caller with no
+   * opinion about corners should get.
+   */
+  readonly cornerDegrees?: number;
 }) {
   const { port, offsets, corridorId } = input;
   const fitted = port.curveBatch({ tolerance: Math.max(input.tolerance, 0.025), commands: [
-    { kind: "fit", points: input.stroke.map(curvePoint) },
+    { kind: "fit", points: input.stroke.map(curvePoint), cornerDegrees: input.cornerDegrees },
   ] })[0]!;
   const controlPoints = [...fitted.curves.map((c) => curvePosition(c.points[0])), curvePosition(fitted.curves.at(-1)!.points[3])];
   const addedNodes = controlPoints.map((p, i) => ({ id: spineControlNodeId(corridorId, i), position: curvePoint(p) }));

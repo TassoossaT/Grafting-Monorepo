@@ -17,6 +17,11 @@ pub enum CurveCommand {
     Fit {
         /// Captured XYZ samples.
         points: Vec<CurvePoint>,
+        /// Turn, in degrees, past which the stroke is read as two runs
+        /// meeting at a corner rather than one curve bending. Absent, the
+        /// stroke is fitted as one smooth run however sharply it was drawn.
+        #[cfg_attr(feature = "curve-serde", serde(default, rename = "cornerDegrees"))]
+        corner_degrees: Option<f64>,
     },
     /// Derive a ribbon from independent lateral offsets.
     Ribbon {
@@ -138,7 +143,13 @@ pub fn execute(batch: CurveBatch) -> Result<Vec<CurveResult>, String> {
         let mut authored = None;
         let curves = match cmd {
             CurveCommand::Automatic { points } => automatic_path(&points)?,
-            CurveCommand::Fit { points } => crate::bezier::fit_path(&points, batch.tolerance)?,
+            CurveCommand::Fit {
+                points,
+                corner_degrees,
+            } => match corner_degrees {
+                Some(degrees) => crate::bezier::fit_gesture(&points, batch.tolerance, degrees)?,
+                None => crate::bezier::fit_path(&points, batch.tolerance)?,
+            },
             CurveCommand::Sample { curves } => curves,
             CurveCommand::Ribbon {
                 curve,

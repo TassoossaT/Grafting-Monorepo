@@ -11,7 +11,8 @@ export interface CurveHandles {
   readonly endBandOffsets?: readonly number[];
 }
 export type CurveCommand =
-  | { readonly kind: "automatic" | "fit"; readonly points: readonly CurvePoint[] }
+  | { readonly kind: "automatic"; readonly points: readonly CurvePoint[] }
+  | { readonly kind: "fit"; readonly points: readonly CurvePoint[]; readonly cornerDegrees?: number }
   | { readonly kind: "join"; readonly sections: readonly (readonly [CurvePoint, CurvePoint])[] }
   | { readonly kind: "ribbon"; readonly curve: CubicBezier; readonly offsets: readonly [number, number]; readonly endOffsets?: readonly [number, number] }
   | { readonly kind: "sample"; readonly curves: readonly CubicBezier[] }

@@ -403,25 +403,7 @@ pub fn fit_path(points: &[CurvePoint], accuracy: f64) -> Result<Vec<CubicBezier>
     if points.len() > 4096 {
         return Err("stroke sample budget exceeded".into());
     }
-    // Distinct **in XZ**, which is the metric `automatic_path` measures its
-    // knots with -- not 3D distance. Two samples sharing a ground position
-    // and differing only in height are one station of the path, however far
-    // apart they sit vertically, and keeping both leaves `automatic_path`
-    // with a zero knot and nothing to do but refuse the whole stroke.
-    //
-    // A pointer produces that pair readily: snap the ground position to a
-    // grid and every sample inside one cell lands on the same XZ while the
-    // height under the cursor goes on varying with the surface. Deduplicating
-    // in 3D let every one of those through.
-    let mut clean: Vec<CurvePoint> = Vec::new();
-    for p in points {
-        if clean
-            .last()
-            .is_none_or(|q| ((p[0] - q[0]).powi(2) + (p[2] - q[2]).powi(2)).sqrt() > 1e-8)
-        {
-            clean.push(*p);
-        }
-    }
+    let clean = distinct_in_xz(points);
     if clean.len() < 2 {
         return Err("stroke needs distinct samples".into());
     }
@@ -459,6 +441,151 @@ pub fn fit_path(points: &[CurvePoint], accuracy: f64) -> Result<Vec<CubicBezier>
         indices.sort_unstable();
         indices.dedup();
     }
+}
+/// Above this turn, in degrees, a gesture stops being one curve bending hard
+/// and becomes two runs meeting at a corner.
+///
+/// The number is not a taste setting. Below it a road *bends*; above it a
+/// road *turns*, and the two want opposite things from the fit: a bend wants
+/// the tangent carried through so the surface stays smooth, a turn wants the
+/// tangent broken so the corner stays where it was drawn. `automatic_path`
+/// can only do the first -- every anchor it produces is G1 by construction --
+/// which is why an L drawn in one gesture has always come back rounded no
+/// matter how sharply it was drawn.
+pub const GESTURE_CORNER_DEGREES: f64 = 75.;
+/// Samples with a distinct ground position, in order.
+///
+/// Distinct **in XZ**, which is the metric `automatic_path` measures its
+/// knots with -- not 3D distance. Two samples sharing a ground position and
+/// differing only in height are one station of the path, however far apart
+/// they sit vertically, and keeping both leaves `automatic_path` with a zero
+/// knot and nothing to do but refuse the whole stroke.
+///
+/// A pointer produces that pair readily: snap the ground position to a grid
+/// and every sample inside one cell lands on the same XZ while the height
+/// under the cursor goes on varying with the surface. Deduplicating in 3D let
+/// every one of those through.
+fn distinct_in_xz(points: &[CurvePoint]) -> Vec<CurvePoint> {
+    let mut clean: Vec<CurvePoint> = Vec::new();
+    for p in points {
+        if clean
+            .last()
+            .is_none_or(|q| ((p[0] - q[0]).powi(2) + (p[2] - q[2]).powi(2)).sqrt() > 1e-8)
+        {
+            clean.push(*p);
+        }
+    }
+    clean
+}
+/// Perpendicular distance from `p` to segment `a..b`, measured in XZ.
+fn distance_segment_xz(p: CurvePoint, a: CurvePoint, b: CurvePoint) -> f64 {
+    let dx = b[0] - a[0];
+    let dz = b[2] - a[2];
+    let len = dx * dx + dz * dz;
+    let t = if len == 0. {
+        0.
+    } else {
+        (((p[0] - a[0]) * dx + (p[2] - a[2]) * dz) / len).clamp(0., 1.)
+    };
+    ((p[0] - (a[0] + dx * t)).powi(2) + (p[2] - (a[2] + dz * t)).powi(2)).sqrt()
+}
+/// Indices of the samples Ramer-Douglas-Peucker keeps at `tolerance`, in XZ.
+///
+/// Indices rather than points because the caller still fits the *original*
+/// samples: this track exists only to decide where the run turns, and a hand
+/// that wobbles by a centimetre between two samples produces a turn of tens
+/// of degrees there that has nothing to do with where the road goes.
+/// Measuring the turn on the simplified track and fitting the full one keeps
+/// the accuracy the fit promises while asking the corner question of a shape
+/// the hand actually drew.
+fn simplified_indices(points: &[CurvePoint], tolerance: f64) -> Vec<usize> {
+    let mut keep = vec![false; points.len()];
+    keep[0] = true;
+    keep[points.len() - 1] = true;
+    let mut pending = vec![(0usize, points.len() - 1)];
+    while let Some((first, last)) = pending.pop() {
+        if last <= first + 1 {
+            continue;
+        }
+        let mut worst = (tolerance, 0usize);
+        for i in first + 1..last {
+            let d = distance_segment_xz(points[i], points[first], points[last]);
+            if d > worst.0 {
+                worst = (d, i);
+            }
+        }
+        if worst.1 != 0 {
+            keep[worst.1] = true;
+            pending.push((first, worst.1));
+            pending.push((worst.1, last));
+        }
+    }
+    (0..points.len()).filter(|i| keep[*i]).collect()
+}
+/// The turn at `b`, in degrees, going `a -> b -> c` in XZ. Zero is straight
+/// on; 180 is a reversal.
+fn turn_degrees(a: CurvePoint, b: CurvePoint, c: CurvePoint) -> f64 {
+    let (inx, inz) = (b[0] - a[0], b[2] - a[2]);
+    let (outx, outz) = (c[0] - b[0], c[2] - b[2]);
+    let cross = inx * outz - inz * outx;
+    let dot = inx * outx + inz * outz;
+    cross.atan2(dot).abs().to_degrees()
+}
+/// Fits a captured gesture, breaking it into independent runs wherever the
+/// hand genuinely turned a corner.
+///
+/// Same bound as [`fit_path`] at every sample, and identical to it on a
+/// gesture that never turns past `corner_degrees`. What differs is what
+/// happens when it does: the run is cut there and each side fitted on its
+/// own, so the corner anchor ends up with two independent tangents -- C0,
+/// the corner as drawn -- instead of one shared tangent rounding it off.
+///
+/// A corner also has to be a corner of the *road* and not of the hand: the
+/// turn is measured on the noise-filtered track, and both arms have to be
+/// longer than `accuracy`, so a jitter spike between two samples cannot cut
+/// a road in half.
+pub fn fit_gesture(
+    points: &[CurvePoint],
+    accuracy: f64,
+    corner_degrees: f64,
+) -> Result<Vec<CubicBezier>, String> {
+    tolerance(accuracy)?;
+    if points.len() > 4096 {
+        return Err("stroke sample budget exceeded".into());
+    }
+    if !corner_degrees.is_finite() || corner_degrees <= 0. || corner_degrees >= 180. {
+        return fit_path(points, accuracy);
+    }
+    let clean = distinct_in_xz(points);
+    if clean.len() < 2 {
+        return Err("stroke needs distinct samples".into());
+    }
+    if clean.len() < 3 {
+        return fit_path(&clean, accuracy);
+    }
+    let track = simplified_indices(&clean, accuracy);
+    let mut cuts: Vec<usize> = Vec::new();
+    for w in track.windows(3) {
+        let (a, b, c) = (clean[w[0]], clean[w[1]], clean[w[2]]);
+        if distance(a, b) <= accuracy || distance(b, c) <= accuracy {
+            continue;
+        }
+        if turn_degrees(a, b, c) >= corner_degrees {
+            cuts.push(w[1]);
+        }
+    }
+    if cuts.is_empty() {
+        return fit_path(&clean, accuracy);
+    }
+    let mut out = Vec::new();
+    let mut from = 0usize;
+    for cut in cuts.into_iter().chain(std::iter::once(clean.len() - 1)) {
+        if cut > from {
+            out.extend(fit_path(&clean[from..=cut], accuracy)?);
+        }
+        from = cut;
+    }
+    Ok(out)
 }
 #[cfg(test)]
 mod tests {
@@ -599,5 +726,112 @@ mod tests {
         let c = automatic_path(&[[0., 0., 0.], [9., 0., 0.]]).unwrap()[0];
         assert_eq!(c.points[1], [3., 0., 0.]);
         assert_eq!(c.points[2], [6., 0., 0.]);
+    }
+    /// An L drawn as one gesture: 10 m east, then 10 m north, sampled every
+    /// half metre. The corner is the one thing the user drew that the fit was
+    /// throwing away.
+    fn drawn_l() -> Vec<CurvePoint> {
+        let mut stroke: Vec<CurvePoint> = Vec::new();
+        let mut d = 0.;
+        while d <= 10. {
+            stroke.push([d, 0., 0.]);
+            d += 0.5;
+        }
+        let mut d = 0.5;
+        while d <= 10. {
+            stroke.push([10., 0., d]);
+            d += 0.5;
+        }
+        stroke
+    }
+    /// How far the curves stray from the corner they were drawn through.
+    fn corner_miss(curves: &[CubicBezier], corner: CurvePoint) -> f64 {
+        curves
+            .iter()
+            .flat_map(|c| c.sample(0.01).unwrap())
+            .map(|s| distance(s.position, corner))
+            .fold(f64::INFINITY, f64::min)
+    }
+    #[test]
+    fn a_drawn_corner_survives_the_fit() {
+        let stroke = drawn_l();
+        let corner = [10., 0., 0.];
+        // A corner is where the plain fit is at its worst, because it has no
+        // way to express one: every anchor `automatic_path` mints is G1, so
+        // the best it can do is spend anchors rounding the shoulder as
+        // tightly as the tolerance demands. Widen the tolerance -- exactly
+        // what a wide brush does, since its unused reach *is* the fitting
+        // budget -- and the shoulder opens up with it.
+        //
+        // Breaking the run at the corner instead puts the corner on the
+        // curve exactly, and keeps it there at any tolerance.
+        for accuracy in [0.05, 0.2, 0.4] {
+            let kept = fit_gesture(&stroke, accuracy, GESTURE_CORNER_DEGREES).unwrap();
+            assert!(corner_miss(&kept, corner) < 1e-6);
+        }
+    }
+    #[test]
+    fn a_corner_is_a_real_break_in_tangent() {
+        let curves = fit_gesture(&drawn_l(), 0.05, GESTURE_CORNER_DEGREES).unwrap();
+        let at = curves
+            .iter()
+            .position(|c| distance(c.points[3], [10., 0., 0.]) < 1e-6)
+            .expect("a curve ends exactly at the drawn corner");
+        let incoming = curves[at].derivative(1.).unwrap();
+        let outgoing = curves[at + 1].derivative(0.).unwrap();
+        let norm = |v: CurvePoint| {
+            let l = (v[0] * v[0] + v[2] * v[2]).sqrt();
+            [v[0] / l, v[2] / l]
+        };
+        let (a, b) = (norm(incoming), norm(outgoing));
+        // Ninety degrees as drawn, not a tangent shared across the corner.
+        assert!((a[0] * b[0] + a[1] * b[1]).abs() < 1e-6);
+
+        // The plain fit passes just as close to the corner -- it refines
+        // until every sample is within tolerance, and the corner is one of
+        // them -- so proximity was never the difference. Continuity is: it
+        // has no break anywhere, because it cannot make one.
+        let rounded = fit_path(&drawn_l(), 0.05).unwrap();
+        for pair in rounded.windows(2) {
+            let (a, b) = (norm(pair[0].derivative(1.).unwrap()), norm(pair[1].derivative(0.).unwrap()));
+            assert!(a[0] * b[0] + a[1] * b[1] > 0.9);
+        }
+    }
+    #[test]
+    fn a_gentle_bend_is_not_a_corner() {
+        let stroke: Vec<CurvePoint> = (0..=40)
+            .map(|i| {
+                let a = i as f64 / 40. * std::f64::consts::FRAC_PI_2;
+                [10. * a.sin(), 0., 10. * (1. - a.cos())]
+            })
+            .collect();
+        // The same total ninety degrees, spread over a quarter circle: one
+        // curve's worth of bending, and it must come back as bending.
+        assert_eq!(
+            fit_gesture(&stroke, 0.05, GESTURE_CORNER_DEGREES).unwrap(),
+            fit_path(&stroke, 0.05).unwrap()
+        );
+    }
+    #[test]
+    fn a_shaking_hand_does_not_cut_the_road() {
+        // A straight run with a two-centimetre tremor on it. Sample to
+        // sample the tremor turns by well over ninety degrees; the road does
+        // not turn at all.
+        let stroke: Vec<CurvePoint> = (0..=60)
+            .map(|i| {
+                let d = i as f64 * 0.25;
+                [d, 0., if i % 2 == 0 { 0.02 } else { -0.02 }]
+            })
+            .collect();
+        let curves = fit_gesture(&stroke, 0.2, GESTURE_CORNER_DEGREES).unwrap();
+        assert_eq!(curves, fit_path(&stroke, 0.2).unwrap());
+    }
+    #[test]
+    fn a_gesture_without_a_corner_threshold_is_the_old_fit() {
+        let stroke = drawn_l();
+        assert_eq!(
+            fit_gesture(&stroke, 0.05, 0.).unwrap(),
+            fit_path(&stroke, 0.05).unwrap()
+        );
     }
 }
