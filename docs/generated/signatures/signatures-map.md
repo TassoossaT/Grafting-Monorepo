@@ -71,6 +71,7 @@ pub struct ApplyPatchReplacementRequest
 pub struct GraphPatchRequest
 pub struct GraphPatchNode
 pub struct GraphPatchEdge
+pub struct ReplacedState
 pub fn apply_patch_replacement(
 
 // src/region_editing.rs
@@ -96,6 +97,7 @@ pub fn apply_region_overlay(
 
 // src/session.rs
 pub struct ConstructionSession
+pub fn profile_cap_json(&self, json: &str) -> Result<String, JsValue>
 pub fn bezier_batch_json(&self, json: &str) -> Result<String, JsValue>
 pub fn bezier_network_json(&self, json: &str) -> Result<String, JsValue>
 pub fn new() -> ConstructionSession
@@ -109,7 +111,6 @@ pub fn remove_vertex_json(&mut self, request_json: &str) -> Result<String, JsVal
 pub fn retype_edge_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn move_edge_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn move_region_json(&mut self, request_json: &str) -> Result<String, JsValue>
-pub fn add_hole_json(&mut self, request_json: &str) -> Result<String, JsValue>
 
 // src/spatial_index.rs
 pub const DEFAULT_GRID_CELL_SIZE: f32 = 4.0;
@@ -415,6 +416,7 @@ pub fn normal_at(&self, point: [f32; 3]) -> [f32; 3]
 pub mod frame;
 pub mod math;
 pub mod planar;
+pub mod profile;
 pub mod tessellation;
 pub mod types;
 pub mod upright;
@@ -433,6 +435,9 @@ pub fn point_in_loop_xz(point: [f32; 2], loop_: &[[f32; 3]]) -> bool
 
 // src/planar.rs
 pub fn triangulate_contour_loops<'a>(
+
+// src/profile.rs
+pub fn triangulate_profile_sheet(
 
 // src/tessellation.rs
 pub fn traversed_edge(topology: &ContourTopology, use_: &OrientedEdgeUse) -> Option<ContourEdge>
@@ -3389,6 +3394,16 @@ export function tokenSceneItem(token: RenderToken): SceneItem<TokenVisualParams>
   params: { color: token.appearance.color },
   },
 
+// src/composition/tabletop/commit-timing.ts
+export function timeCommit<T>(label: string, run: () => T): T {
+  if (current !== undefined) return timePhase(label, run);
+export function timePhase<T>(label: string, run: () => T): T {
+  const trace = current;
+  if (trace === undefined) return run();
+export function countInCommit(label: string, by = 1): void {
+  if (current === undefined) return;
+  current.counters.set(label, (current.counters.get(label) ?? 0) + by);
+
 // src/composition/tabletop/create-tabletop-runtime.ts
 export interface CreateTabletopRuntimeInput {
   readonly tableId: string;
@@ -3488,9 +3503,7 @@ export function commitPathCloudIntent(
   effect: PathBrushEffect,
   tolerance: number,
   ): void {
-  try {
-  const plan = planPathCloudMutation({
-  bezier: ctx.runtime,
+  timeCommit("rua", () => commitUntimed(ctx, effect, tolerance));
 
 // src/composition/tabletop/tabletop-runtime.ts
 export type TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed";
@@ -3508,13 +3521,13 @@ export interface ConfirmedTokenDeltaEnvelope {
   }
 export type TabletopRuntimeListener = () => void;
 export interface TabletopRuntime extends BezierPort {
+  generateCap(request: import("../../ports/cap-port.ts").CapRequest): import("../../ports/cap-port.ts").CapPatch;
   start(): Promise<void>;
   applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void;
   /**
   * Applies a resolved sequence of atomic edit ops as one transaction --
   * what `planEdit` produced from the user's gesture and the grabbed role's
   * own policy. The runtime deliberately does not resolve policy itself:
-  * that belongs to `features/edit-construction`, and the tool layer runs it
 export class AppTabletopRuntime implements TabletopRuntime {
   readonly #listeners = new Set<TabletopRuntimeListener>();
 
@@ -4076,6 +4089,19 @@ export const platformContourTool: ConstructionTool<"platform-contour"> = {
   onCancel(ctx) { drafts.delete(ctx.runtime); },
   previewFor(gesture, params, ctx) {
   const points = draft(ctx,params);
+
+// src/composition/tabletop/tools/roof/roof-tool.ts
+export const ROOF_OVERHANG = 0.2;
+export function commitRoof(ctx: ToolContext, capRequest: CapRequest): void {
+  try {
+  const cap = ctx.runtime.generateCap(capRequest);
+export const roofTool: ConstructionTool<"roof"> = {
+  id: "roof", previewOnHover: true,
+  defaultParams: () => DEFAULT_TOOL_PARAMS.roof,
+  previewFor(gesture, params, ctx) {
+  if (params.shape === "platform") return undefined;
+  try {
+  const cap = ctx.runtime.generateCap(request(ctx, gesture.start, gesture.current, params));
 
 // src/composition/tabletop/tools/shapes/geometry-2d.ts
 export interface PointXZ {
@@ -5321,6 +5347,16 @@ export const platformStructureType: StructureTypeDefinition = Object.freeze<Stru
   motionInfluences: (topology, transport): readonly ConstructionMotionInfluence[] => {
   const anchor = topology.nodes[0];
 
+// src/features/edit-construction/structure-types/roof/roof-structure.ts
+export const roofStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
+  surfaceType: "roof", label: "Telhado", creation: "analytic sheets with one horizontal base and maximum height",
+  roleFor: (_topology, target) => `roof-${target.kind}`,
+  policyFor: (role) => role === "roof-region"
+  ? { ...allowed(role, ALL_AXES, "cloud"), transport: true }
+  : denied(role, "Mova o telhado pela face."),
+  interactionOver: () => IGNORE,
+  repairAfterCut: { kind: "preserve", reason: "Roof section changes require whole-cover regeneration." },
+
 // src/features/edit-construction/structure-types/structural-cut.ts
 export type CutProfile =
 export interface StructuralCutArea {
@@ -5801,6 +5837,18 @@ export interface BezierPort {
   curveNetwork(request: CurveNetworkRequest): CurveNetworkPatch;
   }
 
+// src/ports/cap-port.ts
+export interface CapRequest {
+  readonly base: { readonly kind: "rectangle"; readonly min: readonly [number, number]; readonly max: readonly [number, number] }
+  | { readonly kind: "circle"; readonly center: readonly [number, number]; readonly radius: number }
+  | { readonly kind: "contour"; readonly points: readonly [readonly [number, number], readonly [number, number], readonly [number, number], readonly [number, number]]; readonly centers: readonly [readonly [number, number] | null, readonly [number, number] | null, readonly [number, number] | null, readonly [number, number] | null] };
+export interface CapPatch {
+  readonly preview: readonly (readonly [number, number, number, number, number, number])[];
+  readonly nodes: readonly (readonly [number, number, number])[];
+  readonly edges: readonly { readonly start: number; readonly end: number; readonly center: readonly [number, number] | null }[];
+  readonly faces: readonly { readonly boundary: readonly (readonly [number, boolean])[]; readonly profile: ConstructionSheetProfile }[];
+  }
+
 // src/ports/construction-session-port.ts
 export type ConstructionNodeId = string;
 export type ConstructionEdgeId = string;
@@ -5854,16 +5902,14 @@ export interface ConstructionCoveredRegion {
   /** World-space centroid; `y` is the height the face currently sits at. */
   readonly centroid: ConstructionPosition;
   readonly nodeIds: readonly ConstructionNodeId[];
-export interface ConstructionPatchRegion {
-  readonly regionId: string;
-  readonly boundary: readonly ConstructionOrientedEdgeUse[];
-  /**
-  * Inner loops this face is opened by -- a door, a window, any opening.
-  * Absent means a solid face, which is what almost every patch declares.
-  *
-  * An opening leaves one use free on every edge of its own rim, so a
+export interface ConstructionSheetProfile {
+  readonly start: number;
+  readonly middle: number;
+  readonly end: number;
+  }
 
 // src/ports/index.ts
+export type { CapRequest, CapPatch } from "./cap-port.ts";
 export type { BezierPort, CurveBatch, CurveCommand, CurveResult, CurveHandles, CurvePoint, CubicBezier, CurveHandleMode, CurveNetworkRequest, CurveNetworkPatch } from "./bezier-port.ts";
 export type {
   CameraControlHandle,

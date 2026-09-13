@@ -86,6 +86,7 @@ export interface ConfirmedTokenDeltaEnvelope {
 export type TabletopRuntimeListener = () => void;
 
 export interface TabletopRuntime extends BezierPort {
+  generateCap(request: import("../../ports/cap-port.ts").CapRequest): import("../../ports/cap-port.ts").CapPatch;
   start(): Promise<void>;
   applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void;
   /**
@@ -902,6 +903,11 @@ export class AppTabletopRuntime implements TabletopRuntime {
       return this.#construction.getAllRegionTopologies();
     }
     return [];
+  }
+
+  generateCap(request: import("../../ports/cap-port.ts").CapRequest): import("../../ports/cap-port.ts").CapPatch {
+    this.#requireReady("generating a covering");
+    return this.#construction.generateCap(request);
   }
 
   curveBatch(request: import("../../ports/bezier-port.ts").CurveBatch): readonly import("../../ports/bezier-port.ts").CurveResult[] {

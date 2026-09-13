@@ -1,3 +1,4 @@
+import { roofStructureType } from "./roof/roof-structure.ts";
 import { platformStructureType } from "./platform/platform-structure.ts";
 import type { ConstructionCoveredRegion, ConstructionRegionTopology } from "@/ports";
 
@@ -39,6 +40,7 @@ import { forbid, type CreationInteraction } from "./creation-interaction.ts";
  */
 export const STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[] = Object.freeze([
   platformStructureType,
+  roofStructureType,
   panelStructureType("wall-white", "Parede branca", "one upright panel per contour edge, drawn or stamped"),
   panelStructureType("wall-gray", "Parede cinza", "one upright panel per contour edge, drawn or stamped"),
   panelStructureType("door", "Porta", "one face standing in an opening, on the rim the wall shares with it"),

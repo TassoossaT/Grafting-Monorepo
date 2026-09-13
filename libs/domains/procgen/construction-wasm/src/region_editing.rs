@@ -389,6 +389,8 @@ pub struct RegionNodeDto {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RegionTopologyDto {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub profile: Option<grafting_graph_core::profile_surface::SheetProfile>,
     pub surface_key: Vec<String>,
     pub surface_type: String,
     pub physical: bool,
@@ -483,6 +485,7 @@ pub fn region_topology(
         })
         .collect();
     Ok(Some(RegionTopologyDto {
+        profile: topology.region(region).and_then(|region| region.profile()),
         surface_key: region_id_to_wire(region),
         surface_type: surface.surface_type().as_str().to_owned(),
         physical: surface.physical(),
@@ -957,6 +960,7 @@ mod tests {
                     .collect(),
                 regions: vec![
                     PatchRegionDto {
+                    profile: None,
                         region_id: "wall".into(),
                         boundary: uses("panel", false),
                         holes: vec![uses("rim", false)],
@@ -964,6 +968,7 @@ mod tests {
                         physical: true,
                     },
                     PatchRegionDto {
+                    profile: None,
                         region_id: "window".into(),
                         // The other way round the very same rim: the free
                         // side the hole left is the side this face takes.
@@ -1101,6 +1106,7 @@ mod tests {
                     .collect(),
                 regions: vec![
                     PatchRegionDto {
+                    profile: None,
                         region_id: "good".into(),
                         boundary: closed_boundary("good"),
                         holes: Vec::new(),
@@ -1108,6 +1114,7 @@ mod tests {
                         physical: true,
                     },
                     PatchRegionDto {
+                    profile: None,
                         region_id: "bad".into(),
                         boundary: broken_boundary,
                         holes: Vec::new(),
@@ -1205,6 +1212,7 @@ mod tests {
                 nodes,
                 edges,
                 regions: vec![PatchRegionDto {
+                    profile: None,
                     region_id: "wall".into(),
                     boundary: (0..4)
                         .map(|index| OrientedEdgeUseDto {
@@ -1376,6 +1384,8 @@ pub struct PatchEdgeDto {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PatchRegionDto {
+    #[serde(default)]
+    pub profile: Option<grafting_graph_core::profile_surface::SheetProfile>,
     pub region_id: String,
     pub boundary: Vec<OrientedEdgeUseDto>,
     /// Inner loops this face is opened by -- see
@@ -1449,6 +1459,14 @@ pub fn apply_add_patch(
     surfaces: &mut SurfaceRegistry,
     request: AddPatchRequest,
 ) -> Result<AddPatchResponse, String> {
+    for region in &request.regions {
+        if let Some(profile) = region.profile {
+            profile.validate()?;
+            if !region.holes.is_empty() || !(3..=4).contains(&region.boundary.len()) {
+                return Err("a profiled patch region needs one triangle or quad without holes".into());
+            }
+        }
+    }
     let mut created_node_ids = Vec::new();
     for node in request.nodes {
         let id = parse_node_id(&node.id)?;
@@ -1536,6 +1554,7 @@ pub fn apply_add_patch(
             orphaned.extend(region_edges);
             continue;
         }
+        topology.set_region_profile(&id, region.profile).map_err(|error| error.to_string())?;
         surfaces
             .add_region_surface(
                 topology,

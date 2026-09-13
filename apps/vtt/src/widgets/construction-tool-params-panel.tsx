@@ -284,6 +284,7 @@ function OpeningFields(props: { readonly params: OpeningParams; readonly onChang
 }
 
 const TOOL_LABELS: Partial<Record<ConstructionToolId, string>> = {
+  roof: "Telhado",
   "platform-contour": "Plataforma",
   "edit-region": "Editar estrutura",
   "path-brush": "Parâmetros: Caminho",
@@ -322,7 +323,22 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
     key: activeTool,
     header: label,
     content:
-      activeTool === "platform-contour" ? (
+      activeTool === "roof" ? (
+        <div style={{ display: "grid", gap: "0.6rem" }}>
+          <div className="gm-material-grid">
+            {(["rectangle", "circle", "platform"] as const).map((shape, index) => <SelectableChip key={shape} label={["Retangular", "Circular", "Sobre plataforma"][index]!} swatchColor="#b96e48" selected={params.roof.shape === shape} onSelect={() => onParamsChange("roof", { ...params.roof, shape })} />)}
+          </div>
+          {params.roof.shape !== "platform" && <label>Elevação da base <input type="number" step="0.1" value={params.roof.elevation} onChange={(event) => onParamsChange("roof", { ...params.roof, elevation: Number(event.currentTarget.value) })} /></label>}
+          <label>Altura máxima <input type="number" min="0.1" step="0.1" value={params.roof.height} onChange={(event) => onParamsChange("roof", { ...params.roof, height: Number(event.currentTarget.value) })} /></label>
+          {params.roof.shape === "circle" && <label>Raio <input type="number" min="0.1" step="0.1" value={params.roof.radius} onChange={(event) => onParamsChange("roof", { ...params.roof, radius: Number(event.currentTarget.value) })} /></label>}
+          {params.roof.curvatures.map((curvature, index) => <label key={index}>Curvatura da folha {index + 1} <input type="number" min="-1" max="1" step="0.1" value={curvature} onChange={(event) => {
+            const curvatures: [number, number, number, number] = [...params.roof.curvatures];
+            curvatures[index] = Number(event.currentTarget.value);
+            onParamsChange("roof", { ...params.roof, curvatures });
+          }} /></label>)}
+          <p>Retangular: arraste entre dois cantos. Circular: clique no centro. Sobre plataforma: clique na plataforma que deseja cobrir.</p>
+        </div>
+      ) : activeTool === "platform-contour" ? (
         <div style={{ display: "grid", gap: "0.6rem" }}>
           <label>Elevacao <input type="number" step="0.1" value={params["platform-contour"].elevation} onChange={(event) => onParamsChange("platform-contour", { ...params["platform-contour"], elevation: Number(event.currentTarget.value) })} /></label>
           <div className="gm-material-grid">

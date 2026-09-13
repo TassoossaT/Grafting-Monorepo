@@ -94,6 +94,8 @@ export function colorForSurfaceType(surfaceType: string, physical: boolean): num
       return 0x64748b; // Slate gray block prototype
     case "platform":
       return 0xb08968; // Warm wood-floor brown, distinct from the generic fallback
+    case "roof":
+      return 0xb96e48;
     case "terrain":
       return 0x334155; // Dark Slate / Construction floor grid
     case "terrain-grass":

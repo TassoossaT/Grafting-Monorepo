@@ -19,6 +19,11 @@ mod layout;
 mod model;
 mod motion;
 mod planar;
+pub mod profile_cap;
+pub mod profile_cap_patch;
+pub mod profile_surface;
+#[cfg(test)]
+mod profile_graph_tests;
 pub use planar::{PlanarBoolean, PlanarShape, planar_boolean};
 mod region_edit;
 mod surface;

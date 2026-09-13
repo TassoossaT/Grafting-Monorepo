@@ -48,6 +48,7 @@
 pub mod frame;
 pub mod math;
 pub mod planar;
+pub mod profile;
 pub mod tessellation;
 pub mod types;
 pub mod upright;
@@ -77,6 +78,10 @@ pub fn triangulate_region(
     region: &SurfaceRegion,
     mut resolve_position: impl FnMut(&NodeId) -> Option<[f32; 3]>,
 ) -> Option<Vec<TriangulatedMesh>> {
+    if region.profile().is_some() {
+        let sheet = grafting_graph_core::profile_surface::resolve_region_sheet(topology, region, &mut resolve_position).ok()?;
+        return profile::triangulate_profile_sheet(&sheet, 64, 64).ok().map(|mesh| vec![mesh]);
+    }
     // An upright face is unrolled, not projected: its ring lies on no plane
     // once it curves, and it carries its own openings through with it. See
     // [`upright_face_mesh`], which reports `None` for anything that is not

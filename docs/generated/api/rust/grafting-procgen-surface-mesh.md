@@ -98,6 +98,12 @@ the face is facing.
 Triangulates a planar surface consisting of an outer boundary loop and
 optional hole loops.
 
+### `pub fn grafting_procgen_surface_mesh::profile::triangulate_profile_sheet(sheet: &grafting_graph_core::profile_surface::ProfileSheet, along: u32, rise: u32) -> core::result::Result<grafting_procgen_surface_mesh::types::TriangulatedMesh, alloc::string::String>`
+
+Tessellates a sheet on an explicit, bounded rendering grid.
+Neighboring sheets must use the same rise subdivision count to share seams.
+Collapsed upper sections produce an apex without zero-area triangles.
+
 ### `pub fn grafting_procgen_surface_mesh::tessellation::tessellate_contour_loop(topology: &grafting_graph_core::contour::ContourTopology, loop_: &grafting_graph_core::contour::ContourLoop, resolve_position: &mut impl core::ops::function::FnMut(&grafting_graph_core::model::NodeId) -> core::option::Option<[f32; 3]>) -> core::option::Option<alloc::vec::Vec<[f32; 3]>>`
 
 Discretizes a loop of analytic contour edges into 3D world points.
@@ -270,6 +276,10 @@ Geometric and vector math functions for surface triangulation.
 ### `pub mod grafting_procgen_surface_mesh::planar`
 
 Planar surface triangulation via best-fit plane projection and earcut.
+
+### `pub mod grafting_procgen_surface_mesh::profile`
+
+Transient tessellation of analytic profile sheets.
 
 ### `pub mod grafting_procgen_surface_mesh::tessellation`
 
