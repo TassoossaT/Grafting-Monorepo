@@ -40,8 +40,33 @@ export async function runMcpServer(repoRoot: string): Promise<void> {
         });
       }
 
-      if (req.method === "notifications/initialized") {
+      // JSON-RPC 2.0: Never reply to notifications (no id member or notifications/*)
+      if (req.id === undefined || req.method.startsWith("notifications/") || req.method.startsWith("$/")) {
         return;
+      }
+
+      if (req.method === "ping") {
+        return sendResponse({
+          jsonrpc: "2.0",
+          id: req.id,
+          result: {},
+        });
+      }
+
+      if (req.method === "resources/list") {
+        return sendResponse({
+          jsonrpc: "2.0",
+          id: req.id,
+          result: { resources: [] },
+        });
+      }
+
+      if (req.method === "prompts/list") {
+        return sendResponse({
+          jsonrpc: "2.0",
+          id: req.id,
+          result: { prompts: [] },
+        });
       }
 
       if (req.method === "tools/list") {
