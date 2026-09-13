@@ -499,7 +499,8 @@ pub fn plan(request: NetworkRequest) -> Result<NetworkPatch, String> {
                 || edges[i].end_node_id == edges[j].start_node_id
                 || edges[i].end_node_id == edges[j].end_node_id;
             // Endpoint-on-curve snapping also covers T junctions where there is no proper crossing.
-            if !shares_node {
+            let both_added = !old_ids.contains(&edges[i].edge_id) && !old_ids.contains(&edges[j].edge_id);
+            if !shares_node && !both_added {
                 for (a, b, reverse) in [(i, j, false), (j, i, true)] {
                     for t in [0., 1.] {
                         let p = curves[a].evaluate(t)?;

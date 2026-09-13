@@ -29,27 +29,12 @@ function commitUntimed(
   tolerance: number,
 ): void {
   try {
-    const samples = effect.brushRegion.samples;
-    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-    for (const p of samples) {
-      if (p.x < minX) minX = p.x;
-      if (p.x > maxX) maxX = p.x;
-      if (p.z < minZ) minZ = p.z;
-      if (p.z > maxZ) maxZ = p.z;
-    }
-    const margin = Math.max(tolerance, effect.brushShape.kind === "square" ? effect.brushShape.size : effect.brushShape.radius * 2, 10.0);
-    const bounds = Number.isFinite(minX) ? { minX: minX - margin, maxX: maxX + margin, minZ: minZ - margin, maxZ: maxZ + margin } : undefined;
-
     const plan = timePhase("plano da nuvem", () => planPathCloudMutation({
       bezier: ctx.runtime,
       tableId: ctx.tableId,
       snapToGrid: ctx.snapToGrid,
       graphSnapshot: timePhase("leitura do grafo", () => ctx.runtime.getGraphSnapshot()),
-      regionTopologies: timePhase("leitura de topologias", () =>
-        bounds !== undefined && typeof ctx.runtime.getRegionTopologiesInBounds === "function"
-          ? ctx.runtime.getRegionTopologiesInBounds(bounds)
-          : ctx.runtime.getAllRegionTopologies()
-      ),
+      regionTopologies: timePhase("leitura de todas as topologias", () => ctx.runtime.getAllRegionTopologies()),
       coverageFor: (outline) => timePhase("cobertura do traço", () => ctx.runtime.getFootprintCoverage(outline)),
       effect,
       tolerance,

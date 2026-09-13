@@ -361,3 +361,32 @@ test("real WASM: scoped regeneration affects only touched spine beziers and pres
   } finally { f.session.free(); }
 });
 
+test("real WASM: multiple sequential connected road strokes spanning distance commit without manifold edge conflicts", () => {
+  const f = sessionFixture();
+  try {
+    function makeCurve(p1, p2, p3, steps = 15) {
+      const pts = [];
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const x = (1 - t) * (1 - t) * p1.x + 2 * (1 - t) * t * p2.x + t * t * p3.x;
+        const z = (1 - t) * (1 - t) * p1.z + 2 * (1 - t) * t * p2.z + t * t * p3.z;
+        pts.push(point(x, z));
+      }
+      return pts;
+    }
+
+    // 6 curved connected streets spanning over 180 meters
+    draw(f, makeCurve(point(0, 0), point(15, 5), point(30, 0)), "road:seq:1");
+    draw(f, makeCurve(point(30, 0), point(45, -5), point(60, 0)), "road:seq:2");
+    draw(f, makeCurve(point(60, 0), point(75, 5), point(90, 0)), "road:seq:3");
+    draw(f, makeCurve(point(90, 0), point(105, -5), point(120, 0)), "road:seq:4");
+    draw(f, makeCurve(point(120, 0), point(135, 5), point(150, 0)), "road:seq:5");
+    draw(f, makeCurve(point(150, 0), point(165, -5), point(180, 0)), "road:seq:6");
+
+    const faces = f.runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "path");
+    assert.ok(faces.length >= 6, `expected at least 6 modular faces, got ${faces.length}`);
+    assert.ok(faces.some((t) => t.nodes.some((n) => n.position.x <= 1)), "street 1 start must survive");
+    assert.ok(faces.some((t) => t.nodes.some((n) => n.position.x >= 179)), "street 6 end must survive");
+  } finally { f.session.free(); }
+});
+
