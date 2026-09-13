@@ -95,8 +95,10 @@ export class GitWorktreeSession {
     /**
      * Pushes the current branch to the remote repository.
      */
-    async push(): Promise<void> {
-        await executeGit(['push', '--set-upstream', 'origin', this.branchName], this.worktreePath);
+    async push(forceWithLease = false): Promise<void> {
+        const args = ['push', '--set-upstream', 'origin', this.branchName];
+        if (forceWithLease) args.push('--force-with-lease');
+        await executeGit(args, this.worktreePath);
     }
 
     /**

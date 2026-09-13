@@ -280,6 +280,7 @@ export async function taskDone(repoRoot: string, input: TaskDoneInput) {
   }
 
   // Pre-commit hook: stage and commit all dirty changes (feature files + freshly generated docs) in ONE unified commit
+  let amended = false;
   const dirty = (await session.git(["status", "--porcelain"])).trim();
   if (dirty.length > 0) {
     const nonDocsDirty = (await session.git(["status", "--porcelain", "--", ":!docs/generated"])).trim();
@@ -293,6 +294,7 @@ export async function taskDone(repoRoot: string, input: TaskDoneInput) {
       const lastMsg = (await session.git(["log", "-1", "--format=%B"])).trim();
       await session.commit(lastMsg, true);
       docsCommitted = true;
+      amended = true;
     } else {
       // Unified single commit: stage feature files and generated docs together
       await session.add(".");
@@ -301,7 +303,7 @@ export async function taskDone(repoRoot: string, input: TaskDoneInput) {
     }
   }
 
-  await session.push();
+  await session.push(amended);
   const pr = await session.createPullRequest(input.title, input.body, base);
   return {
     ok: true as const,
