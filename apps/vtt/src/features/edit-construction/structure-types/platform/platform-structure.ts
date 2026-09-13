@@ -1,6 +1,7 @@
 import type { ConstructionMotionInfluence } from "@/ports";
 import { ALL_AXES } from "../../orchestration/atomic-edit.ts";
-import { IGNORE } from "../creation-interaction.ts";
+import { CUT, IGNORE } from "../creation-interaction.ts";
+import { isTerrainSurface } from "../organic/index.ts";
 import { allowed, denied, type StructureTypeDefinition } from "../structure-type.ts";
 
 /** A horizontal structural marker, independently usable as floor or ceiling. */
@@ -8,7 +9,7 @@ export const platformStructureType: StructureTypeDefinition = Object.freeze<Stru
   surfaceType: "platform", label: "Plataforma", creation: "a flat closed contour, without thickness",
   roleFor: (topology, target) => target.kind === "vertex" && !topology.nodes.some((node) => node.id === target.nodeId) ? "platform-unknown" : `platform-${target.kind}`,
   policyFor: (role) => role === "platform-unknown" ? denied(role, "Vertice fora da plataforma.") : ({ ...allowed(role, ALL_AXES, role === "platform-region" ? "cloud" : "surface"), transport: role === "platform-region" }),
-  interactionOver: () => IGNORE,
+  interactionOver: (coveredType: string) => isTerrainSurface(coveredType) ? CUT : IGNORE,
   repairAfterCut: { kind: "preserve", reason: "Structural contour subtraction preserves the remaining planar faces and shared identities." },
   motionInfluences: (topology, transport): readonly ConstructionMotionInfluence[] => {
     const anchor = topology.nodes[0];

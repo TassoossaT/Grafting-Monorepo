@@ -12,6 +12,7 @@ import {
   planTerrainCloudCutRepair,
   pointInOrOnPolygon,
   terrainTopologiesBounds,
+  resolveCreationInteraction,
 } from "../src/features/edit-construction/index.ts";
 
 /**
@@ -935,4 +936,161 @@ test("re-sampling jitter is not movement, so a curve laid again does not drag th
   // following the whole network, and treating that as movement is the same as
   // treating re-minting as movement: everything, every stroke.
   assert.deepEqual(reminting({ farEndMovesBy: 0.01 }), [], "a hairline is noise, not a road that went somewhere");
+});
+
+test("platform interacts with terrain via CUT and ignores other structures", () => {
+  assert.equal(resolveCreationInteraction("platform", "terrain").kind, "cut");
+  assert.equal(resolveCreationInteraction("platform", "terrain-grass").kind, "cut");
+  assert.equal(resolveCreationInteraction("platform", "wall-white").kind, "ignore");
+  assert.equal(resolveCreationInteraction("platform", "platform").kind, "ignore");
+});
+
+test("dispatchCutRepairs handles platform over terrain, consuming covered terrain and providing platform fallout", () => {
+  let receivedFallout;
+  const positions = new Map();
+  // Platform at x = 0..4, z = 0..4 at elevation 3
+  for (const [id, pos] of [
+    ["pn0", { x: 0, y: 3, z: 0 }],
+    ["pn1", { x: 4, y: 3, z: 0 }],
+    ["pn2", { x: 4, y: 3, z: 4 }],
+    ["pn3", { x: 0, y: 3, z: 4 }],
+  ]) {
+    positions.set(id, pos);
+  }
+
+  // Terrain face under platform at x = 1..3, z = 1..3
+  for (const [id, pos] of [
+    ["tn0", { x: 1, y: 0, z: 1 }],
+    ["tn1", { x: 3, y: 0, z: 1 }],
+    ["tn2", { x: 3, y: 0, z: 3 }],
+    ["tn3", { x: 1, y: 0, z: 3 }],
+  ]) {
+    positions.set(id, pos);
+  }
+
+  const terrainTopology = {
+    surfaceKey: ["@region", "T_under_platform"],
+    surfaceType: "terrain",
+    nodes: ["tn0", "tn1", "tn2", "tn3"].map((id) => ({ id, position: positions.get(id) })),
+    outerLoops: [[
+      { edgeId: "e:t0", reversed: false, startNodeId: "tn0", endNodeId: "tn1" },
+      { edgeId: "e:t1", reversed: false, startNodeId: "tn1", endNodeId: "tn2" },
+      { edgeId: "e:t2", reversed: false, startNodeId: "tn2", endNodeId: "tn3" },
+      { edgeId: "e:t3", reversed: false, startNodeId: "tn3", endNodeId: "tn0" },
+    ]],
+    holes: [],
+  };
+
+  const platformPatch = {
+    nodes: ["pn0", "pn1", "pn2", "pn3"].map((id) => ({ id, position: positions.get(id) })),
+    edges: [
+      { id: "e:p0", startNodeId: "pn0", endNodeId: "pn1" },
+      { id: "e:p1", startNodeId: "pn1", endNodeId: "pn2" },
+      { id: "e:p2", startNodeId: "pn2", endNodeId: "pn3" },
+      { id: "e:p3", startNodeId: "pn3", endNodeId: "pn0" },
+    ],
+    regions: [{
+      regionId: "plat_face",
+      surfaceType: "platform",
+      boundary: [
+        { edgeId: "e:p0", reversed: false },
+        { edgeId: "e:p1", reversed: false },
+        { edgeId: "e:p2", reversed: false },
+        { edgeId: "e:p3", reversed: false },
+      ],
+    }],
+  };
+
+  const runtime = {
+    getAllRegionTopologies: () => [terrainTopology],
+    getSnapshot: () => ({
+      tableId: "tbl-platform-test",
+      map: { nodePositions: new Map([...positions].map(([id, pos]) => [id, { position: pos }])) },
+    }),
+  };
+
+  dispatchCutRepairs(
+    runtime,
+    {
+      operationId: "op:platform-create",
+      sourceSurfaceKeys: [],
+      patch: platformPatch,
+      footprintOutline: [[0, 0], [4, 0], [4, 4], [0, 4]],
+    },
+    "cause-platform",
+    [],
+    undefined,
+    {
+      terrain: (_runtime, fallout) => {
+        receivedFallout = fallout;
+        return 1;
+      },
+    },
+  );
+
+  assert.ok(receivedFallout !== undefined, "terrain cut repair was dispatched for platform");
+  assert.equal(receivedFallout.painterSurfaceType, "platform");
+  assert.deepEqual(receivedFallout.consumedSurfaceKeys, [["@region", "T_under_platform"]]);
+  assert.ok(receivedFallout.paintedNodes.some((n) => n.id === "pn0"));
+  assert.ok(receivedFallout.paintedLoops.length > 0);
+});
+
+test("dispatchRemovalRepairs on platform over terrain heals vacated terrain", () => {
+  let cutRepairDispatched = false;
+  const positions = new Map([
+    ["pn0", { x: 0, y: 3, z: 0 }],
+    ["pn1", { x: 4, y: 3, z: 0 }],
+    ["pn2", { x: 4, y: 3, z: 4 }],
+    ["pn3", { x: 0, y: 3, z: 4 }],
+  ]);
+
+  const removedPlatform = {
+    surfaceKey: ["@region", "plat-1"],
+    surfaceType: "platform",
+    nodes: ["pn0", "pn1", "pn2", "pn3"].map((id) => ({ id, position: positions.get(id) })),
+    outerLoops: [[
+      { edgeId: "e:p0", reversed: false, startNodeId: "pn0", endNodeId: "pn1" },
+      { edgeId: "e:p1", reversed: false, startNodeId: "pn1", endNodeId: "pn2" },
+      { edgeId: "e:p2", reversed: false, startNodeId: "pn2", endNodeId: "pn3" },
+      { edgeId: "e:p3", reversed: false, startNodeId: "pn3", endNodeId: "pn0" },
+    ]],
+    holes: [],
+  };
+
+  const adjacentTerrain = {
+    surfaceKey: ["@region", "T_heal"],
+    surfaceType: "terrain",
+    nodes: ["pn0", "pn1", "pn2", "pn3"].map((id) => ({ id, position: positions.get(id) })),
+    outerLoops: [[
+      { edgeId: "e:t0", reversed: false, startNodeId: "pn0", endNodeId: "pn1" },
+      { edgeId: "e:t1", reversed: false, startNodeId: "pn1", endNodeId: "pn2" },
+      { edgeId: "e:t2", reversed: false, startNodeId: "pn2", endNodeId: "pn3" },
+      { edgeId: "e:t3", reversed: false, startNodeId: "pn3", endNodeId: "pn0" },
+    ]],
+    holes: [],
+  };
+
+  const runtime = {
+    getAllRegionTopologies: () => [adjacentTerrain],
+    getSnapshot: () => ({
+      tableId: "tbl-platform-test",
+      map: { nodePositions: positions },
+    }),
+  };
+
+  dispatchRemovalRepairs(
+    runtime,
+    removedPlatform.surfaceKey,
+    "platform",
+    "cause-removal",
+    removedPlatform,
+    {
+      terrain: () => {
+        cutRepairDispatched = true;
+        return 1;
+      },
+    },
+  );
+
+  assert.equal(cutRepairDispatched, true, "dispatchRemovalRepairs should trigger repair for platform removing its cut");
 });

@@ -33,7 +33,11 @@ function parametersAt(ctx: ToolContext, first: PointerSample | undefined, params
     (first.surfaceRef ? surfaceRefFromNodeSet(t.surfaceKey) === first.surfaceRef : first.nodeId && t.nodes.some((n) => n.id === first.nodeId)));
   if (target?.nodes[0]) return { ...params, elevation: target.nodes[0].position.y };
   const node = first.nodeId ? ctx.runtime.getGraphSnapshot().nodes.find((n) => n.id === first.nodeId) : undefined;
-  return node ? { ...params, elevation: node.position.y } : params;
+  if (node) return { ...params, elevation: node.position.y };
+  if (params.mode === "create" && Number.isFinite(first.point?.y) && params.elevation === DEFAULT_TOOL_PARAMS["platform-contour"].elevation) {
+    return { ...params, elevation: first.point.y };
+  }
+  return params;
 }
 /** A source region's own boundary/hole edges, by node id -- the identities a stroke has to weld onto, not the position it happens to occupy. */
 function sourceEdges(topology: ConstructionRegionTopology): readonly (readonly DirectedContourEdge[])[] {
@@ -160,7 +164,16 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
       surfaceType: "platform",
       physical: true,
     }));
-    ctx.runtime.applyPatchReplacement({ operationId, sourceSurfaceKeys: remaining.map(({ source }) => source.surfaceKey), patch: { nodes: [...nodes.values()], edges: builder.all(), regions } }, "local", operationId);
+    const primaryGroup = changedGroups[0];
+    const footprintOutline = primaryGroup && primaryGroup.boundary.length >= 3
+      ? primaryGroup.boundary.map((e) => positionOf(e.a))
+      : (contour.length >= 3 ? contour.map((c) => [c.start.x, c.start.z] as const) : undefined);
+    ctx.runtime.applyPatchReplacement({
+      operationId,
+      sourceSurfaceKeys: remaining.map(({ source }) => source.surfaceKey),
+      patch: { nodes: [...nodes.values()], edges: builder.all(), regions },
+      footprintOutline,
+    }, "local", operationId);
     ctx.history.record({ kind: "path-brush", operationId });
     ctx.reportFeedback({ tone: "success", message: `Plataforma: ${regions.length} face(s) na elevação ${params.elevation}.` });
   } catch (error) { ctx.reportFeedback({ tone: "error", message: error instanceof Error ? error.message : String(error) }); }
