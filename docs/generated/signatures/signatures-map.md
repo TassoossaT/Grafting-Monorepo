@@ -416,6 +416,7 @@ pub fn normal_at(&self, point: [f32; 3]) -> [f32; 3]
 // src/lib.rs
 pub mod frame;
 pub mod math;
+pub mod planar;
 pub mod profile;
 pub mod refine;
 pub mod tessellation;
@@ -4953,7 +4954,6 @@ export function bezierChains(
   targetEdgeIds?: ReadonlySet<string>,
   ): readonly SpineChainInput[] {
   const nodes = new Map(snapshot.nodes.map((n) => [n.id, n.position]));
-export const PATH_CORNER_DEGREES = 75;
 export function planBezierRoad(input: {
   readonly snapshot: ConstructionGraphSnapshot;
   readonly topologies?: readonly ConstructionRegionTopology[];
@@ -5055,7 +5055,7 @@ export function planSpineContour(input: PlanSpineContourInput): PlanSpineContour
   // The curves themselves, kept rather than discarded once their ribbons are
   // offset: they are the height authority for every vertex the union is
   // about to mint, and the same curves the engine reads back out of the
-  // graph to elevate the interior of the faces built here.
+  const referenceCurves: ReferenceCurve[] = [];
 
 // src/features/edit-construction/structure-types/path/contour/union-bands.ts
 export function unionBandLayer(ribbons: readonly BandRibbon[]): MultiPolygon {
@@ -5114,8 +5114,12 @@ export interface ChangedSpineCloud {
   * decide which standing contour faces this edit replaces.
   */
   readonly positions: readonly ConstructionPosition[];
-export function extractCorridorsFromEdgeId(edgeId: string): string[] {
-  const result = new Set<string>();
+export function extractCorridorsFromEdgeId(edgeId: string): readonly string[] {
+  const result: string[] = [];
+  let current: string | undefined = edgeId;
+  while (current) {
+  if (current.startsWith("spine-edge:")) {
+  const match = /^spine-edge:(.+):\d+$/.exec(current);
 export function changedSpineCloud(snapshot: ConstructionGraphSnapshot, patch: ConstructionGraphPatch, topologies: readonly ConstructionRegionTopology[] = []): ChangedSpineCloud {
   const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
 export function standingRegionsForCloud(

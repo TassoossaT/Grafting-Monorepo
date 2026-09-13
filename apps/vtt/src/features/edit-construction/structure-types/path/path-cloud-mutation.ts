@@ -1,4 +1,4 @@
-import { planBezierRoad, unionBezierRibbons, PATH_CORNER_DEGREES } from "./bezier-road-plan.ts";
+import { planBezierRoad, unionBezierRibbons } from "./bezier-road-plan.ts";
 import { pathCorridorId } from "./path-corridor.ts";
 import type { BezierPort } from "@/ports";
 import type { PathBrushEffect } from "../../modes/surface-edit-contract.ts";
@@ -114,20 +114,10 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
     snapshot: input.graphSnapshot, topologies: input.regionTopologies, port: input.bezier, stroke,
     corridorId: pathCorridorId(operationId, effect.parameters.kind),
     offsets: effect.parameters.profile.map((p) => p.lateralOffset),
-    miterLimit: effect.parameters.miterLimit, tolerance, cornerDegrees: PATH_CORNER_DEGREES,
+    miterLimit: effect.parameters.miterLimit, tolerance,
     snapReach: Math.max(tolerance, effect.brushShape.kind === "square" ? effect.brushShape.size / 2 : effect.brushShape.radius),
   }) : undefined;
   if (bezier && bezier.graphPatch.edges.length === 0) return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente após o encaixe." };
-  // A regeneration that cannot redraw every chain of the cloud it is about to
-  // replace would consume faces and put nothing back. Refused whole: a
-  // visible failure naming the chain is recoverable, a silently deleted road
-  // is not.
-  if (bezier && bezier.droppedChainEdgeIds.length > 0) {
-    return {
-      kind: "refused",
-      reason: `parte desta nuvem não pôde ser redesenhada e seria apagada: ${bezier.droppedChainEdgeIds.join(", ")}`,
-    };
-  }
   const fitted = bezier ? [] : fitPath(stroke, tolerance, { arcs: !input.snapToGrid });
   const swept = bezier ? { line: bezier.controlPoints } : fitted.length === 0 ? { line: stroke } : referenceLineFrom(fitted, stroke, resolveConformance("path", "terrain", effect.parameters.kind));
   const spine = pathSpineDraftFor(effect, swept.line);

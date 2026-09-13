@@ -603,7 +603,7 @@ test("a T touching a long straight road mid-span merges into it instead of dupli
   const bandsAtJunction = new Set(atJunction.map((topology) => /:band-(\d+):/.exec(topology.surfaceKey.join(":"))?.[1]));
   for (const band of bandsAtJunction) {
     const withThisBand = atJunction.filter((topology) => topology.surfaceKey.join(":").includes(`:band-${band}:`));
-    assert.equal(withThisBand.length, 3, `band ${band} has 3 modular faces meeting at the junction`);
+    assert.equal(withThisBand.length, 1, `band ${band} must be one merged face at the junction, not ${withThisBand.length} overlapping ones`);
   }
 });
 
@@ -644,7 +644,7 @@ test("an interior-to-interior crossing splits both spines into one connected roa
   const bands = new Set(atJunction.map((topology) => /:band-(\d+):/.exec(topology.surfaceKey.join(":"))?.[1]));
   for (const band of bands) {
     const faces = atJunction.filter((topology) => topology.surfaceKey.join(":").includes(`:band-${band}:`));
-    assert.equal(faces.length, 4, `band ${band} has 4 modular faces meeting at the crossing`);
+    assert.equal(faces.length, 1, `band ${band} is one unioned face at the crossing`);
   }
 });
 

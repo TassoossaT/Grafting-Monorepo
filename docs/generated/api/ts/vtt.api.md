@@ -3231,16 +3231,6 @@ Pick handles are presentation projections, not extra graph anchors.
 
 One complete gesture plan; the caller commits it once or discards it.
 
-### `variable vtt.bezier-road-plan.PATH_CORNER_DEGREES: 75`
-
-The turn, in degrees, past which a stroke is read as two runs meeting at a
-corner rather than one road bending.
-
-Mirrors `grafting_graph_core::bezier::GESTURE_CORNER_DEGREES`, and is
-passed explicitly rather than left to the engine's default so that the
-value a road is authored with is visible on this side too -- the same
-reason every other tolerance in this plan is named here.
-
 ### `function vtt.bezier-road-plan.bezierChains(snapshot: ConstructionGraphSnapshot, port: BezierPort, offsets: readonly number[], miterLimit: number, targetEdgeIds?: ReadonlySet<string>): readonly SpineChainInput[]`
 
 Converts graph-owned authoring data to sampled ribbons through the Rust port.
@@ -3253,7 +3243,7 @@ Converts graph-owned authoring data to sampled ribbons through the Rust port.
 
 Resolve legacy authorship once using the canonical Rust conversion.
 
-### `function vtt.bezier-road-plan.planBezierRoad(input: { cornerDegrees?: number; corridorId: string; miterLimit: number; offsets: readonly number[]; port: BezierPort; snapReach: number; snapshot: ConstructionGraphSnapshot; stroke: readonly ConstructionPosition[]; tolerance: number; topologies?: readonly ConstructionRegionTopology[] }): { chains: readonly SpineChainInput[]; controlPoints: ConstructionPosition[]; droppedChainEdgeIds: string[]; footprint: [number, number][][][]; graphPatch: ConstructionGraphPatch; polyline: ConstructionPosition[]; snapshot: ConstructionGraphSnapshot }`
+### `function vtt.bezier-road-plan.planBezierRoad(input: { corridorId: string; miterLimit: number; offsets: readonly number[]; port: BezierPort; snapReach: number; snapshot: ConstructionGraphSnapshot; stroke: readonly ConstructionPosition[]; tolerance: number; topologies?: readonly ConstructionRegionTopology[] }): { chains: readonly SpineChainInput[]; controlPoints: ConstructionPosition[]; footprint: [number, number][][][]; graphPatch: ConstructionGraphPatch; polyline: ConstructionPosition[]; snapshot: ConstructionGraphSnapshot }`
 
 Product identities and profile policy surround generic Rust fitting and connections.
 
@@ -3713,7 +3703,7 @@ patch's own nodes across the *prospective* graph (snapshot plus patch) --
 this is what `planPathCloudMutation` reads to decide which standing
 contour faces one edit replaces (`standingRegionsForCloud`, below).
 
-### `function vtt.path-cloud-scope.extractCorridorsFromEdgeId(edgeId: string): string[]`
+### `function vtt.path-cloud-scope.extractCorridorsFromEdgeId(edgeId: string): readonly string[]`
 
 ### `function vtt.path-cloud-scope.standingRegionsForCloud(topologies: readonly ConstructionRegionTopology[], cloudPositions: readonly ConstructionPosition[], corridorIds: ReadonlySet<string>, spineOwned: boolean): readonly ConstructionRegionTopology[]`
 

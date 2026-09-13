@@ -84,26 +84,10 @@ export function bezierChains(
   })) });
   junctions.forEach((incident, index) => {
     const outer = joins[index]!.ribbon!.outer;
-    if (outer.length >= 3) {
-      const target = targetEdgeIds
-        ? (incident.find((entry) => targetEdgeIds.has(edges[entry.chain]!.edgeId)) ?? incident[0]!)
-        : incident[0]!;
-      chains[target.chain]!.ribbons.push({ bandIndex: 0, outer: outer.map(curvePosition) });
-    }
+    if (outer.length >= 3) chains[incident[0]!.chain]!.ribbons.push({ bandIndex: 0, outer: outer.map(curvePosition) });
   });
-  return targetEdgeIds ? chains.filter((c) => targetEdgeIds.has(c.chainId)) : chains;
+  return chains;
 }
-
-/**
- * The turn, in degrees, past which a stroke is read as two runs meeting at a
- * corner rather than one road bending.
- *
- * Mirrors `grafting_graph_core::bezier::GESTURE_CORNER_DEGREES`, and is
- * passed explicitly rather than left to the engine's default so that the
- * value a road is authored with is visible on this side too -- the same
- * reason every other tolerance in this plan is named here.
- */
-export const PATH_CORNER_DEGREES = 75;
 
 /** Product identities and profile policy surround generic Rust fitting and connections. */
 export function planBezierRoad(input: {
@@ -116,17 +100,10 @@ export function planBezierRoad(input: {
   readonly miterLimit: number;
   readonly tolerance: number;
   readonly snapReach: number;
-  /**
-   * Turn past which the stroke breaks into separate runs. Omitted, the
-   * stroke is fitted as one smooth run however sharply it was drawn --
-   * which is what every road did before, and is still what a caller with no
-   * opinion about corners should get.
-   */
-  readonly cornerDegrees?: number;
 }) {
   const { port, offsets, corridorId } = input;
   const fitted = port.curveBatch({ tolerance: Math.max(input.tolerance, 0.025), commands: [
-    { kind: "fit", points: input.stroke.map(curvePoint), cornerDegrees: input.cornerDegrees },
+    { kind: "fit", points: input.stroke.map(curvePoint) },
   ] })[0]!;
   const controlPoints = [...fitted.curves.map((c) => curvePosition(c.points[0])), curvePosition(fitted.curves.at(-1)!.points[3])];
   const addedNodes = controlPoints.map((p, i) => ({ id: spineControlNodeId(corridorId, i), position: curvePoint(p) }));
@@ -134,44 +111,10 @@ export function planBezierRoad(input: {
     edgeId: `spine-edge:${corridorId}:${i}`, startNodeId: addedNodes[i]!.id, endNodeId: addedNodes[i + 1]!.id,
     curve: { ...h, bandOffsets: offsets },
   }));
-  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
-  for (const p of input.stroke) {
-    if (p.x < minX) minX = p.x;
-    if (p.x > maxX) maxX = p.x;
-    if (p.z < minZ) minZ = p.z;
-    if (p.z > maxZ) maxZ = p.z;
-  }
-  const reach = Math.max(input.snapReach, 5.0);
-  const strokeMinX = minX - reach, strokeMaxX = maxX + reach;
-  const strokeMinZ = minZ - reach, strokeMaxZ = maxZ + reach;
-  const nodeMap = new Map(input.snapshot.nodes.map((n) => [n.id, n]));
-  const nearbyEdges = input.snapshot.edges.filter((e) => {
-    if (!e.curve || !e.startNodeId.startsWith("spine:") || !e.endNodeId.startsWith("spine:")) return false;
-    const a = nodeMap.get(e.startNodeId);
-    const b = nodeMap.get(e.endNodeId);
-    if (!a || !b) return false;
-    const eMinX = Math.min(a.position.x, b.position.x) - reach;
-    const eMaxX = Math.max(a.position.x, b.position.x) + reach;
-    const eMinZ = Math.min(a.position.z, b.position.z) - reach;
-    const eMaxZ = Math.max(a.position.z, b.position.z) + reach;
-    return !(eMaxX < minX || eMinX > maxX || eMaxZ < minZ || eMinZ > maxZ);
-  });
-  const candidateNodeIds = new Set<string>();
-  for (const e of nearbyEdges) {
-    candidateNodeIds.add(e.startNodeId);
-    candidateNodeIds.add(e.endNodeId);
-  }
-  for (const n of input.snapshot.nodes) {
-    if (n.id.startsWith("spine:") && n.position.x >= strokeMinX && n.position.x <= strokeMaxX && n.position.z >= strokeMinZ && n.position.z <= strokeMaxZ) {
-      candidateNodeIds.add(n.id);
-    }
-  }
-  const candidateNodes = input.snapshot.nodes.filter((n) => candidateNodeIds.has(n.id));
-
   const snapshot = explicitSpineSnapshot(input.snapshot, port, offsets);
   const network = port.curveNetwork({
-    nodes: candidateNodes.filter((n) => n.id.startsWith("spine:")).map((n) => ({ id: n.id, position: curvePoint(n.position) })),
-    edges: nearbyEdges.map((e) => ({ ...e, curve: e.curve! })),
+    nodes: snapshot.nodes.filter((n) => n.id.startsWith("spine:")).map((n) => ({ id: n.id, position: curvePoint(n.position) })),
+    edges: snapshot.edges.filter((e) => e.curve !== undefined).map((e) => ({ ...e, curve: e.curve! })),
     addedNodes, addedEdges, nodePrefix: `spine:${corridorId}#junction:`,
     snapTolerance: input.snapReach, heightTolerance: 0.15, tolerance: 0.005,
   });
@@ -184,30 +127,8 @@ export function planBezierRoad(input: {
     removedEdgeIds: [...network.removedEdgeIds, ...migrations.map((e) => e.edgeId)],
     edges: [...network.edges, ...migrations],
   };
-  const directlyAffectedEdgeIds = new Set(network.edges.map((e) => e.edgeId));
-  for (const node of network.nodes) {
-    for (const e of nearbyEdges) {
-      if (e.startNodeId === node.id || e.endNodeId === node.id) {
-        directlyAffectedEdgeIds.add(e.edgeId);
-      }
-    }
-  }
-  const directlyAffectedCorridors = new Set<string>([corridorId]);
-  for (const edgeId of directlyAffectedEdgeIds) {
-    for (const c of extractCorridorsFromEdgeId(edgeId)) {
-      directlyAffectedCorridors.add(c);
-    }
-  }
-  const droppedChainEdgeIds = cloud.snapshot.edges
-    .filter(
-      (edge) =>
-        edge.curve === undefined &&
-        edge.startNodeId.startsWith("spine:") &&
-        edge.endNodeId.startsWith("spine:"),
-    )
-    .map((edge) => edge.edgeId);
   const chains = bezierChains(cloud.snapshot, port, offsets, input.miterLimit);
   const footprint = unionBezierRibbons(port, chains.filter((c) => c.chainId.startsWith(`spine-edge:${corridorId}:`)).flatMap((c) => c.ribbons ?? []));
-  return { graphPatch, controlPoints, snapshot, chains, footprint, droppedChainEdgeIds,
+  return { graphPatch, controlPoints, snapshot, chains, footprint,
     polyline: fitted.samples.flatMap((span, i) => (i ? span.slice(1) : span).map((p) => curvePosition(p.position))) };
 }

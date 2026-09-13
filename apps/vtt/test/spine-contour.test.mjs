@@ -238,8 +238,8 @@ test("two roads meeting in a Y-junction merge into one single seamless region wi
   });
 
   assert.ok(result !== undefined);
-  assert.equal(result.patch.regions.length, 2, "a Y-junction with two chains produces modular per-chain regions");
-  assert.ok(result.patch.regions.every((r) => r.holes === undefined), "no holes or internal cuts inside the Y-junction faces");
+  assert.equal(result.patch.regions.length, 1, "a Y-junction merges into one seamless polygon region");
+  assert.equal(result.patch.regions[0].holes, undefined, "no holes or internal cuts inside the Y-junction");
 });
 
 test("a complex network of 6 intersecting streets produces valid non-empty regions and never drops faces", () => {
