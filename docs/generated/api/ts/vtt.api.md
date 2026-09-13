@@ -3231,7 +3231,7 @@ Pick handles are presentation projections, not extra graph anchors.
 
 One complete gesture plan; the caller commits it once or discards it.
 
-### `function vtt.bezier-road-plan.bezierChains(snapshot: ConstructionGraphSnapshot, port: BezierPort, offsets: readonly number[], miterLimit: number): readonly SpineChainInput[]`
+### `function vtt.bezier-road-plan.bezierChains(snapshot: ConstructionGraphSnapshot, port: BezierPort, offsets: readonly number[], miterLimit: number, targetEdgeIds?: ReadonlySet<string>): readonly SpineChainInput[]`
 
 Converts graph-owned authoring data to sampled ribbons through the Rust port.
 
@@ -3280,7 +3280,7 @@ seam.
 
 ### `property vtt.contour-patch.ExistingNode.position: ConstructionPosition`
 
-### `function vtt.contour-patch.buildContourPatch(tableId: string, operationId: string, surfaceType: string, bandIndex: number, shapes: MultiPolygon, heightSamples: readonly ConstructionPosition[], existingNodes: readonly ExistingNode[], existingEdgeUses: ReadonlyMap<string, readonly boolean[]>): ContourPatchResult`
+### `function vtt.contour-patch.buildContourPatch(tableId: string, operationId: string, surfaceType: string, bandIndex: number, shapes: MultiPolygon, heightSamples: readonly ConstructionPosition[], referenceCurves: readonly ReferenceCurve[], existingNodes: readonly ExistingNode[], existingEdgeUses: ReadonlyMap<string, readonly boolean[]>): ContourPatchResult`
 
 Turns one band layer's unioned shapes into a `ConstructionPatch` -- the
 same kind of conversion the retired station-sweep engine's own patch
@@ -3296,11 +3296,34 @@ region this call was scoped to untouched: those nodes are simply never
 candidates for a fresh id, because they were never inside any ribbon this
 call was handed.
 
-`heightSamples` supplies `y` for a vertex the union minted (a crossing
-point no original ribbon vertex sits exactly on) via nearest-neighbour
-lookup -- the same approximation `preview-shapes.ts` already uses for its
-own union output, and the same shape of approximation `groundHeightNear`
-uses elsewhere in this codebase for "the height nearest sample said."
+`referenceCurves` supplies `y` for every vertex, by projecting it onto the
+curve the contour was swept from and reading that curve's own height at
+the station the vertex lands on. See `curve-projection.ts` for why this
+replaced a nearest-sample lookup, and why it has to keep agreeing with the
+Rust field that elevates the same surface's interior -- the two answer for
+the margin and the middle of one face, and a disagreement between them is
+a seam right where they meet.
+
+`heightSamples` is now only what `restoreHeightVertices` densifies a long
+clipped edge against; it no longer decides any height.
+
+### `interface vtt.curve-projection.ReferenceCurve`
+
+One curve the contour was swept from, flattened to segments and carrying height.
+
+### `property vtt.curve-projection.ReferenceCurve.points: readonly ConstructionPosition[]`
+
+### `function vtt.curve-projection.heightOnCurves(x: number, z: number, curves: readonly ReferenceCurve[], fallback: number): number`
+
+The height of whichever curve in `curves` runs nearest `(x, z)`, at the
+station the point projects onto.
+
+A point past a curve's end reads that end's height rather than an
+extrapolation, which is what a surface overshooting its curve -- an end
+cap, a mitre past a corner -- should get.
+
+Falls back to `fallback` when no curve has a segment to project onto, so a
+degenerate chain mid-edit produces a flat vertex rather than a NaN.
 
 ### `interface vtt.offset-bands.BandRibbon`
 
@@ -3679,6 +3702,8 @@ The connected spine component a graph patch touches, walked out from the
 patch's own nodes across the *prospective* graph (snapshot plus patch) --
 this is what `planPathCloudMutation` reads to decide which standing
 contour faces one edit replaces (`standingRegionsForCloud`, below).
+
+### `function vtt.path-cloud-scope.extractCorridorsFromEdgeId(edgeId: string): readonly string[]`
 
 ### `function vtt.path-cloud-scope.standingRegionsForCloud(topologies: readonly ConstructionRegionTopology[], cloudPositions: readonly ConstructionPosition[], corridorIds: ReadonlySet<string>, spineOwned: boolean): readonly ConstructionRegionTopology[]`
 
@@ -5169,7 +5194,7 @@ callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 
 ### `property vtt.bezier-port.CurveResult.samples: readonly (readonly { position: CurvePoint; t: number }[])[]`
 
-### `type vtt.bezier-port.CurveCommand = { kind: "automatic" | "fit"; points: readonly CurvePoint[] } | { kind: "join"; sections: readonly (readonly [CurvePoint, CurvePoint])[] } | { curve: CubicBezier; endOffsets?: readonly [number, number]; kind: "ribbon"; offsets: readonly [number, number] } | { curves: readonly CubicBezier[]; kind: "sample" } | { curve: CubicBezier; kind: "split"; profile?: CurveHandles; t: number } | { curve: CubicBezier; kind: "merge"; next: CubicBezier } | { curve: CubicBezier; kind: "pull"; t: number; target: CurvePoint } | { curve: CubicBezier; index: 1 | 2; kind: "handle"; mode: CurveHandleMode; opposite: CurvePoint | null; target: CurvePoint } | { curve: CubicBezier; kind: "nearest"; point: CurvePoint } | { end: CurvePoint; handles: CurveHandles; kind: "resolve"; start: CurvePoint }`
+### `type vtt.bezier-port.CurveCommand = { kind: "automatic"; points: readonly CurvePoint[] } | { cornerDegrees?: number; kind: "fit"; points: readonly CurvePoint[] } | { kind: "join"; sections: readonly (readonly [CurvePoint, CurvePoint])[] } | { curve: CubicBezier; endOffsets?: readonly [number, number]; kind: "ribbon"; offsets: readonly [number, number] } | { curves: readonly CubicBezier[]; kind: "sample" } | { curve: CubicBezier; kind: "split"; profile?: CurveHandles; t: number } | { curve: CubicBezier; kind: "merge"; next: CubicBezier } | { curve: CubicBezier; kind: "pull"; t: number; target: CurvePoint } | { curve: CubicBezier; index: 1 | 2; kind: "handle"; mode: CurveHandleMode; opposite: CurvePoint | null; target: CurvePoint } | { curve: CubicBezier; kind: "nearest"; point: CurvePoint } | { end: CurvePoint; handles: CurveHandles; kind: "resolve"; start: CurvePoint }`
 
 ### `type vtt.bezier-port.CurveHandleMode = "automatic" | "aligned" | "mirrored" | "free"`
 

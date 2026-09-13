@@ -413,6 +413,23 @@ impl<N, E> Graph<N, E> {
             .and_then(|index| self.storage.node_weight(*index))
     }
 
+    /// Every edge, in stable identity order, borrowed rather than cloned.
+    ///
+    /// [`Self::snapshot`] already answers "what is in this graph", but it
+    /// answers it by copying the whole thing, which is the wrong price for a
+    /// caller that only wants to read every edge once -- deriving meshes on
+    /// each refresh, say. Same ordering contract as the snapshot, so the two
+    /// never disagree about what "every edge" means.
+    pub fn edges(&self) -> Vec<&Edge<E>> {
+        let mut edges = self
+            .edge_indices
+            .values()
+            .map(|index| &self.storage[*index])
+            .collect::<Vec<_>>();
+        edges.sort_by(|left, right| left.id().cmp(right.id()));
+        edges
+    }
+
     /// Looks up an edge without exposing the storage engine's index type.
     pub fn edge(&self, id: &EdgeId) -> Option<&Edge<E>> {
         self.edge_indices

@@ -29,7 +29,7 @@ export interface ChangedSpineCloud {
   readonly corridorIds: ReadonlySet<string>;
 }
 
-function extractCorridorsFromEdgeId(edgeId: string): string[] {
+export function extractCorridorsFromEdgeId(edgeId: string): readonly string[] {
   const result: string[] = [];
   let current: string | undefined = edgeId;
   while (current) {

@@ -249,3 +249,113 @@ test("real WASM: disconnected corridors retain shared surface ownership across l
     }
   } finally { f.session.free(); }
 });
+
+
+test("real WASM: editing an extension road does not consume or destroy distant connected roads", () => {
+  const f = sessionFixture();
+  try {
+    draw(f, [point(-20, 0), point(0, 0)], "road:1");
+    draw(f, [point(0, 0), point(20, 0)], "road:2");
+    draw(f, [point(20, 0), point(40, 0)], "road:3");
+
+    const edge3 = curves(f).find((e) => e.edgeId.includes("road:3"));
+    assert.ok(edge3);
+    edit(f, pick(edge3), point(30, 5), "road:3:pull");
+
+    const faces = f.runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "path");
+    assert.ok(faces.some((t) => t.nodes.some((n) => n.position.x <= -19)), "distant road 1 must survive");
+    assert.ok(faces.some((t) => t.nodes.some((n) => n.position.x >= 39)), "edited road 3 must exist");
+  } finally { f.session.free(); }
+});
+
+test("real WASM: long road stroke generates quickly without losing elevation or faces", () => {
+  const f = sessionFixture();
+  try {
+    const longStroke = [];
+    for (let x = 0; x <= 100; x += 0.5) {
+      longStroke.push(point(x, Math.sin(x / 10) * 2, x * 0.05));
+    }
+    const start = performance.now();
+    draw(f, longStroke, "road:long");
+    const elapsed = performance.now() - start;
+    assert.ok(elapsed < 2000, `long road generation took ${elapsed}ms, expected under 2000ms`);
+
+    const faces = f.runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "path");
+    assert.ok(faces.length >= 1, "long road produced surface faces");
+    assert.ok(faces.some((t) => t.nodes.some((n) => n.position.x <= 1)));
+    assert.ok(faces.some((t) => t.nodes.some((n) => n.position.x >= 99)));
+  } finally { f.session.free(); }
+});
+
+test("real WASM: scoped regeneration affects only touched spine beziers and preserves distant road faces across additions", () => {
+  const f = sessionFixture();
+  try {
+    // 1. Draw Road 1 (long road from x=0 to 100)
+    const longStroke = [];
+    for (let x = 0; x <= 100; x += 2) longStroke.push(point(x, 0, 0));
+    draw(f, longStroke, "road:1");
+
+    // 2. Draw Road 2 far away outside cloud
+    const t0 = performance.now();
+    draw(f, [point(0, 200), point(50, 200)], "road:2");
+    const elapsedOutside = performance.now() - t0;
+    assert.ok(elapsedOutside < 500, `outside road took ${elapsedOutside}ms, expected under 500ms`);
+
+    // 3. Draw Road 3: T-junction into Road 1 at x=30
+    draw(f, [point(30, 0), point(30, 40)], "road:3");
+
+    // 4. Draw Road 4: X-crossing Road 1 at x=70
+    draw(f, [point(70, -20), point(70, 20)], "road:4");
+
+    // 5. Draw Road 5: T-junction into Road 3 at x=30, z=20
+    draw(f, [point(30, 20), point(60, 20)], "road:5");
+
+    const faces = f.runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "path");
+    assert.ok(faces.length >= 2, `expected at least 2 surface regions, got ${faces.length}`);
+
+    // Verify distant road 1's geometry survived completely (both endpoints still present)
+    assert.ok(faces.some((t) => t.nodes.some((n) => n.position.x <= 1)), "road 1 start must survive");
+    assert.ok(faces.some((t) => t.nodes.some((n) => n.position.x >= 99)), "road 1 end must survive");
+
+    // Verify road 2 outside cloud survived untouched
+    assert.ok(faces.some((t) => t.nodes.some((n) => n.position.z >= 199)), "road 2 outside cloud must survive");
+
+    // Verify all meshes are valid and non-empty
+    const meshes = JSON.parse(f.session.all_surface_meshes_json());
+    assert.ok(meshes.length >= 2, `expected meshes for all surfaces, got ${meshes.length}`);
+    for (const m of meshes) {
+      assert.ok(m.indices.length > 0, "mesh indices must not be empty");
+      assert.ok(m.positions.length > 0, "mesh positions must not be empty");
+    }
+  } finally { f.session.free(); }
+});
+
+test("real WASM: multiple sequential connected road strokes spanning distance commit without manifold edge conflicts", () => {
+  const f = sessionFixture();
+  try {
+    function makeCurve(p1, p2, p3, steps = 15) {
+      const pts = [];
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const x = (1 - t) * (1 - t) * p1.x + 2 * (1 - t) * t * p2.x + t * t * p3.x;
+        const z = (1 - t) * (1 - t) * p1.z + 2 * (1 - t) * t * p2.z + t * t * p3.z;
+        pts.push(point(x, z));
+      }
+      return pts;
+    }
+
+    // 6 curved connected streets spanning over 180 meters
+    draw(f, makeCurve(point(0, 0), point(15, 5), point(30, 0)), "road:seq:1");
+    draw(f, makeCurve(point(30, 0), point(45, -5), point(60, 0)), "road:seq:2");
+    draw(f, makeCurve(point(60, 0), point(75, 5), point(90, 0)), "road:seq:3");
+    draw(f, makeCurve(point(90, 0), point(105, -5), point(120, 0)), "road:seq:4");
+    draw(f, makeCurve(point(120, 0), point(135, 5), point(150, 0)), "road:seq:5");
+    draw(f, makeCurve(point(150, 0), point(165, -5), point(180, 0)), "road:seq:6");
+
+    const faces = f.runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "path");
+    assert.ok(faces.length >= 1, `expected connected road surface, got ${faces.length}`);
+    assert.ok(faces.some((t) => t.nodes.some((n) => n.position.x <= 1)), "street 1 start must survive");
+    assert.ok(faces.some((t) => t.nodes.some((n) => n.position.x >= 179)), "street 6 end must survive");
+  } finally { f.session.free(); }
+});
+

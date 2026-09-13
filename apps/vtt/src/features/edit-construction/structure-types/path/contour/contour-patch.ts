@@ -2,7 +2,7 @@ import type { ConstructionEdgeId, ConstructionPatch, ConstructionPosition } from
 import type { MultiPolygon, Ring } from "polygon-clipping";
 
 import { createBoundaryEdges, simplifyClosedRing } from "../../../topology/index.ts";
-import { nearestSampleY } from "./union-bands.ts";
+import { heightOnCurves, type ReferenceCurve } from "./curve-projection.ts";
 
 /**
  * How close (world units, XZ) a union's own vertex may sit to a node already
@@ -96,6 +96,21 @@ function restoreHeightVertices(
   heightSamples: readonly ConstructionPosition[],
 ): Ring {
   if (heightSamples.length === 0 || ring.length < 2) return ring;
+
+  const cellSize = 2.0;
+  const grid = new Map<string, ConstructionPosition[]>();
+  for (const sample of heightSamples) {
+    const cx = Math.floor(sample.x / cellSize);
+    const cz = Math.floor(sample.z / cellSize);
+    const key = `${cx},${cz}`;
+    const cell = grid.get(key);
+    if (cell !== undefined) {
+      cell.push(sample);
+    } else {
+      grid.set(key, [sample]);
+    }
+  }
+
   const restored: [number, number][] = [];
   const minInterval = 0.8;
   for (let i = 0; i < ring.length - 1; i += 1) {
@@ -108,12 +123,25 @@ function restoreHeightVertices(
 
     const minTStep = minInterval / segLen;
     const matching: { readonly x: number; readonly z: number; readonly t: number }[] = [];
-    for (const sample of heightSamples) {
-      const { dist, t } = distanceToSegmentXZ(sample, a, b);
-      if (dist < 1e-3) {
-        matching.push({ x: sample.x, z: sample.z, t });
+
+    const minCX = Math.floor((Math.min(a[0], b[0]) - 1e-3) / cellSize);
+    const maxCX = Math.floor((Math.max(a[0], b[0]) + 1e-3) / cellSize);
+    const minCZ = Math.floor((Math.min(a[1], b[1]) - 1e-3) / cellSize);
+    const maxCZ = Math.floor((Math.max(a[1], b[1]) + 1e-3) / cellSize);
+
+    for (let cx = minCX; cx <= maxCX; cx += 1) {
+      for (let cz = minCZ; cz <= maxCZ; cz += 1) {
+        const cell = grid.get(`${cx},${cz}`);
+        if (cell === undefined) continue;
+        for (const sample of cell) {
+          const { dist, t } = distanceToSegmentXZ(sample, a, b);
+          if (dist < 1e-3) {
+            matching.push({ x: sample.x, z: sample.z, t });
+          }
+        }
       }
     }
+
     if (matching.length > 0) {
       matching.sort((l, r) => l.t - r.t);
       let lastT = 0;
@@ -154,11 +182,16 @@ export interface ContourPatchResult {
  * candidates for a fresh id, because they were never inside any ribbon this
  * call was handed.
  *
- * `heightSamples` supplies `y` for a vertex the union minted (a crossing
- * point no original ribbon vertex sits exactly on) via nearest-neighbour
- * lookup -- the same approximation `preview-shapes.ts` already uses for its
- * own union output, and the same shape of approximation `groundHeightNear`
- * uses elsewhere in this codebase for "the height nearest sample said."
+ * `referenceCurves` supplies `y` for every vertex, by projecting it onto the
+ * curve the contour was swept from and reading that curve's own height at
+ * the station the vertex lands on. See `curve-projection.ts` for why this
+ * replaced a nearest-sample lookup, and why it has to keep agreeing with the
+ * Rust field that elevates the same surface's interior -- the two answer for
+ * the margin and the middle of one face, and a disagreement between them is
+ * a seam right where they meet.
+ *
+ * `heightSamples` is now only what `restoreHeightVertices` densifies a long
+ * clipped edge against; it no longer decides any height.
  */
 export function buildContourPatch(
   tableId: string,
@@ -167,6 +200,7 @@ export function buildContourPatch(
   bandIndex: number,
   shapes: MultiPolygon,
   heightSamples: readonly ConstructionPosition[],
+  referenceCurves: readonly ReferenceCurve[],
   existingNodes: readonly ExistingNode[],
   /** Uses already live on the table; a new local patch must never overfill one. */
   existingEdgeUses: ReadonlyMap<ConstructionEdgeId, readonly boolean[]> = new Map(),
@@ -183,12 +217,36 @@ export function buildContourPatch(
   });
   const nodePositions = new Map<string, ConstructionPosition>();
 
+  // **Bucketed, not scanned.** Welding asks "is a node already standing
+  // here", and asking it by walking every node on the table costs the whole
+  // table once per ring vertex -- quadratic in the size of the road network,
+  // which is precisely the cost that made welding unaffordable and left the
+  // engine re-minting every node of the cloud on every stroke instead. A
+  // vertex can only weld to a node within {@link WELD_TOLERANCE}, so only
+  // the buckets that reach that far need looking at, and there are nine of
+  // them however big the table is.
+  const buckets = new Map<string, ExistingNode[]>();
+  const bucketKey = (x: number, z: number): string =>
+    `${Math.floor(x / WELD_TOLERANCE)}:${Math.floor(z / WELD_TOLERANCE)}`;
+  for (const node of existingNodes) {
+    const key = bucketKey(node.position.x, node.position.z);
+    const held = buckets.get(key);
+    if (held === undefined) buckets.set(key, [node]);
+    else held.push(node);
+  }
+
   const nearestExisting = (x: number, y: number, z: number): ExistingNode | undefined => {
     let best: { readonly node: ExistingNode; readonly distance: number } | undefined;
-    for (const node of existingNodes) {
-      const distance = Math.hypot(node.position.x - x, node.position.z - z);
-      if (distance > WELD_TOLERANCE || Math.abs(node.position.y - y) > WELD_TOLERANCE) continue;
-      if (best === undefined || distance < best.distance) best = { node, distance };
+    const column = Math.floor(x / WELD_TOLERANCE);
+    const row = Math.floor(z / WELD_TOLERANCE);
+    for (let dx = -1; dx <= 1; dx += 1) {
+      for (let dz = -1; dz <= 1; dz += 1) {
+        for (const node of buckets.get(`${column + dx}:${row + dz}`) ?? []) {
+          const distance = Math.hypot(node.position.x - x, node.position.z - z);
+          if (distance > WELD_TOLERANCE || Math.abs(node.position.y - y) > WELD_TOLERANCE) continue;
+          if (best === undefined || distance < best.distance) best = { node, distance };
+        }
+      }
     }
     return best?.node;
   };
@@ -196,7 +254,7 @@ export function buildContourPatch(
   let mintedCounter = 0;
   const idsFor = (ring: Ring, ringIndex: number): readonly string[] =>
     openRing(ring).map(([x, z]) => {
-      const y = nearestSampleY(x, z, heightSamples);
+      const y = heightOnCurves(x, z, referenceCurves);
       const welded = nearestExisting(x, y, z);
       if (welded !== undefined) {
         nodePositions.set(welded.id, welded.position);

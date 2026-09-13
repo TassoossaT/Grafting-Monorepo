@@ -57,6 +57,7 @@ pub fn irregular_quad_grid(
 
 // src/mesh.rs
 pub const REGION_SURFACE_KEY_PREFIX: &str = "@region";
+pub fn reference_field_near(graph: &SessionGraph, bounds: Option<Bounds>) -> ReferenceField
 pub fn region_id_to_wire(id: &RegionId) -> Vec<String>
 pub fn region_id_from_wire(wire: &[String]) -> Result<RegionId, String>
 pub struct SurfaceMeshDto
@@ -417,10 +418,12 @@ pub mod frame;
 pub mod math;
 pub mod planar;
 pub mod profile;
+pub mod refine;
 pub mod tessellation;
 pub mod types;
 pub mod upright;
 pub fn triangulate_region(
+pub fn triangulate_region_with(
 
 // src/math.rs
 pub fn dot(a: [f32; 3], b: [f32; 3]) -> f32
@@ -439,6 +442,11 @@ pub fn triangulate_contour_loops<'a>(
 // src/profile.rs
 pub fn triangulate_profile_sheet(
 
+// src/refine.rs
+pub fn field_owns_loops<'a>(
+pub fn needs_interior(outer: &[[f32; 3]], fill: &PlanarFill<'_>) -> bool
+pub fn refined_planar_mesh(
+
 // src/tessellation.rs
 pub fn traversed_edge(topology: &ContourTopology, use_: &OrientedEdgeUse) -> Option<ContourEdge>
 pub fn tessellate_contour_loop(
@@ -446,6 +454,8 @@ pub fn tessellate_contour_loop(
 // src/types.rs
 pub const ARC_TESSELLATION_TOLERANCE: f32 = 0.03;
 pub const VERTICAL_SIDE_EPSILON: f32 = 1e-4;
+pub struct PlanarFill<'a>
+pub fn new(
 pub struct TriangulatedMesh
 
 // src/upright.rs
@@ -4936,7 +4946,13 @@ export const curvePosition = (p: CurvePoint): ConstructionPosition => ({ x: p[0]
 export function explicitSpineSnapshot(snapshot: ConstructionGraphSnapshot, port: BezierPort, offsets: readonly number[]): ConstructionGraphSnapshot {
   if (!snapshot.edges.some((e) => !e.curve && e.startNodeId.startsWith("spine:") && e.endNodeId.startsWith("spine:"))) return snapshot;
   const graph = spineGraphFromSnapshot(snapshot);
-export function bezierChains(snapshot: ConstructionGraphSnapshot, port: BezierPort, offsets: readonly number[], miterLimit: number): readonly SpineChainInput[] {
+export function bezierChains(
+  snapshot: ConstructionGraphSnapshot,
+  port: BezierPort,
+  offsets: readonly number[],
+  miterLimit: number,
+  targetEdgeIds?: ReadonlySet<string>,
+  ): readonly SpineChainInput[] {
   const nodes = new Map(snapshot.nodes.map((n) => [n.id, n.position]));
 export function planBezierRoad(input: {
   readonly snapshot: ConstructionGraphSnapshot;
@@ -4972,12 +4988,26 @@ export function buildContourPatch(
   bandIndex: number,
   shapes: MultiPolygon,
   heightSamples: readonly ConstructionPosition[],
-  existingNodes: readonly ExistingNode[],
+  referenceCurves: readonly ReferenceCurve[],
+
+// src/features/edit-construction/structure-types/path/contour/curve-projection.ts
+export interface ReferenceCurve {
+  readonly points: readonly ConstructionPosition[];
+  }
+export function heightOnCurves(
+  x: number,
+  z: number,
+  curves: readonly ReferenceCurve[],
+  fallback = 0,
+  ): number {
+  let bestDistanceSq = Infinity;
+  let bestY = fallback;
 
 // src/features/edit-construction/structure-types/path/contour/index.ts
 export type { ExistingNode } from "./contour-patch.ts";
 export type { BandRibbon } from "./offset-bands.ts";
 export type { PlanSpineContourInput, PlanSpineContourResult, SpineChainInput } from "./plan-spine-contour.ts";
+export type { ReferenceCurve } from "./curve-projection.ts";
 
 // src/features/edit-construction/structure-types/path/contour/offset-bands.ts
 export interface BandRibbon {
@@ -5022,9 +5052,10 @@ export function planSpineContour(input: PlanSpineContourInput): PlanSpineContour
   if (input.editedChains.length === 0) return undefined;
 
   const ribbons: BandRibbon[] = [];
-  for (const chain of input.editedChains) {
-  if (chain.ribbons) { ribbons.push(...chain.ribbons); continue; }
-  const polyline = chain.sampledPoints ?? sampleCatmullRom(chain.controlPoints, chain.tolerance);
+  // The curves themselves, kept rather than discarded once their ribbons are
+  // offset: they are the height authority for every vertex the union is
+  // about to mint, and the same curves the engine reads back out of the
+  const referenceCurves: ReferenceCurve[] = [];
 
 // src/features/edit-construction/structure-types/path/contour/union-bands.ts
 export function unionBandLayer(ribbons: readonly BandRibbon[]): MultiPolygon {
@@ -5083,6 +5114,12 @@ export interface ChangedSpineCloud {
   * decide which standing contour faces this edit replaces.
   */
   readonly positions: readonly ConstructionPosition[];
+export function extractCorridorsFromEdgeId(edgeId: string): readonly string[] {
+  const result: string[] = [];
+  let current: string | undefined = edgeId;
+  while (current) {
+  if (current.startsWith("spine-edge:")) {
+  const match = /^spine-edge:(.+):\d+$/.exec(current);
 export function changedSpineCloud(snapshot: ConstructionGraphSnapshot, patch: ConstructionGraphPatch, topologies: readonly ConstructionRegionTopology[] = []): ChangedSpineCloud {
   const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
 export function standingRegionsForCloud(

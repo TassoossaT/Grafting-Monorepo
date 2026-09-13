@@ -104,6 +104,40 @@ Tessellates a sheet on an explicit, bounded rendering grid.
 Neighboring sheets must use the same rise subdivision count to share seams.
 Collapsed upper sections produce an apex without zero-area triangles.
 
+### `pub fn grafting_procgen_surface_mesh::refine::field_owns_loops<'a>(fill: &grafting_procgen_surface_mesh::types::PlanarFill<'_>, loops: impl core::iter::traits::collect::IntoIterator<Item = &'a [[f32; 3]]>) -> bool`
+
+Whether `fill`'s field claims every corner of these loops.
+
+All of them, not most: a field that owns only part of a face would
+elevate and parametrize that part on a different authority from the
+rest, and the seam between the two answers is worse than either answer
+alone. Unanimous or not at all.
+
+### `pub fn grafting_procgen_surface_mesh::refine::needs_interior(outer: &[[f32; 3]], fill: &grafting_procgen_surface_mesh::types::PlanarFill<'_>) -> bool`
+
+Whether this face has anything an interior could express.
+
+Two questions, and a face has to fail neither. It must be bigger than one
+cell -- below that the refinement adds nothing and the boundary-only path
+is not merely adequate but identical. And the field must actually *go*
+somewhere across it: a level face is covered exactly by its own corners,
+so refining it buys triangles and no shape. The defect being answered is
+a face that follows a slope, where covering the middle from the margins
+alone twists it, and this is the test for whether there is a slope to
+follow.
+
+The relief test is what lets a flat map pay nothing. It costs one field
+sample per contour point, against a refinement pass per face.
+
+### `pub fn grafting_procgen_surface_mesh::refine::refined_planar_mesh(outer: &[[f32; 3]], holes: &[&alloc::vec::Vec<[f32; 3]>], fill: &grafting_procgen_surface_mesh::types::PlanarFill<'_>) -> core::option::Option<grafting_procgen_surface_mesh::types::TriangulatedMesh>`
+
+Triangulates `outer` (less `holes`) with interior vertices, elevating and
+parametrizing everything it invents from `fill`'s field.
+
+Returns `None` when the constraints cannot be triangulated at all, which
+the caller reads as "mesh this the way it was meshed before" rather than
+as a failure -- a degenerate ring mid-edit is a transient state.
+
 ### `pub fn grafting_procgen_surface_mesh::tessellation::tessellate_contour_loop(topology: &grafting_graph_core::contour::ContourTopology, loop_: &grafting_graph_core::contour::ContourLoop, resolve_position: &mut impl core::ops::function::FnMut(&grafting_graph_core::model::NodeId) -> core::option::Option<[f32; 3]>) -> core::option::Option<alloc::vec::Vec<[f32; 3]>>`
 
 Discretizes a loop of analytic contour edges into 3D world points.
@@ -126,6 +160,31 @@ the XZ contour plane. An invalid hole that is outside every outer loop
 produces `None` rather than a visually plausible but topologically false
 mesh. Callers resolve node positions from their authoritative graph.
 
+### `pub fn grafting_procgen_surface_mesh::triangulate_region_with(topology: &grafting_graph_core::contour::ContourTopology, region: &grafting_graph_core::contour::SurfaceRegion, resolve_position: impl core::ops::function::FnMut(&grafting_graph_core::model::NodeId) -> core::option::Option<[f32; 3]>, fill: core::option::Option<grafting_procgen_surface_mesh::types::PlanarFill<'_>>) -> core::option::Option<alloc::vec::Vec<grafting_procgen_surface_mesh::types::TriangulatedMesh>>`
+
+[`triangulate_region`], with the option of filling a planar face's
+interior rather than covering it from its own corners alone.
+
+`fill` is the whole difference. Without it this is the function it always
+was. With it, a planar face large enough to warrant an interior, and
+whose every corner the field claims, is refined to a bounded triangle
+size instead of ear-clipped -- which is what stops a ribbon swept along a
+curve from being covered by diagonals running margin to margin, twisting
+the surface and digging troughs the contour never had. See
+[`refine`] for why that is a property of the face's shape rather than of
+what kind of surface anybody thinks it is.
+
+### `pub fn grafting_procgen_surface_mesh::types::PlanarFill<'a>::clone(&self) -> grafting_procgen_surface_mesh::types::PlanarFill<'a>`
+
+### `pub fn grafting_procgen_surface_mesh::types::PlanarFill<'a>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result`
+
+### `pub fn grafting_procgen_surface_mesh::types::PlanarFill<'a>::new(field: &'a grafting_graph_core::curve_offset::field::ReferenceField, max_area: f32) -> Self`
+
+A fill on `field` at `max_area`, with the refinement settings the
+constrained ground generator already runs at -- same triangulator,
+same tuning, so a face and the ground beside it are meshed to
+comparable density rather than to two unrelated opinions.
+
 ### `pub fn grafting_procgen_surface_mesh::upright::upright_face_mesh(topology: &grafting_graph_core::contour::ContourTopology, region: &grafting_graph_core::contour::SurfaceRegion, resolve_position: &mut impl core::ops::function::FnMut(&grafting_graph_core::model::NodeId) -> core::option::Option<[f32; 3]>) -> core::option::Option<grafting_procgen_surface_mesh::types::TriangulatedMesh>`
 
 Meshes an upright face -- a wall panel, straight or curved, opened or
@@ -143,6 +202,74 @@ a run back along the top, one side coming down.
 Recognised by structure rather than by counting edges, so a panel whose
 base has since been subdivided -- a T-junction welding another wall onto
 its side -- is still the same upright face it always was.
+
+### `pub grafting_procgen_surface_mesh::PlanarFill::field: &'a grafting_graph_core::curve_offset::field::ReferenceField`
+
+The curves the face was swept from -- its height and `(s, t)`
+authority, and the thing that decides whether the face is its at all.
+
+### `pub grafting_procgen_surface_mesh::PlanarFill::max_additional_vertices: usize`
+
+Hard ceiling on invented points, so a pathological contour costs a
+coarser mesh rather than an unbounded loop.
+
+### `pub grafting_procgen_surface_mesh::PlanarFill::max_area: f32`
+
+Largest triangle left standing, in world units squared. A face
+smaller than this gains nothing from refinement and skips it.
+
+### `pub grafting_procgen_surface_mesh::PlanarFill::max_lattice_points: usize`
+
+Ceiling on lattice points, so a very long or very wide field costs a
+coarser interior rather than an unbounded one.
+
+### `pub grafting_procgen_surface_mesh::PlanarFill::min_angle_degrees: f64`
+
+Smallest angle the refinement leaves standing. Ruppert only
+terminates provably below about 20.7 degrees.
+
+### `pub grafting_procgen_surface_mesh::PlanarFill::min_area_ratio: f64`
+
+Smallest triangle worth improving, as a fraction of [`Self::max_area`]
+-- the guard against two contours running close and near-parallel,
+where local feature size collapses and an unfloored refinement fills
+the wedge with slivers.
+
+### `pub grafting_procgen_surface_mesh::PlanarFill::min_relief: f32`
+
+How far the field's height may vary across a face before the face is
+worth giving an interior at all, in world units.
+
+A level face gains nothing: its corners already say everything there
+is to say about where the surface is, ear clipping puts no vertex
+anywhere the surface is not, and refining it buys triangles and
+nothing else. The defect being answered here is a face that *follows*
+something -- a run crossing a slope, where covering the middle from
+the margins alone twists it -- so this is the test for whether there
+is anything to follow. A flat map pays the cost of sampling its
+corners and nothing more.
+
+### `pub grafting_procgen_surface_mesh::PlanarFill::reach_slack: f32`
+
+Multiplier on each curve's own reach when deciding whether the field
+claims a corner, absorbing a mitre or a union vertex sitting a hair
+outside the swept width.
+
+### `pub grafting_procgen_surface_mesh::PlanarFill::station_step: f32`
+
+Spacing, in world units, of the `(s, t)` lattice the interior is
+seeded with -- the length of a quad along the curve and across it.
+
+Seeding rather than letting the refinement place its own points is
+what makes the interior a *strip*: rows that follow the curve and
+columns that cross it, so every triangle is local in both directions
+and a slope is followed station by station instead of spanned. Where
+two curves meet, their lattices overlap and the triangulation makes
+the patch between them out of what is already there, which is a
+junction for free.
+
+Zero disables seeding, leaving the unstructured refinement that was
+here before.
 
 ### `pub grafting_procgen_surface_mesh::TriangulatedMesh::indices: alloc::vec::Vec<u32>`
 
@@ -163,10 +290,21 @@ corner would disagree about where the pattern is. In metres, scale is
 uniform everywhere for free, and a caller divides by whatever its own
 tile size happens to be.
 
-An upright face measures along its rail and up; a flat one measures in
-world `x` and `z`. Both anchor on something the graph already fixes, so
-re-deriving a mesh yields the same coordinates and neighbours that share
-an anchor agree across the edge between them.
+An upright face measures along its rail and up. A flat one measures
+along and across the curve it was swept from -- `(s, t)`, from its
+[`PlanarFill`] field -- or, with no such curve, in world `x` and `z`.
+All three anchor on something the graph already fixes, so re-deriving
+a mesh yields the same coordinates and neighbours that share an anchor
+agree across the edge between them.
+
+`(s, t)` is the one worth building on. World `xz` is the face's
+*shadow*: it foreshortens wherever the surface is not level and says
+nothing about where along a run a point sits. Distance travelled and
+distance off, in metres, is the coordinate anything laid out over the
+surface actually wants -- a course of replicated units, a marking, a
+structure placed at a station -- and it survives the surface being
+rebuilt, refined differently or widened, which a vertex index does
+not.
 
 ### `pub grafting_procgen_surface_mesh::frame::UnrollFrame::Chord`
 
@@ -185,6 +323,74 @@ an anchor agree across the edge between them.
 ### `pub grafting_procgen_surface_mesh::frame::UnrollFrame::Cylinder::start_angle: f32`
 
 ### `pub grafting_procgen_surface_mesh::frame::UnrollFrame::Cylinder::total_sweep: f32`
+
+### `pub grafting_procgen_surface_mesh::types::PlanarFill::field: &'a grafting_graph_core::curve_offset::field::ReferenceField`
+
+The curves the face was swept from -- its height and `(s, t)`
+authority, and the thing that decides whether the face is its at all.
+
+### `pub grafting_procgen_surface_mesh::types::PlanarFill::max_additional_vertices: usize`
+
+Hard ceiling on invented points, so a pathological contour costs a
+coarser mesh rather than an unbounded loop.
+
+### `pub grafting_procgen_surface_mesh::types::PlanarFill::max_area: f32`
+
+Largest triangle left standing, in world units squared. A face
+smaller than this gains nothing from refinement and skips it.
+
+### `pub grafting_procgen_surface_mesh::types::PlanarFill::max_lattice_points: usize`
+
+Ceiling on lattice points, so a very long or very wide field costs a
+coarser interior rather than an unbounded one.
+
+### `pub grafting_procgen_surface_mesh::types::PlanarFill::min_angle_degrees: f64`
+
+Smallest angle the refinement leaves standing. Ruppert only
+terminates provably below about 20.7 degrees.
+
+### `pub grafting_procgen_surface_mesh::types::PlanarFill::min_area_ratio: f64`
+
+Smallest triangle worth improving, as a fraction of [`Self::max_area`]
+-- the guard against two contours running close and near-parallel,
+where local feature size collapses and an unfloored refinement fills
+the wedge with slivers.
+
+### `pub grafting_procgen_surface_mesh::types::PlanarFill::min_relief: f32`
+
+How far the field's height may vary across a face before the face is
+worth giving an interior at all, in world units.
+
+A level face gains nothing: its corners already say everything there
+is to say about where the surface is, ear clipping puts no vertex
+anywhere the surface is not, and refining it buys triangles and
+nothing else. The defect being answered here is a face that *follows*
+something -- a run crossing a slope, where covering the middle from
+the margins alone twists it -- so this is the test for whether there
+is anything to follow. A flat map pays the cost of sampling its
+corners and nothing more.
+
+### `pub grafting_procgen_surface_mesh::types::PlanarFill::reach_slack: f32`
+
+Multiplier on each curve's own reach when deciding whether the field
+claims a corner, absorbing a mitre or a union vertex sitting a hair
+outside the swept width.
+
+### `pub grafting_procgen_surface_mesh::types::PlanarFill::station_step: f32`
+
+Spacing, in world units, of the `(s, t)` lattice the interior is
+seeded with -- the length of a quad along the curve and across it.
+
+Seeding rather than letting the refinement place its own points is
+what makes the interior a *strip*: rows that follow the curve and
+columns that cross it, so every triangle is local in both directions
+and a slope is followed station by station instead of spanned. Where
+two curves meet, their lattices overlap and the triangulation makes
+the patch between them out of what is already there, which is a
+junction for free.
+
+Zero disables seeding, leaving the unstructured refinement that was
+here before.
 
 ### `pub grafting_procgen_surface_mesh::types::TriangulatedMesh::indices: alloc::vec::Vec<u32>`
 
@@ -205,10 +411,21 @@ corner would disagree about where the pattern is. In metres, scale is
 uniform everywhere for free, and a caller divides by whatever its own
 tile size happens to be.
 
-An upright face measures along its rail and up; a flat one measures in
-world `x` and `z`. Both anchor on something the graph already fixes, so
-re-deriving a mesh yields the same coordinates and neighbours that share
-an anchor agree across the edge between them.
+An upright face measures along its rail and up. A flat one measures
+along and across the curve it was swept from -- `(s, t)`, from its
+[`PlanarFill`] field -- or, with no such curve, in world `x` and `z`.
+All three anchor on something the graph already fixes, so re-deriving
+a mesh yields the same coordinates and neighbours that share an anchor
+agree across the edge between them.
+
+`(s, t)` is the one worth building on. World `xz` is the face's
+*shadow*: it foreshortens wherever the surface is not level and says
+nothing about where along a run a point sits. Distance travelled and
+distance off, in metres, is the coordinate anything laid out over the
+surface actually wants -- a course of replicated units, a marking, a
+structure placed at a station -- and it survives the surface being
+rebuilt, refined differently or widened, which a vertex index does
+not.
 
 ### `pub grafting_procgen_surface_mesh::upright::UprightStructure::base_edges: alloc::vec::Vec<(grafting_graph_core::contour::ContourEdge, [f32; 3], [f32; 3])>`
 
@@ -281,6 +498,44 @@ Planar surface triangulation via best-fit plane projection and earcut.
 
 Transient tessellation of analytic profile sheets.
 
+### `pub mod grafting_procgen_surface_mesh::refine`
+
+Planar triangulation that is allowed to put vertices *inside* the face.
+
+**The defect this exists to remove.** Ear clipping invents nothing: it
+covers a ring using only the ring's own corners. For a compact face that
+is exactly right and this module never runs. For a long, narrow one -- a
+ribbon swept along a curve is the standing example -- it is a
+disfigurement. The only way to cover the middle of a ribbon from its
+corners alone is to run triangles diagonally from one margin across to
+the other, so the interior of the surface becomes a linear blend between
+two points that may be tens of metres apart lengthwise. On level ground
+nobody notices. On a slope the face visibly twists, and every diagonal
+that spans a dip pulls the surface down into a trough that the contour
+itself never had.
+
+It is the same failure `upright.rs` already had to answer for a curved
+wall panel, where the diagonals cut through the cylinder and left a
+helical crease -- and the answer there was the same one in a different
+shape: stop asking the triangulator to cover a surface it has no
+vertices for.
+
+**How it is answered here.** The ring is handed to a constrained Delaunay
+refinement ([`triangulate_constrained`]) instead, which keeps every
+supplied corner exactly where it is, never crosses the boundary, and
+fills the interior with real vertices up to a bounded triangle size. A
+vertex it invents is inside the face and therefore off the contour, so
+nothing in the graph can say how high it is -- which is why this module
+runs only when a reference field is present to answer that. The field
+is also the face's parametrization, so the same call that elevates an
+invented vertex also gives it a UV.
+
+Nothing here knows what kind of surface it is looking at. A face gets an
+interior when a field claims its corners and its own size warrants one;
+that is a statement about geometry, and any surface swept from a curve
+answers it the same way without this module or its caller growing a
+branch per type.
+
 ### `pub mod grafting_procgen_surface_mesh::tessellation`
 
 Tessellation of analytic contour loops into discrete 3D vertex chains.
@@ -293,6 +548,20 @@ Data structures and tolerances for surface mesh generation.
 
 Triangulation of developable upright surfaces (straight or curved wall panels).
 
+### `pub struct grafting_procgen_surface_mesh::PlanarFill<'a>`
+
+What a planar face may put *inside* itself, and on whose authority.
+
+Absent, a face is covered from its own corners alone -- ear clipping,
+which is exactly right for a compact face and disfigures a long narrow
+one (see [`crate::refine`]). Present, the face is refined to a bounded
+triangle size and every vertex the refinement invents is elevated and
+parametrized by `field`.
+
+The field is the precondition, not a decoration: an interior vertex is
+off the contour, so the graph holds no height for it, and inventing one
+is how a surface acquires shape nobody authored.
+
 ### `pub struct grafting_procgen_surface_mesh::TriangulatedMesh`
 
 A triangulated mesh derived from one surface's node cycle. Vertices stay
@@ -301,6 +570,20 @@ the surface, so `indices` reference the same order as the input
 `positions`. The exception is a curved panel with an opening: that one is
 filled with a uniform mesh whose interior vertices exist only here, so
 `positions` is longer than the contour and in the mesher's own order.
+
+### `pub struct grafting_procgen_surface_mesh::types::PlanarFill<'a>`
+
+What a planar face may put *inside* itself, and on whose authority.
+
+Absent, a face is covered from its own corners alone -- ear clipping,
+which is exactly right for a compact face and disfigures a long narrow
+one (see [`crate::refine`]). Present, the face is refined to a bounded
+triangle size and every vertex the refinement invents is elevated and
+parametrized by `field`.
+
+The field is the precondition, not a decoration: an interior vertex is
+off the contour, so the graph holds no height for it, and inventing one
+is how a surface acquires shape nobody authored.
 
 ### `pub struct grafting_procgen_surface_mesh::types::TriangulatedMesh`
 
