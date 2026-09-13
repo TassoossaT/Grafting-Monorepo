@@ -50,6 +50,20 @@ export function heightOnCurves(
   let bestY = fallback;
   for (const curve of curves) {
     const { points } = curve;
+    if (points.length < 2) continue;
+    let minX = points[0]!.x, maxX = points[0]!.x;
+    let minZ = points[0]!.z, maxZ = points[0]!.z;
+    for (let i = 1; i < points.length; i += 1) {
+      const p = points[i]!;
+      if (p.x < minX) minX = p.x;
+      else if (p.x > maxX) maxX = p.x;
+      if (p.z < minZ) minZ = p.z;
+      else if (p.z > maxZ) maxZ = p.z;
+    }
+    const dxBox = x < minX ? minX - x : x > maxX ? x - maxX : 0;
+    const dzBox = z < minZ ? minZ - z : z > maxZ ? z - maxZ : 0;
+    if (dxBox * dxBox + dzBox * dzBox >= bestDistanceSq) continue;
+
     for (let index = 0; index + 1 < points.length; index += 1) {
       const from = points[index]!;
       const to = points[index + 1]!;

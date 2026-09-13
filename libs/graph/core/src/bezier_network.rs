@@ -494,22 +494,43 @@ pub fn plan(request: NetworkRequest) -> Result<NetworkPatch, String> {
                 request.tolerance,
                 request.height_tolerance,
             )?;
+            let shares_node = edges[i].start_node_id == edges[j].start_node_id
+                || edges[i].start_node_id == edges[j].end_node_id
+                || edges[i].end_node_id == edges[j].start_node_id
+                || edges[i].end_node_id == edges[j].end_node_id;
             // Endpoint-on-curve snapping also covers T junctions where there is no proper crossing.
-            for (a, b, reverse) in [(i, j, false), (j, i, true)] {
-                for t in [0., 1.] {
-                    let p = curves[a].evaluate(t)?;
-                    let u = curves[b].nearest(p, request.tolerance)?;
-                    if near(
-                        p,
-                        curves[b].evaluate(u)?,
-                        request.snap_tolerance,
-                        request.height_tolerance,
-                    ) {
-                        hits.push(if reverse { [u, t] } else { [t, u] });
+            if !shares_node {
+                for (a, b, reverse) in [(i, j, false), (j, i, true)] {
+                    for t in [0., 1.] {
+                        let p = curves[a].evaluate(t)?;
+                        let u = curves[b].nearest(p, request.tolerance)?;
+                        if near(
+                            p,
+                            curves[b].evaluate(u)?,
+                            request.snap_tolerance,
+                            request.height_tolerance,
+                        ) {
+                            hits.push(if reverse { [u, t] } else { [t, u] });
+                        }
                     }
                 }
             }
             for [t, u] in hits {
+                if shares_node {
+                    let ai = if t < 0.5 {
+                        &edges[i].start_node_id
+                    } else {
+                        &edges[i].end_node_id
+                    };
+                    let bi = if u < 0.5 {
+                        &edges[j].start_node_id
+                    } else {
+                        &edges[j].end_node_id
+                    };
+                    if ai == bi && (t < 0.05 || t > 0.95) && (u < 0.05 || u > 0.95) {
+                        continue;
+                    }
+                }
                 if !(1e-7..=1. - 1e-7).contains(&t) && !(1e-7..=1. - 1e-7).contains(&u) {
                     let ai = if t < 0.5 {
                         &edges[i].start_node_id

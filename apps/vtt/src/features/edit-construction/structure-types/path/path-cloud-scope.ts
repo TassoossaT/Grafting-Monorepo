@@ -31,23 +31,33 @@ export interface ChangedSpineCloud {
 
 function extractCorridorsFromEdgeId(edgeId: string): string[] {
   const result = new Set<string>();
+  const addWithAliases = (raw: string) => {
+    let curr = raw.replace(/:+$/, "");
+    if (curr.endsWith("#junction")) curr = curr.slice(0, -"#junction".length);
+    result.add(curr);
+    while (curr.includes("#")) {
+      curr = curr.slice(0, curr.lastIndexOf("#"));
+      result.add(curr);
+    }
+  };
+
   const root = edgeId.split(":split:")[0]!;
   const rootMatch = /^spine-edge:(.+):\d+$/.exec(root);
   if (rootMatch && rootMatch[1]) {
-    result.add(rootMatch[1]);
+    addWithAliases(rootMatch[1]);
   }
   const splitParts = edgeId.split(":split:");
   for (let i = 1; i < splitParts.length; i += 1) {
     const part = splitParts[i]!;
-    const junctionMatch = /^spine:([^#]+)#junction/.exec(part);
+    const junctionMatch = /^spine:(.+)#junction/.exec(part);
     if (junctionMatch && junctionMatch[1]) {
-      result.add(junctionMatch[1]);
+      addWithAliases(junctionMatch[1]);
     }
   }
   if (edgeId.startsWith("spine-split:")) {
     const splitMatch = /^spine-split:(.+):\d+$/.exec(edgeId);
     if (splitMatch && splitMatch[1]) {
-      result.add(splitMatch[1]);
+      addWithAliases(splitMatch[1]);
     }
   }
   return [...result];
@@ -75,18 +85,20 @@ export function changedSpineCloud(snapshot: ConstructionGraphSnapshot, patch: Co
 
   // Index all nodes by corridor
   const corridorNodes = new Map<string, string[]>();
-  const corridorOf = (id: string): string | undefined => parseSpineControlNodeId(id)?.operationId;
+  const corridorOf = (id: string): string | undefined => {
+    const raw = parseSpineControlNodeId(id)?.operationId;
+    return raw?.replace(/:+$/, "");
+  };
   for (const node of graph.nodes) {
-    const corridor = corridorOf(node.nodeId);
-    if (corridor !== undefined) corridorNodes.set(corridor, [...(corridorNodes.get(corridor) ?? []), node.nodeId]);
-  }
-
-  // Alias the base operation used by legacy corridor ids with a #road suffix.
-  for (const [corridor, ids] of [...corridorNodes]) {
-    const at = corridor.lastIndexOf("#");
-    if (at >= 0) {
-      const base = corridor.slice(0, at);
-      corridorNodes.set(base, [...(corridorNodes.get(base) ?? []), ...ids]);
+    const raw = corridorOf(node.nodeId);
+    if (raw !== undefined) {
+      let curr = raw;
+      if (curr.endsWith("#junction")) curr = curr.slice(0, -"#junction".length);
+      corridorNodes.set(curr, [...(corridorNodes.get(curr) ?? []), node.nodeId]);
+      while (curr.includes("#")) {
+        curr = curr.slice(0, curr.lastIndexOf("#"));
+        corridorNodes.set(curr, [...(corridorNodes.get(curr) ?? []), node.nodeId]);
+      }
     }
   }
 
@@ -103,33 +115,33 @@ export function changedSpineCloud(snapshot: ConstructionGraphSnapshot, patch: Co
 
   // 1. Corridors directly touched by patch nodes, added edges, and removed edges.
   const directlyTouchedCorridors = new Set<string>();
+  const addTouched = (id: string) => {
+    let curr = id.replace(/:+$/, "");
+    if (curr.endsWith("#junction")) curr = curr.slice(0, -"#junction".length);
+    directlyTouchedCorridors.add(curr);
+    while (curr.includes("#")) {
+      curr = curr.slice(0, curr.lastIndexOf("#"));
+      directlyTouchedCorridors.add(curr);
+    }
+  };
+
   for (const node of patch.nodes) {
     const corridor = corridorOf(node.id);
-    if (corridor !== undefined) {
-      directlyTouchedCorridors.add(corridor);
-      const at = corridor.lastIndexOf("#");
-      if (at >= 0) directlyTouchedCorridors.add(corridor.slice(0, at));
-    }
+    if (corridor !== undefined) addTouched(corridor);
   }
   for (const edge of patch.edges) {
     for (const id of extractCorridorsFromEdgeId(edge.edgeId)) {
-      directlyTouchedCorridors.add(id);
-      const at = id.lastIndexOf("#");
-      if (at >= 0) directlyTouchedCorridors.add(id.slice(0, at));
+      addTouched(id);
     }
   }
   for (const edgeId of patch.removedEdgeIds ?? []) {
     for (const id of extractCorridorsFromEdgeId(edgeId)) {
-      directlyTouchedCorridors.add(id);
-      const at = id.lastIndexOf("#");
-      if (at >= 0) directlyTouchedCorridors.add(id.slice(0, at));
+      addTouched(id);
     }
     const snapEdge = snapshot.edges.find((e) => e.edgeId === edgeId);
     if (snapEdge) {
       for (const id of extractCorridorsFromEdgeId(snapEdge.edgeId)) {
-        directlyTouchedCorridors.add(id);
-        const at = id.lastIndexOf("#");
-        if (at >= 0) directlyTouchedCorridors.add(id.slice(0, at));
+        addTouched(id);
       }
     }
   }
@@ -140,9 +152,12 @@ export function changedSpineCloud(snapshot: ConstructionGraphSnapshot, patch: Co
     const peers = coOwners.get(c);
     if (peers) {
       for (const peer of peers) {
-        corridorIds.add(peer);
-        const at = peer.lastIndexOf("#");
-        if (at >= 0) corridorIds.add(peer.slice(0, at));
+        let curr = peer.replace(/:+$/, "");
+        corridorIds.add(curr);
+        while (curr.includes("#")) {
+          curr = curr.slice(0, curr.lastIndexOf("#"));
+          corridorIds.add(curr);
+        }
       }
     }
   }
