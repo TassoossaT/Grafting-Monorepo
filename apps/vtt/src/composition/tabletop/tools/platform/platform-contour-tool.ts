@@ -160,7 +160,16 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
       surfaceType: "platform",
       physical: true,
     }));
-    ctx.runtime.applyPatchReplacement({ operationId, sourceSurfaceKeys: remaining.map(({ source }) => source.surfaceKey), patch: { nodes: [...nodes.values()], edges: builder.all(), regions } }, "local", operationId);
+    const primaryGroup = changedGroups[0];
+    const footprintOutline = primaryGroup && primaryGroup.boundary.length >= 3
+      ? primaryGroup.boundary.map((e) => positionOf(e.a))
+      : (contour.length >= 3 ? contour.map((c) => [c.start.x, c.start.z] as const) : undefined);
+    ctx.runtime.applyPatchReplacement({
+      operationId,
+      sourceSurfaceKeys: remaining.map(({ source }) => source.surfaceKey),
+      patch: { nodes: [...nodes.values()], edges: builder.all(), regions },
+      footprintOutline,
+    }, "local", operationId);
     ctx.history.record({ kind: "path-brush", operationId });
     ctx.reportFeedback({ tone: "success", message: `Plataforma: ${regions.length} face(s) na elevação ${params.elevation}.` });
   } catch (error) { ctx.reportFeedback({ tone: "error", message: error instanceof Error ? error.message : String(error) }); }

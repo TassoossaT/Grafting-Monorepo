@@ -246,13 +246,34 @@ function topologiesFromPatch(
         geometry: edge?.geometry ?? { kind: "line" },
       });
     }
+    const regionHoles: ConstructionRegionEdge[][] = [];
+    for (const hole of region.holes ?? []) {
+      const holeEdges: ConstructionRegionEdge[] = [];
+      for (const use of hole) {
+        const edge = edgeById.get(use.edgeId);
+        const startId = edge ? (use.reversed ? edge.endNodeId : edge.startNodeId) : "";
+        const endId = edge ? (use.reversed ? edge.startNodeId : edge.endNodeId) : "";
+        const startPos = startId ? (nodeById.get(startId) ?? liveNodes.get(startId)?.position) : undefined;
+        const endPos = endId ? (nodeById.get(endId) ?? liveNodes.get(endId)?.position) : undefined;
+        if (startId && startPos) regionNodes.set(startId, startPos);
+        if (endId && endPos) regionNodes.set(endId, endPos);
+        holeEdges.push({
+          edgeId: use.edgeId,
+          reversed: use.reversed,
+          startNodeId: startId,
+          endNodeId: endId,
+          geometry: edge?.geometry ?? { kind: "line" },
+        });
+      }
+      regionHoles.push(holeEdges);
+    }
     return {
       surfaceKey: ["@region", region.regionId],
       surfaceType: region.surfaceType,
       physical: region.physical,
       nodes: [...regionNodes].map(([id, position]) => ({ id, position })),
       outerLoops: [regionEdges],
-      holes: [],
+      holes: regionHoles,
     };
   });
 }
