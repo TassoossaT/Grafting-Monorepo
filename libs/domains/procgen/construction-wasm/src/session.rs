@@ -79,6 +79,12 @@ impl Default for ConstructionSession {
 
 #[wasm_bindgen]
 impl ConstructionSession {
+    /// Generates an indexed analytic cap without mutating the live graph.
+    pub fn profile_cap_json(&self, json: &str) -> Result<String, JsValue> {
+        let request = parse::<grafting_graph_core::profile_cap_patch::CapRequest>(json)?;
+        serialize(&grafting_graph_core::profile_cap_patch::generate_cap_patch(request).map_err(to_js_error)?)
+    }
+
     /// Evaluates a batch of generic curve-authoring commands without mutation.
     pub fn bezier_batch_json(&self, json: &str) -> Result<String, JsValue> {
         let request = parse::<grafting_graph_core::bezier_commands::CurveBatch>(json)?;

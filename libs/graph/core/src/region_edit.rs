@@ -254,6 +254,11 @@ pub fn insert_vertex<N, E>(
         .edge(edge)
         .cloned()
         .ok_or_else(|| ContourError::UnknownEdgeIdentity { id: edge.clone() })?;
+    for id in topology.regions_using_edge(edge) {
+        if topology.region(&id).is_some_and(|r| r.profile().is_some()) {
+            return Err(ContourError::ProfileRequiresRegeneration { id }.into());
+        }
+    }
     let node_id = node.id().clone();
     if graph.node(&node_id).is_none() {
         graph.add_node(node)?;
@@ -291,6 +296,11 @@ pub fn remove_vertex<N, E>(
     node: &NodeId,
     welded_edge: ContourEdgeId,
 ) -> Result<RegionEditOutcome, RegionEditError> {
+    for id in topology.regions_touching_node(node) {
+        if topology.region(&id).is_some_and(|r| r.profile().is_some()) {
+            return Err(ContourError::ProfileRequiresRegeneration { id }.into());
+        }
+    }
     let incident = topology.edges_incident_to(node);
     if incident.len() != 2 {
         return Err(RegionEditError::NotWeldable {
@@ -708,6 +718,7 @@ pub fn duplicate_region<N, E>(
 
     let copy_region = suffixed_region(region, spec.suffix)?;
     topology.add_region(copy_region.clone(), outer_loops, holes)?;
+    topology.set_region_profile(&copy_region, source.profile())?;
     surfaces.add_region_surface(
         topology,
         copy_region.clone(),

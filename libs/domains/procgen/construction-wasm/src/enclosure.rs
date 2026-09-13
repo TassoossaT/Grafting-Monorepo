@@ -641,6 +641,7 @@ mod tests {
                     continue;
                 }
                 regions.push(PatchRegionDto {
+                    profile: None,
                     region_id: format!("face{column}_{row}"),
                     // Walked as one consistent circuit: bottom left-to-right,
                     // right side up, top right-to-left, left side down.
@@ -750,6 +751,7 @@ mod tests {
                 nodes: Vec::new(),
                 edges: Vec::new(),
                 regions: vec![PatchRegionDto {
+                    profile: None,
                     region_id: "patched".into(),
                     boundary,
                     holes: Vec::new(),
@@ -831,6 +833,7 @@ mod tests {
                     },
                 ],
                 regions: vec![PatchRegionDto {
+                    profile: None,
                     region_id: "far".into(),
                     boundary: ["fa", "fb", "fc", "fd"]
                         .into_iter()
@@ -1137,6 +1140,7 @@ mod tests {
                 ],
                 regions: vec![
                     PatchRegionDto {
+                    profile: None,
                         region_id: "intruder".into(),
                         boundary: vec![
                             OrientedEdgeUseDto {
@@ -1157,6 +1161,7 @@ mod tests {
                         physical: true,
                     },
                     PatchRegionDto {
+                    profile: None,
                         region_id: "innocent".into(),
                         boundary: vec![
                             OrientedEdgeUseDto {

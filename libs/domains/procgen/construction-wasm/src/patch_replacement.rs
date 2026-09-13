@@ -275,6 +275,7 @@ mod tests {
                 nodes: vec![],
                 edges: vec![],
                 regions: vec![PatchRegionDto {
+                    profile: None,
                     region_id: "bad-target".into(),
                     boundary: vec![OrientedEdgeUseDto {
                         edge_id: "missing-edge".into(),
