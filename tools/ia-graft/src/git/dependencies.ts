@@ -211,6 +211,8 @@ export async function prepareDependencyOverlays(
             await mirrorDependencyEntry(repoPath, worktreePath, path.join(source, entry), path.join(target, entry), counts);
         }
     }
+    const extraLinks = await ensureWorkspacePackageLinks(worktreePath, repoPath);
+    counts.workspaceLinks += extraLinks.linked;
     return { linked: true, mode: 'workspace-aware', overlays: relativeDirs.length, ...counts };
 }
 
@@ -253,6 +255,132 @@ export async function mirrorGeneratedArtifacts(repoPath: string, worktreePath: s
             } catch { /* best-effort fallback */ }
         }
     }
+    await ensureWorkspacePackageLinks(worktreePath, repoPath);
+}
+
+/**
+ * Scans the workspace to map all package names (from their package.json) to
+ * their workspace-relative directories. Then checks every package in the
+ * worktree/repo that declares a dependency on a workspace package (@grafting/*),
+ * and ensures that a junction/symlink exists in its `node_modules/@grafting/<pkg>`
+ * pointing to the worktree's copy of that package.
+ *
+ * This prevents TypeDoc, tsc, and test runners from failing in task worktrees
+ * due to missing or stale workspace links (Issue #268).
+ */
+export async function ensureWorkspacePackageLinks(
+    targetRoot: string,
+    fallbackRoot?: string,
+): Promise<{ linked: number; packagesFound: number }> {
+    const packageDirsToScan = ['apps', 'libs', 'packages', 'tools'];
+    const workspacePackages = new Map<string, string>();
+
+    async function findWorkspacePackages(dir: string, relBase = ''): Promise<void> {
+        let entries;
+        try {
+            entries = await fs.readdir(dir, { withFileTypes: true });
+        } catch {
+            return;
+        }
+        for (const entry of entries) {
+            if (!entry.isDirectory()) continue;
+            if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === '.worktrees' || entry.name === 'dist' || entry.name === 'target' || entry.name === 'pkg') continue;
+            const rel = relBase ? path.join(relBase, entry.name) : entry.name;
+            const fullDir = path.join(dir, entry.name);
+            const pkgJsonPath = path.join(fullDir, 'package.json');
+            if (await pathExists(pkgJsonPath)) {
+                try {
+                    const content = JSON.parse(await fs.readFile(pkgJsonPath, 'utf8'));
+                    if (content.name && typeof content.name === 'string') {
+                        workspacePackages.set(content.name, rel);
+                    }
+                } catch {}
+            }
+            await findWorkspacePackages(fullDir, rel);
+        }
+    }
+
+    for (const scanDir of packageDirsToScan) {
+        const fullScanPath = path.join(targetRoot, scanDir);
+        if (await pathExists(fullScanPath)) {
+            await findWorkspacePackages(fullScanPath, scanDir);
+        }
+        if (fallbackRoot) {
+            const fallbackScanPath = path.join(fallbackRoot, scanDir);
+            if (await pathExists(fallbackScanPath)) {
+                await findWorkspacePackages(fallbackScanPath, scanDir);
+            }
+        }
+    }
+
+    let linkedCount = 0;
+
+    async function checkProjectDependencies(dir: string, relBase = ''): Promise<void> {
+        let entries;
+        try {
+            entries = await fs.readdir(dir, { withFileTypes: true });
+        } catch {
+            return;
+        }
+        for (const entry of entries) {
+            if (!entry.isDirectory()) continue;
+            if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === '.worktrees' || entry.name === 'dist' || entry.name === 'target' || entry.name === 'pkg') continue;
+            const rel = relBase ? path.join(relBase, entry.name) : entry.name;
+            const fullDir = path.join(dir, entry.name);
+            const pkgJsonPath = path.join(fullDir, 'package.json');
+            if (await pathExists(pkgJsonPath)) {
+                try {
+                    const content = JSON.parse(await fs.readFile(pkgJsonPath, 'utf8'));
+                    const allDeps = { ...(content.dependencies ?? {}), ...(content.devDependencies ?? {}) };
+                    for (const depName of Object.keys(allDeps)) {
+                        const relTargetDir = workspacePackages.get(depName);
+                        if (!relTargetDir) continue;
+
+                        const linkTarget = path.join(fullDir, 'node_modules', ...depName.split('/'));
+                        let linkValid = false;
+                        if (await pathExists(linkTarget)) {
+                            try {
+                                const resolved = await fs.realpath(linkTarget);
+                                if (await pathExists(resolved)) {
+                                    linkValid = true;
+                                }
+                            } catch {
+                                linkValid = false;
+                            }
+                        }
+
+                        if (!linkValid) {
+                            const destInTarget = path.join(targetRoot, relTargetDir);
+                            const destDir = (await pathExists(destInTarget)) ? destInTarget
+                                : fallbackRoot && (await pathExists(path.join(fallbackRoot, relTargetDir)))
+                                ? path.join(fallbackRoot, relTargetDir)
+                                : undefined;
+
+                            if (destDir) {
+                                await fs.mkdir(path.dirname(linkTarget), { recursive: true });
+                                if (await pathExists(linkTarget)) {
+                                    await removeLinkTree(linkTarget).catch(() => undefined);
+                                }
+                                const targetStat = await fs.stat(destDir).catch(() => undefined);
+                                await fs.symlink(destDir, linkTarget, targetStat?.isDirectory() ? 'junction' : 'file');
+                                linkedCount++;
+                            }
+                        }
+                    }
+                } catch {}
+            }
+            await checkProjectDependencies(fullDir, rel);
+        }
+    }
+
+    for (const scanDir of packageDirsToScan) {
+        const fullScanPath = path.join(targetRoot, scanDir);
+        if (await pathExists(fullScanPath)) {
+            await checkProjectDependencies(fullScanPath, scanDir);
+        }
+    }
+
+    return { linked: linkedCount, packagesFound: workspacePackages.size };
 }
 
 /**

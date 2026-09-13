@@ -424,6 +424,25 @@ test("mirrorGeneratedArtifacts mirrors missing artifacts into worktree", async (
   assert.equal(content, "// generated\n");
 });
 
+test("ensureWorkspacePackageLinks automatically links missing workspace packages into node_modules", async () => {
+  const root = await makeRoot();
+  const pkgDir = join(root, "libs", "domains", "procgen", "sample-pkg");
+  const appDir = join(root, "apps", "sample-app");
+  await mkdir(pkgDir, { recursive: true });
+  await mkdir(appDir, { recursive: true });
+  await writeFile(join(pkgDir, "package.json"), JSON.stringify({ name: "@grafting/sample-pkg", version: "0.0.0" }), "utf8");
+  await writeFile(join(appDir, "package.json"), JSON.stringify({
+    name: "@grafting/sample-app",
+    dependencies: { "@grafting/sample-pkg": "workspace:*" },
+  }), "utf8");
+
+  const { ensureWorkspacePackageLinks } = await import("../git/dependencies.ts");
+  const result = await ensureWorkspacePackageLinks(root);
+  assert.equal(result.linked, 1);
+  const targetLink = join(appDir, "node_modules", "@grafting", "sample-pkg");
+  assert.equal(await (await import("../git/naming.ts")).pathExists(targetLink), true);
+});
+
 test("taskNew resumes an existing task and taskStatus derives its state", async () => {
   const root = await makeRepoWithBareRemote();
   const first = await taskNew(root, { taskId: "RESUME-TASK", base: "main" });
