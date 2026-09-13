@@ -78,6 +78,46 @@ fn crossing(a: CurvePoint, b: CurvePoint, c: CurvePoint, d: CurvePoint) -> Optio
         None
     }
 }
+#[derive(Clone, Copy, Debug)]
+struct CurveAabb {
+    min_x: f64,
+    max_x: f64,
+    min_y: f64,
+    max_y: f64,
+    min_z: f64,
+    max_z: f64,
+}
+
+impl CurveAabb {
+    fn from_curve(c: &CubicBezier) -> Self {
+        let mut min_x = c.points[0][0];
+        let mut max_x = c.points[0][0];
+        let mut min_y = c.points[0][1];
+        let mut max_y = c.points[0][1];
+        let mut min_z = c.points[0][2];
+        let mut max_z = c.points[0][2];
+        for p in &c.points[1..] {
+            if p[0] < min_x { min_x = p[0]; }
+            if p[0] > max_x { max_x = p[0]; }
+            if p[1] < min_y { min_y = p[1]; }
+            if p[1] > max_y { max_y = p[1]; }
+            if p[2] < min_z { min_z = p[2]; }
+            if p[2] > max_z { max_z = p[2]; }
+        }
+        Self { min_x, max_x, min_y, max_y, min_z, max_z }
+    }
+
+    #[inline]
+    fn overlaps(&self, other: &Self, snap_tol: f64, height_tol: f64) -> bool {
+        self.min_x - snap_tol <= other.max_x
+            && self.max_x + snap_tol >= other.min_x
+            && self.min_z - snap_tol <= other.max_z
+            && self.max_z + snap_tol >= other.min_z
+            && self.min_y - height_tol <= other.max_y
+            && self.max_y + height_tol >= other.min_y
+    }
+}
+
 /// Finds same-level intersections using adaptive candidates and Newton refinement.
 /// Nearly tangent/coincident spans do not manufacture arbitrary crossings.
 pub fn intersections(
@@ -89,6 +129,13 @@ pub fn intersections(
     if !height.is_finite() || height < 0. {
         return Err("height tolerance must be finite and nonnegative".into());
     }
+    if a != b {
+        let a_aabb = CurveAabb::from_curve(&a);
+        let b_aabb = CurveAabb::from_curve(&b);
+        if !a_aabb.overlaps(&b_aabb, tolerance, height) {
+            return Ok(Vec::new());
+        }
+    }
     let sa = a.sample(tolerance / 4.)?;
     let sb = b.sample(tolerance / 4.)?;
     let mut out: Vec<[f64; 2]> = Vec::new();
@@ -96,8 +143,19 @@ pub fn intersections(
         return Err("intersection budget exceeded".into());
     }
     for aa in sa.windows(2) {
+        let min_ax = aa[0].position[0].min(aa[1].position[0]) - tolerance;
+        let max_ax = aa[0].position[0].max(aa[1].position[0]) + tolerance;
+        let min_az = aa[0].position[2].min(aa[1].position[2]) - tolerance;
+        let max_az = aa[0].position[2].max(aa[1].position[2]) + tolerance;
         for bb in sb.windows(2) {
             if a == b && aa[1].t >= bb[0].t {
+                continue;
+            }
+            if min_ax > bb[0].position[0].max(bb[1].position[0])
+                || max_ax < bb[0].position[0].min(bb[1].position[0])
+                || min_az > bb[0].position[2].max(bb[1].position[2])
+                || max_az < bb[0].position[2].min(bb[1].position[2])
+            {
                 continue;
             }
             let Some((x, y)) = crossing(
@@ -421,9 +479,13 @@ pub fn plan(request: NetworkRequest) -> Result<NetworkPatch, String> {
             cuts[index].push((u, id));
         }
     }
+    let aabbs: Vec<CurveAabb> = curves.iter().map(CurveAabb::from_curve).collect();
     for i in 0..edges.len() {
         for j in i + 1..edges.len() {
             if old_ids.contains(&edges[i].edge_id) && old_ids.contains(&edges[j].edge_id) {
+                continue;
+            }
+            if !aabbs[i].overlaps(&aabbs[j], request.snap_tolerance, request.height_tolerance) {
                 continue;
             }
             let mut hits = intersections(
