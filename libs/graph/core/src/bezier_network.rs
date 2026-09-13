@@ -182,7 +182,7 @@ pub fn intersections(
                 t = (t + (-db[2] * dx + db[0] * dz) / det).clamp(0., 1.);
                 u = (u + (da[0] * dz - da[2] * dx) / det).clamp(0., 1.);
             }
-            if a == b && (t - u).abs() < 1e-6 {
+            if a == b && (t - u).abs() < 0.05 {
                 continue;
             }
             if near(a.evaluate(t)?, b.evaluate(u)?, tolerance, height)
