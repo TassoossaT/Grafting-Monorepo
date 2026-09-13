@@ -6,6 +6,7 @@ import { runDocCheck } from "./doc-check.ts";
 import { issueView } from "./issue.ts";
 import { GitClient } from "../git/client.ts";
 import { dependencyMode, mirrorGeneratedArtifacts } from "../git/dependencies.ts";
+import { capSummary } from "../git/exec.ts";
 
 export interface CliError {
   ok: false;
@@ -337,6 +338,44 @@ export interface TaskStatusInput {
 export async function taskStatus(repoRoot: string, input: TaskStatusInput) {
   if (!input || !isValidTaskId(input.taskId)) return fail(`invalid task id: ${input?.taskId}`);
   return { ok: true as const, ...(await new GitClient(repoRoot).taskStatus(input.taskId)) };
+}
+
+export interface TaskDiffInput {
+  taskId: string;
+  stat?: boolean;
+  staged?: boolean;
+  base?: boolean;
+  files?: string[];
+}
+
+/**
+ * Inspects uncommitted or branch changes inside the task worktree with token-capped output.
+ */
+export async function taskDiff(repoRoot: string, input: TaskDiffInput) {
+  if (!input || !isValidTaskId(input.taskId)) return fail(`invalid task id: ${input?.taskId}`);
+  const client = new GitClient(repoRoot);
+  const session = await client.openSession(input.taskId);
+  const baseBranch = await client.resolveTaskBase(input.taskId);
+
+  const args = ["diff"];
+  if (input.stat) args.push("--stat");
+  if (input.staged) args.push("--staged");
+  if (input.base) {
+    args.push(`${baseBranch}...HEAD`);
+  }
+  if (input.files && input.files.length > 0) {
+    args.push("--", ...input.files);
+  }
+
+  const rawDiff = (await session.git(args)).trim();
+  return {
+    ok: true as const,
+    taskId: input.taskId,
+    stat: input.stat ?? false,
+    staged: input.staged ?? false,
+    base: input.base ?? false,
+    diff: rawDiff.length > 0 ? capSummary(rawDiff.split(/\r?\n/)) : "(clean / no diff)",
+  };
 }
 
 export interface TaskDoctorInput {

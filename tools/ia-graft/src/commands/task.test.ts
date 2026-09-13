@@ -5,9 +5,10 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { formatCommitMessageWithCoAuthors, isValidTaskId, resolveCoAuthor, taskCheckout, taskCleanup, taskCommit, taskContext, taskDependencies, taskDoctor, taskDone, taskGraph, taskNew, taskResume, taskSweep, taskSync, taskTest } from "./task.ts";
+import { formatCommitMessageWithCoAuthors, isValidTaskId, resolveCoAuthor, taskCheckout, taskCleanup, taskCommit, taskContext, taskDependencies, taskDiff, taskDoctor, taskDone, taskGraph, taskNew, taskResume, taskStatus, taskSweep, taskSync, taskTest } from "./task.ts";
 import { GitClient } from "../git/client.ts";
 import { dependencyMode, mirrorGeneratedArtifacts, parseDependencySpec } from "../git/dependencies.ts";
+import { summarizeTestOutput } from "../git/exec.ts";
 import { appendPullRequestSection } from "../git/naming.ts";
 import { deleteRemoteBranchWithLease, remoteBranchDeletionPlan } from "../git/remote-branches.ts";
 
@@ -1008,5 +1009,79 @@ test("task deps --install --update-lockfile and task deps --add materialize upda
   assert.equal(manualUpdated.materialized, true);
   assert.equal(manualUpdated.updatedLockfile, true);
 });
+
+test("taskStatus reports dirtyFiles when worktree has uncommitted modifications", async () => {
+  const root = await makeRepoWithBareRemote();
+  const created = await taskNew(root, { taskId: "DIRTY-FILES-TASK", base: "main" });
+  assert.equal(created.ok, true);
+  if (!created.ok) return;
+
+  const worktree = join(root, ".worktrees", "DIRTY-FILES-TASK");
+  await writeFile(join(worktree, "foo.txt"), "hello world\n", "utf8");
+
+  const status = await taskStatus(root, { taskId: "DIRTY-FILES-TASK" });
+  assert.equal(status.ok, true);
+  if (!status.ok) return;
+  assert.equal(status.dirty, true);
+  assert(Array.isArray(status.dirtyFiles));
+  assert(status.dirtyFiles.some((f) => f.includes("foo.txt")));
+});
+
+test("taskDiff returns formatted diff and supports diffstat", async () => {
+  const root = await makeRepoWithBareRemote();
+  const created = await taskNew(root, { taskId: "TASK-DIFF-TEST", base: "main" });
+  assert.equal(created.ok, true);
+  if (!created.ok) return;
+
+  const worktree = join(root, ".worktrees", "TASK-DIFF-TEST");
+  await writeFile(join(worktree, "feature.txt"), "line1\nline2\n", "utf8");
+  execFileSync("git", ["add", "feature.txt"], { cwd: worktree });
+
+  // Staged diff
+  const stagedDiff = await taskDiff(root, { taskId: "TASK-DIFF-TEST", staged: true });
+  assert.equal(stagedDiff.ok, true);
+  if (!stagedDiff.ok) return;
+  assert.equal(stagedDiff.staged, true);
+  assert(stagedDiff.diff.includes("+line1"));
+
+  // Diffstat
+  const statDiff = await taskDiff(root, { taskId: "TASK-DIFF-TEST", staged: true, stat: true });
+  assert.equal(statDiff.ok, true);
+  if (!statDiff.ok) return;
+  assert.equal(statDiff.stat, true);
+  assert(statDiff.diff.includes("feature.txt"));
+});
+
+test("summarizeTestOutput captures TAP failure diagnostics with failure details", () => {
+  const tapOutput = [
+    "TAP version 13",
+    "# Subtest: my failing test",
+    "not ok 1 - my failing test",
+    "  ---",
+    "  duration_ms: 1.2",
+    "  failureType: 'testCodeFailure'",
+    "  error: 'AssertionError: expected true to equal false'",
+    "  code: 'ERR_ASSERTION'",
+    "  stack: |-",
+    "    TestContext.<anonymous> (test.js:10:5)",
+    "  ...",
+    "1..1",
+    "# tests 1",
+    "# suites 0",
+    "# pass 0",
+    "# fail 1",
+    "# cancelled 0",
+    "# skipped 0",
+    "# todo 0",
+    "# duration_ms 50.5",
+  ].join("\n");
+
+  const summary = summarizeTestOutput(tapOutput);
+  assert(summary.includes("not ok 1 - my failing test"));
+  assert(summary.includes("AssertionError: expected true to equal false"));
+  assert(summary.includes("ERR_ASSERTION"));
+  assert(summary.includes("# fail 1"));
+});
+
 
 

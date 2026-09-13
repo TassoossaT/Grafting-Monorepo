@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execGhSync } from "../git/exec.ts";
 
 export interface PrListInput {
   limit?: number;
@@ -39,7 +39,7 @@ export async function prList(_repoRoot: string, input: PrListInput = {}) {
     if (input.limit) args.push("--limit", String(input.limit));
     if (input.state) args.push("--state", input.state);
 
-    const raw = execFileSync("gh", args, { encoding: "utf8" });
+    const raw = execGhSync(args);
     const prs = JSON.parse(raw) as Array<{
       number: number;
       title: string;
@@ -77,7 +77,7 @@ export async function prView(_repoRoot: string, input: PrViewInput = {}) {
     if (target) args.push(target);
     args.push("--json", "number,title,state,headRefName,baseRefName,url,isDraft,mergeable,statusCheckRollup,body");
 
-    const raw = execFileSync("gh", args, { encoding: "utf8" });
+    const raw = execGhSync(args);
     const pr = JSON.parse(raw) as {
       number: number;
       title: string;
@@ -138,7 +138,7 @@ export async function prChecks(_repoRoot: string, input: PrChecksInput = {}) {
     if (target) args.push(target);
     args.push("--json", "bucket,name,state,workflow,link");
 
-    const raw = execFileSync("gh", args, { encoding: "utf8" });
+    const raw = execGhSync(args);
     const checks = JSON.parse(raw) as Array<{
       bucket: string;
       name: string;
@@ -161,10 +161,7 @@ export async function prChecks(_repoRoot: string, input: PrChecksInput = {}) {
         const runMatch = check.link.match(/actions\/runs\/(\d+)/);
         if (runMatch && runMatch[1]) {
           try {
-            const runLog = execFileSync("gh", ["run", "view", runMatch[1], "--log-failed"], {
-              encoding: "utf8",
-              timeout: 15000,
-            });
+            const runLog = execGhSync(["run", "view", runMatch[1], "--log-failed"]);
             const lines = runLog.trim().split(/\r?\n/);
             const tail = lines.slice(-25).join("\n").trim();
             if (tail) errorSummary = tail;
@@ -209,7 +206,7 @@ export async function prDiff(_repoRoot: string, input: PrDiffInput = {}) {
     if (target) args.push(target);
     args.push(input.stat ? "--stat" : "--name-only");
 
-    const raw = execFileSync("gh", args, { encoding: "utf8" });
+    const raw = execGhSync(args);
     if (input.stat) {
       return { ok: true as const, target: target || undefined, stat: raw.trim() };
     }
