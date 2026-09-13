@@ -66,19 +66,31 @@ pub fn planar_boolean(
             if length_sq == 0.0 {
                 continue;
             }
-            let mut splits: Vec<(f32, [f32; 2])> = points
-                .iter()
-                .filter_map(|p| {
-                    let t = ((p[0] - a[0]) * d[0] + (p[1] - a[1]) * d[1]) / length_sq;
-                    let error = (p[0] - a[0] - t * d[0])
-                        .abs()
-                        .max((p[1] - a[1] - t * d[1]).abs());
-                    (t > 1e-6 && t < 1.0 - 1e-6 && error < 1e-5).then_some((t, *p))
-                })
-                .collect();
-            splits.sort_by(|a, b| a.0.total_cmp(&b.0));
-            splits.dedup_by(|a, b| (a.0 - b.0).abs() < 1e-6);
-            ring.extend(splits.into_iter().map(|(_, p)| p));
+            let min_x = a[0].min(b[0]) - 1e-4;
+            let max_x = a[0].max(b[0]) + 1e-4;
+            let min_y = a[1].min(b[1]) - 1e-4;
+            let max_y = a[1].max(b[1]) + 1e-4;
+            let mut splits: Vec<(f32, [f32; 2])> = Vec::new();
+            for p in &points {
+                if p[0] < min_x || p[0] > max_x || p[1] < min_y || p[1] > max_y {
+                    continue;
+                }
+                let t = ((p[0] - a[0]) * d[0] + (p[1] - a[1]) * d[1]) / length_sq;
+                if t <= 1e-6 || t >= 1.0 - 1e-6 {
+                    continue;
+                }
+                let error = (p[0] - a[0] - t * d[0])
+                    .abs()
+                    .max((p[1] - a[1] - t * d[1]).abs());
+                if error < 1e-5 {
+                    splits.push((t, *p));
+                }
+            }
+            if !splits.is_empty() {
+                splits.sort_by(|a, b| a.0.total_cmp(&b.0));
+                splits.dedup_by(|a, b| (a.0 - b.0).abs() < 1e-6);
+                ring.extend(splits.into_iter().map(|(_, p)| p));
+            }
         }
     }
     Ok(output)

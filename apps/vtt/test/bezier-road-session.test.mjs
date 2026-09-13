@@ -315,3 +315,47 @@ test("real WASM: long road stroke generates quickly without losing elevation or 
     assert.ok(faces.some((t) => t.nodes.some((n) => n.position.x >= 99)));
   } finally { f.session.free(); }
 });
+
+test("real WASM: scoped regeneration affects only touched spine beziers and preserves distant road faces across additions", () => {
+  const f = sessionFixture();
+  try {
+    // 1. Draw Road 1 (long road from x=0 to 100)
+    const longStroke = [];
+    for (let x = 0; x <= 100; x += 2) longStroke.push(point(x, 0, 0));
+    draw(f, longStroke, "road:1");
+
+    // 2. Draw Road 2 far away outside cloud
+    const t0 = performance.now();
+    draw(f, [point(0, 200), point(50, 200)], "road:2");
+    const elapsedOutside = performance.now() - t0;
+    assert.ok(elapsedOutside < 500, `outside road took ${elapsedOutside}ms, expected under 500ms`);
+
+    // 3. Draw Road 3: T-junction into Road 1 at x=30
+    draw(f, [point(30, 0), point(30, 40)], "road:3");
+
+    // 4. Draw Road 4: X-crossing Road 1 at x=70
+    draw(f, [point(70, -20), point(70, 20)], "road:4");
+
+    // 5. Draw Road 5: T-junction into Road 3 at x=30, z=20
+    draw(f, [point(30, 20), point(60, 20)], "road:5");
+
+    const faces = f.runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "path");
+    assert.ok(faces.length >= 2, `expected at least 2 surface regions, got ${faces.length}`);
+
+    // Verify distant road 1's geometry survived completely (both endpoints still present)
+    assert.ok(faces.some((t) => t.nodes.some((n) => n.position.x <= 1)), "road 1 start must survive");
+    assert.ok(faces.some((t) => t.nodes.some((n) => n.position.x >= 99)), "road 1 end must survive");
+
+    // Verify road 2 outside cloud survived untouched
+    assert.ok(faces.some((t) => t.nodes.some((n) => n.position.z >= 199)), "road 2 outside cloud must survive");
+
+    // Verify all meshes are valid and non-empty
+    const meshes = JSON.parse(f.session.all_surface_meshes_json());
+    assert.ok(meshes.length >= 2, `expected meshes for all surfaces, got ${meshes.length}`);
+    for (const m of meshes) {
+      assert.ok(m.indices.length > 0, "mesh indices must not be empty");
+      assert.ok(m.positions.length > 0, "mesh positions must not be empty");
+    }
+  } finally { f.session.free(); }
+});
+

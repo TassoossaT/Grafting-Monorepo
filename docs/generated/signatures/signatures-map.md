@@ -57,6 +57,7 @@ pub fn irregular_quad_grid(
 
 // src/mesh.rs
 pub const REGION_SURFACE_KEY_PREFIX: &str = "@region";
+pub fn reference_field_near(graph: &SessionGraph, bounds: Option<Bounds>) -> ReferenceField
 pub fn region_id_to_wire(id: &RegionId) -> Vec<String>
 pub fn region_id_from_wire(wire: &[String]) -> Result<RegionId, String>
 pub struct SurfaceMeshDto
@@ -4928,8 +4929,15 @@ export const curvePosition = (p: CurvePoint): ConstructionPosition => ({ x: p[0]
 export function explicitSpineSnapshot(snapshot: ConstructionGraphSnapshot, port: BezierPort, offsets: readonly number[]): ConstructionGraphSnapshot {
   if (!snapshot.edges.some((e) => !e.curve && e.startNodeId.startsWith("spine:") && e.endNodeId.startsWith("spine:"))) return snapshot;
   const graph = spineGraphFromSnapshot(snapshot);
-export function bezierChains(snapshot: ConstructionGraphSnapshot, port: BezierPort, offsets: readonly number[], miterLimit: number): readonly SpineChainInput[] {
+export function bezierChains(
+  snapshot: ConstructionGraphSnapshot,
+  port: BezierPort,
+  offsets: readonly number[],
+  miterLimit: number,
+  targetEdgeIds?: ReadonlySet<string>,
+  ): readonly SpineChainInput[] {
   const nodes = new Map(snapshot.nodes.map((n) => [n.id, n.position]));
+export const PATH_CORNER_DEGREES = 75;
 export function planBezierRoad(input: {
   readonly snapshot: ConstructionGraphSnapshot;
   readonly topologies?: readonly ConstructionRegionTopology[];
@@ -5090,6 +5098,8 @@ export interface ChangedSpineCloud {
   * decide which standing contour faces this edit replaces.
   */
   readonly positions: readonly ConstructionPosition[];
+export function extractCorridorsFromEdgeId(edgeId: string): string[] {
+  const result = new Set<string>();
 export function changedSpineCloud(snapshot: ConstructionGraphSnapshot, patch: ConstructionGraphPatch, topologies: readonly ConstructionRegionTopology[] = []): ChangedSpineCloud {
   const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
 export function standingRegionsForCloud(

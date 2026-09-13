@@ -4,6 +4,19 @@
 
 Generic domain-agnostic primitive role for graph formation.
 
+### `pub const grafting_graph_core::bezier::GESTURE_CORNER_DEGREES: f64`
+
+Above this turn, in degrees, a gesture stops being one curve bending hard
+and becomes two runs meeting at a corner.
+
+The number is not a taste setting. Below it a road *bends*; above it a
+road *turns*, and the two want opposite things from the fit: a bend wants
+the tangent carried through so the surface stays smooth, a turn wants the
+tangent broken so the corner stays where it was drawn. `automatic_path`
+can only do the first -- every anchor it produces is G1 by construction --
+which is why an L drawn in one gesture has always come back rounded no
+matter how sharply it was drawn.
+
 ### `pub enum grafting_graph_core::ArcBulge`
 
 Which side of the chord (walking from an arc's own start to its end) it
@@ -358,6 +371,16 @@ Looks up an edge without exposing the storage engine's index type.
 ### `pub fn grafting_graph_core::Graph<N, E>::edge_count(&self) -> usize`
 
 Number of edges in the graph.
+
+### `pub fn grafting_graph_core::Graph<N, E>::edges(&self) -> alloc::vec::Vec<&grafting_graph_core::Edge<E>>`
+
+Every edge, in stable identity order, borrowed rather than cloned.
+
+[`Self::snapshot`] already answers "what is in this graph", but it
+answers it by copying the whole thing, which is the wrong price for a
+caller that only wants to read every edge once -- deriving meshes on
+each refresh, say. Same ordering contract as the snapshot, so the two
+never disagree about what "every edge" means.
 
 ### `pub fn grafting_graph_core::Graph<N, E>::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result`
 
@@ -737,6 +760,22 @@ Endpoint reflection matches legacy evaluation; duplicate anchors are rejected.
 
 Constrains the paired opposite handle.
 
+### `pub fn grafting_graph_core::bezier::fit_gesture(points: &[grafting_graph_core::bezier::CurvePoint], accuracy: f64, corner_degrees: f64) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::bezier::CubicBezier>, alloc::string::String>`
+
+Fits a captured gesture, breaking it into independent runs wherever the
+hand genuinely turned a corner.
+
+Same bound as [`fit_path`] at every sample, and identical to it on a
+gesture that never turns past `corner_degrees`. What differs is what
+happens when it does: the run is cut there and each side fitted on its
+own, so the corner anchor ends up with two independent tangents -- C0,
+the corner as drawn -- instead of one shared tangent rounding it off.
+
+A corner also has to be a corner of the *road* and not of the hand: the
+turn is measured on the noise-filtered track, and both arms have to be
+longer than `accuracy`, so a jitter spike between two samples cannot cut
+a road in half.
+
 ### `pub fn grafting_graph_core::bezier::fit_path(points: &[grafting_graph_core::bezier::CurvePoint], accuracy: f64) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::bezier::CubicBezier>, alloc::string::String>`
 
 Fits captured samples with a deterministic error bound at each captured point.
@@ -811,6 +850,34 @@ The caller partitions grade-separated connections before this operation.
 ### `pub fn grafting_graph_core::curve_offset::ReferenceField::is_empty(&self) -> bool`
 
 Whether the field holds no curve, in which case it answers nothing.
+
+### `pub fn grafting_graph_core::curve_offset::ReferenceField::lattice(&self, step: f32, budget: usize) -> alloc::vec::Vec<[f32; 2]>`
+
+Ground positions on every curve's own `(s, t)` lattice: stations
+every `step` metres along each curve, and at each station a rung of
+points every `step` metres off it, out to that curve's reach.
+
+**This is the quad strip, expressed as points.** A triangulation
+seeded with these covers a straight run with a regular grid whose
+rows follow the curve and whose columns cross it, which is the one
+thing ear clipping cannot do and the reason a swept face twists on a
+slope: diagonals spanning from one margin to the other make the
+interior a blend between two points tens of metres apart lengthwise.
+Laid out in `(s, t)`, every triangle is local in both directions,
+elevation follows the curve station by station, and the parametrized
+coordinate the mesh reports is the one the lattice was built from.
+
+Points, rather than a strip built facet by facet, because a junction
+is then free. Where two curves meet, their lattices simply overlap
+and the triangulation resolves the overlap into the patch between
+them -- no incidence counting, no deciding in advance where a strip
+should stop and a junction should start, and nothing to get wrong
+when three roads meet instead of two.
+
+`budget` caps the total returned, so a very long or very wide field
+costs a coarser interior rather than an unbounded one. Both the
+station walk and the rung stop at `t = 0` when `reach` is zero, so a
+curve with no width still contributes its own centre line.
 
 ### `pub fn grafting_graph_core::curve_offset::ReferenceField::len(&self) -> usize`
 
@@ -1615,6 +1682,12 @@ Ordered anchors.
 ### `pub grafting_graph_core::bezier_commands::CurveCommand::Fit`
 
 Fit a captured stroke within the batch tolerance at its samples.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Fit::corner_degrees: core::option::Option<f64>`
+
+Turn, in degrees, past which the stroke is read as two runs
+meeting at a corner rather than one curve bending. Absent, the
+stroke is fitted as one smooth run however sharply it was drawn.
 
 ### `pub grafting_graph_core::bezier_commands::CurveCommand::Fit::points: alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>`
 

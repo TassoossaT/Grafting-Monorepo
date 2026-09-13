@@ -29,7 +29,7 @@ export interface ChangedSpineCloud {
   readonly corridorIds: ReadonlySet<string>;
 }
 
-function extractCorridorsFromEdgeId(edgeId: string): string[] {
+export function extractCorridorsFromEdgeId(edgeId: string): string[] {
   const result = new Set<string>();
   const addWithAliases = (raw: string) => {
     let curr = raw.replace(/:+$/, "");
@@ -165,7 +165,8 @@ export function changedSpineCloud(snapshot: ConstructionGraphSnapshot, patch: Co
   if (corridorIds.size > 0) {
     // Add all nodes belonging to the touched corridors (including disconnected remnants)
     for (const corridor of corridorIds) {
-      const ids = corridorNodes.get(corridor) ?? [];
+      const base = corridor.replace(/#.*$/, "");
+      const ids = corridorNodes.get(corridor) ?? corridorNodes.get(base) ?? [];
       for (const id of ids) connected.add(id);
     }
   } else {

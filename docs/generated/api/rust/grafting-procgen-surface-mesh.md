@@ -109,10 +109,19 @@ alone. Unanimous or not at all.
 
 ### `pub fn grafting_procgen_surface_mesh::refine::needs_interior(outer: &[[f32; 3]], fill: &grafting_procgen_surface_mesh::types::PlanarFill<'_>) -> bool`
 
-The largest triangle the ring could be covered by without any interior
-vertex at all -- its own area. Below `fill.max_area` the refinement would
-add nothing, so the cheap boundary-only path is not merely adequate, it
-is identical, and this is what lets the caller skip straight past.
+Whether this face has anything an interior could express.
+
+Two questions, and a face has to fail neither. It must be bigger than one
+cell -- below that the refinement adds nothing and the boundary-only path
+is not merely adequate but identical. And the field must actually *go*
+somewhere across it: a level face is covered exactly by its own corners,
+so refining it buys triangles and no shape. The defect being answered is
+a face that follows a slope, where covering the middle from the margins
+alone twists it, and this is the test for whether there is a slope to
+follow.
+
+The relief test is what lets a flat map pay nothing. It costs one field
+sample per contour point, against a refinement pass per face.
 
 ### `pub fn grafting_procgen_surface_mesh::refine::refined_planar_mesh(outer: &[[f32; 3]], holes: &[&alloc::vec::Vec<[f32; 3]>], fill: &grafting_procgen_surface_mesh::types::PlanarFill<'_>) -> core::option::Option<grafting_procgen_surface_mesh::types::TriangulatedMesh>`
 
@@ -203,6 +212,11 @@ coarser mesh rather than an unbounded loop.
 Largest triangle left standing, in world units squared. A face
 smaller than this gains nothing from refinement and skips it.
 
+### `pub grafting_procgen_surface_mesh::PlanarFill::max_lattice_points: usize`
+
+Ceiling on lattice points, so a very long or very wide field costs a
+coarser interior rather than an unbounded one.
+
 ### `pub grafting_procgen_surface_mesh::PlanarFill::min_angle_degrees: f64`
 
 Smallest angle the refinement leaves standing. Ruppert only
@@ -215,11 +229,41 @@ Smallest triangle worth improving, as a fraction of [`Self::max_area`]
 where local feature size collapses and an unfloored refinement fills
 the wedge with slivers.
 
+### `pub grafting_procgen_surface_mesh::PlanarFill::min_relief: f32`
+
+How far the field's height may vary across a face before the face is
+worth giving an interior at all, in world units.
+
+A level face gains nothing: its corners already say everything there
+is to say about where the surface is, ear clipping puts no vertex
+anywhere the surface is not, and refining it buys triangles and
+nothing else. The defect being answered here is a face that *follows*
+something -- a run crossing a slope, where covering the middle from
+the margins alone twists it -- so this is the test for whether there
+is anything to follow. A flat map pays the cost of sampling its
+corners and nothing more.
+
 ### `pub grafting_procgen_surface_mesh::PlanarFill::reach_slack: f32`
 
 Multiplier on each curve's own reach when deciding whether the field
 claims a corner, absorbing a mitre or a union vertex sitting a hair
 outside the swept width.
+
+### `pub grafting_procgen_surface_mesh::PlanarFill::station_step: f32`
+
+Spacing, in world units, of the `(s, t)` lattice the interior is
+seeded with -- the length of a quad along the curve and across it.
+
+Seeding rather than letting the refinement place its own points is
+what makes the interior a *strip*: rows that follow the curve and
+columns that cross it, so every triangle is local in both directions
+and a slope is followed station by station instead of spanned. Where
+two curves meet, their lattices overlap and the triangulation makes
+the patch between them out of what is already there, which is a
+junction for free.
+
+Zero disables seeding, leaving the unstructured refinement that was
+here before.
 
 ### `pub grafting_procgen_surface_mesh::TriangulatedMesh::indices: alloc::vec::Vec<u32>`
 
@@ -289,6 +333,11 @@ coarser mesh rather than an unbounded loop.
 Largest triangle left standing, in world units squared. A face
 smaller than this gains nothing from refinement and skips it.
 
+### `pub grafting_procgen_surface_mesh::types::PlanarFill::max_lattice_points: usize`
+
+Ceiling on lattice points, so a very long or very wide field costs a
+coarser interior rather than an unbounded one.
+
 ### `pub grafting_procgen_surface_mesh::types::PlanarFill::min_angle_degrees: f64`
 
 Smallest angle the refinement leaves standing. Ruppert only
@@ -301,11 +350,41 @@ Smallest triangle worth improving, as a fraction of [`Self::max_area`]
 where local feature size collapses and an unfloored refinement fills
 the wedge with slivers.
 
+### `pub grafting_procgen_surface_mesh::types::PlanarFill::min_relief: f32`
+
+How far the field's height may vary across a face before the face is
+worth giving an interior at all, in world units.
+
+A level face gains nothing: its corners already say everything there
+is to say about where the surface is, ear clipping puts no vertex
+anywhere the surface is not, and refining it buys triangles and
+nothing else. The defect being answered here is a face that *follows*
+something -- a run crossing a slope, where covering the middle from
+the margins alone twists it -- so this is the test for whether there
+is anything to follow. A flat map pays the cost of sampling its
+corners and nothing more.
+
 ### `pub grafting_procgen_surface_mesh::types::PlanarFill::reach_slack: f32`
 
 Multiplier on each curve's own reach when deciding whether the field
 claims a corner, absorbing a mitre or a union vertex sitting a hair
 outside the swept width.
+
+### `pub grafting_procgen_surface_mesh::types::PlanarFill::station_step: f32`
+
+Spacing, in world units, of the `(s, t)` lattice the interior is
+seeded with -- the length of a quad along the curve and across it.
+
+Seeding rather than letting the refinement place its own points is
+what makes the interior a *strip*: rows that follow the curve and
+columns that cross it, so every triangle is local in both directions
+and a slope is followed station by station instead of spanned. Where
+two curves meet, their lattices overlap and the triangulation makes
+the patch between them out of what is already there, which is a
+junction for free.
+
+Zero disables seeding, leaving the unstructured refinement that was
+here before.
 
 ### `pub grafting_procgen_surface_mesh::types::TriangulatedMesh::indices: alloc::vec::Vec<u32>`
 

@@ -1,6 +1,6 @@
 import type { BezierPort, CurvePoint, CurveHandles, ConstructionGraphSnapshot, ConstructionGraphPatch, ConstructionRegionTopology, ConstructionPosition } from "@/ports";
 import { chainsOf, spineGraphFromSnapshot, spineControlNodeId } from "./spine-graph/index.ts";
-import { changedSpineCloud } from "./path-cloud-scope.ts";
+import { changedSpineCloud, extractCorridorsFromEdgeId } from "./path-cloud-scope.ts";
 import type { SpineChainInput, BandRibbon } from "./contour/index.ts";
 
 export function unionBezierRibbons(port: BezierPort, ribbons: readonly BandRibbon[]): [number, number][][][] {
@@ -31,7 +31,13 @@ export function explicitSpineSnapshot(snapshot: ConstructionGraphSnapshot, port:
 }
 
 /** Converts graph-owned authoring data to sampled ribbons through the Rust port. */
-export function bezierChains(snapshot: ConstructionGraphSnapshot, port: BezierPort, offsets: readonly number[], miterLimit: number): readonly SpineChainInput[] {
+export function bezierChains(
+  snapshot: ConstructionGraphSnapshot,
+  port: BezierPort,
+  offsets: readonly number[],
+  miterLimit: number,
+  targetEdgeIds?: ReadonlySet<string>,
+): readonly SpineChainInput[] {
   const nodes = new Map(snapshot.nodes.map((n) => [n.id, n.position]));
   const edges = snapshot.edges.filter((e) => e.curve && e.startNodeId.startsWith("spine:") && e.endNodeId.startsWith("spine:"));
   const results = port.curveBatch({ tolerance: 0.025, commands: edges.map((e) => ({
@@ -78,9 +84,14 @@ export function bezierChains(snapshot: ConstructionGraphSnapshot, port: BezierPo
   })) });
   junctions.forEach((incident, index) => {
     const outer = joins[index]!.ribbon!.outer;
-    if (outer.length >= 3) chains[incident[0]!.chain]!.ribbons.push({ bandIndex: 0, outer: outer.map(curvePosition) });
+    if (outer.length >= 3) {
+      const target = targetEdgeIds
+        ? (incident.find((entry) => targetEdgeIds.has(edges[entry.chain]!.edgeId)) ?? incident[0]!)
+        : incident[0]!;
+      chains[target.chain]!.ribbons.push({ bandIndex: 0, outer: outer.map(curvePosition) });
+    }
   });
-  return chains;
+  return targetEdgeIds ? chains.filter((c) => targetEdgeIds.has(c.chainId)) : chains;
 }
 
 /**
@@ -123,10 +134,44 @@ export function planBezierRoad(input: {
     edgeId: `spine-edge:${corridorId}:${i}`, startNodeId: addedNodes[i]!.id, endNodeId: addedNodes[i + 1]!.id,
     curve: { ...h, bandOffsets: offsets },
   }));
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+  for (const p of input.stroke) {
+    if (p.x < minX) minX = p.x;
+    if (p.x > maxX) maxX = p.x;
+    if (p.z < minZ) minZ = p.z;
+    if (p.z > maxZ) maxZ = p.z;
+  }
+  const reach = Math.max(input.snapReach, 5.0);
+  const strokeMinX = minX - reach, strokeMaxX = maxX + reach;
+  const strokeMinZ = minZ - reach, strokeMaxZ = maxZ + reach;
+  const nodeMap = new Map(input.snapshot.nodes.map((n) => [n.id, n]));
+  const nearbyEdges = input.snapshot.edges.filter((e) => {
+    if (!e.curve || !e.startNodeId.startsWith("spine:") || !e.endNodeId.startsWith("spine:")) return false;
+    const a = nodeMap.get(e.startNodeId);
+    const b = nodeMap.get(e.endNodeId);
+    if (!a || !b) return false;
+    const eMinX = Math.min(a.position.x, b.position.x) - reach;
+    const eMaxX = Math.max(a.position.x, b.position.x) + reach;
+    const eMinZ = Math.min(a.position.z, b.position.z) - reach;
+    const eMaxZ = Math.max(a.position.z, b.position.z) + reach;
+    return !(eMaxX < minX || eMinX > maxX || eMaxZ < minZ || eMinZ > maxZ);
+  });
+  const candidateNodeIds = new Set<string>();
+  for (const e of nearbyEdges) {
+    candidateNodeIds.add(e.startNodeId);
+    candidateNodeIds.add(e.endNodeId);
+  }
+  for (const n of input.snapshot.nodes) {
+    if (n.id.startsWith("spine:") && n.position.x >= strokeMinX && n.position.x <= strokeMaxX && n.position.z >= strokeMinZ && n.position.z <= strokeMaxZ) {
+      candidateNodeIds.add(n.id);
+    }
+  }
+  const candidateNodes = input.snapshot.nodes.filter((n) => candidateNodeIds.has(n.id));
+
   const snapshot = explicitSpineSnapshot(input.snapshot, port, offsets);
   const network = port.curveNetwork({
-    nodes: snapshot.nodes.filter((n) => n.id.startsWith("spine:")).map((n) => ({ id: n.id, position: curvePoint(n.position) })),
-    edges: snapshot.edges.filter((e) => e.curve !== undefined).map((e) => ({ ...e, curve: e.curve! })),
+    nodes: candidateNodes.filter((n) => n.id.startsWith("spine:")).map((n) => ({ id: n.id, position: curvePoint(n.position) })),
+    edges: nearbyEdges.map((e) => ({ ...e, curve: e.curve! })),
     addedNodes, addedEdges, nodePrefix: `spine:${corridorId}#junction:`,
     snapTolerance: input.snapReach, heightTolerance: 0.15, tolerance: 0.005,
   });
@@ -139,20 +184,20 @@ export function planBezierRoad(input: {
     removedEdgeIds: [...network.removedEdgeIds, ...migrations.map((e) => e.edgeId)],
     edges: [...network.edges, ...migrations],
   };
-  // **The chains this regeneration cannot draw.** `bezierChains` reads only
-  // edges that carry handles, so a spine edge without them is skipped in
-  // silence -- and the face it was holding up gets consumed by the
-  // regeneration with nothing put back. That is the road losing a piece of
-  // itself, and it is invisible from anywhere downstream: by the time the
-  // union runs, the chain that was supposed to redraw that face is simply
-  // not there to be missed.
-  //
-  // Reported rather than worked around. Guessing which faces to spare from
-  // their names was tried and was wrong in both directions -- too strict
-  // doubled every junction, too loose deleted again -- because the names
-  // were never the problem. This is the structural condition itself, so the
-  // caller can refuse the whole edit and say which edge caused it instead of
-  // committing a partial one.
+  const directlyAffectedEdgeIds = new Set(network.edges.map((e) => e.edgeId));
+  for (const node of network.nodes) {
+    for (const e of nearbyEdges) {
+      if (e.startNodeId === node.id || e.endNodeId === node.id) {
+        directlyAffectedEdgeIds.add(e.edgeId);
+      }
+    }
+  }
+  const directlyAffectedCorridors = new Set<string>([corridorId]);
+  for (const edgeId of directlyAffectedEdgeIds) {
+    for (const c of extractCorridorsFromEdgeId(edgeId)) {
+      directlyAffectedCorridors.add(c);
+    }
+  }
   const droppedChainEdgeIds = cloud.snapshot.edges
     .filter(
       (edge) =>
