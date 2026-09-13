@@ -279,3 +279,39 @@ test("real WASM: an L drawn in one stroke keeps the corner it was drawn with", (
     assert.ok(Math.abs(a[0]*b[0]+a[1]*b[1])<1e-3,`corner tangents are independent, got ${a[0]*b[0]+a[1]*b[1]}`);
   } finally { f.session.free(); }
 });
+
+test("real WASM: editing an extension road does not consume or destroy distant connected roads", () => {
+  const f = sessionFixture();
+  try {
+    draw(f, [point(-20, 0), point(0, 0)], "road:1");
+    draw(f, [point(0, 0), point(20, 0)], "road:2");
+    draw(f, [point(20, 0), point(40, 0)], "road:3");
+
+    const edge3 = curves(f).find((e) => e.edgeId.includes("road:3"));
+    assert.ok(edge3);
+    edit(f, pick(edge3), point(30, 5), "road:3:pull");
+
+    const faces = f.runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "path");
+    assert.ok(faces.some((t) => t.nodes.some((n) => n.position.x <= -19)), "distant road 1 must survive");
+    assert.ok(faces.some((t) => t.nodes.some((n) => n.position.x >= 39)), "edited road 3 must exist");
+  } finally { f.session.free(); }
+});
+
+test("real WASM: long road stroke generates quickly without losing elevation or faces", () => {
+  const f = sessionFixture();
+  try {
+    const longStroke = [];
+    for (let x = 0; x <= 100; x += 0.5) {
+      longStroke.push(point(x, Math.sin(x / 10) * 2, x * 0.05));
+    }
+    const start = performance.now();
+    draw(f, longStroke, "road:long");
+    const elapsed = performance.now() - start;
+    assert.ok(elapsed < 2000, `long road generation took ${elapsed}ms, expected under 2000ms`);
+
+    const faces = f.runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "path");
+    assert.ok(faces.length >= 1, "long road produced surface faces");
+    assert.ok(faces.some((t) => t.nodes.some((n) => n.position.x <= 1)));
+    assert.ok(faces.some((t) => t.nodes.some((n) => n.position.x >= 99)));
+  } finally { f.session.free(); }
+});

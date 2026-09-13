@@ -221,7 +221,10 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
     // never adopt a terrain node that happens to sit under it; the two types
     // meet through the cut-and-repair flow, not by sharing an id.
     const weldableNodes = new Map<string, ConstructionPosition>();
-    for (const topology of input.bezier ? standingRegions : topologies) {
+    const candidateTopologies = input.bezier
+      ? topologies.filter((t) => t.surfaceType === "path")
+      : topologies;
+    for (const topology of candidateTopologies) {
       for (const node of topology.nodes) {
         if (!weldableNodes.has(node.id)) weldableNodes.set(node.id, node.position);
       }

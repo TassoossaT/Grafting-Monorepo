@@ -30,27 +30,27 @@ export interface ChangedSpineCloud {
 }
 
 function extractCorridorsFromEdgeId(edgeId: string): string[] {
-  const result: string[] = [];
-  let current: string | undefined = edgeId;
-  while (current) {
-    if (current.startsWith("spine-edge:")) {
-      const match = /^spine-edge:(.+):\d+$/.exec(current);
-      if (match && match[1]) {
-        result.push(match[1]);
-      }
-      break;
-    } else if (current.startsWith("spine-split:")) {
-      const match = /^spine-split:(.+):\d+$/.exec(current);
-      if (match && match[1]) {
-        current = match[1];
-      } else {
-        break;
-      }
-    } else {
-      break;
+  const result = new Set<string>();
+  const root = edgeId.split(":split:")[0]!;
+  const rootMatch = /^spine-edge:(.+):\d+$/.exec(root);
+  if (rootMatch && rootMatch[1]) {
+    result.add(rootMatch[1]);
+  }
+  const splitParts = edgeId.split(":split:");
+  for (let i = 1; i < splitParts.length; i += 1) {
+    const part = splitParts[i]!;
+    const junctionMatch = /^spine:([^#]+)#junction/.exec(part);
+    if (junctionMatch && junctionMatch[1]) {
+      result.add(junctionMatch[1]);
     }
   }
-  return result;
+  if (edgeId.startsWith("spine-split:")) {
+    const splitMatch = /^spine-split:(.+):\d+$/.exec(edgeId);
+    if (splitMatch && splitMatch[1]) {
+      result.add(splitMatch[1]);
+    }
+  }
+  return [...result];
 }
 
 /**
@@ -72,15 +72,24 @@ export function changedSpineCloud(snapshot: ConstructionGraphSnapshot, patch: Co
     adjacent.set(edge.toNodeId, [...(adjacent.get(edge.toNodeId) ?? []), edge.fromNodeId]);
   }
   const connected = new Set([...patch.nodes.map((node) => node.id), ...patch.edges.flatMap((edge) => [edge.startNodeId, edge.endNodeId])]);
-  // A surface may contain disconnected remnants of one authored corridor
-  // after deleting a segment. Regenerate all of those remnants together:
-  // their shared surface ownership outlives graph connectivity.
+
+  // Index all nodes by corridor
   const corridorNodes = new Map<string, string[]>();
   const corridorOf = (id: string): string | undefined => parseSpineControlNodeId(id)?.operationId;
   for (const node of graph.nodes) {
     const corridor = corridorOf(node.nodeId);
     if (corridor !== undefined) corridorNodes.set(corridor, [...(corridorNodes.get(corridor) ?? []), node.nodeId]);
   }
+
+  // Alias the base operation used by legacy corridor ids with a #road suffix.
+  for (const [corridor, ids] of [...corridorNodes]) {
+    const at = corridor.lastIndexOf("#");
+    if (at >= 0) {
+      const base = corridor.slice(0, at);
+      corridorNodes.set(base, [...(corridorNodes.get(base) ?? []), ...ids]);
+    }
+  }
+
   const coOwners = new Map<string, Set<string>>();
   for (const topology of topologies) {
     if (topology.surfaceType !== "path") continue;
@@ -91,29 +100,72 @@ export function changedSpineCloud(snapshot: ConstructionGraphSnapshot, patch: Co
       coOwners.set(owner, peers);
     }
   }
-  // Alias the base operation used by legacy corridor ids with a #road suffix.
-  for (const [corridor, ids] of [...corridorNodes]) {
-    const at = corridor.lastIndexOf("#");
-    if (at >= 0) {
-      const base = corridor.slice(0, at);
-      corridorNodes.set(base, [...(corridorNodes.get(base) ?? []), ...ids]);
+
+  // 1. Corridors directly touched by patch nodes, added edges, and removed edges.
+  const directlyTouchedCorridors = new Set<string>();
+  for (const node of patch.nodes) {
+    const corridor = corridorOf(node.id);
+    if (corridor !== undefined) {
+      directlyTouchedCorridors.add(corridor);
+      const at = corridor.lastIndexOf("#");
+      if (at >= 0) directlyTouchedCorridors.add(corridor.slice(0, at));
     }
   }
-  const visitedCorridors = new Set<string>();
-  const pending = [...connected];
-  while (pending.length > 0) {
-    const nodeId = pending.pop()!;
-    const corridor = corridorOf(nodeId);
-    const owners = corridor === undefined ? [] : [corridor, ...(coOwners.get(corridor) ?? [])];
-    const siblings = owners.flatMap((owner) => visitedCorridors.has(owner) ? [] : corridorNodes.get(owner) ?? []);
-    for (const owner of owners) visitedCorridors.add(owner);
-    if (corridor !== undefined) visitedCorridors.add(corridor);
-    for (const neighbor of [...(adjacent.get(nodeId) ?? []), ...siblings]) {
-      if (connected.has(neighbor)) continue;
-      connected.add(neighbor);
-      pending.push(neighbor);
+  for (const edge of patch.edges) {
+    for (const id of extractCorridorsFromEdgeId(edge.edgeId)) {
+      directlyTouchedCorridors.add(id);
+      const at = id.lastIndexOf("#");
+      if (at >= 0) directlyTouchedCorridors.add(id.slice(0, at));
     }
   }
+  for (const edgeId of patch.removedEdgeIds ?? []) {
+    for (const id of extractCorridorsFromEdgeId(edgeId)) {
+      directlyTouchedCorridors.add(id);
+      const at = id.lastIndexOf("#");
+      if (at >= 0) directlyTouchedCorridors.add(id.slice(0, at));
+    }
+    const snapEdge = snapshot.edges.find((e) => e.edgeId === edgeId);
+    if (snapEdge) {
+      for (const id of extractCorridorsFromEdgeId(snapEdge.edgeId)) {
+        directlyTouchedCorridors.add(id);
+        const at = id.lastIndexOf("#");
+        if (at >= 0) directlyTouchedCorridors.add(id.slice(0, at));
+      }
+    }
+  }
+
+  const corridorIds = new Set<string>(directlyTouchedCorridors);
+  // Include direct co-owners (depth 1) from existing standing surfaces so shared faces are not orphaned
+  for (const c of directlyTouchedCorridors) {
+    const peers = coOwners.get(c);
+    if (peers) {
+      for (const peer of peers) {
+        corridorIds.add(peer);
+        const at = peer.lastIndexOf("#");
+        if (at >= 0) corridorIds.add(peer.slice(0, at));
+      }
+    }
+  }
+
+  if (corridorIds.size > 0) {
+    // Add all nodes belonging to the touched corridors (including disconnected remnants)
+    for (const corridor of corridorIds) {
+      const ids = corridorNodes.get(corridor) ?? [];
+      for (const id of ids) connected.add(id);
+    }
+  } else {
+    // Fallback for legacy graphs without corridor metadata: topological walk
+    const pending = [...connected];
+    while (pending.length > 0) {
+      const nodeId = pending.pop()!;
+      for (const neighbor of adjacent.get(nodeId) ?? []) {
+        if (connected.has(neighbor)) continue;
+        connected.add(neighbor);
+        pending.push(neighbor);
+      }
+    }
+  }
+
   for (const id of connected) if (!adjacent.has(id)) connected.delete(id);
   const clusterNodes = graph.nodes.filter((node) => connected.has(node.nodeId));
   const clusterEdges = graph.edges.filter((edge) => connected.has(edge.fromNodeId) && connected.has(edge.toNodeId));
@@ -122,31 +174,25 @@ export function changedSpineCloud(snapshot: ConstructionGraphSnapshot, patch: Co
     edges: clusterEdges,
   }).map((chain) => chain.nodes.map((node) => node.position));
 
-  const corridorIds = new Set<string>();
-  for (const node of clusterNodes) {
-    const address = parseSpineControlNodeId(node.nodeId);
-    if (address !== undefined) {
-      corridorIds.add(address.operationId);
-      const at = address.operationId.lastIndexOf("#");
-      if (at >= 0) corridorIds.add(address.operationId.slice(0, at));
-    }
-  }
-  for (const edge of clusterEdges) {
-    for (const corridorId of extractCorridorsFromEdgeId(edge.edgeId)) {
-      corridorIds.add(corridorId);
-      const at = corridorId.lastIndexOf("#");
-      if (at >= 0) corridorIds.add(corridorId.slice(0, at));
-    }
-  }
-  for (const edge of patch.edges) {
-    for (const corridorId of extractCorridorsFromEdgeId(edge.edgeId)) {
-      corridorIds.add(corridorId);
-      const at = corridorId.lastIndexOf("#");
-      if (at >= 0) corridorIds.add(corridorId.slice(0, at));
+  if (corridorIds.size === 0) {
+    for (const edge of clusterEdges) {
+      for (const corridorId of extractCorridorsFromEdgeId(edge.edgeId)) {
+        corridorIds.add(corridorId);
+        const at = corridorId.lastIndexOf("#");
+        if (at >= 0) corridorIds.add(corridorId.slice(0, at));
+      }
     }
   }
 
-  return { snapshot: { nodes: [...nodes.values()].filter((n) => connected.has(n.id)), edges: [...edges.values()].filter((e) => connected.has(e.startNodeId) && connected.has(e.endNodeId)) }, chains, positions: clusterNodes.map((node) => node.position), corridorIds };
+  return {
+    snapshot: {
+      nodes: [...nodes.values()].filter((n) => connected.has(n.id)),
+      edges: [...edges.values()].filter((e) => connected.has(e.startNodeId) && connected.has(e.endNodeId)),
+    },
+    chains,
+    positions: clusterNodes.map((node) => node.position),
+    corridorIds,
+  };
 }
 
 /**

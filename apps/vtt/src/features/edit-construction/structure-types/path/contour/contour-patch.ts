@@ -96,6 +96,21 @@ function restoreHeightVertices(
   heightSamples: readonly ConstructionPosition[],
 ): Ring {
   if (heightSamples.length === 0 || ring.length < 2) return ring;
+
+  const cellSize = 2.0;
+  const grid = new Map<string, ConstructionPosition[]>();
+  for (const sample of heightSamples) {
+    const cx = Math.floor(sample.x / cellSize);
+    const cz = Math.floor(sample.z / cellSize);
+    const key = `${cx},${cz}`;
+    const cell = grid.get(key);
+    if (cell !== undefined) {
+      cell.push(sample);
+    } else {
+      grid.set(key, [sample]);
+    }
+  }
+
   const restored: [number, number][] = [];
   const minInterval = 0.8;
   for (let i = 0; i < ring.length - 1; i += 1) {
@@ -108,12 +123,25 @@ function restoreHeightVertices(
 
     const minTStep = minInterval / segLen;
     const matching: { readonly x: number; readonly z: number; readonly t: number }[] = [];
-    for (const sample of heightSamples) {
-      const { dist, t } = distanceToSegmentXZ(sample, a, b);
-      if (dist < 1e-3) {
-        matching.push({ x: sample.x, z: sample.z, t });
+
+    const minCX = Math.floor((Math.min(a[0], b[0]) - 1e-3) / cellSize);
+    const maxCX = Math.floor((Math.max(a[0], b[0]) + 1e-3) / cellSize);
+    const minCZ = Math.floor((Math.min(a[1], b[1]) - 1e-3) / cellSize);
+    const maxCZ = Math.floor((Math.max(a[1], b[1]) + 1e-3) / cellSize);
+
+    for (let cx = minCX; cx <= maxCX; cx += 1) {
+      for (let cz = minCZ; cz <= maxCZ; cz += 1) {
+        const cell = grid.get(`${cx},${cz}`);
+        if (cell === undefined) continue;
+        for (const sample of cell) {
+          const { dist, t } = distanceToSegmentXZ(sample, a, b);
+          if (dist < 1e-3) {
+            matching.push({ x: sample.x, z: sample.z, t });
+          }
+        }
       }
     }
+
     if (matching.length > 0) {
       matching.sort((l, r) => l.t - r.t);
       let lastT = 0;
