@@ -101,6 +101,7 @@ fn unit(t: f64) -> Result<(), String> {
 /// Values in `[-1, 1]` bend the sheet without moving either cross-section or
 /// overshooting their elevations. Zero describes a straight profile.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "curve-serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SheetProfile {
     /// Curvature at the first shared side.
     pub start: f64,
@@ -192,6 +193,106 @@ pub fn closed_sheet_profiles(curvatures: &[f64]) -> Result<Vec<SheetProfile>, St
             end: (middle + curvatures[(i + 1) % curvatures.len()]) * 0.5,
         })
         .collect())
+}
+
+/// Resolves a region's intrinsic profile against its live graph boundary.
+/// The first edge is the lower section. The opposite node of a triangle is
+/// its apex; reversed edge two of a quad is its upper section. This function
+/// does not cache coordinates and therefore follows ordinary graph movement.
+pub fn resolve_region_sheet(
+    topology: &crate::ContourTopology,
+    region: &crate::SurfaceRegion,
+    mut position: impl FnMut(&crate::NodeId) -> Option<[f32; 3]>,
+) -> Result<ProfileSheet, String> {
+    let profile = region.profile().ok_or("region has no sheet profile")?;
+    let boundary = region
+        .outer_loops()
+        .first()
+        .ok_or("sheet has no boundary")?;
+    if region.outer_loops().len() != 1
+        || !region.holes().is_empty()
+        || !(3..=4).contains(&boundary.len())
+    {
+        return Err("sheet requires one solid triangular or quadrilateral boundary".into());
+    }
+    let section = |use_: &crate::OrientedEdgeUse,
+                   position: &mut dyn FnMut(&crate::NodeId) -> Option<[f32; 3]>|
+     -> Result<Section, String> {
+        let edge = topology
+            .edge(use_.edge())
+            .ok_or("unknown sheet section edge")?;
+        let (start_id, end_id, geometry) = if use_.is_reversed() {
+            (edge.end_node(), edge.start_node(), edge.reversed_geometry())
+        } else {
+            (edge.start_node(), edge.end_node(), *edge.geometry())
+        };
+        let start = position(start_id)
+            .ok_or("unknown sheet section node")?
+            .map(f64::from);
+        let end = position(end_id)
+            .ok_or("unknown sheet section node")?
+            .map(f64::from);
+        let section = match geometry {
+            crate::ContourGeometry::Line => Section::Line { start, end },
+            crate::ContourGeometry::CircularArc { center, clockwise } => {
+                let center = [f64::from(center[0]), start[1], f64::from(center[1])];
+                let radius = (start[0] - center[0]).hypot(start[2] - center[2]);
+                let end_radius = (end[0] - center[0]).hypot(end[2] - center[2]);
+                if (start[1] - end[1]).abs() > 1e-6
+                    || (radius - end_radius).abs() > 1e-4 * radius.max(1.0)
+                {
+                    return Err("sheet arc endpoints must lie on one horizontal circle".into());
+                }
+                let start_angle = (start[2] - center[2]).atan2(start[0] - center[0]);
+                let end_angle = (end[2] - center[2]).atan2(end[0] - center[0]);
+                let sweep = if clockwise {
+                    -(start_angle - end_angle).rem_euclid(std::f64::consts::TAU)
+                } else {
+                    (end_angle - start_angle).rem_euclid(std::f64::consts::TAU)
+                };
+                Section::Arc {
+                    center,
+                    radius,
+                    start_angle,
+                    sweep,
+                }
+            }
+        };
+        section.validate()?;
+        Ok(section)
+    };
+    let lower = section(&boundary[0], &mut position)?;
+    let upper = if boundary.len() == 4 {
+        let use_ = &boundary[2];
+        let reversed = if use_.is_reversed() {
+            crate::OrientedEdgeUse::forward(use_.edge().clone())
+        } else {
+            crate::OrientedEdgeUse::reversed(use_.edge().clone())
+        };
+        section(&reversed, &mut position)?
+    } else {
+        let use_ = &boundary[1];
+        let edge = topology.edge(use_.edge()).ok_or("unknown sheet side")?;
+        let apex_id = if use_.is_reversed() {
+            edge.start_node()
+        } else {
+            edge.end_node()
+        };
+        let apex = position(apex_id)
+            .ok_or("unknown sheet apex")?
+            .map(f64::from);
+        Section::Line {
+            start: apex,
+            end: apex,
+        }
+    };
+    let sheet = ProfileSheet {
+        lower,
+        upper,
+        profile,
+    };
+    sheet.point(0.5, 0.5)?;
+    Ok(sheet)
 }
 
 #[cfg(test)]

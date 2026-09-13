@@ -103,6 +103,7 @@ interface RegionEdgeWire {
 }
 
 interface RegionTopologyWire {
+  readonly profile?: ConstructionRegionTopology["profile"];
   readonly surfaceKey: readonly string[];
   readonly surfaceType: string;
   readonly physical: boolean;
@@ -113,6 +114,7 @@ interface RegionTopologyWire {
 
 function fromWireTopology(wire: RegionTopologyWire): ConstructionRegionTopology {
   return {
+    ...(wire.profile ? { profile: wire.profile } : {}),
     surfaceKey: wire.surfaceKey,
     surfaceType: wire.surfaceType,
     physical: wire.physical,
@@ -639,6 +641,11 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
 
   getNodePositions(): readonly ConstructionNodeSnapshot[] {
     return this.getGraphSnapshot().nodes;
+  }
+
+  generateCap(request: import("../../ports/cap-port.ts").CapRequest): import("../../ports/cap-port.ts").CapPatch {
+    const session = this.#require() as ConstructionSession & { profile_cap_json(json: string): string };
+    return JSON.parse(session.profile_cap_json(JSON.stringify(request))) as import("../../ports/cap-port.ts").CapPatch;
   }
 
   curveBatch(request: CurveBatch): readonly CurveResult[] {

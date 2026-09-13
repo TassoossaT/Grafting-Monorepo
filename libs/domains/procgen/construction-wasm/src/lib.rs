@@ -17,6 +17,8 @@ mod region_editing;
 mod region_overlay;
 mod session;
 #[cfg(test)]
+mod profile_cap_tests;
+#[cfg(test)]
 mod session_cost_probe;
 #[cfg(test)]
 mod session_tests;

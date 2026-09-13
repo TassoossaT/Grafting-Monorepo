@@ -269,6 +269,19 @@ single-ghost behaviour every tool already relies on.
 
 ### `function vtt.token-scene-item.tokenTransform(token: RenderToken): Transform`
 
+### `function vtt.commit-timing.countInCommit(label: string, by: number): void`
+
+Adds to a named counter of the running commit; nothing outside one.
+
+### `function vtt.commit-timing.timeCommit(label: string, run: () => T): T`
+
+Times `run` as a whole commit, or as a phase of the commit already running.
+Either way it returns what `run` returns, and rethrows what it throws.
+
+### `function vtt.commit-timing.timePhase(label: string, run: () => T): T`
+
+Times `run` as a phase of the running commit; untimed outside one.
+
 ### `interface vtt.create-tabletop-runtime.CreateTabletopRuntimeInput`
 
 ### `property vtt.create-tabletop-runtime.CreateTabletopRuntimeInput.constructionPort?: ConstructionSessionPort`
@@ -443,6 +456,8 @@ Hides the active tool preview, if any.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.dispose(): Promise<void>`
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.generateCap(request: CapRequest): CapPatch`
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.generateHeightmap(width: number, height: number, seed: number, scale: number, originX: number, originY: number): Float32Array`
 
 Passthrough to `TerrainNoisePort.generateHeightmap` -- see that port for parameter meaning.
@@ -586,6 +601,8 @@ Hides the active tool preview, if any.
 ### `method vtt.tabletop-runtime.TabletopRuntime.detachView(viewId: string): void`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.dispose(): Promise<void>`
+
+### `method vtt.tabletop-runtime.TabletopRuntime.generateCap(request: CapRequest): CapPatch`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.generateHeightmap(width: number, height: number, seed: number, scale: number, originX: number, originY: number): Float32Array`
 
@@ -794,23 +811,22 @@ The `source` index of the ring corner it takes the identity of.
 How coarsely a stroke describes its own swept outline, as a multiple of the
 face size.
 
-**This is what decides how many faces a stroke costs.** A patch comes back
-with about twice as many faces as its boundary has points, so describing the
-outline finely does not buy a finer *shape* -- it buys a finer *mesh*, which
-is the opposite of what the caller asked for. Measured on the capsule the
-brush actually hands over, 30 long and 6 across, asking for faces of 2:
+Describing the outline finely does not buy a finer *shape* -- it buys a
+finer *mesh*. Measured on the capsule the brush actually hands over, 30 long
+and 6 across, asking for faces of 2, once the engine began handing short
+contour runs over as seams:
 
 | chord | outline points | faces | mean side |
 |-------|----------------|-------|-----------|
-| 0.5x  | 98             | 312   | 1.27      |
-| 1x    | 50             | 308   | 1.28      |
+| 0.5x  | 98             | 201   | 1.58      |
+| 1x    | 50             | 115   | 2.09      |
 | 2x    | 26             | 120   | 2.04      |
-| 3x    | 18             | 104   | 2.20      |
+| 3x    | 18             | 140   | 1.90      |
 
-Below 1x the extra points are pure waste -- 98 of them give the same mesh
-50 do. At 2x the mesh finally comes back the size it was asked for, with two
-and a half times fewer faces. Pinned in the engine's own tests as
-`an_outline_described_at_twice_the_face_size_gives_the_size_asked_for`.
+Before seams, 1x cost 308 faces and only 2x came back the size asked for;
+now both do, and 2x stays for describing the same ground in half the
+points. Pinned in the engine's own tests as
+`an_outline_described_at_the_face_size_or_coarser_gives_the_size_asked_for`.
 
 ### `variable vtt.terrain-constraints.OUTLINE_WELD_PER_FACE: 0.5`
 
@@ -1173,6 +1189,10 @@ standing, and moving it would drag the ground it already belongs to.
 ### `property vtt.terrain-fill.TerrainFillRequest.holes: readonly ConstraintRing[]`
 
 Ground inside that area somebody already holds: met, never regenerated.
+
+### `property vtt.terrain-fill.TerrainFillRequest.maxGeneratedFaces?: number`
+
+Optional preflight limit; checked before any live contour adoption.
 
 ### `property vtt.terrain-fill.TerrainFillRequest.mint: string`
 
@@ -2015,11 +2035,11 @@ shared run), or when the survivors do not close into whole loops.
 
 ### `variable vtt.platform-contour-tool.platformContourTool: ConstructionTool<"platform-contour">`
 
-### `function vtt.platform-contour-tool.commitPlatformContour(ctx: ToolContext, samples: readonly PointerSample[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "circle" | "rectangle" | "polygon" | "freehand"; tolerance?: number }): void`
+### `function vtt.platform-contour-tool.commitPlatformContour(ctx: ToolContext, samples: readonly PointerSample[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; tolerance?: number }): void`
 
 Polygon entry point retained for callers that already have explicit corners.
 
-### `function vtt.platform-contour-tool.commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "circle" | "rectangle" | "polygon" | "freehand"; tolerance?: number }, pickedSamples: readonly PointerSample[]): void`
+### `function vtt.platform-contour-tool.commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; tolerance?: number }, pickedSamples: readonly PointerSample[]): void`
 
 Commits the same directed line/arc contour vocabulary consumed by wall
 construction. Ampliar/juntar and recortar/separar no longer run an
@@ -2027,6 +2047,16 @@ analytic boolean against the standing platform: the stroke has to weld
 onto the existing boundary (within WELD_TOLERANCE, the same one a
 wall run snaps onto a column with) and the result is assembled from
 shared/cancelled edges -- see `platform-contour-merge.ts` for why.
+
+### `variable vtt.roof-tool.ROOF_OVERHANG: 0.2`
+
+Application-wide overhang; no individual roof/band control in this delivery.
+
+### `variable vtt.roof-tool.roofTool: ConstructionTool<"roof">`
+
+### `function vtt.roof-tool.commitRoof(ctx: ToolContext, capRequest: CapRequest): void`
+
+Assigns identities to native geometry and applies the entire covering atomically.
 
 ### `interface vtt.geometry-2d.PointXZ`
 
@@ -2134,7 +2164,7 @@ A filled square ghost centered on `center`, `halfExtent` out on both X and Z -- 
 
 An open line ghost from `start` to `end` -- a wall-brush's centerline while dragging.
 
-### `function vtt.preview-shapes.segmentsPreview(positions: Float32Array<ArrayBufferLike> | readonly number[], color: number, opacity: number): PreviewDescriptor`
+### `function vtt.preview-shapes.segmentsPreview(positions: readonly number[] | Float32Array<ArrayBufferLike>, color: number, opacity: number): PreviewDescriptor`
 
 Builds a PreviewDescriptor for a set of straight segment pairs (e.g. wall centerline ghost).
 
@@ -3966,6 +3996,10 @@ The address inside `id`, or `undefined` for an id no sweep minted.
 
 A horizontal structural marker, independently usable as floor or ceiling.
 
+### `variable vtt.roof-structure.roofStructureType: StructureTypeDefinition`
+
+Roof profiles move as a connected cloud; this delivery adds no shape handles.
+
 ### `interface vtt.structural-cut.StructuralCutArea`
 
 ### `property vtt.structural-cut.StructuralCutArea.center?: { x: number; y: number; z: number }`
@@ -4502,7 +4536,9 @@ Perlin `scale` -- smaller values are smoother/larger-scale terrain features.
 
 ### `property vtt.tool-types.ToolParamsByTool.path-brush: PathBrushParams`
 
-### `property vtt.tool-types.ToolParamsByTool.platform-contour: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "circle" | "rectangle" | "polygon" | "freehand"; tolerance?: number }`
+### `property vtt.tool-types.ToolParamsByTool.platform-contour: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; tolerance?: number }`
+
+### `property vtt.tool-types.ToolParamsByTool.roof: { curvatures: readonly [number, number, number, number]; elevation: number; height: number; radius: number; shape: "rectangle" | "circle" | "platform" }`
 
 ### `property vtt.tool-types.ToolParamsByTool.terrain-sculpt: TerrainSculptParams`
 
@@ -4576,7 +4612,7 @@ Length of a panel's own vertical edge, in world units.
 
 ### `type vtt.tool-types.BrushShapeKind = "circle" | "square" | "hexagon"`
 
-### `type vtt.tool-types.ConstructionToolId = "navigate" | "edit-region" | "platform-contour" | "path-brush" | "wall-brush" | "wall-line" | "interior-wall" | "tower-stamp" | "opening" | "house-room-delete" | "terrain-sculpt"`
+### `type vtt.tool-types.ConstructionToolId = "navigate" | "edit-region" | "platform-contour" | "roof" | "path-brush" | "wall-brush" | "wall-line" | "interior-wall" | "tower-stamp" | "opening" | "house-room-delete" | "terrain-sculpt"`
 
 The construction-tool vocabulary every layer (widgets, composition) needs
 to agree on: which tools exist, what each one's parameters look like, and
@@ -5141,6 +5177,30 @@ callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 
 Explicit wire values owned by Grafting; all curve calculations run in Rust.
 
+### `interface vtt.cap-port.CapPatch`
+
+### `property vtt.cap-port.CapPatch.edges: readonly { center: readonly [number, number] | null; end: number; start: number }[]`
+
+### `property vtt.cap-port.CapPatch.faces: readonly { boundary: readonly (readonly [number, boolean])[]; profile: ConstructionSheetProfile }[]`
+
+### `property vtt.cap-port.CapPatch.nodes: readonly (readonly [number, number, number])[]`
+
+### `property vtt.cap-port.CapPatch.preview: readonly (readonly [number, number, number, number, number, number])[]`
+
+### `interface vtt.cap-port.CapRequest`
+
+Grafting-owned wire data for the native analytic cap generator.
+
+### `property vtt.cap-port.CapRequest.base: { kind: "rectangle"; max: readonly [number, number]; min: readonly [number, number] } | { center: readonly [number, number]; kind: "circle"; radius: number } | { centers: readonly [readonly [number, number] | null, readonly [number, number] | null, readonly [number, number] | null, readonly [number, number] | null]; kind: "contour"; points: readonly [readonly [number, number], readonly [number, number], readonly [number, number], readonly [number, number]] }`
+
+### `property vtt.cap-port.CapRequest.curvatures: readonly [number, number, number, number]`
+
+### `property vtt.cap-port.CapRequest.elevation: number`
+
+### `property vtt.cap-port.CapRequest.height: number`
+
+### `property vtt.cap-port.CapRequest.overhang: number`
+
 ### `interface vtt.construction-session-port.AffectedSurfaces`
 
 ### `property vtt.construction-session-port.AffectedSurfaces.affectedSurfaceKeys: readonly ConstructionSurfaceKey[]`
@@ -5334,12 +5394,17 @@ looks like, and height is sampled from the heightmap here.
 Corners sitting *on* a supplied contour that arrived with no source --
 nodes the cloud owning that contour has to adopt.
 
-They exist because the refinement splits a constraint segment where a
-nearby point encroaches on it, and because quadrangulation puts a
-midpoint on every edge, a contour edge included. Both are wanted: the
-alternative to a shared node here is a terrain corner resting against
-the middle of a road edge without sharing it, which reads as a gap along
-the path.
+The engine keeps these rare on purpose. Each one is adopted into the
+neighbour, and the next fill beside that neighbour reads it back as
+contour -- so a grid that put a midpoint on every contour edge halved the
+shared seam on every regeneration (7 -> 13 -> 25 nodes). Short contour
+runs are therefore handed to the triangulation as seams and come back as
+the nodes already standing; only a segment long enough to be cut before
+triangulation yields new nodes here, once. Where two contours cross
+through a seam the engine falls back to the old midpoint-per-edge grid.
+A shared node is still the point: the alternative is a terrain corner
+resting against the middle of a road edge without sharing it, which reads
+as a gap along the path.
 
 Each names the segment it landed on, addressed back into the request.
 That is the difference between adopting it and guessing: the caller
@@ -5347,7 +5412,12 @@ supplied the rings, so a ring and segment index already identifies one
 of its own edges by id, and the node is adopted by splitting that edge
 rather than by finding the nearest one to a position.
 
-### `property vtt.construction-session-port.ConstructionIrregularQuadGrid.quads: readonly (readonly [number, number, number, number])[]`
+### `property vtt.construction-session-port.ConstructionIrregularQuadGrid.quads: readonly (readonly number[])[]`
+
+Cells, as vertex indices in walk order. Four each, except where a contour
+segment too short for a node of its own joined the cells at its two
+corners into one polygon: a node there would be one more the contour's
+owner has to adopt, every time the ground beside it is regenerated.
 
 ### `property vtt.construction-session-port.ConstructionIrregularQuadGrid.refinementComplete: boolean`
 
@@ -5513,8 +5583,6 @@ the ids is left to guess.
 
 ### `interface vtt.construction-session-port.ConstructionPatchRegion`
 
-One face of a generated patch, over edges the same request declares.
-
 ### `property vtt.construction-session-port.ConstructionPatchRegion.boundary: readonly ConstructionOrientedEdgeUse[]`
 
 ### `property vtt.construction-session-port.ConstructionPatchRegion.holes?: readonly (readonly ConstructionOrientedEdgeUse[])[]`
@@ -5528,6 +5596,8 @@ opening. Declaring both in one patch is the point: half of it is a
 wall with an opening nobody is standing in.
 
 ### `property vtt.construction-session-port.ConstructionPatchRegion.physical: boolean`
+
+### `property vtt.construction-session-port.ConstructionPatchRegion.profile?: ConstructionSheetProfile`
 
 ### `property vtt.construction-session-port.ConstructionPatchRegion.regionId: string`
 
@@ -5577,6 +5647,8 @@ end asked for a specific generated shape, so it already knows what
 ### `property vtt.construction-session-port.ConstructionRegionTopology.outerLoops: readonly (readonly ConstructionRegionEdge[])[]`
 
 ### `property vtt.construction-session-port.ConstructionRegionTopology.physical: boolean`
+
+### `property vtt.construction-session-port.ConstructionRegionTopology.profile?: ConstructionSheetProfile`
 
 ### `property vtt.construction-session-port.ConstructionRegionTopology.surfaceKey: ConstructionSurfaceKey`
 
@@ -5633,6 +5705,8 @@ Unregisters a region, leaving zero orphaned nodes or edges behind.
 ### `method vtt.construction-session-port.ConstructionSessionPort.duplicateRegion(request: { offset: ConstructionPosition; physical: boolean; suffix: string; surfaceKey: ConstructionSurfaceKey; surfaceType: string }): RegionEditOutcome`
 
 Mints a parallel copy; the same `suffix` always reproduces the same copy.
+
+### `method vtt.construction-session-port.ConstructionSessionPort.generateCap(request: CapRequest): CapPatch`
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.generateIrregularQuadGrid(request: ConstructionIrregularQuadGridRequest): ConstructionIrregularQuadGrid | undefined`
 
@@ -5769,6 +5843,16 @@ import("./scene-render-port.ts").SceneRenderPort's own
 way.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.undoRegionOverlay(operationId: string): void`
+
+### `interface vtt.construction-session-port.ConstructionSheetProfile`
+
+Intrinsic sheet curvature, with positions resolved from boundary graph nodes.
+
+### `property vtt.construction-session-port.ConstructionSheetProfile.end: number`
+
+### `property vtt.construction-session-port.ConstructionSheetProfile.middle: number`
+
+### `property vtt.construction-session-port.ConstructionSheetProfile.start: number`
 
 ### `interface vtt.construction-session-port.ConstructionSurfaceSpec`
 

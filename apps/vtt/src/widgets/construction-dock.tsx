@@ -63,8 +63,9 @@ export function ConstructionDock(props: ConstructionDockProps) {
   const isWallLineActive = activeTool === "wall-line";
   const isInteriorWallActive = activeTool === "interior-wall";
   const isTowerStampActive = activeTool === "tower-stamp";
+  const isRoofActive = activeTool === "roof";
   const isPlatformActive = activeTool === "platform-contour";
-  const isWallChildActive = isWallBrushActive || isWallLineActive || isInteriorWallActive || isTowerStampActive || isPlatformActive;
+  const isWallChildActive = isWallBrushActive || isWallLineActive || isInteriorWallActive || isTowerStampActive || isPlatformActive || isRoofActive;
   const isOpeningActive = activeTool === "opening";
   const isDemolishActive = activeTool === "house-room-delete";
 
@@ -80,6 +81,7 @@ export function ConstructionDock(props: ConstructionDockProps) {
       disabled: !ready,
       onClick: () => onToolChange("wall-brush"),
       subItems: [
+        { key: "roof", label: "Telhado", icon: "?", tooltip: "Criar cobertura retangular ou circular", active: isRoofActive, disabled: !ready, onClick: () => onToolChange("roof") },
         { key: "platform", label: "Plataforma", icon: "▱", tooltip: "Pisos, tetos e bases: criar, ampliar ou recortar", active: isPlatformActive, disabled: !ready, onClick: () => onToolChange("platform-contour") },
         {
           key: "wall-brush",

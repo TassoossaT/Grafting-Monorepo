@@ -3,7 +3,18 @@ use crate::profile_surface::{ProfileSheet, Section, closed_sheet_profiles};
 
 /// Analytic base shape for a four-sheet cap.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "curve-serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "curve-serde", serde(tag = "kind", rename_all = "camelCase"))]
 pub enum CapBase {
+    /// Four authored boundary corners, with optional circular centers per edge.
+    /// Recognizes axis-aligned rectangles and four cardinal circular quadrants;
+    /// other contours are rejected rather than replaced by a bounding rectangle.
+    Contour {
+        /// Ordered XZ corners.
+        points: [[f64; 2]; 4],
+        /// One center per outgoing edge, absent for a straight segment.
+        centers: [Option<[f64; 2]>; 4],
+    },
     /// Axis-aligned rectangle in XZ. Coordinates must be strictly ordered.
     Rectangle {
         /// Minimum XZ corner.
@@ -18,6 +29,70 @@ pub enum CapBase {
         /// Positive radius.
         radius: f64,
     },
+}
+
+/// Resolves a supported authored contour without approximating its footprint.
+pub fn resolve_cap_base(base: CapBase) -> Result<CapBase, String> {
+    let CapBase::Contour { points, centers } = base else {
+        return Ok(base);
+    };
+    if points.iter().flatten().any(|v| !v.is_finite()) {
+        return Err("cap contour coordinates must be finite".into());
+    }
+    if centers.iter().all(Option::is_none) {
+        let min = std::array::from_fn(|axis| {
+            points.iter().map(|p| p[axis]).fold(f64::INFINITY, f64::min)
+        });
+        let max = std::array::from_fn(|axis| {
+            points
+                .iter()
+                .map(|p| p[axis])
+                .fold(f64::NEG_INFINITY, f64::max)
+        });
+        for i in 0..4 {
+            let a = points[i];
+            let b = points[(i + 1) % 4];
+            if a == b
+                || points[..i].contains(&a)
+                || (a[0] != b[0] && a[1] != b[1])
+                || (0..2).any(|axis| a[axis] != min[axis] && a[axis] != max[axis])
+            {
+                return Err("this cap requires a rectangular or circular contour".into());
+            }
+        }
+        return Ok(CapBase::Rectangle { min, max });
+    }
+    if let Some(center) = centers[0] {
+        if center.iter().all(|v| v.is_finite())
+            && centers.iter().all(|value| *value == Some(center))
+        {
+            let radius = (points[0][0] - center[0]).hypot(points[0][1] - center[1]);
+            if radius <= 0.0 || !radius.is_finite() {
+                return Err("invalid circular cap contour".into());
+            }
+            let tolerance = radius * 1e-6;
+            let mut direction = 0.0_f64;
+            for i in 0..4 {
+                let a = [points[i][0] - center[0], points[i][1] - center[1]];
+                let b = [
+                    points[(i + 1) % 4][0] - center[0],
+                    points[(i + 1) % 4][1] - center[1],
+                ];
+                let cross = a[0] * b[1] - a[1] * b[0];
+                if (a[0].hypot(a[1]) - radius).abs() > tolerance
+                    || (a[0].abs() > tolerance && a[1].abs() > tolerance)
+                    || (a[0] * b[0] + a[1] * b[1]).abs() > radius * tolerance
+                    || cross == 0.0
+                    || (i > 0 && cross.signum() != direction)
+                {
+                    return Err("circular cap requires four consecutive cardinal quadrants".into());
+                }
+                direction = cross.signum();
+            }
+            return Ok(CapBase::Circle { center, radius });
+        }
+    }
+    Err("mixed curved contours require a compound cap generator".into())
 }
 
 /// Generates four analytic sheets with independently authored curvature.
@@ -39,9 +114,11 @@ pub fn four_sheet_cap(
     {
         return Err("cap requires a finite base and a representable positive height".into());
     }
+    let base = resolve_cap_base(base)?;
     let profiles = closed_sheet_profiles(&curvatures)?;
     let top = elevation + height;
     let sections: [(Section, Section); 4] = match base {
+        CapBase::Contour { .. } => return Err("unresolved cap contour".into()),
         CapBase::Circle { center, radius } => {
             if center.iter().any(|v| !v.is_finite())
                 || !radius.is_finite()

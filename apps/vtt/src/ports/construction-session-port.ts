@@ -105,7 +105,14 @@ export interface ConstructionCoveredRegion {
  * the removal opened no hole.
  */
 /** One face of a generated patch, over edges the same request declares. */
+/** Intrinsic sheet curvature, with positions resolved from boundary graph nodes. */
+export interface ConstructionSheetProfile {
+  readonly start: number;
+  readonly middle: number;
+  readonly end: number;
+}
 export interface ConstructionPatchRegion {
+  readonly profile?: ConstructionSheetProfile;
   readonly regionId: string;
   readonly boundary: readonly ConstructionOrientedEdgeUse[];
   /**
@@ -202,6 +209,7 @@ export interface ConstructionUnfilledLoop {
  * `nodes[0]` means. Rust never tags a node or edge with a role.
  */
 export interface ConstructionRegionTopology {
+  readonly profile?: ConstructionSheetProfile;
   readonly surfaceKey: ConstructionSurfaceKey;
   readonly surfaceType: string;
   readonly physical: boolean;
@@ -538,6 +546,7 @@ export interface ConstructionPlanarRequest {
   readonly operation: "union" | "difference" | "extend";
 }
 export interface ConstructionSessionPort extends BezierPort {
+  generateCap(request: import("./cap-port.ts").CapRequest): import("./cap-port.ts").CapPatch;
   planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[];
   /** Pure cascade resolution, using one consistent engine state. */
   planMotion(request: ConstructionMotionRequest): ConstructionMotionPlan;

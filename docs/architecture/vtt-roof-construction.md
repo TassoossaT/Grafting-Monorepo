@@ -50,10 +50,26 @@ Tessellation vertices are not construction vertices or additional logical faces.
 Each leaf remains one sheet regardless of rendering subdivision. Shared seams
 use the same rise subdivision; collapsed apex triangles are omitted.
 
-The foundation alone is not the editor feature: graph-backed profile ownership,
-cloud regeneration, same-level contour unions, platform/tool integration, and
-editing transactions must be connected and verified before #232 can close.
-The existing geometry ownership contract remains authoritative during that work.
+## Editor integration (in progress)
+
+The construction dock exposes a roof tool with rectangle drag, circular click,
+and creation on an existing rectangular or circular platform. The platform is
+preserved. The tool currently uses a global overhang of 0.2 world units and
+exposes base elevation, maximum rise, and four face curvatures at creation.
+It does not expose a height handle or individual overhang control.
+
+The Rust generator produces shared graph boundaries and intrinsic face profiles.
+The WASM adapter applies the entire roof in one patch replacement transaction;
+undo/redo restores profiles as well as topology. Meshes and curved wire previews
+are derived, and preview samples never become graph vertices. Moving a roof
+transports its connected leaves together. Generic insert/remove-vertex operations
+on profiled sheets reject before mutation because those operations require cap
+regeneration. Unsupported platform contours are rejected instead of approximated.
+
+Same-level unions, general concave/mixed contours, and regeneration while editing
+an existing roof remain unimplemented. In particular, creating overlapping roofs
+currently creates separate coverings. The feature must not close #232 until
+these accepted behaviors and their transactions are implemented and verified.
 
 ## Acceptance examples
 

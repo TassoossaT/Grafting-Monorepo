@@ -603,12 +603,21 @@ pub type ContourLoop = Vec<OrientedEdgeUse>;
 /// its node set -- see this module's own doc.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SurfaceRegion {
+    profile: Option<crate::profile_surface::SheetProfile>,
     id: RegionId,
     outer_loops: Vec<ContourLoop>,
     holes: Vec<ContourLoop>,
 }
 
 impl SurfaceRegion {
+    /// Optional intrinsic profile for a triangular or quadrilateral sheet.
+    /// Edge zero is its lower section. A triangle ends at the opposite node;
+    /// a quadrilateral uses reversed edge two as its upper section. Positions
+    /// always resolve from graph nodes, never from a second coordinate record.
+    pub fn profile(&self) -> Option<crate::profile_surface::SheetProfile> {
+        self.profile
+    }
+
     /// This region's stable identity.
     pub fn id(&self) -> &RegionId {
         &self.id
@@ -628,6 +637,16 @@ impl SurfaceRegion {
 /// Structural error from contour edge or region registration.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ContourError {
+    /// A sheet profile is invalid or its region is not one solid triangle/quad.
+    InvalidProfile {
+        /// Region that cannot carry the requested profile.
+        id: RegionId,
+    },
+    /// A profiled region must be regenerated before changing its section layout.
+    ProfileRequiresRegeneration {
+        /// Region whose authored section layout would be changed.
+        id: RegionId,
+    },
     /// A region must declare at least one outer loop.
     NoOuterLoop,
     /// A loop must reference at least one edge.
@@ -683,6 +702,8 @@ pub enum ContourError {
 impl fmt::Display for ContourError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::InvalidProfile { id } => write!(formatter, "invalid sheet profile for region {id}"),
+            Self::ProfileRequiresRegeneration { id } => write!(formatter, "profiled region {id} requires regeneration"),
             Self::NoOuterLoop => {
                 formatter.write_str("a region must declare at least one outer loop")
             }
@@ -806,6 +827,7 @@ impl ContourTopology {
         self.regions.insert(
             id.clone(),
             SurfaceRegion {
+                profile: None,
                 id: id.clone(),
                 outer_loops,
                 holes,
@@ -926,6 +948,26 @@ impl ContourTopology {
     pub fn region(&self, id: &RegionId) -> Option<&SurfaceRegion> {
         self.regions.get(id)
     }
+
+    /// Associates intrinsic curvature with an existing section-bounded region.
+    /// Validation precedes mutation. No node coordinates or meshes are stored.
+    pub fn set_region_profile(
+        &mut self,
+        id: &RegionId,
+        profile: Option<crate::profile_surface::SheetProfile>,
+    ) -> Result<(), ContourError> {
+        let region = self.regions.get_mut(id)
+            .ok_or_else(|| ContourError::UnknownRegion { id: id.clone() })?;
+        if let Some(value) = profile {
+            if value.validate().is_err() || region.outer_loops.len() != 1
+                || !region.holes.is_empty() || !(3..=4).contains(&region.outer_loops[0].len()) {
+                return Err(ContourError::InvalidProfile { id: id.clone() });
+            }
+        }
+        region.profile = profile;
+        Ok(())
+    }
+
 
     /// Removes a region, releasing its edge usages. Edges themselves stay
     /// registered (another region may still reference them).
@@ -1225,6 +1267,11 @@ impl ContourTopology {
 
         let affected = self.regions_using_edge(id);
         for region_id in &affected {
+            if self.region(region_id).is_some_and(|r| r.profile().is_some()) {
+                return Err(ContourError::ProfileRequiresRegeneration { id: region_id.clone() });
+            }
+        }
+        for region_id in &affected {
             let region = self
                 .regions
                 .get(region_id)
@@ -1273,6 +1320,12 @@ impl ContourTopology {
         outer_loops: Vec<ContourLoop>,
         holes: Vec<ContourLoop>,
     ) -> Result<(), ContourError> {
+        if let Some(region) = self.region(id) {
+            if region.profile.is_some() {
+                if region.outer_loops == outer_loops && region.holes == holes { return Ok(()); }
+                return Err(ContourError::ProfileRequiresRegeneration { id: id.clone() });
+            }
+        }
         let previous = self.remove_region(id)?;
         match self.add_region(id.clone(), outer_loops, holes) {
             Ok(_) => Ok(()),
