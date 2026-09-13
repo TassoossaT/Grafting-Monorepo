@@ -106,21 +106,27 @@ export function planSpineContour(input: PlanSpineContourInput): PlanSpineContour
   // about to mint, and the same curves the engine reads back out of the
   // graph to elevate the interior of the faces built here.
   const referenceCurves: ReferenceCurve[] = [];
+  const shapes: [number, number][][][] = [];
   for (const chain of input.editedChains) {
+    const chainRibbons: BandRibbon[] = [];
     const polyline = chain.sampledPoints ?? sampleCatmullRom(chain.controlPoints, chain.tolerance);
     if (polyline.length >= 2) referenceCurves.push({ points: polyline });
-    if (chain.ribbons) { ribbons.push(...chain.ribbons); continue; }
-    const minOffset = Math.min(...chain.bandOffsets);
-    const maxOffset = Math.max(...chain.bandOffsets);
-    for (const ribbon of offsetBands(polyline, [minOffset, maxOffset], chain.miterLimit)) {
-      ribbons.push(ribbon);
+    if (chain.ribbons) {
+      chainRibbons.push(...chain.ribbons);
+    } else {
+      const minOffset = Math.min(...chain.bandOffsets);
+      const maxOffset = Math.max(...chain.bandOffsets);
+      for (const ribbon of offsetBands(polyline, [minOffset, maxOffset], chain.miterLimit)) {
+        chainRibbons.push(ribbon);
+      }
     }
-  }
-
-  let shapes = input.union ? input.union(ribbons) : unionBandLayer(ribbons);
-  if (input.union && shapes.length === 0 && ribbons.length > 0) throw Error("O contorno da curva é degenerado; ajuste a forma ou a largura.");
-  if (shapes.length === 0 && ribbons.length > 0) {
-    shapes = ribbons.map((ribbon) => [ringOf(ribbon.outer)]);
+    ribbons.push(...chainRibbons);
+    const chainShapes = input.union ? input.union(chainRibbons) : unionBandLayer(chainRibbons);
+    if (chainShapes.length > 0) {
+      shapes.push(...chainShapes);
+    } else if (chainRibbons.length > 0) {
+      shapes.push(...chainRibbons.map((r) => [ringOf(r.outer)]));
+    }
   }
   const consumed = input.standingRegions.map((topology) => topology.surfaceKey);
 

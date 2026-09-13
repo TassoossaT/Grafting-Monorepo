@@ -130,8 +130,15 @@ export function planBezierEdit(input: {
   for (const topology of input.topologies) for (const loop of [...topology.outerLoops, ...topology.holes]) {
     for (const e of loop) edgeUses.set(e.edgeId, [...(edgeUses.get(e.edgeId) ?? []), e.reversed]);
   }
+  const weldableNodes = new Map<string, ConstructionPosition>();
+  for (const topology of input.topologies.filter((t) => t.surfaceType === "path")) {
+    for (const node of topology.nodes) {
+      if (!weldableNodes.has(node.id)) weldableNodes.set(node.id, node.position);
+    }
+  }
+  const existingNodes = [...weldableNodes].map(([id, position]) => ({ id, position }));
   const plan = planSpineContour({ tableId: input.tableId, operationId: bezierContourId(cloud.corridorIds, input.operationId), surfaceType: "path",
-    union: (ribbons) => unionBezierRibbons(input.port, ribbons), editedChains: chains, standingRegions: standing, existingNodes: [], existingEdgeUses: edgeUses });
+    union: (ribbons) => unionBezierRibbons(input.port, ribbons), editedChains: chains, standingRegions: standing, existingNodes, existingEdgeUses: edgeUses });
   if (!plan) return undefined;
   const segments = chains.flatMap((c) => c.sampledPoints!.slice(1).flatMap((p, i) => {
     const a = c.sampledPoints![i]!; return [a.x, a.y, a.z, p.x, p.y, p.z];

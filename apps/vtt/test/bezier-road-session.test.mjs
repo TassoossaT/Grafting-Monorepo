@@ -136,10 +136,14 @@ test("real WASM: a roundabout keeps its island and restores after editing", () =
   const f=sessionFixture();
   try {
     draw(f,[point(-10,0),point(0,-10),point(10,0),point(0,10),point(-10,0)],"ring");
-    assert.ok(f.runtime.getAllRegionTopologies().some((t)=>t.holes.length>0),"the central island stays open");
+    const faces=f.runtime.getAllRegionTopologies().filter((t)=>t.surfaceType==="path");
+    assert.equal(faces.length,4,"roundabout is formed of 4 modular faces");
+    assert.ok(faces.every((t)=>t.nodes.every((n)=>Math.hypot(n.position.x,n.position.z)>0.5)),"the central island stays open");
     const before=f.session.snapshot_json();
     edit(f,pick(curves(f)[0]),point(-5,-5),"insert",{insert:true});
-    assert.ok(f.runtime.getAllRegionTopologies().some((t)=>t.holes.length>0));
+    const after=f.runtime.getAllRegionTopologies().filter((t)=>t.surfaceType==="path");
+    assert.equal(after.length,5,"insert splits into 5 modular faces");
+    assert.ok(after.every((t)=>t.nodes.every((n)=>Math.hypot(n.position.x,n.position.z)>0.5)),"the central island stays open");
     f.session.undo_region_overlay("insert");
     assert.deepEqual(JSON.parse(f.session.snapshot_json()),JSON.parse(before));
   } finally { f.session.free(); }
@@ -176,9 +180,9 @@ test("real WASM: angled joins keep the contour away from the spine", () => {
   try {
     draw(f,[point(-5,0),point(0,0)],"angle:1");
     draw(f,[point(0,0),point(0,5)],"angle:2");
-    const faces=f.runtime.getAllRegionTopologies();
-    assert.equal(faces.length,1);
-    assert.ok(faces[0].nodes.every(n=>Math.hypot(n.position.x,n.position.z)>.2), "outside join must not cut down to the anchor");
+    const faces=f.runtime.getAllRegionTopologies().filter(t=>t.surfaceType==="path");
+    assert.equal(faces.length,2);
+    assert.ok(faces.every(face => face.nodes.every(n=>Math.hypot(n.position.x,n.position.z)>.2)), "outside join must not cut down to the anchor");
   } finally { f.session.free(); }
 });
 
@@ -187,15 +191,13 @@ test("real WASM: closed corners retain the island without cuts to the anchors", 
   try {
     const corners=[point(0,0),point(5,0),point(5,5),point(0,5)];
     for(let i=0;i<4;i++)draw(f,[corners[i],corners[(i+1)%4]],"corner:"+i);
-    const faces=f.runtime.getAllRegionTopologies();
-    assert.equal(faces.length,1);
-    assert.equal(faces[0].holes.length,1);
-    assert.ok(faces[0].nodes.every(n=>corners.every(p=>Math.hypot(n.position.x-p.x,n.position.z-p.z)>.2)));
+    const faces=f.runtime.getAllRegionTopologies().filter(t=>t.surfaceType==="path");
+    assert.equal(faces.length,4);
+    assert.ok(faces.every(face => face.nodes.every(n=>corners.every(p=>Math.hypot(n.position.x-p.x,n.position.z-p.z)>.15))));
     const count=faces.length;
     for(let i=0;i<3;i++){
       edit(f,pick(curves(f)[0]),point(0,0),"corner-width:"+i,{action:"width",width:.8+i*.1});
-      assert.equal(f.runtime.getAllRegionTopologies().length,count);
-      assert.equal(f.runtime.getAllRegionTopologies()[0].holes.length,1);
+      assert.equal(f.runtime.getAllRegionTopologies().filter(t=>t.surfaceType==="path").length,count);
     }
   } finally { f.session.free(); }
 });
