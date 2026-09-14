@@ -167,6 +167,38 @@ impl ReferenceField {
         })
     }
 
+    /// Every curve that, on its own, claims all of `points` -- each within
+    /// that curve's reach (widened by `slack`) and on its level.
+    ///
+    /// **Whose face is this.** A face swept from one curve lies entirely
+    /// within that curve's reach, so its own curve claims every corner, while
+    /// a second curve merely crossing it -- another ramp passing through,
+    /// a road underneath -- claims only the corners it happens to pass near.
+    /// Nearest-curve sampling cannot tell those apart where the two meet;
+    /// this can. Empty when no single curve accounts for the whole face, as
+    /// at a road junction, where every curve reaching it is legitimately in
+    /// play.
+    pub fn owners_of_all<'p>(&self, points: impl IntoIterator<Item = &'p [f32; 3]> + Clone, slack: f32) -> Vec<usize> {
+        (0..self.curves.len())
+            .filter(|&index| {
+                let curve = &self.curves[index];
+                let mut any = false;
+                let all = points.clone().into_iter().all(|point| {
+                    any = true;
+                    curve.project(index, point[0], point[2]).is_some_and(|(_, sample)| {
+                        sample.t.abs() <= curve.reach * slack.max(1.0) && (sample.y - point[1]).abs() <= LEVEL_BAND
+                    })
+                });
+                any && all
+            })
+            .collect()
+    }
+
+    /// A field holding only the curves at `indices`, in that order.
+    pub fn subset(&self, indices: &[usize]) -> ReferenceField {
+        ReferenceField { curves: indices.iter().filter_map(|&index| self.curves.get(index).cloned()).collect() }
+    }
+
     fn nearest_on_level(&self, x: f32, z: f32, y: f32) -> Option<FieldSample> {
         let mut best: Option<(f32, FieldSample)> = None;
         for (index, curve) in self.curves.iter().enumerate() {
@@ -472,6 +504,21 @@ mod tests {
         assert!(field.sample_owned_near(5.0, 1.0, 1.6, 1.0).is_none(), "a level between both claims nothing");
         // Nothing on the asked level falls back to plain plan-view nearest.
         assert!(field.sample_near(5.0, 1.0, 50.0).is_some());
+    }
+
+    #[test]
+    fn a_face_belongs_to_the_curve_that_claims_all_of_it_not_to_one_crossing_it() {
+        // Curve 0 runs along x; curve 1 crosses it along z at the same height.
+        let field = ReferenceField::new([
+            ReferenceCurve { points: vec![[0.0, 1.0, 0.0], [10.0, 1.0, 0.0]], reach: 1.0 },
+            ReferenceCurve { points: vec![[5.0, 1.0, -10.0], [5.0, 1.0, 10.0]], reach: 1.0 },
+        ]);
+        let face = [[0.0, 1.0, -1.0], [10.0, 1.0, -1.0], [10.0, 1.0, 1.0], [0.0, 1.0, 1.0]];
+        assert_eq!(field.owners_of_all(&face, 1.0), vec![0]);
+        assert_eq!(field.subset(&[0]).len(), 1);
+        // A patch between both, as at a junction, belongs to neither alone.
+        let junction = [[4.5, 1.0, 0.5], [9.0, 1.0, 0.5], [5.5, 1.0, 9.0]];
+        assert!(field.owners_of_all(&junction, 1.0).is_empty());
     }
 
     #[test]

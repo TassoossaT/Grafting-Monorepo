@@ -915,6 +915,20 @@ indexes into.
 
 Builds the field, dropping any curve too short to project onto.
 
+### `pub fn grafting_graph_core::curve_offset::ReferenceField::owners_of_all<'p>(&self, points: impl core::iter::traits::collect::IntoIterator<Item = &'p [f32; 3]> + core::clone::Clone, slack: f32) -> alloc::vec::Vec<usize>`
+
+Every curve that, on its own, claims all of `points` -- each within
+that curve's reach (widened by `slack`) and on its level.
+
+**Whose face is this.** A face swept from one curve lies entirely
+within that curve's reach, so its own curve claims every corner, while
+a second curve merely crossing it -- another ramp passing through,
+a road underneath -- claims only the corners it happens to pass near.
+Nearest-curve sampling cannot tell those apart where the two meet;
+this can. Empty when no single curve accounts for the whole face, as
+at a road junction, where every curve reaching it is legitimately in
+play.
+
 ### `pub fn grafting_graph_core::curve_offset::ReferenceField::sample(&self, x: f32, z: f32) -> core::option::Option<grafting_graph_core::curve_offset::FieldSample>`
 
 The nearest curve's reading of `(x, z)`, or `None` when the field
@@ -956,6 +970,10 @@ proportionally more of it than a narrow one.
 
 [`Self::sample_owned`] for a point known to lie near height `y`: ground
 is only this field's when a curve on the point's own level claims it.
+
+### `pub fn grafting_graph_core::curve_offset::ReferenceField::subset(&self, indices: &[usize]) -> grafting_graph_core::curve_offset::ReferenceField`
+
+A field holding only the curves at `indices`, in that order.
 
 ### `pub fn grafting_graph_core::curve_offset::offset_bands(polyline: &grafting_graph_core::curve_offset::Polyline, band_offsets: &[f32], miter_limit: f32) -> alloc::vec::Vec<grafting_graph_core::curve_offset::Polygon>`
 

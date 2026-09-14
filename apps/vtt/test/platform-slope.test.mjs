@@ -127,6 +127,30 @@ test("a spiral is one spine, one face per span, meshed on its own turn", () => {
   } finally { session.free(); }
 });
 
+test("ramps passing through each other each mesh on their own curve, never borrowing the other's height", () => {
+  const { ctx, runtime, session, calls } = sessionFixture();
+  const ramps = [
+    [{ x: 0, y: 0, z: -6 }, { x: 0, y: 3, z: 6 }],
+    [{ x: -6, y: 2.3, z: 0.5 }, { x: 6, y: 2.3, z: -0.5 }],
+    [{ x: -6, y: 1, z: 0 }, { x: 6, y: 2, z: 0 }],
+  ];
+  try {
+    for (const points of ramps) commitPlatformSlope(ctx, points, params);
+    assert.equal(faces(runtime, "platform-slope").length, 3, JSON.stringify(calls.feedback));
+    const meshes = JSON.parse(session.all_surface_meshes_json());
+    for (const [a, b] of ramps) {
+      const dx = b.x - a.x, dz = b.z - a.z, length2 = dx * dx + dz * dz;
+      const face = faces(runtime, "platform-slope").find((t) => t.nodes.some((n) => Math.hypot(n.position.x - a.x, n.position.z - a.z) < 1.01 && Math.abs(n.position.y - a.y) < 1e-6));
+      const mesh = meshes.find((m) => JSON.stringify(m.surfaceKey) === JSON.stringify(face.surfaceKey));
+      for (let i = 0; i < mesh.positions.length; i += 3) {
+        const [x, y, z] = [mesh.positions[i], mesh.positions[i + 1], mesh.positions[i + 2]];
+        const expected = a.y + (b.y - a.y) * (((x - a.x) * dx + (z - a.z) * dz) / length2);
+        assert.ok(Math.abs(y - expected) < 1e-3, `vertex (${x}, ${y}, ${z}) left its ramp's plane; expected y ${expected}`);
+      }
+    }
+  } finally { session.free(); }
+});
+
 test("a road drawn across a ramp's spine never welds into it", () => {
   const { ctx, runtime, session, calls } = sessionFixture();
   try {
