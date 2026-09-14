@@ -99,9 +99,10 @@ export interface BoundaryEdges {
   all(): readonly ConstructionPatchEdge[];
 }
 
-/** The same physical curve seen from the other end -- an arc keeps its center and flips its sweep, a chord is symmetric. */
+/** The same physical curve seen from the other end -- an arc keeps its center and flips its sweep, a Bezier swaps its two off-curve handles, a chord is symmetric. */
 export function reverseGeometry(geometry: ConstructionEdgeGeometry): ConstructionEdgeGeometry {
   if (geometry.kind === "line") return geometry;
+  if (geometry.kind === "bezier") return { kind: "bezier", handle1: geometry.handle2, handle2: geometry.handle1 };
   return { kind: "arc", center: geometry.center, clockwise: !geometry.clockwise };
 }
 
@@ -125,12 +126,18 @@ export function createBoundaryEdges(tableId: string, sharing: EdgeSharing): Boun
       const reversed = !forward;
 
       const stored = forward ? geometry : reverseGeometry(geometry);
+      const sameGeometry = (a: ConstructionEdgeGeometry, b: ConstructionEdgeGeometry): boolean => {
+        if (a.kind !== b.kind) return false;
+        if (a.kind === "line") return true;
+        if (a.kind === "arc" && b.kind === "arc") return a.clockwise === b.clockwise && a.center[0] === b.center[0] && a.center[1] === b.center[1];
+        if (a.kind === "bezier" && b.kind === "bezier") {
+          return a.handle1[0] === b.handle1[0] && a.handle1[1] === b.handle1[1] && a.handle2[0] === b.handle2[0] && a.handle2[1] === b.handle2[1];
+        }
+        return false;
+      };
       const accepts = (id: ConstructionEdgeId): boolean => {
         const existing = edges.get(id)?.geometry ?? LINE;
-        const sameGeometry = !edges.has(id) || (existing.kind === stored.kind &&
-          (existing.kind === "line" || (stored.kind === "arc" && existing.clockwise === stored.clockwise &&
-            existing.center[0] === stored.center[0] && existing.center[1] === stored.center[1])));
-        return hasRoom(id, reversed) && sameGeometry;
+        return hasRoom(id, reversed) && (!edges.has(id) || sameGeometry(existing, stored));
       };
       let edgeId: ConstructionEdgeId = sharedEdgeId(tableId, start, end);
       if (sharing.kind === "private-when-full" && !accepts(edgeId)) {

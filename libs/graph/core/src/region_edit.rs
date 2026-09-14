@@ -231,22 +231,30 @@ pub fn move_vertex<N, E>(
 }
 
 /// `InsertVertex`: subdivides one boundary edge, minting a new node on it.
-/// Both fragments keep the original edge's own geometry description (an arc
-/// keeps its center and sweep direction, only its span shrinks), and every
-/// region using the original -- in either direction -- is rewritten to walk
-/// the two fragments instead.
+/// A line or an arc fragment keeps the original edge's own geometry
+/// description (an arc keeps its center and sweep direction, only its span
+/// shrinks) and never reads `from`/`to`/`at`; a Bézier fragment genuinely
+/// needs them, to find where its own two off-curve handles land on each
+/// piece (see [`ContourEdge::split`]). Every region using the original --
+/// in either direction -- is rewritten to walk the two fragments instead.
 ///
-/// The caller supplies the new node (with the position it wants) and both
-/// fragment identities, so ids stay caller-derived and reproducible. This
-/// is also the whole of the "cut a movable notch out of a straight edge"
-/// case: call it twice on the same original edge, and the middle fragment
-/// is an independently movable segment -- there is no separate `Cut`
-/// primitive.
+/// The caller supplies the new node (with the position it wants), that same
+/// position again as `at` (an XZ projection, resolved once by the caller
+/// like every other analytic query on this edge), the original edge's own
+/// resolved endpoints as `from`/`to`, and both fragment identities, so ids
+/// stay caller-derived and reproducible. This is also the whole of the "cut
+/// a movable notch out of a straight edge" case: call it twice on the same
+/// original edge, and the middle fragment is an independently movable
+/// segment -- there is no separate `Cut` primitive.
+#[allow(clippy::too_many_arguments)]
 pub fn insert_vertex<N, E>(
     graph: &mut Graph<N, E>,
     topology: &mut ContourTopology,
     edge: &ContourEdgeId,
     node: Node<N>,
+    from: crate::ContourPoint,
+    to: crate::ContourPoint,
+    at: crate::ContourPoint,
     first_fragment: ContourEdgeId,
     second_fragment: ContourEdgeId,
 ) -> Result<RegionEditOutcome, RegionEditError> {
@@ -263,7 +271,7 @@ pub fn insert_vertex<N, E>(
     if graph.node(&node_id).is_none() {
         graph.add_node(node)?;
     }
-    let (first, second) = original.split(node_id.clone(), first_fragment, second_fragment);
+    let (first, second) = original.split(from, to, at, node_id.clone(), first_fragment, second_fragment);
     let first_id = first.id().clone();
     let second_id = second.id().clone();
     topology.add_edge(graph, first)?;
@@ -828,6 +836,9 @@ mod tests {
             &mut topology,
             &eid("quad-0"),
             Node::new(nid("mid"), [0.5, 0.0, 0.0]),
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [0.5, 0.0],
             eid("quad-0-1"),
             eid("quad-0-2"),
         )
@@ -860,6 +871,9 @@ mod tests {
             &mut topology,
             &eid("quad-0"),
             Node::new(nid("p1"), [0.25, 0.0, 0.0]),
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [0.25, 0.0],
             eid("left"),
             eid("rest"),
         )
@@ -869,6 +883,9 @@ mod tests {
             &mut topology,
             &eid("rest"),
             Node::new(nid("p2"), [0.75, 0.0, 0.0]),
+            [0.25, 0.0],
+            [1.0, 0.0],
+            [0.75, 0.0],
             eid("middle"),
             eid("right"),
         )
@@ -897,6 +914,9 @@ mod tests {
             &mut topology,
             &eid("quad-0"),
             Node::new(nid("mid"), [0.5, 0.0, 0.0]),
+            [0.0, 0.0],
+            [1.0, 0.0],
+            [0.5, 0.0],
             eid("first"),
             eid("second"),
         )
@@ -1325,6 +1345,9 @@ mod tests {
             &mut topology,
             &eid("shared"),
             Node::new(nid("mid"), [0.5, 0.0, 0.5]),
+            [0.0, 0.0],
+            [1.0, 1.0],
+            [0.5, 0.5],
             eid("shared-1"),
             eid("shared-2"),
         )

@@ -89,10 +89,8 @@ export function colorForSurfaceType(surfaceType: string, physical: boolean): num
   switch (surfaceType) {
     case "wall":
     case "wall-white":
-    case "wall-curve-white":
       return 0xe2e8f0; // White / light gray block prototype
     case "wall-gray":
-    case "wall-curve-gray":
       return 0x64748b; // Slate gray block prototype
     case "platform":
     case "platform-slope":

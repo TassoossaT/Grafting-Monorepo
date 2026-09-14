@@ -292,7 +292,6 @@ const TOOL_LABELS: Partial<Record<ConstructionToolId, string>> = {
   "path-brush": "Parâmetros: Caminho",
   "wall-brush": "Parâmetros: Parede (Pincel Livre)",
   "wall-line": "Parâmetros: Parede (Linha Reta)",
-  "wall-curve": "Parâmetros: Parede (Eixo Bézier)",
   "interior-wall": "Parâmetros: Parede (Gerar Interiores)",
   "tower-stamp": "Parâmetros: Torre",
   opening: "Parâmetros: Abertura",
@@ -389,11 +388,6 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
         <WallBrushFields params={params["wall-brush"]} onChange={(next) => onParamsChange("wall-brush", next)} />
       ) : activeTool === "wall-line" ? (
         <WallLineFields params={params["wall-line"]} onChange={(next) => onParamsChange("wall-line", next)} />
-      ) : activeTool === "wall-curve" ? (
-        <>
-          <WallBrushFields params={params["wall-curve"]} onChange={(next) => onParamsChange("wall-curve", next)} />
-          <p>Arraste para desenhar o eixo. Depois, use Editar Estrutura para mover os nós e as alças da curva.</p>
-        </>
       ) : activeTool === "interior-wall" ? (
         <InteriorGenerateFields params={params["interior-wall"]} onChange={(next) => onParamsChange("interior-wall", next)} />
       ) : activeTool === "opening" ? (

@@ -77,6 +77,35 @@ pub fn sweep(from: f32, to: f32, clockwise: bool) -> f32 {
     }
 }
 
+/// Position on the cubic Bézier `p0 p1 p2 p3` at parameter `t` -- the same
+/// closed-form cubic `grafting_graph_core::contour` uses, duplicated here
+/// per this crate's own convention for small pure geometry math (see
+/// `angle_xz`/`sweep` above) rather than exposed as new public API on that
+/// crate's own analytic edge type.
+pub fn cubic_bezier_eval(p0: [f32; 2], p1: [f32; 2], p2: [f32; 2], p3: [f32; 2], t: f32) -> [f32; 2] {
+    let u = 1.0 - t;
+    let a = u * u * u;
+    let b = 3.0 * u * u * t;
+    let c = 3.0 * u * t * t;
+    let d = t * t * t;
+    [
+        a * p0[0] + b * p1[0] + c * p2[0] + d * p3[0],
+        a * p0[1] + b * p1[1] + c * p2[1] + d * p3[1],
+    ]
+}
+
+/// Unit tangent of the cubic Bézier `p0 p1 p2 p3` at parameter `t`.
+pub fn cubic_bezier_tangent(p0: [f32; 2], p1: [f32; 2], p2: [f32; 2], p3: [f32; 2], t: f32) -> [f32; 2] {
+    let u = 1.0 - t;
+    let a = 3.0 * u * u;
+    let b = 6.0 * u * t;
+    let c = 3.0 * t * t;
+    let dx = a * (p1[0] - p0[0]) + b * (p2[0] - p1[0]) + c * (p3[0] - p2[0]);
+    let dz = a * (p1[1] - p0[1]) + b * (p2[1] - p1[1]) + c * (p3[1] - p2[1]);
+    let len = (dx * dx + dz * dz).sqrt().max(f32::EPSILON);
+    [dx / len, dz / len]
+}
+
 pub fn point_in_loop_xz(point: [f32; 2], loop_: &[[f32; 3]]) -> bool {
     let mut inside = false;
     for (current, next) in loop_

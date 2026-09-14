@@ -55,11 +55,15 @@ export interface RegionEditOutcome {
 /**
  * A contour edge's explicit geometry. `"arc"`'s `center` is an XZ point in
  * the surface's own plane -- geometry lives per edge, so a tapering wall is
- * simply two edges with their own centers, not a special case.
+ * simply two edges with their own centers, not a special case. `"bezier"`'s
+ * `handle1`/`handle2` are the curve's own off-curve control points, in that
+ * same XZ plane -- the standard P0 P1 P2 P3 control polygon, with P0/P3 the
+ * edge's own (graph-resolved) start and end.
  */
 export type ConstructionEdgeGeometry =
   | { readonly kind: "line" }
-  | { readonly kind: "arc"; readonly center: readonly [number, number]; readonly clockwise: boolean };
+  | { readonly kind: "arc"; readonly center: readonly [number, number]; readonly clockwise: boolean }
+  | { readonly kind: "bezier"; readonly handle1: readonly [number, number]; readonly handle2: readonly [number, number] };
 
 /** One boundary edge walked in a loop's own direction. */
 export interface ConstructionOrientedEdgeUse {

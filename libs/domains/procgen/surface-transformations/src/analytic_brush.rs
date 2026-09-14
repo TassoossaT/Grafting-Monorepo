@@ -324,6 +324,10 @@ fn reverse_geometry(geometry: ContourGeometry) -> ContourGeometry {
             center,
             clockwise: !clockwise,
         },
+        ContourGeometry::Bezier { handle1, handle2 } => ContourGeometry::Bezier {
+            handle1: handle2,
+            handle2: handle1,
+        },
     }
 }
 

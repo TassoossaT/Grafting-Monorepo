@@ -143,6 +143,8 @@ fn register_region(
             clockwise: !clockwise,
         },
         ContourGeometry::Line => ContourGeometry::Line,
+        // `arc_geometry_for_curvature` only ever returns `CircularArc`.
+        ContourGeometry::Bezier { handle1, handle2 } => ContourGeometry::Bezier { handle1: handle2, handle2: handle1 },
     };
     let mut loop_ = Vec::with_capacity(cycle.len());
     for index in 0..cycle.len() {

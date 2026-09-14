@@ -130,6 +130,9 @@ fn a_generated_wall_panel_survives_an_insert_and_weld_round_trip() {
         &mut topology,
         &first_edge,
         Node::new(NodeId::new("interop-1:mid").unwrap(), [2.0, 0.0, 0.0]),
+        [0.0, 0.0],
+        [4.0, 0.0],
+        [2.0, 0.0],
         ContourEdgeId::new("interop-1:mid-a").unwrap(),
         ContourEdgeId::new("interop-1:mid-b").unwrap(),
     )

@@ -72,6 +72,9 @@ fn profile_uses_live_nodes_and_survives_duplication() {
             &mut topology,
             &edge,
             Node::new(NodeId::new("extra").unwrap(), [0.; 3]),
+            [0., 0.],
+            [1., 0.],
+            [0.5, 0.],
             ContourEdgeId::new("first").unwrap(),
             ContourEdgeId::new("second").unwrap()
         )

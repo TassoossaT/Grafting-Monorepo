@@ -1480,7 +1480,7 @@ is well represented by the default sweep fill and needs no override.
 Generic here, not a wall special case, so any brush gets the same real
 preview by supplying one.
 
-### `type vtt.brush-tool.BrushableToolId = "path-brush" | "wall-brush" | "wall-curve"`
+### `type vtt.brush-tool.BrushableToolId = "path-brush" | "wall-brush"`
 
 Tool ids whose parameters carry a brush shape (radius/rotation/footprint) -- the only ids createBrushTool can wire up.
 
@@ -2273,15 +2273,6 @@ Everything a wall is lives in TypeScript from here down (`wall-shared.ts`,
 engine is handed nodes, edges and faces without ever being told they are a
 wall.
 
-### `variable vtt.wall-curve-tool.wallCurveTool: ConstructionTool<"wall-curve">`
-
-A wall drawn as a persistent Bezier axis instead of a straight/arc
-contour: press, drag, and on release the stroke is fit into a smooth
-curve whose nodes and handles stay in the graph, editable afterward with
-the same gesture a road's spine already uses (`edit-region`). What the
-curve *makes* is still an ordinary wall panel run, generated in
-`wall-curve-spine.ts` -- this tool only chooses the interaction.
-
 ### `variable vtt.wall-line-tool.wallLineTool: ConstructionTool<"wall-line">`
 
 A straight wall drawn by press-drag-release. Wherever the drag wanders,
@@ -2378,14 +2369,17 @@ and nothing downstream is told any of it is a wall.
 Fits a raw stroke and commits it, the free-brush entry point --
 `tolerance` is the brush's own radius, so a radius of 0 commits the drawn
 contour literally and a wider brush corrects a shakier stroke into clean
-straight runs and true arcs.
+straight runs and cubic Béziers -- a curved wall stays exactly the same
+4-node upright panel every other wall step is, the curve carried entirely
+as that step's own edge geometry (`ConstructionEdgeGeometry`'s `"bezier"`
+kind), never as extra graph vertices.
 
 With the grid magnet on, the stroke is already a sequence of exact grid
 intersections: the hand is no longer what the samples describe, so there
-is no hand tremor to read curvature out of, and the circle through any
-three staircase points is a real circle that was never drawn. Arcs are
-off in that mode for that reason -- snapped means deliberate, and what
-was placed deliberately is what gets built.
+is no hand tremor to read curvature out of, and the cubic through any
+few staircase points is a shape that was never drawn. Curves are off in
+that mode for that reason -- snapped means deliberate, and what was
+placed deliberately is what gets built.
 
 ### `function vtt.wall-shared.correctedWallCorners(ctx: ToolContext, samples: readonly ConstructionPosition[], tolerance: number): readonly ConstructionPosition[]`
 
@@ -2855,7 +2849,7 @@ App-owned metadata for a mode, without renderer or Rust types.
 
 ### `property vtt.surface-edit-contract.SurfaceEditModeDefinition.label: string`
 
-### `property vtt.surface-edit-contract.SurfaceEditModeDefinition.previewPolicy: "gesture-preview" | "none"`
+### `property vtt.surface-edit-contract.SurfaceEditModeDefinition.previewPolicy: "none" | "gesture-preview"`
 
 ### `property vtt.surface-edit-contract.SurfaceEditModeDefinition.scopePolicy: "local" | "explicit-global"`
 
@@ -2965,7 +2959,7 @@ The slice of `ConstructionSessionPort` an edit plan actually needs.
 
 ### `method vtt.edit-orchestrator.EditOpSink.removeVertex(nodeId: string, weldedEdgeId: string): RegionEditOutcome`
 
-### `method vtt.edit-orchestrator.EditOpSink.retypeEdge(edgeId: string, geometry: { kind: "line" } | { center: readonly [number, number]; clockwise: boolean; kind: "arc" }): RegionEditOutcome`
+### `method vtt.edit-orchestrator.EditOpSink.retypeEdge(edgeId: string, geometry: ConstructionEdgeGeometry): RegionEditOutcome`
 
 ### `type vtt.edit-orchestrator.EditPlan = { kind: "apply"; ops: readonly AtomicEditOp[]; role: EditRole; scope: EditScope; surfaceCount: number } | { kind: "deny"; reason: string; role: EditRole } | { kind: "regenerate"; reason: string; role: EditRole }`
 
@@ -3333,7 +3327,7 @@ what the vertex means.
 
 ### `function vtt.organic-structure.organicStructureType(surfaceType: string, label: string, creation: string, structural: "deny" | "regenerate", interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction): StructureTypeDefinition`
 
-### `function vtt.organic-structure.pathInteractionOver(coveredType: string, paintedSubtype?: string): CreationInteraction`
+### `function vtt.organic-structure.pathInteractionOver(_coveredType: string, paintedSubtype?: string): CreationInteraction`
 
 A path **carves**: it consumes what it crosses and keeps the leftover with
 the path's own shape cut out of it. Over terrain that is a road; over a
@@ -4692,47 +4686,6 @@ Convenience for the common "allowed, on these axes, at this reach, no cascade" p
 
 The policy every unknown role falls back to: refuse rather than guess.
 
-### `interface vtt.wall-curve-spine.WallCurveSurface`
-
-### `property vtt.wall-curve-spine.WallCurveSurface.edges: readonly ConstructionPatchEdge[]`
-
-### `property vtt.wall-curve-spine.WallCurveSurface.nodes: readonly { id: string; position: ConstructionPosition }[]`
-
-### `property vtt.wall-curve-spine.WallCurveSurface.preview: Float32Array`
-
-### `property vtt.wall-curve-spine.WallCurveSurface.regions: readonly ConstructionPatchRegion[]`
-
-### `function vtt.wall-curve-spine.planWallCurveCreation(input: { height: number; operationId: string; port: BezierPort; snapshot: ConstructionGraphSnapshot; stroke: readonly ConstructionPosition[]; tableId: string; tolerance: number; topologies: readonly ConstructionRegionTopology[]; wallType: string }): { preview: Float32Array; request: ApplyPatchReplacementRequest; selectedId: string } | undefined`
-
-The stroke-drawn creation path: fits a smooth cubic through the drawn
-anchors (the same fit roads use), mints its control nodes and spans
-owned by `wallType`, and regenerates them through the same path an edit
-would take -- creation is not a second recipe.
-
-### `function vtt.wall-curve-spine.regenerateWallCurveSpine(wallType: string): (input: SpineRegenerationInput) => SpineRegeneration | undefined`
-
-Regenerates every curved-wall span of `wallType` that a spine edit touches.
-
-### `function vtt.wall-curve-spine.wallCurveSurface(port: Pick<BezierPort, "curveBatch">, tableId: string, wallType: string, nodes: ReadonlyMap<string, ConstructionPosition>, spans: readonly ConstructionEdgeSnapshot[]): WallCurveSurface`
-
-One panel per curved-wall span, exactly the way `slopeSurface` keeps one
-face per sloped-platform span: the curve is sampled for its shape, but
-that shape is one polygon's own boundary, never a chain of independent
-mini-panels. A control node's own top (`wallTopId`) is shared by every
-span that meets there, so adjacent spans in the same run weld at that
-column exactly as `wallPatch` welds adjacent brush panels -- without
-borrowing that builder's contour/closure bookkeeping, which assumes one
-contiguous run rather than an independently regenerated span.
-
-### `function vtt.wall-curve-structure.wallCurveStructureType(surfaceType: string, label: string): StructureTypeDefinition`
-
-A wall built along a spine instead of a drawn contour: same upright-panel
-shape a brush or a line wall makes (`panel-structure.ts`), curved by the
-shared bezier spine instead. A sibling of the plain wall types rather than
-a mode on them, for the same reason a sloped platform is a sibling of a
-flat one (`platform-structure.ts`): its faces are never grabbed directly,
-the spine is what is edited.
-
 ### `function vtt.brush-shape-params.resolveBrushShape(params: BrushShapeParams): BrushShape`
 
 Converts editable shape parameters into the immutable semantic brush contract.
@@ -4915,10 +4868,6 @@ A spiral sloped platform stamped around a clicked centre.
 
 ### `property vtt.tool-types.ToolParamsByTool.wall-brush: WallBrushParams`
 
-### `property vtt.tool-types.ToolParamsByTool.wall-curve: WallBrushParams`
-
-A wall drawn as a persistent Bezier axis instead of a straight/arc contour; the brush radius is the curve's own fitting tolerance, same convention as `wall-brush`.
-
 ### `property vtt.tool-types.ToolParamsByTool.wall-line: WallParams`
 
 ### `interface vtt.tool-types.TowerStampParams`
@@ -4985,7 +4934,7 @@ Length of a panel's own vertical edge, in world units.
 
 ### `type vtt.tool-types.BrushShapeKind = "circle" | "square" | "hexagon"`
 
-### `type vtt.tool-types.ConstructionToolId = "navigate" | "edit-region" | "platform-contour" | "slope-ramp" | "slope-spiral" | "roof" | "path-brush" | "wall-brush" | "wall-line" | "wall-curve" | "interior-wall" | "tower-stamp" | "opening" | "house-room-delete" | "terrain-sculpt"`
+### `type vtt.tool-types.ConstructionToolId = "navigate" | "edit-region" | "platform-contour" | "slope-ramp" | "slope-spiral" | "roof" | "path-brush" | "wall-brush" | "wall-line" | "interior-wall" | "tower-stamp" | "opening" | "house-room-delete" | "terrain-sculpt"`
 
 The construction-tool vocabulary every layer (widgets, composition) needs
 to agree on: which tools exist, what each one's parameters look like, and
@@ -5116,7 +5065,7 @@ correct depends entirely on what the type means by it, so the type says.
 
 ### `function vtt.boundary-edges.reverseGeometry(geometry: ConstructionEdgeGeometry): ConstructionEdgeGeometry`
 
-The same physical curve seen from the other end -- an arc keeps its center and flips its sweep, a chord is symmetric.
+The same physical curve seen from the other end -- an arc keeps its center and flips its sweep, a Bezier swaps its two off-curve handles, a chord is symmetric.
 
 ### `function vtt.boundary-edges.sharedEdgeId(tableId: string, from: string, to: string): string`
 
@@ -5241,11 +5190,17 @@ adjacent.
 
 ### `interface vtt.stroke-fitting.FitOptions`
 
-What a caller may vary about a fit. `arcs` defaults to on.
+What a caller may vary about a fit. `curves` defaults to `"arc"` (this
+module's original behavior, kept for every existing caller). Only the
+wall brush opts into `"bezier"` -- see `wall-shared.ts` -- so a platform's
+or a path's own contour keeps fitting true circular arcs exactly as it
+always has.
 
-### `property vtt.stroke-fitting.FitOptions.arcs?: boolean`
+### `property vtt.stroke-fitting.FitOptions.curves?: "arc" | "bezier" | "none"`
 
-When false, every span is fitted as a straight chord and no circle is ever considered.
+Which curved-span family to try for a span that is not already
+explained by a straight chord, if any. `"none"` fits every span as a
+chord and never considers a curve at all.
 
 ### `interface vtt.stroke-fitting.FittedEdge`
 
@@ -5267,19 +5222,19 @@ Turns a raw, hand-drawn stroke (every pointer sample, wobble included)
 into a short list of fitted edges: corners are found first
 (Ramer-Douglas-Peucker, cornerIndices), then each run between
 corners is classified (classifySegment) as a straight chord or
-the true circle through it.
+the requested curve family through it.
 
 `tolerance` (world units) is the whole correction dial -- how far the raw
-stroke must wander off *both* a straight line and its best-fit arc before
-that counts as a real corner rather than hand tremor or ordinary
+stroke must wander off *both* a straight line and its best-fit curve
+before that counts as a real corner rather than hand tremor or ordinary
 curvature. At `0` the contour is committed literally; the larger it gets,
 the more freely a shaky stroke is straightened into clean runs. Fewer
 than 2 points fits to nothing.
 
-With `arcs` off every span is a chord, however round the samples look.
-That is for a caller whose samples are no longer a hand -- points landing
-on exact grid intersections, say -- where the circle through any three of
-them is a real circle that nobody drew.
+With `curves: "none"` every span is a chord, however round the samples
+look. That is for a caller whose samples are no longer a hand -- points
+landing on exact grid intersections, say -- where the circle (or cubic)
+through any few of them is a shape nobody drew.
 
 ### `interface vtt.surface-perimeter.PerimeterLoop`
 
@@ -6471,11 +6426,14 @@ Reported as data rather than resolved by the engine: a type that swaps
 whole faces (terrain restacking onto itself) and a type that cuts (a path
 carved through) need different rules from the very same answer.
 
-### `type vtt.construction-session-port.ConstructionEdgeGeometry = { kind: "line" } | { center: readonly [number, number]; clockwise: boolean; kind: "arc" }`
+### `type vtt.construction-session-port.ConstructionEdgeGeometry = { kind: "line" } | { center: readonly [number, number]; clockwise: boolean; kind: "arc" } | { handle1: readonly [number, number]; handle2: readonly [number, number]; kind: "bezier" }`
 
 A contour edge's explicit geometry. `"arc"`'s `center` is an XZ point in
 the surface's own plane -- geometry lives per edge, so a tapering wall is
-simply two edges with their own centers, not a special case.
+simply two edges with their own centers, not a special case. `"bezier"`'s
+`handle1`/`handle2` are the curve's own off-curve control points, in that
+same XZ plane -- the standard P0 P1 P2 P3 control polygon, with P0/P3 the
+edge's own (graph-resolved) start and end.
 
 ### `type vtt.construction-session-port.ConstructionEdgeId = string`
 

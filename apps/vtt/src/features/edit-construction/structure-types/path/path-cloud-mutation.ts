@@ -118,7 +118,7 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
     snapReach: Math.max(tolerance, effect.brushShape.kind === "square" ? effect.brushShape.size / 2 : effect.brushShape.radius),
   }) : undefined;
   if (bezier && bezier.graphPatch.edges.length === 0) return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente após o encaixe." };
-  const fitted = bezier ? [] : fitPath(stroke, tolerance, { arcs: !input.snapToGrid });
+  const fitted = bezier ? [] : fitPath(stroke, tolerance, { curves: input.snapToGrid ? "none" : "arc" });
   const swept = bezier ? { line: bezier.controlPoints } : fitted.length === 0 ? { line: stroke } : referenceLineFrom(fitted, stroke, resolveConformance("path", "terrain", effect.parameters.kind));
   const spine = pathSpineDraftFor(effect, swept.line);
   if (spine === undefined) return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente." };

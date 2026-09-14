@@ -16,7 +16,6 @@ export type ConstructionToolId =
   | "path-brush"
   | "wall-brush"
   | "wall-line"
-  | "wall-curve"
   | "interior-wall"
   | "tower-stamp"
   | "opening"
@@ -216,8 +215,6 @@ export interface ToolParamsByTool {
   readonly "path-brush": PathBrushParams;
   readonly "wall-brush": WallBrushParams;
   readonly "wall-line": WallParams;
-  /** A wall drawn as a persistent Bezier axis instead of a straight/arc contour; the brush radius is the curve's own fitting tolerance, same convention as `wall-brush`. */
-  readonly "wall-curve": WallBrushParams;
   readonly "interior-wall": InteriorGenerateParams;
   readonly "tower-stamp": TowerStampParams;
   readonly opening: OpeningParams;
@@ -246,7 +243,6 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   }),
   "wall-brush": Object.freeze({ wallType: "wall-white", height: 3, shape: "circle", radius: 0.3, rotationDegrees: 0 }),
   "wall-line": Object.freeze({ wallType: "wall-white", height: 3 }),
-  "wall-curve": Object.freeze({ wallType: "wall-white", height: 3, shape: "circle", radius: 0.3, rotationDegrees: 0 }),
   "interior-wall": Object.freeze({ wallType: "wall-white", cellSize: 2, maxRegionCells: 6, seed: 1 }),
   "tower-stamp": Object.freeze({ wallType: "wall-white", height: 3, radius: TOWER_RADIUS_PRESETS[1] }),
   opening: Object.freeze({ openingType: "window", width: 1.2, height: 1.2, sill: 1 }),

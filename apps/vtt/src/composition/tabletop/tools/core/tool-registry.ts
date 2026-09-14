@@ -13,7 +13,6 @@ import { pathBrushTool } from "../paths/path-brush-tool.ts";
 import { terrainSculptTool } from "../terrain/terrain-sculpt-tool.ts";
 import { towerStampTool } from "../tower/tower-stamp-tool.ts";
 import { wallBrushTool } from "../walls/wall-brush-tool.ts";
-import { wallCurveTool } from "../walls/wall-curve-tool.ts";
 import { wallLineTool } from "../walls/wall-line-tool.ts";
 
 /**
@@ -31,7 +30,6 @@ const TOOL_REGISTRY: { readonly [Id in ConstructionToolId]: ConstructionTool<Id>
   "edit-region": editRegionTool,
   "wall-brush": wallBrushTool,
   "wall-line": wallLineTool,
-  "wall-curve": wallCurveTool,
   "interior-wall": interiorWallTool,
   "tower-stamp": towerStampTool,
   opening: openingTool,

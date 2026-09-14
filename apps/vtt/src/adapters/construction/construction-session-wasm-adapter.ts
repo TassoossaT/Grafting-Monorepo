@@ -87,11 +87,11 @@ interface SnapshotWire {
   readonly edges: readonly { readonly id: string; readonly source: string; readonly target: string; readonly curve?: import("../../ports/bezier-port.ts").CurveHandles }[];
 }
 
-/** The engine tags an arc `"arc"`; its center is an XZ pair, never a 3D normal. */
+/** The engine tags an arc `"arc"` and a Bezier `"bezier"`; their control points are XZ pairs, never 3D normals. */
 function toWireGeometry(geometry: ConstructionEdgeGeometry): unknown {
-  return geometry.kind === "line"
-    ? { kind: "line" }
-    : { kind: "arc", center: geometry.center, clockwise: geometry.clockwise };
+  if (geometry.kind === "line") return { kind: "line" };
+  if (geometry.kind === "bezier") return { kind: "bezier", handle1: geometry.handle1, handle2: geometry.handle2 };
+  return { kind: "arc", center: geometry.center, clockwise: geometry.clockwise };
 }
 
 interface RegionEdgeWire {

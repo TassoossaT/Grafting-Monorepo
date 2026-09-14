@@ -125,10 +125,6 @@ pub mod grafting_graph_core::bezier_commands
 pub enum grafting_graph_core::bezier_commands::CurveCommand
 pub grafting_graph_core::bezier_commands::CurveCommand::Automatic
 pub grafting_graph_core::bezier_commands::CurveCommand::Automatic::points: alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>
-pub grafting_graph_core::bezier_commands::CurveCommand::ExtrudeRibbon
-pub grafting_graph_core::bezier_commands::CurveCommand::ExtrudeRibbon::ground: alloc::vec::Vec<alloc::vec::Vec<alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>>>
-pub grafting_graph_core::bezier_commands::CurveCommand::ExtrudeRibbon::height: f64
-pub grafting_graph_core::bezier_commands::CurveCommand::ExtrudeRibbon::segments: alloc::vec::Vec<grafting_graph_core::bezier_surface::RibbonSegment>
 pub grafting_graph_core::bezier_commands::CurveCommand::Fit
 pub grafting_graph_core::bezier_commands::CurveCommand::Fit::corner_degrees: core::option::Option<f64>
 pub grafting_graph_core::bezier_commands::CurveCommand::Fit::points: alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>
@@ -198,7 +194,6 @@ impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::bezier_com
 impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::bezier_commands::CurveBatch
 pub struct grafting_graph_core::bezier_commands::CurveResult
 pub grafting_graph_core::bezier_commands::CurveResult::curves: alloc::vec::Vec<grafting_graph_core::bezier::CubicBezier>
-pub grafting_graph_core::bezier_commands::CurveResult::extrusion: core::option::Option<grafting_graph_core::bezier_surface::RibbonExtrusion>
 pub grafting_graph_core::bezier_commands::CurveResult::handles: alloc::vec::Vec<grafting_graph_core::bezier::CurveHandles>
 pub grafting_graph_core::bezier_commands::CurveResult::lengths: alloc::vec::Vec<f64>
 pub grafting_graph_core::bezier_commands::CurveResult::opposite: core::option::Option<grafting_graph_core::bezier::CurvePoint>
@@ -317,44 +312,6 @@ impl core::marker::Sync for grafting_graph_core::bezier_surface::CurveRibbon
 impl core::marker::Unpin for grafting_graph_core::bezier_surface::CurveRibbon
 impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::bezier_surface::CurveRibbon
 impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::bezier_surface::CurveRibbon
-pub struct grafting_graph_core::bezier_surface::RibbonExtrusion
-pub grafting_graph_core::bezier_surface::RibbonExtrusion::boundaries: alloc::vec::Vec<[(usize, bool); 3]>
-pub grafting_graph_core::bezier_surface::RibbonExtrusion::edges: alloc::vec::Vec<[usize; 2]>
-pub grafting_graph_core::bezier_surface::RibbonExtrusion::faces: alloc::vec::Vec<[usize; 3]>
-pub grafting_graph_core::bezier_surface::RibbonExtrusion::vertices: alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>
-impl core::clone::Clone for grafting_graph_core::bezier_surface::RibbonExtrusion
-pub fn grafting_graph_core::bezier_surface::RibbonExtrusion::clone(&self) -> grafting_graph_core::bezier_surface::RibbonExtrusion
-impl core::fmt::Debug for grafting_graph_core::bezier_surface::RibbonExtrusion
-pub fn grafting_graph_core::bezier_surface::RibbonExtrusion::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-impl serde_core::ser::Serialize for grafting_graph_core::bezier_surface::RibbonExtrusion
-pub fn grafting_graph_core::bezier_surface::RibbonExtrusion::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
-impl<'de> serde_core::de::Deserialize<'de> for grafting_graph_core::bezier_surface::RibbonExtrusion
-pub fn grafting_graph_core::bezier_surface::RibbonExtrusion::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
-impl core::marker::Freeze for grafting_graph_core::bezier_surface::RibbonExtrusion
-impl core::marker::Send for grafting_graph_core::bezier_surface::RibbonExtrusion
-impl core::marker::Sync for grafting_graph_core::bezier_surface::RibbonExtrusion
-impl core::marker::Unpin for grafting_graph_core::bezier_surface::RibbonExtrusion
-impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::bezier_surface::RibbonExtrusion
-impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::bezier_surface::RibbonExtrusion
-pub struct grafting_graph_core::bezier_surface::RibbonSegment
-pub grafting_graph_core::bezier_surface::RibbonSegment::curve: grafting_graph_core::bezier::CubicBezier
-pub grafting_graph_core::bezier_surface::RibbonSegment::end_offsets: [f64; 2]
-pub grafting_graph_core::bezier_surface::RibbonSegment::offsets: [f64; 2]
-impl core::clone::Clone for grafting_graph_core::bezier_surface::RibbonSegment
-pub fn grafting_graph_core::bezier_surface::RibbonSegment::clone(&self) -> grafting_graph_core::bezier_surface::RibbonSegment
-impl core::fmt::Debug for grafting_graph_core::bezier_surface::RibbonSegment
-pub fn grafting_graph_core::bezier_surface::RibbonSegment::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-impl serde_core::ser::Serialize for grafting_graph_core::bezier_surface::RibbonSegment
-pub fn grafting_graph_core::bezier_surface::RibbonSegment::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
-impl<'de> serde_core::de::Deserialize<'de> for grafting_graph_core::bezier_surface::RibbonSegment
-pub fn grafting_graph_core::bezier_surface::RibbonSegment::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
-impl core::marker::Freeze for grafting_graph_core::bezier_surface::RibbonSegment
-impl core::marker::Send for grafting_graph_core::bezier_surface::RibbonSegment
-impl core::marker::Sync for grafting_graph_core::bezier_surface::RibbonSegment
-impl core::marker::Unpin for grafting_graph_core::bezier_surface::RibbonSegment
-impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::bezier_surface::RibbonSegment
-impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::bezier_surface::RibbonSegment
-pub fn grafting_graph_core::bezier_surface::extrude_ribbon(segments: &[grafting_graph_core::bezier_surface::RibbonSegment], height: f64, ground: &[alloc::vec::Vec<alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>>], accuracy: f64) -> core::result::Result<grafting_graph_core::bezier_surface::RibbonExtrusion, alloc::string::String>
 pub fn grafting_graph_core::bezier_surface::ribbon(curve: grafting_graph_core::bezier::CubicBezier, offsets: [f64; 2], accuracy: f64) -> core::result::Result<grafting_graph_core::bezier_surface::CurveRibbon, alloc::string::String>
 pub fn grafting_graph_core::bezier_surface::ribbon_join(sections: &[[grafting_graph_core::bezier::CurvePoint; 2]]) -> core::result::Result<grafting_graph_core::bezier_surface::CurveRibbon, alloc::string::String>
 pub fn grafting_graph_core::bezier_surface::ribbon_profile(curve: grafting_graph_core::bezier::CubicBezier, offsets: [f64; 2], end_offsets: [f64; 2], accuracy: f64) -> core::result::Result<grafting_graph_core::bezier_surface::CurveRibbon, alloc::string::String>
@@ -723,6 +680,9 @@ impl core::marker::Unpin for grafting_graph_core::ContourError
 impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::ContourError
 impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::ContourError
 pub enum grafting_graph_core::ContourGeometry
+pub grafting_graph_core::ContourGeometry::Bezier
+pub grafting_graph_core::ContourGeometry::Bezier::handle1: grafting_graph_core::ContourPoint
+pub grafting_graph_core::ContourGeometry::Bezier::handle2: grafting_graph_core::ContourPoint
 pub grafting_graph_core::ContourGeometry::CircularArc
 pub grafting_graph_core::ContourGeometry::CircularArc::center: grafting_graph_core::ContourPoint
 pub grafting_graph_core::ContourGeometry::CircularArc::clockwise: bool
@@ -1002,7 +962,7 @@ pub fn grafting_graph_core::ContourEdge::intersections(&self, from: grafting_gra
 pub fn grafting_graph_core::ContourEdge::length(&self, from: grafting_graph_core::ContourPoint, to: grafting_graph_core::ContourPoint) -> f32
 pub fn grafting_graph_core::ContourEdge::new(id: grafting_graph_core::ContourEdgeId, start_node: grafting_graph_core::NodeId, end_node: grafting_graph_core::NodeId, geometry: grafting_graph_core::ContourGeometry) -> Self
 pub fn grafting_graph_core::ContourEdge::reversed_geometry(&self) -> grafting_graph_core::ContourGeometry
-pub fn grafting_graph_core::ContourEdge::split(&self, new_node: grafting_graph_core::NodeId, first_id: grafting_graph_core::ContourEdgeId, second_id: grafting_graph_core::ContourEdgeId) -> (grafting_graph_core::ContourEdge, grafting_graph_core::ContourEdge)
+pub fn grafting_graph_core::ContourEdge::split(&self, from: grafting_graph_core::ContourPoint, to: grafting_graph_core::ContourPoint, at: grafting_graph_core::ContourPoint, new_node: grafting_graph_core::NodeId, first_id: grafting_graph_core::ContourEdgeId, second_id: grafting_graph_core::ContourEdgeId) -> (grafting_graph_core::ContourEdge, grafting_graph_core::ContourEdge)
 pub fn grafting_graph_core::ContourEdge::start_node(&self) -> &grafting_graph_core::NodeId
 pub fn grafting_graph_core::ContourEdge::tangent(&self, from: grafting_graph_core::ContourPoint, to: grafting_graph_core::ContourPoint, t: f32) -> grafting_graph_core::ContourPoint
 pub fn grafting_graph_core::ContourEdge::tessellate(&self, from: grafting_graph_core::ContourPoint, to: grafting_graph_core::ContourPoint, tolerance: f32) -> alloc::vec::Vec<grafting_graph_core::ContourPoint>
@@ -1631,7 +1591,7 @@ pub fn grafting_graph_core::add_hole(topology: &mut grafting_graph_core::Contour
 pub fn grafting_graph_core::delete_region<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, surfaces: &mut grafting_graph_core::SurfaceRegistry, region: &grafting_graph_core::RegionId) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>
 pub fn grafting_graph_core::delete_regions<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, surfaces: &mut grafting_graph_core::SurfaceRegistry, regions: &[grafting_graph_core::RegionId]) -> core::result::Result<grafting_graph_core::RegionRemoval, grafting_graph_core::RegionEditError>
 pub fn grafting_graph_core::duplicate_region<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, surfaces: &mut grafting_graph_core::SurfaceRegistry, region: &grafting_graph_core::RegionId, spec: grafting_graph_core::DuplicateRegionSpec<'_, N>) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>
-pub fn grafting_graph_core::insert_vertex<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, edge: &grafting_graph_core::ContourEdgeId, node: grafting_graph_core::Node<N>, first_fragment: grafting_graph_core::ContourEdgeId, second_fragment: grafting_graph_core::ContourEdgeId) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>
+pub fn grafting_graph_core::insert_vertex<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, edge: &grafting_graph_core::ContourEdgeId, node: grafting_graph_core::Node<N>, from: grafting_graph_core::ContourPoint, to: grafting_graph_core::ContourPoint, at: grafting_graph_core::ContourPoint, first_fragment: grafting_graph_core::ContourEdgeId, second_fragment: grafting_graph_core::ContourEdgeId) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>
 pub fn grafting_graph_core::move_edge<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &grafting_graph_core::ContourTopology, edge: &grafting_graph_core::ContourEdgeId, update: impl core::ops::function::Fn(&mut N)) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>
 pub fn grafting_graph_core::move_region<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &grafting_graph_core::ContourTopology, region: &grafting_graph_core::RegionId, update: impl core::ops::function::Fn(&mut N)) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>
 pub fn grafting_graph_core::move_vertex<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &grafting_graph_core::ContourTopology, id: &grafting_graph_core::NodeId, update: impl core::ops::function::FnOnce(&mut N)) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>
@@ -1681,10 +1641,6 @@ Structural error from contour edge or region registration.
 ### `pub enum grafting_graph_core::ContourGeometry`
 
 An edge's explicit geometry between its two declared nodes.
-
-Deliberately closed to exactly these two kinds for now (line and true
-circular arc) -- Bezier and other curve families are a future extension,
-not implemented here; see this module's own doc for scope.
 
 ### `pub enum grafting_graph_core::ContourIdentifierError`
 
@@ -1782,12 +1738,18 @@ direction (end to start) -- the same physical curve, re-parameterized.
 Never mutates the edge; a loop that needs to walk this edge backward
 uses this alongside swapped endpoint positions.
 
-### `pub fn grafting_graph_core::ContourEdge::split(&self, new_node: grafting_graph_core::NodeId, first_id: grafting_graph_core::ContourEdgeId, second_id: grafting_graph_core::ContourEdgeId) -> (grafting_graph_core::ContourEdge, grafting_graph_core::ContourEdge)`
+### `pub fn grafting_graph_core::ContourEdge::split(&self, from: grafting_graph_core::ContourPoint, to: grafting_graph_core::ContourPoint, at: grafting_graph_core::ContourPoint, new_node: grafting_graph_core::NodeId, first_id: grafting_graph_core::ContourEdgeId, second_id: grafting_graph_core::ContourEdgeId) -> (grafting_graph_core::ContourEdge, grafting_graph_core::ContourEdge)`
 
-Splits this edge at `at` (assumed to lie on the curve) into two edges
-sharing a new node, preserving this edge's geometry description on
-both fragments -- a line stays a line, an arc keeps the same center
-and sweep direction (only its span shrinks).
+Splits this edge at `at` into two edges sharing a new node.
+
+A line stays a line, an arc keeps the same center and sweep direction
+(only its span shrinks) -- both shape-invariant to which portion of
+the curve is used, so `from`/`to` go unread for them. A Bézier is
+not: its two off-curve handles genuinely differ for each sub-piece,
+so this finds `at`'s own parameter on the original cubic and applies
+exact De Casteljau subdivision there, giving each fragment its own
+correct control polygon rather than silently reusing the whole
+curve's handles on a shorter span.
 
 ### `pub fn grafting_graph_core::ContourEdge::start_node(&self) -> &grafting_graph_core::NodeId`
 
@@ -2410,15 +2372,6 @@ Nearly tangent/coincident spans do not manufacture arbitrary crossings.
 
 Inserts and splits curves transactionally, enforcing independent height tolerance.
 
-### `pub fn grafting_graph_core::bezier_surface::extrude_ribbon(segments: &[grafting_graph_core::bezier_surface::RibbonSegment], height: f64, ground: &[alloc::vec::Vec<alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>>], accuracy: f64) -> core::result::Result<grafting_graph_core::bezier_surface::RibbonExtrusion, alloc::string::String>`
-
-Extrudes ordered curve spans, sampling their base on supporting polygons.
-Missing support retains the authored curve's elevation. Top vertices are
-always exactly `height` above their corresponding base. Terrain is read-only.
-Stations are at most 0.25 units apart in control-polygon length; curved
-spans also retain the curve sampler's accuracy bound. Disconnected spans,
-nonpositive dimensions and excessive input are rejected before returning geometry.
-
 ### `pub fn grafting_graph_core::bezier_surface::ribbon(curve: grafting_graph_core::bezier::CubicBezier, offsets: [f64; 2], accuracy: f64) -> core::result::Result<grafting_graph_core::bezier_surface::CurveRibbon, alloc::string::String>`
 
 Computes a ribbon from an explicit cubic and independently specified widths.
@@ -2607,20 +2560,24 @@ that still exist and are now used by exactly one region.
 boundary node, one new edge per boundary edge, the same loop structure,
 and its own registered surface.
 
-### `pub fn grafting_graph_core::insert_vertex<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, edge: &grafting_graph_core::ContourEdgeId, node: grafting_graph_core::Node<N>, first_fragment: grafting_graph_core::ContourEdgeId, second_fragment: grafting_graph_core::ContourEdgeId) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
+### `pub fn grafting_graph_core::insert_vertex<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, edge: &grafting_graph_core::ContourEdgeId, node: grafting_graph_core::Node<N>, from: grafting_graph_core::ContourPoint, to: grafting_graph_core::ContourPoint, at: grafting_graph_core::ContourPoint, first_fragment: grafting_graph_core::ContourEdgeId, second_fragment: grafting_graph_core::ContourEdgeId) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
 
 `InsertVertex`: subdivides one boundary edge, minting a new node on it.
-Both fragments keep the original edge's own geometry description (an arc
-keeps its center and sweep direction, only its span shrinks), and every
-region using the original -- in either direction -- is rewritten to walk
-the two fragments instead.
+A line or an arc fragment keeps the original edge's own geometry
+description (an arc keeps its center and sweep direction, only its span
+shrinks) and never reads `from`/`to`/`at`; a Bézier fragment genuinely
+needs them, to find where its own two off-curve handles land on each
+piece (see [`ContourEdge::split`]). Every region using the original --
+in either direction -- is rewritten to walk the two fragments instead.
 
-The caller supplies the new node (with the position it wants) and both
-fragment identities, so ids stay caller-derived and reproducible. This
-is also the whole of the "cut a movable notch out of a straight edge"
-case: call it twice on the same original edge, and the middle fragment
-is an independently movable segment -- there is no separate `Cut`
-primitive.
+The caller supplies the new node (with the position it wants), that same
+position again as `at` (an XZ projection, resolved once by the caller
+like every other analytic query on this edge), the original edge's own
+resolved endpoints as `from`/`to`, and both fragment identities, so ids
+stay caller-derived and reproducible. This is also the whole of the "cut
+a movable notch out of a straight edge" case: call it twice on the same
+original edge, and the middle fragment is an independently movable
+segment -- there is no separate `Cut` primitive.
 
 ### `pub fn grafting_graph_core::move_edge<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &grafting_graph_core::ContourTopology, edge: &grafting_graph_core::ContourEdgeId, update: impl core::ops::function::Fn(&mut N)) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
 
@@ -2868,6 +2825,21 @@ A query or update referenced a region that is not registered.
 ### `pub grafting_graph_core::ContourError::UnknownRegion::id: grafting_graph_core::RegionId`
 
 Identity that could not be resolved.
+
+### `pub grafting_graph_core::ContourGeometry::Bezier`
+
+A cubic Bézier between the edge's two endpoints, in the XZ plane --
+the standard P0 P1 P2 P3 control polygon, with P0/P3 the edge's own
+(caller-resolved) start and end and `handle1`/`handle2` its two
+off-curve control points, in the same absolute XZ frame.
+
+### `pub grafting_graph_core::ContourGeometry::Bezier::handle1: grafting_graph_core::ContourPoint`
+
+The curve's first off-curve control point.
+
+### `pub grafting_graph_core::ContourGeometry::Bezier::handle2: grafting_graph_core::ContourPoint`
+
+The curve's second off-curve control point.
 
 ### `pub grafting_graph_core::ContourGeometry::CircularArc`
 
@@ -3387,22 +3359,6 @@ Convert a legacy/automatic anchor chain.
 
 Ordered anchors.
 
-### `pub grafting_graph_core::bezier_commands::CurveCommand::ExtrudeRibbon`
-
-Sweep a closed vertical cross-section along ordered ribbons, projected onto ground.
-
-### `pub grafting_graph_core::bezier_commands::CurveCommand::ExtrudeRibbon::ground: alloc::vec::Vec<alloc::vec::Vec<alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>>>`
-
-Supporting polygons, each an outer XYZ ring followed by holes.
-
-### `pub grafting_graph_core::bezier_commands::CurveCommand::ExtrudeRibbon::height: f64`
-
-Positive vertical distance above the sampled base.
-
-### `pub grafting_graph_core::bezier_commands::CurveCommand::ExtrudeRibbon::segments: alloc::vec::Vec<grafting_graph_core::bezier_surface::RibbonSegment>`
-
-Ordered, consistently oriented curve spans and their lateral profiles.
-
 ### `pub grafting_graph_core::bezier_commands::CurveCommand::Fit`
 
 Fit a captured stroke within the batch tolerance at its samples.
@@ -3555,10 +3511,6 @@ Insertion parameter.
 
 Resulting authored cubics.
 
-### `pub grafting_graph_core::bezier_commands::CurveResult::extrusion: core::option::Option<grafting_graph_core::bezier_surface::RibbonExtrusion>`
-
-Optional indexed extrusion; vertices alternate between base and top.
-
 ### `pub grafting_graph_core::bezier_commands::CurveResult::handles: alloc::vec::Vec<grafting_graph_core::bezier::CurveHandles>`
 
 Relative controls suitable for durable graph edge payloads.
@@ -3654,34 +3606,6 @@ Curve approximation tolerance.
 ### `pub grafting_graph_core::bezier_surface::CurveRibbon::outer: alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>`
 
 Closed polygon boundary, without a repeated closing vertex.
-
-### `pub grafting_graph_core::bezier_surface::RibbonExtrusion::boundaries: alloc::vec::Vec<[(usize, bool); 3]>`
-
-Each face's edge indices and reversed flags in boundary order.
-
-### `pub grafting_graph_core::bezier_surface::RibbonExtrusion::edges: alloc::vec::Vec<[usize; 2]>`
-
-Unique edges over vertex indices.
-
-### `pub grafting_graph_core::bezier_surface::RibbonExtrusion::faces: alloc::vec::Vec<[usize; 3]>`
-
-Triangular faces, with consistent winding.
-
-### `pub grafting_graph_core::bezier_surface::RibbonExtrusion::vertices: alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>`
-
-Alternating base/top vertices, two pairs per station.
-
-### `pub grafting_graph_core::bezier_surface::RibbonSegment::curve: grafting_graph_core::bezier::CubicBezier`
-
-Authored cubic.
-
-### `pub grafting_graph_core::bezier_surface::RibbonSegment::end_offsets: [f64; 2]`
-
-End cross-section offsets.
-
-### `pub grafting_graph_core::bezier_surface::RibbonSegment::offsets: [f64; 2]`
-
-Start cross-section offsets.
 
 ### `pub grafting_graph_core::curve_offset::FieldSample::curve: usize`
 
@@ -4144,14 +4068,6 @@ Generic insertion into an existing curve graph.
 ### `pub struct grafting_graph_core::bezier_surface::CurveRibbon`
 
 A sampled ribbon with its source heights.
-
-### `pub struct grafting_graph_core::bezier_surface::RibbonExtrusion`
-
-Closed vertical sweep with shared indexed face boundaries.
-
-### `pub struct grafting_graph_core::bezier_surface::RibbonSegment`
-
-One span of a vertical ribbon sweep, oriented in chain order.
 
 ### `pub struct grafting_graph_core::curve_offset::FieldSample`
 

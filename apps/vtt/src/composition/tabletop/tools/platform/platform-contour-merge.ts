@@ -50,6 +50,9 @@ function paramOnEdge(edge: DirectedContourEdge, positionOf: (id: string) => read
     const projected: readonly [number, number] = [ax + t * dx, az + t * dz];
     return Math.hypot(point[0] - projected[0], point[1] - projected[1]) <= tolerance ? t : undefined;
   }
+  // A platform's own contour is only ever fitted as line or arc -- a Bezier
+  // edge never reaches this merge, so there is no mid-span weld to find.
+  if (edge.geometry.kind === "bezier") return undefined;
   const { center, clockwise } = edge.geometry;
   const radius = Math.hypot(ax - center[0], az - center[1]);
   const pointRadius = Math.hypot(point[0] - center[0], point[1] - center[1]);
@@ -101,12 +104,17 @@ export function splitContourAtPoints(
 
 function reverseGeometry(geometry: ConstructionEdgeGeometry): ConstructionEdgeGeometry {
   if (geometry.kind === "line") return geometry;
+  if (geometry.kind === "bezier") return { kind: "bezier", handle1: geometry.handle2, handle2: geometry.handle1 };
   return { kind: "arc", center: geometry.center, clockwise: !geometry.clockwise };
 }
 
 /** A distinct edge between the same two nodes (a lens of two arcs, say) never collides with this -- geometry is part of the identity, matching the same rounding `sharedEdgeId`'s own callers already accept. */
 function geometrySignature(geometry: ConstructionEdgeGeometry): string {
-  return geometry.kind === "line" ? "line" : `arc:${geometry.clockwise}:${geometry.center[0].toFixed(4)}:${geometry.center[1].toFixed(4)}`;
+  if (geometry.kind === "line") return "line";
+  if (geometry.kind === "bezier") {
+    return `bezier:${geometry.handle1[0].toFixed(4)}:${geometry.handle1[1].toFixed(4)}:${geometry.handle2[0].toFixed(4)}:${geometry.handle2[1].toFixed(4)}`;
+  }
+  return `arc:${geometry.clockwise}:${geometry.center[0].toFixed(4)}:${geometry.center[1].toFixed(4)}`;
 }
 
 /**

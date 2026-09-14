@@ -1,19 +1,20 @@
 //! Analytic contour topology: nodes stay semantic points, a [`ContourEdge`]
-//! is an oriented curve (straight line or true circular arc) between two
-//! nodes, and a [`SurfaceRegion`] is a set of oriented edge loops (outer
-//! boundaries plus holes) rather than a bare node cycle.
+//! is an oriented curve (straight line, true circular arc, or cubic Bézier)
+//! between two nodes, and a [`SurfaceRegion`] is a set of oriented edge loops
+//! (outer boundaries plus holes) rather than a bare node cycle.
 //!
 //! **Spatial policy (explicit, not silent):** every [`ContourGeometry::CircularArc`]
-//! lives in the surface's own XZ plane, exactly like [`SurfaceCurvature`](crate::SurfaceCurvature)
-//! already does -- `center` is an XZ point, radius is derived from the
-//! distance to a resolved endpoint, and any height along the curve is a
-//! caller-owned derived rule (e.g. interpolated from node Y), never a stored
-//! 3D normal. This keeps every intersection, split, and closest-point query
-//! 2D, and lets two neighboring regions share the exact same [`ContourEdge`]
-//! without reconciling differing planes. A wall or tower that tapers (a
-//! cone) is not a special case of this policy: its base and cap are simply
-//! two independent `ContourEdge`s, each with its own `center`/radius, since
-//! geometry now lives per edge instead of once per whole surface.
+//! and [`ContourGeometry::Bezier`] lives in the surface's own XZ plane,
+//! exactly like [`SurfaceCurvature`](crate::SurfaceCurvature) already does --
+//! `center`/`handle1`/`handle2` are XZ points, and any height along the curve
+//! is a caller-owned derived rule (e.g. interpolated from node Y), never a
+//! stored 3D normal. This keeps every intersection, split, and
+//! closest-point query 2D, and lets two neighboring regions share the exact
+//! same [`ContourEdge`] without reconciling differing planes. A wall or
+//! tower that tapers (a cone) is not a special case of this policy: its base
+//! and cap are simply two independent `ContourEdge`s, each with its own
+//! `center`/radius or handles, since geometry now lives per edge instead of
+//! once per whole surface.
 //!
 //! This is the only face model there is. [`SurfaceRegistry`] holds what a
 //! region *means* (`{ type, physical }`); this module holds what it *is*.
@@ -124,10 +125,6 @@ impl AsRef<str> for RegionId {
 pub type ContourPoint = [f32; 2];
 
 /// An edge's explicit geometry between its two declared nodes.
-///
-/// Deliberately closed to exactly these two kinds for now (line and true
-/// circular arc) -- Bezier and other curve families are a future extension,
-/// not implemented here; see this module's own doc for scope.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ContourGeometry {
     /// A straight chord between the edge's two endpoints.
@@ -142,6 +139,16 @@ pub enum ContourGeometry {
         center: ContourPoint,
         /// Sweep direction from this edge's own start to its own end.
         clockwise: bool,
+    },
+    /// A cubic Bézier between the edge's two endpoints, in the XZ plane --
+    /// the standard P0 P1 P2 P3 control polygon, with P0/P3 the edge's own
+    /// (caller-resolved) start and end and `handle1`/`handle2` its two
+    /// off-curve control points, in the same absolute XZ frame.
+    Bezier {
+        /// The curve's first off-curve control point.
+        handle1: ContourPoint,
+        /// The curve's second off-curve control point.
+        handle2: ContourPoint,
     },
 }
 
@@ -173,6 +180,172 @@ fn sweep(from: f32, to: f32, clockwise: bool) -> f32 {
     let mut delta = if clockwise { from - to } else { to - from };
     delta = delta.rem_euclid(tau);
     delta
+}
+
+/// Perpendicular distance from `point` to the infinite line through `a`/`b`.
+fn perpendicular_distance(point: ContourPoint, a: ContourPoint, b: ContourPoint) -> f32 {
+    let dx = b[0] - a[0];
+    let dz = b[1] - a[1];
+    let len = (dx * dx + dz * dz).sqrt();
+    if len < f32::EPSILON {
+        return distance(point, a);
+    }
+    ((point[0] - a[0]) * dz - (point[1] - a[1]) * dx).abs() / len
+}
+
+/// Position on the cubic Bézier `p0 p1 p2 p3` at parameter `t`.
+fn cubic_bezier_eval(
+    p0: ContourPoint,
+    p1: ContourPoint,
+    p2: ContourPoint,
+    p3: ContourPoint,
+    t: f32,
+) -> ContourPoint {
+    let u = 1.0 - t;
+    let a = u * u * u;
+    let b = 3.0 * u * u * t;
+    let c = 3.0 * u * t * t;
+    let d = t * t * t;
+    [
+        a * p0[0] + b * p1[0] + c * p2[0] + d * p3[0],
+        a * p0[1] + b * p1[1] + c * p2[1] + d * p3[1],
+    ]
+}
+
+/// Unit tangent of the cubic Bézier `p0 p1 p2 p3` at parameter `t`.
+fn cubic_bezier_tangent(
+    p0: ContourPoint,
+    p1: ContourPoint,
+    p2: ContourPoint,
+    p3: ContourPoint,
+    t: f32,
+) -> ContourPoint {
+    let u = 1.0 - t;
+    let a = 3.0 * u * u;
+    let b = 6.0 * u * t;
+    let c = 3.0 * t * t;
+    let dx = a * (p1[0] - p0[0]) + b * (p2[0] - p1[0]) + c * (p3[0] - p2[0]);
+    let dz = a * (p1[1] - p0[1]) + b * (p2[1] - p1[1]) + c * (p3[1] - p2[1]);
+    let len = (dx * dx + dz * dz).sqrt().max(f32::EPSILON);
+    [dx / len, dz / len]
+}
+
+/// De Casteljau subdivision of `p0 p1 p2 p3` at `t`, into the two sub-cubics'
+/// own control polygons -- exact, not an approximation: reassembling either
+/// half at the same `t` reproduces the original curve precisely.
+fn cubic_bezier_subdivide(
+    p0: ContourPoint,
+    p1: ContourPoint,
+    p2: ContourPoint,
+    p3: ContourPoint,
+    t: f32,
+) -> ([ContourPoint; 4], [ContourPoint; 4]) {
+    let a = lerp(p0, p1, t);
+    let b = lerp(p1, p2, t);
+    let c = lerp(p2, p3, t);
+    let d = lerp(a, b, t);
+    let e = lerp(b, c, t);
+    let f = lerp(d, e, t);
+    ([p0, a, d, f], [f, e, c, p3])
+}
+
+/// A polyline approximation of the cubic Bézier `p0 p1 p2 p3`, adaptively
+/// subdivided (de Casteljau) until each leaf's two off-curve control points
+/// sit within `tolerance` of that leaf's own chord -- the standard flatness
+/// test. Always includes both endpoints.
+fn cubic_bezier_tessellate(
+    p0: ContourPoint,
+    p1: ContourPoint,
+    p2: ContourPoint,
+    p3: ContourPoint,
+    tolerance: f32,
+) -> Vec<ContourPoint> {
+    fn flat_enough(p0: ContourPoint, p1: ContourPoint, p2: ContourPoint, p3: ContourPoint, tolerance: f32) -> bool {
+        perpendicular_distance(p1, p0, p3).max(perpendicular_distance(p2, p0, p3)) <= tolerance
+    }
+    fn recurse(
+        p0: ContourPoint,
+        p1: ContourPoint,
+        p2: ContourPoint,
+        p3: ContourPoint,
+        tolerance: f32,
+        depth: u32,
+        out: &mut Vec<ContourPoint>,
+    ) {
+        if depth >= 16 || flat_enough(p0, p1, p2, p3, tolerance) {
+            out.push(p3);
+            return;
+        }
+        let (left, right) = cubic_bezier_subdivide(p0, p1, p2, p3, 0.5);
+        recurse(left[0], left[1], left[2], left[3], tolerance, depth + 1, out);
+        recurse(right[0], right[1], right[2], right[3], tolerance, depth + 1, out);
+    }
+    let tolerance = tolerance.max(f32::EPSILON);
+    let mut out = vec![p0];
+    recurse(p0, p1, p2, p3, tolerance, 0, &mut out);
+    out
+}
+
+/// Default flatness tolerance for the callers of the cubic Bézier below that
+/// have none of their own to offer (`length`, `bounds`, `closest_point`) --
+/// fine enough that its own numeric error is invisible against ordinary wall
+/// dimensions, cheap enough to pay on every query.
+const BEZIER_DEFAULT_TOLERANCE: f32 = 1e-3;
+
+/// Arc length of the cubic Bézier `p0 p1 p2 p3`, by summing its own adaptive
+/// polyline -- there is no closed form for a cubic's arc length.
+fn cubic_bezier_length(p0: ContourPoint, p1: ContourPoint, p2: ContourPoint, p3: ContourPoint) -> f32 {
+    let points = cubic_bezier_tessellate(p0, p1, p2, p3, BEZIER_DEFAULT_TOLERANCE);
+    let mut total = 0.0;
+    let mut previous = p0;
+    for point in points {
+        total += distance(previous, point);
+        previous = point;
+    }
+    total
+}
+
+/// The parameter `t` and position on the cubic Bézier `p0 p1 p2 p3` closest
+/// to `point`: a coarse uniform scan followed by ternary-search refinement in
+/// the bracket either side of the best sample. Not exact (a cubic's closest
+/// point has no closed form either), but accurate well beyond what a
+/// developable-surface unroll or a fallback query needs.
+fn cubic_bezier_closest(
+    p0: ContourPoint,
+    p1: ContourPoint,
+    p2: ContourPoint,
+    p3: ContourPoint,
+    point: ContourPoint,
+) -> (f32, ContourPoint) {
+    const SAMPLES: usize = 32;
+    let distance_sq_at = |t: f32| {
+        let p = cubic_bezier_eval(p0, p1, p2, p3, t);
+        (p[0] - point[0]).powi(2) + (p[1] - point[1]).powi(2)
+    };
+    let mut best_t = 0.0_f32;
+    let mut best_d2 = f32::INFINITY;
+    for index in 0..=SAMPLES {
+        let t = index as f32 / SAMPLES as f32;
+        let d2 = distance_sq_at(t);
+        if d2 < best_d2 {
+            best_d2 = d2;
+            best_t = t;
+        }
+    }
+    let step = 1.0 / SAMPLES as f32;
+    let mut lo = (best_t - step).max(0.0);
+    let mut hi = (best_t + step).min(1.0);
+    for _ in 0..24 {
+        let m1 = lo + (hi - lo) / 3.0;
+        let m2 = hi - (hi - lo) / 3.0;
+        if distance_sq_at(m1) < distance_sq_at(m2) {
+            hi = m2;
+        } else {
+            lo = m1;
+        }
+    }
+    let t = (lo + hi) / 2.0;
+    (t, cubic_bezier_eval(p0, p1, p2, p3, t))
 }
 
 /// An oriented curve between two graph nodes, with explicit geometry.
@@ -235,6 +408,14 @@ impl ContourEdge {
                 center,
                 clockwise: !clockwise,
             },
+            // The same cubic seen from the other end is the same control
+            // polygon read back to front: P3 P2 P1 P0. The endpoints are the
+            // caller's own start/end (never stored here), so only the two
+            // off-curve handles need to swap.
+            ContourGeometry::Bezier { handle1, handle2 } => ContourGeometry::Bezier {
+                handle1: handle2,
+                handle2: handle1,
+            },
         }
     }
 
@@ -256,6 +437,7 @@ impl ContourEdge {
                     center[1] + radius * angle.sin(),
                 ]
             }
+            ContourGeometry::Bezier { handle1, handle2 } => cubic_bezier_eval(from, handle1, handle2, to, t),
         }
     }
 
@@ -278,6 +460,7 @@ impl ContourEdge {
                     [-radial[1], radial[0]]
                 }
             }
+            ContourGeometry::Bezier { handle1, handle2 } => cubic_bezier_tangent(from, handle1, handle2, to, t),
         }
     }
 
@@ -291,6 +474,7 @@ impl ContourEdge {
                 let end_angle = angle_of(center, to);
                 radius * sweep(start_angle, end_angle, clockwise)
             }
+            ContourGeometry::Bezier { handle1, handle2 } => cubic_bezier_length(from, handle1, handle2, to),
         }
     }
 
@@ -300,6 +484,21 @@ impl ContourEdge {
             ContourGeometry::Line => ContourBounds {
                 min: [from[0].min(to[0]), from[1].min(to[1])],
                 max: [from[0].max(to[0]), from[1].max(to[1])],
+            },
+            // A cubic Bézier always lies within the convex hull of its own
+            // four control points, so their bounding box is a safe (if
+            // slightly conservative) over-approximation -- exact would need
+            // solving the derivative's roots for no benefit any caller here
+            // needs.
+            ContourGeometry::Bezier { handle1, handle2 } => ContourBounds {
+                min: [
+                    from[0].min(to[0]).min(handle1[0]).min(handle2[0]),
+                    from[1].min(to[1]).min(handle1[1]).min(handle2[1]),
+                ],
+                max: [
+                    from[0].max(to[0]).max(handle1[0]).max(handle2[0]),
+                    from[1].max(to[1]).max(handle1[1]).max(handle2[1]),
+                ],
             },
             ContourGeometry::CircularArc { center, clockwise } => {
                 let radius = distance(center, from);
@@ -361,19 +560,46 @@ impl ContourEdge {
                 };
                 (t, self.evaluate(from, to, t))
             }
+            ContourGeometry::Bezier { handle1, handle2 } => cubic_bezier_closest(from, handle1, handle2, to, point),
         }
     }
 
-    /// Splits this edge at `at` (assumed to lie on the curve) into two edges
-    /// sharing a new node, preserving this edge's geometry description on
-    /// both fragments -- a line stays a line, an arc keeps the same center
-    /// and sweep direction (only its span shrinks).
+    /// Splits this edge at `at` into two edges sharing a new node.
+    ///
+    /// A line stays a line, an arc keeps the same center and sweep direction
+    /// (only its span shrinks) -- both shape-invariant to which portion of
+    /// the curve is used, so `from`/`to` go unread for them. A Bézier is
+    /// not: its two off-curve handles genuinely differ for each sub-piece,
+    /// so this finds `at`'s own parameter on the original cubic and applies
+    /// exact De Casteljau subdivision there, giving each fragment its own
+    /// correct control polygon rather than silently reusing the whole
+    /// curve's handles on a shorter span.
     pub fn split(
         &self,
+        from: ContourPoint,
+        to: ContourPoint,
+        at: ContourPoint,
         new_node: NodeId,
         first_id: ContourEdgeId,
         second_id: ContourEdgeId,
     ) -> (ContourEdge, ContourEdge) {
+        if let ContourGeometry::Bezier { handle1, handle2 } = self.geometry {
+            let (t, _) = cubic_bezier_closest(from, handle1, handle2, to, at);
+            let (left, right) = cubic_bezier_subdivide(from, handle1, handle2, to, t);
+            let first = ContourEdge::new(
+                first_id,
+                self.start_node.clone(),
+                new_node.clone(),
+                ContourGeometry::Bezier { handle1: left[1], handle2: left[2] },
+            );
+            let second = ContourEdge::new(
+                second_id,
+                new_node,
+                self.end_node.clone(),
+                ContourGeometry::Bezier { handle1: right[1], handle2: right[2] },
+            );
+            return (first, second);
+        }
         let first = ContourEdge::new(
             first_id,
             self.start_node.clone(),
@@ -407,6 +633,7 @@ impl ContourEdge {
                     .map(|i| self.evaluate(from, to, i as f32 / steps as f32))
                     .collect()
             }
+            ContourGeometry::Bezier { handle1, handle2 } => cubic_bezier_tessellate(from, handle1, handle2, to, tolerance),
         }
     }
 
@@ -449,6 +676,22 @@ impl ContourEdge {
                     self.on_span(from, to, *point) && other.on_span(other_from, other_to, *point)
                 })
                 .collect(),
+            // Any pair involving a Bézier: no closed form exists for a
+            // cubic's intersection with a line, a circle, or another cubic,
+            // so this samples both curves finely and intersects consecutive
+            // chords pairwise (reusing `line_line_intersection`), merging
+            // near-duplicate hits a tangency or a coarse sampling step could
+            // otherwise split into several. Approximate, not analytic --
+            // consistent with every other Bézier query on this edge, and
+            // nothing today calls this for exactness `wall-shared.ts`'s own
+            // crossing detection already only ever projects onto the
+            // straight chord, arc or Bézier alike.
+            (ContourGeometry::Bezier { .. }, _) | (_, ContourGeometry::Bezier { .. }) => {
+                merge_close_points(
+                    numeric_curve_intersections(self, from, to, other, other_from, other_to),
+                    1e-2,
+                )
+            }
         }
     }
 
@@ -470,6 +713,16 @@ impl ContourEdge {
                 let total = sweep(start_angle, angle_of(center, to), clockwise);
                 let swept = sweep(start_angle, angle_of(center, point), clockwise);
                 swept <= total + EPSILON
+            }
+            // `point` is assumed to already lie on this curve (the contract
+            // every caller of `on_span` shares); the only open question for
+            // a Bézier is whether its own closest parameter actually lands
+            // inside its finite span, which is automatic here since
+            // `cubic_bezier_closest` always clamps to `[0, 1]` -- so this
+            // reduces to confirming the assumption itself held.
+            ContourGeometry::Bezier { handle1, handle2 } => {
+                let (_, closest) = cubic_bezier_closest(from, handle1, handle2, to, point);
+                distance(closest, point) <= EPSILON
             }
         }
     }
@@ -553,6 +806,53 @@ fn circle_circle_intersections(
         [mid[0] + h * dz / d, mid[1] - h * dx / d],
         [mid[0] - h * dz / d, mid[1] + h * dx / d],
     ]
+}
+
+/// Both edges' own curves, sampled finely, with straight-chord intersection
+/// checked pairwise between consecutive samples -- the general fallback for
+/// any pair where at least one side is a Bézier (no closed form exists for
+/// its intersection with anything, cubic-cubic included).
+fn numeric_curve_intersections(
+    a: &ContourEdge,
+    a_from: ContourPoint,
+    a_to: ContourPoint,
+    b: &ContourEdge,
+    b_from: ContourPoint,
+    b_to: ContourPoint,
+) -> Vec<ContourPoint> {
+    const SAMPLES: usize = 48;
+    let sample = |edge: &ContourEdge, from: ContourPoint, to: ContourPoint| -> Vec<ContourPoint> {
+        (0..=SAMPLES)
+            .map(|i| edge.evaluate(from, to, i as f32 / SAMPLES as f32))
+            .collect()
+    };
+    let pa = sample(a, a_from, a_to);
+    let pb = sample(b, b_from, b_to);
+    let mut points = Vec::new();
+    for i in 0..pa.len() - 1 {
+        for j in 0..pb.len() - 1 {
+            if let Some(point) = line_line_intersection(pa[i], pa[i + 1], pb[j], pb[j + 1]) {
+                points.push(point);
+            }
+        }
+    }
+    points
+}
+
+/// Collapses points within `epsilon` of one already kept -- a tangency or a
+/// coarse sampling step can otherwise report the same real crossing several
+/// times over.
+fn merge_close_points(points: Vec<ContourPoint>, epsilon: f32) -> Vec<ContourPoint> {
+    let mut merged: Vec<ContourPoint> = Vec::new();
+    'points: for point in points {
+        for kept in &merged {
+            if distance(point, *kept) < epsilon {
+                continue 'points;
+            }
+        }
+        merged.push(point);
+    }
+    merged
 }
 
 /// A single edge-use inside a [`SurfaceRegion`] loop: which [`ContourEdge`]
@@ -1736,13 +2036,122 @@ mod tests {
                 clockwise: false,
             },
         );
-        let (first, second) = arc.split(nid("mid"), eid("arc-1"), eid("arc-2"));
+        let (first, second) = arc.split([1.0, 0.0], [-1.0, 0.0], [0.0, 1.0], nid("mid"), eid("arc-1"), eid("arc-2"));
         assert_eq!(first.geometry(), arc.geometry());
         assert_eq!(second.geometry(), arc.geometry());
         assert_eq!(first.start_node(), &nid("a"));
         assert_eq!(first.end_node(), &nid("mid"));
         assert_eq!(second.start_node(), &nid("mid"));
         assert_eq!(second.end_node(), &nid("b"));
+    }
+
+    fn bezier_edge(handle1: ContourPoint, handle2: ContourPoint) -> ContourEdge {
+        ContourEdge::new(eid("bezier"), nid("a"), nid("b"), ContourGeometry::Bezier { handle1, handle2 })
+    }
+
+    #[test]
+    fn bezier_evaluate_reaches_its_own_endpoints() {
+        let bezier = bezier_edge([1.0, 2.0], [3.0, 2.0]);
+        let start = [0.0, 0.0];
+        let end = [4.0, 0.0];
+        assert_eq!(bezier.evaluate(start, end, 0.0), start);
+        assert_eq!(bezier.evaluate(start, end, 1.0), end);
+    }
+
+    #[test]
+    fn bezier_tangent_points_from_start_toward_its_own_handle() {
+        let bezier = bezier_edge([1.0, 2.0], [3.0, 2.0]);
+        let tangent = bezier.tangent([0.0, 0.0], [4.0, 0.0], 0.0);
+        // A cubic's own tangent at t=0 points from P0 straight at P1.
+        assert!((tangent[0] - 1.0 / (5.0_f32).sqrt()).abs() < 1e-3);
+        assert!((tangent[1] - 2.0 / (5.0_f32).sqrt()).abs() < 1e-3);
+    }
+
+    #[test]
+    fn bezier_reversed_geometry_swaps_its_own_handles() {
+        let bezier = bezier_edge([1.0, 2.0], [3.0, 2.0]);
+        assert_eq!(
+            bezier.reversed_geometry(),
+            ContourGeometry::Bezier { handle1: [3.0, 2.0], handle2: [1.0, 2.0] }
+        );
+    }
+
+    #[test]
+    fn bezier_length_exceeds_the_chord_for_a_curved_span() {
+        let bezier = bezier_edge([1.0, 3.0], [3.0, 3.0]);
+        let length = bezier.length([0.0, 0.0], [4.0, 0.0]);
+        assert!(length > 4.0, "a curved span is longer than its own chord, got {length}");
+    }
+
+    #[test]
+    fn bezier_tessellate_keeps_both_endpoints_and_adds_interior_points() {
+        let start = [0.0, 0.0];
+        let end = [4.0, 0.0];
+        let bezier = bezier_edge([1.0, 3.0], [3.0, -3.0]);
+        let points = bezier.tessellate(start, end, 0.01);
+        assert_eq!(points[0], start);
+        assert_eq!(*points.last().unwrap(), end);
+        assert!(points.len() > 2, "a curved span needs interior points to read as a curve");
+    }
+
+    #[test]
+    fn bezier_split_reassembles_the_exact_original_curve() {
+        let start = [0.0, 0.0];
+        let end = [4.0, 0.0];
+        let bezier = bezier_edge([1.0, 3.0], [3.0, -3.0]);
+        let split_point = bezier.evaluate(start, end, 0.4);
+        let (first, second) = bezier.split(start, end, split_point, nid("mid"), eid("bezier-1"), eid("bezier-2"));
+
+        for step in 0..=10 {
+            let t = step as f32 / 10.0;
+            let original = bezier.evaluate(start, end, 0.4 * t);
+            let reassembled = first.evaluate(start, split_point, t);
+            assert!(
+                distance(original, reassembled) < 1e-3,
+                "the first fragment should retrace the original curve's own [0, 0.4] range: {original:?} vs {reassembled:?}"
+            );
+        }
+        for step in 0..=10 {
+            let t = step as f32 / 10.0;
+            let original = bezier.evaluate(start, end, 0.4 + 0.6 * t);
+            let reassembled = second.evaluate(split_point, end, t);
+            assert!(
+                distance(original, reassembled) < 1e-3,
+                "the second fragment should retrace the original curve's own [0.4, 1] range: {original:?} vs {reassembled:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn line_bezier_intersection_finds_a_real_crossing() {
+        let line = ContourEdge::new(eid("line"), nid("l1"), nid("l2"), ContourGeometry::Line);
+        // A symmetric upward hump from (0,0) to (4,0), peaking around z=2.25
+        // at its midpoint -- a horizontal line at z=1 crosses it twice.
+        let bezier = bezier_edge([1.0, 3.0], [3.0, 3.0]);
+        let points = line.intersections([-1.0, 1.0], [5.0, 1.0], &bezier, [0.0, 0.0], [4.0, 0.0]);
+        assert_eq!(points.len(), 2, "a line through the middle of a symmetric hump crosses it twice, got {points:?}");
+        for point in &points {
+            assert!((point[1] - 1.0).abs() < 0.05, "every crossing sits on the queried line: {point:?}");
+        }
+    }
+
+    #[test]
+    fn bezier_bezier_intersection_finds_a_real_crossing() {
+        // An upward hump from (0,0) to (4,0), and a near-vertical run through
+        // its own midspan -- the two cross exactly once, well inside both
+        // curves' own interiors.
+        let hump = bezier_edge([1.0, 3.0], [3.0, 3.0]);
+        let vertical = ContourEdge::new(
+            eid("vertical"),
+            nid("v1"),
+            nid("v2"),
+            ContourGeometry::Bezier { handle1: [2.0, -1.0], handle2: [2.0, 4.0] },
+        );
+        let points = hump.intersections([0.0, 0.0], [4.0, 0.0], &vertical, [2.0, -2.0], [2.0, 5.0]);
+        assert!(!points.is_empty(), "two curves crossing through the same region must report a crossing");
+        for point in &points {
+            assert!((point[0] - 2.0).abs() < 0.2, "the crossing sits near the vertical run's own x, got {point:?}");
+        }
     }
 
     #[test]

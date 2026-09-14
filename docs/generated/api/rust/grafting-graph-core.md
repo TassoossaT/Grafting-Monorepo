@@ -32,10 +32,6 @@ Structural error from contour edge or region registration.
 
 An edge's explicit geometry between its two declared nodes.
 
-Deliberately closed to exactly these two kinds for now (line and true
-circular arc) -- Bezier and other curve families are a future extension,
-not implemented here; see this module's own doc for scope.
-
 ### `pub enum grafting_graph_core::ContourIdentifierError`
 
 Failure to construct a stable contour identifier.
@@ -132,12 +128,18 @@ direction (end to start) -- the same physical curve, re-parameterized.
 Never mutates the edge; a loop that needs to walk this edge backward
 uses this alongside swapped endpoint positions.
 
-### `pub fn grafting_graph_core::ContourEdge::split(&self, new_node: grafting_graph_core::NodeId, first_id: grafting_graph_core::ContourEdgeId, second_id: grafting_graph_core::ContourEdgeId) -> (grafting_graph_core::ContourEdge, grafting_graph_core::ContourEdge)`
+### `pub fn grafting_graph_core::ContourEdge::split(&self, from: grafting_graph_core::ContourPoint, to: grafting_graph_core::ContourPoint, at: grafting_graph_core::ContourPoint, new_node: grafting_graph_core::NodeId, first_id: grafting_graph_core::ContourEdgeId, second_id: grafting_graph_core::ContourEdgeId) -> (grafting_graph_core::ContourEdge, grafting_graph_core::ContourEdge)`
 
-Splits this edge at `at` (assumed to lie on the curve) into two edges
-sharing a new node, preserving this edge's geometry description on
-both fragments -- a line stays a line, an arc keeps the same center
-and sweep direction (only its span shrinks).
+Splits this edge at `at` into two edges sharing a new node.
+
+A line stays a line, an arc keeps the same center and sweep direction
+(only its span shrinks) -- both shape-invariant to which portion of
+the curve is used, so `from`/`to` go unread for them. A Bézier is
+not: its two off-curve handles genuinely differ for each sub-piece,
+so this finds `at`'s own parameter on the original cubic and applies
+exact De Casteljau subdivision there, giving each fragment its own
+correct control polygon rather than silently reusing the whole
+curve's handles on a shorter span.
 
 ### `pub fn grafting_graph_core::ContourEdge::start_node(&self) -> &grafting_graph_core::NodeId`
 
@@ -1034,20 +1036,24 @@ that still exist and are now used by exactly one region.
 boundary node, one new edge per boundary edge, the same loop structure,
 and its own registered surface.
 
-### `pub fn grafting_graph_core::insert_vertex<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, edge: &grafting_graph_core::ContourEdgeId, node: grafting_graph_core::Node<N>, first_fragment: grafting_graph_core::ContourEdgeId, second_fragment: grafting_graph_core::ContourEdgeId) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
+### `pub fn grafting_graph_core::insert_vertex<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, edge: &grafting_graph_core::ContourEdgeId, node: grafting_graph_core::Node<N>, from: grafting_graph_core::ContourPoint, to: grafting_graph_core::ContourPoint, at: grafting_graph_core::ContourPoint, first_fragment: grafting_graph_core::ContourEdgeId, second_fragment: grafting_graph_core::ContourEdgeId) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
 
 `InsertVertex`: subdivides one boundary edge, minting a new node on it.
-Both fragments keep the original edge's own geometry description (an arc
-keeps its center and sweep direction, only its span shrinks), and every
-region using the original -- in either direction -- is rewritten to walk
-the two fragments instead.
+A line or an arc fragment keeps the original edge's own geometry
+description (an arc keeps its center and sweep direction, only its span
+shrinks) and never reads `from`/`to`/`at`; a Bézier fragment genuinely
+needs them, to find where its own two off-curve handles land on each
+piece (see [`ContourEdge::split`]). Every region using the original --
+in either direction -- is rewritten to walk the two fragments instead.
 
-The caller supplies the new node (with the position it wants) and both
-fragment identities, so ids stay caller-derived and reproducible. This
-is also the whole of the "cut a movable notch out of a straight edge"
-case: call it twice on the same original edge, and the middle fragment
-is an independently movable segment -- there is no separate `Cut`
-primitive.
+The caller supplies the new node (with the position it wants), that same
+position again as `at` (an XZ projection, resolved once by the caller
+like every other analytic query on this edge), the original edge's own
+resolved endpoints as `from`/`to`, and both fragment identities, so ids
+stay caller-derived and reproducible. This is also the whole of the "cut
+a movable notch out of a straight edge" case: call it twice on the same
+original edge, and the middle fragment is an independently movable
+segment -- there is no separate `Cut` primitive.
 
 ### `pub fn grafting_graph_core::move_edge<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &grafting_graph_core::ContourTopology, edge: &grafting_graph_core::ContourEdgeId, update: impl core::ops::function::Fn(&mut N)) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
 
@@ -1319,6 +1325,21 @@ A query or update referenced a region that is not registered.
 ### `pub grafting_graph_core::ContourError::UnknownRegion::id: grafting_graph_core::RegionId`
 
 Identity that could not be resolved.
+
+### `pub grafting_graph_core::ContourGeometry::Bezier`
+
+A cubic Bézier between the edge's two endpoints, in the XZ plane --
+the standard P0 P1 P2 P3 control polygon, with P0/P3 the edge's own
+(caller-resolved) start and end and `handle1`/`handle2` its two
+off-curve control points, in the same absolute XZ frame.
+
+### `pub grafting_graph_core::ContourGeometry::Bezier::handle1: grafting_graph_core::ContourPoint`
+
+The curve's first off-curve control point.
+
+### `pub grafting_graph_core::ContourGeometry::Bezier::handle2: grafting_graph_core::ContourPoint`
+
+The curve's second off-curve control point.
 
 ### `pub grafting_graph_core::ContourGeometry::CircularArc`
 

@@ -434,6 +434,8 @@ pub fn winding_normal(positions: &[[f32; 3]], indices: &[u32]) -> Option<[f32; 3
 pub fn distance_xz(a: [f32; 2], b: [f32; 2]) -> f32
 pub fn angle_xz(center: [f32; 2], point: [f32; 2]) -> f32
 pub fn sweep(from: f32, to: f32, clockwise: bool) -> f32
+pub fn cubic_bezier_eval(p0: [f32; 2], p1: [f32; 2], p2: [f32; 2], p3: [f32; 2], t: f32) -> [f32; 2]
+pub fn cubic_bezier_tangent(p0: [f32; 2], p1: [f32; 2], p2: [f32; 2], p3: [f32; 2], t: f32) -> [f32; 2]
 pub fn point_in_loop_xz(point: [f32; 2], loop_: &[[f32; 3]]) -> bool
 
 // src/planar.rs
@@ -3787,7 +3789,7 @@ export interface BrushRegion {
   * The brush footprint, already widened to hold the product -- see
   * {@link expandedToHold}. This is what the ghost is drawn from, which is
   * what makes the ghost an honest envelope rather than a decoration.
-export type BrushableToolId = "path-brush" | "wall-brush" | "wall-curve";
+export type BrushableToolId = "path-brush" | "wall-brush";
 export function brushReach(shape: BrushShape): number {
   if (shape.kind === "square") return shape.size / 2;
   return shape.radius;
@@ -4345,16 +4347,6 @@ export const wallBrushTool = createBrushTool<"wall-brush">({
   halfWidth: () => 0,
 
 
-// src/composition/tabletop/tools/walls/wall-curve-tool.ts
-export const wallCurveTool = createBrushTool<"wall-curve">({
-  id: "wall-curve",
-  defaultParams: () => DEFAULT_TOOL_PARAMS["wall-curve"],
-  previewColor: (params: WallBrushParams) => WALL_COLOR[params.wallType],
-  // Zero thickness in plan, same as the other wall tools: the whole brush
-  // reach is the curve's own fitting tolerance.
-  halfWidth: () => 0,
-
-
 // src/composition/tabletop/tools/walls/wall-line-tool.ts
 export const wallLineTool: ConstructionTool<"wall-line"> = {
   id: "wall-line",
@@ -4550,9 +4542,9 @@ export function colorForSurfaceType(surfaceType: string, physical: boolean): num
   switch (surfaceType) {
   case "wall":
   case "wall-white":
-  case "wall-curve-white":
   return 0xe2e8f0; // White / light gray block prototype
   case "wall-gray":
+  return 0x64748b; // Slate gray block prototype
 export const NONE_COVERING: SurfaceCovering = Object.freeze({
   kind: NONE_COVERING_KIND,
   key: NONE_COVERING_KIND,
@@ -4994,10 +4986,10 @@ export function terrainInteractionOver(coveredType: string): CreationInteraction
   if (TERRAIN_TYPES.has(coveredType) || isTerrainSurface(coveredType)) return RESTACK;
   return forbid(`terrain cannot be created above "${coveredType}"`);
 export function pathInteractionOver(
-  coveredType: string,
+  _coveredType: string,
   paintedSubtype?: string,
   ): CreationInteraction {
-  return coveredType === "wall-curve-white" || coveredType === "wall-curve-gray" || paintedSubtype === "bridge" ? IGNORE : CUT;
+  return paintedSubtype === "bridge" ? IGNORE : CUT;
   }
 
 // src/features/edit-construction/structure-types/organic/terrain-cloud.ts
@@ -5645,44 +5637,6 @@ export function allowed(
   return { role, resolve: { kind: "allow" }, axes, scope, cascade };
 export type { EditGesture };
 
-// src/features/edit-construction/structure-types/wall/wall-curve-spine.ts
-export interface WallCurveSurface {
-  readonly nodes: readonly { readonly id: string; readonly position: ConstructionPosition }[];
-  readonly edges: readonly ConstructionPatchEdge[];
-  readonly regions: readonly ConstructionPatchRegion[];
-  readonly preview: Float32Array;
-  }
-export function wallCurveSurface(
-  port: Pick<BezierPort, "curveBatch">,
-  tableId: string,
-  wallType: string,
-  nodes: ReadonlyMap<string, ConstructionPosition>,
-  spans: readonly ConstructionEdgeSnapshot[],
-  ): WallCurveSurface {
-  const resolved = resolveCurves(port, spans.map((span) => ({ handles: span.curve!, start: nodes.get(span.startNodeId)!, end: nodes.get(span.endNodeId)! })), TOLERANCE);
-export function regenerateWallCurveSpine(wallType: string) {
-  return function regenerate(input: SpineRegenerationInput): SpineRegeneration | undefined {
-  const { snapshot, graphPatch } = input;
-  const after = prospectiveGraph(snapshot, graphPatch);
-export function planWallCurveCreation(input: {
-  readonly snapshot: ConstructionGraphSnapshot;
-  readonly topologies: readonly ConstructionRegionTopology[];
-  readonly port: BezierPort;
-  readonly stroke: readonly ConstructionPosition[];
-  readonly operationId: string;
-  readonly tableId: string;
-  readonly height: number;
-
-// src/features/edit-construction/structure-types/wall/wall-curve-structure.ts
-export function wallCurveStructureType(surfaceType: string, label: string): StructureTypeDefinition {
-  return Object.freeze<StructureTypeDefinition>({
-  surfaceType,
-  label,
-  creation: "one upright panel per spine station, sampled along its bezier curve",
-  roleFor: panelRoleFor,
-  motionInfluences: panelMotionInfluences,
-  validateMotion: validatePanelMotion,
-
 // src/features/edit-construction/tools/brush-shape-params.ts
 export function resolveBrushShape(params: BrushShapeParams): BrushShape {
   const rotationRadians = (params.rotationDegrees * Math.PI) / 180;
@@ -5819,7 +5773,7 @@ export interface BoundaryEdges {
   /** Every edge declared so far, each exactly once. */
 export function reverseGeometry(geometry: ConstructionEdgeGeometry): ConstructionEdgeGeometry {
   if (geometry.kind === "line") return geometry;
-  return { kind: "arc", center: geometry.center, clockwise: !geometry.clockwise };
+  if (geometry.kind === "bezier") return { kind: "bezier", handle1: geometry.handle2, handle2: geometry.handle1 };
 export function createBoundaryEdges(tableId: string, sharing: EdgeSharing): BoundaryEdges {
   const edges = new Map<ConstructionEdgeId, ConstructionPatchEdge>();
 
@@ -5892,8 +5846,12 @@ export interface FittedEdge {
   readonly geometry: ConstructionEdgeGeometry;
   }
 export interface FitOptions {
-  /** When false, every span is fitted as a straight chord and no circle is ever considered. */
-  readonly arcs?: boolean;
+  /**
+  * Which curved-span family to try for a span that is not already
+  * explained by a straight chord, if any. `"none"` fits every span as a
+  * chord and never considers a curve at all.
+  */
+  readonly curves?: "arc" | "bezier" | "none";
   }
 export function fitPath(
   points: readonly ConstructionPosition[],
@@ -5901,7 +5859,7 @@ export function fitPath(
   options: FitOptions = {},
   ): readonly FittedEdge[] {
   if (points.length < 2) return [];
-  const arcs = options.arcs ?? true;
+  const curves = options.curves ?? "arc";
   const budget = Math.max(0, tolerance);
 
 // src/features/edit-construction/topology/surface-perimeter.ts

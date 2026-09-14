@@ -257,6 +257,9 @@ pub fn resolve_region_sheet(
                     sweep,
                 }
             }
+            crate::ContourGeometry::Bezier { .. } => {
+                return Err("a profiled sheet's rail must be a line or true circular arc".into());
+            }
         };
         section.validate()?;
         Ok(section)
