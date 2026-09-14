@@ -226,29 +226,50 @@ pub fn ribbon_profile(
     end_offsets: [f64; 2],
     accuracy: f64,
 ) -> Result<CurveRibbon, String> {
+    let parameters = curve
+        .sample(accuracy)?
+        .into_iter()
+        .map(|sample| sample.t)
+        .collect::<Vec<_>>();
+    ribbon_profile_at(curve, offsets, end_offsets, &parameters)
+}
+/// [`ribbon_profile`] with its cross-sections taken at explicit, ordered
+/// curve parameters instead of adaptive samples -- so a caller holding
+/// vertices at known parameters can move them with the curve without
+/// re-sampling it and changing how many there are.
+pub fn ribbon_profile_at(
+    curve: CubicBezier,
+    offsets: [f64; 2],
+    end_offsets: [f64; 2],
+    parameters: &[f64],
+) -> Result<CurveRibbon, String> {
     if !end_offsets.iter().all(|x| x.is_finite()) || end_offsets[0] >= end_offsets[1] {
         return Err("end offsets must be finite and ordered".into());
     }
     if !offsets.iter().all(|x| x.is_finite()) || offsets[0] >= offsets[1] {
         return Err("offsets must be finite and ordered".into());
     }
-    let samples = curve.sample(accuracy)?;
+    if parameters.len() < 2
+        || parameters.iter().any(|t| !t.is_finite() || !(0.0..=1.0).contains(t))
+        || parameters.windows(2).any(|pair| pair[0] >= pair[1])
+    {
+        return Err("ribbon parameters must be at least two increasing values in [0, 1]".into());
+    }
     let mut left = Vec::new();
     let mut right = Vec::new();
-    for sample in samples {
-        let d = curve.derivative(sample.t)?;
+    for &t in parameters {
+        let position = curve.evaluate(t)?;
+        let d = curve.derivative(t)?;
         let speed = d[0].hypot(d[2]);
         if speed < 1e-10 {
             return Err("stationary tangent prevents a valid ribbon".into());
         }
-        let offsets = std::array::from_fn::<_, 2, _>(|i| {
-            offsets[i] + (end_offsets[i] - offsets[i]) * sample.t
-        });
+        let offsets = std::array::from_fn::<_, 2, _>(|i| offsets[i] + (end_offsets[i] - offsets[i]) * t);
         let point = |w: f64| {
             [
-                sample.position[0] - d[2] / speed * w,
-                sample.position[1],
-                sample.position[2] + d[0] / speed * w,
+                position[0] - d[2] / speed * w,
+                position[1],
+                position[2] + d[0] / speed * w,
             ]
         };
         left.push(point(offsets[0]));

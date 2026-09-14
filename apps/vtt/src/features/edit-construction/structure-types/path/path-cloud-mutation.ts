@@ -18,7 +18,7 @@ import {
   resolveConformance,
   resolveCoverage,
 } from "../index.ts";
-import { graphPatchForSpine } from "./spine-graph/index.ts";
+import { graphPatchForSpine } from "./materialize-spine.ts";
 import { bezierContourId, changedSpineCloud, standingRegionsForCloud } from "./path-cloud-scope.ts";
 import { referenceLineFrom } from "./path-reference-line.ts";
 import { pathSpineDraftFor } from "./path-spine-draft.ts";

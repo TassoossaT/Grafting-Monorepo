@@ -21,12 +21,9 @@ export {
 } from "./station-node-id.ts";
 export type { StationNodeAddress } from "./station-node-id.ts";
 
-export {
-  chainsOf,
-  isSpineControlNodeId,
-  spineControlNodeId,
-  spineGraphFromSnapshot,
-} from "./spine-graph/index.ts";
+export { graphPatchForSpine } from "./materialize-spine.ts";
+export type { MaterializedSpine } from "./materialize-spine.ts";
+export { regeneratePathSpine } from "./bezier-road-edit.ts";
 
 export { planSpineContour } from "./contour/index.ts";
 

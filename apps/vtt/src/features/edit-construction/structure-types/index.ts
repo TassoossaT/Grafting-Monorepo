@@ -1,6 +1,6 @@
 import { roofStructureType } from "./roof/roof-structure.ts";
 import { muroStructureType } from "./muro/muro-structure.ts";
-import { platformStructureType } from "./platform/platform-structure.ts";
+import { platformStructureType, slopedPlatformStructureType } from "./platform/platform-structure.ts";
 import type { ConstructionCoveredRegion, ConstructionRegionTopology } from "@/ports";
 
 import type { EditTarget } from "../orchestration/atomic-edit.ts";
@@ -42,6 +42,7 @@ import { forbid, type CreationInteraction } from "./creation-interaction.ts";
 export const STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[] = Object.freeze([
   muroStructureType,
   platformStructureType,
+  slopedPlatformStructureType,
   roofStructureType,
   panelStructureType("wall-white", "Parede branca", "one upright panel per contour edge, drawn or stamped"),
   panelStructureType("wall-gray", "Parede cinza", "one upright panel per contour edge, drawn or stamped"),
@@ -191,3 +192,4 @@ export * from "./structural-cut.ts";
 export * from "./panel/index.ts";
 export * from "./organic/index.ts";
 export * from "./path/index.ts";
+export { controlRungId, controlSectionId, prospectiveGraph, regenerateSlopeSpine, SLOPE_SURFACE_TYPE, slopeFaceId, slopeFootprint, slopeSurface } from "./platform/platform-slope-spine.ts";

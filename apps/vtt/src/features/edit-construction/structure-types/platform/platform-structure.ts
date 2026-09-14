@@ -1,6 +1,14 @@
 import type { ConstructionMotionInfluence } from "@/ports";
 import { ALL_AXES } from "../../orchestration/atomic-edit.ts";
 import { CUT, IGNORE } from "../creation-interaction.ts";
+import {
+  deriveSlopeMotion,
+  regenerateSlopeSpine,
+  SLOPE_DEFAULT_OFFSETS,
+  SLOPE_SURFACE_TYPE,
+  slopeMotionInfluences,
+  validateSlopeMotion,
+} from "./platform-slope-spine.ts";
 import { isTerrainSurface } from "../organic/index.ts";
 import { allowed, denied, type StructureTypeDefinition } from "../structure-type.ts";
 
@@ -25,4 +33,38 @@ export const platformStructureType: StructureTypeDefinition = Object.freeze<Stru
     return elevations.some((y) => Math.abs(y - elevations[0]!) > 1e-4)
       ? "Todos os vertices da plataforma devem permanecer na mesma elevacao." : undefined;
   },
+});
+
+/**
+ * The platform built along a spine instead of a contour: a surface whose
+ * height varies along its curve and never across it -- a ramp, a sloped
+ * walkway, a spiral climb. Stairs are this same shape with a step parameter;
+ * steps are appearance, not structure.
+ *
+ * Generated from the shared spine exactly as a road is, so its control
+ * points, handles and width are edited with the same gestures; see
+ * `platform-slope-spine.ts` for what it makes of a spine.
+ *
+ * A sibling surface type rather than a mode read off the face, because a
+ * cloud is one type: a ramp welded between two floors sharing their type
+ * would join both floors and itself into one cloud, and lifting one floor
+ * would carry all three.
+ *
+ * Its faces are never grabbed directly -- the spine is what is edited. A
+ * floor that moves still carries the end welded to it: the end's control
+ * node follows, and the ramp re-places itself on the moved curve.
+ */
+export const slopedPlatformStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
+  surfaceType: SLOPE_SURFACE_TYPE, label: "Plataforma inclinada",
+  creation: "one face per spine span: the span's ribbon, sampled along its bezier curve",
+  roleFor: () => "platform-slope-face",
+  policyFor: (role) => denied(role, "Edite a plataforma inclinada pela espinha: pontos, alças e largura."),
+  // The same answer the flat platform gives: ground under it is cut, and the
+  // terrain's own repair regenerates around it.
+  interactionOver: (coveredType: string) => isTerrainSurface(coveredType) ? CUT : IGNORE,
+  repairAfterCut: { kind: "unsupported", reason: "a cut span needs its own spine split and end capping, not designed yet" },
+  motionInfluences: slopeMotionInfluences,
+  deriveMotion: deriveSlopeMotion,
+  validateMotion: validateSlopeMotion,
+  spine: Object.freeze({ defaultOffsets: SLOPE_DEFAULT_OFFSETS, regenerate: regenerateSlopeSpine }),
 });

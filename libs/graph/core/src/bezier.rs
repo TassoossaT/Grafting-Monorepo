@@ -52,6 +52,15 @@ pub struct CurveHandles {
         serde(default, skip_serializing_if = "Vec::is_empty")
     )]
     pub end_band_offsets: Vec<f64>,
+    /// The surface type generated along this curve, as the application names
+    /// it; empty leaves the choice to the caller's default consumer. The graph
+    /// never interprets it -- it only keeps it with the curve, so every
+    /// structure built from a spine can find its own spans.
+    #[cfg_attr(
+        feature = "curve-serde",
+        serde(default, skip_serializing_if = "String::is_empty")
+    )]
+    pub surface_type: String,
 }
 impl CurveHandles {
     /// Interpolates an independently authored width profile.
@@ -95,6 +104,7 @@ impl CurveHandles {
             mode,
             band_offsets,
             end_band_offsets: Vec::new(),
+            surface_type: String::new(),
         }
     }
 }

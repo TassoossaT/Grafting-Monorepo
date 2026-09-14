@@ -30,7 +30,8 @@ export interface ConstructionDockProps {
  *    preset radius, never freehand-drawn, see `tower-stamp-tool.ts`)
  * 2. 🚪 Aberturas (Portas & Janelas -- one click on a wall panel opens it
  *    and stands a face in the opening, see `opening-tool.ts`)
- * 3. 🪜 Escadas (Conexão de elevações)
+ * 3. 🪜 Escadas (Conexão de elevações -- Rampa, arrastada do início ao fim,
+ *    e Espiral, clicada no centro; both draw a sloped platform)
  * 4. 🛤️ Caminhos (Trilhas & química de portais)
  * 5. ⛰️ Terreno & Água (Escultura de Terreno)
  * 6. 🌲 Vegetação (Adornos & Flora)
@@ -66,6 +67,8 @@ export function ConstructionDock(props: ConstructionDockProps) {
   const isRoofActive = activeTool === "roof";
   const isPlatformActive = activeTool === "platform-contour";
   const isWallChildActive = isWallBrushActive || isWallLineActive || isInteriorWallActive || isTowerStampActive || isPlatformActive || isRoofActive;
+  const isRampActive = activeTool === "slope-ramp";
+  const isSpiralActive = activeTool === "slope-spiral";
   const isOpeningActive = activeTool === "opening";
   const isDemolishActive = activeTool === "house-room-delete";
 
@@ -135,8 +138,15 @@ export function ConstructionDock(props: ConstructionDockProps) {
       key: "stairs",
       label: "Escadas",
       icon: "🪜",
-      tooltip: "Escadas e Desníveis",
-      disabled: true,
+      tooltip: "Escadas e Desníveis (rampas e espirais)",
+      active: isRampActive,
+      childActive: isRampActive || isSpiralActive,
+      disabled: !ready,
+      onClick: () => onToolChange("slope-ramp"),
+      subItems: [
+        { key: "slope-ramp", label: "Rampa", icon: "⟋", tooltip: "Rampa reta: arraste do início ao fim", active: isRampActive, disabled: !ready, onClick: () => onToolChange("slope-ramp") },
+        { key: "slope-spiral", label: "Espiral", icon: "🌀", tooltip: "Espiral: clique no centro", active: isSpiralActive, disabled: !ready, onClick: () => onToolChange("slope-spiral") },
+      ],
     },
     {
       key: "paths",

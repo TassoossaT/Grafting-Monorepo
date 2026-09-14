@@ -49,6 +49,8 @@ const TOOL_LABEL: Record<ConstructionToolId, string> = {
   "muro-brush": "Muro",
   roof: "Telhado",
   "platform-contour": "Plataforma",
+  "slope-ramp": "Rampa",
+  "slope-spiral": "Espiral",
   "path-brush": "Caminho",
   navigate: "Navegação da Câmera",
   "edit-region": "Editar Região",

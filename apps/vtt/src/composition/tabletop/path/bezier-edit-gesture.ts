@@ -15,7 +15,7 @@ export function beginBezierGesture(ctx: ToolContext, sample: PointerSample, para
   const isMuro = muroOwnerForTarget(snapshot, targetId) !== undefined;
   const plan = (insert = false) => {
     const input = { snapshot, topologies, port: ctx.runtime, targetId, position: target, operationId, tableId: ctx.tableId, insert, mode: params?.curveMode, action: params?.curveAction === "height" ? undefined : params?.curveAction, width: params?.curveWidth ?? (isMuro ? 0.3 : 4), endWidth: params?.curveEndWidth };
-    if (isMuro) return planMuroEdit({ ...input, setHeight: params?.curveAction === "height", height: params?.curveHeight ?? 3 });
+    if (isMuro && params?.curveAction === "height") return planMuroEdit({ ...input, setHeight: true, height: params?.curveHeight ?? 3 });
     if (params?.curveAction === "height") throw Error("A altura é um parâmetro do muro. Selecione seu eixo.");
     return planBezierEdit(input);
   };

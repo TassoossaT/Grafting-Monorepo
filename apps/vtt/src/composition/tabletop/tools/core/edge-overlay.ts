@@ -6,6 +6,7 @@ import type { ConstructionGraphSnapshot, ConstructionRegionTopology } from "@/po
 import {
   edgeUseCounts,
   resolvePolicy,
+  resolveCurves,
   spineGraphFromSnapshot,
 } from "../../../../features/edit-construction/index.ts";
 
@@ -130,9 +131,7 @@ export function edgeOverlayOf(
       if (from === undefined || to === undefined) continue;
       const source = graphSnapshot.edges.find((e) => e.edgeId === edge.edgeId);
       if (source?.curve && curves) {
-        const result = curves.curveBatch({ tolerance: 0.025, commands: [{
-          kind: "resolve", handles: source.curve, start: [from.x, from.y, from.z], end: [to.x, to.y, to.z],
-        }] })[0]!;
+        const result = resolveCurves(curves, [{ handles: source.curve, start: from, end: to }], 0.025)[0]!;
         const samples = result.samples[0]!;
         for (let i = 1; i < samples.length; i += 1) spineInto.push(...samples[i - 1]!.position, ...samples[i]!.position);
         const p = result.curves[0]!.points;

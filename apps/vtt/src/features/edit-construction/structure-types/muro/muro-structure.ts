@@ -1,6 +1,7 @@
 import type { StructureTypeDefinition } from "../structure-type.ts";
 import { denied } from "../structure-type.ts";
 import { IGNORE } from "../creation-interaction.ts";
+import { regenerateMuroSpine } from "./muro-plan.ts";
 
 /** A generated upright ribbon is edited through its authored axis, not its tessellation. */
 export const muroStructureType = Object.freeze<StructureTypeDefinition>({
@@ -11,5 +12,6 @@ export const muroStructureType = Object.freeze<StructureTypeDefinition>({
   policyFor: (role) => denied(role, "Edite o muro pelos nós e alças do eixo; use Altura do muro para ajustar o topo."),
   interactionOver: () => IGNORE,
   conformsTo: (surfaceType) => surfaceType === "terrain" || surfaceType === "terrain-grass",
+  spine: { defaultOffsets: [-0.15, 0.15], regenerate: regenerateMuroSpine },
   repairAfterCut: { kind: "preserve", reason: "Interações e recortes do muro estão desativados nesta versão." },
 });

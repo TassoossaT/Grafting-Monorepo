@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sessionFixture, addFace } from "./platform-session-fixture.mjs";
 import { beginBezierGesture } from "../src/composition/tabletop/path/bezier-edit-gesture.ts";
-import { planMuroCreation, planMuroEdit, createPathBrushEffect, pathFormationFor, planPathCloudMutation, structureTypeFor } from "../src/features/edit-construction/index.ts";
+import { planMuroCreation, planMuroEdit, planBezierEdit, createPathBrushEffect, pathFormationFor, planPathCloudMutation, structureTypeFor } from "../src/features/edit-construction/index.ts";
 
 const p = (x,z,y=0) => ({x,y,z});
 function draw(f, operationId="muro:1", stroke=[p(-2,0),p(0,1),p(2,0)]) {
@@ -116,4 +116,22 @@ test("muro gesture previews and cancellation do not mutate, release commits once
     assert.equal(commits,1);
     assert.deepEqual(muroFaces(f).filter(t=>t.surfaceKey[1].startsWith("muro:muro%3Aother:")),others);
   } finally { f.session.free(); }
+});
+
+test("the shared spine registry dispatches muro edits and retains ownership after closing",()=>{
+  const f=sessionFixture();
+  try {
+    draw(f);
+    const original=curves(f);
+    const input={snapshot:f.runtime.getGraphSnapshot(),topologies:f.runtime.getAllRegionTopologies(),port:f.runtime,targetId:original[0].startNodeId,position:p(-2,0),operationId:"shared-close",tableId:"muro-test",action:"close"};
+    const plan=planBezierEdit(input);
+    assert.ok(plan);
+    assert.deepEqual(f.runtime.applyPatchReplacement(plan.request).skippedRegionIds,[]);
+    assert.equal(curves(f).length,original.length+1);
+    assert.ok(curves(f).every(e=>e.curve.surfaceType==="muro"&&e.edgeId.startsWith("spine-edge:muro:")));
+    const added=curves(f).find(e=>!original.some(old=>old.edgeId===e.edgeId));
+    const resized=planBezierEdit({...input,snapshot:f.runtime.getGraphSnapshot(),topologies:f.runtime.getAllRegionTopologies(),targetId:mid(added),operationId:"shared-width",action:"width",width:.6});
+    assert.ok(resized);
+    assert.deepEqual(f.runtime.applyPatchReplacement(resized.request).skippedRegionIds,[]);
+  } finally {f.session.free();}
 });

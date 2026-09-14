@@ -56,9 +56,11 @@ pub fn field_owns_loops<'a>(
     for loop_ in loops {
         for point in loop_ {
             any = true;
+            // Asked at the corner's own height: a curve on another level --
+            // the turn of a ramp overhead -- never owns this face.
             if fill
                 .field
-                .sample_owned(point[0], point[2], fill.reach_slack)
+                .sample_owned_near(point[0], point[2], point[1], fill.reach_slack)
                 .is_none()
             {
                 return false;
@@ -90,7 +92,7 @@ pub fn needs_interior(outer: &[[f32; 3]], fill: &PlanarFill<'_>) -> bool {
     }
     let (mut lowest, mut highest) = (f32::INFINITY, f32::NEG_INFINITY);
     for point in outer {
-        let Some(sample) = fill.field.sample(point[0], point[2]) else {
+        let Some(sample) = fill.field.sample_near(point[0], point[2], point[1]) else {
             continue;
         };
         lowest = lowest.min(sample.y);
@@ -185,7 +187,18 @@ pub fn refined_planar_mesh(
     let mut uvs = Vec::with_capacity(triangles.mesh.vertices.len());
     for (vertex, source) in triangles.mesh.vertices.iter().zip(&triangles.sources) {
         let (x, z) = (vertex.x as f32, vertex.y as f32);
-        let sample = fill.field.sample(x, z);
+        // An invented vertex has no height of its own; the nearest boundary
+        // corner's is the level it belongs to, which is what keeps it on this
+        // face's curve rather than one stacked above or below it.
+        let level = supplied
+            .iter()
+            .min_by(|a, b| {
+                let da = (a[0] - x).powi(2) + (a[2] - z).powi(2);
+                let db = (b[0] - x).powi(2) + (b[2] - z).powi(2);
+                da.total_cmp(&db)
+            })
+            .map_or(0.0, |corner| corner[1]);
+        let sample = fill.field.sample_near(x, z, level);
         positions.push(match source.and_then(|index| supplied.get(index as usize)) {
             Some(point) => *point,
             // Off the contour, so the graph has no height for it. The field

@@ -9,13 +9,15 @@ export interface CurveHandles {
   readonly mode: CurveHandleMode;
   readonly bandOffsets: readonly number[];
   readonly endBandOffsets?: readonly number[];
+  /** The structure type generated along this spine span; absent means the default consumer. */
+  readonly surfaceType?: string;
 }
 export type CurveCommand =
   | { readonly kind: "extrudeRibbon"; readonly segments: readonly { readonly curve: CubicBezier; readonly offsets: readonly [number, number]; readonly endOffsets: readonly [number, number] }[]; readonly height: number; readonly ground: readonly (readonly (readonly CurvePoint[])[])[] }
   | { readonly kind: "automatic"; readonly points: readonly CurvePoint[] }
   | { readonly kind: "fit"; readonly points: readonly CurvePoint[]; readonly cornerDegrees?: number }
   | { readonly kind: "join"; readonly sections: readonly (readonly [CurvePoint, CurvePoint])[] }
-  | { readonly kind: "ribbon"; readonly curve: CubicBezier; readonly offsets: readonly [number, number]; readonly endOffsets?: readonly [number, number] }
+  | { readonly kind: "ribbon"; readonly curve: CubicBezier; readonly offsets: readonly [number, number]; readonly endOffsets?: readonly [number, number]; readonly parameters?: readonly number[] }
   | { readonly kind: "sample"; readonly curves: readonly CubicBezier[] }
   | { readonly kind: "split"; readonly curve: CubicBezier; readonly t: number; readonly profile?: CurveHandles }
   | { readonly kind: "merge"; readonly curve: CubicBezier; readonly next: CubicBezier }

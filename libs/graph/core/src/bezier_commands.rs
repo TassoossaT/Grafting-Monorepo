@@ -41,6 +41,11 @@ pub enum CurveCommand {
         /// Optional ending profile.
         #[cfg_attr(feature = "curve-serde", serde(default, rename = "endOffsets"))]
         end_offsets: Option<[f64; 2]>,
+        /// Curve parameters to take the cross-sections at, in order. Absent,
+        /// the ribbon is sampled adaptively at the batch tolerance -- the
+        /// same parameters this command's own `samples` report.
+        #[cfg_attr(feature = "curve-serde", serde(default))]
+        parameters: Option<Vec<f64>>,
     },
     /// Fill the bevel between cross-sections at a shared anchor.
     Join {
@@ -184,13 +189,22 @@ pub fn execute(batch: CurveBatch) -> Result<Vec<CurveResult>, String> {
                 curve,
                 offsets,
                 end_offsets,
+                parameters,
             } => {
-                ribbon = Some(crate::bezier_surface::ribbon_profile(
-                    curve,
-                    offsets,
-                    end_offsets.unwrap_or(offsets),
-                    batch.tolerance,
-                )?);
+                ribbon = Some(match parameters {
+                    Some(parameters) => crate::bezier_surface::ribbon_profile_at(
+                        curve,
+                        offsets,
+                        end_offsets.unwrap_or(offsets),
+                        &parameters,
+                    )?,
+                    None => crate::bezier_surface::ribbon_profile(
+                        curve,
+                        offsets,
+                        end_offsets.unwrap_or(offsets),
+                        batch.tolerance,
+                    )?,
+                });
                 vec![curve]
             }
             CurveCommand::Join { sections } => {
@@ -215,6 +229,7 @@ pub fn execute(batch: CurveBatch) -> Result<Vec<CurveResult>, String> {
                                 if stations[i] != stations[i + 1] {
                                     h.end_band_offsets = stations[i + 1].clone();
                                 }
+                                h.surface_type = profile.surface_type.clone();
                                 h
                             })
                             .collect::<Vec<_>>(),

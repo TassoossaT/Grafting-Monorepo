@@ -287,6 +287,8 @@ const TOOL_LABELS: Partial<Record<ConstructionToolId, string>> = {
   "muro-brush": "Muro",
   roof: "Telhado",
   "platform-contour": "Plataforma",
+  "slope-ramp": "Rampa",
+  "slope-spiral": "Espiral",
   "edit-region": "Editar estrutura",
   "path-brush": "Parâmetros: Caminho",
   "wall-brush": "Parâmetros: Parede (Pincel Livre)",
@@ -348,10 +350,24 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
           <div className="gm-material-grid">
             {(["rectangle", "circle", "polygon", "freehand"] as const).map((shape,i) => <SelectableChip key={shape} label={["Retângulo", "Círculo", "Polígono", "Livre / curvas"][i]!} swatchColor="#79b8e8" selected={(params["platform-contour"].shape ?? "rectangle") === shape} onSelect={() => onParamsChange("platform-contour",{ ...params["platform-contour"],shape })} />)}
           </div>
-          {params["platform-contour"].shape === "circle" && <div className="gm-material-grid">{TOWER_RADIUS_PRESETS.map((radius) => <SelectableChip key={radius} label={`Raio ${radius}`} swatchColor="#79b8e8" selected={(params["platform-contour"].radius ?? 2.5) === radius} onSelect={() => onParamsChange("platform-contour",{ ...params["platform-contour"],radius })} />)}</div>}
+          {params["platform-contour"].shape === "circle" &&<div className="gm-material-grid">{TOWER_RADIUS_PRESETS.map((radius) => <SelectableChip key={radius} label={`Raio ${radius}`} swatchColor="#79b8e8" selected={(params["platform-contour"].radius ?? 2.5) === radius} onSelect={() => onParamsChange("platform-contour",{ ...params["platform-contour"],radius })} />)}</div>}
           {params["platform-contour"].shape === "freehand" && <label>Correção <input type="number" min="0" max="1" step="0.05" value={params["platform-contour"].tolerance ?? 0.15} onChange={(event) => onParamsChange("platform-contour",{ ...params["platform-contour"],tolerance:Number(event.currentTarget.value) })} /></label>}
           <p>Retângulo: arraste na diagonal. Círculo: clique no centro. Polígono: clique nos cantos e no primeiro para fechar. Livre: arraste o contorno. Esc cancela.</p>
           <p>Para ampliar, desenhe sobre a borda e a área nova. Começar sobre uma plataforma usa a elevação dela; fora dela, vale a elevação escolhida. Vértices de outro andar não são conectados.</p>
+        </div>
+      ) : activeTool === "slope-ramp" ? (
+        <div style={{ display: "grid", gap: "0.6rem" }}>
+          <label>Largura <input type="number" min="0.1" step="0.1" value={params["slope-ramp"].width} onChange={(event) => onParamsChange("slope-ramp", { ...params["slope-ramp"], width: Number(event.currentTarget.value) })} /></label>
+          <label>Subida <input type="number" step="0.1" value={params["slope-ramp"].rise} onChange={(event) => onParamsChange("slope-ramp", { ...params["slope-ramp"], rise: Number(event.currentTarget.value) })} /></label>
+          <p>Arraste do início ao fim. A rampa começa na altura de onde você clicou e sobe o valor de Subida. Uma ponta que cai na borda de uma plataforma na mesma altura é soldada a ela.</p>
+        </div>
+      ) : activeTool === "slope-spiral" ? (
+        <div style={{ display: "grid", gap: "0.6rem" }}>
+          <label>Largura <input type="number" min="0.1" step="0.1" value={params["slope-spiral"].width} onChange={(event) => onParamsChange("slope-spiral", { ...params["slope-spiral"], width: Number(event.currentTarget.value) })} /></label>
+          <label>Raio <input type="number" min="0.5" step="0.1" value={params["slope-spiral"].radius} onChange={(event) => onParamsChange("slope-spiral", { ...params["slope-spiral"], radius: Number(event.currentTarget.value) })} /></label>
+          <label>Voltas <input type="number" min="0.25" step="0.25" value={params["slope-spiral"].turns} onChange={(event) => onParamsChange("slope-spiral", { ...params["slope-spiral"], turns: Number(event.currentTarget.value) })} /></label>
+          <label>Subida <input type="number" step="0.1" value={params["slope-spiral"].rise} onChange={(event) => onParamsChange("slope-spiral", { ...params["slope-spiral"], rise: Number(event.currentTarget.value) })} /></label>
+          <p>Clique no centro. A espiral começa na altura de onde você clicou e sobe o valor de Subida ao longo das voltas.</p>
         </div>
       ) : activeTool === "edit-region" ? (
         <div>

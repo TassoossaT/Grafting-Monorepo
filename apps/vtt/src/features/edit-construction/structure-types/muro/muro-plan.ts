@@ -1,9 +1,8 @@
 import type { ApplyPatchReplacementRequest, BezierPort, ConstructionGraphPatch, ConstructionGraphSnapshot, ConstructionPatch, ConstructionPosition, ConstructionRegionTopology, CurvePoint } from "@/ports";
-import { curvePick, planBezierGraphEdit, type BezierEditInput } from "../path/bezier-road-edit.ts";
-import { curvePoint, curvePosition } from "../path/bezier-road-plan.ts";
-import { chainsOf, spineGraphFromSnapshot } from "../path/spine-graph/index.ts";
-import { changedSpineCloud } from "../path/path-cloud-scope.ts";
+import { curvePick, planSpineEditPatch, type SpineEditInput, chainsOf, spineGraphFromSnapshot, prospectiveGraph } from "../../spine/index.ts";
+import { curvePoint, curvePosition } from "../../topology/bezier-curve.ts";
 import { muroStructureType } from "./muro-structure.ts";
+import type { SpineRegenerationInput } from "../structure-type.ts";
 
 /** Durable ownership is encoded in graph IDs, never in an additional recipe store. */
 export function muroOwner(edgeId: string): string | undefined {
@@ -37,8 +36,7 @@ function regenerate(input: {
 }) {
   if (!Number.isFinite(input.height) || input.height <= 0) throw Error("Informe uma altura positiva para o muro.");
   const source = ownedGraph(input.snapshot, input.owner);
-  const updatedIds = new Set(input.graphPatch.nodes.map((n) => n.id));
-  const graph = changedSpineCloud(source, { ...input.graphPatch, nodes: [...input.graphPatch.nodes, ...source.nodes.filter((n) => !updatedIds.has(n.id))] }).snapshot;
+  const graph = prospectiveGraph(source, input.graphPatch);
   const chains = chainsOf(spineGraphFromSnapshot(graph));
   const ground = supportingGround(input.topologies);
   const commands = chains.filter((c) => c.nodes.length > 1).map((chain) => {
@@ -88,18 +86,33 @@ export function planMuroCreation(input: {
   const owner = encodeURIComponent(input.operationId);
   const anchors: CurvePoint[] = [...fitted.curves.map((c) => c.points[0]), fitted.curves.at(-1)!.points[3]];
   const nodes = anchors.map((p,i) => ({ id: `spine:muro:${owner}:${i}`, position: curvePosition(p) }));
-  const graphPatch: ConstructionGraphPatch = { nodes, edges: fitted.handles.map((h,i) => ({ edgeId: `spine-edge:muro:${owner}:${i}`, startNodeId: nodes[i]!.id, endNodeId: nodes[i+1]!.id, curve: { ...h, bandOffsets: [-input.thickness/2, input.thickness/2] } })) };
+  const graphPatch: ConstructionGraphPatch = { nodes, edges: fitted.handles.map((h,i) => ({ edgeId: `spine-edge:muro:${owner}:${i}`, startNodeId: nodes[i]!.id, endNodeId: nodes[i+1]!.id, curve: { ...h, surfaceType: "muro", bandOffsets: [-input.thickness/2, input.thickness/2] } })) };
   return regenerate({ ...input, owner, graphPatch, selectedId: nodes[0]!.id });
 }
 
-export function planMuroEdit(input: BezierEditInput & { readonly height?: number; readonly setHeight?: boolean }) {
+export function planMuroEdit(input: SpineEditInput & { readonly topologies: readonly ConstructionRegionTopology[]; readonly tableId: string; readonly height?: number; readonly setHeight?: boolean }) {
   const owner = muroOwnerForTarget(input.snapshot, input.targetId);
   if (!owner) return undefined;
   const face = input.topologies.find((t) => t.surfaceType === "muro" && t.surfaceKey[1]?.startsWith(`muro:${owner}:`));
   if (!face) throw Error("Não foi possível identificar a altura do muro.");
   const height = input.setHeight ? input.height! : Number(face.surfaceKey[1]!.split(":")[2]);
   const source = ownedGraph(input.snapshot, owner);
-  const edit = input.setHeight ? { graphPatch: { nodes: [], edges: [] }, selectedId: input.targetId } : planBezierGraphEdit({ ...input, snapshot: source, operationId: `muro:${owner}:edit:${encodeURIComponent(input.operationId)}` });
+  const edit = input.setHeight ? { graphPatch: { nodes: [], edges: [] }, selectedId: input.targetId } : planSpineEditPatch({ ...input, snapshot: source, operationId: `muro:${owner}:edit:${encodeURIComponent(input.operationId)}` });
   if (!edit) return undefined;
   return regenerate({ ...input, owner, height, graphPatch: edit.graphPatch, selectedId: edit.selectedId });
+}
+
+/** Registry entry for the shared spine editor, including callers outside the pointer tool. */
+export function regenerateMuroSpine(input: SpineRegenerationInput) {
+  const seeds = new Set(input.graphPatch.nodes.map((n) => n.id));
+  const removed = new Set(input.graphPatch.removedEdgeIds ?? []);
+  const edge = input.snapshot.edges.find((e) => muroOwner(e.edgeId) && (removed.has(e.edgeId) || seeds.has(e.startNodeId) || seeds.has(e.endNodeId)));
+  const owner = edge && muroOwner(edge.edgeId);
+  if (!owner) return undefined;
+  const face = input.topologies.find((t) => t.surfaceType === "muro" && t.surfaceKey[1]?.startsWith(`muro:${owner}:`));
+  if (!face) return undefined;
+  const height = Number(face.surfaceKey[1]!.split(":")[2]);
+  // A newly closed span is minted by the shared editor; retain this muro's instance identity.
+  const graphPatch = { ...input.graphPatch, edges: input.graphPatch.edges.map((e) => muroOwner(e.edgeId) ? e : { ...e, edgeId: `spine-edge:muro:${owner}:${encodeURIComponent(e.edgeId)}` }) };
+  return regenerate({ ...input, owner, height, graphPatch, selectedId: "" });
 }

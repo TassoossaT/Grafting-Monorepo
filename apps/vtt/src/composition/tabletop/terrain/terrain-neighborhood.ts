@@ -4,7 +4,6 @@ import type {
   ConstructionRegionTopology,
   ConstructionSurfaceKey,
 } from "@/ports";
-
 import type { TerrainFillRuntime } from "./terrain-fill.ts";
 
 export interface TerrainStrokeBounds {
