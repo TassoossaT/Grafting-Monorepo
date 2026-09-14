@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { planEdit, readStrips, resolveCloudTopology } from "../src/features/edit-construction/index.ts";
+import { controlSectionId, createPathBrushEffect, curvePickId, pathFormationFor, planBezierEdit, planEdit, planPathCloudMutation, resolveCloudTopology } from "../src/features/edit-construction/index.ts";
 import { platformContourTool } from "../src/composition/tabletop/tools/platform/platform-contour-tool.ts";
 import { commitPlatformSlope } from "../src/composition/tabletop/tools/platform/platform-slope.ts";
 import { addFace, sessionFixture } from "./platform-session-fixture.mjs";
@@ -10,7 +10,17 @@ const floor = (runtime, prefix, x0, y) => addFace(runtime, prefix, "platform",
   [[x0, 0], [x0 + 4, 0], [x0 + 4, 4], [x0, 4]].map(([x, z], i) => ({ id: `${prefix}:${i}`, position: { x, y, z } })));
 const faces = (runtime, type) => runtime.getAllRegionTopologies().filter((t) => t.surfaceType === type);
 const floorOf = (runtime, prefix) => faces(runtime, "platform").find((t) => t.nodes.some((n) => n.id === `${prefix}:0`));
-const onlyStrip = (runtime) => [...readStrips(faces(runtime, "platform-slope")).values()][0];
+const slopeSpans = (runtime) => runtime.getGraphSnapshot().edges.filter((e) => e.curve?.surfaceType === "platform-slope");
+const node = (runtime, id) => runtime.getGraphSnapshot().nodes.find((n) => n.id === id);
+const level = (topology) => {
+  const byStation = new Map();
+  for (const n of topology.nodes) {
+    const key = n.id.replace(/:(min|max)$/, "");
+    if (byStation.has(key) && Math.abs(byStation.get(key) - n.position.y) > 1e-5) return false;
+    byStation.set(key, n.position.y);
+  }
+  return true;
+};
 
 function twoFloorsAndRamp() {
   const fixture = sessionFixture();
@@ -20,69 +30,117 @@ function twoFloorsAndRamp() {
   return fixture;
 }
 
-test("a ramp welds both ends onto the floors it lands on, sharing nodes and its end rungs", () => {
+test("a ramp is a spine of bezier spans owned by the sloped platform, one face per span, welded into both floors", () => {
   const { runtime, session, calls } = twoFloorsAndRamp();
   try {
-    const strip = onlyStrip(runtime);
-    assert.ok(strip, JSON.stringify(calls.feedback));
-    assert.ok(strip.length >= 3, "a curved axis should produce interior stations");
-    const [first, last] = [strip[0], strip.at(-1)];
-    const low = floorOf(runtime, "low"), high = floorOf(runtime, "high");
-    assert.equal(faces(runtime, "platform").length, 2);
-    for (const node of [first.l, first.r]) assert.ok(low.nodes.some((n) => n.id === node.id), `low floor lacks ${node.id}`);
-    for (const node of [last.l, last.r]) assert.ok(high.nodes.some((n) => n.id === node.id), `high floor lacks ${node.id}`);
-    assert.ok(strip.every((row) => Math.abs(row.l.position.y - row.r.position.y) < 1e-9), "every station stays level across");
-    assert.ok(low.nodes.every((n) => n.position.y === 0) && high.nodes.every((n) => n.position.y === 3));
+    const spans = slopeSpans(runtime);
+    assert.equal(spans.length, 2, JSON.stringify(calls.feedback));
+    const ramp = faces(runtime, "platform-slope");
+    assert.equal(ramp.length, 2);
+    assert.ok(ramp.every((face) => face.nodes.length > 4), "each face follows its curve with sampled margins");
+    assert.ok(ramp.every(level), "every cross-section is level");
+    const [start, end] = [spans.find((e) => e.edgeId.endsWith(":0")).startNodeId, spans.find((e) => e.edgeId.endsWith(":1")).endNodeId];
+    for (const [prefix, control] of [["low", start], ["high", end]]) {
+      const f = floorOf(runtime, prefix);
+      for (const side of ["min", "max"]) assert.ok(f.nodes.some((n) => n.id === controlSectionId(control, side)), `${prefix} lacks ${side}`);
+    }
     const edgeIds = new Set(runtime.getGraphSnapshot().edges.map((e) => e.edgeId));
     assert.ok(!edgeIds.has("low:edge:1") && !edgeIds.has("high:edge:3"), "the split floor edges must not linger");
+    assert.equal(faces(runtime, "path").length, 0);
   } finally { session.free(); }
 });
 
-test("lifting the upper floor carries the ramp end and spreads the climb along the ramp", () => {
+test("lifting the upper floor carries the ramp's end control point and re-places the ramp on the moved curve", () => {
   const { runtime, session } = twoFloorsAndRamp();
   try {
-    const before = onlyStrip(runtime);
+    const end = slopeSpans(runtime).find((e) => e.edgeId.endsWith(":1")).endNodeId;
+    const before = new Map(faces(runtime, "platform-slope").flatMap((t) => t.nodes).map((n) => [n.id, n.position.y]));
     const high = floorOf(runtime, "high");
     const plan = planEdit(resolveCloudTopology(runtime, high.surfaceKey), { surfaceKey: high.surfaceKey, target: { kind: "region" }, delta: { x: 0, y: 1, z: 0 } }, runtime.getGraphSnapshot(), runtime);
     assert.equal(plan.kind, "apply", plan.reason);
     runtime.applyRegionEdit(plan.ops);
-    const after = onlyStrip(runtime);
     assert.ok(floorOf(runtime, "high").nodes.every((n) => n.position.y === 4));
     assert.ok(floorOf(runtime, "low").nodes.every((n) => n.position.y === 0), "the lower floor must not follow");
-    assert.equal(after[0].l.position.y, 0);
-    assert.equal(after.at(-1).l.position.y, 4);
-    for (let i = 1; i < after.length - 1; i += 1) {
-      const lift = after[i].l.position.y - before[i].l.position.y;
-      assert.ok(lift > 0 && lift < 1, `station ${i} lifted by ${lift}`);
-      assert.ok(after[i].l.position.y > after[i - 1].l.position.y, "the ramp keeps climbing");
-      assert.ok(Math.abs(after[i].l.position.y - after[i].r.position.y) < 1e-6);
-    }
+    assert.ok(Math.abs(node(runtime, end).position.y - 4) < 1e-5, "the end control point follows its floor");
+    const ramp = faces(runtime, "platform-slope");
+    assert.ok(ramp.every(level));
+    const lifted = ramp.flatMap((t) => t.nodes).filter((n) => n.position.y - before.get(n.id) > 1e-4);
+    assert.ok(lifted.some((n) => n.position.y - before.get(n.id) < 0.999), "interior sections rise with the curve, less than the end");
   } finally { session.free(); }
 });
 
-test("a ramp and the floors it joins stay separate clouds", () => {
+test("a ramp and the floors it joins stay separate clouds, and its faces are edited through the spine", () => {
   const { runtime, session } = twoFloorsAndRamp();
   try {
     const low = floorOf(runtime, "low");
     assert.equal(resolveCloudTopology(runtime, low.surfaceKey).members.length, 1);
     const ramp = faces(runtime, "platform-slope")[0];
-    assert.equal(resolveCloudTopology(runtime, ramp.surfaceKey).members.length, faces(runtime, "platform-slope").length);
+    assert.equal(resolveCloudTopology(runtime, ramp.surfaceKey).members.length, 2);
+    const grabbed = planEdit(resolveCloudTopology(runtime, ramp.surfaceKey), { surfaceKey: ramp.surfaceKey, target: { kind: "region" }, delta: { x: 0, y: 1, z: 0 } }, runtime.getGraphSnapshot(), runtime);
+    assert.equal(grabbed.kind, "deny");
   } finally { session.free(); }
 });
 
-test("a spiral climbs its rise around the clicked center, level across every station", () => {
+test("the ramp's spine takes the road's handle, midpoint and width edits, regenerating sloped faces", () => {
+  const { runtime, session } = twoFloorsAndRamp();
+  try {
+    const edit = (targetId, position, operationId, extra = {}) => {
+      const plan = planBezierEdit({ snapshot: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), port: runtime, targetId, position, operationId, tableId: "platform-test", ...extra });
+      assert.ok(plan);
+      runtime.applyPatchReplacement(plan.request);
+      return plan;
+    };
+    const first = slopeSpans(runtime).find((e) => e.edgeId.endsWith(":0"));
+    edit(curvePickId(first.edgeId, "midpoint"), { x: 5.5, y: 0.6, z: 1 }, "slope:pull");
+    edit(curvePickId(first.edgeId, "midpoint"), { x: 0, y: 0, z: 0 }, "slope:width", { action: "width", width: 3 });
+    assert.deepEqual(slopeSpans(runtime).find((e) => e.edgeId === first.edgeId).curve.bandOffsets, [-1.5, 1.5]);
+    assert.equal(faces(runtime, "platform-slope").length, 2);
+    assert.equal(faces(runtime, "path").length, 0, "a ramp edit never regenerates a road");
+    assert.ok(faces(runtime, "platform-slope").every(level));
+    assert.equal(slopeSpans(runtime).length, 2, "the spine keeps its owner through edits");
+    edit(curvePickId(first.edgeId, "midpoint"), { x: 0, y: 0, z: 0 }, "slope:split", { insert: true });
+    assert.equal(slopeSpans(runtime).length, 3);
+    assert.equal(faces(runtime, "platform-slope").length, 3);
+  } finally { session.free(); }
+});
+
+test("a spiral is one spine, one face per span, meshed on its own turn", () => {
   const { ctx, runtime, session, calls } = sessionFixture();
   try {
     platformContourTool.onClick(ctx, { point: { x: 20, y: 1, z: 0 } }, { ...params, shape: "spiral", radius: 3, turns: 1.5, rise: 4 });
-    const strip = onlyStrip(runtime);
-    assert.ok(strip && strip.length > 8, JSON.stringify(calls.feedback));
-    const heights = strip.map((row) => row.l.position.y);
-    assert.ok(Math.abs(heights[0] - 1) < 1e-6 && Math.abs(heights.at(-1) - 5) < 1e-6);
-    assert.ok(strip.every((row) => Math.abs(row.l.position.y - row.r.position.y) < 1e-9));
-    for (const row of strip) {
-      const radius = Math.hypot((row.l.position.x + row.r.position.x) / 2 - 20, (row.l.position.z + row.r.position.z) / 2);
-      assert.ok(Math.abs(radius - 3) < 0.35, `station radius ${radius}`);
+    const ramp = faces(runtime, "platform-slope");
+    assert.equal(ramp.length, 12, JSON.stringify(calls.feedback));
+    assert.equal(slopeSpans(runtime).length, 12);
+    const heights = ramp.flatMap((t) => t.nodes.map((n) => n.position.y));
+    assert.ok(Math.abs(Math.min(...heights) - 1) < 1e-5 && Math.abs(Math.max(...heights) - 5) < 1e-5);
+    assert.ok(ramp.every(level));
+    const meshes = JSON.parse(session.all_surface_meshes_json());
+    for (const face of ramp) {
+      const ys = face.nodes.map((n) => n.position.y);
+      const mesh = meshes.find((m) => JSON.stringify(m.surfaceKey) === JSON.stringify(face.surfaceKey));
+      assert.ok(mesh && mesh.indices.length > 0, "every span meshes");
+      for (let i = 1; i < mesh.positions.length; i += 3) {
+        assert.ok(mesh.positions[i] > Math.min(...ys) - 0.3 && mesh.positions[i] < Math.max(...ys) + 0.3, `a vertex left its turn: ${mesh.positions[i]}`);
+      }
     }
+  } finally { session.free(); }
+});
+
+test("a road drawn across a ramp's spine never welds into it", () => {
+  const { ctx, runtime, session, calls } = sessionFixture();
+  try {
+    commitPlatformSlope(ctx, [{ x: 0, y: 0, z: 0 }, { x: 10, y: 0.05, z: 0 }], params);
+    const spine = slopeSpans(runtime);
+    assert.equal(spine.length, 1, JSON.stringify(calls.feedback));
+    const road = { shape: "circle", radius: 0.5, rotationDegrees: 0, pathKind: "road", bedWidth: 0.6, shoulderWidth: 0.1, shoulderHeight: 0, miterLimit: 4 };
+    const effect = createPathBrushEffect({ brushShape: { kind: "circle", radius: 0.5 }, brushRegion: { samples: [{ x: 5, y: 0, z: -6 }, { x: 5, y: 0, z: 6 }] }, parameters: pathFormationFor(road) },
+      { operationId: "road:cross", tableId: "platform-test", initiatedBy: "path-brush" });
+    const plan = planPathCloudMutation({ bezier: runtime, tableId: "platform-test", snapToGrid: false, graphSnapshot: runtime.getGraphSnapshot(),
+      regionTopologies: runtime.getAllRegionTopologies(), coverageFor: () => [], effect, tolerance: 0.025 });
+    assert.equal(plan.kind, "ready");
+    runtime.applyPatchReplacement(plan.request);
+    assert.deepEqual(slopeSpans(runtime).map((e) => [e.edgeId, e.startNodeId, e.endNodeId]), spine.map((e) => [e.edgeId, e.startNodeId, e.endNodeId]));
+    assert.equal(faces(runtime, "platform-slope").length, 1);
   } finally { session.free(); }
 });
 
@@ -90,9 +148,9 @@ test("slope clicks commit on a repeated last point and take each height from the
   const { ctx, runtime, session, calls } = sessionFixture();
   try {
     for (const point of [{ x: 0, y: 0, z: 0 }, { x: 6, y: 2, z: 0 }, { x: 6, y: 2, z: 0 }]) platformContourTool.onClick(ctx, { point }, params);
-    const strip = onlyStrip(runtime);
-    assert.ok(strip, JSON.stringify(calls.feedback));
-    assert.equal(strip[0].l.position.y, 0);
-    assert.equal(strip.at(-1).l.position.y, 2);
+    const spans = slopeSpans(runtime);
+    assert.equal(spans.length, 1, JSON.stringify(calls.feedback));
+    assert.equal(node(runtime, spans[0].startNodeId).position.y, 0);
+    assert.equal(node(runtime, spans[0].endNodeId).position.y, 2);
   } finally { session.free(); }
 });

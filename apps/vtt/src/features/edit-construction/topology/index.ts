@@ -16,16 +16,3 @@ export type { SweptArc, TransverseProfilePoint } from "./sweep-formation.ts";
 export { simplifyClosedRing } from "./ring-simplify.ts";
 export { automaticCurve, curvePoint, curvePosition, resolveCurves, ribbonSections, sampleRibbons, unionRibbonOutlines } from "./bezier-curve.ts";
 export type { RibbonRequest } from "./bezier-curve.ts";
-export {
-  helixControlPoints,
-  interpolateStripMotion,
-  isStripFace,
-  parseStripRungEdgeId,
-  readStrips,
-  sampleStripStations,
-  stripNodeId,
-  stripPatch,
-  stripRailEdgeId,
-  stripRungEdgeId,
-} from "./swept-strip.ts";
-export type { StripSide, StripStation } from "./swept-strip.ts";

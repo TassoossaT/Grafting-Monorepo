@@ -1,6 +1,6 @@
 import type { ConstructionGraphPatch, ConstructionGraphSnapshot, ConstructionPosition, ConstructionRegionTopology } from "@/ports";
 
-import { chainsOf, parseSpineControlNodeId, spineGraphFromSnapshot } from "./spine-graph/index.ts";
+import { chainsOf, DEFAULT_SPINE_OWNER, ownedBy, parseSpineControlNodeId, spineGraphFromSnapshot } from "../../spine/index.ts";
 
 const OWNED_CONTOUR = "road-cloud:";
 function surfaceCorridors(regionId: string): readonly string[] | undefined {
@@ -65,7 +65,7 @@ export function changedSpineCloud(snapshot: ConstructionGraphSnapshot, patch: Co
   const edges = new Map(snapshot.edges.map((edge) => [edge.edgeId, edge]));
   for (const edgeId of patch.removedEdgeIds ?? []) edges.delete(edgeId);
   for (const edge of patch.edges) edges.set(edge.edgeId, edge);
-  const graph = spineGraphFromSnapshot({ nodes: [...nodes.values()], edges: [...edges.values()] });
+  const graph = spineGraphFromSnapshot({ nodes: [...nodes.values()], edges: [...edges.values()] }, ownedBy(DEFAULT_SPINE_OWNER));
   const adjacent = new Map<string, string[]>();
   for (const edge of graph.edges) {
     adjacent.set(edge.fromNodeId, [...(adjacent.get(edge.fromNodeId) ?? []), edge.toNodeId]);

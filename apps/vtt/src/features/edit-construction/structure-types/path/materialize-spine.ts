@@ -1,7 +1,7 @@
 import type { ConstructionGraphPatch, ConstructionGraphSnapshot, ConstructionPosition } from "@/ports";
 
-import type { pathSpineDraftFor } from "../path-spine-draft.ts";
-import { spineControlNodeId } from "./spine-node-id.ts";
+import type { pathSpineDraftFor } from "./path-spine-draft.ts";
+import { spineControlNodeId } from "../../spine/spine-node-id.ts";
 
 interface SpineEdgeCandidate {
   readonly edge: ConstructionGraphPatch["edges"][number];

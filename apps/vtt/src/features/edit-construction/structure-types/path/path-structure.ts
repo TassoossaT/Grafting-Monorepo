@@ -3,8 +3,10 @@ import type { ConstructionRegionTopology } from "@/ports";
 import type { AtomicEditOp, EditTarget } from "../../orchestration/atomic-edit.ts";
 import { ALL_AXES, addPosition } from "../../orchestration/atomic-edit.ts";
 import { followsOutward, parseStationNodeId } from "./station-node-id.ts";
-import { isSpineControlNodeId } from "./spine-graph/index.ts";
-import type { CascadeContext, CutRepair, EditRole, RolePolicy, StructureTypeDefinition } from "../structure-type.ts";
+import { isSpineControlNodeId } from "../../spine/spine-node-id.ts";
+import type { CascadeContext, CutRepair, EditRole, RolePolicy, SpineGeneration, StructureTypeDefinition } from "../structure-type.ts";
+import { regeneratePathSpine } from "./bezier-road-edit.ts";
+import { explicitSpineSnapshot } from "./bezier-road-plan.ts";
 import { allowed, denied } from "../structure-type.ts";
 import type { CreationInteraction } from "../creation-interaction.ts";
 
@@ -247,6 +249,13 @@ const PATH_CUT_REPAIR: CutRepair = {
   reason: "path has no isolated repair for a cut yet -- needs its own spine-split-and-cap logic",
 };
 
+/** A road on the shared spine: legacy spans get automatic handles, and an edit regenerates the unioned contour. */
+const PATH_SPINE: SpineGeneration = Object.freeze<SpineGeneration>({
+  defaultOffsets: [-2, 2],
+  prepare: (snapshot, port) => explicitSpineSnapshot(snapshot, port, [-2, 2]),
+  regenerate: regeneratePathSpine,
+});
+
 /** Builds one swept-product structure type on the shared spine model. */
 export function pathStructureType(
   surfaceType: string,
@@ -264,5 +273,6 @@ export function pathStructureType(
     repairAfterCut: PATH_CUT_REPAIR,
     conformsTo: (coveredSurfaceType: string, subtype?: string) =>
       (coveredSurfaceType === "terrain" || coveredSurfaceType === "terrain-grass") && subtype !== "bridge",
+    spine: PATH_SPINE,
   });
 }

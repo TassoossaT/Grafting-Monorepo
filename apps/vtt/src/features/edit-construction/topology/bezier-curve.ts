@@ -37,6 +37,8 @@ export interface RibbonRequest {
   readonly offsets: readonly [number, number];
   /** Offsets at the curve end, when the ribbon tapers. */
   readonly endOffsets?: readonly [number, number];
+  /** Take the cross-sections at these curve parameters instead of adaptive samples. */
+  readonly parameters?: readonly number[];
 }
 
 /**
@@ -47,7 +49,7 @@ export interface RibbonRequest {
 export function sampleRibbons(port: Pick<BezierPort, "curveBatch">, requests: readonly RibbonRequest[], tolerance: number): readonly (readonly ConstructionPosition[])[] {
   if (requests.length === 0) return [];
   return port.curveBatch({ tolerance, commands: requests.map((request) => ({
-    kind: "ribbon" as const, curve: request.curve, offsets: request.offsets, endOffsets: request.endOffsets,
+    kind: "ribbon" as const, curve: request.curve, offsets: request.offsets, endOffsets: request.endOffsets, parameters: request.parameters,
   })) }).map((result) => (result.ribbon?.outer ?? []).map(curvePosition));
 }
 

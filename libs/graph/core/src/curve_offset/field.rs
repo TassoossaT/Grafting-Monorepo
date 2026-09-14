@@ -28,6 +28,11 @@
 //! this module: it knows curves with elevation, never a road, a corridor or
 //! a station.
 
+/// How far apart in height two curves over the same ground have to be to
+/// count as different levels, in world units. Well under a storey, well over
+/// the grade a surface climbs between a boundary vertex and its own curve.
+pub const LEVEL_BAND: f32 = 1.0;
+
 /// One reference curve, already flattened to segments, carrying elevation.
 ///
 /// `y` is world height; `x`/`z` are the ground plane. Height rides along
@@ -134,6 +139,44 @@ impl ReferenceField {
                 None => true,
             };
             if closer {
+                best = Some((distance, sample));
+            }
+        }
+        best.map(|(_, sample)| sample)
+    }
+
+    /// [`Self::sample`] for a point known to lie near height `y`.
+    ///
+    /// **Plan view cannot tell levels apart.** A spiral's turns, or a ramp
+    /// passing over a road, put curves directly above one another, and the
+    /// nearest curve in `(x, z)` is then whichever one happened to be listed
+    /// first. Curves whose height at the projection lies within a metre of
+    /// `y` are preferred; nearest distance decides among
+    /// them. When none does, this answers exactly what [`Self::sample`] would.
+    pub fn sample_near(&self, x: f32, z: f32, y: f32) -> Option<FieldSample> {
+        self.nearest_on_level(x, z, y).or_else(|| self.sample(x, z))
+    }
+
+    /// [`Self::sample_owned`] for a point known to lie near height `y`: ground
+    /// is only this field's when a curve on the point's own level claims it.
+    pub fn sample_owned_near(&self, x: f32, z: f32, y: f32, slack: f32) -> Option<FieldSample> {
+        self.nearest_on_level(x, z, y).filter(|sample| {
+            self.curves
+                .get(sample.curve)
+                .is_some_and(|curve| sample.t.abs() <= curve.reach * slack.max(1.0))
+        })
+    }
+
+    fn nearest_on_level(&self, x: f32, z: f32, y: f32) -> Option<FieldSample> {
+        let mut best: Option<(f32, FieldSample)> = None;
+        for (index, curve) in self.curves.iter().enumerate() {
+            let Some((distance, sample)) = curve.project(index, x, z) else {
+                continue;
+            };
+            if (sample.y - y).abs() > LEVEL_BAND {
+                continue;
+            }
+            if best.as_ref().is_none_or(|(closest, _)| distance < *closest) {
                 best = Some((distance, sample));
             }
         }
@@ -415,6 +458,20 @@ mod tests {
         }]);
         assert_eq!(field.lattice(0.1, 512).len(), 512);
         assert!(field.lattice(0.0, 512).is_empty());
+    }
+
+    #[test]
+    fn stacked_curves_are_told_apart_by_the_height_asked_about() {
+        // Two turns of a climb over the same ground, three metres apart.
+        let field = ReferenceField::new([
+            ReferenceCurve { points: vec![[0.0, 0.0, 0.0], [10.0, 0.0, 0.0]], reach: 2.0 },
+            ReferenceCurve { points: vec![[0.0, 3.0, 0.0], [10.0, 3.0, 0.0]], reach: 2.0 },
+        ]);
+        assert_eq!(field.sample_near(5.0, 1.0, 0.2).unwrap().curve, 0);
+        assert_eq!(field.sample_near(5.0, 1.0, 2.9).unwrap().curve, 1);
+        assert!(field.sample_owned_near(5.0, 1.0, 1.6, 1.0).is_none(), "a level between both claims nothing");
+        // Nothing on the asked level falls back to plain plan-view nearest.
+        assert!(field.sample_near(5.0, 1.0, 50.0).is_some());
     }
 
     #[test]

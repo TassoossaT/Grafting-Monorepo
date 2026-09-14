@@ -1,4 +1,4 @@
-import type { ConstructionGraphSnapshot, RegionEditOutcome, ConstructionSessionPort, ConstructionPosition } from "@/ports";
+import type { BezierPort, ConstructionGraphSnapshot, RegionEditOutcome, ConstructionSessionPort, ConstructionPosition } from "@/ports";
 
 import type { AtomicEditOp, EditGesture } from "./atomic-edit.ts";
 import { addPosition, constrainToAxes } from "./atomic-edit.ts";
@@ -101,7 +101,7 @@ export function planEdit(
   cloud: CloudTopology,
   gesture: EditGesture,
   graphSnapshot?: ConstructionGraphSnapshot,
-  source?: Pick<ConstructionSessionPort, "planMotion" | "getAllRegionTopologies">,
+  source?: Pick<ConstructionSessionPort, "planMotion" | "getAllRegionTopologies"> & Partial<Pick<BezierPort, "curveBatch">>,
 ): EditPlan {
   const policy = resolvePolicy(cloud.seed, gesture.target);
   if (policy.resolve.kind === "deny") {
@@ -150,7 +150,7 @@ export function planEdit(
       for (const surfaceType of new Set(topologies.map((topology) => topology.surfaceType))) {
         const derive = structureTypeFor(surfaceType)?.deriveMotion;
         if (!derive) continue;
-        for (const [nodeId, position] of derive(topologies.filter((topology) => topology.surfaceType === surfaceType), resolvedMoves)) {
+        for (const [nodeId, position] of derive(topologies.filter((topology) => topology.surfaceType === surfaceType), resolvedMoves, { graphSnapshot, port: source.curveBatch ? source as Pick<BezierPort, "curveBatch"> : undefined })) {
           if (!moved.has(nodeId)) moved.set(nodeId, position);
         }
       }

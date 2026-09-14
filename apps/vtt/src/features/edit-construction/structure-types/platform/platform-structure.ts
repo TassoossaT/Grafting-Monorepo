@@ -1,7 +1,14 @@
-import type { ConstructionMotionInfluence, ConstructionRegionTopology } from "@/ports";
+import type { ConstructionMotionInfluence } from "@/ports";
 import { ALL_AXES } from "../../orchestration/atomic-edit.ts";
-import { interpolateStripMotion, parseStripRungEdgeId } from "../../topology/swept-strip.ts";
 import { CUT, IGNORE } from "../creation-interaction.ts";
+import {
+  deriveSlopeMotion,
+  regenerateSlopeSpine,
+  SLOPE_DEFAULT_OFFSETS,
+  SLOPE_SURFACE_TYPE,
+  slopeMotionInfluences,
+  validateSlopeMotion,
+} from "./platform-slope-spine.ts";
 import { isTerrainSurface } from "../organic/index.ts";
 import { allowed, denied, type StructureTypeDefinition } from "../structure-type.ts";
 
@@ -28,49 +35,34 @@ export const platformStructureType: StructureTypeDefinition = Object.freeze<Stru
   },
 });
 
-/** Each station's two nodes, as the face's rung edges declare them. */
-function rungs(topology: ConstructionRegionTopology): readonly (readonly [string, string])[] {
-  const seen = new Set<string>();
-  return [...topology.outerLoops, ...topology.holes].flat().flatMap((use) => {
-    if (seen.has(use.edgeId) || parseStripRungEdgeId(use.edgeId) === undefined) return [];
-    seen.add(use.edgeId);
-    return [[use.startNodeId, use.endNodeId] as const];
-  });
-}
-
 /**
- * The platform built along a curve instead of a contour: a strip whose
- * height varies along its axis and never across it -- a ramp, a sloped
+ * The platform built along a spine instead of a contour: a surface whose
+ * height varies along its curve and never across it -- a ramp, a sloped
  * walkway, a spiral climb. Stairs are this same shape with a step parameter;
  * steps are appearance, not structure.
+ *
+ * Generated from the shared spine exactly as a road is, so its control
+ * points, handles and width are edited with the same gestures; see
+ * `platform-slope-spine.ts` for what it makes of a spine.
  *
  * A sibling surface type rather than a mode read off the face, because a
  * cloud is one type: a ramp welded between two floors sharing their type
  * would join both floors and itself into one cloud, and lifting one floor
  * would carry all three.
  *
- * It keeps the flat platform's contract otherwise -- shared vertices are the
- * connection, and a floor that moves carries the ramp end welded to it. What
- * the ramp adds is how the rest of it answers: each station stays level
- * across, and the stations between a moved end and the unmoved one spread
- * the move by arc length ({@link interpolateStripMotion}) instead of the
- * last span kinking.
+ * Its faces are never grabbed directly -- the spine is what is edited. A
+ * floor that moves still carries the end welded to it: the end's control
+ * node follows, and the ramp re-places itself on the moved curve.
  */
 export const slopedPlatformStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
-  surfaceType: "platform-slope", label: "Plataforma inclinada",
-  creation: "a strip swept along an automatic bezier through control points, each with its own height",
-  roleFor: (topology, target) => target.kind === "vertex" && !topology.nodes.some((node) => node.id === target.nodeId) ? "platform-slope-unknown" : `platform-slope-${target.kind}`,
-  policyFor: (role) => role === "platform-slope-unknown" ? denied(role, "Vertice fora da plataforma inclinada.") : ({ ...allowed(role, ALL_AXES, role === "platform-slope-region" ? "cloud" : "surface"), transport: role === "platform-slope-region" }),
+  surfaceType: SLOPE_SURFACE_TYPE, label: "Plataforma inclinada",
+  creation: "one face per spine span: the span's ribbon, sampled along its bezier curve",
+  roleFor: () => "platform-slope-face",
+  policyFor: (role) => denied(role, "Edite a plataforma inclinada pela espinha: pontos, alças e largura."),
   interactionOver: () => IGNORE,
-  repairAfterCut: { kind: "unsupported", reason: "a cut strip needs its own station split and end capping, not designed yet" },
-  motionInfluences: (topology, transport): readonly ConstructionMotionInfluence[] => {
-    const axes = [transport, true, transport] as const;
-    return rungs(topology).flatMap(([a, b]) => [{ from: a, to: b, axes }, { from: b, to: a, axes }]);
-  },
-  deriveMotion: interpolateStripMotion,
-  validateMotion: (topology, positions) => {
-    const heightOf = (id: string) => (positions.get(id) ?? topology.nodes.find((node) => node.id === id)?.position)?.y ?? 0;
-    return rungs(topology).some(([a, b]) => Math.abs(heightOf(a) - heightOf(b)) > 1e-4)
-      ? "Cada secao da plataforma inclinada deve permanecer nivelada de lado a lado." : undefined;
-  },
+  repairAfterCut: { kind: "unsupported", reason: "a cut span needs its own spine split and end capping, not designed yet" },
+  motionInfluences: slopeMotionInfluences,
+  deriveMotion: deriveSlopeMotion,
+  validateMotion: validateSlopeMotion,
+  spine: Object.freeze({ defaultOffsets: SLOPE_DEFAULT_OFFSETS, regenerate: regenerateSlopeSpine }),
 });

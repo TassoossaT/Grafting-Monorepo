@@ -11,7 +11,7 @@ import {
   spineGraphFromSnapshot,
   spineGraphIn,
   spineGraphOf,
-} from "../src/features/edit-construction/structure-types/path/spine-graph/index.ts";
+} from "../src/features/edit-construction/spine/index.ts";
 import { cloudOf } from "./cloud-fixture.mjs";
 
 /**

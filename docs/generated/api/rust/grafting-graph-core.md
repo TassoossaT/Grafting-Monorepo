@@ -862,6 +862,13 @@ The convex boundary fills the outside corner without a spike or a cut to the anc
 
 Samples a ribbon with linearly varying start/end lateral offsets.
 
+### `pub fn grafting_graph_core::bezier_surface::ribbon_profile_at(curve: grafting_graph_core::bezier::CubicBezier, offsets: [f64; 2], end_offsets: [f64; 2], parameters: &[f64]) -> core::result::Result<grafting_graph_core::bezier_surface::CurveRibbon, alloc::string::String>`
+
+[`ribbon_profile`] with its cross-sections taken at explicit, ordered
+curve parameters instead of adaptive samples -- so a caller holding
+vertices at known parameters can move them with the curve without
+re-sampling it and changing how many there are.
+
 ### `pub fn grafting_graph_core::bezier_surface::union_ribbons(ribbons: &[grafting_graph_core::bezier_surface::CurveRibbon]) -> alloc::vec::Vec<grafting_graph_core::curve_offset::Polygon>`
 
 Unions coplanar ribbon contours, retaining islands as holes.
@@ -917,6 +924,17 @@ A point past a curve's end projects onto that end: `s` saturates at
 the curve's length and `y` is the end's own height, which is what a
 surface overshooting its curve -- an end cap -- should read.
 
+### `pub fn grafting_graph_core::curve_offset::ReferenceField::sample_near(&self, x: f32, z: f32, y: f32) -> core::option::Option<grafting_graph_core::curve_offset::FieldSample>`
+
+[`Self::sample`] for a point known to lie near height `y`.
+
+**Plan view cannot tell levels apart.** A spiral's turns, or a ramp
+passing over a road, put curves directly above one another, and the
+nearest curve in `(x, z)` is then whichever one happened to be listed
+first. Curves whose height at the projection lies within a metre of
+`y` are preferred; nearest distance decides among
+them. When none does, this answers exactly what [`Self::sample`] would.
+
 ### `pub fn grafting_graph_core::curve_offset::ReferenceField::sample_owned(&self, x: f32, z: f32, slack: f32) -> core::option::Option<grafting_graph_core::curve_offset::FieldSample>`
 
 [`Self::sample`], refused unless the point lies inside the matched
@@ -933,6 +951,11 @@ inherits the same answer for free.
 hair outside it -- a mitre overshooting a corner, a union vertex
 pushed out by float round-off. Multiplicative, so a wide curve gets
 proportionally more of it than a narrow one.
+
+### `pub fn grafting_graph_core::curve_offset::ReferenceField::sample_owned_near(&self, x: f32, z: f32, y: f32, slack: f32) -> core::option::Option<grafting_graph_core::curve_offset::FieldSample>`
+
+[`Self::sample_owned`] for a point known to lie near height `y`: ground
+is only this field's when a curve on the point's own level claims it.
 
 ### `pub fn grafting_graph_core::curve_offset::offset_bands(polyline: &grafting_graph_core::curve_offset::Polyline, band_offsets: &[f32], miter_limit: f32) -> alloc::vec::Vec<grafting_graph_core::curve_offset::Polygon>`
 
@@ -1750,6 +1773,13 @@ Constraint used when editing paired handles.
 
 Outgoing vector relative to the start anchor.
 
+### `pub grafting_graph_core::bezier::CurveHandles::surface_type: alloc::string::String`
+
+The surface type generated along this curve, as the application names
+it; empty leaves the choice to the caller's default consumer. The graph
+never interprets it -- it only keeps it with the curve, so every
+structure built from a spine can find its own spans.
+
 ### `pub grafting_graph_core::bezier::CurveSample::position: grafting_graph_core::bezier::CurvePoint`
 
 XYZ position.
@@ -1907,6 +1937,12 @@ Optional ending profile.
 ### `pub grafting_graph_core::bezier_commands::CurveCommand::Ribbon::offsets: [f64; 2]`
 
 Left and right offsets.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Ribbon::parameters: core::option::Option<alloc::vec::Vec<f64>>`
+
+Curve parameters to take the cross-sections at, in order. Absent,
+the ribbon is sampled adaptively at the batch tolerance -- the
+same parameters this command's own `samples` report.
 
 ### `pub grafting_graph_core::bezier_commands::CurveCommand::Sample`
 
