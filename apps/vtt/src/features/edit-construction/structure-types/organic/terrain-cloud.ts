@@ -16,9 +16,7 @@ export function isTerrainSurface(surfaceType: string): boolean {
   return (
     surfaceType === "terrain" ||
     surfaceType === "terrain-grass" ||
-    surfaceType === "ground" ||
-    surfaceType.startsWith("terrain") ||
-    surfaceType.startsWith("ground")
+    surfaceType.startsWith("terrain")
   );
 }
 

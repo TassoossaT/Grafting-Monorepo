@@ -3723,7 +3723,8 @@ export function terrainStandingAround(
   within: TerrainStrokeBounds,
   reach: number,
   ): readonly ConstructionRegionTopology[] {
-  const terrainCovered = covered.filter((region) => isTerrainSurface(region.surfaceType));
+  return runtime.getRegionTopologiesInBounds({
+  minX: within.minX - reach,
 export interface HeightField {
   at(point: { readonly x: number; readonly z: number }): number | undefined;
   }
@@ -4992,9 +4993,7 @@ export function isTerrainSurface(surfaceType: string): boolean {
   return (
   surfaceType === "terrain" ||
   surfaceType === "terrain-grass" ||
-  surfaceType === "ground" ||
-  surfaceType.startsWith("terrain") ||
-  surfaceType.startsWith("ground")
+  surfaceType.startsWith("terrain")
   );
 export function terrainCloudPerimeter(cloud: CloudTopology): readonly PerimeterLoop[] {
   return perimeterOf(cloud.members);

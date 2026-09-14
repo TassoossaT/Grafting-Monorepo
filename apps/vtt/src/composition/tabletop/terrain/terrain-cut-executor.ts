@@ -85,7 +85,7 @@ function insideSwept(point: ConstructionPosition, swept: MultiPolygon): boolean 
 function faceIntersectsArea(
   topology: ConstructionRegionTopology,
   area: StructuralCutArea,
-  outline: readonly (readonly [number, number])[],
+  outline?: readonly (readonly [number, number])[],
 ): boolean {
   if (area.sweptPolygon && area.sweptPolygon.length > 0) {
     for (const node of topology.nodes) {
@@ -93,10 +93,19 @@ function faceIntersectsArea(
     }
     return insideSwept(centroidOf(topology.nodes), area.sweptPolygon);
   }
-  for (const node of topology.nodes) {
-    if (insidePolygon(node.position, outline)) return true;
+  if (outline && outline.length > 0) {
+    for (const node of topology.nodes) {
+      if (insidePolygon(node.position, outline)) return true;
+    }
+    return insidePolygon(centroidOf(topology.nodes), outline);
   }
-  return insidePolygon(centroidOf(topology.nodes), outline);
+  if (area.outline && area.outline.length > 0) {
+    for (const node of topology.nodes) {
+      if (insidePolygon(node.position, area.outline)) return true;
+    }
+    return insidePolygon(centroidOf(topology.nodes), area.outline);
+  }
+  return false;
 }
 
 /**
@@ -882,9 +891,12 @@ export function executeTerrainCut(
   }
 
   const affectedNodes = affected.flatMap((t) => t.nodes);
+  const strokePathNodes = request.area.path?.map((p) => ({ position: { x: p.x, y: p.y ?? 0, z: p.z } })) ?? [];
+  const outlineNodes = request.area.outline?.map(([x, z]) => ({ position: { x, y: 0, z } })) ?? [];
+  const fallbackNodes = strokePathNodes.length > 0 ? strokePathNodes : outlineNodes;
   const center3D =
     request.area.center ??
-    centroidOf(affectedNodes.length > 0 ? affectedNodes : coveredOutline.map(([x, z]) => ({ position: { x, y: 0, z } })));
+    centroidOf(affectedNodes.length > 0 ? affectedNodes : fallbackNodes);
   const center = { x: center3D.x, z: center3D.z };
   const extentRadius = Math.max((coveredExtent.maxX - coveredExtent.minX) / 2, (coveredExtent.maxZ - coveredExtent.minZ) / 2, effectiveFaceSide);
   const radius = request.area.radius ?? extentRadius;

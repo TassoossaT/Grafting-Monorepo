@@ -6,12 +6,13 @@ import { executeTerrainCut } from "../src/composition/tabletop/terrain/terrain-c
 import { terrainSculptTool } from "../src/composition/tabletop/tools/terrain/terrain-sculpt-tool.ts";
 import { DEFAULT_TOOL_PARAMS } from "../src/features/edit-construction/tools/tool-types.ts";
 
-test("isTerrainSurface: accepts only terrain/ground variants and rejects structural types", () => {
+test("isTerrainSurface: accepts only terrain variants and rejects non-terrain surface types", () => {
   assert.equal(isTerrainSurface("terrain"), true);
   assert.equal(isTerrainSurface("terrain-grass"), true);
   assert.equal(isTerrainSurface("terrain-snow"), true);
-  assert.equal(isTerrainSurface("ground"), true);
 
+  // Structural and non-terrain types must all be rejected:
+  assert.equal(isTerrainSurface("ground"), false);
   assert.equal(isTerrainSurface("wall-white"), false);
   assert.equal(isTerrainSurface("wall-gray"), false);
   assert.equal(isTerrainSurface("platform"), false);
@@ -23,7 +24,7 @@ test("isTerrainSurface: accepts only terrain/ground variants and rejects structu
   assert.equal(isTerrainSurface("ceiling"), false);
 });
 
-test("executeTerrainCut: ignores non-terrain topologies in bounds and never treats them as retained terrain or affected", () => {
+test("executeTerrainCut: isolates non-terrain structures (never splits edges or mutates vertices of walls/platforms)", () => {
   const wallTopology = {
     surfaceKey: ["wall", "w1"],
     surfaceType: "wall-white",
@@ -34,13 +35,20 @@ test("executeTerrainCut: ignores non-terrain topologies in bounds and never trea
       { id: "w2", position: { x: 4, y: 3, z: 0 } },
       { id: "w3", position: { x: 0, y: 3, z: 0 } },
     ],
-    outerLoops: [],
+    outerLoops: [
+      [
+        { startNodeId: "w0", endNodeId: "w1", forward: true },
+        { startNodeId: "w1", endNodeId: "w2", forward: true },
+        { startNodeId: "w2", endNodeId: "w3", forward: true },
+        { startNodeId: "w3", endNodeId: "w0", forward: true },
+      ],
+    ],
     holes: [],
   };
 
   const appliedPatches = [];
   const appliedReplacements = [];
-  const deletedOps = [];
+  const regionEditOps = [];
 
   const mockRuntime = {
     getFootprintCoverage: () => [{ surfaceKey: ["wall", "w1"], surfaceType: "wall-white", coverage: "centroid" }],
@@ -66,12 +74,12 @@ test("executeTerrainCut: ignores non-terrain topologies in bounds and never trea
       return { createdSurfaceKeys: [["terrain", "t1"]], removedSurfaceKeys: [], skippedRegionIds: [] };
     },
     applyRegionEdit: (ops) => {
-      deletedOps.push(...ops);
+      regionEditOps.push(...ops);
     },
   };
 
-  // 1. Calling with targetSurfaceType as a non-terrain type (e.g. wall-white) falls back to "terrain"
-  // and does NOT delete or replace the wall.
+  // Calling with targetSurfaceType as a non-terrain type (e.g. wall-white) falls back to "terrain"
+  // and does NOT delete or replace the wall, and does NOT split its edges.
   const outcome = executeTerrainCut(mockRuntime, {
     area: {
       outline: [
@@ -89,15 +97,73 @@ test("executeTerrainCut: ignores non-terrain topologies in bounds and never trea
   });
 
   assert.equal(outcome.success, true);
-  // Wall should NOT be in removed / replaced
   assert.equal(outcome.removedFaces, 0, "non-terrain faces must not be counted as affected or removed");
   assert.equal(appliedReplacements.length, 0, "must not call applyPatchReplacement on non-terrain faces");
   assert.equal(appliedPatches.length, 1, "adds fresh terrain patch");
-  // The generated patch MUST have surfaceType: "terrain", NOT "wall-white"
   assert.equal(appliedPatches[0].regions[0].surfaceType, "terrain", "generated terrain must have terrain surfaceType");
+
+  // CRITICAL: verify zero edge splits or vertex mutations on the wall
+  const edgeSplits = regionEditOps.filter((op) => op.kind === "split-edge");
+  assert.equal(edgeSplits.length, 0, "must never split edges of non-terrain topologies");
 });
 
-test("executeTerrainCut: hole profile never deletes non-terrain faces", () => {
+test("terrainSculptTool: add mode creates terrain successfully even when starting on empty ground", () => {
+  const feedbacks = [];
+  const addedPatches = [];
+
+  const mockContext = {
+    tableId: "table-1",
+    nextSequence: () => 1,
+    reportFeedback: (fb) => feedbacks.push(fb),
+    runtime: {
+      getFootprintCoverage: () => [],
+      getAllRegionTopologies: () => [],
+      getRegionTopologiesInBounds: () => [],
+      getSnapshot: () => ({ tableId: "table-1", map: { nodePositions: new Map() } }),
+      generateHeightmap: () => new Float32Array(100),
+      generateIrregularQuadGrid: () => ({
+        vertices: [
+          { x: 1, z: 1 },
+          { x: 3, z: 1 },
+          { x: 3, z: 3 },
+          { x: 1, z: 3 },
+        ],
+        quads: [[0, 1, 2, 3]],
+        onContour: [],
+      }),
+      addPatch: (patch) => {
+        addedPatches.push(patch);
+        return { createdSurfaceKeys: [["terrain", "t1"]], removedSurfaceKeys: [], skippedRegionIds: [] };
+      },
+      applyPatchReplacement: () => ({ createdSurfaceKeys: [], removedSurfaceKeys: [], skippedRegionIds: [] }),
+      applyRegionEdit: () => {},
+    },
+  };
+
+  const gesture = {
+    samples: [
+      { point: { x: 2, y: 0, z: 2 } },
+      { point: { x: 4, y: 0, z: 2 } },
+    ],
+  };
+
+  terrainSculptTool.onPointerUp(mockContext, gesture, {
+    ...DEFAULT_TOOL_PARAMS["terrain-sculpt"],
+    mode: "add",
+  });
+
+  assert.equal(feedbacks.length, 1);
+  assert.equal(feedbacks[0].tone, "success");
+  assert.match(feedbacks[0].message, /Terreno: \d+ faces elevadas/);
+  assert.equal(addedPatches.length, 1);
+  assert.equal(addedPatches[0].regions[0].surfaceType, "terrain");
+});
+
+test("terrainSculptTool: add mode overlapping a wall creates terrain without modifying wall and without error", () => {
+  const feedbacks = [];
+  const addedPatches = [];
+  const regionEditOps = [];
+
   const wallTopology = {
     surfaceKey: ["wall", "w1"],
     surfaceType: "wall-white",
@@ -108,45 +174,17 @@ test("executeTerrainCut: hole profile never deletes non-terrain faces", () => {
       { id: "w2", position: { x: 4, y: 3, z: 0 } },
       { id: "w3", position: { x: 0, y: 3, z: 0 } },
     ],
-    outerLoops: [],
+    outerLoops: [
+      [
+        { startNodeId: "w0", endNodeId: "w1", forward: true },
+        { startNodeId: "w1", endNodeId: "w2", forward: true },
+        { startNodeId: "w2", endNodeId: "w3", forward: true },
+        { startNodeId: "w3", endNodeId: "w0", forward: true },
+      ],
+    ],
     holes: [],
   };
 
-  const deleted = [];
-  const mockRuntime = {
-    getFootprintCoverage: () => [{ surfaceKey: ["wall", "w1"], surfaceType: "wall-white" }],
-    getAllRegionTopologies: () => [wallTopology],
-    getRegionTopologiesInBounds: () => [wallTopology],
-    getSnapshot: () => ({ tableId: "t", map: { nodePositions: new Map() } }),
-    applyRegionEdit: (ops) => {
-      for (const op of ops) {
-        if (op.kind === "delete-region") deleted.push(op.surfaceKey.join(" "));
-      }
-    },
-  };
-
-  const outcome = executeTerrainCut(mockRuntime, {
-    area: {
-      outline: [
-        [-1, -1],
-        [5, -1],
-        [5, 5],
-        [-1, 5],
-      ],
-      radius: 4,
-    },
-    targetSurfaceType: "terrain",
-    profile: { kind: "hole" },
-    causeId: "test-cause",
-    tableId: "t",
-  });
-
-  assert.equal(outcome.success, false, "hole profile on non-terrain surfaces must fail gracefully");
-  assert.equal(deleted.length, 0, "no non-terrain regions should be deleted");
-});
-
-test("terrainSculptTool: add mode refuses to paint over non-terrain structures (coverage = centroid)", () => {
-  const feedbacks = [];
   const mockContext = {
     tableId: "table-1",
     nextSequence: () => 1,
@@ -160,14 +198,35 @@ test("terrainSculptTool: add mode refuses to paint over non-terrain structures (
           nodeIds: ["w0", "w1", "w2", "w3"],
         },
       ],
+      getAllRegionTopologies: () => [wallTopology],
+      getRegionTopologiesInBounds: () => [wallTopology],
       getSnapshot: () => ({ tableId: "table-1", map: { nodePositions: new Map() } }),
+      generateHeightmap: () => new Float32Array(100),
+      generateIrregularQuadGrid: () => ({
+        vertices: [
+          { x: 1, z: 1 },
+          { x: 3, z: 1 },
+          { x: 3, z: 3 },
+          { x: 1, z: 3 },
+        ],
+        quads: [[0, 1, 2, 3]],
+        onContour: [],
+      }),
+      addPatch: (patch) => {
+        addedPatches.push(patch);
+        return { createdSurfaceKeys: [["terrain", "t1"]], removedSurfaceKeys: [], skippedRegionIds: [] };
+      },
+      applyPatchReplacement: () => ({ createdSurfaceKeys: [], removedSurfaceKeys: [], skippedRegionIds: [] }),
+      applyRegionEdit: (ops) => {
+        regionEditOps.push(...ops);
+      },
     },
   };
 
   const gesture = {
     samples: [
       { point: { x: 2, y: 0, z: 2 } },
-      { point: { x: 3, y: 0, z: 2 } },
+      { point: { x: 4, y: 0, z: 2 } },
     ],
   };
 
@@ -177,8 +236,13 @@ test("terrainSculptTool: add mode refuses to paint over non-terrain structures (
   });
 
   assert.equal(feedbacks.length, 1);
-  assert.equal(feedbacks[0].tone, "info");
-  assert.match(feedbacks[0].message, /terrain cannot be created above "wall-white"/);
+  assert.equal(feedbacks[0].tone, "success");
+  assert.equal(addedPatches.length, 1);
+  assert.equal(addedPatches[0].regions[0].surfaceType, "terrain");
+
+  // Zero edge splits on the wall
+  const edgeSplits = regionEditOps.filter((op) => op.kind === "split-edge");
+  assert.equal(edgeSplits.length, 0, "must not split wall edges when painting terrain");
 });
 
 test("terrainSculptTool: dig mode reports info and does nothing when only non-terrain structures are covered", () => {

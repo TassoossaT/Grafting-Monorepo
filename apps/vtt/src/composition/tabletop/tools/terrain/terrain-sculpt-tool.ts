@@ -1,4 +1,4 @@
-import { DEFAULT_TOOL_PARAMS, deriveFaceSize, isTerrainSurface, resolveCoverage } from "../../../../features/edit-construction/index.ts";
+import { DEFAULT_TOOL_PARAMS, deriveFaceSize, isTerrainSurface } from "../../../../features/edit-construction/index.ts";
 import type { TerrainSculptParams } from "@/features/edit-construction";
 import type {
   ConstructionCoveredRegion,
@@ -201,19 +201,20 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     const covered = coveredByStroke(ctx, swept);
     const coveredTerrain = covered.find((c) => isTerrainSurface(c.surfaceType));
     const targetSurface =
-      coveredTerrain && isTerrainSurface(coveredTerrain.surfaceType)
-        ? coveredTerrain.surfaceType
-        : params.targetSurface && isTerrainSurface(params.targetSurface)
-          ? params.targetSurface
+      params.targetSurface && isTerrainSurface(params.targetSurface)
+        ? params.targetSurface
+        : coveredTerrain && isTerrainSurface(coveredTerrain.surfaceType)
+          ? coveredTerrain.surfaceType
           : "terrain";
 
     if (isFlatten) {
+      const coveredTerrainRegions = covered.filter((c) => isTerrainSurface(c.surfaceType));
       const raised =
-        covered.length > 0
+        coveredTerrainRegions.length > 0
           ? restackTerrain(
               ctx,
               targetSurface,
-              covered,
+              coveredTerrainRegions,
               causeId,
               dirtLoadOver(gesture.samples.map((sample) => sample.point), brushRadius),
               "flatten",
@@ -260,15 +261,6 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     }
 
     if (isAdd) {
-      const resolved = resolveCoverage(targetSurface, covered);
-      const refusal = resolved.find(
-        (entry) => entry.covered.coverage === "centroid" && entry.interaction.kind === "forbid",
-      );
-      if (refusal !== undefined && refusal.interaction.kind === "forbid") {
-        ctx.reportFeedback({ tone: "info", message: refusal.interaction.reason });
-        return;
-      }
-
       const coveredTerrainRegions = covered.filter((c) => isTerrainSurface(c.surfaceType));
       const { minX, minZ, maxX, maxZ } = boundsOf(swept);
       const originX = Math.floor(minX / NOISE_SPACING) - 1;
