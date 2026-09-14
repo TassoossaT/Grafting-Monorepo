@@ -7,8 +7,6 @@ import { scopedToolId, type ConstructionTool, type PointerSample, type ToolConte
 import { polylineSegmentsPreview, segmentsPreview } from "../shapes/preview-shapes.ts";
 import { circleContour, previewOutline } from "../tower/tower-geometry.ts";
 import { groupLoopsByContainment, splitContourAtPoints, weldedMerge, type DirectedContourEdge } from "./platform-contour-merge.ts";
-import { commitPlatformSlope, slopeControlPoint, spiralControlPoints, straightRampOutline, straightRampPoints } from "./platform-slope.ts";
-
 type Params = ToolParamsByTool["platform-contour"];
 const COLOR = 0x79b8e8;
 /** Same corner-weld tolerance a wall run already snaps onto an existing column with. */
@@ -192,13 +190,6 @@ export const platformContourTool: ConstructionTool<"platform-contour"> = {
     const points = draft(ctx,params);
     const effective = parametersAt(ctx,points[0] ?? gesture.start,params);
     const shape = params.shape ?? "rectangle";
-    if (shape === "spiral") {
-      try { return polylineSegmentsPreview(spiralControlPoints(slopeControlPoint(ctx, gesture.current), params), COLOR); } catch { return undefined; }
-    }
-    if (shape === "slope") {
-      const [from, to] = straightRampPoints(ctx, gesture.start, gesture.current, params);
-      return polylineSegmentsPreview(straightRampOutline(from, to, params.width ?? 1.5), COLOR);
-    }
     if (shape === "rectangle" && gesture.start.point.x === gesture.current.point.x && gesture.start.point.z === gesture.current.point.z) return undefined;
     if (shape === "circle") return segmentsPreview(previewOutline({ ...gesture.current.point, y: effective.elevation },params.radius ?? 2.5,48),COLOR);
     const samples = shape === "rectangle" ? rectangle(gesture.start,gesture.current,effective.elevation) : [...points,...gesture.samples];
@@ -207,11 +198,7 @@ export const platformContourTool: ConstructionTool<"platform-contour"> = {
   },
   onClick(ctx,sample,params) {
     const shape = params.shape ?? "rectangle";
-    if (shape === "spiral") {
-      commitPlatformSlope(ctx, spiralControlPoints(slopeControlPoint(ctx, sample), params), params);
-    } else if (shape === "slope") {
-      ctx.reportFeedback({ tone: "info", message: "Arraste do início ao fim da rampa; ela sobe a altura escolhida em Subida." });
-    } else if (shape === "circle") {
+    if (shape === "circle") {
       const effective = parametersAt(ctx,sample,params);
       commitPlatformShape(ctx,circleContour({ ...sample.point,y:effective.elevation },params.radius ?? 2.5),effective);
     } else if (shape === "polygon") {
@@ -229,16 +216,8 @@ export const platformContourTool: ConstructionTool<"platform-contour"> = {
   },
   onPointerUp(ctx,gesture,params) {
     const shape = params.shape ?? "rectangle";
-    if (shape === "circle" || shape === "polygon" || shape === "spiral") return;
+    if (shape === "circle" || shape === "polygon") return;
     if (gesture.samples.length < 2) return;
-    if (shape === "slope") {
-      const [from, to] = straightRampPoints(ctx, gesture.start, gesture.current, params);
-      if (Math.hypot(to.x - from.x, to.z - from.z) < 0.5) {
-        ctx.reportFeedback({ tone: "error", message: "Arraste mais longe para desenhar a rampa." }); return;
-      }
-      commitPlatformSlope(ctx, [from, to], params);
-      return;
-    }
     const effective = parametersAt(ctx,gesture.start,params);
     if (shape === "rectangle") {
       if (Math.abs(gesture.start.point.x-gesture.current.point.x)<1e-5 || Math.abs(gesture.start.point.z-gesture.current.point.z)<1e-5) {

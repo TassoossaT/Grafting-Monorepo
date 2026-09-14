@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { controlSectionId, createPathBrushEffect, curvePickId, pathFormationFor, planBezierEdit, planEdit, planPathCloudMutation, resolveCloudTopology } from "../src/features/edit-construction/index.ts";
-import { platformContourTool } from "../src/composition/tabletop/tools/platform/platform-contour-tool.ts";
-import { commitPlatformSlope } from "../src/composition/tabletop/tools/platform/platform-slope.ts";
+import { slopeRampTool, slopeSpiralTool } from "../src/composition/tabletop/tools/slope/slope-tools.ts";
+import { commitPlatformSlope } from "../src/composition/tabletop/tools/slope/slope-commit.ts";
 import { dispatchCutRepairs } from "../src/composition/tabletop/interference/type-interference-dispatch.ts";
 import { addFace, sessionFixture } from "./platform-session-fixture.mjs";
 
-const params = { mode: "create", elevation: 0, shape: "slope", width: 2 };
+const params = { width: 2 };
 const floor = (runtime, prefix, x0, y) => addFace(runtime, prefix, "platform",
   [[x0, 0], [x0 + 4, 0], [x0 + 4, 4], [x0, 4]].map(([x, z], i) => ({ id: `${prefix}:${i}`, position: { x, y, z } })));
 const faces = (runtime, type) => runtime.getAllRegionTopologies().filter((t) => t.surfaceType === type);
@@ -108,7 +108,7 @@ test("the ramp's spine takes the road's handle, midpoint and width edits, regene
 test("a spiral is one spine, one face per span, meshed on its own turn", () => {
   const { ctx, runtime, session, calls } = sessionFixture();
   try {
-    platformContourTool.onClick(ctx, { point: { x: 20, y: 1, z: 0 } }, { ...params, shape: "spiral", radius: 3, turns: 1.5, rise: 4 });
+    slopeSpiralTool.onClick(ctx, { point: { x: 20, y: 1, z: 0 } }, { ...params, radius: 3, turns: 1.5, rise: 4 });
     const ramp = faces(runtime, "platform-slope");
     assert.equal(ramp.length, 12, JSON.stringify(calls.feedback));
     assert.equal(slopeSpans(runtime).length, 12);
@@ -173,9 +173,9 @@ test("dragging draws a straight ramp that climbs the fixed rise from the start's
   const { ctx, runtime, session, calls } = sessionFixture();
   try {
     const start = { point: { x: 0, y: 0.5, z: 0 } }, end = { point: { x: 6, y: 0, z: 1 } };
-    const preview = platformContourTool.previewFor({ start, current: end, samples: [start, end] }, { ...params, rise: 2 }, ctx);
+    const preview = slopeRampTool.previewFor({ start, current: end, samples: [start, end] }, { ...params, rise: 2 }, ctx);
     assert.ok(preview, "the drag previews the ramp");
-    platformContourTool.onPointerUp(ctx, { start, current: end, samples: [start, end] }, { ...params, rise: 2 });
+    slopeRampTool.onPointerUp(ctx, { start, current: end, samples: [start, end] }, { ...params, rise: 2 });
     const spans = slopeSpans(runtime);
     assert.equal(spans.length, 1, JSON.stringify(calls.feedback));
     assert.equal(node(runtime, spans[0].startNodeId).position.y, 0.5);
@@ -199,7 +199,7 @@ test("a ramp over terrain cuts it and hands the terrain to its regeneration, on 
   try {
     const ground = addFace(runtime, "ground", "terrain", [[-10, -10], [10, -10], [10, 10], [-10, 10]].map(([x, z], i) => ({ id: `ground:${i}`, position: { x, y: 0, z } })));
     const start = { point: { x: -3, y: 0, z: 0 } }, end = { point: { x: 4, y: 0, z: 1 } };
-    platformContourTool.onPointerUp(ctx, { start, current: end, samples: [start, end] }, { ...params, rise: 2 });
+    slopeRampTool.onPointerUp(ctx, { start, current: end, samples: [start, end] }, { ...params, rise: 2 });
     const created = requests.at(-1);
     assert.equal(created.patch.regions[0].surfaceType, "platform-slope", JSON.stringify(calls.feedback));
     assert.ok(created.footprintOutline?.length >= 3, "creation claims its footprint");
@@ -225,7 +225,7 @@ test("a ramp dragged from a floor edge to the next floor's height welds both end
     floor(runtime, "low", 0, 0);
     floor(runtime, "high", 10, 3);
     const start = { point: { x: 4, y: 0, z: 2 } }, end = { point: { x: 10, y: 0, z: 2 } };
-    platformContourTool.onPointerUp(ctx, { start, current: end, samples: [start, end] }, { ...params, rise: 3 });
+    slopeRampTool.onPointerUp(ctx, { start, current: end, samples: [start, end] }, { ...params, rise: 3 });
     assert.ok(calls.feedback.at(-1).message.includes("2 ponta"), JSON.stringify(calls.feedback));
   } finally { session.free(); }
 });

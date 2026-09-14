@@ -4103,23 +4103,6 @@ export const platformContourTool: ConstructionTool<"platform-contour"> = {
   previewFor(gesture, params, ctx) {
   const points = draft(ctx,params);
 
-// src/composition/tabletop/tools/platform/platform-slope.ts
-export function slopeControlPoint(ctx: ToolContext, sample: PointerSample): ConstructionPosition {
-  const node = sample.nodeId ? ctx.runtime.getGraphSnapshot().nodes.find((n) => n.id === sample.nodeId) : undefined;
-  return { ...sample.point, y: node?.position.y ?? sample.point.y };
-export function straightRampPoints(ctx: ToolContext, start: PointerSample, end: PointerSample, params: Params): readonly [ConstructionPosition, ConstructionPosition] {
-  const from = slopeControlPoint(ctx, start);
-export function straightRampOutline(from: ConstructionPosition, to: ConstructionPosition, width: number): readonly ConstructionPosition[] {
-  const dx = to.x - from.x, dz = to.z - from.z;
-  const length = Math.hypot(dx, dz);
-export function spiralControlPoints(center: ConstructionPosition, params: Params): readonly ConstructionPosition[] {
-  const radius = params.radius ?? 2.5, turns = params.turns ?? 1, rise = params.rise ?? 3;
-  if (!(radius > 0) || !(turns > 0) || !Number.isFinite(rise)) throw new Error("Raio e voltas devem ser positivos.");
-export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly ConstructionPosition[], params: Params): void {
-  try {
-  const width = params.width ?? 1.5;
-  if (!(width > 0)) throw new Error("A largura deve ser positiva.");
-
 // src/composition/tabletop/tools/roof/roof-tool.ts
 export const ROOF_OVERHANG = 0.2;
 export function commitRoof(ctx: ToolContext, capRequest: CapRequest): void {
@@ -4283,6 +4266,44 @@ export function circularBrushStrokeOutline(
   ): PreviewDescriptor {
   const positions: number[] = [];
   if (samples.length === 0) return { kind: "segments", color, opacity, positions: new Float32Array() };
+
+// src/composition/tabletop/tools/slope/slope-commit.ts
+export interface SlopeParams {
+  readonly width?: number;
+  readonly rise?: number;
+  readonly radius?: number;
+  readonly turns?: number;
+  }
+export function slopeControlPoint(ctx: ToolContext, sample: PointerSample): ConstructionPosition {
+  const node = sample.nodeId ? ctx.runtime.getGraphSnapshot().nodes.find((n) => n.id === sample.nodeId) : undefined;
+  return { ...sample.point, y: node?.position.y ?? sample.point.y };
+export function straightRampPoints(ctx: ToolContext, start: PointerSample, end: PointerSample, params: Params): readonly [ConstructionPosition, ConstructionPosition] {
+  const from = slopeControlPoint(ctx, start);
+export function straightRampOutline(from: ConstructionPosition, to: ConstructionPosition, width: number): readonly ConstructionPosition[] {
+  const dx = to.x - from.x, dz = to.z - from.z;
+  const length = Math.hypot(dx, dz);
+export function spiralControlPoints(center: ConstructionPosition, params: Params): readonly ConstructionPosition[] {
+  const radius = params.radius ?? 2.5, turns = params.turns ?? 1, rise = params.rise ?? 3;
+  if (!(radius > 0) || !(turns > 0) || !Number.isFinite(rise)) throw new Error("Raio e voltas devem ser positivos.");
+export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly ConstructionPosition[], params: Params): void {
+  try {
+  const width = params.width ?? 1.5;
+  if (!(width > 0)) throw new Error("A largura deve ser positiva.");
+
+// src/composition/tabletop/tools/slope/slope-tools.ts
+export const slopeRampTool: ConstructionTool<"slope-ramp"> = {
+  id: "slope-ramp",
+  previewOnHover: true,
+  defaultParams: () => DEFAULT_TOOL_PARAMS["slope-ramp"],
+  previewFor(gesture, params, ctx) {
+  const [from, to] = straightRampPoints(ctx, gesture.start, gesture.current, params);
+export const slopeSpiralTool: ConstructionTool<"slope-spiral"> = {
+  id: "slope-spiral",
+  previewOnHover: true,
+  defaultParams: () => DEFAULT_TOOL_PARAMS["slope-spiral"],
+  previewFor(gesture, params, ctx) {
+  try {
+  return polylineSegmentsPreview(spiralControlPoints(slopeControlPoint(ctx, gesture.current), params), COLOR);
 
 // src/composition/tabletop/tools/terrain/terrain-sculpt-tool.ts
 export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {

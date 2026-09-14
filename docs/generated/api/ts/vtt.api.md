@@ -2035,11 +2035,11 @@ shared run), or when the survivors do not close into whole loops.
 
 ### `variable vtt.platform-contour-tool.platformContourTool: ConstructionTool<"platform-contour">`
 
-### `function vtt.platform-contour-tool.commitPlatformContour(ctx: ToolContext, samples: readonly PointerSample[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; rise?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand" | "slope" | "spiral"; tolerance?: number; turns?: number; width?: number }): void`
+### `function vtt.platform-contour-tool.commitPlatformContour(ctx: ToolContext, samples: readonly PointerSample[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; tolerance?: number }): void`
 
 Polygon entry point retained for callers that already have explicit corners.
 
-### `function vtt.platform-contour-tool.commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; rise?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand" | "slope" | "spiral"; tolerance?: number; turns?: number; width?: number }, pickedSamples: readonly PointerSample[]): void`
+### `function vtt.platform-contour-tool.commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; tolerance?: number }, pickedSamples: readonly PointerSample[]): void`
 
 Commits the same directed line/arc contour vocabulary consumed by wall
 construction. Ampliar/juntar and recortar/separar no longer run an
@@ -2047,33 +2047,6 @@ analytic boolean against the standing platform: the stroke has to weld
 onto the existing boundary (within WELD_TOLERANCE, the same one a
 wall run snaps onto a column with) and the result is assembled from
 shared/cancelled edges -- see `platform-contour-merge.ts` for why.
-
-### `function vtt.platform-slope.commitPlatformSlope(ctx: ToolContext, controlPoints: readonly ConstructionPosition[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; rise?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand" | "slope" | "spiral"; tolerance?: number; turns?: number; width?: number }): void`
-
-Commits one sloped platform: a spine through `controlPoints`, owned by the
-sloped platform type, and the faces generated from it. An end that lands
-on a flat platform's edge at its own height meets that edge square on and
-is welded into it.
-
-### `function vtt.platform-slope.slopeControlPoint(ctx: ToolContext, sample: PointerSample): ConstructionPosition`
-
-A control point's height comes from what the pointer actually touched: a node's own height, else the picked surface.
-
-### `function vtt.platform-slope.spiralControlPoints(center: ConstructionPosition, params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; rise?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand" | "slope" | "spiral"; tolerance?: number; turns?: number; width?: number }): readonly ConstructionPosition[]`
-
-The spiral preset: control points of a helix around `center`, climbing
-`rise` over `turns` turns. Eight per turn keeps the automatic curve round.
-A preset only chooses points -- the result is an ordinary spine.
-
-### `function vtt.platform-slope.straightRampOutline(from: ConstructionPosition, to: ConstructionPosition, width: number): readonly ConstructionPosition[]`
-
-The ramp's outline while dragging: both margins at its real width, climbing with it.
-
-### `function vtt.platform-slope.straightRampPoints(ctx: ToolContext, start: PointerSample, end: PointerSample, params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; rise?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand" | "slope" | "spiral"; tolerance?: number; turns?: number; width?: number }): readonly [ConstructionPosition, ConstructionPosition]`
-
-The straight ramp preset: from where the drag starts, at that height, to
-where it ends, `rise` higher. A preset only chooses points -- the result is
-an ordinary spine.
 
 ### `variable vtt.roof-tool.ROOF_OVERHANG: 0.2`
 
@@ -2194,6 +2167,53 @@ An open line ghost from `start` to `end` -- a wall-brush's centerline while drag
 ### `function vtt.preview-shapes.segmentsPreview(positions: readonly number[] | Float32Array<ArrayBufferLike>, color: number, opacity: number): PreviewDescriptor`
 
 Builds a PreviewDescriptor for a set of straight segment pairs (e.g. wall centerline ghost).
+
+### `interface vtt.slope-commit.SlopeParams`
+
+What every way of drawing a sloped platform may decide; each tool fills the part it offers.
+
+### `property vtt.slope-commit.SlopeParams.radius?: number`
+
+### `property vtt.slope-commit.SlopeParams.rise?: number`
+
+### `property vtt.slope-commit.SlopeParams.turns?: number`
+
+### `property vtt.slope-commit.SlopeParams.width?: number`
+
+### `function vtt.slope-commit.commitPlatformSlope(ctx: ToolContext, controlPoints: readonly ConstructionPosition[], params: SlopeParams): void`
+
+Commits one sloped platform: a spine through `controlPoints`, owned by the
+sloped platform type, and the faces generated from it. An end that lands
+on a flat platform's edge at its own height meets that edge square on and
+is welded into it.
+
+### `function vtt.slope-commit.slopeControlPoint(ctx: ToolContext, sample: PointerSample): ConstructionPosition`
+
+A control point's height comes from what the pointer actually touched: a node's own height, else the picked surface.
+
+### `function vtt.slope-commit.spiralControlPoints(center: ConstructionPosition, params: SlopeParams): readonly ConstructionPosition[]`
+
+The spiral preset: control points of a helix around `center`, climbing
+`rise` over `turns` turns. Eight per turn keeps the automatic curve round.
+A preset only chooses points -- the result is an ordinary spine.
+
+### `function vtt.slope-commit.straightRampOutline(from: ConstructionPosition, to: ConstructionPosition, width: number): readonly ConstructionPosition[]`
+
+The ramp's outline while dragging: both margins at its real width, climbing with it.
+
+### `function vtt.slope-commit.straightRampPoints(ctx: ToolContext, start: PointerSample, end: PointerSample, params: SlopeParams): readonly [ConstructionPosition, ConstructionPosition]`
+
+The straight ramp preset: from where the drag starts, at that height, to
+where it ends, `rise` higher. A preset only chooses points -- the result is
+an ordinary spine.
+
+### `variable vtt.slope-tools.slopeRampTool: ConstructionTool<"slope-ramp">`
+
+Drag from the start to the end; the ramp climbs the fixed rise.
+
+### `variable vtt.slope-tools.slopeSpiralTool: ConstructionTool<"slope-spiral">`
+
+Click the centre; the spiral climbs the rise over its turns.
 
 ### `variable vtt.terrain-sculpt-tool.terrainSculptTool: ConstructionTool<"terrain-sculpt">`
 
@@ -4827,9 +4847,17 @@ Perlin `scale` -- smaller values are smoother/larger-scale terrain features.
 
 ### `property vtt.tool-types.ToolParamsByTool.path-brush: PathBrushParams`
 
-### `property vtt.tool-types.ToolParamsByTool.platform-contour: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; rise?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand" | "slope" | "spiral"; tolerance?: number; turns?: number; width?: number }`
+### `property vtt.tool-types.ToolParamsByTool.platform-contour: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; tolerance?: number }`
 
 ### `property vtt.tool-types.ToolParamsByTool.roof: { curvatures: readonly [number, number, number, number]; elevation: number; height: number; radius: number; shape: "rectangle" | "circle" | "platform" }`
+
+### `property vtt.tool-types.ToolParamsByTool.slope-ramp: { rise: number; width: number }`
+
+A straight sloped platform dragged from start to end, climbing a fixed rise.
+
+### `property vtt.tool-types.ToolParamsByTool.slope-spiral: { radius: number; rise: number; turns: number; width: number }`
+
+A spiral sloped platform stamped around a clicked centre.
 
 ### `property vtt.tool-types.ToolParamsByTool.terrain-sculpt: TerrainSculptParams`
 
@@ -4903,7 +4931,7 @@ Length of a panel's own vertical edge, in world units.
 
 ### `type vtt.tool-types.BrushShapeKind = "circle" | "square" | "hexagon"`
 
-### `type vtt.tool-types.ConstructionToolId = "navigate" | "edit-region" | "platform-contour" | "roof" | "path-brush" | "wall-brush" | "wall-line" | "interior-wall" | "tower-stamp" | "opening" | "house-room-delete" | "terrain-sculpt"`
+### `type vtt.tool-types.ConstructionToolId = "navigate" | "edit-region" | "platform-contour" | "slope-ramp" | "slope-spiral" | "roof" | "path-brush" | "wall-brush" | "wall-line" | "interior-wall" | "tower-stamp" | "opening" | "house-room-delete" | "terrain-sculpt"`
 
 The construction-tool vocabulary every layer (widgets, composition) needs
 to agree on: which tools exist, what each one's parameters look like, and
@@ -7627,7 +7655,8 @@ Houses the 8 core construction verbs in a centered, glassmorphic dock:
    preset radius, never freehand-drawn, see `tower-stamp-tool.ts`)
 2. 🚪 Aberturas (Portas & Janelas -- one click on a wall panel opens it
    and stands a face in the opening, see `opening-tool.ts`)
-3. 🪜 Escadas (Conexão de elevações)
+3. 🪜 Escadas (Conexão de elevações -- Rampa, arrastada do início ao fim,
+   e Espiral, clicada no centro; both draw a sloped platform)
 4. 🛤️ Caminhos (Trilhas & química de portais)
 5. ⛰️ Terreno & Água (Escultura de Terreno)
 6. 🌲 Vegetação (Adornos & Flora)

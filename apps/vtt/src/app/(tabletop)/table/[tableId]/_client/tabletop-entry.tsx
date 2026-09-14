@@ -48,6 +48,8 @@ function statusToUiStatus(status: TabletopRuntimeStatus): "neutral" | "info" | "
 const TOOL_LABEL: Record<ConstructionToolId, string> = {
   roof: "Telhado",
   "platform-contour": "Plataforma",
+  "slope-ramp": "Rampa",
+  "slope-spiral": "Espiral",
   "path-brush": "Caminho",
   navigate: "Navegação da Câmera",
   "edit-region": "Editar Região",

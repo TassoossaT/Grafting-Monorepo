@@ -10,6 +10,8 @@ export type ConstructionToolId =
   | "navigate"
   | "edit-region"
   | "platform-contour"
+  | "slope-ramp"
+  | "slope-spiral"
   | "roof"
   | "path-brush"
   | "wall-brush"
@@ -205,7 +207,11 @@ export interface ToolParamsByTool {
   readonly roof: { readonly shape: "rectangle" | "circle" | "platform"; readonly elevation: number; readonly height: number; readonly radius: number; readonly curvatures: readonly [number, number, number, number] };
   readonly navigate: NoToolParams;
   readonly "edit-region": { readonly mode: "shape" | "elevation"; readonly curveMode?: "automatic" | "aligned" | "mirrored" | "free"; readonly curveAction?: "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"; readonly curveWidth?: number; readonly curveEndWidth?: number };
-  readonly "platform-contour": { readonly elevation: number; readonly mode: "create" | "extend" | "cut"; readonly shape?: "rectangle" | "polygon" | "freehand" | "circle" | "slope" | "spiral"; readonly radius?: number; readonly tolerance?: number; readonly width?: number; readonly turns?: number; readonly rise?: number };
+  readonly "platform-contour": { readonly elevation: number; readonly mode: "create" | "extend" | "cut"; readonly shape?: "rectangle" | "polygon" | "freehand" | "circle"; readonly radius?: number; readonly tolerance?: number };
+  /** A straight sloped platform dragged from start to end, climbing a fixed rise. */
+  readonly "slope-ramp": { readonly width: number; readonly rise: number };
+  /** A spiral sloped platform stamped around a clicked centre. */
+  readonly "slope-spiral": { readonly width: number; readonly rise: number; readonly radius: number; readonly turns: number };
   readonly "path-brush": PathBrushParams;
   readonly "wall-brush": WallBrushParams;
   readonly "wall-line": WallParams;
@@ -222,7 +228,9 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   roof: Object.freeze({ shape: "rectangle", elevation: 3, height: 2, radius: 2.5, curvatures: [0, 0, 0, 0] as const }),
   navigate: Object.freeze({}),
   "edit-region": Object.freeze({ mode: "shape" }),
-  "platform-contour": Object.freeze({ elevation: 0, mode: "create", shape: "rectangle", radius: 2.5, tolerance: 0.15, width: 1.5, turns: 1, rise: 3 }),
+  "platform-contour": Object.freeze({ elevation: 0, mode: "create", shape: "rectangle", radius: 2.5, tolerance: 0.15 }),
+  "slope-ramp": Object.freeze({ width: 1.5, rise: 3 }),
+  "slope-spiral": Object.freeze({ width: 1.5, rise: 3, radius: 2.5, turns: 1 }),
   "path-brush": Object.freeze({
     // The brush has to hold the road: half of a 3-wide bed reaches 1.5 from
     // the centerline, so a radius of 2.5 leaves a full metre of correction.

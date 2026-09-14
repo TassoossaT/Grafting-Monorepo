@@ -1,5 +1,4 @@
 import { automaticCurve, controlRungId, controlSectionId, reverseGeometry, SLOPE_SURFACE_TYPE, slopeFootprint, slopeSurface, spineControlNodeId } from "../../../../features/edit-construction/index.ts";
-import type { ToolParamsByTool } from "../../../../features/edit-construction/index.ts";
 import type {
   ConstructionEdgeSnapshot,
   ConstructionOrientedEdgeUse,
@@ -11,7 +10,14 @@ import type {
 } from "../../../../ports/index.ts";
 import { scopedToolId, type PointerSample, type ToolContext } from "../core/tool-context.ts";
 
-type Params = ToolParamsByTool["platform-contour"];
+/** What every way of drawing a sloped platform may decide; each tool fills the part it offers. */
+export interface SlopeParams {
+  readonly width?: number;
+  readonly rise?: number;
+  readonly radius?: number;
+  readonly turns?: number;
+}
+type Params = SlopeParams;
 /** Same weld reach the flat platform contour uses. */
 const WELD_TOLERANCE = 0.25;
 
