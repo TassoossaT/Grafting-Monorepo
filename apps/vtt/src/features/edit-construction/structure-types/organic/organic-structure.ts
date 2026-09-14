@@ -141,8 +141,8 @@ export function terrainInteractionOver(coveredType: string): CreationInteraction
  * a crossing at the same level. The run that passes over says so.
  */
 export function pathInteractionOver(
-  _coveredType: string,
+  coveredType: string,
   paintedSubtype?: string,
 ): CreationInteraction {
-  return paintedSubtype === "bridge" ? IGNORE : CUT;
+  return coveredType === "muro" || paintedSubtype === "bridge" ? IGNORE : CUT;
 }

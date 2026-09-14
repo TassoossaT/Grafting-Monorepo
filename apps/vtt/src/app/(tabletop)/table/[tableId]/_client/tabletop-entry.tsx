@@ -46,6 +46,7 @@ function statusToUiStatus(status: TabletopRuntimeStatus): "neutral" | "info" | "
 }
 
 const TOOL_LABEL: Record<ConstructionToolId, string> = {
+  "muro-brush": "Muro",
   roof: "Telhado",
   "platform-contour": "Plataforma",
   "path-brush": "Caminho",

@@ -1,4 +1,5 @@
 import { roofTool } from "../roof/roof-tool.ts";
+import { muroBrushTool } from "../walls/muro-brush-tool.ts";
 import { platformContourTool } from "../platform/platform-contour-tool.ts";
 import type { ConstructionToolId } from "@/features/edit-construction";
 
@@ -24,6 +25,7 @@ const TOOL_REGISTRY: { readonly [Id in ConstructionToolId]: ConstructionTool<Id>
   roof: roofTool,
   "platform-contour": platformContourTool,
   "path-brush": pathBrushTool,
+  "muro-brush": muroBrushTool,
   "edit-region": editRegionTool,
   "wall-brush": wallBrushTool,
   "wall-line": wallLineTool,

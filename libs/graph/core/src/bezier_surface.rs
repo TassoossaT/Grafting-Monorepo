@@ -1,6 +1,211 @@
 //! Curve-derived ribbon contours. No product materials or rendering policy.
 use crate::bezier::{CubicBezier, CurvePoint};
 use crate::curve_offset::{Polygon, union_polygons};
+/// One span of a vertical ribbon sweep, oriented in chain order.
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "curve-serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "curve-serde", serde(rename_all = "camelCase"))]
+pub struct RibbonSegment {
+    /// Authored cubic.
+    pub curve: CubicBezier,
+    /// Start cross-section offsets.
+    pub offsets: [f64; 2],
+    /// End cross-section offsets.
+    pub end_offsets: [f64; 2],
+}
+/// Closed vertical sweep with shared indexed face boundaries.
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "curve-serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct RibbonExtrusion {
+    /// Alternating base/top vertices, two pairs per station.
+    pub vertices: Vec<CurvePoint>,
+    /// Triangular faces, with consistent winding.
+    pub faces: Vec<[usize; 3]>,
+    /// Unique edges over vertex indices.
+    pub edges: Vec<[usize; 2]>,
+    /// Each face's edge indices and reversed flags in boundary order.
+    pub boundaries: Vec<[(usize, bool); 3]>,
+}
+
+fn ground_triangles(ground: &[Vec<Vec<CurvePoint>>]) -> Result<Vec<[CurvePoint; 3]>, String> {
+    let mut triangles = Vec::new();
+    let mut count = 0;
+    for polygon in ground {
+        let mut points = Vec::new();
+        let mut holes = Vec::new();
+        for (i, ring) in polygon.iter().enumerate() {
+            count += ring.len();
+            if count > 100_000 || ring.len() < 3 || ring.iter().flatten().any(|x| !x.is_finite()) {
+                return Err("invalid or oversized supporting polygon".into());
+            }
+            if i > 0 {
+                holes.push(points.len() as u32);
+            }
+            points.extend(ring.iter().copied());
+        }
+        let flat: Vec<[f64; 2]> = points.iter().map(|p| [p[0], p[2]]).collect();
+        let mut indices = Vec::new();
+        earcut::Earcut::new().earcut(flat, &holes, &mut indices);
+        for t in indices.chunks_exact(3) {
+            triangles.push([
+                points[t[0] as usize],
+                points[t[1] as usize],
+                points[t[2] as usize],
+            ]);
+        }
+    }
+    Ok(triangles)
+}
+
+fn support_height(p: CurvePoint, triangles: &[[CurvePoint; 3]]) -> f64 {
+    let mut height: Option<f64> = None;
+    for &[a, b, c] in triangles {
+        let d = (b[2] - c[2]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[2] - c[2]);
+        if d.abs() < 1e-12 {
+            continue;
+        }
+        let u = ((b[2] - c[2]) * (p[0] - c[0]) + (c[0] - b[0]) * (p[2] - c[2])) / d;
+        let v = ((c[2] - a[2]) * (p[0] - c[0]) + (a[0] - c[0]) * (p[2] - c[2])) / d;
+        let w = 1. - u - v;
+        if u >= -1e-9 && v >= -1e-9 && w >= -1e-9 {
+            let y = u * a[1] + v * b[1] + w * c[1];
+            height = Some(height.map_or(y, |old| old.max(y)));
+        }
+    }
+    height.unwrap_or(p[1])
+}
+
+/// Extrudes ordered curve spans, sampling their base on supporting polygons.
+/// Missing support retains the authored curve's elevation. Top vertices are
+/// always exactly `height` above their corresponding base. Terrain is read-only.
+/// Stations are at most 0.25 units apart in control-polygon length; curved
+/// spans also retain the curve sampler's accuracy bound. Disconnected spans,
+/// nonpositive dimensions and excessive input are rejected before returning geometry.
+pub fn extrude_ribbon(
+    segments: &[RibbonSegment],
+    height: f64,
+    ground: &[Vec<Vec<CurvePoint>>],
+    accuracy: f64,
+) -> Result<RibbonExtrusion, String> {
+    if segments.is_empty()
+        || segments.len() > 4096
+        || !height.is_finite()
+        || height <= 0.
+        || !accuracy.is_finite()
+        || accuracy <= 0.
+    {
+        return Err("invalid extrusion dimensions or segment count".into());
+    }
+    let triangles = ground_triangles(ground)?;
+    let mut stations: Vec<[CurvePoint; 2]> = Vec::new();
+    for (index, segment) in segments.iter().enumerate() {
+        let curve = segment.curve;
+        if index > 0 && segments[index - 1].curve.points[3] != curve.points[0] {
+            return Err("extrusion spans must form an ordered connected chain".into());
+        }
+        for offsets in [segment.offsets, segment.end_offsets] {
+            if offsets.iter().any(|x| !x.is_finite()) || offsets[0] >= offsets[1] {
+                return Err("extrusion offsets must be finite and ordered".into());
+            }
+        }
+        let samples = curve.sample(accuracy)?;
+        let length: f64 = curve
+            .points
+            .windows(2)
+            .map(|p| (p[1][0] - p[0][0]).hypot(p[1][2] - p[0][2]))
+            .sum();
+        let steps = (length / 0.25).ceil().max(1.) as usize;
+        if steps > 8192 || stations.len() + steps + samples.len() > 16384 {
+            return Err("extrusion station budget exceeded".into());
+        }
+        let mut parameters: Vec<f64> = samples
+            .iter()
+            .map(|s| s.t)
+            .chain((0..=steps).map(|i| i as f64 / steps as f64))
+            .collect();
+        parameters.sort_by(f64::total_cmp);
+        parameters.dedup_by(|a, b| (*a - *b).abs() < 1e-10);
+        for t in parameters {
+            let p = curve.evaluate(t)?;
+            let d = curve.derivative(t)?;
+            let speed = d[0].hypot(d[2]);
+            if speed < 1e-10 {
+                return Err("stationary tangent prevents extrusion".into());
+            }
+            let pair = std::array::from_fn(|i| {
+                let w = segment.offsets[i] + (segment.end_offsets[i] - segment.offsets[i]) * t;
+                let mut q = [p[0] - d[2] / speed * w, p[1], p[2] + d[0] / speed * w];
+                q[1] = support_height(q, &triangles);
+                q
+            });
+            if stations.last().is_none_or(|last| {
+                last.iter()
+                    .flatten()
+                    .zip(pair.iter().flatten())
+                    .any(|(a, b)| (a - b).abs() > 1e-9)
+            }) {
+                stations.push(pair);
+            }
+        }
+    }
+    let closed = segments[0].curve.points[0] == segments.last().unwrap().curve.points[3];
+    if closed && stations.first() == stations.last() {
+        stations.pop();
+    }
+    if stations.len() < 2 {
+        return Err("extrusion has no extent".into());
+    }
+    let vertices = stations
+        .iter()
+        .flat_map(|s| s.iter().flat_map(|p| [*p, [p[0], p[1] + height, p[2]]]))
+        .collect();
+    let mut faces = Vec::new();
+    let mut quad = |a, b, c, d| {
+        faces.push([a, c, b]);
+        faces.push([a, d, c]);
+    };
+    let spans = if closed {
+        stations.len()
+    } else {
+        stations.len() - 1
+    };
+    for i in 0..spans {
+        let a = i * 4;
+        let b = ((i + 1) % stations.len()) * 4;
+        quad(a, b, b + 1, a + 1);
+        quad(a + 2, a + 3, b + 3, b + 2);
+        quad(a + 1, b + 1, b + 3, a + 3);
+        quad(a, a + 2, b + 2, b);
+    }
+    if !closed {
+        quad(0, 1, 3, 2);
+        let a = (stations.len() - 1) * 4;
+        quad(a, a + 2, a + 3, a + 1);
+    }
+    let mut edges = Vec::new();
+    let mut edge_indices = std::collections::BTreeMap::new();
+    let boundaries = faces
+        .iter()
+        .map(|face| {
+            std::array::from_fn(|i| {
+                let a = face[i];
+                let b = face[(i + 1) % 3];
+                let key = [a.min(b), a.max(b)];
+                let index = *edge_indices.entry(key).or_insert_with(|| {
+                    edges.push(key);
+                    edges.len() - 1
+                });
+                (index, a > b)
+            })
+        })
+        .collect();
+    Ok(RibbonExtrusion {
+        vertices,
+        faces,
+        edges,
+        boundaries,
+    })
+}
 /// A sampled ribbon with its source heights.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "curve-serde", derive(serde::Serialize, serde::Deserialize))]
@@ -112,6 +317,69 @@ pub fn union_ribbons(ribbons: &[CurveRibbon]) -> Vec<Polygon> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn extrusion_projects_rails_and_preserves_height_and_closed_edge_uses() {
+        let curve = crate::bezier::automatic_path(&[[-2., 0., 0.], [2., 0., 0.]]).unwrap()[0];
+        let segments = [RibbonSegment {
+            curve,
+            offsets: [-0.2, 0.2],
+            end_offsets: [-0.4, 0.4],
+        }];
+        let ground = vec![vec![vec![
+            [-5., 0., -5.],
+            [5., 2., -5.],
+            [5., 2., 5.],
+            [-5., 0., 5.],
+        ]]];
+        let result = extrude_ribbon(&segments, 3., &ground, 0.025).unwrap();
+        for pair in result.vertices.chunks_exact(2) {
+            assert!((pair[0][1] - (1. + pair[0][0] * 0.2)).abs() < 1e-9);
+            assert!((pair[1][1] - pair[0][1] - 3.).abs() < 1e-9);
+            assert_eq!(pair[0][0], pair[1][0]);
+            assert_eq!(pair[0][2], pair[1][2]);
+        }
+        let mut uses = vec![[0; 2]; result.edges.len()];
+        for boundary in result.boundaries {
+            for (edge, reversed) in boundary {
+                uses[edge][usize::from(reversed)] += 1;
+            }
+        }
+        assert!(uses.iter().all(|u| *u == [1, 1]));
+        assert_eq!(result.vertices[0][2], -0.2);
+        assert_eq!(result.vertices[result.vertices.len() - 4][2], -0.4);
+        for bad in [0., -1., f64::NAN, f64::INFINITY] {
+            assert!(extrude_ribbon(&segments, bad, &ground, 0.025).is_err());
+        }
+    }
+
+    #[test]
+    fn extrusion_support_holes_retain_authored_base_and_bends_stay_connected() {
+        let curves =
+            crate::bezier::automatic_path(&[[-2., 1., 0.], [0., 1., 2.], [2., 1., 0.]]).unwrap();
+        let segments: Vec<_> = curves
+            .into_iter()
+            .map(|curve| RibbonSegment {
+                curve,
+                offsets: [-0.1, 0.1],
+                end_offsets: [-0.1, 0.1],
+            })
+            .collect();
+        let ground = vec![vec![
+            vec![[-5., 4., -5.], [5., 4., -5.], [5., 4., 5.], [-5., 4., 5.]],
+            vec![[-3., 4., -3.], [-3., 4., 3.], [3., 4., 3.], [3., 4., -3.]],
+        ]];
+        let result = extrude_ribbon(&segments, 2., &ground, 0.025).unwrap();
+        assert!(
+            result
+                .vertices
+                .chunks_exact(2)
+                .all(|p| (p[0][1] - 1.).abs() < 1e-9 && (p[1][1] - 3.).abs() < 1e-9)
+        );
+        assert!(result.vertices.len() > 16);
+        let mut disconnected = segments;
+        disconnected[1].curve.points[0][0] += 1.;
+        assert!(extrude_ribbon(&disconnected, 2., &ground, 0.025).is_err());
+    }
     #[test]
     fn wide_tight_curve_normalizes_to_a_surface() {
         let c = CubicBezier {

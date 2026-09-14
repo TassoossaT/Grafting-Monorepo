@@ -111,7 +111,10 @@ export function planBezierRoad(input: {
     edgeId: `spine-edge:${corridorId}:${i}`, startNodeId: addedNodes[i]!.id, endNodeId: addedNodes[i + 1]!.id,
     curve: { ...h, bandOffsets: offsets },
   }));
-  const snapshot = explicitSpineSnapshot(input.snapshot, port, offsets);
+  // The axis editor is shared, but roads never connect to a muro axis.
+  const roadEdges = input.snapshot.edges.filter((e) => !e.edgeId.startsWith("spine-edge:muro:"));
+  const wallOnlyNodes = new Set(input.snapshot.edges.filter((e) => e.edgeId.startsWith("spine-edge:muro:")).flatMap((e) => [e.startNodeId, e.endNodeId]));
+  const snapshot = explicitSpineSnapshot({ edges: roadEdges, nodes: input.snapshot.nodes.filter((n) => !wallOnlyNodes.has(n.id)) }, port, offsets);
   const network = port.curveNetwork({
     nodes: snapshot.nodes.filter((n) => n.id.startsWith("spine:")).map((n) => ({ id: n.id, position: curvePoint(n.position) })),
     edges: snapshot.edges.filter((e) => e.curve !== undefined).map((e) => ({ ...e, curve: e.curve! })),

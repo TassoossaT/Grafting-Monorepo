@@ -1,4 +1,5 @@
 import { roofStructureType } from "./roof/roof-structure.ts";
+import { muroStructureType } from "./muro/muro-structure.ts";
 import { platformStructureType } from "./platform/platform-structure.ts";
 import type { ConstructionCoveredRegion, ConstructionRegionTopology } from "@/ports";
 
@@ -39,6 +40,7 @@ import { forbid, type CreationInteraction } from "./creation-interaction.ts";
  * happen to share a generator.
  */
 export const STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[] = Object.freeze([
+  muroStructureType,
   platformStructureType,
   roofStructureType,
   panelStructureType("wall-white", "Parede branca", "one upright panel per contour edge, drawn or stamped"),

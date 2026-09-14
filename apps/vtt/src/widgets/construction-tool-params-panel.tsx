@@ -284,6 +284,7 @@ function OpeningFields(props: { readonly params: OpeningParams; readonly onChang
 }
 
 const TOOL_LABELS: Partial<Record<ConstructionToolId, string>> = {
+  "muro-brush": "Muro",
   roof: "Telhado",
   "platform-contour": "Plataforma",
   "edit-region": "Editar estrutura",
@@ -354,9 +355,11 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
         </div>
       ) : activeTool === "edit-region" ? (
         <div>
-          <label>Ação na rua <select value={params["edit-region"].curveAction ?? "edit"} onChange={(event) => onParamsChange("edit-region", { ...params["edit-region"], curveAction: event.currentTarget.value as "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width" })}>
+          <label>Ação na curva <select value={params["edit-region"].curveAction ?? "edit"} onChange={(event) => onParamsChange("edit-region", { ...params["edit-region"], curveAction: event.currentTarget.value as "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width" | "height" })}>
+            <option value="height">Altura do muro</option>
             <option value="edit">Editar curva</option><option value="remove-anchor">Remover âncora</option><option value="disconnect">Desconectar junção</option><option value="delete-segment">Excluir trecho</option><option value="close">Fechar caminho</option><option value="width">Alterar largura</option>
           </select></label>
+          {params["edit-region"].curveAction === "height" && <label>Altura do muro <input type="number" min="0.1" step="0.1" value={params["edit-region"].curveHeight ?? 3} onChange={(event) => onParamsChange("edit-region", {...params["edit-region"],curveHeight:Number(event.currentTarget.value)})}/><p>Clique em um nó ou alça do eixo para aplicar a altura ao muro inteiro.</p></label>}
           {params["edit-region"].curveAction === "width" && <label>Largura <input type="number" min="0.1" step="0.1" value={params["edit-region"].curveWidth ?? 4} onChange={(event) => onParamsChange("edit-region", {...params["edit-region"],curveWidth:Number(event.currentTarget.value)})}/></label>}
           {params["edit-region"].curveAction === "width" && <label>Largura no fim <input type="number" min="0.1" step="0.1" value={params["edit-region"].curveEndWidth ?? params["edit-region"].curveWidth ?? 4} onChange={(event) => onParamsChange("edit-region", {...params["edit-region"],curveEndWidth:Number(event.currentTarget.value)})}/></label>}
           <p>Para remover, desconectar ou fechar, clique na âncora. Para excluir um trecho ou mudar sua largura, clique no ponto central.</p>
@@ -367,6 +370,13 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
           <SelectableChip label="Formato / posicao" swatchColor="#79b8e8" selected={params["edit-region"].mode === "shape"} onSelect={() => onParamsChange("edit-region", { ...params["edit-region"], mode: "shape" })} />
           <SelectableChip label="Elevar / baixar" swatchColor="#79b8e8" selected={params["edit-region"].mode === "elevation"} onSelect={() => onParamsChange("edit-region", { ...params["edit-region"], mode: "elevation" })} />
           <p>No modo de elevacao, arraste para cima ou para baixo. A plataforma leva a estrutura conectada acima.</p>
+        </div>
+      ) : activeTool === "muro-brush" ? (
+        <div>
+          {sliderRow("Altura", params["muro-brush"].height, 0.1, 20, 0.1, (height) => onParamsChange("muro-brush", { ...params["muro-brush"], height }))}
+          {sliderRow("Espessura", params["muro-brush"].thickness, 0.05, 3, 0.05, (thickness) => onParamsChange("muro-brush", { ...params["muro-brush"], thickness }))}
+          {sliderRow("Correção do traço", params["muro-brush"].radius, 0.05, 3, 0.05, (radius) => onParamsChange("muro-brush", { ...params["muro-brush"], radius }))}
+          <p>Arraste para desenhar. A base acompanha o terreno; ruas não abrem passagens no muro.</p>
         </div>
       ) : activeTool === "path-brush" ? (<PathBrushFields params={params["path-brush"]} onChange={(next) => onParamsChange("path-brush", next)} />) : activeTool === "wall-brush" ? (
         <WallBrushFields params={params["wall-brush"]} onChange={(next) => onParamsChange("wall-brush", next)} />

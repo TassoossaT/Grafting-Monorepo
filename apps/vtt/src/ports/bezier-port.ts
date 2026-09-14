@@ -11,6 +11,7 @@ export interface CurveHandles {
   readonly endBandOffsets?: readonly number[];
 }
 export type CurveCommand =
+  | { readonly kind: "extrudeRibbon"; readonly segments: readonly { readonly curve: CubicBezier; readonly offsets: readonly [number, number]; readonly endOffsets: readonly [number, number] }[]; readonly height: number; readonly ground: readonly (readonly (readonly CurvePoint[])[])[] }
   | { readonly kind: "automatic"; readonly points: readonly CurvePoint[] }
   | { readonly kind: "fit"; readonly points: readonly CurvePoint[]; readonly cornerDegrees?: number }
   | { readonly kind: "join"; readonly sections: readonly (readonly [CurvePoint, CurvePoint])[] }
@@ -24,6 +25,7 @@ export type CurveCommand =
   | { readonly kind: "resolve"; readonly handles: CurveHandles; readonly start: CurvePoint; readonly end: CurvePoint };
 export interface CurveBatch { readonly tolerance: number; readonly commands: readonly CurveCommand[] }
 export interface CurveResult {
+  readonly extrusion?: { readonly vertices: readonly CurvePoint[]; readonly faces: readonly (readonly [number, number, number])[]; readonly edges: readonly (readonly [number, number])[]; readonly boundaries: readonly (readonly (readonly [number, boolean])[])[] };
   readonly ribbon: { readonly outer: readonly CurvePoint[] } | null;
   readonly curves: readonly CubicBezier[];
   readonly handles: readonly CurveHandles[];

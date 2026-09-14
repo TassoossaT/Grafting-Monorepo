@@ -846,6 +846,23 @@ Inserts and splits curves transactionally, enforcing independent height toleranc
 
 ### `pub fn grafting_graph_core::bezier_surface::CurveRibbon::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer`
 
+### `pub fn grafting_graph_core::bezier_surface::RibbonExtrusion::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>`
+
+### `pub fn grafting_graph_core::bezier_surface::RibbonExtrusion::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer`
+
+### `pub fn grafting_graph_core::bezier_surface::RibbonSegment::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>`
+
+### `pub fn grafting_graph_core::bezier_surface::RibbonSegment::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer`
+
+### `pub fn grafting_graph_core::bezier_surface::extrude_ribbon(segments: &[grafting_graph_core::bezier_surface::RibbonSegment], height: f64, ground: &[alloc::vec::Vec<alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>>], accuracy: f64) -> core::result::Result<grafting_graph_core::bezier_surface::RibbonExtrusion, alloc::string::String>`
+
+Extrudes ordered curve spans, sampling their base on supporting polygons.
+Missing support retains the authored curve's elevation. Top vertices are
+always exactly `height` above their corresponding base. Terrain is read-only.
+Stations are at most 0.25 units apart in control-polygon length; curved
+spans also retain the curve sampler's accuracy bound. Disconnected spans,
+nonpositive dimensions and excessive input are rejected before returning geometry.
+
 ### `pub fn grafting_graph_core::bezier_surface::ribbon(curve: grafting_graph_core::bezier::CubicBezier, offsets: [f64; 2], accuracy: f64) -> core::result::Result<grafting_graph_core::bezier_surface::CurveRibbon, alloc::string::String>`
 
 Computes a ribbon from an explicit cubic and independently specified widths.
@@ -1790,6 +1807,22 @@ Convert a legacy/automatic anchor chain.
 
 Ordered anchors.
 
+### `pub grafting_graph_core::bezier_commands::CurveCommand::ExtrudeRibbon`
+
+Sweep a closed vertical cross-section along ordered ribbons, projected onto ground.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::ExtrudeRibbon::ground: alloc::vec::Vec<alloc::vec::Vec<alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>>>`
+
+Supporting polygons, each an outer XYZ ring followed by holes.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::ExtrudeRibbon::height: f64`
+
+Positive vertical distance above the sampled base.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::ExtrudeRibbon::segments: alloc::vec::Vec<grafting_graph_core::bezier_surface::RibbonSegment>`
+
+Ordered, consistently oriented curve spans and their lateral profiles.
+
 ### `pub grafting_graph_core::bezier_commands::CurveCommand::Fit`
 
 Fit a captured stroke within the batch tolerance at its samples.
@@ -1936,6 +1969,10 @@ Insertion parameter.
 
 Resulting authored cubics.
 
+### `pub grafting_graph_core::bezier_commands::CurveResult::extrusion: core::option::Option<grafting_graph_core::bezier_surface::RibbonExtrusion>`
+
+Optional indexed extrusion; vertices alternate between base and top.
+
 ### `pub grafting_graph_core::bezier_commands::CurveResult::handles: alloc::vec::Vec<grafting_graph_core::bezier::CurveHandles>`
 
 Relative controls suitable for durable graph edge payloads.
@@ -2031,6 +2068,34 @@ Curve approximation tolerance.
 ### `pub grafting_graph_core::bezier_surface::CurveRibbon::outer: alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>`
 
 Closed polygon boundary, without a repeated closing vertex.
+
+### `pub grafting_graph_core::bezier_surface::RibbonExtrusion::boundaries: alloc::vec::Vec<[(usize, bool); 3]>`
+
+Each face's edge indices and reversed flags in boundary order.
+
+### `pub grafting_graph_core::bezier_surface::RibbonExtrusion::edges: alloc::vec::Vec<[usize; 2]>`
+
+Unique edges over vertex indices.
+
+### `pub grafting_graph_core::bezier_surface::RibbonExtrusion::faces: alloc::vec::Vec<[usize; 3]>`
+
+Triangular faces, with consistent winding.
+
+### `pub grafting_graph_core::bezier_surface::RibbonExtrusion::vertices: alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>`
+
+Alternating base/top vertices, two pairs per station.
+
+### `pub grafting_graph_core::bezier_surface::RibbonSegment::curve: grafting_graph_core::bezier::CubicBezier`
+
+Authored cubic.
+
+### `pub grafting_graph_core::bezier_surface::RibbonSegment::end_offsets: [f64; 2]`
+
+End cross-section offsets.
+
+### `pub grafting_graph_core::bezier_surface::RibbonSegment::offsets: [f64; 2]`
+
+Start cross-section offsets.
 
 ### `pub grafting_graph_core::curve_offset::FieldSample::curve: usize`
 
@@ -2493,6 +2558,14 @@ Generic insertion into an existing curve graph.
 ### `pub struct grafting_graph_core::bezier_surface::CurveRibbon`
 
 A sampled ribbon with its source heights.
+
+### `pub struct grafting_graph_core::bezier_surface::RibbonExtrusion`
+
+Closed vertical sweep with shared indexed face boundaries.
+
+### `pub struct grafting_graph_core::bezier_surface::RibbonSegment`
+
+One span of a vertical ribbon sweep, oriented in chain order.
 
 ### `pub struct grafting_graph_core::curve_offset::FieldSample`
 

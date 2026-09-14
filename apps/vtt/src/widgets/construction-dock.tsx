@@ -148,6 +148,11 @@ export function ConstructionDock(props: ConstructionDockProps) {
       onClick: () => onToolChange("path-brush"),
     },
     {
+      key: "muro", label: "Muro", icon: "M", tooltip: "Muro sobre eixo Bézier",
+      active: activeTool === "muro-brush", disabled: !ready,
+      onClick: () => onToolChange("muro-brush"),
+    },
+    {
       key: "terrain",
       label: "Escultura de Terreno",
       icon: "⛰️",

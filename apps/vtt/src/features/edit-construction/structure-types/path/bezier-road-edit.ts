@@ -10,7 +10,7 @@ const MIDPOINT = "bezier-midpoint:";
 export function curvePickId(edgeId: string, index: 1 | 2 | "midpoint"): string {
   return index === "midpoint" ? MIDPOINT + encodeURIComponent(edgeId) : HANDLE + index + ":" + encodeURIComponent(edgeId);
 }
-function curvePick(id: string): { edgeId: string; index: 1 | 2 | "midpoint" } | undefined {
+export function curvePick(id: string): { edgeId: string; index: 1 | 2 | "midpoint" } | undefined {
   if (id.startsWith(MIDPOINT)) return { edgeId: decodeURIComponent(id.slice(MIDPOINT.length)), index: "midpoint" };
   if (id.startsWith(HANDLE + "1:") || id.startsWith(HANDLE + "2:")) {
     return { edgeId: decodeURIComponent(id.slice(HANDLE.length + 2)), index: id[HANDLE.length] === "1" ? 1 : 2 };
@@ -42,7 +42,7 @@ export function isBezierEditTarget(snapshot: ConstructionGraphSnapshot, id: stri
 }
 
 /** One complete gesture plan; the caller commits it once or discards it. */
-export function planBezierEdit(input: {
+export interface BezierEditInput {
   readonly snapshot: ConstructionGraphSnapshot;
   readonly topologies: readonly ConstructionRegionTopology[];
   readonly port: BezierPort;
@@ -55,7 +55,10 @@ export function planBezierEdit(input: {
   readonly endWidth?: number;
   readonly insert?: boolean;
   readonly mode?: CurveHandleMode;
-}): { request: ApplyPatchReplacementRequest; preview: Float32Array; selectedId: string } | undefined {
+}
+
+/** Shared authored-curve editing; surface generation belongs to the consuming type. */
+export function planBezierGraphEdit(input: BezierEditInput) {
   const source = explicitSpineSnapshot(input.snapshot, input.port, [-2, 2]);
   const nodes = new Map(source.nodes.map((n) => [n.id, n.position]));
   const pick = curvePick(input.targetId);
@@ -121,6 +124,13 @@ export function planBezierEdit(input: {
   graphPatch = { ...graphPatch, nodes: [
     ...graphPatch.nodes, ...source.nodes.filter((n) => seedIds.has(n.id) && !graphPatch.nodes.some((p) => p.id === n.id)),
   ] };
+  return { source, graphPatch, selectedId };
+}
+
+export function planBezierEdit(input: BezierEditInput): { request: ApplyPatchReplacementRequest; preview: Float32Array; selectedId: string } | undefined {
+  const edit = planBezierGraphEdit(input);
+  if (!edit) return undefined;
+  const { source, graphPatch, selectedId } = edit;
   const cloud = changedSpineCloud(source, graphPatch, input.topologies);
   const chains = bezierChains(cloud.snapshot, input.port, [-2, 2], 4);
   const beforeCloud = changedSpineCloud(source, { nodes: graphPatch.nodes.filter((n) => source.nodes.some((s) => s.id === n.id)), edges: [] }, input.topologies);

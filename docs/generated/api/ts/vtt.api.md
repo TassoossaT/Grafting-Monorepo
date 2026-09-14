@@ -369,7 +369,7 @@ type, heals the vacated terrain hole.
 
 Fast spatial bucketing for proximity queries against road points.
 
-### `function vtt.bezier-edit-gesture.beginBezierGesture(ctx: ToolContext, sample: PointerSample, params?: { curveAction?: "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"; curveEndWidth?: number; curveMode?: "automatic" | "aligned" | "mirrored" | "free"; curveWidth?: number; mode: "shape" | "elevation" }): { cancel: any; commit: any; move: any } | undefined`
+### `function vtt.bezier-edit-gesture.beginBezierGesture(ctx: ToolContext, sample: PointerSample, params?: { curveAction?: "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width" | "height"; curveEndWidth?: number; curveHeight?: number; curveMode?: "automatic" | "aligned" | "mirrored" | "free"; curveWidth?: number; mode: "shape" | "elevation" }): { cancel: any; commit: any; move: any } | undefined`
 
 ### `function vtt.path-cloud-transaction.commitPathCloudIntent(ctx: ToolContext, effect: PathBrushEffect, tolerance: number): void`
 
@@ -1480,7 +1480,7 @@ is well represented by the default sweep fill and needs no override.
 Generic here, not a wall special case, so any brush gets the same real
 preview by supplying one.
 
-### `type vtt.brush-tool.BrushableToolId = "path-brush" | "wall-brush"`
+### `type vtt.brush-tool.BrushableToolId = "path-brush" | "wall-brush" | "muro-brush"`
 
 Tool ids whose parameters carry a brush shape (radius/rotation/footprint) -- the only ids createBrushTool can wire up.
 
@@ -2206,6 +2206,8 @@ the ordinary wall type, committed through the ordinary wall builder, from
 a contour a preset happened to compute instead of a hand drawing it. That
 is the entire difference -- so a tower welds onto a drawn wall, gets
 edited by the same handles, and is subject to the same rules, for free.
+
+### `variable vtt.muro-brush-tool.muroBrushTool: ConstructionTool<"muro-brush">`
 
 ### `variable vtt.wall-brush-tool.wallBrushTool: ConstructionTool<"wall-brush">`
 
@@ -3058,6 +3060,20 @@ inferred from a symmetric "compatible" flag.
 
 ### `function vtt.creation-interaction.forbid(reason: string): CreationInteraction`
 
+### `function vtt.muro-plan.muroOwner(edgeId: string): string | undefined`
+
+Durable ownership is encoded in graph IDs, never in an additional recipe store.
+
+### `function vtt.muro-plan.muroOwnerForTarget(snapshot: ConstructionGraphSnapshot, targetId: string): string | undefined`
+
+### `function vtt.muro-plan.planMuroCreation(input: { height: number; operationId: string; port: BezierPort; snapshot: ConstructionGraphSnapshot; stroke: readonly ConstructionPosition[]; thickness: number; tolerance: number; topologies: readonly ConstructionRegionTopology[] }): { preview: Float32Array<ArrayBuffer>; request: ApplyPatchReplacementRequest; selectedId: string } | undefined`
+
+### `function vtt.muro-plan.planMuroEdit(input: BezierEditInput & { height?: number; setHeight?: boolean }): { preview: Float32Array<ArrayBuffer>; request: ApplyPatchReplacementRequest; selectedId: string } | undefined`
+
+### `variable vtt.muro-structure.muroStructureType: Readonly<StructureTypeDefinition>`
+
+A generated upright ribbon is edited through its authored axis, not its tessellation.
+
 ### `variable vtt.organic-structure.ORGANIC_ROLES: { body: "organic-body"; boundaryEdge: "organic-boundary-edge"; boundaryVertex: "organic-boundary-vertex" }`
 
 The role model for a procedurally generated, non-enumerable boundary --
@@ -3081,7 +3097,7 @@ what the vertex means.
 
 ### `function vtt.organic-structure.organicStructureType(surfaceType: string, label: string, creation: string, structural: "deny" | "regenerate", interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction): StructureTypeDefinition`
 
-### `function vtt.organic-structure.pathInteractionOver(_coveredType: string, paintedSubtype?: string): CreationInteraction`
+### `function vtt.organic-structure.pathInteractionOver(coveredType: string, paintedSubtype?: string): CreationInteraction`
 
 A path **carves**: it consumes what it crosses and keeps the leftover with
 the path's own shape cut out of it. Over terrain that is a road; over a
@@ -3219,17 +3235,49 @@ Builds one `extrude_path`-generated structure type on the shared panel model.
 
 ### `function vtt.bezier-road-actions.planBezierAction(snapshot: ConstructionGraphSnapshot, port: BezierPort, action: BezierRoadAction, targetId: string, edgeId: string | undefined, operationId: string, width?: number, endWidth?: number): ConstructionGraphPatch`
 
+### `interface vtt.bezier-road-edit.BezierEditInput`
+
+One complete gesture plan; the caller commits it once or discards it.
+
+### `property vtt.bezier-road-edit.BezierEditInput.action?: BezierRoadAction`
+
+### `property vtt.bezier-road-edit.BezierEditInput.endWidth?: number`
+
+### `property vtt.bezier-road-edit.BezierEditInput.insert?: boolean`
+
+### `property vtt.bezier-road-edit.BezierEditInput.mode?: CurveHandleMode`
+
+### `property vtt.bezier-road-edit.BezierEditInput.operationId: string`
+
+### `property vtt.bezier-road-edit.BezierEditInput.port: BezierPort`
+
+### `property vtt.bezier-road-edit.BezierEditInput.position: ConstructionPosition`
+
+### `property vtt.bezier-road-edit.BezierEditInput.snapshot: ConstructionGraphSnapshot`
+
+### `property vtt.bezier-road-edit.BezierEditInput.tableId: string`
+
+### `property vtt.bezier-road-edit.BezierEditInput.targetId: string`
+
+### `property vtt.bezier-road-edit.BezierEditInput.topologies: readonly ConstructionRegionTopology[]`
+
+### `property vtt.bezier-road-edit.BezierEditInput.width?: number`
+
 ### `function vtt.bezier-road-edit.bezierPickHandles(snapshot: ConstructionGraphSnapshot, port: BezierPort): { id: string; position: ConstructionPosition }[]`
 
 Pick handles are presentation projections, not extra graph anchors.
+
+### `function vtt.bezier-road-edit.curvePick(id: string): { edgeId: string; index: 2 | 1 | "midpoint" } | undefined`
 
 ### `function vtt.bezier-road-edit.curvePickId(edgeId: string, index: 2 | 1 | "midpoint"): string`
 
 ### `function vtt.bezier-road-edit.isBezierEditTarget(snapshot: ConstructionGraphSnapshot, id: string): boolean`
 
-### `function vtt.bezier-road-edit.planBezierEdit(input: { action?: BezierRoadAction; endWidth?: number; insert?: boolean; mode?: CurveHandleMode; operationId: string; port: BezierPort; position: ConstructionPosition; snapshot: ConstructionGraphSnapshot; tableId: string; targetId: string; topologies: readonly ConstructionRegionTopology[]; width?: number }): { preview: Float32Array; request: ApplyPatchReplacementRequest; selectedId: string } | undefined`
+### `function vtt.bezier-road-edit.planBezierEdit(input: BezierEditInput): { preview: Float32Array; request: ApplyPatchReplacementRequest; selectedId: string } | undefined`
 
-One complete gesture plan; the caller commits it once or discards it.
+### `function vtt.bezier-road-edit.planBezierGraphEdit(input: BezierEditInput): { graphPatch: ConstructionGraphPatch; selectedId: string; source: ConstructionGraphSnapshot } | undefined`
+
+Shared authored-curve editing; surface generation belongs to the consuming type.
 
 ### `function vtt.bezier-road-plan.bezierChains(snapshot: ConstructionGraphSnapshot, port: BezierPort, offsets: readonly number[], miterLimit: number, targetEdgeIds?: ReadonlySet<string>): readonly SpineChainInput[]`
 
@@ -4549,11 +4597,13 @@ Perlin `scale` -- smaller values are smoother/larger-scale terrain features.
 
 ### `interface vtt.tool-types.ToolParamsByTool`
 
-### `property vtt.tool-types.ToolParamsByTool.edit-region: { curveAction?: "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"; curveEndWidth?: number; curveMode?: "automatic" | "aligned" | "mirrored" | "free"; curveWidth?: number; mode: "shape" | "elevation" }`
+### `property vtt.tool-types.ToolParamsByTool.edit-region: { curveAction?: "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width" | "height"; curveEndWidth?: number; curveHeight?: number; curveMode?: "automatic" | "aligned" | "mirrored" | "free"; curveWidth?: number; mode: "shape" | "elevation" }`
 
 ### `property vtt.tool-types.ToolParamsByTool.house-room-delete: NoToolParams`
 
 ### `property vtt.tool-types.ToolParamsByTool.interior-wall: InteriorGenerateParams`
+
+### `property vtt.tool-types.ToolParamsByTool.muro-brush: BrushShapeParams & { height: number; thickness: number }`
 
 ### `property vtt.tool-types.ToolParamsByTool.navigate: NoToolParams`
 
@@ -4637,7 +4687,7 @@ Length of a panel's own vertical edge, in world units.
 
 ### `type vtt.tool-types.BrushShapeKind = "circle" | "square" | "hexagon"`
 
-### `type vtt.tool-types.ConstructionToolId = "navigate" | "edit-region" | "platform-contour" | "roof" | "path-brush" | "wall-brush" | "wall-line" | "interior-wall" | "tower-stamp" | "opening" | "house-room-delete" | "terrain-sculpt"`
+### `type vtt.tool-types.ConstructionToolId = "navigate" | "edit-region" | "platform-contour" | "roof" | "path-brush" | "muro-brush" | "wall-brush" | "wall-line" | "interior-wall" | "tower-stamp" | "opening" | "house-room-delete" | "terrain-sculpt"`
 
 The construction-tool vocabulary every layer (widgets, composition) needs
 to agree on: which tools exist, what each one's parameters look like, and
@@ -5182,6 +5232,8 @@ callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 
 ### `property vtt.bezier-port.CurveResult.curves: readonly CubicBezier[]`
 
+### `property vtt.bezier-port.CurveResult.extrusion?: { boundaries: readonly (readonly (readonly [number, boolean])[])[]; edges: readonly (readonly [number, number])[]; faces: readonly (readonly [number, number, number])[]; vertices: readonly CurvePoint[] }`
+
 ### `property vtt.bezier-port.CurveResult.handles: readonly CurveHandles[]`
 
 ### `property vtt.bezier-port.CurveResult.lengths: readonly number[]`
@@ -5194,7 +5246,7 @@ callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 
 ### `property vtt.bezier-port.CurveResult.samples: readonly (readonly { position: CurvePoint; t: number }[])[]`
 
-### `type vtt.bezier-port.CurveCommand = { kind: "automatic"; points: readonly CurvePoint[] } | { cornerDegrees?: number; kind: "fit"; points: readonly CurvePoint[] } | { kind: "join"; sections: readonly (readonly [CurvePoint, CurvePoint])[] } | { curve: CubicBezier; endOffsets?: readonly [number, number]; kind: "ribbon"; offsets: readonly [number, number] } | { curves: readonly CubicBezier[]; kind: "sample" } | { curve: CubicBezier; kind: "split"; profile?: CurveHandles; t: number } | { curve: CubicBezier; kind: "merge"; next: CubicBezier } | { curve: CubicBezier; kind: "pull"; t: number; target: CurvePoint } | { curve: CubicBezier; index: 1 | 2; kind: "handle"; mode: CurveHandleMode; opposite: CurvePoint | null; target: CurvePoint } | { curve: CubicBezier; kind: "nearest"; point: CurvePoint } | { end: CurvePoint; handles: CurveHandles; kind: "resolve"; start: CurvePoint }`
+### `type vtt.bezier-port.CurveCommand = { ground: readonly (readonly (readonly CurvePoint[])[])[]; height: number; kind: "extrudeRibbon"; segments: readonly { curve: CubicBezier; endOffsets: readonly [number, number]; offsets: readonly [number, number] }[] } | { kind: "automatic"; points: readonly CurvePoint[] } | { cornerDegrees?: number; kind: "fit"; points: readonly CurvePoint[] } | { kind: "join"; sections: readonly (readonly [CurvePoint, CurvePoint])[] } | { curve: CubicBezier; endOffsets?: readonly [number, number]; kind: "ribbon"; offsets: readonly [number, number] } | { curves: readonly CubicBezier[]; kind: "sample" } | { curve: CubicBezier; kind: "split"; profile?: CurveHandles; t: number } | { curve: CubicBezier; kind: "merge"; next: CubicBezier } | { curve: CubicBezier; kind: "pull"; t: number; target: CurvePoint } | { curve: CubicBezier; index: 1 | 2; kind: "handle"; mode: CurveHandleMode; opposite: CurvePoint | null; target: CurvePoint } | { curve: CubicBezier; kind: "nearest"; point: CurvePoint } | { end: CurvePoint; handles: CurveHandles; kind: "resolve"; start: CurvePoint }`
 
 ### `type vtt.bezier-port.CurveHandleMode = "automatic" | "aligned" | "mirrored" | "free"`
 

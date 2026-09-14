@@ -1,4 +1,4 @@
-import { isBezierEditTarget, planBezierEdit } from "../../../features/edit-construction/index.ts";
+import { isBezierEditTarget, planBezierEdit, planMuroEdit, muroOwnerForTarget } from "../../../features/edit-construction/index.ts";
 import type { ToolParamsFor } from "../../../features/edit-construction/index.ts";
 import type { ConstructionPosition } from "../../../ports/index.ts";
 import type { PointerSample, ToolContext, ToolGesture } from "../tools/core/tool-context.ts";
@@ -12,9 +12,13 @@ export function beginBezierGesture(ctx: ToolContext, sample: PointerSample, para
   const topologies = ctx.runtime.getAllRegionTopologies();
   let target: ConstructionPosition = sample.point;
   let moved = false;
-  const plan = (insert = false) => planBezierEdit({
-    snapshot, topologies, port: ctx.runtime, targetId, position: target, operationId, tableId: ctx.tableId, insert, mode: params?.curveMode, action: params?.curveAction, width: params?.curveWidth ?? 4, endWidth: params?.curveEndWidth,
-  });
+  const isMuro = muroOwnerForTarget(snapshot, targetId) !== undefined;
+  const plan = (insert = false) => {
+    const input = { snapshot, topologies, port: ctx.runtime, targetId, position: target, operationId, tableId: ctx.tableId, insert, mode: params?.curveMode, action: params?.curveAction === "height" ? undefined : params?.curveAction, width: params?.curveWidth ?? (isMuro ? 0.3 : 4), endWidth: params?.curveEndWidth };
+    if (isMuro) return planMuroEdit({ ...input, setHeight: params?.curveAction === "height", height: params?.curveHeight ?? 3 });
+    if (params?.curveAction === "height") throw Error("A altura é um parâmetro do muro. Selecione seu eixo.");
+    return planBezierEdit(input);
+  };
   return {
     move(gesture: ToolGesture) {
       target = params?.mode === "elevation" && sample.screenY !== undefined && gesture.current.screenY !== undefined
@@ -38,7 +42,7 @@ export function beginBezierGesture(ctx: ToolContext, sample: PointerSample, para
         ctx.runtime.applyPatchReplacement(draft.request, "local", operationId);
         ctx.history.record({ kind: "path-brush", operationId });
         ctx.reportSelection(isBezierEditTarget(ctx.runtime.getGraphSnapshot(), draft.selectedId) ? { id: draft.selectedId, point: target } : undefined);
-        ctx.reportFeedback({ tone: "success", message: params?.curveAction && params.curveAction !== "edit" ? "Rua atualizada." : moved ? "Curva atualizada." : "Ponto inserido sem alterar a curva." });
+        ctx.reportFeedback({ tone: "success", message: params?.curveAction && params.curveAction !== "edit" ? isMuro ? "Muro atualizado." : "Rua atualizada." : moved ? "Curva atualizada." : "Ponto inserido sem alterar a curva." });
       } catch (error) {
         ctx.reportFeedback({ tone: "error", message: `Curva preservada: ${String(error)}` });
       }

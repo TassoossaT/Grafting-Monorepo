@@ -3787,7 +3787,7 @@ export interface BrushRegion {
   * The brush footprint, already widened to hold the product -- see
   * {@link expandedToHold}. This is what the ghost is drawn from, which is
   * what makes the ghost an honest envelope rather than a decoration.
-export type BrushableToolId = "path-brush" | "wall-brush";
+export type BrushableToolId = "path-brush" | "wall-brush" | "muro-brush";
 export function brushReach(shape: BrushShape): number {
   if (shape.kind === "square") return shape.size / 2;
   return shape.radius;
@@ -4297,6 +4297,15 @@ export const towerStampTool: ConstructionTool<"tower-stamp"> = {
   previewOutline(gesture.current.point, params.radius, PREVIEW_SEGMENTS),
   WALL_COLOR[params.wallType],
 
+// src/composition/tabletop/tools/walls/muro-brush-tool.ts
+export const muroBrushTool = createBrushTool<"muro-brush">({
+  id: "muro-brush",
+  defaultParams: () => DEFAULT_TOOL_PARAMS["muro-brush"],
+  previewColor: () => 0xb6a18c,
+  halfWidth: (params) => params.thickness / 2,
+  applyRegion(region, ctx, params) {
+  const operationId = scopedToolId(ctx, "muro-brush", ctx.nextSequence());
+
 // src/composition/tabletop/tools/walls/wall-brush-tool.ts
 export const wallBrushTool = createBrushTool<"wall-brush">({
   id: "wall-brush",
@@ -4500,11 +4509,11 @@ export interface SurfaceCovering {
 export function colorForSurfaceType(surfaceType: string, physical: boolean): number {
   if (!physical) return 0x3a6b8a;
   switch (surfaceType) {
+  case "muro": return 0xb6a18c;
   case "wall":
   case "wall-white":
   return 0xe2e8f0; // White / light gray block prototype
   case "wall-gray":
-  return 0x64748b; // Slate gray block prototype
 export const NONE_COVERING: SurfaceCovering = Object.freeze({
   kind: NONE_COVERING_KIND,
   key: NONE_COVERING_KIND,
@@ -4801,6 +4810,30 @@ export function firstRefusal(resolved: readonly ResolvedCoverage[]): string | un
   if (entry.interaction.kind === "forbid") return entry.interaction.reason;
   }
 
+// src/features/edit-construction/structure-types/muro/muro-plan.ts
+export function muroOwner(edgeId: string): string | undefined {
+  return /^spine-edge:muro:([^:]+):/.exec(edgeId)?.[1];
+  }
+export function muroOwnerForTarget(snapshot: ConstructionGraphSnapshot, targetId: string): string | undefined {
+  const pick = curvePick(targetId);
+export function planMuroCreation(input: {
+  snapshot: ConstructionGraphSnapshot; topologies: readonly ConstructionRegionTopology[]; port: BezierPort;
+  stroke: readonly ConstructionPosition[]; operationId: string; height: number; thickness: number; tolerance: number;
+  }) {
+  if (!Number.isFinite(input.thickness) || input.thickness <= 0) throw Error("Informe uma espessura positiva para o muro.");
+export function planMuroEdit(input: BezierEditInput & { readonly height?: number; readonly setHeight?: boolean }) {
+  const owner = muroOwnerForTarget(input.snapshot, input.targetId);
+
+// src/features/edit-construction/structure-types/muro/muro-structure.ts
+export const muroStructureType = Object.freeze<StructureTypeDefinition>({
+  surfaceType: "muro",
+  label: "Muro",
+  creation: "Bézier axis extruded in Rust, with thickness and constant height above sampled terrain",
+  roleFor: (_topology, target) => target.kind === "region" ? "muro-body" : target.kind === "edge" ? "muro-panel-edge" : Number(target.nodeId.split(":").at(-1)) % 2 === 1 ? "muro-top" : "muro-base",
+  policyFor: (role) => denied(role, "Edite o muro pelos nós e alças do eixo; use Altura do muro para ajustar o topo."),
+  interactionOver: () => IGNORE,
+  conformsTo: (surfaceType) => surfaceType === "terrain" || surfaceType === "terrain-grass",
+
 // src/features/edit-construction/structure-types/organic/organic-structure.ts
 export const ORGANIC_ROLES = {
   boundaryVertex: "organic-boundary-vertex",
@@ -4831,10 +4864,10 @@ export function terrainInteractionOver(coveredType: string): CreationInteraction
   if (TERRAIN_TYPES.has(coveredType)) return RESTACK;
   return forbid(`terrain cannot be created above "${coveredType}"`);
 export function pathInteractionOver(
-  _coveredType: string,
+  coveredType: string,
   paintedSubtype?: string,
   ): CreationInteraction {
-  return paintedSubtype === "bridge" ? IGNORE : CUT;
+  return coveredType === "muro" || paintedSubtype === "bridge" ? IGNORE : CUT;
   }
 
 // src/features/edit-construction/structure-types/organic/terrain-cloud.ts
@@ -4928,11 +4961,13 @@ export function planBezierAction(snapshot: ConstructionGraphSnapshot, port: Bezi
 // src/features/edit-construction/structure-types/path/bezier-road-edit.ts
 export function curvePickId(edgeId: string, index: 1 | 2 | "midpoint"): string {
   return index === "midpoint" ? MIDPOINT + encodeURIComponent(edgeId) : HANDLE + index + ":" + encodeURIComponent(edgeId);
+export function curvePick(id: string): { edgeId: string; index: 1 | 2 | "midpoint" } | undefined {
+  if (id.startsWith(MIDPOINT)) return { edgeId: decodeURIComponent(id.slice(MIDPOINT.length)), index: "midpoint" };
 export function bezierPickHandles(snapshot: ConstructionGraphSnapshot, port: BezierPort) {
   const nodes = new Map(snapshot.nodes.map((n) => [n.id, n.position]));
 export function isBezierEditTarget(snapshot: ConstructionGraphSnapshot, id: string): boolean {
   const pick = curvePick(id);
-export function planBezierEdit(input: {
+export interface BezierEditInput {
   readonly snapshot: ConstructionGraphSnapshot;
   readonly topologies: readonly ConstructionRegionTopology[];
   readonly port: BezierPort;
@@ -4940,6 +4975,10 @@ export function planBezierEdit(input: {
   readonly position: ConstructionPosition;
   readonly operationId: string;
   readonly tableId: string;
+export function planBezierGraphEdit(input: BezierEditInput) {
+  const source = explicitSpineSnapshot(input.snapshot, input.port, [-2, 2]);
+export function planBezierEdit(input: BezierEditInput): { request: ApplyPatchReplacementRequest; preview: Float32Array; selectedId: string } | undefined {
+  const edit = planBezierGraphEdit(input);
 
 // src/features/edit-construction/structure-types/path/bezier-road-plan.ts
 export function unionBezierRibbons(port: BezierPort, ribbons: readonly BandRibbon[]): [number, number][][][] {
@@ -5849,13 +5888,7 @@ export interface CurveHandles {
 export type CurveCommand =
 export interface CurveBatch { readonly tolerance: number; readonly commands: readonly CurveCommand[] }
 export interface CurveResult {
-  readonly ribbon: { readonly outer: readonly CurvePoint[] } | null;
-  readonly curves: readonly CubicBezier[];
-  readonly handles: readonly CurveHandles[];
-  readonly samples: readonly (readonly { readonly t: number; readonly position: CurvePoint }[])[];
-  readonly lengths: readonly number[];
-  readonly parameter: number | null;
-  readonly opposite: CurvePoint | null;
+  readonly extrusion?: { readonly vertices: readonly CurvePoint[]; readonly faces: readonly (readonly [number, number, number])[]; readonly edges: readonly (readonly [number, number])[]; readonly boundaries: readonly (readonly (readonly [number, boolean])[])[] };
 export interface CurveNetworkNode { readonly id: string; readonly position: CurvePoint }
 export interface CurveNetworkEdge { readonly edgeId: string; readonly startNodeId: string; readonly endNodeId: string; readonly curve: CurveHandles }
 export interface CurveNetworkRequest {

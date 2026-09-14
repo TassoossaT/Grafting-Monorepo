@@ -124,6 +124,10 @@ pub mod grafting_graph_core::bezier_commands
 pub enum grafting_graph_core::bezier_commands::CurveCommand
 pub grafting_graph_core::bezier_commands::CurveCommand::Automatic
 pub grafting_graph_core::bezier_commands::CurveCommand::Automatic::points: alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>
+pub grafting_graph_core::bezier_commands::CurveCommand::ExtrudeRibbon
+pub grafting_graph_core::bezier_commands::CurveCommand::ExtrudeRibbon::ground: alloc::vec::Vec<alloc::vec::Vec<alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>>>
+pub grafting_graph_core::bezier_commands::CurveCommand::ExtrudeRibbon::height: f64
+pub grafting_graph_core::bezier_commands::CurveCommand::ExtrudeRibbon::segments: alloc::vec::Vec<grafting_graph_core::bezier_surface::RibbonSegment>
 pub grafting_graph_core::bezier_commands::CurveCommand::Fit
 pub grafting_graph_core::bezier_commands::CurveCommand::Fit::corner_degrees: core::option::Option<f64>
 pub grafting_graph_core::bezier_commands::CurveCommand::Fit::points: alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>
@@ -192,6 +196,7 @@ impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::bezier_com
 impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::bezier_commands::CurveBatch
 pub struct grafting_graph_core::bezier_commands::CurveResult
 pub grafting_graph_core::bezier_commands::CurveResult::curves: alloc::vec::Vec<grafting_graph_core::bezier::CubicBezier>
+pub grafting_graph_core::bezier_commands::CurveResult::extrusion: core::option::Option<grafting_graph_core::bezier_surface::RibbonExtrusion>
 pub grafting_graph_core::bezier_commands::CurveResult::handles: alloc::vec::Vec<grafting_graph_core::bezier::CurveHandles>
 pub grafting_graph_core::bezier_commands::CurveResult::lengths: alloc::vec::Vec<f64>
 pub grafting_graph_core::bezier_commands::CurveResult::opposite: core::option::Option<grafting_graph_core::bezier::CurvePoint>
@@ -310,6 +315,44 @@ impl core::marker::Sync for grafting_graph_core::bezier_surface::CurveRibbon
 impl core::marker::Unpin for grafting_graph_core::bezier_surface::CurveRibbon
 impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::bezier_surface::CurveRibbon
 impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::bezier_surface::CurveRibbon
+pub struct grafting_graph_core::bezier_surface::RibbonExtrusion
+pub grafting_graph_core::bezier_surface::RibbonExtrusion::boundaries: alloc::vec::Vec<[(usize, bool); 3]>
+pub grafting_graph_core::bezier_surface::RibbonExtrusion::edges: alloc::vec::Vec<[usize; 2]>
+pub grafting_graph_core::bezier_surface::RibbonExtrusion::faces: alloc::vec::Vec<[usize; 3]>
+pub grafting_graph_core::bezier_surface::RibbonExtrusion::vertices: alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>
+impl core::clone::Clone for grafting_graph_core::bezier_surface::RibbonExtrusion
+pub fn grafting_graph_core::bezier_surface::RibbonExtrusion::clone(&self) -> grafting_graph_core::bezier_surface::RibbonExtrusion
+impl core::fmt::Debug for grafting_graph_core::bezier_surface::RibbonExtrusion
+pub fn grafting_graph_core::bezier_surface::RibbonExtrusion::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for grafting_graph_core::bezier_surface::RibbonExtrusion
+pub fn grafting_graph_core::bezier_surface::RibbonExtrusion::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for grafting_graph_core::bezier_surface::RibbonExtrusion
+pub fn grafting_graph_core::bezier_surface::RibbonExtrusion::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for grafting_graph_core::bezier_surface::RibbonExtrusion
+impl core::marker::Send for grafting_graph_core::bezier_surface::RibbonExtrusion
+impl core::marker::Sync for grafting_graph_core::bezier_surface::RibbonExtrusion
+impl core::marker::Unpin for grafting_graph_core::bezier_surface::RibbonExtrusion
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::bezier_surface::RibbonExtrusion
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::bezier_surface::RibbonExtrusion
+pub struct grafting_graph_core::bezier_surface::RibbonSegment
+pub grafting_graph_core::bezier_surface::RibbonSegment::curve: grafting_graph_core::bezier::CubicBezier
+pub grafting_graph_core::bezier_surface::RibbonSegment::end_offsets: [f64; 2]
+pub grafting_graph_core::bezier_surface::RibbonSegment::offsets: [f64; 2]
+impl core::clone::Clone for grafting_graph_core::bezier_surface::RibbonSegment
+pub fn grafting_graph_core::bezier_surface::RibbonSegment::clone(&self) -> grafting_graph_core::bezier_surface::RibbonSegment
+impl core::fmt::Debug for grafting_graph_core::bezier_surface::RibbonSegment
+pub fn grafting_graph_core::bezier_surface::RibbonSegment::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for grafting_graph_core::bezier_surface::RibbonSegment
+pub fn grafting_graph_core::bezier_surface::RibbonSegment::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for grafting_graph_core::bezier_surface::RibbonSegment
+pub fn grafting_graph_core::bezier_surface::RibbonSegment::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for grafting_graph_core::bezier_surface::RibbonSegment
+impl core::marker::Send for grafting_graph_core::bezier_surface::RibbonSegment
+impl core::marker::Sync for grafting_graph_core::bezier_surface::RibbonSegment
+impl core::marker::Unpin for grafting_graph_core::bezier_surface::RibbonSegment
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::bezier_surface::RibbonSegment
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::bezier_surface::RibbonSegment
+pub fn grafting_graph_core::bezier_surface::extrude_ribbon(segments: &[grafting_graph_core::bezier_surface::RibbonSegment], height: f64, ground: &[alloc::vec::Vec<alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>>], accuracy: f64) -> core::result::Result<grafting_graph_core::bezier_surface::RibbonExtrusion, alloc::string::String>
 pub fn grafting_graph_core::bezier_surface::ribbon(curve: grafting_graph_core::bezier::CubicBezier, offsets: [f64; 2], accuracy: f64) -> core::result::Result<grafting_graph_core::bezier_surface::CurveRibbon, alloc::string::String>
 pub fn grafting_graph_core::bezier_surface::ribbon_join(sections: &[[grafting_graph_core::bezier::CurvePoint; 2]]) -> core::result::Result<grafting_graph_core::bezier_surface::CurveRibbon, alloc::string::String>
 pub fn grafting_graph_core::bezier_surface::ribbon_profile(curve: grafting_graph_core::bezier::CubicBezier, offsets: [f64; 2], end_offsets: [f64; 2], accuracy: f64) -> core::result::Result<grafting_graph_core::bezier_surface::CurveRibbon, alloc::string::String>
@@ -2360,6 +2403,15 @@ Nearly tangent/coincident spans do not manufacture arbitrary crossings.
 
 Inserts and splits curves transactionally, enforcing independent height tolerance.
 
+### `pub fn grafting_graph_core::bezier_surface::extrude_ribbon(segments: &[grafting_graph_core::bezier_surface::RibbonSegment], height: f64, ground: &[alloc::vec::Vec<alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>>], accuracy: f64) -> core::result::Result<grafting_graph_core::bezier_surface::RibbonExtrusion, alloc::string::String>`
+
+Extrudes ordered curve spans, sampling their base on supporting polygons.
+Missing support retains the authored curve's elevation. Top vertices are
+always exactly `height` above their corresponding base. Terrain is read-only.
+Stations are at most 0.25 units apart in control-polygon length; curved
+spans also retain the curve sampler's accuracy bound. Disconnected spans,
+nonpositive dimensions and excessive input are rejected before returning geometry.
+
 ### `pub fn grafting_graph_core::bezier_surface::ribbon(curve: grafting_graph_core::bezier::CubicBezier, offsets: [f64; 2], accuracy: f64) -> core::result::Result<grafting_graph_core::bezier_surface::CurveRibbon, alloc::string::String>`
 
 Computes a ribbon from an explicit cubic and independently specified widths.
@@ -3280,6 +3332,22 @@ Convert a legacy/automatic anchor chain.
 
 Ordered anchors.
 
+### `pub grafting_graph_core::bezier_commands::CurveCommand::ExtrudeRibbon`
+
+Sweep a closed vertical cross-section along ordered ribbons, projected onto ground.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::ExtrudeRibbon::ground: alloc::vec::Vec<alloc::vec::Vec<alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>>>`
+
+Supporting polygons, each an outer XYZ ring followed by holes.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::ExtrudeRibbon::height: f64`
+
+Positive vertical distance above the sampled base.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::ExtrudeRibbon::segments: alloc::vec::Vec<grafting_graph_core::bezier_surface::RibbonSegment>`
+
+Ordered, consistently oriented curve spans and their lateral profiles.
+
 ### `pub grafting_graph_core::bezier_commands::CurveCommand::Fit`
 
 Fit a captured stroke within the batch tolerance at its samples.
@@ -3426,6 +3494,10 @@ Insertion parameter.
 
 Resulting authored cubics.
 
+### `pub grafting_graph_core::bezier_commands::CurveResult::extrusion: core::option::Option<grafting_graph_core::bezier_surface::RibbonExtrusion>`
+
+Optional indexed extrusion; vertices alternate between base and top.
+
 ### `pub grafting_graph_core::bezier_commands::CurveResult::handles: alloc::vec::Vec<grafting_graph_core::bezier::CurveHandles>`
 
 Relative controls suitable for durable graph edge payloads.
@@ -3521,6 +3593,34 @@ Curve approximation tolerance.
 ### `pub grafting_graph_core::bezier_surface::CurveRibbon::outer: alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>`
 
 Closed polygon boundary, without a repeated closing vertex.
+
+### `pub grafting_graph_core::bezier_surface::RibbonExtrusion::boundaries: alloc::vec::Vec<[(usize, bool); 3]>`
+
+Each face's edge indices and reversed flags in boundary order.
+
+### `pub grafting_graph_core::bezier_surface::RibbonExtrusion::edges: alloc::vec::Vec<[usize; 2]>`
+
+Unique edges over vertex indices.
+
+### `pub grafting_graph_core::bezier_surface::RibbonExtrusion::faces: alloc::vec::Vec<[usize; 3]>`
+
+Triangular faces, with consistent winding.
+
+### `pub grafting_graph_core::bezier_surface::RibbonExtrusion::vertices: alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>`
+
+Alternating base/top vertices, two pairs per station.
+
+### `pub grafting_graph_core::bezier_surface::RibbonSegment::curve: grafting_graph_core::bezier::CubicBezier`
+
+Authored cubic.
+
+### `pub grafting_graph_core::bezier_surface::RibbonSegment::end_offsets: [f64; 2]`
+
+End cross-section offsets.
+
+### `pub grafting_graph_core::bezier_surface::RibbonSegment::offsets: [f64; 2]`
+
+Start cross-section offsets.
 
 ### `pub grafting_graph_core::curve_offset::FieldSample::curve: usize`
 
@@ -3983,6 +4083,14 @@ Generic insertion into an existing curve graph.
 ### `pub struct grafting_graph_core::bezier_surface::CurveRibbon`
 
 A sampled ribbon with its source heights.
+
+### `pub struct grafting_graph_core::bezier_surface::RibbonExtrusion`
+
+Closed vertical sweep with shared indexed face boundaries.
+
+### `pub struct grafting_graph_core::bezier_surface::RibbonSegment`
+
+One span of a vertical ribbon sweep, oriented in chain order.
 
 ### `pub struct grafting_graph_core::curve_offset::FieldSample`
 

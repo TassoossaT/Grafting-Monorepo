@@ -17,3 +17,4 @@ export * from "./topology/index.ts";
 export * from "./modes/index.ts";
 export * from "./tools/index.ts";
 export * from "./structure-types/index.ts";
+export { planMuroCreation, planMuroEdit, muroOwnerForTarget } from "./structure-types/muro/muro-plan.ts";

@@ -12,6 +12,7 @@ export type ConstructionToolId =
   | "platform-contour"
   | "roof"
   | "path-brush"
+  | "muro-brush"
   | "wall-brush"
   | "wall-line"
   | "interior-wall"
@@ -202,9 +203,10 @@ export interface OpeningParams {
 export type NoToolParams = Record<string, never>;
 
 export interface ToolParamsByTool {
+  readonly "muro-brush": BrushShapeParams & { readonly height: number; readonly thickness: number };
   readonly roof: { readonly shape: "rectangle" | "circle" | "platform"; readonly elevation: number; readonly height: number; readonly radius: number; readonly curvatures: readonly [number, number, number, number] };
   readonly navigate: NoToolParams;
-  readonly "edit-region": { readonly mode: "shape" | "elevation"; readonly curveMode?: "automatic" | "aligned" | "mirrored" | "free"; readonly curveAction?: "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"; readonly curveWidth?: number; readonly curveEndWidth?: number };
+  readonly "edit-region": { readonly mode: "shape" | "elevation"; readonly curveMode?: "automatic" | "aligned" | "mirrored" | "free"; readonly curveAction?: "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width" | "height"; readonly curveWidth?: number; readonly curveEndWidth?: number; readonly curveHeight?: number };
   readonly "platform-contour": { readonly elevation: number; readonly mode: "create" | "extend" | "cut"; readonly shape?: "rectangle" | "polygon" | "freehand" | "circle"; readonly radius?: number; readonly tolerance?: number };
   readonly "path-brush": PathBrushParams;
   readonly "wall-brush": WallBrushParams;
@@ -219,6 +221,7 @@ export interface ToolParamsByTool {
 export type ToolParamsFor<Id extends ConstructionToolId> = ToolParamsByTool[Id];
 
 export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
+  "muro-brush": Object.freeze({ shape: "circle", radius: 0.3, rotationDegrees: 0, height: 3, thickness: 0.3 }),
   roof: Object.freeze({ shape: "rectangle", elevation: 3, height: 2, radius: 2.5, curvatures: [0, 0, 0, 0] as const }),
   navigate: Object.freeze({}),
   "edit-region": Object.freeze({ mode: "shape" }),
