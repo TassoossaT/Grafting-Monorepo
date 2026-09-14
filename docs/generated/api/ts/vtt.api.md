@@ -2035,11 +2035,11 @@ shared run), or when the survivors do not close into whole loops.
 
 ### `variable vtt.platform-contour-tool.platformContourTool: ConstructionTool<"platform-contour">`
 
-### `function vtt.platform-contour-tool.commitPlatformContour(ctx: ToolContext, samples: readonly PointerSample[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; tolerance?: number }): void`
+### `function vtt.platform-contour-tool.commitPlatformContour(ctx: ToolContext, samples: readonly PointerSample[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; rise?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand" | "slope" | "spiral"; tolerance?: number; turns?: number; width?: number }): void`
 
 Polygon entry point retained for callers that already have explicit corners.
 
-### `function vtt.platform-contour-tool.commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; tolerance?: number }, pickedSamples: readonly PointerSample[]): void`
+### `function vtt.platform-contour-tool.commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; rise?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand" | "slope" | "spiral"; tolerance?: number; turns?: number; width?: number }, pickedSamples: readonly PointerSample[]): void`
 
 Commits the same directed line/arc contour vocabulary consumed by wall
 construction. Ampliar/juntar and recortar/separar no longer run an
@@ -2047,6 +2047,17 @@ analytic boolean against the standing platform: the stroke has to weld
 onto the existing boundary (within WELD_TOLERANCE, the same one a
 wall run snaps onto a column with) and the result is assembled from
 shared/cancelled edges -- see `platform-contour-merge.ts` for why.
+
+### `function vtt.platform-slope.commitPlatformSlope(ctx: ToolContext, controlPoints: readonly ConstructionPosition[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; rise?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand" | "slope" | "spiral"; tolerance?: number; turns?: number; width?: number }): void`
+
+Commits one sloped platform along the curve through `controlPoints`. Each
+end welds onto a flat platform edge at its own height when it lands on one.
+
+### `function vtt.platform-slope.slopeControlPoint(ctx: ToolContext, sample: PointerSample): ConstructionPosition`
+
+A control point's height comes from what the pointer actually touched: a node's own height, else the picked surface.
+
+### `function vtt.platform-slope.spiralControlPoints(center: ConstructionPosition, params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; rise?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand" | "slope" | "spiral"; tolerance?: number; turns?: number; width?: number }): readonly ConstructionPosition[]`
 
 ### `variable vtt.roof-tool.ROOF_OVERHANG: 0.2`
 
@@ -4021,6 +4032,25 @@ The address inside `id`, or `undefined` for an id no sweep minted.
 
 A horizontal structural marker, independently usable as floor or ceiling.
 
+### `variable vtt.platform-structure.slopedPlatformStructureType: StructureTypeDefinition`
+
+The platform built along a curve instead of a contour: a strip whose
+height varies along its axis and never across it -- a ramp, a sloped
+walkway, a spiral climb. Stairs are this same shape with a step parameter;
+steps are appearance, not structure.
+
+A sibling surface type rather than a mode read off the face, because a
+cloud is one type: a ramp welded between two floors sharing their type
+would join both floors and itself into one cloud, and lifting one floor
+would carry all three.
+
+It keeps the flat platform's contract otherwise -- shared vertices are the
+connection, and a floor that moves carries the ramp end welded to it. What
+the ramp adds is how the rest of it answers: each station stays level
+across, and the stations between a moved end and the unmoved one spread
+the move by arc length (interpolateStripMotion) instead of the
+last span kinking.
+
 ### `variable vtt.roof-structure.roofStructureType: StructureTypeDefinition`
 
 Roof profiles move as a connected cloud; this delivery adds no shape handles.
@@ -4301,6 +4331,13 @@ Whether regions of this type vertically conform to a surface of `surfaceType` be
 How this type is generated, recorded next to the roles it implies --
 the doc's whole point is that these two halves must not drift apart.
 
+### `property vtt.structure-type.StructureTypeDefinition.deriveMotion?: (topologies: readonly ConstructionRegionTopology[], positions: ReadonlyMap<string, ConstructionPosition>) => ReadonlyMap<string, ConstructionPosition>`
+
+Positions this type derives for its own unmoved nodes once motion has
+been resolved -- a shape that bends with a received move instead of
+kinking at it. Handed every face of the type, since the shape may span
+faces the move never reached. Derived moves do not propagate further.
+
 ### `property vtt.structure-type.StructureTypeDefinition.interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction`
 
 What happens when **this** type is painted over `coveredType` -- the
@@ -4561,7 +4598,7 @@ Perlin `scale` -- smaller values are smoother/larger-scale terrain features.
 
 ### `property vtt.tool-types.ToolParamsByTool.path-brush: PathBrushParams`
 
-### `property vtt.tool-types.ToolParamsByTool.platform-contour: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; tolerance?: number }`
+### `property vtt.tool-types.ToolParamsByTool.platform-contour: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; rise?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand" | "slope" | "spiral"; tolerance?: number; turns?: number; width?: number }`
 
 ### `property vtt.tool-types.ToolParamsByTool.roof: { curvatures: readonly [number, number, number, number]; elevation: number; height: number; radius: number; shape: "rectangle" | "circle" | "platform" }`
 
@@ -5016,6 +5053,74 @@ at one spot give the frame maths no direction to read, and a pointer held
 still or a grid snap folding samples onto one intersection both produce
 exactly that. Where the stations go is the caller's decision, because it
 depends on what the formation runs over.
+
+### `interface vtt.swept-strip.StripStation`
+
+### `property vtt.swept-strip.StripStation.l: ConstructionPosition`
+
+### `property vtt.swept-strip.StripStation.r: ConstructionPosition`
+
+### `type vtt.swept-strip.StripSide = "l" | "r"`
+
+A strip swept along a 3D curve: a row of stations, each one horizontal
+cross-section of two nodes, joined into quads. The curve may climb -- every
+control point carries its own height -- but a station never tilts sideways.
+
+Generic on purpose. Nothing here knows what a strip is *for*; a sloped
+platform, a ramp and a spiral stair are all callers choosing control points
+and a width. The curve fitting and the lateral offset are the Rust bezier
+engine's (`automatic` and `ribbon`); this module only names what comes back.
+
+**Why quads and not one contour.** A spiral's turns overlap in plan, so any
+planar union of its footprint would weld one turn onto the next. One face per
+station span keeps every face nearly planar and never overlapping itself.
+
+**Identity lives on edges.** Stations are read back from rung edge ids, not
+node ids, because a strip end welded onto an existing corner reuses that
+corner's node -- the node keeps its owner's id, while the rung keeps ours.
+
+### `function vtt.swept-strip.helixControlPoints(center: ConstructionPosition, radius: number, turns: number, rise: number, startAngle: number): readonly ConstructionPosition[]`
+
+Control points of a helix around `center`, starting at `center.y` and
+climbing `rise` over `turns` full turns. Eight per turn keeps the automatic
+curve visibly round.
+
+### `function vtt.swept-strip.interpolateStripMotion(topologies: readonly ConstructionRegionTopology[], moved: ReadonlyMap<string, ConstructionPosition>): ReadonlyMap<string, ConstructionPosition>`
+
+Spreads received motion along each strip instead of kinking it at the
+moved station.
+
+Every station a move already reached is an anchor, and so are both ends --
+an unmoved end stays where it stands. Each side's stations in between take
+the anchors' displacement interpolated by arc length along the strip. On a
+climbing strip that is exactly what regenerating it between its new ends
+would give for height; a helix stays a helix.
+
+### `function vtt.swept-strip.isStripFace(topology: ConstructionRegionTopology): boolean`
+
+Whether a face is one span of a swept strip.
+
+### `function vtt.swept-strip.parseStripRungEdgeId(edgeId: string): { index: number; stripId: string } | undefined`
+
+### `function vtt.swept-strip.readStrips(topologies: readonly ConstructionRegionTopology[]): ReadonlyMap<string, readonly StripRow[]>`
+
+Every strip the faces belong to, as ordered station rows. Strips with a gap in their row are skipped.
+
+### `function vtt.swept-strip.sampleStripStations(port: Pick<BezierPort, "curveBatch">, controlPoints: readonly ConstructionPosition[], width: number): readonly StripStation[]`
+
+Stations along the smooth curve through `controlPoints`, `width` wide.
+Consecutive curve spans share their joint station exactly once.
+
+### `function vtt.swept-strip.stripNodeId(stripId: string, index: number, side: StripSide): string`
+
+### `function vtt.swept-strip.stripPatch(stripId: string, stations: readonly StripStation[], surfaceType: string, nodeIds: (index: number, side: StripSide) => string): { edges: readonly ConstructionPatchEdge[]; nodes: readonly { id: string; position: ConstructionPosition }[]; regions: readonly ConstructionPatchRegion[] }`
+
+The strip's nodes, edges and one quad per span. `nodeIds` lets a caller
+substitute an existing node for a station end it welds onto.
+
+### `function vtt.swept-strip.stripRailEdgeId(stripId: string, side: StripSide, index: number): string`
+
+### `function vtt.swept-strip.stripRungEdgeId(stripId: string, index: number): string`
 
 ### `interface vtt.attach-camera-navigation.CameraControllable`
 

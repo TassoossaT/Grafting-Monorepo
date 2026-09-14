@@ -4103,6 +4103,16 @@ export const platformContourTool: ConstructionTool<"platform-contour"> = {
   previewFor(gesture, params, ctx) {
   const points = draft(ctx,params);
 
+// src/composition/tabletop/tools/platform/platform-slope.ts
+export function slopeControlPoint(ctx: ToolContext, sample: PointerSample): ConstructionPosition {
+  const node = sample.nodeId ? ctx.runtime.getGraphSnapshot().nodes.find((n) => n.id === sample.nodeId) : undefined;
+  return { ...sample.point, y: node?.position.y ?? sample.point.y };
+export function spiralControlPoints(center: ConstructionPosition, params: Params): readonly ConstructionPosition[] {
+  return helixControlPoints(center, params.radius ?? 2.5, params.turns ?? 1, params.rise ?? 3);
+export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly ConstructionPosition[], params: Params): void {
+  try {
+  const sampled = sampleStripStations(ctx.runtime, controlPoints, params.width ?? 1.5);
+
 // src/composition/tabletop/tools/roof/roof-tool.ts
 export const ROOF_OVERHANG = 0.2;
 export function commitRoof(ctx: ToolContext, capRequest: CapRequest): void {
@@ -5386,6 +5396,14 @@ export const platformStructureType: StructureTypeDefinition = Object.freeze<Stru
   repairAfterCut: { kind: "preserve", reason: "Structural contour subtraction preserves the remaining planar faces and shared identities." },
   motionInfluences: (topology, transport): readonly ConstructionMotionInfluence[] => {
   const anchor = topology.nodes[0];
+export const slopedPlatformStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
+  surfaceType: "platform-slope", label: "Plataforma inclinada",
+  creation: "a strip swept along an automatic bezier through control points, each with its own height",
+  roleFor: (topology, target) => target.kind === "vertex" && !topology.nodes.some((node) => node.id === target.nodeId) ? "platform-slope-unknown" : `platform-slope-${target.kind}`,
+  policyFor: (role) => role === "platform-slope-unknown" ? denied(role, "Vertice fora da plataforma inclinada.") : ({ ...allowed(role, ALL_AXES, role === "platform-slope-region" ? "cloud" : "surface"), transport: role === "platform-slope-region" }),
+  interactionOver: () => IGNORE,
+  repairAfterCut: { kind: "unsupported", reason: "a cut strip needs its own station split and end capping, not designed yet" },
+  motionInfluences: (topology, transport): readonly ConstructionMotionInfluence[] => {
 
 // src/features/edit-construction/structure-types/roof/roof-structure.ts
 export const roofStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
@@ -5486,8 +5504,8 @@ export interface StructureTypeDefinition {
   readonly label: string;
   /** Responses to received motion, independent of direct gesture constraints. */
   readonly motionInfluences?: (topology: ConstructionRegionTopology, transport: boolean) => readonly ConstructionMotionInfluence[];
-  /** Returns a reason when a proposed position batch violates this type. */
-  readonly validateMotion?: (topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>) => string | undefined;
+  /**
+  * Positions this type derives for its own unmoved nodes once motion has
 export function denied(role: EditRole, reason: string): RolePolicy {
   return { role, resolve: { kind: "deny", reason }, axes: [], scope: "surface" };
 export function allowed(
@@ -5656,6 +5674,7 @@ export type { PerimeterLoop } from "./surface-perimeter.ts";
 export type { FittedEdge, FitOptions } from "./stroke-fitting.ts";
 export type { BoundaryEdges, EdgeSharing } from "./boundary-edges.ts";
 export type { SweptArc, TransverseProfilePoint } from "./sweep-formation.ts";
+export type { StripSide, StripStation } from "./swept-strip.ts";
 
 // src/features/edit-construction/topology/ring-simplify.ts
 export function simplifyClosedRing(
@@ -5753,6 +5772,49 @@ export function sweepFormation(
   /** The curve each span runs on; one shorter than `referenceLine`. */
   readonly arcs?: readonly (SweptArc | undefined)[];
   } = {},
+
+// src/features/edit-construction/topology/swept-strip.ts
+export type StripSide = "l" | "r";
+export interface StripStation {
+  readonly l: ConstructionPosition;
+  readonly r: ConstructionPosition;
+  }
+export function sampleStripStations(
+  port: Pick<BezierPort, "curveBatch">,
+  controlPoints: readonly ConstructionPosition[],
+  width: number,
+  ): readonly StripStation[] {
+  if (!(width > 0)) throw new Error("A largura deve ser positiva.");
+export function helixControlPoints(
+  center: ConstructionPosition,
+  radius: number,
+  turns: number,
+  rise: number,
+  startAngle = 0,
+  ): readonly ConstructionPosition[] {
+  if (!(radius > 0) || !(turns > 0) || !Number.isFinite(rise)) throw new Error("Raio e voltas devem ser positivos.");
+export const stripRungEdgeId = (stripId: string, index: number): string => `${stripId}:rung:${index}`;
+export const stripRailEdgeId = (stripId: string, side: StripSide, index: number): string => `${stripId}:rail:${side}:${index}`;
+export const stripNodeId = (stripId: string, index: number, side: StripSide): string => `${stripId}:station:${index}:${side}`;
+export function parseStripRungEdgeId(edgeId: string): { readonly stripId: string; readonly index: number } | undefined {
+  const match = /^(.*):rung:(\d+)$/.exec(edgeId);
+export function isStripFace(topology: ConstructionRegionTopology): boolean {
+  return topology.outerLoops.some((loop) => loop.some((use) => parseStripRungEdgeId(use.edgeId) !== undefined));
+export function stripPatch(
+  stripId: string,
+  stations: readonly StripStation[],
+  surfaceType: string,
+  nodeIds: (index: number, side: StripSide) => string = (index, side) => stripNodeId(stripId, index, side),
+  ): {
+  readonly nodes: readonly { readonly id: string; readonly position: ConstructionPosition }[];
+  readonly edges: readonly ConstructionPatchEdge[];
+export function readStrips(topologies: readonly ConstructionRegionTopology[]): ReadonlyMap<string, readonly StripRow[]> {
+  const rows = new Map<string, Map<number, StripRow>>();
+export function interpolateStripMotion(
+  topologies: readonly ConstructionRegionTopology[],
+  moved: ReadonlyMap<string, ConstructionPosition>,
+  ): ReadonlyMap<string, ConstructionPosition> {
+  const derived = new Map<string, ConstructionPosition>();
 
 // src/features/navigate-camera/attach-camera-navigation.ts
 export interface CameraControllable {

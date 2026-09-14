@@ -239,6 +239,13 @@ export interface StructureTypeDefinition {
   readonly label: string;
   /** Responses to received motion, independent of direct gesture constraints. */
   readonly motionInfluences?: (topology: ConstructionRegionTopology, transport: boolean) => readonly ConstructionMotionInfluence[];
+  /**
+   * Positions this type derives for its own unmoved nodes once motion has
+   * been resolved -- a shape that bends with a received move instead of
+   * kinking at it. Handed every face of the type, since the shape may span
+   * faces the move never reached. Derived moves do not propagate further.
+   */
+  readonly deriveMotion?: (topologies: readonly ConstructionRegionTopology[], positions: ReadonlyMap<string, ConstructionPosition>) => ReadonlyMap<string, ConstructionPosition>;
   /** Returns a reason when a proposed position batch violates this type. */
   readonly validateMotion?: (topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>) => string | undefined;
   /**
