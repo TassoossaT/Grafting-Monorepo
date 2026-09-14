@@ -35,7 +35,7 @@ function heightOf(edge: Pick<ConstructionEdgeSnapshot, "curve">): number {
   return height !== undefined && Number.isFinite(height) && height > 0 ? height : DEFAULT_HEIGHT;
 }
 
-const panelId = (spanId: string, index: number): string => `${spanId}:panel:${index}`;
+const panelId = (spanId: string): string => `${spanId}:panel`;
 const wallTopId = (nodeId: string): string => `${nodeId}:wall-top`;
 
 export interface WallCurveSurface {
@@ -46,12 +46,14 @@ export interface WallCurveSurface {
 }
 
 /**
- * The panels of every curved-wall span in `spans`, sampled along their
- * curves. A control node's own top (`wallTopId`) is shared by every span
- * that meets there, so adjacent spans in the same run weld at that column
- * exactly as `wallPatch` welds adjacent brush panels -- without borrowing
- * that builder's contour/closure bookkeeping, which assumes one contiguous
- * run rather than an independently regenerated span.
+ * One panel per curved-wall span, exactly the way `slopeSurface` keeps one
+ * face per sloped-platform span: the curve is sampled for its shape, but
+ * that shape is one polygon's own boundary, never a chain of independent
+ * mini-panels. A control node's own top (`wallTopId`) is shared by every
+ * span that meets there, so adjacent spans in the same run weld at that
+ * column exactly as `wallPatch` welds adjacent brush panels -- without
+ * borrowing that builder's contour/closure bookkeeping, which assumes one
+ * contiguous run rather than an independently regenerated span.
  */
 export function wallCurveSurface(
   port: Pick<BezierPort, "curveBatch">,
@@ -82,22 +84,23 @@ export function wallCurveSurface(
       place(topId, top);
       return { bottomId, topId };
     });
+    const along = (side: "bottomId" | "topId") => columns.slice(0, -1).map((_, k) => boundary.use(columns[k]![side], columns[k + 1]![side]));
+    const startRung = boundary.use(columns[0]!.bottomId, columns[0]!.topId);
+    const endRung = boundary.use(columns[last]!.bottomId, columns[last]!.topId);
+    regions.push({
+      regionId: panelId(span.edgeId),
+      surfaceType: wallType,
+      physical: true,
+      boundary: [
+        ...along("bottomId"),
+        endRung,
+        ...along("topId").reverse().map((use) => ({ edgeId: use.edgeId, reversed: !use.reversed })),
+        { edgeId: startRung.edgeId, reversed: !startRung.reversed },
+      ],
+    });
     for (let k = 0; k + 1 < columns.length; k += 1) {
-      const from = columns[k]!;
-      const to = columns[k + 1]!;
-      regions.push({
-        regionId: panelId(span.edgeId, k),
-        surfaceType: wallType,
-        physical: true,
-        boundary: [
-          boundary.use(from.bottomId, to.bottomId),
-          boundary.use(to.bottomId, to.topId),
-          boundary.use(to.topId, from.topId),
-          boundary.use(from.topId, from.bottomId),
-        ],
-      });
-      const fromPos = placed.get(from.bottomId)!;
-      const toPos = placed.get(to.bottomId)!;
+      const fromPos = placed.get(columns[k]!.bottomId)!;
+      const toPos = placed.get(columns[k + 1]!.bottomId)!;
       preview.push(fromPos.x, fromPos.y, fromPos.z, toPos.x, toPos.y, toPos.z);
     }
   });
@@ -114,9 +117,8 @@ export function regenerateWallCurveSpine(wallType: string) {
     if (spans.length === 0) return undefined;
     const before = spineComponent(snapshot, seeds).edges.filter(ownedBy(wallType));
     const removedIds = graphPatch.removedEdgeIds ?? [];
-    const touchedEdgeIds = new Set([...spans, ...before].map((edge) => edge.edgeId).concat(removedIds));
-    const standing = input.topologies.filter((topology) =>
-      topology.surfaceType === wallType && [...touchedEdgeIds].some((id) => topology.surfaceKey[1]?.startsWith(`${id}:panel:`)));
+    const touched = new Set([...spans, ...before].map((edge) => panelId(edge.edgeId)).concat(removedIds.map(panelId)));
+    const standing = input.topologies.filter((topology) => topology.surfaceType === wallType && touched.has(topology.surfaceKey[1] ?? ""));
     const surface = wallCurveSurface(input.port, input.tableId, wallType, new Map(after.nodes.map((node) => [node.id, node.position])), spans);
     return {
       request: {

@@ -31,10 +31,15 @@ function drawWallCurve(fixture, height = 3) {
 test("a Bezier-drawn wall is zero-thickness panels sitting on the curve's own centerline, at a constant height above it", () => {
   const fixture = sessionFixture();
   try {
-    drawWallCurve(fixture, 3);
+    const plan = drawWallCurve(fixture, 3);
     const panels = fixture.runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "wall-curve-white");
-    assert.ok(panels.length > 1, "a curved run should be sampled into more than one panel");
+    const spanCount = plan.request.graphPatch.edges.filter((e) => e.curve).length;
+    assert.equal(panels.length, spanCount, "one panel per fitted Bezier span, not one per sampled station");
     for (const panel of panels) {
+      // A real curve stays one polygon whose boundary follows the sampled
+      // curve, not a chain of tiny quads: more than the 4 nodes a straight
+      // quad panel would have.
+      assert.ok(panel.nodes.length > 4, "a curved panel's boundary should follow the sampled curve, not be a plain quad");
       const ys = panel.nodes.map((n) => n.position.y);
       const bottomY = Math.min(...ys);
       const topY = Math.max(...ys);

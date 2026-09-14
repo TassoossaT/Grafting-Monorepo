@@ -4715,12 +4715,14 @@ Regenerates every curved-wall span of `wallType` that a spine edit touches.
 
 ### `function vtt.wall-curve-spine.wallCurveSurface(port: Pick<BezierPort, "curveBatch">, tableId: string, wallType: string, nodes: ReadonlyMap<string, ConstructionPosition>, spans: readonly ConstructionEdgeSnapshot[]): WallCurveSurface`
 
-The panels of every curved-wall span in `spans`, sampled along their
-curves. A control node's own top (`wallTopId`) is shared by every span
-that meets there, so adjacent spans in the same run weld at that column
-exactly as `wallPatch` welds adjacent brush panels -- without borrowing
-that builder's contour/closure bookkeeping, which assumes one contiguous
-run rather than an independently regenerated span.
+One panel per curved-wall span, exactly the way `slopeSurface` keeps one
+face per sloped-platform span: the curve is sampled for its shape, but
+that shape is one polygon's own boundary, never a chain of independent
+mini-panels. A control node's own top (`wallTopId`) is shared by every
+span that meets there, so adjacent spans in the same run weld at that
+column exactly as `wallPatch` welds adjacent brush panels -- without
+borrowing that builder's contour/closure bookkeeping, which assumes one
+contiguous run rather than an independently regenerated span.
 
 ### `function vtt.wall-curve-structure.wallCurveStructureType(surfaceType: string, label: string): StructureTypeDefinition`
 
