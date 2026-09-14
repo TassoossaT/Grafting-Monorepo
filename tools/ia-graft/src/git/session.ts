@@ -143,7 +143,17 @@ export class GitWorktreeSession {
             ], { cwd: this.worktreePath });
             return { url: stdout.trim(), state: 'created' };
         } catch (error) {
-            throw new Error(`gh pr create failed for base ${baseBranch}: ${commandError(error)}`);
+            const errorMsg = commandError(error);
+            const prUrlMatch = errorMsg.match(/https:\/\/github\.com\/[^\s/]+\/[^\s/]+\/pull\/(\d+)/);
+            if (prUrlMatch) {
+                const existing = await this.existingPullRequest();
+                if (existing) {
+                    const applied = await this.applyPullRequestUpdate(existing, title, body);
+                    return { url: existing.url, state: 'existing', ...applied };
+                }
+                return { url: prUrlMatch[0], state: 'existing', bodyAppended: false, titleUpdated: false };
+            }
+            throw new Error(`gh pr create failed for base ${baseBranch}: ${errorMsg}`);
         }
     }
 
