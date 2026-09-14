@@ -3,6 +3,7 @@ import { HORIZONTAL_AXES } from "../../orchestration/atomic-edit.ts";
 import type { CutRepair, EditRole, RolePolicy, StructureTypeDefinition } from "../structure-type.ts";
 import { allowed, denied } from "../structure-type.ts";
 import { CUT, IGNORE, RESTACK, forbid, type CreationInteraction } from "../creation-interaction.ts";
+import { isTerrainSurface } from "./terrain-cloud.ts";
 
 /**
  * The role model for a procedurally generated, non-enumerable boundary --
@@ -122,7 +123,7 @@ const TERRAIN_TYPES = new Set(["terrain", "terrain-grass"]);
  * that does *not* mirror: a wall over terrain is perfectly ordinary.
  */
 export function terrainInteractionOver(coveredType: string): CreationInteraction {
-  if (TERRAIN_TYPES.has(coveredType)) return RESTACK;
+  if (TERRAIN_TYPES.has(coveredType) || isTerrainSurface(coveredType)) return RESTACK;
   return forbid(`terrain cannot be created above "${coveredType}"`);
 }
 

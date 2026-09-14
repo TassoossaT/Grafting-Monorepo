@@ -24,7 +24,7 @@ import {
 } from "./terrain-constraints.ts";
 import { logTerrainCommit } from "./terrain-diagnostics.ts";
 import { countInCommit, timePhase } from "../commit-timing.ts";
-import { createBoundaryEdges, pointInOrOnPolygon, sharedEdgeId } from "../../../features/edit-construction/index.ts";
+import { createBoundaryEdges, isTerrainSurface, pointInOrOnPolygon, sharedEdgeId } from "../../../features/edit-construction/index.ts";
 
 
 /**
@@ -509,7 +509,8 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
       });
     } else edgeRooms.set(edgeId, null);
   }
-  const patch = timePhase("montagem do patch", () => gridPatch(request.tableId, grid, idFor, nodes, request.surfaceType, edgeRooms, quadOf, request.avoidArea));
+  const surfaceType = isTerrainSurface(request.surfaceType) ? request.surfaceType : "terrain";
+  const patch = timePhase("montagem do patch", () => gridPatch(request.tableId, grid, idFor, nodes, surfaceType, edgeRooms, quadOf, request.avoidArea));
 
 
   // **Does the patch itself already contain the clash?**

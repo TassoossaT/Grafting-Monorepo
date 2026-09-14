@@ -16,6 +16,7 @@ import {
   calculateProfileDisplacement,
   calculateProfileHeight,
   distanceAndElevationOnPath,
+  isTerrainSurface,
 } from "../../../features/edit-construction/index.ts";
 import polygonClipping, { type MultiPolygon, type Polygon } from "polygon-clipping";
 
@@ -650,16 +651,21 @@ export function executeTerrainCut(
     request.profile.kind === "regenerate" ? effectiveFaceSide * 5 : effectiveFaceSide * 2;
   const standing = timePhase("vizinhança do terreno", () => terrainStandingAround(runtime, covered, coveredExtent, standingReach));
 
+  const targetSurfaceType = isTerrainSurface(request.targetSurfaceType)
+    ? request.targetSurfaceType
+    : "terrain";
+
   const isTerrainMatch = (st: string, target: string): boolean => {
+    if (!isTerrainSurface(st)) return false;
     if (st === target) return true;
-    if (st.startsWith("terrain") && target.startsWith("terrain")) return true;
+    if (isTerrainSurface(target)) return true;
     return false;
   };
 
   const coveredKeys = new Set(covered.map((c) => c.surfaceKey.join(" ")));
 
   const terrainStanding = standing.filter((topology) =>
-    isTerrainMatch(topology.surfaceType, request.targetSurfaceType),
+    isTerrainMatch(topology.surfaceType, targetSurfaceType),
   );
   let affected = terrainStanding.filter(
     (topology) =>
@@ -667,7 +673,7 @@ export function executeTerrainCut(
       faceIntersectsArea(topology, request.area, coveredOutline),
   );
   let affectedKeys = new Set(affected.map((t) => t.surfaceKey.join(" ")));
-  let retained = standing.filter((t) => !affectedKeys.has(t.surfaceKey.join(" ")));
+  let retained = terrainStanding.filter((t) => !affectedKeys.has(t.surfaceKey.join(" ")));
 
   // If hole profile: simply delete affected faces
   if (request.profile.kind === "hole") {
@@ -828,7 +834,7 @@ export function executeTerrainCut(
       // not pull an otherwise untouched terrain face into regeneration.
       const touched = affected.flatMap((t) => [...t.outerLoops, ...t.holes].flat());
       const absorbed = timePhase("vizinhas por aresta", () => retained.filter(
-        (t) => isTerrainMatch(t.surfaceType, request.targetSurfaceType) &&
+        (t) => isTerrainMatch(t.surfaceType, targetSurfaceType) &&
           [...t.outerLoops, ...t.holes].some((loop) => loop.some((edge) => touched.some((other) =>
             (edge.startNodeId === other.startNodeId && edge.endNodeId === other.endNodeId) ||
             (edge.startNodeId === other.endNodeId && edge.endNodeId === other.startNodeId)))),
@@ -837,7 +843,7 @@ export function executeTerrainCut(
 
       affected = [...affected, ...absorbed];
       affectedKeys = new Set(affected.map((t) => t.surfaceKey.join(" ")));
-      retained = standing.filter((t) => !affectedKeys.has(t.surfaceKey.join(" ")));
+      retained = terrainStanding.filter((t) => !affectedKeys.has(t.surfaceKey.join(" ")));
       targetPolygon = timePhase(`chão a regerar com vizinhas (${affected.length} faces)`, () => groundFor(affected));
     }
   }
@@ -883,7 +889,7 @@ export function executeTerrainCut(
   const extentRadius = Math.max((coveredExtent.maxX - coveredExtent.minX) / 2, (coveredExtent.maxZ - coveredExtent.minZ) / 2, effectiveFaceSide);
   const radius = request.area.radius ?? extentRadius;
 
-  const standingNodes = standing.flatMap((topology) => topology.nodes.map((node) => node.position));
+  const standingNodes = terrainStanding.flatMap((topology) => topology.nodes.map((node) => node.position));
   const localReach = effectiveFaceSide * 2.0;
   const wideReach = Math.max(effectiveFaceSide * 3, radius);
   const localKept = heightFieldOf(standingNodes, localReach);
@@ -950,9 +956,9 @@ export function executeTerrainCut(
     faceSide: effectiveFaceSide,
     relaxStrength: request.irregularity ?? 0.7,
     surfaceType:
-      affected.length > 0
+      affected.length > 0 && isTerrainSurface(affected[0]!.surfaceType)
         ? affected[0]!.surfaceType
-        : (retained.length > 0 ? retained[0]!.surfaceType : request.targetSurfaceType),
+        : (retained.length > 0 && isTerrainSurface(retained[0]!.surfaceType) ? retained[0]!.surfaceType : targetSurfaceType),
     boundary: boundaryRings,
     holes: holeRings,
     sources: perimeters.sources,

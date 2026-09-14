@@ -4,6 +4,7 @@ import type {
   ConstructionRegionTopology,
   ConstructionSurfaceKey,
 } from "@/ports";
+import { isTerrainSurface } from "../../../features/edit-construction/index.ts";
 
 import type { TerrainFillRuntime } from "./terrain-fill.ts";
 
@@ -46,12 +47,15 @@ export function terrainStandingAround(
   within: TerrainStrokeBounds,
   reach: number,
 ): readonly ConstructionRegionTopology[] {
+  const terrainCovered = covered.filter((region) => isTerrainSurface(region.surfaceType));
   return runtime.getRegionTopologiesInBounds({
     minX: within.minX - reach,
     minZ: within.minZ - reach,
     maxX: within.maxX + reach,
     maxZ: within.maxZ + reach,
-    seeds: covered.map((region) => ({ seed: region.surfaceKey, surfaceType: region.surfaceType })),
+    seeds: terrainCovered.length > 0
+      ? terrainCovered.map((region) => ({ seed: region.surfaceKey, surfaceType: region.surfaceType }))
+      : undefined,
   });
 }
 
