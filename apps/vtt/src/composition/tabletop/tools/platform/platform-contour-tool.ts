@@ -7,7 +7,6 @@ import { scopedToolId, type ConstructionTool, type PointerSample, type ToolConte
 import { polylineSegmentsPreview, segmentsPreview } from "../shapes/preview-shapes.ts";
 import { circleContour, previewOutline } from "../tower/tower-geometry.ts";
 import { groupLoopsByContainment, splitContourAtPoints, weldedMerge, type DirectedContourEdge } from "./platform-contour-merge.ts";
-
 type Params = ToolParamsByTool["platform-contour"];
 const COLOR = 0x79b8e8;
 /** Same corner-weld tolerance a wall run already snaps onto an existing column with. */

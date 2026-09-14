@@ -1,33 +1,20 @@
-import type { BezierPort, CurvePoint, CurveHandles, ConstructionGraphSnapshot, ConstructionGraphPatch, ConstructionRegionTopology, ConstructionPosition } from "@/ports";
-import { chainsOf, spineGraphFromSnapshot, spineControlNodeId } from "./spine-graph/index.ts";
-import { changedSpineCloud, extractCorridorsFromEdgeId } from "./path-cloud-scope.ts";
+import type { BezierPort, CurvePoint, ConstructionGraphSnapshot, ConstructionGraphPatch, ConstructionRegionTopology, ConstructionPosition } from "@/ports";
+import { curvePoint, curvePosition, resolveCurves, sampleRibbons, unionRibbonOutlines } from "../../topology/bezier-curve.ts";
+import { DEFAULT_SPINE_OWNER, ownedBy, spineControlNodeId, withAutomaticHandles } from "../../spine/index.ts";
+import { changedSpineCloud } from "./path-cloud-scope.ts";
 import type { SpineChainInput, BandRibbon } from "./contour/index.ts";
 
+/** Spine spans a road generates; spans owned by any other structure are never part of a road. */
+export const isRoadSpan = ownedBy(DEFAULT_SPINE_OWNER);
+
+/** A road's band ribbons unioned in plan through the shared curve module. */
 export function unionBezierRibbons(port: BezierPort, ribbons: readonly BandRibbon[]): [number, number][][][] {
-  return port.planarBoolean({ operation: "union", subject: ribbons.map((r) => [r.outer.map((p) => [p.x, p.z] as const)]), clip: [] }).map((shape) => shape.map((ring) => ring.map((p) => [p[0], p[1]] as [number, number])));
+  return unionRibbonOutlines(port, ribbons.map((r) => r.outer));
 }
 
-export const curvePoint = (p: ConstructionPosition): CurvePoint => [p.x, p.y, p.z];
-export const curvePosition = (p: CurvePoint): ConstructionPosition => ({ x: p[0], y: p[1], z: p[2] });
-
-/** Resolve legacy authorship once using the canonical Rust conversion. */
+/** Resolve legacy road authorship once using the canonical Rust conversion. */
 export function explicitSpineSnapshot(snapshot: ConstructionGraphSnapshot, port: BezierPort, offsets: readonly number[]): ConstructionGraphSnapshot {
-  if (!snapshot.edges.some((e) => !e.curve && e.startNodeId.startsWith("spine:") && e.endNodeId.startsWith("spine:"))) return snapshot;
-  const graph = spineGraphFromSnapshot(snapshot);
-  const handles = new Map<string, CurveHandles>();
-  for (const chain of chainsOf(graph)) {
-    if (chain.nodes.length < 2) continue;
-    const converted = port.curveBatch({ tolerance: 0.01, commands: [{ kind: "automatic", points: chain.nodes.map((n) => curvePoint(n.position)) }] })[0]!;
-    for (let i = 0; i + 1 < chain.nodes.length; i += 1) {
-      const a = chain.nodes[i]!.nodeId;
-      const b = chain.nodes[i + 1]!.nodeId;
-      const edge = snapshot.edges.find((e) => (e.startNodeId === a && e.endNodeId === b) || (e.startNodeId === b && e.endNodeId === a));
-      if (!edge || edge.curve) continue;
-      const h = converted.handles[i]!;
-      handles.set(edge.edgeId, { ...h, start: edge.startNodeId === a ? h.start : h.end, end: edge.startNodeId === a ? h.end : h.start, bandOffsets: offsets });
-    }
-  }
-  return { nodes: snapshot.nodes, edges: snapshot.edges.map((e) => ({ ...e, curve: e.curve ?? handles.get(e.edgeId) })) };
+  return withAutomaticHandles(snapshot, port, offsets);
 }
 
 /** Converts graph-owned authoring data to sampled ribbons through the Rust port. */
@@ -39,10 +26,8 @@ export function bezierChains(
   targetEdgeIds?: ReadonlySet<string>,
 ): readonly SpineChainInput[] {
   const nodes = new Map(snapshot.nodes.map((n) => [n.id, n.position]));
-  const edges = snapshot.edges.filter((e) => e.curve && e.startNodeId.startsWith("spine:") && e.endNodeId.startsWith("spine:"));
-  const results = port.curveBatch({ tolerance: 0.025, commands: edges.map((e) => ({
-    kind: "resolve", handles: e.curve!, start: curvePoint(nodes.get(e.startNodeId)!), end: curvePoint(nodes.get(e.endNodeId)!),
-  })) });
+  const edges = snapshot.edges.filter((e) => e.curve && isRoadSpan(e) && e.startNodeId.startsWith("spine:") && e.endNodeId.startsWith("spine:"));
+  const results = resolveCurves(port, edges.map((e) => ({ handles: e.curve!, start: nodes.get(e.startNodeId)!, end: nodes.get(e.endNodeId)! })), 0.025);
   const sections = new Map<string, { chain: number; points: readonly [CurvePoint, CurvePoint] }[]>();
   // One crossing for every ribbon, not one crossing each. `resolve` and
   // `join` around it were already batched; this was the odd one out, issued
@@ -50,30 +35,26 @@ export function bezierChains(
   // hundred serialise/parse round trips to the engine every time any one of
   // them was touched. The commands and their results are identical -- this
   // only stops paying the toll per chain.
-  const derived = port.curveBatch({
-    tolerance: 0.025,
-    commands: edges.map((e, i) => {
-      const profile = e.curve!.bandOffsets.length ? e.curve!.bandOffsets : offsets;
-      const endProfile = e.curve!.endBandOffsets?.length ? e.curve!.endBandOffsets! : profile;
-      return {
-        kind: "ribbon" as const,
-        curve: results[i]!.curves[0]!,
-        offsets: [Math.min(...profile), Math.max(...profile)] as const,
-        endOffsets: [Math.min(...endProfile), Math.max(...endProfile)] as const,
-      };
-    }),
-  });
+  const derived = sampleRibbons(port, edges.map((e, i) => {
+    const profile = e.curve!.bandOffsets.length ? e.curve!.bandOffsets : offsets;
+    const endProfile = e.curve!.endBandOffsets?.length ? e.curve!.endBandOffsets! : profile;
+    return {
+      curve: results[i]!.curves[0]!,
+      offsets: [Math.min(...profile), Math.max(...profile)] as const,
+      endOffsets: [Math.min(...endProfile), Math.max(...endProfile)] as const,
+    };
+  }), 0.025);
   const chains = edges.map((e, i) => {
     const samples = results[i]!.samples[0]!.map((p) => curvePosition(p.position));
-    const outer = derived[i]!.ribbon!.outer;
+    const outer = derived[i]!;
     const half = outer.length / 2;
     for (const [id, points] of [
-      [e.startNodeId, [outer[0]!, outer.at(-1)!]],
-      [e.endNodeId, [outer[half - 1]!, outer[half]!]],
+      [e.startNodeId, [curvePoint(outer[0]!), curvePoint(outer.at(-1)!)]],
+      [e.endNodeId, [curvePoint(outer[half - 1]!), curvePoint(outer[half]!)]],
     ] as const) {
       sections.set(id, [...(sections.get(id) ?? []), { chain: i, points }]);
     }
-    const ribbons = [{ bandIndex: 0, outer: outer.map(curvePosition) }];
+    const ribbons = [{ bandIndex: 0, outer: [...outer] }];
     return { chainId: e.edgeId, controlPoints: samples, sampledPoints: samples, ribbons,
       bandOffsets: e.curve!.bandOffsets.length ? e.curve!.bandOffsets : offsets, miterLimit, tolerance: 0.025 };
   });
@@ -112,9 +93,12 @@ export function planBezierRoad(input: {
     curve: { ...h, bandOffsets: offsets },
   }));
   const snapshot = explicitSpineSnapshot(input.snapshot, port, offsets);
+  // A road snaps onto and splits other roads only: a ramp's spine passing
+  // overhead is another structure's, never a junction to weld into.
+  const foreign = new Set(snapshot.edges.filter((e) => !isRoadSpan(e)).flatMap((e) => [e.startNodeId, e.endNodeId]));
   const network = port.curveNetwork({
-    nodes: snapshot.nodes.filter((n) => n.id.startsWith("spine:")).map((n) => ({ id: n.id, position: curvePoint(n.position) })),
-    edges: snapshot.edges.filter((e) => e.curve !== undefined).map((e) => ({ ...e, curve: e.curve! })),
+    nodes: snapshot.nodes.filter((n) => n.id.startsWith("spine:") && !foreign.has(n.id)).map((n) => ({ id: n.id, position: curvePoint(n.position) })),
+    edges: snapshot.edges.filter((e) => e.curve !== undefined && isRoadSpan(e)).map((e) => ({ ...e, curve: e.curve! })),
     addedNodes, addedEdges, nodePrefix: `spine:${corridorId}#junction:`,
     snapTolerance: input.snapReach, heightTolerance: 0.15, tolerance: 0.005,
   });

@@ -632,6 +632,7 @@ pub fn plan(request: NetworkRequest) -> Result<NetworkPatch, String> {
             if end_profile != handles.band_offsets {
                 handles.end_band_offsets = end_profile;
             }
+            handles.surface_type = e.curve.surface_type.clone();
             // Shared junction positions can differ by tolerance; keep absolute controls.
             let start = nodes[&w[0].1];
             let end = nodes[&w[1].1];

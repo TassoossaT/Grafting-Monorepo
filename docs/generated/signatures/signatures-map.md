@@ -4267,6 +4267,44 @@ export function circularBrushStrokeOutline(
   const positions: number[] = [];
   if (samples.length === 0) return { kind: "segments", color, opacity, positions: new Float32Array() };
 
+// src/composition/tabletop/tools/slope/slope-commit.ts
+export interface SlopeParams {
+  readonly width?: number;
+  readonly rise?: number;
+  readonly radius?: number;
+  readonly turns?: number;
+  }
+export function slopeControlPoint(ctx: ToolContext, sample: PointerSample): ConstructionPosition {
+  const node = sample.nodeId ? ctx.runtime.getGraphSnapshot().nodes.find((n) => n.id === sample.nodeId) : undefined;
+  return { ...sample.point, y: node?.position.y ?? sample.point.y };
+export function straightRampPoints(ctx: ToolContext, start: PointerSample, end: PointerSample, params: Params): readonly [ConstructionPosition, ConstructionPosition] {
+  const from = slopeControlPoint(ctx, start);
+export function straightRampOutline(from: ConstructionPosition, to: ConstructionPosition, width: number): readonly ConstructionPosition[] {
+  const dx = to.x - from.x, dz = to.z - from.z;
+  const length = Math.hypot(dx, dz);
+export function spiralControlPoints(center: ConstructionPosition, params: Params): readonly ConstructionPosition[] {
+  const radius = params.radius ?? 2.5, turns = params.turns ?? 1, rise = params.rise ?? 3;
+  if (!(radius > 0) || !(turns > 0) || !Number.isFinite(rise)) throw new Error("Raio e voltas devem ser positivos.");
+export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly ConstructionPosition[], params: Params): void {
+  try {
+  const width = params.width ?? 1.5;
+  if (!(width > 0)) throw new Error("A largura deve ser positiva.");
+
+// src/composition/tabletop/tools/slope/slope-tools.ts
+export const slopeRampTool: ConstructionTool<"slope-ramp"> = {
+  id: "slope-ramp",
+  previewOnHover: true,
+  defaultParams: () => DEFAULT_TOOL_PARAMS["slope-ramp"],
+  previewFor(gesture, params, ctx) {
+  const [from, to] = straightRampPoints(ctx, gesture.start, gesture.current, params);
+export const slopeSpiralTool: ConstructionTool<"slope-spiral"> = {
+  id: "slope-spiral",
+  previewOnHover: true,
+  defaultParams: () => DEFAULT_TOOL_PARAMS["slope-spiral"],
+  previewFor(gesture, params, ctx) {
+  try {
+  return polylineSegmentsPreview(spiralControlPoints(slopeControlPoint(ctx, gesture.current), params), COLOR);
+
 // src/composition/tabletop/tools/terrain/terrain-sculpt-tool.ts
 export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   id: "terrain-sculpt",
@@ -4710,7 +4748,7 @@ export function planEdit(
   cloud: CloudTopology,
   gesture: EditGesture,
   graphSnapshot?: ConstructionGraphSnapshot,
-  source?: Pick<ConstructionSessionPort, "planMotion" | "getAllRegionTopologies">,
+  source?: Pick<ConstructionSessionPort, "planMotion" | "getAllRegionTopologies"> & Partial<Pick<BezierPort, "curveBatch">>,
   ): EditPlan {
   const policy = resolvePolicy(cloud.seed, gesture.target);
 export interface EditOpSink {
@@ -4754,6 +4792,119 @@ export type {
   } from "./atomic-edit.ts";
 
 export type { EditOpSink, EditPlan } from "./edit-orchestrator.ts";
+
+// src/features/edit-construction/orchestration/spine-edit.ts
+export function planBezierEdit(input: SpineEditInput & {
+  readonly topologies: readonly ConstructionRegionTopology[];
+  readonly tableId: string;
+  }): { request: import("@/ports").ApplyPatchReplacementRequest; preview: Float32Array; selectedId: string } | undefined {
+  const owner = spineOwnerAt(input.snapshot, curvePick(input.targetId)?.edgeId ?? input.targetId);
+
+// src/features/edit-construction/spine/index.ts
+export type { SpineChain } from "./spine-chains.ts";
+export type { SpineControlNode, SpineCurveEdge, SpineGraph } from "./spine-graph.ts";
+export type { SpineControlNodeAddress } from "./spine-node-id.ts";
+export type { SpineAction } from "./spine-actions.ts";
+export type { SpineEditInput } from "./spine-edit-plan.ts";
+
+// src/features/edit-construction/spine/spine-actions.ts
+export type SpineAction = "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width";
+export function planSpineAction(snapshot: ConstructionGraphSnapshot, port: BezierPort, action: SpineAction,
+
+// src/features/edit-construction/spine/spine-chains.ts
+export interface SpineChain {
+  readonly nodes: readonly SpineControlNode[];
+  }
+export function chainsOf(graph: SpineGraph): readonly SpineChain[] {
+  const byId = new Map(graph.nodes.map((node) => [node.nodeId, node]));
+
+// src/features/edit-construction/spine/spine-edit-plan.ts
+export function withAutomaticHandles(snapshot: ConstructionGraphSnapshot, port: BezierPort, offsets: readonly number[]): ConstructionGraphSnapshot {
+  if (!snapshot.edges.some((e) => !e.curve && e.startNodeId.startsWith("spine:") && e.endNodeId.startsWith("spine:"))) return snapshot;
+  const graph = spineGraphFromSnapshot(snapshot);
+export interface SpineEditInput {
+  readonly snapshot: ConstructionGraphSnapshot;
+  readonly port: BezierPort;
+  readonly targetId: string;
+  readonly position: ConstructionPosition;
+  readonly operationId: string;
+  readonly action?: SpineAction;
+  readonly width?: number;
+export function planSpineEditPatch(input: SpineEditInput): { readonly graphPatch: ConstructionGraphPatch; readonly selectedId: string } | undefined {
+  const source = input.snapshot;
+  const nodes = new Map(source.nodes.map((n) => [n.id, n.position]));
+
+// src/features/edit-construction/spine/spine-edit.ts
+export function moveSpineControlNode(
+  node: SpineControlNode,
+  delta: ConstructionPosition,
+  ): AtomicEditOp {
+  return { kind: "move-vertex", nodeId: node.nodeId, position: addPosition(node.position, delta) };
+
+// src/features/edit-construction/spine/spine-graph.ts
+export interface SpineControlNode {
+  readonly nodeId: string;
+  readonly position: ConstructionPosition;
+  }
+export interface SpineCurveEdge {
+  readonly edgeId: string;
+  readonly fromNodeId: string;
+  readonly toNodeId: string;
+  }
+export interface SpineGraph {
+  readonly nodes: readonly SpineControlNode[];
+  readonly edges: readonly SpineCurveEdge[];
+  }
+export function spineGraphFromSnapshot(snapshot: ConstructionGraphSnapshot, owner?: (edge: ConstructionEdgeSnapshot) => boolean): SpineGraph {
+  const spineIds = new Set(snapshot.nodes.filter((node) => isSpineControlNodeId(node.id)).map((node) => node.id));
+export function spineGraphIn(topologies: readonly ConstructionRegionTopology[]): SpineGraph {
+  const nodes = new Map<string, SpineControlNode>();
+export function spineGraphOf(cloud: CloudTopology): SpineGraph {
+  return spineGraphIn(cloud.members);
+export function neighborsOf(graph: SpineGraph, nodeId: string): readonly string[] {
+  const found = new Set<string>();
+
+// src/features/edit-construction/spine/spine-handles.ts
+export function curvePickId(edgeId: string, index: 1 | 2 | "midpoint"): string {
+  return index === "midpoint" ? MIDPOINT + encodeURIComponent(edgeId) : HANDLE + index + ":" + encodeURIComponent(edgeId);
+export function curvePick(id: string): { edgeId: string; index: 1 | 2 | "midpoint" } | undefined {
+  if (id.startsWith(MIDPOINT)) return { edgeId: decodeURIComponent(id.slice(MIDPOINT.length)), index: "midpoint" };
+export function bezierPickHandles(snapshot: ConstructionGraphSnapshot, port: BezierPort) {
+  const nodes = new Map(snapshot.nodes.map((n) => [n.id, n.position]));
+export function isBezierEditTarget(snapshot: ConstructionGraphSnapshot, id: string): boolean {
+  const pick = curvePick(id);
+
+// src/features/edit-construction/spine/spine-node-id.ts
+export interface SpineControlNodeAddress {
+  /** The edit that minted this node. Provenance only, never ownership. */
+  readonly operationId: string;
+  /** Which point of that edit this was. */
+  readonly index: number;
+  }
+export function spineControlNodeId(operationId: string, index: number): string {
+  return `${MARKER}:${operationId}:${index}`;
+  }
+export function parseSpineControlNodeId(id: string): SpineControlNodeAddress | undefined {
+  const match = PATTERN.exec(id);
+export function isSpineControlNodeId(id: string): boolean {
+  return parseSpineControlNodeId(id) !== undefined;
+  }
+
+// src/features/edit-construction/spine/spine-owner.ts
+export const DEFAULT_SPINE_OWNER = "path";
+export function spineOwnerOf(edge: Pick<ConstructionEdgeSnapshot, "curve">): string {
+  return edge.curve?.surfaceType || DEFAULT_SPINE_OWNER;
+  }
+export function ownedBy(owner: string): (edge: Pick<ConstructionEdgeSnapshot, "curve">) => boolean {
+  return (edge) => spineOwnerOf(edge) === owner;
+  }
+export function isSpineEdge(edge: ConstructionEdgeSnapshot): boolean {
+  return isSpineControlNodeId(edge.startNodeId) && isSpineControlNodeId(edge.endNodeId);
+export function spineOwnerAt(snapshot: ConstructionGraphSnapshot, edgeOrNodeId: string): string | undefined {
+  const edge = snapshot.edges.find((candidate) => candidate.edgeId === edgeOrNodeId && isSpineEdge(candidate))
+  ?? snapshot.edges.find((candidate) => isSpineEdge(candidate) && (candidate.startNodeId === edgeOrNodeId || candidate.endNodeId === edgeOrNodeId));
+export function spineComponent(snapshot: ConstructionGraphSnapshot, seedNodeIds: Iterable<string>): ConstructionGraphSnapshot {
+  const spans = snapshot.edges.filter(isSpineEdge);
 
 // src/features/edit-construction/structure-types/creation-interaction.ts
 export type CreationInteraction =
@@ -4921,34 +5072,17 @@ export function panelStructureType(
   surfaceType,
   label,
 
-// src/features/edit-construction/structure-types/path/bezier-road-actions.ts
-export type BezierRoadAction = "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width";
-export function planBezierAction(snapshot: ConstructionGraphSnapshot, port: BezierPort, action: BezierRoadAction,
-
 // src/features/edit-construction/structure-types/path/bezier-road-edit.ts
-export function curvePickId(edgeId: string, index: 1 | 2 | "midpoint"): string {
-  return index === "midpoint" ? MIDPOINT + encodeURIComponent(edgeId) : HANDLE + index + ":" + encodeURIComponent(edgeId);
-export function bezierPickHandles(snapshot: ConstructionGraphSnapshot, port: BezierPort) {
-  const nodes = new Map(snapshot.nodes.map((n) => [n.id, n.position]));
-export function isBezierEditTarget(snapshot: ConstructionGraphSnapshot, id: string): boolean {
-  const pick = curvePick(id);
-export function planBezierEdit(input: {
-  readonly snapshot: ConstructionGraphSnapshot;
-  readonly topologies: readonly ConstructionRegionTopology[];
-  readonly port: BezierPort;
-  readonly targetId: string;
-  readonly position: ConstructionPosition;
-  readonly operationId: string;
-  readonly tableId: string;
+export function regeneratePathSpine(input: SpineRegenerationInput): SpineRegeneration | undefined {
+  const { snapshot: source, graphPatch } = input;
+  const cloud = changedSpineCloud(source, graphPatch, input.topologies);
 
 // src/features/edit-construction/structure-types/path/bezier-road-plan.ts
+export const isRoadSpan = ownedBy(DEFAULT_SPINE_OWNER);
 export function unionBezierRibbons(port: BezierPort, ribbons: readonly BandRibbon[]): [number, number][][][] {
-  return port.planarBoolean({ operation: "union", subject: ribbons.map((r) => [r.outer.map((p) => [p.x, p.z] as const)]), clip: [] }).map((shape) => shape.map((ring) => ring.map((p) => [p[0], p[1]] as [number, number])));
-export const curvePoint = (p: ConstructionPosition): CurvePoint => [p.x, p.y, p.z];
-export const curvePosition = (p: CurvePoint): ConstructionPosition => ({ x: p[0], y: p[1], z: p[2] });
+  return unionRibbonOutlines(port, ribbons.map((r) => r.outer));
 export function explicitSpineSnapshot(snapshot: ConstructionGraphSnapshot, port: BezierPort, offsets: readonly number[]): ConstructionGraphSnapshot {
-  if (!snapshot.edges.some((e) => !e.curve && e.startNodeId.startsWith("spine:") && e.endNodeId.startsWith("spine:"))) return snapshot;
-  const graph = spineGraphFromSnapshot(snapshot);
+  return withAutomaticHandles(snapshot, port, offsets);
 export function bezierChains(
   snapshot: ConstructionGraphSnapshot,
   port: BezierPort,
@@ -5080,6 +5214,7 @@ export function nearestSampleY(x: number, z: number, samples: readonly Construct
 export type { PathFormationRecipe, PathProfilePoint } from "./path-recipe.ts";
 export type { PathSpineDraft } from "./path-spine-draft.ts";
 export type { StationNodeAddress } from "./station-node-id.ts";
+export type { MaterializedSpine } from "./materialize-spine.ts";
 export type {
   PathRun,
   PathRunBand,
@@ -5089,6 +5224,18 @@ export type {
   } from "./path-cloud.ts";
 
 export type { PathCloudMutationInput, PathCloudMutationPlan } from "./path-cloud-mutation.ts";
+
+// src/features/edit-construction/structure-types/path/materialize-spine.ts
+export interface MaterializedSpine {
+  readonly graphPatch: ConstructionGraphPatch;
+  readonly controlPoints: readonly ConstructionPosition[];
+  }
+export function graphPatchForSpine(
+  snapshot: ConstructionGraphSnapshot,
+  spine: NonNullable<ReturnType<typeof pathSpineDraftFor>>,
+  snapTolerance: number,
+  ): MaterializedSpine {
+  const spineNodes = snapshot.nodes.filter((node) => node.id.startsWith("spine:"));
 
 // src/features/edit-construction/structure-types/path/path-cloud-mutation.ts
 export interface PathCloudMutationInput {
@@ -5279,79 +5426,6 @@ export function pathStructureType(
   return Object.freeze({
   surfaceType,
 
-// src/features/edit-construction/structure-types/path/spine-graph/index.ts
-export type { SpineChain } from "./spine-chains.ts";
-export type { MaterializedSpine } from "./materialize-spine.ts";
-export type { SpineControlNode, SpineCurveEdge, SpineGraph } from "./spine-graph.ts";
-export type { SpineControlNodeAddress } from "./spine-node-id.ts";
-
-// src/features/edit-construction/structure-types/path/spine-graph/materialize-spine.ts
-export interface MaterializedSpine {
-  readonly graphPatch: ConstructionGraphPatch;
-  readonly controlPoints: readonly ConstructionPosition[];
-  }
-export function graphPatchForSpine(
-  snapshot: ConstructionGraphSnapshot,
-  spine: NonNullable<ReturnType<typeof pathSpineDraftFor>>,
-  snapTolerance: number,
-  ): MaterializedSpine {
-  const spineNodes = snapshot.nodes.filter((node) => node.id.startsWith("spine:"));
-
-// src/features/edit-construction/structure-types/path/spine-graph/spine-chains.ts
-export interface SpineChain {
-  readonly nodes: readonly SpineControlNode[];
-  }
-export function chainsOf(graph: SpineGraph): readonly SpineChain[] {
-  const byId = new Map(graph.nodes.map((node) => [node.nodeId, node]));
-
-// src/features/edit-construction/structure-types/path/spine-graph/spine-edit.ts
-export function moveSpineControlNode(
-  node: SpineControlNode,
-  delta: ConstructionPosition,
-  ): AtomicEditOp {
-  return { kind: "move-vertex", nodeId: node.nodeId, position: addPosition(node.position, delta) };
-
-// src/features/edit-construction/structure-types/path/spine-graph/spine-graph.ts
-export interface SpineControlNode {
-  readonly nodeId: string;
-  readonly position: ConstructionPosition;
-  }
-export interface SpineCurveEdge {
-  readonly edgeId: string;
-  readonly fromNodeId: string;
-  readonly toNodeId: string;
-  }
-export interface SpineGraph {
-  readonly nodes: readonly SpineControlNode[];
-  readonly edges: readonly SpineCurveEdge[];
-  }
-export function spineGraphFromSnapshot(snapshot: ConstructionGraphSnapshot): SpineGraph {
-  const nodes = snapshot.nodes
-  .filter((node) => isSpineControlNodeId(node.id))
-  .map((node) => ({ nodeId: node.id, position: node.position }));
-export function spineGraphIn(topologies: readonly ConstructionRegionTopology[]): SpineGraph {
-  const nodes = new Map<string, SpineControlNode>();
-export function spineGraphOf(cloud: CloudTopology): SpineGraph {
-  return spineGraphIn(cloud.members);
-export function neighborsOf(graph: SpineGraph, nodeId: string): readonly string[] {
-  const found = new Set<string>();
-
-// src/features/edit-construction/structure-types/path/spine-graph/spine-node-id.ts
-export interface SpineControlNodeAddress {
-  /** The edit that minted this node. Provenance only, never ownership. */
-  readonly operationId: string;
-  /** Which point of that edit this was. */
-  readonly index: number;
-  }
-export function spineControlNodeId(operationId: string, index: number): string {
-  return `${MARKER}:${operationId}:${index}`;
-  }
-export function parseSpineControlNodeId(id: string): SpineControlNodeAddress | undefined {
-  const match = PATTERN.exec(id);
-export function isSpineControlNodeId(id: string): boolean {
-  return parseSpineControlNodeId(id) !== undefined;
-  }
-
 // src/features/edit-construction/structure-types/path/station-node-id.ts
 export interface StationNodeAddress {
   /** The operation that minted it -- the corridor this node belongs to. */
@@ -5377,6 +5451,37 @@ export function followsOutward(moved: StationNodeAddress, candidate: StationNode
   return Math.sign(candidate.across) === Math.sign(moved.across)
   && Math.abs(candidate.across) > Math.abs(moved.across);
 
+// src/features/edit-construction/structure-types/platform/platform-slope-spine.ts
+export const SLOPE_SURFACE_TYPE = "platform-slope";
+export const SLOPE_DEFAULT_OFFSETS: readonly number[] = [-0.75, 0.75];
+export const isSlopeSpan = ownedBy(SLOPE_SURFACE_TYPE);
+export const controlSectionId = (controlNodeId: string, side: Side): string => `${controlNodeId}:section:${side}`;
+export const controlRungId = (controlNodeId: string): string => boundaryEdgeId(controlSectionId(controlNodeId, "min"), controlSectionId(controlNodeId, "max"));
+export const slopeFaceId = (edgeId: string): string => `${edgeId}:face`;
+export interface SlopeSurface {
+  readonly nodes: readonly { readonly id: string; readonly position: ConstructionPosition }[];
+  readonly edges: readonly ConstructionPatchEdge[];
+  readonly regions: readonly ConstructionPatchRegion[];
+  readonly preview: Float32Array;
+  }
+export function slopeSurface(port: Pick<BezierPort, "curveBatch">, nodes: ReadonlyMap<string, ConstructionPosition>, spans: readonly ConstructionEdgeSnapshot[]): SlopeSurface {
+  const resolved = resolveCurves(port, spans.map((span) => ({ handles: span.curve!, start: nodes.get(span.startNodeId)!, end: nodes.get(span.endNodeId)! })), TOLERANCE);
+export function slopeFootprint(port: Pick<BezierPort, "planarBoolean">, surface: Pick<SlopeSurface, "nodes" | "edges" | "regions">): readonly (readonly [number, number])[] | undefined {
+  const positions = new Map(surface.nodes.map((node) => [node.id, node.position]));
+export function prospectiveGraph(snapshot: ConstructionGraphSnapshot, patch: ConstructionGraphPatch): ConstructionGraphSnapshot {
+  const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
+export function regenerateSlopeSpine(input: SpineRegenerationInput): SpineRegeneration {
+  const { snapshot, graphPatch } = input;
+  const after = prospectiveGraph(snapshot, graphPatch);
+export function slopeMotionInfluences(topology: ConstructionRegionTopology, transport: boolean): readonly ConstructionMotionInfluence[] {
+  const axes = [transport, true, transport] as const;
+  return topology.nodes.flatMap((node) => {
+  const section = parseSection(node.id);
+export function deriveSlopeMotion(topologies: readonly ConstructionRegionTopology[], positions: ReadonlyMap<string, ConstructionPosition>, context: MotionContext): ReadonlyMap<string, ConstructionPosition> {
+  const derived = new Map<string, ConstructionPosition>();
+export function validateSlopeMotion(topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>): string | undefined {
+  const levels = new Map<string, number>();
+
 // src/features/edit-construction/structure-types/platform/platform-structure.ts
 export const platformStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
   surfaceType: "platform", label: "Plataforma", creation: "a flat closed contour, without thickness",
@@ -5386,6 +5491,14 @@ export const platformStructureType: StructureTypeDefinition = Object.freeze<Stru
   repairAfterCut: { kind: "preserve", reason: "Structural contour subtraction preserves the remaining planar faces and shared identities." },
   motionInfluences: (topology, transport): readonly ConstructionMotionInfluence[] => {
   const anchor = topology.nodes[0];
+export const slopedPlatformStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
+  surfaceType: SLOPE_SURFACE_TYPE, label: "Plataforma inclinada",
+  creation: "one face per spine span: the span's ribbon, sampled along its bezier curve",
+  roleFor: () => "platform-slope-face",
+  policyFor: (role) => denied(role, "Edite a plataforma inclinada pela espinha: pontos, alças e largura."),
+  // The same answer the flat platform gives: ground under it is cut, and the
+  // terrain's own repair regenerates around it.
+  interactionOver: (coveredType: string) => isTerrainSurface(coveredType) ? CUT : IGNORE,
 
 // src/features/edit-construction/structure-types/roof/roof-structure.ts
 export const roofStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
@@ -5480,14 +5593,37 @@ export interface CutFallout {
   *
   * A repair needs these to name the far side of the hole. The engine
   * considers an edge free-boundary only when **both** of its nodes are in
+export interface SpineRegenerationInput {
+  /** The graph before the edit, already prepared by the owner. */
+  readonly snapshot: ConstructionGraphSnapshot;
+  /** What the edit does to the spine. */
+  readonly graphPatch: ConstructionGraphPatch;
+  readonly topologies: readonly ConstructionRegionTopology[];
+  readonly port: BezierPort;
+  readonly operationId: string;
+export interface SpineRegeneration {
+  readonly request: ApplyPatchReplacementRequest;
+  readonly preview: Float32Array;
+  }
+export interface SpineGeneration {
+  /** The width a span with no profile of its own is given. */
+  readonly defaultOffsets: readonly number[];
+  /** Normalizes the standing graph before an edit reads it -- legacy data, say. */
+  readonly prepare?: (snapshot: ConstructionGraphSnapshot, port: BezierPort) => ConstructionGraphSnapshot;
+  readonly regenerate: (input: SpineRegenerationInput) => SpineRegeneration | undefined;
+  }
+export interface MotionContext {
+  readonly graphSnapshot?: ConstructionGraphSnapshot;
+  readonly port?: Pick<BezierPort, "curveBatch">;
+  }
 export interface StructureTypeDefinition {
   /** The `surfaceType` the engine reports for regions of this kind. */
   readonly surfaceType: string;
   readonly label: string;
   /** Responses to received motion, independent of direct gesture constraints. */
   readonly motionInfluences?: (topology: ConstructionRegionTopology, transport: boolean) => readonly ConstructionMotionInfluence[];
-  /** Returns a reason when a proposed position batch violates this type. */
-  readonly validateMotion?: (topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>) => string | undefined;
+  /**
+  * Positions this type derives for its own unmoved nodes once motion has
 export function denied(role: EditRole, reason: string): RolePolicy {
   return { role, resolve: { kind: "deny", reason }, axes: [], scope: "surface" };
 export function allowed(
@@ -5582,6 +5718,40 @@ export interface OpeningParams {
   }
 export type NoToolParams = Record<string, never>;
 
+// src/features/edit-construction/topology/bezier-curve.ts
+export const curvePoint = (p: ConstructionPosition): CurvePoint => [p.x, p.y, p.z];
+export const curvePosition = (p: CurvePoint): ConstructionPosition => ({ x: p[0], y: p[1], z: p[2] });
+export function automaticCurve(port: Pick<BezierPort, "curveBatch">, points: readonly ConstructionPosition[], tolerance: number): CurveResult {
+  return port.curveBatch({ tolerance, commands: [{ kind: "automatic", points: points.map(curvePoint) }] })[0]!;
+  }
+export function resolveCurves(
+  port: Pick<BezierPort, "curveBatch">,
+  spans: readonly { readonly handles: CurveHandles; readonly start: ConstructionPosition; readonly end: ConstructionPosition }[],
+  tolerance: number,
+  ): readonly CurveResult[] {
+  if (spans.length === 0) return [];
+  return port.curveBatch({ tolerance, commands: spans.map((span) => ({
+  kind: "resolve" as const, handles: span.handles, start: curvePoint(span.start), end: curvePoint(span.end),
+export interface RibbonRequest {
+  readonly curve: CubicBezier;
+  /** Lateral offsets `[min, max]` at the curve start. */
+  readonly offsets: readonly [number, number];
+  /** Offsets at the curve end, when the ribbon tapers. */
+  readonly endOffsets?: readonly [number, number];
+  /** Take the cross-sections at these curve parameters instead of adaptive samples. */
+  readonly parameters?: readonly number[];
+export function sampleRibbons(port: Pick<BezierPort, "curveBatch">, requests: readonly RibbonRequest[], tolerance: number): readonly (readonly ConstructionPosition[])[] {
+  if (requests.length === 0) return [];
+  return port.curveBatch({ tolerance, commands: requests.map((request) => ({
+  kind: "ribbon" as const, curve: request.curve, offsets: request.offsets, endOffsets: request.endOffsets, parameters: request.parameters,
+  })) }).map((result) => (result.ribbon?.outer ?? []).map(curvePosition));
+export function ribbonSections(outline: readonly ConstructionPosition[]): readonly { readonly min: ConstructionPosition; readonly max: ConstructionPosition }[] {
+  const count = outline.length / 2;
+  return Array.from({ length: count }, (_, i) => ({ min: outline[i]!, max: outline[outline.length - 1 - i]! }));
+export function unionRibbonOutlines(port: Pick<BezierPort, "planarBoolean">, outlines: readonly (readonly ConstructionPosition[])[]): [number, number][][][] {
+  return port.planarBoolean({ operation: "union", subject: outlines.map((outline) => [outline.map((p) => [p.x, p.z] as const)]), clip: [] })
+  .map((shape) => shape.map((ring) => ring.map((p) => [p[0], p[1]] as [number, number])));
+
 // src/features/edit-construction/topology/boundary-edges.ts
 export function sharedEdgeId(
   tableId: string,
@@ -5656,6 +5826,7 @@ export type { PerimeterLoop } from "./surface-perimeter.ts";
 export type { FittedEdge, FitOptions } from "./stroke-fitting.ts";
 export type { BoundaryEdges, EdgeSharing } from "./boundary-edges.ts";
 export type { SweptArc, TransverseProfilePoint } from "./sweep-formation.ts";
+export type { RibbonRequest } from "./bezier-curve.ts";
 
 // src/features/edit-construction/topology/ring-simplify.ts
 export function simplifyClosedRing(
@@ -5845,7 +6016,8 @@ export interface CurveHandles {
   readonly mode: CurveHandleMode;
   readonly bandOffsets: readonly number[];
   readonly endBandOffsets?: readonly number[];
-  }
+  /** The structure type generated along this spine span; absent means the default consumer. */
+  readonly surfaceType?: string;
 export type CurveCommand =
 export interface CurveBatch { readonly tolerance: number; readonly commands: readonly CurveCommand[] }
 export interface CurveResult {

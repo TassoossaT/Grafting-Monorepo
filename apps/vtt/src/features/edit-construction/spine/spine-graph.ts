@@ -1,6 +1,6 @@
-import type { ConstructionGraphSnapshot, ConstructionPosition, ConstructionRegionTopology } from "@/ports";
+import type { ConstructionEdgeSnapshot, ConstructionGraphSnapshot, ConstructionPosition, ConstructionRegionTopology } from "@/ports";
 
-import type { CloudTopology } from "../../../topology/construction-cloud.ts";
+import type { CloudTopology } from "../topology/construction-cloud.ts";
 import { isSpineControlNodeId } from "./spine-node-id.ts";
 
 /**
@@ -50,14 +50,20 @@ export interface SpineGraph {
  * Face boundaries are deliberately excluded: a contour is a generated view
  * of this graph and must never be mistaken for its source of truth.
  */
-export function spineGraphFromSnapshot(snapshot: ConstructionGraphSnapshot): SpineGraph {
-  const nodes = snapshot.nodes
-    .filter((node) => isSpineControlNodeId(node.id))
-    .map((node) => ({ nodeId: node.id, position: node.position }));
-  const nodeIds = new Set(nodes.map((node) => node.nodeId));
+export function spineGraphFromSnapshot(snapshot: ConstructionGraphSnapshot, owner?: (edge: ConstructionEdgeSnapshot) => boolean): SpineGraph {
+  const spineIds = new Set(snapshot.nodes.filter((node) => isSpineControlNodeId(node.id)).map((node) => node.id));
   const edges = snapshot.edges
-    .filter((edge) => nodeIds.has(edge.startNodeId) && nodeIds.has(edge.endNodeId))
+    .filter((edge) => spineIds.has(edge.startNodeId) && spineIds.has(edge.endNodeId) && (owner?.(edge) ?? true))
     .map((edge) => ({ edgeId: edge.edgeId, fromNodeId: edge.startNodeId, toNodeId: edge.endNodeId }));
+  // Scoped to one owner, a control node belongs to it only through an edge
+  // it owns -- or when it has no edge at all yet, which no other owner claims.
+  const incident = new Set(edges.flatMap((edge) => [edge.fromNodeId, edge.toNodeId]));
+  const claimed = owner === undefined ? undefined : new Set(snapshot.edges
+    .filter((edge) => spineIds.has(edge.startNodeId) && spineIds.has(edge.endNodeId))
+    .flatMap((edge) => [edge.startNodeId, edge.endNodeId]));
+  const nodes = snapshot.nodes
+    .filter((node) => spineIds.has(node.id) && (claimed === undefined || incident.has(node.id) || !claimed.has(node.id)))
+    .map((node) => ({ nodeId: node.id, position: node.position }));
   return { nodes, edges };
 }
 

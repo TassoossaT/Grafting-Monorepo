@@ -2168,6 +2168,53 @@ An open line ghost from `start` to `end` -- a wall-brush's centerline while drag
 
 Builds a PreviewDescriptor for a set of straight segment pairs (e.g. wall centerline ghost).
 
+### `interface vtt.slope-commit.SlopeParams`
+
+What every way of drawing a sloped platform may decide; each tool fills the part it offers.
+
+### `property vtt.slope-commit.SlopeParams.radius?: number`
+
+### `property vtt.slope-commit.SlopeParams.rise?: number`
+
+### `property vtt.slope-commit.SlopeParams.turns?: number`
+
+### `property vtt.slope-commit.SlopeParams.width?: number`
+
+### `function vtt.slope-commit.commitPlatformSlope(ctx: ToolContext, controlPoints: readonly ConstructionPosition[], params: SlopeParams): void`
+
+Commits one sloped platform: a spine through `controlPoints`, owned by the
+sloped platform type, and the faces generated from it. An end that lands
+on a flat platform's edge at its own height meets that edge square on and
+is welded into it.
+
+### `function vtt.slope-commit.slopeControlPoint(ctx: ToolContext, sample: PointerSample): ConstructionPosition`
+
+A control point's height comes from what the pointer actually touched: a node's own height, else the picked surface.
+
+### `function vtt.slope-commit.spiralControlPoints(center: ConstructionPosition, params: SlopeParams): readonly ConstructionPosition[]`
+
+The spiral preset: control points of a helix around `center`, climbing
+`rise` over `turns` turns. Eight per turn keeps the automatic curve round.
+A preset only chooses points -- the result is an ordinary spine.
+
+### `function vtt.slope-commit.straightRampOutline(from: ConstructionPosition, to: ConstructionPosition, width: number): readonly ConstructionPosition[]`
+
+The ramp's outline while dragging: both margins at its real width, climbing with it.
+
+### `function vtt.slope-commit.straightRampPoints(ctx: ToolContext, start: PointerSample, end: PointerSample, params: SlopeParams): readonly [ConstructionPosition, ConstructionPosition]`
+
+The straight ramp preset: from where the drag starts, at that height, to
+where it ends, `rise` higher. A preset only chooses points -- the result is
+an ordinary spine.
+
+### `variable vtt.slope-tools.slopeRampTool: ConstructionTool<"slope-ramp">`
+
+Drag from the start to the end; the ramp climbs the fixed rise.
+
+### `variable vtt.slope-tools.slopeSpiralTool: ConstructionTool<"slope-spiral">`
+
+Click the centre; the spiral climbs the rise over its turns.
+
 ### `variable vtt.terrain-sculpt-tool.terrainSculptTool: ConstructionTool<"terrain-sculpt">`
 
 Terrain-sculpt's own effect: the brush hands over the whole gesture, once, on release.
@@ -2947,11 +2994,203 @@ this layer's.
 
 Folds two outcomes, so a whole transaction reports one combined result.
 
-### `function vtt.edit-orchestrator.planEdit(cloud: CloudTopology, gesture: EditGesture, graphSnapshot?: ConstructionGraphSnapshot, source?: Pick<ConstructionSessionPort, "planMotion" | "getAllRegionTopologies">): EditPlan`
+### `function vtt.edit-orchestrator.planEdit(cloud: CloudTopology, gesture: EditGesture, graphSnapshot?: ConstructionGraphSnapshot, source?: Pick<ConstructionSessionPort, "planMotion" | "getAllRegionTopologies"> & Partial<Pick<BezierPort, "curveBatch">>): EditPlan`
 
 Resolves `gesture` against the structure type's own role table. The
 returned ops are already constrained -- a height-only role's horizontal
 movement is gone by this point, never clamped later or inside Rust.
+
+### `function vtt.spine-edit.planBezierEdit(input: SpineEditInput & { tableId: string; topologies: readonly ConstructionRegionTopology[] }): { preview: Float32Array; request: ApplyPatchReplacementRequest; selectedId: string } | undefined`
+
+One spine gesture, end to end: the spine module says what the gesture does
+to the curve, and the structure type that owns the spine regenerates its
+surface from that. A road, a sloped platform and any future curve-built
+type are edited by exactly the same handles; only the last step differs.
+
+### `type vtt.spine-actions.SpineAction = "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"`
+
+Structural edits on a spine, the same for every structure generated along one.
+
+### `function vtt.spine-actions.planSpineAction(snapshot: ConstructionGraphSnapshot, port: BezierPort, action: SpineAction, targetId: string, edgeId: string | undefined, operationId: string, width?: number, endWidth?: number): ConstructionGraphPatch`
+
+The graph patch one structural spine action makes; the owner regenerates its surface from it.
+
+### `interface vtt.spine-chains.SpineChain`
+
+One continuous, ordered walk of control nodes -- the unit a curve is
+sampled along.
+
+A chain starts and ends at a **boundary** node: one whose degree is not 2,
+which is either a free end (degree 1) or a real junction (degree 3+). A
+degree-2 node in the middle carries the curve through, never splits it.
+This is what lets a junction be one shared control node reached by
+several chains, rather than something a curve has to special-case: the
+chain simply stops there, exactly as it stops at a free end.
+
+### `property vtt.spine-chains.SpineChain.nodes: readonly SpineControlNode[]`
+
+### `function vtt.spine-chains.chainsOf(graph: SpineGraph): readonly SpineChain[]`
+
+Every chain in `graph`, split at every node whose degree is not 2.
+
+A closed component has no natural free end, so it starts deterministically
+at its lowest graph id and returns to that same control point. Keeping the
+closing point makes the generated Catmull-Rom contour continuous there.
+
+### `function vtt.spine-edit.moveSpineControlNode(node: SpineControlNode, delta: ConstructionPosition): AtomicEditOp`
+
+The op that moves one spine control node by `delta`.
+
+Deliberately the same `move-vertex` op, built with the same `addPosition`
+helper, that `edit-orchestrator.ts`'s own vertex case already produces --
+there is no separate edit pipeline for a spine control node to bypass.
+`move-vertex` only ever names a node id and a position; nothing about it
+assumes degree 2, so a junction node with three or more curve edges moves
+through this exact op the same as an ordinary point on a straight run. The
+graph, not this function, is what makes a junction share one id in the
+first place (see `spine-node-id.ts`).
+
+### `interface vtt.spine-edit-plan.SpineEditInput`
+
+### `property vtt.spine-edit-plan.SpineEditInput.action?: SpineAction`
+
+### `property vtt.spine-edit-plan.SpineEditInput.endWidth?: number`
+
+### `property vtt.spine-edit-plan.SpineEditInput.insert?: boolean`
+
+### `property vtt.spine-edit-plan.SpineEditInput.mode?: CurveHandleMode`
+
+### `property vtt.spine-edit-plan.SpineEditInput.operationId: string`
+
+### `property vtt.spine-edit-plan.SpineEditInput.port: BezierPort`
+
+### `property vtt.spine-edit-plan.SpineEditInput.position: ConstructionPosition`
+
+### `property vtt.spine-edit-plan.SpineEditInput.snapshot: ConstructionGraphSnapshot`
+
+### `property vtt.spine-edit-plan.SpineEditInput.targetId: string`
+
+### `property vtt.spine-edit-plan.SpineEditInput.width?: number`
+
+### `function vtt.spine-edit-plan.planSpineEditPatch(input: SpineEditInput): { graphPatch: ConstructionGraphPatch; selectedId: string } | undefined`
+
+What one gesture does to a spine, as a graph patch -- dragging an anchor,
+a handle or a span's midpoint, inserting an anchor, or a structural
+action. Owner-free: the same for a road, a ramp or a curved wall. Whatever
+the spine generates is regenerated from this patch by its owner.
+
+### `function vtt.spine-edit-plan.withAutomaticHandles(snapshot: ConstructionGraphSnapshot, port: BezierPort, offsets: readonly number[]): ConstructionGraphSnapshot`
+
+Gives every spine span without authored handles the automatic curve
+through its chain, once, through the Rust conversion. `offsets` is the
+width a span with no profile of its own is given.
+
+### `interface vtt.spine-graph.SpineControlNode`
+
+One control point of a spine curve.
+
+### `property vtt.spine-graph.SpineControlNode.nodeId: string`
+
+### `property vtt.spine-graph.SpineControlNode.position: ConstructionPosition`
+
+### `interface vtt.spine-graph.SpineCurveEdge`
+
+One curve segment between two control nodes, as it stands in the graph.
+
+### `property vtt.spine-graph.SpineCurveEdge.edgeId: string`
+
+### `property vtt.spine-graph.SpineCurveEdge.fromNodeId: string`
+
+### `property vtt.spine-graph.SpineCurveEdge.toNodeId: string`
+
+### `interface vtt.spine-graph.SpineGraph`
+
+### `property vtt.spine-graph.SpineGraph.edges: readonly SpineCurveEdge[]`
+
+### `property vtt.spine-graph.SpineGraph.nodes: readonly SpineControlNode[]`
+
+### `function vtt.spine-graph.neighborsOf(graph: SpineGraph, nodeId: string): readonly string[]`
+
+Every node id directly joined to `nodeId` by one curve edge -- this node's own degree is `neighborsOf(...).length`.
+
+### `function vtt.spine-graph.spineGraphFromSnapshot(snapshot: ConstructionGraphSnapshot, owner?: (edge: ConstructionEdgeSnapshot) => boolean): SpineGraph`
+
+Reads the durable, type-owned spine from the generic construction graph.
+Face boundaries are deliberately excluded: a contour is a generated view
+of this graph and must never be mistaken for its source of truth.
+
+### `function vtt.spine-graph.spineGraphIn(topologies: readonly ConstructionRegionTopology[]): SpineGraph`
+
+Every spine control node and curve edge present in `topologies`,
+deduplicated by id -- a node or edge shared by more than one band (the two
+faces either side of the travel line, a junction shared by more than one
+run) is reported once.
+
+### `function vtt.spine-graph.spineGraphOf(cloud: CloudTopology): SpineGraph`
+
+spineGraphIn over one cloud's own members -- the reading a tool should reach for.
+
+### `function vtt.spine-handles.bezierPickHandles(snapshot: ConstructionGraphSnapshot, port: BezierPort): { id: string; position: ConstructionPosition }[]`
+
+Every curve span's two handles and midpoint, whatever structure the spine generates.
+
+### `function vtt.spine-handles.curvePick(id: string): { edgeId: string; index: 2 | 1 | "midpoint" } | undefined`
+
+### `function vtt.spine-handles.curvePickId(edgeId: string, index: 2 | 1 | "midpoint"): string`
+
+The pick id of one span's handle or midpoint -- a presentation projection, not a graph anchor.
+
+### `function vtt.spine-handles.isBezierEditTarget(snapshot: ConstructionGraphSnapshot, id: string): boolean`
+
+Whether `id` names a curve handle, a span midpoint, or an anchor some curve span ends on.
+
+### `interface vtt.spine-node-id.SpineControlNodeAddress`
+
+One control node's id, as the parts it is built from.
+
+### `property vtt.spine-node-id.SpineControlNodeAddress.index: number`
+
+Which point of that edit this was.
+
+### `property vtt.spine-node-id.SpineControlNodeAddress.operationId: string`
+
+The edit that minted this node. Provenance only, never ownership.
+
+### `function vtt.spine-node-id.isSpineControlNodeId(id: string): boolean`
+
+### `function vtt.spine-node-id.parseSpineControlNodeId(id: string): SpineControlNodeAddress | undefined`
+
+The address inside `id`, or `undefined` for an id no spine edit minted.
+
+### `function vtt.spine-node-id.spineControlNodeId(operationId: string, index: number): string`
+
+### `variable vtt.spine-owner.DEFAULT_SPINE_OWNER: "path"`
+
+Which structure type a spine span generates -- a road, a sloped platform,
+a curved wall. The graph keeps it on the curve (`CurveHandles.surfaceType`)
+and never reads it; this is where the app does.
+
+Spans written before an owner was recorded were all roads, so an absent
+owner reads as one. That is the only product name this module knows.
+
+### `function vtt.spine-owner.isSpineEdge(edge: ConstructionEdgeSnapshot): boolean`
+
+Whether `edge` is a spine span at all: a curve between two control nodes.
+
+### `function vtt.spine-owner.ownedBy(owner: string): (edge: Pick<ConstructionEdgeSnapshot, "curve">) => boolean`
+
+A predicate selecting the spans one owner generates.
+
+### `function vtt.spine-owner.spineComponent(snapshot: ConstructionGraphSnapshot, seedNodeIds: Iterable<string>): ConstructionGraphSnapshot`
+
+Every node and span connected to `seedNodeIds` through spine spans of the
+prospective graph -- one spine, whichever owner it has.
+
+### `function vtt.spine-owner.spineOwnerAt(snapshot: ConstructionGraphSnapshot, edgeOrNodeId: string): string | undefined`
+
+The owner of the spine a control node or span id belongs to, or `undefined` when it is not on any spine.
+
+### `function vtt.spine-owner.spineOwnerOf(edge: Pick<ConstructionEdgeSnapshot, "curve">): string`
 
 ### `interface vtt.structure-types.ResolvedCoverage`
 
@@ -3215,39 +3454,32 @@ Builds one `extrude_path`-generated structure type on the shared panel model.
 
 ### `function vtt.panel-structure.validatePanelMotion(topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>): string | undefined`
 
-### `type vtt.bezier-road-actions.BezierRoadAction = "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"`
+### `function vtt.bezier-road-edit.regeneratePathSpine(input: SpineRegenerationInput): SpineRegeneration | undefined`
 
-### `function vtt.bezier-road-actions.planBezierAction(snapshot: ConstructionGraphSnapshot, port: BezierPort, action: BezierRoadAction, targetId: string, edgeId: string | undefined, operationId: string, width?: number, endWidth?: number): ConstructionGraphPatch`
+A road regenerated from its spine after an edit: every band ribbon of the
+touched spine component, unioned in plan into the contour faces that
+replace the standing ones. The edit itself -- what moved on the spine -- is
+the generic spine module's; this is only what a road makes of it.
 
-### `function vtt.bezier-road-edit.bezierPickHandles(snapshot: ConstructionGraphSnapshot, port: BezierPort): { id: string; position: ConstructionPosition }[]`
+### `variable vtt.bezier-road-plan.isRoadSpan: (edge: Pick<ConstructionEdgeSnapshot, "curve">) => boolean`
 
-Pick handles are presentation projections, not extra graph anchors.
-
-### `function vtt.bezier-road-edit.curvePickId(edgeId: string, index: 2 | 1 | "midpoint"): string`
-
-### `function vtt.bezier-road-edit.isBezierEditTarget(snapshot: ConstructionGraphSnapshot, id: string): boolean`
-
-### `function vtt.bezier-road-edit.planBezierEdit(input: { action?: BezierRoadAction; endWidth?: number; insert?: boolean; mode?: CurveHandleMode; operationId: string; port: BezierPort; position: ConstructionPosition; snapshot: ConstructionGraphSnapshot; tableId: string; targetId: string; topologies: readonly ConstructionRegionTopology[]; width?: number }): { preview: Float32Array; request: ApplyPatchReplacementRequest; selectedId: string } | undefined`
-
-One complete gesture plan; the caller commits it once or discards it.
+Spine spans a road generates; spans owned by any other structure are never part of a road.
 
 ### `function vtt.bezier-road-plan.bezierChains(snapshot: ConstructionGraphSnapshot, port: BezierPort, offsets: readonly number[], miterLimit: number, targetEdgeIds?: ReadonlySet<string>): readonly SpineChainInput[]`
 
 Converts graph-owned authoring data to sampled ribbons through the Rust port.
 
-### `function vtt.bezier-road-plan.curvePoint(p: ConstructionPosition): CurvePoint`
-
-### `function vtt.bezier-road-plan.curvePosition(p: CurvePoint): ConstructionPosition`
-
 ### `function vtt.bezier-road-plan.explicitSpineSnapshot(snapshot: ConstructionGraphSnapshot, port: BezierPort, offsets: readonly number[]): ConstructionGraphSnapshot`
 
-Resolve legacy authorship once using the canonical Rust conversion.
+Resolve legacy road authorship once using the canonical Rust conversion.
 
 ### `function vtt.bezier-road-plan.planBezierRoad(input: { corridorId: string; miterLimit: number; offsets: readonly number[]; port: BezierPort; snapReach: number; snapshot: ConstructionGraphSnapshot; stroke: readonly ConstructionPosition[]; tolerance: number; topologies?: readonly ConstructionRegionTopology[] }): { chains: readonly SpineChainInput[]; controlPoints: ConstructionPosition[]; footprint: [number, number][][][]; graphPatch: ConstructionGraphPatch; polyline: ConstructionPosition[]; snapshot: ConstructionGraphSnapshot }`
 
 Product identities and profile policy surround generic Rust fitting and connections.
 
 ### `function vtt.bezier-road-plan.unionBezierRibbons(port: BezierPort, ribbons: readonly BandRibbon[]): [number, number][][][]`
+
+A road's band ribbons unioned in plan through the shared curve module.
 
 ### `function vtt.catmull-rom.sampleCatmullRom(controlPoints: readonly ConstructionPosition[], tolerance: number): readonly ConstructionPosition[]`
 
@@ -3478,6 +3710,16 @@ variant (or the boundary loop exposed before triangulation), not the
 A T, an X, or an L of overlapping ribbons all fall out of this one call
 with no per-topology branch: the union either merges two ribbons into one
 loop or it doesn't, and both are the same code path.
+
+### `interface vtt.materialize-spine.MaterializedSpine`
+
+### `property vtt.materialize-spine.MaterializedSpine.controlPoints: readonly ConstructionPosition[]`
+
+### `property vtt.materialize-spine.MaterializedSpine.graphPatch: ConstructionGraphPatch`
+
+### `function vtt.materialize-spine.graphPatchForSpine(snapshot: ConstructionGraphSnapshot, spine: PathSpineDraft, snapTolerance: number): MaterializedSpine`
+
+Materializes and locally snaps the type-owned spine against its own network.
 
 ### `interface vtt.path-cloud.PathRun`
 
@@ -3870,116 +4112,6 @@ anything.
 
 Builds one swept-product structure type on the shared spine model.
 
-### `interface vtt.materialize-spine.MaterializedSpine`
-
-### `property vtt.materialize-spine.MaterializedSpine.controlPoints: readonly ConstructionPosition[]`
-
-### `property vtt.materialize-spine.MaterializedSpine.graphPatch: ConstructionGraphPatch`
-
-### `function vtt.materialize-spine.graphPatchForSpine(snapshot: ConstructionGraphSnapshot, spine: PathSpineDraft, snapTolerance: number): MaterializedSpine`
-
-Materializes and locally snaps the type-owned spine against its own network.
-
-### `interface vtt.spine-chains.SpineChain`
-
-One continuous, ordered walk of control nodes -- the unit a curve is
-sampled along.
-
-A chain starts and ends at a **boundary** node: one whose degree is not 2,
-which is either a free end (degree 1) or a real junction (degree 3+). A
-degree-2 node in the middle carries the curve through, never splits it.
-This is what lets a junction be one shared control node reached by
-several chains, rather than something a curve has to special-case: the
-chain simply stops there, exactly as it stops at a free end.
-
-### `property vtt.spine-chains.SpineChain.nodes: readonly SpineControlNode[]`
-
-### `function vtt.spine-chains.chainsOf(graph: SpineGraph): readonly SpineChain[]`
-
-Every chain in `graph`, split at every node whose degree is not 2.
-
-A closed component has no natural free end, so it starts deterministically
-at its lowest graph id and returns to that same control point. Keeping the
-closing point makes the generated Catmull-Rom contour continuous there.
-
-### `function vtt.spine-edit.moveSpineControlNode(node: SpineControlNode, delta: ConstructionPosition): AtomicEditOp`
-
-The op that moves one spine control node by `delta`.
-
-Deliberately the same `move-vertex` op, built with the same `addPosition`
-helper, that `edit-orchestrator.ts`'s own vertex case already produces --
-there is no separate edit pipeline for a spine control node to bypass.
-`move-vertex` only ever names a node id and a position; nothing about it
-assumes degree 2, so a junction node with three or more curve edges moves
-through this exact op the same as an ordinary point on a straight run. The
-graph, not this function, is what makes a junction share one id in the
-first place (see `spine-node-id.ts`).
-
-### `interface vtt.spine-graph.SpineControlNode`
-
-One control point of a spine curve.
-
-### `property vtt.spine-graph.SpineControlNode.nodeId: string`
-
-### `property vtt.spine-graph.SpineControlNode.position: ConstructionPosition`
-
-### `interface vtt.spine-graph.SpineCurveEdge`
-
-One curve segment between two control nodes, as it stands in the graph.
-
-### `property vtt.spine-graph.SpineCurveEdge.edgeId: string`
-
-### `property vtt.spine-graph.SpineCurveEdge.fromNodeId: string`
-
-### `property vtt.spine-graph.SpineCurveEdge.toNodeId: string`
-
-### `interface vtt.spine-graph.SpineGraph`
-
-### `property vtt.spine-graph.SpineGraph.edges: readonly SpineCurveEdge[]`
-
-### `property vtt.spine-graph.SpineGraph.nodes: readonly SpineControlNode[]`
-
-### `function vtt.spine-graph.neighborsOf(graph: SpineGraph, nodeId: string): readonly string[]`
-
-Every node id directly joined to `nodeId` by one curve edge -- this node's own degree is `neighborsOf(...).length`.
-
-### `function vtt.spine-graph.spineGraphFromSnapshot(snapshot: ConstructionGraphSnapshot): SpineGraph`
-
-Reads the durable, type-owned spine from the generic construction graph.
-Face boundaries are deliberately excluded: a contour is a generated view
-of this graph and must never be mistaken for its source of truth.
-
-### `function vtt.spine-graph.spineGraphIn(topologies: readonly ConstructionRegionTopology[]): SpineGraph`
-
-Every spine control node and curve edge present in `topologies`,
-deduplicated by id -- a node or edge shared by more than one band (the two
-faces either side of the travel line, a junction shared by more than one
-run) is reported once.
-
-### `function vtt.spine-graph.spineGraphOf(cloud: CloudTopology): SpineGraph`
-
-spineGraphIn over one cloud's own members -- the reading a tool should reach for.
-
-### `interface vtt.spine-node-id.SpineControlNodeAddress`
-
-One control node's id, as the parts it is built from.
-
-### `property vtt.spine-node-id.SpineControlNodeAddress.index: number`
-
-Which point of that edit this was.
-
-### `property vtt.spine-node-id.SpineControlNodeAddress.operationId: string`
-
-The edit that minted this node. Provenance only, never ownership.
-
-### `function vtt.spine-node-id.isSpineControlNodeId(id: string): boolean`
-
-### `function vtt.spine-node-id.parseSpineControlNodeId(id: string): SpineControlNodeAddress | undefined`
-
-The address inside `id`, or `undefined` for an id no spine edit minted.
-
-### `function vtt.spine-node-id.spineControlNodeId(operationId: string, index: number): string`
-
 ### `interface vtt.station-node-id.StationNodeAddress`
 
 One node of a station-major sweep, as the parts its id is built from.
@@ -4017,9 +4149,100 @@ The address inside `id`, or `undefined` for an id no sweep minted.
 
 ### `function vtt.station-node-id.stationNodeId(operationId: string, station: number, across: number): string`
 
+### `interface vtt.platform-slope-spine.SlopeSurface`
+
+### `property vtt.platform-slope-spine.SlopeSurface.edges: readonly ConstructionPatchEdge[]`
+
+### `property vtt.platform-slope-spine.SlopeSurface.nodes: readonly { id: string; position: ConstructionPosition }[]`
+
+### `property vtt.platform-slope-spine.SlopeSurface.preview: Float32Array`
+
+### `property vtt.platform-slope-spine.SlopeSurface.regions: readonly ConstructionPatchRegion[]`
+
+### `variable vtt.platform-slope-spine.isSlopeSpan: (edge: Pick<ConstructionEdgeSnapshot, "curve">) => boolean`
+
+### `variable vtt.platform-slope-spine.SLOPE_DEFAULT_OFFSETS: readonly number[]`
+
+### `variable vtt.platform-slope-spine.SLOPE_SURFACE_TYPE: "platform-slope"`
+
+A sloped platform generated from a spine, the way a road is: the spine's
+bezier spans are the source of truth, and the surface is regenerated from
+them. What differs from a road is only the last step -- a road unions its
+ribbons in plan, and a spiral's turns overlap in plan, so a sloped platform
+keeps **one face per span** instead: that span's ribbon outline, sampled
+along the curve on both margins. No face ever overlaps itself in plan, and
+the mesher lifts its interior from the same curve.
+
+Boundary nodes carry the curve parameter they were sampled at, so a move
+the spine receives -- a floor lifting the end welded to it -- re-places
+them on the moved curve without re-sampling and changing their count.
+
+### `function vtt.platform-slope-spine.controlRungId(controlNodeId: string): string`
+
+The cross-section edge a control node's spans -- and a floor welded there -- all share.
+
+### `function vtt.platform-slope-spine.controlSectionId(controlNodeId: string, side: Side): string`
+
+A cross-section node shared by every span meeting at a control node.
+
+### `function vtt.platform-slope-spine.deriveSlopeMotion(topologies: readonly ConstructionRegionTopology[], positions: ReadonlyMap<string, ConstructionPosition>, context: MotionContext): ReadonlyMap<string, ConstructionPosition>`
+
+Re-places every cross-section of a span whose control node moved, at its
+own curve parameter on the moved curve -- the ramp bends with the move
+instead of kinking at the moved end.
+
+### `function vtt.platform-slope-spine.prospectiveGraph(snapshot: ConstructionGraphSnapshot, patch: ConstructionGraphPatch): ConstructionGraphSnapshot`
+
+The graph after `patch`, without committing anything.
+
+### `function vtt.platform-slope-spine.regenerateSlopeSpine(input: SpineRegenerationInput): SpineRegeneration`
+
+Regenerates every sloped-platform span on the spine a graph patch touches.
+
+### `function vtt.platform-slope-spine.slopeFaceId(edgeId: string): string`
+
+### `function vtt.platform-slope-spine.slopeFootprint(port: Pick<BezierPort, "planarBoolean">, surface: Pick<SlopeSurface, "nodes" | "edges" | "regions">): readonly (readonly [number, number])[] | undefined`
+
+The plan-view outline the whole surface claims -- what the runtime cuts
+the ground under it by and bounds the terrain's regeneration with. The
+largest outer ring of the faces' union: a spiral's open centre is not
+excluded here, but the repair subtracts the faces themselves, not this.
+
+### `function vtt.platform-slope-spine.slopeMotionInfluences(topology: ConstructionRegionTopology, transport: boolean): readonly ConstructionMotionInfluence[]`
+
+Each face's control cross-sections follow their control node, and stay level with each other.
+
+### `function vtt.platform-slope-spine.slopeSurface(port: Pick<BezierPort, "curveBatch">, nodes: ReadonlyMap<string, ConstructionPosition>, spans: readonly ConstructionEdgeSnapshot[]): SlopeSurface`
+
+The faces of every sloped-platform span in `spans`, sampled along their curves.
+
+### `function vtt.platform-slope-spine.validateSlopeMotion(topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>): string | undefined`
+
+Every cross-section stays level from margin to margin.
+
 ### `variable vtt.platform-structure.platformStructureType: StructureTypeDefinition`
 
 A horizontal structural marker, independently usable as floor or ceiling.
+
+### `variable vtt.platform-structure.slopedPlatformStructureType: StructureTypeDefinition`
+
+The platform built along a spine instead of a contour: a surface whose
+height varies along its curve and never across it -- a ramp, a sloped
+walkway, a spiral climb. Stairs are this same shape with a step parameter;
+steps are appearance, not structure.
+
+Generated from the shared spine exactly as a road is, so its control
+points, handles and width are edited with the same gestures; see
+`platform-slope-spine.ts` for what it makes of a spine.
+
+A sibling surface type rather than a mode read off the face, because a
+cloud is one type: a ramp welded between two floors sharing their type
+would join both floors and itself into one cloud, and lifting one floor
+would carry all three.
+
+Its faces are never grabbed directly -- the spine is what is edited. A
+floor that moves still carries the end welded to it: the end's control
+node follows, and the ramp re-places itself on the moved curve.
 
 ### `variable vtt.roof-structure.roofStructureType: StructureTypeDefinition`
 
@@ -4236,6 +4459,14 @@ may reach further than the ground being regrown.
 
 Ground vacated by the painter that should be restored to terrain.
 
+### `interface vtt.structure-type.MotionContext`
+
+What a type's derived motion may consult beyond the positions themselves.
+
+### `property vtt.structure-type.MotionContext.graphSnapshot?: ConstructionGraphSnapshot`
+
+### `property vtt.structure-type.MotionContext.port?: Pick<BezierPort, "curveBatch">`
+
 ### `interface vtt.structure-type.RolePolicy`
 
 One role's complete editing policy: what it allows, how far it reaches,
@@ -4267,6 +4498,50 @@ happened to be cheaper -- the same posture the axes list already takes.
 ### `property vtt.structure-type.RolePolicy.transport?: boolean`
 
 Whole-object translation also transports connected support clouds horizontally.
+
+### `interface vtt.structure-type.SpineGeneration`
+
+How a type is generated along a spine (`features/edit-construction/spine`):
+the same control nodes and bezier spans for every owner, regenerated into
+whatever surface this type makes of them.
+
+### `property vtt.structure-type.SpineGeneration.defaultOffsets: readonly number[]`
+
+The width a span with no profile of its own is given.
+
+### `property vtt.structure-type.SpineGeneration.prepare?: (snapshot: ConstructionGraphSnapshot, port: BezierPort) => ConstructionGraphSnapshot`
+
+Normalizes the standing graph before an edit reads it -- legacy data, say.
+
+### `property vtt.structure-type.SpineGeneration.regenerate: (input: SpineRegenerationInput) => SpineRegeneration | undefined`
+
+### `interface vtt.structure-type.SpineRegeneration`
+
+The replacement a spine owner commits, and the curve it previews while dragging.
+
+### `property vtt.structure-type.SpineRegeneration.preview: Float32Array`
+
+### `property vtt.structure-type.SpineRegeneration.request: ApplyPatchReplacementRequest`
+
+### `interface vtt.structure-type.SpineRegenerationInput`
+
+What a spine owner is handed to regenerate its surface after a spine edit.
+
+### `property vtt.structure-type.SpineRegenerationInput.graphPatch: ConstructionGraphPatch`
+
+What the edit does to the spine.
+
+### `property vtt.structure-type.SpineRegenerationInput.operationId: string`
+
+### `property vtt.structure-type.SpineRegenerationInput.port: BezierPort`
+
+### `property vtt.structure-type.SpineRegenerationInput.snapshot: ConstructionGraphSnapshot`
+
+The graph before the edit, already prepared by the owner.
+
+### `property vtt.structure-type.SpineRegenerationInput.tableId: string`
+
+### `property vtt.structure-type.SpineRegenerationInput.topologies: readonly ConstructionRegionTopology[]`
 
 ### `interface vtt.structure-type.StructureTypeDefinition`
 
@@ -4301,6 +4576,13 @@ Whether regions of this type vertically conform to a surface of `surfaceType` be
 How this type is generated, recorded next to the roles it implies --
 the doc's whole point is that these two halves must not drift apart.
 
+### `property vtt.structure-type.StructureTypeDefinition.deriveMotion?: (topologies: readonly ConstructionRegionTopology[], positions: ReadonlyMap<string, ConstructionPosition>, context: MotionContext) => ReadonlyMap<string, ConstructionPosition>`
+
+Positions this type derives for its own unmoved nodes once motion has
+been resolved -- a shape that bends with a received move instead of
+kinking at it. Handed every face of the type, since the shape may span
+faces the move never reached. Derived moves do not propagate further.
+
 ### `property vtt.structure-type.StructureTypeDefinition.interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction`
 
 What happens when **this** type is painted over `coveredType` -- the
@@ -4334,6 +4616,10 @@ not.
 ### `property vtt.structure-type.StructureTypeDefinition.roleFor: (topology: ConstructionRegionTopology, target: EditTarget) => string`
 
 Resolves what the grabbed part of this region means.
+
+### `property vtt.structure-type.StructureTypeDefinition.spine?: SpineGeneration`
+
+Present when this type is generated along a spine.
 
 ### `property vtt.structure-type.StructureTypeDefinition.surfaceType: string`
 
@@ -4565,6 +4851,14 @@ Perlin `scale` -- smaller values are smoother/larger-scale terrain features.
 
 ### `property vtt.tool-types.ToolParamsByTool.roof: { curvatures: readonly [number, number, number, number]; elevation: number; height: number; radius: number; shape: "rectangle" | "circle" | "platform" }`
 
+### `property vtt.tool-types.ToolParamsByTool.slope-ramp: { rise: number; width: number }`
+
+A straight sloped platform dragged from start to end, climbing a fixed rise.
+
+### `property vtt.tool-types.ToolParamsByTool.slope-spiral: { radius: number; rise: number; turns: number; width: number }`
+
+A spiral sloped platform stamped around a clicked centre.
+
 ### `property vtt.tool-types.ToolParamsByTool.terrain-sculpt: TerrainSculptParams`
 
 ### `property vtt.tool-types.ToolParamsByTool.tower-stamp: TowerStampParams`
@@ -4637,7 +4931,7 @@ Length of a panel's own vertical edge, in world units.
 
 ### `type vtt.tool-types.BrushShapeKind = "circle" | "square" | "hexagon"`
 
-### `type vtt.tool-types.ConstructionToolId = "navigate" | "edit-region" | "platform-contour" | "roof" | "path-brush" | "wall-brush" | "wall-line" | "interior-wall" | "tower-stamp" | "opening" | "house-room-delete" | "terrain-sculpt"`
+### `type vtt.tool-types.ConstructionToolId = "navigate" | "edit-region" | "platform-contour" | "slope-ramp" | "slope-spiral" | "roof" | "path-brush" | "wall-brush" | "wall-line" | "interior-wall" | "tower-stamp" | "opening" | "house-room-delete" | "terrain-sculpt"`
 
 The construction-tool vocabulary every layer (widgets, composition) needs
 to agree on: which tools exist, what each one's parameters look like, and
@@ -4692,6 +4986,57 @@ reason about, not an arbitrary one a careless drag produced.
 Derives a recommended face size proportionally from the brush radius.
 Larger brush = broader/macro work = larger faces (fewer quads/vertices).
 Smaller brush = finer detail work = smaller faces.
+
+### `interface vtt.bezier-curve.RibbonRequest`
+
+### `property vtt.bezier-curve.RibbonRequest.curve: CubicBezier`
+
+### `property vtt.bezier-curve.RibbonRequest.endOffsets?: readonly [number, number]`
+
+Offsets at the curve end, when the ribbon tapers.
+
+### `property vtt.bezier-curve.RibbonRequest.offsets: readonly [number, number]`
+
+Lateral offsets `[min, max]` at the curve start.
+
+### `property vtt.bezier-curve.RibbonRequest.parameters?: readonly number[]`
+
+Take the cross-sections at these curve parameters instead of adaptive samples.
+
+### `function vtt.bezier-curve.automaticCurve(port: Pick<BezierPort, "curveBatch">, points: readonly ConstructionPosition[], tolerance: number): CurveResult`
+
+The smooth curve through `points`, one cubic per consecutive pair.
+
+### `function vtt.bezier-curve.curvePoint(p: ConstructionPosition): CurvePoint`
+
+The one place the app speaks to the Rust bezier engine in geometric terms:
+fitting curves through anchors, resolving stored handles, sampling a ribbon
+either side of a curve, and unioning ribbons in plan.
+
+Product-free on purpose. A road network and a sloped platform are both
+callers deciding *which* curves and *how wide*; neither owns the curve
+operations, and neither re-derives them. Every call here is batched --
+one engine crossing per request, however many curves it carries.
+
+### `function vtt.bezier-curve.curvePosition(p: CurvePoint): ConstructionPosition`
+
+### `function vtt.bezier-curve.resolveCurves(port: Pick<BezierPort, "curveBatch">, spans: readonly { end: ConstructionPosition; handles: CurveHandles; start: ConstructionPosition }[], tolerance: number): readonly CurveResult[]`
+
+Explicit cubics for stored handles between their two anchors.
+
+### `function vtt.bezier-curve.ribbonSections(outline: readonly ConstructionPosition[]): readonly { max: ConstructionPosition; min: ConstructionPosition }[]`
+
+A ribbon outline split back into its paired cross-sections, start to end.
+
+### `function vtt.bezier-curve.sampleRibbons(port: Pick<BezierPort, "curveBatch">, requests: readonly RibbonRequest[], tolerance: number): readonly (readonly ConstructionPosition[])[]`
+
+Each curve's ribbon outline: the `min` side walked forward, then the `max`
+side walked back. Every sample keeps its curve height; the cross-section
+is always horizontal.
+
+### `function vtt.bezier-curve.unionRibbonOutlines(port: Pick<BezierPort, "planarBoolean">, outlines: readonly (readonly ConstructionPosition[])[]): [number, number][][][]`
+
+The plan-view union of ribbon outlines, as `[x, z]` shapes of rings.
 
 ### `interface vtt.boundary-edges.BoundaryEdges`
 
@@ -5136,6 +5481,10 @@ callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 
 ### `property vtt.bezier-port.CurveHandles.start: CurvePoint`
 
+### `property vtt.bezier-port.CurveHandles.surfaceType?: string`
+
+The structure type generated along this spine span; absent means the default consumer.
+
 ### `interface vtt.bezier-port.CurveNetworkEdge`
 
 ### `property vtt.bezier-port.CurveNetworkEdge.curve: CurveHandles`
@@ -5194,7 +5543,7 @@ callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 
 ### `property vtt.bezier-port.CurveResult.samples: readonly (readonly { position: CurvePoint; t: number }[])[]`
 
-### `type vtt.bezier-port.CurveCommand = { kind: "automatic"; points: readonly CurvePoint[] } | { cornerDegrees?: number; kind: "fit"; points: readonly CurvePoint[] } | { kind: "join"; sections: readonly (readonly [CurvePoint, CurvePoint])[] } | { curve: CubicBezier; endOffsets?: readonly [number, number]; kind: "ribbon"; offsets: readonly [number, number] } | { curves: readonly CubicBezier[]; kind: "sample" } | { curve: CubicBezier; kind: "split"; profile?: CurveHandles; t: number } | { curve: CubicBezier; kind: "merge"; next: CubicBezier } | { curve: CubicBezier; kind: "pull"; t: number; target: CurvePoint } | { curve: CubicBezier; index: 1 | 2; kind: "handle"; mode: CurveHandleMode; opposite: CurvePoint | null; target: CurvePoint } | { curve: CubicBezier; kind: "nearest"; point: CurvePoint } | { end: CurvePoint; handles: CurveHandles; kind: "resolve"; start: CurvePoint }`
+### `type vtt.bezier-port.CurveCommand = { kind: "automatic"; points: readonly CurvePoint[] } | { cornerDegrees?: number; kind: "fit"; points: readonly CurvePoint[] } | { kind: "join"; sections: readonly (readonly [CurvePoint, CurvePoint])[] } | { curve: CubicBezier; endOffsets?: readonly [number, number]; kind: "ribbon"; offsets: readonly [number, number]; parameters?: readonly number[] } | { curves: readonly CubicBezier[]; kind: "sample" } | { curve: CubicBezier; kind: "split"; profile?: CurveHandles; t: number } | { curve: CubicBezier; kind: "merge"; next: CubicBezier } | { curve: CubicBezier; kind: "pull"; t: number; target: CurvePoint } | { curve: CubicBezier; index: 1 | 2; kind: "handle"; mode: CurveHandleMode; opposite: CurvePoint | null; target: CurvePoint } | { curve: CubicBezier; kind: "nearest"; point: CurvePoint } | { end: CurvePoint; handles: CurveHandles; kind: "resolve"; start: CurvePoint }`
 
 ### `type vtt.bezier-port.CurveHandleMode = "automatic" | "aligned" | "mirrored" | "free"`
 
@@ -7306,7 +7655,8 @@ Houses the 8 core construction verbs in a centered, glassmorphic dock:
    preset radius, never freehand-drawn, see `tower-stamp-tool.ts`)
 2. 🚪 Aberturas (Portas & Janelas -- one click on a wall panel opens it
    and stands a face in the opening, see `opening-tool.ts`)
-3. 🪜 Escadas (Conexão de elevações)
+3. 🪜 Escadas (Conexão de elevações -- Rampa, arrastada do início ao fim,
+   e Espiral, clicada no centro; both draw a sloped platform)
 4. 🛤️ Caminhos (Trilhas & química de portais)
 5. ⛰️ Terreno & Água (Escultura de Terreno)
 6. 🌲 Vegetação (Adornos & Flora)

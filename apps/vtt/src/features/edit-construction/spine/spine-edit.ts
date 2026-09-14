@@ -1,6 +1,6 @@
 import type { ConstructionPosition } from "@/ports";
 
-import { addPosition, type AtomicEditOp } from "../../../orchestration/atomic-edit.ts";
+import { addPosition, type AtomicEditOp } from "../orchestration/atomic-edit.ts";
 import type { SpineControlNode } from "./spine-graph.ts";
 
 /**

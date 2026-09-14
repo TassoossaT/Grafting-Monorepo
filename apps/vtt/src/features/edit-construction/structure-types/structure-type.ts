@@ -1,4 +1,4 @@
-import type { ConstructionMotionInfluence } from "@/ports";
+import type { ApplyPatchReplacementRequest, BezierPort, ConstructionGraphPatch, ConstructionMotionInfluence } from "@/ports";
 import type {
   ConstructionGraphSnapshot,
   ConstructionNodeId,
@@ -211,6 +211,43 @@ export interface CutFallout {
   readonly vacatedGround?: MultiPolygon;
 }
 
+/** What a spine owner is handed to regenerate its surface after a spine edit. */
+export interface SpineRegenerationInput {
+  /** The graph before the edit, already prepared by the owner. */
+  readonly snapshot: ConstructionGraphSnapshot;
+  /** What the edit does to the spine. */
+  readonly graphPatch: ConstructionGraphPatch;
+  readonly topologies: readonly ConstructionRegionTopology[];
+  readonly port: BezierPort;
+  readonly operationId: string;
+  readonly tableId: string;
+}
+
+/** The replacement a spine owner commits, and the curve it previews while dragging. */
+export interface SpineRegeneration {
+  readonly request: ApplyPatchReplacementRequest;
+  readonly preview: Float32Array;
+}
+
+/**
+ * How a type is generated along a spine (`features/edit-construction/spine`):
+ * the same control nodes and bezier spans for every owner, regenerated into
+ * whatever surface this type makes of them.
+ */
+export interface SpineGeneration {
+  /** The width a span with no profile of its own is given. */
+  readonly defaultOffsets: readonly number[];
+  /** Normalizes the standing graph before an edit reads it -- legacy data, say. */
+  readonly prepare?: (snapshot: ConstructionGraphSnapshot, port: BezierPort) => ConstructionGraphSnapshot;
+  readonly regenerate: (input: SpineRegenerationInput) => SpineRegeneration | undefined;
+}
+
+/** What a type's derived motion may consult beyond the positions themselves. */
+export interface MotionContext {
+  readonly graphSnapshot?: ConstructionGraphSnapshot;
+  readonly port?: Pick<BezierPort, "curveBatch">;
+}
+
 /**
  * One structure type's definition -- which is to say, **what a cloud of this
  * type does**, since the cloud is what the type names (`ADR-0022`, and
@@ -239,6 +276,15 @@ export interface StructureTypeDefinition {
   readonly label: string;
   /** Responses to received motion, independent of direct gesture constraints. */
   readonly motionInfluences?: (topology: ConstructionRegionTopology, transport: boolean) => readonly ConstructionMotionInfluence[];
+  /**
+   * Positions this type derives for its own unmoved nodes once motion has
+   * been resolved -- a shape that bends with a received move instead of
+   * kinking at it. Handed every face of the type, since the shape may span
+   * faces the move never reached. Derived moves do not propagate further.
+   */
+  readonly deriveMotion?: (topologies: readonly ConstructionRegionTopology[], positions: ReadonlyMap<string, ConstructionPosition>, context: MotionContext) => ReadonlyMap<string, ConstructionPosition>;
+  /** Present when this type is generated along a spine. */
+  readonly spine?: SpineGeneration;
   /** Returns a reason when a proposed position batch violates this type. */
   readonly validateMotion?: (topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>) => string | undefined;
   /**

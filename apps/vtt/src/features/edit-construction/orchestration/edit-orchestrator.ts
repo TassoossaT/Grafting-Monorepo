@@ -1,4 +1,4 @@
-import type { ConstructionGraphSnapshot, RegionEditOutcome, ConstructionSessionPort, ConstructionPosition } from "@/ports";
+import type { BezierPort, ConstructionGraphSnapshot, RegionEditOutcome, ConstructionSessionPort, ConstructionPosition } from "@/ports";
 
 import type { AtomicEditOp, EditGesture } from "./atomic-edit.ts";
 import { addPosition, constrainToAxes } from "./atomic-edit.ts";
@@ -101,7 +101,7 @@ export function planEdit(
   cloud: CloudTopology,
   gesture: EditGesture,
   graphSnapshot?: ConstructionGraphSnapshot,
-  source?: Pick<ConstructionSessionPort, "planMotion" | "getAllRegionTopologies">,
+  source?: Pick<ConstructionSessionPort, "planMotion" | "getAllRegionTopologies"> & Partial<Pick<BezierPort, "curveBatch">>,
 ): EditPlan {
   const policy = resolvePolicy(cloud.seed, gesture.target);
   if (policy.resolve.kind === "deny") {
@@ -146,6 +146,14 @@ export function planEdit(
       const influences = topologies.flatMap((topology) => structureTypeFor(topology.surfaceType)?.motionInfluences?.(topology, policy.transport === true) ?? []);
       const resolved = source.planMotion({ seeds, influences });
       const moved = new Map(resolved.moves.map((move) => [move.nodeId, move.position]));
+      const resolvedMoves = new Map(moved);
+      for (const surfaceType of new Set(topologies.map((topology) => topology.surfaceType))) {
+        const derive = structureTypeFor(surfaceType)?.deriveMotion;
+        if (!derive) continue;
+        for (const [nodeId, position] of derive(topologies.filter((topology) => topology.surfaceType === surfaceType), resolvedMoves, { graphSnapshot, port: source.curveBatch ? source as Pick<BezierPort, "curveBatch"> : undefined })) {
+          if (!moved.has(nodeId)) moved.set(nodeId, position);
+        }
+      }
       let surfaceCount = 0;
       for (const topology of topologies) {
         if (!topology.nodes.some((node) => moved.has(node.id))) continue;
@@ -154,12 +162,12 @@ export function planEdit(
         if (reason) return { kind: "deny", role: policy.role, reason };
       }
       return { kind: "apply", role: policy.role, scope: policy.scope, surfaceCount,
-        ops: resolved.moves.map((move) => ({ kind: "move-vertex", ...move })) };
+        ops: [...moved].map(([nodeId, position]) => ({ kind: "move-vertex", nodeId, position })) };
     } catch (error) {
       return { kind: "deny", role: policy.role, reason: error instanceof Error ? error.message : String(error) };
     }
   }
-  if (cloud.seed.surfaceType === "platform") {
+  if (cloud.seed.surfaceType === "platform" || cloud.seed.surfaceType === "platform-slope") {
     return { kind: "deny", role: policy.role, reason: "A plataforma requer o resolvedor estrutural da sessao." };
   }
   const cascade = policy.cascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot }) ?? [];

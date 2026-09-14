@@ -1,5 +1,6 @@
 import { roofTool } from "../roof/roof-tool.ts";
 import { platformContourTool } from "../platform/platform-contour-tool.ts";
+import { slopeRampTool, slopeSpiralTool } from "../slope/slope-tools.ts";
 import type { ConstructionToolId } from "@/features/edit-construction";
 
 import type { ConstructionTool } from "./tool-context.ts";
@@ -23,6 +24,8 @@ const TOOL_REGISTRY: { readonly [Id in ConstructionToolId]: ConstructionTool<Id>
   navigate: navigateTool,
   roof: roofTool,
   "platform-contour": platformContourTool,
+  "slope-ramp": slopeRampTool,
+  "slope-spiral": slopeSpiralTool,
   "path-brush": pathBrushTool,
   "edit-region": editRegionTool,
   "wall-brush": wallBrushTool,

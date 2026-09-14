@@ -167,10 +167,23 @@ pub fn triangulate_region_with(
             // constraints refuse to triangulate at all each fall through to
             // exactly the mesh this function produced before `fill` existed.
             let refined = fill.as_ref().and_then(|fill| {
+                // A face that one curve claims entirely was swept from that
+                // curve, and only that curve may shape its interior: another
+                // curve crossing it -- a second ramp, a road beneath -- would
+                // otherwise lend its own height to every vertex nearer to it.
+                let corners = std::iter::once(outer.as_slice())
+                    .chain(owned_holes().map(|hole| hole.as_slice()))
+                    .flatten();
+                let owners = fill.field.owners_of_all(corners, fill.reach_slack);
+                let own_field = (!owners.is_empty() && owners.len() < fill.field.len()).then(|| fill.field.subset(&owners));
+                let fill = match &own_field {
+                    Some(field) => PlanarFill { field, ..*fill },
+                    None => *fill,
+                };
                 let rings = std::iter::once(outer.as_slice())
                     .chain(owned_holes().map(|hole| hole.as_slice()));
-                (needs_interior(outer, fill) && field_owns_loops(fill, rings))
-                    .then(|| refined_planar_mesh(outer, &owned_holes().collect::<Vec<_>>(), fill))
+                (needs_interior(outer, &fill) && field_owns_loops(&fill, rings))
+                    .then(|| refined_planar_mesh(outer, &owned_holes().collect::<Vec<_>>(), &fill))
                     .flatten()
             });
             refined.or_else(|| triangulate_contour_loops(outer, owned_holes()))
