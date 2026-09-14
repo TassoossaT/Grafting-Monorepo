@@ -2115,7 +2115,8 @@ export interface IssueUpdateInput {
   comment?: string;
   body?: string;
   state?: "open" | "closed";
-  reason?: "completed" | "not_planned";
+  reason?: IssueCloseReason;
+export type IssueCloseReason = "completed" | "not_planned";
 export interface CompactIssue {
   id: number;
   title: string;
@@ -2131,9 +2132,12 @@ export function parseLabels(labels: Array<{ name: string }>): {
   status?: string;
   } {
   const result: { type?: string; area?: string; priority?: string; status?: string } = {};
+export function ghCloseReason(reason: string): string | undefined {
+  return Object.hasOwn(GH_CLOSE_REASONS, reason) ? GH_CLOSE_REASONS[reason as IssueCloseReason] : undefined;
+  }
 export interface IssueCloseInput {
   id: number | string;
-  reason?: "completed" | "not_planned";
+  reason?: IssueCloseReason;
   comment?: string;
   }
 export interface IssueReopenInput {
@@ -2152,17 +2156,6 @@ export interface IssueTreeNode {
   priority?: string;
   status?: string;
   state: string;
-export interface IssueDoctorInput {
-  limit?: number;
-  }
-export interface IssueDiagnostic {
-  issueId: number;
-  title: string;
-  severity: "error" | "warning";
-  code:
-  | "ORPHAN_TASK"
-  | "MISSING_AREA"
-  | "MISSING_PRIORITY"
 
 // src/commands/pr.ts
 export interface PrListInput {
