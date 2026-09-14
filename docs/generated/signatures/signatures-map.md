@@ -4311,8 +4311,8 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   defaultParams: () => DEFAULT_TOOL_PARAMS["terrain-sculpt"],
 
   previewFor(gesture: ToolGesture, params: TerrainSculptParams) {
-  const targetSurface = params.targetSurface ?? "terrain";
-  const color = TERRAIN_COLOR[targetSurface] ?? 0x334155;
+  const targetSurface = isTerrainSurface(params.targetSurface) ? params.targetSurface : "terrain";
+  const color = TERRAIN_COLOR[targetSurface as "terrain" | "terrain-grass"] ?? 0x334155;
   return brushSweptRegionFill(
 
 // src/composition/tabletop/tools/tower/tower-geometry.ts
@@ -4979,7 +4979,7 @@ export function organicStructureType(
   ): StructureTypeDefinition {
   return Object.freeze({
 export function terrainInteractionOver(coveredType: string): CreationInteraction {
-  if (TERRAIN_TYPES.has(coveredType)) return RESTACK;
+  if (TERRAIN_TYPES.has(coveredType) || isTerrainSurface(coveredType)) return RESTACK;
   return forbid(`terrain cannot be created above "${coveredType}"`);
 export function pathInteractionOver(
   _coveredType: string,

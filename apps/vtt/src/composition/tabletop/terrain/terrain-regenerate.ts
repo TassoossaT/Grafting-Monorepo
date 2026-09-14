@@ -7,6 +7,7 @@ import type { CutFallout } from "@/features/edit-construction";
 import { executeTerrainCut } from "./terrain-cut-executor.ts";
 import { DEFAULT_FACE_SIDE } from "./terrain-fill.ts";
 import type { TerrainCutRuntime } from "./terrain-neighborhood.ts";
+import { isTerrainSurface } from "../../../features/edit-construction/index.ts";
 
 /**
  * Growing terrain back where something cut through it.
@@ -152,7 +153,7 @@ export function repairTerrainCut(
       surfaceKey: topology.surfaceKey,
       surfaceType: topology.surfaceType,
     })),
-    targetSurfaceType: consumed[0]?.surfaceType ?? "terrain",
+    targetSurfaceType: (consumed[0] && isTerrainSurface(consumed[0].surfaceType)) ? consumed[0].surfaceType : "terrain",
     profile: {
       kind: "regenerate",
       connectTo:
