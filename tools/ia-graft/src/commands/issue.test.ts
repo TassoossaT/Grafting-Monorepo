@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { issueDoctor, issueList, issueNew, issueTree, issueUpdate, issueView } from "./issue.ts";
+import { ghCloseReason, issueClose, issueDoctor, issueList, issueNew, issueTree, issueUpdate, issueView } from "./issue.ts";
 
 test("issue list runs cleanly without throwing", async () => {
   const result = await issueList(process.cwd(), { limit: 5 });
@@ -47,6 +47,19 @@ test("issue doctor audits open issues without throwing", async () => {
 test("issue close validates required id", async () => {
   const result = await (await import("./issue.ts")).issueClose(process.cwd(), { id: "" });
   assert.equal(result.ok, false);
+});
+
+test("close reasons map to the spelling gh issue close accepts", () => {
+  assert.equal(ghCloseReason("completed"), "completed");
+  assert.equal(ghCloseReason("not_planned"), "not planned");
+  assert.equal(ghCloseReason("not planned"), undefined);
+  assert.equal(ghCloseReason("toString"), undefined);
+});
+
+test("issue close rejects an unknown reason before calling gh", async () => {
+  const result = await issueClose(process.cwd(), { id: 1, reason: "wontfix" as never });
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.error, /invalid close reason/);
 });
 
 test("issue reopen validates required id", async () => {

@@ -78,8 +78,10 @@ export interface IssueUpdateInput {
   comment?: string;
   body?: string;
   state?: "open" | "closed";
-  reason?: "completed" | "not_planned";
+  reason?: IssueCloseReason;
 }
+
+export type IssueCloseReason = "completed" | "not_planned";
 
 export interface CompactIssue {
   id: number;
@@ -283,10 +285,28 @@ export async function issueNew(_repoRoot: string, input: IssueNewInput) {
 }
 
 /**
+ * Close reasons in GitHub's own snake_case `state_reason` spelling, mapped to
+ * the spaced spelling `gh issue close --reason` accepts.
+ */
+const GH_CLOSE_REASONS: Readonly<Record<IssueCloseReason, string>> = {
+  completed: "completed",
+  not_planned: "not planned",
+};
+
+/** The `gh issue close --reason` value for a close reason, or `undefined` if the reason is unknown. */
+export function ghCloseReason(reason: string): string | undefined {
+  return Object.hasOwn(GH_CLOSE_REASONS, reason) ? GH_CLOSE_REASONS[reason as IssueCloseReason] : undefined;
+}
+
+/**
  * Updates an existing issue (status/priority label swap, comment, body).
  */
 export async function issueUpdate(_repoRoot: string, input: IssueUpdateInput) {
   if (!input || !input.id) return { ok: false as const, error: "missing issue id" };
+  const closeReason = input.reason ? ghCloseReason(input.reason) : undefined;
+  if (input.reason && closeReason === undefined) {
+    return { ok: false as const, error: `invalid close reason "${input.reason}": expected completed or not_planned` };
+  }
   try {
     const id = String(input.id);
 
@@ -335,7 +355,7 @@ export async function issueUpdate(_repoRoot: string, input: IssueUpdateInput) {
 
     if (input.state === "closed") {
       const closeArgs = ["issue", "close", id];
-      if (input.reason) closeArgs.push("--reason", input.reason);
+      if (closeReason) closeArgs.push("--reason", closeReason);
       execGhSync(closeArgs);
     } else if (input.state === "open") {
       execGhSync(["issue", "reopen", id]);
@@ -349,7 +369,7 @@ export async function issueUpdate(_repoRoot: string, input: IssueUpdateInput) {
 
 export interface IssueCloseInput {
   id: number | string;
-  reason?: "completed" | "not_planned";
+  reason?: IssueCloseReason;
   comment?: string;
 }
 
