@@ -8,15 +8,6 @@ use crate::bezier::{
 #[cfg_attr(feature = "curve-serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "curve-serde", serde(tag = "kind", rename_all = "camelCase"))]
 pub enum CurveCommand {
-    /// Sweep a closed vertical cross-section along ordered ribbons, projected onto ground.
-    ExtrudeRibbon {
-        /// Ordered, consistently oriented curve spans and their lateral profiles.
-        segments: Vec<crate::bezier_surface::RibbonSegment>,
-        /// Positive vertical distance above the sampled base.
-        height: f64,
-        /// Supporting polygons, each an outer XYZ ring followed by holes.
-        ground: Vec<Vec<Vec<CurvePoint>>>,
-    },
     /// Convert a legacy/automatic anchor chain.
     Automatic {
         /// Ordered anchors.
@@ -126,12 +117,6 @@ pub struct CurveBatch {
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "curve-serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CurveResult {
-    /// Optional indexed extrusion; vertices alternate between base and top.
-    #[cfg_attr(
-        feature = "curve-serde",
-        serde(skip_serializing_if = "Option::is_none")
-    )]
-    pub extrusion: Option<crate::bezier_surface::RibbonExtrusion>,
     /// Optional derived ribbon polygon.
     pub ribbon: Option<crate::bezier_surface::CurveRibbon>,
     /// Resulting authored cubics.
@@ -161,21 +146,7 @@ pub fn execute(batch: CurveBatch) -> Result<Vec<CurveResult>, String> {
         let mut opposite_result = None;
         let mut ribbon = None;
         let mut authored = None;
-        let mut extrusion = None;
         let curves = match cmd {
-            CurveCommand::ExtrudeRibbon {
-                segments,
-                height,
-                ground,
-            } => {
-                extrusion = Some(crate::bezier_surface::extrude_ribbon(
-                    &segments,
-                    height,
-                    &ground,
-                    batch.tolerance,
-                )?);
-                Vec::new()
-            }
             CurveCommand::Automatic { points } => automatic_path(&points)?,
             CurveCommand::Fit {
                 points,
@@ -289,7 +260,6 @@ pub fn execute(batch: CurveBatch) -> Result<Vec<CurveResult>, String> {
                 .collect()
         });
         out.push(CurveResult {
-            extrusion,
             ribbon,
             curves,
             handles,

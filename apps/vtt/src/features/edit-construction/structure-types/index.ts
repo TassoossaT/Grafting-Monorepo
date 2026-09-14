@@ -1,6 +1,6 @@
 import { roofStructureType } from "./roof/roof-structure.ts";
-import { muroStructureType } from "./muro/muro-structure.ts";
 import { platformStructureType, slopedPlatformStructureType } from "./platform/platform-structure.ts";
+import { wallCurveStructureType } from "./wall/wall-curve-structure.ts";
 import type { ConstructionCoveredRegion, ConstructionRegionTopology } from "@/ports";
 
 import type { EditTarget } from "../orchestration/atomic-edit.ts";
@@ -40,12 +40,13 @@ import { forbid, type CreationInteraction } from "./creation-interaction.ts";
  * happen to share a generator.
  */
 export const STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[] = Object.freeze([
-  muroStructureType,
   platformStructureType,
   slopedPlatformStructureType,
   roofStructureType,
   panelStructureType("wall-white", "Parede branca", "one upright panel per contour edge, drawn or stamped"),
   panelStructureType("wall-gray", "Parede cinza", "one upright panel per contour edge, drawn or stamped"),
+  wallCurveStructureType("wall-curve-white", "Parede branca (eixo)"),
+  wallCurveStructureType("wall-curve-gray", "Parede cinza (eixo)"),
   panelStructureType("door", "Porta", "one face standing in an opening, on the rim the wall shares with it"),
   panelStructureType("window", "Janela", "one face standing in an opening, on the rim the wall shares with it"),
   panelStructureType("floor", "Piso", "generateRegionPartition's per-region cap"),

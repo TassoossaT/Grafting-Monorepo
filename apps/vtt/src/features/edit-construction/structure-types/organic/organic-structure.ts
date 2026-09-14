@@ -145,5 +145,5 @@ export function pathInteractionOver(
   coveredType: string,
   paintedSubtype?: string,
 ): CreationInteraction {
-  return coveredType === "muro" || paintedSubtype === "bridge" ? IGNORE : CUT;
+  return coveredType === "wall-curve-white" || coveredType === "wall-curve-gray" || paintedSubtype === "bridge" ? IGNORE : CUT;
 }

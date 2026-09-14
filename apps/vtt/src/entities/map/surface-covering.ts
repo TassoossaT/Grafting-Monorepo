@@ -87,11 +87,12 @@ export interface SurfaceCovering {
 export function colorForSurfaceType(surfaceType: string, physical: boolean): number {
   if (!physical) return 0x3a6b8a;
   switch (surfaceType) {
-    case "muro": return 0xb6a18c;
     case "wall":
     case "wall-white":
+    case "wall-curve-white":
       return 0xe2e8f0; // White / light gray block prototype
     case "wall-gray":
+    case "wall-curve-gray":
       return 0x64748b; // Slate gray block prototype
     case "platform":
     case "platform-slope":

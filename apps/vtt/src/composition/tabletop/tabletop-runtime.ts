@@ -576,8 +576,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
     generation: number,
   ): void {
     const revision = (this.#nodeHandleRevisions.get(nodeId) ?? 0) + 1;
-    // Muro tessellation is derived; only its authored axis is a direct handle.
-    if (nodeId.startsWith("muro:")) return;
     this.#nodeHandleRevisions.set(nodeId, revision);
     this.#render.applyConfirmed({
       type: "node-handle-upserted",

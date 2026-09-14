@@ -1,5 +1,4 @@
 import { roofTool } from "../roof/roof-tool.ts";
-import { muroBrushTool } from "../walls/muro-brush-tool.ts";
 import { platformContourTool } from "../platform/platform-contour-tool.ts";
 import { slopeRampTool, slopeSpiralTool } from "../slope/slope-tools.ts";
 import type { ConstructionToolId } from "@/features/edit-construction";
@@ -14,6 +13,7 @@ import { pathBrushTool } from "../paths/path-brush-tool.ts";
 import { terrainSculptTool } from "../terrain/terrain-sculpt-tool.ts";
 import { towerStampTool } from "../tower/tower-stamp-tool.ts";
 import { wallBrushTool } from "../walls/wall-brush-tool.ts";
+import { wallCurveTool } from "../walls/wall-curve-tool.ts";
 import { wallLineTool } from "../walls/wall-line-tool.ts";
 
 /**
@@ -28,10 +28,10 @@ const TOOL_REGISTRY: { readonly [Id in ConstructionToolId]: ConstructionTool<Id>
   "slope-ramp": slopeRampTool,
   "slope-spiral": slopeSpiralTool,
   "path-brush": pathBrushTool,
-  "muro-brush": muroBrushTool,
   "edit-region": editRegionTool,
   "wall-brush": wallBrushTool,
   "wall-line": wallLineTool,
+  "wall-curve": wallCurveTool,
   "interior-wall": interiorWallTool,
   "tower-stamp": towerStampTool,
   opening: openingTool,

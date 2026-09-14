@@ -41,7 +41,7 @@ function outlineShapeFor(shape: BrushShape): BrushOutlineShape {
 }
 
 /** Tool ids whose parameters carry a brush shape (radius/rotation/footprint) -- the only ids {@link createBrushTool} can wire up. */
-export type BrushableToolId = "path-brush" | "wall-brush" | "muro-brush";
+export type BrushableToolId = "path-brush" | "wall-brush" | "wall-curve";
 
 /**
  * How far a brush shape reaches from its own center. What that reach *means*

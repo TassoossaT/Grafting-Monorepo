@@ -62,11 +62,12 @@ export function ConstructionDock(props: ConstructionDockProps) {
 
   const isWallBrushActive = activeTool === "wall-brush";
   const isWallLineActive = activeTool === "wall-line";
+  const isWallCurveActive = activeTool === "wall-curve";
   const isInteriorWallActive = activeTool === "interior-wall";
   const isTowerStampActive = activeTool === "tower-stamp";
   const isRoofActive = activeTool === "roof";
   const isPlatformActive = activeTool === "platform-contour";
-  const isWallChildActive = isWallBrushActive || isWallLineActive || isInteriorWallActive || isTowerStampActive || isPlatformActive || isRoofActive;
+  const isWallChildActive = isWallBrushActive || isWallLineActive || isWallCurveActive || isInteriorWallActive || isTowerStampActive || isPlatformActive || isRoofActive;
   const isRampActive = activeTool === "slope-ramp";
   const isSpiralActive = activeTool === "slope-spiral";
   const isOpeningActive = activeTool === "opening";
@@ -104,6 +105,15 @@ export function ConstructionDock(props: ConstructionDockProps) {
           active: isWallLineActive,
           disabled: !ready,
           onClick: () => onToolChange("wall-line"),
+        },
+        {
+          key: "wall-curve",
+          label: "Eixo Bézier",
+          icon: "〰️",
+          tooltip: "Eixo Bézier (arraste; edite depois pelos nós e alças do eixo)",
+          active: isWallCurveActive,
+          disabled: !ready,
+          onClick: () => onToolChange("wall-curve"),
         },
         {
           key: "interior-wall",
@@ -156,11 +166,6 @@ export function ConstructionDock(props: ConstructionDockProps) {
       active: activeTool === "path-brush",
       disabled: !ready,
       onClick: () => onToolChange("path-brush"),
-    },
-    {
-      key: "muro", label: "Muro", icon: "M", tooltip: "Muro sobre eixo Bézier",
-      active: activeTool === "muro-brush", disabled: !ready,
-      onClick: () => onToolChange("muro-brush"),
     },
     {
       key: "terrain",

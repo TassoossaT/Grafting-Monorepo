@@ -369,7 +369,7 @@ type, heals the vacated terrain hole.
 
 Fast spatial bucketing for proximity queries against road points.
 
-### `function vtt.bezier-edit-gesture.beginBezierGesture(ctx: ToolContext, sample: PointerSample, params?: { curveAction?: "height" | "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"; curveEndWidth?: number; curveHeight?: number; curveMode?: "automatic" | "aligned" | "mirrored" | "free"; curveWidth?: number; mode: "shape" | "elevation" }): { cancel: any; commit: any; move: any } | undefined`
+### `function vtt.bezier-edit-gesture.beginBezierGesture(ctx: ToolContext, sample: PointerSample, params?: { curveAction?: "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"; curveEndWidth?: number; curveMode?: "automatic" | "aligned" | "mirrored" | "free"; curveWidth?: number; mode: "shape" | "elevation" }): { cancel: any; commit: any; move: any } | undefined`
 
 ### `function vtt.path-cloud-transaction.commitPathCloudIntent(ctx: ToolContext, effect: PathBrushEffect, tolerance: number): void`
 
@@ -1480,7 +1480,7 @@ is well represented by the default sweep fill and needs no override.
 Generic here, not a wall special case, so any brush gets the same real
 preview by supplying one.
 
-### `type vtt.brush-tool.BrushableToolId = "path-brush" | "wall-brush" | "muro-brush"`
+### `type vtt.brush-tool.BrushableToolId = "path-brush" | "wall-brush" | "wall-curve"`
 
 Tool ids whose parameters carry a brush shape (radius/rotation/footprint) -- the only ids createBrushTool can wire up.
 
@@ -2254,8 +2254,6 @@ a contour a preset happened to compute instead of a hand drawing it. That
 is the entire difference -- so a tower welds onto a drawn wall, gets
 edited by the same handles, and is subject to the same rules, for free.
 
-### `variable vtt.muro-brush-tool.muroBrushTool: ConstructionTool<"muro-brush">`
-
 ### `variable vtt.wall-brush-tool.wallBrushTool: ConstructionTool<"wall-brush">`
 
 A free wall stroke, built on the same brush every other brush uses: press,
@@ -2274,6 +2272,15 @@ Everything a wall is lives in TypeScript from here down (`wall-shared.ts`,
 `wall-patch.ts`): corners resolve to columns, columns share edges, and the
 engine is handed nodes, edges and faces without ever being told they are a
 wall.
+
+### `variable vtt.wall-curve-tool.wallCurveTool: ConstructionTool<"wall-curve">`
+
+A wall drawn as a persistent Bezier axis instead of a straight/arc
+contour: press, drag, and on release the stroke is fit into a smooth
+curve whose nodes and handles stay in the graph, editable afterward with
+the same gesture a road's spine already uses (`edit-region`). What the
+curve *makes* is still an ordinary wall panel run, generated in
+`wall-curve-spine.ts` -- this tool only chooses the interaction.
 
 ### `variable vtt.wall-line-tool.wallLineTool: ConstructionTool<"wall-line">`
 
@@ -3302,24 +3309,6 @@ inferred from a symmetric "compatible" flag.
 ### `variable vtt.creation-interaction.RESTACK: CreationInteraction`
 
 ### `function vtt.creation-interaction.forbid(reason: string): CreationInteraction`
-
-### `function vtt.muro-plan.muroOwner(edgeId: string): string | undefined`
-
-Durable ownership is encoded in graph IDs, never in an additional recipe store.
-
-### `function vtt.muro-plan.muroOwnerForTarget(snapshot: ConstructionGraphSnapshot, targetId: string): string | undefined`
-
-### `function vtt.muro-plan.planMuroCreation(input: { height: number; operationId: string; port: BezierPort; snapshot: ConstructionGraphSnapshot; stroke: readonly ConstructionPosition[]; thickness: number; tolerance: number; topologies: readonly ConstructionRegionTopology[] }): { preview: Float32Array<ArrayBuffer>; request: ApplyPatchReplacementRequest; selectedId: string } | undefined`
-
-### `function vtt.muro-plan.planMuroEdit(input: SpineEditInput & { height?: number; setHeight?: boolean; tableId: string; topologies: readonly ConstructionRegionTopology[] }): { preview: Float32Array<ArrayBuffer>; request: ApplyPatchReplacementRequest; selectedId: string } | undefined`
-
-### `function vtt.muro-plan.regenerateMuroSpine(input: SpineRegenerationInput): { preview: Float32Array<ArrayBuffer>; request: ApplyPatchReplacementRequest; selectedId: string } | undefined`
-
-Registry entry for the shared spine editor, including callers outside the pointer tool.
-
-### `variable vtt.muro-structure.muroStructureType: Readonly<StructureTypeDefinition>`
-
-A generated upright ribbon is edited through its authored axis, not its tessellation.
 
 ### `variable vtt.organic-structure.ORGANIC_ROLES: { body: "organic-body"; boundaryEdge: "organic-boundary-edge"; boundaryVertex: "organic-boundary-vertex" }`
 
@@ -4703,6 +4692,45 @@ Convenience for the common "allowed, on these axes, at this reach, no cascade" p
 
 The policy every unknown role falls back to: refuse rather than guess.
 
+### `interface vtt.wall-curve-spine.WallCurveSurface`
+
+### `property vtt.wall-curve-spine.WallCurveSurface.edges: readonly ConstructionPatchEdge[]`
+
+### `property vtt.wall-curve-spine.WallCurveSurface.nodes: readonly { id: string; position: ConstructionPosition }[]`
+
+### `property vtt.wall-curve-spine.WallCurveSurface.preview: Float32Array`
+
+### `property vtt.wall-curve-spine.WallCurveSurface.regions: readonly ConstructionPatchRegion[]`
+
+### `function vtt.wall-curve-spine.planWallCurveCreation(input: { height: number; operationId: string; port: BezierPort; snapshot: ConstructionGraphSnapshot; stroke: readonly ConstructionPosition[]; tableId: string; tolerance: number; topologies: readonly ConstructionRegionTopology[]; wallType: string }): { preview: Float32Array; request: ApplyPatchReplacementRequest; selectedId: string } | undefined`
+
+The stroke-drawn creation path: fits a smooth cubic through the drawn
+anchors (the same fit roads use), mints its control nodes and spans
+owned by `wallType`, and regenerates them through the same path an edit
+would take -- creation is not a second recipe.
+
+### `function vtt.wall-curve-spine.regenerateWallCurveSpine(wallType: string): (input: SpineRegenerationInput) => SpineRegeneration | undefined`
+
+Regenerates every curved-wall span of `wallType` that a spine edit touches.
+
+### `function vtt.wall-curve-spine.wallCurveSurface(port: Pick<BezierPort, "curveBatch">, tableId: string, wallType: string, nodes: ReadonlyMap<string, ConstructionPosition>, spans: readonly ConstructionEdgeSnapshot[]): WallCurveSurface`
+
+The panels of every curved-wall span in `spans`, sampled along their
+curves. A control node's own top (`wallTopId`) is shared by every span
+that meets there, so adjacent spans in the same run weld at that column
+exactly as `wallPatch` welds adjacent brush panels -- without borrowing
+that builder's contour/closure bookkeeping, which assumes one contiguous
+run rather than an independently regenerated span.
+
+### `function vtt.wall-curve-structure.wallCurveStructureType(surfaceType: string, label: string): StructureTypeDefinition`
+
+A wall built along a spine instead of a drawn contour: same upright-panel
+shape a brush or a line wall makes (`panel-structure.ts`), curved by the
+shared bezier spine instead. A sibling of the plain wall types rather than
+a mode on them, for the same reason a sloped platform is a sibling of a
+flat one (`platform-structure.ts`): its faces are never grabbed directly,
+the spine is what is edited.
+
 ### `function vtt.brush-shape-params.resolveBrushShape(params: BrushShapeParams): BrushShape`
 
 Converts editable shape parameters into the immutable semantic brush contract.
@@ -4855,13 +4883,11 @@ Perlin `scale` -- smaller values are smoother/larger-scale terrain features.
 
 ### `interface vtt.tool-types.ToolParamsByTool`
 
-### `property vtt.tool-types.ToolParamsByTool.edit-region: { curveAction?: "height" | "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"; curveEndWidth?: number; curveHeight?: number; curveMode?: "automatic" | "aligned" | "mirrored" | "free"; curveWidth?: number; mode: "shape" | "elevation" }`
+### `property vtt.tool-types.ToolParamsByTool.edit-region: { curveAction?: "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"; curveEndWidth?: number; curveMode?: "automatic" | "aligned" | "mirrored" | "free"; curveWidth?: number; mode: "shape" | "elevation" }`
 
 ### `property vtt.tool-types.ToolParamsByTool.house-room-delete: NoToolParams`
 
 ### `property vtt.tool-types.ToolParamsByTool.interior-wall: InteriorGenerateParams`
-
-### `property vtt.tool-types.ToolParamsByTool.muro-brush: BrushShapeParams & { height: number; thickness: number }`
 
 ### `property vtt.tool-types.ToolParamsByTool.navigate: NoToolParams`
 
@@ -4886,6 +4912,10 @@ A spiral sloped platform stamped around a clicked centre.
 ### `property vtt.tool-types.ToolParamsByTool.tower-stamp: TowerStampParams`
 
 ### `property vtt.tool-types.ToolParamsByTool.wall-brush: WallBrushParams`
+
+### `property vtt.tool-types.ToolParamsByTool.wall-curve: WallBrushParams`
+
+A wall drawn as a persistent Bezier axis instead of a straight/arc contour; the brush radius is the curve's own fitting tolerance, same convention as `wall-brush`.
 
 ### `property vtt.tool-types.ToolParamsByTool.wall-line: WallParams`
 
@@ -4953,7 +4983,7 @@ Length of a panel's own vertical edge, in world units.
 
 ### `type vtt.tool-types.BrushShapeKind = "circle" | "square" | "hexagon"`
 
-### `type vtt.tool-types.ConstructionToolId = "navigate" | "edit-region" | "platform-contour" | "slope-ramp" | "slope-spiral" | "roof" | "path-brush" | "muro-brush" | "wall-brush" | "wall-line" | "interior-wall" | "tower-stamp" | "opening" | "house-room-delete" | "terrain-sculpt"`
+### `type vtt.tool-types.ConstructionToolId = "navigate" | "edit-region" | "platform-contour" | "slope-ramp" | "slope-spiral" | "roof" | "path-brush" | "wall-brush" | "wall-line" | "wall-curve" | "interior-wall" | "tower-stamp" | "opening" | "house-room-delete" | "terrain-sculpt"`
 
 The construction-tool vocabulary every layer (widgets, composition) needs
 to agree on: which tools exist, what each one's parameters look like, and
@@ -5553,8 +5583,6 @@ The structure type generated along this spine span; absent means the default con
 
 ### `property vtt.bezier-port.CurveResult.curves: readonly CubicBezier[]`
 
-### `property vtt.bezier-port.CurveResult.extrusion?: { boundaries: readonly (readonly (readonly [number, boolean])[])[]; edges: readonly (readonly [number, number])[]; faces: readonly (readonly [number, number, number])[]; vertices: readonly CurvePoint[] }`
-
 ### `property vtt.bezier-port.CurveResult.handles: readonly CurveHandles[]`
 
 ### `property vtt.bezier-port.CurveResult.lengths: readonly number[]`
@@ -5567,7 +5595,7 @@ The structure type generated along this spine span; absent means the default con
 
 ### `property vtt.bezier-port.CurveResult.samples: readonly (readonly { position: CurvePoint; t: number }[])[]`
 
-### `type vtt.bezier-port.CurveCommand = { ground: readonly (readonly (readonly CurvePoint[])[])[]; height: number; kind: "extrudeRibbon"; segments: readonly { curve: CubicBezier; endOffsets: readonly [number, number]; offsets: readonly [number, number] }[] } | { kind: "automatic"; points: readonly CurvePoint[] } | { cornerDegrees?: number; kind: "fit"; points: readonly CurvePoint[] } | { kind: "join"; sections: readonly (readonly [CurvePoint, CurvePoint])[] } | { curve: CubicBezier; endOffsets?: readonly [number, number]; kind: "ribbon"; offsets: readonly [number, number]; parameters?: readonly number[] } | { curves: readonly CubicBezier[]; kind: "sample" } | { curve: CubicBezier; kind: "split"; profile?: CurveHandles; t: number } | { curve: CubicBezier; kind: "merge"; next: CubicBezier } | { curve: CubicBezier; kind: "pull"; t: number; target: CurvePoint } | { curve: CubicBezier; index: 1 | 2; kind: "handle"; mode: CurveHandleMode; opposite: CurvePoint | null; target: CurvePoint } | { curve: CubicBezier; kind: "nearest"; point: CurvePoint } | { end: CurvePoint; handles: CurveHandles; kind: "resolve"; start: CurvePoint }`
+### `type vtt.bezier-port.CurveCommand = { kind: "automatic"; points: readonly CurvePoint[] } | { cornerDegrees?: number; kind: "fit"; points: readonly CurvePoint[] } | { kind: "join"; sections: readonly (readonly [CurvePoint, CurvePoint])[] } | { curve: CubicBezier; endOffsets?: readonly [number, number]; kind: "ribbon"; offsets: readonly [number, number]; parameters?: readonly number[] } | { curves: readonly CubicBezier[]; kind: "sample" } | { curve: CubicBezier; kind: "split"; profile?: CurveHandles; t: number } | { curve: CubicBezier; kind: "merge"; next: CubicBezier } | { curve: CubicBezier; kind: "pull"; t: number; target: CurvePoint } | { curve: CubicBezier; index: 1 | 2; kind: "handle"; mode: CurveHandleMode; opposite: CurvePoint | null; target: CurvePoint } | { curve: CubicBezier; kind: "nearest"; point: CurvePoint } | { end: CurvePoint; handles: CurveHandles; kind: "resolve"; start: CurvePoint }`
 
 ### `type vtt.bezier-port.CurveHandleMode = "automatic" | "aligned" | "mirrored" | "free"`
 

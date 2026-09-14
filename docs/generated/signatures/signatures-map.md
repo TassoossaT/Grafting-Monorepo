@@ -3787,7 +3787,7 @@ export interface BrushRegion {
   * The brush footprint, already widened to hold the product -- see
   * {@link expandedToHold}. This is what the ghost is drawn from, which is
   * what makes the ghost an honest envelope rather than a decoration.
-export type BrushableToolId = "path-brush" | "wall-brush" | "muro-brush";
+export type BrushableToolId = "path-brush" | "wall-brush" | "wall-curve";
 export function brushReach(shape: BrushShape): number {
   if (shape.kind === "square") return shape.size / 2;
   return shape.radius;
@@ -4335,15 +4335,6 @@ export const towerStampTool: ConstructionTool<"tower-stamp"> = {
   previewOutline(gesture.current.point, params.radius, PREVIEW_SEGMENTS),
   WALL_COLOR[params.wallType],
 
-// src/composition/tabletop/tools/walls/muro-brush-tool.ts
-export const muroBrushTool = createBrushTool<"muro-brush">({
-  id: "muro-brush",
-  defaultParams: () => DEFAULT_TOOL_PARAMS["muro-brush"],
-  previewColor: () => 0xb6a18c,
-  halfWidth: (params) => params.thickness / 2,
-  applyRegion(region, ctx, params) {
-  const operationId = scopedToolId(ctx, "muro-brush", ctx.nextSequence());
-
 // src/composition/tabletop/tools/walls/wall-brush-tool.ts
 export const wallBrushTool = createBrushTool<"wall-brush">({
   id: "wall-brush",
@@ -4351,6 +4342,16 @@ export const wallBrushTool = createBrushTool<"wall-brush">({
   previewColor: (params: WallBrushParams) => WALL_COLOR[params.wallType],
   // A wall is columns and shared edges, with no thickness in plan, so it
   // occupies none of the brush and the whole reach is correction budget.
+  halfWidth: () => 0,
+
+
+// src/composition/tabletop/tools/walls/wall-curve-tool.ts
+export const wallCurveTool = createBrushTool<"wall-curve">({
+  id: "wall-curve",
+  defaultParams: () => DEFAULT_TOOL_PARAMS["wall-curve"],
+  previewColor: (params: WallBrushParams) => WALL_COLOR[params.wallType],
+  // Zero thickness in plan, same as the other wall tools: the whole brush
+  // reach is the curve's own fitting tolerance.
   halfWidth: () => 0,
 
 
@@ -4547,9 +4548,9 @@ export interface SurfaceCovering {
 export function colorForSurfaceType(surfaceType: string, physical: boolean): number {
   if (!physical) return 0x3a6b8a;
   switch (surfaceType) {
-  case "muro": return 0xb6a18c;
   case "wall":
   case "wall-white":
+  case "wall-curve-white":
   return 0xe2e8f0; // White / light gray block prototype
   case "wall-gray":
 export const NONE_COVERING: SurfaceCovering = Object.freeze({
@@ -4963,32 +4964,6 @@ export function firstRefusal(resolved: readonly ResolvedCoverage[]): string | un
   if (entry.interaction.kind === "forbid") return entry.interaction.reason;
   }
 
-// src/features/edit-construction/structure-types/muro/muro-plan.ts
-export function muroOwner(edgeId: string): string | undefined {
-  return /^spine-edge:muro:([^:]+):/.exec(edgeId)?.[1];
-  }
-export function muroOwnerForTarget(snapshot: ConstructionGraphSnapshot, targetId: string): string | undefined {
-  const pick = curvePick(targetId);
-export function planMuroCreation(input: {
-  snapshot: ConstructionGraphSnapshot; topologies: readonly ConstructionRegionTopology[]; port: BezierPort;
-  stroke: readonly ConstructionPosition[]; operationId: string; height: number; thickness: number; tolerance: number;
-  }) {
-  if (!Number.isFinite(input.thickness) || input.thickness <= 0) throw Error("Informe uma espessura positiva para o muro.");
-export function planMuroEdit(input: SpineEditInput & { readonly topologies: readonly ConstructionRegionTopology[]; readonly tableId: string; readonly height?: number; readonly setHeight?: boolean }) {
-  const owner = muroOwnerForTarget(input.snapshot, input.targetId);
-export function regenerateMuroSpine(input: SpineRegenerationInput) {
-  const seeds = new Set(input.graphPatch.nodes.map((n) => n.id));
-
-// src/features/edit-construction/structure-types/muro/muro-structure.ts
-export const muroStructureType = Object.freeze<StructureTypeDefinition>({
-  surfaceType: "muro",
-  label: "Muro",
-  creation: "Bézier axis extruded in Rust, with thickness and constant height above sampled terrain",
-  roleFor: (_topology, target) => target.kind === "region" ? "muro-body" : target.kind === "edge" ? "muro-panel-edge" : Number(target.nodeId.split(":").at(-1)) % 2 === 1 ? "muro-top" : "muro-base",
-  policyFor: (role) => denied(role, "Edite o muro pelos nós e alças do eixo; use Altura do muro para ajustar o topo."),
-  interactionOver: () => IGNORE,
-  conformsTo: (surfaceType) => surfaceType === "terrain" || surfaceType === "terrain-grass",
-
 // src/features/edit-construction/structure-types/organic/organic-structure.ts
 export const ORGANIC_ROLES = {
   boundaryVertex: "organic-boundary-vertex",
@@ -5022,7 +4997,7 @@ export function pathInteractionOver(
   coveredType: string,
   paintedSubtype?: string,
   ): CreationInteraction {
-  return coveredType === "muro" || paintedSubtype === "bridge" ? IGNORE : CUT;
+  return coveredType === "wall-curve-white" || coveredType === "wall-curve-gray" || paintedSubtype === "bridge" ? IGNORE : CUT;
   }
 
 // src/features/edit-construction/structure-types/organic/terrain-cloud.ts
@@ -5670,6 +5645,44 @@ export function allowed(
   return { role, resolve: { kind: "allow" }, axes, scope, cascade };
 export type { EditGesture };
 
+// src/features/edit-construction/structure-types/wall/wall-curve-spine.ts
+export interface WallCurveSurface {
+  readonly nodes: readonly { readonly id: string; readonly position: ConstructionPosition }[];
+  readonly edges: readonly ConstructionPatchEdge[];
+  readonly regions: readonly ConstructionPatchRegion[];
+  readonly preview: Float32Array;
+  }
+export function wallCurveSurface(
+  port: Pick<BezierPort, "curveBatch">,
+  tableId: string,
+  wallType: string,
+  nodes: ReadonlyMap<string, ConstructionPosition>,
+  spans: readonly ConstructionEdgeSnapshot[],
+  ): WallCurveSurface {
+  const resolved = resolveCurves(port, spans.map((span) => ({ handles: span.curve!, start: nodes.get(span.startNodeId)!, end: nodes.get(span.endNodeId)! })), TOLERANCE);
+export function regenerateWallCurveSpine(wallType: string) {
+  return function regenerate(input: SpineRegenerationInput): SpineRegeneration | undefined {
+  const { snapshot, graphPatch } = input;
+  const after = prospectiveGraph(snapshot, graphPatch);
+export function planWallCurveCreation(input: {
+  readonly snapshot: ConstructionGraphSnapshot;
+  readonly topologies: readonly ConstructionRegionTopology[];
+  readonly port: BezierPort;
+  readonly stroke: readonly ConstructionPosition[];
+  readonly operationId: string;
+  readonly tableId: string;
+  readonly height: number;
+
+// src/features/edit-construction/structure-types/wall/wall-curve-structure.ts
+export function wallCurveStructureType(surfaceType: string, label: string): StructureTypeDefinition {
+  return Object.freeze<StructureTypeDefinition>({
+  surfaceType,
+  label,
+  creation: "one upright panel per spine station, sampled along its bezier curve",
+  roleFor: panelRoleFor,
+  motionInfluences: panelMotionInfluences,
+  validateMotion: validatePanelMotion,
+
 // src/features/edit-construction/tools/brush-shape-params.ts
 export function resolveBrushShape(params: BrushShapeParams): BrushShape {
   const rotationRadians = (params.rotationDegrees * Math.PI) / 180;
@@ -6056,7 +6069,13 @@ export interface CurveHandles {
 export type CurveCommand =
 export interface CurveBatch { readonly tolerance: number; readonly commands: readonly CurveCommand[] }
 export interface CurveResult {
-  readonly extrusion?: { readonly vertices: readonly CurvePoint[]; readonly faces: readonly (readonly [number, number, number])[]; readonly edges: readonly (readonly [number, number])[]; readonly boundaries: readonly (readonly (readonly [number, boolean])[])[] };
+  readonly ribbon: { readonly outer: readonly CurvePoint[] } | null;
+  readonly curves: readonly CubicBezier[];
+  readonly handles: readonly CurveHandles[];
+  readonly samples: readonly (readonly { readonly t: number; readonly position: CurvePoint }[])[];
+  readonly lengths: readonly number[];
+  readonly parameter: number | null;
+  readonly opposite: CurvePoint | null;
 export interface CurveNetworkNode { readonly id: string; readonly position: CurvePoint }
 export interface CurveNetworkEdge { readonly edgeId: string; readonly startNodeId: string; readonly endNodeId: string; readonly curve: CurveHandles }
 export interface CurveNetworkRequest {

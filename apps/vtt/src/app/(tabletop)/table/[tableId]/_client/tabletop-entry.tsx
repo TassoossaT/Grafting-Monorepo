@@ -46,7 +46,6 @@ function statusToUiStatus(status: TabletopRuntimeStatus): "neutral" | "info" | "
 }
 
 const TOOL_LABEL: Record<ConstructionToolId, string> = {
-  "muro-brush": "Muro",
   roof: "Telhado",
   "platform-contour": "Plataforma",
   "slope-ramp": "Rampa",
@@ -56,6 +55,7 @@ const TOOL_LABEL: Record<ConstructionToolId, string> = {
   "edit-region": "Editar Região",
   "wall-brush": "Pincel de Parede (Livre)",
   "wall-line": "Pincel de Parede (Linha Reta)",
+  "wall-curve": "Parede (Eixo Bézier)",
   "interior-wall": "Gerar Interiores",
   "tower-stamp": "Torre",
   opening: "Abertura (Porta ou Janela)",

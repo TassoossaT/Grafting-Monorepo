@@ -14,9 +14,9 @@ export type ConstructionToolId =
   | "slope-spiral"
   | "roof"
   | "path-brush"
-  | "muro-brush"
   | "wall-brush"
   | "wall-line"
+  | "wall-curve"
   | "interior-wall"
   | "tower-stamp"
   | "opening"
@@ -205,10 +205,9 @@ export interface OpeningParams {
 export type NoToolParams = Record<string, never>;
 
 export interface ToolParamsByTool {
-  readonly "muro-brush": BrushShapeParams & { readonly height: number; readonly thickness: number };
   readonly roof: { readonly shape: "rectangle" | "circle" | "platform"; readonly elevation: number; readonly height: number; readonly radius: number; readonly curvatures: readonly [number, number, number, number] };
   readonly navigate: NoToolParams;
-  readonly "edit-region": { readonly mode: "shape" | "elevation"; readonly curveMode?: "automatic" | "aligned" | "mirrored" | "free"; readonly curveAction?: "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width" | "height"; readonly curveWidth?: number; readonly curveEndWidth?: number; readonly curveHeight?: number };
+  readonly "edit-region": { readonly mode: "shape" | "elevation"; readonly curveMode?: "automatic" | "aligned" | "mirrored" | "free"; readonly curveAction?: "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"; readonly curveWidth?: number; readonly curveEndWidth?: number };
   readonly "platform-contour": { readonly elevation: number; readonly mode: "create" | "extend" | "cut"; readonly shape?: "rectangle" | "polygon" | "freehand" | "circle"; readonly radius?: number; readonly tolerance?: number };
   /** A straight sloped platform dragged from start to end, climbing a fixed rise. */
   readonly "slope-ramp": { readonly width: number; readonly rise: number };
@@ -217,6 +216,8 @@ export interface ToolParamsByTool {
   readonly "path-brush": PathBrushParams;
   readonly "wall-brush": WallBrushParams;
   readonly "wall-line": WallParams;
+  /** A wall drawn as a persistent Bezier axis instead of a straight/arc contour; the brush radius is the curve's own fitting tolerance, same convention as `wall-brush`. */
+  readonly "wall-curve": WallBrushParams;
   readonly "interior-wall": InteriorGenerateParams;
   readonly "tower-stamp": TowerStampParams;
   readonly opening: OpeningParams;
@@ -227,7 +228,6 @@ export interface ToolParamsByTool {
 export type ToolParamsFor<Id extends ConstructionToolId> = ToolParamsByTool[Id];
 
 export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
-  "muro-brush": Object.freeze({ shape: "circle", radius: 0.3, rotationDegrees: 0, height: 3, thickness: 0.3 }),
   roof: Object.freeze({ shape: "rectangle", elevation: 3, height: 2, radius: 2.5, curvatures: [0, 0, 0, 0] as const }),
   navigate: Object.freeze({}),
   "edit-region": Object.freeze({ mode: "shape" }),
@@ -246,6 +246,7 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   }),
   "wall-brush": Object.freeze({ wallType: "wall-white", height: 3, shape: "circle", radius: 0.3, rotationDegrees: 0 }),
   "wall-line": Object.freeze({ wallType: "wall-white", height: 3 }),
+  "wall-curve": Object.freeze({ wallType: "wall-white", height: 3, shape: "circle", radius: 0.3, rotationDegrees: 0 }),
   "interior-wall": Object.freeze({ wallType: "wall-white", cellSize: 2, maxRegionCells: 6, seed: 1 }),
   "tower-stamp": Object.freeze({ wallType: "wall-white", height: 3, radius: TOWER_RADIUS_PRESETS[1] }),
   opening: Object.freeze({ openingType: "window", width: 1.2, height: 1.2, sill: 1 }),
