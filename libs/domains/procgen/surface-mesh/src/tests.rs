@@ -383,6 +383,61 @@ fn a_panel_with_a_welded_base_is_still_an_upright_face() {
     }
 }
 
+/// A multi-station curved wall over relief: three base stations, the middle
+/// one raised off the chord between the other two (a bump the terrain
+/// under a spine-fitted wall puts there), each with a top station a
+/// constant height above its own base station. This is what a spine-based
+/// wall (several straight boundary edges approximating a Bezier curve,
+/// never just the run's two ends) declares -- unlike every other upright
+/// test here, which has exactly one base edge and one top edge.
+#[test]
+fn a_multi_station_upright_panel_keeps_its_top_rail_on_the_same_relief_as_its_base() {
+    const HEIGHT: f32 = 3.0;
+    let graph = graph_with_positions(&[
+        ("bottom-start", [0.0, 0.0, 0.0]),
+        ("bottom-mid", [2.0, 1.5, 0.0]),
+        ("bottom-end", [4.0, 0.0, 0.0]),
+        ("top-end", [4.0, HEIGHT, 0.0]),
+        ("top-mid", [2.0, 1.5 + HEIGHT, 0.0]),
+        ("top-start", [0.0, HEIGHT, 0.0]),
+    ]);
+    let mut topology = ContourTopology::new();
+    let loop_ = line_loop(
+        &mut topology,
+        &graph,
+        "relief",
+        &[
+            "bottom-start",
+            "bottom-mid",
+            "bottom-end",
+            "top-end",
+            "top-mid",
+            "top-start",
+        ],
+    );
+    let region_id = RegionId::new("relief").unwrap();
+    topology
+        .add_region(region_id.clone(), vec![loop_], Vec::new())
+        .unwrap();
+
+    let mesh = mesh_of(&topology, &region_id, &positions_of(&graph));
+
+    assert_every_triangle_has_area(&mesh);
+    // The mesher pairs each base vertex with the top vertex directly above
+    // it: every consecutive pair must sit exactly `HEIGHT` apart, matching
+    // this wall's own per-station top rail -- not a straight line between
+    // just the run's first and last top heights, which at the middle
+    // station would read 0.75 short of the bump the base actually has.
+    for pair in mesh.positions.chunks_exact(2) {
+        let [base, top] = pair else { unreachable!() };
+        assert!((base[0] - top[0]).abs() < 1e-4 && (base[2] - top[2]).abs() < 1e-4, "a ruled pair shares its ground position: {base:?} vs {top:?}");
+        assert!(
+            (top[1] - base[1] - HEIGHT).abs() < 1e-4,
+            "the top rail must follow the same relief the base does, station by station: base {base:?}, top {top:?}"
+        );
+    }
+}
+
 #[test]
 fn a_vertical_face_keeps_the_hole_punched_in_it() {
     let graph = graph_with_positions(&[
