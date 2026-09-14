@@ -3,6 +3,7 @@ import test from "node:test";
 import { controlSectionId, createPathBrushEffect, curvePickId, pathFormationFor, planBezierEdit, planEdit, planPathCloudMutation, resolveCloudTopology } from "../src/features/edit-construction/index.ts";
 import { platformContourTool } from "../src/composition/tabletop/tools/platform/platform-contour-tool.ts";
 import { commitPlatformSlope } from "../src/composition/tabletop/tools/platform/platform-slope.ts";
+import { dispatchCutRepairs } from "../src/composition/tabletop/interference/type-interference-dispatch.ts";
 import { addFace, sessionFixture } from "./platform-session-fixture.mjs";
 
 const params = { mode: "create", elevation: 0, shape: "slope", width: 2 };
@@ -157,6 +158,40 @@ test("dragging draws a straight ramp that climbs the fixed rise from the start's
     assert.equal(node(runtime, spans[0].endNodeId).position.y, 2.5);
     assert.equal(faces(runtime, "platform-slope").length, 1);
     assert.ok(JSON.parse(session.all_surface_meshes_json()).some((m) => m.surfaceType === "platform-slope" && m.indices.length > 0));
+  } finally { session.free(); }
+});
+
+test("a ramp over terrain cuts it and hands the terrain to its regeneration, on creation and on a spine edit", () => {
+  const { ctx, runtime, session, calls } = sessionFixture();
+  const requests = [];
+  const apply = runtime.applyPatchReplacement;
+  runtime.applyPatchReplacement = (request) => { requests.push(request); return apply(request); };
+  runtime.getSnapshot = () => ({ tableId: "platform-test", map: { nodePositions: new Map(runtime.getGraphSnapshot().nodes.map((n) => [n.id, { position: n.position }])) } });
+  const repairOf = (request, replaced = []) => {
+    let fallout;
+    dispatchCutRepairs(runtime, request, "cause", replaced, undefined, { terrain: (_runtime, received) => { fallout = received; return 1; } });
+    return fallout;
+  };
+  try {
+    const ground = addFace(runtime, "ground", "terrain", [[-10, -10], [10, -10], [10, 10], [-10, 10]].map(([x, z], i) => ({ id: `ground:${i}`, position: { x, y: 0, z } })));
+    const start = { point: { x: -3, y: 0, z: 0 } }, end = { point: { x: 4, y: 0, z: 1 } };
+    platformContourTool.onPointerUp(ctx, { start, current: end, samples: [start, end] }, { ...params, rise: 2 });
+    const created = requests.at(-1);
+    assert.equal(created.patch.regions[0].surfaceType, "platform-slope", JSON.stringify(calls.feedback));
+    assert.ok(created.footprintOutline?.length >= 3, "creation claims its footprint");
+    const cut = repairOf(created);
+    assert.ok(cut, "creating a ramp dispatches the terrain repair");
+    assert.equal(cut.painterSurfaceType, "platform-slope");
+    assert.deepEqual(cut.consumedSurfaceKeys, [ground.surfaceKey]);
+
+    const span = slopeSpans(runtime)[0];
+    const before = faces(runtime, "platform-slope");
+    const plan = planBezierEdit({ snapshot: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), port: runtime,
+      targetId: curvePickId(span.edgeId, "midpoint"), position: { x: 0.5, y: 1, z: 3 }, operationId: "slope:bend", tableId: "platform-test" });
+    assert.ok(plan.request.footprintOutline?.length >= 3, "a spine edit claims the regenerated footprint");
+    assert.deepEqual(plan.request.sourceSurfaceKeys, before.map((t) => t.surfaceKey), "the edit replaces the ramp's standing faces");
+    runtime.applyPatchReplacement(plan.request);
+    assert.ok(repairOf(plan.request, before), "editing the ramp regenerates the terrain around it");
   } finally { session.free(); }
 });
 

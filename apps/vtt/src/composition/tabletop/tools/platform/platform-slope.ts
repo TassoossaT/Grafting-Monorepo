@@ -1,4 +1,4 @@
-import { automaticCurve, controlRungId, controlSectionId, reverseGeometry, SLOPE_SURFACE_TYPE, slopeSurface, spineControlNodeId } from "../../../../features/edit-construction/index.ts";
+import { automaticCurve, controlRungId, controlSectionId, reverseGeometry, SLOPE_SURFACE_TYPE, slopeFootprint, slopeSurface, spineControlNodeId } from "../../../../features/edit-construction/index.ts";
 import type { ToolParamsByTool } from "../../../../features/edit-construction/index.ts";
 import type {
   ConstructionEdgeSnapshot,
@@ -183,9 +183,12 @@ export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly Co
       patch: {
         nodes: [...surface.nodes, ...floors.flatMap((floor) => floor.nodes)],
         edges: [...surface.edges, ...floors.flatMap((floor) => floor.edges)],
-        regions: [...floors.map((floor) => floor.region), ...surface.regions],
+        // The ramp's own faces first: the runtime reads the first region as
+        // the type being painted when it decides what that type cuts.
+        regions: [...surface.regions, ...floors.map((floor) => floor.region)],
       },
       graphPatch: { nodes, removedEdgeIds: [], edges: spans },
+      footprintOutline: slopeFootprint(ctx.runtime, surface),
     }, "local", operationId);
     ctx.history.record({ kind: "path-brush", operationId });
     ctx.reportFeedback({ tone: "success", message: `Plataforma inclinada: ${surface.regions.length} trecho(s), ${welds.length} ponta(s) soldada(s).` });

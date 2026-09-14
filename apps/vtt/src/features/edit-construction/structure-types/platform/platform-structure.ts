@@ -59,7 +59,9 @@ export const slopedPlatformStructureType: StructureTypeDefinition = Object.freez
   creation: "one face per spine span: the span's ribbon, sampled along its bezier curve",
   roleFor: () => "platform-slope-face",
   policyFor: (role) => denied(role, "Edite a plataforma inclinada pela espinha: pontos, alças e largura."),
-  interactionOver: () => IGNORE,
+  // The same answer the flat platform gives: ground under it is cut, and the
+  // terrain's own repair regenerates around it.
+  interactionOver: (coveredType: string) => isTerrainSurface(coveredType) ? CUT : IGNORE,
   repairAfterCut: { kind: "unsupported", reason: "a cut span needs its own spine split and end capping, not designed yet" },
   motionInfluences: slopeMotionInfluences,
   deriveMotion: deriveSlopeMotion,

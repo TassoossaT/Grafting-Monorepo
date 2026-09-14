@@ -4181,6 +4181,13 @@ Regenerates every sloped-platform span on the spine a graph patch touches.
 
 ### `function vtt.platform-slope-spine.slopeFaceId(edgeId: string): string`
 
+### `function vtt.platform-slope-spine.slopeFootprint(port: Pick<BezierPort, "planarBoolean">, surface: Pick<SlopeSurface, "nodes" | "edges" | "regions">): readonly (readonly [number, number])[] | undefined`
+
+The plan-view outline the whole surface claims -- what the runtime cuts
+the ground under it by and bounds the terrain's regeneration with. The
+largest outer ring of the faces' union: a spiral's open centre is not
+excluded here, but the repair subtracts the faces themselves, not this.
+
 ### `function vtt.platform-slope-spine.slopeMotionInfluences(topology: ConstructionRegionTopology, transport: boolean): readonly ConstructionMotionInfluence[]`
 
 Each face's control cross-sections follow their control node, and stay level with each other.

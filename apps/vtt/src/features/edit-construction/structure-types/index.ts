@@ -190,4 +190,4 @@ export * from "./structural-cut.ts";
 export * from "./panel/index.ts";
 export * from "./organic/index.ts";
 export * from "./path/index.ts";
-export { controlRungId, controlSectionId, prospectiveGraph, regenerateSlopeSpine, SLOPE_SURFACE_TYPE, slopeFaceId, slopeSurface } from "./platform/platform-slope-spine.ts";
+export { controlRungId, controlSectionId, prospectiveGraph, regenerateSlopeSpine, SLOPE_SURFACE_TYPE, slopeFaceId, slopeFootprint, slopeSurface } from "./platform/platform-slope-spine.ts";

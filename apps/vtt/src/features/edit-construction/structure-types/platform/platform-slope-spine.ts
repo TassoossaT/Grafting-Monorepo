@@ -10,7 +10,7 @@ import type {
   ConstructionRegionTopology,
 } from "@/ports";
 
-import { resolveCurves, ribbonSections, sampleRibbons } from "../../topology/bezier-curve.ts";
+import { resolveCurves, ribbonSections, sampleRibbons, unionRibbonOutlines } from "../../topology/bezier-curve.ts";
 import { isSpineControlNodeId, ownedBy, spineComponent } from "../../spine/index.ts";
 import type { MotionContext, SpineRegeneration, SpineRegenerationInput } from "../structure-type.ts";
 
@@ -121,6 +121,28 @@ export function slopeSurface(port: Pick<BezierPort, "curveBatch">, nodes: Readon
   return { nodes: [...placed].map(([id, position]) => ({ id, position })), edges: [...edges.values()], regions, preview: Float32Array.from(preview) };
 }
 
+/**
+ * The plan-view outline the whole surface claims -- what the runtime cuts
+ * the ground under it by and bounds the terrain's regeneration with. The
+ * largest outer ring of the faces' union: a spiral's open centre is not
+ * excluded here, but the repair subtracts the faces themselves, not this.
+ */
+export function slopeFootprint(port: Pick<BezierPort, "planarBoolean">, surface: Pick<SlopeSurface, "nodes" | "edges" | "regions">): readonly (readonly [number, number])[] | undefined {
+  const positions = new Map(surface.nodes.map((node) => [node.id, node.position]));
+  const edges = new Map(surface.edges.map((edge) => [edge.edgeId, edge]));
+  const outlines = surface.regions.map((region) => region.boundary.map((use) => {
+    const edge = edges.get(use.edgeId)!;
+    return positions.get(use.reversed ? edge.endNodeId : edge.startNodeId)!;
+  }));
+  if (outlines.length === 0) return undefined;
+  const area = (ring: readonly (readonly [number, number])[]) => Math.abs(ring.reduce((sum, [x, z], i) => {
+    const [nx, nz] = ring[(i + 1) % ring.length]!;
+    return sum + x * nz - nx * z;
+  }, 0));
+  const rings = unionRibbonOutlines(port, outlines).map((shape) => shape[0]).filter((ring): ring is [number, number][] => ring !== undefined && ring.length >= 3);
+  return rings.sort((a, b) => area(b) - area(a))[0];
+}
+
 /** The graph after `patch`, without committing anything. */
 export function prospectiveGraph(snapshot: ConstructionGraphSnapshot, patch: ConstructionGraphPatch): ConstructionGraphSnapshot {
   const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
@@ -148,6 +170,7 @@ export function regenerateSlopeSpine(input: SpineRegenerationInput): SpineRegene
       patch: { nodes: surface.nodes, edges: surface.edges, regions: surface.regions },
       // Section nodes that already stand are moved here: a patch only adds.
       graphPatch: { ...graphPatch, nodes: [...graphPatch.nodes, ...surface.nodes] },
+      footprintOutline: slopeFootprint(input.port, surface),
     },
     preview: surface.preview,
   };

@@ -5445,6 +5445,8 @@ export interface SlopeSurface {
   }
 export function slopeSurface(port: Pick<BezierPort, "curveBatch">, nodes: ReadonlyMap<string, ConstructionPosition>, spans: readonly ConstructionEdgeSnapshot[]): SlopeSurface {
   const resolved = resolveCurves(port, spans.map((span) => ({ handles: span.curve!, start: nodes.get(span.startNodeId)!, end: nodes.get(span.endNodeId)! })), TOLERANCE);
+export function slopeFootprint(port: Pick<BezierPort, "planarBoolean">, surface: Pick<SlopeSurface, "nodes" | "edges" | "regions">): readonly (readonly [number, number])[] | undefined {
+  const positions = new Map(surface.nodes.map((node) => [node.id, node.position]));
 export function prospectiveGraph(snapshot: ConstructionGraphSnapshot, patch: ConstructionGraphPatch): ConstructionGraphSnapshot {
   const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
 export function regenerateSlopeSpine(input: SpineRegenerationInput): SpineRegeneration {
@@ -5473,9 +5475,9 @@ export const slopedPlatformStructureType: StructureTypeDefinition = Object.freez
   creation: "one face per spine span: the span's ribbon, sampled along its bezier curve",
   roleFor: () => "platform-slope-face",
   policyFor: (role) => denied(role, "Edite a plataforma inclinada pela espinha: pontos, alças e largura."),
-  interactionOver: () => IGNORE,
-  repairAfterCut: { kind: "unsupported", reason: "a cut span needs its own spine split and end capping, not designed yet" },
-  motionInfluences: slopeMotionInfluences,
+  // The same answer the flat platform gives: ground under it is cut, and the
+  // terrain's own repair regenerates around it.
+  interactionOver: (coveredType: string) => isTerrainSurface(coveredType) ? CUT : IGNORE,
 
 // src/features/edit-construction/structure-types/roof/roof-structure.ts
 export const roofStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
