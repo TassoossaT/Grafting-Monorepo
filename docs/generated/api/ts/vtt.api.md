@@ -2065,6 +2065,16 @@ The spiral preset: control points of a helix around `center`, climbing
 `rise` over `turns` turns. Eight per turn keeps the automatic curve round.
 A preset only chooses points -- the result is an ordinary spine.
 
+### `function vtt.platform-slope.straightRampOutline(from: ConstructionPosition, to: ConstructionPosition, width: number): readonly ConstructionPosition[]`
+
+The ramp's outline while dragging: both margins at its real width, climbing with it.
+
+### `function vtt.platform-slope.straightRampPoints(ctx: ToolContext, start: PointerSample, end: PointerSample, params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; rise?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand" | "slope" | "spiral"; tolerance?: number; turns?: number; width?: number }): readonly [ConstructionPosition, ConstructionPosition]`
+
+The straight ramp preset: from where the drag starts, at that height, to
+where it ends, `rise` higher. A preset only chooses points -- the result is
+an ordinary spine.
+
 ### `variable vtt.roof-tool.ROOF_OVERHANG: 0.2`
 
 Application-wide overhang; no individual roof/band control in this delivery.

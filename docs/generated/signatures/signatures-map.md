@@ -4107,6 +4107,11 @@ export const platformContourTool: ConstructionTool<"platform-contour"> = {
 export function slopeControlPoint(ctx: ToolContext, sample: PointerSample): ConstructionPosition {
   const node = sample.nodeId ? ctx.runtime.getGraphSnapshot().nodes.find((n) => n.id === sample.nodeId) : undefined;
   return { ...sample.point, y: node?.position.y ?? sample.point.y };
+export function straightRampPoints(ctx: ToolContext, start: PointerSample, end: PointerSample, params: Params): readonly [ConstructionPosition, ConstructionPosition] {
+  const from = slopeControlPoint(ctx, start);
+export function straightRampOutline(from: ConstructionPosition, to: ConstructionPosition, width: number): readonly ConstructionPosition[] {
+  const dx = to.x - from.x, dz = to.z - from.z;
+  const length = Math.hypot(dx, dz);
 export function spiralControlPoints(center: ConstructionPosition, params: Params): readonly ConstructionPosition[] {
   const radius = params.radius ?? 2.5, turns = params.turns ?? 1, rise = params.rise ?? 3;
   if (!(radius > 0) || !(turns > 0) || !Number.isFinite(rise)) throw new Error("Raio e voltas devem ser positivos.");

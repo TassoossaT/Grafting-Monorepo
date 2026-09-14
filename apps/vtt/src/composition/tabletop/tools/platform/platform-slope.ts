@@ -22,6 +22,26 @@ export function slopeControlPoint(ctx: ToolContext, sample: PointerSample): Cons
 }
 
 /**
+ * The straight ramp preset: from where the drag starts, at that height, to
+ * where it ends, `rise` higher. A preset only chooses points -- the result is
+ * an ordinary spine.
+ */
+export function straightRampPoints(ctx: ToolContext, start: PointerSample, end: PointerSample, params: Params): readonly [ConstructionPosition, ConstructionPosition] {
+  const from = slopeControlPoint(ctx, start);
+  return [from, { x: end.point.x, y: from.y + (params.rise ?? 3), z: end.point.z }];
+}
+
+/** The ramp's outline while dragging: both margins at its real width, climbing with it. */
+export function straightRampOutline(from: ConstructionPosition, to: ConstructionPosition, width: number): readonly ConstructionPosition[] {
+  const dx = to.x - from.x, dz = to.z - from.z;
+  const length = Math.hypot(dx, dz);
+  if (length < 1e-6) return [];
+  const nx = (-dz / length) * (width / 2), nz = (dx / length) * (width / 2);
+  const corner = (p: ConstructionPosition, sign: number) => ({ x: p.x + nx * sign, y: p.y, z: p.z + nz * sign });
+  return [corner(from, 1), corner(to, 1), corner(to, -1), corner(from, -1), corner(from, 1)];
+}
+
+/**
  * The spiral preset: control points of a helix around `center`, climbing
  * `rise` over `turns` turns. Eight per turn keeps the automatic curve round.
  * A preset only chooses points -- the result is an ordinary spine.

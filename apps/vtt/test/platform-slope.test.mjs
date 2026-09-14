@@ -144,13 +144,29 @@ test("a road drawn across a ramp's spine never welds into it", () => {
   } finally { session.free(); }
 });
 
-test("slope clicks commit on a repeated last point and take each height from the pick", () => {
+test("dragging draws a straight ramp that climbs the fixed rise from the start's height", () => {
   const { ctx, runtime, session, calls } = sessionFixture();
   try {
-    for (const point of [{ x: 0, y: 0, z: 0 }, { x: 6, y: 2, z: 0 }, { x: 6, y: 2, z: 0 }]) platformContourTool.onClick(ctx, { point }, params);
+    const start = { point: { x: 0, y: 0.5, z: 0 } }, end = { point: { x: 6, y: 0, z: 1 } };
+    const preview = platformContourTool.previewFor({ start, current: end, samples: [start, end] }, { ...params, rise: 2 }, ctx);
+    assert.ok(preview, "the drag previews the ramp");
+    platformContourTool.onPointerUp(ctx, { start, current: end, samples: [start, end] }, { ...params, rise: 2 });
     const spans = slopeSpans(runtime);
     assert.equal(spans.length, 1, JSON.stringify(calls.feedback));
-    assert.equal(node(runtime, spans[0].startNodeId).position.y, 0);
-    assert.equal(node(runtime, spans[0].endNodeId).position.y, 2);
+    assert.equal(node(runtime, spans[0].startNodeId).position.y, 0.5);
+    assert.equal(node(runtime, spans[0].endNodeId).position.y, 2.5);
+    assert.equal(faces(runtime, "platform-slope").length, 1);
+    assert.ok(JSON.parse(session.all_surface_meshes_json()).some((m) => m.surfaceType === "platform-slope" && m.indices.length > 0));
+  } finally { session.free(); }
+});
+
+test("a ramp dragged from a floor edge to the next floor's height welds both ends", () => {
+  const { ctx, runtime, session, calls } = sessionFixture();
+  try {
+    floor(runtime, "low", 0, 0);
+    floor(runtime, "high", 10, 3);
+    const start = { point: { x: 4, y: 0, z: 2 } }, end = { point: { x: 10, y: 0, z: 2 } };
+    platformContourTool.onPointerUp(ctx, { start, current: end, samples: [start, end] }, { ...params, rise: 3 });
+    assert.ok(calls.feedback.at(-1).message.includes("2 ponta"), JSON.stringify(calls.feedback));
   } finally { session.free(); }
 });
