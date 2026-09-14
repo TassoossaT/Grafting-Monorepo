@@ -2239,6 +2239,13 @@ export interface TaskCleanupInput {
 export interface TaskStatusInput {
   taskId: string;
   }
+export interface TaskDiffInput {
+  taskId: string;
+  stat?: boolean;
+  staged?: boolean;
+  base?: boolean;
+  files?: string[];
+  }
 export interface TaskDoctorInput {
   taskId: string;
   }
@@ -2254,10 +2261,6 @@ export interface TaskSyncInput {
   taskId: string;
   fetch?: boolean;
   abort?: boolean;
-  }
-export interface TaskResumeInput {
-  taskId?: string;
-  pr?: number;
   }
 
 // src/git/client.ts
@@ -2317,6 +2320,13 @@ export function capSummary(lines: string[]): string {
   : `${line.slice(0, MAX_SUMMARY_LINE_CHARS)}...[line truncated]`);
 export function summarizeTestOutput(output: string): string {
   const lines = output.split(/\r?\n/).filter((line) => line.length > 0);
+export function isTransientNetworkError(error: unknown): boolean {
+  const detail = error instanceof Error ? error.message : String(error);
+export function execGhSync(
+  args: readonly string[],
+  options?: { cwd?: string; env?: NodeJS.ProcessEnv; maxRetries?: number }
+  ): string {
+  const env = options?.env ?? envWithGhFallbackPath();
 
 // src/git/naming.ts
 export function worktreePathForTask(repoPath: string, taskId: string): string {

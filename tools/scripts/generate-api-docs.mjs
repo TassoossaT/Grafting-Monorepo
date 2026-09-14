@@ -123,7 +123,47 @@ async function discoverTargets() {
   return targets;
 }
 
+async function ensureTargetWorkspaceLinks(target) {
+  const projectRoot = resolve(target.tsconfig, "..");
+  const packageJsonPath = resolve(projectRoot, "package.json");
+  if (!existsSync(packageJsonPath)) return;
+  try {
+    const packageJson = await readJson(packageJsonPath);
+    const allDeps = { ...(packageJson.dependencies ?? {}), ...(packageJson.devDependencies ?? {}) };
+    for (const depName of Object.keys(allDeps)) {
+      if (!depName.startsWith("@grafting/")) continue;
+      const pkgShortName = depName.slice("@grafting/".length);
+      const linkPath = resolve(projectRoot, "node_modules/@grafting", pkgShortName);
+      if (!existsSync(linkPath)) {
+        const candidatePaths = [
+          resolve(root, "libs/domains/procgen", pkgShortName.replace("procgen-", "")),
+          resolve(root, "libs/domains/procgen", pkgShortName),
+          resolve(root, "libs/isekai", pkgShortName.replace("isekai-", "")),
+          resolve(root, "libs/isekai/wasm-bridge"),
+          resolve(root, "packages", pkgShortName),
+          resolve(root, "apps", pkgShortName),
+        ];
+        for (const candidate of candidatePaths) {
+          const candPkgPath = resolve(candidate, "package.json");
+          if (existsSync(candPkgPath)) {
+            try {
+              const candPkg = await readJson(candPkgPath);
+              if (candPkg.name === depName) {
+                const { mkdir, symlink } = await import("node:fs/promises");
+                await mkdir(resolve(projectRoot, "node_modules/@grafting"), { recursive: true });
+                await symlink(candidate, linkPath, "junction");
+                break;
+              }
+            } catch {}
+          }
+        }
+      }
+    }
+  } catch {}
+}
+
 async function convert(target) {
+  await ensureTargetWorkspaceLinks(target);
   const app = await Application.bootstrap({
     entryPoints: target.entryPoints.map(toPosix),
     tsconfig: toPosix(target.tsconfig),

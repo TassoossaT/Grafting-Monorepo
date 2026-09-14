@@ -5,7 +5,7 @@
  * spend the caller's tokens on the result, not on the transcript.
  */
 
-import { exec, execFile } from 'child_process';
+import { exec, execFile, execFileSync } from 'child_process';
 import * as path from 'path';
 import { promisify } from 'util';
 
@@ -63,8 +63,34 @@ export function summarizeTestOutput(output: string): string {
     const lines = output.split(/\r?\n/).filter((line) => line.length > 0);
     const summary = lines.filter((line) => TAP_SUMMARY_LINE.test(line));
     if (summary.length > 0) {
-        const failures = lines.filter((line) => TAP_FAILURE_LINE.test(line));
-        return capSummary([...failures, ...summary]);
+        const failureDetails: string[] = [];
+        let capturing = false;
+        let linesInCurrentFailure = 0;
+        const MAX_LINES_PER_FAILURE = 30;
+
+        for (const line of lines) {
+            if (TAP_FAILURE_LINE.test(line)) {
+                capturing = true;
+                linesInCurrentFailure = 0;
+                failureDetails.push(line);
+                continue;
+            }
+            if (capturing) {
+                if (TAP_SUMMARY_LINE.test(line) || /^ok\b/.test(line)) {
+                    capturing = false;
+                } else if (line.trim() === '...') {
+                    failureDetails.push(line);
+                    capturing = false;
+                } else if (linesInCurrentFailure < MAX_LINES_PER_FAILURE) {
+                    failureDetails.push(line);
+                    linesInCurrentFailure++;
+                } else if (linesInCurrentFailure === MAX_LINES_PER_FAILURE) {
+                    failureDetails.push('    ...[diagnostic truncated]...');
+                    linesInCurrentFailure++;
+                }
+            }
+        }
+        return capSummary([...failureDetails, ...summary]);
     }
     return capSummary(lines.slice(-40));
 }
@@ -86,3 +112,60 @@ export async function executeGit(args: string[], cwd: string): Promise<string> {
         throw new Error(`git ${args[0]} failed: ${detail}`);
     }
 }
+
+export function isTransientNetworkError(error: unknown): boolean {
+    const detail = error instanceof Error ? error.message : String(error);
+    return /timeout|connectex|ETIMEDOUT|ECONNRESET|TLS handshake|read: connection reset/i.test(detail);
+}
+
+/**
+ * Executes a gh command synchronously with fallback path and retries on transient network errors.
+ */
+export function execGhSync(
+    args: readonly string[],
+    options?: { cwd?: string; env?: NodeJS.ProcessEnv; maxRetries?: number }
+): string {
+    const env = options?.env ?? envWithGhFallbackPath();
+    const cwd = options?.cwd;
+    const maxRetries = options?.maxRetries ?? 2;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            return execFileSync('gh', args, { cwd, env, encoding: 'utf8' });
+        } catch (error) {
+            if (attempt < maxRetries && isTransientNetworkError(error)) {
+                const waitMs = 300 * Math.pow(2, attempt);
+                const start = Date.now();
+                while (Date.now() - start < waitMs) { /* sync backoff */ }
+                continue;
+            }
+            throw error;
+        }
+    }
+    throw new Error('gh execution failed');
+}
+
+/**
+ * Executes a gh command asynchronously with fallback path and retries on transient network errors.
+ */
+export async function execGhAsync(
+    args: readonly string[],
+    options?: { cwd?: string; env?: NodeJS.ProcessEnv; maxRetries?: number }
+): Promise<{ stdout: string; stderr: string }> {
+    const env = options?.env ?? envWithGhFallbackPath();
+    const cwd = options?.cwd;
+    const maxRetries = options?.maxRetries ?? 2;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+            return await execFileAsync('gh', args as string[], { cwd, env });
+        } catch (error) {
+            if (attempt < maxRetries && isTransientNetworkError(error)) {
+                const waitMs = 300 * Math.pow(2, attempt);
+                await new Promise((resolve) => setTimeout(resolve, waitMs));
+                continue;
+            }
+            throw error;
+        }
+    }
+    throw new Error('gh execution failed');
+}
+

@@ -9,7 +9,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { type DependencyMode, dependencyMode, type DependencyPreparation, materializeTaskDependencies, mirrorGeneratedArtifacts, prepareDependencyOverlays, type PrepareTaskDependenciesOptions, removeTaskDependencyCache } from "./dependencies.ts";
-import { envWithGhFallbackPath, execFileAsync, executeGit } from "./exec.ts";
+import { envWithGhFallbackPath, execFileAsync, execGhAsync, executeGit } from "./exec.ts";
 import { branchNameForTask, commandError, parseWorktrees, pathExists, safeRemoveTaskDirectory, samePath, worktreePathForTask, type WorktreeRecord } from "./naming.ts";
 import { deleteRemoteBranchWithLease, type MergedBranchProof, type RemoteBranchDeletionPlan, remoteBranchDeletionPlan } from "./remote-branches.ts";
 import { GitWorktreeSession } from "./session.ts";
@@ -204,7 +204,7 @@ export class GitClient {
     async taskStatus(taskId: string): Promise<{
         taskId: string; exists: boolean; branch: string; worktreePath: string; branchLocal: boolean; branchRemote: boolean;
         worktreeRegistered: boolean; directoryExists: boolean; orphanDirectory: boolean; checkoutMode: 'worktree' | 'main' | 'missing' | 'unexpected';
-        location?: string; dirty?: boolean; head?: string; base?: string; parent?: string; syncSource?: string; pr?: unknown; issues: string[];
+        location?: string; dirty?: boolean; dirtyFiles?: string[]; head?: string; base?: string; parent?: string; syncSource?: string; pr?: unknown; issues: string[];
         mergeInProgress: boolean; conflicts: string[]; dependencyMode: DependencyMode;
     }> {
         const branch = branchNameForTask(taskId);
@@ -224,11 +224,14 @@ export class GitClient {
             : expected?.branch === branch ? 'worktree' as const
             : location ? 'unexpected' as const : 'missing' as const;
         let dirty: boolean | undefined;
+        let dirtyFiles: string[] = [];
         let head: string | undefined;
         let mergeInProgress = false;
         let conflicts: string[] = [];
         if (location) {
-            dirty = (await executeGit(['status', '--porcelain'], location)).length > 0;
+            const rawStatus = await executeGit(['status', '--porcelain'], location);
+            dirtyFiles = rawStatus.split(/\r?\n/).filter(Boolean).map((line) => line.trim());
+            dirty = dirtyFiles.length > 0;
             head = await executeGit(['rev-parse', '--short', 'HEAD'], location);
             try {
                 await executeGit(['rev-parse', '--verify', '-q', 'MERGE_HEAD'], location);
@@ -240,7 +243,7 @@ export class GitClient {
             taskId, branch, worktreePath,
             exists: branchLocal || branchRemote || Boolean(expected) || directoryExists,
             branchLocal, branchRemote, worktreeRegistered: Boolean(expected), directoryExists,
-            orphanDirectory: directoryExists && !expected, checkoutMode, location, dirty, head,
+            orphanDirectory: directoryExists && !expected, checkoutMode, location, dirty, dirtyFiles, head,
             base: await this.branchConfig(branch, 'base'), parent: await this.branchConfig(branch, 'parent'),
             syncSource: await this.branchConfig(branch, 'sync-source'),
             pr: await this.pullRequestForBranch(branch), issues,
@@ -601,10 +604,9 @@ export class GitClient {
         expectedHead?: string,
     ): Promise<{ merged: boolean; reason: string; proof?: MergedBranchProof }> {
         try {
-            const { stdout } = await execFileAsync(
-                'gh',
+            const { stdout } = await execGhAsync(
                 ['pr', 'list', '--head', branch, '--state', 'merged', '--json', 'number,headRefName,headRefOid'],
-                { cwd: this.repoPath, env: envWithGhFallbackPath() },
+                { cwd: this.repoPath },
             );
             const rows = JSON.parse(stdout) as Array<Partial<MergedBranchProof>>;
             const proofs = rows.filter((row): row is MergedBranchProof =>

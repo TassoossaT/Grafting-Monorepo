@@ -9,7 +9,7 @@ import { createHash, randomBytes } from 'crypto';
 import * as fs from 'fs/promises';
 import { tmpdir } from 'os';
 import * as path from 'path';
-import { envWithGhFallbackPath, execAsync, execFileAsync, executeGit, summarizeTestOutput } from "./exec.ts";
+import { envWithGhFallbackPath, execAsync, execFileAsync, execGhAsync, executeGit, summarizeTestOutput } from "./exec.ts";
 import { appendPullRequestSection, assertSafeTaskPath, branchNameForTask, commandError, parseWorktrees, pathExists, safeRemoveTaskDirectory, samePath, unlinkTaskDependencies, worktreePathForTask } from "./naming.ts";
 
 export interface ExistingPullRequest {
@@ -95,8 +95,10 @@ export class GitWorktreeSession {
     /**
      * Pushes the current branch to the remote repository.
      */
-    async push(): Promise<void> {
-        await executeGit(['push', '--set-upstream', 'origin', this.branchName], this.worktreePath);
+    async push(forceWithLease = false): Promise<void> {
+        const args = ['push', '--set-upstream', 'origin', this.branchName];
+        if (forceWithLease) args.push('--force-with-lease');
+        await executeGit(args, this.worktreePath);
     }
 
     /**
@@ -129,19 +131,29 @@ export class GitWorktreeSession {
             return { url: existing.url, state: 'existing', ...applied };
         }
         try {
-            await execFileAsync('gh', ['auth', 'status'], { cwd: this.worktreePath, env: envWithGhFallbackPath() });
+            await execGhAsync(['auth', 'status'], { cwd: this.worktreePath });
         } catch (error) {
             const reason = `gh unavailable or unauthenticated: ${commandError(error)}`;
             return { url: await this.compareUrl(baseBranch), state: 'manual', reason };
         }
         try {
-            const { stdout } = await execFileAsync('gh', [
+            const { stdout } = await execGhAsync([
                 'pr', 'create', '--title', title, '--body', body,
                 '--base', baseBranch, '--head', this.branchName,
-            ], { cwd: this.worktreePath, env: envWithGhFallbackPath() });
+            ], { cwd: this.worktreePath });
             return { url: stdout.trim(), state: 'created' };
         } catch (error) {
-            throw new Error(`gh pr create failed for base ${baseBranch}: ${commandError(error)}`);
+            const errorMsg = commandError(error);
+            const prUrlMatch = errorMsg.match(/https:\/\/github\.com\/[^\s/]+\/[^\s/]+\/pull\/(\d+)/);
+            if (prUrlMatch) {
+                const existing = await this.existingPullRequest();
+                if (existing) {
+                    const applied = await this.applyPullRequestUpdate(existing, title, body);
+                    return { url: existing.url, state: 'existing', ...applied };
+                }
+                return { url: prUrlMatch[0], state: 'existing', bodyAppended: false, titleUpdated: false };
+            }
+            throw new Error(`gh pr create failed for base ${baseBranch}: ${errorMsg}`);
         }
     }
 
@@ -154,10 +166,9 @@ export class GitWorktreeSession {
      */
     private async existingPullRequest(): Promise<ExistingPullRequest | null> {
         try {
-            const { stdout } = await execFileAsync(
-                'gh',
+            const { stdout } = await execGhAsync(
                 ['pr', 'view', this.branchName, '--json', 'number,url,baseRefName,title,body'],
-                { cwd: this.worktreePath, env: envWithGhFallbackPath() },
+                { cwd: this.worktreePath },
             );
             const result = JSON.parse(stdout) as Partial<ExistingPullRequest>;
             return result.number && result.url && result.baseRefName
@@ -213,9 +224,8 @@ export class GitWorktreeSession {
         if (args.length === 0) return { bodyAppended: false, titleUpdated: false };
 
         try {
-            await execFileAsync('gh', ['pr', 'edit', String(existing.number), ...args], {
+            await execGhAsync(['pr', 'edit', String(existing.number), ...args], {
                 cwd: this.worktreePath,
-                env: envWithGhFallbackPath(),
             });
             return { bodyAppended, titleUpdated };
         } catch (error) {

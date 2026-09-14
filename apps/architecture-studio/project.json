@@ -3,7 +3,7 @@
   "root": "apps/architecture-studio",
   "projectType": "application",
   "tags": ["scope:knowledge", "lang:typescript", "platform:web", "type:app"],
-  "implicitDependencies": ["generation-wasm", "isekai-wasm-bridge", "discretize", "ui"],
+  "implicitDependencies": ["generation-wasm", "isekai-wasm-bridge", "discretize", "ui", "construction-wasm"],
   "metadata": {
     "graphIr": {
       "id": "architecture-studio",
@@ -15,20 +15,20 @@
     "check": {
       "executor": "nx:run-commands",
       "options": { "command": "pnpm --filter @grafting/architecture-studio check" },
-      "dependsOn": ["generation-wasm:build", "isekai-wasm-bridge:build", "discretize:build", "ui:build"],
+      "dependsOn": ["generation-wasm:build", "isekai-wasm-bridge:build", "discretize:build", "ui:build", "construction-wasm:build"],
       "cache": true,
       "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/docs/generated/grafting.graph.json", "{workspaceRoot}/pnpm-lock.yaml"]
     },
     "dev": {
       "executor": "nx:run-commands",
       "options": { "command": "pnpm --filter @grafting/architecture-studio dev" },
-      "dependsOn": ["generation-wasm:build", "isekai-wasm-bridge:build", "discretize:build", "ui:watch"],
+      "dependsOn": ["generation-wasm:build", "isekai-wasm-bridge:build", "discretize:build", "ui:watch", "construction-wasm:build"],
       "cache": false
     },
     "build": {
       "executor": "nx:run-commands",
       "options": { "command": "pnpm --filter @grafting/architecture-studio build" },
-      "dependsOn": ["generation-wasm:build", "isekai-wasm-bridge:build", "discretize:build", "ui:build"],
+      "dependsOn": ["generation-wasm:build", "isekai-wasm-bridge:build", "discretize:build", "ui:build", "construction-wasm:build"],
       "cache": true,
       "inputs": ["{projectRoot}/**/*", "{workspaceRoot}/docs/generated/grafting.graph.json", "{workspaceRoot}/pnpm-lock.yaml"],
       "outputs": ["{projectRoot}/.next"]

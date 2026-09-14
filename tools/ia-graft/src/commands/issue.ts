@@ -1,7 +1,7 @@
-import { execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { execGhSync } from "../git/exec.ts";
 
 /**
  * Runs a `gh` subcommand whose body/comment text must reach it as a file,
@@ -18,7 +18,7 @@ function ghWithTextFile(args: readonly string[], flag: string, text: string): st
   const filePath = join(dir, "body.md");
   try {
     writeFileSync(filePath, text, "utf8");
-    return execFileSync("gh", [...args, flag, filePath], { encoding: "utf8" });
+    return execGhSync([...args, flag, filePath]);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -116,18 +116,14 @@ export function parseLabels(labels: Array<{ name: string }>): {
 export async function issueList(_repoRoot: string, input: IssueListInput = {}) {
   try {
     const limit = String(input.limit || 50);
-    const raw = execFileSync(
-      "gh",
-      [
-        "issue",
-        "list",
-        "--limit",
-        limit,
-        "--json",
-        "number,title,labels,milestone,url,state,parent",
-      ],
-      { encoding: "utf8" },
-    );
+    const raw = execGhSync([
+      "issue",
+      "list",
+      "--limit",
+      limit,
+      "--json",
+      "number,title,labels,milestone,url,state,parent",
+    ]);
     const parsed = JSON.parse(raw) as Array<{
       number: number;
       title: string;
@@ -195,17 +191,13 @@ export async function issueList(_repoRoot: string, input: IssueListInput = {}) {
 export async function issueView(_repoRoot: string, input: IssueViewInput) {
   if (!input || !input.id) return { ok: false as const, error: "missing issue id" };
   try {
-    const raw = execFileSync(
-      "gh",
-      [
-        "issue",
-        "view",
-        String(input.id),
-        "--json",
-        "number,title,body,labels,milestone,state,url,comments,parent,subIssues,subIssuesSummary",
-      ],
-      { encoding: "utf8" },
-    );
+    const raw = execGhSync([
+      "issue",
+      "view",
+      String(input.id),
+      "--json",
+      "number,title,body,labels,milestone,state,url,comments,parent,subIssues,subIssuesSummary",
+    ]);
     const parsed = JSON.parse(raw);
     const parsedLabels = parseLabels(parsed.labels || []);
     return {
@@ -310,7 +302,7 @@ export async function issueUpdate(_repoRoot: string, input: IssueUpdateInput) {
 
     // Update status or priority if provided
     if (input.status || input.priority) {
-      const viewRaw = execFileSync("gh", ["issue", "view", id, "--json", "labels"], { encoding: "utf8" });
+      const viewRaw = execGhSync(["issue", "view", id, "--json", "labels"]);
       const current = JSON.parse(viewRaw).labels as Array<{ name: string }>;
       
       const removeLabels: string[] = [];
@@ -337,16 +329,16 @@ export async function issueUpdate(_repoRoot: string, input: IssueUpdateInput) {
       for (const l of addLabels) editArgs.push("--add-label", l);
 
       if (editArgs.length > 3) {
-        execFileSync("gh", editArgs, { encoding: "utf8" });
+        execGhSync(editArgs);
       }
     }
 
     if (input.state === "closed") {
       const closeArgs = ["issue", "close", id];
       if (input.reason) closeArgs.push("--reason", input.reason);
-      execFileSync("gh", closeArgs, { encoding: "utf8" });
+      execGhSync(closeArgs);
     } else if (input.state === "open") {
-      execFileSync("gh", ["issue", "reopen", id], { encoding: "utf8" });
+      execGhSync(["issue", "reopen", id]);
     }
 
     return { ok: true as const, id: Number(id), state: input.state };

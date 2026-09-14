@@ -1217,7 +1217,8 @@
                 "generation-wasm:build",
                 "isekai-wasm-bridge:build",
                 "discretize:build",
-                "ui:build"
+                "ui:build",
+                "construction-wasm:build"
               ],
               "executor": "nx:run-commands",
               "inputs": [
@@ -1237,7 +1238,8 @@
                 "generation-wasm:build",
                 "isekai-wasm-bridge:build",
                 "discretize:build",
-                "ui:build"
+                "ui:build",
+                "construction-wasm:build"
               ],
               "executor": "nx:run-commands",
               "inputs": [
@@ -1278,7 +1280,8 @@
                 "generation-wasm:build",
                 "isekai-wasm-bridge:build",
                 "discretize:build",
-                "ui:watch"
+                "ui:watch",
+                "construction-wasm:build"
               ],
               "cache": false,
               "options": {
@@ -1394,7 +1397,8 @@
             "generation-wasm",
             "isekai-wasm-bridge",
             "discretize",
-            "ui"
+            "ui",
+            "construction-wasm"
           ],
           "metadata": {
             "targetGroups": {},
@@ -3340,6 +3344,11 @@
         {
           "source": "architecture-studio",
           "target": "ui",
+          "type": "implicit"
+        },
+        {
+          "source": "architecture-studio",
+          "target": "construction-wasm",
           "type": "implicit"
         },
         {
