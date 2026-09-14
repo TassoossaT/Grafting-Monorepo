@@ -1,5 +1,6 @@
 import type { BezierPort, ConstructionGraphPatch, ConstructionGraphSnapshot, ConstructionPosition, ConstructionRegionTopology, ApplyPatchReplacementRequest, CurveHandleMode } from "@/ports";
-import { bezierChains, unionBezierRibbons, curvePoint, curvePosition, explicitSpineSnapshot } from "./bezier-road-plan.ts";
+import { bezierChains, unionBezierRibbons, explicitSpineSnapshot } from "./bezier-road-plan.ts";
+import { automaticCurve, curvePoint, curvePosition, resolveCurves } from "../../topology/bezier-curve.ts";
 import { bezierContourId, changedSpineCloud, standingRegionsForCloud } from "./path-cloud-scope.ts";
 import { planSpineContour } from "./contour/index.ts";
 
@@ -22,9 +23,7 @@ export function bezierPickHandles(snapshot: ConstructionGraphSnapshot, port: Bez
   const nodes = new Map(snapshot.nodes.map((n) => [n.id, n.position]));
   const edges = snapshot.edges.filter((e) => e.curve);
   if (!edges.length) return [];
-  const resolved = port.curveBatch({ tolerance: 0.025, commands: edges.map((e) => ({
-    kind: "resolve", handles: e.curve!, start: curvePoint(nodes.get(e.startNodeId)!), end: curvePoint(nodes.get(e.endNodeId)!),
-  })) });
+  const resolved = resolveCurves(port, edges.map((e) => ({ handles: e.curve!, start: nodes.get(e.startNodeId)!, end: nodes.get(e.endNodeId)! })), 0.025);
   return edges.flatMap((e, i) => {
     const curve = resolved[i]!.curves[0]!;
     const halves = port.curveBatch({ tolerance: 0.025, commands: [{ kind: "split", curve, t: 0.5 }] })[0]!;
@@ -66,24 +65,19 @@ export function planBezierEdit(input: {
   } else if (pick) {
     const edge = source.edges.find((e) => e.edgeId === pick.edgeId);
     if (!edge?.curve) return undefined;
-    const curve = input.port.curveBatch({ tolerance: 0.025, commands: [{
-      kind: "resolve", handles: edge.curve, start: curvePoint(nodes.get(edge.startNodeId)!), end: curvePoint(nodes.get(edge.endNodeId)!),
-    }] })[0]!.curves[0]!;
+    const curve = resolveCurves(input.port, [{ handles: edge.curve, start: nodes.get(edge.startNodeId)!, end: nodes.get(edge.endNodeId)! }], 0.025)[0]!.curves[0]!;
     const mode = input.mode ?? edge.curve.mode;
     const anchorId = pick.index === 1 ? edge.startNodeId : edge.endNodeId;
     const incident = source.edges.filter((e) => e.curve && e.edgeId !== edge.edgeId && (e.startNodeId === anchorId || e.endNodeId === anchorId));
     const paired = pick.index !== "midpoint" && incident.length === 1 ? incident[0] : undefined;
     const pairedIndex = paired?.startNodeId === anchorId ? 1 : 2;
-    const pairedCurve = paired && input.port.curveBatch({ tolerance: 0.025, commands: [{
-      kind: "resolve", handles: paired.curve!, start: curvePoint(nodes.get(paired.startNodeId)!), end: curvePoint(nodes.get(paired.endNodeId)!),
-    }] })[0]!.curves[0]!;
+    const pairedCurve = paired && resolveCurves(input.port, [{ handles: paired.curve!, start: nodes.get(paired.startNodeId)!, end: nodes.get(paired.endNodeId)! }], 0.025)[0]!.curves[0]!;
     let handleTarget = curvePoint(input.position);
     let automaticOpposite: typeof handleTarget | undefined;
     if (mode === "automatic" && pick.index !== "midpoint") {
       const farId = pick.index === 1 ? edge.endNodeId : edge.startNodeId;
       const otherId = paired && (paired.startNodeId === anchorId ? paired.endNodeId : paired.startNodeId);
-      const points = (otherId ? [otherId, anchorId, farId] : [anchorId, farId]).map((id) => curvePoint(nodes.get(id)!));
-      const automatic = input.port.curveBatch({ tolerance: 0.025, commands: [{ kind: "automatic", points }] })[0]!;
+      const automatic = automaticCurve(input.port, (otherId ? [otherId, anchorId, farId] : [anchorId, farId]).map((id) => nodes.get(id)!), 0.025);
       handleTarget = automatic.curves.at(-1)!.points[1];
       if (paired) automaticOpposite = automatic.curves[0]!.points[2];
     }

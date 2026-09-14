@@ -3246,10 +3246,6 @@ One complete gesture plan; the caller commits it once or discards it.
 
 Converts graph-owned authoring data to sampled ribbons through the Rust port.
 
-### `function vtt.bezier-road-plan.curvePoint(p: ConstructionPosition): CurvePoint`
-
-### `function vtt.bezier-road-plan.curvePosition(p: CurvePoint): ConstructionPosition`
-
 ### `function vtt.bezier-road-plan.explicitSpineSnapshot(snapshot: ConstructionGraphSnapshot, port: BezierPort, offsets: readonly number[]): ConstructionGraphSnapshot`
 
 Resolve legacy authorship once using the canonical Rust conversion.
@@ -3259,6 +3255,8 @@ Resolve legacy authorship once using the canonical Rust conversion.
 Product identities and profile policy surround generic Rust fitting and connections.
 
 ### `function vtt.bezier-road-plan.unionBezierRibbons(port: BezierPort, ribbons: readonly BandRibbon[]): [number, number][][][]`
+
+A road's band ribbons unioned in plan through the shared curve module.
 
 ### `function vtt.catmull-rom.sampleCatmullRom(controlPoints: readonly ConstructionPosition[], tolerance: number): readonly ConstructionPosition[]`
 
@@ -4730,6 +4728,53 @@ Derives a recommended face size proportionally from the brush radius.
 Larger brush = broader/macro work = larger faces (fewer quads/vertices).
 Smaller brush = finer detail work = smaller faces.
 
+### `interface vtt.bezier-curve.RibbonRequest`
+
+### `property vtt.bezier-curve.RibbonRequest.curve: CubicBezier`
+
+### `property vtt.bezier-curve.RibbonRequest.endOffsets?: readonly [number, number]`
+
+Offsets at the curve end, when the ribbon tapers.
+
+### `property vtt.bezier-curve.RibbonRequest.offsets: readonly [number, number]`
+
+Lateral offsets `[min, max]` at the curve start.
+
+### `function vtt.bezier-curve.automaticCurve(port: Pick<BezierPort, "curveBatch">, points: readonly ConstructionPosition[], tolerance: number): CurveResult`
+
+The smooth curve through `points`, one cubic per consecutive pair.
+
+### `function vtt.bezier-curve.curvePoint(p: ConstructionPosition): CurvePoint`
+
+The one place the app speaks to the Rust bezier engine in geometric terms:
+fitting curves through anchors, resolving stored handles, sampling a ribbon
+either side of a curve, and unioning ribbons in plan.
+
+Product-free on purpose. A road network and a sloped platform are both
+callers deciding *which* curves and *how wide*; neither owns the curve
+operations, and neither re-derives them. Every call here is batched --
+one engine crossing per request, however many curves it carries.
+
+### `function vtt.bezier-curve.curvePosition(p: CurvePoint): ConstructionPosition`
+
+### `function vtt.bezier-curve.resolveCurves(port: Pick<BezierPort, "curveBatch">, spans: readonly { end: ConstructionPosition; handles: CurveHandles; start: ConstructionPosition }[], tolerance: number): readonly CurveResult[]`
+
+Explicit cubics for stored handles between their two anchors.
+
+### `function vtt.bezier-curve.ribbonSections(outline: readonly ConstructionPosition[]): readonly { max: ConstructionPosition; min: ConstructionPosition }[]`
+
+A ribbon outline split back into its paired cross-sections, start to end.
+
+### `function vtt.bezier-curve.sampleRibbons(port: Pick<BezierPort, "curveBatch">, requests: readonly RibbonRequest[], tolerance: number): readonly (readonly ConstructionPosition[])[]`
+
+Each curve's ribbon outline: the `min` side walked forward, then the `max`
+side walked back. Every sample keeps its curve height; the cross-section
+is always horizontal.
+
+### `function vtt.bezier-curve.unionRibbonOutlines(port: Pick<BezierPort, "planarBoolean">, outlines: readonly (readonly ConstructionPosition[])[]): [number, number][][][]`
+
+The plan-view union of ribbon outlines, as `[x, z]` shapes of rings.
+
 ### `interface vtt.boundary-edges.BoundaryEdges`
 
 Collects the boundary edges one patch declares, and the uses that walk them.
@@ -5068,8 +5113,9 @@ control point carries its own height -- but a station never tilts sideways.
 
 Generic on purpose. Nothing here knows what a strip is *for*; a sloped
 platform, a ramp and a spiral stair are all callers choosing control points
-and a width. The curve fitting and the lateral offset are the Rust bezier
-engine's (`automatic` and `ribbon`); this module only names what comes back.
+and a width. The curve fitting and the lateral offset go through the shared
+curve module (`bezier-curve.ts`), the same one roads use; this module only
+names what comes back.
 
 **Why quads and not one contour.** A spiral's turns overlap in plan, so any
 planar union of its footprint would weld one turn onto the next. One face per

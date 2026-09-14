@@ -4,8 +4,8 @@ import type {
   ConstructionPatchRegion,
   ConstructionPosition,
   ConstructionRegionTopology,
-  CurvePoint,
 } from "@/ports";
+import { automaticCurve, ribbonSections, sampleRibbons } from "./bezier-curve.ts";
 
 /**
  * A strip swept along a 3D curve: a row of stations, each one horizontal
@@ -14,8 +14,9 @@ import type {
  *
  * Generic on purpose. Nothing here knows what a strip is *for*; a sloped
  * platform, a ramp and a spiral stair are all callers choosing control points
- * and a width. The curve fitting and the lateral offset are the Rust bezier
- * engine's (`automatic` and `ribbon`); this module only names what comes back.
+ * and a width. The curve fitting and the lateral offset go through the shared
+ * curve module (`bezier-curve.ts`), the same one roads use; this module only
+ * names what comes back.
  *
  * **Why quads and not one contour.** A spiral's turns overlap in plan, so any
  * planar union of its footprint would weld one turn onto the next. One face per
@@ -33,9 +34,6 @@ export interface StripStation {
   readonly r: ConstructionPosition;
 }
 
-const curvePoint = (p: ConstructionPosition): CurvePoint => [p.x, p.y, p.z];
-const position = (p: CurvePoint): ConstructionPosition => ({ x: p[0], y: p[1], z: p[2] });
-
 /** How closely a station row follows the true curve, in world units. */
 const STRIP_TOLERANCE = 0.05;
 
@@ -50,21 +48,13 @@ export function sampleStripStations(
 ): readonly StripStation[] {
   if (!(width > 0)) throw new Error("A largura deve ser positiva.");
   if (controlPoints.length < 2) throw new Error("Marque pelo menos dois pontos.");
-  const curves = port.curveBatch({ tolerance: STRIP_TOLERANCE, commands: [
-    { kind: "automatic", points: controlPoints.map(curvePoint) },
-  ] })[0]!.curves;
   const half = width / 2;
-  const ribbons = port.curveBatch({ tolerance: STRIP_TOLERANCE, commands: curves.map((curve) => ({
-    kind: "ribbon" as const, curve, offsets: [-half, half] as const,
-  })) });
+  const curves = automaticCurve(port, controlPoints, STRIP_TOLERANCE).curves;
+  const outlines = sampleRibbons(port, curves.map((curve) => ({ curve, offsets: [-half, half] as const })), STRIP_TOLERANCE);
   const stations: StripStation[] = [];
-  ribbons.forEach((result, index) => {
-    const outer = result.ribbon?.outer ?? [];
-    const count = outer.length / 2;
-    // `outer` is side l forward, then side r reversed.
-    for (let i = index === 0 ? 0 : 1; i < count; i += 1) {
-      stations.push({ l: position(outer[i]!), r: position(outer[outer.length - 1 - i]!) });
-    }
+  outlines.forEach((outline, index) => {
+    // Consecutive curves share their joint section; keep it once.
+    ribbonSections(outline).slice(index === 0 ? 0 : 1).forEach((section) => stations.push({ l: section.min, r: section.max }));
   });
   if (stations.length < 2) throw new Error("A curva não teve extensão suficiente.");
   return stations;

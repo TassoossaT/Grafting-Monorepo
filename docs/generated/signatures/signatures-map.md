@@ -4953,9 +4953,7 @@ export function planBezierEdit(input: {
 
 // src/features/edit-construction/structure-types/path/bezier-road-plan.ts
 export function unionBezierRibbons(port: BezierPort, ribbons: readonly BandRibbon[]): [number, number][][][] {
-  return port.planarBoolean({ operation: "union", subject: ribbons.map((r) => [r.outer.map((p) => [p.x, p.z] as const)]), clip: [] }).map((shape) => shape.map((ring) => ring.map((p) => [p[0], p[1]] as [number, number])));
-export const curvePoint = (p: ConstructionPosition): CurvePoint => [p.x, p.y, p.z];
-export const curvePosition = (p: CurvePoint): ConstructionPosition => ({ x: p[0], y: p[1], z: p[2] });
+  return unionRibbonOutlines(port, ribbons.map((r) => r.outer));
 export function explicitSpineSnapshot(snapshot: ConstructionGraphSnapshot, port: BezierPort, offsets: readonly number[]): ConstructionGraphSnapshot {
   if (!snapshot.edges.some((e) => !e.curve && e.startNodeId.startsWith("spine:") && e.endNodeId.startsWith("spine:"))) return snapshot;
   const graph = spineGraphFromSnapshot(snapshot);
@@ -5600,6 +5598,39 @@ export interface OpeningParams {
   }
 export type NoToolParams = Record<string, never>;
 
+// src/features/edit-construction/topology/bezier-curve.ts
+export const curvePoint = (p: ConstructionPosition): CurvePoint => [p.x, p.y, p.z];
+export const curvePosition = (p: CurvePoint): ConstructionPosition => ({ x: p[0], y: p[1], z: p[2] });
+export function automaticCurve(port: Pick<BezierPort, "curveBatch">, points: readonly ConstructionPosition[], tolerance: number): CurveResult {
+  return port.curveBatch({ tolerance, commands: [{ kind: "automatic", points: points.map(curvePoint) }] })[0]!;
+  }
+export function resolveCurves(
+  port: Pick<BezierPort, "curveBatch">,
+  spans: readonly { readonly handles: CurveHandles; readonly start: ConstructionPosition; readonly end: ConstructionPosition }[],
+  tolerance: number,
+  ): readonly CurveResult[] {
+  if (spans.length === 0) return [];
+  return port.curveBatch({ tolerance, commands: spans.map((span) => ({
+  kind: "resolve" as const, handles: span.handles, start: curvePoint(span.start), end: curvePoint(span.end),
+export interface RibbonRequest {
+  readonly curve: CubicBezier;
+  /** Lateral offsets `[min, max]` at the curve start. */
+  readonly offsets: readonly [number, number];
+  /** Offsets at the curve end, when the ribbon tapers. */
+  readonly endOffsets?: readonly [number, number];
+  }
+export function sampleRibbons(port: Pick<BezierPort, "curveBatch">, requests: readonly RibbonRequest[], tolerance: number): readonly (readonly ConstructionPosition[])[] {
+  if (requests.length === 0) return [];
+  return port.curveBatch({ tolerance, commands: requests.map((request) => ({
+  kind: "ribbon" as const, curve: request.curve, offsets: request.offsets, endOffsets: request.endOffsets,
+  })) }).map((result) => (result.ribbon?.outer ?? []).map(curvePosition));
+export function ribbonSections(outline: readonly ConstructionPosition[]): readonly { readonly min: ConstructionPosition; readonly max: ConstructionPosition }[] {
+  const count = outline.length / 2;
+  return Array.from({ length: count }, (_, i) => ({ min: outline[i]!, max: outline[outline.length - 1 - i]! }));
+export function unionRibbonOutlines(port: Pick<BezierPort, "planarBoolean">, outlines: readonly (readonly ConstructionPosition[])[]): [number, number][][][] {
+  return port.planarBoolean({ operation: "union", subject: outlines.map((outline) => [outline.map((p) => [p.x, p.z] as const)]), clip: [] })
+  .map((shape) => shape.map((ring) => ring.map((p) => [p[0], p[1]] as [number, number])));
+
 // src/features/edit-construction/topology/boundary-edges.ts
 export function sharedEdgeId(
   tableId: string,
@@ -5674,6 +5705,7 @@ export type { PerimeterLoop } from "./surface-perimeter.ts";
 export type { FittedEdge, FitOptions } from "./stroke-fitting.ts";
 export type { BoundaryEdges, EdgeSharing } from "./boundary-edges.ts";
 export type { SweptArc, TransverseProfilePoint } from "./sweep-formation.ts";
+export type { RibbonRequest } from "./bezier-curve.ts";
 export type { StripSide, StripStation } from "./swept-strip.ts";
 
 // src/features/edit-construction/topology/ring-simplify.ts

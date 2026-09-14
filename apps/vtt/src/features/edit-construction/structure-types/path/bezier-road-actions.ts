@@ -1,5 +1,5 @@
 import type { BezierPort, ConstructionGraphPatch, ConstructionGraphSnapshot, ConstructionEdgeSnapshot } from "@/ports";
-import { curvePoint } from "./bezier-road-plan.ts";
+import { automaticCurve, resolveCurves } from "../../topology/bezier-curve.ts";
 import { changedSpineCloud } from "./path-cloud-scope.ts";
 
 export type BezierRoadAction = "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width";
@@ -8,11 +8,11 @@ export function planBezierAction(snapshot: ConstructionGraphSnapshot, port: Bezi
   const nodes=new Map(snapshot.nodes.map((n)=>[n.id,n]));
   const incident=snapshot.edges.filter((e)=>e.curve && (e.startNodeId===targetId || e.endNodeId===targetId));
   const seed = (edges: readonly ConstructionEdgeSnapshot[]) => [...new Set(edges.flatMap((e)=>[e.startNodeId,e.endNodeId]))].map((id)=>nodes.get(id)!);
-  const resolve = (e: ConstructionEdgeSnapshot, reverse=false) => port.curveBatch({tolerance:0.025,commands:[{
-    kind:"resolve",handles:reverse?{...e.curve!,start:e.curve!.end,end:e.curve!.start}:e.curve!,
-    start:curvePoint(nodes.get(reverse?e.endNodeId:e.startNodeId)!.position),
-    end:curvePoint(nodes.get(reverse?e.startNodeId:e.endNodeId)!.position),
-  }]})[0]!.curves[0]!;
+  const resolve = (e: ConstructionEdgeSnapshot, reverse=false) => resolveCurves(port,[{
+    handles:reverse?{...e.curve!,start:e.curve!.end,end:e.curve!.start}:e.curve!,
+    start:nodes.get(reverse?e.endNodeId:e.startNodeId)!.position,
+    end:nodes.get(reverse?e.startNodeId:e.endNodeId)!.position,
+  }],0.025)[0]!.curves[0]!;
   if(action==="remove-anchor") {
     if(incident.length!==2) throw Error("Remova apenas âncoras entre dois trechos; desconecte os cruzamentos primeiro.");
     const [a,b]=incident as [ConstructionEdgeSnapshot,ConstructionEdgeSnapshot];
@@ -36,7 +36,7 @@ export function planBezierAction(snapshot: ConstructionGraphSnapshot, port: Bezi
     const ends=[...degree].filter(([,d])=>d===1).map(([id])=>id);
     if(ends.length!==2 || !ends.includes(targetId) || cloud.edges.length<2) throw Error("Selecione a ponta de um caminho aberto com pelo menos dois trechos.");
     const other=ends.find((id)=>id!==targetId)!;
-    const c=port.curveBatch({tolerance:0.025,commands:[{kind:"automatic",points:[curvePoint(nodes.get(targetId)!.position),curvePoint(nodes.get(other)!.position)]}]})[0]!;
+    const c=automaticCurve(port,[nodes.get(targetId)!.position,nodes.get(other)!.position],0.025);
     return {nodes:[nodes.get(targetId)!,nodes.get(other)!],edges:[{edgeId:"spine-edge:"+operationId+":close",startNodeId:targetId,endNodeId:other,curve:{...c.handles[0]!,bandOffsets:incident[0]!.curve!.bandOffsets}}]};
   }
   const edge=snapshot.edges.find((e)=>e.edgeId===edgeId && e.curve);
