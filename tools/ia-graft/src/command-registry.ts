@@ -46,6 +46,14 @@ import {
   type IssueViewInput,
 } from "./commands/issue.ts";
 import {
+  milestoneList,
+  milestoneNew,
+  milestoneUpdate,
+  type MilestoneListInput,
+  type MilestoneNewInput,
+  type MilestoneUpdateInput,
+} from "./commands/milestone.ts";
+import {
   prChecks,
   prDiff,
   prList,
@@ -399,8 +407,10 @@ export const COMMAND_REGISTRY: AnyCommand[] = [
     name: "graft_issue_list",
     group: "issue",
     subcommand: "list",
-    description: "Lists GitHub issues filtered by type, area, status, priority, or parent, with parent-child metadata.",
+    description: "Lists GitHub issues filtered by state, milestone, type, area, status, priority, or parent, with parent-child metadata.",
     parameters: {
+      state: { type: "string", description: "Issue state: open, closed, or all, default open" },
+      milestone: { type: "string", description: "Only issues in this milestone, by title" },
       type: { type: "string", description: "Filter by type label: task, epic, bug, decision" },
       area: { type: "string", description: "Filter by area label" },
       status: {
@@ -411,7 +421,7 @@ export const COMMAND_REGISTRY: AnyCommand[] = [
         type: "string",
         description: "Filter by priority label: P0-critical, P1-high, P2-medium, P3-low",
       },
-      limit: { type: "number", description: "Maximum issues to return, default 30" },
+      limit: { type: "number", description: "Maximum issues to return, default 50" },
       parent: { type: "number", description: "Only issues under this parent epic" },
       orphan: { type: "boolean", description: "Only issues with no parent epic" },
     },
@@ -453,11 +463,19 @@ export const COMMAND_REGISTRY: AnyCommand[] = [
     name: "graft_issue_update",
     group: "issue",
     subcommand: "update",
-    description: "Updates an issue's status, priority, or body, changes its open/closed state, and can add a comment.",
+    description:
+      "Updates an issue's title, type, area, status, priority, milestone, parent, or body, changes its open/closed state, and can add a comment.",
     parameters: {
       id: { type: "number", description: "Issue number to update", required: true, positional: true },
+      title: { type: "string", description: "New issue title", prose: true },
+      type: { type: "string", description: "Type label, replacing the current one: task, refinement, chore, bug, epic" },
+      area: { type: "string", description: "Area label, replacing the current one" },
       status: { type: "string", description: "Status label: backlog, in-progress, in-review, blocked, done" },
       priority: { type: "string", description: "Priority label" },
+      milestone: { type: "string", description: "Milestone title to move the issue into" },
+      removeMilestone: { type: "boolean", description: "Remove the issue from its milestone" },
+      parent: { type: "number", description: "Parent epic or issue number to move the issue under" },
+      removeParent: { type: "boolean", description: "Detach the issue from its parent" },
       comment: { type: "string", description: "Comment to post on the issue", prose: true },
       body: { type: "string", description: "Replacement body markdown", prose: true },
       state: { type: "string", description: "New state: open or closed" },
@@ -513,6 +531,46 @@ export const COMMAND_REGISTRY: AnyCommand[] = [
       limit: { type: "number", description: "Maximum issues to scan" },
     },
     handler: (root, input) => issueDoctor(root, input),
+  }),
+
+  // ---------------------------------------------------------------------------
+  // MILESTONE COMMANDS
+  // ---------------------------------------------------------------------------
+  defineCommand<MilestoneListInput>({
+    name: "graft_milestone_list",
+    group: "milestone",
+    subcommand: "list",
+    description: "Lists repository milestones with due date and open/closed issue counts.",
+    parameters: {
+      state: { type: "string", description: "Milestone state: open, closed, or all, default open" },
+    },
+    handler: (root, input) => milestoneList(root, input),
+  }),
+  defineCommand<MilestoneNewInput>({
+    name: "graft_milestone_new",
+    group: "milestone",
+    subcommand: "new",
+    description: "Creates a repository milestone with an optional description and due date.",
+    parameters: {
+      title: { type: "string", description: "Milestone title", required: true, prose: true },
+      description: { type: "string", description: "Milestone description markdown", prose: true },
+      dueOn: { type: "string", description: "Due date as YYYY-MM-DD" },
+    },
+    handler: (root, input) => milestoneNew(root, input),
+  }),
+  defineCommand<MilestoneUpdateInput>({
+    name: "graft_milestone_update",
+    group: "milestone",
+    subcommand: "update",
+    description: "Renames, re-describes, re-dates, closes, or reopens a milestone.",
+    parameters: {
+      number: { type: "number", description: "Milestone number", required: true, positional: true },
+      title: { type: "string", description: "New milestone title", prose: true },
+      description: { type: "string", description: "Replacement description markdown", prose: true },
+      dueOn: { type: "string", description: "Due date as YYYY-MM-DD, or none to clear it" },
+      state: { type: "string", description: "New state: open or closed" },
+    },
+    handler: (root, input) => milestoneUpdate(root, input),
   }),
 
   // ---------------------------------------------------------------------------

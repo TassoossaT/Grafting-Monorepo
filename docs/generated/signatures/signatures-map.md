@@ -2072,6 +2072,8 @@ export interface GuardCheckInput {
   }
 
 // src/commands/issue.ts
+export function withTempTextFile<T>(text: string, use: (filePath: string) => T): T {
+  const dir = mkdtempSync(join(tmpdir(), "ia-graft-"));
 export interface IssueParentRef {
   id?: string;
   number: number;
@@ -2099,6 +2101,7 @@ export interface IssueListInput {
   limit?: number;
   parent?: number | string;
   orphan?: boolean;
+export type IssueListState = "open" | "closed" | "all";
 export interface IssueViewInput {
   id: number | string;
   }
@@ -2112,12 +2115,12 @@ export interface IssueNewInput {
   body?: string;
 export interface IssueUpdateInput {
   id: number | string;
+  title?: string;
+  type?: string;
+  area?: string;
   status?: string;
   priority?: string;
-  comment?: string;
-  body?: string;
-  state?: "open" | "closed";
-  reason?: IssueCloseReason;
+  milestone?: string;
 export type IssueCloseReason = "completed" | "not_planned";
 export interface CompactIssue {
   id: number;
@@ -2137,27 +2140,54 @@ export function parseLabels(labels: Array<{ name: string }>): {
 export function ghCloseReason(reason: string): string | undefined {
   return Object.hasOwn(GH_CLOSE_REASONS, reason) ? GH_CLOSE_REASONS[reason as IssueCloseReason] : undefined;
   }
-export interface IssueCloseInput {
-  id: number | string;
-  reason?: IssueCloseReason;
-  comment?: string;
+export function issueUpdateConflict(input: IssueUpdateInput): string | undefined {
+  if (input.milestone && input.removeMilestone) return "pass either milestone or removeMilestone, not both";
+  if (input.parent !== undefined && input.parent !== "" && input.removeParent) {
+  return "pass either parent or removeParent, not both";
   }
-export interface IssueReopenInput {
-  id: number | string;
-  comment?: string;
+export function planIssueEdit(
+  id: string,
+  input: IssueUpdateInput,
+  currentLabels: readonly string[],
+  ): string[] | undefined {
+  const args = ["issue", "edit", id];
+  for (const family of SINGLE_VALUE_LABELS) {
+  const value = input[family];
+
+// src/commands/milestone.ts
+export type MilestoneState = "open" | "closed";
+export interface MilestoneListInput {
+  state?: MilestoneState | "all";
   }
-export interface IssueTreeInput {
-  epic?: number | string;
-  limit?: number;
-  }
-export interface IssueTreeNode {
-  id: number;
+export interface MilestoneNewInput {
   title: string;
-  type?: string;
-  area?: string;
-  priority?: string;
-  status?: string;
+  description?: string;
+  dueOn?: string;
+  }
+export interface MilestoneUpdateInput {
+  number: number | string;
+  title?: string;
+  description?: string;
+  dueOn?: string;
+  state?: MilestoneState;
+  }
+export interface CompactMilestone {
+  number: number;
+  title: string;
+  description?: string;
   state: string;
+  dueOn?: string;
+  openIssues: number;
+  closedIssues: number;
+export function milestoneDueOn(date: string): string | undefined {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return undefined;
+  const parsed = new Date(`${date}T00:00:00Z`);
+export function milestoneFields(
+  input: Omit<MilestoneUpdateInput, "number" | "description">,
+  ): { ok: true; args: string[] } | { ok: false; error: string } {
+  const args: string[] = [];
+  if (input.title !== undefined) {
+  if (!input.title) return { ok: false, error: "milestone title cannot be empty" };
 
 // src/commands/pr.ts
 export interface PrListInput {

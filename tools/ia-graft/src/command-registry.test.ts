@@ -105,6 +105,9 @@ test("findCommandByCliRoute maps every CLI route, including aliases, to its comm
   assert.equal(findCommandByCliRoute("pr", "checks")?.name, "graft_pr_checks");
   assert.equal(findCommandByCliRoute("issue", "tree")?.name, "graft_issue_tree");
   assert.equal(findCommandByCliRoute("issue", "reopen")?.name, "graft_issue_reopen");
+  assert.equal(findCommandByCliRoute("milestone", "list")?.name, "graft_milestone_list");
+  assert.equal(findCommandByCliRoute("milestone", "new")?.name, "graft_milestone_new");
+  assert.equal(findCommandByCliRoute("milestone", "update")?.name, "graft_milestone_update");
   assert.equal(findCommandByCliRoute("context")?.name, "graft_context");
   assert.equal(findCommandByCliRoute("task", "context")?.name, "graft_context");
   assert.equal(findCommandByCliRoute("doc-check")?.name, "graft_doc_check");
@@ -144,8 +147,14 @@ test("the schemas that had drifted now match their handlers", () => {
   const propsOf = (name: string) =>
     Object.keys(commandToMcpTool(findCommandByMcpName(name)!).inputSchema.properties as object).sort();
 
-  assert.deepEqual(propsOf("graft_issue_update"), ["body", "comment", "id", "priority", "reason", "state", "status"]);
-  assert.deepEqual(propsOf("graft_issue_list"), ["area", "limit", "orphan", "parent", "priority", "status", "type"]);
+  assert.deepEqual(propsOf("graft_issue_update"), [
+    "area", "body", "comment", "id", "milestone", "parent", "priority", "reason",
+    "removeMilestone", "removeParent", "state", "status", "title", "type",
+  ]);
+  assert.deepEqual(propsOf("graft_issue_list"), [
+    "area", "limit", "milestone", "orphan", "parent", "priority", "state", "status", "type",
+  ]);
+  assert.deepEqual(propsOf("graft_milestone_update"), ["description", "dueOn", "number", "state", "title"]);
   assert.deepEqual(propsOf("graft_pr_list"), ["limit", "state"]);
   assert.deepEqual(propsOf("graft_pr_diff"), ["id", "stat", "task"]);
   assert.deepEqual(propsOf("graft_delegate_run"), ["effort", "files", "jsonSchema", "prompt"]);
