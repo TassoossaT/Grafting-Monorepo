@@ -19,12 +19,9 @@ import { isSpineControlNodeId } from "./spine-node-id.ts";
  * form one continuous run" to whatever reads the graph next. Nothing here
  * assumes a single walk covers it.
  *
- * **No curvature data on an edge.** A Catmull-Rom edge needs its two
- * immediate neighbours' positions to know its own shape, and neighbours are
- * exactly what graph adjacency already gives for free -- walking one node
- * out past each endpoint. Storing a duplicate of that on the edge would be
- * one more thing a move-vertex op would have to keep in sync; reading it
- * fresh at generation time never can go stale.
+ * **Curvature stays on the graph edge.** A span's authored handles live on
+ * the construction graph (`CurveHandles`); this view only reports which
+ * control nodes and spans form the spine, and reads the shape nowhere.
  */
 
 /** One control point of a spine curve. */

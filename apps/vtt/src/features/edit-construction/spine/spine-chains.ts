@@ -23,7 +23,7 @@ const THROUGH_JUNCTION_COSINE = Math.cos(Math.PI / 4);
  *
  * A closed component has no natural free end, so it starts deterministically
  * at its lowest graph id and returns to that same control point. Keeping the
- * closing point makes the generated Catmull-Rom contour continuous there.
+ * closing point makes the generated contour continuous there.
  */
 export function chainsOf(graph: SpineGraph): readonly SpineChain[] {
   const byId = new Map(graph.nodes.map((node) => [node.nodeId, node]));

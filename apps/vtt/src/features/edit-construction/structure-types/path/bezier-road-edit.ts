@@ -16,7 +16,7 @@ export function regeneratePathSpine(input: SpineRegenerationInput): SpineRegener
   const cloud = changedSpineCloud(source, graphPatch, input.topologies);
   const chains = bezierChains(cloud.snapshot, input.port, [-2, 2], 4);
   const beforeCloud = changedSpineCloud(source, { nodes: graphPatch.nodes.filter((n) => source.nodes.some((s) => s.id === n.id)), edges: [] }, input.topologies);
-  const standing = standingRegionsForCloud(input.topologies, [...cloud.positions, ...beforeCloud.positions], new Set([...cloud.corridorIds, ...beforeCloud.corridorIds]), true);
+  const standing = standingRegionsForCloud(input.topologies, new Set([...cloud.corridorIds, ...beforeCloud.corridorIds]));
   if (chains.length === 0) return { request: { operationId: input.operationId, sourceSurfaceKeys: standing.map((s) => s.surfaceKey), patch: { nodes: [], edges: [], regions: [] }, graphPatch }, preview: new Float32Array() };
   const edgeUses = new Map<string, boolean[]>();
   for (const topology of input.topologies) for (const loop of [...topology.outerLoops, ...topology.holes]) {

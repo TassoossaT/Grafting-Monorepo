@@ -2,8 +2,7 @@ import type { ConstructionPosition } from "@/ports";
 
 /**
  * TS mirror of `grafting-graph-core`'s `curve_offset::ReferenceField` -- see
- * `offset-bands.ts`'s own header for why a mirror rather than a wasm call
- * for now, and `field.rs` for the full argument. The short version is that
+ * `field.rs` for the full argument. The short version is that
  * this is the same question answered the same way on both sides of the
  * boundary, and the two must not drift: the Rust field elevates the mesh's
  * interior, this one elevates the contour the mesh is built on, and a

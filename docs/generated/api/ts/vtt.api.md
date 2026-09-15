@@ -3176,7 +3176,7 @@ Every chain in `graph`, split at every node whose degree is not 2.
 
 A closed component has no natural free end, so it starts deterministically
 at its lowest graph id and returns to that same control point. Keeping the
-closing point makes the generated Catmull-Rom contour continuous there.
+closing point makes the generated contour continuous there.
 
 ### `function vtt.spine-edit.moveSpineControlNode(node: SpineControlNode, delta: ConstructionPosition): AtomicEditOp`
 
@@ -3220,11 +3220,12 @@ a handle or a span's midpoint, inserting an anchor, or a structural
 action. Owner-free: the same for a road, a ramp or a curved wall. Whatever
 the spine generates is regenerated from this patch by its owner.
 
-### `function vtt.spine-edit-plan.withAutomaticHandles(snapshot: ConstructionGraphSnapshot, port: BezierPort, offsets: readonly number[]): ConstructionGraphSnapshot`
+### `function vtt.spine-edit-plan.withAutomaticHandles(snapshot: ConstructionGraphSnapshot, port: BezierPort, offsets: readonly number[], owner?: string): ConstructionGraphSnapshot`
 
 Gives every spine span without authored handles the automatic curve
 through its chain, once, through the Rust conversion. `offsets` is the
-width a span with no profile of its own is given.
+width a span with no profile of its own is given, and `owner`, when given,
+the type it is stamped as generating.
 
 ### `interface vtt.spine-graph.SpineControlNode`
 
@@ -3305,15 +3306,6 @@ The address inside `id`, or `undefined` for an id no spine edit minted.
 
 ### `function vtt.spine-node-id.spineControlNodeId(operationId: string, index: number): string`
 
-### `variable vtt.spine-owner.DEFAULT_SPINE_OWNER: "path"`
-
-Which structure type a spine span generates -- a road, a sloped platform,
-a curved wall. The graph keeps it on the curve (`CurveHandles.surfaceType`)
-and never reads it; this is where the app does.
-
-Spans written before an owner was recorded were all roads, so an absent
-owner reads as one. That is the only product name this module knows.
-
 ### `function vtt.spine-owner.isSpineEdge(edge: ConstructionEdgeSnapshot): boolean`
 
 Whether `edge` is a spine span at all: a curve between two control nodes.
@@ -3335,7 +3327,39 @@ prospective graph -- one spine, whichever owner it has.
 
 The owner of the spine a control node or span id belongs to, or `undefined` when it is not on any spine.
 
-### `function vtt.spine-owner.spineOwnerOf(edge: Pick<ConstructionEdgeSnapshot, "curve">): string`
+### `function vtt.spine-owner.spineOwnerOf(edge: Pick<ConstructionEdgeSnapshot, "curve">): string | undefined`
+
+Which structure type a spine span generates -- a road, a sloped platform,
+a curved wall. The graph keeps it on the curve (`CurveHandles.surfaceType`)
+and never reads it; this is where the app does. Every owner stamps its own
+spans, so this module names no type; a span with no owner generates nothing.
+
+### `interface vtt.spine-ribbons.SpineRibbon`
+
+One swept span: the resolved curve and its outline, `min` side forward then `max` side back.
+
+### `property vtt.spine-ribbons.SpineRibbon.outline: readonly ConstructionPosition[]`
+
+### `property vtt.spine-ribbons.SpineRibbon.resolved: CurveResult`
+
+### `interface vtt.spine-ribbons.SpineRibbonSpan`
+
+One span to sweep: its handles between its two anchors.
+
+### `property vtt.spine-ribbons.SpineRibbonSpan.end: ConstructionPosition`
+
+### `property vtt.spine-ribbons.SpineRibbonSpan.handles: CurveHandles`
+
+### `property vtt.spine-ribbons.SpineRibbonSpan.start: ConstructionPosition`
+
+### `function vtt.spine-ribbons.spanOffsets(handles: Pick<CurveHandles, "bandOffsets" | "endBandOffsets"> | undefined, defaults: readonly number[]): { endOffsets: readonly [number, number]; offsets: readonly [number, number] }`
+
+The lateral extent `[min, max]` a span's profile reaches at its start and
+its end, falling back to `defaults` where the span authored none.
+
+### `function vtt.spine-ribbons.spineRibbons(port: Pick<BezierPort, "curveBatch">, spans: readonly SpineRibbonSpan[], defaults: readonly number[], tolerance: number, parametersFor?: (resolved: CurveResult, index: number) => readonly number[] | undefined): readonly SpineRibbon[]`
+
+Every span resolved and swept into its ribbon.
 
 ### `type vtt.creation-interaction.CreationInteraction = { kind: "ignore" } | { kind: "cut" } | { kind: "restack" } | { kind: "forbid"; reason: string }`
 
@@ -3522,10 +3546,6 @@ touched spine component, unioned in plan into the contour faces that
 replace the standing ones. The edit itself -- what moved on the spine -- is
 the generic spine module's; this is only what a road makes of it.
 
-### `variable vtt.bezier-road-plan.isRoadSpan: (edge: Pick<ConstructionEdgeSnapshot, "curve">) => boolean`
-
-Spine spans a road generates; spans owned by any other structure are never part of a road.
-
 ### `function vtt.bezier-road-plan.bezierChains(snapshot: ConstructionGraphSnapshot, port: BezierPort, offsets: readonly number[], miterLimit: number, targetEdgeIds?: ReadonlySet<string>): readonly SpineChainInput[]`
 
 Converts graph-owned authoring data to sampled ribbons through the Rust port.
@@ -3541,25 +3561,6 @@ Product identities and profile policy surround generic Rust fitting and connecti
 ### `function vtt.bezier-road-plan.unionBezierRibbons(port: BezierPort, ribbons: readonly BandRibbon[]): [number, number][][][]`
 
 A road's band ribbons unioned in plan through the shared curve module.
-
-### `function vtt.catmull-rom.sampleCatmullRom(controlPoints: readonly ConstructionPosition[], tolerance: number): readonly ConstructionPosition[]`
-
-Samples a centripetal Catmull-Rom curve through `controlPoints`,
-flattened so no chord strays from the true curve (in XZ) by more than
-`tolerance`. Collinear control points flatten to their own straight
-chords regardless of how unevenly they are spaced -- collinear is
-collinear under any parametrization -- so the result is exactly
-`controlPoints` back.
-
-A closed loop (first and last point coincide) is walked with wraparound
-neighbours at that seam -- the point one step before the start is the
-loop's own second-to-last point, and the point one step after the end is
-its own second point -- rather than reflect's fabricated free
-end. `reflect` assumes the run stops there; a loop's own closing point is
-not a stop, and treating it as one gives the two spans that meet there
-two different, wrong tangents at what is physically one single point,
-which is what left an O-shaped road not actually closed around its own
-seam.
 
 ### `interface vtt.contour-patch.ContourPatchResult`
 
@@ -3618,29 +3619,13 @@ cap, a mitre past a corner -- should get.
 Falls back to `fallback` when no curve has a segment to project onto, so a
 degenerate chain mid-edit produces a flat vertex rather than a NaN.
 
-### `interface vtt.offset-bands.BandRibbon`
+### `interface vtt.plan-spine-contour.BandRibbon`
 
-One band's ribbon: the ring between two consecutive `bandOffsets`.
+One swept ribbon: a closed ring, its first side forward and its other side back.
 
-### `property vtt.offset-bands.BandRibbon.bandIndex: number`
+### `property vtt.plan-spine-contour.BandRibbon.bandIndex: number`
 
-### `property vtt.offset-bands.BandRibbon.outer: readonly ConstructionPosition[]`
-
-Closed ring in the sweep's own winding, first curve forward then the next reversed.
-
-### `function vtt.offset-bands.offsetBands(polyline: readonly ConstructionPosition[], bandOffsets: readonly number[], miterLimit: number): readonly BandRibbon[]`
-
-One band per consecutive pair of `bandOffsets`, following `polyline`'s
-own shape. Returns no bands for a polyline shorter than two points or a
-profile with fewer than two offsets.
-
-A closed loop's first and last station are the same physical point, but
-`stationFrame` reads each end of the array it is handed as a free end --
-treated separately, they would offset that one seam point two different
-ways, leaving a gap or an overlap right where the loop closes. Framed
-instead through a tiny wraparound window (its own neighbour on the far
-side of the loop, standing in for the "next"/"previous" station an open
-run would not have), both ends get the identical, correctly mitred frame.
+### `property vtt.plan-spine-contour.BandRibbon.outer: readonly ConstructionPosition[]`
 
 ### `interface vtt.plan-spine-contour.PlanSpineContourInput`
 
@@ -3682,7 +3667,9 @@ guess is what closes that gap for good.
 
 ### `property vtt.plan-spine-contour.PlanSpineContourInput.tableId: string`
 
-### `property vtt.plan-spine-contour.PlanSpineContourInput.union?: (ribbons: readonly BandRibbon[]) => [number, number][][][]`
+### `property vtt.plan-spine-contour.PlanSpineContourInput.union: (ribbons: readonly BandRibbon[]) => [number, number][][][]`
+
+The plan-view union of the ribbons, through the curve engine.
 
 ### `interface vtt.plan-spine-contour.PlanSpineContourResult`
 
@@ -3698,15 +3685,12 @@ can never leave the standing faces deleted.
 
 ### `interface vtt.plan-spine-contour.SpineChainInput`
 
-One curve chain's spine, already resolved to an ordered list of control
-points. Kept decoupled from `spine-graph.ts`'s own types (and from
+One curve chain, already swept by the spine's ribbon generator. Kept
+decoupled from `spine-graph.ts`'s own types (and from
 `PathKind`/`pathFormationFor`) on purpose: this module only knows "a
-curve, a band profile," never a corridor, a subtype, or a station -- the
-same genericity the Rust primitives themselves keep.
+sampled curve and its ribbons," never a corridor, a subtype, or a station.
 
 ### `property vtt.plan-spine-contour.SpineChainInput.bandOffsets: readonly number[]`
-
-Lateral offsets defining the bands, e.g. `[-2.1, 0, 2.1]` for contour/spine/contour.
 
 ### `property vtt.plan-spine-contour.SpineChainInput.chainId: string`
 
@@ -3714,21 +3698,20 @@ Lateral offsets defining the bands, e.g. `[-2.1, 0, 2.1]` for contour/spine/cont
 
 ### `property vtt.plan-spine-contour.SpineChainInput.miterLimit: number`
 
-### `property vtt.plan-spine-contour.SpineChainInput.ribbons?: readonly BandRibbon[]`
+### `property vtt.plan-spine-contour.SpineChainInput.ribbons: readonly BandRibbon[]`
 
-### `property vtt.plan-spine-contour.SpineChainInput.sampledPoints?: readonly ConstructionPosition[]`
+The chain's own ribbon, plus any junction ribbon joining it to a neighbour.
 
-Canonical Rust sampling of explicit authoring curves.
+### `property vtt.plan-spine-contour.SpineChainInput.sampledPoints: readonly ConstructionPosition[]`
+
+The curve as the engine sampled it -- the height authority for the contour.
 
 ### `property vtt.plan-spine-contour.SpineChainInput.tolerance: number`
 
-Curve flattening tolerance, world units (XZ).
-
 ### `function vtt.plan-spine-contour.planSpineContour(input: PlanSpineContourInput): PlanSpineContourResult | undefined`
 
-Derives the contour patch for one spine edit: Catmull-Rom sample -> banded
-offset -> union each band layer, across every chain of the touched cloud
-at once -> `ConstructionPatch`.
+Derives the contour patch for one spine edit: every chain's ribbons,
+across the whole touched cloud at once, unioned in plan -> `ConstructionPatch`.
 
 **The whole cloud, derived fresh, every time -- never patched onto what
 was already there.** `input.editedChains` is every chain the touched
@@ -3736,51 +3719,11 @@ cloud has; `input.standingRegions` is every face that cloud currently
 owns. This function reads the *first* for geometry and the *second* only
 for which surface keys to retire -- a standing region's own boundary is
 never fed back into a union as input. A T, an X, or an L are not cases
-this function knows about, they are whatever unionBandLayer
-happens to produce when two chains' ribbons overlap.
+this function knows about, they are whatever the union happens to produce
+when two chains' ribbons overlap.
 
 Returns `undefined` when `editedChains` is empty -- nothing changed, so
 nothing to regenerate.
-
-### `function vtt.union-bands.nearestSampleY(x: number, z: number, samples: readonly ConstructionPosition[]): number`
-
-The `y` of whichever `samples` point is nearest `(x, z)` -- same lookup `preview-shapes.ts`'s `nearestSampleY` already uses to give a union's new vertices a height.
-
-### `function vtt.union-bands.ringOf(outer: readonly ConstructionPosition[]): Ring`
-
-### `function vtt.union-bands.unionBandLayer(ribbons: readonly BandRibbon[]): MultiPolygon`
-
-Unions every ribbon of one band layer into its own outer loop(s) and
-hole(s) -- the same `polygon-clipping` union `preview-shapes.ts`'s
-`unionCapsules` already proves works in this codebase, including its
-incremental fallback for the rare case the library throws on a whole
-batch at once.
-
-**Union only, deliberately no triangulation here.** The construction graph
-stores a region as a boundary *cycle*, not a mesh -- triangulating a face
-is `grafting-procgen-surface-mesh`'s job, done later from that cycle at
-render time (see that crate's own doc: "turning that into geometry is the
-caller's job", read at mesh-generation time, never at patch-authoring
-time). `grafting-procgen-curve-offset`'s Rust `union_and_triangulate`
-(Estágio 1) triangulates too, which is the wrong shape for *this* step --
-a design note carried forward for whenever that crate is wired in: the
-Rust primitive this function will eventually call needs a union-only
-variant (or the boundary loop exposed before triangulation), not the
-`TriangulatedMesh` it hands back today.
-
-A T, an X, or an L of overlapping ribbons all fall out of this one call
-with no per-topology branch: the union either merges two ribbons into one
-loop or it doesn't, and both are the same code path.
-
-### `interface vtt.materialize-spine.MaterializedSpine`
-
-### `property vtt.materialize-spine.MaterializedSpine.controlPoints: readonly ConstructionPosition[]`
-
-### `property vtt.materialize-spine.MaterializedSpine.graphPatch: ConstructionGraphPatch`
-
-### `function vtt.materialize-spine.graphPatchForSpine(snapshot: ConstructionGraphSnapshot, spine: PathSpineDraft, snapTolerance: number): MaterializedSpine`
-
-Materializes and locally snaps the type-owned spine against its own network.
 
 ### `interface vtt.path-cloud.PathRun`
 
@@ -3915,7 +3858,9 @@ about the whole table.
 
 The table facts supplied to the PathCloud before it plans a mutation.
 
-### `property vtt.path-cloud-mutation.PathCloudMutationInput.bezier?: BezierPort`
+### `property vtt.path-cloud-mutation.PathCloudMutationInput.bezier: BezierPort`
+
+The curve engine every road is fitted, sampled and unioned through.
 
 ### `property vtt.path-cloud-mutation.PathCloudMutationInput.coverageFor: (outline: readonly (readonly [number, number])[]) => readonly ConstructionCoveredRegion[]`
 
@@ -3924,8 +3869,6 @@ The table facts supplied to the PathCloud before it plans a mutation.
 ### `property vtt.path-cloud-mutation.PathCloudMutationInput.graphSnapshot: ConstructionGraphSnapshot`
 
 ### `property vtt.path-cloud-mutation.PathCloudMutationInput.regionTopologies: readonly ConstructionRegionTopology[]`
-
-### `property vtt.path-cloud-mutation.PathCloudMutationInput.snapToGrid: boolean`
 
 ### `property vtt.path-cloud-mutation.PathCloudMutationInput.tableId: string`
 
@@ -3941,57 +3884,26 @@ Turns a draw intent into the next state of the entire touched PathCloud.
 Junction resolution, spine splitting, face ownership and contour rebuild
 all live here; callers merely provide snapshots and apply the result.
 
-This is the only path a path is ever built by. A free stroke, and any
-straight drag or preset that comes later, differ in nothing but the
-reference line they hand over: they all resolve to the same spine, go
-through the same whole-cloud contour engine, and declare the same faces.
+This is the only path a path is ever built by: the stroke is fitted into
+bezier spans on the shared spine (`planBezierRoad`), every span of the
+touched spine component is sampled into its ribbon by the same curve
+engine a sloped platform uses, and the ribbons are unioned into the
+contour faces that replace the component's standing ones. A T, an X and
+an L are not cases this function distinguishes -- they are whatever the
+union produces.
 
-**What changed from the station-sweep engine this replaces.** There is no
-mouth, no wedge, no mitre, no crossing-preparation sweep here any more. A
-T, an X, and an L are not cases this function distinguishes -- they are
-whatever `planSpineContour`'s per-band union happens to produce once this
-stroke's own ribbons are unioned against an explicitly selected standing
-continuation. `pathCorridorId`/`pathFormationFor` still decide the
-subtype's profile; everything past that is derived, not hand-closed.
-
-**What this stage deliberately did not carry over**, flagged rather than
-silently dropped:
-- Dragging an already-committed road's own nodes still resolves roles
-  through `station-node-id.ts`'s address scheme (`path-structure.ts`),
-  which a contour node minted by this engine does not carry. A newly
-  drawn road commits correctly; editing it interactively afterwards is a
-  follow-up, not something this function attempts.
-- This function decides nothing about what its own footprint cuts into.
-  `sourceSurfaceKeys` on the request below names only what a *path*
-  consumes of its own kind (`planned.consumedSurfaceKeys` -- absorbing an
-  adjoining road); `footprintOutline` is the one thing a foreign type
-  needs from this stroke, and `TabletopRuntime.applyPatchReplacement` is
-  what resolves coverage against it, decides what got cut, and lets the
-  covered type repair -- and delete -- itself, generically, for whichever
-  type painted the cut, this one or any other that calls the same method.
-- `graphPatchForSpine`'s own welding and crossing checks read a real arc
-  span by its chord (`spine.controlPoints` no longer carries intermediate
-  samples along one -- see `groundTrack`), the same way every other span
-  here always has. A gentle curve's chord and its true arc barely differ;
-  a very tight, wide-swinging one could weld or cross slightly off from
-  where the curve itself actually runs. Not a case this stage resolves,
-  only one it accepts in exchange for never chopping a real arc into
-  graph nodes it does not need.
+This function decides nothing about what its own footprint cuts into:
+`sourceSurfaceKeys` names only the path faces it replaces, and
+`footprintOutline` is what the effect commit hands to whatever the change
+reaches.
 
 ### `interface vtt.path-cloud-scope.ChangedSpineCloud`
 
 The connected spine component changed by this stroke, after its graph patch, and every node id in it.
 
-### `property vtt.path-cloud-scope.ChangedSpineCloud.chains: readonly (readonly ConstructionPosition[])[]`
-
 ### `property vtt.path-cloud-scope.ChangedSpineCloud.corridorIds: ReadonlySet<string>`
 
 Every corridor/operation id participating in this connected spine cluster.
-
-### `property vtt.path-cloud-scope.ChangedSpineCloud.positions: readonly ConstructionPosition[]`
-
-Every spine control point position in the touched component -- used to
-decide which standing contour faces this edit replaces.
 
 ### `property vtt.path-cloud-scope.ChangedSpineCloud.snapshot: ConstructionGraphSnapshot`
 
@@ -4008,12 +3920,12 @@ contour faces one edit replaces (`standingRegionsForCloud`, below).
 
 ### `function vtt.path-cloud-scope.extractCorridorsFromEdgeId(edgeId: string): readonly string[]`
 
-### `function vtt.path-cloud-scope.standingRegionsForCloud(topologies: readonly ConstructionRegionTopology[], cloudPositions: readonly ConstructionPosition[], corridorIds: ReadonlySet<string>, spineOwned: boolean): readonly ConstructionRegionTopology[]`
+### `function vtt.path-cloud-scope.standingRegionsForCloud(topologies: readonly ConstructionRegionTopology[], corridorIds: ReadonlySet<string>): readonly ConstructionRegionTopology[]`
 
-Every standing "path" face that belongs to the touched spine cloud.
-Identified by starting from path regions whose identity or node references
-match the touched corridor/operation ids, and walking the topological
-connectivity graph of shared nodes across path faces.
+Every standing path face the touched spine cloud owns: the faces whose
+contour id names one of its corridors. Ownership comes from the spine, never
+from incidental welding or proximity, so a neighbouring road's faces are
+never taken along.
 
 ### `function vtt.path-corridor.pathCorridorId(operationId: string, kind: PathKind): string`
 
@@ -4106,17 +4018,6 @@ Node identity is minted relative to this slot, so that "outward" is a fact
 an id carries rather than something a later edit has to infer from
 geometry that has since moved.
 
-### `function vtt.path-reference-line.referenceLineFrom(fitted: readonly FittedEdge[], stroke: readonly ConstructionPosition[], ridesTerrain: boolean): { line: readonly ConstructionPosition[] }`
-
-The reference line to build the spine from: where the fit decided the
-road goes, at the height the ground was actually picked at.
-
-These points become the spine's own Catmull-Rom control points --
-`planSpineContour` samples a smooth curve through them, so a corner this
-function keeps as one point still reads as a genuine bend, and a run of
-points along a straight, flat stretch still flattens back to the straight
-chord it was drawn as (`sampleCatmullRom`'s own collinear case).
-
 ### `interface vtt.path-spine-draft.PathSpineDraft`
 
 The path-owned input to contour generation.
@@ -4177,6 +4078,10 @@ Builds one swept-product structure type on the shared spine model.
 
 The path type's own identity. Path modules compare against this to find
 their own faces; code outside the path type asks for traits instead.
+
+### `variable vtt.road-span.isRoadSpan: (edge: Pick<ConstructionEdgeSnapshot, "curve">) => boolean`
+
+Spine spans a road generates; spans owned by any other structure are never part of a road.
 
 ### `interface vtt.station-node-id.StationNodeAddress`
 
@@ -5490,82 +5395,6 @@ walked yet. That yields loops that partition the perimeter rather than the
 one canonical figure-of-eight, which is the right answer for drawing it and
 an arbitrary one for reasoning about winding.
 
-### `class vtt.sweep-formation.SweepFormationError`
-
-Why a sweep could not be planned.
-
-### `constructor vtt.sweep-formation.SweepFormationError.constructor(message?: string): SweepFormationError`
-
-### `constructor vtt.sweep-formation.SweepFormationError.constructor(message?: string, options?: ErrorOptions): SweepFormationError`
-
-### `interface vtt.sweep-formation.SweptArc`
-
-The curve a stretch of a formation runs on, if it is not straight.
-
-### `property vtt.sweep-formation.SweptArc.center: readonly [number, number]`
-
-### `property vtt.sweep-formation.SweptArc.clockwise: boolean`
-
-### `interface vtt.sweep-formation.TransverseProfilePoint`
-
-One sample of a formation's transverse profile.
-
-### `property vtt.sweep-formation.TransverseProfilePoint.elevation: number`
-
-Height above the reference line's own height at that station.
-
-### `property vtt.sweep-formation.TransverseProfilePoint.lateralOffset: number`
-
-Signed world distance from the reference line, left to right.
-
-### `function vtt.sweep-formation.stationFrame(line: readonly ConstructionPosition[], index: number, miterLimit: number, arcs: readonly (SweptArc | undefined)[]): readonly [number, number]`
-
-The direction one station offsets its profile along.
-
-At a corner it is the mitre: the bisector of the two neighbouring normals,
-lengthened so the offset rim still meets both straight stretches, and
-bounded so a hairpin gets a corner rather than a spike. Same rule the
-junction mitre follows between two runs -- this one is within one run.
-
-Where a stretch curves, its normal comes from the curve rather than from
-the chord standing in for it. A station in the middle of an arc then has
-the *same* normal arriving and leaving, so the mitre resolves to no corner
-at all -- correctly, because there is none: a circle does not have corners,
-only the polygon that approximates it does. That is what lets a curved road
-be smooth instead of faceted, and it is why the rim of one can be declared
-as a single arc.
-
-### `function vtt.sweep-formation.sweepFormation(referenceLine: readonly ConstructionPosition[], profile: readonly TransverseProfilePoint[], miterLimit: number, options: { arcs?: readonly (SweptArc | undefined)[] }): ConstructionSweepPlan`
-
-Samples a transverse profile along a reference line into connected quads.
-
-Vertices are station-major: every consecutive `profile.length` entries form
-one transverse station, which is what lets `pathPatch` read a station
-address straight off a vertex index. Quads reference those shared vertices,
-so neighbouring strips are connected by construction rather than by welding
-coincident geometry afterwards.
-
-### `function vtt.sweep-formation.sweptBoundary(stationCount: number, profileLength: number): readonly number[]`
-
-The rim of a plain formation, as vertex indices.
-
-Down the first column, across the last station, back up the last column,
-and across the first station to close. True of a formation standing on its
-own, which is the only thing a sweep can know -- everything that makes it
-*untrue*, a junction above all, is known only where clouds and surface
-types are. Exported so that side can walk it, compare against it, or
-replace it outright.
-
-### `function vtt.sweep-formation.withoutCoincidentStations(samples: readonly ConstructionPosition[]): readonly ConstructionPosition[]`
-
-The caller's stations with any coincident repeat dropped.
-
-Hygiene, not resampling: it only ever removes, never places. Two stations
-at one spot give the frame maths no direction to read, and a pointer held
-still or a grid snap folding samples onto one intersection both produce
-exactly that. Where the stations go is the caller's decision, because it
-depends on what the formation runs over.
-
 ### `interface vtt.attach-camera-navigation.CameraControllable`
 
 The minimum a target needs for this feature to drive its camera. A
@@ -5687,7 +5516,7 @@ callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 
 ### `property vtt.bezier-port.CurveHandles.surfaceType?: string`
 
-The structure type generated along this spine span; absent means the default consumer.
+The structure type generated along this spine span; a span with no owner generates nothing.
 
 ### `interface vtt.bezier-port.CurveNetworkEdge`
 

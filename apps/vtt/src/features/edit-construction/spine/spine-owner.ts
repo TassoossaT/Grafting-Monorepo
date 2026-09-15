@@ -2,15 +2,6 @@ import type { ConstructionEdgeSnapshot, ConstructionGraphPatch, ConstructionGrap
 
 import { isSpineControlNodeId } from "./spine-node-id.ts";
 
-/**
- * Which structure type a spine span generates -- a road, a sloped platform,
- * a curved wall. The graph keeps it on the curve (`CurveHandles.surfaceType`)
- * and never reads it; this is where the app does.
- *
- * Spans written before an owner was recorded were all roads, so an absent
- * owner reads as one. That is the only product name this module knows.
- */
-export const DEFAULT_SPINE_OWNER = "path";
 
 /** The app's prospective construction snapshot, without committing its graph patch. */
 export function prospectiveGraph(snapshot: ConstructionGraphSnapshot, patch: ConstructionGraphPatch): ConstructionGraphSnapshot {
@@ -22,8 +13,14 @@ export function prospectiveGraph(snapshot: ConstructionGraphSnapshot, patch: Con
   return { nodes: [...nodes.values()], edges: [...edges.values()] };
 }
 
-export function spineOwnerOf(edge: Pick<ConstructionEdgeSnapshot, "curve">): string {
-  return edge.curve?.surfaceType || DEFAULT_SPINE_OWNER;
+/**
+ * Which structure type a spine span generates -- a road, a sloped platform,
+ * a curved wall. The graph keeps it on the curve (`CurveHandles.surfaceType`)
+ * and never reads it; this is where the app does. Every owner stamps its own
+ * spans, so this module names no type; a span with no owner generates nothing.
+ */
+export function spineOwnerOf(edge: Pick<ConstructionEdgeSnapshot, "curve">): string | undefined {
+  return edge.curve?.surfaceType || undefined;
 }
 
 /** A predicate selecting the spans one owner generates. */

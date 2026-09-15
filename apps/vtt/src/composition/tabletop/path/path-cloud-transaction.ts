@@ -31,7 +31,6 @@ function commitUntimed(
     const plan = timePhase("plano da nuvem", () => planPathCloudMutation({
       bezier: ctx.runtime,
       tableId: ctx.tableId,
-      snapToGrid: ctx.snapToGrid,
       graphSnapshot: timePhase("leitura do grafo", () => ctx.runtime.getGraphSnapshot()),
       regionTopologies: timePhase("leitura de todas as topologias", () => ctx.runtime.getAllRegionTopologies()),
       coverageFor: (outline) => timePhase("cobertura do traço", () => ctx.runtime.getFootprintCoverage(outline)),
