@@ -297,11 +297,9 @@ export function correctedWallCorners(
   samples: readonly ConstructionPosition[],
   tolerance = 0,
 ): readonly ConstructionPosition[] {
-  const first = samples[0];
-  if (first === undefined) return [];
-  const pinned = samples.map((sample) => pinnedToBaseline(first, sample));
-  const fitted = fitPath(pinned, tolerance, { curves: ctx.snapToGrid ? "none" : "bezier" });
-  const corners = fitted.length > 0 ? [fitted[0]!.start, ...fitted.map((edge) => edge.end)] : pinned;
+  if (samples.length === 0) return [];
+  const fitted = fitPath(samples, tolerance, { curves: ctx.snapToGrid ? "none" : "bezier" });
+  const corners = fitted.length > 0 ? [fitted[0]!.start, ...fitted.map((edge) => edge.end)] : samples;
   return corners.map((corner) => snappedEndpoint(ctx, corner, tolerance));
 }
 
@@ -424,6 +422,12 @@ export function commitWallContour(
  * few staircase points is a shape that was never drawn. Curves are off in
  * that mode for that reason -- snapped means deliberate, and what was
  * placed deliberately is what gets built.
+ *
+ * `samples` keep the elevation the renderer actually picked at each point --
+ * `fitPath` only ever measures XZ deviation, so the Y each surviving corner
+ * carries is that corner's own real height, never a single baseline pinned
+ * across the whole run. That is what lets a free-brush wall follow the
+ * ground it was drawn over instead of standing dead level at the first click.
  */
 export function commitWallStroke(
   ctx: ToolContext,
@@ -432,8 +436,6 @@ export function commitWallStroke(
   params: WallParams,
   domain: string,
 ): void {
-  const first = samples[0];
-  if (first === undefined) return;
-  const pinned = samples.map((sample) => pinnedToBaseline(first, sample));
-  commitWallContour(ctx, fitPath(pinned, tolerance, { curves: ctx.snapToGrid ? "none" : "bezier" }), params, domain, tolerance);
+  if (samples.length === 0) return;
+  commitWallContour(ctx, fitPath(samples, tolerance, { curves: ctx.snapToGrid ? "none" : "bezier" }), params, domain, tolerance);
 }

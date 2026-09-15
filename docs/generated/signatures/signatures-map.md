@@ -4395,9 +4395,8 @@ export function correctedWallCorners(
   samples: readonly ConstructionPosition[],
   tolerance = 0,
   ): readonly ConstructionPosition[] {
-  const first = samples[0];
-  if (first === undefined) return [];
-  const pinned = samples.map((sample) => pinnedToBaseline(first, sample));
+  if (samples.length === 0) return [];
+  const fitted = fitPath(samples, tolerance, { curves: ctx.snapToGrid ? "none" : "bezier" });
 export function wallCorrectionPreview(
   ctx: ToolContext,
   samples: readonly ConstructionPosition[],
@@ -4420,7 +4419,7 @@ export function commitWallStroke(
   params: WallParams,
   domain: string,
   ): void {
-  const first = samples[0];
+  if (samples.length === 0) return;
 
 // src/composition/tabletop/tools/walls/wall-spans.ts
 export interface WallSpan {
