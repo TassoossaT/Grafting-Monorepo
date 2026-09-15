@@ -9,7 +9,7 @@ import type {
   ConstructionSurfaceKey,
   RegionEditOutcome,
 } from "@/ports";
-import type { Effect, Reaction, ReactionId, ReactionRecord } from "@/features/edit-construction";
+import type { Effect, Reaction, ReactionId, ReactionRecord, ShapeChange } from "@/features/edit-construction";
 import type { TransactionResult } from "../tabletop-runtime.ts";
 
 import { runEffects } from "../../../features/edit-construction/index.ts";
@@ -59,6 +59,26 @@ export interface CommitOptions {
   readonly reactions?: TabletopReactions;
 }
 
+/**
+ * Runs `work` -- every mutation one gesture makes -- as one transaction, then
+ * lets every cloud the reported change reaches answer it inside that same
+ * transaction. Throwing anywhere rolls all of it back.
+ */
+export function commitChange<T>(
+  runtime: EffectCommitRuntime,
+  options: CommitOptions,
+  work: () => { readonly value: T; readonly change?: ShapeChange },
+): TransactionResult<T> {
+  const origin = options.origin ?? "local";
+  return runtime.transact(options.transactionId, origin, () => {
+    const { value, change } = work();
+    if (change !== undefined) {
+      dispatchEffects(runtime, [{ kind: "cut", causeId: options.transactionId, change }], options.reactions);
+    }
+    return value;
+  });
+}
+
 /** Replaces regions with a patch and lets every cloud the change reaches answer it, atomically. */
 export function commitPatchReplacement(
   runtime: EffectCommitRuntime,
@@ -66,14 +86,10 @@ export function commitPatchReplacement(
   options: CommitOptions,
 ): TransactionResult<ConstructionPatchOutcome> {
   const origin = options.origin ?? "local";
-  return runtime.transact(options.transactionId, origin, () => {
+  return commitChange(runtime, options, () => {
     const before = topologiesOf(runtime, request.sourceSurfaceKeys);
     const outcome = runtime.applyPatchReplacement(request, origin, options.transactionId);
-    const change = shapeChangeOfReplacement(runtime, request, before, outcome, options.subtype);
-    if (change !== undefined) {
-      dispatchEffects(runtime, [{ kind: "cut", causeId: options.transactionId, change }], options.reactions);
-    }
-    return outcome;
+    return { value: outcome, change: shapeChangeOfReplacement(runtime, request, before, outcome, options.subtype) };
   });
 }
 

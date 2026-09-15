@@ -190,24 +190,6 @@ export interface TabletopRuntime extends BezierPort {
   removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): RegionEditOutcome;
   /** `ADR-0022`'s "cloud" query -- a pure read, never touches the map. See `ConstructionSessionPort.cloudFor`. */
   cloudFor(request: CloudRequest): CloudOutcome;
-  /**
-   * Welds a T-junction into an existing panel: subdividing the crossed
-   * panel's own boundary edges at the crossing point, through
-   * `insertVertex`. The panel stays one region with more boundary, rather
-   * than being replaced by two -- the crossing wall welds onto the freshly
-   * minted nodes by position, which is all the junction ever needed.
-   */
-  applyWallCrossingWeld(
-    inserts: readonly {
-      readonly edgeId: string;
-      readonly nodeId: ConstructionNodeId;
-      readonly position: ConstructionPosition;
-      readonly firstEdgeId: string;
-      readonly secondEdgeId: string;
-    }[],
-    origin: ChangeOrigin,
-    causeId: string,
-  ): RegionEditOutcome;
   /** Passthrough to `TerrainNoisePort.generateHeightmap` -- see that port for parameter meaning. */
   generateHeightmap(
     width: number,
@@ -1090,24 +1072,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
   cloudFor(request: CloudRequest): CloudOutcome {
     this.#requireReady("querying a cloud");
     return this.#construction.cloudFor(request);
-  }
-
-  applyWallCrossingWeld(
-    inserts: readonly {
-      readonly edgeId: string;
-      readonly nodeId: ConstructionNodeId;
-      readonly position: ConstructionPosition;
-      readonly firstEdgeId: string;
-      readonly secondEdgeId: string;
-    }[],
-    origin: ChangeOrigin,
-    causeId: string,
-  ): RegionEditOutcome {
-    return this.applyRegionEdit(
-      inserts.map((insert) => ({ kind: "insert-vertex" as const, ...insert })),
-      origin,
-      causeId,
-    );
   }
 
   applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void {

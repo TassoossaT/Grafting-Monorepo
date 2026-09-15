@@ -17,6 +17,8 @@ import { scopedToolId, type ConstructionTool, type PointerSample, type ToolConte
 import { segmentsPreview } from "../shapes/preview-shapes.ts";
 import { findWallSurfaceAt } from "../walls/wall-shared.ts";
 import { panelRailOf, type PanelRail } from "./panel-rail.ts";
+import { commitChange } from "../../effects/effect-commit.ts";
+import { shapeChangeOfAddition } from "../../effects/shape-change.ts";
 
 /** How much wall must be left standing to either side of an opening, and above and below it. */
 const MARGIN = 0.15;
@@ -119,35 +121,40 @@ export const openingTool: ConstructionTool<"opening"> = {
       edges.use(nodes[3]!.id, nodes[0]!.id),
     ];
 
-    const outcome = ctx.runtime.addPatch(
-      {
-        nodes,
-        edges: edges.all(),
-        regions: [
+    const patch = {
+      nodes,
+      edges: edges.all(),
+      regions: [
+        {
+          regionId: nodes.map((node) => node.id).join("|"),
+          boundary,
+          surfaceType: openingStructureType.surfaceType,
+          physical: false,
+        },
+      ],
+    };
+    // The face and the hole it stands in are one transaction: a face that
+    // does not fit leaves neither its rim nor an opening nobody stands in.
+    let recorded: boolean;
+    try {
+      ({ recorded } = commitChange(ctx.runtime, { transactionId: causeId }, () => {
+        const outcome = ctx.runtime.addPatch(patch, "local", causeId);
+        if (outcome.skippedRegionIds.length > 0) throw new Error("a face nao coube sobre o que ja existe ali.");
+        ctx.runtime.addHole(
           {
-            regionId: nodes.map((node) => node.id).join("|"),
-            boundary,
-            surfaceType: openingStructureType.surfaceType,
-            physical: false,
+            surfaceKey: placed.surfaceKey,
+            hole: [...boundary].reverse().map((use) => ({ edgeId: use.edgeId, reversed: !use.reversed })),
           },
-        ],
-      },
-      "local",
-      causeId,
-    );
-    if (outcome.skippedRegionIds.length > 0) {
-      ctx.reportFeedback({ tone: "error", message: "Abertura: a face nao coube sobre o que ja existe ali." });
+          "local",
+          causeId,
+        );
+        return { value: outcome, change: shapeChangeOfAddition(ctx.runtime, patch, outcome) };
+      }));
+    } catch (error) {
+      ctx.reportFeedback({ tone: "error", message: `Abertura: ${error instanceof Error ? error.message : String(error)}` });
       return;
     }
-
-    ctx.runtime.addHole(
-      {
-        surfaceKey: placed.surfaceKey,
-        hole: [...boundary].reverse().map((use) => ({ edgeId: use.edgeId, reversed: !use.reversed })),
-      },
-      "local",
-      causeId,
-    );
+    if (recorded) ctx.history?.record({ kind: "transaction", transactionId: causeId });
     ctx.reportFeedback({
       tone: "success",
       message: params.openingKind === "door" ? "Porta aberta na parede." : "Janela aberta na parede.",

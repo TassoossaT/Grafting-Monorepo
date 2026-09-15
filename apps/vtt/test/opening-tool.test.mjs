@@ -58,6 +58,8 @@ function contextFor(topologies) {
         getAllRegionTopologies: () => topologies,
         getRegionTopology: (surfaceKey) =>
           topologies.find((topology) => topology.surfaceKey.join("|") === surfaceKey.join("|")),
+        transact: (_id, _origin, work) => ({ value: work(), recorded: true }),
+        getSnapshot: () => ({ tableId: TABLE_ID, map: { nodePositions: new Map() } }),
         addPatch: (patch, origin, causeId) => {
           patches.push({ patch, origin, causeId });
           return {

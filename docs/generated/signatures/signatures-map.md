@@ -3450,13 +3450,21 @@ export interface CommitOptions {
   readonly subtype?: string;
   readonly reactions?: TabletopReactions;
   }
+export function commitChange<T>(
+  runtime: EffectCommitRuntime,
+  options: CommitOptions,
+  work: () => { readonly value: T; readonly change?: ShapeChange },
+  ): TransactionResult<T> {
+  const origin = options.origin ?? "local";
+  return runtime.transact(options.transactionId, origin, () => {
+  const { value, change } = work();
 export function commitPatchReplacement(
   runtime: EffectCommitRuntime,
   request: ApplyPatchReplacementRequest,
   options: CommitOptions,
   ): TransactionResult<ConstructionPatchOutcome> {
   const origin = options.origin ?? "local";
-  return runtime.transact(options.transactionId, origin, () => {
+  return commitChange(runtime, options, () => {
   const before = topologiesOf(runtime, request.sourceSurfaceKeys);
 export function commitSurfaceRemoval(
   runtime: EffectCommitRuntime,
@@ -3492,6 +3500,14 @@ export function shapeChangeOfReplacement(
   subtype?: string,
   ): ShapeChange | undefined {
   const surfaceType = request.patch.regions[0]?.surfaceType ?? before[0]?.surfaceType;
+export function shapeChangeOfAddition(
+  runtime: ShapeChangeRuntime,
+  patch: ConstructionPatch,
+  outcome: ConstructionPatchOutcome,
+  ): ShapeChange | undefined {
+  const surfaceType = patch.regions[0]?.surfaceType;
+  if (surfaceType === undefined) return undefined;
+  let after = topologiesOf(runtime, outcome.createdSurfaceKeys);
 export function shapeChangeOfRemoval(removed: readonly ConstructionRegionTopology[], removedNodeIds: readonly string[]): ShapeChange | undefined {
   const surfaceType = removed[0]?.surfaceType;
   if (surfaceType === undefined) return undefined;

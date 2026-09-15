@@ -13,6 +13,8 @@ import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
 import { fitPath, type FittedEdge } from "../core/stroke-fitting.ts";
 import { boundaryUsage, type EdgeSharing } from "../core/boundary-edges.ts";
 import { brushSweptRegionFill } from "../shapes/preview-shapes.ts";
+import { commitChange } from "../../effects/effect-commit.ts";
+import { shapeChangeOfAddition } from "../../effects/shape-change.ts";
 import { wallPatch, type WallColumn, type WallContour } from "./wall-patch.ts";
 import { wallSpans, type WallSpan } from "./wall-spans.ts";
 
@@ -143,10 +145,10 @@ function insertedColumnAt(
     const bottom: ConstructionPosition = { x, y: span.a.y, z };
     const top: ConstructionPosition = { x, y: span.topY, z };
 
-    ctx.runtime.applyWallCrossingWeld(
+    ctx.runtime.applyRegionEdit(
       [
-        { edgeId: bottomEdgeId, nodeId: bottomNodeId, position: bottom, firstEdgeId: `${bottomEdgeId}|${bottomNodeId}|0`, secondEdgeId: `${bottomEdgeId}|${bottomNodeId}|1` },
-        { edgeId: topEdgeId, nodeId: topNodeId, position: top, firstEdgeId: `${topEdgeId}|${topNodeId}|0`, secondEdgeId: `${topEdgeId}|${topNodeId}|1` },
+        { kind: "insert-vertex", edgeId: bottomEdgeId, nodeId: bottomNodeId, position: bottom, firstEdgeId: `${bottomEdgeId}|${bottomNodeId}|0`, secondEdgeId: `${bottomEdgeId}|${bottomNodeId}|1` },
+        { kind: "insert-vertex", edgeId: topEdgeId, nodeId: topNodeId, position: top, firstEdgeId: `${topEdgeId}|${topNodeId}|0`, secondEdgeId: `${topEdgeId}|${topNodeId}|1` },
       ],
       "local",
       causeId,
@@ -358,7 +360,9 @@ function contourOf(fitted: readonly FittedEdge[], closeTolerance: number): {
 }
 
 /**
- * Commits a fitted run of contour edges as walls, in one transaction.
+ * Commits a fitted run of contour edges as walls, in one transaction: the
+ * T-junction welds its corners make, the panels, and whatever other clouds
+ * the new walls reach answer together, and undo as one step.
  *
  * This is the only path a wall is ever built by. A free stroke, a straight
  * drag and a tower preset differ in nothing but the contour they hand over:
@@ -381,19 +385,30 @@ export function commitWallContour(
   const { points, geometries, closed } = contourOf(fitted, Math.max(CONTOUR_CLOSE_TOLERANCE, correction));
   if (points.length < 2) return;
 
-  const columns = points.map((point, index) =>
-    resolveColumn(ctx, point, params.height, idPrefix, index, causeId, correction),
-  );
-  const contour: WallContour = { columns, geometries, closed };
-  // Any number of walls may stand on one column, so a run keeps its own
-  // edge wherever the shared one is full rather than losing the face.
-  const sharing: EdgeSharing = {
-    kind: "private-when-full",
-    runPrefix: idPrefix,
-    existingUses: boundaryUsage(ctx),
-  };
-
-  const outcome = ctx.runtime.addPatch(wallPatch(ctx.tableId, contour, params.wallType, sharing), "local", causeId);
+  let committed;
+  try {
+    committed = commitChange(ctx.runtime, { transactionId: causeId }, () => {
+      const columns = points.map((point, index) =>
+        resolveColumn(ctx, point, params.height, idPrefix, index, causeId, correction),
+      );
+      const contour: WallContour = { columns, geometries, closed };
+      // Any number of walls may stand on one column, so a run keeps its own
+      // edge wherever the shared one is full rather than losing the face.
+      const sharing: EdgeSharing = {
+        kind: "private-when-full",
+        runPrefix: idPrefix,
+        existingUses: boundaryUsage(ctx),
+      };
+      const patch = wallPatch(ctx.tableId, contour, params.wallType, sharing);
+      const added = ctx.runtime.addPatch(patch, "local", causeId);
+      return { value: added, change: shapeChangeOfAddition(ctx.runtime, patch, added) };
+    });
+  } catch (error) {
+    ctx.reportFeedback({ tone: "error", message: `Parede preservada: ${error instanceof Error ? error.message : String(error)}` });
+    return;
+  }
+  if (committed.recorded) ctx.history?.record({ kind: "transaction", transactionId: causeId });
+  const outcome = committed.value;
   // A refused panel used to be the whole of this bug and left no trace at
   // all. Claiming edges against the live graph should make it unreachable
   // now, so say so out loud rather than letting it go quiet again.

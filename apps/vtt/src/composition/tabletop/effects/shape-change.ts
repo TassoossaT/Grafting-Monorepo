@@ -104,6 +104,19 @@ export function shapeChangeOfReplacement(
   };
 }
 
+/** What adding a patch changed: nothing replaced, the faces it registered produced. */
+export function shapeChangeOfAddition(
+  runtime: ShapeChangeRuntime,
+  patch: ConstructionPatch,
+  outcome: ConstructionPatchOutcome,
+): ShapeChange | undefined {
+  const surfaceType = patch.regions[0]?.surfaceType;
+  if (surfaceType === undefined) return undefined;
+  let after = topologiesOf(runtime, outcome.createdSurfaceKeys);
+  if (after.length === 0) after = [...topologiesFromPatch(patch, runtime)];
+  return { surfaceType, before: [], after, removedNodeIds: outcome.removedNodeIds, declaredPositions: patch.nodes.map((node) => node.position) };
+}
+
 /** What deleting faces changed: all of them gone, nothing produced. */
 export function shapeChangeOfRemoval(removed: readonly ConstructionRegionTopology[], removedNodeIds: readonly string[]): ShapeChange | undefined {
   const surfaceType = removed[0]?.surfaceType;

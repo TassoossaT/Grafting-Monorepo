@@ -338,6 +338,12 @@ What committing needs of the runtime.
 
 ### `type vtt.effect-commit.TabletopReactions = Readonly<Record<ReactionId, Reaction<TabletopReactionRuntime>>>`
 
+### `function vtt.effect-commit.commitChange(runtime: EffectCommitRuntime, options: CommitOptions, work: () => { change?: ShapeChange; value: T }): TransactionResult<T>`
+
+Runs `work` -- every mutation one gesture makes -- as one transaction, then
+lets every cloud the reported change reaches answer it inside that same
+transaction. Throwing anywhere rolls all of it back.
+
 ### `function vtt.effect-commit.commitPatchReplacement(runtime: EffectCommitRuntime, request: ApplyPatchReplacementRequest, options: CommitOptions): TransactionResult<ConstructionPatchOutcome>`
 
 Replaces regions with a patch and lets every cloud the change reaches answer it, atomically.
@@ -367,6 +373,10 @@ What reading a change's faces needs of the runtime.
 ### `method vtt.shape-change.ShapeChangeRuntime.getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined`
 
 ### `method vtt.shape-change.ShapeChangeRuntime.getSnapshot(): { map: { nodePositions: ReadonlyMap<string, { position: ConstructionPosition }> } }`
+
+### `function vtt.shape-change.shapeChangeOfAddition(runtime: ShapeChangeRuntime, patch: ConstructionPatch, outcome: ConstructionPatchOutcome): ShapeChange | undefined`
+
+What adding a patch changed: nothing replaced, the faces it registered produced.
 
 ### `function vtt.shape-change.shapeChangeOfRemoval(removed: readonly ConstructionRegionTopology[], removedNodeIds: readonly string[]): ShapeChange | undefined`
 
@@ -462,14 +472,6 @@ it only performs what was already decided -- see
 `docs/architecture/vtt-atomic-edit-and-cloud-policy-design.md`.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.applyRegionOverlay(request: ApplyRegionOverlayRequest, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome`
-
-### `method vtt.tabletop-runtime.AppTabletopRuntime.applyWallCrossingWeld(inserts: readonly { edgeId: string; firstEdgeId: string; nodeId: string; position: ConstructionPosition; secondEdgeId: string }[], origin: ChangeOrigin, causeId: string): RegionEditOutcome`
-
-Welds a T-junction into an existing panel: subdividing the crossed
-panel's own boundary edges at the crossing point, through
-`insertVertex`. The panel stays one region with more boundary, rather
-than being replaced by two -- the crossing wall welds onto the freshly
-minted nodes by position, which is all the junction ever needed.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.attachCameraControls(viewId: string, element: HTMLElement, options?: CameraControlOptions): CameraControlHandle`
 
@@ -613,14 +615,6 @@ the faces over them -- in one transaction. See `ConstructionPatch`.
 ### `method vtt.tabletop-runtime.TabletopRuntime.applyRegionEdit(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.applyRegionOverlay(request: ApplyRegionOverlayRequest, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome`
-
-### `method vtt.tabletop-runtime.TabletopRuntime.applyWallCrossingWeld(inserts: readonly { edgeId: string; firstEdgeId: string; nodeId: string; position: ConstructionPosition; secondEdgeId: string }[], origin: ChangeOrigin, causeId: string): RegionEditOutcome`
-
-Welds a T-junction into an existing panel: subdividing the crossed
-panel's own boundary edges at the crossing point, through
-`insertVertex`. The panel stays one region with more boundary, rather
-than being replaced by two -- the crossing wall welds onto the freshly
-minted nodes by position, which is all the junction ever needed.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.attachCameraControls(viewId: string, element: HTMLElement, options?: CameraControlOptions): CameraControlHandle`
 
@@ -2357,7 +2351,9 @@ Default length of a panel's own vertical edge, for callers with no height parame
 
 ### `function vtt.wall-shared.commitWallContour(ctx: ToolContext, fitted: readonly FittedEdge[], params: WallParams, domain: string, correction: number): void`
 
-Commits a fitted run of contour edges as walls, in one transaction.
+Commits a fitted run of contour edges as walls, in one transaction: the
+T-junction welds its corners make, the panels, and whatever other clouds
+the new walls reach answer together, and undo as one step.
 
 This is the only path a wall is ever built by. A free stroke, a straight
 drag and a tower preset differ in nothing but the contour they hand over:
