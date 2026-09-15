@@ -3,7 +3,7 @@ name = "grafting-procgen-construction-wasm"
 version = "0.0.0"
 edition = "2024"
 publish = false
-description = "Wasm bridge exposing grafting-graph-core's construction operations (move/delete/merge/split/duplicate) and the terrain-generation/structure-generation crates' pure generators as one stateful ConstructionSession for the Web host. No new domain logic -- pure wrapping over already-merged, already-stable Rust APIs."
+description = "Wasm bridge exposing grafting-graph-core's construction operations (move/delete/merge/split/duplicate) and the terrain-generation crate's pure generators as one stateful ConstructionSession for the Web host. No new domain logic -- pure wrapping over already-merged, already-stable Rust APIs."
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -11,7 +11,6 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 grafting-graph-core = { path = "../../../graph/core", features = ["curve-serde"] }
 grafting-procgen-terrain-generation = { path = "../terrain-generation" }
-grafting-procgen-structure-generation = { path = "../structure-generation" }
 grafting-procgen-irregular-grid = { path = "../irregular-grid" }
 grafting-procgen-surface-mesh = { path = "../surface-mesh" }
 grafting-procgen-surface-transformations = { path = "../surface-transformations" }

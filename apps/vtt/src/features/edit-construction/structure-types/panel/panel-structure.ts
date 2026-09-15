@@ -168,7 +168,7 @@ export function panelInteractionOver(_coveredType: string): CreationInteraction 
  * A path crossing a wall reads as an opening through it -- `CUT`'s own doc
  * comment already says so -- but framing that opening (jamb consistency,
  * which posts stay structural) is undesigned. Every panel type (wall, door,
- * window, floor, ceiling) shares this gap, since they all share this one
+ * window) shares this gap, since they all share this one
  * builder.
  */
 const PANEL_CUT_REPAIR: CutRepair = {

@@ -16,10 +16,8 @@ export type ConstructionToolId =
   | "path-brush"
   | "wall-brush"
   | "wall-line"
-  | "interior-wall"
   | "tower-stamp"
   | "opening"
-  | "house-room-delete"
   | "terrain-sculpt";
 
 export type BrushShapeKind = "circle" | "square" | "hexagon";
@@ -82,28 +80,6 @@ export interface WallParams {
  */
 export interface WallBrushParams extends WallParams, BrushShapeParams {}
 
-/**
- * One click inside an already-enclosed space (any shape -- `findEnclosingRoom`'s
- * own wall-follower algorithm, not limited to rectangles) rasterizes that
- * space into a `cellSize` grid and hands it to the same region-partition
- * algorithm `ConstructionSessionPort.generateRegionPartition` already
- * exposes (the Rust side the retired "Pintar Casa" brush used to drive one
- * cell at a time) -- see `composition/tabletop/tools/house/interior-wall-tool.ts`.
- * A region larger than `maxRegionCells` auto-splits into more than one
- * room, so the same enclosed footprint can regenerate into a different
- * layout just by changing `seed`/`maxRegionCells`. No floor/ceiling
- * (not implemented yet) -- only the generated cap surfaces are stripped
- * back out client-side after the engine call.
- */
-export interface InteriorGenerateParams {
-  readonly wallType: "wall-white" | "wall-gray";
-  /** World-space side length of one grid cell. */
-  readonly cellSize: number;
-  /** A connected region larger than this many cells gets auto-split into more than one room. */
-  readonly maxRegionCells: number;
-  /** Drives the split layout's jitter -- the same enclosed footprint always reproduces the same rooms for a given seed. */
-  readonly seed: number;
-}
 /**
  * Sculpt mode determining whether a stroke adds terrain/height ("add"), digs/removes terrain ("dig"), or flattens ("flatten").
  */
@@ -215,10 +191,8 @@ export interface ToolParamsByTool {
   readonly "path-brush": PathBrushParams;
   readonly "wall-brush": WallBrushParams;
   readonly "wall-line": WallParams;
-  readonly "interior-wall": InteriorGenerateParams;
   readonly "tower-stamp": TowerStampParams;
   readonly opening: OpeningParams;
-  readonly "house-room-delete": NoToolParams;
   readonly "terrain-sculpt": TerrainSculptParams;
 }
 
@@ -243,10 +217,8 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   }),
   "wall-brush": Object.freeze({ wallType: "wall-white", height: 3, shape: "circle", radius: 0.3, rotationDegrees: 0 }),
   "wall-line": Object.freeze({ wallType: "wall-white", height: 3 }),
-  "interior-wall": Object.freeze({ wallType: "wall-white", cellSize: 2, maxRegionCells: 6, seed: 1 }),
   "tower-stamp": Object.freeze({ wallType: "wall-white", height: 3, radius: TOWER_RADIUS_PRESETS[1] }),
   opening: Object.freeze({ openingType: "window", width: 1.2, height: 1.2, sill: 1 }),
-  "house-room-delete": Object.freeze({}),
   "terrain-sculpt": Object.freeze({
     faceSize: 2,
     brushRadius: 6,

@@ -4,8 +4,6 @@ import { slopeRampTool, slopeSpiralTool } from "../slope/slope-tools.ts";
 import type { ConstructionToolId } from "@/features/edit-construction";
 
 import type { ConstructionTool } from "./tool-context.ts";
-import { houseRoomDeleteTool } from "../house/house-room-delete-tool.ts";
-import { interiorWallTool } from "../house/interior-wall-tool.ts";
 import { editRegionTool } from "./edit-region-tool.ts";
 import { navigateTool } from "./navigate-tool.ts";
 import { openingTool } from "../openings/opening-tool.ts";
@@ -30,10 +28,8 @@ const TOOL_REGISTRY: { readonly [Id in ConstructionToolId]: ConstructionTool<Id>
   "edit-region": editRegionTool,
   "wall-brush": wallBrushTool,
   "wall-line": wallLineTool,
-  "interior-wall": interiorWallTool,
   "tower-stamp": towerStampTool,
   opening: openingTool,
-  "house-room-delete": houseRoomDeleteTool,
   "terrain-sculpt": terrainSculptTool,
 };
 

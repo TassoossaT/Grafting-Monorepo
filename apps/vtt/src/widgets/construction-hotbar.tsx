@@ -17,7 +17,6 @@ const CONSTRUCTION_TOOLS: readonly { readonly id: ConstructionToolId; readonly i
 
 /** The "Casa" branch's own children. */
 const HOUSE_TOOLS: readonly { readonly id: ConstructionToolId; readonly icon: string; readonly tooltip: string }[] = [
-  { id: "house-room-delete", icon: "−", tooltip: "Apagar Cômodo (clique dentro de um cômodo)" },
   { id: "edit-region", icon: "◇", tooltip: "Editar (arraste um canto, uma aresta ou o corpo -- o que cada parte permite depende do tipo da estrutura)" },
 ];
 

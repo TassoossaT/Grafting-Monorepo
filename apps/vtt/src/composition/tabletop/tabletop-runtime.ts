@@ -44,8 +44,6 @@ import type {
   ConstructionSurfaceKey,
   ConstructionSurfaceSpec,
   ConstructionUnfilledLoop,
-  DiffOutcome,
-  GenerateRegionPartitionRequest,
   RegionEditOutcome,
   RemoveSurfaceRequest,
   RenderMeshData,
@@ -171,15 +169,6 @@ export interface TabletopRuntime extends BezierPort {
   ): ConstructionPatchOutcome;
   undoPathBrush(operationId: string, origin: ChangeOrigin): void;
   redoPathBrush(operationId: string, origin: ChangeOrigin): void;
-  /**
-   * One tick of a continuous cell-painting brush ("Pintar Casa," a
-   * wall-brush stroke's closure): regenerates the whole painted cell
-   * set's region partition and applies only the difference against what
-   * already exists -- walls/floors/ceilings can be added AND removed in
-   * the same call (a split moving, two regions merging). See
-   * `ConstructionSessionPort.generateRegionPartition`.
-   */
-  generateRegionPartition(request: GenerateRegionPartitionRequest, origin: ChangeOrigin, causeId: string): DiffOutcome;
   /** Unregisters a surface outright, prunes orphaned nodes, and folds the outcome into the running map. See `ConstructionSessionPort.removeSurface`. */
   removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): RegionEditOutcome;
   /** `ADR-0022`'s "cloud" query -- a pure read, never touches the map. See `ConstructionSessionPort.cloudFor`. */
@@ -986,25 +975,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
     );
     this.#notify();
   }
-  /** Shared by every `generate*` mutation: folds `outcome`'s added/removed surfaces and removed nodes into the running map. */
-  #foldDiffOutcome(outcome: DiffOutcome, origin: ChangeOrigin, causeId: string): void {
-    const removedRefs = outcome.removedSurfaceKeys.map(surfaceRefFromNodeSet);
-    this.#applyConstructionMutation(outcome.addedSurfaceKeys, removedRefs, origin, causeId, (map) => {
-      let next = map;
-      for (const surfaceRef of removedRefs) {
-        const previous = next.byId.get(surfaceRef);
-        if (previous === undefined) continue;
-        next = applyMapProjectionDelta(next, { type: "surface-removed", surfaceRef, revision: previous.revision + 1 });
-      }
-      next = this.#foldDiscoveredNodePositions(next, origin, causeId, this.#generation);
-      for (const nodeId of outcome.removedNodeIds) {
-        next = applyMapProjectionDelta(next, { type: "node-removed", nodeRef: nodeId });
-        this.#removeNodeHandle(nodeId, origin, causeId, this.#generation);
-      }
-      return next;
-    });
-  }
-
   applyRegionOverlay(
     request: ApplyRegionOverlayRequest,
     origin: ChangeOrigin,
@@ -1087,14 +1057,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#construction.redoRegionOverlay(operationId);
     this.#refreshConstructionProjection(origin, `redo:${operationId}`);
   }
-  generateRegionPartition(request: GenerateRegionPartitionRequest, origin: ChangeOrigin, causeId: string): DiffOutcome {
-    this.#requireReady("painting a region");
-
-    const outcome = this.#construction.generateRegionPartition(request);
-    this.#foldDiffOutcome(outcome, origin, causeId);
-    return outcome;
-  }
-
   removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): RegionEditOutcome {
     this.#requireReady("removing a surface");
 

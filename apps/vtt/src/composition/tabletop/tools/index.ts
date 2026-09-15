@@ -36,10 +36,6 @@ export { wallPatch, type WallColumn, type WallContour } from "./walls/wall-patch
 export { wallSpans, type WallSpan } from "./walls/wall-spans.ts";
 export { fitPath, type FittedEdge } from "./core/stroke-fitting.ts";
 
-export { interiorWallTool } from "./house/interior-wall-tool.ts";
-export { houseRoomDeleteTool } from "./house/house-room-delete-tool.ts";
-export { cellsInPolygon, idPrefixForRoom, isRedundantPerimeterWall, type Vec2 as HouseVec2 } from "./house/interior-partition.ts";
-export { findEnclosingRoom, type DerivedRoom } from "./house/room-lookup.ts";
 
 export { openingTool } from "./openings/opening-tool.ts";
 export { panelRailOf, type PanelRail } from "./openings/panel-rail.ts";

@@ -21,7 +21,6 @@ import {
 const TYPE_BEARING_FIELDS = {
   "wall-brush": ["wallType"],
   "wall-line": ["wallType"],
-  "interior-wall": ["wallType"],
   "tower-stamp": ["wallType"],
   opening: ["openingType"],
   "terrain-sculpt": ["targetSurface"],
@@ -29,10 +28,9 @@ const TYPE_BEARING_FIELDS = {
 
 /**
  * Types the app's own generators emit without a preset field naming them:
- * the path brush's own product, and the caps and notch
- * `generateRegionPartition` produces for a generated interior.
+ * the path brush's own product.
  */
-const GENERATED_TYPES = ["path", "floor", "ceiling", "door"];
+const GENERATED_TYPES = ["path"];
 
 /** Presets, and near-miss names a preset might be tempted to become. */
 const PRESET_NAMES = ["tower", "house", "room", "fence", "building", "wall-brush", "wall-line"];

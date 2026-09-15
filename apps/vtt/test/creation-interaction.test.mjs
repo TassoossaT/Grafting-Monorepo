@@ -39,7 +39,7 @@ test("terrain over terrain restacks rather than overlaying a second lattice", ()
 });
 
 test("terrain refuses every non-ground type, not just walls", () => {
-  for (const covered of ["wall-gray", "door", "floor", "ceiling", "path"]) {
+  for (const covered of ["wall-gray", "door", "path"]) {
     assert.equal(
       resolveCreationInteraction("terrain", covered).kind,
       "forbid",
@@ -58,7 +58,7 @@ test("a path over a path is cut and regenerated as one formation", () => {
 });
 
 test("a panel never consumes what it stands on, whatever that is", () => {
-  for (const painted of ["wall-white", "wall-gray", "door", "floor", "ceiling"]) {
+  for (const painted of ["wall-white", "wall-gray", "door"]) {
     for (const under of ["terrain", "path", "wall-gray"]) {
       assert.equal(resolveCreationInteraction(painted, under).kind, "ignore");
     }

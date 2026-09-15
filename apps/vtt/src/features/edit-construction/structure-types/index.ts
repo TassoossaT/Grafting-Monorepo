@@ -46,8 +46,6 @@ export const STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[] = Ob
   panelStructureType("wall-gray", "Parede cinza", "one upright panel per contour edge, drawn or stamped"),
   panelStructureType("door", "Porta", "one face standing in an opening, on the rim the wall shares with it"),
   panelStructureType("window", "Janela", "one face standing in an opening, on the rim the wall shares with it"),
-  panelStructureType("floor", "Piso", "generateRegionPartition's per-region cap"),
-  panelStructureType("ceiling", "Teto", "generateRegionPartition's per-region cap"),
   organicStructureType(
     "terrain",
     "Terreno",

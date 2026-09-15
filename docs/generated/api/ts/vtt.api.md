@@ -468,15 +468,6 @@ One irregular quad grid, generated against the contours given -- what
 ground is made of, whether it is being created or regenerated. Pure: it
 reads nothing from the live graph and changes nothing in it.
 
-### `method vtt.tabletop-runtime.AppTabletopRuntime.generateRegionPartition(request: GenerateRegionPartitionRequest, origin: ChangeOrigin, causeId: string): DiffOutcome`
-
-One tick of a continuous cell-painting brush ("Pintar Casa," a
-wall-brush stroke's closure): regenerates the whole painted cell
-set's region partition and applies only the difference against what
-already exists -- walls/floors/ceilings can be added AND removed in
-the same call (a split moving, two regions merging). See
-`ConstructionSessionPort.generateRegionPartition`.
-
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.getAllRegionTopologies(): readonly ConstructionRegionTopology[]`
 
 Every region's boundary.
@@ -613,15 +604,6 @@ Passthrough to `TerrainNoisePort.generateHeightmap` -- see that port for paramet
 One irregular quad grid, generated against the contours given -- what
 ground is made of, whether it is being created or regenerated. Pure: it
 reads nothing from the live graph and changes nothing in it.
-
-### `method vtt.tabletop-runtime.TabletopRuntime.generateRegionPartition(request: GenerateRegionPartitionRequest, origin: ChangeOrigin, causeId: string): DiffOutcome`
-
-One tick of a continuous cell-painting brush ("Pintar Casa," a
-wall-brush stroke's closure): regenerates the whole painted cell
-set's region partition and applies only the difference against what
-already exists -- walls/floors/ceilings can be added AND removed in
-the same call (a split moving, two regions merging). See
-`ConstructionSessionPort.generateRegionPartition`.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.getAllRegionTopologies(): readonly ConstructionRegionTopology[]`
 
@@ -1410,8 +1392,6 @@ A face the table forbids -- a wall the brush centred on -- is left alone
 and reported in `skipped`, not thrown. The stroke still does everything
 else it was asked to.
 
-### `reference vtt.tools.HouseVec2 -> vtt.interior-partition.Vec2`
-
 ### `function vtt.boundary-edges.boundaryUsage(ctx: ToolContext): ReadonlyMap<string, readonly boolean[]>`
 
 Reads live edge use; the geometry policy itself remains feature-owned.
@@ -1784,111 +1764,6 @@ One failed stage, on the console, with everything known about it.
 Something a commit survived but should not have had to.
 
 ### `function vtt.tool-registry.toolFor(id: Id): ConstructionTool<Id>`
-
-### `variable vtt.house-room-delete-tool.houseRoomDeleteTool: ConstructionTool<"house-room-delete">`
-
-Two behaviors, picked by what the click actually landed on: a click
-directly on a wall panel (within `findWallSurfaceAt`'s own tolerance)
-removes just that one surface and any embedded opening (`door`, `window`)
-within it. A click anywhere else inside an enclosed room removes every
-wall and opening bounding it, via `findEnclosingRoom` (`room-lookup.ts`)
-turning the click into the room's boundary and roomSurfaceKeys
-discovering all live perimeter surfaces. A click that hits neither
-(open exterior space) is a no-op.
-
-### `function vtt.house-room-delete-tool.roomSurfaceKeys(ctx: Pick<ToolContext, "runtime">, room: DerivedRoom): readonly ConstructionSurfaceKey[]`
-
-Every bounding surface key for `room`: every upright wall panel and
-embedded opening (`door`, `window`) whose geometry lies along `room`'s
-outer perimeter.
-
-Walks the live surface registry (`getAllRegionTopologies` / `wallSpans`),
-matching wall spans and opening regions whose endpoints and midpoints sit
-within tolerance of the room's polygon boundary. This natively recovers
-notched wall runs (split into remainder/door/remainder pieces) and welded
-T-junction runs, replacing the legacy cycle reconstruction that could only
-delete plain 4-corner unnotched spans.
-
-### `type vtt.interior-partition.Vec2 = PointXZ`
-
-### `function vtt.interior-partition.cellsInPolygon(polygon: readonly PointXZ[], cellSize: number): { cells: readonly CellCoordinate[]; origin: PointXZ }`
-
-Every integer grid cell (in a local, `origin`-relative grid) whose own center falls inside `polygon`, plus the world-space `origin` that grid is anchored to.
-
-### `function vtt.interior-partition.idPrefixForRoom(tableId: string, bottomCycle: readonly string[]): string`
-
-A stable id prefix for one specific enclosed room, derived from its own boundary nodes -- re-clicking the same room regenerates/diffs against its own prior attempt (e.g. after changing `seed`) instead of stacking a duplicate.
-
-### `function vtt.interior-partition.isRedundantPerimeterWall(ctx: { runtime: Pick<TabletopRuntime, "getSnapshot"> & Partial<Pick<TabletopRuntime, "getAllRegionTopologies">> }, surfaceKey: readonly string[], polygon: readonly PointXZ[], tolerance: number): boolean`
-
-True if a wall panel's own midpoint (between its two vertical posts, not
-its 4 individual corners) sits within `tolerance` of the room's own true
-boundary -- see `interior-wall-tool.ts`'s own `BOUNDARY_DUPLICATE_TOLERANCE_CELLS`
-doc for why the region-partition algorithm's own redrawn perimeter needs
-filtering back out. The midpoint, not the corners, is what actually
-distinguishes a redundant duplicate (a short run that itself lies along
-the boundary) from a genuine interior partition wall that legitimately
-*starts and ends* on the boundary while cutting across open interior
-space in between -- checking corners alone would wrongly strip every
-ordinary wall-to-wall partition, since both its ends are expected to
-touch the boundary.
-
-### `variable vtt.interior-wall-tool.interiorWallTool: ConstructionTool<"interior-wall">`
-
-One click inside an already-enclosed space (any shape, any number of
-sides -- `findEnclosingRoom`'s own wall-follower algorithm, `"largest"`
-preference so a click still resolves to the structure's own outermost
-boundary even after it has already been subdivided once, not whatever
-smaller cell the click happens to land in) rasterizes that footprint
-into a `cellSize` grid and hands it to `generateRegionPartition` -- the
-same region-partition Rust algorithm the retired "Pintar Casa" brush
-drove one painted cell at a time, now driven by one click over an
-already-drawn footprint instead. A region larger than `maxRegionCells`
-auto-splits into more than one room; the same footprint reproduces the
-same layout for a given `seed` (see `idPrefixForRoom`), so clicking the
-same structure again after changing `seed`/`maxRegionCells` regenerates
-a different layout in place rather than stacking a duplicate. The
-engine's own floor/ceiling caps are NOT implemented as a front concept
-yet, but are not suppressed here either (`generate_and_apply_region_partition`
-has no opt-out for them -- see `apps/vtt/notes/0008-region-partition-needs-rework.md`,
-item 2).
-
-### `interface vtt.room-lookup.DerivedRoom`
-
-### `property vtt.room-lookup.DerivedRoom.bottomCycle: readonly string[]`
-
-### `property vtt.room-lookup.DerivedRoom.polygon: readonly PointXZ[]`
-
-### `property vtt.room-lookup.DerivedRoom.topCycle: readonly string[]`
-
-### `function vtt.room-lookup.findEnclosingRoom(ctx: ToolContext, click: ConstructionPosition, preference: "smallest" | "largest"): DerivedRoom | undefined`
-
-The smallest (or, with `preference: "largest"`, the largest) closed wall
-loop containing `click`, or `undefined` if no enclosed area was found
-there. Algorithm: every wall is an edge between its two bottom corner
-nodes (`wallSpans`). Tracing a planar graph's faces from a directed edge
-by always continuing to the next neighbour (sorted by angle) immediately
-after the reverse of the edge just arrived on is the standard
-"wall-follower" construction for extracting bounded regions from a
-straight-line graph -- but getting its clockwise/counter-clockwise
-convention right by construction is easy to get backwards. Rather than
-rely on that, this tries *both* directions of every wall as a starting
-edge and keeps whichever closed loops actually contain the click point
-(point-in-polygon) -- correct regardless of winding convention. Robust
-to a T-junction on one side (the loop just gets an extra colinear vertex
-there, which doesn't change area/containment).
-
-`preference` picks which of those candidate loops to return when more
-than one contains the click (nested rooms, or a room already subdivided
-by interior walls): `"smallest"` (the default -- right for
-`house-room-delete-tool.ts`'s "Apagar Cômodo," which must only ever
-touch the one room actually clicked) picks the innermost. `"largest"` is
-right for `interior-wall-tool.ts`'s "Gerar Interiores": a click inside a
-room it already subdivided must still resolve to that structure's own
-*outermost* boundary, not whatever smaller cell the click happens to
-land in after a prior generation -- otherwise regenerating (e.g. after
-changing the seed) only ever re-subdivides an already-subdivided sliver
-instead of the whole footprint again.
 
 ### `variable vtt.opening-tool.openingTool: ConstructionTool<"opening">`
 
@@ -2409,10 +2284,7 @@ simplification every other preview in this codebase already makes.
 ### `function vtt.wall-shared.findWallSurfaceAt(ctx: ToolContext, point: ConstructionPosition): ConstructionSurfaceKey | undefined`
 
 The wall panel whose own centerline `point` lands closest to (XZ only,
-within WALL_PICK_TOLERANCE), or `undefined` if none qualify --
-`house-room-delete-tool.ts`'s single-surface delete: a click that lands
-directly on a wall removes just that one panel, distinct from a click on
-open floor inside a room, which removes every wall bounding it instead.
+within WALL_PICK_TOLERANCE), or `undefined` if none qualify.
 
 ### `function vtt.wall-shared.snappedEndpoint(ctx: ToolContext, point: ConstructionPosition, correction: number): ConstructionPosition`
 
@@ -4718,34 +4590,6 @@ Rotation around world Y; ignored by circles.
 
 Convex footprint shared by terrain and path brushes.
 
-### `interface vtt.tool-types.InteriorGenerateParams`
-
-One click inside an already-enclosed space (any shape -- `findEnclosingRoom`'s
-own wall-follower algorithm, not limited to rectangles) rasterizes that
-space into a `cellSize` grid and hands it to the same region-partition
-algorithm `ConstructionSessionPort.generateRegionPartition` already
-exposes (the Rust side the retired "Pintar Casa" brush used to drive one
-cell at a time) -- see `composition/tabletop/tools/house/interior-wall-tool.ts`.
-A region larger than `maxRegionCells` auto-splits into more than one
-room, so the same enclosed footprint can regenerate into a different
-layout just by changing `seed`/`maxRegionCells`. No floor/ceiling
-(not implemented yet) -- only the generated cap surfaces are stripped
-back out client-side after the engine call.
-
-### `property vtt.tool-types.InteriorGenerateParams.cellSize: number`
-
-World-space side length of one grid cell.
-
-### `property vtt.tool-types.InteriorGenerateParams.maxRegionCells: number`
-
-A connected region larger than this many cells gets auto-split into more than one room.
-
-### `property vtt.tool-types.InteriorGenerateParams.seed: number`
-
-Drives the split layout's jitter -- the same enclosed footprint always reproduces the same rooms for a given seed.
-
-### `property vtt.tool-types.InteriorGenerateParams.wallType: "wall-white" | "wall-gray"`
-
 ### `interface vtt.tool-types.OpeningParams`
 
 One opening stamped onto a wall panel: a door or a window.
@@ -4854,10 +4698,6 @@ Perlin `scale` -- smaller values are smoother/larger-scale terrain features.
 
 ### `property vtt.tool-types.ToolParamsByTool.edit-region: { curveAction?: "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"; curveEndWidth?: number; curveMode?: "automatic" | "aligned" | "mirrored" | "free"; curveWidth?: number; mode: "shape" | "elevation" }`
 
-### `property vtt.tool-types.ToolParamsByTool.house-room-delete: NoToolParams`
-
-### `property vtt.tool-types.ToolParamsByTool.interior-wall: InteriorGenerateParams`
-
 ### `property vtt.tool-types.ToolParamsByTool.navigate: NoToolParams`
 
 ### `property vtt.tool-types.ToolParamsByTool.opening: OpeningParams`
@@ -4948,7 +4788,7 @@ Length of a panel's own vertical edge, in world units.
 
 ### `type vtt.tool-types.BrushShapeKind = "circle" | "square" | "hexagon"`
 
-### `type vtt.tool-types.ConstructionToolId = "navigate" | "edit-region" | "platform-contour" | "slope-ramp" | "slope-spiral" | "roof" | "path-brush" | "wall-brush" | "wall-line" | "interior-wall" | "tower-stamp" | "opening" | "house-room-delete" | "terrain-sculpt"`
+### `type vtt.tool-types.ConstructionToolId = "navigate" | "edit-region" | "platform-contour" | "slope-ramp" | "slope-spiral" | "roof" | "path-brush" | "wall-brush" | "wall-line" | "tower-stamp" | "opening" | "terrain-sculpt"`
 
 The construction-tool vocabulary every layer (widgets, composition) needs
 to agree on: which tools exist, what each one's parameters look like, and
@@ -5709,19 +5549,6 @@ One generic overlay whose geometry and affected regions were resolved by the app
 
 ### `property vtt.construction-session-port.ApplyRegionOverlayRequest.sourceSurfaceKeys: readonly ConstructionSurfaceKey[]`
 
-### `interface vtt.construction-session-port.CellCoordinate`
-
-One grid cell in a GenerateRegionPartitionRequest's own local grid
--- not world units (multiply by `cellSize` and offset by `origin` to get
-a world position). Generic on purpose (not house-specific): the app
-composition layer names a particular use of this "a house," but this
-port only knows about painted cells partitioned into rooms, the same way
-it only knows about "a wall," not "a bedroom wall."
-
-### `property vtt.construction-session-port.CellCoordinate.x: number`
-
-### `property vtt.construction-session-port.CellCoordinate.z: number`
-
 ### `interface vtt.construction-session-port.CloudOutcome`
 
 ### `property vtt.construction-session-port.CloudOutcome.surfaceKeys: readonly ConstructionSurfaceKey[]`
@@ -6190,8 +6017,6 @@ ConstructionIrregularQuadGrid for why that split is deliberate.
 triangulated. That is a refusal, not an error: a caller that gets one
 leaves what is standing alone rather than substituting something.
 
-### `method vtt.construction-session-port.ConstructionSessionPort.generateRegionPartition(request: GenerateRegionPartitionRequest): DiffOutcome`
-
 ### `method vtt.construction-session-port.ConstructionSessionPort.getAllRegionTopologies(): readonly ConstructionRegionTopology[]`
 
 Every region's boundary -- the edit-mode bootstrap call.
@@ -6290,8 +6115,6 @@ Pure cascade resolution, using one consistent engine state.
 Closes one of a face's openings back up, by index, reclaiming whatever rim nothing stands on anymore.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.removeSurface(request: RemoveSurfaceRequest): RegionEditOutcome`
-
-Unregisters a surface outright and prunes orphaned nodes from the graph.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.removeVertex(nodeId: string, weldedEdgeId: string): RegionEditOutcome`
 
@@ -6394,56 +6217,6 @@ be set to. Reported, never applied: the engine has no opinion on what a
 gap should be made of.
 
 ### `property vtt.construction-session-port.ConstructionUnfilledLoop.nodeIds: readonly string[]`
-
-### `interface vtt.construction-session-port.DiffOutcome`
-
-Every `generate*` mutation shares this outcome shape: the whole
-request's geometry was regenerated and diffed against whatever this
-structure already held, and only the difference applied.
-
-### `property vtt.construction-session-port.DiffOutcome.addedSurfaceKeys: readonly ConstructionSurfaceKey[]`
-
-### `property vtt.construction-session-port.DiffOutcome.removedNodeIds: readonly string[]`
-
-### `property vtt.construction-session-port.DiffOutcome.removedSurfaceKeys: readonly ConstructionSurfaceKey[]`
-
-### `interface vtt.construction-session-port.GenerateRegionPartitionRequest`
-
-One tick of a continuous cell-painting brush ("Pintar Casa," a
-wall-brush stroke's closure): the stroke's *whole* current accumulated
-cell set (not just what changed since the last tick), regenerated and
-diffed against whatever this structure already holds every call. Cells
-are auto-split into disjoint regions larger than `maxRegionCells`; every
-region gets its own per-cell floor/ceiling and a wall along every
-boundary run, notched where a run borders a neighboring region.
-
-### `property vtt.construction-session-port.GenerateRegionPartitionRequest.ceilingType: string`
-
-### `property vtt.construction-session-port.GenerateRegionPartitionRequest.cells: readonly CellCoordinate[]`
-
-### `property vtt.construction-session-port.GenerateRegionPartitionRequest.cellSize: number`
-
-### `property vtt.construction-session-port.GenerateRegionPartitionRequest.floorType: string`
-
-### `property vtt.construction-session-port.GenerateRegionPartitionRequest.idPrefix: string`
-
-Namespaces every id this call derives -- same stability contract as GeneratePathExtrusionRequest.idPrefix.
-
-### `property vtt.construction-session-port.GenerateRegionPartitionRequest.maxRegionCells: number`
-
-A connected region larger than this gets auto-split into more than one region.
-
-### `property vtt.construction-session-port.GenerateRegionPartitionRequest.notchType: string`
-
-### `property vtt.construction-session-port.GenerateRegionPartitionRequest.origin: ConstructionPosition`
-
-### `property vtt.construction-session-port.GenerateRegionPartitionRequest.seed: number`
-
-The same seed always reproduces the same split layout for the same cell set.
-
-### `property vtt.construction-session-port.GenerateRegionPartitionRequest.wallHeight: number`
-
-### `property vtt.construction-session-port.GenerateRegionPartitionRequest.wallType: string`
 
 ### `interface vtt.construction-session-port.RegionEditOutcome`
 
@@ -7744,10 +7517,7 @@ and `docs/research/vtt-reactive-construction-and-tiny-glade-ui-model.md`.
 
 Houses the 8 core construction verbs in a centered, glassmorphic dock:
 1. 🏠 Edifícios (Pincel Livre, Linha Reta -- manual free-form/exact
-   point-to-point walls; Gerar Interiores -- one click inside an
-   already-enclosed space auto-generates its interior partition via the
-   same region-partition algorithm the retired "Pintar Casa" brush used;
-   Torre -- one click stamps a closed circular footprint at a known
+   point-to-point walls; Torre -- one click stamps a closed circular footprint at a known
    preset radius, never freehand-drawn, see `tower-stamp-tool.ts`)
 2. 🚪 Aberturas (Portas & Janelas -- one click on a wall panel opens it
    and stands a face in the opening, see `opening-tool.ts`)
@@ -7757,12 +7527,7 @@ Houses the 8 core construction verbs in a centered, glassmorphic dock:
 5. ⛰️ Terreno & Água (Escultura de Terreno)
 6. 🌲 Vegetação (Adornos & Flora)
 7. 🎨 Estilo & Paleta (Materiais & Temas)
-8. 🔨 Demolir (Apagador de cômodos / elementos)
-
-The former "Pintar Casa"/"Carimbo de Sala"/"Derivar Sala" cell-grid/stamp
-tools and the separate "Muros" branch are retired -- the owner flagged the
-whole cell-grid-room model as the wrong idea; "Edifícios" now means the
-wall tools, formerly their own "Muros" entry.
+8. 🔨 Demolir (disabled until the generic delete tool exists)
 
 ### `function vtt.widgets.ConstructionHotbar(props: ConstructionHotbarProps): Element`
 

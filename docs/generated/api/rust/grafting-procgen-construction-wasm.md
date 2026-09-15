@@ -75,16 +75,6 @@ generated -- the creation-side counterpart to `region_topology_json`.
 The engine reports; the caller's own per-type table decides what to
 do about it. See `footprint::footprint_coverage`.
 
-### `pub fn grafting_procgen_construction_wasm::ConstructionSession::generate_and_apply_region_partition_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
-
-Regenerates a painted cell set's whole region partition (every
-region's own per-cell floor/ceiling, and a wall -- notched where a
-run borders a different region -- along every boundary run) and
-applies only the difference against whatever this structure already
-holds -- the "Pintar Casa" tool's per-tick commit, and (once a
-wall-brush stroke's path closes) the wall-brush's own closure
-commit. See `generation::generate_and_apply_region_partition`.
-
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::insert_vertex_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 `InsertVertex`. See `region_editing::apply_insert_vertex`.
@@ -209,9 +199,9 @@ boundary elsewhere on the map is none of its business. See
 ### `pub mod grafting_procgen_construction_wasm`
 
 Wasm bridge exposing `grafting-graph-core`'s construction operations and
-the terrain-generation/structure-generation crates' pure generators as
-one stateful `ConstructionSession` for the Web host. Pure wiring only --
-see this crate's `AGENTS.md` for the boundary this crate must not cross.
+the terrain-generation crate's pure generators as one stateful
+`ConstructionSession` for the Web host. Pure wiring only -- see this
+crate's `AGENTS.md` for the boundary this crate must not cross.
 
 ### `pub struct grafting_procgen_construction_wasm::ConstructionSession`
 

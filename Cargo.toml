@@ -11,7 +11,6 @@ members = [
     "libs/domains/procgen/discretize",
     "libs/domains/procgen/tileset-wfc",
     "libs/domains/procgen/terrain-generation",
-    "libs/domains/procgen/structure-generation",
     "libs/domains/procgen/surface-mesh",
     "libs/domains/procgen/curve-offset",
     "libs/domains/procgen/surface-transformations",

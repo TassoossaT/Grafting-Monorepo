@@ -94,99 +94,6 @@
           "implicitDependencies": []
         }
       },
-      "structure-generation": {
-        "name": "structure-generation",
-        "type": "lib",
-        "data": {
-          "root": "libs/domains/procgen/structure-generation",
-          "targets": {
-            "check": {
-              "cache": true,
-              "dependsOn": [
-                "^build"
-              ],
-              "executor": "nx:run-commands",
-              "inputs": [
-                "{projectRoot}/**/*",
-                "{workspaceRoot}/Cargo.toml",
-                "{workspaceRoot}/Cargo.lock",
-                "{workspaceRoot}/rust-toolchain.toml"
-              ],
-              "options": {
-                "command": "cargo check -p grafting-procgen-structure-generation"
-              },
-              "configurations": {},
-              "parallelism": true
-            },
-            "test": {
-              "cache": true,
-              "dependsOn": [
-                "^build"
-              ],
-              "executor": "nx:run-commands",
-              "inputs": [
-                "{projectRoot}/**/*",
-                "{workspaceRoot}/Cargo.toml",
-                "{workspaceRoot}/Cargo.lock",
-                "{workspaceRoot}/rust-toolchain.toml"
-              ],
-              "options": {
-                "command": "cargo test -p grafting-procgen-structure-generation"
-              },
-              "configurations": {},
-              "parallelism": true
-            },
-            "docs-generate": {
-              "executor": "nx:run-commands",
-              "cache": false,
-              "options": {
-                "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-procgen-structure-generation"
-              },
-              "configurations": {},
-              "parallelism": true
-            },
-            "docs-check": {
-              "executor": "nx:run-commands",
-              "cache": true,
-              "inputs": [
-                "{projectRoot}/src/**/*",
-                "{projectRoot}/Cargo.toml",
-                "{workspaceRoot}/Cargo.toml",
-                "{workspaceRoot}/tools/rust-public-api-toolchain.txt",
-                "{workspaceRoot}/docs/generated/api/rust/grafting-procgen-structure-generation.md",
-                "{workspaceRoot}/tools/scripts/generate-rust-api-docs.mjs",
-                "{workspaceRoot}/tools/rust-api-docgen/src/main.rs",
-                "sharedGlobals"
-              ],
-              "options": {
-                "command": "node tools/scripts/generate-rust-api-docs.mjs grafting-procgen-structure-generation --check"
-              },
-              "configurations": {},
-              "parallelism": true
-            }
-          },
-          "name": "structure-generation",
-          "projectType": "library",
-          "tags": [
-            "scope:procgen",
-            "lang:rust",
-            "platform:cross",
-            "type:lib"
-          ],
-          "metadata": {
-            "graphIr": {
-              "id": "structure-generation",
-              "kind": "lib",
-              "tags": [
-                "scope:procgen",
-                "lang:rust",
-                "platform:cross"
-              ]
-            }
-          },
-          "implicitDependencies": []
-        }
-      },
       "terrain-generation": {
         "name": "terrain-generation",
         "type": "lib",
@@ -3292,7 +3199,6 @@
     },
     "dependencies": {
       "surface-transformations": [],
-      "structure-generation": [],
       "terrain-generation": [],
       "construction-wasm": [],
       "generation-wasm": [],

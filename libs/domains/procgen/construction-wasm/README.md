@@ -2,8 +2,7 @@
 
 Wasm bridge exposing `grafting-graph-core`'s construction operations
 (`move_node`/`delete_node`/`merge_surfaces`/`split_surface`/`duplicate_surface`)
-and the `grafting-procgen-terrain-generation`/`grafting-procgen-structure-generation`
-crates' pure generators as one stateful `ConstructionSession` for the Web
+and the `grafting-procgen-terrain-generation` crate's pure generators as one stateful `ConstructionSession` for the Web
 host -- born under `libs/domains/procgen` per `GRAFTING_MASTER_SOURCE.md`
 §4.4 (DEC-046, routed to `docs/architecture/boundaries.md`), since none of
 the three wrapped inputs are VTT- or Architecture-Studio-exclusive. This is

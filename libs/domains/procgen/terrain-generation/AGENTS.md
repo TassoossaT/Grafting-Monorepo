@@ -21,10 +21,7 @@ needs. It does not:
   (first creation via `add_node`/`add_edge`/`SurfaceRegistry::add_surface`,
   or an edit via the existing operations) is a future orchestration layer's
   job, not this crate's;
-- know anything about walls, doors, or any other non-terrain domain -- that
-  is `grafting-procgen-structure-generation`'s job, a separate crate with no
-  dependency on this one, so the two domains stay isolated at the
-  crate-dependency-graph level, not just by convention.
+- know anything about walls, doors, or any other non-terrain domain.
 
 ## Scope of this first version
 

@@ -4,7 +4,6 @@ export type {
   BrushShapeKind,
   BrushShapeParams,
   ConstructionToolId,
-  InteriorGenerateParams,
   NoToolParams,
   OpeningParams,
   PathBrushParams,

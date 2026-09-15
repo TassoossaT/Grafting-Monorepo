@@ -16,7 +16,6 @@ use grafting_graph_core::{ContourTopology, Graph, RegionId, SurfaceRegistry, Sur
 use crate::editing::{self, SessionGraph};
 use crate::enclosure;
 use crate::footprint;
-use crate::generation;
 use crate::geometry::connected_component;
 use crate::grid_generation;
 use crate::mesh::{self, region_id_to_wire};
@@ -526,37 +525,6 @@ impl ConstructionSession {
         self.swap_state(&mut entry.state);
         self.region_overlay_undo.push(entry);
         Ok(())
-    }
-
-    /// Regenerates a painted cell set's whole region partition (every
-    /// region's own per-cell floor/ceiling, and a wall -- notched where a
-    /// run borders a different region -- along every boundary run) and
-    /// applies only the difference against whatever this structure already
-    /// holds -- the "Pintar Casa" tool's per-tick commit, and (once a
-    /// wall-brush stroke's path closes) the wall-brush's own closure
-    /// commit. See `generation::generate_and_apply_region_partition`.
-    pub fn generate_and_apply_region_partition_json(
-        &mut self,
-        request_json: &str,
-    ) -> Result<String, JsValue> {
-        let request = parse(request_json)?;
-        let response = generation::generate_and_apply_region_partition(
-            &mut self.graph,
-            &mut self.surfaces,
-            &mut self.topology,
-            &self.known_regions,
-            request,
-        )
-        .map_err(to_js_error)?;
-        for wire_key in &response.removed_surface_keys {
-            self.known_regions
-                .remove(&mesh::region_id_from_wire(wire_key).map_err(to_js_error)?);
-        }
-        for wire_key in &response.added_surface_keys {
-            self.known_regions
-                .insert(mesh::region_id_from_wire(wire_key).map_err(to_js_error)?);
-        }
-        serialize(&response)
     }
 
     // ---- Clouds ----
