@@ -5,6 +5,7 @@ import type { ConstructionEdgeGeometry, ConstructionGraphSnapshot, ConstructionP
 // test reaches has to spell out any import it needs at run time.
 import {
   edgeUseCounts,
+  positionAlongEdge,
   resolvePolicy,
   resolveCurves,
   spineGraphFromSnapshot,
@@ -86,34 +87,8 @@ function tessellateForOverlay(
 ): readonly ConstructionPosition[] {
   if (geometry.kind === "line") return [start, end];
   const points: ConstructionPosition[] = [];
-  if (geometry.kind === "arc") {
-    const { center, clockwise } = geometry;
-    const radius = Math.hypot(start.x - center[0], start.z - center[1]);
-    const startAngle = Math.atan2(start.z - center[1], start.x - center[0]);
-    const endAngle = Math.atan2(end.z - center[1], end.x - center[0]);
-    const tau = Math.PI * 2;
-    const rawSweep = clockwise ? -((startAngle - endAngle + tau) % tau) : (endAngle - startAngle + tau) % tau;
-    const sweep = Math.abs(rawSweep) < 1e-9 ? (clockwise ? -tau : tau) : rawSweep;
-    for (let index = 0; index <= OVERLAY_CURVE_STEPS; index += 1) {
-      const t = index / OVERLAY_CURVE_STEPS;
-      const angle = startAngle + sweep * t;
-      points.push({ x: center[0] + radius * Math.cos(angle), y: start.y + (end.y - start.y) * t, z: center[1] + radius * Math.sin(angle) });
-    }
-    return points;
-  }
-  const { handle1, handle2 } = geometry;
   for (let index = 0; index <= OVERLAY_CURVE_STEPS; index += 1) {
-    const t = index / OVERLAY_CURVE_STEPS;
-    const u = 1 - t;
-    const a = u * u * u;
-    const b = 3 * u * u * t;
-    const c = 3 * u * t * t;
-    const d = t * t * t;
-    points.push({
-      x: a * start.x + b * handle1[0] + c * handle2[0] + d * end.x,
-      y: start.y + (end.y - start.y) * t,
-      z: a * start.z + b * handle1[1] + c * handle2[1] + d * end.z,
-    });
+    points.push(positionAlongEdge(geometry, start, end, index / OVERLAY_CURVE_STEPS));
   }
   return points;
 }

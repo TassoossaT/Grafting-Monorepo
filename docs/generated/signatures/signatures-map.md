@@ -4068,7 +4068,7 @@ export function weldedMerge(
   stroke: readonly DirectedContourEdge[],
   ): WeldedMergeResult {
   const declared = [...standing, ...stroke];
-  const buckets = new Map<string, DirectedContourEdge[]>();
+  const pairGroups = new Map<string, { readonly canonical: ConstructionEdgeGeometry; readonly edges: DirectedContourEdge[] }[]>();
 export function loopSignedArea(loop: readonly DirectedContourEdge[], positionOf: (id: string) => readonly [number, number]): number {
   let area = 0;
   for (const edge of loop) {
@@ -5774,6 +5774,12 @@ export interface BoundaryEdges {
 export function reverseGeometry(geometry: ConstructionEdgeGeometry): ConstructionEdgeGeometry {
   if (geometry.kind === "line") return geometry;
   if (geometry.kind === "bezier") return { kind: "bezier", handle1: geometry.handle2, handle2: geometry.handle1 };
+export function sameGeometry(a: ConstructionEdgeGeometry, b: ConstructionEdgeGeometry): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === "line") return true;
+  if (a.kind === "arc" && b.kind === "arc") {
+  return a.clockwise === b.clockwise && a.center[0] === b.center[0] && a.center[1] === b.center[1];
+  }
 export function createBoundaryEdges(tableId: string, sharing: EdgeSharing): BoundaryEdges {
   const edges = new Map<ConstructionEdgeId, ConstructionPatchEdge>();
 
@@ -5822,11 +5828,52 @@ export function cloudNodes(
   ): readonly { readonly id: string; readonly position: { readonly x: number; readonly y: number; readonly z: number } }[] {
   const byId = new Map<string, { readonly id: string; readonly position: { readonly x: number; readonly y: number; readonly z: number } }>();
 
+// src/features/edit-construction/topology/edge-geometry.ts
+export function angleAround(center: readonly [number, number], x: number, z: number): number {
+  return Math.atan2(z - center[1], x - center[0]);
+export function arcSweep(from: number, to: number, clockwise: boolean): number {
+  return clockwise ? -wrapPositive(from - to) : wrapPositive(to - from);
+export function bezierPointXz(
+  start: ConstructionPosition,
+  handle1: readonly [number, number],
+  handle2: readonly [number, number],
+  end: ConstructionPosition,
+  t: number,
+  ): readonly [number, number] {
+  const u = 1 - t;
+export function positionAlongEdge(
+  geometry: ConstructionEdgeGeometry,
+  start: ConstructionPosition,
+  end: ConstructionPosition,
+  t: number,
+  ): ConstructionPosition {
+  const y = start.y + (end.y - start.y) * t;
+  if (geometry.kind === "line") {
+export interface EdgeFrame {
+  /** Total run in world units. */
+  readonly length: number;
+  /** Distance along the edge (clamped to `[0, length]`) closest to `(x, z)`. */
+  travelTo(x: number, z: number): number;
+  /** XZ position at `travel` (clamped to `[0, length]`). */
+  positionAt(travel: number): readonly [number, number];
+  /** The edge's own parameter `t` in `[0, 1]` at `travel` -- uniform for a line or arc, sampled for a Bezier. */
+export function edgeFrame(geometry: ConstructionEdgeGeometry, start: ConstructionPosition, end: ConstructionPosition): EdgeFrame {
+  if (geometry.kind === "arc") return arcFrame(geometry, start, end) ?? chordFrame(start, end);
+export function subGeometry(
+  geometry: ConstructionEdgeGeometry,
+  start: ConstructionPosition,
+  end: ConstructionPosition,
+  t0: number,
+  t1: number,
+  ): ConstructionEdgeGeometry {
+  if (geometry.kind !== "bezier") return geometry;
+
 // src/features/edit-construction/topology/index.ts
 export type { CloudSource, CloudTopology, ConstructionCloud } from "./construction-cloud.ts";
 export type { PerimeterLoop } from "./surface-perimeter.ts";
 export type { FittedEdge, FitOptions } from "./stroke-fitting.ts";
 export type { BoundaryEdges, EdgeSharing } from "./boundary-edges.ts";
+export type { EdgeFrame } from "./edge-geometry.ts";
 export type { SweptArc, TransverseProfilePoint } from "./sweep-formation.ts";
 export type { RibbonRequest } from "./bezier-curve.ts";
 

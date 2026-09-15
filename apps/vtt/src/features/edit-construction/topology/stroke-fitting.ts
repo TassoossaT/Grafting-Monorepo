@@ -1,5 +1,7 @@
 import type { ConstructionEdgeGeometry, ConstructionPosition } from "@/ports"; // Generic stroke geometry capability.
 
+import { angleAround as angleAroundXz, arcSweep } from "./edge-geometry.ts";
+
 /**
  * One fitted edge of a stroke: an endpoint pair plus the contour geometry
  * that actually explains the samples between them -- a straight chord, or a
@@ -45,13 +47,12 @@ function perpendicularDistance(point: ConstructionPosition, a: ConstructionPosit
 
 /** Angle of `point` around `center`, in the same XZ convention the graph's own arc evaluation uses (`atan2(z, x)`). */
 function angleAround(center: readonly [number, number], point: ConstructionPosition): number {
-  return Math.atan2(point.z - center[1], point.x - center[0]);
+  return angleAroundXz(center, point.x, point.z);
 }
 
 /** Counter-clockwise sweep from `from` to `to`, always in `[0, 2*PI)`. */
 function counterClockwiseSweep(from: number, to: number): number {
-  const sweep = (to - from) % (Math.PI * 2);
-  return sweep < 0 ? sweep + Math.PI * 2 : sweep;
+  return arcSweep(from, to, false);
 }
 
 /**

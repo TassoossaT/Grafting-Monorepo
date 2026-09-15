@@ -26,8 +26,12 @@ const OPENING_COLOR: Record<OpeningParams["openingType"], number> = {
   door: 0xd97706,
 };
 
-/** The four corners of an opening, in the order its own face walks them. */
-function rimCorners(rail: PanelRail, at: number, params: OpeningParams): readonly ConstructionPosition[] | undefined {
+/** The four corners of an opening, in the order its own face walks them, plus the travel span they sit on -- needed to declare the rim's own bottom edge with {@link PanelRail.geometryBetween} rather than the whole rail's curvature. */
+function rimCorners(
+  rail: PanelRail,
+  at: number,
+  params: OpeningParams,
+): { readonly corners: readonly ConstructionPosition[]; readonly from: number; readonly to: number } | undefined {
   const half = params.width / 2;
   const from = Math.max(MARGIN, Math.min(at - half, rail.length - MARGIN - params.width));
   const to = from + params.width;
@@ -39,12 +43,16 @@ function rimCorners(rail: PanelRail, at: number, params: OpeningParams): readonl
   const top = bottom + params.height;
   if (top > rail.topY - MARGIN) return undefined;
 
-  return [
-    rail.positionAt(from, bottom),
-    rail.positionAt(to, bottom),
-    rail.positionAt(to, top),
-    rail.positionAt(from, top),
-  ];
+  return {
+    corners: [
+      rail.positionAt(from, bottom),
+      rail.positionAt(to, bottom),
+      rail.positionAt(to, top),
+      rail.positionAt(from, top),
+    ],
+    from,
+    to,
+  };
 }
 
 /**
@@ -102,8 +110,8 @@ export const openingTool: ConstructionTool<"opening"> = {
       runPrefix: idPrefix,
       existingUses: boundaryUsage(ctx),
     });
-    const bottomGeometry = placed.rail.geometry;
-    const topGeometry = reverseGeometry(placed.rail.geometry);
+    const bottomGeometry = placed.rail.geometryBetween(placed.from, placed.to);
+    const topGeometry = reverseGeometry(bottomGeometry);
     const boundary: ConstructionOrientedEdgeUse[] = [
       edges.use(nodes[0]!.id, nodes[1]!.id, bottomGeometry),
       edges.use(nodes[1]!.id, nodes[2]!.id),
@@ -151,6 +159,8 @@ interface Placement {
   readonly surfaceKey: ConstructionSurfaceKey;
   readonly corners: readonly ConstructionPosition[];
   readonly rail: PanelRail;
+  readonly from: number;
+  readonly to: number;
 }
 
 /**
@@ -186,6 +196,6 @@ function resolvePlacement(
   if (topology === undefined) return undefined;
   const rail = panelRailOf(topology);
   if (rail === undefined) return undefined;
-  const corners = rimCorners(rail, rail.travelTo(sample.point), params);
-  return corners === undefined ? undefined : { surfaceKey, corners, rail };
+  const placed = rimCorners(rail, rail.travelTo(sample.point), params);
+  return placed === undefined ? undefined : { surfaceKey, corners: placed.corners, rail, from: placed.from, to: placed.to };
 }
