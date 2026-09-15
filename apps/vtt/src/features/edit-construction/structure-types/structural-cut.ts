@@ -1,3 +1,4 @@
+import type { PlanarArea } from "../topology/planar-area.ts";
 /**
  * Generic Structural Cut & Regeneration Operations
  *
@@ -40,13 +41,12 @@ export type CutProfile =
       readonly kind: "hole";
     };
 
-import type { MultiPolygon } from "polygon-clipping";
 
 export interface StructuralCutArea {
   /** The 2D outline of the cut area on the XZ plane. */
   readonly outline?: readonly (readonly [number, number])[];
-  /** Optional pre-computed MultiPolygon for the cut or brush area. */
-  readonly sweptPolygon?: MultiPolygon;
+  /** Optional pre-computed PlanarArea for the cut or brush area. */
+  readonly sweptPolygon?: PlanarArea;
   /** 3D center point of the cut/brush/explosion in world coordinates. */
   readonly center?: { readonly x: number; readonly y: number; readonly z: number };
   /** Stroke path / polyline trajectory in world coordinates (for brush strokes, trenches, mountain ridges). */
@@ -70,7 +70,7 @@ export interface StructuralCutRequest {
     readonly surfaceType: string;
   }[];
   /** Ground vacated by an acting structure (e.g. road moved off) to be restored as terrain. */
-  readonly vacatedArea?: MultiPolygon;
+  readonly vacatedArea?: PlanarArea;
   /** Optional noise function for base terrain when expanding onto empty ground. */
   readonly noiseAt?: (point: { readonly x: number; readonly z: number }) => number;
 }

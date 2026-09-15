@@ -3,7 +3,6 @@ import type { TerrainSculptParams } from "@/features/edit-construction";
 import type {
   ConstructionCoveredRegion,
 } from "@/ports";
-import type { MultiPolygon } from "polygon-clipping";
 
 import { brushSweptOutlinePolygons, brushSweptRegionFill } from "../shapes/preview-shapes.ts";
 import { dirtLoadOver, restackTerrain } from "../../terrain/terrain-restack.ts";
@@ -11,6 +10,7 @@ import { OUTLINE_CHORD_PER_FACE } from "../../terrain/terrain-constraints.ts";
 import type { TerrainStrokeBounds } from "../../terrain/terrain-neighborhood.ts";
 import { executeTerrainCut } from "../../terrain/terrain-cut-executor.ts";
 import type { ConstructionTool, ToolContext, ToolGesture } from "../core/tool-context.ts";
+import type { PlanarArea } from "@/features/edit-construction";
 
 /**
  * How this tool works.
@@ -127,7 +127,7 @@ function strokeChord(params: TerrainSculptParams): number {
 
 function coveredByStroke(
   ctx: ToolContext,
-  swept: MultiPolygon,
+  swept: PlanarArea,
 ): readonly ConstructionCoveredRegion[] {
   const merged = new Map<string, ConstructionCoveredRegion>();
   for (const polygon of swept) {
@@ -142,7 +142,7 @@ function coveredByStroke(
 
 
 /** The axis-aligned extent of a swept stroke, in XZ. */
-function boundsOf(swept: MultiPolygon): TerrainStrokeBounds {
+function boundsOf(swept: PlanarArea): TerrainStrokeBounds {
   let minX = Infinity;
   let minZ = Infinity;
   let maxX = -Infinity;

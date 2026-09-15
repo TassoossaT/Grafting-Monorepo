@@ -1013,7 +1013,7 @@ quadrangulation put a midpoint on each of the pieces, so an edge of the
 neighbour can owe two or three nodes, and they have to be inserted in the
 order they sit -- each split shortens what is left to split.
 
-### `function vtt.terrain-cut-executor.buildConstraintRings(targetPolygon: MultiPolygon, faceSize: number, perimeters: ConstraintTable): readonly (ConstraintRing & { isHole: boolean })[]`
+### `function vtt.terrain-cut-executor.buildConstraintRings(targetPolygon: PlanarArea, faceSize: number, perimeters: ConstraintTable): readonly (ConstraintRing & { isHole: boolean })[]`
 
 Giving the boolean's output its identity back.
 
@@ -1217,7 +1217,7 @@ Nodes that wanted a neighbour's edge split and did not get it -- one T-junction 
 
 ### `interface vtt.terrain-fill.TerrainFillRequest`
 
-### `property vtt.terrain-fill.TerrainFillRequest.avoidArea?: MultiPolygon`
+### `property vtt.terrain-fill.TerrainFillRequest.avoidArea?: PlanarArea`
 
 Obstacle or road polygons whose interior must never contain any generated terrain face.
 
@@ -2112,7 +2112,7 @@ Squared 2D Euclidean distance on the XZ plane (avoids square root for comparison
 
 Preview-only outline for any convex brush shape supported by the Rust contract.
 
-### `function vtt.preview-shapes.brushSweptOutlinePolygons(samples: readonly ConstructionPosition[], radius: number, chord: number): MultiPolygon`
+### `function vtt.preview-shapes.brushSweptOutlinePolygons(samples: readonly ConstructionPosition[], radius: number, chord: number): PlanarArea`
 
 The swept area of a circular brush stroke, as real 2D polygons (XZ).
 
@@ -3574,7 +3574,7 @@ A road's band ribbons unioned in plan through the shared curve module.
 
 ### `property vtt.contour-patch.ExistingNode.position: ConstructionPosition`
 
-### `function vtt.contour-patch.buildContourPatch(tableId: string, operationId: string, surfaceType: string, bandIndex: number, shapes: MultiPolygon, heightSamples: readonly ConstructionPosition[], referenceCurves: readonly ReferenceCurve[], existingNodes: readonly ExistingNode[], existingEdgeUses: ReadonlyMap<string, readonly boolean[]>): ContourPatchResult`
+### `function vtt.contour-patch.buildContourPatch(tableId: string, operationId: string, surfaceType: string, bandIndex: number, shapes: PlanarArea, heightSamples: readonly ConstructionPosition[], referenceCurves: readonly ReferenceCurve[], existingNodes: readonly ExistingNode[], existingEdgeUses: ReadonlyMap<string, readonly boolean[]>): ContourPatchResult`
 
 Turns one band layer's unioned shapes into a `ConstructionPatch` -- the
 same kind of conversion the retired station-sweep engine's own patch
@@ -4324,9 +4324,9 @@ Stroke path / polyline trajectory in world coordinates (for brush strokes, trenc
 
 Radius of influence around center or stroke path.
 
-### `property vtt.structural-cut.StructuralCutArea.sweptPolygon?: MultiPolygon`
+### `property vtt.structural-cut.StructuralCutArea.sweptPolygon?: PlanarArea`
 
-Optional pre-computed MultiPolygon for the cut or brush area.
+Optional pre-computed PlanarArea for the cut or brush area.
 
 ### `interface vtt.structural-cut.StructuralCutOutcome`
 
@@ -4366,7 +4366,7 @@ Optional noise function for base terrain when expanding onto empty ground.
 
 ### `property vtt.structural-cut.StructuralCutRequest.targetSurfaceType: string`
 
-### `property vtt.structural-cut.StructuralCutRequest.vacatedArea?: MultiPolygon`
+### `property vtt.structural-cut.StructuralCutRequest.vacatedArea?: PlanarArea`
 
 Ground vacated by an acting structure (e.g. road moved off) to be restored as terrain.
 
@@ -4509,7 +4509,7 @@ to its own working extent, rather than trusting paintedLoops to be
 the right *scope* -- those are assembled by whoever dispatched the cut and
 may reach further than the ground being regrown.
 
-### `property vtt.structure-type.CutFallout.vacatedGround?: MultiPolygon`
+### `property vtt.structure-type.CutFallout.vacatedGround?: PlanarArea`
 
 Ground vacated by the painter that should be restored to terrain.
 
@@ -5272,6 +5272,30 @@ curve entirely -- this is what an opening stamped onto a curved wall
 needs to place its own rim edge correctly, via two de Casteljau splits
 (isolate `[t0, 1]`, then take `[0, t1']` of that in its own local
 parameter) instead of borrowing the whole rail's handles unchanged.
+
+### `type vtt.planar-area.PlanarArea = readonly PlanarPolygon[]`
+
+Any number of disjoint polygons.
+
+### `type vtt.planar-area.PlanarPoint = readonly [number, number]`
+
+One `[x, z]` point.
+
+### `type vtt.planar-area.PlanarPolygon = ConstructionPlanarShape`
+
+One polygon: its outer ring first, then any holes. Same shape as the engine's planar shape.
+
+### `type vtt.planar-area.PlanarRing = readonly PlanarPoint[]`
+
+A ring of points; a closed ring repeats its first point last.
+
+### `function vtt.planar-area.planarDifference(subject: ConstructionPlanarShape | PlanarArea, clips: readonly (ConstructionPlanarShape | PlanarArea)[]): PlanarArea`
+
+`subject` with every clip taken out of it. Throws where the library cannot resolve the input.
+
+### `function vtt.planar-area.planarUnion(first: ConstructionPlanarShape | PlanarArea, rest: readonly (ConstructionPlanarShape | PlanarArea)[]): PlanarArea`
+
+The union of every polygon or area given. Throws where the library cannot resolve the input.
 
 ### `function vtt.ring-simplify.simplifyClosedRing(points: readonly ConstructionPosition[], geometryFor: (fromIndex: number, toIndex: number) => ConstructionEdgeGeometry | undefined): readonly number[]`
 

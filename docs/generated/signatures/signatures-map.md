@@ -3668,7 +3668,7 @@ export function adoptContourNodes(
 
 // src/composition/tabletop/terrain/terrain-cut-executor.ts
 export function buildConstraintRings(
-  targetPolygon: MultiPolygon,
+  targetPolygon: PlanarArea,
   faceSize: number,
   perimeters: ConstraintTable,
   ): readonly (ConstraintRing & { readonly isHole: boolean })[] {
@@ -5174,7 +5174,7 @@ export function buildContourPatch(
   operationId: string,
   surfaceType: string,
   bandIndex: number,
-  shapes: MultiPolygon,
+  shapes: PlanarArea,
   heightSamples: readonly ConstructionPosition[],
   referenceCurves: readonly ReferenceCurve[],
 
@@ -5571,8 +5571,8 @@ export type CutProfile =
 export interface StructuralCutArea {
   /** The 2D outline of the cut area on the XZ plane. */
   readonly outline?: readonly (readonly [number, number])[];
-  /** Optional pre-computed MultiPolygon for the cut or brush area. */
-  readonly sweptPolygon?: MultiPolygon;
+  /** Optional pre-computed PlanarArea for the cut or brush area. */
+  readonly sweptPolygon?: PlanarArea;
   /** 3D center point of the cut/brush/explosion in world coordinates. */
   readonly center?: { readonly x: number; readonly y: number; readonly z: number };
 export interface StructuralCutRequest {
@@ -5923,6 +5923,17 @@ export type { FittedEdge, FitOptions } from "./stroke-fitting.ts";
 export type { BoundaryEdges, EdgeSharing } from "./boundary-edges.ts";
 export type { EdgeFrame } from "./edge-geometry.ts";
 export type { RibbonRequest } from "./bezier-curve.ts";
+export type { PlanarArea, PlanarPoint, PlanarPolygon, PlanarRing } from "./planar-area.ts";
+
+// src/features/edit-construction/topology/planar-area.ts
+export type PlanarPoint = readonly [number, number];
+export type PlanarRing = readonly PlanarPoint[];
+export type PlanarPolygon = ConstructionPlanarShape;
+export type PlanarArea = readonly PlanarPolygon[];
+export function planarUnion(first: PlanarPolygon | PlanarArea, ...rest: readonly (PlanarPolygon | PlanarArea)[]): PlanarArea {
+  return fromLibrary(polygonClipping.union(asGeom(first), ...rest.map(asGeom)));
+export function planarDifference(subject: PlanarPolygon | PlanarArea, ...clips: readonly (PlanarPolygon | PlanarArea)[]): PlanarArea {
+  return fromLibrary(polygonClipping.difference(asGeom(subject), ...clips.map(asGeom)));
 
 // src/features/edit-construction/topology/ring-simplify.ts
 export function simplifyClosedRing(

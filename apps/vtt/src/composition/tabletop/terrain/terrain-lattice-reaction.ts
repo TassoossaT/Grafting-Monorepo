@@ -10,7 +10,6 @@ import type {
   ConstructionTopologyBoundsQuery,
 } from "@/ports";
 import type { CutFallout, Effect, Reaction, ReactionOutcome } from "@/features/edit-construction";
-import polygonClipping, { type MultiPolygon, type Polygon } from "polygon-clipping";
 
 import {
   planTerrainCloudCutRepair,
@@ -20,6 +19,8 @@ import {
 import { timePhase } from "../commit-timing.ts";
 import { paintedFalloutOf } from "../interference/painted-topologies.ts";
 import { repairTerrainCut, type TerrainRegenerateRuntime } from "./terrain-regenerate.ts";
+import { planarUnion, planarDifference } from "../../../features/edit-construction/index.ts";
+import type { PlanarArea, PlanarPolygon } from "@/features/edit-construction";
 
 /**
  * The `"lattice-regenerate"` reaction: how a ground cloud answers a change
@@ -119,8 +120,8 @@ function hasNodeIn(topology: ConstructionRegionTopology, bounds: ConstructionTop
  */
 const REALLY_MOVED = 0.05;
 
-function areaPolygonsOf(topologies: readonly ConstructionRegionTopology[]): Polygon[] {
-  const polygons: Polygon[] = [];
+function areaPolygonsOf(topologies: readonly ConstructionRegionTopology[]): PlanarPolygon[] {
+  const polygons: PlanarPolygon[] = [];
   for (const topology of topologies) {
     const at = new Map<string, { x: number; z: number }>();
     for (const node of topology.nodes) at.set(node.id, { x: node.position.x, z: node.position.z });
@@ -145,16 +146,16 @@ function areaPolygonsOf(topologies: readonly ConstructionRegionTopology[]): Poly
   return polygons;
 }
 
-function unionOf(polygons: readonly Polygon[]): MultiPolygon {
+function unionOf(polygons: readonly PlanarPolygon[]): PlanarArea {
   if (polygons.length === 0) return [];
   try {
-    return polygonClipping.union(polygons[0]!, ...polygons.slice(1));
+    return planarUnion(polygons[0]!, ...polygons.slice(1));
   } catch {
     return [];
   }
 }
 
-function widthOfPiece(piece: MultiPolygon[number]): number {
+function widthOfPiece(piece: PlanarArea[number]): number {
   let area = 0;
   let perimeter = 0;
   for (const ring of piece) {
@@ -172,14 +173,14 @@ function widthOfPiece(piece: MultiPolygon[number]): number {
 function groundMovedOff(
   before: readonly ConstructionRegionTopology[],
   after: readonly ConstructionRegionTopology[],
-): MultiPolygon {
+): PlanarArea {
   const was = unionOf(areaPolygonsOf(before));
   const is = unionOf(areaPolygonsOf(after));
   if (was.length === 0) return [];
   if (is.length === 0) return was;
-  let moved: MultiPolygon;
+  let moved: PlanarArea;
   try {
-    moved = polygonClipping.difference(was, is);
+    moved = planarDifference(was, is);
   } catch {
     return was;
   }
@@ -187,7 +188,7 @@ function groundMovedOff(
 }
 
 /** Even-odd across every ring of a multipolygon, holes included. */
-function insideAny(x: number, z: number, polygon: MultiPolygon): boolean {
+function insideAny(x: number, z: number, polygon: PlanarArea): boolean {
   for (const piece of polygon) {
     let crossings = 0;
     for (const ring of piece) {

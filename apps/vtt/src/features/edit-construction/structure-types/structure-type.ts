@@ -12,7 +12,7 @@ import type { AtomicEditOp, EditAxis, EditGesture, EditTarget } from "../orchest
 import type { CloudTopology } from "../topology/construction-cloud.ts";
 import type { CreationInteraction } from "./creation-interaction.ts";
 import type { EffectKind, ReactionId } from "../effects/effect.ts";
-import type { MultiPolygon } from "polygon-clipping";
+import type { PlanarArea } from "../topology/planar-area.ts";
 
 /**
  * A role is this app's own name for "what a particular node/edge of a
@@ -173,7 +173,7 @@ export interface CutFallout {
    */
   readonly painterSurfaceType?: string;
   /** Ground vacated by the painter that should be restored to terrain. */
-  readonly vacatedGround?: MultiPolygon;
+  readonly vacatedGround?: PlanarArea;
 }
 
 /** What a spine owner is handed to regenerate its surface after a spine edit. */
