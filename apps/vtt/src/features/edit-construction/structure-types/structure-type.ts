@@ -1,4 +1,4 @@
-import type { ApplyPatchReplacementRequest, BezierPort, ConstructionGraphPatch, ConstructionMotionInfluence } from "@/ports";
+import type { ApplyPatchReplacementRequest, BezierPort, ConstructionEdgeGeometry, ConstructionGraphPatch, ConstructionMotionInfluence } from "@/ports";
 import type {
   ConstructionGraphSnapshot,
   ConstructionNodeId,
@@ -76,6 +76,21 @@ export interface RolePolicy {
    * scaled or cross-axis variant.
    */
   readonly cascade?: (context: CascadeContext) => readonly AtomicEditOp[];
+  /**
+   * Present when the grabbed edge's curve may be reshaped through a curve
+   * handle, returning the extra ops that reshape alongside it in the same
+   * transaction -- a wall's top run following its bottom run. Absent means
+   * the edge keeps the curve it has.
+   */
+  readonly reshape?: (context: ReshapeContext) => readonly AtomicEditOp[];
+}
+
+/** What a reshape cascade gets to look at: the whole cloud, the edge and the geometry it is taking. */
+export interface ReshapeContext {
+  readonly cloud: CloudTopology;
+  readonly edgeId: string;
+  /** The new geometry, walked from the edge's own start node. */
+  readonly geometry: ConstructionEdgeGeometry;
 }
 
 /**

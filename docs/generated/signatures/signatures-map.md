@@ -3541,10 +3541,6 @@ export function paintedNodesOf(
   ): Pick<CutFallout, "paintedNodes" | "paintedLoops"> {
   return paintedFalloutOf(paintedTopologiesOf(runtime, paintedType, bounds));
 
-// src/composition/tabletop/path/bezier-edit-gesture.ts
-export function beginBezierGesture(ctx: ToolContext, sample: PointerSample, params?: ToolParamsFor<"edit-region">) {
-  const snapshot = ctx.runtime.getGraphSnapshot();
-
 // src/composition/tabletop/path/path-cloud-transaction.ts
 export function commitPathCloudIntent(
   ctx: ToolContext,
@@ -3901,6 +3897,16 @@ export function mitrePoint(
   standingDirection: PointXZ,
   limit: number,
   ): ConstructionPosition {
+
+// src/composition/tabletop/tools/core/curve-edit-gesture.ts
+export interface CurveGesture {
+  move(gesture: ToolGesture): void;
+  commit(): void;
+  cancel(): void;
+  }
+export function beginCurveGesture(ctx: ToolContext, sample: PointerSample, params?: ToolParamsFor<"edit-region">): CurveGesture | undefined {
+  if (!sample.nodeId) return undefined;
+  const snapshot = ctx.runtime.getGraphSnapshot();
 
 // src/composition/tabletop/tools/core/edge-overlay.ts
 export const EDGE_ROLE_COLORS: Readonly<Record<string, number>> = Object.freeze({
@@ -4627,8 +4633,8 @@ export class EffectRefusedError extends Error {
 export class EffectChainTooDeepError extends Error {
   readonly depth: number;
 
-  constructor(depth: number) {
-  super(`effect chain exceeded ${MAX_EFFECT_DEPTH} steps`);
+  constructor(depth: number, limit: number = MAX_EFFECT_DEPTH) {
+  super(`effect chain exceeded ${limit} steps`);
 export interface EffectSource {
   regionsNear(bounds: ConstructionTopologyBoundsQuery): readonly ConstructionRegionTopology[];
   }
@@ -4653,8 +4659,8 @@ export function runEffects<Context>(
   initial: readonly Effect[],
   reactions: Readonly<Record<ReactionId, Reaction<Context>>>,
   declared: DeclaredReaction = REGISTERED_REACTION,
+  maxDepth: number = MAX_EFFECT_DEPTH,
   ): readonly ReactionRecord[] {
-  const queue = initial.map((effect) => ({ effect, depth: 0 }));
 
 // src/features/edit-construction/effects/effect.ts
 export type EffectKind =
@@ -4827,6 +4833,8 @@ export function planEdit(
   source?: Pick<ConstructionSessionPort, "planMotion" | "getAllRegionTopologies"> & Partial<Pick<BezierPort, "curveBatch">>,
   ): EditPlan {
   const policy = resolvePolicy(cloud.seed, gesture.target);
+export function planEdgeReshape(cloud: CloudTopology, edgeId: string, geometry: ConstructionEdgeGeometry): EditPlan {
+  const policy = resolvePolicy(cloud.seed, { kind: "edge", edgeId });
 export interface EditOpSink {
   moveVertices(moves: readonly { readonly nodeId: string; readonly position: ConstructionPosition }[]): RegionEditOutcome;
   moveVertex(nodeId: string, position: { x: number; y: number; z: number }): RegionEditOutcome;
@@ -4942,13 +4950,7 @@ export function neighborsOf(graph: SpineGraph, nodeId: string): readonly string[
   const found = new Set<string>();
 
 // src/features/edit-construction/spine/spine-handles.ts
-export function curvePickId(edgeId: string, index: 1 | 2 | "midpoint"): string {
-  return index === "midpoint" ? MIDPOINT + encodeURIComponent(edgeId) : HANDLE + index + ":" + encodeURIComponent(edgeId);
-export function curvePick(id: string): { edgeId: string; index: 1 | 2 | "midpoint" } | undefined {
-  if (id.startsWith(MIDPOINT)) return { edgeId: decodeURIComponent(id.slice(MIDPOINT.length)), index: "midpoint" };
-export function bezierPickHandles(snapshot: ConstructionGraphSnapshot, port: BezierPort) {
-  const nodes = new Map(snapshot.nodes.map((n) => [n.id, n.position]));
-export function isBezierEditTarget(snapshot: ConstructionGraphSnapshot, id: string): boolean {
+export function isBezierEditTarget(snapshot: ConstructionGraphSnapshot, id: string, contour: readonly Pick<ConstructionCurvedEdge, "edgeId">[] = []): boolean {
   const pick = curvePick(id);
 
 // src/features/edit-construction/spine/spine-node-id.ts
@@ -5132,6 +5134,12 @@ export function panelStructureType(
   ): StructureTypeDefinition {
   return Object.freeze({
   surfaceType,
+export const openingStructureType = panelStructureType(
+  "opening",
+  "Abertura",
+  "one face standing in an opening, on the rim the wall shares with it",
+  [],
+  );
 
 // src/features/edit-construction/structure-types/path/bezier-road-edit.ts
 export function regeneratePathSpine(input: SpineRegenerationInput): SpineRegeneration | undefined {
@@ -5633,6 +5641,12 @@ export interface RolePolicy {
   /**
   * Whether the op applies to the grabbed face alone or to every member of
   * its cloud. Declared per role rather than defaulted, so a new structure
+export interface ReshapeContext {
+  readonly cloud: CloudTopology;
+  readonly edgeId: string;
+  /** The new geometry, walked from the edge's own start node. */
+  readonly geometry: ConstructionEdgeGeometry;
+  }
 export interface CascadeContext {
   readonly cloud: CloudTopology;
   /** The face the gesture landed on -- `cloud.seed`, offered directly for the common case. */
@@ -5686,13 +5700,6 @@ export interface StructureTypeDefinition {
   * Whether a gesture on this type can only be planned through the session's
 export function denied(role: EditRole, reason: string): RolePolicy {
   return { role, resolve: { kind: "deny", reason }, axes: [], scope: "surface" };
-export function allowed(
-  role: EditRole,
-  axes: readonly EditAxis[],
-  scope: EditScope,
-  cascade?: RolePolicy["cascade"],
-  ): RolePolicy {
-  return { role, resolve: { kind: "allow" }, axes, scope, cascade };
 
 // src/features/edit-construction/tools/brush-shape-params.ts
 export function resolveBrushShape(params: BrushShapeParams): BrushShape {
@@ -5757,13 +5764,13 @@ export interface TowerStampParams extends WallParams {
   readonly radius: (typeof TOWER_RADIUS_PRESETS)[number];
   }
 export interface OpeningParams {
-  readonly openingType: "window" | "door";
+  /** A preset of the one opening type: where it starts and what is drawn in it, never its structure. */
+  readonly openingKind: "window" | "door";
   /** How wide, measured along the wall rather than across the ground -- a curved wall is travelled, not spanned. */
   readonly width: number;
   readonly height: number;
   /** How far above the wall's own base the opening starts. Zero is a door. */
   readonly sill: number;
-  }
 export type NoToolParams = Record<string, never>;
 export interface ToolParamsByTool {
   readonly roof: { readonly shape: "rectangle" | "circle" | "platform"; readonly elevation: number; readonly height: number; readonly radius: number; readonly curvatures: readonly [number, number, number, number] };
@@ -5876,6 +5883,54 @@ export function cloudNodes(
   ): readonly { readonly id: string; readonly position: { readonly x: number; readonly y: number; readonly z: number } }[] {
   const byId = new Map<string, { readonly id: string; readonly position: { readonly x: number; readonly y: number; readonly z: number } }>();
 
+// src/features/edit-construction/topology/curve-handles.ts
+export type CurveHandleIndex = 1 | 2 | "midpoint";
+export type CurveStore = "spine" | "contour";
+export interface CurveEdge {
+  readonly edgeId: string;
+  readonly store: CurveStore;
+  readonly startNodeId: string;
+  readonly endNodeId: string;
+  readonly curve: CubicBezier;
+  }
+export function curvePickId(edgeId: string, index: CurveHandleIndex): string {
+  return index === "midpoint" ? MIDPOINT + encodeURIComponent(edgeId) : HANDLE + index + ":" + encodeURIComponent(edgeId);
+export function curvePick(id: string): { edgeId: string; index: CurveHandleIndex } | undefined {
+  if (id.startsWith(MIDPOINT)) return { edgeId: decodeURIComponent(id.slice(MIDPOINT.length)), index: "midpoint" };
+export function contourCurve(edge: ConstructionCurvedEdge): CubicBezier {
+  const heightAt = (t: number) => edge.start.y + (edge.end.y - edge.start.y) * t;
+  return {
+  points: [
+  curvePoint(edge.start),
+  [edge.handle1[0], heightAt(1 / 3), edge.handle1[1]],
+  [edge.handle2[0], heightAt(2 / 3), edge.handle2[1]],
+  curvePoint(edge.end),
+export function contourGeometry(curve: CubicBezier): ConstructionEdgeGeometry {
+  const [, handle1, handle2] = curve.points;
+  return { kind: "bezier", handle1: [handle1[0], handle1[2]], handle2: [handle2[0], handle2[2]] };
+export function curveEdgesOf(
+  snapshot: ConstructionGraphSnapshot,
+  contour: readonly ConstructionCurvedEdge[],
+  port: Pick<BezierPort, "curveBatch">,
+  ): readonly CurveEdge[] {
+  const nodes = new Map(snapshot.nodes.map((node) => [node.id, node.position]));
+export function curveHandles(
+  edges: readonly CurveEdge[],
+  port: Pick<BezierPort, "curveBatch">,
+  ): readonly { readonly id: string; readonly position: ConstructionPosition }[] {
+  if (edges.length === 0) return [];
+  const halves = port.curveBatch({ tolerance: 0.025, commands: edges.map((edge) => ({ kind: "split" as const, curve: edge.curve, t: 0.5 })) });
+export function reshapeCurve(
+  port: Pick<BezierPort, "curveBatch">,
+  curve: CubicBezier,
+  index: CurveHandleIndex,
+  target: ConstructionPosition,
+  ): CubicBezier {
+  const [result] = port.curveBatch({ tolerance: 0.025, commands: [
+  index === "midpoint"
+export function curveSegments(port: Pick<BezierPort, "curveBatch">, curve: CubicBezier): Float32Array {
+  const [result] = port.curveBatch({ tolerance: 0.025, commands: [{ kind: "sample", curves: [curve] }] });
+
 // src/features/edit-construction/topology/edge-geometry.ts
 export function angleAround(center: readonly [number, number], x: number, z: number): number {
   return Math.atan2(z - center[1], x - center[0]);
@@ -5924,6 +5979,7 @@ export type { BoundaryEdges, EdgeSharing } from "./boundary-edges.ts";
 export type { EdgeFrame } from "./edge-geometry.ts";
 export type { RibbonRequest } from "./bezier-curve.ts";
 export type { PlanarArea, PlanarPoint, PlanarPolygon, PlanarRing } from "./planar-area.ts";
+export type { CurveEdge, CurveHandleIndex, CurveStore } from "./curve-handles.ts";
 
 // src/features/edit-construction/topology/planar-area.ts
 export type PlanarPoint = readonly [number, number];
@@ -6160,6 +6216,14 @@ export interface RegionEditOutcome {
   /** Nodes the engine's own zero-orphan cleanup reclaimed. */
   readonly removedNodeIds: readonly ConstructionNodeId[];
 export type ConstructionEdgeGeometry =
+export interface ConstructionCurvedEdge {
+  readonly edgeId: ConstructionEdgeId;
+  readonly startNodeId: ConstructionNodeId;
+  readonly endNodeId: ConstructionNodeId;
+  readonly start: ConstructionPosition;
+  readonly end: ConstructionPosition;
+  readonly handle1: readonly [number, number];
+  readonly handle2: readonly [number, number];
 export interface ConstructionOrientedEdgeUse {
   readonly edgeId: ConstructionEdgeId;
   readonly reversed: boolean;
@@ -6178,11 +6242,6 @@ export interface ConstructionCoveredRegion {
   /** World-space centroid; `y` is the height the face currently sits at. */
   readonly centroid: ConstructionPosition;
   readonly nodeIds: readonly ConstructionNodeId[];
-export interface ConstructionSheetProfile {
-  readonly start: number;
-  readonly middle: number;
-  readonly end: number;
-  }
 
 // src/ports/index.ts
 export type { CapRequest, CapPatch } from "./cap-port.ts";

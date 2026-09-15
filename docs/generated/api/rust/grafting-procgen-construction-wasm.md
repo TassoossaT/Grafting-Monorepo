@@ -65,6 +65,10 @@ The connected component of same-`type` regions reachable from
 Ends the open transaction, recording it as a single undo entry when it
 changed anything. Returns whether it was recorded.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::curved_edges_json(&self) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Every bezier boundary edge a region uses. See `region_editing::curved_edges`.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::delete_region_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 `DeleteRegion`. See `region_editing::apply_delete_region`.

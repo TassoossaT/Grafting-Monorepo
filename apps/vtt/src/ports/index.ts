@@ -39,6 +39,7 @@ export type {
   ConstructionPlanarShape,
   ConstructionMotionPlan,
   ConstructionCoveredRegion,
+  ConstructionCurvedEdge,
   ConstructionPatch,
   ConstructionPatchEdge,
   ConstructionPatchOutcome,

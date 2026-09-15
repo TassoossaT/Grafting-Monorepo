@@ -34,6 +34,7 @@ export function sessionFixture() {
       // Ground regenerating inside a commit splits and deletes; nothing else reaches here.
       for (const op of ops) {
         if (op.kind === "insert-vertex") session.insert_vertex_json(JSON.stringify({ ...op, position: vector(op.position) }));
+        else if (op.kind === "retype-edge") session.retype_edge_json(JSON.stringify({ edgeId: op.edgeId, geometry: op.geometry }));
         else if (op.kind === "delete-region") session.delete_region_json(JSON.stringify({ surfaceKey: op.surfaceKey }));
         else throw new Error(`the fixture does not apply ${op.kind}`);
       }
@@ -51,6 +52,7 @@ export function sessionFixture() {
     },
     addPatch(patch) { const result = JSON.parse(session.add_patch_json(JSON.stringify(wirePatch(patch)))); if (result.skippedRegionIds.length) throw new Error(JSON.stringify(result)); return result; },
     getRegionTopologiesInBounds: (bounds) => JSON.parse(session.region_topologies_in_bounds_json(JSON.stringify(bounds))).map(topology),
+    getCurvedEdges: () => JSON.parse(session.curved_edges_json()).map((edge) => ({ ...edge, start: position(edge.start), end: position(edge.end) })),
     getSnapshot: () => ({ tableId: "platform-test", map: { nodePositions: new Map() } }),
     transact(transactionId, _origin, work) {
       session.begin_transaction(transactionId);

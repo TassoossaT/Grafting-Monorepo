@@ -180,6 +180,24 @@ export function planEdit(
   };
 }
 
+/**
+ * Reshapes one edge's curve -- a curve handle dragged on a contour edge --
+ * against the grabbed edge's own role. The role decides whether the edge may
+ * curve at all and what reshapes with it; the ops set geometry and move no
+ * node.
+ */
+export function planEdgeReshape(cloud: CloudTopology, edgeId: string, geometry: ConstructionEdgeGeometry): EditPlan {
+  const policy = resolvePolicy(cloud.seed, { kind: "edge", edgeId });
+  if (policy.resolve.kind !== "allow") {
+    return { kind: "deny", role: policy.role, reason: policy.resolve.reason };
+  }
+  if (policy.reshape === undefined) {
+    return { kind: "deny", role: policy.role, reason: "Esta aresta nao pode ser curvada." };
+  }
+  const ops: AtomicEditOp[] = [{ kind: "retype-edge", edgeId, geometry }, ...policy.reshape({ cloud, edgeId, geometry })];
+  return { kind: "apply", role: policy.role, scope: "surface", surfaceCount: 1, ops };
+}
+
 /** The slice of `ConstructionSessionPort` an edit plan actually needs. */
 export interface EditOpSink {
   moveVertices(moves: readonly { readonly nodeId: string; readonly position: ConstructionPosition }[]): RegionEditOutcome;

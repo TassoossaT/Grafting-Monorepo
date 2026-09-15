@@ -1,4 +1,4 @@
-import { bezierPickHandles } from "../../features/edit-construction/index.ts";
+import { curveEdgesOf, curveHandles } from "../../features/edit-construction/index.ts";
 import type { BezierPort } from "../../ports/bezier-port.ts";
 import type { ConstructionPlanarRequest, ConstructionPlanarShape, ConstructionMotionRequest, ConstructionMotionPlan, ConstructionNodeMotion } from "../../ports/index.ts";
 import { chunkKeyForSurface, CONSTRUCTION_GRID_EXTENT, mergeChunkBucket, mergeSurfaceMeshes } from "../../adapters/rendering/index.ts";
@@ -30,6 +30,7 @@ import type {
   ConfirmedTokenRenderChange,
   ConstructionTopologyBoundsQuery,
   ConstructionCoveredRegion,
+  ConstructionCurvedEdge,
   ConstructionEdgeGeometry,
   ConstructionGraphSnapshot,
   ConstructionIrregularQuadGrid,
@@ -160,6 +161,8 @@ export interface TabletopRuntime extends BezierPort {
   getAllRegionTopologies(): readonly ConstructionRegionTopology[];
   /** Region boundaries near a local edit, resolved in one engine call. */
   getRegionTopologiesInBounds(bounds: ConstructionTopologyBoundsQuery): readonly ConstructionRegionTopology[];
+  /** Every bezier boundary edge a region uses. See `ConstructionSessionPort.getCurvedEdges`. */
+  getCurvedEdges(): readonly ConstructionCurvedEdge[];
   /** Generic graph primitives, including edges not owned by a region boundary. */
   getGraphSnapshot(): ConstructionGraphSnapshot;
   applyRegionOverlay(
@@ -592,7 +595,8 @@ export class AppTabletopRuntime implements TabletopRuntime {
 
   #syncBezierHandles(origin: ChangeOrigin, causeId: string, generation: number): void {
     if (typeof this.#construction.curveBatch !== "function") return;
-    const handles = bezierPickHandles(this.#construction.getGraphSnapshot(), this.#construction);
+    const contour = typeof this.#construction.getCurvedEdges === "function" ? this.#construction.getCurvedEdges() : [];
+    const handles = curveHandles(curveEdgesOf(this.#construction.getGraphSnapshot(), contour, this.#construction), this.#construction);
     const live = new Set(handles.map((h) => h.id));
     for (const id of this.#bezierHandleIds) if (!live.has(id)) this.#removeNodeHandle(id, origin, causeId, generation);
     for (const handle of handles) this.#uploadNodeHandle(handle.id, handle.position, origin, causeId, generation);
@@ -709,6 +713,9 @@ export class AppTabletopRuntime implements TabletopRuntime {
       });
       this.#uploadNodeHandle(nodeId, position, origin, causeId, generation);
     }
+    // Curve handles sit off the anchors and follow a reshaped edge too, so
+    // they are re-placed whatever the edit moved or retyped.
+    this.#syncBezierHandles(origin, causeId, generation);
     return applyMapProjectionDeltas(map, deltas);
   }
 
@@ -895,6 +902,11 @@ export class AppTabletopRuntime implements TabletopRuntime {
       return this.#construction.getAllRegionTopologies();
     }
     return [];
+  }
+
+  getCurvedEdges(): readonly ConstructionCurvedEdge[] {
+    this.#requireReady("reading curved boundary edges");
+    return typeof this.#construction.getCurvedEdges === "function" ? this.#construction.getCurvedEdges() : [];
   }
 
   getRegionTopologiesInBounds(bounds: ConstructionTopologyBoundsQuery): readonly ConstructionRegionTopology[] {

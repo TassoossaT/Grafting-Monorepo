@@ -65,6 +65,17 @@ export type ConstructionEdgeGeometry =
   | { readonly kind: "arc"; readonly center: readonly [number, number]; readonly clockwise: boolean }
   | { readonly kind: "bezier"; readonly handle1: readonly [number, number]; readonly handle2: readonly [number, number] };
 
+/** One bezier boundary edge, in its own direction: anchors with live positions, and XZ handles. */
+export interface ConstructionCurvedEdge {
+  readonly edgeId: ConstructionEdgeId;
+  readonly startNodeId: ConstructionNodeId;
+  readonly endNodeId: ConstructionNodeId;
+  readonly start: ConstructionPosition;
+  readonly end: ConstructionPosition;
+  readonly handle1: readonly [number, number];
+  readonly handle2: readonly [number, number];
+}
+
 /** One boundary edge walked in a loop's own direction. */
 export interface ConstructionOrientedEdgeUse {
   readonly edgeId: ConstructionEdgeId;
@@ -636,6 +647,8 @@ export interface ConstructionSessionPort extends BezierPort {
   getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined;
   /** Region boundaries with at least one node inside an XZ extent, returned in one engine crossing. */
   getRegionTopologiesInBounds(bounds: ConstructionTopologyBoundsQuery): readonly ConstructionRegionTopology[];
+  /** Every bezier boundary edge a region uses -- what contour curve handles are placed from. */
+  getCurvedEdges(): readonly ConstructionCurvedEdge[];
   /** Every region's boundary -- the edit-mode bootstrap call. */
   getAllRegionTopologies(): readonly ConstructionRegionTopology[];
 

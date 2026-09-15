@@ -19,6 +19,7 @@ import type {
   ConstructionTopologyBoundsQuery,
   ConstructionCoverageKind,
   ConstructionCoveredRegion,
+  ConstructionCurvedEdge,
   ConstructionEdgeGeometry,
   ConstructionNodeId,
   ConstructionNodeSnapshot,
@@ -509,6 +510,11 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
   getAllRegionTopologies(): readonly ConstructionRegionTopology[] {
     const wire = JSON.parse(this.#require().all_region_topologies_json()) as readonly RegionTopologyWire[];
     return wire.map(fromWireTopology);
+  }
+
+  getCurvedEdges(): readonly ConstructionCurvedEdge[] {
+    const wire = JSON.parse(this.#require().curved_edges_json()) as readonly (Omit<ConstructionCurvedEdge, "start" | "end"> & { readonly start: WirePosition; readonly end: WirePosition })[];
+    return wire.map((edge) => ({ ...edge, start: fromWirePosition(edge.start), end: fromWirePosition(edge.end) }));
   }
 
   getRegionTopologiesInBounds(bounds: ConstructionTopologyBoundsQuery): readonly ConstructionRegionTopology[] {

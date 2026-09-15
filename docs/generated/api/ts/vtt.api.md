@@ -418,8 +418,6 @@ the table" gets a contour thousands of segments long, hands all of it to the
 generator as a constraint, and pays for the whole network on a stroke that
 touched a metre of it.
 
-### `function vtt.bezier-edit-gesture.beginBezierGesture(ctx: ToolContext, sample: PointerSample, params?: { curveAction?: "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"; curveEndWidth?: number; curveMode?: "automatic" | "aligned" | "mirrored" | "free"; curveWidth?: number; mode: "shape" | "elevation" }): { cancel: any; commit: any; move: any } | undefined`
-
 ### `function vtt.path-cloud-transaction.commitPathCloudIntent(ctx: ToolContext, effect: PathBrushEffect, tolerance: number): void`
 
 Runtime boundary for a PathCloud decision. This file deliberately contains
@@ -512,6 +510,10 @@ reads nothing from the live graph and changes nothing in it.
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.getAllRegionTopologies(): readonly ConstructionRegionTopology[]`
 
 Every region's boundary.
+
+### `method vtt.tabletop-runtime.AppTabletopRuntime.getCurvedEdges(): readonly ConstructionCurvedEdge[]`
+
+Every bezier boundary edge a region uses. See `ConstructionSessionPort.getCurvedEdges`.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.getFootprintCoverage(polygon: readonly (readonly [number, number])[]): readonly ConstructionCoveredRegion[]`
 
@@ -659,6 +661,10 @@ reads nothing from the live graph and changes nothing in it.
 ### `method vtt.tabletop-runtime.TabletopRuntime.getAllRegionTopologies(): readonly ConstructionRegionTopology[]`
 
 Every region's boundary.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.getCurvedEdges(): readonly ConstructionCurvedEdge[]`
+
+Every bezier boundary edge a region uses. See `ConstructionSessionPort.getCurvedEdges`.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.getFootprintCoverage(polygon: readonly (readonly [number, number])[]): readonly ConstructionCoveredRegion[]`
 
@@ -1667,6 +1673,16 @@ The sign is all that is used. Two rims belong to the same side of a joint
 when a traveller passing through it keeps them both on the same hand --
 which, since one run's direction points *into* the joint and the other's
 points *out* of it, means their signs are opposite.
+
+### `interface vtt.curve-edit-gesture.CurveGesture`
+
+### `method vtt.curve-edit-gesture.CurveGesture.cancel(): void`
+
+### `method vtt.curve-edit-gesture.CurveGesture.commit(): void`
+
+### `method vtt.curve-edit-gesture.CurveGesture.move(gesture: ToolGesture): void`
+
+### `function vtt.curve-edit-gesture.beginCurveGesture(ctx: ToolContext, sample: PointerSample, params?: { curveAction?: "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"; curveEndWidth?: number; curveMode?: "automatic" | "aligned" | "mirrored" | "free"; curveWidth?: number; mode: "shape" | "elevation" }): CurveGesture | undefined`
 
 ### `interface vtt.edge-overlay.EdgeOverlayGroup`
 
@@ -2786,7 +2802,7 @@ How a reaction answered.
 
 A chain kept emitting past MAX_EFFECT_DEPTH.
 
-### `constructor vtt.effect-pipeline.EffectChainTooDeepError.constructor(depth: number): EffectChainTooDeepError`
+### `constructor vtt.effect-pipeline.EffectChainTooDeepError.constructor(depth: number, limit: number): EffectChainTooDeepError`
 
 ### `property vtt.effect-pipeline.EffectChainTooDeepError.depth: number`
 
@@ -2832,7 +2848,7 @@ Past this many chained steps the transaction aborts. A safety net, not the mecha
 
 The XZ extent a change touches, widened by REACH_MARGIN.
 
-### `function vtt.effect-pipeline.runEffects(context: Context, source: EffectSource, initial: readonly Effect[], reactions: Readonly<Record<ReactionId, Reaction<Context>>>, declared: DeclaredReaction): readonly ReactionRecord[]`
+### `function vtt.effect-pipeline.runEffects(context: Context, source: EffectSource, initial: readonly Effect[], reactions: Readonly<Record<ReactionId, Reaction<Context>>>, declared: DeclaredReaction, maxDepth: number): readonly ReactionRecord[]`
 
 Dispatches `initial` and everything the reactions emit, breadth first.
 
@@ -3135,6 +3151,13 @@ this layer's.
 
 Folds two outcomes, so a whole transaction reports one combined result.
 
+### `function vtt.edit-orchestrator.planEdgeReshape(cloud: CloudTopology, edgeId: string, geometry: ConstructionEdgeGeometry): EditPlan`
+
+Reshapes one edge's curve -- a curve handle dragged on a contour edge --
+against the grabbed edge's own role. The role decides whether the edge may
+curve at all and what reshapes with it; the ops set geometry and move no
+node.
+
 ### `function vtt.edit-orchestrator.planEdit(cloud: CloudTopology, gesture: EditGesture, graphSnapshot?: ConstructionGraphSnapshot, source?: Pick<ConstructionSessionPort, "planMotion" | "getAllRegionTopologies"> & Partial<Pick<BezierPort, "curveBatch">>): EditPlan`
 
 Resolves `gesture` against the structure type's own role table. The
@@ -3272,19 +3295,11 @@ run) is reported once.
 
 spineGraphIn over one cloud's own members -- the reading a tool should reach for.
 
-### `function vtt.spine-handles.bezierPickHandles(snapshot: ConstructionGraphSnapshot, port: BezierPort): { id: string; position: ConstructionPosition }[]`
+### `function vtt.spine-handles.isBezierEditTarget(snapshot: ConstructionGraphSnapshot, id: string, contour: readonly Pick<ConstructionCurvedEdge, "edgeId">[]): boolean`
 
-Every curve span's two handles and midpoint, whatever structure the spine generates.
-
-### `function vtt.spine-handles.curvePick(id: string): { edgeId: string; index: 2 | 1 | "midpoint" } | undefined`
-
-### `function vtt.spine-handles.curvePickId(edgeId: string, index: 2 | 1 | "midpoint"): string`
-
-The pick id of one span's handle or midpoint -- a presentation projection, not a graph anchor.
-
-### `function vtt.spine-handles.isBezierEditTarget(snapshot: ConstructionGraphSnapshot, id: string): boolean`
-
-Whether `id` names a curve handle, a span midpoint, or an anchor some curve span ends on.
+Whether `id` names a curve handle or midpoint -- on a spine span or on a
+curved contour edge -- or an anchor some spine span ends on. Anchors of a
+contour edge are ordinary vertices, edited through their own role.
 
 ### `interface vtt.spine-node-id.SpineControlNodeAddress`
 
@@ -3499,6 +3514,13 @@ Extracts the outer and hole perimeter loops of a whole terrain cloud.
 ### `function vtt.terrain-cloud.terrainTopologiesBounds(topologies: readonly ConstructionRegionTopology[], margin: number): ConstructionTopologyBoundsQuery`
 
 Computes the 2D bounding query covering a set of terrain topologies.
+
+### `variable vtt.panel-structure.openingStructureType: StructureTypeDefinition`
+
+The face standing in a hole a wall was opened by. One structural type:
+a door and a window are the same panel on the rim the wall shares with it,
+and differ only in the parameters that placed it (a door sits on the floor,
+a window on its sill) and in what is drawn there.
 
 ### `variable vtt.panel-structure.PANEL_ROLES: { body: "panel-body"; bottomCorner: "panel-bottom-corner"; bottomEdge: "panel-bottom-edge"; post: "panel-post"; topCorner: "panel-top-corner"; topEdge: "panel-top-edge"; unknown: "panel-unknown" }`
 
@@ -4521,6 +4543,18 @@ What a type's derived motion may consult beyond the positions themselves.
 
 ### `property vtt.structure-type.MotionContext.port?: Pick<BezierPort, "curveBatch">`
 
+### `interface vtt.structure-type.ReshapeContext`
+
+What a reshape cascade gets to look at: the whole cloud, the edge and the geometry it is taking.
+
+### `property vtt.structure-type.ReshapeContext.cloud: CloudTopology`
+
+### `property vtt.structure-type.ReshapeContext.edgeId: string`
+
+### `property vtt.structure-type.ReshapeContext.geometry: ConstructionEdgeGeometry`
+
+The new geometry, walked from the edge's own start node.
+
 ### `interface vtt.structure-type.RolePolicy`
 
 One role's complete editing policy: what it allows, how far it reaches,
@@ -4537,6 +4571,13 @@ Extra ops fired alongside the primary one, as one transaction -- e.g.
 moving a wall's bottom corner moves its paired top corner by the *same*
 delta. Same-delta cascades are all this model needs so far; there is no
 scaled or cross-axis variant.
+
+### `property vtt.structure-type.RolePolicy.reshape?: (context: ReshapeContext) => readonly AtomicEditOp[]`
+
+Present when the grabbed edge's curve may be reshaped through a curve
+handle, returning the extra ops that reshape alongside it in the same
+transaction -- a wall's top run following its bottom run. Absent means
+the edge keeps the curve it has.
 
 ### `property vtt.structure-type.RolePolicy.resolve: EditResolution`
 
@@ -4780,7 +4821,9 @@ one tool and not two.
 
 ### `property vtt.tool-types.OpeningParams.height: number`
 
-### `property vtt.tool-types.OpeningParams.openingType: "door" | "window"`
+### `property vtt.tool-types.OpeningParams.openingKind: "window" | "door"`
+
+A preset of the one opening type: where it starts and what is drawn in it, never its structure.
 
 ### `property vtt.tool-types.OpeningParams.sill: number`
 
@@ -5206,6 +5249,56 @@ boundary -- in one call.
 
 Fails as a whole when any member cannot be read: a cloud in the middle of
 changing is not in a state to plan an edit against.
+
+### `interface vtt.curve-handles.CurveEdge`
+
+One editable cubic between two anchor nodes.
+
+### `property vtt.curve-handles.CurveEdge.curve: CubicBezier`
+
+### `property vtt.curve-handles.CurveEdge.edgeId: string`
+
+### `property vtt.curve-handles.CurveEdge.endNodeId: string`
+
+### `property vtt.curve-handles.CurveEdge.startNodeId: string`
+
+### `property vtt.curve-handles.CurveEdge.store: CurveStore`
+
+### `type vtt.curve-handles.CurveHandleIndex = 1 | 2 | "midpoint"`
+
+### `type vtt.curve-handles.CurveStore = "spine" | "contour"`
+
+Where a curve is kept, which decides how a reshape is committed.
+
+### `function vtt.curve-handles.contourCurve(edge: ConstructionCurvedEdge): CubicBezier`
+
+A contour edge's cubic in 3D: its XZ handles, at the height the edge climbs through between its anchors.
+
+### `function vtt.curve-handles.contourGeometry(curve: CubicBezier): ConstructionEdgeGeometry`
+
+The boundary geometry a contour edge keeps for `curve`, walked from its own start node.
+
+### `function vtt.curve-handles.curveEdgesOf(snapshot: ConstructionGraphSnapshot, contour: readonly ConstructionCurvedEdge[], port: Pick<BezierPort, "curveBatch">): readonly CurveEdge[]`
+
+Every curve on the table: spine spans resolved from their stored handles, and curved contour edges.
+
+### `function vtt.curve-handles.curveHandles(edges: readonly CurveEdge[], port: Pick<BezierPort, "curveBatch">): readonly { id: string; position: ConstructionPosition }[]`
+
+Each curve's two handles and its midpoint, as pickable positions, in one engine crossing.
+
+### `function vtt.curve-handles.curvePick(id: string): { edgeId: string; index: CurveHandleIndex } | undefined`
+
+### `function vtt.curve-handles.curvePickId(edgeId: string, index: CurveHandleIndex): string`
+
+The pick id of one curve's handle or midpoint -- a presentation projection, not a graph anchor.
+
+### `function vtt.curve-handles.curveSegments(port: Pick<BezierPort, "curveBatch">, curve: CubicBezier): Float32Array`
+
+A curve flattened to line segments, for a preview.
+
+### `function vtt.curve-handles.reshapeCurve(port: Pick<BezierPort, "curveBatch">, curve: CubicBezier, index: CurveHandleIndex, target: ConstructionPosition): CubicBezier`
+
+`curve` with one handle dragged to `target`, or its midpoint pulled there.
 
 ### `interface vtt.edge-geometry.EdgeFrame`
 
@@ -5716,6 +5809,24 @@ World-space centroid; `y` is the height the face currently sits at.
 
 ### `property vtt.construction-session-port.ConstructionCoveredRegion.surfaceType: string`
 
+### `interface vtt.construction-session-port.ConstructionCurvedEdge`
+
+One bezier boundary edge, in its own direction: anchors with live positions, and XZ handles.
+
+### `property vtt.construction-session-port.ConstructionCurvedEdge.edgeId: string`
+
+### `property vtt.construction-session-port.ConstructionCurvedEdge.end: ConstructionPosition`
+
+### `property vtt.construction-session-port.ConstructionCurvedEdge.endNodeId: string`
+
+### `property vtt.construction-session-port.ConstructionCurvedEdge.handle1: readonly [number, number]`
+
+### `property vtt.construction-session-port.ConstructionCurvedEdge.handle2: readonly [number, number]`
+
+### `property vtt.construction-session-port.ConstructionCurvedEdge.start: ConstructionPosition`
+
+### `property vtt.construction-session-port.ConstructionCurvedEdge.startNodeId: string`
+
 ### `interface vtt.construction-session-port.ConstructionEdgeSnapshot`
 
 One generic graph edge, including edges deliberately not used by a face.
@@ -6159,6 +6270,10 @@ Every region's boundary -- the edit-mode bootstrap call.
 ### `method vtt.construction-session-port.ConstructionSessionPort.getAllSurfaceMeshes(): readonly SurfaceMeshResult[]`
 
 Every currently-known surface's mesh -- the bootstrap/full-render call.
+
+### `method vtt.construction-session-port.ConstructionSessionPort.getCurvedEdges(): readonly ConstructionCurvedEdge[]`
+
+Every bezier boundary edge a region uses -- what contour curve handles are placed from.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.getFootprintCoverage(polygon: readonly (readonly [number, number])[]): readonly ConstructionCoveredRegion[]`
 

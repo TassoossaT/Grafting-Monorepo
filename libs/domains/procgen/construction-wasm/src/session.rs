@@ -560,6 +560,11 @@ impl ConstructionSession {
         serialize(&dtos)
     }
 
+    /// Every bezier boundary edge a region uses. See `region_editing::curved_edges`.
+    pub fn curved_edges_json(&self) -> Result<String, JsValue> {
+        serialize(&region_editing::curved_edges(&self.graph, &self.topology))
+    }
+
     /// Region boundaries intersecting a local XZ extent, serialized once.
     pub fn region_topologies_in_bounds_json(&self, request_json: &str) -> Result<String, JsValue> {
         let request: region_editing::RegionBoundsRequest = parse(request_json)?;
