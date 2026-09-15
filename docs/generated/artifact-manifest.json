@@ -9,7 +9,7 @@
     "major": 0,
     "minor": 0
   },
-  "gitSha": "f74eeb566fd9a0c0eacdabbfdd1a9c05ac4ecae1",
+  "gitSha": "381c57e067e13a40d33acc2c965694e6b157a782",
   "target": "x86_64-pc-windows-msvc",
   "profile": "dev",
   "features": [

@@ -2389,6 +2389,12 @@ few staircase points is a shape that was never drawn. Curves are off in
 that mode for that reason -- snapped means deliberate, and what was
 placed deliberately is what gets built.
 
+`samples` keep the elevation the renderer actually picked at each point --
+`fitPath` only ever measures XZ deviation, so the Y each surviving corner
+carries is that corner's own real height, never a single baseline pinned
+across the whole run. That is what lets a free-brush wall follow the
+ground it was drawn over instead of standing dead level at the first click.
+
 ### `function vtt.wall-shared.correctedWallCorners(ctx: ToolContext, samples: readonly ConstructionPosition[], tolerance: number): readonly ConstructionPosition[]`
 
 The corner-to-corner skeleton a stroke will actually commit as: the same
