@@ -233,9 +233,6 @@ function createFakeConstructionSession() {
     },
     undoRegionOverlay() {},
     redoRegionOverlay() {},
-    generateRegionPartition() {
-      throw new Error("not exercised by this fake");
-    },
     removeSurface() {
       return {
         affectedSurfaceKeys: [],

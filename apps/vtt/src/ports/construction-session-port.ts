@@ -222,30 +222,6 @@ export interface ConstructionRegionTopology {
   readonly nodes: readonly ConstructionNodeSnapshot[];
 }
 
-/**
- * One grid cell in a {@link GenerateRegionPartitionRequest}'s own local grid
- * -- not world units (multiply by `cellSize` and offset by `origin` to get
- * a world position). Generic on purpose (not house-specific): the app
- * composition layer names a particular use of this "a house," but this
- * port only knows about painted cells partitioned into rooms, the same way
- * it only knows about "a wall," not "a bedroom wall."
- */
-export interface CellCoordinate {
-  readonly x: number;
-  readonly z: number;
-}
-
-/**
- * Every `generate*` mutation shares this outcome shape: the whole
- * request's geometry was regenerated and diffed against whatever this
- * structure already held, and only the difference applied.
- */
-export interface DiffOutcome {
-  readonly addedSurfaceKeys: readonly ConstructionSurfaceKey[];
-  readonly removedSurfaceKeys: readonly ConstructionSurfaceKey[];
-  readonly removedNodeIds: readonly ConstructionNodeId[];
-}
-
 /** Identity lifecycle emitted by an atomic surface transformation. */
 export interface TransformationIdentityDelta<TIdentity> {
   readonly created: readonly TIdentity[];
@@ -317,32 +293,6 @@ export interface ApplyPatchReplacementRequest {
    * of this method, not a concern this port or any one caller decides.
    */
   readonly footprintOutline?: readonly (readonly [number, number])[];
-}
-
-/**
- * One tick of a continuous cell-painting brush ("Pintar Casa," a
- * wall-brush stroke's closure): the stroke's *whole* current accumulated
- * cell set (not just what changed since the last tick), regenerated and
- * diffed against whatever this structure already holds every call. Cells
- * are auto-split into disjoint regions larger than `maxRegionCells`; every
- * region gets its own per-cell floor/ceiling and a wall along every
- * boundary run, notched where a run borders a neighboring region.
- */
-export interface GenerateRegionPartitionRequest {
-  readonly cells: readonly CellCoordinate[];
-  readonly cellSize: number;
-  readonly origin: ConstructionPosition;
-  readonly wallHeight: number;
-  /** A connected region larger than this gets auto-split into more than one region. */
-  readonly maxRegionCells: number;
-  /** The same seed always reproduces the same split layout for the same cell set. */
-  readonly seed: number;
-  /** Namespaces every id this call derives -- same stability contract as {@link GeneratePathExtrusionRequest.idPrefix}. */
-  readonly idPrefix: string;
-  readonly wallType: string;
-  readonly notchType: string;
-  readonly floorType: string;
-  readonly ceilingType: string;
 }
 
 export interface RemoveSurfaceRequest {
@@ -695,8 +645,6 @@ export interface ConstructionSessionPort extends BezierPort {
   applyPatchReplacement(request: ApplyPatchReplacementRequest): ConstructionPatchOutcome;
   undoRegionOverlay(operationId: string): void;
   redoRegionOverlay(operationId: string): void;
-  generateRegionPartition(request: GenerateRegionPartitionRequest): DiffOutcome;
-  /** Unregisters a surface outright and prunes orphaned nodes from the graph. */
   removeSurface(request: RemoveSurfaceRequest): RegionEditOutcome;
   /** `ADR-0022`'s "cloud" query. */
   cloudFor(request: CloudRequest): CloudOutcome;

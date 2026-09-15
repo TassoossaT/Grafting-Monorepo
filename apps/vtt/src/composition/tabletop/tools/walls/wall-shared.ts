@@ -158,10 +158,7 @@ function insertedColumnAt(
 
 /**
  * The wall panel whose own centerline `point` lands closest to (XZ only,
- * within {@link WALL_PICK_TOLERANCE}), or `undefined` if none qualify --
- * `house-room-delete-tool.ts`'s single-surface delete: a click that lands
- * directly on a wall removes just that one panel, distinct from a click on
- * open floor inside a room, which removes every wall bounding it instead.
+ * within {@link WALL_PICK_TOLERANCE}), or `undefined` if none qualify.
  */
 export function findWallSurfaceAt(ctx: ToolContext, point: ConstructionPosition): ConstructionSurfaceKey | undefined {
   let best: { readonly surfaceKey: ConstructionSurfaceKey; readonly perp: number } | undefined;

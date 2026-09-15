@@ -8,13 +8,6 @@ Derived workspace signature index for AI agents (Tier 2 micro-context). Regenera
 ### `construction-wasm` (`libs/domains/procgen/construction-wasm`)
 
 ```rust
-// src/diff_apply.rs
-pub struct DiffOutcome
-pub fn diff_and_apply(
-
-// src/dto.rs
-pub fn region_id_from_cycle(cycle: &[NodeId]) -> Result<RegionId, String>
-
 // src/editing.rs
 pub type SessionGraph = Graph<[f32; 3], Option<grafting_graph_core::bezier::CurveHandles>>;
 pub struct RemoveSurfaceRequest
@@ -38,12 +31,6 @@ pub struct ClassifyPointsRequest
 pub struct PointHitDto
 pub struct ClassifyPointsResponse
 pub fn classify_points(
-
-// src/generation.rs
-pub struct DiffResponse
-pub struct CellCoordDto
-pub struct GenerateAndApplyRegionPartitionRequest
-pub fn generate_and_apply_region_partition(
 
 // src/grid_generation.rs
 pub struct ConstraintPointDto
@@ -378,29 +365,6 @@ pub mod engine;
 pub mod handle;
 pub mod job;
 pub fn debug_memory() -> JsValue
-```
-
-### `structure-generation` (`libs/domains/procgen/structure-generation`)
-
-```rust
-// src/boundary.rs
-pub fn cap_boundary(points: &[[f32; 3]], id_prefix: &str, surface_type: SurfaceType, top: bool) -> StructurePiece
-
-// src/extrusion.rs
-pub enum EdgeCurvature
-pub struct PathEdge
-pub struct EdgeNotch
-pub struct StructurePiece
-pub enum ExtrusionError
-pub fn extrude_path(
-
-// src/region_partition.rs
-pub struct CellCoord
-pub struct Region
-pub fn partition_cells_into_regions(cells: &[CellCoord], max_region_cells: usize, seed: u64) -> Vec<Region>
-pub enum Axis
-pub struct BoundaryRun
-pub fn boundary_runs(cells: &[CellCoord], regions: &[Region]) -> Vec<BoundaryRun>
 ```
 
 ### `surface-mesh` (`libs/domains/procgen/surface-mesh`)
@@ -3990,58 +3954,6 @@ export function toolFor<Id extends ConstructionToolId>(id: Id): ConstructionTool
   return TOOL_REGISTRY[id];
   }
 
-// src/composition/tabletop/tools/house/house-room-delete-tool.ts
-export function roomSurfaceKeys(
-  ctx: Pick<ToolContext, "runtime">,
-  room: DerivedRoom,
-  ): readonly ConstructionSurfaceKey[] {
-  const keys: ConstructionSurfaceKey[] = [];
-  const seen = new Set<string>();
-export const houseRoomDeleteTool: ConstructionTool<"house-room-delete"> = {
-  id: "house-room-delete",
-  defaultParams: () => ({}),
-
-  onClick(ctx: ToolContext, sample: PointerSample): void {
-  const directHit = findWallSurfaceAt(ctx, sample.point);
-
-// src/composition/tabletop/tools/house/interior-partition.ts
-export type Vec2 = PointXZ;
-export function cellsInPolygon(polygon: readonly Vec2[], cellSize: number): { readonly cells: readonly CellCoordinate[]; readonly origin: Vec2 } {
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let minZ = Infinity;
-  let maxZ = -Infinity;
-  for (const point of polygon) {
-  minX = Math.min(minX, point.x);
-export function idPrefixForRoom(tableId: string, bottomCycle: readonly ConstructionNodeId[]): string {
-  return `${tableId}:interior:${hashString([...bottomCycle].sort().join("|"))}`;
-  }
-export function isRedundantPerimeterWall(
-  ctx: { readonly runtime: Pick<import("../../tabletop-runtime.ts").TabletopRuntime, "getSnapshot"> & Partial<Pick<import("../../tabletop-runtime.ts").TabletopRuntime, "getAllRegionTopologies">> },
-  surfaceKey: readonly string[],
-  polygon: readonly Vec2[],
-  tolerance: number,
-  ): boolean {
-  let positions: ConstructionPosition[] = [];
-  if (typeof ctx.runtime.getAllRegionTopologies === "function") {
-
-// src/composition/tabletop/tools/house/interior-wall-tool.ts
-export const interiorWallTool: ConstructionTool<"interior-wall"> = {
-  id: "interior-wall",
-  defaultParams: () => DEFAULT_TOOL_PARAMS["interior-wall"],
-
-  onClick(ctx: ToolContext, sample: PointerSample, params: InteriorGenerateParams): void {
-  const room = findEnclosingRoom(ctx, sample.point, "largest");
-
-// src/composition/tabletop/tools/house/room-lookup.ts
-export interface DerivedRoom {
-  readonly bottomCycle: readonly ConstructionNodeId[];
-  readonly topCycle: readonly ConstructionNodeId[];
-  readonly polygon: readonly Vec2[];
-  }
-export function findEnclosingRoom(ctx: ToolContext, click: ConstructionPosition, preference: "smallest" | "largest" = "smallest"): DerivedRoom | undefined {
-  const spans = wallSpans(ctx);
-
 // src/composition/tabletop/tools/openings/opening-tool.ts
 export const openingTool: ConstructionTool<"opening"> = {
   id: "opening",
@@ -5676,10 +5588,10 @@ export type {
   BrushShapeKind,
   BrushShapeParams,
   ConstructionToolId,
-  InteriorGenerateParams,
   NoToolParams,
   OpeningParams,
   PathBrushParams,
+  PathKind,
 
 // src/features/edit-construction/tools/tool-types.ts
 export type ConstructionToolId =
@@ -5709,19 +5621,8 @@ export interface WallParams {
 export interface WallBrushParams extends WallParams, BrushShapeParams {}
 
   /**
-  * One click inside an already-enclosed space (any shape -- `findEnclosingRoom`'s
-  * own wall-follower algorithm, not limited to rectangles) rasterizes that
-  * space into a `cellSize` grid and hands it to the same region-partition
-  * algorithm `ConstructionSessionPort.generateRegionPartition` already
-  * exposes (the Rust side the retired "Pintar Casa" brush used to drive one
-export interface InteriorGenerateParams {
-  readonly wallType: "wall-white" | "wall-gray";
-  /** World-space side length of one grid cell. */
-  readonly cellSize: number;
-  /** A connected region larger than this many cells gets auto-split into more than one room. */
-  readonly maxRegionCells: number;
-  /** Drives the split layout's jitter -- the same enclosed footprint always reproduces the same rooms for a given seed. */
-  readonly seed: number;
+  * Sculpt mode determining whether a stroke adds terrain/height ("add"), digs/removes terrain ("dig"), or flattens ("flatten").
+  */
 export type TerrainSculptMode = "add" | "dig" | "flatten" | "elevate" | "lower";
 export function deriveFaceSize(brushRadius: number, faceSizeOverride?: number): number {
   if (faceSizeOverride !== undefined && faceSizeOverride > 0) {
@@ -5748,6 +5649,8 @@ export interface OpeningParams {
   readonly sill: number;
   }
 export type NoToolParams = Record<string, never>;
+export interface ToolParamsByTool {
+  readonly roof: { readonly shape: "rectangle" | "circle" | "platform"; readonly elevation: number; readonly height: number; readonly radius: number; readonly curvatures: readonly [number, number, number, number] };
 
 // src/features/edit-construction/topology/bezier-curve.ts
 export const curvePoint = (p: ConstructionPosition): CurvePoint => [p.x, p.y, p.z];
@@ -6218,10 +6121,10 @@ export type {
   AffectedSurfaces,
   ApplyPatchReplacementRequest,
   ApplyRegionOverlayRequest,
-  CellCoordinate,
   CloudOutcome,
   CloudRequest,
   ConstructionCoverageKind,
+  ConstructionMotionInfluence,
 
 // src/ports/scene-render-port.ts
 export type ChangeOrigin = "local" | "network" | "programmatic";

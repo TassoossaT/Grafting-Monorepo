@@ -35,8 +35,6 @@ import type {
   ConstructionSessionPort,
   ConstructionSurfaceKey,
   ConstructionUnfilledLoop,
-  DiffOutcome,
-  GenerateRegionPartitionRequest,
   RegionEditOutcome,
   RemoveSurfaceRequest,
   SurfaceMeshResult,
@@ -575,23 +573,6 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     const session = this.#require() as ConstructionSession & { redo_region_overlay(id: string): void };
     session.redo_region_overlay(operationId);
   }
-  generateRegionPartition(request: GenerateRegionPartitionRequest): DiffOutcome {
-    const wire = {
-      cells: request.cells,
-      cellSize: request.cellSize,
-      origin: toWirePosition(request.origin),
-      wallHeight: request.wallHeight,
-      maxRegionCells: request.maxRegionCells,
-      seed: request.seed,
-      idPrefix: request.idPrefix,
-      wallType: request.wallType,
-      notchType: request.notchType,
-      floorType: request.floorType,
-      ceilingType: request.ceilingType,
-    };
-    return this.#diffOutcome(this.#require().generate_and_apply_region_partition_json(JSON.stringify(wire)));
-  }
-
   removeSurface(request: RemoveSurfaceRequest): RegionEditOutcome {
     return this.#regionEdit(
       this.#require().remove_surface_json(JSON.stringify({ surfaceKey: request.surfaceKey })),
@@ -605,19 +586,6 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     return { surfaceKeys: response.surfaceKeys };
   }
 
-
-  #diffOutcome(responseJson: string): DiffOutcome {
-    const response = JSON.parse(responseJson) as {
-      addedSurfaceKeys: readonly (readonly string[])[];
-      removedSurfaceKeys: readonly (readonly string[])[];
-      removedNodeIds: readonly string[];
-    };
-    return {
-      addedSurfaceKeys: response.addedSurfaceKeys,
-      removedSurfaceKeys: response.removedSurfaceKeys,
-      removedNodeIds: response.removedNodeIds,
-    };
-  }
 
   getSurfaceMesh(surfaceKey: ConstructionSurfaceKey): readonly SurfaceMeshResult[] {
     const wire = JSON.parse(

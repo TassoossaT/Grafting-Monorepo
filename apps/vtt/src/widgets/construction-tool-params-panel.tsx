@@ -4,7 +4,6 @@ import { Card, Collapse, SelectableChip, type CollapsePanel } from "@/ui";
 import type {
   BrushShapeParams,
   ConstructionToolId,
-  InteriorGenerateParams,
   OpeningParams,
   PathBrushParams,
   TerrainSculptMode,
@@ -125,34 +124,6 @@ function WallBrushFields(props: {
     <div style={{ display: "grid", gap: "0.6rem" }}>
       <WallFields params={params} onChange={onChange} />
       <BrushShapeFields params={params} radiusMin={0} radiusMax={2} onChange={onChange} />
-    </div>
-  );
-}
-
-function InteriorGenerateFields(props: {
-  readonly params: InteriorGenerateParams;
-  readonly onChange: (next: InteriorGenerateParams) => void;
-}) {
-  const { params, onChange } = props;
-  return (
-    <div style={{ display: "grid", gap: "0.6rem" }}>
-      <div className="gm-material-grid">
-        <SelectableChip
-          label="Bloco Branco"
-          swatchColor="#e2e8f0"
-          selected={params.wallType === "wall-white"}
-          onSelect={() => onChange({ ...params, wallType: "wall-white" })}
-        />
-        <SelectableChip
-          label="Bloco Cinza"
-          swatchColor="#64748b"
-          selected={params.wallType === "wall-gray"}
-          onSelect={() => onChange({ ...params, wallType: "wall-gray" })}
-        />
-      </div>
-      {sliderRow("Tamanho da célula", params.cellSize, 1.5, 4, 0.5, (cellSize) => onChange({ ...params, cellSize }))}
-      {sliderRow("Máx. células por cômodo", params.maxRegionCells, 2, 16, 1, (maxRegionCells) => onChange({ ...params, maxRegionCells }))}
-      {sliderRow("Seed", params.seed, 1, 999, 1, (seed) => onChange({ ...params, seed }))}
     </div>
   );
 }
@@ -292,7 +263,6 @@ const TOOL_LABELS: Partial<Record<ConstructionToolId, string>> = {
   "path-brush": "Parâmetros: Caminho",
   "wall-brush": "Parâmetros: Parede (Pincel Livre)",
   "wall-line": "Parâmetros: Parede (Linha Reta)",
-  "interior-wall": "Parâmetros: Parede (Gerar Interiores)",
   "tower-stamp": "Parâmetros: Torre",
   opening: "Parâmetros: Abertura",
   "terrain-sculpt": "Parâmetros: Escultura de Terreno",
@@ -314,7 +284,7 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
       <Card className="gm-panel-card" backgroundColor="#182234" accentColor="#1e293b">
         <span className="gm-panel-card-title">Parâmetros</span>
         <p style={{ margin: 0, fontSize: "0.75rem", color: "#64748b" }}>
-          Selecione uma ferramenta de construção (Caminho, Parede, Apagar Cômodo ou Escultura de Terreno) no hotbar
+          Selecione uma ferramenta de construção (Caminho, Parede ou Escultura de Terreno) no hotbar
           para ajustar seus parâmetros.
         </p>
       </Card>
@@ -388,8 +358,6 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
         <WallBrushFields params={params["wall-brush"]} onChange={(next) => onParamsChange("wall-brush", next)} />
       ) : activeTool === "wall-line" ? (
         <WallLineFields params={params["wall-line"]} onChange={(next) => onParamsChange("wall-line", next)} />
-      ) : activeTool === "interior-wall" ? (
-        <InteriorGenerateFields params={params["interior-wall"]} onChange={(next) => onParamsChange("interior-wall", next)} />
       ) : activeTool === "opening" ? (
         <OpeningFields params={params.opening} onChange={(next) => onParamsChange("opening", next)} />
       ) : activeTool === "tower-stamp" ? (

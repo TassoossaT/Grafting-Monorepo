@@ -23,10 +23,7 @@ export interface ConstructionDockProps {
  *
  * Houses the 8 core construction verbs in a centered, glassmorphic dock:
  * 1. 🏠 Edifícios (Pincel Livre, Linha Reta -- manual free-form/exact
- *    point-to-point walls; Gerar Interiores -- one click inside an
- *    already-enclosed space auto-generates its interior partition via the
- *    same region-partition algorithm the retired "Pintar Casa" brush used;
- *    Torre -- one click stamps a closed circular footprint at a known
+ *    point-to-point walls; Torre -- one click stamps a closed circular footprint at a known
  *    preset radius, never freehand-drawn, see `tower-stamp-tool.ts`)
  * 2. 🚪 Aberturas (Portas & Janelas -- one click on a wall panel opens it
  *    and stands a face in the opening, see `opening-tool.ts`)
@@ -36,12 +33,7 @@ export interface ConstructionDockProps {
  * 5. ⛰️ Terreno & Água (Escultura de Terreno)
  * 6. 🌲 Vegetação (Adornos & Flora)
  * 7. 🎨 Estilo & Paleta (Materiais & Temas)
- * 8. 🔨 Demolir (Apagador de cômodos / elementos)
- *
- * The former "Pintar Casa"/"Carimbo de Sala"/"Derivar Sala" cell-grid/stamp
- * tools and the separate "Muros" branch are retired -- the owner flagged the
- * whole cell-grid-room model as the wrong idea; "Edifícios" now means the
- * wall tools, formerly their own "Muros" entry.
+ * 8. 🔨 Demolir (disabled until the generic delete tool exists)
  */
 export function ConstructionDock(props: ConstructionDockProps) {
   const {
@@ -62,15 +54,13 @@ export function ConstructionDock(props: ConstructionDockProps) {
 
   const isWallBrushActive = activeTool === "wall-brush";
   const isWallLineActive = activeTool === "wall-line";
-  const isInteriorWallActive = activeTool === "interior-wall";
   const isTowerStampActive = activeTool === "tower-stamp";
   const isRoofActive = activeTool === "roof";
   const isPlatformActive = activeTool === "platform-contour";
-  const isWallChildActive = isWallBrushActive || isWallLineActive || isInteriorWallActive || isTowerStampActive || isPlatformActive || isRoofActive;
+  const isWallChildActive = isWallBrushActive || isWallLineActive || isTowerStampActive || isPlatformActive || isRoofActive;
   const isRampActive = activeTool === "slope-ramp";
   const isSpiralActive = activeTool === "slope-spiral";
   const isOpeningActive = activeTool === "opening";
-  const isDemolishActive = activeTool === "house-room-delete";
 
   const items: ActionDockItem[] = [
     {
@@ -104,15 +94,6 @@ export function ConstructionDock(props: ConstructionDockProps) {
           active: isWallLineActive,
           disabled: !ready,
           onClick: () => onToolChange("wall-line"),
-        },
-        {
-          key: "interior-wall",
-          label: "Gerar Interiores",
-          icon: "🧩",
-          tooltip: "Gerar Interiores (clique dentro de um local já fechado para calcular os cômodos automaticamente)",
-          active: isInteriorWallActive,
-          disabled: !ready,
-          onClick: () => onToolChange("interior-wall"),
         },
         {
           key: "tower-stamp",
@@ -186,10 +167,8 @@ export function ConstructionDock(props: ConstructionDockProps) {
       key: "demolish",
       label: "Demolir",
       icon: "🔨",
-      tooltip: "Apagar cômodos ou elementos",
-      active: isDemolishActive,
-      disabled: !ready,
-      onClick: () => onToolChange("house-room-delete"),
+      tooltip: "Apagar elementos",
+      disabled: true,
     },
   ];
 

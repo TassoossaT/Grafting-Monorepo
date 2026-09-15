@@ -12,8 +12,8 @@ import type { ToolContext } from "../core/tool-context.ts";
  * Every upright wall panel currently on the table, recovered from the
  * engine's own region topology.
  *
- * This replaces the two near-identical `wallSpans` helpers `wall-shared.ts`
- * and `room-lookup.ts` each carried. They both read a surface's
+ * This replaces the near-identical `wallSpans` helpers the wall tools once
+ * carried. They read a surface's
  * `orderedNodeRefs` out of the map projection, which stopped being a list of
  * node ids the moment every surface became an analytic region -- a region
  * projects as its own `["@region", id]` key, so both helpers silently

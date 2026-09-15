@@ -16,7 +16,6 @@ Derived from `docs/generated/project-graph.json` (G-003, master source S16.1/S17
 | `graph-core` | library | `libs/graph/core` | `api-check`, `check`, `docs-check`, `docs-generate`, `format`, `graph-ir-check`, `lint`, `test` |
 | `isekai-capi-bridge` | library | `libs/isekai/capi-bridge` | `build`, `check`, `docs-check`, `docs-generate`, `test` |
 | `isekai-wasm-bridge` | library | `libs/isekai/wasm-bridge` | `build`, `check`, `docs-check`, `docs-generate`, `postinstall`, `test` |
-| `structure-generation` | library | `libs/domains/procgen/structure-generation` | `check`, `docs-check`, `docs-generate`, `test` |
 | `surface-mesh` | library | `libs/domains/procgen/surface-mesh` | `check`, `docs-check`, `docs-generate`, `test` |
 | `surface-transformations` | library | `libs/domains/procgen/surface-transformations` | `check`, `docs-check`, `docs-generate`, `test` |
 | `terrain-generation` | library | `libs/domains/procgen/terrain-generation` | `check`, `docs-check`, `docs-generate`, `test` |
@@ -48,4 +47,4 @@ Derived from `docs/generated/project-graph.json` (G-003, master source S16.1/S17
 | --- | --- | --- | --- |
 | `grafting` | library | `.` | `ai-audit`, `ai-check`, `build`, `docs-api-rust-check`, `docs-api-rust-generate`, `docs-api-ts-check`, `docs-api-ts-generate`, `docs-check`, `graph-check`, `graph-extract`, `graph-extract-check`, `graph-generate`, `graph-manifest`, `graph-manifest-check`, `graph-map`, `graph-map-check`, `graph-v1-check`, `graph-v1-test`, `install`, `toolchains-check`, `update` |
 
-_25 project(s) total._
+_24 project(s) total._

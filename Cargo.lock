@@ -448,7 +448,6 @@ dependencies = [
  "console_error_panic_hook",
  "grafting-graph-core",
  "grafting-procgen-irregular-grid",
- "grafting-procgen-structure-generation",
  "grafting-procgen-surface-mesh",
  "grafting-procgen-surface-transformations",
  "grafting-procgen-terrain-generation",
@@ -487,15 +486,6 @@ name = "grafting-procgen-irregular-grid"
 version = "0.0.0"
 dependencies = [
  "spade",
-]
-
-[[package]]
-name = "grafting-procgen-structure-generation"
-version = "0.0.0"
-dependencies = [
- "grafting-graph-core",
- "rand 0.8.7",
- "rand_pcg",
 ]
 
 [[package]]
@@ -998,15 +988,6 @@ name = "rand_core"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
-
-[[package]]
-name = "rand_pcg"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59cad018caf63deb318e5a4586d99a24424a364f40f1e5778c29aca23f4fc73e"
-dependencies = [
- "rand_core 0.6.4",
-]
 
 [[package]]
 name = "rand_xorshift"
