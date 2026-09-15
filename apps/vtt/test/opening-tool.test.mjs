@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { panelRailOf } from "../src/composition/tabletop/tools/openings/panel-rail.ts";
 import { openingTool } from "../src/composition/tabletop/tools/openings/opening-tool.ts";
+import { bezierPointXz } from "../src/features/edit-construction/index.ts";
 
 const TABLE_ID = "table-1";
 const WINDOW = { openingType: "window", width: 1, height: 1, sill: 1 };
@@ -92,6 +93,47 @@ function contextFor(topologies) {
 const STRAIGHT = panelTopology("wall-1", { from: { x: 0, z: 0 }, to: { x: 6, z: 0 } });
 // Half of a radius-2 circle centred on the origin, three units tall.
 const CURVED = panelTopology("wall-arc", { from: { x: 2, z: 0 }, to: { x: -2, z: 0 } }, [0, 0]);
+
+const BEZIER_START = { x: -3, z: 0 };
+const BEZIER_END = { x: 3, z: 0 };
+const BEZIER_HANDLES = { handle1: [-1, 2], handle2: [1, 2] };
+function reverseBezierHandles(handles) {
+  return { handle1: handles.handle2, handle2: handles.handle1 };
+}
+
+/** One upright panel whose base and top rails are a genuine Bezier curve, not an arc -- the shape a chord-only rail cannot fall back to without placing an opening off the wall entirely. */
+function bezierPanelTopology(id, from, to, handles) {
+  const nodes = [
+    { id: `${id}:b0`, position: { ...from, y: 0 } },
+    { id: `${id}:b1`, position: { ...to, y: 0 } },
+    { id: `${id}:t1`, position: { ...to, y: 3 } },
+    { id: `${id}:t0`, position: { ...from, y: 3 } },
+  ];
+  const steps = [
+    [0, 1, { kind: "bezier", ...handles }],
+    [1, 2, { kind: "line" }],
+    [2, 3, { kind: "bezier", ...reverseBezierHandles(handles) }],
+    [3, 0, { kind: "line" }],
+  ];
+  return {
+    surfaceKey: ["@region", id],
+    surfaceType: "wall-white",
+    physical: true,
+    outerLoops: [
+      steps.map(([from, to, geometry], index) => ({
+        edgeId: `${id}-${index}`,
+        reversed: false,
+        startNodeId: nodes[from].id,
+        endNodeId: nodes[to].id,
+        geometry,
+      })),
+    ],
+    holes: [],
+    nodes,
+  };
+}
+
+const BEZIER = bezierPanelTopology("wall-bezier", BEZIER_START, BEZIER_END, BEZIER_HANDLES);
 
 test("a straight panel reads as a rail of its own length", () => {
   const rail = panelRailOf(STRAIGHT);
@@ -198,6 +240,61 @@ test("an opening on a curved wall sits on the curve", () => {
     const radius = Math.hypot(node.position.x, node.position.z);
     assert.ok(Math.abs(radius - 2) < 1e-3, `corner left the wall: ${JSON.stringify(node.position)}`);
   }
+});
+
+/**
+ * The exact regression this task closes: before {@link panelRailOf} learned
+ * to build a frame for a Bezier rail too, a curved-wall opening's own
+ * bottom rim was declared as a straight chord regardless of the wall's real
+ * shape (`frameOf` had no Bezier case, so `panelRailOf` fell back to
+ * `{ kind: "line" }`), which put an opening's own rim visibly off the
+ * curve. This drives the real `openingTool` against a Bezier panel and
+ * checks both that the rim is declared curved at all, and that its own
+ * handles are the genuine sub-curve for *that* span -- not the whole
+ * rail's handles reused unmodified, which would trace an entirely
+ * different curve once the opening sits anywhere but the rail's own ends.
+ */
+test("an opening on a Bezier wall carries its own exact sub-curve, not the whole rail's handles nor a straight chord", () => {
+  const { ctx, patches } = contextFor([BEZIER]);
+
+  const [midX, midZ] = bezierPointXz(
+    { ...BEZIER_START, y: 0 },
+    BEZIER_HANDLES.handle1,
+    BEZIER_HANDLES.handle2,
+    { ...BEZIER_END, y: 0 },
+    0.5,
+  );
+  openingTool.onClick(ctx, { point: { x: midX, y: 0, z: midZ }, surfaceRef: "@region,wall-bezier" }, WINDOW);
+  assert.equal(patches.length, 1, "a Bezier wall takes an opening like any other");
+
+  const { patch } = patches[0];
+  const rimEdge = patch.edges.find((edge) => edge.geometry?.kind === "bezier");
+  assert.ok(rimEdge, "the opening's own bottom rim must carry curved geometry, not a straight chord");
+
+  assert.ok(
+    Math.abs(rimEdge.geometry.handle1[0] - BEZIER_HANDLES.handle1[0]) > 1e-3 ||
+      Math.abs(rimEdge.geometry.handle1[1] - BEZIER_HANDLES.handle1[1]) > 1e-3,
+    "must be this span's own sub-curve handles, not the rail's whole handles reused unmodified",
+  );
+
+  const positionOf = new Map(patch.nodes.map((node) => [node.id, node.position]));
+  const rimStart = positionOf.get(rimEdge.startNodeId);
+  const rimEnd = positionOf.get(rimEdge.endNodeId);
+  const [sampleX, sampleZ] = bezierPointXz(rimStart, rimEdge.geometry.handle1, rimEdge.geometry.handle2, rimEnd, 0.5);
+
+  let closest = Infinity;
+  for (let step = 0; step <= 200; step += 1) {
+    const t = step / 200;
+    const [ox, oz] = bezierPointXz(
+      { ...BEZIER_START, y: 0 },
+      BEZIER_HANDLES.handle1,
+      BEZIER_HANDLES.handle2,
+      { ...BEZIER_END, y: 0 },
+      t,
+    );
+    closest = Math.min(closest, Math.hypot(sampleX - ox, sampleZ - oz));
+  }
+  assert.ok(closest < 1e-3, `the declared sub-curve must lie exactly on the original rail curve, closest distance ${closest}`);
 });
 
 test("an opening taller than the wall is refused rather than half-built", () => {

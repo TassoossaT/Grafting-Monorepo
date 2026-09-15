@@ -5,6 +5,7 @@ import type {
   ConstructionRegionTopology,
 } from "@/ports";
 
+import { edgeFrame, subGeometry, type EdgeFrame } from "../../../../features/edit-construction/index.ts";
 import { reverseGeometry } from "../core/boundary-edges.ts";
 
 /**
@@ -15,22 +16,21 @@ import { reverseGeometry } from "../core/boundary-edges.ts";
  * for the opposite reason. There it flattens a panel so it can be
  * triangulated; here it flattens one so a caller can say "an opening this
  * wide, this far along, this high" without caring whether the wall is
- * straight or curved. A chord is an arc whose radius has gone to infinity,
- * so both are the same two coordinates: distance along the rail, and height.
+ * straight, arced, or a Bezier -- every shape answers "how far along" and
+ * "where at this distance" through the one generic {@link edgeFrame}.
  */
 
 /** How close two XZ points must be to count as one upright side rather than a run. */
 const UPRIGHT_EPSILON = 1e-4;
 
-type Frame =
-  | { readonly kind: "chord"; readonly origin: readonly [number, number]; readonly direction: readonly [number, number] }
-  | {
-      readonly kind: "cylinder";
-      readonly center: readonly [number, number];
-      readonly radius: number;
-      readonly startAngle: number;
-      readonly clockwise: boolean;
-    };
+/** One run of the rail's own base: an edge's frame, and where its own travel range starts within the whole rail. */
+interface RailSegment {
+  readonly geometry: ConstructionEdgeGeometry;
+  readonly start: ConstructionPosition;
+  readonly end: ConstructionPosition;
+  readonly frame: EdgeFrame;
+  readonly offset: number;
+}
 
 /** One upright face, flattened: a rail to travel along and a height to rise through. */
 export interface PanelRail {
@@ -43,22 +43,19 @@ export interface PanelRail {
   /** The point `travel` along the rail, at height `y`. */
   positionAt(travel: number, y: number): ConstructionPosition;
   /**
-   * The rail's own curvature, as an edge geometry walked in the direction of
-   * increasing travel. A straight panel reads as a line; a curved one carries
-   * the arc, so anything stamped onto the panel bends with it.
+   * The rail's own curvature between two travel distances, as an edge
+   * geometry walked in the direction of increasing travel -- what a caller
+   * stamping something onto the panel (an opening's own rim) must declare
+   * for *that* span specifically, not the whole rail's.
+   *
+   * A straight or arced rail answers this the same way regardless of
+   * `from`/`to`: a chord is a chord end to end, and any two points on a
+   * circle bound an arc of that same circle. A Bezier rail does not -- its
+   * handles are anchored to its own original ends, so a shorter span
+   * between two different points needs its own, freshly split, handles
+   * ({@link subGeometry}) or it traces the wrong curve.
    */
-  readonly geometry: ConstructionEdgeGeometry;
-}
-
-function angleAround(center: readonly [number, number], x: number, z: number): number {
-  return Math.atan2(z - center[1], x - center[0]);
-}
-
-/** Sweep from `from` to `to` in the given direction, always in `[0, 2*PI)`. */
-function sweep(from: number, to: number, clockwise: boolean): number {
-  const raw = clockwise ? from - to : to - from;
-  const wrapped = raw % (Math.PI * 2);
-  return wrapped < 0 ? wrapped + Math.PI * 2 : wrapped;
+  geometryBetween(from: number, to: number): ConstructionEdgeGeometry;
 }
 
 /** The geometry of `edge` as the loop actually walks it. */
@@ -74,19 +71,12 @@ function isUpright(start: ConstructionPosition, end: ConstructionPosition): bool
   );
 }
 
-function frameOf(geometry: ConstructionEdgeGeometry, start: ConstructionPosition): Frame | undefined {
-  if (geometry.kind === "arc") {
-    const radius = Math.hypot(start.x - geometry.center[0], start.z - geometry.center[1]);
-    if (radius < 1e-6) return undefined;
-    return {
-      kind: "cylinder",
-      center: geometry.center,
-      radius,
-      startAngle: angleAround(geometry.center, start.x, start.z),
-      clockwise: geometry.clockwise,
-    };
-  }
-  return undefined;
+/** Every run's own frame, chained end to end -- the segment whose own travel range contains `travel`, clamped at either end of the whole rail. */
+function segmentAt(segments: readonly RailSegment[], travel: number): RailSegment {
+  const clamped = Math.min(Math.max(travel, 0), segments[segments.length - 1]!.offset + segments[segments.length - 1]!.frame.length);
+  let index = 0;
+  while (index < segments.length - 1 && clamped >= segments[index]!.offset + segments[index]!.frame.length) index += 1;
+  return segments[index]!;
 }
 
 /**
@@ -128,75 +118,52 @@ export function panelRailOf(topology: ConstructionRegionTopology): PanelRail | u
   const base = meanY(between) <= meanY(around) ? between : around;
   const top = base === between ? around : between;
 
-  const railStart = base[0]!.start!;
-  const geometry = walkedGeometry(base[0]!.edge);
-  const frame = frameOf(geometry, railStart);
-
-  const baseY = railStart.y;
+  const baseY = base[0]!.start!.y;
   const topY = top[0]!.start!.y;
+  if (!(topY > baseY)) return undefined;
 
-  // Rail length, run by run, so a subdivided base measures the same as an
-  // unbroken one.
-  const length = base.reduce((total, step) => {
-    const stepGeometry = walkedGeometry(step.edge);
-    if (stepGeometry.kind === "arc" && frame?.kind === "cylinder") {
-      return total + frame.radius * sweep(
-        angleAround(frame.center, step.start!.x, step.start!.z),
-        angleAround(frame.center, step.end!.x, step.end!.z),
-        stepGeometry.clockwise,
-      );
-    }
-    return total + Math.hypot(step.end!.x - step.start!.x, step.end!.z - step.start!.z);
-  }, 0);
-  if (!(length > 1e-6) || !(topY > baseY)) return undefined;
-
-  const railEnd = base[base.length - 1]!.end!;
-  const chordDirection: readonly [number, number] = [
-    (railEnd.x - railStart.x) / Math.hypot(railEnd.x - railStart.x, railEnd.z - railStart.z),
-    (railEnd.z - railStart.z) / Math.hypot(railEnd.x - railStart.x, railEnd.z - railStart.z),
-  ];
-  const resolved: Frame = frame ?? {
-    kind: "chord",
-    origin: [railStart.x, railStart.z],
-    direction: chordDirection,
-  };
-
-  const clamp = (travel: number): number => Math.min(Math.max(travel, 0), length);
+  let offset = 0;
+  const segments: RailSegment[] = base.map((step) => {
+    const geometry = walkedGeometry(step.edge);
+    const frame = edgeFrame(geometry, step.start!, step.end!);
+    const segment: RailSegment = { geometry, start: step.start!, end: step.end!, frame, offset };
+    offset += frame.length;
+    return segment;
+  });
+  const length = offset;
+  if (!(length > 1e-6)) return undefined;
 
   return {
     length,
     baseY,
     topY,
-    geometry:
-      resolved.kind === "cylinder"
-        ? { kind: "arc", center: resolved.center, clockwise: resolved.clockwise }
-        : { kind: "line" },
     travelTo(point) {
-      if (resolved.kind === "chord") {
-        return clamp(
-          (point.x - resolved.origin[0]) * resolved.direction[0] +
-            (point.z - resolved.origin[1]) * resolved.direction[1],
-        );
+      let best = 0;
+      let bestDistanceSq = Infinity;
+      for (const segment of segments) {
+        const local = segment.frame.travelTo(point.x, point.z);
+        const [px, pz] = segment.frame.positionAt(local);
+        const distanceSq = (point.x - px) * (point.x - px) + (point.z - pz) * (point.z - pz);
+        if (distanceSq < bestDistanceSq) {
+          bestDistanceSq = distanceSq;
+          best = segment.offset + local;
+        }
       }
-      const angle = angleAround(resolved.center, point.x, point.z);
-      return clamp(resolved.radius * sweep(resolved.startAngle, angle, resolved.clockwise));
+      return Math.min(Math.max(best, 0), length);
     },
     positionAt(travel, y) {
-      const along = clamp(travel);
-      if (resolved.kind === "chord") {
-        return {
-          x: resolved.origin[0] + resolved.direction[0] * along,
-          y,
-          z: resolved.origin[1] + resolved.direction[1] * along,
-        };
-      }
-      const swept = along / resolved.radius;
-      const angle = resolved.startAngle + (resolved.clockwise ? -swept : swept);
-      return {
-        x: resolved.center[0] + resolved.radius * Math.cos(angle),
-        y,
-        z: resolved.center[1] + resolved.radius * Math.sin(angle),
-      };
+      const segment = segmentAt(segments, travel);
+      const [x, z] = segment.frame.positionAt(travel - segment.offset);
+      return { x, y, z };
+    },
+    geometryBetween(from, to) {
+      const clampedFrom = Math.min(Math.max(from, 0), length);
+      const clampedTo = Math.min(Math.max(to, 0), length);
+      const segment = segmentAt(segments, clampedFrom);
+      const segmentEnd = segment.offset + segment.frame.length;
+      const t0 = segment.frame.parameterAt(clampedFrom - segment.offset);
+      const t1 = segment.frame.parameterAt(Math.min(clampedTo, segmentEnd) - segment.offset);
+      return subGeometry(segment.geometry, segment.start, segment.end, t0, t1);
     },
   };
 }

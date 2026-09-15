@@ -1,5 +1,7 @@
 import type { ConstructionEdgeGeometry } from "@/ports";
 
+import { angleAround, arcSweep, sameGeometry } from "../../../../features/edit-construction/index.ts";
+
 /**
  * Replaces the analytic curved-boolean engine platform extend/cut used to
  * run against. That engine could combine any two crossing shapes, arcs
@@ -57,16 +59,12 @@ function paramOnEdge(edge: DirectedContourEdge, positionOf: (id: string) => read
   const radius = Math.hypot(ax - center[0], az - center[1]);
   const pointRadius = Math.hypot(point[0] - center[0], point[1] - center[1]);
   if (Math.abs(pointRadius - radius) > tolerance) return undefined;
-  const tau = Math.PI * 2;
-  const startAngle = Math.atan2(az - center[1], ax - center[0]);
-  const endAngle = Math.atan2(bz - center[1], bx - center[0]);
-  const pointAngle = Math.atan2(point[1] - center[1], point[0] - center[0]);
-  const sweep = clockwise ? -((startAngle - endAngle + tau) % tau) : (endAngle - startAngle + tau) % tau;
+  const startAngle = angleAround(center, ax, az);
+  const endAngle = angleAround(center, bx, bz);
+  const pointAngle = angleAround(center, point[0], point[1]);
+  const sweep = arcSweep(startAngle, endAngle, clockwise);
   if (Math.abs(sweep) < 1e-9) return undefined;
-  let delta = clockwise ? -((startAngle - pointAngle + tau) % tau) : (pointAngle - startAngle + tau) % tau;
-  if (clockwise && delta > 0) delta -= tau;
-  if (!clockwise && delta < 0) delta += tau;
-  const t = delta / sweep;
+  const t = arcSweep(startAngle, pointAngle, clockwise) / sweep;
   return t > 1e-4 && t < 1 - 1e-4 ? t : undefined;
 }
 
@@ -108,15 +106,6 @@ function reverseGeometry(geometry: ConstructionEdgeGeometry): ConstructionEdgeGe
   return { kind: "arc", center: geometry.center, clockwise: !geometry.clockwise };
 }
 
-/** A distinct edge between the same two nodes (a lens of two arcs, say) never collides with this -- geometry is part of the identity, matching the same rounding `sharedEdgeId`'s own callers already accept. */
-function geometrySignature(geometry: ConstructionEdgeGeometry): string {
-  if (geometry.kind === "line") return "line";
-  if (geometry.kind === "bezier") {
-    return `bezier:${geometry.handle1[0].toFixed(4)}:${geometry.handle1[1].toFixed(4)}:${geometry.handle2[0].toFixed(4)}:${geometry.handle2[1].toFixed(4)}`;
-  }
-  return `arc:${geometry.clockwise}:${geometry.center[0].toFixed(4)}:${geometry.center[1].toFixed(4)}`;
-}
-
 /**
  * Cancels every edge the two edge sets share in opposite directions (an
  * edge welded onto by both the old boundary and the new stroke), then
@@ -133,16 +122,18 @@ export function weldedMerge(
   stroke: readonly DirectedContourEdge[],
 ): WeldedMergeResult {
   const declared = [...standing, ...stroke];
-  const buckets = new Map<string, DirectedContourEdge[]>();
+  const pairGroups = new Map<string, { readonly canonical: ConstructionEdgeGeometry; readonly edges: DirectedContourEdge[] }[]>();
   const ambiguous = "O traço encontra a borda existente de um jeito ambíguo. Desenhe emendando uma aresta inteira, não só tocando um vértice.";
   for (const edge of declared) {
     const forwardOrder = edge.a < edge.b;
     const [lo, hi] = forwardOrder ? [edge.a, edge.b] : [edge.b, edge.a];
     const canonical = forwardOrder ? edge.geometry : reverseGeometry(edge.geometry);
-    const key = `${lo}~${hi}~${geometrySignature(canonical)}`;
-    const bucket = buckets.get(key);
-    if (bucket === undefined) buckets.set(key, [edge]);
-    else bucket.push(edge);
+    const key = `${lo}~${hi}`;
+    const groups = pairGroups.get(key) ?? [];
+    if (!pairGroups.has(key)) pairGroups.set(key, groups);
+    const group = groups.find((candidate) => sameGeometry(candidate.canonical, canonical));
+    if (group === undefined) groups.push({ canonical, edges: [edge] });
+    else group.edges.push(edge);
   }
 
   // Direction is deliberately not part of the match: whichever way the new
@@ -150,12 +141,14 @@ export function weldedMerge(
   // declarations of the same span mean it is now interior. The kept span's
   // own direction (there is only ever one left once a pair cancels) is what
   // the later walk actually uses. A distinct edge over the same two nodes
-  // (a lens of two arcs, say) carries its own geometry in the bucket key, so
-  // it never collides with an unrelated edge here.
+  // (a lens of two arcs, say) groups separately via `sameGeometry`, so it
+  // never collides with an unrelated edge here.
   const kept: DirectedContourEdge[] = [];
-  for (const instances of buckets.values()) {
-    if (instances.length === 1) kept.push(instances[0]!);
-    else if (instances.length !== 2) return { kind: "error", message: ambiguous };
+  for (const groups of pairGroups.values()) {
+    for (const { edges: instances } of groups) {
+      if (instances.length === 1) kept.push(instances[0]!);
+      else if (instances.length !== 2) return { kind: "error", message: ambiguous };
+    }
   }
 
   const outFrom = new Map<string, DirectedContourEdge>();
@@ -190,13 +183,10 @@ export function weldedMerge(
 
 function sweep(edge: DirectedContourEdge, positionOf: (id: string) => readonly [number, number]): number {
   if (edge.geometry.kind !== "arc") return 0;
-  const [cx, cz] = edge.geometry.center;
+  const center = edge.geometry.center;
   const [ax, az] = positionOf(edge.a);
   const [bx, bz] = positionOf(edge.b);
-  const start = Math.atan2(az - cz, ax - cx);
-  const end = Math.atan2(bz - cz, bx - cx);
-  const tau = Math.PI * 2;
-  return edge.geometry.clockwise ? -((start - end + tau) % tau) : (end - start + tau) % tau;
+  return arcSweep(angleAround(center, ax, az), angleAround(center, bx, bz), edge.geometry.clockwise);
 }
 
 /** Signed XZ area of a closed directed loop, arcs included -- positive winds counter-clockwise. */

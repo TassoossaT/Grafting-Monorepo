@@ -1912,17 +1912,25 @@ One upright face, flattened: a rail to travel along and a height to rise through
 
 ### `property vtt.panel-rail.PanelRail.baseY: number`
 
-### `property vtt.panel-rail.PanelRail.geometry: ConstructionEdgeGeometry`
-
-The rail's own curvature, as an edge geometry walked in the direction of
-increasing travel. A straight panel reads as a line; a curved one carries
-the arc, so anything stamped onto the panel bends with it.
-
 ### `property vtt.panel-rail.PanelRail.length: number`
 
 Rail length in world units -- the full run from one side of the panel to the other.
 
 ### `property vtt.panel-rail.PanelRail.topY: number`
+
+### `method vtt.panel-rail.PanelRail.geometryBetween(from: number, to: number): ConstructionEdgeGeometry`
+
+The rail's own curvature between two travel distances, as an edge
+geometry walked in the direction of increasing travel -- what a caller
+stamping something onto the panel (an opening's own rim) must declare
+for *that* span specifically, not the whole rail's.
+
+A straight or arced rail answers this the same way regardless of
+`from`/`to`: a chord is a chord end to end, and any two points on a
+circle bound an arc of that same circle. A Bezier rail does not -- its
+handles are anchored to its own original ends, so a shorter span
+between two different points needs its own, freshly split, handles
+(subGeometry) or it traces the wrong curve.
 
 ### `method vtt.panel-rail.PanelRail.positionAt(travel: number, y: number): ConstructionPosition`
 
@@ -5067,6 +5075,10 @@ correct depends entirely on what the type means by it, so the type says.
 
 The same physical curve seen from the other end -- an arc keeps its center and flips its sweep, a Bezier swaps its two off-curve handles, a chord is symmetric.
 
+### `function vtt.boundary-edges.sameGeometry(a: ConstructionEdgeGeometry, b: ConstructionEdgeGeometry): boolean`
+
+Whether two geometries describe the same physical curve, walked the same way -- the one equality this app has for `ConstructionEdgeGeometry`, so a duplicate-edge check anywhere never drifts from what `createBoundaryEdges` itself already treats as "the same edge."
+
 ### `function vtt.boundary-edges.sharedEdgeId(tableId: string, from: string, to: string): string`
 
 The name the edge between two nodes carries, wherever it is named.
@@ -5172,6 +5184,72 @@ boundary -- in one call.
 
 Fails as a whole when any member cannot be read: a cloud in the middle of
 changing is not in a state to plan an edit against.
+
+### `interface vtt.edge-geometry.EdgeFrame`
+
+An edge's own flattened XZ frame: how far along it a point is, and where a given distance sits.
+
+### `property vtt.edge-geometry.EdgeFrame.length: number`
+
+Total run in world units.
+
+### `method vtt.edge-geometry.EdgeFrame.parameterAt(travel: number): number`
+
+The edge's own parameter `t` in `[0, 1]` at `travel` -- uniform for a line or arc, sampled for a Bezier.
+
+### `method vtt.edge-geometry.EdgeFrame.positionAt(travel: number): readonly [number, number]`
+
+XZ position at `travel` (clamped to `[0, length]`).
+
+### `method vtt.edge-geometry.EdgeFrame.travelTo(x: number, z: number): number`
+
+Distance along the edge (clamped to `[0, length]`) closest to `(x, z)`.
+
+### `function vtt.edge-geometry.angleAround(center: readonly [number, number], x: number, z: number): number`
+
+Angle of `(x, z)` around `center`, in the graph's own XZ convention (`atan2(z, x)`).
+
+### `function vtt.edge-geometry.arcSweep(from: number, to: number, clockwise: boolean): number`
+
+The signed angle actually swept walking from angle `from` to angle `to`
+in the direction `clockwise` says, magnitude always in `[0, 2*PI)`.
+Positive/counter-clockwise unless `clockwise` is set.
+
+### `function vtt.edge-geometry.bezierPointXz(start: ConstructionPosition, handle1: readonly [number, number], handle2: readonly [number, number], end: ConstructionPosition, t: number): readonly [number, number]`
+
+XZ position on the cubic Bezier `start -> handle1 -> handle2 -> end` at parameter `t`.
+
+### `function vtt.edge-geometry.edgeFrame(geometry: ConstructionEdgeGeometry, start: ConstructionPosition, end: ConstructionPosition): EdgeFrame`
+
+A parametrized XZ frame for `geometry` walked `start -> end`, whatever
+shape it is. This is the generic answer to "how far along this edge is
+this point" and "where is this edge at this distance" that a straight
+chord and a circular arc already had closed-form answers for -- a Bezier
+edge gets the same two questions answered here too, via arc-length
+sampling, instead of a caller falling back to treating it as a chord.
+
+### `function vtt.edge-geometry.positionAlongEdge(geometry: ConstructionEdgeGeometry, start: ConstructionPosition, end: ConstructionPosition, t: number): ConstructionPosition`
+
+`geometry` walked from `start` to `end`, at parameter `t` in `[0, 1]` --
+the one place every edge kind is evaluated for a flat overlay/preview
+polyline. Height is linear between the two endpoints for every kind: none
+of them carries its own vertical shape independent of its ends (that is
+exactly what the mesh's own ribbon/upright sampling is for).
+
+### `function vtt.edge-geometry.subGeometry(geometry: ConstructionEdgeGeometry, start: ConstructionPosition, end: ConstructionPosition, t0: number, t1: number): ConstructionEdgeGeometry`
+
+The exact sub-curve of `geometry` between its own parameters `t0` and
+`t1` (`0 <= t0 < t1 <= 1`), as its own declarable geometry.
+
+A line or an arc need no work: a chord is a chord end to end, and any two
+points on a circle bound an arc of that *same* circle, so the center and
+direction alone already describe every sub-span. A Bezier's off-curve
+handles are anchored to its own original endpoints, though, so reusing
+them for a shorter span between two different points traces the wrong
+curve entirely -- this is what an opening stamped onto a curved wall
+needs to place its own rim edge correctly, via two de Casteljau splits
+(isolate `[t0, 1]`, then take `[0, t1']` of that in its own local
+parameter) instead of borrowing the whole rail's handles unchanged.
 
 ### `function vtt.ring-simplify.simplifyClosedRing(points: readonly ConstructionPosition[], geometryFor: (fromIndex: number, toIndex: number) => ConstructionEdgeGeometry | undefined): readonly number[]`
 
@@ -6971,7 +7049,7 @@ Invoked when the drawer requests to close, e.g. its own close button or Escape.
 
 Whether the drawer is currently shown.
 
-### `property vtt.ui.DrawerProps.placement?: "bottom" | "top" | "left" | "right"`
+### `property vtt.ui.DrawerProps.placement?: "left" | "bottom" | "top" | "right"`
 
 Which screen edge the drawer slides in from.
 
@@ -7062,7 +7140,7 @@ Ant Design does not do that on its own. Uncontrolled (starts collapsed,
 closes only on its own trigger/outside click) when omitted. Ignored
 when `alwaysExpanded` is set.
 
-### `property vtt.ui.FloatButtonGroupProps.placement?: "bottom" | "top" | "left" | "right"`
+### `property vtt.ui.FloatButtonGroupProps.placement?: "left" | "bottom" | "top" | "right"`
 
 Which side the group expands toward from the trigger -- `"top"`/`"bottom"`
 stack items in a vertical column, `"left"`/`"right"` lay them out in a
@@ -7320,7 +7398,7 @@ Invoked when the popover requests to close, e.g. an outside click or Escape.
 
 Whether the popover is currently shown.
 
-### `property vtt.ui.PopoverProps.placement?: "bottom" | "top" | "left" | "right"`
+### `property vtt.ui.PopoverProps.placement?: "left" | "bottom" | "top" | "right"`
 
 Which side of `anchor` the popover opens toward.
 

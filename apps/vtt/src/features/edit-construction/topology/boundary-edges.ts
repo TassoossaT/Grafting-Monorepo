@@ -106,6 +106,19 @@ export function reverseGeometry(geometry: ConstructionEdgeGeometry): Constructio
   return { kind: "arc", center: geometry.center, clockwise: !geometry.clockwise };
 }
 
+/** Whether two geometries describe the same physical curve, walked the same way -- the one equality this app has for `ConstructionEdgeGeometry`, so a duplicate-edge check anywhere never drifts from what `createBoundaryEdges` itself already treats as "the same edge." */
+export function sameGeometry(a: ConstructionEdgeGeometry, b: ConstructionEdgeGeometry): boolean {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === "line") return true;
+  if (a.kind === "arc" && b.kind === "arc") {
+    return a.clockwise === b.clockwise && a.center[0] === b.center[0] && a.center[1] === b.center[1];
+  }
+  if (a.kind === "bezier" && b.kind === "bezier") {
+    return a.handle1[0] === b.handle1[0] && a.handle1[1] === b.handle1[1] && a.handle2[0] === b.handle2[0] && a.handle2[1] === b.handle2[1];
+  }
+  return false;
+}
+
 export function createBoundaryEdges(tableId: string, sharing: EdgeSharing): BoundaryEdges {
   const edges = new Map<ConstructionEdgeId, ConstructionPatchEdge>();
   const claimed = new Map<ConstructionEdgeId, boolean[]>();
@@ -126,15 +139,6 @@ export function createBoundaryEdges(tableId: string, sharing: EdgeSharing): Boun
       const reversed = !forward;
 
       const stored = forward ? geometry : reverseGeometry(geometry);
-      const sameGeometry = (a: ConstructionEdgeGeometry, b: ConstructionEdgeGeometry): boolean => {
-        if (a.kind !== b.kind) return false;
-        if (a.kind === "line") return true;
-        if (a.kind === "arc" && b.kind === "arc") return a.clockwise === b.clockwise && a.center[0] === b.center[0] && a.center[1] === b.center[1];
-        if (a.kind === "bezier" && b.kind === "bezier") {
-          return a.handle1[0] === b.handle1[0] && a.handle1[1] === b.handle1[1] && a.handle2[0] === b.handle2[0] && a.handle2[1] === b.handle2[1];
-        }
-        return false;
-      };
       const accepts = (id: ConstructionEdgeId): boolean => {
         const existing = edges.get(id)?.geometry ?? LINE;
         return hasRoom(id, reversed) && (!edges.has(id) || sameGeometry(existing, stored));

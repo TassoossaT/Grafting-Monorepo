@@ -9,8 +9,10 @@ export { edgeUseCounts, outwardPerimeterRings, perimeterOf } from "./surface-per
 export type { PerimeterLoop } from "./surface-perimeter.ts";
 export { fitPath } from "./stroke-fitting.ts";
 export type { FittedEdge, FitOptions } from "./stroke-fitting.ts";
-export { createBoundaryEdges, reverseGeometry, sharedEdgeId } from "./boundary-edges.ts";
+export { createBoundaryEdges, reverseGeometry, sameGeometry, sharedEdgeId } from "./boundary-edges.ts";
 export type { BoundaryEdges, EdgeSharing } from "./boundary-edges.ts";
+export { angleAround, arcSweep, bezierPointXz, edgeFrame, positionAlongEdge, subGeometry } from "./edge-geometry.ts";
+export type { EdgeFrame } from "./edge-geometry.ts";
 export { stationFrame, sweptBoundary, sweepFormation, withoutCoincidentStations, SweepFormationError } from "./sweep-formation.ts";
 export type { SweptArc, TransverseProfilePoint } from "./sweep-formation.ts";
 export { simplifyClosedRing } from "./ring-simplify.ts";
