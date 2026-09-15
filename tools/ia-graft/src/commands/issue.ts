@@ -4,24 +4,30 @@ import { join } from "node:path";
 import { execGhSync } from "../git/exec.ts";
 
 /**
- * Runs a `gh` subcommand whose body/comment text must reach it as a file,
- * never inline: `execFileSync` still assembles one Windows command line
- * under the hood, and CreateProcess caps that around 32K characters --
- * comfortably exceeded by a design doc pasted into an issue body (#247 hit
- * this at ~35K, ENAMETOOLONG, past the point where `--body <text>` had
- * worked for a smaller draft of the same issue). `gh` itself reads
- * `--body-file` off disk, so routing every long-text flag through a real
- * temp file sidesteps the OS limit regardless of how large the text is.
+ * Hands `text` to `use` as a real temp file, removed afterwards.
+ *
+ * Long text must reach `gh` as a file, never inline: `execFileSync` still
+ * assembles one Windows command line under the hood, and CreateProcess caps
+ * that around 32K characters -- comfortably exceeded by a design doc pasted
+ * into an issue body (#247 hit this at ~35K, ENAMETOOLONG, past the point
+ * where `--body <text>` had worked for a smaller draft of the same issue).
+ * `gh` reads files off disk, so routing every long-text value through a temp
+ * file sidesteps the OS limit regardless of how large the text is.
  */
-function ghWithTextFile(args: readonly string[], flag: string, text: string): string {
+export function withTempTextFile<T>(text: string, use: (filePath: string) => T): T {
   const dir = mkdtempSync(join(tmpdir(), "ia-graft-"));
   const filePath = join(dir, "body.md");
   try {
     writeFileSync(filePath, text, "utf8");
-    return execGhSync([...args, flag, filePath]);
+    return use(filePath);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+}
+
+/** Runs a `gh` subcommand whose `flag` takes the path of a file holding `text`. */
+function ghWithTextFile(args: readonly string[], flag: string, text: string): string {
+  return withTempTextFile(text, (filePath) => execGhSync([...args, flag, filePath]));
 }
 
 export interface IssueParentRef {
@@ -54,7 +60,13 @@ export interface IssueListInput {
   limit?: number;
   parent?: number | string;
   orphan?: boolean;
+  milestone?: string;
+  state?: IssueListState;
 }
+
+export type IssueListState = "open" | "closed" | "all";
+
+const ISSUE_LIST_STATES: readonly string[] = ["open", "closed", "all"];
 
 export interface IssueViewInput {
   id: number | string;
@@ -73,8 +85,15 @@ export interface IssueNewInput {
 
 export interface IssueUpdateInput {
   id: number | string;
+  title?: string;
+  type?: string;
+  area?: string;
   status?: string;
   priority?: string;
+  milestone?: string;
+  removeMilestone?: boolean;
+  parent?: number | string;
+  removeParent?: boolean;
   comment?: string;
   body?: string;
   state?: "open" | "closed";
@@ -116,16 +135,15 @@ export function parseLabels(labels: Array<{ name: string }>): {
  * Lists issues from GitHub in a token-compact format with hierarchical parent metadata.
  */
 export async function issueList(_repoRoot: string, input: IssueListInput = {}) {
+  const state = input.state ?? "open";
+  if (!ISSUE_LIST_STATES.includes(state)) {
+    return { ok: false as const, error: `invalid issue state "${state}": expected open, closed, or all` };
+  }
   try {
     const limit = String(input.limit || 50);
-    const raw = execGhSync([
-      "issue",
-      "list",
-      "--limit",
-      limit,
-      "--json",
-      "number,title,labels,milestone,url,state,parent",
-    ]);
+    const args = ["issue", "list", "--limit", limit, "--state", state, "--json", "number,title,labels,milestone,url,state,parent"];
+    if (input.milestone) args.push("--milestone", input.milestone);
+    const raw = execGhSync(args);
     const parsed = JSON.parse(raw) as Array<{
       number: number;
       title: string;
@@ -298,8 +316,52 @@ export function ghCloseReason(reason: string): string | undefined {
   return Object.hasOwn(GH_CLOSE_REASONS, reason) ? GH_CLOSE_REASONS[reason as IssueCloseReason] : undefined;
 }
 
+/** The label families an issue carries exactly one of, each named by its label prefix. */
+const SINGLE_VALUE_LABELS = ["type", "area", "status", "priority"] as const;
+
+/** Why `input` asks for two contradictory edits at once, or `undefined` when it does not. */
+export function issueUpdateConflict(input: IssueUpdateInput): string | undefined {
+  if (input.milestone && input.removeMilestone) return "pass either milestone or removeMilestone, not both";
+  if (input.parent !== undefined && input.parent !== "" && input.removeParent) {
+    return "pass either parent or removeParent, not both";
+  }
+  return undefined;
+}
+
 /**
- * Updates an existing issue (status/priority label swap, comment, body).
+ * The `gh issue edit` argv for every metadata change in `input`, or
+ * `undefined` when there is none.
+ *
+ * A single-value label (`type`, `area`, `status`, `priority`) is swapped, not
+ * added: every other label of the same family in `currentLabels` is removed,
+ * so an issue never ends up both `P1-high` and `P3-low`.
+ */
+export function planIssueEdit(
+  id: string,
+  input: IssueUpdateInput,
+  currentLabels: readonly string[],
+): string[] | undefined {
+  const args = ["issue", "edit", id];
+  for (const family of SINGLE_VALUE_LABELS) {
+    const value = input[family];
+    if (!value) continue;
+    const next = value.startsWith(`${family}: `) ? value : `${family}: ${value}`;
+    for (const label of currentLabels) {
+      if (label.startsWith(`${family}: `) && label !== next) args.push("--remove-label", label);
+    }
+    args.push("--add-label", next);
+  }
+  if (input.title) args.push("--title", input.title);
+  if (input.milestone) args.push("--milestone", input.milestone);
+  if (input.removeMilestone) args.push("--remove-milestone");
+  if (input.parent !== undefined && input.parent !== "") args.push("--parent", String(input.parent));
+  if (input.removeParent) args.push("--remove-parent");
+  return args.length > 3 ? args : undefined;
+}
+
+/**
+ * Updates an existing issue: title, single-value labels, milestone, parent,
+ * body, a comment, and its open/closed state.
  */
 export async function issueUpdate(_repoRoot: string, input: IssueUpdateInput) {
   if (!input || !input.id) return { ok: false as const, error: "missing issue id" };
@@ -307,51 +369,25 @@ export async function issueUpdate(_repoRoot: string, input: IssueUpdateInput) {
   if (input.reason && closeReason === undefined) {
     return { ok: false as const, error: `invalid close reason "${input.reason}": expected completed or not_planned` };
   }
+  const conflict = issueUpdateConflict(input);
+  if (conflict) return { ok: false as const, error: conflict };
   try {
     const id = String(input.id);
 
-    // Add comment if provided
     if (input.comment) {
       ghWithTextFile(["issue", "comment", id], "--body-file", input.comment);
     }
 
-    // Replace the body outright if provided
     if (input.body !== undefined) {
       ghWithTextFile(["issue", "edit", id], "--body-file", input.body);
     }
 
-    // Update status or priority if provided
-    if (input.status || input.priority) {
-      const viewRaw = execGhSync(["issue", "view", id, "--json", "labels"]);
-      const current = JSON.parse(viewRaw).labels as Array<{ name: string }>;
-      
-      const removeLabels: string[] = [];
-      const addLabels: string[] = [];
-
-      if (input.status) {
-        const newStatus = input.status.startsWith("status: ") ? input.status : `status: ${input.status}`;
-        for (const l of current) {
-          if (l.name.startsWith("status: ") && l.name !== newStatus) removeLabels.push(l.name);
-        }
-        addLabels.push(newStatus);
-      }
-
-      if (input.priority) {
-        const newPriority = input.priority.startsWith("priority: ") ? input.priority : `priority: ${input.priority}`;
-        for (const l of current) {
-          if (l.name.startsWith("priority: ") && l.name !== newPriority) removeLabels.push(l.name);
-        }
-        addLabels.push(newPriority);
-      }
-
-      const editArgs = ["issue", "edit", id];
-      for (const l of removeLabels) editArgs.push("--remove-label", l);
-      for (const l of addLabels) editArgs.push("--add-label", l);
-
-      if (editArgs.length > 3) {
-        execGhSync(editArgs);
-      }
-    }
+    const needsLabels = SINGLE_VALUE_LABELS.some((family) => input[family]);
+    const currentLabels = needsLabels
+      ? (JSON.parse(execGhSync(["issue", "view", id, "--json", "labels"])).labels as Array<{ name: string }>).map((l) => l.name)
+      : [];
+    const editArgs = planIssueEdit(id, input, currentLabels);
+    if (editArgs) execGhSync(editArgs);
 
     if (input.state === "closed") {
       const closeArgs = ["issue", "close", id];

@@ -1,6 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ghCloseReason, issueClose, issueDoctor, issueList, issueNew, issueTree, issueUpdate, issueView } from "./issue.ts";
+import {
+  ghCloseReason,
+  issueClose,
+  issueDoctor,
+  issueList,
+  issueNew,
+  issueTree,
+  issueUpdate,
+  issueUpdateConflict,
+  issueView,
+  planIssueEdit,
+} from "./issue.ts";
 
 test("issue list runs cleanly without throwing", async () => {
   const result = await issueList(process.cwd(), { limit: 5 });
@@ -60,6 +71,44 @@ test("issue close rejects an unknown reason before calling gh", async () => {
   const result = await issueClose(process.cwd(), { id: 1, reason: "wontfix" as never });
   assert.equal(result.ok, false);
   if (!result.ok) assert.match(result.error, /invalid close reason/);
+});
+
+test("issue edit swaps single-value labels and sets title, milestone, and parent", () => {
+  const args = planIssueEdit(
+    "7",
+    { id: 7, priority: "P1-high", area: "apps", title: "New title", milestone: "1.0", parent: 170 },
+    ["priority: P3-low", "area: domains", "type: task"],
+  );
+  assert.deepEqual(args, [
+    "issue", "edit", "7",
+    "--remove-label", "area: domains", "--add-label", "area: apps",
+    "--remove-label", "priority: P3-low", "--add-label", "priority: P1-high",
+    "--title", "New title",
+    "--milestone", "1.0",
+    "--parent", "170",
+  ]);
+});
+
+test("issue edit removes milestone and parent, and plans nothing when nothing changes", () => {
+  assert.deepEqual(planIssueEdit("7", { id: 7, removeMilestone: true, removeParent: true }, []), [
+    "issue", "edit", "7", "--remove-milestone", "--remove-parent",
+  ]);
+  assert.equal(planIssueEdit("7", { id: 7, comment: "only a comment" }, []), undefined);
+});
+
+test("issue update rejects contradictory milestone or parent edits before calling gh", async () => {
+  assert.match(issueUpdateConflict({ id: 7, milestone: "1.0", removeMilestone: true }) ?? "", /milestone/);
+  assert.match(issueUpdateConflict({ id: 7, parent: 170, removeParent: true }) ?? "", /parent/);
+  assert.equal(issueUpdateConflict({ id: 7, milestone: "1.0", removeParent: true }), undefined);
+
+  const result = await issueUpdate(process.cwd(), { id: 7, parent: 170, removeParent: true });
+  assert.equal(result.ok, false);
+});
+
+test("issue list rejects an unknown state before calling gh", async () => {
+  const result = await issueList(process.cwd(), { state: "merged" as never });
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.error, /invalid issue state/);
 });
 
 test("issue reopen validates required id", async () => {
