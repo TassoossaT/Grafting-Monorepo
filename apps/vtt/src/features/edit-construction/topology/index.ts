@@ -13,8 +13,10 @@ export { createBoundaryEdges, reverseGeometry, sameGeometry, sharedEdgeId } from
 export type { BoundaryEdges, EdgeSharing } from "./boundary-edges.ts";
 export { angleAround, arcSweep, bezierPointXz, edgeFrame, positionAlongEdge, subGeometry } from "./edge-geometry.ts";
 export type { EdgeFrame } from "./edge-geometry.ts";
-export { stationFrame, sweptBoundary, sweepFormation, withoutCoincidentStations, SweepFormationError } from "./sweep-formation.ts";
-export type { SweptArc, TransverseProfilePoint } from "./sweep-formation.ts";
 export { simplifyClosedRing } from "./ring-simplify.ts";
 export { automaticCurve, curvePoint, curvePosition, resolveCurves, ribbonSections, sampleRibbons, unionRibbonOutlines } from "./bezier-curve.ts";
 export type { RibbonRequest } from "./bezier-curve.ts";
+export { planarDifference, planarUnion } from "./planar-area.ts";
+export type { PlanarArea, PlanarPoint, PlanarPolygon, PlanarRing } from "./planar-area.ts";
+export { contourCurve, contourGeometry, curveEdgesOf, curveHandles, curveSegments, reshapeCurve } from "./curve-handles.ts";
+export type { CurveEdge, CurveHandleIndex, CurveStore } from "./curve-handles.ts";

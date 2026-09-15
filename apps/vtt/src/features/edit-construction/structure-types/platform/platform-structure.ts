@@ -9,16 +9,19 @@ import {
   slopeMotionInfluences,
   validateSlopeMotion,
 } from "./platform-slope-spine.ts";
-import { isTerrainSurface } from "../organic/index.ts";
-import { allowed, denied, type StructureTypeDefinition } from "../structure-type.ts";
+import { allowed, denied, type StructureTypeDefinition, type StructureView } from "../structure-type.ts";
+
+/** Ground under a platform is cut, and the ground's own repair regenerates around it. */
+const cutsGround = (covered: StructureView) => covered.traits.has("ground") ? CUT : IGNORE;
 
 /** A horizontal structural marker, independently usable as floor or ceiling. */
 export const platformStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
   surfaceType: "platform", label: "Plataforma", creation: "a flat closed contour, without thickness",
+  traits: Object.freeze(["floor"] as const),
+  requiresMotionSolver: true,
   roleFor: (topology, target) => target.kind === "vertex" && !topology.nodes.some((node) => node.id === target.nodeId) ? "platform-unknown" : `platform-${target.kind}`,
   policyFor: (role) => role === "platform-unknown" ? denied(role, "Vertice fora da plataforma.") : ({ ...allowed(role, ALL_AXES, role === "platform-region" ? "cloud" : "surface"), transport: role === "platform-region" }),
-  interactionOver: (coveredType: string) => isTerrainSurface(coveredType) ? CUT : IGNORE,
-  repairAfterCut: { kind: "preserve", reason: "Structural contour subtraction preserves the remaining planar faces and shared identities." },
+  interactionOver: cutsGround,
   motionInfluences: (topology, transport): readonly ConstructionMotionInfluence[] => {
     const anchor = topology.nodes[0];
     if (!anchor) return [];
@@ -57,12 +60,11 @@ export const platformStructureType: StructureTypeDefinition = Object.freeze<Stru
 export const slopedPlatformStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
   surfaceType: SLOPE_SURFACE_TYPE, label: "Plataforma inclinada",
   creation: "one face per spine span: the span's ribbon, sampled along its bezier curve",
+  traits: Object.freeze([]),
+  requiresMotionSolver: true,
   roleFor: () => "platform-slope-face",
   policyFor: (role) => denied(role, "Edite a plataforma inclinada pela espinha: pontos, alças e largura."),
-  // The same answer the flat platform gives: ground under it is cut, and the
-  // terrain's own repair regenerates around it.
-  interactionOver: (coveredType: string) => isTerrainSurface(coveredType) ? CUT : IGNORE,
-  repairAfterCut: { kind: "unsupported", reason: "a cut span needs its own spine split and end capping, not designed yet" },
+  interactionOver: cutsGround,
   motionInfluences: slopeMotionInfluences,
   deriveMotion: deriveSlopeMotion,
   validateMotion: validateSlopeMotion,

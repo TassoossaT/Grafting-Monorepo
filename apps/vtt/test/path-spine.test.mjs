@@ -13,7 +13,8 @@ import {
 } from "../src/features/edit-construction/structure-types/path/station-node-id.ts";
 import { PATH_ROLES, pathRoleFor } from "../src/features/edit-construction/structure-types/path/path-structure.ts";
 import { planPathCloudMutation } from "../src/features/edit-construction/structure-types/path/path-cloud-mutation.ts";
-import { referenceLineFrom } from "../src/features/edit-construction/structure-types/path/path-reference-line.ts";
+import { bezierContourId } from "../src/features/edit-construction/structure-types/path/path-cloud-scope.ts";
+import { sessionFixture } from "./platform-session-fixture.mjs";
 
 const ROAD = Object.freeze({
   shape: "circle",
@@ -296,9 +297,10 @@ test("dragging a contour node smooths adjacent boundary loop nodes", () => {
   assert.deepEqual(movedMap.get("contour:op1#road:band-0:0:4"), { x: 1, y: 0, z: 1.6 });
 });
 
-test("planPathCloudMutation does not consume standing regions of unrelated path clouds with similar ID prefixes", () => {
+test("planPathCloudMutation does not consume standing faces owned by an unrelated road with a similar id", () => {
+  const { runtime, session } = sessionFixture();
   const unrelatedTopology = {
-    surfaceKey: ["@region", "op-10#road:band-0:0"],
+    surfaceKey: ["@region", bezierContourId(new Set(["op-10#road"]), "op-10")],
     surfaceType: "path",
     nodes: [
       { id: "contour:op-10#road:band-0:0:1", position: { x: 50, y: 0, z: 50 } },
@@ -310,15 +312,6 @@ test("planPathCloudMutation does not consume standing regions of unrelated path 
     holes: [],
   };
 
-  const graphSnapshot = {
-    nodes: [
-      { id: "spine:op-10#road:0", position: { x: 50, y: 0, z: 52.5 } },
-      { id: "spine:op-10#road:1", position: { x: 60, y: 0, z: 52.5 } },
-    ],
-    edges: [
-      { edgeId: "spine-edge:op-10#road:0", startNodeId: "spine:op-10#road:0", endNodeId: "spine:op-10#road:1" },
-    ],
-  };
 
   const effect = createPathBrushEffect(
     {
@@ -335,22 +328,24 @@ test("planPathCloudMutation does not consume standing regions of unrelated path 
     { operationId: "op-1", tableId: "table-1", initiatedBy: "path-brush" },
   );
 
-  const plan = planPathCloudMutation({
-    tableId: "table-1",
-    snapToGrid: false,
-    graphSnapshot,
-    regionTopologies: [unrelatedTopology],
-    coverageFor: () => [],
-    effect,
-    tolerance: 0.05,
-  });
+  try {
+    const plan = planPathCloudMutation({
+      bezier: runtime,
+      tableId: "table-1",
+      graphSnapshot: { nodes: [], edges: [] },
+      regionTopologies: [unrelatedTopology],
+      coverageFor: () => [],
+      effect,
+      tolerance: 0.05,
+    });
 
-  assert.equal(plan.kind, "ready");
-  assert.deepEqual(
-    plan.request.sourceSurfaceKeys,
-    [],
-    "unrelated road op-10 must NOT be consumed or deleted when drawing op-1",
-  );
+    assert.equal(plan.kind, "ready");
+    assert.deepEqual(
+      plan.request.sourceSurfaceKeys,
+      [],
+      "unrelated road op-10 must NOT be consumed or deleted when drawing op-1",
+    );
+  } finally { session.free(); }
 });
 
 function straightRoadEffect() {
@@ -385,69 +380,23 @@ test("planPathCloudMutation never consumes another type's regions itself, whatev
     nodeIds: ["terrain-node-a", "terrain-node-b"],
   };
 
-  const plan = planPathCloudMutation({
-    tableId: "table-1",
-    snapToGrid: false,
-    graphSnapshot: { nodes: [], edges: [] },
-    regionTopologies: [],
-    coverageFor: () => [terrainFace],
-    effect: straightRoadEffect(),
-    tolerance: 0.05,
-  });
+  const { runtime, session } = sessionFixture();
+  try {
+    const plan = planPathCloudMutation({
+      bezier: runtime,
+      tableId: "table-1",
+      graphSnapshot: { nodes: [], edges: [] },
+      regionTopologies: [],
+      coverageFor: () => [terrainFace],
+      effect: straightRoadEffect(),
+      tolerance: 0.05,
+    });
 
-  assert.equal(plan.kind, "ready");
-  assert.deepEqual(plan.request.sourceSurfaceKeys, [], "a foreign region is never in this function's own sourceSurfaceKeys");
-  assert.ok(plan.request.footprintOutline.length >= 3, "the road's own footprint rides along on the request regardless");
-});
-
-test("referenceLineFrom smoothly interpolates height along stroke slope without stepping", () => {
-  const stroke = [
-    { x: 0, y: 0, z: 0 },
-    { x: 10, y: 5, z: 0 },
-  ];
-  const fitted = [
-    { start: { x: 0, y: 0, z: 0 }, end: { x: 10, y: 5, z: 0 } },
-  ];
-  const { line } = referenceLineFrom(fitted, stroke, true);
-  assert.equal(line.length, 2, "a uniform slope does not introduce spurious steps or extra stations");
-  assert.equal(line[0].y, 0);
-  assert.equal(line[1].y, 5);
-});
-
-test("referenceLineFrom over a hill produces a clean crest control point without zig-zag or step lag", () => {
-  const stroke = [
-    { x: 0, y: 0, z: 0 },
-    { x: 5, y: 3, z: 0 },
-    { x: 10, y: 0, z: 0 },
-  ];
-  const fitted = [
-    { start: { x: 0, y: 0, z: 0 }, end: { x: 10, y: 0, z: 0 } },
-  ];
-  const { line } = referenceLineFrom(fitted, stroke, true);
-  // Ridge from 0 to 5 (rising) and 5 to 10 (falling) should place control point at peak (x=5)
-  assert.equal(line.length, 3, "a triangular hill produces exactly start, crest, and end stations");
-  assert.equal(line[0].x, 0);
-  assert.equal(line[0].y, 0);
-  assert.equal(line[1].x, 5);
-  assert.equal(line[1].y, 3);
-  assert.equal(line[2].x, 10);
-  assert.equal(line[2].y, 0);
-});
-
-test("referenceLineFrom over flat ground produces only start and end points", () => {
-  const stroke = [
-    { x: 0, y: 0, z: 0 },
-    { x: 3, y: 0, z: 0 },
-    { x: 7, y: 0, z: 0 },
-    { x: 10, y: 0, z: 0 },
-  ];
-  const fitted = [
-    { start: { x: 0, y: 0, z: 0 }, end: { x: 10, y: 0, z: 0 } },
-  ];
-  const { line } = referenceLineFrom(fitted, stroke, true);
-  assert.equal(line.length, 2, "flat ground produces only endpoints");
-  assert.equal(line[0].x, 0);
-  assert.equal(line[1].x, 10);
+    assert.equal(plan.kind, "ready");
+    assert.deepEqual(plan.request.sourceSurfaceKeys, [], "a foreign region is never in this function's own sourceSurfaceKeys");
+    assert.ok(plan.request.footprintOutline.length >= 3, "the road's own footprint rides along on the request regardless");
+    assert.ok(plan.request.graphPatch.edges.every((edge) => edge.curve?.surfaceType === "path"), "the road stamps itself as the owner of its spans");
+  } finally { session.free(); }
 });
 
 

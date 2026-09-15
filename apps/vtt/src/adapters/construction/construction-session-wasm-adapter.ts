@@ -19,6 +19,7 @@ import type {
   ConstructionTopologyBoundsQuery,
   ConstructionCoverageKind,
   ConstructionCoveredRegion,
+  ConstructionCurvedEdge,
   ConstructionEdgeGeometry,
   ConstructionNodeId,
   ConstructionNodeSnapshot,
@@ -511,6 +512,11 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     return wire.map(fromWireTopology);
   }
 
+  getCurvedEdges(): readonly ConstructionCurvedEdge[] {
+    const wire = JSON.parse(this.#require().curved_edges_json()) as readonly (Omit<ConstructionCurvedEdge, "start" | "end"> & { readonly start: WirePosition; readonly end: WirePosition })[];
+    return wire.map((edge) => ({ ...edge, start: fromWirePosition(edge.start), end: fromWirePosition(edge.end) }));
+  }
+
   getRegionTopologiesInBounds(bounds: ConstructionTopologyBoundsQuery): readonly ConstructionRegionTopology[] {
     const session = this.#require() as ConstructionSession & {
       region_topologies_in_bounds_json(requestJson: string): string;
@@ -562,6 +568,18 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
       patch,
     }))) as { readonly outcome: RegionEditOutcomeWire; readonly skippedRegionIds: readonly string[]; readonly skippedRegionReasons?: readonly string[] };
     return { ...fromWireOutcome(wire.outcome), skippedRegionIds: wire.skippedRegionIds, skippedRegionReasons: wire.skippedRegionReasons ?? [] };
+  }
+
+  beginTransaction(transactionId: string): void {
+    this.#require().begin_transaction(transactionId);
+  }
+
+  commitTransaction(transactionId: string): boolean {
+    return this.#require().commit_transaction(transactionId);
+  }
+
+  rollbackTransaction(transactionId: string): void {
+    this.#require().rollback_transaction(transactionId);
   }
 
   undoRegionOverlay(operationId: string): void {

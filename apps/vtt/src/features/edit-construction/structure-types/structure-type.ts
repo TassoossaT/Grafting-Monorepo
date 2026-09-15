@@ -1,4 +1,4 @@
-import type { ApplyPatchReplacementRequest, BezierPort, ConstructionGraphPatch, ConstructionMotionInfluence } from "@/ports";
+import type { ApplyPatchReplacementRequest, BezierPort, ConstructionEdgeGeometry, ConstructionGraphPatch, ConstructionMotionInfluence } from "@/ports";
 import type {
   ConstructionGraphSnapshot,
   ConstructionNodeId,
@@ -11,7 +11,8 @@ import type {
 import type { AtomicEditOp, EditAxis, EditGesture, EditTarget } from "../orchestration/atomic-edit.ts";
 import type { CloudTopology } from "../topology/construction-cloud.ts";
 import type { CreationInteraction } from "./creation-interaction.ts";
-import type { MultiPolygon } from "polygon-clipping";
+import type { EffectKind, ReactionId } from "../effects/effect.ts";
+import type { PlanarArea } from "../topology/planar-area.ts";
 
 /**
  * A role is this app's own name for "what a particular node/edge of a
@@ -75,6 +76,21 @@ export interface RolePolicy {
    * scaled or cross-axis variant.
    */
   readonly cascade?: (context: CascadeContext) => readonly AtomicEditOp[];
+  /**
+   * Present when the grabbed edge's curve may be reshaped through a curve
+   * handle, returning the extra ops that reshape alongside it in the same
+   * transaction -- a wall's top run following its bottom run. Absent means
+   * the edge keeps the curve it has.
+   */
+  readonly reshape?: (context: ReshapeContext) => readonly AtomicEditOp[];
+}
+
+/** What a reshape cascade gets to look at: the whole cloud, the edge and the geometry it is taking. */
+export interface ReshapeContext {
+  readonly cloud: CloudTopology;
+  readonly edgeId: string;
+  /** The new geometry, walked from the edge's own start node. */
+  readonly geometry: ConstructionEdgeGeometry;
 }
 
 /**
@@ -103,50 +119,14 @@ export interface CascadeContext {
 }
 
 /**
- * How a type fixes itself once `"cut"` has consumed part of it and left a
- * rim exposed where the consumed piece used to be.
+ * What a `"cut"` actually did to one ground type -- the seam its lattice
+ * regeneration now needs to close by welding onto the changed cloud's own
+ * geometry, not merely echoing its position.
  *
- * This is deliberately not folded into `EditResolution`'s own `"regenerate"`
- * kind, even though the organic case answers it the same way: that kind
- * resolves a *gesture* against a role the type already named, where a cut is
- * not a gesture on this type's own geometry at all -- it is a side effect of
- * *another* type's stroke landing on top of it. There is no role, no target,
- * nothing for `roleFor` to classify; only a leftover shape and the rim the
- * removal exposed.
- *
- * `"unsupported"` is not a permanent design choice the way `EditResolution`'s
- * `"deny"` is -- it is a declared gap, present so every structure type states
- * its position instead of one silently doing nothing when cut. The organic
- * doc comment already lists cutting alongside subdividing and welding as
- * structural work that escalates to regeneration; a type built on that same
- * capability answers `"regenerate"`, and a type that has never had a repair
- * path designed says so honestly rather than pretending the geometry stayed
- * valid.
- */
-export type CutRepair =
-  | { readonly kind: "preserve"; readonly reason: string }
-  /**
-   * Regenerate the region from scratch, pinned to the rim the cut exposed --
-   * the same mechanism a structural interactive edit already escalates to
-   * for this type, applied to a cut's leftover instead of a grabbed role.
-   */
-  | { readonly kind: "regenerate"; readonly reason: string }
-  /** No repair has been designed for this type yet; the leftover is left as the cut leaves it. */
-  | { readonly kind: "unsupported"; readonly reason: string };
-
-/**
- * What a `"cut"` actually did to one covered type -- the seam a
- * `"regenerate"`-capable covered type now needs to close by welding onto
- * the painter's own geometry, not merely echoing its position.
- *
- * Deliberately painter-agnostic: this is assembled by whichever generic
- * layer already sees both sides of a `"cut"` (`TabletopRuntime`, not any one
- * tool -- see its own `applyPatchReplacement`), from a fact neither side
- * privately owns -- what the paint actually registered, and what it
- * resolved to consume. The covered type reads this and repairs itself
- * entirely on its own, in its own module, outside `structure-types/`: this
- * shape is the contract, not the repair, which needs a runtime this pure
- * layer does not have.
+ * Painter-agnostic: the `"lattice-regenerate"` reaction assembles it from the
+ * effect that reached it (`effects/effect.ts`), and hands it to the
+ * regeneration. This shape is that hand-off, not the repair, which needs a
+ * runtime this pure layer does not have.
  */
 export interface CutFallout {
   /**
@@ -208,7 +188,7 @@ export interface CutFallout {
    */
   readonly painterSurfaceType?: string;
   /** Ground vacated by the painter that should be restored to terrain. */
-  readonly vacatedGround?: MultiPolygon;
+  readonly vacatedGround?: PlanarArea;
 }
 
 /** What a spine owner is handed to regenerate its surface after a spine edit. */
@@ -240,6 +220,34 @@ export interface SpineGeneration {
   /** Normalizes the standing graph before an edit reads it -- legacy data, say. */
   readonly prepare?: (snapshot: ConstructionGraphSnapshot, port: BezierPort) => ConstructionGraphSnapshot;
   readonly regenerate: (input: SpineRegenerationInput) => SpineRegeneration | undefined;
+}
+
+/**
+ * A tag a structure type carries so other code can ask what the type *is for*
+ * without naming it.
+ *
+ * This is the only vocabulary for relations between types. A platform does
+ * not cut `"terrain"`; it cuts whatever is `"ground"`. A new kind of ground
+ * joins every existing relation by declaring the trait, with no edit anywhere
+ * else. The set is closed on purpose: adding a trait is a deliberate design
+ * change, not a string a caller invents.
+ */
+export type StructureTrait =
+  /** Natural ground: what platforms and paths carve, what paths ride, what terrain restacks onto. */
+  | "ground"
+  /** A level sheet other structures land on and weld to: wall corners, ramp ends, a roof's base. */
+  | "floor"
+  /** An upright run other runs weld their columns onto and openings are cut through. */
+  | "partition";
+
+/**
+ * What a type is shown of another type it meets: its traits and a label for
+ * messages, never its name. Handing reactions this instead of a type string
+ * is what keeps a type from branching on another type's identity.
+ */
+export interface StructureView {
+  readonly label: string;
+  readonly traits: ReadonlySet<StructureTrait>;
 }
 
 /** What a type's derived motion may consult beyond the positions themselves. */
@@ -274,6 +282,14 @@ export interface StructureTypeDefinition {
   /** The `surfaceType` the engine reports for regions of this kind. */
   readonly surfaceType: string;
   readonly label: string;
+  /** What this type is for, as other types and tools see it. See {@link StructureTrait}. */
+  readonly traits: readonly StructureTrait[];
+  /**
+   * Whether a gesture on this type can only be planned through the session's
+   * structural motion solver. Without one, such a gesture is refused instead
+   * of applying a partial move.
+   */
+  readonly requiresMotionSolver?: boolean;
   /** Responses to received motion, independent of direct gesture constraints. */
   readonly motionInfluences?: (topology: ConstructionRegionTopology, transport: boolean) => readonly ConstructionMotionInfluence[];
   /**
@@ -297,10 +313,13 @@ export interface StructureTypeDefinition {
   /** The policy for one role. */
   readonly policyFor: (role: EditRole) => RolePolicy;
   /**
-   * What happens when **this** type is painted over `coveredType` -- the
+   * What happens when **this** type is painted over `covered` -- the
    * creation half of the same declaration. Directional on purpose: a wall
    * goes on terrain, terrain does not go on a wall, and neither direction
    * says anything about the other.
+   *
+   * `covered` exposes traits, not a type name, so the answer is always about
+   * what the covered structure is for.
    *
    * `paintedSubtype` is the preset the run being painted was built from,
    * when its type has subtypes at all. It is what lets one type vary a
@@ -309,21 +328,20 @@ export interface StructureTypeDefinition {
    * and its own logic to keep in step.
    */
   readonly interactionOver: (
-    coveredType: string,
+    covered: StructureView,
     paintedSubtype?: string,
   ) => CreationInteraction;
   /**
-   * How this type repairs itself after `"cut"` has consumed part of it.
-   * Required rather than optional so a new structure type has to say where
-   * it stands -- `"unsupported"` is a legitimate, honest answer, silence is
-   * not.
+   * How a cloud of this type answers each effect that reaches it, by declared
+   * reaction name (`effects/effect.ts`). An effect kind absent here leaves the
+   * cloud as the change left it.
    */
-  readonly repairAfterCut: CutRepair;
+  readonly reactions?: Readonly<Partial<Record<EffectKind, ReactionId>>>;
   /**
-   * Whether regions of this type vertically conform to a surface of `surfaceType` beneath them
-   * (e.g. taking height from ground / terrain), optionally parameterized by `subtype`.
+   * Whether regions of this type vertically conform to a support with these traits beneath them
+   * (e.g. taking height from ground), optionally parameterized by `subtype`.
    */
-  readonly conformsTo?: (surfaceType: string, subtype?: string) => boolean;
+  readonly conformsTo?: (support: ReadonlySet<StructureTrait>, subtype?: string) => boolean;
 }
 
 /** The policy every unknown role falls back to: refuse rather than guess. */

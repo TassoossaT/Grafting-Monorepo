@@ -22,18 +22,17 @@ const TYPE_BEARING_FIELDS = {
   "wall-brush": ["wallType"],
   "wall-line": ["wallType"],
   "tower-stamp": ["wallType"],
-  opening: ["openingType"],
   "terrain-sculpt": ["targetSurface"],
 };
 
 /**
  * Types the app's own generators emit without a preset field naming them:
- * the path brush's own product.
+ * the path brush's product and the opening tool's.
  */
-const GENERATED_TYPES = ["path"];
+const GENERATED_TYPES = ["path", "opening"];
 
 /** Presets, and near-miss names a preset might be tempted to become. */
-const PRESET_NAMES = ["tower", "house", "room", "fence", "building", "wall-brush", "wall-line"];
+const PRESET_NAMES = ["tower", "house", "room", "fence", "building", "wall-brush", "wall-line", "door", "window"];
 
 test("every type a tool preset selects is one the structure-type registry already declares", () => {
   for (const [toolId, fields] of Object.entries(TYPE_BEARING_FIELDS)) {

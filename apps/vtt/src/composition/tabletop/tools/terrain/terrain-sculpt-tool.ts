@@ -1,9 +1,8 @@
-import { DEFAULT_TOOL_PARAMS, deriveFaceSize, isTerrainSurface } from "../../../../features/edit-construction/index.ts";
+import { DEFAULT_TOOL_PARAMS, deriveFaceSize, hasTrait } from "../../../../features/edit-construction/index.ts";
 import type { TerrainSculptParams } from "@/features/edit-construction";
 import type {
   ConstructionCoveredRegion,
 } from "@/ports";
-import type { MultiPolygon } from "polygon-clipping";
 
 import { brushSweptOutlinePolygons, brushSweptRegionFill } from "../shapes/preview-shapes.ts";
 import { dirtLoadOver, restackTerrain } from "../../terrain/terrain-restack.ts";
@@ -11,6 +10,7 @@ import { OUTLINE_CHORD_PER_FACE } from "../../terrain/terrain-constraints.ts";
 import type { TerrainStrokeBounds } from "../../terrain/terrain-neighborhood.ts";
 import { executeTerrainCut } from "../../terrain/terrain-cut-executor.ts";
 import type { ConstructionTool, ToolContext, ToolGesture } from "../core/tool-context.ts";
+import type { PlanarArea } from "@/features/edit-construction";
 
 /**
  * How this tool works.
@@ -127,7 +127,7 @@ function strokeChord(params: TerrainSculptParams): number {
 
 function coveredByStroke(
   ctx: ToolContext,
-  swept: MultiPolygon,
+  swept: PlanarArea,
 ): readonly ConstructionCoveredRegion[] {
   const merged = new Map<string, ConstructionCoveredRegion>();
   for (const polygon of swept) {
@@ -142,7 +142,7 @@ function coveredByStroke(
 
 
 /** The axis-aligned extent of a swept stroke, in XZ. */
-function boundsOf(swept: MultiPolygon): TerrainStrokeBounds {
+function boundsOf(swept: PlanarArea): TerrainStrokeBounds {
   let minX = Infinity;
   let minZ = Infinity;
   let maxX = -Infinity;
@@ -166,7 +166,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   defaultParams: () => DEFAULT_TOOL_PARAMS["terrain-sculpt"],
 
   previewFor(gesture: ToolGesture, params: TerrainSculptParams) {
-    const targetSurface = isTerrainSurface(params.targetSurface) ? params.targetSurface : "terrain";
+    const targetSurface = hasTrait(params.targetSurface, "ground") ? params.targetSurface : "terrain";
     const color = TERRAIN_COLOR[targetSurface as "terrain" | "terrain-grass"] ?? 0x334155;
     return brushSweptRegionFill(
       gesture.samples.map((sample) => sample.point),
@@ -183,136 +183,146 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   onPointerMove(): void {},
 
   onPointerUp(ctx: ToolContext, gesture: ToolGesture, params: TerrainSculptParams): void {
-    const salt = ctx.nextSequence();
-    const causeId = `${ctx.tableId}:terrain-sculpt:${salt}`;
-    const faceSize = strokeFaceSize(params);
-    const brushRadius = params.brushRadius;
-    const swept = brushSweptOutlinePolygons(
-      gesture.samples.map((sample) => sample.point),
-      brushRadius,
-      strokeChord(params),
-    );
-
-    const mode = params.mode ?? "add";
-    const isAdd = mode === "add" || mode === "elevate";
-    const isDig = mode === "dig" || mode === "lower";
-    const isFlatten = mode === "flatten";
-    const elevationStep = params.elevationStep ?? 2.0;
-    const covered = coveredByStroke(ctx, swept);
-    const coveredTerrain = covered.find((c) => isTerrainSurface(c.surfaceType));
-    const targetSurface =
-      params.targetSurface && isTerrainSurface(params.targetSurface)
-        ? params.targetSurface
-        : coveredTerrain && isTerrainSurface(coveredTerrain.surfaceType)
-          ? coveredTerrain.surfaceType
-          : "terrain";
-
-    if (isFlatten) {
-      const coveredTerrainRegions = covered.filter((c) => isTerrainSurface(c.surfaceType));
-      const raised =
-        coveredTerrainRegions.length > 0
-          ? restackTerrain(
-              ctx,
-              targetSurface,
-              coveredTerrainRegions,
-              causeId,
-              dirtLoadOver(gesture.samples.map((sample) => sample.point), brushRadius),
-              "flatten",
-              elevationStep,
-            )
-          : { raisedFaces: 0, movedVertices: 0, skipped: [] };
-      report(ctx, 0, 0, 0, raised, true, raised.raisedFaces > 0 ? `${raised.raisedFaces} faces niveladas` : undefined);
-      return;
-    }
-
-    const strokePoints = gesture.samples.map((sample) => sample.point);
-
-    if (isDig) {
-      const coveredTerrainRegions = covered.filter((c) => isTerrainSurface(c.surfaceType));
-      if (coveredTerrainRegions.length === 0) {
-        ctx.reportFeedback({ tone: "info", message: "Nada a cavar aqui." });
-        return;
-      }
-      const outcome = executeTerrainCut(ctx.runtime, {
-        area: {
-          outline: swept[0]?.[0] ?? [],
-          sweptPolygon: swept,
-          path: strokePoints,
-          radius: brushRadius,
-        },
-        coveredRegions: coveredTerrainRegions,
-        targetSurfaceType: targetSurface,
-        profile: { kind: "concave", depth: elevationStep },
-        causeId,
-        tableId: ctx.tableId,
-        faceSide: faceSize,
-        seed: Math.floor(params.seed ?? 1) || 1,
-        irregularity: params.irregularity ?? 0.7,
-      });
-      if (!outcome.success) {
-        ctx.reportFeedback({ tone: "info", message: outcome.message ?? "Nada a cavar aqui." });
-        return;
-      }
-      ctx.reportFeedback({
-        tone: "success",
-        message: `Terreno: ${outcome.builtFaces} faces escavadas (${outcome.removedFaces} faces substituídas).`,
-      });
-      return;
-    }
-
-    if (isAdd) {
-      const coveredTerrainRegions = covered.filter((c) => isTerrainSurface(c.surfaceType));
-      const { minX, minZ, maxX, maxZ } = boundsOf(swept);
-      const originX = Math.floor(minX / NOISE_SPACING) - 1;
-      const originZ = Math.floor(minZ / NOISE_SPACING) - 1;
-      const columns = Math.ceil(maxX / NOISE_SPACING) - originX + 2;
-      const rows = Math.ceil(maxZ / NOISE_SPACING) - originZ + 2;
-      const heightmap = ctx.runtime.generateHeightmap(
-        columns,
-        rows,
-        Math.floor(params.seed ?? 1) || 1,
-        params.noiseScale ?? 0.15,
-        originX,
-        originZ,
-      );
-      const noiseAt = (point: { readonly x: number; readonly z: number }): number =>
-        sampleHeightmapBilinear(
-          heightmap,
-          columns,
-          rows,
-          point.x / NOISE_SPACING - originX,
-          point.z / NOISE_SPACING - originZ,
-        ) * (params.heightScale ?? 1.5);
-
-      const outcome = executeTerrainCut(ctx.runtime, {
-        area: {
-          outline: swept[0]?.[0] ?? [],
-          sweptPolygon: swept,
-          path: strokePoints,
-          radius: brushRadius,
-        },
-        coveredRegions: coveredTerrainRegions,
-        targetSurfaceType: targetSurface,
-        profile: { kind: "convex", height: elevationStep },
-        causeId,
-        tableId: ctx.tableId,
-        faceSide: faceSize,
-        seed: Math.floor(params.seed ?? 1) || 1,
-        irregularity: params.irregularity ?? 0.7,
-        noiseAt,
-      });
-      if (!outcome.success) {
-        ctx.reportFeedback({ tone: "info", message: outcome.message ?? "Nada a adicionar aqui." });
-        return;
-      }
-      ctx.reportFeedback({
-        tone: "success",
-        message: `Terreno: ${outcome.builtFaces} faces elevadas (${outcome.removedFaces} faces substituídas).`,
-      });
-      return;
+    const causeId = `${ctx.tableId}:terrain-sculpt:${ctx.nextSequence()}`;
+    // One stroke is one transaction: its edge splits, fills and replacements
+    // undo together, and a failure part way leaves the ground as it was.
+    try {
+      const { recorded } = ctx.runtime.transact(causeId, "local", () => sculptStroke(ctx, gesture, params, causeId));
+      if (recorded) ctx.history.record({ kind: "transaction", transactionId: causeId });
+    } catch (error) {
+      ctx.reportFeedback({ tone: "error", message: `Terreno preservado: ${error instanceof Error ? error.message : String(error)}` });
     }
   },
 };
+
+function sculptStroke(ctx: ToolContext, gesture: ToolGesture, params: TerrainSculptParams, causeId: string): void {
+  const faceSize = strokeFaceSize(params);
+  const brushRadius = params.brushRadius;
+  const swept = brushSweptOutlinePolygons(
+    gesture.samples.map((sample) => sample.point),
+    brushRadius,
+    strokeChord(params),
+  );
+
+  const mode = params.mode ?? "add";
+  const isAdd = mode === "add" || mode === "elevate";
+  const isDig = mode === "dig" || mode === "lower";
+  const isFlatten = mode === "flatten";
+  const elevationStep = params.elevationStep ?? 2.0;
+  const covered = coveredByStroke(ctx, swept);
+  const coveredTerrain = covered.find((c) => hasTrait(c.surfaceType, "ground"));
+  const targetSurface =
+    params.targetSurface && hasTrait(params.targetSurface, "ground")
+      ? params.targetSurface
+      : coveredTerrain && hasTrait(coveredTerrain.surfaceType, "ground")
+        ? coveredTerrain.surfaceType
+        : "terrain";
+
+  if (isFlatten) {
+    const coveredTerrainRegions = covered.filter((c) => hasTrait(c.surfaceType, "ground"));
+    const raised =
+      coveredTerrainRegions.length > 0
+        ? restackTerrain(
+            ctx,
+            targetSurface,
+            coveredTerrainRegions,
+            causeId,
+            dirtLoadOver(gesture.samples.map((sample) => sample.point), brushRadius),
+            "flatten",
+            elevationStep,
+          )
+        : { raisedFaces: 0, movedVertices: 0, skipped: [] };
+    report(ctx, 0, 0, 0, raised, true, raised.raisedFaces > 0 ? `${raised.raisedFaces} faces niveladas` : undefined);
+    return;
+  }
+
+  const strokePoints = gesture.samples.map((sample) => sample.point);
+
+  if (isDig) {
+    const coveredTerrainRegions = covered.filter((c) => hasTrait(c.surfaceType, "ground"));
+    if (coveredTerrainRegions.length === 0) {
+      ctx.reportFeedback({ tone: "info", message: "Nada a cavar aqui." });
+      return;
+    }
+    const outcome = executeTerrainCut(ctx.runtime, {
+      area: {
+        outline: swept[0]?.[0] ?? [],
+        sweptPolygon: swept,
+        path: strokePoints,
+        radius: brushRadius,
+      },
+      coveredRegions: coveredTerrainRegions,
+      targetSurfaceType: targetSurface,
+      profile: { kind: "concave", depth: elevationStep },
+      causeId,
+      tableId: ctx.tableId,
+      faceSide: faceSize,
+      seed: Math.floor(params.seed ?? 1) || 1,
+      irregularity: params.irregularity ?? 0.7,
+    });
+    if (!outcome.success) {
+      ctx.reportFeedback({ tone: "info", message: outcome.message ?? "Nada a cavar aqui." });
+      return;
+    }
+    ctx.reportFeedback({
+      tone: "success",
+      message: `Terreno: ${outcome.builtFaces} faces escavadas (${outcome.removedFaces} faces substituídas).`,
+    });
+    return;
+  }
+
+  if (isAdd) {
+    const coveredTerrainRegions = covered.filter((c) => hasTrait(c.surfaceType, "ground"));
+    const { minX, minZ, maxX, maxZ } = boundsOf(swept);
+    const originX = Math.floor(minX / NOISE_SPACING) - 1;
+    const originZ = Math.floor(minZ / NOISE_SPACING) - 1;
+    const columns = Math.ceil(maxX / NOISE_SPACING) - originX + 2;
+    const rows = Math.ceil(maxZ / NOISE_SPACING) - originZ + 2;
+    const heightmap = ctx.runtime.generateHeightmap(
+      columns,
+      rows,
+      Math.floor(params.seed ?? 1) || 1,
+      params.noiseScale ?? 0.15,
+      originX,
+      originZ,
+    );
+    const noiseAt = (point: { readonly x: number; readonly z: number }): number =>
+      sampleHeightmapBilinear(
+        heightmap,
+        columns,
+        rows,
+        point.x / NOISE_SPACING - originX,
+        point.z / NOISE_SPACING - originZ,
+      ) * (params.heightScale ?? 1.5);
+
+    const outcome = executeTerrainCut(ctx.runtime, {
+      area: {
+        outline: swept[0]?.[0] ?? [],
+        sweptPolygon: swept,
+        path: strokePoints,
+        radius: brushRadius,
+      },
+      coveredRegions: coveredTerrainRegions,
+      targetSurfaceType: targetSurface,
+      profile: { kind: "convex", height: elevationStep },
+      causeId,
+      tableId: ctx.tableId,
+      faceSide: faceSize,
+      seed: Math.floor(params.seed ?? 1) || 1,
+      irregularity: params.irregularity ?? 0.7,
+      noiseAt,
+    });
+    if (!outcome.success) {
+      ctx.reportFeedback({ tone: "info", message: outcome.message ?? "Nada a adicionar aqui." });
+      return;
+    }
+    ctx.reportFeedback({
+      tone: "success",
+      message: `Terreno: ${outcome.builtFaces} faces elevadas (${outcome.removedFaces} faces substituídas).`,
+    });
+    return;
+  }
+}
 
 function report(
   ctx: ToolContext,

@@ -7,7 +7,6 @@ export {
   terrainInteractionOver,
 } from "./organic-structure.ts";
 export {
-  isTerrainSurface,
   pointInOrOnPolygon,
   terrainCloudPerimeter,
   terrainTopologiesBounds,

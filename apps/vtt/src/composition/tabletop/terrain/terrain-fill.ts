@@ -15,7 +15,6 @@ import type {
 
 import type { AtomicEditOp } from "@/features/edit-construction";
 
-import type { MultiPolygon } from "polygon-clipping";
 import {
   SHORTEST_USEFUL_FRACTION,
   adoptContourNodes,
@@ -24,7 +23,8 @@ import {
 } from "./terrain-constraints.ts";
 import { logTerrainCommit } from "./terrain-diagnostics.ts";
 import { countInCommit, timePhase } from "../commit-timing.ts";
-import { createBoundaryEdges, isTerrainSurface, pointInOrOnPolygon, sharedEdgeId } from "../../../features/edit-construction/index.ts";
+import { createBoundaryEdges, hasTrait, pointInOrOnPolygon, sharedEdgeId } from "../../../features/edit-construction/index.ts";
+import type { PlanarArea } from "@/features/edit-construction";
 
 
 /**
@@ -96,7 +96,7 @@ export interface TerrainFillRequest {
   /** Ground inside that area somebody already holds: met, never regenerated. */
   readonly holes: readonly ConstraintRing[];
   /** Obstacle or road polygons whose interior must never contain any generated terrain face. */
-  readonly avoidArea?: MultiPolygon;
+  readonly avoidArea?: PlanarArea;
   /** `sources[i]` is the node id the rings handed out as `source: i`, across both lists. */
   readonly sources: readonly ConstructionNodeId[];
   /**
@@ -205,7 +205,7 @@ type FreeEdgeUse = ConstructionOrientedEdgeUse & {
  * ground, and terrain is never laid above anything -- a face that finds its
  * edge full is meant to be refused, not rescued with an edge of its own.
  */
-function insideAnyMultiPolygon(x: number, z: number, multiPolygon: MultiPolygon): boolean {
+function insideAnyMultiPolygon(x: number, z: number, multiPolygon: PlanarArea): boolean {
   for (const piece of multiPolygon) {
     if (piece.length === 0) continue;
     const [outer, ...holes] = piece;
@@ -226,7 +226,7 @@ function gridPatch(
   surfaceType: string,
   edgeRooms: ReadonlyMap<string, FreeEdgeUse | null>,
   quadOf?: Map<string, readonly number[]>,
-  avoidArea?: MultiPolygon,
+  avoidArea?: PlanarArea,
 ): ConstructionPatch {
   const edges = createBoundaryEdges(tableId, { kind: "refuse-when-full" });
   const regions: ConstructionPatchRegion[] = [];
@@ -509,7 +509,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
       });
     } else edgeRooms.set(edgeId, null);
   }
-  const surfaceType = isTerrainSurface(request.surfaceType) ? request.surfaceType : "terrain";
+  const surfaceType = hasTrait(request.surfaceType, "ground") ? request.surfaceType : "terrain";
   const patch = timePhase("montagem do patch", () => gridPatch(request.tableId, grid, idFor, nodes, surfaceType, edgeRooms, quadOf, request.avoidArea));
 
 

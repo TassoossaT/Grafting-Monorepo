@@ -206,6 +206,16 @@ function createFakeConstructionPort() {
         skippedRegionIds: [],
       };
     },
+    beginTransaction() {
+      requireStarted();
+    },
+    commitTransaction() {
+      requireStarted();
+      return true;
+    },
+    rollbackTransaction() {
+      requireStarted();
+    },
     undoRegionOverlay() {
       requireStarted();
     },
@@ -596,7 +606,7 @@ test("addPatch folds every created surface into the map, with its own type and p
   constructionPort.getAllSurfaceMeshes = () => [
     {
       surfaceKey: pieceKey,
-      surfaceType: "door",
+      surfaceType: "opening",
       physical: false,
       mesh: { positions: new Float32Array([0, 0, 0, 1, 0, 0, 1, 0, 1]), indices: new Uint32Array([0, 1, 2]) },
     },
@@ -611,7 +621,7 @@ test("addPatch folds every created surface into the map, with its own type and p
 
   const map = runtime.getSnapshot().map;
   const surfaceRef = surfaceRefFromNodeSet(pieceKey);
-  assert.equal(map.byId.get(surfaceRef).type, "door");
+  assert.equal(map.byId.get(surfaceRef).type, "opening");
   assert.equal(map.byId.get(surfaceRef).physical, false);
 });
 
@@ -889,7 +899,7 @@ test("removeSurface folds outcome through #foldRegionEditOutcome, updating map a
   assert.equal(runtime.getSnapshot().map.byId.has(wallRef), false);
 });
 
-test("removeSurface invokes repair dispatch on removed surface", async () => {
+test("removeSurface only removes -- how other clouds answer is the effect commit's business", async () => {
   const renderPort = createFakeRenderPort();
   const constructionPort = createFakeConstructionPort();
   constructionPort.removeSurface = (request) => ({
@@ -907,9 +917,39 @@ test("removeSurface invokes repair dispatch on removed surface", async () => {
 
   await runtime.start();
 
-  // FAKE_WALL_SURFACE_KEY has type "wall-white" (unsupported repair, so honest no-op)
   const outcome = runtime.removeSurface({ surfaceKey: FAKE_WALL_SURFACE_KEY }, "local", "cause:demolish-wall");
   assert.deepEqual(outcome.removedSurfaceKeys, [FAKE_WALL_SURFACE_KEY]);
+});
+
+test("transact commits once and reports whether an undo entry was recorded", async () => {
+  const constructionPort = createFakeConstructionPort();
+  const calls = [];
+  constructionPort.beginTransaction = (id) => calls.push(["begin", id]);
+  constructionPort.commitTransaction = (id) => { calls.push(["commit", id]); return false; };
+  constructionPort.rollbackTransaction = (id) => calls.push(["rollback", id]);
+  const runtime = createTabletopRuntime({ tableId: "table-transact", renderPort: createFakeRenderPort(), constructionPort });
+  await runtime.start();
+
+  const result = runtime.transact("tx-1", "local", () => 42);
+
+  assert.deepEqual(result, { value: 42, recorded: false });
+  assert.deepEqual(calls, [["begin", "tx-1"], ["commit", "tx-1"]]);
+});
+
+test("transact rolls back, resyncs the projection and rethrows when the work fails", async () => {
+  const constructionPort = createFakeConstructionPort();
+  const calls = [];
+  constructionPort.beginTransaction = (id) => calls.push(["begin", id]);
+  constructionPort.commitTransaction = (id) => { calls.push(["commit", id]); return true; };
+  constructionPort.rollbackTransaction = (id) => calls.push(["rollback", id]);
+  const runtime = createTabletopRuntime({ tableId: "table-rollback", renderPort: createFakeRenderPort(), constructionPort });
+  await runtime.start();
+  const revision = runtime.getSnapshot().revision;
+
+  assert.throws(() => runtime.transact("tx-2", "local", () => { throw new Error("refused"); }), /refused/);
+
+  assert.deepEqual(calls, [["begin", "tx-2"], ["rollback", "tx-2"]]);
+  assert.ok(runtime.getSnapshot().revision > revision, "the projection is rebuilt from the restored state");
 });
 
 

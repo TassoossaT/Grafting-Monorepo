@@ -65,6 +65,17 @@ export type ConstructionEdgeGeometry =
   | { readonly kind: "arc"; readonly center: readonly [number, number]; readonly clockwise: boolean }
   | { readonly kind: "bezier"; readonly handle1: readonly [number, number]; readonly handle2: readonly [number, number] };
 
+/** One bezier boundary edge, in its own direction: anchors with live positions, and XZ handles. */
+export interface ConstructionCurvedEdge {
+  readonly edgeId: ConstructionEdgeId;
+  readonly startNodeId: ConstructionNodeId;
+  readonly endNodeId: ConstructionNodeId;
+  readonly start: ConstructionPosition;
+  readonly end: ConstructionPosition;
+  readonly handle1: readonly [number, number];
+  readonly handle2: readonly [number, number];
+}
+
 /** One boundary edge walked in a loop's own direction. */
 export interface ConstructionOrientedEdgeUse {
   readonly edgeId: ConstructionEdgeId;
@@ -636,6 +647,8 @@ export interface ConstructionSessionPort extends BezierPort {
   getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined;
   /** Region boundaries with at least one node inside an XZ extent, returned in one engine crossing. */
   getRegionTopologiesInBounds(bounds: ConstructionTopologyBoundsQuery): readonly ConstructionRegionTopology[];
+  /** Every bezier boundary edge a region uses -- what contour curve handles are placed from. */
+  getCurvedEdges(): readonly ConstructionCurvedEdge[];
   /** Every region's boundary -- the edit-mode bootstrap call. */
   getAllRegionTopologies(): readonly ConstructionRegionTopology[];
 
@@ -643,6 +656,20 @@ export interface ConstructionSessionPort extends BezierPort {
   applyRegionOverlay(request: ApplyRegionOverlayRequest): ConstructionPatchOutcome;
   /** Atomically replaces exact source regions with an application-generated patch. */
   applyPatchReplacement(request: ApplyPatchReplacementRequest): ConstructionPatchOutcome;
+  /**
+   * Starts one atomic unit of work. Mutations until the matching commit or
+   * rollback record no history of their own; transactions do not nest.
+   */
+  beginTransaction(transactionId: string): void;
+  /**
+   * Ends the open transaction, recording everything it did as one undo entry
+   * named `transactionId` -- unless it changed nothing. Returns whether it
+   * was recorded, so the caller's own history records exactly the same entries.
+   */
+  commitTransaction(transactionId: string): boolean;
+  /** Ends the open transaction by restoring the exact state it began from. */
+  rollbackTransaction(transactionId: string): void;
+  /** Undoes the most recent history entry, which must be `operationId`: a transaction, or an overlay or replacement made outside one. */
   undoRegionOverlay(operationId: string): void;
   redoRegionOverlay(operationId: string): void;
   removeSurface(request: RemoveSurfaceRequest): RegionEditOutcome;

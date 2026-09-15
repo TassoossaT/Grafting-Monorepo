@@ -13,42 +13,17 @@ import type {
 // Relative, not `@/...`: the test runner resolves no aliases, so a module a
 // test reaches has to spell out any import it needs at run time. A type-only
 // `@/` import is fine -- those are erased.
-import {
-  firstRefusal,
-  resolveConformance,
-  resolveCoverage,
-} from "../index.ts";
-import { graphPatchForSpine } from "./materialize-spine.ts";
+import { firstRefusal, resolveCoverage } from "../index.ts";
+import { PATH_SURFACE_TYPE } from "./path-surface-type.ts";
 import { bezierContourId, changedSpineCloud, standingRegionsForCloud } from "./path-cloud-scope.ts";
-import { referenceLineFrom } from "./path-reference-line.ts";
 import { pathSpineDraftFor } from "./path-spine-draft.ts";
-
-import { fitPath } from "../../topology/index.ts";
-import {
-  offsetBands,
-  planSpineContour,
-  sampleCatmullRom,
-  unionBandLayer,
-  type SpineChainInput,
-} from "./contour/index.ts";
-
-/**
- * How finely the committed curve follows the true Catmull-Rom shape, in
- * world units (XZ). The spine's own control points stay few -- `groundTrack`
- * keeps one per real corner, never one per flattening step -- and this is
- * what turns that handful of points into a smooth curve for the contour
- * union and the footprint/coverage outline, the same Catmull-Rom-through-
- * few-anchors model this whole spine is styled on (no attempt to prove any
- * one span is a literal circle; a smooth spline through the right corners
- * already looks right).
- */
-const CURVE_FLATTENING_TOLERANCE = 0.40;
+import { planSpineContour } from "./contour/index.ts";
 
 /** The table facts supplied to the PathCloud before it plans a mutation. */
 export interface PathCloudMutationInput {
-  readonly bezier?: BezierPort;
+  /** The curve engine every road is fitted, sampled and unioned through. */
+  readonly bezier: BezierPort;
   readonly tableId: string;
-  readonly snapToGrid: boolean;
   readonly graphSnapshot: ConstructionGraphSnapshot;
   readonly regionTopologies: readonly ConstructionRegionTopology[];
   readonly coverageFor: (outline: readonly (readonly [number, number])[]) => readonly ConstructionCoveredRegion[];
@@ -67,184 +42,104 @@ export type PathCloudMutationPlan =
  * Junction resolution, spine splitting, face ownership and contour rebuild
  * all live here; callers merely provide snapshots and apply the result.
  *
- * This is the only path a path is ever built by. A free stroke, and any
- * straight drag or preset that comes later, differ in nothing but the
- * reference line they hand over: they all resolve to the same spine, go
- * through the same whole-cloud contour engine, and declare the same faces.
+ * This is the only path a path is ever built by: the stroke is fitted into
+ * bezier spans on the shared spine (`planBezierRoad`), every span of the
+ * touched spine component is sampled into its ribbon by the same curve
+ * engine a sloped platform uses, and the ribbons are unioned into the
+ * contour faces that replace the component's standing ones. A T, an X and
+ * an L are not cases this function distinguishes -- they are whatever the
+ * union produces.
  *
- * **What changed from the station-sweep engine this replaces.** There is no
- * mouth, no wedge, no mitre, no crossing-preparation sweep here any more. A
- * T, an X, and an L are not cases this function distinguishes -- they are
- * whatever `planSpineContour`'s per-band union happens to produce once this
- * stroke's own ribbons are unioned against an explicitly selected standing
- * continuation. `pathCorridorId`/`pathFormationFor` still decide the
- * subtype's profile; everything past that is derived, not hand-closed.
- *
- * **What this stage deliberately did not carry over**, flagged rather than
- * silently dropped:
- * - Dragging an already-committed road's own nodes still resolves roles
- *   through `station-node-id.ts`'s address scheme (`path-structure.ts`),
- *   which a contour node minted by this engine does not carry. A newly
- *   drawn road commits correctly; editing it interactively afterwards is a
- *   follow-up, not something this function attempts.
- * - This function decides nothing about what its own footprint cuts into.
- *   `sourceSurfaceKeys` on the request below names only what a *path*
- *   consumes of its own kind (`planned.consumedSurfaceKeys` -- absorbing an
- *   adjoining road); `footprintOutline` is the one thing a foreign type
- *   needs from this stroke, and `TabletopRuntime.applyPatchReplacement` is
- *   what resolves coverage against it, decides what got cut, and lets the
- *   covered type repair -- and delete -- itself, generically, for whichever
- *   type painted the cut, this one or any other that calls the same method.
- * - `graphPatchForSpine`'s own welding and crossing checks read a real arc
- *   span by its chord (`spine.controlPoints` no longer carries intermediate
- *   samples along one -- see `groundTrack`), the same way every other span
- *   here always has. A gentle curve's chord and its true arc barely differ;
- *   a very tight, wide-swinging one could weld or cross slightly off from
- *   where the curve itself actually runs. Not a case this stage resolves,
- *   only one it accepts in exchange for never chopping a real arc into
- *   graph nodes it does not need.
+ * This function decides nothing about what its own footprint cuts into:
+ * `sourceSurfaceKeys` names only the path faces it replaces, and
+ * `footprintOutline` is what the effect commit hands to whatever the change
+ * reaches.
  */
 export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudMutationPlan {
   const { effect, tolerance } = input;
   const stroke = effect.brushRegion.samples;
-  if (stroke.length === 0) return { kind: "noop", message: "Nenhuma alteração: o traço está vazio." };
+  if (stroke.length < 2) return { kind: "noop", message: "Nenhuma alteração: o traço está vazio." };
   const operationId = effect.operationId;
 
-  const bezier = input.bezier && stroke.length > 1 ? planBezierRoad({
+  const road = planBezierRoad({
     snapshot: input.graphSnapshot, topologies: input.regionTopologies, port: input.bezier, stroke,
     corridorId: pathCorridorId(operationId, effect.parameters.kind),
     offsets: effect.parameters.profile.map((p) => p.lateralOffset),
     miterLimit: effect.parameters.miterLimit, tolerance,
     snapReach: Math.max(tolerance, effect.brushShape.kind === "square" ? effect.brushShape.size / 2 : effect.brushShape.radius),
-  }) : undefined;
-  if (bezier && bezier.graphPatch.edges.length === 0) return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente após o encaixe." };
-  const fitted = bezier ? [] : fitPath(stroke, tolerance, { curves: input.snapToGrid ? "none" : "arc" });
-  const swept = bezier ? { line: bezier.controlPoints } : fitted.length === 0 ? { line: stroke } : referenceLineFrom(fitted, stroke, resolveConformance("path", "terrain", effect.parameters.kind));
-  const spine = pathSpineDraftFor(effect, swept.line);
+  });
+  if (road.graphPatch.edges.length === 0) return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente após o encaixe." };
+  const spine = pathSpineDraftFor(effect, road.controlPoints);
   if (spine === undefined) return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente." };
 
-  const parameters = effect.parameters;
-    // The full painted brush area is the local repair window. A hit only
-    // helps identify the neighbourhood; snapping is a geometric decision
-    // made against the PathCloud's spine, never an endpoint permission.
-    const correctionReach = effect.brushShape.kind === "square" ? effect.brushShape.size / 2 : effect.brushShape.radius;
-    const materialized = bezier ?? graphPatchForSpine(input.graphSnapshot, spine, Math.max(correctionReach, tolerance, 1e-4));
-    const correctedSpine = { ...spine, controlPoints: materialized.controlPoints };
+  const touchedCloud = changedSpineCloud(road.snapshot, road.graphPatch, input.regionTopologies);
 
-    const chain: SpineChainInput = {
-      chainId: correctedSpine.corridorId,
-      controlPoints: correctedSpine.controlPoints,
-      bandOffsets: correctedSpine.bandOffsets,
-      miterLimit: correctedSpine.miterLimit,
-      tolerance: CURVE_FLATTENING_TOLERANCE,
-    };
-    const graphPatch = materialized.graphPatch;
-    const touchedCloud = changedSpineCloud(bezier?.snapshot ?? input.graphSnapshot, graphPatch, input.regionTopologies);
-    const regeneratedChains = bezier?.chains ?? touchedCloud.chains
-      .filter((controlPoints) => controlPoints.length >= 2)
-      .map((controlPoints, index): SpineChainInput => ({
-        ...chain,
-        chainId: `${correctedSpine.corridorId}:component-${index}`,
-        controlPoints,
-      }));
+  // The footprint this stroke alone claims -- full width, one ribbon -- is
+  // what a coverage query is asked about. It is not the patch: the patch is
+  // the whole component unioned, but what lies underneath only cares how far
+  // this road reaches.
+  const outline = (road.footprint[0]?.[0] ?? []).map(([x, z]) => [x, z] as const);
+  // A stroke whose ends both snap onto existing spine geometry can collapse
+  // to a degenerate footprint. Not a road either, and the session's coverage
+  // query refuses a degenerate polygon outright.
+  if (outline.length < 3) {
+    return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente." };
+  }
 
-    // The footprint this stroke alone claims -- full width, one ribbon, no
-    // band separation -- is what a terrain coverage query is asked about.
-    // It is not the patch: the patch is banded and unioned band by band
-    // against whatever standing road it meets, but a query about what lies
-    // underneath only cares how far the road reaches in total.
-    const flatPolyline = bezier?.polyline ?? sampleCatmullRom(correctedSpine.controlPoints, CURVE_FLATTENING_TOLERANCE);
-    const flatLength = flatPolyline.slice(0, -1).reduce((sum, p, i) => sum + Math.hypot(p.x - flatPolyline[i + 1]!.x, p.z - flatPolyline[i + 1]!.z), 0);
-    if (flatLength < 1e-4) {
-      return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente." };
+  const refusal = firstRefusal(resolveCoverage(PATH_SURFACE_TYPE, input.coverageFor(outline), effect.parameters.kind));
+  if (refusal !== undefined) {
+    return { kind: "refused", reason: refusal };
+  }
+
+  const topologies = input.regionTopologies;
+  const standingRegions = standingRegionsForCloud(topologies, touchedCloud.corridorIds);
+  const existingEdgeUses = new Map<string, boolean[]>();
+  for (const topology of topologies) {
+    for (const loop of [...topology.outerLoops, ...topology.holes]) {
+      for (const use of loop) existingEdgeUses.set(use.edgeId, [...(existingEdgeUses.get(use.edgeId) ?? []), use.reversed]);
     }
-    const outerOffset = correctedSpine.bandOffsets[0]!;
-    const innerOffset = correctedSpine.bandOffsets[correctedSpine.bandOffsets.length - 1]!;
-    const footprintShapes = bezier?.footprint ?? unionBandLayer(offsetBands(flatPolyline, [outerOffset, innerOffset], correctedSpine.miterLimit));
-    const outline = (footprintShapes[0]?.[0] ?? []).map(([x, z]) => [x, z] as const);
-    // A stroke that survived the earlier tap check can still collapse to a
-    // degenerate footprint once its own ends snap onto existing spine
-    // geometry -- both landing on the same node in a dense junction, say.
-    // Not a road either, for the same reason a tap is not one; bailing out
-    // here rather than handing an empty/degenerate polygon to the session's
-    // own coverage query, which refuses one outright.
-    if (outline.length < 3) {
-      return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente." };
-    }
+  }
 
-    const resolved = resolveCoverage(
-      "path",
-      input.coverageFor(outline),
-      parameters.kind,
-    );
-    const refusal = firstRefusal(resolved);
-    if (refusal !== undefined) {
-      return { kind: "refused", reason: refusal };
+  // **What the contour may weld back onto:** the path faces already standing.
+  // A regeneration re-derives the same boundary from the same curves, so
+  // almost every vertex lands back where it already was, and welding lets
+  // those keep the node ids they already had -- a network of three hundred
+  // streets is not re-issued in full because one of them was extended.
+  // Scoped to paths so a road vertex can never adopt a terrain node that
+  // happens to sit under it; the two types meet through the effect commit,
+  // not by sharing an id.
+  const weldableNodes = new Map<string, ConstructionPosition>();
+  for (const topology of topologies.filter((t) => t.surfaceType === PATH_SURFACE_TYPE)) {
+    for (const node of topology.nodes) {
+      if (!weldableNodes.has(node.id)) weldableNodes.set(node.id, node.position);
     }
+  }
+  const existingNodes = [...weldableNodes].map(([id, position]) => ({ id, position }));
 
-    const topologies = input.regionTopologies;
-    const standingRegions = standingRegionsForCloud(topologies, touchedCloud.positions, touchedCloud.corridorIds, !!input.bezier);
-    const existingEdgeUses = new Map<string, boolean[]>();
-    for (const topology of topologies) {
-      for (const loop of [...topology.outerLoops, ...topology.holes]) {
-        for (const use of loop) existingEdgeUses.set(use.edgeId, [...(existingEdgeUses.get(use.edgeId) ?? []), use.reversed]);
-      }
-    }
-
-    // **What the contour may weld back onto.**
-    //
-    // The legacy path offers the whole table, because its stroke is welding
-    // into whatever it was drawn across. The explicit-curve path offers only
-    // the faces it is about to replace, and that is the difference between
-    // regenerating a road and rebuilding it: a regeneration re-derives the
-    // same boundary from the same curves, so almost every vertex lands back
-    // where it already was, and welding lets those keep the node ids they
-    // already had. What actually moved is all the patch then carries as new.
-    //
-    // Handing it `[]`, as this did, meant every node of the road was minted
-    // fresh on every stroke -- a network of three hundred streets re-issued
-    // in full because one of them was extended, and the engine given a patch
-    // where nothing is recognisable as what it already held. That is the
-    // cost the owner named: not recalculating a face, copying an entire road.
-    //
-    // Scoped to the replaced faces rather than the table so a road vertex can
-    // never adopt a terrain node that happens to sit under it; the two types
-    // meet through the cut-and-repair flow, not by sharing an id.
-    const weldableNodes = new Map<string, ConstructionPosition>();
-    const candidateTopologies = input.bezier
-      ? topologies.filter((t) => t.surfaceType === "path")
-      : topologies;
-    for (const topology of candidateTopologies) {
-      for (const node of topology.nodes) {
-        if (!weldableNodes.has(node.id)) weldableNodes.set(node.id, node.position);
-      }
-    }
-    const existingNodes = [...weldableNodes].map(([id, position]) => ({ id, position }));
-
-    const planned = planSpineContour({
-      union: input.bezier ? (ribbons) => unionBezierRibbons(input.bezier!, ribbons) : undefined,
-        tableId: input.tableId,
-        operationId: input.bezier ? bezierContourId(touchedCloud.corridorIds, operationId) : operationId,
-        surfaceType: "path",
-        // The changed component is read from the prospective spine graph,
-        // not inferred from its old contour faces. A continuation therefore
-        // regenerates one continuous road; a branch regenerates its whole
-        // junction component.
-        editedChains: regeneratedChains.length === 0 ? [chain] : regeneratedChains,
-        standingRegions,
-        existingNodes,
-        existingEdgeUses,
-      });
-    if (planned === undefined) return { kind: "noop", message: "Nenhuma alteração: a nuvem não produziu contorno." };
-    return {
-      kind: "ready",
-      request: {
-        operationId,
-        sourceSurfaceKeys: planned.consumedSurfaceKeys,
-        patch: planned.patch,
-        graphPatch,
-        footprintOutline: outline,
-      },
-      plannedRegionCount: planned.patch.regions.length,
-    };
+  const planned = planSpineContour({
+    union: (ribbons) => unionBezierRibbons(input.bezier, ribbons),
+    tableId: input.tableId,
+    operationId: bezierContourId(touchedCloud.corridorIds, operationId),
+    surfaceType: PATH_SURFACE_TYPE,
+    // The changed component is read from the prospective spine graph, not
+    // inferred from its old contour faces. A continuation therefore
+    // regenerates one continuous road; a branch regenerates its whole
+    // junction component.
+    editedChains: road.chains,
+    standingRegions,
+    existingNodes,
+    existingEdgeUses,
+  });
+  if (planned === undefined) return { kind: "noop", message: "Nenhuma alteração: a nuvem não produziu contorno." };
+  return {
+    kind: "ready",
+    request: {
+      operationId,
+      sourceSurfaceKeys: planned.consumedSurfaceKeys,
+      patch: planned.patch,
+      graphPatch: road.graphPatch,
+      footprintOutline: outline,
+    },
+    plannedRegionCount: planned.patch.regions.length,
+  };
 }

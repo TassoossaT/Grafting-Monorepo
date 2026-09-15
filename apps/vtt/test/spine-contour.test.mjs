@@ -2,8 +2,24 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { buildContourPatch, planSpineContour } from "../src/features/edit-construction/structure-types/path/contour/index.ts";
+import { spineRibbons } from "../src/features/edit-construction/spine/index.ts";
+import { automaticCurve, curvePosition, unionRibbonOutlines } from "../src/features/edit-construction/topology/bezier-curve.ts";
+import { sessionFixture } from "./platform-session-fixture.mjs";
 
 const at = (x, z, y = 0) => ({ x, y, z });
+
+/** The real curve engine: every chain below is swept and unioned the way a committed road is. */
+const { runtime: port } = sessionFixture();
+const union = (ribbons) => unionRibbonOutlines(port, ribbons.map((ribbon) => ribbon.outer));
+
+/** A chain through `controlPoints`, swept by the spine's ribbon generator. */
+function chainOf(chainId, controlPoints, bandOffsets) {
+  const curve = automaticCurve(port, controlPoints, 0.025);
+  const spans = curve.handles.map((handles, i) => ({ handles: { ...handles, bandOffsets }, start: controlPoints[i], end: controlPoints[i + 1] }));
+  const swept = spineRibbons(port, spans, bandOffsets, 0.025);
+  const sampledPoints = swept.flatMap((ribbon, i) => ribbon.resolved.samples[0].map((sample) => curvePosition(sample.position)).slice(i === 0 ? 0 : 1));
+  return { chainId, controlPoints, sampledPoints, ribbons: swept.map((ribbon) => ({ bandIndex: 0, outer: [...ribbon.outline] })), bandOffsets, miterLimit: 4, tolerance: 0.025 };
+}
 
 /**
  * A standing region as this engine's own commit already names it:
@@ -31,14 +47,9 @@ function standingBand(opId, bandIndex, corners) {
 }
 
 test("a straight isolated run produces one unified region, a clean quad, and consumes nothing standing", () => {
-  const chain = {
-    chainId: "run-1",
-    controlPoints: [at(0, 0), at(10, 0)],
-    bandOffsets: [-2.1, 0, 2.1],
-    miterLimit: 4,
-    tolerance: 0.05,
-  };
+  const chain = chainOf("run-1", [at(0, 0), at(10, 0)], [-2.1, 0, 2.1]);
   const result = planSpineContour({
+    union,
     tableId: "table",
     operationId: "op-1",
     surfaceType: "path",
@@ -61,15 +72,10 @@ test("a new road meeting a standing one in a T unions into one region and consum
   // Stops just inside the standing road's band (z: 1 -> -4), the way a T's
   // arriving road does -- its own ribbon overlaps the standing band rather
   // than merely touching it.
-  const branch = {
-    chainId: "branch",
-    controlPoints: [at(0, 1), at(0, -4)],
-    bandOffsets: [-1, 1],
-    miterLimit: 4,
-    tolerance: 0.05,
-  };
+  const branch = chainOf("branch", [at(0, 1), at(0, -4)], [-1, 1]);
 
   const result = planSpineContour({
+    union,
     tableId: "table",
     operationId: "op-t",
     surfaceType: "path",
@@ -89,15 +95,10 @@ test("a new road meeting a standing one in a T unions into one region and consum
 
 test("a new road crossing a standing one in an X unions into one region", () => {
   const standing = standingBand("horizontal", 0, [at(-5, -1), at(5, -1), at(5, 1), at(-5, 1)]);
-  const vertical = {
-    chainId: "vertical",
-    controlPoints: [at(0, -5), at(0, 5)],
-    bandOffsets: [-1, 1],
-    miterLimit: 4,
-    tolerance: 0.05,
-  };
+  const vertical = chainOf("vertical", [at(0, -5), at(0, 5)], [-1, 1]);
 
   const result = planSpineContour({
+    union,
     tableId: "table",
     operationId: "op-x",
     surfaceType: "path",
@@ -158,15 +159,10 @@ test("two roads meeting end-to-end in an L stay one connected face, not two touc
   // relative to the width), which is exactly what used to need a hand-built
   // mitre; here it is just more area for the same union to cover.
   const standing = standingBand("main", 0, [at(-5, -1), at(0, -1), at(0, 1), at(-5, 1)]);
-  const turn = {
-    chainId: "turn",
-    controlPoints: [at(0, 0), at(0, 5)],
-    bandOffsets: [-1, 1],
-    miterLimit: 4,
-    tolerance: 0.05,
-  };
+  const turn = chainOf("turn", [at(0, 0), at(0, 5)], [-1, 1]);
 
   const result = planSpineContour({
+    union,
     tableId: "table",
     operationId: "op-l",
     surfaceType: "path",
@@ -191,15 +187,10 @@ test("planSpineContour consumes every standingRegion it is given, unconditionall
   // here when it is *known* to belong to the same cloud, not merely
   // suspected of overlapping it.
   const faraway = standingBand("faraway", 0, [at(1000, -1), at(1010, -1), at(1010, 1), at(1000, 1)]);
-  const edited = {
-    chainId: "edited",
-    controlPoints: [at(0, 0), at(10, 0)],
-    bandOffsets: [-1, 1],
-    miterLimit: 4,
-    tolerance: 0.05,
-  };
+  const edited = chainOf("edited", [at(0, 0), at(10, 0)], [-1, 1]);
 
   const result = planSpineContour({
+    union,
     tableId: "table",
     operationId: "op-whole-cloud",
     surfaceType: "path",
@@ -213,22 +204,11 @@ test("planSpineContour consumes every standingRegion it is given, unconditionall
 });
 
 test("two roads meeting in a Y-junction merge into one single seamless region without crossing seams", () => {
-  const stem = {
-    chainId: "stem-and-left",
-    controlPoints: [at(0, -10), at(0, 0), at(-6, 8)],
-    bandOffsets: [-2.1, 0, 2.1],
-    miterLimit: 4,
-    tolerance: 0.05,
-  };
-  const rightBranch = {
-    chainId: "right-branch",
-    controlPoints: [at(0, 0), at(6, 8)],
-    bandOffsets: [-2.1, 0, 2.1],
-    miterLimit: 4,
-    tolerance: 0.05,
-  };
+  const stem = chainOf("stem-and-left", [at(0, -10), at(0, 0), at(-6, 8)], [-2.1, 0, 2.1]);
+  const rightBranch = chainOf("right-branch", [at(0, 0), at(6, 8)], [-2.1, 0, 2.1]);
 
   const result = planSpineContour({
+    union,
     tableId: "table",
     operationId: "op-y",
     surfaceType: "path",
@@ -245,15 +225,16 @@ test("two roads meeting in a Y-junction merge into one single seamless region wi
 test("a complex network of 6 intersecting streets produces valid non-empty regions and never drops faces", () => {
   const center = at(0, 0);
   const chains = [
-    { chainId: "c1", controlPoints: [at(0, -15), center, at(0, 15)], bandOffsets: [-2.1, 0, 2.1], miterLimit: 4, tolerance: 0.05 },
-    { chainId: "c2", controlPoints: [at(-15, 0), center, at(15, 0)], bandOffsets: [-2.1, 0, 2.1], miterLimit: 4, tolerance: 0.05 },
-    { chainId: "c3", controlPoints: [at(-10, -10), center, at(10, 10)], bandOffsets: [-2.1, 0, 2.1], miterLimit: 4, tolerance: 0.05 },
-    { chainId: "c4", controlPoints: [at(-10, 10), center, at(10, -10)], bandOffsets: [-2.1, 0, 2.1], miterLimit: 4, tolerance: 0.05 },
-    { chainId: "c5", controlPoints: [at(5, -15), at(5, 15)], bandOffsets: [-2.1, 0, 2.1], miterLimit: 4, tolerance: 0.05 },
-    { chainId: "c6", controlPoints: [at(-15, 5), at(15, 5)], bandOffsets: [-2.1, 0, 2.1], miterLimit: 4, tolerance: 0.05 },
+    chainOf("c1", [at(0, -15), center, at(0, 15)], [-2.1, 0, 2.1]),
+    chainOf("c2", [at(-15, 0), center, at(15, 0)], [-2.1, 0, 2.1]),
+    chainOf("c3", [at(-10, -10), center, at(10, 10)], [-2.1, 0, 2.1]),
+    chainOf("c4", [at(-10, 10), center, at(10, -10)], [-2.1, 0, 2.1]),
+    chainOf("c5", [at(5, -15), at(5, 15)], [-2.1, 0, 2.1]),
+    chainOf("c6", [at(-15, 5), at(15, 5)], [-2.1, 0, 2.1]),
   ];
 
   const result = planSpineContour({
+    union,
     tableId: "table",
     operationId: "op-complex-hub",
     surfaceType: "path",
@@ -276,14 +257,9 @@ test("a road crossing uneven terrain preserves intermediate 3D contour vertices 
     { x: 5, y: 3, z: 0 },
     { x: 10, y: 0, z: 0 },
   ];
-  const chain = {
-    chainId: "hill-run",
-    controlPoints: hillPoints,
-    bandOffsets: [-2, 0, 2],
-    miterLimit: 4,
-    tolerance: 0.05,
-  };
+  const chain = chainOf("hill-run", hillPoints, [-2, 0, 2]);
   const result = planSpineContour({
+    union,
     tableId: "table",
     operationId: "op-hill-road",
     surfaceType: "path",
@@ -313,14 +289,9 @@ test("a flat straight road with collinear intermediate points simplifies to a 4-
     { x: 7.5, y: 0, z: 0 },
     { x: 10, y: 0, z: 0 },
   ];
-  const chain = {
-    chainId: "flat-run",
-    controlPoints: flatPoints,
-    bandOffsets: [-2, 0, 2],
-    miterLimit: 4,
-    tolerance: 0.05,
-  };
+  const chain = chainOf("flat-run", flatPoints, [-2, 0, 2]);
   const result = planSpineContour({
+    union,
     tableId: "table",
     operationId: "op-flat-road",
     surfaceType: "path",

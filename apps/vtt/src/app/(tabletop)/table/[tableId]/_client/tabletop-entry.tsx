@@ -112,8 +112,8 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
   const handleUndo = useCallback(() => {
     const entry = history.undo();
     if (entry === undefined) return;
-    if ("operationId" in entry) {
-      runtime.undoPathBrush(entry.operationId, "local");
+    if (entry.kind === "transaction") {
+      runtime.undoTransaction(entry.transactionId, "local");
     } else {
       runtime.applyRegionEdit(entry.undo, "local", "undo");
     }
@@ -124,8 +124,8 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
   const handleRedo = useCallback(() => {
     const entry = history.redo();
     if (entry === undefined) return;
-    if ("operationId" in entry) {
-      runtime.redoPathBrush(entry.operationId, "local");
+    if (entry.kind === "transaction") {
+      runtime.redoTransaction(entry.transactionId, "local");
     } else {
       runtime.applyRegionEdit(entry.redo, "local", "redo");
     }

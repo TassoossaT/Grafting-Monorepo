@@ -26,9 +26,50 @@ export function sessionFixture() {
     curveBatch: (request) => JSON.parse(session.bezier_batch_json(JSON.stringify(request))),
     curveNetwork: (request) => JSON.parse(session.bezier_network_json(JSON.stringify(request))),
     planarBoolean: (request) => JSON.parse(session.planar_boolean_json(JSON.stringify(request))),
-    applyRegionEdit(ops) { calls.batches++; return JSON.parse(session.move_vertices_json(JSON.stringify(ops.map((m) => ({ nodeId: m.nodeId, position: vector(m.position) }))))); },
+    applyRegionEdit(ops) {
+      if (ops.every((op) => op.kind === "move-vertex")) {
+        calls.batches++;
+        return JSON.parse(session.move_vertices_json(JSON.stringify(ops.map((m) => ({ nodeId: m.nodeId, position: vector(m.position) })))));
+      }
+      // Ground regenerating inside a commit splits and deletes; nothing else reaches here.
+      for (const op of ops) {
+        if (op.kind === "insert-vertex") session.insert_vertex_json(JSON.stringify({ ...op, position: vector(op.position) }));
+        else if (op.kind === "retype-edge") session.retype_edge_json(JSON.stringify({ edgeId: op.edgeId, geometry: op.geometry }));
+        else if (op.kind === "delete-region") session.delete_region_json(JSON.stringify({ surfaceKey: op.surfaceKey }));
+        else throw new Error(`the fixture does not apply ${op.kind}`);
+      }
+      return {};
+    },
+    generateIrregularQuadGrid(request) {
+      const { relaxStrength, ...rest } = request;
+      let wire;
+      try {
+        wire = JSON.parse(session.irregular_quad_grid_json(JSON.stringify(relaxStrength === undefined ? rest : { ...rest, relax: { strength: relaxStrength } })));
+      } catch {
+        return undefined;
+      }
+      return { ...wire, vertices: wire.vertices.map((v) => (v.source === null ? { x: v.x, z: v.z } : { x: v.x, z: v.z, source: v.source })) };
+    },
     addPatch(patch) { const result = JSON.parse(session.add_patch_json(JSON.stringify(wirePatch(patch)))); if (result.skippedRegionIds.length) throw new Error(JSON.stringify(result)); return result; },
-    applyPatchReplacement(request) { return JSON.parse(session.apply_patch_replacement_json(JSON.stringify({ ...request, patch: wirePatch(request.patch), graphPatch: request.graphPatch && wirePatch(request.graphPatch) }))); },
+    getRegionTopologiesInBounds: (bounds) => JSON.parse(session.region_topologies_in_bounds_json(JSON.stringify(bounds))).map(topology),
+    getCurvedEdges: () => JSON.parse(session.curved_edges_json()).map((edge) => ({ ...edge, start: position(edge.start), end: position(edge.end) })),
+    getSnapshot: () => ({ tableId: "platform-test", map: { nodePositions: new Map() } }),
+    transact(transactionId, _origin, work) {
+      session.begin_transaction(transactionId);
+      let value;
+      try {
+        value = work();
+      } catch (error) {
+        session.rollback_transaction(transactionId);
+        throw error;
+      }
+      return { value, recorded: session.commit_transaction(transactionId) };
+    },
+    applyPatchReplacement(request) {
+      const wire = JSON.parse(session.apply_patch_replacement_json(JSON.stringify({ ...request, patch: wirePatch(request.patch), graphPatch: request.graphPatch && wirePatch(request.graphPatch) })));
+      // The port's shape: the outcome flattened beside what was skipped.
+      return { ...wire.outcome, skippedRegionIds: wire.skippedRegionIds, skippedRegionReasons: wire.skippedRegionReasons ?? [] };
+    },
   };
   const ctx = { runtime, history: createEditHistoryStack(), tableId: "platform-test", snapToGrid: false, nextSequence: () => ++sequence, reportSelection() {}, reportFeedback: (f) => calls.feedback.push(f) };
   return { session, runtime, ctx, calls };

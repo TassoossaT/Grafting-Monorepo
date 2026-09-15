@@ -16,9 +16,8 @@ import {
   calculateProfileDisplacement,
   calculateProfileHeight,
   distanceAndElevationOnPath,
-  isTerrainSurface,
+  hasTrait,
 } from "../../../features/edit-construction/index.ts";
-import polygonClipping, { type MultiPolygon, type Polygon } from "polygon-clipping";
 
 import {
   constraintsFromRings,
@@ -35,6 +34,8 @@ import {
   type TerrainStrokeBounds,
 } from "./terrain-neighborhood.ts";
 import { paintedFalloutOf, paintedTopologiesOf } from "../interference/painted-topologies.ts";
+import { planarUnion, planarDifference } from "../../../features/edit-construction/index.ts";
+import type { PlanarArea, PlanarPolygon } from "@/features/edit-construction";
 
 function centroidOf(nodes: readonly { readonly position: ConstructionPosition }[]): { x: number; y: number; z: number } {
   if (nodes.length === 0) return { x: 0, y: 0, z: 0 };
@@ -61,7 +62,7 @@ function insidePolygon(point: ConstructionPosition, polygon: readonly (readonly 
   return inside;
 }
 
-function insideSwept(point: ConstructionPosition, swept: MultiPolygon): boolean {
+function insideSwept(point: ConstructionPosition, swept: PlanarArea): boolean {
   const inRing = (ring: readonly (readonly [number, number])[]): boolean => {
     let inside = false;
     for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index, index += 1) {
@@ -158,7 +159,7 @@ function loopToRing(
 function loopToPolygon(
   loop: readonly ConstructionRegionEdge[],
   positionOf: ReadonlyMap<ConstructionNodeId, { readonly x: number; readonly z: number }>,
-): Polygon {
+): PlanarPolygon {
   const ring = loopToRing(loop, positionOf);
   return ring ? [ring] : [];
 }
@@ -166,7 +167,7 @@ function loopToPolygon(
 function topologyToPolygonWithHoles(
   topology: ConstructionRegionTopology,
   positionOf: ReadonlyMap<ConstructionNodeId, { readonly x: number; readonly z: number }>,
-): Polygon {
+): PlanarPolygon {
   if (topology.outerLoops.length === 0) return [];
   const outer = loopToRing(topology.outerLoops[0]!, positionOf);
   if (!outer) return [];
@@ -188,7 +189,7 @@ function topologyToPolygonWithHoles(
  * which is the direction to be wrong in when the question is "is this too
  * narrow to lay ground in".
  */
-function widthOf(polygon: MultiPolygon): number {
+function widthOf(polygon: PlanarArea): number {
   let area = 0;
   let perimeter = 0;
   for (const piece of polygon) {
@@ -205,7 +206,7 @@ function widthOf(polygon: MultiPolygon): number {
   return (2 * Math.abs(area / 2)) / perimeter;
 }
 
-function pieceMetrics(piece: MultiPolygon[number]): { readonly area: number; readonly width: number } {
+function pieceMetrics(piece: PlanarArea[number]): { readonly area: number; readonly width: number } {
   let area = 0;
   let perimeter = 0;
   for (const ring of piece) {
@@ -222,7 +223,7 @@ function pieceMetrics(piece: MultiPolygon[number]): { readonly area: number; rea
 }
 
 
-function topologyToPolygon(topology: ConstructionRegionTopology): Polygon {
+function topologyToPolygon(topology: ConstructionRegionTopology): PlanarPolygon {
   const positions = new Map<ConstructionNodeId, { x: number; z: number }>();
   for (const node of topology.nodes) positions.set(node.id, { x: node.position.x, z: node.position.z });
 
@@ -345,7 +346,7 @@ function dropInventedCorners(
  * stays linear as the road network grows instead of squaring with it.
  */
 export function buildConstraintRings(
-  targetPolygon: MultiPolygon,
+  targetPolygon: PlanarArea,
   faceSize: number,
   perimeters: ConstraintTable,
 ): readonly (ConstraintRing & { readonly isHole: boolean })[] {
@@ -596,7 +597,7 @@ export function executeTerrainCut(
     closedOutlineRing.push([closedOutlineRing[0]![0], closedOutlineRing[0]![1]]);
   }
 
-  const outlineMultiPolygon: MultiPolygon =
+  const outlineMultiPolygon: PlanarArea =
     request.area.sweptPolygon && request.area.sweptPolygon.length > 0
       ? request.area.sweptPolygon
       : closedOutlineRing.length >= 4
@@ -660,22 +661,14 @@ export function executeTerrainCut(
     request.profile.kind === "regenerate" ? effectiveFaceSide * 5 : effectiveFaceSide * 2;
   const standing = timePhase("vizinhança do terreno", () => terrainStandingAround(runtime, covered, coveredExtent, standingReach));
 
-  const targetSurfaceType = isTerrainSurface(request.targetSurfaceType)
+  const targetSurfaceType = hasTrait(request.targetSurfaceType, "ground")
     ? request.targetSurfaceType
     : "terrain";
 
-  const isTerrainMatch = (st: string, target: string): boolean => {
-    if (!isTerrainSurface(st)) return false;
-    if (st === target) return true;
-    if (isTerrainSurface(target)) return true;
-    return false;
-  };
-
   const coveredKeys = new Set(covered.map((c) => c.surfaceKey.join(" ")));
 
-  const terrainStanding = standing.filter((topology) =>
-    isTerrainMatch(topology.surfaceType, targetSurfaceType),
-  );
+  // The target is ground by construction above, so every ground face matches it.
+  const terrainStanding = standing.filter((topology) => hasTrait(topology.surfaceType, "ground"));
   let affected = terrainStanding.filter(
     (topology) =>
       coveredKeys.has(topology.surfaceKey.join(" ")) ||
@@ -711,7 +704,7 @@ export function executeTerrainCut(
   // is what makes the shape: the ground being laid is the affected faces
   // *minus* this, and how much ground has to be taken in for that remainder to
   // be layable depends on it.
-  let connectArea: MultiPolygon = [];
+  let connectArea: PlanarArea = [];
   let connectLoops: readonly (readonly ConstructionRegionEdge[])[] = [];
   const connectPositions = new Map<ConstructionNodeId, { x: number; z: number }>();
   let connectSeeds: { readonly seed: readonly string[]; readonly surfaceType: string }[] = [];
@@ -770,7 +763,7 @@ export function executeTerrainCut(
       .filter((polygon) => polygon.length > 0);
     if (facePolygons.length > 0) {
       try {
-        connectArea = timePhase(`união da rua (${facePolygons.length} faces)`, () => polygonClipping.union(facePolygons[0]!, ...facePolygons.slice(1)));
+        connectArea = timePhase(`união da rua (${facePolygons.length} faces)`, () => planarUnion(facePolygons[0]!, ...facePolygons.slice(1)));
       } catch {
         connectArea = [];
       }
@@ -791,29 +784,29 @@ export function executeTerrainCut(
   }
 
   /** The affected faces as one polygon, with `connectArea` taken out of it. */
-  const groundFor = (faces: readonly ConstructionRegionTopology[]): MultiPolygon => {
+  const groundFor = (faces: readonly ConstructionRegionTopology[]): PlanarArea => {
     const polygons = faces.map(topologyToPolygon).filter((p) => p.length > 0);
     const allPolygons =
       request.vacatedArea && request.vacatedArea.length > 0
         ? [...polygons, ...request.vacatedArea]
         : polygons;
     if (allPolygons.length === 0) return [];
-    let merged: MultiPolygon;
+    let merged: PlanarArea;
     try {
-      merged = polygonClipping.union(allPolygons[0]!, ...allPolygons.slice(1));
+      merged = planarUnion(allPolygons[0]!, ...allPolygons.slice(1));
     } catch {
       return [];
     }
     if (request.profile.kind === "convex") {
       try {
-        merged = polygonClipping.union(merged, outlineMultiPolygon);
+        merged = planarUnion(merged, outlineMultiPolygon);
       } catch {
         // Keep the un-unioned shape rather than losing the stroke.
       }
     }
     if (connectArea.length === 0) return merged;
     try {
-      return polygonClipping.difference(merged, connectArea);
+      return planarDifference(merged, connectArea);
     } catch {
       return merged;
     }
@@ -843,7 +836,7 @@ export function executeTerrainCut(
       // not pull an otherwise untouched terrain face into regeneration.
       const touched = affected.flatMap((t) => [...t.outerLoops, ...t.holes].flat());
       const absorbed = timePhase("vizinhas por aresta", () => retained.filter(
-        (t) => isTerrainMatch(t.surfaceType, targetSurfaceType) &&
+        (t) => hasTrait(t.surfaceType, "ground") &&
           [...t.outerLoops, ...t.holes].some((loop) => loop.some((edge) => touched.some((other) =>
             (edge.startNodeId === other.startNodeId && edge.endNodeId === other.endNodeId) ||
             (edge.startNodeId === other.endNodeId && edge.endNodeId === other.startNodeId)))),
@@ -968,9 +961,9 @@ export function executeTerrainCut(
     faceSide: effectiveFaceSide,
     relaxStrength: request.irregularity ?? 0.7,
     surfaceType:
-      affected.length > 0 && isTerrainSurface(affected[0]!.surfaceType)
+      affected.length > 0 && hasTrait(affected[0]!.surfaceType, "ground")
         ? affected[0]!.surfaceType
-        : (retained.length > 0 && isTerrainSurface(retained[0]!.surfaceType) ? retained[0]!.surfaceType : targetSurfaceType),
+        : (retained.length > 0 && hasTrait(retained[0]!.surfaceType, "ground") ? retained[0]!.surfaceType : targetSurfaceType),
     boundary: boundaryRings,
     holes: holeRings,
     sources: perimeters.sources,

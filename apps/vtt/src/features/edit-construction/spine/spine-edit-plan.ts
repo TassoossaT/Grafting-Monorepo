@@ -10,9 +10,10 @@ import { spineComponent } from "./spine-owner.ts";
 /**
  * Gives every spine span without authored handles the automatic curve
  * through its chain, once, through the Rust conversion. `offsets` is the
- * width a span with no profile of its own is given.
+ * width a span with no profile of its own is given, and `owner`, when given,
+ * the type it is stamped as generating.
  */
-export function withAutomaticHandles(snapshot: ConstructionGraphSnapshot, port: BezierPort, offsets: readonly number[]): ConstructionGraphSnapshot {
+export function withAutomaticHandles(snapshot: ConstructionGraphSnapshot, port: BezierPort, offsets: readonly number[], owner?: string): ConstructionGraphSnapshot {
   if (!snapshot.edges.some((e) => !e.curve && e.startNodeId.startsWith("spine:") && e.endNodeId.startsWith("spine:"))) return snapshot;
   const graph = spineGraphFromSnapshot(snapshot);
   const handles = new Map<string, CurveHandles>();
@@ -25,7 +26,7 @@ export function withAutomaticHandles(snapshot: ConstructionGraphSnapshot, port: 
       const edge = snapshot.edges.find((e) => (e.startNodeId === a && e.endNodeId === b) || (e.startNodeId === b && e.endNodeId === a));
       if (!edge || edge.curve) continue;
       const h = converted.handles[i]!;
-      handles.set(edge.edgeId, { ...h, start: edge.startNodeId === a ? h.start : h.end, end: edge.startNodeId === a ? h.end : h.start, bandOffsets: offsets });
+      handles.set(edge.edgeId, { ...h, start: edge.startNodeId === a ? h.start : h.end, end: edge.startNodeId === a ? h.end : h.start, bandOffsets: offsets, ...(owner === undefined ? {} : { surfaceType: owner }) });
     }
   }
   return { nodes: snapshot.nodes, edges: snapshot.edges.map((e) => ({ ...e, curve: e.curve ?? handles.get(e.edgeId) })) };

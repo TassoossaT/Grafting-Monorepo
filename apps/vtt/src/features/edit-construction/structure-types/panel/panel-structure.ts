@@ -3,7 +3,8 @@ import type { ConstructionRegionTopology, ConstructionMotionInfluence, Construct
 import type { AtomicEditOp, EditTarget } from "../../orchestration/atomic-edit.ts";
 import { HEIGHT_AXIS, HORIZONTAL_AXES } from "../../orchestration/atomic-edit.ts";
 import { cloudNodes } from "../../topology/construction-cloud.ts";
-import type { CascadeContext, CutRepair, EditRole, RolePolicy, StructureTypeDefinition } from "../structure-type.ts";
+import { reverseGeometry } from "../../topology/boundary-edges.ts";
+import type { CascadeContext, EditRole, ReshapeContext, RolePolicy, StructureTrait, StructureTypeDefinition, StructureView } from "../structure-type.ts";
 import { allowed, denied } from "../structure-type.ts";
 import { IGNORE, type CreationInteraction } from "../creation-interaction.ts";
 
@@ -121,6 +122,40 @@ function pairedTopCorners(context: CascadeContext): readonly AtomicEditOp[] {
   });
 }
 
+/** An edge's own start and end nodes, whichever way the loop holding it walks it. */
+function canonicalEdge(cloud: CascadeContext["cloud"], edgeId: string): { readonly start: string; readonly end: string } | undefined {
+  for (const member of cloud.members) {
+    for (const use of [...member.outerLoops, ...member.holes].flat()) {
+      if (use.edgeId === edgeId) return use.reversed ? { start: use.endNodeId, end: use.startNodeId } : { start: use.startNodeId, end: use.endNodeId };
+    }
+  }
+  return undefined;
+}
+
+/**
+ * A panel's top and bottom runs are the same curve at two heights: reshaping
+ * one reshapes the run across the panel from it, found through the same
+ * upright links a corner drag carries its paired corner by.
+ */
+function pairedRun(context: ReshapeContext): readonly AtomicEditOp[] {
+  const grabbed = canonicalEdge(context.cloud, context.edgeId);
+  if (grabbed === undefined) return [];
+  const links = context.cloud.members.flatMap((member) => panelMotionInfluences(member));
+  const across = (nodeId: string) => links.find((link) => link.from === nodeId)?.to ?? links.find((link) => link.to === nodeId)?.from;
+  const start = across(grabbed.start);
+  const end = across(grabbed.end);
+  if (start === undefined || end === undefined) return [];
+  for (const member of context.cloud.members) {
+    for (const use of [...member.outerLoops, ...member.holes].flat()) {
+      if (use.edgeId === context.edgeId) continue;
+      const own = use.reversed ? { start: use.endNodeId, end: use.startNodeId } : { start: use.startNodeId, end: use.endNodeId };
+      if (own.start === start && own.end === end) return [{ kind: "retype-edge", edgeId: use.edgeId, geometry: context.geometry }];
+      if (own.start === end && own.end === start) return [{ kind: "retype-edge", edgeId: use.edgeId, geometry: reverseGeometry(context.geometry) }];
+    }
+  }
+  return [];
+}
+
 export function panelPolicyFor(role: EditRole): RolePolicy {
   switch (role) {
     case PANEL_ROLES.bottomCorner:
@@ -134,9 +169,9 @@ export function panelPolicyFor(role: EditRole): RolePolicy {
       // A whole bottom run drags horizontally; its own two corners each
       // carry their paired top corner through the same cascade the corner
       // role uses, so this needs no separate rule.
-      return allowed(role, HORIZONTAL_AXES, "surface", pairedTopCorners);
+      return { ...allowed(role, HORIZONTAL_AXES, "surface", pairedTopCorners), reshape: pairedRun };
     case PANEL_ROLES.topEdge:
-      return allowed(role, HEIGHT_AXIS, "surface");
+      return { ...allowed(role, HEIGHT_AXIS, "surface"), reshape: pairedRun };
     case PANEL_ROLES.post:
       // A vertical post moves as one rigid unit -- `moveEdge` already
       // carries both of its endpoints.
@@ -160,37 +195,39 @@ export function panelPolicyFor(role: EditRole): RolePolicy {
  * walls crossing weld at their shared corners rather than eating each other.
  * That is the whole of the panel side of the interaction table.
  */
-export function panelInteractionOver(_coveredType: string): CreationInteraction {
+export function panelInteractionOver(_covered: StructureView): CreationInteraction {
   return IGNORE;
 }
-
-/**
- * A path crossing a wall reads as an opening through it -- `CUT`'s own doc
- * comment already says so -- but framing that opening (jamb consistency,
- * which posts stay structural) is undesigned. Every panel type (wall, door,
- * window) shares this gap, since they all share this one
- * builder.
- */
-const PANEL_CUT_REPAIR: CutRepair = {
-  kind: "unsupported",
-  reason: "panels have no repair for a cut yet -- a path cutting through a wall should open it, but framing the opening is undesigned",
-};
 
 /** Builds one `extrude_path`-generated structure type on the shared panel model. */
 export function panelStructureType(
   surfaceType: string,
   label: string,
   creation: string,
+  traits: readonly StructureTrait[],
 ): StructureTypeDefinition {
   return Object.freeze({
     surfaceType,
     label,
     creation,
+    traits: Object.freeze([...traits]),
     roleFor: panelRoleFor,
     motionInfluences: panelMotionInfluences,
     validateMotion: validatePanelMotion,
     policyFor: panelPolicyFor,
     interactionOver: panelInteractionOver,
-    repairAfterCut: PANEL_CUT_REPAIR,
   });
 }
+
+/**
+ * The face standing in a hole a wall was opened by. One structural type:
+ * a door and a window are the same panel on the rim the wall shares with it,
+ * and differ only in the parameters that placed it (a door sits on the floor,
+ * a window on its sill) and in what is drawn there.
+ */
+export const openingStructureType = panelStructureType(
+  "opening",
+  "Abertura",
+  "one face standing in an opening, on the rim the wall shares with it",
+  [],
+);

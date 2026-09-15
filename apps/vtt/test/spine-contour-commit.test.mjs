@@ -30,6 +30,7 @@ function createFakeConstructionSession() {
   const nodes = new Map();
   const edges = new Map();
   const regions = new Map();
+  let checkpoint;
   let started = false;
 
   const requireStarted = () => {
@@ -230,6 +231,20 @@ function createFakeConstructionSession() {
     },
     applyRegionOverlay() {
       throw new Error("not exercised by this fake");
+    },
+    beginTransaction() {
+      checkpoint = { regions: new Map(regions), nodes: new Map(nodes), edges: new Map(edges) };
+    },
+    commitTransaction() {
+      checkpoint = undefined;
+      return true;
+    },
+    rollbackTransaction() {
+      for (const [live, saved] of [[regions, checkpoint.regions], [nodes, checkpoint.nodes], [edges, checkpoint.edges]]) {
+        live.clear();
+        for (const [key, value] of saved) live.set(key, value);
+      }
+      checkpoint = undefined;
     },
     undoRegionOverlay() {},
     redoRegionOverlay() {},

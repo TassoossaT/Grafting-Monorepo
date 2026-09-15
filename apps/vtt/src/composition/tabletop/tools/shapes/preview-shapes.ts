@@ -1,9 +1,9 @@
 import earcut, { flatten as earcutFlatten } from "earcut";
-import polygonClipping from "polygon-clipping";
-import type { MultiPolygon, Polygon } from "polygon-clipping";
 
 import type { PreviewDescriptor } from "@/features/edit-construction";
 import type { ConstructionPosition } from "@/ports";
+import { planarUnion } from "../../../../features/edit-construction/index.ts";
+import type { PlanarArea, PlanarPolygon } from "@/features/edit-construction";
 
 /** A filled square ghost centered on `center`, `halfExtent` out on both X and Z -- a hover cursor or stamp footprint. */
 export function quadAround(
@@ -161,7 +161,7 @@ function decimateXZ(samples: readonly ConstructionPosition[], minDistance: numbe
   return kept;
 }
 
-/** A closed circle ring (XZ), `sides`-gon, for one polygon-clipping `Polygon`. */
+/** A closed circle ring (XZ), `sides`-gon, for one polygon-clipping `PlanarPolygon`. */
 function circleRing(center: ConstructionPosition, radius: number, sides: number): [number, number][] {
   const ring: [number, number][] = [];
   for (let index = 0; index <= sides; index += 1) {
@@ -244,16 +244,16 @@ function capsuleRing(start: ConstructionPosition, end: ConstructionPosition, rad
  * The arrangements that defeat the algorithm are not near-duplicate corners,
  * so rounding them does not help.
  */
-function unionCapsules(capsules: readonly Polygon[]): MultiPolygon {
+function unionCapsules(capsules: readonly PlanarPolygon[]): PlanarArea {
   const [first, ...rest] = capsules;
   if (first === undefined) return [];
   try {
-    return polygonClipping.union(first, ...rest);
+    return planarUnion(first, ...rest);
   } catch {
-    let merged: MultiPolygon = [first];
+    let merged: PlanarArea = [first];
     for (const capsule of rest) {
       try {
-        merged = polygonClipping.union(merged, capsule);
+        merged = planarUnion(merged, capsule);
       } catch {
         merged = [...merged, capsule];
       }
@@ -289,12 +289,12 @@ function strokeCapsules(
   samples: readonly ConstructionPosition[],
   radius: number,
   chord: number,
-): readonly Polygon[] {
+): readonly PlanarPolygon[] {
   // Samples closer together than a cell add a capsule that changes the union
   // by less than one cell, at the cost of two more points on its outline.
   const spacing = Math.max(chord > 0 ? chord : radius * 0.5, radius * 0.5, 0.05);
   const decimated = decimateXZ(samples, spacing);
-  const capsules: Polygon[] = [];
+  const capsules: PlanarPolygon[] = [];
   for (let index = 1; index < decimated.length; index += 1) {
     capsules.push([capsuleRing(decimated[index - 1], decimated[index], radius, arcSegments(radius, chord))]);
   }
@@ -318,7 +318,7 @@ export function brushSweptOutlinePolygons(
    * other caller has always had.
    */
   chord = 0,
-): MultiPolygon {
+): PlanarArea {
   const first = samples[0];
   if (first === undefined) return [];
   const capsules = strokeCapsules(samples, radius, chord);
@@ -345,7 +345,7 @@ export function brushSweptRegionFill(
   const positions: number[] = [];
   const indices: number[] = [];
 
-  const addPolygon = (polygon: Polygon, allSamples: readonly ConstructionPosition[]) => {
+  const addPolygon = (polygon: PlanarPolygon, allSamples: readonly ConstructionPosition[]) => {
     const { vertices, holes, dimensions } = earcutFlatten(polygon);
     const triangles = earcut(vertices, holes, dimensions);
     const base = positions.length / 3;

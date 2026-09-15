@@ -1,4 +1,5 @@
 import type { PreviewDescriptor, WallParams } from "@/features/edit-construction";
+import { hasTrait } from "../../../../features/edit-construction/index.ts";
 import type {
   ConstructionEdgeGeometry,
   ConstructionEdgeId,
@@ -195,7 +196,7 @@ function nearestPlatformNodeAt(
 ): { readonly node: { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }; readonly distance: number } | undefined {
   let best: { readonly node: { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }; readonly distance: number } | undefined;
   for (const region of ctx.runtime.getAllRegionTopologies()) {
-    if (region.surfaceType !== "platform") continue;
+    if (!hasTrait(region.surfaceType, "floor")) continue;
     for (const node of region.nodes) {
       if (Math.abs(node.position.y - position.y) > ELEVATION_WELD_TOLERANCE) continue;
       const distance = xzDistance(node.position, position);

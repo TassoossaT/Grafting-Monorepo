@@ -3,7 +3,9 @@ import test from "node:test";
 import { controlSectionId, createPathBrushEffect, curvePickId, pathFormationFor, planBezierEdit, planEdit, planPathCloudMutation, resolveCloudTopology } from "../src/features/edit-construction/index.ts";
 import { slopeRampTool, slopeSpiralTool } from "../src/composition/tabletop/tools/slope/slope-tools.ts";
 import { commitPlatformSlope } from "../src/composition/tabletop/tools/slope/slope-commit.ts";
-import { dispatchCutRepairs } from "../src/composition/tabletop/interference/type-interference-dispatch.ts";
+import { dispatchEffects } from "../src/composition/tabletop/effects/effect-commit.ts";
+import { shapeChangeOfReplacement } from "../src/composition/tabletop/effects/shape-change.ts";
+import { latticeRegenerateReaction } from "../src/composition/tabletop/terrain/terrain-lattice-reaction.ts";
 import { addFace, sessionFixture } from "./platform-session-fixture.mjs";
 
 const params = { width: 2 };
@@ -193,13 +195,18 @@ test("a ramp over terrain cuts it and hands the terrain to its regeneration, on 
   runtime.getSnapshot = () => ({ tableId: "platform-test", map: { nodePositions: new Map(runtime.getGraphSnapshot().nodes.map((n) => [n.id, { position: n.position }])) } });
   const repairOf = (request, replaced = []) => {
     let fallout;
-    dispatchCutRepairs(runtime, request, "cause", replaced, undefined, { terrain: (_runtime, received) => { fallout = received; return 1; } });
+    const change = shapeChangeOfReplacement(runtime, request, replaced, undefined);
+    dispatchEffects(runtime, [{ kind: "cut", causeId: "cause", change }], { "lattice-regenerate": latticeRegenerateReaction((_runtime, received) => { fallout = received; return 1; }) });
     return fallout;
   };
   try {
-    const ground = addFace(runtime, "ground", "terrain", [[-10, -10], [10, -10], [10, 10], [-10, 10]].map(([x, z], i) => ({ id: `ground:${i}`, position: { x, y: 0, z } })));
+    // The ramp is drawn first so its own commit reaches no ground; the ground
+    // laid after it is what the recorded reaction below is asked about. Its
+    // corners sit near the ramp because the pipeline reaches faces by their
+    // nodes, as the engine's bounds query does.
     const start = { point: { x: -3, y: 0, z: 0 } }, end = { point: { x: 4, y: 0, z: 1 } };
     slopeRampTool.onPointerUp(ctx, { start, current: end, samples: [start, end] }, { ...params, rise: 2 });
+    const ground = addFace(runtime, "ground", "terrain", [[-4, -3], [5, -3], [5, 3], [-4, 3]].map(([x, z], i) => ({ id: `ground:${i}`, position: { x, y: 0, z } })));
     const created = requests.at(-1);
     assert.equal(created.patch.regions[0].surfaceType, "platform-slope", JSON.stringify(calls.feedback));
     assert.ok(created.footprintOutline?.length >= 3, "creation claims its footprint");

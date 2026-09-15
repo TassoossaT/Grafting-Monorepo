@@ -3,6 +3,6 @@ export type {
   ConstructionHistoryEntry,
   EditHistoryStack,
   EditHistoryState,
-  PathBrushHistoryEntry,
+  TransactionHistoryEntry,
   RegionEditHistoryEntry,
 } from "./edit-history.ts";

@@ -36,6 +36,10 @@ Applies an application-generated patch over an exact, already-resolved
 set of source regions. Geometry and product policy are caller-owned;
 this method only executes the generic overlay atomically.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::begin_transaction(&mut self, id: &str) -> core::result::Result<(), wasm_bindgen::JsValue>`
+
+Starts one atomic unit of work. See `OpenTransaction`.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::bezier_batch_json(&self, json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 Evaluates a batch of generic curve-authoring commands without mutation.
@@ -55,6 +59,15 @@ generator consults so it only builds over open ground. See
 The connected component of same-`type` regions reachable from
 `seed` by shared graph nodes -- `ADR-0022`'s "cloud" query. See
 `geometry::connected_component`.
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::commit_transaction(&mut self, id: &str) -> core::result::Result<bool, wasm_bindgen::JsValue>`
+
+Ends the open transaction, recording it as a single undo entry when it
+changed anything. Returns whether it was recorded.
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::curved_edges_json(&self) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Every bezier boundary edge a region uses. See `region_editing::curved_edges`.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::delete_region_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
@@ -158,6 +171,10 @@ Unregisters a surface outright and prunes any nodes it orphaned. See
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::retype_edge_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 `RetypeEdge`. See `region_editing::apply_retype_edge`.
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::rollback_transaction(&mut self, id: &str) -> core::result::Result<(), wasm_bindgen::JsValue>`
+
+Ends the open transaction by restoring the state it began from.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::snapshot_json(&self) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 

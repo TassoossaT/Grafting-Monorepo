@@ -10,8 +10,8 @@ import type {
   ConstructionRegionTopology,
 } from "@/ports";
 
-import { resolveCurves, ribbonSections, sampleRibbons, unionRibbonOutlines } from "../../topology/bezier-curve.ts";
-import { isSpineControlNodeId, ownedBy, spineComponent } from "../../spine/index.ts";
+import { ribbonSections, unionRibbonOutlines } from "../../topology/bezier-curve.ts";
+import { isSpineControlNodeId, ownedBy, spineComponent, spineRibbons } from "../../spine/index.ts";
 import type { MotionContext, SpineRegeneration, SpineRegenerationInput } from "../structure-type.ts";
 
 /**
@@ -59,12 +59,6 @@ function parseSection(id: string): { readonly owner: string; readonly t?: number
   return control ? { owner: control[1]!, side: control[2] as Side } : undefined;
 }
 
-function offsetsOf(edge: ConstructionEdgeSnapshot): { offsets: readonly [number, number]; endOffsets: readonly [number, number] } {
-  const profile = edge.curve?.bandOffsets.length ? edge.curve.bandOffsets : SLOPE_DEFAULT_OFFSETS;
-  const end = edge.curve?.endBandOffsets?.length ? edge.curve.endBandOffsets : profile;
-  return { offsets: [Math.min(...profile), Math.max(...profile)], endOffsets: [Math.min(...end), Math.max(...end)] };
-}
-
 export interface SlopeSurface {
   readonly nodes: readonly { readonly id: string; readonly position: ConstructionPosition }[];
   readonly edges: readonly ConstructionPatchEdge[];
@@ -74,16 +68,18 @@ export interface SlopeSurface {
 
 /** The faces of every sloped-platform span in `spans`, sampled along their curves. */
 export function slopeSurface(port: Pick<BezierPort, "curveBatch">, nodes: ReadonlyMap<string, ConstructionPosition>, spans: readonly ConstructionEdgeSnapshot[]): SlopeSurface {
-  const resolved = resolveCurves(port, spans.map((span) => ({ handles: span.curve!, start: nodes.get(span.startNodeId)!, end: nodes.get(span.endNodeId)! })), TOLERANCE);
-  const parameters = resolved.map((result) => result.samples[0]!.map((sample) => sample.t));
-  const outlines = sampleRibbons(port, spans.map((span, i) => ({ curve: resolved[i]!.curves[0]!, ...offsetsOf(span), parameters: parameters[i] })), TOLERANCE);
+  // Cross-sections at the curve's own adaptive samples, so each carries the
+  // parameter a later move re-places it at.
+  const ribbons = spineRibbons(port, spans.map((span) => ({ handles: span.curve!, start: nodes.get(span.startNodeId)!, end: nodes.get(span.endNodeId)! })), SLOPE_DEFAULT_OFFSETS, TOLERANCE,
+    (resolved) => resolved.samples[0]!.map((sample) => sample.t));
+  const parameters = ribbons.map((ribbon) => ribbon.resolved.samples[0]!.map((sample) => sample.t));
   const placed = new Map<string, ConstructionPosition>();
   const edges = new Map<string, ConstructionPatchEdge>();
   const regions: ConstructionPatchRegion[] = [];
   const preview: number[] = [];
   spans.forEach((span, i) => {
     const ts = parameters[i]!;
-    const sections = ribbonSections(outlines[i]!);
+    const sections = ribbonSections(ribbons[i]!.outline);
     const last = ts.length - 1;
     const ids = sections.map((section, k) => Object.fromEntries(SIDES.map((side) => {
       const control = k === 0 ? span.startNodeId : k === last ? span.endNodeId : undefined;
@@ -115,7 +111,7 @@ export function slopeSurface(port: Pick<BezierPort, "curveBatch">, nodes: Readon
         { edgeId: startRung, reversed: true },
       ],
     });
-    const samples = resolved[i]!.samples[0]!;
+    const samples = ribbons[i]!.resolved.samples[0]!;
     for (let k = 1; k < samples.length; k += 1) preview.push(...samples[k - 1]!.position, ...samples[k]!.position);
   });
   return { nodes: [...placed].map(([id, position]) => ({ id, position })), edges: [...edges.values()], regions, preview: Float32Array.from(preview) };
@@ -205,10 +201,10 @@ export function deriveSlopeMotion(topologies: readonly ConstructionRegionTopolog
     return ts.length >= 2 ? [{ span, members, ts }] : [];
   });
   if (work.length === 0) return derived;
-  const resolved = resolveCurves(port, work.map(({ span }) => ({ handles: span.curve!, start: at(span.startNodeId), end: at(span.endNodeId) })), TOLERANCE);
-  const outlines = sampleRibbons(port, work.map(({ span, ts }, i) => ({ curve: resolved[i]!.curves[0]!, ...offsetsOf(span), parameters: ts })), TOLERANCE);
+  const ribbons = spineRibbons(port, work.map(({ span }) => ({ handles: span.curve!, start: at(span.startNodeId), end: at(span.endNodeId) })), SLOPE_DEFAULT_OFFSETS, TOLERANCE,
+    (_resolved, i) => work[i]!.ts);
   work.forEach(({ members, ts }, i) => {
-    const sections = ribbonSections(outlines[i]!);
+    const sections = ribbonSections(ribbons[i]!.outline);
     for (const member of members) {
       if (positions.has(member.id) || derived.has(member.id)) continue;
       derived.set(member.id, sections[ts.indexOf(member.t)]![member.side]);

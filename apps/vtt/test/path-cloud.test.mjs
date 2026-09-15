@@ -5,7 +5,6 @@ import { pathRunsIn, pathRunFor } from "../src/features/edit-construction/struct
 import { pathCorridorId } from "../src/features/edit-construction/structure-types/path/path-corridor.ts";
 import { pathFormationFor, pathSpineSlot } from "../src/features/edit-construction/structure-types/path/path-recipe.ts";
 import { stationNodeId } from "../src/features/edit-construction/structure-types/path/station-node-id.ts";
-import { referenceLineFrom } from "../src/features/edit-construction/structure-types/path/path-reference-line.ts";
 
 const ROAD = Object.freeze({
   shape: "circle",
@@ -34,68 +33,6 @@ test("a run is flat and exactly three slots wide: contour, spine, contour", () =
     street.map((point) => point.lateralOffset),
     [-1.5, 0, 1.5],
   );
-});
-
-test("a straight road over flat ground is two stations and no more", () => {
-  // The wall pattern: commit the straightest thing that still fits. Sixty
-  // metres of flat car park used to buy thirty stations, all of them saying
-  // the same thing about the ground.
-  const at = (x) => ({ x, y: 0, z: 0 });
-  const fitted = [{ start: at(0), end: at(60), geometry: { kind: "line" } }];
-  const { line } = referenceLineFrom(fitted, [at(0), at(30), at(60)], true);
-
-  assert.equal(line.length, 2, `stations: ${line.map((s) => s.x)}`);
-  assert.equal(line[0].x, 0);
-  assert.equal(line[1].x, 60);
-});
-
-test("a corner is still a station, because the run genuinely turns there", () => {
-  const at = (x) => ({ x, y: 0, z: 0 });
-  const fitted = [
-    { start: at(0), end: at(2.1), geometry: { kind: "line" } },
-    { start: at(2.1), end: at(6.0), geometry: { kind: "line" } },
-  ];
-  const { line } = referenceLineFrom(fitted, [at(0), at(2.1), at(6.0)], true);
-
-  assert.ok(
-    line.some((station) => Math.abs(station.x - 2.1) < 1e-9),
-    `the fitted corner is a station: ${line.map((s) => s.x)}`,
-  );
-  assert.ok(
-    Math.abs(line[line.length - 1].x - 6.0) < 1e-9,
-    "the run ends where it was drawn",
-  );
-});
-
-test("ground that strays from the straight line buys itself stations", () => {
-  // A ridge in the middle of an otherwise straight run. The two ends alone
-  // would tunnel a chord straight through it.
-  const at = (x, y) => ({ x, y, z: 0 });
-  const fitted = [{ start: at(0, 0), end: at(40, 0), geometry: { kind: "line" } }];
-  const stroke = [];
-  for (let x = 0; x <= 40; x += 1) {
-    stroke.push(at(x, x > 15 && x < 25 ? 3 : 0));
-  }
-
-  const { line } = referenceLineFrom(fitted, stroke, true);
-  assert.ok(line.length > 2, `the ridge is followed: ${line.map((s) => s.x)}`);
-  assert.ok(
-    line.some((station) => station.y > 2),
-    "and the road actually climbs it",
-  );
-
-  // Still nothing like a station every two metres: the flat parts are free.
-  assert.ok(line.length < 20, `bought only what it needed: ${line.length}`);
-});
-
-test("a deck subdivides for nothing: it spans instead of riding", () => {
-  const at = (x, y) => ({ x, y, z: 0 });
-  const fitted = [{ start: at(0, 0), end: at(40, 0), geometry: { kind: "line" } }];
-  const stroke = [];
-  for (let x = 0; x <= 40; x += 1) stroke.push(at(x, x > 15 && x < 25 ? 3 : 0));
-
-  const { line } = referenceLineFrom(fitted, stroke, false);
-  assert.equal(line.length, 2, "two ends, level between them");
 });
 
 /** One band of a run, as the region topology the graph would report. */

@@ -6,7 +6,7 @@ import { openingTool } from "../src/composition/tabletop/tools/openings/opening-
 import { bezierPointXz } from "../src/features/edit-construction/index.ts";
 
 const TABLE_ID = "table-1";
-const WINDOW = { openingType: "window", width: 1, height: 1, sill: 1 };
+const WINDOW = { openingKind: "window", width: 1, height: 1, sill: 1 };
 
 let sequence = 0;
 
@@ -198,7 +198,7 @@ test("a click on a wall opens it and stands a face in the opening", () => {
 
   const { patch } = patches[0];
   assert.equal(patch.regions.length, 1);
-  assert.equal(patch.regions[0].surfaceType, "window");
+  assert.equal(patch.regions[0].surfaceType, "opening");
   assert.equal(patch.regions[0].physical, false, "you can see and walk through an opening");
   assert.equal(patch.nodes.length, 4);
   for (const node of patch.nodes) {
@@ -319,7 +319,7 @@ test("a door sits on the floor of the wall it opens", () => {
   const { ctx, patches } = contextFor([STRAIGHT]);
 
   openingTool.onClick(ctx, { point: { x: 3, y: 0, z: 0 } }, {
-    openingType: "door",
+    openingKind: "door",
     width: 1,
     height: 2,
     sill: 0,
