@@ -3,7 +3,7 @@ import type { WallBrushParams } from "@/features/edit-construction";
 
 import { createBrushTool, type BrushRegion } from "../core/brush-tool.ts";
 import type { ToolContext } from "../core/tool-context.ts";
-import { WALL_COLOR, commitWallStroke, wallCorrectionPreview } from "./wall-shared.ts";
+import { WALL_COLOR, commitWallStroke } from "./wall-shared.ts";
 
 /**
  * A free wall stroke, built on the same brush every other brush uses: press,
@@ -35,7 +35,12 @@ export const wallBrushTool = createBrushTool<"wall-brush">({
     commitWallStroke(ctx, region.samples, region.tolerance, params, "wall-brush");
   },
 
-  previewContour(region: BrushRegion, ctx: ToolContext, params: WallBrushParams) {
-    return wallCorrectionPreview(ctx, region.samples, region.tolerance, WALL_COLOR[params.wallType]);
-  },
+  // No `previewContour` override: the corrected/fitted result is only
+  // decided once, on release. Refitting it every frame while the stroke is
+  // still growing let already-drawn stretches change shape retroactively as
+  // later samples came in -- an RDP/Bézier fit runs over the whole point
+  // list, so one more sample at the end can move where an earlier corner
+  // was found. The generic fallback below is the honest preview instead:
+  // the literal swept mouse trail, its width the correction/snap budget the
+  // eventual fit may spend, exactly what `path-brush` already shows.
 });
