@@ -1,4 +1,4 @@
-import { DEFAULT_TOOL_PARAMS, deriveFaceSize, isTerrainSurface } from "../../../../features/edit-construction/index.ts";
+import { DEFAULT_TOOL_PARAMS, deriveFaceSize, hasTrait } from "../../../../features/edit-construction/index.ts";
 import type { TerrainSculptParams } from "@/features/edit-construction";
 import type {
   ConstructionCoveredRegion,
@@ -166,7 +166,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   defaultParams: () => DEFAULT_TOOL_PARAMS["terrain-sculpt"],
 
   previewFor(gesture: ToolGesture, params: TerrainSculptParams) {
-    const targetSurface = isTerrainSurface(params.targetSurface) ? params.targetSurface : "terrain";
+    const targetSurface = hasTrait(params.targetSurface, "ground") ? params.targetSurface : "terrain";
     const color = TERRAIN_COLOR[targetSurface as "terrain" | "terrain-grass"] ?? 0x334155;
     return brushSweptRegionFill(
       gesture.samples.map((sample) => sample.point),
@@ -199,16 +199,16 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     const isFlatten = mode === "flatten";
     const elevationStep = params.elevationStep ?? 2.0;
     const covered = coveredByStroke(ctx, swept);
-    const coveredTerrain = covered.find((c) => isTerrainSurface(c.surfaceType));
+    const coveredTerrain = covered.find((c) => hasTrait(c.surfaceType, "ground"));
     const targetSurface =
-      params.targetSurface && isTerrainSurface(params.targetSurface)
+      params.targetSurface && hasTrait(params.targetSurface, "ground")
         ? params.targetSurface
-        : coveredTerrain && isTerrainSurface(coveredTerrain.surfaceType)
+        : coveredTerrain && hasTrait(coveredTerrain.surfaceType, "ground")
           ? coveredTerrain.surfaceType
           : "terrain";
 
     if (isFlatten) {
-      const coveredTerrainRegions = covered.filter((c) => isTerrainSurface(c.surfaceType));
+      const coveredTerrainRegions = covered.filter((c) => hasTrait(c.surfaceType, "ground"));
       const raised =
         coveredTerrainRegions.length > 0
           ? restackTerrain(
@@ -228,7 +228,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     const strokePoints = gesture.samples.map((sample) => sample.point);
 
     if (isDig) {
-      const coveredTerrainRegions = covered.filter((c) => isTerrainSurface(c.surfaceType));
+      const coveredTerrainRegions = covered.filter((c) => hasTrait(c.surfaceType, "ground"));
       if (coveredTerrainRegions.length === 0) {
         ctx.reportFeedback({ tone: "info", message: "Nada a cavar aqui." });
         return;
@@ -261,7 +261,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
     }
 
     if (isAdd) {
-      const coveredTerrainRegions = covered.filter((c) => isTerrainSurface(c.surfaceType));
+      const coveredTerrainRegions = covered.filter((c) => hasTrait(c.surfaceType, "ground"));
       const { minX, minZ, maxX, maxZ } = boundsOf(swept);
       const originX = Math.floor(minX / NOISE_SPACING) - 1;
       const originZ = Math.floor(minZ / NOISE_SPACING) - 1;

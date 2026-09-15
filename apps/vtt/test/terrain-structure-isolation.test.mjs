@@ -1,27 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { isTerrainSurface } from "../src/features/edit-construction/structure-types/organic/terrain-cloud.ts";
+import { hasTrait, surfaceTypesWithTrait } from "../src/features/edit-construction/structure-types/registry.ts";
 import { executeTerrainCut } from "../src/composition/tabletop/terrain/terrain-cut-executor.ts";
 import { terrainSculptTool } from "../src/composition/tabletop/tools/terrain/terrain-sculpt-tool.ts";
 import { DEFAULT_TOOL_PARAMS } from "../src/features/edit-construction/tools/tool-types.ts";
 
-test("isTerrainSurface: accepts only terrain variants and rejects non-terrain surface types", () => {
-  assert.equal(isTerrainSurface("terrain"), true);
-  assert.equal(isTerrainSurface("terrain-grass"), true);
-  assert.equal(isTerrainSurface("terrain-snow"), true);
-
-  // Structural and non-terrain types must all be rejected:
-  assert.equal(isTerrainSurface("ground"), false);
-  assert.equal(isTerrainSurface("wall-white"), false);
-  assert.equal(isTerrainSurface("wall-gray"), false);
-  assert.equal(isTerrainSurface("platform"), false);
-  assert.equal(isTerrainSurface("roof"), false);
-  assert.equal(isTerrainSurface("path"), false);
-  assert.equal(isTerrainSurface("door"), false);
-  assert.equal(isTerrainSurface("window"), false);
-  assert.equal(isTerrainSurface("floor"), false);
-  assert.equal(isTerrainSurface("ceiling"), false);
+test("ground is a declared trait, not a name prefix", () => {
+  assert.deepEqual(surfaceTypesWithTrait("ground"), ["terrain", "terrain-grass"]);
+  // An undeclared name that merely looks like terrain is not ground.
+  assert.equal(hasTrait("terrain-snow", "ground"), false);
+  for (const surfaceType of ["wall-white", "wall-gray", "platform", "platform-slope", "roof", "path", "door", "window"]) {
+    assert.equal(hasTrait(surfaceType, "ground"), false, `${surfaceType} is not ground`);
+  }
 });
 
 test("executeTerrainCut: isolates non-terrain structures (never splits edges or mutates vertices of walls/platforms)", () => {

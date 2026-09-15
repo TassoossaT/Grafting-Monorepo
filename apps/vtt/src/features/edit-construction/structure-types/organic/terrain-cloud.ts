@@ -8,17 +8,7 @@ import type {
 
 import type { CloudTopology } from "../../topology/construction-cloud.ts";
 import { perimeterOf, type PerimeterLoop } from "../../topology/surface-perimeter.ts";
-
-/**
- * Checks whether a surface type is an organic terrain surface.
- */
-export function isTerrainSurface(surfaceType: string): boolean {
-  return (
-    surfaceType === "terrain" ||
-    surfaceType === "terrain-grass" ||
-    surfaceType.startsWith("terrain")
-  );
-}
+import { hasTrait } from "../registry.ts";
 
 /**
  * Extracts the outer and hole perimeter loops of a whole terrain cloud.
@@ -191,7 +181,7 @@ export function planTerrainCloudCutRepair(
 
   let totalCount = 0;
   for (const t of input.candidateTerrain) {
-    if (!isTerrainSurface(t.surfaceType)) continue;
+    if (!hasTrait(t.surfaceType, "ground")) continue;
 
     // 1. Holds a node the cutter is about to destroy.
     //

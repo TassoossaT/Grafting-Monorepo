@@ -3,9 +3,11 @@ import test from "node:test";
 
 import {
   firstRefusal,
+  regeneratingCutTargets,
   resolveConformance,
   resolveCoverage,
   resolveCreationInteraction,
+  surfaceTypesWithTrait,
 } from "../src/features/edit-construction/index.ts";
 
 function covered(surfaceType, coverage = "centroid") {
@@ -100,6 +102,28 @@ test("firstRefusal surfaces why a stroke must be abandoned whole", () => {
 
 test("firstRefusal is undefined when every region resolved", () => {
   assert.equal(firstRefusal(resolveCoverage("terrain", [covered("terrain")])), undefined);
+});
+
+test("a platform cuts whatever is ground and stands on everything else", () => {
+  for (const painted of ["platform", "platform-slope"]) {
+    for (const ground of surfaceTypesWithTrait("ground")) {
+      assert.equal(resolveCreationInteraction(painted, ground).kind, "cut", `${painted} over ${ground}`);
+    }
+    for (const other of ["wall-white", "path", "roof", "platform"]) {
+      assert.equal(resolveCreationInteraction(painted, other).kind, "ignore", `${painted} over ${other}`);
+    }
+  }
+});
+
+test("cut repair targets come from the registry, not a hand-kept list", () => {
+  assert.deepEqual(regeneratingCutTargets("path"), surfaceTypesWithTrait("ground"));
+  assert.deepEqual(regeneratingCutTargets("wall-white"), []);
+  assert.deepEqual(regeneratingCutTargets("mystery"), []);
+});
+
+test("relations are declared by traits: floors, partitions and ground", () => {
+  assert.deepEqual(surfaceTypesWithTrait("floor"), ["platform"]);
+  assert.deepEqual(surfaceTypesWithTrait("partition"), ["wall-white", "wall-gray"]);
 });
 
 test("resolveConformance checks vertical conformance capability across structure types", () => {

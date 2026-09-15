@@ -242,6 +242,34 @@ export interface SpineGeneration {
   readonly regenerate: (input: SpineRegenerationInput) => SpineRegeneration | undefined;
 }
 
+/**
+ * A tag a structure type carries so other code can ask what the type *is for*
+ * without naming it.
+ *
+ * This is the only vocabulary for relations between types. A platform does
+ * not cut `"terrain"`; it cuts whatever is `"ground"`. A new kind of ground
+ * joins every existing relation by declaring the trait, with no edit anywhere
+ * else. The set is closed on purpose: adding a trait is a deliberate design
+ * change, not a string a caller invents.
+ */
+export type StructureTrait =
+  /** Natural ground: what platforms and paths carve, what paths ride, what terrain restacks onto. */
+  | "ground"
+  /** A level sheet other structures land on and weld to: wall corners, ramp ends, a roof's base. */
+  | "floor"
+  /** An upright run other runs weld their columns onto and openings are cut through. */
+  | "partition";
+
+/**
+ * What a type is shown of another type it meets: its traits and a label for
+ * messages, never its name. Handing reactions this instead of a type string
+ * is what keeps a type from branching on another type's identity.
+ */
+export interface StructureView {
+  readonly label: string;
+  readonly traits: ReadonlySet<StructureTrait>;
+}
+
 /** What a type's derived motion may consult beyond the positions themselves. */
 export interface MotionContext {
   readonly graphSnapshot?: ConstructionGraphSnapshot;
@@ -274,6 +302,14 @@ export interface StructureTypeDefinition {
   /** The `surfaceType` the engine reports for regions of this kind. */
   readonly surfaceType: string;
   readonly label: string;
+  /** What this type is for, as other types and tools see it. See {@link StructureTrait}. */
+  readonly traits: readonly StructureTrait[];
+  /**
+   * Whether a gesture on this type can only be planned through the session's
+   * structural motion solver. Without one, such a gesture is refused instead
+   * of applying a partial move.
+   */
+  readonly requiresMotionSolver?: boolean;
   /** Responses to received motion, independent of direct gesture constraints. */
   readonly motionInfluences?: (topology: ConstructionRegionTopology, transport: boolean) => readonly ConstructionMotionInfluence[];
   /**
@@ -297,10 +333,13 @@ export interface StructureTypeDefinition {
   /** The policy for one role. */
   readonly policyFor: (role: EditRole) => RolePolicy;
   /**
-   * What happens when **this** type is painted over `coveredType` -- the
+   * What happens when **this** type is painted over `covered` -- the
    * creation half of the same declaration. Directional on purpose: a wall
    * goes on terrain, terrain does not go on a wall, and neither direction
    * says anything about the other.
+   *
+   * `covered` exposes traits, not a type name, so the answer is always about
+   * what the covered structure is for.
    *
    * `paintedSubtype` is the preset the run being painted was built from,
    * when its type has subtypes at all. It is what lets one type vary a
@@ -309,7 +348,7 @@ export interface StructureTypeDefinition {
    * and its own logic to keep in step.
    */
   readonly interactionOver: (
-    coveredType: string,
+    covered: StructureView,
     paintedSubtype?: string,
   ) => CreationInteraction;
   /**
@@ -320,10 +359,10 @@ export interface StructureTypeDefinition {
    */
   readonly repairAfterCut: CutRepair;
   /**
-   * Whether regions of this type vertically conform to a surface of `surfaceType` beneath them
-   * (e.g. taking height from ground / terrain), optionally parameterized by `subtype`.
+   * Whether regions of this type vertically conform to a support with these traits beneath them
+   * (e.g. taking height from ground), optionally parameterized by `subtype`.
    */
-  readonly conformsTo?: (surfaceType: string, subtype?: string) => boolean;
+  readonly conformsTo?: (support: ReadonlySet<StructureTrait>, subtype?: string) => boolean;
 }
 
 /** The policy every unknown role falls back to: refuse rather than guess. */

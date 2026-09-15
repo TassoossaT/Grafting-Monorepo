@@ -2,6 +2,7 @@ import { planBezierRoad, unionBezierRibbons } from "./bezier-road-plan.ts";
 import { pathCorridorId } from "./path-corridor.ts";
 import type { BezierPort } from "@/ports";
 import type { PathBrushEffect } from "../../modes/surface-edit-contract.ts";
+import type { StructureTrait } from "../structure-type.ts";
 import type {
   ApplyPatchReplacementRequest,
   ConstructionCoveredRegion,
@@ -15,9 +16,13 @@ import type {
 // `@/` import is fine -- those are erased.
 import {
   firstRefusal,
-  resolveConformance,
   resolveCoverage,
+  resolveTraitConformance,
 } from "../index.ts";
+import { PATH_SURFACE_TYPE } from "./path-surface-type.ts";
+
+/** The support a stroke's reference line is fitted against: ground, whatever type carries it. */
+const GROUND_SUPPORT: ReadonlySet<StructureTrait> = new Set(["ground"]);
 import { graphPatchForSpine } from "./materialize-spine.ts";
 import { bezierContourId, changedSpineCloud, standingRegionsForCloud } from "./path-cloud-scope.ts";
 import { referenceLineFrom } from "./path-reference-line.ts";
@@ -119,7 +124,7 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
   }) : undefined;
   if (bezier && bezier.graphPatch.edges.length === 0) return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente após o encaixe." };
   const fitted = bezier ? [] : fitPath(stroke, tolerance, { curves: input.snapToGrid ? "none" : "arc" });
-  const swept = bezier ? { line: bezier.controlPoints } : fitted.length === 0 ? { line: stroke } : referenceLineFrom(fitted, stroke, resolveConformance("path", "terrain", effect.parameters.kind));
+  const swept = bezier ? { line: bezier.controlPoints } : fitted.length === 0 ? { line: stroke } : referenceLineFrom(fitted, stroke, resolveTraitConformance(PATH_SURFACE_TYPE, GROUND_SUPPORT, effect.parameters.kind));
   const spine = pathSpineDraftFor(effect, swept.line);
   if (spine === undefined) return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente." };
 
@@ -173,7 +178,7 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
     }
 
     const resolved = resolveCoverage(
-      "path",
+      PATH_SURFACE_TYPE,
       input.coverageFor(outline),
       parameters.kind,
     );
@@ -212,7 +217,7 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
     // meet through the cut-and-repair flow, not by sharing an id.
     const weldableNodes = new Map<string, ConstructionPosition>();
     const candidateTopologies = input.bezier
-      ? topologies.filter((t) => t.surfaceType === "path")
+      ? topologies.filter((t) => t.surfaceType === PATH_SURFACE_TYPE)
       : topologies;
     for (const topology of candidateTopologies) {
       for (const node of topology.nodes) {
@@ -225,7 +230,7 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
       union: input.bezier ? (ribbons) => unionBezierRibbons(input.bezier!, ribbons) : undefined,
         tableId: input.tableId,
         operationId: input.bezier ? bezierContourId(touchedCloud.corridorIds, operationId) : operationId,
-        surfaceType: "path",
+        surfaceType: PATH_SURFACE_TYPE,
         // The changed component is read from the prospective spine graph,
         // not inferred from its old contour faces. A continuation therefore
         // regenerates one continuous road; a branch regenerates its whole

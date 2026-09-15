@@ -167,8 +167,8 @@ export function planEdit(
       return { kind: "deny", role: policy.role, reason: error instanceof Error ? error.message : String(error) };
     }
   }
-  if (cloud.seed.surfaceType === "platform" || cloud.seed.surfaceType === "platform-slope") {
-    return { kind: "deny", role: policy.role, reason: "A plataforma requer o resolvedor estrutural da sessao." };
+  if (structureTypeFor(cloud.seed.surfaceType)?.requiresMotionSolver === true) {
+    return { kind: "deny", role: policy.role, reason: "Esta estrutura requer o resolvedor estrutural da sessao." };
   }
   const cascade = policy.cascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot }) ?? [];
   return {

@@ -8,7 +8,7 @@ import {
   CUT_REPAIR_EXECUTORS,
 } from "../src/composition/tabletop/interference/type-interference-dispatch.ts";
 import {
-  isTerrainSurface,
+  hasTrait,
   planTerrainCloudCutRepair,
   pointInOrOnPolygon,
   terrainTopologiesBounds,
@@ -534,10 +534,10 @@ test("TerrainCloud: planTerrainCloudCutRepair identifies consumed terrain in cor
 });
 
 test("TerrainCloud: helper functions recognize terrain surface types and bounds", () => {
-  assert.equal(isTerrainSurface("terrain"), true);
-  assert.equal(isTerrainSurface("terrain-grass"), true);
-  assert.equal(isTerrainSurface("path"), false);
-  assert.equal(isTerrainSurface("wall-white"), false);
+  assert.equal(hasTrait("terrain", "ground"), true);
+  assert.equal(hasTrait("terrain-grass", "ground"), true);
+  assert.equal(hasTrait("path", "ground"), false);
+  assert.equal(hasTrait("wall-white", "ground"), false);
 
   const bounds = terrainTopologiesBounds([
     {

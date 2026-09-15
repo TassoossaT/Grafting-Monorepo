@@ -3,7 +3,7 @@ import type { ConstructionRegionTopology, ConstructionMotionInfluence, Construct
 import type { AtomicEditOp, EditTarget } from "../../orchestration/atomic-edit.ts";
 import { HEIGHT_AXIS, HORIZONTAL_AXES } from "../../orchestration/atomic-edit.ts";
 import { cloudNodes } from "../../topology/construction-cloud.ts";
-import type { CascadeContext, CutRepair, EditRole, RolePolicy, StructureTypeDefinition } from "../structure-type.ts";
+import type { CascadeContext, CutRepair, EditRole, RolePolicy, StructureTrait, StructureTypeDefinition, StructureView } from "../structure-type.ts";
 import { allowed, denied } from "../structure-type.ts";
 import { IGNORE, type CreationInteraction } from "../creation-interaction.ts";
 
@@ -160,7 +160,7 @@ export function panelPolicyFor(role: EditRole): RolePolicy {
  * walls crossing weld at their shared corners rather than eating each other.
  * That is the whole of the panel side of the interaction table.
  */
-export function panelInteractionOver(_coveredType: string): CreationInteraction {
+export function panelInteractionOver(_covered: StructureView): CreationInteraction {
   return IGNORE;
 }
 
@@ -181,11 +181,13 @@ export function panelStructureType(
   surfaceType: string,
   label: string,
   creation: string,
+  traits: readonly StructureTrait[],
 ): StructureTypeDefinition {
   return Object.freeze({
     surfaceType,
     label,
     creation,
+    traits: Object.freeze([...traits]),
     roleFor: panelRoleFor,
     motionInfluences: panelMotionInfluences,
     validateMotion: validatePanelMotion,

@@ -24,7 +24,7 @@ import {
 } from "./terrain-constraints.ts";
 import { logTerrainCommit } from "./terrain-diagnostics.ts";
 import { countInCommit, timePhase } from "../commit-timing.ts";
-import { createBoundaryEdges, isTerrainSurface, pointInOrOnPolygon, sharedEdgeId } from "../../../features/edit-construction/index.ts";
+import { createBoundaryEdges, hasTrait, pointInOrOnPolygon, sharedEdgeId } from "../../../features/edit-construction/index.ts";
 
 
 /**
@@ -509,7 +509,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
       });
     } else edgeRooms.set(edgeId, null);
   }
-  const surfaceType = isTerrainSurface(request.surfaceType) ? request.surfaceType : "terrain";
+  const surfaceType = hasTrait(request.surfaceType, "ground") ? request.surfaceType : "terrain";
   const patch = timePhase("montagem do patch", () => gridPatch(request.tableId, grid, idFor, nodes, surfaceType, edgeRooms, quadOf, request.avoidArea));
 
 

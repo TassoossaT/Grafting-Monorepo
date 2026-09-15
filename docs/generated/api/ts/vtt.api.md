@@ -2305,6 +2305,17 @@ so a zero-tolerance straight line still shows its own magnet reach.
 
 ### `interface vtt.wall-spans.WallSpan`
 
+Every upright wall panel currently on the table, recovered from the
+engine's own region topology.
+
+This replaces the near-identical `wallSpans` helpers the wall tools once
+carried. They read a surface's
+`orderedNodeRefs` out of the map projection, which stopped being a list of
+node ids the moment every surface became an analytic region -- a region
+projects as its own `["@region", id]` key, so both helpers silently
+matched nothing. Reading the boundary the engine actually reports fixes
+that and removes the duplication at the same time.
+
 ### `property vtt.wall-spans.WallSpan.a: ConstructionPosition`
 
 The bottom corner under bottomA/topA.
@@ -3085,86 +3096,6 @@ The owner of the spine a control node or span id belongs to, or `undefined` when
 
 ### `function vtt.spine-owner.spineOwnerOf(edge: Pick<ConstructionEdgeSnapshot, "curve">): string`
 
-### `interface vtt.structure-types.ResolvedCoverage`
-
-One covered region, paired with what the painted type wants to do about it.
-
-### `property vtt.structure-types.ResolvedCoverage.covered: ConstructionCoveredRegion`
-
-### `property vtt.structure-types.ResolvedCoverage.interaction: CreationInteraction`
-
-### `variable vtt.structure-types.STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[]`
-
-One module per structure family, each pairing creation-shape knowledge with
-the role table that shape implies -- the whole TS-owned half of
-`docs/architecture/vtt-atomic-edit-and-cloud-policy-design.md`.
-
-A definition here is a **cloud's** behaviour, not a face's: the type
-string a surface carries only selects which of these tables governs the
-cloud it belongs to (`topology/construction-cloud.ts`). Every type declares
-the same three things, including how far each of its roles reaches -- there
-is no per-type escape from the rule, and a type that wants a different
-reach says so in its own role table rather than in a tool.
-
-Types sharing a shape share a definition rather than restating one: every
-upright panel (wall, tower, door jamb) is one type built by one builder --
-a tower is a wall someone stamped a circle of, not a kind of its own --
-and both terrain flavours are the same non-enumerable boundary. Splitting
-those per product name would be duplication, not per-type policy.
-
-A path is its own definition despite also being generated, because its
-shape genuinely differs: a swept run has addressable stations, so it has
-real roles to name, where terrain has none and can only regenerate. Shape
-is what decides whether two products share a table -- not whether they
-happen to share a generator.
-
-### `function vtt.structure-types.firstRefusal(resolved: readonly ResolvedCoverage[]): string | undefined`
-
-The first refusal in a resolved coverage, if any.
-
-### `function vtt.structure-types.resolveConformance(structureType: string, surfaceType: string, subtype?: string): boolean`
-
-Whether `structureType` vertically conforms to `surfaceType` (e.g. riding on top and sampling height).
-
-Consults `definition.conformsTo` if declared on the structure type. Defaults to `false`.
-
-### `function vtt.structure-types.resolveCoverage(paintedType: string, covered: readonly ConstructionCoveredRegion[], paintedSubtype?: string): readonly ResolvedCoverage[]`
-
-Pairs every region a footprint touches with its resolved interaction --
-the creation-side counterpart to `planEdit`. Pure: it decides, it does not
-act, and the caller performs whatever the resolutions imply.
-
-A `"forbid"` anywhere in the result is the caller's cue to abandon the
-whole stroke rather than apply the rest: painting terrain across a wall
-must not quietly terraform everything except the wall.
-
-### `function vtt.structure-types.resolveCreationInteraction(paintedType: string, coveredType: string, paintedSubtype?: string): CreationInteraction`
-
-What painting `paintedType` over one already-present region means.
-
-An unrecognized covered type is refused rather than defaulting to
-`"ignore"`: silently stacking on top of something nobody declared is
-exactly how geometry accumulates unnoticed.
-
-### `function vtt.structure-types.resolveCutRepair(coveredType: string): CutRepair`
-
-How `coveredType` repairs itself once a `"cut"` has consumed part of it.
-
-An unrecognized covered type has no table to consult, so it is reported
-`"unsupported"` for the same reason `resolveCreationInteraction` refuses
-one outright: there is nothing to defer to but a guess.
-
-### `function vtt.structure-types.resolvePolicy(topology: ConstructionRegionTopology, target: EditTarget): RolePolicy`
-
-The role a grabbed part of a region carries, plus the policy governing it.
-A surface type with no definition at all resolves to a denial rather than
-a permissive default -- an unrecognized type is exactly the case where
-guessing would corrupt geometry.
-
-### `function vtt.structure-types.structureTypeFor(surfaceType: string): StructureTypeDefinition | undefined`
-
-The definition governing one surface type, or `undefined` if it has none.
-
 ### `type vtt.creation-interaction.CreationInteraction = { kind: "ignore" } | { kind: "cut" } | { kind: "restack" } | { kind: "forbid"; reason: string }`
 
 What happens when one structure type is painted over another.
@@ -3211,9 +3142,9 @@ what the vertex means.
 
 ### `function vtt.organic-structure.organicRoleFor(_topology: unknown, target: EditTarget): string`
 
-### `function vtt.organic-structure.organicStructureType(surfaceType: string, label: string, creation: string, structural: "deny" | "regenerate", interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction): StructureTypeDefinition`
+### `function vtt.organic-structure.organicStructureType(surfaceType: string, label: string, creation: string, structural: "deny" | "regenerate", interactionOver: (covered: StructureView, paintedSubtype?: string) => CreationInteraction, traits: readonly StructureTrait[]): StructureTypeDefinition`
 
-### `function vtt.organic-structure.pathInteractionOver(_coveredType: string, paintedSubtype?: string): CreationInteraction`
+### `function vtt.organic-structure.pathInteractionOver(_covered: StructureView, paintedSubtype?: string): CreationInteraction`
 
 A path **carves**: it consumes what it crosses and keeps the leftover with
 the path's own shape cut out of it. Over terrain that is a road; over a
@@ -3228,7 +3159,7 @@ of the subtype, not something read back from geometry -- which is exactly
 why an overpass needs no height-aware coverage query to be told apart from
 a crossing at the same level. The run that passes over says so.
 
-### `function vtt.organic-structure.terrainInteractionOver(coveredType: string): CreationInteraction`
+### `function vtt.organic-structure.terrainInteractionOver(covered: StructureView): CreationInteraction`
 
 Terrain painted over terrain **raises** it: the covered faces are deleted,
 the new ones generated above, and the result stitched back onto the rim
@@ -3284,10 +3215,6 @@ The terrain surface keys grouped by surface type to be consumed and repaired.
 
 Whether any repair is required.
 
-### `function vtt.terrain-cloud.isTerrainSurface(surfaceType: string): boolean`
-
-Checks whether a surface type is an organic terrain surface.
-
 ### `function vtt.terrain-cloud.planTerrainCloudCutRepair(input: TerrainCloudCutRepairInput): TerrainCloudCutRepairPlan`
 
 Plans the terrain cloud repair when an interfering structure (such as a path or wall)
@@ -3325,7 +3252,7 @@ comparison is used rather than the raw index so a panel that has since
 been subdivided (a T-junction weld inserting a vertex mid-run) still
 classifies correctly; both rules describe the very same creation shape.
 
-### `function vtt.panel-structure.panelInteractionOver(_coveredType: string): CreationInteraction`
+### `function vtt.panel-structure.panelInteractionOver(_covered: StructureView): CreationInteraction`
 
 A panel is built *on top of* whatever is already there and consumes
 nothing: a wall standing on terrain leaves that terrain intact, and two
@@ -3341,7 +3268,7 @@ posts work through successive edges in the shared Rust solver.
 
 ### `function vtt.panel-structure.panelRoleFor(topology: ConstructionRegionTopology, target: EditTarget): string`
 
-### `function vtt.panel-structure.panelStructureType(surfaceType: string, label: string, creation: string): StructureTypeDefinition`
+### `function vtt.panel-structure.panelStructureType(surfaceType: string, label: string, creation: string, traits: readonly StructureTrait[]): StructureTypeDefinition`
 
 Builds one `extrude_path`-generated structure type on the shared panel model.
 
@@ -4001,9 +3928,14 @@ anything.
 
 ### `function vtt.path-structure.pathRoleFor(topology: ConstructionRegionTopology, target: EditTarget): string`
 
-### `function vtt.path-structure.pathStructureType(surfaceType: string, label: string, creation: string, interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction): StructureTypeDefinition`
+### `function vtt.path-structure.pathStructureType(surfaceType: string, label: string, creation: string, interactionOver: (covered: StructureView, paintedSubtype?: string) => CreationInteraction): StructureTypeDefinition`
 
 Builds one swept-product structure type on the shared spine model.
+
+### `variable vtt.path-surface-type.PATH_SURFACE_TYPE: "path"`
+
+The path type's own identity. Path modules compare against this to find
+their own faces; code outside the path type asks for traits instead.
 
 ### `interface vtt.station-node-id.StationNodeAddress`
 
@@ -4132,6 +4064,111 @@ would carry all three.
 Its faces are never grabbed directly -- the spine is what is edited. A
 floor that moves still carries the end welded to it: the end's control
 node follows, and the ramp re-places itself on the moved curve.
+
+### `interface vtt.registry.ResolvedCoverage`
+
+One covered region, paired with what the painted type wants to do about it.
+
+### `property vtt.registry.ResolvedCoverage.covered: ConstructionCoveredRegion`
+
+### `property vtt.registry.ResolvedCoverage.interaction: CreationInteraction`
+
+### `variable vtt.registry.STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[]`
+
+One module per structure family, each pairing creation-shape knowledge with
+the role table that shape implies -- the whole TS-owned half of
+`docs/architecture/vtt-atomic-edit-and-cloud-policy-design.md`.
+
+A definition here is a **cloud's** behaviour, not a face's: the type
+string a surface carries only selects which of these tables governs the
+cloud it belongs to (`topology/construction-cloud.ts`). Every type declares
+the same things, including how far each of its roles reaches -- there
+is no per-type escape from the rule, and a type that wants a different
+reach says so in its own role table rather than in a tool.
+
+This is the only place type names appear. Everything else asks what a type
+is for through its traits (`hasTrait`), and the build fails on a type-name
+comparison anywhere else (`test/no-type-name-comparisons.test.mjs`).
+
+Types sharing a shape share a definition rather than restating one: every
+upright panel (wall, tower, door jamb) is one type built by one builder --
+a tower is a wall someone stamped a circle of, not a kind of its own --
+and both terrain flavours are the same non-enumerable boundary. Splitting
+those per product name would be duplication, not per-type policy.
+
+A path is its own definition despite also being generated, because its
+shape genuinely differs: a swept run has addressable stations, so it has
+real roles to name, where terrain has none and can only regenerate. Shape
+is what decides whether two products share a table -- not whether they
+happen to share a generator.
+
+### `function vtt.registry.firstRefusal(resolved: readonly ResolvedCoverage[]): string | undefined`
+
+The first refusal in a resolved coverage, if any.
+
+### `function vtt.registry.hasTrait(surfaceType: string, trait: StructureTrait): boolean`
+
+Whether `surfaceType` declares `trait` -- the question to ask instead of comparing type names.
+
+### `function vtt.registry.regeneratingCutTargets(paintedType: string): readonly string[]`
+
+Every declared type a `"cut"` by `paintedType` consumes and that repairs
+itself by regenerating -- the covered side of cut repair, read from the
+registry instead of a hand-kept list.
+
+### `function vtt.registry.resolveConformance(structureType: string, surfaceType: string, subtype?: string): boolean`
+
+resolveTraitConformance against a declared support type's own traits.
+
+### `function vtt.registry.resolveCoverage(paintedType: string, covered: readonly ConstructionCoveredRegion[], paintedSubtype?: string): readonly ResolvedCoverage[]`
+
+Pairs every region a footprint touches with its resolved interaction --
+the creation-side counterpart to `planEdit`. Pure: it decides, it does not
+act, and the caller performs whatever the resolutions imply.
+
+A `"forbid"` anywhere in the result is the caller's cue to abandon the
+whole stroke rather than apply the rest: painting terrain across a wall
+must not quietly terraform everything except the wall.
+
+### `function vtt.registry.resolveCreationInteraction(paintedType: string, coveredType: string, paintedSubtype?: string): CreationInteraction`
+
+What painting `paintedType` over one already-present region means.
+
+An unrecognized covered type is refused rather than defaulting to
+`"ignore"`: silently stacking on top of something nobody declared is
+exactly how geometry accumulates unnoticed.
+
+### `function vtt.registry.resolveCutRepair(coveredType: string): CutRepair`
+
+How `coveredType` repairs itself once a `"cut"` has consumed part of it.
+
+An unrecognized covered type has no table to consult, so it is reported
+`"unsupported"` for the same reason `resolveCreationInteraction` refuses
+one outright: there is nothing to defer to but a guess.
+
+### `function vtt.registry.resolvePolicy(topology: ConstructionRegionTopology, target: EditTarget): RolePolicy`
+
+The role a grabbed part of a region carries, plus the policy governing it.
+A surface type with no definition at all resolves to a denial rather than
+a permissive default -- an unrecognized type is exactly the case where
+guessing would corrupt geometry.
+
+### `function vtt.registry.resolveTraitConformance(structureType: string, support: ReadonlySet<StructureTrait>, subtype?: string): boolean`
+
+Whether `structureType` vertically conforms to a support with these traits
+(e.g. riding on top of ground and sampling its height). Defaults to `false`.
+
+### `function vtt.registry.structureTypeFor(surfaceType: string): StructureTypeDefinition | undefined`
+
+The definition governing one surface type, or `undefined` if it has none.
+
+### `function vtt.registry.surfaceTypesWithTrait(trait: StructureTrait): readonly string[]`
+
+Every declared surface type carrying `trait`, in registry order.
+
+### `function vtt.registry.traitsOf(surfaceType: string): ReadonlySet<StructureTrait>`
+
+The traits one surface type declares. An undeclared type has none.
 
 ### `variable vtt.roof-structure.roofStructureType: StructureTypeDefinition`
 
@@ -4455,10 +4492,10 @@ produces lands in a cloud whose type is one of these, and that cloud is
 where its behaviour comes from. This is why a tower needs no editing code
 of its own.
 
-### `property vtt.structure-type.StructureTypeDefinition.conformsTo?: (surfaceType: string, subtype?: string) => boolean`
+### `property vtt.structure-type.StructureTypeDefinition.conformsTo?: (support: ReadonlySet<StructureTrait>, subtype?: string) => boolean`
 
-Whether regions of this type vertically conform to a surface of `surfaceType` beneath them
-(e.g. taking height from ground / terrain), optionally parameterized by `subtype`.
+Whether regions of this type vertically conform to a support with these traits beneath them
+(e.g. taking height from ground), optionally parameterized by `subtype`.
 
 ### `property vtt.structure-type.StructureTypeDefinition.creation: string`
 
@@ -4472,12 +4509,15 @@ been resolved -- a shape that bends with a received move instead of
 kinking at it. Handed every face of the type, since the shape may span
 faces the move never reached. Derived moves do not propagate further.
 
-### `property vtt.structure-type.StructureTypeDefinition.interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction`
+### `property vtt.structure-type.StructureTypeDefinition.interactionOver: (covered: StructureView, paintedSubtype?: string) => CreationInteraction`
 
-What happens when **this** type is painted over `coveredType` -- the
+What happens when **this** type is painted over `covered` -- the
 creation half of the same declaration. Directional on purpose: a wall
 goes on terrain, terrain does not go on a wall, and neither direction
 says anything about the other.
+
+`covered` exposes traits, not a type name, so the answer is always about
+what the covered structure is for.
 
 `paintedSubtype` is the preset the run being painted was built from,
 when its type has subtypes at all. It is what lets one type vary a
@@ -4502,6 +4542,12 @@ Required rather than optional so a new structure type has to say where
 it stands -- `"unsupported"` is a legitimate, honest answer, silence is
 not.
 
+### `property vtt.structure-type.StructureTypeDefinition.requiresMotionSolver?: boolean`
+
+Whether a gesture on this type can only be planned through the session's
+structural motion solver. Without one, such a gesture is refused instead
+of applying a partial move.
+
 ### `property vtt.structure-type.StructureTypeDefinition.roleFor: (topology: ConstructionRegionTopology, target: EditTarget) => string`
 
 Resolves what the grabbed part of this region means.
@@ -4514,9 +4560,23 @@ Present when this type is generated along a spine.
 
 The `surfaceType` the engine reports for regions of this kind.
 
+### `property vtt.structure-type.StructureTypeDefinition.traits: readonly StructureTrait[]`
+
+What this type is for, as other types and tools see it. See StructureTrait.
+
 ### `property vtt.structure-type.StructureTypeDefinition.validateMotion?: (topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>) => string | undefined`
 
 Returns a reason when a proposed position batch violates this type.
+
+### `interface vtt.structure-type.StructureView`
+
+What a type is shown of another type it meets: its traits and a label for
+messages, never its name. Handing reactions this instead of a type string
+is what keeps a type from branching on another type's identity.
+
+### `property vtt.structure-type.StructureView.label: string`
+
+### `property vtt.structure-type.StructureView.traits: ReadonlySet<StructureTrait>`
 
 ### `type vtt.structure-type.CutRepair = { kind: "preserve"; reason: string } | { kind: "regenerate"; reason: string } | { kind: "unsupported"; reason: string }`
 
@@ -4564,6 +4624,17 @@ scope decision. `"cloud"` is for the roles that name the *whole thing*:
 grabbing a wall's body means the wall, not the one panel under the
 pointer.
 
+### `type vtt.structure-type.StructureTrait = "ground" | "floor" | "partition"`
+
+A tag a structure type carries so other code can ask what the type *is for*
+without naming it.
+
+This is the only vocabulary for relations between types. A platform does
+not cut `"terrain"`; it cuts whatever is `"ground"`. A new kind of ground
+joins every existing relation by declaring the trait, with no edit anywhere
+else. The set is closed on purpose: adding a trait is a deliberate design
+change, not a string a caller invents.
+
 ### `function vtt.structure-type.allowed(role: string, axes: readonly EditAxis[], scope: EditScope, cascade?: (context: CascadeContext) => readonly AtomicEditOp[]): RolePolicy`
 
 Convenience for the common "allowed, on these axes, at this reach, no cascade" policy.
@@ -4604,7 +4675,7 @@ one tool and not two.
 
 ### `property vtt.tool-types.OpeningParams.height: number`
 
-### `property vtt.tool-types.OpeningParams.openingType: "window" | "door"`
+### `property vtt.tool-types.OpeningParams.openingType: "door" | "window"`
 
 ### `property vtt.tool-types.OpeningParams.sill: number`
 

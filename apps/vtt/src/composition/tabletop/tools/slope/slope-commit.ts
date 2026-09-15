@@ -1,4 +1,4 @@
-import { automaticCurve, controlRungId, controlSectionId, reverseGeometry, SLOPE_SURFACE_TYPE, slopeFootprint, slopeSurface, spineControlNodeId } from "../../../../features/edit-construction/index.ts";
+import { automaticCurve, controlRungId, controlSectionId, hasTrait, reverseGeometry, SLOPE_SURFACE_TYPE, slopeFootprint, slopeSurface, spineControlNodeId } from "../../../../features/edit-construction/index.ts";
 import type {
   ConstructionEdgeSnapshot,
   ConstructionOrientedEdgeUse,
@@ -82,7 +82,7 @@ function project(a: ConstructionPosition, b: ConstructionPosition, p: Constructi
 function landingEdge(topologies: readonly ConstructionRegionTopology[], point: ConstructionPosition, controlIndex: number): EndWeld | undefined {
   let best: (EndWeld & { distance: number }) | undefined;
   for (const topology of topologies) {
-    if (topology.surfaceType !== "platform" || Math.abs((topology.nodes[0]?.position.y ?? NaN) - point.y) > 1e-3) continue;
+    if (!hasTrait(topology.surfaceType, "floor") ||Math.abs((topology.nodes[0]?.position.y ?? NaN) - point.y) > 1e-3) continue;
     const positions = new Map(topology.nodes.map((n) => [n.id, n.position]));
     for (const use of topology.outerLoops.flat()) {
       if (use.geometry.kind !== "line") continue;
@@ -124,7 +124,7 @@ function reweldedFloor(operationId: string, weld: EndWeld, controlId: string, se
     return [{ edgeId: before, reversed: false }, { edgeId: controlRungId(controlId), reversed: first !== ids.min }, { edgeId: after, reversed: false }];
   });
   // Walked first: the walk is what declares the split edges.
-  const region = { regionId: `${operationId}:floor:${weld.controlIndex}`, boundary: walk(weld.topology.outerLoops[0] ?? []), holes: weld.topology.holes.map(walk), surfaceType: "platform", physical: true };
+  const region = { regionId: `${operationId}:floor:${weld.controlIndex}`, boundary: walk(weld.topology.outerLoops[0] ?? []), holes: weld.topology.holes.map(walk), surfaceType: weld.topology.surfaceType, physical: weld.topology.physical };
   return { nodes: weld.topology.nodes.map((n) => ({ id: n.id, position: n.position })), edges: [...edges.values()], region };
 }
 

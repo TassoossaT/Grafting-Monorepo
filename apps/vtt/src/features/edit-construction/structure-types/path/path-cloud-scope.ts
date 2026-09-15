@@ -1,6 +1,7 @@
 import type { ConstructionGraphPatch, ConstructionGraphSnapshot, ConstructionPosition, ConstructionRegionTopology } from "@/ports";
 
 import { chainsOf, DEFAULT_SPINE_OWNER, ownedBy, parseSpineControlNodeId, spineGraphFromSnapshot } from "../../spine/index.ts";
+import { PATH_SURFACE_TYPE } from "./path-surface-type.ts";
 
 const OWNED_CONTOUR = "road-cloud:";
 function surfaceCorridors(regionId: string): readonly string[] | undefined {
@@ -83,7 +84,7 @@ export function changedSpineCloud(snapshot: ConstructionGraphSnapshot, patch: Co
   }
   const coOwners = new Map<string, Set<string>>();
   for (const topology of topologies) {
-    if (topology.surfaceType !== "path") continue;
+    if (topology.surfaceType !== PATH_SURFACE_TYPE) continue;
     const owners = surfaceCorridors(topology.surfaceKey[1] ?? "") ?? [];
     for (const owner of owners) {
       const peers = coOwners.get(owner) ?? new Set<string>();
@@ -163,7 +164,7 @@ export function standingRegionsForCloud(
 ): readonly ConstructionRegionTopology[] {
   if (corridorIds.size === 0 && cloudPositions.length === 0) return [];
 
-  const pathTopologies = topologies.filter((topology) => topology.surfaceType === "path");
+  const pathTopologies = topologies.filter((topology) => topology.surfaceType === PATH_SURFACE_TYPE);
   if (pathTopologies.length === 0) return [];
 
   // Index path topologies by each node id they reference

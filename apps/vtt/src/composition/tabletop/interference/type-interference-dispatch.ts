@@ -15,7 +15,7 @@ import type {
 } from "@/ports";
 import {
   planTerrainCloudCutRepair,
-  resolveCreationInteraction,
+  regeneratingCutTargets,
   resolveCutRepair,
   terrainTopologiesBounds,
   type CutFallout,
@@ -335,11 +335,7 @@ export function dispatchCutRepairs(
   const paintedType = request.patch.regions[0]?.surfaceType ?? replacedTopologies[0]?.surfaceType;
   if (paintedType === undefined) return;
 
-  const targetTypes = ["terrain", "terrain-grass"].filter((coveredType) => {
-    const interaction = resolveCreationInteraction(paintedType, coveredType);
-    const repair = resolveCutRepair(coveredType);
-    return interaction.kind === "cut" && repair.kind === "regenerate";
-  });
+  const targetTypes = regeneratingCutTargets(paintedType);
   if (targetTypes.length === 0) return;
 
   // Retrieve new road topologies
@@ -586,7 +582,7 @@ export function dispatchCutRepairs(
 
   const consumedByType = new Map(repairPlan.consumedByType);
   if (consumedByType.size === 0 && changed.length > 0) {
-    consumedByType.set("terrain", []);
+    consumedByType.set(targetTypes[0]!, []);
   }
 
   for (const [surfaceType, consumedSurfaceKeys] of consumedByType) {
@@ -661,12 +657,7 @@ export function dispatchRemovalRepairs(
   }
 
   if (removedTopology !== undefined) {
-    const targetTypes = ["terrain", "terrain-grass"].filter((coveredType) => {
-      const interaction = resolveCreationInteraction(surfaceType, coveredType);
-      const rep = resolveCutRepair(coveredType);
-      return interaction.kind === "cut" && rep.kind === "regenerate";
-    });
-    if (targetTypes.length > 0) {
+    if (regeneratingCutTargets(surfaceType).length > 0) {
       dispatchCutRepairs(
         runtime,
         {

@@ -16,7 +16,7 @@ import {
   calculateProfileDisplacement,
   calculateProfileHeight,
   distanceAndElevationOnPath,
-  isTerrainSurface,
+  hasTrait,
 } from "../../../features/edit-construction/index.ts";
 import polygonClipping, { type MultiPolygon, type Polygon } from "polygon-clipping";
 
@@ -660,22 +660,14 @@ export function executeTerrainCut(
     request.profile.kind === "regenerate" ? effectiveFaceSide * 5 : effectiveFaceSide * 2;
   const standing = timePhase("vizinhança do terreno", () => terrainStandingAround(runtime, covered, coveredExtent, standingReach));
 
-  const targetSurfaceType = isTerrainSurface(request.targetSurfaceType)
+  const targetSurfaceType = hasTrait(request.targetSurfaceType, "ground")
     ? request.targetSurfaceType
     : "terrain";
 
-  const isTerrainMatch = (st: string, target: string): boolean => {
-    if (!isTerrainSurface(st)) return false;
-    if (st === target) return true;
-    if (isTerrainSurface(target)) return true;
-    return false;
-  };
-
   const coveredKeys = new Set(covered.map((c) => c.surfaceKey.join(" ")));
 
-  const terrainStanding = standing.filter((topology) =>
-    isTerrainMatch(topology.surfaceType, targetSurfaceType),
-  );
+  // The target is ground by construction above, so every ground face matches it.
+  const terrainStanding = standing.filter((topology) => hasTrait(topology.surfaceType, "ground"));
   let affected = terrainStanding.filter(
     (topology) =>
       coveredKeys.has(topology.surfaceKey.join(" ")) ||
@@ -843,7 +835,7 @@ export function executeTerrainCut(
       // not pull an otherwise untouched terrain face into regeneration.
       const touched = affected.flatMap((t) => [...t.outerLoops, ...t.holes].flat());
       const absorbed = timePhase("vizinhas por aresta", () => retained.filter(
-        (t) => isTerrainMatch(t.surfaceType, targetSurfaceType) &&
+        (t) => hasTrait(t.surfaceType, "ground") &&
           [...t.outerLoops, ...t.holes].some((loop) => loop.some((edge) => touched.some((other) =>
             (edge.startNodeId === other.startNodeId && edge.endNodeId === other.endNodeId) ||
             (edge.startNodeId === other.endNodeId && edge.endNodeId === other.startNodeId)))),
@@ -968,9 +960,9 @@ export function executeTerrainCut(
     faceSide: effectiveFaceSide,
     relaxStrength: request.irregularity ?? 0.7,
     surfaceType:
-      affected.length > 0 && isTerrainSurface(affected[0]!.surfaceType)
+      affected.length > 0 && hasTrait(affected[0]!.surfaceType, "ground")
         ? affected[0]!.surfaceType
-        : (retained.length > 0 && isTerrainSurface(retained[0]!.surfaceType) ? retained[0]!.surfaceType : targetSurfaceType),
+        : (retained.length > 0 && hasTrait(retained[0]!.surfaceType, "ground") ? retained[0]!.surfaceType : targetSurfaceType),
     boundary: boundaryRings,
     holes: holeRings,
     sources: perimeters.sources,

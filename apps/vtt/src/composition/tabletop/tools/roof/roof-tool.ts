@@ -1,5 +1,5 @@
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
-import { DEFAULT_TOOL_PARAMS, type ToolParamsByTool } from "../../../../features/edit-construction/index.ts";
+import { DEFAULT_TOOL_PARAMS, hasTrait, type ToolParamsByTool } from "../../../../features/edit-construction/index.ts";
 import type { CapRequest } from "@/ports";
 import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext } from "../core/tool-context.ts";
 import { segmentsPreview } from "../shapes/preview-shapes.ts";
@@ -58,7 +58,7 @@ export const roofTool: ConstructionTool<"roof"> = {
   onClick(ctx, sample, params) {
     if (params.shape === "platform") {
       try {
-        const source = ctx.runtime.getAllRegionTopologies().find((face) => face.surfaceType === "platform" && (
+        const source = ctx.runtime.getAllRegionTopologies().find((face) => hasTrait(face.surfaceType, "floor") && (
           sample.surfaceRef ? surfaceRefFromNodeSet(face.surfaceKey) === sample.surfaceRef : sample.nodeId && face.nodes.some((node) => node.id === sample.nodeId)));
         if (!source || source.outerLoops.length !== 1 || source.holes.length || source.outerLoops[0]!.length !== 4) {
           throw new Error("Selecione uma plataforma retangular ou circular, sem aberturas.");

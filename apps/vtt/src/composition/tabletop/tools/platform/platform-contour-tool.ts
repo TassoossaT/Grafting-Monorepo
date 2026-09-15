@@ -1,4 +1,4 @@
-import { DEFAULT_TOOL_PARAMS, fitPath } from "../../../../features/edit-construction/index.ts";
+import { DEFAULT_TOOL_PARAMS, fitPath, platformStructureType } from "../../../../features/edit-construction/index.ts";
 import type { FittedEdge, ToolParamsByTool } from "../../../../features/edit-construction/index.ts";
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import type { ConstructionPosition, ConstructionRegionTopology } from "../../../../ports/index.ts";
@@ -28,7 +28,7 @@ function draft(ctx: ToolContext, params: Params): PointerSample[] {
  */
 function parametersAt(ctx: ToolContext, first: PointerSample | undefined, params: Params): Params {
   if (!first) return params;
-  const target = params.mode === "create" ? undefined : ctx.runtime.getAllRegionTopologies().find((t) => t.surfaceType === "platform" &&
+  const target = params.mode === "create" ? undefined : ctx.runtime.getAllRegionTopologies().find((t) => t.surfaceType === platformStructureType.surfaceType &&
     (first.surfaceRef ? surfaceRefFromNodeSet(t.surfaceKey) === first.surfaceRef : first.nodeId && t.nodes.some((n) => n.id === first.nodeId)));
   if (target?.nodes[0]) return { ...params, elevation: target.nodes[0].position.y };
   const node = first.nodeId ? ctx.runtime.getGraphSnapshot().nodes.find((n) => n.id === first.nodeId) : undefined;
@@ -79,7 +79,7 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
     const graph = ctx.runtime.getGraphSnapshot();
     // Picking the terrain below a drawing plane is not an instruction to weld floors.
     const picked = new Set(pickedSamples.flatMap((s) => s.nodeId ? [s.nodeId] : []));
-    const sources = params.mode === "create" ? [] : all.filter((t) => t.surfaceType === "platform" && t.nodes.every((n) => Math.abs(n.position.y - params.elevation) < 1e-4));
+    const sources = params.mode === "create" ? [] : all.filter((t) => t.surfaceType === platformStructureType.surfaceType && t.nodes.every((n) => Math.abs(n.position.y - params.elevation) < 1e-4));
     if (params.mode !== "create" && sources.length === 0) throw new Error("Nenhuma plataforma nessa elevação. Comece sobre a plataforma ou escolha a elevação correta.");
 
     const operationId = scopedToolId(ctx, "platform", ctx.nextSequence());

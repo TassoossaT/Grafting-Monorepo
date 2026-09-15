@@ -4255,7 +4255,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   defaultParams: () => DEFAULT_TOOL_PARAMS["terrain-sculpt"],
 
   previewFor(gesture: ToolGesture, params: TerrainSculptParams) {
-  const targetSurface = isTerrainSurface(params.targetSurface) ? params.targetSurface : "terrain";
+  const targetSurface = hasTrait(params.targetSurface, "ground") ? params.targetSurface : "terrain";
   const color = TERRAIN_COLOR[targetSurface as "terrain" | "terrain-grass"] ?? 0x334155;
   return brushSweptRegionFill(
 
@@ -4860,43 +4860,6 @@ export const RESTACK: CreationInteraction = Object.freeze({ kind: "restack" });
 export function forbid(reason: string): CreationInteraction {
   return Object.freeze({ kind: "forbid", reason });
 
-// src/features/edit-construction/structure-types/index.ts
-export const STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[] = Object.freeze([
-export function structureTypeFor(surfaceType: string): StructureTypeDefinition | undefined {
-  return DEFINITION_BY_SURFACE_TYPE.get(surfaceType);
-export function resolvePolicy(topology: ConstructionRegionTopology, target: EditTarget): RolePolicy {
-  const definition = structureTypeFor(topology.surfaceType);
-export function resolveCreationInteraction(
-  paintedType: string,
-  coveredType: string,
-  paintedSubtype?: string,
-  ): CreationInteraction {
-  const definition = structureTypeFor(paintedType);
-export function resolveCutRepair(coveredType: string): CutRepair {
-  const definition = structureTypeFor(coveredType);
-export function resolveConformance(
-  structureType: string,
-  surfaceType: string,
-  subtype?: string,
-  ): boolean {
-  const definition = structureTypeFor(structureType);
-export interface ResolvedCoverage {
-  readonly covered: ConstructionCoveredRegion;
-  readonly interaction: CreationInteraction;
-  }
-export function resolveCoverage(
-  paintedType: string,
-  covered: readonly ConstructionCoveredRegion[],
-  paintedSubtype?: string,
-  ): readonly ResolvedCoverage[] {
-  return covered.map((entry) => ({
-  covered: entry,
-  interaction: resolveCreationInteraction(paintedType, entry.surfaceType, paintedSubtype),
-export function firstRefusal(resolved: readonly ResolvedCoverage[]): string | undefined {
-  for (const entry of resolved) {
-  if (entry.interaction.kind === "forbid") return entry.interaction.reason;
-  }
-
 // src/features/edit-construction/structure-types/organic/organic-structure.ts
 export const ORGANIC_ROLES = {
   boundaryVertex: "organic-boundary-vertex",
@@ -4920,26 +4883,20 @@ export function organicStructureType(
   label: string,
   creation: string,
   structural: "regenerate" | "deny",
-  interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction,
+  interactionOver: (covered: StructureView, paintedSubtype?: string) => CreationInteraction,
+  traits: readonly StructureTrait[],
   ): StructureTypeDefinition {
-  return Object.freeze({
-export function terrainInteractionOver(coveredType: string): CreationInteraction {
-  if (TERRAIN_TYPES.has(coveredType) || isTerrainSurface(coveredType)) return RESTACK;
-  return forbid(`terrain cannot be created above "${coveredType}"`);
+export function terrainInteractionOver(covered: StructureView): CreationInteraction {
+  if (covered.traits.has("ground")) return RESTACK;
+  return forbid(`terrain cannot be created above "${covered.label}"`);
 export function pathInteractionOver(
-  _coveredType: string,
+  _covered: StructureView,
   paintedSubtype?: string,
   ): CreationInteraction {
   return paintedSubtype === "bridge" ? IGNORE : CUT;
   }
 
 // src/features/edit-construction/structure-types/organic/terrain-cloud.ts
-export function isTerrainSurface(surfaceType: string): boolean {
-  return (
-  surfaceType === "terrain" ||
-  surfaceType === "terrain-grass" ||
-  surfaceType.startsWith("terrain")
-  );
 export function terrainCloudPerimeter(cloud: CloudTopology): readonly PerimeterLoop[] {
   return perimeterOf(cloud.members);
 export function terrainTopologiesBounds(
@@ -5005,17 +4962,17 @@ export function panelPolicyFor(role: EditRole): RolePolicy {
   // with it because the graph says so, not because the gesture reached
   // for it.
   return allowed(role, HORIZONTAL_AXES, "surface", pairedTopCorners);
-export function panelInteractionOver(_coveredType: string): CreationInteraction {
+export function panelInteractionOver(_covered: StructureView): CreationInteraction {
   return IGNORE;
   }
 export function panelStructureType(
   surfaceType: string,
   label: string,
   creation: string,
+  traits: readonly StructureTrait[],
   ): StructureTypeDefinition {
   return Object.freeze({
   surfaceType,
-  label,
 
 // src/features/edit-construction/structure-types/path/bezier-road-edit.ts
 export function regeneratePathSpine(input: SpineRegenerationInput): SpineRegeneration | undefined {
@@ -5366,10 +5323,13 @@ export function pathStructureType(
   surfaceType: string,
   label: string,
   creation: string,
-  interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction,
+  interactionOver: (covered: StructureView, paintedSubtype?: string) => CreationInteraction,
   ): StructureTypeDefinition {
   return Object.freeze({
   surfaceType,
+
+// src/features/edit-construction/structure-types/path/path-surface-type.ts
+export const PATH_SURFACE_TYPE = "path";
 
 // src/features/edit-construction/structure-types/path/station-node-id.ts
 export interface StationNodeAddress {
@@ -5428,30 +5388,86 @@ export function validateSlopeMotion(topology: ConstructionRegionTopology, positi
 // src/features/edit-construction/structure-types/platform/platform-structure.ts
 export const platformStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
   surfaceType: "platform", label: "Plataforma", creation: "a flat closed contour, without thickness",
+  traits: Object.freeze(["floor"] as const),
+  requiresMotionSolver: true,
   roleFor: (topology, target) => target.kind === "vertex" && !topology.nodes.some((node) => node.id === target.nodeId) ? "platform-unknown" : `platform-${target.kind}`,
   policyFor: (role) => role === "platform-unknown" ? denied(role, "Vertice fora da plataforma.") : ({ ...allowed(role, ALL_AXES, role === "platform-region" ? "cloud" : "surface"), transport: role === "platform-region" }),
-  interactionOver: (coveredType: string) => isTerrainSurface(coveredType) ? CUT : IGNORE,
+  interactionOver: cutsGround,
   repairAfterCut: { kind: "preserve", reason: "Structural contour subtraction preserves the remaining planar faces and shared identities." },
-  motionInfluences: (topology, transport): readonly ConstructionMotionInfluence[] => {
-  const anchor = topology.nodes[0];
 export const slopedPlatformStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
   surfaceType: SLOPE_SURFACE_TYPE, label: "Plataforma inclinada",
   creation: "one face per spine span: the span's ribbon, sampled along its bezier curve",
+  traits: Object.freeze([]),
+  requiresMotionSolver: true,
   roleFor: () => "platform-slope-face",
   policyFor: (role) => denied(role, "Edite a plataforma inclinada pela espinha: pontos, alças e largura."),
-  // The same answer the flat platform gives: ground under it is cut, and the
-  // terrain's own repair regenerates around it.
-  interactionOver: (coveredType: string) => isTerrainSurface(coveredType) ? CUT : IGNORE,
+  interactionOver: cutsGround,
+
+// src/features/edit-construction/structure-types/registry.ts
+export const STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[] = Object.freeze([
+export function structureTypeFor(surfaceType: string): StructureTypeDefinition | undefined {
+  return DEFINITION_BY_SURFACE_TYPE.get(surfaceType);
+export function traitsOf(surfaceType: string): ReadonlySet<StructureTrait> {
+  return TRAITS_BY_SURFACE_TYPE.get(surfaceType) ?? NO_TRAITS;
+  }
+export function hasTrait(surfaceType: string, trait: StructureTrait): boolean {
+  return traitsOf(surfaceType).has(trait);
+export function surfaceTypesWithTrait(trait: StructureTrait): readonly string[] {
+  return STRUCTURE_TYPE_DEFINITIONS.filter((definition) => definition.traits.includes(trait)).map((definition) => definition.surfaceType);
+export function resolvePolicy(topology: ConstructionRegionTopology, target: EditTarget): RolePolicy {
+  const definition = structureTypeFor(topology.surfaceType);
+export function resolveCreationInteraction(
+  paintedType: string,
+  coveredType: string,
+  paintedSubtype?: string,
+  ): CreationInteraction {
+  const definition = structureTypeFor(paintedType);
+export function resolveCutRepair(coveredType: string): CutRepair {
+  const definition = structureTypeFor(coveredType);
+export function regeneratingCutTargets(paintedType: string): readonly string[] {
+  return STRUCTURE_TYPE_DEFINITIONS
+  .map((definition) => definition.surfaceType)
+  .filter((coveredType) =>
+  resolveCreationInteraction(paintedType, coveredType).kind === "cut" && resolveCutRepair(coveredType).kind === "regenerate");
+export function resolveTraitConformance(
+  structureType: string,
+  support: ReadonlySet<StructureTrait>,
+  subtype?: string,
+  ): boolean {
+  return structureTypeFor(structureType)?.conformsTo?.(support, subtype) ?? false;
+  }
+export function resolveConformance(
+  structureType: string,
+  surfaceType: string,
+  subtype?: string,
+  ): boolean {
+  return resolveTraitConformance(structureType, traitsOf(surfaceType), subtype);
+export interface ResolvedCoverage {
+  readonly covered: ConstructionCoveredRegion;
+  readonly interaction: CreationInteraction;
+  }
+export function resolveCoverage(
+  paintedType: string,
+  covered: readonly ConstructionCoveredRegion[],
+  paintedSubtype?: string,
+  ): readonly ResolvedCoverage[] {
+  return covered.map((entry) => ({
+  covered: entry,
+  interaction: resolveCreationInteraction(paintedType, entry.surfaceType, paintedSubtype),
+export function firstRefusal(resolved: readonly ResolvedCoverage[]): string | undefined {
+  for (const entry of resolved) {
+  if (entry.interaction.kind === "forbid") return entry.interaction.reason;
+  }
 
 // src/features/edit-construction/structure-types/roof/roof-structure.ts
 export const roofStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
   surfaceType: "roof", label: "Telhado", creation: "analytic sheets with one horizontal base and maximum height",
+  traits: Object.freeze([]),
   roleFor: (_topology, target) => `roof-${target.kind}`,
   policyFor: (role) => role === "roof-region"
   ? { ...allowed(role, ALL_AXES, "cloud"), transport: true }
   : denied(role, "Mova o telhado pela face."),
   interactionOver: () => IGNORE,
-  repairAfterCut: { kind: "preserve", reason: "Roof section changes require whole-cover regeneration." },
 
 // src/features/edit-construction/structure-types/structural-cut.ts
 export type CutProfile =
@@ -5555,6 +5571,11 @@ export interface SpineGeneration {
   readonly prepare?: (snapshot: ConstructionGraphSnapshot, port: BezierPort) => ConstructionGraphSnapshot;
   readonly regenerate: (input: SpineRegenerationInput) => SpineRegeneration | undefined;
   }
+export type StructureTrait =
+export interface StructureView {
+  readonly label: string;
+  readonly traits: ReadonlySet<StructureTrait>;
+  }
 export interface MotionContext {
   readonly graphSnapshot?: ConstructionGraphSnapshot;
   readonly port?: Pick<BezierPort, "curveBatch">;
@@ -5563,20 +5584,12 @@ export interface StructureTypeDefinition {
   /** The `surfaceType` the engine reports for regions of this kind. */
   readonly surfaceType: string;
   readonly label: string;
-  /** Responses to received motion, independent of direct gesture constraints. */
-  readonly motionInfluences?: (topology: ConstructionRegionTopology, transport: boolean) => readonly ConstructionMotionInfluence[];
+  /** What this type is for, as other types and tools see it. See {@link StructureTrait}. */
+  readonly traits: readonly StructureTrait[];
   /**
-  * Positions this type derives for its own unmoved nodes once motion has
+  * Whether a gesture on this type can only be planned through the session's
 export function denied(role: EditRole, reason: string): RolePolicy {
   return { role, resolve: { kind: "deny", reason }, axes: [], scope: "surface" };
-export function allowed(
-  role: EditRole,
-  axes: readonly EditAxis[],
-  scope: EditScope,
-  cascade?: RolePolicy["cascade"],
-  ): RolePolicy {
-  return { role, resolve: { kind: "allow" }, axes, scope, cascade };
-export type { EditGesture };
 
 // src/features/edit-construction/tools/brush-shape-params.ts
 export function resolveBrushShape(params: BrushShapeParams): BrushShape {

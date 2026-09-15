@@ -4,7 +4,7 @@ import type { AtomicEditOp, EditTarget } from "../../orchestration/atomic-edit.t
 import { ALL_AXES, addPosition } from "../../orchestration/atomic-edit.ts";
 import { followsOutward, parseStationNodeId } from "./station-node-id.ts";
 import { isSpineControlNodeId } from "../../spine/spine-node-id.ts";
-import type { CascadeContext, CutRepair, EditRole, RolePolicy, SpineGeneration, StructureTypeDefinition } from "../structure-type.ts";
+import type { CascadeContext, CutRepair, EditRole, RolePolicy, SpineGeneration, StructureTrait, StructureTypeDefinition, StructureView } from "../structure-type.ts";
 import { regeneratePathSpine } from "./bezier-road-edit.ts";
 import { explicitSpineSnapshot } from "./bezier-road-plan.ts";
 import { allowed, denied } from "../structure-type.ts";
@@ -261,18 +261,19 @@ export function pathStructureType(
   surfaceType: string,
   label: string,
   creation: string,
-  interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction,
+  interactionOver: (covered: StructureView, paintedSubtype?: string) => CreationInteraction,
 ): StructureTypeDefinition {
   return Object.freeze({
     surfaceType,
     label,
     creation,
+    traits: Object.freeze([]),
     roleFor: pathRoleFor,
     policyFor: pathPolicyFor,
     interactionOver,
     repairAfterCut: PATH_CUT_REPAIR,
-    conformsTo: (coveredSurfaceType: string, subtype?: string) =>
-      (coveredSurfaceType === "terrain" || coveredSurfaceType === "terrain-grass") && subtype !== "bridge",
+    // A deck spans instead of riding what is under it.
+    conformsTo: (support: ReadonlySet<StructureTrait>, subtype?: string) => support.has("ground") && subtype !== "bridge",
     spine: PATH_SPINE,
   });
 }
