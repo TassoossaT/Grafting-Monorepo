@@ -65,7 +65,8 @@ fn parse_loop(uses: Vec<OrientedEdgeUseDto>) -> Result<ContourLoop, String> {
 
 /// An edge's explicit geometry, as the front end declares it. `"line"` is a
 /// straight chord; `"arc"` is a true circular arc in the surface's own XZ
-/// plane -- see `grafting_graph_core::contour`'s own spatial policy.
+/// plane; `"bezier"` is a cubic Bézier, also in that plane -- see
+/// `grafting_graph_core::contour`'s own spatial policy.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ContourGeometryDto {
@@ -76,6 +77,13 @@ pub enum ContourGeometryDto {
         center: [f32; 2],
         clockwise: bool,
     },
+    #[serde(rename_all = "camelCase")]
+    Bezier {
+        /// The curve's first off-curve control point, in XZ.
+        handle1: [f32; 2],
+        /// The curve's second off-curve control point, in XZ.
+        handle2: [f32; 2],
+    },
 }
 
 impl ContourGeometryDto {
@@ -83,6 +91,7 @@ impl ContourGeometryDto {
         match self {
             Self::Line => ContourGeometry::Line,
             Self::Arc { center, clockwise } => ContourGeometry::CircularArc { center, clockwise },
+            Self::Bezier { handle1, handle2 } => ContourGeometry::Bezier { handle1, handle2 },
         }
     }
 
@@ -92,6 +101,10 @@ impl ContourGeometryDto {
             ContourGeometry::CircularArc { center, clockwise } => Self::Arc {
                 center: *center,
                 clockwise: *clockwise,
+            },
+            ContourGeometry::Bezier { handle1, handle2 } => Self::Bezier {
+                handle1: *handle1,
+                handle2: *handle2,
             },
         }
     }
@@ -186,11 +199,29 @@ pub fn apply_insert_vertex(
     topology: &mut ContourTopology,
     request: InsertVertexRequest,
 ) -> Result<RegionEditOutcomeDto, String> {
+    let edge_id = parse_edge_id(&request.edge_id)?;
+    // A line or arc fragment never reads these, but a Bézier fragment needs
+    // its own two off-curve handles worked out relative to the original
+    // curve's actual endpoints -- see `ContourEdge::split`.
+    let edge = topology
+        .edge(&edge_id)
+        .ok_or_else(|| "InsertVertex: unknown edge".to_string())?;
+    let start = *graph
+        .node(edge.start_node())
+        .ok_or_else(|| "InsertVertex: unknown start node".to_string())?
+        .data();
+    let end = *graph
+        .node(edge.end_node())
+        .ok_or_else(|| "InsertVertex: unknown end node".to_string())?
+        .data();
     let outcome = insert_vertex(
         graph,
         topology,
-        &parse_edge_id(&request.edge_id)?,
+        &edge_id,
         Node::new(parse_node_id(&request.node_id)?, request.position),
+        [start[0], start[2]],
+        [end[0], end[2]],
+        [request.position[0], request.position[2]],
         parse_edge_id(&request.first_edge_id)?,
         parse_edge_id(&request.second_edge_id)?,
     )

@@ -1,4 +1,4 @@
-import type { BezierPort, ConstructionGraphSnapshot, RegionEditOutcome, ConstructionSessionPort, ConstructionPosition } from "@/ports";
+import type { BezierPort, ConstructionEdgeGeometry, ConstructionGraphSnapshot, RegionEditOutcome, ConstructionSessionPort, ConstructionPosition } from "@/ports";
 
 import type { AtomicEditOp, EditGesture } from "./atomic-edit.ts";
 import { addPosition, constrainToAxes } from "./atomic-edit.ts";
@@ -199,7 +199,7 @@ export interface EditOpSink {
   removeVertex(nodeId: string, weldedEdgeId: string): RegionEditOutcome;
   retypeEdge(
     edgeId: string,
-    geometry: { kind: "line" } | { kind: "arc"; center: readonly [number, number]; clockwise: boolean },
+    geometry: ConstructionEdgeGeometry,
   ): RegionEditOutcome;
   deleteRegion(surfaceKey: readonly string[]): RegionEditOutcome;
   duplicateRegion(request: {

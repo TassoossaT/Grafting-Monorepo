@@ -39,12 +39,19 @@ along its rail, one running up it.
 
 A wall panel is developable, so this map loses nothing. `Chord` is the
 straight case and `Cylinder` the curved one, and they are the same idea
--- a chord is an arc whose radius has gone to infinity.
+-- a chord is an arc whose radius has gone to infinity. `Curve` is the
+general case either specializes: a Bézier rail has no closed-form
+arc-length or nearest-point query, so it keeps a fine sampled table
+instead, built once in [`UnrollFrame::of`].
 
 ### `pub fn grafting_procgen_surface_mesh::frame::UnrollFrame::normal_at(&self, point: [f32; 3]) -> [f32; 3]`
 
 The outward horizontal direction at `point` -- radial for a cylinder,
-constant for a chord.
+constant for a chord, and the tangent's own perpendicular for a
+general curve (any consistent perpendicular does: `upright_face_mesh`
+already corrects a globally-flipped normal from its own winding
+check, so there is no separate "which side is outward" question to
+answer here).
 
 ### `pub fn grafting_procgen_surface_mesh::frame::UnrollFrame::of(geometry: &grafting_graph_core::contour::ContourGeometry, start: [f32; 3], end: [f32; 3]) -> core::option::Option<Self>`
 
@@ -68,6 +75,18 @@ the rail is walked, so the whole face lands on one side of the origin.
 ### `pub fn grafting_procgen_surface_mesh::math::angle_xz(center: [f32; 2], point: [f32; 2]) -> f32`
 
 ### `pub fn grafting_procgen_surface_mesh::math::cross(a: [f32; 3], b: [f32; 3]) -> [f32; 3]`
+
+### `pub fn grafting_procgen_surface_mesh::math::cubic_bezier_eval(p0: [f32; 2], p1: [f32; 2], p2: [f32; 2], p3: [f32; 2], t: f32) -> [f32; 2]`
+
+Position on the cubic Bézier `p0 p1 p2 p3` at parameter `t` -- the same
+closed-form cubic `grafting_graph_core::contour` uses, duplicated here
+per this crate's own convention for small pure geometry math (see
+`angle_xz`/`sweep` above) rather than exposed as new public API on that
+crate's own analytic edge type.
+
+### `pub fn grafting_procgen_surface_mesh::math::cubic_bezier_tangent(p0: [f32; 2], p1: [f32; 2], p2: [f32; 2], p3: [f32; 2], t: f32) -> [f32; 2]`
+
+Unit tangent of the cubic Bézier `p0 p1 p2 p3` at parameter `t`.
 
 ### `pub fn grafting_procgen_surface_mesh::math::distance_xz(a: [f32; 2], b: [f32; 2]) -> f32`
 
@@ -311,6 +330,21 @@ not.
 ### `pub grafting_procgen_surface_mesh::frame::UnrollFrame::Chord::direction: [f32; 2]`
 
 ### `pub grafting_procgen_surface_mesh::frame::UnrollFrame::Chord::origin: [f32; 2]`
+
+### `pub grafting_procgen_surface_mesh::frame::UnrollFrame::Curve`
+
+### `pub grafting_procgen_surface_mesh::frame::UnrollFrame::Curve::cumulative_length: alloc::vec::Vec<f32>`
+
+Cumulative arc length at `BEZIER_UNROLL_STEPS + 1` evenly spaced
+parameters, index `i` at `t = i / BEZIER_UNROLL_STEPS`.
+
+### `pub grafting_procgen_surface_mesh::frame::UnrollFrame::Curve::p0: [f32; 2]`
+
+### `pub grafting_procgen_surface_mesh::frame::UnrollFrame::Curve::p1: [f32; 2]`
+
+### `pub grafting_procgen_surface_mesh::frame::UnrollFrame::Curve::p2: [f32; 2]`
+
+### `pub grafting_procgen_surface_mesh::frame::UnrollFrame::Curve::p3: [f32; 2]`
 
 ### `pub grafting_procgen_surface_mesh::frame::UnrollFrame::Cylinder`
 

@@ -143,15 +143,8 @@ export function slopeFootprint(port: Pick<BezierPort, "planarBoolean">, surface:
   return rings.sort((a, b) => area(b) - area(a))[0];
 }
 
-/** The graph after `patch`, without committing anything. */
-export function prospectiveGraph(snapshot: ConstructionGraphSnapshot, patch: ConstructionGraphPatch): ConstructionGraphSnapshot {
-  const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
-  for (const node of patch.nodes) nodes.set(node.id, node);
-  const removed = new Set(patch.removedEdgeIds ?? []);
-  const edges = new Map(snapshot.edges.filter((edge) => !removed.has(edge.edgeId)).map((edge) => [edge.edgeId, edge]));
-  for (const edge of patch.edges) edges.set(edge.edgeId, edge);
-  return { nodes: [...nodes.values()], edges: [...edges.values()] };
-}
+export { prospectiveGraph } from "../../spine/index.ts";
+import { prospectiveGraph } from "../../spine/index.ts";
 
 /** Regenerates every sloped-platform span on the spine a graph patch touches. */
 export function regenerateSlopeSpine(input: SpineRegenerationInput): SpineRegeneration {

@@ -101,6 +101,44 @@ test("a straight run followed by a genuine curve isolates the straight run exact
   assert.deepEqual(edges[edges.length - 1].end, points[points.length - 1]);
 });
 
+test("with curves: bezier, a perfectly traced curve fits into one cubic Bezier, not several straight corners", () => {
+  const points = arcPoints({ x: 2, z: 0 }, 2, Math.PI, -Math.PI, 8);
+  const edges = fitPath(points, TOLERANCE, { curves: "bezier" });
+  assert.equal(edges.length, 1, "a smooth curve must not be chopped into false corners by straight-line RDP");
+  assert.equal(edges[0].geometry.kind, "bezier");
+  assert.ok(Array.isArray(edges[0].geometry.handle1) && edges[0].geometry.handle1.length === 2);
+  assert.ok(Array.isArray(edges[0].geometry.handle2) && edges[0].geometry.handle2.length === 2);
+  assert.deepEqual(edges[0].start, points[0]);
+  assert.deepEqual(edges[0].end, points[points.length - 1]);
+});
+
+test("with curves: bezier, a straight run followed by a genuine curve still isolates the straight run exactly", () => {
+  const straightPart = [point(-4, 0), point(-3, 0), point(-2, 0), point(-1, 0), point(0, 0)];
+  const curvedPart = arcPoints({ x: 2, z: 0 }, 2, Math.PI, -Math.PI, 8).slice(1);
+  const points = [...straightPart, ...curvedPart];
+  const edges = fitPath(points, TOLERANCE, { curves: "bezier" });
+  assert.ok(edges.length < points.length - 1, "fitting must still collapse far fewer edges than one per raw sample");
+  assert.equal(edges[0].geometry.kind, "line");
+  assert.deepEqual(edges[0].start, points[0]);
+  assert.deepEqual(edges[0].end, points[4], "the straight/curve boundary itself is found exactly");
+  assert.equal(edges[edges.length - 1].geometry.kind, "bezier");
+});
+
+test("with curves: bezier, a sharp right-angle turn still fits into two straight edges, corner preserved", () => {
+  const points = [point(0, 0), point(2, 0), point(4, 0), point(4, 2), point(4, 4)];
+  const edges = fitPath(points, TOLERANCE, { curves: "bezier" });
+  assert.equal(edges.length, 2);
+  assert.equal(edges[0].geometry.kind, "line");
+  assert.equal(edges[1].geometry.kind, "line");
+  assert.deepEqual(edges[0].end, points[2], "the corner is where it always was");
+});
+
+test("with no curves option given, a curved stroke still fits an arc -- only the wall brush opts into bezier", () => {
+  const points = arcPoints({ x: 2, z: 0 }, 2, Math.PI, -Math.PI, 8);
+  const edges = fitPath(points, TOLERANCE);
+  assert.equal(edges[0].geometry.kind, "arc", "platform-contour and path-cloud-mutation's own callers must keep today's arc behavior unchanged");
+});
+
 test("a tolerance of zero commits the contour literally -- one edge per raw sample", () => {
   const points = [point(0, 0), point(1, 0.3), point(2, -0.2), point(3, 0.1)];
   const edges = fitPath(points, 0);
@@ -115,18 +153,18 @@ test("a wider tolerance corrects the same shaky stroke into one straight run", (
   assert.equal(edges[0].geometry.kind, "line");
 });
 
-test("with arcs off, a perfectly traced circle still fits as straight chords", () => {
+test("with curves: none, a perfectly traced circle still fits as straight chords", () => {
   const points = arcPoints({ x: 2, z: 0 }, 2, Math.PI, -Math.PI, 8);
-  const edges = fitPath(points, TOLERANCE, { arcs: false });
+  const edges = fitPath(points, TOLERANCE, { curves: "none" });
   assert.ok(edges.length >= 1);
   for (const edge of edges) assert.equal(edge.geometry.kind, "line");
   assert.deepEqual(edges[0].start, points[0]);
   assert.deepEqual(edges[edges.length - 1].end, points[points.length - 1]);
 });
 
-test("with arcs off, corners are still found -- only curvature is refused", () => {
+test("with curves: none, corners are still found -- only curvature is refused", () => {
   const points = [point(0, 0), point(2, 0), point(4, 0), point(4, 2), point(4, 4)];
-  const edges = fitPath(points, TOLERANCE, { arcs: false });
+  const edges = fitPath(points, TOLERANCE, { curves: "none" });
   assert.equal(edges.length, 2);
   assert.deepEqual(edges[0].end, points[2], "the corner is where it always was");
 });

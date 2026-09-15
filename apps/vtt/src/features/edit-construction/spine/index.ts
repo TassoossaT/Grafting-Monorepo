@@ -13,6 +13,7 @@ export type { SpineControlNode, SpineCurveEdge, SpineGraph } from "./spine-graph
 export { isSpineControlNodeId, parseSpineControlNodeId, spineControlNodeId } from "./spine-node-id.ts";
 export type { SpineControlNodeAddress } from "./spine-node-id.ts";
 export { DEFAULT_SPINE_OWNER, isSpineEdge, ownedBy, spineComponent, spineOwnerAt, spineOwnerOf } from "./spine-owner.ts";
+export { prospectiveGraph } from "./spine-owner.ts";
 export { bezierPickHandles, curvePick, curvePickId, isBezierEditTarget } from "./spine-handles.ts";
 export { planSpineAction } from "./spine-actions.ts";
 export type { SpineAction } from "./spine-actions.ts";

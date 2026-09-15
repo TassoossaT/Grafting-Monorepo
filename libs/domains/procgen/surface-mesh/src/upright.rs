@@ -116,19 +116,49 @@ fn ruled_upright_mesh(
         return None;
     }
 
-    // The top run travels in reverse (from top_end to top_start).
-    // So top_edges.last()'s end is the top point at base_start (t = 0),
-    // and top_edges.first()'s start is the top point at base_end (t = 1).
-    let top_start_height = top_edges.last().map(|(_, _, end)| end[1])?;
-    let top_end_height = top_edges.first().map(|(_, start, _)| start[1])?;
+    // The top run's own per-vertex height, read the same way the base run's
+    // is -- not approximated from just its two ends. A single-edge run (the
+    // ordinary straight or arc wall, tilted uniformly between two known
+    // corner heights) makes that the same number either way, but a
+    // multi-station curved wall keeps its own top height at every station,
+    // following whatever relief its base does; collapsing that to a straight
+    // line between the run's two ends left the top rail cutting through the
+    // ground's own bumps that the base rail correctly followed.
+    //
+    // The top run travels in reverse (from top_end to top_start), so its
+    // per-vertex heights are collected in that order and then reversed to
+    // land index-for-index with `base_points`.
+    let mut top_heights_reversed = Vec::with_capacity(count);
+    for (edge, start, end) in top_edges {
+        let planar = edge.tessellate(
+            [start[0], start[2]],
+            [end[0], end[2]],
+            ARC_TESSELLATION_TOLERANCE,
+        );
+        let point_count = planar.len();
+        if point_count < 2 {
+            return None;
+        }
+        for index in 0..point_count - 1 {
+            let t = index as f32 / (point_count - 1) as f32;
+            top_heights_reversed.push(start[1] + (end[1] - start[1]) * t);
+        }
+    }
+    if let Some((_, _, end)) = top_edges.last() {
+        top_heights_reversed.push(end[1]);
+    }
+    if top_heights_reversed.len() != count {
+        return None;
+    }
+    top_heights_reversed.reverse();
+    let top_heights = top_heights_reversed;
 
     let mut positions = Vec::with_capacity(count * 2);
     let mut normals = Vec::with_capacity(count * 2);
     let mut uvs = Vec::with_capacity(count * 2);
 
     for (index, base_pt) in base_points.iter().enumerate() {
-        let t = index as f32 / (count - 1) as f32;
-        let top_y = top_start_height + (top_end_height - top_start_height) * t;
+        let top_y = top_heights[index];
         let top_pt = [base_pt[0], top_y, base_pt[2]];
 
         let u = frame.unroll(*base_pt)[0];

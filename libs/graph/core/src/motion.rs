@@ -171,12 +171,13 @@ pub fn move_vertices<E>(
             }
         }
     }
-    let mut translated_arcs = Vec::new();
+    let mut translated_curves = Vec::new();
     for edge_id in topology.edge_ids() {
         let edge = topology.edge(&edge_id).unwrap();
-        let ContourGeometry::CircularArc { center, clockwise } = edge.geometry() else {
+        let geometry = *edge.geometry();
+        if matches!(geometry, ContourGeometry::Line) {
             continue;
-        };
+        }
         if !positions.contains_key(edge.start_node()) && !positions.contains_key(edge.end_node()) {
             continue;
         }
@@ -199,32 +200,39 @@ pub fn move_vertices<E>(
         let length_sq = old[0] * old[0] + old[1] * old[1];
         if length_sq < 1e-10 || new[0] * new[0] + new[1] * new[1] < 1e-10 {
             return Err(MotionError::InvalidTopology(
-                "an arc cannot collapse to a zero-length chord".into(),
+                "a curved edge cannot collapse to a zero-length chord".into(),
             ));
         }
-        // Similarity of the old chord to the new one preserves the arc's sweep.
-        // This also handles a single endpoint edit; rigid translation is its
-        // scale=1, rotation=0 case. Undo applies the inverse similarity.
+        // Similarity of the old chord to the new one preserves the curve's
+        // own shape -- an arc's sweep, or a Bézier's two off-curve handles
+        // read relative to its own original start. This also handles a
+        // single endpoint edit; rigid translation is its scale=1, rotation=0
+        // case. Undo applies the inverse similarity.
         let scale_cos = (old[0] * new[0] + old[1] * new[1]) / length_sq;
         let scale_sin = (old[0] * new[1] - old[1] * new[0]) / length_sq;
-        let relative = [
-            (center[0] - original_start[0]) as f64,
-            (center[1] - original_start[2]) as f64,
-        ];
-        let center = [
-            (start[0] as f64 + scale_cos * relative[0] - scale_sin * relative[1]) as f32,
-            (start[2] as f64 + scale_sin * relative[0] + scale_cos * relative[1]) as f32,
-        ];
-        if !center.iter().all(|v| v.is_finite()) {
-            return Err(MotionError::NonFinite(edge.start_node().clone()));
-        }
-        translated_arcs.push((
-            edge_id,
-            ContourGeometry::CircularArc {
-                center,
-                clockwise: *clockwise,
+        let transform = |point: [f32; 2]| -> Option<[f32; 2]> {
+            let relative = [
+                (point[0] - original_start[0]) as f64,
+                (point[1] - original_start[2]) as f64,
+            ];
+            let transformed = [
+                (start[0] as f64 + scale_cos * relative[0] - scale_sin * relative[1]) as f32,
+                (start[2] as f64 + scale_sin * relative[0] + scale_cos * relative[1]) as f32,
+            ];
+            transformed.iter().all(|v| v.is_finite()).then_some(transformed)
+        };
+        let new_geometry = match geometry {
+            ContourGeometry::CircularArc { center, clockwise } => ContourGeometry::CircularArc {
+                center: transform(center).ok_or_else(|| MotionError::NonFinite(edge.start_node().clone()))?,
+                clockwise,
             },
-        ));
+            ContourGeometry::Bezier { handle1, handle2 } => ContourGeometry::Bezier {
+                handle1: transform(handle1).ok_or_else(|| MotionError::NonFinite(edge.start_node().clone()))?,
+                handle2: transform(handle2).ok_or_else(|| MotionError::NonFinite(edge.start_node().clone()))?,
+            },
+            ContourGeometry::Line => unreachable!("filtered out above"),
+        };
+        translated_curves.push((edge_id, new_geometry));
     }
     let mut affected = BTreeSet::new();
     for region in topology.region_ids() {
@@ -238,7 +246,7 @@ pub fn move_vertices<E>(
     for (id, position) in positions {
         *graph.node_mut(&id).unwrap().data_mut() = position;
     }
-    for (id, geometry) in translated_arcs {
+    for (id, geometry) in translated_curves {
         topology
             .set_edge_geometry(&id, geometry)
             .expect("edge was validated in the same exclusive borrow");

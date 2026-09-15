@@ -251,6 +251,75 @@ fn a_curved_upright_panel_meshes_on_its_own_true_cylinder() {
     }
 }
 
+/// A curved wall the free wall brush now draws: a cubic Bézier rail instead
+/// of a true circular arc, but the exact same 4-node upright-face shape
+/// (base, right, top, left) every other wall panel is -- no spine, no
+/// station nodes, the curve lives entirely in the two rail edges' own
+/// geometry.
+#[test]
+fn a_bezier_upright_panel_meshes_as_a_clean_ruled_strip() {
+    let graph = graph_with_positions(&[
+        ("bottom-start", [0.0, 0.0, 0.0]),
+        ("bottom-end", [4.0, 0.0, 0.0]),
+        ("top-end", [4.0, 3.0, 0.0]),
+        ("top-start", [0.0, 3.0, 0.0]),
+    ]);
+    let mut topology = ContourTopology::new();
+    let spec: [(&str, &str, &str, ContourGeometry); 4] = [
+        (
+            "base",
+            "bottom-start",
+            "bottom-end",
+            ContourGeometry::Bezier { handle1: [1.0, 2.0], handle2: [3.0, 2.0] },
+        ),
+        ("right", "bottom-end", "top-end", ContourGeometry::Line),
+        (
+            "top",
+            "top-end",
+            "top-start",
+            ContourGeometry::Bezier { handle1: [3.0, 2.0], handle2: [1.0, 2.0] },
+        ),
+        ("left", "top-start", "bottom-start", ContourGeometry::Line),
+    ];
+    let loop_: ContourLoop = spec
+        .iter()
+        .map(|(name, start, end, geometry)| {
+            let edge_id = ContourEdgeId::new(format!("panel-{name}")).unwrap();
+            topology
+                .add_edge(&graph, ContourEdge::new(edge_id.clone(), nid(start), nid(end), *geometry))
+                .unwrap();
+            OrientedEdgeUse::forward(edge_id)
+        })
+        .collect();
+    let region_id = RegionId::new("panel").unwrap();
+    topology
+        .add_region(region_id.clone(), vec![loop_], Vec::new())
+        .unwrap();
+
+    let mesh = mesh_of(&topology, &region_id, &positions_of(&graph));
+
+    assert_every_triangle_has_area(&mesh);
+    assert!(mesh.positions.len() > 4, "a curved rail needs interior vertices to read as a curve, got {}", mesh.positions.len());
+    // A ruled strip: every base vertex is paired with the top vertex
+    // directly above it, exactly `height` apart -- the same pairing
+    // `a_multi_station_upright_panel_keeps_its_top_rail_on_the_same_relief_as_its_base`
+    // checks for a multi-edge rail, here for a single Bézier edge instead.
+    for pair in mesh.positions.chunks_exact(2) {
+        let [base, top] = pair else { unreachable!() };
+        assert!(
+            (base[0] - top[0]).abs() < 1e-3 && (base[2] - top[2]).abs() < 1e-3,
+            "a ruled pair shares its ground position: {base:?} vs {top:?}"
+        );
+        assert!(
+            (top[1] - base[1] - 3.0).abs() < 1e-3,
+            "the top rail sits exactly `height` above its own base station: {base:?} vs {top:?}"
+        );
+    }
+    for normal in &mesh.normals {
+        assert!(normal[1].abs() < 1e-3, "an upright panel's normals stay horizontal, got {normal:?}");
+    }
+}
+
 #[test]
 fn a_straight_upright_panel_takes_the_same_path_and_stays_four_corners() {
     let graph = graph_with_positions(&[
@@ -379,6 +448,61 @@ fn a_panel_with_a_welded_base_is_still_an_upright_face() {
         assert!(
             (radius - 2.0).abs() < 1e-2,
             "a welded panel still meshes on its own cylinder: {point:?}"
+        );
+    }
+}
+
+/// A multi-station curved wall over relief: three base stations, the middle
+/// one raised off the chord between the other two (a bump the terrain
+/// under a spine-fitted wall puts there), each with a top station a
+/// constant height above its own base station. This is what a spine-based
+/// wall (several straight boundary edges approximating a Bezier curve,
+/// never just the run's two ends) declares -- unlike every other upright
+/// test here, which has exactly one base edge and one top edge.
+#[test]
+fn a_multi_station_upright_panel_keeps_its_top_rail_on_the_same_relief_as_its_base() {
+    const HEIGHT: f32 = 3.0;
+    let graph = graph_with_positions(&[
+        ("bottom-start", [0.0, 0.0, 0.0]),
+        ("bottom-mid", [2.0, 1.5, 0.0]),
+        ("bottom-end", [4.0, 0.0, 0.0]),
+        ("top-end", [4.0, HEIGHT, 0.0]),
+        ("top-mid", [2.0, 1.5 + HEIGHT, 0.0]),
+        ("top-start", [0.0, HEIGHT, 0.0]),
+    ]);
+    let mut topology = ContourTopology::new();
+    let loop_ = line_loop(
+        &mut topology,
+        &graph,
+        "relief",
+        &[
+            "bottom-start",
+            "bottom-mid",
+            "bottom-end",
+            "top-end",
+            "top-mid",
+            "top-start",
+        ],
+    );
+    let region_id = RegionId::new("relief").unwrap();
+    topology
+        .add_region(region_id.clone(), vec![loop_], Vec::new())
+        .unwrap();
+
+    let mesh = mesh_of(&topology, &region_id, &positions_of(&graph));
+
+    assert_every_triangle_has_area(&mesh);
+    // The mesher pairs each base vertex with the top vertex directly above
+    // it: every consecutive pair must sit exactly `HEIGHT` apart, matching
+    // this wall's own per-station top rail -- not a straight line between
+    // just the run's first and last top heights, which at the middle
+    // station would read 0.75 short of the bump the base actually has.
+    for pair in mesh.positions.chunks_exact(2) {
+        let [base, top] = pair else { unreachable!() };
+        assert!((base[0] - top[0]).abs() < 1e-4 && (base[2] - top[2]).abs() < 1e-4, "a ruled pair shares its ground position: {base:?} vs {top:?}");
+        assert!(
+            (top[1] - base[1] - HEIGHT).abs() < 1e-4,
+            "the top rail must follow the same relief the base does, station by station: base {base:?}, top {top:?}"
         );
     }
 }

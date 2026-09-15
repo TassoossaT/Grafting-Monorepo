@@ -300,7 +300,7 @@ export function correctedWallCorners(
   const first = samples[0];
   if (first === undefined) return [];
   const pinned = samples.map((sample) => pinnedToBaseline(first, sample));
-  const fitted = fitPath(pinned, tolerance, { arcs: !ctx.snapToGrid });
+  const fitted = fitPath(pinned, tolerance, { curves: ctx.snapToGrid ? "none" : "bezier" });
   const corners = fitted.length > 0 ? [fitted[0]!.start, ...fitted.map((edge) => edge.end)] : pinned;
   return corners.map((corner) => snappedEndpoint(ctx, corner, tolerance));
 }
@@ -413,14 +413,17 @@ export function commitWallContour(
  * Fits a raw stroke and commits it, the free-brush entry point --
  * `tolerance` is the brush's own radius, so a radius of 0 commits the drawn
  * contour literally and a wider brush corrects a shakier stroke into clean
- * straight runs and true arcs.
+ * straight runs and cubic Béziers -- a curved wall stays exactly the same
+ * 4-node upright panel every other wall step is, the curve carried entirely
+ * as that step's own edge geometry (`ConstructionEdgeGeometry`'s `"bezier"`
+ * kind), never as extra graph vertices.
  *
  * With the grid magnet on, the stroke is already a sequence of exact grid
  * intersections: the hand is no longer what the samples describe, so there
- * is no hand tremor to read curvature out of, and the circle through any
- * three staircase points is a real circle that was never drawn. Arcs are
- * off in that mode for that reason -- snapped means deliberate, and what
- * was placed deliberately is what gets built.
+ * is no hand tremor to read curvature out of, and the cubic through any
+ * few staircase points is a shape that was never drawn. Curves are off in
+ * that mode for that reason -- snapped means deliberate, and what was
+ * placed deliberately is what gets built.
  */
 export function commitWallStroke(
   ctx: ToolContext,
@@ -432,5 +435,5 @@ export function commitWallStroke(
   const first = samples[0];
   if (first === undefined) return;
   const pinned = samples.map((sample) => pinnedToBaseline(first, sample));
-  commitWallContour(ctx, fitPath(pinned, tolerance, { arcs: !ctx.snapToGrid }), params, domain, tolerance);
+  commitWallContour(ctx, fitPath(pinned, tolerance, { curves: ctx.snapToGrid ? "none" : "bezier" }), params, domain, tolerance);
 }

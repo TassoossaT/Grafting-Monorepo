@@ -1,5 +1,5 @@
 import type { PreviewDescriptor } from "@/features/edit-construction";
-import type { ConstructionGraphSnapshot, ConstructionRegionTopology } from "@/ports";
+import type { ConstructionEdgeGeometry, ConstructionGraphSnapshot, ConstructionPosition, ConstructionRegionTopology } from "@/ports";
 
 // Relative, not `@/...`: the test runner resolves no aliases, so a module a
 // test reaches has to spell out any import it needs at run time.
@@ -69,6 +69,55 @@ export function edgeOverlayChannel(role: string): string {
   return `edges:${role}`;
 }
 
+/** How finely a curved edge's own overlay polyline is sampled -- generous for a wireframe (never the mesh itself, which the engine tessellates to its own tolerance). */
+const OVERLAY_CURVE_STEPS = 24;
+
+/**
+ * A flat polyline approximation of `geometry` between `start` and `end`, for
+ * this overlay only -- the actual panel mesh's own curve is tessellated by
+ * the engine at build time; this exists purely so an edit-mode wall edge
+ * reads as the curve it is instead of the straight chord every edge here
+ * used to be drawn as regardless of its own geometry.
+ */
+function tessellateForOverlay(
+  geometry: ConstructionEdgeGeometry,
+  start: ConstructionPosition,
+  end: ConstructionPosition,
+): readonly ConstructionPosition[] {
+  if (geometry.kind === "line") return [start, end];
+  const points: ConstructionPosition[] = [];
+  if (geometry.kind === "arc") {
+    const { center, clockwise } = geometry;
+    const radius = Math.hypot(start.x - center[0], start.z - center[1]);
+    const startAngle = Math.atan2(start.z - center[1], start.x - center[0]);
+    const endAngle = Math.atan2(end.z - center[1], end.x - center[0]);
+    const tau = Math.PI * 2;
+    const rawSweep = clockwise ? -((startAngle - endAngle + tau) % tau) : (endAngle - startAngle + tau) % tau;
+    const sweep = Math.abs(rawSweep) < 1e-9 ? (clockwise ? -tau : tau) : rawSweep;
+    for (let index = 0; index <= OVERLAY_CURVE_STEPS; index += 1) {
+      const t = index / OVERLAY_CURVE_STEPS;
+      const angle = startAngle + sweep * t;
+      points.push({ x: center[0] + radius * Math.cos(angle), y: start.y + (end.y - start.y) * t, z: center[1] + radius * Math.sin(angle) });
+    }
+    return points;
+  }
+  const { handle1, handle2 } = geometry;
+  for (let index = 0; index <= OVERLAY_CURVE_STEPS; index += 1) {
+    const t = index / OVERLAY_CURVE_STEPS;
+    const u = 1 - t;
+    const a = u * u * u;
+    const b = 3 * u * u * t;
+    const c = 3 * u * t * t;
+    const d = t * t * t;
+    points.push({
+      x: a * start.x + b * handle1[0] + c * handle2[0] + d * end.x,
+      y: start.y + (end.y - start.y) * t,
+      z: a * start.z + b * handle1[1] + c * handle2[1] + d * end.z,
+    });
+  }
+  return points;
+}
+
 /** One role's edges, as a flat `[x, y, z, x, y, z, ...]` segment list. */
 export interface EdgeOverlayGroup {
   readonly role: string;
@@ -114,7 +163,12 @@ export function edgeOverlayOf(
         const role = shared && RIM_ROLES.has(named) ? INTERIOR_EDGE_ROLE : named;
         const into = byRole.get(role) ?? [];
         byRole.set(role, into);
-        into.push(start.x, start.y, start.z, end.x, end.y, end.z);
+        const samples = tessellateForOverlay(use.geometry ?? { kind: "line" }, start, end);
+        for (let index = 1; index < samples.length; index += 1) {
+          const from = samples[index - 1]!;
+          const to = samples[index]!;
+          into.push(from.x, from.y, from.z, to.x, to.y, to.z);
+        }
       }
     }
   }

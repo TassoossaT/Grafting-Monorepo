@@ -228,7 +228,7 @@ export const platformContourTool: ConstructionTool<"platform-contour"> = {
       const points = gesture.samples.map((s) => ({ ...s.point,y:effective.elevation }));
       const first = points[0]!, last = points.at(-1)!;
       if (Math.hypot(first.x-last.x,first.z-last.z)>1e-5) points.push(first);
-      const fitted = fitPath(points,params.tolerance ?? 0.15,{ arcs: !ctx.snapToGrid });
+      const fitted = fitPath(points,params.tolerance ?? 0.15,{ curves: ctx.snapToGrid ? "none" : "arc" });
       commitPlatformShape(ctx,fitted,effective,gesture.samples);
     }
     drafts.delete(ctx.runtime);

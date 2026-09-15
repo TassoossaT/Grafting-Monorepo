@@ -1,4 +1,4 @@
-import type { ConstructionEdgeSnapshot, ConstructionGraphSnapshot } from "@/ports";
+import type { ConstructionEdgeSnapshot, ConstructionGraphPatch, ConstructionGraphSnapshot } from "@/ports";
 
 import { isSpineControlNodeId } from "./spine-node-id.ts";
 
@@ -11,6 +11,16 @@ import { isSpineControlNodeId } from "./spine-node-id.ts";
  * owner reads as one. That is the only product name this module knows.
  */
 export const DEFAULT_SPINE_OWNER = "path";
+
+/** The app's prospective construction snapshot, without committing its graph patch. */
+export function prospectiveGraph(snapshot: ConstructionGraphSnapshot, patch: ConstructionGraphPatch): ConstructionGraphSnapshot {
+  const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
+  for (const node of patch.nodes) nodes.set(node.id, node);
+  const removed = new Set(patch.removedEdgeIds ?? []);
+  const edges = new Map(snapshot.edges.filter((edge) => !removed.has(edge.edgeId)).map((edge) => [edge.edgeId, edge]));
+  for (const edge of patch.edges) edges.set(edge.edgeId, edge);
+  return { nodes: [...nodes.values()], edges: [...edges.values()] };
+}
 
 export function spineOwnerOf(edge: Pick<ConstructionEdgeSnapshot, "curve">): string {
   return edge.curve?.surfaceType || DEFAULT_SPINE_OWNER;

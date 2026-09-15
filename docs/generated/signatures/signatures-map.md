@@ -434,6 +434,8 @@ pub fn winding_normal(positions: &[[f32; 3]], indices: &[u32]) -> Option<[f32; 3
 pub fn distance_xz(a: [f32; 2], b: [f32; 2]) -> f32
 pub fn angle_xz(center: [f32; 2], point: [f32; 2]) -> f32
 pub fn sweep(from: f32, to: f32, clockwise: bool) -> f32
+pub fn cubic_bezier_eval(p0: [f32; 2], p1: [f32; 2], p2: [f32; 2], p3: [f32; 2], t: f32) -> [f32; 2]
+pub fn cubic_bezier_tangent(p0: [f32; 2], p1: [f32; 2], p2: [f32; 2], p3: [f32; 2], t: f32) -> [f32; 2]
 pub fn point_in_loop_xz(point: [f32; 2], loop_: &[[f32; 3]]) -> bool
 
 // src/planar.rs
@@ -4892,6 +4894,8 @@ export function isSpineControlNodeId(id: string): boolean {
 
 // src/features/edit-construction/spine/spine-owner.ts
 export const DEFAULT_SPINE_OWNER = "path";
+export function prospectiveGraph(snapshot: ConstructionGraphSnapshot, patch: ConstructionGraphPatch): ConstructionGraphSnapshot {
+  const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
 export function spineOwnerOf(edge: Pick<ConstructionEdgeSnapshot, "curve">): string {
   return edge.curve?.surfaceType || DEFAULT_SPINE_OWNER;
   }
@@ -5468,8 +5472,6 @@ export function slopeSurface(port: Pick<BezierPort, "curveBatch">, nodes: Readon
   const resolved = resolveCurves(port, spans.map((span) => ({ handles: span.curve!, start: nodes.get(span.startNodeId)!, end: nodes.get(span.endNodeId)! })), TOLERANCE);
 export function slopeFootprint(port: Pick<BezierPort, "planarBoolean">, surface: Pick<SlopeSurface, "nodes" | "edges" | "regions">): readonly (readonly [number, number])[] | undefined {
   const positions = new Map(surface.nodes.map((node) => [node.id, node.position]));
-export function prospectiveGraph(snapshot: ConstructionGraphSnapshot, patch: ConstructionGraphPatch): ConstructionGraphSnapshot {
-  const nodes = new Map(snapshot.nodes.map((node) => [node.id, node]));
 export function regenerateSlopeSpine(input: SpineRegenerationInput): SpineRegeneration {
   const { snapshot, graphPatch } = input;
   const after = prospectiveGraph(snapshot, graphPatch);
@@ -5771,7 +5773,7 @@ export interface BoundaryEdges {
   /** Every edge declared so far, each exactly once. */
 export function reverseGeometry(geometry: ConstructionEdgeGeometry): ConstructionEdgeGeometry {
   if (geometry.kind === "line") return geometry;
-  return { kind: "arc", center: geometry.center, clockwise: !geometry.clockwise };
+  if (geometry.kind === "bezier") return { kind: "bezier", handle1: geometry.handle2, handle2: geometry.handle1 };
 export function createBoundaryEdges(tableId: string, sharing: EdgeSharing): BoundaryEdges {
   const edges = new Map<ConstructionEdgeId, ConstructionPatchEdge>();
 
@@ -5844,8 +5846,12 @@ export interface FittedEdge {
   readonly geometry: ConstructionEdgeGeometry;
   }
 export interface FitOptions {
-  /** When false, every span is fitted as a straight chord and no circle is ever considered. */
-  readonly arcs?: boolean;
+  /**
+  * Which curved-span family to try for a span that is not already
+  * explained by a straight chord, if any. `"none"` fits every span as a
+  * chord and never considers a curve at all.
+  */
+  readonly curves?: "arc" | "bezier" | "none";
   }
 export function fitPath(
   points: readonly ConstructionPosition[],
@@ -5853,7 +5859,7 @@ export function fitPath(
   options: FitOptions = {},
   ): readonly FittedEdge[] {
   if (points.length < 2) return [];
-  const arcs = options.arcs ?? true;
+  const curves = options.curves ?? "arc";
   const budget = Math.max(0, tolerance);
 
 // src/features/edit-construction/topology/surface-perimeter.ts
