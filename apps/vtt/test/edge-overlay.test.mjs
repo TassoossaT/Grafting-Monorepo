@@ -254,3 +254,54 @@ test("edgeOverlayOf renders spine edges from ConstructionGraphSnapshot alongside
   assert.ok(contourGroup !== undefined, "contour edges from topology must be drawn");
   assert.equal(contourGroup.color, EDGE_ROLE_COLORS[PATH_ROLES.contourEdge], "contour must be cyan");
 });
+
+test("a curved contour edge (arc or Bezier) is tessellated in the overlay, not drawn as its own straight chord", () => {
+  const straightTopology = {
+    surfaceKey: ["@region", "wall-1:0"],
+    surfaceType: "wall-white",
+    nodes: [
+      { id: "a", position: { x: 0, y: 0, z: 0 } },
+      { id: "b", position: { x: 4, y: 0, z: 0 } },
+    ],
+    outerLoops: [[{ edgeId: "e-line", startNodeId: "a", endNodeId: "b", reversed: false, geometry: { kind: "line" } }]],
+    holes: [],
+  };
+  const arcTopology = {
+    ...straightTopology,
+    outerLoops: [[{
+      edgeId: "e-arc",
+      startNodeId: "a",
+      endNodeId: "b",
+      reversed: false,
+      geometry: { kind: "arc", center: [2, 2], clockwise: false },
+    }]],
+  };
+  const bezierTopology = {
+    ...straightTopology,
+    outerLoops: [[{
+      edgeId: "e-bezier",
+      startNodeId: "a",
+      endNodeId: "b",
+      reversed: false,
+      geometry: { kind: "bezier", handle1: [1, 2], handle2: [3, 2] },
+    }]],
+  };
+
+  const straightGroups = edgeOverlayOf([straightTopology]);
+  const arcGroups = edgeOverlayOf([arcTopology]);
+  const bezierGroups = edgeOverlayOf([bezierTopology]);
+
+  const straightPositions = straightGroups.find((group) => group.positions.length > 0).positions;
+  const arcPositions = arcGroups.find((group) => group.positions.length > 0).positions;
+  const bezierPositions = bezierGroups.find((group) => group.positions.length > 0).positions;
+
+  assert.equal(straightPositions.length, 6, "a straight edge is still one segment");
+  assert.ok(arcPositions.length > 6, "a curved edge is tessellated into more than one segment");
+  assert.ok(bezierPositions.length > 6, "a Bezier edge is tessellated into more than one segment");
+
+  // Every arc sample sits on the same circle its geometry declares.
+  for (let index = 0; index + 2 < arcPositions.length; index += 3) {
+    const radius = Math.hypot(arcPositions[index] - 2, arcPositions[index + 2] - 2);
+    assert.ok(Math.abs(radius - Math.hypot(2, 2)) < 1e-3, "every arc sample stays on the declared circle");
+  }
+});

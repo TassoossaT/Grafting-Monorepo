@@ -14,9 +14,9 @@ import { WALL_COLOR, commitWallStroke, wallCorrectionPreview } from "./wall-shar
  * The brush footprint is the correction dial rather than a footprint to
  * paint. Its reach is fed straight to the fitter as tolerance: at radius 0
  * the drawn contour is committed literally, and the wider the brush the more
- * freely a shaky stroke is straightened into clean runs and true arcs. That
- * is why a wall brush is meant to be a small circle -- it is not covering
- * ground, it is saying how literally to take the hand.
+ * freely a shaky stroke is straightened into clean runs and cubic Béziers.
+ * That is why a wall brush is meant to be a small circle -- it is not
+ * covering ground, it is saying how literally to take the hand.
  *
  * Everything a wall is lives in TypeScript from here down (`wall-shared.ts`,
  * `wall-patch.ts`): corners resolve to columns, columns share edges, and the
