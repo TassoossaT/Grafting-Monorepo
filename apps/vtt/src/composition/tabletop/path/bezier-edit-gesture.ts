@@ -2,6 +2,7 @@ import { isBezierEditTarget, planBezierEdit } from "../../../features/edit-const
 import type { ToolParamsFor } from "../../../features/edit-construction/index.ts";
 import type { ConstructionPosition } from "../../../ports/index.ts";
 import type { PointerSample, ToolContext, ToolGesture } from "../tools/core/tool-context.ts";
+import { commitPatchReplacement } from "../effects/effect-commit.ts";
 
 const CHANNEL = "bezier-edit";
 export function beginBezierGesture(ctx: ToolContext, sample: PointerSample, params?: ToolParamsFor<"edit-region">) {
@@ -35,8 +36,8 @@ export function beginBezierGesture(ctx: ToolContext, sample: PointerSample, para
       try {
         const draft = plan(!moved && (!params?.curveAction || params.curveAction === "edit"));
         if (!draft) return;
-        ctx.runtime.applyPatchReplacement(draft.request, "local", operationId);
-        ctx.history.record({ kind: "path-brush", operationId });
+        const { recorded } = commitPatchReplacement(ctx.runtime, draft.request, { transactionId: operationId });
+        if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
         ctx.reportSelection(isBezierEditTarget(ctx.runtime.getGraphSnapshot(), draft.selectedId) ? { id: draft.selectedId, point: target } : undefined);
         ctx.reportFeedback({ tone: "success", message: params?.curveAction && params.curveAction !== "edit" ? "Rua atualizada." : moved ? "Curva atualizada." : "Ponto inserido sem alterar a curva." });
       } catch (error) {

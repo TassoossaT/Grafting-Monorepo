@@ -3,10 +3,10 @@ import test from "node:test";
 
 import {
   firstRefusal,
-  regeneratingCutTargets,
   resolveConformance,
   resolveCoverage,
   resolveCreationInteraction,
+  structureTypeFor,
   surfaceTypesWithTrait,
 } from "../src/features/edit-construction/index.ts";
 
@@ -115,10 +115,13 @@ test("a platform cuts whatever is ground and stands on everything else", () => {
   }
 });
 
-test("cut repair targets come from the registry, not a hand-kept list", () => {
-  assert.deepEqual(regeneratingCutTargets("path"), surfaceTypesWithTrait("ground"));
-  assert.deepEqual(regeneratingCutTargets("wall-white"), []);
-  assert.deepEqual(regeneratingCutTargets("mystery"), []);
+test("ground declares how it answers a cut or a deleted face; nothing else answers yet", () => {
+  for (const ground of surfaceTypesWithTrait("ground")) {
+    assert.deepEqual(structureTypeFor(ground).reactions, { cut: "lattice-regenerate", remove: "lattice-regenerate" });
+  }
+  for (const other of ["wall-white", "door", "platform", "platform-slope", "roof", "path"]) {
+    assert.equal(structureTypeFor(other).reactions, undefined, `${other} declares no reaction`);
+  }
 });
 
 test("relations are declared by traits: floors, partitions and ground", () => {

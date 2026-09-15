@@ -3,7 +3,7 @@ import type { ConstructionRegionTopology, ConstructionMotionInfluence, Construct
 import type { AtomicEditOp, EditTarget } from "../../orchestration/atomic-edit.ts";
 import { HEIGHT_AXIS, HORIZONTAL_AXES } from "../../orchestration/atomic-edit.ts";
 import { cloudNodes } from "../../topology/construction-cloud.ts";
-import type { CascadeContext, CutRepair, EditRole, RolePolicy, StructureTrait, StructureTypeDefinition, StructureView } from "../structure-type.ts";
+import type { CascadeContext, EditRole, RolePolicy, StructureTrait, StructureTypeDefinition, StructureView } from "../structure-type.ts";
 import { allowed, denied } from "../structure-type.ts";
 import { IGNORE, type CreationInteraction } from "../creation-interaction.ts";
 
@@ -164,18 +164,6 @@ export function panelInteractionOver(_covered: StructureView): CreationInteracti
   return IGNORE;
 }
 
-/**
- * A path crossing a wall reads as an opening through it -- `CUT`'s own doc
- * comment already says so -- but framing that opening (jamb consistency,
- * which posts stay structural) is undesigned. Every panel type (wall, door,
- * window) shares this gap, since they all share this one
- * builder.
- */
-const PANEL_CUT_REPAIR: CutRepair = {
-  kind: "unsupported",
-  reason: "panels have no repair for a cut yet -- a path cutting through a wall should open it, but framing the opening is undesigned",
-};
-
 /** Builds one `extrude_path`-generated structure type on the shared panel model. */
 export function panelStructureType(
   surfaceType: string,
@@ -193,6 +181,5 @@ export function panelStructureType(
     validateMotion: validatePanelMotion,
     policyFor: panelPolicyFor,
     interactionOver: panelInteractionOver,
-    repairAfterCut: PANEL_CUT_REPAIR,
   });
 }

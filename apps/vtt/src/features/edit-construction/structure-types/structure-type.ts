@@ -11,6 +11,7 @@ import type {
 import type { AtomicEditOp, EditAxis, EditGesture, EditTarget } from "../orchestration/atomic-edit.ts";
 import type { CloudTopology } from "../topology/construction-cloud.ts";
 import type { CreationInteraction } from "./creation-interaction.ts";
+import type { EffectKind, ReactionId } from "../effects/effect.ts";
 import type { MultiPolygon } from "polygon-clipping";
 
 /**
@@ -103,50 +104,14 @@ export interface CascadeContext {
 }
 
 /**
- * How a type fixes itself once `"cut"` has consumed part of it and left a
- * rim exposed where the consumed piece used to be.
+ * What a `"cut"` actually did to one ground type -- the seam its lattice
+ * regeneration now needs to close by welding onto the changed cloud's own
+ * geometry, not merely echoing its position.
  *
- * This is deliberately not folded into `EditResolution`'s own `"regenerate"`
- * kind, even though the organic case answers it the same way: that kind
- * resolves a *gesture* against a role the type already named, where a cut is
- * not a gesture on this type's own geometry at all -- it is a side effect of
- * *another* type's stroke landing on top of it. There is no role, no target,
- * nothing for `roleFor` to classify; only a leftover shape and the rim the
- * removal exposed.
- *
- * `"unsupported"` is not a permanent design choice the way `EditResolution`'s
- * `"deny"` is -- it is a declared gap, present so every structure type states
- * its position instead of one silently doing nothing when cut. The organic
- * doc comment already lists cutting alongside subdividing and welding as
- * structural work that escalates to regeneration; a type built on that same
- * capability answers `"regenerate"`, and a type that has never had a repair
- * path designed says so honestly rather than pretending the geometry stayed
- * valid.
- */
-export type CutRepair =
-  | { readonly kind: "preserve"; readonly reason: string }
-  /**
-   * Regenerate the region from scratch, pinned to the rim the cut exposed --
-   * the same mechanism a structural interactive edit already escalates to
-   * for this type, applied to a cut's leftover instead of a grabbed role.
-   */
-  | { readonly kind: "regenerate"; readonly reason: string }
-  /** No repair has been designed for this type yet; the leftover is left as the cut leaves it. */
-  | { readonly kind: "unsupported"; readonly reason: string };
-
-/**
- * What a `"cut"` actually did to one covered type -- the seam a
- * `"regenerate"`-capable covered type now needs to close by welding onto
- * the painter's own geometry, not merely echoing its position.
- *
- * Deliberately painter-agnostic: this is assembled by whichever generic
- * layer already sees both sides of a `"cut"` (`TabletopRuntime`, not any one
- * tool -- see its own `applyPatchReplacement`), from a fact neither side
- * privately owns -- what the paint actually registered, and what it
- * resolved to consume. The covered type reads this and repairs itself
- * entirely on its own, in its own module, outside `structure-types/`: this
- * shape is the contract, not the repair, which needs a runtime this pure
- * layer does not have.
+ * Painter-agnostic: the `"lattice-regenerate"` reaction assembles it from the
+ * effect that reached it (`effects/effect.ts`), and hands it to the
+ * regeneration. This shape is that hand-off, not the repair, which needs a
+ * runtime this pure layer does not have.
  */
 export interface CutFallout {
   /**
@@ -352,12 +317,11 @@ export interface StructureTypeDefinition {
     paintedSubtype?: string,
   ) => CreationInteraction;
   /**
-   * How this type repairs itself after `"cut"` has consumed part of it.
-   * Required rather than optional so a new structure type has to say where
-   * it stands -- `"unsupported"` is a legitimate, honest answer, silence is
-   * not.
+   * How a cloud of this type answers each effect that reaches it, by declared
+   * reaction name (`effects/effect.ts`). An effect kind absent here leaves the
+   * cloud as the change left it.
    */
-  readonly repairAfterCut: CutRepair;
+  readonly reactions?: Readonly<Partial<Record<EffectKind, ReactionId>>>;
   /**
    * Whether regions of this type vertically conform to a support with these traits beneath them
    * (e.g. taking height from ground), optionally parameterized by `subtype`.

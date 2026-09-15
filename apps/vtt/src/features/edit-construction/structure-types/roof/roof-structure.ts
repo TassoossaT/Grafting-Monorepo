@@ -11,7 +11,6 @@ export const roofStructureType: StructureTypeDefinition = Object.freeze<Structur
     ? { ...allowed(role, ALL_AXES, "cloud"), transport: true }
     : denied(role, "Mova o telhado pela face."),
   interactionOver: () => IGNORE,
-  repairAfterCut: { kind: "preserve", reason: "Roof section changes require whole-cover regeneration." },
   motionInfluences: (topology) => {
     const anchor = topology.nodes[0];
     return anchor ? topology.nodes.slice(1).flatMap((node) => [

@@ -9,6 +9,7 @@ import type {
   CurvePoint,
 } from "../../../../ports/index.ts";
 import { scopedToolId, type PointerSample, type ToolContext } from "../core/tool-context.ts";
+import { commitPatchReplacement } from "../../effects/effect-commit.ts";
 
 /** What every way of drawing a sloped platform may decide; each tool fills the part it offers. */
 export interface SlopeParams {
@@ -82,7 +83,7 @@ function project(a: ConstructionPosition, b: ConstructionPosition, p: Constructi
 function landingEdge(topologies: readonly ConstructionRegionTopology[], point: ConstructionPosition, controlIndex: number): EndWeld | undefined {
   let best: (EndWeld & { distance: number }) | undefined;
   for (const topology of topologies) {
-    if (!hasTrait(topology.surfaceType, "floor") ||Math.abs((topology.nodes[0]?.position.y ?? NaN) - point.y) > 1e-3) continue;
+    if (!hasTrait(topology.surfaceType, "floor") || Math.abs((topology.nodes[0]?.position.y ?? NaN) - point.y) > 1e-3) continue;
     const positions = new Map(topology.nodes.map((n) => [n.id, n.position]));
     for (const use of topology.outerLoops.flat()) {
       if (use.geometry.kind !== "line") continue;
@@ -183,20 +184,20 @@ export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly Co
     const welds = landings.filter((weld) => landsInside(weld, nodes[weld.controlIndex]!.id, sections));
     if (welds.length === 2 && welds[0]!.topology === welds[1]!.topology) welds.pop();
     const floors = welds.map((weld) => ({ weld, ...reweldedFloor(operationId, weld, nodes[weld.controlIndex]!.id, sections) }));
-    ctx.runtime.applyPatchReplacement({
+    const { recorded } = commitPatchReplacement(ctx.runtime, {
       operationId,
       sourceSurfaceKeys: floors.map((floor) => floor.weld.topology.surfaceKey),
       patch: {
         nodes: [...surface.nodes, ...floors.flatMap((floor) => floor.nodes)],
         edges: [...surface.edges, ...floors.flatMap((floor) => floor.edges)],
-        // The ramp's own faces first: the runtime reads the first region as
-        // the type being painted when it decides what that type cuts.
+        // The ramp's own faces first: the first region names the type whose
+        // change the commit emits.
         regions: [...surface.regions, ...floors.map((floor) => floor.region)],
       },
       graphPatch: { nodes, removedEdgeIds: [], edges: spans },
       footprintOutline: slopeFootprint(ctx.runtime, surface),
-    }, "local", operationId);
-    ctx.history.record({ kind: "path-brush", operationId });
+    }, { transactionId: operationId });
+    if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
     ctx.reportFeedback({ tone: "success", message: `Plataforma inclinada: ${surface.regions.length} trecho(s), ${welds.length} ponta(s) soldada(s).` });
   } catch (error) {
     ctx.reportFeedback({ tone: "error", message: error instanceof Error ? error.message : String(error) });

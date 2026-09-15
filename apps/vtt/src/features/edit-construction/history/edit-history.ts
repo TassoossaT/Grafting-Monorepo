@@ -19,13 +19,17 @@ export interface RegionEditHistoryEntry {
   readonly redo: readonly AtomicEditOp[];
 }
 
-/** One confirmed path-brush stroke; the construction session owns its before/after checkpoints. */
-export interface PathBrushHistoryEntry {
-  readonly kind: "path-brush";
-  readonly operationId: string;
+/**
+ * One committed construction transaction -- a change and every reaction it
+ * chained into. The construction session owns its state checkpoint; undo and
+ * redo name it by `transactionId`.
+ */
+export interface TransactionHistoryEntry {
+  readonly kind: "transaction";
+  readonly transactionId: string;
 }
 
-export type ConstructionHistoryEntry = RegionEditHistoryEntry | PathBrushHistoryEntry;
+export type ConstructionHistoryEntry = RegionEditHistoryEntry | TransactionHistoryEntry;
 
 export interface EditHistoryState {
   readonly canUndo: boolean;

@@ -643,6 +643,20 @@ export interface ConstructionSessionPort extends BezierPort {
   applyRegionOverlay(request: ApplyRegionOverlayRequest): ConstructionPatchOutcome;
   /** Atomically replaces exact source regions with an application-generated patch. */
   applyPatchReplacement(request: ApplyPatchReplacementRequest): ConstructionPatchOutcome;
+  /**
+   * Starts one atomic unit of work. Mutations until the matching commit or
+   * rollback record no history of their own; transactions do not nest.
+   */
+  beginTransaction(transactionId: string): void;
+  /**
+   * Ends the open transaction, recording everything it did as one undo entry
+   * named `transactionId` -- unless it changed nothing. Returns whether it
+   * was recorded, so the caller's own history records exactly the same entries.
+   */
+  commitTransaction(transactionId: string): boolean;
+  /** Ends the open transaction by restoring the exact state it began from. */
+  rollbackTransaction(transactionId: string): void;
+  /** Undoes the most recent history entry, which must be `operationId`: a transaction, or an overlay or replacement made outside one. */
   undoRegionOverlay(operationId: string): void;
   redoRegionOverlay(operationId: string): void;
   removeSurface(request: RemoveSurfaceRequest): RegionEditOutcome;

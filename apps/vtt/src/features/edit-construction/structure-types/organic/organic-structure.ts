@@ -1,6 +1,6 @@
 import type { EditTarget } from "../../orchestration/atomic-edit.ts";
 import { HORIZONTAL_AXES } from "../../orchestration/atomic-edit.ts";
-import type { CutRepair, EditRole, RolePolicy, StructureTrait, StructureTypeDefinition, StructureView } from "../structure-type.ts";
+import type { EditRole, RolePolicy, StructureTrait, StructureTypeDefinition, StructureView } from "../structure-type.ts";
 import { allowed, denied } from "../structure-type.ts";
 import { CUT, IGNORE, RESTACK, forbid, type CreationInteraction } from "../creation-interaction.ts";
 
@@ -71,22 +71,15 @@ export function organicPolicyFactory(structural: "regenerate" | "deny") {
 }
 
 /**
- * Cut-repair rides the same `structural` knob as the role table: a type that
+ * Reactions ride the same `structural` knob as the role table: a type that
  * escalates a grabbed structural role to regeneration has, by construction,
- * a way to regenerate -- the exact capability a cut's leftover needs. A type
- * that instead denies structural edits (a flat swept product with nothing to
- * regenerate from) has none, and says so.
+ * a way to regenerate -- exactly what a cut or a deleted face leaves it
+ * needing. A type that denies structural edits has nothing to answer with.
  */
-function organicCutRepair(structural: "regenerate" | "deny"): CutRepair {
+function organicReactions(structural: "regenerate" | "deny"): StructureTypeDefinition["reactions"] {
   return structural === "regenerate"
-    ? {
-        kind: "regenerate",
-        reason: "an organic region repairs a cut by regenerating its lattice, pinned to the rim the cut exposed",
-      }
-    : {
-        kind: "unsupported",
-        reason: "this organic type denies structural edits and has no regeneration path to repair a cut with",
-      };
+    ? Object.freeze({ cut: "lattice-regenerate", remove: "lattice-regenerate" })
+    : undefined;
 }
 
 export function organicStructureType(
@@ -105,7 +98,7 @@ export function organicStructureType(
     roleFor: organicRoleFor,
     policyFor: organicPolicyFactory(structural),
     interactionOver,
-    repairAfterCut: organicCutRepair(structural),
+    reactions: organicReactions(structural),
   });
 }
 

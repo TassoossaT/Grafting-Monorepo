@@ -210,7 +210,7 @@ test("platform extension welds onto a shared edge instead of crossing it, and to
     for (const id of original) assert.ok(merged[0].nodes.some((n)=>n.id===id), id);
     assert.ok(merged[0].nodes.some((n)=>n.position.x===8));
     const after = session.snapshot_json();
-    const operationId = ctx.history.undo().operationId;
+    const operationId = ctx.history.undo().transactionId;
     session.undo_region_overlay(operationId);
     assert.equal(runtime.getAllRegionTopologies().length,1);
     assert.ok(!runtime.getAllRegionTopologies()[0].nodes.some((n)=>n.position.x===8));
@@ -269,9 +269,9 @@ test("platform rectangle gesture welds onto the picked floor's own edge, resolvi
     assert.ok(tops.flatMap(t=>t.nodes).some(n=>n.position.x===8));
     const snapshot=session.snapshot_json();
     const entry=ctx.history.undo();
-    session.undo_region_overlay(entry.operationId);
+    session.undo_region_overlay(entry.transactionId);
     assert.equal(runtime.getAllRegionTopologies()[0].nodes.length,4);
-    session.redo_region_overlay(entry.operationId);
+    session.redo_region_overlay(entry.transactionId);
     assert.equal(session.snapshot_json(),snapshot);
   } finally {session.free();}
 });
@@ -295,7 +295,7 @@ test("platform circle shares the tower contour, welds cut holes, and refuses a f
     assert.ok(runtime.getAllRegionTopologies().some(t=>t.holes.length),JSON.stringify(calls.feedback));
     assert.ok(curves().every(c=>c.geometry.kind==="arc"));
     const snapshot=session.snapshot_json();
-    const entry=ctx.history.undo();session.undo_region_overlay(entry.operationId);session.redo_region_overlay(entry.operationId);
+    const entry=ctx.history.undo();session.undo_region_overlay(entry.transactionId);session.redo_region_overlay(entry.transactionId);
     assert.equal(session.snapshot_json(),snapshot);
   } finally {session.free();}
 });

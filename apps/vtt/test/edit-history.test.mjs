@@ -91,10 +91,10 @@ test("getState reflects both stacks accurately across a full cycle", () => {
   assert.deepEqual(stack.getState(), { canUndo: true, canRedo: false });
 });
 
-test("path-brush operations share the semantic LIFO history with region edits", () => {
+test("committed transactions share the semantic LIFO history with region edits", () => {
   const stack = createEditHistoryStack();
   const edited = entry("n0", { x: 0, y: 0, z: 0 }, { x: 1, y: 0, z: 0 });
-  const brush = { kind: "path-brush", operationId: "table-1:path-brush:1" };
+  const brush = { kind: "transaction", transactionId: "table-1:path-brush:1" };
 
   stack.record(edited);
   stack.record(brush);

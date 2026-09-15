@@ -106,7 +106,9 @@ test("terrainSculptTool: add mode creates terrain successfully even when startin
     tableId: "table-1",
     nextSequence: () => 1,
     reportFeedback: (fb) => feedbacks.push(fb),
+    history: { record() {} },
     runtime: {
+      transact: (_id, _origin, work) => ({ value: work(), recorded: true }),
       getFootprintCoverage: () => [],
       getAllRegionTopologies: () => [],
       getRegionTopologiesInBounds: () => [],
@@ -180,7 +182,9 @@ test("terrainSculptTool: add mode overlapping a wall creates terrain without mod
     tableId: "table-1",
     nextSequence: () => 1,
     reportFeedback: (fb) => feedbacks.push(fb),
+    history: { record() {} },
     runtime: {
+      transact: (_id, _origin, work) => ({ value: work(), recorded: true }),
       getFootprintCoverage: () => [
         {
           surfaceKey: ["wall", "w1"],
@@ -242,7 +246,9 @@ test("terrainSculptTool: dig mode reports info and does nothing when only non-te
     tableId: "table-1",
     nextSequence: () => 1,
     reportFeedback: (fb) => feedbacks.push(fb),
+    history: { record() {} },
     runtime: {
+      transact: (_id, _origin, work) => ({ value: work(), recorded: true }),
       getFootprintCoverage: () => [
         {
           surfaceKey: ["platform", "p1"],

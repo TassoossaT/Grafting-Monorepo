@@ -3,6 +3,7 @@ import type { FittedEdge, ToolParamsByTool } from "../../../../features/edit-con
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import type { ConstructionPosition, ConstructionRegionTopology } from "../../../../ports/index.ts";
 import { createBoundaryEdges, reverseGeometry } from "../core/boundary-edges.ts";
+import { commitPatchReplacement } from "../../effects/effect-commit.ts";
 import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext } from "../core/tool-context.ts";
 import { polylineSegmentsPreview, segmentsPreview } from "../shapes/preview-shapes.ts";
 import { circleContour, previewOutline } from "../tower/tower-geometry.ts";
@@ -167,13 +168,13 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
     const footprintOutline = primaryGroup && primaryGroup.boundary.length >= 3
       ? primaryGroup.boundary.map((e) => positionOf(e.a))
       : (contour.length >= 3 ? contour.map((c) => [c.start.x, c.start.z] as const) : undefined);
-    ctx.runtime.applyPatchReplacement({
+    const { recorded } = commitPatchReplacement(ctx.runtime, {
       operationId,
       sourceSurfaceKeys: remaining.map(({ source }) => source.surfaceKey),
       patch: { nodes: [...nodes.values()], edges: builder.all(), regions },
       footprintOutline,
-    }, "local", operationId);
-    ctx.history.record({ kind: "path-brush", operationId });
+    }, { transactionId: operationId });
+    if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
     ctx.reportFeedback({ tone: "success", message: `Plataforma: ${regions.length} face(s) na elevação ${params.elevation}.` });
   } catch (error) { ctx.reportFeedback({ tone: "error", message: error instanceof Error ? error.message : String(error) }); }
 }

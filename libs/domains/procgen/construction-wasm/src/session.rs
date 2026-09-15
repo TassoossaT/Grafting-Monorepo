@@ -55,6 +55,21 @@ struct RegionOverlayHistoryEntry {
     operation_id: String,
     state: ConstructionState,
 }
+
+/// A transaction in progress: the live state as it was when it began.
+///
+/// Every mutation between `begin_transaction` and `commit_transaction` lands
+/// on the live state as usual, but none records history of its own. Commit
+/// records the whole transaction as one undo entry; rollback swaps the saved
+/// state back, so a refused step leaves nothing behind -- edge splits
+/// included.
+struct OpenTransaction {
+    id: String,
+    before: ConstructionState,
+    /// Whether any mutation ran. A transaction that changed nothing records no entry.
+    mutated: bool,
+}
+
 /// One live editing session: a `Graph<[f32; 3], ()>` + `SurfaceRegistry`,
 /// plus an optional `PrismGridMesh` terrain generation reads from. In-memory
 /// only -- gone when the tab/Worker closes; see this crate's `AGENTS.md` for
@@ -68,6 +83,77 @@ pub struct ConstructionSession {
     pub(crate) spatial_index: crate::spatial_index::UniformGridIndex,
     region_overlay_undo: Vec<RegionOverlayHistoryEntry>,
     region_overlay_redo: Vec<RegionOverlayHistoryEntry>,
+    open_transaction: Option<OpenTransaction>,
+}
+
+impl ConstructionSession {
+    fn current_state(&self) -> ConstructionState {
+        ConstructionState {
+            graph: self.graph.clone(),
+            surfaces: self.surfaces.clone(),
+            topology: self.topology.clone(),
+            known_regions: self.known_regions.clone(),
+            spatial_index: self.spatial_index.clone(),
+        }
+    }
+
+    /// Records `state` as the undo entry for `operation_id`, unless a
+    /// transaction is open: then the transaction's own entry covers it.
+    fn record_history(&mut self, operation_id: String, state: ConstructionState) {
+        if self.open_transaction.is_some() {
+            return;
+        }
+        self.region_overlay_undo.push(RegionOverlayHistoryEntry {
+            operation_id,
+            state,
+        });
+        self.region_overlay_redo.clear();
+    }
+
+    pub(crate) fn begin(&mut self, id: &str) -> Result<(), String> {
+        if let Some(open) = &self.open_transaction {
+            return Err(format!(
+                "transaction \"{id}\" cannot begin while \"{}\" is open",
+                open.id
+            ));
+        }
+        self.open_transaction = Some(OpenTransaction {
+            id: id.to_owned(),
+            before: self.current_state(),
+            mutated: false,
+        });
+        Ok(())
+    }
+
+    fn take_open(&mut self, id: &str) -> Result<OpenTransaction, String> {
+        match self.open_transaction.take() {
+            Some(open) if open.id == id => Ok(open),
+            Some(open) => {
+                let message = format!("transaction \"{id}\" is not open; \"{}\" is", open.id);
+                self.open_transaction = Some(open);
+                Err(message)
+            }
+            None => Err(format!("transaction \"{id}\" is not open")),
+        }
+    }
+
+    /// Returns whether the transaction was recorded as an undo entry: only
+    /// one that mutated something is, so callers keep their own history in
+    /// step by recording exactly when this says so.
+    pub(crate) fn commit(&mut self, id: &str) -> Result<bool, String> {
+        let open = self.take_open(id)?;
+        if !open.mutated {
+            return Ok(false);
+        }
+        self.record_history(open.id, open.before);
+        Ok(true)
+    }
+
+    pub(crate) fn rollback(&mut self, id: &str) -> Result<(), String> {
+        let mut open = self.take_open(id)?;
+        self.swap_state(&mut open.before);
+        Ok(())
+    }
 }
 
 impl Default for ConstructionSession {
@@ -81,7 +167,10 @@ impl ConstructionSession {
     /// Generates an indexed analytic cap without mutating the live graph.
     pub fn profile_cap_json(&self, json: &str) -> Result<String, JsValue> {
         let request = parse::<grafting_graph_core::profile_cap_patch::CapRequest>(json)?;
-        serialize(&grafting_graph_core::profile_cap_patch::generate_cap_patch(request).map_err(to_js_error)?)
+        serialize(
+            &grafting_graph_core::profile_cap_patch::generate_cap_patch(request)
+                .map_err(to_js_error)?,
+        )
     }
 
     /// Evaluates a batch of generic curve-authoring commands without mutation.
@@ -110,12 +199,34 @@ impl ConstructionSession {
             spatial_index: crate::spatial_index::UniformGridIndex::default(),
             region_overlay_undo: Vec::new(),
             region_overlay_redo: Vec::new(),
+            open_transaction: None,
         }
+    }
+
+    // ---- Transactions ----
+
+    /// Starts one atomic unit of work. See `OpenTransaction`.
+    pub fn begin_transaction(&mut self, id: &str) -> Result<(), JsValue> {
+        self.begin(id).map_err(to_js_error)
+    }
+
+    /// Ends the open transaction, recording it as a single undo entry when it
+    /// changed anything. Returns whether it was recorded.
+    pub fn commit_transaction(&mut self, id: &str) -> Result<bool, JsValue> {
+        self.commit(id).map_err(to_js_error)
+    }
+
+    /// Ends the open transaction by restoring the state it began from.
+    pub fn rollback_transaction(&mut self, id: &str) -> Result<(), JsValue> {
+        self.rollback(id).map_err(to_js_error)
     }
 
     /// Keeps `known_regions` and `spatial_index` in step with whatever an atomic edit created,
     /// affected, or removed, so queries never enumerate stale regions or miss newly created ones.
     fn track(&mut self, outcome: &region_editing::RegionEditOutcomeDto) {
+        if let Some(open) = self.open_transaction.as_mut() {
+            open.mutated = true;
+        }
         for key in &outcome.created_surface_keys {
             if let Ok(id) = mesh::region_id_from_wire(key) {
                 self.known_regions.insert(id.clone());
@@ -351,21 +462,24 @@ impl ConstructionSession {
             request,
         )
         .map_err(to_js_error)?;
+        if self.open_transaction.is_some() {
+            self.track(&response.outcome);
+            return serialize(&response);
+        }
         // The index is updated in place by `track`, so its previous state is
         // the one piece still copied.
         let spatial_index = self.spatial_index.clone();
         self.track(&response.outcome);
-        self.region_overlay_undo.push(RegionOverlayHistoryEntry {
+        self.record_history(
             operation_id,
-            state: ConstructionState {
+            ConstructionState {
                 graph: previous.graph,
                 surfaces: previous.surfaces,
                 topology: previous.topology,
                 known_regions: previous.known_regions,
                 spatial_index,
             },
-        });
-        self.region_overlay_redo.clear();
+        );
         serialize(&response)
     }
 
@@ -471,13 +585,10 @@ impl ConstructionSession {
     pub fn apply_region_overlay_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request: region_overlay::ApplyRegionOverlayRequest = parse(request_json)?;
         let operation_id = request.operation_id.clone();
-        let before = ConstructionState {
-            graph: self.graph.clone(),
-            surfaces: self.surfaces.clone(),
-            topology: self.topology.clone(),
-            known_regions: self.known_regions.clone(),
-            spatial_index: self.spatial_index.clone(),
-        };
+        let before = self
+            .open_transaction
+            .is_none()
+            .then(|| self.current_state());
         let response = region_overlay::apply_region_overlay(
             &mut self.graph,
             &mut self.surfaces,
@@ -487,16 +598,17 @@ impl ConstructionSession {
         )
         .map_err(to_js_error)?;
         self.track(&response.outcome);
-        self.region_overlay_undo.push(RegionOverlayHistoryEntry {
-            operation_id,
-            state: before,
-        });
-        self.region_overlay_redo.clear();
+        if let Some(before) = before {
+            self.record_history(operation_id, before);
+        }
         serialize(&response)
     }
 
     /// Restores the state immediately before one generic overlay.
     pub fn undo_region_overlay(&mut self, operation_id: &str) -> Result<(), JsValue> {
+        if self.open_transaction.is_some() {
+            return Err(JsValue::from_str("cannot undo while a transaction is open"));
+        }
         let Some(mut entry) = self.region_overlay_undo.pop() else {
             return Err(JsValue::from_str("no region overlay is available to undo"));
         };
@@ -513,6 +625,9 @@ impl ConstructionSession {
 
     /// Restores the state immediately after one undone generic overlay.
     pub fn redo_region_overlay(&mut self, operation_id: &str) -> Result<(), JsValue> {
+        if self.open_transaction.is_some() {
+            return Err(JsValue::from_str("cannot redo while a transaction is open"));
+        }
         let Some(mut entry) = self.region_overlay_redo.pop() else {
             return Err(JsValue::from_str("no region overlay is available to redo"));
         };

@@ -89,6 +89,9 @@ pub fn profile_cap_json(&self, json: &str) -> Result<String, JsValue>
 pub fn bezier_batch_json(&self, json: &str) -> Result<String, JsValue>
 pub fn bezier_network_json(&self, json: &str) -> Result<String, JsValue>
 pub fn new() -> ConstructionSession
+pub fn begin_transaction(&mut self, id: &str) -> Result<(), JsValue>
+pub fn commit_transaction(&mut self, id: &str) -> Result<bool, JsValue>
+pub fn rollback_transaction(&mut self, id: &str) -> Result<(), JsValue>
 pub fn remove_surface_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn planar_boolean_json(&self, request_json: &str) -> Result<String, JsValue>
 pub fn plan_motion_json(&self, request_json: &str) -> Result<String, JsValue>
@@ -96,9 +99,6 @@ pub fn move_vertices_json(&mut self, request_json: &str) -> Result<String, JsVal
 pub fn move_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn insert_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn remove_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue>
-pub fn retype_edge_json(&mut self, request_json: &str) -> Result<String, JsValue>
-pub fn move_edge_json(&mut self, request_json: &str) -> Result<String, JsValue>
-pub fn move_region_json(&mut self, request_json: &str) -> Result<String, JsValue>
 
 // src/spatial_index.rs
 pub const DEFAULT_GRID_CELL_SIZE: f32 = 4.0;
@@ -3426,6 +3426,77 @@ export function createTabletopRuntime(
   ): TabletopRuntime {
   const tableId = input.tableId.trim();
 
+// src/composition/tabletop/effects/effect-commit.ts
+export interface EffectCommitRuntime extends TabletopReactionRuntime {
+  transact<T>(transactionId: string, origin: ChangeOrigin, work: () => T): TransactionResult<T>;
+  applyPatchReplacement(request: ApplyPatchReplacementRequest, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome;
+  removeSurface(request: { readonly surfaceKey: ConstructionSurfaceKey }, origin: ChangeOrigin, causeId: string): RegionEditOutcome;
+  getAllRegionTopologies(): readonly ConstructionRegionTopology[];
+  }
+export type TabletopReactions = Readonly<Record<ReactionId, Reaction<TabletopReactionRuntime>>>;
+export function dispatchEffects(
+  runtime: EffectCommitRuntime,
+  effects: readonly Effect[],
+  reactions: TabletopReactions = TABLETOP_REACTIONS,
+  ): readonly ReactionRecord[] {
+  return timePhase("reações", () => runEffects(runtime, {
+  regionsNear: (bounds) => typeof runtime.getRegionTopologiesInBounds === "function"
+  ? runtime.getRegionTopologiesInBounds(bounds)
+export interface CommitOptions {
+  /** Names the transaction and its undo entry; reactions mint their ids from it. */
+  readonly transactionId: string;
+  readonly origin?: ChangeOrigin;
+  /** The preset the change was made with, when its type has presets. */
+  readonly subtype?: string;
+  readonly reactions?: TabletopReactions;
+  }
+export function commitPatchReplacement(
+  runtime: EffectCommitRuntime,
+  request: ApplyPatchReplacementRequest,
+  options: CommitOptions,
+  ): TransactionResult<ConstructionPatchOutcome> {
+  const origin = options.origin ?? "local";
+  return runtime.transact(options.transactionId, origin, () => {
+  const before = topologiesOf(runtime, request.sourceSurfaceKeys);
+export function commitSurfaceRemoval(
+  runtime: EffectCommitRuntime,
+  surfaceKey: ConstructionSurfaceKey,
+  options: CommitOptions,
+  ): TransactionResult<RegionEditOutcome> {
+  const origin = options.origin ?? "local";
+  return runtime.transact(options.transactionId, origin, () => {
+  const removed = topologiesOf(runtime, [surfaceKey]);
+
+// src/composition/tabletop/effects/reactions.ts
+export type TabletopReactionRuntime = LatticeReactionRuntime;
+export const TABLETOP_REACTIONS: Readonly<Record<ReactionId, Reaction<TabletopReactionRuntime>>> = Object.freeze({
+  "lattice-regenerate": latticeRegenerateReaction(),
+  });
+
+// src/composition/tabletop/effects/shape-change.ts
+export interface ShapeChangeRuntime {
+  getRegionTopology?(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined;
+  getSnapshot(): { readonly map: { readonly nodePositions: ReadonlyMap<string, { readonly position: ConstructionPosition }> } };
+export function topologiesOf(runtime: ShapeChangeRuntime, keys: readonly ConstructionSurfaceKey[]): ConstructionRegionTopology[] {
+  if (typeof runtime.getRegionTopology !== "function") return [];
+  return keys.flatMap((key) => {
+  try {
+  const topology = runtime.getRegionTopology!(key);
+export function topologiesFromPatch(patch: ConstructionPatch, runtime: ShapeChangeRuntime): readonly ConstructionRegionTopology[] {
+  const edgeById = new Map<string, ConstructionPatchEdge>();
+export function shapeChangeOfReplacement(
+  runtime: ShapeChangeRuntime,
+  request: ApplyPatchReplacementRequest,
+  before: readonly ConstructionRegionTopology[],
+  outcome: ConstructionPatchOutcome | undefined,
+  subtype?: string,
+  ): ShapeChange | undefined {
+  const surfaceType = request.patch.regions[0]?.surfaceType ?? before[0]?.surfaceType;
+export function shapeChangeOfRemoval(removed: readonly ConstructionRegionTopology[], removedNodeIds: readonly string[]): ShapeChange | undefined {
+  const surfaceType = removed[0]?.surfaceType;
+  if (surfaceType === undefined) return undefined;
+  return { surfaceType, before: removed, after: [], removedNodeIds, declaredPositions: [] };
+
 // src/composition/tabletop/index.ts
 export type { CreateTabletopRuntimeInput } from "./create-tabletop-runtime.ts";
 export type {
@@ -3470,38 +3541,6 @@ export function paintedNodesOf(
   ): Pick<CutFallout, "paintedNodes" | "paintedLoops"> {
   return paintedFalloutOf(paintedTopologiesOf(runtime, paintedType, bounds));
 
-// src/composition/tabletop/interference/type-interference-dispatch.ts
-export type CutRepairExecutor = (
-  runtime: TerrainRegenerateRuntime,
-  fallout: CutFallout,
-  causeId: string,
-  tableId: string,
-  ) => number;
-
-  /**
-export const CUT_REPAIR_EXECUTORS: Readonly<Record<string, CutRepairExecutor>> = Object.freeze({
-  terrain: repairTerrainCut,
-  "terrain-grass": repairTerrainCut,
-  });
-export function pointBucketIndex(points: readonly ConstructionPosition[], cellSize: number) {
-  const buckets = new Map<string, ConstructionPosition[]>();
-export function dispatchCutRepairs(
-  runtime: TabletopRuntime,
-  request: ApplyPatchReplacementRequest,
-  causeId: string,
-  replacedTopologies: readonly ConstructionRegionTopology[] = [],
-  outcome?: ConstructionPatchOutcome,
-  executors: Readonly<Record<string, CutRepairExecutor>> = CUT_REPAIR_EXECUTORS,
-  ): void {
-export function dispatchRemovalRepairs(
-  runtime: TabletopRuntime,
-  surfaceKey: ConstructionSurfaceKey,
-  surfaceType: string,
-  causeId: string,
-  removedTopologyOrExecutors?: ConstructionRegionTopology | Readonly<Record<string, CutRepairExecutor>>,
-  maybeExecutors: Readonly<Record<string, CutRepairExecutor>> = CUT_REPAIR_EXECUTORS,
-  ): void {
-
 // src/composition/tabletop/path/bezier-edit-gesture.ts
 export function beginBezierGesture(ctx: ToolContext, sample: PointerSample, params?: ToolParamsFor<"edit-region">) {
   const snapshot = ctx.runtime.getGraphSnapshot();
@@ -3529,6 +3568,10 @@ export interface ConfirmedTokenDeltaEnvelope {
   readonly delta: TokenProjectionDelta;
   }
 export type TabletopRuntimeListener = () => void;
+export interface TransactionResult<T> {
+  readonly value: T;
+  readonly recorded: boolean;
+  }
 export interface TabletopRuntime extends BezierPort {
   generateCap(request: import("../../ports/cap-port.ts").CapRequest): import("../../ports/cap-port.ts").CapPatch;
   start(): Promise<void>;
@@ -3697,6 +3740,28 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
   let bMaxX = -Infinity;
   let bMaxZ = -Infinity;
   for (const ring of request.boundary) {
+
+// src/composition/tabletop/terrain/terrain-lattice-reaction.ts
+export interface LatticeReactionRuntime extends TerrainRegenerateRuntime {
+  getSnapshot(): { readonly tableId: string; readonly map: { readonly nodePositions: ReadonlyMap<string, { readonly position: ConstructionPosition }> } };
+export type LatticeRepairExecutor = (
+  runtime: TerrainRegenerateRuntime,
+  fallout: CutFallout,
+  causeId: string,
+  tableId: string,
+  ) => number;
+
+  const DONE: ReactionOutcome = Object.freeze({ kind: "done" });
+export function pointBucketIndex(points: readonly ConstructionPosition[], cellSize: number) {
+  const buckets = new Map<string, ConstructionPosition[]>();
+export function latticeRegenerateReaction(executor: LatticeRepairExecutor = repairTerrainCut): Reaction<LatticeReactionRuntime> {
+  return (runtime, effect, hits) => {
+  if (effect.kind === "remove") {
+  executor(
+  runtime,
+  { consumedSurfaceKeys: effect.change.before.map((topology) => topology.surfaceKey), paintedNodes: [], paintedLoops: [] },
+  effect.causeId,
+  runtime.getSnapshot().tableId,
 
 // src/composition/tabletop/terrain/terrain-neighborhood.ts
 export interface TerrainStrokeBounds {
@@ -4550,17 +4615,85 @@ export function applyTokenProjectionDelta(
   if (delta.type === "token-removed") {
   const previous = current.byId.get(delta.tokenId);
 
+// src/features/edit-construction/effects/effect-pipeline.ts
+export const MAX_EFFECT_DEPTH = 8;
+export class EffectRefusedError extends Error {
+  readonly reactionId: ReactionId;
+  readonly effectKind: EffectKind;
+  readonly reason: string;
+
+  constructor(reactionId: ReactionId, effectKind: EffectKind, reason: string) {
+  super(reason);
+export class EffectChainTooDeepError extends Error {
+  readonly depth: number;
+
+  constructor(depth: number) {
+  super(`effect chain exceeded ${MAX_EFFECT_DEPTH} steps`);
+export interface EffectSource {
+  regionsNear(bounds: ConstructionTopologyBoundsQuery): readonly ConstructionRegionTopology[];
+  }
+export interface ReactionRecord {
+  readonly reactionId: ReactionId;
+  readonly effectKind: EffectKind;
+  readonly depth: number;
+  readonly hitCount: number;
+  }
+export function changeBounds(change: ShapeChange): ConstructionTopologyBoundsQuery | undefined {
+  let minX = Infinity;
+  let minZ = Infinity;
+  let maxX = -Infinity;
+  let maxZ = -Infinity;
+  const include = (x: number, z: number) => {
+  if (x < minX) minX = x;
+  if (x > maxX) maxX = x;
+export type DeclaredReaction = (surfaceType: string, kind: EffectKind) => ReactionId | undefined;
+export function runEffects<Context>(
+  context: Context,
+  source: EffectSource,
+  initial: readonly Effect[],
+  reactions: Readonly<Record<ReactionId, Reaction<Context>>>,
+  declared: DeclaredReaction = REGISTERED_REACTION,
+  ): readonly ReactionRecord[] {
+  const queue = initial.map((effect) => ({ effect, depth: 0 }));
+
+// src/features/edit-construction/effects/effect.ts
+export type EffectKind =
+export type ReactionId =
+export interface ShapeChange {
+  /** The type of the cloud whose shape changed. */
+  readonly surfaceType: string;
+  /** The preset the change was made with, when its type has presets at all. */
+  readonly subtype?: string;
+  /** The faces the change replaced or deleted, as they were. */
+  readonly before: readonly ConstructionRegionTopology[];
+  /** The faces the change produced, as they are now. */
+export interface Effect {
+  readonly kind: EffectKind;
+  /** The transaction's cause id; reactions mint their own ids from it. */
+  readonly causeId: string;
+  readonly change: ShapeChange;
+  /** The reaction that emitted this effect, excluded from receiving it. Absent for the first effect. */
+  readonly emittedBy?: ReactionId;
+  }
+export type ReactionOutcome =
+export type Reaction<Context> = (
+  context: Context,
+  effect: Effect,
+  hits: readonly ConstructionRegionTopology[],
+  ) => ReactionOutcome;
+
+
 // src/features/edit-construction/history/edit-history.ts
 export interface RegionEditHistoryEntry {
   readonly kind: "region-edit";
   readonly undo: readonly AtomicEditOp[];
   readonly redo: readonly AtomicEditOp[];
   }
-export interface PathBrushHistoryEntry {
-  readonly kind: "path-brush";
-  readonly operationId: string;
+export interface TransactionHistoryEntry {
+  readonly kind: "transaction";
+  readonly transactionId: string;
   }
-export type ConstructionHistoryEntry = RegionEditHistoryEntry | PathBrushHistoryEntry;
+export type ConstructionHistoryEntry = RegionEditHistoryEntry | TransactionHistoryEntry;
 export interface EditHistoryState {
   readonly canUndo: boolean;
   readonly canRedo: boolean;
@@ -4587,7 +4720,7 @@ export type {
   ConstructionHistoryEntry,
   EditHistoryStack,
   EditHistoryState,
-  PathBrushHistoryEntry,
+  TransactionHistoryEntry,
   RegionEditHistoryEntry,
   } from "./edit-history.ts";
 
@@ -5393,7 +5526,7 @@ export const platformStructureType: StructureTypeDefinition = Object.freeze<Stru
   roleFor: (topology, target) => target.kind === "vertex" && !topology.nodes.some((node) => node.id === target.nodeId) ? "platform-unknown" : `platform-${target.kind}`,
   policyFor: (role) => role === "platform-unknown" ? denied(role, "Vertice fora da plataforma.") : ({ ...allowed(role, ALL_AXES, role === "platform-region" ? "cloud" : "surface"), transport: role === "platform-region" }),
   interactionOver: cutsGround,
-  repairAfterCut: { kind: "preserve", reason: "Structural contour subtraction preserves the remaining planar faces and shared identities." },
+  motionInfluences: (topology, transport): readonly ConstructionMotionInfluence[] => {
 export const slopedPlatformStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
   surfaceType: SLOPE_SURFACE_TYPE, label: "Plataforma inclinada",
   creation: "one face per spine span: the span's ribbon, sampled along its bezier curve",
@@ -5422,13 +5555,6 @@ export function resolveCreationInteraction(
   paintedSubtype?: string,
   ): CreationInteraction {
   const definition = structureTypeFor(paintedType);
-export function resolveCutRepair(coveredType: string): CutRepair {
-  const definition = structureTypeFor(coveredType);
-export function regeneratingCutTargets(paintedType: string): readonly string[] {
-  return STRUCTURE_TYPE_DEFINITIONS
-  .map((definition) => definition.surfaceType)
-  .filter((coveredType) =>
-  resolveCreationInteraction(paintedType, coveredType).kind === "cut" && resolveCutRepair(coveredType).kind === "regenerate");
 export function resolveTraitConformance(
   structureType: string,
   support: ReadonlySet<StructureTrait>,
@@ -5543,7 +5669,6 @@ export interface CascadeContext {
   readonly target: EditTarget;
   /** The delta already constrained by the role's own axes. */
   readonly delta: { readonly x: number; readonly y: number; readonly z: number };
-export type CutRepair =
 export interface CutFallout {
   /**
   * Every live node of the painter's own type, real graph nodes with real
@@ -5590,6 +5715,13 @@ export interface StructureTypeDefinition {
   * Whether a gesture on this type can only be planned through the session's
 export function denied(role: EditRole, reason: string): RolePolicy {
   return { role, resolve: { kind: "deny", reason }, axes: [], scope: "surface" };
+export function allowed(
+  role: EditRole,
+  axes: readonly EditAxis[],
+  scope: EditScope,
+  cascade?: RolePolicy["cascade"],
+  ): RolePolicy {
+  return { role, resolve: { kind: "allow" }, axes, scope, cascade };
 
 // src/features/edit-construction/tools/brush-shape-params.ts
 export function resolveBrushShape(params: BrushShapeParams): BrushShape {

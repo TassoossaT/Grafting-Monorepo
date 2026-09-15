@@ -1,12 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  paintedNodesOf,
-  dispatchCutRepairs,
-  dispatchRemovalRepairs,
-  CUT_REPAIR_EXECUTORS,
-} from "../src/composition/tabletop/interference/type-interference-dispatch.ts";
+import { paintedNodesOf } from "../src/composition/tabletop/interference/painted-topologies.ts";
+import { dispatchEffects } from "../src/composition/tabletop/effects/effect-commit.ts";
+import { shapeChangeOfRemoval, shapeChangeOfReplacement } from "../src/composition/tabletop/effects/shape-change.ts";
+import { latticeRegenerateReaction } from "../src/composition/tabletop/terrain/terrain-lattice-reaction.ts";
 import {
   hasTrait,
   planTerrainCloudCutRepair,
@@ -26,6 +24,30 @@ import {
  * so anything derived from the stroke's own footprint names a fraction of the
  * road it has drawn -- which is why this reads every live face of the type.
  */
+
+/** A replacement's cut, through the real effect pipeline, with ground's regeneration recorded by `executor`. */
+function cutThroughPipeline(runtime, request, causeId, replaced, outcome, executor) {
+  const change = shapeChangeOfReplacement(runtime, request, replaced, outcome);
+  dispatchEffects(runtime, [{ kind: "cut", causeId, change }], { "lattice-regenerate": latticeRegenerateReaction(executor) });
+}
+
+/** A deleted face's effects, as `commitSurfaceRemoval` emits them once the face is gone. */
+function removalThroughPipeline(runtime, removed, causeId, executor) {
+  const change = shapeChangeOfRemoval([removed], []);
+  dispatchEffects(runtime, [{ kind: "remove", causeId, change }, { kind: "cut", causeId, change }], { "lattice-regenerate": latticeRegenerateReaction(executor) });
+}
+
+/** A face of `type` from `[id, x, z]` corners. */
+function faceFrom(key, type, corners) {
+  return {
+    surfaceKey: ["@region", key],
+    surfaceType: type,
+    physical: true,
+    nodes: corners.map(([id, x, z]) => ({ id, position: { x, y: 0, z } })),
+    outerLoops: [corners.map(([id], index) => ({ edgeId: `e:${key}:${index}`, reversed: false, startNodeId: id, endNodeId: corners[(index + 1) % corners.length][0], geometry: { kind: "line" } }))],
+    holes: [],
+  };
+}
 
 /** A road of three bands laid end to end, of which a stroke's footprint would report only the last. */
 function createRoadGraph() {
@@ -130,21 +152,21 @@ test("paintedNodesOf scopes to bounds when getRegionTopologiesInBounds is availa
   assert.equal(paintedNodes.length, 4, "scoped to single band returned by getRegionTopologiesInBounds");
 });
 
-test("dispatchRemovalRepairs on unsupported type (wall, path) is an honest no-op", () => {
+test("deleting a face whose type declares no reaction, with nothing it cut nearby, reaches nothing", () => {
   let invoked = false;
+  const wall = faceFrom("wall-1", "wall-white", [["w0", 0, 0], ["w1", 2, 0], ["w2", 2, 2], ["w3", 0, 2]]);
   const runtime = {
-    getSnapshot: () => ({ tableId: "table-test" }),
+    getAllRegionTopologies: () => [faceFrom("wall-2", "wall-gray", [["w1", 2, 0], ["v1", 4, 0], ["v2", 4, 2], ["w2", 2, 2]])],
+    getSnapshot: () => ({ tableId: "table-test", map: { nodePositions: new Map() } }),
   };
-  // wall-white resolves to unsupported
-  dispatchRemovalRepairs(runtime, ["@region", "wall-1"], "wall-white", "cause:test");
-  assert.equal(invoked, false);
-
-  // path resolves to unsupported
-  dispatchRemovalRepairs(runtime, ["@region", "path-1"], "path", "cause:test");
+  removalThroughPipeline(runtime, wall, "cause:test", () => {
+    invoked = true;
+    return 1;
+  });
   assert.equal(invoked, false);
 });
 
-test("dispatchRemovalRepairs on regenerate type invokes registered executor with empty painter loops", () => {
+test("deleting a ground face lets the rest of its cloud answer for the hole, with no painter loops", () => {
   let receivedFallout;
   let receivedCauseId;
   let receivedTableId;
@@ -155,16 +177,12 @@ test("dispatchRemovalRepairs on regenerate type invokes registered executor with
     return 1;
   };
 
+  const removed = faceFrom("terrain-1", "terrain", [["t0", 0, 0], ["t1", 2, 0], ["t2", 2, 2], ["t3", 0, 2]]);
   const runtime = {
-    getSnapshot: () => ({ tableId: "table-removal-test" }),
+    getAllRegionTopologies: () => [faceFrom("terrain-2", "terrain", [["t1", 2, 0], ["u1", 4, 0], ["u2", 4, 2], ["t2", 2, 2]])],
+    getSnapshot: () => ({ tableId: "table-removal-test", map: { nodePositions: new Map() } }),
   };
-  dispatchRemovalRepairs(
-    runtime,
-    ["@region", "terrain-1"],
-    "terrain",
-    "cause:removal-1",
-    { terrain: mockExecutor },
-  );
+  removalThroughPipeline(runtime, removed, "cause:removal-1", mockExecutor);
 
   assert.ok(receivedFallout !== undefined);
   assert.deepEqual(receivedFallout.consumedSurfaceKeys, [["@region", "terrain-1"]]);
@@ -174,7 +192,7 @@ test("dispatchRemovalRepairs on regenerate type invokes registered executor with
   assert.equal(receivedTableId, "table-removal-test");
 });
 
-test("dispatchCutRepairs is tool-independent and operates without footprintOutline", () => {
+test("a cut reaches ground whatever made it, even without a footprint outline", () => {
   let receivedFallout;
   const positions = new Map();
   // Road at x = 0..2, z = 0..4
@@ -244,7 +262,7 @@ test("dispatchCutRepairs is tool-independent and operates without footprintOutli
   };
 
   // Notice: footprintOutline is completely omitted (undefined)!
-  dispatchCutRepairs(
+  cutThroughPipeline(
     runtime,
     {
       operationId: "op:road-change",
@@ -254,7 +272,7 @@ test("dispatchCutRepairs is tool-independent and operates without footprintOutli
     "cause:road",
     [],
     undefined,
-    { terrain: mockExecutor },
+    mockExecutor,
   );
 
   assert.ok(receivedFallout !== undefined, "cut repair was dispatched without any tool footprint outline");
@@ -262,7 +280,7 @@ test("dispatchCutRepairs is tool-independent and operates without footprintOutli
   assert.equal(receivedFallout.paintedLoops.length, 1, "road perimeter was extracted as a hole loop");
 });
 
-test("dispatchCutRepairs handles full road modification, consuming both old and new corridor", () => {
+test("a full road modification consumes the ground along both the old and the new corridor", () => {
   let receivedFallout;
   const positions = new Map();
   // Old road at x = 0..2, z = 0..4
@@ -400,7 +418,7 @@ test("dispatchCutRepairs handles full road modification, consuming both old and 
     return 1;
   };
 
-  dispatchCutRepairs(
+  cutThroughPipeline(
     runtime,
     {
       operationId: "op:full-road-mod",
@@ -410,7 +428,7 @@ test("dispatchCutRepairs handles full road modification, consuming both old and 
     "cause:full-mod",
     [oldRoadTopology],
     undefined,
-    { terrain: mockExecutor },
+    mockExecutor,
   );
 
   assert.ok(receivedFallout !== undefined, "cut repair was dispatched for full road modification");
@@ -421,7 +439,7 @@ test("dispatchCutRepairs handles full road modification, consuming both old and 
   assert.equal(receivedFallout.paintedLoops.length, 1, "new road perimeter is provided as the hole loop");
 });
 
-test("dispatchRemovalRepairs on path with removedTopology heals the vacated terrain corridor", () => {
+test("deleting a road reaches the ground it had cut and heals the vacated corridor", () => {
   let receivedFallout;
   const positions = new Map();
   // Removed road at x = 0..2, z = 0..4
@@ -483,14 +501,7 @@ test("dispatchRemovalRepairs on path with removedTopology heals the vacated terr
     return 1;
   };
 
-  dispatchRemovalRepairs(
-    runtime,
-    ["@region", "R_removed"],
-    "path",
-    "cause:path-deletion",
-    removedRoadTopology,
-    { terrain: mockExecutor },
-  );
+  removalThroughPipeline(runtime, removedRoadTopology, "cause:path-deletion", mockExecutor);
 
   assert.ok(receivedFallout !== undefined, "cut repair was triggered on road removal");
   assert.deepEqual(receivedFallout.consumedSurfaceKeys, [["@region", "T_heal"]]);
@@ -615,7 +626,7 @@ test("TerrainCloud: surgical consumption with footprintOutline/coverage does NOT
   assert.ok(!consumed?.includes("@region/t_innocent_near"), "innocent face 2.5m away is preserved, preventing fragmentation!");
 });
 
-test("dispatchCutRepairs extracts complete closed paintedLoops from newRoadTopologies despite partial roadInBounds", () => {
+test("a cut hands over complete closed paintedLoops from newRoadTopologies despite partial roadInBounds", () => {
   let receivedFallout;
   const positions = new Map();
 
@@ -712,7 +723,7 @@ test("dispatchCutRepairs extracts complete closed paintedLoops from newRoadTopol
     return 1;
   };
 
-  dispatchCutRepairs(
+  cutThroughPipeline(
     runtime,
     {
       operationId: "op:road-patch-bounds",
@@ -728,7 +739,7 @@ test("dispatchCutRepairs extracts complete closed paintedLoops from newRoadTopol
       createdEdges: [],
       deletedEdgeIds: [],
     },
-    { terrain: mockExecutor },
+    mockExecutor,
   );
 
   assert.ok(receivedFallout !== undefined);
@@ -903,11 +914,9 @@ function reminting({ farEndMovesBy = 0 } = {}) {
   };
   const outcome = { createdSurfaceKeys: rebuilt.map((t) => t.surfaceKey), skippedRegionIds: [], skippedRegionReasons: [], removedSurfaceKeys: [] };
 
-  dispatchCutRepairs(runtime, request, "cause", replaced, outcome, {
-    terrain: (_runtime, fallout) => {
-      consumed.push(...fallout.consumedSurfaceKeys.map((key) => key.join(" ")));
-      return 1;
-    },
+  cutThroughPipeline(runtime, request, "cause", replaced, outcome, (_runtime, fallout) => {
+    consumed.push(...fallout.consumedSurfaceKeys.map((key) => key.join(" ")));
+    return 1;
   });
 
   return consumed;
@@ -945,7 +954,7 @@ test("platform interacts with terrain via CUT and ignores other structures", () 
   assert.equal(resolveCreationInteraction("platform", "platform").kind, "ignore");
 });
 
-test("dispatchCutRepairs handles platform over terrain, consuming covered terrain and providing platform fallout", () => {
+test("a platform over terrain reaches it, consuming covered terrain and providing platform fallout", () => {
   let receivedFallout;
   const positions = new Map();
   // Platform at x = 0..4, z = 0..4 at elevation 3
@@ -1009,7 +1018,7 @@ test("dispatchCutRepairs handles platform over terrain, consuming covered terrai
     }),
   };
 
-  dispatchCutRepairs(
+  cutThroughPipeline(
     runtime,
     {
       operationId: "op:platform-create",
@@ -1020,11 +1029,9 @@ test("dispatchCutRepairs handles platform over terrain, consuming covered terrai
     "cause-platform",
     [],
     undefined,
-    {
-      terrain: (_runtime, fallout) => {
-        receivedFallout = fallout;
-        return 1;
-      },
+    (_runtime, fallout) => {
+      receivedFallout = fallout;
+      return 1;
     },
   );
 
@@ -1035,7 +1042,7 @@ test("dispatchCutRepairs handles platform over terrain, consuming covered terrai
   assert.ok(receivedFallout.paintedLoops.length > 0);
 });
 
-test("dispatchRemovalRepairs on platform over terrain heals vacated terrain", () => {
+test("deleting a platform over terrain reaches the ground it had cut", () => {
   let cutRepairDispatched = false;
   const positions = new Map([
     ["pn0", { x: 0, y: 3, z: 0 }],
@@ -1078,19 +1085,10 @@ test("dispatchRemovalRepairs on platform over terrain heals vacated terrain", ()
     }),
   };
 
-  dispatchRemovalRepairs(
-    runtime,
-    removedPlatform.surfaceKey,
-    "platform",
-    "cause-removal",
-    removedPlatform,
-    {
-      terrain: () => {
-        cutRepairDispatched = true;
-        return 1;
-      },
-    },
-  );
+  removalThroughPipeline(runtime, removedPlatform, "cause-removal", () => {
+    cutRepairDispatched = true;
+    return 1;
+  });
 
-  assert.equal(cutRepairDispatched, true, "dispatchRemovalRepairs should trigger repair for platform removing its cut");
+  assert.equal(cutRepairDispatched, true, "deleting a platform must reach the ground its cut had consumed");
 });

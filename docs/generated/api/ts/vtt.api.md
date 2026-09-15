@@ -296,6 +296,98 @@ Times `run` as a phase of the running commit; untimed outside one.
 
 ### `function vtt.create-tabletop-runtime.createTabletopRuntime(input: CreateTabletopRuntimeInput): TabletopRuntime`
 
+### `interface vtt.effect-commit.CommitOptions`
+
+### `property vtt.effect-commit.CommitOptions.origin?: ChangeOrigin`
+
+### `property vtt.effect-commit.CommitOptions.reactions?: Readonly<Record<"lattice-regenerate", Reaction<LatticeReactionRuntime>>>`
+
+### `property vtt.effect-commit.CommitOptions.subtype?: string`
+
+The preset the change was made with, when its type has presets.
+
+### `property vtt.effect-commit.CommitOptions.transactionId: string`
+
+Names the transaction and its undo entry; reactions mint their ids from it.
+
+### `interface vtt.effect-commit.EffectCommitRuntime`
+
+What committing needs of the runtime.
+
+### `method vtt.effect-commit.EffectCommitRuntime.addPatch(patch: ConstructionPatch, origin: "local", causeId: string): ConstructionPatchOutcome`
+
+### `method vtt.effect-commit.EffectCommitRuntime.applyPatchReplacement(request: ApplyPatchReplacementRequest, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome`
+
+### `method vtt.effect-commit.EffectCommitRuntime.applyRegionEdit(ops: readonly AtomicEditOp[], origin: "local", causeId: string): unknown`
+
+### `method vtt.effect-commit.EffectCommitRuntime.generateIrregularQuadGrid(request: ConstructionIrregularQuadGridRequest): ConstructionIrregularQuadGrid | undefined`
+
+### `method vtt.effect-commit.EffectCommitRuntime.getAllRegionTopologies(): readonly ConstructionRegionTopology[]`
+
+### `method vtt.effect-commit.EffectCommitRuntime.getFootprintCoverage(polygon: readonly (readonly [number, number])[]): readonly ConstructionCoveredRegion[]`
+
+### `method vtt.effect-commit.EffectCommitRuntime.getRegionTopologiesInBounds(bounds: FillBounds & { seeds?: readonly CloudRequest[] }): readonly ConstructionRegionTopology[]`
+
+### `method vtt.effect-commit.EffectCommitRuntime.getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined`
+
+### `method vtt.effect-commit.EffectCommitRuntime.getSnapshot(): { map: { nodePositions: ReadonlyMap<string, { position: ConstructionPosition }> }; tableId: string }`
+
+### `method vtt.effect-commit.EffectCommitRuntime.removeSurface(request: { surfaceKey: ConstructionSurfaceKey }, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
+
+### `method vtt.effect-commit.EffectCommitRuntime.transact(transactionId: string, origin: ChangeOrigin, work: () => T): TransactionResult<T>`
+
+### `type vtt.effect-commit.TabletopReactions = Readonly<Record<ReactionId, Reaction<TabletopReactionRuntime>>>`
+
+### `function vtt.effect-commit.commitPatchReplacement(runtime: EffectCommitRuntime, request: ApplyPatchReplacementRequest, options: CommitOptions): TransactionResult<ConstructionPatchOutcome>`
+
+Replaces regions with a patch and lets every cloud the change reaches answer it, atomically.
+
+### `function vtt.effect-commit.commitSurfaceRemoval(runtime: EffectCommitRuntime, surfaceKey: ConstructionSurfaceKey, options: CommitOptions): TransactionResult<RegionEditOutcome>`
+
+Deletes one surface and lets its own cloud and every cloud it had cut answer, atomically.
+
+### `function vtt.effect-commit.dispatchEffects(runtime: EffectCommitRuntime, effects: readonly Effect[], reactions: TabletopReactions): readonly ReactionRecord[]`
+
+Dispatches `effects` against the live state. Call inside a transaction.
+
+### `type vtt.reactions.TabletopReactionRuntime = LatticeReactionRuntime`
+
+What every tabletop reaction may read and mutate, inside the pipeline's transaction.
+
+### `variable vtt.reactions.TABLETOP_REACTIONS: Readonly<Record<ReactionId, Reaction<TabletopReactionRuntime>>>`
+
+The implementation behind every reaction name the type registry can
+declare. Keyed by reaction, never by type: a new type answering like terrain
+names `"lattice-regenerate"` and needs nothing here.
+
+### `interface vtt.shape-change.ShapeChangeRuntime`
+
+What reading a change's faces needs of the runtime.
+
+### `method vtt.shape-change.ShapeChangeRuntime.getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined`
+
+### `method vtt.shape-change.ShapeChangeRuntime.getSnapshot(): { map: { nodePositions: ReadonlyMap<string, { position: ConstructionPosition }> } }`
+
+### `function vtt.shape-change.shapeChangeOfRemoval(removed: readonly ConstructionRegionTopology[], removedNodeIds: readonly string[]): ShapeChange | undefined`
+
+What deleting faces changed: all of them gone, nothing produced.
+
+### `function vtt.shape-change.shapeChangeOfReplacement(runtime: ShapeChangeRuntime, request: ApplyPatchReplacementRequest, before: readonly ConstructionRegionTopology[], outcome: ConstructionPatchOutcome | undefined, subtype?: string): ShapeChange | undefined`
+
+What a patch replacement changed, for effects to carry: the faces it
+replaced as they were, the faces it produced as they are, and what it
+claimed or destroyed along the way.
+
+`before` must be read before the replacement runs; everything else after.
+
+### `function vtt.shape-change.topologiesFromPatch(patch: ConstructionPatch, runtime: ShapeChangeRuntime): readonly ConstructionRegionTopology[]`
+
+A patch's regions as topologies, for when the engine cannot yet be asked for them.
+
+### `function vtt.shape-change.topologiesOf(runtime: ShapeChangeRuntime, keys: readonly ConstructionSurfaceKey[]): ConstructionRegionTopology[]`
+
+The faces behind `keys` that still exist. A stale key is skipped, not fatal.
+
 ### `interface vtt.painted-topologies.PaintedTopologyRuntime`
 
 What reading the painter needs of a runtime, structurally.
@@ -326,61 +418,16 @@ the table" gets a contour thousands of segments long, hands all of it to the
 generator as a constraint, and pays for the whole network on a stroke that
 touched a metre of it.
 
-### `type vtt.type-interference-dispatch.CutRepairExecutor = (runtime: TerrainRegenerateRuntime, fallout: CutFallout, causeId: string, tableId: string) => number`
-
-One covered type's own answer to being cut -- `resolveCutRepair`'s
-`"regenerate"`, made real. The type itself owns the whole thing, decision
-and execution both (`repairTerrainCut`, `terrain/terrain-regenerate.ts`);
-this only needs to know it by a runtime-shaped signature, never a
-concrete `TabletopRuntime` import, so this table stays as thin as the
-types it points at.
-
-### `variable vtt.type-interference-dispatch.CUT_REPAIR_EXECUTORS: Readonly<Record<string, CutRepairExecutor>>`
-
-Every structure type that has actually implemented `resolveCutRepair`'s
-`"regenerate"` answer, keyed by `surfaceType`.
-
-`dispatchCutRepairs` is this table's only reader: it already knows, from
-`resolveCutRepair` itself, which consumed region's type is entitled to a
-repair -- this is only where it finds *whose* code to call for one. A
-type absent here despite `resolveCutRepair` answering `"regenerate"` for
-it is a declaration nobody has built yet, not a contradiction; a missing
-entry is treated as nothing to do.
-
-### `function vtt.type-interference-dispatch.dispatchCutRepairs(runtime: TabletopRuntime, request: ApplyPatchReplacementRequest, causeId: string, replacedTopologies: readonly ConstructionRegionTopology[], outcome?: ConstructionPatchOutcome, executors: Readonly<Record<string, CutRepairExecutor>>): void`
-
-Resolves type interference between an acting structure (e.g. `path`) and any
-covered structures (e.g. `terrain`) that declare `repairAfterCut: "regenerate"`.
-
-Fully decoupled from UI tools: operates purely on structure types, topologies,
-and geometric footprints. Handles full-road creations, replacements, movements,
-and deletions where the entire affected terrain corridor is regenerated cleanly,
-filling vacated voids and stitching seamlessly along the entire new road perimeter.
-
-### `function vtt.type-interference-dispatch.dispatchRemovalRepairs(runtime: TabletopRuntime, surfaceKey: ConstructionSurfaceKey, surfaceType: string, causeId: string, removedTopologyOrExecutors?: ConstructionRegionTopology | Readonly<Record<string, CutRepairExecutor>>, maybeExecutors: Readonly<Record<string, CutRepairExecutor>>): void`
-
-Resolves post-removal cut repair for a directly removed surface.
-
-If the removed surface is a regenerating type (e.g. `terrain`), regenerates its hole.
-If the removed surface is an acting cutter (e.g. `path`) that was cutting a regenerating
-type, heals the vacated terrain hole.
-
-### `function vtt.type-interference-dispatch.pointBucketIndex(points: readonly ConstructionPosition[], cellSize: number): { isNear: any }`
-
-Fast spatial bucketing for proximity queries against road points.
-
 ### `function vtt.bezier-edit-gesture.beginBezierGesture(ctx: ToolContext, sample: PointerSample, params?: { curveAction?: "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"; curveEndWidth?: number; curveMode?: "automatic" | "aligned" | "mirrored" | "free"; curveWidth?: number; mode: "shape" | "elevation" }): { cancel: any; commit: any; move: any } | undefined`
 
 ### `function vtt.path-cloud-transaction.commitPathCloudIntent(ctx: ToolContext, effect: PathBrushEffect, tolerance: number): void`
 
 Runtime boundary for a PathCloud decision. This file deliberately contains
 no path geometry or topology policy: it reads snapshots, invokes the type,
-and submits the generic replacement transaction it returns. It has no
-opinion, and no code, for what happens when that replacement cuts into
-another type -- `plan.request.footprintOutline` rides along on the request
-itself, and `TabletopRuntime.applyPatchReplacement` is what notices a
-consumed region needs repairing and dispatches it, the same for any caller
-of that method, not a path-specific step this file performs.
+and commits the generic replacement it returns. It has no opinion, and no
+code, for what happens when that replacement cuts into another type: the
+commit emits the change as an effect, and whatever it reaches answers from
+its own declared reaction, in the same transaction.
 
 ### `class vtt.tabletop-runtime.AppTabletopRuntime`
 
@@ -401,15 +448,9 @@ the faces over them -- in one transaction. See `ConstructionPatch`.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.applyPatchReplacement(request: ApplyPatchReplacementRequest, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome`
 
-Replaces `sourceSurfaceKeys` with `patch`, then lets whichever *other*
-type this patch's own footprint cuts into repair itself, via
-`dispatchCutRepairs` (`interference/type-interference-dispatch.ts`) -- the runtime's
-own choke point for `CUT`'s repair half, so any caller of this one
-method gets it, not only whichever tool happens to import a repair
-function by name. See `CutRepair`/`CutFallout`
-(`structure-types/structure-type.ts`) for the contract; the decision of
-*what* got cut and *who* repairs it is entirely `dispatchCutRepairs`'s
-and `resolveCutRepair`'s, not this method's.
+Replaces `sourceSurfaceKeys` with `patch` and nothing else. How other
+clouds react to the change is the effect pipeline's business
+(`effects/effect-commit.ts`), never a side effect of this mutation.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.applyRegionEdit(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
@@ -514,7 +555,7 @@ own policy. The runtime deliberately does not resolve policy itself:
 that belongs to `features/edit-construction`, and the tool layer runs it
 before calling here.
 
-### `method vtt.tabletop-runtime.AppTabletopRuntime.redoPathBrush(operationId: string, origin: ChangeOrigin): void`
+### `method vtt.tabletop-runtime.AppTabletopRuntime.redoTransaction(transactionId: string, origin: ChangeOrigin): void`
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
@@ -530,7 +571,17 @@ Shows a construction tool's not-yet-committed ghost. Purely visual -- passthroug
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.subscribe(listener: TabletopRuntimeListener): () => void`
 
-### `method vtt.tabletop-runtime.AppTabletopRuntime.undoPathBrush(operationId: string, origin: ChangeOrigin): void`
+### `method vtt.tabletop-runtime.AppTabletopRuntime.transact(transactionId: string, origin: ChangeOrigin, work: () => T): TransactionResult<T>`
+
+Runs `work` as one atomic transaction named `transactionId`: everything
+it mutates commits as a single undo entry, or -- if it throws -- is rolled
+back to exactly the state before it, projection included, and the error
+is rethrown. `recorded` says whether an undo entry was made; record the
+history entry exactly when it is true.
+
+### `method vtt.tabletop-runtime.AppTabletopRuntime.undoTransaction(transactionId: string, origin: ChangeOrigin): void`
+
+Undoes one committed transaction (or a replacement recorded outside one).
 
 ### `interface vtt.tabletop-runtime.ConfirmedTokenDeltaEnvelope`
 
@@ -651,7 +702,7 @@ own policy. The runtime deliberately does not resolve policy itself:
 that belongs to `features/edit-construction`, and the tool layer runs it
 before calling here.
 
-### `method vtt.tabletop-runtime.TabletopRuntime.redoPathBrush(operationId: string, origin: ChangeOrigin): void`
+### `method vtt.tabletop-runtime.TabletopRuntime.redoTransaction(transactionId: string, origin: ChangeOrigin): void`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
@@ -667,7 +718,17 @@ Shows a construction tool's not-yet-committed ghost. Purely visual -- passthroug
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.subscribe(listener: TabletopRuntimeListener): () => void`
 
-### `method vtt.tabletop-runtime.TabletopRuntime.undoPathBrush(operationId: string, origin: ChangeOrigin): void`
+### `method vtt.tabletop-runtime.TabletopRuntime.transact(transactionId: string, origin: ChangeOrigin, work: () => T): TransactionResult<T>`
+
+Runs `work` as one atomic transaction named `transactionId`: everything
+it mutates commits as a single undo entry, or -- if it throws -- is rolled
+back to exactly the state before it, projection included, and the error
+is rethrown. `recorded` says whether an undo entry was made; record the
+history entry exactly when it is true.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.undoTransaction(transactionId: string, origin: ChangeOrigin): void`
+
+Undoes one committed transaction (or a replacement recorded outside one).
 
 ### `interface vtt.tabletop-runtime.TabletopSnapshot`
 
@@ -680,6 +741,14 @@ Shows a construction tool's not-yet-committed ghost. Purely visual -- passthroug
 ### `property vtt.tabletop-runtime.TabletopSnapshot.tableId: string`
 
 ### `property vtt.tabletop-runtime.TabletopSnapshot.tokens: TokenCollectionProjection`
+
+### `interface vtt.tabletop-runtime.TransactionResult`
+
+What a committed transaction produced, and whether it made an undo entry.
+
+### `property vtt.tabletop-runtime.TransactionResult.recorded: boolean`
+
+### `property vtt.tabletop-runtime.TransactionResult.value: T`
 
 ### `type vtt.tabletop-runtime.TabletopRuntimeListener = () => void`
 
@@ -1263,6 +1332,39 @@ The order is not arbitrary: adoption runs **before** the patch, because a
 face about to be registered names a node partway along a neighbour's edge,
 and that node does not exist until the split creates it.
 
+### `interface vtt.terrain-lattice-reaction.LatticeReactionRuntime`
+
+What regenerating ground needs of the runtime, read and written inside the pipeline's transaction.
+
+### `method vtt.terrain-lattice-reaction.LatticeReactionRuntime.addPatch(patch: ConstructionPatch, origin: "local", causeId: string): ConstructionPatchOutcome`
+
+### `method vtt.terrain-lattice-reaction.LatticeReactionRuntime.applyPatchReplacement(request: ApplyPatchReplacementRequest, origin: "local", causeId: string): ConstructionPatchOutcome`
+
+### `method vtt.terrain-lattice-reaction.LatticeReactionRuntime.applyRegionEdit(ops: readonly AtomicEditOp[], origin: "local", causeId: string): unknown`
+
+### `method vtt.terrain-lattice-reaction.LatticeReactionRuntime.generateIrregularQuadGrid(request: ConstructionIrregularQuadGridRequest): ConstructionIrregularQuadGrid | undefined`
+
+### `method vtt.terrain-lattice-reaction.LatticeReactionRuntime.getFootprintCoverage(polygon: readonly (readonly [number, number])[]): readonly ConstructionCoveredRegion[]`
+
+### `method vtt.terrain-lattice-reaction.LatticeReactionRuntime.getRegionTopologiesInBounds(bounds: FillBounds & { seeds?: readonly CloudRequest[] }): readonly ConstructionRegionTopology[]`
+
+### `method vtt.terrain-lattice-reaction.LatticeReactionRuntime.getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined`
+
+### `method vtt.terrain-lattice-reaction.LatticeReactionRuntime.getSnapshot(): { map: { nodePositions: ReadonlyMap<string, { position: ConstructionPosition }> }; tableId: string }`
+
+### `type vtt.terrain-lattice-reaction.LatticeRepairExecutor = (runtime: TerrainRegenerateRuntime, fallout: CutFallout, causeId: string, tableId: string) => number`
+
+Regenerates one ground type's consumed faces; returns how many it built.
+
+### `function vtt.terrain-lattice-reaction.latticeRegenerateReaction(executor: LatticeRepairExecutor): Reaction<LatticeReactionRuntime>`
+
+Builds the reaction around an executor. The default regenerates for real;
+tests hand in a recorder to see exactly what a regeneration would be given.
+
+### `function vtt.terrain-lattice-reaction.pointBucketIndex(points: readonly ConstructionPosition[], cellSize: number): { isNear: any }`
+
+Fast spatial bucketing for proximity queries against a set of points.
+
 ### `interface vtt.terrain-neighborhood.HeightField`
 
 Heights sampled from the ground around an area, so what is laid inside it
@@ -1329,8 +1431,8 @@ correct question -- the ground *connected to* what was touched.
 
 ### `function vtt.terrain-regenerate.repairTerrainCut(runtime: TerrainCutRuntime, fallout: CutFallout, causeId: string, tableId: string): number`
 
-Terrain's `CutRepairExecutor`: grow the ground back around the thing that
-cut it.
+The `"lattice-regenerate"` reaction's executor (`terrain-lattice-reaction.ts`):
+grow the ground back around the thing that cut it.
 
 Everything this decides is which *request* the shared executor gets. The
 consumed faces become the covered regions, so they are what gets replaced;
@@ -2606,6 +2708,143 @@ for it now.
 
 ### `function vtt.token-projection.createTokenProjection(input: TokenProjection): TokenProjection`
 
+### `interface vtt.effect.Effect`
+
+### `property vtt.effect.Effect.causeId: string`
+
+The transaction's cause id; reactions mint their own ids from it.
+
+### `property vtt.effect.Effect.change: ShapeChange`
+
+### `property vtt.effect.Effect.emittedBy?: "lattice-regenerate"`
+
+The reaction that emitted this effect, excluded from receiving it. Absent for the first effect.
+
+### `property vtt.effect.Effect.kind: EffectKind`
+
+### `interface vtt.effect.ShapeChange`
+
+What changed about one cloud, in the terms every reaction reads.
+
+### `property vtt.effect.ShapeChange.after: readonly ConstructionRegionTopology[]`
+
+The faces the change produced, as they are now.
+
+### `property vtt.effect.ShapeChange.before: readonly ConstructionRegionTopology[]`
+
+The faces the change replaced or deleted, as they were.
+
+### `property vtt.effect.ShapeChange.declaredPositions: readonly ConstructionPosition[]`
+
+Positions the change declared outside its faces (patch and spine nodes).
+
+### `property vtt.effect.ShapeChange.footprintOutline?: readonly (readonly [number, number])[]`
+
+The XZ outline the change explicitly claimed, when it had one.
+
+### `property vtt.effect.ShapeChange.removedNodeIds: readonly string[]`
+
+Nodes the engine reported as destroyed by the change.
+
+### `property vtt.effect.ShapeChange.subtype?: string`
+
+The preset the change was made with, when its type has presets at all.
+
+### `property vtt.effect.ShapeChange.surfaceType: string`
+
+The type of the cloud whose shape changed.
+
+### `type vtt.effect.EffectKind = "cut" | "remove"`
+
+What can happen to a cloud that other clouds may have to answer.
+
+The vocabulary is closed and each kind is defined once, in
+`effect-pipeline.ts`: who it reaches, and nothing else. How a cloud answers
+is its type's declared reaction (`StructureTypeDefinition.reactions`), so a
+new effect never edits a type and a new type never edits an effect.
+
+### `type vtt.effect.Reaction = (context: Context, effect: Effect, hits: readonly ConstructionRegionTopology[]) => ReactionOutcome`
+
+One declared reaction's implementation.
+
+It receives every hit face whose type declares this reaction for the
+effect's kind -- a family answers once, across all its types -- and it may
+mutate only through `context`, inside the pipeline's transaction. It never
+calls another cloud's reaction: anything it causes elsewhere, it emits.
+
+### `type vtt.effect.ReactionId = "lattice-regenerate"`
+
+A declared reaction, by name. The type registry names reactions as data;
+the implementation behind each name lives with the runtime that can execute
+it, and must exist for every name here.
+
+### `type vtt.effect.ReactionOutcome = { emitted?: readonly Effect[]; kind: "done" } | { kind: "refuse"; reason: string }`
+
+How a reaction answered.
+
+### `class vtt.effect-pipeline.EffectChainTooDeepError`
+
+A chain kept emitting past MAX_EFFECT_DEPTH.
+
+### `constructor vtt.effect-pipeline.EffectChainTooDeepError.constructor(depth: number): EffectChainTooDeepError`
+
+### `property vtt.effect-pipeline.EffectChainTooDeepError.depth: number`
+
+### `class vtt.effect-pipeline.EffectRefusedError`
+
+A reaction refused, so the whole transaction must be rolled back.
+
+### `constructor vtt.effect-pipeline.EffectRefusedError.constructor(reactionId: "lattice-regenerate", effectKind: EffectKind, reason: string): EffectRefusedError`
+
+### `property vtt.effect-pipeline.EffectRefusedError.effectKind: EffectKind`
+
+### `property vtt.effect-pipeline.EffectRefusedError.reactionId: "lattice-regenerate"`
+
+### `property vtt.effect-pipeline.EffectRefusedError.reason: string`
+
+### `interface vtt.effect-pipeline.EffectSource`
+
+What the pipeline reads: faces near an extent, from the live state inside the transaction.
+
+### `method vtt.effect-pipeline.EffectSource.regionsNear(bounds: ConstructionTopologyBoundsQuery): readonly ConstructionRegionTopology[]`
+
+### `interface vtt.effect-pipeline.ReactionRecord`
+
+One reaction that ran, in the order it ran.
+
+### `property vtt.effect-pipeline.ReactionRecord.depth: number`
+
+### `property vtt.effect-pipeline.ReactionRecord.effectKind: EffectKind`
+
+### `property vtt.effect-pipeline.ReactionRecord.hitCount: number`
+
+### `property vtt.effect-pipeline.ReactionRecord.reactionId: "lattice-regenerate"`
+
+### `type vtt.effect-pipeline.DeclaredReaction = (surfaceType: string, kind: EffectKind) => ReactionId | undefined`
+
+Which reaction a type declares for an effect kind.
+
+### `variable vtt.effect-pipeline.MAX_EFFECT_DEPTH: 8`
+
+Past this many chained steps the transaction aborts. A safety net, not the mechanism that ends a chain.
+
+### `function vtt.effect-pipeline.changeBounds(change: ShapeChange): ConstructionTopologyBoundsQuery | undefined`
+
+The XZ extent a change touches, widened by REACH_MARGIN.
+
+### `function vtt.effect-pipeline.runEffects(context: Context, source: EffectSource, initial: readonly Effect[], reactions: Readonly<Record<ReactionId, Reaction<Context>>>, declared: DeclaredReaction): readonly ReactionRecord[]`
+
+Dispatches `initial` and everything the reactions emit, breadth first.
+
+- A reaction answers each effect kind at most once per run; a later effect
+  of the same kind reaching the same reaction is skipped. That, and a
+  reaction never receiving its own emissions, is what ends a chain.
+- A refusal anywhere throws EffectRefusedError. The caller runs
+  this inside a transaction, so throwing is what rolls every step back.
+
+Pure orchestration: it holds no state between runs and mutates nothing
+itself -- reactions mutate through `context`.
+
 ### `interface vtt.edit-history.EditHistoryStack`
 
 ### `method vtt.edit-history.EditHistoryStack.getState(): EditHistoryState`
@@ -2628,14 +2867,6 @@ Pops the most recent entry and returns it for the caller to apply its `undo` ops
 
 ### `property vtt.edit-history.EditHistoryState.canUndo: boolean`
 
-### `interface vtt.edit-history.PathBrushHistoryEntry`
-
-One confirmed path-brush stroke; the construction session owns its before/after checkpoints.
-
-### `property vtt.edit-history.PathBrushHistoryEntry.kind: "path-brush"`
-
-### `property vtt.edit-history.PathBrushHistoryEntry.operationId: string`
-
 ### `interface vtt.edit-history.RegionEditHistoryEntry`
 
 One completed edit gesture, as the two op sequences that reverse and
@@ -2656,7 +2887,17 @@ that only put the grabbed corner back would leave the panel sheared. See
 
 ### `property vtt.edit-history.RegionEditHistoryEntry.undo: readonly AtomicEditOp[]`
 
-### `type vtt.edit-history.ConstructionHistoryEntry = RegionEditHistoryEntry | PathBrushHistoryEntry`
+### `interface vtt.edit-history.TransactionHistoryEntry`
+
+One committed construction transaction -- a change and every reaction it
+chained into. The construction session owns its state checkpoint; undo and
+redo name it by `transactionId`.
+
+### `property vtt.edit-history.TransactionHistoryEntry.kind: "transaction"`
+
+### `property vtt.edit-history.TransactionHistoryEntry.transactionId: string`
+
+### `type vtt.edit-history.ConstructionHistoryEntry = RegionEditHistoryEntry | TransactionHistoryEntry`
 
 ### `function vtt.edit-history.createEditHistoryStack(): EditHistoryStack`
 
@@ -4110,12 +4351,6 @@ The first refusal in a resolved coverage, if any.
 
 Whether `surfaceType` declares `trait` -- the question to ask instead of comparing type names.
 
-### `function vtt.registry.regeneratingCutTargets(paintedType: string): readonly string[]`
-
-Every declared type a `"cut"` by `paintedType` consumes and that repairs
-itself by regenerating -- the covered side of cut repair, read from the
-registry instead of a hand-kept list.
-
 ### `function vtt.registry.resolveConformance(structureType: string, surfaceType: string, subtype?: string): boolean`
 
 resolveTraitConformance against a declared support type's own traits.
@@ -4137,14 +4372,6 @@ What painting `paintedType` over one already-present region means.
 An unrecognized covered type is refused rather than defaulting to
 `"ignore"`: silently stacking on top of something nobody declared is
 exactly how geometry accumulates unnoticed.
-
-### `function vtt.registry.resolveCutRepair(coveredType: string): CutRepair`
-
-How `coveredType` repairs itself once a `"cut"` has consumed part of it.
-
-An unrecognized covered type has no table to consult, so it is reported
-`"unsupported"` for the same reason `resolveCreationInteraction` refuses
-one outright: there is nothing to defer to but a guess.
 
 ### `function vtt.registry.resolvePolicy(topology: ConstructionRegionTopology, target: EditTarget): RolePolicy`
 
@@ -4308,18 +4535,14 @@ The face the gesture landed on -- `cloud.seed`, offered directly for the common 
 
 ### `interface vtt.structure-type.CutFallout`
 
-What a `"cut"` actually did to one covered type -- the seam a
-`"regenerate"`-capable covered type now needs to close by welding onto
-the painter's own geometry, not merely echoing its position.
+What a `"cut"` actually did to one ground type -- the seam its lattice
+regeneration now needs to close by welding onto the changed cloud's own
+geometry, not merely echoing its position.
 
-Deliberately painter-agnostic: this is assembled by whichever generic
-layer already sees both sides of a `"cut"` (`TabletopRuntime`, not any one
-tool -- see its own `applyPatchReplacement`), from a fact neither side
-privately owns -- what the paint actually registered, and what it
-resolved to consume. The covered type reads this and repairs itself
-entirely on its own, in its own module, outside `structure-types/`: this
-shape is the contract, not the repair, which needs a runtime this pure
-layer does not have.
+Painter-agnostic: the `"lattice-regenerate"` reaction assembles it from the
+effect that reached it (`effects/effect.ts`), and hands it to the
+regeneration. This shape is that hand-off, not the repair, which needs a
+runtime this pure layer does not have.
 
 ### `property vtt.structure-type.CutFallout.consumedSurfaceKeys: readonly ConstructionSurfaceKey[]`
 
@@ -4535,12 +4758,11 @@ Responses to received motion, independent of direct gesture constraints.
 
 The policy for one role.
 
-### `property vtt.structure-type.StructureTypeDefinition.repairAfterCut: CutRepair`
+### `property vtt.structure-type.StructureTypeDefinition.reactions?: Readonly<Partial<Record<EffectKind, "lattice-regenerate">>>`
 
-How this type repairs itself after `"cut"` has consumed part of it.
-Required rather than optional so a new structure type has to say where
-it stands -- `"unsupported"` is a legitimate, honest answer, silence is
-not.
+How a cloud of this type answers each effect that reaches it, by declared
+reaction name (`effects/effect.ts`). An effect kind absent here leaves the
+cloud as the change left it.
 
 ### `property vtt.structure-type.StructureTypeDefinition.requiresMotionSolver?: boolean`
 
@@ -4577,28 +4799,6 @@ is what keeps a type from branching on another type's identity.
 ### `property vtt.structure-type.StructureView.label: string`
 
 ### `property vtt.structure-type.StructureView.traits: ReadonlySet<StructureTrait>`
-
-### `type vtt.structure-type.CutRepair = { kind: "preserve"; reason: string } | { kind: "regenerate"; reason: string } | { kind: "unsupported"; reason: string }`
-
-How a type fixes itself once `"cut"` has consumed part of it and left a
-rim exposed where the consumed piece used to be.
-
-This is deliberately not folded into `EditResolution`'s own `"regenerate"`
-kind, even though the organic case answers it the same way: that kind
-resolves a *gesture* against a role the type already named, where a cut is
-not a gesture on this type's own geometry at all -- it is a side effect of
-*another* type's stroke landing on top of it. There is no role, no target,
-nothing for `roleFor` to classify; only a leftover shape and the rim the
-removal exposed.
-
-`"unsupported"` is not a permanent design choice the way `EditResolution`'s
-`"deny"` is -- it is a declared gap, present so every structure type states
-its position instead of one silently doing nothing when cut. The organic
-doc comment already lists cutting alongside subdividing and welding as
-structural work that escalates to regeneration; a type built on that same
-capability answers `"regenerate"`, and a type that has never had a repair
-path designed says so honestly rather than pretending the geometry stayed
-valid.
 
 ### `type vtt.structure-type.EditResolution = { kind: "allow" } | { kind: "deny"; reason: string } | { kind: "regenerate"; reason: string }`
 
@@ -6043,6 +6243,11 @@ Atomically replaces exact source regions with an application-generated patch.
 
 Atomically overlays an application-generated patch onto exact source regions.
 
+### `method vtt.construction-session-port.ConstructionSessionPort.beginTransaction(transactionId: string): void`
+
+Starts one atomic unit of work. Mutations until the matching commit or
+rollback record no history of their own; transactions do not nest.
+
 ### `method vtt.construction-session-port.ConstructionSessionPort.classifyPoints(points: readonly (readonly [number, number])[]): readonly { index: number; surfaceKey: ConstructionSurfaceKey; surfaceType: string }[]`
 
 Which of `points` already sit inside a region -- the per-point form of
@@ -6056,6 +6261,12 @@ Indexed back to the request; a point over open ground is simply absent.
 ### `method vtt.construction-session-port.ConstructionSessionPort.cloudFor(request: CloudRequest): CloudOutcome`
 
 `ADR-0022`'s "cloud" query.
+
+### `method vtt.construction-session-port.ConstructionSessionPort.commitTransaction(transactionId: string): boolean`
+
+Ends the open transaction, recording everything it did as one undo entry
+named `transactionId` -- unless it changed nothing. Returns whether it
+was recorded, so the caller's own history records exactly the same entries.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.curveBatch(request: CurveBatch): readonly CurveResult[]`
 
@@ -6195,6 +6406,10 @@ Welds a node's two neighboring edges into one -- `insertVertex`'s inverse.
 
 Swaps one edge's geometry without touching either endpoint.
 
+### `method vtt.construction-session-port.ConstructionSessionPort.rollbackTransaction(transactionId: string): void`
+
+Ends the open transaction by restoring the exact state it began from.
+
 ### `method vtt.construction-session-port.ConstructionSessionPort.start(): Promise<void>`
 
 Loads the underlying Wasm module and starts an empty session. Every
@@ -6204,6 +6419,8 @@ import("./scene-render-port.ts").SceneRenderPort's own
 way.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.undoRegionOverlay(operationId: string): void`
+
+Undoes the most recent history entry, which must be `operationId`: a transaction, or an overlay or replacement made outside one.
 
 ### `interface vtt.construction-session-port.ConstructionSheetProfile`
 
@@ -6899,7 +7116,7 @@ Invoked when the drawer requests to close, e.g. its own close button or Escape.
 
 Whether the drawer is currently shown.
 
-### `property vtt.ui.DrawerProps.placement?: "left" | "bottom" | "top" | "right"`
+### `property vtt.ui.DrawerProps.placement?: "left" | "right" | "bottom" | "top"`
 
 Which screen edge the drawer slides in from.
 
@@ -6990,7 +7207,7 @@ Ant Design does not do that on its own. Uncontrolled (starts collapsed,
 closes only on its own trigger/outside click) when omitted. Ignored
 when `alwaysExpanded` is set.
 
-### `property vtt.ui.FloatButtonGroupProps.placement?: "left" | "bottom" | "top" | "right"`
+### `property vtt.ui.FloatButtonGroupProps.placement?: "left" | "right" | "bottom" | "top"`
 
 Which side the group expands toward from the trigger -- `"top"`/`"bottom"`
 stack items in a vertical column, `"left"`/`"right"` lay them out in a
@@ -7248,7 +7465,7 @@ Invoked when the popover requests to close, e.g. an outside click or Escape.
 
 Whether the popover is currently shown.
 
-### `property vtt.ui.PopoverProps.placement?: "left" | "bottom" | "top" | "right"`
+### `property vtt.ui.PopoverProps.placement?: "left" | "right" | "bottom" | "top"`
 
 Which side of `anchor` the popover opens toward.
 

@@ -3,6 +3,7 @@ import { DEFAULT_TOOL_PARAMS, hasTrait, type ToolParamsByTool } from "../../../.
 import type { CapRequest } from "@/ports";
 import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext } from "../core/tool-context.ts";
 import { segmentsPreview } from "../shapes/preview-shapes.ts";
+import { commitPatchReplacement } from "../../effects/effect-commit.ts";
 
 /** Application-wide overhang; no individual roof/band control in this delivery. */
 export const ROOF_OVERHANG = 0.2;
@@ -28,7 +29,7 @@ export function commitRoof(ctx: ToolContext, capRequest: CapRequest): void {
     const operationId = scopedToolId(ctx, "roof", ctx.nextSequence());
     const nodeId = (index: number) => `${operationId}:node:${index}`;
     const edgeId = (index: number) => `${operationId}:edge:${index}`;
-    ctx.runtime.applyPatchReplacement({
+    const { recorded } = commitPatchReplacement(ctx.runtime, {
       operationId, sourceSurfaceKeys: [],
       patch: {
         nodes: cap.nodes.map(([x,y,z], index) => ({ id: nodeId(index), position: { x,y,z } })),
@@ -37,8 +38,8 @@ export function commitRoof(ctx: ToolContext, capRequest: CapRequest): void {
         regions: cap.faces.map((face,index) => ({ regionId: `${operationId}:face:${index}`, surfaceType: "roof", physical: true,
           profile: face.profile, boundary: face.boundary.map(([edge,reversed]) => ({ edgeId: edgeId(edge), reversed })) })),
       },
-    }, "local", operationId);
-    ctx.history.record({ kind: "path-brush", operationId });
+    }, { transactionId: operationId });
+    if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
     ctx.reportFeedback({ tone: "success", message: "Telhado criado com quatro folhas." });
   } catch (error) {
     ctx.reportFeedback({ tone: "error", message: error instanceof Error ? error.message : String(error) });

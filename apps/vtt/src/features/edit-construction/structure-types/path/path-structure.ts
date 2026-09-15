@@ -4,7 +4,7 @@ import type { AtomicEditOp, EditTarget } from "../../orchestration/atomic-edit.t
 import { ALL_AXES, addPosition } from "../../orchestration/atomic-edit.ts";
 import { followsOutward, parseStationNodeId } from "./station-node-id.ts";
 import { isSpineControlNodeId } from "../../spine/spine-node-id.ts";
-import type { CascadeContext, CutRepair, EditRole, RolePolicy, SpineGeneration, StructureTrait, StructureTypeDefinition, StructureView } from "../structure-type.ts";
+import type { CascadeContext, EditRole, RolePolicy, SpineGeneration, StructureTrait, StructureTypeDefinition, StructureView } from "../structure-type.ts";
 import { regeneratePathSpine } from "./bezier-road-edit.ts";
 import { explicitSpineSnapshot } from "./bezier-road-plan.ts";
 import { allowed, denied } from "../structure-type.ts";
@@ -236,19 +236,6 @@ export function pathPolicyFor(role: EditRole): RolePolicy {
   }
 }
 
-/**
- * A path has no regenerate escalation to lean on the way terrain does --
- * `pathPolicyFor` names real, fixed roles instead of denying everything past
- * a boundary -- so a cut through it cannot reuse the organic lattice-regen
- * path. Repairing it means splitting the spine at the cut and capping the
- * exposed ends, which has not been designed yet; declared `"unsupported"`
- * rather than left silently unhandled.
- */
-const PATH_CUT_REPAIR: CutRepair = {
-  kind: "unsupported",
-  reason: "path has no isolated repair for a cut yet -- needs its own spine-split-and-cap logic",
-};
-
 /** A road on the shared spine: legacy spans get automatic handles, and an edit regenerates the unioned contour. */
 const PATH_SPINE: SpineGeneration = Object.freeze<SpineGeneration>({
   defaultOffsets: [-2, 2],
@@ -271,7 +258,6 @@ export function pathStructureType(
     roleFor: pathRoleFor,
     policyFor: pathPolicyFor,
     interactionOver,
-    repairAfterCut: PATH_CUT_REPAIR,
     // A deck spans instead of riding what is under it.
     conformsTo: (support: ReadonlySet<StructureTrait>, subtype?: string) => support.has("ground") && subtype !== "bridge",
     spine: PATH_SPINE,

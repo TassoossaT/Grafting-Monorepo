@@ -22,7 +22,6 @@ export const platformStructureType: StructureTypeDefinition = Object.freeze<Stru
   roleFor: (topology, target) => target.kind === "vertex" && !topology.nodes.some((node) => node.id === target.nodeId) ? "platform-unknown" : `platform-${target.kind}`,
   policyFor: (role) => role === "platform-unknown" ? denied(role, "Vertice fora da plataforma.") : ({ ...allowed(role, ALL_AXES, role === "platform-region" ? "cloud" : "surface"), transport: role === "platform-region" }),
   interactionOver: cutsGround,
-  repairAfterCut: { kind: "preserve", reason: "Structural contour subtraction preserves the remaining planar faces and shared identities." },
   motionInfluences: (topology, transport): readonly ConstructionMotionInfluence[] => {
     const anchor = topology.nodes[0];
     if (!anchor) return [];
@@ -66,7 +65,6 @@ export const slopedPlatformStructureType: StructureTypeDefinition = Object.freez
   roleFor: () => "platform-slope-face",
   policyFor: (role) => denied(role, "Edite a plataforma inclinada pela espinha: pontos, alças e largura."),
   interactionOver: cutsGround,
-  repairAfterCut: { kind: "unsupported", reason: "a cut span needs its own spine split and end capping, not designed yet" },
   motionInfluences: slopeMotionInfluences,
   deriveMotion: deriveSlopeMotion,
   validateMotion: validateSlopeMotion,

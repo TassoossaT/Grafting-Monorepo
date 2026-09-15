@@ -62,7 +62,6 @@ import {
   mergeOutcomes,
   type AtomicEditOp,
 } from "../../features/edit-construction/index.ts";
-import { dispatchCutRepairs, dispatchRemovalRepairs } from "./interference/type-interference-dispatch.ts";
 import { timeCommit, timePhase } from "./commit-timing.ts";
 
 export type TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed";
@@ -82,6 +81,12 @@ export interface ConfirmedTokenDeltaEnvelope {
 }
 
 export type TabletopRuntimeListener = () => void;
+
+/** What a committed transaction produced, and whether it made an undo entry. */
+export interface TransactionResult<T> {
+  readonly value: T;
+  readonly recorded: boolean;
+}
 
 export interface TabletopRuntime extends BezierPort {
   generateCap(request: import("../../ports/cap-port.ts").CapRequest): import("../../ports/cap-port.ts").CapPatch;
@@ -167,8 +172,17 @@ export interface TabletopRuntime extends BezierPort {
     origin: ChangeOrigin,
     causeId: string,
   ): ConstructionPatchOutcome;
-  undoPathBrush(operationId: string, origin: ChangeOrigin): void;
-  redoPathBrush(operationId: string, origin: ChangeOrigin): void;
+  /**
+   * Runs `work` as one atomic transaction named `transactionId`: everything
+   * it mutates commits as a single undo entry, or -- if it throws -- is rolled
+   * back to exactly the state before it, projection included, and the error
+   * is rethrown. `recorded` says whether an undo entry was made; record the
+   * history entry exactly when it is true.
+   */
+  transact<T>(transactionId: string, origin: ChangeOrigin, work: () => T): TransactionResult<T>;
+  /** Undoes one committed transaction (or a replacement recorded outside one). */
+  undoTransaction(transactionId: string, origin: ChangeOrigin): void;
+  redoTransaction(transactionId: string, origin: ChangeOrigin): void;
   /** Unregisters a surface outright, prunes orphaned nodes, and folds the outcome into the running map. See `ConstructionSessionPort.removeSurface`. */
   removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): RegionEditOutcome;
   /** `ADR-0022`'s "cloud" query -- a pure read, never touches the map. See `ConstructionSessionPort.cloudFor`. */
@@ -994,15 +1008,9 @@ export class AppTabletopRuntime implements TabletopRuntime {
   }
 
   /**
-   * Replaces `sourceSurfaceKeys` with `patch`, then lets whichever *other*
-   * type this patch's own footprint cuts into repair itself, via
-   * `dispatchCutRepairs` (`interference/type-interference-dispatch.ts`) -- the runtime's
-   * own choke point for `CUT`'s repair half, so any caller of this one
-   * method gets it, not only whichever tool happens to import a repair
-   * function by name. See `CutRepair`/`CutFallout`
-   * (`structure-types/structure-type.ts`) for the contract; the decision of
-   * *what* got cut and *who* repairs it is entirely `dispatchCutRepairs`'s
-   * and `resolveCutRepair`'s, not this method's.
+   * Replaces `sourceSurfaceKeys` with `patch` and nothing else. How other
+   * clouds react to the change is the effect pipeline's business
+   * (`effects/effect-commit.ts`), never a side effect of this mutation.
    */
   applyPatchReplacement(
     request: ApplyPatchReplacementRequest,
@@ -1011,19 +1019,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
   ): ConstructionPatchOutcome {
     this.#requireReady("replacing generated regions");
     return timeCommit(`substituição de ${request.patch.regions[0]?.surfaceType ?? "patch"}`, () => {
-      const replacedTopologies: ConstructionRegionTopology[] = [];
-      if (request.sourceSurfaceKeys.length > 0 && typeof this.#construction.getRegionTopology === "function") {
-        timePhase(`leitura das substituídas (${request.sourceSurfaceKeys.length})`, () => {
-          for (const key of request.sourceSurfaceKeys) {
-            try {
-              const topology = this.#construction.getRegionTopology(key);
-              if (topology !== undefined) replacedTopologies.push(topology);
-            } catch {
-              // best-effort lookup
-            }
-          }
-        });
-      }
       // Boundary size, not just face count. A path regeneration unions the
       // whole touched cloud, so a connected road network comes back as *one*
       // region whose ring is the perimeter of everything joined to it --
@@ -1042,43 +1037,41 @@ export class AppTabletopRuntime implements TabletopRuntime {
       for (const node of request.patch.nodes) knownNodePositions.set(node.id, node.position);
       for (const node of request.graphPatch?.nodes ?? []) knownNodePositions.set(node.id, node.position);
       timePhase("render", () => this.#foldRegionEditOutcome(outcome, origin, causeId, knownNodePositions));
-      timePhase("reparo de corte", () => dispatchCutRepairs(this, request, causeId, replacedTopologies, outcome));
       return outcome;
     });
   }
-  undoPathBrush(operationId: string, origin: ChangeOrigin): void {
-    this.#requireReady("undoing a path brush");
-    this.#construction.undoRegionOverlay(operationId);
-    this.#refreshConstructionProjection(origin, `undo:${operationId}`);
+  transact<T>(transactionId: string, origin: ChangeOrigin, work: () => T): TransactionResult<T> {
+    this.#requireReady("running a construction transaction");
+    this.#construction.beginTransaction(transactionId);
+    let result: T;
+    try {
+      result = work();
+    } catch (error) {
+      this.#construction.rollbackTransaction(transactionId);
+      // The rolled-back mutations were already folded into the projection
+      // one by one; only a full resync knows every surface they touched.
+      this.#refreshConstructionProjection(origin, `rollback:${transactionId}`);
+      throw error;
+    }
+    return { value: result, recorded: this.#construction.commitTransaction(transactionId) };
   }
 
-  redoPathBrush(operationId: string, origin: ChangeOrigin): void {
-    this.#requireReady("redoing a path brush");
-    this.#construction.redoRegionOverlay(operationId);
-    this.#refreshConstructionProjection(origin, `redo:${operationId}`);
+  undoTransaction(transactionId: string, origin: ChangeOrigin): void {
+    this.#requireReady("undoing a construction transaction");
+    this.#construction.undoRegionOverlay(transactionId);
+    this.#refreshConstructionProjection(origin, `undo:${transactionId}`);
+  }
+
+  redoTransaction(transactionId: string, origin: ChangeOrigin): void {
+    this.#requireReady("redoing a construction transaction");
+    this.#construction.redoRegionOverlay(transactionId);
+    this.#refreshConstructionProjection(origin, `redo:${transactionId}`);
   }
   removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): RegionEditOutcome {
     this.#requireReady("removing a surface");
 
-    const surfaceProjection = this.#snapshot.map.byId.get(surfaceRefFromNodeSet(request.surfaceKey));
-    let surfaceType: string | undefined = surfaceProjection?.type;
-    let removedTopology: ConstructionRegionTopology | undefined;
-    if (typeof this.#construction.getRegionTopology === "function") {
-      try {
-        removedTopology = this.#construction.getRegionTopology(request.surfaceKey);
-        surfaceType = surfaceType ?? removedTopology?.surfaceType;
-      } catch {
-        // Best effort lookup before removal
-      }
-    }
-
     const outcome = this.#construction.removeSurface(request);
     this.#foldRegionEditOutcome(outcome, origin, causeId);
-
-    if (surfaceType !== undefined) {
-      dispatchRemovalRepairs(this, request.surfaceKey, surfaceType, causeId, removedTopology);
-    }
-
     return outcome;
   }
 

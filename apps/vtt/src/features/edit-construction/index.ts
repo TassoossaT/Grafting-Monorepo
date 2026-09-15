@@ -9,6 +9,7 @@
  * - `tools/`: Construction tool parameters, presets, and ghost preview descriptors.
  * - `spine/`: Bezier spines shared by every structure generated along a curve.
  * - `structure-types/`: Semantic structure families (panel, organic, path) & interaction policies.
+ * - `effects/`: What happens to a cloud, whom it reaches, and the pipeline dispatching declared reactions.
  */
 
 export { planBezierEdit } from "./orchestration/spine-edit.ts";
@@ -19,3 +20,4 @@ export * from "./topology/index.ts";
 export * from "./modes/index.ts";
 export * from "./tools/index.ts";
 export * from "./structure-types/index.ts";
+export * from "./effects/index.ts";

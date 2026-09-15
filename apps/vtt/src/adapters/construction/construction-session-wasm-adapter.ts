@@ -564,6 +564,18 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     return { ...fromWireOutcome(wire.outcome), skippedRegionIds: wire.skippedRegionIds, skippedRegionReasons: wire.skippedRegionReasons ?? [] };
   }
 
+  beginTransaction(transactionId: string): void {
+    this.#require().begin_transaction(transactionId);
+  }
+
+  commitTransaction(transactionId: string): boolean {
+    return this.#require().commit_transaction(transactionId);
+  }
+
+  rollbackTransaction(transactionId: string): void {
+    this.#require().rollback_transaction(transactionId);
+  }
+
   undoRegionOverlay(operationId: string): void {
     const session = this.#require() as ConstructionSession & { undo_region_overlay(id: string): void };
     session.undo_region_overlay(operationId);
