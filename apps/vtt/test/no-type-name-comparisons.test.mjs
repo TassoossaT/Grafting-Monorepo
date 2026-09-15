@@ -94,5 +94,5 @@ test("the scan recognizes the shapes it forbids", () => {
   for (const sample of samples) {
     assert.ok(PATTERNS.some((pattern) => new RegExp(pattern.source, pattern.flags).test(sample)), sample);
   }
-  assert.equal(PATTERNS.some((pattern) => new RegExp(pattern.source, pattern.flags).test(`if (params.openingType === "door") {}`)), false);
+  assert.equal(PATTERNS.some((pattern) => new RegExp(pattern.source, pattern.flags).test(`if (params.openingKind === "door") {}`)), false);
 });

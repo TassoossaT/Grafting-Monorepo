@@ -606,7 +606,7 @@ test("addPatch folds every created surface into the map, with its own type and p
   constructionPort.getAllSurfaceMeshes = () => [
     {
       surfaceKey: pieceKey,
-      surfaceType: "door",
+      surfaceType: "opening",
       physical: false,
       mesh: { positions: new Float32Array([0, 0, 0, 1, 0, 0, 1, 0, 1]), indices: new Uint32Array([0, 1, 2]) },
     },
@@ -621,7 +621,7 @@ test("addPatch folds every created surface into the map, with its own type and p
 
   const map = runtime.getSnapshot().map;
   const surfaceRef = surfaceRefFromNodeSet(pieceKey);
-  assert.equal(map.byId.get(surfaceRef).type, "door");
+  assert.equal(map.byId.get(surfaceRef).type, "opening");
   assert.equal(map.byId.get(surfaceRef).physical, false);
 });
 

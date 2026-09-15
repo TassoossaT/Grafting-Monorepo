@@ -10,7 +10,7 @@ test("ground is a declared trait, not a name prefix", () => {
   assert.deepEqual(surfaceTypesWithTrait("ground"), ["terrain", "terrain-grass"]);
   // An undeclared name that merely looks like terrain is not ground.
   assert.equal(hasTrait("terrain-snow", "ground"), false);
-  for (const surfaceType of ["wall-white", "wall-gray", "platform", "platform-slope", "roof", "path", "door", "window"]) {
+  for (const surfaceType of ["wall-white", "wall-gray", "platform", "platform-slope", "roof", "path", "opening"]) {
     assert.equal(hasTrait(surfaceType, "ground"), false, `${surfaceType} is not ground`);
   }
 });

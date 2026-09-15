@@ -169,7 +169,8 @@ export interface TowerStampParams extends WallParams {
  * one tool and not two.
  */
 export interface OpeningParams {
-  readonly openingType: "window" | "door";
+  /** A preset of the one opening type: where it starts and what is drawn in it, never its structure. */
+  readonly openingKind: "window" | "door";
   /** How wide, measured along the wall rather than across the ground -- a curved wall is travelled, not spanned. */
   readonly width: number;
   readonly height: number;
@@ -218,7 +219,7 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   "wall-brush": Object.freeze({ wallType: "wall-white", height: 3, shape: "circle", radius: 0.3, rotationDegrees: 0 }),
   "wall-line": Object.freeze({ wallType: "wall-white", height: 3 }),
   "tower-stamp": Object.freeze({ wallType: "wall-white", height: 3, radius: TOWER_RADIUS_PRESETS[1] }),
-  opening: Object.freeze({ openingType: "window", width: 1.2, height: 1.2, sill: 1 }),
+  opening: Object.freeze({ openingKind: "window", width: 1.2, height: 1.2, sill: 1 }),
   "terrain-sculpt": Object.freeze({
     faceSize: 2,
     brushRadius: 6,

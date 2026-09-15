@@ -8,7 +8,7 @@ import {
   pathInteractionOver,
   terrainInteractionOver,
 } from "./organic/organic-structure.ts";
-import { panelStructureType } from "./panel/panel-structure.ts";
+import { openingStructureType, panelStructureType } from "./panel/panel-structure.ts";
 import { pathStructureType } from "./path/path-structure.ts";
 import { PATH_SURFACE_TYPE } from "./path/path-surface-type.ts";
 import type { EditRole, RolePolicy, StructureTrait, StructureTypeDefinition, StructureView } from "./structure-type.ts";
@@ -49,8 +49,7 @@ export const STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[] = Ob
   roofStructureType,
   panelStructureType("wall-white", "Parede branca", "one upright panel per contour edge, drawn or stamped", ["partition"]),
   panelStructureType("wall-gray", "Parede cinza", "one upright panel per contour edge, drawn or stamped", ["partition"]),
-  panelStructureType("door", "Porta", "one face standing in an opening, on the rim the wall shares with it", []),
-  panelStructureType("window", "Janela", "one face standing in an opening, on the rim the wall shares with it", []),
+  openingStructureType,
   organicStructureType(
     "terrain",
     "Terreno",

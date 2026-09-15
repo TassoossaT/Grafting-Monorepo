@@ -4,7 +4,6 @@ import test from "node:test";
 import {
   EffectChainTooDeepError,
   EffectRefusedError,
-  MAX_EFFECT_DEPTH,
   runEffects,
   STRUCTURE_TYPE_DEFINITIONS,
 } from "../src/features/edit-construction/index.ts";
@@ -123,7 +122,8 @@ test("groups run in a stable order, independent of how the engine listed the fac
 
 test("a chain longer than the depth cap aborts instead of running on", () => {
   const types = STRUCTURE_TYPE_DEFINITIONS.map((definition) => definition.surfaceType);
-  assert.ok(types.length > MAX_EFFECT_DEPTH + 1, "enough declared types to build a chain past the cap");
+  const cap = 3;
+  assert.ok(types.length > cap + 1, "enough declared types to build a chain past the cap");
   const table = {};
   const reactions = {};
   types.forEach((surfaceType, index) => {
@@ -134,7 +134,7 @@ test("a chain longer than the depth cap aborts instead of running on", () => {
   const faces = types.map((surfaceType, index) => face(`f${index}`, surfaceType, index * 2));
 
   assert.throws(
-    () => runEffects(undefined, sourceOf(faces), [effect("remove", types[0])], reactions, declaredBy(table)),
+    () => runEffects(undefined, sourceOf(faces), [effect("remove", types[0])], reactions, declaredBy(table), cap),
     EffectChainTooDeepError,
   );
 });

@@ -183,3 +183,16 @@ export function panelStructureType(
     interactionOver: panelInteractionOver,
   });
 }
+
+/**
+ * The face standing in a hole a wall was opened by. One structural type:
+ * a door and a window are the same panel on the rim the wall shares with it,
+ * and differ only in the parameters that placed it (a door sits on the floor,
+ * a window on its sill) and in what is drawn there.
+ */
+export const openingStructureType = panelStructureType(
+  "opening",
+  "Abertura",
+  "one face standing in an opening, on the rim the wall shares with it",
+  [],
+);

@@ -41,7 +41,7 @@ test("terrain over terrain restacks rather than overlaying a second lattice", ()
 });
 
 test("terrain refuses every non-ground type, not just walls", () => {
-  for (const covered of ["wall-gray", "door", "path"]) {
+  for (const covered of ["wall-gray", "opening", "path"]) {
     assert.equal(
       resolveCreationInteraction("terrain", covered).kind,
       "forbid",
@@ -60,7 +60,7 @@ test("a path over a path is cut and regenerated as one formation", () => {
 });
 
 test("a panel never consumes what it stands on, whatever that is", () => {
-  for (const painted of ["wall-white", "wall-gray", "door"]) {
+  for (const painted of ["wall-white", "wall-gray", "opening"]) {
     for (const under of ["terrain", "path", "wall-gray"]) {
       assert.equal(resolveCreationInteraction(painted, under).kind, "ignore");
     }
@@ -119,7 +119,7 @@ test("ground declares how it answers a cut or a deleted face; nothing else answe
   for (const ground of surfaceTypesWithTrait("ground")) {
     assert.deepEqual(structureTypeFor(ground).reactions, { cut: "lattice-regenerate", remove: "lattice-regenerate" });
   }
-  for (const other of ["wall-white", "door", "platform", "platform-slope", "roof", "path"]) {
+  for (const other of ["wall-white", "opening", "platform", "platform-slope", "roof", "path"]) {
     assert.equal(structureTypeFor(other).reactions, undefined, `${other} declares no reaction`);
   }
 });
