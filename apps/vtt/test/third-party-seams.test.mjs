@@ -13,7 +13,9 @@ import { fileURLToPath } from "node:url";
 const SEAMS = {
   // Planar booleans are the engine's own (`graph-core`'s `planar_boolean`),
   // reached through `topology/planar-area.ts`. Nothing imports a second
-  // implementation of them.
+  // implementation of them, and the library is no longer a dependency at all
+  // -- an import would now fail to resolve, which this keeps deliberate
+  // rather than accidental.
   "polygon-clipping": [],
 };
 

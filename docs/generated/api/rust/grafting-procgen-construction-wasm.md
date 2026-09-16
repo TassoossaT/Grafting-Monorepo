@@ -87,6 +87,11 @@ Every bezier boundary edge a region uses. See `region_editing::curved_edges`.
 
 `DuplicateRegion`. See `region_editing::apply_duplicate_region`.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::field_query_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Where ground-plane points project onto the curves a surface was swept
+from. See `field_query`.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::footprint_coverage_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 What a brush footprint currently covers, before anything is

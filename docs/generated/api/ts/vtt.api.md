@@ -565,6 +565,10 @@ before calling here.
 
 Pure contour geometry questions. See `ConstructionSessionPort.queryContours`.
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.queryField(query: ConstructionFieldQuery): readonly ConstructionFieldSample[]`
+
+Where points project onto the curves a surface was swept from. See `ConstructionSessionPort.queryField`.
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.redoTransaction(transactionId: string, origin: ChangeOrigin): void`
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
@@ -711,6 +715,10 @@ before calling here.
 ### `method vtt.tabletop-runtime.TabletopRuntime.queryContours(queries: readonly ConstructionContourQuery[]): readonly ConstructionContourAnswer[]`
 
 Pure contour geometry questions. See `ConstructionSessionPort.queryContours`.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.queryField(query: ConstructionFieldQuery): readonly ConstructionFieldSample[]`
+
+Where points project onto the curves a surface was swept from. See `ConstructionSessionPort.queryField`.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.redoTransaction(transactionId: string, origin: ChangeOrigin): void`
 
@@ -1999,7 +2007,7 @@ see WeldedMergeResult's `error` case.
 
 ### `type vtt.platform-contour-merge.WeldedMergeResult = { kind: "ok"; loops: readonly (readonly DirectedContourEdge[])[] } | { kind: "error"; message: string }`
 
-### `function vtt.platform-contour-merge.groupLoopsByContainment(loops: readonly (readonly DirectedContourEdge[])[], positionOf: (id: string) => readonly [number, number]): readonly LoopGroup[]`
+### `function vtt.platform-contour-merge.groupLoopsByContainment(port: ContourPort, loops: readonly (readonly DirectedContourEdge[])[], positionOf: (id: string) => readonly [number, number]): readonly LoopGroup[]`
 
 Nests each loop under the smallest other loop that contains it (a hole
 inside its owning face); a loop nothing contains is its own face.
@@ -2009,15 +2017,20 @@ hole produced by this weld model only ever touches its owner at isolated
 weld points, never runs along its boundary -- an interior span run twice
 already cancelled out in weldedMerge.
 
-### `function vtt.platform-contour-merge.loopSignedArea(loop: readonly DirectedContourEdge[], positionOf: (id: string) => readonly [number, number]): number`
+### `function vtt.platform-contour-merge.loopSignedArea(port: ContourPort, loop: readonly DirectedContourEdge[], positionOf: (id: string) => readonly [number, number]): number`
 
-Signed XZ area of a closed directed loop, arcs included -- positive winds counter-clockwise.
+Signed XZ area of a closed directed loop, arcs included -- positive winds
+counter-clockwise.
+
+The chord polygon is summed here; each arc adds the circular segment between
+its chord and its curve, and how far that arc turns is the engine's answer,
+asked for every arc in the loop in one crossing.
 
 ### `function vtt.platform-contour-merge.pointInLoop(loop: readonly DirectedContourEdge[], positionOf: (id: string) => readonly [number, number], point: readonly [number, number]): boolean`
 
 Whether `point` lies inside `loop` (even-odd ray cast; arc spans are chorded for the test, which is exact enough at the ~1e-3 scale these loops are welded at).
 
-### `function vtt.platform-contour-merge.splitContourAtPoints(edges: readonly DirectedContourEdge[], points: readonly { id: string; position: readonly [number, number] }[], positionOf: (id: string) => readonly [number, number], tolerance: number): readonly DirectedContourEdge[]`
+### `function vtt.platform-contour-merge.splitContourAtPoints(port: ContourPort, edges: readonly DirectedContourEdge[], points: readonly { id: string; position: readonly [number, number] }[], positionOf: (id: string) => readonly [number, number], tolerance: number): readonly DirectedContourEdge[]`
 
 Subdivides every edge in `edges` at any of `points` that lands on its span
 (not at either endpoint) -- the mid-edge counterpart to node welding.
@@ -3174,7 +3187,7 @@ Resolves `gesture` against the structure type's own role table. The
 returned ops are already constrained -- a height-only role's horizontal
 movement is gone by this point, never clamped later or inside Rust.
 
-### `function vtt.spine-edit.planBezierEdit(input: SpineEditInput & { tableId: string; topologies: readonly ConstructionRegionTopology[] }): { preview: Float32Array; request: ApplyPatchReplacementRequest; selectedId: string } | undefined`
+### `function vtt.spine-edit.planBezierEdit(input: SpineEditInput & { field: FieldPort; tableId: string; topologies: readonly ConstructionRegionTopology[] }): { preview: Float32Array; request: ApplyPatchReplacementRequest; selectedId: string } | undefined`
 
 One spine gesture, end to end: the spine module says what the gesture does
 to the curve, and the structure type that owns the spine regenerates its
@@ -3606,7 +3619,7 @@ A road's band ribbons unioned in plan through the shared curve module.
 
 ### `property vtt.contour-patch.ExistingNode.position: ConstructionPosition`
 
-### `function vtt.contour-patch.buildContourPatch(tableId: string, operationId: string, surfaceType: string, bandIndex: number, shapes: PlanarArea, heightSamples: readonly ConstructionPosition[], referenceCurves: readonly ReferenceCurve[], existingNodes: readonly ExistingNode[], existingEdgeUses: ReadonlyMap<string, readonly boolean[]>): ContourPatchResult`
+### `function vtt.contour-patch.buildContourPatch(port: FieldPort, tableId: string, operationId: string, surfaceType: string, bandIndex: number, shapes: PlanarArea, heightSamples: readonly ConstructionPosition[], referenceCurves: readonly ReferenceCurve[], existingNodes: readonly ExistingNode[], existingEdgeUses: ReadonlyMap<string, readonly boolean[]>): ContourPatchResult`
 
 Turns one band layer's unioned shapes into a `ConstructionPatch` -- the
 same kind of conversion the retired station-sweep engine's own patch
@@ -3633,23 +3646,32 @@ a seam right where they meet.
 `heightSamples` is now only what `restoreHeightVertices` densifies a long
 clipped edge against; it no longer decides any height.
 
+### `interface vtt.curve-projection.FieldPort`
+
+What answering a projection needs: the engine's own reference field.
+
+### `method vtt.curve-projection.FieldPort.queryField(query: ConstructionFieldQuery): readonly ConstructionFieldSample[]`
+
 ### `interface vtt.curve-projection.ReferenceCurve`
 
 One curve the contour was swept from, flattened to segments and carrying height.
 
 ### `property vtt.curve-projection.ReferenceCurve.points: readonly ConstructionPosition[]`
 
-### `function vtt.curve-projection.heightOnCurves(x: number, z: number, curves: readonly ReferenceCurve[], fallback: number): number`
+### `property vtt.curve-projection.ReferenceCurve.reach?: number`
 
-The height of whichever curve in `curves` runs nearest `(x, z)`, at the
-station the point projects onto.
+How far off this curve the surface it generated reaches; omitted means "just read the nearest".
+
+### `function vtt.curve-projection.heightsOnCurves(port: FieldPort, curves: readonly ReferenceCurve[], points: readonly (readonly [number, number])[], fallback: number): readonly number[]`
+
+The height of whichever curve runs nearest each `[x, z]` point, at the
+station that point projects onto, in one crossing.
 
 A point past a curve's end reads that end's height rather than an
 extrapolation, which is what a surface overshooting its curve -- an end
-cap, a mitre past a corner -- should get.
-
-Falls back to `fallback` when no curve has a segment to project onto, so a
-degenerate chain mid-edit produces a flat vertex rather than a NaN.
+cap, a mitre past a corner -- should get. A point with no curve to project
+onto reads `fallback`, so a degenerate chain mid-edit produces a flat
+vertex rather than a NaN.
 
 ### `interface vtt.plan-spine-contour.BandRibbon`
 
@@ -3678,6 +3700,10 @@ All currently live contour uses, including faces outside this local edit.
 ### `property vtt.plan-spine-contour.PlanSpineContourInput.existingNodes: readonly ExistingNode[]`
 
 Every node already standing on the table, for welding by position.
+
+### `property vtt.plan-spine-contour.PlanSpineContourInput.field: FieldPort`
+
+The engine, which elevates every vertex the plan-view union hands back flat.
 
 ### `property vtt.plan-spine-contour.PlanSpineContourInput.operationId: string`
 
@@ -3897,6 +3923,10 @@ The curve engine every road is fitted, sampled and unioned through.
 ### `property vtt.path-cloud-mutation.PathCloudMutationInput.coverageFor: (outline: readonly (readonly [number, number])[]) => readonly ConstructionCoveredRegion[]`
 
 ### `property vtt.path-cloud-mutation.PathCloudMutationInput.effect: PathBrushEffect`
+
+### `property vtt.path-cloud-mutation.PathCloudMutationInput.field: FieldPort`
+
+The engine, which elevates every contour vertex the plan-view union hands back flat.
 
 ### `property vtt.path-cloud-mutation.PathCloudMutationInput.graphSnapshot: ConstructionGraphSnapshot`
 
@@ -4632,6 +4662,10 @@ The replacement a spine owner commits, and the curve it previews while dragging.
 
 What a spine owner is handed to regenerate its surface after a spine edit.
 
+### `property vtt.structure-type.SpineRegenerationInput.field: FieldPort`
+
+The engine, which elevates every contour vertex the plan-view union hands back flat.
+
 ### `property vtt.structure-type.SpineRegenerationInput.graphPatch: ConstructionGraphPatch`
 
 What the edit does to the spine.
@@ -5280,6 +5314,10 @@ One edge, as every question about it is asked.
 
 The signed angle an arc turns through, positive counter-clockwise; zero for anything else.
 
+### `function vtt.contour-geometry.arcSweepsOf(port: ContourPort, spans: readonly ContourSpan[]): readonly number[]`
+
+Each span's own sweep, in one crossing.
+
 ### `function vtt.contour-geometry.closestOnContours(port: ContourPort, spans: readonly ContourSpan[], point: ConstructionPosition): readonly { position: readonly [number, number]; t: number }[]`
 
 For each span, where `point` sits on it: the parameter and that position.
@@ -5349,16 +5387,6 @@ A curve flattened to line segments, for a preview.
 ### `function vtt.curve-handles.reshapeCurve(port: Pick<BezierPort, "curveBatch">, curve: CubicBezier, index: CurveHandleIndex, target: ConstructionPosition): CubicBezier`
 
 `curve` with one handle dragged to `target`, or its midpoint pulled there.
-
-### `function vtt.edge-geometry.angleAround(center: readonly [number, number], x: number, z: number): number`
-
-Angle of `(x, z)` around `center`, in the graph's own XZ convention (`atan2(z, x)`).
-
-### `function vtt.edge-geometry.arcSweep(from: number, to: number, clockwise: boolean): number`
-
-The signed angle actually swept walking from angle `from` to angle `to`
-in the direction `clockwise` says, magnitude always in `[0, 2*PI)`.
-Positive/counter-clockwise unless `clockwise` is set.
 
 ### `interface vtt.planar-area.PlanarPort`
 
@@ -5852,6 +5880,28 @@ One generic graph edge, including edges deliberately not used by a face.
 ### `property vtt.construction-session-port.ConstructionEdgeSnapshot.endNodeId: string`
 
 ### `property vtt.construction-session-port.ConstructionEdgeSnapshot.startNodeId: string`
+
+### `interface vtt.construction-session-port.ConstructionFieldQuery`
+
+A reading of the curves a surface was swept from: the ground plane says
+where, the curves say how high.
+
+A planar union works in XZ and throws elevation away, so every vertex it
+hands back needs a height from somewhere. That somewhere is the curve the
+surface came from, at the station the vertex projects onto -- the engine's
+own reference field, asked rather than mirrored.
+
+### `property vtt.construction-session-port.ConstructionFieldQuery.curves: readonly { points: readonly ConstructionPosition[]; reach?: number }[]`
+
+The curves, each an ordered run of positions, with how far off it the surface it generated reaches.
+
+### `property vtt.construction-session-port.ConstructionFieldQuery.near?: readonly number[]`
+
+One height per point, when levels stacked over the same ground have to be told apart.
+
+### `property vtt.construction-session-port.ConstructionFieldQuery.points: readonly (readonly [number, number])[]`
+
+`[x, z]` points, answered in order.
 
 ### `interface vtt.construction-session-port.ConstructionGraphPatch`
 
@@ -6382,6 +6432,11 @@ Answers pure questions about contour geometry: where a curve runs, how
 long it is, the span between two parameters. Reads nothing from the live
 session, and answers in the order asked.
 
+### `method vtt.construction-session-port.ConstructionSessionPort.queryField(query: ConstructionFieldQuery): readonly ConstructionFieldSample[]`
+
+Reads ground-plane points against the curves a surface was swept from.
+See ConstructionFieldQuery.
+
 ### `method vtt.construction-session-port.ConstructionSessionPort.redoRegionOverlay(operationId: string): void`
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.removeHole(request: { index: number; surfaceKey: ConstructionSurfaceKey }): RegionEditOutcome`
@@ -6577,6 +6632,10 @@ same XZ plane -- the standard P0 P1 P2 P3 control polygon, with P0/P3 the
 edge's own (graph-resolved) start and end.
 
 ### `type vtt.construction-session-port.ConstructionEdgeId = string`
+
+### `type vtt.construction-session-port.ConstructionFieldSample = { curve: number; s: number; t: number; y: number } | null`
+
+Where one point projected, or `null` when there was no curve to project onto.
 
 ### `type vtt.construction-session-port.ConstructionNodeId = string`
 

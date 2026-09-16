@@ -27,6 +27,12 @@ pub struct UnfilledLoopDto
 pub struct UnfilledLoopsResponse
 pub fn unfilled_loops(
 
+// src/field_query.rs
+pub struct ReferenceCurveDto
+pub struct FieldQuery
+pub struct FieldSampleDto
+pub fn answer(query: &FieldQuery) -> Vec<Option<FieldSampleDto>>
+
 // src/footprint.rs
 pub enum CoverageKind
 pub struct FootprintCoverageRequest
@@ -4092,23 +4098,25 @@ export interface DirectedContourEdge {
   }
 export type WeldedMergeResult =
 export function splitContourAtPoints(
+  port: ContourPort,
   edges: readonly DirectedContourEdge[],
   points: readonly { readonly id: string; readonly position: readonly [number, number] }[],
   positionOf: (id: string) => readonly [number, number],
   tolerance: number,
   ): readonly DirectedContourEdge[] {
   let result = edges;
-  for (const point of points) {
 export function weldedMerge(
   standing: readonly DirectedContourEdge[],
   stroke: readonly DirectedContourEdge[],
   ): WeldedMergeResult {
   const declared = [...standing, ...stroke];
   const pairGroups = new Map<string, { readonly canonical: ConstructionEdgeGeometry; readonly edges: DirectedContourEdge[] }[]>();
-export function loopSignedArea(loop: readonly DirectedContourEdge[], positionOf: (id: string) => readonly [number, number]): number {
-  let area = 0;
-  for (const edge of loop) {
-  const [ax, az] = positionOf(edge.a);
+export function loopSignedArea(
+  port: ContourPort,
+  loop: readonly DirectedContourEdge[],
+  positionOf: (id: string) => readonly [number, number],
+  ): number {
+  const arcs = loop.filter((edge) => edge.geometry.kind === "arc");
 export function pointInLoop(
   loop: readonly DirectedContourEdge[],
   positionOf: (id: string) => readonly [number, number],
@@ -4122,10 +4130,11 @@ export interface LoopGroup {
   readonly holes: readonly (readonly DirectedContourEdge[])[];
   }
 export function groupLoopsByContainment(
+  port: ContourPort,
   loops: readonly (readonly DirectedContourEdge[])[],
   positionOf: (id: string) => readonly [number, number],
   ): readonly LoopGroup[] {
-  const areas = loops.map((loop) => Math.abs(loopSignedArea(loop, positionOf)));
+  const areas = loops.map((loop) => Math.abs(loopSignedArea(port, loop, positionOf)));
 
 // src/composition/tabletop/tools/platform/platform-contour-tool.ts
 export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: Params, pickedSamples: readonly PointerSample[] = []): void {
@@ -4903,6 +4912,8 @@ export type { EditOpSink, EditPlan } from "./edit-orchestrator.ts";
 // src/features/edit-construction/orchestration/spine-edit.ts
 export function planBezierEdit(input: SpineEditInput & {
   readonly topologies: readonly ConstructionRegionTopology[];
+  /** The engine, which elevates every contour vertex the plan-view union hands back flat. */
+  readonly field: FieldPort;
   readonly tableId: string;
   }): { request: import("@/ports").ApplyPatchReplacementRequest; preview: Float32Array; selectedId: string } | undefined {
   const owner = spineOwnerAt(input.snapshot, curvePick(input.targetId)?.edgeId ?? input.targetId);
@@ -5201,31 +5212,36 @@ export interface ContourPatchResult {
   readonly regionIds: readonly string[];
   }
 export function buildContourPatch(
+  /** The engine, which is what elevates a flat union vertex. See `curve-projection.ts`. */
+  port: FieldPort,
   tableId: string,
   operationId: string,
   surfaceType: string,
   bandIndex: number,
   shapes: PlanarArea,
-  heightSamples: readonly ConstructionPosition[],
-  referenceCurves: readonly ReferenceCurve[],
 
 // src/features/edit-construction/structure-types/path/contour/curve-projection.ts
+export interface FieldPort {
+  queryField(query: ConstructionFieldQuery): readonly ConstructionFieldSample[];
+  }
 export interface ReferenceCurve {
   readonly points: readonly ConstructionPosition[];
+  /** How far off this curve the surface it generated reaches; omitted means "just read the nearest". */
+  readonly reach?: number;
   }
-export function heightOnCurves(
-  x: number,
-  z: number,
+export function heightsOnCurves(
+  port: FieldPort,
   curves: readonly ReferenceCurve[],
+  points: readonly (readonly [number, number])[],
   fallback = 0,
-  ): number {
-  let bestDistanceSq = Infinity;
-  let bestY = fallback;
+  ): readonly number[] {
+  if (points.length === 0) return [];
+  if (curves.length === 0) return points.map(() => fallback);
 
 // src/features/edit-construction/structure-types/path/contour/index.ts
 export type { ExistingNode } from "./contour-patch.ts";
 export type { BandRibbon, PlanSpineContourInput, PlanSpineContourResult, SpineChainInput } from "./plan-spine-contour.ts";
-export type { ReferenceCurve } from "./curve-projection.ts";
+export type { FieldPort, ReferenceCurve } from "./curve-projection.ts";
 
 // src/features/edit-construction/structure-types/path/contour/plan-spine-contour.ts
 export interface BandRibbon {
@@ -5241,13 +5257,13 @@ export interface SpineChainInput {
   readonly controlPoints: readonly ConstructionPosition[];
   readonly bandOffsets: readonly number[];
 export interface PlanSpineContourInput {
+  /** The engine, which elevates every vertex the plan-view union hands back flat. */
+  readonly field: FieldPort;
   /** The plan-view union of the ribbons, through the curve engine. */
   readonly union: (ribbons: readonly BandRibbon[]) => [number, number][][][];
   readonly tableId: string;
   /** Scopes every node/region id this call mints -- one edit, one operation. */
   readonly operationId: string;
-  readonly surfaceType: string;
-  /**
 export interface PlanSpineContourResult {
   readonly patch: ConstructionPatch;
   /**
@@ -5283,11 +5299,11 @@ export type { PathCloudMutationInput, PathCloudMutationPlan } from "./path-cloud
 export interface PathCloudMutationInput {
   /** The curve engine every road is fitted, sampled and unioned through. */
   readonly bezier: BezierPort;
+  /** The engine, which elevates every contour vertex the plan-view union hands back flat. */
+  readonly field: FieldPort;
   readonly tableId: string;
   readonly graphSnapshot: ConstructionGraphSnapshot;
   readonly regionTopologies: readonly ConstructionRegionTopology[];
-  readonly coverageFor: (outline: readonly (readonly [number, number])[]) => readonly ConstructionCoveredRegion[];
-  readonly effect: PathBrushEffect;
 export type PathCloudMutationPlan =
 export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudMutationPlan {
   const { effect, tolerance } = input;
@@ -5692,7 +5708,7 @@ export interface SpineRegenerationInput {
   readonly graphPatch: ConstructionGraphPatch;
   readonly topologies: readonly ConstructionRegionTopology[];
   readonly port: BezierPort;
-  readonly operationId: string;
+  /** The engine, which elevates every contour vertex the plan-view union hands back flat. */
 export interface SpineRegeneration {
   readonly request: ApplyPatchReplacementRequest;
   readonly preview: Float32Array;
@@ -5950,7 +5966,13 @@ export function subContour(
   ): ConstructionEdgeGeometry {
   const [answer] = port.queryContours([query(span.geometry, span.start, span.end, { kind: "subGeometry", t0, t1 })]);
 export function arcSweepOf(port: ContourPort, span: ContourSpan): number {
-  const [answer] = port.queryContours([query(span.geometry, span.start, span.end, { kind: "arcSweep" })]);
+  return arcSweepsOf(port, [span])[0] ?? 0;
+  }
+export function arcSweepsOf(port: ContourPort, spans: readonly ContourSpan[]): readonly number[] {
+  if (spans.length === 0) return [];
+  return port
+  .queryContours(spans.map((span) => query(span.geometry, span.start, span.end, { kind: "arcSweep" })))
+  .map((answer) => scalars(answer)[0] ?? 0);
 
 // src/features/edit-construction/topology/curve-handles.ts
 export type CurveHandleIndex = 1 | 2 | "midpoint";
@@ -5999,12 +6021,6 @@ export function reshapeCurve(
   index === "midpoint"
 export function curveSegments(port: Pick<BezierPort, "curveBatch">, curve: CubicBezier): Float32Array {
   const [result] = port.curveBatch({ tolerance: 0.025, commands: [{ kind: "sample", curves: [curve] }] });
-
-// src/features/edit-construction/topology/edge-geometry.ts
-export function angleAround(center: readonly [number, number], x: number, z: number): number {
-  return Math.atan2(z - center[1], x - center[0]);
-export function arcSweep(from: number, to: number, clockwise: boolean): number {
-  return clockwise ? -wrapPositive(from - to) : wrapPositive(to - from);
 
 // src/features/edit-construction/topology/index.ts
 export type { CloudSource, CloudTopology, ConstructionCloud } from "./construction-cloud.ts";
@@ -6271,6 +6287,15 @@ export interface ConstructionContourQuery {
   | { readonly kind: "evaluate"; readonly at: readonly number[] }
   | { readonly kind: "tessellate"; readonly tolerance: number }
 export type ConstructionContourAnswer =
+export interface ConstructionFieldQuery {
+  /** The curves, each an ordered run of positions, with how far off it the surface it generated reaches. */
+  readonly curves: readonly { readonly points: readonly ConstructionPosition[]; readonly reach?: number }[];
+  /** `[x, z]` points, answered in order. */
+  readonly points: readonly (readonly [number, number])[];
+  /** One height per point, when levels stacked over the same ground have to be told apart. */
+  readonly near?: readonly number[];
+  }
+export type ConstructionFieldSample =
 export interface ConstructionCurvedEdge {
   readonly edgeId: ConstructionEdgeId;
   readonly startNodeId: ConstructionNodeId;
@@ -6279,15 +6304,6 @@ export interface ConstructionCurvedEdge {
   readonly end: ConstructionPosition;
   readonly handle1: readonly [number, number];
   readonly handle2: readonly [number, number];
-export interface ConstructionOrientedEdgeUse {
-  readonly edgeId: ConstructionEdgeId;
-  readonly reversed: boolean;
-  }
-export interface ConstructionRegionEdge extends ConstructionOrientedEdgeUse {
-  readonly startNodeId: ConstructionNodeId;
-  readonly endNodeId: ConstructionNodeId;
-  readonly geometry: ConstructionEdgeGeometry;
-  }
 
 // src/ports/index.ts
 export type { CapRequest, CapPatch } from "./cap-port.ts";
