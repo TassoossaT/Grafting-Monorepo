@@ -676,6 +676,13 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     refusedFaces: outcome.skippedRegionIds.length,
     refusals: outcome.skippedRegionReasons,
     declaredNodes: nodes.length,
+    // The one thing no other reading here touches. Every count in this log is
+    // a plan-view count: ground can be laid over exactly the right area, every
+    // face stitched, nothing refused -- and sit at a different level from the
+    // ground around it. That reads on screen as a pit, and as "it regenerated
+    // nothing", because the new ground is below what you are looking at.
+    laidHeights: nodes.map((node) => node.position.y),
+    neighbourHeights: nearbyTopologies.flatMap((topology) => (topology.nodes ?? []).map((node) => node.position.y)),
     regenerated: request.regenerated,
     selfClashes: clashes,
     regeneratedCleared: cleared?.deleted,

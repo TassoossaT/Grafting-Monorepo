@@ -139,3 +139,22 @@ test("a cell dropped because a corner named no node is a warning on its own", ()
 
   assert.equal(warned.length, 1, "a cell dropped for a fault is not a silent continue any more");
 });
+
+test("the level the ground was laid at is reported beside the level around it", () => {
+  // The reading that is not plan-view. A patch sitting three metres under its
+  // neighbours covers its whole area, stitches every corner and refuses
+  // nothing -- and is a pit on screen.
+  const line = logged(report({
+    coveredArea: 100,
+    laidHeights: [-3, -2.5, -3],
+    neighbourHeights: [0, 0.25, 0],
+  }));
+
+  assert.match(line, /altura nova -3\.\.-2\.5, vizinha 0\.\.0\.25/);
+});
+
+test("with no ground standing around it, the neighbouring level is nothing, not zero", () => {
+  const line = logged(report({ coveredArea: 100, laidHeights: [1, 2] }));
+
+  assert.match(line, /altura nova 1\.\.2, vizinha ·/);
+});

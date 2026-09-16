@@ -99,6 +99,12 @@ function quadArea(grid: ConstructionIrregularQuadGrid, quad: readonly number[]):
   return Math.abs(twice) / 2;
 }
 
+/** `min..max` of a set of heights, or `·` when there are none. */
+function span(values: readonly number[] | undefined): string {
+  if (values === undefined || values.length === 0) return "·";
+  return `${round(Math.min(...values))}..${round(Math.max(...values))}`;
+}
+
 function round(value: number): number {
   return Math.round(value * 100) / 100;
 }
@@ -193,6 +199,18 @@ export interface TerrainCommitReport {
    * because the number means nothing without what it was supposed to be.
    */
   readonly coveredArea?: number;
+  /**
+   * Heights of the corners this fill declared, and of the ground standing
+   * around it.
+   *
+   * Every other reading in this log is plan-view. Ground can cover exactly the
+   * area owed, every face stitched and none refused, and still sit at a
+   * different level from its neighbours -- which reads on screen as a pit, and
+   * as the fill having regenerated nothing, because what it laid is below what
+   * you are looking at. Two ranges, so a step is one glance.
+   */
+  readonly laidHeights?: readonly number[];
+  readonly neighbourHeights?: readonly number[];
   /** Why generated cells never became faces. See `terrain-fill.ts`'s `QuadDrops`. */
   readonly quadDrops?: {
     readonly avoided: number;
@@ -250,6 +268,8 @@ function describe(report: TerrainCommitReport): void {
     celulasDegeneradas: report.quadDrops?.degenerate ?? 0,
     celulasSobreChaoRetido: report.quadDrops?.retained ?? 0,
     areaJaDePe: round(report.quadDrops?.coveredByStanding ?? 0),
+    alturaNova: span(report.laidHeights),
+    alturaVizinha: span(report.neighbourHeights),
     pontos: pointCount(report.boundary) + pointCount(report.holes),
     pontosComNo: sourceCount(report.boundary) + sourceCount(report.holes),
     segmentoMedio: round(mean(constrained)),
@@ -346,7 +366,8 @@ function describe(report: TerrainCommitReport): void {
     `(${Math.round(faltando * 100)}% sem chão) ` +
     `| células descartadas: ${contorno.celulasEvitadas} evitadas, ` +
     `${contorno.celulasSobreChaoRetido} sobre chão retido, ` +
-    `${contorno.celulasSemNo} sem nó, ${contorno.celulasDegeneradas} degeneradas`;
+    `${contorno.celulasSemNo} sem nó, ${contorno.celulasDegeneradas} degeneradas ` +
+    `| altura nova ${contorno.alturaNova}, vizinha ${contorno.alturaVizinha}`;
   if (wrong) console.warn(line, { contorno, geracao, mescla });
   else console.info(line, { contorno, geracao, mescla });
 

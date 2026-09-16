@@ -1117,9 +1117,22 @@ Of those, the ones whose segment named no edge to split.
 
 ### `property vtt.terrain-diagnostics.TerrainCommitReport.holes: readonly ConstraintRing[]`
 
+### `property vtt.terrain-diagnostics.TerrainCommitReport.laidHeights?: readonly number[]`
+
+Heights of the corners this fill declared, and of the ground standing
+around it.
+
+Every other reading in this log is plan-view. Ground can cover exactly the
+area owed, every face stitched and none refused, and still sit at a
+different level from its neighbours -- which reads on screen as a pit, and
+as the fill having regenerated nothing, because what it laid is below what
+you are looking at. Two ranges, so a step is one glance.
+
 ### `property vtt.terrain-diagnostics.TerrainCommitReport.landings?: number`
 
 Contour nodes the generator reported as landing on a constraint segment.
+
+### `property vtt.terrain-diagnostics.TerrainCommitReport.neighbourHeights?: readonly number[]`
 
 ### `property vtt.terrain-diagnostics.TerrainCommitReport.quadDrops?: { avoided: number; coveredByStanding: number; degenerate: number; retained: number; unnamed: number }`
 
