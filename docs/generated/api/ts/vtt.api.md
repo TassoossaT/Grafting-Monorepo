@@ -1121,7 +1121,7 @@ Of those, the ones whose segment named no edge to split.
 
 Contour nodes the generator reported as landing on a constraint segment.
 
-### `property vtt.terrain-diagnostics.TerrainCommitReport.quadDrops?: { avoided: number; degenerate: number; retained: number; unnamed: number }`
+### `property vtt.terrain-diagnostics.TerrainCommitReport.quadDrops?: { avoided: number; coveredByStanding: number; degenerate: number; retained: number; unnamed: number }`
 
 Why generated cells never became faces. See `terrain-fill.ts`'s `QuadDrops`.
 
@@ -1244,6 +1244,16 @@ to name it, a cycle that repeats one). Telling them apart is the whole point
 of counting them separately, exactly as the contour landings do.
 
 ### `property vtt.terrain-fill.QuadDrops.avoided: number`
+
+### `property vtt.terrain-fill.QuadDrops.coveredByStanding: number`
+
+Plan area of the cells dropped for a legitimate reason.
+
+The rings ask for an area, and part of that area can already be ground
+that stays -- retained faces inside the boundary are not always declared
+as hole rings, so the generator lays cells over them and each is dropped
+on the way in. That area is covered; counting it as ground the fill failed
+to lay reports a hole on every commit that meets standing ground.
 
 ### `property vtt.terrain-fill.QuadDrops.degenerate: number`
 
@@ -1383,6 +1393,10 @@ the neighbours' edges, and registers the result.
 The order is not arbitrary: adoption runs **before** the patch, because a
 face about to be registered names a node partway along a neighbour's edge,
 and that node does not exist until the split creates it.
+
+### `function vtt.terrain-fill.gridPatch(tableId: string, grid: ConstructionIrregularQuadGrid, idFor: (vertex: number) => string | undefined, nodes: readonly { id: string; position: ConstructionPosition }[], surfaceType: string, edgeRooms: ReadonlyMap<string, FreeEdgeUse | null>, quadOf?: Map<string, readonly number[]>, avoidArea?: PlanarArea, drops?: QuadDrops): ConstructionPatch`
+
+Exported for `terrain-quad-drops.test.mjs`, which holds the rules a cell is dropped by.
 
 ### `interface vtt.terrain-lattice-reaction.LatticeReactionRuntime`
 

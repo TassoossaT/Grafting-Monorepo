@@ -199,6 +199,7 @@ export interface TerrainCommitReport {
     readonly unnamed: number;
     readonly degenerate: number;
     readonly retained: number;
+    readonly coveredByStanding: number;
   };
 }
 
@@ -248,6 +249,7 @@ function describe(report: TerrainCommitReport): void {
     celulasSemNo: report.quadDrops?.unnamed ?? 0,
     celulasDegeneradas: report.quadDrops?.degenerate ?? 0,
     celulasSobreChaoRetido: report.quadDrops?.retained ?? 0,
+    areaJaDePe: round(report.quadDrops?.coveredByStanding ?? 0),
     pontos: pointCount(report.boundary) + pointCount(report.holes),
     pontosComNo: sourceCount(report.boundary) + sourceCount(report.holes),
     segmentoMedio: round(mean(constrained)),
@@ -307,8 +309,11 @@ function describe(report: TerrainCommitReport): void {
   // Ground missing from the area asked for, as a fraction of it. A face or so
   // of slack is the boundary being walked as chords; a tenth of the area gone
   // is a hole somebody can see.
-  const faltando =
-    contorno.areaPedida > 0 ? (contorno.areaPedida - contorno.areaCoberta) / contorno.areaPedida : 0;
+  // Ground the fill owed: the rings' area, less the part of it that was
+  // already standing. A cell dropped for sitting on a face that stays covers
+  // ground nobody is missing.
+  const areaDevida = Math.max(0, contorno.areaPedida - contorno.areaJaDePe);
+  const faltando = areaDevida > 0 ? (areaDevida - contorno.areaCoberta) / areaDevida : 0;
   const wrong =
     report.refusedFaces > 0 ||
     report.unadopted > 0 ||
@@ -336,7 +341,8 @@ function describe(report: TerrainCommitReport): void {
     `min existente ${contorno.minimoDoQueJaExiste}, razão ${contorno.razaoSegmentoPorFace}) ` +
     `| anéis ${contorno.aneisBoundary}+${contorno.aneisHoles} ` +
     `sentido ${contorno.sentidoBoundary}/${contorno.sentidoHoles} ` +
-    `| área ${contorno.areaCoberta} de ${contorno.areaPedida} pedida ` +
+    `| área ${contorno.areaCoberta} de ${round(areaDevida)} devida ` +
+    `(${contorno.areaPedida} pedida, ${contorno.areaJaDePe} já de pé) ` +
     `(${Math.round(faltando * 100)}% sem chão) ` +
     `| células descartadas: ${contorno.celulasEvitadas} evitadas, ` +
     `${contorno.celulasSobreChaoRetido} sobre chão retido, ` +

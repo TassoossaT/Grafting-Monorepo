@@ -3761,7 +3761,17 @@ export interface QuadDrops {
   unnamed: number;
   degenerate: number;
   retained: number;
-  }
+  /**
+  * Plan area of the cells dropped for a legitimate reason.
+  *
+export function gridPatch(
+  tableId: string,
+  grid: ConstructionIrregularQuadGrid,
+  idFor: (vertex: number) => ConstructionNodeId | undefined,
+  nodes: readonly { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }[],
+  surfaceType: string,
+  edgeRooms: ReadonlyMap<string, FreeEdgeUse | null>,
+  quadOf?: Map<string, readonly number[]>,
 export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillRequest): TerrainFillOutcome {
   if (request.boundary.length === 0) return NOTHING;
 

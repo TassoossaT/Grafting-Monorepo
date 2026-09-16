@@ -218,6 +218,18 @@ function insideAnyMultiPolygon(x: number, z: number, multiPolygon: PlanarArea): 
   return false;
 }
 
+/** Plan-view area of one generated cell. */
+function quadPlanArea(grid: ConstructionIrregularQuadGrid, quad: readonly number[]): number {
+  let twice = 0;
+  for (let index = 0; index < quad.length; index += 1) {
+    const from = grid.vertices[quad[index]!];
+    const to = grid.vertices[quad[(index + 1) % quad.length]!];
+    if (from === undefined || to === undefined) return 0;
+    twice += from.x * to.z - to.x * from.z;
+  }
+  return Math.abs(twice) / 2;
+}
+
 /**
  * Why a generated cell never became a face.
  *
@@ -234,9 +246,20 @@ export interface QuadDrops {
   unnamed: number;
   degenerate: number;
   retained: number;
+  /**
+   * Plan area of the cells dropped for a legitimate reason.
+   *
+   * The rings ask for an area, and part of that area can already be ground
+   * that stays -- retained faces inside the boundary are not always declared
+   * as hole rings, so the generator lays cells over them and each is dropped
+   * on the way in. That area is covered; counting it as ground the fill failed
+   * to lay reports a hole on every commit that meets standing ground.
+   */
+  coveredByStanding: number;
 }
 
-function gridPatch(
+/** Exported for `terrain-quad-drops.test.mjs`, which holds the rules a cell is dropped by. */
+export function gridPatch(
   tableId: string,
   grid: ConstructionIrregularQuadGrid,
   idFor: (vertex: number) => ConstructionNodeId | undefined,
@@ -262,7 +285,7 @@ function gridPatch(
       cx /= quad.length;
       cz /= quad.length;
       if (insideAnyMultiPolygon(cx, cz, avoidArea)) {
-        if (drops !== undefined) drops.avoided += 1;
+        if (drops !== undefined) { drops.avoided += 1; drops.coveredByStanding += quadPlanArea(grid, quad); }
         continue quad;
       }
     }
@@ -285,7 +308,7 @@ function gridPatch(
       if (!edgeRooms.has(edgeId)) continue;
       const free = edgeRooms.get(edgeId);
       if (free === null || free === undefined || free.startNodeId !== from || free.endNodeId !== to) {
-        if (drops !== undefined) drops.retained += 1;
+        if (drops !== undefined) { drops.retained += 1; drops.coveredByStanding += quadPlanArea(grid, quad); }
         continue quad;
       }
     }
@@ -515,7 +538,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
   }
 
   const quadOf = new Map<string, readonly number[]>();
-  const quadDrops: QuadDrops = { avoided: 0, unnamed: 0, degenerate: 0, retained: 0 };
+  const quadDrops: QuadDrops = { avoided: 0, unnamed: 0, degenerate: 0, retained: 0, coveredByStanding: 0 };
   // Read after adoption: splitting a contour replaces one edge with fragments,
   // and only live topology knows which side of every fragment remains free.
   // Query only the generated extent instead of serializing the entire map.

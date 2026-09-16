@@ -67,13 +67,25 @@ test("ground laid against ground asked for is reported, holes discounted from th
   // A 10x10 boundary with a 4x4 hole asks for 100 - 16 = 84.
   const line = logged(report({ holes: [square(4, 3)], coveredArea: 84 }));
 
-  assert.match(line, /área 84 de 84 pedida \(0% sem chão\)/);
+  assert.match(line, /área 84 de 84 devida \(84 pedida, 0 já de pé\) \(0% sem chão\)/);
+});
+
+test("ground already standing is owed by nobody, so it is not reported missing", () => {
+  // The rings asked for 100, but 20 of it was covered by faces that stay: the
+  // fill owed 80 and laid 80. Counting the standing ground as missing reported
+  // a hole on every commit that met any.
+  const line = logged(report({
+    coveredArea: 80,
+    quadDrops: { avoided: 0, unnamed: 0, degenerate: 0, retained: 5, coveredByStanding: 20 },
+  }));
+
+  assert.match(line, /área 80 de 80 devida \(100 pedida, 20 já de pé\) \(0% sem chão\)/);
 });
 
 test("ground missing from the area asked for is named as a percentage", () => {
   const line = logged(report({ coveredArea: 75 }));
 
-  assert.match(line, /área 75 de 100 pedida \(25% sem chão\)/);
+  assert.match(line, /área 75 de 100 devida \(100 pedida, 0 já de pé\) \(25% sem chão\)/);
 });
 
 test("a commit that laid every metre it asked for is not warned about", () => {
