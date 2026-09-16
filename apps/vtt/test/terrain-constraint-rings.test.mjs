@@ -270,3 +270,40 @@ test("a corner that lands on a standing node mid-edge still names the edge it li
   assert.ok(rings[0].edges[at] !== undefined, "the segment from n0 knows the edge it runs along");
   assert.equal(rings[0].edges[at].edgeId, "e:n0~n1");
 });
+
+test("an invented corner between a node and a node mid-edge is dropped too", () => {
+  // The leftover tooth after a segment learned to name the edge it lies on.
+  // `dropInventedCorners` asks whether an edge runs between the two *named*
+  // points around an unnamed run, and n0 -> n4 is not such a pair: n4 is a
+  // node sitting partway along n0 -> n1. So the unnamed corner between them
+  // survived, and a segment with no named endpoint at either end cannot find
+  // the edge it runs along. Accepting a containing edge as the pair's answer
+  // drops the run, and the segments left resolve the way the test above does.
+  const edge = { edgeId: "e:n0~n1", reversed: false, startNodeId: "n0", endNodeId: "n1", geometry: { kind: "line" } };
+  const perimeters = standing([[0, 0], [4, 0], [4, 4], [0, 4], [3, 0]], [edge]);
+
+  const withBoth = [
+    [
+      [
+        [0, 0],
+        [1.5, 0],
+        [3, 0],
+        [4, 0],
+        [4, 4],
+        [0, 4],
+        [0, 0],
+      ],
+    ],
+  ];
+  const rings = buildConstraintRings(withBoth, FACE, perimeters);
+  const points = rings[0].points;
+
+  assert.ok(!points.some((point) => point.source === undefined), "the invented corner between the two nodes is gone");
+  // Only the run n0 -> n4 -> n1 lies along a declared edge; the square's other
+  // three sides have none, and are not what this is about.
+  for (const [from, to] of [[0, 4], [4, 1]]) {
+    const at = points.findIndex((point) => point.source === from);
+    assert.equal(points[(at + 1) % points.length].source, to, `${from} is followed by ${to}`);
+    assert.equal(rings[0].edges[at]?.edgeId, "e:n0~n1", `the segment ${from} -> ${to} names the edge it runs along`);
+  }
+});

@@ -429,6 +429,13 @@ export function buildConstraintRings(
    * this stays linear in the network's size the way the pair lookup does.
    */
   const spansAtNode = new Map<number, { readonly edge: ConstructionRegionEdge; readonly from: ConstructionGridConstraintPoint; readonly to: ConstructionGridConstraintPoint }[]>();
+  /** Where each standing node sits, so a pair can be tested against a span it may lie within. */
+  const positionOfSource = new Map<number, ConstructionGridConstraintPoint>();
+  for (const ring of perimeters.rings) {
+    for (const point of ring.points) {
+      if (point.source !== undefined && !positionOfSource.has(point.source)) positionOfSource.set(point.source, point);
+    }
+  }
   for (const ring of perimeters.rings) {
     for (let index = 0; index < ring.points.length; index += 1) {
       const fromPoint = ring.points[index]!;
@@ -566,11 +573,19 @@ export function buildConstraintRings(
 
 
     const onEdgeTolerance = Math.max(1e-6, faceSize * 0.01);
-    const stitched = dropInventedCorners(
-      collinearCleaned,
-      (a, b) => edgeBetween.has(pairKey(a, b)),
-      onEdgeTolerance,
-    );
+    // Two nodes answer for a run between them when an edge joins them, and
+    // equally when one edge simply *contains* them both -- a node partway
+    // along another edge is still a place that edge can be split. Without the
+    // second case the run stayed, and a segment with an unnamed point at each
+    // end had nothing to look itself up by: the tooth this dropped to one.
+    const joinedOrSpanned = (a: number, b: number): boolean => {
+      if (edgeBetween.has(pairKey(a, b))) return true;
+      const from = positionOfSource.get(a);
+      const to = positionOfSource.get(b);
+      return from !== undefined && to !== undefined &&
+        edgeAlongSegment(spansAtNode, from, to, onEdgeTolerance) !== undefined;
+    };
+    const stitched = dropInventedCorners(collinearCleaned, joinedOrSpanned, onEdgeTolerance);
 
 
     const edges: (ConstructionRegionEdge | undefined)[] = [];
@@ -1020,7 +1035,13 @@ export function executeTerrainCut(
     // the faces actually cleared. Left unset, the two never disagreed on paper
     // however far apart they ran -- the divergence the pair exists to catch
     // read `0 vs N` on every single commit, so nobody could see it.
-    regenerated: request.coveredRegions?.length ?? 0,
+    //
+    // It counts `affected`, not the covered regions the caller named: what is
+    // asked to be replaced is exactly `replaceSurfaceKeys` below, and
+    // `affected` is wider than `covered` by design -- faces the area crosses,
+    // and edge neighbours absorbed to give the repair room. Comparing the
+    // narrower number would report a divergence on every widened repair.
+    regenerated: affected.length,
     mint: `${request.tableId}:cut-${request.causeId}`,
     tableId: request.tableId,
     causeId: request.causeId,
