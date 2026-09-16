@@ -1121,6 +1121,10 @@ Of those, the ones whose segment named no edge to split.
 
 Contour nodes the generator reported as landing on a constraint segment.
 
+### `property vtt.terrain-diagnostics.TerrainCommitReport.quadDrops?: { avoided: number; degenerate: number; retained: number; unnamed: number }`
+
+Why generated cells never became faces. See `terrain-fill.ts`'s `QuadDrops`.
+
 ### `property vtt.terrain-diagnostics.TerrainCommitReport.refusals: readonly string[]`
 
 Why the engine refused, in its own words, first few only.
@@ -1226,6 +1230,26 @@ The extent of the generated grid, for a height rule that wants to span it.
 ### `property vtt.terrain-fill.FillBounds.minX: number`
 
 ### `property vtt.terrain-fill.FillBounds.minZ: number`
+
+### `interface vtt.terrain-fill.QuadDrops`
+
+Why a generated cell never became a face.
+
+Each of these used to `continue` in silence, and a dropped cell is ground
+the fill was asked for and did not lay -- a hole, with `refusedFaces` at
+zero because nothing was ever offered to be refused. Two of the reasons are
+legitimate (the cell sits where ground is deliberately avoided, or on top of
+retained ground that still stands) and two are faults (a corner with no node
+to name it, a cycle that repeats one). Telling them apart is the whole point
+of counting them separately, exactly as the contour landings do.
+
+### `property vtt.terrain-fill.QuadDrops.avoided: number`
+
+### `property vtt.terrain-fill.QuadDrops.degenerate: number`
+
+### `property vtt.terrain-fill.QuadDrops.retained: number`
+
+### `property vtt.terrain-fill.QuadDrops.unnamed: number`
 
 ### `interface vtt.terrain-fill.TerrainFillOutcome`
 

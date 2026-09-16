@@ -103,3 +103,27 @@ test("a tenth of the ground gone raises the alarm even with every other count at
 
   assert.equal(warned.length, 1, "missing ground is a warning on its own");
 });
+
+test("cells that never became faces are named by reason, legitimate apart from faulty", () => {
+  const line = logged(report({
+    coveredArea: 100,
+    quadDrops: { avoided: 2, unnamed: 0, degenerate: 0, retained: 3 },
+  }));
+
+  assert.match(line, /células descartadas: 2 evitadas, 3 sobre chão retido, 0 sem nó, 0 degeneradas/);
+});
+
+test("a cell dropped because a corner named no node is a warning on its own", () => {
+  const warned = [];
+  const warn = console.warn;
+  console.warn = (line) => warned.push(line);
+  try {
+    // Nothing else is wrong: the area is covered, and cells legitimately left
+    // out for standing on retained ground never raise the alarm.
+    logTerrainCommit(report({ coveredArea: 100, quadDrops: { avoided: 0, unnamed: 1, degenerate: 0, retained: 9 } }));
+  } finally {
+    console.warn = warn;
+  }
+
+  assert.equal(warned.length, 1, "a cell dropped for a fault is not a silent continue any more");
+});

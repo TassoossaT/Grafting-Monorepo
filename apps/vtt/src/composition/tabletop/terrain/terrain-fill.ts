@@ -218,6 +218,24 @@ function insideAnyMultiPolygon(x: number, z: number, multiPolygon: PlanarArea): 
   return false;
 }
 
+/**
+ * Why a generated cell never became a face.
+ *
+ * Each of these used to `continue` in silence, and a dropped cell is ground
+ * the fill was asked for and did not lay -- a hole, with `refusedFaces` at
+ * zero because nothing was ever offered to be refused. Two of the reasons are
+ * legitimate (the cell sits where ground is deliberately avoided, or on top of
+ * retained ground that still stands) and two are faults (a corner with no node
+ * to name it, a cycle that repeats one). Telling them apart is the whole point
+ * of counting them separately, exactly as the contour landings do.
+ */
+export interface QuadDrops {
+  avoided: number;
+  unnamed: number;
+  degenerate: number;
+  retained: number;
+}
+
 function gridPatch(
   tableId: string,
   grid: ConstructionIrregularQuadGrid,
@@ -227,6 +245,7 @@ function gridPatch(
   edgeRooms: ReadonlyMap<string, FreeEdgeUse | null>,
   quadOf?: Map<string, readonly number[]>,
   avoidArea?: PlanarArea,
+  drops?: QuadDrops,
 ): ConstructionPatch {
   const edges = createBoundaryEdges(tableId, { kind: "refuse-when-full" });
   const regions: ConstructionPatchRegion[] = [];
@@ -243,14 +262,15 @@ function gridPatch(
       cx /= quad.length;
       cz /= quad.length;
       if (insideAnyMultiPolygon(cx, cz, avoidArea)) {
+        if (drops !== undefined) drops.avoided += 1;
         continue quad;
       }
     }
 
     const cycle = quad.map(idFor).filter((id): id is ConstructionNodeId => id !== undefined);
 
-    if (cycle.length !== quad.length) continue;
-    if (new Set(cycle).size !== cycle.length) continue;
+    if (cycle.length !== quad.length) { if (drops !== undefined) drops.unnamed += 1; continue; }
+    if (new Set(cycle).size !== cycle.length) { if (drops !== undefined) drops.degenerate += 1; continue; }
 
     // A constrained cell can occasionally survive on the occupied side of a
     // retained contour. Its node pair names the real split fragment, but that
@@ -264,7 +284,10 @@ function gridPatch(
       const edgeId = sharedEdgeId(tableId, from, to);
       if (!edgeRooms.has(edgeId)) continue;
       const free = edgeRooms.get(edgeId);
-      if (free === null || free === undefined || free.startNodeId !== from || free.endNodeId !== to) continue quad;
+      if (free === null || free === undefined || free.startNodeId !== from || free.endNodeId !== to) {
+        if (drops !== undefined) drops.retained += 1;
+        continue quad;
+      }
     }
 
     const boundary: ConstructionOrientedEdgeUse[] = [];
@@ -492,6 +515,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
   }
 
   const quadOf = new Map<string, readonly number[]>();
+  const quadDrops: QuadDrops = { avoided: 0, unnamed: 0, degenerate: 0, retained: 0 };
   // Read after adoption: splitting a contour replaces one edge with fragments,
   // and only live topology knows which side of every fragment remains free.
   // Query only the generated extent instead of serializing the entire map.
@@ -530,7 +554,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     } else edgeRooms.set(edgeId, null);
   }
   const surfaceType = hasTrait(request.surfaceType, "ground") ? request.surfaceType : "terrain";
-  const patch = timePhase("montagem do patch", () => gridPatch(request.tableId, grid, idFor, nodes, surfaceType, edgeRooms, quadOf, request.avoidArea));
+  const patch = timePhase("montagem do patch", () => gridPatch(request.tableId, grid, idFor, nodes, surfaceType, edgeRooms, quadOf, request.avoidArea, quadDrops));
 
 
   // **Does the patch itself already contain the clash?**
@@ -637,6 +661,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     refusedClockwise,
     builtClockwise,
     coveredArea,
+    quadDrops,
   });
   return {
     built: outcome.createdSurfaceKeys.length,

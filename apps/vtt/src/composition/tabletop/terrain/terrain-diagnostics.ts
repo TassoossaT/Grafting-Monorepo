@@ -193,6 +193,13 @@ export interface TerrainCommitReport {
    * because the number means nothing without what it was supposed to be.
    */
   readonly coveredArea?: number;
+  /** Why generated cells never became faces. See `terrain-fill.ts`'s `QuadDrops`. */
+  readonly quadDrops?: {
+    readonly avoided: number;
+    readonly unnamed: number;
+    readonly degenerate: number;
+    readonly retained: number;
+  };
 }
 
 /** Plan-view area of a ring of constraint points, unsigned. */
@@ -237,6 +244,10 @@ function describe(report: TerrainCommitReport): void {
         report.holes.reduce((sum, ring) => sum + ringArea(ring.points), 0),
     ),
     areaCoberta: round(report.coveredArea ?? 0),
+    celulasEvitadas: report.quadDrops?.avoided ?? 0,
+    celulasSemNo: report.quadDrops?.unnamed ?? 0,
+    celulasDegeneradas: report.quadDrops?.degenerate ?? 0,
+    celulasSobreChaoRetido: report.quadDrops?.retained ?? 0,
     pontos: pointCount(report.boundary) + pointCount(report.holes),
     pontosComNo: sourceCount(report.boundary) + sourceCount(report.holes),
     segmentoMedio: round(mean(constrained)),
@@ -303,6 +314,8 @@ function describe(report: TerrainCommitReport): void {
     report.unadopted > 0 ||
     (report.unstitched ?? 0) > 0 ||
     faltando > 0.05 ||
+    (report.quadDrops?.unnamed ?? 0) > 0 ||
+    (report.quadDrops?.degenerate ?? 0) > 0 ||
     contorno.razaoSegmentoPorFace < 2;
   // In the text of the line, not only in the object beside it. A console
   // collapses the object, and every number that decides anything here was
@@ -324,7 +337,10 @@ function describe(report: TerrainCommitReport): void {
     `| anéis ${contorno.aneisBoundary}+${contorno.aneisHoles} ` +
     `sentido ${contorno.sentidoBoundary}/${contorno.sentidoHoles} ` +
     `| área ${contorno.areaCoberta} de ${contorno.areaPedida} pedida ` +
-    `(${Math.round(faltando * 100)}% sem chão)`;
+    `(${Math.round(faltando * 100)}% sem chão) ` +
+    `| células descartadas: ${contorno.celulasEvitadas} evitadas, ` +
+    `${contorno.celulasSobreChaoRetido} sobre chão retido, ` +
+    `${contorno.celulasSemNo} sem nó, ${contorno.celulasDegeneradas} degeneradas`;
   if (wrong) console.warn(line, { contorno, geracao, mescla });
   else console.info(line, { contorno, geracao, mescla });
 

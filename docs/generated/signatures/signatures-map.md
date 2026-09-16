@@ -3756,6 +3756,12 @@ export interface TerrainFillOutcome {
   /** `false` when refinement hit its vertex ceiling and part of the area came back coarser. */
   readonly refinementComplete: boolean;
 export const DEFAULT_FACE_SIDE = 2;
+export interface QuadDrops {
+  avoided: number;
+  unnamed: number;
+  degenerate: number;
+  retained: number;
+  }
 export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillRequest): TerrainFillOutcome {
   if (request.boundary.length === 0) return NOTHING;
 
