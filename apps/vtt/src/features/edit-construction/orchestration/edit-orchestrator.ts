@@ -167,8 +167,12 @@ export function planEdit(
       return { kind: "deny", role: policy.role, reason: error instanceof Error ? error.message : String(error) };
     }
   }
-  if (structureTypeFor(cloud.seed.surfaceType)?.requiresMotionSolver === true) {
-    return { kind: "deny", role: policy.role, reason: "Esta estrutura requer o resolvedor estrutural da sessao." };
+  const solverBound = structureTypeFor(cloud.seed.surfaceType);
+  if (solverBound?.requiresMotionSolver === true) {
+    // Named by its own label, never by its surface type: the reader is told
+    // which structure refused, and the message still costs the type nothing
+    // in self-knowledge -- a label is what a type already says about itself.
+    return { kind: "deny", role: policy.role, reason: `${solverBound.label} requer o resolvedor estrutural da sessao.` };
   }
   const cascade = policy.cascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot }) ?? [];
   return {
