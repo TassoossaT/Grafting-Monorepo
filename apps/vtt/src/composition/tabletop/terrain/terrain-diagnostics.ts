@@ -46,7 +46,7 @@ function segmentLengths(rings: readonly ConstraintRing[]): number[] {
  * Reported because the generator's ground rule sums the winding of every ring
  * at once, and that only means what it should when the rings agree on which
  * way round they run. They come from two sources with two conventions -- the
- * brush's swept outline through `polygon-clipping`, and the rims of standing
+ * brush's swept outline through the planar boolean, and the rims of standing
  * ground walked off the graph -- and nothing reconciles them. If two rings
  * that overlap disagree, their windings cancel and the overlap reads as free
  * ground, which is ground planned on top of ground that is still standing.

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { planarPort } from "./engine-planar.mjs";
 
 import {
   adoptContourNodes,
@@ -353,7 +354,7 @@ test("welding clears what the union of the brush's capsules leaves on the outlin
   }
 
   const face = 2;
-  const swept = brushSweptOutlinePolygons(samples, 6, face * OUTLINE_CHORD_PER_FACE);
+  const swept = brushSweptOutlinePolygons(planarPort, samples, 6, face * OUTLINE_CHORD_PER_FACE);
   const outer = swept.flatMap((polygon) => polygon.slice(0, 1));
   const shortest = (rings) => {
     let least = Infinity;

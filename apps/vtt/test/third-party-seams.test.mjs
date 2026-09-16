@@ -6,12 +6,15 @@ import { fileURLToPath } from "node:url";
 
 /**
  * A third-party library lives behind one module of ours, and the rest of the
- * app speaks that module's types. Replacing the library -- or routing its job
- * through the engine instead -- is then a change to one file, and no domain
- * contract ever carries the library's own types.
+ * app speaks that module's types, so no domain contract carries a vendor type
+ * and swapping the implementation is a change to one file. A library with no
+ * owner listed is one the app does not use at all any more.
  */
 const SEAMS = {
-  "polygon-clipping": ["features/edit-construction/topology/planar-area.ts"],
+  // Planar booleans are the engine's own (`graph-core`'s `planar_boolean`),
+  // reached through `topology/planar-area.ts`. Nothing imports a second
+  // implementation of them.
+  "polygon-clipping": [],
 };
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), "..", "src");

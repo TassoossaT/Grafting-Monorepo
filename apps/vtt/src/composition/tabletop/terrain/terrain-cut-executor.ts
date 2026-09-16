@@ -134,7 +134,7 @@ const MOST_FACES_WORTH_ABSORBING = 48;
 const NARROW_ENOUGH_TO_GROW = 0.75;
 
 /**
- * One face's boundary as `polygon-clipping` wants it: closed, in walk order.
+ * One face's boundary as a plan-view ring: closed, in walk order.
  *
  * Walk order, not node order. A topology's `nodes` array is a set with an
  * order, not a ring; reading a polygon out of it produces a bowtie for any
@@ -252,7 +252,7 @@ function pairKey(a: number, b: number): string {
  * Dropping corners the boolean invented in the middle of an edge that already
  * existed.
  *
- * Where the ground's own rim crosses the painter's contour, `polygon-clipping`
+ * Where the ground's own rim crosses the painter's contour, the boolean
  * splits both and hands back a vertex at the crossing. That vertex names no
  * node -- it never was one -- and its presence breaks one segment into two,
  * *neither* of which runs between a pair of adjacent nodes any more. So neither
@@ -315,7 +315,7 @@ function dropInventedCorners(
 /**
  * Giving the boolean's output its identity back.
  *
- * `polygon-clipping` answers in bare floats: a corner that was a node going in
+ * The boolean answers in bare floats: a corner that was a node going in
  * comes out as a pair of numbers with nothing attached. So every corner of the
  * result is matched against the corners that *did* carry a node -- the retained
  * terrain's rim and the painter's contour -- and takes that node's id.
@@ -763,7 +763,7 @@ export function executeTerrainCut(
       .filter((polygon) => polygon.length > 0);
     if (facePolygons.length > 0) {
       try {
-        connectArea = timePhase(`união da rua (${facePolygons.length} faces)`, () => planarUnion(facePolygons[0]!, ...facePolygons.slice(1)));
+        connectArea = timePhase(`união da rua (${facePolygons.length} faces)`, () => planarUnion(runtime, facePolygons[0]!, ...facePolygons.slice(1)));
       } catch {
         connectArea = [];
       }
@@ -793,20 +793,20 @@ export function executeTerrainCut(
     if (allPolygons.length === 0) return [];
     let merged: PlanarArea;
     try {
-      merged = planarUnion(allPolygons[0]!, ...allPolygons.slice(1));
+      merged = planarUnion(runtime, allPolygons[0]!, ...allPolygons.slice(1));
     } catch {
       return [];
     }
     if (request.profile.kind === "convex") {
       try {
-        merged = planarUnion(merged, outlineMultiPolygon);
+        merged = planarUnion(runtime, merged, outlineMultiPolygon);
       } catch {
         // Keep the un-unioned shape rather than losing the stroke.
       }
     }
     if (connectArea.length === 0) return merged;
     try {
-      return planarDifference(merged, connectArea);
+      return planarDifference(runtime, merged, connectArea);
     } catch {
       return merged;
     }

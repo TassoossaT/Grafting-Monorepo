@@ -165,10 +165,11 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   id: "terrain-sculpt",
   defaultParams: () => DEFAULT_TOOL_PARAMS["terrain-sculpt"],
 
-  previewFor(gesture: ToolGesture, params: TerrainSculptParams) {
+  previewFor(gesture: ToolGesture, params: TerrainSculptParams, ctx: ToolContext) {
     const targetSurface = hasTrait(params.targetSurface, "ground") ? params.targetSurface : "terrain";
     const color = TERRAIN_COLOR[targetSurface as "terrain" | "terrain-grass"] ?? 0x334155;
     return brushSweptRegionFill(
+      ctx.runtime,
       gesture.samples.map((sample) => sample.point),
       { kind: "circle", radius: params.brushRadius },
       color,
@@ -199,6 +200,7 @@ function sculptStroke(ctx: ToolContext, gesture: ToolGesture, params: TerrainScu
   const faceSize = strokeFaceSize(params);
   const brushRadius = params.brushRadius;
   const swept = brushSweptOutlinePolygons(
+    ctx.runtime,
     gesture.samples.map((sample) => sample.point),
     brushRadius,
     strokeChord(params),

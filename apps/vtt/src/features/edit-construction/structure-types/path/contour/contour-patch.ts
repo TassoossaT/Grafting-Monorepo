@@ -16,7 +16,7 @@ const WELD_TOLERANCE = 0.05; // PathCloud contour weld tolerance (5 cm).
 /**
  * Below this area (world units squared), a shape is a sliver, not a face.
  *
- * `polygon-clipping`'s union of a *self-intersecting* input ring (an
+ * The union of a *self-intersecting* input ring (an
  * offset ribbon can self-intersect on a tight bend relative to its own
  * width -- a real hand-drawn stroke, unlike a clean two-point test line,
  * can do this) does not refuse the input; it normalises it, and a
@@ -56,12 +56,11 @@ function ensureUpwardWinding(ring: PlanarRing, isHole: boolean): PlanarRing {
 }
 
 /**
- * `polygon-clipping` closes every ring by repeating its first point as its
- * last -- the GeoJSON convention. A `ConstructionPatchRegion` boundary is a
- * cycle of distinct nodes with no repeated closing vertex (`useEdge` already
- * wraps `index + 1` back to `0`), so that trailing duplicate is dropped here
- * once, rather than every caller having to know the library's own ring
- * convention.
+ * A plan-view ring is carried closed, repeating its first point as its last
+ * (`planar-area.ts`). A `ConstructionPatchRegion` boundary is a cycle of
+ * distinct nodes with no repeated closing vertex (`useEdge` already wraps
+ * `index + 1` back to `0`), so that trailing duplicate is dropped here once,
+ * rather than every caller having to know both conventions.
  */
 function openRing(ring: PlanarRing): PlanarRing {
   if (ring.length < 2) return ring;

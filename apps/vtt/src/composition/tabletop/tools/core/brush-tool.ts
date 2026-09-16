@@ -139,7 +139,7 @@ export function createBrushTool<Id extends BrushableToolId>(spec: BrushToolSpec<
       const region = regionFor(gesture, params);
       return (
         spec.previewContour?.(region, ctx, params) ??
-        brushSweptRegionFill(region.samples, outlineShapeFor(region.shape), spec.previewColor(params))
+        brushSweptRegionFill(ctx.runtime, region.samples, outlineShapeFor(region.shape), spec.previewColor(params))
       );
     },
 

@@ -3,6 +3,7 @@ import earcut, { flatten as earcutFlatten } from "earcut";
 import type { PreviewDescriptor } from "@/features/edit-construction";
 import type { ConstructionPosition } from "@/ports";
 import { planarUnion } from "../../../../features/edit-construction/index.ts";
+import type { PlanarPort } from "../../../../features/edit-construction/index.ts";
 import type { PlanarArea, PlanarPolygon } from "@/features/edit-construction";
 
 /** A filled square ghost centered on `center`, `halfExtent` out on both X and Z -- a hover cursor or stamp footprint. */
@@ -161,7 +162,7 @@ function decimateXZ(samples: readonly ConstructionPosition[], minDistance: numbe
   return kept;
 }
 
-/** A closed circle ring (XZ), `sides`-gon, for one polygon-clipping `PlanarPolygon`. */
+/** A closed circle ring (XZ), `sides`-gon, for one {@link PlanarPolygon}. */
 function circleRing(center: ConstructionPosition, radius: number, sides: number): [number, number][] {
   const ring: [number, number][] = [];
   for (let index = 0; index <= sides; index += 1) {
@@ -221,18 +222,16 @@ function capsuleRing(start: ConstructionPosition, end: ConstructionPosition, rad
  * radius -- ink-stroke tooling assumes a thin pen, not a fat brush, so nei-
  * ther guarantees a simple polygon here. What *is* guaranteed simple is a
  * proper 2D polygon union: the swept area is exactly the union of one
- * capsule per (decimated) segment, and `polygon-clipping` (the
- * Martinez-Rueda algorithm, also what turf.js uses) computes that union
- * robustly for any input, self-overlapping or not. `earcut` then
+ * capsule per (decimated) segment, and the engine's own planar boolean
+ * computes that union robustly for any input, self-overlapping or not. `earcut` then
  * triangulates the union's own simple output, which it was always built for.
  */
 /**
  * The union of one capsule per stroke segment, and never a thrown error.
  *
  * The union is geometry the user is mid-gesture with, so it runs on every
- * pointer move and again on release. `polygon-clipping` is robust for
- * ordinary input but not total: certain near-degenerate arrangements make it
- * give up mid-ring. That must not take the table down, and it must not
+ * pointer move and again on release. The boolean is robust for ordinary
+ * input but not total: certain near-degenerate arrangements are refused. That must not take the table down, and it must not
  * silently shrink the stroke either -- so a capsule the union refuses is
  * kept as its own polygon instead. Overlapping polygons in the result are
  * fine for both consumers: `earcut` triangulates each one independently, and
@@ -244,16 +243,16 @@ function capsuleRing(start: ConstructionPosition, end: ConstructionPosition, rad
  * The arrangements that defeat the algorithm are not near-duplicate corners,
  * so rounding them does not help.
  */
-function unionCapsules(capsules: readonly PlanarPolygon[]): PlanarArea {
+function unionCapsules(port: PlanarPort, capsules: readonly PlanarPolygon[]): PlanarArea {
   const [first, ...rest] = capsules;
   if (first === undefined) return [];
   try {
-    return planarUnion(first, ...rest);
+    return planarUnion(port, first, ...rest);
   } catch {
     let merged: PlanarArea = [first];
     for (const capsule of rest) {
       try {
-        merged = planarUnion(merged, capsule);
+        merged = planarUnion(port, merged, capsule);
       } catch {
         merged = [...merged, capsule];
       }
@@ -310,6 +309,8 @@ function strokeCapsules(
  * never highlighted.
  */
 export function brushSweptOutlinePolygons(
+  /** The engine's planar boolean, which merges the capsules into one outline. */
+  port: PlanarPort,
   samples: readonly ConstructionPosition[],
   radius: number,
   /**
@@ -323,10 +324,11 @@ export function brushSweptOutlinePolygons(
   if (first === undefined) return [];
   const capsules = strokeCapsules(samples, radius, chord);
   if (capsules.length === 0) return [[circleRing(first, radius, arcSegments(radius, chord))]];
-  return unionCapsules(capsules);
+  return unionCapsules(port, capsules);
 }
 
 export function brushSweptRegionFill(
+  port: PlanarPort,
   samples: readonly ConstructionPosition[],
   shape: BrushOutlineShape,
   color: number,
@@ -361,7 +363,7 @@ export function brushSweptRegionFill(
   if (capsules.length === 0) {
     addPolygon([circleRing(first, radius, arcSegments(radius, chord))], samples);
   } else {
-    for (const polygon of unionCapsules(capsules)) addPolygon(polygon, samples);
+    for (const polygon of unionCapsules(port, capsules)) addPolygon(polygon, samples);
   }
 
   return {

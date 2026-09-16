@@ -318,7 +318,7 @@ export function wallCorrectionPreview(
   color: number,
 ): PreviewDescriptor {
   const corners = correctedWallCorners(ctx, samples, tolerance);
-  return brushSweptRegionFill(corners, { kind: "circle", radius: Math.max(tolerance, CORNER_WELD_TOLERANCE) }, color);
+  return brushSweptRegionFill(ctx.runtime, corners, { kind: "circle", radius: Math.max(tolerance, CORNER_WELD_TOLERANCE) }, color);
 }
 
 /**

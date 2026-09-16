@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { planarPort } from "./engine-planar.mjs";
 
 import {
   heightFieldOf,
@@ -92,6 +93,7 @@ function field({ road = "crossing" } = {}) {
       for (const op of ops) edits.push(op);
       return {};
     },
+    planarBoolean: planarPort.planarBoolean,
     getSnapshot: () => ({ tableId: "t", map: { nodePositions } }),
     generateIrregularQuadGrid(request) {
       requests.push(request);
@@ -459,6 +461,7 @@ function donutField() {
     getRegionTopologiesInBounds: (query) => (query.seeds !== undefined ? [ground] : [ground, ...roads]),
     getAllRegionTopologies: () => [ground, ...roads],
     applyRegionEdit: () => ({}),
+    planarBoolean: planarPort.planarBoolean,
     getSnapshot: () => ({ tableId: "t", map: { nodePositions } }),
     generateIrregularQuadGrid(request) {
       requests.push(request);

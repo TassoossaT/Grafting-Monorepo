@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { planarPort } from "./engine-planar.mjs";
 
 import { brushSweptOutlinePolygons } from "../src/composition/tabletop/tools/shapes/preview-shapes.ts";
 
@@ -27,7 +28,7 @@ function outerArea(multiPolygon) {
 }
 
 test("a straight drag sweeps roughly the capsule it should", () => {
-  const swept = brushSweptOutlinePolygons([at(0, 0), at(20, 0)], RADIUS);
+  const swept = brushSweptOutlinePolygons(planarPort, [at(0, 0), at(20, 0)], RADIUS);
   assert.ok(swept.length >= 1);
   // A 20-long capsule of radius 3: 20*6 body plus a radius-3 disc of caps.
   const expected = 20 * 2 * RADIUS + Math.PI * RADIUS * RADIUS;
@@ -47,7 +48,7 @@ test("a stroke that doubles back over itself still returns a usable footprint", 
   const samples = [];
   for (let step = 0; step <= 40; step += 1) samples.push(at(step * 0.4, 0));
   for (let step = 40; step >= 0; step -= 1) samples.push(at(step * 0.4, 0.001));
-  const swept = brushSweptOutlinePolygons(samples, RADIUS);
+  const swept = brushSweptOutlinePolygons(planarPort, samples, RADIUS);
   assert.ok(swept.length >= 1, "a doubled-back stroke still sweeps something");
   assert.ok(outerArea(swept) > 0);
 });
@@ -59,13 +60,13 @@ test("a tight spiral -- many nearly-touching capsules -- never throws", () => {
     const radius = 0.5 + step * 0.05;
     samples.push(at(Math.cos(angle) * radius, Math.sin(angle) * radius));
   }
-  const swept = brushSweptOutlinePolygons(samples, RADIUS);
+  const swept = brushSweptOutlinePolygons(planarPort, samples, RADIUS);
   assert.ok(swept.length >= 1);
   assert.ok(outerArea(swept) > 0);
 });
 
 test("a stroke of coincident samples degenerates to a single dab, not an error", () => {
-  const swept = brushSweptOutlinePolygons([at(4, 4), at(4, 4), at(4, 4)], RADIUS);
+  const swept = brushSweptOutlinePolygons(planarPort, [at(4, 4), at(4, 4), at(4, 4)], RADIUS);
   const expected = Math.PI * RADIUS * RADIUS;
   assert.ok(
     Math.abs(outerArea(swept) - expected) / expected < 0.05,
@@ -107,7 +108,7 @@ const DEFEATS_THE_UNION = [
 
 test("a drag the polygon union cannot resolve degrades instead of throwing", () => {
   const samples = DEFEATS_THE_UNION.map(([x, z]) => at(x, z));
-  const swept = brushSweptOutlinePolygons(samples, RADIUS);
+  const swept = brushSweptOutlinePolygons(planarPort, samples, RADIUS);
   assert.ok(swept.length >= 1, "the stroke still has a footprint");
   // The fallback keeps whatever it could not merge as its own polygon, so no
   // swept area is lost: this drag covers far more than a single dab.

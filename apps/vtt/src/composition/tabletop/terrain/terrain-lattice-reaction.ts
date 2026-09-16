@@ -20,7 +20,7 @@ import { timePhase } from "../commit-timing.ts";
 import { paintedFalloutOf } from "../interference/painted-topologies.ts";
 import { repairTerrainCut, type TerrainRegenerateRuntime } from "./terrain-regenerate.ts";
 import { planarUnion, planarDifference } from "../../../features/edit-construction/index.ts";
-import type { PlanarArea, PlanarPolygon } from "@/features/edit-construction";
+import type { PlanarArea, PlanarPolygon, PlanarPort } from "@/features/edit-construction";
 
 /**
  * The `"lattice-regenerate"` reaction: how a ground cloud answers a change
@@ -146,10 +146,10 @@ function areaPolygonsOf(topologies: readonly ConstructionRegionTopology[]): Plan
   return polygons;
 }
 
-function unionOf(polygons: readonly PlanarPolygon[]): PlanarArea {
+function unionOf(port: PlanarPort, polygons: readonly PlanarPolygon[]): PlanarArea {
   if (polygons.length === 0) return [];
   try {
-    return planarUnion(polygons[0]!, ...polygons.slice(1));
+    return planarUnion(port, polygons[0]!, ...polygons.slice(1));
   } catch {
     return [];
   }
@@ -171,16 +171,17 @@ function widthOfPiece(piece: PlanarArea[number]): number {
 }
 
 function groundMovedOff(
+  port: PlanarPort,
   before: readonly ConstructionRegionTopology[],
   after: readonly ConstructionRegionTopology[],
 ): PlanarArea {
-  const was = unionOf(areaPolygonsOf(before));
-  const is = unionOf(areaPolygonsOf(after));
+  const was = unionOf(port, areaPolygonsOf(before));
+  const is = unionOf(port, areaPolygonsOf(after));
   if (was.length === 0) return [];
   if (is.length === 0) return was;
   let moved: PlanarArea;
   try {
-    moved = planarDifference(was, is);
+    moved = planarDifference(port, was, is);
   } catch {
     return was;
   }
@@ -314,7 +315,7 @@ function answerCut(runtime: LatticeReactionRuntime, effect: Effect, hits: readon
   // stops existing, and the ground holding them is mostly nowhere near the
   // footprint -- so the search reaches the whole replaced extent, not the stroke.
   const orphaned: ConstructionRegionTopology[] = [];
-  const changed = timePhase("área deixada pela mudança", () => groundMovedOff(change.before, change.after));
+  const changed = timePhase("área deixada pela mudança", () => groundMovedOff(runtime, change.before, change.after));
   if (change.before.length > 0) {
     const beforeBounds = terrainTopologiesBounds(change.before, 4.0);
     for (const t of hits) {
