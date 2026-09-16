@@ -235,3 +235,38 @@ test("a real corner between two nodes is not mistaken for an invented one", () =
     "a corner off the line is a real corner and stays",
   );
 });
+
+test("a corner that lands on a standing node mid-edge still names the edge it lies on", () => {
+  // The tooth `dropInventedCorners` cannot reach. That drop only removes
+  // corners naming *no* node, and a boolean that preserves a structural corner
+  // hands back one sitting exactly on a node a neighbouring face already owns.
+  // It is named, so it survives the drop -- and then neither n0 -> n4 nor
+  // n4 -> n1 is a pair the graph joins, so both segments know no edge and every
+  // landing on them is discarded. Two teeth where the ground meets the contour.
+  //
+  // Dropping the corner is the wrong fix: n4 is a real shared node, and the
+  // edge it sits on is what must be split there. So the segment has to name
+  // the edge that *contains* it, not only the edge between its own endpoints.
+  const edge = { edgeId: "e:n0~n1", reversed: false, startNodeId: "n0", endNodeId: "n1", geometry: { kind: "line" } };
+  const perimeters = standing([[0, 0], [4, 0], [4, 4], [0, 4], [2, 0]], [edge]);
+
+  const withNamedCorner = [
+    [
+      [
+        [0, 0],
+        [2, 0],
+        [4, 0],
+        [4, 4],
+        [0, 4],
+        [0, 0],
+      ],
+    ],
+  ];
+  const rings = buildConstraintRings(withNamedCorner, FACE, perimeters);
+  const points = rings[0].points;
+
+  const at = points.findIndex((point) => point.source === 0);
+  assert.equal(points[(at + 1) % points.length].source, 4, "the corner kept the node it landed on");
+  assert.ok(rings[0].edges[at] !== undefined, "the segment from n0 knows the edge it runs along");
+  assert.equal(rings[0].edges[at].edgeId, "e:n0~n1");
+});

@@ -266,6 +266,52 @@ function pairKey(a: number, b: number): string {
  * should. Only a corner that is genuinely *on* that line goes -- one where the
  * rim leaves the contour is a real corner and stays.
  */
+/** Whether `point` sits on the span `from`-`to`, ends included, within `tolerance`. */
+function onSpan(
+  point: { readonly x: number; readonly z: number },
+  from: { readonly x: number; readonly z: number },
+  to: { readonly x: number; readonly z: number },
+  tolerance: number,
+): boolean {
+  const dx = to.x - from.x;
+  const dz = to.z - from.z;
+  const lengthSq = dx * dx + dz * dz;
+  if (lengthSq <= 1e-12) return false;
+  const along = ((point.x - from.x) * dx + (point.z - from.z) * dz) / lengthSq;
+  if (along < -1e-9 || along > 1 + 1e-9) return false;
+  const length = Math.sqrt(lengthSq);
+  return Math.abs((point.x - from.x) * dz - (point.z - from.z) * dx) / length <= tolerance;
+}
+
+/**
+ * The edge a segment runs *along* when no edge runs exactly between its two
+ * endpoints.
+ *
+ * A boolean that preserves a structural corner hands back a vertex partway
+ * along an edge, and that vertex can name a node -- one a neighbouring face
+ * already owns there. {@link dropInventedCorners} cannot help then: it only
+ * removes corners naming no node, and this one is real and must stay, because
+ * the edge it sits on is exactly what a landing there needs to split.
+ *
+ * So the segment names the edge that contains it instead of the edge between
+ * its own endpoints. Found through the edges meeting the segment's own start
+ * node, so a node's handful of edges is all that is ever examined.
+ */
+function edgeAlongSegment(
+  spansAtNode: ReadonlyMap<number, readonly { readonly edge: ConstructionRegionEdge; readonly from: ConstructionGridConstraintPoint; readonly to: ConstructionGridConstraintPoint }[]>,
+  cur: ConstructionGridConstraintPoint,
+  next: ConstructionGridConstraintPoint,
+  tolerance: number,
+): ConstructionRegionEdge | undefined {
+  for (const node of [cur.source, next.source]) {
+    if (node === undefined) continue;
+    for (const span of spansAtNode.get(node) ?? []) {
+      if (onSpan(cur, span.from, span.to, tolerance) && onSpan(next, span.from, span.to, tolerance)) return span.edge;
+    }
+  }
+  return undefined;
+}
+
 function dropInventedCorners(
   points: readonly ConstructionGridConstraintPoint[],
   hasEdge: (a: number, b: number) => boolean,
@@ -375,14 +421,30 @@ export function buildConstraintRings(
   // for per corner. A pair appearing in more than one ring is the same edge
   // seen from both sides, so the first answer is the answer.
   const edgeBetween = new Map<string, ConstructionRegionEdge>();
+  /**
+   * The same edges, reachable from either end and carrying the span they run
+   * along, so a segment that is only *part* of an edge can still find it.
+   *
+   * Indexed by node rather than searched, and a node's degree is a handful, so
+   * this stays linear in the network's size the way the pair lookup does.
+   */
+  const spansAtNode = new Map<number, { readonly edge: ConstructionRegionEdge; readonly from: ConstructionGridConstraintPoint; readonly to: ConstructionGridConstraintPoint }[]>();
   for (const ring of perimeters.rings) {
     for (let index = 0; index < ring.points.length; index += 1) {
-      const from = ring.points[index]!.source;
-      const to = ring.points[(index + 1) % ring.points.length]!.source;
+      const fromPoint = ring.points[index]!;
+      const toPoint = ring.points[(index + 1) % ring.points.length]!;
+      const from = fromPoint.source;
+      const to = toPoint.source;
       const edge = ring.edges[index];
       if (from === undefined || to === undefined || edge === undefined) continue;
       const key = pairKey(from, to);
       if (!edgeBetween.has(key)) edgeBetween.set(key, edge);
+      const span = { edge, from: fromPoint, to: toPoint };
+      for (const node of [from, to]) {
+        const held = spansAtNode.get(node);
+        if (held === undefined) spansAtNode.set(node, [span]);
+        else held.push(span);
+      }
     }
   }
 
@@ -503,10 +565,11 @@ export function buildConstraintRings(
     }
 
 
+    const onEdgeTolerance = Math.max(1e-6, faceSize * 0.01);
     const stitched = dropInventedCorners(
       collinearCleaned,
       (a, b) => edgeBetween.has(pairKey(a, b)),
-      Math.max(1e-6, faceSize * 0.01),
+      onEdgeTolerance,
     );
 
 
@@ -514,11 +577,10 @@ export function buildConstraintRings(
     for (let i = 0; i < stitched.length; i++) {
       const cur = stitched[i]!;
       const next = stitched[(i + 1) % stitched.length]!;
-      edges.push(
-        cur.source !== undefined && next.source !== undefined
-          ? edgeBetween.get(pairKey(cur.source, next.source))
-          : undefined,
-      );
+      const paired = cur.source !== undefined && next.source !== undefined
+        ? edgeBetween.get(pairKey(cur.source, next.source))
+        : undefined;
+      edges.push(paired ?? edgeAlongSegment(spansAtNode, cur, next, onEdgeTolerance));
     }
     rings.push({ points: stitched, edges, isHole });
   }

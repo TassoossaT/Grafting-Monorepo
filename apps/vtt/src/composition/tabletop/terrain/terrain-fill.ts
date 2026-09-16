@@ -419,15 +419,35 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     claimed.add(id);
     snapped.set(snap.vertex, id);
   }
+  /** `point` projected onto the XZ span `from`-`to`, clamped; `fallback` for a degenerate span. */
+  const alongEdge = (
+    point: { readonly x: number; readonly z: number },
+    from: ConstructionPosition,
+    to: ConstructionPosition,
+    fallback: number,
+  ): number => {
+    const dx = to.x - from.x;
+    const dz = to.z - from.z;
+    const lengthSq = dx * dx + dz * dz;
+    if (lengthSq <= 1e-12) return fallback;
+    return Math.min(1, Math.max(0, ((point.x - from.x) * dx + (point.z - from.z) * dz) / lengthSq));
+  };
+
   const adoptionPositions = new Map<number, ConstructionPosition>();
   for (const adoption of effectiveAdoptions) {
     const vertex = grid.vertices[adoption.vertex];
     if (vertex === undefined) continue;
     const from = live.get(adoption.edge.startNodeId)?.position;
     const to = live.get(adoption.edge.endNodeId)?.position;
+    // Where the vertex sits on the *adopted edge*, projected, rather than
+    // where it sat on the ring segment that found that edge. The two agree
+    // whenever the segment spans the whole edge, and only the projection is
+    // right when the segment is part of one -- which is what a corner landing
+    // partway along an edge produces. Reading the segment's own parameter
+    // there would take the height from the wrong place along the edge.
     const y =
       from !== undefined && to !== undefined
-        ? from.y + (to.y - from.y) * adoption.along
+        ? from.y + (to.y - from.y) * alongEdge(vertex, from, to, adoption.along)
         : request.heightAt(vertex, bounds);
     adoptionPositions.set(adoption.vertex, { x: vertex.x, y, z: vertex.z });
   }
