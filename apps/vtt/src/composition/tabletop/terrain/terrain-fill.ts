@@ -584,6 +584,14 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
   let refusedInHole = 0;
   let refusedClockwise = 0;
   let builtClockwise = 0;
+  // Ground actually laid, summed from the faces that were kept.
+  //
+  // Every other number here counts *events* -- faces refused, corners not
+  // stitched, faces cleared -- and a hole can happen with all of them at zero:
+  // nothing went wrong with what was laid, there was simply less of it than
+  // the area asked for. That is the one thing none of these counts can say,
+  // and it is the reading a hole is actually visible in.
+  let coveredArea = 0;
   const refused = new Set(outcome.skippedRegionIds);
   for (const [regionId, quad] of quadOf) {
     let twice = 0;
@@ -599,7 +607,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
       cz += from.z;
     }
     if (!ok || quad.length === 0) continue;
-    if (!refused.has(regionId)) { if (twice < 0) builtClockwise += 1; continue; }
+    if (!refused.has(regionId)) { coveredArea += Math.abs(twice) / 2; if (twice < 0) builtClockwise += 1; continue; }
     if (twice < 0) refusedClockwise += 1;
     if (windingOf(request.holes, cx / quad.length, cz / quad.length) !== 0) refusedInHole += 1;
   }
@@ -628,6 +636,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     refusedInHole,
     refusedClockwise,
     builtClockwise,
+    coveredArea,
   });
   return {
     built: outcome.createdSurfaceKeys.length,

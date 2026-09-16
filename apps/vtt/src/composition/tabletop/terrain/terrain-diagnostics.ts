@@ -183,6 +183,27 @@ export interface TerrainCommitReport {
    */
   readonly regeneratedCleared?: number;
   readonly regenerateFailures?: readonly string[];
+  /**
+   * Ground actually laid, against the ground the rings asked for.
+   *
+   * Every other reading counts something that went wrong. A hole can happen
+   * with all of them at zero -- each face laid is fine, there are just not
+   * enough of them to fill the area -- and this is the only reading that
+   * shows it. Held against the rings' own area rather than reported alone,
+   * because the number means nothing without what it was supposed to be.
+   */
+  readonly coveredArea?: number;
+}
+
+/** Plan-view area of a ring of constraint points, unsigned. */
+function ringArea(points: readonly { readonly x: number; readonly z: number }[]): number {
+  let twice = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const from = points[index]!;
+    const to = points[(index + 1) % points.length]!;
+    twice += from.x * to.z - to.x * from.z;
+  }
+  return Math.abs(twice) / 2;
 }
 
 /**
@@ -211,6 +232,11 @@ function describe(report: TerrainCommitReport): void {
   const contorno = {
     aneisBoundary: report.boundary.length,
     aneisHoles: report.holes.length,
+    areaPedida: round(
+      report.boundary.reduce((sum, ring) => sum + ringArea(ring.points), 0) -
+        report.holes.reduce((sum, ring) => sum + ringArea(ring.points), 0),
+    ),
+    areaCoberta: round(report.coveredArea ?? 0),
     pontos: pointCount(report.boundary) + pointCount(report.holes),
     pontosComNo: sourceCount(report.boundary) + sourceCount(report.holes),
     segmentoMedio: round(mean(constrained)),
@@ -267,10 +293,16 @@ function describe(report: TerrainCommitReport): void {
     motivos: [...(report.refusals ?? [])].slice(0, 3),
   };
 
+  // Ground missing from the area asked for, as a fraction of it. A face or so
+  // of slack is the boundary being walked as chords; a tenth of the area gone
+  // is a hole somebody can see.
+  const faltando =
+    contorno.areaPedida > 0 ? (contorno.areaPedida - contorno.areaCoberta) / contorno.areaPedida : 0;
   const wrong =
     report.refusedFaces > 0 ||
     report.unadopted > 0 ||
     (report.unstitched ?? 0) > 0 ||
+    faltando > 0.05 ||
     contorno.razaoSegmentoPorFace < 2;
   // In the text of the line, not only in the object beside it. A console
   // collapses the object, and every number that decides anything here was
@@ -290,7 +322,9 @@ function describe(report: TerrainCommitReport): void {
     `(${contorno.pontosComNo} com nó, min traço ${contorno.minimoDoTraco}, ` +
     `min existente ${contorno.minimoDoQueJaExiste}, razão ${contorno.razaoSegmentoPorFace}) ` +
     `| anéis ${contorno.aneisBoundary}+${contorno.aneisHoles} ` +
-    `sentido ${contorno.sentidoBoundary}/${contorno.sentidoHoles}`;
+    `sentido ${contorno.sentidoBoundary}/${contorno.sentidoHoles} ` +
+    `| área ${contorno.areaCoberta} de ${contorno.areaPedida} pedida ` +
+    `(${Math.round(faltando * 100)}% sem chão)`;
   if (wrong) console.warn(line, { contorno, geracao, mescla });
   else console.info(line, { contorno, geracao, mescla });
 

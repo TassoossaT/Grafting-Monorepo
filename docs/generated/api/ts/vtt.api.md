@@ -1087,6 +1087,16 @@ Follows the unified operational cycle:
 
 ### `property vtt.terrain-diagnostics.TerrainCommitReport.builtClockwise?: number`
 
+### `property vtt.terrain-diagnostics.TerrainCommitReport.coveredArea?: number`
+
+Ground actually laid, against the ground the rings asked for.
+
+Every other reading counts something that went wrong. A hole can happen
+with all of them at zero -- each face laid is fine, there are just not
+enough of them to fill the area -- and this is the only reading that
+shows it. Held against the rings' own area rather than reported alone,
+because the number means nothing without what it was supposed to be.
+
 ### `property vtt.terrain-diagnostics.TerrainCommitReport.declaredNodes: number`
 
 ### `property vtt.terrain-diagnostics.TerrainCommitReport.droppedAtCorner?: number`
