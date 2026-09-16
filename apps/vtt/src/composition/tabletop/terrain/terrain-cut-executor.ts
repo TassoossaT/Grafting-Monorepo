@@ -1016,6 +1016,11 @@ export function executeTerrainCut(
 
   const filled = timePhase("preenchimento", () => fillTerrain(runtime, {
     what: request.profile.kind === "concave" ? "escavação" : request.profile.kind === "convex" ? "adição" : "regeneração",
+    // The faces this fill means to replace, so the log can hold that against
+    // the faces actually cleared. Left unset, the two never disagreed on paper
+    // however far apart they ran -- the divergence the pair exists to catch
+    // read `0 vs N` on every single commit, so nobody could see it.
+    regenerated: request.coveredRegions?.length ?? 0,
     mint: `${request.tableId}:cut-${request.causeId}`,
     tableId: request.tableId,
     causeId: request.causeId,
