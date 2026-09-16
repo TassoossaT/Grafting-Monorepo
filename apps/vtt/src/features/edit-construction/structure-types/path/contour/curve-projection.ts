@@ -1,83 +1,52 @@
-import type { ConstructionPosition } from "@/ports";
+import type { ConstructionFieldQuery, ConstructionFieldSample, ConstructionPosition } from "@/ports";
 
 /**
- * TS mirror of `grafting-graph-core`'s `curve_offset::ReferenceField` -- see
- * `field.rs` for the full argument. The short version is that
- * this is the same question answered the same way on both sides of the
- * boundary, and the two must not drift: the Rust field elevates the mesh's
- * interior, this one elevates the contour the mesh is built on, and a
- * disagreement between them would be a seam exactly at the margin.
+ * Elevating what a planar union handed back flat -- asked of the engine's own
+ * reference field, never recomputed here.
  *
- * **What it replaces and why.** The band union works in `[x, z]` and
- * discards height, so every vertex it hands back needs one from somewhere.
- * That somewhere used to be the nearest ribbon sample, which is wrong in the
- * way nearest-neighbour is always wrong: the sample nearest a point on the
- * left margin is regularly one on the *right* margin, or on another chain
+ * **Why the question exists.** The band union works in `[x, z]` and discards
+ * height, so every vertex it hands back needs one from somewhere. That
+ * somewhere used to be the nearest ribbon sample, which is wrong in the way
+ * nearest-neighbour is always wrong: the sample nearest a point on the left
+ * margin is regularly one on the *right* margin, or on another chain
  * entirely, and the vertex came back at that unrelated station's height.
- * Along a run crossing a slope, adjacent boundary vertices could pick
- * samples from opposite sides and end up several stations apart in
- * elevation -- which is one of the two things that dented a road.
  *
- * Projecting onto the curve asks the question that was actually meant: the
- * curve is what the surface was swept from, so a point's height is the
- * curve's height at the station it projects onto.
+ * **Why it is the engine's.** The curve is what the surface was swept from,
+ * and the same field elevates the mesh's interior inside the engine while
+ * this elevates the contour the mesh is built on. Two implementations of one
+ * projection would disagree exactly at the margin, which is a seam; so there
+ * is one, in `curve_offset::field`, and this asks it.
  */
+
+/** What answering a projection needs: the engine's own reference field. */
+export interface FieldPort {
+  queryField(query: ConstructionFieldQuery): readonly ConstructionFieldSample[];
+}
 
 /** One curve the contour was swept from, flattened to segments and carrying height. */
 export interface ReferenceCurve {
   readonly points: readonly ConstructionPosition[];
+  /** How far off this curve the surface it generated reaches; omitted means "just read the nearest". */
+  readonly reach?: number;
 }
 
 /**
- * The height of whichever curve in `curves` runs nearest `(x, z)`, at the
- * station the point projects onto.
+ * The height of whichever curve runs nearest each `[x, z]` point, at the
+ * station that point projects onto, in one crossing.
  *
  * A point past a curve's end reads that end's height rather than an
  * extrapolation, which is what a surface overshooting its curve -- an end
- * cap, a mitre past a corner -- should get.
- *
- * Falls back to `fallback` when no curve has a segment to project onto, so a
- * degenerate chain mid-edit produces a flat vertex rather than a NaN.
+ * cap, a mitre past a corner -- should get. A point with no curve to project
+ * onto reads `fallback`, so a degenerate chain mid-edit produces a flat
+ * vertex rather than a NaN.
  */
-export function heightOnCurves(
-  x: number,
-  z: number,
+export function heightsOnCurves(
+  port: FieldPort,
   curves: readonly ReferenceCurve[],
+  points: readonly (readonly [number, number])[],
   fallback = 0,
-): number {
-  let bestDistanceSq = Infinity;
-  let bestY = fallback;
-  for (const curve of curves) {
-    const { points } = curve;
-    if (points.length < 2) continue;
-    let minX = points[0]!.x, maxX = points[0]!.x;
-    let minZ = points[0]!.z, maxZ = points[0]!.z;
-    for (let i = 1; i < points.length; i += 1) {
-      const p = points[i]!;
-      if (p.x < minX) minX = p.x;
-      else if (p.x > maxX) maxX = p.x;
-      if (p.z < minZ) minZ = p.z;
-      else if (p.z > maxZ) maxZ = p.z;
-    }
-    const dxBox = x < minX ? minX - x : x > maxX ? x - maxX : 0;
-    const dzBox = z < minZ ? minZ - z : z > maxZ ? z - maxZ : 0;
-    if (dxBox * dxBox + dzBox * dzBox >= bestDistanceSq) continue;
-
-    for (let index = 0; index + 1 < points.length; index += 1) {
-      const from = points[index]!;
-      const to = points[index + 1]!;
-      const dx = to.x - from.x;
-      const dz = to.z - from.z;
-      const lengthSq = dx * dx + dz * dz;
-      if (lengthSq < 1e-12) continue;
-      const along = Math.min(1, Math.max(0, ((x - from.x) * dx + (z - from.z) * dz) / lengthSq));
-      const offsetX = x - (from.x + dx * along);
-      const offsetZ = z - (from.z + dz * along);
-      const distanceSq = offsetX * offsetX + offsetZ * offsetZ;
-      if (distanceSq >= bestDistanceSq) continue;
-      bestDistanceSq = distanceSq;
-      bestY = from.y + (to.y - from.y) * along;
-    }
-  }
-  return bestY;
+): readonly number[] {
+  if (points.length === 0) return [];
+  if (curves.length === 0) return points.map(() => fallback);
+  return port.queryField({ curves, points }).map((sample) => sample?.y ?? fallback);
 }

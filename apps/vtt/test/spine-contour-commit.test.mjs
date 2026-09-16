@@ -84,6 +84,7 @@ function createFakeConstructionSession() {
     curveBatch: geometry.runtime.curveBatch,
     curveNetwork: geometry.runtime.curveNetwork,
     planarBoolean: geometry.runtime.planarBoolean,
+    queryField: (query) => geometry.runtime.queryField(query),
     async start() {
       started = true;
     },

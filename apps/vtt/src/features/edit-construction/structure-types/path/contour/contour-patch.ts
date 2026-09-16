@@ -1,7 +1,7 @@
 import type { ConstructionEdgeId, ConstructionPatch, ConstructionPosition } from "@/ports";
 
 import { createBoundaryEdges, simplifyClosedRing } from "../../../topology/index.ts";
-import { heightOnCurves, type ReferenceCurve } from "./curve-projection.ts";
+import { heightsOnCurves, type FieldPort, type ReferenceCurve } from "./curve-projection.ts";
 import type { PlanarArea, PlanarPoint, PlanarRing } from "../../../topology/planar-area.ts";
 
 /**
@@ -193,6 +193,8 @@ export interface ContourPatchResult {
  * clipped edge against; it no longer decides any height.
  */
 export function buildContourPatch(
+  /** The engine, which is what elevates a flat union vertex. See `curve-projection.ts`. */
+  port: FieldPort,
   tableId: string,
   operationId: string,
   surfaceType: string,
@@ -251,9 +253,13 @@ export function buildContourPatch(
   };
 
   let mintedCounter = 0;
-  const idsFor = (ring: PlanarRing, ringIndex: number): readonly string[] =>
-    openRing(ring).map(([x, z]) => {
-      const y = heightOnCurves(x, z, referenceCurves);
+  const idsFor = (ring: PlanarRing, ringIndex: number): readonly string[] => {
+    const walked = openRing(ring);
+    // One crossing for the whole ring: the engine answers where each vertex
+    // projects onto the curves this contour was swept from.
+    const heights = heightsOnCurves(port, referenceCurves, walked.map(([x, z]) => [x, z] as const));
+    return walked.map(([x, z], pointIndex) => {
+      const y = heights[pointIndex] ?? 0;
       const welded = nearestExisting(x, y, z);
       if (welded !== undefined) {
         nodePositions.set(welded.id, welded.position);
@@ -264,6 +270,7 @@ export function buildContourPatch(
       nodePositions.set(id, { x, y, z });
       return id;
     });
+  };
 
   const regions = shapes
     .filter((shape) => {

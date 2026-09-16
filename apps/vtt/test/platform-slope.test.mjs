@@ -88,7 +88,7 @@ test("the ramp's spine takes the road's handle, midpoint and width edits, regene
   const { runtime, session } = twoFloorsAndRamp();
   try {
     const edit = (targetId, position, operationId, extra = {}) => {
-      const plan = planBezierEdit({ snapshot: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), port: runtime, targetId, position, operationId, tableId: "platform-test", ...extra });
+      const plan = planBezierEdit({ snapshot: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), port: runtime, field: runtime, targetId, position, operationId, tableId: "platform-test", ...extra });
       assert.ok(plan);
       runtime.applyPatchReplacement(plan.request);
       return plan;
@@ -162,7 +162,7 @@ test("a road drawn across a ramp's spine never welds into it", () => {
     const road = { shape: "circle", radius: 0.5, rotationDegrees: 0, pathKind: "road", bedWidth: 0.6, shoulderWidth: 0.1, shoulderHeight: 0, miterLimit: 4 };
     const effect = createPathBrushEffect({ brushShape: { kind: "circle", radius: 0.5 }, brushRegion: { samples: [{ x: 5, y: 0, z: -6 }, { x: 5, y: 0, z: 6 }] }, parameters: pathFormationFor(road) },
       { operationId: "road:cross", tableId: "platform-test", initiatedBy: "path-brush" });
-    const plan = planPathCloudMutation({ bezier: runtime, tableId: "platform-test", snapToGrid: false, graphSnapshot: runtime.getGraphSnapshot(),
+    const plan = planPathCloudMutation({ bezier: runtime, field: runtime, tableId: "platform-test", snapToGrid: false, graphSnapshot: runtime.getGraphSnapshot(),
       regionTopologies: runtime.getAllRegionTopologies(), coverageFor: () => [], effect, tolerance: 0.025 });
     assert.equal(plan.kind, "ready");
     runtime.applyPatchReplacement(plan.request);
@@ -217,7 +217,7 @@ test("a ramp over terrain cuts it and hands the terrain to its regeneration, on 
 
     const span = slopeSpans(runtime)[0];
     const before = faces(runtime, "platform-slope");
-    const plan = planBezierEdit({ snapshot: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), port: runtime,
+    const plan = planBezierEdit({ snapshot: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), port: runtime, field: runtime,
       targetId: curvePickId(span.edgeId, "midpoint"), position: { x: 0.5, y: 1, z: 3 }, operationId: "slope:bend", tableId: "platform-test" });
     assert.ok(plan.request.footprintOutline?.length >= 3, "a spine edit claims the regenerated footprint");
     assert.deepEqual(plan.request.sourceSurfaceKeys, before.map((t) => t.surfaceKey), "the edit replaces the ramp's standing faces");

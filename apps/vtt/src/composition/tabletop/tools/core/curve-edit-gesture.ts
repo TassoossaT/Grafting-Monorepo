@@ -63,6 +63,7 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: ToolPara
   let target: ConstructionPosition = sample.point;
   let moved = false;
   const plan = (insert = false) => planBezierEdit({
+    field: ctx.runtime,
     snapshot, topologies, port: ctx.runtime, targetId, position: target, operationId, tableId: ctx.tableId, insert, mode: params?.curveMode, action: params?.curveAction, width: params?.curveWidth ?? 4, endWidth: params?.curveEndWidth,
   });
   return {

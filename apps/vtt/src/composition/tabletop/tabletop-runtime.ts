@@ -33,6 +33,8 @@ import type {
   ConstructionContourQuery,
   ConstructionCoveredRegion,
   ConstructionCurvedEdge,
+  ConstructionFieldQuery,
+  ConstructionFieldSample,
   ConstructionEdgeGeometry,
   ConstructionGraphSnapshot,
   ConstructionIrregularQuadGrid,
@@ -167,6 +169,8 @@ export interface TabletopRuntime extends BezierPort {
   getCurvedEdges(): readonly ConstructionCurvedEdge[];
   /** Pure contour geometry questions. See `ConstructionSessionPort.queryContours`. */
   queryContours(queries: readonly ConstructionContourQuery[]): readonly ConstructionContourAnswer[];
+  /** Where points project onto the curves a surface was swept from. See `ConstructionSessionPort.queryField`. */
+  queryField(query: ConstructionFieldQuery): readonly ConstructionFieldSample[];
   /** Generic graph primitives, including edges not owned by a region boundary. */
   getGraphSnapshot(): ConstructionGraphSnapshot;
   applyRegionOverlay(
@@ -893,6 +897,11 @@ export class AppTabletopRuntime implements TabletopRuntime {
   queryContours(queries: readonly ConstructionContourQuery[]): readonly ConstructionContourAnswer[] {
     this.#requireReady("asking about contour geometry");
     return this.#construction.queryContours(queries);
+  }
+
+  queryField(query: ConstructionFieldQuery): readonly ConstructionFieldSample[] {
+    this.#requireReady("reading a reference field");
+    return this.#construction.queryField(query);
   }
 
   getCurvedEdges(): readonly ConstructionCurvedEdge[] {

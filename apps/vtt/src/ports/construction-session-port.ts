@@ -89,6 +89,29 @@ export type ConstructionContourAnswer =
   | { readonly kind: "geometry"; readonly geometry: ConstructionEdgeGeometry }
   | { readonly kind: "closest"; readonly t: number; readonly position: readonly [number, number] };
 
+/**
+ * A reading of the curves a surface was swept from: the ground plane says
+ * where, the curves say how high.
+ *
+ * A planar union works in XZ and throws elevation away, so every vertex it
+ * hands back needs a height from somewhere. That somewhere is the curve the
+ * surface came from, at the station the vertex projects onto -- the engine's
+ * own reference field, asked rather than mirrored.
+ */
+export interface ConstructionFieldQuery {
+  /** The curves, each an ordered run of positions, with how far off it the surface it generated reaches. */
+  readonly curves: readonly { readonly points: readonly ConstructionPosition[]; readonly reach?: number }[];
+  /** `[x, z]` points, answered in order. */
+  readonly points: readonly (readonly [number, number])[];
+  /** One height per point, when levels stacked over the same ground have to be told apart. */
+  readonly near?: readonly number[];
+}
+
+/** Where one point projected, or `null` when there was no curve to project onto. */
+export type ConstructionFieldSample =
+  | { readonly curve: number; readonly s: number; readonly t: number; readonly y: number }
+  | null;
+
 /** One bezier boundary edge, in its own direction: anchors with live positions, and XZ handles. */
 export interface ConstructionCurvedEdge {
   readonly edgeId: ConstructionEdgeId;
@@ -685,6 +708,12 @@ export interface ConstructionSessionPort extends BezierPort {
    * session, and answers in the order asked.
    */
   queryContours(queries: readonly ConstructionContourQuery[]): readonly ConstructionContourAnswer[];
+
+  /**
+   * Reads ground-plane points against the curves a surface was swept from.
+   * See {@link ConstructionFieldQuery}.
+   */
+  queryField(query: ConstructionFieldQuery): readonly ConstructionFieldSample[];
   /** Every region's boundary -- the edit-mode bootstrap call. */
   getAllRegionTopologies(): readonly ConstructionRegionTopology[];
 

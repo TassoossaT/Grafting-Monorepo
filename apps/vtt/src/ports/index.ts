@@ -39,6 +39,8 @@ export type {
   ConstructionPlanarShape,
   ConstructionMotionPlan,
   ConstructionContourAnswer,
+  ConstructionFieldQuery,
+  ConstructionFieldSample,
   ConstructionContourQuery,
   ConstructionCoveredRegion,
   ConstructionCurvedEdge,

@@ -568,6 +568,13 @@ impl ConstructionSession {
         serialize(&crate::contour_query::answer(&queries).map_err(to_js_error)?)
     }
 
+    /// Where ground-plane points project onto the curves a surface was swept
+    /// from. See `field_query`.
+    pub fn field_query_json(&self, request_json: &str) -> Result<String, JsValue> {
+        let query: crate::field_query::FieldQuery = parse(request_json)?;
+        serialize(&crate::field_query::answer(&query))
+    }
+
     /// Every bezier boundary edge a region uses. See `region_editing::curved_edges`.
     pub fn curved_edges_json(&self) -> Result<String, JsValue> {
         serialize(&region_editing::curved_edges(&self.graph, &self.topology))

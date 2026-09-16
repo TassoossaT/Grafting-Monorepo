@@ -53,6 +53,11 @@ export function sessionFixture() {
     addPatch(patch) { const result = JSON.parse(session.add_patch_json(JSON.stringify(wirePatch(patch)))); if (result.skippedRegionIds.length) throw new Error(JSON.stringify(result)); return { ...result.outcome, skippedRegionIds: result.skippedRegionIds, skippedRegionReasons: result.skippedRegionReasons ?? [] }; },
     getRegionTopologiesInBounds: (bounds) => JSON.parse(session.region_topologies_in_bounds_json(JSON.stringify(bounds))).map(topology),
     queryContours: (queries) => (queries.length === 0 ? [] : JSON.parse(session.contour_query_json(JSON.stringify(queries)))),
+    queryField: (query) => (query.points.length === 0 ? [] : JSON.parse(session.field_query_json(JSON.stringify({
+      curves: query.curves.map((curve) => ({ points: curve.points.map((p) => [p.x, p.y, p.z]), reach: curve.reach ?? 0 })),
+      points: query.points,
+      near: query.near ?? null,
+    })))),
     getCurvedEdges: () => JSON.parse(session.curved_edges_json()).map((edge) => ({ ...edge, start: position(edge.start), end: position(edge.end) })),
     getSnapshot: () => ({ tableId: "platform-test", map: { nodePositions: new Map() } }),
     transact(transactionId, _origin, work) {

@@ -331,6 +331,7 @@ test("planPathCloudMutation does not consume standing faces owned by an unrelate
   try {
     const plan = planPathCloudMutation({
       bezier: runtime,
+      field: runtime,
       tableId: "table-1",
       graphSnapshot: { nodes: [], edges: [] },
       regionTopologies: [unrelatedTopology],
@@ -384,6 +385,7 @@ test("planPathCloudMutation never consumes another type's regions itself, whatev
   try {
     const plan = planPathCloudMutation({
       bezier: runtime,
+      field: runtime,
       tableId: "table-1",
       graphSnapshot: { nodes: [], edges: [] },
       regionTopologies: [],

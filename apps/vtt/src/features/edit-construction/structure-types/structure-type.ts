@@ -13,6 +13,7 @@ import type { CloudTopology } from "../topology/construction-cloud.ts";
 import type { CreationInteraction } from "./creation-interaction.ts";
 import type { EffectKind, ReactionId } from "../effects/effect.ts";
 import type { PlanarArea } from "../topology/planar-area.ts";
+import type { FieldPort } from "./path/contour/curve-projection.ts";
 
 /**
  * A role is this app's own name for "what a particular node/edge of a
@@ -199,6 +200,8 @@ export interface SpineRegenerationInput {
   readonly graphPatch: ConstructionGraphPatch;
   readonly topologies: readonly ConstructionRegionTopology[];
   readonly port: BezierPort;
+  /** The engine, which elevates every contour vertex the plan-view union hands back flat. */
+  readonly field: FieldPort;
   readonly operationId: string;
   readonly tableId: string;
 }

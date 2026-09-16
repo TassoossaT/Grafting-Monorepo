@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { enginePort } from "./engine-planar.mjs";
 
 import { buildContourPatch, planSpineContour } from "../src/features/edit-construction/structure-types/path/contour/index.ts";
 import { spineRibbons } from "../src/features/edit-construction/spine/index.ts";
@@ -49,6 +50,7 @@ function standingBand(opId, bandIndex, corners) {
 test("a straight isolated run produces one unified region, a clean quad, and consumes nothing standing", () => {
   const chain = chainOf("run-1", [at(0, 0), at(10, 0)], [-2.1, 0, 2.1]);
   const result = planSpineContour({
+    field: enginePort,
     union,
     tableId: "table",
     operationId: "op-1",
@@ -75,6 +77,7 @@ test("a new road meeting a standing one in a T unions into one region and consum
   const branch = chainOf("branch", [at(0, 1), at(0, -4)], [-1, 1]);
 
   const result = planSpineContour({
+    field: enginePort,
     union,
     tableId: "table",
     operationId: "op-t",
@@ -98,6 +101,7 @@ test("a new road crossing a standing one in an X unions into one region", () => 
   const vertical = chainOf("vertical", [at(0, -5), at(0, 5)], [-1, 1]);
 
   const result = planSpineContour({
+    field: enginePort,
     union,
     tableId: "table",
     operationId: "op-x",
@@ -120,7 +124,7 @@ test("a sliver shape from a self-intersecting union never becomes a region", () 
   // is exactly why area, not node count, is what has to catch it.
   const real = [[[0, 0], [10, 0], [10, 2], [0, 2], [0, 0]]];
   const sliver = [[[5, 1], [5.0001, 1], [5, 1.0001], [5, 1]]];
-  const result = buildContourPatch("table", "op-sliver", "path", 0, [real, sliver], [], [], []);
+  const result = buildContourPatch(enginePort, "table", "op-sliver", "path", 0, [real, sliver], [], [], []);
   assert.equal(result.patch.regions.length, 1, "the sliver was filtered out before it became a region");
   assert.equal(result.regionIds.length, 1);
 });
@@ -135,6 +139,7 @@ test("a local contour rebuild gives a full retained edge a private identity", ()
   const shape = [[[0, 0], [10, 0], [10, 2], [0, 2], [0, 0]]];
   const fullEdge = "table:seg:n0~n1";
   const result = buildContourPatch(
+    enginePort,
     "table",
     "op-local",
     "path",
@@ -162,6 +167,7 @@ test("two roads meeting end-to-end in an L stay one connected face, not two touc
   const turn = chainOf("turn", [at(0, 0), at(0, 5)], [-1, 1]);
 
   const result = planSpineContour({
+    field: enginePort,
     union,
     tableId: "table",
     operationId: "op-l",
@@ -190,6 +196,7 @@ test("planSpineContour consumes every standingRegion it is given, unconditionall
   const edited = chainOf("edited", [at(0, 0), at(10, 0)], [-1, 1]);
 
   const result = planSpineContour({
+    field: enginePort,
     union,
     tableId: "table",
     operationId: "op-whole-cloud",
@@ -208,6 +215,7 @@ test("two roads meeting in a Y-junction merge into one single seamless region wi
   const rightBranch = chainOf("right-branch", [at(0, 0), at(6, 8)], [-2.1, 0, 2.1]);
 
   const result = planSpineContour({
+    field: enginePort,
     union,
     tableId: "table",
     operationId: "op-y",
@@ -234,6 +242,7 @@ test("a complex network of 6 intersecting streets produces valid non-empty regio
   ];
 
   const result = planSpineContour({
+    field: enginePort,
     union,
     tableId: "table",
     operationId: "op-complex-hub",
@@ -259,6 +268,7 @@ test("a road crossing uneven terrain preserves intermediate 3D contour vertices 
   ];
   const chain = chainOf("hill-run", hillPoints, [-2, 0, 2]);
   const result = planSpineContour({
+    field: enginePort,
     union,
     tableId: "table",
     operationId: "op-hill-road",
@@ -291,6 +301,7 @@ test("a flat straight road with collinear intermediate points simplifies to a 4-
   ];
   const chain = chainOf("flat-run", flatPoints, [-2, 0, 2]);
   const result = planSpineContour({
+    field: enginePort,
     union,
     tableId: "table",
     operationId: "op-flat-road",
@@ -313,11 +324,11 @@ test("regenerating the same boundary reuses the nodes it already had", () => {
   // and must keep the id it already had -- otherwise every stroke hands the
   // engine a patch in which nothing is recognisable as what it already held.
   const shape = [[[0, 0], [40, 0], [40, 4], [0, 4], [0, 0]]];
-  const first = buildContourPatch("table", "op-a", "path", 0, [shape], [], [], []);
+  const first = buildContourPatch(enginePort, "table", "op-a", "path", 0, [shape], [], [], []);
   assert.ok(first.patch.nodes.length >= 4);
 
   const standing = first.patch.nodes.map((node) => ({ id: node.id, position: node.position }));
-  const second = buildContourPatch("table", "op-b", "path", 0, [shape], [], [], standing);
+  const second = buildContourPatch(enginePort, "table", "op-b", "path", 0, [shape], [], [], standing);
 
   const reused = second.patch.nodes.filter((node) => standing.some((was) => was.id === node.id));
   assert.equal(
@@ -332,9 +343,9 @@ test("a vertex that really moved still mints its own node", () => {
   // vertex landing back where a node already stands may adopt one.
   const before = [[[0, 0], [40, 0], [40, 4], [0, 4], [0, 0]]];
   const after = [[[0, 0], [40, 0], [40, 9], [0, 9], [0, 0]]];
-  const first = buildContourPatch("table", "op-a", "path", 0, [before], [], [], []);
+  const first = buildContourPatch(enginePort, "table", "op-a", "path", 0, [before], [], [], []);
   const standing = first.patch.nodes.map((node) => ({ id: node.id, position: node.position }));
-  const second = buildContourPatch("table", "op-b", "path", 0, [after], [], [], standing);
+  const second = buildContourPatch(enginePort, "table", "op-b", "path", 0, [after], [], [], standing);
 
   const minted = second.patch.nodes.filter((node) => !standing.some((was) => was.id === node.id));
   assert.equal(minted.length, 2, "the two corners that moved are new; the two that did not are not");

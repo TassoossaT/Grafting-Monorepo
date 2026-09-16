@@ -6,6 +6,7 @@
 mod editing;
 mod contour_query;
 mod enclosure;
+mod field_query;
 mod footprint;
 mod geometry;
 mod grid_generation;

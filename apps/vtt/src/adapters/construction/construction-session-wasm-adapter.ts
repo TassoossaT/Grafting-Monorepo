@@ -22,6 +22,8 @@ import type {
   ConstructionContourQuery,
   ConstructionCoveredRegion,
   ConstructionCurvedEdge,
+  ConstructionFieldQuery,
+  ConstructionFieldSample,
   ConstructionEdgeGeometry,
   ConstructionNodeId,
   ConstructionNodeSnapshot,
@@ -517,6 +519,19 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
   queryContours(queries: readonly ConstructionContourQuery[]): readonly ConstructionContourAnswer[] {
     if (queries.length === 0) return [];
     return JSON.parse(this.#require().contour_query_json(JSON.stringify(queries))) as readonly ConstructionContourAnswer[];
+  }
+
+  queryField(query: ConstructionFieldQuery): readonly ConstructionFieldSample[] {
+    if (query.points.length === 0) return [];
+    const wire = {
+      curves: query.curves.map((curve) => ({
+        points: curve.points.map((point) => [point.x, point.y, point.z]),
+        reach: curve.reach ?? 0,
+      })),
+      points: query.points,
+      near: query.near ?? null,
+    };
+    return JSON.parse(this.#require().field_query_json(JSON.stringify(wire))) as readonly ConstructionFieldSample[];
   }
 
   getCurvedEdges(): readonly ConstructionCurvedEdge[] {

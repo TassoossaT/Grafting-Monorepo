@@ -16,6 +16,11 @@ const session = new ConstructionSession();
 export const enginePort = {
   planarBoolean: (request) => JSON.parse(session.planar_boolean_json(JSON.stringify(request))),
   queryContours: (queries) => (queries.length === 0 ? [] : JSON.parse(session.contour_query_json(JSON.stringify(queries)))),
+  queryField: (query) => (query.points.length === 0 ? [] : JSON.parse(session.field_query_json(JSON.stringify({
+    curves: query.curves.map((curve) => ({ points: curve.points.map((p) => [p.x, p.y, p.z]), reach: curve.reach ?? 0 })),
+    points: query.points,
+    near: query.near ?? null,
+  })))),
 };
 
 export const planarPort = enginePort;

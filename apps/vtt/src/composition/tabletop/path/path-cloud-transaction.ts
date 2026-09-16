@@ -30,6 +30,7 @@ function commitUntimed(
   try {
     const plan = timePhase("plano da nuvem", () => planPathCloudMutation({
       bezier: ctx.runtime,
+      field: ctx.runtime,
       tableId: ctx.tableId,
       graphSnapshot: timePhase("leitura do grafo", () => ctx.runtime.getGraphSnapshot()),
       regionTopologies: timePhase("leitura de todas as topologias", () => ctx.runtime.getAllRegionTopologies()),

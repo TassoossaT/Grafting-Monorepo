@@ -1,3 +1,4 @@
+import type { FieldPort } from "./contour/curve-projection.ts";
 import { planBezierRoad, unionBezierRibbons } from "./bezier-road-plan.ts";
 import { pathCorridorId } from "./path-corridor.ts";
 import type { BezierPort } from "@/ports";
@@ -23,6 +24,8 @@ import { planSpineContour } from "./contour/index.ts";
 export interface PathCloudMutationInput {
   /** The curve engine every road is fitted, sampled and unioned through. */
   readonly bezier: BezierPort;
+  /** The engine, which elevates every contour vertex the plan-view union hands back flat. */
+  readonly field: FieldPort;
   readonly tableId: string;
   readonly graphSnapshot: ConstructionGraphSnapshot;
   readonly regionTopologies: readonly ConstructionRegionTopology[];
@@ -117,6 +120,7 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
   const existingNodes = [...weldableNodes].map(([id, position]) => ({ id, position }));
 
   const planned = planSpineContour({
+    field: input.field,
     union: (ribbons) => unionBezierRibbons(input.bezier, ribbons),
     tableId: input.tableId,
     operationId: bezierContourId(touchedCloud.corridorIds, operationId),

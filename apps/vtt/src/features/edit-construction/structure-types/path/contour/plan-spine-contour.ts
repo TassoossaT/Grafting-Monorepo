@@ -10,6 +10,7 @@ import type {
 
 import type { ReferenceCurve } from "./curve-projection.ts";
 import { buildContourPatch, type ExistingNode } from "./contour-patch.ts";
+import type { FieldPort } from "./curve-projection.ts";
 
 /** One swept ribbon: a closed ring, its first side forward and its other side back. */
 export interface BandRibbon {
@@ -36,6 +37,8 @@ export interface SpineChainInput {
 }
 
 export interface PlanSpineContourInput {
+  /** The engine, which elevates every vertex the plan-view union hands back flat. */
+  readonly field: FieldPort;
   /** The plan-view union of the ribbons, through the curve engine. */
   readonly union: (ribbons: readonly BandRibbon[]) => [number, number][][][];
   readonly tableId: string;
@@ -134,6 +137,7 @@ export function planSpineContour(input: PlanSpineContourInput): PlanSpineContour
 
   const heightSamples = ribbons.flatMap((ribbon) => ribbon.outer);
   const built = buildContourPatch(
+    input.field,
     input.tableId,
     input.operationId,
     input.surfaceType,

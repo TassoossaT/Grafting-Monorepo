@@ -30,7 +30,7 @@ export function regeneratePathSpine(input: SpineRegenerationInput): SpineRegener
   }
   const existingNodes = [...weldableNodes].map(([id, position]) => ({ id, position }));
   const plan = planSpineContour({ tableId: input.tableId, operationId: bezierContourId(cloud.corridorIds, input.operationId), surfaceType: PATH_SURFACE_TYPE,
-    union: (ribbons) => unionBezierRibbons(input.port, ribbons), editedChains: chains, standingRegions: standing, existingNodes, existingEdgeUses: edgeUses });
+    field: input.field, union: (ribbons) => unionBezierRibbons(input.port, ribbons), editedChains: chains, standingRegions: standing, existingNodes, existingEdgeUses: edgeUses });
   if (!plan) return undefined;
   const segments = chains.flatMap((c) => c.sampledPoints!.slice(1).flatMap((p, i) => {
     const a = c.sampledPoints![i]!; return [a.x, a.y, a.z, p.x, p.y, p.z];
