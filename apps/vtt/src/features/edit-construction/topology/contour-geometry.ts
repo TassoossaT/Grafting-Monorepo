@@ -108,6 +108,13 @@ export function subContour(
 
 /** The signed angle an arc turns through, positive counter-clockwise; zero for anything else. */
 export function arcSweepOf(port: ContourPort, span: ContourSpan): number {
-  const [answer] = port.queryContours([query(span.geometry, span.start, span.end, { kind: "arcSweep" })]);
-  return scalars(answer)[0] ?? 0;
+  return arcSweepsOf(port, [span])[0] ?? 0;
+}
+
+/** Each span's own sweep, in one crossing. */
+export function arcSweepsOf(port: ContourPort, spans: readonly ContourSpan[]): readonly number[] {
+  if (spans.length === 0) return [];
+  return port
+    .queryContours(spans.map((span) => query(span.geometry, span.start, span.end, { kind: "arcSweep" })))
+    .map((answer) => scalars(answer)[0] ?? 0);
 }

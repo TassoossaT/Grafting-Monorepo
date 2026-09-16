@@ -130,11 +130,11 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
     const standingRaw = sources.flatMap((t) => sourceEdges(t).flat());
     const clipPoints = [...new Set(clipEdges.flatMap((e) => [e.a,e.b]))].map((id) => ({ id, position: positionOf(id) }));
     const standingPoints = [...new Set(standingRaw.flatMap((e) => [e.a,e.b]))].map((id) => ({ id, position: positionOf(id) }));
-    const standing = splitContourAtPoints(standingRaw, clipPoints, positionOf, WELD_TOLERANCE);
-    const splitClipEdges = splitContourAtPoints(clipEdges, standingPoints, positionOf, WELD_TOLERANCE);
+    const standing = splitContourAtPoints(ctx.runtime, standingRaw, clipPoints, positionOf, WELD_TOLERANCE);
+    const splitClipEdges = splitContourAtPoints(ctx.runtime, clipEdges, standingPoints, positionOf, WELD_TOLERANCE);
     const merged = weldedMerge(standing, splitClipEdges);
     if (merged.kind === "error") { ctx.reportFeedback({ tone: "error", message: merged.message }); return; }
-    let groups = groupLoopsByContainment(merged.loops, positionOf);
+    let groups = groupLoopsByContainment(ctx.runtime, merged.loops, positionOf);
     // A cut clip that never touches or nests inside any standing platform
     // removed nothing -- its own loop must not be promoted into a new face.
     if (params.mode === "cut") {
