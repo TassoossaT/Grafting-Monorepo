@@ -12,6 +12,7 @@ import type {
   ConstructionSurfaceKey,
 } from "@/ports";
 import type { ShapeChange } from "@/features/edit-construction";
+import { reverseGeometry } from "../../../features/edit-construction/index.ts";
 
 /** What reading a change's faces needs of the runtime. */
 export interface ShapeChangeRuntime {
@@ -46,7 +47,8 @@ function edgeUsesOf(
       const position = id ? nodeAt(id) : undefined;
       if (position) nodes.set(id, position);
     }
-    return { edgeId: use.edgeId, reversed: use.reversed, startNodeId, endNodeId, geometry: edge?.geometry ?? { kind: "line" } };
+    const own = edge?.geometry ?? { kind: "line" as const };
+    return { edgeId: use.edgeId, reversed: use.reversed, startNodeId, endNodeId, geometry: use.reversed ? reverseGeometry(own) : own };
   });
 }
 

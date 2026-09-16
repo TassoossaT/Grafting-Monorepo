@@ -44,7 +44,7 @@ function sourceEdges(topology: ConstructionRegionTopology): readonly (readonly D
   return [...topology.outerLoops, ...topology.holes].map((loop) => loop.map((edge) => ({
     a: edge.startNodeId,
     b: edge.endNodeId,
-    geometry: edge.reversed ? reverseGeometry(edge.geometry) : edge.geometry,
+    geometry: edge.geometry,
   })));
 }
 function ringSignature(edges: readonly DirectedContourEdge[]): string {

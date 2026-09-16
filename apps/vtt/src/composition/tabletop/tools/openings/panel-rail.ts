@@ -6,7 +6,6 @@ import type {
 } from "@/ports";
 
 import { edgeFrame, subGeometry, type EdgeFrame } from "../../../../features/edit-construction/index.ts";
-import { reverseGeometry } from "../core/boundary-edges.ts";
 
 /**
  * Reading an upright face as a rail: where its base runs, how tall it
@@ -60,7 +59,7 @@ export interface PanelRail {
 
 /** The geometry of `edge` as the loop actually walks it. */
 function walkedGeometry(edge: ConstructionRegionEdge): ConstructionEdgeGeometry {
-  return edge.reversed ? reverseGeometry(edge.geometry) : edge.geometry;
+  return edge.geometry;
 }
 
 function isUpright(start: ConstructionPosition, end: ConstructionPosition): boolean {

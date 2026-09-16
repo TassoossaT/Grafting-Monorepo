@@ -82,7 +82,13 @@ export interface ConstructionOrientedEdgeUse {
   readonly reversed: boolean;
 }
 
-/** One edge of a region's boundary, with its walk direction already resolved. */
+/**
+ * One edge of a region's boundary, fully resolved to the direction this face
+ * walks it: the nodes are reported start to end in walk order, and so is the
+ * geometry, so a caller never pairs a start node with a curve bulging the
+ * other way. `reversed` still says whether that is the edge's own direction,
+ * which is what an edit naming the edge itself needs.
+ */
 export interface ConstructionRegionEdge extends ConstructionOrientedEdgeUse {
   readonly startNodeId: ConstructionNodeId;
   readonly endNodeId: ConstructionNodeId;

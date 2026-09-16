@@ -8,6 +8,7 @@ import {
   planEdgeReshape,
   reshapeCurve,
   resolveCloudTopology,
+  reverseGeometry,
 } from "../../../../features/edit-construction/index.ts";
 import type { AtomicEditOp, ToolParamsFor } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionCurvedEdge, ConstructionEdgeGeometry, ConstructionPosition, CubicBezier } from "../../../../ports/index.ts";
@@ -127,7 +128,11 @@ function contourGesture(
       }
       const standing = new Map<string, ConstructionEdgeGeometry>();
       for (const member of cloud.members) {
-        for (const use of [...member.outerLoops, ...member.holes].flat()) standing.set(use.edgeId, use.geometry);
+        // Retype names the edge itself, so the undo keeps the geometry in the
+        // edge's own direction rather than the loop's.
+        for (const use of [...member.outerLoops, ...member.holes].flat()) {
+          standing.set(use.edgeId, use.reversed ? reverseGeometry(use.geometry) : use.geometry);
+        }
       }
       const undo: AtomicEditOp[] = plan.ops.flatMap((op) => {
         if (op.kind !== "retype-edge") return [];
