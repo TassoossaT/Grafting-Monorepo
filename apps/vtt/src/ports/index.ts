@@ -38,6 +38,8 @@ export type {
   ConstructionPlanarRequest,
   ConstructionPlanarShape,
   ConstructionMotionPlan,
+  ConstructionContourAnswer,
+  ConstructionContourQuery,
   ConstructionCoveredRegion,
   ConstructionCurvedEdge,
   ConstructionPatch,

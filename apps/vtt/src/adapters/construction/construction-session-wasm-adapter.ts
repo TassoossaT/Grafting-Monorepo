@@ -18,6 +18,8 @@ import type {
   CloudRequest,
   ConstructionTopologyBoundsQuery,
   ConstructionCoverageKind,
+  ConstructionContourAnswer,
+  ConstructionContourQuery,
   ConstructionCoveredRegion,
   ConstructionCurvedEdge,
   ConstructionEdgeGeometry,
@@ -510,6 +512,11 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
   getAllRegionTopologies(): readonly ConstructionRegionTopology[] {
     const wire = JSON.parse(this.#require().all_region_topologies_json()) as readonly RegionTopologyWire[];
     return wire.map(fromWireTopology);
+  }
+
+  queryContours(queries: readonly ConstructionContourQuery[]): readonly ConstructionContourAnswer[] {
+    if (queries.length === 0) return [];
+    return JSON.parse(this.#require().contour_query_json(JSON.stringify(queries))) as readonly ConstructionContourAnswer[];
   }
 
   getCurvedEdges(): readonly ConstructionCurvedEdge[] {

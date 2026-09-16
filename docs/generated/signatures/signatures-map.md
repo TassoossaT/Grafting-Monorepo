@@ -8,6 +8,12 @@ Derived workspace signature index for AI agents (Tier 2 micro-context). Regenera
 ### `construction-wasm` (`libs/domains/procgen/construction-wasm`)
 
 ```rust
+// src/contour_query.rs
+pub enum ContourQuestion
+pub struct ContourQuery
+pub enum ContourAnswer
+pub fn answer(queries: &[ContourQuery]) -> Result<Vec<ContourAnswer>, String>
+
 // src/editing.rs
 pub type SessionGraph = Graph<[f32; 3], Option<grafting_graph_core::bezier::CurveHandles>>;
 pub struct RemoveSurfaceRequest
@@ -3787,7 +3793,7 @@ export interface TerrainNeighbourhoodRuntime {
   readonly seeds?: readonly { readonly seed: ConstructionSurfaceKey; readonly surfaceType: string }[];
   }): readonly ConstructionRegionTopology[];
   }
-export interface TerrainCutRuntime extends TerrainFillRuntime {
+export interface TerrainCutRuntime extends TerrainFillRuntime, PlanarPort {
   getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined;
   }
 export function terrainStandingAround(
@@ -3945,6 +3951,7 @@ export interface EdgeOverlayGroup {
   readonly positions: Float32Array;
   }
 export function edgeOverlayOf(
+  port: ContourPort,
   topologies: readonly ConstructionRegionTopology[],
   graphSnapshot?: ConstructionGraphSnapshot,
   curves?: import("../../../../ports/bezier-port.ts").BezierPort,
@@ -4058,7 +4065,7 @@ export interface PanelRail {
   /** Where `point` sits along the rail, clamped to the panel. */
   travelTo(point: ConstructionPosition): number;
   /** The point `travel` along the rail, at height `y`. */
-export function panelRailOf(topology: ConstructionRegionTopology): PanelRail | undefined {
+export function panelRailOf(port: ContourPort, topology: ConstructionRegionTopology): PanelRail | undefined {
   const [outer] = topology.outerLoops;
   if (outer === undefined || outer.length < 3) return undefined;
 
@@ -4267,21 +4274,21 @@ export function brushStrokeOutline(
   ): PreviewDescriptor {
   if (shape.kind === "circle") return circularBrushStrokeOutline(samples, shape.radius, color, opacity);
 export function brushSweptOutlinePolygons(
+  /** The engine's planar boolean, which merges the capsules into one outline. */
+  port: PlanarPort,
   samples: readonly ConstructionPosition[],
   radius: number,
   /**
   * How far apart the points of the result may be, for a caller that is going
   * to turn this outline into a mesh. Omitted keeps the fixed resolution every
-  * other caller has always had.
-  */
 export function brushSweptRegionFill(
+  port: PlanarPort,
   samples: readonly ConstructionPosition[],
   shape: BrushOutlineShape,
   color: number,
   opacity = 0.3,
   /**
   * Must match whatever the same stroke passes to
-  * {@link brushSweptOutlinePolygons}, or the ghost stops being the shape the
 export function circleOutline(
   center: ConstructionPosition,
   radius: number,
@@ -4341,7 +4348,7 @@ export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   id: "terrain-sculpt",
   defaultParams: () => DEFAULT_TOOL_PARAMS["terrain-sculpt"],
 
-  previewFor(gesture: ToolGesture, params: TerrainSculptParams) {
+  previewFor(gesture: ToolGesture, params: TerrainSculptParams, ctx: ToolContext) {
   const targetSurface = hasTrait(params.targetSurface, "ground") ? params.targetSurface : "terrain";
   const color = TERRAIN_COLOR[targetSurface as "terrain" | "terrain-grass"] ?? 0x334155;
   return brushSweptRegionFill(
@@ -5899,6 +5906,52 @@ export function cloudNodes(
   ): readonly { readonly id: string; readonly position: { readonly x: number; readonly y: number; readonly z: number } }[] {
   const byId = new Map<string, { readonly id: string; readonly position: { readonly x: number; readonly y: number; readonly z: number } }>();
 
+// src/features/edit-construction/topology/contour-geometry.ts
+export interface ContourPort {
+  queryContours(queries: readonly ConstructionContourQuery[]): readonly ConstructionContourAnswer[];
+  }
+export interface ContourSpan {
+  readonly geometry: ConstructionEdgeGeometry;
+  readonly start: ConstructionPosition;
+  readonly end: ConstructionPosition;
+  }
+export function evaluateContour(
+  port: ContourPort,
+  span: ContourSpan,
+  at: readonly number[],
+  ): readonly ConstructionPosition[] {
+  if (at.length === 0) return [];
+  const [answer] = port.queryContours([query(span.geometry, span.start, span.end, { kind: "evaluate", at })]);
+export function contourLengths(port: ContourPort, spans: readonly ContourSpan[]): readonly number[] {
+  if (spans.length === 0) return [];
+  return port
+  .queryContours(spans.map((span) => query(span.geometry, span.start, span.end, { kind: "length" })))
+  .map((answer) => scalars(answer)[0] ?? 0);
+export function closestOnContours(
+  port: ContourPort,
+  spans: readonly ContourSpan[],
+  point: ConstructionPosition,
+  ): readonly { readonly t: number; readonly position: readonly [number, number] }[] {
+  if (spans.length === 0) return [];
+  return port
+  .queryContours(spans.map((span) => query(span.geometry, span.start, span.end, { kind: "closestPoint", point: xz(point) })))
+export function parametersAtDistance(
+  port: ContourPort,
+  span: ContourSpan,
+  distance: readonly number[],
+  ): readonly number[] {
+  if (distance.length === 0) return [];
+  const [answer] = port.queryContours([query(span.geometry, span.start, span.end, { kind: "parameterAtDistance", distance })]);
+export function subContour(
+  port: ContourPort,
+  span: ContourSpan,
+  t0: number,
+  t1: number,
+  ): ConstructionEdgeGeometry {
+  const [answer] = port.queryContours([query(span.geometry, span.start, span.end, { kind: "subGeometry", t0, t1 })]);
+export function arcSweepOf(port: ContourPort, span: ContourSpan): number {
+  const [answer] = port.queryContours([query(span.geometry, span.start, span.end, { kind: "arcSweep" })]);
+
 // src/features/edit-construction/topology/curve-handles.ts
 export type CurveHandleIndex = 1 | 2 | "midpoint";
 export type CurveStore = "spine" | "contour";
@@ -5952,60 +6005,37 @@ export function angleAround(center: readonly [number, number], x: number, z: num
   return Math.atan2(z - center[1], x - center[0]);
 export function arcSweep(from: number, to: number, clockwise: boolean): number {
   return clockwise ? -wrapPositive(from - to) : wrapPositive(to - from);
-export function bezierPointXz(
-  start: ConstructionPosition,
-  handle1: readonly [number, number],
-  handle2: readonly [number, number],
-  end: ConstructionPosition,
-  t: number,
-  ): readonly [number, number] {
-  const u = 1 - t;
-export function positionAlongEdge(
-  geometry: ConstructionEdgeGeometry,
-  start: ConstructionPosition,
-  end: ConstructionPosition,
-  t: number,
-  ): ConstructionPosition {
-  const y = start.y + (end.y - start.y) * t;
-  if (geometry.kind === "line") {
-export interface EdgeFrame {
-  /** Total run in world units. */
-  readonly length: number;
-  /** Distance along the edge (clamped to `[0, length]`) closest to `(x, z)`. */
-  travelTo(x: number, z: number): number;
-  /** XZ position at `travel` (clamped to `[0, length]`). */
-  positionAt(travel: number): readonly [number, number];
-  /** The edge's own parameter `t` in `[0, 1]` at `travel` -- uniform for a line or arc, sampled for a Bezier. */
-export function edgeFrame(geometry: ConstructionEdgeGeometry, start: ConstructionPosition, end: ConstructionPosition): EdgeFrame {
-  if (geometry.kind === "arc") return arcFrame(geometry, start, end) ?? chordFrame(start, end);
-export function subGeometry(
-  geometry: ConstructionEdgeGeometry,
-  start: ConstructionPosition,
-  end: ConstructionPosition,
-  t0: number,
-  t1: number,
-  ): ConstructionEdgeGeometry {
-  if (geometry.kind !== "bezier") return geometry;
 
 // src/features/edit-construction/topology/index.ts
 export type { CloudSource, CloudTopology, ConstructionCloud } from "./construction-cloud.ts";
 export type { PerimeterLoop } from "./surface-perimeter.ts";
 export type { FittedEdge, FitOptions } from "./stroke-fitting.ts";
 export type { BoundaryEdges, EdgeSharing } from "./boundary-edges.ts";
-export type { EdgeFrame } from "./edge-geometry.ts";
 export type { RibbonRequest } from "./bezier-curve.ts";
-export type { PlanarArea, PlanarPoint, PlanarPolygon, PlanarRing } from "./planar-area.ts";
+export type { PlanarArea, PlanarPoint, PlanarPolygon, PlanarPort, PlanarRing } from "./planar-area.ts";
 export type { CurveEdge, CurveHandleIndex, CurveStore } from "./curve-handles.ts";
+export type { ContourPort, ContourSpan } from "./contour-geometry.ts";
 
 // src/features/edit-construction/topology/planar-area.ts
 export type PlanarPoint = readonly [number, number];
 export type PlanarRing = readonly PlanarPoint[];
 export type PlanarPolygon = ConstructionPlanarShape;
 export type PlanarArea = readonly PlanarPolygon[];
-export function planarUnion(first: PlanarPolygon | PlanarArea, ...rest: readonly (PlanarPolygon | PlanarArea)[]): PlanarArea {
-  return fromLibrary(polygonClipping.union(asGeom(first), ...rest.map(asGeom)));
-export function planarDifference(subject: PlanarPolygon | PlanarArea, ...clips: readonly (PlanarPolygon | PlanarArea)[]): PlanarArea {
-  return fromLibrary(polygonClipping.difference(asGeom(subject), ...clips.map(asGeom)));
+export interface PlanarPort {
+  planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[];
+  }
+export function planarUnion(
+  port: PlanarPort,
+  first: PlanarPolygon | PlanarArea,
+  ...rest: readonly (PlanarPolygon | PlanarArea)[]
+  ): PlanarArea {
+  const subject = toEngine([first]);
+export function planarDifference(
+  port: PlanarPort,
+  subject: PlanarPolygon | PlanarArea,
+  ...clips: readonly (PlanarPolygon | PlanarArea)[]
+  ): PlanarArea {
+  const subjectShapes = toEngine([subject]);
 
 // src/features/edit-construction/topology/ring-simplify.ts
 export function simplifyClosedRing(
@@ -6232,6 +6262,15 @@ export interface RegionEditOutcome {
   /** Nodes the engine's own zero-orphan cleanup reclaimed. */
   readonly removedNodeIds: readonly ConstructionNodeId[];
 export type ConstructionEdgeGeometry =
+export interface ConstructionContourQuery {
+  readonly geometry: ConstructionEdgeGeometry;
+  /** The edge's two endpoint positions in XZ, in the direction being asked about. */
+  readonly from: readonly [number, number];
+  readonly to: readonly [number, number];
+  readonly question:
+  | { readonly kind: "evaluate"; readonly at: readonly number[] }
+  | { readonly kind: "tessellate"; readonly tolerance: number }
+export type ConstructionContourAnswer =
 export interface ConstructionCurvedEdge {
   readonly edgeId: ConstructionEdgeId;
   readonly startNodeId: ConstructionNodeId;
@@ -6249,15 +6288,6 @@ export interface ConstructionRegionEdge extends ConstructionOrientedEdgeUse {
   readonly endNodeId: ConstructionNodeId;
   readonly geometry: ConstructionEdgeGeometry;
   }
-export type ConstructionCoverageKind =
-export interface ConstructionCoveredRegion {
-  readonly surfaceKey: ConstructionSurfaceKey;
-  readonly surfaceType: string;
-  readonly physical: boolean;
-  readonly coverage: ConstructionCoverageKind;
-  /** World-space centroid; `y` is the height the face currently sits at. */
-  readonly centroid: ConstructionPosition;
-  readonly nodeIds: readonly ConstructionNodeId[];
 
 // src/ports/index.ts
 export type { CapRequest, CapPatch } from "./cap-port.ts";

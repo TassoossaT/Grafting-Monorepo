@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { enginePort } from "./engine-planar.mjs";
 
 import {
   EDGE_FALLBACK_COLOR,
@@ -60,7 +61,7 @@ function groupFor(groups, role) {
 
 test("a path's edges are grouped as spine, contour and rib, each its own colour", () => {
   const stations = [0, 1, 2];
-  const groups = edgeOverlayOf([band([-1, 0], stations), band([0, 1], stations)]);
+  const groups = edgeOverlayOf(enginePort, [band([-1, 0], stations), band([0, 1], stations)]);
 
   const spine = groupFor(groups, PATH_ROLES.spineEdge);
   const contour = groupFor(groups, PATH_ROLES.contourEdge);
@@ -84,13 +85,13 @@ test("a path's edges are grouped as spine, contour and rib, each its own colour"
 });
 
 test("an edge shared by two faces is drawn once, not once per face", () => {
-  const groups = edgeOverlayOf([band([-1, 0], [0, 1]), band([0, 1], [0, 1])]);
+  const groups = edgeOverlayOf(enginePort, [band([-1, 0], [0, 1]), band([0, 1], [0, 1])]);
   const spine = groupFor(groups, PATH_ROLES.spineEdge);
   assert.equal(spine.positions.length, 1 * 6, "one segment for one shared edge");
 });
 
 test("a type the palette does not name still draws, in the fallback colour", () => {
-  const groups = edgeOverlayOf([
+  const groups = edgeOverlayOf(enginePort, [
     {
       surfaceKey: ["terrain-cell"],
       surfaceType: "terrain",
@@ -111,14 +112,14 @@ test("a type the palette does not name still draws, in the fallback colour", () 
 });
 
 test("every role gets its own channel, and none of them is the tool ghost's", () => {
-  const groups = edgeOverlayOf([band([-1, 0], [0, 1]), band([0, 1], [0, 1])]);
+  const groups = edgeOverlayOf(enginePort, [band([-1, 0], [0, 1]), band([0, 1], [0, 1])]);
   const channels = groups.map((group) => edgeOverlayChannel(group.role));
   assert.equal(new Set(channels).size, channels.length);
   assert.ok(channels.every((channel) => channel !== "active"));
 });
 
 test("a group becomes a segments descriptor, never a filled one", () => {
-  const groups = edgeOverlayOf([band([-1, 0], [0, 1]), band([0, 1], [0, 1])]);
+  const groups = edgeOverlayOf(enginePort, [band([-1, 0], [0, 1]), band([0, 1], [0, 1])]);
   for (const group of groups) {
     const descriptor = edgeOverlayDescriptor(group);
     assert.equal(descriptor.kind, "segments");
@@ -128,7 +129,7 @@ test("a group becomes a segments descriptor, never a filled one", () => {
 });
 
 test("nothing standing draws nothing", () => {
-  assert.deepEqual(edgeOverlayOf([]), []);
+  assert.deepEqual(edgeOverlayOf(enginePort, []), []);
 });
 
 test("a rim with a face on both sides is drawn as interior, not as rim", () => {
@@ -147,7 +148,7 @@ test("a rim with a face on both sides is drawn as interior, not as rim", () => {
     holes: [],
   };
 
-  const groups = edgeOverlayOf([left, right, rim]);
+  const groups = edgeOverlayOf(enginePort, [left, right, rim]);
   const contour = groupFor(groups, PATH_ROLES.contourEdge);
   const interior = groupFor(groups, INTERIOR_EDGE_ROLE);
 
@@ -167,7 +168,7 @@ test("a rib closing onto another road's spine is a rib, not a contour", () => {
   const corner = stationNodeId(CORRIDOR, 2, -1);
   const junction = stationNodeId(other, 1.5, 0);
 
-  const groups = edgeOverlayOf([
+  const groups = edgeOverlayOf(enginePort, [
     {
       surfaceKey: ["mouth"],
       surfaceType: "path",
@@ -195,7 +196,7 @@ test("nothing that touches the spine is ever called a contour", () => {
     for (const end of across) {
       const from = stationNodeId(CORRIDOR, 0, start);
       const to = stationNodeId(CORRIDOR, 5, end);
-      const [group] = edgeOverlayOf([
+      const [group] = edgeOverlayOf(enginePort, [
         {
           surfaceKey: [`${start}:${end}`],
           surfaceType: "path",
@@ -243,7 +244,7 @@ test("edgeOverlayOf renders spine edges from ConstructionGraphSnapshot alongside
     holes: [],
   };
 
-  const groups = edgeOverlayOf([contourTopology], snapshot);
+  const groups = edgeOverlayOf(enginePort, [contourTopology], snapshot);
   const spineGroup = groupFor(groups, PATH_ROLES.spineEdge);
   const contourGroup = groupFor(groups, PATH_ROLES.contourEdge);
 
@@ -287,9 +288,9 @@ test("a curved contour edge (arc or Bezier) is tessellated in the overlay, not d
     }]],
   };
 
-  const straightGroups = edgeOverlayOf([straightTopology]);
-  const arcGroups = edgeOverlayOf([arcTopology]);
-  const bezierGroups = edgeOverlayOf([bezierTopology]);
+  const straightGroups = edgeOverlayOf(enginePort, [straightTopology]);
+  const arcGroups = edgeOverlayOf(enginePort, [arcTopology]);
+  const bezierGroups = edgeOverlayOf(enginePort, [bezierTopology]);
 
   const straightPositions = straightGroups.find((group) => group.positions.length > 0).positions;
   const arcPositions = arcGroups.find((group) => group.positions.length > 0).positions;

@@ -87,7 +87,7 @@ pub enum ContourGeometryDto {
 }
 
 impl ContourGeometryDto {
-    fn into_geometry(self) -> ContourGeometry {
+    pub(crate) fn into_geometry(self) -> ContourGeometry {
         match self {
             Self::Line => ContourGeometry::Line,
             Self::Arc { center, clockwise } => ContourGeometry::CircularArc { center, clockwise },
@@ -95,7 +95,7 @@ impl ContourGeometryDto {
         }
     }
 
-    fn from_geometry(geometry: &ContourGeometry) -> Self {
+    pub(crate) fn from_geometry(geometry: &ContourGeometry) -> Self {
         match geometry {
             ContourGeometry::Line => Self::Line,
             ContourGeometry::CircularArc { center, clockwise } => Self::Arc {

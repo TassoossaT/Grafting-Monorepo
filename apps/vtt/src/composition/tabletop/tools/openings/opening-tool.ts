@@ -201,7 +201,7 @@ function resolvePlacement(
   if (surfaceKey === undefined) return undefined;
   const topology = ctx.runtime.getRegionTopology(surfaceKey);
   if (topology === undefined) return undefined;
-  const rail = panelRailOf(topology);
+  const rail = panelRailOf(ctx.runtime, topology);
   if (rail === undefined) return undefined;
   const placed = rimCorners(rail, rail.travelTo(sample.point), params);
   return placed === undefined ? undefined : { surfaceKey, corners: placed.corners, rail, from: placed.from, to: placed.to };

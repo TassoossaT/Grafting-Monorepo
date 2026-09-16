@@ -4,6 +4,7 @@
 //! crate's `AGENTS.md` for the boundary this crate must not cross.
 //!
 mod editing;
+mod contour_query;
 mod enclosure;
 mod footprint;
 mod geometry;

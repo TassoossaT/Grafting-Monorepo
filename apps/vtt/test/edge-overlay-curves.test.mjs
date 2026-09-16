@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { enginePort } from "./engine-planar.mjs";
 
 import { edgeOverlayOf } from "../src/composition/tabletop/tools/core/edge-overlay.ts";
 import { commitWallContour } from "../src/composition/tabletop/tools/walls/wall-shared.ts";
@@ -37,7 +38,7 @@ test("a curved wall's top run is drawn as the same curve as its bottom run", () 
       "wall-line",
     );
 
-    const groups = edgeOverlayOf(runtime.getAllRegionTopologies(), runtime.getGraphSnapshot(), runtime);
+    const groups = edgeOverlayOf(enginePort, runtime.getAllRegionTopologies(), runtime.getGraphSnapshot(), runtime);
     const bottom = drawn(groups, "panel-bottom-edge");
     const top = drawn(groups, "panel-top-edge");
 

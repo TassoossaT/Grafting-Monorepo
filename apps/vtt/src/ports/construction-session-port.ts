@@ -65,6 +65,30 @@ export type ConstructionEdgeGeometry =
   | { readonly kind: "arc"; readonly center: readonly [number, number]; readonly clockwise: boolean }
   | { readonly kind: "bezier"; readonly handle1: readonly [number, number]; readonly handle2: readonly [number, number] };
 
+/** A pure question about one contour edge's shape. */
+export interface ConstructionContourQuery {
+  readonly geometry: ConstructionEdgeGeometry;
+  /** The edge's two endpoint positions in XZ, in the direction being asked about. */
+  readonly from: readonly [number, number];
+  readonly to: readonly [number, number];
+  readonly question:
+    | { readonly kind: "evaluate"; readonly at: readonly number[] }
+    | { readonly kind: "tessellate"; readonly tolerance: number }
+    | { readonly kind: "length" }
+    | { readonly kind: "closestPoint"; readonly point: readonly [number, number] }
+    | { readonly kind: "subGeometry"; readonly t0: number; readonly t1: number }
+    | { readonly kind: "parameterAtDistance"; readonly distance: readonly number[] }
+    | { readonly kind: "distanceAtParameter"; readonly at: readonly number[] }
+    | { readonly kind: "arcSweep" };
+}
+
+/** One answer, in the same order the questions were asked. */
+export type ConstructionContourAnswer =
+  | { readonly kind: "points"; readonly points: readonly (readonly [number, number])[] }
+  | { readonly kind: "scalars"; readonly values: readonly number[] }
+  | { readonly kind: "geometry"; readonly geometry: ConstructionEdgeGeometry }
+  | { readonly kind: "closest"; readonly t: number; readonly position: readonly [number, number] };
+
 /** One bezier boundary edge, in its own direction: anchors with live positions, and XZ handles. */
 export interface ConstructionCurvedEdge {
   readonly edgeId: ConstructionEdgeId;
@@ -655,6 +679,12 @@ export interface ConstructionSessionPort extends BezierPort {
   getRegionTopologiesInBounds(bounds: ConstructionTopologyBoundsQuery): readonly ConstructionRegionTopology[];
   /** Every bezier boundary edge a region uses -- what contour curve handles are placed from. */
   getCurvedEdges(): readonly ConstructionCurvedEdge[];
+  /**
+   * Answers pure questions about contour geometry: where a curve runs, how
+   * long it is, the span between two parameters. Reads nothing from the live
+   * session, and answers in the order asked.
+   */
+  queryContours(queries: readonly ConstructionContourQuery[]): readonly ConstructionContourAnswer[];
   /** Every region's boundary -- the edit-mode bootstrap call. */
   getAllRegionTopologies(): readonly ConstructionRegionTopology[];
 

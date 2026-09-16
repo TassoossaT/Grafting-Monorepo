@@ -29,6 +29,8 @@ import type {
   CloudRequest,
   ConfirmedTokenRenderChange,
   ConstructionTopologyBoundsQuery,
+  ConstructionContourAnswer,
+  ConstructionContourQuery,
   ConstructionCoveredRegion,
   ConstructionCurvedEdge,
   ConstructionEdgeGeometry,
@@ -163,6 +165,8 @@ export interface TabletopRuntime extends BezierPort {
   getRegionTopologiesInBounds(bounds: ConstructionTopologyBoundsQuery): readonly ConstructionRegionTopology[];
   /** Every bezier boundary edge a region uses. See `ConstructionSessionPort.getCurvedEdges`. */
   getCurvedEdges(): readonly ConstructionCurvedEdge[];
+  /** Pure contour geometry questions. See `ConstructionSessionPort.queryContours`. */
+  queryContours(queries: readonly ConstructionContourQuery[]): readonly ConstructionContourAnswer[];
   /** Generic graph primitives, including edges not owned by a region boundary. */
   getGraphSnapshot(): ConstructionGraphSnapshot;
   applyRegionOverlay(
@@ -884,6 +888,11 @@ export class AppTabletopRuntime implements TabletopRuntime {
       return this.#construction.getAllRegionTopologies();
     }
     return [];
+  }
+
+  queryContours(queries: readonly ConstructionContourQuery[]): readonly ConstructionContourAnswer[] {
+    this.#requireReady("asking about contour geometry");
+    return this.#construction.queryContours(queries);
   }
 
   getCurvedEdges(): readonly ConstructionCurvedEdge[] {

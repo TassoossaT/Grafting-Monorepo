@@ -65,6 +65,12 @@ The connected component of same-`type` regions reachable from
 Ends the open transaction, recording it as a single undo entry when it
 changed anything. Returns whether it was recorded.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::contour_query_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Answers pure questions about contour geometry -- where a curve runs,
+how long it is, the span between two parameters. Reads nothing from
+the session. See `contour_query`.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::curved_edges_json(&self) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 Every bezier boundary edge a region uses. See `region_editing::curved_edges`.

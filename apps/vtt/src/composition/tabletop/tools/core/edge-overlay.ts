@@ -5,11 +5,12 @@ import type { ConstructionEdgeGeometry, ConstructionGraphSnapshot, ConstructionP
 // test reaches has to spell out any import it needs at run time.
 import {
   edgeUseCounts,
-  positionAlongEdge,
+  evaluateContour,
   resolvePolicy,
   resolveCurves,
   spineGraphFromSnapshot,
 } from "../../../../features/edit-construction/index.ts";
+import type { ContourPort } from "../../../../features/edit-construction/index.ts";
 
 /**
  * Every construction edge on the table, grouped by the role its own structure
@@ -80,17 +81,16 @@ const OVERLAY_CURVE_STEPS = 24;
  * reads as the curve it is instead of the straight chord every edge here
  * used to be drawn as regardless of its own geometry.
  */
+const OVERLAY_PARAMETERS = Array.from({ length: OVERLAY_CURVE_STEPS + 1 }, (_, index) => index / OVERLAY_CURVE_STEPS);
+
 function tessellateForOverlay(
+  port: ContourPort,
   geometry: ConstructionEdgeGeometry,
   start: ConstructionPosition,
   end: ConstructionPosition,
 ): readonly ConstructionPosition[] {
   if (geometry.kind === "line") return [start, end];
-  const points: ConstructionPosition[] = [];
-  for (let index = 0; index <= OVERLAY_CURVE_STEPS; index += 1) {
-    points.push(positionAlongEdge(geometry, start, end, index / OVERLAY_CURVE_STEPS));
-  }
-  return points;
+  return evaluateContour(port, { geometry, start, end }, OVERLAY_PARAMETERS);
 }
 
 /** One role's edges, as a flat `[x, y, z, x, y, z, ...]` segment list. */
@@ -113,6 +113,7 @@ export interface EdgeOverlayGroup {
  * {@link RIM_ROLES}.
  */
 export function edgeOverlayOf(
+  port: ContourPort,
   topologies: readonly ConstructionRegionTopology[],
   graphSnapshot?: ConstructionGraphSnapshot,
   curves?: import("../../../../ports/bezier-port.ts").BezierPort,
@@ -138,7 +139,7 @@ export function edgeOverlayOf(
         const role = shared && RIM_ROLES.has(named) ? INTERIOR_EDGE_ROLE : named;
         const into = byRole.get(role) ?? [];
         byRole.set(role, into);
-        const samples = tessellateForOverlay(use.geometry ?? { kind: "line" }, start, end);
+        const samples = tessellateForOverlay(port, use.geometry ?? { kind: "line" }, start, end);
         for (let index = 1; index < samples.length; index += 1) {
           const from = samples[index - 1]!;
           const to = samples[index]!;

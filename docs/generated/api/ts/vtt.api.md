@@ -332,6 +332,8 @@ What committing needs of the runtime.
 
 ### `method vtt.effect-commit.EffectCommitRuntime.getSnapshot(): { map: { nodePositions: ReadonlyMap<string, { position: ConstructionPosition }> }; tableId: string }`
 
+### `method vtt.effect-commit.EffectCommitRuntime.planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[]`
+
 ### `method vtt.effect-commit.EffectCommitRuntime.removeSurface(request: { surfaceKey: ConstructionSurfaceKey }, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
 ### `method vtt.effect-commit.EffectCommitRuntime.transact(transactionId: string, origin: ChangeOrigin, work: () => T): TransactionResult<T>`
@@ -559,6 +561,10 @@ own policy. The runtime deliberately does not resolve policy itself:
 that belongs to `features/edit-construction`, and the tool layer runs it
 before calling here.
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.queryContours(queries: readonly ConstructionContourQuery[]): readonly ConstructionContourAnswer[]`
+
+Pure contour geometry questions. See `ConstructionSessionPort.queryContours`.
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.redoTransaction(transactionId: string, origin: ChangeOrigin): void`
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
@@ -701,6 +707,10 @@ what `planEdit` produced from the user's gesture and the grabbed role's
 own policy. The runtime deliberately does not resolve policy itself:
 that belongs to `features/edit-construction`, and the tool layer runs it
 before calling here.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.queryContours(queries: readonly ConstructionContourQuery[]): readonly ConstructionContourAnswer[]`
+
+Pure contour geometry questions. See `ConstructionSessionPort.queryContours`.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.redoTransaction(transactionId: string, origin: ChangeOrigin): void`
 
@@ -1017,7 +1027,7 @@ order they sit -- each split shortens what is left to split.
 
 Giving the boolean's output its identity back.
 
-`polygon-clipping` answers in bare floats: a corner that was a node going in
+The boolean answers in bare floats: a corner that was a node going in
 comes out as a pair of numbers with nothing attached. So every corner of the
 result is matched against the corners that *did* carry a node -- the retained
 terrain's rim and the painter's contour -- and takes that node's id.
@@ -1352,6 +1362,8 @@ What regenerating ground needs of the runtime, read and written inside the pipel
 
 ### `method vtt.terrain-lattice-reaction.LatticeReactionRuntime.getSnapshot(): { map: { nodePositions: ReadonlyMap<string, { position: ConstructionPosition }> }; tableId: string }`
 
+### `method vtt.terrain-lattice-reaction.LatticeReactionRuntime.planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[]`
+
 ### `type vtt.terrain-lattice-reaction.LatticeRepairExecutor = (runtime: TerrainRegenerateRuntime, fallout: CutFallout, causeId: string, tableId: string) => number`
 
 Regenerates one ground type's consumed faces; returns how many it built.
@@ -1400,6 +1412,8 @@ reads the neighbourhood.
 ### `method vtt.terrain-neighborhood.TerrainCutRuntime.getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined`
 
 ### `method vtt.terrain-neighborhood.TerrainCutRuntime.getSnapshot(): { map: { nodePositions: ReadonlyMap<string, { position: ConstructionPosition }> } }`
+
+### `method vtt.terrain-neighborhood.TerrainCutRuntime.planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[]`
 
 ### `interface vtt.terrain-neighborhood.TerrainNeighbourhoodRuntime`
 
@@ -1722,7 +1736,7 @@ The preview channel one role's edges are drawn on.
 
 One group as the descriptor that draws it.
 
-### `function vtt.edge-overlay.edgeOverlayOf(topologies: readonly ConstructionRegionTopology[], graphSnapshot?: ConstructionGraphSnapshot, curves?: BezierPort): readonly EdgeOverlayGroup[]`
+### `function vtt.edge-overlay.edgeOverlayOf(port: ContourPort, topologies: readonly ConstructionRegionTopology[], graphSnapshot?: ConstructionGraphSnapshot, curves?: BezierPort): readonly EdgeOverlayGroup[]`
 
 Groups every edge of every region in `topologies` by role.
 
@@ -1916,8 +1930,8 @@ A straight or arced rail answers this the same way regardless of
 `from`/`to`: a chord is a chord end to end, and any two points on a
 circle bound an arc of that same circle. A Bezier rail does not -- its
 handles are anchored to its own original ends, so a shorter span
-between two different points needs its own, freshly split, handles
-(subGeometry) or it traces the wrong curve.
+between two different points needs its own, freshly split, handles or it
+traces the wrong curve.
 
 ### `method vtt.panel-rail.PanelRail.positionAt(travel: number, y: number): ConstructionPosition`
 
@@ -1927,7 +1941,7 @@ The point `travel` along the rail, at height `y`.
 
 Where `point` sits along the rail, clamped to the panel.
 
-### `function vtt.panel-rail.panelRailOf(topology: ConstructionRegionTopology): PanelRail | undefined`
+### `function vtt.panel-rail.panelRailOf(port: ContourPort, topology: ConstructionRegionTopology): PanelRail | undefined`
 
 Reads a face as an upright panel: a run along the base, one side rising, a
 run back along the top, one side coming down.
@@ -2122,7 +2136,7 @@ Squared 2D Euclidean distance on the XZ plane (avoids square root for comparison
 
 Preview-only outline for any convex brush shape supported by the Rust contract.
 
-### `function vtt.preview-shapes.brushSweptOutlinePolygons(samples: readonly ConstructionPosition[], radius: number, chord: number): PlanarArea`
+### `function vtt.preview-shapes.brushSweptOutlinePolygons(port: PlanarPort, samples: readonly ConstructionPosition[], radius: number, chord: number): PlanarArea`
 
 The swept area of a circular brush stroke, as real 2D polygons (XZ).
 
@@ -2131,7 +2145,7 @@ saw while dragging and the footprint the engine is then asked about must
 be the identical shape, or the stroke would affect ground the preview
 never highlighted.
 
-### `function vtt.preview-shapes.brushSweptRegionFill(samples: readonly ConstructionPosition[], shape: BrushOutlineShape, color: number, opacity: number, chord: number): PreviewDescriptor`
+### `function vtt.preview-shapes.brushSweptRegionFill(port: PlanarPort, samples: readonly ConstructionPosition[], shape: BrushOutlineShape, color: number, opacity: number, chord: number): PreviewDescriptor`
 
 ### `function vtt.preview-shapes.circleOutline(center: ConstructionPosition, radius: number, color: number, opacity: number): PreviewDescriptor`
 
@@ -5246,6 +5260,46 @@ boundary -- in one call.
 Fails as a whole when any member cannot be read: a cloud in the middle of
 changing is not in a state to plan an edit against.
 
+### `interface vtt.contour-geometry.ContourPort`
+
+What answering a curve question needs: the engine's own contour query.
+
+### `method vtt.contour-geometry.ContourPort.queryContours(queries: readonly ConstructionContourQuery[]): readonly ConstructionContourAnswer[]`
+
+### `interface vtt.contour-geometry.ContourSpan`
+
+One edge, as every question about it is asked.
+
+### `property vtt.contour-geometry.ContourSpan.end: ConstructionPosition`
+
+### `property vtt.contour-geometry.ContourSpan.geometry: ConstructionEdgeGeometry`
+
+### `property vtt.contour-geometry.ContourSpan.start: ConstructionPosition`
+
+### `function vtt.contour-geometry.arcSweepOf(port: ContourPort, span: ContourSpan): number`
+
+The signed angle an arc turns through, positive counter-clockwise; zero for anything else.
+
+### `function vtt.contour-geometry.closestOnContours(port: ContourPort, spans: readonly ContourSpan[], point: ConstructionPosition): readonly { position: readonly [number, number]; t: number }[]`
+
+For each span, where `point` sits on it: the parameter and that position.
+
+### `function vtt.contour-geometry.contourLengths(port: ContourPort, spans: readonly ContourSpan[]): readonly number[]`
+
+Each span's own length, in one crossing.
+
+### `function vtt.contour-geometry.evaluateContour(port: ContourPort, span: ContourSpan, at: readonly number[]): readonly ConstructionPosition[]`
+
+Positions at `at`, with the height each parameter carries between the anchors.
+
+### `function vtt.contour-geometry.parametersAtDistance(port: ContourPort, span: ContourSpan, distance: readonly number[]): readonly number[]`
+
+The parameters sitting these distances along one span.
+
+### `function vtt.contour-geometry.subContour(port: ContourPort, span: ContourSpan, t0: number, t1: number): ConstructionEdgeGeometry`
+
+The span's own geometry between two of its parameters, walked forward.
+
 ### `interface vtt.curve-handles.CurveEdge`
 
 One editable cubic between two anchor nodes.
@@ -5296,26 +5350,6 @@ A curve flattened to line segments, for a preview.
 
 `curve` with one handle dragged to `target`, or its midpoint pulled there.
 
-### `interface vtt.edge-geometry.EdgeFrame`
-
-An edge's own flattened XZ frame: how far along it a point is, and where a given distance sits.
-
-### `property vtt.edge-geometry.EdgeFrame.length: number`
-
-Total run in world units.
-
-### `method vtt.edge-geometry.EdgeFrame.parameterAt(travel: number): number`
-
-The edge's own parameter `t` in `[0, 1]` at `travel` -- uniform for a line or arc, sampled for a Bezier.
-
-### `method vtt.edge-geometry.EdgeFrame.positionAt(travel: number): readonly [number, number]`
-
-XZ position at `travel` (clamped to `[0, length]`).
-
-### `method vtt.edge-geometry.EdgeFrame.travelTo(x: number, z: number): number`
-
-Distance along the edge (clamped to `[0, length]`) closest to `(x, z)`.
-
 ### `function vtt.edge-geometry.angleAround(center: readonly [number, number], x: number, z: number): number`
 
 Angle of `(x, z)` around `center`, in the graph's own XZ convention (`atan2(z, x)`).
@@ -5326,41 +5360,11 @@ The signed angle actually swept walking from angle `from` to angle `to`
 in the direction `clockwise` says, magnitude always in `[0, 2*PI)`.
 Positive/counter-clockwise unless `clockwise` is set.
 
-### `function vtt.edge-geometry.bezierPointXz(start: ConstructionPosition, handle1: readonly [number, number], handle2: readonly [number, number], end: ConstructionPosition, t: number): readonly [number, number]`
+### `interface vtt.planar-area.PlanarPort`
 
-XZ position on the cubic Bezier `start -> handle1 -> handle2 -> end` at parameter `t`.
+What a boolean needs: the engine's planar operation.
 
-### `function vtt.edge-geometry.edgeFrame(geometry: ConstructionEdgeGeometry, start: ConstructionPosition, end: ConstructionPosition): EdgeFrame`
-
-A parametrized XZ frame for `geometry` walked `start -> end`, whatever
-shape it is. This is the generic answer to "how far along this edge is
-this point" and "where is this edge at this distance" that a straight
-chord and a circular arc already had closed-form answers for -- a Bezier
-edge gets the same two questions answered here too, via arc-length
-sampling, instead of a caller falling back to treating it as a chord.
-
-### `function vtt.edge-geometry.positionAlongEdge(geometry: ConstructionEdgeGeometry, start: ConstructionPosition, end: ConstructionPosition, t: number): ConstructionPosition`
-
-`geometry` walked from `start` to `end`, at parameter `t` in `[0, 1]` --
-the one place every edge kind is evaluated for a flat overlay/preview
-polyline. Height is linear between the two endpoints for every kind: none
-of them carries its own vertical shape independent of its ends (that is
-exactly what the mesh's own ribbon/upright sampling is for).
-
-### `function vtt.edge-geometry.subGeometry(geometry: ConstructionEdgeGeometry, start: ConstructionPosition, end: ConstructionPosition, t0: number, t1: number): ConstructionEdgeGeometry`
-
-The exact sub-curve of `geometry` between its own parameters `t0` and
-`t1` (`0 <= t0 < t1 <= 1`), as its own declarable geometry.
-
-A line or an arc need no work: a chord is a chord end to end, and any two
-points on a circle bound an arc of that *same* circle, so the center and
-direction alone already describe every sub-span. A Bezier's off-curve
-handles are anchored to its own original endpoints, though, so reusing
-them for a shorter span between two different points traces the wrong
-curve entirely -- this is what an opening stamped onto a curved wall
-needs to place its own rim edge correctly, via two de Casteljau splits
-(isolate `[t0, 1]`, then take `[0, t1']` of that in its own local
-parameter) instead of borrowing the whole rail's handles unchanged.
+### `method vtt.planar-area.PlanarPort.planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[]`
 
 ### `type vtt.planar-area.PlanarArea = readonly PlanarPolygon[]`
 
@@ -5372,19 +5376,19 @@ One `[x, z]` point.
 
 ### `type vtt.planar-area.PlanarPolygon = ConstructionPlanarShape`
 
-One polygon: its outer ring first, then any holes. Same shape as the engine's planar shape.
+One polygon: its outer ring first, then any holes.
 
 ### `type vtt.planar-area.PlanarRing = readonly PlanarPoint[]`
 
 A ring of points; a closed ring repeats its first point last.
 
-### `function vtt.planar-area.planarDifference(subject: ConstructionPlanarShape | PlanarArea, clips: readonly (ConstructionPlanarShape | PlanarArea)[]): PlanarArea`
+### `function vtt.planar-area.planarDifference(port: PlanarPort, subject: ConstructionPlanarShape | PlanarArea, clips: readonly (ConstructionPlanarShape | PlanarArea)[]): PlanarArea`
 
-`subject` with every clip taken out of it. Throws where the library cannot resolve the input.
+`subject` with every clip taken out of it.
 
-### `function vtt.planar-area.planarUnion(first: ConstructionPlanarShape | PlanarArea, rest: readonly (ConstructionPlanarShape | PlanarArea)[]): PlanarArea`
+### `function vtt.planar-area.planarUnion(port: PlanarPort, first: ConstructionPlanarShape | PlanarArea, rest: readonly (ConstructionPlanarShape | PlanarArea)[]): PlanarArea`
 
-The union of every polygon or area given. Throws where the library cannot resolve the input.
+The union of every polygon or area given.
 
 ### `function vtt.ring-simplify.simplifyClosedRing(points: readonly ConstructionPosition[], geometryFor: (fromIndex: number, toIndex: number) => ConstructionEdgeGeometry | undefined): readonly number[]`
 
@@ -5787,6 +5791,20 @@ Axis-aligned world-space extent in the construction plane.
 
 ### `property vtt.construction-session-port.ConstructionBoundsXZ.minZ: number`
 
+### `interface vtt.construction-session-port.ConstructionContourQuery`
+
+A pure question about one contour edge's shape.
+
+### `property vtt.construction-session-port.ConstructionContourQuery.from: readonly [number, number]`
+
+The edge's two endpoint positions in XZ, in the direction being asked about.
+
+### `property vtt.construction-session-port.ConstructionContourQuery.geometry: ConstructionEdgeGeometry`
+
+### `property vtt.construction-session-port.ConstructionContourQuery.question: { at: readonly number[]; kind: "evaluate" } | { kind: "tessellate"; tolerance: number } | { kind: "length" } | { kind: "closestPoint"; point: readonly [number, number] } | { kind: "subGeometry"; t0: number; t1: number } | { distance: readonly number[]; kind: "parameterAtDistance" } | { at: readonly number[]; kind: "distanceAtParameter" } | { kind: "arcSweep" }`
+
+### `property vtt.construction-session-port.ConstructionContourQuery.to: readonly [number, number]`
+
 ### `interface vtt.construction-session-port.ConstructionCoveredRegion`
 
 One existing region a footprint touches, with what a per-type rule needs to decide.
@@ -6146,7 +6164,11 @@ wall with an opening nobody is standing in.
 
 ### `interface vtt.construction-session-port.ConstructionRegionEdge`
 
-One edge of a region's boundary, with its walk direction already resolved.
+One edge of a region's boundary, fully resolved to the direction this face
+walks it: the nodes are reported start to end in walk order, and so is the
+geometry, so a caller never pairs a start node with a curve bulging the
+other way. `reversed` still says whether that is the edge's own direction,
+which is what an edit naming the edge itself needs.
 
 ### `property vtt.construction-session-port.ConstructionRegionEdge.edgeId: string`
 
@@ -6354,6 +6376,12 @@ Full validation before any position changes, with one affected-region scan.
 
 Pure cascade resolution, using one consistent engine state.
 
+### `method vtt.construction-session-port.ConstructionSessionPort.queryContours(queries: readonly ConstructionContourQuery[]): readonly ConstructionContourAnswer[]`
+
+Answers pure questions about contour geometry: where a curve runs, how
+long it is, the span between two parameters. Reads nothing from the live
+session, and answers in the order asked.
+
 ### `method vtt.construction-session-port.ConstructionSessionPort.redoRegionOverlay(operationId: string): void`
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.removeHole(request: { index: number; surfaceKey: ConstructionSurfaceKey }): RegionEditOutcome`
@@ -6526,6 +6554,10 @@ Identity lifecycle emitted by an atomic surface transformation.
 ### `property vtt.construction-session-port.TransformationIdentityDelta.removed: readonly TIdentity[]`
 
 ### `property vtt.construction-session-port.TransformationIdentityDelta.replaced: readonly TIdentity[]`
+
+### `type vtt.construction-session-port.ConstructionContourAnswer = { kind: "points"; points: readonly (readonly [number, number])[] } | { kind: "scalars"; values: readonly number[] } | { geometry: ConstructionEdgeGeometry; kind: "geometry" } | { kind: "closest"; position: readonly [number, number]; t: number }`
+
+One answer, in the same order the questions were asked.
 
 ### `type vtt.construction-session-port.ConstructionCoverageKind = "centroid" | "overlap"`
 

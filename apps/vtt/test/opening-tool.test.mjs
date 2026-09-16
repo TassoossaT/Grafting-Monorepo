@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { enginePort } from "./engine-planar.mjs";
 
 import { panelRailOf } from "../src/composition/tabletop/tools/openings/panel-rail.ts";
 import { openingTool } from "../src/composition/tabletop/tools/openings/opening-tool.ts";
-import { bezierPointXz } from "../src/features/edit-construction/index.ts";
+/** Where a curve runs, asked of the engine -- the same answer the tool builds on. */
+function onCurve(geometry, start, end, at) {
+  const [answer] = enginePort.queryContours([{ geometry, from: [start.x, start.z], to: [end.x, end.z], question: { kind: "evaluate", at } }]);
+  return answer.points;
+}
 
 const TABLE_ID = "table-1";
 const WINDOW = { openingKind: "window", width: 1, height: 1, sill: 1 };
@@ -59,6 +64,7 @@ function contextFor(topologies) {
         getRegionTopology: (surfaceKey) =>
           topologies.find((topology) => topology.surfaceKey.join("|") === surfaceKey.join("|")),
         transact: (_id, _origin, work) => ({ value: work(), recorded: true }),
+        queryContours: enginePort.queryContours,
         getSnapshot: () => ({ tableId: TABLE_ID, map: { nodePositions: new Map() } }),
         addPatch: (patch, origin, causeId) => {
           patches.push({ patch, origin, causeId });
@@ -138,7 +144,7 @@ function bezierPanelTopology(id, from, to, handles) {
 const BEZIER = bezierPanelTopology("wall-bezier", BEZIER_START, BEZIER_END, BEZIER_HANDLES);
 
 test("a straight panel reads as a rail of its own length", () => {
-  const rail = panelRailOf(STRAIGHT);
+  const rail = panelRailOf(enginePort, STRAIGHT);
   assert.ok(Math.abs(rail.length - 6) < 1e-6);
   assert.equal(rail.baseY, 0);
   assert.equal(rail.topY, 3);
@@ -147,7 +153,7 @@ test("a straight panel reads as a rail of its own length", () => {
 });
 
 test("a curved panel is travelled, not spanned", () => {
-  const rail = panelRailOf(CURVED);
+  const rail = panelRailOf(enginePort, CURVED);
   assert.ok(
     Math.abs(rail.length - Math.PI * 2) < 1e-4,
     `half a radius-2 circle is PI*2 long, got ${rail.length}`,
@@ -160,7 +166,7 @@ test("a curved panel is travelled, not spanned", () => {
 });
 
 test("every point placed on a curved panel stays on its cylinder", () => {
-  const rail = panelRailOf(CURVED);
+  const rail = panelRailOf(enginePort, CURVED);
   for (let step = 0; step <= 10; step += 1) {
     const point = rail.positionAt((rail.length * step) / 10, 1.5);
     assert.ok(Math.abs(Math.hypot(point.x, point.z) - 2) < 1e-4, `left the cylinder at ${step}`);
@@ -187,7 +193,7 @@ test("a flat face is not a panel and takes no opening", () => {
       { id: "c", position: { x: 0, y: 0, z: 1 } },
     ],
   };
-  assert.equal(panelRailOf(flat), undefined);
+  assert.equal(panelRailOf(enginePort, flat), undefined);
 });
 
 test("a click on a wall opens it and stands a face in the opening", () => {
@@ -259,13 +265,7 @@ test("an opening on a curved wall sits on the curve", () => {
 test("an opening on a Bezier wall carries its own exact sub-curve, not the whole rail's handles nor a straight chord", () => {
   const { ctx, patches } = contextFor([BEZIER]);
 
-  const [midX, midZ] = bezierPointXz(
-    { ...BEZIER_START, y: 0 },
-    BEZIER_HANDLES.handle1,
-    BEZIER_HANDLES.handle2,
-    { ...BEZIER_END, y: 0 },
-    0.5,
-  );
+  const [[midX, midZ]] = onCurve({ kind: "bezier", ...BEZIER_HANDLES }, BEZIER_START, BEZIER_END, [0.5]);
   openingTool.onClick(ctx, { point: { x: midX, y: 0, z: midZ }, surfaceRef: "@region,wall-bezier" }, WINDOW);
   assert.equal(patches.length, 1, "a Bezier wall takes an opening like any other");
 
@@ -282,20 +282,16 @@ test("an opening on a Bezier wall carries its own exact sub-curve, not the whole
   const positionOf = new Map(patch.nodes.map((node) => [node.id, node.position]));
   const rimStart = positionOf.get(rimEdge.startNodeId);
   const rimEnd = positionOf.get(rimEdge.endNodeId);
-  const [sampleX, sampleZ] = bezierPointXz(rimStart, rimEdge.geometry.handle1, rimEdge.geometry.handle2, rimEnd, 0.5);
+  const [[sampleX, sampleZ]] = onCurve(rimEdge.geometry, rimStart, rimEnd, [0.5]);
 
+  const rail = onCurve(
+    { kind: "bezier", ...BEZIER_HANDLES },
+    BEZIER_START,
+    BEZIER_END,
+    Array.from({ length: 201 }, (_, step) => step / 200),
+  );
   let closest = Infinity;
-  for (let step = 0; step <= 200; step += 1) {
-    const t = step / 200;
-    const [ox, oz] = bezierPointXz(
-      { ...BEZIER_START, y: 0 },
-      BEZIER_HANDLES.handle1,
-      BEZIER_HANDLES.handle2,
-      { ...BEZIER_END, y: 0 },
-      t,
-    );
-    closest = Math.min(closest, Math.hypot(sampleX - ox, sampleZ - oz));
-  }
+  for (const [ox, oz] of rail) closest = Math.min(closest, Math.hypot(sampleX - ox, sampleZ - oz));
   assert.ok(closest < 1e-3, `the declared sub-curve must lie exactly on the original rail curve, closest distance ${closest}`);
 });
 

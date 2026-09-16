@@ -560,6 +560,14 @@ impl ConstructionSession {
         serialize(&dtos)
     }
 
+    /// Answers pure questions about contour geometry -- where a curve runs,
+    /// how long it is, the span between two parameters. Reads nothing from
+    /// the session. See `contour_query`.
+    pub fn contour_query_json(&self, request_json: &str) -> Result<String, JsValue> {
+        let queries: Vec<crate::contour_query::ContourQuery> = parse(request_json)?;
+        serialize(&crate::contour_query::answer(&queries).map_err(to_js_error)?)
+    }
+
     /// Every bezier boundary edge a region uses. See `region_editing::curved_edges`.
     pub fn curved_edges_json(&self) -> Result<String, JsValue> {
         serialize(&region_editing::curved_edges(&self.graph, &self.topology))

@@ -5,7 +5,14 @@ import type {
   ConstructionRegionTopology,
 } from "@/ports";
 
-import { edgeFrame, subGeometry, type EdgeFrame } from "../../../../features/edit-construction/index.ts";
+import {
+  closestOnContours,
+  contourLengths,
+  evaluateContour,
+  parametersAtDistance,
+  subContour,
+} from "../../../../features/edit-construction/index.ts";
+import type { ContourPort, ContourSpan } from "../../../../features/edit-construction/index.ts";
 
 /**
  * Reading an upright face as a rail: where its base runs, how tall it
@@ -15,19 +22,18 @@ import { edgeFrame, subGeometry, type EdgeFrame } from "../../../../features/edi
  * for the opposite reason. There it flattens a panel so it can be
  * triangulated; here it flattens one so a caller can say "an opening this
  * wide, this far along, this high" without caring whether the wall is
- * straight, arced, or a Bezier -- every shape answers "how far along" and
- * "where at this distance" through the one generic {@link edgeFrame}.
+ * straight, arced, or a Bezier. Every one of those questions is the engine's
+ * to answer -- it owns what the curve is -- so this only chains the runs
+ * together and asks.
  */
 
 /** How close two XZ points must be to count as one upright side rather than a run. */
 const UPRIGHT_EPSILON = 1e-4;
 
-/** One run of the rail's own base: an edge's frame, and where its own travel range starts within the whole rail. */
+/** One run of the rail's own base: a span, its length, and where its own travel range starts within the whole rail. */
 interface RailSegment {
-  readonly geometry: ConstructionEdgeGeometry;
-  readonly start: ConstructionPosition;
-  readonly end: ConstructionPosition;
-  readonly frame: EdgeFrame;
+  readonly span: ContourSpan;
+  readonly length: number;
   readonly offset: number;
 }
 
@@ -51,8 +57,8 @@ export interface PanelRail {
    * `from`/`to`: a chord is a chord end to end, and any two points on a
    * circle bound an arc of that same circle. A Bezier rail does not -- its
    * handles are anchored to its own original ends, so a shorter span
-   * between two different points needs its own, freshly split, handles
-   * ({@link subGeometry}) or it traces the wrong curve.
+   * between two different points needs its own, freshly split, handles or it
+   * traces the wrong curve.
    */
   geometryBetween(from: number, to: number): ConstructionEdgeGeometry;
 }
@@ -72,9 +78,10 @@ function isUpright(start: ConstructionPosition, end: ConstructionPosition): bool
 
 /** Every run's own frame, chained end to end -- the segment whose own travel range contains `travel`, clamped at either end of the whole rail. */
 function segmentAt(segments: readonly RailSegment[], travel: number): RailSegment {
-  const clamped = Math.min(Math.max(travel, 0), segments[segments.length - 1]!.offset + segments[segments.length - 1]!.frame.length);
+  const last = segments[segments.length - 1]!;
+  const clamped = Math.min(Math.max(travel, 0), last.offset + last.length);
   let index = 0;
-  while (index < segments.length - 1 && clamped >= segments[index]!.offset + segments[index]!.frame.length) index += 1;
+  while (index < segments.length - 1 && clamped >= segments[index]!.offset + segments[index]!.length) index += 1;
   return segments[index]!;
 }
 
@@ -88,7 +95,7 @@ function segmentAt(segments: readonly RailSegment[], travel: number): RailSegmen
  * anything that is not one, which is the whole of "you cannot put an opening
  * here".
  */
-export function panelRailOf(topology: ConstructionRegionTopology): PanelRail | undefined {
+export function panelRailOf(port: ContourPort, topology: ConstructionRegionTopology): PanelRail | undefined {
   const [outer] = topology.outerLoops;
   if (outer === undefined || outer.length < 3) return undefined;
 
@@ -121,12 +128,12 @@ export function panelRailOf(topology: ConstructionRegionTopology): PanelRail | u
   const topY = top[0]!.start!.y;
   if (!(topY > baseY)) return undefined;
 
+  const spans: ContourSpan[] = base.map((step) => ({ geometry: walkedGeometry(step.edge), start: step.start!, end: step.end! }));
+  const lengths = contourLengths(port, spans);
   let offset = 0;
-  const segments: RailSegment[] = base.map((step) => {
-    const geometry = walkedGeometry(step.edge);
-    const frame = edgeFrame(geometry, step.start!, step.end!);
-    const segment: RailSegment = { geometry, start: step.start!, end: step.end!, frame, offset };
-    offset += frame.length;
+  const segments: RailSegment[] = spans.map((span, index) => {
+    const segment: RailSegment = { span, length: lengths[index] ?? 0, offset };
+    offset += segment.length;
     return segment;
   });
   const length = offset;
@@ -137,32 +144,36 @@ export function panelRailOf(topology: ConstructionRegionTopology): PanelRail | u
     baseY,
     topY,
     travelTo(point) {
+      // Every run answers at once: the nearest of them is where the rail was grabbed.
+      const closest = closestOnContours(port, segments.map((segment) => segment.span), point);
       let best = 0;
       let bestDistanceSq = Infinity;
-      for (const segment of segments) {
-        const local = segment.frame.travelTo(point.x, point.z);
-        const [px, pz] = segment.frame.positionAt(local);
-        const distanceSq = (point.x - px) * (point.x - px) + (point.z - pz) * (point.z - pz);
+      closest.forEach((hit, index) => {
+        const segment = segments[index]!;
+        const distanceSq = (point.x - hit.position[0]) ** 2 + (point.z - hit.position[1]) ** 2;
         if (distanceSq < bestDistanceSq) {
           bestDistanceSq = distanceSq;
-          best = segment.offset + local;
+          best = segment.offset + segment.length * hit.t;
         }
-      }
+      });
       return Math.min(Math.max(best, 0), length);
     },
     positionAt(travel, y) {
       const segment = segmentAt(segments, travel);
-      const [x, z] = segment.frame.positionAt(travel - segment.offset);
-      return { x, y, z };
+      const [t = 0] = parametersAtDistance(port, segment.span, [travel - segment.offset]);
+      const [position] = evaluateContour(port, segment.span, [t]);
+      return position === undefined ? { x: segment.span.start.x, y, z: segment.span.start.z } : { ...position, y };
     },
     geometryBetween(from, to) {
       const clampedFrom = Math.min(Math.max(from, 0), length);
       const clampedTo = Math.min(Math.max(to, 0), length);
       const segment = segmentAt(segments, clampedFrom);
-      const segmentEnd = segment.offset + segment.frame.length;
-      const t0 = segment.frame.parameterAt(clampedFrom - segment.offset);
-      const t1 = segment.frame.parameterAt(Math.min(clampedTo, segmentEnd) - segment.offset);
-      return subGeometry(segment.geometry, segment.start, segment.end, t0, t1);
+      const segmentEnd = segment.offset + segment.length;
+      const [t0 = 0, t1 = 1] = parametersAtDistance(port, segment.span, [
+        clampedFrom - segment.offset,
+        Math.min(clampedTo, segmentEnd) - segment.offset,
+      ]);
+      return subContour(port, segment.span, t0, t1);
     },
   };
 }
