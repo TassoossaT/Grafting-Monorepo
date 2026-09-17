@@ -307,3 +307,37 @@ test("an invented corner between a node and a node mid-edge is dropped too", () 
     assert.equal(rings[0].edges[at]?.edgeId, "e:n0~n1", `the segment ${from} -> ${to} names the edge it runs along`);
   }
 });
+
+test("a standing node the boolean left out of a straight run is put back where it stands", () => {
+  // n0 -> n1 -> n2 is one straight side of standing ground, two edges long.
+  // The boolean is free to hand that side back as the single segment n0 -> n2:
+  // n1 adds no *shape*. It is still a node, though, and the ground laid against
+  // it has to meet it. Left out, the new face walks straight from n0 to n2 past
+  // it -- a T-junction. On flat ground that is invisible. Anywhere n1 does not
+  // sit on the line between its neighbours' heights, as in a depression, it
+  // opens a gap along the seam.
+  const left = { edgeId: "e:n0~n1", reversed: false, startNodeId: "n0", endNodeId: "n1", geometry: { kind: "line" } };
+  const right = { edgeId: "e:n1~n2", reversed: false, startNodeId: "n1", endNodeId: "n2", geometry: { kind: "line" } };
+  const perimeters = standing([[0, 0], [2, 0], [4, 0]], [left, right]);
+
+  const rings = buildConstraintRings(square(0, 0, 4, 4), FACE, perimeters);
+  const points = rings[0].points;
+
+  const at = points.findIndex((point) => point.source === 0);
+  assert.notEqual(at, -1, "n0 is in the ring");
+  assert.deepEqual(
+    [points[at].source, points[(at + 1) % points.length].source, points[(at + 2) % points.length].source],
+    [0, 1, 2],
+    "the run walks n0 -> n1 -> n2 rather than skipping the node in the middle",
+  );
+  assert.equal(rings[0].edges[at]?.edgeId, "e:n0~n1");
+  assert.equal(rings[0].edges[(at + 1) % points.length]?.edgeId, "e:n1~n2");
+});
+
+test("a node near a straight run but not on it is not pulled into it", () => {
+  // Half a face off the side is a node of something else, not a corner of it.
+  const perimeters = standing([[0, 0], [2, 1], [4, 0]]);
+  const rings = buildConstraintRings(square(0, 0, 4, 4), FACE, perimeters);
+
+  assert.ok(!sourcesOf(rings[0]).includes(1), "the node off the line stays out");
+});

@@ -312,6 +312,74 @@ function edgeAlongSegment(
   return undefined;
 }
 
+/**
+ * Putting back the standing nodes a straight run of the boolean's output
+ * walked past.
+ *
+ * A node partway along a straight side adds no shape, so the boolean may hand
+ * the side back without it. The engine re-inserts input points it finds on an
+ * output segment, but it does so in `f32` against a fixed `1e-5`, and a point
+ * the overlay snapped even slightly misses that -- which is why it happens in
+ * some places and not others.
+ *
+ * Missing, it is a T-junction: the ground walks from one neighbour straight to
+ * the other past a node the standing side still has. Flat, the two coincide
+ * and nothing shows. Where that node is not at the height of the line between
+ * its neighbours -- ground in a depression, on a slope -- the seam opens.
+ *
+ * Only a node genuinely *on* the segment, strictly between its ends, and not
+ * already in this ring comes back.
+ */
+function restoreSkippedNodes(
+  points: readonly ConstructionGridConstraintPoint[],
+  candidateAt: ReadonlyMap<number, { readonly x: number; readonly z: number }>,
+  buckets: ReadonlyMap<string, readonly number[]>,
+  cell: number,
+  tolerance: number,
+): readonly ConstructionGridConstraintPoint[] {
+  const inRing = new Set<number>();
+  for (const point of points) if (point.source !== undefined) inRing.add(point.source);
+
+  const result: ConstructionGridConstraintPoint[] = [];
+  for (let index = 0; index < points.length; index += 1) {
+    const from = points[index]!;
+    const to = points[(index + 1) % points.length]!;
+    result.push(from);
+
+    const dx = to.x - from.x;
+    const dz = to.z - from.z;
+    const lengthSq = dx * dx + dz * dz;
+    if (lengthSq <= 1e-12) continue;
+    const length = Math.sqrt(lengthSq);
+
+    const found: { readonly along: number; readonly source: number }[] = [];
+    const minColumn = Math.floor((Math.min(from.x, to.x) - tolerance) / cell);
+    const maxColumn = Math.floor((Math.max(from.x, to.x) + tolerance) / cell);
+    const minRow = Math.floor((Math.min(from.z, to.z) - tolerance) / cell);
+    const maxRow = Math.floor((Math.max(from.z, to.z) + tolerance) / cell);
+    for (let column = minColumn; column <= maxColumn; column += 1) {
+      for (let row = minRow; row <= maxRow; row += 1) {
+        for (const source of buckets.get(`${column}:${row}`) ?? []) {
+          if (inRing.has(source)) continue;
+          const at = candidateAt.get(source)!;
+          const along = ((at.x - from.x) * dx + (at.z - from.z) * dz) / lengthSq;
+          if (along * length <= tolerance || (1 - along) * length <= tolerance) continue;
+          if (Math.abs((at.x - from.x) * dz - (at.z - from.z) * dx) / length > tolerance) continue;
+          found.push({ along, source });
+        }
+      }
+    }
+    found.sort((a, b) => a.along - b.along);
+    for (const { source } of found) {
+      if (inRing.has(source)) continue;
+      inRing.add(source);
+      const at = candidateAt.get(source)!;
+      result.push({ x: at.x, z: at.z, source });
+    }
+  }
+  return result;
+}
+
 function dropInventedCorners(
   points: readonly ConstructionGridConstraintPoint[],
   hasEdge: (a: number, b: number) => boolean,
@@ -546,14 +614,17 @@ export function buildConstraintRings(
     }
     if (points.length < 3) continue;
 
+    const onEdgeTolerance = Math.max(1e-6, faceSize * 0.01);
+    const restored = restoreSkippedNodes(points, candidateAt, buckets, cell, onEdgeTolerance);
+
     // Drop collinear unnamed points that add no shape
-    let collinearCleaned = points;
-    if (points.length > 3) {
+    let collinearCleaned = restored;
+    if (restored.length > 3) {
       const cleaned: ConstructionGridConstraintPoint[] = [];
-      for (let i = 0; i < points.length; i++) {
-        const prev = points[(i - 1 + points.length) % points.length]!;
-        const curr = points[i]!;
-        const next = points[(i + 1) % points.length]!;
+      for (let i = 0; i < restored.length; i++) {
+        const prev = restored[(i - 1 + restored.length) % restored.length]!;
+        const curr = restored[i]!;
+        const next = restored[(i + 1) % restored.length]!;
         if (curr.source === undefined) {
           const dx = next.x - prev.x;
           const dz = next.z - prev.z;
@@ -572,7 +643,6 @@ export function buildConstraintRings(
     }
 
 
-    const onEdgeTolerance = Math.max(1e-6, faceSize * 0.01);
     // Two nodes answer for a run between them when an edge joins them, and
     // equally when one edge simply *contains* them both -- a node partway
     // along another edge is still a place that edge can be split. Without the
