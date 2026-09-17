@@ -2116,6 +2116,18 @@ with more than one surviving outgoing or incoming edge (an ambiguous
 branch: the stroke only touched the boundary at a point, not along a
 shared run), or when the survivors do not close into whole loops.
 
+### `function vtt.platform-contour-merge.windLoop(port: ContourPort, loop: readonly DirectedContourEdge[], positionOf: (id: string) => readonly [number, number], role: "boundary" | "hole"): readonly DirectedContourEdge[]`
+
+A loop walked the way a face of its kind has to be: a boundary with positive
+loopSignedArea, a hole negative.
+
+The drawn contour carries whatever direction the gesture happened to have --
+a rectangle dragged one diagonal winds one way, the other diagonal the other.
+A face stored the wrong way round is still a face, but it walks every edge
+the same way as the ground on the other side of it, and two faces walking an
+edge the same way cannot both have it. The ground laid against it is refused
+for sitting on ground already there, and that whole side stays empty.
+
 ### `variable vtt.platform-contour-tool.platformContourTool: ConstructionTool<"platform-contour">`
 
 ### `function vtt.platform-contour-tool.commitPlatformContour(ctx: ToolContext, samples: readonly PointerSample[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; tolerance?: number }): void`

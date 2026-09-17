@@ -4133,6 +4133,13 @@ export function loopSignedArea(
   positionOf: (id: string) => readonly [number, number],
   ): number {
   const arcs = loop.filter((edge) => edge.geometry.kind === "arc");
+export function windLoop(
+  port: ContourPort,
+  loop: readonly DirectedContourEdge[],
+  positionOf: (id: string) => readonly [number, number],
+  role: "boundary" | "hole",
+  ): readonly DirectedContourEdge[] {
+  const area = loopSignedArea(port, loop, positionOf);
 export function pointInLoop(
   loop: readonly DirectedContourEdge[],
   positionOf: (id: string) => readonly [number, number],

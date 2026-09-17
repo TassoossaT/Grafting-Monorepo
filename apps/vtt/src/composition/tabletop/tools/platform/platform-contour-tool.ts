@@ -7,7 +7,7 @@ import { commitPatchReplacement } from "../../effects/effect-commit.ts";
 import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext } from "../core/tool-context.ts";
 import { polylineSegmentsPreview, segmentsPreview } from "../shapes/preview-shapes.ts";
 import { circleContour, previewOutline } from "../tower/tower-geometry.ts";
-import { groupLoopsByContainment, splitContourAtPoints, weldedMerge, type DirectedContourEdge } from "./platform-contour-merge.ts";
+import { groupLoopsByContainment, splitContourAtPoints, weldedMerge, windLoop, type DirectedContourEdge } from "./platform-contour-merge.ts";
 type Params = ToolParamsByTool["platform-contour"];
 const COLOR = 0x79b8e8;
 /** Same corner-weld tolerance a wall run already snaps onto an existing column with. */
@@ -157,10 +157,12 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
     // New boundary identities avoid borrowing an unrelated wall's geometry.
     // Shared graph vertices, rather than endpoint-only edge names, carry support.
     const builder = createBoundaryEdges(operationId, { kind: "private-when-full", runPrefix: operationId, existingUses: new Map() });
+    // Wound here, after the identity match above: a face the operation left
+    // alone keeps its stored walk, so its signature still finds it.
     const regions = changedGroups.map((group,index) => ({
       regionId: `${operationId}:face:${index}`,
-      boundary: group.boundary.map((e) => builder.use(e.a,e.b,e.geometry)),
-      holes: group.holes.map((hole) => hole.map((e) => builder.use(e.a,e.b,e.geometry))),
+      boundary: windLoop(ctx.runtime,group.boundary,positionOf,"boundary").map((e) => builder.use(e.a,e.b,e.geometry)),
+      holes: group.holes.map((hole) => windLoop(ctx.runtime,hole,positionOf,"hole").map((e) => builder.use(e.a,e.b,e.geometry))),
       surfaceType: "platform",
       physical: true,
     }));

@@ -480,11 +480,22 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
   };
 
   const adoptionPositions = new Map<number, ConstructionPosition>();
-  for (const adoption of effectiveAdoptions) {
+  for (const [index, adoption] of effectiveAdoptions.entries()) {
     const vertex = grid.vertices[adoption.vertex];
     if (vertex === undefined) continue;
     const from = live.get(adoption.edge.startNodeId)?.position;
     const to = live.get(adoption.edge.endNodeId)?.position;
+    // `along` arrives measured along the ring *segment*, and the splits below
+    // read it as measured along the edge's own walk. The two agree only when
+    // the segment runs the edge's way and spans all of it. A ring running the
+    // other way -- the boolean's hole around a platform drawn clockwise --
+    // inserted every node on that edge in reverse order, so the edge came
+    // back as fragments overlapping each other and the ground had nothing
+    // left to stitch to along the whole side. Projected onto the edge itself,
+    // the order is the edge's whichever way the ring runs.
+    if (from !== undefined && to !== undefined) {
+      effectiveAdoptions[index] = { ...adoption, along: alongEdge(vertex, from, to, adoption.along) };
+    }
     // Where the vertex sits on the *adopted edge*, projected, rather than
     // where it sat on the ring segment that found that edge. The two agree
     // whenever the segment spans the whole edge, and only the projection is

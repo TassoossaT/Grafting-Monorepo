@@ -230,6 +230,28 @@ export function loopSignedArea(
   return area;
 }
 
+/**
+ * A loop walked the way a face of its kind has to be: a boundary with positive
+ * {@link loopSignedArea}, a hole negative.
+ *
+ * The drawn contour carries whatever direction the gesture happened to have --
+ * a rectangle dragged one diagonal winds one way, the other diagonal the other.
+ * A face stored the wrong way round is still a face, but it walks every edge
+ * the same way as the ground on the other side of it, and two faces walking an
+ * edge the same way cannot both have it. The ground laid against it is refused
+ * for sitting on ground already there, and that whole side stays empty.
+ */
+export function windLoop(
+  port: ContourPort,
+  loop: readonly DirectedContourEdge[],
+  positionOf: (id: string) => readonly [number, number],
+  role: "boundary" | "hole",
+): readonly DirectedContourEdge[] {
+  const area = loopSignedArea(port, loop, positionOf);
+  if (role === "boundary" ? area >= 0 : area <= 0) return loop;
+  return [...loop].reverse().map((edge) => ({ a: edge.b, b: edge.a, geometry: reverseGeometry(edge.geometry) }));
+}
+
 /** Whether `point` lies inside `loop` (even-odd ray cast; arc spans are chorded for the test, which is exact enough at the ~1e-3 scale these loops are welded at). */
 export function pointInLoop(
   loop: readonly DirectedContourEdge[],
