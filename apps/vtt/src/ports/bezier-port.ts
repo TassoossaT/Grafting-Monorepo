@@ -9,7 +9,7 @@ export interface CurveHandles {
   readonly mode: CurveHandleMode;
   readonly bandOffsets: readonly number[];
   readonly endBandOffsets?: readonly number[];
-  /** The structure type generated along this spine span; absent means the default consumer. */
+  /** The structure type generated along this spine span; a span with no owner generates nothing. */
   readonly surfaceType?: string;
 }
 export type CurveCommand =

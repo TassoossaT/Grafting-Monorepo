@@ -235,19 +235,19 @@ function OpeningFields(props: { readonly params: OpeningParams; readonly onChang
         <SelectableChip
           label="Janela"
           swatchColor="#7dd3fc"
-          selected={params.openingType === "window"}
-          onSelect={() => onChange({ ...params, openingType: "window", sill: params.sill > 0 ? params.sill : 1 })}
+          selected={params.openingKind === "window"}
+          onSelect={() => onChange({ ...params, openingKind: "window", sill: params.sill > 0 ? params.sill : 1 })}
         />
         <SelectableChip
           label="Porta"
           swatchColor="#d97706"
-          selected={params.openingType === "door"}
-          onSelect={() => onChange({ ...params, openingType: "door", sill: 0, height: Math.max(params.height, 2) })}
+          selected={params.openingKind === "door"}
+          onSelect={() => onChange({ ...params, openingKind: "door", sill: 0, height: Math.max(params.height, 2) })}
         />
       </div>
       {sliderRow("Largura", params.width, 0.4, 4, 0.1, (width) => onChange({ ...params, width }))}
       {sliderRow("Altura", params.height, 0.4, 4, 0.1, (height) => onChange({ ...params, height }))}
-      {params.openingType === "door"
+      {params.openingKind === "door"
         ? null
         : sliderRow("Peitoril", params.sill, 0, 3, 0.1, (sill) => onChange({ ...params, sill }))}
     </div>

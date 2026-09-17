@@ -6,6 +6,7 @@ import type {
   ConstructionSurfaceKey,
 } from "@/ports";
 
+import { hasTrait } from "../../../../features/edit-construction/index.ts";
 import type { ToolContext } from "../core/tool-context.ts";
 
 /**
@@ -20,8 +21,6 @@ import type { ToolContext } from "../core/tool-context.ts";
  * matched nothing. Reading the boundary the engine actually reports fixes
  * that and removes the duplication at the same time.
  */
-
-const WALL_SURFACE_TYPES = new Set(["wall-white", "wall-gray"]);
 
 export interface WallSpan {
   readonly surfaceKey: ConstructionSurfaceKey;
@@ -95,7 +94,7 @@ function extremities(columns: readonly Column[]): readonly [Column, Column] | un
 }
 
 function spanOf(topology: ConstructionRegionTopology): WallSpan | undefined {
-  if (!WALL_SURFACE_TYPES.has(topology.surfaceType)) return undefined;
+  if (!hasTrait(topology.surfaceType, "partition")) return undefined;
   const columns = columnsOf(topology.nodes);
   const ends = extremities(columns);
   if (ends === undefined) return undefined;

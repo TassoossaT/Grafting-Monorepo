@@ -65,13 +65,77 @@ export type ConstructionEdgeGeometry =
   | { readonly kind: "arc"; readonly center: readonly [number, number]; readonly clockwise: boolean }
   | { readonly kind: "bezier"; readonly handle1: readonly [number, number]; readonly handle2: readonly [number, number] };
 
+/** A pure question about one contour edge's shape. */
+export interface ConstructionContourQuery {
+  readonly geometry: ConstructionEdgeGeometry;
+  /** The edge's two endpoint positions in XZ, in the direction being asked about. */
+  readonly from: readonly [number, number];
+  readonly to: readonly [number, number];
+  readonly question:
+    | { readonly kind: "evaluate"; readonly at: readonly number[] }
+    | { readonly kind: "tessellate"; readonly tolerance: number }
+    | { readonly kind: "length" }
+    | { readonly kind: "closestPoint"; readonly point: readonly [number, number] }
+    | { readonly kind: "subGeometry"; readonly t0: number; readonly t1: number }
+    | { readonly kind: "parameterAtDistance"; readonly distance: readonly number[] }
+    | { readonly kind: "distanceAtParameter"; readonly at: readonly number[] }
+    | { readonly kind: "arcSweep" };
+}
+
+/** One answer, in the same order the questions were asked. */
+export type ConstructionContourAnswer =
+  | { readonly kind: "points"; readonly points: readonly (readonly [number, number])[] }
+  | { readonly kind: "scalars"; readonly values: readonly number[] }
+  | { readonly kind: "geometry"; readonly geometry: ConstructionEdgeGeometry }
+  | { readonly kind: "closest"; readonly t: number; readonly position: readonly [number, number] };
+
+/**
+ * A reading of the curves a surface was swept from: the ground plane says
+ * where, the curves say how high.
+ *
+ * A planar union works in XZ and throws elevation away, so every vertex it
+ * hands back needs a height from somewhere. That somewhere is the curve the
+ * surface came from, at the station the vertex projects onto -- the engine's
+ * own reference field, asked rather than mirrored.
+ */
+export interface ConstructionFieldQuery {
+  /** The curves, each an ordered run of positions, with how far off it the surface it generated reaches. */
+  readonly curves: readonly { readonly points: readonly ConstructionPosition[]; readonly reach?: number }[];
+  /** `[x, z]` points, answered in order. */
+  readonly points: readonly (readonly [number, number])[];
+  /** One height per point, when levels stacked over the same ground have to be told apart. */
+  readonly near?: readonly number[];
+}
+
+/** Where one point projected, or `null` when there was no curve to project onto. */
+export type ConstructionFieldSample =
+  | { readonly curve: number; readonly s: number; readonly t: number; readonly y: number }
+  | null;
+
+/** One bezier boundary edge, in its own direction: anchors with live positions, and XZ handles. */
+export interface ConstructionCurvedEdge {
+  readonly edgeId: ConstructionEdgeId;
+  readonly startNodeId: ConstructionNodeId;
+  readonly endNodeId: ConstructionNodeId;
+  readonly start: ConstructionPosition;
+  readonly end: ConstructionPosition;
+  readonly handle1: readonly [number, number];
+  readonly handle2: readonly [number, number];
+}
+
 /** One boundary edge walked in a loop's own direction. */
 export interface ConstructionOrientedEdgeUse {
   readonly edgeId: ConstructionEdgeId;
   readonly reversed: boolean;
 }
 
-/** One edge of a region's boundary, with its walk direction already resolved. */
+/**
+ * One edge of a region's boundary, fully resolved to the direction this face
+ * walks it: the nodes are reported start to end in walk order, and so is the
+ * geometry, so a caller never pairs a start node with a curve bulging the
+ * other way. `reversed` still says whether that is the edge's own direction,
+ * which is what an edit naming the edge itself needs.
+ */
 export interface ConstructionRegionEdge extends ConstructionOrientedEdgeUse {
   readonly startNodeId: ConstructionNodeId;
   readonly endNodeId: ConstructionNodeId;
@@ -636,6 +700,20 @@ export interface ConstructionSessionPort extends BezierPort {
   getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined;
   /** Region boundaries with at least one node inside an XZ extent, returned in one engine crossing. */
   getRegionTopologiesInBounds(bounds: ConstructionTopologyBoundsQuery): readonly ConstructionRegionTopology[];
+  /** Every bezier boundary edge a region uses -- what contour curve handles are placed from. */
+  getCurvedEdges(): readonly ConstructionCurvedEdge[];
+  /**
+   * Answers pure questions about contour geometry: where a curve runs, how
+   * long it is, the span between two parameters. Reads nothing from the live
+   * session, and answers in the order asked.
+   */
+  queryContours(queries: readonly ConstructionContourQuery[]): readonly ConstructionContourAnswer[];
+
+  /**
+   * Reads ground-plane points against the curves a surface was swept from.
+   * See {@link ConstructionFieldQuery}.
+   */
+  queryField(query: ConstructionFieldQuery): readonly ConstructionFieldSample[];
   /** Every region's boundary -- the edit-mode bootstrap call. */
   getAllRegionTopologies(): readonly ConstructionRegionTopology[];
 
@@ -643,6 +721,20 @@ export interface ConstructionSessionPort extends BezierPort {
   applyRegionOverlay(request: ApplyRegionOverlayRequest): ConstructionPatchOutcome;
   /** Atomically replaces exact source regions with an application-generated patch. */
   applyPatchReplacement(request: ApplyPatchReplacementRequest): ConstructionPatchOutcome;
+  /**
+   * Starts one atomic unit of work. Mutations until the matching commit or
+   * rollback record no history of their own; transactions do not nest.
+   */
+  beginTransaction(transactionId: string): void;
+  /**
+   * Ends the open transaction, recording everything it did as one undo entry
+   * named `transactionId` -- unless it changed nothing. Returns whether it
+   * was recorded, so the caller's own history records exactly the same entries.
+   */
+  commitTransaction(transactionId: string): boolean;
+  /** Ends the open transaction by restoring the exact state it began from. */
+  rollbackTransaction(transactionId: string): void;
+  /** Undoes the most recent history entry, which must be `operationId`: a transaction, or an overlay or replacement made outside one. */
   undoRegionOverlay(operationId: string): void;
   redoRegionOverlay(operationId: string): void;
   removeSurface(request: RemoveSurfaceRequest): RegionEditOutcome;

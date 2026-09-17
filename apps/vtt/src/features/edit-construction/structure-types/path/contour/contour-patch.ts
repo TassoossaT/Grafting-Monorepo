@@ -1,8 +1,8 @@
 import type { ConstructionEdgeId, ConstructionPatch, ConstructionPosition } from "@/ports";
-import type { MultiPolygon, Ring } from "polygon-clipping";
 
 import { createBoundaryEdges, simplifyClosedRing } from "../../../topology/index.ts";
-import { heightOnCurves, type ReferenceCurve } from "./curve-projection.ts";
+import { heightsOnCurves, type FieldPort, type ReferenceCurve } from "./curve-projection.ts";
+import type { PlanarArea, PlanarPoint, PlanarRing } from "../../../topology/planar-area.ts";
 
 /**
  * How close (world units, XZ) a union's own vertex may sit to a node already
@@ -16,7 +16,7 @@ const WELD_TOLERANCE = 0.05; // PathCloud contour weld tolerance (5 cm).
 /**
  * Below this area (world units squared), a shape is a sliver, not a face.
  *
- * `polygon-clipping`'s union of a *self-intersecting* input ring (an
+ * The union of a *self-intersecting* input ring (an
  * offset ribbon can self-intersect on a tight bend relative to its own
  * width -- a real hand-drawn stroke, unlike a clean two-point test line,
  * can do this) does not refuse the input; it normalises it, and a
@@ -29,7 +29,7 @@ const WELD_TOLERANCE = 0.05; // PathCloud contour weld tolerance (5 cm).
  */
 const MIN_SHAPE_AREA = 1e-4;
 
-function signedRingArea(ring: Ring): number {
+function signedRingArea(ring: PlanarRing): number {
   let total = 0;
   for (let index = 0; index < ring.length; index += 1) {
     const [x1, z1] = ring[index]!;
@@ -40,7 +40,7 @@ function signedRingArea(ring: Ring): number {
 }
 
 /** The shoelace area of a ring, unsigned. */
-function ringArea(ring: Ring): number {
+function ringArea(ring: PlanarRing): number {
   return Math.abs(signedRingArea(ring));
 }
 
@@ -49,21 +49,20 @@ function ringArea(ring: Ring): number {
  * In XZ coordinates with Y up, a positive signed area (total > 0) means the normal
  * points up (+Y). If total < 0, reversing the ring flips the normal to point up (+Y).
  */
-function ensureUpwardWinding(ring: Ring, isHole: boolean): Ring {
+function ensureUpwardWinding(ring: PlanarRing, isHole: boolean): PlanarRing {
   const area = signedRingArea(ring);
   const shouldReverse = isHole ? area > 0 : area < 0;
   return shouldReverse ? [...ring].reverse() : ring;
 }
 
 /**
- * `polygon-clipping` closes every ring by repeating its first point as its
- * last -- the GeoJSON convention. A `ConstructionPatchRegion` boundary is a
- * cycle of distinct nodes with no repeated closing vertex (`useEdge` already
- * wraps `index + 1` back to `0`), so that trailing duplicate is dropped here
- * once, rather than every caller having to know the library's own ring
- * convention.
+ * A plan-view ring is carried closed, repeating its first point as its last
+ * (`planar-area.ts`). A `ConstructionPatchRegion` boundary is a cycle of
+ * distinct nodes with no repeated closing vertex (`useEdge` already wraps
+ * `index + 1` back to `0`), so that trailing duplicate is dropped here once,
+ * rather than every caller having to know both conventions.
  */
-function openRing(ring: Ring): Ring {
+function openRing(ring: PlanarRing): PlanarRing {
   if (ring.length < 2) return ring;
   const [firstX, firstZ] = ring[0]!;
   const [lastX, lastZ] = ring[ring.length - 1]!;
@@ -92,9 +91,9 @@ function distanceToSegmentXZ(
  * polygon clipping so elevation stations are not lost before 3D simplification.
  */
 function restoreHeightVertices(
-  ring: Ring,
+  ring: PlanarRing,
   heightSamples: readonly ConstructionPosition[],
-): Ring {
+): PlanarRing {
   if (heightSamples.length === 0 || ring.length < 2) return ring;
 
   const cellSize = 2.0;
@@ -111,7 +110,7 @@ function restoreHeightVertices(
     }
   }
 
-  const restored: [number, number][] = [];
+  const restored: PlanarPoint[] = [];
   const minInterval = 0.8;
   for (let i = 0; i < ring.length - 1; i += 1) {
     const a = ring[i]!;
@@ -194,11 +193,13 @@ export interface ContourPatchResult {
  * clipped edge against; it no longer decides any height.
  */
 export function buildContourPatch(
+  /** The engine, which is what elevates a flat union vertex. See `curve-projection.ts`. */
+  port: FieldPort,
   tableId: string,
   operationId: string,
   surfaceType: string,
   bandIndex: number,
-  shapes: MultiPolygon,
+  shapes: PlanarArea,
   heightSamples: readonly ConstructionPosition[],
   referenceCurves: readonly ReferenceCurve[],
   existingNodes: readonly ExistingNode[],
@@ -252,9 +253,13 @@ export function buildContourPatch(
   };
 
   let mintedCounter = 0;
-  const idsFor = (ring: Ring, ringIndex: number): readonly string[] =>
-    openRing(ring).map(([x, z]) => {
-      const y = heightOnCurves(x, z, referenceCurves);
+  const idsFor = (ring: PlanarRing, ringIndex: number): readonly string[] => {
+    const walked = openRing(ring);
+    // One crossing for the whole ring: the engine answers where each vertex
+    // projects onto the curves this contour was swept from.
+    const heights = heightsOnCurves(port, referenceCurves, walked.map(([x, z]) => [x, z] as const));
+    return walked.map(([x, z], pointIndex) => {
+      const y = heights[pointIndex] ?? 0;
       const welded = nearestExisting(x, y, z);
       if (welded !== undefined) {
         nodePositions.set(welded.id, welded.position);
@@ -265,6 +270,7 @@ export function buildContourPatch(
       nodePositions.set(id, { x, y, z });
       return id;
     });
+  };
 
   const regions = shapes
     .filter((shape) => {

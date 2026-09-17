@@ -1,11 +1,12 @@
 import type { BezierPort, CurvePoint, ConstructionGraphSnapshot, ConstructionGraphPatch, ConstructionRegionTopology, ConstructionPosition } from "@/ports";
-import { curvePoint, curvePosition, resolveCurves, sampleRibbons, unionRibbonOutlines } from "../../topology/bezier-curve.ts";
-import { DEFAULT_SPINE_OWNER, ownedBy, spineControlNodeId, withAutomaticHandles } from "../../spine/index.ts";
+import { curvePoint, curvePosition, unionRibbonOutlines } from "../../topology/bezier-curve.ts";
+import { isSpineEdge, spineControlNodeId, spineRibbons, withAutomaticHandles } from "../../spine/index.ts";
 import { changedSpineCloud } from "./path-cloud-scope.ts";
 import type { SpineChainInput, BandRibbon } from "./contour/index.ts";
+import { PATH_SURFACE_TYPE } from "./path-surface-type.ts";
+import { isRoadSpan } from "./road-span.ts";
 
-/** Spine spans a road generates; spans owned by any other structure are never part of a road. */
-export const isRoadSpan = ownedBy(DEFAULT_SPINE_OWNER);
+export { isRoadSpan } from "./road-span.ts";
 
 /** A road's band ribbons unioned in plan through the shared curve module. */
 export function unionBezierRibbons(port: BezierPort, ribbons: readonly BandRibbon[]): [number, number][][][] {
@@ -14,7 +15,7 @@ export function unionBezierRibbons(port: BezierPort, ribbons: readonly BandRibbo
 
 /** Resolve legacy road authorship once using the canonical Rust conversion. */
 export function explicitSpineSnapshot(snapshot: ConstructionGraphSnapshot, port: BezierPort, offsets: readonly number[]): ConstructionGraphSnapshot {
-  return withAutomaticHandles(snapshot, port, offsets);
+  return withAutomaticHandles(snapshot, port, offsets, PATH_SURFACE_TYPE);
 }
 
 /** Converts graph-owned authoring data to sampled ribbons through the Rust port. */
@@ -26,27 +27,14 @@ export function bezierChains(
   targetEdgeIds?: ReadonlySet<string>,
 ): readonly SpineChainInput[] {
   const nodes = new Map(snapshot.nodes.map((n) => [n.id, n.position]));
-  const edges = snapshot.edges.filter((e) => e.curve && isRoadSpan(e) && e.startNodeId.startsWith("spine:") && e.endNodeId.startsWith("spine:"));
-  const results = resolveCurves(port, edges.map((e) => ({ handles: e.curve!, start: nodes.get(e.startNodeId)!, end: nodes.get(e.endNodeId)! })), 0.025);
+  const edges = snapshot.edges.filter((e) => e.curve && isRoadSpan(e) && isSpineEdge(e));
   const sections = new Map<string, { chain: number; points: readonly [CurvePoint, CurvePoint] }[]>();
-  // One crossing for every ribbon, not one crossing each. `resolve` and
-  // `join` around it were already batched; this was the odd one out, issued
-  // from inside the loop, so a network of three hundred streets paid three
-  // hundred serialise/parse round trips to the engine every time any one of
-  // them was touched. The commands and their results are identical -- this
-  // only stops paying the toll per chain.
-  const derived = sampleRibbons(port, edges.map((e, i) => {
-    const profile = e.curve!.bandOffsets.length ? e.curve!.bandOffsets : offsets;
-    const endProfile = e.curve!.endBandOffsets?.length ? e.curve!.endBandOffsets! : profile;
-    return {
-      curve: results[i]!.curves[0]!,
-      offsets: [Math.min(...profile), Math.max(...profile)] as const,
-      endOffsets: [Math.min(...endProfile), Math.max(...endProfile)] as const,
-    };
-  }), 0.025);
+  // The same generator a sloped platform sweeps its spans with, batched over
+  // every span of the network in one crossing per step.
+  const swept = spineRibbons(port, edges.map((e) => ({ handles: e.curve!, start: nodes.get(e.startNodeId)!, end: nodes.get(e.endNodeId)! })), offsets, 0.025);
   const chains = edges.map((e, i) => {
-    const samples = results[i]!.samples[0]!.map((p) => curvePosition(p.position));
-    const outer = derived[i]!;
+    const samples = swept[i]!.resolved.samples[0]!.map((p) => curvePosition(p.position));
+    const outer = swept[i]!.outline;
     const half = outer.length / 2;
     for (const [id, points] of [
       [e.startNodeId, [curvePoint(outer[0]!), curvePoint(outer.at(-1)!)]],
@@ -90,7 +78,7 @@ export function planBezierRoad(input: {
   const addedNodes = controlPoints.map((p, i) => ({ id: spineControlNodeId(corridorId, i), position: curvePoint(p) }));
   const addedEdges = fitted.handles.map((h, i) => ({
     edgeId: `spine-edge:${corridorId}:${i}`, startNodeId: addedNodes[i]!.id, endNodeId: addedNodes[i + 1]!.id,
-    curve: { ...h, bandOffsets: offsets },
+    curve: { ...h, bandOffsets: offsets, surfaceType: PATH_SURFACE_TYPE },
   }));
   const snapshot = explicitSpineSnapshot(input.snapshot, port, offsets);
   // A road snaps onto and splits other roads only: a ramp's spine passing

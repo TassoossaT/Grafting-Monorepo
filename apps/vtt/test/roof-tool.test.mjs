@@ -67,9 +67,9 @@ test("roof on a platform takes its contour and elevation without replacing the p
     assert.equal(Math.min(...roofs.flatMap((f) => f.nodes.map((n) => n.position.y))), 7);
     assert.equal(Math.max(...roofs.flatMap((f) => f.nodes.map((n) => n.position.y))), 10);
     const entry = ctx.history.undo();
-    session.undo_region_overlay(entry.operationId);
+    session.undo_region_overlay(entry.transactionId);
     assert.equal(runtime.getAllRegionTopologies().length, 1);
-    session.redo_region_overlay(ctx.history.redo().operationId);
+    session.redo_region_overlay(ctx.history.redo().transactionId);
     assert.equal(runtime.getAllRegionTopologies().length, 5);
   } finally { session.free(); }
 });

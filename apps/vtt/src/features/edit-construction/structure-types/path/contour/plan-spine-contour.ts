@@ -8,34 +8,39 @@ import type {
   ConstructionSurfaceKey,
 } from "@/ports";
 
-import { sampleCatmullRom } from "./catmull-rom.ts";
 import type { ReferenceCurve } from "./curve-projection.ts";
-import { type BandRibbon, offsetBands } from "./offset-bands.ts";
-import { ringOf, unionBandLayer } from "./union-bands.ts";
 import { buildContourPatch, type ExistingNode } from "./contour-patch.ts";
+import type { FieldPort } from "./curve-projection.ts";
+
+/** One swept ribbon: a closed ring, its first side forward and its other side back. */
+export interface BandRibbon {
+  readonly bandIndex: number;
+  readonly outer: readonly ConstructionPosition[];
+}
 
 /**
- * One curve chain's spine, already resolved to an ordered list of control
- * points. Kept decoupled from `spine-graph.ts`'s own types (and from
+ * One curve chain, already swept by the spine's ribbon generator. Kept
+ * decoupled from `spine-graph.ts`'s own types (and from
  * `PathKind`/`pathFormationFor`) on purpose: this module only knows "a
- * curve, a band profile," never a corridor, a subtype, or a station -- the
- * same genericity the Rust primitives themselves keep.
+ * sampled curve and its ribbons," never a corridor, a subtype, or a station.
  */
 export interface SpineChainInput {
   readonly chainId: string;
-  /** Canonical Rust sampling of explicit authoring curves. */
-  readonly sampledPoints?: readonly ConstructionPosition[];
-  readonly ribbons?: readonly BandRibbon[];
+  /** The curve as the engine sampled it -- the height authority for the contour. */
+  readonly sampledPoints: readonly ConstructionPosition[];
+  /** The chain's own ribbon, plus any junction ribbon joining it to a neighbour. */
+  readonly ribbons: readonly BandRibbon[];
   readonly controlPoints: readonly ConstructionPosition[];
-  /** Lateral offsets defining the bands, e.g. `[-2.1, 0, 2.1]` for contour/spine/contour. */
   readonly bandOffsets: readonly number[];
   readonly miterLimit: number;
-  /** Curve flattening tolerance, world units (XZ). */
   readonly tolerance: number;
 }
 
 export interface PlanSpineContourInput {
-  readonly union?: (ribbons: readonly BandRibbon[]) => [number, number][][][];
+  /** The engine, which elevates every vertex the plan-view union hands back flat. */
+  readonly field: FieldPort;
+  /** The plan-view union of the ribbons, through the curve engine. */
+  readonly union: (ribbons: readonly BandRibbon[]) => [number, number][][][];
   readonly tableId: string;
   /** Scopes every node/region id this call mints -- one edit, one operation. */
   readonly operationId: string;
@@ -81,9 +86,8 @@ export interface PlanSpineContourResult {
 }
 
 /**
- * Derives the contour patch for one spine edit: Catmull-Rom sample -> banded
- * offset -> union each band layer, across every chain of the touched cloud
- * at once -> `ConstructionPatch`.
+ * Derives the contour patch for one spine edit: every chain's ribbons,
+ * across the whole touched cloud at once, unioned in plan -> `ConstructionPatch`.
  *
  * **The whole cloud, derived fresh, every time -- never patched onto what
  * was already there.** `input.editedChains` is every chain the touched
@@ -91,8 +95,8 @@ export interface PlanSpineContourResult {
  * owns. This function reads the *first* for geometry and the *second* only
  * for which surface keys to retire -- a standing region's own boundary is
  * never fed back into a union as input. A T, an X, or an L are not cases
- * this function knows about, they are whatever {@link unionBandLayer}
- * happens to produce when two chains' ribbons overlap.
+ * this function knows about, they are whatever the union happens to produce
+ * when two chains' ribbons overlap.
  *
  * Returns `undefined` when `editedChains` is empty -- nothing changed, so
  * nothing to regenerate.
@@ -106,21 +110,12 @@ export function planSpineContour(input: PlanSpineContourInput): PlanSpineContour
   // about to mint, and the same curves the engine reads back out of the
   const referenceCurves: ReferenceCurve[] = [];
   for (const chain of input.editedChains) {
-    const polyline = chain.sampledPoints ?? sampleCatmullRom(chain.controlPoints, chain.tolerance);
-    if (polyline.length >= 2) referenceCurves.push({ points: polyline });
-    if (chain.ribbons) { ribbons.push(...chain.ribbons); continue; }
-    const minOffset = Math.min(...chain.bandOffsets);
-    const maxOffset = Math.max(...chain.bandOffsets);
-    for (const ribbon of offsetBands(polyline, [minOffset, maxOffset], chain.miterLimit)) {
-      ribbons.push(ribbon);
-    }
+    if (chain.sampledPoints.length >= 2) referenceCurves.push({ points: chain.sampledPoints });
+    ribbons.push(...chain.ribbons);
   }
 
-  let shapes = input.union ? input.union(ribbons) : unionBandLayer(ribbons);
-  if (input.union && shapes.length === 0 && ribbons.length > 0) throw Error("O contorno da curva é degenerado; ajuste a forma ou a largura.");
-  if (shapes.length === 0 && ribbons.length > 0) {
-    shapes = ribbons.map((ribbon) => [ringOf(ribbon.outer)]);
-  }
+  const shapes = input.union(ribbons);
+  if (shapes.length === 0 && ribbons.length > 0) throw Error("O contorno da curva é degenerado; ajuste a forma ou a largura.");
   const consumed = input.standingRegions.map((topology) => topology.surfaceKey);
 
   // `applyPatchReplacement` removes these faces before it registers the new
@@ -142,6 +137,7 @@ export function planSpineContour(input: PlanSpineContourInput): PlanSpineContour
 
   const heightSamples = ribbons.flatMap((ribbon) => ribbon.outer);
   const built = buildContourPatch(
+    input.field,
     input.tableId,
     input.operationId,
     input.surfaceType,

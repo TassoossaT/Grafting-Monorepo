@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { planarPort } from "./engine-planar.mjs";
 
 import {
   calculateProfileDisplacement,
@@ -120,6 +121,7 @@ test("executeTerrainCut: hole profile deletes affected faces", () => {
     getFootprintCoverage: () => [{ surfaceKey: ["terrain", "f1"], surfaceType: "terrain" }],
     getAllRegionTopologies: () => [face],
     getRegionTopologiesInBounds: () => [face],
+    planarBoolean: planarPort.planarBoolean,
     getSnapshot: () => ({ tableId: "t", map: { nodePositions: new Map() } }),
     applyRegionEdit: (ops) => {
       for (const op of ops) {
@@ -180,6 +182,7 @@ test("executeTerrainCut: concave profile replaces affected faces atomically with
     getFootprintCoverage: () => [{ surfaceKey: ["terrain", "f1"], surfaceType: "terrain" }],
     getAllRegionTopologies: () => [face],
     getRegionTopologiesInBounds: () => [face],
+    planarBoolean: planarPort.planarBoolean,
     getSnapshot: () => ({ tableId: "t", map: { nodePositions } }),
     generateIrregularQuadGrid: () => ({
       vertices: [
@@ -349,6 +352,7 @@ test("executeTerrainCut: matches terrain variants (e.g. terrain-grass) and prese
     getFootprintCoverage: () => [{ surfaceKey: ["terrain-grass", "f1"], surfaceType: "terrain-grass" }],
     getAllRegionTopologies: () => [grassFace],
     getRegionTopologiesInBounds: () => [grassFace],
+    planarBoolean: planarPort.planarBoolean,
     getSnapshot: () => ({ tableId: "t", map: { nodePositions } }),
     generateIrregularQuadGrid: () => ({
       vertices: [

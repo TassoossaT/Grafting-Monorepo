@@ -16,9 +16,8 @@ import {
   calculateProfileDisplacement,
   calculateProfileHeight,
   distanceAndElevationOnPath,
-  isTerrainSurface,
+  hasTrait,
 } from "../../../features/edit-construction/index.ts";
-import polygonClipping, { type MultiPolygon, type Polygon } from "polygon-clipping";
 
 import {
   constraintsFromRings,
@@ -35,6 +34,8 @@ import {
   type TerrainStrokeBounds,
 } from "./terrain-neighborhood.ts";
 import { paintedFalloutOf, paintedTopologiesOf } from "../interference/painted-topologies.ts";
+import { planarUnion, planarDifference } from "../../../features/edit-construction/index.ts";
+import type { PlanarArea, PlanarPolygon } from "@/features/edit-construction";
 
 function centroidOf(nodes: readonly { readonly position: ConstructionPosition }[]): { x: number; y: number; z: number } {
   if (nodes.length === 0) return { x: 0, y: 0, z: 0 };
@@ -61,7 +62,7 @@ function insidePolygon(point: ConstructionPosition, polygon: readonly (readonly 
   return inside;
 }
 
-function insideSwept(point: ConstructionPosition, swept: MultiPolygon): boolean {
+function insideSwept(point: ConstructionPosition, swept: PlanarArea): boolean {
   const inRing = (ring: readonly (readonly [number, number])[]): boolean => {
     let inside = false;
     for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index, index += 1) {
@@ -133,7 +134,7 @@ const MOST_FACES_WORTH_ABSORBING = 48;
 const NARROW_ENOUGH_TO_GROW = 0.75;
 
 /**
- * One face's boundary as `polygon-clipping` wants it: closed, in walk order.
+ * One face's boundary as a plan-view ring: closed, in walk order.
  *
  * Walk order, not node order. A topology's `nodes` array is a set with an
  * order, not a ring; reading a polygon out of it produces a bowtie for any
@@ -158,7 +159,7 @@ function loopToRing(
 function loopToPolygon(
   loop: readonly ConstructionRegionEdge[],
   positionOf: ReadonlyMap<ConstructionNodeId, { readonly x: number; readonly z: number }>,
-): Polygon {
+): PlanarPolygon {
   const ring = loopToRing(loop, positionOf);
   return ring ? [ring] : [];
 }
@@ -166,7 +167,7 @@ function loopToPolygon(
 function topologyToPolygonWithHoles(
   topology: ConstructionRegionTopology,
   positionOf: ReadonlyMap<ConstructionNodeId, { readonly x: number; readonly z: number }>,
-): Polygon {
+): PlanarPolygon {
   if (topology.outerLoops.length === 0) return [];
   const outer = loopToRing(topology.outerLoops[0]!, positionOf);
   if (!outer) return [];
@@ -188,7 +189,7 @@ function topologyToPolygonWithHoles(
  * which is the direction to be wrong in when the question is "is this too
  * narrow to lay ground in".
  */
-function widthOf(polygon: MultiPolygon): number {
+function widthOf(polygon: PlanarArea): number {
   let area = 0;
   let perimeter = 0;
   for (const piece of polygon) {
@@ -205,7 +206,7 @@ function widthOf(polygon: MultiPolygon): number {
   return (2 * Math.abs(area / 2)) / perimeter;
 }
 
-function pieceMetrics(piece: MultiPolygon[number]): { readonly area: number; readonly width: number } {
+function pieceMetrics(piece: PlanarArea[number]): { readonly area: number; readonly width: number } {
   let area = 0;
   let perimeter = 0;
   for (const ring of piece) {
@@ -222,7 +223,7 @@ function pieceMetrics(piece: MultiPolygon[number]): { readonly area: number; rea
 }
 
 
-function topologyToPolygon(topology: ConstructionRegionTopology): Polygon {
+function topologyToPolygon(topology: ConstructionRegionTopology): PlanarPolygon {
   const positions = new Map<ConstructionNodeId, { x: number; z: number }>();
   for (const node of topology.nodes) positions.set(node.id, { x: node.position.x, z: node.position.z });
 
@@ -251,7 +252,7 @@ function pairKey(a: number, b: number): string {
  * Dropping corners the boolean invented in the middle of an edge that already
  * existed.
  *
- * Where the ground's own rim crosses the painter's contour, `polygon-clipping`
+ * Where the ground's own rim crosses the painter's contour, the boolean
  * splits both and hands back a vertex at the crossing. That vertex names no
  * node -- it never was one -- and its presence breaks one segment into two,
  * *neither* of which runs between a pair of adjacent nodes any more. So neither
@@ -265,6 +266,120 @@ function pairKey(a: number, b: number): string {
  * should. Only a corner that is genuinely *on* that line goes -- one where the
  * rim leaves the contour is a real corner and stays.
  */
+/** Whether `point` sits on the span `from`-`to`, ends included, within `tolerance`. */
+function onSpan(
+  point: { readonly x: number; readonly z: number },
+  from: { readonly x: number; readonly z: number },
+  to: { readonly x: number; readonly z: number },
+  tolerance: number,
+): boolean {
+  const dx = to.x - from.x;
+  const dz = to.z - from.z;
+  const lengthSq = dx * dx + dz * dz;
+  if (lengthSq <= 1e-12) return false;
+  const along = ((point.x - from.x) * dx + (point.z - from.z) * dz) / lengthSq;
+  if (along < -1e-9 || along > 1 + 1e-9) return false;
+  const length = Math.sqrt(lengthSq);
+  return Math.abs((point.x - from.x) * dz - (point.z - from.z) * dx) / length <= tolerance;
+}
+
+/**
+ * The edge a segment runs *along* when no edge runs exactly between its two
+ * endpoints.
+ *
+ * A boolean that preserves a structural corner hands back a vertex partway
+ * along an edge, and that vertex can name a node -- one a neighbouring face
+ * already owns there. {@link dropInventedCorners} cannot help then: it only
+ * removes corners naming no node, and this one is real and must stay, because
+ * the edge it sits on is exactly what a landing there needs to split.
+ *
+ * So the segment names the edge that contains it instead of the edge between
+ * its own endpoints. Found through the edges meeting the segment's own start
+ * node, so a node's handful of edges is all that is ever examined.
+ */
+function edgeAlongSegment(
+  spansAtNode: ReadonlyMap<number, readonly { readonly edge: ConstructionRegionEdge; readonly from: ConstructionGridConstraintPoint; readonly to: ConstructionGridConstraintPoint }[]>,
+  cur: ConstructionGridConstraintPoint,
+  next: ConstructionGridConstraintPoint,
+  tolerance: number,
+): ConstructionRegionEdge | undefined {
+  for (const node of [cur.source, next.source]) {
+    if (node === undefined) continue;
+    for (const span of spansAtNode.get(node) ?? []) {
+      if (onSpan(cur, span.from, span.to, tolerance) && onSpan(next, span.from, span.to, tolerance)) return span.edge;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Putting back the standing nodes a straight run of the boolean's output
+ * walked past.
+ *
+ * A node partway along a straight side adds no shape, so the boolean may hand
+ * the side back without it. The engine re-inserts input points it finds on an
+ * output segment, but it does so in `f32` against a fixed `1e-5`, and a point
+ * the overlay snapped even slightly misses that -- which is why it happens in
+ * some places and not others.
+ *
+ * Missing, it is a T-junction: the ground walks from one neighbour straight to
+ * the other past a node the standing side still has. Flat, the two coincide
+ * and nothing shows. Where that node is not at the height of the line between
+ * its neighbours -- ground in a depression, on a slope -- the seam opens.
+ *
+ * Only a node genuinely *on* the segment, strictly between its ends, and not
+ * already in this ring comes back.
+ */
+function restoreSkippedNodes(
+  points: readonly ConstructionGridConstraintPoint[],
+  candidateAt: ReadonlyMap<number, { readonly x: number; readonly z: number }>,
+  buckets: ReadonlyMap<string, readonly number[]>,
+  cell: number,
+  tolerance: number,
+): readonly ConstructionGridConstraintPoint[] {
+  const inRing = new Set<number>();
+  for (const point of points) if (point.source !== undefined) inRing.add(point.source);
+
+  const result: ConstructionGridConstraintPoint[] = [];
+  for (let index = 0; index < points.length; index += 1) {
+    const from = points[index]!;
+    const to = points[(index + 1) % points.length]!;
+    result.push(from);
+
+    const dx = to.x - from.x;
+    const dz = to.z - from.z;
+    const lengthSq = dx * dx + dz * dz;
+    if (lengthSq <= 1e-12) continue;
+    const length = Math.sqrt(lengthSq);
+
+    const found: { readonly along: number; readonly source: number }[] = [];
+    const minColumn = Math.floor((Math.min(from.x, to.x) - tolerance) / cell);
+    const maxColumn = Math.floor((Math.max(from.x, to.x) + tolerance) / cell);
+    const minRow = Math.floor((Math.min(from.z, to.z) - tolerance) / cell);
+    const maxRow = Math.floor((Math.max(from.z, to.z) + tolerance) / cell);
+    for (let column = minColumn; column <= maxColumn; column += 1) {
+      for (let row = minRow; row <= maxRow; row += 1) {
+        for (const source of buckets.get(`${column}:${row}`) ?? []) {
+          if (inRing.has(source)) continue;
+          const at = candidateAt.get(source)!;
+          const along = ((at.x - from.x) * dx + (at.z - from.z) * dz) / lengthSq;
+          if (along * length <= tolerance || (1 - along) * length <= tolerance) continue;
+          if (Math.abs((at.x - from.x) * dz - (at.z - from.z) * dx) / length > tolerance) continue;
+          found.push({ along, source });
+        }
+      }
+    }
+    found.sort((a, b) => a.along - b.along);
+    for (const { source } of found) {
+      if (inRing.has(source)) continue;
+      inRing.add(source);
+      const at = candidateAt.get(source)!;
+      result.push({ x: at.x, z: at.z, source });
+    }
+  }
+  return result;
+}
+
 function dropInventedCorners(
   points: readonly ConstructionGridConstraintPoint[],
   hasEdge: (a: number, b: number) => boolean,
@@ -314,7 +429,7 @@ function dropInventedCorners(
 /**
  * Giving the boolean's output its identity back.
  *
- * `polygon-clipping` answers in bare floats: a corner that was a node going in
+ * The boolean answers in bare floats: a corner that was a node going in
  * comes out as a pair of numbers with nothing attached. So every corner of the
  * result is matched against the corners that *did* carry a node -- the retained
  * terrain's rim and the painter's contour -- and takes that node's id.
@@ -345,7 +460,7 @@ function dropInventedCorners(
  * stays linear as the road network grows instead of squaring with it.
  */
 export function buildConstraintRings(
-  targetPolygon: MultiPolygon,
+  targetPolygon: PlanarArea,
   faceSize: number,
   perimeters: ConstraintTable,
 ): readonly (ConstraintRing & { readonly isHole: boolean })[] {
@@ -374,14 +489,37 @@ export function buildConstraintRings(
   // for per corner. A pair appearing in more than one ring is the same edge
   // seen from both sides, so the first answer is the answer.
   const edgeBetween = new Map<string, ConstructionRegionEdge>();
+  /**
+   * The same edges, reachable from either end and carrying the span they run
+   * along, so a segment that is only *part* of an edge can still find it.
+   *
+   * Indexed by node rather than searched, and a node's degree is a handful, so
+   * this stays linear in the network's size the way the pair lookup does.
+   */
+  const spansAtNode = new Map<number, { readonly edge: ConstructionRegionEdge; readonly from: ConstructionGridConstraintPoint; readonly to: ConstructionGridConstraintPoint }[]>();
+  /** Where each standing node sits, so a pair can be tested against a span it may lie within. */
+  const positionOfSource = new Map<number, ConstructionGridConstraintPoint>();
+  for (const ring of perimeters.rings) {
+    for (const point of ring.points) {
+      if (point.source !== undefined && !positionOfSource.has(point.source)) positionOfSource.set(point.source, point);
+    }
+  }
   for (const ring of perimeters.rings) {
     for (let index = 0; index < ring.points.length; index += 1) {
-      const from = ring.points[index]!.source;
-      const to = ring.points[(index + 1) % ring.points.length]!.source;
+      const fromPoint = ring.points[index]!;
+      const toPoint = ring.points[(index + 1) % ring.points.length]!;
+      const from = fromPoint.source;
+      const to = toPoint.source;
       const edge = ring.edges[index];
       if (from === undefined || to === undefined || edge === undefined) continue;
       const key = pairKey(from, to);
       if (!edgeBetween.has(key)) edgeBetween.set(key, edge);
+      const span = { edge, from: fromPoint, to: toPoint };
+      for (const node of [from, to]) {
+        const held = spansAtNode.get(node);
+        if (held === undefined) spansAtNode.set(node, [span]);
+        else held.push(span);
+      }
     }
   }
 
@@ -476,14 +614,17 @@ export function buildConstraintRings(
     }
     if (points.length < 3) continue;
 
+    const onEdgeTolerance = Math.max(1e-6, faceSize * 0.01);
+    const restored = restoreSkippedNodes(points, candidateAt, buckets, cell, onEdgeTolerance);
+
     // Drop collinear unnamed points that add no shape
-    let collinearCleaned = points;
-    if (points.length > 3) {
+    let collinearCleaned = restored;
+    if (restored.length > 3) {
       const cleaned: ConstructionGridConstraintPoint[] = [];
-      for (let i = 0; i < points.length; i++) {
-        const prev = points[(i - 1 + points.length) % points.length]!;
-        const curr = points[i]!;
-        const next = points[(i + 1) % points.length]!;
+      for (let i = 0; i < restored.length; i++) {
+        const prev = restored[(i - 1 + restored.length) % restored.length]!;
+        const curr = restored[i]!;
+        const next = restored[(i + 1) % restored.length]!;
         if (curr.source === undefined) {
           const dx = next.x - prev.x;
           const dz = next.z - prev.z;
@@ -502,22 +643,29 @@ export function buildConstraintRings(
     }
 
 
-    const stitched = dropInventedCorners(
-      collinearCleaned,
-      (a, b) => edgeBetween.has(pairKey(a, b)),
-      Math.max(1e-6, faceSize * 0.01),
-    );
+    // Two nodes answer for a run between them when an edge joins them, and
+    // equally when one edge simply *contains* them both -- a node partway
+    // along another edge is still a place that edge can be split. Without the
+    // second case the run stayed, and a segment with an unnamed point at each
+    // end had nothing to look itself up by: the tooth this dropped to one.
+    const joinedOrSpanned = (a: number, b: number): boolean => {
+      if (edgeBetween.has(pairKey(a, b))) return true;
+      const from = positionOfSource.get(a);
+      const to = positionOfSource.get(b);
+      return from !== undefined && to !== undefined &&
+        edgeAlongSegment(spansAtNode, from, to, onEdgeTolerance) !== undefined;
+    };
+    const stitched = dropInventedCorners(collinearCleaned, joinedOrSpanned, onEdgeTolerance);
 
 
     const edges: (ConstructionRegionEdge | undefined)[] = [];
     for (let i = 0; i < stitched.length; i++) {
       const cur = stitched[i]!;
       const next = stitched[(i + 1) % stitched.length]!;
-      edges.push(
-        cur.source !== undefined && next.source !== undefined
-          ? edgeBetween.get(pairKey(cur.source, next.source))
-          : undefined,
-      );
+      const paired = cur.source !== undefined && next.source !== undefined
+        ? edgeBetween.get(pairKey(cur.source, next.source))
+        : undefined;
+      edges.push(paired ?? edgeAlongSegment(spansAtNode, cur, next, onEdgeTolerance));
     }
     rings.push({ points: stitched, edges, isHole });
   }
@@ -596,7 +744,7 @@ export function executeTerrainCut(
     closedOutlineRing.push([closedOutlineRing[0]![0], closedOutlineRing[0]![1]]);
   }
 
-  const outlineMultiPolygon: MultiPolygon =
+  const outlineMultiPolygon: PlanarArea =
     request.area.sweptPolygon && request.area.sweptPolygon.length > 0
       ? request.area.sweptPolygon
       : closedOutlineRing.length >= 4
@@ -660,22 +808,14 @@ export function executeTerrainCut(
     request.profile.kind === "regenerate" ? effectiveFaceSide * 5 : effectiveFaceSide * 2;
   const standing = timePhase("vizinhança do terreno", () => terrainStandingAround(runtime, covered, coveredExtent, standingReach));
 
-  const targetSurfaceType = isTerrainSurface(request.targetSurfaceType)
+  const targetSurfaceType = hasTrait(request.targetSurfaceType, "ground")
     ? request.targetSurfaceType
     : "terrain";
 
-  const isTerrainMatch = (st: string, target: string): boolean => {
-    if (!isTerrainSurface(st)) return false;
-    if (st === target) return true;
-    if (isTerrainSurface(target)) return true;
-    return false;
-  };
-
   const coveredKeys = new Set(covered.map((c) => c.surfaceKey.join(" ")));
 
-  const terrainStanding = standing.filter((topology) =>
-    isTerrainMatch(topology.surfaceType, targetSurfaceType),
-  );
+  // The target is ground by construction above, so every ground face matches it.
+  const terrainStanding = standing.filter((topology) => hasTrait(topology.surfaceType, "ground"));
   let affected = terrainStanding.filter(
     (topology) =>
       coveredKeys.has(topology.surfaceKey.join(" ")) ||
@@ -711,7 +851,7 @@ export function executeTerrainCut(
   // is what makes the shape: the ground being laid is the affected faces
   // *minus* this, and how much ground has to be taken in for that remainder to
   // be layable depends on it.
-  let connectArea: MultiPolygon = [];
+  let connectArea: PlanarArea = [];
   let connectLoops: readonly (readonly ConstructionRegionEdge[])[] = [];
   const connectPositions = new Map<ConstructionNodeId, { x: number; z: number }>();
   let connectSeeds: { readonly seed: readonly string[]; readonly surfaceType: string }[] = [];
@@ -770,7 +910,7 @@ export function executeTerrainCut(
       .filter((polygon) => polygon.length > 0);
     if (facePolygons.length > 0) {
       try {
-        connectArea = timePhase(`união da rua (${facePolygons.length} faces)`, () => polygonClipping.union(facePolygons[0]!, ...facePolygons.slice(1)));
+        connectArea = timePhase(`união da rua (${facePolygons.length} faces)`, () => planarUnion(runtime, facePolygons[0]!, ...facePolygons.slice(1)));
       } catch {
         connectArea = [];
       }
@@ -791,29 +931,29 @@ export function executeTerrainCut(
   }
 
   /** The affected faces as one polygon, with `connectArea` taken out of it. */
-  const groundFor = (faces: readonly ConstructionRegionTopology[]): MultiPolygon => {
+  const groundFor = (faces: readonly ConstructionRegionTopology[]): PlanarArea => {
     const polygons = faces.map(topologyToPolygon).filter((p) => p.length > 0);
     const allPolygons =
       request.vacatedArea && request.vacatedArea.length > 0
         ? [...polygons, ...request.vacatedArea]
         : polygons;
     if (allPolygons.length === 0) return [];
-    let merged: MultiPolygon;
+    let merged: PlanarArea;
     try {
-      merged = polygonClipping.union(allPolygons[0]!, ...allPolygons.slice(1));
+      merged = planarUnion(runtime, allPolygons[0]!, ...allPolygons.slice(1));
     } catch {
       return [];
     }
     if (request.profile.kind === "convex") {
       try {
-        merged = polygonClipping.union(merged, outlineMultiPolygon);
+        merged = planarUnion(runtime, merged, outlineMultiPolygon);
       } catch {
         // Keep the un-unioned shape rather than losing the stroke.
       }
     }
     if (connectArea.length === 0) return merged;
     try {
-      return polygonClipping.difference(merged, connectArea);
+      return planarDifference(runtime, merged, connectArea);
     } catch {
       return merged;
     }
@@ -843,7 +983,7 @@ export function executeTerrainCut(
       // not pull an otherwise untouched terrain face into regeneration.
       const touched = affected.flatMap((t) => [...t.outerLoops, ...t.holes].flat());
       const absorbed = timePhase("vizinhas por aresta", () => retained.filter(
-        (t) => isTerrainMatch(t.surfaceType, targetSurfaceType) &&
+        (t) => hasTrait(t.surfaceType, "ground") &&
           [...t.outerLoops, ...t.holes].some((loop) => loop.some((edge) => touched.some((other) =>
             (edge.startNodeId === other.startNodeId && edge.endNodeId === other.endNodeId) ||
             (edge.startNodeId === other.endNodeId && edge.endNodeId === other.startNodeId)))),
@@ -961,6 +1101,17 @@ export function executeTerrainCut(
 
   const filled = timePhase("preenchimento", () => fillTerrain(runtime, {
     what: request.profile.kind === "concave" ? "escavação" : request.profile.kind === "convex" ? "adição" : "regeneração",
+    // The faces this fill means to replace, so the log can hold that against
+    // the faces actually cleared. Left unset, the two never disagreed on paper
+    // however far apart they ran -- the divergence the pair exists to catch
+    // read `0 vs N` on every single commit, so nobody could see it.
+    //
+    // It counts `affected`, not the covered regions the caller named: what is
+    // asked to be replaced is exactly `replaceSurfaceKeys` below, and
+    // `affected` is wider than `covered` by design -- faces the area crosses,
+    // and edge neighbours absorbed to give the repair room. Comparing the
+    // narrower number would report a divergence on every widened repair.
+    regenerated: affected.length,
     mint: `${request.tableId}:cut-${request.causeId}`,
     tableId: request.tableId,
     causeId: request.causeId,
@@ -968,9 +1119,9 @@ export function executeTerrainCut(
     faceSide: effectiveFaceSide,
     relaxStrength: request.irregularity ?? 0.7,
     surfaceType:
-      affected.length > 0 && isTerrainSurface(affected[0]!.surfaceType)
+      affected.length > 0 && hasTrait(affected[0]!.surfaceType, "ground")
         ? affected[0]!.surfaceType
-        : (retained.length > 0 && isTerrainSurface(retained[0]!.surfaceType) ? retained[0]!.surfaceType : targetSurfaceType),
+        : (retained.length > 0 && hasTrait(retained[0]!.surfaceType, "ground") ? retained[0]!.surfaceType : targetSurfaceType),
     boundary: boundaryRings,
     holes: holeRings,
     sources: perimeters.sources,

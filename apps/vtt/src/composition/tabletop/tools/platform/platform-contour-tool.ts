@@ -1,12 +1,13 @@
-import { DEFAULT_TOOL_PARAMS, fitPath } from "../../../../features/edit-construction/index.ts";
+import { DEFAULT_TOOL_PARAMS, fitPath, platformStructureType } from "../../../../features/edit-construction/index.ts";
 import type { FittedEdge, ToolParamsByTool } from "../../../../features/edit-construction/index.ts";
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import type { ConstructionPosition, ConstructionRegionTopology } from "../../../../ports/index.ts";
 import { createBoundaryEdges, reverseGeometry } from "../core/boundary-edges.ts";
+import { commitPatchReplacement } from "../../effects/effect-commit.ts";
 import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext } from "../core/tool-context.ts";
 import { polylineSegmentsPreview, segmentsPreview } from "../shapes/preview-shapes.ts";
 import { circleContour, previewOutline } from "../tower/tower-geometry.ts";
-import { groupLoopsByContainment, splitContourAtPoints, weldedMerge, type DirectedContourEdge } from "./platform-contour-merge.ts";
+import { groupLoopsByContainment, splitContourAtPoints, weldedMerge, windLoop, type DirectedContourEdge } from "./platform-contour-merge.ts";
 type Params = ToolParamsByTool["platform-contour"];
 const COLOR = 0x79b8e8;
 /** Same corner-weld tolerance a wall run already snaps onto an existing column with. */
@@ -28,7 +29,7 @@ function draft(ctx: ToolContext, params: Params): PointerSample[] {
  */
 function parametersAt(ctx: ToolContext, first: PointerSample | undefined, params: Params): Params {
   if (!first) return params;
-  const target = params.mode === "create" ? undefined : ctx.runtime.getAllRegionTopologies().find((t) => t.surfaceType === "platform" &&
+  const target = params.mode === "create" ? undefined : ctx.runtime.getAllRegionTopologies().find((t) => t.surfaceType === platformStructureType.surfaceType &&
     (first.surfaceRef ? surfaceRefFromNodeSet(t.surfaceKey) === first.surfaceRef : first.nodeId && t.nodes.some((n) => n.id === first.nodeId)));
   if (target?.nodes[0]) return { ...params, elevation: target.nodes[0].position.y };
   const node = first.nodeId ? ctx.runtime.getGraphSnapshot().nodes.find((n) => n.id === first.nodeId) : undefined;
@@ -43,7 +44,7 @@ function sourceEdges(topology: ConstructionRegionTopology): readonly (readonly D
   return [...topology.outerLoops, ...topology.holes].map((loop) => loop.map((edge) => ({
     a: edge.startNodeId,
     b: edge.endNodeId,
-    geometry: edge.reversed ? reverseGeometry(edge.geometry) : edge.geometry,
+    geometry: edge.geometry,
   })));
 }
 function ringSignature(edges: readonly DirectedContourEdge[]): string {
@@ -79,7 +80,7 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
     const graph = ctx.runtime.getGraphSnapshot();
     // Picking the terrain below a drawing plane is not an instruction to weld floors.
     const picked = new Set(pickedSamples.flatMap((s) => s.nodeId ? [s.nodeId] : []));
-    const sources = params.mode === "create" ? [] : all.filter((t) => t.surfaceType === "platform" && t.nodes.every((n) => Math.abs(n.position.y - params.elevation) < 1e-4));
+    const sources = params.mode === "create" ? [] : all.filter((t) => t.surfaceType === platformStructureType.surfaceType && t.nodes.every((n) => Math.abs(n.position.y - params.elevation) < 1e-4));
     if (params.mode !== "create" && sources.length === 0) throw new Error("Nenhuma plataforma nessa elevação. Comece sobre a plataforma ou escolha a elevação correta.");
 
     const operationId = scopedToolId(ctx, "platform", ctx.nextSequence());
@@ -129,11 +130,11 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
     const standingRaw = sources.flatMap((t) => sourceEdges(t).flat());
     const clipPoints = [...new Set(clipEdges.flatMap((e) => [e.a,e.b]))].map((id) => ({ id, position: positionOf(id) }));
     const standingPoints = [...new Set(standingRaw.flatMap((e) => [e.a,e.b]))].map((id) => ({ id, position: positionOf(id) }));
-    const standing = splitContourAtPoints(standingRaw, clipPoints, positionOf, WELD_TOLERANCE);
-    const splitClipEdges = splitContourAtPoints(clipEdges, standingPoints, positionOf, WELD_TOLERANCE);
+    const standing = splitContourAtPoints(ctx.runtime, standingRaw, clipPoints, positionOf, WELD_TOLERANCE);
+    const splitClipEdges = splitContourAtPoints(ctx.runtime, clipEdges, standingPoints, positionOf, WELD_TOLERANCE);
     const merged = weldedMerge(standing, splitClipEdges);
     if (merged.kind === "error") { ctx.reportFeedback({ tone: "error", message: merged.message }); return; }
-    let groups = groupLoopsByContainment(merged.loops, positionOf);
+    let groups = groupLoopsByContainment(ctx.runtime, merged.loops, positionOf);
     // A cut clip that never touches or nests inside any standing platform
     // removed nothing -- its own loop must not be promoted into a new face.
     if (params.mode === "cut") {
@@ -156,10 +157,12 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
     // New boundary identities avoid borrowing an unrelated wall's geometry.
     // Shared graph vertices, rather than endpoint-only edge names, carry support.
     const builder = createBoundaryEdges(operationId, { kind: "private-when-full", runPrefix: operationId, existingUses: new Map() });
+    // Wound here, after the identity match above: a face the operation left
+    // alone keeps its stored walk, so its signature still finds it.
     const regions = changedGroups.map((group,index) => ({
       regionId: `${operationId}:face:${index}`,
-      boundary: group.boundary.map((e) => builder.use(e.a,e.b,e.geometry)),
-      holes: group.holes.map((hole) => hole.map((e) => builder.use(e.a,e.b,e.geometry))),
+      boundary: windLoop(ctx.runtime,group.boundary,positionOf,"boundary").map((e) => builder.use(e.a,e.b,e.geometry)),
+      holes: group.holes.map((hole) => windLoop(ctx.runtime,hole,positionOf,"hole").map((e) => builder.use(e.a,e.b,e.geometry))),
       surfaceType: "platform",
       physical: true,
     }));
@@ -167,13 +170,13 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
     const footprintOutline = primaryGroup && primaryGroup.boundary.length >= 3
       ? primaryGroup.boundary.map((e) => positionOf(e.a))
       : (contour.length >= 3 ? contour.map((c) => [c.start.x, c.start.z] as const) : undefined);
-    ctx.runtime.applyPatchReplacement({
+    const { recorded } = commitPatchReplacement(ctx.runtime, {
       operationId,
       sourceSurfaceKeys: remaining.map(({ source }) => source.surfaceKey),
       patch: { nodes: [...nodes.values()], edges: builder.all(), regions },
       footprintOutline,
-    }, "local", operationId);
-    ctx.history.record({ kind: "path-brush", operationId });
+    }, { transactionId: operationId });
+    if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
     ctx.reportFeedback({ tone: "success", message: `Plataforma: ${regions.length} face(s) na elevação ${params.elevation}.` });
   } catch (error) { ctx.reportFeedback({ tone: "error", message: error instanceof Error ? error.message : String(error) }); }
 }

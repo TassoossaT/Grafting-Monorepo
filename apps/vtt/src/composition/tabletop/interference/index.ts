@@ -1,1 +1,1 @@
-export * from "./type-interference-dispatch.ts";
+export * from "./painted-topologies.ts";

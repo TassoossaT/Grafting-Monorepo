@@ -696,6 +696,10 @@ second region take the opening as its own outer boundary. A hole and the
 face filling it are then joined the same way any two faces are: they
 share the rim.
 
+### `pub fn grafting_graph_core::arc_sweep(edge: &grafting_graph_core::ContourEdge, from: grafting_graph_core::ContourPoint, to: grafting_graph_core::ContourPoint) -> f32`
+
+The signed sweep an arc turns through, positive counter-clockwise.
+
 ### `pub fn grafting_graph_core::bezier::CubicBezier::curvature(&self, t: f64) -> core::result::Result<core::option::Option<f64>, alloc::string::String>`
 
 Signed XZ curvature, undefined at stationary points.
@@ -1030,6 +1034,10 @@ The rim is derived, never guessed: after the removal and the shared
 orphan cleanup, it is exactly those of the removed regions' own edges
 that still exist and are now used by exactly one region.
 
+### `pub fn grafting_graph_core::distance_at_parameter(edge: &grafting_graph_core::ContourEdge, from: grafting_graph_core::ContourPoint, to: grafting_graph_core::ContourPoint, t: f32) -> f32`
+
+Distance along the edge from its start to parameter `t`.
+
 ### `pub fn grafting_graph_core::duplicate_region<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, surfaces: &mut grafting_graph_core::SurfaceRegistry, region: &grafting_graph_core::RegionId, spec: grafting_graph_core::DuplicateRegionSpec<'_, N>) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
 
 `DuplicateRegion`: mints a parallel copy of a region -- one new node per
@@ -1081,6 +1089,10 @@ fail when the node does not exist.
 Validates the whole batch before writing; invalid batches leave the graph
 untouched. Contours are scanned once for the entire batch, so outcome
 collection does not repeat a global incidence query for each moved node.
+
+### `pub fn grafting_graph_core::parameter_at_distance(edge: &grafting_graph_core::ContourEdge, from: grafting_graph_core::ContourPoint, to: grafting_graph_core::ContourPoint, distance: f32) -> f32`
+
+The parameter sitting `distance` along the edge from its start.
 
 ### `pub fn grafting_graph_core::plan_motion<E>(graph: &grafting_graph_core::Graph<[f32; 3], E>, seeds: &[grafting_graph_core::RequestedMotion], influences: &[grafting_graph_core::MotionInfluence]) -> core::result::Result<grafting_graph_core::MotionPlan, grafting_graph_core::MotionError>`
 
@@ -1213,6 +1225,15 @@ edges itself and build the loop directly instead.
 
 Registers the produced edges and region into `topology`, validated
 against `graph` exactly as any other region would be.
+
+### `pub fn grafting_graph_core::sub_geometry(edge: &grafting_graph_core::ContourEdge, from: grafting_graph_core::ContourPoint, to: grafting_graph_core::ContourPoint, t0: f32, t1: f32) -> grafting_graph_core::ContourGeometry`
+
+The edge's own geometry between parameters `t0` and `t1`, walked forward.
+
+A line or an arc need no work: a chord is a chord end to end, and any two
+points on a circle bound an arc of that same circle. A Bezier's handles are
+anchored to its own endpoints, so a shorter span between two other points
+needs its own freshly split handles or it traces a different curve.
 
 ### `pub grafting_graph_core::ArcBulge::Left`
 

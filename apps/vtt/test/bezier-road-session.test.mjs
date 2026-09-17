@@ -8,13 +8,13 @@ const road = { shape:"circle",radius:0.5,rotationDegrees:0,pathKind:"road",bedWi
 function draw(f, samples, operationId) {
   const effect=createPathBrushEffect({brushShape:{kind:"circle",radius:0.5},brushRegion:{samples},parameters:pathFormationFor(road)},
     {operationId,tableId:"bezier-test",initiatedBy:"path-brush"});
-  const plan=planPathCloudMutation({bezier:f.runtime,tableId:"bezier-test",snapToGrid:false,graphSnapshot:f.runtime.getGraphSnapshot(),
+  const plan=planPathCloudMutation({bezier:f.runtime,field:f.runtime,tableId:"bezier-test",snapToGrid:false,graphSnapshot:f.runtime.getGraphSnapshot(),
     regionTopologies:f.runtime.getAllRegionTopologies(),coverageFor:()=>[],effect,tolerance:0.025});
   assert.equal(plan.kind,"ready");
   f.runtime.applyPatchReplacement(plan.request);
 }
 function edit(f, targetId, position, operationId, extra={}) {
-  const plan=planBezierEdit({snapshot:f.runtime.getGraphSnapshot(),topologies:f.runtime.getAllRegionTopologies(),port:f.runtime,
+  const plan=planBezierEdit({snapshot:f.runtime.getGraphSnapshot(),topologies:f.runtime.getAllRegionTopologies(),port:f.runtime,field:f.runtime,
     targetId,position,operationId,tableId:"bezier-test",...extra});
   assert.ok(plan);
   f.runtime.applyPatchReplacement(plan.request);

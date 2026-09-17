@@ -1,10 +1,6 @@
-export { sampleCatmullRom } from "./catmull-rom.ts";
 export type { ExistingNode } from "./contour-patch.ts";
 export { buildContourPatch } from "./contour-patch.ts";
-export { offsetBands } from "./offset-bands.ts";
-export type { BandRibbon } from "./offset-bands.ts";
 export { planSpineContour } from "./plan-spine-contour.ts";
-export type { PlanSpineContourInput, PlanSpineContourResult, SpineChainInput } from "./plan-spine-contour.ts";
-export { unionBandLayer } from "./union-bands.ts";
-export { heightOnCurves } from "./curve-projection.ts";
-export type { ReferenceCurve } from "./curve-projection.ts";
+export type { BandRibbon, PlanSpineContourInput, PlanSpineContourResult, SpineChainInput } from "./plan-spine-contour.ts";
+export { heightsOnCurves } from "./curve-projection.ts";
+export type { FieldPort, ReferenceCurve } from "./curve-projection.ts";

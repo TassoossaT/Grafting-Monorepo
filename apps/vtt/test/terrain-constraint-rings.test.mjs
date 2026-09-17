@@ -235,3 +235,109 @@ test("a real corner between two nodes is not mistaken for an invented one", () =
     "a corner off the line is a real corner and stays",
   );
 });
+
+test("a corner that lands on a standing node mid-edge still names the edge it lies on", () => {
+  // The tooth `dropInventedCorners` cannot reach. That drop only removes
+  // corners naming *no* node, and a boolean that preserves a structural corner
+  // hands back one sitting exactly on a node a neighbouring face already owns.
+  // It is named, so it survives the drop -- and then neither n0 -> n4 nor
+  // n4 -> n1 is a pair the graph joins, so both segments know no edge and every
+  // landing on them is discarded. Two teeth where the ground meets the contour.
+  //
+  // Dropping the corner is the wrong fix: n4 is a real shared node, and the
+  // edge it sits on is what must be split there. So the segment has to name
+  // the edge that *contains* it, not only the edge between its own endpoints.
+  const edge = { edgeId: "e:n0~n1", reversed: false, startNodeId: "n0", endNodeId: "n1", geometry: { kind: "line" } };
+  const perimeters = standing([[0, 0], [4, 0], [4, 4], [0, 4], [2, 0]], [edge]);
+
+  const withNamedCorner = [
+    [
+      [
+        [0, 0],
+        [2, 0],
+        [4, 0],
+        [4, 4],
+        [0, 4],
+        [0, 0],
+      ],
+    ],
+  ];
+  const rings = buildConstraintRings(withNamedCorner, FACE, perimeters);
+  const points = rings[0].points;
+
+  const at = points.findIndex((point) => point.source === 0);
+  assert.equal(points[(at + 1) % points.length].source, 4, "the corner kept the node it landed on");
+  assert.ok(rings[0].edges[at] !== undefined, "the segment from n0 knows the edge it runs along");
+  assert.equal(rings[0].edges[at].edgeId, "e:n0~n1");
+});
+
+test("an invented corner between a node and a node mid-edge is dropped too", () => {
+  // The leftover tooth after a segment learned to name the edge it lies on.
+  // `dropInventedCorners` asks whether an edge runs between the two *named*
+  // points around an unnamed run, and n0 -> n4 is not such a pair: n4 is a
+  // node sitting partway along n0 -> n1. So the unnamed corner between them
+  // survived, and a segment with no named endpoint at either end cannot find
+  // the edge it runs along. Accepting a containing edge as the pair's answer
+  // drops the run, and the segments left resolve the way the test above does.
+  const edge = { edgeId: "e:n0~n1", reversed: false, startNodeId: "n0", endNodeId: "n1", geometry: { kind: "line" } };
+  const perimeters = standing([[0, 0], [4, 0], [4, 4], [0, 4], [3, 0]], [edge]);
+
+  const withBoth = [
+    [
+      [
+        [0, 0],
+        [1.5, 0],
+        [3, 0],
+        [4, 0],
+        [4, 4],
+        [0, 4],
+        [0, 0],
+      ],
+    ],
+  ];
+  const rings = buildConstraintRings(withBoth, FACE, perimeters);
+  const points = rings[0].points;
+
+  assert.ok(!points.some((point) => point.source === undefined), "the invented corner between the two nodes is gone");
+  // Only the run n0 -> n4 -> n1 lies along a declared edge; the square's other
+  // three sides have none, and are not what this is about.
+  for (const [from, to] of [[0, 4], [4, 1]]) {
+    const at = points.findIndex((point) => point.source === from);
+    assert.equal(points[(at + 1) % points.length].source, to, `${from} is followed by ${to}`);
+    assert.equal(rings[0].edges[at]?.edgeId, "e:n0~n1", `the segment ${from} -> ${to} names the edge it runs along`);
+  }
+});
+
+test("a standing node the boolean left out of a straight run is put back where it stands", () => {
+  // n0 -> n1 -> n2 is one straight side of standing ground, two edges long.
+  // The boolean is free to hand that side back as the single segment n0 -> n2:
+  // n1 adds no *shape*. It is still a node, though, and the ground laid against
+  // it has to meet it. Left out, the new face walks straight from n0 to n2 past
+  // it -- a T-junction. On flat ground that is invisible. Anywhere n1 does not
+  // sit on the line between its neighbours' heights, as in a depression, it
+  // opens a gap along the seam.
+  const left = { edgeId: "e:n0~n1", reversed: false, startNodeId: "n0", endNodeId: "n1", geometry: { kind: "line" } };
+  const right = { edgeId: "e:n1~n2", reversed: false, startNodeId: "n1", endNodeId: "n2", geometry: { kind: "line" } };
+  const perimeters = standing([[0, 0], [2, 0], [4, 0]], [left, right]);
+
+  const rings = buildConstraintRings(square(0, 0, 4, 4), FACE, perimeters);
+  const points = rings[0].points;
+
+  const at = points.findIndex((point) => point.source === 0);
+  assert.notEqual(at, -1, "n0 is in the ring");
+  assert.deepEqual(
+    [points[at].source, points[(at + 1) % points.length].source, points[(at + 2) % points.length].source],
+    [0, 1, 2],
+    "the run walks n0 -> n1 -> n2 rather than skipping the node in the middle",
+  );
+  assert.equal(rings[0].edges[at]?.edgeId, "e:n0~n1");
+  assert.equal(rings[0].edges[(at + 1) % points.length]?.edgeId, "e:n1~n2");
+});
+
+test("a node near a straight run but not on it is not pulled into it", () => {
+  // Half a face off the side is a node of something else, not a corner of it.
+  const perimeters = standing([[0, 0], [2, 1], [4, 0]]);
+  const rings = buildConstraintRings(square(0, 0, 4, 4), FACE, perimeters);
+
+  assert.ok(!sourcesOf(rings[0]).includes(1), "the node off the line stays out");
+});

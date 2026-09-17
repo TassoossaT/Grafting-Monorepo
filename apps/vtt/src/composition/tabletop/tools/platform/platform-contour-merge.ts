@@ -1,6 +1,12 @@
 import type { ConstructionEdgeGeometry } from "@/ports";
 
-import { angleAround, arcSweep, sameGeometry } from "../../../../features/edit-construction/index.ts";
+import {
+  arcSweepsOf,
+  closestOnContours,
+  sameGeometry,
+  type ContourPort,
+  type ContourSpan,
+} from "../../../../features/edit-construction/index.ts";
 
 /**
  * Replaces the analytic curved-boolean engine platform extend/cut used to
@@ -35,37 +41,47 @@ export type WeldedMergeResult =
   | { readonly kind: "ok"; readonly loops: readonly (readonly DirectedContourEdge[])[] }
   | { readonly kind: "error"; readonly message: string };
 
-/**
- * Where a point falls along `edge` (line or arc), as a fraction in (0, 1) --
- * `undefined` when it is not on the span at all, or sits at either endpoint
- * (an endpoint is a weld, not a split).
- */
-function paramOnEdge(edge: DirectedContourEdge, positionOf: (id: string) => readonly [number, number], point: readonly [number, number], tolerance: number): number | undefined {
+/** One edge, phrased the way a contour question is asked; height plays no part in a weld. */
+function spanOf(
+  edge: DirectedContourEdge,
+  positionOf: (id: string) => readonly [number, number],
+): ContourSpan {
   const [ax, az] = positionOf(edge.a);
   const [bx, bz] = positionOf(edge.b);
-  if (edge.geometry.kind === "line") {
-    const dx = bx - ax, dz = bz - az;
-    const lengthSq = dx * dx + dz * dz;
-    if (lengthSq < 1e-12) return undefined;
-    const t = ((point[0] - ax) * dx + (point[1] - az) * dz) / lengthSq;
+  return { geometry: edge.geometry, start: { x: ax, y: 0, z: az }, end: { x: bx, y: 0, z: bz } };
+}
+
+/**
+ * Where `point` falls along each edge, as a fraction in (0, 1) -- `undefined`
+ * for an edge the point is not on, or one it only meets at an endpoint (an
+ * endpoint is a weld, not a split).
+ *
+ * The engine answers where the point sits on each curve; the tolerance and the
+ * endpoint exclusion are this merge's own judgement about what counts as a
+ * weld, which is the part that belongs here.
+ */
+function paramsOnEdges(
+  port: ContourPort,
+  edges: readonly DirectedContourEdge[],
+  positionOf: (id: string) => readonly [number, number],
+  point: readonly [number, number],
+  tolerance: number,
+): readonly (number | undefined)[] {
+  const closest = closestOnContours(
+    port,
+    edges.map((edge) => spanOf(edge, positionOf)),
+    { x: point[0], y: 0, z: point[1] },
+  );
+  return closest.map(({ t, position }, index) => {
+    // A split keeps each half's own geometry, which is true of a chord and of
+    // an arc (any two points on a circle bound an arc of that same circle) but
+    // never of a Bezier, whose handles belong to its own endpoints. A
+    // platform's contour is only ever fitted as line or arc, so rather than
+    // split a curve wrongly here, a Bezier edge simply offers no weld.
+    if (edges[index]!.geometry.kind === "bezier") return undefined;
     if (!(t > 1e-4 && t < 1 - 1e-4)) return undefined;
-    const projected: readonly [number, number] = [ax + t * dx, az + t * dz];
-    return Math.hypot(point[0] - projected[0], point[1] - projected[1]) <= tolerance ? t : undefined;
-  }
-  // A platform's own contour is only ever fitted as line or arc -- a Bezier
-  // edge never reaches this merge, so there is no mid-span weld to find.
-  if (edge.geometry.kind === "bezier") return undefined;
-  const { center, clockwise } = edge.geometry;
-  const radius = Math.hypot(ax - center[0], az - center[1]);
-  const pointRadius = Math.hypot(point[0] - center[0], point[1] - center[1]);
-  if (Math.abs(pointRadius - radius) > tolerance) return undefined;
-  const startAngle = angleAround(center, ax, az);
-  const endAngle = angleAround(center, bx, bz);
-  const pointAngle = angleAround(center, point[0], point[1]);
-  const sweep = arcSweep(startAngle, endAngle, clockwise);
-  if (Math.abs(sweep) < 1e-9) return undefined;
-  const t = arcSweep(startAngle, pointAngle, clockwise) / sweep;
-  return t > 1e-4 && t < 1 - 1e-4 ? t : undefined;
+    return Math.hypot(point[0] - position[0], point[1] - position[1]) <= tolerance ? t : undefined;
+  });
 }
 
 /**
@@ -81,6 +97,7 @@ function paramOnEdge(edge: DirectedContourEdge, positionOf: (id: string) => read
  * node before {@link weldedMerge} ever compares edges.
  */
 export function splitContourAtPoints(
+  port: ContourPort,
   edges: readonly DirectedContourEdge[],
   points: readonly { readonly id: string; readonly position: readonly [number, number] }[],
   positionOf: (id: string) => readonly [number, number],
@@ -88,13 +105,14 @@ export function splitContourAtPoints(
 ): readonly DirectedContourEdge[] {
   let result = edges;
   for (const point of points) {
+    const params = paramsOnEdges(port, result, positionOf, point.position, tolerance);
     const next: DirectedContourEdge[] = [];
-    for (const edge of result) {
-      const t = edge.a === point.id || edge.b === point.id ? undefined : paramOnEdge(edge, positionOf, point.position, tolerance);
-      if (t === undefined) { next.push(edge); continue; }
+    result.forEach((edge, index) => {
+      const t = edge.a === point.id || edge.b === point.id ? undefined : params[index];
+      if (t === undefined) { next.push(edge); return; }
       next.push({ a: edge.a, b: point.id, geometry: edge.geometry });
       next.push({ a: point.id, b: edge.b, geometry: edge.geometry });
-    }
+    });
     result = next;
   }
   return result;
@@ -181,16 +199,22 @@ export function weldedMerge(
   return { kind: "ok", loops };
 }
 
-function sweep(edge: DirectedContourEdge, positionOf: (id: string) => readonly [number, number]): number {
-  if (edge.geometry.kind !== "arc") return 0;
-  const center = edge.geometry.center;
-  const [ax, az] = positionOf(edge.a);
-  const [bx, bz] = positionOf(edge.b);
-  return arcSweep(angleAround(center, ax, az), angleAround(center, bx, bz), edge.geometry.clockwise);
-}
-
-/** Signed XZ area of a closed directed loop, arcs included -- positive winds counter-clockwise. */
-export function loopSignedArea(loop: readonly DirectedContourEdge[], positionOf: (id: string) => readonly [number, number]): number {
+/**
+ * Signed XZ area of a closed directed loop, arcs included -- positive winds
+ * counter-clockwise.
+ *
+ * The chord polygon is summed here; each arc adds the circular segment between
+ * its chord and its curve, and how far that arc turns is the engine's answer,
+ * asked for every arc in the loop in one crossing.
+ */
+export function loopSignedArea(
+  port: ContourPort,
+  loop: readonly DirectedContourEdge[],
+  positionOf: (id: string) => readonly [number, number],
+): number {
+  const arcs = loop.filter((edge) => edge.geometry.kind === "arc");
+  const answered = arcSweepsOf(port, arcs.map((edge) => spanOf(edge, positionOf)));
+  const sweeps = new Map(arcs.map((edge, index) => [edge, answered[index] ?? 0]));
   let area = 0;
   for (const edge of loop) {
     const [ax, az] = positionOf(edge.a);
@@ -199,11 +223,33 @@ export function loopSignedArea(loop: readonly DirectedContourEdge[], positionOf:
     if (edge.geometry.kind === "arc") {
       const [cx, cz] = edge.geometry.center;
       const radius = Math.hypot(ax - cx, az - cz);
-      const angle = sweep(edge, positionOf);
+      const angle = sweeps.get(edge) ?? 0;
       area += (radius * radius * (angle - Math.sin(angle))) / 2;
     }
   }
   return area;
+}
+
+/**
+ * A loop walked the way a face of its kind has to be: a boundary with positive
+ * {@link loopSignedArea}, a hole negative.
+ *
+ * The drawn contour carries whatever direction the gesture happened to have --
+ * a rectangle dragged one diagonal winds one way, the other diagonal the other.
+ * A face stored the wrong way round is still a face, but it walks every edge
+ * the same way as the ground on the other side of it, and two faces walking an
+ * edge the same way cannot both have it. The ground laid against it is refused
+ * for sitting on ground already there, and that whole side stays empty.
+ */
+export function windLoop(
+  port: ContourPort,
+  loop: readonly DirectedContourEdge[],
+  positionOf: (id: string) => readonly [number, number],
+  role: "boundary" | "hole",
+): readonly DirectedContourEdge[] {
+  const area = loopSignedArea(port, loop, positionOf);
+  if (role === "boundary" ? area >= 0 : area <= 0) return loop;
+  return [...loop].reverse().map((edge) => ({ a: edge.b, b: edge.a, geometry: reverseGeometry(edge.geometry) }));
 }
 
 /** Whether `point` lies inside `loop` (even-odd ray cast; arc spans are chorded for the test, which is exact enough at the ~1e-3 scale these loops are welded at). */
@@ -240,10 +286,11 @@ export interface LoopGroup {
  * already cancelled out in {@link weldedMerge}.
  */
 export function groupLoopsByContainment(
+  port: ContourPort,
   loops: readonly (readonly DirectedContourEdge[])[],
   positionOf: (id: string) => readonly [number, number],
 ): readonly LoopGroup[] {
-  const areas = loops.map((loop) => Math.abs(loopSignedArea(loop, positionOf)));
+  const areas = loops.map((loop) => Math.abs(loopSignedArea(port, loop, positionOf)));
   const ownerOf = loops.map((loop, index) => {
     const sample = positionOf(loop[0]!.a);
     let owner = -1;

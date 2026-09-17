@@ -7,7 +7,7 @@ import type { CutFallout } from "@/features/edit-construction";
 import { executeTerrainCut } from "./terrain-cut-executor.ts";
 import { DEFAULT_FACE_SIDE } from "./terrain-fill.ts";
 import type { TerrainCutRuntime } from "./terrain-neighborhood.ts";
-import { isTerrainSurface } from "../../../features/edit-construction/index.ts";
+import { hasTrait } from "../../../features/edit-construction/index.ts";
 
 /**
  * Growing terrain back where something cut through it.
@@ -54,7 +54,7 @@ export { heightFieldOf } from "./terrain-neighborhood.ts";
 export type TerrainRegenerateRuntime = TerrainCutRuntime;
 
 /**
- * The extent to work in when the dispatcher had no footprint to give.
+ * The extent to work in when the reaction had no footprint to give.
  *
  * A removal repair -- ground regrowing because the thing standing in it was
  * deleted -- has no painter and therefore no footprint. The hole itself is the
@@ -111,8 +111,8 @@ function outlineAroundMultiPolygon(
 }
 
 /**
- * Terrain's `CutRepairExecutor`: grow the ground back around the thing that
- * cut it.
+ * The `"lattice-regenerate"` reaction's executor (`terrain-lattice-reaction.ts`):
+ * grow the ground back around the thing that cut it.
  *
  * Everything this decides is which *request* the shared executor gets. The
  * consumed faces become the covered regions, so they are what gets replaced;
@@ -153,7 +153,7 @@ export function repairTerrainCut(
       surfaceKey: topology.surfaceKey,
       surfaceType: topology.surfaceType,
     })),
-    targetSurfaceType: (consumed[0] && isTerrainSurface(consumed[0].surfaceType)) ? consumed[0].surfaceType : "terrain",
+    targetSurfaceType: (consumed[0] && hasTrait(consumed[0].surfaceType, "ground")) ? consumed[0].surfaceType : "terrain",
     profile: {
       kind: "regenerate",
       connectTo:

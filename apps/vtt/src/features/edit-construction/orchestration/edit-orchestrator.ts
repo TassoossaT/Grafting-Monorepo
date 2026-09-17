@@ -167,8 +167,12 @@ export function planEdit(
       return { kind: "deny", role: policy.role, reason: error instanceof Error ? error.message : String(error) };
     }
   }
-  if (cloud.seed.surfaceType === "platform" || cloud.seed.surfaceType === "platform-slope") {
-    return { kind: "deny", role: policy.role, reason: "A plataforma requer o resolvedor estrutural da sessao." };
+  const solverBound = structureTypeFor(cloud.seed.surfaceType);
+  if (solverBound?.requiresMotionSolver === true) {
+    // Named by its own label, never by its surface type: the reader is told
+    // which structure refused, and the message still costs the type nothing
+    // in self-knowledge -- a label is what a type already says about itself.
+    return { kind: "deny", role: policy.role, reason: `${solverBound.label} requer o resolvedor estrutural da sessao.` };
   }
   const cascade = policy.cascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot }) ?? [];
   return {
@@ -178,6 +182,24 @@ export function planEdit(
     surfaceCount: policy.scope === "cloud" ? cloud.members.length : 1,
     ops: [...primary, ...cascade],
   };
+}
+
+/**
+ * Reshapes one edge's curve -- a curve handle dragged on a contour edge --
+ * against the grabbed edge's own role. The role decides whether the edge may
+ * curve at all and what reshapes with it; the ops set geometry and move no
+ * node.
+ */
+export function planEdgeReshape(cloud: CloudTopology, edgeId: string, geometry: ConstructionEdgeGeometry): EditPlan {
+  const policy = resolvePolicy(cloud.seed, { kind: "edge", edgeId });
+  if (policy.resolve.kind !== "allow") {
+    return { kind: "deny", role: policy.role, reason: policy.resolve.reason };
+  }
+  if (policy.reshape === undefined) {
+    return { kind: "deny", role: policy.role, reason: "Esta aresta nao pode ser curvada." };
+  }
+  const ops: AtomicEditOp[] = [{ kind: "retype-edge", edgeId, geometry }, ...policy.reshape({ cloud, edgeId, geometry })];
+  return { kind: "apply", role: policy.role, scope: "surface", surfaceCount: 1, ops };
 }
 
 /** The slice of `ConstructionSessionPort` an edit plan actually needs. */

@@ -15,7 +15,6 @@ import type {
 
 import type { AtomicEditOp } from "@/features/edit-construction";
 
-import type { MultiPolygon } from "polygon-clipping";
 import {
   SHORTEST_USEFUL_FRACTION,
   adoptContourNodes,
@@ -24,7 +23,8 @@ import {
 } from "./terrain-constraints.ts";
 import { logTerrainCommit } from "./terrain-diagnostics.ts";
 import { countInCommit, timePhase } from "../commit-timing.ts";
-import { createBoundaryEdges, isTerrainSurface, pointInOrOnPolygon, sharedEdgeId } from "../../../features/edit-construction/index.ts";
+import { createBoundaryEdges, hasTrait, pointInOrOnPolygon, sharedEdgeId } from "../../../features/edit-construction/index.ts";
+import type { PlanarArea } from "@/features/edit-construction";
 
 
 /**
@@ -96,7 +96,7 @@ export interface TerrainFillRequest {
   /** Ground inside that area somebody already holds: met, never regenerated. */
   readonly holes: readonly ConstraintRing[];
   /** Obstacle or road polygons whose interior must never contain any generated terrain face. */
-  readonly avoidArea?: MultiPolygon;
+  readonly avoidArea?: PlanarArea;
   /** `sources[i]` is the node id the rings handed out as `source: i`, across both lists. */
   readonly sources: readonly ConstructionNodeId[];
   /**
@@ -205,7 +205,7 @@ type FreeEdgeUse = ConstructionOrientedEdgeUse & {
  * ground, and terrain is never laid above anything -- a face that finds its
  * edge full is meant to be refused, not rescued with an edge of its own.
  */
-function insideAnyMultiPolygon(x: number, z: number, multiPolygon: MultiPolygon): boolean {
+function insideAnyMultiPolygon(x: number, z: number, multiPolygon: PlanarArea): boolean {
   for (const piece of multiPolygon) {
     if (piece.length === 0) continue;
     const [outer, ...holes] = piece;
@@ -218,7 +218,48 @@ function insideAnyMultiPolygon(x: number, z: number, multiPolygon: MultiPolygon)
   return false;
 }
 
-function gridPatch(
+/** Plan-view area of one generated cell. */
+function quadPlanArea(grid: ConstructionIrregularQuadGrid, quad: readonly number[]): number {
+  let twice = 0;
+  for (let index = 0; index < quad.length; index += 1) {
+    const from = grid.vertices[quad[index]!];
+    const to = grid.vertices[quad[(index + 1) % quad.length]!];
+    if (from === undefined || to === undefined) return 0;
+    twice += from.x * to.z - to.x * from.z;
+  }
+  return Math.abs(twice) / 2;
+}
+
+/**
+ * Why a generated cell never became a face.
+ *
+ * Each of these used to `continue` in silence, and a dropped cell is ground
+ * the fill was asked for and did not lay -- a hole, with `refusedFaces` at
+ * zero because nothing was ever offered to be refused. Two of the reasons are
+ * legitimate (the cell sits where ground is deliberately avoided, or on top of
+ * retained ground that still stands) and two are faults (a corner with no node
+ * to name it, a cycle that repeats one). Telling them apart is the whole point
+ * of counting them separately, exactly as the contour landings do.
+ */
+export interface QuadDrops {
+  avoided: number;
+  unnamed: number;
+  degenerate: number;
+  retained: number;
+  /**
+   * Plan area of the cells dropped for a legitimate reason.
+   *
+   * The rings ask for an area, and part of that area can already be ground
+   * that stays -- retained faces inside the boundary are not always declared
+   * as hole rings, so the generator lays cells over them and each is dropped
+   * on the way in. That area is covered; counting it as ground the fill failed
+   * to lay reports a hole on every commit that meets standing ground.
+   */
+  coveredByStanding: number;
+}
+
+/** Exported for `terrain-quad-drops.test.mjs`, which holds the rules a cell is dropped by. */
+export function gridPatch(
   tableId: string,
   grid: ConstructionIrregularQuadGrid,
   idFor: (vertex: number) => ConstructionNodeId | undefined,
@@ -226,7 +267,8 @@ function gridPatch(
   surfaceType: string,
   edgeRooms: ReadonlyMap<string, FreeEdgeUse | null>,
   quadOf?: Map<string, readonly number[]>,
-  avoidArea?: MultiPolygon,
+  avoidArea?: PlanarArea,
+  drops?: QuadDrops,
 ): ConstructionPatch {
   const edges = createBoundaryEdges(tableId, { kind: "refuse-when-full" });
   const regions: ConstructionPatchRegion[] = [];
@@ -243,14 +285,15 @@ function gridPatch(
       cx /= quad.length;
       cz /= quad.length;
       if (insideAnyMultiPolygon(cx, cz, avoidArea)) {
+        if (drops !== undefined) { drops.avoided += 1; drops.coveredByStanding += quadPlanArea(grid, quad); }
         continue quad;
       }
     }
 
     const cycle = quad.map(idFor).filter((id): id is ConstructionNodeId => id !== undefined);
 
-    if (cycle.length !== quad.length) continue;
-    if (new Set(cycle).size !== cycle.length) continue;
+    if (cycle.length !== quad.length) { if (drops !== undefined) drops.unnamed += 1; continue; }
+    if (new Set(cycle).size !== cycle.length) { if (drops !== undefined) drops.degenerate += 1; continue; }
 
     // A constrained cell can occasionally survive on the occupied side of a
     // retained contour. Its node pair names the real split fragment, but that
@@ -264,7 +307,10 @@ function gridPatch(
       const edgeId = sharedEdgeId(tableId, from, to);
       if (!edgeRooms.has(edgeId)) continue;
       const free = edgeRooms.get(edgeId);
-      if (free === null || free === undefined || free.startNodeId !== from || free.endNodeId !== to) continue quad;
+      if (free === null || free === undefined || free.startNodeId !== from || free.endNodeId !== to) {
+        if (drops !== undefined) { drops.retained += 1; drops.coveredByStanding += quadPlanArea(grid, quad); }
+        continue quad;
+      }
     }
 
     const boundary: ConstructionOrientedEdgeUse[] = [];
@@ -419,15 +465,46 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     claimed.add(id);
     snapped.set(snap.vertex, id);
   }
+  /** `point` projected onto the XZ span `from`-`to`, clamped; `fallback` for a degenerate span. */
+  const alongEdge = (
+    point: { readonly x: number; readonly z: number },
+    from: ConstructionPosition,
+    to: ConstructionPosition,
+    fallback: number,
+  ): number => {
+    const dx = to.x - from.x;
+    const dz = to.z - from.z;
+    const lengthSq = dx * dx + dz * dz;
+    if (lengthSq <= 1e-12) return fallback;
+    return Math.min(1, Math.max(0, ((point.x - from.x) * dx + (point.z - from.z) * dz) / lengthSq));
+  };
+
   const adoptionPositions = new Map<number, ConstructionPosition>();
-  for (const adoption of effectiveAdoptions) {
+  for (const [index, adoption] of effectiveAdoptions.entries()) {
     const vertex = grid.vertices[adoption.vertex];
     if (vertex === undefined) continue;
     const from = live.get(adoption.edge.startNodeId)?.position;
     const to = live.get(adoption.edge.endNodeId)?.position;
+    // `along` arrives measured along the ring *segment*, and the splits below
+    // read it as measured along the edge's own walk. The two agree only when
+    // the segment runs the edge's way and spans all of it. A ring running the
+    // other way -- the boolean's hole around a platform drawn clockwise --
+    // inserted every node on that edge in reverse order, so the edge came
+    // back as fragments overlapping each other and the ground had nothing
+    // left to stitch to along the whole side. Projected onto the edge itself,
+    // the order is the edge's whichever way the ring runs.
+    if (from !== undefined && to !== undefined) {
+      effectiveAdoptions[index] = { ...adoption, along: alongEdge(vertex, from, to, adoption.along) };
+    }
+    // Where the vertex sits on the *adopted edge*, projected, rather than
+    // where it sat on the ring segment that found that edge. The two agree
+    // whenever the segment spans the whole edge, and only the projection is
+    // right when the segment is part of one -- which is what a corner landing
+    // partway along an edge produces. Reading the segment's own parameter
+    // there would take the height from the wrong place along the edge.
     const y =
       from !== undefined && to !== undefined
-        ? from.y + (to.y - from.y) * adoption.along
+        ? from.y + (to.y - from.y) * alongEdge(vertex, from, to, adoption.along)
         : request.heightAt(vertex, bounds);
     adoptionPositions.set(adoption.vertex, { x: vertex.x, y, z: vertex.z });
   }
@@ -472,6 +549,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
   }
 
   const quadOf = new Map<string, readonly number[]>();
+  const quadDrops: QuadDrops = { avoided: 0, unnamed: 0, degenerate: 0, retained: 0, coveredByStanding: 0 };
   // Read after adoption: splitting a contour replaces one edge with fragments,
   // and only live topology knows which side of every fragment remains free.
   // Query only the generated extent instead of serializing the entire map.
@@ -509,8 +587,8 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
       });
     } else edgeRooms.set(edgeId, null);
   }
-  const surfaceType = isTerrainSurface(request.surfaceType) ? request.surfaceType : "terrain";
-  const patch = timePhase("montagem do patch", () => gridPatch(request.tableId, grid, idFor, nodes, surfaceType, edgeRooms, quadOf, request.avoidArea));
+  const surfaceType = hasTrait(request.surfaceType, "ground") ? request.surfaceType : "terrain";
+  const patch = timePhase("montagem do patch", () => gridPatch(request.tableId, grid, idFor, nodes, surfaceType, edgeRooms, quadOf, request.avoidArea, quadDrops));
 
 
   // **Does the patch itself already contain the clash?**
@@ -564,6 +642,14 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
   let refusedInHole = 0;
   let refusedClockwise = 0;
   let builtClockwise = 0;
+  // Ground actually laid, summed from the faces that were kept.
+  //
+  // Every other number here counts *events* -- faces refused, corners not
+  // stitched, faces cleared -- and a hole can happen with all of them at zero:
+  // nothing went wrong with what was laid, there was simply less of it than
+  // the area asked for. That is the one thing none of these counts can say,
+  // and it is the reading a hole is actually visible in.
+  let coveredArea = 0;
   const refused = new Set(outcome.skippedRegionIds);
   for (const [regionId, quad] of quadOf) {
     let twice = 0;
@@ -579,7 +665,7 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
       cz += from.z;
     }
     if (!ok || quad.length === 0) continue;
-    if (!refused.has(regionId)) { if (twice < 0) builtClockwise += 1; continue; }
+    if (!refused.has(regionId)) { coveredArea += Math.abs(twice) / 2; if (twice < 0) builtClockwise += 1; continue; }
     if (twice < 0) refusedClockwise += 1;
     if (windingOf(request.holes, cx / quad.length, cz / quad.length) !== 0) refusedInHole += 1;
   }
@@ -601,6 +687,13 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     refusedFaces: outcome.skippedRegionIds.length,
     refusals: outcome.skippedRegionReasons,
     declaredNodes: nodes.length,
+    // The one thing no other reading here touches. Every count in this log is
+    // a plan-view count: ground can be laid over exactly the right area, every
+    // face stitched, nothing refused -- and sit at a different level from the
+    // ground around it. That reads on screen as a pit, and as "it regenerated
+    // nothing", because the new ground is below what you are looking at.
+    laidHeights: nodes.map((node) => node.position.y),
+    neighbourHeights: nearbyTopologies.flatMap((topology) => (topology.nodes ?? []).map((node) => node.position.y)),
     regenerated: request.regenerated,
     selfClashes: clashes,
     regeneratedCleared: cleared?.deleted,
@@ -608,6 +701,8 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     refusedInHole,
     refusedClockwise,
     builtClockwise,
+    coveredArea,
+    quadDrops,
   });
   return {
     built: outcome.createdSurfaceKeys.length,

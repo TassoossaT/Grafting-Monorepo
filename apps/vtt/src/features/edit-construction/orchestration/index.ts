@@ -21,5 +21,6 @@ export {
   applyEditPlan,
   mergeOutcomes,
   planEdit,
+  planEdgeReshape,
 } from "./edit-orchestrator.ts";
 export type { EditOpSink, EditPlan } from "./edit-orchestrator.ts";

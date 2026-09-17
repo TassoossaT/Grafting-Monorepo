@@ -153,9 +153,9 @@ export function outlineConstraints(
   const weldSq = weld * weld;
   return rings
     .map((ring) => {
-      // `polygon-clipping` closes a ring by repeating its first point as its
-      // last; a constraint ring closes implicitly, so the repeat would be a
-      // zero-length segment.
+      // A plan-view ring is carried closed, repeating its first point as its
+      // last (`planar-area.ts`); a constraint ring closes implicitly, so the
+      // repeat would be a zero-length segment.
       const open =
         ring.length > 1 &&
         ring[0]![0] === ring[ring.length - 1]![0] &&

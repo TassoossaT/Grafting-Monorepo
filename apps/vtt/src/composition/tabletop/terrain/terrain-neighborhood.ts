@@ -5,6 +5,7 @@ import type {
   ConstructionSurfaceKey,
 } from "@/ports";
 import type { TerrainFillRuntime } from "./terrain-fill.ts";
+import type { PlanarPort } from "@/features/edit-construction";
 
 export interface TerrainStrokeBounds {
   readonly minX: number;
@@ -26,7 +27,7 @@ export interface TerrainNeighbourhoodRuntime {
  * and a cut's repair go through one executor now, and the executor is what
  * reads the neighbourhood.
  */
-export interface TerrainCutRuntime extends TerrainFillRuntime {
+export interface TerrainCutRuntime extends TerrainFillRuntime, PlanarPort {
   getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined;
 }
 

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { planarPort } from "./engine-planar.mjs";
 
 import {
   dirtLoadOver,
@@ -51,15 +52,15 @@ test("the sweep is never described more finely than the mesh it will bound", asy
 
   // A patch comes back with about twice as many faces as its outline has
   // points, so the outline's point count is the face count.
-  const fixed = points(brushSweptOutlinePolygons(stroke, 3));
-  const sized = points(brushSweptOutlinePolygons(stroke, 3, 2));
+  const fixed = points(brushSweptOutlinePolygons(planarPort, stroke, 3));
+  const sized = points(brushSweptOutlinePolygons(planarPort, stroke, 3, 2));
   assert.ok(sized < fixed, `a cell-sized sweep is coarser: ${sized} against ${fixed}`);
 
   // And a wider brush spends fewer of its points per unit of ground, which is
   // the ratio that decides whether cells come back the size they were asked
   // for at all.
-  const narrow = points(brushSweptOutlinePolygons(stroke, 3, 2));
-  const wide = points(brushSweptOutlinePolygons(stroke, 6, 2));
+  const narrow = points(brushSweptOutlinePolygons(planarPort, stroke, 3, 2));
+  const wide = points(brushSweptOutlinePolygons(planarPort, stroke, 6, 2));
   const narrowArea = 2 * 3 * 32 + Math.PI * 9;
   const wideArea = 2 * 6 * 32 + Math.PI * 36;
   assert.ok(

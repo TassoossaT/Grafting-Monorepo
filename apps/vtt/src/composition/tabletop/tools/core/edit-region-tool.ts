@@ -1,4 +1,4 @@
-import { beginBezierGesture } from "../../path/bezier-edit-gesture.ts";
+import { beginCurveGesture } from "./curve-edit-gesture.ts";
 import {
   cloudNodes,
   planEdit,
@@ -151,7 +151,7 @@ interface ActiveDrag {
 }
 
 let active: ActiveDrag | undefined;
-let curveGesture: ReturnType<typeof beginBezierGesture>;
+let curveGesture: ReturnType<typeof beginCurveGesture>;
 
 export const editRegionTool: ConstructionTool<"edit-region"> = {
   id: "edit-region",
@@ -160,7 +160,7 @@ export const editRegionTool: ConstructionTool<"edit-region"> = {
   onPointerDown(ctx: ToolContext, sample: PointerSample, params): void {
     active = undefined;
     curveGesture?.cancel();
-    curveGesture = beginBezierGesture(ctx, sample, params);
+    curveGesture = beginCurveGesture(ctx, sample, params);
     if (curveGesture) return;
     const grabbed = grabbedTarget(ctx, sample, params?.mode === "elevation");
     if (grabbed === undefined) {

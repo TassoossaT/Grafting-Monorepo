@@ -18,7 +18,12 @@ import type {
   CloudRequest,
   ConstructionTopologyBoundsQuery,
   ConstructionCoverageKind,
+  ConstructionContourAnswer,
+  ConstructionContourQuery,
   ConstructionCoveredRegion,
+  ConstructionCurvedEdge,
+  ConstructionFieldQuery,
+  ConstructionFieldSample,
   ConstructionEdgeGeometry,
   ConstructionNodeId,
   ConstructionNodeSnapshot,
@@ -511,6 +516,29 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     return wire.map(fromWireTopology);
   }
 
+  queryContours(queries: readonly ConstructionContourQuery[]): readonly ConstructionContourAnswer[] {
+    if (queries.length === 0) return [];
+    return JSON.parse(this.#require().contour_query_json(JSON.stringify(queries))) as readonly ConstructionContourAnswer[];
+  }
+
+  queryField(query: ConstructionFieldQuery): readonly ConstructionFieldSample[] {
+    if (query.points.length === 0) return [];
+    const wire = {
+      curves: query.curves.map((curve) => ({
+        points: curve.points.map((point) => [point.x, point.y, point.z]),
+        reach: curve.reach ?? 0,
+      })),
+      points: query.points,
+      near: query.near ?? null,
+    };
+    return JSON.parse(this.#require().field_query_json(JSON.stringify(wire))) as readonly ConstructionFieldSample[];
+  }
+
+  getCurvedEdges(): readonly ConstructionCurvedEdge[] {
+    const wire = JSON.parse(this.#require().curved_edges_json()) as readonly (Omit<ConstructionCurvedEdge, "start" | "end"> & { readonly start: WirePosition; readonly end: WirePosition })[];
+    return wire.map((edge) => ({ ...edge, start: fromWirePosition(edge.start), end: fromWirePosition(edge.end) }));
+  }
+
   getRegionTopologiesInBounds(bounds: ConstructionTopologyBoundsQuery): readonly ConstructionRegionTopology[] {
     const session = this.#require() as ConstructionSession & {
       region_topologies_in_bounds_json(requestJson: string): string;
@@ -562,6 +590,18 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
       patch,
     }))) as { readonly outcome: RegionEditOutcomeWire; readonly skippedRegionIds: readonly string[]; readonly skippedRegionReasons?: readonly string[] };
     return { ...fromWireOutcome(wire.outcome), skippedRegionIds: wire.skippedRegionIds, skippedRegionReasons: wire.skippedRegionReasons ?? [] };
+  }
+
+  beginTransaction(transactionId: string): void {
+    this.#require().begin_transaction(transactionId);
+  }
+
+  commitTransaction(transactionId: string): boolean {
+    return this.#require().commit_transaction(transactionId);
+  }
+
+  rollbackTransaction(transactionId: string): void {
+    this.#require().rollback_transaction(transactionId);
   }
 
   undoRegionOverlay(operationId: string): void {

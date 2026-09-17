@@ -10,18 +10,20 @@ import type {
 // test reaches has to spell out any import it needs at run time. A
 // type-only `@/` import is fine -- those are erased.
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
-import { DEFAULT_TOOL_PARAMS } from "../../../../features/edit-construction/index.ts";
+import { DEFAULT_TOOL_PARAMS, openingStructureType } from "../../../../features/edit-construction/index.ts";
 
 import { boundaryUsage, createBoundaryEdges, reverseGeometry } from "../core/boundary-edges.ts";
 import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext, type ToolGesture } from "../core/tool-context.ts";
 import { segmentsPreview } from "../shapes/preview-shapes.ts";
 import { findWallSurfaceAt } from "../walls/wall-shared.ts";
 import { panelRailOf, type PanelRail } from "./panel-rail.ts";
+import { commitChange } from "../../effects/effect-commit.ts";
+import { shapeChangeOfAddition } from "../../effects/shape-change.ts";
 
 /** How much wall must be left standing to either side of an opening, and above and below it. */
 const MARGIN = 0.15;
 
-const OPENING_COLOR: Record<OpeningParams["openingType"], number> = {
+const OPENING_COLOR: Record<OpeningParams["openingKind"], number> = {
   window: 0x7dd3fc,
   door: 0xd97706,
 };
@@ -39,7 +41,7 @@ function rimCorners(
 
   // A door sits on the floor; anything else starts at its own sill. Either
   // way the wall has to survive above it.
-  const bottom = rail.baseY + Math.max(params.openingType === "door" ? 0 : MARGIN, params.sill);
+  const bottom = rail.baseY + Math.max(params.openingKind === "door" ? 0 : MARGIN, params.sill);
   const top = bottom + params.height;
   if (top > rail.topY - MARGIN) return undefined;
 
@@ -84,7 +86,7 @@ export const openingTool: ConstructionTool<"opening"> = {
       const to = ring[index + 1]!;
       positions.push(from.x, from.y, from.z, to.x, to.y, to.z);
     }
-    return segmentsPreview(Float32Array.from(positions), OPENING_COLOR[params.openingType]);
+    return segmentsPreview(Float32Array.from(positions), OPENING_COLOR[params.openingKind]);
   },
 
   onClick(ctx: ToolContext, sample: PointerSample, params: OpeningParams): void {
@@ -119,38 +121,43 @@ export const openingTool: ConstructionTool<"opening"> = {
       edges.use(nodes[3]!.id, nodes[0]!.id),
     ];
 
-    const outcome = ctx.runtime.addPatch(
-      {
-        nodes,
-        edges: edges.all(),
-        regions: [
+    const patch = {
+      nodes,
+      edges: edges.all(),
+      regions: [
+        {
+          regionId: nodes.map((node) => node.id).join("|"),
+          boundary,
+          surfaceType: openingStructureType.surfaceType,
+          physical: false,
+        },
+      ],
+    };
+    // The face and the hole it stands in are one transaction: a face that
+    // does not fit leaves neither its rim nor an opening nobody stands in.
+    let recorded: boolean;
+    try {
+      ({ recorded } = commitChange(ctx.runtime, { transactionId: causeId }, () => {
+        const outcome = ctx.runtime.addPatch(patch, "local", causeId);
+        if (outcome.skippedRegionIds.length > 0) throw new Error("a face nao coube sobre o que ja existe ali.");
+        ctx.runtime.addHole(
           {
-            regionId: nodes.map((node) => node.id).join("|"),
-            boundary,
-            surfaceType: params.openingType,
-            physical: false,
+            surfaceKey: placed.surfaceKey,
+            hole: [...boundary].reverse().map((use) => ({ edgeId: use.edgeId, reversed: !use.reversed })),
           },
-        ],
-      },
-      "local",
-      causeId,
-    );
-    if (outcome.skippedRegionIds.length > 0) {
-      ctx.reportFeedback({ tone: "error", message: "Abertura: a face nao coube sobre o que ja existe ali." });
+          "local",
+          causeId,
+        );
+        return { value: outcome, change: shapeChangeOfAddition(ctx.runtime, patch, outcome) };
+      }));
+    } catch (error) {
+      ctx.reportFeedback({ tone: "error", message: `Abertura: ${error instanceof Error ? error.message : String(error)}` });
       return;
     }
-
-    ctx.runtime.addHole(
-      {
-        surfaceKey: placed.surfaceKey,
-        hole: [...boundary].reverse().map((use) => ({ edgeId: use.edgeId, reversed: !use.reversed })),
-      },
-      "local",
-      causeId,
-    );
+    if (recorded) ctx.history?.record({ kind: "transaction", transactionId: causeId });
     ctx.reportFeedback({
       tone: "success",
-      message: params.openingType === "door" ? "Porta aberta na parede." : "Janela aberta na parede.",
+      message: params.openingKind === "door" ? "Porta aberta na parede." : "Janela aberta na parede.",
     });
   },
 };
@@ -194,7 +201,7 @@ function resolvePlacement(
   if (surfaceKey === undefined) return undefined;
   const topology = ctx.runtime.getRegionTopology(surfaceKey);
   if (topology === undefined) return undefined;
-  const rail = panelRailOf(topology);
+  const rail = panelRailOf(ctx.runtime, topology);
   if (rail === undefined) return undefined;
   const placed = rimCorners(rail, rail.travelTo(sample.point), params);
   return placed === undefined ? undefined : { surfaceKey, corners: placed.corners, rail, from: placed.from, to: placed.to };

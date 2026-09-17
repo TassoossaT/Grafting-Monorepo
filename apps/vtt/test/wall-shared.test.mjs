@@ -41,8 +41,10 @@ function contextFor(topologies, snapToGrid = false) {
             skippedRegionIds: [],
           };
         },
-        applyWallCrossingWeld: (inserts, origin, causeId) => {
-          weldCalls.push({ inserts, origin, causeId });
+        transact: (_id, _origin, work) => ({ value: work(), recorded: true }),
+        getSnapshot: () => ({ tableId: TABLE_ID, map: { nodePositions: new Map() } }),
+        applyRegionEdit: (ops, origin, causeId) => {
+          weldCalls.push({ inserts: ops.map(({ kind: _kind, ...insert }) => insert), origin, causeId });
           return {
             affectedSurfaceKeys: [],
             createdSurfaceKeys: [],

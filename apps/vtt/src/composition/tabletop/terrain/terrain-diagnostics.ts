@@ -46,7 +46,7 @@ function segmentLengths(rings: readonly ConstraintRing[]): number[] {
  * Reported because the generator's ground rule sums the winding of every ring
  * at once, and that only means what it should when the rings agree on which
  * way round they run. They come from two sources with two conventions -- the
- * brush's swept outline through `polygon-clipping`, and the rims of standing
+ * brush's swept outline through the planar boolean, and the rims of standing
  * ground walked off the graph -- and nothing reconciles them. If two rings
  * that overlap disagree, their windings cancel and the overlap reads as free
  * ground, which is ground planned on top of ground that is still standing.
@@ -97,6 +97,12 @@ function quadArea(grid: ConstructionIrregularQuadGrid, quad: readonly number[]):
     twice += from.x * to.z - to.x * from.z;
   }
   return Math.abs(twice) / 2;
+}
+
+/** `min..max` of a set of heights, or `·` when there are none. */
+function span(values: readonly number[] | undefined): string {
+  if (values === undefined || values.length === 0) return "·";
+  return `${round(Math.min(...values))}..${round(Math.max(...values))}`;
 }
 
 function round(value: number): number {
@@ -183,6 +189,47 @@ export interface TerrainCommitReport {
    */
   readonly regeneratedCleared?: number;
   readonly regenerateFailures?: readonly string[];
+  /**
+   * Ground actually laid, against the ground the rings asked for.
+   *
+   * Every other reading counts something that went wrong. A hole can happen
+   * with all of them at zero -- each face laid is fine, there are just not
+   * enough of them to fill the area -- and this is the only reading that
+   * shows it. Held against the rings' own area rather than reported alone,
+   * because the number means nothing without what it was supposed to be.
+   */
+  readonly coveredArea?: number;
+  /**
+   * Heights of the corners this fill declared, and of the ground standing
+   * around it.
+   *
+   * Every other reading in this log is plan-view. Ground can cover exactly the
+   * area owed, every face stitched and none refused, and still sit at a
+   * different level from its neighbours -- which reads on screen as a pit, and
+   * as the fill having regenerated nothing, because what it laid is below what
+   * you are looking at. Two ranges, so a step is one glance.
+   */
+  readonly laidHeights?: readonly number[];
+  readonly neighbourHeights?: readonly number[];
+  /** Why generated cells never became faces. See `terrain-fill.ts`'s `QuadDrops`. */
+  readonly quadDrops?: {
+    readonly avoided: number;
+    readonly unnamed: number;
+    readonly degenerate: number;
+    readonly retained: number;
+    readonly coveredByStanding: number;
+  };
+}
+
+/** Plan-view area of a ring of constraint points, unsigned. */
+function ringArea(points: readonly { readonly x: number; readonly z: number }[]): number {
+  let twice = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const from = points[index]!;
+    const to = points[(index + 1) % points.length]!;
+    twice += from.x * to.z - to.x * from.z;
+  }
+  return Math.abs(twice) / 2;
 }
 
 /**
@@ -211,6 +258,18 @@ function describe(report: TerrainCommitReport): void {
   const contorno = {
     aneisBoundary: report.boundary.length,
     aneisHoles: report.holes.length,
+    areaPedida: round(
+      report.boundary.reduce((sum, ring) => sum + ringArea(ring.points), 0) -
+        report.holes.reduce((sum, ring) => sum + ringArea(ring.points), 0),
+    ),
+    areaCoberta: round(report.coveredArea ?? 0),
+    celulasEvitadas: report.quadDrops?.avoided ?? 0,
+    celulasSemNo: report.quadDrops?.unnamed ?? 0,
+    celulasDegeneradas: report.quadDrops?.degenerate ?? 0,
+    celulasSobreChaoRetido: report.quadDrops?.retained ?? 0,
+    areaJaDePe: round(report.quadDrops?.coveredByStanding ?? 0),
+    alturaNova: span(report.laidHeights),
+    alturaVizinha: span(report.neighbourHeights),
     pontos: pointCount(report.boundary) + pointCount(report.holes),
     pontosComNo: sourceCount(report.boundary) + sourceCount(report.holes),
     segmentoMedio: round(mean(constrained)),
@@ -267,10 +326,21 @@ function describe(report: TerrainCommitReport): void {
     motivos: [...(report.refusals ?? [])].slice(0, 3),
   };
 
+  // Ground missing from the area asked for, as a fraction of it. A face or so
+  // of slack is the boundary being walked as chords; a tenth of the area gone
+  // is a hole somebody can see.
+  // Ground the fill owed: the rings' area, less the part of it that was
+  // already standing. A cell dropped for sitting on a face that stays covers
+  // ground nobody is missing.
+  const areaDevida = Math.max(0, contorno.areaPedida - contorno.areaJaDePe);
+  const faltando = areaDevida > 0 ? (areaDevida - contorno.areaCoberta) / areaDevida : 0;
   const wrong =
     report.refusedFaces > 0 ||
     report.unadopted > 0 ||
     (report.unstitched ?? 0) > 0 ||
+    faltando > 0.05 ||
+    (report.quadDrops?.unnamed ?? 0) > 0 ||
+    (report.quadDrops?.degenerate ?? 0) > 0 ||
     contorno.razaoSegmentoPorFace < 2;
   // In the text of the line, not only in the object beside it. A console
   // collapses the object, and every number that decides anything here was
@@ -290,7 +360,14 @@ function describe(report: TerrainCommitReport): void {
     `(${contorno.pontosComNo} com nó, min traço ${contorno.minimoDoTraco}, ` +
     `min existente ${contorno.minimoDoQueJaExiste}, razão ${contorno.razaoSegmentoPorFace}) ` +
     `| anéis ${contorno.aneisBoundary}+${contorno.aneisHoles} ` +
-    `sentido ${contorno.sentidoBoundary}/${contorno.sentidoHoles}`;
+    `sentido ${contorno.sentidoBoundary}/${contorno.sentidoHoles} ` +
+    `| área ${contorno.areaCoberta} de ${round(areaDevida)} devida ` +
+    `(${contorno.areaPedida} pedida, ${contorno.areaJaDePe} já de pé) ` +
+    `(${Math.round(faltando * 100)}% sem chão) ` +
+    `| células descartadas: ${contorno.celulasEvitadas} evitadas, ` +
+    `${contorno.celulasSobreChaoRetido} sobre chão retido, ` +
+    `${contorno.celulasSemNo} sem nó, ${contorno.celulasDegeneradas} degeneradas ` +
+    `| altura nova ${contorno.alturaNova}, vizinha ${contorno.alturaVizinha}`;
   if (wrong) console.warn(line, { contorno, geracao, mescla });
   else console.info(line, { contorno, geracao, mescla });
 

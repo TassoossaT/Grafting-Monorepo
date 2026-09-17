@@ -1,9 +1,8 @@
 import type { EditTarget } from "../../orchestration/atomic-edit.ts";
 import { HORIZONTAL_AXES } from "../../orchestration/atomic-edit.ts";
-import type { CutRepair, EditRole, RolePolicy, StructureTypeDefinition } from "../structure-type.ts";
+import type { EditRole, RolePolicy, StructureTrait, StructureTypeDefinition, StructureView } from "../structure-type.ts";
 import { allowed, denied } from "../structure-type.ts";
 import { CUT, IGNORE, RESTACK, forbid, type CreationInteraction } from "../creation-interaction.ts";
-import { isTerrainSurface } from "./terrain-cloud.ts";
 
 /**
  * The role model for a procedurally generated, non-enumerable boundary --
@@ -72,22 +71,15 @@ export function organicPolicyFactory(structural: "regenerate" | "deny") {
 }
 
 /**
- * Cut-repair rides the same `structural` knob as the role table: a type that
+ * Reactions ride the same `structural` knob as the role table: a type that
  * escalates a grabbed structural role to regeneration has, by construction,
- * a way to regenerate -- the exact capability a cut's leftover needs. A type
- * that instead denies structural edits (a flat swept product with nothing to
- * regenerate from) has none, and says so.
+ * a way to regenerate -- exactly what a cut or a deleted face leaves it
+ * needing. A type that denies structural edits has nothing to answer with.
  */
-function organicCutRepair(structural: "regenerate" | "deny"): CutRepair {
+function organicReactions(structural: "regenerate" | "deny"): StructureTypeDefinition["reactions"] {
   return structural === "regenerate"
-    ? {
-        kind: "regenerate",
-        reason: "an organic region repairs a cut by regenerating its lattice, pinned to the rim the cut exposed",
-      }
-    : {
-        kind: "unsupported",
-        reason: "this organic type denies structural edits and has no regeneration path to repair a cut with",
-      };
+    ? Object.freeze({ cut: "lattice-regenerate", remove: "lattice-regenerate" })
+    : undefined;
 }
 
 export function organicStructureType(
@@ -95,21 +87,20 @@ export function organicStructureType(
   label: string,
   creation: string,
   structural: "regenerate" | "deny",
-  interactionOver: (coveredType: string, paintedSubtype?: string) => CreationInteraction,
+  interactionOver: (covered: StructureView, paintedSubtype?: string) => CreationInteraction,
+  traits: readonly StructureTrait[],
 ): StructureTypeDefinition {
   return Object.freeze({
     surfaceType,
     label,
+    traits: Object.freeze([...traits]),
     creation,
     roleFor: organicRoleFor,
     policyFor: organicPolicyFactory(structural),
     interactionOver,
-    repairAfterCut: organicCutRepair(structural),
+    reactions: organicReactions(structural),
   });
 }
-
-/** Surface types that are themselves ground -- what terrain may restack onto. */
-const TERRAIN_TYPES = new Set(["terrain", "terrain-grass"]);
 
 /**
  * Terrain painted over terrain **raises** it: the covered faces are deleted,
@@ -122,9 +113,9 @@ const TERRAIN_TYPES = new Set(["terrain", "terrain-grass"]);
  * so nothing is generated and the caller says why. This is the direction
  * that does *not* mirror: a wall over terrain is perfectly ordinary.
  */
-export function terrainInteractionOver(coveredType: string): CreationInteraction {
-  if (TERRAIN_TYPES.has(coveredType) || isTerrainSurface(coveredType)) return RESTACK;
-  return forbid(`terrain cannot be created above "${coveredType}"`);
+export function terrainInteractionOver(covered: StructureView): CreationInteraction {
+  if (covered.traits.has("ground")) return RESTACK;
+  return forbid(`terrain cannot be created above "${covered.label}"`);
 }
 
 /**
@@ -142,7 +133,7 @@ export function terrainInteractionOver(coveredType: string): CreationInteraction
  * a crossing at the same level. The run that passes over says so.
  */
 export function pathInteractionOver(
-  _coveredType: string,
+  _covered: StructureView,
   paintedSubtype?: string,
 ): CreationInteraction {
   return paintedSubtype === "bridge" ? IGNORE : CUT;

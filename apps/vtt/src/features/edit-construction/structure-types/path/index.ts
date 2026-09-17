@@ -21,8 +21,6 @@ export {
 } from "./station-node-id.ts";
 export type { StationNodeAddress } from "./station-node-id.ts";
 
-export { graphPatchForSpine } from "./materialize-spine.ts";
-export type { MaterializedSpine } from "./materialize-spine.ts";
 export { regeneratePathSpine } from "./bezier-road-edit.ts";
 
 export { planSpineContour } from "./contour/index.ts";
@@ -43,7 +41,6 @@ export type {
 
 export { planPathCloudMutation } from "./path-cloud-mutation.ts";
 export type { PathCloudMutationInput, PathCloudMutationPlan } from "./path-cloud-mutation.ts";
-export { referenceLineFrom } from "./path-reference-line.ts";
 
 export {
   PATH_ROLES,

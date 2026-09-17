@@ -30,7 +30,7 @@ test("real pointer lifecycle: final release sample, one drag commit, Escape and 
   globalThis.window={addEventListener:(k,f)=>listeners.set(k,f),removeEventListener:(k)=>listeners.delete(k)};
   globalThis.__platformHook={effects,tool:platformContourTool};
   Object.assign(runtime,{
-    getSnapshot:()=>({status:"ready"}),
+    getSnapshot:()=>({status:"ready",tableId:"pointer",map:{nodePositions:new Map()}}),
     subscribe:()=>()=>{},
     pick:(_view,x,z)=>({point:{x:x/10,y:0,z:z/10}}),
     clearPreview(){},showPreview(){},

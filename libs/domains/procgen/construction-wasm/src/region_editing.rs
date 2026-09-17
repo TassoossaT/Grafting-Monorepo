@@ -67,7 +67,7 @@ fn parse_loop(uses: Vec<OrientedEdgeUseDto>) -> Result<ContourLoop, String> {
 /// straight chord; `"arc"` is a true circular arc in the surface's own XZ
 /// plane; `"bezier"` is a cubic Bézier, also in that plane -- see
 /// `grafting_graph_core::contour`'s own spatial policy.
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ContourGeometryDto {
     Line,
@@ -87,7 +87,7 @@ pub enum ContourGeometryDto {
 }
 
 impl ContourGeometryDto {
-    fn into_geometry(self) -> ContourGeometry {
+    pub(crate) fn into_geometry(self) -> ContourGeometry {
         match self {
             Self::Line => ContourGeometry::Line,
             Self::Arc { center, clockwise } => ContourGeometry::CircularArc { center, clockwise },
@@ -95,7 +95,7 @@ impl ContourGeometryDto {
         }
     }
 
-    fn from_geometry(geometry: &ContourGeometry) -> Self {
+    pub(crate) fn from_geometry(geometry: &ContourGeometry) -> Self {
         match geometry {
             ContourGeometry::Line => Self::Line,
             ContourGeometry::CircularArc { center, clockwise } => Self::Arc {
@@ -476,7 +476,14 @@ fn loop_dto(topology: &ContourTopology, loop_: &ContourLoop) -> Result<Vec<Regio
                 reversed: use_.is_reversed(),
                 start_node_id: start.as_str().to_owned(),
                 end_node_id: end.as_str().to_owned(),
-                geometry: ContourGeometryDto::from_geometry(edge.geometry()),
+                // Walked, like the nodes beside it: a use reports one
+                // orientation, so a caller never has to pair a start node
+                // with a curve bulging the other way.
+                geometry: if use_.is_reversed() {
+                    ContourGeometryDto::from_geometry(&edge.reversed_geometry())
+                } else {
+                    ContourGeometryDto::from_geometry(edge.geometry())
+                },
             })
         })
         .collect()
@@ -647,6 +654,51 @@ pub fn region_topologies_in_bounds(
         }
     }
     Ok(result)
+}
+
+/// One bezier boundary edge in wire terms: its anchors with their live
+/// positions and its two off-curve handles in XZ.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CurvedEdgeDto {
+    pub edge_id: String,
+    pub start_node_id: String,
+    pub end_node_id: String,
+    pub start: [f32; 3],
+    pub end: [f32; 3],
+    pub handle1: [f32; 2],
+    pub handle2: [f32; 2],
+}
+
+/// Every bezier boundary edge some region still uses, sorted by edge id.
+///
+/// What an edit layer needs to place curve handles on contour edges without
+/// reading every region's whole topology back on each mutation.
+pub fn curved_edges(graph: &SessionGraph, topology: &ContourTopology) -> Vec<CurvedEdgeDto> {
+    let mut edges: Vec<CurvedEdgeDto> = topology
+        .edge_ids()
+        .into_iter()
+        .filter(|id| topology.usage_count(id) > 0)
+        .filter_map(|id| {
+            let edge = topology.edge(&id)?;
+            let ContourGeometry::Bezier { handle1, handle2 } = *edge.geometry() else {
+                return None;
+            };
+            let start = *graph.node(edge.start_node())?.data();
+            let end = *graph.node(edge.end_node())?.data();
+            Some(CurvedEdgeDto {
+                edge_id: id.as_str().to_owned(),
+                start_node_id: edge.start_node().as_str().to_owned(),
+                end_node_id: edge.end_node().as_str().to_owned(),
+                start,
+                end,
+                handle1,
+                handle2,
+            })
+        })
+        .collect();
+    edges.sort_by(|left, right| left.edge_id.cmp(&right.edge_id));
+    edges
 }
 
 #[cfg(test)]
@@ -1342,6 +1394,116 @@ mod tests {
             .unwrap();
         assert_eq!(*straight.geometry(), ContourGeometry::Line);
     }
+
+    #[test]
+    fn curved_edges_reports_only_bezier_edges_a_region_uses() {
+        let mut graph: SessionGraph = Graph::try_from_parts(Vec::new(), Vec::new()).unwrap();
+        let mut topology = ContourTopology::new();
+        let mut surfaces = SurfaceRegistry::new();
+        let corner = |id: &str, x: f32, z: f32| PatchNodeDto { id: id.into(), position: [x, 1.0, z] };
+        let edge = |id: &str, from: &str, to: &str, geometry: Option<ContourGeometryDto>| PatchEdgeDto {
+            edge_id: id.into(),
+            start_node_id: from.into(),
+            end_node_id: to.into(),
+            geometry,
+        };
+        let bezier = || Some(ContourGeometryDto::Bezier { handle1: [1.0, -1.0], handle2: [3.0, -1.0] });
+        apply_add_patch(
+            &mut graph,
+            &mut topology,
+            &mut surfaces,
+            AddPatchRequest {
+                nodes: vec![corner("a", 0.0, 0.0), corner("b", 4.0, 0.0), corner("c", 4.0, 4.0), corner("d", 0.0, 4.0)],
+                edges: vec![
+                    edge("e0", "a", "b", bezier()),
+                    edge("e1", "b", "c", None),
+                    edge("e2", "c", "d", None),
+                    edge("e3", "d", "a", None),
+                    edge("loose", "a", "c", bezier()),
+                ],
+                regions: vec![PatchRegionDto {
+                    profile: None,
+                    region_id: "face".into(),
+                    boundary: ["e0", "e1", "e2", "e3"]
+                        .iter()
+                        .map(|id| OrientedEdgeUseDto { edge_id: (*id).into(), reversed: false })
+                        .collect(),
+                    holes: Vec::new(),
+                    surface_type: "wall-white".into(),
+                    physical: true,
+                }],
+            },
+        )
+        .unwrap();
+
+        let curved = curved_edges(&graph, &topology);
+
+        assert_eq!(curved.len(), 1, "the loose bezier edge belongs to no region");
+        assert_eq!(curved[0].edge_id, "e0");
+        assert_eq!(curved[0].start, [0.0, 1.0, 0.0]);
+        assert_eq!(curved[0].end, [4.0, 1.0, 0.0]);
+        assert_eq!(curved[0].handle1, [1.0, -1.0]);
+        assert_eq!(curved[0].handle2, [3.0, -1.0]);
+    }
+
+
+    #[test]
+    fn a_reversed_use_reports_its_curve_walked_the_way_it_is_walked() {
+        let mut graph: SessionGraph = Graph::try_from_parts(Vec::new(), Vec::new()).unwrap();
+        let mut topology = ContourTopology::new();
+        let mut surfaces = SurfaceRegistry::new();
+        let corner = |id: &str, x: f32, z: f32| PatchNodeDto { id: id.into(), position: [x, 0.0, z] };
+        let edge = |id: &str, from: &str, to: &str, geometry: Option<ContourGeometryDto>| PatchEdgeDto {
+            edge_id: id.into(),
+            start_node_id: from.into(),
+            end_node_id: to.into(),
+            geometry,
+        };
+        apply_add_patch(
+            &mut graph,
+            &mut topology,
+            &mut surfaces,
+            AddPatchRequest {
+                nodes: vec![corner("a", 0.0, 0.0), corner("b", 4.0, 0.0), corner("c", 4.0, 4.0)],
+                edges: vec![
+                    edge("e0", "a", "b", Some(ContourGeometryDto::Bezier { handle1: [1.0, -1.0], handle2: [3.0, -1.0] })),
+                    edge("e1", "b", "c", None),
+                    edge("e2", "c", "a", None),
+                ],
+                regions: vec![PatchRegionDto {
+                    profile: None,
+                    region_id: "face".into(),
+                    // Walked b -> a, against the edge's own direction.
+                    boundary: vec![
+                        OrientedEdgeUseDto { edge_id: "e0".into(), reversed: true },
+                        OrientedEdgeUseDto { edge_id: "e2".into(), reversed: true },
+                        OrientedEdgeUseDto { edge_id: "e1".into(), reversed: true },
+                    ],
+                    holes: Vec::new(),
+                    surface_type: "wall-white".into(),
+                    physical: true,
+                }],
+            },
+        )
+        .unwrap();
+
+        let dto = region_topology(&graph, &topology, &surfaces, &RegionId::new("face").unwrap())
+            .unwrap()
+            .unwrap();
+        let walked = dto.outer_loops[0]
+            .iter()
+            .find(|use_| use_.edge_id == "e0")
+            .unwrap();
+
+        assert_eq!(walked.start_node_id, "b");
+        assert_eq!(walked.end_node_id, "a");
+        assert_eq!(
+            walked.geometry,
+            ContourGeometryDto::Bezier { handle1: [3.0, -1.0], handle2: [1.0, -1.0] },
+            "the handles are read back to front, so the curve bulges the same way on the ground"
+        );
+    }
+
 }
 
 // ---- Holes ----

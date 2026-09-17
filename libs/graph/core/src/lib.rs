@@ -14,6 +14,7 @@ pub mod bezier_network;
 pub mod bezier_surface;
 mod construction;
 mod contour;
+mod contour_travel;
 pub mod curve_offset;
 mod layout;
 mod model;
@@ -24,6 +25,7 @@ pub mod profile_cap_patch;
 pub mod profile_surface;
 #[cfg(test)]
 mod profile_graph_tests;
+pub use contour_travel::{arc_sweep, distance_at_parameter, parameter_at_distance, sub_geometry};
 pub use planar::{PlanarBoolean, PlanarShape, planar_boolean};
 mod region_edit;
 mod surface;

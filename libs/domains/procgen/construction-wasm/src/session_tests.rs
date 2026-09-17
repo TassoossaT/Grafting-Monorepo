@@ -110,13 +110,11 @@ fn application_generated_patch_is_overlaid_without_a_provisional_target() {
             .len(),
         1
     );
-    assert!(
-        response["outcome"]["createdSurfaceKeys"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|key| { !key[1].as_str().unwrap().contains("new") })
-    );
+    assert!(response["outcome"]["createdSurfaceKeys"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|key| { !key[1].as_str().unwrap().contains("new") }));
     let meshes: Vec<serde_json::Value> =
         serde_json::from_str(&session.all_surface_meshes_json().unwrap()).unwrap();
     assert!(meshes.iter().any(|mesh| mesh["surfaceType"] == "terrain"));
@@ -466,16 +464,14 @@ fn crossing_profiled_paths_union_without_leaving_a_provisional_face() {
         &formation,
         &sources,
     );
-    assert!(
-        response["outcome"]["createdSurfaceKeys"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .all(|key| {
-                let id = key[1].as_str().unwrap();
-                id.contains("remainder") || id.contains("quad")
-            })
-    );
+    assert!(response["outcome"]["createdSurfaceKeys"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|key| {
+            let id = key[1].as_str().unwrap();
+            id.contains("remainder") || id.contains("quad")
+        }));
     let meshes: Vec<serde_json::Value> =
         serde_json::from_str(&session.all_surface_meshes_json().unwrap()).unwrap();
     assert!(!meshes.is_empty());
@@ -830,4 +826,135 @@ fn a_crossing_consumes_the_crossed_runs_spine_and_keeps_only_its_rim() {
         gone.iter().all(|index| index % 3 == 1),
         "every loss is a spine node"
     );
+}
+
+fn mesh_types(session: &ConstructionSession) -> Vec<String> {
+    let meshes: Vec<serde_json::Value> =
+        serde_json::from_str(&session.all_surface_meshes_json().unwrap()).unwrap();
+    let mut types: Vec<String> = meshes
+        .iter()
+        .map(|mesh| mesh["surfaceType"].as_str().unwrap().to_owned())
+        .collect();
+    types.sort();
+    types
+}
+
+fn overlay_request(operation_id: &str, source: serde_json::Value) -> String {
+    json!({
+        "operationId": operation_id,
+        "sourceSurfaceKeys": [source],
+        "outline": [[0.5, 0.5], [1.5, 0.5], [1.5, 1.5], [0.5, 1.5]],
+        "boundary": [
+            {"edgeId": "tx-e0", "reversed": false},
+            {"edgeId": "tx-e1", "reversed": false},
+            {"edgeId": "tx-e2", "reversed": false},
+            {"edgeId": "tx-e3", "reversed": false}
+        ],
+        "patch": {
+            "nodes": [
+                {"id": "tx-a", "position": [0.5, 0.0, 0.5]},
+                {"id": "tx-b", "position": [1.5, 0.0, 0.5]},
+                {"id": "tx-c", "position": [1.5, 0.0, 1.5]},
+                {"id": "tx-d", "position": [0.5, 0.0, 1.5]}
+            ],
+            "edges": [
+                {"edgeId": "tx-e0", "startNodeId": "tx-a", "endNodeId": "tx-b"},
+                {"edgeId": "tx-e1", "startNodeId": "tx-b", "endNodeId": "tx-c"},
+                {"edgeId": "tx-e2", "startNodeId": "tx-c", "endNodeId": "tx-d"},
+                {"edgeId": "tx-e3", "startNodeId": "tx-d", "endNodeId": "tx-a"}
+            ],
+            "regions": [{
+                "regionId": "tx-path-face",
+                "boundary": [
+                    {"edgeId": "tx-e0", "reversed": false},
+                    {"edgeId": "tx-e1", "reversed": false},
+                    {"edgeId": "tx-e2", "reversed": false},
+                    {"edgeId": "tx-e3", "reversed": false}
+                ],
+                "surfaceType": "path",
+                "physical": true
+            }]
+        }
+    })
+    .to_string()
+}
+
+#[test]
+fn a_committed_transaction_undoes_and_redoes_as_one_entry() {
+    let mut session = ConstructionSession::new();
+    terrain_cell(&mut session, 0, 2, 0.0, ["n0", "n1", "n2", "n3"]);
+    let before = mesh_types(&session);
+
+    session.begin("stroke").unwrap();
+    let source = mesh::region_id_to_wire(session.known_regions.iter().next().unwrap());
+    session
+        .apply_region_overlay_json(&overlay_request("stroke", json!(source)))
+        .expect("overlay applies inside the transaction");
+    terrain_cell(&mut session, 3, 2, 0.0, ["m0", "m1", "m2", "m3"]);
+    assert!(
+        session.commit("stroke").unwrap(),
+        "a transaction that changed the map is recorded"
+    );
+    let after = mesh_types(&session);
+    assert_ne!(before, after);
+
+    session
+        .undo_region_overlay("stroke")
+        .expect("the transaction undoes");
+    assert_eq!(
+        mesh_types(&session),
+        before,
+        "the overlay and the later patch undo together"
+    );
+    session
+        .redo_region_overlay("stroke")
+        .expect("the transaction redoes");
+    assert_eq!(mesh_types(&session), after);
+}
+
+#[test]
+fn a_rolled_back_transaction_leaves_nothing_behind() {
+    let mut session = ConstructionSession::new();
+    terrain_cell(&mut session, 0, 2, 0.0, ["n0", "n1", "n2", "n3"]);
+    let before = mesh_types(&session);
+    let regions_before = session.known_regions.clone();
+
+    session.begin("refused").unwrap();
+    terrain_cell(&mut session, 1, 2, 0.0, ["m0", "m1", "m2", "m3"]);
+    session
+        .insert_vertex_json(
+            &json!({
+                "edgeId": "seg:n0~n1",
+                "nodeId": "split",
+                "position": [0.5, 0.0, 0.0],
+                "firstEdgeId": "split-a",
+                "secondEdgeId": "split-b"
+            })
+            .to_string(),
+        )
+        .expect("edge splits inside the transaction");
+    session.rollback("refused").unwrap();
+
+    assert_eq!(mesh_types(&session), before);
+    assert_eq!(session.known_regions, regions_before);
+    let snapshot: serde_json::Value =
+        serde_json::from_str(&session.snapshot_json().unwrap()).unwrap();
+    assert!(
+        !snapshot.to_string().contains("\"split\""),
+        "the split node is gone with the rollback"
+    );
+}
+
+#[test]
+fn transactions_do_not_nest_and_must_be_named_to_end() {
+    let mut session = ConstructionSession::new();
+    session.begin("outer").unwrap();
+    assert!(session.begin("inner").is_err());
+    assert!(session.commit("inner").is_err());
+    assert!(session.rollback("inner").is_err());
+    assert!(
+        !session.commit("outer").unwrap(),
+        "a transaction that changed nothing records no entry"
+    );
+    assert!(session.commit("outer").is_err());
 }
