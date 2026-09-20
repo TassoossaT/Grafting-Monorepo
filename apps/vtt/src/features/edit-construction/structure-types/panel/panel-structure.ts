@@ -253,7 +253,13 @@ export function panelPolicyFor(role: EditRole): RolePolicy {
       // -- the shape a wall can never legitimately take. Every member moves
       // by the same delta instead, and a lone panel is a cloud of one, so
       // this is not two behaviours.
-      return allowed(role, HORIZONTAL_AXES, "cloud");
+      //
+      // `transport: true` because this is the one panel gesture that moves
+      // the *whole object*: without it, `panelMotionInfluences` only carries
+      // an opening's rim nodes vertically, and a horizontal drag of the wall
+      // leaves every door and window standing exactly where the wall used to
+      // be instead of riding along with it.
+      return { ...allowed(role, HORIZONTAL_AXES, "cloud"), transport: true };
     default:
       return denied(role, "this part of the panel has no editing role");
   }
