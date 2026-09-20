@@ -59,6 +59,8 @@ export function sessionFixture() {
       near: query.near ?? null,
     })))),
     getCurvedEdges: () => JSON.parse(session.curved_edges_json()).map((edge) => ({ ...edge, start: position(edge.start), end: position(edge.end) })),
+    addHole: (request) => JSON.parse(session.add_hole_json(JSON.stringify(request))),
+    removeHole: (request) => JSON.parse(session.remove_hole_json(JSON.stringify(request))),
     getSnapshot: () => ({ tableId: "platform-test", map: { nodePositions: new Map() } }),
     transact(transactionId, _origin, work) {
       session.begin_transaction(transactionId);

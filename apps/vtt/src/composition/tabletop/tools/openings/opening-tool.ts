@@ -1,7 +1,5 @@
 import type { OpeningParams } from "@/features/edit-construction";
 import type {
-  ConstructionNodeId,
-  ConstructionOrientedEdgeUse,
   ConstructionPosition,
   ConstructionRegionTopology,
   ConstructionSurfaceKey,
@@ -13,12 +11,9 @@ import type {
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import { DEFAULT_TOOL_PARAMS, hasTrait, openingStructureType, panelRailOf, type PanelRail } from "../../../../features/edit-construction/index.ts";
 
-import { boundaryUsage, createBoundaryEdges, reverseGeometry } from "../core/boundary-edges.ts";
 import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext, type ToolGesture } from "../core/tool-context.ts";
 import { segmentsPreview } from "../shapes/preview-shapes.ts";
 import { findWallSurfaceAt } from "../walls/wall-shared.ts";
-import { commitChange } from "../../effects/effect-commit.ts";
-import { shapeChangeOfAddition } from "../../effects/shape-change.ts";
 import {
   commitOpeningReplacement,
   hostWallOf,
@@ -32,25 +27,27 @@ export const OPENING_COLOR: Record<OpeningParams["openingKind"], number> = {
   door: 0xd97706,
 };
 
-const EDIT_CHANNEL = "opening-edit";
 const OVERLAP_COLOR = 0xef4444;
 
 /**
- * One tool for the whole life of an opening: click a wall to stamp a new
- * door or window onto it; click an *existing* one to select it, then click
- * its host wall again to move or resize it (a fresh rim replaces the old
- * one, using whatever width/height/sill/kind the tool's own params
- * currently hold -- adjust a slider and click again to resize, click
- * somewhere else along the wall to move); Delete or Backspace, with a
- * selection standing, removes it and restores the wall. One tool, not two
- * modes, because that is how every other pick-then-act gesture in this app
- * already works (`edit-region-tool.ts` grabs whatever is under the pointer
- * rather than switching between a "select" and an "edit" tool).
+ * One tool for the whole life of an opening, matching the press-and-drag
+ * model every other construction tool now shares
+ * (`core/structure-edit-behavior.ts`): press on an *existing* door or
+ * window and drag to move or resize it live; press anywhere else on a wall
+ * to stamp a new one. Release commits -- unless nothing actually moved,
+ * which leaves the opening merely selected (Delete/Backspace removes it,
+ * restoring the wall). Not click-select-then-click-elsewhere: that model
+ * left no way to start a second, independent opening while one was
+ * selected, since *every* later click on the wall re-targeted the
+ * selection instead of creating.
  *
  * Editing is always a full replace, never a nudge: `openingStructureType`'s
  * own role (`panel-structure.ts`) resolves every gesture to `"regenerate"`
  * for exactly this reason -- there is no meaningful "the same rim, moved a
- * little" on a rail that may be curved.
+ * little" on a rail that may be curved. That is also why this tool cannot
+ * ride the generic `structure-edit-behavior.ts` grab (built for per-node
+ * moves): it recomputes and replaces the whole rim itself, the same reason
+ * terrain has its own `terrain-sculpt-tool.ts` instead.
  *
  * Where the opening lands is read off the panel itself, not off the ground:
  * `panel-rail.ts` flattens the panel into travel-and-height, so a curved
@@ -62,15 +59,26 @@ interface Selected {
   readonly openingSurfaceKey: ConstructionSurfaceKey;
   readonly wallSurfaceKey: ConstructionSurfaceKey;
   readonly holeIndex: number;
-  readonly rail: PanelRail;
 }
 
+/** The opening a plain click (no drag) last landed on -- kept around only so Delete/Backspace and the inspector have something to act on; never consulted by `onClick`'s create path, so it can never block placing a new one elsewhere. */
 let selected: Selected | undefined;
+
+interface Drag {
+  readonly openingSurfaceKey: ConstructionSurfaceKey;
+  readonly wallSurfaceKey: ConstructionSurfaceKey;
+  readonly holeIndex: number;
+  readonly originalSpan: { readonly from: number; readonly to: number; readonly bottom: number; readonly top: number };
+}
+
+/** The opening currently being press-dragged, if any -- live for exactly one gesture. */
+let drag: Drag | undefined;
+/** Whether `onPointerDown` grabbed an opening this gesture, so the release's native `click` does not also run the create path. */
+let grabbedThisGesture = false;
 
 function clearSelection(ctx: ToolContext): void {
   selected = undefined;
   ctx.reportSelection(undefined);
-  ctx.runtime.clearPreview(EDIT_CHANNEL);
 }
 
 /** The opening region under the pointer, if any -- the same pick-by-`surfaceRef` read `wallUnder` uses below, scoped to the opening's own surface type so clicking a placed window never gets read as clicking the wall behind it. */
@@ -82,28 +90,30 @@ function openingUnder(ctx: ToolContext, sample: PointerSample): ConstructionRegi
     .find((topology) => topology.surfaceType === openingStructureType.surfaceType && surfaceRefFromNodeSet(topology.surfaceKey) === picked);
 }
 
-function select(ctx: ToolContext, opening: ConstructionRegionTopology): boolean {
+/** Starts a drag on `opening`, if it can be read as a rail-mounted rim -- `false` when its host wall cannot be found, leaving the gesture to fall through to placement. */
+function beginGrab(ctx: ToolContext, opening: ConstructionRegionTopology): boolean {
   const host = hostWallOf(ctx, opening);
   if (host === undefined) return false;
   const rail = panelRailOf(ctx.runtime, host.wall);
   if (rail === undefined) return false;
   const span = openingSpan(rail, opening);
   if (span === undefined) return false;
-  selected = { openingSurfaceKey: opening.surfaceKey, wallSurfaceKey: host.wall.surfaceKey, holeIndex: host.holeIndex, rail };
+  selected = { openingSurfaceKey: opening.surfaceKey, wallSurfaceKey: host.wall.surfaceKey, holeIndex: host.holeIndex };
+  drag = { openingSurfaceKey: opening.surfaceKey, wallSurfaceKey: host.wall.surfaceKey, holeIndex: host.holeIndex, originalSpan: span };
   const center = rail.positionAt((span.from + span.to) / 2, (span.bottom + span.top) / 2);
   ctx.reportSelection({ id: surfaceRefFromNodeSet(opening.surfaceKey), point: center });
   return true;
 }
 
-/** The move/resize preview for the currently selected opening, at the hovered spot on its host wall. */
-function editPreview(gesture: ToolGesture, params: OpeningParams, ctx: ToolContext): ReturnType<typeof segmentsPreview> | undefined {
-  if (selected === undefined) return undefined;
-  const wall = ctx.runtime.getRegionTopology(selected.wallSurfaceKey);
+/** The live move/resize preview for the opening being dragged, at the pointer's current spot on its host wall. */
+function dragPreview(gesture: ToolGesture, params: OpeningParams, ctx: ToolContext, active: Drag): ReturnType<typeof segmentsPreview> | undefined {
+  const wall = ctx.runtime.getRegionTopology(active.wallSurfaceKey);
   if (wall === undefined) return undefined;
-  const rail = panelRailOf(ctx.runtime, wall) ?? selected.rail;
+  const rail = panelRailOf(ctx.runtime, wall);
+  if (rail === undefined) return undefined;
   const rim = rimCorners(rail, rail.travelTo(gesture.current.point), params);
   if (rim === undefined) return undefined;
-  const overlaps = openingOverlapsSibling(rail, wall, rim.from, rim.to, rim.bottom, rim.top, selected.holeIndex);
+  const overlaps = openingOverlapsSibling(rail, wall, rim.from, rim.to, rim.bottom, rim.top, active.holeIndex);
   const ring = [...rim.corners, rim.corners[0]!];
   const positions: number[] = [];
   for (let index = 0; index + 1 < ring.length; index += 1) {
@@ -114,23 +124,37 @@ function editPreview(gesture: ToolGesture, params: OpeningParams, ctx: ToolConte
   return segmentsPreview(Float32Array.from(positions), overlaps ? OVERLAP_COLOR : OPENING_COLOR[params.openingKind]);
 }
 
-/** Moves or resizes the selected opening to `sample`'s spot on its host wall -- the click that follows selecting one. */
-function commitEdit(ctx: ToolContext, sample: PointerSample, params: OpeningParams): void {
-  const current = selected;
-  if (current === undefined) return;
-  const wall = ctx.runtime.getRegionTopology(current.wallSurfaceKey);
+/** Commits the drag's move/resize to wherever it was released -- a no-op (kept selected, not committed) when the rim never actually changed, so a plain click just selects. */
+function commitDrag(ctx: ToolContext, gesture: ToolGesture, params: OpeningParams, active: Drag): void {
+  const wall = ctx.runtime.getRegionTopology(active.wallSurfaceKey);
   if (wall === undefined) {
     clearSelection(ctx);
     ctx.reportFeedback({ tone: "error", message: "A parede desta abertura nao existe mais." });
     return;
   }
-  const rail = panelRailOf(ctx.runtime, wall) ?? current.rail;
-  const rim = rimCorners(rail, rail.travelTo(sample.point), params);
+  const rail = panelRailOf(ctx.runtime, wall);
+  if (rail === undefined) {
+    ctx.reportFeedback({ tone: "error", message: "A parede desta abertura nao existe mais." });
+    return;
+  }
+  const rim = rimCorners(rail, rail.travelTo(gesture.current.point), params);
   if (rim === undefined) {
     ctx.reportFeedback({ tone: "error", message: "Abertura: nao cabe aqui." });
     return;
   }
-  if (openingOverlapsSibling(rail, wall, rim.from, rim.to, rim.bottom, rim.top, current.holeIndex)) {
+
+  const EPS = 1e-6;
+  const unchanged =
+    Math.abs(rim.from - active.originalSpan.from) < EPS &&
+    Math.abs(rim.to - active.originalSpan.to) < EPS &&
+    Math.abs(rim.bottom - active.originalSpan.bottom) < EPS &&
+    Math.abs(rim.top - active.originalSpan.top) < EPS;
+  if (unchanged) {
+    ctx.reportFeedback({ tone: "info", message: "Abertura selecionada. Arraste para mover ou redimensionar; ajuste largura/altura/peitoril e arraste de novo; Delete apaga." });
+    return;
+  }
+
+  if (openingOverlapsSibling(rail, wall, rim.from, rim.to, rim.bottom, rim.top, active.holeIndex)) {
     ctx.reportFeedback({ tone: "error", message: "Abertura: sobreporia outra abertura ja existente nesta parede." });
     return;
   }
@@ -139,7 +163,7 @@ function commitEdit(ctx: ToolContext, sample: PointerSample, params: OpeningPara
   const { recorded, error } = commitOpeningReplacement(
     ctx,
     causeId,
-    { faceSurfaceKey: current.openingSurfaceKey, wallSurfaceKey: current.wallSurfaceKey, holeIndex: current.holeIndex },
+    { faceSurfaceKey: active.openingSurfaceKey, wallSurfaceKey: active.wallSurfaceKey, holeIndex: active.holeIndex },
     { wallSurfaceKey: wall.surfaceKey, rail, from: rim.from, to: rim.to, bottom: rim.bottom, top: rim.top, openingKind: params.openingKind },
   );
   clearSelection(ctx);
@@ -157,7 +181,7 @@ export const openingTool: ConstructionTool<"opening"> = {
   previewOnHover: true,
 
   previewFor(gesture: ToolGesture, params: OpeningParams, ctx: ToolContext) {
-    if (selected !== undefined) return editPreview(gesture, params, ctx);
+    if (drag !== undefined) return dragPreview(gesture, params, ctx, drag);
     const placed = resolvePlacement(ctx, gesture.current, params);
     if (placed === undefined) return undefined;
     const ring = [...placed.corners, placed.corners[0]!];
@@ -170,19 +194,37 @@ export const openingTool: ConstructionTool<"opening"> = {
     return segmentsPreview(Float32Array.from(positions), OPENING_COLOR[params.openingKind]);
   },
 
-  onClick(ctx: ToolContext, sample: PointerSample, params: OpeningParams): void {
+  /** Press on an existing opening starts a drag (see `beginGrab`); press anywhere else leaves the gesture to `onClick`'s create path below. */
+  onPointerDown(ctx: ToolContext, sample: PointerSample): void {
+    drag = undefined;
+    grabbedThisGesture = false;
     const opening = openingUnder(ctx, sample);
-    if (opening !== undefined) {
-      if (select(ctx, opening)) {
-        ctx.reportFeedback({ tone: "info", message: "Abertura selecionada. Ajuste largura/altura/peitoril e clique na parede para mover ou redimensionar. Delete apaga." });
-      } else {
-        ctx.reportFeedback({ tone: "error", message: "Nao foi possivel identificar a parede desta abertura." });
-      }
-      return;
+    if (opening === undefined) return;
+    if (beginGrab(ctx, opening)) {
+      grabbedThisGesture = true;
+    } else {
+      ctx.reportFeedback({ tone: "error", message: "Nao foi possivel identificar a parede desta abertura." });
     }
+  },
 
-    if (selected !== undefined) {
-      commitEdit(ctx, sample, params);
+  // No-op: `previewFor` already redraws the live ghost every move via the
+  // dispatcher's own throttle; the actual rim replace only happens once, on
+  // release, matching every other tool's single-commit-per-gesture shape.
+  onPointerMove(): void {},
+
+  onPointerUp(ctx: ToolContext, gesture: ToolGesture, params: OpeningParams): void {
+    if (drag === undefined) return;
+    const active = drag;
+    drag = undefined;
+    commitDrag(ctx, gesture, params, active);
+  },
+
+  onClick(ctx: ToolContext, sample: PointerSample, params: OpeningParams): void {
+    // A press+release that grabbed an existing opening already ran through
+    // `onPointerUp` above (selecting it, or committing its move/resize) --
+    // this trailing native click must never also try to stamp a new one.
+    if (grabbedThisGesture) {
+      grabbedThisGesture = false;
       return;
     }
 
@@ -194,60 +236,25 @@ export const openingTool: ConstructionTool<"opening"> = {
       });
       return;
     }
+    const wall = ctx.runtime.getRegionTopology(placed.surfaceKey);
+    if (wall === undefined) return;
+    if (openingOverlapsSibling(placed.rail, wall, placed.from, placed.to, placed.bottom, placed.top)) {
+      ctx.reportFeedback({ tone: "error", message: "Abertura: sobreporia outra abertura ja existente nesta parede." });
+      return;
+    }
 
-    const sequence = ctx.nextSequence();
-    const causeId = scopedToolId(ctx, "opening", sequence);
-    const idPrefix = scopedToolId(ctx, `opening-${sequence}`);
-    const nodes = placed.corners.map((position, index) => ({
-      id: `${idPrefix}:c${index}` as ConstructionNodeId,
-      position,
-    }));
-
-    const edges = createBoundaryEdges(ctx.tableId, {
-      kind: "private-when-full",
-      runPrefix: idPrefix,
-      existingUses: boundaryUsage(ctx),
+    const causeId = scopedToolId(ctx, "opening", ctx.nextSequence());
+    const { recorded, error } = commitOpeningReplacement(ctx, causeId, undefined, {
+      wallSurfaceKey: placed.surfaceKey,
+      rail: placed.rail,
+      from: placed.from,
+      to: placed.to,
+      bottom: placed.bottom,
+      top: placed.top,
+      openingKind: params.openingKind,
     });
-    const bottomGeometry = placed.rail.geometryBetween(placed.from, placed.to);
-    const topGeometry = reverseGeometry(bottomGeometry);
-    const boundary: ConstructionOrientedEdgeUse[] = [
-      edges.use(nodes[0]!.id, nodes[1]!.id, bottomGeometry),
-      edges.use(nodes[1]!.id, nodes[2]!.id),
-      edges.use(nodes[2]!.id, nodes[3]!.id, topGeometry),
-      edges.use(nodes[3]!.id, nodes[0]!.id),
-    ];
-
-    const patch = {
-      nodes,
-      edges: edges.all(),
-      regions: [
-        {
-          regionId: nodes.map((node) => node.id).join("|"),
-          boundary,
-          surfaceType: openingStructureType.surfaceType,
-          physical: false,
-        },
-      ],
-    };
-    // The face and the hole it stands in are one transaction: a face that
-    // does not fit leaves neither its rim nor an opening nobody stands in.
-    let recorded: boolean;
-    try {
-      ({ recorded } = commitChange(ctx.runtime, { transactionId: causeId }, () => {
-        const outcome = ctx.runtime.addPatch(patch, "local", causeId);
-        if (outcome.skippedRegionIds.length > 0) throw new Error("a face nao coube sobre o que ja existe ali.");
-        ctx.runtime.addHole(
-          {
-            surfaceKey: placed.surfaceKey,
-            hole: [...boundary].reverse().map((use) => ({ edgeId: use.edgeId, reversed: !use.reversed })),
-          },
-          "local",
-          causeId,
-        );
-        return { value: outcome, change: shapeChangeOfAddition(ctx.runtime, patch, outcome) };
-      }));
-    } catch (error) {
-      ctx.reportFeedback({ tone: "error", message: `Abertura: ${error instanceof Error ? error.message : String(error)}` });
+    if (error !== undefined) {
+      ctx.reportFeedback({ tone: "error", message: `Abertura: ${error}` });
       return;
     }
     if (recorded) ctx.history?.record({ kind: "transaction", transactionId: causeId });
@@ -272,6 +279,7 @@ export const openingTool: ConstructionTool<"opening"> = {
   },
 
   onCancel(ctx: ToolContext): void {
+    drag = undefined;
     clearSelection(ctx);
   },
 };
@@ -282,6 +290,8 @@ interface Placement {
   readonly rail: PanelRail;
   readonly from: number;
   readonly to: number;
+  readonly bottom: number;
+  readonly top: number;
 }
 
 /**
@@ -324,5 +334,7 @@ function resolvePlacement(
   const rail = panelRailOf(ctx.runtime, topology);
   if (rail === undefined) return undefined;
   const placed = rimCorners(rail, rail.travelTo(sample.point), params);
-  return placed === undefined ? undefined : { surfaceKey, corners: placed.corners, rail, from: placed.from, to: placed.to };
+  return placed === undefined
+    ? undefined
+    : { surfaceKey, corners: placed.corners, rail, from: placed.from, to: placed.to, bottom: placed.bottom, top: placed.top };
 }
