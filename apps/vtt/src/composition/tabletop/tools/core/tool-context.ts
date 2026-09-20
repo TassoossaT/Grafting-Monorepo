@@ -1,5 +1,5 @@
 import type { EditHistoryStack } from "@/features/edit-construction";
-import type { ConstructionToolId, PreviewDescriptor, ToolParamsFor } from "@/features/edit-construction";
+import type { ConstructionToolId, PreviewDescriptor, StructureEditParams, ToolParamsFor } from "@/features/edit-construction";
 import type { ConstructionPosition } from "@/ports";
 
 import type { TabletopRuntime } from "../../tabletop-runtime.ts";
@@ -40,6 +40,14 @@ export interface ToolContext {
    * any tool does with it is that tool's own business.
    */
   readonly snapToGrid: boolean;
+  /**
+   * How a grab on an existing structure behaves -- shape/elevation mode and
+   * the bezier handle options (`curveMode`/`curveAction`/`curveWidth`).
+   * Ambient like `snapToGrid`: every construction tool can grab and edit
+   * whatever it owns (`structure-edit-behavior.ts`), so this is no longer
+   * one tool's own params.
+   */
+  readonly structureEditParams: StructureEditParams;
   /** A fresh integer each call, monotonically increasing for the runtime's lifetime -- feeds id-namespacing salts and cell/room indices, mirroring `tabletop-entry.tsx`'s retired `generateCountRef`. */
   nextSequence(): number;
   /** Reports the node a tool just selected/moved, for `SettingsDrawer`'s inspector. `undefined` clears the inspector. */

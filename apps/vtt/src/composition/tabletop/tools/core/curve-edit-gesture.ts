@@ -10,7 +10,7 @@ import {
   resolveCloudTopology,
   reverseGeometry,
 } from "../../../../features/edit-construction/index.ts";
-import type { AtomicEditOp, ToolParamsFor } from "../../../../features/edit-construction/index.ts";
+import type { AtomicEditOp, StructureEditParams } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionCurvedEdge, ConstructionEdgeGeometry, ConstructionPosition, CubicBezier } from "../../../../ports/index.ts";
 import type { PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
 import { commitPatchReplacement } from "../../effects/effect-commit.ts";
@@ -36,13 +36,13 @@ export interface CurveGesture {
 }
 
 /** Where the pointer is taking the handle: along the ground, or up and down in elevation mode. */
-function targetOf(sample: PointerSample, gesture: ToolGesture, params?: ToolParamsFor<"edit-region">): ConstructionPosition {
+function targetOf(sample: PointerSample, gesture: ToolGesture, params?: StructureEditParams): ConstructionPosition {
   return params?.mode === "elevation" && sample.screenY !== undefined && gesture.current.screenY !== undefined
     ? { ...sample.point, y: sample.point.y + (sample.screenY - gesture.current.screenY) / 40 }
     : { ...gesture.current.point, y: sample.point.y };
 }
 
-export function beginCurveGesture(ctx: ToolContext, sample: PointerSample, params?: ToolParamsFor<"edit-region">): CurveGesture | undefined {
+export function beginCurveGesture(ctx: ToolContext, sample: PointerSample, params?: StructureEditParams): CurveGesture | undefined {
   if (!sample.nodeId) return undefined;
   const snapshot = ctx.runtime.getGraphSnapshot();
   const contour = ctx.runtime.getCurvedEdges();
@@ -55,7 +55,7 @@ export function beginCurveGesture(ctx: ToolContext, sample: PointerSample, param
   return spineGesture(ctx, sample, params);
 }
 
-function spineGesture(ctx: ToolContext, sample: PointerSample, params?: ToolParamsFor<"edit-region">): CurveGesture {
+function spineGesture(ctx: ToolContext, sample: PointerSample, params?: StructureEditParams): CurveGesture {
   const snapshot = ctx.runtime.getGraphSnapshot();
   const targetId = sample.nodeId!;
   const operationId = `curve-edit:${ctx.nextSequence()}`;
@@ -99,7 +99,7 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: ToolPara
 function contourGesture(
   ctx: ToolContext,
   sample: PointerSample,
-  params: ToolParamsFor<"edit-region"> | undefined,
+  params: StructureEditParams | undefined,
   edge: ConstructionCurvedEdge,
   index: 1 | 2 | "midpoint",
 ): CurveGesture {

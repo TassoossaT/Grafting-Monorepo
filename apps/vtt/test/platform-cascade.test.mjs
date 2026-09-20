@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { planEdit, resolveCloudTopology } from "../src/features/edit-construction/index.ts";
-import { editRegionTool } from "../src/composition/tabletop/tools/core/edit-region-tool.ts";
+import { createStructureEditBehavior } from "../src/composition/tabletop/tools/core/structure-edit-behavior.ts";
 import { commitPlatformContour, commitPlatformShape, platformContourTool } from "../src/composition/tabletop/tools/platform/platform-contour-tool.ts";
 import { commitWallContour } from "../src/composition/tabletop/tools/walls/wall-shared.ts";
 import { surfaceRefFromNodeSet } from "../src/entities/map/index.ts";
@@ -74,12 +74,13 @@ test("one drag history covers every storey, including after a rejected tick", ()
   try {
     const surfaceRef = surfaceRefFromNodeSet(platform(runtime,1).surfaceKey);
     const start = { point: {x:2,y:3,z:2}, surfaceRef, screenY:200 };
-    editRegionTool.onPointerDown(ctx,start);
+    const behavior = createStructureEditBehavior({ ownsType: () => true });
+    behavior.tryGrab(ctx,start,{mode:"shape"});
     const current = {...start, screenY:160};
-    editRegionTool.onPointerMove(ctx,{start,current,samples:[start,current]},{mode:"elevation"});
+    behavior.onPointerMove(ctx,{start,current,samples:[start,current]},{mode:"elevation"});
     const bad = {...start, screenY:400};
-    editRegionTool.onPointerMove(ctx,{start,current:bad,samples:[start,bad]},{mode:"elevation"});
-    editRegionTool.onPointerUp(ctx);
+    behavior.onPointerMove(ctx,{start,current:bad,samples:[start,bad]},{mode:"elevation"});
+    behavior.onPointerUp(ctx);
     assert.deepEqual(heights(runtime),[0,4,7]);
     const history = ctx.history.undo();
     assert.equal(history.undo.length,8);

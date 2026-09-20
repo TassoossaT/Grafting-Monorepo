@@ -8,7 +8,6 @@
  */
 export type ConstructionToolId =
   | "navigate"
-  | "edit-region"
   | "platform-contour"
   | "slope-ramp"
   | "slope-spiral"
@@ -180,10 +179,28 @@ export interface OpeningParams {
 
 export type NoToolParams = Record<string, never>;
 
+/**
+ * How a grab on an *existing* structure behaves -- independent of which
+ * creation tool is active, since `beginCurveGesture`/the generic grab
+ * machinery (`structure-edit-behavior.ts`) work the same regardless of
+ * which type owns the grabbed part. Used to live as one tool's own params
+ * (`"edit-region"`, since retired); every construction tool now carries it
+ * ambiently via `ToolContext.structureEditParams` instead of declaring it
+ * as its own.
+ */
+export interface StructureEditParams {
+  readonly mode: "shape" | "elevation";
+  readonly curveMode?: "automatic" | "aligned" | "mirrored" | "free";
+  readonly curveAction?: "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width";
+  readonly curveWidth?: number;
+  readonly curveEndWidth?: number;
+}
+
+export const DEFAULT_STRUCTURE_EDIT_PARAMS: StructureEditParams = Object.freeze({ mode: "shape" });
+
 export interface ToolParamsByTool {
   readonly roof: { readonly shape: "rectangle" | "circle" | "platform"; readonly elevation: number; readonly height: number; readonly radius: number; readonly curvatures: readonly [number, number, number, number] };
   readonly navigate: NoToolParams;
-  readonly "edit-region": { readonly mode: "shape" | "elevation"; readonly curveMode?: "automatic" | "aligned" | "mirrored" | "free"; readonly curveAction?: "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"; readonly curveWidth?: number; readonly curveEndWidth?: number };
   readonly "platform-contour": { readonly elevation: number; readonly mode: "create" | "extend" | "cut"; readonly shape?: "rectangle" | "polygon" | "freehand" | "circle"; readonly radius?: number; readonly tolerance?: number };
   /** A straight sloped platform dragged from start to end, climbing a fixed rise. */
   readonly "slope-ramp": { readonly width: number; readonly rise: number };
@@ -202,7 +219,6 @@ export type ToolParamsFor<Id extends ConstructionToolId> = ToolParamsByTool[Id];
 export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   roof: Object.freeze({ shape: "rectangle", elevation: 3, height: 2, radius: 2.5, curvatures: [0, 0, 0, 0] as const }),
   navigate: Object.freeze({}),
-  "edit-region": Object.freeze({ mode: "shape" }),
   "platform-contour": Object.freeze({ elevation: 0, mode: "create", shape: "rectangle", radius: 2.5, tolerance: 0.15 }),
   "slope-ramp": Object.freeze({ width: 1.5, rise: 3 }),
   "slope-spiral": Object.freeze({ width: 1.5, rise: 3, radius: 2.5, turns: 1 }),

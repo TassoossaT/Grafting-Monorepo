@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 
-import type { ConstructionToolId, EditHistoryStack, ToolParamsByTool } from "@/features/edit-construction";
+import type { ConstructionToolId, EditHistoryStack, StructureEditParams, ToolParamsByTool } from "@/features/edit-construction";
 import { TOOL_GHOST_PREVIEW_CHANNEL } from "@/ports";
 import type { RenderViewId } from "@/ports";
 import type { SelectedNodeInfo } from "@/widgets";
@@ -31,6 +31,8 @@ export interface UseConstructionPointerOptions {
   readonly viewId: RenderViewId | undefined;
   /** When true, a resolved point (other than an existing node handle -- those stay precise) snaps to the nearest grid intersection before any tool sees it, so a new terrain cell/wall/room lands centered on the grid instead of wherever the pointer happened to be. */
   readonly snapToGrid: boolean;
+  /** How a grab on an existing structure behaves -- ambient across every construction tool, not one tool's own params. See `ToolContext.structureEditParams`. */
+  readonly structureEditParams: StructureEditParams;
   readonly onSelectionChange: (info: SelectedNodeInfo | undefined) => void;
   readonly onFeedbackChange: (feedback: ConstructionToolFeedback | undefined) => void;
 }
@@ -117,6 +119,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       },
       get snapToGrid() {
         return optionsRef.current.snapToGrid;
+      },
+      get structureEditParams() {
+        return optionsRef.current.structureEditParams;
       },
       nextSequence,
       reportSelection: (info) => optionsRef.current.onSelectionChange(info),

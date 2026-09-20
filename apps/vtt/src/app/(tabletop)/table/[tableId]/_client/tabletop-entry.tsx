@@ -6,12 +6,14 @@ import {
   attachCameraNavigation,
   createEditHistoryStack,
   createTabletopRuntime,
+  DEFAULT_STRUCTURE_EDIT_PARAMS,
   DEFAULT_TOOL_PARAMS,
   useConstructionPointer,
   type ConstructionToolFeedback,
   type ConstructionToolId,
   type EditHistoryStack,
   type RenderViewId,
+  type StructureEditParams,
   type TabletopRuntime,
   type TabletopRuntimeStatus,
   type ToolParamsByTool,
@@ -52,7 +54,6 @@ const TOOL_LABEL: Record<ConstructionToolId, string> = {
   "slope-spiral": "Espiral",
   "path-brush": "Caminho",
   navigate: "Navegação da Câmera",
-  "edit-region": "Editar Região",
   "wall-brush": "Pincel de Parede (Livre)",
   "wall-line": "Pincel de Parede (Linha Reta)",
   "tower-stamp": "Torre",
@@ -77,6 +78,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
 
   const [tool, setTool] = useState<EditTool>("navigate");
   const [toolParams, setToolParams] = useState<ToolParamsByTool>(DEFAULT_TOOL_PARAMS);
+  const [structureEditParams, setStructureEditParams] = useState<StructureEditParams>(DEFAULT_STRUCTURE_EDIT_PARAMS);
   const [snapToGrid, setSnapToGrid] = useState(true);
   const [editorMode, setEditorMode] = useState<"gm" | "player">("gm");
   const [selectedNodeInfo, setSelectedNodeInfo] = useState<SelectedNodeInfo | null>(null);
@@ -158,6 +160,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     tableId,
     viewId: viewIdRef.current,
     snapToGrid,
+    structureEditParams,
     onSelectionChange: (info) => setSelectedNodeInfo(info ?? null),
     onFeedbackChange: handleFeedbackChange,
   });
@@ -267,6 +270,8 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           activeTool={tool}
           toolParams={toolParams}
           onToolParamsChange={handleToolParamsChange}
+          structureEditParams={structureEditParams}
+          onStructureEditParamsChange={setStructureEditParams}
           tokenCount={current.tokens.byId.size}
         />
       </section>

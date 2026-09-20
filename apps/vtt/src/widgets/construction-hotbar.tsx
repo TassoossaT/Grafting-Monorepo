@@ -16,9 +16,10 @@ const CONSTRUCTION_TOOLS: readonly { readonly id: ConstructionToolId; readonly i
 ];
 
 /** The "Casa" branch's own children. */
-const HOUSE_TOOLS: readonly { readonly id: ConstructionToolId; readonly icon: string; readonly tooltip: string }[] = [
-  { id: "edit-region", icon: "◇", tooltip: "Editar (arraste um canto, uma aresta ou o corpo -- o que cada parte permite depende do tipo da estrutura)" },
-];
+// Editing an existing structure is no longer its own tool -- every
+// construction tool grabs and edits whatever it owns, see
+// `composition/tabletop/tools/core/structure-edit-behavior.ts`.
+const HOUSE_TOOLS: readonly { readonly id: ConstructionToolId; readonly icon: string; readonly tooltip: string }[] = [];
 
 const HOUSE_TOOL_IDS: ReadonlySet<ConstructionToolId> = new Set(HOUSE_TOOLS.map((tool) => tool.id));
 
@@ -77,7 +78,7 @@ export function ConstructionHotbar(props: ConstructionHotbarProps) {
         key: "construction-tools",
         icon: "C",
         tooltip: "Construir",
-        tone: props.activeTool === "navigate" || props.activeTool === "edit-region" ? "default" : "primary",
+        tone: props.activeTool === "navigate" ? "default" : "primary",
         children,
       }}
     />

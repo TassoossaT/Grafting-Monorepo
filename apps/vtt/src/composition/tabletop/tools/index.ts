@@ -16,7 +16,7 @@ export {
   type EdgeSharing,
 } from "./core/boundary-edges.ts";
 export { navigateTool } from "./core/navigate-tool.ts";
-export { editRegionTool } from "./core/edit-region-tool.ts";
+export { createStructureEditBehavior, withStructureEditing, type StructureEditBehavior, type StructureEditOptions } from "./core/structure-edit-behavior.ts";
 
 export { terrainSculptTool } from "./terrain/terrain-sculpt-tool.ts";
 export { restackTerrain } from "./terrain/terrain-restack.ts";
