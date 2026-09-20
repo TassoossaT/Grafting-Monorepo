@@ -46,6 +46,7 @@ test("real pointer lifecycle: final release sample, one drag commit, Escape and 
   try {
     const handlers=useConstructionPointer({
       activeTool:"platform-contour",toolParams:params,runtime,history:fixture.ctx.history,tableId:"pointer",viewId:"view",snapToGrid:false,
+      structureEditParams:{mode:"shape"},
       onSelectionChange(){},onFeedbackChange:(f)=>calls.feedback.push(f),
     });
     for(const effect of effects)cleanups.push(effect());

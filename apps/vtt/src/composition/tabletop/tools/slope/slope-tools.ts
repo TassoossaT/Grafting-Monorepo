@@ -1,7 +1,10 @@
-import { DEFAULT_TOOL_PARAMS } from "../../../../features/edit-construction/index.ts";
+import { DEFAULT_TOOL_PARAMS, SLOPE_SURFACE_TYPE } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionTool } from "../core/tool-context.ts";
+import { withStructureEditing } from "../core/structure-edit-behavior.ts";
 import { polylineSegmentsPreview } from "../shapes/preview-shapes.ts";
 import { commitPlatformSlope, slopeControlPoint, spiralControlPoints, straightRampOutline, straightRampPoints } from "./slope-commit.ts";
+
+const ownsType = (surfaceType: string) => surfaceType === SLOPE_SURFACE_TYPE;
 
 const COLOR = 0x79b8e8;
 
@@ -12,7 +15,7 @@ const COLOR = 0x79b8e8;
  */
 
 /** Drag from the start to the end; the ramp climbs the fixed rise. */
-export const slopeRampTool: ConstructionTool<"slope-ramp"> = {
+const rawSlopeRampTool: ConstructionTool<"slope-ramp"> = {
   id: "slope-ramp",
   previewOnHover: true,
   defaultParams: () => DEFAULT_TOOL_PARAMS["slope-ramp"],
@@ -34,8 +37,11 @@ export const slopeRampTool: ConstructionTool<"slope-ramp"> = {
   },
 };
 
+/** Also grabs and edits an existing slope spine's own control point/segment -- see `structure-edit-behavior.ts`. */
+export const slopeRampTool = withStructureEditing(rawSlopeRampTool, { ownsType });
+
 /** Click the centre; the spiral climbs the rise over its turns. */
-export const slopeSpiralTool: ConstructionTool<"slope-spiral"> = {
+const rawSlopeSpiralTool: ConstructionTool<"slope-spiral"> = {
   id: "slope-spiral",
   previewOnHover: true,
   defaultParams: () => DEFAULT_TOOL_PARAMS["slope-spiral"],
@@ -50,3 +56,6 @@ export const slopeSpiralTool: ConstructionTool<"slope-spiral"> = {
     commitPlatformSlope(ctx, spiralControlPoints(slopeControlPoint(ctx, sample), params), params);
   },
 };
+
+/** Also grabs and edits an existing slope spine's own control point/segment -- see `structure-edit-behavior.ts`. */
+export const slopeSpiralTool = withStructureEditing(rawSlopeSpiralTool, { ownsType });

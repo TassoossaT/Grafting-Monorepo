@@ -5,6 +5,7 @@ import type { ConstructionPosition, ConstructionRegionTopology } from "../../../
 import { createBoundaryEdges, reverseGeometry } from "../core/boundary-edges.ts";
 import { commitPatchReplacement } from "../../effects/effect-commit.ts";
 import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext } from "../core/tool-context.ts";
+import { withStructureEditing } from "../core/structure-edit-behavior.ts";
 import { polylineSegmentsPreview, segmentsPreview } from "../shapes/preview-shapes.ts";
 import { circleContour, previewOutline } from "../tower/tower-geometry.ts";
 import { groupLoopsByContainment, splitContourAtPoints, weldedMerge, windLoop, type DirectedContourEdge } from "./platform-contour-merge.ts";
@@ -184,7 +185,7 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
 export function commitPlatformContour(ctx: ToolContext, samples: readonly PointerSample[], params: Params): void {
   commitPlatformShape(ctx, lines(samples,params.elevation),params,samples);
 }
-export const platformContourTool: ConstructionTool<"platform-contour"> = {
+const rawPlatformContourTool: ConstructionTool<"platform-contour"> = {
   id: "platform-contour",
   previewOnHover: true,
   defaultParams: () => DEFAULT_TOOL_PARAMS["platform-contour"],
@@ -237,3 +238,6 @@ export const platformContourTool: ConstructionTool<"platform-contour"> = {
     drafts.delete(ctx.runtime);
   },
 };
+
+/** Also grabs and edits an existing platform's own vertex/edge/body -- see `structure-edit-behavior.ts`. */
+export const platformContourTool = withStructureEditing(rawPlatformContourTool, { ownsType: (surfaceType) => surfaceType === platformStructureType.surfaceType });
