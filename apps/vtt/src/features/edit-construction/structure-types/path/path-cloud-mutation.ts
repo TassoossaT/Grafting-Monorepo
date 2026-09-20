@@ -65,11 +65,11 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
   const operationId = effect.operationId;
 
   const road = planBezierRoad({
-    snapshot: input.graphSnapshot, topologies: input.regionTopologies, port: input.bezier, stroke,
+    snapshot: input.graphSnapshot, topologies: input.regionTopologies, port: input.bezier, stroke, authoredCurves: effect.authoredCurves,
     corridorId: pathCorridorId(operationId, effect.parameters.kind),
     offsets: effect.parameters.profile.map((p) => p.lateralOffset),
     miterLimit: effect.parameters.miterLimit, tolerance,
-    snapReach: Math.max(tolerance, effect.brushShape.kind === "square" ? effect.brushShape.size / 2 : effect.brushShape.radius),
+    snapReach: effect.authoredCurves ? 0.025 : Math.max(tolerance, effect.brushShape.kind === "square" ? effect.brushShape.size / 2 : effect.brushShape.radius),
   });
   if (road.graphPatch.edges.length === 0) return { kind: "noop", message: "Nenhuma alteração: o traço não teve extensão suficiente após o encaixe." };
   const spine = pathSpineDraftFor(effect, road.controlPoints);

@@ -125,25 +125,6 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     [nextSequence],
   );
 
-  useEffect(() => {
-    const tool = toolFor(options.activeTool);
-    const cancel = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || !tool.onCancel) return;
-      tool.onCancel(ctx);
-      const active = gestureRef.current;
-      if (active?.captureTarget.hasPointerCapture(active.pointerId)) active.captureTarget.releasePointerCapture(active.pointerId);
-      gestureRef.current = null;
-      suppressClickRef.current = true;
-      options.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
-    };
-    window.addEventListener("keydown",cancel);
-    return () => {
-      window.removeEventListener("keydown",cancel); tool.onCancel?.(ctx);
-      const active = gestureRef.current;
-      if (active?.captureTarget.hasPointerCapture(active.pointerId)) active.captureTarget.releasePointerCapture(active.pointerId);
-      gestureRef.current = null;
-    };
-  },[options.activeTool,options.runtime,ctx]);
 
   /**
    * Redraws the construction-edge overlay from whatever is now standing.
@@ -169,6 +150,38 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       shownEdgeChannels.current.add(channel);
     }
   }, []);
+
+  const activeParams = options.toolParams[options.activeTool];
+  useEffect(() => {
+    const tool = toolFor(options.activeTool);
+    // Bind cleanup to the runtime that owns this draft, even after a table switch.
+    const ownedContext: ToolContext = { ...ctx, runtime: options.runtime, history: options.history, tableId: options.tableId };
+    const release = () => {
+      const active = gestureRef.current;
+      if (active?.captureTarget.hasPointerCapture(active.pointerId)) active.captureTarget.releasePointerCapture(active.pointerId);
+      gestureRef.current = null;
+      suppressClickRef.current = true;
+      options.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
+    };
+    const keydown = (event: KeyboardEvent) => {
+      if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.target instanceof HTMLElement && (event.target.isContentEditable || event.target.closest("input, textarea, select"))) return;
+      if (event.key === "Escape" && tool.onCancel) {
+        tool.onCancel(ownedContext); release(); event.preventDefault(); return;
+      }
+      if (gestureRef.current) return;
+      if (tool.onKeyDown?.(ownedContext, event.key, activeParams as never)) {
+        event.preventDefault();
+        refreshEdgeOverlay();
+      }
+    };
+    window.addEventListener("keydown", keydown);
+    return () => {
+      window.removeEventListener("keydown", keydown);
+      tool.onCancel?.(ownedContext);
+      release();
+    };
+  }, [options.activeTool, options.runtime, options.history, options.tableId, activeParams, ctx, refreshEdgeOverlay]);
 
   // Draw what is already standing as soon as the table is live, not only
   // after the first commit -- an edge that was there before this session
@@ -261,7 +274,8 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       // Most brushes preview only an active drag. Contour tools may opt in
       // to a circle footprint or unfinished polygon preview between clicks.
       if (gesture === null || gesture.pointerId !== event.pointerId) {
-        const sample = tool.previewOnHover ? sampleAt(event) : undefined;
+        const hover = typeof tool.previewOnHover === "function" ? tool.previewOnHover(params) : tool.previewOnHover;
+        const sample = hover ? sampleAt(event) : undefined;
         const descriptor = sample ? tool.previewFor?.({ start: sample,current: sample,samples: [sample] },params,ctx) : undefined;
         if (descriptor) optionsRef.current.runtime.showPreview(descriptor,TOOL_GHOST_PREVIEW_CHANNEL);
         else optionsRef.current.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);

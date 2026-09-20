@@ -34,6 +34,8 @@
 
 export type { Euler, Transform, Vec3 } from "./contracts/space.js";
 export { IDENTITY_TRANSFORM } from "./contracts/space.js";
+export { createCurvePen } from "./interaction/curve-pen.js";
+export type { CurvePen, CurvePenAnchor, CurvePenDraft, CurvePenOptions } from "./interaction/curve-pen.js";
 
 export type { Clock, ClockMode, ClockTick } from "./contracts/clock.js";
 export { createClock } from "./clock/create-clock.js";

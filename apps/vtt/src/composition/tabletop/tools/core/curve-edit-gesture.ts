@@ -62,14 +62,18 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: ToolPara
   const topologies = ctx.runtime.getAllRegionTopologies();
   let target: ConstructionPosition = sample.point;
   let moved = false;
+  let dragged = false;
+  let ended = false;
   const plan = (insert = false) => planBezierEdit({
     field: ctx.runtime,
     snapshot, topologies, port: ctx.runtime, targetId, position: target, operationId, tableId: ctx.tableId, insert, mode: params?.curveMode, action: params?.curveAction, width: params?.curveWidth ?? 4, endWidth: params?.curveEndWidth,
   });
   return {
     move(gesture) {
+      if (ended) return;
       target = targetOf(sample, gesture, params);
-      moved ||= target.x !== sample.point.x || target.y !== sample.point.y || target.z !== sample.point.z;
+      moved = target.x !== sample.point.x || target.y !== sample.point.y || target.z !== sample.point.z;
+      dragged ||= moved;
       try {
         const draft = plan();
         if (draft) ctx.runtime.showPreview({ kind: "segments", positions: draft.preview, color: PREVIEW_COLOR, opacity: 0.9 }, CHANNEL);
@@ -79,7 +83,10 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: ToolPara
       }
     },
     commit() {
+      if (ended) return;
+      ended = true;
       ctx.runtime.clearPreview(CHANNEL);
+      if (dragged && !moved) return;
       if (!moved && curvePick(targetId)?.index !== "midpoint" && (!params?.curveAction || params.curveAction === "edit")) return;
       try {
         const draft = plan(!moved && (!params?.curveAction || params.curveAction === "edit"));
@@ -92,7 +99,7 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: ToolPara
         ctx.reportFeedback({ tone: "error", message: `Curva preservada: ${String(error)}` });
       }
     },
-    cancel() { ctx.runtime.clearPreview(CHANNEL); },
+    cancel() { ended = true; ctx.runtime.clearPreview(CHANNEL); },
   };
 }
 
@@ -105,10 +112,18 @@ function contourGesture(
 ): CurveGesture {
   const original = contourCurve(edge);
   let reshaped: CubicBezier | undefined;
+  let ended = false;
   return {
     move(gesture) {
+      if (ended) return;
+      reshaped = undefined;
+      const target = targetOf(sample, gesture, params);
+      if (target.x === sample.point.x && target.y === sample.point.y && target.z === sample.point.z) {
+        ctx.runtime.clearPreview(CHANNEL);
+        return;
+      }
       try {
-        reshaped = reshapeCurve(ctx.runtime, original, index, targetOf(sample, gesture, params));
+        reshaped = reshapeCurve(ctx.runtime, original, index, target);
         ctx.runtime.showPreview({ kind: "segments", positions: curveSegments(ctx.runtime, reshaped), color: PREVIEW_COLOR, opacity: 0.9 }, CHANNEL);
       } catch (error) {
         ctx.runtime.clearPreview(CHANNEL);
@@ -116,6 +131,8 @@ function contourGesture(
       }
     },
     commit() {
+      if (ended) return;
+      ended = true;
       ctx.runtime.clearPreview(CHANNEL);
       if (reshaped === undefined) return;
       const face = ctx.runtime.getAllRegionTopologies().find((topology) =>
@@ -149,6 +166,6 @@ function contourGesture(
       ctx.history.record({ kind: "region-edit", undo, redo: plan.ops });
       ctx.reportFeedback({ tone: "success", message: "Curva atualizada." });
     },
-    cancel() { ctx.runtime.clearPreview(CHANNEL); },
+    cancel() { ended = true; reshaped = undefined; ctx.runtime.clearPreview(CHANNEL); },
   };
 }

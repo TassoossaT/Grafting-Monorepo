@@ -1,5 +1,5 @@
 import type { PathFormationRecipe } from "../structure-types/path/path-recipe.ts";
-import type { ConstructionPosition } from "@/ports";
+import type { ConstructionPosition, CubicBezier, CurvePoint } from "@/ports";
 
 /**
  * A revision an effect expects to still be current when it lands.
@@ -78,6 +78,8 @@ export interface PathBrushEffect extends ConstructionOperationContext {
   readonly targetType: "path";
   readonly brushShape: BrushShape;
   readonly brushRegion: BrushGestureRegion;
+  /** Explicit pen controls, preserved without fitting the stroke. */
+  readonly authoredCurves?: readonly CubicBezier[];
   /** Raw brush observations, never pre-interpreted as path topology. */
   readonly observedElements: readonly BrushElementObservation[];
   readonly parameters: PathFormationParameters;
@@ -160,8 +162,26 @@ export function createPathBrushEffect(
     targetType: "path",
     brushShape: freezeShape(payload.brushShape),
     brushRegion: Object.freeze({ samples: Object.freeze(samples) }),
+    ...(payload.authoredCurves === undefined ? {} : { authoredCurves: freezeAuthoredCurves(payload.authoredCurves) }),
     observedElements: freezeObservedElements(payload.observedElements),
     parameters: freezeFormation(payload.parameters),
     expected: Object.freeze(revisions),
   });
+}
+
+/** Validates and freezes wire coordinates without computing curve geometry. */
+function freezeAuthoredCurves(curves: readonly CubicBezier[]): readonly CubicBezier[] {
+  if (!Array.isArray(curves) || curves.length === 0 || curves.length > 4096) throw new Error("authoredCurves must contain 1..4096 segments");
+  const frozen = curves.map((curve) => {
+    if (!Array.isArray(curve?.points) || curve.points.length !== 4) throw new Error("a cubic must have four points");
+    const points = curve.points.map((point: CurvePoint) => {
+      if (!Array.isArray(point) || point.length !== 3 || point.some((value) => !Number.isFinite(value) || Math.abs(value) > 1e12)) throw new Error("invalid cubic coordinate");
+      return Object.freeze([...point]) as CurvePoint;
+    }) as unknown as CubicBezier["points"];
+    return Object.freeze({ points: Object.freeze(points) });
+  });
+  for (let i = 1; i < frozen.length; i++) {
+    if (frozen[i - 1]!.points[3].some((value, axis) => value !== frozen[i]!.points[0][axis])) throw new Error("authoredCurves must be connected");
+  }
+  return Object.freeze(frozen);
 }

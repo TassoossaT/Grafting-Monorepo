@@ -32,6 +32,8 @@ export interface BrushShapeParams {
 }
 
 export interface PathBrushParams extends BrushShapeParams {
+  /** The creation gesture; omitted preserves the freehand brush. */
+  readonly creationMode?: "brush" | "pen";
   /** Product recipe; every variant still creates the single `path` surface type. */
   readonly pathKind: PathKind;
   /** Width of the flat traversable bed, in world units. */

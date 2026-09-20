@@ -27,6 +27,8 @@ test("real pointer lifecycle: final release sample, one drag commit, Escape and 
   const {runtime,session,calls}=fixture;
   const effects=[],listeners=new Map(),captures=new Set();
   const oldWindow=globalThis.window;
+  const oldHTMLElement=globalThis.HTMLElement;
+  globalThis.HTMLElement=class {};
   globalThis.window={addEventListener:(k,f)=>listeners.set(k,f),removeEventListener:(k)=>listeners.delete(k)};
   globalThis.__platformHook={effects,tool:platformContourTool};
   Object.assign(runtime,{
@@ -67,7 +69,10 @@ test("real pointer lifecycle: final release sample, one drag commit, Escape and 
     const click=(x,z)=>{handlers.onPointerDown(event(x,z));handlers.onPointerUp(event(x,z));handlers.onClick(event(x,z));};
     click(100,100);
     handlers.onPointerDown(event(150,100));
-    listeners.get("keydown")({key:"Escape"});
+    const input=Object.assign(new globalThis.HTMLElement(),{isContentEditable:false,closest:()=>true});
+    listeners.get("keydown")({key:"Escape",target:input,preventDefault(){throw Error("text input key was intercepted");}});
+    assert.equal(captures.size,1,"keys from form controls must not cancel a canvas gesture");
+    listeners.get("keydown")({key:"Escape",preventDefault(){}});
     assert.equal(captures.size,0);
     handlers.onPointerUp(event(150,100));handlers.onClick(event(150,100));
     click(200,200);click(240,200);click(240,240);click(200,240);click(200,200);
@@ -81,6 +86,7 @@ test("real pointer lifecycle: final release sample, one drag commit, Escape and 
   } finally {
     delete globalThis.__platformHook;
     globalThis.window=oldWindow;
+    globalThis.HTMLElement=oldHTMLElement;
     session.free();
   }
 });

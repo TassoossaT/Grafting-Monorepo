@@ -74,6 +74,11 @@ function PathBrushFields(props: { readonly params: PathBrushParams; readonly onC
   const { params, onChange } = props;
   return (
     <div style={{ display: "grid", gap: "0.6rem" }}>
+      <label>Criação <select value={params.creationMode ?? "brush"} onChange={(event) => onChange({ ...params, creationMode: event.currentTarget.value as "brush" | "pen" })}>
+        <option value="brush">Pincel</option>
+        <option value="pen">Caneta Bézier</option>
+      </select></label>
+      {params.creationMode === "pen" && <p>Clique para criar pontos; arraste para definir as alças. Enter confirma, Backspace remove o último ponto e Esc cancela. Clique no primeiro ponto para fechar a curva.</p>}
       {sliderRow("Largura do leito", params.bedWidth, 0.5, 12, 0.25, (bedWidth) => onChange({ ...params, bedWidth }))}
     </div>
   );
@@ -346,7 +351,7 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
           {params["edit-region"].curveAction === "width" && <label>Largura <input type="number" min="0.1" step="0.1" value={params["edit-region"].curveWidth ?? 4} onChange={(event) => onParamsChange("edit-region", {...params["edit-region"],curveWidth:Number(event.currentTarget.value)})}/></label>}
           {params["edit-region"].curveAction === "width" && <label>Largura no fim <input type="number" min="0.1" step="0.1" value={params["edit-region"].curveEndWidth ?? params["edit-region"].curveWidth ?? 4} onChange={(event) => onParamsChange("edit-region", {...params["edit-region"],curveEndWidth:Number(event.currentTarget.value)})}/></label>}
           <p>Para remover, desconectar ou fechar, clique na âncora. Para excluir um trecho ou mudar sua largura, clique no ponto central.</p>
-          <label>Alças da rua <select value={params["edit-region"].curveMode ?? "free"} onChange={(event) => onParamsChange("edit-region", { ...params["edit-region"], curveMode: event.currentTarget.value as "automatic" | "aligned" | "mirrored" | "free" })}>
+          <label>Alças Bézier <select value={params["edit-region"].curveMode ?? "free"} onChange={(event) => onParamsChange("edit-region", { ...params["edit-region"], curveMode: event.currentTarget.value as "automatic" | "aligned" | "mirrored" | "free" })}>
             <option value="free">Livres</option><option value="aligned">Alinhadas</option><option value="mirrored">Espelhadas</option><option value="automatic">Automáticas</option>
           </select></label>
           <p>Arraste uma alça para ajustar a curva. Arraste o ponto central para puxar o trecho; clique nele para inserir uma âncora.</p>

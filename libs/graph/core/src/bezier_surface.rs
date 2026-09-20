@@ -10,7 +10,7 @@ pub struct CurveRibbon {
 }
 /// Computes a ribbon from an explicit cubic and independently specified widths.
 /// The raw offset may overlap at tight turns; normalize it with the planar union before meshing.
-/// Stationary ground-plane tangents are rejected.
+/// Collapsed endpoint handles use their one-sided tangent; stationary interior tangents are rejected.
 pub fn ribbon(curve: CubicBezier, offsets: [f64; 2], accuracy: f64) -> Result<CurveRibbon, String> {
     ribbon_profile(curve, offsets, offsets, accuracy)
 }
@@ -45,7 +45,9 @@ pub fn ribbon_profile_at(
         return Err("offsets must be finite and ordered".into());
     }
     if parameters.len() < 2
-        || parameters.iter().any(|t| !t.is_finite() || !(0.0..=1.0).contains(t))
+        || parameters
+            .iter()
+            .any(|t| !t.is_finite() || !(0.0..=1.0).contains(t))
         || parameters.windows(2).any(|pair| pair[0] >= pair[1])
     {
         return Err("ribbon parameters must be at least two increasing values in [0, 1]".into());
@@ -54,12 +56,41 @@ pub fn ribbon_profile_at(
     let mut right = Vec::new();
     for &t in parameters {
         let position = curve.evaluate(t)?;
-        let d = curve.derivative(t)?;
+        let mut d = curve.derivative(t)?;
+        // A collapsed pen handle still has a well-defined one-sided direction.
+        // At an endpoint, the first distinct control determines that limit.
+        // Interior cusps and curves without any ground-plane direction remain invalid.
+        if d[0].hypot(d[2]) < 1e-10 && (t == 0.0 || t == 1.0) {
+            let endpoint = if t == 0.0 {
+                curve.points[0]
+            } else {
+                curve.points[3]
+            };
+            let controls = if t == 0.0 {
+                [curve.points[1], curve.points[2], curve.points[3]]
+            } else {
+                [curve.points[2], curve.points[1], curve.points[0]]
+            };
+            for control in controls {
+                let direction = std::array::from_fn(|axis| {
+                    if t == 0.0 {
+                        control[axis] - endpoint[axis]
+                    } else {
+                        endpoint[axis] - control[axis]
+                    }
+                });
+                if direction[0].hypot(direction[2]) >= 1e-10 {
+                    d = direction;
+                    break;
+                }
+            }
+        }
         let speed = d[0].hypot(d[2]);
         if speed < 1e-10 {
             return Err("stationary tangent prevents a valid ribbon".into());
         }
-        let offsets = std::array::from_fn::<_, 2, _>(|i| offsets[i] + (end_offsets[i] - offsets[i]) * t);
+        let offsets =
+            std::array::from_fn::<_, 2, _>(|i| offsets[i] + (end_offsets[i] - offsets[i]) * t);
         let point = |w: f64| {
             [
                 position[0] - d[2] / speed * w,
@@ -133,6 +164,34 @@ pub fn union_ribbons(ribbons: &[CurveRibbon]) -> Vec<Polygon> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn collapsed_endpoint_handles_keep_the_authored_curve_and_ribbon() {
+        let c = CubicBezier {
+            points: [[0., 2., 0.], [0., 2., 0.], [10., 2., 0.], [10., 2., 0.]],
+        };
+        let result = ribbon(c, [-1., 1.], 0.025).unwrap();
+        assert_eq!(
+            result.outer,
+            vec![[0., 2., -1.], [10., 2., -1.], [10., 2., 1.], [0., 2., 1.]]
+        );
+        let curved = CubicBezier {
+            points: [[0., 0., 0.], [0., 0., 0.], [5., 0., 5.], [10., 0., 0.]],
+        };
+        let result = ribbon(curved, [-1., 1.], 0.01).unwrap();
+        assert!((result.outer[0][0] - std::f64::consts::FRAC_1_SQRT_2).abs() < 1e-10);
+        assert!((result.outer[0][2] + std::f64::consts::FRAC_1_SQRT_2).abs() < 1e-10);
+    }
+    #[test]
+    fn stationary_interior_and_vertical_curves_remain_invalid() {
+        let cusp = CubicBezier {
+            points: [[0., 0., 0.], [1., 0., 0.], [1., 0., 0.], [0., 0., 0.]],
+        };
+        assert!(ribbon_profile_at(cusp, [-1., 1.], [-1., 1.], &[0., 0.5, 1.]).is_err());
+        let vertical = CubicBezier {
+            points: [[0., 0., 0.], [0., 1., 0.], [0., 2., 0.], [0., 3., 0.]],
+        };
+        assert!(ribbon(vertical, [-1., 1.], 0.025).is_err());
+    }
     #[test]
     fn wide_tight_curve_normalizes_to_a_surface() {
         let c = CubicBezier {

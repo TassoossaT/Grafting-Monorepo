@@ -856,7 +856,7 @@ Inserts and splits curves transactionally, enforcing independent height toleranc
 
 Computes a ribbon from an explicit cubic and independently specified widths.
 The raw offset may overlap at tight turns; normalize it with the planar union before meshing.
-Stationary ground-plane tangents are rejected.
+Collapsed endpoint handles use their one-sided tangent; stationary interior tangents are rejected.
 
 ### `pub fn grafting_graph_core::bezier_surface::ribbon_join(sections: &[[grafting_graph_core::bezier::CurvePoint; 2]]) -> core::result::Result<grafting_graph_core::bezier_surface::CurveRibbon, alloc::string::String>`
 

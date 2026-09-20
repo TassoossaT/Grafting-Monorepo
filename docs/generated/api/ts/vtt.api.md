@@ -4,6 +4,74 @@
 
 ### `function vtt.terrain-noise-wasm-adapter.createTerrainNoiseAdapter(): TerrainNoisePort`
 
+### `interface vtt.rendering.CurvePen`
+
+Renderer-neutral pen lifecycle. Bind pointer capture and keys in the consumer.
+
+### `method vtt.rendering.CurvePen.begin(point: P): void`
+
+Arms placement; never confirms scene data.
+
+### `method vtt.rendering.CurvePen.cancel(): void`
+
+Discards every pending anchor without confirmation.
+
+### `method vtt.rendering.CurvePen.end(point: P): void`
+
+Uses the final pointer sample and stores a draft anchor, or closes on release.
+
+### `method vtt.rendering.CurvePen.finish(closed?: boolean): boolean`
+
+Confirms once, when released and sufficiently populated; rejected drafts remain editable.
+
+### `method vtt.rendering.CurvePen.hover(point: P): void`
+
+Displays an extension without changing stored anchors.
+
+### `method vtt.rendering.CurvePen.move(point: P): void`
+
+Updates only the pending anchor.
+
+### `method vtt.rendering.CurvePen.removeLast(): void`
+
+Discards a pending placement, otherwise removes the last draft anchor.
+
+### `method vtt.rendering.CurvePen.snapshot(): CurvePenDraft<P>`
+
+Returns a frozen snapshot; caller-owned point values are not cloned.
+
+### `interface vtt.rendering.CurvePenAnchor`
+
+A caller-owned anchor and its two control positions. Point values must be immutable.
+
+### `property vtt.rendering.CurvePenAnchor.incoming: P`
+
+Incoming control position.
+
+### `property vtt.rendering.CurvePenAnchor.outgoing: P`
+
+Outgoing control position.
+
+### `property vtt.rendering.CurvePenAnchor.point: P`
+
+Anchor position.
+
+### `interface vtt.rendering.CurvePenDraft`
+
+Immutable authoring draft; no confirmed scene data is owned by the controller.
+
+### `property vtt.rendering.CurvePenDraft.anchors: readonly CurvePenAnchor<P>[]`
+
+Ordered anchors.
+
+### `property vtt.rendering.CurvePenDraft.closed: boolean`
+
+Whether the consumer should connect the final anchor to the first.
+
+### `function vtt.rendering.createCurvePen(options: CurvePenOptions<P>): CurvePen<P>`
+
+Creates an isolated pen controller without geometry, renderer, keyboard or style policy.
+
 ### `variable vtt.construction-grid-scene-item.CONSTRUCTION_GRID_EXTENT: 25`
 
 Half the grid's world-space span on each axis -- the board runs from `-extent` to `extent` on both X and Z.
@@ -430,7 +498,7 @@ the table" gets a contour thousands of segments long, hands all of it to the
 generator as a constraint, and pays for the whole network on a stroke that
 touched a metre of it.
 
-### `function vtt.path-cloud-transaction.commitPathCloudIntent(ctx: ToolContext, effect: PathBrushEffect, tolerance: number): void`
+### `function vtt.path-cloud-transaction.commitPathCloudIntent(ctx: ToolContext, effect: PathBrushEffect, tolerance: number): boolean`
 
 Runtime boundary for a PathCloud decision. This file deliberately contains
 no path geometry or topology policy: it reads snapshots, invokes the type,
@@ -1839,7 +1907,7 @@ the active tool defines.
 
 ### `property vtt.tool-context.ConstructionTool.id: Id`
 
-### `property vtt.tool-context.ConstructionTool.previewOnHover?: boolean`
+### `property vtt.tool-context.ConstructionTool.previewOnHover?: boolean | ((params: ToolParamsFor<Id>) => boolean)`
 
 Opt in to a stationary drawing preview between gestures.
 
@@ -1852,6 +1920,10 @@ Discards an unfinished tool draft on Escape, cancellation or tool switch.
 ### `method vtt.tool-context.ConstructionTool.onClick(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void`
 
 A press+release with no intervening drag. Batch/stamp tools (room) commit here instead of `onPointerUp`.
+
+### `method vtt.tool-context.ConstructionTool.onKeyDown(ctx: ToolContext, key: string, params: ToolParamsFor<Id>): boolean`
+
+Handles a tool key outside text controls; true prevents the browser default.
 
 ### `method vtt.tool-context.ConstructionTool.onPointerDown(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void`
 
@@ -2023,13 +2095,11 @@ here".
 
 ### `variable vtt.path-brush-tool.pathBrushTool: ConstructionTool<"path-brush">`
 
-A free path stroke, built on the same brush every other brush uses: press,
-drag, and on release the whole swept region is handed over once.
+Both authoring gestures use the same path recipe and transaction pipeline.
 
-Path creation follows the same ownership split as walls: this tool only
-chooses the interaction and emits a `PathBrushEffect`. The PathCloud owns
-the resulting graph and contour plan; the composition boundary commits its
-generic transaction without interpreting path topology.
+### `variable vtt.path-pen-tool.pathPenTool: ConstructionTool<"path-brush">`
+
+VTT binding for the reusable pen; only finish changes the construction session.
 
 ### `interface vtt.platform-contour-merge.DirectedContourEdge`
 
@@ -3053,6 +3123,10 @@ Who asked for an effect, and on which table. Only `operationId` crosses to the e
 
 One semantic path-paint intent. It contains no graph mutations.
 
+### `property vtt.surface-edit-contract.PathBrushEffect.authoredCurves?: readonly CubicBezier[]`
+
+Explicit pen controls, preserved without fitting the stroke.
+
 ### `property vtt.surface-edit-contract.PathBrushEffect.brushRegion: BrushGestureRegion`
 
 ### `property vtt.surface-edit-contract.PathBrushEffect.brushShape: BrushShape`
@@ -3672,7 +3746,7 @@ Converts graph-owned authoring data to sampled ribbons through the Rust port.
 
 Resolve legacy road authorship once using the canonical Rust conversion.
 
-### `function vtt.bezier-road-plan.planBezierRoad(input: { corridorId: string; miterLimit: number; offsets: readonly number[]; port: BezierPort; snapReach: number; snapshot: ConstructionGraphSnapshot; stroke: readonly ConstructionPosition[]; tolerance: number; topologies?: readonly ConstructionRegionTopology[] }): { chains: readonly SpineChainInput[]; controlPoints: ConstructionPosition[]; footprint: [number, number][][][]; graphPatch: ConstructionGraphPatch; polyline: ConstructionPosition[]; snapshot: ConstructionGraphSnapshot }`
+### `function vtt.bezier-road-plan.planBezierRoad(input: { authoredCurves?: readonly CubicBezier[]; corridorId: string; miterLimit: number; offsets: readonly number[]; port: BezierPort; snapReach: number; snapshot: ConstructionGraphSnapshot; stroke: readonly ConstructionPosition[]; tolerance: number; topologies?: readonly ConstructionRegionTopology[] }): { chains: readonly SpineChainInput[]; controlPoints: ConstructionPosition[]; footprint: [number, number][][][]; graphPatch: ConstructionGraphPatch; polyline: ConstructionPosition[]; snapshot: ConstructionGraphSnapshot }`
 
 Product identities and profile policy surround generic Rust fitting and connections.
 
@@ -4955,6 +5029,10 @@ How wide, measured along the wall rather than across the ground -- a curved wall
 ### `property vtt.tool-types.PathBrushParams.bedWidth: number`
 
 Width of the flat traversable bed, in world units.
+
+### `property vtt.tool-types.PathBrushParams.creationMode?: "brush" | "pen"`
+
+The creation gesture; omitted preserves the freehand brush.
 
 ### `property vtt.tool-types.PathBrushParams.miterLimit: number`
 

@@ -246,8 +246,8 @@ export const editRegionTool: ConstructionTool<"edit-region"> = {
 
   onCancel(): void { curveGesture?.cancel(); curveGesture = undefined; active = undefined; },
 
-  onPointerUp(ctx: ToolContext): void {
-    if (curveGesture) { curveGesture.commit(); curveGesture = undefined; return; }
+  onPointerUp(ctx: ToolContext, gesture: ToolGesture): void {
+    if (curveGesture) { curveGesture.move(gesture); curveGesture.commit(); curveGesture = undefined; return; }
     const drag = active;
     active = undefined;
     if (drag === undefined) return;

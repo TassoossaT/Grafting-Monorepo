@@ -2772,6 +2772,7 @@ export function createEngine(options: EngineOptions = {}): RenderEngine {
 
 // src/index.ts
 export type { Euler, Transform, Vec3 } from "./contracts/space.js";
+export type { CurvePen, CurvePenAnchor, CurvePenDraft, CurvePenOptions } from "./interaction/curve-pen.js";
 export type { Clock, ClockMode, ClockTick } from "./contracts/clock.js";
 export type { ClockOptions } from "./clock/create-clock.js";
 export type {
@@ -2811,6 +2812,40 @@ export type { Invalidation, InvalidationTracker } from "./invalidation/create-in
 export type { HeightfieldParams } from "./visual/heightfield-visual.js";
 export type { GridParams } from "./visual/grid-visual.js";
 export type { OrbitOptions, OrbitState, OrbitableView } from "./camera/orbit.js";
+
+// src/interaction/curve-pen.ts
+export interface CurvePenAnchor<P> {
+  /** Anchor position. */
+  readonly point: P;
+  /** Incoming control position. */
+  readonly incoming: P;
+  /** Outgoing control position. */
+  readonly outgoing: P;
+  }
+export interface CurvePenDraft<P> {
+  /** Ordered anchors. */
+  readonly anchors: readonly CurvePenAnchor<P>[];
+  /** Whether the consumer should connect the final anchor to the first. */
+  readonly closed: boolean;
+  }
+export interface CurvePenOptions<P> {
+  /** Constructs an anchor; an omitted drag means a plain click. */
+  readonly anchor: (point: P, drag?: P) => CurvePenAnchor<P>;
+  /** Determines whether a pointer position has changed. */
+  readonly equal: (a: P, b: P) => boolean;
+  /** Determines whether a released point requests closing the draft. */
+  readonly closes: (first: P, current: P) => boolean;
+  /** Receives temporary presentation only. */
+export interface CurvePen<P> {
+  /** Arms placement; never confirms scene data. */
+  begin(point: P): void;
+  /** Updates only the pending anchor. */
+  move(point: P): void;
+  /** Uses the final pointer sample and stores a draft anchor, or closes on release. */
+  end(point: P): void;
+  /** Displays an extension without changing stored anchors. */
+export function createCurvePen<P>(options: CurvePenOptions<P>): CurvePen<P> {
+  type State = { kind: "ready" } | { kind: "placing"; origin: P; current: P; closing: boolean } | { kind: "committing" };
 
 // src/invalidation/create-invalidation.ts
 export interface Invalidation {
@@ -3289,6 +3324,9 @@ export function constructionPreviewSceneItem(
   layer: CONSTRUCTION_PREVIEW_LAYER_ID,
   visual: {
 
+// src/adapters/rendering/index.ts
+export type { CurvePen, CurvePenAnchor, CurvePenDraft } from "@grafting/render-3d";
+
 // src/adapters/rendering/map-chunk-batching.ts
 export function chunkKeyForSurface(surface: SurfaceMeshResult, resolveCovering: CoveringResolver): string {
   const covering = resolveCovering(surface.surfaceType, surface.physical);
@@ -3574,8 +3612,8 @@ export function commitPathCloudIntent(
   ctx: ToolContext,
   effect: PathBrushEffect,
   tolerance: number,
-  ): void {
-  timeCommit("rua", () => commitUntimed(ctx, effect, tolerance));
+  ): boolean {
+  return timeCommit("rua", () => commitUntimed(ctx, effect, tolerance));
 
 // src/composition/tabletop/tabletop-runtime.ts
 export type TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed";
@@ -4032,10 +4070,7 @@ export interface ConstructionTool<Id extends ConstructionToolId> {
   readonly id: Id;
   defaultParams(): ToolParamsFor<Id>;
   /** Opt in to a stationary drawing preview between gestures. */
-  readonly previewOnHover?: boolean;
-  /** The tool's not-yet-committed ghost for the current gesture (or stationary hover, when `gesture.start === gesture.current`). */
-  previewFor?(gesture: ToolGesture, params: ToolParamsFor<Id>, ctx: ToolContext): PreviewDescriptor | undefined;
-  /** Left-button press. Continuous tools (brushes, move-node) start their gesture here. */
+  readonly previewOnHover?: boolean | ((params: ToolParamsFor<Id>) => boolean);
 export function scopedToolId(ctx: ToolContext | string, domain: string, suffix?: string | number): string {
   const tableId = typeof ctx === "string" ? ctx : ctx.tableId;
   return suffix !== undefined ? `${tableId}:${domain}:${suffix}` : `${tableId}:${domain}`;
@@ -4097,14 +4132,18 @@ export function panelRailOf(port: ContourPort, topology: ConstructionRegionTopol
   const walked = outer.map((edge) => ({
 
 // src/composition/tabletop/tools/paths/path-brush-tool.ts
-export const pathBrushTool = createBrushTool<"path-brush">({
+export const pathBrushTool: ConstructionTool<"path-brush"> = {
+  id: "path-brush", defaultParams: freehandTool.defaultParams, previewOnHover: (params) => params.creationMode === "pen",
+  previewFor(gesture, params, ctx) {
+  return implementation(params).previewFor?.(gesture, params, ctx);
+
+// src/composition/tabletop/tools/paths/path-pen-tool.ts
+export const pathPenTool: ConstructionTool<"path-brush"> = {
   id: "path-brush",
   defaultParams: () => DEFAULT_TOOL_PARAMS["path-brush"],
-  previewColor: () => PATH_COLOR,
-  // Bed plus shoulders: the road occupies this much of the brush, and only
-  // what is left over may be spent straightening the stroke.
-  halfWidth: pathHalfWidth,
-
+  previewOnHover: true,
+  previewFor(gesture, params, ctx) {
+  safely(ctx, () => sessions.get(ctx.runtime)?.pen.hover(gesture.current.point));
 
 // src/composition/tabletop/tools/platform/platform-contour-merge.ts
 export interface DirectedContourEdge {
@@ -4836,8 +4875,8 @@ export interface PathBrushEffect extends ConstructionOperationContext {
   readonly targetType: "path";
   readonly brushShape: BrushShape;
   readonly brushRegion: BrushGestureRegion;
-  /** Raw brush observations, never pre-interpreted as path topology. */
-  readonly observedElements: readonly BrushElementObservation[];
+  /** Explicit pen controls, preserved without fitting the stroke. */
+  readonly authoredCurves?: readonly CubicBezier[];
 export function createPathBrushEffect(
   payload: Omit<PathBrushEffect, keyof ConstructionOperationContext | "kind" | "targetScope" | "targetType" | "expected" | "observedElements"> &
   Partial<Pick<PathBrushEffect, "observedElements">>,
@@ -5221,9 +5260,9 @@ export function planBezierRoad(input: {
   readonly topologies?: readonly ConstructionRegionTopology[];
   readonly port: BezierPort;
   readonly stroke: readonly ConstructionPosition[];
+  readonly authoredCurves?: readonly CubicBezier[];
   readonly corridorId: string;
   readonly offsets: readonly number[];
-  readonly miterLimit: number;
 
 // src/features/edit-construction/structure-types/path/contour/contour-patch.ts
 export interface ExistingNode {
@@ -5790,13 +5829,13 @@ export interface BrushShapeParams {
   readonly rotationDegrees: number;
   }
 export interface PathBrushParams extends BrushShapeParams {
+  /** The creation gesture; omitted preserves the freehand brush. */
+  readonly creationMode?: "brush" | "pen";
   /** Product recipe; every variant still creates the single `path` surface type. */
   readonly pathKind: PathKind;
   /** Width of the flat traversable bed, in world units. */
   readonly bedWidth: number;
   /** Width of each optional raised shoulder, in world units. */
-  readonly shoulderWidth: number;
-  /** Non-negative shoulder elevation above the path bed. */
 export type PathKind = "trail" | "street" | "road" | "bridge";
 export interface WallParams {
   readonly wallType: "wall-white" | "wall-gray";

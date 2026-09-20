@@ -21,7 +21,7 @@ const PATH_COLOR = 0xc084fc;
  * the resulting graph and contour plan; the composition boundary commits its
  * generic transaction without interpreting path topology.
  */
-export const pathBrushTool = createBrushTool<"path-brush">({
+const freehandTool = createBrushTool<"path-brush">({
   id: "path-brush",
   defaultParams: () => DEFAULT_TOOL_PARAMS["path-brush"],
   previewColor: () => PATH_COLOR,
@@ -43,3 +43,20 @@ export const pathBrushTool = createBrushTool<"path-brush">({
     commitPathCloudIntent(ctx, effect, region.tolerance);
   },
 });
+
+import { pathPenTool } from "./path-pen-tool.ts";
+import type { ConstructionTool } from "../core/tool-context.ts";
+const implementation = (params: PathBrushParams) => params.creationMode === "pen" ? pathPenTool : freehandTool;
+
+/** Both authoring gestures use the same path recipe and transaction pipeline. */
+export const pathBrushTool: ConstructionTool<"path-brush"> = {
+  id: "path-brush", defaultParams: freehandTool.defaultParams, previewOnHover: (params) => params.creationMode === "pen",
+  previewFor(gesture, params, ctx) {
+    return implementation(params).previewFor?.(gesture, params, ctx);
+  },
+  onPointerDown(ctx, sample, params) { implementation(params).onPointerDown?.(ctx, sample, params); },
+  onPointerMove(ctx, gesture, params) { implementation(params).onPointerMove?.(ctx, gesture, params); },
+  onPointerUp(ctx, gesture, params) { implementation(params).onPointerUp?.(ctx, gesture, params); },
+  onKeyDown(ctx, key, params) { return implementation(params).onKeyDown?.(ctx, key, params) ?? false; },
+  onCancel(ctx) { pathPenTool.onCancel?.(ctx); },
+};

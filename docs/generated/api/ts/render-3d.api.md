@@ -167,6 +167,94 @@ except on the sample that follows an explicit Clock.advance.
 
 Simulated milliseconds since the clock was created. Frozen while paused.
 
+### `interface render-3d.CurvePen`
+
+Renderer-neutral pen lifecycle. Bind pointer capture and keys in the consumer.
+
+### `method render-3d.CurvePen.begin(point: P): void`
+
+Arms placement; never confirms scene data.
+
+### `method render-3d.CurvePen.cancel(): void`
+
+Discards every pending anchor without confirmation.
+
+### `method render-3d.CurvePen.end(point: P): void`
+
+Uses the final pointer sample and stores a draft anchor, or closes on release.
+
+### `method render-3d.CurvePen.finish(closed?: boolean): boolean`
+
+Confirms once, when released and sufficiently populated; rejected drafts remain editable.
+
+### `method render-3d.CurvePen.hover(point: P): void`
+
+Displays an extension without changing stored anchors.
+
+### `method render-3d.CurvePen.move(point: P): void`
+
+Updates only the pending anchor.
+
+### `method render-3d.CurvePen.removeLast(): void`
+
+Discards a pending placement, otherwise removes the last draft anchor.
+
+### `method render-3d.CurvePen.snapshot(): CurvePenDraft<P>`
+
+Returns a frozen snapshot; caller-owned point values are not cloned.
+
+### `interface render-3d.CurvePenAnchor`
+
+A caller-owned anchor and its two control positions. Point values must be immutable.
+
+### `property render-3d.CurvePenAnchor.incoming: P`
+
+Incoming control position.
+
+### `property render-3d.CurvePenAnchor.outgoing: P`
+
+Outgoing control position.
+
+### `property render-3d.CurvePenAnchor.point: P`
+
+Anchor position.
+
+### `interface render-3d.CurvePenDraft`
+
+Immutable authoring draft; no confirmed scene data is owned by the controller.
+
+### `property render-3d.CurvePenDraft.anchors: readonly CurvePenAnchor<P>[]`
+
+Ordered anchors.
+
+### `property render-3d.CurvePenDraft.closed: boolean`
+
+Whether the consumer should connect the final anchor to the first.
+
+### `interface render-3d.CurvePenOptions`
+
+Geometry and interaction policies supplied by the consumer.
+
+### `property render-3d.CurvePenOptions.anchor: (point: P, drag?: P) => CurvePenAnchor<P>`
+
+Constructs an anchor; an omitted drag means a plain click.
+
+### `property render-3d.CurvePenOptions.closes: (first: P, current: P) => boolean`
+
+Determines whether a released point requests closing the draft.
+
+### `property render-3d.CurvePenOptions.equal: (a: P, b: P) => boolean`
+
+Determines whether a pointer position has changed.
+
+### `property render-3d.CurvePenOptions.onFinish: (draft: CurvePenDraft<P>) => boolean`
+
+Accepts a complete draft synchronously; false or a thrown error preserves it for retry.
+
+### `property render-3d.CurvePenOptions.onPreview: (draft: CurvePenDraft<P>) => void`
+
+Receives temporary presentation only.
+
 ### `interface render-3d.EngineOptions`
 
 Everything needed to stand an engine up.
@@ -1045,6 +1133,10 @@ A real-time caller calls Clock.sample once a frame and never touches
 anything else. A turn-based caller creates the clock paused and calls
 Clock.advance when a turn resolves. Both produce the same tick shape,
 so nothing downstream needs to know which one it is serving.
+
+### `function render-3d.createCurvePen(options: CurvePenOptions<P>): CurvePen<P>`
+
+Creates an isolated pen controller without geometry, renderer, keyboard or style policy.
 
 ### `function render-3d.createEngine(options: EngineOptions): RenderEngine`
 

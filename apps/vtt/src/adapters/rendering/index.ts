@@ -1,4 +1,6 @@
 export { createRender3dSceneAdapter } from "./render-3d-scene-adapter.ts";
+export { createCurvePen } from "@grafting/render-3d";
+export type { CurvePen, CurvePenAnchor, CurvePenDraft } from "@grafting/render-3d";
 export { CONSTRUCTION_GRID_EXTENT, GRID_SNAP_UNIT } from "./construction-grid-scene-item.ts";
 export { chunkKeyFor, clipPlaneForCameraHeight } from "./map-chunk-key.ts";
 export {
