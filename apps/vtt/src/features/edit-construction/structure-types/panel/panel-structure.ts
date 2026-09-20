@@ -231,7 +231,13 @@ export function panelPolicyFor(role: EditRole): RolePolicy {
       // A whole bottom run drags horizontally; its own two corners each
       // carry their paired top corner through the same cascade the corner
       // role uses, so this needs no separate rule.
-      return { ...allowed(role, HORIZONTAL_AXES, "surface", pairedTopCorners), reshape: pairedRun };
+      //
+      // `transport: true` for the same reason `body` needs it: dragging a
+      // whole edge is a rigid translation of that segment, same as dragging
+      // the whole wall, just scoped to one run -- an opening standing in
+      // that run has to ride along, not a corner drag (which stretches the
+      // panel instead of translating it, so it stays without this flag).
+      return { ...allowed(role, HORIZONTAL_AXES, "surface", pairedTopCorners), reshape: pairedRun, transport: true };
     case PANEL_ROLES.topEdge:
       return { ...allowed(role, HEIGHT_AXIS, "surface"), reshape: pairedRun };
     case PANEL_ROLES.topSegmentSingle:
@@ -244,8 +250,9 @@ export function panelPolicyFor(role: EditRole): RolePolicy {
       return { ...allowed(role, HEIGHT_AXIS, "surface"), groupCascade: sameHeightGroupCascade };
     case PANEL_ROLES.post:
       // A vertical post moves as one rigid unit -- `moveEdge` already
-      // carries both of its endpoints.
-      return allowed(role, HORIZONTAL_AXES, "surface");
+      // carries both of its endpoints. `transport: true` for the same
+      // reason `bottomEdge` needs it: a rigid translation, not a stretch.
+      return { ...allowed(role, HORIZONTAL_AXES, "surface"), transport: true };
     case PANEL_ROLES.body:
       // Grabbing the body means the wall, not the panel under the pointer.
       // Moving one panel of a welded run drags the columns it shares with
@@ -254,9 +261,10 @@ export function panelPolicyFor(role: EditRole): RolePolicy {
       // by the same delta instead, and a lone panel is a cloud of one, so
       // this is not two behaviours.
       //
-      // `transport: true` because this is the one panel gesture that moves
-      // the *whole object*: without it, `panelMotionInfluences` only carries
-      // an opening's rim nodes vertically, and a horizontal drag of the wall
+      // `transport: true` because this, like `bottomEdge` and `post`, is a
+      // rigid horizontal translation, only scoped to the whole cloud instead
+      // of one segment: without it, `panelMotionInfluences` only carries an
+      // opening's rim nodes vertically, and a horizontal drag of the wall
       // leaves every door and window standing exactly where the wall used to
       // be instead of riding along with it.
       return { ...allowed(role, HORIZONTAL_AXES, "cloud"), transport: true };

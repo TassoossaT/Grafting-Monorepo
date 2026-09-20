@@ -33,9 +33,11 @@ const WALL_WITH_HOLE = {
   ],
 };
 
-test("the body role transports its holes -- moving the whole wall must carry any opening along with it", () => {
-  const policy = panelPolicyFor(PANEL_ROLES.body);
-  assert.equal(policy.transport, true);
+test("every rigid-translation role transports its holes -- a corner stretch is the only one that must not", () => {
+  assert.equal(panelPolicyFor(PANEL_ROLES.body).transport, true, "moving the whole wall must carry any opening along with it");
+  assert.equal(panelPolicyFor(PANEL_ROLES.bottomEdge).transport, true, "moving one whole run must carry an opening standing in it");
+  assert.equal(panelPolicyFor(PANEL_ROLES.post).transport, true, "moving one whole vertical post is the same rigid translation, scoped smaller still");
+  assert.notEqual(panelPolicyFor(PANEL_ROLES.bottomCorner).transport, true, "a corner stretch deforms the panel instead of translating it -- an opening elsewhere on the same panel must stay put");
 });
 
 test("panelMotionInfluences only carries a hole's rim horizontally when transport is requested", () => {

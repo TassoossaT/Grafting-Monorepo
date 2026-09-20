@@ -146,7 +146,25 @@ export function planEdit(
           for (const node of cloud.seed.nodes) seeds.push({ nodeId: node.id, delta: op.delta });
         } else throw new Error("A resposta de movimento deve produzir apenas deslocamentos.");
       }
-      const influences = topologies.flatMap((topology) => structureTypeFor(topology.surfaceType)?.motionInfluences?.(topology, policy.transport === true) ?? []);
+      // `policy.transport` is the *grabbed type's own* declaration -- each
+      // type gives it its own meaning (a wall carries its own openings; a
+      // platform carries whatever is welded on top of it, cloud after
+      // cloud), so it must reach only topologies of that *same type*, never
+      // an unrelated one. Broadcasting it to every topology regardless of
+      // type (as this once did) let one type's `transport` flag flip
+      // another, unrelated type's own `motionInfluences` behaviour: e.g.
+      // dragging a wall's bottom edge (`transport: true`, carrying its own
+      // openings) used to also turn on every *platform*'s own
+      // `transport`-gated linking, doubling how far the drag propagated
+      // through an unrelated structure welded onto the wall. Restricting to
+      // "the same cloud" would have been too narrow the other way: a
+      // platform's own whole-body drag deliberately reaches *other* platform
+      // clouds several storeys up, bridged only by the walls between them,
+      // never through a shared cloud membership.
+      const influences = topologies.flatMap((topology) => structureTypeFor(topology.surfaceType)?.motionInfluences?.(
+        topology,
+        policy.transport === true && topology.surfaceType === cloud.seed.surfaceType,
+      ) ?? []);
       const resolved = source.planMotion({ seeds, influences });
       const moved = new Map(resolved.moves.map((move) => [move.nodeId, move.position]));
       const resolvedMoves = new Map(moved);
