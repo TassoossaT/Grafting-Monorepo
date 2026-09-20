@@ -117,3 +117,28 @@ test("dragging an existing opening to a new spot on the wall moves it, and frees
     assert.ok(openingAt(ctx, 6) !== undefined, "the opening must now stand where it was dragged to");
   } finally { session.free(); }
 });
+
+test("grabbing still finds and drags an existing opening even when the renderer's own pick misses its face and reports no surfaceRef at all", () => {
+  const { runtime, session, ctx } = sessionFixture();
+  try {
+    wall(runtime);
+    openingTool.onClick(ctx, { point: { x: 1.5, y: 0, z: 0 } }, WINDOW);
+    assert.ok(openingAt(ctx, 1.5) !== undefined);
+
+    // No surfaceRef anywhere in this gesture -- `openingNear`'s geometric
+    // fallback must still resolve the opening standing exactly at this spot.
+    // y=1.5 lands inside the window's own pane (sill 1 to top 2), same as a
+    // real click would need to for the renderer to have any hope of hitting it.
+    openingTool.onPointerDown(ctx, { point: { x: 1.5, y: 1.5, z: 0 } }, WINDOW);
+    openingTool.onPointerUp(
+      ctx,
+      { start: { point: { x: 1.5, y: 1.5, z: 0 } }, current: { point: { x: 6, y: 1.5, z: 0 } } },
+      WINDOW,
+    );
+    openingTool.onClick(ctx, { point: { x: 6, y: 0, z: 0 } }, WINDOW);
+
+    const openings = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "opening");
+    assert.equal(openings.length, 1, "still a move, not a stacked create -- proves the grab (not the create path) handled it");
+    assert.ok(openingAt(ctx, 6) !== undefined, "the opening moved to where the drag released");
+  } finally { session.free(); }
+});

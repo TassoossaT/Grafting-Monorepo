@@ -81,13 +81,49 @@ function clearSelection(ctx: ToolContext): void {
   ctx.reportSelection(undefined);
 }
 
-/** The opening region under the pointer, if any -- the same pick-by-`surfaceRef` read `wallUnder` uses below, scoped to the opening's own surface type so clicking a placed window never gets read as clicking the wall behind it. */
+/** Same order of magnitude as walls' own `WALL_PICK_TOLERANCE` (`wall-shared.ts`) -- how far off an opening's own rim a click may land and still count as "on it". */
+const OPENING_PICK_TOLERANCE = 0.2;
+
+/**
+ * The closest opening whose own rim genuinely contains `point`, read off
+ * its host wall's rail -- the fallback for when the renderer's own pick
+ * missed the opening's face outright (a thin, `physical: false` panel is
+ * an easy miss at a grazing camera angle, the same reason
+ * `wallUnder`/`findWallSurfaceAt` below exists as a fallback for walls).
+ * Bounded by {@link OPENING_PICK_TOLERANCE} so a point nowhere near any
+ * wall cannot spuriously match one just because its rail's nearest
+ * projection happens to fall within some opening's travel/height range.
+ */
+function openingNear(ctx: ToolContext, point: ConstructionPosition): ConstructionRegionTopology | undefined {
+  let best: { readonly topology: ConstructionRegionTopology; readonly distanceSq: number } | undefined;
+  for (const topology of ctx.runtime.getAllRegionTopologies()) {
+    if (topology.surfaceType !== openingStructureType.surfaceType) continue;
+    const host = hostWallOf(ctx, topology);
+    if (host === undefined) continue;
+    const rail = panelRailOf(ctx.runtime, host.wall);
+    if (rail === undefined) continue;
+    const span = openingSpan(rail, topology);
+    if (span === undefined) continue;
+    const travel = rail.travelTo(point);
+    if (travel < span.from || travel > span.to || point.y < span.bottom || point.y > span.top) continue;
+    const projected = rail.positionAt(travel, point.y);
+    const distanceSq = (point.x - projected.x) ** 2 + (point.z - projected.z) ** 2;
+    if (distanceSq > OPENING_PICK_TOLERANCE ** 2) continue;
+    if (best === undefined || distanceSq < best.distanceSq) best = { topology, distanceSq };
+  }
+  return best?.topology;
+}
+
+/** The opening region under the pointer, if any -- pick-by-`surfaceRef` first (the same read `wallUnder` uses below), then `openingNear`'s geometric fallback, scoped to the opening's own surface type so clicking a placed window never gets read as clicking the wall behind it. */
 function openingUnder(ctx: ToolContext, sample: PointerSample): ConstructionRegionTopology | undefined {
   const picked = sample.surfaceRef;
-  if (picked === undefined) return undefined;
-  return ctx.runtime
-    .getAllRegionTopologies()
-    .find((topology) => topology.surfaceType === openingStructureType.surfaceType && surfaceRefFromNodeSet(topology.surfaceKey) === picked);
+  if (picked !== undefined) {
+    const hit = ctx.runtime
+      .getAllRegionTopologies()
+      .find((topology) => topology.surfaceType === openingStructureType.surfaceType && surfaceRefFromNodeSet(topology.surfaceKey) === picked);
+    if (hit !== undefined) return hit;
+  }
+  return openingNear(ctx, sample.point);
 }
 
 /** Starts a drag on `opening`, if it can be read as a rail-mounted rim -- `false` when its host wall cannot be found, leaving the gesture to fall through to placement. */
