@@ -265,7 +265,6 @@ const TOOL_LABELS: Partial<Record<ConstructionToolId, string>> = {
   "wall-line": "Parâmetros: Parede (Linha Reta)",
   "tower-stamp": "Parâmetros: Torre",
   opening: "Parâmetros: Abertura",
-  "opening-edit": "Editar Abertura",
   "terrain-sculpt": "Parâmetros: Escultura de Terreno",
 };
 
@@ -360,11 +359,9 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
       ) : activeTool === "wall-line" ? (
         <WallLineFields params={params["wall-line"]} onChange={(next) => onParamsChange("wall-line", next)} />
       ) : activeTool === "opening" ? (
-        <OpeningFields params={params.opening} onChange={(next) => onParamsChange("opening", next)} />
-      ) : activeTool === "opening-edit" ? (
         <div style={{ display: "grid", gap: "0.6rem" }}>
-          <OpeningFields params={params["opening-edit"]} onChange={(next) => onParamsChange("opening-edit", next)} />
-          <p>Clique numa abertura para selecionar. Com uma selecionada: ajuste os campos acima e clique na parede para mover ou redimensionar; Delete ou Backspace apaga e restaura a parede.</p>
+          <OpeningFields params={params.opening} onChange={(next) => onParamsChange("opening", next)} />
+          <p>Clique numa parede para abrir uma abertura nova. Clique numa existente para selecionar -- com uma selecionada, ajuste os campos acima e clique na parede para mover ou redimensionar; Delete ou Backspace apaga e restaura a parede.</p>
         </div>
       ) : activeTool === "tower-stamp" ? (
         <TowerStampFields params={params["tower-stamp"]} onChange={(next) => onParamsChange("tower-stamp", next)} />

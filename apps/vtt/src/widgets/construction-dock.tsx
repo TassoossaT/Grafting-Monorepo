@@ -61,7 +61,6 @@ export function ConstructionDock(props: ConstructionDockProps) {
   const isRampActive = activeTool === "slope-ramp";
   const isSpiralActive = activeTool === "slope-spiral";
   const isOpeningActive = activeTool === "opening";
-  const isOpeningEditActive = activeTool === "opening-edit";
 
   const items: ActionDockItem[] = [
     {
@@ -111,15 +110,10 @@ export function ConstructionDock(props: ConstructionDockProps) {
       key: "openings",
       label: "Aberturas",
       icon: "🚪",
-      tooltip: "Portas & Janelas (clique sobre uma parede para abrir)",
+      tooltip: "Portas & Janelas -- clique numa parede para abrir uma nova, clique numa existente para selecionar e editar (mover/redimensionar clicando na parede de novo, Delete apaga)",
       active: isOpeningActive,
-      childActive: isOpeningActive || isOpeningEditActive,
       disabled: !ready,
       onClick: () => onToolChange("opening"),
-      subItems: [
-        { key: "opening", label: "Criar", icon: "🚪", tooltip: "Criar Porta ou Janela (clique sobre uma parede)", active: isOpeningActive, disabled: !ready, onClick: () => onToolChange("opening") },
-        { key: "opening-edit", label: "Editar", icon: "✥", tooltip: "Mover, redimensionar (clique numa abertura, ajuste e clique na parede) ou apagar (Delete) uma abertura existente", active: isOpeningEditActive, disabled: !ready, onClick: () => onToolChange("opening-edit") },
-      ],
     },
     {
       key: "stairs",

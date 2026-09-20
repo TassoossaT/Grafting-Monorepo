@@ -310,9 +310,9 @@ export function panelStructureType(
  * host wall's own travel-and-height rail -- editing one always means
  * recomputing its rim and replacing the whole face, the same "regenerate"
  * escalation terrain uses for its own reason. `composition/tabletop/tools/
- * openings/opening-edit-tool.ts` is the dedicated tool that gesture actually
- * reaches, the same way terrain has `terrain-sculpt-tool.ts` instead of the
- * generic `edit-region-tool.ts`.
+ * openings/opening-tool.ts` is the one tool that gesture actually reaches
+ * (it both creates and edits), the same way terrain has
+ * `terrain-sculpt-tool.ts` instead of the generic `edit-region-tool.ts`.
  */
 const OPENING_ROLE = "opening-body";
 

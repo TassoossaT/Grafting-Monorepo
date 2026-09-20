@@ -3,6 +3,7 @@ import type {
   ConstructionNodeId,
   ConstructionOrientedEdgeUse,
   ConstructionPosition,
+  ConstructionRegionTopology,
   ConstructionSurfaceKey,
 } from "@/ports";
 
@@ -10,41 +11,153 @@ import type {
 // test reaches has to spell out any import it needs at run time. A
 // type-only `@/` import is fine -- those are erased.
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
-import { DEFAULT_TOOL_PARAMS, openingStructureType, panelRailOf, type PanelRail } from "../../../../features/edit-construction/index.ts";
+import { DEFAULT_TOOL_PARAMS, hasTrait, openingStructureType, panelRailOf, type PanelRail } from "../../../../features/edit-construction/index.ts";
 
 import { boundaryUsage, createBoundaryEdges, reverseGeometry } from "../core/boundary-edges.ts";
 import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext, type ToolGesture } from "../core/tool-context.ts";
 import { segmentsPreview } from "../shapes/preview-shapes.ts";
 import { findWallSurfaceAt } from "../walls/wall-shared.ts";
-import { rimCorners } from "./opening-shared.ts";
 import { commitChange } from "../../effects/effect-commit.ts";
 import { shapeChangeOfAddition } from "../../effects/shape-change.ts";
+import {
+  commitOpeningReplacement,
+  hostWallOf,
+  openingOverlapsSibling,
+  openingSpan,
+  rimCorners,
+} from "./opening-shared.ts";
 
 export const OPENING_COLOR: Record<OpeningParams["openingKind"], number> = {
   window: 0x7dd3fc,
   door: 0xd97706,
 };
 
+const EDIT_CHANNEL = "opening-edit";
+const OVERLAP_COLOR = 0xef4444;
+
 /**
- * One click stamps an opening onto the wall panel under the pointer.
+ * One tool for the whole life of an opening: click a wall to stamp a new
+ * door or window onto it; click an *existing* one to select it, then click
+ * its host wall again to move or resize it (a fresh rim replaces the old
+ * one, using whatever width/height/sill/kind the tool's own params
+ * currently hold -- adjust a slider and click again to resize, click
+ * somewhere else along the wall to move); Delete or Backspace, with a
+ * selection standing, removes it and restores the wall. One tool, not two
+ * modes, because that is how every other pick-then-act gesture in this app
+ * already works (`edit-region-tool.ts` grabs whatever is under the pointer
+ * rather than switching between a "select" and an "edit" tool).
  *
- * Two calls, because the wall already exists and only one of them creates
- * anything: the patch registers the rim and the face standing in it, then
- * the wall is opened along that very rim. The second walks the loop
- * backwards -- reversing a ring is not just flipping each use, the order
- * reverses too -- so the rim ends up bounding the wall on one side and the
- * opening on the other, used twice, joined the way any two faces are.
+ * Editing is always a full replace, never a nudge: `openingStructureType`'s
+ * own role (`panel-structure.ts`) resolves every gesture to `"regenerate"`
+ * for exactly this reason -- there is no meaningful "the same rim, moved a
+ * little" on a rail that may be curved.
  *
  * Where the opening lands is read off the panel itself, not off the ground:
  * `panel-rail.ts` flattens the panel into travel-and-height, so a curved
  * wall is travelled rather than spanned and a window sits on the curve
  * instead of cutting across it.
  */
+
+interface Selected {
+  readonly openingSurfaceKey: ConstructionSurfaceKey;
+  readonly wallSurfaceKey: ConstructionSurfaceKey;
+  readonly holeIndex: number;
+  readonly rail: PanelRail;
+}
+
+let selected: Selected | undefined;
+
+function clearSelection(ctx: ToolContext): void {
+  selected = undefined;
+  ctx.reportSelection(undefined);
+  ctx.runtime.clearPreview(EDIT_CHANNEL);
+}
+
+/** The opening region under the pointer, if any -- the same pick-by-`surfaceRef` read `wallUnder` uses below, scoped to the opening's own surface type so clicking a placed window never gets read as clicking the wall behind it. */
+function openingUnder(ctx: ToolContext, sample: PointerSample): ConstructionRegionTopology | undefined {
+  const picked = sample.surfaceRef;
+  if (picked === undefined) return undefined;
+  return ctx.runtime
+    .getAllRegionTopologies()
+    .find((topology) => topology.surfaceType === openingStructureType.surfaceType && surfaceRefFromNodeSet(topology.surfaceKey) === picked);
+}
+
+function select(ctx: ToolContext, opening: ConstructionRegionTopology): boolean {
+  const host = hostWallOf(ctx, opening);
+  if (host === undefined) return false;
+  const rail = panelRailOf(ctx.runtime, host.wall);
+  if (rail === undefined) return false;
+  const span = openingSpan(rail, opening);
+  if (span === undefined) return false;
+  selected = { openingSurfaceKey: opening.surfaceKey, wallSurfaceKey: host.wall.surfaceKey, holeIndex: host.holeIndex, rail };
+  const center = rail.positionAt((span.from + span.to) / 2, (span.bottom + span.top) / 2);
+  ctx.reportSelection({ id: surfaceRefFromNodeSet(opening.surfaceKey), point: center });
+  return true;
+}
+
+/** The move/resize preview for the currently selected opening, at the hovered spot on its host wall. */
+function editPreview(gesture: ToolGesture, params: OpeningParams, ctx: ToolContext): ReturnType<typeof segmentsPreview> | undefined {
+  if (selected === undefined) return undefined;
+  const wall = ctx.runtime.getRegionTopology(selected.wallSurfaceKey);
+  if (wall === undefined) return undefined;
+  const rail = panelRailOf(ctx.runtime, wall) ?? selected.rail;
+  const rim = rimCorners(rail, rail.travelTo(gesture.current.point), params);
+  if (rim === undefined) return undefined;
+  const overlaps = openingOverlapsSibling(rail, wall, rim.from, rim.to, rim.bottom, rim.top, selected.holeIndex);
+  const ring = [...rim.corners, rim.corners[0]!];
+  const positions: number[] = [];
+  for (let index = 0; index + 1 < ring.length; index += 1) {
+    const from = ring[index]!;
+    const to = ring[index + 1]!;
+    positions.push(from.x, from.y, from.z, to.x, to.y, to.z);
+  }
+  return segmentsPreview(Float32Array.from(positions), overlaps ? OVERLAP_COLOR : OPENING_COLOR[params.openingKind]);
+}
+
+/** Moves or resizes the selected opening to `sample`'s spot on its host wall -- the click that follows selecting one. */
+function commitEdit(ctx: ToolContext, sample: PointerSample, params: OpeningParams): void {
+  const current = selected;
+  if (current === undefined) return;
+  const wall = ctx.runtime.getRegionTopology(current.wallSurfaceKey);
+  if (wall === undefined) {
+    clearSelection(ctx);
+    ctx.reportFeedback({ tone: "error", message: "A parede desta abertura nao existe mais." });
+    return;
+  }
+  const rail = panelRailOf(ctx.runtime, wall) ?? current.rail;
+  const rim = rimCorners(rail, rail.travelTo(sample.point), params);
+  if (rim === undefined) {
+    ctx.reportFeedback({ tone: "error", message: "Abertura: nao cabe aqui." });
+    return;
+  }
+  if (openingOverlapsSibling(rail, wall, rim.from, rim.to, rim.bottom, rim.top, current.holeIndex)) {
+    ctx.reportFeedback({ tone: "error", message: "Abertura: sobreporia outra abertura ja existente nesta parede." });
+    return;
+  }
+
+  const causeId = scopedToolId(ctx, "opening-edit", ctx.nextSequence());
+  const { recorded, error } = commitOpeningReplacement(
+    ctx,
+    causeId,
+    { faceSurfaceKey: current.openingSurfaceKey, wallSurfaceKey: current.wallSurfaceKey, holeIndex: current.holeIndex },
+    { wallSurfaceKey: wall.surfaceKey, rail, from: rim.from, to: rim.to, bottom: rim.bottom, top: rim.top, openingKind: params.openingKind },
+  );
+  clearSelection(ctx);
+  if (error !== undefined) {
+    ctx.reportFeedback({ tone: "error", message: `Abertura: ${error}` });
+    return;
+  }
+  if (recorded) ctx.history?.record({ kind: "transaction", transactionId: causeId });
+  ctx.reportFeedback({ tone: "success", message: "Abertura movida/redimensionada." });
+}
+
 export const openingTool: ConstructionTool<"opening"> = {
   id: "opening",
   defaultParams: () => DEFAULT_TOOL_PARAMS.opening,
+  previewOnHover: true,
 
   previewFor(gesture: ToolGesture, params: OpeningParams, ctx: ToolContext) {
+    if (selected !== undefined) return editPreview(gesture, params, ctx);
     const placed = resolvePlacement(ctx, gesture.current, params);
     if (placed === undefined) return undefined;
     const ring = [...placed.corners, placed.corners[0]!];
@@ -58,6 +171,21 @@ export const openingTool: ConstructionTool<"opening"> = {
   },
 
   onClick(ctx: ToolContext, sample: PointerSample, params: OpeningParams): void {
+    const opening = openingUnder(ctx, sample);
+    if (opening !== undefined) {
+      if (select(ctx, opening)) {
+        ctx.reportFeedback({ tone: "info", message: "Abertura selecionada. Ajuste largura/altura/peitoril e clique na parede para mover ou redimensionar. Delete apaga." });
+      } else {
+        ctx.reportFeedback({ tone: "error", message: "Nao foi possivel identificar a parede desta abertura." });
+      }
+      return;
+    }
+
+    if (selected !== undefined) {
+      commitEdit(ctx, sample, params);
+      return;
+    }
+
     const placed = resolvePlacement(ctx, sample, params);
     if (placed === undefined) {
       ctx.reportFeedback({
@@ -128,6 +256,24 @@ export const openingTool: ConstructionTool<"opening"> = {
       message: params.openingKind === "door" ? "Porta aberta na parede." : "Janela aberta na parede.",
     });
   },
+
+  onDeleteKey(ctx: ToolContext): void {
+    if (selected === undefined) return;
+    const removal = { faceSurfaceKey: selected.openingSurfaceKey, wallSurfaceKey: selected.wallSurfaceKey, holeIndex: selected.holeIndex };
+    const causeId = scopedToolId(ctx, "opening-edit-delete", ctx.nextSequence());
+    const { recorded, error } = commitOpeningReplacement(ctx, causeId, removal, undefined);
+    clearSelection(ctx);
+    if (error !== undefined) {
+      ctx.reportFeedback({ tone: "error", message: `Abertura: ${error}` });
+      return;
+    }
+    if (recorded) ctx.history?.record({ kind: "transaction", transactionId: causeId });
+    ctx.reportFeedback({ tone: "success", message: "Abertura removida; parede restaurada." });
+  },
+
+  onCancel(ctx: ToolContext): void {
+    clearSelection(ctx);
+  },
 };
 
 interface Placement {
@@ -147,13 +293,19 @@ interface Placement {
  * it measures against the straight line between a panel's two ends. On a
  * curved wall that line runs through open air, so a click on the far side of
  * the arc is nowhere near it.
+ *
+ * Restricted to `"partition"`-trait topologies: an opening's own face is an
+ * upright panel too (built the same way, off the same rail), and without
+ * this an already-placed window would read as "a wall" the moment it was
+ * clicked, stamping a second, nested opening into it instead of the click
+ * ever reaching `openingUnder`'s own selection check above.
  */
 function wallUnder(ctx: ToolContext, sample: PointerSample): ConstructionSurfaceKey | undefined {
   const picked = sample.surfaceRef;
   if (picked !== undefined) {
     const hit = ctx.runtime
       .getAllRegionTopologies()
-      .find((topology) => surfaceRefFromNodeSet(topology.surfaceKey) === picked);
+      .find((topology) => hasTrait(topology.surfaceType, "partition") && surfaceRefFromNodeSet(topology.surfaceKey) === picked);
     if (hit !== undefined) return hit.surfaceKey;
   }
   return findWallSurfaceAt(ctx, sample.point);
