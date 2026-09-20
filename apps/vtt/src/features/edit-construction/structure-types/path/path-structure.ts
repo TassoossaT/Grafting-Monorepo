@@ -88,6 +88,7 @@ function pathEdgeRole(
 export function pathRoleFor(topology: ConstructionRegionTopology, target: EditTarget): EditRole {
   if (target.kind === "region") return PATH_ROLES.body;
   if (target.kind === "edge") return pathEdgeRole(topology, target.edgeId);
+  if (target.kind === "edge-zone") return PATH_ROLES.unknown;
   const address = parseStationNodeId(target.nodeId);
   if (address !== undefined) {
     return address.across === 0 ? PATH_ROLES.spine : PATH_ROLES.across;

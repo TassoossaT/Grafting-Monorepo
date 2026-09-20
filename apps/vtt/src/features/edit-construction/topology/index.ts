@@ -18,5 +18,7 @@ export { planarDifference, planarUnion } from "./planar-area.ts";
 export type { PlanarArea, PlanarPoint, PlanarPolygon, PlanarPort, PlanarRing } from "./planar-area.ts";
 export { contourCurve, contourGeometry, curveEdgesOf, curveHandles, curveSegments, reshapeCurve } from "./curve-handles.ts";
 export type { CurveEdge, CurveHandleIndex, CurveStore } from "./curve-handles.ts";
+export { panelHeightWidgetPick, panelHeightWidgetPickId, panelHeightWidgets } from "./panel-height-widget.ts";
+export type { PanelHeightWidgetZone } from "./panel-height-widget.ts";
 export { arcSweepOf, arcSweepsOf, closestOnContours, contourLengths, evaluateContour, parametersAtDistance, subContour } from "./contour-geometry.ts";
 export type { ContourPort, ContourSpan } from "./contour-geometry.ts";
