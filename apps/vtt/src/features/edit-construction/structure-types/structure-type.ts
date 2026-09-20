@@ -78,6 +78,21 @@ export interface RolePolicy {
    */
   readonly cascade?: (context: CascadeContext) => readonly AtomicEditOp[];
   /**
+   * Extra ops matched by a type's own declared value or trait across the
+   * *whole table*, not the grabbed cloud -- the opportunistic case, where
+   * what reaches together is decided at gesture time by comparing current
+   * state, not by any standing weld. A wall's per-segment height widget uses
+   * this to raise every other wall currently level with the one grabbed.
+   *
+   * Applied unconditionally, unlike {@link cascade}: the solver path
+   * (`edit-orchestrator.ts`) supersedes `cascade` whenever the type also
+   * declares `motionInfluences`, because that path derives structural
+   * cascades from the influence graph instead. A `groupCascade` match is not
+   * structural -- no influence link could express it -- so it is never
+   * superseded.
+   */
+  readonly groupCascade?: (context: CascadeContext) => readonly AtomicEditOp[];
+  /**
    * Present when the grabbed edge's curve may be reshaped through a curve
    * handle, returning the extra ops that reshape alongside it in the same
    * transaction -- a wall's top run following its bottom run. Absent means
@@ -117,6 +132,15 @@ export interface CascadeContext {
   /** The delta already constrained by the role's own axes. */
   readonly delta: { readonly x: number; readonly y: number; readonly z: number };
   readonly graphSnapshot?: ConstructionGraphSnapshot;
+  /**
+   * Every region topology currently on the table, present only where the
+   * caller already resolved it for the session's motion solver. A
+   * `groupCascade` reaches through this for matches outside the grabbed
+   * cloud -- e.g. every wall currently level with the grabbed one, wherever
+   * it stands -- which a cloud, scoped to one connected same-type run, can
+   * never contain by construction.
+   */
+  readonly allTopologies?: readonly ConstructionRegionTopology[];
 }
 
 /**

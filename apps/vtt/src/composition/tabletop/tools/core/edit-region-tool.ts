@@ -1,6 +1,7 @@
 import { beginCurveGesture } from "./curve-edit-gesture.ts";
 import {
   cloudNodes,
+  panelHeightWidgetPick,
   planEdit,
   refreshCloudTopology,
   resolveCloudTopology,
@@ -63,6 +64,14 @@ const xzDistanceToSegment = distanceToSegmentXZ;
  */
 function grabbedTarget(ctx: ToolContext, sample: PointerSample, elevation = false): GrabbedTarget | undefined {
   const topologies = ctx.runtime.getAllRegionTopologies();
+
+  const widget = sample.nodeId === undefined ? undefined : panelHeightWidgetPick(sample.nodeId);
+  if (widget !== undefined) {
+    const target: EditTarget = { kind: "edge-zone", edgeId: widget.edgeId, zone: widget.zone };
+    const topology = topologies.find((candidate) =>
+      [...candidate.outerLoops, ...candidate.holes].some((loop) => loop.some((edge) => edge.edgeId === widget.edgeId)));
+    return topology === undefined ? undefined : { seedKey: topology.surfaceKey, target };
+  }
 
   if (sample.nodeId !== undefined) {
     const target: EditTarget = { kind: "vertex", nodeId: sample.nodeId };

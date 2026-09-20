@@ -1,4 +1,4 @@
-import { curveEdgesOf, curveHandles } from "../../features/edit-construction/index.ts";
+import { curveEdgesOf, curveHandles, panelHeightWidgets } from "../../features/edit-construction/index.ts";
 import type { BezierPort } from "../../ports/bezier-port.ts";
 import type { ConstructionPlanarRequest, ConstructionPlanarShape, ConstructionMotionRequest, ConstructionMotionPlan, ConstructionNodeMotion } from "../../ports/index.ts";
 import { chunkKeyForSurface, CONSTRUCTION_GRID_EXTENT, mergeChunkBucket, mergeSurfaceMeshes } from "../../adapters/rendering/index.ts";
@@ -302,6 +302,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
   /** Last uploaded revision per node handle, mirroring `#chunkRevisions` but for the `"handles"` render layer. */
   readonly #nodeHandleRevisions = new Map<string, number>();
   #bezierHandleIds = new Set<string>();
+  #panelHeightWidgetIds = new Set<string>();
   #generation = 0;
   #snapshot: TabletopSnapshot;
 
@@ -593,6 +594,16 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#bezierHandleIds = live;
   }
 
+  /** Uploads/retires one widget per top run of every partition panel -- a wall's own per-segment height handle, mirroring `#syncBezierHandles`. */
+  #syncPanelHeightWidgets(origin: ChangeOrigin, causeId: string, generation: number): void {
+    if (typeof this.#construction.getAllRegionTopologies !== "function") return;
+    const widgets = panelHeightWidgets(this.#construction.getAllRegionTopologies());
+    const live = new Set(widgets.map((widget) => widget.id));
+    for (const id of this.#panelHeightWidgetIds) if (!live.has(id)) this.#removeNodeHandle(id, origin, causeId, generation);
+    for (const widget of widgets) this.#uploadNodeHandle(widget.id, widget.position, origin, causeId, generation);
+    this.#panelHeightWidgetIds = live;
+  }
+
   /** Removes one node's pickable handle -- the counterpart to {@link AppTabletopRuntime.#uploadNodeHandle}, needed once a mutation deletes a node outright. */
   #removeNodeHandle(nodeId: ConstructionNodeId, origin: ChangeOrigin, causeId: string, generation: number): void {
     const revision = (this.#nodeHandleRevisions.get(nodeId) ?? 0) + 1;
@@ -673,6 +684,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
       this.#uploadNodeHandle(node.id, node.position, origin, causeId, generation);
     }
     this.#syncBezierHandles(origin, causeId, generation);
+    this.#syncPanelHeightWidgets(origin, causeId, generation);
     return applyMapProjectionDeltas(map, deltas);
   }
 
@@ -704,8 +716,10 @@ export class AppTabletopRuntime implements TabletopRuntime {
       this.#uploadNodeHandle(nodeId, position, origin, causeId, generation);
     }
     // Curve handles sit off the anchors and follow a reshaped edge too, so
-    // they are re-placed whatever the edit moved or retyped.
+    // they are re-placed whatever the edit moved or retyped. Height widgets
+    // sit at a top run's midpoint for the same reason.
     this.#syncBezierHandles(origin, causeId, generation);
+    this.#syncPanelHeightWidgets(origin, causeId, generation);
     return applyMapProjectionDeltas(map, deltas);
   }
 
