@@ -10,6 +10,7 @@ import type {
 
 import type { AtomicEditOp, EditAxis, EditGesture, EditTarget } from "../orchestration/atomic-edit.ts";
 import type { CloudTopology } from "../topology/construction-cloud.ts";
+import type { ContourPort } from "../topology/contour-geometry.ts";
 import type { CreationInteraction } from "./creation-interaction.ts";
 import type { EffectKind, ReactionId } from "../effects/effect.ts";
 import type { PlanarArea } from "../topology/planar-area.ts";
@@ -281,6 +282,8 @@ export interface StructureView {
 export interface MotionContext {
   readonly graphSnapshot?: ConstructionGraphSnapshot;
   readonly port?: Pick<BezierPort, "curveBatch">;
+  /** Present alongside `port` -- what a rail projection (`panelRailOf`) needs, e.g. an opening's `deriveMotion` reprojecting its rim onto a corner-stretched host wall. */
+  readonly contourPort?: ContourPort;
 }
 
 /**

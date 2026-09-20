@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { enginePort } from "./engine-planar.mjs";
 
-import { panelRailOf } from "../src/composition/tabletop/tools/openings/panel-rail.ts";
+import { panelRailOf } from "../src/features/edit-construction/topology/panel-rail.ts";
 import { openingTool } from "../src/composition/tabletop/tools/openings/opening-tool.ts";
 /** Where a curve runs, asked of the engine -- the same answer the tool builds on. */
 function onCurve(geometry, start, end, at) {

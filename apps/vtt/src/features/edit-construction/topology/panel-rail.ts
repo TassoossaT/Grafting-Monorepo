@@ -11,8 +11,8 @@ import {
   evaluateContour,
   parametersAtDistance,
   subContour,
-} from "../../../../features/edit-construction/index.ts";
-import type { ContourPort, ContourSpan } from "../../../../features/edit-construction/index.ts";
+} from "./contour-geometry.ts";
+import type { ContourPort, ContourSpan } from "./contour-geometry.ts";
 
 /**
  * Reading an upright face as a rail: where its base runs, how tall it
@@ -25,6 +25,13 @@ import type { ContourPort, ContourSpan } from "../../../../features/edit-constru
  * straight, arced, or a Bezier. Every one of those questions is the engine's
  * to answer -- it owns what the curve is -- so this only chains the runs
  * together and asks.
+ *
+ * Lives in `features/edit-construction/topology/` rather than under a tool
+ * (its original home) because `panelStructureType`'s own `deriveMotion`
+ * needs it too -- an opening riding a corner-stretched, deformed wall is the
+ * same rail projection as placing one in the first place, and a structure
+ * type in `structure-types/` cannot reach into `composition/tabletop/tools/`
+ * without inverting the dependency the module layout documents.
  */
 
 /** How close two XZ points must be to count as one upright side rather than a run. */

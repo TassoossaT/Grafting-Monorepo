@@ -20,5 +20,7 @@ export { contourCurve, contourGeometry, curveEdgesOf, curveHandles, curveSegment
 export type { CurveEdge, CurveHandleIndex, CurveStore } from "./curve-handles.ts";
 export { panelHeightWidgetPick, panelHeightWidgetPickId, panelHeightWidgets } from "./panel-height-widget.ts";
 export type { PanelHeightWidgetZone } from "./panel-height-widget.ts";
+export { panelRailOf } from "./panel-rail.ts";
+export type { PanelRail } from "./panel-rail.ts";
 export { arcSweepOf, arcSweepsOf, closestOnContours, contourLengths, evaluateContour, parametersAtDistance, subContour } from "./contour-geometry.ts";
 export type { ContourPort, ContourSpan } from "./contour-geometry.ts";

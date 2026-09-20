@@ -4,12 +4,11 @@ import type { ConstructionRegionTopology, ConstructionSurfaceKey } from "@/ports
 // Relative, not `@/...`: the test runner resolves no aliases, so a module a
 // test reaches has to spell out any import it needs at run time. A
 // type-only `@/` import is fine -- those are erased.
-import { DEFAULT_TOOL_PARAMS, openingStructureType } from "../../../../features/edit-construction/index.ts";
+import { DEFAULT_TOOL_PARAMS, openingStructureType, panelRailOf, type PanelRail } from "../../../../features/edit-construction/index.ts";
 
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext, type ToolGesture } from "../core/tool-context.ts";
 import { segmentsPreview } from "../shapes/preview-shapes.ts";
-import { panelRailOf, type PanelRail } from "./panel-rail.ts";
 import { OPENING_COLOR } from "./opening-tool.ts";
 import {
   commitOpeningReplacement,

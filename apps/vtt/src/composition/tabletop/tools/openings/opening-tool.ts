@@ -10,13 +10,12 @@ import type {
 // test reaches has to spell out any import it needs at run time. A
 // type-only `@/` import is fine -- those are erased.
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
-import { DEFAULT_TOOL_PARAMS, openingStructureType } from "../../../../features/edit-construction/index.ts";
+import { DEFAULT_TOOL_PARAMS, openingStructureType, panelRailOf, type PanelRail } from "../../../../features/edit-construction/index.ts";
 
 import { boundaryUsage, createBoundaryEdges, reverseGeometry } from "../core/boundary-edges.ts";
 import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext, type ToolGesture } from "../core/tool-context.ts";
 import { segmentsPreview } from "../shapes/preview-shapes.ts";
 import { findWallSurfaceAt } from "../walls/wall-shared.ts";
-import { panelRailOf, type PanelRail } from "./panel-rail.ts";
 import { rimCorners } from "./opening-shared.ts";
 import { commitChange } from "../../effects/effect-commit.ts";
 import { shapeChangeOfAddition } from "../../effects/shape-change.ts";

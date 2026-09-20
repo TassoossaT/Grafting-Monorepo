@@ -10,13 +10,12 @@ import type {
 // Relative, not `@/...`: the test runner resolves no aliases, so a module a
 // test reaches has to spell out any import it needs at run time. A
 // type-only `@/` import is fine -- those are erased.
-import { openingStructureType } from "../../../../features/edit-construction/index.ts";
+import { openingStructureType, type PanelRail } from "../../../../features/edit-construction/index.ts";
 
 import { boundaryUsage, createBoundaryEdges, reverseGeometry } from "../core/boundary-edges.ts";
 import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
 import { commitChange } from "../../effects/effect-commit.ts";
 import { shapeChangeOfAddition } from "../../effects/shape-change.ts";
-import type { PanelRail } from "./panel-rail.ts";
 
 /**
  * What creating, moving, resizing and deleting an opening all share: the

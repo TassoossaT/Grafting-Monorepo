@@ -62,3 +62,30 @@ test("real WASM: dragging the wall's bottom edge sideways carries the opening st
     assert.ok(affected.has(opening.surfaceKey.join(" ")), "the opening's own face must be reported affected too");
   } finally { session.free(); }
 });
+
+test("real WASM: stretching one bottom corner reprojects the opening onto the deformed wall's rail", () => {
+  const { runtime, session } = sessionFixture();
+  try {
+    const wall = wallWithOpening(runtime);
+    const cloud = resolveCloudTopology(runtime, wall.surfaceKey);
+    // Drag "w:a-bottom" alone (the other bottom corner stays put): the panel
+    // stops being a rectangle, so there is no single delta the opening could
+    // simply be translated by.
+    const plan = planEdit(cloud, { surfaceKey: wall.surfaceKey, target: { kind: "vertex", nodeId: "w:a-bottom" }, delta: { x: -1, y: 0, z: 0 } }, runtime.getGraphSnapshot(), runtime);
+    assert.equal(plan.kind, "apply", plan.reason);
+    runtime.applyRegionEdit(plan.ops);
+    const after = new Map(runtime.getGraphSnapshot().nodes.map((n) => [n.id, n.position]));
+    assert.equal(after.get("w:a-bottom").x, -1);
+    assert.equal(after.get("w:a-top").x, -1, "the paired top corner still follows through the wall's own unconditional upright link");
+    assert.equal(after.get("w:b-bottom").x, 4, "the untouched corner stays put -- this is a deformation, not a translation");
+
+    // The wall's new rail runs from x=-1 to x=4 (length 5, still a straight
+    // line): the opening's old travel positions (1 and 2, out of the old
+    // rail's length 4) land at x=0 and x=1 on it.
+    assert.equal(after.get("h:0").x, 0, "hole corner at old travel 1 rides the new rail");
+    assert.equal(after.get("h:1").x, 1, "hole corner at old travel 2 rides the new rail");
+    assert.equal(after.get("h:2").x, 1);
+    assert.equal(after.get("h:3").x, 0);
+    assert.equal(after.get("h:0").y, 1, "height is untouched by the reprojection -- the unconditional Y link already handles it");
+  } finally { session.free(); }
+});

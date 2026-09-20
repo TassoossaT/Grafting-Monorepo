@@ -102,7 +102,7 @@ export function planEdit(
   cloud: CloudTopology,
   gesture: EditGesture,
   graphSnapshot?: ConstructionGraphSnapshot,
-  source?: Pick<ConstructionSessionPort, "planMotion" | "getAllRegionTopologies"> & Partial<Pick<BezierPort, "curveBatch">>,
+  source?: Pick<ConstructionSessionPort, "planMotion" | "getAllRegionTopologies" | "queryContours"> & Partial<Pick<BezierPort, "curveBatch">>,
 ): EditPlan {
   const policy = resolvePolicy(cloud.seed, gesture.target);
   if (policy.resolve.kind === "deny") {
@@ -171,7 +171,14 @@ export function planEdit(
       for (const surfaceType of new Set(topologies.map((topology) => topology.surfaceType))) {
         const derive = structureTypeFor(surfaceType)?.deriveMotion;
         if (!derive) continue;
-        for (const [nodeId, position] of derive(topologies.filter((topology) => topology.surfaceType === surfaceType), resolvedMoves, { graphSnapshot, port: source.curveBatch ? source as Pick<BezierPort, "curveBatch"> : undefined })) {
+        // The *whole table*, not only this type's own topologies: an
+        // opening's `deriveMotion` has to read its host wall's shape to
+        // reproject its rim onto it, and a wall is a different type.
+        for (const [nodeId, position] of derive(topologies, resolvedMoves, {
+          graphSnapshot,
+          port: source.curveBatch ? source as Pick<BezierPort, "curveBatch"> : undefined,
+          contourPort: source,
+        })) {
           if (!moved.has(nodeId)) moved.set(nodeId, position);
         }
       }
