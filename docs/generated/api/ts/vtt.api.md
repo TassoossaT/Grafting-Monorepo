@@ -571,6 +571,10 @@ Where points project onto the curves a surface was swept from. See `Construction
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.redoTransaction(transactionId: string, origin: ChangeOrigin): void`
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.removeHole(request: { index: number; surfaceKey: ConstructionSurfaceKey }, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
+
+Closes one of a face's openings back up, by index, reclaiming whatever rim nothing stands on anymore -- the counterpart to addHole.
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
 Unregisters a surface outright, prunes orphaned nodes, and folds the outcome into the running map. See `ConstructionSessionPort.removeSurface`.
@@ -721,6 +725,10 @@ Pure contour geometry questions. See `ConstructionSessionPort.queryContours`.
 Where points project onto the curves a surface was swept from. See `ConstructionSessionPort.queryField`.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.redoTransaction(transactionId: string, origin: ChangeOrigin): void`
+
+### `method vtt.tabletop-runtime.TabletopRuntime.removeHole(request: { index: number; surfaceKey: ConstructionSurfaceKey }, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
+
+Closes one of a face's openings back up, by index, reclaiming whatever rim nothing stands on anymore -- the counterpart to addHole.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.removeSurface(request: RemoveSurfaceRequest, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
@@ -1853,6 +1861,10 @@ Discards an unfinished tool draft on Escape, cancellation or tool switch.
 
 A press+release with no intervening drag. Batch/stamp tools (room) commit here instead of `onPointerUp`.
 
+### `method vtt.tool-context.ConstructionTool.onDeleteKey(ctx: ToolContext): void`
+
+Delete/Backspace with the tool active -- a tool holding a selection (an opening picked for editing, say) removes it here.
+
 ### `method vtt.tool-context.ConstructionTool.onPointerDown(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void`
 
 Left-button press. Continuous tools (brushes, move-node) start their gesture here.
@@ -1959,6 +1971,69 @@ One failed stage, on the console, with everything known about it.
 Something a commit survived but should not have had to.
 
 ### `function vtt.tool-registry.toolFor(id: Id): ConstructionTool<Id>`
+
+### `variable vtt.opening-edit-tool.openingEditTool: ConstructionTool<"opening-edit">`
+
+### `interface vtt.opening-shared.OpeningRemoval`
+
+What to remove before (re)placing, when replacing or deleting an existing opening.
+
+### `property vtt.opening-shared.OpeningRemoval.faceSurfaceKey: ConstructionSurfaceKey`
+
+### `property vtt.opening-shared.OpeningRemoval.holeIndex: number`
+
+### `property vtt.opening-shared.OpeningRemoval.wallSurfaceKey: ConstructionSurfaceKey`
+
+### `variable vtt.opening-shared.MARGIN: 0.15`
+
+How much wall must be left standing to either side of an opening, and above and below it.
+
+### `function vtt.opening-shared.commitOpeningReplacement(ctx: ToolContext, causeId: string, removal: OpeningRemoval | undefined, place: OpeningPlacement & { openingKind: "window" | "door" } | undefined): { error?: string; recorded: boolean }`
+
+One transaction: optionally close an existing opening back up (its face
+deleted, its hole removed from the host wall -- restoring the wall,
+criterion 3 of #231), then optionally stand a new one in a fresh rim
+(criterion 1, move/resize -- delete and recreate rather than nudging the
+existing nodes, since a curved wall's rail parametrization has no
+meaningful notion of "the same rim, stretched"). Passing both is a move
+or a resize; passing only `removal` is a delete; passing only `place` is
+a plain creation (what `opening-tool.ts` itself still does).
+
+### `function vtt.opening-shared.deriveOpeningParams(rail: PanelRail, topology: ConstructionRegionTopology): OpeningParams | undefined`
+
+An existing opening's own current parameters, read back off its rim --
+the inverse of rimCorners. `openingKind` has no field of its own
+to read (only `rimCorners`' own floor clamp cared, at creation time), so
+it is guessed from how close the sill sits to the floor: a genuine door
+is indistinguishable from a window whose sill someone dragged to zero,
+and that is fine -- the same shape means the same thing either way.
+
+### `function vtt.opening-shared.hostWallOf(ctx: ToolContext, openingTopology: ConstructionRegionTopology): { holeIndex: number; wall: ConstructionRegionTopology } | undefined`
+
+The wall hosting `openingTopology`, and which of its holes is this
+opening's own rim -- found the same way a curve handle finds which face
+owns a grabbed edge (`curve-edit-gesture.ts`'s `contourGesture`): by
+which topology's boundary already references one of the opening's own
+edges, since the hole and the face share it.
+
+### `function vtt.opening-shared.openingOverlapsSibling(rail: PanelRail, wall: ConstructionRegionTopology, from: number, to: number, bottom: number, top: number, excludeHoleIndex?: number): boolean`
+
+Whether an opening at `[from, to] x [bottom, top]` would overlap any
+*other* hole already on `wall` -- a whole extra opening's worth of
+travel-and-height rectangle, not merely a touching edge (the `MARGIN`
+both rims already keep is what makes two side-by-side openings legal).
+`excludeHoleIndex` is the opening's own hole, when moving/resizing one
+that already exists -- it must never collide with itself.
+
+### `function vtt.opening-shared.openingSpan(rail: PanelRail, topology: ConstructionRegionTopology): { bottom: number; from: number; to: number; top: number } | undefined`
+
+The travel span and height range an existing opening's rim already occupies.
+
+### `function vtt.opening-shared.rimCorners(rail: PanelRail, at: number, params: OpeningParams): { bottom: number; corners: readonly ConstructionPosition[]; from: number; to: number; top: number } | undefined`
+
+The four corners of an opening, in the order its own face walks them, plus the travel span they sit on -- needed to declare the rim's own bottom edge with PanelRail.geometryBetween rather than the whole rail's curvature.
+
+### `variable vtt.opening-tool.OPENING_COLOR: Record<OpeningParams["openingKind"], number>`
 
 ### `variable vtt.opening-tool.openingTool: ConstructionTool<"opening">`
 
@@ -3618,6 +3693,12 @@ a door and a window are the same panel on the rim the wall shares with it,
 and differ only in the parameters that placed it (a door sits on the floor,
 a window on its sill) and in what is drawn there.
 
+Its own role table, not `panelStructureType`'s: a wall's corners and edges
+move independently of each other, but an opening's four corners are one
+rectangle on its host wall's rail, and no combination of the generic
+vertex/edge roles keeps that rectangle valid while dragging one part of
+it -- see openingPolicyFor.
+
 ### `variable vtt.panel-structure.PANEL_ROLES: { body: "panel-body"; bottomCorner: "panel-bottom-corner"; bottomEdge: "panel-bottom-edge"; post: "panel-post"; topCorner: "panel-top-corner"; topEdge: "panel-top-edge"; unknown: "panel-unknown" }`
 
 The shared role model for every type generated by `extrude_path`: an
@@ -5038,6 +5119,10 @@ Perlin `scale` -- smaller values are smoother/larger-scale terrain features.
 
 ### `property vtt.tool-types.ToolParamsByTool.opening: OpeningParams`
 
+### `property vtt.tool-types.ToolParamsByTool.opening-edit: OpeningParams`
+
+Moving, resizing or deleting an existing opening -- the same shape as creating one, since a resize is a recreation at different corners.
+
 ### `property vtt.tool-types.ToolParamsByTool.path-brush: PathBrushParams`
 
 ### `property vtt.tool-types.ToolParamsByTool.platform-contour: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; tolerance?: number }`
@@ -5124,7 +5209,7 @@ Length of a panel's own vertical edge, in world units.
 
 ### `type vtt.tool-types.BrushShapeKind = "circle" | "square" | "hexagon"`
 
-### `type vtt.tool-types.ConstructionToolId = "navigate" | "edit-region" | "platform-contour" | "slope-ramp" | "slope-spiral" | "roof" | "path-brush" | "wall-brush" | "wall-line" | "tower-stamp" | "opening" | "terrain-sculpt"`
+### `type vtt.tool-types.ConstructionToolId = "navigate" | "edit-region" | "platform-contour" | "slope-ramp" | "slope-spiral" | "roof" | "path-brush" | "wall-brush" | "wall-line" | "tower-stamp" | "opening" | "opening-edit" | "terrain-sculpt"`
 
 The construction-tool vocabulary every layer (widgets, composition) needs
 to agree on: which tools exist, what each one's parameters look like, and

@@ -17,45 +17,14 @@ import { scopedToolId, type ConstructionTool, type PointerSample, type ToolConte
 import { segmentsPreview } from "../shapes/preview-shapes.ts";
 import { findWallSurfaceAt } from "../walls/wall-shared.ts";
 import { panelRailOf, type PanelRail } from "./panel-rail.ts";
+import { rimCorners } from "./opening-shared.ts";
 import { commitChange } from "../../effects/effect-commit.ts";
 import { shapeChangeOfAddition } from "../../effects/shape-change.ts";
 
-/** How much wall must be left standing to either side of an opening, and above and below it. */
-const MARGIN = 0.15;
-
-const OPENING_COLOR: Record<OpeningParams["openingKind"], number> = {
+export const OPENING_COLOR: Record<OpeningParams["openingKind"], number> = {
   window: 0x7dd3fc,
   door: 0xd97706,
 };
-
-/** The four corners of an opening, in the order its own face walks them, plus the travel span they sit on -- needed to declare the rim's own bottom edge with {@link PanelRail.geometryBetween} rather than the whole rail's curvature. */
-function rimCorners(
-  rail: PanelRail,
-  at: number,
-  params: OpeningParams,
-): { readonly corners: readonly ConstructionPosition[]; readonly from: number; readonly to: number } | undefined {
-  const half = params.width / 2;
-  const from = Math.max(MARGIN, Math.min(at - half, rail.length - MARGIN - params.width));
-  const to = from + params.width;
-  if (to > rail.length - MARGIN) return undefined;
-
-  // A door sits on the floor; anything else starts at its own sill. Either
-  // way the wall has to survive above it.
-  const bottom = rail.baseY + Math.max(params.openingKind === "door" ? 0 : MARGIN, params.sill);
-  const top = bottom + params.height;
-  if (top > rail.topY - MARGIN) return undefined;
-
-  return {
-    corners: [
-      rail.positionAt(from, bottom),
-      rail.positionAt(to, bottom),
-      rail.positionAt(to, top),
-      rail.positionAt(from, top),
-    ],
-    from,
-    to,
-  };
-}
 
 /**
  * One click stamps an opening onto the wall panel under the pointer.

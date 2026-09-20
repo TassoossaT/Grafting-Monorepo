@@ -57,6 +57,7 @@ const TOOL_LABEL: Record<ConstructionToolId, string> = {
   "wall-line": "Pincel de Parede (Linha Reta)",
   "tower-stamp": "Torre",
   opening: "Abertura (Porta ou Janela)",
+  "opening-edit": "Editar Abertura",
   "terrain-sculpt": "Escultura de Terreno",
 };
 

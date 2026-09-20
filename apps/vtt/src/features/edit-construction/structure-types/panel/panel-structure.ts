@@ -220,14 +220,48 @@ export function panelStructureType(
 }
 
 /**
+ * An opening's own single role: however it is grabbed, there is no atomic
+ * expression for "move" or "resize" a rectangle parametrized against its
+ * host wall's own travel-and-height rail -- editing one always means
+ * recomputing its rim and replacing the whole face, the same "regenerate"
+ * escalation terrain uses for its own reason. `composition/tabletop/tools/
+ * openings/opening-edit-tool.ts` is the dedicated tool that gesture actually
+ * reaches, the same way terrain has `terrain-sculpt-tool.ts` instead of the
+ * generic `edit-region-tool.ts`.
+ */
+const OPENING_ROLE = "opening-body";
+
+function openingRoleFor(): EditRole {
+  return OPENING_ROLE;
+}
+
+function openingPolicyFor(role: EditRole): RolePolicy {
+  return {
+    role,
+    resolve: { kind: "regenerate", reason: "uma abertura muda de lugar ou de tamanho recriando seu proprio rim, nao arrastando um vertice isolado." },
+    axes: [],
+    scope: "surface",
+  };
+}
+
+/**
  * The face standing in a hole a wall was opened by. One structural type:
  * a door and a window are the same panel on the rim the wall shares with it,
  * and differ only in the parameters that placed it (a door sits on the floor,
  * a window on its sill) and in what is drawn there.
+ *
+ * Its own role table, not `panelStructureType`'s: a wall's corners and edges
+ * move independently of each other, but an opening's four corners are one
+ * rectangle on its host wall's rail, and no combination of the generic
+ * vertex/edge roles keeps that rectangle valid while dragging one part of
+ * it -- see {@link openingPolicyFor}.
  */
-export const openingStructureType = panelStructureType(
-  "opening",
-  "Abertura",
-  "one face standing in an opening, on the rim the wall shares with it",
-  [],
-);
+export const openingStructureType: StructureTypeDefinition = Object.freeze({
+  surfaceType: "opening",
+  label: "Abertura",
+  creation: "one face standing in an opening, on the rim the wall shares with it",
+  traits: Object.freeze([]),
+  roleFor: openingRoleFor,
+  policyFor: openingPolicyFor,
+  interactionOver: panelInteractionOver,
+});
