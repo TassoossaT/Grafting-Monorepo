@@ -128,13 +128,18 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
   useEffect(() => {
     const tool = toolFor(options.activeTool);
     const cancel = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || !tool.onCancel) return;
-      tool.onCancel(ctx);
-      const active = gestureRef.current;
-      if (active?.captureTarget.hasPointerCapture(active.pointerId)) active.captureTarget.releasePointerCapture(active.pointerId);
-      gestureRef.current = null;
-      suppressClickRef.current = true;
-      options.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
+      if (event.key === "Escape" && tool.onCancel) {
+        tool.onCancel(ctx);
+        const active = gestureRef.current;
+        if (active?.captureTarget.hasPointerCapture(active.pointerId)) active.captureTarget.releasePointerCapture(active.pointerId);
+        gestureRef.current = null;
+        suppressClickRef.current = true;
+        options.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
+        return;
+      }
+      if ((event.key === "Delete" || event.key === "Backspace") && tool.onDeleteKey) {
+        tool.onDeleteKey(ctx);
+      }
     };
     window.addEventListener("keydown",cancel);
     return () => {

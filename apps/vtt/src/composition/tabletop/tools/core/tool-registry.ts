@@ -6,6 +6,7 @@ import type { ConstructionToolId } from "@/features/edit-construction";
 import type { ConstructionTool } from "./tool-context.ts";
 import { editRegionTool } from "./edit-region-tool.ts";
 import { navigateTool } from "./navigate-tool.ts";
+import { openingEditTool } from "../openings/opening-edit-tool.ts";
 import { openingTool } from "../openings/opening-tool.ts";
 import { pathBrushTool } from "../paths/path-brush-tool.ts";
 import { terrainSculptTool } from "../terrain/terrain-sculpt-tool.ts";
@@ -30,6 +31,7 @@ const TOOL_REGISTRY: { readonly [Id in ConstructionToolId]: ConstructionTool<Id>
   "wall-line": wallLineTool,
   "tower-stamp": towerStampTool,
   opening: openingTool,
+  "opening-edit": openingEditTool,
   "terrain-sculpt": terrainSculptTool,
 };
 

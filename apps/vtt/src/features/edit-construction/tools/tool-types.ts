@@ -18,6 +18,7 @@ export type ConstructionToolId =
   | "wall-line"
   | "tower-stamp"
   | "opening"
+  | "opening-edit"
   | "terrain-sculpt";
 
 export type BrushShapeKind = "circle" | "square" | "hexagon";
@@ -194,6 +195,8 @@ export interface ToolParamsByTool {
   readonly "wall-line": WallParams;
   readonly "tower-stamp": TowerStampParams;
   readonly opening: OpeningParams;
+  /** Moving, resizing or deleting an existing opening -- the same shape as creating one, since a resize is a recreation at different corners. */
+  readonly "opening-edit": OpeningParams;
   readonly "terrain-sculpt": TerrainSculptParams;
 }
 
@@ -220,6 +223,7 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   "wall-line": Object.freeze({ wallType: "wall-white", height: 3 }),
   "tower-stamp": Object.freeze({ wallType: "wall-white", height: 3, radius: TOWER_RADIUS_PRESETS[1] }),
   opening: Object.freeze({ openingKind: "window", width: 1.2, height: 1.2, sill: 1 }),
+  "opening-edit": Object.freeze({ openingKind: "window", width: 1.2, height: 1.2, sill: 1 }),
   "terrain-sculpt": Object.freeze({
     faceSize: 2,
     brushRadius: 6,

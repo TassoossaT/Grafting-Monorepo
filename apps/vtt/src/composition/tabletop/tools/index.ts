@@ -38,6 +38,7 @@ export { fitPath, type FittedEdge } from "./core/stroke-fitting.ts";
 
 
 export { openingTool } from "./openings/opening-tool.ts";
+export { openingEditTool } from "./openings/opening-edit-tool.ts";
 export { panelRailOf, type PanelRail } from "./openings/panel-rail.ts";
 
 export { towerStampTool } from "./tower/tower-stamp-tool.ts";

@@ -141,6 +141,15 @@ export interface TabletopRuntime extends BezierPort {
     origin: ChangeOrigin,
     causeId: string,
   ): RegionEditOutcome;
+  /** Closes one of a face's openings back up, by index, reclaiming whatever rim nothing stands on anymore -- the counterpart to {@link addHole}. */
+  removeHole(
+    request: {
+      readonly surfaceKey: ConstructionSurfaceKey;
+      readonly index: number;
+    },
+    origin: ChangeOrigin,
+    causeId: string,
+  ): RegionEditOutcome;
   /** Every closed loop of boundary with no face on it, among `scope`'s nodes -- a hole whose rim already exists. */
   getUnfilledLoops(scope: readonly ConstructionNodeId[]): readonly ConstructionUnfilledLoop[];
   /** One region's live boundary -- what a handle/hit-test layer reads. */
@@ -851,6 +860,20 @@ export class AppTabletopRuntime implements TabletopRuntime {
   ): RegionEditOutcome {
     this.#requireReady("opening a face");
     const outcome = this.#construction.addHole(request);
+    this.#foldRegionEditOutcome(outcome, origin, causeId);
+    return outcome;
+  }
+
+  removeHole(
+    request: {
+      readonly surfaceKey: ConstructionSurfaceKey;
+      readonly index: number;
+    },
+    origin: ChangeOrigin,
+    causeId: string,
+  ): RegionEditOutcome {
+    this.#requireReady("closing an opening");
+    const outcome = this.#construction.removeHole(request);
     this.#foldRegionEditOutcome(outcome, origin, causeId);
     return outcome;
   }

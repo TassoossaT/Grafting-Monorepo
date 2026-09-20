@@ -4070,7 +4070,68 @@ export function toolFor<Id extends ConstructionToolId>(id: Id): ConstructionTool
   return TOOL_REGISTRY[id];
   }
 
+// src/composition/tabletop/tools/openings/opening-edit-tool.ts
+export const openingEditTool: ConstructionTool<"opening-edit"> = {
+  id: "opening-edit",
+  defaultParams: () => DEFAULT_TOOL_PARAMS["opening-edit"],
+  previewOnHover: true,
+
+  previewFor(gesture: ToolGesture, params: OpeningParams, ctx: ToolContext) {
+  if (selected === undefined) return undefined;
+  const wall = ctx.runtime.getRegionTopology(selected.wallSurfaceKey);
+
+// src/composition/tabletop/tools/openings/opening-shared.ts
+export const MARGIN = 0.15;
+export function rimCorners(
+  rail: PanelRail,
+  at: number,
+  params: OpeningParams,
+  ): { readonly corners: readonly ConstructionPosition[]; readonly from: number; readonly to: number; readonly bottom: number; readonly top: number } | undefined {
+  const half = params.width / 2;
+  const from = Math.max(MARGIN, Math.min(at - half, rail.length - MARGIN - params.width));
+export function deriveOpeningParams(rail: PanelRail, topology: ConstructionRegionTopology): OpeningParams | undefined {
+  const [outer] = topology.outerLoops;
+  if (outer === undefined || outer.length === 0) return undefined;
+  const positions = outer.map((edge) => topology.nodes.find((node) => node.id === edge.startNodeId)?.position);
+export function openingSpan(rail: PanelRail, topology: ConstructionRegionTopology): { readonly from: number; readonly to: number; readonly bottom: number; readonly top: number } | undefined {
+  const [outer] = topology.outerLoops;
+  if (outer === undefined || outer.length === 0) return undefined;
+  const positions = outer.map((edge) => topology.nodes.find((node) => node.id === edge.startNodeId)?.position);
+export function hostWallOf(
+  ctx: ToolContext,
+  openingTopology: ConstructionRegionTopology,
+  ): { readonly wall: ConstructionRegionTopology; readonly holeIndex: number } | undefined {
+  const [outer] = openingTopology.outerLoops;
+  const edgeId = outer?.[0]?.edgeId;
+  if (edgeId === undefined) return undefined;
+  for (const candidate of ctx.runtime.getAllRegionTopologies()) {
+export function openingOverlapsSibling(
+  rail: PanelRail,
+  wall: ConstructionRegionTopology,
+  from: number,
+  to: number,
+  bottom: number,
+  top: number,
+  excludeHoleIndex?: number,
+export interface OpeningRemoval {
+  readonly faceSurfaceKey: ConstructionSurfaceKey;
+  readonly wallSurfaceKey: ConstructionSurfaceKey;
+  readonly holeIndex: number;
+  }
+export function commitOpeningReplacement(
+  ctx: ToolContext,
+  causeId: string,
+  removal: OpeningRemoval | undefined,
+  place: (OpeningPlacement & { readonly openingKind: OpeningParams["openingKind"] }) | undefined,
+  ): { readonly recorded: boolean; readonly error?: string } {
+  let recorded = false;
+  try {
+
 // src/composition/tabletop/tools/openings/opening-tool.ts
+export const OPENING_COLOR: Record<OpeningParams["openingKind"], number> = {
+  window: 0x7dd3fc,
+  door: 0xd97706,
+  };
 export const openingTool: ConstructionTool<"opening"> = {
   id: "opening",
   defaultParams: () => DEFAULT_TOOL_PARAMS.opening,
@@ -5191,12 +5252,14 @@ export function panelStructureType(
   ): StructureTypeDefinition {
   return Object.freeze({
   surfaceType,
-export const openingStructureType = panelStructureType(
-  "opening",
-  "Abertura",
-  "one face standing in an opening, on the rim the wall shares with it",
-  [],
-  );
+export const openingStructureType: StructureTypeDefinition = Object.freeze({
+  surfaceType: "opening",
+  label: "Abertura",
+  creation: "one face standing in an opening, on the rim the wall shares with it",
+  traits: Object.freeze([]),
+  roleFor: openingRoleFor,
+  policyFor: openingPolicyFor,
+  interactionOver: panelInteractionOver,
 
 // src/features/edit-construction/structure-types/path/bezier-road-edit.ts
 export function regeneratePathSpine(input: SpineRegenerationInput): SpineRegeneration | undefined {
