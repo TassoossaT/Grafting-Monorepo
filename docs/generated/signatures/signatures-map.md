@@ -5162,7 +5162,7 @@ export const PANEL_ROLES = {
   topEdge: "panel-top-edge",
   post: "panel-post",
   body: "panel-body",
-  unknown: "panel-unknown",
+  /** The height widget's upper zone: raises every other level top run currently at the grabbed one's height, table-wide. */
 export function panelRoleFor(topology: ConstructionRegionTopology, target: EditTarget): EditRole {
   if (target.kind === "region") return PANEL_ROLES.body;
   if (target.kind === "vertex") {
@@ -6053,7 +6053,20 @@ export type { BoundaryEdges, EdgeSharing } from "./boundary-edges.ts";
 export type { RibbonRequest } from "./bezier-curve.ts";
 export type { PlanarArea, PlanarPoint, PlanarPolygon, PlanarPort, PlanarRing } from "./planar-area.ts";
 export type { CurveEdge, CurveHandleIndex, CurveStore } from "./curve-handles.ts";
+export type { PanelHeightWidgetZone } from "./panel-height-widget.ts";
 export type { ContourPort, ContourSpan } from "./contour-geometry.ts";
+
+// src/features/edit-construction/topology/panel-height-widget.ts
+export type PanelHeightWidgetZone = "group" | "single";
+export function panelHeightWidgetPickId(edgeId: string, zone: PanelHeightWidgetZone): string {
+  return (zone === "group" ? GROUP : SINGLE) + encodeURIComponent(edgeId);
+export function panelHeightWidgetPick(id: string): { readonly edgeId: string; readonly zone: PanelHeightWidgetZone } | undefined {
+  if (id.startsWith(GROUP)) return { edgeId: decodeURIComponent(id.slice(GROUP.length)), zone: "group" };
+export function panelHeightWidgets(
+  topologies: readonly ConstructionRegionTopology[],
+  ): readonly { readonly id: string; readonly position: ConstructionPosition }[] {
+  const items: { readonly id: string; readonly position: ConstructionPosition }[] = [];
+  const seen = new Set<string>();
 
 // src/features/edit-construction/topology/planar-area.ts
 export type PlanarPoint = readonly [number, number];

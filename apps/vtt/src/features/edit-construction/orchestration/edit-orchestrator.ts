@@ -68,6 +68,7 @@ function primaryOps(
       return [{ kind: "move-vertex", nodeId: node.id, position: addPosition(node.position, delta) }];
     }
     case "edge":
+    case "edge-zone":
       return [{ kind: "move-edge", edgeId: gesture.target.edgeId, delta }];
     case "region": {
       if (scope !== "cloud") {
@@ -127,8 +128,10 @@ export function planEdit(
       for (const node of graphSnapshot?.nodes ?? []) positions.set(node.id, node.position);
       const seeds: { nodeId: string; delta: ConstructionPosition }[] = [];
       const primarySet = new Set(primary);
-      const extras = structureTypeFor(cloud.seed.surfaceType)?.motionInfluences ? []
+      const structural = structureTypeFor(cloud.seed.surfaceType)?.motionInfluences ? []
         : policy.cascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot }) ?? [];
+      const grouped = policy.groupCascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot, allTopologies: topologies }) ?? [];
+      const extras = [...structural, ...grouped];
       for (const op of [...primary, ...extras]) {
         if (op.kind === "move-vertex") {
           const before = positions.get(op.nodeId);
@@ -175,12 +178,13 @@ export function planEdit(
     return { kind: "deny", role: policy.role, reason: `${solverBound.label} requer o resolvedor estrutural da sessao.` };
   }
   const cascade = policy.cascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot }) ?? [];
+  const grouped = policy.groupCascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot }) ?? [];
   return {
     kind: "apply",
     role: policy.role,
     scope: policy.scope,
     surfaceCount: policy.scope === "cloud" ? cloud.members.length : 1,
-    ops: [...primary, ...cascade],
+    ops: [...primary, ...cascade, ...grouped],
   };
 }
 
