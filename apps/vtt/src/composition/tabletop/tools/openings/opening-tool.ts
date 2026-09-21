@@ -17,6 +17,7 @@ import { findWallSurfaceAt } from "../walls/wall-shared.ts";
 import {
   commitOpeningReplacement,
   hostWallOf,
+  MARGIN,
   openingOverlapsSibling,
   openingSpan,
   rimCorners,
@@ -126,6 +127,32 @@ function openingUnder(ctx: ToolContext, sample: PointerSample): ConstructionRegi
   return openingNear(ctx, sample.point);
 }
 
+/**
+ * The sill a window standing at `y` on `rail` would have -- clamped to
+ * whatever range still leaves room for `params.height` between the floor
+ * and the lintel, so a click too low or too high settles at the nearest
+ * spot that still fits rather than refusing outright. A door's sill is
+ * never read from the pointer: it always sits on the floor, the same
+ * invariant `rimCorners` itself already enforces.
+ *
+ * Height along the wall was, until this, entirely a `params.sill` slider
+ * value no click or drag ever touched -- every window landed at whatever
+ * height the slider last held, no matter where on the wall you clicked.
+ * This is what lets the vertical spot you actually clicked or dragged to
+ * decide it instead, the same way the horizontal spot always has.
+ */
+function sillAt(rail: PanelRail, y: number, params: OpeningParams): number {
+  if (params.openingKind === "door") return 0;
+  const min = MARGIN;
+  const max = rail.topY - rail.baseY - MARGIN - params.height;
+  return Math.max(min, Math.min(y - rail.baseY, Math.max(min, max)));
+}
+
+/** `params` with its sill replaced by whatever `sillAt` reads off `point` on `rail` -- what every `rimCorners` call below actually places, so a click or drag's height is never silently discarded in favor of the slider's last value. */
+function paramsAt(rail: PanelRail, point: ConstructionPosition, params: OpeningParams): OpeningParams {
+  return { ...params, sill: sillAt(rail, point.y, params) };
+}
+
 /** Starts a drag on `opening`, if it can be read as a rail-mounted rim -- `false` when its host wall cannot be found, leaving the gesture to fall through to placement. */
 function beginGrab(ctx: ToolContext, opening: ConstructionRegionTopology): boolean {
   const host = hostWallOf(ctx, opening);
@@ -147,7 +174,7 @@ function dragPreview(gesture: ToolGesture, params: OpeningParams, ctx: ToolConte
   if (wall === undefined) return undefined;
   const rail = panelRailOf(ctx.runtime, wall);
   if (rail === undefined) return undefined;
-  const rim = rimCorners(rail, rail.travelTo(gesture.current.point), params);
+  const rim = rimCorners(rail, rail.travelTo(gesture.current.point), paramsAt(rail, gesture.current.point, params));
   if (rim === undefined) return undefined;
   const overlaps = openingOverlapsSibling(rail, wall, rim.from, rim.to, rim.bottom, rim.top, active.holeIndex);
   const ring = [...rim.corners, rim.corners[0]!];
@@ -173,7 +200,7 @@ function commitDrag(ctx: ToolContext, gesture: ToolGesture, params: OpeningParam
     ctx.reportFeedback({ tone: "error", message: "A parede desta abertura nao existe mais." });
     return;
   }
-  const rim = rimCorners(rail, rail.travelTo(gesture.current.point), params);
+  const rim = rimCorners(rail, rail.travelTo(gesture.current.point), paramsAt(rail, gesture.current.point, params));
   if (rim === undefined) {
     ctx.reportFeedback({ tone: "error", message: "Abertura: nao cabe aqui." });
     return;
@@ -369,7 +396,7 @@ function resolvePlacement(
   if (topology === undefined) return undefined;
   const rail = panelRailOf(ctx.runtime, topology);
   if (rail === undefined) return undefined;
-  const placed = rimCorners(rail, rail.travelTo(sample.point), params);
+  const placed = rimCorners(rail, rail.travelTo(sample.point), paramsAt(rail, sample.point, params));
   return placed === undefined
     ? undefined
     : { surfaceKey, corners: placed.corners, rail, from: placed.from, to: placed.to, bottom: placed.bottom, top: placed.top };

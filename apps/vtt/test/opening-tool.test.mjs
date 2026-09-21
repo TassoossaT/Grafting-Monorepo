@@ -199,7 +199,10 @@ test("a flat face is not a panel and takes no opening", () => {
 test("a click on a wall opens it and stands a face in the opening", () => {
   const { ctx, patches, holes } = contextFor([STRAIGHT]);
 
-  openingTool.onClick(ctx, { point: { x: 3, y: 0, z: 0 } }, WINDOW);
+  // y=1 places this window's own height (1 tall) exactly at sill 1 to
+  // lintel 2 -- height is now read off the click, not off the `sill` param
+  // alone, so the click must actually land where the assertions expect it.
+  openingTool.onClick(ctx, { point: { x: 3, y: 1, z: 0 } }, WINDOW);
 
   assert.equal(patches.length, 1);
   assert.equal(holes.length, 1);
@@ -216,10 +219,33 @@ test("a click on a wall opens it and stands a face in the opening", () => {
   }
 });
 
+test("the vertical spot clicked sets the opening's own height on the wall, not just the `sill` param's last value", () => {
+  const { ctx, patches } = contextFor([STRAIGHT]);
+
+  openingTool.onClick(ctx, { point: { x: 3, y: 1.7, z: 0 } }, WINDOW);
+
+  const heights = patches[0].patch.nodes.map((node) => node.position.y).sort((a, b) => a - b);
+  assert.ok(Math.abs(heights[0] - 1.7) < 1e-6, `expected sill near the clicked height, got ${heights[0]}`);
+  assert.ok(Math.abs(heights[3] - 2.7) < 1e-6, `expected lintel near the clicked height, got ${heights[3]}`);
+});
+
+test("a click too low or too high for the opening's height still places it, clamped to the nearest spot that fits", () => {
+  const { ctx, patches } = contextFor([STRAIGHT]);
+
+  openingTool.onClick(ctx, { point: { x: 3, y: 0, z: 0 } }, WINDOW);
+  const low = patches[0].patch.nodes.map((node) => node.position.y).sort((a, b) => a - b);
+  assert.ok(Math.abs(low[0] - 0.15) < 1e-6, "clamped to the floor margin, not refused");
+
+  patches.length = 0;
+  openingTool.onClick(ctx, { point: { x: 3, y: 10, z: 0 } }, WINDOW);
+  const high = patches[0].patch.nodes.map((node) => node.position.y).sort((a, b) => a - b);
+  assert.ok(Math.abs(high[3] - 2.85) < 1e-6, "clamped to the lintel margin, not refused");
+});
+
 test("the wall is opened along the very rim the face stands on, walked the other way", () => {
   const { ctx, patches, holes } = contextFor([STRAIGHT]);
 
-  openingTool.onClick(ctx, { point: { x: 3, y: 0, z: 0 } }, WINDOW);
+  openingTool.onClick(ctx, { point: { x: 3, y: 1.5, z: 0 } }, WINDOW);
 
   const face = patches[0].patch.regions[0].boundary;
   const { request } = holes[0];

@@ -122,17 +122,19 @@ test("grabbing still finds and drags an existing opening even when the renderer'
   const { runtime, session, ctx } = sessionFixture();
   try {
     wall(runtime);
-    openingTool.onClick(ctx, { point: { x: 1.5, y: 0, z: 0 } }, WINDOW);
+    // y=0.5 places this window's own pane at [0.5, 1.5] (height 1, clicked
+    // height 0.5, nothing to clamp) -- a known range the grab below can aim into.
+    openingTool.onClick(ctx, { point: { x: 1.5, y: 0.5, z: 0 } }, WINDOW);
     assert.ok(openingAt(ctx, 1.5) !== undefined);
 
     // No surfaceRef anywhere in this gesture -- `openingNear`'s geometric
     // fallback must still resolve the opening standing exactly at this spot.
-    // y=1.5 lands inside the window's own pane (sill 1 to top 2), same as a
-    // real click would need to for the renderer to have any hope of hitting it.
-    openingTool.onPointerDown(ctx, { point: { x: 1.5, y: 1.5, z: 0 } }, WINDOW);
+    // y=1.0 lands inside that pane, same as a real click would need to for
+    // the renderer to have any hope of hitting it.
+    openingTool.onPointerDown(ctx, { point: { x: 1.5, y: 1.0, z: 0 } }, WINDOW);
     openingTool.onPointerUp(
       ctx,
-      { start: { point: { x: 1.5, y: 1.5, z: 0 } }, current: { point: { x: 6, y: 1.5, z: 0 } } },
+      { start: { point: { x: 1.5, y: 1.0, z: 0 } }, current: { point: { x: 6, y: 1.0, z: 0 } } },
       WINDOW,
     );
     openingTool.onClick(ctx, { point: { x: 6, y: 0, z: 0 } }, WINDOW);
