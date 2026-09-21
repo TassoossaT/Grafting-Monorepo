@@ -144,3 +144,52 @@ test("grabbing still finds and drags an existing opening even when the renderer'
     assert.ok(openingAt(ctx, 6) !== undefined, "the opening moved to where the drag released");
   } finally { session.free(); }
 });
+
+test("placing a window right beside an existing window of the same kind merges them into one wider opening", () => {
+  const { runtime, session, ctx } = sessionFixture();
+  try {
+    wall(runtime);
+    openingTool.onClick(ctx, { point: { x: 2, y: 1, z: 0 } }, WINDOW); // rim [1.5, 2.5]
+    assert.equal(runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "opening").length, 1);
+
+    openingTool.onClick(ctx, { point: { x: 3.2, y: 1, z: 0 } }, WINDOW); // rim [2.7, 3.7] -- 0.2 short of flush
+
+    const openings = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "opening");
+    assert.equal(openings.length, 1, "the two windows must merge into one, not stand side by side as two");
+    const xs = openings[0].nodes.map((n) => n.position.x);
+    assert.ok(Math.abs(Math.min(...xs) - 1.5) < 1e-6, `expected the merged opening to start at 1.5, got ${Math.min(...xs)}`);
+    assert.ok(Math.abs(Math.max(...xs) - 3.7) < 1e-6, `expected the merged opening to end at 3.7, got ${Math.max(...xs)}`);
+  } finally { session.free(); }
+});
+
+test("a door placed beside a window never merges -- only the same kind absorbs a neighbor", () => {
+  const { runtime, session, ctx } = sessionFixture();
+  try {
+    wall(runtime);
+    openingTool.onClick(ctx, { point: { x: 2, y: 1, z: 0 } }, WINDOW); // rim [1.5, 2.5], height [1, 2]
+    const DOOR = { openingKind: "door", width: 1, height: 2, sill: 0 };
+    openingTool.onClick(ctx, { point: { x: 3.2, y: 0, z: 0 } }, DOOR); // rim [2.7, 3.7], height [0, 2] -- overlaps the window's height band, close enough to merge, but a different kind
+
+    const openings = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "opening");
+    assert.equal(openings.length, 2, "different kinds must never merge into each other");
+  } finally { session.free(); }
+});
+
+test("dragging a window flush against another window of the same kind merges them too", () => {
+  const { runtime, session, ctx } = sessionFixture();
+  try {
+    wall(runtime);
+    openingTool.onClick(ctx, { point: { x: 1, y: 1, z: 0 } }, WINDOW); // rim [0.5, 1.5]
+    openingTool.onClick(ctx, { point: { x: 6, y: 1, z: 0 } }, WINDOW); // rim [5.5, 6.5]
+    assert.equal(runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "opening").length, 2);
+
+    const target = openingAt(ctx, 6);
+    const surfaceRef = surfaceRefFromNodeSet(target.surfaceKey);
+    openingTool.onPointerDown(ctx, { point: { x: 6, y: 1, z: 0 }, surfaceRef }, WINDOW);
+    openingTool.onPointerUp(ctx, { start: { point: { x: 6, y: 1, z: 0 } }, current: { point: { x: 2.2, y: 1, z: 0 } } }, WINDOW); // rim [1.7, 2.7] -- 0.2 short of flush against the first
+    openingTool.onClick(ctx, { point: { x: 2.2, y: 1, z: 0 }, surfaceRef }, WINDOW);
+
+    const openings = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "opening");
+    assert.equal(openings.length, 1, "dragging one window flush against another must merge them");
+  } finally { session.free(); }
+});

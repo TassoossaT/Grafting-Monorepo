@@ -16,11 +16,13 @@ import { segmentsPreview } from "../shapes/preview-shapes.ts";
 import { findWallSurfaceAt } from "../walls/wall-shared.ts";
 import {
   commitOpeningReplacement,
+  deriveOpeningParams,
   hostWallOf,
   MARGIN,
   openingOverlapsSibling,
   openingSpan,
   rimCorners,
+  type OpeningRemoval,
 } from "./opening-shared.ts";
 
 export const OPENING_COLOR: Record<OpeningParams["openingKind"], number> = {
@@ -153,6 +155,69 @@ function paramsAt(rail: PanelRail, point: ConstructionPosition, params: OpeningP
   return { ...params, sill: sillAt(rail, point.y, params) };
 }
 
+/** How much bare wall between two same-kind openings still reads as "meant to be one continuous opening" rather than two separate ones -- generous enough to catch a click placed a little short of flush, twice `rimCorners`' own `MARGIN`. */
+const MERGE_GAP = MARGIN * 2;
+
+/** The opening standing in `wall`'s hole at `holeIndex`, found the same way `hostWallOf` finds a wall from an opening -- by the edge the hole and the face share. */
+function openingForHole(ctx: ToolContext, wall: ConstructionRegionTopology, holeIndex: number): ConstructionRegionTopology | undefined {
+  const loop = wall.holes[holeIndex];
+  const edgeId = loop?.[0]?.edgeId;
+  if (edgeId === undefined) return undefined;
+  return ctx.runtime
+    .getAllRegionTopologies()
+    .find((topology) => topology.surfaceType === openingStructureType.surfaceType && topology.outerLoops[0]?.some((use) => use.edgeId === edgeId));
+}
+
+/**
+ * Grows `[from, to] x [bottom, top]` to absorb every same-kind opening
+ * already on `wall` that sits close enough alongside it -- placing a
+ * second window right beside a first one reads as "make it one wider
+ * window", not "stack a second, separate one with a sliver of wall
+ * between them". Runs to a fixed point so three windows placed in a row,
+ * one at a time, end up as one continuous opening rather than a chain of
+ * pairwise merges. A door never absorbs a window or vice versa: a
+ * sibling's own kind is read back off its rim the same way
+ * `deriveOpeningParams` always has.
+ */
+function mergeWithNeighbors(
+  ctx: ToolContext,
+  wall: ConstructionRegionTopology,
+  rail: PanelRail,
+  kind: OpeningParams["openingKind"],
+  initial: { readonly from: number; readonly to: number; readonly bottom: number; readonly top: number },
+  excludeHoleIndex?: number,
+): { readonly from: number; readonly to: number; readonly bottom: number; readonly top: number; readonly removals: readonly OpeningRemoval[] } {
+  let { from, to, bottom, top } = initial;
+  const absorbed = new Set<number>();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    wall.holes.forEach((loop, index) => {
+      if (index === excludeHoleIndex || absorbed.has(index) || loop.length === 0) return;
+      const opening = openingForHole(ctx, wall, index);
+      if (opening === undefined) return;
+      const derived = deriveOpeningParams(rail, opening);
+      if (derived === undefined || derived.openingKind !== kind) return;
+      const span = openingSpan(rail, opening);
+      if (span === undefined) return;
+      const heightOverlaps = bottom < span.top && top > span.bottom;
+      const closeEnough = from - span.to <= MERGE_GAP && span.from - to <= MERGE_GAP;
+      if (!heightOverlaps || !closeEnough) return;
+      from = Math.min(from, span.from);
+      to = Math.max(to, span.to);
+      bottom = Math.min(bottom, span.bottom);
+      top = Math.max(top, span.top);
+      absorbed.add(index);
+      changed = true;
+    });
+  }
+  const removals = [...absorbed].map((holeIndex) => {
+    const opening = openingForHole(ctx, wall, holeIndex)!;
+    return { faceSurfaceKey: opening.surfaceKey, wallSurfaceKey: wall.surfaceKey, holeIndex };
+  });
+  return { from, to, bottom, top, removals };
+}
+
 /** Starts a drag on `opening`, if it can be read as a rail-mounted rim -- `false` when its host wall cannot be found, leaving the gesture to fall through to placement. */
 function beginGrab(ctx: ToolContext, opening: ConstructionRegionTopology): boolean {
   const host = hostWallOf(ctx, opening);
@@ -217,7 +282,8 @@ function commitDrag(ctx: ToolContext, gesture: ToolGesture, params: OpeningParam
     return;
   }
 
-  if (openingOverlapsSibling(rail, wall, rim.from, rim.to, rim.bottom, rim.top, active.holeIndex)) {
+  const merged = mergeWithNeighbors(ctx, wall, rail, params.openingKind, rim, active.holeIndex);
+  if (openingOverlapsSibling(rail, wall, merged.from, merged.to, merged.bottom, merged.top, [active.holeIndex, ...merged.removals.map((r) => r.holeIndex)])) {
     ctx.reportFeedback({ tone: "error", message: "Abertura: sobreporia outra abertura ja existente nesta parede." });
     return;
   }
@@ -226,8 +292,8 @@ function commitDrag(ctx: ToolContext, gesture: ToolGesture, params: OpeningParam
   const { recorded, error } = commitOpeningReplacement(
     ctx,
     causeId,
-    { faceSurfaceKey: active.openingSurfaceKey, wallSurfaceKey: active.wallSurfaceKey, holeIndex: active.holeIndex },
-    { wallSurfaceKey: wall.surfaceKey, rail, from: rim.from, to: rim.to, bottom: rim.bottom, top: rim.top, openingKind: params.openingKind },
+    [{ faceSurfaceKey: active.openingSurfaceKey, wallSurfaceKey: active.wallSurfaceKey, holeIndex: active.holeIndex }, ...merged.removals],
+    { wallSurfaceKey: wall.surfaceKey, rail, from: merged.from, to: merged.to, bottom: merged.bottom, top: merged.top, openingKind: params.openingKind },
   );
   clearSelection(ctx);
   if (error !== undefined) {
@@ -301,19 +367,20 @@ export const openingTool: ConstructionTool<"opening"> = {
     }
     const wall = ctx.runtime.getRegionTopology(placed.surfaceKey);
     if (wall === undefined) return;
-    if (openingOverlapsSibling(placed.rail, wall, placed.from, placed.to, placed.bottom, placed.top)) {
+    const merged = mergeWithNeighbors(ctx, wall, placed.rail, params.openingKind, placed);
+    if (openingOverlapsSibling(placed.rail, wall, merged.from, merged.to, merged.bottom, merged.top, merged.removals.map((r) => r.holeIndex))) {
       ctx.reportFeedback({ tone: "error", message: "Abertura: sobreporia outra abertura ja existente nesta parede." });
       return;
     }
 
     const causeId = scopedToolId(ctx, "opening", ctx.nextSequence());
-    const { recorded, error } = commitOpeningReplacement(ctx, causeId, undefined, {
+    const { recorded, error } = commitOpeningReplacement(ctx, causeId, merged.removals.length > 0 ? merged.removals : undefined, {
       wallSurfaceKey: placed.surfaceKey,
       rail: placed.rail,
-      from: placed.from,
-      to: placed.to,
-      bottom: placed.bottom,
-      top: placed.top,
+      from: merged.from,
+      to: merged.to,
+      bottom: merged.bottom,
+      top: merged.top,
       openingKind: params.openingKind,
     });
     if (error !== undefined) {
@@ -323,7 +390,10 @@ export const openingTool: ConstructionTool<"opening"> = {
     if (recorded) ctx.history?.record({ kind: "transaction", transactionId: causeId });
     ctx.reportFeedback({
       tone: "success",
-      message: params.openingKind === "door" ? "Porta aberta na parede." : "Janela aberta na parede.",
+      message:
+        merged.removals.length > 0
+          ? params.openingKind === "door" ? "Portas unidas em uma so." : "Janelas unidas em uma so."
+          : params.openingKind === "door" ? "Porta aberta na parede." : "Janela aberta na parede.",
     });
   },
 

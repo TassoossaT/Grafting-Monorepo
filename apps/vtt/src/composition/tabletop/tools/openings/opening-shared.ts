@@ -124,7 +124,9 @@ export function hostWallOf(
  * travel-and-height rectangle, not merely a touching edge (the `MARGIN`
  * both rims already keep is what makes two side-by-side openings legal).
  * `excludeHoleIndex` is the opening's own hole, when moving/resizing one
- * that already exists -- it must never collide with itself.
+ * that already exists (or the set of holes a merge is already folding in,
+ * which are expected to overlap the merged rim) -- it must never collide
+ * with itself.
  */
 export function openingOverlapsSibling(
   rail: PanelRail,
@@ -133,10 +135,11 @@ export function openingOverlapsSibling(
   to: number,
   bottom: number,
   top: number,
-  excludeHoleIndex?: number,
+  excludeHoleIndex?: number | readonly number[],
 ): boolean {
+  const excluded = excludeHoleIndex === undefined ? [] : Array.isArray(excludeHoleIndex) ? excludeHoleIndex : [excludeHoleIndex];
   return wall.holes.some((loop, index) => {
-    if (index === excludeHoleIndex || loop.length === 0) return false;
+    if (excluded.includes(index) || loop.length === 0) return false;
     const positions = loop.map((edge) => wall.nodes.find((node) => node.id === edge.startNodeId)?.position).filter((position): position is ConstructionPosition => position !== undefined);
     if (positions.length === 0) return false;
     const travels = positions.map((position) => rail.travelTo(position));
@@ -204,27 +207,38 @@ function buildOpeningPatch(ctx: ToolContext, idPrefix: string, place: OpeningPla
 }
 
 /**
- * One transaction: optionally close an existing opening back up (its face
- * deleted, its hole removed from the host wall -- restoring the wall,
- * criterion 3 of #231), then optionally stand a new one in a fresh rim
- * (criterion 1, move/resize -- delete and recreate rather than nudging the
- * existing nodes, since a curved wall's rail parametrization has no
- * meaningful notion of "the same rim, stretched"). Passing both is a move
- * or a resize; passing only `removal` is a delete; passing only `place` is
- * a plain creation (what `opening-tool.ts` itself still does).
+ * One transaction: optionally close one or more existing openings back up
+ * (each face deleted, its hole removed from its host wall -- restoring the
+ * wall, criterion 3 of #231), then optionally stand a new one in a fresh
+ * rim (criterion 1, move/resize -- delete and recreate rather than nudging
+ * the existing nodes, since a curved wall's rail parametrization has no
+ * meaningful notion of "the same rim, stretched"). Passing both is a move,
+ * resize, or a merge of several openings into one wider rim; passing only
+ * `removal` is a delete; passing only `place` is a plain creation (what
+ * `opening-tool.ts` itself still does).
+ *
+ * More than one `removal` is what a same-kind opening placed right beside
+ * (or a drag landing right against) another absorbs: every sibling being
+ * folded into the new rim closes in the same transaction the new one
+ * opens, so there is never a frame with two faces and one of them
+ * orphaned. Holes are removed by index into the *same* wall, which shifts
+ * after each removal -- sorted highest index first so an earlier removal
+ * never invalidates a later one's index.
  */
 export function commitOpeningReplacement(
   ctx: ToolContext,
   causeId: string,
-  removal: OpeningRemoval | undefined,
+  removal: OpeningRemoval | readonly OpeningRemoval[] | undefined,
   place: (OpeningPlacement & { readonly openingKind: OpeningParams["openingKind"] }) | undefined,
 ): { readonly recorded: boolean; readonly error?: string } {
   let recorded = false;
   try {
     ({ recorded } = commitChange(ctx.runtime, { transactionId: causeId }, () => {
-      if (removal !== undefined) {
-        ctx.runtime.applyRegionEdit([{ kind: "delete-region", surfaceKey: removal.faceSurfaceKey }], "local", causeId);
-        ctx.runtime.removeHole({ surfaceKey: removal.wallSurfaceKey, index: removal.holeIndex }, "local", causeId);
+      const removals = removal === undefined ? [] : Array.isArray(removal) ? removal : [removal];
+      const byWallDescending = [...removals].sort((a, b) => b.holeIndex - a.holeIndex);
+      for (const one of byWallDescending) {
+        ctx.runtime.applyRegionEdit([{ kind: "delete-region", surfaceKey: one.faceSurfaceKey }], "local", causeId);
+        ctx.runtime.removeHole({ surfaceKey: one.wallSurfaceKey, index: one.holeIndex }, "local", causeId);
       }
       if (place === undefined) return { value: undefined };
 
