@@ -74,14 +74,39 @@ interface Selected {
 /** The opening a plain click (no drag) last landed on -- kept around only so Delete/Backspace and the inspector have something to act on; never consulted by `onClick`'s create path, so it can never block placing a new one elsewhere. */
 let selected: Selected | undefined;
 
+/**
+ * Which part of an existing opening a press landed on -- `"body"` (the
+ * interior) translates the whole rim; the four edges each stretch just
+ * their own side, the other three staying put. This is the actual
+ * "editing handle" a door or window has: there is no separate drawn handle
+ * widget (see `structure-edit-behavior.ts`'s node handles for that on
+ * other types), because an opening's own rim edge already sits exactly
+ * where a handle would be drawn.
+ */
+type GrabHandle = "body" | "left" | "right" | "top" | "bottom";
+
+/** How close (in rail travel/height units) a press has to land to an opening's own rim edge to grab *that edge* instead of the whole body -- generous enough to find with an ordinary click, tight enough that grabbing well inside the pane (however that pane's own sill happens to line up) always reads as "move", never "resize". */
+const HANDLE_TOLERANCE = 0.12;
+
+/** Which handle `point` (already known to be on `opening`'s own rim) landed nearest -- edges checked before the body, since a press has to be genuinely close to one to count as anything but a move. */
+function handleAt(span: { readonly from: number; readonly to: number; readonly bottom: number; readonly top: number }, travel: number, y: number): GrabHandle {
+  if (Math.abs(travel - span.from) <= HANDLE_TOLERANCE) return "left";
+  if (Math.abs(travel - span.to) <= HANDLE_TOLERANCE) return "right";
+  if (Math.abs(y - span.top) <= HANDLE_TOLERANCE) return "top";
+  if (Math.abs(y - span.bottom) <= HANDLE_TOLERANCE) return "bottom";
+  return "body";
+}
+
 interface Drag {
   readonly openingSurfaceKey: ConstructionSurfaceKey;
   readonly wallSurfaceKey: ConstructionSurfaceKey;
   readonly holeIndex: number;
   readonly originalSpan: { readonly from: number; readonly to: number; readonly bottom: number; readonly top: number };
-  /** The size (and door/window-ness) this drag actually moves -- almost always read off the opening's own rim, never the tool's live width/height sliders, so grabbing and nudging an opening can never silently resize it to whatever the sliders last held. See `beginGrab`. */
+  /** Which part was grabbed -- see `GrabHandle`. */
+  readonly handle: GrabHandle;
+  /** The size (and door/window-ness) a *body* drag moves -- almost always read off the opening's own rim, never the tool's live width/height sliders, so grabbing and nudging an opening can never silently resize it to whatever the sliders last held. See `beginGrab`. An edge drag ignores `width`/`height` entirely: it stretches `originalSpan` directly. */
   readonly params: OpeningParams;
-  /** Travel/height offset from the grab point to the opening's own center, so the opening does not jump to re-center itself on the cursor the instant the drag starts -- it keeps whatever offset you actually grabbed it at. */
+  /** Travel/height offset from the grab point to the opening's own center, so a *body* drag does not jump to re-center the opening on the cursor the instant it starts -- it keeps whatever offset you actually grabbed it at. Irrelevant to an edge drag, which follows the cursor exactly. */
   readonly grabOffset: { readonly travel: number; readonly y: number };
 }
 
@@ -372,6 +397,8 @@ function beginGrab(ctx: ToolContext, opening: ConstructionRegionTopology, point:
   const alreadySelected = selected !== undefined && surfaceRefFromNodeSet(selected.openingSurfaceKey) === surfaceRefFromNodeSet(opening.surfaceKey);
   const params = alreadySelected ? { ...derived, width: liveParams.width, height: liveParams.height } : derived;
 
+  const travel = rail.travelTo(point);
+  const handle = handleAt(span, travel, point.y);
   const centerTravel = (span.from + span.to) / 2;
   const centerY = (span.bottom + span.top) / 2;
   selected = { openingSurfaceKey: opening.surfaceKey, wallSurfaceKey: host.wall.surfaceKey, holeIndex: host.holeIndex };
@@ -380,25 +407,41 @@ function beginGrab(ctx: ToolContext, opening: ConstructionRegionTopology, point:
     wallSurfaceKey: host.wall.surfaceKey,
     holeIndex: host.holeIndex,
     originalSpan: span,
+    handle,
     params,
-    grabOffset: { travel: rail.travelTo(point) - centerTravel, y: point.y - centerY },
+    grabOffset: { travel: travel - centerTravel, y: point.y - centerY },
   };
   ctx.reportSelection({ id: surfaceRefFromNodeSet(opening.surfaceKey), point: rail.positionAt(centerTravel, centerY) });
   return true;
 }
 
 /**
- * Where `active`'s opening would stand if released at `point` -- a pure
- * translate, `active.params`' own width/height carried along unchanged
- * (see `beginGrab`). A door never moves vertically: its sill is always the
- * floor, so only its travel position follows the drag.
+ * Where `active`'s opening would stand if released at `point`.
+ *
+ * A body drag is a pure translate, `active.params`' own width/height
+ * carried along unchanged (see `beginGrab`) -- a door never moves
+ * vertically even then, since its sill is always the floor. An edge drag
+ * ignores `params.width`/`height` entirely and instead moves just that one
+ * edge of `originalSpan`, the other three staying exactly where they were
+ * -- the actual resize a real handle would do. A door's `bottom` edge is
+ * not draggable (there is no sill to move), the same floor-pin every other
+ * door path already enforces.
  */
 function rectFor(rail: PanelRail, active: Drag, point: ConstructionPosition): { readonly from: number; readonly to: number; readonly bottom: number; readonly top: number } | undefined {
-  const { width, height, openingKind } = active.params;
-  const isDoor = openingKind === "door";
-  const travel = rail.travelTo(point) - active.grabOffset.travel;
-  const from = travel - width / 2;
-  const to = travel + width / 2;
+  const { originalSpan: span, handle } = active;
+  const isDoor = active.params.openingKind === "door";
+  const travel = rail.travelTo(point);
+
+  if (handle === "left") return clampRect(rail, isDoor, Math.min(travel, span.to - MIN_OPENING_SIZE), span.to, span.bottom, span.top);
+  if (handle === "right") return clampRect(rail, isDoor, span.from, Math.max(travel, span.from + MIN_OPENING_SIZE), span.bottom, span.top);
+  if (handle === "top") return clampRect(rail, isDoor, span.from, span.to, span.bottom, Math.max(point.y, span.bottom + MIN_OPENING_SIZE));
+  if (handle === "bottom" && !isDoor) return clampRect(rail, isDoor, span.from, span.to, Math.min(point.y, span.top - MIN_OPENING_SIZE), span.top);
+  if (handle === "bottom") return clampRect(rail, isDoor, span.from, span.to, span.bottom, span.top); // a door's floor sill never moves
+
+  const { width, height } = active.params;
+  const centerTravel = travel - active.grabOffset.travel;
+  const from = centerTravel - width / 2;
+  const to = centerTravel + width / 2;
   const bottom = isDoor ? rail.baseY : point.y - active.grabOffset.y - height / 2;
   const top = bottom + height;
   return clampRect(rail, isDoor, from, to, bottom, top);
@@ -416,7 +459,7 @@ function dragPreview(gesture: ToolGesture, ctx: ToolContext, active: Drag): Retu
   return ringPreview(rail, rect, overlaps ? OVERLAP_COLOR : OPENING_COLOR[active.params.openingKind]);
 }
 
-/** Commits the drag's move to wherever it was released -- a no-op (kept selected, not committed) when the rim never actually moved, so a plain click just selects. */
+/** Commits the drag's move or resize to wherever it was released -- a no-op (kept selected, not committed) when the rim never actually changed, so a plain click just selects. */
 function commitDrag(ctx: ToolContext, gesture: ToolGesture, active: Drag): void {
   const wall = ctx.runtime.getRegionTopology(active.wallSurfaceKey);
   if (wall === undefined) {
@@ -442,7 +485,7 @@ function commitDrag(ctx: ToolContext, gesture: ToolGesture, active: Drag): void 
     Math.abs(rect.bottom - active.originalSpan.bottom) < EPS &&
     Math.abs(rect.top - active.originalSpan.top) < EPS;
   if (unchanged) {
-    ctx.reportFeedback({ tone: "info", message: "Abertura selecionada. Arraste para mover; ajuste largura/altura/peitoril e arraste de novo para redimensionar; Delete apaga." });
+    ctx.reportFeedback({ tone: "info", message: "Abertura selecionada. Arraste o meio para mover, uma borda para redimensionar; Delete apaga." });
     return;
   }
 
@@ -465,7 +508,7 @@ function commitDrag(ctx: ToolContext, gesture: ToolGesture, active: Drag): void 
     return;
   }
   if (recorded) ctx.history?.record({ kind: "transaction", transactionId: causeId });
-  ctx.reportFeedback({ tone: "success", message: "Abertura movida." });
+  ctx.reportFeedback({ tone: "success", message: active.handle === "body" ? "Abertura movida." : "Abertura redimensionada." });
 }
 
 /** The live create-drag preview for a brand-new opening, from `anchor` to the pointer's current spot on the same wall. */

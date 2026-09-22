@@ -185,9 +185,11 @@ test("dragging a window flush against another window of the same kind merges the
 
     const target = openingAt(ctx, 6);
     const surfaceRef = surfaceRefFromNodeSet(target.surfaceKey);
-    openingTool.onPointerDown(ctx, { point: { x: 6, y: 1, z: 0 }, surfaceRef }, WINDOW);
-    openingTool.onPointerUp(ctx, { start: { point: { x: 6, y: 1, z: 0 } }, current: { point: { x: 2.2, y: 1, z: 0 } } }, WINDOW); // rim [1.7, 2.7] -- 0.2 short of flush against the first
-    openingTool.onClick(ctx, { point: { x: 2.2, y: 1, z: 0 }, surfaceRef }, WINDOW);
+    // y=1.5 is this window's own vertical center ([1, 2]) -- well clear of
+    // any edge-handle band, so this grab reads as a body move, not a resize.
+    openingTool.onPointerDown(ctx, { point: { x: 6, y: 1.5, z: 0 }, surfaceRef }, WINDOW);
+    openingTool.onPointerUp(ctx, { start: { point: { x: 6, y: 1.5, z: 0 } }, current: { point: { x: 2.2, y: 1.5, z: 0 } } }, WINDOW); // rim [1.7, 2.7] -- 0.2 short of flush against the first
+    openingTool.onClick(ctx, { point: { x: 2.2, y: 1.5, z: 0 }, surfaceRef }, WINDOW);
 
     const openings = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "opening");
     assert.equal(openings.length, 1, "dragging one window flush against another must merge them");
@@ -238,8 +240,10 @@ test("dragging an existing opening to a new spot preserves its own size, even wh
     // A very different size on the tool's own params -- since this opening
     // was never re-selected before this drag, the grab must read its own
     // actual size back off its rim instead, not this mismatched slider.
+    // y=1.5 is this window's own vertical center ([1, 2]), clear of any
+    // edge-handle band, so the grab reads as a body move.
     const MISMATCHED = { openingKind: "window", width: 3, height: 2.5, sill: 0 };
-    gesture(ctx, MISMATCHED, { x: 2, y: 1, z: 0 }, { x: 6, y: 1, z: 0 });
+    gesture(ctx, MISMATCHED, { x: 2, y: 1.5, z: 0 }, { x: 6, y: 1.5, z: 0 });
 
     const openings = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "opening");
     assert.equal(openings.length, 1, "a move replaces the opening, it does not add a second one");
@@ -261,10 +265,12 @@ test("re-grabbing an already-selected opening and dragging again applies the too
 
     // First gesture: a plain select (no movement) -- the standing pattern
     // for "I'm about to change the sliders, then drag again to resize."
-    gesture(ctx, WINDOW, { x: 2, y: 1, z: 0 });
+    // y=1.5 is this window's own vertical center ([1, 2]), clear of any
+    // edge-handle band, so both grabs read as a body move, not a resize.
+    gesture(ctx, WINDOW, { x: 2, y: 1.5, z: 0 });
 
     const RESIZED = { openingKind: "window", width: 2, height: 1.5, sill: 0 };
-    gesture(ctx, RESIZED, { x: 2, y: 1, z: 0 }, { x: 6, y: 1, z: 0 });
+    gesture(ctx, RESIZED, { x: 2, y: 1.5, z: 0 }, { x: 6, y: 1.5, z: 0 });
 
     const openings = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "opening");
     assert.equal(openings.length, 1, "the resize-drag replaces the opening, it does not add a second one");
@@ -273,5 +279,80 @@ test("re-grabbing an already-selected opening and dragging again applies the too
     const ys = moved.nodes.map((n) => n.position.y);
     assert.ok(Math.abs(Math.max(...xs) - Math.min(...xs) - RESIZED.width) < 1e-6, `re-dragging an already-selected opening must apply the new width (${RESIZED.width}), got ${Math.max(...xs) - Math.min(...xs)}`);
     assert.ok(Math.abs(Math.max(...ys) - Math.min(...ys) - RESIZED.height) < 1e-6, `re-dragging an already-selected opening must apply the new height (${RESIZED.height}), got ${Math.max(...ys) - Math.min(...ys)}`);
+  } finally { session.free(); }
+});
+
+test("grabbing an existing window right at its own right edge stretches just that edge, leaving the other three where they were", () => {
+  const { runtime, session, ctx } = sessionFixture();
+  try {
+    wall(runtime);
+    openingTool.onClick(ctx, { point: { x: 2, y: 1, z: 0 } }, WINDOW); // rim [1.5, 2.5] x [1, 2]
+    gesture(ctx, WINDOW, { x: 2.5, y: 1.5, z: 0 }, { x: 4, y: 1.5, z: 0 });
+
+    const openings = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "opening");
+    assert.equal(openings.length, 1, "a resize replaces the opening, it does not add a second one");
+    const xs = openings[0].nodes.map((n) => n.position.x);
+    const ys = openings[0].nodes.map((n) => n.position.y);
+    assert.ok(Math.abs(Math.min(...xs) - 1.5) < 1e-6, `the left edge must stay put at 1.5, got ${Math.min(...xs)}`);
+    assert.ok(Math.abs(Math.max(...xs) - 4) < 1e-6, `the right edge must follow the drag to 4, got ${Math.max(...xs)}`);
+    assert.ok(Math.abs(Math.min(...ys) - 1) < 1e-6, "the sill must stay put");
+    assert.ok(Math.abs(Math.max(...ys) - 2) < 1e-6, "the top must stay put");
+  } finally { session.free(); }
+});
+
+test("grabbing an existing window right at its own left edge stretches just that edge", () => {
+  const { runtime, session, ctx } = sessionFixture();
+  try {
+    wall(runtime);
+    openingTool.onClick(ctx, { point: { x: 4, y: 1, z: 0 } }, WINDOW); // rim [3.5, 4.5] x [1, 2]
+    gesture(ctx, WINDOW, { x: 3.5, y: 1.5, z: 0 }, { x: 2, y: 1.5, z: 0 });
+
+    const opening = runtime.getAllRegionTopologies().find((t) => t.surfaceType === "opening");
+    const xs = opening.nodes.map((n) => n.position.x);
+    assert.ok(Math.abs(Math.min(...xs) - 2) < 1e-6, `the left edge must follow the drag to 2, got ${Math.min(...xs)}`);
+    assert.ok(Math.abs(Math.max(...xs) - 4.5) < 1e-6, `the right edge must stay put at 4.5, got ${Math.max(...xs)}`);
+  } finally { session.free(); }
+});
+
+test("grabbing an existing window right at its own top edge stretches its height upward, the sill staying put", () => {
+  const { runtime, session, ctx } = sessionFixture();
+  try {
+    wall(runtime);
+    openingTool.onClick(ctx, { point: { x: 2, y: 1, z: 0 } }, WINDOW); // rim [1.5, 2.5] x [1, 2]
+    gesture(ctx, WINDOW, { x: 2, y: 2, z: 0 }, { x: 2, y: 2.8, z: 0 });
+
+    const opening = runtime.getAllRegionTopologies().find((t) => t.surfaceType === "opening");
+    const ys = opening.nodes.map((n) => n.position.y);
+    assert.ok(Math.abs(Math.min(...ys) - 1) < 1e-6, `the sill must stay put at 1, got ${Math.min(...ys)}`);
+    assert.ok(Math.abs(Math.max(...ys) - 2.8) < 1e-6, `the top must follow the drag to 2.8, got ${Math.max(...ys)}`);
+  } finally { session.free(); }
+});
+
+test("grabbing an existing window right at its own sill stretches downward, the top staying put", () => {
+  const { runtime, session, ctx } = sessionFixture();
+  try {
+    wall(runtime);
+    openingTool.onClick(ctx, { point: { x: 2, y: 1, z: 0 } }, WINDOW); // rim [1.5, 2.5] x [1, 2]
+    gesture(ctx, WINDOW, { x: 2, y: 1, z: 0 }, { x: 2, y: 0.3, z: 0 });
+
+    const opening = runtime.getAllRegionTopologies().find((t) => t.surfaceType === "opening");
+    const ys = opening.nodes.map((n) => n.position.y);
+    assert.ok(Math.abs(Math.min(...ys) - 0.3) < 1e-6, `the sill must follow the drag down to 0.3, got ${Math.min(...ys)}`);
+    assert.ok(Math.abs(Math.max(...ys) - 2) < 1e-6, `the top must stay put at 2, got ${Math.max(...ys)}`);
+  } finally { session.free(); }
+});
+
+test("a door's sill can never be dragged off the floor, even grabbed right where its own bottom edge is", () => {
+  const { runtime, session, ctx } = sessionFixture();
+  try {
+    wall(runtime);
+    const DOOR = { openingKind: "door", width: 1, height: 2, sill: 0 };
+    openingTool.onClick(ctx, { point: { x: 2, y: 0, z: 0 } }, DOOR); // rim [1.5, 2.5] x [0, 2]
+    gesture(ctx, DOOR, { x: 2, y: 0, z: 0 }, { x: 2, y: 1, z: 0 });
+
+    const opening = runtime.getAllRegionTopologies().find((t) => t.surfaceType === "opening");
+    const ys = opening.nodes.map((n) => n.position.y);
+    assert.ok(Math.abs(Math.min(...ys) - 0) < 1e-6, "a door's own floor sill must never move");
+    assert.ok(Math.abs(Math.max(...ys) - 2) < 1e-6, "a door's own height must stay put when its (non-existent) bottom handle is dragged");
   } finally { session.free(); }
 });
