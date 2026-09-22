@@ -146,8 +146,32 @@ function openingUnder(ctx: ToolContext, sample: PointerSample): ConstructionRegi
 function sillAt(rail: PanelRail, y: number, params: OpeningParams): number {
   if (params.openingKind === "door") return 0;
   const min = MARGIN;
-  const max = rail.topY - rail.baseY - MARGIN - params.height;
-  return Math.max(min, Math.min(y - rail.baseY, Math.max(min, max)));
+  const max = Math.max(min, rail.topY - rail.baseY - MARGIN - params.height);
+  const clamped = Math.max(min, Math.min(y - rail.baseY, max));
+  // Snapping can round a value that was sitting exactly on `max` up past it
+  // -- re-clamp afterwards so a fit that only just fits is never pushed into
+  // one `rimCorners` refuses outright.
+  return Math.min(Math.max(snapped(clamped), min), max);
+}
+
+/**
+ * Rounds to a small fixed increment.
+ *
+ * The hover preview redraws on every raw pointer-move event, unthrottled
+ * (`use-construction-pointer.ts`'s hover branch), and `sillAt` now follows
+ * the raw pick's own Y continuously where it used to be a fixed param --
+ * the tiniest sub-pixel difference in the picked world position, from
+ * nothing more than a grazing camera angle, used to regenerate a whole new
+ * rim a hair higher or lower than the last. Close enough that it only read
+ * as smooth, continuous motion while the picker's own precision held up
+ * perfectly; any noise in that made the ghost hop between two
+ * barely-different heights every frame, which reads as flicker rather than
+ * motion. Snapping absorbs exactly that noise without being coarse enough
+ * to feel like a grid magnet.
+ */
+function snapped(value: number): number {
+  const step = 0.02;
+  return Math.round(value / step) * step;
 }
 
 /** `params` with its sill replaced by whatever `sillAt` reads off `point` on `rail` -- what every `rimCorners` call below actually places, so a click or drag's height is never silently discarded in favor of the slider's last value. */
