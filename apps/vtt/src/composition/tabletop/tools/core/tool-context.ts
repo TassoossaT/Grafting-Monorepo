@@ -68,6 +68,19 @@ export interface ConstructionTool<Id extends ConstructionToolId> {
   defaultParams(): ToolParamsFor<Id>;
   /** Opt in to a stationary drawing preview between gestures. */
   readonly previewOnHover?: boolean;
+  /**
+   * This tool always projects the pointer onto an existing surface's own
+   * parametrization (a wall's rail, say) rather than reading raw world X/Z --
+   * so the dispatcher's world-space grid magnet, applied before any tool
+   * ever sees the point, is redundant at best. At worst it is actively
+   * harmful: rounding X/Z to a world grid *before* a nonlinear projection
+   * (onto a rotated or curved rail) can jump the projected result across
+   * much more than one grid cell, which reads as the pointer "teleporting"
+   * rather than the smooth follow every other tool gets from the same
+   * magnet. A tool that opts in reads its own samples unsnapped and is
+   * responsible for whatever continuity it wants.
+   */
+  readonly snapsToSurface?: boolean;
   /** The tool's not-yet-committed ghost for the current gesture (or stationary hover, when `gesture.start === gesture.current`). */
   previewFor?(gesture: ToolGesture, params: ToolParamsFor<Id>, ctx: ToolContext): PreviewDescriptor | undefined;
   /** Left-button press. Continuous tools (brushes, move-node) start their gesture here. */

@@ -198,11 +198,13 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
 
   const sampleAt = useCallback(
     (event: { currentTarget: HTMLElement; clientX: number; clientY: number }): PointerSample | undefined => {
-      const { viewId, runtime, snapToGrid } = optionsRef.current;
+      const { viewId, runtime, snapToGrid, activeTool } = optionsRef.current;
       if (viewId === undefined) return undefined;
       const { x, y } = pointerOffset(event);
       const hit = runtime.pick(viewId, x, y);
-      return hit === undefined ? undefined : { ...applySnap(hit, snapToGrid), screenY: event.clientY, screenX: event.clientX };
+      if (hit === undefined) return undefined;
+      const snap = snapToGrid && !toolFor(activeTool).snapsToSurface;
+      return { ...applySnap(hit, snap), screenY: event.clientY, screenX: event.clientX };
     },
     [],
   );
