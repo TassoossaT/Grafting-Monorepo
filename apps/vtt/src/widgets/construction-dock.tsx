@@ -133,7 +133,7 @@ export function ConstructionDock(props: ConstructionDockProps) {
       key: "paths",
       label: "Caminhos",
       icon: "⌁",
-      tooltip: "Pincel de Caminhos",
+      tooltip: "Rua Bézier: criar e ajustar pontos",
       active: activeTool === "path-brush",
       disabled: !ready,
       onClick: () => onToolChange("path-brush"),

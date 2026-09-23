@@ -1,8 +1,12 @@
-# Caneta e edi??o B?zier
+# Ferramenta unificada de rua Bézier
 
-A op??o **Caneta B?zier** no painel da ferramenta de caminho cria um rascunho na cena. Clique para adicionar uma ?ncora de canto; arraste para definir as duas al?as espelhadas. Enter confirma um caminho aberto, Backspace remove a ?ltima ?ncora e Esc descarta o rascunho. Com pelo menos tr?s ?ncoras, clicar novamente junto ? primeira fecha a curva. Trocar ferramenta, par?metros ou mesa tamb?m cancela o rascunho.
+A ferramenta **Caminhos / Rua Bézier** cria e ajusta a rua pelo mesmo gesto contextual. Não há escolha entre pincel de área e caneta: mesmo preferências antigas com `creationMode: "brush"` passam pelo autor de curvas.
 
-A edi??o existente usa as mesmas al?as para espinhas e contornos curvos. O ?ltimo ponto do pointer-up ? considerado. Um clique numa al?a, uma ida e volta ? posi??o original ou um cancelamento n?o alteram a geometria; clicar no meio de uma espinha continua inserindo uma ?ncora. As regras de cada estrutura continuam determinando quais contornos podem ser remodelados.
+Em espaço livre, clique para adicionar uma âncora; arraste para definir suas alças espelhadas. Enter confirma, Backspace remove a última âncora e Esc cancela. Com pelo menos três âncoras, clicar junto à primeira fecha a curva. A superfície é gerada da espinha e de seu perfil, sem pintar uma área com o arraste.
+
+Sem um desenho pendente, arraste os pontos ou as alças de uma curva existente para editá-la na mesma ferramenta. Clique no ponto central de uma espinha para subdividir o trecho sem mudar sua forma. O painel oferece alças espelhadas, alinhadas, livres e automáticas. Um rascunho pendente continua aceitando pontos de conexão; confirme ou cancele antes de manipular a curva existente.
+
+O arraste de edição usa uma prévia e grava uma única transação ao soltar. A posição final do pointer-up é considerada. Cancelar ou voltar à posição inicial não altera a geometria. Trocar ferramenta, parâmetros ou mesa descarta a interação pendente.
 
 ## Fronteiras
 

@@ -5,6 +5,8 @@ import type { ConstructionPosition, CubicBezier, CurvePoint } from "../../../../
 import { commitPathCloudIntent } from "../../path/path-cloud-transaction.ts";
 import { scopedToolId, type ConstructionTool, type ToolContext } from "../core/tool-context.ts";
 
+import { beginCurveGesture, type CurveGesture } from "../core/curve-edit-gesture.ts";
+
 const CHANNEL = "curve-pen";
 const COLOR = 0xc084fc;
 const point = (p: ConstructionPosition): CurvePoint => [p.x, p.y, p.z];
@@ -21,6 +23,7 @@ function curvesFor(draft: CurvePenDraft<ConstructionPosition>): readonly CubicBe
 
 interface PenSession { readonly pen: CurvePen<ConstructionPosition>; readonly params: PathBrushParams }
 const sessions = new WeakMap<ToolContext["runtime"], PenSession>();
+const edits = new WeakMap<ToolContext["runtime"], CurveGesture>();
 
 function session(ctx: ToolContext, params: PathBrushParams): PenSession {
   const existing = sessions.get(ctx.runtime);
@@ -79,6 +82,8 @@ function safely(ctx: ToolContext, work: () => void): void {
   try { work(); }
   catch (error) {
     // A failed sample must never leave a stale preview that can later be committed.
+    edits.get(ctx.runtime)?.cancel();
+    edits.delete(ctx.runtime);
     sessions.get(ctx.runtime)?.pen.cancel();
     sessions.delete(ctx.runtime);
     ctx.runtime.clearPreview(CHANNEL);
@@ -86,19 +91,50 @@ function safely(ctx: ToolContext, work: () => void): void {
   }
 }
 
-/** VTT binding for the reusable pen; only finish changes the construction session. */
+/** One road tool: existing curve controls edit; an empty placement starts authoring. */
 export const pathPenTool: ConstructionTool<"path-brush"> = {
   id: "path-brush",
   defaultParams: () => DEFAULT_TOOL_PARAMS["path-brush"],
   previewOnHover: true,
   previewFor(gesture, params, ctx) {
-    safely(ctx, () => sessions.get(ctx.runtime)?.pen.hover(gesture.current.point));
+    if (!edits.has(ctx.runtime)) safely(ctx, () => sessions.get(ctx.runtime)?.pen.hover(gesture.current.point));
     return undefined;
   },
-  onPointerDown(ctx, sample, params) { safely(ctx, () => session(ctx, params).pen.begin(sample.point)); },
-  onPointerMove(ctx, gesture, params) { safely(ctx, () => session(ctx, params).pen.move(gesture.current.point)); },
-  onPointerUp(ctx, gesture, params) { safely(ctx, () => session(ctx, params).pen.end(gesture.current.point)); },
+  onPointerDown(ctx, sample, params) {
+    safely(ctx, () => {
+      if (edits.has(ctx.runtime)) return;
+      // A draft can connect to existing anchors. Once confirmed/cancelled, the
+      // same picks manipulate the standing curve instead of starting another road.
+      if (!sessions.get(ctx.runtime)?.pen.snapshot().anchors.length) {
+        const edit = beginCurveGesture(ctx, sample, { mode: "shape", curveMode: params.curveMode ?? "mirrored" });
+        if (edit) {
+          edits.set(ctx.runtime, edit);
+          ctx.reportSelection({ id: sample.nodeId!, point: sample.point });
+          return;
+        }
+      }
+      session(ctx, params).pen.begin(sample.point);
+    });
+  },
+  onPointerMove(ctx, gesture) {
+    safely(ctx, () => {
+      const edit = edits.get(ctx.runtime);
+      if (edit) edit.move(gesture);
+      else sessions.get(ctx.runtime)?.pen.move(gesture.current.point);
+    });
+  },
+  onPointerUp(ctx, gesture) {
+    safely(ctx, () => {
+      const edit = edits.get(ctx.runtime);
+      if (edit) {
+        edits.delete(ctx.runtime);
+        edit.move(gesture);
+        edit.commit();
+      } else sessions.get(ctx.runtime)?.pen.end(gesture.current.point);
+    });
+  },
   onKeyDown(ctx, key) {
+    if (edits.has(ctx.runtime)) return false;
     const active = sessions.get(ctx.runtime);
     if (!active || !["Enter", "Backspace"].includes(key)) return false;
     if (!active.pen.snapshot().anchors.length) return false;
@@ -106,6 +142,8 @@ export const pathPenTool: ConstructionTool<"path-brush"> = {
     return true;
   },
   onCancel(ctx) {
+    edits.get(ctx.runtime)?.cancel();
+    edits.delete(ctx.runtime);
     sessions.get(ctx.runtime)?.pen.cancel();
     sessions.delete(ctx.runtime);
     ctx.runtime.clearPreview(CHANNEL);

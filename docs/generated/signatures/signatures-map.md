@@ -4132,10 +4132,7 @@ export function panelRailOf(port: ContourPort, topology: ConstructionRegionTopol
   const walked = outer.map((edge) => ({
 
 // src/composition/tabletop/tools/paths/path-brush-tool.ts
-export const pathBrushTool: ConstructionTool<"path-brush"> = {
-  id: "path-brush", defaultParams: freehandTool.defaultParams, previewOnHover: (params) => params.creationMode === "pen",
-  previewFor(gesture, params, ctx) {
-  return implementation(params).previewFor?.(gesture, params, ctx);
+export const pathBrushTool = pathPenTool;
 
 // src/composition/tabletop/tools/paths/path-pen-tool.ts
 export const pathPenTool: ConstructionTool<"path-brush"> = {
@@ -4143,7 +4140,7 @@ export const pathPenTool: ConstructionTool<"path-brush"> = {
   defaultParams: () => DEFAULT_TOOL_PARAMS["path-brush"],
   previewOnHover: true,
   previewFor(gesture, params, ctx) {
-  safely(ctx, () => sessions.get(ctx.runtime)?.pen.hover(gesture.current.point));
+  if (!edits.has(ctx.runtime)) safely(ctx, () => sessions.get(ctx.runtime)?.pen.hover(gesture.current.point));
 
 // src/composition/tabletop/tools/platform/platform-contour-merge.ts
 export interface DirectedContourEdge {
@@ -5829,13 +5826,13 @@ export interface BrushShapeParams {
   readonly rotationDegrees: number;
   }
 export interface PathBrushParams extends BrushShapeParams {
-  /** The creation gesture; omitted preserves the freehand brush. */
+  /** Legacy preference retained for saved parameters; both values now use the unified curve tool. */
   readonly creationMode?: "brush" | "pen";
+  /** Constraint for editing an existing curve with this same tool. */
+  readonly curveMode?: "automatic" | "aligned" | "mirrored" | "free";
   /** Product recipe; every variant still creates the single `path` surface type. */
   readonly pathKind: PathKind;
   /** Width of the flat traversable bed, in world units. */
-  readonly bedWidth: number;
-  /** Width of each optional raised shoulder, in world units. */
 export type PathKind = "trail" | "street" | "road" | "bridge";
 export interface WallParams {
   readonly wallType: "wall-white" | "wall-gray";

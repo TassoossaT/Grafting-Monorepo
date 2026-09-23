@@ -74,11 +74,15 @@ function PathBrushFields(props: { readonly params: PathBrushParams; readonly onC
   const { params, onChange } = props;
   return (
     <div style={{ display: "grid", gap: "0.6rem" }}>
-      <label>Criação <select value={params.creationMode ?? "brush"} onChange={(event) => onChange({ ...params, creationMode: event.currentTarget.value as "brush" | "pen" })}>
-        <option value="brush">Pincel</option>
-        <option value="pen">Caneta Bézier</option>
+      <p>Crie a rua por pontos Bézier. Clique para adicionar um ponto e arraste para definir suas alças.</p>
+      <p>Na mesma ferramenta, arraste os pontos e as alças de uma rua existente para ajustar sua curva. Clique no ponto central para subdividir um trecho.</p>
+      <label>Alças <select value={params.curveMode ?? "mirrored"} onChange={(event) => onChange({ ...params, curveMode: event.currentTarget.value as NonNullable<PathBrushParams["curveMode"]> })}>
+        <option value="mirrored">Espelhadas</option>
+        <option value="aligned">Alinhadas</option>
+        <option value="free">Livres</option>
+        <option value="automatic">Automáticas</option>
       </select></label>
-      {params.creationMode === "pen" && <p>Clique para criar pontos; arraste para definir as alças. Enter confirma, Backspace remove o último ponto e Esc cancela. Clique no primeiro ponto para fechar a curva.</p>}
+      <p>Enter confirma o desenho; Backspace remove o último ponto; Esc cancela. Clique no primeiro ponto para fechar.</p>
       {sliderRow("Largura do leito", params.bedWidth, 0.5, 12, 0.25, (bedWidth) => onChange({ ...params, bedWidth }))}
     </div>
   );

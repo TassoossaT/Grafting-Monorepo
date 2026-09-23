@@ -110,3 +110,53 @@ test("real WASM edit tool: pointer-up applies the last sample even without a mov
     assert.deepEqual(updated.curve.start,[4,0,3]);
   }finally{editRegionTool.onCancel(f.ctx);pathPenTool.onCancel(f.ctx);f.session.free();}
 });
+
+test("unified road tool: legacy brush settings still create a curve, then edit it without changing tool", async()=>{
+  const { pathBrushTool: tool }=await import("../src/composition/tabletop/tools/paths/path-brush-tool.ts");
+  const f=fixture();
+  const legacy={...params,creationMode:"brush"};
+  try {
+    const blank=f.session.snapshot_json();
+    const put=(a,b=a)=>{tool.onPointerDown(f.ctx,a,legacy);tool.onPointerUp(f.ctx,gesture(a,b),legacy);};
+    put(sample(-10,0),sample(-6,3));
+    assert.equal(f.session.snapshot_json(),blank,"a drag places an anchor, never paints an area");
+    put(sample(10,0),sample(14,-3));
+    assert.equal(f.session.snapshot_json(),blank);
+    tool.onKeyDown(f.ctx,"Enter",legacy);
+    const before=f.session.snapshot_json();
+    const edge=f.runtime.getGraphSnapshot().edges.find(e=>e.curve);
+    const handle={...sample(-6,3),nodeId:curvePickId(edge.edgeId,1)};
+    tool.onPointerDown(f.ctx,handle,legacy);
+    tool.onPointerMove(f.ctx,gesture(handle,sample(-5,5)),legacy);
+    assert.equal(f.session.snapshot_json(),before);
+    tool.onPointerUp(f.ctx,gesture(handle,sample(-4,4)),legacy);
+    const after=f.session.snapshot_json();
+    assert.notEqual(after,before);
+    assert.deepEqual(f.runtime.getGraphSnapshot().edges.find(e=>e.edgeId===edge.edgeId).curve.start,[6,0,4]);
+    assert.equal(tool.onKeyDown(f.ctx,"Enter",legacy),false,"grabbing a handle must not start a new draft");
+    f.session.undo_region_overlay("curve-edit:2");
+    assert.deepEqual(JSON.parse(f.session.snapshot_json()),JSON.parse(before));
+    f.session.redo_region_overlay("curve-edit:2");
+    assert.deepEqual(JSON.parse(f.session.snapshot_json()),JSON.parse(after));
+  }finally{tool.onCancel(f.ctx);f.session.free();}
+});
+test("unified road tool: moving an anchor, cancelling and subdividing all use the same tool", async()=>{
+  const { pathBrushTool: tool }=await import("../src/composition/tabletop/tools/paths/path-brush-tool.ts");
+  const f=fixture();
+  try {
+    f.place(sample(-10,0));f.place(sample(10,0));tool.onKeyDown(f.ctx,"Enter",params);
+    let edge=f.runtime.getGraphSnapshot().edges.find(e=>e.curve);
+    const a={...sample(-10,0),nodeId:edge.startNodeId};
+    const before=f.session.snapshot_json();
+    tool.onPointerDown(f.ctx,a,params);tool.onPointerMove(f.ctx,gesture(a,sample(-10,4)),params);
+    tool.onCancel(f.ctx);tool.onPointerUp(f.ctx,gesture(a,sample(-10,4)),params);
+    assert.equal(f.session.snapshot_json(),before);
+    tool.onPointerDown(f.ctx,a,params);tool.onPointerUp(f.ctx,gesture(a,sample(-10,4)),params);
+    assert.equal(f.runtime.getGraphSnapshot().nodes.find(n=>n.id===a.nodeId).position.z,4);
+    edge=f.runtime.getGraphSnapshot().edges.find(e=>e.curve);
+    const mid={...sample(0,2),nodeId:curvePickId(edge.edgeId,"midpoint")};
+    tool.onPointerDown(f.ctx,mid,params);tool.onPointerUp(f.ctx,gesture(mid,mid),params);
+    assert.equal(f.runtime.getGraphSnapshot().edges.filter(e=>e.curve).length,2);
+    assert.equal(tool.onKeyDown(f.ctx,"Enter",params),false);
+  }finally{tool.onCancel(f.ctx);f.session.free();}
+});

@@ -2095,11 +2095,11 @@ here".
 
 ### `variable vtt.path-brush-tool.pathBrushTool: ConstructionTool<"path-brush">`
 
-Both authoring gestures use the same path recipe and transaction pipeline.
+Stable tool identity; the road is always authored and edited through its curve.
 
 ### `variable vtt.path-pen-tool.pathPenTool: ConstructionTool<"path-brush">`
 
-VTT binding for the reusable pen; only finish changes the construction session.
+One road tool: existing curve controls edit; an empty placement starts authoring.
 
 ### `interface vtt.platform-contour-merge.DirectedContourEdge`
 
@@ -5032,7 +5032,11 @@ Width of the flat traversable bed, in world units.
 
 ### `property vtt.tool-types.PathBrushParams.creationMode?: "brush" | "pen"`
 
-The creation gesture; omitted preserves the freehand brush.
+Legacy preference retained for saved parameters; both values now use the unified curve tool.
+
+### `property vtt.tool-types.PathBrushParams.curveMode?: "automatic" | "aligned" | "mirrored" | "free"`
+
+Constraint for editing an existing curve with this same tool.
 
 ### `property vtt.tool-types.PathBrushParams.miterLimit: number`
 
