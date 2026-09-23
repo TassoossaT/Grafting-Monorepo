@@ -3,7 +3,6 @@ import test from "node:test";
 
 import { openingTool } from "../src/composition/tabletop/tools/openings/opening-tool.ts";
 import { surfaceRefFromNodeSet } from "../src/entities/map/index.ts";
-import { panelHeightWidgetPickId } from "../src/features/edit-construction/index.ts";
 import { addFace, sessionFixture } from "./platform-session-fixture.mjs";
 
 /**
@@ -146,54 +145,69 @@ test("grabbing still finds and drags an existing opening even when the renderer'
   } finally { session.free(); }
 });
 
-test("placing a window right beside an existing window of the same kind merges them into one wider opening", () => {
+test("placing a window right beside an existing window of the same kind leaves two independent openings -- never merged", () => {
   const { runtime, session, ctx } = sessionFixture();
   try {
     wall(runtime);
     openingTool.onClick(ctx, { point: { x: 2, y: 1, z: 0 } }, WINDOW); // rim [1.5, 2.5]
-    assert.equal(runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "opening").length, 1);
-
-    openingTool.onClick(ctx, { point: { x: 3.2, y: 1, z: 0 } }, WINDOW); // rim [2.7, 3.7] -- 0.2 short of flush
+    openingTool.onClick(ctx, { point: { x: 3.2, y: 1, z: 0 } }, WINDOW); // rim [2.7, 3.7]
 
     const openings = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "opening");
-    assert.equal(openings.length, 1, "the two windows must merge into one, not stand side by side as two");
-    const xs = openings[0].nodes.map((n) => n.position.x);
-    assert.ok(Math.abs(Math.min(...xs) - 1.5) < 1e-6, `expected the merged opening to start at 1.5, got ${Math.min(...xs)}`);
-    assert.ok(Math.abs(Math.max(...xs) - 3.7) < 1e-6, `expected the merged opening to end at 3.7, got ${Math.max(...xs)}`);
+    assert.equal(openings.length, 2, "two separate openings, side by side");
   } finally { session.free(); }
 });
 
-test("a door placed beside a window never merges -- only the same kind absorbs a neighbor", () => {
-  const { runtime, session, ctx } = sessionFixture();
-  try {
-    wall(runtime);
-    openingTool.onClick(ctx, { point: { x: 2, y: 1, z: 0 } }, WINDOW); // rim [1.5, 2.5], height [1, 2]
-    const DOOR = { openingKind: "door", width: 1, height: 2, sill: 0 };
-    openingTool.onClick(ctx, { point: { x: 3.2, y: 0, z: 0 } }, DOOR); // rim [2.7, 3.7], height [0, 2] -- overlaps the window's height band, close enough to merge, but a different kind
-
-    const openings = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "opening");
-    assert.equal(openings.length, 2, "different kinds must never merge into each other");
-  } finally { session.free(); }
-});
-
-test("dragging a window flush against another window of the same kind merges them too", () => {
+test("dragging a window onto another one is refused, leaving both where they were", () => {
   const { runtime, session, ctx } = sessionFixture();
   try {
     wall(runtime);
     openingTool.onClick(ctx, { point: { x: 1, y: 1, z: 0 } }, WINDOW); // rim [0.5, 1.5]
     openingTool.onClick(ctx, { point: { x: 6, y: 1, z: 0 } }, WINDOW); // rim [5.5, 6.5]
-    assert.equal(runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "opening").length, 2);
-
-    const target = openingAt(ctx, 6);
-    const surfaceRef = surfaceRefFromNodeSet(target.surfaceKey);
-    // y=1.5 is this window's own vertical center ([1, 2]) -- well clear of
-    // any edge-handle band, so this grab reads as a body move, not a resize.
+    const surfaceRef = surfaceRefFromNodeSet(openingAt(ctx, 6).surfaceKey);
     openingTool.onPointerDown(ctx, { point: { x: 6, y: 1.5, z: 0 }, surfaceRef }, WINDOW);
-    openingTool.onPointerUp(ctx, { start: { point: { x: 6, y: 1.5, z: 0 } }, current: { point: { x: 2.2, y: 1.5, z: 0 } } }, WINDOW); // rim [1.7, 2.7] -- 0.2 short of flush against the first
-    openingTool.onClick(ctx, { point: { x: 2.2, y: 1.5, z: 0 }, surfaceRef }, WINDOW);
+    openingTool.onPointerUp(ctx, { start: { point: { x: 6, y: 1.5, z: 0 } }, current: { point: { x: 1.4, y: 1.5, z: 0 } } }, WINDOW);
+    openingTool.onClick(ctx, { point: { x: 1.4, y: 1.5, z: 0 }, surfaceRef }, WINDOW);
 
     const openings = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "opening");
-    assert.equal(openings.length, 1, "dragging one window flush against another must merge them");
+    assert.equal(openings.length, 2);
+    assert.ok(openingAt(ctx, 6) !== undefined, "the dragged window stays where it was");
+  } finally { session.free(); }
+});
+
+test("an opening is its own region pinned to the wall, and the wall gets no hole", () => {
+  const { runtime, session, ctx } = sessionFixture();
+  try {
+    const host = wall(runtime);
+    openingTool.onClick(ctx, { point: { x: 2, y: 1, z: 0 } }, WINDOW); // rim [1.5, 2.5] x [1, 2]
+    const standing = runtime.getAllRegionTopologies();
+    const opening = standing.find((t) => t.surfaceType === "opening");
+    const wallNow = standing.find((t) => t.surfaceType === "wall-white");
+    assert.equal(wallNow.holes.length, 0);
+    const wallNodes = new Set(wallNow.nodes.map((n) => n.id));
+    assert.ok(opening.nodes.every((n) => !wallNodes.has(n.id)), "no node is shared with the wall");
+    for (const node of opening.nodes) {
+      assert.deepEqual(node.pin.hostSurfaceKey, host.surfaceKey);
+      assert.ok(node.pin.u >= 0 && node.pin.u <= 1 && node.pin.v >= 0 && node.pin.v <= 1);
+    }
+    const byCorner = (x, y) => opening.nodes.find((n) => Math.abs(n.position.x - x) < 1e-6 && Math.abs(n.position.y - y) < 1e-6);
+    assert.ok(Math.abs(byCorner(1.5, 1).pin.u - 1.5 / 8) < 1e-9 && Math.abs(byCorner(1.5, 1).pin.v - 1 / 3) < 1e-9);
+  } finally { session.free(); }
+});
+
+test("lowering the wall's top carries the opening, deformed by the local height", () => {
+  const { runtime, session, ctx } = sessionFixture();
+  try {
+    wall(runtime);
+    openingTool.onClick(ctx, { point: { x: 2, y: 1, z: 0 } }, WINDOW); // rim [1.5, 2.5] x [1, 2]
+    runtime.applyRegionEdit([{ kind: "move-vertex", nodeId: "w:a-top", position: { x: 0, y: 1.5, z: 0 } }]);
+    const opening = runtime.getAllRegionTopologies().find((t) => t.surfaceType === "opening");
+    for (const node of opening.nodes) {
+      const [resolved] = runtime.resolveOnHost({ hostSurfaceKey: node.pin.hostSurfaceKey, uv: [[node.pin.u, node.pin.v]] });
+      assert.ok(Math.hypot(resolved.x - node.position.x, resolved.y - node.position.y, resolved.z - node.position.z) < 1e-6);
+    }
+    const topLeft = opening.nodes.find((n) => Math.abs(n.position.x - 1.5) < 1e-6 && n.pin.v > 0.5);
+    const heightThere = 1.5 + (3 - 1.5) * (1.5 / 8);
+    assert.ok(Math.abs(topLeft.position.y - (2 / 3) * heightThere) < 1e-6, `top-left follows the local height, got ${topLeft.position.y}`);
   } finally { session.free(); }
 });
 
@@ -410,54 +424,6 @@ test("dragging a door's bottom corner dot only widens it -- the floor sill never
     assert.ok(Math.abs(Math.max(...xs) - 3.5) < 1e-6, `the right edge must follow to 3.5, got ${Math.max(...xs)}`);
     assert.ok(Math.abs(Math.min(...ys) - 0) < 1e-6, "a door's floor sill must never move");
     assert.ok(Math.abs(Math.max(...ys) - 2) < 1e-6, "a door's top must stay put");
-  } finally { session.free(); }
-});
-
-/** The widget id on the opening's rim edge whose two ends both sit at height `y` -- the same dot the runtime draws at that edge's midpoint. */
-function edgeWidgetAt(runtime, y, zone) {
-  const opening = runtime.getAllRegionTopologies().find((t) => t.surfaceType === "opening");
-  const yOf = (id) => opening.nodes.find((n) => n.id === id).position.y;
-  const edge = opening.outerLoops.flat().find((e) => Math.abs(yOf(e.startNodeId) - y) < 1e-6 && Math.abs(yOf(e.endNodeId) - y) < 1e-6);
-  return panelHeightWidgetPickId(edge.edgeId, zone);
-}
-
-function pressDot(ctx, params, nodeId, down, up) {
-  openingTool.onPointerDown(ctx, { point: down, nodeId }, params);
-  openingTool.onPointerUp(ctx, { start: { point: down }, current: { point: up } }, params);
-  openingTool.onClick(ctx, { point: up }, params);
-}
-
-for (const zone of ["group", "single"]) {
-  test(`pressing either dot (${zone}) on a window's top edge raises just the top`, () => {
-    const { runtime, session, ctx } = sessionFixture();
-    try {
-      wall(runtime);
-      openingTool.onClick(ctx, { point: { x: 2, y: 1, z: 0 } }, WINDOW); // rim [1.5, 2.5] x [1, 2]
-      const dotY = zone === "group" ? 2.22 : 1.78;
-      pressDot(ctx, WINDOW, edgeWidgetAt(runtime, 2, zone), { x: 2, y: dotY, z: 0 }, { x: 2.3, y: 2.7, z: 0 });
-
-      const openings = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "opening");
-      assert.equal(openings.length, 1, "an edge-dot drag resizes, it never creates a second opening");
-      const xs = openings[0].nodes.map((n) => n.position.x);
-      const ys = openings[0].nodes.map((n) => n.position.y);
-      assert.ok(Math.abs(Math.max(...ys) - 2.7) < 1e-6, `the top must follow to 2.7, got ${Math.max(...ys)}`);
-      assert.ok(Math.abs(Math.min(...ys) - 1) < 1e-6, `the sill must stay put, got ${Math.min(...ys)}`);
-      assert.ok(Math.abs(Math.min(...xs) - 1.5) < 1e-6 && Math.abs(Math.max(...xs) - 2.5) < 1e-6, "the sides must stay put");
-    } finally { session.free(); }
-  });
-}
-
-test("pressing the dot on a window's sill edge lowers just the sill", () => {
-  const { runtime, session, ctx } = sessionFixture();
-  try {
-    wall(runtime);
-    openingTool.onClick(ctx, { point: { x: 2, y: 1, z: 0 } }, WINDOW); // rim [1.5, 2.5] x [1, 2]
-    pressDot(ctx, WINDOW, edgeWidgetAt(runtime, 1, "single"), { x: 2, y: 0.78, z: 0 }, { x: 2, y: 0.4, z: 0 });
-
-    const opening = runtime.getAllRegionTopologies().find((t) => t.surfaceType === "opening");
-    const ys = opening.nodes.map((n) => n.position.y);
-    assert.ok(Math.abs(Math.min(...ys) - 0.4) < 1e-6, `the sill must follow to 0.4, got ${Math.min(...ys)}`);
-    assert.ok(Math.abs(Math.max(...ys) - 2) < 1e-6, `the top must stay put, got ${Math.max(...ys)}`);
   } finally { session.free(); }
 });
 

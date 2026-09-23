@@ -122,6 +122,7 @@ function createFakeConstructionPort() {
       if (started) throw new Error("construction session is already started");
       started = true;
     },
+    setSurfaceCapabilities() {},
     addPatch() {
       requireStarted();
       const created = nextCreatedSurfaceKeys ?? [FAKE_TERRAIN_SURFACE_KEY, FAKE_WALL_SURFACE_KEY];

@@ -4,16 +4,14 @@ import { enginePort } from "./engine-planar.mjs";
 
 import { panelRailOf } from "../src/features/edit-construction/topology/panel-rail.ts";
 import { openingTool } from "../src/composition/tabletop/tools/openings/opening-tool.ts";
+import { sessionFixture } from "./platform-session-fixture.mjs";
 /** Where a curve runs, asked of the engine -- the same answer the tool builds on. */
 function onCurve(geometry, start, end, at) {
   const [answer] = enginePort.queryContours([{ geometry, from: [start.x, start.z], to: [end.x, end.z], question: { kind: "evaluate", at } }]);
   return answer.points;
 }
 
-const TABLE_ID = "table-1";
 const WINDOW = { openingKind: "window", width: 1, height: 1, sill: 1 };
-
-let sequence = 0;
 
 /**
  * One upright panel as the engine reports it: a base run, a side rising, a
@@ -49,52 +47,6 @@ function panelTopology(id, corners, arc) {
     ],
     holes: [],
     nodes,
-  };
-}
-
-function contextFor(topologies) {
-  const patches = [];
-  const holes = [];
-  return {
-    patches,
-    holes,
-    ctx: {
-      runtime: {
-        getAllRegionTopologies: () => topologies,
-        getRegionTopology: (surfaceKey) =>
-          topologies.find((topology) => topology.surfaceKey.join("|") === surfaceKey.join("|")),
-        transact: (_id, _origin, work) => ({ value: work(), recorded: true }),
-        queryContours: enginePort.queryContours,
-        getSnapshot: () => ({ tableId: TABLE_ID, map: { nodePositions: new Map() } }),
-        addPatch: (patch, origin, causeId) => {
-          patches.push({ patch, origin, causeId });
-          return {
-            affectedSurfaceKeys: [],
-            createdSurfaceKeys: [],
-            removedSurfaceKeys: [],
-            createdNodeIds: [],
-            removedNodeIds: [],
-            skippedRegionIds: [],
-          };
-        },
-        addHole: (request, origin, causeId) => {
-          holes.push({ request, origin, causeId });
-          return {
-            affectedSurfaceKeys: [],
-            createdSurfaceKeys: [],
-            removedSurfaceKeys: [],
-            createdNodeIds: [],
-            removedNodeIds: [],
-          };
-        },
-      },
-      history: undefined,
-      tableId: TABLE_ID,
-      snapToGrid: false,
-      nextSequence: () => (sequence += 1),
-      reportSelection: () => {},
-      reportFeedback: () => {},
-    },
   };
 }
 
@@ -196,162 +148,133 @@ test("a flat face is not a panel and takes no opening", () => {
   assert.equal(panelRailOf(enginePort, flat), undefined);
 });
 
-test("a click on a wall opens it and stands a face in the opening", () => {
-  const { ctx, patches, holes } = contextFor([STRAIGHT]);
+/** `topology` registered in a real session, so the tool reads the engine's own host frame. */
+function sessionWith(topology) {
+  const fixture = sessionFixture();
+  const [outer] = topology.outerLoops;
+  fixture.runtime.addPatch({
+    nodes: topology.nodes,
+    edges: outer.map((use) => ({ edgeId: use.edgeId, startNodeId: use.startNodeId, endNodeId: use.endNodeId, geometry: use.geometry })),
+    regions: [{ regionId: topology.surfaceKey[1], boundary: outer.map((use) => ({ edgeId: use.edgeId, reversed: false })), surfaceType: topology.surfaceType, physical: true }],
+  });
+  const openings = () => fixture.runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "opening");
+  return { ...fixture, openings };
+}
 
-  // y=1 places this window's own height (1 tall) exactly at sill 1 to
-  // lintel 2 -- height is now read off the click, not off the `sill` param
-  // alone, so the click must actually land where the assertions expect it.
-  openingTool.onClick(ctx, { point: { x: 3, y: 1, z: 0 } }, WINDOW);
+test("a click on a wall stands an opening region there, pinned to the wall, with no hole in the wall", () => {
+  const { session, ctx, runtime, openings } = sessionWith(STRAIGHT);
+  try {
+    // y=1 is the clicked sill: the window runs from 1 to its own height above.
+    openingTool.onClick(ctx, { point: { x: 3, y: 1, z: 0 } }, WINDOW);
 
-  assert.equal(patches.length, 1);
-  assert.equal(holes.length, 1);
-
-  const { patch } = patches[0];
-  assert.equal(patch.regions.length, 1);
-  assert.equal(patch.regions[0].surfaceType, "opening");
-  assert.equal(patch.regions[0].physical, false, "you can see and walk through an opening");
-  assert.equal(patch.nodes.length, 4);
-  for (const node of patch.nodes) {
-    assert.ok(node.position.y >= 1 && node.position.y <= 2, "sill to lintel");
-    assert.ok(node.position.x >= 2.4 && node.position.x <= 3.6, "centred on the click");
-    assert.equal(node.position.z, 0, "on the wall, not beside it");
-  }
+    const [opening] = openings();
+    assert.ok(opening, "one opening region");
+    assert.equal(opening.physical, false, "you can see and walk through an opening");
+    assert.equal(opening.nodes.length, 4);
+    for (const node of opening.nodes) {
+      assert.ok(node.position.y >= 1 - 1e-6 && node.position.y <= 2 + 1e-6, "sill to lintel");
+      assert.ok(node.position.x >= 2.5 - 1e-6 && node.position.x <= 3.5 + 1e-6, "centred on the click");
+      assert.ok(Math.abs(node.position.z) < 1e-9, "on the wall, not beside it");
+      assert.deepEqual(node.pin.hostSurfaceKey, STRAIGHT.surfaceKey);
+    }
+    const wall = runtime.getAllRegionTopologies().find((t) => t.surfaceType === "wall-white");
+    assert.equal(wall.holes.length, 0, "the wall is cut at mesh time, never given a topological hole");
+  } finally { session.free(); }
 });
 
 test("the vertical spot clicked sets the opening's own height on the wall, not just the `sill` param's last value", () => {
-  const { ctx, patches } = contextFor([STRAIGHT]);
-
-  openingTool.onClick(ctx, { point: { x: 3, y: 1.7, z: 0 } }, WINDOW);
-
-  const heights = patches[0].patch.nodes.map((node) => node.position.y).sort((a, b) => a - b);
-  assert.ok(Math.abs(heights[0] - 1.7) < 1e-6, `expected sill near the clicked height, got ${heights[0]}`);
-  assert.ok(Math.abs(heights[3] - 2.7) < 1e-6, `expected lintel near the clicked height, got ${heights[3]}`);
+  const { session, ctx, openings } = sessionWith(STRAIGHT);
+  try {
+    openingTool.onClick(ctx, { point: { x: 3, y: 1.7, z: 0 } }, WINDOW);
+    const heights = openings()[0].nodes.map((node) => node.position.y).sort((a, b) => a - b);
+    assert.ok(Math.abs(heights[0] - 1.7) < 1e-6, `expected sill at the clicked height, got ${heights[0]}`);
+    assert.ok(Math.abs(heights[3] - 2.7) < 1e-6, `expected lintel one height above, got ${heights[3]}`);
+  } finally { session.free(); }
 });
 
 test("a click too low or too high for the opening's height still places it, clamped to the nearest spot that fits", () => {
-  const { ctx, patches } = contextFor([STRAIGHT]);
-
-  // Within one snap step (0.02, `sillAt`'s own rounding) of the true
-  // MARGIN/lintel clamp, not exact -- the clamped value itself gets snapped
-  // same as any other pointer-derived height.
-  openingTool.onClick(ctx, { point: { x: 3, y: 0, z: 0 } }, WINDOW);
-  const low = patches[0].patch.nodes.map((node) => node.position.y).sort((a, b) => a - b);
-  assert.ok(Math.abs(low[0] - 0.15) < 0.02, "clamped to the floor margin, not refused");
-
-  patches.length = 0;
-  openingTool.onClick(ctx, { point: { x: 3, y: 10, z: 0 } }, WINDOW);
-  const high = patches[0].patch.nodes.map((node) => node.position.y).sort((a, b) => a - b);
-  assert.ok(Math.abs(high[3] - 2.85) < 0.02, "clamped to the lintel margin, not refused");
+  const { session, ctx, openings } = sessionWith(STRAIGHT);
+  try {
+    openingTool.onClick(ctx, { point: { x: 1.5, y: 0, z: 0 } }, WINDOW);
+    openingTool.onClick(ctx, { point: { x: 4.5, y: 10, z: 0 } }, WINDOW);
+    const [low, high] = openings()
+      .map((opening) => opening.nodes.map((node) => node.position.y).sort((a, b) => a - b))
+      .sort((a, b) => a[0] - b[0]);
+    assert.ok(Math.abs(low[0] - 0.15) < 1e-6, `clamped to the floor margin, got ${low[0]}`);
+    assert.ok(Math.abs(high[3] - 2.85) < 1e-6, `clamped to the lintel margin, got ${high[3]}`);
+  } finally { session.free(); }
 });
 
-test("the wall is opened along the very rim the face stands on, walked the other way", () => {
-  const { ctx, patches, holes } = contextFor([STRAIGHT]);
-
-  openingTool.onClick(ctx, { point: { x: 3, y: 1.5, z: 0 } }, WINDOW);
-
-  const face = patches[0].patch.regions[0].boundary;
-  const { request } = holes[0];
-  assert.deepEqual(request.surfaceKey, ["@region", "wall-1"]);
-  assert.deepEqual(
-    request.hole,
-    [...face].reverse().map((use) => ({ edgeId: use.edgeId, reversed: !use.reversed })),
-    "reversing a ring flips every use and the order with it, or the loop stops closing",
-  );
-  assert.deepEqual(
-    [...request.hole].map((use) => use.edgeId).sort(),
-    [...face].map((use) => use.edgeId).sort(),
-    "one rim, not two coincident ones",
-  );
+test("an opening on a curved wall sits on the curve, every node of it", () => {
+  const { session, ctx, openings } = sessionWith(CURVED);
+  try {
+    // The renderer picked the panel itself, the only exact answer on a curve:
+    // the straight line between its two ends runs through open air.
+    openingTool.onClick(ctx, { point: { x: 0, y: 1, z: 2 }, surfaceRef: "@region,wall-arc" }, WINDOW);
+    const [opening] = openings();
+    assert.ok(opening, "a curved wall takes an opening like any other");
+    assert.ok(opening.nodes.length > 4, "its horizontal sides follow the curve, not one chord");
+    for (const node of opening.nodes) {
+      assert.ok(Math.abs(Math.hypot(node.position.x, node.position.z) - 2) < 1e-3, `node left the wall: ${JSON.stringify(node.position)}`);
+    }
+  } finally { session.free(); }
 });
 
-test("an opening on a curved wall sits on the curve", () => {
-  const { ctx, patches } = contextFor([CURVED]);
-
-  // The renderer picked the panel itself, which is the only exact answer on
-  // a curve: the straight line between its two ends runs through open air.
-  openingTool.onClick(ctx, { point: { x: 0, y: 0, z: 2 }, surfaceRef: "@region,wall-arc" }, WINDOW);
-
-  assert.equal(patches.length, 1, "a curved wall takes an opening like any other");
-  for (const node of patches[0].patch.nodes) {
-    const radius = Math.hypot(node.position.x, node.position.z);
-    assert.ok(Math.abs(radius - 2) < 1e-3, `corner left the wall: ${JSON.stringify(node.position)}`);
-  }
-});
-
-/**
- * The exact regression this task closes: before {@link panelRailOf} learned
- * to build a frame for a Bezier rail too, a curved-wall opening's own
- * bottom rim was declared as a straight chord regardless of the wall's real
- * shape (`frameOf` had no Bezier case, so `panelRailOf` fell back to
- * `{ kind: "line" }`), which put an opening's own rim visibly off the
- * curve. This drives the real `openingTool` against a Bezier panel and
- * checks both that the rim is declared curved at all, and that its own
- * handles are the genuine sub-curve for *that* span -- not the whole
- * rail's handles reused unmodified, which would trace an entirely
- * different curve once the opening sits anywhere but the rail's own ends.
- */
-test("an opening on a Bezier wall carries its own exact sub-curve, not the whole rail's handles nor a straight chord", () => {
-  const { ctx, patches } = contextFor([BEZIER]);
-
-  const [[midX, midZ]] = onCurve({ kind: "bezier", ...BEZIER_HANDLES }, BEZIER_START, BEZIER_END, [0.5]);
-  openingTool.onClick(ctx, { point: { x: midX, y: 0, z: midZ }, surfaceRef: "@region,wall-bezier" }, WINDOW);
-  assert.equal(patches.length, 1, "a Bezier wall takes an opening like any other");
-
-  const { patch } = patches[0];
-  const rimEdge = patch.edges.find((edge) => edge.geometry?.kind === "bezier");
-  assert.ok(rimEdge, "the opening's own bottom rim must carry curved geometry, not a straight chord");
-
-  assert.ok(
-    Math.abs(rimEdge.geometry.handle1[0] - BEZIER_HANDLES.handle1[0]) > 1e-3 ||
-      Math.abs(rimEdge.geometry.handle1[1] - BEZIER_HANDLES.handle1[1]) > 1e-3,
-    "must be this span's own sub-curve handles, not the rail's whole handles reused unmodified",
-  );
-
-  const positionOf = new Map(patch.nodes.map((node) => [node.id, node.position]));
-  const rimStart = positionOf.get(rimEdge.startNodeId);
-  const rimEnd = positionOf.get(rimEdge.endNodeId);
-  const [[sampleX, sampleZ]] = onCurve(rimEdge.geometry, rimStart, rimEnd, [0.5]);
-
-  const rail = onCurve(
-    { kind: "bezier", ...BEZIER_HANDLES },
-    BEZIER_START,
-    BEZIER_END,
-    Array.from({ length: 201 }, (_, step) => step / 200),
-  );
-  let closest = Infinity;
-  for (const [ox, oz] of rail) closest = Math.min(closest, Math.hypot(sampleX - ox, sampleZ - oz));
-  assert.ok(closest < 1e-3, `the declared sub-curve must lie exactly on the original rail curve, closest distance ${closest}`);
+test("an opening on a Bezier wall has every node on the wall's own curve", () => {
+  const { session, ctx, openings } = sessionWith(BEZIER);
+  try {
+    const [[midX, midZ]] = onCurve({ kind: "bezier", ...BEZIER_HANDLES }, BEZIER_START, BEZIER_END, [0.5]);
+    openingTool.onClick(ctx, { point: { x: midX, y: 1, z: midZ }, surfaceRef: "@region,wall-bezier" }, WINDOW);
+    const [opening] = openings();
+    assert.ok(opening, "a Bezier wall takes an opening like any other");
+    assert.ok(opening.nodes.length > 4, "its horizontal sides follow the curve, not one chord");
+    const rail = onCurve({ kind: "bezier", ...BEZIER_HANDLES }, BEZIER_START, BEZIER_END, Array.from({ length: 2001 }, (_, step) => step / 2000));
+    for (const node of opening.nodes) {
+      let closest = Infinity;
+      for (const [ox, oz] of rail) closest = Math.min(closest, Math.hypot(node.position.x - ox, node.position.z - oz));
+      assert.ok(closest < 5e-3, `node off the curve by ${closest}`);
+    }
+  } finally { session.free(); }
 });
 
 test("an opening taller than the wall is refused rather than half-built", () => {
-  const { ctx, patches, holes } = contextFor([STRAIGHT]);
-
-  openingTool.onClick(ctx, { point: { x: 3, y: 0, z: 0 } }, { ...WINDOW, height: 5 });
-
-  assert.equal(patches.length, 0, "nothing is registered when it cannot fit");
-  assert.equal(holes.length, 0, "and the wall is never opened for a face that will not come");
+  const { session, ctx, openings } = sessionWith(STRAIGHT);
+  try {
+    openingTool.onClick(ctx, { point: { x: 3, y: 0, z: 0 } }, { ...WINDOW, height: 5 });
+    assert.equal(openings().length, 0, "nothing is registered when it cannot fit");
+  } finally { session.free(); }
 });
 
 test("a click on open ground opens nothing", () => {
-  const { ctx, patches, holes } = contextFor([STRAIGHT]);
-
-  openingTool.onClick(ctx, { point: { x: 3, y: 0, z: 9 } }, WINDOW);
-
-  assert.equal(patches.length, 0);
-  assert.equal(holes.length, 0);
+  const { session, ctx, openings } = sessionWith(STRAIGHT);
+  try {
+    openingTool.onClick(ctx, { point: { x: 3, y: 0, z: 9 } }, WINDOW);
+    assert.equal(openings().length, 0);
+  } finally { session.free(); }
 });
 
 test("a door sits on the floor of the wall it opens", () => {
-  const { ctx, patches } = contextFor([STRAIGHT]);
+  const { session, ctx, openings } = sessionWith(STRAIGHT);
+  try {
+    openingTool.onClick(ctx, { point: { x: 3, y: 0, z: 0 } }, { openingKind: "door", width: 1, height: 2, sill: 0 });
+    const [opening] = openings();
+    assert.deepEqual(opening.nodes.map((node) => node.position.y).sort((a, b) => a - b), [0, 0, 2, 2]);
+    assert.ok(opening.nodes.filter((node) => node.position.y === 0).every((node) => node.pin.v === 0), "pinned at the very bottom of the face");
+  } finally { session.free(); }
+});
 
-  openingTool.onClick(ctx, { point: { x: 3, y: 0, z: 0 } }, {
-    openingKind: "door",
-    width: 1,
-    height: 2,
-    sill: 0,
-  });
-
-  const heights = patches[0].patch.nodes.map((node) => node.position.y).sort((a, b) => a - b);
-  assert.deepEqual(heights, [0, 0, 2, 2]);
+test("the hover preview on a slanted-top wall shows the opening deformed by the local height", () => {
+  const { session, ctx, runtime } = sessionWith(STRAIGHT);
+  try {
+    runtime.applyRegionEdit([{ kind: "move-vertex", nodeId: "wall-1:t0", position: { x: 0, y: 1.5, z: 0 } }]);
+    const point = { x: 3, y: 0.5, z: 0 };
+    const preview = openingTool.previewFor({ start: { point }, current: { point }, samples: [{ point }] }, WINDOW, ctx);
+    assert.equal(preview.kind, "segments");
+    const vertices = [];
+    for (let index = 0; index < preview.positions.length; index += 3) vertices.push([preview.positions[index], preview.positions[index + 1]]);
+    const left = Math.min(...vertices.map(([vx]) => vx));
+    const right = Math.max(...vertices.map(([vx]) => vx));
+    const topAt = (x) => Math.max(...vertices.filter(([vx]) => Math.abs(vx - x) < 1e-4).map(([, vy]) => vy));
+    assert.ok(topAt(right) - topAt(left) > 1e-3, `the lintel follows the slanted top: ${topAt(left)} vs ${topAt(right)}`);
+  } finally { session.free(); }
 });

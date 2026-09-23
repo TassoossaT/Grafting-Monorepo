@@ -88,6 +88,7 @@ function createFakeConstructionSession() {
     async start() {
       started = true;
     },
+    setSurfaceCapabilities() {},
     async dispose() {
       started = false;
     },
@@ -174,9 +175,6 @@ function createFakeConstructionSession() {
       throw new Error("not exercised by this fake");
     },
     duplicateRegion() {
-      throw new Error("not exercised by this fake");
-    },
-    addHole() {
       throw new Error("not exercised by this fake");
     },
     getUnfilledLoops() {

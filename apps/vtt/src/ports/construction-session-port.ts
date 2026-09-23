@@ -383,9 +383,35 @@ export interface SurfaceMeshResult {
   readonly mesh: RenderMeshData;
 }
 
+/** Where a pinned node sits on its host face: `u` along the face, `v` a fraction of the local height at that `u`. */
+export interface ConstructionNodePin {
+  readonly hostSurfaceKey: ConstructionSurfaceKey;
+  readonly u: number;
+  readonly v: number;
+}
+
 export interface ConstructionNodeSnapshot {
   readonly id: ConstructionNodeId;
   readonly position: ConstructionPosition;
+  readonly pin?: ConstructionNodePin;
+}
+
+/** Per surface type: whether its regions subtract their area from the hosts they are pinned to, and whether it can be cut that way. */
+export interface ConstructionSurfaceCapability {
+  readonly surfaceType: string;
+  readonly cuts: boolean;
+  readonly acceptsCuts: boolean;
+}
+
+/** A point expressed in a host face's `(u, v)` frame; unclamped, `inside` when both are in `[0, 1]`. */
+export interface ConstructionHostPoint {
+  readonly u: number;
+  readonly v: number;
+  readonly inside: boolean;
+}
+
+export interface ConstructionPinRequest extends ConstructionNodePin {
+  readonly nodeId: ConstructionNodeId;
 }
 
 /** One generic graph edge, including edges deliberately not used by a face. */
@@ -609,20 +635,16 @@ export interface ConstructionSessionPort extends BezierPort {
   retypeEdge(edgeId: ConstructionEdgeId, geometry: ConstructionEdgeGeometry): RegionEditOutcome;
   /** Moves both of an edge's endpoints as one rigid unit. */
   moveEdge(edgeId: ConstructionEdgeId, delta: ConstructionPosition): RegionEditOutcome;
-  /**
-   * Opens one more inner loop on an existing face -- what a door or a
-   * window is an opening for. The loop must already be registered, and it
-   * keeps one free use per edge so a face can stand in it.
-   */
-  addHole(request: {
-    readonly surfaceKey: ConstructionSurfaceKey;
-    readonly hole: readonly ConstructionOrientedEdgeUse[];
-  }): RegionEditOutcome;
-  /** Closes one of a face's openings back up, by index, reclaiming whatever rim nothing stands on anymore. */
-  removeHole(request: {
-    readonly surfaceKey: ConstructionSurfaceKey;
-    readonly index: number;
-  }): RegionEditOutcome;
+  /** Session configuration, not undoable state: replaces the whole per-type capability table. */
+  setSurfaceCapabilities(capabilities: readonly ConstructionSurfaceCapability[]): void;
+  /** Pins nodes to host faces in relative coordinates; the host carries them from then on. */
+  pinNodes(pins: readonly ConstructionPinRequest[]): RegionEditOutcome;
+  /** Drops pins; the nodes stay where they are. */
+  unpinNodes(nodeIds: readonly ConstructionNodeId[]): RegionEditOutcome;
+  /** World points in a host face's `(u, v)` frame. Throws when the host is not an upright panel. */
+  projectToHost(request: { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly points: readonly ConstructionPosition[] }): readonly ConstructionHostPoint[];
+  /** Host `(u, v)` pairs back to world positions. Pure. */
+  resolveOnHost(request: { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly uv: readonly (readonly [number, number])[] }): readonly ConstructionPosition[];
   /**
    * Registers a whole generated patch in one transaction -- see
    * {@link ConstructionPatch} for why a generator names its own edges.

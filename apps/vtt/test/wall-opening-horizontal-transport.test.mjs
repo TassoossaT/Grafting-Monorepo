@@ -4,7 +4,7 @@ import test from "node:test";
 import { planEdit, resolveCloudTopology } from "../src/features/edit-construction/index.ts";
 import { sessionFixture } from "./platform-session-fixture.mjs";
 
-/** A single straight wall panel with a rectangular opening standing in it, built directly against the real WASM session. */
+/** A single straight wall panel with a rectangular opening pinned to it, built directly against the real WASM session. */
 function wallWithOpening(runtime) {
   const wallNodes = [
     { id: "w:a-bottom", position: { x: 0, y: 0, z: 0 } },
@@ -12,34 +12,30 @@ function wallWithOpening(runtime) {
     { id: "w:b-top", position: { x: 4, y: 3, z: 0 } },
     { id: "w:a-top", position: { x: 0, y: 3, z: 0 } },
   ];
-  const holeNodes = [
+  const openingNodes = [
     { id: "h:0", position: { x: 1, y: 1, z: 0 } },
     { id: "h:1", position: { x: 2, y: 1, z: 0 } },
     { id: "h:2", position: { x: 2, y: 2, z: 0 } },
     { id: "h:3", position: { x: 1, y: 2, z: 0 } },
   ];
   const edges = (nodes, prefix) => nodes.map((n, i) => ({ edgeId: `${prefix}:${i}`, startNodeId: n.id, endNodeId: nodes[(i + 1) % nodes.length].id }));
-  const wallEdges = edges(wallNodes, "wall");
-  const holeEdges = edges(holeNodes, "hole");
   const uses = (es) => es.map((e) => ({ edgeId: e.edgeId, reversed: false }));
-  // The wall's hole and the opening's own face are the SAME rim, one edge
-  // used forwards by the face and backwards by the wall's hole -- exactly
-  // how `opening-tool.ts`'s real onClick commits it (patch first, then the
-  // hole on the same boundary reversed).
-  const holeUses = uses(holeEdges);
-  const wallHole = [...holeUses].reverse().map((use) => ({ edgeId: use.edgeId, reversed: !use.reversed }));
+  const wallEdges = edges(wallNodes, "wall");
+  const openingEdges = edges(openingNodes, "opening");
   runtime.addPatch({
-    nodes: [...wallNodes, ...holeNodes],
-    edges: [...wallEdges, ...holeEdges],
+    nodes: [...wallNodes, ...openingNodes],
+    edges: [...wallEdges, ...openingEdges],
     regions: [
-      { regionId: "wall-with-opening", boundary: uses(wallEdges), holes: [wallHole], surfaceType: "wall-white", physical: true },
-      { regionId: "opening-face", boundary: holeUses, surfaceType: "opening", physical: false },
+      { regionId: "wall", boundary: uses(wallEdges), surfaceType: "wall-white", physical: true },
+      { regionId: "opening-face", boundary: uses(openingEdges), surfaceType: "opening", physical: false },
     ],
   });
-  return runtime.getAllRegionTopologies().find((t) => t.nodes.some((n) => n.id === "w:a-bottom"));
+  const wall = runtime.getAllRegionTopologies().find((t) => t.nodes.some((n) => n.id === "w:a-bottom"));
+  runtime.pinNodes(openingNodes.map((n) => ({ nodeId: n.id, hostSurfaceKey: wall.surfaceKey, u: n.position.x / 4, v: n.position.y / 3 })));
+  return wall;
 }
 
-test("real WASM: dragging the wall's bottom edge sideways carries the opening standing in it", () => {
+test("real WASM: dragging the wall's bottom edge sideways carries the opening pinned to it", () => {
   const { runtime, session } = sessionFixture();
   try {
     const wall = wallWithOpening(runtime);
@@ -49,13 +45,11 @@ test("real WASM: dragging the wall's bottom edge sideways carries the opening st
     assert.equal(plan.kind, "apply", plan.reason);
     const outcome = runtime.applyRegionEdit(plan.ops);
     const after = new Map(runtime.getGraphSnapshot().nodes.map((n) => [n.id, n.position]));
-    assert.equal(after.get("h:0").x, 3, "the opening's own rim must ride along with the wall segment it stands in");
+    assert.equal(after.get("h:0").x, 3, "the opening's pinned nodes ride along with their host");
     assert.equal(after.get("h:2").x, 4);
 
-    // Both faces sharing the moved rim must come back as affected, or the
-    // render layer has no signal to re-mesh the opening's own face -- the
-    // wall's hole would then move in the data while the door/window panel
-    // itself stays rendered exactly where it used to be.
+    // The opening shares no node with the wall: only the engine carrying its
+    // pins can report it, or its face stays rendered where it used to be.
     const opening = runtime.getAllRegionTopologies().find((t) => t.surfaceType === "opening");
     const affected = new Set(outcome.affectedSurfaceKeys.map((key) => key.join(" ")));
     assert.ok(affected.has(wall.surfaceKey.join(" ")), "wall must be reported affected");
@@ -63,7 +57,7 @@ test("real WASM: dragging the wall's bottom edge sideways carries the opening st
   } finally { session.free(); }
 });
 
-test("real WASM: stretching one bottom corner reprojects the opening onto the deformed wall's rail", () => {
+test("real WASM: stretching one bottom corner keeps the opening at the same relative place on the deformed wall", () => {
   const { runtime, session } = sessionFixture();
   try {
     const wall = wallWithOpening(runtime);
@@ -79,13 +73,12 @@ test("real WASM: stretching one bottom corner reprojects the opening onto the de
     assert.equal(after.get("w:a-top").x, -1, "the paired top corner still follows through the wall's own unconditional upright link");
     assert.equal(after.get("w:b-bottom").x, 4, "the untouched corner stays put -- this is a deformation, not a translation");
 
-    // The wall's new rail runs from x=-1 to x=4 (length 5, still a straight
-    // line): the opening's old travel positions (1 and 2, out of the old
-    // rail's length 4) land at x=0 and x=1 on it.
-    assert.equal(after.get("h:0").x, 0, "hole corner at old travel 1 rides the new rail");
-    assert.equal(after.get("h:1").x, 1, "hole corner at old travel 2 rides the new rail");
-    assert.equal(after.get("h:2").x, 1);
-    assert.equal(after.get("h:3").x, 0);
-    assert.equal(after.get("h:0").y, 1, "height is untouched by the reprojection -- the unconditional Y link already handles it");
+    // Pins are relative: u = 0.25 and 0.5 of the new 5-long base, from x=-1.
+    const near = (actual, expected) => Math.abs(actual - expected) < 1e-9;
+    assert.ok(near(after.get("h:0").x, 0.25), `h:0 at u=0.25, got ${after.get("h:0").x}`);
+    assert.ok(near(after.get("h:1").x, 1.5));
+    assert.ok(near(after.get("h:2").x, 1.5));
+    assert.ok(near(after.get("h:3").x, 0.25));
+    assert.ok(near(after.get("h:0").y, 1), "the wall kept its height, so v keeps the node's height");
   } finally { session.free(); }
 });

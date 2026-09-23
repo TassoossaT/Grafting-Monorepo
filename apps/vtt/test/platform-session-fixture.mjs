@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { initSync, ConstructionSession } from "../../../libs/domains/procgen/construction-wasm/pkg/grafting_procgen_construction_wasm.js";
-import { createEditHistoryStack } from "../src/features/edit-construction/index.ts";
+import { createEditHistoryStack, hasTrait, surfaceTypesWithTrait } from "../src/features/edit-construction/index.ts";
 
 initSync({ module: readFileSync(new URL("../../../libs/domains/procgen/construction-wasm/pkg/grafting_procgen_construction_wasm_bg.wasm", import.meta.url)) });
 const vector = (p) => [p.x, p.y, p.z];
@@ -11,6 +11,8 @@ const wirePatch = (p) => ({ ...p, nodes: p.nodes.map((n) => ({ ...n, position: v
 /** A real WASM session behind the narrow source used by tools and the planner. */
 export function sessionFixture() {
   const session = new ConstructionSession();
+  const capable = [...new Set([...surfaceTypesWithTrait("cuts"), ...surfaceTypesWithTrait("accepts-cuts")])];
+  session.set_surface_capabilities_json(JSON.stringify({ capabilities: capable.map((surfaceType) => ({ surfaceType, cuts: hasTrait(surfaceType, "cuts"), acceptsCuts: hasTrait(surfaceType, "accepts-cuts") })) }));
   let sequence = 0;
   const calls = { plans: 0, batches: 0, feedback: [] };
   const runtime = {
@@ -59,8 +61,10 @@ export function sessionFixture() {
       near: query.near ?? null,
     })))),
     getCurvedEdges: () => JSON.parse(session.curved_edges_json()).map((edge) => ({ ...edge, start: position(edge.start), end: position(edge.end) })),
-    addHole: (request) => JSON.parse(session.add_hole_json(JSON.stringify(request))),
-    removeHole: (request) => JSON.parse(session.remove_hole_json(JSON.stringify(request))),
+    pinNodes: (pins) => JSON.parse(session.pin_nodes_json(JSON.stringify({ pins }))),
+    unpinNodes: (nodeIds) => JSON.parse(session.unpin_nodes_json(JSON.stringify({ nodeIds }))),
+    projectToHost: ({ hostSurfaceKey, points }) => JSON.parse(session.project_to_host_json(JSON.stringify({ hostSurfaceKey, points: points.map(vector) }))),
+    resolveOnHost: (request) => JSON.parse(session.resolve_on_host_json(JSON.stringify(request))).map(position),
     getSnapshot: () => ({ tableId: "platform-test", map: { nodePositions: new Map() } }),
     transact(transactionId, _origin, work) {
       session.begin_transaction(transactionId);

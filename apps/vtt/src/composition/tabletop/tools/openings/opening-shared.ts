@@ -1,5 +1,5 @@
-import type { OpeningParams } from "@/features/edit-construction";
 import type {
+  ConstructionHostPoint,
   ConstructionNodeId,
   ConstructionOrientedEdgeUse,
   ConstructionPosition,
@@ -10,187 +10,209 @@ import type {
 // Relative, not `@/...`: the test runner resolves no aliases, so a module a
 // test reaches has to spell out any import it needs at run time. A
 // type-only `@/` import is fine -- those are erased.
-import { openingStructureType, type PanelRail } from "../../../../features/edit-construction/index.ts";
+import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
+import { openingStructureType } from "../../../../features/edit-construction/index.ts";
 
-import { boundaryUsage, createBoundaryEdges, reverseGeometry } from "../core/boundary-edges.ts";
+import { boundaryUsage, createBoundaryEdges } from "../core/boundary-edges.ts";
 import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
 import { commitChange } from "../../effects/effect-commit.ts";
 import { shapeChangeOfAddition } from "../../effects/shape-change.ts";
 
 /**
- * What creating, moving, resizing and deleting an opening all share: the
- * rim geometry an opening's own rectangle resolves to on its host wall's
- * rail, and the one-transaction commit that stands a face in it (and, for
- * an edit, first removes whatever stood there before).
+ * What creating, moving, resizing and deleting an opening share. An opening
+ * is its own region whose nodes are pinned to a host face in relative
+ * `(u, v)`: `u` along the face, `v` a fraction of the local height there.
+ * The host has no hole; the engine cuts it at mesh time.
  */
 
-/** How much wall must be left standing to either side of an opening, and above and below it. */
+/** How much wall (world units) must be left standing to either side of an opening, and above and below it. */
 export const MARGIN = 0.15;
 
-/** The four corners of an opening, in the order its own face walks them, plus the travel span they sit on -- needed to declare the rim's own bottom edge with {@link PanelRail.geometryBetween} rather than the whole rail's curvature. */
-export function rimCorners(
-  rail: PanelRail,
-  at: number,
-  params: OpeningParams,
-): { readonly corners: readonly ConstructionPosition[]; readonly from: number; readonly to: number; readonly bottom: number; readonly top: number } | undefined {
-  const half = params.width / 2;
-  const from = Math.max(MARGIN, Math.min(at - half, rail.length - MARGIN - params.width));
-  const to = from + params.width;
-  if (to > rail.length - MARGIN) return undefined;
-
-  // A door sits on the floor; anything else starts at its own sill. Either
-  // way the wall has to survive above it.
-  const bottom = rail.baseY + Math.max(params.openingKind === "door" ? 0 : MARGIN, params.sill);
-  const top = bottom + params.height;
-  if (top > rail.topY - MARGIN) return undefined;
-
-  return {
-    corners: [
-      rail.positionAt(from, bottom),
-      rail.positionAt(to, bottom),
-      rail.positionAt(to, top),
-      rail.positionAt(from, top),
-    ],
-    from,
-    to,
-    bottom,
-    top,
-  };
+/** An axis-aligned rectangle in a host face's `(u, v)` frame. */
+export interface HostRect {
+  readonly u0: number;
+  readonly u1: number;
+  readonly v0: number;
+  readonly v1: number;
 }
 
-/**
- * An existing opening's own current parameters, read back off its rim --
- * the inverse of {@link rimCorners}. `openingKind` has no field of its own
- * to read (only `rimCorners`' own floor clamp cared, at creation time), so
- * it is guessed from how close the sill sits to the floor: a genuine door
- * is indistinguishable from a window whose sill someone dragged to zero,
- * and that is fine -- the same shape means the same thing either way.
- */
-export function deriveOpeningParams(rail: PanelRail, topology: ConstructionRegionTopology): OpeningParams | undefined {
-  const [outer] = topology.outerLoops;
-  if (outer === undefined || outer.length === 0) return undefined;
-  const positions = outer.map((edge) => topology.nodes.find((node) => node.id === edge.startNodeId)?.position);
-  if (positions.some((position) => position === undefined)) return undefined;
-  const travels = positions.map((position) => rail.travelTo(position!));
-  const ys = positions.map((position) => position!.y);
-  const from = Math.min(...travels);
-  const to = Math.max(...travels);
-  const bottom = Math.min(...ys);
-  const top = Math.max(...ys);
-  const sill = bottom - rail.baseY;
-  return {
-    openingKind: sill < MARGIN + 1e-3 ? "door" : "window",
-    width: to - from,
-    height: top - bottom,
-    sill: Math.max(0, sill),
-  };
+type HostRuntime = Pick<ToolContext["runtime"], "projectToHost" | "resolveOnHost">;
+
+/** One host face measured through the engine's own resolve, so world-unit sizes convert to `(u, v)` exactly as the mesher sees them. */
+export interface HostFrame {
+  readonly hostSurfaceKey: ConstructionSurfaceKey;
+  /** World length of the face's base run. */
+  readonly length: number;
+  /** World height of the face at `u`. */
+  heightAt(u: number): number;
+  /** The smallest world height over `[u0, u1]`. */
+  minHeightBetween(u0: number, u1: number): number;
+  resolve(uv: readonly (readonly [number, number])[]): readonly ConstructionPosition[];
+  project(points: readonly ConstructionPosition[]): readonly ConstructionHostPoint[];
 }
 
-/** The travel span and height range an existing opening's rim already occupies. */
-export function openingSpan(rail: PanelRail, topology: ConstructionRegionTopology): { readonly from: number; readonly to: number; readonly bottom: number; readonly top: number } | undefined {
-  const [outer] = topology.outerLoops;
-  if (outer === undefined || outer.length === 0) return undefined;
-  const positions = outer.map((edge) => topology.nodes.find((node) => node.id === edge.startNodeId)?.position);
-  if (positions.some((position) => position === undefined)) return undefined;
-  const travels = positions.map((position) => rail.travelTo(position!));
-  const ys = positions.map((position) => position!.y);
-  return { from: Math.min(...travels), to: Math.max(...travels), bottom: Math.min(...ys), top: Math.max(...ys) };
-}
+const LENGTH_SAMPLES = 32;
+const HEIGHT_SAMPLES = 6;
 
-/**
- * The wall hosting `openingTopology`, and which of its holes is this
- * opening's own rim -- found the same way a curve handle finds which face
- * owns a grabbed edge (`curve-edit-gesture.ts`'s `contourGesture`): by
- * which topology's boundary already references one of the opening's own
- * edges, since the hole and the face share it.
- */
-export function hostWallOf(
-  ctx: ToolContext,
-  openingTopology: ConstructionRegionTopology,
-): { readonly wall: ConstructionRegionTopology; readonly holeIndex: number } | undefined {
-  const [outer] = openingTopology.outerLoops;
-  const edgeId = outer?.[0]?.edgeId;
-  if (edgeId === undefined) return undefined;
-  for (const candidate of ctx.runtime.getAllRegionTopologies()) {
-    const holeIndex = candidate.holes.findIndex((loop) => loop.some((use) => use.edgeId === edgeId));
-    if (holeIndex >= 0) return { wall: candidate, holeIndex };
+const distance = (a: ConstructionPosition, b: ConstructionPosition): number => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+
+/** `undefined` when the face is not an upright panel the engine can frame. */
+export function hostFrame(runtime: HostRuntime, hostSurfaceKey: ConstructionSurfaceKey): HostFrame | undefined {
+  const resolve = (uv: readonly (readonly [number, number])[]) => runtime.resolveOnHost({ hostSurfaceKey, uv });
+  let base: readonly ConstructionPosition[];
+  try {
+    runtime.projectToHost({ hostSurfaceKey, points: [] });
+    base = resolve(Array.from({ length: LENGTH_SAMPLES + 1 }, (_, index) => [index / LENGTH_SAMPLES, 0] as const));
+  } catch {
+    return undefined;
   }
-  return undefined;
+  let length = 0;
+  for (let index = 1; index < base.length; index += 1) length += distance(base[index - 1]!, base[index]!);
+  if (!(length > 1e-9)) return undefined;
+
+  const heightsAt = (us: readonly number[]): number[] => {
+    const ends = resolve(us.flatMap((u) => [[u, 0] as const, [u, 1] as const]));
+    return us.map((_, index) => distance(ends[2 * index]!, ends[2 * index + 1]!));
+  };
+  return {
+    hostSurfaceKey,
+    length,
+    heightAt: (u) => heightsAt([u])[0]!,
+    minHeightBetween: (u0, u1) =>
+      Math.min(...heightsAt(Array.from({ length: HEIGHT_SAMPLES + 1 }, (_, index) => u0 + ((u1 - u0) * index) / HEIGHT_SAMPLES))),
+    resolve,
+    project: (points) => (points.length === 0 ? [] : runtime.projectToHost({ hostSurfaceKey, points })),
+  };
 }
 
 /**
- * Whether an opening at `[from, to] x [bottom, top]` would overlap any
- * *other* hole already on `wall` -- a whole extra opening's worth of
- * travel-and-height rectangle, not merely a touching edge (the `MARGIN`
- * both rims already keep is what makes two side-by-side openings legal).
- * `excludeHoleIndex` is the opening's own hole, when moving/resizing one
- * that already exists (or the set of holes a merge is already folding in,
- * which are expected to overlap the merged rim) -- it must never collide
- * with itself.
+ * `rect` repositioned (never resized) to keep {@link MARGIN} of face on every
+ * side -- `undefined` when it cannot fit at all. A door keeps `v0 = 0`: it
+ * sits on the floor.
  */
-export function openingOverlapsSibling(
-  rail: PanelRail,
-  wall: ConstructionRegionTopology,
-  from: number,
-  to: number,
-  bottom: number,
-  top: number,
-  excludeHoleIndex?: number | readonly number[],
-): boolean {
-  const excluded = excludeHoleIndex === undefined ? [] : Array.isArray(excludeHoleIndex) ? excludeHoleIndex : [excludeHoleIndex];
-  return wall.holes.some((loop, index) => {
-    if (excluded.includes(index) || loop.length === 0) return false;
-    const positions = loop.map((edge) => wall.nodes.find((node) => node.id === edge.startNodeId)?.position).filter((position): position is ConstructionPosition => position !== undefined);
-    if (positions.length === 0) return false;
-    const travels = positions.map((position) => rail.travelTo(position));
-    const ys = positions.map((position) => position.y);
-    const otherFrom = Math.min(...travels), otherTo = Math.max(...travels);
-    const otherBottom = Math.min(...ys), otherTop = Math.max(...ys);
-    return from < otherTo && to > otherFrom && bottom < otherTop && top > otherBottom;
+export function clampRect(frame: HostFrame, rect: HostRect, isDoor: boolean): HostRect | undefined {
+  const du = rect.u1 - rect.u0;
+  const uMargin = MARGIN / frame.length;
+  if (!(du > 0) || du > 1 - 2 * uMargin) return undefined;
+  const u0 = Math.max(uMargin, Math.min(rect.u0, 1 - uMargin - du));
+  const u1 = u0 + du;
+
+  const height = frame.minHeightBetween(u0, u1);
+  if (!(height > 0)) return undefined;
+  const vMargin = MARGIN / height;
+  const dv = rect.v1 - rect.v0;
+  if (!(dv > 0)) return undefined;
+  if (isDoor) return dv > 1 - vMargin ? undefined : { u0, u1, v0: 0, v1: dv };
+  if (dv > 1 - 2 * vMargin) return undefined;
+  const v0 = Math.max(vMargin, Math.min(rect.v0, 1 - vMargin - dv));
+  return { u0, u1, v0, v1: v0 + dv };
+}
+
+/** Whether `rect` reads as a door: a door is the only opening standing on the floor. */
+export function isDoorRect(rect: HostRect): boolean {
+  return rect.v0 < 1e-6;
+}
+
+/** Every host an opening's nodes are pinned to, keyed by surface ref, with how many nodes each holds. */
+export function hostsOf(opening: ConstructionRegionTopology): ReadonlyMap<string, { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly nodeIds: readonly ConstructionNodeId[] }> {
+  const hosts = new Map<string, { hostSurfaceKey: ConstructionSurfaceKey; nodeIds: ConstructionNodeId[] }>();
+  for (const node of opening.nodes) {
+    if (node.pin === undefined) continue;
+    const ref = surfaceRefFromNodeSet(node.pin.hostSurfaceKey);
+    const entry = hosts.get(ref) ?? { hostSurfaceKey: node.pin.hostSurfaceKey, nodeIds: [] };
+    entry.nodeIds.push(node.id);
+    hosts.set(ref, entry);
+  }
+  return hosts;
+}
+
+/** The host holding most of an opening's pinned nodes -- the one its `(u, v)` edits are read in. */
+export function primaryHostOf(opening: ConstructionRegionTopology): ConstructionSurfaceKey | undefined {
+  let best: { readonly key: ConstructionSurfaceKey; readonly count: number } | undefined;
+  for (const { hostSurfaceKey, nodeIds } of hostsOf(opening).values()) {
+    if (best === undefined || nodeIds.length > best.count) best = { key: hostSurfaceKey, count: nodeIds.length };
+  }
+  return best?.key;
+}
+
+/** The `(u, v)` bounding box `region` occupies on `frame`'s host: its own pins where they are on this host, a projection otherwise. */
+export function spanOn(frame: HostFrame, region: ConstructionRegionTopology): HostRect | undefined {
+  const hostRef = surfaceRefFromNodeSet(frame.hostSurfaceKey);
+  const uvs: { u: number; v: number }[] = [];
+  const foreign: ConstructionPosition[] = [];
+  for (const node of region.nodes) {
+    if (node.pin !== undefined && surfaceRefFromNodeSet(node.pin.hostSurfaceKey) === hostRef) uvs.push(node.pin);
+    else foreign.push(node.position);
+  }
+  if (foreign.length > 0) {
+    try {
+      uvs.push(...frame.project(foreign));
+    } catch {
+      return undefined;
+    }
+  }
+  if (uvs.length === 0) return undefined;
+  const us = uvs.map((uv) => uv.u);
+  const vs = uvs.map((uv) => uv.v);
+  return { u0: Math.min(...us), u1: Math.max(...us), v0: Math.min(...vs), v1: Math.max(...vs) };
+}
+
+/**
+ * Whether `rect` would overlap any other region already pinned to `frame`'s
+ * host -- touching is fine, sharing area is refused (never merged).
+ */
+export function overlapsSibling(ctx: ToolContext, frame: HostFrame, rect: HostRect, excludeSurfaceKey?: ConstructionSurfaceKey): boolean {
+  const hostRef = surfaceRefFromNodeSet(frame.hostSurfaceKey);
+  const excluded = excludeSurfaceKey === undefined ? undefined : surfaceRefFromNodeSet(excludeSurfaceKey);
+  const EPS = 1e-9;
+  return ctx.runtime.getAllRegionTopologies().some((region) => {
+    if (excluded !== undefined && surfaceRefFromNodeSet(region.surfaceKey) === excluded) return false;
+    if (!hostsOf(region).has(hostRef)) return false;
+    const other = spanOn(frame, region);
+    if (other === undefined) return false;
+    return rect.u0 < other.u1 - EPS && rect.u1 > other.u0 + EPS && rect.v0 < other.v1 - EPS && rect.v1 > other.v0 + EPS;
   });
 }
 
-interface OpeningPlacement {
-  readonly wallSurfaceKey: ConstructionSurfaceKey;
-  readonly rail: PanelRail;
-  readonly from: number;
-  readonly to: number;
-  readonly bottom: number;
-  readonly top: number;
+const CURVE_TOLERANCE = 1e-3;
+const CURVE_STEP = 0.25;
+const MAX_CURVE_SEGMENTS = 32;
+
+/** How many straight pieces each horizontal side needs to follow the face: one on a flat face, more where the face bends. */
+function horizontalSegments(frame: HostFrame, rect: HostRect): number {
+  const uMid = (rect.u0 + rect.u1) / 2;
+  const [a, b, mid] = frame.resolve([[rect.u0, rect.v0], [rect.u1, rect.v0], [uMid, rect.v0]]);
+  const chordMid = { x: (a!.x + b!.x) / 2, y: (a!.y + b!.y) / 2, z: (a!.z + b!.z) / 2 };
+  if (distance(chordMid, mid!) <= CURVE_TOLERANCE) return 1;
+  return Math.min(MAX_CURVE_SEGMENTS, Math.max(2, Math.ceil(((rect.u1 - rect.u0) * frame.length) / CURVE_STEP)));
 }
 
-/** What to remove before (re)placing, when replacing or deleting an existing opening. */
-export interface OpeningRemoval {
-  readonly faceSurfaceKey: ConstructionSurfaceKey;
-  readonly wallSurfaceKey: ConstructionSurfaceKey;
-  readonly holeIndex: number;
+/** `rect`'s boundary as `(u, v)` pairs in walking order: bottom left to right, then top right to left. */
+export function rectLoop(frame: HostFrame, rect: HostRect, segments = horizontalSegments(frame, rect)): readonly (readonly [number, number])[] {
+  const du = (rect.u1 - rect.u0) / segments;
+  const bottom = Array.from({ length: segments + 1 }, (_, index) => [index === segments ? rect.u1 : rect.u0 + du * index, rect.v0] as const);
+  const top = Array.from({ length: segments + 1 }, (_, index) => [index === segments ? rect.u0 : rect.u1 - du * index, rect.v1] as const);
+  return [...bottom, ...top];
 }
 
-/** Builds the same node/edge/patch shape `opening-tool.ts` has always created a new opening from -- factored out so an edit can replay it against a different rim. */
+export interface OpeningPlacement {
+  readonly frame: HostFrame;
+  readonly rect: HostRect;
+}
+
 function buildOpeningPatch(ctx: ToolContext, idPrefix: string, place: OpeningPlacement) {
-  const nodes = [
-    place.rail.positionAt(place.from, place.bottom),
-    place.rail.positionAt(place.to, place.bottom),
-    place.rail.positionAt(place.to, place.top),
-    place.rail.positionAt(place.from, place.top),
-  ].map((position, index) => ({ id: `${idPrefix}:c${index}` as ConstructionNodeId, position }));
-
+  const loop = rectLoop(place.frame, place.rect);
+  const positions = place.frame.resolve(loop);
+  const nodes = positions.map((position, index) => ({ id: `${idPrefix}:c${index}` as ConstructionNodeId, position }));
   const edges = createBoundaryEdges(ctx.tableId, {
     kind: "private-when-full",
     runPrefix: idPrefix,
     existingUses: boundaryUsage(ctx),
   });
-  const bottomGeometry = place.rail.geometryBetween(place.from, place.to);
-  const topGeometry = reverseGeometry(bottomGeometry);
-  const boundary: ConstructionOrientedEdgeUse[] = [
-    edges.use(nodes[0]!.id, nodes[1]!.id, bottomGeometry),
-    edges.use(nodes[1]!.id, nodes[2]!.id),
-    edges.use(nodes[2]!.id, nodes[3]!.id, topGeometry),
-    edges.use(nodes[3]!.id, nodes[0]!.id),
-  ];
-
+  const boundary: ConstructionOrientedEdgeUse[] = nodes.map((node, index) => edges.use(node.id, nodes[(index + 1) % nodes.length]!.id));
+  const pins = nodes.map((node, index) => ({ nodeId: node.id, hostSurfaceKey: place.frame.hostSurfaceKey, u: loop[index]![0], v: loop[index]![1] }));
   return {
-    boundary,
+    pins,
     patch: {
       nodes,
       edges: edges.all(),
@@ -207,54 +229,28 @@ function buildOpeningPatch(ctx: ToolContext, idPrefix: string, place: OpeningPla
 }
 
 /**
- * One transaction: optionally close one or more existing openings back up
- * (each face deleted, its hole removed from its host wall -- restoring the
- * wall, criterion 3 of #231), then optionally stand a new one in a fresh
- * rim (criterion 1, move/resize -- delete and recreate rather than nudging
- * the existing nodes, since a curved wall's rail parametrization has no
- * meaningful notion of "the same rim, stretched"). Passing both is a move,
- * resize, or a merge of several openings into one wider rim; passing only
- * `removal` is a delete; passing only `place` is a plain creation (what
- * `opening-tool.ts` itself still does).
- *
- * More than one `removal` is what a same-kind opening placed right beside
- * (or a drag landing right against) another absorbs: every sibling being
- * folded into the new rim closes in the same transaction the new one
- * opens, so there is never a frame with two faces and one of them
- * orphaned. Holes are removed by index into the *same* wall, which shifts
- * after each removal -- sorted highest index first so an earlier removal
- * never invalidates a later one's index.
+ * One transaction: optionally delete an existing opening region, then
+ * optionally add a new one with its own nodes, every node pinned to the
+ * host. Both is a move or resize; only `removal` a delete; only `place` a
+ * creation.
  */
 export function commitOpeningReplacement(
   ctx: ToolContext,
   causeId: string,
-  removal: OpeningRemoval | readonly OpeningRemoval[] | undefined,
-  place: (OpeningPlacement & { readonly openingKind: OpeningParams["openingKind"] }) | undefined,
+  removal: ConstructionSurfaceKey | undefined,
+  place: OpeningPlacement | undefined,
 ): { readonly recorded: boolean; readonly error?: string } {
   let recorded = false;
   try {
     ({ recorded } = commitChange(ctx.runtime, { transactionId: causeId }, () => {
-      const removals = removal === undefined ? [] : Array.isArray(removal) ? removal : [removal];
-      const byWallDescending = [...removals].sort((a, b) => b.holeIndex - a.holeIndex);
-      for (const one of byWallDescending) {
-        ctx.runtime.applyRegionEdit([{ kind: "delete-region", surfaceKey: one.faceSurfaceKey }], "local", causeId);
-        ctx.runtime.removeHole({ surfaceKey: one.wallSurfaceKey, index: one.holeIndex }, "local", causeId);
-      }
+      if (removal !== undefined) ctx.runtime.applyRegionEdit([{ kind: "delete-region", surfaceKey: removal }], "local", causeId);
       if (place === undefined) return { value: undefined };
 
-      const sequence = ctx.nextSequence();
-      const idPrefix = scopedToolId(ctx, `opening-${sequence}`);
-      const { boundary, patch } = buildOpeningPatch(ctx, idPrefix, place);
+      const idPrefix = scopedToolId(ctx, `opening-${ctx.nextSequence()}`);
+      const { pins, patch } = buildOpeningPatch(ctx, idPrefix, place);
       const outcome = ctx.runtime.addPatch(patch, "local", causeId);
       if (outcome.skippedRegionIds.length > 0) throw new Error("a face nao coube sobre o que ja existe ali.");
-      ctx.runtime.addHole(
-        {
-          surfaceKey: place.wallSurfaceKey,
-          hole: [...boundary].reverse().map((use) => ({ edgeId: use.edgeId, reversed: !use.reversed })),
-        },
-        "local",
-        causeId,
-      );
+      ctx.runtime.pinNodes(pins, "local", causeId);
       return { value: outcome, change: shapeChangeOfAddition(ctx.runtime, patch, outcome) };
     }));
   } catch (error) {

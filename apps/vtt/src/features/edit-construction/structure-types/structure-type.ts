@@ -265,8 +265,12 @@ export type StructureTrait =
   | "ground"
   /** A level sheet other structures land on and weld to: wall corners, ramp ends, a roof's base. */
   | "floor"
-  /** An upright run other runs weld their columns onto and openings are cut through. */
-  | "partition";
+  /** An upright run other runs weld their columns onto. */
+  | "partition"
+  /** Subtracts its own area from every face its nodes are pinned to. */
+  | "cuts"
+  /** Can be cut by a `"cuts"` region pinned to it. */
+  | "accepts-cuts";
 
 /**
  * What a type is shown of another type it meets: its traits and a label for

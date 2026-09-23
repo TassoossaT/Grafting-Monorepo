@@ -47,8 +47,8 @@ export const STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[] = Ob
   platformStructureType,
   slopedPlatformStructureType,
   roofStructureType,
-  panelStructureType("wall-white", "Parede branca", "one upright panel per contour edge, drawn or stamped", ["partition"]),
-  panelStructureType("wall-gray", "Parede cinza", "one upright panel per contour edge, drawn or stamped", ["partition"]),
+  panelStructureType("wall-white", "Parede branca", "one upright panel per contour edge, drawn or stamped", ["partition", "accepts-cuts"]),
+  panelStructureType("wall-gray", "Parede cinza", "one upright panel per contour edge, drawn or stamped", ["partition", "accepts-cuts"]),
   openingStructureType,
   organicStructureType(
     "terrain",

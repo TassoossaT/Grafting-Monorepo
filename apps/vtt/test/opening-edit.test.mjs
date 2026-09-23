@@ -2,175 +2,161 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  deriveOpeningParams,
-  hostWallOf,
-  openingOverlapsSibling,
-  openingSpan,
-  rimCorners,
+  clampRect,
   commitOpeningReplacement,
+  hostFrame,
+  hostsOf,
+  isDoorRect,
+  MARGIN,
+  overlapsSibling,
+  primaryHostOf,
+  spanOn,
 } from "../src/composition/tabletop/tools/openings/opening-shared.ts";
+import { openingTool } from "../src/composition/tabletop/tools/openings/opening-tool.ts";
+import { addFace, sessionFixture } from "./platform-session-fixture.mjs";
 
-/** A straight rail along +X at z=0, the simplest case `panel-rail.ts` itself would resolve to. */
-function straightRail(length, baseY = 0, topY = 3) {
-  return {
-    length,
-    baseY,
-    topY,
-    travelTo(point) {
-      return Math.min(Math.max(point.x, 0), length);
-    },
-    positionAt(travel, y) {
-      return { x: travel, y, z: 0 };
-    },
-    geometryBetween() {
-      return { kind: "line" };
-    },
-  };
+/** A straight 8 x 3 wall along +X. */
+function wall(runtime, id = "wall", from = { x: 0, z: 0 }, to = { x: 8, z: 0 }, height = 3) {
+  return addFace(runtime, id, "wall-white", [
+    { id: `${id}:a-bottom`, position: { x: from.x, y: 0, z: from.z } },
+    { id: `${id}:b-bottom`, position: { x: to.x, y: 0, z: to.z } },
+    { id: `${id}:b-top`, position: { x: to.x, y: height, z: to.z } },
+    { id: `${id}:a-top`, position: { x: from.x, y: height, z: from.z } },
+  ]);
 }
 
-const RAIL = straightRail(10);
-const OPENING_PARAMS = { openingKind: "window", width: 1.2, height: 1.2, sill: 1 };
+const openingsOf = (runtime) => runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "opening");
 
-/** An opening's own topology, built the same way `opening-tool.ts` walks a rim into a face's boundary. */
-function openingTopologyAt(id, rail, at, params) {
-  const rim = rimCorners(rail, at, params);
-  const nodes = rim.corners.map((position, index) => ({ id: `${id}:c${index}`, position }));
-  const outerLoop = nodes.map((node, index) => ({
-    edgeId: `${id}-${index}`,
-    reversed: false,
-    startNodeId: node.id,
-    endNodeId: nodes[(index + 1) % nodes.length].id,
-    geometry: { kind: "line" },
-  }));
-  return { surfaceKey: ["@region", id], surfaceType: "opening", physical: false, outerLoops: [outerLoop], holes: [], nodes };
-}
-
-/** A wall topology carrying one or more holes at known rim spans, each hole's nodes taken straight from an opening built the same way. */
-function wallWithHoles(id, length, openings) {
-  const holes = openings.map((opening) => opening.outerLoops[0].map((edge) => ({ ...edge, reversed: !edge.reversed, startNodeId: edge.endNodeId, endNodeId: edge.startNodeId })).reverse());
-  const nodes = openings.flatMap((opening) => opening.nodes);
-  return { surfaceKey: ["@region", id], surfaceType: "wall-white", physical: true, outerLoops: [[]], holes, nodes };
-}
-
-test("rimCorners and deriveOpeningParams round-trip: reading a rim back gives the params it was built from", () => {
-  const opening = openingTopologyAt("op-1", RAIL, 4, OPENING_PARAMS);
-  const derived = deriveOpeningParams(RAIL, opening);
-  assert.ok(derived !== undefined);
-  assert.ok(Math.abs(derived.width - OPENING_PARAMS.width) < 1e-6);
-  assert.ok(Math.abs(derived.height - OPENING_PARAMS.height) < 1e-6);
-  assert.ok(Math.abs(derived.sill - OPENING_PARAMS.sill) < 1e-6);
+test("hostFrame measures the face through the engine: length along the base, local height at u", () => {
+  const { runtime, session } = sessionFixture();
+  try {
+    const host = wall(runtime);
+    const frame = hostFrame(runtime, host.surfaceKey);
+    assert.ok(Math.abs(frame.length - 8) < 1e-9);
+    assert.ok(Math.abs(frame.heightAt(0.5) - 3) < 1e-9);
+    const [point] = frame.project([{ x: 2, y: 1.5, z: 0 }]);
+    assert.ok(Math.abs(point.u - 0.25) < 1e-9 && Math.abs(point.v - 0.5) < 1e-9 && point.inside);
+  } finally { session.free(); }
 });
 
-test("deriveOpeningParams reads a floor-sitting opening back as a door", () => {
-  const door = openingTopologyAt("op-door", RAIL, 4, { openingKind: "door", width: 1, height: 2.1, sill: 0 });
-  const derived = deriveOpeningParams(RAIL, door);
-  assert.equal(derived.openingKind, "door");
+test("clampRect keeps MARGIN of face on every side, converted into u and v by the face's own size", () => {
+  const { runtime, session } = sessionFixture();
+  try {
+    const frame = hostFrame(runtime, wall(runtime).surfaceKey);
+    const pushed = clampRect(frame, { u0: -0.1, u1: 0.1, v0: 0.9, v1: 1.2 }, false);
+    assert.ok(Math.abs(pushed.u0 - MARGIN / 8) < 1e-12, "left margin is MARGIN over the face length");
+    assert.ok(Math.abs(pushed.v1 - (1 - MARGIN / 3)) < 1e-12, "top margin is MARGIN over the local height");
+    assert.ok(Math.abs(pushed.u1 - pushed.u0 - 0.2) < 1e-12 && Math.abs(pushed.v1 - pushed.v0 - 0.3) < 1e-12, "repositioned, never resized");
+    assert.equal(clampRect(frame, { u0: 0, u1: 0.99, v0: 0.2, v1: 0.4 }, false), undefined, "too wide to keep both margins");
+  } finally { session.free(); }
 });
 
-test("openingSpan reads back the travel and height range a rim already occupies", () => {
-  const opening = openingTopologyAt("op-2", RAIL, 5, OPENING_PARAMS);
-  const span = openingSpan(RAIL, opening);
-  assert.ok(Math.abs(span.to - span.from - OPENING_PARAMS.width) < 1e-6);
-  assert.ok(Math.abs(span.top - span.bottom - OPENING_PARAMS.height) < 1e-6);
+test("clampRect stands a door on the floor and reads it back as one", () => {
+  const { runtime, session } = sessionFixture();
+  try {
+    const frame = hostFrame(runtime, wall(runtime).surfaceKey);
+    const door = clampRect(frame, { u0: 0.4, u1: 0.5, v0: 0.3, v1: 0.9 }, true);
+    assert.equal(door.v0, 0);
+    assert.ok(Math.abs(door.v1 - 0.6) < 1e-12, "keeps its height");
+    assert.ok(isDoorRect(door));
+    assert.ok(!isDoorRect(clampRect(frame, { u0: 0.4, u1: 0.5, v0: 0.3, v1: 0.9 }, false)));
+  } finally { session.free(); }
 });
 
-test("openingOverlapsSibling refuses a rim that would overlap another hole on the same wall", () => {
-  const existing = openingTopologyAt("op-existing", RAIL, 4, OPENING_PARAMS); // travel ~3.4..4.6
-  const wall = wallWithHoles("wall-1", 10, [existing]);
-  // A rim centered right on top of the existing one, same height range.
-  const overlapping = rimCorners(RAIL, 4.2, OPENING_PARAMS);
-  assert.equal(openingOverlapsSibling(RAIL, wall, overlapping.from, overlapping.to, overlapping.bottom, overlapping.top), true);
+test("commitOpeningReplacement places an opening with its own nodes, every one pinned, in one transaction", () => {
+  const { runtime, session, ctx } = sessionFixture();
+  try {
+    const host = wall(runtime);
+    const frame = hostFrame(runtime, host.surfaceKey);
+    const result = commitOpeningReplacement(ctx, "cause-place", undefined, { frame, rect: { u0: 0.25, u1: 0.5, v0: 0.2, v1: 0.6 } });
+    assert.equal(result.error, undefined);
+    assert.equal(result.recorded, true);
+
+    const [opening] = openingsOf(runtime);
+    const hostNodes = new Set(host.nodes.map((node) => node.id));
+    assert.ok(opening.nodes.every((node) => !hostNodes.has(node.id) && node.pin !== undefined));
+    assert.deepEqual(primaryHostOf(opening), host.surfaceKey);
+    const span = spanOn(frame, opening);
+    assert.deepEqual(span, { u0: 0.25, u1: 0.5, v0: 0.2, v1: 0.6 });
+    assert.equal(runtime.getRegionTopology(host.surfaceKey).holes.length, 0);
+  } finally { session.free(); }
 });
 
-test("openingOverlapsSibling allows two openings that do not share travel range", () => {
-  const existing = openingTopologyAt("op-existing", RAIL, 4, OPENING_PARAMS); // travel ~3.4..4.6
-  const wall = wallWithHoles("wall-1", 10, [existing]);
-  const farAway = rimCorners(RAIL, 8, OPENING_PARAMS); // travel ~7.4..8.6
-  assert.equal(openingOverlapsSibling(RAIL, wall, farAway.from, farAway.to, farAway.bottom, farAway.top), false);
+test("commitOpeningReplacement replacing: the old region goes, the new one stands, nothing else changes", () => {
+  const { runtime, session, ctx } = sessionFixture();
+  try {
+    const host = wall(runtime);
+    const frame = hostFrame(runtime, host.surfaceKey);
+    commitOpeningReplacement(ctx, "cause-a", undefined, { frame, rect: { u0: 0.1, u1: 0.3, v0: 0.2, v1: 0.6 } });
+    const [before] = openingsOf(runtime);
+    const result = commitOpeningReplacement(ctx, "cause-b", before.surfaceKey, { frame, rect: { u0: 0.6, u1: 0.8, v0: 0.2, v1: 0.6 } });
+    assert.equal(result.error, undefined);
+    const after = openingsOf(runtime);
+    assert.equal(after.length, 1);
+    assert.deepEqual(spanOn(frame, after[0]), { u0: 0.6, u1: 0.8, v0: 0.2, v1: 0.6 });
+    const live = new Set(runtime.getGraphSnapshot().nodes.map((node) => node.id));
+    assert.ok(before.nodes.every((node) => !live.has(node.id)), "the old opening's nodes are gone with it");
+  } finally { session.free(); }
 });
 
-test("openingOverlapsSibling excludes the opening's own hole -- moving/resizing in place is not a collision with itself", () => {
-  const existing = openingTopologyAt("op-existing", RAIL, 4, OPENING_PARAMS);
-  const wall = wallWithHoles("wall-1", 10, [existing]);
-  const sameSpot = rimCorners(RAIL, 4, OPENING_PARAMS);
-  assert.equal(openingOverlapsSibling(RAIL, wall, sameSpot.from, sameSpot.to, sameSpot.bottom, sameSpot.top, 0), false);
-  assert.equal(openingOverlapsSibling(RAIL, wall, sameSpot.from, sameSpot.to, sameSpot.bottom, sameSpot.top), true, "without the exclusion, it does collide with itself");
+test("commitOpeningReplacement deleting only removes the region and nothing on the wall", () => {
+  const { runtime, session, ctx } = sessionFixture();
+  try {
+    const host = wall(runtime);
+    const frame = hostFrame(runtime, host.surfaceKey);
+    commitOpeningReplacement(ctx, "cause-a", undefined, { frame, rect: { u0: 0.1, u1: 0.3, v0: 0.2, v1: 0.6 } });
+    const result = commitOpeningReplacement(ctx, "cause-delete", openingsOf(runtime)[0].surfaceKey, undefined);
+    assert.equal(result.error, undefined);
+    assert.equal(openingsOf(runtime).length, 0);
+    assert.deepEqual(runtime.getRegionTopology(host.surfaceKey).nodes, host.nodes);
+  } finally { session.free(); }
 });
 
-test("hostWallOf finds the wall whose hole shares the opening's own rim edges", () => {
-  const opening = openingTopologyAt("op-3", RAIL, 4, OPENING_PARAMS);
-  const wall = wallWithHoles("wall-1", 10, [opening]);
-  const ctx = { runtime: { getAllRegionTopologies: () => [wall, opening] } };
-  const host = hostWallOf(ctx, opening);
-  assert.ok(host !== undefined);
-  assert.deepEqual(host.wall.surfaceKey, wall.surfaceKey);
-  assert.equal(host.holeIndex, 0);
+test("overlapsSibling refuses sharing area on the same host, allows touching, and never counts the opening itself", () => {
+  const { runtime, session, ctx } = sessionFixture();
+  try {
+    const host = wall(runtime);
+    const frame = hostFrame(runtime, host.surfaceKey);
+    commitOpeningReplacement(ctx, "cause-a", undefined, { frame, rect: { u0: 0.2, u1: 0.4, v0: 0.2, v1: 0.6 } });
+    const [standing] = openingsOf(runtime);
+    assert.equal(overlapsSibling(ctx, frame, { u0: 0.3, u1: 0.5, v0: 0.3, v1: 0.7 }), true);
+    assert.equal(overlapsSibling(ctx, frame, { u0: 0.4, u1: 0.6, v0: 0.2, v1: 0.6 }), false, "touching is not overlapping");
+    assert.equal(overlapsSibling(ctx, frame, { u0: 0.3, u1: 0.5, v0: 0.3, v1: 0.7 }, standing.surfaceKey), false);
+  } finally { session.free(); }
 });
 
-function fakeToolContext() {
-  const calls = [];
-  let sequence = 0;
-  const runtime = {
-    getSnapshot: () => ({ map: { nodePositions: new Map() } }),
-    getAllRegionTopologies: () => [],
-    getRegionTopologiesInBounds: () => [],
-    transact(transactionId, origin, work) {
-      const value = work();
-      return { value, recorded: true };
-    },
-    applyRegionEdit(ops) {
-      calls.push(["applyRegionEdit", ops]);
-      return { affectedSurfaceKeys: [], createdSurfaceKeys: [], removedSurfaceKeys: [], createdNodeIds: [], removedNodeIds: [] };
-    },
-    removeHole(request) {
-      calls.push(["removeHole", request]);
-      return { affectedSurfaceKeys: [], createdSurfaceKeys: [], removedSurfaceKeys: [], createdNodeIds: [], removedNodeIds: [] };
-    },
-    addPatch(patch) {
-      calls.push(["addPatch", patch]);
-      return { skippedRegionIds: [], createdSurfaceKeys: [["@region", patch.regions[0].regionId]], removedNodeIds: [] };
-    },
-    addHole(request) {
-      calls.push(["addHole", request]);
-      return { affectedSurfaceKeys: [], createdSurfaceKeys: [], removedSurfaceKeys: [], createdNodeIds: [], removedNodeIds: [] };
-    },
-  };
-  const ctx = {
-    runtime,
-    tableId: "table-1",
-    nextSequence: () => (sequence += 1),
-  };
-  return { ctx, calls };
-}
+test("an opening pinned to two hosts at a corner reads both hosts, selects, and deletes without breaking", () => {
+  const { runtime, session, ctx } = sessionFixture();
+  try {
+    const a = wall(runtime, "a", { x: 0, z: 0 }, { x: 4, z: 0 });
+    const b = wall(runtime, "b", { x: 4, z: 0 }, { x: 4, z: 4 });
+    const corners = [
+      { id: "o:0", position: { x: 3, y: 1, z: 0 }, host: a, u: 0.75 },
+      { id: "o:1", position: { x: 4, y: 1, z: 1 }, host: b, u: 0.25 },
+      { id: "o:2", position: { x: 4, y: 2, z: 1 }, host: b, u: 0.25 },
+      { id: "o:3", position: { x: 3, y: 2, z: 0 }, host: a, u: 0.75 },
+    ];
+    const edges = corners.map((corner, index) => ({ edgeId: `o:e${index}`, startNodeId: corner.id, endNodeId: corners[(index + 1) % 4].id }));
+    runtime.addPatch({
+      nodes: corners.map(({ id, position }) => ({ id, position })),
+      edges,
+      regions: [{ regionId: "corner-window", boundary: edges.map((edge) => ({ edgeId: edge.edgeId, reversed: false })), surfaceType: "opening", physical: false }],
+    });
+    runtime.pinNodes(corners.map((corner) => ({ nodeId: corner.id, hostSurfaceKey: corner.host.surfaceKey, u: corner.u, v: corner.position.y / 3 })));
 
-test("commitOpeningReplacement, deleting only: removes the face and closes the hole, in that order, with no place call", () => {
-  const { ctx, calls } = fakeToolContext();
-  const removal = { faceSurfaceKey: ["@region", "op-1"], wallSurfaceKey: ["@region", "wall-1"], holeIndex: 2 };
-  const result = commitOpeningReplacement(ctx, "cause-1", removal, undefined);
-  assert.equal(result.recorded, true);
-  assert.equal(result.error, undefined);
-  assert.deepEqual(calls.map((call) => call[0]), ["applyRegionEdit", "removeHole"]);
-  assert.deepEqual(calls[0][1], [{ kind: "delete-region", surfaceKey: removal.faceSurfaceKey }]);
-  assert.deepEqual(calls[1][1], { surfaceKey: removal.wallSurfaceKey, index: removal.holeIndex });
-});
+    const [opening] = openingsOf(runtime);
+    assert.equal(hostsOf(opening).size, 2);
+    const span = spanOn(hostFrame(runtime, primaryHostOf(opening)), opening);
+    assert.ok(span !== undefined && span.u1 > span.u0);
 
-test("commitOpeningReplacement, placing only: creates a patch and opens the hole, with no removal call", () => {
-  const { ctx, calls } = fakeToolContext();
-  const rim = rimCorners(RAIL, 4, OPENING_PARAMS);
-  const place = { wallSurfaceKey: ["@region", "wall-1"], rail: RAIL, from: rim.from, to: rim.to, bottom: rim.bottom, top: rim.top, openingKind: "window" };
-  const result = commitOpeningReplacement(ctx, "cause-2", undefined, place);
-  assert.equal(result.recorded, true);
-  assert.equal(result.error, undefined);
-  assert.deepEqual(calls.map((call) => call[0]), ["addPatch", "addHole"]);
-  assert.equal(calls[1][1].surfaceKey, place.wallSurfaceKey);
-});
+    const down = { x: 3, y: 1, z: 0 };
+    openingTool.onPointerDown(ctx, { point: down, nodeId: "o:0" }, { openingKind: "window", width: 1, height: 1, sill: 1 });
+    openingTool.onPointerUp(ctx, { start: { point: down }, current: { point: { x: 1, y: 1, z: 0 } } }, { openingKind: "window", width: 1, height: 1, sill: 1 });
+    openingTool.onClick(ctx, { point: { x: 1, y: 1, z: 0 } }, { openingKind: "window", width: 1, height: 1, sill: 1 });
+    assert.equal(openingsOf(runtime).length, 1, "selected, not rebuilt on one host");
+    assert.deepEqual(openingsOf(runtime)[0].nodes.map((node) => node.position), corners.map((corner) => corner.position));
 
-test("commitOpeningReplacement, both: removes the old opening before placing the new one, one transaction", () => {
-  const { ctx, calls } = fakeToolContext();
-  const removal = { faceSurfaceKey: ["@region", "op-1"], wallSurfaceKey: ["@region", "wall-1"], holeIndex: 0 };
-  const rim = rimCorners(RAIL, 7, OPENING_PARAMS);
-  const place = { wallSurfaceKey: removal.wallSurfaceKey, rail: RAIL, from: rim.from, to: rim.to, bottom: rim.bottom, top: rim.top, openingKind: "window" };
-  const result = commitOpeningReplacement(ctx, "cause-3", removal, place);
-  assert.equal(result.recorded, true);
-  assert.deepEqual(calls.map((call) => call[0]), ["applyRegionEdit", "removeHole", "addPatch", "addHole"]);
+    openingTool.onDeleteKey(ctx);
+    assert.equal(openingsOf(runtime).length, 0);
+  } finally { session.free(); }
 });

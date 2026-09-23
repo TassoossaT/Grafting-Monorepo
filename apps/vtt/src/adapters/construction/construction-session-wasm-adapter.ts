@@ -27,12 +27,15 @@ import type {
   ConstructionEdgeGeometry,
   ConstructionNodeId,
   ConstructionNodeSnapshot,
+  ConstructionNodePin,
+  ConstructionHostPoint,
+  ConstructionPinRequest,
+  ConstructionSurfaceCapability,
   ConstructionGraphSnapshot,
   ConstructionGridConstraintPoint,
   ConstructionGridContourNode,
   ConstructionIrregularQuadGrid,
   ConstructionIrregularQuadGridRequest,
-  ConstructionOrientedEdgeUse,
   ConstructionPatch,
   ConstructionPatchOutcome,
   ConstructionPosition,
@@ -112,7 +115,18 @@ interface RegionTopologyWire {
   readonly physical: boolean;
   readonly outerLoops: readonly (readonly RegionEdgeWire[])[];
   readonly holes: readonly (readonly RegionEdgeWire[])[];
-  readonly nodes: readonly { readonly id: string; readonly position: WirePosition }[];
+  readonly nodes: readonly NodeWire[];
+}
+
+interface NodeWire {
+  readonly id: string;
+  readonly position: WirePosition;
+  readonly pin?: ConstructionNodePin | null;
+}
+
+function fromWireNode(node: NodeWire): ConstructionNodeSnapshot {
+  const position = fromWirePosition(node.position);
+  return node.pin ? { id: node.id, position, pin: node.pin } : { id: node.id, position };
 }
 
 function fromWireTopology(wire: RegionTopologyWire): ConstructionRegionTopology {
@@ -123,7 +137,7 @@ function fromWireTopology(wire: RegionTopologyWire): ConstructionRegionTopology 
     physical: wire.physical,
     outerLoops: wire.outerLoops,
     holes: wire.holes,
-    nodes: wire.nodes.map((node) => ({ id: node.id, position: fromWirePosition(node.position) })),
+    nodes: wire.nodes.map(fromWireNode),
   };
 }
 
@@ -228,15 +242,27 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     );
   }
 
-  addHole(request: {
-    readonly surfaceKey: ConstructionSurfaceKey;
-    readonly hole: readonly ConstructionOrientedEdgeUse[];
-  }): RegionEditOutcome {
-    return this.#regionEdit(this.#require().add_hole_json(JSON.stringify(request)));
+  setSurfaceCapabilities(capabilities: readonly ConstructionSurfaceCapability[]): void {
+    this.#require().set_surface_capabilities_json(JSON.stringify({ capabilities }));
   }
 
-  removeHole(request: { readonly surfaceKey: ConstructionSurfaceKey; readonly index: number }): RegionEditOutcome {
-    return this.#regionEdit(this.#require().remove_hole_json(JSON.stringify(request)));
+  pinNodes(pins: readonly ConstructionPinRequest[]): RegionEditOutcome {
+    return this.#regionEdit(this.#require().pin_nodes_json(JSON.stringify({ pins })));
+  }
+
+  unpinNodes(nodeIds: readonly ConstructionNodeId[]): RegionEditOutcome {
+    return this.#regionEdit(this.#require().unpin_nodes_json(JSON.stringify({ nodeIds })));
+  }
+
+  projectToHost(request: { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly points: readonly ConstructionPosition[] }): readonly ConstructionHostPoint[] {
+    return JSON.parse(
+      this.#require().project_to_host_json(JSON.stringify({ hostSurfaceKey: request.hostSurfaceKey, points: request.points.map(toWirePosition) })),
+    ) as ConstructionHostPoint[];
+  }
+
+  resolveOnHost(request: { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly uv: readonly (readonly [number, number])[] }): readonly ConstructionPosition[] {
+    const wire = JSON.parse(this.#require().resolve_on_host_json(JSON.stringify(request))) as WirePosition[];
+    return wire.map(fromWirePosition);
   }
 
   addPatch(patch: ConstructionPatch): ConstructionPatchOutcome {
