@@ -78,7 +78,7 @@ pub fn capability_table(request: SetSurfaceCapabilitiesRequest) -> SurfaceCapabi
         .collect()
 }
 
-fn capability_of(
+pub(crate) fn capability_of(
     capabilities: &SurfaceCapabilities,
     surfaces: &SurfaceRegistry,
     region: &RegionId,

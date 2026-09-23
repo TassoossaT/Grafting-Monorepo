@@ -12,7 +12,7 @@
 
 use earcut::Earcut;
 use grafting_graph_core::{
-    ContourEdge, ContourTopology, NodeId, PlanarBoolean, PlanarShape, SurfaceRegion, planar_boolean,
+    ContourEdge, ContourEdgeId, ContourTopology, NodeId, PlanarBoolean, PlanarShape, SurfaceRegion, planar_boolean,
 };
 use i_triangle::float::uniform::UniformTriangulatable;
 
@@ -33,6 +33,7 @@ pub struct HostFace {
     base: Vec<[f32; 2]>,
     top: Vec<[f32; 2]>,
     travel: [f32; 2],
+    sides: [ContourEdgeId; 2],
 }
 
 fn run_points(edges: &[(ContourEdge, [f32; 3], [f32; 3])]) -> Option<Vec<[f32; 3]>> {
@@ -102,12 +103,32 @@ impl HostFace {
         let base = unroll_run(&structure.base_edges)?;
         let top = unroll_run(&structure.top_edges)?;
         let travel = [base.first()?[0], base.last()?[0]];
+        let [one, other] = &structure.side_edges;
+        let from_start = |(_, start, _): &(ContourEdge, [f32; 3], [f32; 3])| {
+            (structure.frame.unroll(*start)[0] - travel[0]).abs()
+        };
+        let sides = if from_start(one) <= from_start(other) {
+            [one.0.id().clone(), other.0.id().clone()]
+        } else {
+            [other.0.id().clone(), one.0.id().clone()]
+        };
         (travel[1] - travel[0] > f32::EPSILON).then_some(Self {
             frame: structure.frame,
             base,
             top,
             travel,
+            sides,
         })
+    }
+
+    /// The base run's extent in the frame's arc-length measure: `u` scales it.
+    pub fn length(&self) -> f32 {
+        self.travel[1] - self.travel[0]
+    }
+
+    /// The vertical side edges at `u = 0` and at `u = 1`.
+    pub fn sides(&self) -> &[ContourEdgeId; 2] {
+        &self.sides
     }
 
     fn local_height(&self, travel: f32) -> (f32, f32) {

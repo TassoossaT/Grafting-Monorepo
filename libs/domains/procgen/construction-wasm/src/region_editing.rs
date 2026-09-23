@@ -434,6 +434,10 @@ pub struct RegionTopologyDto {
     /// Every boundary node, first-encountered loop order, with its live
     /// position -- what a caller places handles from.
     pub nodes: Vec<RegionNodeDto>,
+    /// The group this region belongs to, when it does -- filled in by the
+    /// session, which owns the group table.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -535,6 +539,7 @@ pub fn region_topology(
         outer_loops,
         holes,
         nodes,
+        group: None,
     }))
 }
 

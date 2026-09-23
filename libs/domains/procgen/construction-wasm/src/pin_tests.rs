@@ -2,17 +2,17 @@ use serde_json::{Value, json};
 
 use crate::session::ConstructionSession;
 
-const CAPABILITIES: &str = r#"{"capabilities":[
+pub(crate) const CAPABILITIES: &str = r#"{"capabilities":[
     {"surfaceType":"wall","cuts":false,"acceptsCuts":true},
     {"surfaceType":"opening","cuts":true,"acceptsCuts":false}]}"#;
 
-fn key(id: &str) -> Value {
+pub(crate) fn key(id: &str) -> Value {
     json!(["@region", id])
 }
 
 /// An upright panel from `from` to `to` (XZ), base at height 0, top at
 /// `heights` over the start and end corners.
-fn wall(
+pub(crate) fn wall(
     session: &mut ConstructionSession,
     id: &str,
     from: [f32; 2],
@@ -63,7 +63,7 @@ fn straight_wall(session: &mut ConstructionSession, id: &str) {
 }
 
 /// A four-node region with its own nodes, placed away from everything.
-fn opening(session: &mut ConstructionSession, id: &str) {
+pub(crate) fn opening(session: &mut ConstructionSession, id: &str) {
     let node = |index: usize| format!("{id}-n{index}");
     let edge = |index: usize| format!("{id}-e{index}");
     let request = json!({
@@ -82,7 +82,7 @@ fn opening(session: &mut ConstructionSession, id: &str) {
 }
 
 /// Pins the opening's four nodes to the rectangle `u0..u1` x `v0..v1` on `host`.
-fn pin_rectangle(
+pub(crate) fn pin_rectangle(
     session: &mut ConstructionSession,
     id: &str,
     host: &str,
@@ -103,7 +103,7 @@ fn pin_rectangle(
     .unwrap()
 }
 
-fn resolve(session: &ConstructionSession, host: &str, uv: &[[f64; 2]]) -> Vec<[f32; 3]> {
+pub(crate) fn resolve(session: &ConstructionSession, host: &str, uv: &[[f64; 2]]) -> Vec<[f32; 3]> {
     serde_json::from_str(
         &session
             .resolve_on_host_json(&json!({"hostSurfaceKey": key(host), "uv": uv}).to_string())
@@ -112,7 +112,7 @@ fn resolve(session: &ConstructionSession, host: &str, uv: &[[f64; 2]]) -> Vec<[f
     .unwrap()
 }
 
-fn project(session: &ConstructionSession, host: &str, points: &[[f32; 3]]) -> Vec<Value> {
+pub(crate) fn project(session: &ConstructionSession, host: &str, points: &[[f32; 3]]) -> Vec<Value> {
     serde_json::from_str(
         &session
             .project_to_host_json(
@@ -123,7 +123,7 @@ fn project(session: &ConstructionSession, host: &str, points: &[[f32; 3]]) -> Ve
     .unwrap()
 }
 
-fn topology(session: &ConstructionSession, region: &str) -> Value {
+pub(crate) fn topology(session: &ConstructionSession, region: &str) -> Value {
     serde_json::from_str(
         &session
             .region_topology_json(&json!({"surfaceKey": key(region)}).to_string())
@@ -143,7 +143,7 @@ fn node_position(session: &ConstructionSession, region: &str, node: &str) -> [f3
     serde_json::from_value(entry["position"].clone()).unwrap()
 }
 
-fn mesh_area(session: &ConstructionSession, region: &str) -> f32 {
+pub(crate) fn mesh_area(session: &ConstructionSession, region: &str) -> f32 {
     let pieces: Vec<Value> = serde_json::from_str(
         &session
             .surface_mesh_json(&json!({"surfaceKey": key(region)}).to_string())

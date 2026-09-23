@@ -22,6 +22,7 @@ use crate::mesh::{self, region_id_to_wire};
 use crate::patch_replacement;
 use crate::pins::{self, Cutting, Pins, SurfaceCapabilities};
 use crate::region_editing;
+use crate::region_groups::{self, RegionGroups};
 use crate::region_overlay;
 
 fn parse<T: serde::de::DeserializeOwned>(json: &str) -> Result<T, JsValue> {
@@ -46,6 +47,7 @@ struct ConstructionState {
     known_regions: HashSet<RegionId>,
     spatial_index: crate::spatial_index::UniformGridIndex,
     pins: Pins,
+    groups: RegionGroups,
 }
 
 /// One undoable replacement, holding the *other* state: the one before it
@@ -84,8 +86,9 @@ pub struct ConstructionSession {
     pub(crate) known_regions: HashSet<RegionId>,
     pub(crate) spatial_index: crate::spatial_index::UniformGridIndex,
     pub(crate) pins: Pins,
+    pub(crate) groups: RegionGroups,
     /// Session configuration rather than edit state: undo never touches it.
-    surface_capabilities: SurfaceCapabilities,
+    pub(crate) surface_capabilities: SurfaceCapabilities,
     region_overlay_undo: Vec<RegionOverlayHistoryEntry>,
     region_overlay_redo: Vec<RegionOverlayHistoryEntry>,
     open_transaction: Option<OpenTransaction>,
@@ -100,6 +103,7 @@ impl ConstructionSession {
             known_regions: self.known_regions.clone(),
             spatial_index: self.spatial_index.clone(),
             pins: self.pins.clone(),
+            groups: self.groups.clone(),
         }
     }
 
@@ -204,6 +208,7 @@ impl ConstructionSession {
             known_regions: HashSet::new(),
             spatial_index: crate::spatial_index::UniformGridIndex::default(),
             pins: Pins::new(),
+            groups: RegionGroups::new(),
             surface_capabilities: SurfaceCapabilities::new(),
             region_overlay_undo: Vec::new(),
             region_overlay_redo: Vec::new(),
@@ -238,6 +243,10 @@ impl ConstructionSession {
             open.mutated = true;
         }
         pins::settle(&mut self.graph, &self.topology, &mut self.pins, outcome);
+        if !self.groups.is_empty() {
+            let topology = &self.topology;
+            self.groups.retain(|region, _| topology.region(region).is_some());
+        }
         for key in &outcome.created_surface_keys {
             if let Ok(id) = mesh::region_id_from_wire(key) {
                 self.known_regions.insert(id.clone());
@@ -266,6 +275,9 @@ impl ConstructionSession {
     }
 
     fn annotate_pins(&self, dto: &mut region_editing::RegionTopologyDto) {
+        dto.group = mesh::region_id_from_wire(&dto.surface_key)
+            .ok()
+            .and_then(|id| self.groups.get(&id).cloned());
         if self.pins.is_empty() {
             return;
         }
@@ -285,6 +297,7 @@ impl ConstructionSession {
         std::mem::swap(&mut self.known_regions, &mut state.known_regions);
         std::mem::swap(&mut self.spatial_index, &mut state.spatial_index);
         std::mem::swap(&mut self.pins, &mut state.pins);
+        std::mem::swap(&mut self.groups, &mut state.groups);
     }
 
     // ---- Bootstrapping ----
@@ -487,6 +500,33 @@ impl ConstructionSession {
         )
     }
 
+    // ---- Region groups and panel runs ----
+
+    /// Labels regions as one group, or clears their label when `groupId` is
+    /// null. See `region_groups::set_region_group`.
+    pub fn set_region_group_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let mut response =
+            region_groups::set_region_group(&self.topology, &mut self.groups, parse(request_json)?)
+                .map_err(to_js_error)?;
+        self.track(&mut response);
+        serialize(&response)
+    }
+
+    /// The chain of cuttable upright panels continuing the requested one
+    /// through shared vertical sides. See `region_groups::panel_run_of`.
+    pub fn panel_run_json(&self, request_json: &str) -> Result<String, JsValue> {
+        serialize(
+            &region_groups::panel_run_of(
+                &self.graph,
+                &self.topology,
+                &self.surfaces,
+                &self.surface_capabilities,
+                parse(request_json)?,
+            )
+            .map_err(to_js_error)?,
+        )
+    }
+
     /// What a brush footprint currently covers, before anything is
     /// generated -- the creation-side counterpart to `region_topology_json`.
     /// The engine reports; the caller's own per-type table decides what to
@@ -529,6 +569,7 @@ impl ConstructionSession {
         let request: patch_replacement::ApplyPatchReplacementRequest = parse(request_json)?;
         let operation_id = request.operation_id.clone();
         let pins_before = self.pins.clone();
+        let groups_before = self.groups.clone();
         let (mut response, previous) = patch_replacement::apply_patch_replacement(
             &mut self.graph,
             &mut self.surfaces,
@@ -554,6 +595,7 @@ impl ConstructionSession {
                 known_regions: previous.known_regions,
                 spatial_index,
                 pins: pins_before,
+                groups: groups_before,
             },
         );
         serialize(&response)

@@ -14,6 +14,8 @@ pub struct UprightStructure {
     pub frame: UnrollFrame,
     pub base_edges: Vec<(ContourEdge, [f32; 3], [f32; 3])>,
     pub top_edges: Vec<(ContourEdge, [f32; 3], [f32; 3])>,
+    /// The two vertical sides, in loop order.
+    pub side_edges: [(ContourEdge, [f32; 3], [f32; 3]); 2],
 }
 
 /// Reads a loop as an upright face: a run along the base, one side rising,
@@ -72,11 +74,13 @@ pub fn upright_structure(
     let (edge, start, _) = base_edges.first()?;
     let (_, _, end) = base_edges.last()?;
     let frame = UnrollFrame::of(edge.geometry(), *start, *end)?;
+    let side_edges = [walked[first].clone(), walked[second].clone()];
 
     Some(UprightStructure {
         frame,
         base_edges,
         top_edges,
+        side_edges,
     })
 }
 
