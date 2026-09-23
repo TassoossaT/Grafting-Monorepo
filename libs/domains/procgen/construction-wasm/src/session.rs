@@ -810,6 +810,19 @@ impl ConstructionSession {
         ))
     }
 
+    /// [`Self::surface_meshes_json`] plus every key that yielded no mesh and
+    /// why: `{"meshes": [...], "failed": [{"surfaceKey", "reason"}]}`.
+    pub fn surface_meshes_report_json(&self, request_json: &str) -> Result<String, JsValue> {
+        let request: mesh::SurfaceMeshesRequest = parse(request_json)?;
+        serialize(&mesh::surface_meshes_report(
+            &self.graph,
+            &self.surfaces,
+            &self.topology,
+            request,
+            Some(&Cutting::new(&self.pins, &self.surface_capabilities)),
+        ))
+    }
+
     // ---- Introspection ----
 
     /// The session's current nodes, edges, and surfaces, for a caller to

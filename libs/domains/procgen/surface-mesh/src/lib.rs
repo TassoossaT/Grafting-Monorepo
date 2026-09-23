@@ -51,6 +51,7 @@ pub mod math;
 pub mod planar;
 pub mod profile;
 pub mod refine;
+pub mod sanitize;
 pub mod tessellation;
 pub mod types;
 pub mod upright;
@@ -135,13 +136,29 @@ pub fn triangulate_region_with(
         .outer_loops()
         .iter()
         .map(|loop_| tessellate_contour_loop(topology, loop_, &mut resolve_position))
-        .collect::<Option<Vec<_>>>()?;
+        .collect::<Option<Vec<_>>>();
     let holes = region
         .holes()
         .iter()
         .map(|loop_| tessellate_contour_loop(topology, loop_, &mut resolve_position))
-        .collect::<Option<Vec<_>>>()?;
+        .collect::<Option<Vec<_>>>();
+    // A loop that is degenerate or crosses itself is resolved into simple
+    // pieces first; a valid face never reaches that path.
+    if let (Some(outers), Some(holes)) = (outers, holes)
+        && !sanitize::any_self_crossing(outers.iter().chain(&holes))
+        && let Some(meshes) = planar_meshes(&outers, &holes, fill)
+    {
+        return Some(meshes);
+    }
+    sanitize::sanitized_planar_meshes(topology, region, &mut resolve_position)
+}
 
+/// Meshes a flat face from its already-valid tessellated loops.
+fn planar_meshes(
+    outers: &[Vec<[f32; 3]>],
+    holes: &[Vec<[f32; 3]>],
+    fill: Option<PlanarFill<'_>>,
+) -> Option<Vec<TriangulatedMesh>> {
     // With one outer loop there is nothing to decide: every hole belongs to
     // it, because there is nowhere else for a hole of this region to be.
     // Asking anyway would only add a way to be wrong -- ray casting is
