@@ -953,3 +953,40 @@ test("transact rolls back, resyncs the projection and rethrows when the work fai
 });
 
 
+
+test("road presentation exposes only spine anchors and insertion points, restores other controls, and survives graph refresh",async()=>{
+  const {sessionFixture}=await import("./platform-session-fixture.mjs");
+  const {curvePickId}=await import("../src/features/edit-construction/index.ts");
+  const real=sessionFixture(),render=createFakeRenderPort(),construction=createFakeConstructionPort();
+  let graph={
+    nodes:[{id:"spine:a",position:{x:0,y:0,z:0}},{id:"spine:b",position:{x:10,y:0,z:0}},{id:"mesh:vertex",position:{x:5,y:0,z:1}}],
+    edges:[{edgeId:"spine-edge:a",startNodeId:"spine:a",endNodeId:"spine:b",curve:{start:[3,0,0],end:[-3,0,0],mode:"free",bandOffsets:[-1,1],surfaceType:"path"}}],
+  };
+  Object.assign(construction,{getGraphSnapshot:()=>graph,getNodePositions:()=>graph.nodes,getCurvedEdges:()=>[],curveBatch:real.runtime.curveBatch});
+  const runtime=createTabletopRuntime({tableId:"point-controls",renderPort:render,constructionPort:construction});
+  const shown=()=>{
+    const ids=new Set(),revisions=new Map();
+    for(const c of render.changes) {
+      const key=c.dependency.layer+":"+c.dependency.scopeId;
+      if(c.dependency.revision<=(revisions.get(key)??-1))continue;
+      revisions.set(key,c.dependency.revision);
+      if(c.type==="node-handle-upserted")ids.add(c.handle.nodeId);
+      if(c.type==="node-handle-removed")ids.delete(c.nodeId);
+    }
+    return [...ids].sort();
+  };
+  try {
+    await runtime.start();const before=JSON.stringify(graph),snapshot=runtime.getSnapshot();
+    runtime.setConstructionHandlePresentation("spine-points");
+    assert.deepEqual(shown(),["spine:a","spine:b",curvePickId("spine-edge:a","midpoint")].sort());
+    assert.equal(JSON.stringify(graph),before);assert.equal(runtime.getSnapshot(),snapshot);
+    const count=render.changes.length;runtime.setConstructionHandlePresentation("spine-points");assert.equal(render.changes.length,count);
+    runtime.setConstructionHandlePresentation("all");
+    assert.ok(shown().includes("mesh:vertex"));assert.ok(shown().includes(curvePickId("spine-edge:a",1)));
+    runtime.setConstructionHandlePresentation("spine-points");
+    graph={...graph,nodes:graph.nodes.map(n=>n.id==="spine:b"?{...n,position:{x:11,y:0,z:2}}:n)};
+    runtime.addPatch(EMPTY_PATCH,"local","updated-spine");
+    assert.deepEqual(shown(),["spine:a","spine:b",curvePickId("spine-edge:a","midpoint")].sort());
+    assert.deepEqual(render.changes.filter(c=>c.type==="node-handle-upserted"&&c.handle.nodeId==="spine:b").at(-1).handle.position,{x:11,y:0,z:2});
+  }finally{await runtime.dispose();real.session.free();}
+});

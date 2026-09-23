@@ -38,6 +38,7 @@ export interface CurveGesture {
 
 export type CurveGestureOptions = ToolParamsFor<"edit-region"> & {
   readonly parameter?: number;
+  readonly allowShapeChange?: boolean;
   readonly insertOnClick?: boolean;
   readonly pointerOrigin?: ConstructionPosition;
   readonly dragThreshold?: number;
@@ -83,7 +84,7 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGes
   let ended = false;
   const input = (insert = false) => ({
     field: ctx.runtime,
-    snapshot, topologies, port: ctx.runtime, targetId, position: target, operationId, tableId: ctx.tableId, insert, parameter: params?.parameter, mode: params?.curveMode, action: params?.curveAction, width: params?.curveWidth ?? 4, endWidth: params?.curveEndWidth,
+    snapshot, topologies, port: ctx.runtime, targetId, position: target, operationId, tableId: ctx.tableId, insert, allowShapeChange: params?.allowShapeChange, parameter: params?.parameter, mode: params?.curveMode, action: params?.curveAction, width: params?.curveWidth ?? 4, endWidth: params?.curveEndWidth,
   });
   return {
     move(gesture) {

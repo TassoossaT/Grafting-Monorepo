@@ -57,6 +57,9 @@ export interface ToolContext {
  */
 export interface ConstructionTool<Id extends ConstructionToolId> {
   readonly id: Id;
+  /** Presentation and sampling policy while this tool is active. */
+  readonly handlePresentation?: "spine-points";
+  readonly useGridSnap?: boolean;
   defaultParams(): ToolParamsFor<Id>;
   /** Opt in to a stationary drawing preview between gestures. */
   readonly previewOnHover?: boolean | ((params: ToolParamsFor<Id>) => boolean);

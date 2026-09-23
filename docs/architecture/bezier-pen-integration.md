@@ -1,24 +1,22 @@
-# Rua Bézier: traçado livre e precisão
+# Rua Bézier: desenho livre e por pontos
 
-**Traçado livre** é o padrão para uso durante o jogo. Arraste para desenhar a espinha da rua, veja a largura na prévia e solte para construir em uma transação reversível. A prévia verde indica um traçado que pode gerar a faixa; vermelho indica falha na prévia. O ajuste final é recalculado ao soltar: uma prévia antiga nunca é usada no lugar de uma entrada final inválida.
+A mesma ferramenta de rua cria e edita caminhos. O seletor de construção oferece:
 
-Arraste sobre uma rua existente para puxar sua espinha pelo ponto mais próximo do clique. O deslocamento preserva a distância entre o clique e a espinha para evitar um salto inicial. Perto das extremidades, o gesto move a âncora. Cliques e movimentos abaixo de cinco pixels não iniciam a edição; Esc cancela sem mutação. A consulta de proximidade vem do Rust e os candidatos são separados por altura.
+- **Desenho livre:** arrastar pelo terreno e soltar confirma uma operação. O Rust converte as amostras em curvas, com tolerância de 0,12 unidades. Não há detecção adicional de cantos, correção inteligente ou encaixe na grade.
+- **Por pontos:** cada clique marca uma posição pela qual a curva passa. O comando Rust `automatic` interpola esses pontos em cúbicas; não remove nem desloca os pontos escolhidos. Arrastar durante um clique não cria alças. Enter confirma, Backspace retira o último ponto e Esc cancela. Hover mostra apenas a continuação possível.
 
-**Precisão: pontos e alças** preserva a construção ponto a ponto: clique para adicionar uma âncora, arraste para definir alças, Enter confirma, Backspace remove a última e Esc cancela. Clicar junto à primeira fecha a curva. Nesse modo, clicar no ponto central subdivide um trecho e o painel oferece as restrições das alças.
+A ferramenta mostra somente os pontos da espinha e os pontos centrais usados para inserção. Alças tangentes, vértices da malha e suas linhas auxiliares ficam ocultos nesse contexto e reaparecem ao mudar para outras ferramentas.
 
-Ambos os modos usam a mesma ferramenta de rua, a mesma espinha Bézier e o mesmo fluxo de regeneração da superfície. O traçado livre usa o ajuste Rust com tolerância de 0,12 unidades e supressão de cantos menores que 100 graus. A transação permanece somente no fim do gesto.
+Arrastar um ponto move a espinha, preservando a distância inicial entre clique e centro do marcador. A prévia não altera a cena confirmada; a superfície é regenerada ao soltar. Clicar no ponto central insere uma âncora por subdivisão exata. Delete remove o ponto selecionado e une os controles restantes, permitindo alterar a forma local. Uma extremidade pode ser removida enquanto restar um caminho com pelo menos dois pontos; cruzamentos não são removidos por essa ação. Clicar ou arrastar o corpo da rua não deforma a curva nem começa outra rua.
+
+A troca de modo ou ferramenta cancela o rascunho atual. Esta versão básica não mistura os dois modos dentro de um rascunho. Criação, movimentação, inserção e remoção usam transações com desfazer/refazer. Erros preservam a cena anterior; uma confirmação recusada no modo por pontos mantém o rascunho disponível.
 
 ## Fronteiras
 
-- `packages/render-3d/src/interaction/curve-pen.ts` mant?m apenas o ciclo de intera??o, independente do renderer, da geometria e de pol?ticas de teclado ou apar?ncia. Confirma??es recusadas preservam o rascunho.
-- A composi??o do VTT transforma ?ncoras em comandos do port B?zier e previews do renderer existente. Os controles s?o enviados ao fluxo da espinha sem passar novamente pelo ajuste do pincel.
-- O Rust em `grafting-graph-core` calcula al?as, amostras, conex?es e contornos. Al?as recolhidas nos extremos usam a dire??o tangente unilateral; c?spides interiores estacion?rias continuam sendo recusadas.
-- Cada cria??o aceita corresponde a uma transa??o revers?vel do caminho. O controlador ? reutiliz?vel; o consumidor conectado nesta entrega ? a ferramenta de caminho. N?o h? novo gerador de ruas nem altera??o da pol?tica de largura.
+A composição do VTT decide gestos, seleção e apresentação. A matemática de interpolação, ajuste, subdivisão e geração das faixas permanece no núcleo Rust. A representação persistida continua Bézier. O controlador genérico de caneta em render-3d permanece disponível para outros consumidores, mas não dirige a ferramenta de rua.
 
-## Refer?ncias de intera??o
+O [exemplo oficial de spline do Three.js](https://threejs.org/examples/webgl_geometry_spline_editor.html) é referência de interação por pontos, não uma dependência importada. Nenhuma biblioteca nova foi instalada.
 
-A pesquisa anterior usou [pen-tool](https://github.com/BenjaminDobler/pen-tool) como refer?ncia para clique, arraste e fechamento e [dollycurve](https://github.com/jtydhr88/dollycurve) para edi??o de caminhos numa cena Three.js. Esta implementa??o n?o incorpora c?digo desses projetos nem acrescenta depend?ncias.
+## Verificação
 
-## Verifica??o
-
-Os testes do controlador exercitam confirma??o ?nica, fechamento somente no release, hover transit?rio, cancelamento, remo??o de ?ncora e retomada ap?s recusa. Os testes de sess?o executam o WASM real para preservar controles, criar curvas abertas/fechadas e desfazer/refazer. Os testes de gesto cobrem espinha e contorno; os testes Rust cobrem al?as recolhidas e tangentes inv?lidas.
+Testes com WASM real cobrem posições explícitas, preview transitório, desenho livre, cancelamento, falha de confirmação, movimentação, inserção, remoção e desfazer/refazer. O dispatcher é exercitado com os eventos de ponteiro e teclado. A apresentação dos controles é verificada no runtime. A sensação de uso ainda exige avaliação visual no navegador.

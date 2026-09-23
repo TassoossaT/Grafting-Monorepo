@@ -16,7 +16,7 @@ function meaningful(g: ToolGesture): boolean {
 function draft(ctx: ToolContext,g: ToolGesture,params: PathBrushParams) {
   const samples = [...g.samples];
   if (samples.at(-1) !== g.current) samples.push(g.current);
-  const fitted=ctx.runtime.curveBatch({tolerance:0.12,commands:[{kind:"fit",points:samples.map(point),cornerDegrees:100}]})[0]!;
+  const fitted=ctx.runtime.curveBatch({tolerance:0.12,commands:[{kind:"fit",points:samples.map(point)}]})[0]!;
   const ribbons=ctx.runtime.curveBatch({tolerance:0.05,commands:fitted.curves.map(curve=>({kind:"ribbon" as const,curve,offsets:[-params.bedWidth/2,params.bedWidth/2] as const}))});
   const lines:number[]=[];
   for(const span of fitted.samples)for(let i=1;i<span.length;i++)lines.push(...span[i-1]!.position,...span[i]!.position);
@@ -58,7 +58,7 @@ export const pathStrokeTool: ConstructionTool<"path-brush"> = {
       },{operationId,tableId:ctx.tableId,initiatedBy:"road-stroke"});
       commitPathCloudIntent(ctx,effect,0.025);
     } catch(error) {
-      ctx.reportFeedback({tone:"error",message:`Tra?ado n?o aplicado: ${String(error)}`});
+      ctx.reportFeedback({tone:"error",message:`Traçado não aplicado: ${String(error)}`});
     }
   },
   onCancel(ctx){active.delete(ctx.runtime);ctx.runtime.clearPreview(CHANNEL);},

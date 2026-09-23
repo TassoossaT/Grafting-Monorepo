@@ -1,250 +1,182 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sessionFixture } from "./platform-session-fixture.mjs";
-import { pathPenTool } from "../src/composition/tabletop/tools/paths/path-pen-tool.ts";
-import { beginCurveGesture } from "../src/composition/tabletop/tools/core/curve-edit-gesture.ts";
+import { pathBrushTool as tool } from "../src/composition/tabletop/tools/paths/path-brush-tool.ts";
 import { curvePickId } from "../src/features/edit-construction/index.ts";
+import { surfaceRefFromNodeSet } from "../src/entities/map/index.ts";
 const sample=(x,z)=>({point:{x,y:0,z}});
 const gesture=(a,b)=>({start:a,current:b,samples:[a,b]});
-const params={...pathPenTool.defaultParams(),creationMode:"pen",bedWidth:0.6};
+const points={...tool.defaultParams(),creationMode:"points",bedWidth:0.6};
+const brush={...points,creationMode:"brush"};
+const state=f=>JSON.parse(f.session.snapshot_json());
+const edges=f=>f.runtime.getGraphSnapshot().edges.filter(e=>e.curve);
+const closeCurves=(actual,expected)=>{assert.equal(actual.length,expected.length);actual.forEach((c,i)=>c.points.forEach((p,j)=>p.forEach((v,k)=>assert.ok(Math.abs(v-expected[i].points[j][k])<1e-10, "curve coordinate changed"))));};
 function fixture() {
-  const f=sessionFixture();f.previews=new Map();
+  const f=sessionFixture();f.previews=new Map();f.selected=undefined;
+  f.ctx.reportSelection=value=>{f.selected=value;};
   f.runtime.showPreview=(d,c)=>f.previews.set(c,d);
   f.runtime.clearPreview=c=>f.previews.delete(c);
   f.runtime.getFootprintCoverage=()=>[];
-  f.place=(a,b=a)=>{pathPenTool.onPointerDown(f.ctx,a,params);pathPenTool.onPointerUp(f.ctx,gesture(a,b),params);};
+  f.click=(a,b=a,params=points)=>{tool.onPointerDown(f.ctx,a,params);tool.onPointerUp(f.ctx,gesture(a,b),params);};
+  f.finish=()=>tool.onKeyDown(f.ctx,"Enter",points);
+  f.close=()=>{tool.onCancel(f.ctx);f.session.free();};
   return f;
 }
-test("real WASM pen: draft is transient, authored controls survive one undoable confirmation",()=>{
+function build(f) {f.click(sample(-10,0));f.click(sample(0,4));f.click(sample(10,0));f.finish();}
+function resolve(f,e) {
+  const nodes=new Map(f.runtime.getGraphSnapshot().nodes.map(n=>[n.id,n.position]));
+  const xyz=p=>[p.x,p.y,p.z];
+  return f.runtime.curveBatch({tolerance:0.025,commands:[{kind:"resolve",handles:e.curve,start:xyz(nodes.get(e.startNodeId)),end:xyz(nodes.get(e.endNodeId))}]})[0].curves[0];
+}
+test("road points: exact click anchors, no pen handles, hover excluded, one reversible commit",()=>{
   const f=fixture();
   try {
-    const before=JSON.parse(f.session.snapshot_json());
-    f.place(sample(-10,0),sample(-6,3));f.place(sample(10,0),sample(14,-3));
-    assert.deepEqual(JSON.parse(f.session.snapshot_json()),before);
-    assert.ok(f.previews.has("curve-pen"));
-    assert.equal(pathPenTool.onKeyDown(f.ctx,"Enter",params),true);
-    assert.ok(f.calls.feedback.some(x=>x.tone==="success"),JSON.stringify(f.calls.feedback));
-    const edges=f.runtime.getGraphSnapshot().edges.filter(e=>e.curve);
-    assert.equal(edges.length,1);
-    assert.deepEqual(edges[0].curve.start,[4,0,3]);
-    assert.deepEqual(edges[0].curve.end,[-4,0,3]);
-    assert.equal(f.previews.has("curve-pen"),false);
-    const after=JSON.parse(f.session.snapshot_json());
-    assert.equal(pathPenTool.onKeyDown(f.ctx,"Enter",params),false);
-    f.session.undo_region_overlay("platform-test:curve-pen:1");
-    assert.deepEqual(JSON.parse(f.session.snapshot_json()),before);
-    f.session.redo_region_overlay("platform-test:curve-pen:1");
-    assert.deepEqual(JSON.parse(f.session.snapshot_json()),after);
-  }finally{pathPenTool.onCancel(f.ctx);f.session.free();}
+    const before=state(f);
+    f.click(sample(-10,0),sample(-7,3));f.click(sample(0,4));f.click(sample(10,0));
+    tool.previewFor(gesture(sample(10,0),sample(20,9)),points,f.ctx);
+    assert.deepEqual(state(f),before);assert.ok(f.previews.has("road-points"));
+    assert.equal(f.finish(),true);
+    assert.equal(edges(f).length,2,JSON.stringify(f.calls.feedback));
+    const ids=new Set(edges(f).flatMap(e=>[e.startNodeId,e.endNodeId]));
+    const actual=f.runtime.getGraphSnapshot().nodes.filter(n=>ids.has(n.id)).map(n=>n.position);
+    assert.deepEqual(actual,[{x:-10,y:0,z:0},{x:0,y:0,z:4},{x:10,y:0,z:0}]);
+    const expected=f.runtime.curveBatch({tolerance:0.025,commands:[{kind:"automatic",points:[[-10,0,0],[0,0,4],[10,0,0]]}]})[0].curves;
+    closeCurves(edges(f).map(e=>resolve(f,e)),expected);
+    assert.equal(f.previews.has("road-points"),false);assert.equal(f.finish(),false);
+    const after=state(f);
+    f.session.undo_region_overlay("platform-test:road-points:1");assert.deepEqual(state(f),before);
+    f.session.redo_region_overlay("platform-test:road-points:1");assert.deepEqual(state(f),after);
+  }finally{f.close();}
 });
-test("real WASM pen: cancel discards all anchors and allows a new draft",()=>{
+test("road points: duplicate click, Backspace, cancellation and late release never build",()=>{
   const f=fixture();
   try {
-    const before=f.session.snapshot_json();
-    f.place(sample(-10,0));f.place(sample(10,0));pathPenTool.onCancel(f.ctx);
-    assert.equal(f.session.snapshot_json(),before);
-    assert.equal(pathPenTool.onKeyDown(f.ctx,"Enter",params),false);
-    f.place(sample(-5,0));f.place(sample(5,0));
-    pathPenTool.onKeyDown(f.ctx,"Enter",params);
-    assert.ok(f.runtime.getGraphSnapshot().edges.some(e=>e.curve),JSON.stringify(f.calls.feedback));
-  }finally{pathPenTool.onCancel(f.ctx);f.session.free();}
+    const before=state(f);f.click(sample(-10,0));f.click(sample(-10,0));
+    assert.equal(f.finish(),true);assert.deepEqual(state(f),before);
+    f.click(sample(0,4));tool.onKeyDown(f.ctx,"Backspace",points);f.finish();
+    assert.deepEqual(state(f),before);
+    tool.onPointerDown(f.ctx,sample(10,0),points);tool.onCancel(f.ctx);
+    tool.onPointerUp(f.ctx,gesture(sample(10,0),sample(10,0)),points);
+    assert.equal(f.finish(),false);assert.deepEqual(state(f),before);assert.equal(f.previews.size,0);
+    build(f);assert.equal(edges(f).length,2);
+  }finally{f.close();}
 });
-test("real WASM editing: a cancelled drag and an out-and-back drag leave the spine unchanged",()=>{
+test("road points: a rejected commit retains the draft and rolls back for retry",()=>{
   const f=fixture();
   try {
-    f.place(sample(-10,0));f.place(sample(10,0));pathPenTool.onKeyDown(f.ctx,"Enter",params);
-    const before=f.session.snapshot_json();
-    const edge=f.runtime.getGraphSnapshot().edges.find(e=>e.curve);
-    const a={...sample(-10,0),nodeId:curvePickId(edge.edgeId,1)};
-    const edit=beginCurveGesture(f.ctx,a);
-    edit.move(gesture(a,sample(-5,3)));assert.equal(f.session.snapshot_json(),before);
-    edit.move(gesture(a,a));edit.commit();assert.equal(f.session.snapshot_json(),before);
-    const cancelled=beginCurveGesture(f.ctx,a);
-    cancelled.move(gesture(a,sample(-5,3)));cancelled.cancel();cancelled.commit();
-    assert.equal(f.session.snapshot_json(),before);
-  }finally{pathPenTool.onCancel(f.ctx);f.session.free();}
-});
-
-test("real WASM pen: closing joins the first anchor without a duplicate endpoint",()=>{
-  const f=fixture();
-  try {
-    f.place(sample(-10,0));f.place(sample(10,0));f.place(sample(0,15));
-    const before=f.session.snapshot_json();
-    pathPenTool.onPointerDown(f.ctx,sample(-10,0),params);
-    assert.equal(f.session.snapshot_json(),before);
-    pathPenTool.onPointerUp(f.ctx,gesture(sample(-10,0),sample(-10,0)),params);
-    const edges=f.runtime.getGraphSnapshot().edges.filter(e=>e.curve);
-    assert.equal(edges.length,3,JSON.stringify(f.calls.feedback));
-    const degrees=new Map();
-    for(const e of edges) for(const id of [e.startNodeId,e.endNodeId])degrees.set(id,(degrees.get(id)??0)+1);
-    assert.equal(degrees.size,3);assert.ok([...degrees.values()].every(n=>n===2));
-  }finally{pathPenTool.onCancel(f.ctx);f.session.free();}
-});
-
-test("real WASM pen: a failed commit rolls back and leaves the draft available for retry",()=>{
-  const f=fixture();
-  try {
-    f.place(sample(-10,0));f.place(sample(10,0));
-    const before=f.session.snapshot_json();
+    f.click(sample(-10,0));f.click(sample(10,0));const before=state(f);
     const apply=f.runtime.applyPatchReplacement;
-    f.runtime.applyPatchReplacement=request=>{apply(request);throw Error("simulated failure");};
-    pathPenTool.onKeyDown(f.ctx,"Enter",params);
-    assert.equal(f.session.snapshot_json(),before);
-    assert.ok(f.previews.has("curve-pen"));
-    f.runtime.applyPatchReplacement=apply;
-    pathPenTool.onKeyDown(f.ctx,"Enter",params);
-    assert.equal(f.runtime.getGraphSnapshot().edges.filter(e=>e.curve).length,1);
-    assert.equal(pathPenTool.onKeyDown(f.ctx,"Enter",params),false);
-  }finally{pathPenTool.onCancel(f.ctx);f.session.free();}
+    f.runtime.applyPatchReplacement=r=>{apply(r);throw Error("simulated failure");};
+    f.finish();assert.deepEqual(state(f),before);assert.ok(f.previews.has("road-points"));
+    f.runtime.applyPatchReplacement=apply;f.finish();assert.equal(edges(f).length,1);
+  }finally{f.close();}
 });
-test("real WASM edit tool: pointer-up applies the last sample even without a move event", async()=>{
-  const { editRegionTool }=await import("../src/composition/tabletop/tools/core/edit-region-tool.ts");
+test("same road tool: anchor drag uses last sample, preserves grab offset and regenerates road",()=>{
   const f=fixture();
   try {
-    f.place(sample(-10,0));f.place(sample(10,0));pathPenTool.onKeyDown(f.ctx,"Enter",params);
-    const edge=f.runtime.getGraphSnapshot().edges.find(e=>e.curve);
-    const a={...sample(-10,0),nodeId:curvePickId(edge.edgeId,1)};
-    editRegionTool.onPointerDown(f.ctx,a,{mode:"shape"});
-    editRegionTool.onPointerUp(f.ctx,gesture(a,sample(-6,3)),{mode:"shape"});
-    const updated=f.runtime.getGraphSnapshot().edges.find(e=>e.edgeId===edge.edgeId);
-    assert.deepEqual(updated.curve.start,[4,0,3]);
-  }finally{editRegionTool.onCancel(f.ctx);pathPenTool.onCancel(f.ctx);f.session.free();}
-});
-
-test("precision road tool: creates a curve, then edits it without changing tool", async()=>{
-  const { pathBrushTool: tool }=await import("../src/composition/tabletop/tools/paths/path-brush-tool.ts");
-  const f=fixture();
-  const legacy={...params,creationMode:"pen"};
-  try {
-    const blank=f.session.snapshot_json();
-    const put=(a,b=a)=>{tool.onPointerDown(f.ctx,a,legacy);tool.onPointerUp(f.ctx,gesture(a,b),legacy);};
-    put(sample(-10,0),sample(-6,3));
-    assert.equal(f.session.snapshot_json(),blank,"a drag places an anchor, never paints an area");
-    put(sample(10,0),sample(14,-3));
-    assert.equal(f.session.snapshot_json(),blank);
-    tool.onKeyDown(f.ctx,"Enter",legacy);
-    const before=f.session.snapshot_json();
-    const edge=f.runtime.getGraphSnapshot().edges.find(e=>e.curve);
-    const handle={...sample(-6,3),nodeId:curvePickId(edge.edgeId,1)};
-    tool.onPointerDown(f.ctx,handle,legacy);
-    tool.onPointerMove(f.ctx,gesture(handle,sample(-5,5)),legacy);
-    assert.equal(f.session.snapshot_json(),before);
-    tool.onPointerUp(f.ctx,gesture(handle,sample(-4,4)),legacy);
-    const after=f.session.snapshot_json();
-    assert.notEqual(after,before);
-    assert.deepEqual(f.runtime.getGraphSnapshot().edges.find(e=>e.edgeId===edge.edgeId).curve.start,[6,0,4]);
-    assert.equal(tool.onKeyDown(f.ctx,"Enter",legacy),false,"grabbing a handle must not start a new draft");
-    f.session.undo_region_overlay("curve-edit:2");
-    assert.deepEqual(JSON.parse(f.session.snapshot_json()),JSON.parse(before));
-    f.session.redo_region_overlay("curve-edit:2");
-    assert.deepEqual(JSON.parse(f.session.snapshot_json()),JSON.parse(after));
-  }finally{tool.onCancel(f.ctx);f.session.free();}
-});
-test("unified road tool: moving an anchor, cancelling and subdividing all use the same tool", async()=>{
-  const { pathBrushTool: tool }=await import("../src/composition/tabletop/tools/paths/path-brush-tool.ts");
-  const f=fixture();
-  try {
-    f.place(sample(-10,0));f.place(sample(10,0));tool.onKeyDown(f.ctx,"Enter",params);
-    let edge=f.runtime.getGraphSnapshot().edges.find(e=>e.curve);
-    const a={...sample(-10,0),nodeId:edge.startNodeId};
-    const before=f.session.snapshot_json();
-    tool.onPointerDown(f.ctx,a,params);tool.onPointerMove(f.ctx,gesture(a,sample(-10,4)),params);
-    tool.onCancel(f.ctx);tool.onPointerUp(f.ctx,gesture(a,sample(-10,4)),params);
-    assert.equal(f.session.snapshot_json(),before);
-    tool.onPointerDown(f.ctx,a,params);tool.onPointerUp(f.ctx,gesture(a,sample(-10,4)),params);
-    assert.equal(f.runtime.getGraphSnapshot().nodes.find(n=>n.id===a.nodeId).position.z,4);
-    edge=f.runtime.getGraphSnapshot().edges.find(e=>e.curve);
-    const mid={...sample(0,2),nodeId:curvePickId(edge.edgeId,"midpoint")};
-    tool.onPointerDown(f.ctx,mid,params);tool.onPointerUp(f.ctx,gesture(mid,mid),params);
-    assert.equal(f.runtime.getGraphSnapshot().edges.filter(e=>e.curve).length,2);
-    assert.equal(tool.onKeyDown(f.ctx,"Enter",params),false);
-  }finally{tool.onCancel(f.ctx);f.session.free();}
-});
-
-test("freehand road: release commits a fitted curve once; a click and a cancelled stroke do nothing", async()=>{
-  const {pathBrushTool:tool}=await import("../src/composition/tabletop/tools/paths/path-brush-tool.ts");
-  const f=fixture(),simple={...params,creationMode:"brush"};
-  try {
-    const before=f.session.snapshot_json(),a=sample(-10,0),b=sample(0,4),c=sample(10,0);
-    tool.onPointerDown(f.ctx,a,simple);tool.onPointerUp(f.ctx,gesture(a,a),simple);
-    assert.equal(f.session.snapshot_json(),before);
-    const g={start:a,current:c,samples:[a,b,c]};
-    tool.onPointerDown(f.ctx,a,simple);tool.onPointerMove(f.ctx,g,simple);
-    assert.equal(f.session.snapshot_json(),before);assert.ok(f.previews.has("road-stroke"));
-    tool.onCancel(f.ctx);tool.onPointerUp(f.ctx,g,simple);assert.equal(f.session.snapshot_json(),before);
-    tool.onPointerDown(f.ctx,a,simple);tool.onPointerUp(f.ctx,g,simple);
-    assert.ok(f.runtime.getGraphSnapshot().edges.some(e=>e.curve),JSON.stringify(f.calls.feedback));
-    const after=f.session.snapshot_json();tool.onPointerUp(f.ctx,g,simple);assert.equal(f.session.snapshot_json(),after);
-    assert.equal(f.previews.has("road-stroke"),false);
-    f.session.undo_region_overlay("platform-test:road-stroke:1");assert.deepEqual(JSON.parse(f.session.snapshot_json()),JSON.parse(before));
-  }finally{tool.onCancel(f.ctx);f.session.free();}
-});
-test("simple road editing: drag the body at the grabbed parameter with no initial jump; click stays a no-op", async()=>{
-  const {pathBrushTool:tool}=await import("../src/composition/tabletop/tools/paths/path-brush-tool.ts");
-  const {surfaceRefFromNodeSet}=await import("../src/entities/map/index.ts");
-  const f=fixture(),simple={...params,creationMode:"brush"};
-  try {
-    f.place(sample(-10,0));f.place(sample(10,0));tool.onKeyDown(f.ctx,"Enter",params);
-    const before=f.session.snapshot_json(),face=f.runtime.getAllRegionTopologies().find(t=>t.surfaceType==="path");
-    const a={...sample(-4,0.2),surfaceRef:surfaceRefFromNodeSet(face.surfaceKey),screenX:100,screenY:100};
-    tool.onPointerDown(f.ctx,a,simple);tool.onPointerUp(f.ctx,gesture(a,a),simple);
-    assert.equal(f.session.snapshot_json(),before);
-    const jitter={...sample(-3.98,0.22),screenX:102,screenY:102};
-    tool.onPointerDown(f.ctx,a,simple);tool.onPointerUp(f.ctx,gesture(a,jitter),simple);
-    assert.equal(f.session.snapshot_json(),before);
-    tool.onPointerDown(f.ctx,a,simple);
-    const end={...sample(-4,2.2),screenX:100,screenY:130};
+    build(f);
+    const e=edges(f)[0],id=e.endNodeId,before=state(f);
+    const surfaces=JSON.stringify(f.runtime.getAllRegionTopologies());
+    const a={...sample(0.1,4.1),nodeId:id};
+    tool.onPointerDown(f.ctx,a,points);
+    const end=sample(1.1,6.1);
     const boolean=f.runtime.planarBoolean;
-    f.runtime.planarBoolean=()=>{throw Error("preview must not regenerate surfaces");};
-    tool.onPointerMove(f.ctx,gesture(a,end),simple);
-    assert.ok(f.previews.has("curve-edit"));
+    f.runtime.planarBoolean=()=>{throw Error("preview regenerated a surface");};
+    tool.onPointerMove(f.ctx,gesture(a,end),points);
+    assert.ok(f.previews.has("curve-edit"));assert.deepEqual(state(f),before);
     f.runtime.planarBoolean=boolean;
-    assert.equal(f.session.snapshot_json(),before);
-    tool.onPointerUp(f.ctx,gesture(a,end),simple);
-    assert.notEqual(f.session.snapshot_json(),before,JSON.stringify(f.calls.feedback));
-    assert.equal(f.runtime.getGraphSnapshot().edges.filter(e=>e.curve).length,1);
-    const graph=f.runtime.getGraphSnapshot(),edge=graph.edges.find(e=>e.curve);
-    const resolved=f.runtime.curveBatch({tolerance:0.025,commands:[{kind:"resolve",handles:edge.curve,start:Object.values(graph.nodes.find(n=>n.id===edge.startNodeId).position),end:Object.values(graph.nodes.find(n=>n.id===edge.endNodeId).position)}]})[0].curves[0];
-    const original={points:[[-10,0,0],[-10,0,0],[10,0,0],[10,0,0]]};
-    const t=f.runtime.curveBatch({tolerance:0.025,commands:[{kind:"nearest",curve:original,point:[-4,0,0.2]}]})[0].parameter;
-    const pulled=f.runtime.curveBatch({tolerance:0.025,commands:[{kind:"split",curve:resolved,t}]})[0].curves[0].points[3];
-    const grabbed=f.runtime.curveBatch({tolerance:0.025,commands:[{kind:"split",curve:original,t}]})[0].curves[0].points[3];
-    assert.ok(Math.abs(pulled[0]-grabbed[0])<0.0001);
-    assert.ok(Math.abs(pulled[2]-2)<0.0001,"the initial 0.2 offset from the spine is preserved");
-  }finally{tool.onCancel(f.ctx);f.session.free();}
+    tool.onPointerUp(f.ctx,gesture(a,end),points);
+    const p=f.runtime.getGraphSnapshot().nodes.find(n=>n.id===id).position;
+    assert.ok(Math.abs(p.x-1)<1e-9 && Math.abs(p.z-6)<1e-9);
+    assert.notEqual(JSON.stringify(f.runtime.getAllRegionTopologies()),surfaces);
+    assert.equal(edges(f).length,2);
+    const after=state(f);tool.onPointerUp(f.ctx,gesture(a,end),points);assert.deepEqual(state(f),after);
+    f.session.undo_region_overlay("curve-edit:2");assert.deepEqual(state(f),before);
+    f.session.redo_region_overlay("curve-edit:2");assert.deepEqual(state(f),after);
+  }finally{f.close();}
 });
-
-test("freehand road: a failed final fit never commits the last valid preview",async()=>{
-  const {pathBrushTool:tool}=await import("../src/composition/tabletop/tools/paths/path-brush-tool.ts");
-  const f=fixture(),simple={...params,creationMode:"brush"};
-  try{
-    const a=sample(-10,0),b=sample(10,0),g=gesture(a,b),before=f.session.snapshot_json();
-    tool.onPointerDown(f.ctx,a,simple);tool.onPointerMove(f.ctx,g,simple);
-    assert.ok(f.previews.has("road-stroke"));
-    const batch=f.runtime.curveBatch;
+test("road point drag: cancellation, click and out-and-back preserve graph",()=>{
+  const f=fixture();
+  try {
+    build(f);const id=edges(f)[0].startNodeId,a={...sample(-10,0),nodeId:id},end=sample(-10,3),before=state(f);
+    tool.onPointerDown(f.ctx,a,brush);tool.onPointerMove(f.ctx,gesture(a,end),brush);tool.onCancel(f.ctx);
+    tool.onPointerUp(f.ctx,gesture(a,end),brush);assert.deepEqual(state(f),before);
+    f.click(a,a,brush);assert.deepEqual(state(f),before);
+    tool.onPointerDown(f.ctx,a,brush);tool.onPointerMove(f.ctx,gesture(a,end),brush);tool.onPointerUp(f.ctx,gesture(a,a),brush);
+    assert.deepEqual(state(f),before);
+  }finally{f.close();}
+});
+test("road midpoint: inserts without changing curve and selected internal point can be removed",()=>{
+  const f=fixture();
+  try {
+    build(f);const original=edges(f)[0],curve=resolve(f,original);
+    const half=f.runtime.curveBatch({tolerance:0.025,commands:[{kind:"split",curve,t:0.5}]})[0].curves;
+    const mid={...sample(half[0].points[3][0],half[0].points[3][2]),nodeId:curvePickId(original.edgeId,"midpoint")};
+    f.click(mid);assert.equal(edges(f).length,3,JSON.stringify(f.calls.feedback));
+    const split=edges(f).filter(e=>e.edgeId===original.edgeId||e.edgeId.startsWith(original.edgeId+":split:"));
+    closeCurves(split.map(e=>resolve(f,e)),half);
+    const id=split[0].endNodeId,p=f.runtime.getGraphSnapshot().nodes.find(n=>n.id===id).position;
+    f.click({point:p,nodeId:id});
+    assert.equal(tool.onKeyDown(f.ctx,"Delete",points),true);
+    assert.equal(edges(f).length,2,JSON.stringify(f.calls.feedback));
+    assert.ok(edges(f).every(e=>e.startNodeId!==id&&e.endNodeId!==id));
+  }finally{f.close();}
+});
+test("road deletion: removes a deliberate bend; endpoint deletion fails without altering road",()=>{
+  const f=fixture();
+  try {
+    build(f);const id=edges(f)[0].endNodeId,p=f.runtime.getGraphSnapshot().nodes.find(n=>n.id===id).position;
+    f.click({point:p,nodeId:id});const before=state(f);
+    tool.onKeyDown(f.ctx,"Delete",points);assert.equal(edges(f).length,1,JSON.stringify(f.calls.feedback));assert.notDeepEqual(state(f),before);
+    const end=edges(f)[0].startNodeId,pos=f.runtime.getGraphSnapshot().nodes.find(n=>n.id===end).position;
+    f.click({point:pos,nodeId:end});const kept=state(f);
+    tool.onKeyDown(f.ctx,"Delete",points);assert.deepEqual(state(f),kept);assert.ok(f.calls.feedback.some(x=>x?.tone==="error"));
+  }finally{f.close();}
+});
+test("road body and obsolete tangent picks never pull the curve or create another road",()=>{
+  const f=fixture();
+  try {
+    build(f);const before=state(f),face=f.runtime.getAllRegionTopologies()[0];
+    const body={...sample(-4,2.6),surfaceRef:surfaceRefFromNodeSet(face.surfaceKey)};
+    f.click(body,sample(-4,9),brush);assert.deepEqual(state(f),before);
+    const e=edges(f)[0],handle={...sample(-8,2),nodeId:curvePickId(e.edgeId,1)};
+    f.click(handle,sample(-8,8));assert.deepEqual(state(f),before);assert.equal(f.finish(),false);
+  }finally{f.close();}
+});
+test("freehand road: click and cancelled stroke do nothing; final release commits once with undo",()=>{
+  const f=fixture();
+  try {
+    const before=state(f),a=sample(-10,0),b=sample(0,4),c=sample(10,0),g={start:a,current:c,samples:[a,b,c]};
+    f.click(a,a,brush);assert.deepEqual(state(f),before);
+    tool.onPointerDown(f.ctx,a,brush);tool.onPointerMove(f.ctx,g,brush);
+    assert.ok(f.previews.has("road-stroke"));assert.deepEqual(state(f),before);
+    tool.onCancel(f.ctx);tool.onPointerUp(f.ctx,g,brush);assert.deepEqual(state(f),before);
+    tool.onPointerDown(f.ctx,a,brush);tool.onPointerUp(f.ctx,g,brush);
+    assert.ok(edges(f).length,JSON.stringify(f.calls.feedback));
+    const after=state(f);tool.onPointerUp(f.ctx,g,brush);assert.deepEqual(state(f),after);
+    f.session.undo_region_overlay("platform-test:road-stroke:1");assert.deepEqual(state(f),before);
+    f.session.redo_region_overlay("platform-test:road-stroke:1");assert.deepEqual(state(f),after);
+  }finally{f.close();}
+});
+test("freehand road: failed final conversion never commits a stale preview",()=>{
+  const f=fixture();
+  try {
+    const a=sample(-10,0),b=sample(10,0),g=gesture(a,b),before=state(f);
+    tool.onPointerDown(f.ctx,a,brush);tool.onPointerMove(f.ctx,g,brush);assert.ok(f.previews.has("road-stroke"));
     f.runtime.curveBatch=()=>{throw Error("invalid final sample");};
-    tool.onPointerMove(f.ctx,g,simple);
-    assert.equal(f.previews.get("road-stroke").color,0xf87171);
-    tool.onPointerUp(f.ctx,g,simple);
-    f.runtime.curveBatch=batch;
-    tool.onPointerUp(f.ctx,g,simple);
-    assert.equal(f.session.snapshot_json(),before);
-    assert.equal(f.previews.has("road-stroke"),false);
-    assert.ok(f.calls.feedback.some(x=>x.tone==="error"));
-  }finally{tool.onCancel(f.ctx);f.session.free();}
+    tool.onPointerUp(f.ctx,g,brush);assert.deepEqual(state(f),before);assert.equal(f.previews.has("road-stroke"),false);
+  }finally{f.close();}
 });
 
-test("simple road editing: a mesh vertex pick without surfaceRef still edits the existing road",async()=>{
-  const {pathBrushTool:tool}=await import("../src/composition/tabletop/tools/paths/path-brush-tool.ts");
-  const f=fixture(),simple={...params,creationMode:"brush"};
-  try{
-    f.place(sample(-10,0));f.place(sample(10,0));tool.onKeyDown(f.ctx,"Enter",params);
-    const before=f.session.snapshot_json();
-    const node=f.runtime.getAllRegionTopologies().find(t=>t.surfaceType==="path").nodes[0];
-    const start={nodeId:node.id,point:node.position,screenX:100,screenY:100};
-    const end={point:{...node.position,z:node.position.z+2},screenX:100,screenY:130};
-    tool.onPointerDown(f.ctx,start,simple);tool.onPointerUp(f.ctx,gesture(start,end),simple);
-    assert.notEqual(f.session.snapshot_json(),before,JSON.stringify(f.calls.feedback));
-    assert.equal(f.runtime.getGraphSnapshot().edges.filter(e=>e.curve).length,1);
-  }finally{tool.onCancel(f.ctx);f.session.free();}
+test("road endpoint deletion shortens a path; midpoint dragging never inserts by accident",()=>{
+  const f=fixture();
+  try {
+    build(f);const e=edges(f)[0],mid={...sample(-5,2),nodeId:curvePickId(e.edgeId,"midpoint")},before=state(f);
+    f.click(mid,sample(-5,8));assert.deepEqual(state(f),before);
+    const id=e.startNodeId,p=f.runtime.getGraphSnapshot().nodes.find(n=>n.id===id).position;
+    f.click({point:p,nodeId:id});tool.onKeyDown(f.ctx,"Delete",points);
+    assert.equal(edges(f).length,1,JSON.stringify(f.calls.feedback));
+    assert.ok(edges(f).every(e=>e.startNodeId!==id&&e.endNodeId!==id));
+    assert.ok(f.runtime.getAllRegionTopologies().length);
+  }finally{f.close();}
 });

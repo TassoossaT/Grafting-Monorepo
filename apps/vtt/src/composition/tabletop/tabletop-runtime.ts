@@ -1,4 +1,4 @@
-import { curveEdgesOf, curveHandles } from "../../features/edit-construction/index.ts";
+import { curveEdgesOf, curveHandles, curvePick } from "../../features/edit-construction/index.ts";
 import type { BezierPort } from "../../ports/bezier-port.ts";
 import type { ConstructionPlanarRequest, ConstructionPlanarShape, ConstructionMotionRequest, ConstructionMotionPlan, ConstructionNodeMotion } from "../../ports/index.ts";
 import { chunkKeyForSurface, CONSTRUCTION_GRID_EXTENT, mergeChunkBucket, mergeSurfaceMeshes } from "../../adapters/rendering/index.ts";
@@ -207,6 +207,8 @@ export interface TabletopRuntime extends BezierPort {
     originX: number,
     originY: number,
   ): Float32Array;
+  /** Local editing presentation; never changes the graph or persistence. */
+  setConstructionHandlePresentation?(mode: "all" | "spine-points"): void;
   pick(viewId: RenderViewId, x: number, y: number): ScenePickResult | undefined;
   /** Shows a construction tool's not-yet-committed ghost. Purely visual -- passthrough to `SceneRenderPort`, never touches the construction session. */
   showPreview(descriptor: RenderPreviewDescriptor, channel?: string): void;
@@ -301,6 +303,10 @@ export class AppTabletopRuntime implements TabletopRuntime {
   readonly #surfacePickRevisions = new Map<string, number>();
   /** Last uploaded revision per node handle, mirroring `#chunkRevisions` but for the `"handles"` render layer. */
   readonly #nodeHandleRevisions = new Map<string, number>();
+  /** Monotonic across hide/show cycles so renderer revision guards accept restored controls. */
+  #handleRevision = 0;
+  #pointHandlesOnly = false;
+  #pointHandleIds = new Set<string>();
   #bezierHandleIds = new Set<string>();
   #generation = 0;
   #snapshot: TabletopSnapshot;
@@ -571,7 +577,8 @@ export class AppTabletopRuntime implements TabletopRuntime {
     causeId: string,
     generation: number,
   ): void {
-    const revision = (this.#nodeHandleRevisions.get(nodeId) ?? 0) + 1;
+    if (this.#pointHandlesOnly && !this.#pointHandleIds.has(nodeId)) return;
+    const revision = ++this.#handleRevision;
     this.#nodeHandleRevisions.set(nodeId, revision);
     this.#render.applyConfirmed({
       type: "node-handle-upserted",
@@ -586,7 +593,16 @@ export class AppTabletopRuntime implements TabletopRuntime {
   #syncBezierHandles(origin: ChangeOrigin, causeId: string, generation: number): void {
     if (typeof this.#construction.curveBatch !== "function") return;
     const contour = typeof this.#construction.getCurvedEdges === "function" ? this.#construction.getCurvedEdges() : [];
-    const handles = curveHandles(curveEdgesOf(this.#construction.getGraphSnapshot(), contour, this.#construction), this.#construction);
+    const graph = this.#construction.getGraphSnapshot();
+    const edges = curveEdgesOf(graph, contour, this.#construction);
+    const shownEdges = this.#pointHandlesOnly ? edges.filter(e => e.store === "spine") : edges;
+    const handles = curveHandles(shownEdges, this.#construction).filter(h => !this.#pointHandlesOnly || curvePick(h.id)?.index === "midpoint");
+    if (this.#pointHandlesOnly) {
+      const anchors = new Set(shownEdges.flatMap(e => [e.startNodeId,e.endNodeId]));
+      this.#pointHandleIds = new Set([...anchors,...handles.map(h => h.id)]);
+      for (const id of [...this.#nodeHandleRevisions.keys()]) if (!this.#pointHandleIds.has(id)) this.#removeNodeHandle(id,origin,causeId,generation);
+      for (const node of graph.nodes) if (anchors.has(node.id)) this.#uploadNodeHandle(node.id,node.position,origin,causeId,generation);
+    }
     const live = new Set(handles.map((h) => h.id));
     for (const id of this.#bezierHandleIds) if (!live.has(id)) this.#removeNodeHandle(id, origin, causeId, generation);
     for (const handle of handles) this.#uploadNodeHandle(handle.id, handle.position, origin, causeId, generation);
@@ -595,8 +611,8 @@ export class AppTabletopRuntime implements TabletopRuntime {
 
   /** Removes one node's pickable handle -- the counterpart to {@link AppTabletopRuntime.#uploadNodeHandle}, needed once a mutation deletes a node outright. */
   #removeNodeHandle(nodeId: ConstructionNodeId, origin: ChangeOrigin, causeId: string, generation: number): void {
-    const revision = (this.#nodeHandleRevisions.get(nodeId) ?? 0) + 1;
-    this.#nodeHandleRevisions.delete(nodeId);
+    const revision = ++this.#handleRevision;
+    if (!this.#nodeHandleRevisions.delete(nodeId)) return;
     this.#render.applyConfirmed({
       type: "node-handle-removed",
       origin,
@@ -1108,6 +1124,17 @@ export class AppTabletopRuntime implements TabletopRuntime {
       this.#snapshot.map,
     );
     this.#notify();
+  }
+
+  setConstructionHandlePresentation(mode: "all" | "spine-points"): void {
+    const points = mode === "spine-points";
+    if (this.#pointHandlesOnly === points) return;
+    this.#pointHandlesOnly = points;
+    if (this.#snapshot.status !== "ready") return;
+    if (!points) {
+      for (const node of this.#construction.getNodePositions()) this.#uploadNodeHandle(node.id,node.position,"programmatic","handle-presentation",this.#generation);
+    }
+    this.#syncBezierHandles("programmatic","handle-presentation",this.#generation);
   }
 
   pick(viewId: RenderViewId, x: number, y: number): ScenePickResult | undefined {

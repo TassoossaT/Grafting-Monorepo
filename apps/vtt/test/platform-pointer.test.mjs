@@ -107,7 +107,7 @@ test("road pointer lifecycle: one selected tool creates and edits the curve, and
     clearPreview(){},showPreview(){},
   });
   const target={getBoundingClientRect:()=>({left:0,top:0}),setPointerCapture:id=>captures.add(id),hasPointerCapture:id=>captures.has(id),releasePointerCapture:id=>captures.delete(id)};
-  const params={...DEFAULT_TOOL_PARAMS,"path-brush":{...DEFAULT_TOOL_PARAMS["path-brush"],creationMode:"pen",bedWidth:0.6}};
+  const params={...DEFAULT_TOOL_PARAMS,"path-brush":{...DEFAULT_TOOL_PARAMS["path-brush"],creationMode:"points",bedWidth:0.6}};
   try {
     const handlers=useConstructionPointer({activeTool:"path-brush",toolParams:params,runtime:f.runtime,history:f.ctx.history,tableId:"pointer-road",viewId:"view",snapToGrid:false,onSelectionChange(){},onFeedbackChange:v=>f.calls.feedback.push(v)});
     for(const effect of effects)cleanups.push(effect());
@@ -122,10 +122,10 @@ test("road pointer lifecycle: one selected tool creates and edits the curve, and
     listeners.get("keydown")({key:"Enter",preventDefault(){}});
     const edge=f.runtime.getGraphSnapshot().edges.find(e=>e.curve);
     assert.ok(edge,JSON.stringify(f.calls.feedback));
-    pickedId=curvePickId(edge.edgeId,1);
-    handlers.onPointerDown(event(20,20));pickedId=undefined;
+    pickedId=edge.startNodeId;
+    handlers.onPointerDown(event(0,0));pickedId=undefined;
     handlers.onPointerUp(event(30,30));handlers.onClick(event(30,30));
-    assert.deepEqual(f.runtime.getGraphSnapshot().edges.find(e=>e.edgeId===edge.edgeId).curve.start,[3,0,3]);
+    assert.deepEqual(f.runtime.getGraphSnapshot().nodes.find(n=>n.id===edge.startNodeId).position,{x:3,y:0,z:3});
     assert.equal(f.runtime.getGraphSnapshot().edges.filter(e=>e.curve).length,1);
     assert.equal(captures.size,0);
   }finally{

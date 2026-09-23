@@ -141,10 +141,12 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     // mount effect below runs before the runtime finishes loading, and asking
     // it for topologies then is an error rather than an empty answer.
     if (runtime.getSnapshot().status !== "ready") return;
+    const presentation = toolFor(optionsRef.current.activeTool).handlePresentation;
+    runtime.setConstructionHandlePresentation?.(presentation ?? "all");
     for (const channel of shownEdgeChannels.current) runtime.clearPreview(channel);
     shownEdgeChannels.current.clear();
     for (const group of edgeOverlayOf(runtime, runtime.getAllRegionTopologies(), runtime.getGraphSnapshot(), runtime)) {
-      if (group.positions.length === 0) continue;
+      if (group.positions.length === 0 || (presentation === "spine-points" && group.role !== "path-spine-edge")) continue;
       const channel = edgeOverlayChannel(group.role);
       runtime.showPreview(edgeOverlayDescriptor(group), channel);
       shownEdgeChannels.current.add(channel);
@@ -175,10 +177,12 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
         refreshEdgeOverlay();
       }
     };
+    refreshEdgeOverlay();
     window.addEventListener("keydown", keydown);
     return () => {
       window.removeEventListener("keydown", keydown);
       tool.onCancel?.(ownedContext);
+      options.runtime.setConstructionHandlePresentation?.("all");
       release();
     };
   }, [options.activeTool, options.runtime, options.history, options.tableId, activeParams, ctx, refreshEdgeOverlay]);
@@ -205,7 +209,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       if (viewId === undefined) return undefined;
       const { x, y } = pointerOffset(event);
       const hit = runtime.pick(viewId, x, y);
-      return hit === undefined ? undefined : { ...applySnap(hit, snapToGrid), screenY: event.clientY, screenX: event.clientX };
+      return hit === undefined ? undefined : { ...applySnap(hit, snapToGrid && toolFor(optionsRef.current.activeTool).useGridSnap !== false), screenY: event.clientY, screenX: event.clientX };
     },
     [],
   );

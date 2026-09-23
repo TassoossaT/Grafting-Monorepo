@@ -645,6 +645,10 @@ Unregisters a surface outright, prunes orphaned nodes, and folds the outcome int
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.resizeView(viewId: string, width: number, height: number): void`
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.setConstructionHandlePresentation(mode: "all" | "spine-points"): void`
+
+Local editing presentation; never changes the graph or persistence.
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.showPreview(descriptor: RenderPreviewDescriptor, channel?: string): void`
 
 Shows a construction tool's not-yet-committed ghost. Purely visual -- passthrough to `SceneRenderPort`, never touches the construction session.
@@ -795,6 +799,10 @@ Where points project onto the curves a surface was swept from. See `Construction
 Unregisters a surface outright, prunes orphaned nodes, and folds the outcome into the running map. See `ConstructionSessionPort.removeSurface`.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.resizeView(viewId: string, width: number, height: number): void`
+
+### `method vtt.tabletop-runtime.TabletopRuntime.setConstructionHandlePresentation(mode: "all" | "spine-points"): void`
+
+Local editing presentation; never changes the graph or persistence.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.showPreview(descriptor: RenderPreviewDescriptor, channel?: string): void`
 
@@ -1827,7 +1835,7 @@ points *out* of it, means their signs are opposite.
 
 ### `method vtt.curve-edit-gesture.CurveGesture.move(gesture: ToolGesture): void`
 
-### `type vtt.curve-edit-gesture.CurveGestureOptions = ToolParamsFor<"edit-region"> & { dragThreshold?: number; insertOnClick?: boolean; parameter?: number; pointerOrigin?: ConstructionPosition }`
+### `type vtt.curve-edit-gesture.CurveGestureOptions = ToolParamsFor<"edit-region"> & { allowShapeChange?: boolean; dragThreshold?: number; insertOnClick?: boolean; parameter?: number; pointerOrigin?: ConstructionPosition }`
 
 ### `function vtt.curve-edit-gesture.beginCurveGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGestureOptions): CurveGesture | undefined`
 
@@ -1907,11 +1915,17 @@ on `onClick`). `composition/tabletop/use-construction-pointer.ts` is the
 only caller and never branches on `id` -- it just invokes whichever hook
 the active tool defines.
 
+### `property vtt.tool-context.ConstructionTool.handlePresentation?: "spine-points"`
+
+Presentation and sampling policy while this tool is active.
+
 ### `property vtt.tool-context.ConstructionTool.id: Id`
 
 ### `property vtt.tool-context.ConstructionTool.previewOnHover?: boolean | ((params: ToolParamsFor<Id>) => boolean)`
 
 Opt in to a stationary drawing preview between gestures.
+
+### `property vtt.tool-context.ConstructionTool.useGridSnap?: boolean`
 
 ### `method vtt.tool-context.ConstructionTool.defaultParams(): ToolParamsFor<Id>`
 
@@ -2097,11 +2111,11 @@ here".
 
 ### `variable vtt.path-brush-tool.pathBrushTool: ConstructionTool<"path-brush">`
 
-Stable tool identity; the road is always authored and edited through its curve.
+Stable identity for freehand creation, through-point creation and spine editing.
 
-### `variable vtt.path-pen-tool.pathPenTool: ConstructionTool<"path-brush">`
+### `variable vtt.path-points-tool.pathPointsTool: ConstructionTool<"path-brush">`
 
-One road tool: existing curve controls edit; an empty placement starts authoring.
+A road is drawn freely or through explicit points, and edited by its spine points.
 
 ### `variable vtt.path-stroke-tool.pathStrokeTool: ConstructionTool<"path-brush">`
 
@@ -3359,7 +3373,7 @@ Preview only the affected curves; surface regeneration runs once on release.
 
 Structural edits on a spine, the same for every structure generated along one.
 
-### `function vtt.spine-actions.planSpineAction(snapshot: ConstructionGraphSnapshot, port: BezierPort, action: SpineAction, targetId: string, edgeId: string | undefined, operationId: string, width?: number, endWidth?: number): ConstructionGraphPatch`
+### `function vtt.spine-actions.planSpineAction(snapshot: ConstructionGraphSnapshot, port: BezierPort, action: SpineAction, targetId: string, edgeId: string | undefined, operationId: string, width?: number, endWidth?: number, allowShapeChange: boolean): ConstructionGraphPatch`
 
 The graph patch one structural spine action makes; the owner regenerates its surface from it.
 
@@ -3401,6 +3415,10 @@ first place (see `spine-node-id.ts`).
 ### `interface vtt.spine-edit-plan.SpineEditInput`
 
 ### `property vtt.spine-edit-plan.SpineEditInput.action?: SpineAction`
+
+### `property vtt.spine-edit-plan.SpineEditInput.allowShapeChange?: boolean`
+
+Explicit point deletion may change the adjacent curve shape.
 
 ### `property vtt.spine-edit-plan.SpineEditInput.endWidth?: number`
 
@@ -5048,9 +5066,9 @@ How wide, measured along the wall rather than across the ground -- a curved wall
 
 Width of the flat traversable bed, in world units.
 
-### `property vtt.tool-types.PathBrushParams.creationMode?: "brush" | "pen"`
+### `property vtt.tool-types.PathBrushParams.creationMode?: "points" | "brush" | "pen"`
 
-Freehand drawing for play; pen exposes precise point-by-point authoring.
+Freehand or through-point road authoring; pen is a legacy alias for points.
 
 ### `property vtt.tool-types.PathBrushParams.curveMode?: "automatic" | "aligned" | "mirrored" | "free"`
 

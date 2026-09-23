@@ -42,6 +42,8 @@ export interface SpineEditInput {
   readonly width?: number;
   readonly endWidth?: number;
   readonly insert?: boolean;
+  /** Explicit point deletion may change the adjacent curve shape. */
+  readonly allowShapeChange?: boolean;
   /** Parameter of the grabbed span, supplied by the curve nearest-point query. */
   readonly parameter?: number;
   readonly mode?: CurveHandleMode;
@@ -60,7 +62,7 @@ export function planSpineEditPatch(input: SpineEditInput): { readonly graphPatch
   let graphPatch: ConstructionGraphPatch;
   let selectedId = input.targetId;
   if (input.action && input.action !== "edit") {
-    graphPatch = planSpineAction(source, input.port, input.action, input.targetId, pick?.edgeId, input.operationId, input.width, input.endWidth);
+    graphPatch = planSpineAction(source, input.port, input.action, input.targetId, pick?.edgeId, input.operationId, input.width, input.endWidth, input.allowShapeChange);
   } else if (pick) {
     const edge = source.edges.find((e) => e.edgeId === pick.edgeId);
     if (!edge?.curve) return undefined;

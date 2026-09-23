@@ -3988,6 +3988,7 @@ export interface CurveGesture {
   }
 export type CurveGestureOptions = ToolParamsFor<"edit-region"> & {
   readonly parameter?: number;
+  readonly allowShapeChange?: boolean;
   readonly insertOnClick?: boolean;
   readonly pointerOrigin?: ConstructionPosition;
   readonly dragThreshold?: number;
@@ -4074,6 +4075,9 @@ export interface ToolContext {
   * grid intersection by the time a tool sees it, and this only says so, so
 export interface ConstructionTool<Id extends ConstructionToolId> {
   readonly id: Id;
+  /** Presentation and sampling policy while this tool is active. */
+  readonly handlePresentation?: "spine-points";
+  readonly useGridSnap?: boolean;
   defaultParams(): ToolParamsFor<Id>;
   /** Opt in to a stationary drawing preview between gestures. */
   readonly previewOnHover?: boolean | ((params: ToolParamsFor<Id>) => boolean);
@@ -4138,15 +4142,17 @@ export function panelRailOf(port: ContourPort, topology: ConstructionRegionTopol
   const walked = outer.map((edge) => ({
 
 // src/composition/tabletop/tools/paths/path-brush-tool.ts
-export const pathBrushTool = pathPenTool;
+export const pathBrushTool = pathPointsTool;
 
-// src/composition/tabletop/tools/paths/path-pen-tool.ts
-export const pathPenTool: ConstructionTool<"path-brush"> = {
+// src/composition/tabletop/tools/paths/path-points-tool.ts
+export const pathPointsTool: ConstructionTool<"path-brush"> = {
   id: "path-brush",
+  handlePresentation: "spine-points",
+  useGridSnap: false,
   defaultParams: () => DEFAULT_TOOL_PARAMS["path-brush"],
   previewOnHover: true,
-  previewFor(gesture, params, ctx) {
-  if (!edits.has(ctx.runtime)) safely(ctx, () => sessions.get(ctx.runtime)?.pen.hover(gesture.current.point));
+  previewFor(g, _params, ctx) {
+  const draft = drafts.get(ctx.runtime);
 
 // src/composition/tabletop/tools/paths/path-stroke-tool.ts
 export const pathStrokeTool: ConstructionTool<"path-brush"> = {
@@ -5851,8 +5857,8 @@ export interface BrushShapeParams {
   readonly rotationDegrees: number;
   }
 export interface PathBrushParams extends BrushShapeParams {
-  /** Freehand drawing for play; pen exposes precise point-by-point authoring. */
-  readonly creationMode?: "brush" | "pen";
+  /** Freehand or through-point road authoring; pen is a legacy alias for points. */
+  readonly creationMode?: "brush" | "points" | "pen";
   /** Constraint for editing an existing curve with this same tool. */
   readonly curveMode?: "automatic" | "aligned" | "mirrored" | "free";
   /** Product recipe; every variant still creates the single `path` surface type. */
