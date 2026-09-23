@@ -433,6 +433,12 @@ export class AppTabletopRuntime implements TabletopRuntime {
    * tracks that membership persistently; only the *chunks* a change actually
    * touched (gained a surface, lost one, or had one move between buckets)
    * get re-merged and re-uploaded here -- everything else costs nothing.
+   *
+   * A surface whose mesh failed to derive this call is simply absent from
+   * `changedMeshes` (see `#applyConstructionMutation`'s use of
+   * `getSurfaceMeshesReport`) rather than listed in `removedSurfaceRefs`, so
+   * it falls straight into "every other surface" above and keeps whatever it
+   * last rendered.
    */
   #syncSurfaceChunks(
     changedMeshes: readonly SurfaceMeshResult[],
@@ -777,16 +783,38 @@ export class AppTabletopRuntime implements TabletopRuntime {
     // screen simply never caught up.
     // Older/in-memory ports used by embedders can still provide only the
     // single-key method; the Wasm port takes the one-crossing batch path.
+    //
+    // A port that also exposes `getSurfaceMeshesReport` tells the two ways a
+    // key can be absent from `meshes` apart: `"unknown"` is a stale key --
+    // normal when this same mutation also removed that surface, already
+    // handled via `removedSurfaceRefs` -- while any other reason is a live
+    // surface whose mesh genuinely failed to derive. That surface's chunk
+    // membership, pick target, and projection are left exactly as they were
+    // (they simply never enter `meshes` below), so the last valid render
+    // keeps showing rather than the face vanishing under a still-live key.
+    const report = this.#construction.getSurfaceMeshesReport;
     const batch = this.#construction.getSurfaceMeshes;
-    const meshes = typeof batch === "function"
-      ? batch.call(this.#construction, surfaceKeys)
-      : surfaceKeys.flatMap((surfaceKey) => {
-          try {
-            return this.#construction.getSurfaceMesh(surfaceKey);
-          } catch {
-            return [];
-          }
-        });
+    let meshes: readonly SurfaceMeshResult[];
+    if (typeof report === "function") {
+      const result = report.call(this.#construction, surfaceKeys);
+      meshes = result.meshes;
+      for (const failure of result.failed) {
+        if (failure.reason === "unknown") continue;
+        const surfaceRef = surfaceRefFromNodeSet(failure.surfaceKey);
+        if (removedSurfaceRefs.includes(surfaceRef)) continue;
+        console.warn(`surface ${surfaceRef} failed to mesh: ${failure.reason}`);
+      }
+    } else {
+      meshes = typeof batch === "function"
+        ? batch.call(this.#construction, surfaceKeys)
+        : surfaceKeys.flatMap((surfaceKey) => {
+            try {
+              return this.#construction.getSurfaceMesh(surfaceKey);
+            } catch {
+              return [];
+            }
+          });
+    }
     this.#syncSurfaceChunks(meshes, removedSurfaceRefs, origin, causeId, this.#generation);
 
     let map = this.#foldAffectedSurfaces(this.#snapshot.map, surfaceKeys, meshes);

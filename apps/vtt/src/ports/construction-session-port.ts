@@ -774,6 +774,19 @@ export interface ConstructionSessionPort extends BezierPort {
   getSurfaceMeshes(surfaceKeys: readonly ConstructionSurfaceKey[]): readonly SurfaceMeshResult[];
   /** Every currently-known surface's mesh -- the bootstrap/full-render call. */
   getAllSurfaceMeshes(): readonly SurfaceMeshResult[];
+  /**
+   * {@link getSurfaceMeshes}, plus which of `surfaceKeys` could not be
+   * meshed and why -- so a caller can tell a live surface whose mesh
+   * derivation genuinely failed from a stale key naming a surface already
+   * gone (`reason: "unknown"`, expected when a surface was removed in the
+   * same mutation) instead of both silently vanishing from the result the
+   * same way. Optional: older/in-memory ports fall back to
+   * {@link getSurfaceMeshes}, which reports neither.
+   */
+  getSurfaceMeshesReport?(surfaceKeys: readonly ConstructionSurfaceKey[]): {
+    readonly meshes: readonly SurfaceMeshResult[];
+    readonly failed: readonly { readonly surfaceKey: ConstructionSurfaceKey; readonly reason: string }[];
+  };
 
   /**
    * Every node currently in the session with its live position -- what an

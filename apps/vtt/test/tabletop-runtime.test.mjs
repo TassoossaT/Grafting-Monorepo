@@ -922,6 +922,116 @@ test("removeSurface only removes -- how other clouds answer is the effect commit
   assert.deepEqual(outcome.removedSurfaceKeys, [FAKE_WALL_SURFACE_KEY]);
 });
 
+test("a surface the report lists as failed (not removed) keeps its last render, then a later success replaces it", async () => {
+  const renderPort = createFakeRenderPort();
+  const constructionPort = createFakeConstructionPort();
+  const runtime = createTabletopRuntime({
+    tableId: "table-mesh-report-failed",
+    seedFakeMap: true,
+    renderPort,
+    constructionPort,
+  });
+  await runtime.start();
+
+  const terrainRef = surfaceRefFromNodeSet(FAKE_TERRAIN_SURFACE_KEY);
+  const before = runtime.getSnapshot().map.byId.get(terrainRef);
+  const eventsBefore = renderPort.changes.length;
+
+  const move = constructionPort.moveVertex.bind(constructionPort);
+  constructionPort.moveVertex = (nodeId, position) => ({
+    ...move(nodeId, position),
+    affectedSurfaceKeys: [FAKE_TERRAIN_SURFACE_KEY],
+  });
+  constructionPort.getSurfaceMeshesReport = (surfaceKeys) => ({
+    meshes: [],
+    failed: surfaceKeys.map((surfaceKey) => ({ surfaceKey, reason: "triangulation-failed" })),
+  });
+
+  const originalWarn = console.warn;
+  const warnCalls = [];
+  console.warn = (...args) => warnCalls.push(args);
+  try {
+    runtime.moveVertex("fake:terrain:n0", { x: 9, y: 9, z: 9 }, "local", "drag-fail-1");
+  } finally {
+    console.warn = originalWarn;
+  }
+
+  assert.equal(warnCalls.length, 1, "a live surface that failed to mesh is reported once");
+  assert.ok(warnCalls[0].some((arg) => typeof arg === "string" && arg.includes(terrainRef) && arg.includes("triangulation-failed")));
+
+  const after = runtime.getSnapshot().map.byId.get(terrainRef);
+  assert.equal(after, before, "the failed surface's projection entry is left exactly as it was");
+
+  const newEvents = renderPort.changes.slice(eventsBefore);
+  assert.equal(
+    newEvents.some((change) => change.type === "surface-pick-target-removed" && change.surfaceRef === terrainRef),
+    false,
+    "a failed-to-mesh surface's pick target must not be removed",
+  );
+  assert.equal(
+    newEvents.some((change) => change.type === "map-chunk-removed"),
+    false,
+    "a failed-to-mesh surface's chunk membership must not be dropped",
+  );
+
+  // A later successful mesh replaces the surface normally.
+  constructionPort.getSurfaceMeshesReport = (surfaceKeys) => ({
+    meshes: surfaceKeys.map((surfaceKey) => ({
+      surfaceKey,
+      surfaceType: "terrain",
+      physical: true,
+      mesh: { positions: new Float32Array([0, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1]) },
+    })),
+    failed: [],
+  });
+  runtime.moveVertex("fake:terrain:n0", { x: 1, y: 1, z: 1 }, "local", "drag-fail-2");
+
+  const replaced = runtime.getSnapshot().map.byId.get(terrainRef);
+  assert.ok(replaced.revision > before.revision, "the surface picks back up normal updates once meshing succeeds again");
+  const pickUpserts = renderPort.changes.filter(
+    (change) => change.type === "surface-pick-target-upserted" && change.target.surfaceRef === terrainRef,
+  );
+  assert.ok(pickUpserts.length > 1, "the pick target is re-uploaded once the mesh is available again");
+});
+
+test("a report failure with reason \"unknown\" (a stale key) behaves as today -- no warning, no touch", async () => {
+  const renderPort = createFakeRenderPort();
+  const constructionPort = createFakeConstructionPort();
+  const runtime = createTabletopRuntime({
+    tableId: "table-mesh-report-unknown",
+    seedFakeMap: true,
+    renderPort,
+    constructionPort,
+  });
+  await runtime.start();
+
+  const terrainRef = surfaceRefFromNodeSet(FAKE_TERRAIN_SURFACE_KEY);
+  const before = runtime.getSnapshot().map.byId.get(terrainRef);
+
+  const move = constructionPort.moveVertex.bind(constructionPort);
+  constructionPort.moveVertex = (nodeId, position) => ({
+    ...move(nodeId, position),
+    affectedSurfaceKeys: [FAKE_TERRAIN_SURFACE_KEY],
+  });
+  constructionPort.getSurfaceMeshesReport = (surfaceKeys) => ({
+    meshes: [],
+    failed: surfaceKeys.map((surfaceKey) => ({ surfaceKey, reason: "unknown" })),
+  });
+
+  const originalWarn = console.warn;
+  const warnCalls = [];
+  console.warn = (...args) => warnCalls.push(args);
+  try {
+    runtime.moveVertex("fake:terrain:n0", { x: 9, y: 9, z: 9 }, "local", "drag-unknown-1");
+  } finally {
+    console.warn = originalWarn;
+  }
+
+  assert.equal(warnCalls.length, 0, "a stale/unknown key is not reported as a live meshing failure");
+  const after = runtime.getSnapshot().map.byId.get(terrainRef);
+  assert.equal(after, before, "an unknown key leaves the surface's projection entry untouched, exactly as before this feature");
+});
+
 test("transact commits once and reports whether an undo entry was recorded", async () => {
   const constructionPort = createFakeConstructionPort();
   const calls = [];
