@@ -46,6 +46,7 @@
 //! the same grid.
 
 pub mod frame;
+pub mod host;
 pub mod math;
 pub mod planar;
 pub mod profile;
@@ -81,6 +82,24 @@ pub fn triangulate_region(
     resolve_position: impl FnMut(&NodeId) -> Option<[f32; 3]>,
 ) -> Option<Vec<TriangulatedMesh>> {
     triangulate_region_with(topology, region, resolve_position, None)
+}
+
+/// [`triangulate_region_with`], with closed world-space `cutters` subtracted
+/// from an upright face. Any other face, and any face given no cutters, is
+/// meshed exactly as [`triangulate_region_with`] meshes it.
+pub fn triangulate_region_cut(
+    topology: &ContourTopology,
+    region: &SurfaceRegion,
+    mut resolve_position: impl FnMut(&NodeId) -> Option<[f32; 3]>,
+    fill: Option<PlanarFill<'_>>,
+    cutters: &[Vec<[f32; 3]>],
+) -> Option<Vec<TriangulatedMesh>> {
+    if !cutters.is_empty()
+        && let Some(mesh) = host::upright_face_mesh_cut(topology, region, &mut resolve_position, cutters)
+    {
+        return Some(vec![mesh]);
+    }
+    triangulate_region_with(topology, region, resolve_position, fill)
 }
 
 /// [`triangulate_region`], with the option of filling a planar face's

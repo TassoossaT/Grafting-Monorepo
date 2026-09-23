@@ -8,9 +8,10 @@ use serde::{Deserialize, Serialize};
 
 use grafting_graph_core::curve_offset::{ReferenceCurve, ReferenceField};
 use grafting_graph_core::{ContourTopology, RegionId, SurfaceRegion, SurfaceRegistry};
-use grafting_procgen_surface_mesh::{PlanarFill, triangulate_region_with};
+use grafting_procgen_surface_mesh::{PlanarFill, triangulate_region_cut};
 
 use crate::editing::SessionGraph;
+use crate::pins::Cutting;
 
 /// Reserved wire marker for a stable analytic-region identity.
 pub const REGION_SURFACE_KEY_PREFIX: &str = "@region";
@@ -233,6 +234,7 @@ pub fn all_surface_meshes(
     surfaces: &SurfaceRegistry,
     topology: &ContourTopology,
     known_regions: &std::collections::HashSet<RegionId>,
+    cutting: Option<&Cutting<'_>>,
 ) -> Vec<SurfaceMeshDto> {
     let mut meshes = Vec::new();
     let mut regions = known_regions.iter().collect::<Vec<_>>();
@@ -253,11 +255,13 @@ pub fn all_surface_meshes(
         let Some(surface) = surfaces.region_surface(region_id) else {
             continue;
         };
-        let Some(region_meshes) = triangulate_region_with(
+        let cutters = cutting.map_or_else(Vec::new, |cutting| cutting.rings(graph, surfaces, topology, region_id));
+        let Some(region_meshes) = triangulate_region_cut(
             topology,
             region,
             |id| graph.node(id).map(|node| *node.data()),
             fill,
+            &cutters,
         ) else {
             continue;
         };
@@ -287,6 +291,7 @@ pub fn surface_mesh(
     surfaces: &SurfaceRegistry,
     topology: &ContourTopology,
     request: SurfaceMeshRequest,
+    cutting: Option<&Cutting<'_>>,
 ) -> Result<Vec<SurfaceMeshDto>, String> {
     let field = reference_field_near(
         graph,
@@ -295,7 +300,7 @@ pub fn surface_mesh(
             .and_then(|id| topology.region(&id))
             .and_then(|region| region_bounds(graph, topology, region)),
     );
-    surface_mesh_with(graph, surfaces, topology, request, planar_fill(&field))
+    surface_mesh_with(graph, surfaces, topology, request, planar_fill(&field), cutting)
 }
 
 /// [`surface_mesh`] against a field the caller already built.
@@ -309,6 +314,7 @@ fn surface_mesh_with(
     topology: &ContourTopology,
     request: SurfaceMeshRequest,
     fill: Option<PlanarFill<'_>>,
+    cutting: Option<&Cutting<'_>>,
 ) -> Result<Vec<SurfaceMeshDto>, String> {
     if let [prefix, region_id] = request.surface_key.as_slice()
         && prefix == REGION_SURFACE_KEY_PREFIX
@@ -320,11 +326,13 @@ fn surface_mesh_with(
         let surface = surfaces
             .region_surface(&region_id)
             .ok_or_else(|| format!("unknown analytic region surface {region_id}"))?;
-        let meshes = triangulate_region_with(
+        let cutters = cutting.map_or_else(Vec::new, |cutting| cutting.rings(graph, surfaces, topology, &region_id));
+        let meshes = triangulate_region_cut(
             topology,
             region,
             |id| graph.node(id).map(|node| *node.data()),
             fill,
+            &cutters,
         )
         .ok_or_else(|| format!("no mesh derivable for analytic region {region_id}"))?;
         if meshes.is_empty() {
@@ -356,6 +364,7 @@ pub fn surface_meshes(
     surfaces: &SurfaceRegistry,
     topology: &ContourTopology,
     request: SurfaceMeshesRequest,
+    cutting: Option<&Cutting<'_>>,
 ) -> Vec<SurfaceMeshDto> {
     let mut seen = std::collections::HashSet::new();
     let mut meshes = Vec::new();
@@ -383,6 +392,7 @@ pub fn surface_meshes(
             topology,
             SurfaceMeshRequest { surface_key },
             fill,
+            cutting,
         ) {
             meshes.append(&mut pieces);
         }
@@ -490,6 +500,7 @@ mod tests {
             SurfaceMeshRequest {
                 surface_key: region_id_to_wire(&region_id),
             },
+            None,
         )
         .unwrap();
 
@@ -535,6 +546,7 @@ mod tests {
             SurfaceMeshRequest {
                 surface_key: region_id_to_wire(&region_id),
             },
+            None,
         )
         .unwrap();
         assert_eq!(dtos.len(), 1, "one outer loop is one piece");
@@ -555,6 +567,7 @@ mod tests {
             SurfaceMeshRequest {
                 surface_key: vec!["@region".into(), "missing".into()],
             },
+            None,
         )
         .unwrap_err();
         assert!(
@@ -573,6 +586,7 @@ mod tests {
             SurfaceMeshRequest {
                 surface_key: vec!["a".into(), "b".into(), "c".into()],
             },
+            None,
         )
         .unwrap_err();
         assert!(!error.is_empty());
@@ -582,7 +596,7 @@ mod tests {
     fn all_surface_meshes_returns_only_known_regions() {
         let (graph, surfaces, topology, region_id) = quad_region();
         let known = std::collections::HashSet::from([region_id.clone()]);
-        let meshes = all_surface_meshes(&graph, &surfaces, &topology, &known);
+        let meshes = all_surface_meshes(&graph, &surfaces, &topology, &known, None);
         assert_eq!(meshes.len(), 1);
         assert_eq!(meshes[0].surface_key, region_id_to_wire(&region_id));
 
@@ -591,6 +605,7 @@ mod tests {
             &surfaces,
             &topology,
             &std::collections::HashSet::new(),
+            None,
         );
         assert!(
             none.is_empty(),
@@ -602,7 +617,7 @@ mod tests {
     fn all_surface_meshes_skips_a_stale_id_without_erroring() {
         let (graph, surfaces, topology, region_id) = quad_region();
         let known = std::collections::HashSet::from([region_id, RegionId::new("gone").unwrap()]);
-        let meshes = all_surface_meshes(&graph, &surfaces, &topology, &known);
+        let meshes = all_surface_meshes(&graph, &surfaces, &topology, &known, None);
         assert_eq!(meshes.len(), 1, "the stale id is skipped, not an error");
     }
 }

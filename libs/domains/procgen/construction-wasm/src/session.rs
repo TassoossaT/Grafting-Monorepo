@@ -20,6 +20,7 @@ use crate::geometry::connected_component;
 use crate::grid_generation;
 use crate::mesh::{self, region_id_to_wire};
 use crate::patch_replacement;
+use crate::pins::{self, Cutting, Pins, SurfaceCapabilities};
 use crate::region_editing;
 use crate::region_overlay;
 
@@ -44,6 +45,7 @@ struct ConstructionState {
     topology: ContourTopology,
     known_regions: HashSet<RegionId>,
     spatial_index: crate::spatial_index::UniformGridIndex,
+    pins: Pins,
 }
 
 /// One undoable replacement, holding the *other* state: the one before it
@@ -81,6 +83,9 @@ pub struct ConstructionSession {
     pub(crate) topology: ContourTopology,
     pub(crate) known_regions: HashSet<RegionId>,
     pub(crate) spatial_index: crate::spatial_index::UniformGridIndex,
+    pub(crate) pins: Pins,
+    /// Session configuration rather than edit state: undo never touches it.
+    surface_capabilities: SurfaceCapabilities,
     region_overlay_undo: Vec<RegionOverlayHistoryEntry>,
     region_overlay_redo: Vec<RegionOverlayHistoryEntry>,
     open_transaction: Option<OpenTransaction>,
@@ -94,6 +99,7 @@ impl ConstructionSession {
             topology: self.topology.clone(),
             known_regions: self.known_regions.clone(),
             spatial_index: self.spatial_index.clone(),
+            pins: self.pins.clone(),
         }
     }
 
@@ -197,6 +203,8 @@ impl ConstructionSession {
             topology: ContourTopology::new(),
             known_regions: HashSet::new(),
             spatial_index: crate::spatial_index::UniformGridIndex::default(),
+            pins: Pins::new(),
+            surface_capabilities: SurfaceCapabilities::new(),
             region_overlay_undo: Vec::new(),
             region_overlay_redo: Vec::new(),
             open_transaction: None,
@@ -223,10 +231,13 @@ impl ConstructionSession {
 
     /// Keeps `known_regions` and `spatial_index` in step with whatever an atomic edit created,
     /// affected, or removed, so queries never enumerate stale regions or miss newly created ones.
-    fn track(&mut self, outcome: &region_editing::RegionEditOutcomeDto) {
+    /// Re-resolves pinned nodes first, so the bookkeeping below sees every
+    /// region that re-resolution moved.
+    fn track(&mut self, outcome: &mut region_editing::RegionEditOutcomeDto) {
         if let Some(open) = self.open_transaction.as_mut() {
             open.mutated = true;
         }
+        pins::settle(&mut self.graph, &self.topology, &mut self.pins, outcome);
         for key in &outcome.created_surface_keys {
             if let Ok(id) = mesh::region_id_from_wire(key) {
                 self.known_regions.insert(id.clone());
@@ -254,6 +265,18 @@ impl ConstructionSession {
         }
     }
 
+    fn annotate_pins(&self, dto: &mut region_editing::RegionTopologyDto) {
+        if self.pins.is_empty() {
+            return;
+        }
+        for node in &mut dto.nodes {
+            node.pin = grafting_graph_core::NodeId::new(node.id.clone())
+                .ok()
+                .and_then(|id| self.pins.get(&id))
+                .map(Into::into);
+        }
+    }
+
     /// Exchanges the live construction state with a history entry's.
     fn swap_state(&mut self, state: &mut ConstructionState) {
         std::mem::swap(&mut self.graph, &mut state.graph);
@@ -261,6 +284,7 @@ impl ConstructionSession {
         std::mem::swap(&mut self.topology, &mut state.topology);
         std::mem::swap(&mut self.known_regions, &mut state.known_regions);
         std::mem::swap(&mut self.spatial_index, &mut state.spatial_index);
+        std::mem::swap(&mut self.pins, &mut state.pins);
     }
 
     // ---- Bootstrapping ----
@@ -269,14 +293,14 @@ impl ConstructionSession {
     /// `editing::remove_surface`.
     pub fn remove_surface_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request: editing::RemoveSurfaceRequest = parse(request_json)?;
-        let response = editing::remove_surface(
+        let mut response = editing::remove_surface(
             &mut self.graph,
             &mut self.surfaces,
             &mut self.topology,
             request,
         )
         .map_err(to_js_error)?;
-        self.track(&response);
+        self.track(&mut response);
         serialize(&response)
     }
 
@@ -312,69 +336,72 @@ impl ConstructionSession {
 
     /// Validates and applies all vertex positions atomically, tracking regions once.
     pub fn move_vertices_json(&mut self, request_json: &str) -> Result<String, JsValue> {
-        let response = region_editing::apply_move_vertices(
+        let mut response = region_editing::apply_move_vertices(
             &mut self.graph,
             &mut self.topology,
             parse(request_json)?,
         )
         .map_err(to_js_error)?;
-        self.track(&response);
+        self.track(&mut response);
         serialize(&response)
     }
 
     /// `MoveVertex`. See `region_editing::apply_move_vertex`.
     pub fn move_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let response = region_editing::apply_move_vertex(&mut self.graph, &self.topology, request)
-            .map_err(to_js_error)?;
-        self.track(&response);
+        let mut response =
+            region_editing::apply_move_vertex(&mut self.graph, &self.topology, request)
+                .map_err(to_js_error)?;
+        self.track(&mut response);
         serialize(&response)
     }
 
     /// `InsertVertex`. See `region_editing::apply_insert_vertex`.
     pub fn insert_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let response =
+        let mut response =
             region_editing::apply_insert_vertex(&mut self.graph, &mut self.topology, request)
                 .map_err(to_js_error)?;
-        self.track(&response);
+        self.track(&mut response);
         serialize(&response)
     }
 
     /// `RemoveVertex`. See `region_editing::apply_remove_vertex`.
     pub fn remove_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let response =
+        let mut response =
             region_editing::apply_remove_vertex(&mut self.graph, &mut self.topology, request)
                 .map_err(to_js_error)?;
-        self.track(&response);
+        self.track(&mut response);
         serialize(&response)
     }
 
     /// `RetypeEdge`. See `region_editing::apply_retype_edge`.
     pub fn retype_edge_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let response =
+        let mut response =
             region_editing::apply_retype_edge(&mut self.topology, request).map_err(to_js_error)?;
-        self.track(&response);
+        self.track(&mut response);
         serialize(&response)
     }
 
     /// `MoveEdge`. See `region_editing::apply_move_edge`.
     pub fn move_edge_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let response = region_editing::apply_move_edge(&mut self.graph, &self.topology, request)
-            .map_err(to_js_error)?;
-        self.track(&response);
+        let mut response =
+            region_editing::apply_move_edge(&mut self.graph, &self.topology, request)
+                .map_err(to_js_error)?;
+        self.track(&mut response);
         serialize(&response)
     }
 
     /// `MoveRegion`. See `region_editing::apply_move_region`.
     pub fn move_region_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let response = region_editing::apply_move_region(&mut self.graph, &self.topology, request)
-            .map_err(to_js_error)?;
-        self.track(&response);
+        let mut response =
+            region_editing::apply_move_region(&mut self.graph, &self.topology, request)
+                .map_err(to_js_error)?;
+        self.track(&mut response);
         serialize(&response)
     }
 
@@ -382,9 +409,9 @@ impl ConstructionSession {
     /// `region_editing::apply_add_hole`.
     pub fn add_hole_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let response =
+        let mut response =
             region_editing::apply_add_hole(&mut self.topology, request).map_err(to_js_error)?;
-        self.track(&response);
+        self.track(&mut response);
         serialize(&response)
     }
 
@@ -392,25 +419,72 @@ impl ConstructionSession {
     /// `region_editing::apply_remove_hole`.
     pub fn remove_hole_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let response =
+        let mut response =
             region_editing::apply_remove_hole(&mut self.graph, &mut self.topology, request)
                 .map_err(to_js_error)?;
-        self.track(&response);
+        self.track(&mut response);
         serialize(&response)
     }
 
     /// `DeleteRegion`. See `region_editing::apply_delete_region`.
     pub fn delete_region_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let response = region_editing::apply_delete_region(
+        let mut response = region_editing::apply_delete_region(
             &mut self.graph,
             &mut self.topology,
             &mut self.surfaces,
             request,
         )
         .map_err(to_js_error)?;
-        self.track(&response);
+        self.track(&mut response);
         serialize(&response)
+    }
+
+    // ---- Pins and cut capabilities ----
+
+    /// Replaces the whole per-surface-type capability table. Configuration,
+    /// not edit state: it is never undone and moves no geometry.
+    pub fn set_surface_capabilities_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        self.surface_capabilities = pins::capability_table(parse(request_json)?);
+        Ok("{}".to_owned())
+    }
+
+    /// Pins nodes to host faces at relative `(u, v)` and moves them there.
+    /// See `pins::pin_nodes`.
+    pub fn pin_nodes_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let mut response = pins::pin_nodes(
+            &self.graph,
+            &self.topology,
+            &mut self.pins,
+            parse(request_json)?,
+        )
+        .map_err(to_js_error)?;
+        self.track(&mut response);
+        serialize(&response)
+    }
+
+    /// Drops pins; the nodes stay where they are.
+    pub fn unpin_nodes_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let mut response = pins::unpin_nodes(&self.topology, &mut self.pins, parse(request_json)?)
+            .map_err(to_js_error)?;
+        self.track(&mut response);
+        serialize(&response)
+    }
+
+    /// World points as unclamped `(u, v)` on an upright host face.
+    pub fn project_to_host_json(&self, request_json: &str) -> Result<String, JsValue> {
+        serialize(
+            &pins::project_to_host(&self.graph, &self.topology, parse(request_json)?)
+                .map_err(to_js_error)?,
+        )
+    }
+
+    /// `(u, v)` on an upright host face as world points, without mutating.
+    pub fn resolve_on_host_json(&self, request_json: &str) -> Result<String, JsValue> {
+        serialize(
+            &pins::resolve_on_host(&self.graph, &self.topology, parse(request_json)?)
+                .map_err(to_js_error)?,
+        )
     }
 
     /// What a brush footprint currently covers, before anything is
@@ -436,14 +510,14 @@ impl ConstructionSession {
     /// own edges rather than let each face mint its own.
     pub fn add_patch_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let dto = region_editing::apply_add_patch(
+        let mut dto = region_editing::apply_add_patch(
             &mut self.graph,
             &mut self.topology,
             &mut self.surfaces,
             request,
         )
         .map_err(to_js_error)?;
-        self.track(&dto.outcome);
+        self.track(&mut dto.outcome);
         serialize(&dto)
     }
 
@@ -454,7 +528,8 @@ impl ConstructionSession {
     pub fn apply_patch_replacement_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request: patch_replacement::ApplyPatchReplacementRequest = parse(request_json)?;
         let operation_id = request.operation_id.clone();
-        let (response, previous) = patch_replacement::apply_patch_replacement(
+        let pins_before = self.pins.clone();
+        let (mut response, previous) = patch_replacement::apply_patch_replacement(
             &mut self.graph,
             &mut self.surfaces,
             &mut self.topology,
@@ -463,13 +538,13 @@ impl ConstructionSession {
         )
         .map_err(to_js_error)?;
         if self.open_transaction.is_some() {
-            self.track(&response.outcome);
+            self.track(&mut response.outcome);
             return serialize(&response);
         }
         // The index is updated in place by `track`, so its previous state is
         // the one piece still copied.
         let spatial_index = self.spatial_index.clone();
-        self.track(&response.outcome);
+        self.track(&mut response.outcome);
         self.record_history(
             operation_id,
             ConstructionState {
@@ -478,6 +553,7 @@ impl ConstructionSession {
                 topology: previous.topology,
                 known_regions: previous.known_regions,
                 spatial_index,
+                pins: pins_before,
             },
         );
         serialize(&response)
@@ -529,14 +605,14 @@ impl ConstructionSession {
     /// `DuplicateRegion`. See `region_editing::apply_duplicate_region`.
     pub fn duplicate_region_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let response = region_editing::apply_duplicate_region(
+        let mut response = region_editing::apply_duplicate_region(
             &mut self.graph,
             &mut self.topology,
             &mut self.surfaces,
             request,
         )
         .map_err(to_js_error)?;
-        self.track(&response);
+        self.track(&mut response);
         serialize(&response)
     }
 
@@ -545,18 +621,22 @@ impl ConstructionSession {
     pub fn region_topology_json(&self, request_json: &str) -> Result<String, JsValue> {
         let request: region_editing::RegionRequest = parse(request_json)?;
         let region = mesh::region_id_from_wire(&request.surface_key).map_err(to_js_error)?;
-        let dto =
+        let mut dto =
             region_editing::region_topology(&self.graph, &self.topology, &self.surfaces, &region)
                 .map_err(to_js_error)?;
+        if let Some(dto) = dto.as_mut() {
+            self.annotate_pins(dto);
+        }
         serialize(&dto)
     }
 
     /// Every registered region's boundary -- the edit-mode bootstrap call.
     /// See `region_editing::all_region_topologies`.
     pub fn all_region_topologies_json(&self) -> Result<String, JsValue> {
-        let dtos =
+        let mut dtos =
             region_editing::all_region_topologies(&self.graph, &self.topology, &self.surfaces)
                 .map_err(to_js_error)?;
+        dtos.iter_mut().for_each(|dto| self.annotate_pins(dto));
         serialize(&dtos)
     }
 
@@ -583,7 +663,7 @@ impl ConstructionSession {
     /// Region boundaries intersecting a local XZ extent, serialized once.
     pub fn region_topologies_in_bounds_json(&self, request_json: &str) -> Result<String, JsValue> {
         let request: region_editing::RegionBoundsRequest = parse(request_json)?;
-        let dtos = region_editing::region_topologies_in_bounds(
+        let mut dtos = region_editing::region_topologies_in_bounds(
             &self.graph,
             &self.topology,
             &self.surfaces,
@@ -592,6 +672,7 @@ impl ConstructionSession {
             &request,
         )
         .map_err(to_js_error)?;
+        dtos.iter_mut().for_each(|dto| self.annotate_pins(dto));
         serialize(&dtos)
     }
 
@@ -609,7 +690,7 @@ impl ConstructionSession {
             .open_transaction
             .is_none()
             .then(|| self.current_state());
-        let response = region_overlay::apply_region_overlay(
+        let mut response = region_overlay::apply_region_overlay(
             &mut self.graph,
             &mut self.surfaces,
             &mut self.topology,
@@ -617,7 +698,7 @@ impl ConstructionSession {
             request,
         )
         .map_err(to_js_error)?;
-        self.track(&response.outcome);
+        self.track(&mut response.outcome);
         if let Some(before) = before {
             self.record_history(operation_id, before);
         }
@@ -693,6 +774,7 @@ impl ConstructionSession {
             &self.surfaces,
             &self.topology,
             &self.known_regions,
+            Some(&Cutting::new(&self.pins, &self.surface_capabilities)),
         );
         serialize(&meshes)
     }
@@ -704,8 +786,15 @@ impl ConstructionSession {
     /// surface key always returns exactly one. See `mesh::surface_mesh`.
     pub fn surface_mesh_json(&self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let dtos = mesh::surface_mesh(&self.graph, &self.surfaces, &self.topology, request)
-            .map_err(to_js_error)?;
+        let cutting = Cutting::new(&self.pins, &self.surface_capabilities);
+        let dtos = mesh::surface_mesh(
+            &self.graph,
+            &self.surfaces,
+            &self.topology,
+            request,
+            Some(&cutting),
+        )
+        .map_err(to_js_error)?;
         serialize(&dtos)
     }
 
@@ -717,6 +806,7 @@ impl ConstructionSession {
             &self.surfaces,
             &self.topology,
             request,
+            Some(&Cutting::new(&self.pins, &self.surface_capabilities)),
         ))
     }
 

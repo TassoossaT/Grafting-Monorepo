@@ -412,6 +412,10 @@ pub struct RegionEdgeDto {
 pub struct RegionNodeDto {
     pub id: String,
     pub position: [f32; 3],
+    /// Where this node is pinned, when it is -- filled in by the session,
+    /// which owns the pin table.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pin: Option<crate::pins::NodePinDto>,
 }
 
 /// One region's live boundary, in the deterministic order this crate
@@ -519,6 +523,7 @@ pub fn region_topology(
             graph.node(&id).map(|node| RegionNodeDto {
                 id: id.as_str().to_owned(),
                 position: *node.data(),
+                pin: None,
             })
         })
         .collect();
