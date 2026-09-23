@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { openingTool } from "../src/composition/tabletop/tools/openings/opening-tool.ts";
 import { surfaceRefFromNodeSet } from "../src/entities/map/index.ts";
+import { panelHeightWidgetPickId } from "../src/features/edit-construction/index.ts";
 import { addFace, sessionFixture } from "./platform-session-fixture.mjs";
 
 /**
@@ -409,6 +410,54 @@ test("dragging a door's bottom corner dot only widens it -- the floor sill never
     assert.ok(Math.abs(Math.max(...xs) - 3.5) < 1e-6, `the right edge must follow to 3.5, got ${Math.max(...xs)}`);
     assert.ok(Math.abs(Math.min(...ys) - 0) < 1e-6, "a door's floor sill must never move");
     assert.ok(Math.abs(Math.max(...ys) - 2) < 1e-6, "a door's top must stay put");
+  } finally { session.free(); }
+});
+
+/** The widget id on the opening's rim edge whose two ends both sit at height `y` -- the same dot the runtime draws at that edge's midpoint. */
+function edgeWidgetAt(runtime, y, zone) {
+  const opening = runtime.getAllRegionTopologies().find((t) => t.surfaceType === "opening");
+  const yOf = (id) => opening.nodes.find((n) => n.id === id).position.y;
+  const edge = opening.outerLoops.flat().find((e) => Math.abs(yOf(e.startNodeId) - y) < 1e-6 && Math.abs(yOf(e.endNodeId) - y) < 1e-6);
+  return panelHeightWidgetPickId(edge.edgeId, zone);
+}
+
+function pressDot(ctx, params, nodeId, down, up) {
+  openingTool.onPointerDown(ctx, { point: down, nodeId }, params);
+  openingTool.onPointerUp(ctx, { start: { point: down }, current: { point: up } }, params);
+  openingTool.onClick(ctx, { point: up }, params);
+}
+
+for (const zone of ["group", "single"]) {
+  test(`pressing either dot (${zone}) on a window's top edge raises just the top`, () => {
+    const { runtime, session, ctx } = sessionFixture();
+    try {
+      wall(runtime);
+      openingTool.onClick(ctx, { point: { x: 2, y: 1, z: 0 } }, WINDOW); // rim [1.5, 2.5] x [1, 2]
+      const dotY = zone === "group" ? 2.22 : 1.78;
+      pressDot(ctx, WINDOW, edgeWidgetAt(runtime, 2, zone), { x: 2, y: dotY, z: 0 }, { x: 2.3, y: 2.7, z: 0 });
+
+      const openings = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "opening");
+      assert.equal(openings.length, 1, "an edge-dot drag resizes, it never creates a second opening");
+      const xs = openings[0].nodes.map((n) => n.position.x);
+      const ys = openings[0].nodes.map((n) => n.position.y);
+      assert.ok(Math.abs(Math.max(...ys) - 2.7) < 1e-6, `the top must follow to 2.7, got ${Math.max(...ys)}`);
+      assert.ok(Math.abs(Math.min(...ys) - 1) < 1e-6, `the sill must stay put, got ${Math.min(...ys)}`);
+      assert.ok(Math.abs(Math.min(...xs) - 1.5) < 1e-6 && Math.abs(Math.max(...xs) - 2.5) < 1e-6, "the sides must stay put");
+    } finally { session.free(); }
+  });
+}
+
+test("pressing the dot on a window's sill edge lowers just the sill", () => {
+  const { runtime, session, ctx } = sessionFixture();
+  try {
+    wall(runtime);
+    openingTool.onClick(ctx, { point: { x: 2, y: 1, z: 0 } }, WINDOW); // rim [1.5, 2.5] x [1, 2]
+    pressDot(ctx, WINDOW, edgeWidgetAt(runtime, 1, "single"), { x: 2, y: 0.78, z: 0 }, { x: 2, y: 0.4, z: 0 });
+
+    const opening = runtime.getAllRegionTopologies().find((t) => t.surfaceType === "opening");
+    const ys = opening.nodes.map((n) => n.position.y);
+    assert.ok(Math.abs(Math.min(...ys) - 0.4) < 1e-6, `the sill must follow to 0.4, got ${Math.min(...ys)}`);
+    assert.ok(Math.abs(Math.max(...ys) - 2) < 1e-6, `the top must stay put, got ${Math.max(...ys)}`);
   } finally { session.free(); }
 });
 

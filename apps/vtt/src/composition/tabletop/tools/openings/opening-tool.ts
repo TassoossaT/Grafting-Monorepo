@@ -9,7 +9,7 @@ import type {
 // test reaches has to spell out any import it needs at run time. A
 // type-only `@/` import is fine -- those are erased.
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
-import { DEFAULT_TOOL_PARAMS, hasTrait, openingStructureType, panelRailOf, type PanelRail } from "../../../../features/edit-construction/index.ts";
+import { DEFAULT_TOOL_PARAMS, hasTrait, openingStructureType, panelHeightWidgetPick, panelRailOf, type PanelRail } from "../../../../features/edit-construction/index.ts";
 
 import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext, type ToolGesture } from "../core/tool-context.ts";
 import { segmentsPreview } from "../shapes/preview-shapes.ts";
@@ -109,6 +109,36 @@ function cornerAt(span: Span, travel: number, y: number): GrabHandle {
   };
 }
 
+/**
+ * The one side a press on an edge widget means -- the rim edge `edgeId`
+ * names, read by which of the rim's four sides its own midpoint sits on.
+ * The widget is the same edge dot every partition edge gets (the hole a
+ * window cuts shares its edges with the window's rim), so it moves that
+ * edge here just as it does from a wall tool.
+ */
+function edgeWidgetHandle(rail: PanelRail, opening: ConstructionRegionTopology, span: Span, edgeId: string): GrabHandle | undefined {
+  const edge = opening.outerLoops.flat().find((use) => use.edgeId === edgeId);
+  if (edge === undefined) return undefined;
+  const start = opening.nodes.find((node) => node.id === edge.startNodeId)?.position;
+  const end = opening.nodes.find((node) => node.id === edge.endNodeId)?.position;
+  if (start === undefined || end === undefined) return undefined;
+  const mid = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2, z: (start.z + end.z) / 2 };
+  const travel = rail.travelTo(mid);
+  const sides: readonly [number, GrabHandle][] = [
+    [Math.abs(travel - span.from), { travel: "left" }],
+    [Math.abs(travel - span.to), { travel: "right" }],
+    [Math.abs(mid.y - span.bottom), { y: "bottom" }],
+    [Math.abs(mid.y - span.top), { y: "top" }],
+  ];
+  return sides.reduce((best, side) => (side[0] < best[0] ? side : best))[1];
+}
+
+function widgetEdgeOf(opening: ConstructionRegionTopology, nodeId: string | undefined): string | undefined {
+  const widget = nodeId === undefined ? undefined : panelHeightWidgetPick(nodeId);
+  if (widget === undefined) return undefined;
+  return opening.outerLoops.some((loop) => loop.some((use) => use.edgeId === widget.edgeId)) ? widget.edgeId : undefined;
+}
+
 function isBody(handle: GrabHandle): boolean {
   return handle.travel === undefined && handle.y === undefined;
 }
@@ -189,12 +219,17 @@ function isRimNode(opening: ConstructionRegionTopology, nodeId: string | undefin
 
 /** The opening region under the pointer, if any -- pick-by-`surfaceRef` first (the same read `wallUnder` uses below), then `openingNear`'s geometric fallback, scoped to the opening's own surface type so clicking a placed window never gets read as clicking the wall behind it. */
 function openingUnder(ctx: ToolContext, sample: PointerSample): ConstructionRegionTopology | undefined {
-  // A press on one of a rim's own node dots: the dot sits on the corner, so
-  // the pick point can land just outside the rim `openingNear` checks.
+  // A press on one of a rim's own dots (a corner node, or an edge's widget):
+  // the dot sits on or just off the rim, so the pick point can land outside
+  // the rim `openingNear` checks.
   if (sample.nodeId !== undefined) {
     const owner = ctx.runtime
       .getAllRegionTopologies()
-      .find((topology) => topology.surfaceType === openingStructureType.surfaceType && isRimNode(topology, sample.nodeId));
+      .find(
+        (topology) =>
+          topology.surfaceType === openingStructureType.surfaceType &&
+          (isRimNode(topology, sample.nodeId) || widgetEdgeOf(topology, sample.nodeId) !== undefined),
+      );
     if (owner !== undefined) return owner;
   }
   const picked = sample.surfaceRef;
@@ -427,7 +462,10 @@ function beginGrab(ctx: ToolContext, opening: ConstructionRegionTopology, sample
   const params = alreadySelected ? { ...derived, width: liveParams.width, height: liveParams.height } : derived;
 
   const travel = rail.travelTo(point);
-  const handle = isRimNode(opening, sample.nodeId) ? cornerAt(span, travel, point.y) : handleAt(span, travel, point.y);
+  const widgetEdge = widgetEdgeOf(opening, sample.nodeId);
+  const handle =
+    (widgetEdge !== undefined ? edgeWidgetHandle(rail, opening, span, widgetEdge) : undefined) ??
+    (isRimNode(opening, sample.nodeId) ? cornerAt(span, travel, point.y) : handleAt(span, travel, point.y));
   const centerTravel = (span.from + span.to) / 2;
   const centerY = (span.bottom + span.top) / 2;
   selected = { openingSurfaceKey: opening.surfaceKey, wallSurfaceKey: host.wall.surfaceKey, holeIndex: host.holeIndex };
