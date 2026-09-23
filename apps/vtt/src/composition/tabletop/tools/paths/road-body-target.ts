@@ -5,8 +5,11 @@ import type { CurveGestureOptions } from "../core/curve-edit-gesture.ts";
 
 /** Project a road-body pick onto its spine using the canonical curve query. */
 export function roadBodyTarget(ctx: ToolContext,sample: PointerSample): {sample:PointerSample;options:CurveGestureOptions}|undefined {
-  if(!sample.surfaceRef)return;
-  const hit=ctx.runtime.getAllRegionTopologies().find(t=>surfaceRefFromNodeSet(t.surfaceKey)===sample.surfaceRef);
+  if(!sample.surfaceRef && !sample.nodeId)return;
+  const hit=ctx.runtime.getAllRegionTopologies().find(t=>
+    structureTypeFor(t.surfaceType)?.spine && (sample.surfaceRef
+      ? surfaceRefFromNodeSet(t.surfaceKey)===sample.surfaceRef
+      : t.nodes.some(n=>n.id===sample.nodeId)));
   const owner=hit && structureTypeFor(hit.surfaceType)?.spine;
   if(!owner)return;
   const snapshot=ctx.runtime.getGraphSnapshot();

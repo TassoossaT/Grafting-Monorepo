@@ -4159,8 +4159,11 @@ export const pathStrokeTool: ConstructionTool<"path-brush"> = {
 
 // src/composition/tabletop/tools/paths/road-body-target.ts
 export function roadBodyTarget(ctx: ToolContext,sample: PointerSample): {sample:PointerSample;options:CurveGestureOptions}|undefined {
-  if(!sample.surfaceRef)return;
-  const hit=ctx.runtime.getAllRegionTopologies().find(t=>surfaceRefFromNodeSet(t.surfaceKey)===sample.surfaceRef);
+  if(!sample.surfaceRef && !sample.nodeId)return;
+  const hit=ctx.runtime.getAllRegionTopologies().find(t=>
+  structureTypeFor(t.surfaceType)?.spine && (sample.surfaceRef
+  ? surfaceRefFromNodeSet(t.surfaceKey)===sample.surfaceRef
+  : t.nodes.some(n=>n.id===sample.nodeId)));
 
 // src/composition/tabletop/tools/platform/platform-contour-merge.ts
 export interface DirectedContourEdge {

@@ -111,14 +111,15 @@ export const pathPenTool: ConstructionTool<"path-brush"> = {
       // same picks manipulate the standing curve instead of starting another road.
       if (!sessions.get(ctx.runtime)?.pen.snapshot().anchors.length) {
         const options = { mode: "shape" as const, curveMode: params.curveMode ?? "mirrored", dragThreshold: 5, insertOnClick: params.creationMode === "pen" };
+        let picked = sample;
         let edit = beginCurveGesture(ctx, sample, options);
         if (!edit && params.creationMode !== "pen") {
           const target = roadBodyTarget(ctx, sample);
-          if (target) edit = beginCurveGesture(ctx, target.sample, {...options,...target.options});
+          if (target) { picked = target.sample; edit = beginCurveGesture(ctx, picked, {...options,...target.options}); }
         }
         if (edit) {
           edits.set(ctx.runtime, edit);
-          if (sample.nodeId) ctx.reportSelection({ id: sample.nodeId, point: sample.point });
+          if (picked.nodeId) ctx.reportSelection({ id: picked.nodeId, point: picked.point });
           return;
         }
       }

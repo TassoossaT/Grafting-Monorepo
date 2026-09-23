@@ -233,3 +233,18 @@ test("freehand road: a failed final fit never commits the last valid preview",as
     assert.ok(f.calls.feedback.some(x=>x.tone==="error"));
   }finally{tool.onCancel(f.ctx);f.session.free();}
 });
+
+test("simple road editing: a mesh vertex pick without surfaceRef still edits the existing road",async()=>{
+  const {pathBrushTool:tool}=await import("../src/composition/tabletop/tools/paths/path-brush-tool.ts");
+  const f=fixture(),simple={...params,creationMode:"brush"};
+  try{
+    f.place(sample(-10,0));f.place(sample(10,0));tool.onKeyDown(f.ctx,"Enter",params);
+    const before=f.session.snapshot_json();
+    const node=f.runtime.getAllRegionTopologies().find(t=>t.surfaceType==="path").nodes[0];
+    const start={nodeId:node.id,point:node.position,screenX:100,screenY:100};
+    const end={point:{...node.position,z:node.position.z+2},screenX:100,screenY:130};
+    tool.onPointerDown(f.ctx,start,simple);tool.onPointerUp(f.ctx,gesture(start,end),simple);
+    assert.notEqual(f.session.snapshot_json(),before,JSON.stringify(f.calls.feedback));
+    assert.equal(f.runtime.getGraphSnapshot().edges.filter(e=>e.curve).length,1);
+  }finally{tool.onCancel(f.ctx);f.session.free();}
+});
