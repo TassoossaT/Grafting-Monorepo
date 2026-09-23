@@ -57,6 +57,8 @@ export type {
   ConstructionNodePin,
   ConstructionHostPoint,
   ConstructionPinRequest,
+  ConstructionPanelRun,
+  ConstructionRunPanel,
   ConstructionSurfaceCapability,
   ConstructionEdgeSnapshot,
   ConstructionGraphSnapshot,

@@ -30,6 +30,7 @@ import type {
   ConstructionNodePin,
   ConstructionHostPoint,
   ConstructionPinRequest,
+  ConstructionPanelRun,
   ConstructionSurfaceCapability,
   ConstructionGraphSnapshot,
   ConstructionGridConstraintPoint,
@@ -116,6 +117,7 @@ interface RegionTopologyWire {
   readonly outerLoops: readonly (readonly RegionEdgeWire[])[];
   readonly holes: readonly (readonly RegionEdgeWire[])[];
   readonly nodes: readonly NodeWire[];
+  readonly group?: string | null;
 }
 
 interface NodeWire {
@@ -138,6 +140,7 @@ function fromWireTopology(wire: RegionTopologyWire): ConstructionRegionTopology 
     outerLoops: wire.outerLoops,
     holes: wire.holes,
     nodes: wire.nodes.map(fromWireNode),
+    ...(wire.group ? { group: wire.group } : {}),
   };
 }
 
@@ -263,6 +266,14 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
   resolveOnHost(request: { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly uv: readonly (readonly [number, number])[] }): readonly ConstructionPosition[] {
     const wire = JSON.parse(this.#require().resolve_on_host_json(JSON.stringify(request))) as WirePosition[];
     return wire.map(fromWirePosition);
+  }
+
+  setRegionGroup(surfaceKeys: readonly ConstructionSurfaceKey[], groupId: string | null): RegionEditOutcome {
+    return this.#regionEdit(this.#require().set_region_group_json(JSON.stringify({ surfaceKeys, groupId })));
+  }
+
+  panelRun(surfaceKey: ConstructionSurfaceKey): ConstructionPanelRun {
+    return JSON.parse(this.#require().panel_run_json(JSON.stringify({ surfaceKey }))) as ConstructionPanelRun;
   }
 
   addPatch(patch: ConstructionPatch): ConstructionPatchOutcome {

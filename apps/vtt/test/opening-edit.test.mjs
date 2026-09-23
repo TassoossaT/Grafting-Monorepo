@@ -2,17 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  clampRect,
-  commitOpeningReplacement,
-  hostFrame,
-  hostsOf,
+  commitOpeningGroup,
+  groupRunSpan,
   isDoorRect,
   MARGIN,
-  overlapsSibling,
+  overlapsOther,
   primaryHostOf,
-  spanOn,
+  runFrame,
+  settleRect,
 } from "../src/composition/tabletop/tools/openings/opening-shared.ts";
-import { openingTool } from "../src/composition/tabletop/tools/openings/opening-tool.ts";
+import { surfaceRefFromNodeSet } from "../src/entities/map/index.ts";
 import { addFace, sessionFixture } from "./platform-session-fixture.mjs";
 
 /** A straight 8 x 3 wall along +X. */
@@ -26,137 +25,111 @@ function wall(runtime, id = "wall", from = { x: 0, z: 0 }, to = { x: 8, z: 0 }, 
 }
 
 const openingsOf = (runtime) => runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "opening");
+const near = (a, b, eps = 1e-9) => Math.abs(a - b) < eps;
 
-test("hostFrame measures the face through the engine: length along the base, local height at u", () => {
+test("runFrame measures a lone face as a run of one: length along the base, local height, projection to (s, v)", () => {
   const { runtime, session } = sessionFixture();
   try {
-    const host = wall(runtime);
-    const frame = hostFrame(runtime, host.surfaceKey);
-    assert.ok(Math.abs(frame.length - 8) < 1e-9);
-    assert.ok(Math.abs(frame.heightAt(0.5) - 3) < 1e-9);
-    const [point] = frame.project([{ x: 2, y: 1.5, z: 0 }]);
-    assert.ok(Math.abs(point.u - 0.25) < 1e-9 && Math.abs(point.v - 0.5) < 1e-9 && point.inside);
+    const run = runFrame(runtime, wall(runtime).surfaceKey);
+    assert.equal(run.panels.length, 1);
+    assert.ok(near(run.start, 0) && near(run.end, 8, 1e-5));
+    assert.ok(near(run.heightAt(4), 3, 1e-9));
+    const at = run.project({ x: 2, y: 1.5, z: 0 });
+    assert.ok(near(at.s, 2, 1e-5) && near(at.v, 0.5));
   } finally { session.free(); }
 });
 
-test("clampRect keeps MARGIN of face on every side, converted into u and v by the face's own size", () => {
+test("runFrame is undefined for a face that is not an upright panel", () => {
   const { runtime, session } = sessionFixture();
   try {
-    const frame = hostFrame(runtime, wall(runtime).surfaceKey);
-    const pushed = clampRect(frame, { u0: -0.1, u1: 0.1, v0: 0.9, v1: 1.2 }, false);
-    assert.ok(Math.abs(pushed.u0 - MARGIN / 8) < 1e-12, "left margin is MARGIN over the face length");
-    assert.ok(Math.abs(pushed.v1 - (1 - MARGIN / 3)) < 1e-12, "top margin is MARGIN over the local height");
-    assert.ok(Math.abs(pushed.u1 - pushed.u0 - 0.2) < 1e-12 && Math.abs(pushed.v1 - pushed.v0 - 0.3) < 1e-12, "repositioned, never resized");
-    assert.equal(clampRect(frame, { u0: 0, u1: 0.99, v0: 0.2, v1: 0.4 }, false), undefined, "too wide to keep both margins");
+    const floor = addFace(runtime, "floor", "platform", [[0, 0], [4, 0], [4, 4], [0, 4]].map(([x, z], i) => ({ id: `f:${i}`, position: { x, y: 0, z } })));
+    assert.equal(runFrame(runtime, floor.surfaceKey), undefined);
   } finally { session.free(); }
 });
 
-test("clampRect stands a door on the floor and reads it back as one", () => {
+test("settleRect keeps MARGIN of wall at the run's ends and above and below, repositioning without resizing", () => {
   const { runtime, session } = sessionFixture();
   try {
-    const frame = hostFrame(runtime, wall(runtime).surfaceKey);
-    const door = clampRect(frame, { u0: 0.4, u1: 0.5, v0: 0.3, v1: 0.9 }, true);
+    const run = runFrame(runtime, wall(runtime).surfaceKey);
+    const pushed = settleRect(run, { s0: -0.8, s1: 0.8, v0: 0.9, v1: 1.2 }, false);
+    assert.ok(near(pushed.s0, MARGIN, 1e-6), "left margin is MARGIN in world units");
+    assert.ok(near(pushed.v1, 1 - MARGIN / 3, 1e-12), "top margin is MARGIN over the local height");
+    assert.ok(near(pushed.s1 - pushed.s0, 1.6, 1e-9) && near(pushed.v1 - pushed.v0, 0.3, 1e-12), "repositioned, never resized");
+    assert.equal(settleRect(run, { s0: 0, s1: 7.9, v0: 0.2, v1: 0.4 }, false), undefined, "too wide to keep both margins");
+  } finally { session.free(); }
+});
+
+test("settleRect stands a door on the floor and reads it back as one", () => {
+  const { runtime, session } = sessionFixture();
+  try {
+    const run = runFrame(runtime, wall(runtime).surfaceKey);
+    const door = settleRect(run, { s0: 3, s1: 4, v0: 0.3, v1: 0.9 }, true);
     assert.equal(door.v0, 0);
-    assert.ok(Math.abs(door.v1 - 0.6) < 1e-12, "keeps its height");
+    assert.ok(near(door.v1, 0.6, 1e-12), "keeps its height");
     assert.ok(isDoorRect(door));
-    assert.ok(!isDoorRect(clampRect(frame, { u0: 0.4, u1: 0.5, v0: 0.3, v1: 0.9 }, false)));
+    assert.ok(!isDoorRect(settleRect(run, { s0: 3, s1: 4, v0: 0.3, v1: 0.9 }, false)));
   } finally { session.free(); }
 });
 
-test("commitOpeningReplacement places an opening with its own nodes, every one pinned, in one transaction", () => {
+test("commitOpeningGroup places one piece per face with its own nodes, every one pinned, one group, one transaction", () => {
   const { runtime, session, ctx } = sessionFixture();
   try {
     const host = wall(runtime);
-    const frame = hostFrame(runtime, host.surfaceKey);
-    const result = commitOpeningReplacement(ctx, "cause-place", undefined, { frame, rect: { u0: 0.25, u1: 0.5, v0: 0.2, v1: 0.6 } });
+    const run = runFrame(runtime, host.surfaceKey);
+    const result = commitOpeningGroup(ctx, "cause-place", [], run.pieces({ s0: 2, s1: 4, v0: 0.2, v1: 0.6 }));
     assert.equal(result.error, undefined);
     assert.equal(result.recorded, true);
 
     const [opening] = openingsOf(runtime);
     const hostNodes = new Set(host.nodes.map((node) => node.id));
     assert.ok(opening.nodes.every((node) => !hostNodes.has(node.id) && node.pin !== undefined));
+    assert.ok(typeof opening.group === "string" && opening.group.length > 0, "labelled as a group");
     assert.deepEqual(primaryHostOf(opening), host.surfaceKey);
-    const span = spanOn(frame, opening);
-    assert.deepEqual(span, { u0: 0.25, u1: 0.5, v0: 0.2, v1: 0.6 });
+    const span = groupRunSpan(run, [opening]);
+    assert.ok(near(span.s0, 2, 1e-5) && near(span.s1, 4, 1e-5) && near(span.v0, 0.2) && near(span.v1, 0.6));
     assert.equal(runtime.getRegionTopology(host.surfaceKey).holes.length, 0);
   } finally { session.free(); }
 });
 
-test("commitOpeningReplacement replacing: the old region goes, the new one stands, nothing else changes", () => {
+test("commitOpeningGroup replacing: the old pieces go, the new ones stand, nothing else changes", () => {
   const { runtime, session, ctx } = sessionFixture();
   try {
-    const host = wall(runtime);
-    const frame = hostFrame(runtime, host.surfaceKey);
-    commitOpeningReplacement(ctx, "cause-a", undefined, { frame, rect: { u0: 0.1, u1: 0.3, v0: 0.2, v1: 0.6 } });
-    const [before] = openingsOf(runtime);
-    const result = commitOpeningReplacement(ctx, "cause-b", before.surfaceKey, { frame, rect: { u0: 0.6, u1: 0.8, v0: 0.2, v1: 0.6 } });
+    const run = runFrame(runtime, wall(runtime).surfaceKey);
+    commitOpeningGroup(ctx, "cause-a", [], run.pieces({ s0: 1, s1: 2, v0: 0.2, v1: 0.6 }));
+    const before = openingsOf(runtime);
+    const result = commitOpeningGroup(ctx, "cause-b", before.map((o) => o.surfaceKey), run.pieces({ s0: 5, s1: 6, v0: 0.2, v1: 0.6 }));
     assert.equal(result.error, undefined);
     const after = openingsOf(runtime);
     assert.equal(after.length, 1);
-    assert.deepEqual(spanOn(frame, after[0]), { u0: 0.6, u1: 0.8, v0: 0.2, v1: 0.6 });
+    const span = groupRunSpan(run, after);
+    assert.ok(near(span.s0, 5, 1e-5) && near(span.s1, 6, 1e-5));
     const live = new Set(runtime.getGraphSnapshot().nodes.map((node) => node.id));
-    assert.ok(before.nodes.every((node) => !live.has(node.id)), "the old opening's nodes are gone with it");
+    assert.ok(before[0].nodes.every((node) => !live.has(node.id)), "the old opening's nodes are gone with it");
   } finally { session.free(); }
 });
 
-test("commitOpeningReplacement deleting only removes the region and nothing on the wall", () => {
+test("commitOpeningGroup deleting only removes the pieces and nothing on the wall", () => {
   const { runtime, session, ctx } = sessionFixture();
   try {
     const host = wall(runtime);
-    const frame = hostFrame(runtime, host.surfaceKey);
-    commitOpeningReplacement(ctx, "cause-a", undefined, { frame, rect: { u0: 0.1, u1: 0.3, v0: 0.2, v1: 0.6 } });
-    const result = commitOpeningReplacement(ctx, "cause-delete", openingsOf(runtime)[0].surfaceKey, undefined);
+    const run = runFrame(runtime, host.surfaceKey);
+    commitOpeningGroup(ctx, "cause-a", [], run.pieces({ s0: 1, s1: 2, v0: 0.2, v1: 0.6 }));
+    const result = commitOpeningGroup(ctx, "cause-delete", openingsOf(runtime).map((o) => o.surfaceKey), []);
     assert.equal(result.error, undefined);
     assert.equal(openingsOf(runtime).length, 0);
     assert.deepEqual(runtime.getRegionTopology(host.surfaceKey).nodes, host.nodes);
   } finally { session.free(); }
 });
 
-test("overlapsSibling refuses sharing area on the same host, allows touching, and never counts the opening itself", () => {
+test("overlapsOther refuses sharing area on the run, allows touching, and never counts the excluded group", () => {
   const { runtime, session, ctx } = sessionFixture();
   try {
-    const host = wall(runtime);
-    const frame = hostFrame(runtime, host.surfaceKey);
-    commitOpeningReplacement(ctx, "cause-a", undefined, { frame, rect: { u0: 0.2, u1: 0.4, v0: 0.2, v1: 0.6 } });
+    const run = runFrame(runtime, wall(runtime).surfaceKey);
+    commitOpeningGroup(ctx, "cause-a", [], run.pieces({ s0: 2, s1: 3, v0: 0.2, v1: 0.6 }));
     const [standing] = openingsOf(runtime);
-    assert.equal(overlapsSibling(ctx, frame, { u0: 0.3, u1: 0.5, v0: 0.3, v1: 0.7 }), true);
-    assert.equal(overlapsSibling(ctx, frame, { u0: 0.4, u1: 0.6, v0: 0.2, v1: 0.6 }), false, "touching is not overlapping");
-    assert.equal(overlapsSibling(ctx, frame, { u0: 0.3, u1: 0.5, v0: 0.3, v1: 0.7 }, standing.surfaceKey), false);
-  } finally { session.free(); }
-});
-
-test("an opening pinned to two hosts at a corner reads both hosts, selects, and deletes without breaking", () => {
-  const { runtime, session, ctx } = sessionFixture();
-  try {
-    const a = wall(runtime, "a", { x: 0, z: 0 }, { x: 4, z: 0 });
-    const b = wall(runtime, "b", { x: 4, z: 0 }, { x: 4, z: 4 });
-    const corners = [
-      { id: "o:0", position: { x: 3, y: 1, z: 0 }, host: a, u: 0.75 },
-      { id: "o:1", position: { x: 4, y: 1, z: 1 }, host: b, u: 0.25 },
-      { id: "o:2", position: { x: 4, y: 2, z: 1 }, host: b, u: 0.25 },
-      { id: "o:3", position: { x: 3, y: 2, z: 0 }, host: a, u: 0.75 },
-    ];
-    const edges = corners.map((corner, index) => ({ edgeId: `o:e${index}`, startNodeId: corner.id, endNodeId: corners[(index + 1) % 4].id }));
-    runtime.addPatch({
-      nodes: corners.map(({ id, position }) => ({ id, position })),
-      edges,
-      regions: [{ regionId: "corner-window", boundary: edges.map((edge) => ({ edgeId: edge.edgeId, reversed: false })), surfaceType: "opening", physical: false }],
-    });
-    runtime.pinNodes(corners.map((corner) => ({ nodeId: corner.id, hostSurfaceKey: corner.host.surfaceKey, u: corner.u, v: corner.position.y / 3 })));
-
-    const [opening] = openingsOf(runtime);
-    assert.equal(hostsOf(opening).size, 2);
-    const span = spanOn(hostFrame(runtime, primaryHostOf(opening)), opening);
-    assert.ok(span !== undefined && span.u1 > span.u0);
-
-    const down = { x: 3, y: 1, z: 0 };
-    openingTool.onPointerDown(ctx, { point: down, nodeId: "o:0" }, { openingKind: "window", width: 1, height: 1, sill: 1 });
-    openingTool.onPointerUp(ctx, { start: { point: down }, current: { point: { x: 1, y: 1, z: 0 } } }, { openingKind: "window", width: 1, height: 1, sill: 1 });
-    openingTool.onClick(ctx, { point: { x: 1, y: 1, z: 0 } }, { openingKind: "window", width: 1, height: 1, sill: 1 });
-    assert.equal(openingsOf(runtime).length, 1, "selected, not rebuilt on one host");
-    assert.deepEqual(openingsOf(runtime)[0].nodes.map((node) => node.position), corners.map((corner) => corner.position));
-
-    openingTool.onDeleteKey(ctx);
-    assert.equal(openingsOf(runtime).length, 0);
+    const standingRef = surfaceRefFromNodeSet(standing.surfaceKey);
+    assert.equal(overlapsOther(ctx, run, { s0: 2.5, s1: 3.5, v0: 0.3, v1: 0.7 }), true);
+    assert.equal(overlapsOther(ctx, run, { s0: 3, s1: 4, v0: 0.2, v1: 0.6 }), false, "touching is not overlapping");
+    assert.equal(overlapsOther(ctx, run, { s0: 2.5, s1: 3.5, v0: 0.3, v1: 0.7 }, new Set([standingRef])), false);
   } finally { session.free(); }
 });

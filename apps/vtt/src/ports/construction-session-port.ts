@@ -284,6 +284,8 @@ export interface ConstructionRegionTopology {
   readonly outerLoops: readonly (readonly ConstructionRegionEdge[])[];
   readonly holes: readonly (readonly ConstructionRegionEdge[])[];
   readonly nodes: readonly ConstructionNodeSnapshot[];
+  /** The group this region belongs to: regions a caller treats as one object. */
+  readonly group?: string;
 }
 
 /** Identity lifecycle emitted by an atomic surface transformation. */
@@ -412,6 +414,20 @@ export interface ConstructionHostPoint {
 
 export interface ConstructionPinRequest extends ConstructionNodePin {
   readonly nodeId: ConstructionNodeId;
+}
+
+/** One upright panel's place on a run: run distance `s` is panel `u = (s - offset) / length`, mirrored when `reversed`. */
+export interface ConstructionRunPanel {
+  readonly surfaceKey: ConstructionSurfaceKey;
+  readonly offset: number;
+  readonly length: number;
+  readonly reversed: boolean;
+}
+
+/** The chain of cuttable upright panels continuing one another through shared vertical sides. */
+export interface ConstructionPanelRun {
+  readonly panels: readonly ConstructionRunPanel[];
+  readonly closed: boolean;
 }
 
 /** One generic graph edge, including edges deliberately not used by a face. */
@@ -645,6 +661,10 @@ export interface ConstructionSessionPort extends BezierPort {
   projectToHost(request: { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly points: readonly ConstructionPosition[] }): readonly ConstructionHostPoint[];
   /** Host `(u, v)` pairs back to world positions. Pure. */
   resolveOnHost(request: { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly uv: readonly (readonly [number, number])[] }): readonly ConstructionPosition[];
+  /** Labels regions as one group, or clears the label with `null`. Undoable; moves nothing. */
+  setRegionGroup(surfaceKeys: readonly ConstructionSurfaceKey[], groupId: string | null): RegionEditOutcome;
+  /** The run through an upright panel that accepts cuts. Throws otherwise. */
+  panelRun(surfaceKey: ConstructionSurfaceKey): ConstructionPanelRun;
   /**
    * Registers a whole generated patch in one transaction -- see
    * {@link ConstructionPatch} for why a generator names its own edges.

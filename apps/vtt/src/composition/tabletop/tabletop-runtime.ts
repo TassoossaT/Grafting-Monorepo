@@ -43,6 +43,7 @@ import type {
   ConstructionHostPoint,
   ConstructionPatch,
   ConstructionPinRequest,
+  ConstructionPanelRun,
   ConstructionPatchOutcome,
   ConstructionPosition,
   ConstructionRegionTopology,
@@ -148,6 +149,10 @@ export interface TabletopRuntime extends BezierPort {
   projectToHost(request: { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly points: readonly ConstructionPosition[] }): readonly ConstructionHostPoint[];
   /** Host `(u, v)` pairs back to world positions. Pure. */
   resolveOnHost(request: { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly uv: readonly (readonly [number, number])[] }): readonly ConstructionPosition[];
+  /** Labels regions as one group (`null` clears). See `ConstructionSessionPort.setRegionGroup`. */
+  setRegionGroup(surfaceKeys: readonly ConstructionSurfaceKey[], groupId: string | null): RegionEditOutcome;
+  /** The run of upright panels through `surfaceKey`. See `ConstructionSessionPort.panelRun`. */
+  panelRun(surfaceKey: ConstructionSurfaceKey): ConstructionPanelRun;
   /** Every closed loop of boundary with no face on it, among `scope`'s nodes -- a hole whose rim already exists. */
   getUnfilledLoops(scope: readonly ConstructionNodeId[]): readonly ConstructionUnfilledLoop[];
   /** One region's live boundary -- what a handle/hit-test layer reads. */
@@ -924,6 +929,16 @@ export class AppTabletopRuntime implements TabletopRuntime {
   resolveOnHost(request: { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly uv: readonly (readonly [number, number])[] }): readonly ConstructionPosition[] {
     this.#requireReady("resolving on a host face");
     return this.#construction.resolveOnHost(request);
+  }
+
+  setRegionGroup(surfaceKeys: readonly ConstructionSurfaceKey[], groupId: string | null): RegionEditOutcome {
+    this.#requireReady("grouping regions");
+    return this.#construction.setRegionGroup(surfaceKeys, groupId);
+  }
+
+  panelRun(surfaceKey: ConstructionSurfaceKey): ConstructionPanelRun {
+    this.#requireReady("reading a panel run");
+    return this.#construction.panelRun(surfaceKey);
   }
 
   getUnfilledLoops(scope: readonly ConstructionNodeId[]): readonly ConstructionUnfilledLoop[] {

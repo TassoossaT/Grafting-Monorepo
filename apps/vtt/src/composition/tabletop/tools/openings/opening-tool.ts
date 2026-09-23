@@ -1,6 +1,5 @@
 import type { OpeningParams } from "@/features/edit-construction";
 import type {
-  ConstructionHostPoint,
   ConstructionPosition,
   ConstructionRegionTopology,
   ConstructionSurfaceKey,
@@ -16,17 +15,19 @@ import { scopedToolId, type ConstructionTool, type PointerSample, type ToolConte
 import { segmentsPreview } from "../shapes/preview-shapes.ts";
 import { findWallSurfaceAt } from "../walls/wall-shared.ts";
 import {
-  clampRect,
-  commitOpeningReplacement,
-  hostFrame,
-  hostsOf,
+  commitOpeningGroup,
+  groupKeyOf,
+  groupOf,
+  groupRunSpan,
   isDoorRect,
-  overlapsSibling,
+  overlapsOther,
   primaryHostOf,
   rectLoop,
-  spanOn,
-  type HostFrame,
-  type HostRect,
+  runFrame,
+  settleRect,
+  type OpeningPiece,
+  type RunFrame,
+  type RunRect,
 } from "./opening-shared.ts";
 
 export const OPENING_COLOR: Record<OpeningParams["openingKind"], number> = {
@@ -44,20 +45,22 @@ const OVERLAP_COLOR = 0xef4444;
  * selects (Delete removes it; a plain click on an already-selected opening
  * applies the sliders' width/height).
  *
- * Everything is computed in the host face's `(u, v)` frame, so a curved or
- * slanted host is followed rather than spanned, and editing is always a full
- * replace of the opening region (see `openingStructureType`'s policy).
+ * Everything is computed in the run's `(s, v)` frame -- the chain of faces
+ * the pressed one continues -- so an opening follows a curved or slanted
+ * wall and straddles its seams; each commit splits the rect into one piece
+ * per face and replaces the whole group (see `openingStructureType`).
  */
 
 interface Selected {
-  readonly openingSurfaceKey: ConstructionSurfaceKey;
+  readonly groupKey: string;
+  readonly pieceKeys: readonly ConstructionSurfaceKey[];
 }
 
 let selected: Selected | undefined;
 
 /** Which side of each axis a press grabbed. Neither = the body; one = an edge; both = a corner. */
 interface GrabHandle {
-  readonly u?: "left" | "right";
+  readonly s?: "left" | "right";
   readonly v?: "top" | "bottom";
 }
 
@@ -71,48 +74,52 @@ const CREATE_DRAG_THRESHOLD = 0.05;
 const OPENING_PICK_TOLERANCE = 0.2;
 const PREVIEW_SIDE_STEPS = 8;
 
-function handleAt(frame: HostFrame, span: HostRect, at: ConstructionHostPoint): GrabHandle {
-  const tolU = HANDLE_TOLERANCE / frame.length;
-  const tolV = HANDLE_TOLERANCE / frame.heightAt((span.u0 + span.u1) / 2);
+interface RunPoint {
+  readonly s: number;
+  readonly v: number;
+}
+
+function handleAt(run: RunFrame, span: RunRect, at: RunPoint): GrabHandle {
+  const tolV = HANDLE_TOLERANCE / run.heightAt((span.s0 + span.s1) / 2);
   return {
-    u: Math.abs(at.u - span.u0) <= tolU ? "left" : Math.abs(at.u - span.u1) <= tolU ? "right" : undefined,
+    s: Math.abs(at.s - span.s0) <= HANDLE_TOLERANCE ? "left" : Math.abs(at.s - span.s1) <= HANDLE_TOLERANCE ? "right" : undefined,
     v: Math.abs(at.v - span.v1) <= tolV ? "top" : Math.abs(at.v - span.v0) <= tolV ? "bottom" : undefined,
   };
 }
 
 /** A press on one of the rim's own node dots always means the nearer corner. */
-function cornerAt(span: HostRect, at: ConstructionHostPoint): GrabHandle {
+function cornerAt(span: RunRect, at: RunPoint): GrabHandle {
   return {
-    u: Math.abs(at.u - span.u0) <= Math.abs(at.u - span.u1) ? "left" : "right",
+    s: Math.abs(at.s - span.s0) <= Math.abs(at.s - span.s1) ? "left" : "right",
     v: Math.abs(at.v - span.v0) <= Math.abs(at.v - span.v1) ? "bottom" : "top",
   };
 }
 
 function isBody(handle: GrabHandle): boolean {
-  return handle.u === undefined && handle.v === undefined;
+  return handle.s === undefined && handle.v === undefined;
 }
 
 interface Drag {
-  readonly openingSurfaceKey: ConstructionSurfaceKey;
-  readonly hostSurfaceKey: ConstructionSurfaceKey;
-  readonly originalSpan: HostRect;
+  readonly run: RunFrame;
+  readonly pieceKeys: readonly ConstructionSurfaceKey[];
+  readonly pieceRefs: ReadonlySet<string>;
+  readonly originalSpan: RunRect;
   readonly handle: GrabHandle;
   readonly isDoor: boolean;
-  /** The `(u, v)` size a body drag carries: the opening's own, or the sliders' when it was already selected. */
-  readonly du: number;
+  /** The size a body drag carries: the opening's own, or the sliders' when it was already selected. */
+  readonly ds: number;
   readonly dv: number;
   /** Offset from the grab point to the opening's center, so a body drag never jumps. */
-  readonly grabOffset: { readonly u: number; readonly v: number };
+  readonly grabOffset: RunPoint;
 }
 
 let drag: Drag | undefined;
 /** Whether `onPointerDown` grabbed an opening this gesture, so the trailing `click` does not also create. */
 let grabbedThisGesture = false;
 
-interface CreateAnchor {
+interface CreateAnchor extends RunPoint {
+  readonly run: RunFrame;
   readonly hostSurfaceKey: ConstructionSurfaceKey;
-  readonly u: number;
-  readonly v: number;
 }
 let creating: CreateAnchor | undefined;
 /** Whether `onPointerUp` already placed a drawn opening, so the trailing `click` does not stamp a second. */
@@ -127,27 +134,24 @@ function isOpening(topology: ConstructionRegionTopology): boolean {
   return topology.surfaceType === openingStructureType.surfaceType;
 }
 
-function projectOne(frame: HostFrame, point: ConstructionPosition): ConstructionHostPoint | undefined {
-  try {
-    return frame.project([point])[0];
-  } catch {
-    return undefined;
-  }
-}
-
 /** The closest opening whose face contains `point` -- the fallback when the renderer's pick missed a thin, non-physical face. */
 function openingNear(ctx: ToolContext, point: ConstructionPosition): ConstructionRegionTopology | undefined {
   let best: { readonly topology: ConstructionRegionTopology; readonly distance: number } | undefined;
   for (const topology of ctx.runtime.getAllRegionTopologies()) {
     if (!isOpening(topology)) continue;
-    const hostKey = primaryHostOf(topology);
-    const frame = hostKey === undefined ? undefined : hostFrame(ctx.runtime, hostKey);
-    if (frame === undefined) continue;
-    const span = spanOn(frame, topology);
-    const at = projectOne(frame, point);
-    if (span === undefined || at === undefined) continue;
-    if (at.u < span.u0 || at.u > span.u1 || at.v < span.v0 || at.v > span.v1) continue;
-    const [onFace] = frame.resolve([[at.u, at.v]]);
+    const hostSurfaceKey = primaryHostOf(topology);
+    if (hostSurfaceKey === undefined) continue;
+    const pins = topology.nodes.flatMap((node) => (node.pin !== undefined && surfaceRefFromNodeSet(node.pin.hostSurfaceKey) === surfaceRefFromNodeSet(hostSurfaceKey) ? [node.pin] : []));
+    let at, onFace;
+    try {
+      [at] = ctx.runtime.projectToHost({ hostSurfaceKey, points: [point] });
+      [onFace] = ctx.runtime.resolveOnHost({ hostSurfaceKey, uv: [[at!.u, at!.v]] });
+    } catch {
+      continue;
+    }
+    const us = pins.map((pin) => pin.u);
+    const vs = pins.map((pin) => pin.v);
+    if (at!.u < Math.min(...us) || at!.u > Math.max(...us) || at!.v < Math.min(...vs) || at!.v > Math.max(...vs)) continue;
     const distance = Math.hypot(point.x - onFace!.x, point.y - onFace!.y, point.z - onFace!.z);
     if (distance > OPENING_PICK_TOLERANCE) continue;
     if (best === undefined || distance < best.distance) best = { topology, distance };
@@ -155,15 +159,15 @@ function openingNear(ctx: ToolContext, point: ConstructionPosition): Constructio
   return best?.topology;
 }
 
-function isRimNode(opening: ConstructionRegionTopology, nodeId: string | undefined): boolean {
-  return nodeId !== undefined && opening.nodes.some((node) => node.id === nodeId);
+function isRimNode(pieces: readonly ConstructionRegionTopology[], nodeId: string | undefined): boolean {
+  return nodeId !== undefined && pieces.some((piece) => piece.nodes.some((node) => node.id === nodeId));
 }
 
 /** The opening under the pointer: a rim dot, then the pick, then `openingNear`. */
 function openingUnder(ctx: ToolContext, sample: PointerSample): ConstructionRegionTopology | undefined {
   const topologies = ctx.runtime.getAllRegionTopologies();
   if (sample.nodeId !== undefined) {
-    const owner = topologies.find((topology) => isOpening(topology) && isRimNode(topology, sample.nodeId));
+    const owner = topologies.find((topology) => isOpening(topology) && isRimNode([topology], sample.nodeId));
     if (owner !== undefined) return owner;
   }
   const picked = sample.surfaceRef;
@@ -180,90 +184,98 @@ function snapped(value: number): number {
   return Math.round(value / step) * step;
 }
 
+/** The run a sample's face belongs to, and where on it the sample lands. */
+function runPointAt(ctx: ToolContext, hostSurfaceKey: ConstructionSurfaceKey, point: ConstructionPosition): { readonly run: RunFrame; readonly at: RunPoint } | undefined {
+  const run = runFrame(ctx.runtime, hostSurfaceKey);
+  const at = run?.project(point, hostSurfaceKey);
+  return run === undefined || at === undefined ? undefined : { run, at };
+}
+
 /**
- * Starts a drag on `opening`. Its own size is carried, never the sliders' --
- * except on an opening that is already this tool's selection, where a second
- * press means "apply the sliders now". An opening pinned to several hosts is
- * only selected: its edits would need every host's frame at once.
+ * Starts a drag on `opening`'s whole group. Its own size is carried, never
+ * the sliders' -- except on an opening that is already this tool's
+ * selection, where a second press means "apply the sliders now".
  */
 function beginGrab(ctx: ToolContext, opening: ConstructionRegionTopology, sample: PointerSample, liveParams: OpeningParams): boolean {
+  const pieces = groupOf(ctx, opening);
   const hostKey = primaryHostOf(opening);
-  if (hostKey === undefined) return false;
-  const frame = hostFrame(ctx.runtime, hostKey);
-  if (frame === undefined) return false;
-  const span = spanOn(frame, opening);
-  const at = projectOne(frame, sample.point);
-  if (span === undefined || at === undefined) return false;
+  const placed = hostKey === undefined ? undefined : runPointAt(ctx, hostKey, sample.point);
+  if (placed === undefined) return false;
+  const { run, at } = placed;
+  const span = groupRunSpan(run, pieces);
+  if (span === undefined) return false;
 
-  const alreadySelected = selected !== undefined && surfaceRefFromNodeSet(selected.openingSurfaceKey) === surfaceRefFromNodeSet(opening.surfaceKey);
-  selected = { openingSurfaceKey: opening.surfaceKey };
-  const centerU = (span.u0 + span.u1) / 2;
+  const groupKey = groupKeyOf(opening);
+  const alreadySelected = selected?.groupKey === groupKey;
+  const pieceKeys = pieces.map((piece) => piece.surfaceKey);
+  selected = { groupKey, pieceKeys };
+  const centerS = (span.s0 + span.s1) / 2;
   const centerV = (span.v0 + span.v1) / 2;
-  const [center] = frame.resolve([[centerU, centerV]]);
-  ctx.reportSelection({ id: surfaceRefFromNodeSet(opening.surfaceKey), point: center! });
-
-  if (hostsOf(opening).size > 1) {
-    drag = undefined;
-    return true;
-  }
+  ctx.reportSelection({ id: surfaceRefFromNodeSet(opening.surfaceKey), point: run.resolveAt(centerS, centerV) });
 
   drag = {
-    openingSurfaceKey: opening.surfaceKey,
-    hostSurfaceKey: hostKey,
+    run,
+    pieceKeys,
+    pieceRefs: new Set(pieceKeys.map(surfaceRefFromNodeSet)),
     originalSpan: span,
-    handle: isRimNode(opening, sample.nodeId) ? cornerAt(span, at) : handleAt(frame, span, at),
+    handle: isRimNode(pieces, sample.nodeId) ? cornerAt(span, at) : handleAt(run, span, at),
     isDoor: isDoorRect(span),
-    du: alreadySelected ? liveParams.width / frame.length : span.u1 - span.u0,
-    dv: alreadySelected ? liveParams.height / frame.heightAt(centerU) : span.v1 - span.v0,
-    grabOffset: { u: at.u - centerU, v: at.v - centerV },
+    ds: alreadySelected ? liveParams.width : span.s1 - span.s0,
+    dv: alreadySelected ? liveParams.height / run.heightAt(centerS) : span.v1 - span.v0,
+    grabOffset: { s: at.s - centerS, v: at.v - centerV },
   };
   return true;
 }
 
-/** Where `active`'s opening would stand, before clamping, if released at `at`. */
-function rawRectFor(frame: HostFrame, active: Drag, at: ConstructionHostPoint): HostRect {
-  const { originalSpan: span, handle } = active;
+/** Where `active`'s opening would stand, before settling, if released at `at`. */
+function rawRectFor(active: Drag, at: RunPoint): RunRect {
+  const { originalSpan: span, handle, run } = active;
   if (!isBody(handle)) {
-    const minU = MIN_OPENING_SIZE / frame.length;
-    const minV = MIN_OPENING_SIZE / frame.heightAt((span.u0 + span.u1) / 2);
-    let { u0, u1, v0, v1 } = span;
-    if (handle.u === "left") u0 = Math.min(at.u, span.u1 - minU);
-    if (handle.u === "right") u1 = Math.max(at.u, span.u0 + minU);
+    const minV = MIN_OPENING_SIZE / run.heightAt((span.s0 + span.s1) / 2);
+    let { s0, s1, v0, v1 } = span;
+    if (handle.s === "left") s0 = Math.min(at.s, span.s1 - MIN_OPENING_SIZE);
+    if (handle.s === "right") s1 = Math.max(at.s, span.s0 + MIN_OPENING_SIZE);
     if (handle.v === "top") v1 = Math.max(at.v, span.v0 + minV);
     // A door's floor sill never moves.
     if (handle.v === "bottom" && !active.isDoor) v0 = Math.min(at.v, span.v1 - minV);
-    return { u0, u1, v0, v1 };
+    return { s0, s1, v0, v1 };
   }
-  const centerU = at.u - active.grabOffset.u;
+  const centerS = at.s - active.grabOffset.s;
   const v0 = active.isDoor ? 0 : at.v - active.grabOffset.v - active.dv / 2;
-  return { u0: centerU - active.du / 2, u1: centerU + active.du / 2, v0, v1: v0 + active.dv };
+  return { s0: centerS - active.ds / 2, s1: centerS + active.ds / 2, v0, v1: v0 + active.dv };
 }
 
-function sameRect(a: HostRect, b: HostRect): boolean {
+function sameRect(a: RunRect, b: RunRect): boolean {
   const EPS = 1e-9;
-  return Math.abs(a.u0 - b.u0) < EPS && Math.abs(a.u1 - b.u1) < EPS && Math.abs(a.v0 - b.v0) < EPS && Math.abs(a.v1 - b.v1) < EPS;
+  return Math.abs(a.s0 - b.s0) < EPS && Math.abs(a.s1 - b.s1) < EPS && Math.abs(a.v0 - b.v0) < EPS && Math.abs(a.v1 - b.v1) < EPS;
 }
 
-/** A closed-ring preview of `rect`, resolved on the host so a slanted or curved face shows the deformed shape. */
-function ringPreview(frame: HostFrame, rect: HostRect, color: number): ReturnType<typeof segmentsPreview> {
-  const ring = frame.resolve(rectLoop(frame, rect, PREVIEW_SIDE_STEPS));
+/** One closed ring per piece, resolved on its face so a slanted or curved face shows the deformed shape. */
+function piecesPreview(pieces: readonly OpeningPiece[], color: number): ReturnType<typeof segmentsPreview> {
   const positions: number[] = [];
-  for (let index = 0; index < ring.length; index += 1) {
-    const from = ring[index]!;
-    const to = ring[(index + 1) % ring.length]!;
-    positions.push(from.x, from.y, from.z, to.x, to.y, to.z);
+  for (const { panel, rect } of pieces) {
+    const ring = panel.frame.resolve(rectLoop(panel.frame, rect, PREVIEW_SIDE_STEPS));
+    for (let index = 0; index < ring.length; index += 1) {
+      const from = ring[index]!;
+      const to = ring[(index + 1) % ring.length]!;
+      positions.push(from.x, from.y, from.z, to.x, to.y, to.z);
+    }
   }
   return segmentsPreview(Float32Array.from(positions), color);
 }
 
+function rectPreview(ctx: ToolContext, run: RunFrame, rect: RunRect, color: number, excluded?: ReadonlySet<string>): ReturnType<typeof segmentsPreview> | undefined {
+  const pieces = run.pieces(rect);
+  if (pieces === undefined || pieces.length === 0) return undefined;
+  return piecesPreview(pieces, overlapsOther(ctx, run, rect, excluded) ? OVERLAP_COLOR : color);
+}
+
 function dragPreview(gesture: ToolGesture, ctx: ToolContext, active: Drag): ReturnType<typeof segmentsPreview> | undefined {
-  const frame = hostFrame(ctx.runtime, active.hostSurfaceKey);
-  const at = frame === undefined ? undefined : projectOne(frame, gesture.current.point);
-  if (frame === undefined || at === undefined) return undefined;
-  const rect = clampRect(frame, rawRectFor(frame, active, at), active.isDoor);
+  const at = active.run.project(gesture.current.point);
+  if (at === undefined) return undefined;
+  const rect = settleRect(active.run, rawRectFor(active, at), active.isDoor, isBody(active.handle));
   if (rect === undefined) return undefined;
-  const overlaps = overlapsSibling(ctx, frame, rect, active.openingSurfaceKey);
-  return ringPreview(frame, rect, overlaps ? OVERLAP_COLOR : OPENING_COLOR[active.isDoor ? "door" : "window"]);
+  return rectPreview(ctx, active.run, rect, OPENING_COLOR[active.isDoor ? "door" : "window"], active.pieceRefs);
 }
 
 function reportCommit(ctx: ToolContext, causeId: string, result: { readonly recorded: boolean; readonly error?: string }, success: string): void {
@@ -277,70 +289,62 @@ function reportCommit(ctx: ToolContext, causeId: string, result: { readonly reco
 
 const OVERLAP_MESSAGE = "Abertura: sobreporia outra abertura ja existente nesta parede.";
 const NO_FIT_MESSAGE = "Abertura: nao cabe aqui.";
-const HOST_GONE_MESSAGE = "A parede desta abertura nao existe mais.";
 
 function commitDrag(ctx: ToolContext, gesture: ToolGesture, active: Drag): void {
-  const frame = hostFrame(ctx.runtime, active.hostSurfaceKey);
-  if (frame === undefined) {
-    clearSelection(ctx);
-    ctx.reportFeedback({ tone: "error", message: HOST_GONE_MESSAGE });
-    return;
-  }
-  const at = projectOne(frame, gesture.current.point);
+  const at = active.run.project(gesture.current.point);
   if (at === undefined) {
     ctx.reportFeedback({ tone: "error", message: NO_FIT_MESSAGE });
     return;
   }
-  const raw = rawRectFor(frame, active, at);
+  const raw = rawRectFor(active, at);
   if (sameRect(raw, active.originalSpan)) {
     ctx.reportFeedback({ tone: "info", message: "Abertura selecionada. Arraste o meio para mover, uma borda ou um canto para redimensionar; Delete apaga." });
     return;
   }
-  const rect = clampRect(frame, raw, active.isDoor);
-  if (rect === undefined) {
+  const rect = settleRect(active.run, raw, active.isDoor, isBody(active.handle));
+  const pieces = rect === undefined ? undefined : active.run.pieces(rect);
+  if (rect === undefined || pieces === undefined || pieces.length === 0) {
     ctx.reportFeedback({ tone: "error", message: NO_FIT_MESSAGE });
     return;
   }
   if (sameRect(rect, active.originalSpan)) return;
-  if (overlapsSibling(ctx, frame, rect, active.openingSurfaceKey)) {
+  if (overlapsOther(ctx, active.run, rect, active.pieceRefs)) {
     ctx.reportFeedback({ tone: "error", message: OVERLAP_MESSAGE });
     return;
   }
   const causeId = scopedToolId(ctx, "opening-edit", ctx.nextSequence());
-  const result = commitOpeningReplacement(ctx, causeId, active.openingSurfaceKey, { frame, rect });
+  const result = commitOpeningGroup(ctx, causeId, active.pieceKeys, pieces);
   clearSelection(ctx);
   reportCommit(ctx, causeId, result, isBody(active.handle) ? "Abertura movida." : "Abertura redimensionada.");
 }
 
 /** The rect drawn from `anchor` to `at`, both read as opposite corners. */
-function drawnRect(frame: HostFrame, isDoor: boolean, anchor: CreateAnchor, at: ConstructionHostPoint): HostRect | undefined {
-  const u0 = Math.min(anchor.u, at.u), u1 = Math.max(anchor.u, at.u);
+function drawnRect(isDoor: boolean, anchor: CreateAnchor, at: RunPoint): RunRect | undefined {
+  const s0 = Math.min(anchor.s, at.s), s1 = Math.max(anchor.s, at.s);
   const v0 = Math.min(anchor.v, at.v), v1 = Math.max(anchor.v, at.v);
-  if ((u1 - u0) * frame.length < MIN_OPENING_SIZE) return undefined;
-  if ((v1 - v0) * frame.heightAt((u0 + u1) / 2) < MIN_OPENING_SIZE) return undefined;
-  return clampRect(frame, isDoor ? { u0, u1, v0: 0, v1: v1 - v0 } : { u0, u1, v0, v1 }, isDoor);
+  if (s1 - s0 < MIN_OPENING_SIZE) return undefined;
+  if ((v1 - v0) * anchor.run.heightAt((s0 + s1) / 2) < MIN_OPENING_SIZE) return undefined;
+  return settleRect(anchor.run, isDoor ? { s0, s1, v0: 0, v1: v1 - v0 } : { s0, s1, v0, v1 }, isDoor, false);
 }
 
 function createPreview(gesture: ToolGesture, params: OpeningParams, ctx: ToolContext, anchor: CreateAnchor): ReturnType<typeof segmentsPreview> | undefined {
-  const frame = hostFrame(ctx.runtime, anchor.hostSurfaceKey);
-  const at = frame === undefined ? undefined : projectOne(frame, gesture.current.point);
-  if (frame === undefined || at === undefined) return undefined;
-  const rect = drawnRect(frame, params.openingKind === "door", anchor, at);
-  if (rect === undefined) return undefined;
-  return ringPreview(frame, rect, overlapsSibling(ctx, frame, rect) ? OVERLAP_COLOR : OPENING_COLOR[params.openingKind]);
+  const at = anchor.run.project(gesture.current.point, anchor.hostSurfaceKey);
+  const rect = at === undefined ? undefined : drawnRect(params.openingKind === "door", anchor, at);
+  return rect === undefined ? undefined : rectPreview(ctx, anchor.run, rect, OPENING_COLOR[params.openingKind]);
 }
 
-function placeNew(ctx: ToolContext, frame: HostFrame, rect: HostRect | undefined, kind: OpeningParams["openingKind"]): void {
-  if (rect === undefined) {
+function placeNew(ctx: ToolContext, run: RunFrame, rect: RunRect | undefined, kind: OpeningParams["openingKind"]): void {
+  const pieces = rect === undefined ? undefined : run.pieces(rect);
+  if (rect === undefined || pieces === undefined || pieces.length === 0) {
     ctx.reportFeedback({ tone: "error", message: NO_FIT_MESSAGE });
     return;
   }
-  if (overlapsSibling(ctx, frame, rect)) {
+  if (overlapsOther(ctx, run, rect)) {
     ctx.reportFeedback({ tone: "error", message: OVERLAP_MESSAGE });
     return;
   }
   const causeId = scopedToolId(ctx, "opening", ctx.nextSequence());
-  const result = commitOpeningReplacement(ctx, causeId, undefined, { frame, rect });
+  const result = commitOpeningGroup(ctx, causeId, [], pieces);
   reportCommit(ctx, causeId, result, kind === "door" ? "Porta aberta na parede." : "Janela aberta na parede.");
 }
 
@@ -348,7 +352,7 @@ export const openingTool: ConstructionTool<"opening"> = {
   id: "opening",
   defaultParams: () => DEFAULT_TOOL_PARAMS.opening,
   previewOnHover: true,
-  // Placement is read in the host's own frame, never off raw world X/Z, so
+  // Placement is read in the run's own frame, never off raw world X/Z, so
   // the dispatcher's world-grid magnet must not round the pointer first.
   snapsToSurface: true,
 
@@ -357,7 +361,8 @@ export const openingTool: ConstructionTool<"opening"> = {
     if (creating !== undefined) return createPreview(gesture, params, ctx, creating);
     const placed = resolvePlacement(ctx, gesture.current, params);
     if (placed?.rect === undefined) return undefined;
-    return ringPreview(placed.frame, placed.rect, OPENING_COLOR[params.openingKind]);
+    const pieces = placed.run.pieces(placed.rect);
+    return pieces === undefined || pieces.length === 0 ? undefined : piecesPreview(pieces, OPENING_COLOR[params.openingKind]);
   },
 
   onPointerDown(ctx: ToolContext, sample: PointerSample, params: OpeningParams): void {
@@ -372,10 +377,9 @@ export const openingTool: ConstructionTool<"opening"> = {
       return;
     }
     const hostSurfaceKey = wallUnder(ctx, sample);
-    const frame = hostSurfaceKey === undefined ? undefined : hostFrame(ctx.runtime, hostSurfaceKey);
-    const at = frame === undefined ? undefined : projectOne(frame, sample.point);
-    if (hostSurfaceKey === undefined || at === undefined) return;
-    creating = { hostSurfaceKey, u: at.u, v: at.v };
+    const placed = hostSurfaceKey === undefined ? undefined : runPointAt(ctx, hostSurfaceKey, sample.point);
+    if (hostSurfaceKey === undefined || placed === undefined) return;
+    creating = { run: placed.run, hostSurfaceKey, ...placed.at };
   },
 
   // The ghost is redrawn by `previewFor`; the commit happens once, on release.
@@ -396,10 +400,9 @@ export const openingTool: ConstructionTool<"opening"> = {
     // A plain click is left to `onClick`, which stamps the slider size.
     if (!moved) return;
     createdThisGesture = true;
-    const frame = hostFrame(ctx.runtime, anchor.hostSurfaceKey);
-    const at = frame === undefined ? undefined : projectOne(frame, current.point);
-    if (frame === undefined || at === undefined) return;
-    placeNew(ctx, frame, drawnRect(frame, params.openingKind === "door", anchor, at), params.openingKind);
+    const at = anchor.run.project(current.point, anchor.hostSurfaceKey);
+    if (at === undefined) return;
+    placeNew(ctx, anchor.run, drawnRect(params.openingKind === "door", anchor, at), params.openingKind);
   },
 
   onClick(ctx: ToolContext, sample: PointerSample, params: OpeningParams): void {
@@ -419,13 +422,13 @@ export const openingTool: ConstructionTool<"opening"> = {
       });
       return;
     }
-    placeNew(ctx, placed.frame, placed.rect, params.openingKind);
+    placeNew(ctx, placed.run, placed.rect, params.openingKind);
   },
 
   onDeleteKey(ctx: ToolContext): void {
     if (selected === undefined) return;
     const causeId = scopedToolId(ctx, "opening-edit-delete", ctx.nextSequence());
-    const result = commitOpeningReplacement(ctx, causeId, selected.openingSurfaceKey, undefined);
+    const result = commitOpeningGroup(ctx, causeId, selected.pieceKeys, []);
     clearSelection(ctx);
     reportCommit(ctx, causeId, result, "Abertura removida; parede restaurada.");
   },
@@ -453,21 +456,20 @@ function wallUnder(ctx: ToolContext, sample: PointerSample): ConstructionSurface
   return findWallSurfaceAt(ctx, sample.point);
 }
 
-/** The face under the pointer with a slider-sized opening centered on the click, its bottom at the clicked height -- `rect` undefined when it will not fit. */
+/** The run under the pointer with a slider-sized opening centered on the click, its bottom at the clicked height -- `rect` undefined when it will not fit. */
 function resolvePlacement(
   ctx: ToolContext,
   sample: PointerSample,
   params: OpeningParams,
-): { readonly frame: HostFrame; readonly rect: HostRect | undefined } | undefined {
+): { readonly run: RunFrame; readonly rect: RunRect | undefined } | undefined {
   const hostSurfaceKey = wallUnder(ctx, sample);
-  const frame = hostSurfaceKey === undefined ? undefined : hostFrame(ctx.runtime, hostSurfaceKey);
-  const at = frame === undefined ? undefined : projectOne(frame, sample.point);
-  if (frame === undefined || at === undefined) return undefined;
-  const height = frame.heightAt(Math.max(0, Math.min(1, at.u)));
-  if (!(height > 0)) return { frame, rect: undefined };
-  const du = params.width / frame.length;
+  const placed = hostSurfaceKey === undefined ? undefined : runPointAt(ctx, hostSurfaceKey, sample.point);
+  if (placed === undefined) return undefined;
+  const { run, at } = placed;
+  const height = run.heightAt(Math.max(run.start, Math.min(run.end, at.s)));
+  if (!(height > 0)) return { run, rect: undefined };
   const dv = params.height / height;
   const isDoor = params.openingKind === "door";
   const v0 = isDoor ? 0 : snapped(at.v * height) / height;
-  return { frame, rect: clampRect(frame, { u0: at.u - du / 2, u1: at.u + du / 2, v0, v1: v0 + dv }, isDoor) };
+  return { run, rect: settleRect(run, { s0: at.s - params.width / 2, s1: at.s + params.width / 2, v0, v1: v0 + dv }, isDoor) };
 }

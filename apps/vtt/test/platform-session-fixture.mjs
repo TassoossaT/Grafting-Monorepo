@@ -65,6 +65,8 @@ export function sessionFixture() {
     unpinNodes: (nodeIds) => JSON.parse(session.unpin_nodes_json(JSON.stringify({ nodeIds }))),
     projectToHost: ({ hostSurfaceKey, points }) => JSON.parse(session.project_to_host_json(JSON.stringify({ hostSurfaceKey, points: points.map(vector) }))),
     resolveOnHost: (request) => JSON.parse(session.resolve_on_host_json(JSON.stringify(request))).map(position),
+    setRegionGroup: (surfaceKeys, groupId) => JSON.parse(session.set_region_group_json(JSON.stringify({ surfaceKeys, groupId }))),
+    panelRun: (surfaceKey) => JSON.parse(session.panel_run_json(JSON.stringify({ surfaceKey }))),
     getSnapshot: () => ({ tableId: "platform-test", map: { nodePositions: new Map() } }),
     transact(transactionId, _origin, work) {
       session.begin_transaction(transactionId);
