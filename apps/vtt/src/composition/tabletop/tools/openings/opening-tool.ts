@@ -75,26 +75,42 @@ interface Selected {
 let selected: Selected | undefined;
 
 /**
- * Which part of an existing opening a press landed on -- `"body"` (the
- * interior) translates the whole rim; the four edges each stretch just
- * their own side, the other three staying put. This is the actual
- * "editing handle" a door or window has: there is no separate drawn handle
- * widget (see `structure-edit-behavior.ts`'s node handles for that on
- * other types), because an opening's own rim edge already sits exactly
- * where a handle would be drawn.
+ * Which part of an existing opening a press landed on, as the side of each
+ * axis it grabbed. Neither side = the body, which translates the whole rim.
+ * One side = an edge, which stretches just that edge. Both = a corner,
+ * which stretches the two edges meeting there. The corners are the rim's
+ * own nodes, the dots the runtime draws on every node, so the handle you
+ * can see is the one that resizes.
  */
-type GrabHandle = "body" | "left" | "right" | "top" | "bottom";
+interface GrabHandle {
+  readonly travel?: "left" | "right";
+  readonly y?: "top" | "bottom";
+}
 
 /** How close (in rail travel/height units) a press has to land to an opening's own rim edge to grab *that edge* instead of the whole body -- generous enough to find with an ordinary click, tight enough that grabbing well inside the pane (however that pane's own sill happens to line up) always reads as "move", never "resize". */
 const HANDLE_TOLERANCE = 0.12;
 
-/** Which handle `point` (already known to be on `opening`'s own rim) landed nearest -- edges checked before the body, since a press has to be genuinely close to one to count as anything but a move. */
-function handleAt(span: { readonly from: number; readonly to: number; readonly bottom: number; readonly top: number }, travel: number, y: number): GrabHandle {
-  if (Math.abs(travel - span.from) <= HANDLE_TOLERANCE) return "left";
-  if (Math.abs(travel - span.to) <= HANDLE_TOLERANCE) return "right";
-  if (Math.abs(y - span.top) <= HANDLE_TOLERANCE) return "top";
-  if (Math.abs(y - span.bottom) <= HANDLE_TOLERANCE) return "bottom";
-  return "body";
+type Span = { readonly from: number; readonly to: number; readonly bottom: number; readonly top: number };
+
+/** Which edges `travel`/`y` (already known to be on the opening) sits close to -- both at once near a corner. */
+function handleAt(span: Span, travel: number, y: number): GrabHandle {
+  const side =
+    Math.abs(travel - span.from) <= HANDLE_TOLERANCE ? "left" : Math.abs(travel - span.to) <= HANDLE_TOLERANCE ? "right" : undefined;
+  const level =
+    Math.abs(y - span.top) <= HANDLE_TOLERANCE ? "top" : Math.abs(y - span.bottom) <= HANDLE_TOLERANCE ? "bottom" : undefined;
+  return { travel: side, y: level };
+}
+
+/** The exact corner a press on one of the rim's own node dots means -- the nearer side on each axis, never the body, whatever the pick's own offset off the dot's center. */
+function cornerAt(span: Span, travel: number, y: number): GrabHandle {
+  return {
+    travel: Math.abs(travel - span.from) <= Math.abs(travel - span.to) ? "left" : "right",
+    y: Math.abs(y - span.bottom) <= Math.abs(y - span.top) ? "bottom" : "top",
+  };
+}
+
+function isBody(handle: GrabHandle): boolean {
+  return handle.travel === undefined && handle.y === undefined;
 }
 
 interface Drag {
@@ -167,8 +183,20 @@ function openingNear(ctx: ToolContext, point: ConstructionPosition): Constructio
   return best?.topology;
 }
 
+function isRimNode(opening: ConstructionRegionTopology, nodeId: string | undefined): boolean {
+  return nodeId !== undefined && opening.nodes.some((node) => node.id === nodeId);
+}
+
 /** The opening region under the pointer, if any -- pick-by-`surfaceRef` first (the same read `wallUnder` uses below), then `openingNear`'s geometric fallback, scoped to the opening's own surface type so clicking a placed window never gets read as clicking the wall behind it. */
 function openingUnder(ctx: ToolContext, sample: PointerSample): ConstructionRegionTopology | undefined {
+  // A press on one of a rim's own node dots: the dot sits on the corner, so
+  // the pick point can land just outside the rim `openingNear` checks.
+  if (sample.nodeId !== undefined) {
+    const owner = ctx.runtime
+      .getAllRegionTopologies()
+      .find((topology) => topology.surfaceType === openingStructureType.surfaceType && isRimNode(topology, sample.nodeId));
+    if (owner !== undefined) return owner;
+  }
   const picked = sample.surfaceRef;
   if (picked !== undefined) {
     const hit = ctx.runtime
@@ -380,7 +408,8 @@ function mergeWithNeighbors(
  * it) reads as "I changed the sliders on purpose, now apply them" -- the
  * "arraste de novo" workflow the width/height/sill sliders exist for.
  */
-function beginGrab(ctx: ToolContext, opening: ConstructionRegionTopology, point: ConstructionPosition, liveParams: OpeningParams): boolean {
+function beginGrab(ctx: ToolContext, opening: ConstructionRegionTopology, sample: PointerSample, liveParams: OpeningParams): boolean {
+  const point = sample.point;
   const host = hostWallOf(ctx, opening);
   if (host === undefined) return false;
   const rail = panelRailOf(ctx.runtime, host.wall);
@@ -398,7 +427,7 @@ function beginGrab(ctx: ToolContext, opening: ConstructionRegionTopology, point:
   const params = alreadySelected ? { ...derived, width: liveParams.width, height: liveParams.height } : derived;
 
   const travel = rail.travelTo(point);
-  const handle = handleAt(span, travel, point.y);
+  const handle = isRimNode(opening, sample.nodeId) ? cornerAt(span, travel, point.y) : handleAt(span, travel, point.y);
   const centerTravel = (span.from + span.to) / 2;
   const centerY = (span.bottom + span.top) / 2;
   selected = { openingSurfaceKey: opening.surfaceKey, wallSurfaceKey: host.wall.surfaceKey, holeIndex: host.holeIndex };
@@ -427,16 +456,20 @@ function beginGrab(ctx: ToolContext, opening: ConstructionRegionTopology, point:
  * not draggable (there is no sill to move), the same floor-pin every other
  * door path already enforces.
  */
-function rectFor(rail: PanelRail, active: Drag, point: ConstructionPosition): { readonly from: number; readonly to: number; readonly bottom: number; readonly top: number } | undefined {
+function rectFor(rail: PanelRail, active: Drag, point: ConstructionPosition): Span | undefined {
   const { originalSpan: span, handle } = active;
   const isDoor = active.params.openingKind === "door";
   const travel = rail.travelTo(point);
 
-  if (handle === "left") return clampRect(rail, isDoor, Math.min(travel, span.to - MIN_OPENING_SIZE), span.to, span.bottom, span.top);
-  if (handle === "right") return clampRect(rail, isDoor, span.from, Math.max(travel, span.from + MIN_OPENING_SIZE), span.bottom, span.top);
-  if (handle === "top") return clampRect(rail, isDoor, span.from, span.to, span.bottom, Math.max(point.y, span.bottom + MIN_OPENING_SIZE));
-  if (handle === "bottom" && !isDoor) return clampRect(rail, isDoor, span.from, span.to, Math.min(point.y, span.top - MIN_OPENING_SIZE), span.top);
-  if (handle === "bottom") return clampRect(rail, isDoor, span.from, span.to, span.bottom, span.top); // a door's floor sill never moves
+  if (!isBody(handle)) {
+    let { from, to, bottom, top } = span;
+    if (handle.travel === "left") from = Math.min(travel, span.to - MIN_OPENING_SIZE);
+    if (handle.travel === "right") to = Math.max(travel, span.from + MIN_OPENING_SIZE);
+    if (handle.y === "top") top = Math.max(point.y, span.bottom + MIN_OPENING_SIZE);
+    // A door's floor sill never moves -- its bottom corners stretch sideways only.
+    if (handle.y === "bottom" && !isDoor) bottom = Math.min(point.y, span.top - MIN_OPENING_SIZE);
+    return clampRect(rail, isDoor, from, to, bottom, top);
+  }
 
   const { width, height } = active.params;
   const centerTravel = travel - active.grabOffset.travel;
@@ -485,7 +518,7 @@ function commitDrag(ctx: ToolContext, gesture: ToolGesture, active: Drag): void 
     Math.abs(rect.bottom - active.originalSpan.bottom) < EPS &&
     Math.abs(rect.top - active.originalSpan.top) < EPS;
   if (unchanged) {
-    ctx.reportFeedback({ tone: "info", message: "Abertura selecionada. Arraste o meio para mover, uma borda para redimensionar; Delete apaga." });
+    ctx.reportFeedback({ tone: "info", message: "Abertura selecionada. Arraste o meio para mover, uma borda ou um canto para redimensionar; Delete apaga." });
     return;
   }
 
@@ -508,7 +541,7 @@ function commitDrag(ctx: ToolContext, gesture: ToolGesture, active: Drag): void 
     return;
   }
   if (recorded) ctx.history?.record({ kind: "transaction", transactionId: causeId });
-  ctx.reportFeedback({ tone: "success", message: active.handle === "body" ? "Abertura movida." : "Abertura redimensionada." });
+  ctx.reportFeedback({ tone: "success", message: isBody(active.handle) ? "Abertura movida." : "Abertura redimensionada." });
 }
 
 /** The live create-drag preview for a brand-new opening, from `anchor` to the pointer's current spot on the same wall. */
@@ -595,7 +628,7 @@ export const openingTool: ConstructionTool<"opening"> = {
     createdThisGesture = false;
     const opening = openingUnder(ctx, sample);
     if (opening !== undefined) {
-      if (beginGrab(ctx, opening, sample.point, params)) {
+      if (beginGrab(ctx, opening, sample, params)) {
         grabbedThisGesture = true;
       } else {
         ctx.reportFeedback({ tone: "error", message: "Nao foi possivel identificar a parede desta abertura." });

@@ -342,6 +342,76 @@ test("grabbing an existing window right at its own sill stretches downward, the 
   } finally { session.free(); }
 });
 
+function cornerNode(runtime, x, y) {
+  const opening = runtime.getAllRegionTopologies().find((t) => t.surfaceType === "opening");
+  return opening.nodes.find((n) => Math.abs(n.position.x - x) < 1e-6 && Math.abs(n.position.y - y) < 1e-6);
+}
+
+test("pressing a window's own top-right corner dot stretches both edges that meet there, the opposite corner staying put", () => {
+  const { runtime, session, ctx } = sessionFixture();
+  try {
+    wall(runtime);
+    openingTool.onClick(ctx, { point: { x: 2, y: 1, z: 0 } }, WINDOW); // rim [1.5, 2.5] x [1, 2]
+    const node = cornerNode(runtime, 2.5, 2);
+    assert.ok(node, "the rim must have a node at its top-right corner");
+    // The dot's own pick lands a little off the corner, even outside the rim.
+    const down = { x: 2.58, y: 2.06, z: 0 };
+    const up = { x: 4, y: 2.6, z: 0 };
+    openingTool.onPointerDown(ctx, { point: down, nodeId: node.id }, WINDOW);
+    openingTool.onPointerUp(ctx, { start: { point: down }, current: { point: up } }, WINDOW);
+    openingTool.onClick(ctx, { point: up }, WINDOW);
+
+    const openings = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "opening");
+    assert.equal(openings.length, 1, "a corner drag resizes, it never creates a second opening");
+    const xs = openings[0].nodes.map((n) => n.position.x);
+    const ys = openings[0].nodes.map((n) => n.position.y);
+    assert.ok(Math.abs(Math.min(...xs) - 1.5) < 1e-6, `the left edge must stay put, got ${Math.min(...xs)}`);
+    assert.ok(Math.abs(Math.max(...xs) - 4) < 1e-6, `the right edge must follow to 4, got ${Math.max(...xs)}`);
+    assert.ok(Math.abs(Math.min(...ys) - 1) < 1e-6, `the sill must stay put, got ${Math.min(...ys)}`);
+    assert.ok(Math.abs(Math.max(...ys) - 2.6) < 1e-6, `the top must follow to 2.6, got ${Math.max(...ys)}`);
+  } finally { session.free(); }
+});
+
+test("pressing near a window's bottom-left corner without hitting the dot still grabs the corner", () => {
+  const { runtime, session, ctx } = sessionFixture();
+  try {
+    wall(runtime);
+    openingTool.onClick(ctx, { point: { x: 4, y: 1, z: 0 } }, WINDOW); // rim [3.5, 4.5] x [1, 2]
+    gesture(ctx, WINDOW, { x: 3.55, y: 1.05, z: 0 }, { x: 3, y: 0.5, z: 0 });
+
+    const opening = runtime.getAllRegionTopologies().find((t) => t.surfaceType === "opening");
+    const xs = opening.nodes.map((n) => n.position.x);
+    const ys = opening.nodes.map((n) => n.position.y);
+    assert.ok(Math.abs(Math.min(...xs) - 3) < 1e-6, `the left edge must follow to 3, got ${Math.min(...xs)}`);
+    assert.ok(Math.abs(Math.max(...xs) - 4.5) < 1e-6, `the right edge must stay put, got ${Math.max(...xs)}`);
+    assert.ok(Math.abs(Math.min(...ys) - 0.5) < 1e-6, `the sill must follow to 0.5, got ${Math.min(...ys)}`);
+    assert.ok(Math.abs(Math.max(...ys) - 2) < 1e-6, `the top must stay put, got ${Math.max(...ys)}`);
+  } finally { session.free(); }
+});
+
+test("dragging a door's bottom corner dot only widens it -- the floor sill never lifts", () => {
+  const { runtime, session, ctx } = sessionFixture();
+  try {
+    wall(runtime);
+    const DOOR = { openingKind: "door", width: 1, height: 2, sill: 0 };
+    openingTool.onClick(ctx, { point: { x: 2, y: 0, z: 0 } }, DOOR); // rim [1.5, 2.5] x [0, 2]
+    const node = cornerNode(runtime, 2.5, 0);
+    assert.ok(node, "the door must have a node at its bottom-right corner");
+    const down = { x: 2.5, y: 0, z: 0 };
+    const up = { x: 3.5, y: 0.8, z: 0 };
+    openingTool.onPointerDown(ctx, { point: down, nodeId: node.id }, DOOR);
+    openingTool.onPointerUp(ctx, { start: { point: down }, current: { point: up } }, DOOR);
+    openingTool.onClick(ctx, { point: up }, DOOR);
+
+    const opening = runtime.getAllRegionTopologies().find((t) => t.surfaceType === "opening");
+    const xs = opening.nodes.map((n) => n.position.x);
+    const ys = opening.nodes.map((n) => n.position.y);
+    assert.ok(Math.abs(Math.max(...xs) - 3.5) < 1e-6, `the right edge must follow to 3.5, got ${Math.max(...xs)}`);
+    assert.ok(Math.abs(Math.min(...ys) - 0) < 1e-6, "a door's floor sill must never move");
+    assert.ok(Math.abs(Math.max(...ys) - 2) < 1e-6, "a door's top must stay put");
+  } finally { session.free(); }
+});
+
 test("a door's sill can never be dragged off the floor, even grabbed right where its own bottom edge is", () => {
   const { runtime, session, ctx } = sessionFixture();
   try {
