@@ -7,20 +7,28 @@
 //   1. screen (pick targets + render chunks) matches engine surfaces
 //   2. no topological holes on partition-type hosts (detected via hasTrait,
 //      never a type-name string)
-//   3. coverage: sampled host points are drawn iff inside the host face and
-//      outside every opening pinned to it (no overdraw, no missing wall)
+//   3. coverage: sampled points of the host's own (u,v) frame (via
+//      runtime.resolveOnHost -- true positions on curved hosts too, not a
+//      flat-projection guess) are drawn -- checked by a ray cast along the
+//      LOCAL surface normal against the host's mesh -- iff inside the host
+//      face and outside every opening pinned to it (no overdraw, no missing
+//      wall). Every host-mesh triangle centroid must also round-trip through
+//      projectToHost/resolveOnHost back onto the true surface within 0.05m
+//      (no flat-chord triangles floating off a curved host).
 //   4. pinned opening nodes lie on resolve(u,v) of their host, within 1e-4,
 //      u,v in [0,1] -- guarded: only runs once nodes expose a `pin` field
 //      AND the runtime exposes `resolveOnHost`; otherwise skipped with a note
 //   5. openings stay attached to their host through wall edits (exercised by
 //      running the wall-vertex/edge/height ops in the same op mix)
-//   6. openings on the same host never overlap
+//   6. openings on the same host never overlap (checked in the host's own
+//      (u,v) frame via projectToHost, so it works on curved hosts too)
 //
-// This is written for the TARGET design (pinned nodes, mesh-time cut, no
-// wall holes). It is EXPECTED to fail some invariants today, before the
-// engine + tool rewrite land (walls still get topological holes) -- that is
-// the point: the test encodes where the redesign must land, not where the
-// code is now.
+// Host shapes: straight (wallLineTool, the original regression seeds),
+// arc and Bezier (built with the real commitWallContour, the same function
+// the product's wall tools call -- see apps/vtt/test/zz-bez-repro.mjs, which
+// this suite's arc/Bezier setup mirrors). The straight and arc suites are
+// expected to be green; the Bezier ones are EXPECTED TO FAIL right now --
+// an engine fix for curved-host mesh-time cuts is in progress elsewhere.
 //
 // wall-line-tool.ts imports via the "@/..." alias, which plain Node has no
 // resolver for. Solved locally, no --import flag needed: register a resolve
@@ -57,6 +65,7 @@ const {
 const { surfaceRefFromNodeSet } = await import("../src/entities/map/index.ts");
 const { openingTool } = await import("../src/composition/tabletop/tools/openings/opening-tool.ts");
 const { wallLineTool } = await import("../src/composition/tabletop/tools/walls/wall-line-tool.ts");
+const { commitWallContour } = await import("../src/composition/tabletop/tools/walls/wall-shared.ts");
 
 // ---------- generic helpers ----------
 
@@ -87,7 +96,7 @@ const bbox = (t) => {
   return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
 };
 const posOf = (t, id) => t.nodes.find((n) => n.id === id).position;
-const polyOf = (t, loop) => loop.map((e) => posOf(t, e.startNodeId)).map((p) => [p.x, p.y]);
+/** Point-in-polygon; used on (u,v) pairs (host-local) and, in `hostOf`, on world (x,y) bboxes. */
 const inPoly = (x, y, pts) => {
   let c = false;
   for (let a = 0, b = pts.length - 1; a < pts.length; b = a++) {
@@ -96,11 +105,48 @@ const inPoly = (x, y, pts) => {
   }
   return c;
 };
-const d2 = (p, q, s) => (p[0] - s[0]) * (q[1] - s[1]) - (q[0] - s[0]) * (p[1] - s[1]);
-const inTri = (x, y, [a, b, c]) => {
-  const d1 = d2([x, y], a, b), d2_ = d2([x, y], b, c), d3 = d2([x, y], c, a);
-  return !((d1 < 0 || d2_ < 0 || d3 < 0) && (d1 > 0 || d2_ > 0 || d3 > 0));
-};
+
+/** Möller-Trumbore ray/triangle-mesh hit test, world space (any host orientation). */
+function hitMesh(mesh, origin, dir, maxT) {
+  const P = mesh.positions, I = mesh.indices ?? Array.from({ length: P.length / 3 }, (_, i) => i);
+  for (let i = 0; i < I.length; i += 3) {
+    const v0 = [P[3 * I[i]], P[3 * I[i] + 1], P[3 * I[i] + 2]];
+    const v1 = [P[3 * I[i + 1]], P[3 * I[i + 1] + 1], P[3 * I[i + 1] + 2]];
+    const v2 = [P[3 * I[i + 2]], P[3 * I[i + 2] + 1], P[3 * I[i + 2] + 2]];
+    const e1 = v1.map((x, k) => x - v0[k]), e2 = v2.map((x, k) => x - v0[k]);
+    const p = [dir[1] * e2[2] - dir[2] * e2[1], dir[2] * e2[0] - dir[0] * e2[2], dir[0] * e2[1] - dir[1] * e2[0]];
+    const det = e1[0] * p[0] + e1[1] * p[1] + e1[2] * p[2];
+    if (Math.abs(det) < 1e-12) continue;
+    const tv = origin.map((x, k) => x - v0[k]);
+    const u = (tv[0] * p[0] + tv[1] * p[1] + tv[2] * p[2]) / det;
+    if (u < 0 || u > 1) continue;
+    const q = [tv[1] * e1[2] - tv[2] * e1[1], tv[2] * e1[0] - tv[0] * e1[2], tv[0] * e1[1] - tv[1] * e1[0]];
+    const v = (dir[0] * q[0] + dir[1] * q[1] + dir[2] * q[2]) / det;
+    if (v < 0 || u + v > 1) continue;
+    const t = (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]) / det;
+    if (Math.abs(t) <= maxT) return true;
+  }
+  return false;
+}
+
+/** Whether (u,v) sits right on a polygon's boundary -- a perturbed neighbour disagrees on inside/outside. */
+function isNearPolyBoundaryUV(u, v, poly, du, dv) {
+  const base = inPoly(u, v, poly);
+  for (const [su, sv] of [[du, 0], [-du, 0], [0, dv], [0, -dv]]) {
+    if (inPoly(u + su, v + sv, poly) !== base) return true;
+  }
+  return false;
+}
+
+/** An opening's outer loop, expressed in ITS HOST's own (u,v) frame via the real projectToHost -- works on any host shape. */
+function openingUVPolygon(opening, host, runtime) {
+  const points = opening.outerLoops[0].map((e) => posOf(opening, e.startNodeId));
+  try {
+    return runtime.projectToHost({ hostSurfaceKey: host.surfaceKey, points }).map((p) => [p.u, p.v]);
+  } catch {
+    return null;
+  }
+}
 
 /**
  * The wall hosting `opening`. Prefers a real pin (target design); falls back
@@ -126,52 +172,110 @@ function hostOf(opening, wallTopos, ref) {
   return best;
 }
 
-/** Invariant 3: sampled host points drawn iff inside the face and outside every cutter. */
-function coverageProblems(t, cutterPolys, pickTargets, ref) {
+/**
+ * Invariant 3: sample the host's own (u,v) frame (works for straight, arc
+ * and Bezier hosts alike, since (u,v) is defined the same way for all of
+ * them), resolve each sample to its TRUE world position, and cast a ray
+ * along the LOCAL surface normal (from the tangent at that (u,v), via a
+ * second resolve a hair further along u) against the host's rendered mesh.
+ * Drawn iff inside the host face and outside every cutter pinned to it.
+ */
+function coverageProblems(t, cutterPolysUV, pickTargets, ref, runtime) {
   const problems = [];
-  const z0 = t.nodes[0].position.z;
-  if (t.nodes.some((n) => Math.abs(n.position.z - z0) > 1e-6)) return problems; // sampling only handles flat-z hosts
   const mesh = pickTargets.get(ref(t));
   if (!mesh) return problems; // MISSING is already reported elsewhere
-  const P = mesh.positions, I = mesh.indices ?? Array.from({ length: P.length / 3 }, (_, i) => i);
-  const tris = [];
-  for (let i = 0; i < I.length; i += 3) tris.push([I[i], I[i + 1], I[i + 2]].map((k) => [P[3 * k], P[3 * k + 1]]));
-  const outer = polyOf(t, t.outerLoops[0]);
-  const xs = outer.map((p) => p[0]), ys = outer.map((p) => p[1]);
-  let missing = 0, extra = 0, total = 0;
-  for (let y = Math.min(...ys) + 0.0371; y < Math.max(...ys); y += 0.1) {
-    for (let x = Math.min(...xs) + 0.0413; x < Math.max(...xs); x += 0.1) {
-      const hit = tris.some((tri) => inTri(x, y, tri));
-      const should = inPoly(x, y, outer) && !cutterPolys.some((h) => inPoly(x, y, h));
-      if (should) { total++; if (!hit) missing++; } else if (hit) extra++;
-    }
+  const N_U = 60, N_V = 20;
+  const du = 1 / N_U, dv = 1 / N_V;
+  const marginU = 1.5 * du, marginV = 1.5 * dv;
+  const uvs = [];
+  for (let i = 1; i < N_U; i++) for (let j = 1; j < N_V; j++) uvs.push([i / N_U, j / N_V]);
+  const uvsAhead = uvs.map(([u, v]) => [Math.min(1, u + du * 0.5), v]);
+  let resolved, resolvedAhead;
+  try {
+    resolved = runtime.resolveOnHost({ hostSurfaceKey: t.surfaceKey, uv: uvs });
+    resolvedAhead = runtime.resolveOnHost({ hostSurfaceKey: t.surfaceKey, uv: uvsAhead });
+  } catch (error) {
+    problems.push(`RESOLVE threw on ${t.surfaceType}: ${error?.message ?? error}`);
+    return problems;
   }
-  if (missing > 2) problems.push(`WALL MISSING ${missing}/${total} samples (${(100 * missing / total).toFixed(1)}%) on ${t.surfaceType}`);
-  if (extra > 2) problems.push(`OVERDRAW ${extra} samples drawn where it should be empty on ${t.surfaceType}`);
+  let missing = 0, extra = 0, total = 0;
+  for (let k = 0; k < uvs.length; k++) {
+    const [u, v] = uvs[k];
+    if (u < marginU || u > 1 - marginU || v < marginV || v > 1 - marginV) continue;
+    if (cutterPolysUV.some((poly) => isNearPolyBoundaryUV(u, v, poly, du, dv))) continue;
+    const inCut = cutterPolysUV.some((poly) => inPoly(u, v, poly));
+    const p = resolved[k], p2 = resolvedAhead[k];
+    const tx = p2.x - p.x, tz = p2.z - p.z;
+    const tl = Math.hypot(tx, tz) || 1;
+    const nrm = [-tz / tl, 0, tx / tl]; // horizontal normal to the tangent, for an upright host
+    const origin = [p.x - nrm[0] * 0.25, p.y, p.z - nrm[2] * 0.25];
+    const drawn = hitMesh(mesh, origin, nrm, 0.5);
+    if (!inCut) { total++; if (!drawn) missing++; } else if (drawn) extra++;
+  }
+  if (missing > 2) problems.push(`WALL MISSING ${missing}/${total} samples on ${t.surfaceType} (host (u,v) sampling, normal-ray cast)`);
+  if (extra > 2) problems.push(`OVERDRAW ${extra} samples drawn inside a cutter on ${t.surfaceType} (host (u,v) sampling, normal-ray cast)`);
   return problems;
 }
 
-/** Invariant 6: no two openings on the same host may overlap. */
-function overlapProblems(openingsOnHost) {
+/**
+ * Every host-mesh triangle centroid must lie on the TRUE surface: project it
+ * to (u,v) and resolve back -- a flat-chord triangle across a curve fails
+ * this even though it may still look area-correct from above.
+ */
+function offSurfaceProblems(t, pickTargets, ref, runtime, tol = 0.05) {
+  const mesh = pickTargets.get(ref(t));
+  if (!mesh) return [];
+  const P = mesh.positions, I = mesh.indices ?? Array.from({ length: P.length / 3 }, (_, i) => i);
+  if (I.length === 0) return [];
+  const centroids = [];
+  for (let i = 0; i < I.length; i += 3) {
+    centroids.push({
+      x: (P[3 * I[i]] + P[3 * I[i + 1]] + P[3 * I[i + 2]]) / 3,
+      y: (P[3 * I[i] + 1] + P[3 * I[i + 1] + 1] + P[3 * I[i + 2] + 1]) / 3,
+      z: (P[3 * I[i] + 2] + P[3 * I[i + 1] + 2] + P[3 * I[i + 2] + 2]) / 3,
+    });
+  }
+  let proj, resolvedBack;
+  try {
+    proj = runtime.projectToHost({ hostSurfaceKey: t.surfaceKey, points: centroids });
+    resolvedBack = runtime.resolveOnHost({
+      hostSurfaceKey: t.surfaceKey,
+      uv: proj.map((p) => [Math.min(1, Math.max(0, p.u)), Math.min(1, Math.max(0, p.v))]),
+    });
+  } catch (error) {
+    return [`OFF-SURFACE check threw on ${t.surfaceType}: ${error?.message ?? error}`];
+  }
+  let maxOff = 0;
+  for (let i = 0; i < centroids.length; i++) {
+    const b = resolvedBack[i];
+    maxOff = Math.max(maxOff, Math.hypot(b.x - centroids[i].x, b.y - centroids[i].y, b.z - centroids[i].z));
+  }
+  if (maxOff > tol) return [`OFF-SURFACE triangle centroid ${maxOff.toFixed(4)}m from ${t.surfaceType}'s true surface (tol ${tol})`];
+  return [];
+}
+
+/** Invariant 6: no two openings on the same host may overlap, checked in the host's own (u,v) frame. */
+function overlapProblems(cutterPolysUV) {
   const problems = [];
-  for (let i = 0; i < openingsOnHost.length; i++) {
-    for (let j = i + 1; j < openingsOnHost.length; j++) {
-      const a = openingsOnHost[i], b = openingsOnHost[j];
-      const ba = bbox(a), bb = bbox(b);
-      const ox = Math.min(ba.x1, bb.x1) - Math.max(ba.x0, bb.x0);
-      const oy = Math.min(ba.y1, bb.y1) - Math.max(ba.y0, bb.y0);
-      if (ox <= 1e-6 || oy <= 1e-6) continue;
-      const polyA = polyOf(a, a.outerLoops[0]), polyB = polyOf(b, b.outerLoops[0]);
-      const x0 = Math.max(ba.x0, bb.x0), x1 = Math.min(ba.x1, bb.x1);
-      const y0 = Math.max(ba.y0, bb.y0), y1 = Math.min(ba.y1, bb.y1);
+  const bboxUV = (poly) => ({
+    u0: Math.min(...poly.map((p) => p[0])), u1: Math.max(...poly.map((p) => p[0])),
+    v0: Math.min(...poly.map((p) => p[1])), v1: Math.max(...poly.map((p) => p[1])),
+  });
+  for (let i = 0; i < cutterPolysUV.length; i++) {
+    for (let j = i + 1; j < cutterPolysUV.length; j++) {
+      const A = cutterPolysUV[i], B = cutterPolysUV[j];
+      const ba = bboxUV(A), bb = bboxUV(B);
+      const u0 = Math.max(ba.u0, bb.u0), u1 = Math.min(ba.u1, bb.u1);
+      const v0 = Math.max(ba.v0, bb.v0), v1 = Math.min(ba.v1, bb.v1);
+      if (u1 <= u0 || v1 <= v0) continue;
       let hit = 0, total = 0;
-      for (let y = y0 + 0.013; y < y1; y += 0.05) {
-        for (let x = x0 + 0.017; x < x1; x += 0.05) {
+      for (let v = v0 + 0.003; v < v1; v += 0.01) {
+        for (let u = u0 + 0.002; u < u1; u += 0.01) {
           total++;
-          if (inPoly(x, y, polyA) && inPoly(x, y, polyB)) hit++;
+          if (inPoly(u, v, A) && inPoly(u, v, B)) hit++;
         }
       }
-      if (total > 0 && hit / total > 0.02) problems.push(`OVERLAP ${hit}/${total} samples shared between two openings on the same host`);
+      if (total > 0 && hit / total > 0.02) problems.push(`OVERLAP ${hit}/${total} (u,v) samples shared between two openings on the same host`);
     }
   }
   return problems;
@@ -256,8 +360,10 @@ function checkInvariants({ topos, pickTargets, chunks, wallCount, runtime, ref }
   }
   for (const w of wallTopos) {
     const hosted = byHost.get(ref(w)) ?? [];
-    problems.push(...coverageProblems(w, hosted.map((o) => polyOf(o, o.outerLoops[0])), pickTargets, ref));
-    problems.push(...overlapProblems(hosted));
+    const cutterPolysUV = hosted.map((o) => openingUVPolygon(o, w, runtime)).filter((poly) => poly !== null);
+    problems.push(...coverageProblems(w, cutterPolysUV, pickTargets, ref, runtime));
+    problems.push(...overlapProblems(cutterPolysUV));
+    problems.push(...offSurfaceProblems(w, pickTargets, ref, runtime));
   }
 
   // Invariant 4 (guarded).
@@ -293,7 +399,29 @@ function createHarness() {
 
 const ref = (t) => surfaceRefFromNodeSet(t.surfaceKey);
 
-async function runSeed(seed, opsCount = 40) {
+// Non-straight host shapes, built with the real `commitWallContour` (what the
+// product's own wall tools call), mirroring apps/vtt/test/zz-bez-repro.mjs.
+const HOST_HEIGHT = 3;
+const CURVED_HOST_SHAPES = {
+  arc: { geometry: { kind: "arc", center: [4, -3], clockwise: false }, a: { x: 0, y: 0, z: 0 }, b: { x: 8, y: 0, z: 0 } },
+  bezier: { geometry: { kind: "bezier", handle1: [1, 4], handle2: [6, -2] }, a: { x: 0, y: 0, z: 0 }, b: { x: 8, y: 0, z: 0 } },
+};
+const cubicBezierXZ = (p0, p1, p2, p3, t) => {
+  const s = 1 - t;
+  return [0, 1].map((k) => s * s * s * p0[k] + 3 * s * s * t * p1[k] + 3 * s * t * t * p2[k] + t * t * t * p3[k]);
+};
+/** The true rail (x,z) of a curved host, for placing opening clicks near it. */
+function railFor(kind, geometry, a, b) {
+  if (kind === "bezier") return (t) => cubicBezierXZ([a.x, a.z], geometry.handle1, geometry.handle2, [b.x, b.z], t);
+  const [cx, cz] = geometry.center;
+  const rad = Math.hypot(a.x - cx, a.z - cz);
+  const a0 = Math.atan2(a.z - cz, a.x - cx);
+  let sweep = Math.atan2(b.z - cz, b.x - cx) - a0;
+  if (geometry.clockwise) { while (sweep > 0) sweep -= 2 * Math.PI; } else { while (sweep < 0) sweep += 2 * Math.PI; }
+  return (t) => [cx + rad * Math.cos(a0 + sweep * t), cz + rad * Math.sin(a0 + sweep * t)];
+}
+
+async function runSeed(seed, opsCount = 40, hostKind = "straight") {
   const rnd = mulberry32(seed);
   const r = (a, b) => a + (b - a) * rnd();
   const pick = (xs) => xs[Math.floor(rnd() * xs.length)];
@@ -323,19 +451,32 @@ async function runSeed(seed, opsCount = 40) {
   }
 
   const WALL = DEFAULT_TOOL_PARAMS["wall-line"];
-  const length = r(5, 12);
-  wallLineTool.onPointerDown(ctx, { point: { x: 0, y: 0, z: 0 } }, WALL);
-  wallLineTool.onPointerUp(ctx, { start: { point: { x: 0, y: 0, z: 0 } }, current: { point: { x: length, y: 0, z: 0 } }, samples: [] }, WALL);
-  wallLineTool.onClick?.(ctx, { point: { x: length, y: 0, z: 0 } }, WALL);
+  let length, top;
+  if (hostKind === "straight") {
+    // Unchanged from the original driver: the regression seeds (25, 93, 213)
+    // depend on this exact rnd() call sequence for reproducibility.
+    length = r(5, 12);
+    wallLineTool.onPointerDown(ctx, { point: { x: 0, y: 0, z: 0 } }, WALL);
+    wallLineTool.onPointerUp(ctx, { start: { point: { x: 0, y: 0, z: 0 } }, current: { point: { x: length, y: 0, z: 0 } }, samples: [] }, WALL);
+    wallLineTool.onClick?.(ctx, { point: { x: length, y: 0, z: 0 } }, WALL);
+    top = Math.max(...walls()[0].nodes.map((n) => n.position.y));
+  } else {
+    const spec = CURVED_HOST_SHAPES[hostKind];
+    commitWallContour(ctx, [{ start: spec.a, end: spec.b, geometry: spec.geometry }], { ...WALL, height: HOST_HEIGHT }, "fuzz");
+    length = 8;
+    top = HOST_HEIGHT;
+  }
   const wallCount = walls().length;
-  const top = Math.max(...walls()[0].nodes.map((n) => n.position.y));
-  log.push(`wall length=${length.toFixed(3)} top=${top}`);
+  log.push(`host=${hostKind} length~=${length} top=${top}`);
+  const railFn = hostKind === "straight" ? (t) => [t * length, 0] : railFor(hostKind, CURVED_HOST_SHAPES[hostKind].geometry, CURVED_HOST_SHAPES[hostKind].a, CURVED_HOST_SHAPES[hostKind].b);
 
   const kinds = () => {
     const kind = rnd() < 0.3 ? "door" : "window";
     return { ...DEFAULT_TOOL_PARAMS.opening, openingKind: kind, width: r(0.5, 2.5), height: kind === "door" ? r(1.5, 2.6) : r(0.5, 1.8), sill: kind === "door" ? 0 : r(0.3, 1.5) };
   };
-  const onWall = () => ({ x: r(-0.3, length + 0.3), y: r(-0.1, top + 0.1), z: rnd() < 0.8 ? 0 : r(-0.05, 0.05) });
+  const onWall = hostKind === "straight"
+    ? () => ({ x: r(-0.3, length + 0.3), y: r(-0.1, top + 0.1), z: rnd() < 0.8 ? 0 : r(-0.05, 0.05) })
+    : () => { const [rx, rz] = railFn(rnd()); return { x: rx + r(-0.15, 0.15), y: r(-0.1, top + 0.1), z: rz + r(-0.15, 0.15) }; };
   const q = (p) => `(${p.x.toFixed(3)},${p.y.toFixed(3)},${p.z.toFixed(3)})`;
 
   for (let i = 0; i < opsCount; i++) {
@@ -442,8 +583,28 @@ const SEEDS = SWEEP_N ? Array.from({ length: SWEEP_N }, (_, i) => i + 1) : DEFAU
 const OPS = 40;
 
 for (const seed of SEEDS) {
-  test(`opening fuzz: seed ${seed} (${OPS} ops, walls enabled) keeps all invariants`, async () => {
-    assertNoFailure(await runSeed(seed, OPS));
+  test(`opening fuzz: seed ${seed} (straight host, ${OPS} ops, walls enabled) keeps all invariants`, async () => {
+    assertNoFailure(await runSeed(seed, OPS, "straight"));
+  });
+}
+
+// Arc and Bezier hosts (item 2): same op mix, built with the real
+// commitWallContour instead of wallLineTool clicks. Not part of the
+// FUZZ_SEEDS sweep -- that sweep is for the straight-host regression corpus.
+const ARC_SEEDS = [901, 902, 903];
+for (const seed of ARC_SEEDS) {
+  test(`opening fuzz: seed ${seed} (arc host, ${OPS} ops, walls enabled) keeps all invariants`, async () => {
+    assertNoFailure(await runSeed(seed, OPS, "arc"));
+  });
+}
+
+const BEZIER_SEEDS = [801, 802, 803];
+for (const seed of BEZIER_SEEDS) {
+  // EXPECTED TO FAIL: curved-host mesh-time cut for Bezier hosts is being
+  // fixed by another agent right now (flat-chord triangles / missing cut
+  // coverage on the true curved surface).
+  test(`opening fuzz: seed ${seed} (bezier host, ${OPS} ops, walls enabled) keeps all invariants`, async () => {
+    assertNoFailure(await runSeed(seed, OPS, "bezier"));
   });
 }
 
@@ -495,4 +656,34 @@ test("deterministic: lowering a wall's top corner through a window leaves no ove
   const problems = checkInvariants({ topos: runtime.getAllRegionTopologies(), pickTargets, chunks, wallCount, runtime, ref });
   const overdraw = problems.filter((p) => p.startsWith("OVERDRAW"));
   assert.deepEqual(overdraw, [], `unexpected overdraw after lowering the host's top corner through the window:\n  ${problems.join("\n  ")}`);
+});
+
+// EXPECTED TO FAIL right now: curved-host mesh-time cut is being fixed by
+// another agent (flat-chord triangles / missing coverage on the true curve).
+test("deterministic: a window mid-Bezier-wall has no missing coverage and no off-surface triangles", async () => {
+  const { runtime, ctx, pickTargets, chunks } = createHarness();
+  await runtime.start();
+  openingTool.onCancel(ctx);
+  const WALL = DEFAULT_TOOL_PARAMS["wall-line"];
+  const spec = CURVED_HOST_SHAPES.bezier;
+
+  commitWallContour(ctx, [{ start: spec.a, end: spec.b, geometry: spec.geometry }], { ...WALL, height: HOST_HEIGHT }, "fuzz");
+  const wall = runtime.getAllRegionTopologies().filter(isPartition)[0];
+  assert.ok(wall, "bezier wall was created");
+  const wallCount = 1;
+
+  const rail = railFor("bezier", spec.geometry, spec.a, spec.b);
+  const [mx, mz] = rail(0.5); // wall midpoint by parameter (not exact arc-length midpoint, close enough to land the click)
+  const windowParams = { ...DEFAULT_TOOL_PARAMS.opening, openingKind: "window", width: 1.2, height: 1.0, sill: 1 };
+  const down = { point: { x: mx, y: 1.3, z: mz }, surfaceRef: ref(wall) };
+  const gesture = { start: down, current: down, samples: [down] };
+  openingTool.onPointerDown(ctx, down, windowParams);
+  openingTool.onPointerMove(ctx, gesture, windowParams);
+  openingTool.onPointerUp(ctx, gesture, windowParams);
+  openingTool.onClick(ctx, down, windowParams);
+  assert.equal(runtime.getAllRegionTopologies().filter(isOpening).length, 1, "window was created mid-wall");
+
+  const problems = checkInvariants({ topos: runtime.getAllRegionTopologies(), pickTargets, chunks, wallCount, runtime, ref });
+  const relevant = problems.filter((p) => p.startsWith("WALL MISSING") || p.startsWith("OFF-SURFACE"));
+  assert.deepEqual(relevant, [], `bezier host has missing coverage or off-surface triangles:\n  ${problems.join("\n  ")}`);
 });
