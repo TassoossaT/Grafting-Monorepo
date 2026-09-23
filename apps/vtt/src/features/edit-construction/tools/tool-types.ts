@@ -32,7 +32,7 @@ export interface BrushShapeParams {
 }
 
 export interface PathBrushParams extends BrushShapeParams {
-  /** Legacy preference retained for saved parameters; both values now use the unified curve tool. */
+  /** Freehand drawing for play; pen exposes precise point-by-point authoring. */
   readonly creationMode?: "brush" | "pen";
   /** Constraint for editing an existing curve with this same tool. */
   readonly curveMode?: "automatic" | "aligned" | "mirrored" | "free";

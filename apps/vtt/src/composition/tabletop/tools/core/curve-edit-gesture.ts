@@ -5,6 +5,7 @@ import {
   curveSegments,
   isBezierEditTarget,
   planBezierEdit,
+  previewBezierEdit,
   planEdgeReshape,
   reshapeCurve,
   resolveCloudTopology,
@@ -35,14 +36,30 @@ export interface CurveGesture {
   cancel(): void;
 }
 
-/** Where the pointer is taking the handle: along the ground, or up and down in elevation mode. */
-function targetOf(sample: PointerSample, gesture: ToolGesture, params?: ToolParamsFor<"edit-region">): ConstructionPosition {
-  return params?.mode === "elevation" && sample.screenY !== undefined && gesture.current.screenY !== undefined
-    ? { ...sample.point, y: sample.point.y + (sample.screenY - gesture.current.screenY) / 40 }
-    : { ...gesture.current.point, y: sample.point.y };
+export type CurveGestureOptions = ToolParamsFor<"edit-region"> & {
+  readonly parameter?: number;
+  readonly insertOnClick?: boolean;
+  readonly pointerOrigin?: ConstructionPosition;
+  readonly dragThreshold?: number;
+};
+function crossedThreshold(sample: PointerSample, gesture: ToolGesture, params?: CurveGestureOptions): boolean {
+  if (!params?.dragThreshold) return true;
+  if (sample.screenX !== undefined && sample.screenY !== undefined && gesture.current.screenX !== undefined && gesture.current.screenY !== undefined)
+    return Math.hypot(gesture.current.screenX-sample.screenX,gesture.current.screenY-sample.screenY)>=params.dragThreshold;
+  const origin=params.pointerOrigin??sample.point;
+  return Math.hypot(gesture.current.point.x-origin.x,gesture.current.point.z-origin.z)>=0.05;
 }
 
-export function beginCurveGesture(ctx: ToolContext, sample: PointerSample, params?: ToolParamsFor<"edit-region">): CurveGesture | undefined {
+/** Where the pointer is taking the handle: along the ground, or up and down in elevation mode. */
+function targetOf(sample: PointerSample, gesture: ToolGesture, params?: CurveGestureOptions): ConstructionPosition {
+  return params?.mode === "elevation" && sample.screenY !== undefined && gesture.current.screenY !== undefined
+    ? { ...sample.point, y: sample.point.y + (sample.screenY - gesture.current.screenY) / 40 }
+    : params?.pointerOrigin
+      ? {x:sample.point.x+gesture.current.point.x-params.pointerOrigin.x,y:sample.point.y,z:sample.point.z+gesture.current.point.z-params.pointerOrigin.z}
+      : { ...gesture.current.point, y: sample.point.y };
+}
+
+export function beginCurveGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGestureOptions): CurveGesture | undefined {
   if (!sample.nodeId) return undefined;
   const snapshot = ctx.runtime.getGraphSnapshot();
   const contour = ctx.runtime.getCurvedEdges();
@@ -55,7 +72,7 @@ export function beginCurveGesture(ctx: ToolContext, sample: PointerSample, param
   return spineGesture(ctx, sample, params);
 }
 
-function spineGesture(ctx: ToolContext, sample: PointerSample, params?: ToolParamsFor<"edit-region">): CurveGesture {
+function spineGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGestureOptions): CurveGesture {
   const snapshot = ctx.runtime.getGraphSnapshot();
   const targetId = sample.nodeId!;
   const operationId = `curve-edit:${ctx.nextSequence()}`;
@@ -64,19 +81,20 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: ToolPara
   let moved = false;
   let dragged = false;
   let ended = false;
-  const plan = (insert = false) => planBezierEdit({
+  const input = (insert = false) => ({
     field: ctx.runtime,
-    snapshot, topologies, port: ctx.runtime, targetId, position: target, operationId, tableId: ctx.tableId, insert, mode: params?.curveMode, action: params?.curveAction, width: params?.curveWidth ?? 4, endWidth: params?.curveEndWidth,
+    snapshot, topologies, port: ctx.runtime, targetId, position: target, operationId, tableId: ctx.tableId, insert, parameter: params?.parameter, mode: params?.curveMode, action: params?.curveAction, width: params?.curveWidth ?? 4, endWidth: params?.curveEndWidth,
   });
   return {
     move(gesture) {
       if (ended) return;
+      if (!dragged && !crossedThreshold(sample, gesture, params)) return;
       target = targetOf(sample, gesture, params);
       moved = target.x !== sample.point.x || target.y !== sample.point.y || target.z !== sample.point.z;
       dragged ||= moved;
       try {
-        const draft = plan();
-        if (draft) ctx.runtime.showPreview({ kind: "segments", positions: draft.preview, color: PREVIEW_COLOR, opacity: 0.9 }, CHANNEL);
+        const draft = previewBezierEdit(input());
+        if (draft) ctx.runtime.showPreview({ kind: "segments", positions: draft, color: PREVIEW_COLOR, opacity: 0.9 }, CHANNEL);
       } catch (error) {
         ctx.runtime.clearPreview(CHANNEL);
         ctx.reportFeedback({ tone: "error", message: String(error) });
@@ -87,9 +105,10 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: ToolPara
       ended = true;
       ctx.runtime.clearPreview(CHANNEL);
       if (dragged && !moved) return;
+      if (!dragged && params?.insertOnClick === false) return;
       if (!moved && curvePick(targetId)?.index !== "midpoint" && (!params?.curveAction || params.curveAction === "edit")) return;
       try {
-        const draft = plan(!moved && (!params?.curveAction || params.curveAction === "edit"));
+        const draft = planBezierEdit(input(!moved && (!params?.curveAction || params.curveAction === "edit")));
         if (!draft) return;
         const { recorded } = commitPatchReplacement(ctx.runtime, draft.request, { transactionId: operationId });
         if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
@@ -106,7 +125,7 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: ToolPara
 function contourGesture(
   ctx: ToolContext,
   sample: PointerSample,
-  params: ToolParamsFor<"edit-region"> | undefined,
+  params: CurveGestureOptions | undefined,
   edge: ConstructionCurvedEdge,
   index: 1 | 2 | "midpoint",
 ): CurveGesture {

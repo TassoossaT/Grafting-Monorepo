@@ -1827,7 +1827,9 @@ points *out* of it, means their signs are opposite.
 
 ### `method vtt.curve-edit-gesture.CurveGesture.move(gesture: ToolGesture): void`
 
-### `function vtt.curve-edit-gesture.beginCurveGesture(ctx: ToolContext, sample: PointerSample, params?: { curveAction?: "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"; curveEndWidth?: number; curveMode?: "automatic" | "aligned" | "mirrored" | "free"; curveWidth?: number; mode: "shape" | "elevation" }): CurveGesture | undefined`
+### `type vtt.curve-edit-gesture.CurveGestureOptions = ToolParamsFor<"edit-region"> & { dragThreshold?: number; insertOnClick?: boolean; parameter?: number; pointerOrigin?: ConstructionPosition }`
+
+### `function vtt.curve-edit-gesture.beginCurveGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGestureOptions): CurveGesture | undefined`
 
 ### `interface vtt.edge-overlay.EdgeOverlayGroup`
 
@@ -2100,6 +2102,14 @@ Stable tool identity; the road is always authored and edited through its curve.
 ### `variable vtt.path-pen-tool.pathPenTool: ConstructionTool<"path-brush">`
 
 One road tool: existing curve controls edit; an empty placement starts authoring.
+
+### `variable vtt.path-stroke-tool.pathStrokeTool: ConstructionTool<"path-brush">`
+
+Drag to sketch the centerline. Release commits one fitted curve transaction.
+
+### `function vtt.road-body-target.roadBodyTarget(ctx: ToolContext, sample: PointerSample): { options: CurveGestureOptions; sample: PointerSample } | undefined`
+
+Project a road-body pick onto its spine using the canonical curve query.
 
 ### `interface vtt.platform-contour-merge.DirectedContourEdge`
 
@@ -3341,6 +3351,10 @@ to the curve, and the structure type that owns the spine regenerates its
 surface from that. A road, a sloped platform and any future curve-built
 type are edited by exactly the same handles; only the last step differs.
 
+### `function vtt.spine-edit.previewBezierEdit(input: SpineEditInput): Float32Array<ArrayBufferLike> | undefined`
+
+Preview only the affected curves; surface regeneration runs once on release.
+
 ### `type vtt.spine-actions.SpineAction = "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"`
 
 Structural edits on a spine, the same for every structure generated along one.
@@ -3395,6 +3409,10 @@ first place (see `spine-node-id.ts`).
 ### `property vtt.spine-edit-plan.SpineEditInput.mode?: CurveHandleMode`
 
 ### `property vtt.spine-edit-plan.SpineEditInput.operationId: string`
+
+### `property vtt.spine-edit-plan.SpineEditInput.parameter?: number`
+
+Parameter of the grabbed span, supplied by the curve nearest-point query.
 
 ### `property vtt.spine-edit-plan.SpineEditInput.port: BezierPort`
 
@@ -5032,7 +5050,7 @@ Width of the flat traversable bed, in world units.
 
 ### `property vtt.tool-types.PathBrushParams.creationMode?: "brush" | "pen"`
 
-Legacy preference retained for saved parameters; both values now use the unified curve tool.
+Freehand drawing for play; pen exposes precise point-by-point authoring.
 
 ### `property vtt.tool-types.PathBrushParams.curveMode?: "automatic" | "aligned" | "mirrored" | "free"`
 

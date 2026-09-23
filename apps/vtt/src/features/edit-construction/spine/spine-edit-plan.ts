@@ -42,6 +42,8 @@ export interface SpineEditInput {
   readonly width?: number;
   readonly endWidth?: number;
   readonly insert?: boolean;
+  /** Parameter of the grabbed span, supplied by the curve nearest-point query. */
+  readonly parameter?: number;
   readonly mode?: CurveHandleMode;
 }
 
@@ -80,7 +82,7 @@ export function planSpineEditPatch(input: SpineEditInput): { readonly graphPatch
     }
     const edited = input.port.curveBatch({ tolerance: 0.025, commands: [
       pick.index === "midpoint"
-        ? input.insert ? { kind: "split", curve, t: 0.5, profile: edge.curve } : { kind: "pull", curve, t: 0.5, target: curvePoint(input.position) }
+        ? input.insert ? { kind: "split", curve, t: input.parameter ?? 0.5, profile: edge.curve } : { kind: "pull", curve, t: input.parameter ?? 0.5, target: curvePoint(input.position) }
         : { kind: "handle", curve, index: pick.index, target: handleTarget, mode: mode === "automatic" ? "free" : mode, opposite: pairedCurve ? pairedCurve.points[pairedIndex] : null },
     ] })[0]!;
     const handles = edited.handles.map((h) => ({ ...h, mode: input.mode ?? edge.curve!.mode, bandOffsets: input.insert ? h.bandOffsets : edge.curve!.bandOffsets, endBandOffsets: input.insert ? h.endBandOffsets : edge.curve!.endBandOffsets, surfaceType: edge.curve!.surfaceType }));

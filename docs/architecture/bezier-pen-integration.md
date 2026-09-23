@@ -1,12 +1,12 @@
-# Ferramenta unificada de rua Bézier
+# Rua Bézier: traçado livre e precisão
 
-A ferramenta **Caminhos / Rua Bézier** cria e ajusta a rua pelo mesmo gesto contextual. Não há escolha entre pincel de área e caneta: mesmo preferências antigas com `creationMode: "brush"` passam pelo autor de curvas.
+**Traçado livre** é o padrão para uso durante o jogo. Arraste para desenhar a espinha da rua, veja a largura na prévia e solte para construir em uma transação reversível. A prévia verde indica um traçado que pode gerar a faixa; vermelho indica falha na prévia. O ajuste final é recalculado ao soltar: uma prévia antiga nunca é usada no lugar de uma entrada final inválida.
 
-Em espaço livre, clique para adicionar uma âncora; arraste para definir suas alças espelhadas. Enter confirma, Backspace remove a última âncora e Esc cancela. Com pelo menos três âncoras, clicar junto à primeira fecha a curva. A superfície é gerada da espinha e de seu perfil, sem pintar uma área com o arraste.
+Arraste sobre uma rua existente para puxar sua espinha pelo ponto mais próximo do clique. O deslocamento preserva a distância entre o clique e a espinha para evitar um salto inicial. Perto das extremidades, o gesto move a âncora. Cliques e movimentos abaixo de cinco pixels não iniciam a edição; Esc cancela sem mutação. A consulta de proximidade vem do Rust e os candidatos são separados por altura.
 
-Sem um desenho pendente, arraste os pontos ou as alças de uma curva existente para editá-la na mesma ferramenta. Clique no ponto central de uma espinha para subdividir o trecho sem mudar sua forma. O painel oferece alças espelhadas, alinhadas, livres e automáticas. Um rascunho pendente continua aceitando pontos de conexão; confirme ou cancele antes de manipular a curva existente.
+**Precisão: pontos e alças** preserva a construção ponto a ponto: clique para adicionar uma âncora, arraste para definir alças, Enter confirma, Backspace remove a última e Esc cancela. Clicar junto à primeira fecha a curva. Nesse modo, clicar no ponto central subdivide um trecho e o painel oferece as restrições das alças.
 
-O arraste de edição usa uma prévia e grava uma única transação ao soltar. A posição final do pointer-up é considerada. Cancelar ou voltar à posição inicial não altera a geometria. Trocar ferramenta, parâmetros ou mesa descarta a interação pendente.
+Ambos os modos usam a mesma ferramenta de rua, a mesma espinha Bézier e o mesmo fluxo de regeneração da superfície. O traçado livre usa o ajuste Rust com tolerância de 0,12 unidades e supressão de cantos menores que 100 graus. A transação permanece somente no fim do gesto.
 
 ## Fronteiras
 

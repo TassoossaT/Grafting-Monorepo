@@ -3986,7 +3986,13 @@ export interface CurveGesture {
   commit(): void;
   cancel(): void;
   }
-export function beginCurveGesture(ctx: ToolContext, sample: PointerSample, params?: ToolParamsFor<"edit-region">): CurveGesture | undefined {
+export type CurveGestureOptions = ToolParamsFor<"edit-region"> & {
+  readonly parameter?: number;
+  readonly insertOnClick?: boolean;
+  readonly pointerOrigin?: ConstructionPosition;
+  readonly dragThreshold?: number;
+  };
+export function beginCurveGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGestureOptions): CurveGesture | undefined {
   if (!sample.nodeId) return undefined;
   const snapshot = ctx.runtime.getGraphSnapshot();
 
@@ -4141,6 +4147,20 @@ export const pathPenTool: ConstructionTool<"path-brush"> = {
   previewOnHover: true,
   previewFor(gesture, params, ctx) {
   if (!edits.has(ctx.runtime)) safely(ctx, () => sessions.get(ctx.runtime)?.pen.hover(gesture.current.point));
+
+// src/composition/tabletop/tools/paths/path-stroke-tool.ts
+export const pathStrokeTool: ConstructionTool<"path-brush"> = {
+  id:"path-brush",defaultParams:()=>DEFAULT_TOOL_PARAMS["path-brush"],
+  onPointerDown(ctx,sample){active.set(ctx.runtime,sample);},
+  onPointerMove(ctx,g,params) {
+  if(!active.has(ctx.runtime)||!meaningful(g))return;
+  try {
+  const d=draft(ctx,g,params);
+
+// src/composition/tabletop/tools/paths/road-body-target.ts
+export function roadBodyTarget(ctx: ToolContext,sample: PointerSample): {sample:PointerSample;options:CurveGestureOptions}|undefined {
+  if(!sample.surfaceRef)return;
+  const hit=ctx.runtime.getAllRegionTopologies().find(t=>surfaceRefFromNodeSet(t.surfaceKey)===sample.surfaceRef);
 
 // src/composition/tabletop/tools/platform/platform-contour-merge.ts
 export interface DirectedContourEdge {
@@ -4975,7 +4995,9 @@ export function planBezierEdit(input: SpineEditInput & {
   readonly field: FieldPort;
   readonly tableId: string;
   }): { request: import("@/ports").ApplyPatchReplacementRequest; preview: Float32Array; selectedId: string } | undefined {
-  const owner = spineOwnerAt(input.snapshot, curvePick(input.targetId)?.edgeId ?? input.targetId);
+  const draft = editDraft(input);
+export function previewBezierEdit(input: SpineEditInput): Float32Array | undefined {
+  const draft = editDraft(input);
 
 // src/features/edit-construction/spine/index.ts
 export type { SpineChain } from "./spine-chains.ts";
@@ -5826,7 +5848,7 @@ export interface BrushShapeParams {
   readonly rotationDegrees: number;
   }
 export interface PathBrushParams extends BrushShapeParams {
-  /** Legacy preference retained for saved parameters; both values now use the unified curve tool. */
+  /** Freehand drawing for play; pen exposes precise point-by-point authoring. */
   readonly creationMode?: "brush" | "pen";
   /** Constraint for editing an existing curve with this same tool. */
   readonly curveMode?: "automatic" | "aligned" | "mirrored" | "free";

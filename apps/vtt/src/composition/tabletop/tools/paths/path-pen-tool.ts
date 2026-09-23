@@ -7,6 +7,9 @@ import { scopedToolId, type ConstructionTool, type ToolContext } from "../core/t
 
 import { beginCurveGesture, type CurveGesture } from "../core/curve-edit-gesture.ts";
 
+import { pathStrokeTool } from "./path-stroke-tool.ts";
+import { roadBodyTarget } from "./road-body-target.ts";
+
 const CHANNEL = "curve-pen";
 const COLOR = 0xc084fc;
 const point = (p: ConstructionPosition): CurvePoint => [p.x, p.y, p.z];
@@ -82,6 +85,7 @@ function safely(ctx: ToolContext, work: () => void): void {
   try { work(); }
   catch (error) {
     // A failed sample must never leave a stale preview that can later be committed.
+    pathStrokeTool.onCancel?.(ctx);
     edits.get(ctx.runtime)?.cancel();
     edits.delete(ctx.runtime);
     sessions.get(ctx.runtime)?.pen.cancel();
@@ -106,31 +110,39 @@ export const pathPenTool: ConstructionTool<"path-brush"> = {
       // A draft can connect to existing anchors. Once confirmed/cancelled, the
       // same picks manipulate the standing curve instead of starting another road.
       if (!sessions.get(ctx.runtime)?.pen.snapshot().anchors.length) {
-        const edit = beginCurveGesture(ctx, sample, { mode: "shape", curveMode: params.curveMode ?? "mirrored" });
+        const options = { mode: "shape" as const, curveMode: params.curveMode ?? "mirrored", dragThreshold: 5, insertOnClick: params.creationMode === "pen" };
+        let edit = beginCurveGesture(ctx, sample, options);
+        if (!edit && params.creationMode !== "pen") {
+          const target = roadBodyTarget(ctx, sample);
+          if (target) edit = beginCurveGesture(ctx, target.sample, {...options,...target.options});
+        }
         if (edit) {
           edits.set(ctx.runtime, edit);
-          ctx.reportSelection({ id: sample.nodeId!, point: sample.point });
+          if (sample.nodeId) ctx.reportSelection({ id: sample.nodeId, point: sample.point });
           return;
         }
       }
-      session(ctx, params).pen.begin(sample.point);
+      if (params.creationMode === "pen") session(ctx, params).pen.begin(sample.point);
+      else pathStrokeTool.onPointerDown?.(ctx, sample, params);
     });
   },
-  onPointerMove(ctx, gesture) {
+  onPointerMove(ctx, gesture, params) {
     safely(ctx, () => {
       const edit = edits.get(ctx.runtime);
       if (edit) edit.move(gesture);
-      else sessions.get(ctx.runtime)?.pen.move(gesture.current.point);
+      else if (params.creationMode === "pen") sessions.get(ctx.runtime)?.pen.move(gesture.current.point);
+      else pathStrokeTool.onPointerMove?.(ctx,gesture,params);
     });
   },
-  onPointerUp(ctx, gesture) {
+  onPointerUp(ctx, gesture, params) {
     safely(ctx, () => {
       const edit = edits.get(ctx.runtime);
       if (edit) {
         edits.delete(ctx.runtime);
         edit.move(gesture);
         edit.commit();
-      } else sessions.get(ctx.runtime)?.pen.end(gesture.current.point);
+      } else if (params.creationMode === "pen") sessions.get(ctx.runtime)?.pen.end(gesture.current.point);
+      else pathStrokeTool.onPointerUp?.(ctx,gesture,params);
     });
   },
   onKeyDown(ctx, key) {
@@ -142,6 +154,7 @@ export const pathPenTool: ConstructionTool<"path-brush"> = {
     return true;
   },
   onCancel(ctx) {
+    pathStrokeTool.onCancel?.(ctx);
     edits.get(ctx.runtime)?.cancel();
     edits.delete(ctx.runtime);
     sessions.get(ctx.runtime)?.pen.cancel();

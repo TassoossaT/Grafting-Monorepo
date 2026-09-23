@@ -111,10 +111,10 @@ test("real WASM edit tool: pointer-up applies the last sample even without a mov
   }finally{editRegionTool.onCancel(f.ctx);pathPenTool.onCancel(f.ctx);f.session.free();}
 });
 
-test("unified road tool: legacy brush settings still create a curve, then edit it without changing tool", async()=>{
+test("precision road tool: creates a curve, then edits it without changing tool", async()=>{
   const { pathBrushTool: tool }=await import("../src/composition/tabletop/tools/paths/path-brush-tool.ts");
   const f=fixture();
-  const legacy={...params,creationMode:"brush"};
+  const legacy={...params,creationMode:"pen"};
   try {
     const blank=f.session.snapshot_json();
     const put=(a,b=a)=>{tool.onPointerDown(f.ctx,a,legacy);tool.onPointerUp(f.ctx,gesture(a,b),legacy);};
@@ -158,5 +158,78 @@ test("unified road tool: moving an anchor, cancelling and subdividing all use th
     tool.onPointerDown(f.ctx,mid,params);tool.onPointerUp(f.ctx,gesture(mid,mid),params);
     assert.equal(f.runtime.getGraphSnapshot().edges.filter(e=>e.curve).length,2);
     assert.equal(tool.onKeyDown(f.ctx,"Enter",params),false);
+  }finally{tool.onCancel(f.ctx);f.session.free();}
+});
+
+test("freehand road: release commits a fitted curve once; a click and a cancelled stroke do nothing", async()=>{
+  const {pathBrushTool:tool}=await import("../src/composition/tabletop/tools/paths/path-brush-tool.ts");
+  const f=fixture(),simple={...params,creationMode:"brush"};
+  try {
+    const before=f.session.snapshot_json(),a=sample(-10,0),b=sample(0,4),c=sample(10,0);
+    tool.onPointerDown(f.ctx,a,simple);tool.onPointerUp(f.ctx,gesture(a,a),simple);
+    assert.equal(f.session.snapshot_json(),before);
+    const g={start:a,current:c,samples:[a,b,c]};
+    tool.onPointerDown(f.ctx,a,simple);tool.onPointerMove(f.ctx,g,simple);
+    assert.equal(f.session.snapshot_json(),before);assert.ok(f.previews.has("road-stroke"));
+    tool.onCancel(f.ctx);tool.onPointerUp(f.ctx,g,simple);assert.equal(f.session.snapshot_json(),before);
+    tool.onPointerDown(f.ctx,a,simple);tool.onPointerUp(f.ctx,g,simple);
+    assert.ok(f.runtime.getGraphSnapshot().edges.some(e=>e.curve),JSON.stringify(f.calls.feedback));
+    const after=f.session.snapshot_json();tool.onPointerUp(f.ctx,g,simple);assert.equal(f.session.snapshot_json(),after);
+    assert.equal(f.previews.has("road-stroke"),false);
+    f.session.undo_region_overlay("platform-test:road-stroke:1");assert.deepEqual(JSON.parse(f.session.snapshot_json()),JSON.parse(before));
+  }finally{tool.onCancel(f.ctx);f.session.free();}
+});
+test("simple road editing: drag the body at the grabbed parameter with no initial jump; click stays a no-op", async()=>{
+  const {pathBrushTool:tool}=await import("../src/composition/tabletop/tools/paths/path-brush-tool.ts");
+  const {surfaceRefFromNodeSet}=await import("../src/entities/map/index.ts");
+  const f=fixture(),simple={...params,creationMode:"brush"};
+  try {
+    f.place(sample(-10,0));f.place(sample(10,0));tool.onKeyDown(f.ctx,"Enter",params);
+    const before=f.session.snapshot_json(),face=f.runtime.getAllRegionTopologies().find(t=>t.surfaceType==="path");
+    const a={...sample(-4,0.2),surfaceRef:surfaceRefFromNodeSet(face.surfaceKey),screenX:100,screenY:100};
+    tool.onPointerDown(f.ctx,a,simple);tool.onPointerUp(f.ctx,gesture(a,a),simple);
+    assert.equal(f.session.snapshot_json(),before);
+    const jitter={...sample(-3.98,0.22),screenX:102,screenY:102};
+    tool.onPointerDown(f.ctx,a,simple);tool.onPointerUp(f.ctx,gesture(a,jitter),simple);
+    assert.equal(f.session.snapshot_json(),before);
+    tool.onPointerDown(f.ctx,a,simple);
+    const end={...sample(-4,2.2),screenX:100,screenY:130};
+    const boolean=f.runtime.planarBoolean;
+    f.runtime.planarBoolean=()=>{throw Error("preview must not regenerate surfaces");};
+    tool.onPointerMove(f.ctx,gesture(a,end),simple);
+    assert.ok(f.previews.has("curve-edit"));
+    f.runtime.planarBoolean=boolean;
+    assert.equal(f.session.snapshot_json(),before);
+    tool.onPointerUp(f.ctx,gesture(a,end),simple);
+    assert.notEqual(f.session.snapshot_json(),before,JSON.stringify(f.calls.feedback));
+    assert.equal(f.runtime.getGraphSnapshot().edges.filter(e=>e.curve).length,1);
+    const graph=f.runtime.getGraphSnapshot(),edge=graph.edges.find(e=>e.curve);
+    const resolved=f.runtime.curveBatch({tolerance:0.025,commands:[{kind:"resolve",handles:edge.curve,start:Object.values(graph.nodes.find(n=>n.id===edge.startNodeId).position),end:Object.values(graph.nodes.find(n=>n.id===edge.endNodeId).position)}]})[0].curves[0];
+    const original={points:[[-10,0,0],[-10,0,0],[10,0,0],[10,0,0]]};
+    const t=f.runtime.curveBatch({tolerance:0.025,commands:[{kind:"nearest",curve:original,point:[-4,0,0.2]}]})[0].parameter;
+    const pulled=f.runtime.curveBatch({tolerance:0.025,commands:[{kind:"split",curve:resolved,t}]})[0].curves[0].points[3];
+    const grabbed=f.runtime.curveBatch({tolerance:0.025,commands:[{kind:"split",curve:original,t}]})[0].curves[0].points[3];
+    assert.ok(Math.abs(pulled[0]-grabbed[0])<0.0001);
+    assert.ok(Math.abs(pulled[2]-2)<0.0001,"the initial 0.2 offset from the spine is preserved");
+  }finally{tool.onCancel(f.ctx);f.session.free();}
+});
+
+test("freehand road: a failed final fit never commits the last valid preview",async()=>{
+  const {pathBrushTool:tool}=await import("../src/composition/tabletop/tools/paths/path-brush-tool.ts");
+  const f=fixture(),simple={...params,creationMode:"brush"};
+  try{
+    const a=sample(-10,0),b=sample(10,0),g=gesture(a,b),before=f.session.snapshot_json();
+    tool.onPointerDown(f.ctx,a,simple);tool.onPointerMove(f.ctx,g,simple);
+    assert.ok(f.previews.has("road-stroke"));
+    const batch=f.runtime.curveBatch;
+    f.runtime.curveBatch=()=>{throw Error("invalid final sample");};
+    tool.onPointerMove(f.ctx,g,simple);
+    assert.equal(f.previews.get("road-stroke").color,0xf87171);
+    tool.onPointerUp(f.ctx,g,simple);
+    f.runtime.curveBatch=batch;
+    tool.onPointerUp(f.ctx,g,simple);
+    assert.equal(f.session.snapshot_json(),before);
+    assert.equal(f.previews.has("road-stroke"),false);
+    assert.ok(f.calls.feedback.some(x=>x.tone==="error"));
   }finally{tool.onCancel(f.ctx);f.session.free();}
 });
