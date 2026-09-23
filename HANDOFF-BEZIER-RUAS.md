@@ -1,5 +1,9 @@
 # Passagem de contexto — editor Bézier e geração de ruas
 
+## Pesquisa posterior: fragmentação e integração incompleta
+
+O usuário rejeitou a entrega parcial: manipulador apenas ao selecionar pontos de rua, ausente na autoria e nas paredes; desenho livre produz muitos trechos pequenos. A pesquisa verificada está em [RESEARCH-ROAD-ALGORITHMS.md](RESEARCH-ROAD-ALGORITHMS.md), com commits/fontes de Godot Road Generator e Road Architect, funções dissecadas e reproduções reais-WASM. Curva suave: 4 cúbicas; mesma curva com oscilação de amplitude 0,15: 33 cúbicas, independentemente de 81/161/321 amostras. Entradas iguais deram saídas iguais. Aumentar tolerância de 0,12 para 0,20 reduziu só para 31. Não chamar isso de correção já aplicada. Próximo recorte: comparar ajuste aproximante de cúbicas com o interpolante atual e generalizar a sessão de autoria/edição para alvos spine/contour/rascunho. Não impor teto arbitrário, migrar paredes em massa ou prometer que tesselação resolve seleção de âncoras.
+
 ## Implementação atual — substitui as pendências históricas abaixo
 
 O usuário aprovou recalcular a curva ao mover âncoras de ruas criadas Por pontos e autorizou a integração visual e a extensão da API. Implementado o TransformControls oficial do Three.js 0.182.0, isolado no backend render-3d, exposto por View.setPointManipulator e conectado à seleção/edição da espinha no VTT. Clicar numa âncora mostra o gizmo; setas e plano XZ movem a âncora mantendo altura. A prévia da espinha acompanha o gesto; a malha completa da rua é regenerada na confirmação. Esc cancela. Seleção, desfazer/refazer e troca de ferramenta atualizam/limpam o helper.
