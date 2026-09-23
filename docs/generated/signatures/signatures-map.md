@@ -2434,13 +2434,13 @@ export const easings: Readonly<Record<"linear" | "easeIn" | "easeOut" | "easeInO
 
 // src/backend/contract.ts
 export interface BackendSurface {
+  setPointManipulator(target: PointManipulator | undefined, camera: CameraDescriptor, invalidate: () => void): void;
   /** Resizes the presentation target. Cheap; never rebuilds scene content. */
   resize(width: number, height: number): void;
   /** Encodes the last drawn content. */
   toDataURL(mimeType: string): string;
   /** Detaches the target from the document. */
   destroy(): void;
-  }
 export interface RenderBackend {
   /** Whether the graphics context is currently usable. */
   readonly available: boolean;
@@ -2470,6 +2470,15 @@ export interface ThreeBackendOptions {
   }
 export function createThreeBackend(options: ThreeBackendOptions = {}): RenderBackend {
   const renderScene = new THREE.Scene();
+
+// src/backend/three/point-manipulator.ts
+export function createPointManipulator(
+  camera: Camera, element: HTMLCanvasElement, scene: Scene,
+  initial: PointManipulator, invalidate: () => void,
+  ) {
+  // Manual pointer forwarding lets a hit consume input before the product's
+  // tool/camera listeners. connect() would install competing bubble listeners.
+  const controls = new TransformControls(camera);
 
 // src/camera/orbit.ts
 export interface OrbitState {
@@ -2706,6 +2715,11 @@ export interface ViewOptions {
   /** How this view projects the world. */
   readonly camera: CameraDescriptor;
   /**
+export interface PointManipulator {
+  /** Stable consumer identity of the point being edited. */
+  readonly id: string;
+  /** Confirmed world position; preview remains local until the consumer commits. */
+  readonly position: { readonly x: number; readonly y: number; readonly z: number };
 export interface View {
   /** This view's identity, as supplied or generated. */
   readonly id: ViewId;
@@ -2799,7 +2813,7 @@ export type {
   TrackId,
   } from "./contracts/animation.js";
   export { createAnimator } from "./animation/create-animator.js";
-export type { CameraDescriptor, PickResult, View, ViewId, ViewOptions } from "./contracts/view.js";
+export type { CameraDescriptor, PickResult, PointManipulator, View, ViewId, ViewOptions } from "./contracts/view.js";
 export type {
   ClipPlaneDescriptor,
   EngineOptions,
@@ -5289,8 +5303,8 @@ export function planBezierRoad(input: {
   readonly port: BezierPort;
   readonly stroke: readonly ConstructionPosition[];
   readonly authoredCurves?: readonly CubicBezier[];
+  readonly curveMode?: "automatic" | "free";
   readonly corridorId: string;
-  readonly offsets: readonly number[];
 
 // src/features/edit-construction/structure-types/path/contour/contour-patch.ts
 export interface ExistingNode {
@@ -6418,6 +6432,9 @@ export type {
 
 // src/ports/scene-render-port.ts
 export type ChangeOrigin = "local" | "network" | "programmatic";
+export interface RenderPointManipulator {
+  readonly id: string;
+  readonly position: { readonly x: number; readonly y: number; readonly z: number };
 export type RenderViewId = string;
 export type RenderLayerKey = "tokens" | "terrain" | "handles" | "surface-picks";
 export interface RenderDependencyRevision {
@@ -6461,7 +6478,6 @@ export interface RenderNodeHandle {
   readonly nodeId: string;
   readonly position: { readonly x: number; readonly y: number; readonly z: number };
 export type ConfirmedNodeHandleRenderChange =
-export type ConfirmedRenderChange =
 
 // src/ports/terrain-noise-port.ts
 export interface TerrainNoisePort {

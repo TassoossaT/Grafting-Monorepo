@@ -65,7 +65,7 @@ export function planPathCloudMutation(input: PathCloudMutationInput): PathCloudM
   const operationId = effect.operationId;
 
   const road = planBezierRoad({
-    snapshot: input.graphSnapshot, topologies: input.regionTopologies, port: input.bezier, stroke, authoredCurves: effect.authoredCurves,
+    snapshot: input.graphSnapshot, topologies: input.regionTopologies, port: input.bezier, stroke, authoredCurves: effect.authoredCurves, curveMode: effect.curveMode,
     corridorId: pathCorridorId(operationId, effect.parameters.kind),
     offsets: effect.parameters.profile.map((p) => p.lateralOffset),
     miterLimit: effect.parameters.miterLimit, tolerance,

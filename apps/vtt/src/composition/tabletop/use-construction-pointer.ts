@@ -11,6 +11,7 @@ import type { SelectedNodeInfo } from "@/widgets";
 import { GRID_SNAP_UNIT } from "../../adapters/rendering/index.ts";
 import type { TabletopRuntime } from "./tabletop-runtime.ts";
 import { toolFor } from "./tools/index.ts";
+import { beginCurveGesture, type CurveGesture } from "./tools/core/curve-edit-gesture.ts";
 import {
   edgeOverlayChannel,
   edgeOverlayDescriptor,
@@ -90,6 +91,8 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
   optionsRef.current = options;
   /** Channels the edge overlay currently occupies, so a redraw clears exactly what it drew. */
   const shownEdgeChannels = useRef(new Set<string>());
+  const manipulatorGesture = useRef<CurveGesture | undefined>(undefined);
+  const selectedPoint = useRef<string | undefined>(undefined);
 
   const nextSequence = useCallback(() => ++sequenceRef.current, []);
 
@@ -119,7 +122,34 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
         return optionsRef.current.snapToGrid;
       },
       nextSequence,
-      reportSelection: (info) => optionsRef.current.onSelectionChange(info),
+      reportSelection: (info) => {
+        const { runtime, viewId, activeTool } = optionsRef.current;
+        optionsRef.current.onSelectionChange(info);
+        if (viewId === undefined) return;
+        const node = info && toolFor(activeTool).handlePresentation === "spine-points"
+          ? runtime.getGraphSnapshot().nodes.find(n => n.id === info.id && n.id.startsWith("spine:")) : undefined;
+        selectedPoint.current = node?.id;
+        runtime.setPointManipulator?.(viewId, node ? {
+          id: node.id, position: node.position,
+          onChange(phase, position) {
+            if (phase === "start") {
+              manipulatorGesture.current?.cancel();
+              manipulatorGesture.current = beginCurveGesture(ctx, { nodeId: node.id, point: position }, { mode: "shape", insertOnClick: false });
+            } else if (phase === "move") {
+              const sample = { nodeId: node.id, point: position };
+              manipulatorGesture.current?.move({ start: sample, current: sample, samples: [sample] });
+            } else {
+              const gesture = manipulatorGesture.current;
+              manipulatorGesture.current = undefined;
+              if (phase === "end") gesture?.commit(); else gesture?.cancel();
+              // Refresh from confirmed state after success, rejection or cancellation.
+              const current = runtime.getGraphSnapshot().nodes.find(n => n.id === node.id);
+              if (selectedPoint.current === node.id) ctx.reportSelection(current ? { id: current.id, point: current.position } : undefined);
+              refreshEdgeOverlay();
+            }
+          },
+        } : undefined);
+      },
       reportFeedback: (feedback) => optionsRef.current.onFeedbackChange(feedback),
     }),
     [nextSequence],
@@ -181,11 +211,15 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     window.addEventListener("keydown", keydown);
     return () => {
       window.removeEventListener("keydown", keydown);
+      selectedPoint.current = undefined;
+      manipulatorGesture.current?.cancel();
+      manipulatorGesture.current = undefined;
+      if (options.viewId !== undefined) options.runtime.setPointManipulator?.(options.viewId, undefined);
       tool.onCancel?.(ownedContext);
       options.runtime.setConstructionHandlePresentation?.("all");
       release();
     };
-  }, [options.activeTool, options.runtime, options.history, options.tableId, activeParams, ctx, refreshEdgeOverlay]);
+  }, [options.activeTool, options.runtime, options.history, options.tableId, options.viewId, activeParams, ctx, refreshEdgeOverlay]);
 
   // Draw what is already standing as soon as the table is live, not only
   // after the first commit -- an edge that was there before this session
@@ -196,12 +230,16 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     refreshEdgeOverlay();
     let drawn = runtime.getSnapshot().status === "ready";
     const unsubscribe = runtime.subscribe(() => {
+      if (selectedPoint.current && !manipulatorGesture.current) {
+        const node = runtime.getGraphSnapshot().nodes.find(n => n.id === selectedPoint.current);
+        ctx.reportSelection(node ? { id: node.id, point: node.position } : undefined);
+      }
       if (drawn || runtime.getSnapshot().status !== "ready") return;
       drawn = true;
       refreshEdgeOverlay();
     });
     return unsubscribe;
-  }, [options.runtime, refreshEdgeOverlay]);
+  }, [options.runtime, refreshEdgeOverlay, ctx]);
 
   const sampleAt = useCallback(
     (event: { currentTarget: HTMLElement; clientX: number; clientY: number }): PointerSample | undefined => {

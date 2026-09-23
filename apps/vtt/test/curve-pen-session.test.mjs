@@ -28,6 +28,35 @@ function resolve(f,e) {
   const xyz=p=>[p.x,p.y,p.z];
   return f.runtime.curveBatch({tolerance:0.025,commands:[{kind:"resolve",handles:e.curve,start:xyz(nodes.get(e.startNodeId)),end:xyz(nodes.get(e.endNodeId))}]})[0].curves[0];
 }
+
+test("point-authored road reinterpolates moved anchors, with reversible automatic policy",()=>{
+  const f=fixture();
+  try {
+    build(f);
+    const before=state(f), id=edges(f)[0].endNodeId;
+    assert.ok(edges(f).every(e=>e.curve.mode==="automatic"));
+    const a={...sample(0,4),nodeId:id}, b=sample(1,6);
+    tool.onPointerDown(f.ctx,a,points);tool.onPointerUp(f.ctx,gesture(a,b),points);
+    const expected=f.runtime.curveBatch({tolerance:0.025,commands:[{kind:"automatic",points:[[-10,0,0],[1,0,6],[10,0,0]]}]})[0].curves;
+    closeCurves(edges(f).map(e=>resolve(f,e)),expected);
+    assert.ok(edges(f).every(e=>e.curve.mode==="automatic"));
+    const after=state(f);
+    f.session.undo_region_overlay("curve-edit:2");assert.deepEqual(state(f),before);
+    f.session.redo_region_overlay("curve-edit:2");assert.deepEqual(state(f),after);
+  } finally {f.close();}
+});
+
+test("freehand road keeps explicit controls after point-mode policy addition",()=>{
+  const f=fixture();
+  try {
+    const a=sample(-10,0),b=sample(0,4),c=sample(10,0);
+    tool.onPointerDown(f.ctx,a,brush);
+    tool.onPointerMove(f.ctx,{start:a,current:b,samples:[a,b]},brush);
+    tool.onPointerUp(f.ctx,{start:a,current:c,samples:[a,b,c]},brush);
+    assert.ok(edges(f).length>0);
+    assert.ok(edges(f).every(e=>e.curve.mode==="free"));
+  } finally {f.close();}
+});
 test("road points: exact click anchors, no pen handles, hover excluded, one reversible commit",()=>{
   const f=fixture();
   try {

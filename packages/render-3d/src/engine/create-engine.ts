@@ -303,6 +303,12 @@ export function createEngine(options: EngineOptions = {}): RenderEngine {
         return state.surface.toDataURL(mimeType);
       },
 
+      setPointManipulator(target) {
+        if (state.disposed) return;
+        state.surface.setPointManipulator(target, state.descriptor, () => { state.dirty = true; });
+        state.dirty = true;
+      },
+
       dispose() {
         if (state.disposed) return;
         state.disposed = true;

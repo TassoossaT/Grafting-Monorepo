@@ -311,6 +311,8 @@ Resolves a pointer position (in the view's CSS pixels) to what it hit, or `undef
 
 Sets the floor-cutaway height in continuous world-space Y. `undefined` disables cutaway.
 
+### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.setPointManipulator(viewId: string, target: RenderPointManipulator | undefined): void`
+
 ### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.showPreview(descriptor: RenderPreviewDescriptor, channel: string): void`
 
 Shows (or replaces) one preview overlay.
@@ -649,6 +651,8 @@ Unregisters a surface outright, prunes orphaned nodes, and folds the outcome int
 
 Local editing presentation; never changes the graph or persistence.
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.setPointManipulator(viewId: string, target: RenderPointManipulator | undefined): void`
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.showPreview(descriptor: RenderPreviewDescriptor, channel?: string): void`
 
 Shows a construction tool's not-yet-committed ghost. Purely visual -- passthrough to `SceneRenderPort`, never touches the construction session.
@@ -803,6 +807,8 @@ Unregisters a surface outright, prunes orphaned nodes, and folds the outcome int
 ### `method vtt.tabletop-runtime.TabletopRuntime.setConstructionHandlePresentation(mode: "all" | "spine-points"): void`
 
 Local editing presentation; never changes the graph or persistence.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.setPointManipulator(viewId: string, target: RenderPointManipulator | undefined): void`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.showPreview(descriptor: RenderPreviewDescriptor, channel?: string): void`
 
@@ -3155,6 +3161,10 @@ Explicit pen controls, preserved without fitting the stroke.
 
 ### `property vtt.surface-edit-contract.PathBrushEffect.brushShape: BrushShape`
 
+### `property vtt.surface-edit-contract.PathBrushEffect.curveMode?: "automatic" | "free"`
+
+Editing policy for newly authored spans; omitted preserves explicit controls.
+
 ### `property vtt.surface-edit-contract.PathBrushEffect.expected: readonly RevisionPrecondition[]`
 
 ### `property vtt.surface-edit-contract.PathBrushEffect.initiatedBy: string`
@@ -3782,7 +3792,7 @@ Converts graph-owned authoring data to sampled ribbons through the Rust port.
 
 Resolve legacy road authorship once using the canonical Rust conversion.
 
-### `function vtt.bezier-road-plan.planBezierRoad(input: { authoredCurves?: readonly CubicBezier[]; corridorId: string; miterLimit: number; offsets: readonly number[]; port: BezierPort; snapReach: number; snapshot: ConstructionGraphSnapshot; stroke: readonly ConstructionPosition[]; tolerance: number; topologies?: readonly ConstructionRegionTopology[] }): { chains: readonly SpineChainInput[]; controlPoints: ConstructionPosition[]; footprint: [number, number][][][]; graphPatch: ConstructionGraphPatch; polyline: ConstructionPosition[]; snapshot: ConstructionGraphSnapshot }`
+### `function vtt.bezier-road-plan.planBezierRoad(input: { authoredCurves?: readonly CubicBezier[]; corridorId: string; curveMode?: "automatic" | "free"; miterLimit: number; offsets: readonly number[]; port: BezierPort; snapReach: number; snapshot: ConstructionGraphSnapshot; stroke: readonly ConstructionPosition[]; tolerance: number; topologies?: readonly ConstructionRegionTopology[] }): { chains: readonly SpineChainInput[]; controlPoints: ConstructionPosition[]; footprint: [number, number][][][]; graphPatch: ConstructionGraphPatch; polyline: ConstructionPosition[]; snapshot: ConstructionGraphSnapshot }`
 
 Product identities and profile policy surround generic Rust fitting and connections.
 
@@ -6932,6 +6942,14 @@ A construction node's live world position, rendered as a small pickable handle -
 
 ### `property vtt.scene-render-port.RenderNodeHandle.position: { x: number; y: number; z: number }`
 
+### `interface vtt.scene-render-port.RenderPointManipulator`
+
+### `property vtt.scene-render-port.RenderPointManipulator.id: string`
+
+### `property vtt.scene-render-port.RenderPointManipulator.onChange: (phase: "start" | "move" | "end" | "cancel", position: { x: number; y: number; z: number }) => void`
+
+### `property vtt.scene-render-port.RenderPointManipulator.position: { x: number; y: number; z: number }`
+
 ### `interface vtt.scene-render-port.RenderSurfacePickTarget`
 
 ### `property vtt.scene-render-port.RenderSurfacePickTarget.mesh: RenderMeshData`
@@ -7007,6 +7025,8 @@ Resolves a pointer position (in the view's CSS pixels) to what it hit, or `undef
 ### `method vtt.scene-render-port.SceneRenderPort.setFloorClipHeight(height: number | undefined): void`
 
 Sets the floor-cutaway height in continuous world-space Y. `undefined` disables cutaway.
+
+### `method vtt.scene-render-port.SceneRenderPort.setPointManipulator(viewId: string, target: RenderPointManipulator | undefined): void`
 
 ### `method vtt.scene-render-port.SceneRenderPort.showPreview(descriptor: RenderPreviewDescriptor, channel?: string): void`
 

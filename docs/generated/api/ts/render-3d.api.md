@@ -619,6 +619,35 @@ The layer that item belongs to.
 
 World-space intersection point.
 
+### `interface render-3d.PointManipulator`
+
+One camera onto the scene.
+
+Views are the reason a scene with many rendered elements needs one engine
+rather than many: every view in an engine shares a single graphics context,
+so the number of views is bounded by memory rather than by the browser's cap
+on live contexts, which is silently enforced by dropping the oldest.
+
+### `property render-3d.PointManipulator.axes: readonly ("x" | "y" | "z")[]`
+
+World axes available to the translation helper.
+
+### `property render-3d.PointManipulator.id: string`
+
+Stable consumer identity of the point being edited.
+
+### `property render-3d.PointManipulator.onChange: (phase: "start" | "move" | "end" | "cancel", position: { x: number; y: number; z: number }) => void`
+
+Gesture lifecycle. End commits an intention; cancel leaves confirmed state intact.
+
+### `property render-3d.PointManipulator.position: { x: number; y: number; z: number }`
+
+Confirmed world position; preview remains local until the consumer commits.
+
+### `property render-3d.PointManipulator.size: number`
+
+Screen-relative size of the helper, supplied by the consumer.
+
 ### `interface render-3d.RenderEngine`
 
 One graphics context, one world, many views.
@@ -826,12 +855,7 @@ Depth axis, toward the viewer.
 
 ### `interface render-3d.View`
 
-One camera onto the scene.
-
-Views are the reason a scene with many rendered elements needs one engine
-rather than many: every view in an engine shares a single graphics context,
-so the number of views is bounded by memory rather than by the browser's cap
-on live contexts, which is silently enforced by dropping the oldest.
+One independently framed and invalidated presentation of the shared scene.
 
 ### `property render-3d.View.height: number`
 
@@ -879,6 +903,10 @@ Repoints the camera. Marks only this view dirty.
 ### `method render-3d.View.setLayers(layers: readonly string[] | undefined): void`
 
 Changes which layers are drawn. Marks only this view dirty.
+
+### `method render-3d.View.setPointManipulator(target: PointManipulator | undefined): void`
+
+A view-local translation helper. Undefined clears selection and cancels dragging.
 
 ### `interface render-3d.ViewOptions`
 

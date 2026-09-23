@@ -178,7 +178,7 @@ export const pathPointsTool: ConstructionTool<"path-brush"> = {
           const operationId = scopedToolId(ctx, "road-points", ctx.nextSequence());
           const effect = createPathBrushEffect({
             brushShape: { kind: "circle", radius: 0.025 }, brushRegion: { samples: draft.points },
-            authoredCurves: curves(ctx, draft.points), parameters: pathFormationFor(draft.params),
+            authoredCurves: curves(ctx, draft.points), curveMode: "automatic", parameters: pathFormationFor(draft.params),
           }, { operationId, tableId: ctx.tableId, initiatedBy: "road-points" });
           if (commitPathCloudIntent(ctx, effect, 0.025)) {
             drafts.delete(ctx.runtime);

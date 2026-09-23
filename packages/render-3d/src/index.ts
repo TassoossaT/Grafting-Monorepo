@@ -76,7 +76,7 @@ export type {
 export { createAnimator } from "./animation/create-animator.js";
 export { easings } from "./animation/easing.js";
 
-export type { CameraDescriptor, PickResult, View, ViewId, ViewOptions } from "./contracts/view.js";
+export type { CameraDescriptor, PickResult, PointManipulator, View, ViewId, ViewOptions } from "./contracts/view.js";
 
 export type {
   ClipPlaneDescriptor,

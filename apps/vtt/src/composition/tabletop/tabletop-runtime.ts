@@ -1,5 +1,6 @@
 import { curveEdgesOf, curveHandles, curvePick } from "../../features/edit-construction/index.ts";
 import type { BezierPort } from "../../ports/bezier-port.ts";
+import type { RenderPointManipulator } from "../../ports/scene-render-port.ts";
 import type { ConstructionPlanarRequest, ConstructionPlanarShape, ConstructionMotionRequest, ConstructionMotionPlan, ConstructionNodeMotion } from "../../ports/index.ts";
 import { chunkKeyForSurface, CONSTRUCTION_GRID_EXTENT, mergeChunkBucket, mergeSurfaceMeshes } from "../../adapters/rendering/index.ts";
 import {
@@ -209,6 +210,7 @@ export interface TabletopRuntime extends BezierPort {
   ): Float32Array;
   /** Local editing presentation; never changes the graph or persistence. */
   setConstructionHandlePresentation?(mode: "all" | "spine-points"): void;
+  setPointManipulator?(viewId: RenderViewId, target: RenderPointManipulator | undefined): void;
   pick(viewId: RenderViewId, x: number, y: number): ScenePickResult | undefined;
   /** Shows a construction tool's not-yet-committed ghost. Purely visual -- passthrough to `SceneRenderPort`, never touches the construction session. */
   showPreview(descriptor: RenderPreviewDescriptor, channel?: string): void;
@@ -1139,6 +1141,10 @@ export class AppTabletopRuntime implements TabletopRuntime {
 
   pick(viewId: RenderViewId, x: number, y: number): ScenePickResult | undefined {
     return this.#render.pick(viewId, x, y);
+  }
+
+  setPointManipulator(viewId: RenderViewId, target: RenderPointManipulator | undefined): void {
+    this.#render.setPointManipulator?.(viewId, target);
   }
 
   showPreview(descriptor: RenderPreviewDescriptor, channel?: string): void {

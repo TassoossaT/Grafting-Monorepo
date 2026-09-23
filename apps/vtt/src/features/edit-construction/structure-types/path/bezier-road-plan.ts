@@ -65,6 +65,7 @@ export function planBezierRoad(input: {
   readonly port: BezierPort;
   readonly stroke: readonly ConstructionPosition[];
   readonly authoredCurves?: readonly CubicBezier[];
+  readonly curveMode?: "automatic" | "free";
   readonly corridorId: string;
   readonly offsets: readonly number[];
   readonly miterLimit: number;
@@ -81,7 +82,7 @@ export function planBezierRoad(input: {
   const addedNodes = controlPoints.map((p, i) => ({ id: spineControlNodeId(corridorId, i), position: curvePoint(p) }));
   const addedEdges = fitted.handles.map((h, i) => ({
     edgeId: `spine-edge:${corridorId}:${i}`, startNodeId: addedNodes[i]!.id, endNodeId: addedNodes[i + 1]!.id,
-    curve: { ...h, bandOffsets: offsets, surfaceType: PATH_SURFACE_TYPE },
+    curve: { ...h, mode: input.curveMode ?? h.mode, bandOffsets: offsets, surfaceType: PATH_SURFACE_TYPE },
   }));
   const snapshot = explicitSpineSnapshot(input.snapshot, port, offsets);
   // A road snaps onto and splits other roads only: a ramp's spine passing

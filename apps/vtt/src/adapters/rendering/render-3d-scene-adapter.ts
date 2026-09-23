@@ -10,6 +10,7 @@ import {
   type RenderEngine,
   type View,
 } from "@grafting/render-3d";
+import type { RenderPointManipulator } from "../../ports/scene-render-port.ts";
 
 import type {
   CameraControlHandle,
@@ -435,6 +436,10 @@ export class Render3dSceneAdapter implements SceneRenderPort {
     // without either knowing about the other.
     engine.scene.put(constructionPreviewSceneItem(descriptor, channel), "engine");
     this.#previewChannels.add(channel);
+  }
+
+  setPointManipulator(viewId: RenderViewId, target: RenderPointManipulator | undefined): void {
+    this.#views.get(viewId)?.view.setPointManipulator(target ? { ...target, axes: ["x", "z"], size: 1 } : undefined);
   }
 
   clearPreview(channel?: string): void {
