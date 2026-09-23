@@ -3,6 +3,7 @@
 use grafting_graph_core::ContourGeometry;
 
 use crate::math::{angle_xz, cubic_bezier_eval, cubic_bezier_tangent, distance_xz, sweep};
+use crate::types::ARC_TESSELLATION_TOLERANCE;
 
 /// How many chords a Bézier rail's arc-length table is built from. A wall
 /// segment is short (a handful of metres at most), so this is far finer than
@@ -80,7 +81,56 @@ fn nearest_parameter(p0: [f32; 2], p1: [f32; 2], p2: [f32; 2], p3: [f32; 2], xz:
     (lo + hi) / 2.0
 }
 
+/// Stretches a lattice's step below the chord length whose sagitta is the
+/// tessellation tolerance, since a lattice cell's diagonal is longer than
+/// its step.
+const LATTICE_DIAGONAL_SLACK: f32 = 1.5;
+
+/// Floor on a lattice step, so a near-cusp does not demand an unbounded mesh.
+const MIN_LATTICE_STEP: f32 = 0.05;
+
+/// The smallest radius of curvature of a cubic Bézier over its sampled
+/// parameters.
+fn min_radius_of_curvature(p0: [f32; 2], p1: [f32; 2], p2: [f32; 2], p3: [f32; 2]) -> f32 {
+    let mut smallest = f32::INFINITY;
+    for index in 0..=BEZIER_UNROLL_STEPS {
+        let t = index as f32 / BEZIER_UNROLL_STEPS as f32;
+        let u = 1.0 - t;
+        let first = [0, 1].map(|axis| {
+            3.0 * u * u * (p1[axis] - p0[axis]) + 6.0 * u * t * (p2[axis] - p1[axis]) + 3.0 * t * t * (p3[axis] - p2[axis])
+        });
+        let second = [0, 1].map(|axis| {
+            6.0 * u * (p2[axis] - 2.0 * p1[axis] + p0[axis]) + 6.0 * t * (p3[axis] - 2.0 * p2[axis] + p1[axis])
+        });
+        let speed = (first[0] * first[0] + first[1] * first[1]).sqrt();
+        let bend = (first[0] * second[1] - first[1] * second[0]).abs();
+        if bend > f32::EPSILON {
+            smallest = smallest.min(speed * speed * speed / bend);
+        }
+    }
+    smallest
+}
+
 impl UnrollFrame {
+    /// The step of the lattice a curved face is filled with, so that every
+    /// triangle stays a local facet of the surface; `None` for a straight
+    /// face, which needs no interior vertices.
+    pub fn lattice_step(&self) -> Option<f32> {
+        let radius = match self {
+            Self::Chord { .. } => return None,
+            Self::Cylinder { radius, .. } => *radius,
+            Self::Curve { p0, p1, p2, p3, cumulative_length } => {
+                let total = *cumulative_length.last()?;
+                min_radius_of_curvature(*p0, *p1, *p2, *p3).min(total * total)
+            }
+        };
+        let step = (8.0 * ARC_TESSELLATION_TOLERANCE * radius).sqrt() / LATTICE_DIAGONAL_SLACK;
+        match self {
+            Self::Cylinder { .. } => (step > 0.0).then_some(step),
+            _ => (step > 0.0).then_some(step.max(MIN_LATTICE_STEP)),
+        }
+    }
+
     /// Builds the frame from the rail's own geometry and where that rail starts.
     pub fn of(geometry: &ContourGeometry, start: [f32; 3], end: [f32; 3]) -> Option<Self> {
         match geometry {
@@ -158,8 +208,27 @@ impl UnrollFrame {
                 [radius * swept, point[1]]
             }
             Self::Curve { p0, p1, p2, p3, cumulative_length } => {
-                let t = nearest_parameter(*p0, *p1, *p2, *p3, [point[0], point[2]]);
+                let xz = [point[0], point[2]];
+                let t = nearest_parameter(*p0, *p1, *p2, *p3, xz);
                 let steps = cumulative_length.len() - 1;
+                let total = cumulative_length[steps];
+                // Past either end the rail continues straight along its end
+                // tangent, as a chord does, instead of pinning to the end.
+                let near_end = 1.0 / steps as f32;
+                if t <= near_end {
+                    let tangent = cubic_bezier_tangent(*p0, *p1, *p2, *p3, 0.0);
+                    let along = (xz[0] - p0[0]) * tangent[0] + (xz[1] - p0[1]) * tangent[1];
+                    if along < 0.0 {
+                        return [along, point[1]];
+                    }
+                }
+                if t >= 1.0 - near_end {
+                    let tangent = cubic_bezier_tangent(*p0, *p1, *p2, *p3, 1.0);
+                    let along = (xz[0] - p3[0]) * tangent[0] + (xz[1] - p3[1]) * tangent[1];
+                    if along > 0.0 {
+                        return [total + along, point[1]];
+                    }
+                }
                 let position = t * steps as f32;
                 let low = (position.floor() as usize).min(steps);
                 let high = (low + 1).min(steps);
@@ -205,7 +274,17 @@ impl UnrollFrame {
             }
             Self::Curve { p0, p1, p2, p3, cumulative_length } => {
                 let steps = cumulative_length.len() - 1;
-                let target = unrolled[0].clamp(0.0, *cumulative_length.last().unwrap());
+                let total = cumulative_length[steps];
+                if unrolled[0] < 0.0 || unrolled[0] > total {
+                    let (anchor, t, beyond) = if unrolled[0] < 0.0 {
+                        (*p0, 0.0, unrolled[0])
+                    } else {
+                        (*p3, 1.0, unrolled[0] - total)
+                    };
+                    let tangent = cubic_bezier_tangent(*p0, *p1, *p2, *p3, t);
+                    return [anchor[0] + tangent[0] * beyond, unrolled[1], anchor[1] + tangent[1] * beyond];
+                }
+                let target = unrolled[0];
                 // Binary search for the bracket `target` falls in --
                 // `cumulative_length` is monotonically non-decreasing.
                 let mut low = 0usize;

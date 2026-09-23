@@ -237,9 +237,7 @@ fn uniform_curved_mesh(
     outer: &[[f32; 3]],
     holes: &[Vec<[f32; 3]>],
 ) -> Option<TriangulatedMesh> {
-    let UnrollFrame::Cylinder { radius, .. } = frame else {
-        return None;
-    };
+    let edge_length = frame.lattice_step()?;
 
     let unroll_ring = |ring: &[[f32; 3]]| -> Vec<[f32; 2]> {
         ring.iter().map(|point| frame.unroll(*point)).collect()
@@ -252,17 +250,6 @@ fn uniform_curved_mesh(
         shape.push(wound(unroll_ring(hole), false));
     }
 
-    // The same sagitta the arcs themselves are tessellated to, read as a
-    // length along the rail: a chord that far off the circle spans
-    // `sqrt(8 * tolerance * radius)`. The lattice is laid out finer than
-    // that, because what has to stay inside the tolerance is the longest
-    // edge of a triangle, and a lattice cell's diagonal is longer than its
-    // step.
-    const LATTICE_DIAGONAL_SLACK: f32 = 1.5;
-    let edge_length = (8.0 * ARC_TESSELLATION_TOLERANCE * radius).sqrt() / LATTICE_DIAGONAL_SLACK;
-    if !(edge_length > 0.0) {
-        return None;
-    }
     let mesh = shape.uniform_triangulate(edge_length).to_triangulation::<u32>();
     if mesh.indices.is_empty() {
         return None;

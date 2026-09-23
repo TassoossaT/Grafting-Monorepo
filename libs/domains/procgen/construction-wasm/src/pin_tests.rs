@@ -550,3 +550,137 @@ fn moving_a_cutter_reports_its_host() {
     .unwrap();
     assert!(affected(&outcome).contains(&key("w")), "{outcome}");
 }
+
+fn bezier_point(handles: [[f32; 2]; 2], t: f32) -> [f32; 2] {
+    let (p0, p1, p2, p3) = ([0.0, 0.0], handles[0], handles[1], [8.0, 0.0]);
+    let u = 1.0 - t;
+    let w = [u * u * u, 3.0 * u * u * t, 3.0 * u * t * t, t * t * t];
+    [0, 1].map(|axis| w[0] * p0[axis] + w[1] * p1[axis] + w[2] * p2[axis] + w[3] * p3[axis])
+}
+
+/// Every triangle's centroid lies on the Bézier rail (in XZ) within the
+/// tessellation tolerance, and the total area.
+fn bezier_mesh_check(session: &ConstructionSession, handles: [[f32; 2]; 2]) -> (f32, f32) {
+    let rail: Vec<[f32; 2]> = (0..=2000)
+        .map(|i| bezier_point(handles, i as f32 / 2000.0))
+        .collect();
+    let pieces: Vec<Value> = serde_json::from_str(
+        &session
+            .surface_mesh_json(&json!({"surfaceKey": key("w")}).to_string())
+            .unwrap(),
+    )
+    .unwrap();
+    let mut worst: f32 = 0.0;
+    for piece in pieces {
+        let positions: Vec<f32> = serde_json::from_value(piece["positions"].clone()).unwrap();
+        let indices: Vec<usize> = serde_json::from_value(piece["indices"].clone()).unwrap();
+        for triangle in indices.chunks_exact(3) {
+            let centroid = [0, 2].map(|axis| {
+                triangle
+                    .iter()
+                    .map(|&i| positions[i * 3 + axis])
+                    .sum::<f32>()
+                    / 3.0
+            });
+            let off = rail
+                .windows(2)
+                .map(|pair| {
+                    let (a, b) = (pair[0], pair[1]);
+                    let d = [b[0] - a[0], b[1] - a[1]];
+                    let t = (((centroid[0] - a[0]) * d[0] + (centroid[1] - a[1]) * d[1])
+                        / (d[0] * d[0] + d[1] * d[1]))
+                        .clamp(0.0, 1.0);
+                    ((centroid[0] - a[0] - d[0] * t).powi(2)
+                        + (centroid[1] - a[1] - d[1] * t).powi(2))
+                    .sqrt()
+                })
+                .fold(f32::INFINITY, f32::min);
+            worst = worst.max(off);
+        }
+    }
+    (mesh_area(session, "w"), worst)
+}
+
+fn bezier_window(handles: [[f32; 2]; 2]) {
+    let mut session = ConstructionSession::new();
+    session.set_surface_capabilities_json(CAPABILITIES).unwrap();
+    let geometry = json!({"kind": "bezier", "handle1": handles[0], "handle2": handles[1]});
+    wall(
+        &mut session,
+        "w",
+        [0.0, 0.0],
+        [8.0, 0.0],
+        [3.0, 3.0],
+        geometry,
+    );
+    let length: f32 = (0..2000)
+        .map(|i| {
+            let (a, b) = (
+                bezier_point(handles, i as f32 / 2000.0),
+                bezier_point(handles, (i + 1) as f32 / 2000.0),
+            );
+            ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt()
+        })
+        .sum();
+    let (solid, solid_off) = bezier_mesh_check(&session, handles);
+    assert!(
+        (solid - 3.0 * length).abs() < 0.01 * solid,
+        "{solid} vs {}",
+        3.0 * length
+    );
+    assert!(solid_off < 0.03, "uncut panel off the rail by {solid_off}");
+
+    opening(&mut session, "o");
+    let width = f64::from(1.2 / length);
+    pin_rectangle(
+        &mut session,
+        "o",
+        "w",
+        [0.5 - width / 2.0, 0.5 + width / 2.0],
+        [0.4, 0.4 + 1.0 / 3.0],
+    );
+    let (cut, off) = bezier_mesh_check(&session, handles);
+    assert!(
+        (cut - (solid - 1.2)).abs() < 0.01 * solid,
+        "{cut} vs {}",
+        solid - 1.2
+    );
+    assert!(off < 0.03, "cut mesh off the rail by {off}");
+}
+
+#[test]
+fn a_window_on_an_s_bezier_panel_cuts_only_its_area_and_stays_on_the_rail() {
+    bezier_window([[2.0, 3.0], [6.0, -3.0]]);
+}
+
+#[test]
+fn a_window_on_a_c_bezier_panel_cuts_only_its_area_and_stays_on_the_rail() {
+    bezier_window([[0.0, 6.0], [8.0, 6.0]]);
+}
+
+#[test]
+fn a_bezier_host_projects_past_its_ends_as_outside() {
+    let mut session = ConstructionSession::new();
+    wall(
+        &mut session,
+        "w",
+        [0.0, 0.0],
+        [8.0, 0.0],
+        [3.0, 3.0],
+        json!({"kind": "bezier", "handle1": [2.0, 3.0], "handle2": [6.0, -3.0]}),
+    );
+    let beyond = resolve(&session, "w", &[[-0.1, 0.5], [1.1, 0.5]]);
+    let projected = project(&session, "w", &beyond);
+    assert!(
+        (projected[0]["u"].as_f64().unwrap() + 0.1).abs() < 1e-3,
+        "{}",
+        projected[0]
+    );
+    assert!(
+        (projected[1]["u"].as_f64().unwrap() - 1.1).abs() < 1e-3,
+        "{}",
+        projected[1]
+    );
+    assert_eq!(projected[0]["inside"], false);
+    assert_eq!(projected[1]["inside"], false);
+}

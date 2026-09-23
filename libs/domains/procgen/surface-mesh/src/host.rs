@@ -184,21 +184,17 @@ fn triangulate_component(
     frame: &UnrollFrame,
     shape: &PlanarShape,
 ) -> Option<(Vec<[f32; 2]>, Vec<u32>)> {
-    if let UnrollFrame::Cylinder { radius, .. } = frame {
-        // Same lattice spacing `uniform_curved_mesh` fills an opened arc with.
-        let edge_length = (8.0 * ARC_TESSELLATION_TOLERANCE * radius).sqrt() / 1.5;
-        if edge_length > 0.0 {
-            let rings: Vec<Vec<[f32; 2]>> = shape
-                .iter()
-                .enumerate()
-                .map(|(index, ring)| wound(ring.clone(), index == 0))
-                .collect();
-            let mesh = rings
-                .uniform_triangulate(edge_length)
-                .to_triangulation::<u32>();
-            if !mesh.indices.is_empty() {
-                return Some((mesh.points, mesh.indices));
-            }
+    if let Some(edge_length) = frame.lattice_step() {
+        let rings: Vec<Vec<[f32; 2]>> = shape
+            .iter()
+            .enumerate()
+            .map(|(index, ring)| wound(ring.clone(), index == 0))
+            .collect();
+        let mesh = rings
+            .uniform_triangulate(edge_length)
+            .to_triangulation::<u32>();
+        if !mesh.indices.is_empty() {
+            return Some((mesh.points, mesh.indices));
         }
     }
     let mut points = Vec::new();
