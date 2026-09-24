@@ -8,8 +8,11 @@
 
 1. **An opening is a demarcation, not a real face.** It marks where a future door/window asset sits. Its
    painted pane is a placeholder until assets exist.
-2. **An opening is its own graph region of any shape** (rectangle today; round/arch planned in #313). It never
-   shares nodes with its host.
+2. **An opening is its own graph region of any shape.** It never shares nodes with its host. Shape = its
+   bounding rectangle plus a per-side rounding radius (world meters, 0 = straight) or a circle inscribed in
+   the box; rounded sides stay inside the box and the outline stays convex. The shape lives in the region's
+   generic property bag (`props.openingShape`), so it survives undo and is kept through move/resize. Doors
+   take every shape; a round door touches the floor.
 3. **Truth lives in the host.** Every opening node is *pinned* to a host face in relative coordinates:
    `u` = fraction along the face's base run, `v` = fraction of the face's **local** height at that `u`
    (between the base run and the top run there). Moving, stretching, curving or tilting the host carries the
@@ -47,3 +50,6 @@ that state impossible.
 
 - Acute corners: an opening wrapping a corner sharper than 90° may over-cut the neighbouring face.
 - Moving a pinned node directly is not snapped back until its host changes; move openings by re-pinning.
+- A shaped opening's own painted pane has no vertical sides, so the engine draws it flat: on a curved wall it
+  follows the chord, not the curve (the cut in the wall is exact).
+- Overlap between openings is tested on bounding rectangles, so rounded openings can't sit closer than their boxes.
