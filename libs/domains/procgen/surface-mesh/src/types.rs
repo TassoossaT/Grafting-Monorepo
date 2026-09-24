@@ -94,7 +94,7 @@ impl<'a> PlanarFill<'a> {
             min_area_ratio: 0.25,
             min_angle_degrees: 20.5,
             max_additional_vertices: 2_500,
-            reach_slack: 1.25,
+            reach_slack: 2.5,
             // A metre square: a few of them fit across an ordinary run,
             // which is what it takes for the surface to follow a slope
             // rather than span it, and coarse enough that a long run stays

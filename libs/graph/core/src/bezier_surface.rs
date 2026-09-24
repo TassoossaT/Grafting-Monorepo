@@ -116,11 +116,14 @@ pub fn ribbon_join(sections: &[[CurvePoint; 2]]) -> Result<CurveRibbon, String> 
     if points.iter().flatten().any(|v| !v.is_finite()) {
         return Err("join coordinates must be finite".into());
     }
-    if let Some(first) = points.first()
-        && points.iter().any(|p| (p[1] - first[1]).abs() > 1e-8)
-    {
+    let min_y = points.iter().map(|p| p[1]).fold(f64::INFINITY, f64::min);
+    let max_y = points.iter().map(|p| p[1]).fold(f64::NEG_INFINITY, f64::max);
+    // Grade-separated connections (> 0.25m) are separate levels and cannot join.
+    // Incident sections meeting on an incline or within height tolerance share a single bevel.
+    if (max_y - min_y) > 0.25 {
         return Err("join sections must be coplanar".into());
     }
+    let mid_y = if points.is_empty() { 0.0 } else { (min_y + max_y) * 0.5 };
     points.sort_by(|a, b| a[0].total_cmp(&b[0]).then(a[2].total_cmp(&b[2])));
     points.dedup_by(|a, b| a[0] == b[0] && a[2] == b[2]);
     if points.len() < 3 {
@@ -146,6 +149,9 @@ pub fn ribbon_join(sections: &[[CurvePoint; 2]]) -> Result<CurveRibbon, String> 
     hull.pop();
     if hull.len() < 3 {
         hull.clear();
+    }
+    for p in &mut hull {
+        p[1] = mid_y;
     }
     Ok(CurveRibbon { outer: hull })
 }
@@ -237,5 +243,9 @@ mod tests {
         );
         assert!(ribbon_join(&[[[0., f64::NAN, 0.], [1., 0., 0.]]]).is_err());
         assert!(ribbon_join(&[[[0., 0., 0.], [1., 1., 0.]]]).is_err());
+        let sloped = [[[0., 2.0, -1.], [0., 2.05, 1.]], [[-2., 2.02, 0.], [2., 2.03, 0.]]];
+        let sloped_joined = ribbon_join(&sloped).unwrap();
+        assert_eq!(sloped_joined.outer.len(), 4);
+        assert!((sloped_joined.outer[0][1] - 2.025).abs() < 1e-4);
     }
 }
