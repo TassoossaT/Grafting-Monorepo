@@ -2139,13 +2139,41 @@ A road is drawn freely or through explicit points, and edited by its spine point
 
 Drag to sketch the centerline. Release commits one fitted curve transaction.
 
+### `interface vtt.road-body-target.RoadSnapTarget`
+
+What the pointer resolved to at one instant -- `nodeId` present only when it hit a node handle.
+
+### `property vtt.road-body-target.RoadSnapTarget.constructionAction?: { kind: "branch"; nodeId: string }`
+
+### `property vtt.road-body-target.RoadSnapTarget.nodeId?: string`
+
+### `property vtt.road-body-target.RoadSnapTarget.point: ConstructionPosition`
+
+### `property vtt.road-body-target.RoadSnapTarget.screenX?: number`
+
+### `property vtt.road-body-target.RoadSnapTarget.screenY?: number`
+
+Screen coordinate used by explicit elevation gestures.
+
+### `property vtt.road-body-target.RoadSnapTarget.shiftKey?: boolean`
+
+### `property vtt.road-body-target.RoadSnapTarget.snapEdge?: { edgeId: string; parameter: number }`
+
+### `property vtt.road-body-target.RoadSnapTarget.snapSignature?: string`
+
+### `property vtt.road-body-target.RoadSnapTarget.surfaceRef?: string`
+
 ### `function vtt.road-body-target.roadBodyTarget(ctx: ToolContext, sample: PointerSample): { options: CurveGestureOptions; sample: PointerSample } | undefined`
 
 Project a road-body pick onto its spine using the canonical curve query.
 
-### `function vtt.road-body-target.roadSnapTarget(ctx: ToolContext, sample: PointerSample): PointerSample | undefined`
+### `function vtt.road-body-target.roadSnapIsCurrent(ctx: ToolContext, target: RoadSnapTarget): boolean`
 
-Product snap reach; projection and splitting remain canonical Rust operations.
+A deleted or reshaped target cannot be confirmed from a stale preview.
+
+### `function vtt.road-body-target.roadSnapTarget(ctx: ToolContext, sample: PointerSample): RoadSnapTarget | undefined`
+
+Keep the displayed position and edge parameter until the pointer exits the wider release zone.
 
 ### `function vtt.road-body-target.showRoadSnap(ctx: ToolContext, target?: PointerSample): void`
 

@@ -460,3 +460,13 @@ Esta rodada de preparação altera apenas este documento. Não foram implementad
 - Snap durante a criacao por pontos e desenho livre: prioriza vertices de espinha ate 0.6 unidades, com diferenca vertical maxima de 0.2; sobre o corpo da rua usa a projecao Rust existente na espinha. Alvo azul marca a posicao exata usada no preview e confirmacao. Limpa o helper ao afastar/cancelar/confirmar.
 - O construtor continua sendo o unico responsavel pela divisao e uniao do grafo. Nao implementa soldagem por arrasto de duas ruas ja prontas nem alinhamento automatico de tangentes.
 - Seis novas regressoes real-WASM: acao 3D sem selecao via barra, quatro combinacoes de modo/alvo com juncao real, separacao vertical e limpeza do helper. Build e testes focados passaram; aceite visual em navegador permanece pendente.
+
+
+## Estabilizacao do snap e confirmacao - 24/09/2026
+
+- Snap com histerese: entrada em vertice ate 0.6 unidades, saida a partir de 0.9; no corpo a saida inclui a distancia inicial da borda ate a espinha mais 0.3. Mantem posicao e parametro da aresta enquanto o cursor permanece na zona. Diferenca de altura maxima continua 0.2.
+- A proposta de clique e travada no pointer-down; jitter ate o release nao muda a posicao exibida. Assinatura do alvo verifica mudancas de posicao/aresta antes da confirmacao e recusa um alvo desatualizado. A criacao final continua usando o construtor de rede, com a posicao autorada fixada; nao foi adicionado contrato de binding explicito de aresta ao comando Rust.
+- Encaixe projetado ate 0.6 unidades de um extremo reutiliza o vertice. Remove a regra antiga de 5% do parametro, que dependia do comprimento da aresta e causava saltos grandes em ruas longas.
+- Clique em snap durante draft por pontos confirma e encerra automaticamente (inclusive iniciado pelo +). Clique livre continua a adicionar pontos; Enter ainda permite finalizar sem snap. Mesmo ponto de origem sozinho nao gera rua degenerada.
+- Passaram 502 testes VTT, check TypeScript e build. Sete novas regressoes: histerese entre alvos proximos, confirmacao sem Enter com jitter, reutilizacao perto do extremo, rua longa, alvo alterado e T inclinado/curvo.
+- Proxima frente: geometria dedicada e validacao de malha nas juncoes; nao foi substituido o algoritmo de recorte/uniao dos encontros nesta rodada. Aceite visual continua pendente.

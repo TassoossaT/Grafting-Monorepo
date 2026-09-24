@@ -37,7 +37,7 @@ function draft(ctx: ToolContext,g: ToolGesture,params: PathBrushParams) {
 /** Drag to sketch the centerline. Release commits one fitted curve transaction. */
 export const pathStrokeTool: ConstructionTool<"path-brush"> = {
   id:"path-brush",defaultParams:()=>DEFAULT_TOOL_PARAMS["path-brush"],
-  onPointerDown(ctx,sample){active.set(ctx.runtime,sample);},
+  onPointerDown(ctx,sample){showRoadSnap(ctx);active.set(ctx.runtime,sample);},
   onPointerMove(ctx,g,params) {
     if(!active.has(ctx.runtime)||!meaningful(g))return;
     try {
@@ -55,9 +55,8 @@ export const pathStrokeTool: ConstructionTool<"path-brush"> = {
   onPointerUp(ctx,g,params) {
     if(!active.delete(ctx.runtime))return;
     ctx.runtime.clearPreview(CHANNEL);
-    showRoadSnap(ctx);
     const final={...g,samples:[...g.samples,g.current]};
-    if(!meaningful(final))return;
+    if(!meaningful(final)){showRoadSnap(ctx);return;}
     try {
       const d=draft(ctx,final,params);
       const operationId=scopedToolId(ctx,"road-stroke",ctx.nextSequence());

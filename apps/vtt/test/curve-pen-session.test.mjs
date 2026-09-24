@@ -422,3 +422,96 @@ test("snap respects height separation and clears its helper when the pointer lea
     tool.previewFor(gesture(near,near),points,f.ctx);tool.onCancel(f.ctx);assert.equal(f.previews.has("road-snap"),false);
   }finally{f.close();}
 });
+
+
+test("snap hysteresis retains a vertex instead of oscillating between close targets",async()=>{
+  const {roadSnapTarget,showRoadSnap}=await import("../src/composition/tabletop/tools/paths/road-body-target.ts");
+  const f=fixture();
+  try {
+    for(const x of [-10,0,0.9,10])f.click(sample(x,0));f.finish();
+    const first=roadSnapTarget(f.ctx,sample(0.35,0));
+    assert.equal(first.point.x,0);
+    assert.equal(roadSnapTarget(f.ctx,sample(0.55,0)).nodeId,first.nodeId);
+    assert.notEqual(roadSnapTarget(f.ctx,sample(1.05,0)).nodeId,first.nodeId);
+    showRoadSnap(f.ctx);
+    assert.notEqual(roadSnapTarget(f.ctx,sample(0.55,0)).nodeId,first.nodeId);
+  }finally{f.close();}
+});
+
+test("clicking a snapped edge confirms the displayed station and ends without Enter despite release jitter",()=>{
+  const f=fixture();
+  try {
+    f.click(sample(-10,0));f.click(sample(10,0));f.finish();
+    const face=f.runtime.getAllRegionTopologies()[0],a=sample(3,8);
+    f.click(a,a,points);
+    const hover={...sample(3,0.1),surfaceRef:surfaceRefFromNodeSet(face.surfaceKey)};
+    tool.previewFor(gesture(hover,hover),points,f.ctx);
+    const click={...hover,point:{x:3.2,y:0,z:0.1}},release={...hover,point:{x:3.4,y:0,z:0.1}};
+    f.click(click,release,points);
+    const graph=f.runtime.getGraphSnapshot();
+    assert.ok(graph.nodes.some(n=>Math.abs(n.position.x-3)<0.01&&Math.abs(n.position.z)<0.01&&edges(f).filter(e=>e.startNodeId===n.id||e.endNodeId===n.id).length===3));
+    assert.equal(tool.onKeyDown(f.ctx,"Enter",points),false);
+    assert.equal(f.previews.has("road-points"),false);
+    assert.equal(f.previews.has("road-snap"),false);
+  }finally{f.close();}
+});
+
+test("projected snap near an endpoint reuses it instead of introducing a tiny span",()=>{
+  const f=fixture();
+  try {
+    const wide={...points,bedWidth:3};
+    f.click(sample(-10,0),sample(-10,0),wide);f.click(sample(10,0),sample(10,0),wide);f.finish();
+    const end=edges(f)[0].endNodeId,face=f.runtime.getAllRegionTopologies()[0];
+    f.click(sample(10,8));
+    const hit={...sample(9.8,1),surfaceRef:surfaceRefFromNodeSet(face.surfaceKey)};
+    f.click(hit);
+    assert.equal(edges(f).length,2,JSON.stringify(f.calls.feedback));
+    assert.equal(edges(f).filter(e=>e.startNodeId===end||e.endNodeId===end).length,2);
+    assert.equal(tool.onKeyDown(f.ctx,"Enter",points),false);
+  }finally{f.close();}
+});
+
+test("world-distance endpoint reuse does not snap five percent of a long road",async()=>{
+  const {roadBodyTarget}=await import("../src/composition/tabletop/tools/paths/road-body-target.ts");
+  const f=fixture();
+  try {
+    f.click(sample(0,0));f.click(sample(100,0));f.finish();
+    const face=f.runtime.getAllRegionTopologies()[0];
+    const target=roadBodyTarget(f.ctx,{...sample(3,0.1),surfaceRef:surfaceRefFromNodeSet(face.surfaceKey)});
+    assert.ok(Math.abs(target.sample.point.x-3)<0.01);
+  }finally{f.close();}
+});
+
+
+test("a snap whose target changes between press and release is rejected without modifying the draft road",()=>{
+  const f=fixture();
+  try {
+    f.click(sample(-10,0));f.click(sample(0,0));f.click(sample(10,0));f.finish();
+    f.click(sample(0,8));const b=sample(0.2,0.1),before=state(f);
+    tool.previewFor(gesture(b,b),points,f.ctx);tool.onPointerDown(f.ctx,b,points);
+    const original=f.runtime.getGraphSnapshot;
+    f.runtime.getGraphSnapshot=()=>{const graph=original();return {...graph,nodes:graph.nodes.map(n=>n.position.x===0&&n.position.z===0?{...n,position:{...n.position,y:2}}:n)};};
+    tool.onPointerUp(f.ctx,gesture(b,b),points);f.runtime.getGraphSnapshot=original;
+    assert.deepEqual(state(f),before);
+    assert.ok(f.calls.feedback.some(v=>v.tone==="error"&&v.message.includes("alvo de encaixe mudou")));
+    assert.equal(f.previews.has("road-snap"),false);
+  }finally{f.close();}
+});
+
+for(const shape of ["inclined","curved"]){
+  test(`stable T junction into ${shape} road uses the displayed curve parameter`,()=>{
+    const f=fixture();
+    try {
+      f.click(sample(-10,0));if(shape==="curved")f.click(sample(0,4));f.click(sample(10,shape==="inclined"?5:0));f.finish();
+      const edge=edges(f)[0],curve=resolve(f,edge);
+      const p=f.runtime.curveBatch({tolerance:0.025,commands:[{kind:"split",curve,t:0.55}]})[0].curves[0].points[3];
+      const face=f.runtime.getAllRegionTopologies()[0];
+      f.click(sample(p[0],p[2]+8));
+      const hit={point:{x:p[0],y:p[1],z:p[2]},surfaceRef:surfaceRefFromNodeSet(face.surfaceKey)};
+      tool.previewFor(gesture(hit,hit),points,f.ctx);f.click(hit);
+      assert.equal(f.calls.feedback.filter(v=>v.tone==="error").length,0,JSON.stringify(f.calls.feedback));
+      assert.ok(f.runtime.getGraphSnapshot().nodes.some(n=>Math.hypot(n.position.x-p[0],n.position.z-p[2])<0.02&&edges(f).filter(e=>e.startNodeId===n.id||e.endNodeId===n.id).length===3));
+      assert.equal(tool.onKeyDown(f.ctx,"Enter",points),false);
+    }finally{f.close();}
+  });
+}

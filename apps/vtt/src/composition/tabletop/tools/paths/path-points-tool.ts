@@ -5,13 +5,13 @@ import { commitPathCloudIntent } from "../../path/path-cloud-transaction.ts";
 import { scopedToolId, type ConstructionTool, type ToolContext, type PointerSample, type ToolGesture } from "../core/tool-context.ts";
 import { beginCurveGesture, type CurveGesture, type CurveGestureOptions } from "../core/curve-edit-gesture.ts";
 import { pathStrokeTool } from "./path-stroke-tool.ts";
-import { roadBodyTarget, roadSnapTarget, showRoadSnap } from "./road-body-target.ts";
+import { roadBodyTarget, roadSnapTarget, roadSnapIsCurrent, showRoadSnap, type RoadSnapTarget } from "./road-body-target.ts";
 
 const CHANNEL = "road-points";
 const xyz = (p: ConstructionPosition) => [p.x, p.y, p.z] as const;
 const equal = (a: ConstructionPosition, b: ConstructionPosition) => a.x === b.x && a.y === b.y && a.z === b.z;
 type Draft = { points: ConstructionPosition[]; params: PathBrushParams };
-type Gesture = { kind: "edit"; edit: CurveGesture } | { kind: "stroke"; origin?: PointerSample } | { kind: "point"; point: ConstructionPosition } | { kind: "selection" };
+type Gesture = { kind: "edit"; edit: CurveGesture } | { kind: "stroke"; origin?: PointerSample } | { kind: "point"; point: ConstructionPosition; snapTarget?: RoadSnapTarget } | { kind: "selection" };
 const drafts = new WeakMap<ToolContext["runtime"], Draft>();
 const gestures = new WeakMap<ToolContext["runtime"], Gesture>();
 const selections = new WeakMap<ToolContext["runtime"], string>();
@@ -85,15 +85,29 @@ function editTarget(ctx: ToolContext, sample: PointerSample): PointerSample | un
   return node && { ...sample, point: node.position };
 }
 
+function commitDraft(ctx: ToolContext, draft: Draft): void {
+  const operationId = scopedToolId(ctx, "road-points", ctx.nextSequence());
+  const effect = createPathBrushEffect({
+    brushShape: { kind: "circle", radius: 0.025 }, brushRegion: { samples: draft.points },
+    authoredCurves: curves(ctx, draft.points), curveMode: "automatic", parameters: pathFormationFor(draft.params),
+  }, { operationId, tableId: ctx.tableId, initiatedBy: "road-points" });
+  if (commitPathCloudIntent(ctx, effect, 0.025)) {
+    drafts.delete(ctx.runtime);
+    ctx.runtime.clearPreview(CHANNEL);
+    showRoadSnap(ctx);
+  }
+}
+
 function startBranch(ctx: ToolContext, id: string | undefined, params: PathBrushParams): boolean {
 
     const node = ctx.runtime.getGraphSnapshot().nodes.find(n => n.id === id);
     if (!node || !editTarget(ctx, { nodeId: node.id, point: node.position })) return false;
     const draft: Draft = { points: [{ ...node.position }], params: { ...params, creationMode: "points" } };
+    showRoadSnap(ctx);
     drafts.set(ctx.runtime, draft);
     select(ctx);
     preview(ctx, draft);
-    ctx.reportFeedback({ tone: "info", message: "Posicione a nova rua com o mouse. Clique para adicionar pontos; Enter confirma e Esc cancela." });
+    ctx.reportFeedback({ tone: "info", message: "Posicione a nova rua com o mouse. Clique num encaixe para finalizar, ou adicione pontos livres; Enter confirma e Esc cancela." });
     return true;
 }
 
@@ -120,7 +134,8 @@ export const pathPointsTool: ConstructionTool<"path-brush"> = {
         if (!drafts.has(ctx.runtime)) startBranch(ctx, sample.constructionAction.nodeId, params);
         return;
       }
-      if (drafts.has(ctx.runtime)) sample = roadSnapTarget(ctx, sample) ?? sample;
+      const snap = drafts.has(ctx.runtime) ? roadSnapTarget(ctx, sample) : undefined;
+      if (snap) sample = snap;
       if (!drafts.get(ctx.runtime)?.points.length) {
         const target = editTarget(ctx, sample);
         const body = target ? undefined : roadBodyTarget(ctx, sample);
@@ -161,7 +176,7 @@ export const pathPointsTool: ConstructionTool<"path-brush"> = {
         select(ctx);
       }
       if (drafts.has(ctx.runtime) || (params.creationMode && params.creationMode !== "brush")) {
-        gestures.set(ctx.runtime, { kind: "point", point: { ...sample.point } });
+        gestures.set(ctx.runtime, { kind: "point", point: { ...sample.point }, snapTarget: snap });
       } else {
         gestures.set(ctx.runtime, { kind: "stroke" });
         pathStrokeTool.onPointerDown?.(ctx, sample, params);
@@ -176,9 +191,8 @@ export const pathPointsTool: ConstructionTool<"path-brush"> = {
       else if (active?.kind === "point") {
         const draft = drafts.get(ctx.runtime);
         if (draft?.points.length) {
-          const target = roadSnapTarget(ctx, g.current);
-          showRoadSnap(ctx, target);
-          preview(ctx, draft, target?.point ?? g.current.point);
+          // A click confirms the proposal latched on pointer-down, even with hand jitter on release.
+          preview(ctx, draft, active.point);
         }
       }
     });
@@ -190,10 +204,15 @@ export const pathPointsTool: ConstructionTool<"path-brush"> = {
       if (active?.kind === "edit") { active.edit.move(g); active.edit.commit(); }
       else if (active?.kind === "stroke") pathStrokeTool.onPointerUp?.(ctx, seededGesture(g, active.origin), params);
       else if (active?.kind === "point") {
+        if (active.snapTarget && !roadSnapIsCurrent(ctx, active.snapTarget)) {
+          showRoadSnap(ctx);
+          throw new Error("O alvo de encaixe mudou. Aproxime o mouse novamente antes de confirmar.");
+        }
         const draft = drafts.get(ctx.runtime) ?? { points: [], params: { ...params } };
         if (!draft.points.length || !equal(draft.points.at(-1)!, active.point)) draft.points.push(active.point);
         drafts.set(ctx.runtime, draft);
-        preview(ctx, draft);
+        if (active.snapTarget && draft.points.length >= 2) commitDraft(ctx, draft);
+        else preview(ctx, draft);
       }
     });
   },
@@ -212,16 +231,7 @@ export const pathPointsTool: ConstructionTool<"path-brush"> = {
           if (draft.points.length) preview(ctx, draft);
           else { drafts.delete(ctx.runtime); ctx.runtime.clearPreview(CHANNEL); showRoadSnap(ctx); }
         } else if (draft.points.length >= 2) {
-          const operationId = scopedToolId(ctx, "road-points", ctx.nextSequence());
-          const effect = createPathBrushEffect({
-            brushShape: { kind: "circle", radius: 0.025 }, brushRegion: { samples: draft.points },
-            authoredCurves: curves(ctx, draft.points), curveMode: "automatic", parameters: pathFormationFor(draft.params),
-          }, { operationId, tableId: ctx.tableId, initiatedBy: "road-points" });
-          if (commitPathCloudIntent(ctx, effect, 0.025)) {
-            drafts.delete(ctx.runtime);
-            ctx.runtime.clearPreview(CHANNEL);
-            showRoadSnap(ctx);
-          }
+          commitDraft(ctx, draft);
         }
       });
       return true;

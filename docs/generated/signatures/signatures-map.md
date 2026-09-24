@@ -4168,7 +4168,7 @@ export const pathPointsTool: ConstructionTool<"path-brush"> = {
 // src/composition/tabletop/tools/paths/path-stroke-tool.ts
 export const pathStrokeTool: ConstructionTool<"path-brush"> = {
   id:"path-brush",defaultParams:()=>DEFAULT_TOOL_PARAMS["path-brush"],
-  onPointerDown(ctx,sample){active.set(ctx.runtime,sample);},
+  onPointerDown(ctx,sample){showRoadSnap(ctx);active.set(ctx.runtime,sample);},
   onPointerMove(ctx,g,params) {
   if(!active.has(ctx.runtime)||!meaningful(g))return;
   try {
@@ -4181,10 +4181,16 @@ export function roadBodyTarget(ctx: ToolContext,sample: PointerSample): {sample:
   structureTypeFor(t.surfaceType)?.spine && (sample.surfaceRef
   ? surfaceRefFromNodeSet(t.surfaceKey)===sample.surfaceRef
   : t.nodes.some(n=>n.id===sample.nodeId)));
-export function roadSnapTarget(ctx: ToolContext, sample: PointerSample): PointerSample | undefined {
-  const graph = ctx.runtime.getGraphSnapshot();
+export interface RoadSnapTarget extends PointerSample {
+  readonly snapSignature?: string;
+  readonly snapEdge?: { readonly edgeId: string; readonly parameter: number };
+export function roadSnapTarget(ctx: ToolContext, sample: PointerSample): RoadSnapTarget | undefined {
+  const previous = snapLocks.get(ctx.runtime);
+export function roadSnapIsCurrent(ctx: ToolContext, target: RoadSnapTarget): boolean {
+  return target.snapSignature !== undefined && targetSignature(ctx, target) === target.snapSignature;
+  }
 export function showRoadSnap(ctx: ToolContext, target?: PointerSample): void {
-  if (!target) { ctx.runtime.clearPreview("road-snap"); return; }
+  if (!target) { snapLocks.delete(ctx.runtime); ctx.runtime.clearPreview("road-snap"); return; }
   const { x, y, z } = target.point;
   const r = 0.35, h = y + 0.035;
   ctx.runtime.showPreview({ kind: "segments", color: 0x38bdf8, opacity: 1,

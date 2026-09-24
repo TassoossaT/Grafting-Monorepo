@@ -1,4 +1,4 @@
-import { curveEdgesOf, curvePickId, structureTypeFor } from "../../../../features/edit-construction/index.ts";
+import { curveEdgesOf, curvePick, curvePickId, structureTypeFor } from "../../../../features/edit-construction/index.ts";
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import type { PointerSample, ToolContext } from "../core/tool-context.ts";
 import type { CurveGestureOptions } from "../core/curve-edit-gesture.ts";
@@ -29,7 +29,11 @@ export function roadBodyTarget(ctx: ToolContext,sample: PointerSample): {sample:
   });
   if(!best)return;
   const i=best.index, edge=edges[i]!,t=nearest[i]!.parameter!;
-  const endpoint=t<0.05?0:t>0.95?3:undefined;
+  const projected = evaluated[i]!.curves[0]!.points[3];
+  // Reuse anchors by world distance, not a percentage of arbitrarily long spans.
+  const nearStart = Math.hypot(...projected.map((v, axis) => v - edge.curve.points[0][axis]!));
+  const nearEnd = Math.hypot(...projected.map((v, axis) => v - edge.curve.points[3][axis]!));
+  const endpoint = nearStart <= 0.6 && nearStart <= nearEnd ? 0 : nearEnd <= 0.6 ? 3 : undefined;
   const p=endpoint===undefined?evaluated[i]!.curves[0]!.points[3]:edge.curve.points[endpoint];
   return {
     sample:{...sample,nodeId:endpoint===0?edge.startNodeId:endpoint===3?edge.endNodeId:curvePickId(edge.edgeId,"midpoint"),point:{x:p[0],y:p[1],z:p[2]}},
@@ -38,8 +42,47 @@ export function roadBodyTarget(ctx: ToolContext,sample: PointerSample): {sample:
 }
 
 
+export interface RoadSnapTarget extends PointerSample {
+  readonly snapSignature?: string;
+  readonly snapEdge?: { readonly edgeId: string; readonly parameter: number };
+}
+const snapLocks = new WeakMap<ToolContext["runtime"], { target: RoadSnapTarget; signature: string; exitReach: number }>();
+function targetSignature(ctx: ToolContext, target: RoadSnapTarget): string | undefined {
+  const graph = ctx.runtime.getGraphSnapshot();
+  if (target.snapEdge) {
+    const edge = graph.edges.find(e => e.edgeId === target.snapEdge!.edgeId);
+    if (!edge) return;
+    return JSON.stringify([edge, graph.nodes.find(n => n.id === edge.startNodeId), graph.nodes.find(n => n.id === edge.endNodeId)]);
+  }
+  const node = graph.nodes.find(n => n.id === target.nodeId);
+  return node && JSON.stringify(node);
+}
+/** Keep the displayed position and edge parameter until the pointer exits the wider release zone. */
+export function roadSnapTarget(ctx: ToolContext, sample: PointerSample): RoadSnapTarget | undefined {
+  const previous = snapLocks.get(ctx.runtime);
+  if (previous && targetSignature(ctx, previous.target) === previous.signature
+      && Math.abs(previous.target.point.y - sample.point.y) <= 0.2
+      && Math.hypot(previous.target.point.x - sample.point.x, previous.target.point.z - sample.point.z) <= previous.exitReach) {
+    return { ...sample, nodeId: previous.target.nodeId, point: previous.target.point, snapEdge: previous.target.snapEdge, snapSignature: previous.signature };
+  }
+  snapLocks.delete(ctx.runtime);
+  let target = acquireRoadSnap(ctx, sample);
+  if (target) {
+    const signature = targetSignature(ctx, target);
+    if (signature) target = { ...target, snapSignature: signature };
+    if (signature) snapLocks.set(ctx.runtime, { target, signature, exitReach: Math.max(0.9,
+      Math.hypot(target.point.x - sample.point.x, target.point.z - sample.point.z) + 0.3) });
+  }
+  return target;
+}
+
+/** A deleted or reshaped target cannot be confirmed from a stale preview. */
+export function roadSnapIsCurrent(ctx: ToolContext, target: RoadSnapTarget): boolean {
+  return target.snapSignature !== undefined && targetSignature(ctx, target) === target.snapSignature;
+}
+
 /** Product snap reach; projection and splitting remain canonical Rust operations. */
-export function roadSnapTarget(ctx: ToolContext, sample: PointerSample): PointerSample | undefined {
+function acquireRoadSnap(ctx: ToolContext, sample: PointerSample): RoadSnapTarget | undefined {
   const graph = ctx.runtime.getGraphSnapshot();
   const ids = new Set(graph.edges.filter(e => e.curve?.surfaceType && structureTypeFor(e.curve.surfaceType)?.spine).flatMap(e => [e.startNodeId, e.endNodeId]));
   let best: { node: typeof graph.nodes[number]; distance: number } | undefined;
@@ -49,12 +92,15 @@ export function roadSnapTarget(ctx: ToolContext, sample: PointerSample): Pointer
     if (distance <= 0.6 && (!best || distance < best.distance)) best = { node, distance };
   }
   if (best) return { ...sample, nodeId: best.node.id, point: best.node.position };
-  return roadBodyTarget(ctx, sample)?.sample;
+  const body = roadBodyTarget(ctx, sample);
+  if (!body) return;
+  const edge = curvePick(body.sample.nodeId!);
+  return { ...body.sample, snapEdge: edge ? { edgeId: edge.edgeId, parameter: body.options.parameter! } : undefined };
 }
 
 /** Highlight the exact prospective junction without changing the graph. */
 export function showRoadSnap(ctx: ToolContext, target?: PointerSample): void {
-  if (!target) { ctx.runtime.clearPreview("road-snap"); return; }
+  if (!target) { snapLocks.delete(ctx.runtime); ctx.runtime.clearPreview("road-snap"); return; }
   const { x, y, z } = target.point;
   const r = 0.35, h = y + 0.035;
   ctx.runtime.showPreview({ kind: "segments", color: 0x38bdf8, opacity: 1,
