@@ -405,6 +405,10 @@ pub struct RegionEdgeDto {
     pub start_node_id: String,
     pub end_node_id: String,
     pub geometry: ContourGeometryDto,
+    /// How the edge is traced on the host both its ends are pinned to, when
+    /// they are -- filled in by the session, which owns the pins.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host_curve: Option<crate::pins::HostCurveDto>,
 }
 
 #[derive(Debug, Serialize)]
@@ -495,6 +499,7 @@ fn loop_dto(topology: &ContourTopology, loop_: &ContourLoop) -> Result<Vec<Regio
                 } else {
                     ContourGeometryDto::from_geometry(edge.geometry())
                 },
+                host_curve: None,
             })
         })
         .collect()

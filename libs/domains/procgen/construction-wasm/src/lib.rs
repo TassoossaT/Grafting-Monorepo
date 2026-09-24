@@ -21,6 +21,8 @@ mod session;
 #[cfg(test)]
 mod pin_tests;
 #[cfg(test)]
+mod host_trace_tests;
+#[cfg(test)]
 mod profile_cap_tests;
 #[cfg(test)]
 mod run_tests;

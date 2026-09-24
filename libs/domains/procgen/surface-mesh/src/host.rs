@@ -136,16 +136,20 @@ impl HostFace {
         (base, height_at(&self.top, travel) - base)
     }
 
-    /// The world point at relative `(u, v)` on this face.
-    pub fn resolve(&self, u: f64, v: f64) -> [f32; 3] {
+    /// Relative `(u, v)` as a point of the face's unrolled frame.
+    pub fn unrolled_at(&self, u: f64, v: f64) -> [f32; 2] {
         let travel = self.travel[0] + (self.travel[1] - self.travel[0]) * u as f32;
         let (base, height) = self.local_height(travel);
-        self.frame.roll([travel, base + height * v as f32])
+        [travel, base + height * v as f32]
     }
 
-    /// The inverse of [`resolve`](Self::resolve), unclamped.
-    pub fn project(&self, point: [f32; 3]) -> [f64; 2] {
-        let [travel, height] = self.frame.unroll(point);
+    /// The world point at relative `(u, v)` on this face.
+    pub fn resolve(&self, u: f64, v: f64) -> [f32; 3] {
+        self.frame.roll(self.unrolled_at(u, v))
+    }
+
+    /// The inverse of [`unrolled_at`](Self::unrolled_at), unclamped.
+    pub fn uv_of_unrolled(&self, [travel, height]: [f32; 2]) -> [f64; 2] {
         let u = (travel - self.travel[0]) / (self.travel[1] - self.travel[0]);
         let (base, local) = self.local_height(travel);
         let v = if local.abs() <= f32::EPSILON {
@@ -155,7 +159,93 @@ impl HostFace {
         };
         [f64::from(u), f64::from(v)]
     }
+
+    /// The inverse of [`resolve`](Self::resolve), unclamped.
+    pub fn project(&self, point: [f32; 3]) -> [f64; 2] {
+        self.uv_of_unrolled(self.frame.unroll(point))
+    }
+
+    /// A path drawn on the face between two `(u, v)` points, as points of the
+    /// unrolled frame with both ends included: straight in `(u, v)`, or the
+    /// cubic Bézier through `controls` there.
+    ///
+    /// Subdivided only where the path strays from its chord -- in the flat,
+    /// or in the world once rolled onto a curved face -- by more than
+    /// [`HOST_TRACE_TOLERANCE`], so a straight path on a flat face stays two
+    /// points.
+    pub fn trace(
+        &self,
+        from: [f64; 2],
+        to: [f64; 2],
+        controls: Option<[[f64; 2]; 2]>,
+    ) -> Vec<[f32; 2]> {
+        let at = |t: f64| -> [f32; 2] {
+            let [u, v] = match controls {
+                None => [0, 1].map(|axis| from[axis] + (to[axis] - from[axis]) * t),
+                Some([c1, c2]) => {
+                    let s = 1.0 - t;
+                    let w = [s * s * s, 3.0 * s * s * t, 3.0 * s * t * t, t * t * t];
+                    [0, 1].map(|axis| {
+                        w[0] * from[axis] + w[1] * c1[axis] + w[2] * c2[axis] + w[3] * to[axis]
+                    })
+                }
+            };
+            self.unrolled_at(u, v)
+        };
+        let spans = if controls.is_some() {
+            CURVE_TRACE_SPANS
+        } else {
+            1
+        };
+        let mut points = vec![at(0.0)];
+        for span in 0..spans {
+            let (t0, t1) = (span as f64 / spans as f64, (span + 1) as f64 / spans as f64);
+            self.refine_trace(&at, (t0, at(t0)), (t1, at(t1)), 0, &mut points);
+        }
+        points
+    }
+
+    fn refine_trace(
+        &self,
+        at: &dyn Fn(f64) -> [f32; 2],
+        (t0, a): (f64, [f32; 2]),
+        (t1, b): (f64, [f32; 2]),
+        depth: u32,
+        points: &mut Vec<[f32; 2]>,
+    ) {
+        let tm = 0.5 * (t0 + t1);
+        let m = at(tm);
+        if depth < MAX_TRACE_DEPTH && self.chord_deviation(a, m, b) > HOST_TRACE_TOLERANCE {
+            self.refine_trace(at, (t0, a), (tm, m), depth + 1, points);
+            self.refine_trace(at, (tm, m), (t1, b), depth + 1, points);
+        } else {
+            points.push(b);
+        }
+    }
+
+    fn chord_deviation(&self, a: [f32; 2], m: [f32; 2], b: [f32; 2]) -> f32 {
+        let flat =
+            ((m[0] - 0.5 * (a[0] + b[0])).powi(2) + (m[1] - 0.5 * (a[1] + b[1])).powi(2)).sqrt();
+        let [a, m, b] = [a, m, b].map(|point| self.frame.roll(point));
+        let world = (0..3)
+            .map(|axis| (m[axis] - 0.5 * (a[axis] + b[axis])).powi(2))
+            .sum::<f32>()
+            .sqrt();
+        flat.max(world)
+    }
 }
+
+/// Largest gap, in metres, left between a path traced on a host face and
+/// the chords it is drawn with. Finer than the mesher's own tolerance: what
+/// is traced on a face is a small feature on it, and its outline is seen.
+pub const HOST_TRACE_TOLERANCE: f32 = 0.002;
+
+/// Bounds a traced path's subdivision at `2^12` chords per span.
+const MAX_TRACE_DEPTH: u32 = 12;
+
+/// Spans a curved path is checked in before refining, so a curve whose
+/// midpoint happens to sit on its chord is still followed.
+const CURVE_TRACE_SPANS: usize = 4;
 
 fn signed_area(ring: &[[f32; 2]]) -> f32 {
     ring.iter()
@@ -231,60 +321,13 @@ fn triangulate_component(
     (!indices.is_empty()).then_some((points, indices))
 }
 
-/// An upright face's mesh with `cutters` -- closed world-space rings --
-/// subtracted from it.
-///
-/// `None` only when the region is not an upright face, leaving the caller's
-/// ordinary path in charge. A cut that removes nothing yields exactly the
-/// uncut mesh; one that removes everything yields an empty one.
-pub fn upright_face_mesh_cut(
-    topology: &ContourTopology,
-    region: &SurfaceRegion,
-    resolve_position: &mut impl FnMut(&NodeId) -> Option<[f32; 3]>,
-    cutters: &[Vec<[f32; 3]>],
-) -> Option<TriangulatedMesh> {
-    if region.profile().is_some() {
-        return None;
-    }
-    let [outer_loop] = region.outer_loops() else {
-        return None;
-    };
-    let frame = upright_structure(topology, outer_loop, resolve_position)?.frame;
-    let unroll = |ring: &[[f32; 3]]| -> Vec<[f32; 2]> {
-        ring.iter().map(|point| frame.unroll(*point)).collect()
-    };
-
-    let clip: Vec<PlanarShape> = cutters
-        .iter()
-        .filter_map(|ring| cleaned(unroll(ring)))
-        .map(|ring| vec![wound(ring, true)])
-        .collect();
-    if clip.is_empty() {
-        return upright_face_mesh(topology, region, resolve_position);
-    }
-
-    let outer = tessellate_contour_loop(topology, outer_loop, resolve_position)?;
-    let mut subject: PlanarShape = vec![wound(cleaned(unroll(&outer))?, true)];
-    for hole in region.holes() {
-        let hole = tessellate_contour_loop(topology, hole, resolve_position)?;
-        subject.push(wound(cleaned(unroll(&hole))?, false));
-    }
-    let Ok(remaining) = planar_boolean(
-        std::slice::from_ref(&subject),
-        &clip,
-        PlanarBoolean::Difference,
-    ) else {
-        return upright_face_mesh(topology, region, resolve_position);
-    };
-    let removed = shape_area(&subject) - remaining.iter().map(shape_area).sum::<f32>();
-    if removed <= NEGLIGIBLE_CUT_AREA {
-        return upright_face_mesh(topology, region, resolve_position);
-    }
-
+/// Triangulates each shape in `frame`'s flat and rolls the result onto the
+/// face, every triangle facing the frame's outward side.
+fn rolled_mesh(frame: &UnrollFrame, shapes: &[PlanarShape]) -> TriangulatedMesh {
     let mut flat: Vec<[f32; 2]> = Vec::new();
     let mut indices: Vec<u32> = Vec::new();
-    for shape in &remaining {
-        let Some((points, component)) = triangulate_component(&frame, shape) else {
+    for shape in shapes {
+        let Some((points, component)) = triangulate_component(frame, shape) else {
             continue;
         };
         let offset = flat.len() as u32;
@@ -311,10 +354,79 @@ pub fn upright_face_mesh_cut(
             triangle.swap(1, 2);
         }
     }
-    Some(TriangulatedMesh {
+    TriangulatedMesh {
         positions,
         normals,
         uvs: flat,
         indices,
-    })
+    }
+}
+
+/// An upright face's mesh with `cutters` -- closed rings in the face's own
+/// unrolled frame, the one [`HostFace::of`] reads it with -- subtracted
+/// from it.
+///
+/// `None` only when the region is not an upright face, leaving the caller's
+/// ordinary path in charge. A cut that removes nothing yields exactly the
+/// uncut mesh; one that removes everything yields an empty one.
+pub fn upright_face_mesh_cut(
+    topology: &ContourTopology,
+    region: &SurfaceRegion,
+    resolve_position: &mut impl FnMut(&NodeId) -> Option<[f32; 3]>,
+    cutters: &[Vec<[f32; 2]>],
+) -> Option<TriangulatedMesh> {
+    if region.profile().is_some() {
+        return None;
+    }
+    let [outer_loop] = region.outer_loops() else {
+        return None;
+    };
+    let frame = upright_structure(topology, outer_loop, resolve_position)?.frame;
+    let unroll = |ring: &[[f32; 3]]| -> Vec<[f32; 2]> {
+        ring.iter().map(|point| frame.unroll(*point)).collect()
+    };
+
+    let clip: Vec<PlanarShape> = cutters
+        .iter()
+        .filter_map(|ring| cleaned(ring.clone()))
+        .map(|ring| vec![wound(ring, true)])
+        .collect();
+    if clip.is_empty() {
+        return upright_face_mesh(topology, region, resolve_position);
+    }
+
+    let outer = tessellate_contour_loop(topology, outer_loop, resolve_position)?;
+    let mut subject: PlanarShape = vec![wound(cleaned(unroll(&outer))?, true)];
+    for hole in region.holes() {
+        let hole = tessellate_contour_loop(topology, hole, resolve_position)?;
+        subject.push(wound(cleaned(unroll(&hole))?, false));
+    }
+    let Ok(remaining) = planar_boolean(
+        std::slice::from_ref(&subject),
+        &clip,
+        PlanarBoolean::Difference,
+    ) else {
+        return upright_face_mesh(topology, region, resolve_position);
+    };
+    let removed = shape_area(&subject) - remaining.iter().map(shape_area).sum::<f32>();
+    if removed <= NEGLIGIBLE_CUT_AREA {
+        return upright_face_mesh(topology, region, resolve_position);
+    }
+    Some(rolled_mesh(&frame, &remaining))
+}
+
+/// A face lying on a host, meshed in the host's own frame: `outer` and
+/// `holes` are rings of the host's flat, so what is drawn follows the host
+/// however it curves. `None` when the outline encloses nothing.
+pub fn mesh_on_host(
+    face: &HostFace,
+    outer: &[[f32; 2]],
+    holes: &[Vec<[f32; 2]>],
+) -> Option<TriangulatedMesh> {
+    let mut shape: PlanarShape = vec![wound(cleaned(outer.to_vec())?, true)];
+    for hole in holes {
+        shape.push(wound(cleaned(hole.clone())?, false));
+    }
+    let mesh = rolled_mesh(&face.frame, std::slice::from_ref(&shape));
+    (!mesh.indices.is_empty()).then_some(mesh)
 }

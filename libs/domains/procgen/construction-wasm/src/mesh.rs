@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 
 use grafting_graph_core::curve_offset::{ReferenceCurve, ReferenceField};
 use grafting_graph_core::{ContourTopology, RegionId, SurfaceRegion, SurfaceRegistry};
-use grafting_procgen_surface_mesh::{PlanarFill, triangulate_region_cut};
+use grafting_procgen_surface_mesh::{PlanarFill, TriangulatedMesh, triangulate_region_cut};
 
 use crate::editing::SessionGraph;
 use crate::pins::Cutting;
@@ -179,6 +179,36 @@ fn planar_fill(field: &ReferenceField) -> Option<PlanarFill<'_>> {
     (!field.is_empty()).then(|| PlanarFill::new(field, PLANAR_FILL_MAX_AREA))
 }
 
+/// One region's mesh pieces: cut by whatever is pinned to it, or, when it
+/// lies wholly on a host and cuts nothing out of itself, drawn in that
+/// host's frame.
+fn region_meshes(
+    graph: &SessionGraph,
+    surfaces: &SurfaceRegistry,
+    topology: &ContourTopology,
+    region_id: &RegionId,
+    region: &SurfaceRegion,
+    fill: Option<PlanarFill<'_>>,
+    cutting: Option<&Cutting<'_>>,
+) -> Option<Vec<TriangulatedMesh>> {
+    let cutters = cutting.map_or_else(Vec::new, |cutting| {
+        cutting.rings(graph, surfaces, topology, region_id)
+    });
+    if cutters.is_empty()
+        && let Some(mesh) =
+            cutting.and_then(|cutting| cutting.tracer().mesh(graph, topology, region))
+    {
+        return Some(vec![mesh]);
+    }
+    triangulate_region_cut(
+        topology,
+        region,
+        |id| graph.node(id).map(|node| *node.data()),
+        fill,
+        &cutters,
+    )
+}
+
 /// Converts a stable analytic region id to the existing surface-key wire
 /// slot without changing legacy node-set callers.
 pub fn region_id_to_wire(id: &RegionId) -> Vec<String> {
@@ -255,14 +285,9 @@ pub fn all_surface_meshes(
         let Some(surface) = surfaces.region_surface(region_id) else {
             continue;
         };
-        let cutters = cutting.map_or_else(Vec::new, |cutting| cutting.rings(graph, surfaces, topology, region_id));
-        let Some(region_meshes) = triangulate_region_cut(
-            topology,
-            region,
-            |id| graph.node(id).map(|node| *node.data()),
-            fill,
-            &cutters,
-        ) else {
+        let Some(region_meshes) =
+            region_meshes(graph, surfaces, topology, region_id, region, fill, cutting)
+        else {
             continue;
         };
         meshes.extend(region_meshes.into_iter().map(|mesh| SurfaceMeshDto {
@@ -326,15 +351,8 @@ fn surface_mesh_with(
         let surface = surfaces
             .region_surface(&region_id)
             .ok_or_else(|| format!("unknown analytic region surface {region_id}"))?;
-        let cutters = cutting.map_or_else(Vec::new, |cutting| cutting.rings(graph, surfaces, topology, &region_id));
-        let meshes = triangulate_region_cut(
-            topology,
-            region,
-            |id| graph.node(id).map(|node| *node.data()),
-            fill,
-            &cutters,
-        )
-        .ok_or_else(|| format!("no mesh derivable for analytic region {region_id}"))?;
+        let meshes = region_meshes(graph, surfaces, topology, &region_id, region, fill, cutting)
+            .ok_or_else(|| format!("no mesh derivable for analytic region {region_id}"))?;
         if meshes.is_empty() {
             return Err(format!("no mesh derivable for analytic region {region_id}"));
         }

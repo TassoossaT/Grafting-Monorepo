@@ -86,7 +86,8 @@ pub fn triangulate_region(
     triangulate_region_with(topology, region, resolve_position, None)
 }
 
-/// [`triangulate_region_with`], with closed world-space `cutters` subtracted
+/// [`triangulate_region_with`], with closed `cutters` -- rings in the face's
+/// own unrolled frame, see [`host::upright_face_mesh_cut`] -- subtracted
 /// from an upright face. Any other face, and any face given no cutters, is
 /// meshed exactly as [`triangulate_region_with`] meshes it.
 pub fn triangulate_region_cut(
@@ -94,7 +95,7 @@ pub fn triangulate_region_cut(
     region: &SurfaceRegion,
     mut resolve_position: impl FnMut(&NodeId) -> Option<[f32; 3]>,
     fill: Option<PlanarFill<'_>>,
-    cutters: &[Vec<[f32; 3]>],
+    cutters: &[Vec<[f32; 2]>],
 ) -> Option<Vec<TriangulatedMesh>> {
     if !cutters.is_empty()
         && let Some(mesh) = host::upright_face_mesh_cut(topology, region, &mut resolve_position, cutters)
