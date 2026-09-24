@@ -106,7 +106,7 @@ export const pathPointsTool: ConstructionTool<"path-brush"> = {
         const origin = target ?? body?.sample;
         if (sample.shiftKey && origin) {
           select(ctx);
-          if (params.creationMode && params.creationMode !== "brush") {
+          if (drafts.has(ctx.runtime) || (params.creationMode && params.creationMode !== "brush")) {
             gestures.set(ctx.runtime, { kind: "point", point: { ...origin.point } });
           } else {
             gestures.set(ctx.runtime, { kind: "stroke", origin });
@@ -139,7 +139,7 @@ export const pathPointsTool: ConstructionTool<"path-brush"> = {
         }
         select(ctx);
       }
-      if (params.creationMode && params.creationMode !== "brush") {
+      if (drafts.has(ctx.runtime) || (params.creationMode && params.creationMode !== "brush")) {
         gestures.set(ctx.runtime, { kind: "point", point: { ...sample.point } });
       } else {
         gestures.set(ctx.runtime, { kind: "stroke" });
@@ -171,6 +171,18 @@ export const pathPointsTool: ConstructionTool<"path-brush"> = {
         preview(ctx, draft);
       }
     });
+  },
+  onSelectionAction(ctx, action, params) {
+    if (action !== "branch" || gestures.has(ctx.runtime) || drafts.has(ctx.runtime)) return false;
+    const id = selections.get(ctx.runtime);
+    const node = ctx.runtime.getGraphSnapshot().nodes.find(n => n.id === id);
+    if (!node || !editTarget(ctx, { nodeId: node.id, point: node.position })) return false;
+    const draft: Draft = { points: [{ ...node.position }], params: { ...params, creationMode: "points" } };
+    drafts.set(ctx.runtime, draft);
+    select(ctx);
+    preview(ctx, draft);
+    ctx.reportFeedback({ tone: "info", message: "Posicione a nova rua com o mouse. Clique para adicionar pontos; Enter confirma e Esc cancela." });
+    return true;
   },
   onKeyDown(ctx, key) {
     if (gestures.has(ctx.runtime)) return false;

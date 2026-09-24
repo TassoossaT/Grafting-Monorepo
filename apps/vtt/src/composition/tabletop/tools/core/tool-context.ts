@@ -74,6 +74,8 @@ export interface ConstructionTool<Id extends ConstructionToolId> {
   onPointerUp?(ctx: ToolContext, gesture: ToolGesture, params: ToolParamsFor<Id>): void;
   /** Discards an unfinished tool draft on Escape, cancellation or tool switch. */
   onCancel?(ctx: ToolContext): void;
+  /** Runs an explicit action on the current selection. */
+  onSelectionAction?(ctx: ToolContext, action: string, params: ToolParamsFor<Id>): boolean;
   /** Handles a tool key outside text controls; true prevents the browser default. */
   onKeyDown?(ctx: ToolContext, key: string, params: ToolParamsFor<Id>): boolean;
   /** A press+release with no intervening drag. Batch/stamp tools (room) commit here instead of `onPointerUp`. */

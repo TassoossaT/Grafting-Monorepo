@@ -16,7 +16,7 @@ import {
   type TabletopRuntimeStatus,
   type ToolParamsByTool,
 } from "@/composition/tabletop";
-import { StatusBadge } from "@/ui";
+import { IconButton, StatusBadge } from "@/ui";
 import {
   ConstructionDock,
   ConstructionHotbar,
@@ -232,6 +232,17 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
             </span>
           ) : null}
         </div>
+
+        {tool === "path-brush" && selectedNodeInfo?.id.startsWith("spine:") ? (
+          <div role="toolbar" aria-label="Acoes do vertice da rua" style={{ position: "absolute", top: "0.75rem", left: "50%", transform: "translateX(-50%)", zIndex: 15 }}>
+            <IconButton
+              icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M4 19h16M12 19V5m-4 4 4-4 4 4" /><circle cx="12" cy="19" r="2" /></svg>}
+              label="Criar rua daqui"
+              title="Criar rua a partir deste vertice"
+              onClick={() => pointerHandlers.onSelectionAction("branch")}
+            />
+          </div>
+        ) : null}
 
         <ToolRail
           tool={tool}

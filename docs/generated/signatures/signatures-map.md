@@ -4594,6 +4594,7 @@ export interface UseConstructionPointerOptions {
   readonly viewId: RenderViewId | undefined;
   /** When true, a resolved point (other than an existing node handle -- those stay precise) snaps to the nearest grid intersection before any tool sees it, so a new terrain cell/wall/room lands centered on the grid instead of wherever the pointer happened to be. */
 export interface ConstructionPointerHandlers {
+  readonly onSelectionAction: (action: string) => void;
   readonly onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
   readonly onPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
   readonly onPointerUp: (event: ReactPointerEvent<HTMLDivElement>) => void;

@@ -1959,6 +1959,10 @@ Called while a gesture is active (left button held). Brushes that paint continuo
 
 Gesture end. Tools that commit a single shape from a drag (wall, move-node's history entry) act here.
 
+### `method vtt.tool-context.ConstructionTool.onSelectionAction(ctx: ToolContext, action: string, params: ToolParamsFor<Id>): boolean`
+
+Runs an explicit action on the current selection.
+
 ### `method vtt.tool-context.ConstructionTool.previewFor(gesture: ToolGesture, params: ToolParamsFor<Id>, ctx: ToolContext): PreviewDescriptor | undefined`
 
 The tool's not-yet-committed ghost for the current gesture (or stationary hover, when `gesture.start === gesture.current`).
@@ -2675,6 +2679,8 @@ Boundary edges running along the top, the paired half of the same subdivision.
 ### `property vtt.use-construction-pointer.ConstructionPointerHandlers.onPointerMove: (event: PointerEvent<HTMLDivElement>) => void`
 
 ### `property vtt.use-construction-pointer.ConstructionPointerHandlers.onPointerUp: (event: PointerEvent<HTMLDivElement>) => void`
+
+### `property vtt.use-construction-pointer.ConstructionPointerHandlers.onSelectionAction: (action: string) => void`
 
 ### `interface vtt.use-construction-pointer.UseConstructionPointerOptions`
 

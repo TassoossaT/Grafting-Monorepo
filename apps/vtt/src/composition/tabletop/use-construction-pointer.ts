@@ -50,6 +50,7 @@ function applySnap(sample: PointerSample, snapToGrid: boolean): PointerSample {
 }
 
 export interface ConstructionPointerHandlers {
+  readonly onSelectionAction: (action: string) => void;
   readonly onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
   readonly onPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
   readonly onPointerUp: (event: ReactPointerEvent<HTMLDivElement>) => void;
@@ -416,7 +417,14 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     [ctx, refreshEdgeOverlay, sampleAt],
   );
 
+  const onSelectionAction = useCallback((action: string) => {
+    if (gestureRef.current || manipulatorGesture.current) return;
+    const { activeTool, toolParams } = optionsRef.current;
+    if (toolFor(activeTool).onSelectionAction?.(ctx, action, toolParams[activeTool] as never)) refreshEdgeOverlay();
+  }, [ctx, refreshEdgeOverlay]);
+
   return {
+    onSelectionAction,
     onPointerDown,
     onPointerMove,
     onPointerUp: finishGesture,

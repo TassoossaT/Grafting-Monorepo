@@ -442,3 +442,12 @@ Esta rodada de preparação altera apenas este documento. Não foram implementad
 - O gizmo e ocultado enquanto Shift esta pressionado para nao roubar o inicio da ramificacao sobre um ponto selecionado; retorna ao soltar Shift se ainda houver selecao.
 - Instrucoes atualizadas no painel. Passaram 487 testes VTT, check TypeScript e build. Sete novas regressoes cobrem quatro combinacoes origem/modo, insercao no parametro certo, cancelamento da ramificacao e curvatura com cancelamento/desfazer/refazer.
 - Validacao automatizada verifica juncoes reais de grau tres e identidade do grafo ao desfazer. Aceite visual ainda pendente; conferir gizmo/Shift, encontro em curva e alturas no uso real.
+
+
+## Acao visual para ramificar - 24/09/2026
+
+- Selecionar uma ancora de rua (inclusive recem-inserida na aresta) exibe o botao com icone "Criar rua daqui" no topo central do viewport.
+- O clique chama uma acao explicita da ferramenta e inicia um draft por pontos ancorado no vertice. O preview acompanha o mouse sem botao pressionado; cliques adicionam pontos, Enter confirma, Esc cancela. Funciona mesmo com desenho livre selecionado no painel, sem alterar essa preferencia persistida.
+- Selecao/gizmo sao limpos ao iniciar o draft para nao capturar a nova construcao. Acao duplicada, selecao ausente e gesto ativo nao iniciam outra ramificacao. A rua existente so muda na confirmacao.
+- Passaram 489 testes VTT, TypeScript e build. Novos testes real-WASM cobrem vertice inserido, hover transitorio, confirmacao com juncao de grau tres, desfazer e cancelamento. Dependencias render-3d e construction-wasm foram reconstruidas por artefatos antigos encontrados no inicio da rodada.
+- Posicionamento visual do botao: barra contextual superior, nao um icone projetado sobre o vertice em 3D. Aceite visual permanece pendente.
