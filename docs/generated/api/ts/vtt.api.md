@@ -1841,7 +1841,7 @@ points *out* of it, means their signs are opposite.
 
 ### `method vtt.curve-edit-gesture.CurveGesture.move(gesture: ToolGesture): void`
 
-### `type vtt.curve-edit-gesture.CurveGestureOptions = ToolParamsFor<"edit-region"> & { allowShapeChange?: boolean; dragThreshold?: number; insertOnClick?: boolean; parameter?: number; pointerOrigin?: ConstructionPosition }`
+### `type vtt.curve-edit-gesture.CurveGestureOptions = ToolParamsFor<"edit-region"> & { allowShapeChange?: boolean; dragThreshold?: number; insertOnClick?: boolean; parameter?: number; pointerOrigin?: ConstructionPosition; spatialTarget?: boolean }`
 
 ### `function vtt.curve-edit-gesture.beginCurveGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGestureOptions): CurveGesture | undefined`
 

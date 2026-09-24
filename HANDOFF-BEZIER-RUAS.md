@@ -425,3 +425,11 @@ Esta rodada de preparação altera apenas este documento. Não foram implementad
 - A margem limita desvio das amostras XZ: nao garante ausencia de lacos, validade da malha ou contencao de toda a largura no pincel. Quadrado/hexagono usam alcance escalar, sem contencao poligonal exata. Limite de 4096 observacoes, validacao de numeros finitos e preservacao de retornos colineares.
 - Passaram: 478 testes VTT, 106 testes unitarios graph-core, check TypeScript, builds WASM/VTT e graph-core:api-check. Baseline publica atualizada. Regressao real-WASM usa 161 amostras tremidas, exige menos de 10 espinhas e compara preview/confirmacao/curva salva (com precisao f32 do grafo).
 - Pendente: aceite visual, curvas apertadas/largas/cruzamentos e integracao posterior dos gizmos de parede. Centralizar fitting nao conclui toda a interacao compartilhada.
+
+
+## Correcao de altura - 23/09/2026
+
+- Gizmo da espinha agora expoe X/Y/Z. O gesto recebe XYZ diretamente do manipulador; o arrasto comum no plano continua preservando Y do ponto selecionado.
+- InterpretStroke ajusta os controles verticais por minimos quadrados e verifica erro vertical separado (0.025 unidades), independentemente da margem lateral do pincel. Assim extremos em Y=0 nao apagam uma elevacao intermediaria.
+- Testes adicionados: elevar ancora pelo mesmo gesto usado pelo gizmo, mover horizontalmente sem perder altura, criar e persistir uma colina com extremos baixos e verificar altura da superficie gerada. Nao implementa nova projecao automatica sobre terreno ao arrastar: preserva altura autorada e amostrada.
+- Validacao: 480 testes VTT, 107 testes Rust, check TypeScript e builds passaram. Foi necessario reconstruir render-3d por artefatos locais desatualizados. Aceite visual continua pendente.

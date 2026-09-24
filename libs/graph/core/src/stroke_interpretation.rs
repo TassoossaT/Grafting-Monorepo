@@ -85,6 +85,29 @@ fn candidate(points: &[CurvePoint], parameters: &[f64]) -> CubicBezier {
     }
 }
 
+// Elevation is independent of the lateral brush correction budget.
+const HEIGHT_TOLERANCE: f64 = 0.025;
+
+fn fit_height(curve: &mut CubicBezier, points: &[CurvePoint], parameters: &[f64]) {
+    let (mut aa, mut ab, mut bb, mut ay, mut by) = (0., 0., 0., 0., 0.);
+    for (point, &u) in points.iter().zip(parameters) {
+        let v = 1. - u;
+        let a = 3. * u * v * v;
+        let b = 3. * u * u * v;
+        let y = point[1] - v.powi(3) * curve.points[0][1] - u.powi(3) * curve.points[3][1];
+        aa += a * a;
+        ab += a * b;
+        bb += b * b;
+        ay += a * y;
+        by += b * y;
+    }
+    let determinant: f64 = aa * bb - ab * ab;
+    if determinant.abs() > 1e-9 {
+        curve.points[1][1] = (ay * bb - by * ab) / determinant;
+        curve.points[2][1] = (by * aa - ay * ab) / determinant;
+    }
+}
+
 /// Returns cubic spans and their straight/curved classification. The correction
 /// budget measures captured XZ samples, not tessellation density or mesh validity.
 pub(crate) fn interpret(
@@ -119,6 +142,8 @@ pub(crate) fn interpret(
         let chord = distance(a, b);
         let mut straight = 0.;
         let mut split = 1;
+        let mut height_error = 0.;
+        let mut height_split = 1;
         for (i, &point) in span.iter().enumerate().skip(1).take(span.len() - 2) {
             // Clamp to the segment so collinear backtracking is not erased.
             let t = if chord < 1e-6 {
@@ -130,37 +155,54 @@ pub(crate) fn interpret(
             };
             let deviation =
                 (point[0] - a[0] - t * (b[0] - a[0])).hypot(point[2] - a[2] - t * (b[2] - a[2]));
+            let height_deviation = (point[1] - a[1] - t * (b[1] - a[1])).abs();
+            if height_deviation > height_error {
+                height_error = height_deviation;
+                height_split = i;
+            }
             if deviation > straight {
                 straight = deviation;
                 split = i;
             }
         }
         let cubic = if curved && span.len() >= 4 && chord >= 1e-6 {
-            Some(candidate(span, &parameters(span)))
+            let parameters = parameters(span);
+            let mut curve = candidate(span, &parameters);
+            fit_height(&mut curve, span, &parameters);
+            Some(curve)
         } else {
             None
         };
         let mut residual = f64::INFINITY;
+        let mut height_residual = f64::INFINITY;
         if let Some(c) = cubic {
             residual = 0.;
+            height_residual = 0.;
             for (&point, u) in span.iter().zip(parameters(span)) {
-                residual = residual.max(distance(point, c.evaluate(u)?));
+                let fitted = c.evaluate(u)?;
+                residual = residual.max(distance(point, fitted));
+                height_residual = height_residual.max((point[1] - fitted[1]).abs());
             }
         }
-        if straight > correction && residual > correction && span.len() > 2 {
+        let line_fits = straight <= correction && height_error <= HEIGHT_TOLERANCE;
+        let curve_fits = residual <= correction && height_residual <= HEIGHT_TOLERANCE;
+        if !line_fits && !curve_fits && span.len() > 2 {
+            if height_error > HEIGHT_TOLERANCE {
+                split = height_split;
+            }
             pending.push((start + split, end));
             pending.push((start, start + split));
             continue;
         }
-        let choose_curve = residual <= correction
-            && (straight > correction || (residual < chord * 0.3 && residual < straight * 0.6));
+        let choose_curve =
+            curve_fits && (!line_fits || (residual < chord * 0.3 && residual < straight * 0.6));
         let selected = if choose_curve {
             cubic.unwrap()
         } else {
             line(a, b)
         };
         selected.validate()?;
-        if chord > 1e-9 {
+        if chord > 1e-9 || (a[1] - b[1]).abs() > 1e-9 {
             result.push((selected, !choose_curve));
         }
     }
@@ -195,6 +237,22 @@ mod tests {
         assert_eq!(spans.len(), 3);
         assert!(spans.iter().all(|s| s.1));
     }
+    #[test]
+    fn terrain_hill_is_not_flattened_by_a_wide_brush() {
+        let points: Vec<_> = (0..=40)
+            .map(|i| {
+                let t = i as f64 / 40.;
+                [20. * t, 12. * t * (1. - t), 0.]
+            })
+            .collect();
+        let spans = interpret(&points, 10., true).unwrap();
+        assert_eq!(spans.len(), 1);
+        assert!(!spans[0].1);
+        for (i, point) in points.iter().enumerate() {
+            assert!((spans[0].0.evaluate(i as f64 / 40.).unwrap()[1] - point[1]).abs() < 1e-8);
+        }
+    }
+
     #[test]
     fn invalid_and_duplicate_samples_are_explicit() {
         assert!(interpret(&[[f64::NAN, 0., 0.]], 1., true).is_err());

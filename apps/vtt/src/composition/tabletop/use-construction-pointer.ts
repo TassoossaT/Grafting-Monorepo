@@ -134,7 +134,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
           onChange(phase, position) {
             if (phase === "start") {
               manipulatorGesture.current?.cancel();
-              manipulatorGesture.current = beginCurveGesture(ctx, { nodeId: node.id, point: position }, { mode: "shape", insertOnClick: false });
+              manipulatorGesture.current = beginCurveGesture(ctx, { nodeId: node.id, point: position }, { mode: "shape", insertOnClick: false, spatialTarget: true });
             } else if (phase === "move") {
               const sample = { nodeId: node.id, point: position };
               manipulatorGesture.current?.move({ start: sample, current: sample, samples: [sample] });

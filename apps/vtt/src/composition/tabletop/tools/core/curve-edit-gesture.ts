@@ -37,6 +37,8 @@ export interface CurveGesture {
 }
 
 export type CurveGestureOptions = ToolParamsFor<"edit-region"> & {
+  /** A scene manipulator supplies an authoritative XYZ target, unlike a ground pointer. */
+  readonly spatialTarget?: boolean;
   readonly parameter?: number;
   readonly allowShapeChange?: boolean;
   readonly insertOnClick?: boolean;
@@ -53,6 +55,7 @@ function crossedThreshold(sample: PointerSample, gesture: ToolGesture, params?: 
 
 /** Where the pointer is taking the handle: along the ground, or up and down in elevation mode. */
 function targetOf(sample: PointerSample, gesture: ToolGesture, params?: CurveGestureOptions): ConstructionPosition {
+  if (params?.spatialTarget) return gesture.current.point;
   return params?.mode === "elevation" && sample.screenY !== undefined && gesture.current.screenY !== undefined
     ? { ...sample.point, y: sample.point.y + (sample.screenY - gesture.current.screenY) / 40 }
     : params?.pointerOrigin

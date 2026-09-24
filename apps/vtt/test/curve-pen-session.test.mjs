@@ -229,3 +229,38 @@ test("freehand road uses brush margin and commits the preview's interpreted spin
     closeCurves(edges(f).map(e=>resolve(f,e)),interpreted[0].result[0].curves,2e-6);
   }finally{f.close();}
 });
+
+
+test("scene gizmo raises a road anchor and horizontal editing retains its elevation",async()=>{
+  const {beginCurveGesture}=await import("../src/composition/tabletop/tools/core/curve-edit-gesture.ts");
+  const f=fixture();
+  try {
+    build(f);
+    const id=edges(f)[0].endNodeId;
+    const node=()=>f.runtime.getGraphSnapshot().nodes.find(n=>n.id===id);
+    const start={nodeId:id,point:node().position};
+    const raised={nodeId:id,point:{...start.point,y:3}};
+    const edit=beginCurveGesture(f.ctx,start,{mode:"shape",insertOnClick:false,spatialTarget:true});
+    edit.move(gesture(start,raised));edit.commit();
+    assert.equal(node().position.y,3,JSON.stringify(f.calls.feedback));
+    const above={nodeId:id,point:node().position};
+    const horizontal=beginCurveGesture(f.ctx,above,{mode:"shape",insertOnClick:false});
+    horizontal.move(gesture(above,{point:{x:above.point.x+1,y:0,z:above.point.z}}));horizontal.commit();
+    assert.equal(node().position.y,3);
+    assert.equal(node().position.x,above.point.x+1);
+  }finally{f.close();}
+});
+
+test("freehand road retains a hill between endpoints at zero elevation",()=>{
+  const f=fixture();
+  try {
+    const samples=Array.from({length:41},(_,i)=>{const t=i/40;return {point:{x:20*t,y:12*t*(1-t),z:0}};});
+    const g={start:samples[0],current:samples.at(-1),samples};
+    tool.onPointerDown(f.ctx,g.start,brush);tool.onPointerUp(f.ctx,g,brush);
+    assert.equal(edges(f).length,1,JSON.stringify(f.calls.feedback));
+    const c=resolve(f,edges(f)[0]);
+    const middle=f.runtime.curveBatch({tolerance:0.025,commands:[{kind:"split",curve:c,t:0.5}]})[0].curves[0].points[3];
+    assert.ok(Math.abs(middle[1]-3)<1e-5,"road hill must survive fitting and commit");
+    assert.ok(f.runtime.getAllRegionTopologies().some(t=>t.nodes.some(n=>n.position.y>2.9)),"the generated surface must retain the hill too");
+  }finally{f.close();}
+});

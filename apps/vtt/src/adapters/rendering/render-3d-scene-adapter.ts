@@ -439,7 +439,7 @@ export class Render3dSceneAdapter implements SceneRenderPort {
   }
 
   setPointManipulator(viewId: RenderViewId, target: RenderPointManipulator | undefined): void {
-    this.#views.get(viewId)?.view.setPointManipulator(target ? { ...target, axes: ["x", "z"], size: 1 } : undefined);
+    this.#views.get(viewId)?.view.setPointManipulator(target ? { ...target, axes: ["x", "y", "z"], size: 1 } : undefined);
   }
 
   clearPreview(channel?: string): void {

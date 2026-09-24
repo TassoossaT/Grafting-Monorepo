@@ -4001,12 +4001,13 @@ export interface CurveGesture {
   cancel(): void;
   }
 export type CurveGestureOptions = ToolParamsFor<"edit-region"> & {
+  /** A scene manipulator supplies an authoritative XYZ target, unlike a ground pointer. */
+  readonly spatialTarget?: boolean;
   readonly parameter?: number;
   readonly allowShapeChange?: boolean;
   readonly insertOnClick?: boolean;
   readonly pointerOrigin?: ConstructionPosition;
   readonly dragThreshold?: number;
-  };
 export function beginCurveGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGestureOptions): CurveGesture | undefined {
   if (!sample.nodeId) return undefined;
   const snapshot = ctx.runtime.getGraphSnapshot();
