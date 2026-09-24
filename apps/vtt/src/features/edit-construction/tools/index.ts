@@ -25,7 +25,7 @@ export {
   type OutlinePath,
   type OutlineSegment,
 } from "./opening-path.ts";
-export { DEFAULT_STRUCTURE_EDIT_PARAMS, DEFAULT_TOOL_PARAMS, RECTANGLE_OPENING_SHAPE, TOWER_RADIUS_PRESETS, deriveFaceSize } from "./tool-types.ts";
+export { DEFAULT_STRUCTURE_EDIT_PARAMS, DEFAULT_TOOL_PARAMS, RECTANGLE_OPENING_SHAPE, TOWER_RADIUS_PRESETS, deriveFaceSize, withOpeningKind } from "./tool-types.ts";
 export type {
   BrushShapeKind,
   BrushShapeParams,

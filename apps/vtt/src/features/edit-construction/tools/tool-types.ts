@@ -179,6 +179,13 @@ export interface OpeningParams {
   readonly shape: OpeningShape;
 }
 
+/** `params` switched to `kind`: a door's sill is the floor and it is at least door-tall; a window lifts off the floor. */
+export function withOpeningKind(params: OpeningParams, kind: OpeningParams["openingKind"]): OpeningParams {
+  return kind === "door"
+    ? { ...params, openingKind: "door", sill: 0, height: Math.max(params.height, 2) }
+    : { ...params, openingKind: "window", sill: params.sill > 0 ? params.sill : 1 };
+}
+
 export type OpeningSide = "top" | "right" | "bottom" | "left";
 
 /**

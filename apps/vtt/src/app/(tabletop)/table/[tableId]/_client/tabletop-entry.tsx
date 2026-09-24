@@ -9,9 +9,11 @@ import {
   DEFAULT_STRUCTURE_EDIT_PARAMS,
   DEFAULT_TOOL_PARAMS,
   useConstructionPointer,
+  withOpeningKind,
   type ConstructionToolFeedback,
   type ConstructionToolId,
   type EditHistoryStack,
+  type OpeningParams,
   type RenderViewId,
   type StructureEditParams,
   type TabletopRuntime,
@@ -140,6 +142,10 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     },
     [],
   );
+  const handleOpeningKindChange = useCallback((kind: OpeningParams["openingKind"]) => {
+    setToolParams((previous) => ({ ...previous, opening: withOpeningKind(previous.opening, kind) }));
+    setTool("opening");
+  }, []);
   const handleToolParamsUpdate = useCallback(
     <Id extends ConstructionToolId>(toolId: Id, update: (current: ToolParamsByTool[Id]) => ToolParamsByTool[Id]) => {
       setToolParams((previous) => ({ ...previous, [toolId]: update(previous[toolId]) }));
@@ -258,6 +264,8 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           ready={current.status === "ready"}
           activeTool={tool}
           onToolChange={setTool}
+          openingKind={toolParams.opening.openingKind}
+          onOpeningKindChange={handleOpeningKindChange}
           canUndo={historyState.canUndo}
           canRedo={historyState.canRedo}
           onUndo={handleUndo}

@@ -18,7 +18,7 @@ import type {
   WallBrushParams,
   WallParams,
 } from "@/features/edit-construction";
-import { RECTANGLE_OPENING_SHAPE, TOWER_RADIUS_PRESETS, deriveFaceSize, isRectangleShape, openingOutline } from "@/features/edit-construction";
+import { RECTANGLE_OPENING_SHAPE, TOWER_RADIUS_PRESETS, deriveFaceSize, isRectangleShape, openingOutline, withOpeningKind } from "@/features/edit-construction";
 
 export interface ConstructionToolParamsPanelProps {
   readonly activeTool: ConstructionToolId;
@@ -354,13 +354,13 @@ function OpeningFields(props: { readonly params: OpeningParams; readonly onChang
           label="Janela"
           swatchColor="#7dd3fc"
           selected={params.openingKind === "window"}
-          onSelect={() => onChange({ ...params, openingKind: "window", sill: params.sill > 0 ? params.sill : 1 })}
+          onSelect={() => onChange(withOpeningKind(params, "window"))}
         />
         <SelectableChip
           label="Porta"
           swatchColor="#d97706"
           selected={params.openingKind === "door"}
-          onSelect={() => onChange({ ...params, openingKind: "door", sill: 0, height: Math.max(params.height, 2) })}
+          onSelect={() => onChange(withOpeningKind(params, "door"))}
         />
       </div>
       {sliderRow("Largura", params.width, 0.4, 4, 0.1, (width) => onChange({ ...params, width }))}
