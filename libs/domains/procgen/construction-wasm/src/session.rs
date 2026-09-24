@@ -23,6 +23,7 @@ use crate::patch_replacement;
 use crate::pins::{self, Cutting, Pins, SurfaceCapabilities};
 use crate::region_editing;
 use crate::region_groups::{self, RegionGroups};
+use crate::region_props::{self, RegionProps};
 use crate::region_overlay;
 
 fn parse<T: serde::de::DeserializeOwned>(json: &str) -> Result<T, JsValue> {
@@ -48,6 +49,7 @@ struct ConstructionState {
     spatial_index: crate::spatial_index::UniformGridIndex,
     pins: Pins,
     groups: RegionGroups,
+    props: RegionProps,
 }
 
 /// One undoable replacement, holding the *other* state: the one before it
@@ -87,6 +89,7 @@ pub struct ConstructionSession {
     pub(crate) spatial_index: crate::spatial_index::UniformGridIndex,
     pub(crate) pins: Pins,
     pub(crate) groups: RegionGroups,
+    pub(crate) props: RegionProps,
     /// Session configuration rather than edit state: undo never touches it.
     pub(crate) surface_capabilities: SurfaceCapabilities,
     region_overlay_undo: Vec<RegionOverlayHistoryEntry>,
@@ -104,6 +107,7 @@ impl ConstructionSession {
             spatial_index: self.spatial_index.clone(),
             pins: self.pins.clone(),
             groups: self.groups.clone(),
+            props: self.props.clone(),
         }
     }
 
@@ -209,6 +213,7 @@ impl ConstructionSession {
             spatial_index: crate::spatial_index::UniformGridIndex::default(),
             pins: Pins::new(),
             groups: RegionGroups::new(),
+            props: RegionProps::new(),
             surface_capabilities: SurfaceCapabilities::new(),
             region_overlay_undo: Vec::new(),
             region_overlay_redo: Vec::new(),
@@ -247,6 +252,10 @@ impl ConstructionSession {
             let topology = &self.topology;
             self.groups.retain(|region, _| topology.region(region).is_some());
         }
+        if !self.props.is_empty() {
+            let topology = &self.topology;
+            self.props.retain(|region, _| topology.region(region).is_some());
+        }
         for key in &outcome.created_surface_keys {
             if let Ok(id) = mesh::region_id_from_wire(key) {
                 self.known_regions.insert(id.clone());
@@ -275,9 +284,10 @@ impl ConstructionSession {
     }
 
     fn annotate_pins(&self, dto: &mut region_editing::RegionTopologyDto) {
-        dto.group = mesh::region_id_from_wire(&dto.surface_key)
-            .ok()
-            .and_then(|id| self.groups.get(&id).cloned());
+        if let Ok(id) = mesh::region_id_from_wire(&dto.surface_key) {
+            dto.group = self.groups.get(&id).cloned();
+            dto.props = self.props.get(&id).cloned();
+        }
         if self.pins.is_empty() {
             return;
         }
@@ -298,6 +308,7 @@ impl ConstructionSession {
         std::mem::swap(&mut self.spatial_index, &mut state.spatial_index);
         std::mem::swap(&mut self.pins, &mut state.pins);
         std::mem::swap(&mut self.groups, &mut state.groups);
+        std::mem::swap(&mut self.props, &mut state.props);
     }
 
     // ---- Bootstrapping ----
@@ -512,6 +523,16 @@ impl ConstructionSession {
         serialize(&response)
     }
 
+    /// Replaces the regions' property bag, or clears it when `props` is
+    /// null. See `region_props::set_region_props`.
+    pub fn set_region_props_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let mut response =
+            region_props::set_region_props(&self.topology, &mut self.props, parse(request_json)?)
+                .map_err(to_js_error)?;
+        self.track(&mut response);
+        serialize(&response)
+    }
+
     /// The chain of cuttable upright panels continuing the requested one
     /// through shared vertical sides. See `region_groups::panel_run_of`.
     pub fn panel_run_json(&self, request_json: &str) -> Result<String, JsValue> {
@@ -570,6 +591,7 @@ impl ConstructionSession {
         let operation_id = request.operation_id.clone();
         let pins_before = self.pins.clone();
         let groups_before = self.groups.clone();
+        let props_before = self.props.clone();
         let (mut response, previous) = patch_replacement::apply_patch_replacement(
             &mut self.graph,
             &mut self.surfaces,
@@ -596,6 +618,7 @@ impl ConstructionSession {
                 spatial_index,
                 pins: pins_before,
                 groups: groups_before,
+                props: props_before,
             },
         );
         serialize(&response)

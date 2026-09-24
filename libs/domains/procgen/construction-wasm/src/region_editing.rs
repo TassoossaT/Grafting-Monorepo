@@ -438,6 +438,9 @@ pub struct RegionTopologyDto {
     /// session, which owns the group table.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
+    /// The region's property bag, when it has one -- filled in by the session.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub props: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -540,6 +543,7 @@ pub fn region_topology(
         holes,
         nodes,
         group: None,
+        props: None,
     }))
 }
 

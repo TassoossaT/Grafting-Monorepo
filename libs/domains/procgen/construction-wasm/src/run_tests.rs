@@ -492,3 +492,78 @@ fn pieces_meeting_at_a_curved_seam_cut_one_continuous_hole() {
     assert_no_sliver(&session, "p0", [0.6, 1.1]);
     assert_no_sliver(&session, "p1", [0.6, 1.1]);
 }
+
+fn set_props(session: &mut ConstructionSession, regions: &[&str], props: Value) -> Value {
+    let keys: Vec<Value> = regions.iter().map(|region| key(region)).collect();
+    serde_json::from_str(
+        &session
+            .set_region_props_json(&json!({"surfaceKeys": keys, "props": props}).to_string())
+            .unwrap(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn props_replace_clear_and_leave_meshes_alone() {
+    let mut session = session_with(&[[0.0, 0.0], [4.0, 0.0]], &[panel(0, 1)]);
+    opening(&mut session, "a");
+    let meshes = session.all_surface_meshes_json().unwrap();
+    let outcome = set_props(
+        &mut session,
+        &["a"],
+        json!({"x": 1, "nested": {"r": [0.5, 0.25]}}),
+    );
+    assert_eq!(outcome["affectedSurfaceKeys"], json!([key("a")]));
+    assert_eq!(
+        topology(&session, "a")["props"],
+        json!({"x": 1, "nested": {"r": [0.5, 0.25]}})
+    );
+    assert!(topology(&session, "p0").get("props").is_none());
+    set_props(&mut session, &["a"], json!({"y": "z"}));
+    assert_eq!(topology(&session, "a")["props"], json!({"y": "z"}));
+    assert_eq!(session.all_surface_meshes_json().unwrap(), meshes);
+    set_props(&mut session, &["a"], Value::Null);
+    assert!(topology(&session, "a").get("props").is_none());
+    assert!(session.props.is_empty());
+}
+
+#[test]
+fn props_are_undoable_and_dropped_with_their_region() {
+    let mut session = session_with(&[[0.0, 0.0], [4.0, 0.0]], &[panel(0, 1)]);
+    opening(&mut session, "a");
+    opening(&mut session, "b");
+    session.begin_transaction("props").unwrap();
+    set_props(&mut session, &["a", "b"], json!({"k": 1}));
+    assert!(session.commit_transaction("props").unwrap());
+
+    session.undo_region_overlay("props").unwrap();
+    assert!(topology(&session, "a").get("props").is_none());
+    session.redo_region_overlay("props").unwrap();
+    assert_eq!(topology(&session, "a")["props"], json!({"k": 1}));
+
+    session.begin_transaction("rollback").unwrap();
+    set_props(&mut session, &["a"], json!({"k": 2}));
+    assert_eq!(topology(&session, "a")["props"], json!({"k": 2}));
+    session.rollback_transaction("rollback").unwrap();
+    assert_eq!(topology(&session, "a")["props"], json!({"k": 1}));
+
+    session
+        .delete_region_json(&json!({"surfaceKey": key("a")}).to_string())
+        .unwrap();
+    assert!(!session.props.keys().any(|region| region.as_str() == "a"));
+    assert_eq!(topology(&session, "b")["props"], json!({"k": 1}));
+}
+
+#[test]
+fn props_on_an_unknown_region_are_refused() {
+    let mut session = ConstructionSession::new();
+    opening(&mut session, "a");
+    let refused = crate::region_props::set_region_props(
+        &session.topology,
+        &mut session.props,
+        serde_json::from_value(json!({"surfaceKeys": [key("a"), key("ghost")], "props": {"k": 1}}))
+            .unwrap(),
+    );
+    assert!(refused.unwrap_err().contains("unknown region"));
+    assert!(session.props.is_empty());
+}

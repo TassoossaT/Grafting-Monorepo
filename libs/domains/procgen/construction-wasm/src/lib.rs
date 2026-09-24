@@ -15,6 +15,7 @@ mod patch_replacement;
 mod pins;
 mod region_editing;
 mod region_groups;
+mod region_props;
 mod region_overlay;
 mod session;
 #[cfg(test)]
