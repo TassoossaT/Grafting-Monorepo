@@ -35,10 +35,25 @@ fn candidate(points: &[CurvePoint], parameters: &[f64]) -> CubicBezier {
     let a = points[0];
     let b = *points.last().unwrap();
     let fallback = line(a, b);
-    let Some(t1) = direction(a, points[1]) else {
+    let chord = distance(a, b);
+    let min_chord = (chord * 0.12).clamp(0.12, 0.8);
+    let p1 = points
+        .iter()
+        .skip(1)
+        .find(|&&p| distance(a, p) >= min_chord)
+        .copied()
+        .unwrap_or(points[1]);
+    let p2 = points
+        .iter()
+        .rev()
+        .skip(1)
+        .find(|&&p| distance(b, p) >= min_chord)
+        .copied()
+        .unwrap_or(points[points.len() - 2]);
+    let Some(t1) = direction(a, p1) else {
         return fallback;
     };
-    let Some(t2) = direction(b, points[points.len() - 2]) else {
+    let Some(t2) = direction(b, p2) else {
         return fallback;
     };
     let (mut a11, mut a12, mut a22, mut c1, mut c2) = (0., 0., 0., 0., 0.);
@@ -85,9 +100,6 @@ fn candidate(points: &[CurvePoint], parameters: &[f64]) -> CubicBezier {
     }
 }
 
-// Elevation is independent of the lateral brush correction budget.
-const HEIGHT_TOLERANCE: f64 = 0.025;
-
 fn fit_height(curve: &mut CubicBezier, points: &[CurvePoint], parameters: &[f64]) {
     let (mut aa, mut ab, mut bb, mut ay, mut by) = (0., 0., 0., 0., 0.);
     for (point, &u) in points.iter().zip(parameters) {
@@ -124,15 +136,38 @@ pub(crate) fn interpret(
     if points.iter().flatten().any(|v| !v.is_finite()) {
         return Err("stroke coordinates must be finite".into());
     }
+    let min_step = if correction > 0.0 {
+        (correction * 0.08).clamp(0.06, 0.20)
+    } else {
+        1e-6
+    };
     let mut clean = Vec::new();
-    for &point in points {
-        if clean.last() != Some(&point) {
-            clean.push(point);
+    if let Some(&first) = points.first() {
+        clean.push(first);
+    }
+    for &point in points.iter().skip(1).take(points.len().saturating_sub(2)) {
+        if let Some(&last) = clean.last() {
+            if distance(last, point) >= min_step || (last[1] - point[1]).abs() >= min_step {
+                clean.push(point);
+            }
         }
+    }
+    if points.len() >= 2 {
+        clean.push(*points.last().unwrap());
     }
     if clean.len() < 2 {
         return Ok(Vec::new());
     }
+    let height_tolerance = if correction > 0.0 {
+        (correction * 0.4).max(0.18)
+    } else {
+        0.025
+    };
+    let min_split_len = if correction > 0.0 {
+        (correction * 0.5).max(0.75)
+    } else {
+        0.05
+    };
     let mut pending = vec![(0, clean.len() - 1)];
     let mut result = Vec::new();
     while let Some((start, end)) = pending.pop() {
@@ -184,10 +219,11 @@ pub(crate) fn interpret(
                 height_residual = height_residual.max((point[1] - fitted[1]).abs());
             }
         }
-        let line_fits = straight <= correction && height_error <= HEIGHT_TOLERANCE;
-        let curve_fits = residual <= correction && height_residual <= HEIGHT_TOLERANCE;
-        if !line_fits && !curve_fits && span.len() > 2 {
-            if height_error > HEIGHT_TOLERANCE {
+        let line_height_tol = if correction > 0.0 { 0.08 } else { 0.025 };
+        let line_fits = straight <= correction && height_error <= line_height_tol;
+        let curve_fits = residual <= correction && height_residual <= height_tolerance;
+        if !line_fits && !curve_fits && span.len() > 2 && (chord < 1e-6 || chord >= min_split_len) {
+            if height_error > height_tolerance {
                 split = height_split;
             }
             pending.push((start + split, end));
@@ -251,6 +287,24 @@ mod tests {
         for (i, point) in points.iter().enumerate() {
             assert!((spans[0].0.evaluate(i as f64 / 40.).unwrap()[1] - point[1]).abs() < 1e-8);
         }
+    }
+
+    #[test]
+    fn terrain_roughness_does_not_oversegment_into_micro_spans() {
+        let points: Vec<_> = (0..=60)
+            .map(|i| {
+                let t = i as f64 / 60.;
+                [
+                    20. * t,
+                    1.5 * (std::f64::consts::PI * 2. * t).sin() + 0.04 * (i as f64 * 1.7).sin(),
+                    2. * (std::f64::consts::PI * t).sin(),
+                ]
+            })
+            .collect();
+        let spans = interpret(&points, 1.0, true).unwrap();
+        // A 20m terrain stroke with 4cm facet roughness must produce a clean,
+        // compact spine (<= 5 spans), never fragmenting into 20+ micro-segments.
+        assert!(spans.len() <= 5, "produced {} spans", spans.len());
     }
 
     #[test]
