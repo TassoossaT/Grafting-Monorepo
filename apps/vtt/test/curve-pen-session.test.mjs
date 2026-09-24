@@ -162,14 +162,15 @@ test("road deletion: removes a deliberate bend; endpoint deletion fails without 
     tool.onKeyDown(f.ctx,"Delete",points);assert.deepEqual(state(f),kept);assert.ok(f.calls.feedback.some(x=>x?.tone==="error"));
   }finally{f.close();}
 });
-test("road body and obsolete tangent picks never pull the curve or create another road",()=>{
+test("road body dragging curves the edge; obsolete tangent picks remain inert",()=>{
   const f=fixture();
   try {
     build(f);const before=state(f),face=f.runtime.getAllRegionTopologies()[0];
     const body={...sample(-4,2.6),surfaceRef:surfaceRefFromNodeSet(face.surfaceKey)};
-    f.click(body,sample(-4,9),brush);assert.deepEqual(state(f),before);
+    f.click(body,sample(-4,9),brush);assert.notDeepEqual(state(f),before);
+    assert.equal(edges(f).length,2);const reshaped=state(f);
     const e=edges(f)[0],handle={...sample(-8,2),nodeId:curvePickId(e.edgeId,1)};
-    f.click(handle,sample(-8,8));assert.deepEqual(state(f),before);assert.equal(f.finish(),false);
+    f.click(handle,sample(-8,8));assert.deepEqual(state(f),reshaped);assert.equal(f.finish(),false);
   }finally{f.close();}
 });
 test("freehand road: click and cancelled stroke do nothing; final release commits once with undo",()=>{
@@ -201,7 +202,7 @@ test("road endpoint deletion shortens a path; midpoint dragging never inserts by
   const f=fixture();
   try {
     build(f);const e=edges(f)[0],mid={...sample(-5,2),nodeId:curvePickId(e.edgeId,"midpoint")},before=state(f);
-    f.click(mid,sample(-5,8));assert.deepEqual(state(f),before);
+    f.click(mid,sample(-5,8));assert.notDeepEqual(state(f),before);assert.equal(edges(f).length,2);
     const id=e.startNodeId,p=f.runtime.getGraphSnapshot().nodes.find(n=>n.id===id).position;
     f.click({point:p,nodeId:id});tool.onKeyDown(f.ctx,"Delete",points);
     assert.equal(edges(f).length,1,JSON.stringify(f.calls.feedback));
@@ -262,5 +263,70 @@ test("freehand road retains a hill between endpoints at zero elevation",()=>{
     const middle=f.runtime.curveBatch({tolerance:0.025,commands:[{kind:"split",curve:c,t:0.5}]})[0].curves[0].points[3];
     assert.ok(Math.abs(middle[1]-3)<1e-5,"road hill must survive fitting and commit");
     assert.ok(f.runtime.getAllRegionTopologies().some(t=>t.nodes.some(n=>n.position.y>2.9)),"the generated surface must retain the hill too");
+  }finally{f.close();}
+});
+
+
+for(const mode of ["points","brush"])for(const originKind of ["vertex","edge"]){
+  test(`T junction from ${originKind} in ${mode} mode is connected and reversible`,()=>{
+    const f=fixture();
+    try {
+      f.click(sample(-10,0));if(originKind==="vertex")f.click(sample(0,0));f.click(sample(10,0));f.finish();
+      const face=f.runtime.getAllRegionTopologies()[0];
+      const vertex=edges(f)[0].endNodeId;
+      const origin=originKind==="vertex"?{...sample(0,0),nodeId:vertex,shiftKey:true}:{...sample(3,0.1),surfaceRef:surfaceRefFromNodeSet(face.surfaceKey),shiftKey:true};
+      const x=originKind==="vertex"?0:3, params={...points,creationMode:mode};
+      const before=state(f);
+      if(mode==="points"){f.click(origin,origin,params);f.click(sample(x,8),sample(x,8),params);f.finish();}
+      else f.click(origin,sample(x,8),params);
+      assert.equal(f.calls.feedback.filter(x=>x.tone==="error").length,0,JSON.stringify(f.calls.feedback));
+      const graph=f.runtime.getGraphSnapshot();
+      const junction=graph.nodes.find(n=>Math.abs(n.position.x-x)<0.01&&Math.abs(n.position.z)<0.01&&edges(f).filter(e=>e.startNodeId===n.id||e.endNodeId===n.id).length===3);
+      assert.ok(junction,"branch must share a degree-three spine junction, not merely overlap visually");
+      assert.equal(edges(f).length,3);
+      const after=state(f),id=`platform-test:road-${mode==="points"?"points":"stroke"}:2`;
+      f.session.undo_region_overlay(id);assert.deepEqual(state(f),before);
+      f.session.redo_region_overlay(id);assert.deepEqual(state(f),after);
+    }finally{f.close();}
+  });
+}
+
+test("edge click inserts at the clicked parameter and preserves the original curve",()=>{
+  const f=fixture();
+  try {
+    f.click(sample(-10,0));f.click(sample(10,0));f.finish();
+    const face=f.runtime.getAllRegionTopologies()[0];
+    f.click({...sample(3,0.1),surfaceRef:surfaceRefFromNodeSet(face.surfaceKey)});
+    assert.equal(edges(f).length,2,JSON.stringify(f.calls.feedback));
+    const node=f.runtime.getGraphSnapshot().nodes.find(n=>n.id===f.selected?.id);
+    assert.ok(Math.abs(node.position.x-3)<0.01&&Math.abs(node.position.z)<0.01);
+    for(const e of edges(f))for(const p of resolve(f,e).points)assert.ok(Math.abs(p[2])<1e-9);
+  }finally{f.close();}
+});
+
+test("cancelling a branch from an edge does not split the standing road",()=>{
+  const f=fixture();
+  try {
+    f.click(sample(-10,0));f.click(sample(10,0));f.finish();
+    const face=f.runtime.getAllRegionTopologies()[0],before=state(f);
+    const a={...sample(3,0),surfaceRef:surfaceRefFromNodeSet(face.surfaceKey),shiftKey:true},b=sample(3,8),g=gesture(a,b);
+    tool.onPointerDown(f.ctx,a,brush);tool.onPointerMove(f.ctx,g,brush);
+    assert.deepEqual(state(f),before);tool.onCancel(f.ctx);tool.onPointerUp(f.ctx,g,brush);assert.deepEqual(state(f),before);
+  }finally{f.close();}
+});
+
+
+test("edge curvature drag previews transiently, cancels, and undoes without adding vertices",()=>{
+  const f=fixture();
+  try {
+    f.click(sample(-10,0));f.click(sample(10,0));f.finish();
+    const face=f.runtime.getAllRegionTopologies()[0],before=state(f);
+    const a={...sample(3,0.1),surfaceRef:surfaceRefFromNodeSet(face.surfaceKey)},b=sample(3,4),g=gesture(a,b);
+    tool.onPointerDown(f.ctx,a,brush);tool.onPointerMove(f.ctx,g,brush);
+    assert.deepEqual(state(f),before);tool.onCancel(f.ctx);tool.onPointerUp(f.ctx,g,brush);assert.deepEqual(state(f),before);
+    f.click(a,b,brush);assert.equal(edges(f).length,1);assert.notDeepEqual(state(f),before);
+    assert.ok(resolve(f,edges(f)[0]).points.some(p=>p[2]>1));
+    const after=state(f);f.session.undo_region_overlay("curve-edit:3");assert.deepEqual(state(f),before);
+    f.session.redo_region_overlay("curve-edit:3");assert.deepEqual(state(f),after);
   }finally{f.close();}
 });

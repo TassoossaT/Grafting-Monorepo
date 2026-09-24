@@ -10,6 +10,7 @@ export interface PointerSample {
   /** Screen coordinate used by explicit elevation gestures. */
   readonly screenY?: number;
   readonly screenX?: number;
+  readonly shiftKey?: boolean;
   readonly nodeId?: string;
   readonly surfaceRef?: string;
 }

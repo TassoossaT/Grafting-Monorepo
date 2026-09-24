@@ -2,7 +2,7 @@ import { createPathBrushEffect, pathFormationFor, DEFAULT_TOOL_PARAMS, curvePick
 import type { PathBrushParams } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionPosition, CubicBezier } from "../../../../ports/index.ts";
 import { commitPathCloudIntent } from "../../path/path-cloud-transaction.ts";
-import { scopedToolId, type ConstructionTool, type ToolContext, type PointerSample } from "../core/tool-context.ts";
+import { scopedToolId, type ConstructionTool, type ToolContext, type PointerSample, type ToolGesture } from "../core/tool-context.ts";
 import { beginCurveGesture, type CurveGesture, type CurveGestureOptions } from "../core/curve-edit-gesture.ts";
 import { pathStrokeTool } from "./path-stroke-tool.ts";
 import { roadBodyTarget } from "./road-body-target.ts";
@@ -11,10 +11,14 @@ const CHANNEL = "road-points";
 const xyz = (p: ConstructionPosition) => [p.x, p.y, p.z] as const;
 const equal = (a: ConstructionPosition, b: ConstructionPosition) => a.x === b.x && a.y === b.y && a.z === b.z;
 type Draft = { points: ConstructionPosition[]; params: PathBrushParams };
-type Gesture = { kind: "edit"; edit: CurveGesture } | { kind: "stroke" } | { kind: "point"; point: ConstructionPosition } | { kind: "selection" };
+type Gesture = { kind: "edit"; edit: CurveGesture } | { kind: "stroke"; origin?: PointerSample } | { kind: "point"; point: ConstructionPosition } | { kind: "selection" };
 const drafts = new WeakMap<ToolContext["runtime"], Draft>();
 const gestures = new WeakMap<ToolContext["runtime"], Gesture>();
 const selections = new WeakMap<ToolContext["runtime"], string>();
+
+function seededGesture(gesture: ToolGesture, origin?: PointerSample): ToolGesture {
+  return origin ? { ...gesture, start: origin, samples: [origin, ...gesture.samples.slice(1)] } : gesture;
+}
 
 function curves(ctx: ToolContext, points: readonly ConstructionPosition[]): readonly CubicBezier[] {
   return ctx.runtime.curveBatch({ tolerance: 0.025, commands: [{ kind: "automatic", points: points.map(xyz) }] })[0]!.curves;
@@ -98,34 +102,38 @@ export const pathPointsTool: ConstructionTool<"path-brush"> = {
       if (gestures.has(ctx.runtime)) return;
       if (!drafts.get(ctx.runtime)?.points.length) {
         const target = editTarget(ctx, sample);
+        const body = target ? undefined : roadBodyTarget(ctx, sample);
+        const origin = target ?? body?.sample;
+        if (sample.shiftKey && origin) {
+          select(ctx);
+          if (params.creationMode && params.creationMode !== "brush") {
+            gestures.set(ctx.runtime, { kind: "point", point: { ...origin.point } });
+          } else {
+            gestures.set(ctx.runtime, { kind: "stroke", origin });
+            pathStrokeTool.onPointerDown?.(ctx, origin, params);
+          }
+          return;
+        }
         if (target) {
           select(ctx, target);
           const midpoint = curvePick(target.nodeId!)?.index === "midpoint";
           if (midpoint) {
-            // A midpoint is an insertion button, never an implicit curve-pull gesture.
-            gestures.set(ctx.runtime, { kind: "selection" });
-            const edit = beginEdit(ctx, target, { mode: "shape", insertOnClick: true });
-            if (edit) {
-              let dragged = false;
-              gestures.set(ctx.runtime, { kind: "edit", edit: {
-                move(g) {
-                  dragged ||= sample.screenX !== undefined && sample.screenY !== undefined && g.current.screenX !== undefined && g.current.screenY !== undefined
-                    ? Math.hypot(g.current.screenX-sample.screenX,g.current.screenY-sample.screenY) >= 5
-                    : Math.hypot(g.current.point.x-sample.point.x,g.current.point.z-sample.point.z) >= 0.05;
-                },
-                commit: () => dragged ? edit.cancel() : edit.commit(),
-                cancel: () => edit.cancel(),
-              } });
-            }
+            const edit = beginEdit(ctx, target, { mode: "shape", curveMode: "free", insertOnClick: true, dragThreshold: 5, pointerOrigin: sample.point });
+            if (edit) gestures.set(ctx.runtime, { kind: "edit", edit });
           } else {
             const edit = beginEdit(ctx, target, { mode: "shape", insertOnClick: false, dragThreshold: 5, pointerOrigin: sample.point });
             if (edit) gestures.set(ctx.runtime, { kind: "edit", edit });
           }
           return;
         }
-        const body = roadBodyTarget(ctx, sample);
-        if (body || (sample.nodeId && curvePick(sample.nodeId))) {
-          select(ctx, body?.sample);
+        if (body) {
+          select(ctx, body.sample);
+          const edit = beginEdit(ctx, body.sample, { ...body.options, curveMode: "free", insertOnClick: curvePick(body.sample.nodeId!)?.index === "midpoint" });
+          if (edit) gestures.set(ctx.runtime, { kind: "edit", edit });
+          return;
+        }
+        if (sample.nodeId && curvePick(sample.nodeId)) {
+          select(ctx);
           gestures.set(ctx.runtime, { kind: "selection" });
           return;
         }
@@ -143,7 +151,7 @@ export const pathPointsTool: ConstructionTool<"path-brush"> = {
     safely(ctx, () => {
       const active = gestures.get(ctx.runtime);
       if (active?.kind === "edit") active.edit.move(g);
-      else if (active?.kind === "stroke") pathStrokeTool.onPointerMove?.(ctx, g, params);
+      else if (active?.kind === "stroke") pathStrokeTool.onPointerMove?.(ctx, seededGesture(g, active.origin), params);
       else if (active?.kind === "point") {
         const draft = drafts.get(ctx.runtime);
         if (draft?.points.length) preview(ctx, draft, g.current.point);
@@ -155,7 +163,7 @@ export const pathPointsTool: ConstructionTool<"path-brush"> = {
       const active = gestures.get(ctx.runtime);
       gestures.delete(ctx.runtime);
       if (active?.kind === "edit") { active.edit.move(g); active.edit.commit(); }
-      else if (active?.kind === "stroke") pathStrokeTool.onPointerUp?.(ctx, g, params);
+      else if (active?.kind === "stroke") pathStrokeTool.onPointerUp?.(ctx, seededGesture(g, active.origin), params);
       else if (active?.kind === "point") {
         const draft = drafts.get(ctx.runtime) ?? { points: [], params: { ...params } };
         if (!draft.points.length || !equal(draft.points.at(-1)!, active.point)) draft.points.push(active.point);

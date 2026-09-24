@@ -433,3 +433,12 @@ Esta rodada de preparação altera apenas este documento. Não foram implementad
 - InterpretStroke ajusta os controles verticais por minimos quadrados e verifica erro vertical separado (0.025 unidades), independentemente da margem lateral do pincel. Assim extremos em Y=0 nao apagam uma elevacao intermediaria.
 - Testes adicionados: elevar ancora pelo mesmo gesto usado pelo gizmo, mover horizontalmente sem perder altura, criar e persistir uma colina com extremos baixos e verificar altura da superficie gerada. Nao implementa nova projecao automatica sobre terreno ao arrastar: preserva altura autorada e amostrada.
 - Validacao: 480 testes VTT, 107 testes Rust, check TypeScript e builds passaram. Foi necessario reconstruir render-3d por artefatos locais desatualizados. Aceite visual continua pendente.
+
+
+## Ramificacoes em T e curvatura de aresta - 23/09/2026
+
+- Shift ao iniciar em um vertice ou no corpo de um trecho inicia uma nova rua a partir da espinha projetada. Funciona nos modos por pontos e desenho livre. Divisao da aresta e uniao sao feitas pelo construtor existente na confirmacao, sem mutar a rua ao iniciar/cancelar.
+- Clique simples num trecho insere ancora no parametro projetado do clique. Arrastar o trecho (incluindo marcador central) puxa a curva, preserva extremos e nao insere ancora. O trecho ajustado passa a modo livre para manter a curvatura autorada.
+- O gizmo e ocultado enquanto Shift esta pressionado para nao roubar o inicio da ramificacao sobre um ponto selecionado; retorna ao soltar Shift se ainda houver selecao.
+- Instrucoes atualizadas no painel. Passaram 487 testes VTT, check TypeScript e build. Sete novas regressoes cobrem quatro combinacoes origem/modo, insercao no parametro certo, cancelamento da ramificacao e curvatura com cancelamento/desfazer/refazer.
+- Validacao automatizada verifica juncoes reais de grau tres e identidade do grafo ao desfazer. Aceite visual ainda pendente; conferir gizmo/Shift, encontro em curva e alturas no uso real.

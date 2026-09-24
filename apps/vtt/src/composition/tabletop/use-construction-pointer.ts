@@ -92,6 +92,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
   /** Channels the edge overlay currently occupies, so a redraw clears exactly what it drew. */
   const shownEdgeChannels = useRef(new Set<string>());
   const manipulatorGesture = useRef<CurveGesture | undefined>(undefined);
+  const branchModifier = useRef(false);
   const selectedPoint = useRef<string | undefined>(undefined);
 
   const nextSequence = useCallback(() => ++sequenceRef.current, []);
@@ -129,7 +130,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
         const node = info && toolFor(activeTool).handlePresentation === "spine-points"
           ? runtime.getGraphSnapshot().nodes.find(n => n.id === info.id && n.id.startsWith("spine:")) : undefined;
         selectedPoint.current = node?.id;
-        runtime.setPointManipulator?.(viewId, node ? {
+        runtime.setPointManipulator?.(viewId, node && !branchModifier.current ? {
           id: node.id, position: node.position,
           onChange(phase, position) {
             if (phase === "start") {
@@ -198,6 +199,11 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     const keydown = (event: KeyboardEvent) => {
       if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
       if (event.target instanceof HTMLElement && (event.target.isContentEditable || event.target.closest("input, textarea, select"))) return;
+      if (event.key === "Shift" && tool.handlePresentation === "spine-points" && !manipulatorGesture.current) {
+        branchModifier.current = true;
+        if (options.viewId !== undefined) options.runtime.setPointManipulator?.(options.viewId, undefined);
+        return;
+      }
       if (event.key === "Escape" && tool.onCancel) {
         tool.onCancel(ownedContext); release(); event.preventDefault(); return;
       }
@@ -207,10 +213,22 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
         refreshEdgeOverlay();
       }
     };
+    const restoreManipulator = () => {
+      if (!branchModifier.current) return;
+      branchModifier.current = false;
+      const node = options.runtime.getGraphSnapshot().nodes.find(n => n.id === selectedPoint.current);
+      if (node) ctx.reportSelection({ id: node.id, point: node.position });
+    };
+    const keyup = (event: KeyboardEvent) => { if (event.key === "Shift") restoreManipulator(); };
     refreshEdgeOverlay();
+    window.addEventListener("keyup", keyup);
+    window.addEventListener("blur", restoreManipulator);
     window.addEventListener("keydown", keydown);
     return () => {
       window.removeEventListener("keydown", keydown);
+      window.removeEventListener("keyup", keyup);
+      window.removeEventListener("blur", restoreManipulator);
+      branchModifier.current = false;
       selectedPoint.current = undefined;
       manipulatorGesture.current?.cancel();
       manipulatorGesture.current = undefined;
@@ -242,12 +260,12 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
   }, [options.runtime, refreshEdgeOverlay, ctx]);
 
   const sampleAt = useCallback(
-    (event: { currentTarget: HTMLElement; clientX: number; clientY: number }): PointerSample | undefined => {
+    (event: { currentTarget: HTMLElement; clientX: number; clientY: number; shiftKey?: boolean }): PointerSample | undefined => {
       const { viewId, runtime, snapToGrid } = optionsRef.current;
       if (viewId === undefined) return undefined;
       const { x, y } = pointerOffset(event);
       const hit = runtime.pick(viewId, x, y);
-      return hit === undefined ? undefined : { ...applySnap(hit, snapToGrid && toolFor(optionsRef.current.activeTool).useGridSnap !== false), screenY: event.clientY, screenX: event.clientX };
+      return hit === undefined ? undefined : { ...applySnap(hit, snapToGrid && toolFor(optionsRef.current.activeTool).useGridSnap !== false), screenY: event.clientY, screenX: event.clientX, shiftKey: event.shiftKey };
     },
     [],
   );

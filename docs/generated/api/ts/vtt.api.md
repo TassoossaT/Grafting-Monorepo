@@ -1985,6 +1985,8 @@ What the pointer resolved to at one instant -- `nodeId` present only when it hit
 
 Screen coordinate used by explicit elevation gestures.
 
+### `property vtt.tool-context.PointerSample.shiftKey?: boolean`
+
 ### `property vtt.tool-context.PointerSample.surfaceRef?: string`
 
 ### `interface vtt.tool-context.ToolContext`
