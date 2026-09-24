@@ -63,7 +63,6 @@ import {
   nodeHandleSceneItemId,
   nodeHandleTransform,
   type NodeHandlePickData,
-  type NodeHandleVisualParams,
 } from "./node-handle-scene-item.ts";
 import {
   TOKEN_LAYER_ID,
@@ -117,7 +116,7 @@ function engineOrigin(origin: ChangeOrigin): EngineChangeOrigin {
 export class Render3dSceneAdapter implements SceneRenderPort {
   readonly #views = new Map<RenderViewId, AttachedView>();
   readonly #tokens = new Map<string, RenderToken>();
-  readonly #nodeHandles = new Map<string, { readonly position: { readonly x: number; readonly y: number; readonly z: number }; readonly highlighted: boolean }>();
+  readonly #nodeHandles = new Map<string, { readonly x: number; readonly y: number; readonly z: number }>();
   /** Which preview channels currently have something on them, so an unnamed clear can empty them all. */
   readonly #previewChannels = new Set<string>();
   // Keyed by `${layer}:${scopeId}` (not scopeId alone) so a terrain chunk id
@@ -136,8 +135,7 @@ export class Render3dSceneAdapter implements SceneRenderPort {
     if (this.#engine !== undefined) throw new Error("scene renderer is already started");
 
     const texture = createMarkerTexture();
-    const handleTexture = createNodeHandleTexture(false);
-    const highlightedHandleTexture = createNodeHandleTexture(true);
+    const handleTexture = createNodeHandleTexture();
     const registry = createVisualRegistry();
     registry.register<TokenVisualParams>({
       kind: TOKEN_VISUAL_KIND,
@@ -151,13 +149,13 @@ export class Render3dSceneAdapter implements SceneRenderPort {
       }),
       equals: (left, right) => left.color === right.color,
     });
-    registry.register<NodeHandleVisualParams>({
+    registry.register<Record<string, never>>({
       kind: NODE_HANDLE_VISUAL_KIND,
-      describe: (params) => ({
-        geometry: { shape: "sprite", screenConstant: true },
-        material: { surface: "unlit", color: 0xffffff, texture: params.highlighted ? highlightedHandleTexture : handleTexture },
+      describe: () => ({
+        geometry: { shape: "sprite" },
+        material: { surface: "unlit", color: 0xffffff, texture: handleTexture },
       }),
-      equals: (left, right) => left.highlighted === right.highlighted,
+      equals: () => true,
     });
     registry.register<MapChunkVisualParams>({
       kind: MAP_SURFACE_VISUAL_KIND,
@@ -378,25 +376,21 @@ export class Render3dSceneAdapter implements SceneRenderPort {
       engine.scene.remove(nodeHandleSceneItemId(change.nodeId), origin);
       this.#nodeHandles.delete(change.nodeId);
     } else if (change.type === "node-handle-upserted") {
-      const { nodeId, position } = change.handle;
-      const highlighted = change.handle.highlighted === true;
-      const previous = this.#nodeHandles.get(nodeId);
+      const previous = this.#nodeHandles.get(change.handle.nodeId);
       if (previous === undefined) {
-        engine.scene.put(nodeHandleSceneItem(nodeId, position, highlighted), origin);
-      } else {
-        if (previous.highlighted !== highlighted) {
-          engine.scene.setVisualParams(nodeHandleSceneItemId(nodeId), { highlighted } satisfies NodeHandleVisualParams, origin);
-        }
-        if (
-          previous.highlighted !== highlighted ||
-          previous.position.x !== position.x ||
-          previous.position.y !== position.y ||
-          previous.position.z !== position.z
-        ) {
-          engine.scene.setTransform(nodeHandleSceneItemId(nodeId), nodeHandleTransform(position, highlighted), origin);
-        }
+        engine.scene.put(nodeHandleSceneItem(change.handle.nodeId, change.handle.position), origin);
+      } else if (
+        previous.x !== change.handle.position.x ||
+        previous.y !== change.handle.position.y ||
+        previous.z !== change.handle.position.z
+      ) {
+        engine.scene.setTransform(
+          nodeHandleSceneItemId(change.handle.nodeId),
+          nodeHandleTransform(change.handle.position),
+          origin,
+        );
       }
-      this.#nodeHandles.set(nodeId, { position, highlighted });
+      this.#nodeHandles.set(change.handle.nodeId, change.handle.position);
     } else if (change.type === "surface-pick-target-removed") {
       engine.scene.remove(mapSurfacePickSceneItemId(change.surfaceRef), origin);
     } else if (change.type === "surface-pick-target-upserted") {

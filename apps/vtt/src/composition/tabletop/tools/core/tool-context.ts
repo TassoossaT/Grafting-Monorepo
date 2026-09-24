@@ -3,7 +3,6 @@ import type { ConstructionToolId, PreviewDescriptor, StructureEditParams, ToolPa
 import type { ConstructionPosition } from "@/ports";
 
 import type { TabletopRuntime } from "../../tabletop-runtime.ts";
-import type { EditIntent } from "./edit-intent.ts";
 
 /** What the pointer resolved to at one instant -- `nodeId` present only when it hit a node handle. */
 export interface PointerSample {
@@ -21,31 +20,6 @@ export interface ToolGesture {
   readonly current: PointerSample;
   /** Ordered samples accumulated by the dispatcher; preview-only until pointer release. */
   readonly samples: readonly PointerSample[];
-  /** Whether the pointer travelled far enough to be a drag rather than a click -- set by the dispatcher, see {@link gestureDragged}. */
-  readonly dragged?: boolean;
-}
-
-/** How far a press may wander, on screen or in the world when no screen position is known, and still be a click. */
-const CLICK_SLOP_PIXELS = 3;
-const CLICK_SLOP_WORLD = 0.05;
-
-/** The one click-versus-drag decision: the dispatcher's own, when it made it, else the same rule applied to the samples. */
-export function gestureDragged(gesture: ToolGesture): boolean {
-  if (gesture.dragged !== undefined) return gesture.dragged;
-  const { start } = gesture;
-  return [...gesture.samples, gesture.current].some((sample) =>
-    sample.screenX !== undefined && sample.screenY !== undefined && start.screenX !== undefined && start.screenY !== undefined
-      ? Math.hypot(sample.screenX - start.screenX, sample.screenY - start.screenY) > CLICK_SLOP_PIXELS
-      : Math.hypot(sample.point.x - start.point.x, sample.point.y - start.point.y, sample.point.z - start.point.z) > CLICK_SLOP_WORLD);
-}
-
-/** Screen pixels of vertical pointer travel per world unit of height in elevation mode. */
-const ELEVATION_PIXELS_PER_UNIT = 40;
-
-/** The height an elevation drag adds going from `fromScreenY` to `toScreenY` (screen Y grows downward), or `undefined` without both. */
-export function elevationRise(fromScreenY: number | undefined, toScreenY: number | undefined): number | undefined {
-  if (fromScreenY === undefined || toScreenY === undefined) return undefined;
-  return (fromScreenY - toScreenY) / ELEVATION_PIXELS_PER_UNIT;
 }
 
 export interface ConstructionToolFeedback {
@@ -107,16 +81,10 @@ export interface ConstructionTool<Id extends ConstructionToolId> {
    * responsible for whatever continuity it wants.
    */
   readonly snapsToSurface?: boolean;
-  /**
-   * The structure types whose edit handles this tool edits. A press on one
-   * of their handles edits; every other press creates. Absent: every press
-   * creates, and no handles are shown.
-   */
-  readonly editableType?: (surfaceType: string) => boolean;
   /** The tool's not-yet-committed ghost for the current gesture (or stationary hover, when `gesture.start === gesture.current`). */
   previewFor?(gesture: ToolGesture, params: ToolParamsFor<Id>, ctx: ToolContext): PreviewDescriptor | undefined;
-  /** Left-button press. Continuous tools (brushes, move-node) start their gesture here. `intent` is what the dispatcher resolved from the hover; absent when called outside it. */
-  onPointerDown?(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>, intent?: EditIntent): void;
+  /** Left-button press. Continuous tools (brushes, move-node) start their gesture here. */
+  onPointerDown?(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void;
   /** Called while a gesture is active (left button held). Brushes that paint continuously (terrain) commit here, throttled by the dispatcher. */
   onPointerMove?(ctx: ToolContext, gesture: ToolGesture, params: ToolParamsFor<Id>): void;
   /** Gesture end. Tools that commit a single shape from a drag (wall, move-node's history entry) act here. */

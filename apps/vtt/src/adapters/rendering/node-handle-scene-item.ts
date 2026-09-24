@@ -11,33 +11,26 @@ export interface NodeHandlePickData {
   readonly nodeId: string;
 }
 
-/** The handle's placeholder look; the visual registry decides what each state draws. */
-export interface NodeHandleVisualParams {
-  readonly highlighted: boolean;
-}
-
 export function nodeHandleSceneItemId(nodeId: string): string {
   return `construction-node-handle:${nodeId}`;
 }
 
-/** Screen-constant sizes (see render-3d's `screenConstant` sprite): about 16px, and larger under the pointer, at the table view's field of view. */
-const HANDLE_SCALE = 0.014;
-const HIGHLIGHTED_HANDLE_SCALE = 0.02;
+/** Large enough to stay a comfortable pointer/touch target at typical table-view camera distances, small enough not to obscure the geometry it marks. */
+const HANDLE_SCALE = 0.32;
 
-export function nodeHandleTransform(position: ConstructionPosition, highlighted = false): Transform {
-  return { position, scale: highlighted ? HIGHLIGHTED_HANDLE_SCALE : HANDLE_SCALE };
+export function nodeHandleTransform(position: ConstructionPosition): Transform {
+  return { position, scale: HANDLE_SCALE };
 }
 
 export function nodeHandleSceneItem(
   nodeId: string,
   position: ConstructionPosition,
-  highlighted = false,
-): SceneItem<NodeHandleVisualParams> {
+): SceneItem<Record<string, never>> {
   return {
     id: nodeHandleSceneItemId(nodeId),
     layer: NODE_HANDLE_LAYER_ID,
-    visual: { kind: NODE_HANDLE_VISUAL_KIND, params: { highlighted } },
-    transform: nodeHandleTransform(position, highlighted),
+    visual: { kind: NODE_HANDLE_VISUAL_KIND, params: {} },
+    transform: nodeHandleTransform(position),
     data: Object.freeze({ entity: "construction-node-handle", nodeId }) satisfies NodeHandlePickData,
   };
 }

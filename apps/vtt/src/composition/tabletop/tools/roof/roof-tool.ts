@@ -89,5 +89,5 @@ const rawRoofTool: ConstructionTool<"roof"> = {
   },
 };
 
-/** Also grabs and edits an existing roof's own vertex handles -- see `structure-edit-behavior.ts`. */
+/** Also grabs and edits an existing roof's own vertex/edge/body -- see `structure-edit-behavior.ts`. */
 export const roofTool = withStructureEditing(rawRoofTool, { ownsType: (surfaceType) => surfaceType === roofStructureType.surfaceType });

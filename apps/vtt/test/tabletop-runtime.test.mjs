@@ -1064,39 +1064,3 @@ test("transact rolls back, resyncs the projection and rethrows when the work fai
 });
 
 
-
-test("edit handles are uploaded only for the focused faces, and a vertex move re-places only theirs", async () => {
-  const renderPort = createFakeRenderPort();
-  const constructionPort = createFakeConstructionPort();
-  const runtime = createTabletopRuntime({ tableId: "table-handles", seedFakeMap: true, renderPort, constructionPort });
-  await runtime.start();
-  const positions = new Map([["fake:wall:a", { x: 2, y: 0, z: 0 }], ["fake:wall:b", { x: 2, y: 0, z: 4 }], ["fake:wall:c", { x: 2, y: 3, z: 0 }]]);
-  let fullReads = 0;
-  constructionPort.getAllRegionTopologies = () => { fullReads += 1; return []; };
-  constructionPort.getGraphSnapshot = () => { fullReads += 1; return { nodes: [], edges: [] }; };
-  constructionPort.getRegionTopology = (surfaceKey) => surfaceRefFromNodeSet(surfaceKey) !== surfaceRefFromNodeSet(FAKE_WALL_SURFACE_KEY) ? undefined : {
-    surfaceKey: FAKE_WALL_SURFACE_KEY, surfaceType: "platform", physical: true, holes: [],
-    outerLoops: [FAKE_WALL_SURFACE_KEY.map((id, i) => ({ edgeId: `e${i}`, reversed: false, startNodeId: id, endNodeId: FAKE_WALL_SURFACE_KEY[(i + 1) % 3], geometry: { kind: "line" } }))],
-    nodes: FAKE_WALL_SURFACE_KEY.map((id) => ({ id, position: positions.get(id) })),
-  };
-  const handles = () => renderPort.changes.filter((change) => change.type === "node-handle-upserted" || change.type === "node-handle-removed");
-  assert.equal(handles().length, 0, "nothing is focused, so no handle is on the table");
-
-  const wall = surfaceRefFromNodeSet(FAKE_WALL_SURFACE_KEY);
-  runtime.setHandleFocus({ surfaceRefs: [wall] });
-  assert.deepEqual(handles().map((change) => change.handle.nodeId).sort(), [...FAKE_WALL_SURFACE_KEY].sort());
-
-  const before = handles().length;
-  runtime.setHandleFocus({ surfaceRefs: [wall], highlighted: "fake:wall:a" });
-  assert.deepEqual(handles().slice(before).map((change) => [change.handle.nodeId, change.handle.highlighted]), [["fake:wall:a", true]]);
-
-  const readsBefore = fullReads;
-  const afterHighlight = handles().length;
-  positions.set("fake:wall:b", { x: 3, y: 0, z: 4 });
-  runtime.moveVertex("fake:wall:b", { x: 3, y: 0, z: 4 }, "local", "drag");
-  assert.deepEqual(handles().slice(afterHighlight).map((change) => [change.handle.nodeId, change.handle.position.x]), [["fake:wall:b", 3]]);
-  assert.equal(fullReads, readsBefore, "a drag tick reads the focused face only, never the whole table");
-
-  runtime.setHandleFocus({ surfaceRefs: [] });
-  assert.deepEqual(handles().slice(-3).map((change) => change.type), ["node-handle-removed", "node-handle-removed", "node-handle-removed"]);
-});

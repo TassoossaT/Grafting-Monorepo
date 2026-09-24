@@ -226,12 +226,6 @@ export type GeometryDescriptor = {
      * transform scale, and an optional unlit texture supplies its shape.
      */
     readonly shape: "sprite";
-    /**
-     * Keeps the sprite the same size on screen at any camera distance. The
-     * transform scale is then read as the size the sprite would have one
-     * world unit in front of a perspective camera. Defaults to `false`.
-     */
-    readonly screenConstant?: boolean;
 } | {
     readonly shape: "plane";
     readonly width: number;

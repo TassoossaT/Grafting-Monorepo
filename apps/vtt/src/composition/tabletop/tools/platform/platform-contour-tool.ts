@@ -239,5 +239,5 @@ const rawPlatformContourTool: ConstructionTool<"platform-contour"> = {
   },
 };
 
-/** Also grabs and edits an existing platform's own vertex handles -- see `structure-edit-behavior.ts`. */
+/** Also grabs and edits an existing platform's own vertex/edge/body -- see `structure-edit-behavior.ts`. */
 export const platformContourTool = withStructureEditing(rawPlatformContourTool, { ownsType: (surfaceType) => surfaceType === platformStructureType.surfaceType });

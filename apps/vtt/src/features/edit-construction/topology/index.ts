@@ -24,5 +24,3 @@ export { panelRailOf } from "./panel-rail.ts";
 export type { PanelRail } from "./panel-rail.ts";
 export { arcSweepOf, arcSweepsOf, closestOnContours, contourLengths, evaluateContour, parametersAtDistance, subContour } from "./contour-geometry.ts";
 export type { ContourPort, ContourSpan } from "./contour-geometry.ts";
-export { describeHandle, faceHandles, spineHandles } from "./edit-handles.ts";
-export type { EditHandle, EditHandleOwner, EditHandleRole, EditHandleSource } from "./edit-handles.ts";

@@ -21,8 +21,8 @@ export function createMarkerTexture(): HTMLCanvasElement {
   return canvas;
 }
 
-/** A small ring-dot, visually distinct from the token marker -- an editable construction-node handle, not a placed token. Placeholder art; `highlighted` is the handle a press would grab. */
-export function createNodeHandleTexture(highlighted: boolean): HTMLCanvasElement {
+/** A small ring-dot, visually distinct from the token marker -- an editable construction-node handle, not a placed token. */
+export function createNodeHandleTexture(): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
   canvas.width = 64;
   canvas.height = 64;
@@ -30,9 +30,9 @@ export function createNodeHandleTexture(highlighted: boolean): HTMLCanvasElement
   if (context === null) throw new Error("node handle texture needs a 2D canvas context");
 
   context.clearRect(0, 0, 64, 64);
-  context.strokeStyle = highlighted ? "#f2994a" : "#0b1a17";
-  context.lineWidth = highlighted ? 8 : 4;
-  context.fillStyle = highlighted ? "#ffffff" : "#f2c94c";
+  context.strokeStyle = "#0b1a17";
+  context.lineWidth = 4;
+  context.fillStyle = "#f2c94c";
   context.beginPath();
   context.arc(32, 32, 22, 0, Math.PI * 2);
   context.fill();

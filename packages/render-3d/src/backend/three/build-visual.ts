@@ -182,7 +182,6 @@ function buildMaterial(descriptor: VisualDescriptor, clipPlane?: THREE.Plane): T
       depthWrite: material.depthWrite ?? true,
       map: texture,
       alphaTest: texture ? 0.01 : 0,
-      sizeAttenuation: descriptor.geometry.screenConstant !== true,
     });
   }
 

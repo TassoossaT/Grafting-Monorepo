@@ -1,4 +1,4 @@
-import { faceHandles, spineHandles, type EditHandle } from "../../features/edit-construction/index.ts";
+import { curveEdgesOf, curveHandles, panelHeightWidgets } from "../../features/edit-construction/index.ts";
 import type { BezierPort } from "../../ports/bezier-port.ts";
 import type { ConstructionPlanarRequest, ConstructionPlanarShape, ConstructionMotionRequest, ConstructionMotionPlan, ConstructionNodeMotion } from "../../ports/index.ts";
 import { chunkKeyForSurface, CONSTRUCTION_GRID_EXTENT, mergeChunkBucket, mergeSurfaceMeshes } from "../../adapters/rendering/index.ts";
@@ -100,12 +100,6 @@ export interface ConfirmedTokenDeltaEnvelope {
 }
 
 export type TabletopRuntimeListener = () => void;
-
-/** Which faces show their edit handles, and the one handle under the pointer. Every other face's handles are not uploaded at all. */
-export interface HandleFocus {
-  readonly surfaceRefs: readonly string[];
-  readonly highlighted?: string;
-}
 
 /** What a committed transaction produced, and whether it made an undo entry. */
 export interface TransactionResult<T> {
@@ -240,8 +234,6 @@ export interface TabletopRuntime extends BezierPort {
   ): CameraControlHandle;
   getRenderMetrics(): SceneRenderMetrics;
   getSnapshot(): TabletopSnapshot;
-  /** Shows the edit handles of `focus.surfaceRefs` only, with `focus.highlighted` lit. See {@link HandleFocus}. */
-  setHandleFocus(focus: HandleFocus): void;
   subscribe(listener: TabletopRuntimeListener): () => void;
   dispose(): Promise<void>;
 }
@@ -319,14 +311,10 @@ export class AppTabletopRuntime implements TabletopRuntime {
   readonly #surfaceMembers = new Map<string, ReadonlySet<string>>();
   /** Last uploaded revision for each invisible per-surface pick proxy. */
   readonly #surfacePickRevisions = new Map<string, number>();
-  /** Last uploaded revision per edit handle, mirroring `#chunkRevisions` but for the `"handles"` render layer. */
+  /** Last uploaded revision per node handle, mirroring `#chunkRevisions` but for the `"handles"` render layer. */
   readonly #nodeHandleRevisions = new Map<string, number>();
-  /** What each uploaded handle currently shows, so a re-sync uploads only what changed. */
-  readonly #shownHandles = new Map<string, { readonly position: ConstructionPosition; readonly highlighted: boolean }>();
-  #handleFocus: HandleFocus = { surfaceRefs: [] };
-  #spineHandles: readonly EditHandle[] = [];
-  /** Spine handles live on the graph, not on the focused faces; re-read only when the focus or the graph's shape changes. */
-  #spineHandlesStale = true;
+  #bezierHandleIds = new Set<string>();
+  #panelHeightWidgetIds = new Set<string>();
   /** Surfaces holding pinned nodes; `undefined` until next needed after a restore. A host edit moves those nodes without naming them. */
   #pinnedSurfaceRefs: Set<string> | undefined;
   #generation = 0;
@@ -363,8 +351,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
     }
 
     const generation = ++this.#generation;
-    this.#shownHandles.clear();
-    this.#spineHandlesStale = true;
     this.#publishLifecycle("starting");
     await this.#render.start(generation);
     await this.#construction.start();
@@ -599,89 +585,50 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#syncSurfaceChunks(meshes, staleRefs, origin, causeId, generation);
   }
 
-  /** Uploads one pickable edit handle, mirroring `#syncSurfaceChunks`'s revision-guard bookkeeping but per handle rather than per chunk. */
+  /** Uploads one node's pickable handle at its current position, mirroring `#syncSurfaceChunks`'s revision-guard bookkeeping but per-node rather than per-chunk. */
   #uploadNodeHandle(
     nodeId: ConstructionNodeId,
     position: ConstructionPosition,
-    highlighted: boolean,
     origin: ChangeOrigin,
     causeId: string,
     generation: number,
   ): void {
     const revision = (this.#nodeHandleRevisions.get(nodeId) ?? 0) + 1;
     this.#nodeHandleRevisions.set(nodeId, revision);
-    this.#shownHandles.set(nodeId, { position, highlighted });
     this.#render.applyConfirmed({
       type: "node-handle-upserted",
       origin,
       causeId,
       runtimeGeneration: generation,
       dependency: { layer: "handles", scopeId: nodeId, revision },
-      handle: { nodeId, position, highlighted },
+      handle: { nodeId, position },
     });
   }
 
-  /**
-   * Uploads the edit handles of the focused faces only, retiring every other
-   * one. Reads just those faces' own topologies, so a drag tick costs what
-   * the grabbed structure costs, never what the whole table does.
-   */
-  #syncHandles(origin: ChangeOrigin, causeId: string, generation: number): void {
-    if (this.#snapshot.status !== "ready" || typeof this.#construction.getRegionTopology !== "function") return;
-    const faces = this.#handleFocus.surfaceRefs.flatMap((surfaceRef) => {
-      const surfaceKey = this.#snapshot.map.byId.get(surfaceRef)?.orderedNodeRefs;
-      const topology = surfaceKey === undefined ? undefined : this.#construction.getRegionTopology(surfaceKey);
-      return topology === undefined ? [] : [topology];
-    });
-    if (this.#spineHandlesStale) {
-      this.#spineHandlesStale = false;
-      this.#spineHandles = faces.length === 0 ? [] : spineHandles(faces, this.#construction.getGraphSnapshot(), this.#construction);
-    }
-    const wanted = new Map<string, ConstructionPosition>();
-    for (const handle of [...faceHandles(faces, this.#construction), ...this.#spineHandles]) wanted.set(handle.id, handle.position);
-    for (const id of [...this.#shownHandles.keys()]) {
-      if (!wanted.has(id)) this.#removeNodeHandle(id, origin, causeId, generation);
-    }
-    for (const [id, position] of wanted) {
-      const highlighted = id === this.#handleFocus.highlighted;
-      const shown = this.#shownHandles.get(id);
-      if (
-        shown !== undefined &&
-        shown.highlighted === highlighted &&
-        shown.position.x === position.x &&
-        shown.position.y === position.y &&
-        shown.position.z === position.z
-      ) {
-        continue;
-      }
-      this.#uploadNodeHandle(id, position, highlighted, origin, causeId, generation);
-    }
+  #syncBezierHandles(origin: ChangeOrigin, causeId: string, generation: number): void {
+    if (typeof this.#construction.curveBatch !== "function") return;
+    const contour = typeof this.#construction.getCurvedEdges === "function" ? this.#construction.getCurvedEdges() : [];
+    const handles = curveHandles(curveEdgesOf(this.#construction.getGraphSnapshot(), contour, this.#construction), this.#construction);
+    const live = new Set(handles.map((h) => h.id));
+    for (const id of this.#bezierHandleIds) if (!live.has(id)) this.#removeNodeHandle(id, origin, causeId, generation);
+    for (const handle of handles) this.#uploadNodeHandle(handle.id, handle.position, origin, causeId, generation);
+    this.#bezierHandleIds = live;
   }
 
-  setHandleFocus(focus: HandleFocus): void {
-    const previous = this.#handleFocus;
-    const sameFaces = previous.surfaceRefs.length === focus.surfaceRefs.length
-      && previous.surfaceRefs.every((surfaceRef) => focus.surfaceRefs.includes(surfaceRef));
-    if (sameFaces && previous.highlighted === focus.highlighted) return;
-    this.#handleFocus = focus;
-    if (!sameFaces) {
-      this.#spineHandlesStale = true;
-      this.#syncHandles("local", "handle-focus", this.#generation);
-      return;
-    }
-    for (const id of [previous.highlighted, focus.highlighted]) {
-      const shown = id === undefined ? undefined : this.#shownHandles.get(id);
-      if (id !== undefined && shown !== undefined) {
-        this.#uploadNodeHandle(id, shown.position, id === focus.highlighted, "local", "handle-focus", this.#generation);
-      }
-    }
+  /** Uploads/retires one widget per top run of every partition panel -- a wall's own per-segment height handle, mirroring `#syncBezierHandles`. */
+  #syncPanelHeightWidgets(origin: ChangeOrigin, causeId: string, generation: number): void {
+    if (typeof this.#construction.getAllRegionTopologies !== "function") return;
+    const widgets = panelHeightWidgets(this.#construction.getAllRegionTopologies());
+    const live = new Set(widgets.map((widget) => widget.id));
+    for (const id of this.#panelHeightWidgetIds) if (!live.has(id)) this.#removeNodeHandle(id, origin, causeId, generation);
+    for (const widget of widgets) this.#uploadNodeHandle(widget.id, widget.position, origin, causeId, generation);
+    this.#panelHeightWidgetIds = live;
   }
 
-  /** Removes one pickable edit handle -- the counterpart to {@link AppTabletopRuntime.#uploadNodeHandle}. */
+  /** Removes one node's pickable handle -- the counterpart to {@link AppTabletopRuntime.#uploadNodeHandle}, needed once a mutation deletes a node outright. */
   #removeNodeHandle(nodeId: ConstructionNodeId, origin: ChangeOrigin, causeId: string, generation: number): void {
     const revision = (this.#nodeHandleRevisions.get(nodeId) ?? 0) + 1;
     this.#nodeHandleRevisions.delete(nodeId);
-    this.#shownHandles.delete(nodeId);
     this.#render.applyConfirmed({
       type: "node-handle-removed",
       origin,
@@ -725,7 +672,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
 
   /**
    * Diffs a full `getNodePositions()` against `map`'s cached positions and
-   * folds in anything that changed -- the only
+   * folds in (and uploads a handle for) anything that changed -- the only
    * way to discover a newly-generated cell/wall's node positions, since the
    * Rust engine computes those internally from cell-index/wall-geometry
    * rather than the caller supplying them. Not used by {@link moveNode},
@@ -734,6 +681,9 @@ export class AppTabletopRuntime implements TabletopRuntime {
    */
   #foldDiscoveredNodePositions(
     map: MapProjection,
+    origin: ChangeOrigin,
+    causeId: string,
+    generation: number,
   ): MapProjection {
     const deltas: MapProjectionDelta[] = [];
     for (const node of this.#construction.getNodePositions()) {
@@ -752,8 +702,10 @@ export class AppTabletopRuntime implements TabletopRuntime {
         position: node.position,
         revision: (previous?.revision ?? 0) + 1,
       });
+      this.#uploadNodeHandle(node.id, node.position, origin, causeId, generation);
     }
-    this.#spineHandlesStale = true;
+    this.#syncBezierHandles(origin, causeId, generation);
+    this.#syncPanelHeightWidgets(origin, causeId, generation);
     return applyMapProjectionDeltas(map, deltas);
   }
 
@@ -761,6 +713,9 @@ export class AppTabletopRuntime implements TabletopRuntime {
   #foldKnownNodePositions(
     map: MapProjection,
     positions: ReadonlyMap<ConstructionNodeId, ConstructionPosition>,
+    origin: ChangeOrigin,
+    causeId: string,
+    generation: number,
   ): MapProjection {
     const deltas: MapProjectionDelta[] = [];
     for (const [nodeId, position] of positions) {
@@ -779,7 +734,13 @@ export class AppTabletopRuntime implements TabletopRuntime {
         position,
         revision: (previous?.revision ?? 0) + 1,
       });
+      this.#uploadNodeHandle(nodeId, position, origin, causeId, generation);
     }
+    // Curve handles sit off the anchors and follow a reshaped edge too, so
+    // they are re-placed whatever the edit moved or retyped. Height widgets
+    // sit at a top run's midpoint for the same reason.
+    this.#syncBezierHandles(origin, causeId, generation);
+    this.#syncPanelHeightWidgets(origin, causeId, generation);
     return applyMapProjectionDeltas(map, deltas);
   }
 
@@ -871,10 +832,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
       this.#snapshot.tokens,
       map,
     );
-    // Curve handles and height widgets sit off the anchors and follow a
-    // reshaped edge too, so the focused faces' handles are re-placed
-    // whatever the edit moved or retyped.
-    this.#syncHandles(origin, causeId, this.#generation);
     this.#notify();
   }
 
@@ -1098,11 +1055,12 @@ export class AppTabletopRuntime implements TabletopRuntime {
       }
       for (const nodeId of outcome.removedNodeIds) {
         removals.push({ type: "node-removed", nodeRef: nodeId });
+        this.#removeNodeHandle(nodeId, origin, causeId, this.#generation);
       }
       const next = applyMapProjectionDeltas(map, removals);
       return knownNodePositions === undefined
-        ? this.#foldDiscoveredNodePositions(next)
-        : this.#foldKnownNodePositions(next, knownNodePositions);
+        ? this.#foldDiscoveredNodePositions(next, origin, causeId, this.#generation)
+        : this.#foldKnownNodePositions(next, knownNodePositions, origin, causeId, this.#generation);
     });
   }
 
@@ -1135,12 +1093,17 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#pinnedSurfaceRefs = undefined;
     this.#fullResyncSurfaces(meshes, origin, causeId, this.#generation);
 
+    const liveNodes = new Set(this.#construction.getNodePositions().map((node) => node.id));
+    for (const nodeId of [...this.#nodeHandleRevisions.keys()]) {
+      if (!liveNodes.has(nodeId)) this.#removeNodeHandle(nodeId, origin, causeId, this.#generation);
+    }
+
     let map = this.#foldAffectedSurfaces(
       createMapProjection(),
       meshes.map((mesh) => mesh.surfaceKey),
       meshes,
     );
-    map = this.#foldDiscoveredNodePositions(map);
+    map = this.#foldDiscoveredNodePositions(map, origin, causeId, this.#generation);
     this.#snapshot = snapshot(
       this.#tableId,
       this.#snapshot.status,
@@ -1148,7 +1111,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
       this.#snapshot.tokens,
       map,
     );
-    this.#syncHandles(origin, causeId, this.#generation);
     this.#notify();
   }
   applyRegionOverlay(
