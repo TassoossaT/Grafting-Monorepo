@@ -1,4 +1,4 @@
-import type { OpeningParams } from "@/features/edit-construction";
+import type { OpeningParams, OpeningShape } from "@/features/edit-construction";
 import type {
   ConstructionPosition,
   ConstructionRegionTopology,
@@ -9,7 +9,7 @@ import type {
 // test reaches has to spell out any import it needs at run time. A
 // type-only `@/` import is fine -- those are erased.
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
-import { DEFAULT_TOOL_PARAMS, hasTrait, openingStructureType } from "../../../../features/edit-construction/index.ts";
+import { DEFAULT_TOOL_PARAMS, RECTANGLE_OPENING_SHAPE, hasTrait, openingStructureType, sameShape } from "../../../../features/edit-construction/index.ts";
 
 import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext, type ToolGesture } from "../core/tool-context.ts";
 import { segmentsPreview } from "../shapes/preview-shapes.ts";
@@ -21,10 +21,11 @@ import {
   groupRunSpan,
   isDoorRect,
   overlapsOther,
+  pieceLoop,
   primaryHostOf,
-  rectLoop,
   runFrame,
   settleRect,
+  shapeOfGroup,
   type OpeningPiece,
   type RunFrame,
   type RunRect,
@@ -54,9 +55,30 @@ const OVERLAP_COLOR = 0xef4444;
 interface Selected {
   readonly groupKey: string;
   readonly pieceKeys: readonly ConstructionSurfaceKey[];
+  readonly shape: OpeningShape;
 }
 
 let selected: Selected | undefined;
+/**
+ * While an opening is selected the params panel shows and edits ITS shape;
+ * this keeps the shape the next new opening gets, put back on deselect.
+ */
+let shapeForNew: OpeningShape | undefined;
+
+function shapeOf(params: OpeningParams): OpeningShape {
+  return params.shape ?? RECTANGLE_OPENING_SHAPE;
+}
+
+/** The shape a new opening is created with, whatever the panel shows for a selection. */
+function creationShape(params: OpeningParams): OpeningShape {
+  return shapeForNew ?? shapeOf(params);
+}
+
+function select(ctx: ToolContext, next: Selected, params: OpeningParams): void {
+  if (shapeForNew === undefined) shapeForNew = shapeOf(params);
+  selected = next;
+  if (!sameShape(shapeOf(params), next.shape)) ctx.updateToolParams?.("opening", (current) => ({ ...current, shape: next.shape }));
+}
 
 /** Which side of each axis a press grabbed. Neither = the body; one = an edge; both = a corner. */
 interface GrabHandle {
@@ -72,7 +94,8 @@ const MIN_OPENING_SIZE = 0.3;
 const CREATE_DRAG_THRESHOLD = 0.05;
 /** How far off an opening's own face a point may land and still count as on it. */
 const OPENING_PICK_TOLERANCE = 0.2;
-const PREVIEW_SIDE_STEPS = 8;
+/** The longest straight step (world units) a preview ring takes along a curved face. */
+const PREVIEW_STEP = 0.15;
 
 interface RunPoint {
   readonly s: number;
@@ -106,6 +129,7 @@ interface Drag {
   readonly originalSpan: RunRect;
   readonly handle: GrabHandle;
   readonly isDoor: boolean;
+  readonly shape: OpeningShape;
   /** The size a body drag carries: the opening's own, or the sliders' when it was already selected. */
   readonly ds: number;
   readonly dv: number;
@@ -128,6 +152,9 @@ let createdThisGesture = false;
 function clearSelection(ctx: ToolContext): void {
   selected = undefined;
   ctx.reportSelection(undefined);
+  const restore = shapeForNew;
+  shapeForNew = undefined;
+  if (restore !== undefined) ctx.updateToolParams?.("opening", (current) => (sameShape(shapeOf(current), restore) ? current : { ...current, shape: restore }));
 }
 
 function isOpening(topology: ConstructionRegionTopology): boolean {
@@ -208,7 +235,8 @@ function beginGrab(ctx: ToolContext, opening: ConstructionRegionTopology, sample
   const groupKey = groupKeyOf(opening);
   const alreadySelected = selected?.groupKey === groupKey;
   const pieceKeys = pieces.map((piece) => piece.surfaceKey);
-  selected = { groupKey, pieceKeys };
+  const shape = shapeOfGroup(pieces);
+  select(ctx, { groupKey, pieceKeys, shape }, liveParams);
   const centerS = (span.s0 + span.s1) / 2;
   const centerV = (span.v0 + span.v1) / 2;
   ctx.reportSelection({ id: surfaceRefFromNodeSet(opening.surfaceKey), point: run.resolveAt(centerS, centerV) });
@@ -220,6 +248,7 @@ function beginGrab(ctx: ToolContext, opening: ConstructionRegionTopology, sample
     originalSpan: span,
     handle: isRimNode(pieces, sample.nodeId) ? cornerAt(span, at) : handleAt(run, span, at),
     isDoor: isDoorRect(span),
+    shape,
     ds: alreadySelected ? liveParams.width : span.s1 - span.s0,
     dv: alreadySelected ? liveParams.height / run.heightAt(centerS) : span.v1 - span.v0,
     grabOffset: { s: at.s - centerS, v: at.v - centerV },
@@ -253,8 +282,8 @@ function sameRect(a: RunRect, b: RunRect): boolean {
 /** One closed ring per piece, resolved on its face so a slanted or curved face shows the deformed shape. */
 function piecesPreview(pieces: readonly OpeningPiece[], color: number): ReturnType<typeof segmentsPreview> {
   const positions: number[] = [];
-  for (const { panel, rect } of pieces) {
-    const ring = panel.frame.resolve(rectLoop(panel.frame, rect, PREVIEW_SIDE_STEPS));
+  for (const piece of pieces) {
+    const ring = piece.panel.frame.resolve(pieceLoop(piece, PREVIEW_STEP));
     for (let index = 0; index < ring.length; index += 1) {
       const from = ring[index]!;
       const to = ring[(index + 1) % ring.length]!;
@@ -264,8 +293,8 @@ function piecesPreview(pieces: readonly OpeningPiece[], color: number): ReturnTy
   return segmentsPreview(Float32Array.from(positions), color);
 }
 
-function rectPreview(ctx: ToolContext, run: RunFrame, rect: RunRect, color: number, excluded?: ReadonlySet<string>): ReturnType<typeof segmentsPreview> | undefined {
-  const pieces = run.pieces(rect);
+function rectPreview(ctx: ToolContext, run: RunFrame, rect: RunRect, shape: OpeningShape, color: number, excluded?: ReadonlySet<string>): ReturnType<typeof segmentsPreview> | undefined {
+  const pieces = run.pieces(rect, shape);
   if (pieces === undefined || pieces.length === 0) return undefined;
   return piecesPreview(pieces, overlapsOther(ctx, run, rect, excluded) ? OVERLAP_COLOR : color);
 }
@@ -275,7 +304,7 @@ function dragPreview(gesture: ToolGesture, ctx: ToolContext, active: Drag): Retu
   if (at === undefined) return undefined;
   const rect = settleRect(active.run, rawRectFor(active, at), active.isDoor, isBody(active.handle));
   if (rect === undefined) return undefined;
-  return rectPreview(ctx, active.run, rect, OPENING_COLOR[active.isDoor ? "door" : "window"], active.pieceRefs);
+  return rectPreview(ctx, active.run, rect, active.shape, OPENING_COLOR[active.isDoor ? "door" : "window"], active.pieceRefs);
 }
 
 function reportCommit(ctx: ToolContext, causeId: string, result: { readonly recorded: boolean; readonly error?: string }, success: string): void {
@@ -302,7 +331,7 @@ function commitDrag(ctx: ToolContext, gesture: ToolGesture, active: Drag): void 
     return;
   }
   const rect = settleRect(active.run, raw, active.isDoor, isBody(active.handle));
-  const pieces = rect === undefined ? undefined : active.run.pieces(rect);
+  const pieces = rect === undefined ? undefined : active.run.pieces(rect, active.shape);
   if (rect === undefined || pieces === undefined || pieces.length === 0) {
     ctx.reportFeedback({ tone: "error", message: NO_FIT_MESSAGE });
     return;
@@ -313,7 +342,7 @@ function commitDrag(ctx: ToolContext, gesture: ToolGesture, active: Drag): void 
     return;
   }
   const causeId = scopedToolId(ctx, "opening-edit", ctx.nextSequence());
-  const result = commitOpeningGroup(ctx, causeId, active.pieceKeys, pieces);
+  const result = commitOpeningGroup(ctx, causeId, active.pieceKeys, pieces, active.shape);
   clearSelection(ctx);
   reportCommit(ctx, causeId, result, isBody(active.handle) ? "Abertura movida." : "Abertura redimensionada.");
 }
@@ -330,11 +359,13 @@ function drawnRect(isDoor: boolean, anchor: CreateAnchor, at: RunPoint): RunRect
 function createPreview(gesture: ToolGesture, params: OpeningParams, ctx: ToolContext, anchor: CreateAnchor): ReturnType<typeof segmentsPreview> | undefined {
   const at = anchor.run.project(gesture.current.point, anchor.hostSurfaceKey);
   const rect = at === undefined ? undefined : drawnRect(params.openingKind === "door", anchor, at);
-  return rect === undefined ? undefined : rectPreview(ctx, anchor.run, rect, OPENING_COLOR[params.openingKind]);
+  return rect === undefined ? undefined : rectPreview(ctx, anchor.run, rect, creationShape(params), OPENING_COLOR[params.openingKind]);
 }
 
-function placeNew(ctx: ToolContext, run: RunFrame, rect: RunRect | undefined, kind: OpeningParams["openingKind"]): void {
-  const pieces = rect === undefined ? undefined : run.pieces(rect);
+function placeNew(ctx: ToolContext, run: RunFrame, rect: RunRect | undefined, params: OpeningParams): void {
+  const kind = params.openingKind;
+  const shape = creationShape(params);
+  const pieces = rect === undefined ? undefined : run.pieces(rect, shape);
   if (rect === undefined || pieces === undefined || pieces.length === 0) {
     ctx.reportFeedback({ tone: "error", message: NO_FIT_MESSAGE });
     return;
@@ -343,8 +374,9 @@ function placeNew(ctx: ToolContext, run: RunFrame, rect: RunRect | undefined, ki
     ctx.reportFeedback({ tone: "error", message: OVERLAP_MESSAGE });
     return;
   }
+  if (selected !== undefined) clearSelection(ctx);
   const causeId = scopedToolId(ctx, "opening", ctx.nextSequence());
-  const result = commitOpeningGroup(ctx, causeId, [], pieces);
+  const result = commitOpeningGroup(ctx, causeId, [], pieces, shape);
   reportCommit(ctx, causeId, result, kind === "door" ? "Porta aberta na parede." : "Janela aberta na parede.");
 }
 
@@ -361,7 +393,7 @@ export const openingTool: ConstructionTool<"opening"> = {
     if (creating !== undefined) return createPreview(gesture, params, ctx, creating);
     const placed = resolvePlacement(ctx, gesture.current, params);
     if (placed?.rect === undefined) return undefined;
-    const pieces = placed.run.pieces(placed.rect);
+    const pieces = placed.run.pieces(placed.rect, creationShape(params));
     return pieces === undefined || pieces.length === 0 ? undefined : piecesPreview(pieces, OPENING_COLOR[params.openingKind]);
   },
 
@@ -402,7 +434,7 @@ export const openingTool: ConstructionTool<"opening"> = {
     createdThisGesture = true;
     const at = anchor.run.project(current.point, anchor.hostSurfaceKey);
     if (at === undefined) return;
-    placeNew(ctx, anchor.run, drawnRect(params.openingKind === "door", anchor, at), params.openingKind);
+    placeNew(ctx, anchor.run, drawnRect(params.openingKind === "door", anchor, at), params);
   },
 
   onClick(ctx: ToolContext, sample: PointerSample, params: OpeningParams): void {
@@ -422,7 +454,12 @@ export const openingTool: ConstructionTool<"opening"> = {
       });
       return;
     }
-    placeNew(ctx, placed.run, placed.rect, params.openingKind);
+    placeNew(ctx, placed.run, placed.rect, params);
+  },
+
+  onParamsChange(ctx: ToolContext, next: OpeningParams): void {
+    if (selected === undefined || sameShape(shapeOf(next), selected.shape)) return;
+    reshapeSelected(ctx, selected, shapeOf(next));
   },
 
   onDeleteKey(ctx: ToolContext): void {
@@ -439,6 +476,24 @@ export const openingTool: ConstructionTool<"opening"> = {
     clearSelection(ctx);
   },
 };
+
+/** Replaces the selected group with the same rectangle outlined by `shape`; it stays selected. */
+function reshapeSelected(ctx: ToolContext, current: Selected, shape: OpeningShape): void {
+  const refs = new Set(current.pieceKeys.map(surfaceRefFromNodeSet));
+  const pieces = ctx.runtime.getAllRegionTopologies().filter((topology) => refs.has(surfaceRefFromNodeSet(topology.surfaceKey)));
+  const hostKey = pieces.length === current.pieceKeys.length && pieces.length > 0 ? primaryHostOf(pieces[0]!) : undefined;
+  const run = hostKey === undefined ? undefined : runFrame(ctx.runtime, hostKey);
+  const span = run === undefined ? undefined : groupRunSpan(run, pieces);
+  const split = run === undefined || span === undefined ? undefined : run.pieces(span, shape);
+  if (split === undefined || split.length === 0) {
+    ctx.reportFeedback({ tone: "error", message: "Abertura: nao foi possivel mudar o formato desta abertura." });
+    return;
+  }
+  const causeId = scopedToolId(ctx, "opening-edit-shape", ctx.nextSequence());
+  const result = commitOpeningGroup(ctx, causeId, current.pieceKeys, split, shape);
+  if (result.created !== undefined) selected = { groupKey: result.created.group, pieceKeys: result.created.surfaceKeys, shape };
+  reportCommit(ctx, causeId, result, "Formato da abertura alterado.");
+}
 
 /**
  * Which face the pointer is on: the renderer's pick first, the straight-run

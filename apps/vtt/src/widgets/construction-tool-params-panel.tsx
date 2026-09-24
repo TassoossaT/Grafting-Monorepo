@@ -1,10 +1,14 @@
 "use client";
 
+import { useState } from "react";
+
 import { Card, Collapse, SelectableChip, type CollapsePanel } from "@/ui";
 import type {
   BrushShapeParams,
   ConstructionToolId,
   OpeningParams,
+  OpeningShape,
+  OpeningSide,
   PathBrushParams,
   StructureEditParams,
   TerrainSculptMode,
@@ -14,7 +18,7 @@ import type {
   WallBrushParams,
   WallParams,
 } from "@/features/edit-construction";
-import { TOWER_RADIUS_PRESETS, deriveFaceSize } from "@/features/edit-construction";
+import { RECTANGLE_OPENING_SHAPE, TOWER_RADIUS_PRESETS, deriveFaceSize, isRectangleShape, openingOutline } from "@/features/edit-construction";
 
 export interface ConstructionToolParamsPanelProps {
   readonly activeTool: ConstructionToolId;
@@ -252,6 +256,94 @@ function TerrainSculptFields(props: {
   );
 }
 
+const SIDE_LABELS: Readonly<Record<OpeningSide, string>> = { top: "Topo", right: "Direita", bottom: "Base", left: "Esquerda" };
+const SHAPE_BOX = 72;
+const SHAPE_PAD = 10;
+const SHAPE_MAX_RADIUS = 3;
+
+/**
+ * The opening's four sides as a small clickable square: pick a side, then
+ * its rounding radius (0 = straight; a radius under half the side reads as
+ * half, a semicircle). The slider only applies on release, so dragging it
+ * is one edit, not one per tick.
+ */
+function OpeningShapeFields(props: { readonly params: OpeningParams; readonly onChange: (next: OpeningParams) => void }) {
+  const { params, onChange } = props;
+  const shape: OpeningShape = params.shape ?? RECTANGLE_OPENING_SHAPE;
+  const [side, setSide] = useState<OpeningSide>("top");
+  const [draft, setDraft] = useState<number | undefined>(undefined);
+  const radius = draft ?? shape.radii[side];
+  const setShape = (next: OpeningShape) => onChange({ ...params, shape: next });
+  const commitDraft = () => {
+    if (draft === undefined) return;
+    setDraft(undefined);
+    setShape({ ellipse: false, radii: { ...shape.radii, [side]: draft } });
+  };
+
+  const scale = SHAPE_BOX / Math.max(params.width, params.height, 1e-6);
+  const w = params.width * scale;
+  const h = params.height * scale;
+  const x0 = SHAPE_PAD + (SHAPE_BOX - w) / 2;
+  const y0 = SHAPE_PAD + (SHAPE_BOX - h) / 2;
+  const shown: OpeningShape = draft === undefined ? shape : { ellipse: false, radii: { ...shape.radii, [side]: draft } };
+  const outline = openingOutline(shown, params.width, params.height)
+    .map(([x, y]) => `${(x0 + x * scale).toFixed(1)},${(y0 + h - y * scale).toFixed(1)}`)
+    .join(" ");
+  const edges: Readonly<Record<OpeningSide, readonly [number, number, number, number]>> = {
+    top: [x0, y0, x0 + w, y0],
+    right: [x0 + w, y0, x0 + w, y0 + h],
+    bottom: [x0, y0 + h, x0 + w, y0 + h],
+    left: [x0, y0, x0, y0 + h],
+  };
+  const size = SHAPE_BOX + 2 * SHAPE_PAD;
+
+  return (
+    <div style={{ display: "grid", gap: "0.5rem" }}>
+      <span style={{ fontSize: "0.78rem" }}>Formato</span>
+      <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="group" aria-label="Lados da abertura">
+          <rect x={x0} y={y0} width={w} height={h} fill="none" stroke="#475569" strokeDasharray="3 3" />
+          <polygon points={outline} fill={OPENING_SWATCH[params.openingKind]} fillOpacity={0.35} stroke={OPENING_SWATCH[params.openingKind]} strokeWidth={1.5} />
+          {(Object.keys(edges) as OpeningSide[]).map((key) => {
+            const [ax, ay, bx, by] = edges[key];
+            return (
+              <g key={key} style={{ cursor: "pointer" }} onClick={() => { commitDraft(); setSide(key); }}>
+                <title>{SIDE_LABELS[key]}</title>
+                {side === key && !shape.ellipse ? <line x1={ax} y1={ay} x2={bx} y2={by} stroke="#f8fafc" strokeWidth={3} /> : null}
+                <line x1={ax} y1={ay} x2={bx} y2={by} stroke="transparent" strokeWidth={12} />
+              </g>
+            );
+          })}
+        </svg>
+        <div style={{ display: "grid", gap: "0.4rem", flex: 1 }}>
+          <SelectableChip label="Retângulo" swatchColor="#94a3b8" selected={isRectangleShape(shape)} onSelect={() => { setDraft(undefined); setShape(RECTANGLE_OPENING_SHAPE); }} />
+          <SelectableChip label="Círculo" swatchColor="#c084fc" selected={shape.ellipse} onSelect={() => { setDraft(undefined); setShape({ ...shape, ellipse: true }); }} />
+        </div>
+      </div>
+      <label style={{ display: "grid", gap: "0.25rem", fontSize: "0.78rem" }}>
+        <span className="gm-stat-row">
+          <span>Raio: {SIDE_LABELS[side].toLowerCase()}</span>
+          <span className="gm-stat-value">{shape.ellipse && draft === undefined ? "--" : radius > 0 ? radius.toFixed(2) : "reto"}</span>
+        </span>
+        <input
+          type="range"
+          min={0}
+          max={SHAPE_MAX_RADIUS}
+          step={0.05}
+          value={shape.ellipse && draft === undefined ? 0 : radius}
+          onChange={(event) => setDraft(Number(event.currentTarget.value))}
+          onPointerUp={commitDraft}
+          onKeyUp={commitDraft}
+          onBlur={commitDraft}
+        />
+      </label>
+      <p style={{ margin: 0, fontSize: "0.72rem", color: "#94a3b8" }}>Clique num lado do quadrado e ajuste o raio (0 = reto). Com uma abertura selecionada, o formato muda nela; sem seleção, vale para a próxima.</p>
+    </div>
+  );
+}
+
+const OPENING_SWATCH: Readonly<Record<OpeningParams["openingKind"], string>> = { window: "#7dd3fc", door: "#d97706" };
+
 /** A door is the same opening with its sill on the floor, so the type sets the sill and the sliders take it from there. */
 function OpeningFields(props: { readonly params: OpeningParams; readonly onChange: (next: OpeningParams) => void }) {
   const { params, onChange } = props;
@@ -276,6 +368,7 @@ function OpeningFields(props: { readonly params: OpeningParams; readonly onChang
       {params.openingKind === "door"
         ? null
         : sliderRow("Peitoril", params.sill, 0, 3, 0.1, (sill) => onChange({ ...params, sill }))}
+      <OpeningShapeFields params={params} onChange={onChange} />
     </div>
   );
 }

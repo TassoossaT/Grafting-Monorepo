@@ -286,6 +286,8 @@ export interface ConstructionRegionTopology {
   readonly nodes: readonly ConstructionNodeSnapshot[];
   /** The group this region belongs to: regions a caller treats as one object. */
   readonly group?: string;
+  /** Free-form properties a caller stored on the region; the engine never reads them. */
+  readonly props?: Readonly<Record<string, unknown>>;
 }
 
 /** Identity lifecycle emitted by an atomic surface transformation. */
@@ -663,6 +665,8 @@ export interface ConstructionSessionPort extends BezierPort {
   resolveOnHost(request: { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly uv: readonly (readonly [number, number])[] }): readonly ConstructionPosition[];
   /** Labels regions as one group, or clears the label with `null`. Undoable; moves nothing. */
   setRegionGroup(surfaceKeys: readonly ConstructionSurfaceKey[], groupId: string | null): RegionEditOutcome;
+  /** Replaces the regions' property bag, or clears it with `null`. Undoable; moves nothing. */
+  setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): RegionEditOutcome;
   /** The run through an upright panel that accepts cuts. Throws otherwise. */
   panelRun(surfaceKey: ConstructionSurfaceKey): ConstructionPanelRun;
   /**

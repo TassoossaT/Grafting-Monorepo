@@ -370,7 +370,9 @@ function groupProblems(topos, runtime, ref) {
     const valid = spans.filter(({ span }) => span && !span.multiHost).map(({ span }) => span);
     if (valid.length === 0 || valid.length !== pieces.length) continue; // can't resolve every piece's run yet -- skip quietly
     const [{ vLo: vLo0, vHi: vHi0 }] = valid;
-    for (const s of valid) {
+    // A shaped outline split at a seam gives pieces of different heights; only a rectangle's must agree.
+    const shaped = pieces.some((p) => p.props?.openingShape != null);
+    for (const s of shaped ? [] : valid) {
       if (Math.abs(s.vLo - vLo0) > 1e-3 || Math.abs(s.vHi - vHi0) > 1e-3) {
         problems.push(`GROUP ${groupId} pieces disagree on v-range: [${s.vLo.toFixed(4)},${s.vHi.toFixed(4)}] vs [${vLo0.toFixed(4)},${vHi0.toFixed(4)}] -- not one rectangle in (s,v)`);
       }
@@ -510,8 +512,20 @@ function railFor(kind, geometry, a, b) {
   return (t) => [cx + rad * Math.cos(a0 + sweep * t), cz + rad * Math.sin(a0 + sweep * t)];
 }
 
+/** A random opening outline from its own stream, so every seed's op sequence stays what it was. */
+function shapeStream(seed) {
+  const rnd = mulberry32(seed ^ 0x5eed);
+  const radius = () => (rnd() < 0.6 ? 0 : 0.1 + rnd() * 2);
+  return () => {
+    const roll = rnd();
+    if (roll < 0.4) return undefined;
+    return { ellipse: roll > 0.85, radii: { top: radius(), right: radius(), bottom: radius(), left: radius() } };
+  };
+}
+
 async function runSeed(seed, opsCount = 40, hostKind = "straight") {
   const rnd = mulberry32(seed);
+  const randomShape = shapeStream(seed);
   const r = (a, b) => a + (b - a) * rnd();
   const pick = (xs) => xs[Math.floor(rnd() * xs.length)];
 
@@ -561,7 +575,7 @@ async function runSeed(seed, opsCount = 40, hostKind = "straight") {
 
   const kinds = () => {
     const kind = rnd() < 0.3 ? "door" : "window";
-    return { ...DEFAULT_TOOL_PARAMS.opening, openingKind: kind, width: r(0.5, 2.5), height: kind === "door" ? r(1.5, 2.6) : r(0.5, 1.8), sill: kind === "door" ? 0 : r(0.3, 1.5) };
+    return { ...DEFAULT_TOOL_PARAMS.opening, openingKind: kind, width: r(0.5, 2.5), height: kind === "door" ? r(1.5, 2.6) : r(0.5, 1.8), sill: kind === "door" ? 0 : r(0.3, 1.5), shape: randomShape() };
   };
   const onWall = hostKind === "straight"
     ? () => ({ x: r(-0.3, length + 0.3), y: r(-0.1, top + 0.1), z: rnd() < 0.8 ? 0 : r(-0.05, 0.05) })
@@ -785,6 +799,7 @@ test("a long, curvy wall-brush stroke fits as several distinct Bezier panels (ve
 
 async function runMultiPanelSeed(seed, opsCount, hostKind) {
   const rnd = mulberry32(seed);
+  const randomShape = shapeStream(seed);
   const r = (a, b) => a + (b - a) * rnd();
   const pick = (xs) => xs[Math.floor(rnd() * xs.length)];
 
@@ -852,7 +867,7 @@ async function runMultiPanelSeed(seed, opsCount, hostKind) {
   const kinds = () => {
     const kind = rnd() < 0.3 ? "door" : "window";
     // Wide relative to a run3/corner-l leg segment (~4-6m) so a good fraction of ops genuinely straddle a seam.
-    return { ...DEFAULT_TOOL_PARAMS.opening, openingKind: kind, width: r(0.8, 3.0), height: kind === "door" ? r(1.5, 2.6) : r(0.5, 1.8), sill: kind === "door" ? 0 : r(0.3, 1.2) };
+    return { ...DEFAULT_TOOL_PARAMS.opening, openingKind: kind, width: r(0.8, 3.0), height: kind === "door" ? r(1.5, 2.6) : r(0.5, 1.8), sill: kind === "door" ? 0 : r(0.3, 1.2), shape: randomShape() };
   };
 
   for (let i = 0; i < opsCount; i++) {

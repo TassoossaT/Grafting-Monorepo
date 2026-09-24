@@ -35,6 +35,8 @@ export interface UseConstructionPointerOptions {
   readonly structureEditParams: StructureEditParams;
   readonly onSelectionChange: (info: SelectedNodeInfo | undefined) => void;
   readonly onFeedbackChange: (feedback: ConstructionToolFeedback | undefined) => void;
+  /** Lets a tool rewrite its own params, e.g. to show its selection's settings in the panel. */
+  readonly onToolParamsUpdate?: <Id extends ConstructionToolId>(toolId: Id, update: (current: ToolParamsByTool[Id]) => ToolParamsByTool[Id]) => void;
 }
 
 function snappedTo(value: number, unit: number): number {
@@ -126,9 +128,19 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       nextSequence,
       reportSelection: (info) => optionsRef.current.onSelectionChange(info),
       reportFeedback: (feedback) => optionsRef.current.onFeedbackChange(feedback),
+      updateToolParams: (toolId, update) => optionsRef.current.onToolParamsUpdate?.(toolId, update as never),
     }),
     [nextSequence],
   );
+
+  const lastParamsRef = useRef<{ readonly tool: ConstructionToolId; readonly params: unknown } | undefined>(undefined);
+  useEffect(() => {
+    const params = options.toolParams[options.activeTool];
+    const last = lastParamsRef.current;
+    lastParamsRef.current = { tool: options.activeTool, params };
+    if (last === undefined || last.tool !== options.activeTool || last.params === params) return;
+    toolFor(options.activeTool).onParamsChange?.(ctx, params as never, last.params as never);
+  }, [options.activeTool, options.toolParams, ctx]);
 
   useEffect(() => {
     const tool = toolFor(options.activeTool);

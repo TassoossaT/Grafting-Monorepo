@@ -5,7 +5,11 @@ import { createEditHistoryStack, hasTrait, surfaceTypesWithTrait } from "../src/
 initSync({ module: readFileSync(new URL("../../../libs/domains/procgen/construction-wasm/pkg/grafting_procgen_construction_wasm_bg.wasm", import.meta.url)) });
 const vector = (p) => [p.x, p.y, p.z];
 const position = (p) => ({ x: p[0], y: p[1], z: p[2] });
-const topology = (t) => t && ({ ...t, nodes: t.nodes.map((n) => ({ ...n, position: position(n.position) })) });
+const topology = (t) => {
+  if (!t) return t;
+  const { props, ...rest } = t;
+  return { ...rest, ...(props ? { props } : {}), nodes: t.nodes.map((n) => ({ ...n, position: position(n.position) })) };
+};
 const wirePatch = (p) => ({ ...p, nodes: p.nodes.map((n) => ({ ...n, position: vector(n.position) })) });
 
 /** A real WASM session behind the narrow source used by tools and the planner. */
@@ -66,6 +70,7 @@ export function sessionFixture() {
     projectToHost: ({ hostSurfaceKey, points }) => JSON.parse(session.project_to_host_json(JSON.stringify({ hostSurfaceKey, points: points.map(vector) }))),
     resolveOnHost: (request) => JSON.parse(session.resolve_on_host_json(JSON.stringify(request))).map(position),
     setRegionGroup: (surfaceKeys, groupId) => JSON.parse(session.set_region_group_json(JSON.stringify({ surfaceKeys, groupId }))),
+    setRegionProps: (surfaceKeys, props) => JSON.parse(session.set_region_props_json(JSON.stringify({ surfaceKeys, props }))),
     panelRun: (surfaceKey) => JSON.parse(session.panel_run_json(JSON.stringify({ surfaceKey }))),
     getSnapshot: () => ({ tableId: "platform-test", map: { nodePositions: new Map() } }),
     transact(transactionId, _origin, work) {

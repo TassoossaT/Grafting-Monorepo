@@ -118,6 +118,7 @@ interface RegionTopologyWire {
   readonly holes: readonly (readonly RegionEdgeWire[])[];
   readonly nodes: readonly NodeWire[];
   readonly group?: string | null;
+  readonly props?: Readonly<Record<string, unknown>> | null;
 }
 
 interface NodeWire {
@@ -141,6 +142,7 @@ function fromWireTopology(wire: RegionTopologyWire): ConstructionRegionTopology 
     holes: wire.holes,
     nodes: wire.nodes.map(fromWireNode),
     ...(wire.group ? { group: wire.group } : {}),
+    ...(wire.props ? { props: wire.props } : {}),
   };
 }
 
@@ -270,6 +272,10 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
 
   setRegionGroup(surfaceKeys: readonly ConstructionSurfaceKey[], groupId: string | null): RegionEditOutcome {
     return this.#regionEdit(this.#require().set_region_group_json(JSON.stringify({ surfaceKeys, groupId })));
+  }
+
+  setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): RegionEditOutcome {
+    return this.#regionEdit(this.#require().set_region_props_json(JSON.stringify({ surfaceKeys, props })));
   }
 
   panelRun(surfaceKey: ConstructionSurfaceKey): ConstructionPanelRun {

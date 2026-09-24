@@ -175,7 +175,27 @@ export interface OpeningParams {
   readonly height: number;
   /** How far above the wall's own base the opening starts. Zero is a door. */
   readonly sill: number;
+  /** The outline the next opening gets inside its bounding rectangle. */
+  readonly shape: OpeningShape;
 }
+
+export type OpeningSide = "top" | "right" | "bottom" | "left";
+
+/**
+ * An opening's outline inside its bounding rectangle. Each side is straight
+ * (radius 0) or a circular arc through that side's midpoint, bulging toward
+ * it, with the given radius in world meters; `ellipse` ignores the radii
+ * and inscribes an ellipse (a circle when the rectangle is square).
+ */
+export interface OpeningShape {
+  readonly ellipse: boolean;
+  readonly radii: Readonly<Record<OpeningSide, number>>;
+}
+
+export const RECTANGLE_OPENING_SHAPE: OpeningShape = Object.freeze({
+  ellipse: false,
+  radii: Object.freeze({ top: 0, right: 0, bottom: 0, left: 0 }),
+});
 
 export type NoToolParams = Record<string, never>;
 
@@ -235,7 +255,7 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   "wall-brush": Object.freeze({ wallType: "wall-white", height: 3, shape: "circle", radius: 0.3, rotationDegrees: 0 }),
   "wall-line": Object.freeze({ wallType: "wall-white", height: 3 }),
   "tower-stamp": Object.freeze({ wallType: "wall-white", height: 3, radius: TOWER_RADIUS_PRESETS[1] }),
-  opening: Object.freeze({ openingKind: "window", width: 1.2, height: 1.2, sill: 1 }),
+  opening: Object.freeze({ openingKind: "window", width: 1.2, height: 1.2, sill: 1, shape: RECTANGLE_OPENING_SHAPE }),
   "terrain-sculpt": Object.freeze({
     faceSize: 2,
     brushRadius: 6,

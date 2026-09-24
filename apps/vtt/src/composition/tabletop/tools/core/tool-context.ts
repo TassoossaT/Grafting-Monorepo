@@ -53,6 +53,11 @@ export interface ToolContext {
   /** Reports the node a tool just selected/moved, for `SettingsDrawer`'s inspector. `undefined` clears the inspector. */
   reportSelection(info: { readonly id: string; readonly point: ConstructionPosition } | undefined): void;
   reportFeedback(feedback: ConstructionToolFeedback | undefined): void;
+  /**
+   * Rewrites a tool's own params as the params panel would, so a tool can
+   * show its selection's settings there. Absent where no panel exists.
+   */
+  updateToolParams?<Id extends ConstructionToolId>(toolId: Id, update: (current: ToolParamsFor<Id>) => ToolParamsFor<Id>): void;
 }
 
 /**
@@ -93,6 +98,8 @@ export interface ConstructionTool<Id extends ConstructionToolId> {
   onCancel?(ctx: ToolContext): void;
   /** Delete/Backspace with the tool active -- a tool holding a selection (an opening picked for editing, say) removes it here. */
   onDeleteKey?(ctx: ToolContext): void;
+  /** The active tool's params changed (the panel, or `updateToolParams`) -- a tool holding a selection may apply them to it. */
+  onParamsChange?(ctx: ToolContext, next: ToolParamsFor<Id>, previous: ToolParamsFor<Id>): void;
   /** A press+release with no intervening drag. Batch/stamp tools (room) commit here instead of `onPointerUp`. */
   onClick?(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void;
 }

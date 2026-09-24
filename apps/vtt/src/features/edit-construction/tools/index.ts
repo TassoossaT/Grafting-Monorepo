@@ -1,11 +1,26 @@
 export { resolveBrushShape } from "./brush-shape-params.ts";
-export { DEFAULT_STRUCTURE_EDIT_PARAMS, DEFAULT_TOOL_PARAMS, TOWER_RADIUS_PRESETS, deriveFaceSize } from "./tool-types.ts";
+export {
+  OPENING_SHAPE_PROP,
+  clipToConvex,
+  isRectangleShape,
+  maxUsefulRadius,
+  openingOutline,
+  propsForShape,
+  sameShape,
+  shapeFromProps,
+  sideArc,
+  simplifyLoop,
+  type OutlinePoint,
+} from "./opening-outline.ts";
+export { DEFAULT_STRUCTURE_EDIT_PARAMS, DEFAULT_TOOL_PARAMS, RECTANGLE_OPENING_SHAPE, TOWER_RADIUS_PRESETS, deriveFaceSize } from "./tool-types.ts";
 export type {
   BrushShapeKind,
   BrushShapeParams,
   ConstructionToolId,
   NoToolParams,
   OpeningParams,
+  OpeningShape,
+  OpeningSide,
   PathBrushParams,
   PathKind,
   PreviewDescriptor,

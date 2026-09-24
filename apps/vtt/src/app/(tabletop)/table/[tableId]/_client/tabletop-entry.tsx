@@ -140,6 +140,12 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     },
     [],
   );
+  const handleToolParamsUpdate = useCallback(
+    <Id extends ConstructionToolId>(toolId: Id, update: (current: ToolParamsByTool[Id]) => ToolParamsByTool[Id]) => {
+      setToolParams((previous) => ({ ...previous, [toolId]: update(previous[toolId]) }));
+    },
+    [],
+  );
 
   const handleFeedbackChange = useCallback((feedback: ConstructionToolFeedback | undefined) => {
     setToolFeedback((previous) =>
@@ -163,6 +169,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     structureEditParams,
     onSelectionChange: (info) => setSelectedNodeInfo(info ?? null),
     onFeedbackChange: handleFeedbackChange,
+    onToolParamsUpdate: handleToolParamsUpdate,
   });
 
   useKeyboardShortcuts({

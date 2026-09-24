@@ -151,6 +151,8 @@ export interface TabletopRuntime extends BezierPort {
   resolveOnHost(request: { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly uv: readonly (readonly [number, number])[] }): readonly ConstructionPosition[];
   /** Labels regions as one group (`null` clears). See `ConstructionSessionPort.setRegionGroup`. */
   setRegionGroup(surfaceKeys: readonly ConstructionSurfaceKey[], groupId: string | null): RegionEditOutcome;
+  /** Replaces the regions' property bag (`null` clears). See `ConstructionSessionPort.setRegionProps`. */
+  setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): RegionEditOutcome;
   /** The run of upright panels through `surfaceKey`. See `ConstructionSessionPort.panelRun`. */
   panelRun(surfaceKey: ConstructionSurfaceKey): ConstructionPanelRun;
   /** Every closed loop of boundary with no face on it, among `scope`'s nodes -- a hole whose rim already exists. */
@@ -934,6 +936,11 @@ export class AppTabletopRuntime implements TabletopRuntime {
   setRegionGroup(surfaceKeys: readonly ConstructionSurfaceKey[], groupId: string | null): RegionEditOutcome {
     this.#requireReady("grouping regions");
     return this.#construction.setRegionGroup(surfaceKeys, groupId);
+  }
+
+  setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): RegionEditOutcome {
+    this.#requireReady("setting region properties");
+    return this.#construction.setRegionProps(surfaceKeys, props);
   }
 
   panelRun(surfaceKey: ConstructionSurfaceKey): ConstructionPanelRun {

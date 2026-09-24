@@ -1,3 +1,4 @@
+import type { OpeningShape } from "@/features/edit-construction";
 import type {
   ConstructionHostPoint,
   ConstructionNodeId,
@@ -14,7 +15,15 @@ import type {
 // test reaches has to spell out any import it needs at run time. A
 // type-only `@/` import is fine -- those are erased.
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
-import { openingStructureType } from "../../../../features/edit-construction/index.ts";
+import {
+  clipToConvex,
+  openingOutline,
+  openingStructureType,
+  propsForShape,
+  shapeFromProps,
+  simplifyLoop,
+  type OutlinePoint,
+} from "../../../../features/edit-construction/index.ts";
 
 import { boundaryUsage, createBoundaryEdges } from "../core/boundary-edges.ts";
 import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
@@ -72,10 +81,11 @@ export interface RunPanelFrame extends ConstructionRunPanel {
   readonly frame: HostFrame;
 }
 
-/** One face's share of a run rectangle. */
+/** One face's share of a run rectangle: its bounds, and its outline as `(u, v)` pairs counter-clockwise in the face's frame. */
 export interface OpeningPiece {
   readonly panel: RunPanelFrame;
   readonly rect: HostRect;
+  readonly loop: readonly (readonly [number, number])[];
 }
 
 export interface RunFrame {
@@ -90,8 +100,8 @@ export interface RunFrame {
   heightAt(s: number): number;
   minHeightBetween(s0: number, s1: number): number;
   resolveAt(s: number, v: number): ConstructionPosition;
-  /** `rect` split at the seams, one piece per face it covers -- `undefined` when a closed run would make it overlap itself. */
-  pieces(rect: RunRect): readonly OpeningPiece[] | undefined;
+  /** `rect`, outlined by `shape`, split at the seams: one piece per face it covers -- `undefined` when a closed run would make it overlap itself. */
+  pieces(rect: RunRect, shape?: OpeningShape): readonly OpeningPiece[] | undefined;
 }
 
 const HEIGHT_SAMPLES = 6;
@@ -151,8 +161,9 @@ export function runFrame(runtime: RunRuntime, surfaceKey: ConstructionSurfaceKey
     return panel.frame.heightAt(clamp01(u));
   };
 
-  const pieces = (rect: RunRect): OpeningPiece[] | undefined => {
+  const pieces = (rect: RunRect, shape?: OpeningShape): OpeningPiece[] | undefined => {
     const shifts = wire.closed ? [-period, 0, period] : [0];
+    const outline = runOutline(rect, shape, heightAt((rect.s0 + rect.s1) / 2));
     const out: OpeningPiece[] = [];
     for (const panel of panels) {
       let found = 0;
@@ -160,10 +171,16 @@ export function runFrame(runtime: RunRuntime, surfaceKey: ConstructionSurfaceKey
         const a = Math.max(rect.s0, panel.offset + shift);
         const b = Math.min(rect.s1, panel.offset + panel.length + shift);
         if (b - a <= PIECE_EPS) continue;
+        const strip: OutlinePoint[] = [[a, rect.v0 - 1], [b, rect.v0 - 1], [b, rect.v1 + 1], [a, rect.v1 + 1]];
+        const clipped = simplifyLoop(clipToConvex(outline, strip), 1e-9);
+        if (clipped.length < 3) continue;
         found += 1;
-        const ua = clamp01(uOf(panel, a - shift));
-        const ub = clamp01(uOf(panel, b - shift));
-        out.push({ panel, rect: { u0: Math.min(ua, ub), u1: Math.max(ua, ub), v0: rect.v0, v1: rect.v1 } });
+        let loop = clipped.map(([s, v]) => [clamp01(uOf(panel, s - shift)), v] as const);
+        if (signedArea(loop) < 0) loop = [...loop].reverse();
+        loop = startAtBottomLeft(loop);
+        const us = loop.map(([u]) => u);
+        const vs = loop.map(([, v]) => v);
+        out.push({ panel, rect: { u0: Math.min(...us), u1: Math.max(...us), v0: Math.min(...vs), v1: Math.max(...vs) }, loop });
       }
       if (found > 1) return undefined;
     }
@@ -209,6 +226,38 @@ export function runFrame(runtime: RunRuntime, surfaceKey: ConstructionSurfaceKey
     },
     pieces,
   };
+}
+
+/** `rect`'s outline in run `(s, v)`: the shape is drawn in world meters, `height` being the wall's height across it. */
+function runOutline(rect: RunRect, shape: OpeningShape | undefined, height: number): OutlinePoint[] {
+  const width = rect.s1 - rect.s0;
+  const dv = rect.v1 - rect.v0;
+  const tall = dv * (height > 0 ? height : 1);
+  return openingOutline(shape, width, tall).map(([x, y]) => [rect.s0 + x, rect.v0 + (tall > 0 ? (y / tall) * dv : 0)] as const);
+}
+
+function signedArea(loop: readonly (readonly [number, number])[]): number {
+  let area = 0;
+  loop.forEach(([x0, y0], index) => {
+    const [x1, y1] = loop[(index + 1) % loop.length]!;
+    area += x0 * y1 - x1 * y0;
+  });
+  return area / 2;
+}
+
+function startAtBottomLeft<T extends readonly [number, number]>(loop: readonly T[]): T[] {
+  let first = 0;
+  loop.forEach(([u, v], index) => {
+    const [bu, bv] = loop[first]!;
+    if (v < bv - 1e-9 || (Math.abs(v - bv) <= 1e-9 && u < bu)) first = index;
+  });
+  return [...loop.slice(first), ...loop.slice(0, first)];
+}
+
+/** The shape an opening group carries, read from any piece's property bag. */
+export function shapeOfGroup(pieces: readonly ConstructionRegionTopology[]): OpeningShape {
+  const carrier = pieces.find((piece) => piece.props !== undefined);
+  return shapeFromProps(carrier?.props);
 }
 
 /** Interior seams, in run distance: every face start but a free end's. */
@@ -371,21 +420,29 @@ const CURVE_TOLERANCE = 1e-3;
 const CURVE_STEP = 0.25;
 const MAX_CURVE_SEGMENTS = 32;
 
-/** How many straight pieces each horizontal side needs to follow the face: one on a flat face, more where the face bends. */
-function horizontalSegments(frame: HostFrame, rect: HostRect): number {
+/** Whether the face bends between `u0` and `u1`, so a straight chord would leave it. */
+function bendsBetween(frame: HostFrame, rect: HostRect): boolean {
   const uMid = (rect.u0 + rect.u1) / 2;
   const [a, b, mid] = frame.resolve([[rect.u0, rect.v0], [rect.u1, rect.v0], [uMid, rect.v0]]);
   const chordMid = { x: (a!.x + b!.x) / 2, y: (a!.y + b!.y) / 2, z: (a!.z + b!.z) / 2 };
-  if (distance(chordMid, mid!) <= CURVE_TOLERANCE) return 1;
-  return Math.min(MAX_CURVE_SEGMENTS, Math.max(2, Math.ceil(((rect.u1 - rect.u0) * frame.length) / CURVE_STEP)));
+  return distance(chordMid, mid!) > CURVE_TOLERANCE;
 }
 
-/** `rect`'s boundary as `(u, v)` pairs in walking order: bottom left to right, then top right to left. */
-export function rectLoop(frame: HostFrame, rect: HostRect, segments = horizontalSegments(frame, rect)): readonly (readonly [number, number])[] {
-  const du = (rect.u1 - rect.u0) / segments;
-  const bottom = Array.from({ length: segments + 1 }, (_, index) => [index === segments ? rect.u1 : rect.u0 + du * index, rect.v0] as const);
-  const top = Array.from({ length: segments + 1 }, (_, index) => [index === segments ? rect.u0 : rect.u1 - du * index, rect.v1] as const);
-  return [...bottom, ...top];
+/**
+ * A piece's outline with every side split so no straight step spans more
+ * than `step` world units along the face -- on a flat face (unless `always`)
+ * the outline is kept as it is.
+ */
+export function pieceLoop(piece: OpeningPiece, step = CURVE_STEP, always = false): readonly (readonly [number, number])[] {
+  const { frame } = piece.panel;
+  if (!always && !bendsBetween(frame, piece.rect)) return piece.loop;
+  const out: (readonly [number, number])[] = [];
+  piece.loop.forEach(([u, v], index) => {
+    const [nu, nv] = piece.loop[(index + 1) % piece.loop.length]!;
+    const segments = Math.min(MAX_CURVE_SEGMENTS, Math.max(1, Math.ceil((Math.abs(nu - u) * frame.length) / step)));
+    for (let k = 0; k < segments; k += 1) out.push([u + ((nu - u) * k) / segments, v + ((nv - v) * k) / segments]);
+  });
+  return out;
 }
 
 function buildGroupPatch(ctx: ToolContext, idPrefix: string, pieces: readonly OpeningPiece[]): { readonly patch: ConstructionPatch; readonly pins: readonly ConstructionPinRequest[] } {
@@ -396,7 +453,7 @@ function buildGroupPatch(ctx: ToolContext, idPrefix: string, pieces: readonly Op
   const pins: ConstructionPinRequest[] = [];
   pieces.forEach((piece, pieceIndex) => {
     const prefix = `${idPrefix}:p${pieceIndex}`;
-    const loop = rectLoop(piece.panel.frame, piece.rect);
+    const loop = pieceLoop(piece);
     const ring = piece.panel.frame.resolve(loop).map((position, index) => ({ id: `${prefix}:c${index}` as ConstructionNodeId, position }));
     const boundaryEdges = createBoundaryEdges(ctx.tableId, { kind: "private-when-full", runPrefix: prefix, existingUses });
     const boundary: ConstructionOrientedEdgeUse[] = ring.map((node, index) => boundaryEdges.use(node.id, ring[(index + 1) % ring.length]!.id));
@@ -419,8 +476,10 @@ export function commitOpeningGroup(
   causeId: string,
   removals: readonly ConstructionSurfaceKey[],
   pieces: readonly OpeningPiece[],
-): { readonly recorded: boolean; readonly error?: string } {
+  shape?: OpeningShape,
+): OpeningCommit {
   let recorded = false;
+  let created: { readonly group: string; readonly surfaceKeys: readonly ConstructionSurfaceKey[] } | undefined;
   try {
     ({ recorded } = commitChange(ctx.runtime, { transactionId: causeId }, () => {
       if (removals.length > 0) {
@@ -436,10 +495,20 @@ export function commitOpeningGroup(
       }
       ctx.runtime.pinNodes(pins, "local", causeId);
       ctx.runtime.setRegionGroup(outcome.createdSurfaceKeys, idPrefix);
+      const props = propsForShape(shape);
+      if (props !== null) ctx.runtime.setRegionProps(outcome.createdSurfaceKeys, props);
+      created = { group: idPrefix, surfaceKeys: outcome.createdSurfaceKeys };
       return { value: outcome, change: shapeChangeOfAddition(ctx.runtime, patch, outcome) };
     }));
   } catch (error) {
     return { recorded: false, error: error instanceof Error ? error.message : String(error) };
   }
-  return { recorded };
+  return created === undefined ? { recorded } : { recorded, created };
+}
+
+export interface OpeningCommit {
+  readonly recorded: boolean;
+  readonly error?: string;
+  /** The new group, when pieces were added. */
+  readonly created?: { readonly group: string; readonly surfaceKeys: readonly ConstructionSurfaceKey[] };
 }
