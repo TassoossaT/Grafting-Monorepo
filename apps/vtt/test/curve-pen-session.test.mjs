@@ -10,7 +10,7 @@ const points={...tool.defaultParams(),creationMode:"points",bedWidth:0.6};
 const brush={...points,creationMode:"brush"};
 const state=f=>JSON.parse(f.session.snapshot_json());
 const edges=f=>f.runtime.getGraphSnapshot().edges.filter(e=>e.curve);
-const closeCurves=(actual,expected)=>{assert.equal(actual.length,expected.length);actual.forEach((c,i)=>c.points.forEach((p,j)=>p.forEach((v,k)=>assert.ok(Math.abs(v-expected[i].points[j][k])<1e-10, "curve coordinate changed"))));};
+const closeCurves=(actual,expected,tolerance=1e-10)=>{assert.equal(actual.length,expected.length);actual.forEach((c,i)=>c.points.forEach((p,j)=>p.forEach((v,k)=>assert.ok(Math.abs(v-expected[i].points[j][k])<tolerance, `curve coordinate changed at ${i}/${j}/${k}: ${v} != ${expected[i].points[j][k]}`))));};
 function fixture() {
   const f=sessionFixture();f.previews=new Map();f.selected=undefined;
   f.ctx.reportSelection=value=>{f.selected=value;};
@@ -207,5 +207,25 @@ test("road endpoint deletion shortens a path; midpoint dragging never inserts by
     assert.equal(edges(f).length,1,JSON.stringify(f.calls.feedback));
     assert.ok(edges(f).every(e=>e.startNodeId!==id&&e.endNodeId!==id));
     assert.ok(f.runtime.getAllRegionTopologies().length);
+  }finally{f.close();}
+});
+
+
+test("freehand road uses brush margin and commits the preview's interpreted spine",()=>{
+  const f=fixture();
+  try {
+    const params={...brush,radius:2.5,bedWidth:3};
+    const samples=Array.from({length:161},(_,i)=>{const t=i/160;return sample(20*t,4*Math.sin(Math.PI*t)+0.15*Math.sin(32*Math.PI*t));});
+    const g={start:samples[0],current:samples.at(-1),samples};
+    const interpreted=[];const original=f.runtime.curveBatch;
+    f.runtime.curveBatch=request=>{const result=original(request);if(request.commands[0]?.kind==="interpretStroke")interpreted.push({request,result});return result;};
+    tool.onPointerDown(f.ctx,g.start,params);tool.onPointerMove(f.ctx,g,params);
+    assert.equal(interpreted[0].request.commands[0].correction,1);
+    assert.ok(interpreted[0].result[0].curves.length<10,"hand wobble must not create dozens of spines");
+    tool.onPointerUp(f.ctx,g,params);
+    assert.equal(f.calls.feedback.filter(x=>x.tone==="error").length,0,JSON.stringify(f.calls.feedback));
+    closeCurves(interpreted[1].result[0].curves,interpreted[0].result[0].curves);
+    // Graph node positions are stored as f32; handle reconstruction inherits that precision.
+    closeCurves(edges(f).map(e=>resolve(f,e)),interpreted[0].result[0].curves,2e-6);
   }finally{f.close();}
 });

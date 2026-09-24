@@ -4543,7 +4543,7 @@ export function correctedWallCorners(
   tolerance = 0,
   ): readonly ConstructionPosition[] {
   if (samples.length === 0) return [];
-  const fitted = fitPath(samples, tolerance, { curves: ctx.snapToGrid ? "none" : "bezier" });
+  const fitted = fitPath(samples, tolerance, { curves: ctx.snapToGrid ? "none" : "bezier", port: ctx.runtime });
 export function wallCorrectionPreview(
   ctx: ToolContext,
   samples: readonly ConstructionPosition[],
@@ -6178,8 +6178,8 @@ export interface FitOptions {
   * explained by a straight chord, if any. `"none"` fits every span as a
   * chord and never considers a curve at all.
   */
+  readonly port?: Pick<BezierPort, "curveBatch">;
   readonly curves?: "arc" | "bezier" | "none";
-  }
 export function fitPath(
   points: readonly ConstructionPosition[],
   tolerance: number,
@@ -6307,13 +6307,13 @@ export interface CurveHandles {
 export type CurveCommand =
 export interface CurveBatch { readonly tolerance: number; readonly commands: readonly CurveCommand[] }
 export interface CurveResult {
+  readonly linear?: readonly boolean[];
   readonly ribbon: { readonly outer: readonly CurvePoint[] } | null;
   readonly curves: readonly CubicBezier[];
   readonly handles: readonly CurveHandles[];
   readonly samples: readonly (readonly { readonly t: number; readonly position: CurvePoint }[])[];
   readonly lengths: readonly number[];
   readonly parameter: number | null;
-  readonly opposite: CurvePoint | null;
 export interface CurveNetworkNode { readonly id: string; readonly position: CurvePoint }
 export interface CurveNetworkEdge { readonly edgeId: string; readonly startNodeId: string; readonly endNodeId: string; readonly curve: CurveHandles }
 export interface CurveNetworkRequest {

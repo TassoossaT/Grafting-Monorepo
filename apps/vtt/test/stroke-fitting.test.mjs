@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { after } from "node:test";
+import { sessionFixture } from "./platform-session-fixture.mjs";
+const curveFixture = sessionFixture();
+after(() => curveFixture.session.free());
 
 import { fitPath } from "../src/composition/tabletop/tools/core/stroke-fitting.ts";
 
@@ -103,7 +106,7 @@ test("a straight run followed by a genuine curve isolates the straight run exact
 
 test("with curves: bezier, a perfectly traced curve fits into one cubic Bezier, not several straight corners", () => {
   const points = arcPoints({ x: 2, z: 0 }, 2, Math.PI, -Math.PI, 8);
-  const edges = fitPath(points, TOLERANCE, { curves: "bezier" });
+  const edges = fitPath(points, TOLERANCE, { curves: "bezier", port: curveFixture.runtime });
   assert.equal(edges.length, 1, "a smooth curve must not be chopped into false corners by straight-line RDP");
   assert.equal(edges[0].geometry.kind, "bezier");
   assert.ok(Array.isArray(edges[0].geometry.handle1) && edges[0].geometry.handle1.length === 2);
@@ -116,7 +119,7 @@ test("with curves: bezier, a straight run followed by a genuine curve still isol
   const straightPart = [point(-4, 0), point(-3, 0), point(-2, 0), point(-1, 0), point(0, 0)];
   const curvedPart = arcPoints({ x: 2, z: 0 }, 2, Math.PI, -Math.PI, 8).slice(1);
   const points = [...straightPart, ...curvedPart];
-  const edges = fitPath(points, TOLERANCE, { curves: "bezier" });
+  const edges = fitPath(points, TOLERANCE, { curves: "bezier", port: curveFixture.runtime });
   assert.ok(edges.length < points.length - 1, "fitting must still collapse far fewer edges than one per raw sample");
   assert.equal(edges[0].geometry.kind, "line");
   assert.deepEqual(edges[0].start, points[0]);
@@ -126,7 +129,7 @@ test("with curves: bezier, a straight run followed by a genuine curve still isol
 
 test("with curves: bezier, a sharp right-angle turn still fits into two straight edges, corner preserved", () => {
   const points = [point(0, 0), point(2, 0), point(4, 0), point(4, 2), point(4, 4)];
-  const edges = fitPath(points, TOLERANCE, { curves: "bezier" });
+  const edges = fitPath(points, TOLERANCE, { curves: "bezier", port: curveFixture.runtime });
   assert.equal(edges.length, 2);
   assert.equal(edges[0].geometry.kind, "line");
   assert.equal(edges[1].geometry.kind, "line");

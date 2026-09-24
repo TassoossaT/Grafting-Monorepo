@@ -16,7 +16,9 @@ function meaningful(g: ToolGesture): boolean {
 function draft(ctx: ToolContext,g: ToolGesture,params: PathBrushParams) {
   const samples = [...g.samples];
   if (samples.at(-1) !== g.current) samples.push(g.current);
-  const fitted=ctx.runtime.curveBatch({tolerance:0.12,commands:[{kind:"fit",points:samples.map(point)}]})[0]!;
+  // The brush reserves half the road width; the remaining area may correct hand wobble.
+  const correction=Math.max(0,params.radius-params.bedWidth/2);
+  const fitted=ctx.runtime.curveBatch({tolerance:0.025,commands:[{kind:"interpretStroke",points:samples.map(point),correction,curved:true}]})[0]!;
   const ribbons=ctx.runtime.curveBatch({tolerance:0.05,commands:fitted.curves.map(curve=>({kind:"ribbon" as const,curve,offsets:[-params.bedWidth/2,params.bedWidth/2] as const}))});
   const lines:number[]=[];
   for(const span of fitted.samples)for(let i=1;i<span.length;i++)lines.push(...span[i-1]!.position,...span[i]!.position);

@@ -1,3 +1,4 @@
+import type { BezierPort } from "../../../ports/bezier-port.ts";
 import type { ConstructionEdgeGeometry, ConstructionPosition } from "@/ports"; // Generic stroke geometry capability.
 
 /**
@@ -13,19 +14,14 @@ export interface FittedEdge {
   readonly geometry: ConstructionEdgeGeometry;
 }
 
-/**
- * What a caller may vary about a fit. `curves` defaults to `"arc"` (this
- * module's original behavior, kept for every existing caller). Only the
- * wall brush opts into `"bezier"` -- see `wall-shared.ts` -- so a platform's
- * or a path's own contour keeps fitting true circular arcs exactly as it
- * always has.
- */
+/** Arc fitting remains local legacy behavior; B?zier interpretation is owned by Rust. */
 export interface FitOptions {
   /**
    * Which curved-span family to try for a span that is not already
    * explained by a straight chord, if any. `"none"` fits every span as a
    * chord and never considers a curve at all.
    */
+  readonly port?: Pick<BezierPort, "curveBatch">;
   readonly curves?: "arc" | "bezier" | "none";
 }
 
@@ -114,144 +110,6 @@ function arcThrough(
   return { center, radius, clockwise: toVia > toEnd };
 }
 
-/** A candidate single-segment cubic Bézier for one span: its two off-curve control points, in XZ. */
-interface BezierCandidate {
-  readonly handle1: readonly [number, number];
-  readonly handle2: readonly [number, number];
-}
-
-/** Unit vector from `(fromX, fromZ)` to `(toX, toZ)`, or `undefined` when the two coincide. */
-function unitDirection(fromX: number, fromZ: number, toX: number, toZ: number): readonly [number, number] | undefined {
-  const dx = toX - fromX;
-  const dz = toZ - fromZ;
-  const length = Math.hypot(dx, dz);
-  return length < 1e-9 ? undefined : [dx / length, dz / length];
-}
-
-/** Every sample's own chord-length parameter in `[0, 1]` across `points[startIndex..endIndex]`, plus the run's total chord length. */
-function chordLengthParameters(
-  points: readonly ConstructionPosition[],
-  startIndex: number,
-  endIndex: number,
-): { readonly parameters: readonly number[]; readonly total: number } {
-  const cumulative: number[] = [0];
-  for (let index = startIndex + 1; index <= endIndex; index += 1) {
-    const a = points[index - 1]!;
-    const b = points[index]!;
-    cumulative.push(cumulative[cumulative.length - 1]! + Math.hypot(b.x - a.x, b.z - a.z));
-  }
-  const total = cumulative[cumulative.length - 1]!;
-  return { parameters: total < 1e-6 ? cumulative.map(() => 0) : cumulative.map((c) => c / total), total };
-}
-
-/**
- * Single-segment least-squares cubic Bézier through `points[startIndex..endIndex]`,
- * its two endpoints fixed -- the single-segment case of Schneider's
- * curve-fitting algorithm (Graphics Gems). Tangent *directions* at each end
- * are estimated from the immediately neighboring sample; only their two
- * scalar reach magnitudes are actually fit, via the standard 2x2
- * least-squares normal-equations system this reduces to. Falls back to a
- * plain one-third-chord placement (the ordinary default control points for a
- * cubic with no better information) whenever that system is degenerate
- * (near-collinear tangents) or produces a magnitude that would pull a
- * handle behind its own endpoint instead of forward along the curve.
- */
-function bezierThrough(
-  points: readonly ConstructionPosition[],
-  startIndex: number,
-  endIndex: number,
-): BezierCandidate | undefined {
-  const start = points[startIndex];
-  const end = points[endIndex];
-  if (start === undefined || end === undefined) return undefined;
-  const chordLength = Math.hypot(end.x - start.x, end.z - start.z);
-  if (chordLength < 1e-6) return undefined;
-
-  const fallback = (): BezierCandidate | undefined => {
-    const forward = unitDirection(start.x, start.z, end.x, end.z);
-    if (forward === undefined) return undefined;
-    const reach = chordLength / 3;
-    return {
-      handle1: [start.x + forward[0] * reach, start.z + forward[1] * reach],
-      handle2: [end.x - forward[0] * reach, end.z - forward[1] * reach],
-    };
-  };
-
-  const next = points[startIndex + 1];
-  const previous = points[endIndex - 1];
-  const t1 = next !== undefined ? unitDirection(start.x, start.z, next.x, next.z) : undefined;
-  const t2 = previous !== undefined ? unitDirection(end.x, end.z, previous.x, previous.z) : undefined;
-  if (t1 === undefined || t2 === undefined) return fallback();
-
-  const { parameters, total } = chordLengthParameters(points, startIndex, endIndex);
-  if (total < 1e-6) return fallback();
-
-  let a11 = 0;
-  let a12 = 0;
-  let a22 = 0;
-  let c1 = 0;
-  let c2 = 0;
-  for (let index = startIndex + 1; index < endIndex; index += 1) {
-    const u = parameters[index - startIndex]!;
-    const oneMinusU = 1 - u;
-    const b1 = 3 * u * oneMinusU * oneMinusU;
-    const b2 = 3 * u * u * oneMinusU;
-    const weightStart = oneMinusU * oneMinusU * oneMinusU + b1;
-    const weightEnd = b2 + u * u * u;
-    const point = points[index]!;
-    const rx = point.x - (weightStart * start.x + weightEnd * end.x);
-    const rz = point.z - (weightStart * start.z + weightEnd * end.z);
-    const tangentDot = t1[0] * t2[0] + t1[1] * t2[1];
-    a11 += b1 * b1;
-    a12 += b1 * b2 * tangentDot;
-    a22 += b2 * b2;
-    c1 += b1 * (rx * t1[0] + rz * t1[1]);
-    c2 += b2 * (rx * t2[0] + rz * t2[1]);
-  }
-  const determinant = a11 * a22 - a12 * a12;
-  if (Math.abs(determinant) < 1e-9) return fallback();
-  const alpha1 = (c1 * a22 - c2 * a12) / determinant;
-  const alpha2 = (a11 * c2 - a12 * c1) / determinant;
-  const minimumReach = chordLength * 1e-3;
-  if (!(alpha1 > minimumReach) || !(alpha2 > minimumReach)) return fallback();
-
-  return {
-    handle1: [start.x + t1[0] * alpha1, start.z + t1[1] * alpha1],
-    handle2: [end.x + t2[0] * alpha2, end.z + t2[1] * alpha2],
-  };
-}
-
-/**
- * Worst deviation between `points[startIndex..endIndex]` and `bezier`,
- * evaluated at each sample's own chord-length parameter -- no closest-point
- * search needed, since that parameterization is already assigned.
- */
-function bezierResidual(
-  points: readonly ConstructionPosition[],
-  startIndex: number,
-  endIndex: number,
-  bezier: BezierCandidate,
-): number {
-  const start = points[startIndex]!;
-  const end = points[endIndex]!;
-  const { parameters, total } = chordLengthParameters(points, startIndex, endIndex);
-  if (total < 1e-6) return 0;
-  let worst = 0;
-  for (let index = startIndex + 1; index < endIndex; index += 1) {
-    const u = parameters[index - startIndex]!;
-    const oneMinusU = 1 - u;
-    const b0 = oneMinusU * oneMinusU * oneMinusU;
-    const b1 = 3 * u * oneMinusU * oneMinusU;
-    const b2 = 3 * u * u * oneMinusU;
-    const b3 = u * u * u;
-    const x = b0 * start.x + b1 * bezier.handle1[0] + b2 * bezier.handle2[0] + b3 * end.x;
-    const z = b0 * start.z + b1 * bezier.handle1[1] + b2 * bezier.handle2[1] + b3 * end.z;
-    const point = points[index]!;
-    worst = Math.max(worst, Math.hypot(point.x - x, point.z - z));
-  }
-  return worst;
-}
-
 /** The interior sample that wanders furthest off the span's own chord -- where any real curvature is most visible, and the point an arc has to be made to pass through. */
 function furthestFromChord(
   points: readonly ConstructionPosition[],
@@ -275,8 +133,7 @@ function furthestFromChord(
  * and `end` as one edge: `straightResidual` (worst perpendicular distance
  * from the chord) and `curveResidual` (worst deviation from whichever curve
  * family `curves` asks for -- radial distance from the true circle through
- * the endpoints and the span's own furthest interior point for `"arc"`, or
- * deviation from the least-squares cubic for `"bezier"`).
+ * the endpoints and the span's own furthest interior point for `"arc"`).
  *
  * Shared by {@link cornerIndices} (deciding *where* a real corner is) and
  * {@link classifySegment} (deciding straight vs. curved for one already
@@ -286,12 +143,12 @@ function computeResiduals(
   points: readonly ConstructionPosition[],
   startIndex: number,
   endIndex: number,
-  curves: "arc" | "bezier" | "none",
-): { readonly straightResidual: number; readonly curveResidual: number; readonly arc: ArcCandidate | undefined; readonly bezier: BezierCandidate | undefined } {
+  curves: "arc" | "none",
+): { readonly straightResidual: number; readonly curveResidual: number; readonly arc: ArcCandidate | undefined } {
   const start = points[startIndex];
   const end = points[endIndex];
   if (start === undefined || end === undefined) {
-    return { straightResidual: 0, curveResidual: Infinity, arc: undefined, bezier: undefined };
+    return { straightResidual: 0, curveResidual: Infinity, arc: undefined };
   }
 
   const apex = furthestFromChord(points, startIndex, endIndex, start, end);
@@ -304,12 +161,12 @@ function computeResiduals(
   // least one other sample before it means anything.
   const chordLength = Math.hypot(end.x - start.x, end.z - start.z);
   if (curves === "none" || apex === undefined || chordLength < 1e-6 || endIndex - startIndex < 3) {
-    return { straightResidual, curveResidual: Infinity, arc: undefined, bezier: undefined };
+    return { straightResidual, curveResidual: Infinity, arc: undefined };
   }
 
   if (curves === "arc") {
     const arc = arcThrough(start, apex.point, end);
-    if (arc === undefined) return { straightResidual, curveResidual: Infinity, arc: undefined, bezier: undefined };
+    if (arc === undefined) return { straightResidual, curveResidual: Infinity, arc: undefined };
     let arcResidual = 0;
     for (let index = startIndex + 1; index < endIndex; index += 1) {
       const point = points[index];
@@ -317,13 +174,10 @@ function computeResiduals(
       const distanceFromCenter = Math.hypot(point.x - arc.center[0], point.z - arc.center[1]);
       arcResidual = Math.max(arcResidual, Math.abs(distanceFromCenter - arc.radius));
     }
-    return { straightResidual, curveResidual: arcResidual, arc, bezier: undefined };
+    return { straightResidual, curveResidual: arcResidual, arc };
   }
 
-  const bezier = bezierThrough(points, startIndex, endIndex);
-  if (bezier === undefined) return { straightResidual, curveResidual: Infinity, arc: undefined, bezier: undefined };
-  const curveResidual = bezierResidual(points, startIndex, endIndex, bezier);
-  return { straightResidual, curveResidual, arc: undefined, bezier };
+  return { straightResidual, curveResidual: Infinity, arc: undefined };
 }
 
 /**
@@ -342,7 +196,7 @@ function computeResiduals(
 function cornerIndices(
   points: readonly ConstructionPosition[],
   tolerance: number,
-  curves: "arc" | "bezier" | "none",
+  curves: "arc" | "none",
 ): readonly number[] {
   function recurse(startIndex: number, endIndex: number): number[] {
     if (endIndex - startIndex < 2) return [startIndex, endIndex];
@@ -369,8 +223,7 @@ function cornerIndices(
  * How much smaller a span's own best-fit-curve residual must be than its
  * best-fit-straight-line residual before it is worth calling a curve at all
  * -- below this, a straight edge already reads as intentional and a curve
- * would just be fitting hand tremor. Shared by both curve families: neither
- * is a more or less "deliberate" shape than the other.
+ * would just be fitting hand tremor.
  */
 const CURVE_MUST_BEAT_STRAIGHT_RATIO = 0.6;
 /**
@@ -386,9 +239,8 @@ const CURVE_RESIDUAL_MAX_RATIO = 0.3;
 
 const LINE: ConstructionEdgeGeometry = { kind: "line" };
 
-function curveGeometry(arc: ArcCandidate | undefined, bezier: BezierCandidate | undefined): ConstructionEdgeGeometry {
-  if (arc !== undefined) return { kind: "arc", center: arc.center, clockwise: arc.clockwise };
-  return { kind: "bezier", handle1: bezier!.handle1, handle2: bezier!.handle2 };
+function curveGeometry(arc: ArcCandidate): ConstructionEdgeGeometry {
+  return { kind: "arc", center: arc.center, clockwise: arc.clockwise };
 }
 
 /**
@@ -402,7 +254,7 @@ function classifySegment(
   points: readonly ConstructionPosition[],
   startIndex: number,
   endIndex: number,
-  curves: "arc" | "bezier" | "none",
+  curves: "arc" | "none",
   tolerance: number,
 ): FittedEdge {
   const start = points[startIndex];
@@ -410,8 +262,8 @@ function classifySegment(
   if (start === undefined || end === undefined) throw new Error("classifySegment: index out of range");
   if (endIndex - startIndex < 2) return { start, end, geometry: LINE };
 
-  const { straightResidual, curveResidual, arc, bezier } = computeResiduals(points, startIndex, endIndex, curves);
-  if (arc === undefined && bezier === undefined) return { start, end, geometry: LINE };
+  const { straightResidual, curveResidual, arc } = computeResiduals(points, startIndex, endIndex, curves);
+  if (arc === undefined) return { start, end, geometry: LINE };
 
   // This span survived {@link cornerIndices} without being split, which
   // means *some* shape explained it within `tolerance`. If a straight chord
@@ -422,7 +274,7 @@ function classifySegment(
   // arbitrarily far outside the brush the user actually drew -- the fit
   // silently breaking the one promise the correction dial makes.
   if (straightResidual > tolerance && curveResidual <= tolerance) {
-    return { start, end, geometry: curveGeometry(arc, bezier) };
+    return { start, end, geometry: curveGeometry(arc) };
   }
 
   const chordLength = Math.hypot(end.x - start.x, end.z - start.z);
@@ -430,7 +282,7 @@ function classifySegment(
   const allowance = Math.min(characteristicSize, chordLength) * CURVE_RESIDUAL_MAX_RATIO;
   const curveFitsWellEnough = curveResidual < allowance && curveResidual < straightResidual * CURVE_MUST_BEAT_STRAIGHT_RATIO;
   if (!curveFitsWellEnough) return { start, end, geometry: LINE };
-  return { start, end, geometry: curveGeometry(arc, bezier) };
+  return { start, end, geometry: curveGeometry(arc) };
 }
 
 /**
@@ -460,6 +312,18 @@ export function fitPath(
   if (points.length < 2) return [];
   const curves = options.curves ?? "arc";
   const budget = Math.max(0, tolerance);
+  if (curves === "bezier") {
+    if (!options.port) throw new Error("Bezier stroke interpretation requires the Rust curve port");
+    const result = options.port.curveBatch({ tolerance: 0.025, commands: [{
+      kind: "interpretStroke", points: points.map(p => [p.x, p.y, p.z] as const), correction: budget, curved: true,
+    }] })[0];
+    if (!result) throw new Error("Missing interpreted stroke result");
+    return result.curves.map((curve, index) => {
+      const [a, h1, h2, b] = curve.points;
+      return { start: { x: a[0], y: a[1], z: a[2] }, end: { x: b[0], y: b[1], z: b[2] },
+        geometry: result.linear?.[index] ? LINE : { kind: "bezier", handle1: [h1[0], h1[2]], handle2: [h2[0], h2[2]] } };
+    });
+  }
   const indices = cornerIndices(points, budget, curves);
   const edges: FittedEdge[] = [];
   for (let index = 0; index + 1 < indices.length; index += 1) {

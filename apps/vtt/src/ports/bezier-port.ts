@@ -13,6 +13,7 @@ export interface CurveHandles {
   readonly surfaceType?: string;
 }
 export type CurveCommand =
+  | { readonly kind: "interpretStroke"; readonly points: readonly CurvePoint[]; readonly correction: number; readonly curved: boolean }
   | { readonly kind: "automatic"; readonly points: readonly CurvePoint[] }
   | { readonly kind: "fit"; readonly points: readonly CurvePoint[]; readonly cornerDegrees?: number }
   | { readonly kind: "join"; readonly sections: readonly (readonly [CurvePoint, CurvePoint])[] }
@@ -26,6 +27,7 @@ export type CurveCommand =
   | { readonly kind: "resolve"; readonly handles: CurveHandles; readonly start: CurvePoint; readonly end: CurvePoint };
 export interface CurveBatch { readonly tolerance: number; readonly commands: readonly CurveCommand[] }
 export interface CurveResult {
+  readonly linear?: readonly boolean[];
   readonly ribbon: { readonly outer: readonly CurvePoint[] } | null;
   readonly curves: readonly CubicBezier[];
   readonly handles: readonly CurveHandles[];

@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { after } from "node:test";
+import { sessionFixture } from "./platform-session-fixture.mjs";
+const curveFixture = sessionFixture();
+after(() => curveFixture.session.free());
 
 import {
   commitWallContour,
@@ -29,6 +32,7 @@ function contextFor(topologies, snapToGrid = false) {
   return {
     ctx: {
       runtime: {
+        curveBatch: curveFixture.runtime.curveBatch,
         getAllRegionTopologies: () => topologies,
         addPatch: (patch, origin, causeId) => {
           patches.push({ patch, origin, causeId });

@@ -134,6 +134,10 @@ pub grafting_graph_core::bezier_commands::CurveCommand::Handle::index: usize
 pub grafting_graph_core::bezier_commands::CurveCommand::Handle::mode: grafting_graph_core::bezier::HandleMode
 pub grafting_graph_core::bezier_commands::CurveCommand::Handle::opposite: core::option::Option<grafting_graph_core::bezier::CurvePoint>
 pub grafting_graph_core::bezier_commands::CurveCommand::Handle::target: grafting_graph_core::bezier::CurvePoint
+pub grafting_graph_core::bezier_commands::CurveCommand::InterpretStroke
+pub grafting_graph_core::bezier_commands::CurveCommand::InterpretStroke::correction: f64
+pub grafting_graph_core::bezier_commands::CurveCommand::InterpretStroke::curved: bool
+pub grafting_graph_core::bezier_commands::CurveCommand::InterpretStroke::points: alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>
 pub grafting_graph_core::bezier_commands::CurveCommand::Join
 pub grafting_graph_core::bezier_commands::CurveCommand::Join::sections: alloc::vec::Vec<[grafting_graph_core::bezier::CurvePoint; 2]>
 pub grafting_graph_core::bezier_commands::CurveCommand::Merge
@@ -196,6 +200,7 @@ pub struct grafting_graph_core::bezier_commands::CurveResult
 pub grafting_graph_core::bezier_commands::CurveResult::curves: alloc::vec::Vec<grafting_graph_core::bezier::CubicBezier>
 pub grafting_graph_core::bezier_commands::CurveResult::handles: alloc::vec::Vec<grafting_graph_core::bezier::CurveHandles>
 pub grafting_graph_core::bezier_commands::CurveResult::lengths: alloc::vec::Vec<f64>
+pub grafting_graph_core::bezier_commands::CurveResult::linear: alloc::vec::Vec<bool>
 pub grafting_graph_core::bezier_commands::CurveResult::opposite: core::option::Option<grafting_graph_core::bezier::CurvePoint>
 pub grafting_graph_core::bezier_commands::CurveResult::parameter: core::option::Option<f64>
 pub grafting_graph_core::bezier_commands::CurveResult::ribbon: core::option::Option<grafting_graph_core::bezier_surface::CurveRibbon>
@@ -3422,6 +3427,22 @@ Optional paired handle on another incident edge.
 
 Desired control position.
 
+### `pub grafting_graph_core::bezier_commands::CurveCommand::InterpretStroke`
+
+Interpret brush observations independently of tessellation accuracy.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::InterpretStroke::correction: f64`
+
+Non-negative allowed sample deviation in XZ world units.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::InterpretStroke::curved: bool`
+
+Allow cubic approximation in addition to straight spans.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::InterpretStroke::points: alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>`
+
+Ordered captured XYZ observations.
+
 ### `pub grafting_graph_core::bezier_commands::CurveCommand::Join`
 
 Fill the bevel between cross-sections at a shared anchor.
@@ -3543,6 +3564,10 @@ Relative controls suitable for durable graph edge payloads.
 ### `pub grafting_graph_core::bezier_commands::CurveResult::lengths: alloc::vec::Vec<f64>`
 
 Ground-plane lengths.
+
+### `pub grafting_graph_core::bezier_commands::CurveResult::linear: alloc::vec::Vec<bool>`
+
+Straight-span flags for interpreted strokes; omitted for existing commands.
 
 ### `pub grafting_graph_core::bezier_commands::CurveResult::opposite: core::option::Option<grafting_graph_core::bezier::CurvePoint>`
 

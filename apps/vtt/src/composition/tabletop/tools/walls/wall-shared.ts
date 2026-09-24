@@ -298,7 +298,7 @@ export function correctedWallCorners(
   tolerance = 0,
 ): readonly ConstructionPosition[] {
   if (samples.length === 0) return [];
-  const fitted = fitPath(samples, tolerance, { curves: ctx.snapToGrid ? "none" : "bezier" });
+  const fitted = fitPath(samples, tolerance, { curves: ctx.snapToGrid ? "none" : "bezier", port: ctx.runtime });
   const corners = fitted.length > 0 ? [fitted[0]!.start, ...fitted.map((edge) => edge.end)] : samples;
   return corners.map((corner) => snappedEndpoint(ctx, corner, tolerance));
 }
@@ -450,5 +450,5 @@ export function commitWallStroke(
   domain: string,
 ): void {
   if (samples.length === 0) return;
-  commitWallContour(ctx, fitPath(samples, tolerance, { curves: ctx.snapToGrid ? "none" : "bezier" }), params, domain, tolerance);
+  commitWallContour(ctx, fitPath(samples, tolerance, { curves: ctx.snapToGrid ? "none" : "bezier", port: ctx.runtime }), params, domain, tolerance);
 }

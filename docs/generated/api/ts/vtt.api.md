@@ -5636,13 +5636,11 @@ adjacent.
 
 ### `interface vtt.stroke-fitting.FitOptions`
 
-What a caller may vary about a fit. `curves` defaults to `"arc"` (this
-module's original behavior, kept for every existing caller). Only the
-wall brush opts into `"bezier"` -- see `wall-shared.ts` -- so a platform's
-or a path's own contour keeps fitting true circular arcs exactly as it
-always has.
+Arc fitting remains local legacy behavior; B?zier interpretation is owned by Rust.
 
 ### `property vtt.stroke-fitting.FitOptions.curves?: "arc" | "bezier" | "none"`
+
+### `property vtt.stroke-fitting.FitOptions.port?: Pick<BezierPort, "curveBatch">`
 
 Which curved-span family to try for a span that is not already
 explained by a straight chord, if any. `"none"` fits every span as a
@@ -5914,6 +5912,8 @@ The structure type generated along this spine span; a span with no owner generat
 
 ### `property vtt.bezier-port.CurveResult.lengths: readonly number[]`
 
+### `property vtt.bezier-port.CurveResult.linear?: readonly boolean[]`
+
 ### `property vtt.bezier-port.CurveResult.opposite: CurvePoint | null`
 
 ### `property vtt.bezier-port.CurveResult.parameter: number | null`
@@ -5922,7 +5922,7 @@ The structure type generated along this spine span; a span with no owner generat
 
 ### `property vtt.bezier-port.CurveResult.samples: readonly (readonly { position: CurvePoint; t: number }[])[]`
 
-### `type vtt.bezier-port.CurveCommand = { kind: "automatic"; points: readonly CurvePoint[] } | { cornerDegrees?: number; kind: "fit"; points: readonly CurvePoint[] } | { kind: "join"; sections: readonly (readonly [CurvePoint, CurvePoint])[] } | { curve: CubicBezier; endOffsets?: readonly [number, number]; kind: "ribbon"; offsets: readonly [number, number]; parameters?: readonly number[] } | { curves: readonly CubicBezier[]; kind: "sample" } | { curve: CubicBezier; kind: "split"; profile?: CurveHandles; t: number } | { curve: CubicBezier; kind: "merge"; next: CubicBezier } | { curve: CubicBezier; kind: "pull"; t: number; target: CurvePoint } | { curve: CubicBezier; index: 1 | 2; kind: "handle"; mode: CurveHandleMode; opposite: CurvePoint | null; target: CurvePoint } | { curve: CubicBezier; kind: "nearest"; point: CurvePoint } | { end: CurvePoint; handles: CurveHandles; kind: "resolve"; start: CurvePoint }`
+### `type vtt.bezier-port.CurveCommand = { correction: number; curved: boolean; kind: "interpretStroke"; points: readonly CurvePoint[] } | { kind: "automatic"; points: readonly CurvePoint[] } | { cornerDegrees?: number; kind: "fit"; points: readonly CurvePoint[] } | { kind: "join"; sections: readonly (readonly [CurvePoint, CurvePoint])[] } | { curve: CubicBezier; endOffsets?: readonly [number, number]; kind: "ribbon"; offsets: readonly [number, number]; parameters?: readonly number[] } | { curves: readonly CubicBezier[]; kind: "sample" } | { curve: CubicBezier; kind: "split"; profile?: CurveHandles; t: number } | { curve: CubicBezier; kind: "merge"; next: CubicBezier } | { curve: CubicBezier; kind: "pull"; t: number; target: CurvePoint } | { curve: CubicBezier; index: 1 | 2; kind: "handle"; mode: CurveHandleMode; opposite: CurvePoint | null; target: CurvePoint } | { curve: CubicBezier; kind: "nearest"; point: CurvePoint } | { end: CurvePoint; handles: CurveHandles; kind: "resolve"; start: CurvePoint }`
 
 ### `type vtt.bezier-port.CurveHandleMode = "automatic" | "aligned" | "mirrored" | "free"`
 

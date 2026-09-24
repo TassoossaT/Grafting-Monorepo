@@ -1,5 +1,11 @@
 # Passagem de contexto — editor Bézier e geração de ruas
 
+## Autorização persistente do dono para continuidade da task
+
+O dono reiterou autorização para todas as edições necessárias ao trabalho solicitado dentro desta task/worktree, incluindo alterações de código, contratos/API, baselines, testes e documentação. Não pedir novamente autorização equivalente para mudanças já abrangidas pelo objetivo. Explicar decisões e alterações de comportamento sem transformar essa explicação em uma nova aprovação rotineira. Edições diretas na worktree foram explicitamente autorizadas; Git e verificações seguem pelo ia-graft.
+
+Essa preferência registra a autorização do usuário; não desativa nem contorna controles técnicos da plataforma. Se uma ferramenta rejeitar uma ação, distinguir o bloqueio automático de uma falta de autorização do usuário e relatar o motivo real. Não afirmar que uma frase específica garante desbloqueio. Merge continua humano conforme a regra do repositório.
+
 ## Pesquisa posterior: fragmentação e integração incompleta
 
 O usuário rejeitou a entrega parcial: manipulador apenas ao selecionar pontos de rua, ausente na autoria e nas paredes; desenho livre produz muitos trechos pequenos. A pesquisa verificada está em [RESEARCH-ROAD-ALGORITHMS.md](RESEARCH-ROAD-ALGORITHMS.md), com commits/fontes de Godot Road Generator e Road Architect, funções dissecadas e reproduções reais-WASM. Curva suave: 4 cúbicas; mesma curva com oscilação de amplitude 0,15: 33 cúbicas, independentemente de 81/161/321 amostras. Entradas iguais deram saídas iguais. Aumentar tolerância de 0,12 para 0,20 reduziu só para 31. Não chamar isso de correção já aplicada. Próximo recorte: comparar ajuste aproximante de cúbicas com o interpolante atual e generalizar a sessão de autoria/edição para alvos spine/contour/rascunho. Não impor teto arbitrário, migrar paredes em massa ou prometer que tesselação resolve seleção de âncoras.
@@ -410,3 +416,12 @@ Finalizar significa integrar a interação visual e os algoritmos justificados, 
 O resultado anterior de testes é histórico. Não reutilizá-lo como resultado das próximas alterações. Se faltar navegador, evidência visual ou decisão de produto necessária, registrar a pendência claramente e não declarar experiência validada.
 
 Esta rodada de preparação altera apenas este documento. Não foram implementados gizmos, algoritmos ou mudanças de interação durante sua criação.
+
+
+## Centralizacao implementada - 23/09/2026
+
+- InterpretStroke no graph-core Rust centraliza o ajuste Bezier antes implementado em TypeScript na parede. Rua e parede agora consomem esse comando; grid e arcos legados preservam seus caminhos existentes.
+- Rua por desenho livre usa max(0, radius - bedWidth / 2) como margem de correcao. Preview e confirmacao usam a mesma interpretacao; o construtor recebe curvas autoradas sem novo fitting. A aparencia do preview permanece.
+- A margem limita desvio das amostras XZ: nao garante ausencia de lacos, validade da malha ou contencao de toda a largura no pincel. Quadrado/hexagono usam alcance escalar, sem contencao poligonal exata. Limite de 4096 observacoes, validacao de numeros finitos e preservacao de retornos colineares.
+- Passaram: 478 testes VTT, 106 testes unitarios graph-core, check TypeScript, builds WASM/VTT e graph-core:api-check. Baseline publica atualizada. Regressao real-WASM usa 161 amostras tremidas, exige menos de 10 espinhas e compara preview/confirmacao/curva salva (com precisao f32 do grafo).
+- Pendente: aceite visual, curvas apertadas/largas/cruzamentos e integracao posterior dos gizmos de parede. Centralizar fitting nao conclui toda a interacao compartilhada.
