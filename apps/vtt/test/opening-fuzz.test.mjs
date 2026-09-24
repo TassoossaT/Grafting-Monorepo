@@ -616,9 +616,10 @@ async function runSeed(seed, opsCount = 40, hostKind = "straight") {
           const n = pick(w.nodes.filter((node) => outer.some((e) => e.startNodeId === node.id)));
           down = n.position; extra = { nodeId: n.id, surfaceRef: ref(w) };
         } else if (mode === "edge") {
+          // A press on a wall edge creates now; only handles edit. The edge op
+          // grabs the edge's start vertex handle, drawing the same randoms.
           const e = pick(outer);
-          const a = w.nodes.find((n) => n.id === e.startNodeId).position, b = w.nodes.find((n) => n.id === e.endNodeId).position;
-          down = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 }; extra = { surfaceRef: ref(w) };
+          down = w.nodes.find((n) => n.id === e.startNodeId).position; extra = { nodeId: e.startNodeId, surfaceRef: ref(w) };
         } else {
           const e = pick(outer);
           const a = w.nodes.find((n) => n.id === e.startNodeId).position, b = w.nodes.find((n) => n.id === e.endNodeId).position;
@@ -899,9 +900,10 @@ async function runMultiPanelSeed(seed, opsCount, hostKind) {
           const n = pick(w.nodes.filter((node) => outer.some((e) => e.startNodeId === node.id)));
           down = n.position; extra = { nodeId: n.id, surfaceRef: ref(w) };
         } else {
+          // A press on a wall edge creates now; only handles edit. The edge op
+          // grabs the edge's start vertex handle, drawing the same randoms.
           const e = pick(outer);
-          const a = w.nodes.find((n) => n.id === e.startNodeId).position, b = w.nodes.find((n) => n.id === e.endNodeId).position;
-          down = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 }; extra = { surfaceRef: ref(w) };
+          down = w.nodes.find((n) => n.id === e.startNodeId).position; extra = { nodeId: e.startNodeId, surfaceRef: ref(w) };
         }
         const up = { x: down.x + delta.x, y: down.y + delta.y, z: down.z + delta.z };
         desc = `wall-${mode} ${q(down)} -> ${q(up)}`;

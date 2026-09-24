@@ -133,6 +133,8 @@ export type ConfirmedMapChunkRenderChange =
 export interface RenderNodeHandle {
   readonly nodeId: string;
   readonly position: { readonly x: number; readonly y: number; readonly z: number };
+  /** The handle a press at the pointer would grab. */
+  readonly highlighted?: boolean;
 }
 
 export type ConfirmedNodeHandleRenderChange =

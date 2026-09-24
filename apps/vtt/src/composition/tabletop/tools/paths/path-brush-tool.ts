@@ -46,5 +46,5 @@ const rawPathBrushTool = createBrushTool<"path-brush">({
   },
 });
 
-/** Also grabs and edits an existing path's own vertex/edge/body/curve-handle -- see `structure-edit-behavior.ts`. */
+/** Also grabs and edits an existing path's own vertex and curve handles -- see `structure-edit-behavior.ts`. */
 export const pathBrushTool = withStructureEditing(rawPathBrushTool, { ownsType: (surfaceType) => surfaceType === PATH_SURFACE_TYPE });

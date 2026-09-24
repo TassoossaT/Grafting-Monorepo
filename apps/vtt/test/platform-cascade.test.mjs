@@ -69,18 +69,18 @@ test("invalid absolute batches are atomic; equal cycles converge and conflicting
     assert.equal(session.snapshot_json(), before);
   } finally { session.free(); }
 });
-test("one drag history covers every storey, including after a rejected tick", () => {
+test("one drag history covers every storey, including after a rejected tick -- grabbed by its vertex handle, since a press on the platform body now creates", () => {
   const { ctx, runtime, session } = building();
   try {
     const surfaceRef = surfaceRefFromNodeSet(platform(runtime,1).surfaceKey);
-    const start = { point: {x:2,y:3,z:2}, surfaceRef, screenY:200 };
+    const start = { point: {x:0,y:3,z:0}, nodeId: "p1:0", surfaceRef, screenY:200 };
     const behavior = createStructureEditBehavior({ ownsType: () => true });
-    behavior.tryGrab(ctx,start,{mode:"shape"});
+    assert.equal(behavior.tryGrab(ctx,start,{mode:"elevation"}), true);
     const current = {...start, screenY:160};
     behavior.onPointerMove(ctx,{start,current,samples:[start,current]},{mode:"elevation"});
     const bad = {...start, screenY:400};
     behavior.onPointerMove(ctx,{start,current:bad,samples:[start,bad]},{mode:"elevation"});
-    behavior.onPointerUp(ctx);
+    behavior.onPointerUp(ctx,{start,current:bad,samples:[start,current,bad],dragged:true});
     assert.deepEqual(heights(runtime),[0,4,7]);
     const history = ctx.history.undo();
     assert.equal(history.undo.length,8);

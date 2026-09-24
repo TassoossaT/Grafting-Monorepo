@@ -27,3 +27,22 @@ test("sprite geometry rejects materials whose semantics it cannot preserve", () 
     /requires an "unlit" material/,
   );
 });
+
+test("a screen-constant sprite keeps its on-screen size instead of shrinking with distance", () => {
+  const constant = buildVisual({
+    geometry: { shape: "sprite", screenConstant: true },
+    material: { surface: "unlit" },
+  });
+  const world = buildVisual({
+    geometry: { shape: "sprite" },
+    material: { surface: "unlit" },
+  });
+
+  try {
+    assert.equal(constant.object.material.sizeAttenuation, false);
+    assert.equal(world.object.material.sizeAttenuation, true);
+  } finally {
+    constant.dispose();
+    world.dispose();
+  }
+});

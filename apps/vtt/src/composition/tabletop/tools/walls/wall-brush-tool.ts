@@ -46,5 +46,5 @@ const rawWallBrushTool = createBrushTool<"wall-brush">({
   // eventual fit may spend, exactly what `path-brush` already shows.
 });
 
-/** Also grabs and edits an existing wall's own vertex/edge/body/height-widget -- see `structure-edit-behavior.ts`. */
+/** Also grabs and edits an existing wall's own vertex, curve and height-widget handles -- see `structure-edit-behavior.ts`. */
 export const wallBrushTool = withStructureEditing(rawWallBrushTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "partition") });

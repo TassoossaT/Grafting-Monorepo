@@ -12,6 +12,7 @@ import {
 } from "../../../../features/edit-construction/index.ts";
 import type { AtomicEditOp, StructureEditParams } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionCurvedEdge, ConstructionEdgeGeometry, ConstructionPosition, CubicBezier } from "../../../../ports/index.ts";
+import { elevationRise } from "./tool-context.ts";
 import type { PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
 import { commitPatchReplacement } from "../../effects/effect-commit.ts";
 
@@ -31,14 +32,16 @@ const PREVIEW_COLOR = 0xffbc55;
 
 export interface CurveGesture {
   move(gesture: ToolGesture): void;
-  commit(): void;
+  /** `dragged` is the dispatcher's click-versus-drag decision: a click on a curve's midpoint inserts a point there. */
+  commit(dragged: boolean): void;
   cancel(): void;
 }
 
 /** Where the pointer is taking the handle: along the ground, or up and down in elevation mode. */
 function targetOf(sample: PointerSample, gesture: ToolGesture, params?: StructureEditParams): ConstructionPosition {
-  return params?.mode === "elevation" && sample.screenY !== undefined && gesture.current.screenY !== undefined
-    ? { ...sample.point, y: sample.point.y + (sample.screenY - gesture.current.screenY) / 40 }
+  const rise = params?.mode === "elevation" ? elevationRise(sample.screenY, gesture.current.screenY) : undefined;
+  return rise !== undefined
+    ? { ...sample.point, y: sample.point.y + rise }
     : { ...gesture.current.point, y: sample.point.y };
 }
 
@@ -61,7 +64,6 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: Structur
   const operationId = `curve-edit:${ctx.nextSequence()}`;
   const topologies = ctx.runtime.getAllRegionTopologies();
   let target: ConstructionPosition = sample.point;
-  let moved = false;
   const plan = (insert = false) => planBezierEdit({
     field: ctx.runtime,
     snapshot, topologies, port: ctx.runtime, targetId, position: target, operationId, tableId: ctx.tableId, insert, mode: params?.curveMode, action: params?.curveAction, width: params?.curveWidth ?? 4, endWidth: params?.curveEndWidth,
@@ -69,7 +71,6 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: Structur
   return {
     move(gesture) {
       target = targetOf(sample, gesture, params);
-      moved ||= target.x !== sample.point.x || target.y !== sample.point.y || target.z !== sample.point.z;
       try {
         const draft = plan();
         if (draft) ctx.runtime.showPreview({ kind: "segments", positions: draft.preview, color: PREVIEW_COLOR, opacity: 0.9 }, CHANNEL);
@@ -78,7 +79,7 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: Structur
         ctx.reportFeedback({ tone: "error", message: String(error) });
       }
     },
-    commit() {
+    commit(moved) {
       ctx.runtime.clearPreview(CHANNEL);
       if (!moved && curvePick(targetId)?.index !== "midpoint" && (!params?.curveAction || params.curveAction === "edit")) return;
       try {

@@ -52,5 +52,5 @@ const rawWallLineTool: ConstructionTool<"wall-line"> = {
   },
 };
 
-/** Also grabs and edits an existing wall's own vertex/edge/body/height-widget -- see `structure-edit-behavior.ts`. */
+/** Also grabs and edits an existing wall's own vertex, curve and height-widget handles -- see `structure-edit-behavior.ts`. */
 export const wallLineTool = withStructureEditing(rawWallLineTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "partition") });

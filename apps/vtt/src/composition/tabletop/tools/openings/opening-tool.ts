@@ -355,6 +355,8 @@ export const openingTool: ConstructionTool<"opening"> = {
   // Placement is read in the run's own frame, never off raw world X/Z, so
   // the dispatcher's world-grid magnet must not round the pointer first.
   snapsToSurface: true,
+  // Shows an opening's own rim dots on hover; the pane itself stays this tool's handle.
+  editableType: (surfaceType: string) => surfaceType === openingStructureType.surfaceType,
 
   previewFor(gesture: ToolGesture, params: OpeningParams, ctx: ToolContext) {
     if (drag !== undefined) return dragPreview(gesture, ctx, drag);
