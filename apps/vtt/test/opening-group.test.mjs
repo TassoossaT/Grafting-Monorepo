@@ -190,7 +190,8 @@ test("a window clicked on the seam of a brush-drawn curved wall splits into 2 pi
   assert.ok(Math.abs(rect.s1 - rect.s0 - WINDOW.width) < 1e-3, "the pieces add up to the slider width");
   const vMid = (rect.v0 + rect.v1) / 2;
   for (const s of [seamS - 0.3, seamS - 0.01, seamS + 0.01, seamS + 0.3]) assert.ok(!wallDrawnAt(h, run, s, vMid), `wall cut at s=${s}`);
-  assert.ok(pieces.some((p) => p.nodes.length > 4), "a piece on a curved face follows the curve, not one chord");
+  assert.ok(pieces.every((p) => p.nodes.length === 4), "each piece is its four corners, no densified sides");
+  assert.ok(pieces.some((p) => h.runtime.hostOutline(p.surfaceKey).uv.length > 4), "a piece on a curved face follows the curve in its host's frame, not one chord");
 });
 
 test("dragging a window across a seam splits it over both faces, and dragging it back folds it onto one again", async () => {
@@ -306,4 +307,26 @@ test("an opening from before groups (one ungrouped region) still selects, moves 
   press(h, WINDOW, { x: 4, y: 1.5, z: 0 });
   openingTool.onDeleteKey(h.ctx);
   assert.equal(h.openings().length, 0);
+});
+
+test("an old densified opening (extra pinned nodes along its sides) still moves, and comes back as four corners", async () => {
+  const h = await harness();
+  line(h.ctx, { x: 0, y: 0, z: 0 }, { x: 8, y: 0, z: 0 });
+  const [wall] = h.walls();
+  const ring = [[1.5, 1], [2, 1], [2.5, 1], [2.5, 1.5], [2.5, 2], [2, 2], [1.5, 2], [1.5, 1.5]];
+  const nodes = ring.map(([x, y], i) => ({ id: `legacy:c${i}`, position: { x, y, z: 0 } }));
+  const edges = nodes.map((n, i) => ({ edgeId: `legacy:e${i}`, startNodeId: n.id, endNodeId: nodes[(i + 1) % nodes.length].id }));
+  h.runtime.addPatch({ nodes, edges, regions: [{ regionId: "legacy", boundary: edges.map((e) => ({ edgeId: e.edgeId, reversed: false })), surfaceType: openingStructureType.surfaceType, physical: false }] }, "local", "legacy");
+  const uv = h.runtime.projectToHost({ hostSurfaceKey: wall.surfaceKey, points: nodes.map((n) => n.position) });
+  h.runtime.pinNodes(nodes.map((n, i) => ({ nodeId: n.id, hostSurfaceKey: wall.surfaceKey, u: uv[i].u, v: uv[i].v })), "local", "legacy");
+  const [legacy] = h.openings();
+  assert.equal(legacy.nodes.length, 8);
+  assert.equal(legacy.group, undefined);
+
+  press(h, WINDOW, { x: 2, y: 1.5, z: 0 }, { x: 5, y: 1.5, z: 0 });
+  const [moved, ...rest] = h.openings();
+  assert.equal(rest.length, 0);
+  assert.equal(moved.nodes.length, 4, "rebuilt clean on its first edit");
+  const rect = assertOneRect(h.runtime, [moved]);
+  assert.ok(Math.abs(rect.s0 - 4.5) < 1e-6 && Math.abs(rect.s1 - 5.5) < 1e-6, `moved as its box: [${rect.s0}, ${rect.s1}]`);
 });

@@ -67,6 +67,12 @@ export function sessionFixture() {
     getCurvedEdges: () => JSON.parse(session.curved_edges_json()).map((edge) => ({ ...edge, start: position(edge.start), end: position(edge.end) })),
     pinNodes: (pins) => JSON.parse(session.pin_nodes_json(JSON.stringify({ pins }))),
     unpinNodes: (nodeIds) => JSON.parse(session.unpin_nodes_json(JSON.stringify({ nodeIds }))),
+    pinEdgeCurves(requests) {
+      const affected = new Map();
+      for (const request of requests) for (const key of JSON.parse(session.pin_edge_curve_json(JSON.stringify(request))).affectedSurfaceKeys) affected.set(JSON.stringify(key), key);
+      return { affectedSurfaceKeys: [...affected.values()], createdSurfaceKeys: [], removedSurfaceKeys: [], createdNodeIds: [], removedNodeIds: [] };
+    },
+    hostOutline: (surfaceKey) => JSON.parse(session.host_outline_json(JSON.stringify({ surfaceKey }))),
     projectToHost: ({ hostSurfaceKey, points }) => JSON.parse(session.project_to_host_json(JSON.stringify({ hostSurfaceKey, points: points.map(vector) }))),
     resolveOnHost: (request) => JSON.parse(session.resolve_on_host_json(JSON.stringify(request))).map(position),
     setRegionGroup: (surfaceKeys, groupId) => JSON.parse(session.set_region_group_json(JSON.stringify({ surfaceKeys, groupId }))),

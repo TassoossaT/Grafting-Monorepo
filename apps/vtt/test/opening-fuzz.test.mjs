@@ -138,8 +138,16 @@ function isNearPolyBoundaryUV(u, v, poly, du, dv) {
   return false;
 }
 
-/** An opening's outer loop, expressed in ITS HOST's own (u,v) frame via the real projectToHost -- works on any host shape. */
+/**
+ * An opening's outer loop in ITS HOST's own (u,v) frame: the engine's own
+ * trace (runtime.hostOutline, which follows host-space curved edges) when
+ * the opening is pinned wholly to that host, else its nodes projected.
+ */
 function openingUVPolygon(opening, host, runtime) {
+  try {
+    const outline = runtime.hostOutline(opening.surfaceKey);
+    if (surfaceRefFromNodeSet(outline.hostSurfaceKey) === surfaceRefFromNodeSet(host.surfaceKey)) return outline.uv;
+  } catch {}
   const points = opening.outerLoops[0].map((e) => posOf(opening, e.startNodeId));
   try {
     return runtime.projectToHost({ hostSurfaceKey: host.surfaceKey, points }).map((p) => [p.u, p.v]);

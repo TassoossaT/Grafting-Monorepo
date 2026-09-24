@@ -4,6 +4,7 @@ import type {
   ConstructionNodeId,
   ConstructionOrientedEdgeUse,
   ConstructionPatch,
+  ConstructionPinEdgeCurveRequest,
   ConstructionPinRequest,
   ConstructionPosition,
   ConstructionRegionTopology,
@@ -16,13 +17,18 @@ import type {
 // type-only `@/` import is fine -- those are erased.
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import {
-  clipToConvex,
-  openingOutline,
+  clipPathToStrip,
+  mapPath,
+  openingPath,
   openingStructureType,
+  pointAt,
   propsForShape,
+  reversePath,
+  segmentExtremes,
   shapeFromProps,
-  simplifyLoop,
-  type OutlinePoint,
+  splitSegment,
+  startAtLowest,
+  type OutlineSegment,
 } from "../../../../features/edit-construction/index.ts";
 
 import { boundaryUsage, createBoundaryEdges } from "../core/boundary-edges.ts";
@@ -81,11 +87,11 @@ export interface RunPanelFrame extends ConstructionRunPanel {
   readonly frame: HostFrame;
 }
 
-/** One face's share of a run rectangle: its bounds, and its outline as `(u, v)` pairs counter-clockwise in the face's frame. */
+/** One face's share of a run rectangle: its bounds, and its outline as straight and cubic segments counter-clockwise in the face's `(u, v)`. */
 export interface OpeningPiece {
   readonly panel: RunPanelFrame;
   readonly rect: HostRect;
-  readonly loop: readonly (readonly [number, number])[];
+  readonly path: readonly OutlineSegment[];
 }
 
 export interface RunFrame {
@@ -171,16 +177,15 @@ export function runFrame(runtime: RunRuntime, surfaceKey: ConstructionSurfaceKey
         const a = Math.max(rect.s0, panel.offset + shift);
         const b = Math.min(rect.s1, panel.offset + panel.length + shift);
         if (b - a <= PIECE_EPS) continue;
-        const strip: OutlinePoint[] = [[a, rect.v0 - 1], [b, rect.v0 - 1], [b, rect.v1 + 1], [a, rect.v1 + 1]];
-        const clipped = simplifyLoop(clipToConvex(outline, strip), 1e-9);
-        if (clipped.length < 3) continue;
+        const clipped = atLeastThree(clipPathToStrip(outline, a, b));
+        if (clipped === undefined) continue;
         found += 1;
-        let loop = clipped.map(([s, v]) => [clamp01(uOf(panel, s - shift)), v] as const);
-        if (signedArea(loop) < 0) loop = [...loop].reverse();
-        loop = startAtBottomLeft(loop);
-        const us = loop.map(([u]) => u);
-        const vs = loop.map(([, v]) => v);
-        out.push({ panel, rect: { u0: Math.min(...us), u1: Math.max(...us), v0: Math.min(...vs), v1: Math.max(...vs) }, loop });
+        const onFace = mapPath(clipped, ([s, v]) => [uOf(panel, s - shift), v]).map(clampEnds);
+        const path = startAtLowest(panel.reversed ? reversePath(onFace) : onFace);
+        const extremes = path.flatMap(segmentExtremes);
+        const us = extremes.map(([u]) => u);
+        const vs = extremes.map(([, v]) => v);
+        out.push({ panel, rect: { u0: Math.max(0, Math.min(...us)), u1: Math.min(1, Math.max(...us)), v0: Math.min(...vs), v1: Math.max(...vs) }, path });
       }
       if (found > 1) return undefined;
     }
@@ -229,29 +234,24 @@ export function runFrame(runtime: RunRuntime, surfaceKey: ConstructionSurfaceKey
 }
 
 /** `rect`'s outline in run `(s, v)`: the shape is drawn in world meters, `height` being the wall's height across it. */
-function runOutline(rect: RunRect, shape: OpeningShape | undefined, height: number): OutlinePoint[] {
+function runOutline(rect: RunRect, shape: OpeningShape | undefined, height: number): OutlineSegment[] {
   const width = rect.s1 - rect.s0;
   const dv = rect.v1 - rect.v0;
   const tall = dv * (height > 0 ? height : 1);
-  return openingOutline(shape, width, tall).map(([x, y]) => [rect.s0 + x, rect.v0 + (tall > 0 ? (y / tall) * dv : 0)] as const);
+  return mapPath(openingPath(shape, width, tall), ([x, y]) => [rect.s0 + x, rect.v0 + (tall > 0 ? (y / tall) * dv : 0)]);
 }
 
-function signedArea(loop: readonly (readonly [number, number])[]): number {
-  let area = 0;
-  loop.forEach(([x0, y0], index) => {
-    const [x1, y1] = loop[(index + 1) % loop.length]!;
-    area += x0 * y1 - x1 * y0;
-  });
-  return area / 2;
+function clampEnds(segment: OutlineSegment): OutlineSegment {
+  const clamp = ([u, v]: readonly [number, number]) => [clamp01(u), v] as const;
+  return { ...segment, from: clamp(segment.from), to: clamp(segment.to) };
 }
 
-function startAtBottomLeft<T extends readonly [number, number]>(loop: readonly T[]): T[] {
-  let first = 0;
-  loop.forEach(([u, v], index) => {
-    const [bu, bv] = loop[first]!;
-    if (v < bv - 1e-9 || (Math.abs(v - bv) <= 1e-9 && u < bu)) first = index;
-  });
-  return [...loop.slice(first), ...loop.slice(0, first)];
+/** A closed path of at least three segments -- two would name the same node pair twice -- or `undefined` when it bounds nothing. */
+function atLeastThree(path: readonly OutlineSegment[]): readonly OutlineSegment[] | undefined {
+  if (path.length >= 3) return path;
+  const curved = path.findIndex((segment) => segment.controls !== undefined);
+  if (curved < 0) return undefined;
+  return [...path.slice(0, curved), ...splitSegment(path[curved]!, 0.5), ...path.slice(curved + 1)];
 }
 
 /** The shape an opening group carries, read from any piece's property bag. */
@@ -329,6 +329,38 @@ export function hostsOf(region: ConstructionRegionTopology): ReadonlyMap<string,
   return hosts;
 }
 
+/** Where a region's host-space cubics bulge past their end nodes, in their host's `(u, v)`. */
+export function curveExtremes(region: ConstructionRegionTopology): readonly { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly u: number; readonly v: number }[] {
+  let pins: Map<string, { readonly u: number; readonly v: number }> | undefined;
+  const out: { hostSurfaceKey: ConstructionSurfaceKey; u: number; v: number }[] = [];
+  for (const loop of region.outerLoops) {
+    for (const edge of loop) {
+      const controls = edge.hostCurve?.controls;
+      if (controls === undefined) continue;
+      pins ??= new Map(region.nodes.flatMap((node) => (node.pin === undefined ? [] : [[node.id, node.pin] as const])));
+      const from = pins.get(edge.startNodeId);
+      const to = pins.get(edge.endNodeId);
+      if (from === undefined || to === undefined) continue;
+      const extremes = segmentExtremes({ from: [from.u, from.v], to: [to.u, to.v], controls: [controls[0], controls[1]] });
+      for (const [u, v] of extremes.slice(2)) out.push({ hostSurfaceKey: edge.hostCurve!.hostSurfaceKey, u, v });
+    }
+  }
+  return out;
+}
+
+/** A region's `(u, v)` box on one host: its pins there and any cubic bulging past them. */
+export function hostBoxOf(region: ConstructionRegionTopology, hostSurfaceKey: ConstructionSurfaceKey): HostRect | undefined {
+  const ref = surfaceRefFromNodeSet(hostSurfaceKey);
+  const points = [
+    ...region.nodes.flatMap((node) => (node.pin !== undefined && surfaceRefFromNodeSet(node.pin.hostSurfaceKey) === ref ? [node.pin] : [])),
+    ...curveExtremes(region).filter((point) => surfaceRefFromNodeSet(point.hostSurfaceKey) === ref),
+  ];
+  if (points.length === 0) return undefined;
+  const us = points.map((point) => point.u);
+  const vs = points.map((point) => point.v);
+  return { u0: Math.min(...us), u1: Math.max(...us), v0: Math.min(...vs), v1: Math.max(...vs) };
+}
+
 /** The host holding most of a region's pinned nodes. */
 export function primaryHostOf(region: ConstructionRegionTopology): ConstructionSurfaceKey | undefined {
   let best: { readonly key: ConstructionSurfaceKey; readonly count: number } | undefined;
@@ -363,6 +395,10 @@ export function regionRunSpan(run: RunFrame, region: ConstructionRegionTopology)
     else foreign.push(node.position);
   }
   if (points.length === 0) return undefined;
+  for (const { hostSurfaceKey, u, v } of curveExtremes(region)) {
+    const panel = run.panelOf(hostSurfaceKey);
+    if (panel !== undefined) points.push({ s: run.sOf(panel, u), v });
+  }
   for (const position of foreign) {
     const at = run.project(position);
     if (at !== undefined) points.push(at);
@@ -417,8 +453,7 @@ export function overlapsOther(ctx: ToolContext, run: RunFrame, rect: RunRect, ex
 }
 
 const CURVE_TOLERANCE = 1e-3;
-const CURVE_STEP = 0.25;
-const MAX_CURVE_SEGMENTS = 32;
+const CURVE_SAMPLES = 12;
 
 /** Whether the face bends between `u0` and `u1`, so a straight chord would leave it. */
 function bendsBetween(frame: HostFrame, rect: HostRect): boolean {
@@ -429,40 +464,58 @@ function bendsBetween(frame: HostFrame, rect: HostRect): boolean {
 }
 
 /**
- * A piece's outline with every side split so no straight step spans more
- * than `step` world units along the face -- on a flat face (unless `always`)
- * the outline is kept as it is.
+ * A piece's outline as a `(u, v)` polyline for drawing: each cubic sampled,
+ * and on a bending face each straight side split so no step spans more than
+ * `step` world units along it -- the same path the engine traces.
  */
-export function pieceLoop(piece: OpeningPiece, step = CURVE_STEP, always = false): readonly (readonly [number, number])[] {
+export function piecePolyline(piece: OpeningPiece, step: number): readonly (readonly [number, number])[] {
   const { frame } = piece.panel;
-  if (!always && !bendsBetween(frame, piece.rect)) return piece.loop;
+  const bends = bendsBetween(frame, piece.rect);
   const out: (readonly [number, number])[] = [];
-  piece.loop.forEach(([u, v], index) => {
-    const [nu, nv] = piece.loop[(index + 1) % piece.loop.length]!;
-    const segments = Math.min(MAX_CURVE_SEGMENTS, Math.max(1, Math.ceil((Math.abs(nu - u) * frame.length) / step)));
-    for (let k = 0; k < segments; k += 1) out.push([u + ((nu - u) * k) / segments, v + ((nv - v) * k) / segments]);
-  });
+  for (const segment of piece.path) {
+    const [u, v] = segment.from;
+    const [nu, nv] = segment.to;
+    const steps = segment.controls !== undefined ? CURVE_SAMPLES : bends ? Math.max(1, Math.ceil((Math.abs(nu - u) * frame.length) / step)) : 1;
+    for (let k = 0; k < steps; k += 1) out.push(segment.controls !== undefined ? pointAt(segment, k / steps) : [u + ((nu - u) * k) / steps, v + ((nv - v) * k) / steps]);
+  }
   return out;
 }
 
-function buildGroupPatch(ctx: ToolContext, idPrefix: string, pieces: readonly OpeningPiece[]): { readonly patch: ConstructionPatch; readonly pins: readonly ConstructionPinRequest[] } {
+/**
+ * Each piece as a plain graph: one node per path segment start, pinned to
+ * its face. A straight segment is a line edge -- the engine traces it in the
+ * face's frame, so it follows a curved wall -- and each cubic is one edge
+ * given its `(u, v)` controls.
+ */
+function buildGroupPatch(
+  ctx: ToolContext,
+  idPrefix: string,
+  pieces: readonly OpeningPiece[],
+): { readonly patch: ConstructionPatch; readonly pins: readonly ConstructionPinRequest[]; readonly curves: readonly ConstructionPinEdgeCurveRequest[] } {
   const existingUses = boundaryUsage(ctx);
   const nodes: { id: ConstructionNodeId; position: ConstructionPosition }[] = [];
   const edges: ConstructionPatch["edges"][number][] = [];
   const regions: ConstructionPatch["regions"][number][] = [];
   const pins: ConstructionPinRequest[] = [];
+  const curves: ConstructionPinEdgeCurveRequest[] = [];
   pieces.forEach((piece, pieceIndex) => {
     const prefix = `${idPrefix}:p${pieceIndex}`;
-    const loop = pieceLoop(piece);
-    const ring = piece.panel.frame.resolve(loop).map((position, index) => ({ id: `${prefix}:c${index}` as ConstructionNodeId, position }));
+    const hostSurfaceKey = piece.panel.surfaceKey;
+    const corners = piece.path.map((segment) => segment.from);
+    const ring = piece.panel.frame.resolve(corners).map((position, index) => ({ id: `${prefix}:c${index}` as ConstructionNodeId, position }));
     const boundaryEdges = createBoundaryEdges(ctx.tableId, { kind: "private-when-full", runPrefix: prefix, existingUses });
-    const boundary: ConstructionOrientedEdgeUse[] = ring.map((node, index) => boundaryEdges.use(node.id, ring[(index + 1) % ring.length]!.id));
+    const boundary: ConstructionOrientedEdgeUse[] = ring.map((node, index) => {
+      const use = boundaryEdges.use(node.id, ring[(index + 1) % ring.length]!.id);
+      const controls = piece.path[index]!.controls;
+      if (controls !== undefined) curves.push({ edgeId: use.edgeId, hostSurfaceKey, controls: use.reversed ? [controls[1], controls[0]] : [controls[0], controls[1]] });
+      return use;
+    });
     nodes.push(...ring);
     edges.push(...boundaryEdges.all());
     regions.push({ regionId: ring.map((node) => node.id).join("|"), boundary, surfaceType: openingStructureType.surfaceType, physical: false });
-    ring.forEach((node, index) => pins.push({ nodeId: node.id, hostSurfaceKey: piece.panel.surfaceKey, u: loop[index]![0], v: loop[index]![1] }));
+    ring.forEach((node, index) => pins.push({ nodeId: node.id, hostSurfaceKey, u: corners[index]![0], v: corners[index]![1] }));
   });
-  return { patch: { nodes, edges, regions }, pins };
+  return { patch: { nodes, edges, regions }, pins, curves };
 }
 
 /**
@@ -488,12 +541,13 @@ export function commitOpeningGroup(
       if (pieces.length === 0) return { value: undefined };
 
       const idPrefix = scopedToolId(ctx, `opening-${ctx.nextSequence()}`);
-      const { pins, patch } = buildGroupPatch(ctx, idPrefix, pieces);
+      const { pins, patch, curves } = buildGroupPatch(ctx, idPrefix, pieces);
       const outcome = ctx.runtime.addPatch(patch, "local", causeId);
       if (outcome.skippedRegionIds.length > 0 || outcome.createdSurfaceKeys.length !== pieces.length) {
         throw new Error("a face nao coube sobre o que ja existe ali.");
       }
       ctx.runtime.pinNodes(pins, "local", causeId);
+      if (curves.length > 0) ctx.runtime.pinEdgeCurves(curves, "local", causeId);
       ctx.runtime.setRegionGroup(outcome.createdSurfaceKeys, idPrefix);
       const props = propsForShape(shape);
       if (props !== null) ctx.runtime.setRegionProps(outcome.createdSurfaceKeys, props);

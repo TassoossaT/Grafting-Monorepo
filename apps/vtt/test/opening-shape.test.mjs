@@ -16,13 +16,13 @@ initSync({ module: readFileSync(new URL("../../../libs/domains/procgen/construct
 const { AppTabletopRuntime } = await import("../src/composition/tabletop/tabletop-runtime.ts");
 const { createConstructionSessionAdapter } = await import("../src/adapters/construction/construction-session-wasm-adapter.ts");
 const {
-  createEditHistoryStack, DEFAULT_TOOL_PARAMS, hasTrait, openingStructureType, openingOutline, shapeFromProps, sideArc, OPENING_SHAPE_PROP,
+  createEditHistoryStack, DEFAULT_TOOL_PARAMS, hasTrait, openingStructureType, openingOutline, openingPath, pointAt, segmentExtremes, shapeFromProps, sideArc, OPENING_SHAPE_PROP,
 } = await import("../src/features/edit-construction/index.ts");
 const { surfaceRefFromNodeSet } = await import("../src/entities/map/index.ts");
 const { openingTool } = await import("../src/composition/tabletop/tools/openings/opening-tool.ts");
 const { groupRunSpan, runFrame, primaryHostOf } = await import("../src/composition/tabletop/tools/openings/opening-shared.ts");
 const { wallLineTool } = await import("../src/composition/tabletop/tools/walls/wall-line-tool.ts");
-const { commitWallStroke } = await import("../src/composition/tabletop/tools/walls/wall-shared.ts");
+const { commitWallContour, commitWallStroke } = await import("../src/composition/tabletop/tools/walls/wall-shared.ts");
 
 const shape = (radii = {}, ellipse = false) => ({ ellipse, radii: { top: 0, right: 0, bottom: 0, left: 0, ...radii } });
 const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
@@ -90,6 +90,51 @@ test("outline: clamping keeps every mix of radii a simple convex loop inside, an
   const low = sideArc(1, 2, 1);
   assert.ok(near(low.rise, 0.5) && low.radius > 1, "the rise is capped at half the box across the side, flattening the arc");
   assert.equal(sideArc(0, 2, 1), undefined, "0 is a straight side");
+});
+
+/** The true area of a shaped box, by a fine grid against the circles themselves -- not a sampled polygon. */
+function exactArea(s, w, h) {
+  const N = 600;
+  const circles = s.ellipse ? [] : ["top", "right", "bottom", "left"].flatMap((side) => {
+    const horizontal = side === "top" || side === "bottom";
+    const arc = sideArc(s.radii[side], horizontal ? w : h, horizontal ? h : w);
+    if (!arc) return [];
+    const r = arc.radius;
+    const c = side === "bottom" ? [w / 2, r] : side === "top" ? [w / 2, h - r] : side === "right" ? [w - r, h / 2] : [r, h / 2];
+    return [{ side, c, r }];
+  });
+  const inside = (x, y) => {
+    if (s.ellipse) return ((x - w / 2) / (w / 2)) ** 2 + ((y - h / 2) / (h / 2)) ** 2 <= 1;
+    return circles.every(({ side, c, r }) => {
+      const along = side === "top" || side === "bottom" ? x - c[0] : y - c[1];
+      const across = side === "top" ? y - c[1] : side === "bottom" ? c[1] - y : side === "right" ? x - c[0] : c[0] - x;
+      return across <= 0 || along * along + across * across <= r * r;
+    });
+  };
+  let hits = 0;
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) if (inside(((i + 0.5) / N) * w, ((j + 0.5) / N) * h)) hits++;
+  return (hits / (N * N)) * w * h;
+}
+
+test("path: every mix of radii is a closed chain of 2 to 8 segments, spanning its box, matching the outline's area", () => {
+  let seed = 7;
+  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const polyArea = (pts) => pts.reduce((a, p, i) => { const q = pts[(i + 1) % pts.length]; return a + p[0] * q[1] - q[0] * p[1]; }, 0) / 2;
+  for (let i = 0; i < 120; i++) {
+    const w = 0.3 + rand() * 3, h = 0.3 + rand() * 3;
+    const pick = () => (rand() < 0.4 ? 0 : rand() * 3);
+    const s = rand() < 0.1 ? shape({}, true) : shape({ top: pick(), right: pick(), bottom: pick(), left: pick() });
+    const path = openingPath(s, w, h);
+    const label = `#${i} ${w.toFixed(2)}x${h.toFixed(2)} ${JSON.stringify(s)}`;
+    assert.ok(path.length >= 2 && path.length <= 8, `${label}: ${path.length} segments`);
+    path.forEach((seg, k) => assert.ok(Math.hypot(seg.to[0] - path[(k + 1) % path.length].from[0], seg.to[1] - path[(k + 1) % path.length].from[1]) < 1e-9, `${label}: closed at ${k}`));
+    const ext = path.flatMap(segmentExtremes);
+    const xs = ext.map((p) => p[0]), ys = ext.map((p) => p[1]);
+    assert.ok(near(Math.min(...xs), 0, 1e-6) && near(Math.max(...xs), w, 1e-6) && near(Math.min(...ys), 0, 1e-6) && near(Math.max(...ys), h, 1e-6), `${label}: spans its box`);
+    const dense = path.flatMap((seg) => Array.from({ length: 32 }, (_, k) => pointAt(seg, k / 32)));
+    const exact = exactArea(s, w, h);
+    assert.ok(Math.abs(polyArea(dense) - exact) / exact < 0.005, `${label}: area ${polyArea(dense)} vs ${exact}`);
+  }
 });
 
 test("shape props: a missing or malformed bag reads as a rectangle", () => {
@@ -191,12 +236,12 @@ function hitMesh(mesh, origin, dir, maxT) {
   return false;
 }
 
-/** Each opening piece's outline in its host's own (u, v), from its pins in rim order. */
+/** Each opening piece's outline in its host's own (u, v), as the engine traces it -- curved edges included. */
 function cuttersOn(h, wall) {
   const hostRef = ref(wall);
   return h.openings().flatMap((o) => {
-    const pins = o.outerLoops[0].map((e) => o.nodes.find((n) => n.id === e.startNodeId).pin);
-    return pins.every((p) => p && surfaceRefFromNodeSet(p.hostSurfaceKey) === hostRef) ? [pins.map((p) => [p.u, p.v])] : [];
+    const outline = h.runtime.hostOutline(o.surfaceKey);
+    return surfaceRefFromNodeSet(outline.hostSurfaceKey) === hostRef ? [outline.uv] : [];
   });
 }
 
@@ -237,6 +282,8 @@ function cutProblems(h, wall, probes = []) {
 }
 
 const shapeOf = (piece) => shapeFromProps(piece.props);
+/** A piece's edges the engine traces as a cubic in its host's (u, v). */
+const curvedEdges = (piece) => piece.outerLoops[0].filter((e) => e.hostCurve?.controls);
 
 test("a window with a rounded top on a straight wall cuts the wall by its arch, not its rectangle", async () => {
   const h = await harness();
@@ -245,7 +292,9 @@ test("a window with a rounded top on a straight wall cuts the wall by its arch, 
   press(h, { ...WINDOW, shape: ARCH }, { x: 4, y: 0.9, z: 0 }, undefined, ref(wall));
   const [opening, ...rest] = h.openings();
   assert.equal(rest.length, 0);
-  assert.ok(opening.nodes.length > 10, "the arch is sampled as many pinned nodes");
+  // A semicircle is too much turn for one cubic within 2 mm, so it is two quarter arcs meeting at the apex.
+  assert.equal(opening.nodes.length, 5, "two sill corners, two springing points, the apex -- no arc samples");
+  assert.equal(curvedEdges(opening).length, 2, "the arch is two host-space cubics");
   assert.ok(opening.nodes.every((n) => n.pin), "every outline point is pinned");
   assert.deepEqual(shapeOf(opening), ARCH, "the shape is stored on the piece");
 
@@ -270,7 +319,8 @@ test("a rounded-top window on a curved brush wall cuts every face it covers by i
   const openings = h.openings();
   assert.ok(openings.length >= 1, `created: ${h.feedback.map((f) => f.message).join(" / ")}`);
   assert.ok(openings.every((o) => shapeOf(o).radii.top === 0.7));
-  assert.ok(openings.every((o) => o.nodes.length > 8), "every piece is outlined by its arcs");
+  assert.ok(openings.every((o) => o.nodes.length <= 7), "no piece is densified: only corners, arc ends and seam crossings");
+  assert.ok(openings.every((o) => curvedEdges(o).length >= 1), "every piece is outlined by host-space cubics");
   for (const wall of h.walls()) assert.deepEqual(cutProblems(h, wall), [], `face ${ref(wall).slice(0, 40)}`);
 });
 
@@ -283,7 +333,8 @@ test("a window straddling a seam is split along the seam and still cut by its ar
   const pieces = h.openings();
   assert.equal(pieces.length, 2, "one piece per face");
   assert.ok(pieces.every((p) => shapeOf(p).ellipse), "both pieces carry the shape");
-  assert.ok(pieces.every((p) => p.nodes.length > 8), "both pieces are outlined by the ellipse");
+  assert.deepEqual(pieces.map((p) => p.nodes.length).sort(), [3, 5], "the left piece: its extreme and two seam crossings; the right: three extremes and two crossings");
+  assert.deepEqual(pieces.map((p) => curvedEdges(p).length).sort(), [2, 4], "the ellipse's quarters are split at the seam, never resampled");
   for (const wall of h.walls()) assert.deepEqual(cutProblems(h, wall), [], `face ${ref(wall).slice(0, 40)}`);
 });
 
@@ -387,4 +438,124 @@ test("with an opening selected, the panel shows its shape and a shape change res
   openingTool.onCancel(h.ctx);
   const restored = h.paramUpdates.at(-1).update({ ...WINDOW, shape: circle });
   assert.deepEqual(restored.shape, NEXT, "deselecting puts back the shape for the next opening");
+});
+
+// ---------- host-space edges: no densified nodes ----------
+
+/** A piece's outline area in world square meters, traced by the engine on a host `length` long and `height` tall. */
+function outlineArea(h, piece, length, height) {
+  const uv = h.runtime.hostOutline(piece.surfaceKey).uv;
+  let area = 0;
+  uv.forEach(([u, v], i) => {
+    const [nu, nv] = uv[(i + 1) % uv.length];
+    area += u * length * nv * height - nu * length * v * height;
+  });
+  return Math.abs(area) / 2;
+}
+
+test("a window on a Bezier wall is exactly 4 pinned nodes, and its cut follows the wall", async () => {
+  const h = await harness();
+  commitWallContour(h.ctx, [{ start: { x: 0, y: 0, z: 0 }, end: { x: 8, y: 0, z: 0 }, geometry: { kind: "bezier", handle1: [1, 4], handle2: [6, -2] } }], { ...DEFAULT_TOOL_PARAMS["wall-line"], height: 3 }, "test");
+  const [wall] = h.walls();
+  const [point] = h.runtime.resolveOnHost({ hostSurfaceKey: wall.surfaceKey, uv: [[0.5, 0.4]] });
+  press(h, { ...WINDOW, width: 2 }, point, undefined, ref(wall));
+  const pieces = h.openings();
+  assert.equal(pieces.length, 1);
+  assert.equal(pieces[0].nodes.length, 4, "four corners, no points added along the curved sides");
+  assert.equal(curvedEdges(pieces[0]).length, 0, "straight sides are plain line edges");
+  const outline = h.runtime.hostOutline(pieces[0].surfaceKey).uv;
+  assert.ok(outline.length > 4, `the engine traces the sides along the curved wall (${outline.length} points)`);
+  const length = h.runtime.panelRun(wall.surfaceKey).panels[0].length;
+  const area = outlineArea(h, pieces[0], length, 3);
+  assert.ok(Math.abs(area - 2 * 1.5) / 3 < 0.01, `cut area ${area} is the 2 x 1.5 box`);
+  assert.deepEqual(cutProblems(h, wall), []);
+});
+
+test("a semicircular-top window: its arch is host-space cubics, cut area within 1%", async () => {
+  const h = await harness();
+  line(h.ctx, { x: 0, y: 0, z: 0 }, { x: 8, y: 0, z: 0 });
+  const [wall] = h.walls();
+  press(h, { ...WINDOW, shape: ARCH }, { x: 4, y: 0.9, z: 0 }, undefined, ref(wall));
+  const [opening] = h.openings();
+  assert.equal(opening.nodes.length, 5);
+  assert.equal(curvedEdges(opening).length, 2);
+  const exact = 1.2 * 0.9 + (Math.PI * 0.6 * 0.6) / 2;
+  const area = outlineArea(h, opening, 8, 3);
+  assert.ok(Math.abs(area - exact) / exact < 0.01, `area ${area} vs ${exact}`);
+});
+
+test("a circle is 4 nodes and 4 curved edges, cut area within 1%", async () => {
+  const h = await harness();
+  line(h.ctx, { x: 0, y: 0, z: 0 }, { x: 8, y: 0, z: 0 });
+  const [wall] = h.walls();
+  press(h, { ...WINDOW, height: 1.2, shape: shape({}, true) }, { x: 4, y: 0.9, z: 0 }, undefined, ref(wall));
+  const [opening] = h.openings();
+  assert.equal(opening.nodes.length, 4, "its four extremes");
+  assert.equal(curvedEdges(opening).length, 4, "one cubic per quarter");
+  const exact = Math.PI * 0.6 * 0.6;
+  const area = outlineArea(h, opening, 8, 3);
+  assert.ok(Math.abs(area - exact) / exact < 0.01, `area ${area} vs ${exact}`);
+  const run = runFrame(h.runtime, wall.surfaceKey);
+  const span = groupRunSpan(run, [opening]);
+  assert.ok(near(span.s1 - span.s0, 1.2, 1e-6) && near((span.v1 - span.v0) * 3, 1.2, 1e-6), "its box is still the slider size");
+  assert.deepEqual(cutProblems(h, wall), []);
+});
+
+test("a circle straddling a seam splits its cubics at the seam, with one continuous cut", async () => {
+  const h = await harness();
+  line(h.ctx, { x: 0, y: 0, z: 0 }, { x: 4, y: 0, z: 0 });
+  line(h.ctx, { x: 4, y: 0, z: 0 }, { x: 8, y: 0, z: 0 });
+  const [a] = h.walls();
+  press(h, { ...WINDOW, width: 1.5, height: 1.5, shape: shape({}, true) }, { x: 4.25, y: 0.8, z: 0 }, undefined, ref(a));
+  const pieces = h.openings();
+  assert.equal(pieces.length, 2);
+  assert.ok(pieces.every((p) => p.nodes.length <= 5 && curvedEdges(p).length >= 2), "each piece: arc ends and seam crossings only");
+  const run = runFrame(h.runtime, a.surfaceKey);
+  const span = groupRunSpan(run, pieces);
+  assert.ok(near(span.s1 - span.s0, 1.5, 1e-6), "the pieces add up to the box");
+  const total = pieces.reduce((sum, p) => sum + outlineArea(h, p, 4, 3), 0);
+  const exact = Math.PI * 0.75 * 0.75;
+  assert.ok(Math.abs(total - exact) / exact < 0.01, `area ${total} vs ${exact}`);
+  const seamPins = pieces.flatMap((p) => p.nodes.filter((n) => near(n.position.x, 4, 1e-4)).map((n) => n.position.y)).sort((x, y) => x - y);
+  assert.equal(seamPins.length, 4, "each piece crosses the seam at the same two heights");
+  assert.ok(near(seamPins[0], seamPins[1], 1e-4) && near(seamPins[2], seamPins[3], 1e-4), `crossings meet: ${seamPins}`);
+  for (const wall of h.walls()) assert.deepEqual(cutProblems(h, wall), [], `face ${ref(wall).slice(0, 40)}`);
+});
+
+test("move, resize and undo keep a circle's shape and never add nodes", async () => {
+  const h = await harness();
+  line(h.ctx, { x: 0, y: 0, z: 0 }, { x: 8, y: 0, z: 0 });
+  const [wall] = h.walls();
+  const CIRCLE = { ...WINDOW, height: 1.2, shape: shape({}, true) };
+  press(h, CIRCLE, { x: 3, y: 0.9, z: 0 }, undefined, ref(wall));
+  const counts = (o) => [o.nodes.length, curvedEdges(o).length];
+  const [placed] = h.openings();
+  assert.deepEqual(counts(placed), [4, 4]);
+
+  const grab = { x: 3, y: 1.5, z: 0 };
+  press(h, CIRCLE, grab, { x: 5, y: 1.5, z: 0 }, openingRefAt(h, grab));
+  const [moved] = h.openings();
+  assert.notEqual(ref(moved), ref(placed));
+  assert.deepEqual(counts(moved), [4, 4], "moved");
+
+  const run = runFrame(h.runtime, wall.surfaceKey);
+  const before = groupRunSpan(run, [moved]);
+  const mid = (before.v0 + before.v1) / 2 * 3;
+  press(h, CIRCLE, { x: before.s1, y: mid, z: 0 }, { x: before.s1 + 0.6, y: mid, z: 0 }, openingRefAt(h, { x: before.s1 - 0.01, y: mid, z: 0 }));
+  const [resized] = h.openings();
+  const after = groupRunSpan(run, [resized]);
+  assert.ok(near(after.s1 - after.s0, 1.8, 1e-6), `wider: ${after.s1 - after.s0}`);
+  assert.deepEqual(counts(resized), [4, 4], "resized");
+  const exact = Math.PI * 0.9 * 0.6;
+  assert.ok(Math.abs(outlineArea(h, resized, 8, 3) - exact) / exact < 0.01, "an ellipse filling the new box");
+  assert.deepEqual(cutProblems(h, wall), []);
+
+  for (const expected of [moved, placed]) {
+    const entry = h.ctx.history.undo();
+    h.runtime.undoTransaction(entry.transactionId, "local");
+    const [back] = h.openings();
+    assert.equal(ref(back), ref(expected));
+    assert.deepEqual(counts(back), [4, 4], "undo brings the curves back with the piece");
+  }
+  assert.deepEqual(cutProblems(h, wall), []);
 });

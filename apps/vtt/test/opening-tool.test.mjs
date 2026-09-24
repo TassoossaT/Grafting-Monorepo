@@ -213,10 +213,13 @@ test("an opening on a curved wall sits on the curve, every node of it", () => {
     openingTool.onClick(ctx, { point: { x: 0, y: 1, z: 2 }, surfaceRef: "@region,wall-arc" }, WINDOW);
     const [opening] = openings();
     assert.ok(opening, "a curved wall takes an opening like any other");
-    assert.ok(opening.nodes.length > 4, "its horizontal sides follow the curve, not one chord");
+    assert.equal(opening.nodes.length, 4, "four corners -- no nodes added along the curve");
     for (const node of opening.nodes) {
       assert.ok(Math.abs(Math.hypot(node.position.x, node.position.z) - 2) < 1e-3, `node left the wall: ${JSON.stringify(node.position)}`);
     }
+    const traced = opening.outerLoops[0].flatMap((edge) => edge.hostCurve.points);
+    assert.ok(opening.outerLoops[0].some((edge) => edge.hostCurve.points.length > 2), "its horizontal sides follow the curve, not one chord");
+    for (const [x, , z] of traced) assert.ok(Math.abs(Math.hypot(x, z) - 2) < 1e-3, `traced side left the wall: ${[x, z]}`);
   } finally { session.free(); }
 });
 
@@ -227,12 +230,14 @@ test("an opening on a Bezier wall has every node on the wall's own curve", () =>
     openingTool.onClick(ctx, { point: { x: midX, y: 1, z: midZ }, surfaceRef: "@region,wall-bezier" }, WINDOW);
     const [opening] = openings();
     assert.ok(opening, "a Bezier wall takes an opening like any other");
-    assert.ok(opening.nodes.length > 4, "its horizontal sides follow the curve, not one chord");
+    assert.equal(opening.nodes.length, 4, "four corners -- no nodes added along the curve");
+    assert.ok(opening.outerLoops[0].some((edge) => edge.hostCurve.points.length > 2), "its horizontal sides follow the curve, not one chord");
     const rail = onCurve({ kind: "bezier", ...BEZIER_HANDLES }, BEZIER_START, BEZIER_END, Array.from({ length: 2001 }, (_, step) => step / 2000));
-    for (const node of opening.nodes) {
+    const traced = opening.outerLoops[0].flatMap((edge) => edge.hostCurve.points.map(([x, y, z]) => ({ x, y, z })));
+    for (const point of [...opening.nodes.map((node) => node.position), ...traced]) {
       let closest = Infinity;
-      for (const [ox, oz] of rail) closest = Math.min(closest, Math.hypot(node.position.x - ox, node.position.z - oz));
-      assert.ok(closest < 5e-3, `node off the curve by ${closest}`);
+      for (const [ox, oz] of rail) closest = Math.min(closest, Math.hypot(point.x - ox, point.z - oz));
+      assert.ok(closest < 5e-3, `off the curve by ${closest}`);
     }
   } finally { session.free(); }
 });

@@ -140,6 +140,19 @@ export interface ConstructionRegionEdge extends ConstructionOrientedEdgeUse {
   readonly startNodeId: ConstructionNodeId;
   readonly endNodeId: ConstructionNodeId;
   readonly geometry: ConstructionEdgeGeometry;
+  /** How the edge is traced on the host both its ends are pinned to, when they are. */
+  readonly hostCurve?: ConstructionHostCurve;
+}
+
+/** A host-traced edge, oriented as its loop walks it: straight or a cubic in the host's `(u, v)`. */
+export interface ConstructionHostCurve {
+  readonly hostSurfaceKey: ConstructionSurfaceKey;
+  /** The cubic's control points in host `(u, v)`; absent for a straight path there. */
+  readonly controls?: readonly [readonly [number, number], readonly [number, number]];
+  /** The same control points placed on the host, in world space. */
+  readonly handles?: readonly [readonly [number, number, number], readonly [number, number, number]];
+  /** The traced path in world space, both ends included. */
+  readonly points: readonly (readonly [number, number, number])[];
 }
 
 /**
@@ -418,6 +431,19 @@ export interface ConstructionPinRequest extends ConstructionNodePin {
   readonly nodeId: ConstructionNodeId;
 }
 
+/** Makes an edge pinned at both ends to one host a cubic in that host's `(u, v)`; `controls` run in the edge's own start-to-end direction, `null` makes it straight there. */
+export interface ConstructionPinEdgeCurveRequest {
+  readonly edgeId: ConstructionEdgeId;
+  readonly hostSurfaceKey: ConstructionSurfaceKey;
+  readonly controls: readonly [readonly [number, number], readonly [number, number]] | null;
+}
+
+/** A pinned region's outer loop traced on its one host, as `(u, v)` there. */
+export interface ConstructionHostOutline {
+  readonly hostSurfaceKey: ConstructionSurfaceKey;
+  readonly uv: readonly (readonly [number, number])[];
+}
+
 /** One upright panel's place on a run: run distance `s` is panel `u = (s - offset) / length`, mirrored when `reversed`. */
 export interface ConstructionRunPanel {
   readonly surfaceKey: ConstructionSurfaceKey;
@@ -659,6 +685,10 @@ export interface ConstructionSessionPort extends BezierPort {
   pinNodes(pins: readonly ConstructionPinRequest[]): RegionEditOutcome;
   /** Drops pins; the nodes stay where they are. */
   unpinNodes(nodeIds: readonly ConstructionNodeId[]): RegionEditOutcome;
+  /** Gives an edge pinned at both ends to one host a cubic path in that host's `(u, v)`, or a straight one there. Refused unless both ends are pinned to that host. */
+  pinEdgeCurve(request: ConstructionPinEdgeCurveRequest): RegionEditOutcome;
+  /** A pinned region's outer loop traced on its host. Throws unless every node is pinned to one host. */
+  hostOutline(surfaceKey: ConstructionSurfaceKey): ConstructionHostOutline;
   /** World points in a host face's `(u, v)` frame. Throws when the host is not an upright panel. */
   projectToHost(request: { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly points: readonly ConstructionPosition[] }): readonly ConstructionHostPoint[];
   /** Host `(u, v)` pairs back to world positions. Pure. */

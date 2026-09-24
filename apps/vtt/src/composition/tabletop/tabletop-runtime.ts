@@ -43,6 +43,8 @@ import type {
   ConstructionHostPoint,
   ConstructionPatch,
   ConstructionPinRequest,
+  ConstructionPinEdgeCurveRequest,
+  ConstructionHostOutline,
   ConstructionPanelRun,
   ConstructionPatchOutcome,
   ConstructionPosition,
@@ -145,6 +147,10 @@ export interface TabletopRuntime extends BezierPort {
   /** Pins nodes to host faces in relative `(u, v)`; the host carries them from then on. See `ConstructionSessionPort.pinNodes`. */
   pinNodes(pins: readonly ConstructionPinRequest[], origin: ChangeOrigin, causeId: string): RegionEditOutcome;
   unpinNodes(nodeIds: readonly ConstructionNodeId[], origin: ChangeOrigin, causeId: string): RegionEditOutcome;
+  /** Makes each edge a cubic (or straight) path in its host's `(u, v)`; one remesh for the batch. See `ConstructionSessionPort.pinEdgeCurve`. */
+  pinEdgeCurves(requests: readonly ConstructionPinEdgeCurveRequest[], origin: ChangeOrigin, causeId: string): RegionEditOutcome;
+  /** A pinned region's outer loop traced on its host. See `ConstructionSessionPort.hostOutline`. */
+  hostOutline(surfaceKey: ConstructionSurfaceKey): ConstructionHostOutline;
   /** World points in a host face's `(u, v)` frame. Throws when the host is not an upright panel. */
   projectToHost(request: { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly points: readonly ConstructionPosition[] }): readonly ConstructionHostPoint[];
   /** Host `(u, v)` pairs back to world positions. Pure. */
@@ -921,6 +927,22 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#pinnedSurfaceRefs = undefined;
     this.#foldRegionEditOutcome(outcome, origin, causeId, new Map());
     return outcome;
+  }
+
+  pinEdgeCurves(requests: readonly ConstructionPinEdgeCurveRequest[], origin: ChangeOrigin, causeId: string): RegionEditOutcome {
+    this.#requireReady("pinning edge curves");
+    const affected = new Map<string, ConstructionSurfaceKey>();
+    for (const request of requests) {
+      for (const surfaceKey of this.#construction.pinEdgeCurve(request).affectedSurfaceKeys) affected.set(surfaceRefFromNodeSet(surfaceKey), surfaceKey);
+    }
+    const outcome: RegionEditOutcome = { affectedSurfaceKeys: [...affected.values()], createdSurfaceKeys: [], removedSurfaceKeys: [], createdNodeIds: [], removedNodeIds: [] };
+    if (outcome.affectedSurfaceKeys.length > 0) this.#foldRegionEditOutcome(outcome, origin, causeId, new Map());
+    return outcome;
+  }
+
+  hostOutline(surfaceKey: ConstructionSurfaceKey): ConstructionHostOutline {
+    this.#requireReady("tracing a pinned outline");
+    return this.#construction.hostOutline(surfaceKey);
   }
 
   projectToHost(request: { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly points: readonly ConstructionPosition[] }): readonly ConstructionHostPoint[] {

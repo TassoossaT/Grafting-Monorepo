@@ -50,6 +50,8 @@ that state impossible.
 
 - Acute corners: an opening wrapping a corner sharper than 90° may over-cut the neighbouring face.
 - Moving a pinned node directly is not snapped back until its host changes; move openings by re-pinning.
-- A shaped opening's own painted pane has no vertical sides, so the engine draws it flat: on a curved wall it
-  follows the chord, not the curve (the cut in the wall is exact).
+- An opening is a plain graph: pinned corners, straight edges, and one pinned cubic edge per rounded arc (a
+  half-circle is 2 cubics to stay within 2 mm). No sampled "mini vertices": an edge whose ends are pinned to
+  one host is traced in that host's (u, v) frame, so straight sides follow a curved wall and the pane follows
+  the curve too. Never densify an outline with extra pinned nodes to follow a surface.
 - Overlap between openings is tested on bounding rectangles, so rounded openings can't sit closer than their boxes.

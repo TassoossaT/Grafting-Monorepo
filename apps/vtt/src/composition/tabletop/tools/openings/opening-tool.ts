@@ -19,9 +19,10 @@ import {
   groupKeyOf,
   groupOf,
   groupRunSpan,
+  hostBoxOf,
   isDoorRect,
   overlapsOther,
-  pieceLoop,
+  piecePolyline,
   primaryHostOf,
   runFrame,
   settleRect,
@@ -168,7 +169,8 @@ function openingNear(ctx: ToolContext, point: ConstructionPosition): Constructio
     if (!isOpening(topology)) continue;
     const hostSurfaceKey = primaryHostOf(topology);
     if (hostSurfaceKey === undefined) continue;
-    const pins = topology.nodes.flatMap((node) => (node.pin !== undefined && surfaceRefFromNodeSet(node.pin.hostSurfaceKey) === surfaceRefFromNodeSet(hostSurfaceKey) ? [node.pin] : []));
+    const box = hostBoxOf(topology, hostSurfaceKey);
+    if (box === undefined) continue;
     let at, onFace;
     try {
       [at] = ctx.runtime.projectToHost({ hostSurfaceKey, points: [point] });
@@ -176,9 +178,7 @@ function openingNear(ctx: ToolContext, point: ConstructionPosition): Constructio
     } catch {
       continue;
     }
-    const us = pins.map((pin) => pin.u);
-    const vs = pins.map((pin) => pin.v);
-    if (at!.u < Math.min(...us) || at!.u > Math.max(...us) || at!.v < Math.min(...vs) || at!.v > Math.max(...vs)) continue;
+    if (at!.u < box.u0 || at!.u > box.u1 || at!.v < box.v0 || at!.v > box.v1) continue;
     const distance = Math.hypot(point.x - onFace!.x, point.y - onFace!.y, point.z - onFace!.z);
     if (distance > OPENING_PICK_TOLERANCE) continue;
     if (best === undefined || distance < best.distance) best = { topology, distance };
@@ -283,7 +283,7 @@ function sameRect(a: RunRect, b: RunRect): boolean {
 function piecesPreview(pieces: readonly OpeningPiece[], color: number): ReturnType<typeof segmentsPreview> {
   const positions: number[] = [];
   for (const piece of pieces) {
-    const ring = piece.panel.frame.resolve(pieceLoop(piece, PREVIEW_STEP));
+    const ring = piece.panel.frame.resolve(piecePolyline(piece, PREVIEW_STEP));
     for (let index = 0; index < ring.length; index += 1) {
       const from = ring[index]!;
       const to = ring[(index + 1) % ring.length]!;

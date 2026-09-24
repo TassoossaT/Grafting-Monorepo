@@ -30,6 +30,9 @@ import type {
   ConstructionNodePin,
   ConstructionHostPoint,
   ConstructionPinRequest,
+  ConstructionPinEdgeCurveRequest,
+  ConstructionHostOutline,
+  ConstructionHostCurve,
   ConstructionPanelRun,
   ConstructionSurfaceCapability,
   ConstructionGraphSnapshot,
@@ -107,6 +110,7 @@ interface RegionEdgeWire {
   readonly startNodeId: string;
   readonly endNodeId: string;
   readonly geometry: ConstructionEdgeGeometry;
+  readonly hostCurve?: ConstructionHostCurve;
 }
 
 interface RegionTopologyWire {
@@ -257,6 +261,14 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
 
   unpinNodes(nodeIds: readonly ConstructionNodeId[]): RegionEditOutcome {
     return this.#regionEdit(this.#require().unpin_nodes_json(JSON.stringify({ nodeIds })));
+  }
+
+  pinEdgeCurve(request: ConstructionPinEdgeCurveRequest): RegionEditOutcome {
+    return this.#regionEdit(this.#require().pin_edge_curve_json(JSON.stringify(request)));
+  }
+
+  hostOutline(surfaceKey: ConstructionSurfaceKey): ConstructionHostOutline {
+    return JSON.parse(this.#require().host_outline_json(JSON.stringify({ surfaceKey }))) as ConstructionHostOutline;
   }
 
   projectToHost(request: { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly points: readonly ConstructionPosition[] }): readonly ConstructionHostPoint[] {
