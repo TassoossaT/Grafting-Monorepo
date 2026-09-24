@@ -132,7 +132,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
           ? runtime.getGraphSnapshot().nodes.find(n => n.id === info.id && n.id.startsWith("spine:")) : undefined;
         selectedPoint.current = node?.id;
         runtime.setPointManipulator?.(viewId, node && !branchModifier.current ? {
-          id: node.id, position: node.position,
+          id: node.id, position: node.position, branchAction: true,
           onChange(phase, position) {
             if (phase === "start") {
               manipulatorGesture.current?.cancel();
@@ -337,6 +337,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       if (gesture === null || gesture.pointerId !== event.pointerId) {
         const hover = typeof tool.previewOnHover === "function" ? tool.previewOnHover(params) : tool.previewOnHover;
         const sample = hover ? sampleAt(event) : undefined;
+        event.currentTarget.style.cursor = sample?.constructionAction ? "pointer" : sample?.nodeId ? "grab" : "";
         const descriptor = sample ? tool.previewFor?.({ start: sample,current: sample,samples: [sample] },params,ctx) : undefined;
         if (descriptor) optionsRef.current.runtime.showPreview(descriptor,TOOL_GHOST_PREVIEW_CHANNEL);
         else optionsRef.current.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);

@@ -451,3 +451,12 @@ Esta rodada de preparação altera apenas este documento. Não foram implementad
 - Selecao/gizmo sao limpos ao iniciar o draft para nao capturar a nova construcao. Acao duplicada, selecao ausente e gesto ativo nao iniciam outra ramificacao. A rua existente so muda na confirmacao.
 - Passaram 489 testes VTT, TypeScript e build. Novos testes real-WASM cobrem vertice inserido, hover transitorio, confirmacao com juncao de grau tres, desfazer e cancelamento. Dependencias render-3d e construction-wasm foram reconstruidas por artefatos antigos encontrados no inicio da rodada.
 - Posicionamento visual do botao: barra contextual superior, nao um icone projetado sobre o vertice em 3D. Aceite visual permanece pendente.
+
+
+## Helpers na cena e snap de construcao - 24/09/2026
+
+- O vertice selecionado agora exibe um sprite verde + clicavel dentro da cena, deslocado do ponto para nao sobrepor o gizmo. Usa a camada de handles, picking do renderer e acao explicita da ferramenta; nao e um node autorado nem entra no historico. E removido com a selecao/view e o cursor indica clique.
+- O + inicia o mesmo draft usado pela acao da barra. A barra permanece como alternativa acessivel. O sprite usa tamanho em unidades de mundo; escala constante em pixels e posicionamento adaptativo ainda nao foram implementados.
+- Snap durante a criacao por pontos e desenho livre: prioriza vertices de espinha ate 0.6 unidades, com diferenca vertical maxima de 0.2; sobre o corpo da rua usa a projecao Rust existente na espinha. Alvo azul marca a posicao exata usada no preview e confirmacao. Limpa o helper ao afastar/cancelar/confirmar.
+- O construtor continua sendo o unico responsavel pela divisao e uniao do grafo. Nao implementa soldagem por arrasto de duas ruas ja prontas nem alinhamento automatico de tangentes.
+- Seis novas regressoes real-WASM: acao 3D sem selecao via barra, quatro combinacoes de modo/alvo com juncao real, separacao vertical e limpeza do helper. Build e testes focados passaram; aceite visual em navegador permanece pendente.

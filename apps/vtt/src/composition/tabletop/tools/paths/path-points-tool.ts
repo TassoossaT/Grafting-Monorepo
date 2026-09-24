@@ -5,7 +5,7 @@ import { commitPathCloudIntent } from "../../path/path-cloud-transaction.ts";
 import { scopedToolId, type ConstructionTool, type ToolContext, type PointerSample, type ToolGesture } from "../core/tool-context.ts";
 import { beginCurveGesture, type CurveGesture, type CurveGestureOptions } from "../core/curve-edit-gesture.ts";
 import { pathStrokeTool } from "./path-stroke-tool.ts";
-import { roadBodyTarget } from "./road-body-target.ts";
+import { roadBodyTarget, roadSnapTarget, showRoadSnap } from "./road-body-target.ts";
 
 const CHANNEL = "road-points";
 const xyz = (p: ConstructionPosition) => [p.x, p.y, p.z] as const;
@@ -85,6 +85,18 @@ function editTarget(ctx: ToolContext, sample: PointerSample): PointerSample | un
   return node && { ...sample, point: node.position };
 }
 
+function startBranch(ctx: ToolContext, id: string | undefined, params: PathBrushParams): boolean {
+
+    const node = ctx.runtime.getGraphSnapshot().nodes.find(n => n.id === id);
+    if (!node || !editTarget(ctx, { nodeId: node.id, point: node.position })) return false;
+    const draft: Draft = { points: [{ ...node.position }], params: { ...params, creationMode: "points" } };
+    drafts.set(ctx.runtime, draft);
+    select(ctx);
+    preview(ctx, draft);
+    ctx.reportFeedback({ tone: "info", message: "Posicione a nova rua com o mouse. Clique para adicionar pontos; Enter confirma e Esc cancela." });
+    return true;
+}
+
 /** A road is drawn freely or through explicit points, and edited by its spine points. */
 export const pathPointsTool: ConstructionTool<"path-brush"> = {
   id: "path-brush",
@@ -94,12 +106,21 @@ export const pathPointsTool: ConstructionTool<"path-brush"> = {
   previewOnHover: true,
   previewFor(g, _params, ctx) {
     const draft = drafts.get(ctx.runtime);
-    if (draft?.points.length && !gestures.has(ctx.runtime)) preview(ctx, draft, g.current.point);
+    if (draft?.points.length && !gestures.has(ctx.runtime)) {
+      const target = roadSnapTarget(ctx, g.current);
+      showRoadSnap(ctx, target);
+      preview(ctx, draft, target?.point ?? g.current.point);
+    }
     return undefined;
   },
   onPointerDown(ctx, sample, params) {
     safely(ctx, () => {
       if (gestures.has(ctx.runtime)) return;
+      if (sample.constructionAction?.kind === "branch") {
+        if (!drafts.has(ctx.runtime)) startBranch(ctx, sample.constructionAction.nodeId, params);
+        return;
+      }
+      if (drafts.has(ctx.runtime)) sample = roadSnapTarget(ctx, sample) ?? sample;
       if (!drafts.get(ctx.runtime)?.points.length) {
         const target = editTarget(ctx, sample);
         const body = target ? undefined : roadBodyTarget(ctx, sample);
@@ -154,7 +175,11 @@ export const pathPointsTool: ConstructionTool<"path-brush"> = {
       else if (active?.kind === "stroke") pathStrokeTool.onPointerMove?.(ctx, seededGesture(g, active.origin), params);
       else if (active?.kind === "point") {
         const draft = drafts.get(ctx.runtime);
-        if (draft?.points.length) preview(ctx, draft, g.current.point);
+        if (draft?.points.length) {
+          const target = roadSnapTarget(ctx, g.current);
+          showRoadSnap(ctx, target);
+          preview(ctx, draft, target?.point ?? g.current.point);
+        }
       }
     });
   },
@@ -174,15 +199,7 @@ export const pathPointsTool: ConstructionTool<"path-brush"> = {
   },
   onSelectionAction(ctx, action, params) {
     if (action !== "branch" || gestures.has(ctx.runtime) || drafts.has(ctx.runtime)) return false;
-    const id = selections.get(ctx.runtime);
-    const node = ctx.runtime.getGraphSnapshot().nodes.find(n => n.id === id);
-    if (!node || !editTarget(ctx, { nodeId: node.id, point: node.position })) return false;
-    const draft: Draft = { points: [{ ...node.position }], params: { ...params, creationMode: "points" } };
-    drafts.set(ctx.runtime, draft);
-    select(ctx);
-    preview(ctx, draft);
-    ctx.reportFeedback({ tone: "info", message: "Posicione a nova rua com o mouse. Clique para adicionar pontos; Enter confirma e Esc cancela." });
-    return true;
+    return startBranch(ctx, selections.get(ctx.runtime), params);
   },
   onKeyDown(ctx, key) {
     if (gestures.has(ctx.runtime)) return false;
@@ -193,7 +210,7 @@ export const pathPointsTool: ConstructionTool<"path-brush"> = {
         if (key === "Backspace") {
           draft.points.pop();
           if (draft.points.length) preview(ctx, draft);
-          else { drafts.delete(ctx.runtime); ctx.runtime.clearPreview(CHANNEL); }
+          else { drafts.delete(ctx.runtime); ctx.runtime.clearPreview(CHANNEL); showRoadSnap(ctx); }
         } else if (draft.points.length >= 2) {
           const operationId = scopedToolId(ctx, "road-points", ctx.nextSequence());
           const effect = createPathBrushEffect({
@@ -203,6 +220,7 @@ export const pathPointsTool: ConstructionTool<"path-brush"> = {
           if (commitPathCloudIntent(ctx, effect, 0.025)) {
             drafts.delete(ctx.runtime);
             ctx.runtime.clearPreview(CHANNEL);
+            showRoadSnap(ctx);
           }
         }
       });
@@ -226,5 +244,7 @@ export const pathPointsTool: ConstructionTool<"path-brush"> = {
     selections.delete(ctx.runtime);
     pathStrokeTool.onCancel?.(ctx);
     ctx.runtime.clearPreview(CHANNEL);
+    showRoadSnap(ctx);
+    select(ctx);
   },
 };

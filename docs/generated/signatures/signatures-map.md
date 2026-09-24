@@ -3419,6 +3419,8 @@ export function createMarkerTexture(): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
 export function createNodeHandleTexture(): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
+export function createRoadBranchTexture(): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
 
 // src/adapters/rendering/node-handle-scene-item.ts
 export const NODE_HANDLE_LAYER_ID = "construction-handles";
@@ -4062,13 +4064,7 @@ export type { FittedEdge, FitOptions } from "../../../../features/edit-construct
 
 // src/composition/tabletop/tools/core/tool-context.ts
 export interface PointerSample {
-  readonly point: ConstructionPosition;
-  /** Screen coordinate used by explicit elevation gestures. */
-  readonly screenY?: number;
-  readonly screenX?: number;
-  readonly shiftKey?: boolean;
-  readonly nodeId?: string;
-  readonly surfaceRef?: string;
+  readonly constructionAction?: { readonly kind: "branch"; readonly nodeId: string };
 export interface ToolGesture {
   readonly start: PointerSample;
   readonly current: PointerSample;
@@ -4185,6 +4181,16 @@ export function roadBodyTarget(ctx: ToolContext,sample: PointerSample): {sample:
   structureTypeFor(t.surfaceType)?.spine && (sample.surfaceRef
   ? surfaceRefFromNodeSet(t.surfaceKey)===sample.surfaceRef
   : t.nodes.some(n=>n.id===sample.nodeId)));
+export function roadSnapTarget(ctx: ToolContext, sample: PointerSample): PointerSample | undefined {
+  const graph = ctx.runtime.getGraphSnapshot();
+export function showRoadSnap(ctx: ToolContext, target?: PointerSample): void {
+  if (!target) { ctx.runtime.clearPreview("road-snap"); return; }
+  const { x, y, z } = target.point;
+  const r = 0.35, h = y + 0.035;
+  ctx.runtime.showPreview({ kind: "segments", color: 0x38bdf8, opacity: 1,
+  positions: Float32Array.from([x-r,h,z, x,h,z+r, x,h,z+r, x+r,h,z, x+r,h,z, x,h,z-r, x,h,z-r, x-r,h,z,
+  x-r*2,h,z, x+r*2,h,z, x,h,z-r*2, x,h,z+r*2]),
+  }, "road-snap");
 
 // src/composition/tabletop/tools/platform/platform-contour-merge.ts
 export interface DirectedContourEdge {
@@ -6435,6 +6441,7 @@ export type {
 // src/ports/scene-render-port.ts
 export type ChangeOrigin = "local" | "network" | "programmatic";
 export interface RenderPointManipulator {
+  readonly branchAction?: boolean;
   readonly id: string;
   readonly position: { readonly x: number; readonly y: number; readonly z: number };
 export type RenderViewId = string;

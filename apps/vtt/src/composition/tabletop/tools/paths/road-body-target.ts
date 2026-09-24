@@ -36,3 +36,29 @@ export function roadBodyTarget(ctx: ToolContext,sample: PointerSample): {sample:
     options:{mode:"shape",parameter:t,insertOnClick:false,pointerOrigin:sample.point,dragThreshold:5},
   };
 }
+
+
+/** Product snap reach; projection and splitting remain canonical Rust operations. */
+export function roadSnapTarget(ctx: ToolContext, sample: PointerSample): PointerSample | undefined {
+  const graph = ctx.runtime.getGraphSnapshot();
+  const ids = new Set(graph.edges.filter(e => e.curve?.surfaceType && structureTypeFor(e.curve.surfaceType)?.spine).flatMap(e => [e.startNodeId, e.endNodeId]));
+  let best: { node: typeof graph.nodes[number]; distance: number } | undefined;
+  for (const node of graph.nodes) {
+    if (!ids.has(node.id) || Math.abs(node.position.y - sample.point.y) > 0.2) continue;
+    const distance = Math.hypot(node.position.x - sample.point.x, node.position.z - sample.point.z);
+    if (distance <= 0.6 && (!best || distance < best.distance)) best = { node, distance };
+  }
+  if (best) return { ...sample, nodeId: best.node.id, point: best.node.position };
+  return roadBodyTarget(ctx, sample)?.sample;
+}
+
+/** Highlight the exact prospective junction without changing the graph. */
+export function showRoadSnap(ctx: ToolContext, target?: PointerSample): void {
+  if (!target) { ctx.runtime.clearPreview("road-snap"); return; }
+  const { x, y, z } = target.point;
+  const r = 0.35, h = y + 0.035;
+  ctx.runtime.showPreview({ kind: "segments", color: 0x38bdf8, opacity: 1,
+    positions: Float32Array.from([x-r,h,z, x,h,z+r, x,h,z+r, x+r,h,z, x+r,h,z, x,h,z-r, x,h,z-r, x-r,h,z,
+      x-r*2,h,z, x+r*2,h,z, x,h,z-r*2, x,h,z+r*2]),
+  }, "road-snap");
+}

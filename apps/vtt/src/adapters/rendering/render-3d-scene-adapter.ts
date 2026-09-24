@@ -56,7 +56,7 @@ import {
   type MapSurfacePickVisualParams,
 } from "./map-surface-pick-scene-item.ts";
 import { clipPlaneForCameraHeight } from "./map-chunk-key.ts";
-import { createMarkerTexture, createNodeHandleTexture } from "./marker-textures.ts";
+import { createMarkerTexture, createNodeHandleTexture, createRoadBranchTexture } from "./marker-textures.ts";
 import {
   NODE_HANDLE_LAYER_ID,
   NODE_HANDLE_VISUAL_KIND,
@@ -156,6 +156,11 @@ export class Render3dSceneAdapter implements SceneRenderPort {
         geometry: { shape: "sprite" },
         material: { surface: "unlit", color: 0xffffff, texture: handleTexture },
       }),
+      equals: () => true,
+    });
+    registry.register<Record<string, never>>({
+      kind: "vtt-road-branch-action",
+      describe: () => ({ geometry: { shape: "sprite" }, material: { surface: "unlit", color: 0xffffff, texture: createRoadBranchTexture() } }),
       equals: () => true,
     });
     registry.register<MapChunkVisualParams>({
@@ -313,6 +318,7 @@ export class Render3dSceneAdapter implements SceneRenderPort {
   }
 
   detachView(viewId: RenderViewId): void {
+    this.#engine?.scene.remove(`road-branch-action:${viewId}`, "engine");
     const attached = this.#views.get(viewId);
     if (attached === undefined) return;
     attached.observer?.disconnect();
@@ -426,7 +432,10 @@ export class Render3dSceneAdapter implements SceneRenderPort {
       data?.entity === "map-surface-pick" && typeof data.surfaceRef === "string"
         ? data.surfaceRef
         : undefined;
-    return { point: result.point, nodeId, surfaceRef };
+    const action = result.data as { entity?: string; nodeId?: string } | undefined;
+    const constructionAction = action?.entity === "road-branch-action" && action.nodeId
+      ? { kind: "branch" as const, nodeId: action.nodeId } : undefined;
+    return { point: result.point, nodeId, surfaceRef, constructionAction };
   }
 
   showPreview(descriptor: RenderPreviewDescriptor, channel = DEFAULT_PREVIEW_CHANNEL): void {
@@ -439,6 +448,14 @@ export class Render3dSceneAdapter implements SceneRenderPort {
   }
 
   setPointManipulator(viewId: RenderViewId, target: RenderPointManipulator | undefined): void {
+    const actionId = `road-branch-action:${viewId}`;
+    if (target?.branchAction) {
+      this.#requireEngine().scene.put({ id: actionId, layer: NODE_HANDLE_LAYER_ID,
+        visual: { kind: "vtt-road-branch-action", params: {} },
+        transform: { position: { x: target.position.x + 0.8, y: target.position.y + 0.55, z: target.position.z + 0.8 }, scale: 0.65 },
+        data: { entity: "road-branch-action", nodeId: target.id },
+      }, "engine");
+    } else this.#engine?.scene.remove(actionId, "engine");
     this.#views.get(viewId)?.view.setPointManipulator(target ? { ...target, axes: ["x", "y", "z"], size: 1 } : undefined);
   }
 

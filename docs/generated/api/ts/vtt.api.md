@@ -256,6 +256,10 @@ Draws the sprite texture for a placed token marker: a filled circle with a small
 
 A small ring-dot, visually distinct from the token marker -- an editable construction-node handle, not a placed token.
 
+### `function vtt.marker-textures.createRoadBranchTexture(): HTMLCanvasElement`
+
+In-scene road branching affordance, distinct from a movable anchor.
+
 ### `interface vtt.node-handle-scene-item.NodeHandlePickData`
 
 Opaque per-item data a pick result echoes back, letting the adapter recover which node a hit handle belongs to without parsing its scene item id.
@@ -1979,6 +1983,8 @@ The tool's not-yet-committed ghost for the current gesture (or stationary hover,
 
 What the pointer resolved to at one instant -- `nodeId` present only when it hit a node handle.
 
+### `property vtt.tool-context.PointerSample.constructionAction?: { kind: "branch"; nodeId: string }`
+
 ### `property vtt.tool-context.PointerSample.nodeId?: string`
 
 ### `property vtt.tool-context.PointerSample.point: ConstructionPosition`
@@ -2136,6 +2142,14 @@ Drag to sketch the centerline. Release commits one fitted curve transaction.
 ### `function vtt.road-body-target.roadBodyTarget(ctx: ToolContext, sample: PointerSample): { options: CurveGestureOptions; sample: PointerSample } | undefined`
 
 Project a road-body pick onto its spine using the canonical curve query.
+
+### `function vtt.road-body-target.roadSnapTarget(ctx: ToolContext, sample: PointerSample): PointerSample | undefined`
+
+Product snap reach; projection and splitting remain canonical Rust operations.
+
+### `function vtt.road-body-target.showRoadSnap(ctx: ToolContext, target?: PointerSample): void`
+
+Highlight the exact prospective junction without changing the graph.
 
 ### `interface vtt.platform-contour-merge.DirectedContourEdge`
 
@@ -6952,6 +6966,8 @@ A construction node's live world position, rendered as a small pickable handle -
 
 ### `interface vtt.scene-render-port.RenderPointManipulator`
 
+### `property vtt.scene-render-port.RenderPointManipulator.branchAction?: boolean`
+
 ### `property vtt.scene-render-port.RenderPointManipulator.id: string`
 
 ### `property vtt.scene-render-port.RenderPointManipulator.onChange: (phase: "start" | "move" | "end" | "cancel", position: { x: number; y: number; z: number }) => void`
@@ -6978,6 +6994,8 @@ What a pointer position resolved to. `nodeId` is present only when the
 pointer actually hit a node handle -- otherwise `point` alone (e.g. a hit
 against map geometry) is still useful for continuing an in-progress drag
 across the ground.
+
+### `property vtt.scene-render-port.ScenePickResult.constructionAction?: { kind: "branch"; nodeId: string }`
 
 ### `property vtt.scene-render-port.ScenePickResult.nodeId?: string`
 

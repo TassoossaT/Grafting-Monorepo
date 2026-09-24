@@ -1,3 +1,4 @@
+import { roadSnapTarget, showRoadSnap } from "./road-body-target.ts";
 import { createPathBrushEffect, pathFormationFor, DEFAULT_TOOL_PARAMS } from "../../../../features/edit-construction/index.ts";
 import type { PathBrushParams } from "../../../../features/edit-construction/index.ts";
 import { commitPathCloudIntent } from "../../path/path-cloud-transaction.ts";
@@ -14,8 +15,13 @@ function meaningful(g: ToolGesture): boolean {
     : Math.hypot(s.point.x-g.start.point.x,s.point.z-g.start.point.z) >= 0.15);
 }
 function draft(ctx: ToolContext,g: ToolGesture,params: PathBrushParams) {
-  const samples = [...g.samples];
-  if (samples.at(-1) !== g.current) samples.push(g.current);
+  const samples = [...g.samples, g.current].filter((sample, index, all) => {
+    const previous = all[index - 1];
+    return !previous || sample.point.x !== previous.point.x || sample.point.y !== previous.point.y || sample.point.z !== previous.point.z;
+  });
+  const target = roadSnapTarget(ctx, g.current);
+  if (target) samples[samples.length - 1] = target;
+  showRoadSnap(ctx, target);
   // The brush reserves half the road width; the remaining area may correct hand wobble.
   const correction=Math.max(0,params.radius-params.bedWidth/2);
   const fitted=ctx.runtime.curveBatch({tolerance:0.025,commands:[{kind:"interpretStroke",points:samples.map(point),correction,curved:true}]})[0]!;
@@ -38,6 +44,7 @@ export const pathStrokeTool: ConstructionTool<"path-brush"> = {
       const d=draft(ctx,g,params);
       ctx.runtime.showPreview({kind:"segments",positions:Float32Array.from(d.lines),color:0x4ade80,opacity:0.9},CHANNEL);
     } catch {
+      showRoadSnap(ctx);
       // Red raw input is presentation only, never a candidate for confirmation.
       const points=g.samples.filter(s=>Object.values(s.point).every(Number.isFinite));
       const lines:number[]=[];
@@ -48,6 +55,7 @@ export const pathStrokeTool: ConstructionTool<"path-brush"> = {
   onPointerUp(ctx,g,params) {
     if(!active.delete(ctx.runtime))return;
     ctx.runtime.clearPreview(CHANNEL);
+    showRoadSnap(ctx);
     const final={...g,samples:[...g.samples,g.current]};
     if(!meaningful(final))return;
     try {
@@ -59,9 +67,11 @@ export const pathStrokeTool: ConstructionTool<"path-brush"> = {
         authoredCurves:d.fitted.curves,parameters:pathFormationFor(params),
       },{operationId,tableId:ctx.tableId,initiatedBy:"road-stroke"});
       commitPathCloudIntent(ctx,effect,0.025);
+      showRoadSnap(ctx);
     } catch(error) {
+      showRoadSnap(ctx);
       ctx.reportFeedback({tone:"error",message:`Traçado não aplicado: ${String(error)}`});
     }
   },
-  onCancel(ctx){active.delete(ctx.runtime);ctx.runtime.clearPreview(CHANNEL);},
+  onCancel(ctx){active.delete(ctx.runtime);ctx.runtime.clearPreview(CHANNEL);showRoadSnap(ctx);},
 };

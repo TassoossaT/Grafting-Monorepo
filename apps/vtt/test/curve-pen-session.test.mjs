@@ -367,3 +367,58 @@ test("branch action cancellation and missing selection leave the road unchanged"
     assert.equal(f.previews.has("road-points"),false);
   }finally{f.close();}
 });
+
+
+test("in-scene branch action starts from its vertex without requiring toolbar selection",()=>{
+  const f=fixture();
+  try {
+    build(f);const edge=edges(f)[0],id=edge.endNodeId;
+    const action={...sample(0.8,4.8),constructionAction:{kind:"branch",nodeId:id}};
+    const before=state(f);
+    f.click(action,action,brush);
+    const cursor=sample(0,9);tool.previewFor(gesture(cursor,cursor),brush,f.ctx);
+    assert.ok(f.previews.get("road-points").positions.length>12);
+    assert.deepEqual(state(f),before);
+    f.click(cursor,cursor,brush);tool.onKeyDown(f.ctx,"Enter",brush);
+    assert.equal(edges(f).filter(e=>e.startNodeId===id||e.endNodeId===id).length,3,JSON.stringify(f.calls.feedback));
+  }finally{f.close();}
+});
+
+for(const mode of ["points","brush"])for(const destination of ["vertex","edge"]){
+  test(`snap to ${destination} while drawing in ${mode} mode commits the highlighted junction`,()=>{
+    const f=fixture();
+    try {
+      f.click(sample(-10,0));f.click(sample(0,0));f.click(sample(10,0));f.finish();
+      const params={...points,creationMode:mode},x=destination==="vertex"?0:3;
+      const face=f.runtime.getAllRegionTopologies()[0];
+      const a=sample(x,8),b=destination==="vertex"?sample(0.3,0.25):{...sample(x,0.1),surfaceRef:surfaceRefFromNodeSet(face.surfaceKey)};
+      const before=state(f);
+      if(mode==="points"){
+        f.click(a,a,params);tool.previewFor(gesture(b,b),params,f.ctx);
+        assert.ok(f.previews.has("road-snap"));assert.deepEqual(state(f),before);
+        f.click(b,b,params);tool.onKeyDown(f.ctx,"Enter",params);
+      }else{
+        tool.onPointerDown(f.ctx,a,params);tool.onPointerMove(f.ctx,gesture(a,b),params);
+        assert.ok(f.previews.has("road-snap"));assert.deepEqual(state(f),before);
+        tool.onPointerUp(f.ctx,gesture(a,b),params);
+      }
+      assert.equal(f.calls.feedback.filter(v=>v.tone==="error").length,0,JSON.stringify(f.calls.feedback));
+      const graph=f.runtime.getGraphSnapshot();
+      assert.ok(graph.nodes.some(n=>Math.abs(n.position.x-x)<0.01&&Math.abs(n.position.z)<0.01&&edges(f).filter(e=>e.startNodeId===n.id||e.endNodeId===n.id).length===3));
+      assert.equal(f.previews.has("road-snap"),false);
+    }finally{f.close();}
+  });
+}
+
+test("snap respects height separation and clears its helper when the pointer leaves the target",async()=>{
+  const {roadSnapTarget}=await import("../src/composition/tabletop/tools/paths/road-body-target.ts");
+  const f=fixture();
+  try {
+    f.click(sample(-10,0));f.click(sample(0,0));f.click(sample(10,0));f.finish();
+    assert.equal(roadSnapTarget(f.ctx,{point:{x:0,y:3,z:0}}),undefined);
+    const a=sample(0,8),near=sample(0.2,0.1),far=sample(0,5);
+    f.click(a,a,points);tool.previewFor(gesture(near,near),points,f.ctx);assert.ok(f.previews.has("road-snap"));
+    tool.previewFor(gesture(far,far),points,f.ctx);assert.equal(f.previews.has("road-snap"),false);
+    tool.previewFor(gesture(near,near),points,f.ctx);tool.onCancel(f.ctx);assert.equal(f.previews.has("road-snap"),false);
+  }finally{f.close();}
+});
