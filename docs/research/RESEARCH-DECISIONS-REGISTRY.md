@@ -316,6 +316,20 @@ Full reasoning: `docs/research/vtt-reactive-construction-and-tiny-glade-ui-model
 | `streemap` | MIT OR Apache-2.0 | Standby, **top pick** | Squarified treemap subdivision for varied room floor plans; compiles clean to `wasm32-unknown-unknown` |
 
 
+## VTT curved ramps and spirals (creation and editing)
+
+Full reasoning: `docs/research/ramps-and-spirals-creation-editing.md`
+
+| Candidate | License | Status | Note |
+| --- | --- | --- | --- |
+| `kurbo` (`Arc`, `ParamCurveArclen`) | MIT OR Apache-2.0 | Adopted | Already a graph-core dependency; now also backs the `helix` (exact arc cut into cubics) and `grade` (constant grade by plan length) curve commands |
+| Revit spiral stair and ramp | Proprietary | Reference only | Spiral laid out from centre and radius, turns derived from the target level; ramp length from base/top level and max slope |
+| AutoCAD HELIX | Proprietary | Reference only | Parametric helix with grips (start, radii, height, location) and a `Constrain` property choosing which of height, turns and turn height stays fixed |
+| Cities: Skylines II road tool | Proprietary | Reference only | Plan curve modes plus elevation as a separate control, with live slope feedback and a too-steep refusal |
+| Planet Zoo / Planet Coaster paths | Proprietary | Reference only | Height as its own gesture; turns into stairs past a slope; "curved slopes" allows helix paths |
+| Unity-Procedural-Stair-Builder | MIT | Reference only | Linear, curved and spiral stair generator in C#; not reusable in the Rust/TS stack |
+| HammerForge | Unknown | Reference only | Godot brush editor; spiral stair as a radial array with rise per copy |
+
 ## Asset and resource management (`@grafting/assets`)
 
 Source: `docs/research/asset-management-prior-art.md`. No dependency is

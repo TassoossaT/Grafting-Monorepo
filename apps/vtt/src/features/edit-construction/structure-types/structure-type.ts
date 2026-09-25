@@ -260,6 +260,14 @@ export interface SpineRegeneration {
 export interface SpineGeneration {
   /** The width a span with no profile of its own is given. */
   readonly defaultOffsets: readonly number[];
+  /**
+   * The spine's points move in plan only: the owner derives every height
+   * itself on regeneration, so a drag keeps the grabbed point's own height
+   * instead of taking whatever lies under the pointer, and never snaps onto
+   * another network's node by position. Heights still change on purpose, in
+   * elevation mode.
+   */
+  readonly planOnly?: boolean;
   /** Normalizes the standing graph before an edit reads it -- legacy data, say. */
   readonly prepare?: (snapshot: ConstructionGraphSnapshot, port: BezierPort) => ConstructionGraphSnapshot;
   readonly regenerate: (input: SpineRegenerationInput) => SpineRegeneration | undefined;

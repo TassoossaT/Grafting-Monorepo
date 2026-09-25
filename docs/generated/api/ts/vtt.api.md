@@ -2061,6 +2061,10 @@ spine-built type shares, whatever surface it regenerates from the spine:
 The road was first to have this, and the spiral uses the same thing; a
 tool only says which spine owners it edits, never how.
 
+### `property vtt.spine-edit-behavior.SpineEditOptions.drafting?: (ctx: ToolContext) => boolean`
+
+While this answers true -- a tool midway through drawing -- presses belong to the tool, not to editing.
+
 ### `property vtt.spine-edit-behavior.SpineEditOptions.ownsSpine: (surfaceType: string) => boolean`
 
 Only spines owned by a type this accepts are edited; anything else falls through to the tool.
@@ -2848,12 +2852,21 @@ What every way of drawing a sloped platform may decide; each tool fills the part
 
 ### `property vtt.slope-commit.SlopeParams.width?: number`
 
-### `function vtt.slope-commit.commitPlatformSlope(ctx: ToolContext, controlPoints: readonly ConstructionPosition[], params: SlopeParams): void`
+### `function vtt.slope-commit.commitPlatformSlope(ctx: ToolContext, controlPoints: readonly ConstructionPosition[], params: SlopeParams, plan?: readonly CubicBezier[]): void`
 
-Commits one sloped platform: a spine through `controlPoints`, owned by the
-sloped platform type, and the faces generated from it. An end that lands
-on a flat platform's edge at its own height meets that edge square on and
-is welded into it.
+Commits one sloped platform: a spine owned by the sloped platform type,
+and the faces generated from it.
+
+The spine runs smoothly through `controlPoints`, or follows `plan` exactly
+when a preset already computed its curves -- a helix. Either way only the
+two ends' heights are kept: everything between is graded at one constant
+grade by plan length. An end of a free run that lands on a flat
+platform's edge at its own height meets that edge square on and is
+welded into it.
+
+### `function vtt.slope-commit.curvesPolyline(ctx: ToolContext, curves: readonly CubicBezier[]): readonly ConstructionPosition[]`
+
+The sampled polyline of `curves`, for a preview.
 
 ### `function vtt.slope-commit.landingEdge(topologies: readonly ConstructionRegionTopology[], point: ConstructionPosition, controlIndex: number): EndWeld | undefined`
 
@@ -2873,11 +2886,17 @@ The welded floor again, with the landing edge split around the ramp end's own ru
 
 A control point's height comes from what the pointer actually touched: a node's own height, else the picked surface.
 
-### `function vtt.slope-commit.spiralControlPoints(center: ConstructionPosition, params: SlopeParams): readonly ConstructionPosition[]`
+### `function vtt.slope-commit.spiralPlan(ctx: ToolContext, center: ConstructionPosition, params: SlopeParams & { flip?: boolean }, towards?: ConstructionPosition): readonly CubicBezier[]`
 
-The spiral preset: control points of a helix around `center`, climbing
-`rise` over `turns` turns. Eight per turn keeps the automatic curve round.
-A preset only chooses points -- the result is an ordinary spine.
+The spiral preset: an exact helix around `center`, computed in Rust --
+a circular arc in plan cut into cubics, climbing `rise` over `turns`.
+`towards`, when given, is where a drag from the centre ended: it sets the
+radius and the angle the spiral starts at, the way a spiral stair is laid
+out from its centre. `flip` turns it the other way round.
+
+### `variable vtt.slope-tools.slopeCurveTool: ConstructionTool<"slope-curve">`
+
+Edits an existing curved ramp by its spine points, as the spiral and the road are edited.
 
 ### `variable vtt.slope-tools.slopeRampTool: ConstructionTool<"slope-ramp">`
 
@@ -4936,7 +4955,13 @@ Both ends level, square to the axis and on the same side of it, with a real leng
 
 A sloped platform generated from a spine, the way a road is: the spine's
 bezier spans are the source of truth, and the surface is regenerated from
-them. What differs from a road is only the last step -- a road unions its
+them.
+
+Plan and height are kept apart, as ramp tools do: the spine's plan is
+edited freely, and only its two free ends carry authored heights. Every
+point between them is re-graded on each regeneration so the whole run
+climbs at one constant grade by plan length (`gradeSlopeSpans`, computed
+in Rust). A spiral is this same ramp whose plan is a helix. What differs from a road is only the last step -- a road unions its
 ribbons in plan, and a spiral's turns overlap in plan, so a sloped platform
 keeps **one face per span** instead: that span's ribbon outline, sampled
 along the curve on both margins. No face ever overlaps itself in plan, and
@@ -4960,9 +4985,16 @@ Re-places every cross-section of a span whose control node moved, at its
 own curve parameter on the moved curve -- the ramp bends with the move
 instead of kinking at the moved end.
 
+### `function vtt.platform-slope-spine.gradeSlopeSpans(port: Pick<BezierPort, "curveBatch">, graph: ConstructionGraphSnapshot, spans: readonly ConstructionEdgeSnapshot[]): { edges: readonly ConstructionEdgeSnapshot[]; grade?: number; nodes: readonly { id: string; position: ConstructionPosition }[] }`
+
+The control nodes and spans of `spans` re-graded: the chain's two free
+ends keep their heights, and every point between takes the height one
+constant grade by plan length gives it. The plan is untouched. Nothing is
+returned for a spine that is not one open chain.
+
 ### `function vtt.platform-slope-spine.regenerateSlopeSpine(input: SpineRegenerationInput): SpineRegeneration`
 
-Regenerates every sloped-platform span on the spine a graph patch touches.
+Regenerates every sloped-platform span on the spine a graph patch touches, re-graded between its ends.
 
 ### `function vtt.platform-slope-spine.slopeFaceId(edgeId: string): string`
 
@@ -5429,6 +5461,14 @@ whatever surface this type makes of them.
 
 The width a span with no profile of its own is given.
 
+### `property vtt.structure-type.SpineGeneration.planOnly?: boolean`
+
+The spine's points move in plan only: the owner derives every height
+itself on regeneration, so a drag keeps the grabbed point's own height
+instead of taking whatever lies under the pointer, and never snaps onto
+another network's node by position. Heights still change on purpose, in
+elevation mode.
+
 ### `property vtt.structure-type.SpineGeneration.prepare?: (snapshot: ConstructionGraphSnapshot, port: BezierPort) => ConstructionGraphSnapshot`
 
 Normalizes the standing graph before an edit reads it -- legacy data, say.
@@ -5873,13 +5913,17 @@ floating one -- a storey, a bridge deck -- that leaves the terrain alone.
 
 ### `property vtt.tool-types.ToolParamsByTool.roof: { curvatures: readonly [number, number, number, number]; elevation: number; height: number; radius: number; shape: "rectangle" | "circle" | "platform" }`
 
+### `property vtt.tool-types.ToolParamsByTool.slope-curve: { rise: number; width: number }`
+
+A curved ramp drawn through points in plan, climbing from its first point to its last at one constant grade.
+
 ### `property vtt.tool-types.ToolParamsByTool.slope-ramp: { bottomWidth: number; rise: number; topWidth: number }`
 
 A straight ramp dragged from start to end, climbing a fixed rise, with its own width at each end.
 
-### `property vtt.tool-types.ToolParamsByTool.slope-spiral: { radius: number; rise: number; turns: number; width: number }`
+### `property vtt.tool-types.ToolParamsByTool.slope-spiral: { flip?: boolean; radius: number; rise: number; turns: number; width: number }`
 
-A spiral sloped platform stamped around a clicked centre.
+A spiral sloped platform laid out from its centre: a click uses `radius`, a drag sets it. `flip` turns the other way round.
 
 ### `property vtt.tool-types.ToolParamsByTool.terrain-sculpt: TerrainSculptParams`
 
@@ -5953,7 +5997,7 @@ Length of a panel's own vertical edge, in world units.
 
 ### `type vtt.tool-types.BrushShapeKind = "circle" | "square" | "hexagon"`
 
-### `type vtt.tool-types.ConstructionToolId = "navigate" | "platform-contour" | "slope-ramp" | "slope-spiral" | "roof" | "path-brush" | "wall-brush" | "wall-line" | "tower-stamp" | "opening" | "terrain-sculpt"`
+### `type vtt.tool-types.ConstructionToolId = "navigate" | "platform-contour" | "slope-ramp" | "slope-spiral" | "slope-curve" | "roof" | "path-brush" | "wall-brush" | "wall-line" | "tower-stamp" | "opening" | "terrain-sculpt"`
 
 The construction-tool vocabulary every layer (widgets, composition) needs
 to agree on: which tools exist, what each one's parameters look like, and
@@ -6653,7 +6697,7 @@ The structure type generated along this spine span; a span with no owner generat
 
 ### `property vtt.bezier-port.CurveResult.samples: readonly (readonly { position: CurvePoint; t: number }[])[]`
 
-### `type vtt.bezier-port.CurveCommand = { correction: number; curved: boolean; kind: "interpretStroke"; points: readonly CurvePoint[] } | { kind: "automatic"; points: readonly CurvePoint[] } | { cornerDegrees?: number; kind: "fit"; points: readonly CurvePoint[] } | { kind: "join"; sections: readonly (readonly [CurvePoint, CurvePoint])[] } | { curve: CubicBezier; endOffsets?: readonly [number, number]; kind: "ribbon"; offsets: readonly [number, number]; parameters?: readonly number[] } | { curves: readonly CubicBezier[]; kind: "sample" } | { curve: CubicBezier; kind: "split"; profile?: CurveHandles; t: number } | { curve: CubicBezier; kind: "merge"; next: CubicBezier } | { curve: CubicBezier; kind: "pull"; t: number; target: CurvePoint } | { curve: CubicBezier; index: 1 | 2; kind: "handle"; mode: CurveHandleMode; opposite: CurvePoint | null; target: CurvePoint } | { curve: CubicBezier; kind: "nearest"; point: CurvePoint } | { end: CurvePoint; handles: CurveHandles; kind: "resolve"; start: CurvePoint }`
+### `type vtt.bezier-port.CurveCommand = { correction: number; curved: boolean; kind: "interpretStroke"; points: readonly CurvePoint[] } | { kind: "automatic"; points: readonly CurvePoint[] } | { cornerDegrees?: number; kind: "fit"; points: readonly CurvePoint[] } | { kind: "join"; sections: readonly (readonly [CurvePoint, CurvePoint])[] } | { curve: CubicBezier; endOffsets?: readonly [number, number]; kind: "ribbon"; offsets: readonly [number, number]; parameters?: readonly number[] } | { curves: readonly CubicBezier[]; kind: "sample" } | { curve: CubicBezier; kind: "split"; profile?: CurveHandles; t: number } | { curve: CubicBezier; kind: "merge"; next: CubicBezier } | { curve: CubicBezier; kind: "pull"; t: number; target: CurvePoint } | { curve: CubicBezier; index: 1 | 2; kind: "handle"; mode: CurveHandleMode; opposite: CurvePoint | null; target: CurvePoint } | { curve: CubicBezier; kind: "nearest"; point: CurvePoint } | { end: CurvePoint; handles: CurveHandles; kind: "resolve"; start: CurvePoint } | { center: CurvePoint; kind: "helix"; radius: number; rise: number; startAngle: number; sweep: number } | { curves: readonly CubicBezier[]; end: number; kind: "grade"; start: number }`
 
 ### `type vtt.bezier-port.CurveHandleMode = "automatic" | "aligned" | "mirrored" | "free"`
 

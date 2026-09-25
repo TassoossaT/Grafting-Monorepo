@@ -10,4 +10,4 @@ export { floatingPlatformStructureType, platformStructureType } from "./platform
 export { RAMP_SURFACE_TYPE, rampCornerId, rampCorners, rampEdgeId, rampOutline, rampPatch, type RampCorners, type RampShape } from "./platform/platform-ramp.ts";
 export { roofStructureType } from "./roof/roof-structure.ts";
 export { openingStructureType } from "./panel/panel-structure.ts";
-export { controlRungId, controlSectionId, prospectiveGraph, regenerateSlopeSpine, SLOPE_SURFACE_TYPE, slopeFaceId, slopeFootprint, slopeSurface } from "./platform/platform-slope-spine.ts";
+export { controlRungId, controlSectionId, gradeSlopeSpans, prospectiveGraph, regenerateSlopeSpine, SLOPE_SURFACE_TYPE, slopeFaceId, slopeFootprint, slopeSurface } from "./platform/platform-slope-spine.ts";

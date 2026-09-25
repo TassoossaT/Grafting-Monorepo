@@ -66,6 +66,7 @@ export function ConstructionDock(props: ConstructionDockProps) {
   const isWallChildActive = isWallBrushActive || isWallLineActive || isTowerStampActive || isPlatformActive || isRoofActive;
   const isRampActive = activeTool === "slope-ramp";
   const isSpiralActive = activeTool === "slope-spiral";
+  const isCurveRampActive = activeTool === "slope-curve";
   const isOpeningActive = activeTool === "opening";
 
   const items: ActionDockItem[] = [
@@ -132,12 +133,13 @@ export function ConstructionDock(props: ConstructionDockProps) {
       icon: "🪜",
       tooltip: "Escadas e Desníveis (rampas e espirais)",
       active: isRampActive,
-      childActive: isRampActive || isSpiralActive,
+      childActive: isRampActive || isSpiralActive || isCurveRampActive,
       disabled: !ready,
       onClick: () => onToolChange("slope-ramp"),
       subItems: [
         { key: "slope-ramp", label: "Rampa", icon: "⟋", tooltip: "Rampa reta: arraste do início ao fim", active: isRampActive, disabled: !ready, onClick: () => onToolChange("slope-ramp") },
-        { key: "slope-spiral", label: "Espiral", icon: "🌀", tooltip: "Espiral: clique no centro", active: isSpiralActive, disabled: !ready, onClick: () => onToolChange("slope-spiral") },
+        { key: "slope-curve", label: "Rampa curva", icon: "⤴", tooltip: "Rampa curva: clique os pontos em planta, Enter termina", active: isCurveRampActive, disabled: !ready, onClick: () => onToolChange("slope-curve") },
+        { key: "slope-spiral", label: "Espiral", icon: "🌀", tooltip: "Espiral: clique no centro, ou arraste do centro para o raio", active: isSpiralActive, disabled: !ready, onClick: () => onToolChange("slope-spiral") },
       ],
     },
     {

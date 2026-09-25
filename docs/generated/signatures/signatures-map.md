@@ -4143,6 +4143,8 @@ export const navigateTool: ConstructionTool<"navigate"> = {
 export interface SpineEditOptions {
   /** Only spines owned by a type this accepts are edited; anything else falls through to the tool. */
   readonly ownsSpine: (surfaceType: string) => boolean;
+  /** While this answers true -- a tool midway through drawing -- presses belong to the tool, not to editing. */
+  readonly drafting?: (ctx: ToolContext) => boolean;
   }
 export interface SpinePick {
   readonly sample: PointerSample;
@@ -4681,9 +4683,14 @@ export interface SlopeParams {
 export function slopeControlPoint(ctx: ToolContext, sample: PointerSample): ConstructionPosition {
   const node = sample.nodeId ? ctx.runtime.getGraphSnapshot().nodes.find((n) => n.id === sample.nodeId) : undefined;
   return { ...sample.point, y: node?.position.y ?? sample.point.y };
-export function spiralControlPoints(center: ConstructionPosition, params: Params): readonly ConstructionPosition[] {
-  const radius = params.radius ?? 2.5, turns = params.turns ?? 1, rise = params.rise ?? 3;
+export function spiralPlan(ctx: ToolContext, center: ConstructionPosition, params: Params & { readonly flip?: boolean }, towards?: ConstructionPosition): readonly CubicBezier[] {
+  const radius = towards ? Math.hypot(towards.x - center.x, towards.z - center.z) : params.radius ?? 2.5;
+  const turns = params.turns ?? 1, rise = params.rise ?? 3;
   if (!(radius > 0) || !(turns > 0) || !Number.isFinite(rise)) throw new Error("Raio e voltas devem ser positivos.");
+export function curvesPolyline(ctx: ToolContext, curves: readonly CubicBezier[]): readonly ConstructionPosition[] {
+  if (curves.length === 0) return [];
+  return ctx.runtime.curveBatch({ tolerance: 0.05, commands: [{ kind: "sample", curves }] })[0]!.samples
+  .flatMap((samples, i) => samples.slice(i === 0 ? 0 : 1)).map((sample) => position(sample.position));
 export interface EndWeld {
   readonly controlIndex: number;
   readonly topology: ConstructionRegionTopology;
@@ -4709,7 +4716,7 @@ export function reweldedFloor(operationId: string, weld: EndWeld, rung: Rung, se
   const edges = new Map<string, ConstructionPatchEdge>();
 export function landsInside(weld: EndWeld, rung: Rung, sections: ReadonlyMap<string, ConstructionPosition>): boolean {
   const length = Math.hypot(weld.b.x - weld.a.x, weld.b.z - weld.a.z);
-export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly ConstructionPosition[], params: Params): void {
+export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly ConstructionPosition[], params: Params, plan?: readonly CubicBezier[]): void {
   try {
   const width = params.width ?? 1.5;
   if (!(width > 0)) throw new Error("A largura deve ser positiva.");
@@ -4717,6 +4724,10 @@ export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly Co
 // src/composition/tabletop/tools/slope/slope-tools.ts
 export const slopeRampTool = withStructureEditing(rawSlopeRampTool, { ownsType: ownsRamp });
 export const slopeSpiralTool = withSpineEditing(rawSlopeSpiralTool, { ownsSpine: ownsSlope });
+export const slopeCurveTool = withSpineEditing(rawSlopeCurveTool, {
+  ownsSpine: ownsSlope,
+  drafting: (ctx) => (curveDrafts.get(ctx.runtime)?.points.length ?? 0) > 0,
+  });
 
 // src/composition/tabletop/tools/terrain/terrain-sculpt-tool.ts
 export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
@@ -5921,9 +5932,18 @@ export function slopeSurface(port: Pick<BezierPort, "curveBatch">, nodes: Readon
   (resolved) => resolved.samples[0]!.map((sample) => sample.t));
 export function slopeFootprint(port: Pick<BezierPort, "planarBoolean">, surface: Pick<SlopeSurface, "nodes" | "edges" | "regions">): readonly (readonly [number, number])[] | undefined {
   const positions = new Map(surface.nodes.map((node) => [node.id, node.position]));
+export function gradeSlopeSpans(
+  port: Pick<BezierPort, "curveBatch">,
+  graph: ConstructionGraphSnapshot,
+  spans: readonly ConstructionEdgeSnapshot[],
+  ): {
+  readonly nodes: readonly { readonly id: string; readonly position: ConstructionPosition }[];
+  readonly edges: readonly ConstructionEdgeSnapshot[];
+  /** Rise over plan length along the whole chain, when it was graded. */
 export function regenerateSlopeSpine(input: SpineRegenerationInput): SpineRegeneration {
-  const { snapshot, graphPatch } = input;
-  const after = prospectiveGraph(snapshot, graphPatch);
+  const { snapshot } = input;
+  const seeds = [...input.graphPatch.nodes.map((node) => node.id), ...input.graphPatch.edges.flatMap((edge) => [edge.startNodeId, edge.endNodeId])];
+  const drafted = prospectiveGraph(snapshot, input.graphPatch);
 export function slopeMotionInfluences(topology: ConstructionRegionTopology, transport: boolean): readonly ConstructionMotionInfluence[] {
   const axes = [transport, true, transport] as const;
   return topology.nodes.flatMap((node) => {
@@ -6114,10 +6134,11 @@ export interface SpineRegeneration {
 export interface SpineGeneration {
   /** The width a span with no profile of its own is given. */
   readonly defaultOffsets: readonly number[];
-  /** Normalizes the standing graph before an edit reads it -- legacy data, say. */
-  readonly prepare?: (snapshot: ConstructionGraphSnapshot, port: BezierPort) => ConstructionGraphSnapshot;
-  readonly regenerate: (input: SpineRegenerationInput) => SpineRegeneration | undefined;
-  }
+  /**
+  * The spine's points move in plan only: the owner derives every height
+  * itself on regeneration, so a drag keeps the grabbed point's own height
+  * instead of taking whatever lies under the pointer, and never snaps onto
+  * another network's node by position. Heights still change on purpose, in
 export type StructureTrait =
 export interface StructureView {
   readonly label: string;

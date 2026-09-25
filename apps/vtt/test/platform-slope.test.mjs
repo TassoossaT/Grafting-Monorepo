@@ -112,8 +112,13 @@ test("a spiral is one spine, one face per span, meshed on its own turn", () => {
   try {
     slopeSpiralTool.onClick(ctx, { point: { x: 20, y: 1, z: 0 } }, { ...params, radius: 3, turns: 1.5, rise: 4 });
     const ramp = faces(runtime, "platform-slope");
-    assert.equal(ramp.length, 12, JSON.stringify(calls.feedback));
-    assert.equal(slopeSpans(runtime).length, 12);
+    const spans = slopeSpans(runtime);
+    assert.ok(spans.length >= 6, `at least one span per quarter turn: ${JSON.stringify(calls.feedback)}`);
+    assert.equal(ramp.length, spans.length, "one face per span");
+    for (const id of new Set(spans.flatMap((e) => [e.startNodeId, e.endNodeId]))) {
+      const p = node(runtime, id).position;
+      assert.ok(Math.abs(Math.hypot(p.x - 20, p.z) - 3) < 1e-6, `every control point sits on the circle: ${Math.hypot(p.x - 20, p.z)}`);
+    }
     const heights = ramp.flatMap((t) => t.nodes.map((n) => n.position.y));
     assert.ok(Math.abs(Math.min(...heights) - 1) < 1e-5 && Math.abs(Math.max(...heights) - 5) < 1e-5);
     assert.ok(ramp.every(level));

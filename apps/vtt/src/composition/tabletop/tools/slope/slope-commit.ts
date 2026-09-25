@@ -1,4 +1,4 @@
-import { automaticCurve, controlRungId, controlSectionId, hasTrait, reverseGeometry, SLOPE_SURFACE_TYPE, slopeFootprint, slopeSurface, spineControlNodeId } from "../../../../features/edit-construction/index.ts";
+import { automaticCurve, controlRungId, controlSectionId, gradeSlopeSpans, hasTrait, reverseGeometry, SLOPE_SURFACE_TYPE, slopeFootprint, slopeSurface, spineControlNodeId } from "../../../../features/edit-construction/index.ts";
 import type {
   ConstructionEdgeSnapshot,
   ConstructionOrientedEdgeUse,
@@ -6,10 +6,14 @@ import type {
   ConstructionPosition,
   ConstructionRegionEdge,
   ConstructionRegionTopology,
+  CubicBezier,
+  CurveHandles,
   CurvePoint,
 } from "../../../../ports/index.ts";
 import { scopedToolId, type PointerSample, type ToolContext } from "../core/tool-context.ts";
 import { commitPatchReplacement } from "../../effects/effect-commit.ts";
+
+const position = (p: CurvePoint): ConstructionPosition => ({ x: p[0], y: p[1], z: p[2] });
 
 /** What every way of drawing a sloped platform may decide; each tool fills the part it offers. */
 export interface SlopeParams {
@@ -29,18 +33,26 @@ export function slopeControlPoint(ctx: ToolContext, sample: PointerSample): Cons
 }
 
 /**
- * The spiral preset: control points of a helix around `center`, climbing
- * `rise` over `turns` turns. Eight per turn keeps the automatic curve round.
- * A preset only chooses points -- the result is an ordinary spine.
+ * The spiral preset: an exact helix around `center`, computed in Rust --
+ * a circular arc in plan cut into cubics, climbing `rise` over `turns`.
+ * `towards`, when given, is where a drag from the centre ended: it sets the
+ * radius and the angle the spiral starts at, the way a spiral stair is laid
+ * out from its centre. `flip` turns it the other way round.
  */
-export function spiralControlPoints(center: ConstructionPosition, params: Params): readonly ConstructionPosition[] {
-  const radius = params.radius ?? 2.5, turns = params.turns ?? 1, rise = params.rise ?? 3;
+export function spiralPlan(ctx: ToolContext, center: ConstructionPosition, params: Params & { readonly flip?: boolean }, towards?: ConstructionPosition): readonly CubicBezier[] {
+  const radius = towards ? Math.hypot(towards.x - center.x, towards.z - center.z) : params.radius ?? 2.5;
+  const turns = params.turns ?? 1, rise = params.rise ?? 3;
   if (!(radius > 0) || !(turns > 0) || !Number.isFinite(rise)) throw new Error("Raio e voltas devem ser positivos.");
-  const steps = Math.max(2, Math.ceil(turns * 8));
-  return Array.from({ length: steps + 1 }, (_, k) => {
-    const angle = (k / steps) * turns * Math.PI * 2;
-    return { x: center.x + radius * Math.cos(angle), y: center.y + (rise * k) / steps, z: center.z + radius * Math.sin(angle) };
-  });
+  const startAngle = towards ? Math.atan2(towards.z - center.z, towards.x - center.x) : 0;
+  const sweep = turns * Math.PI * 2 * (params.flip ? -1 : 1);
+  return ctx.runtime.curveBatch({ tolerance: 0.005, commands: [{ kind: "helix", center: [center.x, center.y, center.z], radius, startAngle, sweep, rise }] })[0]!.curves;
+}
+
+/** The sampled polyline of `curves`, for a preview. */
+export function curvesPolyline(ctx: ToolContext, curves: readonly CubicBezier[]): readonly ConstructionPosition[] {
+  if (curves.length === 0) return [];
+  return ctx.runtime.curveBatch({ tolerance: 0.05, commands: [{ kind: "sample", curves }] })[0]!.samples
+    .flatMap((samples, i) => samples.slice(i === 0 ? 0 : 1)).map((sample) => position(sample.position));
 }
 
 export interface EndWeld {
@@ -127,21 +139,29 @@ export function landsInside(weld: EndWeld, rung: Rung, sections: ReadonlyMap<str
   });
 }
 
+const minus = (a: CurvePoint, b: CurvePoint): CurvePoint => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+
 /**
- * Commits one sloped platform: a spine through `controlPoints`, owned by the
- * sloped platform type, and the faces generated from it. An end that lands
- * on a flat platform's edge at its own height meets that edge square on and
- * is welded into it.
+ * Commits one sloped platform: a spine owned by the sloped platform type,
+ * and the faces generated from it.
+ *
+ * The spine runs smoothly through `controlPoints`, or follows `plan` exactly
+ * when a preset already computed its curves -- a helix. Either way only the
+ * two ends' heights are kept: everything between is graded at one constant
+ * grade by plan length. An end of a free run that lands on a flat
+ * platform's edge at its own height meets that edge square on and is
+ * welded into it.
  */
-export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly ConstructionPosition[], params: Params): void {
+export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly ConstructionPosition[], params: Params, plan?: readonly CubicBezier[]): void {
   try {
     const width = params.width ?? 1.5;
     if (!(width > 0)) throw new Error("A largura deve ser positiva.");
+    if (plan) controlPoints = [position(plan[0]!.points[0]), ...plan.map((curve) => position(curve.points[3]))];
     if (controlPoints.length < 2) throw new Error("Marque pelo menos dois pontos.");
     const operationId = scopedToolId(ctx, "platform-slope", ctx.nextSequence());
     const topologies = ctx.runtime.getAllRegionTopologies();
     const last = controlPoints.length - 1;
-    const landings = [landingEdge(topologies, controlPoints[0]!, 0), landingEdge(topologies, controlPoints[last]!, last)]
+    const landings = plan ? [] : [landingEdge(topologies, controlPoints[0]!, 0), landingEdge(topologies, controlPoints[last]!, last)]
       .filter((weld): weld is EndWeld => weld !== undefined);
     const points = controlPoints.map((point, i) => {
       const weld = landings.find((w) => w.controlIndex === i);
@@ -149,9 +169,11 @@ export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly Co
       const { t } = project(weld.a, weld.b, point);
       return { x: weld.a.x + (weld.b.x - weld.a.x) * t, y: weld.a.y, z: weld.a.z + (weld.b.z - weld.a.z) * t };
     });
-    const fitted = automaticCurve(ctx.runtime, points, 0.025);
-    const nodes = points.map((position, i) => ({ id: spineControlNodeId(operationId, i), position }));
-    const spans: ConstructionEdgeSnapshot[] = fitted.handles.map((h, i) => {
+    const handles: readonly CurveHandles[] = plan
+      ? plan.map((curve) => ({ start: minus(curve.points[1], curve.points[0]), end: minus(curve.points[2], curve.points[3]), mode: "aligned" as const, bandOffsets: [] }))
+      : automaticCurve(ctx.runtime, points, 0.025).handles;
+    let nodes = points.map((point, i) => ({ id: spineControlNodeId(operationId, i), position: point }));
+    let spans: ConstructionEdgeSnapshot[] = handles.map((h, i) => {
       const startWeld = i === 0 ? landings.find((w) => w.controlIndex === 0) : undefined;
       const endWeld = i === last - 1 ? landings.find((w) => w.controlIndex === last) : undefined;
       return {
@@ -162,12 +184,17 @@ export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly Co
           ...h,
           start: startWeld ? squareTo(h.start, startWeld) : h.start,
           end: endWeld ? squareTo(h.end, endWeld) : h.end,
-          mode: startWeld || endWeld ? "aligned" : "automatic",
+          mode: plan || startWeld || endWeld ? "aligned" : "automatic",
           bandOffsets: [-width / 2, width / 2],
           surfaceType: SLOPE_SURFACE_TYPE,
         },
       };
     });
+    const graded = gradeSlopeSpans(ctx.runtime, { nodes, edges: spans }, spans);
+    const gradedNodes = new Map(graded.nodes.map((n) => [n.id, n.position]));
+    const gradedSpans = new Map(graded.edges.map((e) => [e.edgeId, e]));
+    nodes = nodes.map((n) => ({ ...n, position: gradedNodes.get(n.id) ?? n.position }));
+    spans = spans.map((s) => gradedSpans.get(s.edgeId) ?? s);
     const surface = slopeSurface(ctx.runtime, new Map(nodes.map((n) => [n.id, n.position])), spans);
     const sections = new Map(surface.nodes.map((n) => [n.id, n.position]));
     const welds = landings.filter((weld) => landsInside(weld, controlRung(nodes[weld.controlIndex]!.id), sections));
@@ -187,7 +214,8 @@ export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly Co
       footprintOutline: slopeFootprint(ctx.runtime, surface),
     }, { transactionId: operationId });
     if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
-    ctx.reportFeedback({ tone: "success", message: `Plataforma inclinada: ${surface.regions.length} trecho(s), ${welds.length} ponta(s) soldada(s).` });
+    const slope = graded.grade === undefined ? "" : `, inclinação ${(graded.grade * 100).toFixed(0)}%`;
+    ctx.reportFeedback({ tone: "success", message: `Plataforma inclinada: ${surface.regions.length} trecho(s), ${welds.length} ponta(s) soldada(s)${slope}.` });
   } catch (error) {
     ctx.reportFeedback({ tone: "error", message: error instanceof Error ? error.message : String(error) });
   }

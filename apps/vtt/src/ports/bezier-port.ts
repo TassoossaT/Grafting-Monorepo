@@ -24,7 +24,11 @@ export type CurveCommand =
   | { readonly kind: "pull"; readonly curve: CubicBezier; readonly t: number; readonly target: CurvePoint }
   | { readonly kind: "handle"; readonly curve: CubicBezier; readonly index: 1 | 2; readonly target: CurvePoint; readonly mode: CurveHandleMode; readonly opposite: CurvePoint | null }
   | { readonly kind: "nearest"; readonly curve: CubicBezier; readonly point: CurvePoint }
-  | { readonly kind: "resolve"; readonly handles: CurveHandles; readonly start: CurvePoint; readonly end: CurvePoint };
+  | { readonly kind: "resolve"; readonly handles: CurveHandles; readonly start: CurvePoint; readonly end: CurvePoint }
+  /** An exact circular arc in plan around `center` (whose y is the start height), climbing `rise` linearly over the signed `sweep` (radians, +X towards +Z). */
+  | { readonly kind: "helix"; readonly center: CurvePoint; readonly radius: number; readonly startAngle: number; readonly sweep: number; readonly rise: number }
+  /** A chain, in order, with its heights redistributed from `start` to `end` at one constant grade by plan length; the plan is untouched. */
+  | { readonly kind: "grade"; readonly curves: readonly CubicBezier[]; readonly start: number; readonly end: number };
 export interface CurveBatch { readonly tolerance: number; readonly commands: readonly CurveCommand[] }
 export interface CurveResult {
   readonly linear?: readonly boolean[];

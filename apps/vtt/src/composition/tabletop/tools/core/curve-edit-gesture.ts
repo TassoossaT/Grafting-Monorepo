@@ -12,6 +12,7 @@ import {
   resolveCurves,
   reverseGeometry,
   spineOwnerAt,
+  structureTypeFor,
 } from "../../../../features/edit-construction/index.ts";
 import type { AtomicEditOp, StructureEditParams } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionCurvedEdge, ConstructionEdgeGeometry, ConstructionPosition, ConstructionSurfaceKey, CubicBezier } from "../../../../ports/index.ts";
@@ -96,10 +97,10 @@ export function beginCurveGesture(
     return face === undefined ? undefined : contourGesture(ctx, sample, actualParams, contourEdge, pick.index, face.surfaceKey);
   }
   const owner = spineOwnerAt(snapshot, pick?.edgeId ?? sample.nodeId);
-  return owner !== undefined && ownsType(owner) ? spineGesture(ctx, sample, actualParams) : undefined;
+  return owner !== undefined && ownsType(owner) ? spineGesture(ctx, sample, actualParams, structureTypeFor(owner)?.spine?.planOnly === true) : undefined;
 }
 
-function spineGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGestureOptions): CurveGesture {
+function spineGesture(ctx: ToolContext, sample: PointerSample, params: CurveGestureOptions | undefined, planOnly: boolean): CurveGesture {
   const snapshot = ctx.runtime.getGraphSnapshot();
   const targetId = sample.nodeId!;
   const operationId = `curve-edit:${ctx.nextSequence()}`;
@@ -149,7 +150,9 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGes
       if (ended) return;
       if (!dragged && !crossedThreshold(sample, gesture, params)) return;
       target = targetOf(sample, gesture, params);
-      if (!curvePick(targetId)) {
+      // A plan-only spine's heights are its owner's: the grabbed point keeps its own.
+      if (planOnly && params?.mode !== "elevation") target = { ...target, y: sample.point.y };
+      if (!curvePick(targetId) && !planOnly) {
         const snap = roadSnapTarget(ctx, { point: target }, targetId);
         if (snap) {
           target = snap.point;
@@ -219,7 +222,7 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGes
         if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
         ctx.reportSelection(isBezierEditTarget(ctx.runtime.getGraphSnapshot(), draft.selectedId) ? { id: draft.selectedId, point: target } : undefined);
         const msg = isWidthDrag
-          ? `Largura da rua ajustada para ${currentWidth.toFixed(2)}m.`
+          ? `Largura ajustada para ${currentWidth.toFixed(2)}m.`
           : params?.curveAction && params.curveAction !== "edit"
           ? "Curva atualizada."
           : moved

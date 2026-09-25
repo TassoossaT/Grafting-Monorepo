@@ -103,6 +103,30 @@ pub enum CurveCommand {
         /// Query position.
         point: CurvePoint,
     },
+    /// A helix: an exact circular arc in plan, climbing linearly in its angle.
+    Helix {
+        /// Plan centre; its height is where the helix starts.
+        center: CurvePoint,
+        /// Plan radius.
+        radius: f64,
+        /// Angle of the first point, radians, measured in plan from +X towards +Z.
+        #[cfg_attr(feature = "curve-serde", serde(rename = "startAngle"))]
+        start_angle: f64,
+        /// Signed sweep in radians: positive turns from +X towards +Z.
+        sweep: f64,
+        /// Height climbed over the whole sweep.
+        rise: f64,
+    },
+    /// A chain of curves with its heights redistributed at one constant
+    /// grade by plan length; the plan is untouched.
+    Grade {
+        /// The chain, in order, each curve starting where the previous ends.
+        curves: Vec<CubicBezier>,
+        /// Height at the chain's first point.
+        start: f64,
+        /// Height at the chain's last point.
+        end: f64,
+    },
     /// Resolve graph-owned controls against updated anchors.
     Resolve {
         /// Relative controls.
@@ -173,6 +197,23 @@ pub fn execute(batch: CurveBatch) -> Result<Vec<CurveResult>, String> {
                 spans.into_iter().map(|(curve, _)| curve).collect()
             }
             CurveCommand::Automatic { points } => automatic_path(&points)?,
+            CurveCommand::Helix {
+                center,
+                radius,
+                start_angle,
+                sweep,
+                rise,
+            } => crate::bezier_ramp::helix(
+                center,
+                radius,
+                start_angle,
+                sweep,
+                rise,
+                batch.tolerance,
+            )?,
+            CurveCommand::Grade { curves, start, end } => {
+                crate::bezier_ramp::grade(&curves, start, end, batch.tolerance)?
+            }
             CurveCommand::Fit {
                 points,
                 corner_degrees,
