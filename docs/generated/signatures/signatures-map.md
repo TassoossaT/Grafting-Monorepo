@@ -6439,6 +6439,14 @@ export function planarDifference(
   const subjectShapes = toEngine([subject]);
 
 // src/features/edit-construction/topology/ring-simplify.ts
+export function simplifyPolygonRdp(
+  ring: readonly (readonly [number, number])[],
+  epsilon = 0.06,
+  ): (readonly [number, number])[] {
+  if (ring.length <= 4) return [...ring];
+  const isClosed =
+  Math.hypot(ring[0]![0] - ring.at(-1)![0], ring[0]![1] - ring.at(-1)![1]) < 1e-6;
+  const pts = isClosed ? ring.slice(0, -1) : [...ring];
 export function simplifyClosedRing(
   points: readonly ConstructionPosition[],
   geometryFor: (fromIndex: number, toIndex: number) => ConstructionEdgeGeometry | undefined,

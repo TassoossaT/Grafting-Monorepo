@@ -6128,6 +6128,12 @@ which entry a position belonged to. Read fresh for each candidate pair
 rather than cached, since dropping a vertex changes which pairs are
 adjacent.
 
+### `function vtt.ring-simplify.simplifyPolygonRdp(ring: readonly (readonly [number, number])[], epsilon: number): (readonly [number, number])[]`
+
+Simplifies a closed planar ring using the Ramer-Douglas-Peucker (RDP) algorithm.
+Drops vertices that deviate from the chord by less than `epsilon` meters,
+dramatically reducing vertex and edge count while preserving the visual curve.
+
 ### `interface vtt.stroke-fitting.FitOptions`
 
 Arc fitting remains local legacy behavior; B?zier interpretation is owned by Rust.

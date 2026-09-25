@@ -169,9 +169,14 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGes
 
       if (isWidthDrag && resolvedCurve) {
         const near = ctx.runtime.curveBatch({ tolerance: 0.025, commands: [{ kind: "nearest", curve: resolvedCurve, point: [target.x, target.y, target.z] }] })[0];
-        if (near?.point) {
-          const dist = Math.hypot(target.x - near.point[0], target.z - near.point[2]);
-          currentWidth = Math.max(0.5, Math.round(dist * 2 * 4) / 4);
+        if (near && near.parameter !== null && near.parameter !== undefined) {
+          const t = Math.max(0.000001, Math.min(0.999999, near.parameter));
+          const ev = ctx.runtime.curveBatch({ tolerance: 0.025, commands: [{ kind: "split", curve: resolvedCurve, t }] })[0];
+          const pt = ev?.curves[0]?.points[3];
+          if (pt) {
+            const dist = Math.hypot(target.x - pt[0], target.z - pt[2]);
+            currentWidth = Math.max(0.5, Math.round(dist * 2 * 4) / 4);
+          }
         }
       }
 
