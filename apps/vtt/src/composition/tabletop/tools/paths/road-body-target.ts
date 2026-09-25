@@ -2,6 +2,7 @@ import { curveEdgesOf, curvePick, curvePickId, structureTypeFor } from "../../..
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import type { PointerSample, ToolContext } from "../core/tool-context.ts";
 import type { CurveGestureOptions } from "../core/curve-edit-gesture.ts";
+import { createSnapMeshPreview } from "./road-preview-mesh.ts";
 
 /** Project a road-body pick onto its spine using the canonical curve query. */
 export function roadBodyTarget(ctx: ToolContext,sample: PointerSample): {sample:PointerSample;options:CurveGestureOptions}|undefined {
@@ -101,10 +102,5 @@ function acquireRoadSnap(ctx: ToolContext, sample: PointerSample): RoadSnapTarge
 /** Highlight the exact prospective junction without changing the graph. */
 export function showRoadSnap(ctx: ToolContext, target?: PointerSample): void {
   if (!target) { snapLocks.delete(ctx.runtime); ctx.runtime.clearPreview("road-snap"); return; }
-  const { x, y, z } = target.point;
-  const r = 0.35, h = y + 0.035;
-  ctx.runtime.showPreview({ kind: "segments", color: 0x38bdf8, opacity: 1,
-    positions: Float32Array.from([x-r,h,z, x,h,z+r, x,h,z+r, x+r,h,z, x+r,h,z, x,h,z-r, x,h,z-r, x-r,h,z,
-      x-r*2,h,z, x+r*2,h,z, x,h,z-r*2, x,h,z+r*2]),
-  }, "road-snap");
+  ctx.runtime.showPreview(createSnapMeshPreview(target.point), "road-snap");
 }

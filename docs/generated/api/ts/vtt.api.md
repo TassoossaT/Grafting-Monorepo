@@ -2179,6 +2179,58 @@ Keep the displayed position and edge parameter until the pointer exits the wider
 
 Highlight the exact prospective junction without changing the graph.
 
+### `interface vtt.road-preview-mesh.RoadMeshPreviewOptions`
+
+### `property vtt.road-preview-mesh.RoadMeshPreviewOptions.anchors: readonly ConstructionPosition[]`
+
+### `property vtt.road-preview-mesh.RoadMeshPreviewOptions.bedWidth: number`
+
+### `property vtt.road-preview-mesh.RoadMeshPreviewOptions.color?: number`
+
+### `property vtt.road-preview-mesh.RoadMeshPreviewOptions.cursor?: ConstructionPosition`
+
+### `property vtt.road-preview-mesh.RoadMeshPreviewOptions.fallbackPoints?: readonly ConstructionPosition[]`
+
+### `property vtt.road-preview-mesh.RoadMeshPreviewOptions.opacity?: number`
+
+### `property vtt.road-preview-mesh.RoadMeshPreviewOptions.ribbons?: readonly { ribbon: { outer: readonly (readonly [number, number, number])[] } | null }[]`
+
+### `variable vtt.road-preview-mesh.NODE_DISK_ELEVATION: 0.055`
+
+### `variable vtt.road-preview-mesh.PREVIEW_ELEVATION: 0.05`
+
+### `variable vtt.road-preview-mesh.ROAD_ERROR_COLOR: 16281969`
+
+### `variable vtt.road-preview-mesh.ROAD_ERROR_OPACITY: 0.6`
+
+### `variable vtt.road-preview-mesh.ROAD_PREVIEW_COLOR: 3718648`
+
+### `variable vtt.road-preview-mesh.ROAD_PREVIEW_OPACITY: 0.65`
+
+### `variable vtt.road-preview-mesh.SNAP_DISK_COLOR: 440020`
+
+### `variable vtt.road-preview-mesh.SNAP_DISK_OPACITY: 0.85`
+
+### `function vtt.road-preview-mesh.appendNodeDisk(positions: number[], indices: number[], center: ConstructionPosition, radius: number, elevation: number, segments: number): void`
+
+Append a filled circular disk at a specific anchor node or cursor position.
+
+### `function vtt.road-preview-mesh.appendRibbonQuads(positions: number[], indices: number[], outer: readonly (readonly [number, number, number])[], elevation: number): void`
+
+Append triangulated quad strips for a ribbon outline computed by graph-core.
+
+### `function vtt.road-preview-mesh.appendStraightQuads(positions: number[], indices: number[], points: readonly ConstructionPosition[], halfWidth: number, elevation: number): void`
+
+Fallback straight quads connecting consecutive points when curve fitting is unavailable.
+
+### `function vtt.road-preview-mesh.createRoadMeshPreview(options: RoadMeshPreviewOptions): RenderPreviewDescriptor`
+
+Build a solid translucent 3D mesh preview for a road, including ribbon quads and anchor disks.
+
+### `function vtt.road-preview-mesh.createSnapMeshPreview(target: ConstructionPosition, radius: number): RenderPreviewDescriptor`
+
+Build a glowing circular snap preview mesh at the target junction location.
+
 ### `interface vtt.platform-contour-merge.DirectedContourEdge`
 
 Replaces the analytic curved-boolean engine platform extend/cut used to

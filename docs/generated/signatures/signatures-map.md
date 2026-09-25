@@ -4191,12 +4191,58 @@ export function roadSnapIsCurrent(ctx: ToolContext, target: RoadSnapTarget): boo
   }
 export function showRoadSnap(ctx: ToolContext, target?: PointerSample): void {
   if (!target) { snapLocks.delete(ctx.runtime); ctx.runtime.clearPreview("road-snap"); return; }
-  const { x, y, z } = target.point;
-  const r = 0.35, h = y + 0.035;
-  ctx.runtime.showPreview({ kind: "segments", color: 0x38bdf8, opacity: 1,
-  positions: Float32Array.from([x-r,h,z, x,h,z+r, x,h,z+r, x+r,h,z, x+r,h,z, x,h,z-r, x,h,z-r, x-r,h,z,
-  x-r*2,h,z, x+r*2,h,z, x,h,z-r*2, x,h,z+r*2]),
-  }, "road-snap");
+  ctx.runtime.showPreview(createSnapMeshPreview(target.point), "road-snap");
+
+// src/composition/tabletop/tools/paths/road-preview-mesh.ts
+export const PREVIEW_ELEVATION = 0.05;
+export const NODE_DISK_ELEVATION = 0.055;
+export const ROAD_PREVIEW_COLOR = 0x38bdf8;
+export const ROAD_PREVIEW_OPACITY = 0.65;
+export const ROAD_ERROR_COLOR = 0xf87171;
+export const ROAD_ERROR_OPACITY = 0.6;
+export const SNAP_DISK_COLOR = 0x06b6d4;
+export const SNAP_DISK_OPACITY = 0.85;
+export interface RoadMeshPreviewOptions {
+  readonly ribbons?: readonly { readonly ribbon: { readonly outer: readonly (readonly [number, number, number])[] } | null }[];
+  readonly fallbackPoints?: readonly ConstructionPosition[];
+  readonly anchors: readonly ConstructionPosition[];
+  readonly cursor?: ConstructionPosition;
+  readonly bedWidth: number;
+  readonly color?: number;
+  readonly opacity?: number;
+export function appendRibbonQuads(
+  positions: number[],
+  indices: number[],
+  outer: readonly (readonly [number, number, number])[],
+  elevation = PREVIEW_ELEVATION,
+  ): void {
+  if (outer.length < 4 || outer.length % 2 !== 0) return;
+  const n = outer.length / 2;
+export function appendStraightQuads(
+  positions: number[],
+  indices: number[],
+  points: readonly ConstructionPosition[],
+  halfWidth: number,
+  elevation = PREVIEW_ELEVATION,
+  ): void {
+  for (let i = 0; i + 1 < points.length; i++) {
+export function appendNodeDisk(
+  positions: number[],
+  indices: number[],
+  center: ConstructionPosition,
+  radius: number,
+  elevation = NODE_DISK_ELEVATION,
+  segments = 24,
+  ): void {
+export function createRoadMeshPreview(options: RoadMeshPreviewOptions): RenderPreviewDescriptor {
+  const positions: number[] = [];
+  const indices: number[] = [];
+  const halfWidth = Math.max(0.1, options.bedWidth / 2);
+export function createSnapMeshPreview(target: ConstructionPosition, radius = 0.45): RenderPreviewDescriptor {
+  const positions: number[] = [];
+  const indices: number[] = [];
+  // Elevated disk with outer ring for clear junction target visual
+  appendNodeDisk(positions, indices, target, radius, NODE_DISK_ELEVATION + 0.01, 24);
 
 // src/composition/tabletop/tools/platform/platform-contour-merge.ts
 export interface DirectedContourEdge {

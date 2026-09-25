@@ -6,6 +6,7 @@ import { scopedToolId, type ConstructionTool, type ToolContext, type PointerSamp
 import { beginCurveGesture, type CurveGesture, type CurveGestureOptions } from "../core/curve-edit-gesture.ts";
 import { pathStrokeTool } from "./path-stroke-tool.ts";
 import { roadBodyTarget, roadSnapTarget, roadSnapIsCurrent, showRoadSnap, type RoadSnapTarget } from "./road-body-target.ts";
+import { createRoadMeshPreview, ROAD_PREVIEW_COLOR, ROAD_PREVIEW_OPACITY, ROAD_ERROR_COLOR, ROAD_ERROR_OPACITY } from "./road-preview-mesh.ts";
 
 const CHANNEL = "road-points";
 const xyz = (p: ConstructionPosition) => [p.x, p.y, p.z] as const;
@@ -25,26 +26,38 @@ function curves(ctx: ToolContext, points: readonly ConstructionPosition[]): read
 }
 function preview(ctx: ToolContext, draft: Draft, cursor?: ConstructionPosition): void {
   const points = cursor && !equal(cursor, draft.points.at(-1)!) ? [...draft.points, cursor] : draft.points;
-  const lines: number[] = [];
-  let color = 0x4ade80;
   try {
     if (points.length > 1) {
       const path = curves(ctx, points);
-      const sampled = ctx.runtime.curveBatch({ tolerance: 0.025, commands: [{ kind: "sample", curves: path }] })[0]!;
-      for (const span of sampled.samples) for (let i = 1; i < span.length; i++) lines.push(...span[i - 1]!.position, ...span[i]!.position);
       const ribbons = ctx.runtime.curveBatch({ tolerance: 0.05, commands: path.map(curve => ({ kind: "ribbon" as const, curve, offsets: [-draft.params.bedWidth / 2, draft.params.bedWidth / 2] as const })) });
-      for (const ribbon of ribbons) {
-        const outline = ribbon.ribbon!.outer;
-        for (let i = 0; i < outline.length; i++) lines.push(...outline[i]!, ...outline[(i + 1) % outline.length]!);
-      }
+      ctx.runtime.showPreview(createRoadMeshPreview({
+        ribbons,
+        anchors: draft.points,
+        cursor,
+        bedWidth: draft.params.bedWidth,
+        color: ROAD_PREVIEW_COLOR,
+        opacity: ROAD_PREVIEW_OPACITY,
+      }), CHANNEL);
+      return;
     }
   } catch {
-    color = 0xf87171;
-    lines.length = 0;
-    for (let i = 1; i < points.length; i++) lines.push(...xyz(points[i - 1]!), ...xyz(points[i]!));
+    ctx.runtime.showPreview(createRoadMeshPreview({
+      fallbackPoints: points,
+      anchors: draft.points,
+      cursor,
+      bedWidth: draft.params.bedWidth,
+      color: ROAD_ERROR_COLOR,
+      opacity: ROAD_ERROR_OPACITY,
+    }), CHANNEL);
+    return;
   }
-  for (const p of draft.points) lines.push(p.x - 0.12, p.y + 0.02, p.z, p.x + 0.12, p.y + 0.02, p.z, p.x, p.y + 0.02, p.z - 0.12, p.x, p.y + 0.02, p.z + 0.12);
-  ctx.runtime.showPreview({ kind: "segments", positions: Float32Array.from(lines), color, opacity: 0.95 }, CHANNEL);
+  ctx.runtime.showPreview(createRoadMeshPreview({
+    anchors: draft.points,
+    cursor,
+    bedWidth: draft.params.bedWidth,
+    color: ROAD_PREVIEW_COLOR,
+    opacity: ROAD_PREVIEW_OPACITY,
+  }), CHANNEL);
 }
 function safely(ctx: ToolContext, work: () => void): void {
   try { work(); } catch (error) {
