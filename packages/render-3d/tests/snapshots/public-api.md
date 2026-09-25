@@ -75,6 +75,108 @@ export declare const IDENTITY_TRANSFORM: Required<Pick<Transform, "position" | "
     readonly scale: number;
 };
 
+/** A caller-owned anchor and its two control positions. Point values must be immutable. */
+export interface CurvePenAnchor<P> {
+    /** Anchor position. */
+    readonly point: P;
+    /** Incoming control position. */
+    readonly incoming: P;
+    /** Outgoing control position. */
+    readonly outgoing: P;
+}
+/** Immutable authoring draft; no confirmed scene data is owned by the controller. */
+export interface CurvePenDraft<P> {
+    /** Ordered anchors. */
+    readonly anchors: readonly CurvePenAnchor<P>[];
+    /** Whether the consumer should connect the final anchor to the first. */
+    readonly closed: boolean;
+}
+/** Geometry and interaction policies supplied by the consumer. */
+export interface CurvePenOptions<P> {
+    /** Constructs an anchor; an omitted drag means a plain click. */
+    readonly anchor: (point: P, drag?: P) => CurvePenAnchor<P>;
+    /** Determines whether a pointer position has changed. */
+    readonly equal: (a: P, b: P) => boolean;
+    /** Determines whether a released point requests closing the draft. */
+    readonly closes: (first: P, current: P) => boolean;
+    /** Receives temporary presentation only. */
+    readonly onPreview: (draft: CurvePenDraft<P>) => void;
+    /** Accepts a complete draft synchronously; false or a thrown error preserves it for retry. */
+    readonly onFinish: (draft: CurvePenDraft<P>) => boolean;
+}
+/** Renderer-neutral pen lifecycle. Bind pointer capture and keys in the consumer. */
+export interface CurvePen<P> {
+    /** Arms placement; never confirms scene data. */
+    begin(point: P): void;
+    /** Updates only the pending anchor. */
+    move(point: P): void;
+    /** Uses the final pointer sample and stores a draft anchor, or closes on release. */
+    end(point: P): void;
+    /** Displays an extension without changing stored anchors. */
+    hover(point: P): void;
+    /** Confirms once, when released and sufficiently populated; rejected drafts remain editable. */
+    finish(closed?: boolean): boolean;
+    /** Discards every pending anchor without confirmation. */
+    cancel(): void;
+    /** Discards a pending placement, otherwise removes the last draft anchor. */
+    removeLast(): void;
+    /** Returns a frozen snapshot; caller-owned point values are not cloned. */
+    snapshot(): CurvePenDraft<P>;
+}
+/** Creates an isolated pen controller without geometry, renderer, keyboard or style policy. */
+export declare function createCurvePen<P>(options: CurvePenOptions<P>): CurvePen<P>;
+
+/** A caller-owned anchor and its two control positions. Point values must be immutable. */
+export interface CurvePenAnchor<P> {
+    /** Anchor position. */
+    readonly point: P;
+    /** Incoming control position. */
+    readonly incoming: P;
+    /** Outgoing control position. */
+    readonly outgoing: P;
+}
+/** Immutable authoring draft; no confirmed scene data is owned by the controller. */
+export interface CurvePenDraft<P> {
+    /** Ordered anchors. */
+    readonly anchors: readonly CurvePenAnchor<P>[];
+    /** Whether the consumer should connect the final anchor to the first. */
+    readonly closed: boolean;
+}
+/** Geometry and interaction policies supplied by the consumer. */
+export interface CurvePenOptions<P> {
+    /** Constructs an anchor; an omitted drag means a plain click. */
+    readonly anchor: (point: P, drag?: P) => CurvePenAnchor<P>;
+    /** Determines whether a pointer position has changed. */
+    readonly equal: (a: P, b: P) => boolean;
+    /** Determines whether a released point requests closing the draft. */
+    readonly closes: (first: P, current: P) => boolean;
+    /** Receives temporary presentation only. */
+    readonly onPreview: (draft: CurvePenDraft<P>) => void;
+    /** Accepts a complete draft synchronously; false or a thrown error preserves it for retry. */
+    readonly onFinish: (draft: CurvePenDraft<P>) => boolean;
+}
+/** Renderer-neutral pen lifecycle. Bind pointer capture and keys in the consumer. */
+export interface CurvePen<P> {
+    /** Arms placement; never confirms scene data. */
+    begin(point: P): void;
+    /** Updates only the pending anchor. */
+    move(point: P): void;
+    /** Uses the final pointer sample and stores a draft anchor, or closes on release. */
+    end(point: P): void;
+    /** Displays an extension without changing stored anchors. */
+    hover(point: P): void;
+    /** Confirms once, when released and sufficiently populated; rejected drafts remain editable. */
+    finish(closed?: boolean): boolean;
+    /** Discards every pending anchor without confirmation. */
+    cancel(): void;
+    /** Discards a pending placement, otherwise removes the last draft anchor. */
+    removeLast(): void;
+    /** Returns a frozen snapshot; caller-owned point values are not cloned. */
+    snapshot(): CurvePenDraft<P>;
+}
+/** Creates an isolated pen controller without geometry, renderer, keyboard or style policy. */
+export declare function createCurvePen<P>(options: CurvePenOptions<P>): CurvePen<P>;
+
 /**
  * The engine's time authority.
  *
@@ -691,6 +793,23 @@ export interface ViewOptions {
  * so the number of views is bounded by memory rather than by the browser's cap
  * on live contexts, which is silently enforced by dropping the oldest.
  */
+export interface PointManipulator {
+    /** Stable consumer identity of the point being edited. */
+    readonly id: string;
+    /** Confirmed world position; preview remains local until the consumer commits. */
+    readonly position: {
+        readonly x: number;
+        readonly y: number;
+        readonly z: number;
+    };
+    /** World axes available to the translation helper. */
+    readonly axes: readonly ("x" | "y" | "z")[];
+    /** Screen-relative size of the helper, supplied by the consumer. */
+    readonly size: number;
+    /** Gesture lifecycle. End commits an intention; cancel leaves confirmed state intact. */
+    readonly onChange: (phase: "start" | "move" | "end" | "cancel", position: PointManipulator["position"]) => void;
+}
+/** One independently framed and invalidated presentation of the shared scene. */
 export interface View {
     /** This view's identity, as supplied or generated. */
     readonly id: ViewId;
@@ -715,6 +834,8 @@ export interface View {
     setActive(active: boolean): void;
     /** Resolves a pointer position in the view's CSS pixels to what it hit. */
     pick(x: number, y: number): PickResult | undefined;
+    /** A view-local translation helper. Undefined clears selection and cancels dragging. */
+    setPointManipulator(target: PointManipulator | undefined): void;
     /** Captures the last drawn frame as a data URL. */
     capture(mimeType?: string): string;
     /** Releases the view's surface. The engine and its other views are unaffected. */

@@ -378,7 +378,13 @@ fn surface_mesh_with(
     let surface = surfaces.region_surface(&region_id).ok_or_else(|| {
         MeshFailure::Unknown(format!("unknown analytic region surface {region_id}"))
     })?;
-    let meshes = region_meshes(graph, surfaces, topology, &region_id, region, fill, cutting)
+    let surface_type_str = surface.surface_type().as_str();
+    let applicable_fill = if surface_type_str.starts_with("path") || surface_type_str.starts_with("slope") {
+        fill
+    } else {
+        None
+    };
+    let meshes = region_meshes(graph, surfaces, topology, &region_id, region, applicable_fill, cutting)
         .filter(|meshes| !meshes.is_empty())
         .ok_or_else(|| {
             MeshFailure::Unmeshable(format!("no mesh derivable for analytic region {region_id}"))

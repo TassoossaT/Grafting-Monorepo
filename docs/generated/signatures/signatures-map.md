@@ -65,6 +65,15 @@ pub struct SurfaceMeshesRequest
 pub fn all_surface_meshes(
 pub fn surface_mesh(
 pub fn surface_meshes(
+pub struct FailedSurfaceMeshDto
+pub struct SurfaceMeshesReportDto
+pub fn surface_meshes_report(
+
+// src/panel_runs.rs
+pub struct PanelRunRequest
+pub struct RunPanelDto
+pub struct PanelRunDto
+pub fn panel_run_of(
 
 // src/patch_replacement.rs
 pub struct ApplyPatchReplacementRequest
@@ -73,6 +82,27 @@ pub struct GraphPatchNode
 pub struct GraphPatchEdge
 pub struct ReplacedState
 pub fn apply_patch_replacement(
+
+// src/pins.rs
+pub struct Pin
+pub type Pins = BTreeMap<NodeId, Pin>;
+pub struct PinnedCurve
+pub type PinnedCurves = BTreeMap<ContourEdgeId, PinnedCurve>;
+pub struct PinEdgeCurveRequest
+pub struct HostOutlineRequest
+pub struct HostOutlineDto
+pub struct HostCurveDto
+pub struct SurfaceCapability
+pub type SurfaceCapabilities = HashMap<String, SurfaceCapability>;
+pub struct SurfaceCapabilityDto
+pub struct SetSurfaceCapabilitiesRequest
+pub fn capability_table(request: SetSurfaceCapabilitiesRequest) -> SurfaceCapabilities
+pub struct PinDto
+pub struct PinNodesRequest
+
+// src/region_annotations.rs
+pub struct RegionAnnotations
+pub fn retain_live(
 
 // src/region_editing.rs
 pub struct OrientedEdgeUseDto
@@ -94,6 +124,11 @@ pub fn apply_move_region(
 // src/region_overlay.rs
 pub struct ApplyRegionOverlayRequest
 pub fn apply_region_overlay(
+
+// src/region_props.rs
+pub type RegionProps = BTreeMap<RegionId, Map<String, Value>>;
+pub struct SetRegionPropsRequest
+pub fn set_region_props(
 
 // src/session.rs
 pub struct ConstructionSession
@@ -384,21 +419,42 @@ pub fn debug_memory() -> JsValue
 ```rust
 // src/frame.rs
 pub enum UnrollFrame
+pub fn lattice_step(&self) -> Option<f32>
 pub fn of(geometry: &ContourGeometry, start: [f32; 3], end: [f32; 3]) -> Option<Self>
 pub fn unroll(&self, point: [f32; 3]) -> [f32; 2]
 pub fn roll(&self, unrolled: [f32; 2]) -> [f32; 3]
 pub fn normal_at(&self, point: [f32; 3]) -> [f32; 3]
 
+// src/host.rs
+pub struct HostFace
+pub struct PanelSpan
+pub fn of(
+pub fn length(&self) -> f32
+pub fn sides(&self) -> &[ContourEdgeId; 2]
+pub fn of(
+pub fn unrolled_at(&self, u: f64, v: f64) -> [f32; 2]
+pub fn resolve(&self, u: f64, v: f64) -> [f32; 3]
+pub fn uv_of_unrolled(&self, [travel, height]: [f32; 2]) -> [f64; 2]
+pub fn project(&self, point: [f32; 3]) -> [f64; 2]
+pub fn trace(
+pub const HOST_TRACE_TOLERANCE: f32 = 0.002;
+pub fn upright_face_mesh_cut(
+pub fn mesh_on_host(
+
 // src/lib.rs
 pub mod frame;
+pub mod host;
 pub mod math;
 pub mod planar;
 pub mod profile;
 pub mod refine;
+pub mod run;
+pub mod sanitize;
 pub mod tessellation;
 pub mod types;
 pub mod upright;
 pub fn triangulate_region(
+pub fn triangulate_region_cut(
 pub fn triangulate_region_with(
 
 // src/math.rs
@@ -425,8 +481,18 @@ pub fn field_owns_loops<'a>(
 pub fn needs_interior(outer: &[[f32; 3]], fill: &PlanarFill<'_>) -> bool
 pub fn refined_planar_mesh(
 
+// src/run.rs
+pub struct RunPanel
+pub struct PanelRun
+pub fn panel_run(
+
+// src/sanitize.rs
+pub fn any_self_crossing<'a>(rings: impl IntoIterator<Item = &'a Vec<[f32; 3]>>) -> bool
+pub fn sanitized_planar_meshes(
+
 // src/tessellation.rs
 pub fn traversed_edge(topology: &ContourTopology, use_: &OrientedEdgeUse) -> Option<ContourEdge>
+pub fn tessellate_edge(
 pub fn tessellate_contour_loop(
 
 // src/types.rs
@@ -2434,13 +2500,13 @@ export const easings: Readonly<Record<"linear" | "easeIn" | "easeOut" | "easeInO
 
 // src/backend/contract.ts
 export interface BackendSurface {
+  setPointManipulator(target: PointManipulator | undefined, camera: CameraDescriptor, invalidate: () => void): void;
   /** Resizes the presentation target. Cheap; never rebuilds scene content. */
   resize(width: number, height: number): void;
   /** Encodes the last drawn content. */
   toDataURL(mimeType: string): string;
   /** Detaches the target from the document. */
   destroy(): void;
-  }
 export interface RenderBackend {
   /** Whether the graphics context is currently usable. */
   readonly available: boolean;
@@ -2470,6 +2536,15 @@ export interface ThreeBackendOptions {
   }
 export function createThreeBackend(options: ThreeBackendOptions = {}): RenderBackend {
   const renderScene = new THREE.Scene();
+
+// src/backend/three/point-manipulator.ts
+export function createPointManipulator(
+  camera: Camera, element: HTMLCanvasElement, scene: Scene,
+  initial: PointManipulator, invalidate: () => void,
+  ) {
+  // Manual pointer forwarding lets a hit consume input before the product's
+  // tool/camera listeners. connect() would install competing bubble listeners.
+  const controls = new TransformControls(camera);
 
 // src/camera/orbit.ts
 export interface OrbitState {
@@ -2706,6 +2781,11 @@ export interface ViewOptions {
   /** How this view projects the world. */
   readonly camera: CameraDescriptor;
   /**
+export interface PointManipulator {
+  /** Stable consumer identity of the point being edited. */
+  readonly id: string;
+  /** Confirmed world position; preview remains local until the consumer commits. */
+  readonly position: { readonly x: number; readonly y: number; readonly z: number };
 export interface View {
   /** This view's identity, as supplied or generated. */
   readonly id: ViewId;
@@ -2772,6 +2852,7 @@ export function createEngine(options: EngineOptions = {}): RenderEngine {
 
 // src/index.ts
 export type { Euler, Transform, Vec3 } from "./contracts/space.js";
+export type { CurvePen, CurvePenAnchor, CurvePenDraft, CurvePenOptions } from "./interaction/curve-pen.js";
 export type { Clock, ClockMode, ClockTick } from "./contracts/clock.js";
 export type { ClockOptions } from "./clock/create-clock.js";
 export type {
@@ -2798,7 +2879,7 @@ export type {
   TrackId,
   } from "./contracts/animation.js";
   export { createAnimator } from "./animation/create-animator.js";
-export type { CameraDescriptor, PickResult, View, ViewId, ViewOptions } from "./contracts/view.js";
+export type { CameraDescriptor, PickResult, PointManipulator, View, ViewId, ViewOptions } from "./contracts/view.js";
 export type {
   ClipPlaneDescriptor,
   EngineOptions,
@@ -2811,6 +2892,40 @@ export type { Invalidation, InvalidationTracker } from "./invalidation/create-in
 export type { HeightfieldParams } from "./visual/heightfield-visual.js";
 export type { GridParams } from "./visual/grid-visual.js";
 export type { OrbitOptions, OrbitState, OrbitableView } from "./camera/orbit.js";
+
+// src/interaction/curve-pen.ts
+export interface CurvePenAnchor<P> {
+  /** Anchor position. */
+  readonly point: P;
+  /** Incoming control position. */
+  readonly incoming: P;
+  /** Outgoing control position. */
+  readonly outgoing: P;
+  }
+export interface CurvePenDraft<P> {
+  /** Ordered anchors. */
+  readonly anchors: readonly CurvePenAnchor<P>[];
+  /** Whether the consumer should connect the final anchor to the first. */
+  readonly closed: boolean;
+  }
+export interface CurvePenOptions<P> {
+  /** Constructs an anchor; an omitted drag means a plain click. */
+  readonly anchor: (point: P, drag?: P) => CurvePenAnchor<P>;
+  /** Determines whether a pointer position has changed. */
+  readonly equal: (a: P, b: P) => boolean;
+  /** Determines whether a released point requests closing the draft. */
+  readonly closes: (first: P, current: P) => boolean;
+  /** Receives temporary presentation only. */
+export interface CurvePen<P> {
+  /** Arms placement; never confirms scene data. */
+  begin(point: P): void;
+  /** Updates only the pending anchor. */
+  move(point: P): void;
+  /** Uses the final pointer sample and stores a draft anchor, or closes on release. */
+  end(point: P): void;
+  /** Displays an extension without changing stored anchors. */
+export function createCurvePen<P>(options: CurvePenOptions<P>): CurvePen<P> {
+  type State = { kind: "ready" } | { kind: "placing"; origin: P; current: P; closing: boolean } | { kind: "committing" };
 
 // src/invalidation/create-invalidation.ts
 export interface Invalidation {
@@ -3289,6 +3404,9 @@ export function constructionPreviewSceneItem(
   layer: CONSTRUCTION_PREVIEW_LAYER_ID,
   visual: {
 
+// src/adapters/rendering/index.ts
+export type { CurvePen, CurvePenAnchor, CurvePenDraft } from "@grafting/render-3d";
+
 // src/adapters/rendering/map-chunk-batching.ts
 export function chunkKeyForSurface(surface: SurfaceMeshResult, resolveCovering: CoveringResolver): string {
   const covering = resolveCovering(surface.surfaceType, surface.physical);
@@ -3367,6 +3485,8 @@ export function createMarkerTexture(): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
 export function createNodeHandleTexture(): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
+export function createRoadBranchTexture(): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
 
 // src/adapters/rendering/node-handle-scene-item.ts
 export const NODE_HANDLE_LAYER_ID = "construction-handles";
@@ -3437,6 +3557,24 @@ export function createTabletopRuntime(
   input: CreateTabletopRuntimeInput,
   ): TabletopRuntime {
   const tableId = input.tableId.trim();
+
+// src/composition/tabletop/effects/change-area.ts
+export const REALLY_MOVED = 0.05;
+export interface ChangeArea {
+  readonly claimed: PlanarArea;
+  readonly vacated: PlanarArea;
+  }
+export function changeAreaOf(port: Partial<PlanarPort>, change: Pick<ShapeChange, "before" | "after">): ChangeArea | undefined {
+  if (typeof port.planarBoolean !== "function") return undefined;
+  const planar = port as PlanarPort;
+  const was = unionOf(planar, areaPolygonsOf(change.before));
+export function largestOuterRing(area: PlanarArea): readonly (readonly [number, number])[] | undefined {
+  let best: readonly (readonly [number, number])[] | undefined;
+  let bestArea = 0;
+  for (const piece of area) {
+  const ring = piece[0];
+  if (ring === undefined || ring.length < 3) continue;
+  const size = Math.abs(twiceArea(ring));
 
 // src/composition/tabletop/effects/effect-commit.ts
 export interface EffectCommitRuntime extends TabletopReactionRuntime {
@@ -3541,7 +3679,7 @@ export type {
   RegionEditHistoryEntry,
   } from "../../features/edit-construction/index.ts";
 export type { CameraControlHandle, CameraControlOptions, ConstructionPosition, RenderViewId } from "@/ports";
-export type { ConstructionToolId, ToolParamsByTool, ToolParamsFor } from "../../features/edit-construction/index.ts";
+export type { ConstructionToolId, OpeningParams, StructureEditParams, ToolParamsByTool, ToolParamsFor } from "../../features/edit-construction/index.ts";
 export type { ConstructionPointerHandlers, UseConstructionPointerOptions } from "./use-construction-pointer.ts";
 export type { ConstructionToolFeedback } from "./tools/index.ts";
 
@@ -3574,8 +3712,8 @@ export function commitPathCloudIntent(
   ctx: ToolContext,
   effect: PathBrushEffect,
   tolerance: number,
-  ): void {
-  timeCommit("rua", () => commitUntimed(ctx, effect, tolerance));
+  ): boolean {
+  return timeCommit("rua", () => commitUntimed(ctx, effect, tolerance));
 
 // src/composition/tabletop/tabletop-runtime.ts
 export type TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed";
@@ -3948,9 +4086,22 @@ export interface CurveGesture {
   commit(): void;
   cancel(): void;
   }
-export function beginCurveGesture(ctx: ToolContext, sample: PointerSample, params?: ToolParamsFor<"edit-region">): CurveGesture | undefined {
-  if (!sample.nodeId) return undefined;
-  const snapshot = ctx.runtime.getGraphSnapshot();
+export type CurveGestureOptions = StructureEditParams & {
+  /** A scene manipulator supplies an authoritative XYZ target, unlike a ground pointer. */
+  readonly spatialTarget?: boolean;
+  readonly parameter?: number;
+  readonly allowShapeChange?: boolean;
+  readonly insertOnClick?: boolean;
+  readonly pointerOrigin?: ConstructionPosition;
+  readonly dragThreshold?: number;
+export function beginCurveGesture(
+  ctx: ToolContext,
+  sample: PointerSample,
+  ownsTypeOrParams?: ((surfaceType: string) => boolean) | CurveGestureOptions,
+  params?: CurveGestureOptions,
+  ): CurveGesture | undefined {
+  const ownsType = typeof ownsTypeOrParams === "function" ? ownsTypeOrParams : () => true;
+  const actualParams = typeof ownsTypeOrParams === "function" ? params : ownsTypeOrParams;
 
 // src/composition/tabletop/tools/core/edge-overlay.ts
 export const EDGE_ROLE_COLORS: Readonly<Record<string, number>> = Object.freeze({
@@ -3982,15 +4133,6 @@ export function edgeOverlayOf(
 export function edgeOverlayDescriptor(group: EdgeOverlayGroup): PreviewDescriptor {
   return { kind: "segments", positions: group.positions, color: group.color, opacity: 1 };
 
-// src/composition/tabletop/tools/core/edit-region-tool.ts
-export const editRegionTool: ConstructionTool<"edit-region"> = {
-  id: "edit-region",
-  defaultParams: () => ({ mode: "shape" }),
-
-  onPointerDown(ctx: ToolContext, sample: PointerSample, params): void {
-  active = undefined;
-  curveGesture?.cancel();
-
 // src/composition/tabletop/tools/core/navigate-tool.ts
 export const navigateTool: ConstructionTool<"navigate"> = {
   id: "navigate",
@@ -4000,21 +4142,52 @@ export const navigateTool: ConstructionTool<"navigate"> = {
 // src/composition/tabletop/tools/core/stroke-fitting.ts
 export type { FittedEdge, FitOptions } from "../../../../features/edit-construction/index.ts";
 
+// src/composition/tabletop/tools/core/structure-edit-behavior.ts
+export interface StructureEditOptions {
+  /** Only a vertex/edge/body/handle whose topology's surface type this accepts is grabbed; anything else falls through to the wrapped tool's own creation gesture. */
+  readonly ownsType: (surfaceType: string) => boolean;
+  }
+export interface StructureEditBehavior {
+  /** Tries to start an edit gesture on whatever `sample` landed on; `true` means the rest of this pointer gesture belongs to this behaviour, not the wrapped tool's own creation gesture. */
+  tryGrab(ctx: ToolContext, sample: PointerSample, editParams: StructureEditParams): boolean;
+  onPointerMove(ctx: ToolContext, gesture: ToolGesture, editParams: StructureEditParams): void;
+  onPointerUp(ctx: ToolContext, gesture?: ToolGesture): void;
+  onCancel(): void;
+  /** Whether a drag is currently under this behaviour's control. */
+  isActive(): boolean;
+export function createStructureEditBehavior(options: StructureEditOptions): StructureEditBehavior {
+  let active: ActiveDrag | undefined;
+  let curveGesture: ReturnType<typeof beginCurveGesture>;
+  let grabbedThisGesture = false;
+
+  function tryGrab(ctx: ToolContext, sample: PointerSample, editParams: StructureEditParams): boolean {
+  active = undefined;
+  curveGesture?.cancel();
+export function withStructureEditing<Id extends ConstructionToolId>(
+  tool: ConstructionTool<Id>,
+  options: StructureEditOptions,
+  ): ConstructionTool<Id> {
+  const behavior = createStructureEditBehavior(options);
+
 // src/composition/tabletop/tools/core/tool-context.ts
 export interface PointerSample {
-  readonly point: ConstructionPosition;
-  /** Screen coordinate used by explicit elevation gestures. */
-  readonly screenY?: number;
-  readonly screenX?: number;
-  readonly nodeId?: string;
-  readonly surfaceRef?: string;
-  }
+  readonly constructionAction?: { readonly kind: "branch"; readonly nodeId: string };
 export interface ToolGesture {
   readonly start: PointerSample;
   readonly current: PointerSample;
   /** Ordered samples accumulated by the dispatcher; preview-only until pointer release. */
   readonly samples: readonly PointerSample[];
   }
+export interface ReleasedGesture extends ToolGesture {
+  /** Whether the pointer travelled far enough to be a drag rather than a click -- decided once, by the dispatcher. */
+  readonly moved: boolean;
+  }
+export function gestureMoved(start: PointerSample, samples: readonly PointerSample[]): boolean {
+  return samples.some((sample) =>
+  sample.screenX !== undefined && sample.screenY !== undefined && start.screenX !== undefined && start.screenY !== undefined
+  ? Math.hypot(sample.screenX - start.screenX, sample.screenY - start.screenY) > CLICK_SLOP_PIXELS
+  : Math.hypot(sample.point.x - start.point.x, sample.point.y - start.point.y, sample.point.z - start.point.z) > CLICK_SLOP_WORLD,
+  );
 export interface ConstructionToolFeedback {
   readonly tone: "info" | "success" | "error";
   readonly message: string;
@@ -4030,12 +4203,12 @@ export interface ToolContext {
   * grid intersection by the time a tool sees it, and this only says so, so
 export interface ConstructionTool<Id extends ConstructionToolId> {
   readonly id: Id;
+  /** Presentation and sampling policy while this tool is active. */
+  readonly handlePresentation?: "spine-points";
+  readonly useGridSnap?: boolean;
   defaultParams(): ToolParamsFor<Id>;
   /** Opt in to a stationary drawing preview between gestures. */
-  readonly previewOnHover?: boolean;
-  /** The tool's not-yet-committed ghost for the current gesture (or stationary hover, when `gesture.start === gesture.current`). */
-  previewFor?(gesture: ToolGesture, params: ToolParamsFor<Id>, ctx: ToolContext): PreviewDescriptor | undefined;
-  /** Left-button press. Continuous tools (brushes, move-node) start their gesture here. */
+  readonly previewOnHover?: boolean | ((params: ToolParamsFor<Id>) => boolean);
 export function scopedToolId(ctx: ToolContext | string, domain: string, suffix?: string | number): string {
   const tableId = typeof ctx === "string" ? ctx : ctx.tableId;
   return suffix !== undefined ? `${tableId}:${domain}:${suffix}` : `${tableId}:${domain}`;
@@ -4070,41 +4243,178 @@ export function toolFor<Id extends ConstructionToolId>(id: Id): ConstructionTool
   return TOOL_REGISTRY[id];
   }
 
+// src/composition/tabletop/tools/openings/opening-shared.ts
+export const MARGIN = 0.15;
+export interface RunRect {
+  readonly s0: number;
+  readonly s1: number;
+  readonly v0: number;
+  readonly v1: number;
+  }
+export interface OpeningPiece {
+  readonly panel: RunPanelFrame;
+  readonly rect: HostRect;
+  readonly path: readonly OutlineSegment[];
+  }
+export interface RunFrame {
+  readonly panels: readonly RunPanelFrame[];
+  readonly closed: boolean;
+  readonly start: number;
+  readonly end: number;
+  panelOf(surfaceKey: ConstructionSurfaceKey): RunPanelFrame | undefined;
+  sOf(panel: RunPanelFrame, u: number): number;
+  /** Where `point` lands on the run; `hint` is tried first. */
+export function runFrame(runtime: RunRuntime, surfaceKey: ConstructionSurfaceKey): RunFrame | undefined {
+  let wire;
+  try {
+  wire = runtime.panelRun(surfaceKey);
+export function shapeOfGroup(pieces: readonly ConstructionRegionTopology[]): OpeningShape {
+  const carrier = pieces.find((piece) => piece.props !== undefined);
+export function settleRect(run: RunFrame, rect: RunRect, isDoor: boolean, keepWidth = true): RunRect | undefined {
+  const snapped = snapToSeams(run, rect, keepWidth);
+export function isDoorRect(rect: { readonly v0: number }): boolean {
+  return rect.v0 < 1e-6;
+  }
+export function hostBoxOf(region: ConstructionRegionTopology, hostSurfaceKey: ConstructionSurfaceKey): HostRect | undefined {
+  const ref = surfaceRefFromNodeSet(hostSurfaceKey);
+export function primaryHostOf(region: ConstructionRegionTopology): ConstructionSurfaceKey | undefined {
+  let best: { readonly key: ConstructionSurfaceKey; readonly count: number } | undefined;
+  for (const { hostSurfaceKey, nodeIds } of hostsOf(region).values()) {
+  if (best === undefined || nodeIds.length > best.count) best = { key: hostSurfaceKey, count: nodeIds.length };
+export function groupIdOf(region: ConstructionRegionTopology): string | undefined {
+  const group = region.props?.[GROUP_PROP];
+  return typeof group === "string" ? group : undefined;
+  }
+export function groupPieces(ctx: ToolContext, group: string): readonly ConstructionRegionTopology[] {
+  return ctx.runtime.getAllRegionTopologies().filter((candidate) => groupIdOf(candidate) === group);
+export function groupRunSpan(run: RunFrame, pieces: readonly ConstructionRegionTopology[]): RunRect | undefined {
+  const spans = pieces.flatMap((piece) => regionRunSpan(run, piece) ?? []).sort((a, b) => a.s0 - b.s0);
+export function overlapsOther(ctx: ToolContext, run: RunFrame, rect: RunRect, excluded: ReadonlySet<string> = new Set()): boolean {
+  const EPS = 1e-9;
+  const period = run.end - run.start;
+  const shifts = run.closed ? [-period, 0, period] : [0];
+  return ctx.runtime.getAllRegionTopologies().some((region) => {
+  if (!hasTrait(region.surfaceType, "cuts") || excluded.has(surfaceRefFromNodeSet(region.surfaceKey))) return false;
+  if (!region.nodes.some((node) => node.pin !== undefined && run.panelOf(node.pin.hostSurfaceKey) !== undefined)) return false;
+  const other = regionRunSpan(run, region);
+export function piecePolyline(piece: OpeningPiece, step: number): readonly (readonly [number, number])[] {
+  const { frame } = piece.panel;
+  const bends = bendsBetween(frame, piece.rect);
+
 // src/composition/tabletop/tools/openings/opening-tool.ts
 export const openingTool: ConstructionTool<"opening"> = {
   id: "opening",
   defaultParams: () => DEFAULT_TOOL_PARAMS.opening,
+  previewOnHover: true,
+  // Placement is read in the run's own frame, never off raw world X/Z, so
+  // the dispatcher's world-grid magnet must not round the pointer first.
+  snapsToSurface: true,
 
-  previewFor(gesture: ToolGesture, params: OpeningParams, ctx: ToolContext) {
-  const placed = resolvePlacement(ctx, gesture.current, params);
-
-// src/composition/tabletop/tools/openings/panel-rail.ts
-export interface PanelRail {
-  /** Rail length in world units -- the full run from one side of the panel to the other. */
-  readonly length: number;
-  readonly baseY: number;
-  readonly topY: number;
-  /** Where `point` sits along the rail, clamped to the panel. */
-  travelTo(point: ConstructionPosition): number;
-  /** The point `travel` along the rail, at height `y`. */
-export function panelRailOf(port: ContourPort, topology: ConstructionRegionTopology): PanelRail | undefined {
-  const [outer] = topology.outerLoops;
-  if (outer === undefined || outer.length < 3) return undefined;
-
-  const positionOf = (nodeId: string): ConstructionPosition | undefined =>
-  topology.nodes.find((node) => node.id === nodeId)?.position;
-
-  const walked = outer.map((edge) => ({
 
 // src/composition/tabletop/tools/paths/path-brush-tool.ts
-export const pathBrushTool = createBrushTool<"path-brush">({
-  id: "path-brush",
-  defaultParams: () => DEFAULT_TOOL_PARAMS["path-brush"],
-  previewColor: () => PATH_COLOR,
-  // Bed plus shoulders: the road occupies this much of the brush, and only
-  // what is left over may be spent straightening the stroke.
-  halfWidth: pathHalfWidth,
+export const pathBrushTool = pathPointsTool;
 
+// src/composition/tabletop/tools/paths/path-points-tool.ts
+export function prunePoints(points: readonly ConstructionPosition[]): ConstructionPosition[] {
+  return points.filter((p, i, all) => {
+  if (i === 0 || i === all.length - 1) return true;
+  const prev = all[i - 1]!;
+  return Math.hypot(p.x - prev.x, p.z - prev.z) >= 0.1;
+  });
+export const pathPointsTool: ConstructionTool<"path-brush"> = {
+  id: "path-brush",
+  handlePresentation: "spine-points",
+  useGridSnap: false,
+  defaultParams: () => DEFAULT_TOOL_PARAMS["path-brush"],
+  previewOnHover: true,
+  previewFor(g, _params, ctx) {
+  const draft = drafts.get(ctx.runtime);
+
+// src/composition/tabletop/tools/paths/path-stroke-tool.ts
+export const pathStrokeTool: ConstructionTool<"path-brush"> = {
+  id:"path-brush",defaultParams:()=>DEFAULT_TOOL_PARAMS["path-brush"],
+  onPointerDown(ctx,sample){showRoadSnap(ctx);active.set(ctx.runtime,sample);},
+  onPointerMove(ctx,g,params) {
+  if(!active.has(ctx.runtime)||!meaningful(g))return;
+  try {
+  const d=draft(ctx,g,params);
+
+// src/composition/tabletop/tools/paths/road-body-target.ts
+export function roadBodyTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): { sample: PointerSample; options: CurveGestureOptions } | undefined {
+  const hit = ctx.runtime.getAllRegionTopologies().find((t) =>
+  structureTypeFor(t.surfaceType)?.spine && (sample.surfaceRef
+  ? surfaceRefFromNodeSet(t.surfaceKey) === sample.surfaceRef
+  : t.nodes.some((n) => n.id === sample.nodeId)));
+export interface RoadSnapTarget extends PointerSample {
+  readonly snapSignature?: string;
+  readonly snapEdge?: { readonly edgeId: string; readonly parameter: number };
+export function roadSnapTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): RoadSnapTarget | undefined {
+  const previous = snapLocks.get(ctx.runtime);
+export function roadSnapIsCurrent(ctx: ToolContext, target: RoadSnapTarget): boolean {
+  return target.snapSignature !== undefined && targetSignature(ctx, target) === target.snapSignature;
+  }
+export function showRoadSnap(ctx: ToolContext, target?: PointerSample): void {
+  if (!target) { snapLocks.delete(ctx.runtime); ctx.runtime.clearPreview("road-snap"); return; }
+  ctx.runtime.showPreview(createSnapMeshPreview(target.point), "road-snap");
+
+// src/composition/tabletop/tools/paths/road-preview-mesh.ts
+export const PREVIEW_ELEVATION = 0.05;
+export const NODE_DISK_ELEVATION = 0.055;
+export const ROAD_PREVIEW_COLOR = 0x38bdf8;
+export const ROAD_PREVIEW_OPACITY = 0.65;
+export const ROAD_ERROR_COLOR = 0xf87171;
+export const ROAD_ERROR_OPACITY = 0.6;
+export const SNAP_DISK_COLOR = 0x06b6d4;
+export const SNAP_DISK_OPACITY = 0.85;
+export interface RoadMeshPreviewOptions {
+  readonly ribbons?: readonly { readonly ribbon: { readonly outer: readonly (readonly [number, number, number])[] } | null }[];
+  readonly fallbackPoints?: readonly ConstructionPosition[];
+  readonly anchors: readonly ConstructionPosition[];
+  readonly cursor?: ConstructionPosition;
+  readonly bedWidth: number;
+  readonly color?: number;
+  readonly opacity?: number;
+export function appendRibbonQuads(
+  positions: number[],
+  indices: number[],
+  outer: readonly (readonly [number, number, number])[],
+  elevation = PREVIEW_ELEVATION,
+  ): void {
+  if (outer.length < 4 || outer.length % 2 !== 0) return;
+  const n = outer.length / 2;
+export function appendStraightQuads(
+  positions: number[],
+  indices: number[],
+  points: readonly ConstructionPosition[],
+  halfWidth: number,
+  elevation = PREVIEW_ELEVATION,
+  ): void {
+  for (let i = 0; i + 1 < points.length; i++) {
+export function appendNodeDisk(
+  positions: number[],
+  indices: number[],
+  center: ConstructionPosition,
+  radius: number,
+  elevation = NODE_DISK_ELEVATION,
+  segments = 24,
+  ): void {
+export function createRoadMeshPreview(options: RoadMeshPreviewOptions): RenderPreviewDescriptor {
+  const positions: number[] = [];
+  const indices: number[] = [];
+  const halfWidth = Math.max(0.1, options.bedWidth / 2);
+export function createFastRoadPreview(
+  points: readonly ConstructionPosition[],
+  bedWidth: number,
+  cursor?: ConstructionPosition,
+  color?: number,
+  opacity?: number,
+  ): RenderPreviewDescriptor {
+  const positions: number[] = [];
+export function createSnapMeshPreview(target: ConstructionPosition, radius = 0.45): RenderPreviewDescriptor {
+  const positions: number[] = [];
+  const indices: number[] = [];
+  // Elevated disk for clear junction target visual
+  appendNodeDisk(positions, indices, target, radius, NODE_DISK_ELEVATION + 0.01, 12);
 
 // src/composition/tabletop/tools/platform/platform-contour-merge.ts
 export interface DirectedContourEdge {
@@ -4165,26 +4475,14 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
   if (!Number.isFinite(params.elevation)) throw new Error("A elevação deve ser finita.");
 export function commitPlatformContour(ctx: ToolContext, samples: readonly PointerSample[], params: Params): void {
   commitPlatformShape(ctx, lines(samples,params.elevation),params,samples);
-export const platformContourTool: ConstructionTool<"platform-contour"> = {
-  id: "platform-contour",
-  previewOnHover: true,
-  defaultParams: () => DEFAULT_TOOL_PARAMS["platform-contour"],
-  onCancel(ctx) { drafts.delete(ctx.runtime); },
-  previewFor(gesture, params, ctx) {
-  const points = draft(ctx,params);
+export const platformContourTool = withStructureEditing(rawPlatformContourTool, { ownsType: (surfaceType) => surfaceType === platformStructureType.surfaceType });
 
 // src/composition/tabletop/tools/roof/roof-tool.ts
 export const ROOF_OVERHANG = 0.2;
 export function commitRoof(ctx: ToolContext, capRequest: CapRequest): void {
   try {
   const cap = ctx.runtime.generateCap(capRequest);
-export const roofTool: ConstructionTool<"roof"> = {
-  id: "roof", previewOnHover: true,
-  defaultParams: () => DEFAULT_TOOL_PARAMS.roof,
-  previewFor(gesture, params, ctx) {
-  if (params.shape === "platform") return undefined;
-  try {
-  const cap = ctx.runtime.generateCap(request(ctx, gesture.start, gesture.current, params));
+export const roofTool = withStructureEditing(rawRoofTool, { ownsType: (surfaceType) => surfaceType === roofStructureType.surfaceType });
 
 // src/composition/tabletop/tools/shapes/geometry-2d.ts
 export interface PointXZ {
@@ -4361,19 +4659,8 @@ export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly Co
   if (!(width > 0)) throw new Error("A largura deve ser positiva.");
 
 // src/composition/tabletop/tools/slope/slope-tools.ts
-export const slopeRampTool: ConstructionTool<"slope-ramp"> = {
-  id: "slope-ramp",
-  previewOnHover: true,
-  defaultParams: () => DEFAULT_TOOL_PARAMS["slope-ramp"],
-  previewFor(gesture, params, ctx) {
-  const [from, to] = straightRampPoints(ctx, gesture.start, gesture.current, params);
-export const slopeSpiralTool: ConstructionTool<"slope-spiral"> = {
-  id: "slope-spiral",
-  previewOnHover: true,
-  defaultParams: () => DEFAULT_TOOL_PARAMS["slope-spiral"],
-  previewFor(gesture, params, ctx) {
-  try {
-  return polylineSegmentsPreview(spiralControlPoints(slopeControlPoint(ctx, gesture.current), params), COLOR);
+export const slopeRampTool = withStructureEditing(rawSlopeRampTool, { ownsType });
+export const slopeSpiralTool = withStructureEditing(rawSlopeSpiralTool, { ownsType });
 
 // src/composition/tabletop/tools/terrain/terrain-sculpt-tool.ts
 export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
@@ -4396,34 +4683,13 @@ export function previewOutline(center: ConstructionPosition, radius: number, seg
   const from = pointOnCircle(center, radius, (step / segments) * Math.PI * 2);
 
 // src/composition/tabletop/tools/tower/tower-stamp-tool.ts
-export const towerStampTool: ConstructionTool<"tower-stamp"> = {
-  id: "tower-stamp",
-  defaultParams: () => DEFAULT_TOOL_PARAMS["tower-stamp"],
-
-  previewFor(gesture: ToolGesture, params: TowerStampParams) {
-  return segmentsPreview(
-  previewOutline(gesture.current.point, params.radius, PREVIEW_SEGMENTS),
-  WALL_COLOR[params.wallType],
+export const towerStampTool = withStructureEditing(rawTowerStampTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "partition") });
 
 // src/composition/tabletop/tools/walls/wall-brush-tool.ts
-export const wallBrushTool = createBrushTool<"wall-brush">({
-  id: "wall-brush",
-  defaultParams: () => DEFAULT_TOOL_PARAMS["wall-brush"],
-  previewColor: (params: WallBrushParams) => WALL_COLOR[params.wallType],
-  // A wall is columns and shared edges, with no thickness in plan, so it
-  // occupies none of the brush and the whole reach is correction budget.
-  halfWidth: () => 0,
-
+export const wallBrushTool = withStructureEditing(rawWallBrushTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "partition") });
 
 // src/composition/tabletop/tools/walls/wall-line-tool.ts
-export const wallLineTool: ConstructionTool<"wall-line"> = {
-  id: "wall-line",
-  defaultParams: () => DEFAULT_TOOL_PARAMS["wall-line"],
-
-  previewFor(gesture: ToolGesture, params: WallParams, ctx: ToolContext) {
-  if (anchor === undefined) return undefined;
-  // Same correction-and-weld band the brush preview draws from -- the raw
-  // press/cursor points never showed where the run will actually land, or
+export const wallLineTool = withStructureEditing(rawWallLineTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "partition") });
 
 // src/composition/tabletop/tools/walls/wall-patch.ts
 export interface WallColumn {
@@ -4464,7 +4730,7 @@ export function correctedWallCorners(
   tolerance = 0,
   ): readonly ConstructionPosition[] {
   if (samples.length === 0) return [];
-  const fitted = fitPath(samples, tolerance, { curves: ctx.snapToGrid ? "none" : "bezier" });
+  const fitted = fitPath(samples, tolerance, { curves: ctx.snapToGrid ? "none" : "bezier", port: ctx.runtime });
 export function wallCorrectionPreview(
   ctx: ToolContext,
   samples: readonly ConstructionPosition[],
@@ -4514,6 +4780,7 @@ export interface UseConstructionPointerOptions {
   readonly viewId: RenderViewId | undefined;
   /** When true, a resolved point (other than an existing node handle -- those stay precise) snaps to the nearest grid intersection before any tool sees it, so a new terrain cell/wall/room lands centered on the grid instead of wherever the pointer happened to be. */
 export interface ConstructionPointerHandlers {
+  readonly onSelectionAction: (action: string) => void;
   readonly onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
   readonly onPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
   readonly onPointerUp: (event: ReactPointerEvent<HTMLDivElement>) => void;
@@ -4836,8 +5103,8 @@ export interface PathBrushEffect extends ConstructionOperationContext {
   readonly targetType: "path";
   readonly brushShape: BrushShape;
   readonly brushRegion: BrushGestureRegion;
-  /** Raw brush observations, never pre-interpreted as path topology. */
-  readonly observedElements: readonly BrushElementObservation[];
+  /** Explicit pen controls, preserved without fitting the stroke. */
+  readonly authoredCurves?: readonly CubicBezier[];
 export function createPathBrushEffect(
   payload: Omit<PathBrushEffect, keyof ConstructionOperationContext | "kind" | "targetScope" | "targetType" | "expected" | "observedElements"> &
   Partial<Pick<PathBrushEffect, "observedElements">>,
@@ -4939,7 +5206,9 @@ export function planBezierEdit(input: SpineEditInput & {
   readonly field: FieldPort;
   readonly tableId: string;
   }): { request: import("@/ports").ApplyPatchReplacementRequest; preview: Float32Array; selectedId: string } | undefined {
-  const owner = spineOwnerAt(input.snapshot, curvePick(input.targetId)?.edgeId ?? input.targetId);
+  const draft = editDraft(input);
+export function previewBezierEdit(input: SpineEditInput): Float32Array | undefined {
+  const draft = editDraft(input);
 
 // src/features/edit-construction/spine/index.ts
 export type { SpineChain } from "./spine-chains.ts";
@@ -5162,14 +5431,21 @@ export const PANEL_ROLES = {
   topEdge: "panel-top-edge",
   post: "panel-post",
   body: "panel-body",
-  unknown: "panel-unknown",
+  /** The height widget's upper zone: raises every other level top run currently at the grabbed one's height, table-wide. */
+export interface PanelTopRun {
+  readonly edge: ConstructionRegionEdge;
+  readonly start: ConstructionNodeSnapshot;
+  readonly end: ConstructionNodeSnapshot;
+  }
+export function topRunsOf(topology: ConstructionRegionTopology): readonly PanelTopRun[] {
+  const base = baselineY(topology);
 export function panelRoleFor(topology: ConstructionRegionTopology, target: EditTarget): EditRole {
   if (target.kind === "region") return PANEL_ROLES.body;
   if (target.kind === "vertex") {
   if (!topology.nodes.some((node) => node.id === target.nodeId)) return PANEL_ROLES.unknown;
   return isAtBaseline(topology, target.nodeId) ? PANEL_ROLES.bottomCorner : PANEL_ROLES.topCorner;
   }
-export function panelMotionInfluences(topology: ConstructionRegionTopology, transport = false): readonly ConstructionMotionInfluence[] {
+export function panelMotionInfluences(topology: ConstructionRegionTopology): readonly ConstructionMotionInfluence[] {
   const nodes = new Map(topology.nodes.map((node) => [node.id, node.position]));
 export function validatePanelMotion(topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>): string | undefined {
   const original = new Map(topology.nodes.map((node) => [node.id, node.position]));
@@ -5191,12 +5467,14 @@ export function panelStructureType(
   ): StructureTypeDefinition {
   return Object.freeze({
   surfaceType,
-export const openingStructureType = panelStructureType(
-  "opening",
-  "Abertura",
-  "one face standing in an opening, on the rim the wall shares with it",
-  [],
-  );
+export const openingStructureType: StructureTypeDefinition = Object.freeze({
+  surfaceType: "opening",
+  label: "Abertura",
+  creation: "one face pinned to its host faces, cutting them where it stands",
+  traits: Object.freeze(["cuts"] as const),
+  roleFor: openingRoleFor,
+  policyFor: openingPolicyFor,
+  interactionOver: panelInteractionOver,
 
 // src/features/edit-construction/structure-types/path/bezier-road-edit.ts
 export function regeneratePathSpine(input: SpineRegenerationInput): SpineRegeneration | undefined {
@@ -5221,9 +5499,9 @@ export function planBezierRoad(input: {
   readonly topologies?: readonly ConstructionRegionTopology[];
   readonly port: BezierPort;
   readonly stroke: readonly ConstructionPosition[];
+  readonly authoredCurves?: readonly CubicBezier[];
+  readonly curveMode?: "automatic" | "free";
   readonly corridorId: string;
-  readonly offsets: readonly number[];
-  readonly miterLimit: number;
 
 // src/features/edit-construction/structure-types/path/contour/contour-patch.ts
 export interface ExistingNode {
@@ -5775,8 +6053,79 @@ export type {
   ConstructionToolId,
   NoToolParams,
   OpeningParams,
-  PathBrushParams,
-  PathKind,
+  OpeningShape,
+  OpeningSide,
+
+// src/features/edit-construction/tools/opening-path.ts
+export type OutlinePoint = readonly [number, number];
+export interface OutlineSegment {
+  readonly from: OutlinePoint;
+  readonly to: OutlinePoint;
+  /** The cubic's two off-curve control points; absent for a straight segment. */
+  readonly controls?: readonly [OutlinePoint, OutlinePoint];
+  }
+export function sideArc(radius: number, length: number, across: number): { readonly rise: number; readonly radius: number } | undefined {
+  if (!(radius > 0) || !(length > EPS) || !(across > EPS)) return undefined;
+  const half = length / 2;
+  const r = Math.max(radius, half);
+export function openingPath(shape: OpeningShape | undefined, width: number, height: number): OutlineSegment[] {
+  if (shape?.ellipse) {
+  const center: Point = [width / 2, height / 2];
+  return [0, 1, 2, 3].flatMap((quarter) => ellipseArc(center, width / 2, height / 2, -Math.PI / 2 + (quarter * Math.PI) / 2, Math.PI / 2));
+export function pointAt(segment: OutlineSegment, t: number): Point {
+  if (segment.controls === undefined) return lerp(segment.from, segment.to, t);
+export function splitSegment(segment: OutlineSegment, t: number): readonly [OutlineSegment, OutlineSegment] {
+  if (segment.controls === undefined) {
+  const mid = lerp(segment.from, segment.to, t);
+export function mapPath(path: OutlinePath, map: (point: Point) => Point): OutlineSegment[] {
+  return path.map((segment) =>
+  segment.controls === undefined
+  ? { from: map(segment.from), to: map(segment.to) }
+  : { from: map(segment.from), to: map(segment.to), controls: [map(segment.controls[0]), map(segment.controls[1])] },
+  );
+export function reversePath(path: OutlinePath): OutlineSegment[] {
+  return [...path].reverse().map((segment) =>
+  segment.controls === undefined
+  ? { from: segment.to, to: segment.from }
+  : { from: segment.to, to: segment.from, controls: [segment.controls[1], segment.controls[0]] },
+  );
+export function clipPathToStrip(path: OutlinePath, x0: number, x1: number): OutlineSegment[] {
+  const kept: OutlineSegment[] = [];
+  for (const segment of path) {
+  for (const part of splitAt(segment, [...crossings(segment, x0), ...crossings(segment, x1)])) {
+  const [x] = pointAt(part, 0.5);
+export function startAtLowest(path: readonly OutlineSegment[]): OutlineSegment[] {
+  let first = 0;
+  path.forEach((segment, index) => {
+  const best = path[first]!.from;
+  const [x, y] = segment.from;
+  if (y < best[1] - 1e-9 || (Math.abs(y - best[1]) <= 1e-9 && x < best[0])) first = index;
+  });
+export function segmentExtremes(segment: OutlineSegment): Point[] {
+  const points: Point[] = [segment.from, segment.to];
+  if (segment.controls === undefined) return points;
+  const [c1, c2] = segment.controls;
+  for (const axis of [0, 1] as const) {
+  const p0 = segment.from[axis], p1 = c1[axis], p2 = c2[axis], p3 = segment.to[axis];
+  const a = -p0 + 3 * p1 - 3 * p2 + p3;
+  const b = 2 * (p0 - 2 * p1 + p2);
+
+// src/features/edit-construction/tools/opening-shape.ts
+export const OPENING_SHAPE_PROP = "openingShape";
+export function isRectangleShape(shape: OpeningShape | undefined): boolean {
+  return shape === undefined || (!shape.ellipse && SIDES.every((side) => !(shape.radii[side] > 0)));
+export function shapeFromProps(props: Readonly<Record<string, unknown>> | undefined): OpeningShape {
+  const raw = props?.[OPENING_SHAPE_PROP];
+  if (raw === null || typeof raw !== "object") return RECTANGLE_OPENING_SHAPE;
+  const entry = raw as { readonly ellipse?: unknown; readonly radii?: Record<string, unknown> };
+export function shapeProps(shape: OpeningShape | undefined): Record<string, unknown> {
+  if (shape === undefined || isRectangleShape(shape)) return {};
+export function sameShape(a: OpeningShape | undefined, b: OpeningShape | undefined): boolean {
+  const left = a ?? RECTANGLE_OPENING_SHAPE;
+  const right = b ?? RECTANGLE_OPENING_SHAPE;
+  if (isRectangleShape(left) && isRectangleShape(right)) return true;
+  if (left.ellipse || right.ellipse) return left.ellipse === right.ellipse;
+  return SIDES.every((side) => Math.abs((left.radii[side] ?? 0) - (right.radii[side] ?? 0)) < 1e-9);
 
 // src/features/edit-construction/tools/tool-types.ts
 export type ConstructionToolId =
@@ -5790,13 +6139,13 @@ export interface BrushShapeParams {
   readonly rotationDegrees: number;
   }
 export interface PathBrushParams extends BrushShapeParams {
+  /** Freehand or through-point road authoring; pen is a legacy alias for points. */
+  readonly creationMode?: "brush" | "points" | "pen";
+  /** Constraint for editing an existing curve with this same tool. */
+  readonly curveMode?: "automatic" | "aligned" | "mirrored" | "free";
   /** Product recipe; every variant still creates the single `path` surface type. */
   readonly pathKind: PathKind;
   /** Width of the flat traversable bed, in world units. */
-  readonly bedWidth: number;
-  /** Width of each optional raised shoulder, in world units. */
-  readonly shoulderWidth: number;
-  /** Non-negative shoulder elevation above the path bed. */
 export type PathKind = "trail" | "street" | "road" | "bridge";
 export interface WallParams {
   readonly wallType: "wall-white" | "wall-gray";
@@ -5831,11 +6180,11 @@ export interface OpeningParams {
   /** How wide, measured along the wall rather than across the ground -- a curved wall is travelled, not spanned. */
   readonly width: number;
   readonly height: number;
-  /** How far above the wall's own base the opening starts. Zero is a door. */
-  readonly sill: number;
-export type NoToolParams = Record<string, never>;
-export interface ToolParamsByTool {
-  readonly roof: { readonly shape: "rectangle" | "circle" | "platform"; readonly elevation: number; readonly height: number; readonly radius: number; readonly curvatures: readonly [number, number, number, number] };
+  /** The outline the next opening gets inside its bounding rectangle. */
+  readonly shape: OpeningShape;
+export function withOpeningKind(params: OpeningParams, kind: OpeningParams["openingKind"]): OpeningParams {
+  return kind === "door" ? { ...params, openingKind: "door", height: Math.max(params.height, 2) } : { ...params, openingKind: "window" };
+export const OPENING_KIND_COLOR: Readonly<Record<OpeningParams["openingKind"], number>> = Object.freeze({ window: 0x7dd3fc, door: 0xd97706 });
 
 // src/features/edit-construction/topology/bezier-curve.ts
 export const curvePoint = (p: ConstructionPosition): CurvePoint => [p.x, p.y, p.z];
@@ -6053,7 +6402,20 @@ export type { BoundaryEdges, EdgeSharing } from "./boundary-edges.ts";
 export type { RibbonRequest } from "./bezier-curve.ts";
 export type { PlanarArea, PlanarPoint, PlanarPolygon, PlanarPort, PlanarRing } from "./planar-area.ts";
 export type { CurveEdge, CurveHandleIndex, CurveStore } from "./curve-handles.ts";
+export type { PanelHeightWidgetZone } from "./panel-height-widget.ts";
 export type { ContourPort, ContourSpan } from "./contour-geometry.ts";
+
+// src/features/edit-construction/topology/panel-height-widget.ts
+export type PanelHeightWidgetZone = "group" | "single";
+export function panelHeightWidgetPickId(edgeId: string, zone: PanelHeightWidgetZone): string {
+  return (zone === "group" ? GROUP : SINGLE) + encodeURIComponent(edgeId);
+export function panelHeightWidgetPick(id: string): { readonly edgeId: string; readonly zone: PanelHeightWidgetZone } | undefined {
+  if (id.startsWith(GROUP)) return { edgeId: decodeURIComponent(id.slice(GROUP.length)), zone: "group" };
+export function panelHeightWidgets(
+  topologies: readonly ConstructionRegionTopology[],
+  ): readonly { readonly id: string; readonly position: ConstructionPosition }[] {
+  const items: { readonly id: string; readonly position: ConstructionPosition }[] = [];
+  const seen = new Set<string>();
 
 // src/features/edit-construction/topology/planar-area.ts
 export type PlanarPoint = readonly [number, number];
@@ -6077,6 +6439,14 @@ export function planarDifference(
   const subjectShapes = toEngine([subject]);
 
 // src/features/edit-construction/topology/ring-simplify.ts
+export function simplifyPolygonRdp(
+  ring: readonly (readonly [number, number])[],
+  epsilon = 0.06,
+  ): (readonly [number, number])[] {
+  if (ring.length <= 4) return [...ring];
+  const isClosed =
+  Math.hypot(ring[0]![0] - ring.at(-1)![0], ring[0]![1] - ring.at(-1)![1]) < 1e-6;
+  const pts = isClosed ? ring.slice(0, -1) : [...ring];
 export function simplifyClosedRing(
   points: readonly ConstructionPosition[],
   geometryFor: (fromIndex: number, toIndex: number) => ConstructionEdgeGeometry | undefined,
@@ -6097,8 +6467,8 @@ export interface FitOptions {
   * explained by a straight chord, if any. `"none"` fits every span as a
   * chord and never considers a curve at all.
   */
+  readonly port?: Pick<BezierPort, "curveBatch">;
   readonly curves?: "arc" | "bezier" | "none";
-  }
 export function fitPath(
   points: readonly ConstructionPosition[],
   tolerance: number,
@@ -6226,13 +6596,13 @@ export interface CurveHandles {
 export type CurveCommand =
 export interface CurveBatch { readonly tolerance: number; readonly commands: readonly CurveCommand[] }
 export interface CurveResult {
+  readonly linear?: readonly boolean[];
   readonly ribbon: { readonly outer: readonly CurvePoint[] } | null;
   readonly curves: readonly CubicBezier[];
   readonly handles: readonly CurveHandles[];
   readonly samples: readonly (readonly { readonly t: number; readonly position: CurvePoint }[])[];
   readonly lengths: readonly number[];
   readonly parameter: number | null;
-  readonly opposite: CurvePoint | null;
 export interface CurveNetworkNode { readonly id: string; readonly position: CurvePoint }
 export interface CurveNetworkEdge { readonly edgeId: string; readonly startNodeId: string; readonly endNodeId: string; readonly curve: CurveHandles }
 export interface CurveNetworkRequest {
@@ -6351,6 +6721,10 @@ export type {
 
 // src/ports/scene-render-port.ts
 export type ChangeOrigin = "local" | "network" | "programmatic";
+export interface RenderPointManipulator {
+  readonly branchAction?: boolean;
+  readonly id: string;
+  readonly position: { readonly x: number; readonly y: number; readonly z: number };
 export type RenderViewId = string;
 export type RenderLayerKey = "tokens" | "terrain" | "handles" | "surface-picks";
 export interface RenderDependencyRevision {
@@ -6394,7 +6768,6 @@ export interface RenderNodeHandle {
   readonly nodeId: string;
   readonly position: { readonly x: number; readonly y: number; readonly z: number };
 export type ConfirmedNodeHandleRenderChange =
-export type ConfirmedRenderChange =
 
 // src/ports/terrain-noise-port.ts
 export interface TerrainNoisePort {

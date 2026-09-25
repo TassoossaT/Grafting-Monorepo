@@ -1,5 +1,5 @@
 import type { PathFormationRecipe } from "../structure-types/path/path-recipe.ts";
-import type { ConstructionPosition } from "@/ports";
+import type { ConstructionPosition, CubicBezier, CurvePoint } from "@/ports";
 
 /**
  * A revision an effect expects to still be current when it lands.
@@ -78,6 +78,10 @@ export interface PathBrushEffect extends ConstructionOperationContext {
   readonly targetType: "path";
   readonly brushShape: BrushShape;
   readonly brushRegion: BrushGestureRegion;
+  /** Explicit pen controls, preserved without fitting the stroke. */
+  readonly authoredCurves?: readonly CubicBezier[];
+  /** Editing policy for newly authored spans; omitted preserves explicit controls. */
+  readonly curveMode?: "automatic" | "free";
   /** Raw brush observations, never pre-interpreted as path topology. */
   readonly observedElements: readonly BrushElementObservation[];
   readonly parameters: PathFormationParameters;
@@ -146,6 +150,8 @@ export function createPathBrushEffect(
   expected: readonly RevisionPrecondition[] = [],
 ): PathBrushEffect {
   if (payload.brushRegion.samples.length === 0) throw new Error("brushRegion.samples must not be empty");
+  if (payload.curveMode !== undefined && payload.curveMode !== "automatic" && payload.curveMode !== "free") throw new Error("invalid curveMode");
+  if (payload.curveMode === "automatic" && payload.authoredCurves === undefined) throw new Error("automatic curveMode requires authoredCurves");
   const samples = payload.brushRegion.samples.map((sample) => Object.freeze({ x: finite(sample.x, "sample.x"), y: finite(sample.y, "sample.y"), z: finite(sample.z, "sample.z") }));
   const revisions = expected.map((item) => {
     if (!Number.isInteger(item.revision) || item.revision < 0) throw new Error("expected.revision must be a non-negative integer");
@@ -160,8 +166,27 @@ export function createPathBrushEffect(
     targetType: "path",
     brushShape: freezeShape(payload.brushShape),
     brushRegion: Object.freeze({ samples: Object.freeze(samples) }),
+    ...(payload.authoredCurves === undefined ? {} : { authoredCurves: freezeAuthoredCurves(payload.authoredCurves) }),
+    ...(payload.curveMode === undefined ? {} : { curveMode: payload.curveMode }),
     observedElements: freezeObservedElements(payload.observedElements),
     parameters: freezeFormation(payload.parameters),
     expected: Object.freeze(revisions),
   });
+}
+
+/** Validates and freezes wire coordinates without computing curve geometry. */
+function freezeAuthoredCurves(curves: readonly CubicBezier[]): readonly CubicBezier[] {
+  if (!Array.isArray(curves) || curves.length === 0 || curves.length > 4096) throw new Error("authoredCurves must contain 1..4096 segments");
+  const frozen = curves.map((curve) => {
+    if (!Array.isArray(curve?.points) || curve.points.length !== 4) throw new Error("a cubic must have four points");
+    const points = curve.points.map((point: CurvePoint) => {
+      if (!Array.isArray(point) || point.length !== 3 || point.some((value) => !Number.isFinite(value) || Math.abs(value) > 1e12)) throw new Error("invalid cubic coordinate");
+      return Object.freeze([...point]) as CurvePoint;
+    }) as unknown as CubicBezier["points"];
+    return Object.freeze({ points: Object.freeze(points) });
+  });
+  for (let i = 1; i < frozen.length; i++) {
+    if (frozen[i - 1]!.points[3].some((value, axis) => value !== frozen[i]!.points[0][axis])) throw new Error("authoredCurves must be connected");
+  }
+  return Object.freeze(frozen);
 }

@@ -10,7 +10,7 @@ export interface ConstructionHotbarProps {
 }
 
 const CONSTRUCTION_TOOLS: readonly { readonly id: ConstructionToolId; readonly icon: string; readonly tooltip: string }[] = [
-  { id: "path-brush", icon: "⌁", tooltip: "Pincel de Caminho (clique no terreno)" },
+  { id: "path-brush", icon: "⌁", tooltip: "Rua Bézier (criar e ajustar pontos)" },
   { id: "wall-brush", icon: "W", tooltip: "Pincel de Parede (clique livremente, tecla P)" },
   { id: "terrain-sculpt", icon: "◆", tooltip: "Escultura de Terreno (clique ou arraste, tecla I)" },
 ];

@@ -98,3 +98,54 @@ test("a post, and an edge whose role declares no reshape, keep the curve they ha
     } finally { other.session.free(); }
   } finally { session.free(); }
 });
+
+test("contour gestures are transient, ignore clicks and return trips, and cannot commit after cancel", async () => {
+  const { beginCurveGesture } = await import("../src/composition/tabletop/tools/core/curve-edit-gesture.ts");
+  const f=sessionFixture();
+  f.runtime.showPreview=()=>{}; f.runtime.clearPreview=()=>{};
+  try {
+    curvedWall(f.runtime);
+    const before=f.session.snapshot_json();
+    const a={point:{x:1,y:0,z:-1},nodeId:curvePickId("bottom",1)};
+    const at=(point)=>({start:a,current:{point},samples:[a,{point}]});
+    const click=beginCurveGesture(f.ctx,a);
+    click.move(at(a.point));click.commit();
+    assert.equal(f.session.snapshot_json(),before);
+    const back=beginCurveGesture(f.ctx,a);
+    back.move(at({x:1,y:0,z:-3}));
+    assert.equal(f.session.snapshot_json(),before);
+    back.move(at(a.point));back.commit();
+    assert.equal(f.session.snapshot_json(),before);
+    const cancel=beginCurveGesture(f.ctx,a);
+    cancel.move(at({x:1,y:0,z:-3}));cancel.cancel();cancel.commit();
+    assert.equal(f.session.snapshot_json(),before);
+    const edit=beginCurveGesture(f.ctx,a);
+    edit.move(at({x:1,y:0,z:-3}));edit.commit();
+    assert.deepEqual(f.runtime.getCurvedEdges().find(e=>e.edgeId==="bottom").handle1,[1,-3]);
+    const after=f.session.snapshot_json();edit.commit();
+    assert.equal(f.session.snapshot_json(),after);
+  }finally{f.session.free();}
+});
+
+test("contour gesture on curved wall edge directly fits to surface height while tangent handle retains height", async () => {
+  const { beginCurveGesture } = await import("../src/composition/tabletop/tools/core/curve-edit-gesture.ts");
+  const f=sessionFixture();
+  let previewTarget;
+  f.runtime.showPreview=(desc)=>{ previewTarget = desc; };
+  f.runtime.clearPreview=()=>{ previewTarget = undefined; };
+  try {
+    curvedWall(f.runtime);
+    const midPick = { point: { x: 2, y: 0, z: -1 }, nodeId: curvePickId("bottom", "midpoint") };
+    const at = (point) => ({ start: midPick, current: { point }, samples: [midPick, { point }] });
+    const gesture = beginCurveGesture(f.ctx, midPick);
+    assert.ok(gesture, "midpoint gesture on curved wall should begin");
+    // Move midpoint over an elevated surface (y: 2.5)
+    gesture.move(at({ x: 2, y: 2.5, z: -2 }));
+    assert.ok(previewTarget, "preview should be shown for reshaped curve");
+    gesture.commit();
+    assert.equal(f.calls.feedback.at(-1)?.tone, "success");
+    const edge = f.runtime.getCurvedEdges().find(e => e.edgeId === "bottom");
+    assert.ok(edge);
+  } finally { f.session.free(); }
+});
+

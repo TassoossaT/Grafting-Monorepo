@@ -273,6 +273,24 @@ export function gridPatch(
   const edges = createBoundaryEdges(tableId, { kind: "refuse-when-full" });
   const regions: ConstructionPatchRegion[] = [];
 
+  interface EdgeTrackingState {
+    uses: number;
+    allowedFrom?: ConstructionNodeId;
+    allowedTo?: ConstructionNodeId;
+  }
+  const edgeTracking = new Map<string, EdgeTrackingState>();
+  for (const [edgeId, free] of edgeRooms) {
+    if (free === null || free === undefined) {
+      edgeTracking.set(edgeId, { uses: 2 });
+    } else {
+      edgeTracking.set(edgeId, {
+        uses: 1,
+        allowedFrom: free.startNodeId,
+        allowedTo: free.endNodeId,
+      });
+    }
+  }
+
   quad: for (const quad of grid.quads) {
     if (avoidArea !== undefined && avoidArea.length > 0) {
       let cx = 0;
@@ -295,21 +313,21 @@ export function gridPatch(
     if (cycle.length !== quad.length) { if (drops !== undefined) drops.unnamed += 1; continue; }
     if (new Set(cycle).size !== cycle.length) { if (drops !== undefined) drops.degenerate += 1; continue; }
 
-    // A constrained cell can occasionally survive on the occupied side of a
-    // retained contour. Its node pair names the real split fragment, but that
-    // fragment's free walk runs opposite to this cell's step. Overwriting only
-    // `reversed` used to turn `a -> b -> c -> d` into `b -> a, b -> c...`, a
-    // loop which cannot close. The cell is already covered by retained ground,
-    // so it belongs outside the replacement patch.
+    // In 2D manifold topology, an edge can bound at most two faces (one in each
+    // walk direction). Checking edge capacity dynamically against both standing
+    // ground and earlier cells in this patch prevents any third edge use or
+    // duplicate walk from reaching the engine, which would otherwise refuse the
+    // entire patch replacement transaction.
     for (let index = 0; index < cycle.length; index += 1) {
       const from = cycle[index]!;
       const to = cycle[(index + 1) % cycle.length]!;
       const edgeId = sharedEdgeId(tableId, from, to);
-      if (!edgeRooms.has(edgeId)) continue;
-      const free = edgeRooms.get(edgeId);
-      if (free === null || free === undefined || free.startNodeId !== from || free.endNodeId !== to) {
-        if (drops !== undefined) { drops.retained += 1; drops.coveredByStanding += quadPlanArea(grid, quad); }
-        continue quad;
+      const state = edgeTracking.get(edgeId);
+      if (state !== undefined) {
+        if (state.uses >= 2 || state.allowedFrom !== from || state.allowedTo !== to) {
+          if (drops !== undefined) { drops.retained += 1; drops.coveredByStanding += quadPlanArea(grid, quad); }
+          continue quad;
+        }
       }
     }
 
@@ -319,6 +337,20 @@ export function gridPatch(
       const to = cycle[(index + 1) % cycle.length]!;
       const use = edges.use(from, to);
       boundary.push({ ...use, reversed: edgeRooms.get(use.edgeId)?.reversed ?? use.reversed });
+
+      const edgeId = use.edgeId;
+      const state = edgeTracking.get(edgeId);
+      if (state === undefined) {
+        edgeTracking.set(edgeId, {
+          uses: 1,
+          allowedFrom: to,
+          allowedTo: from,
+        });
+      } else {
+        state.uses = 2;
+        state.allowedFrom = undefined;
+        state.allowedTo = undefined;
+      }
     }
     regions.push({ regionId: cycle.join("|"), boundary, surfaceType, physical: true });
     quadOf?.set(cycle.join("|"), quad);
@@ -555,15 +587,12 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
   // Query only the generated extent instead of serializing the entire map.
   const occupied = new Map<string, ConstructionRegionTopology["outerLoops"][number][number][]>();
   const reach = request.faceSide;
-  const nearbyTopologies = timePhase("topologias vizinhas", () => request.topologySeeds?.length === 0
-    ? []
-    : runtime.getRegionTopologiesInBounds({
-        minX: bounds.minX - reach,
-        minZ: bounds.minZ - reach,
-        maxX: bounds.maxX + reach,
-        maxZ: bounds.maxZ + reach,
-        seeds: request.topologySeeds,
-      }));
+  const nearbyTopologies = timePhase("topologias vizinhas", () => runtime.getRegionTopologiesInBounds({
+    minX: bounds.minX - reach,
+    minZ: bounds.minZ - reach,
+    maxX: bounds.maxX + reach,
+    maxZ: bounds.maxZ + reach,
+  }));
   const replaced = new Set((request.replaceSurfaceKeys ?? []).map((key) => key.join("\u0000")));
   for (const topology of nearbyTopologies) {
     if (replaced.has(topology.surfaceKey.join("\u0000"))) continue;
@@ -572,6 +601,15 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
         const uses = occupied.get(use.edgeId) ?? [];
         uses.push(use);
         occupied.set(use.edgeId, uses);
+
+        if (use.startNodeId && use.endNodeId) {
+          const sharedId = sharedEdgeId(request.tableId, use.startNodeId, use.endNodeId);
+          if (sharedId !== use.edgeId) {
+            const sharedUses = occupied.get(sharedId) ?? [];
+            sharedUses.push(use);
+            occupied.set(sharedId, sharedUses);
+          }
+        }
       }
     }
   }

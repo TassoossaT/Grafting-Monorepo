@@ -7,7 +7,7 @@ export type SpineAction = "edit" | "remove-anchor" | "disconnect" | "delete-segm
 
 /** The graph patch one structural spine action makes; the owner regenerates its surface from it. */
 export function planSpineAction(snapshot: ConstructionGraphSnapshot, port: BezierPort, action: SpineAction,
-  targetId: string, edgeId: string | undefined, operationId: string, width?: number, endWidth?: number): ConstructionGraphPatch {
+  targetId: string, edgeId: string | undefined, operationId: string, width?: number, endWidth?: number, allowShapeChange = false): ConstructionGraphPatch {
   const nodes=new Map(snapshot.nodes.map((n)=>[n.id,n]));
   const incident=snapshot.edges.filter((e)=>e.curve && (e.startNodeId===targetId || e.endNodeId===targetId));
   const seed = (edges: readonly ConstructionEdgeSnapshot[]) => [...new Set(edges.flatMap((e)=>[e.startNodeId,e.endNodeId]))].map((id)=>nodes.get(id)!);
@@ -17,13 +17,21 @@ export function planSpineAction(snapshot: ConstructionGraphSnapshot, port: Bezie
     end:nodes.get(reverse?e.startNodeId:e.endNodeId)!.position,
   }],0.025)[0]!.curves[0]!;
   if(action==="remove-anchor") {
+    if (allowShapeChange && incident.length === 1) {
+      if (spineComponent(snapshot,[targetId]).edges.filter(e=>e.curve).length < 2) throw Error("O caminho precisa manter pelo menos dois pontos.");
+      return {nodes:seed(incident),removedEdgeIds:[incident[0]!.edgeId],edges:[]};
+    }
     if(incident.length!==2) throw Error("Remova apenas âncoras entre dois trechos; desconecte os cruzamentos primeiro.");
     const [a,b]=incident as [ConstructionEdgeSnapshot,ConstructionEdgeSnapshot];
     if(JSON.stringify(a.curve!.bandOffsets)!==JSON.stringify(b.curve!.bandOffsets)) throw Error("Os perfis dos trechos precisam coincidir.");
     const from=a.startNodeId===targetId?a.endNodeId:a.startNodeId;
     const to=b.startNodeId===targetId?b.endNodeId:b.startNodeId;
     if(from===to) throw Error("A remoção eliminaria o circuito.");
-    const merged=port.curveBatch({tolerance:0.025,commands:[{kind:"merge",curve:resolve(a,a.startNodeId===targetId),next:resolve(b,b.endNodeId===targetId)}]})[0]!;
+    const left = resolve(a,a.startNodeId===targetId);
+    const right = resolve(b,b.endNodeId===targetId);
+    const merged=port.curveBatch({tolerance:0.025,commands:[allowShapeChange
+      ? {kind:"sample",curves:[{points:[left.points[0],left.points[1],right.points[2],right.points[3]]}]}
+      : {kind:"merge",curve:left,next:right}]})[0]!;
     return {nodes:seed(incident),removedEdgeIds:incident.map((e)=>e.edgeId),edges:[{...a,startNodeId:from,endNodeId:to,curve:{...merged.handles[0]!,bandOffsets:a.curve!.bandOffsets,surfaceType:a.curve!.surfaceType}}]};
   }
   if(action==="disconnect") {

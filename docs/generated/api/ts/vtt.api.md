@@ -4,6 +4,74 @@
 
 ### `function vtt.terrain-noise-wasm-adapter.createTerrainNoiseAdapter(): TerrainNoisePort`
 
+### `interface vtt.rendering.CurvePen`
+
+Renderer-neutral pen lifecycle. Bind pointer capture and keys in the consumer.
+
+### `method vtt.rendering.CurvePen.begin(point: P): void`
+
+Arms placement; never confirms scene data.
+
+### `method vtt.rendering.CurvePen.cancel(): void`
+
+Discards every pending anchor without confirmation.
+
+### `method vtt.rendering.CurvePen.end(point: P): void`
+
+Uses the final pointer sample and stores a draft anchor, or closes on release.
+
+### `method vtt.rendering.CurvePen.finish(closed?: boolean): boolean`
+
+Confirms once, when released and sufficiently populated; rejected drafts remain editable.
+
+### `method vtt.rendering.CurvePen.hover(point: P): void`
+
+Displays an extension without changing stored anchors.
+
+### `method vtt.rendering.CurvePen.move(point: P): void`
+
+Updates only the pending anchor.
+
+### `method vtt.rendering.CurvePen.removeLast(): void`
+
+Discards a pending placement, otherwise removes the last draft anchor.
+
+### `method vtt.rendering.CurvePen.snapshot(): CurvePenDraft<P>`
+
+Returns a frozen snapshot; caller-owned point values are not cloned.
+
+### `interface vtt.rendering.CurvePenAnchor`
+
+A caller-owned anchor and its two control positions. Point values must be immutable.
+
+### `property vtt.rendering.CurvePenAnchor.incoming: P`
+
+Incoming control position.
+
+### `property vtt.rendering.CurvePenAnchor.outgoing: P`
+
+Outgoing control position.
+
+### `property vtt.rendering.CurvePenAnchor.point: P`
+
+Anchor position.
+
+### `interface vtt.rendering.CurvePenDraft`
+
+Immutable authoring draft; no confirmed scene data is owned by the controller.
+
+### `property vtt.rendering.CurvePenDraft.anchors: readonly CurvePenAnchor<P>[]`
+
+Ordered anchors.
+
+### `property vtt.rendering.CurvePenDraft.closed: boolean`
+
+Whether the consumer should connect the final anchor to the first.
+
+### `function vtt.rendering.createCurvePen(options: CurvePenOptions<P>): CurvePen<P>`
+
+Creates an isolated pen controller without geometry, renderer, keyboard or style policy.
+
 ### `variable vtt.construction-grid-scene-item.CONSTRUCTION_GRID_EXTENT: 25`
 
 Half the grid's world-space span on each axis -- the board runs from `-extent` to `extent` on both X and Z.
@@ -188,6 +256,10 @@ Draws the sprite texture for a placed token marker: a filled circle with a small
 
 A small ring-dot, visually distinct from the token marker -- an editable construction-node handle, not a placed token.
 
+### `function vtt.marker-textures.createRoadBranchTexture(): HTMLCanvasElement`
+
+In-scene road branching affordance, distinct from a movable anchor.
+
 ### `interface vtt.node-handle-scene-item.NodeHandlePickData`
 
 Opaque per-item data a pick result echoes back, letting the adapter recover which node a hit handle belongs to without parsing its scene item id.
@@ -243,6 +315,8 @@ Resolves a pointer position (in the view's CSS pixels) to what it hit, or `undef
 
 Sets the floor-cutaway height in continuous world-space Y. `undefined` disables cutaway.
 
+### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.setPointManipulator(viewId: string, target: RenderPointManipulator | undefined): void`
+
 ### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.showPreview(descriptor: RenderPreviewDescriptor, channel: string): void`
 
 Shows (or replaces) one preview overlay.
@@ -295,6 +369,49 @@ Times `run` as a phase of the running commit; untimed outside one.
 ### `property vtt.create-tabletop-runtime.CreateTabletopRuntimeInput.terrainNoisePort?: TerrainNoisePort`
 
 ### `function vtt.create-tabletop-runtime.createTabletopRuntime(input: CreateTabletopRuntimeInput): TabletopRuntime`
+
+### `interface vtt.change-area.ChangeArea`
+
+### `property vtt.change-area.ChangeArea.claimed: PlanarArea`
+
+### `property vtt.change-area.ChangeArea.vacated: PlanarArea`
+
+### `variable vtt.change-area.REALLY_MOVED: 0.05`
+
+Where a change actually went, read from its shape alone.
+
+**Why every reaction reads this rather than the type's own footprint.** A
+type regenerating from a spine or a contour replaces its whole connected
+component, so "the faces it produced" and any outline built from them name
+the entire network on every edit, however small. A reaction scoped by that
+rebuilds everything the network touches each time -- and ground rebuilt
+against a finely described contour comes back finer, so every edit made the
+next one heavier. What changed is the difference between the two shapes,
+and that is a question about plan-view area, never about which type changed
+or which node is which. So it is answered once, here, for every type.
+
+- `claimed`: ground the change covers now and did not before.
+- `vacated`: ground it covered before and no longer does.
+
+Slivers are discarded. Re-flattening a curve lands its samples fractionally
+off the last ones all along its length, so the difference of two runs of the
+same shape is a hairline following the whole network. `2*area/perimeter` is
+a strip's width, and anything thinner than REALLY_MOVED is
+re-sampling noise rather than a change that went somewhere.
+
+### `function vtt.change-area.changeAreaOf(port: Partial<PlanarPort>, change: Pick<ShapeChange, "before" | "after">): ChangeArea | undefined`
+
+The ground `change` claimed and vacated, in plan.
+
+`undefined` when there is no boolean to ask, or it refused the shapes: the
+caller cannot tell "nothing moved" from "could not look", so it has to fall
+back to its own wider scope rather than conclude that nothing needs repair.
+
+### `function vtt.change-area.largestOuterRing(area: PlanarArea): readonly (readonly [number, number])[] | undefined`
+
+The outer ring of an area's largest piece: the one outline a footprint
+contract carries. Every piece still reaches the reaction through the area
+itself; this only names the one a single-ring consumer answers for.
 
 ### `interface vtt.effect-commit.CommitOptions`
 
@@ -430,7 +547,7 @@ the table" gets a contour thousands of segments long, hands all of it to the
 generator as a constraint, and pays for the whole network on a stroke that
 touched a metre of it.
 
-### `function vtt.path-cloud-transaction.commitPathCloudIntent(ctx: ToolContext, effect: PathBrushEffect, tolerance: number): void`
+### `function vtt.path-cloud-transaction.commitPathCloudIntent(ctx: ToolContext, effect: PathBrushEffect, tolerance: number): boolean`
 
 Runtime boundary for a PathCloud decision. This file deliberately contains
 no path geometry or topology policy: it reads snapshots, invokes the type,
@@ -442,12 +559,6 @@ its own declared reaction, in the same transaction.
 ### `class vtt.tabletop-runtime.AppTabletopRuntime`
 
 ### `constructor vtt.tabletop-runtime.AppTabletopRuntime.constructor(tableId: string, render: SceneRenderPort, construction: ConstructionSessionPort, terrainNoise: TerrainNoisePort, initialTokens: readonly TokenProjection[]): AppTabletopRuntime`
-
-### `method vtt.tabletop-runtime.AppTabletopRuntime.addHole(request: { hole: readonly ConstructionOrientedEdgeUse[]; surfaceKey: ConstructionSurfaceKey }, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
-
-Opens one more inner loop on a face that already exists -- what a door
-or a window stands in. The loop must already be registered, and it keeps
-one free use per edge so a face can take it.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.addPatch(patch: ConstructionPatch, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome`
 
@@ -543,13 +654,29 @@ One region's live boundary -- what a handle/hit-test layer reads.
 
 Every closed loop of boundary with no face on it, among `scope`'s nodes -- a hole whose rim already exists.
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.hostOutline(surfaceKey: ConstructionSurfaceKey): ConstructionHostOutline`
+
+A pinned region's outer loop traced on its host. See `ConstructionSessionPort.hostOutline`.
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.moveVertex(nodeId: string, position: ConstructionPosition, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
 The single-op shortcut for a caller that already knows the absolute
 position it wants (an undo/redo stack replaying a drag), skipping the
 policy pass a live gesture goes through.
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.panelRun(surfaceKey: ConstructionSurfaceKey): ConstructionPanelRun`
+
+The run of upright panels through `surfaceKey`. See `ConstructionSessionPort.panelRun`.
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.pick(viewId: string, x: number, y: number): ScenePickResult | undefined`
+
+### `method vtt.tabletop-runtime.AppTabletopRuntime.pinEdgeCurves(requests: readonly ConstructionPinEdgeCurveRequest[], origin: ChangeOrigin, causeId: string): RegionEditOutcome`
+
+Makes each edge a cubic (or straight) path in its host's `(u, v)`; one remesh for the batch. See `ConstructionSessionPort.pinEdgeCurves`.
+
+### `method vtt.tabletop-runtime.AppTabletopRuntime.pinNodes(pins: readonly ConstructionPinRequest[], origin: ChangeOrigin, causeId: string): RegionEditOutcome`
+
+Pins nodes to host faces in relative `(u, v)`; the host carries them from then on. See `ConstructionSessionPort.pinNodes`.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[]`
 
@@ -560,6 +687,10 @@ what `planEdit` produced from the user's gesture and the grabbed role's
 own policy. The runtime deliberately does not resolve policy itself:
 that belongs to `features/edit-construction`, and the tool layer runs it
 before calling here.
+
+### `method vtt.tabletop-runtime.AppTabletopRuntime.projectToHost(request: { hostSurfaceKey: ConstructionSurfaceKey; points: readonly ConstructionPosition[] }): readonly ConstructionHostPoint[]`
+
+World points in a host face's `(u, v)` frame. Throws when the host is not an upright panel.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.queryContours(queries: readonly ConstructionContourQuery[]): readonly ConstructionContourAnswer[]`
 
@@ -576,6 +707,20 @@ Where points project onto the curves a surface was swept from. See `Construction
 Unregisters a surface outright, prunes orphaned nodes, and folds the outcome into the running map. See `ConstructionSessionPort.removeSurface`.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.resizeView(viewId: string, width: number, height: number): void`
+
+### `method vtt.tabletop-runtime.AppTabletopRuntime.resolveOnHost(request: { hostSurfaceKey: ConstructionSurfaceKey; uv: readonly (readonly [number, number])[] }): readonly ConstructionPosition[]`
+
+Host `(u, v)` pairs back to world positions. Pure.
+
+### `method vtt.tabletop-runtime.AppTabletopRuntime.setConstructionHandlePresentation(mode: "all" | "spine-points"): void`
+
+Local editing presentation; never changes the graph or persistence.
+
+### `method vtt.tabletop-runtime.AppTabletopRuntime.setPointManipulator(viewId: string, target: RenderPointManipulator | undefined): void`
+
+### `method vtt.tabletop-runtime.AppTabletopRuntime.setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): RegionEditOutcome`
+
+Replaces the regions' property bag (`null` clears). See `ConstructionSessionPort.setRegionProps`.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.showPreview(descriptor: RenderPreviewDescriptor, channel?: string): void`
 
@@ -597,6 +742,8 @@ history entry exactly when it is true.
 
 Undoes one committed transaction (or a replacement recorded outside one).
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.unpinNodes(nodeIds: readonly string[], origin: ChangeOrigin, causeId: string): RegionEditOutcome`
+
 ### `interface vtt.tabletop-runtime.ConfirmedTokenDeltaEnvelope`
 
 ### `property vtt.tabletop-runtime.ConfirmedTokenDeltaEnvelope.causeId: string`
@@ -606,12 +753,6 @@ Undoes one committed transaction (or a replacement recorded outside one).
 ### `property vtt.tabletop-runtime.ConfirmedTokenDeltaEnvelope.origin: ChangeOrigin`
 
 ### `interface vtt.tabletop-runtime.TabletopRuntime`
-
-### `method vtt.tabletop-runtime.TabletopRuntime.addHole(request: { hole: readonly ConstructionOrientedEdgeUse[]; surfaceKey: ConstructionSurfaceKey }, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
-
-Opens one more inner loop on a face that already exists -- what a door
-or a window stands in. The loop must already be registered, and it keeps
-one free use per edge so a face can take it.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.addPatch(patch: ConstructionPatch, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome`
 
@@ -694,13 +835,29 @@ One region's live boundary -- what a handle/hit-test layer reads.
 
 Every closed loop of boundary with no face on it, among `scope`'s nodes -- a hole whose rim already exists.
 
+### `method vtt.tabletop-runtime.TabletopRuntime.hostOutline(surfaceKey: ConstructionSurfaceKey): ConstructionHostOutline`
+
+A pinned region's outer loop traced on its host. See `ConstructionSessionPort.hostOutline`.
+
 ### `method vtt.tabletop-runtime.TabletopRuntime.moveVertex(nodeId: string, position: ConstructionPosition, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
 The single-op shortcut for a caller that already knows the absolute
 position it wants (an undo/redo stack replaying a drag), skipping the
 policy pass a live gesture goes through.
 
+### `method vtt.tabletop-runtime.TabletopRuntime.panelRun(surfaceKey: ConstructionSurfaceKey): ConstructionPanelRun`
+
+The run of upright panels through `surfaceKey`. See `ConstructionSessionPort.panelRun`.
+
 ### `method vtt.tabletop-runtime.TabletopRuntime.pick(viewId: string, x: number, y: number): ScenePickResult | undefined`
+
+### `method vtt.tabletop-runtime.TabletopRuntime.pinEdgeCurves(requests: readonly ConstructionPinEdgeCurveRequest[], origin: ChangeOrigin, causeId: string): RegionEditOutcome`
+
+Makes each edge a cubic (or straight) path in its host's `(u, v)`; one remesh for the batch. See `ConstructionSessionPort.pinEdgeCurves`.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.pinNodes(pins: readonly ConstructionPinRequest[], origin: ChangeOrigin, causeId: string): RegionEditOutcome`
+
+Pins nodes to host faces in relative `(u, v)`; the host carries them from then on. See `ConstructionSessionPort.pinNodes`.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[]`
 
@@ -711,6 +868,10 @@ what `planEdit` produced from the user's gesture and the grabbed role's
 own policy. The runtime deliberately does not resolve policy itself:
 that belongs to `features/edit-construction`, and the tool layer runs it
 before calling here.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.projectToHost(request: { hostSurfaceKey: ConstructionSurfaceKey; points: readonly ConstructionPosition[] }): readonly ConstructionHostPoint[]`
+
+World points in a host face's `(u, v)` frame. Throws when the host is not an upright panel.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.queryContours(queries: readonly ConstructionContourQuery[]): readonly ConstructionContourAnswer[]`
 
@@ -727,6 +888,20 @@ Where points project onto the curves a surface was swept from. See `Construction
 Unregisters a surface outright, prunes orphaned nodes, and folds the outcome into the running map. See `ConstructionSessionPort.removeSurface`.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.resizeView(viewId: string, width: number, height: number): void`
+
+### `method vtt.tabletop-runtime.TabletopRuntime.resolveOnHost(request: { hostSurfaceKey: ConstructionSurfaceKey; uv: readonly (readonly [number, number])[] }): readonly ConstructionPosition[]`
+
+Host `(u, v)` pairs back to world positions. Pure.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.setConstructionHandlePresentation(mode: "all" | "spine-points"): void`
+
+Local editing presentation; never changes the graph or persistence.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.setPointManipulator(viewId: string, target: RenderPointManipulator | undefined): void`
+
+### `method vtt.tabletop-runtime.TabletopRuntime.setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): RegionEditOutcome`
+
+Replaces the regions' property bag (`null` clears). See `ConstructionSessionPort.setRegionProps`.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.showPreview(descriptor: RenderPreviewDescriptor, channel?: string): void`
 
@@ -747,6 +922,8 @@ history entry exactly when it is true.
 ### `method vtt.tabletop-runtime.TabletopRuntime.undoTransaction(transactionId: string, origin: ChangeOrigin): void`
 
 Undoes one committed transaction (or a replacement recorded outside one).
+
+### `method vtt.tabletop-runtime.TabletopRuntime.unpinNodes(nodeIds: readonly string[], origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
 ### `interface vtt.tabletop-runtime.TabletopSnapshot`
 
@@ -1759,7 +1936,11 @@ points *out* of it, means their signs are opposite.
 
 ### `method vtt.curve-edit-gesture.CurveGesture.move(gesture: ToolGesture): void`
 
-### `function vtt.curve-edit-gesture.beginCurveGesture(ctx: ToolContext, sample: PointerSample, params?: { curveAction?: "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"; curveEndWidth?: number; curveMode?: "automatic" | "aligned" | "mirrored" | "free"; curveWidth?: number; mode: "shape" | "elevation" }): CurveGesture | undefined`
+### `type vtt.curve-edit-gesture.CurveGestureOptions = StructureEditParams & { allowShapeChange?: boolean; dragThreshold?: number; insertOnClick?: boolean; parameter?: number; pointerOrigin?: ConstructionPosition; spatialTarget?: boolean }`
+
+### `function vtt.curve-edit-gesture.beginCurveGesture(ctx: ToolContext, sample: PointerSample, ownsTypeOrParams?: CurveGestureOptions | ((surfaceType: string) => boolean), params?: CurveGestureOptions): CurveGesture | undefined`
+
+Starts a curve gesture on the handle `sample` landed on, when the curve belongs to a type `ownsType` accepts.
 
 ### `interface vtt.edge-overlay.EdgeOverlayGroup`
 
@@ -1818,8 +1999,6 @@ rim named it from one face, and one face cannot see the other; if the graph
 shows two, the edge is interior whatever it was called -- see
 RIM_ROLES.
 
-### `variable vtt.edit-region-tool.editRegionTool: ConstructionTool<"edit-region">`
-
 ### `variable vtt.navigate-tool.navigateTool: ConstructionTool<"navigate">`
 
 No-op: in `navigate` mode the pointer drives camera orbit/pan
@@ -1827,6 +2006,45 @@ No-op: in `navigate` mode the pointer drives camera orbit/pan
 not any construction effect. Exists so `tool-registry.ts` has an entry for
 every `ConstructionToolId` and `use-construction-pointer.ts` never needs a
 "no tool selected" special case.
+
+### `interface vtt.structure-edit-behavior.StructureEditBehavior`
+
+### `method vtt.structure-edit-behavior.StructureEditBehavior.isActive(): boolean`
+
+Whether a drag is currently under this behaviour's control.
+
+### `method vtt.structure-edit-behavior.StructureEditBehavior.onCancel(): void`
+
+### `method vtt.structure-edit-behavior.StructureEditBehavior.onPointerMove(ctx: ToolContext, gesture: ToolGesture, editParams: StructureEditParams): void`
+
+### `method vtt.structure-edit-behavior.StructureEditBehavior.onPointerUp(ctx: ToolContext, gesture?: ToolGesture): void`
+
+### `method vtt.structure-edit-behavior.StructureEditBehavior.tryGrab(ctx: ToolContext, sample: PointerSample, editParams: StructureEditParams): boolean`
+
+Tries to start an edit gesture on whatever `sample` landed on; `true` means the rest of this pointer gesture belongs to this behaviour, not the wrapped tool's own creation gesture.
+
+### `method vtt.structure-edit-behavior.StructureEditBehavior.wasGrabbed(): boolean`
+
+Whether the *last* `tryGrab` succeeded -- read after pointer-up, once `isActive()` has already gone back to `false`, to decide whether a plain click (no drag) belongs to this behaviour or should still fall through to the wrapped tool's own `onClick`.
+
+### `interface vtt.structure-edit-behavior.StructureEditOptions`
+
+### `property vtt.structure-edit-behavior.StructureEditOptions.ownsType: (surfaceType: string) => boolean`
+
+Only a vertex/edge/body/handle whose topology's surface type this accepts is grabbed; anything else falls through to the wrapped tool's own creation gesture.
+
+### `function vtt.structure-edit-behavior.createStructureEditBehavior(options: StructureEditOptions): StructureEditBehavior`
+
+The grab-and-edit half of `withStructureEditing` -- kept separate so a tool that has no meaningful "click, don't drag" case (a brush) can still use just the drag machinery.
+
+### `function vtt.structure-edit-behavior.withStructureEditing(tool: ConstructionTool<Id>, options: StructureEditOptions): ConstructionTool<Id>`
+
+Composes a creation tool with createStructureEditBehavior: a press
+on an existing structure this tool owns edits it (drag to move/resize,
+release commits); a press anywhere else falls through to the tool's own
+creation gesture, unchanged. One tool, not a second "edit mode" -- the
+same reasoning `opening-tool.ts` already applies to openings, generalized
+to every other construction tool via the type-filtered grab above.
 
 ### `interface vtt.tool-context.ConstructionTool`
 
@@ -1837,11 +2055,30 @@ on `onClick`). `composition/tabletop/use-construction-pointer.ts` is the
 only caller and never branches on `id` -- it just invokes whichever hook
 the active tool defines.
 
+### `property vtt.tool-context.ConstructionTool.handlePresentation?: "spine-points"`
+
+Presentation and sampling policy while this tool is active.
+
 ### `property vtt.tool-context.ConstructionTool.id: Id`
 
-### `property vtt.tool-context.ConstructionTool.previewOnHover?: boolean`
+### `property vtt.tool-context.ConstructionTool.previewOnHover?: boolean | ((params: ToolParamsFor<Id>) => boolean)`
 
 Opt in to a stationary drawing preview between gestures.
+
+### `property vtt.tool-context.ConstructionTool.snapsToSurface?: boolean`
+
+This tool always projects the pointer onto an existing surface's own
+parametrization (a wall's rail, say) rather than reading raw world X/Z --
+so the dispatcher's world-space grid magnet, applied before any tool
+ever sees the point, is redundant at best. At worst it is actively
+harmful: rounding X/Z to a world grid *before* a nonlinear projection
+(onto a rotated or curved rail) can jump the projected result across
+much more than one grid cell, which reads as the pointer "teleporting"
+rather than the smooth follow every other tool gets from the same
+magnet. A tool that opts in reads its own samples unsnapped and is
+responsible for whatever continuity it wants.
+
+### `property vtt.tool-context.ConstructionTool.useGridSnap?: boolean`
 
 ### `method vtt.tool-context.ConstructionTool.defaultParams(): ToolParamsFor<Id>`
 
@@ -1853,6 +2090,18 @@ Discards an unfinished tool draft on Escape, cancellation or tool switch.
 
 A press+release with no intervening drag. Batch/stamp tools (room) commit here instead of `onPointerUp`.
 
+### `method vtt.tool-context.ConstructionTool.onDeleteKey(ctx: ToolContext): void`
+
+Delete/Backspace with the tool active -- a tool holding a selection (an opening picked for editing, say) removes it here.
+
+### `method vtt.tool-context.ConstructionTool.onKeyDown(ctx: ToolContext, key: string, params: ToolParamsFor<Id>): boolean`
+
+Handles a tool key outside text controls; true prevents the browser default.
+
+### `method vtt.tool-context.ConstructionTool.onParamsChange(ctx: ToolContext, next: ToolParamsFor<Id>, previous: ToolParamsFor<Id>): void`
+
+The active tool's params changed (the panel, or `updateToolParams`) -- a tool holding a selection may apply them to it.
+
 ### `method vtt.tool-context.ConstructionTool.onPointerDown(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void`
 
 Left-button press. Continuous tools (brushes, move-node) start their gesture here.
@@ -1861,9 +2110,13 @@ Left-button press. Continuous tools (brushes, move-node) start their gesture her
 
 Called while a gesture is active (left button held). Brushes that paint continuously (terrain) commit here, throttled by the dispatcher.
 
-### `method vtt.tool-context.ConstructionTool.onPointerUp(ctx: ToolContext, gesture: ToolGesture, params: ToolParamsFor<Id>): void`
+### `method vtt.tool-context.ConstructionTool.onPointerUp(ctx: ToolContext, gesture: ReleasedGesture, params: ToolParamsFor<Id>): void`
 
 Gesture end. Tools that commit a single shape from a drag (wall, move-node's history entry) act here.
+
+### `method vtt.tool-context.ConstructionTool.onSelectionAction(ctx: ToolContext, action: string, params: ToolParamsFor<Id>): boolean`
+
+Runs an explicit action on the current selection.
 
 ### `method vtt.tool-context.ConstructionTool.previewFor(gesture: ToolGesture, params: ToolParamsFor<Id>, ctx: ToolContext): PreviewDescriptor | undefined`
 
@@ -1881,6 +2134,8 @@ The tool's not-yet-committed ghost for the current gesture (or stationary hover,
 
 What the pointer resolved to at one instant -- `nodeId` present only when it hit a node handle.
 
+### `property vtt.tool-context.PointerSample.constructionAction?: { kind: "branch"; nodeId: string }`
+
 ### `property vtt.tool-context.PointerSample.nodeId?: string`
 
 ### `property vtt.tool-context.PointerSample.point: ConstructionPosition`
@@ -1891,7 +2146,25 @@ What the pointer resolved to at one instant -- `nodeId` present only when it hit
 
 Screen coordinate used by explicit elevation gestures.
 
+### `property vtt.tool-context.PointerSample.shiftKey?: boolean`
+
 ### `property vtt.tool-context.PointerSample.surfaceRef?: string`
+
+### `interface vtt.tool-context.ReleasedGesture`
+
+A finished gesture, as `onPointerUp` gets it.
+
+### `property vtt.tool-context.ReleasedGesture.current: PointerSample`
+
+### `property vtt.tool-context.ReleasedGesture.moved: boolean`
+
+Whether the pointer travelled far enough to be a drag rather than a click -- decided once, by the dispatcher.
+
+### `property vtt.tool-context.ReleasedGesture.samples: readonly PointerSample[]`
+
+Ordered samples accumulated by the dispatcher; preview-only until pointer release.
+
+### `property vtt.tool-context.ReleasedGesture.start: PointerSample`
 
 ### `interface vtt.tool-context.ToolContext`
 
@@ -1909,6 +2182,14 @@ grid intersection by the time a tool sees it, and this only says so, so
 a tool that reads meaning into where its samples came from can. What
 any tool does with it is that tool's own business.
 
+### `property vtt.tool-context.ToolContext.structureEditParams: StructureEditParams`
+
+How a grab on an existing structure behaves -- shape/elevation mode and
+the bezier handle options (`curveMode`/`curveAction`/`curveWidth`).
+Ambient like `snapToGrid`: every construction tool can grab and edit
+whatever it owns (`structure-edit-behavior.ts`), so this is no longer
+one tool's own params.
+
 ### `property vtt.tool-context.ToolContext.tableId: string`
 
 ### `method vtt.tool-context.ToolContext.nextSequence(): number`
@@ -1921,6 +2202,11 @@ A fresh integer each call, monotonically increasing for the runtime's lifetime -
 
 Reports the node a tool just selected/moved, for `SettingsDrawer`'s inspector. `undefined` clears the inspector.
 
+### `method vtt.tool-context.ToolContext.updateToolParams(toolId: Id, update: (current: ToolParamsFor<Id>) => ToolParamsFor<Id>): void`
+
+Rewrites a tool's own params as the params panel would, so a tool can
+show its selection's settings there. Absent where no panel exists.
+
 ### `interface vtt.tool-context.ToolGesture`
 
 A gesture in progress (or, for a stationary hover, one where `start === current`).
@@ -1932,6 +2218,10 @@ A gesture in progress (or, for a stationary hover, one where `start === current`
 Ordered samples accumulated by the dispatcher; preview-only until pointer release.
 
 ### `property vtt.tool-context.ToolGesture.start: PointerSample`
+
+### `function vtt.tool-context.gestureMoved(start: PointerSample, samples: readonly PointerSample[]): boolean`
+
+Whether any of `samples` strayed from `start` past the click slop.
 
 ### `function vtt.tool-context.scopedToolId(ctx: string | ToolContext, domain: string, suffix?: string | number): string`
 
@@ -1960,76 +2250,232 @@ Something a commit survived but should not have had to.
 
 ### `function vtt.tool-registry.toolFor(id: Id): ConstructionTool<Id>`
 
+### `interface vtt.opening-shared.OpeningPiece`
+
+One face's share of a run rectangle: its bounds, and its outline as straight and cubic segments counter-clockwise in the face's `(u, v)`.
+
+### `property vtt.opening-shared.OpeningPiece.panel: RunPanelFrame`
+
+### `property vtt.opening-shared.OpeningPiece.path: readonly OutlineSegment[]`
+
+### `property vtt.opening-shared.OpeningPiece.rect: HostRect`
+
+### `interface vtt.opening-shared.RunFrame`
+
+### `property vtt.opening-shared.RunFrame.closed: boolean`
+
+### `property vtt.opening-shared.RunFrame.end: number`
+
+### `property vtt.opening-shared.RunFrame.panels: readonly RunPanelFrame[]`
+
+### `property vtt.opening-shared.RunFrame.start: number`
+
+### `method vtt.opening-shared.RunFrame.heightAt(s: number): number`
+
+### `method vtt.opening-shared.RunFrame.minHeightBetween(s0: number, s1: number): number`
+
+### `method vtt.opening-shared.RunFrame.panelOf(surfaceKey: ConstructionSurfaceKey): RunPanelFrame | undefined`
+
+### `method vtt.opening-shared.RunFrame.pieces(rect: RunRect, shape?: OpeningShape): readonly OpeningPiece[] | undefined`
+
+`rect`, outlined by `shape`, split at the seams: one piece per face it covers -- `undefined` when a closed run would make it overlap itself.
+
+### `method vtt.opening-shared.RunFrame.project(point: ConstructionPosition, hint?: ConstructionSurfaceKey): { s: number; v: number } | undefined`
+
+Where `point` lands on the run; `hint` is tried first.
+
+### `method vtt.opening-shared.RunFrame.resolveAt(s: number, v: number): ConstructionPosition`
+
+### `method vtt.opening-shared.RunFrame.sOf(panel: RunPanelFrame, u: number): number`
+
+### `interface vtt.opening-shared.RunRect`
+
+An axis-aligned rectangle in a run's `(s, v)` frame; `s` is in world units.
+
+### `property vtt.opening-shared.RunRect.s0: number`
+
+### `property vtt.opening-shared.RunRect.s1: number`
+
+### `property vtt.opening-shared.RunRect.v0: number`
+
+### `property vtt.opening-shared.RunRect.v1: number`
+
+### `variable vtt.opening-shared.MARGIN: 0.15`
+
+How much wall (world units) must be left standing at either end of a run, and above and below an opening.
+
+### `function vtt.opening-shared.commitOpeningGroup(ctx: ToolContext, causeId: string, removals: readonly ConstructionSurfaceKey[], pieces: readonly OpeningPiece[], shape?: OpeningShape): OpeningCommit`
+
+One transaction: delete every region in `removals`, then add `pieces` as
+new regions with their own nodes, each pinned to its face, all labelled
+one group in their property bag beside the shape. Both is a move or resize; only `removals` a delete; only
+`pieces` a creation.
+
+### `function vtt.opening-shared.groupIdOf(region: ConstructionRegionTopology): string | undefined`
+
+The id of the group `region` belongs to, read from its property bag.
+
+### `function vtt.opening-shared.groupPieces(ctx: ToolContext, group: string): readonly ConstructionRegionTopology[]`
+
+Every piece of the group `group`.
+
+### `function vtt.opening-shared.groupRunSpan(run: RunFrame, pieces: readonly ConstructionRegionTopology[]): RunRect | undefined`
+
+The one run rectangle a group's pieces make together; on a closed run it starts after the widest gap.
+
+### `function vtt.opening-shared.hostBoxOf(region: ConstructionRegionTopology, hostSurfaceKey: ConstructionSurfaceKey): HostRect | undefined`
+
+A region's `(u, v)` box on one host: its pins there and any cubic bulging past them.
+
+### `function vtt.opening-shared.isDoorRect(rect: { v0: number }): boolean`
+
+Whether `rect` reads as a door: a door is the only opening standing on the floor.
+
+### `function vtt.opening-shared.overlapsOther(ctx: ToolContext, run: RunFrame, rect: RunRect, excluded: ReadonlySet<string>): boolean`
+
+Whether `rect` would share area with any region that cuts and is already
+pinned to the run, other than `excluded` (surface refs of the group being
+edited). Touching is fine; overlapping is refused, never merged.
+
+### `function vtt.opening-shared.piecePolyline(piece: OpeningPiece, step: number): readonly (readonly [number, number])[]`
+
+A piece's outline as a `(u, v)` polyline for drawing: each cubic sampled,
+and on a bending face each straight side split so no step spans more than
+`step` world units along it -- the same path the engine traces.
+
+### `function vtt.opening-shared.primaryHostOf(region: ConstructionRegionTopology): ConstructionSurfaceKey | undefined`
+
+The host holding most of a region's pinned nodes.
+
+### `function vtt.opening-shared.runFrame(runtime: RunRuntime, surfaceKey: ConstructionSurfaceKey): RunFrame | undefined`
+
+The run through `surfaceKey` -- `undefined` when it is not an upright face that accepts cuts.
+
+### `function vtt.opening-shared.settleRect(run: RunFrame, rect: RunRect, isDoor: boolean, keepWidth: boolean): RunRect | undefined`
+
+`rect` settled on the run: an edge just past a seam snapped onto it, then
+repositioned (never resized) to keep MARGIN of wall at the run's
+ends and above and below -- `undefined` when it cannot fit at all. A door
+keeps `v0 = 0`: it sits on the floor. A closed run has no ends, but a
+rect may not reach round onto itself.
+
+### `function vtt.opening-shared.shapeOfGroup(pieces: readonly ConstructionRegionTopology[]): OpeningShape`
+
+The shape an opening group carries, read from any piece's property bag.
+
 ### `variable vtt.opening-tool.openingTool: ConstructionTool<"opening">`
-
-One click stamps an opening onto the wall panel under the pointer.
-
-Two calls, because the wall already exists and only one of them creates
-anything: the patch registers the rim and the face standing in it, then
-the wall is opened along that very rim. The second walks the loop
-backwards -- reversing a ring is not just flipping each use, the order
-reverses too -- so the rim ends up bounding the wall on one side and the
-opening on the other, used twice, joined the way any two faces are.
-
-Where the opening lands is read off the panel itself, not off the ground:
-`panel-rail.ts` flattens the panel into travel-and-height, so a curved
-wall is travelled rather than spanned and a window sits on the curve
-instead of cutting across it.
-
-### `interface vtt.panel-rail.PanelRail`
-
-One upright face, flattened: a rail to travel along and a height to rise through.
-
-### `property vtt.panel-rail.PanelRail.baseY: number`
-
-### `property vtt.panel-rail.PanelRail.length: number`
-
-Rail length in world units -- the full run from one side of the panel to the other.
-
-### `property vtt.panel-rail.PanelRail.topY: number`
-
-### `method vtt.panel-rail.PanelRail.geometryBetween(from: number, to: number): ConstructionEdgeGeometry`
-
-The rail's own curvature between two travel distances, as an edge
-geometry walked in the direction of increasing travel -- what a caller
-stamping something onto the panel (an opening's own rim) must declare
-for *that* span specifically, not the whole rail's.
-
-A straight or arced rail answers this the same way regardless of
-`from`/`to`: a chord is a chord end to end, and any two points on a
-circle bound an arc of that same circle. A Bezier rail does not -- its
-handles are anchored to its own original ends, so a shorter span
-between two different points needs its own, freshly split, handles or it
-traces the wrong curve.
-
-### `method vtt.panel-rail.PanelRail.positionAt(travel: number, y: number): ConstructionPosition`
-
-The point `travel` along the rail, at height `y`.
-
-### `method vtt.panel-rail.PanelRail.travelTo(point: ConstructionPosition): number`
-
-Where `point` sits along the rail, clamped to the panel.
-
-### `function vtt.panel-rail.panelRailOf(port: ContourPort, topology: ConstructionRegionTopology): PanelRail | undefined`
-
-Reads a face as an upright panel: a run along the base, one side rising, a
-run back along the top, one side coming down.
-
-Found by locating exactly two upright sides rather than by counting edges,
-so a panel whose base has since been subdivided -- a T-junction welding
-another wall onto its side -- is still the same panel. `undefined` for
-anything that is not one, which is the whole of "you cannot put an opening
-here".
 
 ### `variable vtt.path-brush-tool.pathBrushTool: ConstructionTool<"path-brush">`
 
-A free path stroke, built on the same brush every other brush uses: press,
-drag, and on release the whole swept region is handed over once.
+Stable identity for freehand creation, through-point creation and spine editing.
 
-Path creation follows the same ownership split as walls: this tool only
-chooses the interaction and emits a `PathBrushEffect`. The PathCloud owns
-the resulting graph and contour plan; the composition boundary commits its
-generic transaction without interpreting path topology.
+### `variable vtt.path-points-tool.pathPointsTool: ConstructionTool<"path-brush">`
+
+A road is drawn freely or through explicit points, and edited by its spine points.
+
+### `function vtt.path-points-tool.prunePoints(points: readonly ConstructionPosition[]): ConstructionPosition[]`
+
+Prunes accidental duplicate or jitter points (< 0.1m) from a draft spine.
+
+### `variable vtt.path-stroke-tool.pathStrokeTool: ConstructionTool<"path-brush">`
+
+Drag to sketch the centerline. Release commits one fitted curve transaction.
+
+### `interface vtt.road-body-target.RoadSnapTarget`
+
+What the pointer resolved to at one instant -- `nodeId` present only when it hit a node handle.
+
+### `property vtt.road-body-target.RoadSnapTarget.constructionAction?: { kind: "branch"; nodeId: string }`
+
+### `property vtt.road-body-target.RoadSnapTarget.nodeId?: string`
+
+### `property vtt.road-body-target.RoadSnapTarget.point: ConstructionPosition`
+
+### `property vtt.road-body-target.RoadSnapTarget.screenX?: number`
+
+### `property vtt.road-body-target.RoadSnapTarget.screenY?: number`
+
+Screen coordinate used by explicit elevation gestures.
+
+### `property vtt.road-body-target.RoadSnapTarget.shiftKey?: boolean`
+
+### `property vtt.road-body-target.RoadSnapTarget.snapEdge?: { edgeId: string; parameter: number }`
+
+### `property vtt.road-body-target.RoadSnapTarget.snapSignature?: string`
+
+### `property vtt.road-body-target.RoadSnapTarget.surfaceRef?: string`
+
+### `function vtt.road-body-target.roadBodyTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): { options: CurveGestureOptions; sample: PointerSample } | undefined`
+
+Project a road-body pick onto its spine using the canonical curve query.
+
+### `function vtt.road-body-target.roadSnapIsCurrent(ctx: ToolContext, target: RoadSnapTarget): boolean`
+
+A deleted or reshaped target cannot be confirmed from a stale preview.
+
+### `function vtt.road-body-target.roadSnapTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): RoadSnapTarget | undefined`
+
+Keep the displayed position and edge parameter until the pointer exits the wider release zone.
+
+### `function vtt.road-body-target.showRoadSnap(ctx: ToolContext, target?: PointerSample): void`
+
+Highlight the exact prospective junction without changing the graph.
+
+### `interface vtt.road-preview-mesh.RoadMeshPreviewOptions`
+
+### `property vtt.road-preview-mesh.RoadMeshPreviewOptions.anchors: readonly ConstructionPosition[]`
+
+### `property vtt.road-preview-mesh.RoadMeshPreviewOptions.bedWidth: number`
+
+### `property vtt.road-preview-mesh.RoadMeshPreviewOptions.color?: number`
+
+### `property vtt.road-preview-mesh.RoadMeshPreviewOptions.cursor?: ConstructionPosition`
+
+### `property vtt.road-preview-mesh.RoadMeshPreviewOptions.fallbackPoints?: readonly ConstructionPosition[]`
+
+### `property vtt.road-preview-mesh.RoadMeshPreviewOptions.opacity?: number`
+
+### `property vtt.road-preview-mesh.RoadMeshPreviewOptions.ribbons?: readonly { ribbon: { outer: readonly (readonly [number, number, number])[] } | null }[]`
+
+### `variable vtt.road-preview-mesh.NODE_DISK_ELEVATION: 0.055`
+
+### `variable vtt.road-preview-mesh.PREVIEW_ELEVATION: 0.05`
+
+### `variable vtt.road-preview-mesh.ROAD_ERROR_COLOR: 16281969`
+
+### `variable vtt.road-preview-mesh.ROAD_ERROR_OPACITY: 0.6`
+
+### `variable vtt.road-preview-mesh.ROAD_PREVIEW_COLOR: 3718648`
+
+### `variable vtt.road-preview-mesh.ROAD_PREVIEW_OPACITY: 0.65`
+
+### `variable vtt.road-preview-mesh.SNAP_DISK_COLOR: 440020`
+
+### `variable vtt.road-preview-mesh.SNAP_DISK_OPACITY: 0.85`
+
+### `function vtt.road-preview-mesh.appendNodeDisk(positions: number[], indices: number[], center: ConstructionPosition, radius: number, elevation: number, segments: number): void`
+
+Append a filled circular disk at a specific anchor node or cursor position.
+
+### `function vtt.road-preview-mesh.appendRibbonQuads(positions: number[], indices: number[], outer: readonly (readonly [number, number, number])[], elevation: number): void`
+
+Append triangulated quad strips for a ribbon outline computed by graph-core.
+
+### `function vtt.road-preview-mesh.appendStraightQuads(positions: number[], indices: number[], points: readonly ConstructionPosition[], halfWidth: number, elevation: number): void`
+
+Fallback straight quads connecting consecutive points when curve fitting is unavailable.
+
+### `function vtt.road-preview-mesh.createFastRoadPreview(points: readonly ConstructionPosition[], bedWidth: number, cursor?: ConstructionPosition, color?: number, opacity?: number): RenderPreviewDescriptor`
+
+Build a lightweight straight-quad preview mesh connecting path points directly, without WASM round-trips.
+
+### `function vtt.road-preview-mesh.createRoadMeshPreview(options: RoadMeshPreviewOptions): RenderPreviewDescriptor`
+
+Build a solid translucent 3D mesh preview for a road, including ribbon quads and anchor disks.
+
+### `function vtt.road-preview-mesh.createSnapMeshPreview(target: ConstructionPosition, radius: number): RenderPreviewDescriptor`
+
+Build a glowing circular snap preview mesh at the target junction location.
 
 ### `interface vtt.platform-contour-merge.DirectedContourEdge`
 
@@ -2130,6 +2576,8 @@ for sitting on ground already there, and that whole side stays empty.
 
 ### `variable vtt.platform-contour-tool.platformContourTool: ConstructionTool<"platform-contour">`
 
+Also grabs and edits an existing platform's own vertex/edge/body -- see `structure-edit-behavior.ts`.
+
 ### `function vtt.platform-contour-tool.commitPlatformContour(ctx: ToolContext, samples: readonly PointerSample[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; tolerance?: number }): void`
 
 Polygon entry point retained for callers that already have explicit corners.
@@ -2148,6 +2596,8 @@ shared/cancelled edges -- see `platform-contour-merge.ts` for why.
 Application-wide overhang; no individual roof/band control in this delivery.
 
 ### `variable vtt.roof-tool.roofTool: ConstructionTool<"roof">`
+
+Also grabs and edits an existing roof's own vertex/edge/body -- see `structure-edit-behavior.ts`.
 
 ### `function vtt.roof-tool.commitRoof(ctx: ToolContext, capRequest: CapRequest): void`
 
@@ -2304,11 +2754,11 @@ an ordinary spine.
 
 ### `variable vtt.slope-tools.slopeRampTool: ConstructionTool<"slope-ramp">`
 
-Drag from the start to the end; the ramp climbs the fixed rise.
+Also grabs and edits an existing slope spine's own control point/segment -- see `structure-edit-behavior.ts`.
 
 ### `variable vtt.slope-tools.slopeSpiralTool: ConstructionTool<"slope-spiral">`
 
-Click the centre; the spiral climbs the rise over its turns.
+Also grabs and edits an existing slope spine's own control point/segment -- see `structure-edit-behavior.ts`.
 
 ### `variable vtt.terrain-sculpt-tool.terrainSculptTool: ConstructionTool<"terrain-sculpt">`
 
@@ -2340,47 +2790,15 @@ lands on the same position as `pointAt(0)`'s (`0`).
 
 ### `variable vtt.tower-stamp-tool.towerStampTool: ConstructionTool<"tower-stamp">`
 
-One click stamps a closed circular wall run at a known radius (one of
-`TOWER_RADIUS_PRESETS`, never a freehand drag).
-
-A tower is not its own kind of structure and has no code of its own: it is
-the ordinary wall type, committed through the ordinary wall builder, from
-a contour a preset happened to compute instead of a hand drawing it. That
-is the entire difference -- so a tower welds onto a drawn wall, gets
-edited by the same handles, and is subject to the same rules, for free.
+Also grabs and edits an existing wall's own vertex/edge/body/height-widget -- a tower is an ordinary wall, see `structure-edit-behavior.ts`.
 
 ### `variable vtt.wall-brush-tool.wallBrushTool: ConstructionTool<"wall-brush">`
 
-A free wall stroke, built on the same brush every other brush uses: press,
-drag, and on release the whole swept region is handed over once. Nothing
-is committed mid-drag and nothing is resent per tick -- what the pointer
-traced is corrected into contour edges and declared as one patch.
-
-The brush footprint is the correction dial rather than a footprint to
-paint. Its reach is fed straight to the fitter as tolerance: at radius 0
-the drawn contour is committed literally, and the wider the brush the more
-freely a shaky stroke is straightened into clean runs and cubic Béziers.
-That is why a wall brush is meant to be a small circle -- it is not
-covering ground, it is saying how literally to take the hand.
-
-Everything a wall is lives in TypeScript from here down (`wall-shared.ts`,
-`wall-patch.ts`): corners resolve to columns, columns share edges, and the
-engine is handed nodes, edges and faces without ever being told they are a
-wall.
+Also grabs and edits an existing wall's own vertex/edge/body/height-widget -- see `structure-edit-behavior.ts`.
 
 ### `variable vtt.wall-line-tool.wallLineTool: ConstructionTool<"wall-line">`
 
-A straight wall drawn by press-drag-release. Wherever the drag wanders,
-only the press point and the release point reach the graph: one exact
-straight contour edge between them. That correction is this tool's entire
-reason to exist, distinct from the free brush, whose own correction is a
-fit with a tolerance rather than a guarantee.
-
-Beyond that it is the same wall as every other: the same contour commit,
-the same column resolution, the same shared edges. A run drawn here welds
-onto a free stroke, or onto another straight run, by resolving its corner
-onto that run's own column -- by connection, not by landing on the same
-coordinate.
+Also grabs and edits an existing wall's own vertex/edge/body/height-widget -- see `structure-edit-behavior.ts`.
 
 ### `interface vtt.wall-patch.WallColumn`
 
@@ -2574,6 +2992,8 @@ Boundary edges running along the top, the paired half of the same subdivision.
 
 ### `property vtt.use-construction-pointer.ConstructionPointerHandlers.onPointerUp: (event: PointerEvent<HTMLDivElement>) => void`
 
+### `property vtt.use-construction-pointer.ConstructionPointerHandlers.onSelectionAction: (action: string) => void`
+
 ### `interface vtt.use-construction-pointer.UseConstructionPointerOptions`
 
 ### `property vtt.use-construction-pointer.UseConstructionPointerOptions.activeTool: ConstructionToolId`
@@ -2584,11 +3004,19 @@ Boundary edges running along the top, the paired half of the same subdivision.
 
 ### `property vtt.use-construction-pointer.UseConstructionPointerOptions.onSelectionChange: (info: SelectedNodeInfo | undefined) => void`
 
+### `property vtt.use-construction-pointer.UseConstructionPointerOptions.onToolParamsUpdate?: (toolId: Id, update: (current: ToolParamsByTool[Id]) => ToolParamsByTool[Id]) => void`
+
+Lets a tool rewrite its own params, e.g. to show its selection's settings in the panel.
+
 ### `property vtt.use-construction-pointer.UseConstructionPointerOptions.runtime: TabletopRuntime`
 
 ### `property vtt.use-construction-pointer.UseConstructionPointerOptions.snapToGrid: boolean`
 
 When true, a resolved point (other than an existing node handle -- those stay precise) snaps to the nearest grid intersection before any tool sees it, so a new terrain cell/wall/room lands centered on the grid instead of wherever the pointer happened to be.
+
+### `property vtt.use-construction-pointer.UseConstructionPointerOptions.structureEditParams: StructureEditParams`
+
+How a grab on an existing structure behaves -- ambient across every construction tool, not one tool's own params. See `ToolContext.structureEditParams`.
 
 ### `property vtt.use-construction-pointer.UseConstructionPointerOptions.tableId: string`
 
@@ -3053,9 +3481,17 @@ Who asked for an effect, and on which table. Only `operationId` crosses to the e
 
 One semantic path-paint intent. It contains no graph mutations.
 
+### `property vtt.surface-edit-contract.PathBrushEffect.authoredCurves?: readonly CubicBezier[]`
+
+Explicit pen controls, preserved without fitting the stroke.
+
 ### `property vtt.surface-edit-contract.PathBrushEffect.brushRegion: BrushGestureRegion`
 
 ### `property vtt.surface-edit-contract.PathBrushEffect.brushShape: BrushShape`
+
+### `property vtt.surface-edit-contract.PathBrushEffect.curveMode?: "automatic" | "free"`
+
+Editing policy for newly authored spans; omitted preserves explicit controls.
 
 ### `property vtt.surface-edit-contract.PathBrushEffect.expected: readonly RevisionPrecondition[]`
 
@@ -3171,7 +3607,7 @@ Zeroes out every axis a role does not allow -- the "constraint on the op's
 own parameter" half of a role policy, enforced here on the TS side
 *before* the engine call, never inside Rust.
 
-### `type vtt.atomic-edit.EditTarget = { kind: "vertex"; nodeId: ConstructionNodeId } | { edgeId: ConstructionEdgeId; kind: "edge" } | { kind: "region" }`
+### `type vtt.atomic-edit.EditTarget = { kind: "vertex"; nodeId: ConstructionNodeId } | { edgeId: ConstructionEdgeId; kind: "edge" } | { kind: "region" } | { edgeId: ConstructionEdgeId; kind: "edge-zone"; zone: "group" | "single" }`
 
 Which part of a region the user grabbed.
 
@@ -3267,11 +3703,15 @@ to the curve, and the structure type that owns the spine regenerates its
 surface from that. A road, a sloped platform and any future curve-built
 type are edited by exactly the same handles; only the last step differs.
 
+### `function vtt.spine-edit.previewBezierEdit(input: SpineEditInput): Float32Array<ArrayBufferLike> | undefined`
+
+Preview only the affected curves; surface regeneration runs once on release.
+
 ### `type vtt.spine-actions.SpineAction = "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"`
 
 Structural edits on a spine, the same for every structure generated along one.
 
-### `function vtt.spine-actions.planSpineAction(snapshot: ConstructionGraphSnapshot, port: BezierPort, action: SpineAction, targetId: string, edgeId: string | undefined, operationId: string, width?: number, endWidth?: number): ConstructionGraphPatch`
+### `function vtt.spine-actions.planSpineAction(snapshot: ConstructionGraphSnapshot, port: BezierPort, action: SpineAction, targetId: string, edgeId: string | undefined, operationId: string, width?: number, endWidth?: number, allowShapeChange: boolean): ConstructionGraphPatch`
 
 The graph patch one structural spine action makes; the owner regenerates its surface from it.
 
@@ -3314,6 +3754,10 @@ first place (see `spine-node-id.ts`).
 
 ### `property vtt.spine-edit-plan.SpineEditInput.action?: SpineAction`
 
+### `property vtt.spine-edit-plan.SpineEditInput.allowShapeChange?: boolean`
+
+Explicit point deletion may change the adjacent curve shape.
+
 ### `property vtt.spine-edit-plan.SpineEditInput.endWidth?: number`
 
 ### `property vtt.spine-edit-plan.SpineEditInput.insert?: boolean`
@@ -3321,6 +3765,10 @@ first place (see `spine-node-id.ts`).
 ### `property vtt.spine-edit-plan.SpineEditInput.mode?: CurveHandleMode`
 
 ### `property vtt.spine-edit-plan.SpineEditInput.operationId: string`
+
+### `property vtt.spine-edit-plan.SpineEditInput.parameter?: number`
+
+Parameter of the grabbed span, supplied by the curve nearest-point query.
 
 ### `property vtt.spine-edit-plan.SpineEditInput.port: BezierPort`
 
@@ -3611,14 +4059,22 @@ Extracts the outer and hole perimeter loops of a whole terrain cloud.
 
 Computes the 2D bounding query covering a set of terrain topologies.
 
+### `interface vtt.panel-structure.PanelTopRun`
+
+### `property vtt.panel-structure.PanelTopRun.edge: ConstructionRegionEdge`
+
+### `property vtt.panel-structure.PanelTopRun.end: ConstructionNodeSnapshot`
+
+### `property vtt.panel-structure.PanelTopRun.start: ConstructionNodeSnapshot`
+
 ### `variable vtt.panel-structure.openingStructureType: StructureTypeDefinition`
 
-The face standing in a hole a wall was opened by. One structural type:
-a door and a window are the same panel on the rim the wall shares with it,
-and differ only in the parameters that placed it (a door sits on the floor,
-a window on its sill) and in what is drawn there.
+A door or a window: its own region, every node pinned to a host face in
+relative coordinates, cutting the host at mesh time rather than through a
+topological hole. Editing one always replaces it (see
+openingPolicyFor).
 
-### `variable vtt.panel-structure.PANEL_ROLES: { body: "panel-body"; bottomCorner: "panel-bottom-corner"; bottomEdge: "panel-bottom-edge"; post: "panel-post"; topCorner: "panel-top-corner"; topEdge: "panel-top-edge"; unknown: "panel-unknown" }`
+### `variable vtt.panel-structure.PANEL_ROLES: { body: "panel-body"; bottomCorner: "panel-bottom-corner"; bottomEdge: "panel-bottom-edge"; post: "panel-post"; topCorner: "panel-top-corner"; topEdge: "panel-top-edge"; topSegmentGroup: "panel-top-segment-group"; topSegmentSingle: "panel-top-segment-single"; unknown: "panel-unknown" }`
 
 The shared role model for every type generated by `extrude_path`: an
 upright panel whose boundary is a bottom run at the baseline and a top run
@@ -3642,7 +4098,7 @@ nothing: a wall standing on terrain leaves that terrain intact, and two
 walls crossing weld at their shared corners rather than eating each other.
 That is the whole of the panel side of the interaction table.
 
-### `function vtt.panel-structure.panelMotionInfluences(topology: ConstructionRegionTopology, transport: boolean): readonly ConstructionMotionInfluence[]`
+### `function vtt.panel-structure.panelMotionInfluences(topology: ConstructionRegionTopology): readonly ConstructionMotionInfluence[]`
 
 Only actual upright boundary edges transmit movement upwards. Subdivided
 posts work through successive edges in the shared Rust solver.
@@ -3654,6 +4110,10 @@ posts work through successive edges in the shared Rust solver.
 ### `function vtt.panel-structure.panelStructureType(surfaceType: string, label: string, creation: string, traits: readonly StructureTrait[]): StructureTypeDefinition`
 
 Builds one `extrude_path`-generated structure type on the shared panel model.
+
+### `function vtt.panel-structure.topRunsOf(topology: ConstructionRegionTopology): readonly PanelTopRun[]`
+
+Every run of `topology` with neither end at its baseline: the runs that carry a panel's height.
 
 ### `function vtt.panel-structure.validatePanelMotion(topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>): string | undefined`
 
@@ -3672,7 +4132,7 @@ Converts graph-owned authoring data to sampled ribbons through the Rust port.
 
 Resolve legacy road authorship once using the canonical Rust conversion.
 
-### `function vtt.bezier-road-plan.planBezierRoad(input: { corridorId: string; miterLimit: number; offsets: readonly number[]; port: BezierPort; snapReach: number; snapshot: ConstructionGraphSnapshot; stroke: readonly ConstructionPosition[]; tolerance: number; topologies?: readonly ConstructionRegionTopology[] }): { chains: readonly SpineChainInput[]; controlPoints: ConstructionPosition[]; footprint: [number, number][][][]; graphPatch: ConstructionGraphPatch; polyline: ConstructionPosition[]; snapshot: ConstructionGraphSnapshot }`
+### `function vtt.bezier-road-plan.planBezierRoad(input: { authoredCurves?: readonly CubicBezier[]; corridorId: string; curveMode?: "automatic" | "free"; miterLimit: number; offsets: readonly number[]; port: BezierPort; snapReach: number; snapshot: ConstructionGraphSnapshot; stroke: readonly ConstructionPosition[]; tolerance: number; topologies?: readonly ConstructionRegionTopology[] }): { chains: readonly SpineChainInput[]; controlPoints: ConstructionPosition[]; footprint: [number, number][][][]; graphPatch: ConstructionGraphPatch; polyline: ConstructionPosition[]; snapshot: ConstructionGraphSnapshot }`
 
 Product identities and profile policy surround generic Rust fitting and connections.
 
@@ -4559,6 +5019,15 @@ beside this one. The cloud already *is* that list, resolved by the layer
 whose job it is (`construction-cloud.ts`) instead of recomputed by
 whichever tool happens to be calling.
 
+### `property vtt.structure-type.CascadeContext.allTopologies?: readonly ConstructionRegionTopology[]`
+
+Every region topology the plan can see: the whole table when the
+session is at hand, only the grabbed cloud's members otherwise. A
+`groupCascade` reaches through this for matches outside the grabbed
+cloud -- e.g. every wall currently level with the grabbed one, wherever
+it stands -- which a cloud, scoped to one connected same-type run, can
+never contain by construction.
+
 ### `property vtt.structure-type.CascadeContext.cloud: CloudTopology`
 
 ### `property vtt.structure-type.CascadeContext.delta: { x: number; y: number; z: number }`
@@ -4684,6 +5153,21 @@ Extra ops fired alongside the primary one, as one transaction -- e.g.
 moving a wall's bottom corner moves its paired top corner by the *same*
 delta. Same-delta cascades are all this model needs so far; there is no
 scaled or cross-axis variant.
+
+### `property vtt.structure-type.RolePolicy.groupCascade?: (context: CascadeContext) => readonly AtomicEditOp[]`
+
+Extra ops matched by a type's own declared value or trait across the
+*whole table*, not the grabbed cloud -- the opportunistic case, where
+what reaches together is decided at gesture time by comparing current
+state, not by any standing weld. A wall's per-segment height widget uses
+this to raise every other wall currently level with the one grabbed.
+
+Applied unconditionally, unlike cascade: the solver path
+(`edit-orchestrator.ts`) supersedes `cascade` whenever the type also
+declares `motionInfluences`, because that path derives structural
+cascades from the influence graph instead. A `groupCascade` match is not
+structural -- no influence link could express it -- so it is never
+superseded.
 
 ### `property vtt.structure-type.RolePolicy.reshape?: (context: ReshapeContext) => readonly AtomicEditOp[]`
 
@@ -4887,7 +5371,7 @@ scope decision. `"cloud"` is for the roles that name the *whole thing*:
 grabbing a wall's body means the wall, not the one panel under the
 pointer.
 
-### `type vtt.structure-type.StructureTrait = "ground" | "floor" | "partition"`
+### `type vtt.structure-type.StructureTrait = "ground" | "floor" | "partition" | "cuts" | "accepts-cuts"`
 
 A tag a structure type carries so other code can ask what the type *is for*
 without naming it.
@@ -4909,6 +5393,83 @@ The policy every unknown role falls back to: refuse rather than guess.
 ### `function vtt.brush-shape-params.resolveBrushShape(params: BrushShapeParams): BrushShape`
 
 Converts editable shape parameters into the immutable semantic brush contract.
+
+### `interface vtt.opening-path.OutlineSegment`
+
+### `property vtt.opening-path.OutlineSegment.controls?: readonly [OutlinePoint, OutlinePoint]`
+
+The cubic's two off-curve control points; absent for a straight segment.
+
+### `property vtt.opening-path.OutlineSegment.from: OutlinePoint`
+
+### `property vtt.opening-path.OutlineSegment.to: OutlinePoint`
+
+### `type vtt.opening-path.OutlinePoint = readonly [number, number]`
+
+An opening's outline as a closed path of straight and cubic segments, so a
+pinned opening needs one node per segment end and nothing in between.
+Pure; `x` along the wall, `y` up, world meters.
+
+A rounded side is the arc of a circle through that side's midpoint whose
+chord ends sit on the two neighbouring sides, so the outline is convex and
+every apex stays on the box.
+
+### `function vtt.opening-path.clipPathToStrip(path: OutlinePath, x0: number, x1: number): OutlineSegment[]`
+
+The part of the convex, closed `path` between `x = x0` and `x = x1`: its
+segments cut where they cross either line (cubics split, never
+resampled), closed along the lines themselves by straight segments.
+
+### `function vtt.opening-path.mapPath(path: OutlinePath, map: (point: OutlinePoint) => OutlinePoint): OutlineSegment[]`
+
+Every point of `path` mapped by `map`, which must be affine so a cubic stays that same cubic.
+
+### `function vtt.opening-path.openingPath(shape: OpeningShape | undefined, width: number, height: number): OutlineSegment[]`
+
+The outline of a `width` x `height` box with `shape` as a closed path, counter-clockwise from its lowest, leftmost point.
+
+### `function vtt.opening-path.pointAt(segment: OutlineSegment, t: number): OutlinePoint`
+
+The point at `t` along `segment`.
+
+### `function vtt.opening-path.reversePath(path: OutlinePath): OutlineSegment[]`
+
+`path` walked the other way.
+
+### `function vtt.opening-path.segmentExtremes(segment: OutlineSegment): OutlinePoint[]`
+
+Where a segment reaches its extremes along either axis, ends included.
+
+### `function vtt.opening-path.sideArc(radius: number, length: number, across: number): { radius: number; rise: number } | undefined`
+
+How far a side's arc rises from its chord, and the radius that rise
+means. A radius under half the side is raised to half (a semicircle); the
+rise is capped at half the box across the side, so opposite arcs never
+meet and every apex stays on the box.
+
+### `function vtt.opening-path.splitSegment(segment: OutlineSegment, t: number): readonly [OutlineSegment, OutlineSegment]`
+
+`segment` cut in two at `t` (De Casteljau for a cubic).
+
+### `function vtt.opening-path.startAtLowest(path: readonly OutlineSegment[]): OutlineSegment[]`
+
+`path` rotated to start at its lowest, then leftmost, segment start.
+
+### `variable vtt.opening-shape.OPENING_SHAPE_PROP: "openingShape"`
+
+Where an opening's shape lives in its region's property bag.
+
+### `function vtt.opening-shape.isRectangleShape(shape: OpeningShape | undefined): boolean`
+
+### `function vtt.opening-shape.sameShape(a: OpeningShape | undefined, b: OpeningShape | undefined): boolean`
+
+### `function vtt.opening-shape.shapeFromProps(props: Readonly<Record<string, unknown>> | undefined): OpeningShape`
+
+The shape stored in a region's property bag; a missing or malformed entry is a rectangle.
+
+### `function vtt.opening-shape.shapeProps(shape: OpeningShape | undefined): Record<string, unknown>`
+
+The property-bag entries an opening with `shape` stores; none for a rectangle.
 
 ### `interface vtt.tool-types.BrushShapeParams`
 
@@ -4933,8 +5494,8 @@ not a hole cut through it. The wall gains an inner loop and this face
 takes that very loop as its own boundary, so the two share the rim and a
 wall with a window is still one wall.
 
-A door is the same shape with its sill on the floor, which is why there is
-one tool and not two.
+A door is the same shape standing on the floor, which is why there is one
+tool and not two. A window's height on the wall is wherever it is placed.
 
 ### `property vtt.tool-types.OpeningParams.height: number`
 
@@ -4942,19 +5503,38 @@ one tool and not two.
 
 A preset of the one opening type: where it starts and what is drawn in it, never its structure.
 
-### `property vtt.tool-types.OpeningParams.sill: number`
+### `property vtt.tool-types.OpeningParams.shape: OpeningShape`
 
-How far above the wall's own base the opening starts. Zero is a door.
+The outline the next opening gets inside its bounding rectangle.
 
 ### `property vtt.tool-types.OpeningParams.width: number`
 
 How wide, measured along the wall rather than across the ground -- a curved wall is travelled, not spanned.
+
+### `interface vtt.tool-types.OpeningShape`
+
+An opening's outline inside its bounding rectangle. Each side is straight
+(radius 0) or a circular arc through that side's midpoint, bulging toward
+it, with the given radius in world meters; `ellipse` ignores the radii
+and inscribes an ellipse (a circle when the rectangle is square).
+
+### `property vtt.tool-types.OpeningShape.ellipse: boolean`
+
+### `property vtt.tool-types.OpeningShape.radii: Readonly<Record<OpeningSide, number>>`
 
 ### `interface vtt.tool-types.PathBrushParams`
 
 ### `property vtt.tool-types.PathBrushParams.bedWidth: number`
 
 Width of the flat traversable bed, in world units.
+
+### `property vtt.tool-types.PathBrushParams.creationMode?: "points" | "brush" | "pen"`
+
+Freehand or through-point road authoring; pen is a legacy alias for points.
+
+### `property vtt.tool-types.PathBrushParams.curveMode?: "automatic" | "aligned" | "mirrored" | "free"`
+
+Constraint for editing an existing curve with this same tool.
 
 ### `property vtt.tool-types.PathBrushParams.miterLimit: number`
 
@@ -4983,6 +5563,26 @@ Non-negative shoulder elevation above the path bed.
 ### `property vtt.tool-types.PathBrushParams.shoulderWidth: number`
 
 Width of each optional raised shoulder, in world units.
+
+### `interface vtt.tool-types.StructureEditParams`
+
+How a grab on an *existing* structure behaves -- independent of which
+creation tool is active, since `beginCurveGesture`/the generic grab
+machinery (`structure-edit-behavior.ts`) work the same regardless of
+which type owns the grabbed part. Used to live as one tool's own params
+(`"edit-region"`, since retired); every construction tool now carries it
+ambiently via `ToolContext.structureEditParams` instead of declaring it
+as its own.
+
+### `property vtt.tool-types.StructureEditParams.curveAction?: "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"`
+
+### `property vtt.tool-types.StructureEditParams.curveEndWidth?: number`
+
+### `property vtt.tool-types.StructureEditParams.curveMode?: "automatic" | "aligned" | "mirrored" | "free"`
+
+### `property vtt.tool-types.StructureEditParams.curveWidth?: number`
+
+### `property vtt.tool-types.StructureEditParams.mode: "shape" | "elevation"`
 
 ### `interface vtt.tool-types.TerrainSculptParams`
 
@@ -5031,8 +5631,6 @@ Perlin `scale` -- smaller values are smoother/larger-scale terrain features.
 ### `property vtt.tool-types.TerrainSculptParams.targetSurface: "terrain" | "terrain-grass"`
 
 ### `interface vtt.tool-types.ToolParamsByTool`
-
-### `property vtt.tool-types.ToolParamsByTool.edit-region: { curveAction?: "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"; curveEndWidth?: number; curveMode?: "automatic" | "aligned" | "mirrored" | "free"; curveWidth?: number; mode: "shape" | "elevation" }`
 
 ### `property vtt.tool-types.ToolParamsByTool.navigate: NoToolParams`
 
@@ -5124,7 +5722,7 @@ Length of a panel's own vertical edge, in world units.
 
 ### `type vtt.tool-types.BrushShapeKind = "circle" | "square" | "hexagon"`
 
-### `type vtt.tool-types.ConstructionToolId = "navigate" | "edit-region" | "platform-contour" | "slope-ramp" | "slope-spiral" | "roof" | "path-brush" | "wall-brush" | "wall-line" | "tower-stamp" | "opening" | "terrain-sculpt"`
+### `type vtt.tool-types.ConstructionToolId = "navigate" | "platform-contour" | "slope-ramp" | "slope-spiral" | "roof" | "path-brush" | "wall-brush" | "wall-line" | "tower-stamp" | "opening" | "terrain-sculpt"`
 
 The construction-tool vocabulary every layer (widgets, composition) needs
 to agree on: which tools exist, what each one's parameters look like, and
@@ -5134,6 +5732,8 @@ pointer/render logic -- that lives in `composition/tabletop/tools/`
 PreviewDescriptor into an actual scene item).
 
 ### `type vtt.tool-types.NoToolParams = Record<string, never>`
+
+### `type vtt.tool-types.OpeningSide = "top" | "right" | "bottom" | "left"`
 
 ### `type vtt.tool-types.PathKind = "trail" | "street" | "road" | "bridge"`
 
@@ -5160,7 +5760,15 @@ Sculpt mode determining whether a stroke adds terrain/height ("add"), digs/remov
 
 ### `type vtt.tool-types.ToolParamsFor = ToolParamsByTool[Id]`
 
+### `variable vtt.tool-types.DEFAULT_STRUCTURE_EDIT_PARAMS: StructureEditParams`
+
 ### `variable vtt.tool-types.DEFAULT_TOOL_PARAMS: ToolParamsByTool`
+
+### `variable vtt.tool-types.OPENING_KIND_COLOR: Readonly<Record<OpeningParams["openingKind"], number>>`
+
+The one color each opening preset is drawn in, by the tool's ghost and the panel alike.
+
+### `variable vtt.tool-types.RECTANGLE_OPENING_SHAPE: OpeningShape`
 
 ### `variable vtt.tool-types.TOWER_RADIUS_PRESETS: readonly [1.5, 2.5, 4]`
 
@@ -5179,6 +5787,10 @@ reason about, not an arbitrary one a careless drag produced.
 Derives a recommended face size proportionally from the brush radius.
 Larger brush = broader/macro work = larger faces (fewer quads/vertices).
 Smaller brush = finer detail work = smaller faces.
+
+### `function vtt.tool-types.withOpeningKind(params: OpeningParams, kind: "window" | "door"): OpeningParams`
+
+`params` switched to `kind`: a door is at least door-tall.
 
 ### `interface vtt.bezier-curve.RibbonRequest`
 
@@ -5461,6 +6073,16 @@ A curve flattened to line segments, for a preview.
 
 `curve` with one handle dragged to `target`, or its midpoint pulled there.
 
+### `type vtt.panel-height-widget.PanelHeightWidgetZone = "group" | "single"`
+
+### `function vtt.panel-height-widget.panelHeightWidgetPick(id: string): { edgeId: string; zone: PanelHeightWidgetZone } | undefined`
+
+### `function vtt.panel-height-widget.panelHeightWidgetPickId(edgeId: string, zone: PanelHeightWidgetZone): string`
+
+### `function vtt.panel-height-widget.panelHeightWidgets(topologies: readonly ConstructionRegionTopology[]): readonly { id: string; position: ConstructionPosition }[]`
+
+Every top-run widget's two zone positions, across every partition panel `topologies` holds.
+
 ### `interface vtt.planar-area.PlanarPort`
 
 What a boolean needs: the engine's planar operation.
@@ -5506,15 +6128,19 @@ which entry a position belonged to. Read fresh for each candidate pair
 rather than cached, since dropping a vertex changes which pairs are
 adjacent.
 
+### `function vtt.ring-simplify.simplifyPolygonRdp(ring: readonly (readonly [number, number])[], epsilon: number): (readonly [number, number])[]`
+
+Simplifies a closed planar ring using the Ramer-Douglas-Peucker (RDP) algorithm.
+Drops vertices that deviate from the chord by less than `epsilon` meters,
+dramatically reducing vertex and edge count while preserving the visual curve.
+
 ### `interface vtt.stroke-fitting.FitOptions`
 
-What a caller may vary about a fit. `curves` defaults to `"arc"` (this
-module's original behavior, kept for every existing caller). Only the
-wall brush opts into `"bezier"` -- see `wall-shared.ts` -- so a platform's
-or a path's own contour keeps fitting true circular arcs exactly as it
-always has.
+Arc fitting remains local legacy behavior; B?zier interpretation is owned by Rust.
 
 ### `property vtt.stroke-fitting.FitOptions.curves?: "arc" | "bezier" | "none"`
+
+### `property vtt.stroke-fitting.FitOptions.port?: Pick<BezierPort, "curveBatch">`
 
 Which curved-span family to try for a span that is not already
 explained by a straight chord, if any. `"none"` fits every span as a
@@ -5786,6 +6412,8 @@ The structure type generated along this spine span; a span with no owner generat
 
 ### `property vtt.bezier-port.CurveResult.lengths: readonly number[]`
 
+### `property vtt.bezier-port.CurveResult.linear?: readonly boolean[]`
+
 ### `property vtt.bezier-port.CurveResult.opposite: CurvePoint | null`
 
 ### `property vtt.bezier-port.CurveResult.parameter: number | null`
@@ -5794,7 +6422,7 @@ The structure type generated along this spine span; a span with no owner generat
 
 ### `property vtt.bezier-port.CurveResult.samples: readonly (readonly { position: CurvePoint; t: number }[])[]`
 
-### `type vtt.bezier-port.CurveCommand = { kind: "automatic"; points: readonly CurvePoint[] } | { cornerDegrees?: number; kind: "fit"; points: readonly CurvePoint[] } | { kind: "join"; sections: readonly (readonly [CurvePoint, CurvePoint])[] } | { curve: CubicBezier; endOffsets?: readonly [number, number]; kind: "ribbon"; offsets: readonly [number, number]; parameters?: readonly number[] } | { curves: readonly CubicBezier[]; kind: "sample" } | { curve: CubicBezier; kind: "split"; profile?: CurveHandles; t: number } | { curve: CubicBezier; kind: "merge"; next: CubicBezier } | { curve: CubicBezier; kind: "pull"; t: number; target: CurvePoint } | { curve: CubicBezier; index: 1 | 2; kind: "handle"; mode: CurveHandleMode; opposite: CurvePoint | null; target: CurvePoint } | { curve: CubicBezier; kind: "nearest"; point: CurvePoint } | { end: CurvePoint; handles: CurveHandles; kind: "resolve"; start: CurvePoint }`
+### `type vtt.bezier-port.CurveCommand = { correction: number; curved: boolean; kind: "interpretStroke"; points: readonly CurvePoint[] } | { kind: "automatic"; points: readonly CurvePoint[] } | { cornerDegrees?: number; kind: "fit"; points: readonly CurvePoint[] } | { kind: "join"; sections: readonly (readonly [CurvePoint, CurvePoint])[] } | { curve: CubicBezier; endOffsets?: readonly [number, number]; kind: "ribbon"; offsets: readonly [number, number]; parameters?: readonly number[] } | { curves: readonly CubicBezier[]; kind: "sample" } | { curve: CubicBezier; kind: "split"; profile?: CurveHandles; t: number } | { curve: CubicBezier; kind: "merge"; next: CubicBezier } | { curve: CubicBezier; kind: "pull"; t: number; target: CurvePoint } | { curve: CubicBezier; index: 1 | 2; kind: "handle"; mode: CurveHandleMode; opposite: CurvePoint | null; target: CurvePoint } | { curve: CubicBezier; kind: "nearest"; point: CurvePoint } | { end: CurvePoint; handles: CurveHandles; kind: "resolve"; start: CurvePoint }`
 
 ### `type vtt.bezier-port.CurveHandleMode = "automatic" | "aligned" | "mirrored" | "free"`
 
@@ -6046,6 +6674,42 @@ Minimum angle in degrees for triangles (default 20.5).
 
 Minimum triangle area ratio relative to maximum allowed area (default 0.25).
 
+### `interface vtt.construction-session-port.ConstructionHostCurve`
+
+A host-traced edge, oriented as its loop walks it: straight or a cubic in the host's `(u, v)`.
+
+### `property vtt.construction-session-port.ConstructionHostCurve.controls?: readonly [readonly [number, number], readonly [number, number]]`
+
+The cubic's control points in host `(u, v)`; absent for a straight path there.
+
+### `property vtt.construction-session-port.ConstructionHostCurve.handles?: readonly [readonly [number, number, number], readonly [number, number, number]]`
+
+The same control points placed on the host, in world space.
+
+### `property vtt.construction-session-port.ConstructionHostCurve.hostSurfaceKey: ConstructionSurfaceKey`
+
+### `property vtt.construction-session-port.ConstructionHostCurve.points: readonly (readonly [number, number, number])[]`
+
+The traced path in world space, both ends included.
+
+### `interface vtt.construction-session-port.ConstructionHostOutline`
+
+A pinned region's outer loop traced on its one host, as `(u, v)` there.
+
+### `property vtt.construction-session-port.ConstructionHostOutline.hostSurfaceKey: ConstructionSurfaceKey`
+
+### `property vtt.construction-session-port.ConstructionHostOutline.uv: readonly (readonly [number, number])[]`
+
+### `interface vtt.construction-session-port.ConstructionHostPoint`
+
+A point expressed in a host face's `(u, v)` frame; unclamped, `inside` when both are in `[0, 1]`.
+
+### `property vtt.construction-session-port.ConstructionHostPoint.inside: boolean`
+
+### `property vtt.construction-session-port.ConstructionHostPoint.u: number`
+
+### `property vtt.construction-session-port.ConstructionHostPoint.v: number`
+
 ### `interface vtt.construction-session-port.ConstructionIrregularQuadGrid`
 
 A generated grid, and what each of its corners already is.
@@ -6162,9 +6826,21 @@ Semantic response links supplied to the Rust motion solver.
 
 ### `property vtt.construction-session-port.ConstructionNodeMotion.position: ConstructionPosition`
 
+### `interface vtt.construction-session-port.ConstructionNodePin`
+
+Where a pinned node sits on its host face: `u` along the face, `v` a fraction of the local height at that `u`.
+
+### `property vtt.construction-session-port.ConstructionNodePin.hostSurfaceKey: ConstructionSurfaceKey`
+
+### `property vtt.construction-session-port.ConstructionNodePin.u: number`
+
+### `property vtt.construction-session-port.ConstructionNodePin.v: number`
+
 ### `interface vtt.construction-session-port.ConstructionNodeSnapshot`
 
 ### `property vtt.construction-session-port.ConstructionNodeSnapshot.id: string`
+
+### `property vtt.construction-session-port.ConstructionNodeSnapshot.pin?: ConstructionNodePin`
 
 ### `property vtt.construction-session-port.ConstructionNodeSnapshot.position: ConstructionPosition`
 
@@ -6175,6 +6851,14 @@ One boundary edge walked in a loop's own direction.
 ### `property vtt.construction-session-port.ConstructionOrientedEdgeUse.edgeId: string`
 
 ### `property vtt.construction-session-port.ConstructionOrientedEdgeUse.reversed: boolean`
+
+### `interface vtt.construction-session-port.ConstructionPanelRun`
+
+The chain of cuttable upright panels continuing one another through shared vertical sides.
+
+### `property vtt.construction-session-port.ConstructionPanelRun.closed: boolean`
+
+### `property vtt.construction-session-port.ConstructionPanelRun.panels: readonly ConstructionRunPanel[]`
 
 ### `interface vtt.construction-session-port.ConstructionPatch`
 
@@ -6269,6 +6953,28 @@ wall with an opening nobody is standing in.
 
 ### `property vtt.construction-session-port.ConstructionPatchRegion.surfaceType: string`
 
+### `interface vtt.construction-session-port.ConstructionPinEdgeCurveRequest`
+
+Makes an edge pinned at both ends to one host a cubic in that host's `(u, v)`; `controls` run in the edge's own start-to-end direction, `null` makes it straight there.
+
+### `property vtt.construction-session-port.ConstructionPinEdgeCurveRequest.controls: readonly [readonly [number, number], readonly [number, number]] | null`
+
+### `property vtt.construction-session-port.ConstructionPinEdgeCurveRequest.edgeId: string`
+
+### `property vtt.construction-session-port.ConstructionPinEdgeCurveRequest.hostSurfaceKey: ConstructionSurfaceKey`
+
+### `interface vtt.construction-session-port.ConstructionPinRequest`
+
+Where a pinned node sits on its host face: `u` along the face, `v` a fraction of the local height at that `u`.
+
+### `property vtt.construction-session-port.ConstructionPinRequest.hostSurfaceKey: ConstructionSurfaceKey`
+
+### `property vtt.construction-session-port.ConstructionPinRequest.nodeId: string`
+
+### `property vtt.construction-session-port.ConstructionPinRequest.u: number`
+
+### `property vtt.construction-session-port.ConstructionPinRequest.v: number`
+
 ### `interface vtt.construction-session-port.ConstructionPlanarRequest`
 
 ### `property vtt.construction-session-port.ConstructionPlanarRequest.clip: readonly ConstructionPlanarShape[]`
@@ -6299,6 +7005,10 @@ which is what an edit naming the edge itself needs.
 
 ### `property vtt.construction-session-port.ConstructionRegionEdge.geometry: ConstructionEdgeGeometry`
 
+### `property vtt.construction-session-port.ConstructionRegionEdge.hostCurve?: ConstructionHostCurve`
+
+How the edge is traced on the host both its ends are pinned to, when they are.
+
 ### `property vtt.construction-session-port.ConstructionRegionEdge.reversed: boolean`
 
 ### `property vtt.construction-session-port.ConstructionRegionEdge.startNodeId: string`
@@ -6320,17 +7030,27 @@ end asked for a specific generated shape, so it already knows what
 
 ### `property vtt.construction-session-port.ConstructionRegionTopology.profile?: ConstructionSheetProfile`
 
+### `property vtt.construction-session-port.ConstructionRegionTopology.props?: Readonly<Record<string, unknown>>`
+
+Free-form properties a caller stored on the region; the engine never reads them.
+
 ### `property vtt.construction-session-port.ConstructionRegionTopology.surfaceKey: ConstructionSurfaceKey`
 
 ### `property vtt.construction-session-port.ConstructionRegionTopology.surfaceType: string`
 
+### `interface vtt.construction-session-port.ConstructionRunPanel`
+
+One upright panel's place on a run: run distance `s` is panel `u = (s - offset) / length`, mirrored when `reversed`.
+
+### `property vtt.construction-session-port.ConstructionRunPanel.length: number`
+
+### `property vtt.construction-session-port.ConstructionRunPanel.offset: number`
+
+### `property vtt.construction-session-port.ConstructionRunPanel.reversed: boolean`
+
+### `property vtt.construction-session-port.ConstructionRunPanel.surfaceKey: ConstructionSurfaceKey`
+
 ### `interface vtt.construction-session-port.ConstructionSessionPort`
-
-### `method vtt.construction-session-port.ConstructionSessionPort.addHole(request: { hole: readonly ConstructionOrientedEdgeUse[]; surfaceKey: ConstructionSurfaceKey }): RegionEditOutcome`
-
-Opens one more inner loop on an existing face -- what a door or a
-window is an opening for. The loop must already be registered, and it
-keeps one free use per edge so a face can stand in it.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.addPatch(patch: ConstructionPatch): ConstructionPatchOutcome`
 
@@ -6443,16 +7163,14 @@ Region boundaries with at least one node inside an XZ extent, returned in one en
 
 One region's live boundary, or `undefined` for a stale key.
 
-### `method vtt.construction-session-port.ConstructionSessionPort.getSurfaceMesh(surfaceKey: ConstructionSurfaceKey): readonly SurfaceMeshResult[]`
+### `method vtt.construction-session-port.ConstructionSessionPort.getSurfaceMeshesReport(surfaceKeys: readonly ConstructionSurfaceKey[]): { failed: readonly { reason: string; surfaceKey: ConstructionSurfaceKey }[]; meshes: readonly SurfaceMeshResult[] }`
 
-One surface's mesh piece(s), by key. Almost always one piece -- but an
-analytic-region key (a merged path-brush source/target region) can
-legitimately triangulate into several disjoint pieces (one per outer
-loop), and every one of them must be rendered, not just the first.
-
-### `method vtt.construction-session-port.ConstructionSessionPort.getSurfaceMeshes(surfaceKeys: readonly ConstructionSurfaceKey[]): readonly SurfaceMeshResult[]`
-
-A known mutation set's meshes in one engine crossing.
+A known mutation set's meshes in one engine crossing, plus which of
+`surfaceKeys` could not be meshed and why -- so a caller can tell a live
+surface whose mesh derivation genuinely failed from a stale key naming a
+surface already gone (`reason: "unknown"`, expected when a surface was
+removed in the same mutation). A key can yield several pieces: an
+analytic-region key triangulates into one per outer loop.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.getUnfilledLoops(scope: readonly string[]): readonly ConstructionUnfilledLoop[]`
 
@@ -6469,6 +7187,10 @@ what makes the answer right rather than merely cheap: free boundary
 elsewhere on the map bounds shapes nobody is editing, and a courtyard
 between two unrelated patches reads as a hole from every angle except
 "did this stroke put it there". An empty scope reports nothing.
+
+### `method vtt.construction-session-port.ConstructionSessionPort.hostOutline(surfaceKey: ConstructionSurfaceKey): ConstructionHostOutline`
+
+A pinned region's outer loop traced on its host. Throws unless every node is pinned to one host.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.insertVertex(request: { edgeId: string; firstEdgeId: string; nodeId: string; position: ConstructionPosition; secondEdgeId: string }): RegionEditOutcome`
 
@@ -6493,11 +7215,27 @@ Moves one boundary node to an absolute position.
 
 Full validation before any position changes, with one affected-region scan.
 
+### `method vtt.construction-session-port.ConstructionSessionPort.panelRun(surfaceKey: ConstructionSurfaceKey): ConstructionPanelRun`
+
+The run through an upright panel that accepts cuts. Throws otherwise.
+
+### `method vtt.construction-session-port.ConstructionSessionPort.pinEdgeCurves(requests: readonly ConstructionPinEdgeCurveRequest[]): RegionEditOutcome`
+
+Gives each edge, pinned at both ends to one host, a cubic path in that host's `(u, v)`, or a straight one there. Refused unless both ends are pinned to that host.
+
+### `method vtt.construction-session-port.ConstructionSessionPort.pinNodes(pins: readonly ConstructionPinRequest[]): RegionEditOutcome`
+
+Pins nodes to host faces in relative coordinates; the host carries them from then on.
+
 ### `method vtt.construction-session-port.ConstructionSessionPort.planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[]`
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.planMotion(request: ConstructionMotionRequest): ConstructionMotionPlan`
 
 Pure cascade resolution, using one consistent engine state.
+
+### `method vtt.construction-session-port.ConstructionSessionPort.projectToHost(request: { hostSurfaceKey: ConstructionSurfaceKey; points: readonly ConstructionPosition[] }): readonly ConstructionHostPoint[]`
+
+World points in a host face's `(u, v)` frame. Throws when the host is not an upright panel.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.queryContours(queries: readonly ConstructionContourQuery[]): readonly ConstructionContourAnswer[]`
 
@@ -6512,15 +7250,15 @@ See ConstructionFieldQuery.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.redoRegionOverlay(operationId: string): void`
 
-### `method vtt.construction-session-port.ConstructionSessionPort.removeHole(request: { index: number; surfaceKey: ConstructionSurfaceKey }): RegionEditOutcome`
-
-Closes one of a face's openings back up, by index, reclaiming whatever rim nothing stands on anymore.
-
 ### `method vtt.construction-session-port.ConstructionSessionPort.removeSurface(request: RemoveSurfaceRequest): RegionEditOutcome`
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.removeVertex(nodeId: string, weldedEdgeId: string): RegionEditOutcome`
 
 Welds a node's two neighboring edges into one -- `insertVertex`'s inverse.
+
+### `method vtt.construction-session-port.ConstructionSessionPort.resolveOnHost(request: { hostSurfaceKey: ConstructionSurfaceKey; uv: readonly (readonly [number, number])[] }): readonly ConstructionPosition[]`
+
+Host `(u, v)` pairs back to world positions. Pure.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.retypeEdge(edgeId: string, geometry: ConstructionEdgeGeometry): RegionEditOutcome`
 
@@ -6529,6 +7267,14 @@ Swaps one edge's geometry without touching either endpoint.
 ### `method vtt.construction-session-port.ConstructionSessionPort.rollbackTransaction(transactionId: string): void`
 
 Ends the open transaction by restoring the exact state it began from.
+
+### `method vtt.construction-session-port.ConstructionSessionPort.setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): RegionEditOutcome`
+
+Replaces the regions' property bag, or clears it with `null`. Undoable; moves nothing.
+
+### `method vtt.construction-session-port.ConstructionSessionPort.setSurfaceCapabilities(capabilities: readonly ConstructionSurfaceCapability[]): void`
+
+Session configuration, not undoable state: replaces the whole per-type capability table.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.start(): Promise<void>`
 
@@ -6542,6 +7288,10 @@ way.
 
 Undoes the most recent history entry, which must be `operationId`: a transaction, or an overlay or replacement made outside one.
 
+### `method vtt.construction-session-port.ConstructionSessionPort.unpinNodes(nodeIds: readonly string[]): RegionEditOutcome`
+
+Drops pins; the nodes stay where they are.
+
 ### `interface vtt.construction-session-port.ConstructionSheetProfile`
 
 Intrinsic sheet curvature, with positions resolved from boundary graph nodes.
@@ -6551,6 +7301,16 @@ Intrinsic sheet curvature, with positions resolved from boundary graph nodes.
 ### `property vtt.construction-session-port.ConstructionSheetProfile.middle: number`
 
 ### `property vtt.construction-session-port.ConstructionSheetProfile.start: number`
+
+### `interface vtt.construction-session-port.ConstructionSurfaceCapability`
+
+Per surface type: whether its regions subtract their area from the hosts they are pinned to, and whether it can be cut that way.
+
+### `property vtt.construction-session-port.ConstructionSurfaceCapability.acceptsCuts: boolean`
+
+### `property vtt.construction-session-port.ConstructionSurfaceCapability.cuts: boolean`
+
+### `property vtt.construction-session-port.ConstructionSurfaceCapability.surfaceType: string`
 
 ### `interface vtt.construction-session-port.ConstructionSurfaceSpec`
 
@@ -6814,6 +7574,16 @@ A construction node's live world position, rendered as a small pickable handle -
 
 ### `property vtt.scene-render-port.RenderNodeHandle.position: { x: number; y: number; z: number }`
 
+### `interface vtt.scene-render-port.RenderPointManipulator`
+
+### `property vtt.scene-render-port.RenderPointManipulator.branchAction?: boolean`
+
+### `property vtt.scene-render-port.RenderPointManipulator.id: string`
+
+### `property vtt.scene-render-port.RenderPointManipulator.onChange: (phase: "start" | "move" | "end" | "cancel", position: { x: number; y: number; z: number }) => void`
+
+### `property vtt.scene-render-port.RenderPointManipulator.position: { x: number; y: number; z: number }`
+
 ### `interface vtt.scene-render-port.RenderSurfacePickTarget`
 
 ### `property vtt.scene-render-port.RenderSurfacePickTarget.mesh: RenderMeshData`
@@ -6834,6 +7604,8 @@ What a pointer position resolved to. `nodeId` is present only when the
 pointer actually hit a node handle -- otherwise `point` alone (e.g. a hit
 against map geometry) is still useful for continuing an in-progress drag
 across the ground.
+
+### `property vtt.scene-render-port.ScenePickResult.constructionAction?: { kind: "branch"; nodeId: string }`
 
 ### `property vtt.scene-render-port.ScenePickResult.nodeId?: string`
 
@@ -6889,6 +7661,8 @@ Resolves a pointer position (in the view's CSS pixels) to what it hit, or `undef
 ### `method vtt.scene-render-port.SceneRenderPort.setFloorClipHeight(height: number | undefined): void`
 
 Sets the floor-cutaway height in continuous world-space Y. `undefined` disables cutaway.
+
+### `method vtt.scene-render-port.SceneRenderPort.setPointManipulator(viewId: string, target: RenderPointManipulator | undefined): void`
 
 ### `method vtt.scene-render-port.SceneRenderPort.showPreview(descriptor: RenderPreviewDescriptor, channel?: string): void`
 
@@ -7244,7 +8018,7 @@ Invoked when the drawer requests to close, e.g. its own close button or Escape.
 
 Whether the drawer is currently shown.
 
-### `property vtt.ui.DrawerProps.placement?: "left" | "right" | "bottom" | "top"`
+### `property vtt.ui.DrawerProps.placement?: "top" | "right" | "bottom" | "left"`
 
 Which screen edge the drawer slides in from.
 
@@ -7264,7 +8038,7 @@ Public inputs for a small handle fused to one edge of a panel, toggling it open/
 
 Optional caller-owned class name for layout composition.
 
-### `property vtt.ui.EdgeHandleProps.edge: "left" | "right"`
+### `property vtt.ui.EdgeHandleProps.edge: "right" | "left"`
 
 Which edge of the panel the handle protrudes from -- `"right"` bulges
 rightward (for a panel anchored to the screen's left edge), `"left"`
@@ -7335,7 +8109,7 @@ Ant Design does not do that on its own. Uncontrolled (starts collapsed,
 closes only on its own trigger/outside click) when omitted. Ignored
 when `alwaysExpanded` is set.
 
-### `property vtt.ui.FloatButtonGroupProps.placement?: "left" | "right" | "bottom" | "top"`
+### `property vtt.ui.FloatButtonGroupProps.placement?: "top" | "right" | "bottom" | "left"`
 
 Which side the group expands toward from the trigger -- `"top"`/`"bottom"`
 stack items in a vertical column, `"left"`/`"right"` lay them out in a
@@ -7593,7 +8367,7 @@ Invoked when the popover requests to close, e.g. an outside click or Escape.
 
 Whether the popover is currently shown.
 
-### `property vtt.ui.PopoverProps.placement?: "left" | "right" | "bottom" | "top"`
+### `property vtt.ui.PopoverProps.placement?: "top" | "right" | "bottom" | "left"`
 
 Which side of `anchor` the popover opens toward.
 
@@ -7637,7 +8411,7 @@ The panel's own content.
 
 Caller-owned class name for the panel's own container (use this for background, shadows, borders).
 
-### `property vtt.ui.SlidingPanelProps.edge: "left" | "right"`
+### `property vtt.ui.SlidingPanelProps.edge: "right" | "left"`
 
 Which screen edge the panel is anchored to.
 
@@ -7848,6 +8622,10 @@ Semantic status marker with Grafting-owned status names.
 
 ### `property vtt.widgets.ConstructionDockProps.canUndo: boolean`
 
+### `property vtt.widgets.ConstructionDockProps.onOpeningKindChange: (kind: "window" | "door") => void`
+
+Picks the opening preset and activates the opening tool.
+
 ### `property vtt.widgets.ConstructionDockProps.onRedo: () => void`
 
 ### `property vtt.widgets.ConstructionDockProps.onSnapToGridChange: (snap: boolean) => void`
@@ -7857,6 +8635,10 @@ Semantic status marker with Grafting-owned status names.
 ### `property vtt.widgets.ConstructionDockProps.onToolChange: (tool: ConstructionToolId) => void`
 
 ### `property vtt.widgets.ConstructionDockProps.onUndo: () => void`
+
+### `property vtt.widgets.ConstructionDockProps.openingKind: "window" | "door"`
+
+Which opening preset the Aberturas blocks show as picked.
 
 ### `property vtt.widgets.ConstructionDockProps.ready: boolean`
 
@@ -7878,7 +8660,13 @@ Semantic status marker with Grafting-owned status names.
 
 ### `property vtt.widgets.ConstructionToolParamsPanelProps.onParamsChange: (toolId: Id, next: ToolParamsByTool[Id]) => void`
 
+### `property vtt.widgets.ConstructionToolParamsPanelProps.onStructureEditParamsChange: (next: StructureEditParams) => void`
+
 ### `property vtt.widgets.ConstructionToolParamsPanelProps.params: ToolParamsByTool`
+
+### `property vtt.widgets.ConstructionToolParamsPanelProps.structureEditParams: StructureEditParams`
+
+How a grab on an existing structure behaves -- ambient, not tied to `activeTool`, since every construction tool can now grab and edit whatever it owns.
 
 ### `interface vtt.widgets.SelectedNodeInfo`
 
@@ -7894,11 +8682,15 @@ A plain `{x,y,z}` shape rather than importing `ConstructionPosition` -- `widgets
 
 ### `property vtt.widgets.SettingsDrawerProps.onOpenChange?: (open: boolean) => void`
 
+### `property vtt.widgets.SettingsDrawerProps.onStructureEditParamsChange: (next: StructureEditParams) => void`
+
 ### `property vtt.widgets.SettingsDrawerProps.onToolParamsChange: (toolId: Id, next: ToolParamsByTool[Id]) => void`
 
 ### `property vtt.widgets.SettingsDrawerProps.open?: boolean`
 
 ### `property vtt.widgets.SettingsDrawerProps.selectedNodeInfo: SelectedNodeInfo | null`
+
+### `property vtt.widgets.SettingsDrawerProps.structureEditParams: StructureEditParams`
 
 ### `property vtt.widgets.SettingsDrawerProps.tokenCount: number`
 
@@ -7952,11 +8744,9 @@ generates geometry itself. A tool's own parameters live in
 `ConstructionToolParamsPanel` (the right drawer); what a selected tool
 does with the pointer lives in `composition/tabletop/tools/*.ts` via
 `useConstructionPointer`. One root FloatButtonTree branch
-("Construir") expands into one leaf per direct-action tool plus one
-nested "Casa" branch -- "Expandir Cômodo" deliberately reuses the
-`move-node` tool id rather than introducing a new one, since dragging a
-shared corner already resizes whichever room(s) reference it with zero
-house-specific code (`VTT-HOUSE-INCREMENTAL-EDIT`'s own finding).
+("Construir") expands into one leaf per tool. Editing an existing
+structure is not a tool of its own: every construction tool grabs and
+edits whatever it owns (`composition/tabletop/tools/core/structure-edit-behavior.ts`).
 
 ### `function vtt.widgets.ConstructionToolParamsPanel(props: ConstructionToolParamsPanelProps): Element`
 
@@ -8005,7 +8795,7 @@ construction tool's resolved point the same way, via
 ### `function vtt.use-keyboard-shortcuts.useKeyboardShortcuts(options: KeyboardShortcutsOptions): void`
 
 Global keyboard shortcuts for the GM studio: Ctrl+Z/Ctrl+Y for undo/redo,
-N/M/P/I select tools (mirroring the hotbar/rail's own tooltips) --
+N/P/I select tools (mirroring the hotbar/rail's own tooltips) --
 nothing here generates geometry directly anymore, a key just changes
 `activeTool` the same way clicking its hotbar button would. Ignored while
 an `<input>`/`<textarea>` has focus, so typing in a settings field never

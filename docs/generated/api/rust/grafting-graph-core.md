@@ -856,7 +856,7 @@ Inserts and splits curves transactionally, enforcing independent height toleranc
 
 Computes a ribbon from an explicit cubic and independently specified widths.
 The raw offset may overlap at tight turns; normalize it with the planar union before meshing.
-Stationary ground-plane tangents are rejected.
+Collapsed endpoint handles use their one-sided tangent; stationary interior tangents are rejected.
 
 ### `pub fn grafting_graph_core::bezier_surface::ribbon_join(sections: &[[grafting_graph_core::bezier::CurvePoint; 2]]) -> core::result::Result<grafting_graph_core::bezier_surface::CurveRibbon, alloc::string::String>`
 
@@ -1918,6 +1918,22 @@ Optional paired handle on another incident edge.
 
 Desired control position.
 
+### `pub grafting_graph_core::bezier_commands::CurveCommand::InterpretStroke`
+
+Interpret brush observations independently of tessellation accuracy.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::InterpretStroke::correction: f64`
+
+Non-negative allowed sample deviation in XZ world units.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::InterpretStroke::curved: bool`
+
+Allow cubic approximation in addition to straight spans.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::InterpretStroke::points: alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>`
+
+Ordered captured XYZ observations.
+
 ### `pub grafting_graph_core::bezier_commands::CurveCommand::Join`
 
 Fill the bevel between cross-sections at a shared anchor.
@@ -2039,6 +2055,10 @@ Relative controls suitable for durable graph edge payloads.
 ### `pub grafting_graph_core::bezier_commands::CurveResult::lengths: alloc::vec::Vec<f64>`
 
 Ground-plane lengths.
+
+### `pub grafting_graph_core::bezier_commands::CurveResult::linear: alloc::vec::Vec<bool>`
+
+Straight-span flags for interpreted strokes; omitted for existing commands.
 
 ### `pub grafting_graph_core::bezier_commands::CurveResult::opposite: core::option::Option<grafting_graph_core::bezier::CurvePoint>`
 

@@ -12,7 +12,7 @@
  * - `effects/`: What happens to a cloud, whom it reaches, and the pipeline dispatching declared reactions.
  */
 
-export { planBezierEdit } from "./orchestration/spine-edit.ts";
+export { planBezierEdit, previewBezierEdit } from "./orchestration/spine-edit.ts";
 export * from "./spine/index.ts";
 export * from "./history/index.ts";
 export * from "./orchestration/index.ts";

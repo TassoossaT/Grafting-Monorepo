@@ -140,7 +140,7 @@ export interface StructureEditBehavior {
   /** Tries to start an edit gesture on whatever `sample` landed on; `true` means the rest of this pointer gesture belongs to this behaviour, not the wrapped tool's own creation gesture. */
   tryGrab(ctx: ToolContext, sample: PointerSample, editParams: StructureEditParams): boolean;
   onPointerMove(ctx: ToolContext, gesture: ToolGesture, editParams: StructureEditParams): void;
-  onPointerUp(ctx: ToolContext): void;
+  onPointerUp(ctx: ToolContext, gesture?: ToolGesture): void;
   onCancel(): void;
   /** Whether a drag is currently under this behaviour's control. */
   isActive(): boolean;
@@ -247,8 +247,13 @@ export function createStructureEditBehavior(options: StructureEditOptions): Stru
     }
   }
 
-  function onPointerUp(ctx: ToolContext): void {
-    if (curveGesture) { curveGesture.commit(); curveGesture = undefined; return; }
+  function onPointerUp(ctx: ToolContext, gesture?: ToolGesture): void {
+    if (curveGesture) {
+      if (gesture) curveGesture.move(gesture);
+      curveGesture.commit();
+      curveGesture = undefined;
+      return;
+    }
     const drag = active;
     active = undefined;
     if (drag === undefined) return;
@@ -310,7 +315,7 @@ export function withStructureEditing<Id extends ConstructionToolId>(
 
     onPointerUp(ctx, gesture, params) {
       const wasActive = behavior.isActive();
-      if (wasActive) { behavior.onPointerUp(ctx); return; }
+      if (wasActive) { behavior.onPointerUp(ctx, gesture); return; }
       tool.onPointerUp?.(ctx, gesture, params);
     },
 

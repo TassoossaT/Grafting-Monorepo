@@ -35,6 +35,9 @@ export function regeneratePathSpine(input: SpineRegenerationInput): SpineRegener
   const segments = chains.flatMap((c) => c.sampledPoints!.slice(1).flatMap((p, i) => {
     const a = c.sampledPoints![i]!; return [a.x, a.y, a.z, p.x, p.y, p.z];
   }));
+  // No footprint: what an edit claims is read from its before/after shape by
+  // every reaction (`effects/change-area.ts`), never from the regenerated
+  // component, which names the whole network.
   return { request: { operationId: input.operationId, sourceSurfaceKeys: plan.consumedSurfaceKeys, patch: plan.patch, graphPatch },
     preview: Float32Array.from(segments) };
 }

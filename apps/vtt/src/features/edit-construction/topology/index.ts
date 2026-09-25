@@ -11,7 +11,7 @@ export { fitPath } from "./stroke-fitting.ts";
 export type { FittedEdge, FitOptions } from "./stroke-fitting.ts";
 export { createBoundaryEdges, reverseGeometry, sameGeometry, sharedEdgeId } from "./boundary-edges.ts";
 export type { BoundaryEdges, EdgeSharing } from "./boundary-edges.ts";
-export { simplifyClosedRing } from "./ring-simplify.ts";
+export { simplifyClosedRing, simplifyPolygonRdp } from "./ring-simplify.ts";
 export { automaticCurve, curvePoint, curvePosition, resolveCurves, ribbonSections, sampleRibbons, unionRibbonOutlines } from "./bezier-curve.ts";
 export type { RibbonRequest } from "./bezier-curve.ts";
 export { planarDifference, planarUnion } from "./planar-area.ts";

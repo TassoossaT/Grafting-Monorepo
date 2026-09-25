@@ -73,6 +73,20 @@ export interface ViewOptions {
  * so the number of views is bounded by memory rather than by the browser's cap
  * on live contexts, which is silently enforced by dropping the oldest.
  */
+export interface PointManipulator {
+  /** Stable consumer identity of the point being edited. */
+  readonly id: string;
+  /** Confirmed world position; preview remains local until the consumer commits. */
+  readonly position: { readonly x: number; readonly y: number; readonly z: number };
+  /** World axes available to the translation helper. */
+  readonly axes: readonly ("x" | "y" | "z")[];
+  /** Screen-relative size of the helper, supplied by the consumer. */
+  readonly size: number;
+  /** Gesture lifecycle. End commits an intention; cancel leaves confirmed state intact. */
+  readonly onChange: (phase: "start" | "move" | "end" | "cancel", position: PointManipulator["position"]) => void;
+}
+
+/** One independently framed and invalidated presentation of the shared scene. */
 export interface View {
   /** This view's identity, as supplied or generated. */
   readonly id: ViewId;
@@ -99,6 +113,8 @@ export interface View {
 
   /** Resolves a pointer position in the view's CSS pixels to what it hit. */
   pick(x: number, y: number): PickResult | undefined;
+  /** A view-local translation helper. Undefined clears selection and cancels dragging. */
+  setPointManipulator(target: PointManipulator | undefined): void;
   /** Captures the last drawn frame as a data URL. */
   capture(mimeType?: string): string;
 

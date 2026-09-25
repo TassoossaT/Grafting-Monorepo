@@ -1,4 +1,4 @@
-import type { BezierPort, CurvePoint, ConstructionGraphSnapshot, ConstructionGraphPatch, ConstructionRegionTopology, ConstructionPosition } from "@/ports";
+import type { BezierPort, CubicBezier, CurvePoint, ConstructionGraphSnapshot, ConstructionGraphPatch, ConstructionRegionTopology, ConstructionPosition } from "@/ports";
 import { curvePoint, curvePosition, unionRibbonOutlines } from "../../topology/bezier-curve.ts";
 import { isSpineEdge, spineControlNodeId, spineRibbons, withAutomaticHandles } from "../../spine/index.ts";
 import { changedSpineCloud } from "./path-cloud-scope.ts";
@@ -64,6 +64,8 @@ export function planBezierRoad(input: {
   readonly topologies?: readonly ConstructionRegionTopology[];
   readonly port: BezierPort;
   readonly stroke: readonly ConstructionPosition[];
+  readonly authoredCurves?: readonly CubicBezier[];
+  readonly curveMode?: "automatic" | "free";
   readonly corridorId: string;
   readonly offsets: readonly number[];
   readonly miterLimit: number;
@@ -72,13 +74,15 @@ export function planBezierRoad(input: {
 }) {
   const { port, offsets, corridorId } = input;
   const fitted = port.curveBatch({ tolerance: Math.max(input.tolerance, 0.025), commands: [
-    { kind: "fit", points: input.stroke.map(curvePoint) },
+    input.authoredCurves === undefined
+      ? { kind: "fit", points: input.stroke.map(curvePoint) }
+      : { kind: "sample", curves: input.authoredCurves },
   ] })[0]!;
   const controlPoints = [...fitted.curves.map((c) => curvePosition(c.points[0])), curvePosition(fitted.curves.at(-1)!.points[3])];
   const addedNodes = controlPoints.map((p, i) => ({ id: spineControlNodeId(corridorId, i), position: curvePoint(p) }));
   const addedEdges = fitted.handles.map((h, i) => ({
     edgeId: `spine-edge:${corridorId}:${i}`, startNodeId: addedNodes[i]!.id, endNodeId: addedNodes[i + 1]!.id,
-    curve: { ...h, bandOffsets: offsets, surfaceType: PATH_SURFACE_TYPE },
+    curve: { ...h, mode: input.curveMode ?? h.mode, bandOffsets: offsets, surfaceType: PATH_SURFACE_TYPE },
   }));
   const snapshot = explicitSpineSnapshot(input.snapshot, port, offsets);
   // A road snaps onto and splits other roads only: a ramp's spine passing

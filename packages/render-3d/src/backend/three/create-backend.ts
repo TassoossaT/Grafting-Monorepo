@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { createPointManipulator } from "./point-manipulator.js";
 import type { ClipPlaneDescriptor, LightDescriptor } from "../../contracts/engine.js";
 import type { ItemId, LayerId } from "../../contracts/scene.js";
 import type { Transform } from "../../contracts/space.js";
@@ -14,6 +15,7 @@ export interface ThreeBackendOptions {
 }
 
 interface ThreeSurface extends BackendSurface {
+  manipulator?: ReturnType<typeof createPointManipulator>;
   readonly canvas: HTMLCanvasElement;
   readonly context: CanvasRenderingContext2D;
   camera: THREE.PerspectiveCamera | THREE.OrthographicCamera | undefined;
@@ -63,6 +65,7 @@ export function createThreeBackend(options: ThreeBackendOptions = {}): RenderBac
     // Without preventDefault the browser will not attempt restoration at all.
     event.preventDefault();
     contextLost = true;
+    for (const surface of surfaces) surface.manipulator?.cancel();
     lostHandler?.();
   });
   canvas.addEventListener("webglcontextrestored", () => {
@@ -269,6 +272,14 @@ export function createThreeBackend(options: ThreeBackendOptions = {}): RenderBac
         cameraKey: "",
         width,
         height,
+        setPointManipulator(target, descriptor, invalidate) {
+          if (!target) {
+            const previous = surface.manipulator;
+            surface.manipulator = undefined;
+            previous?.dispose();
+          } else if (surface.manipulator) surface.manipulator.update(target);
+          else surface.manipulator = createPointManipulator(resolveCamera(surface, descriptor, surface.width, surface.height), element, renderScene, target, invalidate);
+        },
         resize(nextWidth: number, nextHeight: number) {
           surface.width = nextWidth;
           surface.height = nextHeight;
@@ -279,6 +290,9 @@ export function createThreeBackend(options: ThreeBackendOptions = {}): RenderBac
           return element.toDataURL(mimeType);
         },
         destroy() {
+          const manipulator = surface.manipulator;
+          surface.manipulator = undefined;
+          manipulator?.dispose();
           surfaces.delete(surface);
           if (element.parentNode === target) target.removeChild(element);
         },
@@ -300,6 +314,7 @@ export function createThreeBackend(options: ThreeBackendOptions = {}): RenderBac
 
       ensureBuffer(width, height);
       const camera = resolveCamera(surface, cameraDescriptor, width, height);
+      for (const candidate of surfaces) candidate.manipulator?.draw(camera, candidate === surface);
 
       // Group visibility is scratch state used only for the span of one draw,
       // so there is nothing to save or restore — and therefore no per-frame

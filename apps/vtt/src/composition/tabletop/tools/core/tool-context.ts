@@ -6,10 +6,12 @@ import type { TabletopRuntime } from "../../tabletop-runtime.ts";
 
 /** What the pointer resolved to at one instant -- `nodeId` present only when it hit a node handle. */
 export interface PointerSample {
+  readonly constructionAction?: { readonly kind: "branch"; readonly nodeId: string };
   readonly point: ConstructionPosition;
   /** Screen coordinate used by explicit elevation gestures. */
   readonly screenY?: number;
   readonly screenX?: number;
+  readonly shiftKey?: boolean;
   readonly nodeId?: string;
   readonly surfaceRef?: string;
 }
@@ -89,9 +91,12 @@ export interface ToolContext {
  */
 export interface ConstructionTool<Id extends ConstructionToolId> {
   readonly id: Id;
+  /** Presentation and sampling policy while this tool is active. */
+  readonly handlePresentation?: "spine-points";
+  readonly useGridSnap?: boolean;
   defaultParams(): ToolParamsFor<Id>;
   /** Opt in to a stationary drawing preview between gestures. */
-  readonly previewOnHover?: boolean;
+  readonly previewOnHover?: boolean | ((params: ToolParamsFor<Id>) => boolean);
   /**
    * This tool always projects the pointer onto an existing surface's own
    * parametrization (a wall's rail, say) rather than reading raw world X/Z --
@@ -115,6 +120,10 @@ export interface ConstructionTool<Id extends ConstructionToolId> {
   onPointerUp?(ctx: ToolContext, gesture: ReleasedGesture, params: ToolParamsFor<Id>): void;
   /** Discards an unfinished tool draft on Escape, cancellation or tool switch. */
   onCancel?(ctx: ToolContext): void;
+  /** Runs an explicit action on the current selection. */
+  onSelectionAction?(ctx: ToolContext, action: string, params: ToolParamsFor<Id>): boolean;
+  /** Handles a tool key outside text controls; true prevents the browser default. */
+  onKeyDown?(ctx: ToolContext, key: string, params: ToolParamsFor<Id>): boolean;
   /** Delete/Backspace with the tool active -- a tool holding a selection (an opening picked for editing, say) removes it here. */
   onDeleteKey?(ctx: ToolContext): void;
   /** The active tool's params changed (the panel, or `updateToolParams`) -- a tool holding a selection may apply them to it. */

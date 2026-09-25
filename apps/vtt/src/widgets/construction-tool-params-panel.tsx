@@ -104,6 +104,14 @@ function PathBrushFields(props: { readonly params: PathBrushParams; readonly onC
   const { params, onChange } = props;
   return (
     <div style={{ display: "grid", gap: "0.6rem" }}>
+      <label>Construção <select value={params.creationMode === "pen" ? "points" : params.creationMode ?? "brush"} onChange={(event) => onChange({ ...params, creationMode: event.currentTarget.value as "brush" | "points" })}>
+        <option value="brush">Desenho livre</option>
+        <option value="points">Por pontos</option>
+      </select></label>
+      {(!params.creationMode || params.creationMode === "brush")
+        ? <p>Arraste pelo terreno e solte para construir o caminho.</p>
+        : <p>Clique por onde o caminho deve passar. Enter constrói; Backspace retira o último ponto.</p>}
+      <p>Clique no + verde junto ao ponto selecionado para ramificar. O alvo azul indica o encaixe com outra rua: clique nele para confirmar e encerrar. Arraste os pontos da espinha para editar; use o eixo Y para altura. Clique em um trecho para inserir um ponto, ou arraste o trecho para curvar. Segure Shift ao iniciar num ponto ou trecho para criar uma ramificacao (por desenho ou por pontos). Delete remove o ponto selecionado; Esc cancela.</p>
       {sliderRow("Largura do leito", params.bedWidth, 0.5, 12, 0.25, (bedWidth) => onChange({ ...params, bedWidth }))}
     </div>
   );
@@ -458,6 +466,7 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
           <label>Subida <input type="number" step="0.1" value={params["slope-spiral"].rise} onChange={(event) => onParamsChange("slope-spiral", { ...params["slope-spiral"], rise: Number(event.currentTarget.value) })} /></label>
           <p>Clique no centro. A espiral começa na altura de onde você clicou e sobe o valor de Subida ao longo das voltas.</p>
         </div>
+
       ) : activeTool === "path-brush" ? (<PathBrushFields params={params["path-brush"]} onChange={(next) => onParamsChange("path-brush", next)} />) : activeTool === "wall-brush" ? (
         <WallBrushFields params={params["wall-brush"]} onChange={(next) => onParamsChange("wall-brush", next)} />
       ) : activeTool === "wall-line" ? (

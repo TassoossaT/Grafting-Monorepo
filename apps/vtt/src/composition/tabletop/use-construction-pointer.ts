@@ -11,6 +11,7 @@ import type { SelectedNodeInfo } from "@/widgets";
 import { GRID_SNAP_UNIT } from "../../adapters/rendering/index.ts";
 import type { TabletopRuntime } from "./tabletop-runtime.ts";
 import { toolFor } from "./tools/index.ts";
+import { beginCurveGesture, type CurveGesture } from "./tools/core/curve-edit-gesture.ts";
 import { gestureMoved } from "./tools/core/tool-context.ts";
 import {
   edgeOverlayChannel,
@@ -54,6 +55,7 @@ function applySnap(sample: PointerSample, snapToGrid: boolean): PointerSample {
 }
 
 export interface ConstructionPointerHandlers {
+  readonly onSelectionAction: (action: string) => void;
   readonly onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
   readonly onPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
   readonly onPointerUp: (event: ReactPointerEvent<HTMLDivElement>) => void;
@@ -95,6 +97,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
   optionsRef.current = options;
   /** Channels the edge overlay currently occupies, so a redraw clears exactly what it drew. */
   const shownEdgeChannels = useRef(new Set<string>());
+  const manipulatorGesture = useRef<CurveGesture | undefined>(undefined);
+  const branchModifier = useRef(false);
+  const selectedPoint = useRef<string | undefined>(undefined);
 
   const nextSequence = useCallback(() => ++sequenceRef.current, []);
 
@@ -127,8 +132,40 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
         return optionsRef.current.structureEditParams;
       },
       nextSequence,
-      reportSelection: (info) => optionsRef.current.onSelectionChange(info),
-      reportFeedback: (feedback) => optionsRef.current.onFeedbackChange(feedback),
+      reportSelection: (info) => {
+        const { runtime, viewId, activeTool } = optionsRef.current;
+        optionsRef.current.onSelectionChange(info);
+        if (viewId === undefined) return;
+        const node = info && toolFor(activeTool).handlePresentation === "spine-points"
+          ? runtime.getGraphSnapshot().nodes.find(n => n.id === info.id && n.id.startsWith("spine:")) : undefined;
+        selectedPoint.current = node?.id;
+        runtime.setPointManipulator?.(viewId, node && !branchModifier.current ? {
+          id: node.id, position: node.position, branchAction: true,
+          onChange(phase, position) {
+            if (phase === "start") {
+              manipulatorGesture.current?.cancel();
+              manipulatorGesture.current = beginCurveGesture(ctx, { nodeId: node.id, point: position }, { mode: "shape", insertOnClick: false, spatialTarget: true });
+            } else if (phase === "move") {
+              const sample = { nodeId: node.id, point: position };
+              manipulatorGesture.current?.move({ start: sample, current: sample, samples: [sample] });
+            } else {
+              const gesture = manipulatorGesture.current;
+              manipulatorGesture.current = undefined;
+              if (phase === "end") gesture?.commit(); else gesture?.cancel();
+              // Refresh from confirmed state after success, rejection or cancellation.
+              const current = runtime.getGraphSnapshot().nodes.find(n => n.id === node.id);
+              if (selectedPoint.current === node.id) ctx.reportSelection(current ? { id: current.id, point: current.position } : undefined);
+              refreshEdgeOverlay();
+            }
+          },
+        } : undefined);
+      },
+      reportFeedback: (feedback) => {
+        if (feedback?.tone === "error") {
+          console.error("[VTT Tool Error]", feedback.message, feedback);
+        }
+        optionsRef.current.onFeedbackChange(feedback);
+      },
       updateToolParams: (toolId, update) => optionsRef.current.onToolParamsUpdate?.(toolId, update as never),
     }),
     [nextSequence],
@@ -142,31 +179,6 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     if (last === undefined || last.tool !== options.activeTool || last.params === params) return;
     toolFor(options.activeTool).onParamsChange?.(ctx, params as never, last.params as never);
   }, [options.activeTool, options.toolParams, ctx]);
-
-  useEffect(() => {
-    const tool = toolFor(options.activeTool);
-    const cancel = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && tool.onCancel) {
-        tool.onCancel(ctx);
-        const active = gestureRef.current;
-        if (active?.captureTarget.hasPointerCapture(active.pointerId)) active.captureTarget.releasePointerCapture(active.pointerId);
-        gestureRef.current = null;
-        suppressClickRef.current = true;
-        options.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
-        return;
-      }
-      if ((event.key === "Delete" || event.key === "Backspace") && tool.onDeleteKey) {
-        tool.onDeleteKey(ctx);
-      }
-    };
-    window.addEventListener("keydown",cancel);
-    return () => {
-      window.removeEventListener("keydown",cancel); tool.onCancel?.(ctx);
-      const active = gestureRef.current;
-      if (active?.captureTarget.hasPointerCapture(active.pointerId)) active.captureTarget.releasePointerCapture(active.pointerId);
-      gestureRef.current = null;
-    };
-  },[options.activeTool,options.runtime,ctx]);
 
   /**
    * Redraws the construction-edge overlay from whatever is now standing.
@@ -183,15 +195,75 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     // mount effect below runs before the runtime finishes loading, and asking
     // it for topologies then is an error rather than an empty answer.
     if (runtime.getSnapshot().status !== "ready") return;
+    const presentation = toolFor(optionsRef.current.activeTool).handlePresentation;
+    runtime.setConstructionHandlePresentation?.(presentation ?? "all");
     for (const channel of shownEdgeChannels.current) runtime.clearPreview(channel);
     shownEdgeChannels.current.clear();
     for (const group of edgeOverlayOf(runtime, runtime.getAllRegionTopologies(), runtime.getGraphSnapshot(), runtime)) {
-      if (group.positions.length === 0) continue;
+      if (group.positions.length === 0 || (presentation === "spine-points" && group.role !== "path-spine-edge")) continue;
       const channel = edgeOverlayChannel(group.role);
       runtime.showPreview(edgeOverlayDescriptor(group), channel);
       shownEdgeChannels.current.add(channel);
     }
   }, []);
+
+  const activeParams = options.toolParams[options.activeTool];
+  useEffect(() => {
+    const tool = toolFor(options.activeTool);
+    // Bind cleanup to the runtime that owns this draft, even after a table switch.
+    const ownedContext: ToolContext = { ...ctx, runtime: options.runtime, history: options.history, tableId: options.tableId };
+    const release = () => {
+      const active = gestureRef.current;
+      if (active?.captureTarget.hasPointerCapture(active.pointerId)) active.captureTarget.releasePointerCapture(active.pointerId);
+      gestureRef.current = null;
+      suppressClickRef.current = true;
+      options.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
+    };
+    const keydown = (event: KeyboardEvent) => {
+      if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.target instanceof HTMLElement && (event.target.isContentEditable || event.target.closest("input, textarea, select"))) return;
+      if (event.key === "Shift" && tool.handlePresentation === "spine-points" && !manipulatorGesture.current) {
+        branchModifier.current = true;
+        if (options.viewId !== undefined) options.runtime.setPointManipulator?.(options.viewId, undefined);
+        return;
+      }
+      if (event.key === "Escape" && tool.onCancel) {
+        tool.onCancel(ownedContext); release(); event.preventDefault(); return;
+      }
+      if ((event.key === "Delete" || event.key === "Backspace") && tool.onDeleteKey) {
+        tool.onDeleteKey(ownedContext);
+      }
+      if (gestureRef.current) return;
+      if (tool.onKeyDown?.(ownedContext, event.key, activeParams as never)) {
+        event.preventDefault();
+        refreshEdgeOverlay();
+      }
+    };
+    const restoreManipulator = () => {
+      if (!branchModifier.current) return;
+      branchModifier.current = false;
+      const node = options.runtime.getGraphSnapshot().nodes.find(n => n.id === selectedPoint.current);
+      if (node) ctx.reportSelection({ id: node.id, point: node.position });
+    };
+    const keyup = (event: KeyboardEvent) => { if (event.key === "Shift") restoreManipulator(); };
+    refreshEdgeOverlay();
+    window.addEventListener("keyup", keyup);
+    window.addEventListener("blur", restoreManipulator);
+    window.addEventListener("keydown", keydown);
+    return () => {
+      window.removeEventListener("keydown", keydown);
+      window.removeEventListener("keyup", keyup);
+      window.removeEventListener("blur", restoreManipulator);
+      branchModifier.current = false;
+      selectedPoint.current = undefined;
+      manipulatorGesture.current?.cancel();
+      manipulatorGesture.current = undefined;
+      if (options.viewId !== undefined) options.runtime.setPointManipulator?.(options.viewId, undefined);
+      tool.onCancel?.(ownedContext);
+      options.runtime.setConstructionHandlePresentation?.("all");
+      release();
+    };
+  }, [options.activeTool, options.runtime, options.history, options.tableId, options.viewId, activeParams, ctx, refreshEdgeOverlay]);
 
   // Draw what is already standing as soon as the table is live, not only
   // after the first commit -- an edge that was there before this session
@@ -202,22 +274,26 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     refreshEdgeOverlay();
     let drawn = runtime.getSnapshot().status === "ready";
     const unsubscribe = runtime.subscribe(() => {
+      if (selectedPoint.current && !manipulatorGesture.current) {
+        const node = runtime.getGraphSnapshot().nodes.find(n => n.id === selectedPoint.current);
+        ctx.reportSelection(node ? { id: node.id, point: node.position } : undefined);
+      }
       if (drawn || runtime.getSnapshot().status !== "ready") return;
       drawn = true;
       refreshEdgeOverlay();
     });
     return unsubscribe;
-  }, [options.runtime, refreshEdgeOverlay]);
+  }, [options.runtime, refreshEdgeOverlay, ctx]);
 
   const sampleAt = useCallback(
-    (event: { currentTarget: HTMLElement; clientX: number; clientY: number }): PointerSample | undefined => {
+    (event: { currentTarget: HTMLElement; clientX: number; clientY: number; shiftKey?: boolean }): PointerSample | undefined => {
       const { viewId, runtime, snapToGrid, activeTool } = optionsRef.current;
       if (viewId === undefined) return undefined;
       const { x, y } = pointerOffset(event);
       const hit = runtime.pick(viewId, x, y);
       if (hit === undefined) return undefined;
-      const snap = snapToGrid && !toolFor(activeTool).snapsToSurface;
-      return { ...applySnap(hit, snap), screenY: event.clientY, screenX: event.clientX };
+      const snap = snapToGrid && !toolFor(activeTool).snapsToSurface && toolFor(activeTool).useGridSnap !== false;
+      return { ...applySnap(hit, snap), screenY: event.clientY, screenX: event.clientX, shiftKey: event.shiftKey };
     },
     [],
   );
@@ -286,7 +362,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       // Most brushes preview only an active drag. Contour tools may opt in
       // to a circle footprint or unfinished polygon preview between clicks.
       if (gesture === null || gesture.pointerId !== event.pointerId) {
-        const sample = tool.previewOnHover ? sampleAt(event) : undefined;
+        const hover = typeof tool.previewOnHover === "function" ? tool.previewOnHover(params) : tool.previewOnHover;
+        const sample = hover ? sampleAt(event) : undefined;
+        event.currentTarget.style.cursor = sample?.constructionAction ? "pointer" : sample?.nodeId ? "grab" : "";
         const descriptor = sample ? tool.previewFor?.({ start: sample,current: sample,samples: [sample] },params,ctx) : undefined;
         if (descriptor) optionsRef.current.runtime.showPreview(descriptor,TOOL_GHOST_PREVIEW_CHANNEL);
         else optionsRef.current.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
@@ -366,7 +444,14 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     [ctx, refreshEdgeOverlay, sampleAt],
   );
 
+  const onSelectionAction = useCallback((action: string) => {
+    if (gestureRef.current || manipulatorGesture.current) return;
+    const { activeTool, toolParams } = optionsRef.current;
+    if (toolFor(activeTool).onSelectionAction?.(ctx, action, toolParams[activeTool] as never)) refreshEdgeOverlay();
+  }, [ctx, refreshEdgeOverlay]);
+
   return {
+    onSelectionAction,
     onPointerDown,
     onPointerMove,
     onPointerUp: finishGesture,

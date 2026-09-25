@@ -8,6 +8,15 @@ use crate::bezier::{
 #[cfg_attr(feature = "curve-serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "curve-serde", serde(tag = "kind", rename_all = "camelCase"))]
 pub enum CurveCommand {
+    /// Interpret brush observations independently of tessellation accuracy.
+    InterpretStroke {
+        /// Ordered captured XYZ observations.
+        points: Vec<CurvePoint>,
+        /// Non-negative allowed sample deviation in XZ world units.
+        correction: f64,
+        /// Allow cubic approximation in addition to straight spans.
+        curved: bool,
+    },
     /// Convert a legacy/automatic anchor chain.
     Automatic {
         /// Ordered anchors.
@@ -117,6 +126,12 @@ pub struct CurveBatch {
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "curve-serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CurveResult {
+    /// Straight-span flags for interpreted strokes; omitted for existing commands.
+    #[cfg_attr(
+        feature = "curve-serde",
+        serde(default, skip_serializing_if = "Vec::is_empty")
+    )]
+    pub linear: Vec<bool>,
     /// Optional derived ribbon polygon.
     pub ribbon: Option<crate::bezier_surface::CurveRibbon>,
     /// Resulting authored cubics.
@@ -142,11 +157,21 @@ pub fn execute(batch: CurveBatch) -> Result<Vec<CurveResult>, String> {
     }
     let mut out = Vec::new();
     for cmd in batch.commands {
+        let mut linear = Vec::new();
         let mut nearest = None;
         let mut opposite_result = None;
         let mut ribbon = None;
         let mut authored = None;
         let curves = match cmd {
+            CurveCommand::InterpretStroke {
+                points,
+                correction,
+                curved,
+            } => {
+                let spans = crate::stroke_interpretation::interpret(&points, correction, curved)?;
+                linear = spans.iter().map(|(_, straight)| *straight).collect();
+                spans.into_iter().map(|(curve, _)| curve).collect()
+            }
             CurveCommand::Automatic { points } => automatic_path(&points)?,
             CurveCommand::Fit {
                 points,
@@ -260,6 +285,7 @@ pub fn execute(batch: CurveBatch) -> Result<Vec<CurveResult>, String> {
                 .collect()
         });
         out.push(CurveResult {
+            linear,
             ribbon,
             curves,
             handles,

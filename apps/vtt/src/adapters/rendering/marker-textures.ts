@@ -39,3 +39,20 @@ export function createNodeHandleTexture(): HTMLCanvasElement {
   context.stroke();
   return canvas;
 }
+
+
+/** In-scene road branching affordance, distinct from a movable anchor. */
+export function createRoadBranchTexture(): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 64;
+  const context = canvas.getContext("2d");
+  if (!context) throw new Error("road action needs a 2D canvas context");
+  context.fillStyle = "#167d52";
+  context.strokeStyle = "#ffffff";
+  context.lineWidth = 4;
+  context.beginPath(); context.arc(32, 32, 27, 0, Math.PI * 2); context.fill(); context.stroke();
+  context.lineWidth = 6;
+  context.beginPath(); context.moveTo(18, 32); context.lineTo(46, 32);
+  context.moveTo(32, 18); context.lineTo(32, 46); context.stroke();
+  return canvas;
+}

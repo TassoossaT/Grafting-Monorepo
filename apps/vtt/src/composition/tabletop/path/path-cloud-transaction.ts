@@ -18,15 +18,15 @@ export function commitPathCloudIntent(
   ctx: ToolContext,
   effect: PathBrushEffect,
   tolerance: number,
-): void {
-  timeCommit("rua", () => commitUntimed(ctx, effect, tolerance));
+): boolean {
+  return timeCommit("rua", () => commitUntimed(ctx, effect, tolerance));
 }
 
 function commitUntimed(
   ctx: ToolContext,
   effect: PathBrushEffect,
   tolerance: number,
-): void {
+): boolean {
   try {
     const plan = timePhase("plano da nuvem", () => planPathCloudMutation({
       bezier: ctx.runtime,
@@ -40,11 +40,11 @@ function commitUntimed(
     }));
     if (plan.kind === "noop") {
       ctx.reportFeedback({ tone: "info", message: plan.message });
-      return;
+      return false;
     }
     if (plan.kind === "refused") {
       ctx.reportFeedback({ tone: "error", message: `Caminho não aplicado: ${plan.reason}` });
-      return;
+      return false;
     }
 
     const { value: outcome, recorded } = commitPatchReplacement(ctx.runtime, plan.request, { transactionId: effect.operationId, subtype: effect.parameters.kind });
@@ -58,15 +58,17 @@ function commitUntimed(
     const changedSurfaceCount = outcome.createdSurfaceKeys.length + outcome.affectedSurfaceKeys.length;
     if (changedSurfaceCount === 0 && outcome.removedSurfaceKeys.length === 0) {
       ctx.reportFeedback({ tone: "info", message: "Nenhuma alteração: o traço não cobriu nenhuma área válida." });
-      return;
+      return recorded;
     }
     ctx.reportFeedback({
       tone: "success",
       message: `Caminho aplicado: ${changedSurfaceCount} superfícies alteradas e ${outcome.createdNodeIds.length} nós novos.`,
     });
+    return recorded;
   } catch (error) {
     reportToolFailure("path-cloud", "commit the PathCloud transaction", { operationId: effect.operationId }, error);
     const message = error instanceof Error ? error.message : String(error);
     ctx.reportFeedback({ tone: "error", message: `Caminho não aplicado: ${message}` });
+    return false;
   }
 }

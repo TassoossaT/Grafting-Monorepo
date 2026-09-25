@@ -31,6 +31,10 @@ export interface BrushShapeParams {
 }
 
 export interface PathBrushParams extends BrushShapeParams {
+  /** Freehand or through-point road authoring; pen is a legacy alias for points. */
+  readonly creationMode?: "brush" | "points" | "pen";
+  /** Constraint for editing an existing curve with this same tool. */
+  readonly curveMode?: "automatic" | "aligned" | "mirrored" | "free";
   /** Product recipe; every variant still creates the single `path` surface type. */
   readonly pathKind: PathKind;
   /** Width of the flat traversable bed, in world units. */
@@ -249,12 +253,11 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   "slope-ramp": Object.freeze({ width: 1.5, rise: 3 }),
   "slope-spiral": Object.freeze({ width: 1.5, rise: 3, radius: 2.5, turns: 1 }),
   "path-brush": Object.freeze({
-    // The brush has to hold the road: half of a 3-wide bed reaches 1.5 from
-    // the centerline, so a radius of 2.5 leaves a full metre of correction.
+    // Legacy brush footprint fields remain readable; authoring now uses explicit curves.
     // `street` is the only preset the UI still writes -- its own bed-only
     // profile is the one everything else in the recipe (shoulder width and
     // height, the still-unbuilt raised rim) is deliberately left inert for.
-    shape: "circle", radius: 2.5, rotationDegrees: 0,
+    shape: "circle", radius: 2.5, rotationDegrees: 0, curveMode: "mirrored",
     pathKind: "street", bedWidth: 3, shoulderWidth: 0.6, shoulderHeight: 0.15,
     miterLimit: 4,
   }),

@@ -1,7 +1,7 @@
 import type { ClipPlaneDescriptor, LightDescriptor } from "../contracts/engine.js";
 import type { ItemId, LayerId } from "../contracts/scene.js";
 import type { Transform } from "../contracts/space.js";
-import type { CameraDescriptor, PickResult } from "../contracts/view.js";
+import type { CameraDescriptor, PickResult, PointManipulator } from "../contracts/view.js";
 import type { VisualDescriptor } from "../contracts/visual.js";
 
 /**
@@ -19,6 +19,7 @@ import type { VisualDescriptor } from "../contracts/visual.js";
 
 /** One presentation target owned by a backend. Opaque to the engine. */
 export interface BackendSurface {
+  setPointManipulator(target: PointManipulator | undefined, camera: CameraDescriptor, invalidate: () => void): void;
   /** Resizes the presentation target. Cheap; never rebuilds scene content. */
   resize(width: number, height: number): void;
   /** Encodes the last drawn content. */

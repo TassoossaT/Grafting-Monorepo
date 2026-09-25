@@ -201,7 +201,8 @@ h1 {
   backdrop-filter: blur(10px);
   font-size: 0.72rem;
   color: #94a3b8;
-  pointer-events: none;
+  pointer-events: auto;
+  user-select: text;
 }
 
 /* Left rail -- small, specific, powerful tools (floats over the map) */

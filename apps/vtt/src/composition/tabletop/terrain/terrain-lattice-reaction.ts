@@ -19,8 +19,8 @@ import {
 import { timePhase } from "../commit-timing.ts";
 import { paintedFalloutOf } from "../interference/painted-topologies.ts";
 import { repairTerrainCut, type TerrainRegenerateRuntime } from "./terrain-regenerate.ts";
-import { planarUnion, planarDifference } from "../../../features/edit-construction/index.ts";
-import type { PlanarArea, PlanarPolygon, PlanarPort } from "@/features/edit-construction";
+import { REALLY_MOVED, changeAreaOf, largestOuterRing } from "../effects/change-area.ts";
+import type { PlanarArea } from "@/features/edit-construction";
 
 /**
  * The `"lattice-regenerate"` reaction: how a ground cloud answers a change
@@ -92,100 +92,6 @@ function topologyIntersectsPolygon(topology: ConstructionRegionTopology, polygon
 function hasNodeIn(topology: ConstructionRegionTopology, bounds: ConstructionTopologyBoundsQuery): boolean {
   return topology.nodes.some((node) =>
     node.position.x >= bounds.minX && node.position.x <= bounds.maxX && node.position.z >= bounds.minZ && node.position.z <= bounds.maxZ);
-}
-
-/**
- * Ground the changed cloud used to stand on and no longer does, or the other
- * way round -- the places its shape actually changed.
- *
- * **Why this is a shape question and not an identity one.** A path mints every
- * contour node from the operation id (`contour-patch.ts`), so regenerating its
- * cloud re-mints *every* node in the whole connected component, however far
- * from the stroke. "Terrain holding a node the change replaced" is therefore
- * true of every metre of ground the road touches, on every stroke, and using it
- * to decide what to repair means regenerating the entire terrain corridor each
- * time. Identity cannot contain this while the changed cloud throws its own away.
- *
- * The shape can. Where the road came back over exactly the ground it left, the
- * terrain beside it still meets the same boundary in the same place and has
- * nothing to fix; where the road actually moved, it does. This decides *how
- * much* to regenerate and never which node is which, so it is not proximity
- * matching.
- *
- * Slivers are discarded. Re-flattening a curve lands its samples fractionally
- * off the last ones all along its length, so the difference of two runs of the
- * same road is a hairline following the whole network. `2*area/perimeter` is a
- * strip's width, and anything thinner than {@link REALLY_MOVED} is re-sampling
- * noise rather than a change that went somewhere.
- */
-const REALLY_MOVED = 0.05;
-
-function areaPolygonsOf(topologies: readonly ConstructionRegionTopology[]): PlanarPolygon[] {
-  const polygons: PlanarPolygon[] = [];
-  for (const topology of topologies) {
-    const at = new Map<string, { x: number; z: number }>();
-    for (const node of topology.nodes) at.set(node.id, { x: node.position.x, z: node.position.z });
-    const ringOf = (loop: readonly ConstructionRegionEdge[]): [number, number][] | undefined => {
-      const ring: [number, number][] = [];
-      for (const use of loop) {
-        const position = at.get(use.startNodeId);
-        if (position === undefined) return undefined;
-        ring.push([position.x, position.z]);
-      }
-      if (ring.length < 3) return undefined;
-      ring.push([ring[0]![0], ring[0]![1]]);
-      return ring;
-    };
-    for (const loop of topology.outerLoops) {
-      const ring = ringOf(loop);
-      if (ring === undefined) continue;
-      const holes = topology.holes.map(ringOf).filter((hole): hole is [number, number][] => hole !== undefined);
-      polygons.push([ring, ...holes]);
-    }
-  }
-  return polygons;
-}
-
-function unionOf(port: PlanarPort, polygons: readonly PlanarPolygon[]): PlanarArea {
-  if (polygons.length === 0) return [];
-  try {
-    return planarUnion(port, polygons[0]!, ...polygons.slice(1));
-  } catch {
-    return [];
-  }
-}
-
-function widthOfPiece(piece: PlanarArea[number]): number {
-  let area = 0;
-  let perimeter = 0;
-  for (const ring of piece) {
-    for (let index = 0; index < ring.length - 1; index += 1) {
-      const [ax, az] = ring[index]!;
-      const [bx, bz] = ring[index + 1]!;
-      area += ax * bz - bx * az;
-      perimeter += Math.hypot(bx - ax, bz - az);
-    }
-  }
-  if (perimeter <= 1e-9) return 0;
-  return Math.abs(area) / perimeter;
-}
-
-function groundMovedOff(
-  port: PlanarPort,
-  before: readonly ConstructionRegionTopology[],
-  after: readonly ConstructionRegionTopology[],
-): PlanarArea {
-  const was = unionOf(port, areaPolygonsOf(before));
-  const is = unionOf(port, areaPolygonsOf(after));
-  if (was.length === 0) return [];
-  if (is.length === 0) return was;
-  let moved: PlanarArea;
-  try {
-    moved = planarDifference(port, was, is);
-  } catch {
-    return was;
-  }
-  return moved.filter((piece) => widthOfPiece(piece) >= REALLY_MOVED);
 }
 
 /** Even-odd across every ring of a multipolygon, holes included. */
@@ -274,7 +180,21 @@ function answerCut(runtime: LatticeReactionRuntime, effect: Effect, hits: readon
   ];
   if (changedPositions.length === 0) return;
 
-  const footprint = change.footprintOutline !== undefined && change.footprintOutline.length >= 3 ? change.footprintOutline : undefined;
+  // **An edit is scoped by where its shape went, never by what it rebuilt.**
+  // A change that replaced standing faces -- any type regenerating a spine or
+  // contour component -- produces the whole component again, and any outline
+  // the type derives from that names the whole network. Creation replaces
+  // nothing, so there the type's own footprint is exactly the new ground.
+  // Without a boolean to answer, it falls back to the type's footprint and the
+  // change's whole extent: wider, never narrower than what is needed.
+  const area = change.before.length > 0 ? timePhase("área mudada", () => changeAreaOf(runtime, change)) : undefined;
+  const isEdit = area !== undefined;
+  const claimed: PlanarArea = area?.claimed ?? [];
+  const changed: PlanarArea = area?.vacated ?? [];
+  const editArea: PlanarArea = [...claimed, ...changed];
+
+  const typeFootprint = change.footprintOutline !== undefined && change.footprintOutline.length >= 3 ? change.footprintOutline : undefined;
+  const footprint = isEdit ? (largestOuterRing(claimed) ?? largestOuterRing(changed)) : typeFootprint;
   const extentOf = (points: readonly (readonly [number, number])[]) => {
     const margin = 2.5;
     return {
@@ -284,13 +204,19 @@ function answerCut(runtime: LatticeReactionRuntime, effect: Effect, hits: readon
       maxZ: Math.max(...points.map(([, z]) => z)) + margin,
     };
   };
-  const reachBounds = extentOf(footprint ?? changedPositions.map((p) => [p.x, p.z] as const));
+  const editPoints = editArea.flatMap((piece) => piece[0] ?? []);
 
   // The reach is deliberately broad, but it must not become the repair scope:
   // any node in the box pulled in large ground faces beside long or curved
   // roads and split their whole cloud. The footprint itself decides admission;
   // the planner still includes faces truly covered through its own checks.
-  const underFootprint = hits.filter((t) => hasNodeIn(t, reachBounds) && (footprint === undefined || topologyIntersectsPolygon(t, footprint)));
+  // An edit admits only ground its moved area touches -- every piece of it,
+  // not only the one the single-ring footprint names.
+  const underFootprint = isEdit
+    ? (editPoints.length === 0 ? [] : hits.filter((t) => hasNodeIn(t, extentOf(editPoints)) &&
+        editArea.some((piece) => piece[0] !== undefined && topologyIntersectsPolygon(t, piece[0]))))
+    : hits.filter((t) => hasNodeIn(t, extentOf(footprint ?? changedPositions.map((p) => [p.x, p.z] as const))) &&
+        (footprint === undefined || topologyIntersectsPolygon(t, footprint)));
 
   const cutters = cutterPolygonsOf(runtime, change.after);
 
@@ -315,7 +241,6 @@ function answerCut(runtime: LatticeReactionRuntime, effect: Effect, hits: readon
   // stops existing, and the ground holding them is mostly nowhere near the
   // footprint -- so the search reaches the whole replaced extent, not the stroke.
   const orphaned: ConstructionRegionTopology[] = [];
-  const changed = timePhase("área deixada pela mudança", () => groundMovedOff(runtime, change.before, change.after));
   if (change.before.length > 0) {
     const beforeBounds = terrainTopologiesBounds(change.before, 4.0);
     for (const t of hits) {
@@ -349,10 +274,10 @@ function answerCut(runtime: LatticeReactionRuntime, effect: Effect, hits: readon
 
   const plan = timePhase("plano do reparo", () => planTerrainCloudCutRepair({
     candidateTerrain,
-    cutterPositions: footprint !== undefined ? footprint.map(([x, z]) => ({ x, y: 0, z })) : changedPositions,
+    cutterPositions: footprint !== undefined ? footprint.map(([x, z]) => ({ x, y: 0, z })) : isEdit ? editPoints.map(([x, z]) => ({ x, y: 0, z })) : changedPositions,
     cutterNodeIds: destroyedNodeIds,
     coverageSurfaceKeys: coverageKeys,
-    footprintOutline: change.footprintOutline,
+    footprintOutline: footprint,
     cutterPolygons: cutters,
   }));
   if (!plan.requiresRepair && changed.length === 0) return;
@@ -375,7 +300,7 @@ function answerCut(runtime: LatticeReactionRuntime, effect: Effect, hits: readon
         // The shape the change claimed, and whose type the repair reads again
         // for itself, so it subtracts the changed cloud from the ground it lays
         // instead of laying ground over it.
-        footprintOutline: change.footprintOutline,
+        footprintOutline: footprint,
         painterSurfaceType: change.surfaceType,
         vacatedGround: changed,
       },
