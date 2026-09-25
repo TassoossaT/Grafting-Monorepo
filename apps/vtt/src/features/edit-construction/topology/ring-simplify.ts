@@ -17,8 +17,8 @@ import type { ConstructionEdgeGeometry, ConstructionPosition } from "@/ports";
  * the same collapse.
  */
 
-const COLLINEAR_COSINE_EPSILON = 1e-6;
-const COLLINEAR_HEIGHT_EPSILON = 0.02;
+const COLLINEAR_COSINE_EPSILON = 2e-4;
+const COLLINEAR_HEIGHT_EPSILON = 0.03;
 const ARC_CENTER_EPSILON = 1e-3;
 
 function isStraight(geometry: ConstructionEdgeGeometry | undefined): boolean {

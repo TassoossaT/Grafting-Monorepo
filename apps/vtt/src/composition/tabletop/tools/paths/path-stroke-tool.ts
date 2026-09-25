@@ -23,6 +23,7 @@ function draft(ctx: ToolContext,g: ToolGesture,params: PathBrushParams) {
   const target = roadSnapTarget(ctx, g.current);
   if (target) samples[samples.length - 1] = target;
   showRoadSnap(ctx, target);
+
   // The brush reserves half the road width; the remaining area may correct hand wobble.
   const correction=Math.max(0,params.radius-params.bedWidth/2);
   const fitted=ctx.runtime.curveBatch({tolerance:0.025,commands:[{kind:"interpretStroke",points:samples.map(point),correction,curved:true}]})[0]!;

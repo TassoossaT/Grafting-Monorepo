@@ -27,16 +27,11 @@ function curves(ctx: ToolContext, points: readonly ConstructionPosition[]): read
 
 /** Prunes accidental duplicate or jitter points (< 0.1m) from a draft spine. */
 export function prunePoints(points: readonly ConstructionPosition[]): ConstructionPosition[] {
-  if (points.length <= 2) return [...points];
-  const pruned: ConstructionPosition[] = [points[0]!];
-  for (let i = 1; i < points.length; i++) {
-    const current = points[i]!;
-    const prev = pruned.at(-1)!;
-    const dist = Math.hypot(current.x - prev.x, current.z - prev.z);
-    if (dist < 0.1 && i < points.length - 1) continue;
-    pruned.push(current);
-  }
-  return pruned;
+  return points.filter((p, i, all) => {
+    if (i === 0 || i === all.length - 1) return true;
+    const prev = all[i - 1]!;
+    return Math.hypot(p.x - prev.x, p.z - prev.z) >= 0.1;
+  });
 }
 
 function preview(ctx: ToolContext, draft: Draft, cursor?: ConstructionPosition): void {

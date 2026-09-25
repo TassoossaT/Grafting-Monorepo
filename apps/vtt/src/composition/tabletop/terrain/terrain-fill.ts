@@ -587,15 +587,12 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
   // Query only the generated extent instead of serializing the entire map.
   const occupied = new Map<string, ConstructionRegionTopology["outerLoops"][number][number][]>();
   const reach = request.faceSide;
-  const nearbyTopologies = timePhase("topologias vizinhas", () => request.topologySeeds?.length === 0
-    ? []
-    : runtime.getRegionTopologiesInBounds({
-        minX: bounds.minX - reach,
-        minZ: bounds.minZ - reach,
-        maxX: bounds.maxX + reach,
-        maxZ: bounds.maxZ + reach,
-        seeds: request.topologySeeds,
-      }));
+  const nearbyTopologies = timePhase("topologias vizinhas", () => runtime.getRegionTopologiesInBounds({
+    minX: bounds.minX - reach,
+    minZ: bounds.minZ - reach,
+    maxX: bounds.maxX + reach,
+    maxZ: bounds.maxZ + reach,
+  }));
   const replaced = new Set((request.replaceSurfaceKeys ?? []).map((key) => key.join("\u0000")));
   for (const topology of nearbyTopologies) {
     if (replaced.has(topology.surfaceKey.join("\u0000"))) continue;
@@ -604,6 +601,15 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
         const uses = occupied.get(use.edgeId) ?? [];
         uses.push(use);
         occupied.set(use.edgeId, uses);
+
+        if (use.startNodeId && use.endNodeId) {
+          const sharedId = sharedEdgeId(request.tableId, use.startNodeId, use.endNodeId);
+          if (sharedId !== use.edgeId) {
+            const sharedUses = occupied.get(sharedId) ?? [];
+            sharedUses.push(use);
+            occupied.set(sharedId, sharedUses);
+          }
+        }
       }
     }
   }

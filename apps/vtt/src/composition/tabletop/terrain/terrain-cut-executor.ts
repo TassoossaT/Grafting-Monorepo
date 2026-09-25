@@ -760,12 +760,18 @@ export function executeTerrainCut(
 
   // Ask runtime what surfaces are covered by outline / footprint
   const coveredOutline = outline.length >= 3 ? outline : outlineMultiPolygon[0]?.[0] ?? [];
-  const covered: readonly ConstructionCoveredRegion[] =
-    (request.coveredRegions as readonly ConstructionCoveredRegion[] | undefined) ??
-    (coveredOutline.length >= 3 &&
+  const footprintCovered: readonly ConstructionCoveredRegion[] =
+    coveredOutline.length >= 3 &&
     typeof (runtime as unknown as { getFootprintCoverage?: (outline: readonly (readonly [number, number])[]) => readonly ConstructionCoveredRegion[] }).getFootprintCoverage === "function"
       ? (runtime as unknown as { getFootprintCoverage: (outline: readonly (readonly [number, number])[]) => readonly ConstructionCoveredRegion[] }).getFootprintCoverage(coveredOutline)
-      : []);
+      : [];
+  const requestedCovered: readonly ConstructionCoveredRegion[] =
+    (request.coveredRegions as readonly ConstructionCoveredRegion[] | undefined) ?? [];
+  const coveredMap = new Map<string, ConstructionCoveredRegion>();
+  for (const c of [...requestedCovered, ...footprintCovered]) {
+    coveredMap.set(c.surfaceKey.join(" "), c);
+  }
+  const covered = [...coveredMap.values()];
 
   // **The neighbourhood has to contain the ground being replaced.**
   //

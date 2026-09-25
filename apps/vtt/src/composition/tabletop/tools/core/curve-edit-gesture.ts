@@ -107,6 +107,7 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGes
   let moved = false;
   let dragged = false;
   let ended = false;
+  let lastRenderedTarget: ConstructionPosition | undefined;
   const input = (insert = false) => ({
     field: ctx.runtime,
     snapshot, topologies, port: ctx.runtime, targetId, position: target, operationId, tableId: ctx.tableId, insert, allowShapeChange: params?.allowShapeChange, parameter: params?.parameter, mode: params?.curveMode, action: params?.curveAction, width: params?.curveWidth ?? 4, endWidth: params?.curveEndWidth,
@@ -127,6 +128,12 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGes
       }
       moved = target.x !== sample.point.x || target.y !== sample.point.y || target.z !== sample.point.z;
       dragged ||= moved;
+      if (lastRenderedTarget &&
+          Math.hypot(target.x - lastRenderedTarget.x, target.z - lastRenderedTarget.z) < 0.015 &&
+          Math.abs(target.y - lastRenderedTarget.y) < 0.015) {
+        return;
+      }
+      lastRenderedTarget = { ...target };
       try {
         const draft = previewBezierEdit(input());
         if (draft) ctx.runtime.showPreview({ kind: "segments", positions: draft, color: PREVIEW_COLOR, opacity: 0.9 }, CHANNEL);

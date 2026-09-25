@@ -111,7 +111,7 @@ function restoreHeightVertices(
   }
 
   const restored: PlanarPoint[] = [];
-  const minInterval = 0.8;
+  const minInterval = 1.6;
   for (let i = 0; i < ring.length - 1; i += 1) {
     const a = ring[i]!;
     const b = ring[i + 1]!;
