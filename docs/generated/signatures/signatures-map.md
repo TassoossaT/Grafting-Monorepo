@@ -286,6 +286,16 @@ pub fn grafting_graph_core::bezier::HandleMode::eq(&self, other: &grafting_graph
 pub fn grafting_graph_core::bezier::HandleMode::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn grafting_graph_core::bezier::HandleMode::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
 pub fn grafting_graph_core::bezier::HandleMode::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+pub enum grafting_graph_core::bezier::SpanGeometry
+pub grafting_graph_core::bezier::SpanGeometry::Arc
+pub grafting_graph_core::bezier::SpanGeometry::Arc::center: [f64; 2]
+pub grafting_graph_core::bezier::SpanGeometry::Arc::positive: bool
+pub grafting_graph_core::bezier::SpanGeometry::Line
+pub fn grafting_graph_core::bezier::SpanGeometry::clone(&self) -> grafting_graph_core::bezier::SpanGeometry
+pub fn grafting_graph_core::bezier::SpanGeometry::eq(&self, other: &grafting_graph_core::bezier::SpanGeometry) -> bool
+pub fn grafting_graph_core::bezier::SpanGeometry::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn grafting_graph_core::bezier::SpanGeometry::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+pub fn grafting_graph_core::bezier::SpanGeometry::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
 pub struct grafting_graph_core::bezier::CubicBezier
 pub grafting_graph_core::bezier::CubicBezier::points: [grafting_graph_core::bezier::CurvePoint; 4]
 pub fn grafting_graph_core::bezier::CubicBezier::curvature(&self, t: f64) -> core::result::Result<core::option::Option<f64>, alloc::string::String>
@@ -299,16 +309,6 @@ pub fn grafting_graph_core::bezier::CubicBezier::pull(&self, t: f64, target: gra
 pub fn grafting_graph_core::bezier::CubicBezier::reversed(&self) -> Self
 pub fn grafting_graph_core::bezier::CubicBezier::sample(&self, accuracy: f64) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::bezier::CurveSample>, alloc::string::String>
 pub fn grafting_graph_core::bezier::CubicBezier::split(&self, t: f64) -> core::result::Result<[Self; 2], alloc::string::String>
-pub fn grafting_graph_core::bezier::CubicBezier::validate(&self) -> core::result::Result<(), alloc::string::String>
-pub fn grafting_graph_core::bezier::CubicBezier::clone(&self) -> grafting_graph_core::bezier::CubicBezier
-pub fn grafting_graph_core::bezier::CubicBezier::eq(&self, other: &grafting_graph_core::bezier::CubicBezier) -> bool
-pub fn grafting_graph_core::bezier::CubicBezier::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn grafting_graph_core::bezier::CubicBezier::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
-pub fn grafting_graph_core::bezier::CubicBezier::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
-pub struct grafting_graph_core::bezier::CurveHandles
-pub grafting_graph_core::bezier::CurveHandles::band_offsets: alloc::vec::Vec<f64>
-pub grafting_graph_core::bezier::CurveHandles::end: grafting_graph_core::bezier::CurvePoint
-pub grafting_graph_core::bezier::CurveHandles::end_band_offsets: alloc::vec::Vec<f64>
 ```
 
 ### `isekai-capi-bridge` (`libs/isekai/capi-bridge`)
@@ -4080,6 +4080,32 @@ export function mitrePoint(
   limit: number,
   ): ConstructionPosition {
 
+// src/composition/tabletop/tools/core/curve-draft.ts
+export type CurveDraftMode = "straight" | "arc" | "points" | "connect" | "spiral";
+export const CURVE_DRAFT_MODES: readonly CurveDraftMode[] = Object.freeze(["points", "straight", "arc", "connect", "spiral"]);
+export type FinishedCurveDraft =
+export interface CurveDraftOptions<Id extends ConstructionToolId> {
+  readonly id: Id;
+  readonly defaultParams: () => ToolParamsFor<Id>;
+  /** The mode this tool draws in now. */
+  readonly modeOf: (params: ToolParamsFor<Id>) => CurveDraftMode;
+  /** Whether R cycles the mode, and how the tool stores the next one. */
+  readonly withMode?: (params: ToolParamsFor<Id>, mode: CurveDraftMode) => ToolParamsFor<Id>;
+  /** The default climb from start to end when the end is not on a floor. */
+export interface CurveDraftTool<Id extends ConstructionToolId> extends ConstructionTool<Id> {
+  /** Whether a draft is under way -- presses then belong to drawing, not to editing what stands. */
+  drafting(ctx: ToolContext): boolean;
+  }
+export function createCurveDraftTool<Id extends ConstructionToolId>(options: CurveDraftOptions<Id>): CurveDraftTool<Id> {
+  const states = new WeakMap<ToolContext["runtime"], DraftState>();
+export const MODE_LABELS: Record<CurveDraftMode, string> = {
+  straight: "Reta",
+  arc: "Arco",
+  points: "Por pontos",
+  connect: "Ligar pontas",
+  spiral: "Espiral",
+  };
+
 // src/composition/tabletop/tools/core/curve-edit-gesture.ts
 export interface CurveGesture {
   move(gesture: ToolGesture): void;
@@ -4683,10 +4709,10 @@ export interface SlopeParams {
 export function slopeControlPoint(ctx: ToolContext, sample: PointerSample): ConstructionPosition {
   const node = sample.nodeId ? ctx.runtime.getGraphSnapshot().nodes.find((n) => n.id === sample.nodeId) : undefined;
   return { ...sample.point, y: node?.position.y ?? sample.point.y };
-export function spiralPlan(ctx: ToolContext, center: ConstructionPosition, params: Params & { readonly flip?: boolean }, towards?: ConstructionPosition): readonly CubicBezier[] {
-  const radius = towards ? Math.hypot(towards.x - center.x, towards.z - center.z) : params.radius ?? 2.5;
-  const turns = params.turns ?? 1, rise = params.rise ?? 3;
-  if (!(radius > 0) || !(turns > 0) || !Number.isFinite(rise)) throw new Error("Raio e voltas devem ser positivos.");
+export interface PlannedSpan {
+  readonly curve: CubicBezier;
+  readonly handles: CurveHandles;
+  }
 export function curvesPolyline(ctx: ToolContext, curves: readonly CubicBezier[]): readonly ConstructionPosition[] {
   if (curves.length === 0) return [];
   return ctx.runtime.curveBatch({ tolerance: 0.05, commands: [{ kind: "sample", curves }] })[0]!.samples
@@ -4716,18 +4742,15 @@ export function reweldedFloor(operationId: string, weld: EndWeld, rung: Rung, se
   const edges = new Map<string, ConstructionPatchEdge>();
 export function landsInside(weld: EndWeld, rung: Rung, sections: ReadonlyMap<string, ConstructionPosition>): boolean {
   const length = Math.hypot(weld.b.x - weld.a.x, weld.b.z - weld.a.z);
-export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly ConstructionPosition[], params: Params, plan?: readonly CubicBezier[]): void {
+export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly ConstructionPosition[], params: Params, plan?: readonly PlannedSpan[]): void {
   try {
   const width = params.width ?? 1.5;
   if (!(width > 0)) throw new Error("A largura deve ser positiva.");
 
 // src/composition/tabletop/tools/slope/slope-tools.ts
 export const slopeRampTool = withStructureEditing(rawSlopeRampTool, { ownsType: ownsRamp });
-export const slopeSpiralTool = withSpineEditing(rawSlopeSpiralTool, { ownsSpine: ownsSlope });
-export const slopeCurveTool = withSpineEditing(rawSlopeCurveTool, {
-  ownsSpine: ownsSlope,
-  drafting: (ctx) => (curveDrafts.get(ctx.runtime)?.points.length ?? 0) > 0,
-  });
+export const slopeSpiralTool = withSpineEditing(rawSlopeSpiralTool, { ownsSpine: ownsSlope, drafting: rawSlopeSpiralTool.drafting });
+export const slopeCurveTool = withSpineEditing(rawSlopeCurveTool, { ownsSpine: ownsSlope, drafting: rawSlopeCurveTool.drafting });
 
 // src/composition/tabletop/tools/terrain/terrain-sculpt-tool.ts
 export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
@@ -6701,6 +6724,7 @@ export function createBindTokenSubjectOperation(
 export type CurvePoint = readonly [number, number, number];
 export interface CubicBezier { readonly points: readonly [CurvePoint, CurvePoint, CurvePoint, CurvePoint] }
 export type CurveHandleMode = "automatic" | "aligned" | "mirrored" | "free";
+export type SpanGeometry = { readonly kind: "line" } | { readonly kind: "arc"; readonly center: readonly [number, number]; readonly positive: boolean };
 export interface CurveHandles {
   readonly start: CurvePoint;
   readonly end: CurvePoint;
@@ -6816,7 +6840,7 @@ export interface ConstructionCurvedEdge {
 
 // src/ports/index.ts
 export type { CapRequest, CapPatch } from "./cap-port.ts";
-export type { BezierPort, CurveBatch, CurveCommand, CurveResult, CurveHandles, CurvePoint, CubicBezier, CurveHandleMode, CurveNetworkRequest, CurveNetworkPatch } from "./bezier-port.ts";
+export type { BezierPort, CurveBatch, CurveCommand, CurveResult, CurveHandles, CurvePoint, CubicBezier, CurveHandleMode, SpanGeometry, CurveNetworkRequest, CurveNetworkPatch } from "./bezier-port.ts";
 export type {
   CameraControlHandle,
   CameraControlOptions,

@@ -1,6 +1,6 @@
 # Rampas curvas e espirais: criação e edição
 
-- Status: pesquisa consolidada em 2026-09-25; decisões do dono aplicadas no TASK-333 (PR #334)
+- Status: duas rodadas de pesquisa em 2026-09-25 (modelo; depois, controles de criação); decisões do dono aplicadas no TASK-333 (PR #334)
 - Relacionado: `construction-elements-online-research.md` (escadas e rampas em geral), issue #303 (contrato de edição por tipo)
 
 ## Veredito
@@ -10,6 +10,9 @@
 3. **A criação é de um nível ao outro.** A altura final vem do piso onde a rampa termina, ou de uma subida fixa.
 4. **Cálculo em Rust, gerenciamento em TS.** A hélice e a inclinação são comandos do lote de curvas (`helix`, `grade`), usando o `kurbo` que já está no motor. O TS cuida de tipos, papéis, alças e ferramentas.
 5. **Não existe biblioteca pronta que cubra criação e edição.** A geometria é pouca matemática sobre o `kurbo`; o esforço está no tipo e na interação.
+6. **A criação usa modos compartilhados**, iguais para qualquer tipo feito sobre espinha: por pontos, reta, arco, ligar pontas e espiral centro-início-fim.
+7. **Cada trecho tem um tipo de geometria** (reta, arco ou bezier livre), guardado nas alças e respeitado no `resolve` do Rust. Assim uma reta ou um arco continuam exatos depois de editados.
+8. **A estrutura é um marcador declarativo** da posição dos assets. Degraus, pisos de escada e corrimãos são dos assets; não viram parâmetro da estrutura, nem existe limite de inclinação.
 
 ## Diagnóstico do modelo anterior (medido no motor real)
 
@@ -42,6 +45,20 @@
 - A inclinação aparece enquanto se desenha; acima do máximo, é erro ou vira escada.
 - Inverter o sentido é uma ação explícita.
 
+## Segunda rodada: controles de criação
+
+O primeiro modelo de criação da rampa curva era ruim: o preview ligava os cliques por retas, não havia números enquanto se desenhava, a regra da altura final era invisível, e não havia controle da direção nas pontas.
+
+| Ferramenta | Controle | O que se aproveitou |
+|---|---|---|
+| Illustrator, Curvature tool | clique os pontos e a curva passa por eles, com preview vivo até o cursor; sem alças nem teclas | modo **por pontos** |
+| SketchUp, 2 Point Arc | início, fim, e a barriga puxada perpendicular à corda; aviso de tangência | modo **arco**, e o arrasto do meio de um trecho reto ou em arco (vira o arco pelos 3 pontos) |
+| Cities: Skylines II | modos reto, curva simples, curva complexa e contínuo; encaixe em 90°, guias e geometria; inclinação nas guias | modos explícitos e números ao vivo |
+| Satisfactory, esteiras | modos Padrão, Reto e Curva, trocados com R; a Curva segue a posição **e a direção** das pontas; 35° de inclinação e 2 m de raio no máximo | modo **ligar pontas** e R para trocar; os limites não foram adotados (decisão 8) |
+| Revit, Center-Ends Spiral | centro, início, e girar o cursor no sentido desejado até clicar o fim; *Flip* depois | modo **espiral**, que soma uma volta a cada círculo completo do cursor |
+| Planet Coaster | Shift mais movimento do mouse sobe e desce em passos | Shift mais movimento vertical ajusta a subida em passos de 0,25 m |
+| Tiny Glade, ferramenta de escada | pontos retos ou curvos; seta dupla na borda para a altura e seta lateral para a largura; reage a paredes, telhados e torres | referência para as alças embutidas da #318 |
+
 ## O que foi aplicado (TASK-333)
 
 - **Rust, `grafting-graph-core::bezier_ramp`:**
@@ -49,16 +66,18 @@
   - `grade`: redistribui as alturas de uma cadeia pelo comprimento em planta, medido com `ParamCurveArclen`, sem tocar a planta.
   - Os dois estão expostos como comandos `helix` e `grade` do lote de curvas.
 - **TS, espinha da plataforma inclinada:** declara `planOnly`. O gesto de ponto mantém a altura do próprio ponto e não encaixa em outras redes; a altura só muda de propósito, no modo de elevação. A cada regeneração, `gradeSlopeSpans` recalcula a cadeia entre as pontas.
-- **Ferramenta Espiral:** clique no centro usa o raio do painel; arrastar do centro define o raio e o ponto de partida. Há também *Inverter sentido*. O plano vem do comando `helix`.
-- **Ferramenta Rampa curva:** pontos em planta, fechada com Enter ou clicando de novo no último ponto. A altura final vem do piso do último clique, ou da subida do painel. Pontas numa borda de piso são soldadas.
-- **Mensagens:** informam a inclinação resultante.
+- **Tipo de geometria por trecho:** `SpanGeometry` (reta, ou arco com centro e sentido) fica em `CurveHandles.geometry`. `CurveHandles::resolve` no Rust reconstrói o trecho pela forma, e a malha, as fitas, o overlay e o TS passam todos por ele. Dividir um trecho mantém a forma nas duas metades. `helix` e `arcThrough` devolvem trechos de no máximo um quarto de volta, onde uma cúbica fica a cerca de 0,03% do círculo, com as pontas exatamente nos pontos pedidos.
+- **Arrastar o meio de um trecho reto ou em arco** o transforma no arco pelos dois extremos e pelo cursor, via `arcThrough`. Um trecho livre continua sendo puxado como cúbica.
+- **Soldas desligadas:** numa espinha `planOnly`, arrastar uma ponta não a solda em outro nó nem a transforma em junção, porque as voltas de uma espiral passam umas sobre as outras.
+- **Controlador genérico** `tools/core/curve-draft.ts`, com os cinco modos, R para trocar, Backspace, Enter e Esc. A altura inicial vem do que o primeiro clique acertou; a final, do piso do último clique, ou da subida (ajustável com Shift). Os números aparecem ao vivo: comprimento, subida, inclinação e, na espiral, raio e voltas. Todo o cálculo é feito no Rust.
+- **Ferramentas:** "Rampa curva" usa os cinco modos; "Espiral" é o mesmo controlador fixo no modo espiral. As duas editam depois pelo editor de espinha compartilhado.
 
 ## Pendente
 
-- **Espiral com alças paramétricas:** anel do raio, ponta que soma voltas, topo, *Flip* numa espiral já criada, e o parâmetro travado. Hoje a espiral criada é editada como rampa curva, por pontos em planta, e deixa de ser uma hélice exata depois de editada. Depende dos componentes visuais da #318 e de guardar os parâmetros.
+- **Alças de nível da espiral:** anel do raio, *Flip* numa espiral já criada, e somar voltas girando a ponta além de um quarto de volta. Os trechos em arco já mantêm o centro ao serem editados; o resto depende dos componentes visuais da #318.
+- **Rua nos modos novos:** o controlador é genérico, mas por enquanto só as rampas o usam. A ferramenta de rua tem desenho, ramificação e encaixe próprios, que ficam para a #324.
+- **Continuar tangente a partir da ponta de uma espinha existente** ainda não é um encaixe.
 - **Mover um piso soldado** leva a ponta da rampa junto, mas o meio só volta à inclinação constante na próxima edição da rampa.
-- **Inclinação máxima, e virar escada acima dela:** valor e comportamento a decidir.
-- **Degraus:** ainda sem parâmetro.
 
 ## Fontes
 
@@ -73,5 +92,12 @@
 - PC Gamer, Tiny Glade stairs: https://www.pcgamer.com/games/city-builder/cozy-castle-builder-literally-hits-next-level-as-tiny-glade-announces-stairs-its-biggest-and-most-complicated-change-yet/
 - Unity-Procedural-Stair-Builder: https://github.com/GregFrench/Unity-Procedural-Stair-Builder
 - HammerForge PR #187: https://github.com/saworbit/hammerforge/pull/187
+- Revit, Center-Ends Spiral Run: https://help.autodesk.com/cloudhelp/2019/ENU/Revit-Model/files/GUID-4E05115C-84C9-4930-95FB-E8B91219B1E6.htm
+- Satisfactory Wiki, Conveyor Belts: https://satisfactory.wiki.gg/wiki/Conveyor_Belts
+- Creativepro, Curvature Tool in Illustrator: https://creativepro.com/curvature-tool-adobe-illustrator/
+- SketchUp, Drawing Arcs: https://help.sketchup.com/en/sketchup/drawing-arcs
+- CS2 Wiki, Editor: Snapping and Tool Modes: https://cs2.paradoxwikis.com/Editor:_Snapping_and_Tool_Modes
+- Planet Coaster, building snap to path/grid: https://steamcommunity.com/app/493340/discussions/0/1368380934282271935/
+- 80.lv, Tiny Glade stair tool: https://80.lv/articles/you-can-finally-make-stairs-easily-in-tiny-glade
 - kurbo Arc: https://docs.rs/kurbo/0.13.1/kurbo/struct.Arc.html
 - kurbo ParamCurveArclen: https://docs.rs/kurbo/0.13.1/kurbo/trait.ParamCurveArclen.html

@@ -239,10 +239,13 @@ export interface ToolParamsByTool {
   readonly "platform-contour": { readonly elevation: number; readonly mode: "create" | "extend" | "cut"; readonly support?: "grounded" | "floating"; readonly shape?: "rectangle" | "polygon" | "freehand" | "circle"; readonly radius?: number; readonly tolerance?: number };
   /** A straight ramp dragged from start to end, climbing a fixed rise, with its own width at each end. */
   readonly "slope-ramp": { readonly bottomWidth: number; readonly topWidth: number; readonly rise: number };
-  /** A spiral sloped platform laid out from its centre: a click uses `radius`, a drag sets it. `flip` turns the other way round. */
-  readonly "slope-spiral": { readonly width: number; readonly rise: number; readonly radius: number; readonly turns: number; readonly flip?: boolean };
-  /** A curved ramp drawn through points in plan, climbing from its first point to its last at one constant grade. */
-  readonly "slope-curve": { readonly width: number; readonly rise: number };
+  /** A spiral sloped platform: centre, start, then turned round to its end. `rise` is its climb when the end is not on a floor. */
+  readonly "slope-spiral": { readonly width: number; readonly rise: number };
+  /**
+   * A curved ramp, drawn in one of the shared spine creation modes. `rise` is
+   * its climb when the end is not on a floor; it climbs at one constant grade.
+   */
+  readonly "slope-curve": { readonly width: number; readonly rise: number; readonly mode?: "points" | "straight" | "arc" | "connect" | "spiral" };
   readonly "path-brush": PathBrushParams;
   readonly "wall-brush": WallBrushParams;
   readonly "wall-line": WallParams;
@@ -258,8 +261,8 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   navigate: Object.freeze({}),
   "platform-contour": Object.freeze({ elevation: 0, mode: "create", support: "grounded", shape: "rectangle", radius: 2.5, tolerance: 0.15 }),
   "slope-ramp": Object.freeze({ bottomWidth: 1.5, topWidth: 1.5, rise: 3 }),
-  "slope-spiral": Object.freeze({ width: 1.5, rise: 3, radius: 2.5, turns: 1, flip: false }),
-  "slope-curve": Object.freeze({ width: 1.5, rise: 3 }),
+  "slope-spiral": Object.freeze({ width: 1.5, rise: 3 }),
+  "slope-curve": Object.freeze({ width: 1.5, rise: 3, mode: "points" }),
   "path-brush": Object.freeze({
     // Legacy brush footprint fields remain readable; authoring now uses explicit curves.
     // `street` is the only preset the UI still writes -- its own bed-only

@@ -1,5 +1,5 @@
 export type { CapRequest, CapPatch } from "./cap-port.ts";
-export type { BezierPort, CurveBatch, CurveCommand, CurveResult, CurveHandles, CurvePoint, CubicBezier, CurveHandleMode, CurveNetworkRequest, CurveNetworkPatch } from "./bezier-port.ts";
+export type { BezierPort, CurveBatch, CurveCommand, CurveResult, CurveHandles, CurvePoint, CubicBezier, CurveHandleMode, SpanGeometry, CurveNetworkRequest, CurveNetworkPatch } from "./bezier-port.ts";
 export type {
   CameraControlHandle,
   CameraControlOptions,

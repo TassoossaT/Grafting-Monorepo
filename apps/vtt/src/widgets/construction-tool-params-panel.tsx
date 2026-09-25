@@ -468,21 +468,20 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
       ) : activeTool === "slope-spiral" ? (
         <div style={{ display: "grid", gap: "0.6rem" }}>
           <label>Largura <input type="number" min="0.1" step="0.1" value={params["slope-spiral"].width} onChange={(event) => onParamsChange("slope-spiral", { ...params["slope-spiral"], width: Number(event.currentTarget.value) })} /></label>
-          <label>Raio <input type="number" min="0.5" step="0.1" value={params["slope-spiral"].radius} onChange={(event) => onParamsChange("slope-spiral", { ...params["slope-spiral"], radius: Number(event.currentTarget.value) })} /></label>
-          <label>Voltas <input type="number" min="0.25" step="0.25" value={params["slope-spiral"].turns} onChange={(event) => onParamsChange("slope-spiral", { ...params["slope-spiral"], turns: Number(event.currentTarget.value) })} /></label>
           <label>Subida <input type="number" step="0.1" value={params["slope-spiral"].rise} onChange={(event) => onParamsChange("slope-spiral", { ...params["slope-spiral"], rise: Number(event.currentTarget.value) })} /></label>
-          <label><input type="checkbox" checked={params["slope-spiral"].flip ?? false} onChange={(event) => onParamsChange("slope-spiral", { ...params["slope-spiral"], flip: event.currentTarget.checked })} /> Inverter sentido</label>
-          <p>Clique no centro para o raio escolhido, ou arraste do centro para fora: a distância vira o raio e a espiral começa onde você soltou. Ela sobe o valor de Subida ao longo das voltas, sempre na mesma inclinação.</p>
-          <p>Depois de criada, edite pelos pontos como uma rua: arrastar move só em planta, e as alturas saem das pontas. No modo de elevação, a ponta muda de altura.</p>
+          <p>Clique o centro, depois o início: a distância é o raio. Gire o cursor em volta do centro no sentido que quiser, cada volta completa soma uma volta, e clique o fim.</p>
+          <p>A espiral começa na altura do início e termina na altura do piso onde você clicou o fim, ou sobe o valor de Subida. Shift e mover o mouse para cima ou para baixo ajusta a subida.</p>
         </div>
       ) : activeTool === "slope-curve" ? (
         <div style={{ display: "grid", gap: "0.6rem" }}>
+          <div className="gm-material-grid">
+            {(["points", "straight", "arc", "connect", "spiral"] as const).map((mode, i) => <SelectableChip key={mode} label={["Por pontos", "Reta", "Arco", "Ligar pontas", "Espiral"][i]!} swatchColor="#79b8e8" selected={(params["slope-curve"].mode ?? "points") === mode} onSelect={() => onParamsChange("slope-curve", { ...params["slope-curve"], mode })} />)}
+          </div>
           <label>Largura <input type="number" min="0.1" step="0.1" value={params["slope-curve"].width} onChange={(event) => onParamsChange("slope-curve", { ...params["slope-curve"], width: Number(event.currentTarget.value) })} /></label>
           <label>Subida <input type="number" step="0.1" value={params["slope-curve"].rise} onChange={(event) => onParamsChange("slope-curve", { ...params["slope-curve"], rise: Number(event.currentTarget.value) })} /></label>
-          <p>Clique para marcar a curva em planta; clique de novo no último ponto, ou Enter, para terminar. Backspace desfaz o último ponto e Esc cancela.</p>
-          <p>A rampa começa na altura do primeiro clique. Termina na altura do piso onde você deu o último clique, ou sobe o valor de Subida, sempre na mesma inclinação.</p>
+          <p>Por pontos: clique por onde a curva passa; clique de novo no último, ou Enter. Reta: início e fim. Arco: início, fim e puxe a curva. Ligar pontas: clique na borda de um piso e depois na do outro, e a rampa sai reta de cada borda. Espiral: centro, início, gire e clique o fim. R troca o modo.</p>
+          <p>A rampa começa na altura do primeiro clique e termina na altura do piso do último clique, ou sobe o valor de Subida, sempre na mesma inclinação. Shift e mover o mouse para cima ou para baixo ajusta a subida. Backspace desfaz o último clique e Esc cancela.</p>
         </div>
-
       ) : activeTool === "path-brush" ? (<PathBrushFields params={params["path-brush"]} onChange={(next) => onParamsChange("path-brush", next)} />) : activeTool === "wall-brush" ? (
         <WallBrushFields params={params["wall-brush"]} onChange={(next) => onParamsChange("wall-brush", next)} />
       ) : activeTool === "wall-line" ? (

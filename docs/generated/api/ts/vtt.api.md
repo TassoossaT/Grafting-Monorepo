@@ -1928,6 +1928,151 @@ when a traveller passing through it keeps them both on the same hand --
 which, since one run's direction points *into* the joint and the other's
 points *out* of it, means their signs are opposite.
 
+### `interface vtt.curve-draft.CurveDraftOptions`
+
+### `property vtt.curve-draft.CurveDraftOptions.color: number`
+
+### `property vtt.curve-draft.CurveDraftOptions.commit: (ctx: ToolContext, draft: FinishedCurveDraft, params: ToolParamsFor<Id>) => void`
+
+### `property vtt.curve-draft.CurveDraftOptions.defaultParams: () => ToolParamsFor<Id>`
+
+### `property vtt.curve-draft.CurveDraftOptions.id: Id`
+
+### `property vtt.curve-draft.CurveDraftOptions.modeOf: (params: ToolParamsFor<Id>) => CurveDraftMode`
+
+The mode this tool draws in now.
+
+### `property vtt.curve-draft.CurveDraftOptions.riseOf: (params: ToolParamsFor<Id>) => number`
+
+The default climb from start to end when the end is not on a floor.
+
+### `property vtt.curve-draft.CurveDraftOptions.withMode?: (params: ToolParamsFor<Id>, mode: CurveDraftMode) => ToolParamsFor<Id>`
+
+Whether R cycles the mode, and how the tool stores the next one.
+
+### `interface vtt.curve-draft.CurveDraftTool`
+
+One construction tool's behavior, generic over its own parameter shape.
+Every hook is optional -- a tool implements only the lifecycle stages it
+actually uses (a click-only tool has no `onPointerUp`, it commits
+on `onClick`). `composition/tabletop/use-construction-pointer.ts` is the
+only caller and never branches on `id` -- it just invokes whichever hook
+the active tool defines.
+
+### `property vtt.curve-draft.CurveDraftTool.handlePresentation?: "spine-points"`
+
+Presentation and sampling policy while this tool is active.
+
+### `property vtt.curve-draft.CurveDraftTool.id: Id`
+
+### `property vtt.curve-draft.CurveDraftTool.previewOnHover?: boolean | ((params: ToolParamsFor<Id>) => boolean)`
+
+Opt in to a stationary drawing preview between gestures.
+
+### `property vtt.curve-draft.CurveDraftTool.snapsToSurface?: boolean`
+
+This tool always projects the pointer onto an existing surface's own
+parametrization (a wall's rail, say) rather than reading raw world X/Z --
+so the dispatcher's world-space grid magnet, applied before any tool
+ever sees the point, is redundant at best. At worst it is actively
+harmful: rounding X/Z to a world grid *before* a nonlinear projection
+(onto a rotated or curved rail) can jump the projected result across
+much more than one grid cell, which reads as the pointer "teleporting"
+rather than the smooth follow every other tool gets from the same
+magnet. A tool that opts in reads its own samples unsnapped and is
+responsible for whatever continuity it wants.
+
+### `property vtt.curve-draft.CurveDraftTool.useGridSnap?: boolean`
+
+### `method vtt.curve-draft.CurveDraftTool.defaultParams(): ToolParamsFor<Id>`
+
+### `method vtt.curve-draft.CurveDraftTool.drafting(ctx: ToolContext): boolean`
+
+Whether a draft is under way -- presses then belong to drawing, not to editing what stands.
+
+### `method vtt.curve-draft.CurveDraftTool.onCancel(ctx: ToolContext): void`
+
+Discards an unfinished tool draft on Escape, cancellation or tool switch.
+
+### `method vtt.curve-draft.CurveDraftTool.onClick(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void`
+
+A press+release with no intervening drag. Batch/stamp tools (room) commit here instead of `onPointerUp`.
+
+### `method vtt.curve-draft.CurveDraftTool.onDeleteKey(ctx: ToolContext): void`
+
+Delete/Backspace with the tool active -- a tool holding a selection (an opening picked for editing, say) removes it here.
+
+### `method vtt.curve-draft.CurveDraftTool.onKeyDown(ctx: ToolContext, key: string, params: ToolParamsFor<Id>): boolean`
+
+Handles a tool key outside text controls; true prevents the browser default.
+
+### `method vtt.curve-draft.CurveDraftTool.onParamsChange(ctx: ToolContext, next: ToolParamsFor<Id>, previous: ToolParamsFor<Id>): void`
+
+The active tool's params changed (the panel, or `updateToolParams`) -- a tool holding a selection may apply them to it.
+
+### `method vtt.curve-draft.CurveDraftTool.onPointerDown(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void`
+
+Left-button press. Continuous tools (brushes, move-node) start their gesture here.
+
+### `method vtt.curve-draft.CurveDraftTool.onPointerMove(ctx: ToolContext, gesture: ToolGesture, params: ToolParamsFor<Id>): void`
+
+Called while a gesture is active (left button held). Brushes that paint continuously (terrain) commit here, throttled by the dispatcher.
+
+### `method vtt.curve-draft.CurveDraftTool.onPointerUp(ctx: ToolContext, gesture: ReleasedGesture, params: ToolParamsFor<Id>): void`
+
+Gesture end. Tools that commit a single shape from a drag (wall, move-node's history entry) act here.
+
+### `method vtt.curve-draft.CurveDraftTool.onSelectionAction(ctx: ToolContext, action: string, params: ToolParamsFor<Id>): boolean`
+
+Runs an explicit action on the current selection.
+
+### `method vtt.curve-draft.CurveDraftTool.previewFor(gesture: ToolGesture, params: ToolParamsFor<Id>, ctx: ToolContext): PreviewDescriptor | undefined`
+
+The tool's not-yet-committed ghost for the current gesture (or stationary hover, when `gesture.start === gesture.current`).
+
+### `type vtt.curve-draft.CurveDraftMode = "straight" | "arc" | "points" | "connect" | "spiral"`
+
+Drawing a new spine-built structure, one way of laying out its plan per
+mode -- the same modes whatever the spine generates:
+
+- `straight`: start, end;
+- `arc`: start, end, then the bulge pulled out from the chord (a two-point
+  arc tool);
+- `points`: clicks the curve passes through, drawn live up to the pointer
+  (a curvature tool); the last point clicked again, or Enter, ends it;
+- `connect`: two ends, each leaving square to the floor edge it lands on,
+  and the curve between them follows (a curve build mode between
+  oriented ends);
+- `spiral`: centre, start, then turn the pointer round the centre in
+  either direction -- every full circle adds a turn -- and click the end
+  (a centre-ends spiral run).
+
+Heights are never drawn point by point: the start takes the height of
+what it was clicked on, and the end the height of the floor it is clicked
+on, or the tool's rise above the start. Shift and a vertical pointer move
+change that rise in quarter steps. Everything between is the owner's to
+derive. Live readouts say the length, rise, grade, and -- for arcs and
+spirals -- the radius and turns.
+
+All the geometry is computed in Rust through the curve batch; this module
+only keeps the gesture's state.
+
+### `type vtt.curve-draft.FinishedCurveDraft = { kind: "spans"; spans: readonly { curve: CubicBezier; handles: CurveHandles }[] } | { kind: "points"; points: readonly ConstructionPosition[] }`
+
+A finished draft: laid-out spans, or -- for `points` -- the points a smooth curve passes through. Ends carry their heights.
+
+### `variable vtt.curve-draft.CURVE_DRAFT_MODES: readonly CurveDraftMode[]`
+
+Every mode a multi-mode tool cycles through with R, in order.
+
+### `variable vtt.curve-draft.MODE_LABELS: Record<CurveDraftMode, string>`
+
+How each mode is named to the person drawing.
+
+### `function vtt.curve-draft.createCurveDraftTool(options: CurveDraftOptions<Id>): CurveDraftTool<Id>`
+
+A creation tool drawing spine plans in the modes above; its owner only commits what it is handed.
+
 ### `interface vtt.curve-edit-gesture.CurveGesture`
 
 ### `method vtt.curve-edit-gesture.CurveGesture.cancel(): void`
@@ -2830,6 +2975,14 @@ From where the drag starts, at that height, to where it ends, `rise` higher.
 
 ### `property vtt.slope-commit.EndWeld.use: ConstructionRegionEdge`
 
+### `interface vtt.slope-commit.PlannedSpan`
+
+One span a creation gesture already laid out: the cubic it resolves to, and its handles -- a straight or circular span's carry that shape.
+
+### `property vtt.slope-commit.PlannedSpan.curve: CubicBezier`
+
+### `property vtt.slope-commit.PlannedSpan.handles: CurveHandles`
+
 ### `interface vtt.slope-commit.Rung`
 
 The edge a ramp's end shares with the floor it is welded into, from one of its end nodes to the other.
@@ -2852,13 +3005,14 @@ What every way of drawing a sloped platform may decide; each tool fills the part
 
 ### `property vtt.slope-commit.SlopeParams.width?: number`
 
-### `function vtt.slope-commit.commitPlatformSlope(ctx: ToolContext, controlPoints: readonly ConstructionPosition[], params: SlopeParams, plan?: readonly CubicBezier[]): void`
+### `function vtt.slope-commit.commitPlatformSlope(ctx: ToolContext, controlPoints: readonly ConstructionPosition[], params: SlopeParams, plan?: readonly PlannedSpan[]): void`
 
 Commits one sloped platform: a spine owned by the sloped platform type,
 and the faces generated from it.
 
 The spine runs smoothly through `controlPoints`, or follows `plan` exactly
-when a preset already computed its curves -- a helix. Either way only the
+when a creation gesture already laid its spans out -- straight, circular
+or free. Either way only the
 two ends' heights are kept: everything between is graded at one constant
 grade by plan length. An end of a free run that lands on a flat
 platform's edge at its own height meets that edge square on and is
@@ -2885,14 +3039,6 @@ The welded floor again, with the landing edge split around the ramp end's own ru
 ### `function vtt.slope-commit.slopeControlPoint(ctx: ToolContext, sample: PointerSample): ConstructionPosition`
 
 A control point's height comes from what the pointer actually touched: a node's own height, else the picked surface.
-
-### `function vtt.slope-commit.spiralPlan(ctx: ToolContext, center: ConstructionPosition, params: SlopeParams & { flip?: boolean }, towards?: ConstructionPosition): readonly CubicBezier[]`
-
-The spiral preset: an exact helix around `center`, computed in Rust --
-a circular arc in plan cut into cubics, climbing `rise` over `turns`.
-`towards`, when given, is where a drag from the centre ended: it sets the
-radius and the angle the spiral starts at, the way a spiral stair is laid
-out from its centre. `flip` turns it the other way round.
 
 ### `variable vtt.slope-tools.slopeCurveTool: ConstructionTool<"slope-curve">`
 
@@ -3924,6 +4070,12 @@ Parameter of the grabbed span, supplied by the curve nearest-point query.
 
 ### `property vtt.spine-edit-plan.SpineEditInput.targetId: string`
 
+### `property vtt.spine-edit-plan.SpineEditInput.weld?: boolean`
+
+Whether a dragged anchor may weld onto another spine's node or split a
+span into a junction by landing near it. Off for an owner whose spine
+moves in plan only: a spiral's turns pass right over each other.
+
 ### `property vtt.spine-edit-plan.SpineEditInput.width?: number`
 
 ### `function vtt.spine-edit-plan.planSpineEditPatch(input: SpineEditInput): { graphPatch: ConstructionGraphPatch; selectedId: string } | undefined`
@@ -4888,8 +5040,9 @@ rise -- and one width at each end. Both ends stay level and square to the
 axis, centred on it, so the four corners always say exactly those four
 numbers and nothing else is stored.
 
-Stairs are this same shape with steps: level strips between the two ends,
-appearance rather than structure.
+Like every structure, it is a declarative placeholder: where the assets
+that dress it will go, not what they look like. Steps, treads or rails
+are the assets' business, never a parameter here.
 
 A type of its own rather than a spine of two points, because the spine is
 a different truth: a curve edited by its control points and handles. A
@@ -5029,8 +5182,8 @@ A floor resting on the ground: it takes the ground under it, which regenerates a
 
 The platform built along a spine instead of a contour: a surface whose
 height varies along its curve and never across it -- a ramp, a sloped
-walkway, a spiral climb. Stairs are this same shape with a step parameter;
-steps are appearance, not structure.
+walkway, a spiral climb. What dresses it -- steps, treads, rails -- is the
+assets' business; the structure only declares where they go.
 
 Generated from the shared spine exactly as a road is, so its control
 points, handles and width are edited with the same gestures; see
@@ -5913,17 +6066,18 @@ floating one -- a storey, a bridge deck -- that leaves the terrain alone.
 
 ### `property vtt.tool-types.ToolParamsByTool.roof: { curvatures: readonly [number, number, number, number]; elevation: number; height: number; radius: number; shape: "rectangle" | "circle" | "platform" }`
 
-### `property vtt.tool-types.ToolParamsByTool.slope-curve: { rise: number; width: number }`
+### `property vtt.tool-types.ToolParamsByTool.slope-curve: { mode?: "arc" | "points" | "straight" | "connect" | "spiral"; rise: number; width: number }`
 
-A curved ramp drawn through points in plan, climbing from its first point to its last at one constant grade.
+A curved ramp, drawn in one of the shared spine creation modes. `rise` is
+its climb when the end is not on a floor; it climbs at one constant grade.
 
 ### `property vtt.tool-types.ToolParamsByTool.slope-ramp: { bottomWidth: number; rise: number; topWidth: number }`
 
 A straight ramp dragged from start to end, climbing a fixed rise, with its own width at each end.
 
-### `property vtt.tool-types.ToolParamsByTool.slope-spiral: { flip?: boolean; radius: number; rise: number; turns: number; width: number }`
+### `property vtt.tool-types.ToolParamsByTool.slope-spiral: { rise: number; width: number }`
 
-A spiral sloped platform laid out from its centre: a click uses `radius`, a drag sets it. `flip` turns the other way round.
+A spiral sloped platform: centre, start, then turned round to its end. `rise` is its climb when the end is not on a floor.
 
 ### `property vtt.tool-types.ToolParamsByTool.terrain-sculpt: TerrainSculptParams`
 
@@ -6629,6 +6783,10 @@ callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 
 ### `property vtt.bezier-port.CurveHandles.endBandOffsets?: readonly number[]`
 
+### `property vtt.bezier-port.CurveHandles.geometry?: SpanGeometry`
+
+Keeps the span straight or circular when its anchors move; see SpanGeometry.
+
 ### `property vtt.bezier-port.CurveHandles.mode: CurveHandleMode`
 
 ### `property vtt.bezier-port.CurveHandles.start: CurvePoint`
@@ -6697,13 +6855,19 @@ The structure type generated along this spine span; a span with no owner generat
 
 ### `property vtt.bezier-port.CurveResult.samples: readonly (readonly { position: CurvePoint; t: number }[])[]`
 
-### `type vtt.bezier-port.CurveCommand = { correction: number; curved: boolean; kind: "interpretStroke"; points: readonly CurvePoint[] } | { kind: "automatic"; points: readonly CurvePoint[] } | { cornerDegrees?: number; kind: "fit"; points: readonly CurvePoint[] } | { kind: "join"; sections: readonly (readonly [CurvePoint, CurvePoint])[] } | { curve: CubicBezier; endOffsets?: readonly [number, number]; kind: "ribbon"; offsets: readonly [number, number]; parameters?: readonly number[] } | { curves: readonly CubicBezier[]; kind: "sample" } | { curve: CubicBezier; kind: "split"; profile?: CurveHandles; t: number } | { curve: CubicBezier; kind: "merge"; next: CubicBezier } | { curve: CubicBezier; kind: "pull"; t: number; target: CurvePoint } | { curve: CubicBezier; index: 1 | 2; kind: "handle"; mode: CurveHandleMode; opposite: CurvePoint | null; target: CurvePoint } | { curve: CubicBezier; kind: "nearest"; point: CurvePoint } | { end: CurvePoint; handles: CurveHandles; kind: "resolve"; start: CurvePoint } | { center: CurvePoint; kind: "helix"; radius: number; rise: number; startAngle: number; sweep: number } | { curves: readonly CubicBezier[]; end: number; kind: "grade"; start: number }`
+### `type vtt.bezier-port.CurveCommand = { correction: number; curved: boolean; kind: "interpretStroke"; points: readonly CurvePoint[] } | { kind: "automatic"; points: readonly CurvePoint[] } | { cornerDegrees?: number; kind: "fit"; points: readonly CurvePoint[] } | { kind: "join"; sections: readonly (readonly [CurvePoint, CurvePoint])[] } | { curve: CubicBezier; endOffsets?: readonly [number, number]; kind: "ribbon"; offsets: readonly [number, number]; parameters?: readonly number[] } | { curves: readonly CubicBezier[]; kind: "sample" } | { curve: CubicBezier; kind: "split"; profile?: CurveHandles; t: number } | { curve: CubicBezier; kind: "merge"; next: CubicBezier } | { curve: CubicBezier; kind: "pull"; t: number; target: CurvePoint } | { curve: CubicBezier; index: 1 | 2; kind: "handle"; mode: CurveHandleMode; opposite: CurvePoint | null; target: CurvePoint } | { curve: CubicBezier; kind: "nearest"; point: CurvePoint } | { end: CurvePoint; handles: CurveHandles; kind: "resolve"; start: CurvePoint } | { center: CurvePoint; kind: "helix"; radius: number; rise: number; startAngle: number; sweep: number } | { end: CurvePoint; kind: "arcThrough"; start: CurvePoint; through: CurvePoint } | { curves: readonly CubicBezier[]; end: number; kind: "grade"; start: number }`
 
 ### `type vtt.bezier-port.CurveHandleMode = "automatic" | "aligned" | "mirrored" | "free"`
 
 ### `type vtt.bezier-port.CurvePoint = readonly [number, number, number]`
 
 Explicit wire values owned by Grafting; all curve calculations run in Rust.
+
+### `type vtt.bezier-port.SpanGeometry = { kind: "line" } | { center: readonly [number, number]; kind: "arc"; positive: boolean }`
+
+The plan shape a span keeps whatever its anchors do; absent is a free cubic.
+A shaped span climbs linearly between its anchors. `positive` turns from
++X towards +Z; `center` is `[x, z]`.
 
 ### `interface vtt.cap-port.CapPatch`
 
@@ -9004,8 +9168,9 @@ Houses the 8 core construction verbs in a centered, glassmorphic dock:
    preset radius, never freehand-drawn, see `tower-stamp-tool.ts`)
 2. 🚪 Aberturas (Portas & Janelas -- one click on a wall panel opens it
    and stands a face in the opening, see `opening-tool.ts`)
-3. 🪜 Escadas (Conexão de elevações -- Rampa, arrastada do início ao fim,
-   e Espiral, clicada no centro; both draw a sloped platform)
+3. 🪜 Rampas (Conexão de elevações -- Rampa reta, arrastada do início ao
+   fim; Rampa curva, nos modos de criação compartilhados de espinha; e
+   Espiral, centro-início-fim. Degraus são dos assets, não da estrutura)
 4. 🛤️ Caminhos (Trilhas & química de portais)
 5. ⛰️ Terreno & Água (Escultura de Terreno)
 6. 🌲 Vegetação (Adornos & Flora)

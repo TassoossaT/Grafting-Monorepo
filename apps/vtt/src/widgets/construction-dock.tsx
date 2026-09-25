@@ -31,8 +31,9 @@ export interface ConstructionDockProps {
  *    preset radius, never freehand-drawn, see `tower-stamp-tool.ts`)
  * 2. 🚪 Aberturas (Portas & Janelas -- one click on a wall panel opens it
  *    and stands a face in the opening, see `opening-tool.ts`)
- * 3. 🪜 Escadas (Conexão de elevações -- Rampa, arrastada do início ao fim,
- *    e Espiral, clicada no centro; both draw a sloped platform)
+ * 3. 🪜 Rampas (Conexão de elevações -- Rampa reta, arrastada do início ao
+ *    fim; Rampa curva, nos modos de criação compartilhados de espinha; e
+ *    Espiral, centro-início-fim. Degraus são dos assets, não da estrutura)
  * 4. 🛤️ Caminhos (Trilhas & química de portais)
  * 5. ⛰️ Terreno & Água (Escultura de Terreno)
  * 6. 🌲 Vegetação (Adornos & Flora)
@@ -129,17 +130,17 @@ export function ConstructionDock(props: ConstructionDockProps) {
     },
     {
       key: "stairs",
-      label: "Escadas",
+      label: "Rampas",
       icon: "🪜",
-      tooltip: "Escadas e Desníveis (rampas e espirais)",
+      tooltip: "Rampas e desníveis: reta, curva e espiral",
       active: isRampActive,
       childActive: isRampActive || isSpiralActive || isCurveRampActive,
       disabled: !ready,
       onClick: () => onToolChange("slope-ramp"),
       subItems: [
         { key: "slope-ramp", label: "Rampa", icon: "⟋", tooltip: "Rampa reta: arraste do início ao fim", active: isRampActive, disabled: !ready, onClick: () => onToolChange("slope-ramp") },
-        { key: "slope-curve", label: "Rampa curva", icon: "⤴", tooltip: "Rampa curva: clique os pontos em planta, Enter termina", active: isCurveRampActive, disabled: !ready, onClick: () => onToolChange("slope-curve") },
-        { key: "slope-spiral", label: "Espiral", icon: "🌀", tooltip: "Espiral: clique no centro, ou arraste do centro para o raio", active: isSpiralActive, disabled: !ready, onClick: () => onToolChange("slope-spiral") },
+        { key: "slope-curve", label: "Rampa curva", icon: "⤴", tooltip: "Rampa curva: por pontos, reta, arco, ligar pontas ou espiral (R troca o modo)", active: isCurveRampActive, disabled: !ready, onClick: () => onToolChange("slope-curve") },
+        { key: "slope-spiral", label: "Espiral", icon: "🌀", tooltip: "Espiral: clique o centro, o início, gire e clique o fim", active: isSpiralActive, disabled: !ready, onClick: () => onToolChange("slope-spiral") },
       ],
     },
     {

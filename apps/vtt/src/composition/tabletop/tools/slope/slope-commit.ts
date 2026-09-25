@@ -32,20 +32,10 @@ export function slopeControlPoint(ctx: ToolContext, sample: PointerSample): Cons
   return { ...sample.point, y: node?.position.y ?? sample.point.y };
 }
 
-/**
- * The spiral preset: an exact helix around `center`, computed in Rust --
- * a circular arc in plan cut into cubics, climbing `rise` over `turns`.
- * `towards`, when given, is where a drag from the centre ended: it sets the
- * radius and the angle the spiral starts at, the way a spiral stair is laid
- * out from its centre. `flip` turns it the other way round.
- */
-export function spiralPlan(ctx: ToolContext, center: ConstructionPosition, params: Params & { readonly flip?: boolean }, towards?: ConstructionPosition): readonly CubicBezier[] {
-  const radius = towards ? Math.hypot(towards.x - center.x, towards.z - center.z) : params.radius ?? 2.5;
-  const turns = params.turns ?? 1, rise = params.rise ?? 3;
-  if (!(radius > 0) || !(turns > 0) || !Number.isFinite(rise)) throw new Error("Raio e voltas devem ser positivos.");
-  const startAngle = towards ? Math.atan2(towards.z - center.z, towards.x - center.x) : 0;
-  const sweep = turns * Math.PI * 2 * (params.flip ? -1 : 1);
-  return ctx.runtime.curveBatch({ tolerance: 0.005, commands: [{ kind: "helix", center: [center.x, center.y, center.z], radius, startAngle, sweep, rise }] })[0]!.curves;
+/** One span a creation gesture already laid out: the cubic it resolves to, and its handles -- a straight or circular span's carry that shape. */
+export interface PlannedSpan {
+  readonly curve: CubicBezier;
+  readonly handles: CurveHandles;
 }
 
 /** The sampled polyline of `curves`, for a preview. */
@@ -139,29 +129,29 @@ export function landsInside(weld: EndWeld, rung: Rung, sections: ReadonlyMap<str
   });
 }
 
-const minus = (a: CurvePoint, b: CurvePoint): CurvePoint => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 
 /**
  * Commits one sloped platform: a spine owned by the sloped platform type,
  * and the faces generated from it.
  *
  * The spine runs smoothly through `controlPoints`, or follows `plan` exactly
- * when a preset already computed its curves -- a helix. Either way only the
+ * when a creation gesture already laid its spans out -- straight, circular
+ * or free. Either way only the
  * two ends' heights are kept: everything between is graded at one constant
  * grade by plan length. An end of a free run that lands on a flat
  * platform's edge at its own height meets that edge square on and is
  * welded into it.
  */
-export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly ConstructionPosition[], params: Params, plan?: readonly CubicBezier[]): void {
+export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly ConstructionPosition[], params: Params, plan?: readonly PlannedSpan[]): void {
   try {
     const width = params.width ?? 1.5;
     if (!(width > 0)) throw new Error("A largura deve ser positiva.");
-    if (plan) controlPoints = [position(plan[0]!.points[0]), ...plan.map((curve) => position(curve.points[3]))];
+    if (plan) controlPoints = [position(plan[0]!.curve.points[0]), ...plan.map((span) => position(span.curve.points[3]))];
     if (controlPoints.length < 2) throw new Error("Marque pelo menos dois pontos.");
     const operationId = scopedToolId(ctx, "platform-slope", ctx.nextSequence());
     const topologies = ctx.runtime.getAllRegionTopologies();
     const last = controlPoints.length - 1;
-    const landings = plan ? [] : [landingEdge(topologies, controlPoints[0]!, 0), landingEdge(topologies, controlPoints[last]!, last)]
+    const landings = [landingEdge(topologies, controlPoints[0]!, 0), landingEdge(topologies, controlPoints[last]!, last)]
       .filter((weld): weld is EndWeld => weld !== undefined);
     const points = controlPoints.map((point, i) => {
       const weld = landings.find((w) => w.controlIndex === i);
@@ -169,9 +159,7 @@ export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly Co
       const { t } = project(weld.a, weld.b, point);
       return { x: weld.a.x + (weld.b.x - weld.a.x) * t, y: weld.a.y, z: weld.a.z + (weld.b.z - weld.a.z) * t };
     });
-    const handles: readonly CurveHandles[] = plan
-      ? plan.map((curve) => ({ start: minus(curve.points[1], curve.points[0]), end: minus(curve.points[2], curve.points[3]), mode: "aligned" as const, bandOffsets: [] }))
-      : automaticCurve(ctx.runtime, points, 0.025).handles;
+    const handles: readonly CurveHandles[] = plan ? plan.map((span) => span.handles) : automaticCurve(ctx.runtime, points, 0.025).handles;
     let nodes = points.map((point, i) => ({ id: spineControlNodeId(operationId, i), position: point }));
     let spans: ConstructionEdgeSnapshot[] = handles.map((h, i) => {
       const startWeld = i === 0 ? landings.find((w) => w.controlIndex === 0) : undefined;

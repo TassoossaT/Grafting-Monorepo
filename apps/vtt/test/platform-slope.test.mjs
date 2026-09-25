@@ -7,6 +7,7 @@ import { dispatchEffects } from "../src/composition/tabletop/effects/effect-comm
 import { shapeChangeOfReplacement } from "../src/composition/tabletop/effects/shape-change.ts";
 import { latticeRegenerateReaction } from "../src/composition/tabletop/terrain/terrain-lattice-reaction.ts";
 import { addFace, sessionFixture } from "./platform-session-fixture.mjs";
+import { drawSpiral } from "./curve-draft-fixture.mjs";
 
 const params = { width: 2 };
 const floor = (runtime, prefix, x0, y) => addFace(runtime, prefix, "platform",
@@ -110,7 +111,7 @@ test("the ramp's spine takes the road's handle, midpoint and width edits, regene
 test("a spiral is one spine, one face per span, meshed on its own turn", () => {
   const { ctx, runtime, session, calls } = sessionFixture();
   try {
-    slopeSpiralTool.onClick(ctx, { point: { x: 20, y: 1, z: 0 } }, { ...params, radius: 3, turns: 1.5, rise: 4 });
+    drawSpiral(slopeSpiralTool, ctx, { center: { x: 20, y: 1, z: 0 }, radius: 3, turns: 1.5, params: { ...params, rise: 4 } });
     const ramp = faces(runtime, "platform-slope");
     const spans = slopeSpans(runtime);
     assert.ok(spans.length >= 6, `at least one span per quarter turn: ${JSON.stringify(calls.feedback)}`);
@@ -139,7 +140,7 @@ test("a spiral is edited by its spine points exactly as a road is: drag a point,
   const { ctx, runtime, session, calls } = sessionFixture();
   Object.assign(runtime, { showPreview() {}, clearPreview() {} });
   try {
-    slopeSpiralTool.onClick(ctx, { point: { x: 20, y: 1, z: 0 } }, { ...params, radius: 3, turns: 1, rise: 4 });
+    drawSpiral(slopeSpiralTool, ctx, { center: { x: 20, y: 1, z: 0 }, radius: 3, turns: 2, params: { ...params, rise: 4 } });
     const spans = slopeSpans(runtime);
     const control = spans[3].endNodeId;
     const start = { nodeId: control, point: node(runtime, control).position };

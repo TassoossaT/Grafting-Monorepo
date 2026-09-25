@@ -117,6 +117,17 @@ pub enum CurveCommand {
         /// Height climbed over the whole sweep.
         rise: f64,
     },
+    /// The circular arc from `start` through `through` to `end` in plan,
+    /// climbing linearly from `start`'s height to `end`'s; a straight run when
+    /// the three are in line. Its handles carry the span's shape.
+    ArcThrough {
+        /// First anchor.
+        start: CurvePoint,
+        /// Any point the arc passes through, between the anchors.
+        through: CurvePoint,
+        /// Last anchor.
+        end: CurvePoint,
+    },
     /// A chain of curves with its heights redistributed at one constant
     /// grade by plan length; the plan is untouched.
     Grade {
@@ -203,14 +214,20 @@ pub fn execute(batch: CurveBatch) -> Result<Vec<CurveResult>, String> {
                 start_angle,
                 sweep,
                 rise,
-            } => crate::bezier_ramp::helix(
-                center,
-                radius,
-                start_angle,
-                sweep,
-                rise,
-                batch.tolerance,
-            )?,
+            } => {
+                let spans = crate::bezier_ramp::helix(center, radius, start_angle, sweep, rise)?;
+                authored = Some(spans.iter().map(|(_, h)| h.clone()).collect());
+                spans.into_iter().map(|(c, _)| c).collect()
+            }
+            CurveCommand::ArcThrough {
+                start,
+                through,
+                end,
+            } => {
+                let spans = crate::bezier_ramp::arc_through(start, through, end)?;
+                authored = Some(spans.iter().map(|(_, h)| h.clone()).collect());
+                spans.into_iter().map(|(c, _)| c).collect()
+            }
             CurveCommand::Grade { curves, start, end } => {
                 crate::bezier_ramp::grade(&curves, start, end, batch.tolerance)?
             }
@@ -267,6 +284,8 @@ pub fn execute(batch: CurveBatch) -> Result<Vec<CurveResult>, String> {
                                     h.end_band_offsets = stations[i + 1].clone();
                                 }
                                 h.surface_type = profile.surface_type.clone();
+                                // Both halves of a shaped span keep its shape.
+                                h.geometry = profile.geometry;
                                 h
                             })
                             .collect::<Vec<_>>(),

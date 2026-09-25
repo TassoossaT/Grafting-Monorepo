@@ -17,8 +17,9 @@ import { allowed, denied, type ConstrainContext, type EditRole, type RolePolicy,
  * axis, centred on it, so the four corners always say exactly those four
  * numbers and nothing else is stored.
  *
- * Stairs are this same shape with steps: level strips between the two ends,
- * appearance rather than structure.
+ * Like every structure, it is a declarative placeholder: where the assets
+ * that dress it will go, not what they look like. Steps, treads or rails
+ * are the assets' business, never a parameter here.
  *
  * A type of its own rather than a spine of two points, because the spine is
  * a different truth: a curve edited by its control points and handles. A

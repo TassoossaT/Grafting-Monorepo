@@ -3,6 +3,12 @@ import type { ConstructionPlanarRequest, ConstructionPlanarShape } from "./const
 export type CurvePoint = readonly [number, number, number];
 export interface CubicBezier { readonly points: readonly [CurvePoint, CurvePoint, CurvePoint, CurvePoint] }
 export type CurveHandleMode = "automatic" | "aligned" | "mirrored" | "free";
+/**
+ * The plan shape a span keeps whatever its anchors do; absent is a free cubic.
+ * A shaped span climbs linearly between its anchors. `positive` turns from
+ * +X towards +Z; `center` is `[x, z]`.
+ */
+export type SpanGeometry = { readonly kind: "line" } | { readonly kind: "arc"; readonly center: readonly [number, number]; readonly positive: boolean };
 export interface CurveHandles {
   readonly start: CurvePoint;
   readonly end: CurvePoint;
@@ -11,6 +17,8 @@ export interface CurveHandles {
   readonly endBandOffsets?: readonly number[];
   /** The structure type generated along this spine span; a span with no owner generates nothing. */
   readonly surfaceType?: string;
+  /** Keeps the span straight or circular when its anchors move; see {@link SpanGeometry}. */
+  readonly geometry?: SpanGeometry;
 }
 export type CurveCommand =
   | { readonly kind: "interpretStroke"; readonly points: readonly CurvePoint[]; readonly correction: number; readonly curved: boolean }
@@ -25,8 +33,10 @@ export type CurveCommand =
   | { readonly kind: "handle"; readonly curve: CubicBezier; readonly index: 1 | 2; readonly target: CurvePoint; readonly mode: CurveHandleMode; readonly opposite: CurvePoint | null }
   | { readonly kind: "nearest"; readonly curve: CubicBezier; readonly point: CurvePoint }
   | { readonly kind: "resolve"; readonly handles: CurveHandles; readonly start: CurvePoint; readonly end: CurvePoint }
-  /** An exact circular arc in plan around `center` (whose y is the start height), climbing `rise` linearly over the signed `sweep` (radians, +X towards +Z). */
+  /** A circular arc in plan around `center` (whose y is the start height), climbing `rise` linearly over the signed `sweep` (radians, +X towards +Z), in quarter-turn spans whose handles carry their arc. */
   | { readonly kind: "helix"; readonly center: CurvePoint; readonly radius: number; readonly startAngle: number; readonly sweep: number; readonly rise: number }
+  /** The arc from `start` through `through` to `end` in plan, in quarter-turn spans (one straight span when in line), climbing linearly; the handles carry each span's shape. */
+  | { readonly kind: "arcThrough"; readonly start: CurvePoint; readonly through: CurvePoint; readonly end: CurvePoint }
   /** A chain, in order, with its heights redistributed from `start` to `end` at one constant grade by plan length; the plan is untouched. */
   | { readonly kind: "grade"; readonly curves: readonly CubicBezier[]; readonly start: number; readonly end: number };
 export interface CurveBatch { readonly tolerance: number; readonly commands: readonly CurveCommand[] }

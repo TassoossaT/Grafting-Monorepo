@@ -329,6 +329,11 @@ Full reasoning: `docs/research/ramps-and-spirals-creation-editing.md`
 | Planet Zoo / Planet Coaster paths | Proprietary | Reference only | Height as its own gesture; turns into stairs past a slope; "curved slopes" allows helix paths |
 | Unity-Procedural-Stair-Builder | MIT | Reference only | Linear, curved and spiral stair generator in C#; not reusable in the Rust/TS stack |
 | HammerForge | Unknown | Reference only | Godot brush editor; spiral stair as a radial array with rise per copy |
+| Illustrator Curvature tool | Proprietary | Reference only | Click points the curve passes through, live up to the pointer; the model for the shared "points" creation mode |
+| SketchUp 2 Point Arc | Proprietary | Reference only | Start, end, pull the bulge; the model for the "arc" mode and for a shaped span's midpoint drag |
+| Satisfactory conveyor build modes | Proprietary | Reference only | Default/Straight/Curve cycled with R; Curve follows the ends' positions and directions -- the model for "connect" mode |
+| Revit Center-Ends Spiral Run | Proprietary | Reference only | Centre, start, turn the cursor to the end; the model for the "spiral" creation mode |
+| Tiny Glade stair tool | Proprietary | Reference only | Embedded double-arrow height and width handles; context-reactive stairs; input for #318's edit components |
 
 ## Asset and resource management (`@grafting/assets`)
 

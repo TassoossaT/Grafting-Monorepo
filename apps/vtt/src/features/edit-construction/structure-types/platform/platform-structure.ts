@@ -66,8 +66,8 @@ export const floatingPlatformStructureType = contourPlatformStructureType("platf
 /**
  * The platform built along a spine instead of a contour: a surface whose
  * height varies along its curve and never across it -- a ramp, a sloped
- * walkway, a spiral climb. Stairs are this same shape with a step parameter;
- * steps are appearance, not structure.
+ * walkway, a spiral climb. What dresses it -- steps, treads, rails -- is the
+ * assets' business; the structure only declares where they go.
  *
  * Generated from the shared spine exactly as a road is, so its control
  * points, handles and width are edited with the same gestures; see
