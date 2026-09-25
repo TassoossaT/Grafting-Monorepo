@@ -45,13 +45,6 @@ export function ToolRail(props: ToolRailProps) {
           onClick: () => props.onToolChange("navigate"),
         },
         {
-          key: "edit-region",
-          icon: "M",
-          tooltip: "Editar Região -- canto, aresta ou corpo (tecla M)",
-          tone: props.tool === "edit-region" ? "primary" : "default",
-          onClick: () => props.onToolChange("edit-region"),
-        },
-        {
           key: "snap-to-grid",
           icon: "🧲",
           tooltip: props.snapToGrid ? "Ímã do Grid: Ativado (tecla G)" : "Ímã do Grid: Desativado (tecla G)",

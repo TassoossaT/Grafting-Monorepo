@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { Card, SlidingPanel } from "@/ui";
-import type { ConstructionToolId, ToolParamsByTool } from "@/features/edit-construction";
+import type { ConstructionToolId, StructureEditParams, ToolParamsByTool } from "@/features/edit-construction";
 
 import { ConstructionToolParamsPanel } from "./construction-tool-params-panel.tsx";
 
@@ -20,6 +20,8 @@ export interface SettingsDrawerProps {
   readonly activeTool: ConstructionToolId;
   readonly toolParams: ToolParamsByTool;
   readonly onToolParamsChange: <Id extends ConstructionToolId>(toolId: Id, next: ToolParamsByTool[Id]) => void;
+  readonly structureEditParams: StructureEditParams;
+  readonly onStructureEditParamsChange: (next: StructureEditParams) => void;
   readonly tokenCount: number;
   readonly open?: boolean;
   readonly onOpenChange?: (open: boolean) => void;
@@ -67,8 +69,8 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
           </div>
         ) : (
           <p style={{ margin: 0, fontSize: "0.75rem", color: "#64748b" }}>
-            Clique em uma alça de node (esfera amarela) com a ferramenta <em>Mover Node</em> (M) ativada para
-            inspecionar.
+            Clique em uma alça de node (esfera amarela) de uma estrutura já existente, com a ferramenta que a criou
+            ativa, para inspecionar.
           </p>
         )}
       </Card>
@@ -77,6 +79,8 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
         activeTool={props.activeTool}
         params={props.toolParams}
         onParamsChange={props.onToolParamsChange}
+        structureEditParams={props.structureEditParams}
+        onStructureEditParamsChange={props.onStructureEditParamsChange}
       />
 
       <Card className="gm-panel-card" backgroundColor="#182234" accentColor="#1e293b">

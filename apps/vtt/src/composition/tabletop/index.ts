@@ -27,8 +27,8 @@ export { attachCameraNavigation } from "../../features/navigate-camera/index.ts"
 
 // Same reason again: the tool vocabulary is a `features/` type, `TabletopEntry`
 // reaches it only through this barrel.
-export { DEFAULT_TOOL_PARAMS } from "../../features/edit-construction/index.ts";
-export type { ConstructionToolId, ToolParamsByTool, ToolParamsFor } from "../../features/edit-construction/index.ts";
+export { DEFAULT_STRUCTURE_EDIT_PARAMS, DEFAULT_TOOL_PARAMS, withOpeningKind } from "../../features/edit-construction/index.ts";
+export type { ConstructionToolId, OpeningParams, StructureEditParams, ToolParamsByTool, ToolParamsFor } from "../../features/edit-construction/index.ts";
 
 export { useConstructionPointer } from "./use-construction-pointer.ts";
 export type { ConstructionPointerHandlers, UseConstructionPointerOptions } from "./use-construction-pointer.ts";

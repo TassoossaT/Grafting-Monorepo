@@ -22,6 +22,33 @@ pub fn traversed_edge(topology: &ContourTopology, use_: &OrientedEdgeUse) -> Opt
     })
 }
 
+/// One traversed edge as 3D world points, both ends included.
+pub fn tessellate_edge(
+    traversed: &ContourEdge,
+    start: [f32; 3],
+    end: [f32; 3],
+) -> Option<Vec<[f32; 3]>> {
+    let planar = traversed.tessellate(
+        [start[0], start[2]],
+        [end[0], end[2]],
+        ARC_TESSELLATION_TOLERANCE,
+    );
+    if planar.len() < 2 {
+        return None;
+    }
+    let last = (planar.len() - 1) as f32;
+    Some(
+        planar
+            .iter()
+            .enumerate()
+            .map(|(index, point)| {
+                let t = index as f32 / last;
+                [point[0], start[1] + (end[1] - start[1]) * t, point[1]]
+            })
+            .collect(),
+    )
+}
+
 /// Discretizes a loop of analytic contour edges into 3D world points.
 pub fn tessellate_contour_loop(
     topology: &ContourTopology,
@@ -33,18 +60,9 @@ pub fn tessellate_contour_loop(
         let traversed = traversed_edge(topology, use_)?;
         let start = resolve_position(traversed.start_node())?;
         let end = resolve_position(traversed.end_node())?;
-        let planar = traversed.tessellate(
-            [start[0], start[2]],
-            [end[0], end[2]],
-            ARC_TESSELLATION_TOLERANCE,
-        );
-        if planar.len() < 2 {
-            return None;
-        }
-        for (index, point) in planar.iter().take(planar.len() - 1).enumerate() {
-            let t = index as f32 / (planar.len() - 1) as f32;
-            positions.push([point[0], start[1] + (end[1] - start[1]) * t, point[1]]);
-        }
+        let mut points = tessellate_edge(&traversed, start, end)?;
+        points.pop();
+        positions.extend(points);
     }
     (positions.len() >= 3).then_some(positions)
 }

@@ -1,11 +1,16 @@
 "use client";
 
+import { useState } from "react";
+
 import { Card, Collapse, SelectableChip, type CollapsePanel } from "@/ui";
 import type {
   BrushShapeParams,
   ConstructionToolId,
   OpeningParams,
+  OpeningShape,
+  OpeningSide,
   PathBrushParams,
+  StructureEditParams,
   TerrainSculptMode,
   TerrainSculptParams,
   ToolParamsByTool,
@@ -13,12 +18,37 @@ import type {
   WallBrushParams,
   WallParams,
 } from "@/features/edit-construction";
-import { TOWER_RADIUS_PRESETS, deriveFaceSize } from "@/features/edit-construction";
+import { OPENING_KIND_COLOR, RECTANGLE_OPENING_SHAPE, TOWER_RADIUS_PRESETS, deriveFaceSize, isRectangleShape, openingPath, withOpeningKind } from "@/features/edit-construction";
 
 export interface ConstructionToolParamsPanelProps {
   readonly activeTool: ConstructionToolId;
   readonly params: ToolParamsByTool;
   readonly onParamsChange: <Id extends ConstructionToolId>(toolId: Id, next: ToolParamsByTool[Id]) => void;
+  /** How a grab on an existing structure behaves -- ambient, not tied to `activeTool`, since every construction tool can now grab and edit whatever it owns. */
+  readonly structureEditParams: StructureEditParams;
+  readonly onStructureEditParamsChange: (next: StructureEditParams) => void;
+}
+
+/** The curve-handle/mode controls every construction tool's own grab-and-edit now shares -- `edit-region`'s old params, no longer tied to one retired tool. */
+function StructureEditFields(props: { readonly params: StructureEditParams; readonly onChange: (next: StructureEditParams) => void }) {
+  const { params, onChange } = props;
+  return (
+    <div style={{ display: "grid", gap: "0.6rem" }}>
+      <label>Ação na rua <select value={params.curveAction ?? "edit"} onChange={(event) => onChange({ ...params, curveAction: event.currentTarget.value as "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width" })}>
+        <option value="edit">Editar curva</option><option value="remove-anchor">Remover âncora</option><option value="disconnect">Desconectar junção</option><option value="delete-segment">Excluir trecho</option><option value="close">Fechar caminho</option><option value="width">Alterar largura</option>
+      </select></label>
+      {params.curveAction === "width" && <label>Largura <input type="number" min="0.1" step="0.1" value={params.curveWidth ?? 4} onChange={(event) => onChange({ ...params, curveWidth: Number(event.currentTarget.value) })} /></label>}
+      {params.curveAction === "width" && <label>Largura no fim <input type="number" min="0.1" step="0.1" value={params.curveEndWidth ?? params.curveWidth ?? 4} onChange={(event) => onChange({ ...params, curveEndWidth: Number(event.currentTarget.value) })} /></label>}
+      <p>Para remover, desconectar ou fechar, clique na âncora. Para excluir um trecho ou mudar sua largura, clique no ponto central.</p>
+      <label>Alças da rua <select value={params.curveMode ?? "free"} onChange={(event) => onChange({ ...params, curveMode: event.currentTarget.value as "automatic" | "aligned" | "mirrored" | "free" })}>
+        <option value="free">Livres</option><option value="aligned">Alinhadas</option><option value="mirrored">Espelhadas</option><option value="automatic">Automáticas</option>
+      </select></label>
+      <p>Arraste uma alça para ajustar a curva. Arraste o ponto central para puxar o trecho; clique nele para inserir uma âncora.</p>
+      <SelectableChip label="Formato / posicao" swatchColor="#79b8e8" selected={params.mode === "shape"} onSelect={() => onChange({ ...params, mode: "shape" })} />
+      <SelectableChip label="Elevar / baixar" swatchColor="#79b8e8" selected={params.mode === "elevation"} onSelect={() => onChange({ ...params, mode: "elevation" })} />
+      <p>No modo de elevação, arraste para cima ou para baixo. Clicar e arrastar um vértice/aresta/corpo já existente edita em vez de criar.</p>
+    </div>
+  );
 }
 
 function sliderRow(label: string, value: number, min: number, max: number, step: number, onChange: (value: number) => void) {
@@ -226,7 +256,100 @@ function TerrainSculptFields(props: {
   );
 }
 
-/** A door is the same opening with its sill on the floor, so the type sets the sill and the sliders take it from there. */
+const SIDE_LABELS: Readonly<Record<OpeningSide, string>> = { top: "Topo", right: "Direita", bottom: "Base", left: "Esquerda" };
+const SHAPE_BOX = 72;
+const SHAPE_PAD = 10;
+const SHAPE_MAX_RADIUS = 3;
+
+/**
+ * The opening's four sides as a small clickable square: pick a side, then
+ * its rounding radius (0 = straight; a radius under half the side reads as
+ * half, a semicircle). The slider only applies on release, so dragging it
+ * is one edit, not one per tick.
+ */
+function OpeningShapeFields(props: { readonly params: OpeningParams; readonly onChange: (next: OpeningParams) => void }) {
+  const { params, onChange } = props;
+  const shape: OpeningShape = params.shape ?? RECTANGLE_OPENING_SHAPE;
+  const [side, setSide] = useState<OpeningSide>("top");
+  const [draft, setDraft] = useState<number | undefined>(undefined);
+  const radius = draft ?? shape.radii[side];
+  const setShape = (next: OpeningShape) => onChange({ ...params, shape: next });
+  const commitDraft = () => {
+    if (draft === undefined) return;
+    setDraft(undefined);
+    setShape({ ellipse: false, radii: { ...shape.radii, [side]: draft } });
+  };
+
+  const scale = SHAPE_BOX / Math.max(params.width, params.height, 1e-6);
+  const w = params.width * scale;
+  const h = params.height * scale;
+  const x0 = SHAPE_PAD + (SHAPE_BOX - w) / 2;
+  const y0 = SHAPE_PAD + (SHAPE_BOX - h) / 2;
+  const shown: OpeningShape = draft === undefined ? shape : { ellipse: false, radii: { ...shape.radii, [side]: draft } };
+  const at = ([x, y]: readonly [number, number]) => `${(x0 + x * scale).toFixed(1)},${(y0 + h - y * scale).toFixed(1)}`;
+  const segments = openingPath(shown, params.width, params.height);
+  const outline = segments.length === 0
+    ? ""
+    : `M${at(segments[0]!.from)} ${segments.map((segment) => (segment.controls === undefined ? `L${at(segment.to)}` : `C${at(segment.controls[0])} ${at(segment.controls[1])} ${at(segment.to)}`)).join(" ")} Z`;
+  const color = kindHex(params.openingKind);
+  const edges: Readonly<Record<OpeningSide, readonly [number, number, number, number]>> = {
+    top: [x0, y0, x0 + w, y0],
+    right: [x0 + w, y0, x0 + w, y0 + h],
+    bottom: [x0, y0 + h, x0 + w, y0 + h],
+    left: [x0, y0, x0, y0 + h],
+  };
+  const size = SHAPE_BOX + 2 * SHAPE_PAD;
+
+  return (
+    <div style={{ display: "grid", gap: "0.5rem" }}>
+      <span style={{ fontSize: "0.78rem" }}>Formato</span>
+      <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="group" aria-label="Lados da abertura">
+          <rect x={x0} y={y0} width={w} height={h} fill="none" stroke="#475569" strokeDasharray="3 3" />
+          <path d={outline} fill={color} fillOpacity={0.35} stroke={color} strokeWidth={1.5} />
+          {(Object.keys(edges) as OpeningSide[]).map((key) => {
+            const [ax, ay, bx, by] = edges[key];
+            return (
+              <g key={key} style={{ cursor: "pointer" }} onClick={() => { commitDraft(); setSide(key); }}>
+                <title>{SIDE_LABELS[key]}</title>
+                {side === key && !shape.ellipse ? <line x1={ax} y1={ay} x2={bx} y2={by} stroke="#f8fafc" strokeWidth={3} /> : null}
+                <line x1={ax} y1={ay} x2={bx} y2={by} stroke="transparent" strokeWidth={12} />
+              </g>
+            );
+          })}
+        </svg>
+        <div style={{ display: "grid", gap: "0.4rem", flex: 1 }}>
+          <SelectableChip label="Retângulo" swatchColor="#94a3b8" selected={isRectangleShape(shape)} onSelect={() => { setDraft(undefined); setShape(RECTANGLE_OPENING_SHAPE); }} />
+          <SelectableChip label="Círculo" swatchColor="#c084fc" selected={shape.ellipse} onSelect={() => { setDraft(undefined); setShape({ ...shape, ellipse: true }); }} />
+        </div>
+      </div>
+      <label style={{ display: "grid", gap: "0.25rem", fontSize: "0.78rem" }}>
+        <span className="gm-stat-row">
+          <span>Raio: {SIDE_LABELS[side].toLowerCase()}</span>
+          <span className="gm-stat-value">{shape.ellipse && draft === undefined ? "--" : radius > 0 ? radius.toFixed(2) : "reto"}</span>
+        </span>
+        <input
+          type="range"
+          min={0}
+          max={SHAPE_MAX_RADIUS}
+          step={0.05}
+          value={shape.ellipse && draft === undefined ? 0 : radius}
+          onChange={(event) => setDraft(Number(event.currentTarget.value))}
+          onPointerUp={commitDraft}
+          onKeyUp={commitDraft}
+          onBlur={commitDraft}
+        />
+      </label>
+      <p style={{ margin: 0, fontSize: "0.72rem", color: "#94a3b8" }}>Clique num lado do quadrado e ajuste o raio (0 = reto). Com uma abertura selecionada, o formato muda nela; sem seleção, vale para a próxima.</p>
+    </div>
+  );
+}
+
+function kindHex(kind: OpeningParams["openingKind"]): string {
+  return `#${OPENING_KIND_COLOR[kind].toString(16).padStart(6, "0")}`;
+}
+
+/** A door is the same opening standing on the floor; a window stands wherever it is placed on the wall. */
 function OpeningFields(props: { readonly params: OpeningParams; readonly onChange: (next: OpeningParams) => void }) {
   const { params, onChange } = props;
   return (
@@ -234,22 +357,20 @@ function OpeningFields(props: { readonly params: OpeningParams; readonly onChang
       <div className="gm-material-grid">
         <SelectableChip
           label="Janela"
-          swatchColor="#7dd3fc"
+          swatchColor={kindHex("window")}
           selected={params.openingKind === "window"}
-          onSelect={() => onChange({ ...params, openingKind: "window", sill: params.sill > 0 ? params.sill : 1 })}
+          onSelect={() => onChange(withOpeningKind(params, "window"))}
         />
         <SelectableChip
           label="Porta"
-          swatchColor="#d97706"
+          swatchColor={kindHex("door")}
           selected={params.openingKind === "door"}
-          onSelect={() => onChange({ ...params, openingKind: "door", sill: 0, height: Math.max(params.height, 2) })}
+          onSelect={() => onChange(withOpeningKind(params, "door"))}
         />
       </div>
       {sliderRow("Largura", params.width, 0.4, 4, 0.1, (width) => onChange({ ...params, width }))}
       {sliderRow("Altura", params.height, 0.4, 4, 0.1, (height) => onChange({ ...params, height }))}
-      {params.openingKind === "door"
-        ? null
-        : sliderRow("Peitoril", params.sill, 0, 3, 0.1, (sill) => onChange({ ...params, sill }))}
+      <OpeningShapeFields params={params} onChange={onChange} />
     </div>
   );
 }
@@ -259,7 +380,6 @@ const TOOL_LABELS: Partial<Record<ConstructionToolId, string>> = {
   "platform-contour": "Plataforma",
   "slope-ramp": "Rampa",
   "slope-spiral": "Espiral",
-  "edit-region": "Editar estrutura",
   "path-brush": "Parâmetros: Caminho",
   "wall-brush": "Parâmetros: Parede (Pincel Livre)",
   "wall-line": "Parâmetros: Parede (Linha Reta)",
@@ -276,7 +396,7 @@ const TOOL_LABELS: Partial<Record<ConstructionToolId, string>> = {
  * `composition/tabletop/tools/*.ts`.
  */
 export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelProps) {
-  const { activeTool, params, onParamsChange } = props;
+  const { activeTool, params, onParamsChange, structureEditParams, onStructureEditParamsChange } = props;
   const label = TOOL_LABELS[activeTool];
 
   if (label === undefined) {
@@ -338,28 +458,15 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
           <label>Subida <input type="number" step="0.1" value={params["slope-spiral"].rise} onChange={(event) => onParamsChange("slope-spiral", { ...params["slope-spiral"], rise: Number(event.currentTarget.value) })} /></label>
           <p>Clique no centro. A espiral começa na altura de onde você clicou e sobe o valor de Subida ao longo das voltas.</p>
         </div>
-      ) : activeTool === "edit-region" ? (
-        <div>
-          <label>Ação na rua <select value={params["edit-region"].curveAction ?? "edit"} onChange={(event) => onParamsChange("edit-region", { ...params["edit-region"], curveAction: event.currentTarget.value as "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width" })}>
-            <option value="edit">Editar curva</option><option value="remove-anchor">Remover âncora</option><option value="disconnect">Desconectar junção</option><option value="delete-segment">Excluir trecho</option><option value="close">Fechar caminho</option><option value="width">Alterar largura</option>
-          </select></label>
-          {params["edit-region"].curveAction === "width" && <label>Largura <input type="number" min="0.1" step="0.1" value={params["edit-region"].curveWidth ?? 4} onChange={(event) => onParamsChange("edit-region", {...params["edit-region"],curveWidth:Number(event.currentTarget.value)})}/></label>}
-          {params["edit-region"].curveAction === "width" && <label>Largura no fim <input type="number" min="0.1" step="0.1" value={params["edit-region"].curveEndWidth ?? params["edit-region"].curveWidth ?? 4} onChange={(event) => onParamsChange("edit-region", {...params["edit-region"],curveEndWidth:Number(event.currentTarget.value)})}/></label>}
-          <p>Para remover, desconectar ou fechar, clique na âncora. Para excluir um trecho ou mudar sua largura, clique no ponto central.</p>
-          <label>Alças da rua <select value={params["edit-region"].curveMode ?? "free"} onChange={(event) => onParamsChange("edit-region", { ...params["edit-region"], curveMode: event.currentTarget.value as "automatic" | "aligned" | "mirrored" | "free" })}>
-            <option value="free">Livres</option><option value="aligned">Alinhadas</option><option value="mirrored">Espelhadas</option><option value="automatic">Automáticas</option>
-          </select></label>
-          <p>Arraste uma alça para ajustar a curva. Arraste o ponto central para puxar o trecho; clique nele para inserir uma âncora.</p>
-          <SelectableChip label="Formato / posicao" swatchColor="#79b8e8" selected={params["edit-region"].mode === "shape"} onSelect={() => onParamsChange("edit-region", { ...params["edit-region"], mode: "shape" })} />
-          <SelectableChip label="Elevar / baixar" swatchColor="#79b8e8" selected={params["edit-region"].mode === "elevation"} onSelect={() => onParamsChange("edit-region", { ...params["edit-region"], mode: "elevation" })} />
-          <p>No modo de elevacao, arraste para cima ou para baixo. A plataforma leva a estrutura conectada acima.</p>
-        </div>
       ) : activeTool === "path-brush" ? (<PathBrushFields params={params["path-brush"]} onChange={(next) => onParamsChange("path-brush", next)} />) : activeTool === "wall-brush" ? (
         <WallBrushFields params={params["wall-brush"]} onChange={(next) => onParamsChange("wall-brush", next)} />
       ) : activeTool === "wall-line" ? (
         <WallLineFields params={params["wall-line"]} onChange={(next) => onParamsChange("wall-line", next)} />
       ) : activeTool === "opening" ? (
-        <OpeningFields params={params.opening} onChange={(next) => onParamsChange("opening", next)} />
+        <div style={{ display: "grid", gap: "0.6rem" }}>
+          <OpeningFields params={params.opening} onChange={(next) => onParamsChange("opening", next)} />
+          <p>Clique numa parede para abrir uma abertura nova. Clique numa existente para selecionar -- com uma selecionada, ajuste os campos acima e clique na parede para mover ou redimensionar; Delete ou Backspace apaga e restaura a parede.</p>
+        </div>
       ) : activeTool === "tower-stamp" ? (
         <TowerStampFields params={params["tower-stamp"]} onChange={(next) => onParamsChange("tower-stamp", next)} />
       ) : (
@@ -370,8 +477,18 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
       ),
   };
 
+  // Every construction tool but `opening` (its own click-select/click-commit
+  // pattern, not a drag) now also grabs and edits whatever it owns
+  // (`structure-edit-behavior.ts`), so this stays a second, always-present
+  // panel rather than a per-tool branch.
+  const panels = activeTool === "opening" ? [panel] : [panel, {
+    key: "structure-edit",
+    header: "Editar estrutura existente",
+    content: <StructureEditFields params={structureEditParams} onChange={onStructureEditParamsChange} />,
+  }];
+
   // `Collapse` owns its expanded keys internally. Remount it when the tool
   // changes so its new single panel starts expanded rather than inheriting
   // the previous tool's key and appearing empty.
-  return <Collapse key={activeTool} panels={[panel]} bordered={false} />;
+  return <Collapse key={activeTool} panels={panels} bordered={false} />;
 }

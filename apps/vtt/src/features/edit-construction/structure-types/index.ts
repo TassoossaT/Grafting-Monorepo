@@ -7,5 +7,6 @@ export * from "./organic/index.ts";
 export * from "./path/index.ts";
 export { PATH_SURFACE_TYPE } from "./path/path-surface-type.ts";
 export { platformStructureType } from "./platform/platform-structure.ts";
+export { roofStructureType } from "./roof/roof-structure.ts";
 export { openingStructureType } from "./panel/panel-structure.ts";
 export { controlRungId, controlSectionId, prospectiveGraph, regenerateSlopeSpine, SLOPE_SURFACE_TYPE, slopeFaceId, slopeFootprint, slopeSurface } from "./platform/platform-slope-spine.ts";

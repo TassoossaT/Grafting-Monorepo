@@ -1,6 +1,9 @@
+import type { ConstructionToolId, StructureEditParams } from "@/features/edit-construction";
+
 import { beginCurveGesture } from "./curve-edit-gesture.ts";
 import {
   cloudNodes,
+  panelHeightWidgetPick,
   planEdit,
   refreshCloudTopology,
   resolveCloudTopology,
@@ -20,49 +23,41 @@ import { distanceToSegmentXZ } from "../shapes/geometry-2d.ts";
 import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
 
 /**
- * Edit mode: grab a cloud by any of its parts -- a vertex, a boundary edge,
- * or the body -- and what that gesture is *allowed* to do is decided by the
- * grabbed part's role in the cloud's own type. A wall's top corner only
- * moves vertically, its bottom corner drags its paired top corner along,
- * grabbing its body moves the whole run rather than shearing one panel out
- * of it, and a terrain patch refuses fine-grained edits outright.
+ * Grab-and-edit an *existing* structure by any of its parts -- a vertex, a
+ * boundary edge, the body, a curve handle, or a type-specific handle --
+ * filtered to whichever types `options.ownsType` accepts, so
+ * `withStructureEditing` below can fold it into every creation tool's own
+ * pointer lifecycle.
  *
- * **The cloud is what is being edited, never the face under the pointer**
- * (`ADR-0022`: "editing dispatches by cloud, not by individual surface").
- * The face still says *what was grabbed* -- a corner is a corner of a panel,
- * and no cloud-wide question has an answer for a single node -- but the
- * reach of the resulting op comes from the role's own declaration in
- * `features/edit-construction/structure-types/`.
- *
- * The tool itself contains **no** per-type behavior. It resolves the cloud
- * and the target, hands both to `planEdit`, and applies whatever plan comes
- * back; adding a structure type never means touching this file, and neither
- * does adding a preset that produces one.
+ * The tool composing this still contains **no** per-type behaviour: the
+ * `ownsType` filter is the only thing that varies between callers, and it
+ * asks a trait or a type's own identity constant, never a type name --
+ * `no-type-name-comparisons.test.mjs` holds here exactly as it does
+ * everywhere else `hasTrait` is the question to ask.
  */
 
-/** Same tolerance the wall tools pick a panel with -- an edge grab is deliberate, not a snap. */
 const EDGE_PICK_TOLERANCE = 0.2;
+
+export interface StructureEditOptions {
+  /** Only a vertex/edge/body/handle whose topology's surface type this accepts is grabbed; anything else falls through to the wrapped tool's own creation gesture. */
+  readonly ownsType: (surfaceType: string) => boolean;
+}
 
 interface GrabbedTarget {
   readonly seedKey: ConstructionSurfaceKey;
   readonly target: EditTarget;
 }
 
-const xzDistanceToSegment = distanceToSegmentXZ;
+function grabbedTarget(ctx: ToolContext, sample: PointerSample, ownsType: StructureEditOptions["ownsType"], elevation: boolean): GrabbedTarget | undefined {
+  const topologies = ctx.runtime.getAllRegionTopologies().filter((topology) => ownsType(topology.surfaceType));
 
-/**
- * What the pointer grabbed: the node handle it hit, else the boundary edge
- * it landed on, else the region body. A node handle already reports its own
- * id, so a vertex grab needs no geometric search -- only which face to seed
- * the cloud from.
- *
- * A node welded between two clouds of *different* types belongs to both, and
- * the first match wins. That ambiguity predates cloud dispatch and is not
- * resolved here: it is a question about what a shared node means, not about
- * scope.
- */
-function grabbedTarget(ctx: ToolContext, sample: PointerSample, elevation = false): GrabbedTarget | undefined {
-  const topologies = ctx.runtime.getAllRegionTopologies();
+  const widget = sample.nodeId === undefined ? undefined : panelHeightWidgetPick(sample.nodeId);
+  if (widget !== undefined) {
+    const target: EditTarget = { kind: "edge-zone", edgeId: widget.edgeId, zone: widget.zone };
+    const topology = topologies.find((candidate) =>
+      [...candidate.outerLoops, ...candidate.holes].some((loop) => loop.some((edge) => edge.edgeId === widget.edgeId)));
+    return topology === undefined ? undefined : { seedKey: topology.surfaceKey, target };
+  }
 
   if (sample.nodeId !== undefined) {
     const target: EditTarget = { kind: "vertex", nodeId: sample.nodeId };
@@ -97,7 +92,7 @@ function edgeOrBodyAt(topology: ConstructionRegionTopology, point: ConstructionP
       const start = positionOf(edge.startNodeId);
       const end = positionOf(edge.endNodeId);
       if (start === undefined || end === undefined) continue;
-      const distance = xzDistanceToSegment(point, start, end);
+      const distance = distanceToSegmentXZ(point, start, end);
       if (distance > EDGE_PICK_TOLERANCE) continue;
       if (closest === undefined || distance < closest.distance) closest = { edgeId: edge.edgeId, distance };
     }
@@ -109,16 +104,7 @@ function delta(from: ConstructionPosition, to: ConstructionPosition): Constructi
   return { x: to.x - from.x, y: to.y - from.y, z: to.z - from.z };
 }
 
-/**
- * Every node of the cloud whose position differs from the captured
- * snapshot -- what an undo has to put back.
- *
- * Snapshotted across the whole cloud, for the same reason the plan is:
- * a cloud-scoped move addresses every member, and a cascade (plus the
- * engine's own cleanup) moves nodes the gesture never named. A snapshot of
- * only the seed would leave an undo that puts one panel back and abandons
- * the rest of the run where the drag left it.
- */
+/** Every node of the cloud whose position differs from the captured snapshot -- what an undo has to put back. */
 function restoreOps(
   before: ReadonlyMap<string, ConstructionPosition>,
   after: CloudTopology,
@@ -150,28 +136,43 @@ interface ActiveDrag {
   screenY?: number;
 }
 
-let active: ActiveDrag | undefined;
-let curveGesture: ReturnType<typeof beginCurveGesture>;
+export interface StructureEditBehavior {
+  /** Tries to start an edit gesture on whatever `sample` landed on; `true` means the rest of this pointer gesture belongs to this behaviour, not the wrapped tool's own creation gesture. */
+  tryGrab(ctx: ToolContext, sample: PointerSample, editParams: StructureEditParams): boolean;
+  onPointerMove(ctx: ToolContext, gesture: ToolGesture, editParams: StructureEditParams): void;
+  onPointerUp(ctx: ToolContext): void;
+  onCancel(): void;
+  /** Whether a drag is currently under this behaviour's control. */
+  isActive(): boolean;
+  /** Whether the *last* `tryGrab` succeeded -- read after pointer-up, once `isActive()` has already gone back to `false`, to decide whether a plain click (no drag) belongs to this behaviour or should still fall through to the wrapped tool's own `onClick`. */
+  wasGrabbed(): boolean;
+}
 
-export const editRegionTool: ConstructionTool<"edit-region"> = {
-  id: "edit-region",
-  defaultParams: () => ({ mode: "shape" }),
+/** The grab-and-edit half of `withStructureEditing` -- kept separate so a tool that has no meaningful "click, don't drag" case (a brush) can still use just the drag machinery. */
+export function createStructureEditBehavior(options: StructureEditOptions): StructureEditBehavior {
+  let active: ActiveDrag | undefined;
+  let curveGesture: ReturnType<typeof beginCurveGesture>;
+  let grabbedThisGesture = false;
 
-  onPointerDown(ctx: ToolContext, sample: PointerSample, params): void {
+  function tryGrab(ctx: ToolContext, sample: PointerSample, editParams: StructureEditParams): boolean {
     active = undefined;
     curveGesture?.cancel();
-    curveGesture = beginCurveGesture(ctx, sample, params);
-    if (curveGesture) return;
-    const grabbed = grabbedTarget(ctx, sample, params?.mode === "elevation");
+    grabbedThisGesture = false;
+    curveGesture = beginCurveGesture(ctx, sample, options.ownsType, editParams);
+    if (curveGesture) {
+      grabbedThisGesture = true;
+      return true;
+    }
+    const grabbed = grabbedTarget(ctx, sample, options.ownsType, editParams.mode === "elevation");
     if (grabbed === undefined) {
       ctx.reportSelection(undefined);
       ctx.reportFeedback(undefined);
-      return;
+      return false;
     }
     const cloud = resolveCloudTopology(ctx.runtime, grabbed.seedKey);
     if (cloud === undefined) {
       ctx.reportSelection(undefined);
-      return;
+      return false;
     }
     active = {
       cloud,
@@ -183,15 +184,17 @@ export const editRegionTool: ConstructionTool<"edit-region"> = {
     if (grabbed.target.kind === "vertex") {
       ctx.reportSelection({ id: grabbed.target.nodeId, point: sample.point });
     }
-  },
+    grabbedThisGesture = true;
+    return true;
+  }
 
-  onPointerMove(ctx: ToolContext, gesture: ToolGesture, params): void {
+  function onPointerMove(ctx: ToolContext, gesture: ToolGesture, editParams: StructureEditParams): void {
     if (curveGesture) { curveGesture.move(gesture); return; }
     if (active === undefined) return;
     // Per-tick delta, not gesture-total: every op the plan produces applies
     // on top of the cloud's *current* state, so a cumulative delta would
     // move everything again on each tick.
-    const step = params?.mode === "elevation" && active.screenY !== undefined && gesture.current.screenY !== undefined
+    const step = editParams.mode === "elevation" && active.screenY !== undefined && gesture.current.screenY !== undefined
       ? { x: 0, y: (active.screenY - gesture.current.screenY) / 40, z: 0 }
       : delta(active.previous, gesture.current.point);
     active.screenY = gesture.current.screenY;
@@ -242,11 +245,9 @@ export const editRegionTool: ConstructionTool<"edit-region"> = {
     if (active.target.kind === "vertex") {
       ctx.reportSelection({ id: active.target.nodeId, point: gesture.current.point });
     }
-  },
+  }
 
-  onCancel(): void { curveGesture?.cancel(); curveGesture = undefined; active = undefined; },
-
-  onPointerUp(ctx: ToolContext): void {
+  function onPointerUp(ctx: ToolContext): void {
     if (curveGesture) { curveGesture.commit(); curveGesture = undefined; return; }
     const drag = active;
     active = undefined;
@@ -257,5 +258,72 @@ export const editRegionTool: ConstructionTool<"edit-region"> = {
     const { undo, redo } = restoreOps(drag.before, cloud, snapshot);
     if (undo.length === 0) return;
     ctx.history.record({ kind: "region-edit", undo, redo });
-  },
-};
+  }
+
+  function onCancel(): void {
+    curveGesture?.cancel();
+    curveGesture = undefined;
+    active = undefined;
+  }
+
+  return {
+    tryGrab,
+    onPointerMove,
+    onPointerUp,
+    onCancel,
+    isActive: () => active !== undefined || curveGesture !== undefined,
+    wasGrabbed: () => grabbedThisGesture,
+  };
+}
+
+/**
+ * Composes a creation tool with {@link createStructureEditBehavior}: a press
+ * on an existing structure this tool owns edits it (drag to move/resize,
+ * release commits); a press anywhere else falls through to the tool's own
+ * creation gesture, unchanged. One tool, not a second "edit mode" -- the
+ * same reasoning `opening-tool.ts` already applies to openings, generalized
+ * to every other construction tool via the type-filtered grab above.
+ */
+export function withStructureEditing<Id extends ConstructionToolId>(
+  tool: ConstructionTool<Id>,
+  options: StructureEditOptions,
+): ConstructionTool<Id> {
+  const behavior = createStructureEditBehavior(options);
+  return {
+    ...tool,
+    previewOnHover: true,
+
+    previewFor(gesture, params, ctx) {
+      if (behavior.isActive()) return undefined;
+      return tool.previewFor?.(gesture, params, ctx);
+    },
+
+    onPointerDown(ctx, sample, params) {
+      if (behavior.tryGrab(ctx, sample, ctx.structureEditParams)) return;
+      tool.onPointerDown?.(ctx, sample, params);
+    },
+
+    onPointerMove(ctx, gesture, params) {
+      if (behavior.isActive()) { behavior.onPointerMove(ctx, gesture, ctx.structureEditParams); return; }
+      tool.onPointerMove?.(ctx, gesture, params);
+    },
+
+    onPointerUp(ctx, gesture, params) {
+      const wasActive = behavior.isActive();
+      if (wasActive) { behavior.onPointerUp(ctx); return; }
+      tool.onPointerUp?.(ctx, gesture, params);
+    },
+
+    onCancel(ctx) {
+      behavior.onCancel();
+      tool.onCancel?.(ctx);
+    },
+
+    onClick(ctx, sample, params) {
+      // A press that grabbed something (drag or not) already belongs to the
+      // edit gesture; a plain click that grabbed nothing is the tool's own.
+      if (behavior.wasGrabbed()) return;
+      tool.onClick?.(ctx, sample, params);
+    },
+  };
+}

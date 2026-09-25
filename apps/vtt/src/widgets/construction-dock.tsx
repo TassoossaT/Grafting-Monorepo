@@ -1,12 +1,16 @@
 "use client";
 
 import { ActionDock, type ActionDockItem } from "@/ui";
-import type { ConstructionToolId } from "@/features/edit-construction";
+import type { ConstructionToolId, OpeningParams } from "@/features/edit-construction";
 
 export interface ConstructionDockProps {
   readonly ready: boolean;
   readonly activeTool: ConstructionToolId;
   readonly onToolChange: (tool: ConstructionToolId) => void;
+  /** Which opening preset the Aberturas blocks show as picked. */
+  readonly openingKind: OpeningParams["openingKind"];
+  /** Picks the opening preset and activates the opening tool. */
+  readonly onOpeningKindChange: (kind: OpeningParams["openingKind"]) => void;
   readonly canUndo: boolean;
   readonly canRedo: boolean;
   readonly onUndo: () => void;
@@ -40,6 +44,8 @@ export function ConstructionDock(props: ConstructionDockProps) {
     ready,
     activeTool,
     onToolChange,
+    openingKind,
+    onOpeningKindChange,
     canUndo,
     canRedo,
     onUndo,
@@ -110,10 +116,15 @@ export function ConstructionDock(props: ConstructionDockProps) {
       key: "openings",
       label: "Aberturas",
       icon: "🚪",
-      tooltip: "Portas & Janelas (clique sobre uma parede para abrir)",
+      tooltip: "Portas & Janelas -- clique numa parede para abrir uma nova, clique numa existente para selecionar e editar (mover/redimensionar clicando na parede de novo, Delete apaga)",
       active: isOpeningActive,
+      childActive: isOpeningActive,
       disabled: !ready,
       onClick: () => onToolChange("opening"),
+      subItems: [
+        { key: "opening-window", label: "Janela", icon: "🪟", tooltip: "Janela: arraste numa parede, ou clique para o tamanho padrão", active: isOpeningActive && openingKind === "window", disabled: !ready, onClick: () => onOpeningKindChange("window") },
+        { key: "opening-door", label: "Porta", icon: "🚪", tooltip: "Porta: arraste numa parede, ou clique para o tamanho padrão; o peitoril fica no chão", active: isOpeningActive && openingKind === "door", disabled: !ready, onClick: () => onOpeningKindChange("door") },
+      ],
     },
     {
       key: "stairs",

@@ -1,11 +1,13 @@
 import {
   createPathBrushEffect,
   DEFAULT_TOOL_PARAMS,
+  PATH_SURFACE_TYPE,
   pathFormationFor,
   pathHalfWidth,
 } from "@/features/edit-construction";
 
 import { createBrushTool, type BrushRegion } from "../core/brush-tool.ts";
+import { withStructureEditing } from "../core/structure-edit-behavior.ts";
 import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
 import type { PathBrushParams } from "@/features/edit-construction";
 import { commitPathCloudIntent } from "../../path/path-cloud-transaction.ts";
@@ -21,7 +23,7 @@ const PATH_COLOR = 0xc084fc;
  * the resulting graph and contour plan; the composition boundary commits its
  * generic transaction without interpreting path topology.
  */
-export const pathBrushTool = createBrushTool<"path-brush">({
+const rawPathBrushTool = createBrushTool<"path-brush">({
   id: "path-brush",
   defaultParams: () => DEFAULT_TOOL_PARAMS["path-brush"],
   previewColor: () => PATH_COLOR,
@@ -43,3 +45,6 @@ export const pathBrushTool = createBrushTool<"path-brush">({
     commitPathCloudIntent(ctx, effect, region.tolerance);
   },
 });
+
+/** Also grabs and edits an existing path's own vertex/edge/body/curve-handle -- see `structure-edit-behavior.ts`. */
+export const pathBrushTool = withStructureEditing(rawPathBrushTool, { ownsType: (surfaceType) => surfaceType === PATH_SURFACE_TYPE });

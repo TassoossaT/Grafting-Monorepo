@@ -9,9 +9,10 @@ import {
   reshapeCurve,
   resolveCloudTopology,
   reverseGeometry,
+  spineOwnerAt,
 } from "../../../../features/edit-construction/index.ts";
-import type { AtomicEditOp, ToolParamsFor } from "../../../../features/edit-construction/index.ts";
-import type { ConstructionCurvedEdge, ConstructionEdgeGeometry, ConstructionPosition, CubicBezier } from "../../../../ports/index.ts";
+import type { AtomicEditOp, StructureEditParams } from "../../../../features/edit-construction/index.ts";
+import type { ConstructionCurvedEdge, ConstructionEdgeGeometry, ConstructionPosition, ConstructionSurfaceKey, CubicBezier } from "../../../../ports/index.ts";
 import type { PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
 import { commitPatchReplacement } from "../../effects/effect-commit.ts";
 
@@ -36,13 +37,19 @@ export interface CurveGesture {
 }
 
 /** Where the pointer is taking the handle: along the ground, or up and down in elevation mode. */
-function targetOf(sample: PointerSample, gesture: ToolGesture, params?: ToolParamsFor<"edit-region">): ConstructionPosition {
+function targetOf(sample: PointerSample, gesture: ToolGesture, params?: StructureEditParams): ConstructionPosition {
   return params?.mode === "elevation" && sample.screenY !== undefined && gesture.current.screenY !== undefined
     ? { ...sample.point, y: sample.point.y + (sample.screenY - gesture.current.screenY) / 40 }
     : { ...gesture.current.point, y: sample.point.y };
 }
 
-export function beginCurveGesture(ctx: ToolContext, sample: PointerSample, params?: ToolParamsFor<"edit-region">): CurveGesture | undefined {
+/** Starts a curve gesture on the handle `sample` landed on, when the curve belongs to a type `ownsType` accepts. */
+export function beginCurveGesture(
+  ctx: ToolContext,
+  sample: PointerSample,
+  ownsType: (surfaceType: string) => boolean,
+  params?: StructureEditParams,
+): CurveGesture | undefined {
   if (!sample.nodeId) return undefined;
   const snapshot = ctx.runtime.getGraphSnapshot();
   const contour = ctx.runtime.getCurvedEdges();
@@ -50,12 +57,15 @@ export function beginCurveGesture(ctx: ToolContext, sample: PointerSample, param
   const pick = curvePick(sample.nodeId);
   const contourEdge = pick === undefined ? undefined : contour.find((edge) => edge.edgeId === pick.edgeId);
   if (pick !== undefined && contourEdge !== undefined && !snapshot.edges.some((edge) => edge.edgeId === pick.edgeId && edge.curve)) {
-    return contourGesture(ctx, sample, params, contourEdge, pick.index);
+    const face = ctx.runtime.getAllRegionTopologies().find((topology) => ownsType(topology.surfaceType)
+      && [...topology.outerLoops, ...topology.holes].some((loop) => loop.some((use) => use.edgeId === contourEdge.edgeId)));
+    return face === undefined ? undefined : contourGesture(ctx, sample, params, contourEdge, pick.index, face.surfaceKey);
   }
-  return spineGesture(ctx, sample, params);
+  const owner = spineOwnerAt(snapshot, pick?.edgeId ?? sample.nodeId);
+  return owner !== undefined && ownsType(owner) ? spineGesture(ctx, sample, params) : undefined;
 }
 
-function spineGesture(ctx: ToolContext, sample: PointerSample, params?: ToolParamsFor<"edit-region">): CurveGesture {
+function spineGesture(ctx: ToolContext, sample: PointerSample, params?: StructureEditParams): CurveGesture {
   const snapshot = ctx.runtime.getGraphSnapshot();
   const targetId = sample.nodeId!;
   const operationId = `curve-edit:${ctx.nextSequence()}`;
@@ -99,9 +109,10 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: ToolPara
 function contourGesture(
   ctx: ToolContext,
   sample: PointerSample,
-  params: ToolParamsFor<"edit-region"> | undefined,
+  params: StructureEditParams | undefined,
   edge: ConstructionCurvedEdge,
   index: 1 | 2 | "midpoint",
+  faceKey: ConstructionSurfaceKey,
 ): CurveGesture {
   const original = contourCurve(edge);
   let reshaped: CubicBezier | undefined;
@@ -118,9 +129,7 @@ function contourGesture(
     commit() {
       ctx.runtime.clearPreview(CHANNEL);
       if (reshaped === undefined) return;
-      const face = ctx.runtime.getAllRegionTopologies().find((topology) =>
-        [...topology.outerLoops, ...topology.holes].some((loop) => loop.some((use) => use.edgeId === edge.edgeId)));
-      const cloud = face && resolveCloudTopology(ctx.runtime, face.surfaceKey);
+      const cloud = resolveCloudTopology(ctx.runtime, faceKey);
       if (cloud === undefined) return;
       const plan = planEdgeReshape(cloud, edge.edgeId, contourGeometry(reshaped));
       if (plan.kind !== "apply") {

@@ -1,8 +1,9 @@
-import { DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
+import { DEFAULT_TOOL_PARAMS, hasTrait } from "@/features/edit-construction";
 import type { TowerStampParams } from "@/features/edit-construction";
 
 import { segmentsPreview } from "../shapes/preview-shapes.ts";
 import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "../core/tool-context.ts";
+import { withStructureEditing } from "../core/structure-edit-behavior.ts";
 import { circleContour, previewOutline } from "./tower-geometry.ts";
 import { WALL_COLOR, commitWallContour } from "../walls/wall-shared.ts";
 
@@ -19,7 +20,7 @@ const PREVIEW_SEGMENTS = 24;
  * is the entire difference -- so a tower welds onto a drawn wall, gets
  * edited by the same handles, and is subject to the same rules, for free.
  */
-export const towerStampTool: ConstructionTool<"tower-stamp"> = {
+const rawTowerStampTool: ConstructionTool<"tower-stamp"> = {
   id: "tower-stamp",
   defaultParams: () => DEFAULT_TOOL_PARAMS["tower-stamp"],
 
@@ -34,3 +35,6 @@ export const towerStampTool: ConstructionTool<"tower-stamp"> = {
     commitWallContour(ctx, circleContour(sample.point, params.radius), params, "tower-stamp");
   },
 };
+
+/** Also grabs and edits an existing wall's own vertex/edge/body/height-widget -- a tower is an ordinary wall, see `structure-edit-behavior.ts`. */
+export const towerStampTool = withStructureEditing(rawTowerStampTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "partition") });

@@ -1000,3 +1000,102 @@ fn an_opening_leaves_the_curved_panel_on_its_cylinder() {
         );
     }
 }
+
+fn ring_region(points: &[[f32; 3]]) -> (ContourTopology, RegionId, HashMap<String, [f32; 3]>) {
+    let names: Vec<String> = (0..points.len()).map(|index| format!("p{index}")).collect();
+    let graph = graph_with_positions(
+        &names
+            .iter()
+            .zip(points)
+            .map(|(name, point)| (name.as_str(), *point))
+            .collect::<Vec<_>>(),
+    );
+    let mut topology = ContourTopology::new();
+    let ids: Vec<&str> = names.iter().map(String::as_str).collect();
+    let outer = line_loop(&mut topology, &graph, "ring", &ids);
+    let region_id = RegionId::new("ring").unwrap();
+    topology.add_region(region_id.clone(), vec![outer], Vec::new()).unwrap();
+    let positions = positions_of(&graph);
+    (topology, region_id, positions)
+}
+
+fn surface_area(meshes: &[TriangulatedMesh]) -> f32 {
+    meshes
+        .iter()
+        .flat_map(|mesh| {
+            mesh.indices.chunks_exact(3).map(|triangle| {
+                let [a, b, c] = [0, 1, 2].map(|k| mesh.positions[triangle[k] as usize]);
+                let normal = cross(sub(b, a), sub(c, a));
+                0.5 * (normal[0].powi(2) + normal[1].powi(2) + normal[2].powi(2)).sqrt()
+            })
+        })
+        .sum()
+}
+
+fn meshes_of(points: &[[f32; 3]]) -> Vec<TriangulatedMesh> {
+    let (topology, region_id, positions) = ring_region(points);
+    triangulate_region(&topology, topology.region(&region_id).unwrap(), |id| {
+        positions.get(id.as_str()).copied()
+    })
+    .unwrap()
+}
+
+#[test]
+fn a_warped_upright_square_is_not_read_as_crossing_itself() {
+    let ring: Vec<[f32; 3]> = [[0.0, 1.0], [1.0, 0.0], [2.0, 1.0], [1.0, 2.0]]
+        .iter()
+        .enumerate()
+        .map(|(index, [x, y])| [*x, *y, if index % 2 == 0 { 0.01 } else { -0.01 }])
+        .collect();
+    assert!(!crate::sanitize::any_self_crossing([&ring]));
+    let meshes = meshes_of(&ring);
+    assert!((surface_area(&meshes) - 2.0).abs() < 1e-3, "{}", surface_area(&meshes));
+}
+
+#[test]
+fn a_warped_upright_circle_whose_shadow_zigzags_meshes_whole() {
+    let count = 24;
+    let ring: Vec<[f32; 3]> = (0..count)
+        .map(|index| {
+            let angle = index as f32 / count as f32 * std::f32::consts::TAU;
+            [angle.cos(), 2.0 + angle.sin(), if index % 2 == 0 { 0.01 } else { -0.01 }]
+        })
+        .collect();
+    let shadow_crosses = (0..count).any(|i| {
+        (i + 2..count).any(|j| {
+            if (j + 1) % count == i {
+                return false;
+            }
+            let p = |k: usize| [ring[k % count][0], ring[k % count][2]];
+            let o = |a: [f32; 2], b: [f32; 2], c: [f32; 2]| (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+            let (a, b, c, d) = (p(i), p(i + 1), p(j), p(j + 1));
+            o(a, b, c) * o(a, b, d) < 0.0 && o(c, d, a) * o(c, d, b) < 0.0
+        })
+    });
+    assert!(shadow_crosses, "the XZ shadow of this ring must zigzag for the test to mean anything");
+    assert!(!crate::sanitize::any_self_crossing([&ring]));
+    let meshes = meshes_of(&ring);
+    let expected = 0.5 * count as f32 * (std::f32::consts::TAU / count as f32).sin();
+    assert!((surface_area(&meshes) - expected).abs() < 3e-2, "{} vs {expected}", surface_area(&meshes));
+}
+
+#[test]
+fn an_upright_bow_tie_is_resolved_in_its_own_plane() {
+    let (sin, cos) = 0.5_f32.sin_cos();
+    let ring: Vec<[f32; 3]> = [[0.0, 0.0], [2.0, 2.0], [2.0, 0.0], [0.0, 2.0]]
+        .iter()
+        .map(|[x, y]| [x * cos - y * sin, 1.0 + x * sin + y * cos, 0.0])
+        .collect();
+    assert!(crate::sanitize::any_self_crossing([&ring]));
+    let meshes = meshes_of(&ring);
+    assert!((surface_area(&meshes) - 2.0).abs() < 1e-4, "{}", surface_area(&meshes));
+    for mesh in &meshes {
+        assert!(mesh.positions.iter().all(|point| point[2].abs() < 1e-5), "{:?}", mesh.positions);
+        assert!(mesh.normals.iter().all(|normal| normal[2].abs() > 0.99), "{:?}", mesh.normals);
+        for triangle in mesh.indices.chunks_exact(3) {
+            let [a, b, c] = [0, 1, 2].map(|k| mesh.positions[triangle[k] as usize]);
+            let facing = cross(sub(b, a), sub(c, a));
+            assert!(facing[2] * mesh.normals[0][2] > 0.0, "triangle wound against the face normal");
+        }
+    }
+}

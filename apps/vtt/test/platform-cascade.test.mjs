@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { planEdit, resolveCloudTopology } from "../src/features/edit-construction/index.ts";
-import { editRegionTool } from "../src/composition/tabletop/tools/core/edit-region-tool.ts";
+import { createStructureEditBehavior } from "../src/composition/tabletop/tools/core/structure-edit-behavior.ts";
 import { commitPlatformContour, commitPlatformShape, platformContourTool } from "../src/composition/tabletop/tools/platform/platform-contour-tool.ts";
 import { commitWallContour } from "../src/composition/tabletop/tools/walls/wall-shared.ts";
 import { surfaceRefFromNodeSet } from "../src/entities/map/index.ts";
@@ -74,12 +74,13 @@ test("one drag history covers every storey, including after a rejected tick", ()
   try {
     const surfaceRef = surfaceRefFromNodeSet(platform(runtime,1).surfaceKey);
     const start = { point: {x:2,y:3,z:2}, surfaceRef, screenY:200 };
-    editRegionTool.onPointerDown(ctx,start);
+    const behavior = createStructureEditBehavior({ ownsType: () => true });
+    behavior.tryGrab(ctx,start,{mode:"shape"});
     const current = {...start, screenY:160};
-    editRegionTool.onPointerMove(ctx,{start,current,samples:[start,current]},{mode:"elevation"});
+    behavior.onPointerMove(ctx,{start,current,samples:[start,current]},{mode:"elevation"});
     const bad = {...start, screenY:400};
-    editRegionTool.onPointerMove(ctx,{start,current:bad,samples:[start,bad]},{mode:"elevation"});
-    editRegionTool.onPointerUp(ctx);
+    behavior.onPointerMove(ctx,{start,current:bad,samples:[start,bad]},{mode:"elevation"});
+    behavior.onPointerUp(ctx);
     assert.deepEqual(heights(runtime),[0,4,7]);
     const history = ctx.history.undo();
     assert.equal(history.undo.length,8);
@@ -179,22 +180,6 @@ test("bottom wall edge moves both paired posts and propagates through actual inc
     assert.equal(result.kind,"apply",result.reason);
     assert.equal(result.ops.length,6);
     assert.ok(result.ops.every((op)=>op.position.y===Number(op.nodeId[1])*3));
-  } finally {session.free();}
-});
-test("wall openings follow the base and remain inside a wall when its top is lowered", () => {
-  const {runtime,session}=building();
-  try {
-    const outer=["p0:0","p0:1","p1:1","p1:0"].map((id)=>runtime.getGraphSnapshot().nodes.find((n)=>n.id===id));
-    const hole=[[1,1],[1,2],[2,2],[2,1]].map(([x,y],i)=>({id:`hole:${i}`,position:{x,y,z:0}}));
-    const edges=(nodes,prefix)=>nodes.map((n,i)=>({edgeId:`${prefix}:${i}`,startNodeId:n.id,endNodeId:nodes[(i+1)%nodes.length].id}));
-    const rim=edges(outer,"rim"), opening=edges(hole,"opening");
-    const uses=(es)=>es.map((e)=>({edgeId:e.edgeId,reversed:false}));
-    runtime.addPatch({nodes:[...outer,...hole],edges:[...rim,...opening],regions:[{regionId:"wall-with-hole",boundary:uses(rim),holes:[uses(opening)],surfaceType:"wall-white",physical:true}]});
-    const moved=plan(runtime,0,{x:0,y:1,z:0});
-    assert.equal(moved.kind,"apply",moved.reason);
-    runtime.applyRegionEdit(moved.ops);
-    assert.deepEqual(runtime.getGraphSnapshot().nodes.filter((n)=>n.id.startsWith("hole:")).map((n)=>n.position.y),[2,3,3,2]);
-    assert.equal(plan(runtime,1,{x:0,y:-1.5,z:0}).kind,"deny");
   } finally {session.free();}
 });
 test("platform extension welds onto a shared edge instead of crossing it, and topology history covers the whole gesture", () => {

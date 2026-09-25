@@ -21,8 +21,8 @@ use serde::{Deserialize, Serialize};
 use grafting_graph_core::{
     ContourEdge, ContourEdgeId, ContourGeometry, ContourLoop, ContourTopology, DuplicateRegionSpec,
     Node, NodeId, OrientedEdgeUse, RegionEditOutcome, RegionId, SurfaceRegistry, SurfaceType,
-    add_hole, delete_region, duplicate_region, insert_vertex, move_edge, move_region, move_vertex,
-    remove_hole, remove_vertex, retype_edge,
+    delete_region, duplicate_region, insert_vertex, move_edge, move_region, move_vertex,
+    remove_vertex, retype_edge,
 };
 
 use crate::editing::SessionGraph;
@@ -405,6 +405,10 @@ pub struct RegionEdgeDto {
     pub start_node_id: String,
     pub end_node_id: String,
     pub geometry: ContourGeometryDto,
+    /// How the edge is traced on the host both its ends are pinned to, when
+    /// they are -- filled in by the session, which owns the pins.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host_curve: Option<crate::pins::HostCurveDto>,
 }
 
 #[derive(Debug, Serialize)]
@@ -412,6 +416,10 @@ pub struct RegionEdgeDto {
 pub struct RegionNodeDto {
     pub id: String,
     pub position: [f32; 3],
+    /// Where this node is pinned, when it is -- filled in by the session,
+    /// which owns the pin table.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pin: Option<crate::pins::NodePinDto>,
 }
 
 /// One region's live boundary, in the deterministic order this crate
@@ -430,6 +438,9 @@ pub struct RegionTopologyDto {
     /// Every boundary node, first-encountered loop order, with its live
     /// position -- what a caller places handles from.
     pub nodes: Vec<RegionNodeDto>,
+    /// The region's property bag, when it has one -- filled in by the session.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub props: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -484,6 +495,7 @@ fn loop_dto(topology: &ContourTopology, loop_: &ContourLoop) -> Result<Vec<Regio
                 } else {
                     ContourGeometryDto::from_geometry(edge.geometry())
                 },
+                host_curve: None,
             })
         })
         .collect()
@@ -519,6 +531,7 @@ pub fn region_topology(
             graph.node(&id).map(|node| RegionNodeDto {
                 id: id.as_str().to_owned(),
                 position: *node.data(),
+                pin: None,
             })
         })
         .collect();
@@ -530,6 +543,7 @@ pub fn region_topology(
         outer_loops,
         holes,
         nodes,
+        props: None,
     }))
 }
 
@@ -1221,10 +1235,9 @@ mod tests {
         assert!(topology.region(&RegionId::new("bad").unwrap()).is_none());
     }
 
-    /// A face can carry more than one opening, and closing one leaves the
-    /// others standing.
+    /// A face can carry more than one hole.
     #[test]
-    fn a_face_may_carry_several_openings_and_close_them_one_at_a_time() {
+    fn a_face_may_carry_several_holes() {
         let mut graph: SessionGraph = Graph::try_from_parts(Vec::new(), Vec::new()).unwrap();
         let mut topology = ContourTopology::new();
         let mut surfaces = SurfaceRegistry::new();
@@ -1313,22 +1326,6 @@ mod tests {
 
         let wall = RegionId::new("wall").unwrap();
         assert_eq!(topology.region(&wall).unwrap().holes().len(), 2);
-
-        apply_remove_hole(
-            &mut graph,
-            &mut topology,
-            RemoveHoleRequest {
-                surface_key: vec!["@region".into(), "wall".into()],
-                index: 0,
-            },
-        )
-        .unwrap();
-
-        assert_eq!(
-            topology.region(&wall).unwrap().holes().len(),
-            1,
-            "closing one opening leaves the other standing"
-        );
     }
 
     /// A patch is the only way a generator names a **shared** edge, so an
@@ -1506,49 +1503,6 @@ mod tests {
 
 }
 
-// ---- Holes ----
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AddHoleRequest {
-    pub surface_key: Vec<String>,
-    pub hole: Vec<OrientedEdgeUseDto>,
-}
-
-/// `AddHole` -- what a door or a window is an opening for. Structurally
-/// nothing new: a hole is a second real loop of registered edges, validated
-/// by the same closure and manifold rules as any outer loop, and it leaves
-/// one use free on each of them so a face can take the opening as its own
-/// boundary.
-pub fn apply_add_hole(
-    topology: &mut ContourTopology,
-    request: AddHoleRequest,
-) -> Result<RegionEditOutcomeDto, String> {
-    let region = region_id_from_wire(&request.surface_key)?;
-    let hole = parse_loop(request.hole)?;
-    let outcome = add_hole(topology, &region, hole).map_err(|error| error.to_string())?;
-    Ok(outcome.into())
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RemoveHoleRequest {
-    pub surface_key: Vec<String>,
-    pub index: usize,
-}
-
-/// `RemoveHole`: closes one opening back up.
-pub fn apply_remove_hole(
-    graph: &mut SessionGraph,
-    topology: &mut ContourTopology,
-    request: RemoveHoleRequest,
-) -> Result<RegionEditOutcomeDto, String> {
-    let region = region_id_from_wire(&request.surface_key)?;
-    let outcome =
-        remove_hole(graph, topology, &region, request.index).map_err(|error| error.to_string())?;
-    Ok(outcome.into())
-}
-
 // ---- Batched patch registration (shared edges) ----
 
 #[derive(Debug, Deserialize)]
@@ -1581,11 +1535,11 @@ pub struct PatchRegionDto {
     pub profile: Option<grafting_graph_core::profile_surface::SheetProfile>,
     pub region_id: String,
     pub boundary: Vec<OrientedEdgeUseDto>,
-    /// Inner loops this face is opened by -- see
-    /// [`apply_add_hole`]. Absent means a solid face, which is what almost
-    /// every patch declares. A generator that opens a face and fills the
-    /// opening in the same breath needs both in one transaction, or the
-    /// half-built state is briefly a face with a hole nobody stands in.
+    /// Inner loops of this face: real loops of registered edges, validated by
+    /// the same closure and manifold rules as the boundary, each leaving one
+    /// use free on its edges so another face can take the loop as its own
+    /// boundary. Absent means a solid face, which is what almost every patch
+    /// declares.
     #[serde(default)]
     pub holes: Vec<Vec<OrientedEdgeUseDto>>,
     pub surface_type: String,
@@ -1713,7 +1667,7 @@ pub fn apply_add_patch(
             .map(|use_| use_.edge().clone())
             .collect();
         // Every loop the face declares has to fit, inner ones included: an
-        // opening consumes a use on its rim exactly the way an outer
+        // hole consumes a use on its rim exactly the way an outer
         // boundary does.
         let no_room = boundary_refusal(topology, &boundary).or_else(|| {
             holes
