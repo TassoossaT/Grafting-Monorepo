@@ -168,6 +168,8 @@ pub fn apply_patch_replacement(
         next_known_regions.remove(region_id);
     }
 
+    next_topology.prune_unused_edges();
+
     let mut response = apply_add_patch(
         &mut next_graph,
         &mut next_topology,
@@ -358,4 +360,71 @@ mod tests {
                 .is_some()
         );
     }
+
+    #[test]
+    fn replaced_region_freed_edges_are_pruned_before_target_patch() {
+        let (mut graph, mut topology, mut surfaces, mut known, source) = quad();
+        let request = ApplyPatchReplacementRequest {
+            operation_id: "clean-replacement".into(),
+            source_surface_keys: vec![region_id_to_wire(&source)],
+            patch: AddPatchRequest {
+                nodes: vec![
+                    crate::region_editing::PatchNodeDto { id: "a".into(), position: [0.0, 0.0, 0.0] },
+                    crate::region_editing::PatchNodeDto { id: "b".into(), position: [1.0, 0.0, 0.0] },
+                    crate::region_editing::PatchNodeDto { id: "c".into(), position: [1.0, 0.0, 1.0] },
+                    crate::region_editing::PatchNodeDto { id: "d".into(), position: [0.0, 0.0, 1.0] },
+                ],
+                edges: vec![
+                    crate::region_editing::PatchEdgeDto {
+                        edge_id: "new-e0".into(),
+                        start_node_id: "a".into(),
+                        end_node_id: "b".into(),
+                        geometry: None,
+                    },
+                    crate::region_editing::PatchEdgeDto {
+                        edge_id: "new-e1".into(),
+                        start_node_id: "b".into(),
+                        end_node_id: "c".into(),
+                        geometry: None,
+                    },
+                    crate::region_editing::PatchEdgeDto {
+                        edge_id: "new-e2".into(),
+                        start_node_id: "c".into(),
+                        end_node_id: "d".into(),
+                        geometry: None,
+                    },
+                    crate::region_editing::PatchEdgeDto {
+                        edge_id: "new-e3".into(),
+                        start_node_id: "a".into(),
+                        end_node_id: "d".into(),
+                        geometry: None,
+                    },
+                ],
+                regions: vec![PatchRegionDto {
+                    profile: None,
+                    region_id: "replacement".into(),
+                    boundary: vec![
+                        OrientedEdgeUseDto { edge_id: "new-e0".into(), reversed: false },
+                        OrientedEdgeUseDto { edge_id: "new-e1".into(), reversed: false },
+                        OrientedEdgeUseDto { edge_id: "new-e2".into(), reversed: false },
+                        OrientedEdgeUseDto { edge_id: "new-e3".into(), reversed: true },
+                    ],
+                    holes: vec![],
+                    surface_type: "path".into(),
+                    physical: true,
+                }],
+            },
+            graph_patch: None,
+        };
+
+        let result = apply_patch_replacement(
+            &mut graph,
+            &mut surfaces,
+            &mut topology,
+            &mut known,
+            request,
+        );
+        assert!(result.is_ok(), "replacement should succeed: {:?}", result.err());
+    }
 }
+
