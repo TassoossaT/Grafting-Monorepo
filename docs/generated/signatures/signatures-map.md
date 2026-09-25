@@ -3558,6 +3558,24 @@ export function createTabletopRuntime(
   ): TabletopRuntime {
   const tableId = input.tableId.trim();
 
+// src/composition/tabletop/effects/change-area.ts
+export const REALLY_MOVED = 0.05;
+export interface ChangeArea {
+  readonly claimed: PlanarArea;
+  readonly vacated: PlanarArea;
+  }
+export function changeAreaOf(port: Partial<PlanarPort>, change: Pick<ShapeChange, "before" | "after">): ChangeArea | undefined {
+  if (typeof port.planarBoolean !== "function") return undefined;
+  const planar = port as PlanarPort;
+  const was = unionOf(planar, areaPolygonsOf(change.before));
+export function largestOuterRing(area: PlanarArea): readonly (readonly [number, number])[] | undefined {
+  let best: readonly (readonly [number, number])[] | undefined;
+  let bestArea = 0;
+  for (const piece of area) {
+  const ring = piece[0];
+  if (ring === undefined || ring.length < 3) continue;
+  const size = Math.abs(twiceArea(ring));
+
 // src/composition/tabletop/effects/effect-commit.ts
 export interface EffectCommitRuntime extends TabletopReactionRuntime {
   transact<T>(transactionId: string, origin: ChangeOrigin, work: () => T): TransactionResult<T>;

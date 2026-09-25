@@ -370,6 +370,49 @@ Times `run` as a phase of the running commit; untimed outside one.
 
 ### `function vtt.create-tabletop-runtime.createTabletopRuntime(input: CreateTabletopRuntimeInput): TabletopRuntime`
 
+### `interface vtt.change-area.ChangeArea`
+
+### `property vtt.change-area.ChangeArea.claimed: PlanarArea`
+
+### `property vtt.change-area.ChangeArea.vacated: PlanarArea`
+
+### `variable vtt.change-area.REALLY_MOVED: 0.05`
+
+Where a change actually went, read from its shape alone.
+
+**Why every reaction reads this rather than the type's own footprint.** A
+type regenerating from a spine or a contour replaces its whole connected
+component, so "the faces it produced" and any outline built from them name
+the entire network on every edit, however small. A reaction scoped by that
+rebuilds everything the network touches each time -- and ground rebuilt
+against a finely described contour comes back finer, so every edit made the
+next one heavier. What changed is the difference between the two shapes,
+and that is a question about plan-view area, never about which type changed
+or which node is which. So it is answered once, here, for every type.
+
+- `claimed`: ground the change covers now and did not before.
+- `vacated`: ground it covered before and no longer does.
+
+Slivers are discarded. Re-flattening a curve lands its samples fractionally
+off the last ones all along its length, so the difference of two runs of the
+same shape is a hairline following the whole network. `2*area/perimeter` is
+a strip's width, and anything thinner than REALLY_MOVED is
+re-sampling noise rather than a change that went somewhere.
+
+### `function vtt.change-area.changeAreaOf(port: Partial<PlanarPort>, change: Pick<ShapeChange, "before" | "after">): ChangeArea | undefined`
+
+The ground `change` claimed and vacated, in plan.
+
+`undefined` when there is no boolean to ask, or it refused the shapes: the
+caller cannot tell "nothing moved" from "could not look", so it has to fall
+back to its own wider scope rather than conclude that nothing needs repair.
+
+### `function vtt.change-area.largestOuterRing(area: PlanarArea): readonly (readonly [number, number])[] | undefined`
+
+The outer ring of an area's largest piece: the one outline a footprint
+contract carries. Every piece still reaches the reaction through the area
+itself; this only names the one a single-ring consumer answers for.
+
 ### `interface vtt.effect-commit.CommitOptions`
 
 ### `property vtt.effect-commit.CommitOptions.origin?: ChangeOrigin`
