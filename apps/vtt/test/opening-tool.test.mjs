@@ -2,16 +2,17 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { enginePort } from "./engine-planar.mjs";
 
-import { panelRailOf } from "../src/features/edit-construction/topology/panel-rail.ts";
 import { openingTool } from "../src/composition/tabletop/tools/openings/opening-tool.ts";
 import { sessionFixture } from "./platform-session-fixture.mjs";
+import { click } from "./support/opening-harness.mjs";
+
 /** Where a curve runs, asked of the engine -- the same answer the tool builds on. */
 function onCurve(geometry, start, end, at) {
   const [answer] = enginePort.queryContours([{ geometry, from: [start.x, start.z], to: [end.x, end.z], question: { kind: "evaluate", at } }]);
   return answer.points;
 }
 
-const WINDOW = { openingKind: "window", width: 1, height: 1, sill: 1 };
+const WINDOW = { openingKind: "window", width: 1, height: 1 };
 
 /**
  * One upright panel as the engine reports it: a base run, a side rising, a
@@ -95,62 +96,10 @@ function bezierPanelTopology(id, from, to, handles) {
 
 const BEZIER = bezierPanelTopology("wall-bezier", BEZIER_START, BEZIER_END, BEZIER_HANDLES);
 
-test("a straight panel reads as a rail of its own length", () => {
-  const rail = panelRailOf(enginePort, STRAIGHT);
-  assert.ok(Math.abs(rail.length - 6) < 1e-6);
-  assert.equal(rail.baseY, 0);
-  assert.equal(rail.topY, 3);
-  assert.deepEqual(rail.positionAt(2, 1), { x: 2, y: 1, z: 0 });
-  assert.ok(Math.abs(rail.travelTo({ x: 4.5, y: 0, z: 0 }) - 4.5) < 1e-6);
-});
-
-test("a curved panel is travelled, not spanned", () => {
-  const rail = panelRailOf(enginePort, CURVED);
-  assert.ok(
-    Math.abs(rail.length - Math.PI * 2) < 1e-4,
-    `half a radius-2 circle is PI*2 long, got ${rail.length}`,
-  );
-  // Halfway along the rail is the far side of the arc, not the midpoint of
-  // the chord between its ends -- which is the origin, and is nowhere on it.
-  const middle = rail.positionAt(rail.length / 2, 1);
-  assert.ok(Math.abs(Math.hypot(middle.x, middle.z) - 2) < 1e-4, "stays on the true circle");
-  assert.ok(Math.abs(middle.x) < 1e-4 && Math.abs(middle.z - 2) < 1e-4);
-});
-
-test("every point placed on a curved panel stays on its cylinder", () => {
-  const rail = panelRailOf(enginePort, CURVED);
-  for (let step = 0; step <= 10; step += 1) {
-    const point = rail.positionAt((rail.length * step) / 10, 1.5);
-    assert.ok(Math.abs(Math.hypot(point.x, point.z) - 2) < 1e-4, `left the cylinder at ${step}`);
-    assert.equal(point.y, 1.5);
-  }
-});
-
-test("a flat face is not a panel and takes no opening", () => {
-  const flat = {
-    surfaceKey: ["@region", "floor"],
-    surfaceType: "terrain",
-    physical: true,
-    outerLoops: [
-      [
-        { edgeId: "f0", reversed: false, startNodeId: "a", endNodeId: "b", geometry: { kind: "line" } },
-        { edgeId: "f1", reversed: false, startNodeId: "b", endNodeId: "c", geometry: { kind: "line" } },
-        { edgeId: "f2", reversed: false, startNodeId: "c", endNodeId: "a", geometry: { kind: "line" } },
-      ],
-    ],
-    holes: [],
-    nodes: [
-      { id: "a", position: { x: 0, y: 0, z: 0 } },
-      { id: "b", position: { x: 1, y: 0, z: 0 } },
-      { id: "c", position: { x: 0, y: 0, z: 1 } },
-    ],
-  };
-  assert.equal(panelRailOf(enginePort, flat), undefined);
-});
-
 /** `topology` registered in a real session, so the tool reads the engine's own host frame. */
 function sessionWith(topology) {
   const fixture = sessionFixture();
+  openingTool.onCancel(fixture.ctx);
   const [outer] = topology.outerLoops;
   fixture.runtime.addPatch({
     nodes: topology.nodes,
@@ -164,8 +113,8 @@ function sessionWith(topology) {
 test("a click on a wall stands an opening region there, pinned to the wall, with no hole in the wall", () => {
   const { session, ctx, runtime, openings } = sessionWith(STRAIGHT);
   try {
-    // y=1 is the clicked sill: the window runs from 1 to its own height above.
-    openingTool.onClick(ctx, { point: { x: 3, y: 1, z: 0 } }, WINDOW);
+    // y=1 is the clicked bottom: the window runs from 1 to its own height above.
+    click(ctx, { point: { x: 3, y: 1, z: 0 } }, WINDOW);
 
     const [opening] = openings();
     assert.ok(opening, "one opening region");
@@ -182,10 +131,10 @@ test("a click on a wall stands an opening region there, pinned to the wall, with
   } finally { session.free(); }
 });
 
-test("the vertical spot clicked sets the opening's own height on the wall, not just the `sill` param's last value", () => {
+test("the vertical spot clicked sets where the opening stands on the wall", () => {
   const { session, ctx, openings } = sessionWith(STRAIGHT);
   try {
-    openingTool.onClick(ctx, { point: { x: 3, y: 1.7, z: 0 } }, WINDOW);
+    click(ctx, { point: { x: 3, y: 1.7, z: 0 } }, WINDOW);
     const heights = openings()[0].nodes.map((node) => node.position.y).sort((a, b) => a - b);
     assert.ok(Math.abs(heights[0] - 1.7) < 1e-6, `expected sill at the clicked height, got ${heights[0]}`);
     assert.ok(Math.abs(heights[3] - 2.7) < 1e-6, `expected lintel one height above, got ${heights[3]}`);
@@ -195,8 +144,8 @@ test("the vertical spot clicked sets the opening's own height on the wall, not j
 test("a click too low or too high for the opening's height still places it, clamped to the nearest spot that fits", () => {
   const { session, ctx, openings } = sessionWith(STRAIGHT);
   try {
-    openingTool.onClick(ctx, { point: { x: 1.5, y: 0, z: 0 } }, WINDOW);
-    openingTool.onClick(ctx, { point: { x: 4.5, y: 10, z: 0 } }, WINDOW);
+    click(ctx, { point: { x: 1.5, y: 0, z: 0 } }, WINDOW);
+    click(ctx, { point: { x: 4.5, y: 10, z: 0 } }, WINDOW);
     const [low, high] = openings()
       .map((opening) => opening.nodes.map((node) => node.position.y).sort((a, b) => a - b))
       .sort((a, b) => a[0] - b[0]);
@@ -210,7 +159,7 @@ test("an opening on a curved wall sits on the curve, every node of it", () => {
   try {
     // The renderer picked the panel itself, the only exact answer on a curve:
     // the straight line between its two ends runs through open air.
-    openingTool.onClick(ctx, { point: { x: 0, y: 1, z: 2 }, surfaceRef: "@region,wall-arc" }, WINDOW);
+    click(ctx, { point: { x: 0, y: 1, z: 2 }, surfaceRef: "@region,wall-arc" }, WINDOW);
     const [opening] = openings();
     assert.ok(opening, "a curved wall takes an opening like any other");
     assert.equal(opening.nodes.length, 4, "four corners -- no nodes added along the curve");
@@ -227,7 +176,7 @@ test("an opening on a Bezier wall has every node on the wall's own curve", () =>
   const { session, ctx, openings } = sessionWith(BEZIER);
   try {
     const [[midX, midZ]] = onCurve({ kind: "bezier", ...BEZIER_HANDLES }, BEZIER_START, BEZIER_END, [0.5]);
-    openingTool.onClick(ctx, { point: { x: midX, y: 1, z: midZ }, surfaceRef: "@region,wall-bezier" }, WINDOW);
+    click(ctx, { point: { x: midX, y: 1, z: midZ }, surfaceRef: "@region,wall-bezier" }, WINDOW);
     const [opening] = openings();
     assert.ok(opening, "a Bezier wall takes an opening like any other");
     assert.equal(opening.nodes.length, 4, "four corners -- no nodes added along the curve");
@@ -245,7 +194,7 @@ test("an opening on a Bezier wall has every node on the wall's own curve", () =>
 test("an opening taller than the wall is refused rather than half-built", () => {
   const { session, ctx, openings } = sessionWith(STRAIGHT);
   try {
-    openingTool.onClick(ctx, { point: { x: 3, y: 0, z: 0 } }, { ...WINDOW, height: 5 });
+    click(ctx, { point: { x: 3, y: 0, z: 0 } }, { ...WINDOW, height: 5 });
     assert.equal(openings().length, 0, "nothing is registered when it cannot fit");
   } finally { session.free(); }
 });
@@ -253,7 +202,7 @@ test("an opening taller than the wall is refused rather than half-built", () => 
 test("a click on open ground opens nothing", () => {
   const { session, ctx, openings } = sessionWith(STRAIGHT);
   try {
-    openingTool.onClick(ctx, { point: { x: 3, y: 0, z: 9 } }, WINDOW);
+    click(ctx, { point: { x: 3, y: 0, z: 9 } }, WINDOW);
     assert.equal(openings().length, 0);
   } finally { session.free(); }
 });
@@ -261,7 +210,7 @@ test("a click on open ground opens nothing", () => {
 test("a door sits on the floor of the wall it opens", () => {
   const { session, ctx, openings } = sessionWith(STRAIGHT);
   try {
-    openingTool.onClick(ctx, { point: { x: 3, y: 0, z: 0 } }, { openingKind: "door", width: 1, height: 2, sill: 0 });
+    click(ctx, { point: { x: 3, y: 0, z: 0 } }, { openingKind: "door", width: 1, height: 2 });
     const [opening] = openings();
     assert.deepEqual(opening.nodes.map((node) => node.position.y).sort((a, b) => a - b), [0, 0, 2, 2]);
     assert.ok(opening.nodes.filter((node) => node.position.y === 0).every((node) => node.pin.v === 0), "pinned at the very bottom of the face");

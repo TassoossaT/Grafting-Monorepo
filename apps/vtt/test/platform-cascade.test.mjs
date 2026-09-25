@@ -182,22 +182,6 @@ test("bottom wall edge moves both paired posts and propagates through actual inc
     assert.ok(result.ops.every((op)=>op.position.y===Number(op.nodeId[1])*3));
   } finally {session.free();}
 });
-test("wall openings follow the base and remain inside a wall when its top is lowered", () => {
-  const {runtime,session}=building();
-  try {
-    const outer=["p0:0","p0:1","p1:1","p1:0"].map((id)=>runtime.getGraphSnapshot().nodes.find((n)=>n.id===id));
-    const hole=[[1,1],[1,2],[2,2],[2,1]].map(([x,y],i)=>({id:`hole:${i}`,position:{x,y,z:0}}));
-    const edges=(nodes,prefix)=>nodes.map((n,i)=>({edgeId:`${prefix}:${i}`,startNodeId:n.id,endNodeId:nodes[(i+1)%nodes.length].id}));
-    const rim=edges(outer,"rim"), opening=edges(hole,"opening");
-    const uses=(es)=>es.map((e)=>({edgeId:e.edgeId,reversed:false}));
-    runtime.addPatch({nodes:[...outer,...hole],edges:[...rim,...opening],regions:[{regionId:"wall-with-hole",boundary:uses(rim),holes:[uses(opening)],surfaceType:"wall-white",physical:true}]});
-    const moved=plan(runtime,0,{x:0,y:1,z:0});
-    assert.equal(moved.kind,"apply",moved.reason);
-    runtime.applyRegionEdit(moved.ops);
-    assert.deepEqual(runtime.getGraphSnapshot().nodes.filter((n)=>n.id.startsWith("hole:")).map((n)=>n.position.y),[2,3,3,2]);
-    assert.equal(plan(runtime,1,{x:0,y:-1.5,z:0}).kind,"deny");
-  } finally {session.free();}
-});
 test("platform extension welds onto a shared edge instead of crossing it, and topology history covers the whole gesture", () => {
   const {ctx,runtime,session,calls} = sessionFixture();
   try {

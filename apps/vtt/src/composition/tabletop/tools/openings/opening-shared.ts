@@ -18,14 +18,15 @@ import type {
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import {
   clipPathToStrip,
+  hasTrait,
   mapPath,
   openingPath,
   openingStructureType,
   pointAt,
-  propsForShape,
   reversePath,
   segmentExtremes,
   shapeFromProps,
+  shapeProps,
   splitSegment,
   startAtLowest,
   type OutlineSegment,
@@ -52,7 +53,7 @@ const SEAM_SNAP = 0.02;
 const PIECE_EPS = 1e-6;
 
 /** An axis-aligned rectangle in one face's `(u, v)` frame. */
-export interface HostRect {
+interface HostRect {
   readonly u0: number;
   readonly u1: number;
   readonly v0: number;
@@ -70,7 +71,7 @@ export interface RunRect {
 type RunRuntime = Pick<ToolContext["runtime"], "projectToHost" | "resolveOnHost" | "panelRun">;
 
 /** One face measured through the engine's own resolve, so the tool never duplicates the mesher's frame. */
-export interface HostFrame {
+interface HostFrame {
   readonly hostSurfaceKey: ConstructionSurfaceKey;
   /** World length of the face's base run. */
   readonly length: number;
@@ -82,7 +83,7 @@ export interface HostFrame {
   project(points: readonly ConstructionPosition[]): readonly ConstructionHostPoint[];
 }
 
-export interface RunPanelFrame extends ConstructionRunPanel {
+interface RunPanelFrame extends ConstructionRunPanel {
   readonly ref: string;
   readonly frame: HostFrame;
 }
@@ -317,7 +318,7 @@ export function isDoorRect(rect: { readonly v0: number }): boolean {
 }
 
 /** Every host a region's nodes are pinned to, keyed by surface ref, with the nodes each holds. */
-export function hostsOf(region: ConstructionRegionTopology): ReadonlyMap<string, { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly nodeIds: readonly ConstructionNodeId[] }> {
+function hostsOf(region: ConstructionRegionTopology): ReadonlyMap<string, { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly nodeIds: readonly ConstructionNodeId[] }> {
   const hosts = new Map<string, { hostSurfaceKey: ConstructionSurfaceKey; nodeIds: ConstructionNodeId[] }>();
   for (const node of region.nodes) {
     if (node.pin === undefined) continue;
@@ -330,7 +331,7 @@ export function hostsOf(region: ConstructionRegionTopology): ReadonlyMap<string,
 }
 
 /** Where a region's host-space cubics bulge past their end nodes, in their host's `(u, v)`. */
-export function curveExtremes(region: ConstructionRegionTopology): readonly { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly u: number; readonly v: number }[] {
+function curveExtremes(region: ConstructionRegionTopology): readonly { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly u: number; readonly v: number }[] {
   let pins: Map<string, { readonly u: number; readonly v: number }> | undefined;
   const out: { hostSurfaceKey: ConstructionSurfaceKey; u: number; v: number }[] = [];
   for (const loop of region.outerLoops) {
@@ -370,38 +371,31 @@ export function primaryHostOf(region: ConstructionRegionTopology): ConstructionS
   return best?.key;
 }
 
-/** The regions edited as one object with `region`: its group, or itself alone when it has none. */
-export function groupOf(ctx: ToolContext, region: ConstructionRegionTopology): readonly ConstructionRegionTopology[] {
-  if (region.group === undefined) return [region];
-  return ctx.runtime.getAllRegionTopologies().filter((candidate) => candidate.group === region.group);
+/** Where an opening's group id lives in its region's property bag, beside its shape. */
+const GROUP_PROP = "group";
+
+/** The id of the group `region` belongs to, read from its property bag. */
+export function groupIdOf(region: ConstructionRegionTopology): string | undefined {
+  const group = region.props?.[GROUP_PROP];
+  return typeof group === "string" ? group : undefined;
 }
 
-/** A stable identity for `region`'s group, ungrouped regions standing alone. */
-export function groupKeyOf(region: ConstructionRegionTopology): string {
-  return region.group ?? `@alone:${surfaceRefFromNodeSet(region.surfaceKey)}`;
+/** Every piece of the group `group`. */
+export function groupPieces(ctx: ToolContext, group: string): readonly ConstructionRegionTopology[] {
+  return ctx.runtime.getAllRegionTopologies().filter((candidate) => groupIdOf(candidate) === group);
 }
 
-/**
- * The run-space box `region` occupies: its pins where they sit on the run,
- * a projection for any node pinned elsewhere or not at all. `undefined`
- * when none of it is on the run.
- */
-export function regionRunSpan(run: RunFrame, region: ConstructionRegionTopology): RunRect | undefined {
+/** The run-space box `region`'s pins on the run occupy, cubic bulges included; `undefined` when none is on it. */
+function regionRunSpan(run: RunFrame, region: ConstructionRegionTopology): RunRect | undefined {
   const points: { s: number; v: number }[] = [];
-  const foreign: ConstructionPosition[] = [];
   for (const node of region.nodes) {
     const panel = node.pin === undefined ? undefined : run.panelOf(node.pin.hostSurfaceKey);
     if (panel !== undefined) points.push({ s: run.sOf(panel, node.pin!.u), v: node.pin!.v });
-    else foreign.push(node.position);
   }
   if (points.length === 0) return undefined;
   for (const { hostSurfaceKey, u, v } of curveExtremes(region)) {
     const panel = run.panelOf(hostSurfaceKey);
     if (panel !== undefined) points.push({ s: run.sOf(panel, u), v });
-  }
-  for (const position of foreign) {
-    const at = run.project(position);
-    if (at !== undefined) points.push(at);
   }
   const ss = points.map((point) => point.s);
   const vs = points.map((point) => point.v);
@@ -434,16 +428,16 @@ export function groupRunSpan(run: RunFrame, pieces: readonly ConstructionRegionT
 }
 
 /**
- * Whether `rect` would share area with any region already pinned to the
- * run, other than `excluded` (surface refs of the group being edited).
- * Touching is fine; overlapping is refused, never merged.
+ * Whether `rect` would share area with any region that cuts and is already
+ * pinned to the run, other than `excluded` (surface refs of the group being
+ * edited). Touching is fine; overlapping is refused, never merged.
  */
 export function overlapsOther(ctx: ToolContext, run: RunFrame, rect: RunRect, excluded: ReadonlySet<string> = new Set()): boolean {
   const EPS = 1e-9;
   const period = run.end - run.start;
   const shifts = run.closed ? [-period, 0, period] : [0];
   return ctx.runtime.getAllRegionTopologies().some((region) => {
-    if (excluded.has(surfaceRefFromNodeSet(region.surfaceKey))) return false;
+    if (!hasTrait(region.surfaceType, "cuts") || excluded.has(surfaceRefFromNodeSet(region.surfaceKey))) return false;
     if (!region.nodes.some((node) => node.pin !== undefined && run.panelOf(node.pin.hostSurfaceKey) !== undefined)) return false;
     const other = regionRunSpan(run, region);
     if (other === undefined) return false;
@@ -521,7 +515,7 @@ function buildGroupPatch(
 /**
  * One transaction: delete every region in `removals`, then add `pieces` as
  * new regions with their own nodes, each pinned to its face, all labelled
- * one group. Both is a move or resize; only `removals` a delete; only
+ * one group in their property bag beside the shape. Both is a move or resize; only `removals` a delete; only
  * `pieces` a creation.
  */
 export function commitOpeningGroup(
@@ -548,9 +542,7 @@ export function commitOpeningGroup(
       }
       ctx.runtime.pinNodes(pins, "local", causeId);
       if (curves.length > 0) ctx.runtime.pinEdgeCurves(curves, "local", causeId);
-      ctx.runtime.setRegionGroup(outcome.createdSurfaceKeys, idPrefix);
-      const props = propsForShape(shape);
-      if (props !== null) ctx.runtime.setRegionProps(outcome.createdSurfaceKeys, props);
+      ctx.runtime.setRegionProps(outcome.createdSurfaceKeys, { ...shapeProps(shape), [GROUP_PROP]: idPrefix });
       created = { group: idPrefix, surfaceKeys: outcome.createdSurfaceKeys };
       return { value: outcome, change: shapeChangeOfAddition(ctx.runtime, patch, outcome) };
     }));
@@ -560,7 +552,7 @@ export function commitOpeningGroup(
   return created === undefined ? { recorded } : { recorded, created };
 }
 
-export interface OpeningCommit {
+interface OpeningCommit {
   readonly recorded: boolean;
   readonly error?: string;
   /** The new group, when pieces were added. */

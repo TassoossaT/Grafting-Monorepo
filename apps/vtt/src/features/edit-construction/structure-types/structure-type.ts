@@ -10,7 +10,6 @@ import type {
 
 import type { AtomicEditOp, EditAxis, EditGesture, EditTarget } from "../orchestration/atomic-edit.ts";
 import type { CloudTopology } from "../topology/construction-cloud.ts";
-import type { ContourPort } from "../topology/contour-geometry.ts";
 import type { CreationInteraction } from "./creation-interaction.ts";
 import type { EffectKind, ReactionId } from "../effects/effect.ts";
 import type { PlanarArea } from "../topology/planar-area.ts";
@@ -134,8 +133,8 @@ export interface CascadeContext {
   readonly delta: { readonly x: number; readonly y: number; readonly z: number };
   readonly graphSnapshot?: ConstructionGraphSnapshot;
   /**
-   * Every region topology currently on the table, present only where the
-   * caller already resolved it for the session's motion solver. A
+   * Every region topology the plan can see: the whole table when the
+   * session is at hand, only the grabbed cloud's members otherwise. A
    * `groupCascade` reaches through this for matches outside the grabbed
    * cloud -- e.g. every wall currently level with the grabbed one, wherever
    * it stands -- which a cloud, scoped to one connected same-type run, can
@@ -286,8 +285,6 @@ export interface StructureView {
 export interface MotionContext {
   readonly graphSnapshot?: ConstructionGraphSnapshot;
   readonly port?: Pick<BezierPort, "curveBatch">;
-  /** Present alongside `port` -- what a rail projection (`panelRailOf`) needs, e.g. an opening's `deriveMotion` reprojecting its rim onto a corner-stretched host wall. */
-  readonly contourPort?: ContourPort;
 }
 
 /**

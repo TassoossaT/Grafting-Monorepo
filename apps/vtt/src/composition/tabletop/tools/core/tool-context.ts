@@ -22,6 +22,25 @@ export interface ToolGesture {
   readonly samples: readonly PointerSample[];
 }
 
+/** A finished gesture, as `onPointerUp` gets it. */
+export interface ReleasedGesture extends ToolGesture {
+  /** Whether the pointer travelled far enough to be a drag rather than a click -- decided once, by the dispatcher. */
+  readonly moved: boolean;
+}
+
+/** How far the pointer may wander, in screen pixels (or world units when a sample has no screen position), and still count as a click. */
+const CLICK_SLOP_PIXELS = 3;
+const CLICK_SLOP_WORLD = 0.05;
+
+/** Whether any of `samples` strayed from `start` past the click slop. */
+export function gestureMoved(start: PointerSample, samples: readonly PointerSample[]): boolean {
+  return samples.some((sample) =>
+    sample.screenX !== undefined && sample.screenY !== undefined && start.screenX !== undefined && start.screenY !== undefined
+      ? Math.hypot(sample.screenX - start.screenX, sample.screenY - start.screenY) > CLICK_SLOP_PIXELS
+      : Math.hypot(sample.point.x - start.point.x, sample.point.y - start.point.y, sample.point.z - start.point.z) > CLICK_SLOP_WORLD,
+  );
+}
+
 export interface ConstructionToolFeedback {
   readonly tone: "info" | "success" | "error";
   readonly message: string;
@@ -93,7 +112,7 @@ export interface ConstructionTool<Id extends ConstructionToolId> {
   /** Called while a gesture is active (left button held). Brushes that paint continuously (terrain) commit here, throttled by the dispatcher. */
   onPointerMove?(ctx: ToolContext, gesture: ToolGesture, params: ToolParamsFor<Id>): void;
   /** Gesture end. Tools that commit a single shape from a drag (wall, move-node's history entry) act here. */
-  onPointerUp?(ctx: ToolContext, gesture: ToolGesture, params: ToolParamsFor<Id>): void;
+  onPointerUp?(ctx: ToolContext, gesture: ReleasedGesture, params: ToolParamsFor<Id>): void;
   /** Discards an unfinished tool draft on Escape, cancellation or tool switch. */
   onCancel?(ctx: ToolContext): void;
   /** Delete/Backspace with the tool active -- a tool holding a selection (an opening picked for editing, say) removes it here. */

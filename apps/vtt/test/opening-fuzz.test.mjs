@@ -1,71 +1,43 @@
-// Permanent randomized suite for the opening (door/window) redesign -- see
-// apps/vtt/test/zz-opening-contract.md, section "Invariants the permanent
-// randomized test enforces". Drives the REAL runtime (AppTabletopRuntime +
-// real WASM adapter + a fake render port that only tracks pick targets and
-// render chunks) through seeded random opening/wall ops and checks, after
-// every op:
+// Permanent randomized suite for openings (note 0008). Drives the REAL
+// runtime (AppTabletopRuntime + real WASM adapter + a fake render port that
+// only tracks pick targets and render chunks) through seeded random
+// opening/wall ops, the opening tool fed exactly as the pointer dispatcher
+// feeds it, and checks after every op:
 //   1. screen (pick targets + render chunks) matches engine surfaces
 //   2. no topological holes on partition-type hosts (detected via hasTrait,
 //      never a type-name string)
 //   3. coverage: sampled points of the host's own (u,v) frame (via
-//      runtime.resolveOnHost -- true positions on curved hosts too, not a
-//      flat-projection guess) are drawn -- checked by a ray cast along the
-//      LOCAL surface normal against the host's mesh -- iff inside the host
-//      face and outside every opening pinned to it (no overdraw, no missing
-//      wall). Every host-mesh triangle centroid must also round-trip through
-//      projectToHost/resolveOnHost back onto the true surface within 0.05m
-//      (no flat-chord triangles floating off a curved host).
+//      runtime.resolveOnHost -- true positions on curved hosts too) are
+//      drawn -- checked by a ray cast along the LOCAL surface normal against
+//      the host's mesh -- iff inside the host face and outside every opening
+//      pinned to it (no overdraw, no missing wall). Every host-mesh triangle
+//      centroid must also round-trip through projectToHost/resolveOnHost
+//      back onto the true surface within 0.05m.
 //   4. pinned opening nodes lie on resolve(u,v) of their host, within 1e-4,
-//      u,v in [0,1] -- guarded: only runs once nodes expose a `pin` field
-//      AND the runtime exposes `resolveOnHost`; otherwise skipped with a note
+//      u,v in [0,1]
 //   5. openings stay attached to their host through wall edits (exercised by
 //      running the wall-vertex/edge/height ops in the same op mix)
 //   6. openings on the same host never overlap (checked in the host's own
 //      (u,v) frame via projectToHost, so it works on curved hosts too)
+//   7. every opening belongs to a group whose pieces, one per face, form one
+//      rectangle in run space
 //
-// Host shapes: straight (wallLineTool, the original regression seeds),
-// arc and Bezier (built with the real commitWallContour, the same function
-// the product's wall tools call -- see apps/vtt/test/zz-bez-repro.mjs, which
-// this suite's arc/Bezier setup mirrors). The straight and arc suites are
-// expected to be green; the Bezier ones are EXPECTED TO FAIL right now --
-// an engine fix for curved-host mesh-time cuts is in progress elsewhere.
-//
-// wall-line-tool.ts imports via the "@/..." alias, which plain Node has no
-// resolver for. Solved locally, no --import flag needed: register a resolve
-// hook synchronously, then dynamically import everything that reaches it.
+// Host shapes: straight (wallLineTool, the original regression seeds), arc
+// and Bezier (built with the real commitWallContour, the same function the
+// product's wall tools call), and multi-face runs (straight, L corner,
+// brush-drawn curve).
 import assert from "node:assert/strict";
 import test from "node:test";
-import { registerHooks } from "node:module";
-import { createAliasResolveHook } from "./support/alias-resolve-hook.mjs";
 
-const SRC_URL = new URL("../src/", import.meta.url);
-registerHooks(createAliasResolveHook(SRC_URL));
+import { curvyBrushStroke, curvyBrushWall, dispatchGesture, groupOf, harness, hitMesh, inPoly, isOpening, isPartition, line, ref } from "./support/opening-harness.mjs";
+import { DEFAULT_TOOL_PARAMS, panelHeightWidgetPickId } from "../src/features/edit-construction/index.ts";
+import { surfaceRefFromNodeSet } from "../src/entities/map/index.ts";
+import { openingTool } from "../src/composition/tabletop/tools/openings/opening-tool.ts";
+import { commitWallContour } from "../src/composition/tabletop/tools/walls/wall-shared.ts";
 
 process.env.WALLS = "1"; // exercise wall vertex/edge/height edits (invariant 5)
 
-const { readFileSync } = await import("node:fs");
-const { initSync } = await import(
-  "../../../libs/domains/procgen/construction-wasm/pkg/grafting_procgen_construction_wasm.js"
-);
-initSync({
-  module: readFileSync(
-    new URL("../../../libs/domains/procgen/construction-wasm/pkg/grafting_procgen_construction_wasm_bg.wasm", import.meta.url),
-  ),
-});
-
-const { AppTabletopRuntime } = await import("../src/composition/tabletop/tabletop-runtime.ts");
-const { createConstructionSessionAdapter } = await import("../src/adapters/construction/construction-session-wasm-adapter.ts");
-const {
-  createEditHistoryStack,
-  DEFAULT_TOOL_PARAMS,
-  panelHeightWidgetPickId,
-  hasTrait,
-  openingStructureType,
-} = await import("../src/features/edit-construction/index.ts");
-const { surfaceRefFromNodeSet } = await import("../src/entities/map/index.ts");
-const { openingTool } = await import("../src/composition/tabletop/tools/openings/opening-tool.ts");
 const { wallLineTool } = await import("../src/composition/tabletop/tools/walls/wall-line-tool.ts");
-const { commitWallContour, commitWallStroke } = await import("../src/composition/tabletop/tools/walls/wall-shared.ts");
 
 // ---------- generic helpers ----------
 
@@ -89,46 +61,10 @@ function meshArea(mesh) {
   return a;
 }
 
-const isOpening = (t) => t.surfaceType === openingStructureType.surfaceType;
-const isPartition = (t) => hasTrait(t.surfaceType, "partition");
 const bbox = (t) => {
   const xs = t.nodes.map((n) => n.position.x), ys = t.nodes.map((n) => n.position.y);
   return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
 };
-const posOf = (t, id) => t.nodes.find((n) => n.id === id).position;
-/** Point-in-polygon; used on (u,v) pairs (host-local) and, in `hostOf`, on world (x,y) bboxes. */
-const inPoly = (x, y, pts) => {
-  let c = false;
-  for (let a = 0, b = pts.length - 1; a < pts.length; b = a++) {
-    const [xi, yi] = pts[a], [xj, yj] = pts[b];
-    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c;
-  }
-  return c;
-};
-
-/** Möller-Trumbore ray/triangle-mesh hit test, world space (any host orientation). */
-function hitMesh(mesh, origin, dir, maxT) {
-  const P = mesh.positions, I = mesh.indices ?? Array.from({ length: P.length / 3 }, (_, i) => i);
-  for (let i = 0; i < I.length; i += 3) {
-    const v0 = [P[3 * I[i]], P[3 * I[i] + 1], P[3 * I[i] + 2]];
-    const v1 = [P[3 * I[i + 1]], P[3 * I[i + 1] + 1], P[3 * I[i + 1] + 2]];
-    const v2 = [P[3 * I[i + 2]], P[3 * I[i + 2] + 1], P[3 * I[i + 2] + 2]];
-    const e1 = v1.map((x, k) => x - v0[k]), e2 = v2.map((x, k) => x - v0[k]);
-    const p = [dir[1] * e2[2] - dir[2] * e2[1], dir[2] * e2[0] - dir[0] * e2[2], dir[0] * e2[1] - dir[1] * e2[0]];
-    const det = e1[0] * p[0] + e1[1] * p[1] + e1[2] * p[2];
-    if (Math.abs(det) < 1e-12) continue;
-    const tv = origin.map((x, k) => x - v0[k]);
-    const u = (tv[0] * p[0] + tv[1] * p[1] + tv[2] * p[2]) / det;
-    if (u < 0 || u > 1) continue;
-    const q = [tv[1] * e1[2] - tv[2] * e1[1], tv[2] * e1[0] - tv[0] * e1[2], tv[0] * e1[1] - tv[1] * e1[0]];
-    const v = (dir[0] * q[0] + dir[1] * q[1] + dir[2] * q[2]) / det;
-    if (v < 0 || u + v > 1) continue;
-    const t = (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]) / det;
-    if (Math.abs(t) <= maxT) return true;
-  }
-  return false;
-}
-
 /** Whether (u,v) sits right on a polygon's boundary -- a perturbed neighbour disagrees on inside/outside. */
 function isNearPolyBoundaryUV(u, v, poly, du, dv) {
   const base = inPoly(u, v, poly);
@@ -138,46 +74,15 @@ function isNearPolyBoundaryUV(u, v, poly, du, dv) {
   return false;
 }
 
-/**
- * An opening's outer loop in ITS HOST's own (u,v) frame: the engine's own
- * trace (runtime.hostOutline, which follows host-space curved edges) when
- * the opening is pinned wholly to that host, else its nodes projected.
- */
-function openingUVPolygon(opening, host, runtime) {
-  try {
-    const outline = runtime.hostOutline(opening.surfaceKey);
-    if (surfaceRefFromNodeSet(outline.hostSurfaceKey) === surfaceRefFromNodeSet(host.surfaceKey)) return outline.uv;
-  } catch {}
-  const points = opening.outerLoops[0].map((e) => posOf(opening, e.startNodeId));
-  try {
-    return runtime.projectToHost({ hostSurfaceKey: host.surfaceKey, points }).map((p) => [p.u, p.v]);
-  } catch {
-    return null;
-  }
+/** An opening's outline in its host's own (u,v) frame, as the engine traces it (curved edges included). */
+function openingUVPolygon(opening, runtime) {
+  return runtime.hostOutline(opening.surfaceKey).uv;
 }
 
-/**
- * The wall hosting `opening`. Prefers a real pin (target design); falls back
- * to a bbox-overlap heuristic for the current pre-pin model, so the coverage
- * and overlap invariants (3, 6) still run meaningfully today.
- */
-function hostOf(opening, wallTopos, ref) {
-  const pinnedNode = opening.nodes.find((n) => n.pin && n.pin.hostSurfaceKey);
-  if (pinnedNode) {
-    const hostRef = surfaceRefFromNodeSet(pinnedNode.pin.hostSurfaceKey);
-    const byPin = wallTopos.find((w) => ref(w) === hostRef);
-    if (byPin) return byPin;
-  }
-  const b = bbox(opening);
-  let best, bestScore = -Infinity;
-  for (const w of wallTopos) {
-    const wb = bbox(w);
-    const ox = Math.min(b.x1, wb.x1) - Math.max(b.x0, wb.x0);
-    const oy = Math.min(b.y1, wb.y1) - Math.max(b.y0, wb.y0);
-    const score = Math.min(ox, oy);
-    if (score > bestScore) { bestScore = score; best = w; }
-  }
-  return best;
+/** The wall `opening` is pinned to. */
+function hostOf(opening, wallTopos) {
+  const hostRef = surfaceRefFromNodeSet(opening.nodes.find((n) => n.pin).pin.hostSurfaceKey);
+  return wallTopos.find((w) => ref(w) === hostRef);
 }
 
 /**
@@ -289,21 +194,8 @@ function overlapProblems(cutterPolysUV) {
   return problems;
 }
 
-let pinNoteLogged = false;
-/** Invariant 4, guarded: only runs when nodes expose `pin` and the runtime exposes `resolveOnHost`. */
+/** Invariant 4: every pinned node sits where its host resolves its (u,v). */
 function pinProblems(topos, runtime) {
-  const anyPin = topos.some((t) => t.nodes.some((n) => Object.prototype.hasOwnProperty.call(n, "pin") && n.pin));
-  const hasResolve = typeof runtime.resolveOnHost === "function";
-  if (!anyPin || !hasResolve) {
-    if (!pinNoteLogged) {
-      pinNoteLogged = true;
-      console.log(
-        `  [invariant 4 skipped] ${anyPin ? "" : "no topology node exposes a `pin` field yet; "}` +
-          `${hasResolve ? "" : "runtime has no resolveOnHost yet"} -- pin-resolve invariant not checked until the tool rewrite lands`,
-      );
-    }
-    return [];
-  }
   const problems = [];
   for (const t of topos) {
     for (const n of t.nodes) {
@@ -334,11 +226,10 @@ function pinProblems(topos, runtime) {
 }
 
 /**
- * Addendum 2 (openings straddling a seam): a group's pieces, one per host
+ * Invariant 7 (openings straddling a seam): a group's pieces, one per host
  * panel, together must form one rectangle in RUN space (s = arc length along
  * the panel chain, v = fraction of local height -- continuous across a seam
- * since adjacent panels share the vertical edge). Guarded generically below;
- * see `guardedGroupProblems` for the exact runtime shape this assumes.
+ * since adjacent panels share the vertical edge).
  */
 function pieceRunSpan(piece, runtime) {
   const pins = piece.nodes.map((n) => n.pin).filter(Boolean);
@@ -366,9 +257,10 @@ function groupProblems(topos, runtime, ref) {
   const problems = [];
   const byGroup = new Map();
   for (const o of topos.filter(isOpening)) {
-    if (!("group" in o) || o.group == null) continue;
-    if (!byGroup.has(o.group)) byGroup.set(o.group, []);
-    byGroup.get(o.group).push(o);
+    const group = groupOf(o);
+    if (group == null) { problems.push(`OPENING ${ref(o).slice(0, 40)} belongs to no group`); continue; }
+    if (!byGroup.has(group)) byGroup.set(group, []);
+    byGroup.get(group).push(o);
   }
   for (const [groupId, pieces] of byGroup) {
     const spans = pieces.map((p) => ({ piece: p, span: pieceRunSpan(p, runtime) }));
@@ -394,31 +286,6 @@ function groupProblems(topos, runtime, ref) {
     }
   }
   return problems;
-}
-
-let groupNoteLogged = false;
-/**
- * Guarded like invariant 4: only runs once a topology region exposes a
- * non-null `group` field AND the runtime exposes a panel-run query. Assumed
- * shape, for the tool agent to match: `runtime.panelRun(hostSurfaceKey) ->
- * { panels: [{ surfaceKey, offset, length, reversed }], closed }`, per
- * Addendum 2 G2 in zz-opening-contract.md.
- */
-function guardedGroupProblems(topos, runtime, ref) {
-  const anyGroup = topos.some((t) => "group" in t && t.group != null);
-  const hasPanelRun = typeof runtime.panelRun === "function";
-  if (!anyGroup || !hasPanelRun) {
-    if (!groupNoteLogged) {
-      groupNoteLogged = true;
-      console.log(
-        `  [group/run invariants skipped] ${anyGroup ? "" : "no topology region exposes a non-null `group` field yet; "}` +
-          `${hasPanelRun ? "" : "runtime has no panelRun(hostSurfaceKey) yet"} -- assumed shape: ` +
-          `runtime.panelRun(surfaceKey) -> { panels: [{ surfaceKey, offset, length, reversed }], closed }`,
-      );
-    }
-    return [];
-  }
-  return groupProblems(topos, runtime, ref);
 }
 
 function checkInvariants({ topos, pickTargets, chunks, wallCount, runtime, ref }) {
@@ -448,7 +315,7 @@ function checkInvariants({ topos, pickTargets, chunks, wallCount, runtime, ref }
   const openings = topos.filter(isOpening);
   const byHost = new Map();
   for (const o of openings) {
-    const host = hostOf(o, wallTopos, ref);
+    const host = hostOf(o, wallTopos);
     if (!host) continue;
     const key = ref(host);
     if (!byHost.has(key)) byHost.set(key, []);
@@ -456,50 +323,20 @@ function checkInvariants({ topos, pickTargets, chunks, wallCount, runtime, ref }
   }
   for (const w of wallTopos) {
     const hosted = byHost.get(ref(w)) ?? [];
-    const cutterPolysUV = hosted.map((o) => openingUVPolygon(o, w, runtime)).filter((poly) => poly !== null);
+    const cutterPolysUV = hosted.map((o) => openingUVPolygon(o, runtime));
     problems.push(...coverageProblems(w, cutterPolysUV, pickTargets, ref, runtime));
     problems.push(...overlapProblems(cutterPolysUV));
     problems.push(...offSurfaceProblems(w, pickTargets, ref, runtime));
   }
 
-  // Invariant 4 (guarded).
   problems.push(...pinProblems(topos, runtime));
-
-  // Addendum 2 group/run invariants (guarded).
-  problems.push(...guardedGroupProblems(topos, runtime, ref));
+  problems.push(...groupProblems(topos, runtime, ref));
 
   return problems;
 }
 
-// ---------- harness ----------
-
-function createHarness() {
-  const pickTargets = new Map();
-  const chunks = new Map();
-  const renderPort = {
-    async start() {}, attachView: () => "v", detachView() {}, resizeView() {}, setFloorClipHeight() {}, pick: () => undefined,
-    getMetrics: () => ({}), async dispose() {},
-    applyConfirmed(c) {
-      if (c.type === "surface-pick-target-upserted") pickTargets.set(c.target.surfaceRef, c.target.mesh);
-      else if (c.type === "surface-pick-target-removed") pickTargets.delete(c.surfaceRef);
-      else if (c.type === "map-chunk-upserted") chunks.set(c.chunk.chunkId, c.chunk);
-      else if (c.type === "map-chunk-removed") chunks.delete(c.chunkId);
-    },
-  };
-  const runtime = new AppTabletopRuntime("t", renderPort, createConstructionSessionAdapter(), { async start() {}, async dispose() {} }, []);
-  let seq = 0;
-  const feedback = [];
-  const ctx = {
-    runtime, history: createEditHistoryStack(), tableId: "t", snapToGrid: false, structureEditParams: { mode: "shape" },
-    nextSequence: () => ++seq, reportSelection() {}, reportFeedback: (f) => f && feedback.push(f),
-  };
-  return { runtime, ctx, pickTargets, chunks, feedback };
-}
-
-const ref = (t) => surfaceRefFromNodeSet(t.surfaceKey);
-
 // Non-straight host shapes, built with the real `commitWallContour` (what the
-// product's own wall tools call), mirroring apps/vtt/test/zz-bez-repro.mjs.
+// product's own wall tools call).
 const HOST_HEIGHT = 3;
 const CURVED_HOST_SHAPES = {
   arc: { geometry: { kind: "arc", center: [4, -3], clockwise: false }, a: { x: 0, y: 0, z: 0 }, b: { x: 8, y: 0, z: 0 } },
@@ -537,14 +374,10 @@ async function runSeed(seed, opsCount = 40, hostKind = "straight") {
   const r = (a, b) => a + (b - a) * rnd();
   const pick = (xs) => xs[Math.floor(rnd() * xs.length)];
 
-  const { runtime, ctx, pickTargets, chunks, feedback } = createHarness();
-  await runtime.start();
-  openingTool.onCancel(ctx);
+  const { runtime, ctx, pickTargets, chunks, feedback, openings, walls } = await harness();
 
   const log = [];
   const all = () => runtime.getAllRegionTopologies();
-  const openings = () => all().filter(isOpening);
-  const walls = () => all().filter(isPartition);
   const pickAt = (p) => {
     if (rnd() < 0.15) return undefined;
     const hit = openings().find((o) => { const b = bbox(o); return p.x >= b.x0 && p.x <= b.x1 && p.y >= b.y0 && p.y <= b.y1; });
@@ -552,13 +385,8 @@ async function runSeed(seed, opsCount = 40, hostKind = "straight") {
   };
 
   function press(params, down, up, extra = {}) {
-    const d = { point: down, surfaceRef: pickAt(down), ...extra };
-    const g = { start: { point: down }, current: { point: up }, samples: [{ point: down }, { point: up }] };
-    openingTool.onPointerDown(ctx, d, params);
-    openingTool.onPointerMove(ctx, g, params);
-    openingTool.previewFor?.(g, params, ctx);
-    openingTool.onPointerUp(ctx, g, params);
-    openingTool.onClick(ctx, { point: up, surfaceRef: pickAt(up) }, params);
+    const start = { point: down, surfaceRef: pickAt(down), ...extra };
+    dispatchGesture(openingTool, ctx, params, [start, { point: up, surfaceRef: pickAt(up) }]);
   }
 
   const WALL = DEFAULT_TOOL_PARAMS["wall-line"];
@@ -583,7 +411,9 @@ async function runSeed(seed, opsCount = 40, hostKind = "straight") {
 
   const kinds = () => {
     const kind = rnd() < 0.3 ? "door" : "window";
-    return { ...DEFAULT_TOOL_PARAMS.opening, openingKind: kind, width: r(0.5, 2.5), height: kind === "door" ? r(1.5, 2.6) : r(0.5, 1.8), sill: kind === "door" ? 0 : r(0.3, 1.5), shape: randomShape() };
+    const width = r(0.5, 2.5), height = kind === "door" ? r(1.5, 2.6) : r(0.5, 1.8);
+    if (kind === "window") rnd(); // the retired sill draw, kept so every seed's sequence stays what it was
+    return { ...DEFAULT_TOOL_PARAMS.opening, openingKind: kind, width, height, shape: randomShape() };
   };
   const onWall = hostKind === "straight"
     ? () => ({ x: r(-0.3, length + 0.3), y: r(-0.1, top + 0.1), z: rnd() < 0.8 ? 0 : r(-0.05, 0.05) })
@@ -711,22 +541,14 @@ for (const seed of ARC_SEEDS) {
 
 const BEZIER_SEEDS = [801, 802, 803];
 for (const seed of BEZIER_SEEDS) {
-  // EXPECTED TO FAIL: curved-host mesh-time cut for Bezier hosts is being
-  // fixed by another agent right now (flat-chord triangles / missing cut
-  // coverage on the true curved surface).
   test(`opening fuzz: seed ${seed} (bezier host, ${OPS} ops, walls enabled) keeps all invariants`, async () => {
     assertNoFailure(await runSeed(seed, OPS, "bezier"));
   });
 }
 
-// ---------- multi-panel hosts (Addendum 2: openings straddling a seam) ----------
+// ---------- multi-panel hosts (openings straddling a seam) ----------
 
 const WALL_LINE = () => DEFAULT_TOOL_PARAMS["wall-line"];
-const line = (ctx, a, b) => {
-  wallLineTool.onPointerDown(ctx, { point: a }, WALL_LINE());
-  wallLineTool.onPointerUp(ctx, { start: { point: a }, current: { point: b }, samples: [] }, WALL_LINE());
-  wallLineTool.onClick?.(ctx, { point: b }, WALL_LINE());
-};
 
 /** A straight run of 3 co-linear panels, welded end to end by drawing 3 sequential wall-line segments (see wall-line-tool.ts: "a run drawn here welds ... onto another straight run"). */
 const RUN3_LENGTH = 12;
@@ -744,23 +566,8 @@ function buildLCorner(ctx) {
   return corners;
 }
 
-/**
- * A stroke long/curvy enough that the free brush's RDP+Bezier fit
- * (`fitPath`, see stroke-fitting.ts) finds real corners and commits several
- * distinct panels instead of one smooth curve -- alternating S-bends, not a
- * single arc. Verified empirically by the standalone test below.
- */
-function curvyBrushStroke(length = 24, amplitude = 3, periods = 2.5, samples = 90) {
-  const stroke = [];
-  for (let i = 0; i <= samples; i++) {
-    const t = i / samples;
-    stroke.push({ x: t * length, y: 0, z: amplitude * Math.sin(t * Math.PI * periods * 2) });
-  }
-  return stroke;
-}
-const BRUSH_WALL = { wallType: "wall-white", height: HOST_HEIGHT };
 function buildCurvedBrushRun(ctx) {
-  commitWallStroke(ctx, curvyBrushStroke(), 0.25, BRUSH_WALL, "wall-brush");
+  curvyBrushWall(ctx, HOST_HEIGHT);
 }
 
 /** Every pair of wall panels sharing >= 2 node ids -- the vertical seam edge between adjacent panels in a run, found off the topology itself (works for any host shape, no run-space math needed to locate it). */
@@ -793,9 +600,7 @@ function nearestWall(p, wallList) {
 }
 
 test("a long, curvy wall-brush stroke fits as several distinct Bezier panels (verifies the multi-face host builder used below)", async () => {
-  const { runtime, ctx } = createHarness();
-  await runtime.start();
-  openingTool.onCancel(ctx);
+  const { runtime, ctx } = await harness();
   buildCurvedBrushRun(ctx);
   const panels = runtime.getAllRegionTopologies().filter(isPartition);
   assert.ok(panels.length >= 2, `expected >= 2 faces from the curvy brush stroke, got ${panels.length}`);
@@ -811,14 +616,10 @@ async function runMultiPanelSeed(seed, opsCount, hostKind) {
   const r = (a, b) => a + (b - a) * rnd();
   const pick = (xs) => xs[Math.floor(rnd() * xs.length)];
 
-  const { runtime, ctx, pickTargets, chunks, feedback } = createHarness();
-  await runtime.start();
-  openingTool.onCancel(ctx);
+  const { runtime, ctx, pickTargets, chunks, feedback, openings, walls } = await harness();
 
   const log = [];
   const all = () => runtime.getAllRegionTopologies();
-  const openings = () => all().filter(isOpening);
-  const walls = () => all().filter(isPartition);
 
   if (hostKind === "run3") buildStraightRun3(ctx);
   else if (hostKind === "corner-l") buildLCorner(ctx);
@@ -864,18 +665,15 @@ async function runMultiPanelSeed(seed, opsCount, hostKind) {
     return w && ref(w);
   };
   function press(params, down, up, extra = {}) {
-    const d = { point: down, surfaceRef: pickAt(down), ...extra };
-    const g = { start: { point: down }, current: { point: up }, samples: [{ point: down }, { point: up }] };
-    openingTool.onPointerDown(ctx, d, params);
-    openingTool.onPointerMove(ctx, g, params);
-    openingTool.previewFor?.(g, params, ctx);
-    openingTool.onPointerUp(ctx, g, params);
-    openingTool.onClick(ctx, { point: up, surfaceRef: pickAt(up) }, params);
+    const start = { point: down, surfaceRef: pickAt(down), ...extra };
+    dispatchGesture(openingTool, ctx, params, [start, { point: up, surfaceRef: pickAt(up) }]);
   }
   const kinds = () => {
     const kind = rnd() < 0.3 ? "door" : "window";
     // Wide relative to a run3/corner-l leg segment (~4-6m) so a good fraction of ops genuinely straddle a seam.
-    return { ...DEFAULT_TOOL_PARAMS.opening, openingKind: kind, width: r(0.8, 3.0), height: kind === "door" ? r(1.5, 2.6) : r(0.5, 1.8), sill: kind === "door" ? 0 : r(0.3, 1.2), shape: randomShape() };
+    const width = r(0.8, 3.0), height = kind === "door" ? r(1.5, 2.6) : r(0.5, 1.8);
+    if (kind === "window") rnd(); // the retired sill draw, kept so every seed's sequence stays what it was
+    return { ...DEFAULT_TOOL_PARAMS.opening, openingKind: kind, width, height, shape: randomShape() };
   };
 
   for (let i = 0; i < opsCount; i++) {
@@ -971,9 +769,6 @@ for (const seed of CORNER_L_SEEDS) {
 
 const BRUSH_CURVE_SEEDS = [721, 722];
 for (const seed of BRUSH_CURVE_SEEDS) {
-  // Same caveat as the single-face BEZIER_SEEDS suite: curved-host mesh-time
-  // cut correctness is being fixed elsewhere, so this may fail on off-surface
-  // / missing-coverage grounds independent of the Addendum 2 group work.
   test(`opening fuzz: seed ${seed} (brush-drawn multi-face curved run, ${MULTI_PANEL_OPS} ops, seam-biased) keeps all invariants`, async () => {
     assertNoFailure(await runMultiPanelSeed(seed, MULTI_PANEL_OPS, "brush-curve"));
   });
@@ -982,9 +777,7 @@ for (const seed of BRUSH_CURVE_SEEDS) {
 // ---------- deterministic scenario ----------
 
 test("deterministic: lowering a wall's top corner through a window leaves no overdraw", async () => {
-  const { runtime, ctx, pickTargets, chunks } = createHarness();
-  await runtime.start();
-  openingTool.onCancel(ctx);
+  const { runtime, ctx, pickTargets, chunks } = await harness();
   const WALL = DEFAULT_TOOL_PARAMS["wall-line"];
 
   // One wall, 8 units long.
@@ -996,14 +789,9 @@ test("deterministic: lowering a wall's top corner through a window leaves no ove
   const wallCount = 1;
 
   // One window near the top, centered on the wall.
-  const windowParams = { ...DEFAULT_TOOL_PARAMS.opening, openingKind: "window", width: 1.4, height: 0.9, sill: wallTop - 1.0 };
+  const windowParams = { ...DEFAULT_TOOL_PARAMS.opening, openingKind: "window", width: 1.4, height: 0.9 };
   const a = { x: 3.3, y: wallTop - 1.0, z: 0 }, b = { x: 4.7, y: wallTop - 0.1, z: 0 };
-  const down = { point: a, surfaceRef: ref(wall) };
-  const gesture = { start: { point: a }, current: { point: b }, samples: [{ point: a }, { point: b }] };
-  openingTool.onPointerDown(ctx, down, windowParams);
-  openingTool.onPointerMove(ctx, gesture, windowParams);
-  openingTool.onPointerUp(ctx, gesture, windowParams);
-  openingTool.onClick(ctx, { point: b, surfaceRef: ref(wall) }, windowParams);
+  dispatchGesture(openingTool, ctx, windowParams, [{ point: a, surfaceRef: ref(wall) }, { point: b, surfaceRef: ref(wall) }]);
 
   assert.equal(runtime.getAllRegionTopologies().filter(isOpening).length, 1, "window was created");
 
@@ -1012,7 +800,7 @@ test("deterministic: lowering a wall's top corner through a window leaves no ove
   const topLeft = wall.nodes.filter((n) => outer.some((e) => e.startNodeId === n.id))
     .reduce((best, n) => (n.position.y > (best?.position.y ?? -Infinity) && n.position.x < 4 ? n : best), undefined);
   assert.ok(topLeft, "wall has a top-left corner node");
-  const dropTo = { x: topLeft.position.x, y: wallTop - 1.5, z: topLeft.position.z }; // below the window's sill
+  const dropTo = { x: topLeft.position.x, y: wallTop - 1.5, z: topLeft.position.z }; // below the window's bottom
   const steps = 4;
   const pts = Array.from({ length: steps + 1 }, (_, k) => ({
     x: topLeft.position.x, z: topLeft.position.z,
@@ -1029,12 +817,8 @@ test("deterministic: lowering a wall's top corner through a window leaves no ove
   assert.deepEqual(overdraw, [], `unexpected overdraw after lowering the host's top corner through the window:\n  ${problems.join("\n  ")}`);
 });
 
-// EXPECTED TO FAIL right now: curved-host mesh-time cut is being fixed by
-// another agent (flat-chord triangles / missing coverage on the true curve).
 test("deterministic: a window mid-Bezier-wall has no missing coverage and no off-surface triangles", async () => {
-  const { runtime, ctx, pickTargets, chunks } = createHarness();
-  await runtime.start();
-  openingTool.onCancel(ctx);
+  const { runtime, ctx, pickTargets, chunks } = await harness();
   const WALL = DEFAULT_TOOL_PARAMS["wall-line"];
   const spec = CURVED_HOST_SHAPES.bezier;
 
@@ -1045,13 +829,8 @@ test("deterministic: a window mid-Bezier-wall has no missing coverage and no off
 
   const rail = railFor("bezier", spec.geometry, spec.a, spec.b);
   const [mx, mz] = rail(0.5); // wall midpoint by parameter (not exact arc-length midpoint, close enough to land the click)
-  const windowParams = { ...DEFAULT_TOOL_PARAMS.opening, openingKind: "window", width: 1.2, height: 1.0, sill: 1 };
-  const down = { point: { x: mx, y: 1.3, z: mz }, surfaceRef: ref(wall) };
-  const gesture = { start: down, current: down, samples: [down] };
-  openingTool.onPointerDown(ctx, down, windowParams);
-  openingTool.onPointerMove(ctx, gesture, windowParams);
-  openingTool.onPointerUp(ctx, gesture, windowParams);
-  openingTool.onClick(ctx, down, windowParams);
+  const windowParams = { ...DEFAULT_TOOL_PARAMS.opening, openingKind: "window", width: 1.2, height: 1.0 };
+  dispatchGesture(openingTool, ctx, windowParams, [{ point: { x: mx, y: 1.3, z: mz }, surfaceRef: ref(wall) }]);
   assert.equal(runtime.getAllRegionTopologies().filter(isOpening).length, 1, "window was created mid-wall");
 
   const problems = checkInvariants({ topos: runtime.getAllRegionTopologies(), pickTargets, chunks, wallCount, runtime, ref });
@@ -1059,17 +838,10 @@ test("deterministic: a window mid-Bezier-wall has no missing coverage and no off
   assert.deepEqual(relevant, [], `bezier host has missing coverage or off-surface triangles:\n  ${problems.join("\n  ")}`);
 });
 
-// Addendum 2's headline scenario: a window created straddling the seam
-// between two faces of a brush-drawn curved wall should become one group of
-// 2 pieces with a continuous cut. The group/run assertions below are
-// guarded (see `guardedGroupProblems`) and log-and-skip until the tool lands
-// its group support; the screen/coverage/off-surface invariants run for
-// real either way, against whatever the current opening-tool actually does
-// with a click at the seam.
+// A window created straddling the seam between two faces of a brush-drawn
+// curved wall becomes one group of 2 pieces with a continuous cut.
 test("deterministic: a window straddling a brush-curve wall's seam becomes one group of 2 pieces with a continuous cut", async () => {
-  const { runtime, ctx, pickTargets, chunks } = createHarness();
-  await runtime.start();
-  openingTool.onCancel(ctx);
+  const { runtime, ctx, pickTargets, chunks } = await harness();
 
   buildCurvedBrushRun(ctx);
   const wallsBefore = runtime.getAllRegionTopologies().filter(isPartition);
@@ -1080,31 +852,20 @@ test("deterministic: a window straddling a brush-curve wall's seam becomes one g
   assert.ok(seams.length >= 1, "adjacent brush-curve faces should share a vertical seam edge");
   const seam = seams[0];
 
-  const windowParams = { ...DEFAULT_TOOL_PARAMS.opening, openingKind: "window", width: 1.4, height: 0.9, sill: (seam.yLo + seam.yHi) / 2 - 0.45 };
+  const windowParams = { ...DEFAULT_TOOL_PARAMS.opening, openingKind: "window", width: 1.4, height: 0.9 };
   const p = { x: seam.x, y: (seam.yLo + seam.yHi) / 2, z: seam.z };
   const host = nearestWall(p, wallsBefore);
-  const down = { point: p, surfaceRef: host && ref(host) };
-  const gesture = { start: { point: p }, current: { point: p }, samples: [{ point: p }] };
-  openingTool.onPointerDown(ctx, down, windowParams);
-  openingTool.onPointerMove(ctx, gesture, windowParams);
-  openingTool.onPointerUp(ctx, gesture, windowParams);
-  openingTool.onClick(ctx, { point: p, surfaceRef: down.surfaceRef }, windowParams);
+  dispatchGesture(openingTool, ctx, windowParams, [{ point: p, surfaceRef: host && ref(host) }]);
 
   const openingsAfter = runtime.getAllRegionTopologies().filter(isOpening);
   assert.ok(openingsAfter.length >= 1, "a window was created at the seam");
-
-  const anyGroup = runtime.getAllRegionTopologies().some((t) => "group" in t && t.group != null);
-  const hasPanelRun = typeof runtime.panelRun === "function";
-  if (!anyGroup || !hasPanelRun) {
-    console.log("  [seam-straddle scenario partially skipped] group/panelRun not exposed yet -- only screen/coverage/off-surface invariants checked for now");
-  } else {
-    const groupId = openingsAfter[0].group;
-    const pieces = openingsAfter.filter((o) => o.group === groupId);
-    assert.equal(pieces.length, 2, `a window straddling one seam should split into exactly 2 pieces, got ${pieces.length}`);
-    for (const piece of pieces) {
-      const hostRefs = new Set(piece.nodes.map((n) => n.pin?.hostSurfaceKey).filter(Boolean).map((k) => surfaceRefFromNodeSet(k)));
-      assert.equal(hostRefs.size, 1, `piece ${ref(piece)} should pin to exactly one host, pins to ${hostRefs.size}`);
-    }
+  const groupId = groupOf(openingsAfter[0]);
+  assert.ok(groupId, "the window carries a group");
+  const pieces = openingsAfter.filter((o) => groupOf(o) === groupId);
+  assert.equal(pieces.length, 2, `a window straddling one seam should split into exactly 2 pieces, got ${pieces.length}`);
+  for (const piece of pieces) {
+    const hostRefs = new Set(piece.nodes.map((n) => n.pin?.hostSurfaceKey).filter(Boolean).map((k) => surfaceRefFromNodeSet(k)));
+    assert.equal(hostRefs.size, 1, `piece ${ref(piece)} should pin to exactly one host, pins to ${hostRefs.size}`);
   }
 
   const problems = checkInvariants({ topos: runtime.getAllRegionTopologies(), pickTargets, chunks, wallCount, runtime, ref });

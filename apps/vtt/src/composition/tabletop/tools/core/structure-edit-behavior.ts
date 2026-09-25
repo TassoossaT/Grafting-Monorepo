@@ -24,12 +24,10 @@ import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "
 
 /**
  * Grab-and-edit an *existing* structure by any of its parts -- a vertex, a
- * boundary edge, the body, or a type-specific handle -- filtered to
- * whichever types `options.ownsType` accepts. This is `edit-region-tool.ts`'s
- * old machinery unchanged (`grabbedTarget`, `edgeOrBodyAt`, `restoreOps`,
- * `planEdit`/`applyRegionEdit`/history), pulled out of that one standalone
- * tool so `withStructureEditing` below can fold it into every creation
- * tool's own pointer lifecycle instead.
+ * boundary edge, the body, a curve handle, or a type-specific handle --
+ * filtered to whichever types `options.ownsType` accepts, so
+ * `withStructureEditing` below can fold it into every creation tool's own
+ * pointer lifecycle.
  *
  * The tool composing this still contains **no** per-type behaviour: the
  * `ownsType` filter is the only thing that varies between callers, and it
@@ -160,7 +158,7 @@ export function createStructureEditBehavior(options: StructureEditOptions): Stru
     active = undefined;
     curveGesture?.cancel();
     grabbedThisGesture = false;
-    curveGesture = beginCurveGesture(ctx, sample, editParams);
+    curveGesture = beginCurveGesture(ctx, sample, options.ownsType, editParams);
     if (curveGesture) {
       grabbedThisGesture = true;
       return true;

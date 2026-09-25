@@ -1,4 +1,4 @@
-import type { ConstructionRegionTopology, ConstructionMotionInfluence, ConstructionPosition } from "@/ports";
+import type { ConstructionMotionInfluence, ConstructionNodeSnapshot, ConstructionPosition, ConstructionRegionEdge, ConstructionRegionTopology } from "@/ports";
 
 import type { AtomicEditOp, EditTarget } from "../../orchestration/atomic-edit.ts";
 import { addPosition, HEIGHT_AXIS, HORIZONTAL_AXES } from "../../orchestration/atomic-edit.ts";
@@ -51,11 +51,26 @@ function isAtBaseline(topology: ConstructionRegionTopology, nodeId: string): boo
 }
 
 function edgeOf(topology: ConstructionRegionTopology, edgeId: string) {
-  for (const loop of [...topology.outerLoops, ...topology.holes]) {
-    const edge = loop.find((candidate) => candidate.edgeId === edgeId);
-    if (edge !== undefined) return edge;
-  }
-  return undefined;
+  return topology.outerLoops.flat().find((candidate) => candidate.edgeId === edgeId);
+}
+
+export interface PanelTopRun {
+  readonly edge: ConstructionRegionEdge;
+  readonly start: ConstructionNodeSnapshot;
+  readonly end: ConstructionNodeSnapshot;
+}
+
+/** Every run of `topology` with neither end at its baseline: the runs that carry a panel's height. */
+export function topRunsOf(topology: ConstructionRegionTopology): readonly PanelTopRun[] {
+  const base = baselineY(topology);
+  const nodes = new Map(topology.nodes.map((node) => [node.id, node]));
+  return topology.outerLoops.flat().flatMap((edge) => {
+    const start = nodes.get(edge.startNodeId);
+    const end = nodes.get(edge.endNodeId);
+    if (start === undefined || end === undefined) return [];
+    if (Math.abs(start.position.y - base) < 1e-3 || Math.abs(end.position.y - base) < 1e-3) return [];
+    return [{ edge, start, end }];
+  });
 }
 
 export function panelRoleFor(topology: ConstructionRegionTopology, target: EditTarget): EditRole {
@@ -65,13 +80,9 @@ export function panelRoleFor(topology: ConstructionRegionTopology, target: EditT
     return isAtBaseline(topology, target.nodeId) ? PANEL_ROLES.bottomCorner : PANEL_ROLES.topCorner;
   }
   if (target.kind === "edge-zone") {
-    const edge = edgeOf(topology, target.edgeId);
-    if (edge === undefined) return PANEL_ROLES.unknown;
-    const startAtBaseline = isAtBaseline(topology, edge.startNodeId);
-    const endAtBaseline = isAtBaseline(topology, edge.endNodeId);
-    // The widget only ever sits on a genuine top run -- a bottom run or a
-    // post never renders one, so a stray pick against either is unknown.
-    if (startAtBaseline || endAtBaseline) return PANEL_ROLES.unknown;
+    // The widget only ever sits on a top run, so a stray pick against a
+    // bottom run or a post is unknown.
+    if (!topRunsOf(topology).some((run) => run.edge.edgeId === target.edgeId)) return PANEL_ROLES.unknown;
     return target.zone === "group" ? PANEL_ROLES.topSegmentGroup : PANEL_ROLES.topSegmentSingle;
   }
   const edge = edgeOf(topology, target.edgeId);
@@ -85,22 +96,13 @@ export function panelRoleFor(topology: ConstructionRegionTopology, target: EditT
 
 /** Only actual upright boundary edges transmit movement upwards. Subdivided
  * posts work through successive edges in the shared Rust solver. */
-export function panelMotionInfluences(topology: ConstructionRegionTopology, transport = false): readonly ConstructionMotionInfluence[] {
+export function panelMotionInfluences(topology: ConstructionRegionTopology): readonly ConstructionMotionInfluence[] {
   const nodes = new Map(topology.nodes.map((node) => [node.id, node.position]));
-  const links: ConstructionMotionInfluence[] = [...topology.outerLoops, ...topology.holes].flatMap((loop) => loop.flatMap((edge) => {
+  return topology.outerLoops.flat().flatMap((edge) => {
     const a = nodes.get(edge.startNodeId), b = nodes.get(edge.endNodeId);
     if (!a || !b || Math.abs(a.x - b.x) > 1e-3 || Math.abs(a.z - b.z) > 1e-3 || Math.abs(a.y - b.y) < 1e-4) return [];
     return [{ from: a.y < b.y ? edge.startNodeId : edge.endNodeId, to: a.y < b.y ? edge.endNodeId : edge.startNodeId, axes: [true, true, true] as const }];
-  }));
-  // Openings retain their sill offset when their supporting rail is raised.
-  // A whole-object translation carries the aperture horizontally as well.
-  const base = baselineY(topology);
-  const supports = topology.nodes.filter((node) => Math.abs(node.position.y - base) < 1e-4);
-  const holeNodes = new Set(topology.holes.flatMap((loop) => loop.map((edge) => edge.startNodeId)));
-  for (const support of supports) for (const target of holeNodes) {
-    if (target !== support.id) links.push({ from: support.id, to: target, axes: [transport, true, transport] });
-  }
-  return links;
+  });
 }
 
 export function validatePanelMotion(topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>): string | undefined {
@@ -116,19 +118,12 @@ export function validatePanelMotion(topology: ConstructionRegionTopology, positi
       return "O movimento inclinaria uma parede vertical. Mova sua base ou ajuste apenas a elevacao.";
     }
   }
-  const outerIds = topology.outerLoops.flatMap((loop) => loop.map((edge) => edge.startNodeId));
-  const outerY = outerIds.map((id) => (positions.get(id) ?? original.get(id)!).y);
-  const bottom = Math.min(...outerY), top = Math.max(...outerY);
-  for (const edge of topology.holes.flat()) {
-    const y = (positions.get(edge.startNodeId) ?? original.get(edge.startNodeId)!).y;
-    if (y < bottom - 1e-4 || y > top + 1e-4) return "O movimento colocaria uma abertura fora da parede.";
-  }
   return undefined;
 }
 
 function pairedTopCorners(context: CascadeContext): readonly AtomicEditOp[] {
   const ids = context.target.kind === "vertex" ? [context.target.nodeId]
-    : context.target.kind === "edge" ? context.cloud.members.flatMap((member) => [...member.outerLoops, ...member.holes].flat().filter((edge) => edge.edgeId === (context.target as { edgeId: string }).edgeId).flatMap((edge) => [edge.startNodeId, edge.endNodeId])) : [];
+    : context.target.kind === "edge" ? context.cloud.members.flatMap((member) => member.outerLoops.flat().filter((edge) => edge.edgeId === (context.target as { edgeId: string }).edgeId).flatMap((edge) => [edge.startNodeId, edge.endNodeId])) : [];
   const nodes = new Map(cloudNodes(context.cloud).map((node) => [node.id, node.position]));
   const paired = new Set(context.cloud.members.flatMap((member) => panelMotionInfluences(member)).filter((link) => ids.includes(link.from)).map((link) => link.to));
   return [...paired].map((nodeId) => {
@@ -140,7 +135,7 @@ function pairedTopCorners(context: CascadeContext): readonly AtomicEditOp[] {
 /** An edge's own start and end nodes, whichever way the loop holding it walks it. */
 function canonicalEdge(cloud: CascadeContext["cloud"], edgeId: string): { readonly start: string; readonly end: string } | undefined {
   for (const member of cloud.members) {
-    for (const use of [...member.outerLoops, ...member.holes].flat()) {
+    for (const use of member.outerLoops.flat()) {
       if (use.edgeId === edgeId) return use.reversed ? { start: use.endNodeId, end: use.startNodeId } : { start: use.startNodeId, end: use.endNodeId };
     }
   }
@@ -161,7 +156,7 @@ function pairedRun(context: ReshapeContext): readonly AtomicEditOp[] {
   const end = across(grabbed.end);
   if (start === undefined || end === undefined) return [];
   for (const member of context.cloud.members) {
-    for (const use of [...member.outerLoops, ...member.holes].flat()) {
+    for (const use of member.outerLoops.flat()) {
       if (use.edgeId === context.edgeId) continue;
       const own = use.reversed ? { start: use.endNodeId, end: use.startNodeId } : { start: use.startNodeId, end: use.endNodeId };
       if (own.start === start && own.end === end) return [{ kind: "retype-edge", edgeId: use.edgeId, geometry: context.geometry }];
@@ -198,21 +193,14 @@ function sameHeightGroupCascade(context: CascadeContext): readonly AtomicEditOp[
   const ops: AtomicEditOp[] = [];
   for (const topology of context.allTopologies ?? []) {
     if (!hasTrait(topology.surfaceType, "partition")) continue;
-    const base = Math.min(...topology.nodes.map((node) => node.position.y));
-    for (const loop of [...topology.outerLoops, ...topology.holes]) {
-      for (const edge of loop) {
-        if (edge.edgeId === context.target.edgeId) continue;
-        const start = topology.nodes.find((node) => node.id === edge.startNodeId);
-        const end = topology.nodes.find((node) => node.id === edge.endNodeId);
-        if (start === undefined || end === undefined) continue;
-        if (Math.abs(start.position.y - base) < 1e-3 || Math.abs(end.position.y - base) < 1e-3) continue; // Only a top run carries a height to match.
-        if (Math.abs(start.position.y - end.position.y) > 1e-3) continue; // Only a level run has one.
-        if (Math.abs(start.position.y - height) > 1e-3) continue;
-        ops.push(
-          { kind: "move-vertex", nodeId: start.id, position: addPosition(start.position, context.delta) },
-          { kind: "move-vertex", nodeId: end.id, position: addPosition(end.position, context.delta) },
-        );
-      }
+    for (const { edge, start, end } of topRunsOf(topology)) {
+      if (edge.edgeId === context.target.edgeId) continue;
+      if (Math.abs(start.position.y - end.position.y) > 1e-3) continue; // Only a level run has one height.
+      if (Math.abs(start.position.y - height) > 1e-3) continue;
+      ops.push(
+        { kind: "move-vertex", nodeId: start.id, position: addPosition(start.position, context.delta) },
+        { kind: "move-vertex", nodeId: end.id, position: addPosition(end.position, context.delta) },
+      );
     }
   }
   return ops;
@@ -231,13 +219,7 @@ export function panelPolicyFor(role: EditRole): RolePolicy {
       // A whole bottom run drags horizontally; its own two corners each
       // carry their paired top corner through the same cascade the corner
       // role uses, so this needs no separate rule.
-      //
-      // `transport: true` for the same reason `body` needs it: dragging a
-      // whole edge is a rigid translation of that segment, same as dragging
-      // the whole wall, just scoped to one run -- an opening standing in
-      // that run has to ride along, not a corner drag (which stretches the
-      // panel instead of translating it, so it stays without this flag).
-      return { ...allowed(role, HORIZONTAL_AXES, "surface", pairedTopCorners), reshape: pairedRun, transport: true };
+      return { ...allowed(role, HORIZONTAL_AXES, "surface", pairedTopCorners), reshape: pairedRun };
     case PANEL_ROLES.topEdge:
       return { ...allowed(role, HEIGHT_AXIS, "surface"), reshape: pairedRun };
     case PANEL_ROLES.topSegmentSingle:
@@ -250,9 +232,8 @@ export function panelPolicyFor(role: EditRole): RolePolicy {
       return { ...allowed(role, HEIGHT_AXIS, "surface"), groupCascade: sameHeightGroupCascade };
     case PANEL_ROLES.post:
       // A vertical post moves as one rigid unit -- `moveEdge` already
-      // carries both of its endpoints. `transport: true` for the same
-      // reason `bottomEdge` needs it: a rigid translation, not a stretch.
-      return { ...allowed(role, HORIZONTAL_AXES, "surface"), transport: true };
+      // carries both of its endpoints.
+      return allowed(role, HORIZONTAL_AXES, "surface");
     case PANEL_ROLES.body:
       // Grabbing the body means the wall, not the panel under the pointer.
       // Moving one panel of a welded run drags the columns it shares with
@@ -260,14 +241,7 @@ export function panelPolicyFor(role: EditRole): RolePolicy {
       // -- the shape a wall can never legitimately take. Every member moves
       // by the same delta instead, and a lone panel is a cloud of one, so
       // this is not two behaviours.
-      //
-      // `transport: true` because this, like `bottomEdge` and `post`, is a
-      // rigid horizontal translation, only scoped to the whole cloud instead
-      // of one segment: without it, `panelMotionInfluences` only carries an
-      // opening's rim nodes vertically, and a horizontal drag of the wall
-      // leaves every door and window standing exactly where the wall used to
-      // be instead of riding along with it.
-      return { ...allowed(role, HORIZONTAL_AXES, "cloud"), transport: true };
+      return allowed(role, HORIZONTAL_AXES, "cloud");
     default:
       return denied(role, "this part of the panel has no editing role");
   }
@@ -310,8 +284,8 @@ export function panelStructureType(
  * recomputing its rim and replacing the whole face, the same "regenerate"
  * escalation terrain uses for its own reason. `composition/tabletop/tools/
  * openings/opening-tool.ts` is the one tool that gesture actually reaches
- * (it both creates and edits), the same way terrain has
- * `terrain-sculpt-tool.ts` instead of the generic `edit-region-tool.ts`.
+ * (it both creates and edits), the same way terrain has its own
+ * `terrain-sculpt-tool.ts`.
  */
 const OPENING_ROLE = "opening-body";
 

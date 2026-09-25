@@ -1,5 +1,6 @@
 import type { ConstructionPosition, ConstructionRegionTopology } from "@/ports";
 
+import { topRunsOf } from "../structure-types/panel/panel-structure.ts";
 import { hasTrait } from "../structure-types/registry.ts";
 
 /**
@@ -38,22 +39,12 @@ export function panelHeightWidgets(
   const seen = new Set<string>();
   for (const topology of topologies) {
     if (!hasTrait(topology.surfaceType, "partition")) continue;
-    const base = Math.min(...topology.nodes.map((node) => node.position.y));
-    const positionOf = (id: string) => topology.nodes.find((node) => node.id === id)?.position;
-    for (const loop of [...topology.outerLoops, ...topology.holes]) {
-      for (const edge of loop) {
-        if (seen.has(edge.edgeId)) continue;
-        seen.add(edge.edgeId);
-        const start = positionOf(edge.startNodeId);
-        const end = positionOf(edge.endNodeId);
-        if (start === undefined || end === undefined) continue;
-        // Only a genuine top run carries the widget -- a bottom run or a
-        // post has no height of its own to raise.
-        if (Math.abs(start.y - base) < 1e-3 || Math.abs(end.y - base) < 1e-3) continue;
-        const mid: ConstructionPosition = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2, z: (start.z + end.z) / 2 };
-        items.push({ id: panelHeightWidgetPickId(edge.edgeId, "group"), position: { ...mid, y: mid.y + ZONE_OFFSET } });
-        items.push({ id: panelHeightWidgetPickId(edge.edgeId, "single"), position: { ...mid, y: mid.y - ZONE_OFFSET } });
-      }
+    for (const { edge, start: { position: start }, end: { position: end } } of topRunsOf(topology)) {
+      if (seen.has(edge.edgeId)) continue;
+      seen.add(edge.edgeId);
+      const mid: ConstructionPosition = { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2, z: (start.z + end.z) / 2 };
+      items.push({ id: panelHeightWidgetPickId(edge.edgeId, "group"), position: { ...mid, y: mid.y + ZONE_OFFSET } });
+      items.push({ id: panelHeightWidgetPickId(edge.edgeId, "single"), position: { ...mid, y: mid.y - ZONE_OFFSET } });
     }
   }
   return items;

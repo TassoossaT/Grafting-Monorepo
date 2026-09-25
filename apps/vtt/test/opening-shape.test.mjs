@@ -4,25 +4,13 @@
 // move, resize, undo and redo.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { registerHooks } from "node:module";
-import { createAliasResolveHook } from "./support/alias-resolve-hook.mjs";
 
-registerHooks(createAliasResolveHook(new URL("../src/", import.meta.url)));
-
-const { readFileSync } = await import("node:fs");
-const { initSync } = await import("../../../libs/domains/procgen/construction-wasm/pkg/grafting_procgen_construction_wasm.js");
-initSync({ module: readFileSync(new URL("../../../libs/domains/procgen/construction-wasm/pkg/grafting_procgen_construction_wasm_bg.wasm", import.meta.url)) });
-
-const { AppTabletopRuntime } = await import("../src/composition/tabletop/tabletop-runtime.ts");
-const { createConstructionSessionAdapter } = await import("../src/adapters/construction/construction-session-wasm-adapter.ts");
-const {
-  createEditHistoryStack, DEFAULT_TOOL_PARAMS, hasTrait, openingStructureType, openingOutline, openingPath, pointAt, segmentExtremes, shapeFromProps, sideArc, OPENING_SHAPE_PROP,
-} = await import("../src/features/edit-construction/index.ts");
-const { surfaceRefFromNodeSet } = await import("../src/entities/map/index.ts");
-const { openingTool } = await import("../src/composition/tabletop/tools/openings/opening-tool.ts");
-const { groupRunSpan, runFrame, primaryHostOf } = await import("../src/composition/tabletop/tools/openings/opening-shared.ts");
-const { wallLineTool } = await import("../src/composition/tabletop/tools/walls/wall-line-tool.ts");
-const { commitWallContour, commitWallStroke } = await import("../src/composition/tabletop/tools/walls/wall-shared.ts");
+import { curvyBrushWall, harness, hitMesh, inPoly, line, openingRefAt, press, ref } from "./support/opening-harness.mjs";
+import { DEFAULT_TOOL_PARAMS, OPENING_SHAPE_PROP, openingPath, pointAt, segmentExtremes, shapeFromProps, sideArc } from "../src/features/edit-construction/index.ts";
+import { surfaceRefFromNodeSet } from "../src/entities/map/index.ts";
+import { openingTool } from "../src/composition/tabletop/tools/openings/opening-tool.ts";
+import { groupRunSpan, runFrame } from "../src/composition/tabletop/tools/openings/opening-shared.ts";
+import { commitWallContour } from "../src/composition/tabletop/tools/walls/wall-shared.ts";
 
 const shape = (radii = {}, ellipse = false) => ({ ellipse, radii: { top: 0, right: 0, bottom: 0, left: 0, ...radii } });
 const near = (a, b, eps = 1e-9) => Math.abs(a - b) <= eps;
@@ -50,40 +38,25 @@ function assertConvexInBox(loop, width, height, label) {
   assert.ok(near(Math.min(...xs), 0, 1e-9) && near(Math.max(...xs), width, 1e-9) && near(Math.min(...ys), 0, 1e-9) && near(Math.max(...ys), height, 1e-9), `${label}: spans its whole box`);
 }
 
-test("outline: a rectangle is exactly its four corners from bottom-left", () => {
-  assert.deepEqual(openingOutline(undefined, 2, 1), [[0, 0], [2, 0], [2, 1], [0, 1]]);
-  assert.deepEqual(openingOutline(shape(), 2, 1), [[0, 0], [2, 0], [2, 1], [0, 1]]);
+/** A path densely sampled into a polygon. */
+const sampled = (path) => path.flatMap((seg) => Array.from({ length: 32 }, (_, k) => pointAt(seg, k / 32)));
+
+test("path: a rectangle is its four straight sides from the bottom-left corner", () => {
+  for (const s of [undefined, shape()]) {
+    const path = openingPath(s, 2, 1);
+    assert.ok(path.every((seg) => seg.controls === undefined));
+    assert.deepEqual(path.map((seg) => seg.from), [[0, 0], [2, 0], [2, 1], [0, 1]]);
+  }
 });
 
-test("outline: top radius = width/2 is a semicircular arch whose apex is the box top; the bottom corners stay", () => {
-  const w = 1.2, h = 1.5;
-  const loop = openingOutline(shape({ top: w / 2 }), w, h);
-  assert.deepEqual(loop.slice(0, 2), [[0, 0], [w, 0]], "bottom corners unchanged");
-  assert.ok(loop.some(([x, y]) => near(x, w / 2, 1e-9) && near(y, h, 1e-9)), "apex at the middle of the top");
-  const center = [w / 2, h - w / 2];
-  const arc = loop.filter(([, y]) => y > h - w / 2 + 1e-9);
-  assert.ok(arc.length >= 8, "sampled densely enough to read round");
-  for (const [x, y] of arc) assert.ok(near(Math.hypot(x - center[0], y - center[1]), w / 2, 1e-9), `(${x}, ${y}) on the semicircle`);
-  assert.ok(loop.some(([x, y]) => near(x, w, 1e-9) && near(y, h - w / 2, 1e-9)) && loop.some(([x, y]) => near(x, 0, 1e-9) && near(y, h - w / 2, 1e-9)), "the arch springs from the sides");
-  assertConvexInBox(loop, w, h, "arch");
-});
-
-test("outline: the circle preset on a square is a circle through the four side midpoints", () => {
-  const loop = openingOutline(shape({}, true), 1, 1);
-  assert.ok(loop.length >= 32);
-  for (const [x, y] of loop) assert.ok(near(Math.hypot(x - 0.5, y - 0.5), 0.5, 1e-12));
-  for (const [x, y] of [[0.5, 0], [1, 0.5], [0.5, 1], [0, 0.5]]) assert.ok(loop.some((p) => near(p[0], x, 1e-12) && near(p[1], y, 1e-12)), `touches (${x}, ${y})`);
-  assert.deepEqual(loop[0], [0.5, 0], "starts at the bottom");
-});
-
-test("outline: clamping keeps every mix of radii a simple convex loop inside, and spanning, its box", () => {
+test("path: every mix of radii samples to a simple convex loop inside, and spanning, its box", () => {
   let seed = 7;
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   const pick = () => (rnd() < 0.3 ? 0 : rnd() * 3);
   for (let i = 0; i < 300; i++) {
     const w = 0.3 + rnd() * 3, h = 0.3 + rnd() * 3;
     const s = shape({ top: pick(), right: pick(), bottom: pick(), left: pick() }, rnd() < 0.1);
-    assertConvexInBox(openingOutline(s, w, h), w, h, `#${i} ${w.toFixed(2)}x${h.toFixed(2)} ${JSON.stringify(s)}`);
+    assertConvexInBox(sampled(openingPath(s, w, h)), w, h, `#${i} ${w.toFixed(2)}x${h.toFixed(2)} ${JSON.stringify(s)}`);
   }
   const tiny = sideArc(0.01, 2, 3);
   assert.ok(near(tiny.radius, 1) && near(tiny.rise, 1), "a radius under half the side reads as half: a semicircle");
@@ -116,7 +89,7 @@ function exactArea(s, w, h) {
   return (hits / (N * N)) * w * h;
 }
 
-test("path: every mix of radii is a closed chain of 2 to 8 segments, spanning its box, matching the outline's area", () => {
+test("path: every mix of radii is a closed chain of 2 to 8 segments, spanning its box, matching the true area", () => {
   let seed = 7;
   const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   const polyArea = (pts) => pts.reduce((a, p, i) => { const q = pts[(i + 1) % pts.length]; return a + p[0] * q[1] - q[0] * p[1]; }, 0) / 2;
@@ -131,7 +104,7 @@ test("path: every mix of radii is a closed chain of 2 to 8 segments, spanning it
     const ext = path.flatMap(segmentExtremes);
     const xs = ext.map((p) => p[0]), ys = ext.map((p) => p[1]);
     assert.ok(near(Math.min(...xs), 0, 1e-6) && near(Math.max(...xs), w, 1e-6) && near(Math.min(...ys), 0, 1e-6) && near(Math.max(...ys), h, 1e-6), `${label}: spans its box`);
-    const dense = path.flatMap((seg) => Array.from({ length: 32 }, (_, k) => pointAt(seg, k / 32)));
+    const dense = sampled(path);
     const exact = exactArea(s, w, h);
     assert.ok(Math.abs(polyArea(dense) - exact) / exact < 0.005, `${label}: area ${polyArea(dense)} vs ${exact}`);
   }
@@ -145,96 +118,8 @@ test("shape props: a missing or malformed bag reads as a rectangle", () => {
 
 // ---------- real engine ----------
 
-const ref = (t) => surfaceRefFromNodeSet(t.surfaceKey);
-const isOpening = (t) => t.surfaceType === openingStructureType.surfaceType;
-const isPartition = (t) => hasTrait(t.surfaceType, "partition");
-const WINDOW = { ...DEFAULT_TOOL_PARAMS.opening, openingKind: "window", width: 1.2, height: 1.5, sill: 1 };
+const WINDOW = { ...DEFAULT_TOOL_PARAMS.opening, openingKind: "window", width: 1.2, height: 1.5 };
 const ARCH = shape({ top: 0.6 });
-
-async function harness() {
-  const pickTargets = new Map();
-  const renderPort = {
-    async start() {}, attachView: () => "v", detachView() {}, resizeView() {}, setFloorClipHeight() {}, pick: () => undefined,
-    getMetrics: () => ({}), async dispose() {},
-    applyConfirmed(c) {
-      if (c.type === "surface-pick-target-upserted") pickTargets.set(c.target.surfaceRef, c.target.mesh);
-      else if (c.type === "surface-pick-target-removed") pickTargets.delete(c.surfaceRef);
-    },
-  };
-  const runtime = new AppTabletopRuntime("t", renderPort, createConstructionSessionAdapter(), { async start() {}, async dispose() {} }, []);
-  await runtime.start();
-  let seq = 0;
-  const feedback = [];
-  const paramUpdates = [];
-  const ctx = {
-    runtime, history: createEditHistoryStack(), tableId: "t", snapToGrid: false, structureEditParams: { mode: "shape" },
-    nextSequence: () => ++seq, reportSelection() {}, reportFeedback: (f) => f && feedback.push(f),
-    updateToolParams: (toolId, update) => paramUpdates.push({ toolId, update }),
-  };
-  openingTool.onCancel(ctx);
-  const all = () => runtime.getAllRegionTopologies();
-  return { runtime, ctx, pickTargets, feedback, paramUpdates, openings: () => all().filter(isOpening), walls: () => all().filter(isPartition) };
-}
-
-function line(ctx, a, b) {
-  const params = DEFAULT_TOOL_PARAMS["wall-line"];
-  wallLineTool.onPointerDown(ctx, { point: a }, params);
-  wallLineTool.onPointerUp(ctx, { start: { point: a }, current: { point: b }, samples: [] }, params);
-  wallLineTool.onClick?.(ctx, { point: b }, params);
-}
-
-function curvyBrushWall(ctx) {
-  const stroke = Array.from({ length: 91 }, (_, i) => ({ x: (i / 90) * 24, y: 0, z: 3 * Math.sin((i / 90) * Math.PI * 5) }));
-  commitWallStroke(ctx, stroke, 0.25, { wallType: "wall-white", height: 3 }, "wall-brush");
-}
-
-function press(h, params, down, up = down, surfaceRef = undefined) {
-  const sample = { point: down, surfaceRef };
-  const gesture = { start: sample, current: { point: up }, samples: [sample, { point: up }] };
-  openingTool.onPointerDown(h.ctx, sample, params);
-  openingTool.onPointerMove(h.ctx, gesture, params);
-  openingTool.onPointerUp(h.ctx, gesture, params);
-  openingTool.onClick(h.ctx, { point: up, surfaceRef }, params);
-}
-
-const openingRefAt = (h, point) => {
-  const hit = h.openings().find((o) => {
-    const xs = o.nodes.map((n) => n.position.x), ys = o.nodes.map((n) => n.position.y);
-    return point.x >= Math.min(...xs) && point.x <= Math.max(...xs) && point.y >= Math.min(...ys) && point.y <= Math.max(...ys);
-  });
-  return hit && ref(hit);
-};
-
-const inPoly = (x, y, pts) => {
-  let c = false;
-  for (let a = 0, b = pts.length - 1; a < pts.length; b = a++) {
-    const [xi, yi] = pts[a], [xj, yj] = pts[b];
-    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) c = !c;
-  }
-  return c;
-};
-
-function hitMesh(mesh, origin, dir, maxT) {
-  const P = mesh.positions, I = mesh.indices ?? Array.from({ length: P.length / 3 }, (_, i) => i);
-  for (let i = 0; i < I.length; i += 3) {
-    const v0 = [P[3 * I[i]], P[3 * I[i] + 1], P[3 * I[i] + 2]];
-    const v1 = [P[3 * I[i + 1]], P[3 * I[i + 1] + 1], P[3 * I[i + 1] + 2]];
-    const v2 = [P[3 * I[i + 2]], P[3 * I[i + 2] + 1], P[3 * I[i + 2] + 2]];
-    const e1 = v1.map((x, k) => x - v0[k]), e2 = v2.map((x, k) => x - v0[k]);
-    const p = [dir[1] * e2[2] - dir[2] * e2[1], dir[2] * e2[0] - dir[0] * e2[2], dir[0] * e2[1] - dir[1] * e2[0]];
-    const det = e1[0] * p[0] + e1[1] * p[1] + e1[2] * p[2];
-    if (Math.abs(det) < 1e-12) continue;
-    const tv = origin.map((x, k) => x - v0[k]);
-    const u = (tv[0] * p[0] + tv[1] * p[1] + tv[2] * p[2]) / det;
-    if (u < 0 || u > 1) continue;
-    const q = [tv[1] * e1[2] - tv[2] * e1[1], tv[2] * e1[0] - tv[0] * e1[2], tv[0] * e1[1] - tv[1] * e1[0]];
-    const v = (dir[0] * q[0] + dir[1] * q[1] + dir[2] * q[2]) / det;
-    if (v < 0 || u + v > 1) continue;
-    const t = (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]) / det;
-    if (Math.abs(t) <= maxT) return true;
-  }
-  return false;
-}
 
 /** Each opening piece's outline in its host's own (u, v), as the engine traces it -- curved edges included. */
 function cuttersOn(h, wall) {
@@ -289,7 +174,7 @@ test("a window with a rounded top on a straight wall cuts the wall by its arch, 
   const h = await harness();
   line(h.ctx, { x: 0, y: 0, z: 0 }, { x: 8, y: 0, z: 0 });
   const [wall] = h.walls();
-  press(h, { ...WINDOW, shape: ARCH }, { x: 4, y: 0.9, z: 0 }, undefined, ref(wall));
+  press(h, { ...WINDOW, shape: ARCH }, { x: 4, y: 0.9, z: 0 }, undefined, { surfaceRef: ref(wall) });
   const [opening, ...rest] = h.openings();
   assert.equal(rest.length, 0);
   // A semicircle is too much turn for one cubic within 2 mm, so it is two quarter arcs meeting at the apex.
@@ -315,7 +200,7 @@ test("a rounded-top window on a curved brush wall cuts every face it covers by i
   assert.ok(walls.length >= 2);
   const host = walls[0];
   const [mid] = h.runtime.resolveOnHost({ hostSurfaceKey: host.surfaceKey, uv: [[0.5, 0.3]] });
-  press(h, { ...WINDOW, width: 1.4, height: 1.6, shape: shape({ top: 0.7, bottom: 2 }) }, mid, undefined, ref(host));
+  press(h, { ...WINDOW, width: 1.4, height: 1.6, shape: shape({ top: 0.7, bottom: 2 }) }, mid, undefined, { surfaceRef: ref(host) });
   const openings = h.openings();
   assert.ok(openings.length >= 1, `created: ${h.feedback.map((f) => f.message).join(" / ")}`);
   assert.ok(openings.every((o) => shapeOf(o).radii.top === 0.7));
@@ -329,7 +214,7 @@ test("a window straddling a seam is split along the seam and still cut by its ar
   line(h.ctx, { x: 0, y: 0, z: 0 }, { x: 4, y: 0, z: 0 });
   line(h.ctx, { x: 4, y: 0, z: 0 }, { x: 8, y: 0, z: 0 });
   const [a] = h.walls();
-  press(h, { ...WINDOW, width: 1.6, shape: shape({}, true) }, { x: 4.3, y: 0.8, z: 0 }, undefined, ref(a));
+  press(h, { ...WINDOW, width: 1.6, shape: shape({}, true) }, { x: 4.3, y: 0.8, z: 0 }, undefined, { surfaceRef: ref(a) });
   const pieces = h.openings();
   assert.equal(pieces.length, 2, "one piece per face");
   assert.ok(pieces.every((p) => shapeOf(p).ellipse), "both pieces carry the shape");
@@ -342,11 +227,11 @@ test("moving a shaped window keeps its shape, and undo/redo bring the shape back
   const h = await harness();
   line(h.ctx, { x: 0, y: 0, z: 0 }, { x: 8, y: 0, z: 0 });
   const [wall] = h.walls();
-  press(h, { ...WINDOW, shape: ARCH }, { x: 3, y: 0.9, z: 0 }, undefined, ref(wall));
+  press(h, { ...WINDOW, shape: ARCH }, { x: 3, y: 0.9, z: 0 }, undefined, { surfaceRef: ref(wall) });
   const [placed] = h.openings();
 
   const grab = { x: 3, y: 1.5, z: 0 };
-  press(h, WINDOW, grab, { x: 5, y: 1.5, z: 0 }, openingRefAt(h, grab));
+  press(h, WINDOW, grab, { x: 5, y: 1.5, z: 0 });
   const [moved] = h.openings();
   assert.notEqual(ref(moved), ref(placed), "replaced by a new group");
   assert.deepEqual(shapeOf(moved), ARCH, "the move keeps the arch");
@@ -368,11 +253,11 @@ test("resizing a shaped window keeps its radii in meters, re-fitted to the new b
   const h = await harness();
   line(h.ctx, { x: 0, y: 0, z: 0 }, { x: 8, y: 0, z: 0 });
   const [wall] = h.walls();
-  press(h, { ...WINDOW, shape: ARCH }, { x: 3, y: 0.9, z: 0 }, undefined, ref(wall));
+  press(h, { ...WINDOW, shape: ARCH }, { x: 3, y: 0.9, z: 0 }, undefined, { surfaceRef: ref(wall) });
   const run = runFrame(h.runtime, wall.surfaceKey);
   const before = groupRunSpan(run, h.openings());
   const edge = { x: before.s1, y: 1.2, z: 0 };
-  press(h, WINDOW, edge, { x: before.s1 + 0.8, y: 1.2, z: 0 }, openingRefAt(h, { x: before.s1 - 0.01, y: 1.2, z: 0 }));
+  press(h, WINDOW, edge, { x: before.s1 + 0.8, y: 1.2, z: 0 }, { surfaceRef: openingRefAt(h.openings(), { x: before.s1 - 0.01, y: 1.2, z: 0 }) });
   const resized = h.openings();
   const after = groupRunSpan(run, resized);
   assert.ok(near(after.s1 - after.s0, 2, 1e-6), `wider: ${after.s1 - after.s0}`);
@@ -388,8 +273,8 @@ test("a round door stands on the floor", async () => {
   const h = await harness();
   line(h.ctx, { x: 0, y: 0, z: 0 }, { x: 8, y: 0, z: 0 });
   const [wall] = h.walls();
-  const DOOR = { ...DEFAULT_TOOL_PARAMS.opening, openingKind: "door", width: 1.2, height: 2.2, sill: 0, shape: shape({}, true) };
-  press(h, DOOR, { x: 4, y: 1.4, z: 0 }, undefined, ref(wall));
+  const DOOR = { ...DEFAULT_TOOL_PARAMS.opening, openingKind: "door", width: 1.2, height: 2.2, shape: shape({}, true) };
+  press(h, DOOR, { x: 4, y: 1.4, z: 0 }, undefined, { surfaceRef: ref(wall) });
   const [door] = h.openings();
   const run = runFrame(h.runtime, wall.surfaceKey);
   const span = groupRunSpan(run, [door]);
@@ -398,7 +283,7 @@ test("a round door stands on the floor", async () => {
   assert.ok(shapeOf(door).ellipse);
 
   const grab = { x: 4, y: 1.1, z: 0 };
-  press(h, DOOR, grab, { x: 5.5, y: 1.6, z: 0 }, openingRefAt(h, grab));
+  press(h, DOOR, grab, { x: 5.5, y: 1.6, z: 0 });
   const [moved] = h.openings();
   assert.ok(near(groupRunSpan(run, [moved]).v0, 0, 1e-9), "still on the floor after a move");
   assert.ok(shapeOf(moved).ellipse);
@@ -410,14 +295,15 @@ test("with an opening selected, the panel shows its shape and a shape change res
   line(h.ctx, { x: 0, y: 0, z: 0 }, { x: 8, y: 0, z: 0 });
   const [wall] = h.walls();
   const NEXT = shape({ left: 1 });
-  press(h, { ...WINDOW, shape: ARCH }, { x: 3, y: 0.9, z: 0 }, undefined, ref(wall));
+  press(h, { ...WINDOW, shape: ARCH }, { x: 3, y: 0.9, z: 0 }, undefined, { surfaceRef: ref(wall) });
   const panel = { ...WINDOW, shape: NEXT };
 
   const grab = { x: 3, y: 1.5, z: 0 };
-  press(h, panel, grab, grab, openingRefAt(h, grab));
+  press(h, panel, grab, grab);
   assert.equal(h.paramUpdates.length, 1, "selecting shows the opening's shape in the panel");
   const shown = h.paramUpdates[0].update(panel);
   assert.deepEqual(shown.shape, ARCH);
+  assert.ok(near(shown.width, 1.2, 1e-9) && near(shown.height, 1.5, 1e-9), "and its size");
 
   const circle = shape({}, true);
   openingTool.onParamsChange(h.ctx, { ...shown, shape: circle }, shown);
@@ -429,7 +315,7 @@ test("with an opening selected, the panel shows its shape and a shape change res
   assert.deepEqual(cutProblems(h, wall), []);
 
   openingTool.onParamsChange(h.ctx, { ...shown, shape: shape() }, { ...shown, shape: circle });
-  assert.equal(h.openings()[0].props, undefined, "still selected: back to a rectangle, which stores nothing");
+  assert.equal(h.openings()[0].props?.[OPENING_SHAPE_PROP], undefined, "still selected: back to a rectangle, which stores no shape");
 
   const entry = h.ctx.history.undo();
   h.runtime.undoTransaction(entry.transactionId, "local");
@@ -458,7 +344,7 @@ test("a window on a Bezier wall is exactly 4 pinned nodes, and its cut follows t
   commitWallContour(h.ctx, [{ start: { x: 0, y: 0, z: 0 }, end: { x: 8, y: 0, z: 0 }, geometry: { kind: "bezier", handle1: [1, 4], handle2: [6, -2] } }], { ...DEFAULT_TOOL_PARAMS["wall-line"], height: 3 }, "test");
   const [wall] = h.walls();
   const [point] = h.runtime.resolveOnHost({ hostSurfaceKey: wall.surfaceKey, uv: [[0.5, 0.4]] });
-  press(h, { ...WINDOW, width: 2 }, point, undefined, ref(wall));
+  press(h, { ...WINDOW, width: 2 }, point, undefined, { surfaceRef: ref(wall) });
   const pieces = h.openings();
   assert.equal(pieces.length, 1);
   assert.equal(pieces[0].nodes.length, 4, "four corners, no points added along the curved sides");
@@ -475,7 +361,7 @@ test("a semicircular-top window: its arch is host-space cubics, cut area within 
   const h = await harness();
   line(h.ctx, { x: 0, y: 0, z: 0 }, { x: 8, y: 0, z: 0 });
   const [wall] = h.walls();
-  press(h, { ...WINDOW, shape: ARCH }, { x: 4, y: 0.9, z: 0 }, undefined, ref(wall));
+  press(h, { ...WINDOW, shape: ARCH }, { x: 4, y: 0.9, z: 0 }, undefined, { surfaceRef: ref(wall) });
   const [opening] = h.openings();
   assert.equal(opening.nodes.length, 5);
   assert.equal(curvedEdges(opening).length, 2);
@@ -488,7 +374,7 @@ test("a circle is 4 nodes and 4 curved edges, cut area within 1%", async () => {
   const h = await harness();
   line(h.ctx, { x: 0, y: 0, z: 0 }, { x: 8, y: 0, z: 0 });
   const [wall] = h.walls();
-  press(h, { ...WINDOW, height: 1.2, shape: shape({}, true) }, { x: 4, y: 0.9, z: 0 }, undefined, ref(wall));
+  press(h, { ...WINDOW, height: 1.2, shape: shape({}, true) }, { x: 4, y: 0.9, z: 0 }, undefined, { surfaceRef: ref(wall) });
   const [opening] = h.openings();
   assert.equal(opening.nodes.length, 4, "its four extremes");
   assert.equal(curvedEdges(opening).length, 4, "one cubic per quarter");
@@ -506,7 +392,7 @@ test("a circle straddling a seam splits its cubics at the seam, with one continu
   line(h.ctx, { x: 0, y: 0, z: 0 }, { x: 4, y: 0, z: 0 });
   line(h.ctx, { x: 4, y: 0, z: 0 }, { x: 8, y: 0, z: 0 });
   const [a] = h.walls();
-  press(h, { ...WINDOW, width: 1.5, height: 1.5, shape: shape({}, true) }, { x: 4.25, y: 0.8, z: 0 }, undefined, ref(a));
+  press(h, { ...WINDOW, width: 1.5, height: 1.5, shape: shape({}, true) }, { x: 4.25, y: 0.8, z: 0 }, undefined, { surfaceRef: ref(a) });
   const pieces = h.openings();
   assert.equal(pieces.length, 2);
   assert.ok(pieces.every((p) => p.nodes.length <= 5 && curvedEdges(p).length >= 2), "each piece: arc ends and seam crossings only");
@@ -527,13 +413,13 @@ test("move, resize and undo keep a circle's shape and never add nodes", async ()
   line(h.ctx, { x: 0, y: 0, z: 0 }, { x: 8, y: 0, z: 0 });
   const [wall] = h.walls();
   const CIRCLE = { ...WINDOW, height: 1.2, shape: shape({}, true) };
-  press(h, CIRCLE, { x: 3, y: 0.9, z: 0 }, undefined, ref(wall));
+  press(h, CIRCLE, { x: 3, y: 0.9, z: 0 }, undefined, { surfaceRef: ref(wall) });
   const counts = (o) => [o.nodes.length, curvedEdges(o).length];
   const [placed] = h.openings();
   assert.deepEqual(counts(placed), [4, 4]);
 
   const grab = { x: 3, y: 1.5, z: 0 };
-  press(h, CIRCLE, grab, { x: 5, y: 1.5, z: 0 }, openingRefAt(h, grab));
+  press(h, CIRCLE, grab, { x: 5, y: 1.5, z: 0 });
   const [moved] = h.openings();
   assert.notEqual(ref(moved), ref(placed));
   assert.deepEqual(counts(moved), [4, 4], "moved");
@@ -541,7 +427,7 @@ test("move, resize and undo keep a circle's shape and never add nodes", async ()
   const run = runFrame(h.runtime, wall.surfaceKey);
   const before = groupRunSpan(run, [moved]);
   const mid = (before.v0 + before.v1) / 2 * 3;
-  press(h, CIRCLE, { x: before.s1, y: mid, z: 0 }, { x: before.s1 + 0.6, y: mid, z: 0 }, openingRefAt(h, { x: before.s1 - 0.01, y: mid, z: 0 }));
+  press(h, CIRCLE, { x: before.s1, y: mid, z: 0 }, { x: before.s1 + 0.6, y: mid, z: 0 }, { surfaceRef: openingRefAt(h.openings(), { x: before.s1 - 0.01, y: mid, z: 0 }) });
   const [resized] = h.openings();
   const after = groupRunSpan(run, [resized]);
   assert.ok(near(after.s1 - after.s0, 1.8, 1e-6), `wider: ${after.s1 - after.s0}`);

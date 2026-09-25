@@ -282,9 +282,12 @@ function createFakeConstructionSession() {
       }
       return { surfaceKeys: all.filter((topology) => connected.has(topology.surfaceKey.join(":"))).map((topology) => topology.surfaceKey) };
     },
-    getSurfaceMesh(surfaceKey) {
-      const region = regions.get(surfaceKey.join(":"));
-      return region === undefined ? [] : [{ surfaceKey, surfaceType: region.surfaceType, physical: region.physical, mesh: emptyMesh() }];
+    getSurfaceMeshesReport(surfaceKeys) {
+      const meshes = surfaceKeys.flatMap((surfaceKey) => {
+        const region = regions.get(surfaceKey.join(":"));
+        return region === undefined ? [] : [{ surfaceKey, surfaceType: region.surfaceType, physical: region.physical, mesh: emptyMesh() }];
+      });
+      return { meshes, failed: [] };
     },
     getAllSurfaceMeshes() {
       return [...regions.values()].map((region) => ({
@@ -299,6 +302,12 @@ function createFakeConstructionSession() {
     },
     getGraphSnapshot() {
       return { nodes: [...nodes].map(([id, position]) => ({ id, position })), edges: [...edges.values()] };
+    },
+    getCurvedEdges() {
+      return [];
+    },
+    getRegionTopologiesInBounds() {
+      return this.getAllRegionTopologies();
     },
   };
 }

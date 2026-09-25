@@ -164,8 +164,8 @@ export interface TowerStampParams extends WallParams {
  * takes that very loop as its own boundary, so the two share the rim and a
  * wall with a window is still one wall.
  *
- * A door is the same shape with its sill on the floor, which is why there is
- * one tool and not two.
+ * A door is the same shape standing on the floor, which is why there is one
+ * tool and not two. A window's height on the wall is wherever it is placed.
  */
 export interface OpeningParams {
   /** A preset of the one opening type: where it starts and what is drawn in it, never its structure. */
@@ -173,18 +173,17 @@ export interface OpeningParams {
   /** How wide, measured along the wall rather than across the ground -- a curved wall is travelled, not spanned. */
   readonly width: number;
   readonly height: number;
-  /** How far above the wall's own base the opening starts. Zero is a door. */
-  readonly sill: number;
   /** The outline the next opening gets inside its bounding rectangle. */
   readonly shape: OpeningShape;
 }
 
-/** `params` switched to `kind`: a door's sill is the floor and it is at least door-tall; a window lifts off the floor. */
+/** `params` switched to `kind`: a door is at least door-tall. */
 export function withOpeningKind(params: OpeningParams, kind: OpeningParams["openingKind"]): OpeningParams {
-  return kind === "door"
-    ? { ...params, openingKind: "door", sill: 0, height: Math.max(params.height, 2) }
-    : { ...params, openingKind: "window", sill: params.sill > 0 ? params.sill : 1 };
+  return kind === "door" ? { ...params, openingKind: "door", height: Math.max(params.height, 2) } : { ...params, openingKind: "window" };
 }
+
+/** The one color each opening preset is drawn in, by the tool's ghost and the panel alike. */
+export const OPENING_KIND_COLOR: Readonly<Record<OpeningParams["openingKind"], number>> = Object.freeze({ window: 0x7dd3fc, door: 0xd97706 });
 
 export type OpeningSide = "top" | "right" | "bottom" | "left";
 
@@ -262,7 +261,7 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   "wall-brush": Object.freeze({ wallType: "wall-white", height: 3, shape: "circle", radius: 0.3, rotationDegrees: 0 }),
   "wall-line": Object.freeze({ wallType: "wall-white", height: 3 }),
   "tower-stamp": Object.freeze({ wallType: "wall-white", height: 3, radius: TOWER_RADIUS_PRESETS[1] }),
-  opening: Object.freeze({ openingKind: "window", width: 1.2, height: 1.2, sill: 1, shape: RECTANGLE_OPENING_SHAPE }),
+  opening: Object.freeze({ openingKind: "window", width: 1.2, height: 1.2, shape: RECTANGLE_OPENING_SHAPE }),
   "terrain-sculpt": Object.freeze({
     faceSize: 2,
     brushRadius: 6,

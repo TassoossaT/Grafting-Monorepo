@@ -121,7 +121,6 @@ interface RegionTopologyWire {
   readonly outerLoops: readonly (readonly RegionEdgeWire[])[];
   readonly holes: readonly (readonly RegionEdgeWire[])[];
   readonly nodes: readonly NodeWire[];
-  readonly group?: string | null;
   readonly props?: Readonly<Record<string, unknown>> | null;
 }
 
@@ -145,7 +144,6 @@ function fromWireTopology(wire: RegionTopologyWire): ConstructionRegionTopology 
     outerLoops: wire.outerLoops,
     holes: wire.holes,
     nodes: wire.nodes.map(fromWireNode),
-    ...(wire.group ? { group: wire.group } : {}),
     ...(wire.props ? { props: wire.props } : {}),
   };
 }
@@ -263,8 +261,14 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     return this.#regionEdit(this.#require().unpin_nodes_json(JSON.stringify({ nodeIds })));
   }
 
-  pinEdgeCurve(request: ConstructionPinEdgeCurveRequest): RegionEditOutcome {
-    return this.#regionEdit(this.#require().pin_edge_curve_json(JSON.stringify(request)));
+  pinEdgeCurves(requests: readonly ConstructionPinEdgeCurveRequest[]): RegionEditOutcome {
+    const affected = new Map<string, ConstructionSurfaceKey>();
+    for (const request of requests) {
+      for (const surfaceKey of this.#regionEdit(this.#require().pin_edge_curve_json(JSON.stringify(request))).affectedSurfaceKeys) {
+        affected.set(JSON.stringify(surfaceKey), surfaceKey);
+      }
+    }
+    return { affectedSurfaceKeys: [...affected.values()], createdSurfaceKeys: [], removedSurfaceKeys: [], createdNodeIds: [], removedNodeIds: [] };
   }
 
   hostOutline(surfaceKey: ConstructionSurfaceKey): ConstructionHostOutline {
@@ -280,10 +284,6 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
   resolveOnHost(request: { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly uv: readonly (readonly [number, number])[] }): readonly ConstructionPosition[] {
     const wire = JSON.parse(this.#require().resolve_on_host_json(JSON.stringify(request))) as WirePosition[];
     return wire.map(fromWirePosition);
-  }
-
-  setRegionGroup(surfaceKeys: readonly ConstructionSurfaceKey[], groupId: string | null): RegionEditOutcome {
-    return this.#regionEdit(this.#require().set_region_group_json(JSON.stringify({ surfaceKeys, groupId })));
   }
 
   setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): RegionEditOutcome {
@@ -595,9 +595,7 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
   }
 
   getRegionTopologiesInBounds(bounds: ConstructionTopologyBoundsQuery): readonly ConstructionRegionTopology[] {
-    const session = this.#require() as ConstructionSession & {
-      region_topologies_in_bounds_json(requestJson: string): string;
-    };
+    const session = this.#require();
     const wire = JSON.parse(session.region_topologies_in_bounds_json(JSON.stringify(bounds))) as readonly RegionTopologyWire[];
     return wire.map(fromWireTopology);
   }
@@ -607,9 +605,7 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
   }
 
   applyRegionOverlay(request: ApplyRegionOverlayRequest): ConstructionPatchOutcome {
-    const session = this.#require() as ConstructionSession & {
-      apply_region_overlay_json(requestJson: string): string;
-    };
+    const session = this.#require();
     const patch = {
       nodes: request.patch.nodes.map((node) => ({ id: node.id, position: toWirePosition(node.position) })),
       edges: request.patch.edges,
@@ -626,9 +622,7 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
   }
 
   applyPatchReplacement(request: ApplyPatchReplacementRequest): ConstructionPatchOutcome {
-    const session = this.#require() as ConstructionSession & {
-      apply_patch_replacement_json(requestJson: string): string;
-    };
+    const session = this.#require();
     const patch = {
       nodes: request.patch.nodes.map((node) => ({ id: node.id, position: toWirePosition(node.position) })),
       edges: request.patch.edges,
@@ -660,12 +654,12 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
   }
 
   undoRegionOverlay(operationId: string): void {
-    const session = this.#require() as ConstructionSession & { undo_region_overlay(id: string): void };
+    const session = this.#require();
     session.undo_region_overlay(operationId);
   }
 
   redoRegionOverlay(operationId: string): void {
-    const session = this.#require() as ConstructionSession & { redo_region_overlay(id: string): void };
+    const session = this.#require();
     session.redo_region_overlay(operationId);
   }
   removeSurface(request: RemoveSurfaceRequest): RegionEditOutcome {
@@ -682,21 +676,6 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
   }
 
 
-  getSurfaceMesh(surfaceKey: ConstructionSurfaceKey): readonly SurfaceMeshResult[] {
-    const wire = JSON.parse(
-      this.#require().surface_mesh_json(JSON.stringify({ surfaceKey })),
-    ) as readonly SurfaceMeshWire[];
-    return wire.map(toMeshResult);
-  }
-
-  getSurfaceMeshes(surfaceKeys: readonly ConstructionSurfaceKey[]): readonly SurfaceMeshResult[] {
-    const session = this.#require() as ConstructionSession & {
-      surface_meshes_json(requestJson: string): string;
-    };
-    const wire = JSON.parse(session.surface_meshes_json(JSON.stringify({ surfaceKeys }))) as readonly SurfaceMeshWire[];
-    return wire.map(toMeshResult);
-  }
-
   getAllSurfaceMeshes(): readonly SurfaceMeshResult[] {
     const wire = JSON.parse(this.#require().all_surface_meshes_json()) as readonly SurfaceMeshWire[];
     return wire.map(toMeshResult);
@@ -706,10 +685,7 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     readonly meshes: readonly SurfaceMeshResult[];
     readonly failed: readonly { readonly surfaceKey: ConstructionSurfaceKey; readonly reason: string }[];
   } {
-    const session = this.#require() as ConstructionSession & {
-      surface_meshes_report_json(requestJson: string): string;
-    };
-    const wire = JSON.parse(session.surface_meshes_report_json(JSON.stringify({ surfaceKeys }))) as {
+    const wire = JSON.parse(this.#require().surface_meshes_report_json(JSON.stringify({ surfaceKeys }))) as {
       readonly meshes: readonly SurfaceMeshWire[];
       readonly failed: readonly { readonly surfaceKey: readonly string[]; readonly reason: string }[];
     };
@@ -721,7 +697,7 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
   }
 
   generateCap(request: import("../../ports/cap-port.ts").CapRequest): import("../../ports/cap-port.ts").CapPatch {
-    const session = this.#require() as ConstructionSession & { profile_cap_json(json: string): string };
+    const session = this.#require();
     return JSON.parse(session.profile_cap_json(JSON.stringify(request))) as import("../../ports/cap-port.ts").CapPatch;
   }
 

@@ -147,7 +147,7 @@ export interface TabletopRuntime extends BezierPort {
   /** Pins nodes to host faces in relative `(u, v)`; the host carries them from then on. See `ConstructionSessionPort.pinNodes`. */
   pinNodes(pins: readonly ConstructionPinRequest[], origin: ChangeOrigin, causeId: string): RegionEditOutcome;
   unpinNodes(nodeIds: readonly ConstructionNodeId[], origin: ChangeOrigin, causeId: string): RegionEditOutcome;
-  /** Makes each edge a cubic (or straight) path in its host's `(u, v)`; one remesh for the batch. See `ConstructionSessionPort.pinEdgeCurve`. */
+  /** Makes each edge a cubic (or straight) path in its host's `(u, v)`; one remesh for the batch. See `ConstructionSessionPort.pinEdgeCurves`. */
   pinEdgeCurves(requests: readonly ConstructionPinEdgeCurveRequest[], origin: ChangeOrigin, causeId: string): RegionEditOutcome;
   /** A pinned region's outer loop traced on its host. See `ConstructionSessionPort.hostOutline`. */
   hostOutline(surfaceKey: ConstructionSurfaceKey): ConstructionHostOutline;
@@ -155,8 +155,6 @@ export interface TabletopRuntime extends BezierPort {
   projectToHost(request: { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly points: readonly ConstructionPosition[] }): readonly ConstructionHostPoint[];
   /** Host `(u, v)` pairs back to world positions. Pure. */
   resolveOnHost(request: { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly uv: readonly (readonly [number, number])[] }): readonly ConstructionPosition[];
-  /** Labels regions as one group (`null` clears). See `ConstructionSessionPort.setRegionGroup`. */
-  setRegionGroup(surfaceKeys: readonly ConstructionSurfaceKey[], groupId: string | null): RegionEditOutcome;
   /** Replaces the regions' property bag (`null` clears). See `ConstructionSessionPort.setRegionProps`. */
   setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): RegionEditOutcome;
   /** The run of upright panels through `surfaceKey`. See `ConstructionSessionPort.panelRun`. */
@@ -614,9 +612,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
   }
 
   #syncBezierHandles(origin: ChangeOrigin, causeId: string, generation: number): void {
-    if (typeof this.#construction.curveBatch !== "function") return;
-    const contour = typeof this.#construction.getCurvedEdges === "function" ? this.#construction.getCurvedEdges() : [];
-    const handles = curveHandles(curveEdgesOf(this.#construction.getGraphSnapshot(), contour, this.#construction), this.#construction);
+    const handles = curveHandles(curveEdgesOf(this.#construction.getGraphSnapshot(), this.#construction.getCurvedEdges(), this.#construction), this.#construction);
     const live = new Set(handles.map((h) => h.id));
     for (const id of this.#bezierHandleIds) if (!live.has(id)) this.#removeNodeHandle(id, origin, causeId, generation);
     for (const handle of handles) this.#uploadNodeHandle(handle.id, handle.position, origin, causeId, generation);
@@ -625,7 +621,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
 
   /** Uploads/retires one widget per top run of every partition panel -- a wall's own per-segment height handle, mirroring `#syncBezierHandles`. */
   #syncPanelHeightWidgets(origin: ChangeOrigin, causeId: string, generation: number): void {
-    if (typeof this.#construction.getAllRegionTopologies !== "function") return;
     const widgets = panelHeightWidgets(this.#construction.getAllRegionTopologies());
     const live = new Set(widgets.map((widget) => widget.id));
     for (const id of this.#panelHeightWidgetIds) if (!live.has(id)) this.#removeNodeHandle(id, origin, causeId, generation);
@@ -782,51 +777,20 @@ export class AppTabletopRuntime implements TabletopRuntime {
     causeId: string,
     foldNodePositions: (map: MapProjection) => MapProjection,
   ): void {
-    // Fetched one surface at a time, not `surfaceKeys.flatMap`, and a
-    // fetch that throws is skipped rather than aborting the whole sync: a
-    // single mutation can name several affected surfaces that also border
-    // *each other*, and one of them can legitimately have already been
-    // removed by this same call (a batch deleting several adjacent
-    // consumed regions together, say) -- its own removal is already
-    // handled through `removedSurfaceRefs`/`#foldRegionEditOutcome`'s own
-    // removed-keys loop, so a stale mesh fetch for it here is redundant,
-    // not load-bearing. Letting one such fetch abort the whole sync used
-    // to skip the render update for *every* surface in the batch, not just
-    // the stale one -- the mutation itself had already committed, so the
-    // screen simply never caught up.
-    // Older/in-memory ports used by embedders can still provide only the
-    // single-key method; the Wasm port takes the one-crossing batch path.
-    //
-    // A port that also exposes `getSurfaceMeshesReport` tells the two ways a
-    // key can be absent from `meshes` apart: `"unknown"` is a stale key --
-    // normal when this same mutation also removed that surface, already
-    // handled via `removedSurfaceRefs` -- while any other reason is a live
-    // surface whose mesh genuinely failed to derive. That surface's chunk
-    // membership, pick target, and projection are left exactly as they were
-    // (they simply never enter `meshes` below), so the last valid render
-    // keeps showing rather than the face vanishing under a still-live key.
-    const report = this.#construction.getSurfaceMeshesReport;
-    const batch = this.#construction.getSurfaceMeshes;
-    let meshes: readonly SurfaceMeshResult[];
-    if (typeof report === "function") {
-      const result = report.call(this.#construction, surfaceKeys);
-      meshes = result.meshes;
-      for (const failure of result.failed) {
-        if (failure.reason === "unknown") continue;
-        const surfaceRef = surfaceRefFromNodeSet(failure.surfaceKey);
-        if (removedSurfaceRefs.includes(surfaceRef)) continue;
-        console.warn(`surface ${surfaceRef} failed to mesh: ${failure.reason}`);
-      }
-    } else {
-      meshes = typeof batch === "function"
-        ? batch.call(this.#construction, surfaceKeys)
-        : surfaceKeys.flatMap((surfaceKey) => {
-            try {
-              return this.#construction.getSurfaceMesh(surfaceKey);
-            } catch {
-              return [];
-            }
-          });
+    // One engine crossing for the whole mutation set. The report tells the
+    // two ways a key can be absent from `meshes` apart: `"unknown"` is a
+    // stale key -- normal when this same mutation also removed that surface,
+    // already handled via `removedSurfaceRefs` -- while any other reason is a
+    // live surface whose mesh genuinely failed to derive. That surface's
+    // chunk membership, pick target, and projection are left exactly as they
+    // were (it never enters `meshes`), so the last valid render keeps showing
+    // rather than the face vanishing under a still-live key.
+    const { meshes, failed } = this.#construction.getSurfaceMeshesReport(surfaceKeys);
+    for (const failure of failed) {
+      if (failure.reason === "unknown") continue;
+      const surfaceRef = surfaceRefFromNodeSet(failure.surfaceKey);
+      if (removedSurfaceRefs.includes(surfaceRef)) continue;
+      console.warn(`surface ${surfaceRef} failed to mesh: ${failure.reason}`);
     }
     this.#syncSurfaceChunks(meshes, removedSurfaceRefs, origin, causeId, this.#generation);
 
@@ -931,11 +895,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
 
   pinEdgeCurves(requests: readonly ConstructionPinEdgeCurveRequest[], origin: ChangeOrigin, causeId: string): RegionEditOutcome {
     this.#requireReady("pinning edge curves");
-    const affected = new Map<string, ConstructionSurfaceKey>();
-    for (const request of requests) {
-      for (const surfaceKey of this.#construction.pinEdgeCurve(request).affectedSurfaceKeys) affected.set(surfaceRefFromNodeSet(surfaceKey), surfaceKey);
-    }
-    const outcome: RegionEditOutcome = { affectedSurfaceKeys: [...affected.values()], createdSurfaceKeys: [], removedSurfaceKeys: [], createdNodeIds: [], removedNodeIds: [] };
+    const outcome = this.#construction.pinEdgeCurves(requests);
     if (outcome.affectedSurfaceKeys.length > 0) this.#foldRegionEditOutcome(outcome, origin, causeId, new Map());
     return outcome;
   }
@@ -953,11 +913,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
   resolveOnHost(request: { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly uv: readonly (readonly [number, number])[] }): readonly ConstructionPosition[] {
     this.#requireReady("resolving on a host face");
     return this.#construction.resolveOnHost(request);
-  }
-
-  setRegionGroup(surfaceKeys: readonly ConstructionSurfaceKey[], groupId: string | null): RegionEditOutcome {
-    this.#requireReady("grouping regions");
-    return this.#construction.setRegionGroup(surfaceKeys, groupId);
   }
 
   setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): RegionEditOutcome {
@@ -1003,10 +958,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
 
   getAllRegionTopologies(): readonly ConstructionRegionTopology[] {
     this.#requireReady("reading every region's topology");
-    if (typeof this.#construction.getAllRegionTopologies === "function") {
-      return this.#construction.getAllRegionTopologies();
-    }
-    return [];
+    return this.#construction.getAllRegionTopologies();
   }
 
   queryContours(queries: readonly ConstructionContourQuery[]): readonly ConstructionContourAnswer[] {
@@ -1021,18 +973,12 @@ export class AppTabletopRuntime implements TabletopRuntime {
 
   getCurvedEdges(): readonly ConstructionCurvedEdge[] {
     this.#requireReady("reading curved boundary edges");
-    return typeof this.#construction.getCurvedEdges === "function" ? this.#construction.getCurvedEdges() : [];
+    return this.#construction.getCurvedEdges();
   }
 
   getRegionTopologiesInBounds(bounds: ConstructionTopologyBoundsQuery): readonly ConstructionRegionTopology[] {
     this.#requireReady("reading nearby region topologies");
-    if (typeof this.#construction.getRegionTopologiesInBounds === "function") {
-      return this.#construction.getRegionTopologiesInBounds(bounds);
-    }
-    if (typeof this.#construction.getAllRegionTopologies === "function") {
-      return this.#construction.getAllRegionTopologies();
-    }
-    return [];
+    return this.#construction.getRegionTopologiesInBounds(bounds);
   }
 
   generateCap(request: import("../../ports/cap-port.ts").CapRequest): import("../../ports/cap-port.ts").CapPatch {

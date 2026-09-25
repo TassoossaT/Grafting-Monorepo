@@ -102,7 +102,7 @@ export function planEdit(
   cloud: CloudTopology,
   gesture: EditGesture,
   graphSnapshot?: ConstructionGraphSnapshot,
-  source?: Pick<ConstructionSessionPort, "planMotion" | "getAllRegionTopologies" | "queryContours"> & Partial<Pick<BezierPort, "curveBatch">>,
+  source?: Pick<ConstructionSessionPort, "planMotion" | "getAllRegionTopologies"> & Partial<Pick<BezierPort, "curveBatch">>,
 ): EditPlan {
   const policy = resolvePolicy(cloud.seed, gesture.target);
   if (policy.resolve.kind === "deny") {
@@ -146,21 +146,11 @@ export function planEdit(
           for (const node of cloud.seed.nodes) seeds.push({ nodeId: node.id, delta: op.delta });
         } else throw new Error("A resposta de movimento deve produzir apenas deslocamentos.");
       }
-      // `policy.transport` is the *grabbed type's own* declaration -- each
-      // type gives it its own meaning (a wall carries its own openings; a
-      // platform carries whatever is welded on top of it, cloud after
-      // cloud), so it must reach only topologies of that *same type*, never
-      // an unrelated one. Broadcasting it to every topology regardless of
-      // type (as this once did) let one type's `transport` flag flip
-      // another, unrelated type's own `motionInfluences` behaviour: e.g.
-      // dragging a wall's bottom edge (`transport: true`, carrying its own
-      // openings) used to also turn on every *platform*'s own
-      // `transport`-gated linking, doubling how far the drag propagated
-      // through an unrelated structure welded onto the wall. Restricting to
-      // "the same cloud" would have been too narrow the other way: a
-      // platform's own whole-body drag deliberately reaches *other* platform
-      // clouds several storeys up, bridged only by the walls between them,
-      // never through a shared cloud membership.
+      // `policy.transport` is the *grabbed type's own* declaration, so it
+      // reaches only topologies of that same type: broadcasting it would let
+      // one type's flag flip an unrelated type's `motionInfluences`. It is not
+      // limited to the grabbed cloud either -- a platform's whole-body drag
+      // deliberately reaches other platform clouds bridged only by walls.
       const influences = topologies.flatMap((topology) => structureTypeFor(topology.surfaceType)?.motionInfluences?.(
         topology,
         policy.transport === true && topology.surfaceType === cloud.seed.surfaceType,
@@ -171,13 +161,9 @@ export function planEdit(
       for (const surfaceType of new Set(topologies.map((topology) => topology.surfaceType))) {
         const derive = structureTypeFor(surfaceType)?.deriveMotion;
         if (!derive) continue;
-        // The *whole table*, not only this type's own topologies: an
-        // opening's `deriveMotion` has to read its host wall's shape to
-        // reproject its rim onto it, and a wall is a different type.
-        for (const [nodeId, position] of derive(topologies, resolvedMoves, {
+        for (const [nodeId, position] of derive(topologies.filter((topology) => topology.surfaceType === surfaceType), resolvedMoves, {
           graphSnapshot,
           port: source.curveBatch ? source as Pick<BezierPort, "curveBatch"> : undefined,
-          contourPort: source,
         })) {
           if (!moved.has(nodeId)) moved.set(nodeId, position);
         }
@@ -203,7 +189,8 @@ export function planEdit(
     return { kind: "deny", role: policy.role, reason: `${solverBound.label} requer o resolvedor estrutural da sessao.` };
   }
   const cascade = policy.cascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot }) ?? [];
-  const grouped = policy.groupCascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot }) ?? [];
+  // Without a session the grabbed cloud is all of the table this plan can see.
+  const grouped = policy.groupCascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot, allTopologies: cloud.members }) ?? [];
   return {
     kind: "apply",
     role: policy.role,

@@ -75,7 +75,6 @@ export function sessionFixture() {
     hostOutline: (surfaceKey) => JSON.parse(session.host_outline_json(JSON.stringify({ surfaceKey }))),
     projectToHost: ({ hostSurfaceKey, points }) => JSON.parse(session.project_to_host_json(JSON.stringify({ hostSurfaceKey, points: points.map(vector) }))),
     resolveOnHost: (request) => JSON.parse(session.resolve_on_host_json(JSON.stringify(request))).map(position),
-    setRegionGroup: (surfaceKeys, groupId) => JSON.parse(session.set_region_group_json(JSON.stringify({ surfaceKeys, groupId }))),
     setRegionProps: (surfaceKeys, props) => JSON.parse(session.set_region_props_json(JSON.stringify({ surfaceKeys, props }))),
     panelRun: (surfaceKey) => JSON.parse(session.panel_run_json(JSON.stringify({ surfaceKey }))),
     getSnapshot: () => ({ tableId: "platform-test", map: { nodePositions: new Map() } }),

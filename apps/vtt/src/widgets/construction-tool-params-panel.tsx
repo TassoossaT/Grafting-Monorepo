@@ -18,7 +18,7 @@ import type {
   WallBrushParams,
   WallParams,
 } from "@/features/edit-construction";
-import { RECTANGLE_OPENING_SHAPE, TOWER_RADIUS_PRESETS, deriveFaceSize, isRectangleShape, openingOutline, withOpeningKind } from "@/features/edit-construction";
+import { OPENING_KIND_COLOR, RECTANGLE_OPENING_SHAPE, TOWER_RADIUS_PRESETS, deriveFaceSize, isRectangleShape, openingPath, withOpeningKind } from "@/features/edit-construction";
 
 export interface ConstructionToolParamsPanelProps {
   readonly activeTool: ConstructionToolId;
@@ -286,9 +286,12 @@ function OpeningShapeFields(props: { readonly params: OpeningParams; readonly on
   const x0 = SHAPE_PAD + (SHAPE_BOX - w) / 2;
   const y0 = SHAPE_PAD + (SHAPE_BOX - h) / 2;
   const shown: OpeningShape = draft === undefined ? shape : { ellipse: false, radii: { ...shape.radii, [side]: draft } };
-  const outline = openingOutline(shown, params.width, params.height)
-    .map(([x, y]) => `${(x0 + x * scale).toFixed(1)},${(y0 + h - y * scale).toFixed(1)}`)
-    .join(" ");
+  const at = ([x, y]: readonly [number, number]) => `${(x0 + x * scale).toFixed(1)},${(y0 + h - y * scale).toFixed(1)}`;
+  const segments = openingPath(shown, params.width, params.height);
+  const outline = segments.length === 0
+    ? ""
+    : `M${at(segments[0]!.from)} ${segments.map((segment) => (segment.controls === undefined ? `L${at(segment.to)}` : `C${at(segment.controls[0])} ${at(segment.controls[1])} ${at(segment.to)}`)).join(" ")} Z`;
+  const color = kindHex(params.openingKind);
   const edges: Readonly<Record<OpeningSide, readonly [number, number, number, number]>> = {
     top: [x0, y0, x0 + w, y0],
     right: [x0 + w, y0, x0 + w, y0 + h],
@@ -303,7 +306,7 @@ function OpeningShapeFields(props: { readonly params: OpeningParams; readonly on
       <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
         <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="group" aria-label="Lados da abertura">
           <rect x={x0} y={y0} width={w} height={h} fill="none" stroke="#475569" strokeDasharray="3 3" />
-          <polygon points={outline} fill={OPENING_SWATCH[params.openingKind]} fillOpacity={0.35} stroke={OPENING_SWATCH[params.openingKind]} strokeWidth={1.5} />
+          <path d={outline} fill={color} fillOpacity={0.35} stroke={color} strokeWidth={1.5} />
           {(Object.keys(edges) as OpeningSide[]).map((key) => {
             const [ax, ay, bx, by] = edges[key];
             return (
@@ -342,9 +345,11 @@ function OpeningShapeFields(props: { readonly params: OpeningParams; readonly on
   );
 }
 
-const OPENING_SWATCH: Readonly<Record<OpeningParams["openingKind"], string>> = { window: "#7dd3fc", door: "#d97706" };
+function kindHex(kind: OpeningParams["openingKind"]): string {
+  return `#${OPENING_KIND_COLOR[kind].toString(16).padStart(6, "0")}`;
+}
 
-/** A door is the same opening with its sill on the floor, so the type sets the sill and the sliders take it from there. */
+/** A door is the same opening standing on the floor; a window stands wherever it is placed on the wall. */
 function OpeningFields(props: { readonly params: OpeningParams; readonly onChange: (next: OpeningParams) => void }) {
   const { params, onChange } = props;
   return (
@@ -352,22 +357,19 @@ function OpeningFields(props: { readonly params: OpeningParams; readonly onChang
       <div className="gm-material-grid">
         <SelectableChip
           label="Janela"
-          swatchColor="#7dd3fc"
+          swatchColor={kindHex("window")}
           selected={params.openingKind === "window"}
           onSelect={() => onChange(withOpeningKind(params, "window"))}
         />
         <SelectableChip
           label="Porta"
-          swatchColor="#d97706"
+          swatchColor={kindHex("door")}
           selected={params.openingKind === "door"}
           onSelect={() => onChange(withOpeningKind(params, "door"))}
         />
       </div>
       {sliderRow("Largura", params.width, 0.4, 4, 0.1, (width) => onChange({ ...params, width }))}
       {sliderRow("Altura", params.height, 0.4, 4, 0.1, (height) => onChange({ ...params, height }))}
-      {params.openingKind === "door"
-        ? null
-        : sliderRow("Peitoril", params.sill, 0, 3, 0.1, (sill) => onChange({ ...params, sill }))}
       <OpeningShapeFields params={params} onChange={onChange} />
     </div>
   );

@@ -1,12 +1,16 @@
-import { sideArc, type OutlinePoint } from "./opening-outline.ts";
 import type { OpeningShape, OpeningSide } from "./tool-types.ts";
 
 /**
- * An opening's outline as a closed path of straight and cubic segments: the
- * same shape `openingOutline` draws, but every rounded side is a few cubics
- * instead of a polyline, so a pinned opening needs one node per segment end
- * and nothing in between. Pure; `x` along the wall, `y` up, world meters.
+ * An opening's outline as a closed path of straight and cubic segments, so a
+ * pinned opening needs one node per segment end and nothing in between.
+ * Pure; `x` along the wall, `y` up, world meters.
+ *
+ * A rounded side is the arc of a circle through that side's midpoint whose
+ * chord ends sit on the two neighbouring sides, so the outline is convex and
+ * every apex stays on the box.
  */
+
+export type OutlinePoint = readonly [number, number];
 
 export interface OutlineSegment {
   readonly from: OutlinePoint;
@@ -15,10 +19,10 @@ export interface OutlineSegment {
   readonly controls?: readonly [OutlinePoint, OutlinePoint];
 }
 
-export type OutlinePath = readonly OutlineSegment[];
+type OutlinePath = readonly OutlineSegment[];
 
 /** How far (world meters) a cubic may stray from the circle it stands for. */
-export const ARC_TOLERANCE = 0.002;
+const ARC_TOLERANCE = 0.002;
 
 const EPS = 1e-9;
 const ERROR_SAMPLES = 16;
@@ -70,6 +74,23 @@ function ellipseArc(center: Point, rx: number, ry: number, start: number, sweep:
     out.push({ from: p0, to: p3, controls: [[p0[0] + k * t0[0], p0[1] + k * t0[1]], [p3[0] - k * t1[0], p3[1] - k * t1[1]]] });
   }
   return out;
+}
+
+/**
+ * How far a side's arc rises from its chord, and the radius that rise
+ * means. A radius under half the side is raised to half (a semicircle); the
+ * rise is capped at half the box across the side, so opposite arcs never
+ * meet and every apex stays on the box.
+ */
+export function sideArc(radius: number, length: number, across: number): { readonly rise: number; readonly radius: number } | undefined {
+  if (!(radius > 0) || !(length > EPS) || !(across > EPS)) return undefined;
+  const half = length / 2;
+  const r = Math.max(radius, half);
+  let rise = r - Math.sqrt(Math.max(0, r * r - half * half));
+  const maxRise = across / 2;
+  if (rise <= maxRise) return rise > EPS ? { rise, radius: r } : undefined;
+  rise = maxRise;
+  return { rise, radius: (rise * rise + half * half) / (2 * rise) };
 }
 
 interface SideCircle {

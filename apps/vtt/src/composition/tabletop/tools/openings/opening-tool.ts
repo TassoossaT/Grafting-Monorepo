@@ -9,15 +9,15 @@ import type {
 // test reaches has to spell out any import it needs at run time. A
 // type-only `@/` import is fine -- those are erased.
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
-import { DEFAULT_TOOL_PARAMS, RECTANGLE_OPENING_SHAPE, hasTrait, openingStructureType, sameShape } from "../../../../features/edit-construction/index.ts";
+import { DEFAULT_TOOL_PARAMS, OPENING_KIND_COLOR, RECTANGLE_OPENING_SHAPE, hasTrait, openingStructureType, sameShape } from "../../../../features/edit-construction/index.ts";
 
-import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext, type ToolGesture } from "../core/tool-context.ts";
+import { scopedToolId, type ConstructionTool, type PointerSample, type ReleasedGesture, type ToolContext, type ToolGesture } from "../core/tool-context.ts";
 import { segmentsPreview } from "../shapes/preview-shapes.ts";
 import { findWallSurfaceAt } from "../walls/wall-shared.ts";
 import {
   commitOpeningGroup,
-  groupKeyOf,
-  groupOf,
+  groupIdOf,
+  groupPieces,
   groupRunSpan,
   hostBoxOf,
   isDoorRect,
@@ -32,20 +32,15 @@ import {
   type RunRect,
 } from "./opening-shared.ts";
 
-export const OPENING_COLOR: Record<OpeningParams["openingKind"], number> = {
-  window: 0x7dd3fc,
-  door: 0xd97706,
-};
-
 const OVERLAP_COLOR = 0xef4444;
 
 /**
  * One tool for the whole life of an opening. Press on an existing door or
  * window and drag: the body moves it, an edge or a corner resizes it.
  * Press on bare wall and drag to draw a new one; a plain click places one
- * at the slider size. Release commits unless nothing changed, which only
- * selects (Delete removes it; a plain click on an already-selected opening
- * applies the sliders' width/height).
+ * at the slider size. A plain click on an opening selects it and shows its
+ * size and shape in the panel (Delete removes it); a plain click on the
+ * opening already selected applies the sliders' width/height to it.
  *
  * Everything is computed in the run's `(s, v)` frame -- the chain of faces
  * the pressed one continues -- so an opening follows a curved or slanted
@@ -60,25 +55,44 @@ interface Selected {
 }
 
 let selected: Selected | undefined;
-/**
- * While an opening is selected the params panel shows and edits ITS shape;
- * this keeps the shape the next new opening gets, put back on deselect.
- */
-let shapeForNew: OpeningShape | undefined;
 
-function shapeOf(params: OpeningParams): OpeningShape {
+/** What the params panel shows of an opening. */
+type OpeningLook = Pick<OpeningParams, "width" | "height" | "shape">;
+/**
+ * While an opening is selected the params panel shows and edits ITS look;
+ * this keeps the look the next new opening gets, put back on deselect.
+ */
+let lookForNew: OpeningLook | undefined;
+
+function shapeOf(params: Pick<OpeningParams, "shape">): OpeningShape {
   return params.shape ?? RECTANGLE_OPENING_SHAPE;
 }
 
-/** The shape a new opening is created with, whatever the panel shows for a selection. */
-function creationShape(params: OpeningParams): OpeningShape {
-  return shapeForNew ?? shapeOf(params);
+function lookOf(params: OpeningLook): OpeningLook {
+  return { width: params.width, height: params.height, shape: shapeOf(params) };
 }
 
-function select(ctx: ToolContext, next: Selected, params: OpeningParams): void {
-  if (shapeForNew === undefined) shapeForNew = shapeOf(params);
+function sameLook(a: OpeningLook, b: OpeningLook): boolean {
+  return Math.abs(a.width - b.width) < 1e-9 && Math.abs(a.height - b.height) < 1e-9 && sameShape(a.shape, b.shape);
+}
+
+/** `params` as a new opening takes them, whatever the panel shows for a selection. */
+function forNew(params: OpeningParams): OpeningParams {
+  return lookForNew === undefined ? params : { ...params, ...lookForNew };
+}
+
+function select(ctx: ToolContext, next: Selected, look: OpeningLook, params: OpeningParams): void {
+  lookForNew ??= lookOf(params);
   selected = next;
-  if (!sameShape(shapeOf(params), next.shape)) ctx.updateToolParams?.("opening", (current) => ({ ...current, shape: next.shape }));
+  if (!sameLook(lookOf(params), look)) ctx.updateToolParams?.("opening", (current) => ({ ...current, ...look }));
+}
+
+function clearSelection(ctx: ToolContext): void {
+  selected = undefined;
+  ctx.reportSelection(undefined);
+  const restore = lookForNew;
+  lookForNew = undefined;
+  if (restore !== undefined) ctx.updateToolParams?.("opening", (current) => (sameLook(lookOf(current), restore) ? current : { ...current, ...restore }));
 }
 
 /** Which side of each axis a press grabbed. Neither = the body; one = an edge; both = a corner. */
@@ -91,8 +105,6 @@ interface GrabHandle {
 const HANDLE_TOLERANCE = 0.12;
 /** The smallest world width or height a drawn or dragged opening may settle at. */
 const MIN_OPENING_SIZE = 0.3;
-/** How far (world units) a press must travel to count as drawing a size rather than clicking. */
-const CREATE_DRAG_THRESHOLD = 0.05;
 /** How far off an opening's own face a point may land and still count as on it. */
 const OPENING_PICK_TOLERANCE = 0.2;
 /** The longest straight step (world units) a preview ring takes along a curved face. */
@@ -103,19 +115,12 @@ interface RunPoint {
   readonly v: number;
 }
 
+/** The handle under `at`, found by geometry against the opening's box. */
 function handleAt(run: RunFrame, span: RunRect, at: RunPoint): GrabHandle {
   const tolV = HANDLE_TOLERANCE / run.heightAt((span.s0 + span.s1) / 2);
   return {
     s: Math.abs(at.s - span.s0) <= HANDLE_TOLERANCE ? "left" : Math.abs(at.s - span.s1) <= HANDLE_TOLERANCE ? "right" : undefined,
     v: Math.abs(at.v - span.v1) <= tolV ? "top" : Math.abs(at.v - span.v0) <= tolV ? "bottom" : undefined,
-  };
-}
-
-/** A press on one of the rim's own node dots always means the nearer corner. */
-function cornerAt(span: RunRect, at: RunPoint): GrabHandle {
-  return {
-    s: Math.abs(at.s - span.s0) <= Math.abs(at.s - span.s1) ? "left" : "right",
-    v: Math.abs(at.v - span.v0) <= Math.abs(at.v - span.v1) ? "bottom" : "top",
   };
 }
 
@@ -131,38 +136,34 @@ interface Drag {
   readonly handle: GrabHandle;
   readonly isDoor: boolean;
   readonly shape: OpeningShape;
-  /** The size a body drag carries: the opening's own, or the sliders' when it was already selected. */
-  readonly ds: number;
-  readonly dv: number;
+  /** Whether the group was already this tool's selection when pressed: a plain click then applies the sliders. */
+  readonly wasSelected: boolean;
   /** Offset from the grab point to the opening's center, so a body drag never jumps. */
   readonly grabOffset: RunPoint;
 }
-
-let drag: Drag | undefined;
-/** Whether `onPointerDown` grabbed an opening this gesture, so the trailing `click` does not also create. */
-let grabbedThisGesture = false;
 
 interface CreateAnchor extends RunPoint {
   readonly run: RunFrame;
   readonly hostSurfaceKey: ConstructionSurfaceKey;
 }
-let creating: CreateAnchor | undefined;
-/** Whether `onPointerUp` already placed a drawn opening, so the trailing `click` does not stamp a second. */
-let createdThisGesture = false;
 
-function clearSelection(ctx: ToolContext): void {
-  selected = undefined;
-  ctx.reportSelection(undefined);
-  const restore = shapeForNew;
-  shapeForNew = undefined;
-  if (restore !== undefined) ctx.updateToolParams?.("opening", (current) => (sameShape(shapeOf(current), restore) ? current : { ...current, shape: restore }));
-}
+/** What the current press landed on: an opening it grabbed, or bare wall (or nothing) to create on. */
+type Press =
+  | { readonly kind: "grab"; readonly drag: Drag }
+  | { readonly kind: "wall"; readonly anchor: CreateAnchor | undefined };
+
+let press: Press | undefined;
 
 function isOpening(topology: ConstructionRegionTopology): boolean {
   return topology.surfaceType === openingStructureType.surfaceType;
 }
 
-/** The closest opening whose face contains `point` -- the fallback when the renderer's pick missed a thin, non-physical face. */
+/**
+ * The closest opening whose box holds `point`, or whose rim it lands within
+ * a handle's reach of. The renderer picks an opening's pane, but its handles
+ * live on its bounding box: a press just outside the rim, or on an edge or
+ * corner of a rounded opening outside its pane, reports the wall.
+ */
 function openingNear(ctx: ToolContext, point: ConstructionPosition): ConstructionRegionTopology | undefined {
   let best: { readonly topology: ConstructionRegionTopology; readonly distance: number } | undefined;
   for (const topology of ctx.runtime.getAllRegionTopologies()) {
@@ -171,35 +172,28 @@ function openingNear(ctx: ToolContext, point: ConstructionPosition): Constructio
     if (hostSurfaceKey === undefined) continue;
     const box = hostBoxOf(topology, hostSurfaceKey);
     if (box === undefined) continue;
-    let at, onFace;
+    let inside, onBox;
     try {
-      [at] = ctx.runtime.projectToHost({ hostSurfaceKey, points: [point] });
-      [onFace] = ctx.runtime.resolveOnHost({ hostSurfaceKey, uv: [[at!.u, at!.v]] });
+      const [at] = ctx.runtime.projectToHost({ hostSurfaceKey, points: [point] });
+      const u = Math.max(box.u0, Math.min(box.u1, at!.u));
+      const v = Math.max(box.v0, Math.min(box.v1, at!.v));
+      inside = u === at!.u && v === at!.v;
+      [onBox] = ctx.runtime.resolveOnHost({ hostSurfaceKey, uv: [[u, v]] });
     } catch {
       continue;
     }
-    if (at!.u < box.u0 || at!.u > box.u1 || at!.v < box.v0 || at!.v > box.v1) continue;
-    const distance = Math.hypot(point.x - onFace!.x, point.y - onFace!.y, point.z - onFace!.z);
-    if (distance > OPENING_PICK_TOLERANCE) continue;
+    const distance = Math.hypot(point.x - onBox!.x, point.y - onBox!.y, point.z - onBox!.z);
+    if (distance > (inside ? OPENING_PICK_TOLERANCE : HANDLE_TOLERANCE)) continue;
     if (best === undefined || distance < best.distance) best = { topology, distance };
   }
   return best?.topology;
 }
 
-function isRimNode(pieces: readonly ConstructionRegionTopology[], nodeId: string | undefined): boolean {
-  return nodeId !== undefined && pieces.some((piece) => piece.nodes.some((node) => node.id === nodeId));
-}
-
-/** The opening under the pointer: a rim dot, then the pick, then `openingNear`. */
+/** The opening under the pointer: the pick, then `openingNear`. */
 function openingUnder(ctx: ToolContext, sample: PointerSample): ConstructionRegionTopology | undefined {
-  const topologies = ctx.runtime.getAllRegionTopologies();
-  if (sample.nodeId !== undefined) {
-    const owner = topologies.find((topology) => isOpening(topology) && isRimNode([topology], sample.nodeId));
-    if (owner !== undefined) return owner;
-  }
   const picked = sample.surfaceRef;
   if (picked !== undefined) {
-    const hit = topologies.find((topology) => isOpening(topology) && surfaceRefFromNodeSet(topology.surfaceKey) === picked);
+    const hit = ctx.runtime.getAllRegionTopologies().find((topology) => isOpening(topology) && surfaceRefFromNodeSet(topology.surfaceKey) === picked);
     if (hit !== undefined) return hit;
   }
   return openingNear(ctx, sample.point);
@@ -218,42 +212,39 @@ function runPointAt(ctx: ToolContext, hostSurfaceKey: ConstructionSurfaceKey, po
   return run === undefined || at === undefined ? undefined : { run, at };
 }
 
-/**
- * Starts a drag on `opening`'s whole group. Its own size is carried, never
- * the sliders' -- except on an opening that is already this tool's
- * selection, where a second press means "apply the sliders now".
- */
-function beginGrab(ctx: ToolContext, opening: ConstructionRegionTopology, sample: PointerSample, liveParams: OpeningParams): boolean {
-  const pieces = groupOf(ctx, opening);
+/** Grabs `opening`'s whole group and selects it; a group not selected yet shows its own size and shape in the panel. */
+function beginGrab(ctx: ToolContext, opening: ConstructionRegionTopology, sample: PointerSample, params: OpeningParams): Drag | undefined {
+  const group = groupIdOf(opening);
   const hostKey = primaryHostOf(opening);
   const placed = hostKey === undefined ? undefined : runPointAt(ctx, hostKey, sample.point);
-  if (placed === undefined) return false;
+  if (group === undefined || placed === undefined) return undefined;
   const { run, at } = placed;
+  const pieces = groupPieces(ctx, group);
   const span = groupRunSpan(run, pieces);
-  if (span === undefined) return false;
+  if (span === undefined) return undefined;
 
-  const groupKey = groupKeyOf(opening);
-  const alreadySelected = selected?.groupKey === groupKey;
+  const wasSelected = selected?.groupKey === group;
   const pieceKeys = pieces.map((piece) => piece.surfaceKey);
   const shape = shapeOfGroup(pieces);
-  select(ctx, { groupKey, pieceKeys, shape }, liveParams);
   const centerS = (span.s0 + span.s1) / 2;
   const centerV = (span.v0 + span.v1) / 2;
+  if (!wasSelected) {
+    const look = { width: span.s1 - span.s0, height: (span.v1 - span.v0) * run.heightAt(centerS), shape };
+    select(ctx, { groupKey: group, pieceKeys, shape }, look, params);
+  }
   ctx.reportSelection({ id: surfaceRefFromNodeSet(opening.surfaceKey), point: run.resolveAt(centerS, centerV) });
 
-  drag = {
+  return {
     run,
     pieceKeys,
     pieceRefs: new Set(pieceKeys.map(surfaceRefFromNodeSet)),
     originalSpan: span,
-    handle: isRimNode(pieces, sample.nodeId) ? cornerAt(span, at) : handleAt(run, span, at),
+    handle: handleAt(run, span, at),
     isDoor: isDoorRect(span),
     shape,
-    ds: alreadySelected ? liveParams.width : span.s1 - span.s0,
-    dv: alreadySelected ? liveParams.height / run.heightAt(centerS) : span.v1 - span.v0,
+    wasSelected,
     grabOffset: { s: at.s - centerS, v: at.v - centerV },
   };
-  return true;
 }
 
 /** Where `active`'s opening would stand, before settling, if released at `at`. */
@@ -269,9 +260,20 @@ function rawRectFor(active: Drag, at: RunPoint): RunRect {
     if (handle.v === "bottom" && !active.isDoor) v0 = Math.min(at.v, span.v1 - minV);
     return { s0, s1, v0, v1 };
   }
+  const ds = span.s1 - span.s0;
+  const dv = span.v1 - span.v0;
   const centerS = at.s - active.grabOffset.s;
-  const v0 = active.isDoor ? 0 : at.v - active.grabOffset.v - active.dv / 2;
-  return { s0: centerS - active.ds / 2, s1: centerS + active.ds / 2, v0, v1: v0 + active.dv };
+  const v0 = active.isDoor ? 0 : at.v - active.grabOffset.v - dv / 2;
+  return { s0: centerS - ds / 2, s1: centerS + ds / 2, v0, v1: v0 + dv };
+}
+
+/** `active`'s opening resized to the sliders' width/height about its own center. */
+function sliderRect(active: Drag, params: OpeningParams): RunRect {
+  const { originalSpan: span, run } = active;
+  const centerS = (span.s0 + span.s1) / 2;
+  const dv = params.height / run.heightAt(centerS);
+  const v0 = active.isDoor ? 0 : (span.v0 + span.v1) / 2 - dv / 2;
+  return { s0: centerS - params.width / 2, s1: centerS + params.width / 2, v0, v1: v0 + dv };
 }
 
 function sameRect(a: RunRect, b: RunRect): boolean {
@@ -293,6 +295,7 @@ function piecesPreview(pieces: readonly OpeningPiece[], color: number): ReturnTy
   return segmentsPreview(Float32Array.from(positions), color);
 }
 
+/** The ghost of `rect` outlined by `shape`, red where it would overlap another opening. */
 function rectPreview(ctx: ToolContext, run: RunFrame, rect: RunRect, shape: OpeningShape, color: number, excluded?: ReadonlySet<string>): ReturnType<typeof segmentsPreview> | undefined {
   const pieces = run.pieces(rect, shape);
   if (pieces === undefined || pieces.length === 0) return undefined;
@@ -304,7 +307,7 @@ function dragPreview(gesture: ToolGesture, ctx: ToolContext, active: Drag): Retu
   if (at === undefined) return undefined;
   const rect = settleRect(active.run, rawRectFor(active, at), active.isDoor, isBody(active.handle));
   if (rect === undefined) return undefined;
-  return rectPreview(ctx, active.run, rect, active.shape, OPENING_COLOR[active.isDoor ? "door" : "window"], active.pieceRefs);
+  return rectPreview(ctx, active.run, rect, active.shape, OPENING_KIND_COLOR[active.isDoor ? "door" : "window"], active.pieceRefs);
 }
 
 function reportCommit(ctx: ToolContext, causeId: string, result: { readonly recorded: boolean; readonly error?: string }, success: string): void {
@@ -318,25 +321,21 @@ function reportCommit(ctx: ToolContext, causeId: string, result: { readonly reco
 
 const OVERLAP_MESSAGE = "Abertura: sobreporia outra abertura ja existente nesta parede.";
 const NO_FIT_MESSAGE = "Abertura: nao cabe aqui.";
+const SELECTED_MESSAGE =
+  "Abertura selecionada. Arraste o meio para mover, uma borda ou um canto para redimensionar; clique de novo para aplicar largura e altura; Delete apaga.";
 
-function commitDrag(ctx: ToolContext, gesture: ToolGesture, active: Drag): void {
-  const at = active.run.project(gesture.current.point);
-  if (at === undefined) {
-    ctx.reportFeedback({ tone: "error", message: NO_FIT_MESSAGE });
-    return;
-  }
-  const raw = rawRectFor(active, at);
-  if (sameRect(raw, active.originalSpan)) {
-    ctx.reportFeedback({ tone: "info", message: "Abertura selecionada. Arraste o meio para mover, uma borda ou um canto para redimensionar; Delete apaga." });
-    return;
-  }
-  const rect = settleRect(active.run, raw, active.isDoor, isBody(active.handle));
+/** Replaces `active`'s group with `raw` settled on the run; `keepWidth` settles by shifting rather than trimming. */
+function commitEdit(ctx: ToolContext, active: Drag, raw: RunRect, keepWidth: boolean, success: string): void {
+  const rect = sameRect(raw, active.originalSpan) ? active.originalSpan : settleRect(active.run, raw, active.isDoor, keepWidth);
   const pieces = rect === undefined ? undefined : active.run.pieces(rect, active.shape);
   if (rect === undefined || pieces === undefined || pieces.length === 0) {
     ctx.reportFeedback({ tone: "error", message: NO_FIT_MESSAGE });
     return;
   }
-  if (sameRect(rect, active.originalSpan)) return;
+  if (sameRect(rect, active.originalSpan)) {
+    ctx.reportFeedback({ tone: "info", message: SELECTED_MESSAGE });
+    return;
+  }
   if (overlapsOther(ctx, active.run, rect, active.pieceRefs)) {
     ctx.reportFeedback({ tone: "error", message: OVERLAP_MESSAGE });
     return;
@@ -344,7 +343,22 @@ function commitDrag(ctx: ToolContext, gesture: ToolGesture, active: Drag): void 
   const causeId = scopedToolId(ctx, "opening-edit", ctx.nextSequence());
   const result = commitOpeningGroup(ctx, causeId, active.pieceKeys, pieces, active.shape);
   clearSelection(ctx);
-  reportCommit(ctx, causeId, result, isBody(active.handle) ? "Abertura movida." : "Abertura redimensionada.");
+  reportCommit(ctx, causeId, result, success);
+}
+
+/** A release after grabbing an opening: a drag moves or resizes it; a plain click selects it, or applies the sliders when it already was. */
+function releaseGrab(ctx: ToolContext, gesture: ReleasedGesture, active: Drag, params: OpeningParams): void {
+  if (!gesture.moved) {
+    if (active.wasSelected) commitEdit(ctx, active, sliderRect(active, params), true, "Abertura redimensionada.");
+    else ctx.reportFeedback({ tone: "info", message: SELECTED_MESSAGE });
+    return;
+  }
+  const at = active.run.project(gesture.current.point);
+  if (at === undefined) {
+    ctx.reportFeedback({ tone: "error", message: NO_FIT_MESSAGE });
+    return;
+  }
+  commitEdit(ctx, active, rawRectFor(active, at), isBody(active.handle), isBody(active.handle) ? "Abertura movida." : "Abertura redimensionada.");
 }
 
 /** The rect drawn from `anchor` to `at`, both read as opposite corners. */
@@ -359,12 +373,12 @@ function drawnRect(isDoor: boolean, anchor: CreateAnchor, at: RunPoint): RunRect
 function createPreview(gesture: ToolGesture, params: OpeningParams, ctx: ToolContext, anchor: CreateAnchor): ReturnType<typeof segmentsPreview> | undefined {
   const at = anchor.run.project(gesture.current.point, anchor.hostSurfaceKey);
   const rect = at === undefined ? undefined : drawnRect(params.openingKind === "door", anchor, at);
-  return rect === undefined ? undefined : rectPreview(ctx, anchor.run, rect, creationShape(params), OPENING_COLOR[params.openingKind]);
+  return rect === undefined ? undefined : rectPreview(ctx, anchor.run, rect, shapeOf(params), OPENING_KIND_COLOR[params.openingKind]);
 }
 
+/** Places a new opening at `rect`; `params` are what a new opening takes. */
 function placeNew(ctx: ToolContext, run: RunFrame, rect: RunRect | undefined, params: OpeningParams): void {
-  const kind = params.openingKind;
-  const shape = creationShape(params);
+  const shape = shapeOf(params);
   const pieces = rect === undefined ? undefined : run.pieces(rect, shape);
   if (rect === undefined || pieces === undefined || pieces.length === 0) {
     ctx.reportFeedback({ tone: "error", message: NO_FIT_MESSAGE });
@@ -377,7 +391,23 @@ function placeNew(ctx: ToolContext, run: RunFrame, rect: RunRect | undefined, pa
   if (selected !== undefined) clearSelection(ctx);
   const causeId = scopedToolId(ctx, "opening", ctx.nextSequence());
   const result = commitOpeningGroup(ctx, causeId, [], pieces, shape);
-  reportCommit(ctx, causeId, result, kind === "door" ? "Porta aberta na parede." : "Janela aberta na parede.");
+  reportCommit(ctx, causeId, result, params.openingKind === "door" ? "Porta aberta na parede." : "Janela aberta na parede.");
+}
+
+/** A release after pressing off any opening: a drag draws a new one; a plain click places one at the slider size. */
+function releaseOnWall(ctx: ToolContext, gesture: ReleasedGesture, anchor: CreateAnchor | undefined, params: OpeningParams): void {
+  if (!gesture.moved) {
+    const placed = resolvePlacement(ctx, gesture.start, params);
+    if (placed === undefined) {
+      ctx.reportFeedback({ tone: "error", message: "Abertura: clique sobre uma parede reta ou curva, com espaco para a abertura caber nela." });
+      return;
+    }
+    placeNew(ctx, placed.run, placed.rect, params);
+    return;
+  }
+  const at = anchor?.run.project(gesture.current.point, anchor.hostSurfaceKey);
+  if (anchor === undefined || at === undefined) return;
+  placeNew(ctx, anchor.run, drawnRect(params.openingKind === "door", anchor, at), params);
 }
 
 export const openingTool: ConstructionTool<"opening"> = {
@@ -389,72 +419,33 @@ export const openingTool: ConstructionTool<"opening"> = {
   snapsToSurface: true,
 
   previewFor(gesture: ToolGesture, params: OpeningParams, ctx: ToolContext) {
-    if (drag !== undefined) return dragPreview(gesture, ctx, drag);
-    if (creating !== undefined) return createPreview(gesture, params, ctx, creating);
-    const placed = resolvePlacement(ctx, gesture.current, params);
+    if (press?.kind === "grab") return dragPreview(gesture, ctx, press.drag);
+    const fresh = forNew(params);
+    if (press?.anchor !== undefined) return createPreview(gesture, fresh, ctx, press.anchor);
+    const placed = resolvePlacement(ctx, gesture.current, fresh);
     if (placed?.rect === undefined) return undefined;
-    const pieces = placed.run.pieces(placed.rect, creationShape(params));
-    return pieces === undefined || pieces.length === 0 ? undefined : piecesPreview(pieces, OPENING_COLOR[params.openingKind]);
+    return rectPreview(ctx, placed.run, placed.rect, shapeOf(fresh), OPENING_KIND_COLOR[fresh.openingKind]);
   },
 
   onPointerDown(ctx: ToolContext, sample: PointerSample, params: OpeningParams): void {
-    drag = undefined;
-    creating = undefined;
-    grabbedThisGesture = false;
-    createdThisGesture = false;
+    press = undefined;
     const opening = openingUnder(ctx, sample);
     if (opening !== undefined) {
-      if (beginGrab(ctx, opening, sample, params)) grabbedThisGesture = true;
+      const drag = beginGrab(ctx, opening, sample, params);
+      if (drag !== undefined) press = { kind: "grab", drag };
       else ctx.reportFeedback({ tone: "error", message: "Nao foi possivel identificar a parede desta abertura." });
       return;
     }
     const hostSurfaceKey = wallUnder(ctx, sample);
     const placed = hostSurfaceKey === undefined ? undefined : runPointAt(ctx, hostSurfaceKey, sample.point);
-    if (hostSurfaceKey === undefined || placed === undefined) return;
-    creating = { run: placed.run, hostSurfaceKey, ...placed.at };
+    press = { kind: "wall", anchor: hostSurfaceKey === undefined || placed === undefined ? undefined : { run: placed.run, hostSurfaceKey, ...placed.at } };
   },
 
-  // The ghost is redrawn by `previewFor`; the commit happens once, on release.
-  onPointerMove(): void {},
-
-  onPointerUp(ctx: ToolContext, gesture: ToolGesture, params: OpeningParams): void {
-    if (drag !== undefined) {
-      const active = drag;
-      drag = undefined;
-      commitDrag(ctx, gesture, active);
-      return;
-    }
-    if (creating === undefined) return;
-    const anchor = creating;
-    creating = undefined;
-    const { start, current } = gesture;
-    const moved = Math.hypot(current.point.x - start.point.x, current.point.y - start.point.y, current.point.z - start.point.z) > CREATE_DRAG_THRESHOLD;
-    // A plain click is left to `onClick`, which stamps the slider size.
-    if (!moved) return;
-    createdThisGesture = true;
-    const at = anchor.run.project(current.point, anchor.hostSurfaceKey);
-    if (at === undefined) return;
-    placeNew(ctx, anchor.run, drawnRect(params.openingKind === "door", anchor, at), params);
-  },
-
-  onClick(ctx: ToolContext, sample: PointerSample, params: OpeningParams): void {
-    if (grabbedThisGesture) {
-      grabbedThisGesture = false;
-      return;
-    }
-    if (createdThisGesture) {
-      createdThisGesture = false;
-      return;
-    }
-    const placed = resolvePlacement(ctx, sample, params);
-    if (placed === undefined) {
-      ctx.reportFeedback({
-        tone: "error",
-        message: "Abertura: clique sobre uma parede reta ou curva, com espaco para a abertura caber nela.",
-      });
-      return;
-    }
-    placeNew(ctx, placed.run, placed.rect, params);
+  onPointerUp(ctx: ToolContext, gesture: ReleasedGesture, params: OpeningParams): void {
+    const released = press;
+    press = undefined;
+    if (released?.kind === "grab") releaseGrab(ctx, gesture, released.drag, params);
+    else if (released?.kind === "wall") releaseOnWall(ctx, gesture, released.anchor, forNew(params));
   },
 
   onParamsChange(ctx: ToolContext, next: OpeningParams): void {
@@ -471,8 +462,7 @@ export const openingTool: ConstructionTool<"opening"> = {
   },
 
   onCancel(ctx: ToolContext): void {
-    drag = undefined;
-    creating = undefined;
+    press = undefined;
     clearSelection(ctx);
   },
 };

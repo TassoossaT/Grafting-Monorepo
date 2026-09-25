@@ -193,6 +193,15 @@ function createFakeConstructionPort() {
       requireStarted();
       return [];
     },
+    getGraphSnapshot() {
+      return { nodes: [], edges: [] };
+    },
+    getCurvedEdges() {
+      return [];
+    },
+    curveBatch() {
+      return [];
+    },
     applyRegionOverlay() {
       requireStarted();
       return {
@@ -223,7 +232,7 @@ function createFakeConstructionPort() {
     redoRegionOverlay() {
       requireStarted();
     },
-    getSurfaceMesh(surfaceKey) {
+    meshFor(surfaceKey) {
       requireStarted();
       const surfaceRef = surfaceRefFromNodeSet(surfaceKey);
       const match = this.getAllSurfaceMeshes().find((mesh) => surfaceRefFromNodeSet(mesh.surfaceKey) === surfaceRef);
@@ -237,8 +246,8 @@ function createFakeConstructionPort() {
         },
       ];
     },
-    getSurfaceMeshes(surfaceKeys) {
-      return surfaceKeys.flatMap((surfaceKey) => this.getSurfaceMesh(surfaceKey));
+    getSurfaceMeshesReport(surfaceKeys) {
+      return { meshes: surfaceKeys.flatMap((surfaceKey) => this.meshFor(surfaceKey)), failed: [] };
     },
     getAllSurfaceMeshes() {
       requireStarted();
@@ -447,7 +456,7 @@ test("moving a vertex removes a chunk that no longer has any surface in it", asy
     ...move(nodeId, position),
     affectedSurfaceKeys: [FAKE_TERRAIN_SURFACE_KEY],
   });
-  constructionPort.getSurfaceMesh = (surfaceKey) => [
+  constructionPort.meshFor = (surfaceKey) => [
     {
       surfaceKey,
       surfaceType: "terrain",
@@ -478,7 +487,7 @@ test("editing one surface never touches the render chunk of an unrelated, untouc
   // chunk buckets (`chunkKeyFor`'s own 8-unit bucket size).
   const farKey = ["fake:far:n0", "fake:far:n1"];
   const nearKey = ["fake:near:n0", "fake:near:n1"];
-  constructionPort.getSurfaceMesh = (surfaceKey) => {
+  constructionPort.meshFor = (surfaceKey) => {
     if (surfaceRefFromNodeSet(surfaceKey) === surfaceRefFromNodeSet(farKey)) {
       return [
         {
@@ -521,7 +530,7 @@ test("editing one surface never touches the render chunk of an unrelated, untouc
 test("one surface key returning several disjoint mesh pieces uploads every piece, not just the first", async () => {
   // Regression: an analytic-region surface (a merged path-brush
   // source/target region) can legitimately triangulate into more than one
-  // disjoint mesh piece -- one per outer loop. `getSurfaceMesh` used to be
+  // disjoint mesh piece -- one per outer loop. The mesh query used to be
   // a single-mesh contract, so `#applyConstructionMutation`'s refetch kept
   // only the first piece and silently dropped the rest from the render
   // chunk -- the real cause of "surfaces vanishing" after a path-brush
@@ -536,7 +545,7 @@ test("one surface key returning several disjoint mesh pieces uploads every piece
   await runtime.start();
 
   const regionKey = ["@region", "path-1-target"];
-  constructionPort.getSurfaceMesh = (surfaceKey) => [
+  constructionPort.meshFor = (surfaceKey) => [
     {
       surfaceKey,
       surfaceType: "terrain",
@@ -692,18 +701,15 @@ test("applyPatchReplacement folds supplied nodes without scanning every live nod
     skippedRegionIds: [],
   });
   let batchMeshReads = 0;
-  constructionPort.getSurfaceMesh = () => {
-    throw new Error("replacement projection must use the batch mesh query");
-  };
-  constructionPort.getSurfaceMeshes = (surfaceKeys) => {
+  constructionPort.getSurfaceMeshesReport = (surfaceKeys) => {
     batchMeshReads += 1;
     assert.deepEqual(surfaceKeys, [replacementKey]);
-    return [{
+    return { meshes: [{
       surfaceKey: replacementKey,
       surfaceType: "terrain",
       physical: true,
       mesh: { positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 0, 1]), indices: new Uint32Array([0, 1, 2]) },
-    }];
+    }], failed: [] };
   };
   const patch = {
     nodes: [

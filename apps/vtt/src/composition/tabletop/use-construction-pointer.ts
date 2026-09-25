@@ -11,6 +11,7 @@ import type { SelectedNodeInfo } from "@/widgets";
 import { GRID_SNAP_UNIT } from "../../adapters/rendering/index.ts";
 import type { TabletopRuntime } from "./tabletop-runtime.ts";
 import { toolFor } from "./tools/index.ts";
+import { gestureMoved } from "./tools/core/tool-context.ts";
 import {
   edgeOverlayChannel,
   edgeOverlayDescriptor,
@@ -327,10 +328,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       if (released && (released.point.x !== gesture.last.point.x || released.point.y !== gesture.last.point.y || released.point.z !== gesture.last.point.z)) {
         gesture.last = released; gesture.samples.push(released);
       }
-      suppressClickRef.current = gesture.samples.some((s) => s.screenX !== undefined && s.screenY !== undefined && gesture.start.screenX !== undefined && gesture.start.screenY !== undefined
-        ? Math.hypot(s.screenX-gesture.start.screenX,s.screenY-gesture.start.screenY)>3
-        : Math.hypot(s.point.x-gesture.start.point.x,s.point.y-gesture.start.point.y,s.point.z-gesture.start.point.z)>0.05);
-      tool.onPointerUp?.(ctx, { start: gesture.start, current: gesture.last, samples: gesture.samples }, params);
+      const moved = gestureMoved(gesture.start, gesture.samples);
+      suppressClickRef.current = moved;
+      tool.onPointerUp?.(ctx, { start: gesture.start, current: gesture.last, samples: gesture.samples, moved }, params);
       gestureRef.current = null;
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId);

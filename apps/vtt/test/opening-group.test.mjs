@@ -3,57 +3,13 @@
 // real runtime + WASM engine through the opening tool's own gesture model.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { registerHooks } from "node:module";
-import { createAliasResolveHook } from "./support/alias-resolve-hook.mjs";
 
-registerHooks(createAliasResolveHook(new URL("../src/", import.meta.url)));
+import { curvyBrushWall, groupOf, harness, hitMesh, line, press, ref } from "./support/opening-harness.mjs";
+import { DEFAULT_TOOL_PARAMS } from "../src/features/edit-construction/index.ts";
+import { surfaceRefFromNodeSet } from "../src/entities/map/index.ts";
+import { openingTool } from "../src/composition/tabletop/tools/openings/opening-tool.ts";
 
-const { readFileSync } = await import("node:fs");
-const { initSync } = await import("../../../libs/domains/procgen/construction-wasm/pkg/grafting_procgen_construction_wasm.js");
-initSync({ module: readFileSync(new URL("../../../libs/domains/procgen/construction-wasm/pkg/grafting_procgen_construction_wasm_bg.wasm", import.meta.url)) });
-
-const { AppTabletopRuntime } = await import("../src/composition/tabletop/tabletop-runtime.ts");
-const { createConstructionSessionAdapter } = await import("../src/adapters/construction/construction-session-wasm-adapter.ts");
-const { createEditHistoryStack, DEFAULT_TOOL_PARAMS, hasTrait, openingStructureType } = await import("../src/features/edit-construction/index.ts");
-const { surfaceRefFromNodeSet } = await import("../src/entities/map/index.ts");
-const { openingTool } = await import("../src/composition/tabletop/tools/openings/opening-tool.ts");
-const { wallLineTool } = await import("../src/composition/tabletop/tools/walls/wall-line-tool.ts");
-const { commitWallStroke } = await import("../src/composition/tabletop/tools/walls/wall-shared.ts");
-
-const ref = (t) => surfaceRefFromNodeSet(t.surfaceKey);
-const isOpening = (t) => t.surfaceType === openingStructureType.surfaceType;
-const isPartition = (t) => hasTrait(t.surfaceType, "partition");
-const WINDOW = { ...DEFAULT_TOOL_PARAMS.opening, openingKind: "window", width: 1.2, height: 1, sill: 1 };
-
-async function harness() {
-  const pickTargets = new Map();
-  const renderPort = {
-    async start() {}, attachView: () => "v", detachView() {}, resizeView() {}, setFloorClipHeight() {}, pick: () => undefined,
-    getMetrics: () => ({}), async dispose() {},
-    applyConfirmed(c) {
-      if (c.type === "surface-pick-target-upserted") pickTargets.set(c.target.surfaceRef, c.target.mesh);
-      else if (c.type === "surface-pick-target-removed") pickTargets.delete(c.surfaceRef);
-    },
-  };
-  const runtime = new AppTabletopRuntime("t", renderPort, createConstructionSessionAdapter(), { async start() {}, async dispose() {} }, []);
-  await runtime.start();
-  let seq = 0;
-  const feedback = [];
-  const ctx = {
-    runtime, history: createEditHistoryStack(), tableId: "t", snapToGrid: false, structureEditParams: { mode: "shape" },
-    nextSequence: () => ++seq, reportSelection() {}, reportFeedback: (f) => f && feedback.push(f),
-  };
-  openingTool.onCancel(ctx);
-  const all = () => runtime.getAllRegionTopologies();
-  return { runtime, ctx, pickTargets, feedback, openings: () => all().filter(isOpening), walls: () => all().filter(isPartition) };
-}
-
-function line(ctx, a, b) {
-  const params = DEFAULT_TOOL_PARAMS["wall-line"];
-  wallLineTool.onPointerDown(ctx, { point: a }, params);
-  wallLineTool.onPointerUp(ctx, { start: { point: a }, current: { point: b }, samples: [] }, params);
-  wallLineTool.onClick?.(ctx, { point: b }, params);
-}
+const WINDOW = { ...DEFAULT_TOOL_PARAMS.opening, openingKind: "window", width: 1.2, height: 1 };
 
 /** Two co-linear 4 m panels welded end to end, x in [0, 8]. */
 function twoPanelWall(ctx) {
@@ -61,35 +17,8 @@ function twoPanelWall(ctx) {
   line(ctx, { x: 4, y: 0, z: 0 }, { x: 8, y: 0, z: 0 });
 }
 
-function curvyBrushWall(ctx) {
-  const stroke = Array.from({ length: 91 }, (_, i) => ({ x: (i / 90) * 24, y: 0, z: 3 * Math.sin((i / 90) * Math.PI * 5) }));
-  commitWallStroke(ctx, stroke, 0.25, { wallType: "wall-white", height: 3 }, "wall-brush");
-}
-
-/** The opening standing at `point`, by its pieces' pinned rim in world XY -- what a pick would report. */
-function openingRefAt(openings, point) {
-  const hit = openings.find((o) => {
-    const xs = o.nodes.map((n) => n.position.x), ys = o.nodes.map((n) => n.position.y), zs = o.nodes.map((n) => n.position.z);
-    return point.x >= Math.min(...xs) - 1e-6 && point.x <= Math.max(...xs) + 1e-6 && point.y >= Math.min(...ys) && point.y <= Math.max(...ys)
-      && point.z >= Math.min(...zs) - 1e-6 && point.z <= Math.max(...zs) + 1e-6;
-  });
-  return hit && ref(hit);
-}
-
-function press(h, params, down, up = down, downExtra = {}) {
-  const sample = { point: down, surfaceRef: openingRefAt(h.openings(), down), ...downExtra };
-  const gesture = { start: { point: down }, current: { point: up }, samples: [{ point: down }, { point: up }] };
-  openingTool.onPointerDown(h.ctx, sample, params);
-  openingTool.previewFor(gesture, params, h.ctx);
-  openingTool.onPointerUp(h.ctx, gesture, params);
-  openingTool.onClick(h.ctx, { point: up, surfaceRef: sample.surfaceRef }, params);
-}
-
 function clickOnWall(h, params, point, wall) {
-  const gesture = { start: { point }, current: { point }, samples: [{ point }] };
-  openingTool.onPointerDown(h.ctx, { point, surfaceRef: wall && ref(wall) }, params);
-  openingTool.onPointerUp(h.ctx, gesture, params);
-  openingTool.onClick(h.ctx, { point, surfaceRef: wall && ref(wall) }, params);
+  press(h, params, point, point, { surfaceRef: wall && ref(wall) });
 }
 
 /** Every piece's (s, v) span measured through ONE run, so the pieces are compared in the same frame. */
@@ -109,36 +38,15 @@ function groupSpans(runtime, pieces) {
 /** One group, its pieces contiguous in run space and sharing one v range; returns the whole (s, v) rect. */
 function assertOneRect(runtime, pieces) {
   assert.ok(pieces.length >= 1);
-  const group = pieces[0].group;
+  const group = groupOf(pieces[0]);
   assert.ok(group, "pieces carry a group id");
-  assert.ok(pieces.every((p) => p.group === group), "one group");
+  assert.ok(pieces.every((p) => groupOf(p) === group), "one group");
   const spans = groupSpans(runtime, pieces);
   for (let i = 1; i < spans.length; i++) {
     assert.ok(Math.abs(spans[i].s0 - spans[i - 1].s1) < 1e-3, `contiguous at the seam: ${spans[i - 1].s1} vs ${spans[i].s0}`);
     assert.ok(Math.abs(spans[i].v0 - spans[0].v0) < 1e-9 && Math.abs(spans[i].v1 - spans[0].v1) < 1e-9, "one v range");
   }
   return { s0: spans[0].s0, s1: spans.at(-1).s1, v0: spans[0].v0, v1: spans[0].v1, spans };
-}
-
-/** Möller-Trumbore against every triangle of `mesh`. */
-function hits(mesh, origin, dir) {
-  const P = mesh.positions, I = mesh.indices ?? Array.from({ length: P.length / 3 }, (_, i) => i);
-  for (let i = 0; i < I.length; i += 3) {
-    const [a, b, c] = [I[i], I[i + 1], I[i + 2]].map((k) => [P[3 * k], P[3 * k + 1], P[3 * k + 2]]);
-    const e1 = b.map((x, k) => x - a[k]), e2 = c.map((x, k) => x - a[k]);
-    const p = [dir[1] * e2[2] - dir[2] * e2[1], dir[2] * e2[0] - dir[0] * e2[2], dir[0] * e2[1] - dir[1] * e2[0]];
-    const det = e1[0] * p[0] + e1[1] * p[1] + e1[2] * p[2];
-    if (Math.abs(det) < 1e-12) continue;
-    const t = origin.map((x, k) => x - a[k]);
-    const u = (t[0] * p[0] + t[1] * p[1] + t[2] * p[2]) / det;
-    if (u < 0 || u > 1) continue;
-    const q = [t[1] * e1[2] - t[2] * e1[1], t[2] * e1[0] - t[0] * e1[2], t[0] * e1[1] - t[1] * e1[0]];
-    const v = (dir[0] * q[0] + dir[1] * q[1] + dir[2] * q[2]) / det;
-    if (v < 0 || u + v > 1) continue;
-    const d = (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]) / det;
-    if (Math.abs(d) <= 0.5) return true;
-  }
-  return false;
 }
 
 /** Whether any wall is drawn at run point (s, v), probing along the face normal there. */
@@ -150,7 +58,7 @@ function wallDrawnAt(h, run, s, v) {
   const len = Math.hypot(tangent[0], tangent[2]);
   const normal = [-tangent[2] / len, 0, tangent[0] / len];
   const origin = [at.x - normal[0] * 0.25, at.y, at.z - normal[2] * 0.25];
-  return h.walls().some((w) => { const mesh = h.pickTargets.get(ref(w)); return mesh && hits(mesh, origin, normal); });
+  return h.walls().some((w) => { const mesh = h.pickTargets.get(ref(w)); return mesh && hitMesh(mesh, origin, normal, 0.5); });
 }
 
 test("a window clicked on the seam of a 2-panel straight wall becomes one group of 2 pieces with one continuous cut", async () => {
@@ -274,7 +182,7 @@ test("undo after moving a straddling window restores its two pieces as one group
   const [a] = h.walls();
   clickOnWall(h, WINDOW, { x: 4, y: 1.5, z: 0 }, a);
   const before = h.openings();
-  const groupBefore = before[0].group;
+  const groupBefore = groupOf(before[0]);
   const spansBefore = assertOneRect(h.runtime, before);
 
   press(h, WINDOW, { x: 4, y: 2, z: 0 }, { x: 6, y: 2, z: 0 });
@@ -285,48 +193,7 @@ test("undo after moving a straddling window restores its two pieces as one group
   h.runtime.undoTransaction(entry.transactionId, "local");
   const restored = h.openings();
   assert.equal(restored.length, 2);
-  assert.ok(restored.every((p) => p.group === groupBefore), "the same group comes back");
+  assert.ok(restored.every((p) => groupOf(p) === groupBefore), "the same group comes back");
   const spansAfter = assertOneRect(h.runtime, restored);
   assert.ok(Math.abs(spansAfter.s0 - spansBefore.s0) < 1e-9 && Math.abs(spansAfter.s1 - spansBefore.s1) < 1e-9);
-});
-
-test("an opening from before groups (one ungrouped region) still selects, moves and deletes as a group of one", async () => {
-  const h = await harness();
-  twoPanelWall(h.ctx);
-  const [a] = h.walls();
-  clickOnWall(h, { ...WINDOW, width: 1 }, { x: 2, y: 1, z: 0 }, a);
-  const [legacy] = h.openings();
-  h.runtime.setRegionGroup([legacy.surfaceKey], null);
-  assert.equal(h.openings()[0].group, undefined, "ungrouped, as before groups existed");
-
-  press(h, WINDOW, { x: 2, y: 1.5, z: 0 }, { x: 4, y: 1.5, z: 0 });
-  const moved = h.openings();
-  assert.equal(moved.length, 2, "moved onto the seam, now split");
-  assertOneRect(h.runtime, moved);
-
-  press(h, WINDOW, { x: 4, y: 1.5, z: 0 });
-  openingTool.onDeleteKey(h.ctx);
-  assert.equal(h.openings().length, 0);
-});
-
-test("an old densified opening (extra pinned nodes along its sides) still moves, and comes back as four corners", async () => {
-  const h = await harness();
-  line(h.ctx, { x: 0, y: 0, z: 0 }, { x: 8, y: 0, z: 0 });
-  const [wall] = h.walls();
-  const ring = [[1.5, 1], [2, 1], [2.5, 1], [2.5, 1.5], [2.5, 2], [2, 2], [1.5, 2], [1.5, 1.5]];
-  const nodes = ring.map(([x, y], i) => ({ id: `legacy:c${i}`, position: { x, y, z: 0 } }));
-  const edges = nodes.map((n, i) => ({ edgeId: `legacy:e${i}`, startNodeId: n.id, endNodeId: nodes[(i + 1) % nodes.length].id }));
-  h.runtime.addPatch({ nodes, edges, regions: [{ regionId: "legacy", boundary: edges.map((e) => ({ edgeId: e.edgeId, reversed: false })), surfaceType: openingStructureType.surfaceType, physical: false }] }, "local", "legacy");
-  const uv = h.runtime.projectToHost({ hostSurfaceKey: wall.surfaceKey, points: nodes.map((n) => n.position) });
-  h.runtime.pinNodes(nodes.map((n, i) => ({ nodeId: n.id, hostSurfaceKey: wall.surfaceKey, u: uv[i].u, v: uv[i].v })), "local", "legacy");
-  const [legacy] = h.openings();
-  assert.equal(legacy.nodes.length, 8);
-  assert.equal(legacy.group, undefined);
-
-  press(h, WINDOW, { x: 2, y: 1.5, z: 0 }, { x: 5, y: 1.5, z: 0 });
-  const [moved, ...rest] = h.openings();
-  assert.equal(rest.length, 0);
-  assert.equal(moved.nodes.length, 4, "rebuilt clean on its first edit");
-  const rect = assertOneRect(h.runtime, [moved]);
-  assert.ok(Math.abs(rect.s0 - 4.5) < 1e-6 && Math.abs(rect.s1 - 5.5) < 1e-6, `moved as its box: [${rect.s0}, ${rect.s1}]`);
 });

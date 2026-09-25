@@ -13,6 +13,7 @@ import {
 } from "../src/composition/tabletop/tools/openings/opening-shared.ts";
 import { surfaceRefFromNodeSet } from "../src/entities/map/index.ts";
 import { addFace, sessionFixture } from "./platform-session-fixture.mjs";
+import { groupOf } from "./support/opening-harness.mjs";
 
 /** A straight 8 x 3 wall along +X. */
 function wall(runtime, id = "wall", from = { x: 0, z: 0 }, to = { x: 8, z: 0 }, height = 3) {
@@ -83,7 +84,7 @@ test("commitOpeningGroup places one piece per face with its own nodes, every one
     const [opening] = openingsOf(runtime);
     const hostNodes = new Set(host.nodes.map((node) => node.id));
     assert.ok(opening.nodes.every((node) => !hostNodes.has(node.id) && node.pin !== undefined));
-    assert.ok(typeof opening.group === "string" && opening.group.length > 0, "labelled as a group");
+    assert.ok(typeof groupOf(opening) === "string" && groupOf(opening).length > 0, "labelled as a group in its property bag");
     assert.deepEqual(primaryHostOf(opening), host.surfaceKey);
     const span = groupRunSpan(run, [opening]);
     assert.ok(near(span.s0, 2, 1e-5) && near(span.s1, 4, 1e-5) && near(span.v0, 0.2) && near(span.v1, 0.6));

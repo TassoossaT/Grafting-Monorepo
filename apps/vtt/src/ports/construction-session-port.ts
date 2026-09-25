@@ -297,8 +297,6 @@ export interface ConstructionRegionTopology {
   readonly outerLoops: readonly (readonly ConstructionRegionEdge[])[];
   readonly holes: readonly (readonly ConstructionRegionEdge[])[];
   readonly nodes: readonly ConstructionNodeSnapshot[];
-  /** The group this region belongs to: regions a caller treats as one object. */
-  readonly group?: string;
   /** Free-form properties a caller stored on the region; the engine never reads them. */
   readonly props?: Readonly<Record<string, unknown>>;
 }
@@ -685,16 +683,14 @@ export interface ConstructionSessionPort extends BezierPort {
   pinNodes(pins: readonly ConstructionPinRequest[]): RegionEditOutcome;
   /** Drops pins; the nodes stay where they are. */
   unpinNodes(nodeIds: readonly ConstructionNodeId[]): RegionEditOutcome;
-  /** Gives an edge pinned at both ends to one host a cubic path in that host's `(u, v)`, or a straight one there. Refused unless both ends are pinned to that host. */
-  pinEdgeCurve(request: ConstructionPinEdgeCurveRequest): RegionEditOutcome;
+  /** Gives each edge, pinned at both ends to one host, a cubic path in that host's `(u, v)`, or a straight one there. Refused unless both ends are pinned to that host. */
+  pinEdgeCurves(requests: readonly ConstructionPinEdgeCurveRequest[]): RegionEditOutcome;
   /** A pinned region's outer loop traced on its host. Throws unless every node is pinned to one host. */
   hostOutline(surfaceKey: ConstructionSurfaceKey): ConstructionHostOutline;
   /** World points in a host face's `(u, v)` frame. Throws when the host is not an upright panel. */
   projectToHost(request: { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly points: readonly ConstructionPosition[] }): readonly ConstructionHostPoint[];
   /** Host `(u, v)` pairs back to world positions. Pure. */
   resolveOnHost(request: { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly uv: readonly (readonly [number, number])[] }): readonly ConstructionPosition[];
-  /** Labels regions as one group, or clears the label with `null`. Undoable; moves nothing. */
-  setRegionGroup(surfaceKeys: readonly ConstructionSurfaceKey[], groupId: string | null): RegionEditOutcome;
   /** Replaces the regions' property bag, or clears it with `null`. Undoable; moves nothing. */
   setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): RegionEditOutcome;
   /** The run through an upright panel that accepts cuts. Throws otherwise. */
@@ -817,27 +813,17 @@ export interface ConstructionSessionPort extends BezierPort {
   /** `ADR-0022`'s "cloud" query. */
   cloudFor(request: CloudRequest): CloudOutcome;
 
-  /**
-   * One surface's mesh piece(s), by key. Almost always one piece -- but an
-   * analytic-region key (a merged path-brush source/target region) can
-   * legitimately triangulate into several disjoint pieces (one per outer
-   * loop), and every one of them must be rendered, not just the first.
-   */
-  getSurfaceMesh(surfaceKey: ConstructionSurfaceKey): readonly SurfaceMeshResult[];
-  /** A known mutation set's meshes in one engine crossing. */
-  getSurfaceMeshes(surfaceKeys: readonly ConstructionSurfaceKey[]): readonly SurfaceMeshResult[];
   /** Every currently-known surface's mesh -- the bootstrap/full-render call. */
   getAllSurfaceMeshes(): readonly SurfaceMeshResult[];
   /**
-   * {@link getSurfaceMeshes}, plus which of `surfaceKeys` could not be
-   * meshed and why -- so a caller can tell a live surface whose mesh
-   * derivation genuinely failed from a stale key naming a surface already
-   * gone (`reason: "unknown"`, expected when a surface was removed in the
-   * same mutation) instead of both silently vanishing from the result the
-   * same way. Optional: older/in-memory ports fall back to
-   * {@link getSurfaceMeshes}, which reports neither.
+   * A known mutation set's meshes in one engine crossing, plus which of
+   * `surfaceKeys` could not be meshed and why -- so a caller can tell a live
+   * surface whose mesh derivation genuinely failed from a stale key naming a
+   * surface already gone (`reason: "unknown"`, expected when a surface was
+   * removed in the same mutation). A key can yield several pieces: an
+   * analytic-region key triangulates into one per outer loop.
    */
-  getSurfaceMeshesReport?(surfaceKeys: readonly ConstructionSurfaceKey[]): {
+  getSurfaceMeshesReport(surfaceKeys: readonly ConstructionSurfaceKey[]): {
     readonly meshes: readonly SurfaceMeshResult[];
     readonly failed: readonly { readonly surfaceKey: ConstructionSurfaceKey; readonly reason: string }[];
   };
