@@ -29,26 +29,6 @@ export function slopeControlPoint(ctx: ToolContext, sample: PointerSample): Cons
 }
 
 /**
- * The straight ramp preset: from where the drag starts, at that height, to
- * where it ends, `rise` higher. A preset only chooses points -- the result is
- * an ordinary spine.
- */
-export function straightRampPoints(ctx: ToolContext, start: PointerSample, end: PointerSample, params: Params): readonly [ConstructionPosition, ConstructionPosition] {
-  const from = slopeControlPoint(ctx, start);
-  return [from, { x: end.point.x, y: from.y + (params.rise ?? 3), z: end.point.z }];
-}
-
-/** The ramp's outline while dragging: both margins at its real width, climbing with it. */
-export function straightRampOutline(from: ConstructionPosition, to: ConstructionPosition, width: number): readonly ConstructionPosition[] {
-  const dx = to.x - from.x, dz = to.z - from.z;
-  const length = Math.hypot(dx, dz);
-  if (length < 1e-6) return [];
-  const nx = (-dz / length) * (width / 2), nz = (dx / length) * (width / 2);
-  const corner = (p: ConstructionPosition, sign: number) => ({ x: p.x + nx * sign, y: p.y, z: p.z + nz * sign });
-  return [corner(from, 1), corner(to, 1), corner(to, -1), corner(from, -1), corner(from, 1)];
-}
-
-/**
  * The spiral preset: control points of a helix around `center`, climbing
  * `rise` over `turns` turns. Eight per turn keeps the automatic curve round.
  * A preset only chooses points -- the result is an ordinary spine.
@@ -63,7 +43,7 @@ export function spiralControlPoints(center: ConstructionPosition, params: Params
   });
 }
 
-interface EndWeld {
+export interface EndWeld {
   readonly controlIndex: number;
   readonly topology: ConstructionRegionTopology;
   readonly use: ConstructionRegionEdge;
@@ -71,7 +51,7 @@ interface EndWeld {
   readonly b: ConstructionPosition;
 }
 
-function project(a: ConstructionPosition, b: ConstructionPosition, p: ConstructionPosition): { t: number; distance: number } {
+export function project(a: ConstructionPosition, b: ConstructionPosition, p: ConstructionPosition): { t: number; distance: number } {
   const dx = b.x - a.x, dz = b.z - a.z;
   const lengthSq = dx * dx + dz * dz;
   if (lengthSq < 1e-12) return { t: -1, distance: Infinity };
@@ -80,7 +60,7 @@ function project(a: ConstructionPosition, b: ConstructionPosition, p: Constructi
 }
 
 /** The straight boundary edge of a flat platform at `point`'s height that `point` lands on, if any. */
-function landingEdge(topologies: readonly ConstructionRegionTopology[], point: ConstructionPosition, controlIndex: number): EndWeld | undefined {
+export function landingEdge(topologies: readonly ConstructionRegionTopology[], point: ConstructionPosition, controlIndex: number): EndWeld | undefined {
   let best: (EndWeld & { distance: number }) | undefined;
   for (const topology of topologies) {
     if (!hasTrait(topology.surfaceType, "floor") || Math.abs((topology.nodes[0]?.position.y ?? NaN) - point.y) > 1e-3) continue;
@@ -106,12 +86,21 @@ function squareTo(handle: CurvePoint, weld: EndWeld): CurvePoint {
   return [nx * reach, handle[1], nz * reach];
 }
 
+/** The edge a ramp's end shares with the floor it is welded into, from one of its end nodes to the other. */
+export interface Rung {
+  readonly edgeId: string;
+  readonly startNodeId: string;
+  readonly endNodeId: string;
+}
+
+/** A spine control node's cross-section, as the rung its spans and a welded floor share. */
+const controlRung = (controlId: string): Rung => ({ edgeId: controlRungId(controlId), startNodeId: controlSectionId(controlId, "min"), endNodeId: controlSectionId(controlId, "max") });
+
 /** The welded floor again, with the landing edge split around the ramp end's own rung. */
-function reweldedFloor(operationId: string, weld: EndWeld, controlId: string, sections: ReadonlyMap<string, ConstructionPosition>) {
+export function reweldedFloor(operationId: string, weld: EndWeld, rung: Rung, sections: ReadonlyMap<string, ConstructionPosition>) {
   const edges = new Map<string, ConstructionPatchEdge>();
-  const ids = { min: controlSectionId(controlId, "min"), max: controlSectionId(controlId, "max") };
   const along = (id: string) => project(weld.a, weld.b, sections.get(id)!).t;
-  const [first, second] = along(ids.min) <= along(ids.max) ? [ids.min, ids.max] : [ids.max, ids.min];
+  const [first, second] = along(rung.startNodeId) <= along(rung.endNodeId) ? [rung.startNodeId, rung.endNodeId] : [rung.endNodeId, rung.startNodeId];
   const walk = (loop: readonly ConstructionRegionEdge[]): ConstructionOrientedEdgeUse[] => loop.flatMap((use) => {
     if (use.edgeId !== weld.use.edgeId) {
       edges.set(use.edgeId, use.reversed
@@ -122,18 +111,18 @@ function reweldedFloor(operationId: string, weld: EndWeld, controlId: string, se
     const before = `${operationId}:weld:${weld.controlIndex}:before`, after = `${operationId}:weld:${weld.controlIndex}:after`;
     edges.set(before, { edgeId: before, startNodeId: use.startNodeId, endNodeId: first });
     edges.set(after, { edgeId: after, startNodeId: second, endNodeId: use.endNodeId });
-    return [{ edgeId: before, reversed: false }, { edgeId: controlRungId(controlId), reversed: first !== ids.min }, { edgeId: after, reversed: false }];
+    return [{ edgeId: before, reversed: false }, { edgeId: rung.edgeId, reversed: first !== rung.startNodeId }, { edgeId: after, reversed: false }];
   });
   // Walked first: the walk is what declares the split edges.
   const region = { regionId: `${operationId}:floor:${weld.controlIndex}`, boundary: walk(weld.topology.outerLoops[0] ?? []), holes: weld.topology.holes.map(walk), surfaceType: weld.topology.surfaceType, physical: weld.topology.physical };
   return { nodes: weld.topology.nodes.map((n) => ({ id: n.id, position: n.position })), edges: [...edges.values()], region };
 }
 
-/** Whether both end cross-sections landed strictly inside the edge, clear of its corners. */
-function landsInside(weld: EndWeld, controlId: string, sections: ReadonlyMap<string, ConstructionPosition>): boolean {
+/** Whether both ends of the rung landed strictly inside the edge, clear of its corners. */
+export function landsInside(weld: EndWeld, rung: Rung, sections: ReadonlyMap<string, ConstructionPosition>): boolean {
   const length = Math.hypot(weld.b.x - weld.a.x, weld.b.z - weld.a.z);
-  return (["min", "max"] as const).every((side) => {
-    const { t, distance } = project(weld.a, weld.b, sections.get(controlSectionId(controlId, side))!);
+  return [rung.startNodeId, rung.endNodeId].every((id) => {
+    const { t, distance } = project(weld.a, weld.b, sections.get(id)!);
     return distance < 1e-3 && t * length > 1e-2 && (1 - t) * length > 1e-2;
   });
 }
@@ -181,9 +170,9 @@ export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly Co
     });
     const surface = slopeSurface(ctx.runtime, new Map(nodes.map((n) => [n.id, n.position])), spans);
     const sections = new Map(surface.nodes.map((n) => [n.id, n.position]));
-    const welds = landings.filter((weld) => landsInside(weld, nodes[weld.controlIndex]!.id, sections));
+    const welds = landings.filter((weld) => landsInside(weld, controlRung(nodes[weld.controlIndex]!.id), sections));
     if (welds.length === 2 && welds[0]!.topology === welds[1]!.topology) welds.pop();
-    const floors = welds.map((weld) => ({ weld, ...reweldedFloor(operationId, weld, nodes[weld.controlIndex]!.id, sections) }));
+    const floors = welds.map((weld) => ({ weld, ...reweldedFloor(operationId, weld, controlRung(nodes[weld.controlIndex]!.id), sections) }));
     const { recorded } = commitPatchReplacement(ctx.runtime, {
       operationId,
       sourceSurfaceKeys: floors.map((floor) => floor.weld.topology.surfaceKey),

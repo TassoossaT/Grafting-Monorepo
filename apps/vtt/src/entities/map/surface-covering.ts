@@ -93,8 +93,11 @@ export function colorForSurfaceType(surfaceType: string, physical: boolean): num
     case "wall-gray":
       return 0x64748b; // Slate gray block prototype
     case "platform":
-    case "platform-slope":
       return 0xb08968; // Warm wood-floor brown, distinct from the generic fallback
+    case "platform-floating":
+    case "platform-ramp":
+    case "platform-slope":
+      return 0xc9a27e; // Lighter wood: stands over the ground instead of resting on it
     case "roof":
       return 0xb96e48;
     case "terrain":

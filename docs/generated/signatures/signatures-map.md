@@ -4475,7 +4475,7 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
   if (!Number.isFinite(params.elevation)) throw new Error("A elevação deve ser finita.");
 export function commitPlatformContour(ctx: ToolContext, samples: readonly PointerSample[], params: Params): void {
   commitPlatformShape(ctx, lines(samples,params.elevation),params,samples);
-export const platformContourTool = withStructureEditing(rawPlatformContourTool, { ownsType: (surfaceType) => surfaceType === platformStructureType.surfaceType });
+export const platformContourTool = withStructureEditing(rawPlatformContourTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "floor") });
 
 // src/composition/tabletop/tools/roof/roof-tool.ts
 export const ROOF_OVERHANG = 0.2;
@@ -4635,6 +4635,20 @@ export function circularBrushStrokeOutline(
   const positions: number[] = [];
   if (samples.length === 0) return { kind: "segments", color, opacity, positions: new Float32Array() };
 
+// src/composition/tabletop/tools/slope/ramp-commit.ts
+export interface RampParams {
+  readonly bottomWidth?: number;
+  readonly topWidth?: number;
+  readonly rise?: number;
+  }
+export function straightRampPoints(ctx: ToolContext, start: PointerSample, end: PointerSample, params: RampParams): readonly [ConstructionPosition, ConstructionPosition] {
+  const from = slopeControlPoint(ctx, start);
+export function plannedRamp(ctx: ToolContext, start: PointerSample, end: PointerSample, params: RampParams): { readonly corners: RampCorners; readonly welds: readonly EndWeld[] } {
+  const [from, to] = straightRampPoints(ctx, start, end, params);
+export function commitStraightRamp(ctx: ToolContext, start: PointerSample, end: PointerSample, params: RampParams): void {
+  try {
+  const { corners, welds: landings } = plannedRamp(ctx, start, end, params);
+
 // src/composition/tabletop/tools/slope/slope-commit.ts
 export interface SlopeParams {
   readonly width?: number;
@@ -4645,22 +4659,42 @@ export interface SlopeParams {
 export function slopeControlPoint(ctx: ToolContext, sample: PointerSample): ConstructionPosition {
   const node = sample.nodeId ? ctx.runtime.getGraphSnapshot().nodes.find((n) => n.id === sample.nodeId) : undefined;
   return { ...sample.point, y: node?.position.y ?? sample.point.y };
-export function straightRampPoints(ctx: ToolContext, start: PointerSample, end: PointerSample, params: Params): readonly [ConstructionPosition, ConstructionPosition] {
-  const from = slopeControlPoint(ctx, start);
-export function straightRampOutline(from: ConstructionPosition, to: ConstructionPosition, width: number): readonly ConstructionPosition[] {
-  const dx = to.x - from.x, dz = to.z - from.z;
-  const length = Math.hypot(dx, dz);
 export function spiralControlPoints(center: ConstructionPosition, params: Params): readonly ConstructionPosition[] {
   const radius = params.radius ?? 2.5, turns = params.turns ?? 1, rise = params.rise ?? 3;
   if (!(radius > 0) || !(turns > 0) || !Number.isFinite(rise)) throw new Error("Raio e voltas devem ser positivos.");
+export interface EndWeld {
+  readonly controlIndex: number;
+  readonly topology: ConstructionRegionTopology;
+  readonly use: ConstructionRegionEdge;
+  readonly a: ConstructionPosition;
+  readonly b: ConstructionPosition;
+  }
+export function project(a: ConstructionPosition, b: ConstructionPosition, p: ConstructionPosition): { t: number; distance: number } {
+  const dx = b.x - a.x, dz = b.z - a.z;
+  const lengthSq = dx * dx + dz * dz;
+  if (lengthSq < 1e-12) return { t: -1, distance: Infinity };
+export function landingEdge(topologies: readonly ConstructionRegionTopology[], point: ConstructionPosition, controlIndex: number): EndWeld | undefined {
+  let best: (EndWeld & { distance: number }) | undefined;
+  for (const topology of topologies) {
+  if (!hasTrait(topology.surfaceType, "floor") || Math.abs((topology.nodes[0]?.position.y ?? NaN) - point.y) > 1e-3) continue;
+  const positions = new Map(topology.nodes.map((n) => [n.id, n.position]));
+export interface Rung {
+  readonly edgeId: string;
+  readonly startNodeId: string;
+  readonly endNodeId: string;
+  }
+export function reweldedFloor(operationId: string, weld: EndWeld, rung: Rung, sections: ReadonlyMap<string, ConstructionPosition>) {
+  const edges = new Map<string, ConstructionPatchEdge>();
+export function landsInside(weld: EndWeld, rung: Rung, sections: ReadonlyMap<string, ConstructionPosition>): boolean {
+  const length = Math.hypot(weld.b.x - weld.a.x, weld.b.z - weld.a.z);
 export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly ConstructionPosition[], params: Params): void {
   try {
   const width = params.width ?? 1.5;
   if (!(width > 0)) throw new Error("A largura deve ser positiva.");
 
 // src/composition/tabletop/tools/slope/slope-tools.ts
-export const slopeRampTool = withStructureEditing(rawSlopeRampTool, { ownsType });
-export const slopeSpiralTool = withStructureEditing(rawSlopeSpiralTool, { ownsType });
+export const slopeRampTool = withStructureEditing(rawSlopeRampTool, { ownsType: ownsRamp });
+export const slopeSpiralTool = withStructureEditing(rawSlopeSpiralTool, { ownsType: ownsSlope });
 
 // src/composition/tabletop/tools/terrain/terrain-sculpt-tool.ts
 export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
@@ -5805,6 +5839,46 @@ export function followsOutward(moved: StationNodeAddress, candidate: StationNode
   return Math.sign(candidate.across) === Math.sign(moved.across)
   && Math.abs(candidate.across) > Math.abs(moved.across);
 
+// src/features/edit-construction/structure-types/platform/platform-ramp.ts
+export const RAMP_SURFACE_TYPE = "platform-ramp";
+export type RampEnd = "bottom" | "top";
+export type RampSide = "min" | "max";
+export const rampCornerId = (operationId: string, end: RampEnd, side: RampSide): string => `${operationId}:ramp:${end}:${side}`;
+export const rampEdgeId = (operationId: string, name: RampEnd | RampSide): string => `${operationId}:ramp:edge:${name}`;
+export const rampFaceId = (operationId: string): string => `${operationId}:ramp:face`;
+export type RampCorners = Readonly<Record<RampEnd, Readonly<Record<RampSide, ConstructionPosition>>>>;
+export interface RampShape {
+  readonly axisStart: ConstructionPosition;
+  readonly axisEnd: ConstructionPosition;
+  readonly bottomWidth: number;
+  readonly topWidth: number;
+  }
+export function rampCorners(shape: RampShape): RampCorners {
+  const { axisStart: start, axisEnd: end } = shape;
+  const dx = end.x - start.x, dz = end.z - start.z;
+  const length = Math.hypot(dx, dz);
+export function rampOutline(corners: RampCorners): readonly ConstructionPosition[] {
+  return [corners.bottom.min, corners.bottom.max, corners.top.max, corners.top.min, corners.bottom.min];
+  }
+export function rampPatch(operationId: string, corners: RampCorners): {
+  readonly nodes: readonly { readonly id: string; readonly position: ConstructionPosition }[];
+  readonly edges: readonly ConstructionPatchEdge[];
+  readonly region: ConstructionPatchRegion;
+  } {
+  const id = (end: RampEnd, side: RampSide) => rampCornerId(operationId, end, side);
+export function deriveRampMotion(topologies: readonly ConstructionRegionTopology[], positions: ReadonlyMap<string, ConstructionPosition>): ReadonlyMap<string, ConstructionPosition> {
+  const derived = new Map<string, ConstructionPosition>();
+export function validateRampMotion(topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>): string | undefined {
+  const corners = cornersOf(topology, positions);
+export const rampStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
+  surfaceType: RAMP_SURFACE_TYPE, label: "Rampa",
+  creation: "a symmetric trapezoid on an inclined plane: an axis and a width at each end",
+  traits: Object.freeze([]),
+  requiresMotionSolver: true,
+  roleFor,
+  policyFor,
+  // A ramp climbs between levels above the ground; it never carves it.
+
 // src/features/edit-construction/structure-types/platform/platform-slope-spine.ts
 export const SLOPE_SURFACE_TYPE = "platform-slope";
 export const SLOPE_DEFAULT_OFFSETS: readonly number[] = [-0.75, 0.75];
@@ -5838,14 +5912,8 @@ export function validateSlopeMotion(topology: ConstructionRegionTopology, positi
   const levels = new Map<string, number>();
 
 // src/features/edit-construction/structure-types/platform/platform-structure.ts
-export const platformStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
-  surfaceType: "platform", label: "Plataforma", creation: "a flat closed contour, without thickness",
-  traits: Object.freeze(["floor"] as const),
-  requiresMotionSolver: true,
-  roleFor: (topology, target) => target.kind === "vertex" && !topology.nodes.some((node) => node.id === target.nodeId) ? "platform-unknown" : `platform-${target.kind}`,
-  policyFor: (role) => role === "platform-unknown" ? denied(role, "Vertice fora da plataforma.") : ({ ...allowed(role, ALL_AXES, role === "platform-region" ? "cloud" : "surface"), transport: role === "platform-region" }),
-  interactionOver: cutsGround,
-  motionInfluences: (topology, transport): readonly ConstructionMotionInfluence[] => {
+export const platformStructureType = contourPlatformStructureType("platform", "Plataforma", cutsGround);
+export const floatingPlatformStructureType = contourPlatformStructureType("platform-floating", "Plataforma flutuante", ignoresGround);
 export const slopedPlatformStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
   surfaceType: SLOPE_SURFACE_TYPE, label: "Plataforma inclinada",
   creation: "one face per spine span: the span's ribbon, sampled along its bezier curve",
@@ -5853,7 +5921,7 @@ export const slopedPlatformStructureType: StructureTypeDefinition = Object.freez
   requiresMotionSolver: true,
   roleFor: () => "platform-slope-face",
   policyFor: (role) => denied(role, "Edite a plataforma inclinada pela espinha: pontos, alças e largura."),
-  interactionOver: cutsGround,
+  // A ramp climbs between levels above the ground; it never carves it.
 
 // src/features/edit-construction/structure-types/registry.ts
 export const STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[] = Object.freeze([
@@ -5981,6 +6049,13 @@ export interface RolePolicy {
   /**
   * Whether the op applies to the grabbed face alone or to every member of
   * its cloud. Declared per role rather than defaulted, so a new structure
+export interface ConstrainContext {
+  /** The face the gesture landed on. */
+  readonly topology: ConstructionRegionTopology;
+  readonly target: EditTarget;
+  /** The delta already constrained by the role's own axes. */
+  readonly delta: ConstructionPosition;
+  }
 export interface ReshapeContext {
   readonly cloud: CloudTopology;
   readonly edgeId: string;
@@ -6038,8 +6113,6 @@ export interface StructureTypeDefinition {
   readonly traits: readonly StructureTrait[];
   /**
   * Whether a gesture on this type can only be planned through the session's
-export function denied(role: EditRole, reason: string): RolePolicy {
-  return { role, resolve: { kind: "deny", reason }, axes: [], scope: "surface" };
 
 // src/features/edit-construction/tools/brush-shape-params.ts
 export function resolveBrushShape(params: BrushShapeParams): BrushShape {

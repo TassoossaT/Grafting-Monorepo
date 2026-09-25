@@ -99,6 +99,22 @@ export interface RolePolicy {
    * the edge keeps the curve it has.
    */
   readonly reshape?: (context: ReshapeContext) => readonly AtomicEditOp[];
+  /**
+   * Narrows the gesture's delta past what whole world {@link axes} can say:
+   * onto a direction the type reads off its own shape at gesture time -- a
+   * ramp's corner sliding only along its own edge. Applied after `axes`,
+   * before anything else sees the delta.
+   */
+  readonly constrain?: (context: ConstrainContext) => ConstructionPosition;
+}
+
+/** What a role's {@link RolePolicy.constrain} gets to look at. */
+export interface ConstrainContext {
+  /** The face the gesture landed on. */
+  readonly topology: ConstructionRegionTopology;
+  readonly target: EditTarget;
+  /** The delta already constrained by the role's own axes. */
+  readonly delta: ConstructionPosition;
 }
 
 /** What a reshape cascade gets to look at: the whole cloud, the edge and the geometry it is taking. */

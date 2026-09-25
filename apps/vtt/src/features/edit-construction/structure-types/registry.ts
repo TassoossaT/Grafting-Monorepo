@@ -1,5 +1,6 @@
 import { roofStructureType } from "./roof/roof-structure.ts";
-import { platformStructureType, slopedPlatformStructureType } from "./platform/platform-structure.ts";
+import { floatingPlatformStructureType, platformStructureType, slopedPlatformStructureType } from "./platform/platform-structure.ts";
+import { rampStructureType } from "./platform/platform-ramp.ts";
 import type { ConstructionCoveredRegion, ConstructionRegionTopology } from "@/ports";
 
 import type { EditTarget } from "../orchestration/atomic-edit.ts";
@@ -45,6 +46,8 @@ import { forbid, type CreationInteraction } from "./creation-interaction.ts";
  */
 export const STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[] = Object.freeze([
   platformStructureType,
+  floatingPlatformStructureType,
+  rampStructureType,
   slopedPlatformStructureType,
   roofStructureType,
   panelStructureType("wall-white", "Parede branca", "one upright panel per contour edge, drawn or stamped", ["partition", "accepts-cuts"]),

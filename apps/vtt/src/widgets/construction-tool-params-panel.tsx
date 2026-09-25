@@ -442,6 +442,9 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
         <div style={{ display: "grid", gap: "0.6rem" }}>
           <label>Elevacao <input type="number" step="0.1" value={params["platform-contour"].elevation} onChange={(event) => onParamsChange("platform-contour", { ...params["platform-contour"], elevation: Number(event.currentTarget.value) })} /></label>
           <div className="gm-material-grid">
+            {(["grounded", "floating"] as const).map((support, i) => <SelectableChip key={support} label={["Apoiada no chão", "Flutuante"][i]!} swatchColor="#79b8e8" selected={(params["platform-contour"].support ?? "grounded") === support} onSelect={() => onParamsChange("platform-contour", { ...params["platform-contour"], support })} />)}
+          </div>
+          <div className="gm-material-grid">
             {(["create", "extend", "cut"] as const).map((mode, i) => <SelectableChip key={mode} label={["Criar", "Ampliar / juntar", "Recortar / separar"][i]!} swatchColor="#79b8e8" selected={params["platform-contour"].mode === mode} onSelect={() => onParamsChange("platform-contour", { ...params["platform-contour"], mode })} />)}
           </div>
           <div className="gm-material-grid">
@@ -450,13 +453,16 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
           {params["platform-contour"].shape === "circle" &&<div className="gm-material-grid">{TOWER_RADIUS_PRESETS.map((radius) => <SelectableChip key={radius} label={`Raio ${radius}`} swatchColor="#79b8e8" selected={(params["platform-contour"].radius ?? 2.5) === radius} onSelect={() => onParamsChange("platform-contour",{ ...params["platform-contour"],radius })} />)}</div>}
           {params["platform-contour"].shape === "freehand" && <label>Correção <input type="number" min="0" max="1" step="0.05" value={params["platform-contour"].tolerance ?? 0.15} onChange={(event) => onParamsChange("platform-contour",{ ...params["platform-contour"],tolerance:Number(event.currentTarget.value) })} /></label>}
           <p>Retângulo: arraste na diagonal. Círculo: clique no centro. Polígono: clique nos cantos e no primeiro para fechar. Livre: arraste o contorno. Esc cancela.</p>
+          <p>Apoiada no chão: um piso que ocupa o terreno embaixo dela. Flutuante: andares e pontes, o terreno embaixo fica intacto. Uma não amplia nem recorta a outra, e o tipo não muda depois de criada.</p>
           <p>Para ampliar, desenhe sobre a borda e a área nova. Começar sobre uma plataforma usa a elevação dela; fora dela, vale a elevação escolhida. Vértices de outro andar não são conectados.</p>
         </div>
       ) : activeTool === "slope-ramp" ? (
         <div style={{ display: "grid", gap: "0.6rem" }}>
-          <label>Largura <input type="number" min="0.1" step="0.1" value={params["slope-ramp"].width} onChange={(event) => onParamsChange("slope-ramp", { ...params["slope-ramp"], width: Number(event.currentTarget.value) })} /></label>
+          <label>Largura embaixo <input type="number" min="0.1" step="0.1" value={params["slope-ramp"].bottomWidth ?? 1.5} onChange={(event) => onParamsChange("slope-ramp", { ...params["slope-ramp"], bottomWidth: Number(event.currentTarget.value) })} /></label>
+          <label>Largura em cima <input type="number" min="0.1" step="0.1" value={params["slope-ramp"].topWidth ?? 1.5} onChange={(event) => onParamsChange("slope-ramp", { ...params["slope-ramp"], topWidth: Number(event.currentTarget.value) })} /></label>
           <label>Subida <input type="number" step="0.1" value={params["slope-ramp"].rise} onChange={(event) => onParamsChange("slope-ramp", { ...params["slope-ramp"], rise: Number(event.currentTarget.value) })} /></label>
           <p>Arraste do início ao fim. A rampa começa na altura de onde você clicou e sobe o valor de Subida. Uma ponta que cai na borda de uma plataforma na mesma altura é soldada a ela.</p>
+          <p>Depois de criada: um canto muda a largura daquela ponta, uma lateral muda as duas larguras juntas, uma ponta muda o comprimento e a subida. Para uma rampa com curvas, use a Espiral.</p>
         </div>
       ) : activeTool === "slope-spiral" ? (
         <div style={{ display: "grid", gap: "0.6rem" }}>

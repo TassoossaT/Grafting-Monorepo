@@ -112,7 +112,8 @@ export function planEdit(
     return { kind: "regenerate", role: policy.role, reason: policy.resolve.reason };
   }
 
-  const delta = constrainToAxes(gesture.delta, policy.axes);
+  const axisDelta = constrainToAxes(gesture.delta, policy.axes);
+  const delta = policy.constrain?.({ topology: cloud.seed, target: gesture.target, delta: axisDelta }) ?? axisDelta;
   const primary = primaryOps(cloud, gesture, policy.scope, delta, graphSnapshot);
   if (primary.length === 0) {
     return {

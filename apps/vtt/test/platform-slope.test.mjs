@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { controlSectionId, createPathBrushEffect, curvePickId, pathFormationFor, planBezierEdit, planEdit, planPathCloudMutation, resolveCloudTopology } from "../src/features/edit-construction/index.ts";
-import { slopeRampTool, slopeSpiralTool } from "../src/composition/tabletop/tools/slope/slope-tools.ts";
+import { slopeSpiralTool } from "../src/composition/tabletop/tools/slope/slope-tools.ts";
 import { commitPlatformSlope } from "../src/composition/tabletop/tools/slope/slope-commit.ts";
 import { dispatchEffects } from "../src/composition/tabletop/effects/effect-commit.ts";
 import { shapeChangeOfReplacement } from "../src/composition/tabletop/effects/shape-change.ts";
@@ -171,23 +171,7 @@ test("a road drawn across a ramp's spine never welds into it", () => {
   } finally { session.free(); }
 });
 
-test("dragging draws a straight ramp that climbs the fixed rise from the start's height", () => {
-  const { ctx, runtime, session, calls } = sessionFixture();
-  try {
-    const start = { point: { x: 0, y: 0.5, z: 0 } }, end = { point: { x: 6, y: 0, z: 1 } };
-    const preview = slopeRampTool.previewFor({ start, current: end, samples: [start, end] }, { ...params, rise: 2 }, ctx);
-    assert.ok(preview, "the drag previews the ramp");
-    slopeRampTool.onPointerUp(ctx, { start, current: end, samples: [start, end] }, { ...params, rise: 2 });
-    const spans = slopeSpans(runtime);
-    assert.equal(spans.length, 1, JSON.stringify(calls.feedback));
-    assert.equal(node(runtime, spans[0].startNodeId).position.y, 0.5);
-    assert.equal(node(runtime, spans[0].endNodeId).position.y, 2.5);
-    assert.equal(faces(runtime, "platform-slope").length, 1);
-    assert.ok(JSON.parse(session.all_surface_meshes_json()).some((m) => m.surfaceType === "platform-slope" && m.indices.length > 0));
-  } finally { session.free(); }
-});
-
-test("a ramp over terrain cuts it and hands the terrain to its regeneration, on creation and on a spine edit", () => {
+test("a sloped ramp over terrain leaves it alone, on creation and on a spine edit", () => {
   const { ctx, runtime, session, calls } = sessionFixture();
   const requests = [];
   const apply = runtime.applyPatchReplacement;
@@ -200,39 +184,21 @@ test("a ramp over terrain cuts it and hands the terrain to its regeneration, on 
     return fallout;
   };
   try {
-    // The ramp is drawn first so its own commit reaches no ground; the ground
-    // laid after it is what the recorded reaction below is asked about. Its
-    // corners sit near the ramp because the pipeline reaches faces by their
-    // nodes, as the engine's bounds query does.
-    const start = { point: { x: -3, y: 0, z: 0 } }, end = { point: { x: 4, y: 0, z: 1 } };
-    slopeRampTool.onPointerUp(ctx, { start, current: end, samples: [start, end] }, { ...params, rise: 2 });
-    const ground = addFace(runtime, "ground", "terrain", [[-4, -3], [5, -3], [5, 3], [-4, 3]].map(([x, z], i) => ({ id: `ground:${i}`, position: { x, y: 0, z } })));
+    // The ground laid after the ramp is what the recorded reaction below is
+    // asked about; its corners sit near the ramp because the pipeline reaches
+    // faces by their nodes, as the engine's bounds query does.
+    commitPlatformSlope(ctx, [{ x: -3, y: 0, z: 0 }, { x: 0.5, y: 1, z: 0.5 }, { x: 4, y: 2, z: 1 }], params);
+    addFace(runtime, "ground", "terrain", [[-4, -3], [5, -3], [5, 3], [-4, 3]].map(([x, z], i) => ({ id: `ground:${i}`, position: { x, y: 0, z } })));
     const created = requests.at(-1);
     assert.equal(created.patch.regions[0].surfaceType, "platform-slope", JSON.stringify(calls.feedback));
-    assert.ok(created.footprintOutline?.length >= 3, "creation claims its footprint");
-    const cut = repairOf(created);
-    assert.ok(cut, "creating a ramp dispatches the terrain repair");
-    assert.equal(cut.painterSurfaceType, "platform-slope");
-    assert.deepEqual(cut.consumedSurfaceKeys, [ground.surfaceKey]);
+    assert.equal(repairOf(created), undefined, "creating a ramp reaches no ground");
 
     const span = slopeSpans(runtime)[0];
     const before = faces(runtime, "platform-slope");
     const plan = planBezierEdit({ snapshot: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), port: runtime, field: runtime,
-      targetId: curvePickId(span.edgeId, "midpoint"), position: { x: 0.5, y: 1, z: 3 }, operationId: "slope:bend", tableId: "platform-test" });
-    assert.ok(plan.request.footprintOutline?.length >= 3, "a spine edit claims the regenerated footprint");
-    assert.deepEqual(plan.request.sourceSurfaceKeys, before.map((t) => t.surfaceKey), "the edit replaces the ramp's standing faces");
+      targetId: curvePickId(span.edgeId, "midpoint"), position: { x: -1, y: 0.5, z: 2 }, operationId: "slope:bend", tableId: "platform-test" });
     runtime.applyPatchReplacement(plan.request);
-    assert.ok(repairOf(plan.request, before), "editing the ramp regenerates the terrain around it");
-  } finally { session.free(); }
-});
-
-test("a ramp dragged from a floor edge to the next floor's height welds both ends", () => {
-  const { ctx, runtime, session, calls } = sessionFixture();
-  try {
-    floor(runtime, "low", 0, 0);
-    floor(runtime, "high", 10, 3);
-    const start = { point: { x: 4, y: 0, z: 2 } }, end = { point: { x: 10, y: 0, z: 2 } };
-    slopeRampTool.onPointerUp(ctx, { start, current: end, samples: [start, end] }, { ...params, rise: 3 });
-    assert.ok(calls.feedback.at(-1).message.includes("2 ponta"), JSON.stringify(calls.feedback));
+    assert.equal(repairOf(plan.request, before), undefined, "editing the ramp reaches no ground either");
+    assert.equal(faces(runtime, "terrain").length, 1, "the terrain under the ramp is untouched");
   } finally { session.free(); }
 });

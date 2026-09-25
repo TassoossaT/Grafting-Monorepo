@@ -1,4 +1,4 @@
-import { DEFAULT_TOOL_PARAMS, fitPath, platformStructureType } from "../../../../features/edit-construction/index.ts";
+import { DEFAULT_TOOL_PARAMS, fitPath, floatingPlatformStructureType, hasTrait, platformStructureType } from "../../../../features/edit-construction/index.ts";
 import type { FittedEdge, ToolParamsByTool } from "../../../../features/edit-construction/index.ts";
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import type { ConstructionPosition, ConstructionRegionTopology } from "../../../../ports/index.ts";
@@ -13,6 +13,13 @@ type Params = ToolParamsByTool["platform-contour"];
 const COLOR = 0x79b8e8;
 /** Same corner-weld tolerance a wall run already snaps onto an existing column with. */
 const WELD_TOLERANCE = 0.25;
+/**
+ * The type a stroke draws, and the only type it extends or cuts: a floor on
+ * the ground and a floating storey never become one cloud, so neither
+ * reshapes the other either.
+ */
+const surfaceTypeOf = (params: Params): string =>
+  (params.support === "floating" ? floatingPlatformStructureType : platformStructureType).surfaceType;
 const drafts = new WeakMap<object, { key: string; points: PointerSample[] }>();
 function draft(ctx: ToolContext, params: Params): PointerSample[] {
   const key = JSON.stringify(params);
@@ -30,7 +37,7 @@ function draft(ctx: ToolContext, params: Params): PointerSample[] {
  */
 function parametersAt(ctx: ToolContext, first: PointerSample | undefined, params: Params): Params {
   if (!first) return params;
-  const target = params.mode === "create" ? undefined : ctx.runtime.getAllRegionTopologies().find((t) => t.surfaceType === platformStructureType.surfaceType &&
+  const target = params.mode === "create" ? undefined : ctx.runtime.getAllRegionTopologies().find((t) => t.surfaceType === surfaceTypeOf(params) &&
     (first.surfaceRef ? surfaceRefFromNodeSet(t.surfaceKey) === first.surfaceRef : first.nodeId && t.nodes.some((n) => n.id === first.nodeId)));
   if (target?.nodes[0]) return { ...params, elevation: target.nodes[0].position.y };
   const node = first.nodeId ? ctx.runtime.getGraphSnapshot().nodes.find((n) => n.id === first.nodeId) : undefined;
@@ -81,7 +88,7 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
     const graph = ctx.runtime.getGraphSnapshot();
     // Picking the terrain below a drawing plane is not an instruction to weld floors.
     const picked = new Set(pickedSamples.flatMap((s) => s.nodeId ? [s.nodeId] : []));
-    const sources = params.mode === "create" ? [] : all.filter((t) => t.surfaceType === platformStructureType.surfaceType && t.nodes.every((n) => Math.abs(n.position.y - params.elevation) < 1e-4));
+    const sources = params.mode === "create" ? [] : all.filter((t) => t.surfaceType === surfaceTypeOf(params) && t.nodes.every((n) => Math.abs(n.position.y - params.elevation) < 1e-4));
     if (params.mode !== "create" && sources.length === 0) throw new Error("Nenhuma plataforma nessa elevação. Comece sobre a plataforma ou escolha a elevação correta.");
 
     const operationId = scopedToolId(ctx, "platform", ctx.nextSequence());
@@ -164,7 +171,7 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
       regionId: `${operationId}:face:${index}`,
       boundary: windLoop(ctx.runtime,group.boundary,positionOf,"boundary").map((e) => builder.use(e.a,e.b,e.geometry)),
       holes: group.holes.map((hole) => windLoop(ctx.runtime,hole,positionOf,"hole").map((e) => builder.use(e.a,e.b,e.geometry))),
-      surfaceType: "platform",
+      surfaceType: surfaceTypeOf(params),
       physical: true,
     }));
     const primaryGroup = changedGroups[0];
@@ -240,4 +247,4 @@ const rawPlatformContourTool: ConstructionTool<"platform-contour"> = {
 };
 
 /** Also grabs and edits an existing platform's own vertex/edge/body -- see `structure-edit-behavior.ts`. */
-export const platformContourTool = withStructureEditing(rawPlatformContourTool, { ownsType: (surfaceType) => surfaceType === platformStructureType.surfaceType });
+export const platformContourTool = withStructureEditing(rawPlatformContourTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "floor") });

@@ -2578,11 +2578,11 @@ for sitting on ground already there, and that whole side stays empty.
 
 Also grabs and edits an existing platform's own vertex/edge/body -- see `structure-edit-behavior.ts`.
 
-### `function vtt.platform-contour-tool.commitPlatformContour(ctx: ToolContext, samples: readonly PointerSample[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; tolerance?: number }): void`
+### `function vtt.platform-contour-tool.commitPlatformContour(ctx: ToolContext, samples: readonly PointerSample[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; support?: "grounded" | "floating"; tolerance?: number }): void`
 
 Polygon entry point retained for callers that already have explicit corners.
 
-### `function vtt.platform-contour-tool.commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; tolerance?: number }, pickedSamples: readonly PointerSample[]): void`
+### `function vtt.platform-contour-tool.commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; support?: "grounded" | "floating"; tolerance?: number }, pickedSamples: readonly PointerSample[]): void`
 
 Commits the same directed line/arc contour vocabulary consumed by wall
 construction. Ampliar/juntar and recortar/separar no longer run an
@@ -2713,6 +2713,52 @@ An open line ghost from `start` to `end` -- a wall-brush's centerline while drag
 
 Builds a PreviewDescriptor for a set of straight segment pairs (e.g. wall centerline ghost).
 
+### `interface vtt.ramp-commit.RampParams`
+
+What drawing a straight ramp may decide.
+
+### `property vtt.ramp-commit.RampParams.bottomWidth?: number`
+
+### `property vtt.ramp-commit.RampParams.rise?: number`
+
+### `property vtt.ramp-commit.RampParams.topWidth?: number`
+
+### `function vtt.ramp-commit.commitStraightRamp(ctx: ToolContext, start: PointerSample, end: PointerSample, params: RampParams): void`
+
+Commits one straight ramp. An end landing on a floor's edge at its own
+height -- grounded or floating -- is welded into it: the floor's edge is
+split around the ramp's end edge, which both faces then share.
+
+### `function vtt.ramp-commit.plannedRamp(ctx: ToolContext, start: PointerSample, end: PointerSample, params: RampParams): { corners: RampCorners; welds: readonly EndWeld[] }`
+
+The corners a drag from `start` to `end` would build, before anything is committed -- what the preview draws.
+
+### `function vtt.ramp-commit.straightRampPoints(ctx: ToolContext, start: PointerSample, end: PointerSample, params: RampParams): readonly [ConstructionPosition, ConstructionPosition]`
+
+From where the drag starts, at that height, to where it ends, `rise` higher.
+
+### `interface vtt.slope-commit.EndWeld`
+
+### `property vtt.slope-commit.EndWeld.a: ConstructionPosition`
+
+### `property vtt.slope-commit.EndWeld.b: ConstructionPosition`
+
+### `property vtt.slope-commit.EndWeld.controlIndex: number`
+
+### `property vtt.slope-commit.EndWeld.topology: ConstructionRegionTopology`
+
+### `property vtt.slope-commit.EndWeld.use: ConstructionRegionEdge`
+
+### `interface vtt.slope-commit.Rung`
+
+The edge a ramp's end shares with the floor it is welded into, from one of its end nodes to the other.
+
+### `property vtt.slope-commit.Rung.edgeId: string`
+
+### `property vtt.slope-commit.Rung.endNodeId: string`
+
+### `property vtt.slope-commit.Rung.startNodeId: string`
+
 ### `interface vtt.slope-commit.SlopeParams`
 
 What every way of drawing a sloped platform may decide; each tool fills the part it offers.
@@ -2732,6 +2778,20 @@ sloped platform type, and the faces generated from it. An end that lands
 on a flat platform's edge at its own height meets that edge square on and
 is welded into it.
 
+### `function vtt.slope-commit.landingEdge(topologies: readonly ConstructionRegionTopology[], point: ConstructionPosition, controlIndex: number): EndWeld | undefined`
+
+The straight boundary edge of a flat platform at `point`'s height that `point` lands on, if any.
+
+### `function vtt.slope-commit.landsInside(weld: EndWeld, rung: Rung, sections: ReadonlyMap<string, ConstructionPosition>): boolean`
+
+Whether both ends of the rung landed strictly inside the edge, clear of its corners.
+
+### `function vtt.slope-commit.project(a: ConstructionPosition, b: ConstructionPosition, p: ConstructionPosition): { distance: number; t: number }`
+
+### `function vtt.slope-commit.reweldedFloor(operationId: string, weld: EndWeld, rung: Rung, sections: ReadonlyMap<string, ConstructionPosition>): { edges: ConstructionPatchEdge[]; nodes: { id: string; position: ConstructionPosition }[]; region: { boundary: ConstructionOrientedEdgeUse[]; holes: ConstructionOrientedEdgeUse[][]; physical: boolean; regionId: string; surfaceType: string } }`
+
+The welded floor again, with the landing edge split around the ramp end's own rung.
+
 ### `function vtt.slope-commit.slopeControlPoint(ctx: ToolContext, sample: PointerSample): ConstructionPosition`
 
 A control point's height comes from what the pointer actually touched: a node's own height, else the picked surface.
@@ -2742,19 +2802,9 @@ The spiral preset: control points of a helix around `center`, climbing
 `rise` over `turns` turns. Eight per turn keeps the automatic curve round.
 A preset only chooses points -- the result is an ordinary spine.
 
-### `function vtt.slope-commit.straightRampOutline(from: ConstructionPosition, to: ConstructionPosition, width: number): readonly ConstructionPosition[]`
-
-The ramp's outline while dragging: both margins at its real width, climbing with it.
-
-### `function vtt.slope-commit.straightRampPoints(ctx: ToolContext, start: PointerSample, end: PointerSample, params: SlopeParams): readonly [ConstructionPosition, ConstructionPosition]`
-
-The straight ramp preset: from where the drag starts, at that height, to
-where it ends, `rise` higher. A preset only chooses points -- the result is
-an ordinary spine.
-
 ### `variable vtt.slope-tools.slopeRampTool: ConstructionTool<"slope-ramp">`
 
-Also grabs and edits an existing slope spine's own control point/segment -- see `structure-edit-behavior.ts`.
+Also grabs and edits an existing ramp's own corner, side, end or body -- see `structure-edit-behavior.ts`.
 
 ### `variable vtt.slope-tools.slopeSpiralTool: ConstructionTool<"slope-spiral">`
 
@@ -4715,6 +4765,82 @@ The address inside `id`, or `undefined` for an id no sweep minted.
 
 ### `function vtt.station-node-id.stationNodeId(operationId: string, station: number, across: number): string`
 
+### `interface vtt.platform-ramp.RampShape`
+
+What a straight ramp is: an axis from the bottom end's centre to the top end's, and a width at each end.
+
+### `property vtt.platform-ramp.RampShape.axisEnd: ConstructionPosition`
+
+### `property vtt.platform-ramp.RampShape.axisStart: ConstructionPosition`
+
+### `property vtt.platform-ramp.RampShape.bottomWidth: number`
+
+### `property vtt.platform-ramp.RampShape.topWidth: number`
+
+### `type vtt.platform-ramp.RampCorners = Readonly<Record<RampEnd, Readonly<Record<RampSide, ConstructionPosition>>>>`
+
+### `type vtt.platform-ramp.RampEnd = "bottom" | "top"`
+
+### `type vtt.platform-ramp.RampSide = "min" | "max"`
+
+### `variable vtt.platform-ramp.RAMP_SURFACE_TYPE: "platform-ramp"`
+
+The straight ramp: a trapezoid on an inclined plane. Its source of truth
+is its own four corners, read as an axis -- the midpoint of the bottom
+edge to the midpoint of the top edge, their height difference being the
+rise -- and one width at each end. Both ends stay level and square to the
+axis, centred on it, so the four corners always say exactly those four
+numbers and nothing else is stored.
+
+Stairs are this same shape with steps: level strips between the two ends,
+appearance rather than structure.
+
+A type of its own rather than a spine of two points, because the spine is
+a different truth: a curve edited by its control points and handles. A
+straight ramp edits by its widths and its ends, and never turns into a
+curve -- that is the sloped platform, drawn as one.
+
+### `variable vtt.platform-ramp.rampStructureType: StructureTypeDefinition`
+
+The straight ramp's definition: edited by its corners, sides, ends and body, never carving the ground.
+
+### `function vtt.platform-ramp.deriveRampMotion(topologies: readonly ConstructionRegionTopology[], positions: ReadonlyMap<string, ConstructionPosition>): ReadonlyMap<string, ConstructionPosition>`
+
+Keeps each ramp a symmetric trapezoid when some of its corners were moved:
+
+- one corner, or one whole side: each moved corner's twin mirrors it
+  across its end's centre, so the width changes and the axis stays;
+- one whole end, together: the other end follows only the part of the
+  move square to the axis, so a floor carrying a welded end sideways drags
+  the ramp with it, while moving that end along the axis or up changes
+  the ramp's length or rise.
+
+Anything else is left for validateRampMotion to judge.
+
+### `function vtt.platform-ramp.rampCornerId(operationId: string, end: RampEnd, side: RampSide): string`
+
+### `function vtt.platform-ramp.rampCorners(shape: RampShape): RampCorners`
+
+The four corners `shape` says: each end level and square to the axis, centred on it.
+
+### `function vtt.platform-ramp.rampEdgeId(operationId: string, name: RampEnd | RampSide): string`
+
+An end edge is named by its end, a side edge by its side.
+
+### `function vtt.platform-ramp.rampFaceId(operationId: string): string`
+
+### `function vtt.platform-ramp.rampOutline(corners: RampCorners): readonly ConstructionPosition[]`
+
+The outline of `corners` as a closed plan loop, for a preview.
+
+### `function vtt.platform-ramp.rampPatch(operationId: string, corners: RampCorners): { edges: readonly ConstructionPatchEdge[]; nodes: readonly { id: string; position: ConstructionPosition }[]; region: ConstructionPatchRegion }`
+
+The ramp's own nodes, edges and face. Its end edges are what a floor it lands on welds onto.
+
+### `function vtt.platform-ramp.validateRampMotion(topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>): string | undefined`
+
+Both ends level, square to the axis and on the same side of it, with a real length and width.
+
 ### `interface vtt.platform-slope-spine.SlopeSurface`
 
 ### `property vtt.platform-slope-spine.SlopeSurface.edges: readonly ConstructionPatchEdge[]`
@@ -4782,9 +4908,13 @@ The faces of every sloped-platform span in `spans`, sampled along their curves.
 
 Every cross-section stays level from margin to margin.
 
+### `variable vtt.platform-structure.floatingPlatformStructureType: StructureTypeDefinition`
+
+A floor standing over the ground -- a storey, a bridge deck: the terrain under it is left untouched.
+
 ### `variable vtt.platform-structure.platformStructureType: StructureTypeDefinition`
 
-A horizontal structural marker, independently usable as floor or ceiling.
+A floor resting on the ground: it takes the ground under it, which regenerates around it.
 
 ### `variable vtt.platform-structure.slopedPlatformStructureType: StructureTypeDefinition`
 
@@ -5042,6 +5172,20 @@ The delta already constrained by the role's own axes.
 
 The face the gesture landed on -- `cloud.seed`, offered directly for the common case.
 
+### `interface vtt.structure-type.ConstrainContext`
+
+What a role's RolePolicy.constrain gets to look at.
+
+### `property vtt.structure-type.ConstrainContext.delta: ConstructionPosition`
+
+The delta already constrained by the role's own axes.
+
+### `property vtt.structure-type.ConstrainContext.target: EditTarget`
+
+### `property vtt.structure-type.ConstrainContext.topology: ConstructionRegionTopology`
+
+The face the gesture landed on.
+
 ### `interface vtt.structure-type.CutFallout`
 
 What a `"cut"` actually did to one ground type -- the seam its lattice
@@ -5153,6 +5297,13 @@ Extra ops fired alongside the primary one, as one transaction -- e.g.
 moving a wall's bottom corner moves its paired top corner by the *same*
 delta. Same-delta cascades are all this model needs so far; there is no
 scaled or cross-axis variant.
+
+### `property vtt.structure-type.RolePolicy.constrain?: (context: ConstrainContext) => ConstructionPosition`
+
+Narrows the gesture's delta past what whole world axes can say:
+onto a direction the type reads off its own shape at gesture time -- a
+ramp's corner sliding only along its own edge. Applied after `axes`,
+before anything else sees the delta.
 
 ### `property vtt.structure-type.RolePolicy.groupCascade?: (context: CascadeContext) => readonly AtomicEditOp[]`
 
@@ -5638,13 +5789,16 @@ Perlin `scale` -- smaller values are smoother/larger-scale terrain features.
 
 ### `property vtt.tool-types.ToolParamsByTool.path-brush: PathBrushParams`
 
-### `property vtt.tool-types.ToolParamsByTool.platform-contour: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; tolerance?: number }`
+### `property vtt.tool-types.ToolParamsByTool.platform-contour: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; support?: "grounded" | "floating"; tolerance?: number }`
+
+`support` picks the type drawn: a floor resting on the ground, or a
+floating one -- a storey, a bridge deck -- that leaves the terrain alone.
 
 ### `property vtt.tool-types.ToolParamsByTool.roof: { curvatures: readonly [number, number, number, number]; elevation: number; height: number; radius: number; shape: "rectangle" | "circle" | "platform" }`
 
-### `property vtt.tool-types.ToolParamsByTool.slope-ramp: { rise: number; width: number }`
+### `property vtt.tool-types.ToolParamsByTool.slope-ramp: { bottomWidth: number; rise: number; topWidth: number }`
 
-A straight sloped platform dragged from start to end, climbing a fixed rise.
+A straight ramp dragged from start to end, climbing a fixed rise, with its own width at each end.
 
 ### `property vtt.tool-types.ToolParamsByTool.slope-spiral: { radius: number; rise: number; turns: number; width: number }`
 
@@ -8018,7 +8172,7 @@ Invoked when the drawer requests to close, e.g. its own close button or Escape.
 
 Whether the drawer is currently shown.
 
-### `property vtt.ui.DrawerProps.placement?: "top" | "right" | "bottom" | "left"`
+### `property vtt.ui.DrawerProps.placement?: "bottom" | "top" | "right" | "left"`
 
 Which screen edge the drawer slides in from.
 
@@ -8109,7 +8263,7 @@ Ant Design does not do that on its own. Uncontrolled (starts collapsed,
 closes only on its own trigger/outside click) when omitted. Ignored
 when `alwaysExpanded` is set.
 
-### `property vtt.ui.FloatButtonGroupProps.placement?: "top" | "right" | "bottom" | "left"`
+### `property vtt.ui.FloatButtonGroupProps.placement?: "bottom" | "top" | "right" | "left"`
 
 Which side the group expands toward from the trigger -- `"top"`/`"bottom"`
 stack items in a vertical column, `"left"`/`"right"` lay them out in a
@@ -8367,7 +8521,7 @@ Invoked when the popover requests to close, e.g. an outside click or Escape.
 
 Whether the popover is currently shown.
 
-### `property vtt.ui.PopoverProps.placement?: "top" | "right" | "bottom" | "left"`
+### `property vtt.ui.PopoverProps.placement?: "bottom" | "top" | "right" | "left"`
 
 Which side of `anchor` the popover opens toward.
 
