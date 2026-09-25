@@ -27,7 +27,8 @@ The `nodeId` returned by picking a node sprite is overloaded as:
 - edit handles: vertex drag, and bezier controls / wall height widgets that masquerade as nodes through
   encoded ids (`panel-height-widget:...`);
 - business rules: roof inherits a clicked node's height (`tools/roof/roof-tool.ts`), slope control points
-  take a node's height (`tools/slope/slope-commit.ts`), openings detect rim corners by node.
+  take a node's height (`tools/slope/slope-commit.ts`). (Openings no longer detect corners by node --
+  fixed 2026-09-24; they grab by geometry.)
 
 The runtime also owns handle presentation (`#syncBezierHandles`, `#syncPanelHeightWidgets` in
 `composition/tabletop/tabletop-runtime.ts`), and the render adapter knows handle kinds and textures.

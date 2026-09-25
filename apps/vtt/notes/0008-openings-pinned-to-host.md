@@ -25,10 +25,13 @@
    `accepts-cuts` (can be cut). Types declare `cuts` / `accepts-cuts` as traits; never compare type names.
    Examples: window/door = pinned + cuts; lamp/painting = pinned only; trapdoor/skylight/pond = pinned + cuts.
 6. **An opening may span several faces** of a wall run (seams of a brush-drawn curved wall, L corners):
-   it is a *group* of pieces, one piece per face, each pinned to exactly one host. Select, move, resize,
-   delete and overlap act on the whole group. Work happens in *run space* (`s` along the run, `v`).
+   it is a *group* of pieces, one piece per face, each pinned to exactly one host. The group id is just a key
+   in each piece's property bag (the engine has no group concept). Select, move, resize, delete and overlap
+   act on the whole group. Work happens in *run space* (`s` along the run, `v`).
 7. **No merging.** Two openings never merge, automatically or explicitly. Overlapping another opening on the
-   same run is refused.
+   same run is refused; only regions whose type `cuts` count as overlap.
+10. **Handles are geometric.** Corners and edges are grabbed by where the press lands on the opening's box,
+    never by which graph dot was clicked (note 0009).
 8. **A door's sill is the floor** (`v0 = 0`).
 9. **Deleting the host deletes its openings** — deferred to the generic erase tool (#291), not implemented.
 
@@ -41,10 +44,13 @@ that state impossible.
 
 ## Where
 
-- Engine: `libs/domains/procgen/construction-wasm/src/pins.rs`, `region_groups.rs`;
-  `libs/domains/procgen/surface-mesh/src/host.rs`, `run.rs`, `frame.rs`.
-- App: `apps/vtt/src/composition/tabletop/tools/openings/`.
-- Guard: `apps/vtt/test/opening-fuzz.test.mjs` (seeded, real engine; straight/arc/bezier/multi-face walls).
+- Engine: `libs/domains/procgen/construction-wasm/src/pins.rs` (pins, pinned curves, cuts, settle),
+  `region_annotations.rs` (the undoable pins/curves/props table), `panel_runs.rs`;
+  `libs/domains/procgen/surface-mesh/src/host.rs`, `unrolled.rs`, `run.rs`, `frame.rs`.
+- App: `apps/vtt/src/composition/tabletop/tools/openings/`; shape/path math in
+  `apps/vtt/src/features/edit-construction/tools/opening-shape.ts` and `opening-path.ts`.
+- Guard: `apps/vtt/test/opening-fuzz.test.mjs` (seeded, real engine; straight/arc/bezier/multi-face walls),
+  shared helpers in `apps/vtt/test/support/opening-harness.mjs`.
 
 ## Known limits
 
