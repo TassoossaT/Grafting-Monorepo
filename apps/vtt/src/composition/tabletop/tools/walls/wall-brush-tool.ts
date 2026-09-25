@@ -1,7 +1,8 @@
-import { DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
+import { DEFAULT_TOOL_PARAMS, hasTrait } from "@/features/edit-construction";
 import type { WallBrushParams } from "@/features/edit-construction";
 
 import { createBrushTool, type BrushRegion } from "../core/brush-tool.ts";
+import { withStructureEditing } from "../core/structure-edit-behavior.ts";
 import type { ToolContext } from "../core/tool-context.ts";
 import { WALL_COLOR, commitWallStroke } from "./wall-shared.ts";
 
@@ -23,7 +24,7 @@ import { WALL_COLOR, commitWallStroke } from "./wall-shared.ts";
  * engine is handed nodes, edges and faces without ever being told they are a
  * wall.
  */
-export const wallBrushTool = createBrushTool<"wall-brush">({
+const rawWallBrushTool = createBrushTool<"wall-brush">({
   id: "wall-brush",
   defaultParams: () => DEFAULT_TOOL_PARAMS["wall-brush"],
   previewColor: (params: WallBrushParams) => WALL_COLOR[params.wallType],
@@ -44,3 +45,6 @@ export const wallBrushTool = createBrushTool<"wall-brush">({
   // the literal swept mouse trail, its width the correction/snap budget the
   // eventual fit may spend, exactly what `path-brush` already shows.
 });
+
+/** Also grabs and edits an existing wall's own vertex/edge/body/height-widget -- see `structure-edit-behavior.ts`. */
+export const wallBrushTool = withStructureEditing(rawWallBrushTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "partition") });

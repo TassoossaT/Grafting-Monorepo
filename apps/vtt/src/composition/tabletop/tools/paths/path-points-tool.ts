@@ -17,7 +17,7 @@ const drafts = new WeakMap<ToolContext["runtime"], Draft>();
 const gestures = new WeakMap<ToolContext["runtime"], Gesture>();
 const selections = new WeakMap<ToolContext["runtime"], string>();
 
-function seededGesture(gesture: ToolGesture, origin?: PointerSample): ToolGesture {
+function seededGesture<G extends ToolGesture>(gesture: G, origin?: PointerSample): G {
   return origin ? { ...gesture, start: origin, samples: [origin, ...gesture.samples.slice(1)] } : gesture;
 }
 

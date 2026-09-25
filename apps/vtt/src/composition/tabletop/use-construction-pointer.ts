@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 
-import type { ConstructionToolId, EditHistoryStack, ToolParamsByTool } from "@/features/edit-construction";
+import type { ConstructionToolId, EditHistoryStack, StructureEditParams, ToolParamsByTool } from "@/features/edit-construction";
 import { TOOL_GHOST_PREVIEW_CHANNEL } from "@/ports";
 import type { RenderViewId } from "@/ports";
 import type { SelectedNodeInfo } from "@/widgets";
@@ -12,6 +12,7 @@ import { GRID_SNAP_UNIT } from "../../adapters/rendering/index.ts";
 import type { TabletopRuntime } from "./tabletop-runtime.ts";
 import { toolFor } from "./tools/index.ts";
 import { beginCurveGesture, type CurveGesture } from "./tools/core/curve-edit-gesture.ts";
+import { gestureMoved } from "./tools/core/tool-context.ts";
 import {
   edgeOverlayChannel,
   edgeOverlayDescriptor,
@@ -32,8 +33,12 @@ export interface UseConstructionPointerOptions {
   readonly viewId: RenderViewId | undefined;
   /** When true, a resolved point (other than an existing node handle -- those stay precise) snaps to the nearest grid intersection before any tool sees it, so a new terrain cell/wall/room lands centered on the grid instead of wherever the pointer happened to be. */
   readonly snapToGrid: boolean;
+  /** How a grab on an existing structure behaves -- ambient across every construction tool, not one tool's own params. See `ToolContext.structureEditParams`. */
+  readonly structureEditParams: StructureEditParams;
   readonly onSelectionChange: (info: SelectedNodeInfo | undefined) => void;
   readonly onFeedbackChange: (feedback: ConstructionToolFeedback | undefined) => void;
+  /** Lets a tool rewrite its own params, e.g. to show its selection's settings in the panel. */
+  readonly onToolParamsUpdate?: <Id extends ConstructionToolId>(toolId: Id, update: (current: ToolParamsByTool[Id]) => ToolParamsByTool[Id]) => void;
 }
 
 function snappedTo(value: number, unit: number): number {
@@ -123,6 +128,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       get snapToGrid() {
         return optionsRef.current.snapToGrid;
       },
+      get structureEditParams() {
+        return optionsRef.current.structureEditParams;
+      },
       nextSequence,
       reportSelection: (info) => {
         const { runtime, viewId, activeTool } = optionsRef.current;
@@ -158,10 +166,19 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
         }
         optionsRef.current.onFeedbackChange(feedback);
       },
+      updateToolParams: (toolId, update) => optionsRef.current.onToolParamsUpdate?.(toolId, update as never),
     }),
     [nextSequence],
   );
 
+  const lastParamsRef = useRef<{ readonly tool: ConstructionToolId; readonly params: unknown } | undefined>(undefined);
+  useEffect(() => {
+    const params = options.toolParams[options.activeTool];
+    const last = lastParamsRef.current;
+    lastParamsRef.current = { tool: options.activeTool, params };
+    if (last === undefined || last.tool !== options.activeTool || last.params === params) return;
+    toolFor(options.activeTool).onParamsChange?.(ctx, params as never, last.params as never);
+  }, [options.activeTool, options.toolParams, ctx]);
 
   /**
    * Redraws the construction-edge overlay from whatever is now standing.
@@ -212,6 +229,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       }
       if (event.key === "Escape" && tool.onCancel) {
         tool.onCancel(ownedContext); release(); event.preventDefault(); return;
+      }
+      if ((event.key === "Delete" || event.key === "Backspace") && tool.onDeleteKey) {
+        tool.onDeleteKey(ownedContext);
       }
       if (gestureRef.current) return;
       if (tool.onKeyDown?.(ownedContext, event.key, activeParams as never)) {
@@ -267,11 +287,13 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
 
   const sampleAt = useCallback(
     (event: { currentTarget: HTMLElement; clientX: number; clientY: number; shiftKey?: boolean }): PointerSample | undefined => {
-      const { viewId, runtime, snapToGrid } = optionsRef.current;
+      const { viewId, runtime, snapToGrid, activeTool } = optionsRef.current;
       if (viewId === undefined) return undefined;
       const { x, y } = pointerOffset(event);
       const hit = runtime.pick(viewId, x, y);
-      return hit === undefined ? undefined : { ...applySnap(hit, snapToGrid && toolFor(optionsRef.current.activeTool).useGridSnap !== false), screenY: event.clientY, screenX: event.clientX, shiftKey: event.shiftKey };
+      if (hit === undefined) return undefined;
+      const snap = snapToGrid && !toolFor(activeTool).snapsToSurface && toolFor(activeTool).useGridSnap !== false;
+      return { ...applySnap(hit, snap), screenY: event.clientY, screenX: event.clientX, shiftKey: event.shiftKey };
     },
     [],
   );
@@ -384,10 +406,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       if (released && (released.point.x !== gesture.last.point.x || released.point.y !== gesture.last.point.y || released.point.z !== gesture.last.point.z)) {
         gesture.last = released; gesture.samples.push(released);
       }
-      suppressClickRef.current = gesture.samples.some((s) => s.screenX !== undefined && s.screenY !== undefined && gesture.start.screenX !== undefined && gesture.start.screenY !== undefined
-        ? Math.hypot(s.screenX-gesture.start.screenX,s.screenY-gesture.start.screenY)>3
-        : Math.hypot(s.point.x-gesture.start.point.x,s.point.y-gesture.start.point.y,s.point.z-gesture.start.point.z)>0.05);
-      tool.onPointerUp?.(ctx, { start: gesture.start, current: gesture.last, samples: gesture.samples }, params);
+      const moved = gestureMoved(gesture.start, gesture.samples);
+      suppressClickRef.current = moved;
+      tool.onPointerUp?.(ctx, { start: gesture.start, current: gesture.last, samples: gesture.samples, moved }, params);
       gestureRef.current = null;
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId);

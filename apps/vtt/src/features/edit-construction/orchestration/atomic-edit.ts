@@ -46,7 +46,15 @@ export type AtomicEditOpKind = AtomicEditOp["kind"];
 export type EditTarget =
   | { readonly kind: "vertex"; readonly nodeId: ConstructionNodeId }
   | { readonly kind: "edge"; readonly edgeId: ConstructionEdgeId }
-  | { readonly kind: "region" };
+  | { readonly kind: "region" }
+  /**
+   * A declared zone of a type-rendered widget sitting on an edge, distinct
+   * from grabbing the edge itself -- e.g. a wall's per-segment height widget,
+   * whose two zones (`"group"` and `"single"`) carry the same edge but
+   * resolve to different roles. Presentation-only: no engine primitive names
+   * a zone, only the edge it sits on.
+   */
+  | { readonly kind: "edge-zone"; readonly edgeId: ConstructionEdgeId; readonly zone: "group" | "single" };
 
 /** One user gesture, before any policy has looked at it. */
 export interface EditGesture {

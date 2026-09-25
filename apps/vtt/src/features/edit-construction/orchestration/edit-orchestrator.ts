@@ -68,6 +68,7 @@ function primaryOps(
       return [{ kind: "move-vertex", nodeId: node.id, position: addPosition(node.position, delta) }];
     }
     case "edge":
+    case "edge-zone":
       return [{ kind: "move-edge", edgeId: gesture.target.edgeId, delta }];
     case "region": {
       if (scope !== "cloud") {
@@ -127,8 +128,10 @@ export function planEdit(
       for (const node of graphSnapshot?.nodes ?? []) positions.set(node.id, node.position);
       const seeds: { nodeId: string; delta: ConstructionPosition }[] = [];
       const primarySet = new Set(primary);
-      const extras = structureTypeFor(cloud.seed.surfaceType)?.motionInfluences ? []
+      const structural = structureTypeFor(cloud.seed.surfaceType)?.motionInfluences ? []
         : policy.cascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot }) ?? [];
+      const grouped = policy.groupCascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot, allTopologies: topologies }) ?? [];
+      const extras = [...structural, ...grouped];
       for (const op of [...primary, ...extras]) {
         if (op.kind === "move-vertex") {
           const before = positions.get(op.nodeId);
@@ -143,14 +146,25 @@ export function planEdit(
           for (const node of cloud.seed.nodes) seeds.push({ nodeId: node.id, delta: op.delta });
         } else throw new Error("A resposta de movimento deve produzir apenas deslocamentos.");
       }
-      const influences = topologies.flatMap((topology) => structureTypeFor(topology.surfaceType)?.motionInfluences?.(topology, policy.transport === true) ?? []);
+      // `policy.transport` is the *grabbed type's own* declaration, so it
+      // reaches only topologies of that same type: broadcasting it would let
+      // one type's flag flip an unrelated type's `motionInfluences`. It is not
+      // limited to the grabbed cloud either -- a platform's whole-body drag
+      // deliberately reaches other platform clouds bridged only by walls.
+      const influences = topologies.flatMap((topology) => structureTypeFor(topology.surfaceType)?.motionInfluences?.(
+        topology,
+        policy.transport === true && topology.surfaceType === cloud.seed.surfaceType,
+      ) ?? []);
       const resolved = source.planMotion({ seeds, influences });
       const moved = new Map(resolved.moves.map((move) => [move.nodeId, move.position]));
       const resolvedMoves = new Map(moved);
       for (const surfaceType of new Set(topologies.map((topology) => topology.surfaceType))) {
         const derive = structureTypeFor(surfaceType)?.deriveMotion;
         if (!derive) continue;
-        for (const [nodeId, position] of derive(topologies.filter((topology) => topology.surfaceType === surfaceType), resolvedMoves, { graphSnapshot, port: source.curveBatch ? source as Pick<BezierPort, "curveBatch"> : undefined })) {
+        for (const [nodeId, position] of derive(topologies.filter((topology) => topology.surfaceType === surfaceType), resolvedMoves, {
+          graphSnapshot,
+          port: source.curveBatch ? source as Pick<BezierPort, "curveBatch"> : undefined,
+        })) {
           if (!moved.has(nodeId)) moved.set(nodeId, position);
         }
       }
@@ -175,12 +189,14 @@ export function planEdit(
     return { kind: "deny", role: policy.role, reason: `${solverBound.label} requer o resolvedor estrutural da sessao.` };
   }
   const cascade = policy.cascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot }) ?? [];
+  // Without a session the grabbed cloud is all of the table this plan can see.
+  const grouped = policy.groupCascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot, allTopologies: cloud.members }) ?? [];
   return {
     kind: "apply",
     role: policy.role,
     scope: policy.scope,
     surfaceCount: policy.scope === "cloud" ? cloud.members.length : 1,
-    ops: [...primary, ...cascade],
+    ops: [...primary, ...cascade, ...grouped],
   };
 }
 

@@ -17,7 +17,7 @@ export interface KeyboardShortcutsOptions {
 
 /**
  * Global keyboard shortcuts for the GM studio: Ctrl+Z/Ctrl+Y for undo/redo,
- * N/M/P/I select tools (mirroring the hotbar/rail's own tooltips) --
+ * N/P/I select tools (mirroring the hotbar/rail's own tooltips) --
  * nothing here generates geometry directly anymore, a key just changes
  * `activeTool` the same way clicking its hotbar button would. Ignored while
  * an `<input>`/`<textarea>` has focus, so typing in a settings field never
@@ -35,8 +35,6 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions): void {
       } else if (event.ctrlKey && event.key.toLowerCase() === "y") {
         event.preventDefault();
         if (canRedo) onRedo();
-      } else if (event.key.toLowerCase() === "m") {
-        onToolChange("edit-region");
       } else if (event.key.toLowerCase() === "n" || event.key === "Escape") {
         onToolChange("navigate");
       } else if (event.key.toLowerCase() === "p") {

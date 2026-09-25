@@ -1,7 +1,8 @@
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
-import { DEFAULT_TOOL_PARAMS, hasTrait, type ToolParamsByTool } from "../../../../features/edit-construction/index.ts";
+import { DEFAULT_TOOL_PARAMS, hasTrait, roofStructureType, type ToolParamsByTool } from "../../../../features/edit-construction/index.ts";
 import type { CapRequest } from "@/ports";
 import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext } from "../core/tool-context.ts";
+import { withStructureEditing } from "../core/structure-edit-behavior.ts";
 import { segmentsPreview } from "../shapes/preview-shapes.ts";
 import { commitPatchReplacement } from "../../effects/effect-commit.ts";
 
@@ -46,7 +47,7 @@ export function commitRoof(ctx: ToolContext, capRequest: CapRequest): void {
   }
 }
 
-export const roofTool: ConstructionTool<"roof"> = {
+const rawRoofTool: ConstructionTool<"roof"> = {
   id: "roof", previewOnHover: true,
   defaultParams: () => DEFAULT_TOOL_PARAMS.roof,
   previewFor(gesture, params, ctx) {
@@ -87,3 +88,6 @@ export const roofTool: ConstructionTool<"roof"> = {
     commitRoof(ctx, request(ctx, gesture.start, gesture.current, params));
   },
 };
+
+/** Also grabs and edits an existing roof's own vertex/edge/body -- see `structure-edit-behavior.ts`. */
+export const roofTool = withStructureEditing(rawRoofTool, { ownsType: (surfaceType) => surfaceType === roofStructureType.surfaceType });

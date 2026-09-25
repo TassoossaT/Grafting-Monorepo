@@ -1,6 +1,6 @@
 "use client";
 
-import { FloatButtonTree, type FloatButtonTreeBranch, type FloatButtonTreeLeaf, type FloatButtonTreeNode } from "@/ui";
+import { FloatButtonTree, type FloatButtonTreeLeaf } from "@/ui";
 import type { ConstructionToolId } from "@/features/edit-construction";
 
 export interface ConstructionHotbarProps {
@@ -15,24 +15,15 @@ const CONSTRUCTION_TOOLS: readonly { readonly id: ConstructionToolId; readonly i
   { id: "terrain-sculpt", icon: "◆", tooltip: "Escultura de Terreno (clique ou arraste, tecla I)" },
 ];
 
-/** The "Casa" branch's own children. */
-const HOUSE_TOOLS: readonly { readonly id: ConstructionToolId; readonly icon: string; readonly tooltip: string }[] = [
-  { id: "edit-region", icon: "◇", tooltip: "Editar (arraste um canto, uma aresta ou o corpo -- o que cada parte permite depende do tipo da estrutura)" },
-];
-
-const HOUSE_TOOL_IDS: ReadonlySet<ConstructionToolId> = new Set(HOUSE_TOOLS.map((tool) => tool.id));
-
 /**
  * The bottom hotbar: selects the active construction tool only -- it never
  * generates geometry itself. A tool's own parameters live in
  * `ConstructionToolParamsPanel` (the right drawer); what a selected tool
  * does with the pointer lives in `composition/tabletop/tools/*.ts` via
  * `useConstructionPointer`. One root {@link FloatButtonTree} branch
- * ("Construir") expands into one leaf per direct-action tool plus one
- * nested "Casa" branch -- "Expandir Cômodo" deliberately reuses the
- * `move-node` tool id rather than introducing a new one, since dragging a
- * shared corner already resizes whichever room(s) reference it with zero
- * house-specific code (`VTT-HOUSE-INCREMENTAL-EDIT`'s own finding).
+ * ("Construir") expands into one leaf per tool. Editing an existing
+ * structure is not a tool of its own: every construction tool grabs and
+ * edits whatever it owns (`composition/tabletop/tools/core/structure-edit-behavior.ts`).
  */
 export function ConstructionHotbar(props: ConstructionHotbarProps) {
   const leaves: FloatButtonTreeLeaf[] = CONSTRUCTION_TOOLS.map((tool) => ({
@@ -43,24 +34,6 @@ export function ConstructionHotbar(props: ConstructionHotbarProps) {
     disabled: !props.ready,
     onClick: () => props.onToolChange(tool.id),
   }));
-
-  const houseBranch: FloatButtonTreeBranch = {
-    key: "house-tools",
-    icon: "H",
-    tooltip: "Casa",
-    tone: HOUSE_TOOL_IDS.has(props.activeTool) ? "primary" : "default",
-    disabled: !props.ready,
-    children: HOUSE_TOOLS.map((tool): FloatButtonTreeLeaf => ({
-      key: tool.id,
-      icon: tool.icon,
-      tooltip: tool.tooltip,
-      tone: props.activeTool === tool.id ? "primary" : "default",
-      disabled: !props.ready,
-      onClick: () => props.onToolChange(tool.id),
-    })),
-  };
-
-  const children: FloatButtonTreeNode[] = [...leaves, houseBranch];
 
   return (
     <FloatButtonTree
@@ -77,8 +50,8 @@ export function ConstructionHotbar(props: ConstructionHotbarProps) {
         key: "construction-tools",
         icon: "C",
         tooltip: "Construir",
-        tone: props.activeTool === "navigate" || props.activeTool === "edit-region" ? "default" : "primary",
-        children,
+        tone: props.activeTool === "navigate" ? "default" : "primary",
+        children: leaves,
       }}
     />
   );

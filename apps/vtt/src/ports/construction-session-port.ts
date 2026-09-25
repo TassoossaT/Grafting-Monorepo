@@ -140,6 +140,19 @@ export interface ConstructionRegionEdge extends ConstructionOrientedEdgeUse {
   readonly startNodeId: ConstructionNodeId;
   readonly endNodeId: ConstructionNodeId;
   readonly geometry: ConstructionEdgeGeometry;
+  /** How the edge is traced on the host both its ends are pinned to, when they are. */
+  readonly hostCurve?: ConstructionHostCurve;
+}
+
+/** A host-traced edge, oriented as its loop walks it: straight or a cubic in the host's `(u, v)`. */
+export interface ConstructionHostCurve {
+  readonly hostSurfaceKey: ConstructionSurfaceKey;
+  /** The cubic's control points in host `(u, v)`; absent for a straight path there. */
+  readonly controls?: readonly [readonly [number, number], readonly [number, number]];
+  /** The same control points placed on the host, in world space. */
+  readonly handles?: readonly [readonly [number, number, number], readonly [number, number, number]];
+  /** The traced path in world space, both ends included. */
+  readonly points: readonly (readonly [number, number, number])[];
 }
 
 /**
@@ -284,6 +297,8 @@ export interface ConstructionRegionTopology {
   readonly outerLoops: readonly (readonly ConstructionRegionEdge[])[];
   readonly holes: readonly (readonly ConstructionRegionEdge[])[];
   readonly nodes: readonly ConstructionNodeSnapshot[];
+  /** Free-form properties a caller stored on the region; the engine never reads them. */
+  readonly props?: Readonly<Record<string, unknown>>;
 }
 
 /** Identity lifecycle emitted by an atomic surface transformation. */
@@ -383,9 +398,62 @@ export interface SurfaceMeshResult {
   readonly mesh: RenderMeshData;
 }
 
+/** Where a pinned node sits on its host face: `u` along the face, `v` a fraction of the local height at that `u`. */
+export interface ConstructionNodePin {
+  readonly hostSurfaceKey: ConstructionSurfaceKey;
+  readonly u: number;
+  readonly v: number;
+}
+
 export interface ConstructionNodeSnapshot {
   readonly id: ConstructionNodeId;
   readonly position: ConstructionPosition;
+  readonly pin?: ConstructionNodePin;
+}
+
+/** Per surface type: whether its regions subtract their area from the hosts they are pinned to, and whether it can be cut that way. */
+export interface ConstructionSurfaceCapability {
+  readonly surfaceType: string;
+  readonly cuts: boolean;
+  readonly acceptsCuts: boolean;
+}
+
+/** A point expressed in a host face's `(u, v)` frame; unclamped, `inside` when both are in `[0, 1]`. */
+export interface ConstructionHostPoint {
+  readonly u: number;
+  readonly v: number;
+  readonly inside: boolean;
+}
+
+export interface ConstructionPinRequest extends ConstructionNodePin {
+  readonly nodeId: ConstructionNodeId;
+}
+
+/** Makes an edge pinned at both ends to one host a cubic in that host's `(u, v)`; `controls` run in the edge's own start-to-end direction, `null` makes it straight there. */
+export interface ConstructionPinEdgeCurveRequest {
+  readonly edgeId: ConstructionEdgeId;
+  readonly hostSurfaceKey: ConstructionSurfaceKey;
+  readonly controls: readonly [readonly [number, number], readonly [number, number]] | null;
+}
+
+/** A pinned region's outer loop traced on its one host, as `(u, v)` there. */
+export interface ConstructionHostOutline {
+  readonly hostSurfaceKey: ConstructionSurfaceKey;
+  readonly uv: readonly (readonly [number, number])[];
+}
+
+/** One upright panel's place on a run: run distance `s` is panel `u = (s - offset) / length`, mirrored when `reversed`. */
+export interface ConstructionRunPanel {
+  readonly surfaceKey: ConstructionSurfaceKey;
+  readonly offset: number;
+  readonly length: number;
+  readonly reversed: boolean;
+}
+
+/** The chain of cuttable upright panels continuing one another through shared vertical sides. */
+export interface ConstructionPanelRun {
+  readonly panels: readonly ConstructionRunPanel[];
+  readonly closed: boolean;
 }
 
 /** One generic graph edge, including edges deliberately not used by a face. */
@@ -609,20 +677,24 @@ export interface ConstructionSessionPort extends BezierPort {
   retypeEdge(edgeId: ConstructionEdgeId, geometry: ConstructionEdgeGeometry): RegionEditOutcome;
   /** Moves both of an edge's endpoints as one rigid unit. */
   moveEdge(edgeId: ConstructionEdgeId, delta: ConstructionPosition): RegionEditOutcome;
-  /**
-   * Opens one more inner loop on an existing face -- what a door or a
-   * window is an opening for. The loop must already be registered, and it
-   * keeps one free use per edge so a face can stand in it.
-   */
-  addHole(request: {
-    readonly surfaceKey: ConstructionSurfaceKey;
-    readonly hole: readonly ConstructionOrientedEdgeUse[];
-  }): RegionEditOutcome;
-  /** Closes one of a face's openings back up, by index, reclaiming whatever rim nothing stands on anymore. */
-  removeHole(request: {
-    readonly surfaceKey: ConstructionSurfaceKey;
-    readonly index: number;
-  }): RegionEditOutcome;
+  /** Session configuration, not undoable state: replaces the whole per-type capability table. */
+  setSurfaceCapabilities(capabilities: readonly ConstructionSurfaceCapability[]): void;
+  /** Pins nodes to host faces in relative coordinates; the host carries them from then on. */
+  pinNodes(pins: readonly ConstructionPinRequest[]): RegionEditOutcome;
+  /** Drops pins; the nodes stay where they are. */
+  unpinNodes(nodeIds: readonly ConstructionNodeId[]): RegionEditOutcome;
+  /** Gives each edge, pinned at both ends to one host, a cubic path in that host's `(u, v)`, or a straight one there. Refused unless both ends are pinned to that host. */
+  pinEdgeCurves(requests: readonly ConstructionPinEdgeCurveRequest[]): RegionEditOutcome;
+  /** A pinned region's outer loop traced on its host. Throws unless every node is pinned to one host. */
+  hostOutline(surfaceKey: ConstructionSurfaceKey): ConstructionHostOutline;
+  /** World points in a host face's `(u, v)` frame. Throws when the host is not an upright panel. */
+  projectToHost(request: { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly points: readonly ConstructionPosition[] }): readonly ConstructionHostPoint[];
+  /** Host `(u, v)` pairs back to world positions. Pure. */
+  resolveOnHost(request: { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly uv: readonly (readonly [number, number])[] }): readonly ConstructionPosition[];
+  /** Replaces the regions' property bag, or clears it with `null`. Undoable; moves nothing. */
+  setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): RegionEditOutcome;
+  /** The run through an upright panel that accepts cuts. Throws otherwise. */
+  panelRun(surfaceKey: ConstructionSurfaceKey): ConstructionPanelRun;
   /**
    * Registers a whole generated patch in one transaction -- see
    * {@link ConstructionPatch} for why a generator names its own edges.
@@ -741,17 +813,20 @@ export interface ConstructionSessionPort extends BezierPort {
   /** `ADR-0022`'s "cloud" query. */
   cloudFor(request: CloudRequest): CloudOutcome;
 
-  /**
-   * One surface's mesh piece(s), by key. Almost always one piece -- but an
-   * analytic-region key (a merged path-brush source/target region) can
-   * legitimately triangulate into several disjoint pieces (one per outer
-   * loop), and every one of them must be rendered, not just the first.
-   */
-  getSurfaceMesh(surfaceKey: ConstructionSurfaceKey): readonly SurfaceMeshResult[];
-  /** A known mutation set's meshes in one engine crossing. */
-  getSurfaceMeshes(surfaceKeys: readonly ConstructionSurfaceKey[]): readonly SurfaceMeshResult[];
   /** Every currently-known surface's mesh -- the bootstrap/full-render call. */
   getAllSurfaceMeshes(): readonly SurfaceMeshResult[];
+  /**
+   * A known mutation set's meshes in one engine crossing, plus which of
+   * `surfaceKeys` could not be meshed and why -- so a caller can tell a live
+   * surface whose mesh derivation genuinely failed from a stale key naming a
+   * surface already gone (`reason: "unknown"`, expected when a surface was
+   * removed in the same mutation). A key can yield several pieces: an
+   * analytic-region key triangulates into one per outer loop.
+   */
+  getSurfaceMeshesReport(surfaceKeys: readonly ConstructionSurfaceKey[]): {
+    readonly meshes: readonly SurfaceMeshResult[];
+    readonly failed: readonly { readonly surfaceKey: ConstructionSurfaceKey; readonly reason: string }[];
+  };
 
   /**
    * Every node currently in the session with its live position -- what an

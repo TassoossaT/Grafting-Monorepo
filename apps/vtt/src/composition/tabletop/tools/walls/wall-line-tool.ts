@@ -1,8 +1,9 @@
-import { DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
+import { DEFAULT_TOOL_PARAMS, hasTrait } from "@/features/edit-construction";
 import type { WallParams } from "@/features/edit-construction";
 import type { ConstructionPosition } from "@/ports";
 
 import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "../core/tool-context.ts";
+import { withStructureEditing } from "../core/structure-edit-behavior.ts";
 import { WALL_COLOR, commitWallContour, pinnedToBaseline, wallCorrectionPreview } from "./wall-shared.ts";
 
 /**
@@ -27,7 +28,7 @@ let anchor: ConstructionPosition | undefined;
  * onto that run's own column -- by connection, not by landing on the same
  * coordinate.
  */
-export const wallLineTool: ConstructionTool<"wall-line"> = {
+const rawWallLineTool: ConstructionTool<"wall-line"> = {
   id: "wall-line",
   defaultParams: () => DEFAULT_TOOL_PARAMS["wall-line"],
 
@@ -50,3 +51,6 @@ export const wallLineTool: ConstructionTool<"wall-line"> = {
     anchor = undefined;
   },
 };
+
+/** Also grabs and edits an existing wall's own vertex/edge/body/height-widget -- see `structure-edit-behavior.ts`. */
+export const wallLineTool = withStructureEditing(rawWallLineTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "partition") });

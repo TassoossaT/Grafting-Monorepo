@@ -1,10 +1,5 @@
 # grafting-procgen-construction-wasm
 
-### `pub fn grafting_procgen_construction_wasm::ConstructionSession::add_hole_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
-
-`AddHole` -- opens one more inner loop on a face. See
-`region_editing::apply_add_hole`.
-
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::add_patch_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 Registers a whole generated patch -- nodes, shared boundary edges,
@@ -99,6 +94,10 @@ generated -- the creation-side counterpart to `region_topology_json`.
 The engine reports; the caller's own per-type table decides what to
 do about it. See `footprint::footprint_coverage`.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::host_outline_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+A pinned region's outer loop traced on its host, as `(u, v)` there.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::insert_vertex_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 `InsertVertex`. See `region_editing::apply_insert_vertex`.
@@ -140,6 +139,22 @@ Creates an empty session.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::none() -> Self::Abi`
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::panel_run_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+The chain of cuttable upright panels continuing the requested one
+through shared vertical sides. See `panel_runs::panel_run_of`.
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::pin_edge_curve_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Gives an edge pinned at both ends to one host a cubic path in that
+host's `(u, v)`, or with `controls` null a straight one there. See
+`pins::pin_edge_curve`.
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::pin_nodes_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Pins nodes to host faces at relative `(u, v)` and moves them there.
+See `pins::pin_nodes`.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::plan_motion_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 Resolves a complete directed motion cascade without mutating the session.
@@ -151,6 +166,10 @@ Generic closed-contour union/subtraction. Product selection stays in the caller.
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::profile_cap_json(&self, json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 Generates an indexed analytic cap without mutating the live graph.
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::project_to_host_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+World points as unclamped `(u, v)` on an upright host face.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::redo_region_overlay(&mut self, operation_id: &str) -> core::result::Result<(), wasm_bindgen::JsValue>`
 
@@ -165,11 +184,6 @@ Region boundaries intersecting a local XZ extent, serialized once.
 One region's live boundary, in this crate's own deterministic order.
 See `region_editing::region_topology`.
 
-### `pub fn grafting_procgen_construction_wasm::ConstructionSession::remove_hole_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
-
-`RemoveHole` -- closes one back up. See
-`region_editing::apply_remove_hole`.
-
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::remove_surface_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 Unregisters a surface outright and prunes any nodes it orphaned. See
@@ -179,6 +193,10 @@ Unregisters a surface outright and prunes any nodes it orphaned. See
 
 `RemoveVertex`. See `region_editing::apply_remove_vertex`.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::resolve_on_host_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+`(u, v)` on an upright host face as world points, without mutating.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::retype_edge_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 `RetypeEdge`. See `region_editing::apply_retype_edge`.
@@ -186,6 +204,16 @@ Unregisters a surface outright and prunes any nodes it orphaned. See
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::rollback_transaction(&mut self, id: &str) -> core::result::Result<(), wasm_bindgen::JsValue>`
 
 Ends the open transaction by restoring the state it began from.
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::set_region_props_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Replaces the regions' property bag, or clears it when `props` is
+null. See `region_props::set_region_props`.
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::set_surface_capabilities_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Replaces the whole per-surface-type capability table. Configuration,
+not edit state: it is never undone and moves no geometry.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::snapshot_json(&self) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
@@ -204,6 +232,11 @@ surface key always returns exactly one. See `mesh::surface_mesh`.
 
 A mutation's known surface meshes through one JSON/Wasm crossing.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::surface_meshes_report_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+[`Self::surface_meshes_json`] plus every key that yielded no mesh and
+why: `{"meshes": [...], "failed": [{"surfaceKey", "reason"}]}`.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::try_from_js_value(value: wasm_bindgen::JsValue) -> core::result::Result<Self, wasm_bindgen::JsValue>`
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::try_from_js_value_ref(value: &wasm_bindgen::JsValue) -> core::option::Option<Self>`
@@ -219,6 +252,10 @@ names, that another such loop encloses -- a hole in the surface whose
 rim already exists. The caller passes the region it just touched;
 boundary elsewhere on the map is none of its business. See
 `enclosure::unfilled_loops`.
+
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::unpin_nodes_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Drops pins; the nodes stay where they are.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::vector_into_abi(vector: alloc::boxed::Box<[grafting_procgen_construction_wasm::ConstructionSession]>) -> Self::Abi`
 

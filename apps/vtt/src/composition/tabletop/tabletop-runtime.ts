@@ -1,4 +1,4 @@
-import { curveEdgesOf, curveHandles, curvePick } from "../../features/edit-construction/index.ts";
+import { curveEdgesOf, curveHandles, curvePick, panelHeightWidgets } from "../../features/edit-construction/index.ts";
 import type { BezierPort } from "../../ports/bezier-port.ts";
 import type { RenderPointManipulator } from "../../ports/scene-render-port.ts";
 import type { ConstructionPlanarRequest, ConstructionPlanarShape, ConstructionMotionRequest, ConstructionMotionPlan, ConstructionNodeMotion } from "../../ports/index.ts";
@@ -41,13 +41,18 @@ import type {
   ConstructionIrregularQuadGrid,
   ConstructionIrregularQuadGridRequest,
   ConstructionNodeId,
-  ConstructionOrientedEdgeUse,
+  ConstructionHostPoint,
   ConstructionPatch,
+  ConstructionPinRequest,
+  ConstructionPinEdgeCurveRequest,
+  ConstructionHostOutline,
+  ConstructionPanelRun,
   ConstructionPatchOutcome,
   ConstructionPosition,
   ConstructionRegionTopology,
   ConstructionSessionPort,
   ConstructionSurfaceKey,
+  ConstructionSurfaceCapability,
   ConstructionSurfaceSpec,
   ConstructionUnfilledLoop,
   RegionEditOutcome,
@@ -65,10 +70,21 @@ import type {
 import {
   EMPTY_OUTCOME,
   applyEditOp,
+  hasTrait,
   mergeOutcomes,
+  surfaceTypesWithTrait,
   type AtomicEditOp,
 } from "../../features/edit-construction/index.ts";
 import { timeCommit, timePhase } from "./commit-timing.ts";
+
+function surfaceCapabilities(): readonly ConstructionSurfaceCapability[] {
+  const types = new Set([...surfaceTypesWithTrait("cuts"), ...surfaceTypesWithTrait("accepts-cuts")]);
+  return [...types].map((surfaceType) => ({
+    surfaceType,
+    cuts: hasTrait(surfaceType, "cuts"),
+    acceptsCuts: hasTrait(surfaceType, "accepts-cuts"),
+  }));
+}
 
 export type TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed";
 
@@ -129,19 +145,21 @@ export interface TabletopRuntime extends BezierPort {
    * the faces over them -- in one transaction. See `ConstructionPatch`.
    */
   addPatch(patch: ConstructionPatch, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome;
-  /**
-   * Opens one more inner loop on a face that already exists -- what a door
-   * or a window stands in. The loop must already be registered, and it keeps
-   * one free use per edge so a face can take it.
-   */
-  addHole(
-    request: {
-      readonly surfaceKey: ConstructionSurfaceKey;
-      readonly hole: readonly ConstructionOrientedEdgeUse[];
-    },
-    origin: ChangeOrigin,
-    causeId: string,
-  ): RegionEditOutcome;
+  /** Pins nodes to host faces in relative `(u, v)`; the host carries them from then on. See `ConstructionSessionPort.pinNodes`. */
+  pinNodes(pins: readonly ConstructionPinRequest[], origin: ChangeOrigin, causeId: string): RegionEditOutcome;
+  unpinNodes(nodeIds: readonly ConstructionNodeId[], origin: ChangeOrigin, causeId: string): RegionEditOutcome;
+  /** Makes each edge a cubic (or straight) path in its host's `(u, v)`; one remesh for the batch. See `ConstructionSessionPort.pinEdgeCurves`. */
+  pinEdgeCurves(requests: readonly ConstructionPinEdgeCurveRequest[], origin: ChangeOrigin, causeId: string): RegionEditOutcome;
+  /** A pinned region's outer loop traced on its host. See `ConstructionSessionPort.hostOutline`. */
+  hostOutline(surfaceKey: ConstructionSurfaceKey): ConstructionHostOutline;
+  /** World points in a host face's `(u, v)` frame. Throws when the host is not an upright panel. */
+  projectToHost(request: { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly points: readonly ConstructionPosition[] }): readonly ConstructionHostPoint[];
+  /** Host `(u, v)` pairs back to world positions. Pure. */
+  resolveOnHost(request: { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly uv: readonly (readonly [number, number])[] }): readonly ConstructionPosition[];
+  /** Replaces the regions' property bag (`null` clears). See `ConstructionSessionPort.setRegionProps`. */
+  setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): RegionEditOutcome;
+  /** The run of upright panels through `surfaceKey`. See `ConstructionSessionPort.panelRun`. */
+  panelRun(surfaceKey: ConstructionSurfaceKey): ConstructionPanelRun;
   /** Every closed loop of boundary with no face on it, among `scope`'s nodes -- a hole whose rim already exists. */
   getUnfilledLoops(scope: readonly ConstructionNodeId[]): readonly ConstructionUnfilledLoop[];
   /** One region's live boundary -- what a handle/hit-test layer reads. */
@@ -310,6 +328,9 @@ export class AppTabletopRuntime implements TabletopRuntime {
   #pointHandlesOnly = false;
   #pointHandleIds = new Set<string>();
   #bezierHandleIds = new Set<string>();
+  #panelHeightWidgetIds = new Set<string>();
+  /** Surfaces holding pinned nodes; `undefined` until next needed after a restore. A host edit moves those nodes without naming them. */
+  #pinnedSurfaceRefs: Set<string> | undefined;
   #generation = 0;
   #snapshot: TabletopSnapshot;
 
@@ -347,6 +368,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#publishLifecycle("starting");
     await this.#render.start(generation);
     await this.#construction.start();
+    this.#construction.setSurfaceCapabilities(surfaceCapabilities());
     await this.#terrainNoise.start();
 
     if (generation !== this.#generation) return;
@@ -430,6 +452,12 @@ export class AppTabletopRuntime implements TabletopRuntime {
    * tracks that membership persistently; only the *chunks* a change actually
    * touched (gained a surface, lost one, or had one move between buckets)
    * get re-merged and re-uploaded here -- everything else costs nothing.
+   *
+   * A surface whose mesh failed to derive this call is simply absent from
+   * `changedMeshes` (see `#applyConstructionMutation`'s use of
+   * `getSurfaceMeshesReport`) rather than listed in `removedSurfaceRefs`, so
+   * it falls straight into "every other surface" above and keeps whatever it
+   * last rendered.
    */
   #syncSurfaceChunks(
     changedMeshes: readonly SurfaceMeshResult[],
@@ -611,6 +639,15 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#bezierHandleIds = live;
   }
 
+  /** Uploads/retires one widget per top run of every partition panel -- a wall's own per-segment height handle, mirroring `#syncBezierHandles`. */
+  #syncPanelHeightWidgets(origin: ChangeOrigin, causeId: string, generation: number): void {
+    const widgets = panelHeightWidgets(this.#construction.getAllRegionTopologies());
+    const live = new Set(widgets.map((widget) => widget.id));
+    for (const id of this.#panelHeightWidgetIds) if (!live.has(id)) this.#removeNodeHandle(id, origin, causeId, generation);
+    for (const widget of widgets) this.#uploadNodeHandle(widget.id, widget.position, origin, causeId, generation);
+    this.#panelHeightWidgetIds = live;
+  }
+
   /** Removes one node's pickable handle -- the counterpart to {@link AppTabletopRuntime.#uploadNodeHandle}, needed once a mutation deletes a node outright. */
   #removeNodeHandle(nodeId: ConstructionNodeId, origin: ChangeOrigin, causeId: string, generation: number): void {
     const revision = ++this.#handleRevision;
@@ -691,6 +728,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
       this.#uploadNodeHandle(node.id, node.position, origin, causeId, generation);
     }
     this.#syncBezierHandles(origin, causeId, generation);
+    this.#syncPanelHeightWidgets(origin, causeId, generation);
     return applyMapProjectionDeltas(map, deltas);
   }
 
@@ -722,8 +760,10 @@ export class AppTabletopRuntime implements TabletopRuntime {
       this.#uploadNodeHandle(nodeId, position, origin, causeId, generation);
     }
     // Curve handles sit off the anchors and follow a reshaped edge too, so
-    // they are re-placed whatever the edit moved or retyped.
+    // they are re-placed whatever the edit moved or retyped. Height widgets
+    // sit at a top run's midpoint for the same reason.
     this.#syncBezierHandles(origin, causeId, generation);
+    this.#syncPanelHeightWidgets(origin, causeId, generation);
     return applyMapProjectionDeltas(map, deltas);
   }
 
@@ -757,30 +797,21 @@ export class AppTabletopRuntime implements TabletopRuntime {
     causeId: string,
     foldNodePositions: (map: MapProjection) => MapProjection,
   ): void {
-    // Fetched one surface at a time, not `surfaceKeys.flatMap`, and a
-    // fetch that throws is skipped rather than aborting the whole sync: a
-    // single mutation can name several affected surfaces that also border
-    // *each other*, and one of them can legitimately have already been
-    // removed by this same call (a batch deleting several adjacent
-    // consumed regions together, say) -- its own removal is already
-    // handled through `removedSurfaceRefs`/`#foldRegionEditOutcome`'s own
-    // removed-keys loop, so a stale mesh fetch for it here is redundant,
-    // not load-bearing. Letting one such fetch abort the whole sync used
-    // to skip the render update for *every* surface in the batch, not just
-    // the stale one -- the mutation itself had already committed, so the
-    // screen simply never caught up.
-    // Older/in-memory ports used by embedders can still provide only the
-    // single-key method; the Wasm port takes the one-crossing batch path.
-    const batch = this.#construction.getSurfaceMeshes;
-    const meshes = typeof batch === "function"
-      ? batch.call(this.#construction, surfaceKeys)
-      : surfaceKeys.flatMap((surfaceKey) => {
-          try {
-            return this.#construction.getSurfaceMesh(surfaceKey);
-          } catch {
-            return [];
-          }
-        });
+    // One engine crossing for the whole mutation set. The report tells the
+    // two ways a key can be absent from `meshes` apart: `"unknown"` is a
+    // stale key -- normal when this same mutation also removed that surface,
+    // already handled via `removedSurfaceRefs` -- while any other reason is a
+    // live surface whose mesh genuinely failed to derive. That surface's
+    // chunk membership, pick target, and projection are left exactly as they
+    // were (it never enters `meshes`), so the last valid render keeps showing
+    // rather than the face vanishing under a still-live key.
+    const { meshes, failed } = this.#construction.getSurfaceMeshesReport(surfaceKeys);
+    for (const failure of failed) {
+      if (failure.reason === "unknown") continue;
+      const surfaceRef = surfaceRefFromNodeSet(failure.surfaceKey);
+      if (removedSurfaceRefs.includes(surfaceRef)) continue;
+      console.warn(`surface ${surfaceRef} failed to mesh: ${failure.reason}`);
+    }
     this.#syncSurfaceChunks(meshes, removedSurfaceRefs, origin, causeId, this.#generation);
 
     let map = this.#foldAffectedSurfaces(this.#snapshot.map, surfaceKeys, meshes);
@@ -859,18 +890,59 @@ export class AppTabletopRuntime implements TabletopRuntime {
     return outcome;
   }
 
-  addHole(
-    request: {
-      readonly surfaceKey: ConstructionSurfaceKey;
-      readonly hole: readonly ConstructionOrientedEdgeUse[];
-    },
-    origin: ChangeOrigin,
-    causeId: string,
-  ): RegionEditOutcome {
-    this.#requireReady("opening a face");
-    const outcome = this.#construction.addHole(request);
-    this.#foldRegionEditOutcome(outcome, origin, causeId);
+  pinNodes(pins: readonly ConstructionPinRequest[], origin: ChangeOrigin, causeId: string): RegionEditOutcome {
+    this.#requireReady("pinning nodes");
+    const outcome = this.#construction.pinNodes(pins);
+    const pinned = new Set(pins.map((pin) => pin.nodeId));
+    const positions = new Map<ConstructionNodeId, ConstructionPosition>();
+    for (const surfaceKey of outcome.affectedSurfaceKeys) {
+      const topology = this.#construction.getRegionTopology(surfaceKey);
+      if (topology === undefined || !topology.nodes.some((node) => pinned.has(node.id))) continue;
+      this.#pinnedSurfaceRefs?.add(surfaceRefFromNodeSet(surfaceKey));
+      for (const node of topology.nodes) if (pinned.has(node.id)) positions.set(node.id, node.position);
+    }
+    this.#foldRegionEditOutcome(outcome, origin, causeId, positions);
     return outcome;
+  }
+
+  unpinNodes(nodeIds: readonly ConstructionNodeId[], origin: ChangeOrigin, causeId: string): RegionEditOutcome {
+    this.#requireReady("unpinning nodes");
+    const outcome = this.#construction.unpinNodes(nodeIds);
+    this.#pinnedSurfaceRefs = undefined;
+    this.#foldRegionEditOutcome(outcome, origin, causeId, new Map());
+    return outcome;
+  }
+
+  pinEdgeCurves(requests: readonly ConstructionPinEdgeCurveRequest[], origin: ChangeOrigin, causeId: string): RegionEditOutcome {
+    this.#requireReady("pinning edge curves");
+    const outcome = this.#construction.pinEdgeCurves(requests);
+    if (outcome.affectedSurfaceKeys.length > 0) this.#foldRegionEditOutcome(outcome, origin, causeId, new Map());
+    return outcome;
+  }
+
+  hostOutline(surfaceKey: ConstructionSurfaceKey): ConstructionHostOutline {
+    this.#requireReady("tracing a pinned outline");
+    return this.#construction.hostOutline(surfaceKey);
+  }
+
+  projectToHost(request: { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly points: readonly ConstructionPosition[] }): readonly ConstructionHostPoint[] {
+    this.#requireReady("projecting onto a host face");
+    return this.#construction.projectToHost(request);
+  }
+
+  resolveOnHost(request: { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly uv: readonly (readonly [number, number])[] }): readonly ConstructionPosition[] {
+    this.#requireReady("resolving on a host face");
+    return this.#construction.resolveOnHost(request);
+  }
+
+  setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): RegionEditOutcome {
+    this.#requireReady("setting region properties");
+    return this.#construction.setRegionProps(surfaceKeys, props);
+  }
+
+  panelRun(surfaceKey: ConstructionSurfaceKey): ConstructionPanelRun {
+    this.#requireReady("reading a panel run");
+    return this.#construction.panelRun(surfaceKey);
   }
 
   getUnfilledLoops(scope: readonly ConstructionNodeId[]): readonly ConstructionUnfilledLoop[] {
@@ -906,10 +978,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
 
   getAllRegionTopologies(): readonly ConstructionRegionTopology[] {
     this.#requireReady("reading every region's topology");
-    if (typeof this.#construction.getAllRegionTopologies === "function") {
-      return this.#construction.getAllRegionTopologies();
-    }
-    return [];
+    return this.#construction.getAllRegionTopologies();
   }
 
   queryContours(queries: readonly ConstructionContourQuery[]): readonly ConstructionContourAnswer[] {
@@ -924,18 +993,12 @@ export class AppTabletopRuntime implements TabletopRuntime {
 
   getCurvedEdges(): readonly ConstructionCurvedEdge[] {
     this.#requireReady("reading curved boundary edges");
-    return typeof this.#construction.getCurvedEdges === "function" ? this.#construction.getCurvedEdges() : [];
+    return this.#construction.getCurvedEdges();
   }
 
   getRegionTopologiesInBounds(bounds: ConstructionTopologyBoundsQuery): readonly ConstructionRegionTopology[] {
     this.#requireReady("reading nearby region topologies");
-    if (typeof this.#construction.getRegionTopologiesInBounds === "function") {
-      return this.#construction.getRegionTopologiesInBounds(bounds);
-    }
-    if (typeof this.#construction.getAllRegionTopologies === "function") {
-      return this.#construction.getAllRegionTopologies();
-    }
-    return [];
+    return this.#construction.getRegionTopologiesInBounds(bounds);
   }
 
   generateCap(request: import("../../ports/cap-port.ts").CapRequest): import("../../ports/cap-port.ts").CapPatch {
@@ -972,6 +1035,8 @@ export class AppTabletopRuntime implements TabletopRuntime {
   ): void {
     const changed = [...outcome.affectedSurfaceKeys, ...outcome.createdSurfaceKeys];
     const removedRefs = outcome.removedSurfaceKeys.map(surfaceRefFromNodeSet);
+    for (const removedRef of removedRefs) this.#pinnedSurfaceRefs?.delete(removedRef);
+    if (knownNodePositions !== undefined) knownNodePositions = this.#withCarriedPinnedNodes(outcome.affectedSurfaceKeys, knownNodePositions);
     this.#applyConstructionMutation(changed, removedRefs, origin, causeId, (map) => {
       const removals: MapProjectionDelta[] = [];
       for (const removedRef of removedRefs) {
@@ -994,9 +1059,33 @@ export class AppTabletopRuntime implements TabletopRuntime {
     });
   }
 
+  #withCarriedPinnedNodes(
+    affected: readonly ConstructionSurfaceKey[],
+    known: ReadonlyMap<ConstructionNodeId, ConstructionPosition>,
+  ): ReadonlyMap<ConstructionNodeId, ConstructionPosition> {
+    if (affected.length === 0) return known;
+    this.#pinnedSurfaceRefs ??= new Set(
+      this.#construction
+        .getAllRegionTopologies()
+        .filter((topology) => topology.nodes.some((node) => node.pin !== undefined))
+        .map((topology) => surfaceRefFromNodeSet(topology.surfaceKey)),
+    );
+    let carried: Map<ConstructionNodeId, ConstructionPosition> | undefined;
+    for (const surfaceKey of affected) {
+      if (!this.#pinnedSurfaceRefs.has(surfaceRefFromNodeSet(surfaceKey))) continue;
+      for (const node of this.#construction.getRegionTopology(surfaceKey)?.nodes ?? []) {
+        if (node.pin === undefined || known.has(node.id)) continue;
+        carried ??= new Map(known);
+        carried.set(node.id, node.position);
+      }
+    }
+    return carried ?? known;
+  }
+
   /** Rebuilds projections after a session-owned semantic checkpoint restore -- the only place a full `getAllSurfaceMeshes()` re-derivation is still correct, since an undo/redo restore can touch an arbitrary, unenumerated set of surfaces. See {@link AppTabletopRuntime.#fullResyncSurfaces}. */
   #refreshConstructionProjection(origin: ChangeOrigin, causeId: string): void {
     const meshes = this.#construction.getAllSurfaceMeshes();
+    this.#pinnedSurfaceRefs = undefined;
     this.#fullResyncSurfaces(meshes, origin, causeId, this.#generation);
 
     const liveNodes = new Set(this.#construction.getNodePositions().map((node) => node.id));

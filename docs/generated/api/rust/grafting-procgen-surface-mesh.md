@@ -16,6 +16,12 @@ compared against values that are meant to be exactly equal (the same
 contour point at two heights), so this absorbs float round-trip drift,
 not any real slant.
 
+### `pub const grafting_procgen_surface_mesh::host::HOST_TRACE_TOLERANCE: f32`
+
+Largest gap, in metres, left between a path traced on a host face and
+the chords it is drawn with. Finer than the mesher's own tolerance: what
+is traced on a face is a small feature on it, and its outline is seen.
+
 ### `pub const grafting_procgen_surface_mesh::types::ARC_TESSELLATION_TOLERANCE: f32`
 
 Maximum deviation, in world units, between a tessellated arc's chords and
@@ -44,6 +50,12 @@ general case either specializes: a Bézier rail has no closed-form
 arc-length or nearest-point query, so it keeps a fine sampled table
 instead, built once in [`UnrollFrame::of`].
 
+### `pub fn grafting_procgen_surface_mesh::frame::UnrollFrame::lattice_step(&self) -> core::option::Option<f32>`
+
+The step of the lattice a curved face is filled with, so that every
+triangle stays a local facet of the surface; `None` for a straight
+face, which needs no interior vertices.
+
 ### `pub fn grafting_procgen_surface_mesh::frame::UnrollFrame::normal_at(&self, point: [f32; 3]) -> [f32; 3]`
 
 The outward horizontal direction at `point` -- radial for a cylinder,
@@ -71,6 +83,65 @@ roll it there.
 
 `point` as (distance along the rail, height). Distance grows the way
 the rail is walked, so the whole face lands on one side of the origin.
+
+### `pub fn grafting_procgen_surface_mesh::host::HostFace::of(topology: &grafting_graph_core::contour::ContourTopology, region: &grafting_graph_core::contour::SurfaceRegion, resolve_position: &mut impl core::ops::function::FnMut(&grafting_graph_core::model::NodeId) -> core::option::Option<[f32; 3]>) -> core::option::Option<Self>`
+
+`None` for anything that does not mesh as an upright face.
+
+### `pub fn grafting_procgen_surface_mesh::host::HostFace::project(&self, point: [f32; 3]) -> [f64; 2]`
+
+The inverse of [`resolve`](Self::resolve), unclamped.
+
+### `pub fn grafting_procgen_surface_mesh::host::HostFace::resolve(&self, u: f64, v: f64) -> [f32; 3]`
+
+The world point at relative `(u, v)` on this face.
+
+### `pub fn grafting_procgen_surface_mesh::host::HostFace::trace(&self, from: [f64; 2], to: [f64; 2], controls: core::option::Option<[[f64; 2]; 2]>) -> alloc::vec::Vec<[f32; 2]>`
+
+A path drawn on the face between two `(u, v)` points, as points of the
+unrolled frame with both ends included: straight in `(u, v)`, or the
+cubic Bézier through `controls` there.
+
+Subdivided only where the path strays from its chord -- in the flat,
+or in the world once rolled onto a curved face -- by more than
+[`HOST_TRACE_TOLERANCE`], so a straight path on a flat face stays two
+points.
+
+### `pub fn grafting_procgen_surface_mesh::host::HostFace::unrolled_at(&self, u: f64, v: f64) -> [f32; 2]`
+
+Relative `(u, v)` as a point of the face's unrolled frame.
+
+### `pub fn grafting_procgen_surface_mesh::host::HostFace::uv_of_unrolled(&self, [travel, height]: [f32; 2]) -> [f64; 2]`
+
+The inverse of [`unrolled_at`](Self::unrolled_at), unclamped.
+
+### `pub fn grafting_procgen_surface_mesh::host::PanelSpan::length(&self) -> f32`
+
+The base run's extent in the frame's arc-length measure: `u` scales it.
+
+### `pub fn grafting_procgen_surface_mesh::host::PanelSpan::of(topology: &grafting_graph_core::contour::ContourTopology, region: &grafting_graph_core::contour::SurfaceRegion, resolve_position: &mut impl core::ops::function::FnMut(&grafting_graph_core::model::NodeId) -> core::option::Option<[f32; 3]>) -> core::option::Option<Self>`
+
+`None` for anything that does not mesh as an upright face.
+
+### `pub fn grafting_procgen_surface_mesh::host::PanelSpan::sides(&self) -> &[grafting_graph_core::contour::ContourEdgeId; 2]`
+
+The vertical side edges at `u = 0` and at `u = 1`.
+
+### `pub fn grafting_procgen_surface_mesh::host::mesh_on_host(face: &grafting_procgen_surface_mesh::host::HostFace, outer: &[[f32; 2]], holes: &[alloc::vec::Vec<[f32; 2]>]) -> core::option::Option<grafting_procgen_surface_mesh::types::TriangulatedMesh>`
+
+A face lying on a host, meshed in the host's own frame: `outer` and
+`holes` are rings of the host's flat, so what is drawn follows the host
+however it curves. `None` when the outline encloses nothing.
+
+### `pub fn grafting_procgen_surface_mesh::host::upright_face_mesh_cut(topology: &grafting_graph_core::contour::ContourTopology, region: &grafting_graph_core::contour::SurfaceRegion, resolve_position: &mut impl core::ops::function::FnMut(&grafting_graph_core::model::NodeId) -> core::option::Option<[f32; 3]>, cutters: &[alloc::vec::Vec<[f32; 2]>]) -> core::option::Option<grafting_procgen_surface_mesh::types::TriangulatedMesh>`
+
+An upright face's mesh with `cutters` -- closed rings in the face's own
+unrolled frame, the one [`HostFace::of`] reads it with -- subtracted
+from it.
+
+`None` only when the region is not an upright face, leaving the caller's
+ordinary path in charge. A cut that removes nothing yields exactly the
+uncut mesh; one that removes everything yields an empty one.
 
 ### `pub fn grafting_procgen_surface_mesh::math::angle_xz(center: [f32; 2], point: [f32; 2]) -> f32`
 
@@ -157,9 +228,30 @@ Returns `None` when the constraints cannot be triangulated at all, which
 the caller reads as "mesh this the way it was meshed before" rather than
 as a failure -- a degenerate ring mid-edit is a transient state.
 
+### `pub fn grafting_procgen_surface_mesh::run::panel_run(topology: &grafting_graph_core::contour::ContourTopology, start: &grafting_graph_core::contour::RegionId, resolve_position: &mut impl core::ops::function::FnMut(&grafting_graph_core::model::NodeId) -> core::option::Option<[f32; 3]>, joins: impl core::ops::function::Fn(&grafting_graph_core::contour::RegionId) -> bool) -> core::option::Option<grafting_procgen_surface_mesh::run::PanelRun>`
+
+The maximal run through `start`, ordered along `start`'s own `u`. `None`
+when `start` is not an upright face. Only panels `joins` accepts are
+added past `start`; the chain stops at a branch (a side shared by three
+or more upright faces).
+
+### `pub fn grafting_procgen_surface_mesh::sanitize::any_self_crossing<'a>(rings: impl core::iter::traits::collect::IntoIterator<Item = &'a alloc::vec::Vec<[f32; 3]>>) -> bool`
+
+Whether any ring has two non-adjacent segments properly crossing in its
+own best-fit plane. Touching at a shared point is not a crossing.
+
+### `pub fn grafting_procgen_surface_mesh::sanitize::sanitized_planar_meshes(topology: &grafting_graph_core::contour::ContourTopology, region: &grafting_graph_core::contour::SurfaceRegion, resolve_position: &mut impl core::ops::function::FnMut(&grafting_graph_core::model::NodeId) -> core::option::Option<[f32; 3]>) -> core::option::Option<alloc::vec::Vec<grafting_procgen_surface_mesh::types::TriangulatedMesh>>`
+
+Meshes a flat face through the boolean resolution described above.
+`None` when nothing with area is left.
+
 ### `pub fn grafting_procgen_surface_mesh::tessellation::tessellate_contour_loop(topology: &grafting_graph_core::contour::ContourTopology, loop_: &grafting_graph_core::contour::ContourLoop, resolve_position: &mut impl core::ops::function::FnMut(&grafting_graph_core::model::NodeId) -> core::option::Option<[f32; 3]>) -> core::option::Option<alloc::vec::Vec<[f32; 3]>>`
 
 Discretizes a loop of analytic contour edges into 3D world points.
+
+### `pub fn grafting_procgen_surface_mesh::tessellation::tessellate_edge(traversed: &grafting_graph_core::contour::ContourEdge, start: [f32; 3], end: [f32; 3]) -> core::option::Option<alloc::vec::Vec<[f32; 3]>>`
+
+One traversed edge as 3D world points, both ends included.
 
 ### `pub fn grafting_procgen_surface_mesh::tessellation::traversed_edge(topology: &grafting_graph_core::contour::ContourTopology, use_: &grafting_graph_core::contour::OrientedEdgeUse) -> core::option::Option<grafting_graph_core::contour::ContourEdge>`
 
@@ -178,6 +270,13 @@ Holes are assigned to the outer loop that contains their first point in
 the XZ contour plane. An invalid hole that is outside every outer loop
 produces `None` rather than a visually plausible but topologically false
 mesh. Callers resolve node positions from their authoritative graph.
+
+### `pub fn grafting_procgen_surface_mesh::triangulate_region_cut(topology: &grafting_graph_core::contour::ContourTopology, region: &grafting_graph_core::contour::SurfaceRegion, resolve_position: impl core::ops::function::FnMut(&grafting_graph_core::model::NodeId) -> core::option::Option<[f32; 3]>, fill: core::option::Option<grafting_procgen_surface_mesh::types::PlanarFill<'_>>, cutters: &[alloc::vec::Vec<[f32; 2]>]) -> core::option::Option<alloc::vec::Vec<grafting_procgen_surface_mesh::types::TriangulatedMesh>>`
+
+[`triangulate_region_with`], with closed `cutters` -- rings in the face's
+own unrolled frame, see [`host::upright_face_mesh_cut`] -- subtracted
+from an upright face. Any other face, and any face given no cutters, is
+meshed exactly as [`triangulate_region_with`] meshes it.
 
 ### `pub fn grafting_procgen_surface_mesh::triangulate_region_with(topology: &grafting_graph_core::contour::ContourTopology, region: &grafting_graph_core::contour::SurfaceRegion, resolve_position: impl core::ops::function::FnMut(&grafting_graph_core::model::NodeId) -> core::option::Option<[f32; 3]>, fill: core::option::Option<grafting_procgen_surface_mesh::types::PlanarFill<'_>>) -> core::option::Option<alloc::vec::Vec<grafting_procgen_surface_mesh::types::TriangulatedMesh>>`
 
@@ -206,8 +305,8 @@ comparable density rather than to two unrelated opinions.
 
 ### `pub fn grafting_procgen_surface_mesh::upright::upright_face_mesh(topology: &grafting_graph_core::contour::ContourTopology, region: &grafting_graph_core::contour::SurfaceRegion, resolve_position: &mut impl core::ops::function::FnMut(&grafting_graph_core::model::NodeId) -> core::option::Option<[f32; 3]>) -> core::option::Option<grafting_procgen_surface_mesh::types::TriangulatedMesh>`
 
-Meshes an upright face -- a wall panel, straight or curved, opened or
-solid -- by unrolling it flat and triangulating there.
+Meshes an upright face -- straight or curved, with holes or solid -- by
+unrolling it flat and triangulating there.
 
 `None` for anything that is not one, which leaves every other region on
 the ordinary projection path untouched. A region with more than one outer
@@ -358,6 +457,24 @@ parameters, index `i` at `t = i / BEZIER_UNROLL_STEPS`.
 
 ### `pub grafting_procgen_surface_mesh::frame::UnrollFrame::Cylinder::total_sweep: f32`
 
+### `pub grafting_procgen_surface_mesh::host::HostFace::frame: grafting_procgen_surface_mesh::frame::UnrollFrame`
+
+### `pub grafting_procgen_surface_mesh::run::PanelRun::closed: bool`
+
+The chain comes back round to its first panel.
+
+### `pub grafting_procgen_surface_mesh::run::PanelRun::panels: alloc::vec::Vec<grafting_procgen_surface_mesh::run::RunPanel>`
+
+### `pub grafting_procgen_surface_mesh::run::RunPanel::length: f32`
+
+### `pub grafting_procgen_surface_mesh::run::RunPanel::offset: f32`
+
+### `pub grafting_procgen_surface_mesh::run::RunPanel::region: grafting_graph_core::contour::RegionId`
+
+### `pub grafting_procgen_surface_mesh::run::RunPanel::reversed: bool`
+
+The panel's own `u` runs against the run.
+
 ### `pub grafting_procgen_surface_mesh::types::PlanarFill::field: &'a grafting_graph_core::curve_offset::field::ReferenceField`
 
 The curves the face was swept from -- its height and `(s, t)`
@@ -465,6 +582,10 @@ not.
 
 ### `pub grafting_procgen_surface_mesh::upright::UprightStructure::frame: grafting_procgen_surface_mesh::frame::UnrollFrame`
 
+### `pub grafting_procgen_surface_mesh::upright::UprightStructure::side_edges: [(grafting_graph_core::contour::ContourEdge, [f32; 3], [f32; 3]); 2]`
+
+The two vertical sides, in loop order.
+
 ### `pub grafting_procgen_surface_mesh::upright::UprightStructure::top_edges: alloc::vec::Vec<(grafting_graph_core::contour::ContourEdge, [f32; 3], [f32; 3])>`
 
 ### `pub mod grafting_procgen_surface_mesh`
@@ -489,18 +610,18 @@ own fixed [`ARC_TESSELLATION_TOLERANCE`], not a value a caller supplies
 or the graph stores: controlling render resolution is a rendering
 concern, not a construction-time one.
 
-An **upright** face -- a wall panel, straight or curved -- gets there by
+An **upright** face -- straight or curved -- gets there by
 being unrolled rather than projected. Its ring does not lie on a plane
 when it curves, so a best-fit plane folds it onto itself and emits
 triangles that visibly cut across the surface. But the panel is a
 developable surface: a section of a cylinder flattens without distortion
 into "distance along the rail" and "height", and a straight panel is the
 same map with an infinite radius. Unrolled, it is an ordinary 2D polygon
-that triangulates like any other -- openings included, which a strip
+that triangulates like any other -- holes included, which a strip
 built facet by facet could never punch.
 
 A flat panel keeps exactly the vertices its contour has: `earcut` invents
-none, and on a plane none are needed. A curved panel with an opening does
+none, and on a plane none are needed. A curved panel with a hole does
 need them -- the face left around the hole cannot be covered by joining
 contour vertices without spanning chords that cut through the inside of
 the cylinder -- so that one case is filled with `i_triangle`'s uniform
@@ -519,6 +640,20 @@ the same grid.
 ### `pub mod grafting_procgen_surface_mesh::frame`
 
 Frame mappings for developable upright surfaces (straight or curved walls).
+
+### `pub mod grafting_procgen_surface_mesh::host`
+
+An upright face as a host other geometry is placed on in relative
+coordinates, and the mesh left once that geometry is cut out of it.
+
+Both read the face through the same [`upright_structure`] frame the
+mesher unrolls it with, so a point placed at `(u, v)` and the cut made
+around it land exactly where the face itself is drawn.
+
+`u` runs along the base run's travel, `v` up the face's *local* height
+at that travel -- from the base run to the top run directly above it --
+so a slanted or uneven top deforms whatever is placed on it rather than
+letting it poke out.
 
 ### `pub mod grafting_procgen_surface_mesh::math`
 
@@ -570,6 +705,28 @@ that is a statement about geometry, and any surface swept from a curve
 answers it the same way without this module or its caller growing a
 branch per type.
 
+### `pub mod grafting_procgen_surface_mesh::run`
+
+Chains of upright faces that continue one another through a shared
+vertical side -- the panels of one wall, straight, cornered or curved --
+measured as one run.
+
+A panel's place on the run is in the same arc-length measure its
+[`HostFace`](crate::host::HostFace) resolves `u` with, so run distance `s` maps to panel
+`u = (s - offset) / length`, mirrored when the panel runs backwards.
+
+### `pub mod grafting_procgen_surface_mesh::sanitize`
+
+A flat face whose loops cannot be triangulated as given -- a loop that
+crosses itself, or one collapsed to fewer than three distinct points --
+resolved into simple pieces and meshed from those.
+
+The loops are read under the non-zero fill rule, the same one every
+other planar boolean here uses: outer loops are unioned, holes are
+subtracted, and what remains is a set of simple polygons with holes.
+Degenerate loops enclose nothing and simply drop out. The face is read
+in its own best-fit plane, so an upright face resolves as a flat one does.
+
 ### `pub mod grafting_procgen_surface_mesh::tessellation`
 
 Tessellation of analytic contour loops into discrete 3D vertex chains.
@@ -604,6 +761,20 @@ the surface, so `indices` reference the same order as the input
 `positions`. The exception is a curved panel with an opening: that one is
 filled with a uniform mesh whose interior vertices exist only here, so
 `positions` is longer than the contour and in the mesher's own order.
+
+### `pub struct grafting_procgen_surface_mesh::host::HostFace`
+
+An upright face's unrolled extent: its frame plus the base and top runs
+as `(travel, height)` polylines sorted by travel.
+
+### `pub struct grafting_procgen_surface_mesh::host::PanelSpan`
+
+An upright face's extent along its base run and its two vertical sides,
+without the top run a [`HostFace`] also reads.
+
+### `pub struct grafting_procgen_surface_mesh::run::PanelRun`
+
+### `pub struct grafting_procgen_surface_mesh::run::RunPanel`
 
 ### `pub struct grafting_procgen_surface_mesh::types::PlanarFill<'a>`
 

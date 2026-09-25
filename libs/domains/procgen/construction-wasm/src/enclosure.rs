@@ -462,7 +462,7 @@ pub fn unfilled_loops(
         return Ok(UnfilledLoopsResponse { loops: Vec::new() });
     }
 
-    // A hole a region *declared* -- a doorway cut in a floor, a courtyard --
+    // A hole a region *declared* -- a cut-out in a floor, a courtyard --
     // is free boundary enclosed by that region's own outer loop, and so
     // looks exactly like a gap from the outside. It is not one: somebody
     // asked for it. Its edges are exactly the ones already listed as a
@@ -985,9 +985,9 @@ mod tests {
     }
 
     /// A hole somebody asked for is not a hole to repair. A floor with a
-    /// doorway cut in it looks identical from the outside -- free boundary
+    /// cut-out in it looks identical from the outside -- free boundary
     /// enclosed by the floor's own silhouette -- so without this the very
-    /// next stroke would seal every door on the table.
+    /// next stroke would seal every declared hole on the table.
     #[test]
     fn a_hole_a_region_declared_is_left_alone() {
         let mut graph: SessionGraph = Graph::try_from_parts(Vec::new(), Vec::new()).unwrap();

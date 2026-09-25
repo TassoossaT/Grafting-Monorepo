@@ -1,5 +1,5 @@
 import type { EditHistoryStack } from "@/features/edit-construction";
-import type { ConstructionToolId, PreviewDescriptor, ToolParamsFor } from "@/features/edit-construction";
+import type { ConstructionToolId, PreviewDescriptor, StructureEditParams, ToolParamsFor } from "@/features/edit-construction";
 import type { ConstructionPosition } from "@/ports";
 
 import type { TabletopRuntime } from "../../tabletop-runtime.ts";
@@ -24,6 +24,25 @@ export interface ToolGesture {
   readonly samples: readonly PointerSample[];
 }
 
+/** A finished gesture, as `onPointerUp` gets it. */
+export interface ReleasedGesture extends ToolGesture {
+  /** Whether the pointer travelled far enough to be a drag rather than a click -- decided once, by the dispatcher. */
+  readonly moved: boolean;
+}
+
+/** How far the pointer may wander, in screen pixels (or world units when a sample has no screen position), and still count as a click. */
+const CLICK_SLOP_PIXELS = 3;
+const CLICK_SLOP_WORLD = 0.05;
+
+/** Whether any of `samples` strayed from `start` past the click slop. */
+export function gestureMoved(start: PointerSample, samples: readonly PointerSample[]): boolean {
+  return samples.some((sample) =>
+    sample.screenX !== undefined && sample.screenY !== undefined && start.screenX !== undefined && start.screenY !== undefined
+      ? Math.hypot(sample.screenX - start.screenX, sample.screenY - start.screenY) > CLICK_SLOP_PIXELS
+      : Math.hypot(sample.point.x - start.point.x, sample.point.y - start.point.y, sample.point.z - start.point.z) > CLICK_SLOP_WORLD,
+  );
+}
+
 export interface ConstructionToolFeedback {
   readonly tone: "info" | "success" | "error";
   readonly message: string;
@@ -42,11 +61,24 @@ export interface ToolContext {
    * any tool does with it is that tool's own business.
    */
   readonly snapToGrid: boolean;
+  /**
+   * How a grab on an existing structure behaves -- shape/elevation mode and
+   * the bezier handle options (`curveMode`/`curveAction`/`curveWidth`).
+   * Ambient like `snapToGrid`: every construction tool can grab and edit
+   * whatever it owns (`structure-edit-behavior.ts`), so this is no longer
+   * one tool's own params.
+   */
+  readonly structureEditParams: StructureEditParams;
   /** A fresh integer each call, monotonically increasing for the runtime's lifetime -- feeds id-namespacing salts and cell/room indices, mirroring `tabletop-entry.tsx`'s retired `generateCountRef`. */
   nextSequence(): number;
   /** Reports the node a tool just selected/moved, for `SettingsDrawer`'s inspector. `undefined` clears the inspector. */
   reportSelection(info: { readonly id: string; readonly point: ConstructionPosition } | undefined): void;
   reportFeedback(feedback: ConstructionToolFeedback | undefined): void;
+  /**
+   * Rewrites a tool's own params as the params panel would, so a tool can
+   * show its selection's settings there. Absent where no panel exists.
+   */
+  updateToolParams?<Id extends ConstructionToolId>(toolId: Id, update: (current: ToolParamsFor<Id>) => ToolParamsFor<Id>): void;
 }
 
 /**
@@ -65,6 +97,19 @@ export interface ConstructionTool<Id extends ConstructionToolId> {
   defaultParams(): ToolParamsFor<Id>;
   /** Opt in to a stationary drawing preview between gestures. */
   readonly previewOnHover?: boolean | ((params: ToolParamsFor<Id>) => boolean);
+  /**
+   * This tool always projects the pointer onto an existing surface's own
+   * parametrization (a wall's rail, say) rather than reading raw world X/Z --
+   * so the dispatcher's world-space grid magnet, applied before any tool
+   * ever sees the point, is redundant at best. At worst it is actively
+   * harmful: rounding X/Z to a world grid *before* a nonlinear projection
+   * (onto a rotated or curved rail) can jump the projected result across
+   * much more than one grid cell, which reads as the pointer "teleporting"
+   * rather than the smooth follow every other tool gets from the same
+   * magnet. A tool that opts in reads its own samples unsnapped and is
+   * responsible for whatever continuity it wants.
+   */
+  readonly snapsToSurface?: boolean;
   /** The tool's not-yet-committed ghost for the current gesture (or stationary hover, when `gesture.start === gesture.current`). */
   previewFor?(gesture: ToolGesture, params: ToolParamsFor<Id>, ctx: ToolContext): PreviewDescriptor | undefined;
   /** Left-button press. Continuous tools (brushes, move-node) start their gesture here. */
@@ -72,13 +117,17 @@ export interface ConstructionTool<Id extends ConstructionToolId> {
   /** Called while a gesture is active (left button held). Brushes that paint continuously (terrain) commit here, throttled by the dispatcher. */
   onPointerMove?(ctx: ToolContext, gesture: ToolGesture, params: ToolParamsFor<Id>): void;
   /** Gesture end. Tools that commit a single shape from a drag (wall, move-node's history entry) act here. */
-  onPointerUp?(ctx: ToolContext, gesture: ToolGesture, params: ToolParamsFor<Id>): void;
+  onPointerUp?(ctx: ToolContext, gesture: ReleasedGesture, params: ToolParamsFor<Id>): void;
   /** Discards an unfinished tool draft on Escape, cancellation or tool switch. */
   onCancel?(ctx: ToolContext): void;
   /** Runs an explicit action on the current selection. */
   onSelectionAction?(ctx: ToolContext, action: string, params: ToolParamsFor<Id>): boolean;
   /** Handles a tool key outside text controls; true prevents the browser default. */
   onKeyDown?(ctx: ToolContext, key: string, params: ToolParamsFor<Id>): boolean;
+  /** Delete/Backspace with the tool active -- a tool holding a selection (an opening picked for editing, say) removes it here. */
+  onDeleteKey?(ctx: ToolContext): void;
+  /** The active tool's params changed (the panel, or `updateToolParams`) -- a tool holding a selection may apply them to it. */
+  onParamsChange?(ctx: ToolContext, next: ToolParamsFor<Id>, previous: ToolParamsFor<Id>): void;
   /** A press+release with no intervening drag. Batch/stamp tools (room) commit here instead of `onPointerUp`. */
   onClick?(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void;
 }

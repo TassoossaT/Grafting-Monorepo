@@ -8,7 +8,6 @@
  */
 export type ConstructionToolId =
   | "navigate"
-  | "edit-region"
   | "platform-contour"
   | "slope-ramp"
   | "slope-spiral"
@@ -169,8 +168,8 @@ export interface TowerStampParams extends WallParams {
  * takes that very loop as its own boundary, so the two share the rim and a
  * wall with a window is still one wall.
  *
- * A door is the same shape with its sill on the floor, which is why there is
- * one tool and not two.
+ * A door is the same shape standing on the floor, which is why there is one
+ * tool and not two. A window's height on the wall is wherever it is placed.
  */
 export interface OpeningParams {
   /** A preset of the one opening type: where it starts and what is drawn in it, never its structure. */
@@ -178,16 +177,60 @@ export interface OpeningParams {
   /** How wide, measured along the wall rather than across the ground -- a curved wall is travelled, not spanned. */
   readonly width: number;
   readonly height: number;
-  /** How far above the wall's own base the opening starts. Zero is a door. */
-  readonly sill: number;
+  /** The outline the next opening gets inside its bounding rectangle. */
+  readonly shape: OpeningShape;
 }
 
+/** `params` switched to `kind`: a door is at least door-tall. */
+export function withOpeningKind(params: OpeningParams, kind: OpeningParams["openingKind"]): OpeningParams {
+  return kind === "door" ? { ...params, openingKind: "door", height: Math.max(params.height, 2) } : { ...params, openingKind: "window" };
+}
+
+/** The one color each opening preset is drawn in, by the tool's ghost and the panel alike. */
+export const OPENING_KIND_COLOR: Readonly<Record<OpeningParams["openingKind"], number>> = Object.freeze({ window: 0x7dd3fc, door: 0xd97706 });
+
+export type OpeningSide = "top" | "right" | "bottom" | "left";
+
+/**
+ * An opening's outline inside its bounding rectangle. Each side is straight
+ * (radius 0) or a circular arc through that side's midpoint, bulging toward
+ * it, with the given radius in world meters; `ellipse` ignores the radii
+ * and inscribes an ellipse (a circle when the rectangle is square).
+ */
+export interface OpeningShape {
+  readonly ellipse: boolean;
+  readonly radii: Readonly<Record<OpeningSide, number>>;
+}
+
+export const RECTANGLE_OPENING_SHAPE: OpeningShape = Object.freeze({
+  ellipse: false,
+  radii: Object.freeze({ top: 0, right: 0, bottom: 0, left: 0 }),
+});
+
 export type NoToolParams = Record<string, never>;
+
+/**
+ * How a grab on an *existing* structure behaves -- independent of which
+ * creation tool is active, since `beginCurveGesture`/the generic grab
+ * machinery (`structure-edit-behavior.ts`) work the same regardless of
+ * which type owns the grabbed part. Used to live as one tool's own params
+ * (`"edit-region"`, since retired); every construction tool now carries it
+ * ambiently via `ToolContext.structureEditParams` instead of declaring it
+ * as its own.
+ */
+export interface StructureEditParams {
+  readonly mode: "shape" | "elevation";
+  readonly curveMode?: "automatic" | "aligned" | "mirrored" | "free";
+  readonly curveAction?: "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width";
+  readonly curveWidth?: number;
+  readonly curveEndWidth?: number;
+}
+
+export const DEFAULT_STRUCTURE_EDIT_PARAMS: StructureEditParams = Object.freeze({ mode: "shape" });
 
 export interface ToolParamsByTool {
   readonly roof: { readonly shape: "rectangle" | "circle" | "platform"; readonly elevation: number; readonly height: number; readonly radius: number; readonly curvatures: readonly [number, number, number, number] };
   readonly navigate: NoToolParams;
-  readonly "edit-region": { readonly mode: "shape" | "elevation"; readonly curveMode?: "automatic" | "aligned" | "mirrored" | "free"; readonly curveAction?: "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"; readonly curveWidth?: number; readonly curveEndWidth?: number };
   readonly "platform-contour": { readonly elevation: number; readonly mode: "create" | "extend" | "cut"; readonly shape?: "rectangle" | "polygon" | "freehand" | "circle"; readonly radius?: number; readonly tolerance?: number };
   /** A straight sloped platform dragged from start to end, climbing a fixed rise. */
   readonly "slope-ramp": { readonly width: number; readonly rise: number };
@@ -206,7 +249,6 @@ export type ToolParamsFor<Id extends ConstructionToolId> = ToolParamsByTool[Id];
 export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   roof: Object.freeze({ shape: "rectangle", elevation: 3, height: 2, radius: 2.5, curvatures: [0, 0, 0, 0] as const }),
   navigate: Object.freeze({}),
-  "edit-region": Object.freeze({ mode: "shape" }),
   "platform-contour": Object.freeze({ elevation: 0, mode: "create", shape: "rectangle", radius: 2.5, tolerance: 0.15 }),
   "slope-ramp": Object.freeze({ width: 1.5, rise: 3 }),
   "slope-spiral": Object.freeze({ width: 1.5, rise: 3, radius: 2.5, turns: 1 }),
@@ -222,7 +264,7 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   "wall-brush": Object.freeze({ wallType: "wall-white", height: 3, shape: "circle", radius: 0.3, rotationDegrees: 0 }),
   "wall-line": Object.freeze({ wallType: "wall-white", height: 3 }),
   "tower-stamp": Object.freeze({ wallType: "wall-white", height: 3, radius: TOWER_RADIUS_PRESETS[1] }),
-  opening: Object.freeze({ openingKind: "window", width: 1.2, height: 1.2, sill: 1 }),
+  opening: Object.freeze({ openingKind: "window", width: 1.2, height: 1.2, shape: RECTANGLE_OPENING_SHAPE }),
   "terrain-sculpt": Object.freeze({
     faceSize: 2,
     brushRadius: 6,
