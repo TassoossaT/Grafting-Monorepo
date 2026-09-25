@@ -40,7 +40,13 @@ export function roadBodyTarget(ctx: ToolContext, sample: PointerSample, excludeN
   const p = endpoint === undefined ? evaluated[i]!.curves[0]!.points[3] : edge.curve.points[endpoint];
   return {
     sample: { ...sample, nodeId: endpoint === 0 ? edge.startNodeId : endpoint === 3 ? edge.endNodeId : curvePickId(edge.edgeId, "midpoint"), point: { x: p[0], y: p[1], z: p[2] } },
-    options: { mode: "shape", parameter: t, insertOnClick: false, pointerOrigin: sample.point, dragThreshold: 5 },
+    options: {
+      mode: "shape",
+      parameter: t,
+      insertOnClick: false,
+      pointerOrigin: sample.point,
+      dragThreshold: 5,
+    },
   };
 }
 

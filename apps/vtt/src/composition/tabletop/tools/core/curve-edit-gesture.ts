@@ -9,6 +9,7 @@ import {
   planEdgeReshape,
   reshapeCurve,
   resolveCloudTopology,
+  resolveCurves,
   reverseGeometry,
   spineOwnerAt,
 } from "../../../../features/edit-construction/index.ts";
@@ -108,10 +109,41 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGes
   let dragged = false;
   let ended = false;
   let lastRenderedTarget: ConstructionPosition | undefined;
+  const pick = curvePick(targetId);
+  const isWidthDrag = params?.curveAction === "width";
+  let currentWidth = params?.curveWidth ?? 4;
+  let resolvedCurve: CubicBezier | undefined;
+
+  if (isWidthDrag && pick) {
+    const edge = snapshot.edges.find((e) => e.edgeId === pick.edgeId);
+    if (edge && edge.curve) {
+      const startPos = snapshot.nodes.find((n) => n.id === edge.startNodeId)?.position;
+      const endPos = snapshot.nodes.find((n) => n.id === edge.endNodeId)?.position;
+      if (startPos && endPos) {
+        const res = resolveCurves(ctx.runtime, [{ handles: edge.curve, start: startPos, end: endPos }], 0.025)[0];
+        resolvedCurve = res?.curves[0];
+      }
+    }
+  }
+
   const input = (insert = false) => ({
     field: ctx.runtime,
-    snapshot, topologies, port: ctx.runtime, targetId, position: target, operationId, tableId: ctx.tableId, insert, allowShapeChange: params?.allowShapeChange, parameter: params?.parameter, mode: params?.curveMode, action: params?.curveAction, width: params?.curveWidth ?? 4, endWidth: params?.curveEndWidth,
+    snapshot,
+    topologies,
+    port: ctx.runtime,
+    targetId,
+    position: target,
+    operationId,
+    tableId: ctx.tableId,
+    insert,
+    allowShapeChange: params?.allowShapeChange,
+    parameter: params?.parameter,
+    mode: params?.curveMode,
+    action: isWidthDrag ? ("width" as const) : params?.curveAction,
+    width: currentWidth,
+    endWidth: params?.curveEndWidth,
   });
+
   return {
     move(gesture) {
       if (ended) return;
@@ -134,9 +166,34 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGes
         return;
       }
       lastRenderedTarget = { ...target };
+
+      if (isWidthDrag && resolvedCurve) {
+        const near = ctx.runtime.curveBatch({ tolerance: 0.025, commands: [{ kind: "nearest", curve: resolvedCurve, point: [target.x, target.y, target.z] }] })[0];
+        if (near?.point) {
+          const dist = Math.hypot(target.x - near.point[0], target.z - near.point[2]);
+          currentWidth = Math.max(0.5, Math.round(dist * 2 * 4) / 4);
+        }
+      }
+
       try {
-        const draft = previewBezierEdit(input());
-        if (draft) ctx.runtime.showPreview({ kind: "segments", positions: draft, color: PREVIEW_COLOR, opacity: 0.9 }, CHANNEL);
+        if (isWidthDrag && resolvedCurve) {
+          const ribbon = ctx.runtime.curveBatch({
+            tolerance: 0.05,
+            commands: [{ kind: "ribbon", curve: resolvedCurve, offsets: [-currentWidth / 2, currentWidth / 2] as const }],
+          })[0]?.ribbon;
+          if (ribbon && ribbon.outer.length >= 2) {
+            const positions: number[] = [];
+            for (let i = 0; i < ribbon.outer.length; i++) {
+              const a = ribbon.outer[i]!;
+              const b = ribbon.outer[(i + 1) % ribbon.outer.length]!;
+              positions.push(a[0], a[1] + 0.05, a[2], b[0], b[1] + 0.05, b[2]);
+            }
+            ctx.runtime.showPreview({ kind: "segments", positions: Float32Array.from(positions), color: PREVIEW_COLOR, opacity: 0.95 }, CHANNEL);
+          }
+        } else {
+          const draft = previewBezierEdit(input());
+          if (draft) ctx.runtime.showPreview({ kind: "segments", positions: draft, color: PREVIEW_COLOR, opacity: 0.9 }, CHANNEL);
+        }
       } catch (error) {
         ctx.runtime.clearPreview(CHANNEL);
         ctx.reportFeedback({ tone: "error", message: String(error) });
@@ -156,7 +213,14 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGes
         const { recorded } = commitPatchReplacement(ctx.runtime, draft.request, { transactionId: operationId });
         if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
         ctx.reportSelection(isBezierEditTarget(ctx.runtime.getGraphSnapshot(), draft.selectedId) ? { id: draft.selectedId, point: target } : undefined);
-        ctx.reportFeedback({ tone: "success", message: params?.curveAction && params.curveAction !== "edit" ? "Curva atualizada." : moved ? "Curva atualizada." : "Ponto inserido sem alterar a curva." });
+        const msg = isWidthDrag
+          ? `Largura da rua ajustada para ${currentWidth.toFixed(2)}m.`
+          : params?.curveAction && params.curveAction !== "edit"
+          ? "Curva atualizada."
+          : moved
+          ? "Curva atualizada."
+          : "Ponto inserido sem alterar a curva.";
+        ctx.reportFeedback({ tone: "success", message: msg });
       } catch (error) {
         ctx.reportFeedback({ tone: "error", message: `Curva preservada: ${String(error)}` });
       }

@@ -1,6 +1,6 @@
 import type { ConstructionEdgeId, ConstructionPatch, ConstructionPosition } from "@/ports";
 
-import { createBoundaryEdges, simplifyClosedRing } from "../../../topology/index.ts";
+import { createBoundaryEdges, simplifyClosedRing, simplifyPolygonRdp } from "../../../topology/index.ts";
 import { heightsOnCurves, type FieldPort, type ReferenceCurve } from "./curve-projection.ts";
 import type { PlanarArea, PlanarPoint, PlanarRing } from "../../../topology/planar-area.ts";
 
@@ -28,6 +28,13 @@ const WELD_TOLERANCE = 0.05; // PathCloud contour weld tolerance (5 cm).
  * one drew. Filtered here, once, rather than trusted downstream.
  */
 const MIN_SHAPE_AREA = 1e-4;
+
+/**
+ * Holes below this area (world units squared) are spurious artifacts of offset
+ * ribbon self-intersections (swallowtail loops) and boolean intersections,
+ * not genuine urban courtyards or enclosed land blocks.
+ */
+const MIN_HOLE_AREA = 16.0;
 
 function signedRingArea(ring: PlanarRing): number {
   let total = 0;
@@ -278,7 +285,11 @@ export function buildContourPatch(
       return outerRing !== undefined && ringArea(outerRing) >= MIN_SHAPE_AREA;
     })
     .map((shape, shapeIndex) => {
-      const [outerRing, ...holeRings] = shape;
+      const [rawOuterRing, ...rawHoleRings] = shape;
+      const outerRing = simplifyPolygonRdp(rawOuterRing ?? [], 0.06);
+      const holeRings = rawHoleRings
+        .filter((holeRing) => ringArea(holeRing) >= MIN_HOLE_AREA)
+        .map((holeRing) => simplifyPolygonRdp(holeRing, 0.06));
       // A run of collinear points the union happened to leave standing is
       // still, geometrically, one straight edge -- simplified here, once, so
       // a self-intersection cleanup or a welded-in existing vertex does not
