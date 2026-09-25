@@ -60,7 +60,7 @@ function targetOf(sample: PointerSample, gesture: ToolGesture, params?: CurveGes
   return params?.mode === "elevation" && sample.screenY !== undefined && gesture.current.screenY !== undefined
     ? { ...sample.point, y: sample.point.y + (sample.screenY - gesture.current.screenY) / 40 }
     : params?.pointerOrigin
-      ? {x:sample.point.x+gesture.current.point.x-params.pointerOrigin.x,y:sample.point.y,z:sample.point.z+gesture.current.point.z-params.pointerOrigin.z}
+      ? { x: sample.point.x + gesture.current.point.x - params.pointerOrigin.x, y: sample.point.y, z: sample.point.z + gesture.current.point.z - params.pointerOrigin.z }
       : { ...gesture.current.point, y: sample.point.y };
 }
 

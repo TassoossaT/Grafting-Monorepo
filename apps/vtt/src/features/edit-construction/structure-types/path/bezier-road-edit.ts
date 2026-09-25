@@ -35,6 +35,7 @@ export function regeneratePathSpine(input: SpineRegenerationInput): SpineRegener
   const segments = chains.flatMap((c) => c.sampledPoints!.slice(1).flatMap((p, i) => {
     const a = c.sampledPoints![i]!; return [a.x, a.y, a.z, p.x, p.y, p.z];
   }));
-  return { request: { operationId: input.operationId, sourceSurfaceKeys: plan.consumedSurfaceKeys, patch: plan.patch, graphPatch },
+  const footprintOutline = chains.flatMap((c) => c.ribbons.flatMap((r) => r.outer)).map((p) => [p.x, p.z] as const);
+  return { request: { operationId: input.operationId, sourceSurfaceKeys: plan.consumedSurfaceKeys, patch: plan.patch, graphPatch, footprintOutline },
     preview: Float32Array.from(segments) };
 }

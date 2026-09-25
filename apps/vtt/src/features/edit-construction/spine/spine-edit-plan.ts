@@ -107,8 +107,8 @@ export function planSpineEditPatch(input: SpineEditInput): { readonly graphPatch
     if (!isBezierEditTarget(source, input.targetId)) return undefined;
     const snapNode = source.nodes.find((n) => n.id !== input.targetId &&
       isSpineControlNodeId(n.id) &&
-      Math.hypot(n.position.x - input.position.x, n.position.z - input.position.z) <= 0.45 &&
-      Math.abs(n.position.y - input.position.y) <= 0.35);
+      Math.hypot(n.position.x - input.position.x, n.position.z - input.position.z) <= 0.55 &&
+      Math.abs(n.position.y - input.position.y) <= 1.5);
 
     if (snapNode) {
       selectedId = snapNode.id;

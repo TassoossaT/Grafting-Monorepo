@@ -5,40 +5,42 @@ import type { CurveGestureOptions } from "../core/curve-edit-gesture.ts";
 import { createSnapMeshPreview } from "./road-preview-mesh.ts";
 
 /** Project a road-body pick onto its spine using the canonical curve query. */
-export function roadBodyTarget(ctx: ToolContext,sample: PointerSample): {sample:PointerSample;options:CurveGestureOptions}|undefined {
-  if(!sample.surfaceRef && !sample.nodeId)return;
-  const hit=ctx.runtime.getAllRegionTopologies().find(t=>
+export function roadBodyTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): { sample: PointerSample; options: CurveGestureOptions } | undefined {
+  const hit = ctx.runtime.getAllRegionTopologies().find((t) =>
     structureTypeFor(t.surfaceType)?.spine && (sample.surfaceRef
-      ? surfaceRefFromNodeSet(t.surfaceKey)===sample.surfaceRef
-      : t.nodes.some(n=>n.id===sample.nodeId)));
-  const owner=hit && structureTypeFor(hit.surfaceType)?.spine;
-  if(!owner)return;
-  const snapshot=ctx.runtime.getGraphSnapshot();
-  const roadIds=new Set(snapshot.edges.filter(e=>e.curve?.surfaceType && structureTypeFor(e.curve.surfaceType)?.spine===owner).map(e=>e.edgeId));
-  const edges=curveEdgesOf(snapshot,[],ctx.runtime).filter(e=>roadIds.has(e.edgeId));
-  if(!edges.length)return;
-  const nearest=ctx.runtime.curveBatch({tolerance:0.025,commands:edges.map(e=>({kind:"nearest" as const,curve:e.curve,point:[sample.point.x,sample.point.y,sample.point.z] as const}))});
-  const evaluated=ctx.runtime.curveBatch({tolerance:0.025,commands:edges.map((e,i)=>({kind:"split" as const,curve:e.curve,t:Math.max(0.000001,Math.min(0.999999,nearest[i]!.parameter!))}))});
-  let best:{index:number;distance:number}|undefined;
-  evaluated.forEach((result,i)=>{
-    const p=result.curves[0]!.points[3];
-    const distance=Math.hypot(p[0]-sample.point.x,p[1]-sample.point.y,p[2]-sample.point.z);
-    if(Math.abs(p[1]-sample.point.y)>0.2)return;
-    const profile=snapshot.edges.find(e=>e.edgeId===edges[i]!.edgeId)!.curve!;
-    const reach=Math.max(...profile.bandOffsets.map(Math.abs),...(profile.endBandOffsets??[]).map(Math.abs),0.2)+0.2;
-    if(distance<=reach && (!best||distance<best.distance))best={index:i,distance};
+      ? surfaceRefFromNodeSet(t.surfaceKey) === sample.surfaceRef
+      : t.nodes.some((n) => n.id === sample.nodeId)));
+  const owner = hit && structureTypeFor(hit.surfaceType)?.spine;
+  const snapshot = ctx.runtime.getGraphSnapshot();
+  const roadEdges = snapshot.edges.filter((e) =>
+    e.curve?.surfaceType &&
+    (!owner || structureTypeFor(e.curve.surfaceType)?.spine === owner) &&
+    (!excludeNodeId || (e.startNodeId !== excludeNodeId && e.endNodeId !== excludeNodeId)));
+  const roadIds = new Set(roadEdges.map((e) => e.edgeId));
+  const edges = curveEdgesOf(snapshot, [], ctx.runtime).filter((e) => roadIds.has(e.edgeId));
+  if (!edges.length) return;
+  const nearest = ctx.runtime.curveBatch({ tolerance: 0.025, commands: edges.map((e) => ({ kind: "nearest" as const, curve: e.curve, point: [sample.point.x, sample.point.y, sample.point.z] as const })) });
+  const evaluated = ctx.runtime.curveBatch({ tolerance: 0.025, commands: edges.map((e, i) => ({ kind: "split" as const, curve: e.curve, t: Math.max(0.000001, Math.min(0.999999, nearest[i]!.parameter!)) })) });
+  let best: { index: number; distance: number } | undefined;
+  evaluated.forEach((result, i) => {
+    const p = result.curves[0]!.points[3];
+    const distance = Math.hypot(p[0] - sample.point.x, p[1] - sample.point.y, p[2] - sample.point.z);
+    if (Math.abs(p[1] - sample.point.y) > 1.5) return;
+    const profile = snapshot.edges.find((e) => e.edgeId === edges[i]!.edgeId)!.curve!;
+    const reach = Math.max(...profile.bandOffsets.map(Math.abs), ...(profile.endBandOffsets ?? []).map(Math.abs), 0.2) + 0.2;
+    if (distance <= reach && (!best || distance < best.distance)) best = { index: i, distance };
   });
-  if(!best)return;
-  const i=best.index, edge=edges[i]!,t=nearest[i]!.parameter!;
+  if (!best) return;
+  const i = best.index, edge = edges[i]!, t = nearest[i]!.parameter!;
   const projected = evaluated[i]!.curves[0]!.points[3];
   // Reuse anchors by world distance, not a percentage of arbitrarily long spans.
   const nearStart = Math.hypot(...projected.map((v, axis) => v - edge.curve.points[0][axis]!));
   const nearEnd = Math.hypot(...projected.map((v, axis) => v - edge.curve.points[3][axis]!));
   const endpoint = nearStart <= 0.6 && nearStart <= nearEnd ? 0 : nearEnd <= 0.6 ? 3 : undefined;
-  const p=endpoint===undefined?evaluated[i]!.curves[0]!.points[3]:edge.curve.points[endpoint];
+  const p = endpoint === undefined ? evaluated[i]!.curves[0]!.points[3] : edge.curve.points[endpoint];
   return {
-    sample:{...sample,nodeId:endpoint===0?edge.startNodeId:endpoint===3?edge.endNodeId:curvePickId(edge.edgeId,"midpoint"),point:{x:p[0],y:p[1],z:p[2]}},
-    options:{mode:"shape",parameter:t,insertOnClick:false,pointerOrigin:sample.point,dragThreshold:5},
+    sample: { ...sample, nodeId: endpoint === 0 ? edge.startNodeId : endpoint === 3 ? edge.endNodeId : curvePickId(edge.edgeId, "midpoint"), point: { x: p[0], y: p[1], z: p[2] } },
+    options: { mode: "shape", parameter: t, insertOnClick: false, pointerOrigin: sample.point, dragThreshold: 5 },
   };
 }
 
@@ -62,7 +64,7 @@ function targetSignature(ctx: ToolContext, target: RoadSnapTarget): string | und
 export function roadSnapTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): RoadSnapTarget | undefined {
   const previous = snapLocks.get(ctx.runtime);
   if (previous && targetSignature(ctx, previous.target) === previous.signature
-      && Math.abs(previous.target.point.y - sample.point.y) <= 0.2
+      && Math.abs(previous.target.point.y - sample.point.y) <= 1.5
       && Math.hypot(previous.target.point.x - sample.point.x, previous.target.point.z - sample.point.z) <= previous.exitReach) {
     if (!excludeNodeId || previous.target.nodeId !== excludeNodeId) {
       return { ...sample, nodeId: previous.target.nodeId, point: previous.target.point, snapEdge: previous.target.snapEdge, snapSignature: previous.signature };
@@ -91,12 +93,12 @@ function acquireRoadSnap(ctx: ToolContext, sample: PointerSample, excludeNodeId?
   let best: { node: (typeof graph.nodes)[number]; distance: number } | undefined;
   for (const node of graph.nodes) {
     if (excludeNodeId && node.id === excludeNodeId) continue;
-    if (!ids.has(node.id) || Math.abs(node.position.y - sample.point.y) > 0.2) continue;
+    if (!ids.has(node.id) || Math.abs(node.position.y - sample.point.y) > 1.5) continue;
     const distance = Math.hypot(node.position.x - sample.point.x, node.position.z - sample.point.z);
-    if (distance <= 0.45 && (!best || distance < best.distance)) best = { node, distance };
+    if (distance <= 0.55 && (!best || distance < best.distance)) best = { node, distance };
   }
   if (best) return { ...sample, nodeId: best.node.id, point: best.node.position };
-  const body = roadBodyTarget(ctx, sample);
+  const body = roadBodyTarget(ctx, sample, excludeNodeId);
   if (!body) return;
   const edge = curvePick(body.sample.nodeId!);
   return { ...body.sample, snapEdge: edge ? { edgeId: edge.edgeId, parameter: body.options.parameter! } : undefined };
