@@ -2135,6 +2135,10 @@ Stable identity for freehand creation, through-point creation and spine editing.
 
 A road is drawn freely or through explicit points, and edited by its spine points.
 
+### `function vtt.path-points-tool.prunePoints(points: readonly ConstructionPosition[]): ConstructionPosition[]`
+
+Prunes accidental duplicate or jitter points (< 0.1m) from a draft spine.
+
 ### `variable vtt.path-stroke-tool.pathStrokeTool: ConstructionTool<"path-brush">`
 
 Drag to sketch the centerline. Release commits one fitted curve transaction.
@@ -2171,7 +2175,7 @@ Project a road-body pick onto its spine using the canonical curve query.
 
 A deleted or reshaped target cannot be confirmed from a stale preview.
 
-### `function vtt.road-body-target.roadSnapTarget(ctx: ToolContext, sample: PointerSample): RoadSnapTarget | undefined`
+### `function vtt.road-body-target.roadSnapTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): RoadSnapTarget | undefined`
 
 Keep the displayed position and edge parameter until the pointer exits the wider release zone.
 
@@ -2222,6 +2226,10 @@ Append triangulated quad strips for a ribbon outline computed by graph-core.
 ### `function vtt.road-preview-mesh.appendStraightQuads(positions: number[], indices: number[], points: readonly ConstructionPosition[], halfWidth: number, elevation: number): void`
 
 Fallback straight quads connecting consecutive points when curve fitting is unavailable.
+
+### `function vtt.road-preview-mesh.createFastRoadPreview(points: readonly ConstructionPosition[], bedWidth: number, cursor?: ConstructionPosition, color?: number, opacity?: number): RenderPreviewDescriptor`
+
+Build a lightweight straight-quad preview mesh connecting path points directly, without WASM round-trips.
 
 ### `function vtt.road-preview-mesh.createRoadMeshPreview(options: RoadMeshPreviewOptions): RenderPreviewDescriptor`
 

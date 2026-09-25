@@ -15,6 +15,7 @@ import type { AtomicEditOp, ToolParamsFor } from "../../../../features/edit-cons
 import type { ConstructionCurvedEdge, ConstructionEdgeGeometry, ConstructionPosition, CubicBezier } from "../../../../ports/index.ts";
 import type { PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
 import { commitPatchReplacement } from "../../effects/effect-commit.ts";
+import { roadSnapTarget, showRoadSnap } from "../paths/road-body-target.ts";
 
 /**
  * One curve-handle gesture for every curve on the table.
@@ -94,6 +95,15 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGes
       if (ended) return;
       if (!dragged && !crossedThreshold(sample, gesture, params)) return;
       target = targetOf(sample, gesture, params);
+      if (!curvePick(targetId)) {
+        const snap = roadSnapTarget(ctx, { point: target }, targetId);
+        if (snap) {
+          target = snap.point;
+          showRoadSnap(ctx, snap);
+        } else {
+          showRoadSnap(ctx);
+        }
+      }
       moved = target.x !== sample.point.x || target.y !== sample.point.y || target.z !== sample.point.z;
       dragged ||= moved;
       try {
@@ -107,6 +117,7 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGes
     commit() {
       if (ended) return;
       ended = true;
+      showRoadSnap(ctx);
       ctx.runtime.clearPreview(CHANNEL);
       if (dragged && !moved) return;
       if (!dragged && params?.insertOnClick === false) return;
@@ -122,7 +133,7 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGes
         ctx.reportFeedback({ tone: "error", message: `Curva preservada: ${String(error)}` });
       }
     },
-    cancel() { ended = true; ctx.runtime.clearPreview(CHANNEL); },
+    cancel() { ended = true; showRoadSnap(ctx); ctx.runtime.clearPreview(CHANNEL); },
   };
 }
 

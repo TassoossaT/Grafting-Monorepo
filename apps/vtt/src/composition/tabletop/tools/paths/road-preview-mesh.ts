@@ -151,13 +151,45 @@ export function createRoadMeshPreview(options: RoadMeshPreviewOptions): RenderPr
   };
 }
 
+/** Build a lightweight straight-quad preview mesh connecting path points directly, without WASM round-trips. */
+export function createFastRoadPreview(
+  points: readonly ConstructionPosition[],
+  bedWidth: number,
+  cursor?: ConstructionPosition,
+  color?: number,
+  opacity?: number,
+): RenderPreviewDescriptor {
+  const positions: number[] = [];
+  const indices: number[] = [];
+  const allPoints = cursor && (points.length === 0 || Math.hypot(cursor.x - points.at(-1)!.x, cursor.z - points.at(-1)!.z) > 1e-3)
+    ? [...points, cursor]
+    : points;
+  const halfWidth = Math.max(0.1, bedWidth / 2);
+  const diskRadius = Math.max(0.35, bedWidth * 0.52);
+
+  if (allPoints.length >= 2) {
+    appendStraightQuads(positions, indices, allPoints, halfWidth, PREVIEW_ELEVATION);
+  }
+
+  for (const p of allPoints) {
+    appendNodeDisk(positions, indices, p, diskRadius, NODE_DISK_ELEVATION, 12);
+  }
+
+  return {
+    kind: "mesh",
+    positions: Float32Array.from(positions),
+    indices: Uint32Array.from(indices),
+    color: color ?? ROAD_PREVIEW_COLOR,
+    opacity: opacity ?? ROAD_PREVIEW_OPACITY,
+  };
+}
+
 /** Build a glowing circular snap preview mesh at the target junction location. */
 export function createSnapMeshPreview(target: ConstructionPosition, radius = 0.45): RenderPreviewDescriptor {
   const positions: number[] = [];
   const indices: number[] = [];
-  // Elevated disk with outer ring for clear junction target visual
-  appendNodeDisk(positions, indices, target, radius, NODE_DISK_ELEVATION + 0.01, 24);
-  appendNodeDisk(positions, indices, target, radius * 1.35, NODE_DISK_ELEVATION + 0.005, 24);
+  // Elevated disk for clear junction target visual
+  appendNodeDisk(positions, indices, target, radius, NODE_DISK_ELEVATION + 0.01, 12);
 
   return {
     kind: "mesh",
@@ -167,3 +199,4 @@ export function createSnapMeshPreview(target: ConstructionPosition, radius = 0.4
     opacity: SNAP_DISK_OPACITY,
   };
 }
+

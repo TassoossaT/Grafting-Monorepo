@@ -515,3 +515,42 @@ for(const shape of ["inclined","curved"]){
     }finally{f.close();}
   });
 }
+
+test("dragging a spine vertex onto its direct neighbor collapses the edge and prunes the redundant vertex", () => {
+  const f = fixture();
+  try {
+    f.click(sample(-10, 0)); f.click(sample(0, 0)); f.click(sample(10, 0)); f.finish();
+    assert.equal(edges(f).length, 2);
+    const middleNodeId = edges(f)[0].endNodeId;
+    tool.onPointerDown(f.ctx, { ...sample(0, 0), nodeId: middleNodeId }, points);
+    tool.onPointerMove(f.ctx, gesture(sample(0, 0), sample(10, 0)), points);
+    tool.onPointerUp(f.ctx, gesture(sample(0, 0), sample(10, 0)), points);
+    assert.equal(f.calls.feedback.filter(v => v.tone === "error").length, 0, JSON.stringify(f.calls.feedback));
+    assert.equal(edges(f).length, 1, "direct edge must be collapsed into one remaining edge");
+    const graph = f.runtime.getGraphSnapshot();
+    assert.equal(graph.nodes.some(n => n.id === middleNodeId), false, "collapsed node must be pruned from graph");
+  } finally { f.close(); }
+});
+
+test("dragging an endpoint onto another road's vertex welds the two roads into a shared junction", () => {
+  const f = fixture();
+  try {
+    f.click(sample(-10, 0)); f.click(sample(10, 0)); f.finish();
+    assert.equal(edges(f).length, 1);
+    const targetNode = f.runtime.getGraphSnapshot().nodes.find(n => n.id.startsWith("spine:") && Math.abs(n.position.x - 10) < 0.01);
+
+    f.click(sample(0, 8)); f.click(sample(0, 4)); f.finish();
+    assert.equal(edges(f).length, 2);
+    const road2End = f.runtime.getGraphSnapshot().nodes.find(n => n.id.startsWith("spine:") && Math.abs(n.position.z - 4) < 0.01);
+
+    tool.onPointerDown(f.ctx, { ...sample(0, 4), nodeId: road2End.id }, points);
+    tool.onPointerMove(f.ctx, gesture(sample(0, 4), sample(10, 0)), points);
+    tool.onPointerUp(f.ctx, gesture(sample(0, 4), sample(10, 0)), points);
+    assert.equal(f.calls.feedback.filter(v => v.tone === "error").length, 0, JSON.stringify(f.calls.feedback));
+    const graph = f.runtime.getGraphSnapshot();
+    const junctionEdges = edges(f).filter(e => e.startNodeId === targetNode.id || e.endNodeId === targetNode.id);
+    assert.equal(junctionEdges.length, 2, "both roads must now meet at the shared junction node");
+    assert.equal(graph.nodes.some(n => n.id === road2End.id), false, "welded endpoint is absorbed by the target node");
+  } finally { f.close(); }
+});
+

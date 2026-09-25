@@ -6,7 +6,7 @@ import { scopedToolId, type ConstructionTool, type ToolContext, type PointerSamp
 import { beginCurveGesture, type CurveGesture, type CurveGestureOptions } from "../core/curve-edit-gesture.ts";
 import { pathStrokeTool } from "./path-stroke-tool.ts";
 import { roadBodyTarget, roadSnapTarget, roadSnapIsCurrent, showRoadSnap, type RoadSnapTarget } from "./road-body-target.ts";
-import { createRoadMeshPreview, ROAD_PREVIEW_COLOR, ROAD_PREVIEW_OPACITY, ROAD_ERROR_COLOR, ROAD_ERROR_OPACITY } from "./road-preview-mesh.ts";
+import { createFastRoadPreview } from "./road-preview-mesh.ts";
 
 const CHANNEL = "road-points";
 const xyz = (p: ConstructionPosition) => [p.x, p.y, p.z] as const;
@@ -24,40 +24,26 @@ function seededGesture(gesture: ToolGesture, origin?: PointerSample): ToolGestur
 function curves(ctx: ToolContext, points: readonly ConstructionPosition[]): readonly CubicBezier[] {
   return ctx.runtime.curveBatch({ tolerance: 0.025, commands: [{ kind: "automatic", points: points.map(xyz) }] })[0]!.curves;
 }
-function preview(ctx: ToolContext, draft: Draft, cursor?: ConstructionPosition): void {
-  const points = cursor && !equal(cursor, draft.points.at(-1)!) ? [...draft.points, cursor] : draft.points;
-  try {
-    if (points.length > 1) {
-      const path = curves(ctx, points);
-      const ribbons = ctx.runtime.curveBatch({ tolerance: 0.05, commands: path.map(curve => ({ kind: "ribbon" as const, curve, offsets: [-draft.params.bedWidth / 2, draft.params.bedWidth / 2] as const })) });
-      ctx.runtime.showPreview(createRoadMeshPreview({
-        ribbons,
-        anchors: draft.points,
-        cursor,
-        bedWidth: draft.params.bedWidth,
-        color: ROAD_PREVIEW_COLOR,
-        opacity: ROAD_PREVIEW_OPACITY,
-      }), CHANNEL);
-      return;
-    }
-  } catch {
-    ctx.runtime.showPreview(createRoadMeshPreview({
-      fallbackPoints: points,
-      anchors: draft.points,
-      cursor,
-      bedWidth: draft.params.bedWidth,
-      color: ROAD_ERROR_COLOR,
-      opacity: ROAD_ERROR_OPACITY,
-    }), CHANNEL);
-    return;
+
+/** Prunes accidental duplicate or jitter points (< 0.1m) from a draft spine. */
+export function prunePoints(points: readonly ConstructionPosition[]): ConstructionPosition[] {
+  if (points.length <= 2) return [...points];
+  const pruned: ConstructionPosition[] = [points[0]!];
+  for (let i = 1; i < points.length; i++) {
+    const current = points[i]!;
+    const prev = pruned.at(-1)!;
+    const dist = Math.hypot(current.x - prev.x, current.z - prev.z);
+    if (dist < 0.1 && i < points.length - 1) continue;
+    pruned.push(current);
   }
-  ctx.runtime.showPreview(createRoadMeshPreview({
-    anchors: draft.points,
-    cursor,
-    bedWidth: draft.params.bedWidth,
-    color: ROAD_PREVIEW_COLOR,
-    opacity: ROAD_PREVIEW_OPACITY,
-  }), CHANNEL);
+  return pruned;
+}
+
+function preview(ctx: ToolContext, draft: Draft, cursor?: ConstructionPosition): void {
+  ctx.runtime.showPreview(
+    createFastRoadPreview(draft.points, draft.params.bedWidth, cursor),
+    CHANNEL,
+  );
 }
 function safely(ctx: ToolContext, work: () => void): void {
   try { work(); } catch (error) {
@@ -99,10 +85,12 @@ function editTarget(ctx: ToolContext, sample: PointerSample): PointerSample | un
 }
 
 function commitDraft(ctx: ToolContext, draft: Draft): void {
+  const points = prunePoints(draft.points);
+  if (points.length < 2) return;
   const operationId = scopedToolId(ctx, "road-points", ctx.nextSequence());
   const effect = createPathBrushEffect({
-    brushShape: { kind: "circle", radius: 0.025 }, brushRegion: { samples: draft.points },
-    authoredCurves: curves(ctx, draft.points), curveMode: "automatic", parameters: pathFormationFor(draft.params),
+    brushShape: { kind: "circle", radius: 0.025 }, brushRegion: { samples: points },
+    authoredCurves: curves(ctx, points), curveMode: "automatic", parameters: pathFormationFor(draft.params),
   }, { operationId, tableId: ctx.tableId, initiatedBy: "road-points" });
   if (commitPathCloudIntent(ctx, effect, 0.025)) {
     drafts.delete(ctx.runtime);
@@ -222,7 +210,12 @@ export const pathPointsTool: ConstructionTool<"path-brush"> = {
           throw new Error("O alvo de encaixe mudou. Aproxime o mouse novamente antes de confirmar.");
         }
         const draft = drafts.get(ctx.runtime) ?? { points: [], params: { ...params } };
-        if (!draft.points.length || !equal(draft.points.at(-1)!, active.point)) draft.points.push(active.point);
+        const last = draft.points.at(-1);
+        if (!last || Math.hypot(active.point.x - last.x, active.point.z - last.z) >= 0.1 || Math.abs(active.point.y - last.y) >= 0.05) {
+          draft.points.push(active.point);
+        } else {
+          draft.points[draft.points.length - 1] = active.point;
+        }
         drafts.set(ctx.runtime, draft);
         if (active.snapTarget && draft.points.length >= 2) commitDraft(ctx, draft);
         else preview(ctx, draft);

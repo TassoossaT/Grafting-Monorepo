@@ -59,15 +59,17 @@ function targetSignature(ctx: ToolContext, target: RoadSnapTarget): string | und
   return node && JSON.stringify(node);
 }
 /** Keep the displayed position and edge parameter until the pointer exits the wider release zone. */
-export function roadSnapTarget(ctx: ToolContext, sample: PointerSample): RoadSnapTarget | undefined {
+export function roadSnapTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): RoadSnapTarget | undefined {
   const previous = snapLocks.get(ctx.runtime);
   if (previous && targetSignature(ctx, previous.target) === previous.signature
       && Math.abs(previous.target.point.y - sample.point.y) <= 0.2
       && Math.hypot(previous.target.point.x - sample.point.x, previous.target.point.z - sample.point.z) <= previous.exitReach) {
-    return { ...sample, nodeId: previous.target.nodeId, point: previous.target.point, snapEdge: previous.target.snapEdge, snapSignature: previous.signature };
+    if (!excludeNodeId || previous.target.nodeId !== excludeNodeId) {
+      return { ...sample, nodeId: previous.target.nodeId, point: previous.target.point, snapEdge: previous.target.snapEdge, snapSignature: previous.signature };
+    }
   }
   snapLocks.delete(ctx.runtime);
-  let target = acquireRoadSnap(ctx, sample);
+  let target = acquireRoadSnap(ctx, sample, excludeNodeId);
   if (target) {
     const signature = targetSignature(ctx, target);
     if (signature) target = { ...target, snapSignature: signature };
@@ -83,14 +85,15 @@ export function roadSnapIsCurrent(ctx: ToolContext, target: RoadSnapTarget): boo
 }
 
 /** Product snap reach; projection and splitting remain canonical Rust operations. */
-function acquireRoadSnap(ctx: ToolContext, sample: PointerSample): RoadSnapTarget | undefined {
+function acquireRoadSnap(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): RoadSnapTarget | undefined {
   const graph = ctx.runtime.getGraphSnapshot();
   const ids = new Set(graph.edges.filter(e => e.curve?.surfaceType && structureTypeFor(e.curve.surfaceType)?.spine).flatMap(e => [e.startNodeId, e.endNodeId]));
-  let best: { node: typeof graph.nodes[number]; distance: number } | undefined;
+  let best: { node: (typeof graph.nodes)[number]; distance: number } | undefined;
   for (const node of graph.nodes) {
+    if (excludeNodeId && node.id === excludeNodeId) continue;
     if (!ids.has(node.id) || Math.abs(node.position.y - sample.point.y) > 0.2) continue;
     const distance = Math.hypot(node.position.x - sample.point.x, node.position.z - sample.point.z);
-    if (distance <= 0.6 && (!best || distance < best.distance)) best = { node, distance };
+    if (distance <= 0.45 && (!best || distance < best.distance)) best = { node, distance };
   }
   if (best) return { ...sample, nodeId: best.node.id, point: best.node.position };
   const body = roadBodyTarget(ctx, sample);

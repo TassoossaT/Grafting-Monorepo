@@ -4156,6 +4156,13 @@ export function panelRailOf(port: ContourPort, topology: ConstructionRegionTopol
 export const pathBrushTool = pathPointsTool;
 
 // src/composition/tabletop/tools/paths/path-points-tool.ts
+export function prunePoints(points: readonly ConstructionPosition[]): ConstructionPosition[] {
+  if (points.length <= 2) return [...points];
+  const pruned: ConstructionPosition[] = [points[0]!];
+  for (let i = 1; i < points.length; i++) {
+  const current = points[i]!;
+  const prev = pruned.at(-1)!;
+  const dist = Math.hypot(current.x - prev.x, current.z - prev.z);
 export const pathPointsTool: ConstructionTool<"path-brush"> = {
   id: "path-brush",
   handlePresentation: "spine-points",
@@ -4184,7 +4191,7 @@ export function roadBodyTarget(ctx: ToolContext,sample: PointerSample): {sample:
 export interface RoadSnapTarget extends PointerSample {
   readonly snapSignature?: string;
   readonly snapEdge?: { readonly edgeId: string; readonly parameter: number };
-export function roadSnapTarget(ctx: ToolContext, sample: PointerSample): RoadSnapTarget | undefined {
+export function roadSnapTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): RoadSnapTarget | undefined {
   const previous = snapLocks.get(ctx.runtime);
 export function roadSnapIsCurrent(ctx: ToolContext, target: RoadSnapTarget): boolean {
   return target.snapSignature !== undefined && targetSignature(ctx, target) === target.snapSignature;
@@ -4238,11 +4245,19 @@ export function createRoadMeshPreview(options: RoadMeshPreviewOptions): RenderPr
   const positions: number[] = [];
   const indices: number[] = [];
   const halfWidth = Math.max(0.1, options.bedWidth / 2);
+export function createFastRoadPreview(
+  points: readonly ConstructionPosition[],
+  bedWidth: number,
+  cursor?: ConstructionPosition,
+  color?: number,
+  opacity?: number,
+  ): RenderPreviewDescriptor {
+  const positions: number[] = [];
 export function createSnapMeshPreview(target: ConstructionPosition, radius = 0.45): RenderPreviewDescriptor {
   const positions: number[] = [];
   const indices: number[] = [];
-  // Elevated disk with outer ring for clear junction target visual
-  appendNodeDisk(positions, indices, target, radius, NODE_DISK_ELEVATION + 0.01, 24);
+  // Elevated disk for clear junction target visual
+  appendNodeDisk(positions, indices, target, radius, NODE_DISK_ELEVATION + 0.01, 12);
 
 // src/composition/tabletop/tools/platform/platform-contour-merge.ts
 export interface DirectedContourEdge {
