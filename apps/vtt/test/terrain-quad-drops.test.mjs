@@ -81,3 +81,47 @@ test("only the cell on the free side of standing ground is laid", () => {
   assert.equal(facingRight.regions, 1);
   assert.equal(facingRight.drops.retained, 1);
 });
+
+test("a third cell attempting to use the same internal edge is dropped", () => {
+  const g = {
+    vertices: [
+      { x: 0, z: 0 }, { x: 1, z: 0 }, { x: 1, z: 1 }, { x: 0, z: 1 },
+      { x: 2, z: 0 }, { x: 2, z: 1 },
+      { x: 1, z: 2 }, { x: 2, z: 2 },
+    ],
+    quads: [
+      [0, 3, 2, 1], // left: walks n2 -> n1 on SHARED
+      [1, 2, 5, 4], // right: walks n1 -> n2 on SHARED (now SHARED has 2 uses)
+      [1, 2, 7, 6], // third quad: also walks n1 -> n2 on SHARED
+    ],
+    onContour: [],
+    refinementComplete: true,
+  };
+  const nodes8 = ["n0", "n1", "n2", "n3", "n4", "n5", "n6", "n7"].map((id, index) => ({ id, position: { x: index, y: 0, z: 0 } }));
+  const drops = { avoided: 0, unnamed: 0, degenerate: 0, retained: 0 };
+  const patch = gridPatch(TABLE, g, (v) => nodes8[v]?.id, nodes8, "terrain", new Map(), undefined, undefined, drops);
+
+  assert.equal(patch.regions.length, 2, "only 2 cells can share an internal edge");
+  assert.equal(drops.retained, 1, "third cell is culled before reaching the engine");
+});
+
+test("two cells walking an edge in the same direction cull the duplicate", () => {
+  const g = {
+    vertices: [
+      { x: 0, z: 0 }, { x: 1, z: 0 }, { x: 1, z: 1 }, { x: 0, z: 1 },
+      { x: 1, z: 2 }, { x: 0, z: 2 },
+    ],
+    quads: [
+      [0, 3, 2, 1], // walks n2 -> n1 on SHARED
+      [0, 3, 2, 1], // duplicate quad also walking n2 -> n1 on SHARED
+    ],
+    onContour: [],
+    refinementComplete: true,
+  };
+  const drops = { avoided: 0, unnamed: 0, degenerate: 0, retained: 0 };
+  const patch = gridPatch(TABLE, g, idFor, nodes, "terrain", new Map(), undefined, undefined, drops);
+
+  assert.equal(patch.regions.length, 1, "duplicate walk in same direction is culled");
+  assert.equal(drops.retained, 1);
+});
+
