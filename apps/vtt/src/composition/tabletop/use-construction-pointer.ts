@@ -152,7 +152,12 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
           },
         } : undefined);
       },
-      reportFeedback: (feedback) => optionsRef.current.onFeedbackChange(feedback),
+      reportFeedback: (feedback) => {
+        if (feedback?.tone === "error") {
+          console.error("[VTT Tool Error]", feedback.message, feedback);
+        }
+        optionsRef.current.onFeedbackChange(feedback);
+      },
     }),
     [nextSequence],
   );

@@ -320,11 +320,17 @@ fn surface_mesh_with(
         let surface = surfaces
             .region_surface(&region_id)
             .ok_or_else(|| format!("unknown analytic region surface {region_id}"))?;
+        let surface_type_str = surface.surface_type().as_str();
+        let applicable_fill = if surface_type_str.starts_with("path") || surface_type_str.starts_with("slope") {
+            fill
+        } else {
+            None
+        };
         let meshes = triangulate_region_with(
             topology,
             region,
             |id| graph.node(id).map(|node| *node.data()),
-            fill,
+            applicable_fill,
         )
         .ok_or_else(|| format!("no mesh derivable for analytic region {region_id}"))?;
         if meshes.is_empty() {

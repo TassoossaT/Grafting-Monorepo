@@ -82,6 +82,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
   const [selectedNodeInfo, setSelectedNodeInfo] = useState<SelectedNodeInfo | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [toolFeedback, setToolFeedback] = useState<ConstructionToolFeedback | undefined>(undefined);
+  const [copiedFeedback, setCopiedFeedback] = useState(false);
 
   const historyState = history.getState();
   const current = useSyncExternalStore(
@@ -140,6 +141,13 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
   );
 
   const handleFeedbackChange = useCallback((feedback: ConstructionToolFeedback | undefined) => {
+    if (feedback?.tone === "error") {
+      console.error("[VTT Tool Error]", feedback.message, feedback);
+    } else if (feedback?.tone === "info") {
+      console.info("[VTT Tool Info]", feedback.message);
+    } else if (feedback?.tone === "success") {
+      console.log("[VTT Tool Success]", feedback.message);
+    }
     setToolFeedback((previous) =>
       previous?.tone === feedback?.tone &&
       previous?.message === feedback?.message &&
@@ -225,10 +233,35 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           <span>| Modo: {TOOL_LABEL[tool]}</span>
           {toolFeedback !== undefined ? (
             <span
-              title={toolFeedback.surfaceRef}
-              style={{ color: toolFeedback.tone === "error" ? "#fca5a5" : toolFeedback.tone === "success" ? "#86efac" : "#c4b5fd" }}
+              role="button"
+              tabIndex={0}
+              title="Clique para copiar esta mensagem"
+              style={{
+                color: toolFeedback.tone === "error" ? "#fca5a5" : toolFeedback.tone === "success" ? "#86efac" : "#c4b5fd",
+                cursor: "pointer",
+                userSelect: "text",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.3rem",
+              }}
+              onClick={() => {
+                if (toolFeedback.message) {
+                  navigator.clipboard.writeText(toolFeedback.message);
+                  setCopiedFeedback(true);
+                  setTimeout(() => setCopiedFeedback(false), 2000);
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  if (toolFeedback.message) {
+                    navigator.clipboard.writeText(toolFeedback.message);
+                    setCopiedFeedback(true);
+                    setTimeout(() => setCopiedFeedback(false), 2000);
+                  }
+                }
+              }}
             >
-              | {toolFeedback.message}
+              | {toolFeedback.message} {copiedFeedback ? "✓ Copiado!" : "📋"}
             </span>
           ) : null}
         </div>
