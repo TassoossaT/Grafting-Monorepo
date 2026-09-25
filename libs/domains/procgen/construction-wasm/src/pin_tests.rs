@@ -1,184 +1,10 @@
 use serde_json::{Value, json};
 
 use crate::session::ConstructionSession;
-
-pub(crate) const CAPABILITIES: &str = r#"{"capabilities":[
-    {"surfaceType":"wall","cuts":false,"acceptsCuts":true},
-    {"surfaceType":"opening","cuts":true,"acceptsCuts":false}]}"#;
-
-pub(crate) fn key(id: &str) -> Value {
-    json!(["@region", id])
-}
-
-/// An upright panel from `from` to `to` (XZ), base at height 0, top at
-/// `heights` over the start and end corners.
-pub(crate) fn wall(
-    session: &mut ConstructionSession,
-    id: &str,
-    from: [f32; 2],
-    to: [f32; 2],
-    heights: [f32; 2],
-    geometry: Value,
-) {
-    let node = |suffix: &str| format!("{id}-{suffix}");
-    let request = json!({
-        "nodes": [
-            {"id": node("a"), "position": [from[0], 0.0, from[1]]},
-            {"id": node("b"), "position": [to[0], 0.0, to[1]]},
-            {"id": node("c"), "position": [to[0], heights[1], to[1]]},
-            {"id": node("d"), "position": [from[0], heights[0], from[1]]},
-        ],
-        "edges": [
-            {"edgeId": node("base"), "startNodeId": node("a"), "endNodeId": node("b"), "geometry": geometry},
-            {"edgeId": node("right"), "startNodeId": node("b"), "endNodeId": node("c")},
-            {"edgeId": node("top"), "startNodeId": node("d"), "endNodeId": node("c"), "geometry": geometry},
-            {"edgeId": node("left"), "startNodeId": node("d"), "endNodeId": node("a")},
-        ],
-        "regions": [{
-            "regionId": id,
-            "boundary": [
-                {"edgeId": node("base"), "reversed": false},
-                {"edgeId": node("right"), "reversed": false},
-                {"edgeId": node("top"), "reversed": true},
-                {"edgeId": node("left"), "reversed": false},
-            ],
-            "surfaceType": "wall",
-            "physical": true,
-        }],
-    });
-    session
-        .add_patch_json(&request.to_string())
-        .expect("wall registers");
-}
-
-fn straight_wall(session: &mut ConstructionSession, id: &str) {
-    wall(
-        session,
-        id,
-        [0.0, 0.0],
-        [4.0, 0.0],
-        [3.0, 3.0],
-        json!({"kind": "line"}),
-    );
-}
-
-/// A four-node region with its own nodes, placed away from everything.
-pub(crate) fn opening(session: &mut ConstructionSession, id: &str) {
-    let node = |index: usize| format!("{id}-n{index}");
-    let edge = |index: usize| format!("{id}-e{index}");
-    let request = json!({
-        "nodes": (0..4).map(|index| json!({"id": node(index), "position": [index as f32, 0.0, 50.0 + index as f32]})).collect::<Vec<_>>(),
-        "edges": (0..4).map(|index| json!({"edgeId": edge(index), "startNodeId": node(index), "endNodeId": node((index + 1) % 4)})).collect::<Vec<_>>(),
-        "regions": [{
-            "regionId": id,
-            "boundary": (0..4).map(|index| json!({"edgeId": edge(index), "reversed": false})).collect::<Vec<_>>(),
-            "surfaceType": "opening",
-            "physical": false,
-        }],
-    });
-    session
-        .add_patch_json(&request.to_string())
-        .expect("opening registers");
-}
-
-/// Pins the opening's four nodes to the rectangle `u0..u1` x `v0..v1` on `host`.
-pub(crate) fn pin_rectangle(
-    session: &mut ConstructionSession,
-    id: &str,
-    host: &str,
-    [u0, u1]: [f64; 2],
-    [v0, v1]: [f64; 2],
-) -> Value {
-    let corners = [[u0, v0], [u1, v0], [u1, v1], [u0, v1]];
-    let pins: Vec<Value> = corners
-        .iter()
-        .enumerate()
-        .map(|(index, [u, v])| json!({"nodeId": format!("{id}-n{index}"), "hostSurfaceKey": key(host), "u": u, "v": v}))
-        .collect();
-    serde_json::from_str(
-        &session
-            .pin_nodes_json(&json!({ "pins": pins }).to_string())
-            .unwrap(),
-    )
-    .unwrap()
-}
-
-pub(crate) fn resolve(session: &ConstructionSession, host: &str, uv: &[[f64; 2]]) -> Vec<[f32; 3]> {
-    serde_json::from_str(
-        &session
-            .resolve_on_host_json(&json!({"hostSurfaceKey": key(host), "uv": uv}).to_string())
-            .unwrap(),
-    )
-    .unwrap()
-}
-
-pub(crate) fn project(session: &ConstructionSession, host: &str, points: &[[f32; 3]]) -> Vec<Value> {
-    serde_json::from_str(
-        &session
-            .project_to_host_json(
-                &json!({"hostSurfaceKey": key(host), "points": points}).to_string(),
-            )
-            .unwrap(),
-    )
-    .unwrap()
-}
-
-pub(crate) fn topology(session: &ConstructionSession, region: &str) -> Value {
-    serde_json::from_str(
-        &session
-            .region_topology_json(&json!({"surfaceKey": key(region)}).to_string())
-            .unwrap(),
-    )
-    .unwrap()
-}
-
-fn node_position(session: &ConstructionSession, region: &str, node: &str) -> [f32; 3] {
-    let dto = topology(session, region);
-    let entry = dto["nodes"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|entry| entry["id"] == node)
-        .unwrap();
-    serde_json::from_value(entry["position"].clone()).unwrap()
-}
-
-pub(crate) fn mesh_area(session: &ConstructionSession, region: &str) -> f32 {
-    let pieces: Vec<Value> = serde_json::from_str(
-        &session
-            .surface_mesh_json(&json!({"surfaceKey": key(region)}).to_string())
-            .unwrap(),
-    )
-    .unwrap();
-    let mut area = 0.0;
-    for piece in pieces {
-        let positions: Vec<f32> = serde_json::from_value(piece["positions"].clone()).unwrap();
-        let indices: Vec<usize> = serde_json::from_value(piece["indices"].clone()).unwrap();
-        for triangle in indices.chunks_exact(3) {
-            let p = |index: usize| {
-                [
-                    positions[index * 3],
-                    positions[index * 3 + 1],
-                    positions[index * 3 + 2],
-                ]
-            };
-            let (a, b, c) = (p(triangle[0]), p(triangle[1]), p(triangle[2]));
-            let ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
-            let ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
-            let cross = [
-                ab[1] * ac[2] - ab[2] * ac[1],
-                ab[2] * ac[0] - ab[0] * ac[2],
-                ab[0] * ac[1] - ab[1] * ac[0],
-            ];
-            area += 0.5 * (cross[0] * cross[0] + cross[1] * cross[1] + cross[2] * cross[2]).sqrt();
-        }
-    }
-    area
-}
-
-fn close(a: [f32; 3], b: [f32; 3], tolerance: f32) -> bool {
-    (0..3).all(|axis| (a[axis] - b[axis]).abs() <= tolerance)
-}
+use crate::test_support::{
+    CAPABILITIES, close, key, mesh_area, node_position, opening, pin_rectangle, project, resolve,
+    straight_wall, topology, wall,
+};
 
 fn affected(outcome: &Value) -> Vec<Value> {
     outcome["affectedSurfaceKeys"].as_array().unwrap().clone()
@@ -394,7 +220,7 @@ fn deleting_the_host_drops_the_pins_and_keeps_the_nodes() {
     session
         .delete_region_json(&json!({"surfaceKey": key("w")}).to_string())
         .unwrap();
-    assert!(session.pins.is_empty());
+    assert!(session.annotations.pins.is_empty());
     assert!(close(
         node_position(&session, "o", "o-n0"),
         [1.0, 0.6, 0.0],
@@ -683,4 +509,72 @@ fn a_bezier_host_projects_past_its_ends_as_outside() {
     );
     assert_eq!(projected[0]["inside"], false);
     assert_eq!(projected[1]["inside"], false);
+}
+
+/// Pins through the session on success; a refusal comes back as its message.
+fn try_pin(session: &mut ConstructionSession, pins: Value) -> Result<(), String> {
+    let request = json!({ "pins": pins });
+    let mut table = session.annotations.pins.clone();
+    crate::pins::pin_nodes(
+        &session.graph,
+        &session.topology,
+        &mut table,
+        serde_json::from_value(request.clone()).unwrap(),
+    )?;
+    session.pin_nodes_json(&request.to_string()).unwrap();
+    Ok(())
+}
+
+fn pin(node: &str, host: &str, [u, v]: [f64; 2]) -> Value {
+    json!({"nodeId": node, "hostSurfaceKey": key(host), "u": u, "v": v})
+}
+
+#[test]
+fn pinning_to_a_host_that_is_not_an_upright_panel_is_refused() {
+    let mut session = ConstructionSession::new();
+    opening(&mut session, "flat");
+    opening(&mut session, "o");
+    let refused = try_pin(&mut session, json!([pin("o-n0", "flat", [0.5, 0.5])]));
+    assert!(refused.unwrap_err().contains("not an upright panel"));
+    assert!(session.annotations.pins.is_empty());
+}
+
+/// Two panels meeting where `a`'s top corner lies on `b`, so pinning it
+/// there moves nothing and both stay upright.
+fn crossing_walls() -> ConstructionSession {
+    let mut session = ConstructionSession::new();
+    let line = json!({"kind": "line"});
+    wall(&mut session, "a", [0.0, 0.0], [4.0, 0.0], [3.0, 3.0], line.clone());
+    wall(&mut session, "b", [4.0, -2.0], [4.0, 2.0], [3.0, 3.0], line.clone());
+    wall(&mut session, "c", [8.0, -2.0], [8.0, 2.0], [3.0, 3.0], line);
+    session
+}
+
+#[test]
+fn a_pin_that_would_make_a_host_follow_itself_is_refused() {
+    let mut session = crossing_walls();
+    try_pin(&mut session, json!([pin("a-c", "b", [0.5, 1.0])])).unwrap();
+    let refused = try_pin(&mut session, json!([pin("b-d", "a", [1.0, 1.0])]));
+    assert!(refused.unwrap_err().contains("follow itself"));
+    assert_eq!(session.annotations.pins.len(), 1);
+}
+
+#[test]
+fn a_pin_cycle_through_several_hosts_is_refused() {
+    let mut session = crossing_walls();
+    let refused = try_pin(
+        &mut session,
+        json!([
+            pin("a-c", "b", [0.5, 1.0]),
+            pin("b-c", "c", [0.5, 1.0]),
+            pin("c-c", "a", [0.5, 1.0]),
+        ]),
+    );
+    assert!(refused.unwrap_err().contains("follow itself"));
+    assert!(session.annotations.pins.is_empty());
+    try_pin(
+        &mut session,
+        json!([pin("a-c", "b", [0.5, 1.0]), pin("b-c", "c", [0.5, 1.0])]),
+    )
+    .expect("a chain without a cycle is fine");
 }

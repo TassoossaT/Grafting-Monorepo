@@ -20,10 +20,11 @@ use crate::geometry::connected_component;
 use crate::grid_generation;
 use crate::mesh::{self, region_id_to_wire};
 use crate::patch_replacement;
-use crate::pins::{self, Cutting, HostTracer, PinnedCurves, Pins, SurfaceCapabilities};
+use crate::panel_runs;
+use crate::pins::{self, Cutting, HostTracer, SurfaceCapabilities};
+use crate::region_annotations::RegionAnnotations;
 use crate::region_editing;
-use crate::region_groups::{self, RegionGroups};
-use crate::region_props::{self, RegionProps};
+use crate::region_props;
 use crate::region_overlay;
 
 fn parse<T: serde::de::DeserializeOwned>(json: &str) -> Result<T, JsValue> {
@@ -47,10 +48,7 @@ struct ConstructionState {
     topology: ContourTopology,
     known_regions: HashSet<RegionId>,
     spatial_index: crate::spatial_index::UniformGridIndex,
-    pins: Pins,
-    curves: PinnedCurves,
-    groups: RegionGroups,
-    props: RegionProps,
+    annotations: RegionAnnotations,
 }
 
 /// One undoable replacement, holding the *other* state: the one before it
@@ -88,10 +86,7 @@ pub struct ConstructionSession {
     pub(crate) topology: ContourTopology,
     pub(crate) known_regions: HashSet<RegionId>,
     pub(crate) spatial_index: crate::spatial_index::UniformGridIndex,
-    pub(crate) pins: Pins,
-    pub(crate) curves: PinnedCurves,
-    pub(crate) groups: RegionGroups,
-    pub(crate) props: RegionProps,
+    pub(crate) annotations: RegionAnnotations,
     /// Session configuration rather than edit state: undo never touches it.
     pub(crate) surface_capabilities: SurfaceCapabilities,
     region_overlay_undo: Vec<RegionOverlayHistoryEntry>,
@@ -107,10 +102,7 @@ impl ConstructionSession {
             topology: self.topology.clone(),
             known_regions: self.known_regions.clone(),
             spatial_index: self.spatial_index.clone(),
-            pins: self.pins.clone(),
-            curves: self.curves.clone(),
-            groups: self.groups.clone(),
-            props: self.props.clone(),
+            annotations: self.annotations.clone(),
         }
     }
 
@@ -214,10 +206,7 @@ impl ConstructionSession {
             topology: ContourTopology::new(),
             known_regions: HashSet::new(),
             spatial_index: crate::spatial_index::UniformGridIndex::default(),
-            pins: Pins::new(),
-            curves: PinnedCurves::new(),
-            groups: RegionGroups::new(),
-            props: RegionProps::new(),
+            annotations: RegionAnnotations::default(),
             surface_capabilities: SurfaceCapabilities::new(),
             region_overlay_undo: Vec::new(),
             region_overlay_redo: Vec::new(),
@@ -251,21 +240,14 @@ impl ConstructionSession {
         if let Some(open) = self.open_transaction.as_mut() {
             open.mutated = true;
         }
+        let orphaned_hosts = self.annotations.retain_live(&self.topology, &self.graph);
         pins::settle(
             &mut self.graph,
             &self.topology,
-            &mut self.pins,
-            &mut self.curves,
+            &self.annotations.pins,
+            &orphaned_hosts,
             outcome,
         );
-        if !self.groups.is_empty() {
-            let topology = &self.topology;
-            self.groups.retain(|region, _| topology.region(region).is_some());
-        }
-        if !self.props.is_empty() {
-            let topology = &self.topology;
-            self.props.retain(|region, _| topology.region(region).is_some());
-        }
         for key in &outcome.created_surface_keys {
             if let Ok(id) = mesh::region_id_from_wire(key) {
                 self.known_regions.insert(id.clone());
@@ -293,21 +275,23 @@ impl ConstructionSession {
         }
     }
 
-    fn annotate_pins(&self, dto: &mut region_editing::RegionTopologyDto) {
+    /// Fills in what the session keeps beside the region: its property bag,
+    /// its nodes' pins, and how its edges are traced on their host.
+    fn annotate(&self, dto: &mut region_editing::RegionTopologyDto) {
+        let annotations = &self.annotations;
         if let Ok(id) = mesh::region_id_from_wire(&dto.surface_key) {
-            dto.group = self.groups.get(&id).cloned();
-            dto.props = self.props.get(&id).cloned();
+            dto.props = annotations.props.get(&id).cloned();
         }
-        if self.pins.is_empty() {
+        if annotations.pins.is_empty() {
             return;
         }
         for node in &mut dto.nodes {
             node.pin = grafting_graph_core::NodeId::new(node.id.clone())
                 .ok()
-                .and_then(|id| self.pins.get(&id))
+                .and_then(|id| annotations.pins.get(&id))
                 .map(Into::into);
         }
-        let tracer = HostTracer::new(&self.pins, &self.curves);
+        let tracer = HostTracer::new(annotations);
         let mut faces = std::collections::BTreeMap::new();
         for edge_dto in dto
             .outer_loops
@@ -329,6 +313,10 @@ impl ConstructionSession {
         }
     }
 
+    fn cutting(&self) -> Cutting<'_> {
+        Cutting::new(&self.annotations, &self.surface_capabilities)
+    }
+
     /// Exchanges the live construction state with a history entry's.
     fn swap_state(&mut self, state: &mut ConstructionState) {
         std::mem::swap(&mut self.graph, &mut state.graph);
@@ -336,10 +324,7 @@ impl ConstructionSession {
         std::mem::swap(&mut self.topology, &mut state.topology);
         std::mem::swap(&mut self.known_regions, &mut state.known_regions);
         std::mem::swap(&mut self.spatial_index, &mut state.spatial_index);
-        std::mem::swap(&mut self.pins, &mut state.pins);
-        std::mem::swap(&mut self.curves, &mut state.curves);
-        std::mem::swap(&mut self.groups, &mut state.groups);
-        std::mem::swap(&mut self.props, &mut state.props);
+        std::mem::swap(&mut self.annotations, &mut state.annotations);
     }
 
     // ---- Bootstrapping ----
@@ -460,27 +445,6 @@ impl ConstructionSession {
         serialize(&response)
     }
 
-    /// `AddHole` -- opens one more inner loop on a face. See
-    /// `region_editing::apply_add_hole`.
-    pub fn add_hole_json(&mut self, request_json: &str) -> Result<String, JsValue> {
-        let request = parse(request_json)?;
-        let mut response =
-            region_editing::apply_add_hole(&mut self.topology, request).map_err(to_js_error)?;
-        self.track(&mut response);
-        serialize(&response)
-    }
-
-    /// `RemoveHole` -- closes one back up. See
-    /// `region_editing::apply_remove_hole`.
-    pub fn remove_hole_json(&mut self, request_json: &str) -> Result<String, JsValue> {
-        let request = parse(request_json)?;
-        let mut response =
-            region_editing::apply_remove_hole(&mut self.graph, &mut self.topology, request)
-                .map_err(to_js_error)?;
-        self.track(&mut response);
-        serialize(&response)
-    }
-
     /// `DeleteRegion`. See `region_editing::apply_delete_region`.
     pub fn delete_region_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
@@ -510,7 +474,7 @@ impl ConstructionSession {
         let mut response = pins::pin_nodes(
             &self.graph,
             &self.topology,
-            &mut self.pins,
+            &mut self.annotations.pins,
             parse(request_json)?,
         )
         .map_err(to_js_error)?;
@@ -520,7 +484,7 @@ impl ConstructionSession {
 
     /// Drops pins; the nodes stay where they are.
     pub fn unpin_nodes_json(&mut self, request_json: &str) -> Result<String, JsValue> {
-        let mut response = pins::unpin_nodes(&self.topology, &mut self.pins, parse(request_json)?)
+        let mut response = pins::unpin_nodes(&self.topology, &mut self.annotations.pins, parse(request_json)?)
             .map_err(to_js_error)?;
         self.track(&mut response);
         serialize(&response)
@@ -532,8 +496,8 @@ impl ConstructionSession {
     pub fn pin_edge_curve_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let mut response = pins::pin_edge_curve(
             &self.topology,
-            &self.pins,
-            &mut self.curves,
+            &self.annotations.pins,
+            &mut self.annotations.curves,
             parse(request_json)?,
         )
         .map_err(to_js_error)?;
@@ -547,7 +511,7 @@ impl ConstructionSession {
             &pins::host_outline(
                 &self.graph,
                 &self.topology,
-                HostTracer::new(&self.pins, &self.curves),
+                HostTracer::new(&self.annotations),
                 parse(request_json)?,
             )
             .map_err(to_js_error)?,
@@ -570,33 +534,27 @@ impl ConstructionSession {
         )
     }
 
-    // ---- Region groups and panel runs ----
-
-    /// Labels regions as one group, or clears their label when `groupId` is
-    /// null. See `region_groups::set_region_group`.
-    pub fn set_region_group_json(&mut self, request_json: &str) -> Result<String, JsValue> {
-        let mut response =
-            region_groups::set_region_group(&self.topology, &mut self.groups, parse(request_json)?)
-                .map_err(to_js_error)?;
-        self.track(&mut response);
-        serialize(&response)
-    }
+    // ---- Region props and panel runs ----
 
     /// Replaces the regions' property bag, or clears it when `props` is
     /// null. See `region_props::set_region_props`.
     pub fn set_region_props_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let mut response =
-            region_props::set_region_props(&self.topology, &mut self.props, parse(request_json)?)
+            region_props::set_region_props(
+            &self.topology,
+            &mut self.annotations.props,
+            parse(request_json)?,
+        )
                 .map_err(to_js_error)?;
         self.track(&mut response);
         serialize(&response)
     }
 
     /// The chain of cuttable upright panels continuing the requested one
-    /// through shared vertical sides. See `region_groups::panel_run_of`.
+    /// through shared vertical sides. See `panel_runs::panel_run_of`.
     pub fn panel_run_json(&self, request_json: &str) -> Result<String, JsValue> {
         serialize(
-            &region_groups::panel_run_of(
+            &panel_runs::panel_run_of(
                 &self.graph,
                 &self.topology,
                 &self.surfaces,
@@ -648,10 +606,10 @@ impl ConstructionSession {
     pub fn apply_patch_replacement_json(&mut self, request_json: &str) -> Result<String, JsValue> {
         let request: patch_replacement::ApplyPatchReplacementRequest = parse(request_json)?;
         let operation_id = request.operation_id.clone();
-        let pins_before = self.pins.clone();
-        let curves_before = self.curves.clone();
-        let groups_before = self.groups.clone();
-        let props_before = self.props.clone();
+        let annotations = self
+            .open_transaction
+            .is_none()
+            .then(|| self.annotations.clone());
         let (mut response, previous) = patch_replacement::apply_patch_replacement(
             &mut self.graph,
             &mut self.surfaces,
@@ -660,10 +618,10 @@ impl ConstructionSession {
             request,
         )
         .map_err(to_js_error)?;
-        if self.open_transaction.is_some() {
+        let Some(annotations) = annotations else {
             self.track(&mut response.outcome);
             return serialize(&response);
-        }
+        };
         // The index is updated in place by `track`, so its previous state is
         // the one piece still copied.
         let spatial_index = self.spatial_index.clone();
@@ -676,10 +634,7 @@ impl ConstructionSession {
                 topology: previous.topology,
                 known_regions: previous.known_regions,
                 spatial_index,
-                pins: pins_before,
-                curves: curves_before,
-                groups: groups_before,
-                props: props_before,
+                annotations,
             },
         );
         serialize(&response)
@@ -751,7 +706,7 @@ impl ConstructionSession {
             region_editing::region_topology(&self.graph, &self.topology, &self.surfaces, &region)
                 .map_err(to_js_error)?;
         if let Some(dto) = dto.as_mut() {
-            self.annotate_pins(dto);
+            self.annotate(dto);
         }
         serialize(&dto)
     }
@@ -762,7 +717,7 @@ impl ConstructionSession {
         let mut dtos =
             region_editing::all_region_topologies(&self.graph, &self.topology, &self.surfaces)
                 .map_err(to_js_error)?;
-        dtos.iter_mut().for_each(|dto| self.annotate_pins(dto));
+        dtos.iter_mut().for_each(|dto| self.annotate(dto));
         serialize(&dtos)
     }
 
@@ -798,7 +753,7 @@ impl ConstructionSession {
             &request,
         )
         .map_err(to_js_error)?;
-        dtos.iter_mut().for_each(|dto| self.annotate_pins(dto));
+        dtos.iter_mut().for_each(|dto| self.annotate(dto));
         serialize(&dtos)
     }
 
@@ -900,11 +855,7 @@ impl ConstructionSession {
             &self.surfaces,
             &self.topology,
             &self.known_regions,
-            Some(&Cutting::new(
-                &self.pins,
-                &self.curves,
-                &self.surface_capabilities,
-            )),
+            &self.cutting(),
         );
         serialize(&meshes)
     }
@@ -916,13 +867,12 @@ impl ConstructionSession {
     /// surface key always returns exactly one. See `mesh::surface_mesh`.
     pub fn surface_mesh_json(&self, request_json: &str) -> Result<String, JsValue> {
         let request = parse(request_json)?;
-        let cutting = Cutting::new(&self.pins, &self.curves, &self.surface_capabilities);
         let dtos = mesh::surface_mesh(
             &self.graph,
             &self.surfaces,
             &self.topology,
             request,
-            Some(&cutting),
+            &self.cutting(),
         )
         .map_err(to_js_error)?;
         serialize(&dtos)
@@ -936,11 +886,7 @@ impl ConstructionSession {
             &self.surfaces,
             &self.topology,
             request,
-            Some(&Cutting::new(
-                &self.pins,
-                &self.curves,
-                &self.surface_capabilities,
-            )),
+            &self.cutting(),
         ))
     }
 
@@ -953,11 +899,7 @@ impl ConstructionSession {
             &self.surfaces,
             &self.topology,
             request,
-            Some(&Cutting::new(
-                &self.pins,
-                &self.curves,
-                &self.surface_capabilities,
-            )),
+            &self.cutting(),
         ))
     }
 

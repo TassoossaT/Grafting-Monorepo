@@ -1,9 +1,10 @@
 use serde_json::{Value, json};
 
-use crate::pin_tests::{
-    CAPABILITIES, key, mesh_area, opening, pin_rectangle, project, resolve, topology, wall,
-};
 use crate::session::ConstructionSession;
+use crate::test_support::{
+    CAPABILITIES, key, mesh_area, opening, pin_rectangle, project, resolve, topology,
+    triangle_centroids, uv_area, wall,
+};
 
 const HEIGHT: f32 = 3.0;
 
@@ -96,52 +97,6 @@ fn off_surface(session: &ConstructionSession, points: &[[f32; 3]]) -> f32 {
                 .sqrt()
         })
         .fold(0.0, f32::max)
-}
-
-fn triangle_centroids(session: &ConstructionSession, region: &str) -> Vec<[f32; 3]> {
-    let pieces: Vec<Value> = serde_json::from_str(
-        &session
-            .surface_mesh_json(&json!({"surfaceKey": key(region)}).to_string())
-            .unwrap(),
-    )
-    .unwrap();
-    let mut centroids = Vec::new();
-    for piece in pieces {
-        let positions: Vec<f32> = serde_json::from_value(piece["positions"].clone()).unwrap();
-        let indices: Vec<usize> = serde_json::from_value(piece["indices"].clone()).unwrap();
-        for triangle in indices.chunks_exact(3) {
-            centroids.push([0, 1, 2].map(|axis| {
-                triangle
-                    .iter()
-                    .map(|index| positions[index * 3 + axis])
-                    .sum::<f32>()
-                    / 3.0
-            }));
-        }
-    }
-    centroids
-}
-
-/// A mesh's area measured in its own unrolled `uvs`, free of the faceting
-/// a curved face's world triangles lose.
-fn uv_area(session: &ConstructionSession, region: &str) -> f32 {
-    let pieces: Vec<Value> = serde_json::from_str(
-        &session
-            .surface_mesh_json(&json!({"surfaceKey": key(region)}).to_string())
-            .unwrap(),
-    )
-    .unwrap();
-    let mut area = 0.0;
-    for piece in pieces {
-        let uvs: Vec<f32> = serde_json::from_value(piece["uvs"].clone()).unwrap();
-        let indices: Vec<usize> = serde_json::from_value(piece["indices"].clone()).unwrap();
-        for triangle in indices.chunks_exact(3) {
-            let [a, b, c] =
-                [0, 1, 2].map(|corner| [uvs[triangle[corner] * 2], uvs[triangle[corner] * 2 + 1]]);
-            area += 0.5 * ((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])).abs();
-        }
-    }
-    area
 }
 
 fn shoelace(ring: &[[f64; 2]]) -> f64 {
@@ -376,15 +331,15 @@ fn curves_are_undoable_and_dropped_with_their_pins_or_edge() {
     session
         .pin_edge_curve_json(&json!({"edgeId": "o-e2", "controls": null}).to_string())
         .unwrap();
-    assert!(session.curves.is_empty());
+    assert!(session.annotations.curves.is_empty());
     session.rollback_transaction("flatten").unwrap();
-    assert_eq!(session.curves.len(), 1);
+    assert_eq!(session.annotations.curves.len(), 1);
 
     session
         .unpin_nodes_json(&json!({"nodeIds": ["o-n2"]}).to_string())
         .unwrap();
     assert!(
-        session.curves.is_empty(),
+        session.annotations.curves.is_empty(),
         "an end no longer on the host drops the curve"
     );
 
@@ -394,7 +349,7 @@ fn curves_are_undoable_and_dropped_with_their_pins_or_edge() {
     session
         .delete_region_json(&json!({"surfaceKey": key("o")}).to_string())
         .unwrap();
-    assert!(session.curves.is_empty());
+    assert!(session.annotations.curves.is_empty());
 }
 
 #[test]
@@ -402,8 +357,8 @@ fn a_curve_needs_both_ends_pinned_to_its_host() {
     let mut session = straight();
     let refused = crate::pins::pin_edge_curve(
         &session.topology,
-        &session.pins,
-        &mut session.curves,
+        &session.annotations.pins,
+        &mut session.annotations.curves,
         serde_json::from_value(curve_request("o-e2", json!([[0.75, 0.8], [0.25, 0.8]]))).unwrap(),
     )
     .unwrap_err();
@@ -411,10 +366,10 @@ fn a_curve_needs_both_ends_pinned_to_its_host() {
     let refused = crate::pins::host_outline(
         &session.graph,
         &session.topology,
-        crate::pins::HostTracer::new(&session.pins, &session.curves),
+        crate::pins::HostTracer::new(&session.annotations),
         serde_json::from_value(json!({"surfaceKey": key("o")})).unwrap(),
     )
     .unwrap_err();
     assert!(refused.contains("not all pinned"), "{refused}");
-    assert!(session.curves.is_empty());
+    assert!(session.annotations.curves.is_empty());
 }

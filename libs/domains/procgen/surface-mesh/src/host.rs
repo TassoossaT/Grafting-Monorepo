@@ -10,17 +10,15 @@
 //! so a slanted or uneven top deforms whatever is placed on it rather than
 //! letting it poke out.
 
-use earcut::Earcut;
 use grafting_graph_core::{
     ContourEdge, ContourEdgeId, ContourTopology, NodeId, PlanarBoolean, PlanarShape, SurfaceRegion, planar_boolean,
 };
-use i_triangle::float::uniform::UniformTriangulatable;
 
 use crate::frame::UnrollFrame;
-use crate::math::{dot, winding_normal};
-use crate::tessellation::tessellate_contour_loop;
-use crate::types::{ARC_TESSELLATION_TOLERANCE, TriangulatedMesh};
-use crate::upright::{upright_face_mesh, upright_structure};
+use crate::tessellation::{tessellate_contour_loop, tessellate_edge};
+use crate::types::TriangulatedMesh;
+use crate::unrolled::{cleaned, flat_shape, rolled_mesh, signed_area, wound};
+use crate::upright::{UprightStructure, upright_face_mesh, upright_structure};
 
 /// Unrolled area below which a cut is treated as having removed nothing.
 const NEGLIGIBLE_CUT_AREA: f32 = 1e-5;
@@ -33,26 +31,82 @@ pub struct HostFace {
     base: Vec<[f32; 2]>,
     top: Vec<[f32; 2]>,
     travel: [f32; 2],
+}
+
+/// A run's edges as `(travel, height)` points of `frame`, sorted by travel.
+fn unrolled_run(
+    frame: &UnrollFrame,
+    edges: &[(ContourEdge, [f32; 3], [f32; 3])],
+) -> Option<Vec<[f32; 2]>> {
+    let mut run = Vec::new();
+    for (edge, start, end) in edges {
+        run.extend(
+            tessellate_edge(edge, *start, *end)?
+                .into_iter()
+                .map(|point| frame.unroll(point)),
+        );
+    }
+    run.sort_by(|a, b| a[0].total_cmp(&b[0]));
+    Some(run)
+}
+
+fn upright_of(
+    topology: &ContourTopology,
+    region: &SurfaceRegion,
+    resolve_position: &mut impl FnMut(&NodeId) -> Option<[f32; 3]>,
+) -> Option<UprightStructure> {
+    if region.profile().is_some() {
+        return None;
+    }
+    let [outer_loop] = region.outer_loops() else {
+        return None;
+    };
+    upright_structure(topology, outer_loop, resolve_position)
+}
+
+/// An upright face's extent along its base run and its two vertical sides,
+/// without the top run a [`HostFace`] also reads.
+#[derive(Debug, Clone)]
+pub struct PanelSpan {
+    travel: [f32; 2],
     sides: [ContourEdgeId; 2],
 }
 
-fn run_points(edges: &[(ContourEdge, [f32; 3], [f32; 3])]) -> Option<Vec<[f32; 3]>> {
-    let mut points = Vec::new();
-    for (edge, start, end) in edges {
-        let planar = edge.tessellate(
-            [start[0], start[2]],
-            [end[0], end[2]],
-            ARC_TESSELLATION_TOLERANCE,
-        );
-        if planar.len() < 2 {
-            return None;
-        }
-        for (index, point) in planar.iter().enumerate() {
-            let t = index as f32 / (planar.len() - 1) as f32;
-            points.push([point[0], start[1] + (end[1] - start[1]) * t, point[1]]);
-        }
+impl PanelSpan {
+    /// `None` for anything that does not mesh as an upright face.
+    pub fn of(
+        topology: &ContourTopology,
+        region: &SurfaceRegion,
+        resolve_position: &mut impl FnMut(&NodeId) -> Option<[f32; 3]>,
+    ) -> Option<Self> {
+        let structure = upright_of(topology, region, resolve_position)?;
+        let base = unrolled_run(&structure.frame, &structure.base_edges)?;
+        Self::from_base(&structure, &base)
     }
-    Some(points)
+
+    fn from_base(structure: &UprightStructure, base: &[[f32; 2]]) -> Option<Self> {
+        let travel = [base.first()?[0], base.last()?[0]];
+        let [one, other] = &structure.side_edges;
+        let from_start = |(_, start, _): &(ContourEdge, [f32; 3], [f32; 3])| {
+            (structure.frame.unroll(*start)[0] - travel[0]).abs()
+        };
+        let sides = if from_start(one) <= from_start(other) {
+            [one.0.id().clone(), other.0.id().clone()]
+        } else {
+            [other.0.id().clone(), one.0.id().clone()]
+        };
+        (travel[1] - travel[0] > f32::EPSILON).then_some(Self { travel, sides })
+    }
+
+    /// The base run's extent in the frame's arc-length measure: `u` scales it.
+    pub fn length(&self) -> f32 {
+        self.travel[1] - self.travel[0]
+    }
+
+    /// The vertical side edges at `u = 0` and at `u = 1`.
+    pub fn sides(&self) -> &[ContourEdgeId; 2] {
+        &self.sides
+    }
 }
 
 fn height_at(run: &[[f32; 2]], travel: f32) -> f32 {
@@ -85,50 +139,16 @@ impl HostFace {
         region: &SurfaceRegion,
         resolve_position: &mut impl FnMut(&NodeId) -> Option<[f32; 3]>,
     ) -> Option<Self> {
-        if region.profile().is_some() {
-            return None;
-        }
-        let [outer_loop] = region.outer_loops() else {
-            return None;
-        };
-        let structure = upright_structure(topology, outer_loop, resolve_position)?;
-        let unroll_run = |edges| -> Option<Vec<[f32; 2]>> {
-            let mut run: Vec<[f32; 2]> = run_points(edges)?
-                .into_iter()
-                .map(|point| structure.frame.unroll(point))
-                .collect();
-            run.sort_by(|a, b| a[0].total_cmp(&b[0]));
-            Some(run)
-        };
-        let base = unroll_run(&structure.base_edges)?;
-        let top = unroll_run(&structure.top_edges)?;
-        let travel = [base.first()?[0], base.last()?[0]];
-        let [one, other] = &structure.side_edges;
-        let from_start = |(_, start, _): &(ContourEdge, [f32; 3], [f32; 3])| {
-            (structure.frame.unroll(*start)[0] - travel[0]).abs()
-        };
-        let sides = if from_start(one) <= from_start(other) {
-            [one.0.id().clone(), other.0.id().clone()]
-        } else {
-            [other.0.id().clone(), one.0.id().clone()]
-        };
-        (travel[1] - travel[0] > f32::EPSILON).then_some(Self {
+        let structure = upright_of(topology, region, resolve_position)?;
+        let base = unrolled_run(&structure.frame, &structure.base_edges)?;
+        let travel = PanelSpan::from_base(&structure, &base)?.travel;
+        let top = unrolled_run(&structure.frame, &structure.top_edges)?;
+        Some(Self {
             frame: structure.frame,
             base,
             top,
             travel,
-            sides,
         })
-    }
-
-    /// The base run's extent in the frame's arc-length measure: `u` scales it.
-    pub fn length(&self) -> f32 {
-        self.travel[1] - self.travel[0]
-    }
-
-    /// The vertical side edges at `u = 0` and at `u = 1`.
-    pub fn sides(&self) -> &[ContourEdgeId; 2] {
-        &self.sides
     }
 
     fn local_height(&self, travel: f32) -> (f32, f32) {
@@ -247,119 +267,10 @@ const MAX_TRACE_DEPTH: u32 = 12;
 /// midpoint happens to sit on its chord is still followed.
 const CURVE_TRACE_SPANS: usize = 4;
 
-fn signed_area(ring: &[[f32; 2]]) -> f32 {
-    ring.iter()
-        .zip(ring.iter().cycle().skip(1))
-        .take(ring.len())
-        .map(|(current, next)| current[0] * next[1] - next[0] * current[1])
-        .sum::<f32>()
-        / 2.0
-}
-
-fn wound(mut ring: Vec<[f32; 2]>, counter_clockwise: bool) -> Vec<[f32; 2]> {
-    if (signed_area(&ring) > 0.0) != counter_clockwise {
-        ring.reverse();
-    }
-    ring
-}
-
 fn shape_area(shape: &PlanarShape) -> f32 {
     let mut rings = shape.iter();
     let outer = rings.next().map_or(0.0, |ring| signed_area(ring).abs());
     outer - rings.map(|ring| signed_area(ring).abs()).sum::<f32>()
-}
-
-fn cleaned(ring: Vec<[f32; 2]>) -> Option<Vec<[f32; 2]>> {
-    let mut out: Vec<[f32; 2]> = Vec::with_capacity(ring.len());
-    for point in ring {
-        if point.iter().any(|value| !value.is_finite()) {
-            return None;
-        }
-        if out.last().is_none_or(|last| {
-            (last[0] - point[0]).abs() > 1e-6 || (last[1] - point[1]).abs() > 1e-6
-        }) {
-            out.push(point);
-        }
-    }
-    while out.len() > 1 && {
-        let (first, last) = (out[0], out[out.len() - 1]);
-        (first[0] - last[0]).abs() <= 1e-6 && (first[1] - last[1]).abs() <= 1e-6
-    } {
-        out.pop();
-    }
-    (out.len() >= 3 && signed_area(&out).abs() > f32::EPSILON).then_some(out)
-}
-
-/// One unrolled component triangulated in the flat, as `(points, indices)`.
-fn triangulate_component(
-    frame: &UnrollFrame,
-    shape: &PlanarShape,
-) -> Option<(Vec<[f32; 2]>, Vec<u32>)> {
-    if let Some(edge_length) = frame.lattice_step() {
-        let rings: Vec<Vec<[f32; 2]>> = shape
-            .iter()
-            .enumerate()
-            .map(|(index, ring)| wound(ring.clone(), index == 0))
-            .collect();
-        let mesh = rings
-            .uniform_triangulate(edge_length)
-            .to_triangulation::<u32>();
-        if !mesh.indices.is_empty() {
-            return Some((mesh.points, mesh.indices));
-        }
-    }
-    let mut points = Vec::new();
-    let mut hole_indices = Vec::new();
-    for (index, ring) in shape.iter().enumerate() {
-        if index > 0 {
-            hole_indices.push(points.len() as u32);
-        }
-        points.extend(ring.iter().copied());
-    }
-    let mut indices: Vec<u32> = Vec::new();
-    Earcut::new().earcut(points.iter().copied(), &hole_indices, &mut indices);
-    (!indices.is_empty()).then_some((points, indices))
-}
-
-/// Triangulates each shape in `frame`'s flat and rolls the result onto the
-/// face, every triangle facing the frame's outward side.
-fn rolled_mesh(frame: &UnrollFrame, shapes: &[PlanarShape]) -> TriangulatedMesh {
-    let mut flat: Vec<[f32; 2]> = Vec::new();
-    let mut indices: Vec<u32> = Vec::new();
-    for shape in shapes {
-        let Some((points, component)) = triangulate_component(frame, shape) else {
-            continue;
-        };
-        let offset = flat.len() as u32;
-        for triangle in component.chunks_exact(3) {
-            let [a, b, c] =
-                [triangle[0], triangle[1], triangle[2]].map(|index| points[index as usize]);
-            let ccw = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]) >= 0.0;
-            let [i, j, k] = [triangle[0], triangle[1], triangle[2]].map(|index| index + offset);
-            indices.extend_from_slice(&if ccw { [i, j, k] } else { [i, k, j] });
-        }
-        flat.extend(points);
-    }
-
-    let positions: Vec<[f32; 3]> = flat.iter().map(|point| frame.roll(*point)).collect();
-    let normals: Vec<[f32; 3]> = positions
-        .iter()
-        .map(|point| frame.normal_at(*point))
-        .collect();
-    if !indices.is_empty()
-        && let Some(reference) = winding_normal(&positions, &indices)
-        && dot(reference, normals[indices[0] as usize]) < 0.0
-    {
-        for triangle in indices.chunks_exact_mut(3) {
-            triangle.swap(1, 2);
-        }
-    }
-    TriangulatedMesh {
-        positions,
-        normals,
-        uvs: flat,
-        indices,
-    }
 }
 
 /// An upright face's mesh with `cutters` -- closed rings in the face's own
@@ -375,13 +286,7 @@ pub fn upright_face_mesh_cut(
     resolve_position: &mut impl FnMut(&NodeId) -> Option<[f32; 3]>,
     cutters: &[Vec<[f32; 2]>],
 ) -> Option<TriangulatedMesh> {
-    if region.profile().is_some() {
-        return None;
-    }
-    let [outer_loop] = region.outer_loops() else {
-        return None;
-    };
-    let frame = upright_structure(topology, outer_loop, resolve_position)?.frame;
+    let frame = upright_of(topology, region, resolve_position)?.frame;
     let unroll = |ring: &[[f32; 3]]| -> Vec<[f32; 2]> {
         ring.iter().map(|point| frame.unroll(*point)).collect()
     };
@@ -395,12 +300,16 @@ pub fn upright_face_mesh_cut(
         return upright_face_mesh(topology, region, resolve_position);
     }
 
+    let [outer_loop] = region.outer_loops() else {
+        return None;
+    };
     let outer = tessellate_contour_loop(topology, outer_loop, resolve_position)?;
-    let mut subject: PlanarShape = vec![wound(cleaned(unroll(&outer))?, true)];
-    for hole in region.holes() {
-        let hole = tessellate_contour_loop(topology, hole, resolve_position)?;
-        subject.push(wound(cleaned(unroll(&hole))?, false));
-    }
+    let holes = region
+        .holes()
+        .iter()
+        .map(|hole| Some(unroll(&tessellate_contour_loop(topology, hole, resolve_position)?)))
+        .collect::<Option<Vec<_>>>()?;
+    let subject = flat_shape(unroll(&outer), holes)?;
     let Ok(remaining) = planar_boolean(
         std::slice::from_ref(&subject),
         &clip,
@@ -423,10 +332,7 @@ pub fn mesh_on_host(
     outer: &[[f32; 2]],
     holes: &[Vec<[f32; 2]>],
 ) -> Option<TriangulatedMesh> {
-    let mut shape: PlanarShape = vec![wound(cleaned(outer.to_vec())?, true)];
-    for hole in holes {
-        shape.push(wound(cleaned(hole.clone())?, false));
-    }
+    let shape = flat_shape(outer.to_vec(), holes.to_vec())?;
     let mesh = rolled_mesh(&face.frame, std::slice::from_ref(&shape));
     (!mesh.indices.is_empty()).then_some(mesh)
 }

@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 
 use grafting_graph_core::curve_offset::{ReferenceCurve, ReferenceField};
-use grafting_graph_core::{ContourTopology, RegionId, SurfaceRegion, SurfaceRegistry};
+use grafting_graph_core::{ContourTopology, RegionId, RegionSurface, SurfaceRegion, SurfaceRegistry};
 use grafting_procgen_surface_mesh::{PlanarFill, TriangulatedMesh, triangulate_region_cut};
 
 use crate::editing::SessionGraph;
@@ -189,14 +189,11 @@ fn region_meshes(
     region_id: &RegionId,
     region: &SurfaceRegion,
     fill: Option<PlanarFill<'_>>,
-    cutting: Option<&Cutting<'_>>,
+    cutting: &Cutting<'_>,
 ) -> Option<Vec<TriangulatedMesh>> {
-    let cutters = cutting.map_or_else(Vec::new, |cutting| {
-        cutting.rings(graph, surfaces, topology, region_id)
-    });
+    let cutters = cutting.rings(graph, surfaces, topology, region_id);
     if cutters.is_empty()
-        && let Some(mesh) =
-            cutting.and_then(|cutting| cutting.tracer().mesh(graph, topology, region))
+        && let Some(mesh) = cutting.tracer().mesh(graph, topology, region)
     {
         return Some(vec![mesh]);
     }
@@ -242,6 +239,20 @@ pub struct SurfaceMeshDto {
     pub indices: Vec<u32>,
 }
 
+impl SurfaceMeshDto {
+    fn of(region_id: &RegionId, surface: &RegionSurface, mesh: TriangulatedMesh) -> Self {
+        Self {
+            surface_key: region_id_to_wire(region_id),
+            surface_type: surface.surface_type().as_str().to_owned(),
+            physical: surface.physical(),
+            positions: mesh.positions.into_iter().flatten().collect(),
+            normals: mesh.normals.into_iter().flatten().collect(),
+            uvs: mesh.uvs.into_iter().flatten().collect(),
+            indices: mesh.indices,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SurfaceMeshRequest {
@@ -264,7 +275,7 @@ pub fn all_surface_meshes(
     surfaces: &SurfaceRegistry,
     topology: &ContourTopology,
     known_regions: &std::collections::HashSet<RegionId>,
-    cutting: Option<&Cutting<'_>>,
+    cutting: &Cutting<'_>,
 ) -> Vec<SurfaceMeshDto> {
     let mut meshes = Vec::new();
     let mut regions = known_regions.iter().collect::<Vec<_>>();
@@ -290,15 +301,11 @@ pub fn all_surface_meshes(
         else {
             continue;
         };
-        meshes.extend(region_meshes.into_iter().map(|mesh| SurfaceMeshDto {
-            surface_key: region_id_to_wire(region_id),
-            surface_type: surface.surface_type().as_str().to_owned(),
-            physical: surface.physical(),
-            positions: mesh.positions.into_iter().flatten().collect(),
-            normals: mesh.normals.into_iter().flatten().collect(),
-            uvs: mesh.uvs.into_iter().flatten().collect(),
-            indices: mesh.indices,
-        }));
+        meshes.extend(
+            region_meshes
+                .into_iter()
+                .map(|mesh| SurfaceMeshDto::of(region_id, surface, mesh)),
+        );
     }
     meshes
 }
@@ -316,7 +323,7 @@ pub fn surface_mesh(
     surfaces: &SurfaceRegistry,
     topology: &ContourTopology,
     request: SurfaceMeshRequest,
-    cutting: Option<&Cutting<'_>>,
+    cutting: &Cutting<'_>,
 ) -> Result<Vec<SurfaceMeshDto>, String> {
     let field = reference_field_near(
         graph,
@@ -325,7 +332,30 @@ pub fn surface_mesh(
             .and_then(|id| topology.region(&id))
             .and_then(|region| region_bounds(graph, topology, region)),
     );
-    surface_mesh_with(graph, surfaces, topology, request, planar_fill(&field), cutting)
+    surface_mesh_with(
+        graph,
+        surfaces,
+        topology,
+        &request.surface_key,
+        planar_fill(&field),
+        cutting,
+    )
+    .map_err(MeshFailure::into_message)
+}
+
+/// Why a key yielded no mesh: it names no live region, or the region's
+/// boundary cannot be triangulated right now.
+enum MeshFailure {
+    Unknown(String),
+    Unmeshable(String),
+}
+
+impl MeshFailure {
+    fn into_message(self) -> String {
+        match self {
+            Self::Unknown(message) | Self::Unmeshable(message) => message,
+        }
+    }
 }
 
 /// [`surface_mesh`] against a field the caller already built.
@@ -337,42 +367,26 @@ fn surface_mesh_with(
     graph: &SessionGraph,
     surfaces: &SurfaceRegistry,
     topology: &ContourTopology,
-    request: SurfaceMeshRequest,
+    surface_key: &[String],
     fill: Option<PlanarFill<'_>>,
-    cutting: Option<&Cutting<'_>>,
-) -> Result<Vec<SurfaceMeshDto>, String> {
-    if let [prefix, region_id] = request.surface_key.as_slice()
-        && prefix == REGION_SURFACE_KEY_PREFIX
-    {
-        let region_id = RegionId::new(region_id.clone()).map_err(|error| error.to_string())?;
-        let region = topology
-            .region(&region_id)
-            .ok_or_else(|| format!("unknown analytic region {region_id}"))?;
-        let surface = surfaces
-            .region_surface(&region_id)
-            .ok_or_else(|| format!("unknown analytic region surface {region_id}"))?;
-        let meshes = region_meshes(graph, surfaces, topology, &region_id, region, fill, cutting)
-            .ok_or_else(|| format!("no mesh derivable for analytic region {region_id}"))?;
-        if meshes.is_empty() {
-            return Err(format!("no mesh derivable for analytic region {region_id}"));
-        }
-        return Ok(meshes
-            .into_iter()
-            .map(|mesh| SurfaceMeshDto {
-                surface_key: region_id_to_wire(&region_id),
-                surface_type: surface.surface_type().as_str().to_owned(),
-                physical: surface.physical(),
-                positions: mesh.positions.into_iter().flatten().collect(),
-                normals: mesh.normals.into_iter().flatten().collect(),
-                uvs: mesh.uvs.into_iter().flatten().collect(),
-                indices: mesh.indices,
-            })
-            .collect());
-    }
-    Err(format!(
-        "not an analytic region key: {:?}",
-        request.surface_key
-    ))
+    cutting: &Cutting<'_>,
+) -> Result<Vec<SurfaceMeshDto>, MeshFailure> {
+    let region_id = region_id_from_wire(surface_key).map_err(MeshFailure::Unknown)?;
+    let region = topology
+        .region(&region_id)
+        .ok_or_else(|| MeshFailure::Unknown(format!("unknown analytic region {region_id}")))?;
+    let surface = surfaces.region_surface(&region_id).ok_or_else(|| {
+        MeshFailure::Unknown(format!("unknown analytic region surface {region_id}"))
+    })?;
+    let meshes = region_meshes(graph, surfaces, topology, &region_id, region, fill, cutting)
+        .filter(|meshes| !meshes.is_empty())
+        .ok_or_else(|| {
+            MeshFailure::Unmeshable(format!("no mesh derivable for analytic region {region_id}"))
+        })?;
+    Ok(meshes
+        .into_iter()
+        .map(|mesh| SurfaceMeshDto::of(&region_id, surface, mesh))
+        .collect())
 }
 
 /// Meshes for a known mutation set, serialized through one Wasm crossing.
@@ -382,7 +396,7 @@ pub fn surface_meshes(
     surfaces: &SurfaceRegistry,
     topology: &ContourTopology,
     request: SurfaceMeshesRequest,
-    cutting: Option<&Cutting<'_>>,
+    cutting: &Cutting<'_>,
 ) -> Vec<SurfaceMeshDto> {
     surface_meshes_report(graph, surfaces, topology, request, cutting).meshes
 }
@@ -402,13 +416,14 @@ pub struct SurfaceMeshesReportDto {
 }
 
 /// [`surface_meshes`], naming every key that produced nothing and why, so a
-/// caller never drops a face's render without knowing.
+/// caller never drops a face's render without knowing. A key naming no live
+/// region is reported as `"unknown"`, which a caller may skip as stale.
 pub fn surface_meshes_report(
     graph: &SessionGraph,
     surfaces: &SurfaceRegistry,
     topology: &ContourTopology,
     request: SurfaceMeshesRequest,
-    cutting: Option<&Cutting<'_>>,
+    cutting: &Cutting<'_>,
 ) -> SurfaceMeshesReportDto {
     let mut seen = std::collections::HashSet::new();
     let mut meshes = Vec::new();
@@ -431,23 +446,16 @@ pub fn surface_meshes_report(
         if !seen.insert(surface_key.clone()) {
             continue;
         }
-        let known = region_id_from_wire(&surface_key)
-            .is_ok_and(|id| topology.region(&id).is_some() && surfaces.region_surface(&id).is_some());
-        if !known {
-            failed.push(FailedSurfaceMeshDto { surface_key, reason: "unknown".into() });
-            continue;
-        }
-        match surface_mesh_with(
-            graph,
-            surfaces,
-            topology,
-            SurfaceMeshRequest { surface_key: surface_key.clone() },
-            fill,
-            cutting,
-        ) {
-            Ok(mut pieces) => meshes.append(&mut pieces),
-            Err(reason) => failed.push(FailedSurfaceMeshDto { surface_key, reason }),
-        }
+        let reason = match surface_mesh_with(graph, surfaces, topology, &surface_key, fill, cutting)
+        {
+            Ok(mut pieces) => {
+                meshes.append(&mut pieces);
+                continue;
+            }
+            Err(MeshFailure::Unknown(_)) => "unknown".to_owned(),
+            Err(MeshFailure::Unmeshable(reason)) => reason,
+        };
+        failed.push(FailedSurfaceMeshDto { surface_key, reason });
     }
     SurfaceMeshesReportDto { meshes, failed }
 }
@@ -455,10 +463,20 @@ pub fn surface_meshes_report(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::pins::SurfaceCapabilities;
+    use crate::region_annotations::RegionAnnotations;
+    use std::sync::LazyLock;
     use grafting_graph_core::{
         ContourEdge, ContourEdgeId, ContourGeometry, Graph, Node, NodeId, OrientedEdgeUse,
         SurfaceType,
     };
+
+    /// A [`Cutting`] with nothing pinned.
+    fn uncut() -> Cutting<'static> {
+        static ANNOTATIONS: LazyLock<RegionAnnotations> = LazyLock::new(Default::default);
+        static CAPABILITIES: LazyLock<SurfaceCapabilities> = LazyLock::new(Default::default);
+        Cutting::new(&ANNOTATIONS, &CAPABILITIES)
+    }
 
     fn quad_graph() -> SessionGraph {
         Graph::try_from_parts(
@@ -552,7 +570,7 @@ mod tests {
             SurfaceMeshRequest {
                 surface_key: region_id_to_wire(&region_id),
             },
-            None,
+            &uncut(),
         )
         .unwrap();
 
@@ -598,7 +616,7 @@ mod tests {
             SurfaceMeshRequest {
                 surface_key: region_id_to_wire(&region_id),
             },
-            None,
+            &uncut(),
         )
         .unwrap();
         assert_eq!(dtos.len(), 1, "one outer loop is one piece");
@@ -619,7 +637,7 @@ mod tests {
             SurfaceMeshRequest {
                 surface_key: vec!["@region".into(), "missing".into()],
             },
-            None,
+            &uncut(),
         )
         .unwrap_err();
         assert!(
@@ -638,7 +656,7 @@ mod tests {
             SurfaceMeshRequest {
                 surface_key: vec!["a".into(), "b".into(), "c".into()],
             },
-            None,
+            &uncut(),
         )
         .unwrap_err();
         assert!(!error.is_empty());
@@ -648,7 +666,7 @@ mod tests {
     fn all_surface_meshes_returns_only_known_regions() {
         let (graph, surfaces, topology, region_id) = quad_region();
         let known = std::collections::HashSet::from([region_id.clone()]);
-        let meshes = all_surface_meshes(&graph, &surfaces, &topology, &known, None);
+        let meshes = all_surface_meshes(&graph, &surfaces, &topology, &known, &uncut());
         assert_eq!(meshes.len(), 1);
         assert_eq!(meshes[0].surface_key, region_id_to_wire(&region_id));
 
@@ -657,7 +675,7 @@ mod tests {
             &surfaces,
             &topology,
             &std::collections::HashSet::new(),
-            None,
+            &uncut(),
         );
         assert!(
             none.is_empty(),
@@ -669,7 +687,7 @@ mod tests {
     fn all_surface_meshes_skips_a_stale_id_without_erroring() {
         let (graph, surfaces, topology, region_id) = quad_region();
         let known = std::collections::HashSet::from([region_id, RegionId::new("gone").unwrap()]);
-        let meshes = all_surface_meshes(&graph, &surfaces, &topology, &known, None);
+        let meshes = all_surface_meshes(&graph, &surfaces, &topology, &known, &uncut());
         assert_eq!(meshes.len(), 1, "the stale id is skipped, not an error");
     }
 
@@ -744,7 +762,7 @@ mod tests {
     ) -> SurfaceMeshesReportDto {
         let mut surface_keys = vec![region_id_to_wire(region_id)];
         surface_keys.extend(extra);
-        surface_meshes_report(graph, surfaces, topology, SurfaceMeshesRequest { surface_keys }, None)
+        surface_meshes_report(graph, surfaces, topology, SurfaceMeshesRequest { surface_keys }, &uncut())
     }
 
     /// A loop that crosses itself -- a bow tie -- is read under the non-zero
@@ -796,7 +814,7 @@ mod tests {
             &surfaces,
             &topology,
             SurfaceMeshRequest { surface_key: region_id_to_wire(&region_id) },
-            None,
+            &uncut(),
         )
         .unwrap();
         let region = quad_region();

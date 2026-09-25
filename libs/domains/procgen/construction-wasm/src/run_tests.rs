@@ -1,9 +1,10 @@
 use serde_json::{Value, json};
 
-use crate::pin_tests::{
-    CAPABILITIES, key, mesh_area, opening, pin_rectangle, project, resolve, topology,
-};
 use crate::session::ConstructionSession;
+use crate::test_support::{
+    CAPABILITIES, close, key, mesh_area, opening, pin_rectangle, project, resolve, topology,
+    triangle_centroids,
+};
 
 const HEIGHT: f32 = 3.0;
 
@@ -154,10 +155,6 @@ fn on_panel(session: &ConstructionSession, panel: &Value, s: f32, v: f64) -> [f3
     resolve(session, panel["surfaceKey"][1].as_str().unwrap(), &[[u, v]])[0]
 }
 
-fn near(a: [f32; 3], b: [f32; 3], tolerance: f32) -> bool {
-    (0..3).all(|axis| (a[axis] - b[axis]).abs() <= tolerance)
-}
-
 #[test]
 fn three_straight_panels_in_a_line_make_one_run() {
     let columns = [[0.0, 0.0], [4.0, 0.0], [8.0, 0.0], [12.0, 0.0]];
@@ -172,7 +169,7 @@ fn three_straight_panels_in_a_line_make_one_run() {
     }
     for s in [0.0, 1.5, 4.0, 6.0, 9.25, 12.0] {
         assert!(
-            near(at(&session, &run, s, 0.5), [s, 1.5, 0.0], 1e-4),
+            close(at(&session, &run, s, 0.5), [s, 1.5, 0.0], 1e-4),
             "s = {s}"
         );
     }
@@ -191,7 +188,7 @@ fn a_flipped_panel_is_reported_reversed_and_still_maps_onto_the_run() {
     assert_eq!(reversed(&from_first), [false, true, false]);
     for s in [1.0, 5.0, 7.5, 11.0] {
         assert!(
-            near(at(&session, &from_first, s, 0.25), [s, 0.75, 0.0], 1e-4),
+            close(at(&session, &from_first, s, 0.25), [s, 0.75, 0.0], 1e-4),
             "s = {s}"
         );
     }
@@ -201,7 +198,7 @@ fn a_flipped_panel_is_reported_reversed_and_still_maps_onto_the_run() {
     assert_eq!(reversed(&from_flipped), [true, false, true]);
     for s in [1.0, 5.0, 7.5, 11.0] {
         assert!(
-            near(
+            close(
                 at(&session, &from_flipped, s, 0.25),
                 [12.0 - s, 0.75, 0.0],
                 1e-4
@@ -222,7 +219,7 @@ fn a_run_wraps_an_l_corner() {
     let panels = run["panels"].as_array().unwrap();
     assert!((panels[1]["offset"].as_f64().unwrap() - 4.0).abs() < 1e-5);
     assert!((panels[1]["length"].as_f64().unwrap() - 3.0).abs() < 1e-5);
-    assert!(near(at(&session, &run, 5.5, 0.0), [4.0, 0.0, 1.5], 1e-4));
+    assert!(close(at(&session, &run, 5.5, 0.0), [4.0, 0.0, 1.5], 1e-4));
 }
 
 /// Points on a half circle of radius 5, each span a Bézier approximating its arc.
@@ -271,7 +268,7 @@ fn a_brush_like_chain_of_bezier_panels_runs_continuously_across_flips() {
                 on_panel(&session, &pair[0], seam, v),
                 on_panel(&session, &pair[1], seam, v),
             );
-            assert!(near(end, start, 1e-4), "{end:?} vs {start:?}");
+            assert!(close(end, start, 1e-4), "{end:?} vs {start:?}");
         }
     }
     let mut previous = f32::NEG_INFINITY;
@@ -314,7 +311,7 @@ fn a_closed_loop_is_returned_once_from_the_queried_panel() {
     assert_eq!(run["closed"], true);
     assert_eq!(order(&run), ["p2", "p3", "p0", "p1"]);
     assert_eq!(reversed(&run), [false, false, false, true]);
-    assert!(near(at(&session, &run, 10.0, 0.0), [2.0, 0.0, 0.0], 1e-4));
+    assert!(close(at(&session, &run, 10.0, 0.0), [2.0, 0.0, 0.0], 1e-4));
 }
 
 #[test]
@@ -327,7 +324,7 @@ fn panels_that_do_not_accept_cuts_are_left_out() {
     let session = session_with(&columns, &[panel(0, 1), fence, panel(2, 3)]);
     assert_eq!(order(&run(&session, "p0")), ["p0"]);
     assert_eq!(order(&run(&session, "p2")), ["p2"]);
-    let refused = crate::region_groups::panel_run_of(
+    let refused = crate::panel_runs::panel_run_of(
         &session.graph,
         &session.topology,
         &session.surfaces,
@@ -337,88 +334,9 @@ fn panels_that_do_not_accept_cuts_are_left_out() {
     assert!(refused.unwrap_err().contains("does not accept cuts"));
 }
 
-fn set_group(session: &mut ConstructionSession, regions: &[&str], group: Option<&str>) -> Value {
-    let keys: Vec<Value> = regions.iter().map(|region| key(region)).collect();
-    serde_json::from_str(
-        &session
-            .set_region_group_json(&json!({"surfaceKeys": keys, "groupId": group}).to_string())
-            .unwrap(),
-    )
-    .unwrap()
-}
-
-#[test]
-fn groups_are_undoable_and_dropped_with_their_region() {
-    let mut session = session_with(
-        &[[0.0, 0.0], [4.0, 0.0], [8.0, 0.0]],
-        &[panel(0, 1), panel(1, 2)],
-    );
-    opening(&mut session, "a");
-    opening(&mut session, "b");
-    session.begin_transaction("group").unwrap();
-    let outcome = set_group(&mut session, &["a", "b"], Some("g1"));
-    assert_eq!(outcome["affectedSurfaceKeys"], json!([key("a"), key("b")]));
-    assert!(session.commit_transaction("group").unwrap());
-    assert_eq!(topology(&session, "a")["group"], "g1");
-    assert_eq!(topology(&session, "b")["group"], "g1");
-    assert!(topology(&session, "p0").get("group").is_none());
-
-    session.undo_region_overlay("group").unwrap();
-    assert!(topology(&session, "a").get("group").is_none());
-    session.redo_region_overlay("group").unwrap();
-    assert_eq!(topology(&session, "b")["group"], "g1");
-
-    session.begin_transaction("rollback").unwrap();
-    set_group(&mut session, &["a"], None);
-    assert!(topology(&session, "a").get("group").is_none());
-    session.rollback_transaction("rollback").unwrap();
-    assert_eq!(topology(&session, "a")["group"], "g1");
-
-    session
-        .delete_region_json(&json!({"surfaceKey": key("a")}).to_string())
-        .unwrap();
-    assert!(!session.groups.keys().any(|region| region.as_str() == "a"));
-    assert_eq!(topology(&session, "b")["group"], "g1");
-}
-
-#[test]
-fn grouping_an_unknown_region_is_refused() {
-    let mut session = ConstructionSession::new();
-    opening(&mut session, "a");
-    let refused = crate::region_groups::set_region_group(
-        &session.topology,
-        &mut session.groups,
-        serde_json::from_value(json!({"surfaceKeys": [key("a"), key("ghost")], "groupId": "g"}))
-            .unwrap(),
-    );
-    assert!(refused.unwrap_err().contains("unknown region"));
-    assert!(session.groups.is_empty());
-}
-
 /// Triangle centroids of `host`'s mesh as `(u, v)` on `host`.
 fn centroids_uv(session: &ConstructionSession, host: &str) -> Vec<[f64; 2]> {
-    let pieces: Vec<Value> = serde_json::from_str(
-        &session
-            .surface_mesh_json(&json!({"surfaceKey": key(host)}).to_string())
-            .unwrap(),
-    )
-    .unwrap();
-    let mut centroids = Vec::new();
-    for piece in pieces {
-        let positions: Vec<f32> = serde_json::from_value(piece["positions"].clone()).unwrap();
-        let indices: Vec<usize> = serde_json::from_value(piece["indices"].clone()).unwrap();
-        for triangle in indices.chunks_exact(3) {
-            let centroid = [0, 1, 2].map(|axis| {
-                triangle
-                    .iter()
-                    .map(|index| positions[index * 3 + axis])
-                    .sum::<f32>()
-                    / 3.0
-            });
-            centroids.push(centroid);
-        }
-    }
-    project(session, host, &centroids)
+    project(session, host, &triangle_centroids(session, host))
         .into_iter()
         .map(|uv| [uv["u"].as_f64().unwrap(), uv["v"].as_f64().unwrap()])
         .collect()
@@ -432,7 +350,6 @@ fn seam_pieces(session: &mut ConstructionSession, p1_reversed: bool) {
     pin_rectangle(session, "a", "p0", [0.6, 1.0], [0.2, 0.6]);
     let b = if p1_reversed { [1.0, 0.6] } else { [0.0, 0.4] };
     pin_rectangle(session, "b", "p1", b, [0.2, 0.6]);
-    set_group(session, &["a", "b"], Some("g"));
 }
 
 fn assert_no_sliver(session: &ConstructionSession, host: &str, cut: [f64; 2]) {
@@ -452,7 +369,7 @@ fn pieces_meeting_at_a_seam_cut_one_continuous_hole() {
         &[panel(0, 1), panel(1, 2)],
     );
     seam_pieces(&mut session, false);
-    assert!(near(
+    assert!(close(
         topology(&session, "a")["nodes"][1]["position"]
             .as_array()
             .map(|p| [0, 1, 2].map(|i| p[i].as_f64().unwrap() as f32))
@@ -524,7 +441,7 @@ fn props_replace_clear_and_leave_meshes_alone() {
     assert_eq!(session.all_surface_meshes_json().unwrap(), meshes);
     set_props(&mut session, &["a"], Value::Null);
     assert!(topology(&session, "a").get("props").is_none());
-    assert!(session.props.is_empty());
+    assert!(session.annotations.props.is_empty());
 }
 
 #[test]
@@ -550,7 +467,7 @@ fn props_are_undoable_and_dropped_with_their_region() {
     session
         .delete_region_json(&json!({"surfaceKey": key("a")}).to_string())
         .unwrap();
-    assert!(!session.props.keys().any(|region| region.as_str() == "a"));
+    assert!(!session.annotations.props.keys().any(|region| region.as_str() == "a"));
     assert_eq!(topology(&session, "b")["props"], json!({"k": 1}));
 }
 
@@ -560,10 +477,10 @@ fn props_on_an_unknown_region_are_refused() {
     opening(&mut session, "a");
     let refused = crate::region_props::set_region_props(
         &session.topology,
-        &mut session.props,
+        &mut session.annotations.props,
         serde_json::from_value(json!({"surfaceKeys": [key("a"), key("ghost")], "props": {"k": 1}}))
             .unwrap(),
     );
     assert!(refused.unwrap_err().contains("unknown region"));
-    assert!(session.props.is_empty());
+    assert!(session.annotations.props.is_empty());
 }

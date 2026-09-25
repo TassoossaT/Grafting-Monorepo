@@ -18,18 +18,18 @@
 //! or the graph stores: controlling render resolution is a rendering
 //! concern, not a construction-time one.
 //!
-//! An **upright** face -- a wall panel, straight or curved -- gets there by
+//! An **upright** face -- straight or curved -- gets there by
 //! being unrolled rather than projected. Its ring does not lie on a plane
 //! when it curves, so a best-fit plane folds it onto itself and emits
 //! triangles that visibly cut across the surface. But the panel is a
 //! developable surface: a section of a cylinder flattens without distortion
 //! into "distance along the rail" and "height", and a straight panel is the
 //! same map with an infinite radius. Unrolled, it is an ordinary 2D polygon
-//! that triangulates like any other -- openings included, which a strip
+//! that triangulates like any other -- holes included, which a strip
 //! built facet by facet could never punch.
 //!
 //! A flat panel keeps exactly the vertices its contour has: `earcut` invents
-//! none, and on a plane none are needed. A curved panel with an opening does
+//! none, and on a plane none are needed. A curved panel with a hole does
 //! need them -- the face left around the hole cannot be covered by joining
 //! contour vertices without spanning chords that cut through the inside of
 //! the cylinder -- so that one case is filled with `i_triangle`'s uniform
@@ -55,6 +55,7 @@ pub mod run;
 pub mod sanitize;
 pub mod tessellation;
 pub mod types;
+mod unrolled;
 pub mod upright;
 
 #[cfg(test)]

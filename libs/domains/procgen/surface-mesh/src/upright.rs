@@ -1,13 +1,12 @@
 //! Triangulation of developable upright surfaces (straight or curved wall panels).
 
-use earcut::Earcut;
 use grafting_graph_core::{ContourEdge, ContourLoop, ContourTopology, NodeId, SurfaceRegion};
-use i_triangle::float::uniform::UniformTriangulatable;
 
 use crate::frame::UnrollFrame;
-use crate::math::{cross, dot, sub, winding_normal};
+use crate::math::{cross, dot, sub};
 use crate::tessellation::{tessellate_contour_loop, traversed_edge};
 use crate::types::{TriangulatedMesh, ARC_TESSELLATION_TOLERANCE, VERTICAL_SIDE_EPSILON};
+use crate::unrolled::{flat_shape, rolled_mesh};
 
 /// The rail and structure of an upright face.
 pub struct UprightStructure {
@@ -203,87 +202,8 @@ fn ruled_upright_mesh(
     })
 }
 
-/// Twice the signed area of a flat ring -- positive when it winds
-/// counter-clockwise.
-fn signed_area(ring: &[[f32; 2]]) -> f32 {
-    ring.iter()
-        .zip(ring.iter().cycle().skip(1))
-        .take(ring.len())
-        .map(|(current, next)| current[0] * next[1] - next[0] * current[1])
-        .sum()
-}
-
-/// The ring wound the way the triangulator's non-zero fill rule reads it:
-/// counter-clockwise for the outline, clockwise for a hole inside it.
-fn wound(mut ring: Vec<[f32; 2]>, counter_clockwise: bool) -> Vec<[f32; 2]> {
-    if (signed_area(&ring) > 0.0) != counter_clockwise {
-        ring.reverse();
-    }
-    ring
-}
-
-/// Meshes an opened curved panel with a boundary-conforming uniform mesh.
-///
-/// The solid case is a ruled strip because every vertex it needs is already
-/// on the rail. An opening ends that: the face left around it is no longer a
-/// strip, and a triangulation that only ever joins contour vertices has to
-/// span the gap with long triangles. Each of those is a flat chord through
-/// the inside of the cylinder, which is the wall visibly caving in around
-/// the window.
-///
-/// So the flat face gets vertices of its own. `i_triangle`'s uniform
-/// Delaunay mesh fills the unrolled panel at a bounded edge length, holes
-/// included, and every vertex it invents is rolled back onto the cylinder.
-/// Bounded edge length in metres of rail is a bounded angle on the circle,
-/// which is what keeps each triangle a local facet.
-fn uniform_curved_mesh(
-    frame: &UnrollFrame,
-    outer: &[[f32; 3]],
-    holes: &[Vec<[f32; 3]>],
-) -> Option<TriangulatedMesh> {
-    let edge_length = frame.lattice_step()?;
-
-    let unroll_ring = |ring: &[[f32; 3]]| -> Vec<[f32; 2]> {
-        ring.iter().map(|point| frame.unroll(*point)).collect()
-    };
-    let mut shape = vec![wound(unroll_ring(outer), true)];
-    for hole in holes {
-        if hole.len() < 3 {
-            return None;
-        }
-        shape.push(wound(unroll_ring(hole), false));
-    }
-
-    let mesh = shape.uniform_triangulate(edge_length).to_triangulation::<u32>();
-    if mesh.indices.is_empty() {
-        return None;
-    }
-
-    let positions: Vec<[f32; 3]> = mesh.points.iter().map(|point| frame.roll(*point)).collect();
-    let normals: Vec<[f32; 3]> = positions
-        .iter()
-        .map(|point| frame.normal_at(*point))
-        .collect();
-    let mut indices = mesh.indices;
-    if let Some(reference) = winding_normal(&positions, &indices) {
-        let radial = normals[indices[0] as usize];
-        if dot(reference, radial) < 0.0 {
-            for triangle in indices.chunks_exact_mut(3) {
-                triangle.swap(1, 2);
-            }
-        }
-    }
-
-    Some(TriangulatedMesh {
-        positions,
-        normals,
-        uvs: mesh.points,
-        indices,
-    })
-}
-
-/// Meshes an upright face -- a wall panel, straight or curved, opened or
-/// solid -- by unrolling it flat and triangulating there.
+/// Meshes an upright face -- straight or curved, with holes or solid -- by
+/// unrolling it flat and triangulating there.
 ///
 /// `None` for anything that is not one, which leaves every other region on
 /// the ordinary projection path untouched. A region with more than one outer
@@ -312,68 +232,22 @@ pub fn upright_face_mesh(
         }
     }
 
-    // General fallback path for upright panels with holes (e.g. doors, windows):
+    // With holes the face left is no longer a strip. Joining only contour
+    // vertices would span it with long flat chords through a curved face, so
+    // `rolled_mesh` fills a curved one with a bounded-edge uniform mesh and
+    // a flat one with its own vertices.
+    let unroll = |ring: Vec<[f32; 3]>| -> Vec<[f32; 2]> {
+        ring.into_iter()
+            .map(|point| structure.frame.unroll(point))
+            .collect()
+    };
     let outer = tessellate_contour_loop(topology, outer_loop, resolve_position)?;
     let holes = region
         .holes()
         .iter()
-        .map(|loop_| tessellate_contour_loop(topology, loop_, resolve_position))
+        .map(|loop_| tessellate_contour_loop(topology, loop_, resolve_position).map(unroll))
         .collect::<Option<Vec<_>>>()?;
-
-    // A curved opened panel cannot be triangulated on its contour alone --
-    // see `uniform_curved_mesh`. A flat one can: there is no curvature for a
-    // long triangle to cut through, so ear clipping stays exact and cheap.
-    if let Some(mesh) = uniform_curved_mesh(&structure.frame, &outer, &holes) {
-        return Some(mesh);
-    }
-
-    let mut positions = outer;
-    let mut hole_indices = Vec::new();
-    for hole in &holes {
-        if hole.len() < 3 {
-            return None;
-        }
-        hole_indices.push(positions.len() as u32);
-        positions.extend(hole.iter().copied());
-    }
-
-    // The flat place `earcut` works, and the face's texture coordinates, are
-    // the same numbers: distance along the rail and height, both in metres.
-    // So this is kept rather than consumed -- deriving it twice, or deriving
-    // it again downstream from a frame that would have to be re-established
-    // there, would be two ways to compute one thing.
-    let unrolled: Vec<[f32; 2]> = positions
-        .iter()
-        .map(|point| structure.frame.unroll(*point))
-        .collect();
-    let mut earcut = Earcut::new();
-    let mut indices: Vec<u32> = Vec::new();
-    earcut.earcut(unrolled.iter().copied(), &hole_indices, &mut indices);
-    if indices.is_empty() {
-        return None;
-    }
-
-    // Which way the face actually faces is settled by the frame's outward
-    // direction. If the unrolled triangle winding ended up facing inward,
-    // swap the triangle winding so the mesh is front-facing from the outside.
-    let normals: Vec<[f32; 3]> = positions
-        .iter()
-        .map(|point| structure.frame.normal_at(*point))
-        .collect();
-    if let Some(reference) = winding_normal(&positions, &indices) {
-        let anchor = indices[0] as usize;
-        let radial = normals[anchor];
-        if dot(reference, radial) < 0.0 {
-            for triangle in indices.chunks_exact_mut(3) {
-                triangle.swap(1, 2);
-            }
-        }
-    }
-
-    Some(TriangulatedMesh {
-        positions,
-        normals,
-        uvs: unrolled,
-        indices,
-    })
+    let shape = flat_shape(unroll(outer), holes)?;
+    let mesh = rolled_mesh(&structure.frame, std::slice::from_ref(&shape));
+    (!mesh.indices.is_empty()).then_some(mesh)
 }

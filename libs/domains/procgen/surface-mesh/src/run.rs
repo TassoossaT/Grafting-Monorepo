@@ -3,14 +3,14 @@
 //! measured as one run.
 //!
 //! A panel's place on the run is in the same arc-length measure its
-//! [`HostFace`] resolves `u` with, so run distance `s` maps to panel
+//! [`HostFace`](crate::host::HostFace) resolves `u` with, so run distance `s` maps to panel
 //! `u = (s - offset) / length`, mirrored when the panel runs backwards.
 
 use std::collections::BTreeSet;
 
 use grafting_graph_core::{ContourEdgeId, ContourTopology, NodeId, RegionId};
 
-use crate::host::HostFace;
+use crate::host::PanelSpan;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RunPanel {
@@ -30,16 +30,16 @@ pub struct PanelRun {
 
 struct Step {
     region: RegionId,
-    face: HostFace,
+    span: PanelSpan,
     reversed: bool,
 }
 
-fn face_of(
+fn span_of(
     topology: &ContourTopology,
     region: &RegionId,
     resolve_position: &mut impl FnMut(&NodeId) -> Option<[f32; 3]>,
-) -> Option<HostFace> {
-    HostFace::of(topology, topology.region(region)?, resolve_position)
+) -> Option<PanelSpan> {
+    PanelSpan::of(topology, topology.region(region)?, resolve_position)
 }
 
 fn same_column(topology: &ContourTopology, one: &ContourEdgeId, other: &ContourEdgeId) -> bool {
@@ -60,22 +60,22 @@ fn neighbour(
     side: &ContourEdgeId,
     resolve_position: &mut impl FnMut(&NodeId) -> Option<[f32; 3]>,
     joins: &impl Fn(&RegionId) -> bool,
-) -> Option<(RegionId, HostFace, usize)> {
+) -> Option<(RegionId, PanelSpan, usize)> {
     let bottom = topology.edge(side)?.start_node().clone();
     let mut panels = Vec::new();
     for region in topology.regions_touching_node(&bottom) {
         if &region == from {
             continue;
         }
-        let Some(face) = face_of(topology, &region, resolve_position) else {
+        let Some(span) = span_of(topology, &region, resolve_position) else {
             continue;
         };
-        if let Some(entry) = face
+        if let Some(entry) = span
             .sides()
             .iter()
             .position(|own| same_column(topology, own, side))
         {
-            panels.push((region, face, entry));
+            panels.push((region, span, entry));
         }
     }
     if panels.len() != 1 || !joins(&panels[0].0) {
@@ -94,18 +94,18 @@ pub fn panel_run(
     resolve_position: &mut impl FnMut(&NodeId) -> Option<[f32; 3]>,
     joins: impl Fn(&RegionId) -> bool,
 ) -> Option<PanelRun> {
-    let face = face_of(topology, start, resolve_position)?;
+    let span = span_of(topology, start, resolve_position)?;
     let mut visited = BTreeSet::from([start.clone()]);
     let mut forward = vec![Step {
         region: start.clone(),
-        face,
+        span,
         reversed: false,
     }];
     let mut closed = false;
     loop {
         let last = forward.last()?;
-        let exit = last.face.sides()[usize::from(!last.reversed)].clone();
-        let Some((region, face, entry)) =
+        let exit = last.span.sides()[usize::from(!last.reversed)].clone();
+        let Some((region, span, entry)) =
             neighbour(topology, &last.region, &exit, resolve_position, &joins)
         else {
             break;
@@ -119,26 +119,26 @@ pub fn panel_run(
         }
         forward.push(Step {
             region,
-            face,
+            span,
             reversed: entry == 1,
         });
     }
 
     let mut backward: Vec<Step> = Vec::new();
     if !closed {
-        let mut exit = forward[0].face.sides()[0].clone();
+        let mut exit = forward[0].span.sides()[0].clone();
         let mut from = start.clone();
-        while let Some((region, face, entry)) =
+        while let Some((region, span, entry)) =
             neighbour(topology, &from, &exit, resolve_position, &joins)
         {
             if !visited.insert(region.clone()) {
                 break;
             }
-            exit = face.sides()[1 - entry].clone();
+            exit = span.sides()[1 - entry].clone();
             from = region.clone();
             backward.push(Step {
                 region,
-                face,
+                span,
                 reversed: entry == 0,
             });
         }
@@ -150,7 +150,7 @@ pub fn panel_run(
         .rev()
         .chain(forward)
         .map(|step| {
-            let length = step.face.length();
+            let length = step.span.length();
             let panel = RunPanel {
                 region: step.region,
                 offset,

@@ -14,7 +14,8 @@ mod mesh;
 mod patch_replacement;
 mod pins;
 mod region_editing;
-mod region_groups;
+mod panel_runs;
+mod region_annotations;
 mod region_props;
 mod region_overlay;
 mod session;
@@ -31,5 +32,7 @@ mod session_cost_probe;
 #[cfg(test)]
 mod session_tests;
 pub(crate) mod spatial_index;
+#[cfg(test)]
+mod test_support;
 
 pub use session::ConstructionSession;

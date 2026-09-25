@@ -21,6 +21,7 @@ use grafting_procgen_surface_mesh::tessellation::{tessellate_edge, traversed_edg
 
 use crate::editing::SessionGraph;
 use crate::mesh::{region_id_from_wire, region_id_to_wire};
+use crate::region_annotations::RegionAnnotations;
 use crate::region_editing::RegionEditOutcomeDto;
 
 /// How far a pinned node may sit from its resolved place before it is moved.
@@ -30,6 +31,7 @@ const RESOLVE_TOLERANCE: f32 = 1e-6;
 const INSIDE_TOLERANCE: f64 = 1e-6;
 
 /// Bounds the re-resolution cascade when a pinned region is itself a host.
+/// [`pin_nodes`] refuses cycles, so this only caps a very deep chain.
 const MAX_SETTLE_PASSES: usize = 8;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -221,17 +223,26 @@ pub fn host_face(
     })
 }
 
+fn required_host(
+    graph: &SessionGraph,
+    topology: &ContourTopology,
+    key: &[String],
+) -> Result<(RegionId, HostFace), String> {
+    let host = region_id_from_wire(key)?;
+    if topology.region(&host).is_none() {
+        return Err(format!("unknown host region {host}"));
+    }
+    let face = host_face(graph, topology, &host)
+        .ok_or_else(|| format!("host region {host} is not an upright panel"))?;
+    Ok((host, face))
+}
+
 fn required_host_face(
     graph: &SessionGraph,
     topology: &ContourTopology,
     key: &[String],
 ) -> Result<HostFace, String> {
-    let host = region_id_from_wire(key)?;
-    if topology.region(&host).is_none() {
-        return Err(format!("unknown host region {host}"));
-    }
-    host_face(graph, topology, &host)
-        .ok_or_else(|| format!("host region {host} is not an upright panel"))
+    required_host(graph, topology, key).map(|(_, face)| face)
 }
 
 pub fn project_to_host(
@@ -290,7 +301,7 @@ pub fn pin_nodes(
         if graph.node(&node).is_none() {
             return Err(format!("unknown node {node}"));
         }
-        let host = region_id_from_wire(&pin.host_surface_key)?;
+        let (host, _) = required_host(graph, topology, &pin.host_surface_key)?;
         let host_nodes = topology
             .region_nodes(&host)
             .map_err(|error| error.to_string())?;
@@ -309,6 +320,7 @@ pub fn pin_nodes(
             },
         ));
     }
+    refuse_pin_cycles(topology, pins, &parsed)?;
     let mut outcome = RegionEditOutcomeDto::default();
     for (node, pin) in parsed {
         for region in topology.regions_touching_node(&node) {
@@ -322,6 +334,45 @@ pub fn pin_nodes(
         }
     }
     Ok(outcome)
+}
+
+/// Refuses `added` when, with it in place, some host would move whatever is
+/// pinned to it, directly or through a chain of other pins: a region moves
+/// with the host of every node on it, so a cycle has no resting place.
+fn refuse_pin_cycles(
+    topology: &ContourTopology,
+    pins: &Pins,
+    added: &[(NodeId, Pin)],
+) -> Result<(), String> {
+    let mut table: BTreeMap<&NodeId, &RegionId> =
+        pins.iter().map(|(node, pin)| (node, &pin.host)).collect();
+    for (node, pin) in added {
+        table.insert(node, &pin.host);
+    }
+    let mut follows: BTreeMap<RegionId, BTreeSet<&RegionId>> = BTreeMap::new();
+    for (node, host) in &table {
+        for region in topology.regions_touching_node(node) {
+            follows.entry(region).or_default().insert(host);
+        }
+    }
+    for (node, pin) in added {
+        for region in topology.regions_touching_node(node) {
+            let mut stack = vec![&pin.host];
+            let mut seen = BTreeSet::new();
+            while let Some(current) = stack.pop() {
+                if current == &region {
+                    return Err(format!(
+                        "pinning node {node} to {} would make region {region} follow itself",
+                        pin.host
+                    ));
+                }
+                if seen.insert(current) {
+                    stack.extend(follows.get(current).into_iter().flatten().copied());
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Drops the pins; every node keeps the position it has.
@@ -420,46 +471,26 @@ fn report_affected(outcome: &mut RegionEditOutcomeDto, region: &RegionId) {
     }
 }
 
-/// Brings the pin table and pinned positions back in step after a mutation.
+/// Brings pinned positions back in step after a mutation, once
+/// [`RegionAnnotations::retain_live`] has dropped the dead pins.
 ///
-/// Pins whose node is gone are dropped (their host re-meshes); pins whose
-/// host is gone are dropped with the node left where it is. Every pin on a
-/// host the mutation touched is re-resolved, every region traced on such a
-/// host is reported, and every host of a pinned node in a touched region is
-/// reported, since its cut depends on it. A curve is dropped with its edge,
-/// or once its ends are no longer both pinned to its host.
+/// `orphaned_hosts` lost a pinned node and re-mesh. Every pin on a host the
+/// mutation touched is re-resolved, every region traced on such a host is
+/// reported, and every host of a pinned node in a touched region is
+/// reported, since its cut depends on it.
 pub fn settle(
     graph: &mut SessionGraph,
     topology: &ContourTopology,
-    pins: &mut Pins,
-    curves: &mut PinnedCurves,
+    pins: &Pins,
+    orphaned_hosts: &[RegionId],
     outcome: &mut RegionEditOutcomeDto,
 ) {
-    if pins.is_empty() {
-        curves.clear();
-        return;
-    }
-    let mut orphaned_hosts = Vec::new();
-    pins.retain(|node, pin| {
-        let host_alive = topology.region(&pin.host).is_some();
-        if graph.node(node).is_none() {
-            if host_alive {
-                orphaned_hosts.push(pin.host.clone());
-            }
-            return false;
-        }
-        host_alive
-    });
-    for host in &orphaned_hosts {
+    for host in orphaned_hosts {
         report_affected(outcome, host);
     }
-    curves.retain(|edge_id, curve| {
-        topology.edge(edge_id).is_some_and(|edge| {
-            [edge.start_node(), edge.end_node()]
-                .into_iter()
-                .all(|node| pins.get(node).is_some_and(|pin| pin.host == curve.host))
-        })
-    });
+    if pins.is_empty() {
+        return;
+    }
 
     for _ in 0..MAX_SETTLE_PASSES {
         let touched = touched_regions(outcome);
@@ -531,8 +562,27 @@ pub struct HostTracer<'a> {
 }
 
 impl<'a> HostTracer<'a> {
-    pub fn new(pins: &'a Pins, curves: &'a PinnedCurves) -> Self {
-        Self { pins, curves }
+    pub fn new(annotations: &'a RegionAnnotations) -> Self {
+        Self {
+            pins: &annotations.pins,
+            curves: &annotations.curves,
+        }
+    }
+
+    /// `edge_id`'s curve on `host` in `(u, v)`, walked forward or backward.
+    fn oriented_controls(
+        &self,
+        edge_id: &ContourEdgeId,
+        host: &RegionId,
+        forward: bool,
+    ) -> Option<[[f64; 2]; 2]> {
+        let curve = self.curves.get(edge_id).filter(|curve| &curve.host == host)?;
+        let [first, second] = curve.controls;
+        Some(if forward {
+            [first, second]
+        } else {
+            [second, first]
+        })
     }
 
     /// The one host every boundary node of `region` is pinned to.
@@ -569,19 +619,10 @@ impl<'a> HostTracer<'a> {
         let [from, to] = [traversed.start_node(), traversed.end_node()]
             .map(|node| self.pins.get(node).filter(|pin| &pin.host == host));
         let (from, to) = (from?, to?);
-        let controls = self
-            .curves
-            .get(traversed.id())
-            .filter(|curve| &curve.host == host)
-            .and_then(|curve| {
-                let forward = topology.edge(traversed.id())?.start_node() == traversed.start_node();
-                let [first, second] = curve.controls;
-                Some(if forward {
-                    [first, second]
-                } else {
-                    [second, first]
-                })
-            });
+        let controls = topology.edge(traversed.id()).and_then(|edge| {
+            let forward = edge.start_node() == traversed.start_node();
+            self.oriented_controls(traversed.id(), host, forward)
+        });
         Some(face.trace([from.u, from.v], [to.u, to.v], controls))
     }
 
@@ -666,18 +707,7 @@ impl<'a> HostTracer<'a> {
             .or_insert_with(|| host_face(graph, topology, host))
             .as_ref()?;
         let points = self.trace(topology, host, face, &traversed)?;
-        let controls = self
-            .curves
-            .get(edge.id())
-            .filter(|curve| &curve.host == host)
-            .map(|curve| {
-                let [first, second] = curve.controls;
-                if forward {
-                    [first, second]
-                } else {
-                    [second, first]
-                }
-            });
+        let controls = self.oriented_controls(edge.id(), host, forward);
         Some(HostCurveDto {
             host_surface_key: region_id_to_wire(host),
             controls,
@@ -731,18 +761,14 @@ pub struct Cutting<'a> {
 }
 
 impl<'a> Cutting<'a> {
-    pub fn new(
-        pins: &'a Pins,
-        curves: &'a PinnedCurves,
-        capabilities: &'a SurfaceCapabilities,
-    ) -> Self {
+    pub fn new(annotations: &'a RegionAnnotations, capabilities: &'a SurfaceCapabilities) -> Self {
         let mut by_host: HashMap<&RegionId, Vec<&NodeId>> = HashMap::new();
-        for (node, pin) in pins {
+        for (node, pin) in &annotations.pins {
             by_host.entry(&pin.host).or_default().push(node);
         }
         Self {
             capabilities,
-            tracer: HostTracer::new(pins, curves),
+            tracer: HostTracer::new(annotations),
             by_host,
         }
     }

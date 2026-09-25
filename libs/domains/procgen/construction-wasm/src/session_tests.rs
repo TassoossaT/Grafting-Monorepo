@@ -631,21 +631,29 @@ fn a_tower_stamp_patch_meshes_all_four_quarters_cleanly() {
     }
 }
 
-#[wasm_bindgen_test]
-fn a_curved_wall_with_an_opening_preserves_cylinder_curvature() {
+#[test]
+fn a_curved_wall_with_a_hole_preserves_cylinder_curvature() {
     let mut session = ConstructionSession::new();
     let patch_json = r#"{
         "nodes": [
             {"id": "b0", "position": [2.0, 0.0, 0.0]},
             {"id": "t0", "position": [2.0, 3.0, 0.0]},
             {"id": "b1", "position": [0.0, 0.0, 2.0]},
-            {"id": "t1", "position": [0.0, 3.0, 2.0]}
+            {"id": "t1", "position": [0.0, 3.0, 2.0]},
+            {"id": "w0", "position": [1.847759, 1.0, 0.765366]},
+            {"id": "w1", "position": [1.414213, 1.0, 1.414213]},
+            {"id": "w2", "position": [1.414213, 2.0, 1.414213]},
+            {"id": "w3", "position": [1.847759, 2.0, 0.765366]}
         ],
         "edges": [
             {"edgeId": "e_b0_b1", "startNodeId": "b0", "endNodeId": "b1", "geometry": {"kind": "arc", "center": [0.0, 0.0], "clockwise": false}},
             {"edgeId": "e_b1_t1", "startNodeId": "b1", "endNodeId": "t1"},
             {"edgeId": "e_t0_t1", "startNodeId": "t0", "endNodeId": "t1", "geometry": {"kind": "arc", "center": [0.0, 0.0], "clockwise": false}},
-            {"edgeId": "e_t0_b0", "startNodeId": "t0", "endNodeId": "b0"}
+            {"edgeId": "e_t0_b0", "startNodeId": "t0", "endNodeId": "b0"},
+            {"edgeId": "e_w0_w1", "startNodeId": "w0", "endNodeId": "w1", "geometry": {"kind": "arc", "center": [0.0, 0.0], "clockwise": false}},
+            {"edgeId": "e_w1_w2", "startNodeId": "w1", "endNodeId": "w2"},
+            {"edgeId": "e_w2_w3", "startNodeId": "w2", "endNodeId": "w3", "geometry": {"kind": "arc", "center": [0.0, 0.0], "clockwise": true}},
+            {"edgeId": "e_w3_w0", "startNodeId": "w3", "endNodeId": "w0"}
         ],
         "regions": [
             {
@@ -656,27 +664,15 @@ fn a_curved_wall_with_an_opening_preserves_cylinder_curvature() {
                     {"edgeId": "e_t0_t1", "reversed": true},
                     {"edgeId": "e_t0_b0", "reversed": false}
                 ],
+                "holes": [[
+                    {"edgeId": "e_w3_w0", "reversed": true},
+                    {"edgeId": "e_w2_w3", "reversed": true},
+                    {"edgeId": "e_w1_w2", "reversed": true},
+                    {"edgeId": "e_w0_w1", "reversed": true}
+                ]],
                 "surfaceType": "wall-white",
                 "physical": true
-            }
-        ]
-    }"#;
-    session.add_patch_json(patch_json).unwrap();
-
-    let win_patch_json = r#"{
-        "nodes": [
-            {"id": "w0", "position": [1.847759, 1.0, 0.765366]},
-            {"id": "w1", "position": [1.414213, 1.0, 1.414213]},
-            {"id": "w2", "position": [1.414213, 2.0, 1.414213]},
-            {"id": "w3", "position": [1.847759, 2.0, 0.765366]}
-        ],
-        "edges": [
-            {"edgeId": "e_w0_w1", "startNodeId": "w0", "endNodeId": "w1", "geometry": {"kind": "arc", "center": [0.0, 0.0], "clockwise": false}},
-            {"edgeId": "e_w1_w2", "startNodeId": "w1", "endNodeId": "w2"},
-            {"edgeId": "e_w2_w3", "startNodeId": "w2", "endNodeId": "w3", "geometry": {"kind": "arc", "center": [0.0, 0.0], "clockwise": true}},
-            {"edgeId": "e_w3_w0", "startNodeId": "w3", "endNodeId": "w0"}
-        ],
-        "regions": [
+            },
             {
                 "regionId": "r_win",
                 "boundary": [
@@ -690,18 +686,7 @@ fn a_curved_wall_with_an_opening_preserves_cylinder_curvature() {
             }
         ]
     }"#;
-    session.add_patch_json(win_patch_json).unwrap();
-
-    let add_hole_json = r#"{
-        "surfaceKey": ["@region", "r0"],
-        "hole": [
-            {"edgeId": "e_w3_w0", "reversed": true},
-            {"edgeId": "e_w2_w3", "reversed": true},
-            {"edgeId": "e_w1_w2", "reversed": true},
-            {"edgeId": "e_w0_w1", "reversed": true}
-        ]
-    }"#;
-    session.add_hole_json(add_hole_json).unwrap();
+    session.add_patch_json(patch_json).unwrap();
 
     let meshes_json = session.all_surface_meshes_json().unwrap();
     let meshes: Vec<serde_json::Value> = serde_json::from_str(&meshes_json).unwrap();
