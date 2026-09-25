@@ -2007,6 +2007,81 @@ not any construction effect. Exists so `tool-registry.ts` has an entry for
 every `ConstructionToolId` and `use-construction-pointer.ts` never needs a
 "no tool selected" special case.
 
+### `interface vtt.spine-edit-behavior.SpineEditBehavior`
+
+### `method vtt.spine-edit-behavior.SpineEditBehavior.abort(ctx: ToolContext): void`
+
+Drops an active drag without committing it, keeping the selection.
+
+### `method vtt.spine-edit-behavior.SpineEditBehavior.begin(ctx: ToolContext, picked: SpinePick): boolean`
+
+Selects and starts dragging `picked`; false when the curve refused the gesture.
+
+### `method vtt.spine-edit-behavior.SpineEditBehavior.cancel(ctx: ToolContext): void`
+
+Drops any drag and the selection.
+
+### `method vtt.spine-edit-behavior.SpineEditBehavior.end(ctx: ToolContext, gesture: ToolGesture): boolean`
+
+Ends and commits an active drag; false when none was active.
+
+### `method vtt.spine-edit-behavior.SpineEditBehavior.isActive(ctx: ToolContext): boolean`
+
+### `method vtt.spine-edit-behavior.SpineEditBehavior.isHandle(ctx: ToolContext, sample: PointerSample): boolean`
+
+Whether `sample` is any curve handle of an owned spine, including one this editor does not drag.
+
+### `method vtt.spine-edit-behavior.SpineEditBehavior.move(ctx: ToolContext, gesture: ToolGesture): boolean`
+
+### `method vtt.spine-edit-behavior.SpineEditBehavior.pick(ctx: ToolContext, sample: PointerSample): SpinePick | undefined`
+
+The handle of an owned spine `sample` lands on -- a control point, a midpoint, or the body projected onto the spine.
+
+### `method vtt.spine-edit-behavior.SpineEditBehavior.removeSelected(ctx: ToolContext): boolean`
+
+Removes the selected control point; false when nothing was selected.
+
+### `method vtt.spine-edit-behavior.SpineEditBehavior.select(ctx: ToolContext, sample?: PointerSample): void`
+
+### `method vtt.spine-edit-behavior.SpineEditBehavior.selected(ctx: ToolContext): string | undefined`
+
+### `interface vtt.spine-edit-behavior.SpineEditOptions`
+
+Editing an existing spine by its points -- the one editor every
+spine-built type shares, whatever surface it regenerates from the spine:
+
+- drag a control point, or the point manipulator the scene shows on the
+  selected one;
+- drag a span's midpoint to bend it, or click it to insert a point there;
+- drag the body itself, projected onto the spine under it;
+- Delete/Backspace removes the selected control point;
+- whatever the shared edit panel asks for instead: raising or lowering,
+  or a curve action such as a span's width.
+
+The road was first to have this, and the spiral uses the same thing; a
+tool only says which spine owners it edits, never how.
+
+### `property vtt.spine-edit-behavior.SpineEditOptions.ownsSpine: (surfaceType: string) => boolean`
+
+Only spines owned by a type this accepts are edited; anything else falls through to the tool.
+
+### `interface vtt.spine-edit-behavior.SpinePick`
+
+What a press on a spine resolved to: the handle it actually takes, and how to drag it.
+
+### `property vtt.spine-edit-behavior.SpinePick.options: CurveGestureOptions`
+
+### `property vtt.spine-edit-behavior.SpinePick.sample: PointerSample`
+
+### `function vtt.spine-edit-behavior.createSpineEditBehavior(__namedParameters: SpineEditOptions): SpineEditBehavior`
+
+### `function vtt.spine-edit-behavior.withSpineEditing(tool: ConstructionTool<Id>, options: SpineEditOptions): ConstructionTool<Id>`
+
+Composes a creation tool with createSpineEditBehavior: a press on
+a spine this tool owns edits it, and a press anywhere else is the tool's
+own creation gesture, unchanged -- the spine counterpart of
+`withStructureEditing`.
+
 ### `interface vtt.structure-edit-behavior.StructureEditBehavior`
 
 ### `method vtt.structure-edit-behavior.StructureEditBehavior.isActive(): boolean`
@@ -2405,9 +2480,11 @@ Screen coordinate used by explicit elevation gestures.
 
 ### `property vtt.road-body-target.RoadSnapTarget.surfaceRef?: string`
 
-### `function vtt.road-body-target.roadBodyTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): { options: CurveGestureOptions; sample: PointerSample } | undefined`
+### `function vtt.road-body-target.roadBodyTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string, ownsSpine: (surfaceType: string) => boolean): { options: CurveGestureOptions; sample: PointerSample } | undefined`
 
-Project a road-body pick onto its spine using the canonical curve query.
+Project a pick on a spine-built body onto its spine using the canonical
+curve query. `ownsSpine` limits it to the spines of the types a tool edits;
+a road's name is historical, any spine owner is projected the same way.
 
 ### `function vtt.road-body-target.roadSnapIsCurrent(ctx: ToolContext, target: RoadSnapTarget): boolean`
 
@@ -2808,7 +2885,7 @@ Also grabs and edits an existing ramp's own corner, side, end or body -- see `st
 
 ### `variable vtt.slope-tools.slopeSpiralTool: ConstructionTool<"slope-spiral">`
 
-Also grabs and edits an existing slope spine's own control point/segment -- see `structure-edit-behavior.ts`.
+Also edits an existing spiral by its spine points, exactly as a road is edited -- see `spine-edit-behavior.ts`.
 
 ### `variable vtt.terrain-sculpt-tool.terrainSculptTool: ConstructionTool<"terrain-sculpt">`
 

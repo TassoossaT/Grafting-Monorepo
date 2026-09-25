@@ -1,6 +1,7 @@
 import { DEFAULT_TOOL_PARAMS, RAMP_SURFACE_TYPE, rampOutline, SLOPE_SURFACE_TYPE } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionTool } from "../core/tool-context.ts";
 import { withStructureEditing } from "../core/structure-edit-behavior.ts";
+import { withSpineEditing } from "../core/spine-edit-behavior.ts";
 import { polylineSegmentsPreview } from "../shapes/preview-shapes.ts";
 import { commitPlatformSlope, slopeControlPoint, spiralControlPoints } from "./slope-commit.ts";
 import { commitStraightRamp, plannedRamp, straightRampPoints } from "./ramp-commit.ts";
@@ -63,5 +64,5 @@ const rawSlopeSpiralTool: ConstructionTool<"slope-spiral"> = {
   },
 };
 
-/** Also grabs and edits an existing slope spine's own control point/segment -- see `structure-edit-behavior.ts`. */
-export const slopeSpiralTool = withStructureEditing(rawSlopeSpiralTool, { ownsType: ownsSlope });
+/** Also edits an existing spiral by its spine points, exactly as a road is edited -- see `spine-edit-behavior.ts`. */
+export const slopeSpiralTool = withSpineEditing(rawSlopeSpiralTool, { ownsSpine: ownsSlope });

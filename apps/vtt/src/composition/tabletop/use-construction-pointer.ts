@@ -140,7 +140,8 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
           ? runtime.getGraphSnapshot().nodes.find(n => n.id === info.id && n.id.startsWith("spine:")) : undefined;
         selectedPoint.current = node?.id;
         runtime.setPointManipulator?.(viewId, node && !branchModifier.current ? {
-          id: node.id, position: node.position, branchAction: true,
+          // Branching starts a new structure from the point, which only a tool that handles the action can do.
+          id: node.id, position: node.position, branchAction: toolFor(activeTool).onSelectionAction !== undefined,
           onChange(phase, position) {
             if (phase === "start") {
               manipulatorGesture.current?.cancel();

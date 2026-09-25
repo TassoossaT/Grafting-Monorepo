@@ -129,6 +129,37 @@ test("a spiral is one spine, one face per span, meshed on its own turn", () => {
   } finally { session.free(); }
 });
 
+test("a spiral is edited by its spine points exactly as a road is: drag a point, delete a point", async () => {
+  const { pathPointsTool } = await import("../src/composition/tabletop/tools/paths/path-points-tool.ts");
+  const { ctx, runtime, session, calls } = sessionFixture();
+  Object.assign(runtime, { showPreview() {}, clearPreview() {} });
+  try {
+    slopeSpiralTool.onClick(ctx, { point: { x: 20, y: 1, z: 0 } }, { ...params, radius: 3, turns: 1, rise: 4 });
+    const spans = slopeSpans(runtime);
+    const control = spans[3].endNodeId;
+    const start = { nodeId: control, point: node(runtime, control).position };
+    const target = { point: { x: start.point.x + 1, y: 0, z: start.point.z + 0.5 } };
+
+    const blank = session.snapshot_json();
+    pathPointsTool.onPointerDown(ctx, start, pathPointsTool.defaultParams());
+    pathPointsTool.onCancel(ctx);
+    assert.equal(session.snapshot_json(), blank, "the road tool leaves a spiral's spine alone");
+
+    slopeSpiralTool.onPointerDown(ctx, start, params);
+    slopeSpiralTool.onPointerMove(ctx, { start, current: target, samples: [start, target] }, params);
+    slopeSpiralTool.onPointerUp(ctx, { start, current: target, samples: [start, target] }, params);
+    slopeSpiralTool.onClick(ctx, target, params);
+    const moved = node(runtime, control).position;
+    assert.ok(Math.abs(moved.x - target.point.x) < 1e-6 && Math.abs(moved.z - target.point.z) < 1e-6, JSON.stringify(calls.feedback));
+    assert.equal(slopeSpans(runtime).length, spans.length, "a drag is not a click: no new spiral is stamped");
+    assert.ok(faces(runtime, "platform-slope").every(level), "the regenerated faces stay level across");
+
+    assert.equal(slopeSpiralTool.onKeyDown(ctx, "Delete", params), true);
+    assert.equal(node(runtime, control), undefined, "the selected point is removed");
+    assert.equal(slopeSpans(runtime).length, spans.length - 1);
+  } finally { session.free(); }
+});
+
 test("ramps passing through each other each mesh on their own curve, never borrowing the other's height", () => {
   const { ctx, runtime, session, calls } = sessionFixture();
   const ramps = [

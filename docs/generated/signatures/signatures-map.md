@@ -4139,6 +4139,28 @@ export const navigateTool: ConstructionTool<"navigate"> = {
   defaultParams: () => ({}),
   };
 
+// src/composition/tabletop/tools/core/spine-edit-behavior.ts
+export interface SpineEditOptions {
+  /** Only spines owned by a type this accepts are edited; anything else falls through to the tool. */
+  readonly ownsSpine: (surfaceType: string) => boolean;
+  }
+export interface SpinePick {
+  readonly sample: PointerSample;
+  readonly options: CurveGestureOptions;
+  }
+export interface SpineEditBehavior {
+  /** The handle of an owned spine `sample` lands on -- a control point, a midpoint, or the body projected onto the spine. */
+  pick(ctx: ToolContext, sample: PointerSample): SpinePick | undefined;
+  /** Whether `sample` is any curve handle of an owned spine, including one this editor does not drag. */
+  isHandle(ctx: ToolContext, sample: PointerSample): boolean;
+  /** Selects and starts dragging `picked`; false when the curve refused the gesture. */
+  begin(ctx: ToolContext, picked: SpinePick): boolean;
+  move(ctx: ToolContext, gesture: ToolGesture): boolean;
+export function createSpineEditBehavior({ ownsSpine }: SpineEditOptions): SpineEditBehavior {
+  const drags = new WeakMap<ToolContext["runtime"], CurveGesture>();
+export function withSpineEditing<Id extends ConstructionToolId>(tool: ConstructionTool<Id>, options: SpineEditOptions): ConstructionTool<Id> {
+  const spine = createSpineEditBehavior(options);
+
 // src/composition/tabletop/tools/core/stroke-fitting.ts
 export type { FittedEdge, FitOptions } from "../../../../features/edit-construction/index.ts";
 
@@ -4340,9 +4362,9 @@ export const pathStrokeTool: ConstructionTool<"path-brush"> = {
   const d=draft(ctx,g,params);
 
 // src/composition/tabletop/tools/paths/road-body-target.ts
-export function roadBodyTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): { sample: PointerSample; options: CurveGestureOptions } | undefined {
+export function roadBodyTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string, ownsSpine: (surfaceType: string) => boolean = () => true): { sample: PointerSample; options: CurveGestureOptions } | undefined {
   const hit = ctx.runtime.getAllRegionTopologies().find((t) =>
-  structureTypeFor(t.surfaceType)?.spine && (sample.surfaceRef
+  structureTypeFor(t.surfaceType)?.spine && ownsSpine(t.surfaceType) && (sample.surfaceRef
   ? surfaceRefFromNodeSet(t.surfaceKey) === sample.surfaceRef
   : t.nodes.some((n) => n.id === sample.nodeId)));
 export interface RoadSnapTarget extends PointerSample {
@@ -4694,7 +4716,7 @@ export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly Co
 
 // src/composition/tabletop/tools/slope/slope-tools.ts
 export const slopeRampTool = withStructureEditing(rawSlopeRampTool, { ownsType: ownsRamp });
-export const slopeSpiralTool = withStructureEditing(rawSlopeSpiralTool, { ownsType: ownsSlope });
+export const slopeSpiralTool = withSpineEditing(rawSlopeSpiralTool, { ownsSpine: ownsSlope });
 
 // src/composition/tabletop/tools/terrain/terrain-sculpt-tool.ts
 export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {

@@ -4,16 +4,20 @@ import type { PointerSample, ToolContext } from "../core/tool-context.ts";
 import type { CurveGestureOptions } from "../core/curve-edit-gesture.ts";
 import { createSnapMeshPreview } from "./road-preview-mesh.ts";
 
-/** Project a road-body pick onto its spine using the canonical curve query. */
-export function roadBodyTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): { sample: PointerSample; options: CurveGestureOptions } | undefined {
+/**
+ * Project a pick on a spine-built body onto its spine using the canonical
+ * curve query. `ownsSpine` limits it to the spines of the types a tool edits;
+ * a road's name is historical, any spine owner is projected the same way.
+ */
+export function roadBodyTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string, ownsSpine: (surfaceType: string) => boolean = () => true): { sample: PointerSample; options: CurveGestureOptions } | undefined {
   const hit = ctx.runtime.getAllRegionTopologies().find((t) =>
-    structureTypeFor(t.surfaceType)?.spine && (sample.surfaceRef
+    structureTypeFor(t.surfaceType)?.spine && ownsSpine(t.surfaceType) && (sample.surfaceRef
       ? surfaceRefFromNodeSet(t.surfaceKey) === sample.surfaceRef
       : t.nodes.some((n) => n.id === sample.nodeId)));
   const owner = hit && structureTypeFor(hit.surfaceType)?.spine;
   const snapshot = ctx.runtime.getGraphSnapshot();
   const roadEdges = snapshot.edges.filter((e) =>
-    e.curve?.surfaceType &&
+    e.curve?.surfaceType && ownsSpine(e.curve.surfaceType) &&
     (!owner || structureTypeFor(e.curve.surfaceType)?.spine === owner) &&
     (!excludeNodeId || (e.startNodeId !== excludeNodeId && e.endNodeId !== excludeNodeId)));
   const roadIds = new Set(roadEdges.map((e) => e.edgeId));
