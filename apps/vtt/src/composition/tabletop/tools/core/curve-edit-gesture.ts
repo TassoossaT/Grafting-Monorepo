@@ -58,11 +58,20 @@ function crossedThreshold(sample: PointerSample, gesture: ToolGesture, params?: 
 /** Where the pointer is taking the handle: along the ground, or up and down in elevation mode. */
 function targetOf(sample: PointerSample, gesture: ToolGesture, params?: CurveGestureOptions): ConstructionPosition {
   if (params?.spatialTarget) return gesture.current.point;
-  return params?.mode === "elevation" && sample.screenY !== undefined && gesture.current.screenY !== undefined
-    ? { ...sample.point, y: sample.point.y + (sample.screenY - gesture.current.screenY) / 40 }
-    : params?.pointerOrigin
-      ? { x: sample.point.x + gesture.current.point.x - params.pointerOrigin.x, y: sample.point.y, z: sample.point.z + gesture.current.point.z - params.pointerOrigin.z }
-      : { ...gesture.current.point, y: sample.point.y };
+  if (params?.mode === "elevation" && sample.screenY !== undefined && gesture.current.screenY !== undefined) {
+    return { ...sample.point, y: sample.point.y + (sample.screenY - gesture.current.screenY) / 40 };
+  }
+  const pick = sample.nodeId ? curvePick(sample.nodeId) : undefined;
+  const isTangentHandle = pick !== undefined && pick.index !== "midpoint";
+  const y = isTangentHandle ? sample.point.y : gesture.current.point.y;
+  if (params?.pointerOrigin) {
+    return {
+      x: sample.point.x + gesture.current.point.x - params.pointerOrigin.x,
+      y,
+      z: sample.point.z + gesture.current.point.z - params.pointerOrigin.z,
+    };
+  }
+  return { ...gesture.current.point, y };
 }
 
 /** Starts a curve gesture on the handle `sample` landed on, when the curve belongs to a type `ownsType` accepts. */

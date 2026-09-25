@@ -232,12 +232,13 @@ test("freehand road uses brush margin and commits the preview's interpreted spin
 });
 
 
-test("scene gizmo raises a road anchor and horizontal editing retains its elevation",async()=>{
+test("scene gizmo raises a road anchor and direct editing fits to surface height while tangent handles retain elevation",async()=>{
   const {beginCurveGesture}=await import("../src/composition/tabletop/tools/core/curve-edit-gesture.ts");
   const f=fixture();
   try {
     build(f);
-    const id=edges(f)[0].endNodeId;
+    const edge=edges(f)[0];
+    const id=edge.endNodeId;
     const node=()=>f.runtime.getGraphSnapshot().nodes.find(n=>n.id===id);
     const start={nodeId:id,point:node().position};
     const raised={nodeId:id,point:{...start.point,y:3}};
@@ -245,10 +246,15 @@ test("scene gizmo raises a road anchor and horizontal editing retains its elevat
     edit.move(gesture(start,raised));edit.commit();
     assert.equal(node().position.y,3,JSON.stringify(f.calls.feedback));
     const above={nodeId:id,point:node().position};
-    const horizontal=beginCurveGesture(f.ctx,above,{mode:"shape",insertOnClick:false});
-    horizontal.move(gesture(above,{point:{x:above.point.x+1,y:0,z:above.point.z}}));horizontal.commit();
-    assert.equal(node().position.y,3);
+    const direct=beginCurveGesture(f.ctx,above,{mode:"shape",insertOnClick:false});
+    direct.move(gesture(above,{point:{x:above.point.x+1,y:1.5,z:above.point.z}}));direct.commit();
+    assert.equal(node().position.y,1.5,"direct dragging must fit to surface elevation");
     assert.equal(node().position.x,above.point.x+1);
+
+    // Tangent handle direct editing preserves elevation rather than collapsing to surface
+    const handlePick={nodeId:`bezier-handle:1:${encodeURIComponent(edge.edgeId)}`,point:{x:above.point.x,y:3,z:above.point.z}};
+    const handleEdit=beginCurveGesture(f.ctx,handlePick,{mode:"shape",insertOnClick:false});
+    assert.ok(handleEdit,"tangent handle gesture should be created");
   }finally{f.close();}
 });
 

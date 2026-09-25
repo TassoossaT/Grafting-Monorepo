@@ -126,3 +126,26 @@ test("contour gestures are transient, ignore clicks and return trips, and cannot
     assert.equal(f.session.snapshot_json(),after);
   }finally{f.session.free();}
 });
+
+test("contour gesture on curved wall edge directly fits to surface height while tangent handle retains height", async () => {
+  const { beginCurveGesture } = await import("../src/composition/tabletop/tools/core/curve-edit-gesture.ts");
+  const f=sessionFixture();
+  let previewTarget;
+  f.runtime.showPreview=(desc)=>{ previewTarget = desc; };
+  f.runtime.clearPreview=()=>{ previewTarget = undefined; };
+  try {
+    curvedWall(f.runtime);
+    const midPick = { point: { x: 2, y: 0, z: -1 }, nodeId: curvePickId("bottom", "midpoint") };
+    const at = (point) => ({ start: midPick, current: { point }, samples: [midPick, { point }] });
+    const gesture = beginCurveGesture(f.ctx, midPick);
+    assert.ok(gesture, "midpoint gesture on curved wall should begin");
+    // Move midpoint over an elevated surface (y: 2.5)
+    gesture.move(at({ x: 2, y: 2.5, z: -2 }));
+    assert.ok(previewTarget, "preview should be shown for reshaped curve");
+    gesture.commit();
+    assert.equal(f.calls.feedback.at(-1)?.tone, "success");
+    const edge = f.runtime.getCurvedEdges().find(e => e.edgeId === "bottom");
+    assert.ok(edge);
+  } finally { f.session.free(); }
+});
+
