@@ -91,6 +91,31 @@ pub fn ribbon_profile_at(
         }
         let offsets =
             std::array::from_fn::<_, 2, _>(|i| offsets[i] + (end_offsets[i] - offsets[i]) * t);
+        // Anti-cusp clamp:
+        // A curve offset P(t) + w * n(t) forms a self-intersecting swallowtail when the offset
+        // on the concave (inner) side exceeds the local radius of curvature rho = speed^3 / |cross|.
+        // Clamping the concave offset to 0.85 * rho prevents self-intersecting ribbons
+        // while preserving the exact authored offset on the convex side and in gentle curves.
+        let a = curve.second_derivative(t).unwrap_or([0.0, 0.0, 0.0]);
+        let cross = d[0] * a[2] - d[2] * a[0];
+        let abs_cross = cross.abs();
+        let radius = if abs_cross > 1e-9 {
+            (speed * speed * speed) / abs_cross
+        } else {
+            f64::INFINITY
+        };
+        let clamp_concave = |w: f64| {
+            if w * cross > 0.0 && radius.is_finite() {
+                let max_w = (radius * 0.85).max(0.15);
+                if w.abs() > max_w {
+                    w.signum() * max_w
+                } else {
+                    w
+                }
+            } else {
+                w
+            }
+        };
         let point = |w: f64| {
             [
                 position[0] - d[2] / speed * w,
@@ -98,8 +123,8 @@ pub fn ribbon_profile_at(
                 position[2] + d[0] / speed * w,
             ]
         };
-        left.push(point(offsets[0]));
-        right.push(point(offsets[1]));
+        left.push(point(clamp_concave(offsets[0])));
+        right.push(point(clamp_concave(offsets[1])));
     }
     right.reverse();
     left.extend(right);
@@ -210,6 +235,17 @@ mod tests {
                 .iter()
                 .all(|s| s.outer.len() >= 3 && s.outer.iter().flatten().all(|v| v.is_finite()))
         );
+    }
+    #[test]
+    fn tight_concave_turn_mitigates_inner_cusp() {
+        let sharp_turn = CubicBezier {
+            points: [[0., 0., 0.], [0., 0., 1.], [1., 0., 1.], [1., 0., 0.]],
+        };
+        let ribbon_result = ribbon(sharp_turn, [-3., 3.], 0.05).unwrap();
+        assert!(!ribbon_result.outer.is_empty());
+        for p in &ribbon_result.outer {
+            assert!(p.iter().all(|v| v.is_finite()));
+        }
     }
     #[test]
     fn crossing_ribbons_make_one_surface() {

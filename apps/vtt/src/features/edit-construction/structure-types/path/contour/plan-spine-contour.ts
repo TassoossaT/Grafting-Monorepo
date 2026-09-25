@@ -34,6 +34,8 @@ export interface SpineChainInput {
   readonly bandOffsets: readonly number[];
   readonly miterLimit: number;
   readonly tolerance: number;
+  /** Start and end spine node IDs, if known, for graph connectivity partitioning. */
+  readonly nodeIds?: readonly [string, string];
 }
 
 export interface PlanSpineContourInput {
@@ -85,9 +87,68 @@ export interface PlanSpineContourResult {
   readonly consumedSurfaceKeys: readonly ConstructionSurfaceKey[];
 }
 
+function chainsShareAnchor(a: SpineChainInput, b: SpineChainInput): boolean {
+  if (a.nodeIds && b.nodeIds) {
+    if (a.nodeIds.some((id) => b.nodeIds!.includes(id))) return true;
+  }
+  for (const pa of a.controlPoints) {
+    for (const pb of b.controlPoints) {
+      if (Math.hypot(pa.x - pb.x, pa.z - pb.z) < 0.05) return true;
+    }
+  }
+  const aEnds = [a.sampledPoints[0], a.sampledPoints.at(-1)];
+  const bEnds = [b.sampledPoints[0], b.sampledPoints.at(-1)];
+  for (const pa of aEnds) {
+    if (!pa) continue;
+    for (const pb of bEnds) {
+      if (!pb) continue;
+      if (Math.hypot(pa.x - pb.x, pa.z - pb.z) < 0.05) return true;
+    }
+  }
+  return false;
+}
+
+export function partitionConnectedChains(
+  chains: readonly SpineChainInput[],
+): readonly (readonly SpineChainInput[])[] {
+  if (chains.length <= 1) return [chains];
+
+  const parent = chains.map((_, i) => i);
+  const find = (i: number): number => {
+    let curr = i;
+    while (parent[curr] !== curr) {
+      parent[curr] = parent[parent[curr]!]!;
+      curr = parent[curr]!;
+    }
+    return curr;
+  };
+  const unionSets = (i: number, j: number) => {
+    const rootI = find(i);
+    const rootJ = find(j);
+    if (rootI !== rootJ) parent[rootI] = rootJ;
+  };
+
+  for (let i = 0; i < chains.length; i += 1) {
+    for (let j = i + 1; j < chains.length; j += 1) {
+      if (chainsShareAnchor(chains[i]!, chains[j]!)) {
+        unionSets(i, j);
+      }
+    }
+  }
+
+  const groups = new Map<number, SpineChainInput[]>();
+  for (let i = 0; i < chains.length; i += 1) {
+    const root = find(i);
+    const list = groups.get(root);
+    if (list) list.push(chains[i]!);
+    else groups.set(root, [chains[i]!]);
+  }
+  return [...groups.values()];
+}
+
 /**
  * Derives the contour patch for one spine edit: every chain's ribbons,
- * across the whole touched cloud at once, unioned in plan -> `ConstructionPatch`.
+ * partitioned by connected spine component and unioned in plan -> `ConstructionPatch`.
  *
  * **The whole cloud, derived fresh, every time -- never patched onto what
  * was already there.** `input.editedChains` is every chain the touched
@@ -114,7 +175,14 @@ export function planSpineContour(input: PlanSpineContourInput): PlanSpineContour
     ribbons.push(...chain.ribbons);
   }
 
-  const shapes = input.union(ribbons);
+  const groups = partitionConnectedChains(input.editedChains);
+  const shapes: [number, number][][][] = [];
+  for (const group of groups) {
+    const groupRibbons = group.flatMap((chain) => chain.ribbons);
+    if (groupRibbons.length > 0) {
+      shapes.push(...input.union(groupRibbons));
+    }
+  }
   if (shapes.length === 0 && ribbons.length > 0) throw Error("O contorno da curva é degenerado; ajuste a forma ou a largura.");
   const consumed = input.standingRegions.map((topology) => topology.surfaceKey);
 

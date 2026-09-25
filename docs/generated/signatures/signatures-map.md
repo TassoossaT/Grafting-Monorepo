@@ -5555,6 +5555,12 @@ export interface PlanSpineContourResult {
   * most of their own nodes were welded back unchanged. The caller replaces
   * them in one atomic transaction with the unioned patch; a refused target
   * can never leave the standing faces deleted.
+export function partitionConnectedChains(
+  chains: readonly SpineChainInput[],
+  ): readonly (readonly SpineChainInput[])[] {
+  if (chains.length <= 1) return [chains];
+
+  const parent = chains.map((_, i) => i);
 export function planSpineContour(input: PlanSpineContourInput): PlanSpineContourResult | undefined {
   if (input.editedChains.length === 0) return undefined;
 

@@ -44,7 +44,8 @@ export function bezierChains(
     }
     const ribbons = [{ bandIndex: 0, outer: [...outer] }];
     return { chainId: e.edgeId, controlPoints: samples, sampledPoints: samples, ribbons,
-      bandOffsets: e.curve!.bandOffsets.length ? e.curve!.bandOffsets : offsets, miterLimit, tolerance: 0.025 };
+      bandOffsets: e.curve!.bandOffsets.length ? e.curve!.bandOffsets : offsets, miterLimit, tolerance: 0.025,
+      nodeIds: [e.startNodeId, e.endNodeId] as const };
   });
   // Connectivity, not proximity: disconnected or grade-separated anchors never join.
   const junctions = [...sections.values()].filter((incident) => incident.length > 1);

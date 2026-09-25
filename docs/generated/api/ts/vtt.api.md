@@ -4246,6 +4246,10 @@ sampled curve and its ribbons," never a corridor, a subtype, or a station.
 
 ### `property vtt.plan-spine-contour.SpineChainInput.miterLimit: number`
 
+### `property vtt.plan-spine-contour.SpineChainInput.nodeIds?: readonly [string, string]`
+
+Start and end spine node IDs, if known, for graph connectivity partitioning.
+
 ### `property vtt.plan-spine-contour.SpineChainInput.ribbons: readonly BandRibbon[]`
 
 The chain's own ribbon, plus any junction ribbon joining it to a neighbour.
@@ -4256,10 +4260,12 @@ The curve as the engine sampled it -- the height authority for the contour.
 
 ### `property vtt.plan-spine-contour.SpineChainInput.tolerance: number`
 
+### `function vtt.plan-spine-contour.partitionConnectedChains(chains: readonly SpineChainInput[]): readonly (readonly SpineChainInput[])[]`
+
 ### `function vtt.plan-spine-contour.planSpineContour(input: PlanSpineContourInput): PlanSpineContourResult | undefined`
 
 Derives the contour patch for one spine edit: every chain's ribbons,
-across the whole touched cloud at once, unioned in plan -> `ConstructionPatch`.
+partitioned by connected spine component and unioned in plan -> `ConstructionPatch`.
 
 **The whole cloud, derived fresh, every time -- never patched onto what
 was already there.** `input.editedChains` is every chain the touched
