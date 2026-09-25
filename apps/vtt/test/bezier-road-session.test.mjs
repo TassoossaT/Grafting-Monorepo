@@ -359,3 +359,20 @@ test("real WASM: multiple sequential connected road strokes spanning distance co
   } finally { f.session.free(); }
 });
 
+test("real WASM: moving a road endpoint to meet another road in a T-junction connects cleanly", () => {
+  const f = sessionFixture();
+  try {
+    draw(f, [point(-10, 0), point(10, 0)], "road:1");
+    draw(f, [point(0, -10), point(0, -5)], "road:2");
+    const edgesBefore = curves(f);
+    const road2Edge = edgesBefore.find((e) => e.edgeId.includes("road:2"));
+    edit(f, road2Edge.endNodeId, point(0, 0), "edit:t");
+    const edgesAfter = curves(f);
+    assert.equal(edgesAfter.length, 3, "T-junction edit splits main road and connects arriving branch");
+    const faces = f.runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "path");
+    assert.equal(faces.length, 1, "T-junction edit merges road surfaces into 1 continuous face");
+    const meshes = JSON.parse(f.session.all_surface_meshes_json());
+    assert.ok(meshes.length >= 1, "surface mesh must be generated for unified T-junction");
+  } finally { f.session.free(); }
+});
+

@@ -166,16 +166,99 @@ export function planSpineEditPatch(input: SpineEditInput): { readonly graphPatch
         edges: automaticEdges,
       };
     } else {
-      const movedNodes = [{ id: input.targetId, position: input.position }];
-      const moved = new Map(movedNodes.map((n) => [n.id, n]));
-      const movedCloud = spineComponent({ nodes: source.nodes.map((n) => moved.get(n.id) ?? n), edges: source.edges }, [input.targetId]);
-      const automatic = new Map(movedCloud.edges.filter((e) => e.curve?.mode === "automatic").map((e) => [e.edgeId, e.curve!]));
-      const converted = automatic.size ? withAutomaticHandles({ ...movedCloud, edges: movedCloud.edges.map((e) => automatic.has(e.edgeId) ? { ...e, curve: undefined } : e) }, input.port, [-2, 2]) : movedCloud;
-      const automaticEdges = converted.edges.filter((e) => automatic.has(e.edgeId)).map((e) => {
-        const authored = automatic.get(e.edgeId)!;
-        return { ...e, curve: { ...e.curve!, mode: "automatic" as const, bandOffsets: authored.bandOffsets, endBandOffsets: authored.endBandOffsets, surfaceType: authored.surfaceType } };
-      });
-      graphPatch = { nodes: movedNodes, removedEdgeIds: automaticEdges.map((e) => e.edgeId), edges: automaticEdges };
+      // Check if target node was moved to meet an existing road edge (T-junction snap):
+      const candidateEdges = source.edges.filter((e) =>
+        e.curve &&
+        e.startNodeId !== input.targetId &&
+        e.endNodeId !== input.targetId &&
+        isSpineControlNodeId(e.startNodeId) &&
+        isSpineControlNodeId(e.endNodeId)
+      );
+
+      let tSnap: { edge: typeof source.edges[number]; t: number; junctionPosition: ConstructionPosition; splitCurves: import("@/ports").CurveResult } | undefined;
+      for (const candidate of candidateEdges) {
+        const startPos = nodes.get(candidate.startNodeId);
+        const endPos = nodes.get(candidate.endNodeId);
+        if (!startPos || !endPos) continue;
+        const resolved = resolveCurves(input.port, [{ handles: candidate.curve!, start: startPos, end: endPos }], 0.025)[0];
+        if (!resolved?.curves[0]) continue;
+        const curve = resolved.curves[0];
+        const near = input.port.curveBatch({ tolerance: 0.025, commands: [{ kind: "nearest", curve, point: curvePoint(input.position) }] })[0];
+        if (!near?.parameter) continue;
+        const t = near.parameter;
+        if (t <= 0.05 || t >= 0.95) continue;
+        const evaluated = input.port.curveBatch({ tolerance: 0.025, commands: [{ kind: "split", curve, t, profile: candidate.curve }] })[0];
+        if (!evaluated?.curves[0]) continue;
+        const proj = evaluated.curves[0].points[3];
+        const dist = Math.hypot(proj[0] - input.position.x, proj[2] - input.position.z);
+        const heightDiff = Math.abs(proj[1] - input.position.y);
+        const reach = Math.max(...candidate.curve!.bandOffsets.map(Math.abs), 2.0);
+        if (dist <= reach && heightDiff <= 1.5 && (!tSnap || dist < Math.hypot(tSnap.junctionPosition.x - input.position.x, tSnap.junctionPosition.z - input.position.z))) {
+          tSnap = {
+            edge: candidate,
+            t,
+            junctionPosition: curvePosition(proj),
+            splitCurves: evaluated,
+          };
+        }
+      }
+
+      if (tSnap) {
+        const targetId = input.targetId;
+        const junctionPos = tSnap.junctionPosition;
+        const splitEdge = tSnap.edge;
+
+        const edgeA = {
+          ...splitEdge,
+          endNodeId: targetId,
+          curve: {
+            ...tSnap.splitCurves.handles[0]!,
+            mode: "automatic" as const,
+            bandOffsets: splitEdge.curve!.bandOffsets,
+            endBandOffsets: splitEdge.curve!.endBandOffsets,
+            surfaceType: splitEdge.curve!.surfaceType,
+          },
+        };
+        const edgeB = {
+          ...splitEdge,
+          edgeId: `${splitEdge.edgeId}:split:${input.operationId}`,
+          startNodeId: targetId,
+          curve: {
+            ...tSnap.splitCurves.handles[1]!,
+            mode: "automatic" as const,
+            bandOffsets: splitEdge.curve!.bandOffsets,
+            endBandOffsets: splitEdge.curve!.endBandOffsets,
+            surfaceType: splitEdge.curve!.surfaceType,
+          },
+        };
+
+        const movedNodes = [{ id: targetId, position: junctionPos }];
+        const movedMap = new Map(movedNodes.map((n) => [n.id, n]));
+        const movedCloud = spineComponent({ nodes: source.nodes.map((n) => movedMap.get(n.id) ?? n), edges: source.edges }, [targetId]);
+        const automatic = new Map(movedCloud.edges.filter((e) => e.edgeId !== splitEdge.edgeId && e.curve?.mode === "automatic").map((e) => [e.edgeId, e.curve!]));
+        const converted = automatic.size ? withAutomaticHandles({ ...movedCloud, edges: movedCloud.edges.map((e) => automatic.has(e.edgeId) ? { ...e, curve: undefined } : e) }, input.port, [-2, 2]) : movedCloud;
+        const automaticEdges = converted.edges.filter((e) => automatic.has(e.edgeId)).map((e) => {
+          const authored = automatic.get(e.edgeId)!;
+          return { ...e, curve: { ...e.curve!, mode: "automatic" as const, bandOffsets: authored.bandOffsets, endBandOffsets: authored.endBandOffsets, surfaceType: authored.surfaceType } };
+        });
+
+        graphPatch = {
+          nodes: movedNodes,
+          removedEdgeIds: [splitEdge.edgeId, ...automaticEdges.map((e) => e.edgeId)],
+          edges: [edgeA, edgeB, ...automaticEdges],
+        };
+      } else {
+        const movedNodes = [{ id: input.targetId, position: input.position }];
+        const moved = new Map(movedNodes.map((n) => [n.id, n]));
+        const movedCloud = spineComponent({ nodes: source.nodes.map((n) => moved.get(n.id) ?? n), edges: source.edges }, [input.targetId]);
+        const automatic = new Map(movedCloud.edges.filter((e) => e.curve?.mode === "automatic").map((e) => [e.edgeId, e.curve!]));
+        const converted = automatic.size ? withAutomaticHandles({ ...movedCloud, edges: movedCloud.edges.map((e) => automatic.has(e.edgeId) ? { ...e, curve: undefined } : e) }, input.port, [-2, 2]) : movedCloud;
+        const automaticEdges = converted.edges.filter((e) => automatic.has(e.edgeId)).map((e) => {
+          const authored = automatic.get(e.edgeId)!;
+          return { ...e, curve: { ...e.curve!, mode: "automatic" as const, bandOffsets: authored.bandOffsets, endBandOffsets: authored.endBandOffsets, surfaceType: authored.surfaceType } };
+        });
+        graphPatch = { nodes: movedNodes, removedEdgeIds: automaticEdges.map((e) => e.edgeId), edges: automaticEdges };
+      }
     }
   }
   // Edge edits seed both anchors even when neither anchor moved.

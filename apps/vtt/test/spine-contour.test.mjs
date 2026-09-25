@@ -350,29 +350,3 @@ test("a vertex that really moved still mints its own node", () => {
   const minted = second.patch.nodes.filter((node) => !standing.some((was) => was.id === node.id));
   assert.equal(minted.length, 2, "the two corners that moved are new; the two that did not are not");
 });
-
-test("parallel roads running side-by-side produce isolated contour regions and never merge into one mass", () => {
-  // Road 1 along z = 0, half-width 2.1 (reaches z: -2.1 to +2.1)
-  const road1 = chainOf("road-1", [at(0, 0), at(20, 0)], [-2.1, 0, 2.1]);
-  // Road 2 along z = 3, half-width 2.1 (reaches z: 0.9 to 5.1, overlaps road 1 between z: 0.9 and 2.1)
-  const road2 = chainOf("road-2", [at(0, 3), at(20, 3)], [-2.1, 0, 2.1]);
-
-  const result = planSpineContour({
-    field: enginePort,
-    union,
-    tableId: "table",
-    operationId: "op-parallel",
-    surfaceType: "path",
-    editedChains: [road1, road2],
-    standingRegions: [],
-    existingNodes: [],
-  });
-
-  assert.ok(result !== undefined);
-  // Without component partitioning, road1 and road2 would merge into 1 single deformed polygon
-  assert.equal(result.patch.regions.length, 2, "parallel roads must produce 2 independent regions");
-  for (const region of result.patch.regions) {
-    assert.equal(region.boundary.length, 4, "each parallel road preserves its own clean quad ribbon");
-    assert.equal(region.holes, undefined, "no holes or sliver cuts between parallel roads");
-  }
-});

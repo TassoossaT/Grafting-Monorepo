@@ -172,14 +172,6 @@ impl CubicBezier {
         let b = self.projected(1).deriv().eval(t);
         Ok([a.x, b.y, a.y])
     }
-    /// Returns the XYZ parameter second derivative for curvature and normal analysis.
-    pub(crate) fn second_derivative(&self, t: f64) -> Result<CurvePoint, String> {
-        self.validate()?;
-        parameter(t)?;
-        let a = self.projected(2).deriv().deriv().eval(t);
-        let b = self.projected(1).deriv().deriv().eval(t);
-        Ok([a.x, b.y, a.y])
-    }
     /// Exact de Casteljau subdivision preserving the locus.
     pub fn split(&self, t: f64) -> Result<[Self; 2], String> {
         self.validate()?;

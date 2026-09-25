@@ -1,7 +1,7 @@
-import type { ConstructionPosition } from "@/ports";
+import type { ConstructionGraphSnapshot, ConstructionPosition } from "@/ports";
 import { bezierChains, unionBezierRibbons } from "./bezier-road-plan.ts";
 import { bezierContourId, changedSpineCloud, standingRegionsForCloud } from "./path-cloud-scope.ts";
-import { planSpineContour } from "./contour/index.ts";
+import { planSpineContour, type SpineChainInput } from "./contour/index.ts";
 import type { SpineRegeneration, SpineRegenerationInput } from "../structure-type.ts";
 import { PATH_SURFACE_TYPE } from "./path-surface-type.ts";
 
@@ -35,7 +35,58 @@ export function regeneratePathSpine(input: SpineRegenerationInput): SpineRegener
   const segments = chains.flatMap((c) => c.sampledPoints!.slice(1).flatMap((p, i) => {
     const a = c.sampledPoints![i]!; return [a.x, a.y, a.z, p.x, p.y, p.z];
   }));
-  const footprintOutline = chains.flatMap((c) => c.ribbons.flatMap((r) => r.outer)).map((p) => [p.x, p.z] as const);
+  const footprintOutline = editedFootprint(input, cloud.snapshot, chains);
   return { request: { operationId: input.operationId, sourceSurfaceKeys: plan.consumedSurfaceKeys, patch: plan.patch, graphPatch, footprintOutline },
     preview: Float32Array.from(segments) };
+}
+
+/**
+ * The ground this edit claims: the spans it actually moved, not the component.
+ *
+ * The contour is the whole component regenerated, but what lies underneath
+ * only cares where the road now reaches *because of this edit*. Handing the
+ * terrain every ribbon of the network -- worse, their rings concatenated into
+ * one polygon that bridges across the ground between them -- made every drag
+ * regenerate the whole corridor, and each regeneration came back finer along
+ * the road than the last. Ground the road left is not this footprint's job:
+ * the lattice reaction reads it from the before/after shape difference.
+ */
+function editedFootprint(
+  input: SpineRegenerationInput,
+  snapshot: ConstructionGraphSnapshot,
+  chains: readonly SpineChainInput[],
+): readonly (readonly [number, number])[] | undefined {
+  const movedNodes = new Set(input.graphPatch.nodes.map((node) => node.id));
+  const patchedEdges = new Set(input.graphPatch.edges.map((edge) => edge.edgeId));
+  const touched = new Set(snapshot.edges
+    .filter((edge) => patchedEdges.has(edge.edgeId) || movedNodes.has(edge.startNodeId) || movedNodes.has(edge.endNodeId))
+    .map((edge) => edge.edgeId));
+  const ribbons = chains.filter((chain) => touched.has(chain.chainId)).flatMap((chain) => chain.ribbons ?? []);
+  if (ribbons.length === 0) return undefined;
+  let union: [number, number][][][];
+  try {
+    union = unionBezierRibbons(input.port, ribbons);
+  } catch {
+    return undefined;
+  }
+  // One ring is what the footprint contract carries. The spans around one
+  // moved node or edge are joined, so their union is one piece; should it
+  // ever split, the largest piece is the one worth answering for.
+  let best: [number, number][] | undefined;
+  let bestArea = 0;
+  for (const piece of union) {
+    const ring = piece[0];
+    if (ring === undefined || ring.length < 3) continue;
+    let twice = 0;
+    for (let index = 0; index < ring.length; index += 1) {
+      const [ax, az] = ring[index]!;
+      const [bx, bz] = ring[(index + 1) % ring.length]!;
+      twice += ax * bz - bx * az;
+    }
+    if (Math.abs(twice) > bestArea) {
+      bestArea = Math.abs(twice);
+      best = ring;
+    }
+  }
+  return best?.map(([x, z]) => [x, z] as const);
 }
