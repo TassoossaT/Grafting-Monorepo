@@ -1946,6 +1946,10 @@ The mode this tool draws in now.
 
 The default climb from start to end when the end is not on a floor.
 
+### `property vtt.curve-draft.CurveDraftOptions.widthOf: (params: ToolParamsFor<Id>) => number`
+
+The width the preview band is drawn at.
+
 ### `property vtt.curve-draft.CurveDraftOptions.withMode?: (params: ToolParamsFor<Id>, mode: CurveDraftMode) => ToolParamsFor<Id>`
 
 Whether R cycles the mode, and how the tool stores the next one.

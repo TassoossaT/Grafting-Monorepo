@@ -66,6 +66,7 @@ const rawSlopeSpiralTool = createCurveDraftTool({
   defaultParams: () => DEFAULT_TOOL_PARAMS["slope-spiral"],
   modeOf: () => "spiral",
   riseOf: (params) => params.rise,
+  widthOf: (params) => params.width,
   commit: commitDraft,
   color: COLOR,
 });
@@ -80,6 +81,7 @@ const rawSlopeCurveTool = createCurveDraftTool({
   modeOf: (params) => params.mode ?? "points",
   withMode: (params, mode) => ({ ...params, mode }),
   riseOf: (params) => params.rise,
+  widthOf: (params) => params.width,
   commit: commitDraft,
   color: COLOR,
 });

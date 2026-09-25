@@ -1,8 +1,8 @@
 import { hasTrait } from "../../../../features/edit-construction/index.ts";
-import type { ConstructionToolId, ToolParamsFor } from "../../../../features/edit-construction/index.ts";
+import type { ConstructionToolId, PreviewDescriptor, ToolParamsFor } from "../../../../features/edit-construction/index.ts";
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import type { ConstructionPosition, ConstructionRegionTopology, CubicBezier, CurveHandles, CurvePoint, CurveResult } from "../../../../ports/index.ts";
-import { polylineSegmentsPreview } from "../shapes/preview-shapes.ts";
+import { createRoadMeshPreview } from "../paths/road-preview-mesh.ts";
 import type { ConstructionTool, PointerSample, ToolContext } from "./tool-context.ts";
 
 /**
@@ -51,6 +51,8 @@ export interface CurveDraftOptions<Id extends ConstructionToolId> {
   /** The default climb from start to end when the end is not on a floor. */
   readonly riseOf: (params: ToolParamsFor<Id>) => number;
   readonly commit: (ctx: ToolContext, draft: FinishedCurveDraft, params: ToolParamsFor<Id>) => void;
+  /** The width the preview band is drawn at. */
+  readonly widthOf: (params: ToolParamsFor<Id>) => number;
   readonly color: number;
 }
 
@@ -71,24 +73,36 @@ interface DraftState {
   /** A rise set with Shift, overriding the tool's own. */
   rise?: number;
   shift?: { readonly screenY: number; readonly base: number };
+  /** The floors on the table, read once per click rather than on every pointer move. */
+  floors: readonly ConstructionRegionTopology[];
+  /** The last preview and what it was drawn for, so a pointer that has not moved costs nothing. */
+  last?: { readonly key: string; readonly preview: PreviewDescriptor | undefined };
   readout?: string;
+  readoutAt?: number;
 }
 
 const EDGE_REACH = 0.5;
+const READOUT_INTERVAL_MS = 150;
+const PREVIEW_OPACITY = 0.55;
 const xyz = (p: ConstructionPosition): CurvePoint => [p.x, p.y, p.z];
 const at = (p: CurvePoint): ConstructionPosition => ({ x: p[0], y: p[1], z: p[2] });
 
+/** Every floor on the table. */
+function floorsOf(ctx: ToolContext): readonly ConstructionRegionTopology[] {
+  return ctx.runtime.getAllRegionTopologies().filter((topology) => hasTrait(topology.surfaceType, "floor"));
+}
+
 /** The floor `sample` landed on, if any. */
-function floorAt(ctx: ToolContext, sample: PointerSample): ConstructionRegionTopology | undefined {
-  return ctx.runtime.getAllRegionTopologies().find((topology) => hasTrait(topology.surfaceType, "floor") && (sample.surfaceRef
+function floorAt(floors: readonly ConstructionRegionTopology[], sample: PointerSample): ConstructionRegionTopology | undefined {
+  return floors.find((topology) => sample.surfaceRef
     ? surfaceRefFromNodeSet(topology.surfaceKey) === sample.surfaceRef
-    : sample.nodeId !== undefined && topology.nodes.some((node) => node.id === sample.nodeId)));
+    : sample.nodeId !== undefined && topology.nodes.some((node) => node.id === sample.nodeId));
 }
 
 /** A click's end: on a floor near its edge, moved onto that edge and facing off the floor. */
-function endAt(ctx: ToolContext, sample: PointerSample, height: number): End {
+function endAt(floors: readonly ConstructionRegionTopology[], sample: PointerSample, height: number): End {
   const point = { ...sample.point, y: height };
-  const floor = floorAt(ctx, sample);
+  const floor = floorAt(floors, sample);
   if (!floor) return { point, sample };
   const positions = new Map(floor.nodes.map((node) => [node.id, node.position]));
   let best: { point: ConstructionPosition; out: { x: number; z: number }; distance: number } | undefined;
@@ -151,15 +165,15 @@ export function createCurveDraftTool<Id extends ConstructionToolId>(options: Cur
     let state = states.get(ctx.runtime);
     const mode = options.modeOf(params);
     if (!state || state.mode !== mode) {
-      state = { mode, ends: [], turned: 0 };
+      state = { mode, ends: [], turned: 0, floors: floorsOf(ctx) };
       states.set(ctx.runtime, state);
     }
     return state;
   };
   const clear = (ctx: ToolContext) => states.delete(ctx.runtime);
   const startHeight = (state: DraftState) => state.ends[0]?.point.y ?? 0;
-  const endHeight = (ctx: ToolContext, state: DraftState, sample: PointerSample, params: ToolParamsFor<Id>) => {
-    const floor = floorAt(ctx, sample);
+  const endHeight = (state: DraftState, sample: PointerSample, params: ToolParamsFor<Id>) => {
+    const floor = floorAt(state.floors, sample);
     return floor?.nodes[0]?.position.y ?? startHeight(state) + (state.rise ?? options.riseOf(params));
   };
 
@@ -179,11 +193,11 @@ export function createCurveDraftTool<Id extends ConstructionToolId>(options: Cur
   /** What finishing now would build, with `sample` as the last click or the pointer. */
   function planned(ctx: ToolContext, state: DraftState, sample: PointerSample, params: ToolParamsFor<Id>, turned?: number): FinishedCurveDraft | undefined {
     const ends = state.ends;
-    const height = endHeight(ctx, state, sample, params);
+    const height = endHeight(state, sample, params);
     switch (state.mode) {
       case "straight": {
         if (ends.length < 1) return undefined;
-        const end = endAt(ctx, sample, height).point;
+        const end = endAt(state.floors, sample, height).point;
         const a = ends[0]!.point;
         if (Math.hypot(end.x - a.x, end.z - a.z) < 0.1) return undefined;
         return { kind: "spans", spans: spansOf(arcThrough(ctx, a, { x: (a.x + end.x) / 2, y: (a.y + end.y) / 2, z: (a.z + end.z) / 2 }, end)) };
@@ -195,11 +209,11 @@ export function createCurveDraftTool<Id extends ConstructionToolId>(options: Cur
       }
       case "points": {
         if (ends.length < 1) return undefined;
-        return { kind: "points", points: [...ends.map((end) => end.point), endAt(ctx, sample, height).point] };
+        return { kind: "points", points: [...ends.map((end) => end.point), endAt(state.floors, sample, height).point] };
       }
       case "connect": {
         if (ends.length < 1) return undefined;
-        const end = endAt(ctx, sample, height);
+        const end = endAt(state.floors, sample, height);
         if (Math.hypot(end.point.x - ends[0]!.point.x, end.point.z - ends[0]!.point.z) < 0.1) return undefined;
         return { kind: "spans", spans: [connecting(ends[0]!, end)] };
       }
@@ -235,9 +249,40 @@ export function createCurveDraftTool<Id extends ConstructionToolId>(options: Cur
       parts.push(`raio ${Math.hypot(start!.point.x - center!.point.x, start!.point.z - center!.point.z).toFixed(2)} m`, `voltas ${(Math.abs(state.turned) / (2 * Math.PI)).toFixed(2)}`);
     }
     const message = parts.join(" · ");
-    if (message === state.readout) return;
+    const now = Date.now();
+    // Updating the panel re-renders it: never more than a few times a second.
+    if (message === state.readout || (state.readoutAt !== undefined && now - state.readoutAt < READOUT_INTERVAL_MS)) return;
     state.readout = message;
+    state.readoutAt = now;
     ctx.reportFeedback({ tone: "info", message });
+  }
+
+  /** The band the draft would build, filled at its real width, with a disk at each end and at the pointer. */
+  function drawn(ctx: ToolContext, state: DraftState, current: PointerSample, params: ToolParamsFor<Id>, width: number, turned: number | undefined): PreviewDescriptor {
+    const anchors = state.ends.map((end) => end.point);
+    let curves: readonly CubicBezier[] = [];
+    if (state.mode === "spiral" && state.ends.length === 1) {
+      // Centre only: the circle the start click will choose the radius of.
+      const center = state.ends[0]!.point;
+      const radius = Math.hypot(current.point.x - center.x, current.point.z - center.z);
+      if (radius > 0.1) {
+        curves = ctx.runtime.curveBatch({ tolerance: 0.05, commands: [{ kind: "helix", center: xyz(center), radius, startAngle: Math.atan2(current.point.z - center.z, current.point.x - center.x), sweep: 2 * Math.PI, rise: 0 }] })[0]!.curves;
+      }
+    } else {
+      const draft = planned(ctx, state, current, params, turned);
+      if (draft) curves = curvesOf(ctx, draft);
+    }
+    const ribbons = curves.length === 0 ? [] : ctx.runtime.curveBatch({ tolerance: 0.08, commands: curves.map((curve) => ({ kind: "ribbon" as const, curve, offsets: [-width / 2, width / 2] as const })) });
+    if (state.mode !== "spiral" || state.ends.length >= 2) report(ctx, state, curves, ribbons.map((r) => r.lengths[0] ?? 0));
+    return createRoadMeshPreview({
+      ribbons,
+      fallbackPoints: [anchors.at(-1)!, { ...current.point, y: anchors.at(-1)!.y }],
+      anchors,
+      cursor: current.point,
+      bedWidth: width,
+      color: options.color,
+      opacity: PREVIEW_OPACITY,
+    });
   }
 
   function finish(ctx: ToolContext, state: DraftState, sample: PointerSample, params: ToolParamsFor<Id>): void {
@@ -273,8 +318,10 @@ export function createCurveDraftTool<Id extends ConstructionToolId>(options: Cur
     drafting: (ctx) => (states.get(ctx.runtime)?.ends.length ?? 0) > 0,
     previewFor(gesture, params, ctx) {
       const state = stateOf(ctx, params);
-      if (state.ends.length === 0) return undefined;
       const current = gesture.current;
+      const width = Math.max(0.1, options.widthOf(params));
+      // Before the first click: only where it would start.
+      if (state.ends.length === 0) return createRoadMeshPreview({ anchors: [], cursor: current.point, bedWidth: width, color: options.color, opacity: PREVIEW_OPACITY });
       if (current.shiftKey && current.screenY !== undefined) {
         state.shift ??= { screenY: current.screenY, base: state.rise ?? options.riseOf(params) };
         state.rise = state.shift.base + Math.round((state.shift.screenY - current.screenY) / 40 / 0.25) * 0.25;
@@ -283,22 +330,19 @@ export function createCurveDraftTool<Id extends ConstructionToolId>(options: Cur
       }
       try {
         const turned = state.mode === "spiral" && state.ends.length >= 2 ? spiralTurn(state, current.point) : undefined;
-        const draft = planned(ctx, state, current, params, turned);
-        if (!draft) {
-          const from = state.ends.at(-1)!.point;
-          return polylineSegmentsPreview([from, { ...current.point, y: from.y }], options.color);
-        }
-        const curves = curvesOf(ctx, draft);
-        const sampled = ctx.runtime.curveBatch({ tolerance: 0.05, commands: [{ kind: "sample", curves }] })[0]!;
-        report(ctx, state, curves, sampled.lengths);
-        const line = sampled.samples.flatMap((samples, i) => samples.slice(i === 0 ? 0 : 1)).map((s) => at(s.position));
-        return polylineSegmentsPreview(line, options.color);
+        const key = [current.point.x.toFixed(2), current.point.z.toFixed(2), state.rise ?? "", current.surfaceRef ?? "", turned?.toFixed(3) ?? "", state.ends.length, width].join("|");
+        if (state.last?.key === key) return state.last.preview;
+        const preview = drawn(ctx, state, current, params, width, turned);
+        state.last = { key, preview };
+        return preview;
       } catch {
         return undefined;
       }
     },
     onClick(ctx, sample, params) {
       const state = stateOf(ctx, params);
+      state.floors = floorsOf(ctx);
+      state.last = undefined;
       try {
         const needed = clicksToFinish[state.mode];
         const last = state.ends.at(-1);
@@ -316,9 +360,9 @@ export function createCurveDraftTool<Id extends ConstructionToolId>(options: Cur
         // The first click (and a spiral's start) takes the height of what it
         // hit; an arc's second click is its end; points between are the owner's.
         const height = state.ends.length === 0 || state.mode === "spiral" ? node?.position.y ?? sample.point.y
-          : state.mode === "arc" ? endHeight(ctx, state, sample, params) : startHeight(state);
+          : state.mode === "arc" ? endHeight(state, sample, params) : startHeight(state);
         if (last && Math.hypot(sample.point.x - last.point.x, sample.point.z - last.point.z) < 0.1) return;
-        state.ends.push(state.ends.length === 0 || state.mode !== "spiral" ? endAt(ctx, sample, height) : { point: { ...sample.point, y: height }, sample });
+        state.ends.push(state.ends.length === 0 || state.mode !== "spiral" ? endAt(state.floors, sample, height) : { point: { ...sample.point, y: height }, sample });
         if (state.mode === "spiral" && state.ends.length === 2) {
           // The spiral starts at the start click's height; the centre is only a position.
           state.ends[0] = { ...state.ends[0]!, point: { ...state.ends[0]!.point, y: height } };

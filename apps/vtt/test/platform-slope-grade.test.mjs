@@ -213,3 +213,28 @@ test("pulling a straight span's midpoint bends it into an arc through the pointe
     assert.ok(Math.hypot(center[0], center[1]) < 1e-6, `the arc through (-3,0), (0,3), (3,0) is centred at the origin: ${center}`);
   } finally { session.free(); }
 });
+
+test("the draft preview is a filled band at the ramp's width, and hovering never re-reads the table", () => {
+  const { ctx, runtime, session } = sessionFixture();
+  const params = { width: 2, rise: 3, mode: "arc" };
+  try {
+    for (let i = 0; i < 40; i += 1) addFace(runtime, `f${i}`, "platform", [[0, 0], [1, 0], [1, 1], [0, 1]].map(([x, z], k) => ({ id: `f${i}:${k}`, position: { x: x + 20 + (i % 8) * 2, y: 0, z: z + Math.floor(i / 8) * 2 } })));
+    clickAll(slopeCurveTool, ctx, [{ x: 0, y: 0, z: 0 }, { x: 8, y: 0, z: 0 }], params);
+    let reads = 0;
+    const read = runtime.getAllRegionTopologies;
+    runtime.getAllRegionTopologies = () => { reads += 1; return read(); };
+    const started = performance.now();
+    let preview;
+    for (let i = 0; i < 120; i += 1) {
+      const sample = { point: { x: 4 + Math.cos(i / 10), y: 0, z: 3 + Math.sin(i / 10) } };
+      preview = slopeCurveTool.previewFor({ start: sample, current: sample, samples: [sample] }, params, ctx);
+    }
+    const perFrame = (performance.now() - started) / 120;
+    assert.equal(reads, 0, "hovering reads nothing from the table");
+    assert.equal(preview.kind, "mesh", "a filled band, not a line");
+    const xs = [], zs = [];
+    for (let i = 0; i < preview.positions.length; i += 3) { xs.push(preview.positions[i]); zs.push(preview.positions[i + 2]); }
+    assert.ok(Math.min(...zs) < -0.9, "the band has the ramp's width either side of its axis");
+    assert.ok(perFrame < 5, `a preview frame costs ${perFrame.toFixed(2)} ms`);
+  } finally { session.free(); }
+});
