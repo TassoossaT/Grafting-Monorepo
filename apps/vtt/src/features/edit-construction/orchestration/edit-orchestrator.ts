@@ -131,7 +131,7 @@ export function planEdit(
       const primarySet = new Set(primary);
       const structural = structureTypeFor(cloud.seed.surfaceType)?.motionInfluences ? []
         : policy.cascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot }) ?? [];
-      const grouped = policy.groupCascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot, allTopologies: topologies }) ?? [];
+      const grouped = policy.groupCascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot }) ?? [];
       const extras = [...structural, ...grouped];
       for (const op of [...primary, ...extras]) {
         if (op.kind === "move-vertex") {
@@ -190,8 +190,7 @@ export function planEdit(
     return { kind: "deny", role: policy.role, reason: `${solverBound.label} requer o resolvedor estrutural da sessao.` };
   }
   const cascade = policy.cascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot }) ?? [];
-  // Without a session the grabbed cloud is all of the table this plan can see.
-  const grouped = policy.groupCascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot, allTopologies: cloud.members }) ?? [];
+  const grouped = policy.groupCascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot }) ?? [];
   return {
     kind: "apply",
     role: policy.role,

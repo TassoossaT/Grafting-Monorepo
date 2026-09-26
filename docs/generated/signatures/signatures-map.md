@@ -5782,7 +5782,7 @@ export const PANEL_ROLES = {
   topEdge: "panel-top-edge",
   post: "panel-post",
   body: "panel-body",
-  /** The height widget's upper zone: raises every other level top run currently at the grabbed one's height, table-wide. */
+  /** The height widget's upper zone: raises every top run across the grabbed cloud together. */
 export interface PanelTopRun {
   readonly edge: ConstructionRegionEdge;
   readonly start: ConstructionNodeSnapshot;

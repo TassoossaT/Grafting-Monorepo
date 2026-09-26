@@ -5965,15 +5965,6 @@ beside this one. The cloud already *is* that list, resolved by the layer
 whose job it is (`construction-cloud.ts`) instead of recomputed by
 whichever tool happens to be calling.
 
-### `property vtt.structure-type.CascadeContext.allTopologies?: readonly ConstructionRegionTopology[]`
-
-Every region topology the plan can see: the whole table when the
-session is at hand, only the grabbed cloud's members otherwise. A
-`groupCascade` reaches through this for matches outside the grabbed
-cloud -- e.g. every wall currently level with the grabbed one, wherever
-it stands -- which a cloud, scoped to one connected same-type run, can
-never contain by construction.
-
 ### `property vtt.structure-type.CascadeContext.cloud: CloudTopology`
 
 ### `property vtt.structure-type.CascadeContext.delta: { x: number; y: number; z: number }`
@@ -6123,11 +6114,9 @@ before anything else sees the delta.
 
 ### `property vtt.structure-type.RolePolicy.groupCascade?: (context: CascadeContext) => readonly AtomicEditOp[]`
 
-Extra ops matched by a type's own declared value or trait across the
-*whole table*, not the grabbed cloud -- the opportunistic case, where
-what reaches together is decided at gesture time by comparing current
-state, not by any standing weld. A wall's per-segment height widget uses
-this to raise every other wall currently level with the one grabbed.
+Extra ops matched across the grabbed cloud that are not expressed as
+standing welds or structural motion influences (e.g. raising every top run
+of a wall cloud together via the height widget's group zone).
 
 Applied unconditionally, unlike cascade: the solver path
 (`edit-orchestrator.ts`) supersedes `cascade` whenever the type also

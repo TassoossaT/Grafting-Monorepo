@@ -79,11 +79,9 @@ export interface RolePolicy {
    */
   readonly cascade?: (context: CascadeContext) => readonly AtomicEditOp[];
   /**
-   * Extra ops matched by a type's own declared value or trait across the
-   * *whole table*, not the grabbed cloud -- the opportunistic case, where
-   * what reaches together is decided at gesture time by comparing current
-   * state, not by any standing weld. A wall's per-segment height widget uses
-   * this to raise every other wall currently level with the one grabbed.
+   * Extra ops matched across the grabbed cloud that are not expressed as
+   * standing welds or structural motion influences (e.g. raising every top run
+   * of a wall cloud together via the height widget's group zone).
    *
    * Applied unconditionally, unlike {@link cascade}: the solver path
    * (`edit-orchestrator.ts`) supersedes `cascade` whenever the type also
@@ -149,15 +147,6 @@ export interface CascadeContext {
   /** The delta already constrained by the role's own axes. */
   readonly delta: { readonly x: number; readonly y: number; readonly z: number };
   readonly graphSnapshot?: ConstructionGraphSnapshot;
-  /**
-   * Every region topology the plan can see: the whole table when the
-   * session is at hand, only the grabbed cloud's members otherwise. A
-   * `groupCascade` reaches through this for matches outside the grabbed
-   * cloud -- e.g. every wall currently level with the grabbed one, wherever
-   * it stands -- which a cloud, scoped to one connected same-type run, can
-   * never contain by construction.
-   */
-  readonly allTopologies?: readonly ConstructionRegionTopology[];
 }
 
 /**
