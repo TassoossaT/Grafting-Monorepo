@@ -87,6 +87,8 @@ export function commitPatchReplacement(
   options: CommitOptions & {
     /** Faces the replacement moves without replacing them -- carried along; each type answers its own move. */
     readonly carries?: readonly ConstructionSurfaceKey[];
+    /** More of the same change, once the replacement stands and before anything answers it. */
+    readonly afterward?: (outcome: ConstructionPatchOutcome) => void;
   },
 ): TransactionResult<ConstructionPatchOutcome> {
   const origin = options.origin ?? "local";
@@ -94,6 +96,7 @@ export function commitPatchReplacement(
     const before = topologiesOf(runtime, request.sourceSurfaceKeys);
     const carriedBefore = topologiesOf(runtime, options.carries ?? []);
     const outcome = runtime.applyPatchReplacement(request, origin, options.transactionId);
+    options.afterward?.(outcome);
     if (carriedBefore.length > 0) dispatchEffects(runtime, movedEffects(runtime, carriedBefore, outcome.removedNodeIds, [], options.transactionId), options.reactions);
     return { value: outcome, change: shapeChangeOfReplacement(runtime, request, before, outcome, options.subtype) };
   });

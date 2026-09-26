@@ -1,4 +1,4 @@
-import { DEFAULT_TOOL_PARAMS, fitPath, floatingPlatformStructureType, hasTrait, platformStructureType } from "../../../../features/edit-construction/index.ts";
+import { DEFAULT_TOOL_PARAMS, fitPath, floatingPlatformStructureType, hasTrait, platformStructureType, weldFreeEndsOnto } from "../../../../features/edit-construction/index.ts";
 import type { FittedEdge, ToolParamsByTool } from "../../../../features/edit-construction/index.ts";
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import type { ConstructionPosition, ConstructionRegionTopology } from "../../../../ports/index.ts";
@@ -183,7 +183,15 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
       sourceSurfaceKeys: remaining.map(({ source }) => source.surfaceKey),
       patch: { nodes: [...nodes.values()], edges: builder.all(), regions },
       footprintOutline,
-    }, { transactionId: operationId });
+    }, {
+      transactionId: operationId,
+      // A floor drawn against a ramp's or spiral's free end joins it, corners picked or not.
+      afterward: (outcome) => {
+        if (params.mode === "cut") return;
+        const welds = weldFreeEndsOnto(ctx.runtime.getGraphSnapshot(), ctx.runtime.getAllRegionTopologies(), outcome.createdSurfaceKeys, `${operationId}:ends`);
+        if (welds) ctx.runtime.applyPatchReplacement(welds, "local", operationId);
+      },
+    });
     if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
     ctx.reportFeedback({ tone: "success", message: `Plataforma: ${regions.length} face(s) na elevação ${params.elevation}.` });
   } catch (error) { ctx.reportFeedback({ tone: "error", message: error instanceof Error ? error.message : String(error) }); }

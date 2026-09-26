@@ -27,3 +27,4 @@ export type { EditOpSink, EditPlan } from "./edit-orchestrator.ts";
 export { globalHandleActions, handleMotionAt, planGlobalHandle, shownGlobalHandleAt, shownGlobalHandles } from "./global-handles/index.ts";
 export type { CloudGlobalHandle } from "./global-handles/cloud-handle-provider.ts";
 export { detachSpineEnd, regenerateWithEndWelds, spineChainEnds, spineEndsLanded, spineEndWelded } from "./spine-end-welds.ts";
+export { freeStructureEnds, weldFreeEndsOnto } from "./free-end-welds.ts";

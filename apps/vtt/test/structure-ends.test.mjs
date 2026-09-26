@@ -339,3 +339,29 @@ test("deleting a welded curved ramp drops its faces and makes its floor's side w
     assert.equal(faces(runtime, "platform")[0].outerLoops[0].length, 4, "the floor's side is one edge again");
   } finally { session.free(); }
 });
+
+test("a floor drawn against a ramp's free end welds it, without its corners being picked", async () => {
+  const { commitPlatformContour } = await import("../src/composition/tabletop/tools/platform/platform-contour-tool.ts");
+  const { commitPlatformSlope } = await import("../src/composition/tabletop/tools/slope/slope-commit.ts");
+  const { controlSectionId, isSpineControlNodeId } = await import("../src/features/edit-construction/index.ts");
+  const fixture = sessionFixture();
+  const { runtime, session, ctx, calls } = fixture;
+  try {
+    // A straight ramp climbing east to a free top at x = 8, y = 2.
+    drawn(fixture, { x: 4, y: 0, z: 2 }, { x: 8, y: 0, z: 2 });
+    // A curved ramp climbing west to a free end at x = -4, y = 2.
+    commitPlatformSlope(ctx, [{ x: 0, y: 0, z: 8 }, { x: -4, y: 2, z: 8 }], { width: 1.5 });
+    const curveEnd = runtime.getGraphSnapshot().nodes.find((n) => isSpineControlNodeId(n.id) && Math.abs(n.position.x + 4) < 1e-6);
+    // Floors drawn with sides running across each free end -- no corner anywhere near them.
+    commitPlatformContour(ctx, [[8, -2], [12, -2], [12, 6], [8, 6]].map(([x, z]) => ({ point: { x, y: 2, z } })), { mode: "create", elevation: 2, support: "floating", shape: "rectangle" });
+    assert.equal(calls.feedback.at(-1).tone, "success", JSON.stringify(calls.feedback.at(-1)));
+    commitPlatformContour(ctx, [[-8, 4], [-4, 4], [-4, 12], [-8, 12]].map(([x, z]) => ({ point: { x, y: 2, z } })), { mode: "create", elevation: 2, support: "floating", shape: "rectangle" });
+    const floors = faces(runtime, "platform-floating");
+    assert.equal(floors.length, 2);
+    const east = floors.find((f) => f.nodes.some((n) => n.position.x > 10));
+    const west = floors.find((f) => f.nodes.some((n) => n.position.x < -6));
+    assert.ok(welded(east, ramp(runtime), "top"), "the straight ramp's top is welded into the floor drawn against it");
+    assert.ok(["min", "max"].every((side) => west.nodes.some((n) => n.id === controlSectionId(curveEnd.id, side))), "and the curved ramp's end into the other");
+    assert.equal(ctx.history.undo()?.kind, "transaction", "one step with the floor it came with");
+  } finally { session.free(); }
+});
