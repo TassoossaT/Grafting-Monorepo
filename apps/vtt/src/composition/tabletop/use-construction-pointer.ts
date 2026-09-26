@@ -256,6 +256,17 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       if (event.key === "Escape" && tool.onCancel) {
         tool.onCancel(ownedContext); release(); event.preventDefault(); return;
       }
+      if ((event.key === "Delete" || event.key === "Backspace") && !gestureRef.current) {
+        // A picked structure that offers to be deleted is deleted by the key too.
+        const picked = selectedId.current;
+        const { toolParams, activeTool } = optionsRef.current;
+        if (picked !== undefined && tool.selectionActions?.(ownedContext, picked).some((action) => action.id === "delete")
+          && tool.onSelectionAction?.(ownedContext, "delete", toolParams[activeTool] as never, picked)) {
+          event.preventDefault();
+          refreshEdgeOverlay();
+          return;
+        }
+      }
       if ((event.key === "Delete" || event.key === "Backspace") && tool.onDeleteKey) {
         tool.onDeleteKey(ownedContext);
       }

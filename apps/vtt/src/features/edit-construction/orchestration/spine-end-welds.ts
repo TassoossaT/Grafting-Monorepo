@@ -67,6 +67,15 @@ function landEnds(snapshot: ConstructionGraphSnapshot, graphPatch: ConstructionG
   return { graphPatch: { ...graphPatch, nodes: [...nodes.values()], edges: [...edges.values()] }, shifted, landed };
 }
 
+/** The free ends of spans `graphPatch` deletes that no span is left on. */
+function vanishedEnds(snapshot: ConstructionGraphSnapshot, graphPatch: ConstructionGraphPatch): readonly string[] {
+  const removed = new Set(graphPatch.removedEdgeIds ?? []);
+  if (removed.size === 0) return [];
+  const touched = snapshot.edges.filter((edge) => removed.has(edge.edgeId)).flatMap((edge) => [edge.startNodeId, edge.endNodeId]);
+  const standing = new Set(prospectiveGraph(snapshot, graphPatch).edges.filter(isSpineEdge).flatMap((edge) => [edge.startNodeId, edge.endNodeId]));
+  return spineChainEnds(snapshot, touched).filter((id) => !standing.has(id));
+}
+
 /** `graphPatch` with every moved free end placed on the floor edge it lands on -- what a preview draws. */
 export function spineEndsLanded(snapshot: ConstructionGraphSnapshot, graphPatch: ConstructionGraphPatch, generation: SpineGeneration, topologies: readonly ConstructionRegionTopology[]): ConstructionGraphPatch {
   return generation.endRung ? landEnds(snapshot, graphPatch, generation, topologies).graphPatch : graphPatch;
@@ -87,11 +96,13 @@ export function regenerateWithEndWelds(
   const endRung = generation.endRung;
   const { graphPatch, shifted, landed } = landEnds(input.snapshot, input.graphPatch, generation, input.topologies);
   const regenerated = generation.regenerate({ ...input, graphPatch });
-  if (!regenerated || shifted.length === 0) return regenerated;
+  // Ends whose spans the edit deletes come off their floors too.
+  const leaving = [...shifted, ...vanishedEnds(input.snapshot, graphPatch).filter((id) => !shifted.includes(id))];
+  if (!regenerated || leaving.length === 0) return regenerated;
   const { request } = regenerated;
   const positions = new Map(request.patch.nodes.map((node) => [node.id, node.position]));
   const welds = reweldFloors(input.topologies, {
-    detach: shifted.map((id) => endRung(id)),
+    detach: leaving.map((id) => endRung(id)),
     attach: [...landed].map(([id, landing]) => ({ rung: endRung(id), floor: landing.topology.surfaceKey })),
   }, positions, input.operationId);
   if (welds.sourceSurfaceKeys.length === 0) return regenerated;

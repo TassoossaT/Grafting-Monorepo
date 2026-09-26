@@ -48,7 +48,9 @@ export type GlobalHandleIntent =
   /** Take an end to `at`; `under` is the surface the pointer is on, which a landing prefers. */
   | { readonly kind: "place"; readonly at: ConstructionPosition; readonly under?: ConstructionSurfaceKey }
   /** Take an end off whatever it is welded to, leaving it where it stands. */
-  | { readonly kind: "detach" };
+  | { readonly kind: "detach" }
+  /** Delete the whole structure, taking it off whatever it is welded to first. */
+  | { readonly kind: "remove" };
 
 /**
  * What a provider makes of an intent, in the terms the edit is carried out
@@ -79,7 +81,12 @@ export type GlobalHandleEdit =
       readonly moves: readonly { readonly nodeId: string; readonly position: ConstructionPosition }[];
       readonly retypes: readonly { readonly edgeId: string; readonly geometry: ConstructionEdgeGeometry }[];
     }
-  | { readonly kind: "replace"; readonly request: ApplyPatchReplacementRequest };
+  | { readonly kind: "replace"; readonly request: ApplyPatchReplacementRequest }
+  /**
+   * The structure's faces deleted, after `release` -- a replacement taking
+   * its ends off the floors they are welded into -- when it has one.
+   */
+  | { readonly kind: "remove"; readonly surfaceKeys: readonly ConstructionSurfaceKey[]; readonly release?: ApplyPatchReplacementRequest };
 
 /** Something a picked handle offers besides dragging it -- a button, say. */
 export interface GlobalHandleAction {

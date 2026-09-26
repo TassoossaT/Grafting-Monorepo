@@ -16,7 +16,7 @@ import type { CurveGesture, CurveGestureOptions } from "./curve-edit-gesture.ts"
 import { commitSpineRegeneration, regenerateSpine } from "./spine-commit.ts";
 import { createConstrainedDrag } from "./constrained-drag.ts";
 import { floorsOf, floorUnder } from "./floor-landing.ts";
-import { commitPatchReplacement, commitRegionEdit } from "../../effects/effect-commit.ts";
+import { commitPatchReplacement, commitRegionEdit, commitStructureRemoval } from "../../effects/effect-commit.ts";
 import type { PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
 
 const CHANNEL = "global-handle";
@@ -75,6 +75,7 @@ function previewOf(ctx: ToolContext, handle: GlobalHandle, edit: GlobalHandleEdi
     return Float32Array.from(segments);
   }
   if (edit.kind === "replace") return replacementOutline(edit.request);
+  if (edit.kind === "remove") return undefined;
   const moved = movedPositions(ctx, handle, edit, scene);
   // Every face the edit moves a node of -- more than the handle's own structure when it carries what is joined to it.
   const nodes = new Set([...handle.nodeIds, ...moved.keys()]);
@@ -106,6 +107,11 @@ function commitEdit(ctx: ToolContext, handle: GlobalHandle, edit: GlobalHandleEd
   }
   if (edit.kind === "replace") {
     const { recorded } = commitPatchReplacement(ctx.runtime, edit.request, { transactionId: operationId });
+    if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
+    return;
+  }
+  if (edit.kind === "remove") {
+    const { recorded } = commitStructureRemoval(ctx.runtime, edit.surfaceKeys, edit.release, { transactionId: operationId });
     if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
     return;
   }

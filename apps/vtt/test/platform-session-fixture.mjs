@@ -32,6 +32,7 @@ export function sessionFixture() {
     curveBatch: (request) => JSON.parse(session.bezier_batch_json(JSON.stringify(request))),
     curveNetwork: (request) => JSON.parse(session.bezier_network_json(JSON.stringify(request))),
     planarBoolean: (request) => JSON.parse(session.planar_boolean_json(JSON.stringify(request))),
+    removeSurface: (request) => JSON.parse(session.remove_surface_json(JSON.stringify({ surfaceKey: request.surfaceKey }))),
     applyRegionEdit(ops) {
       if (ops.every((op) => op.kind === "move-vertex")) {
         calls.batches++;

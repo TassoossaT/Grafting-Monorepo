@@ -92,15 +92,15 @@ test("a welded end offers Desconectar, which takes it off the floor and leaves t
     floor(runtime, "low", 0, 0);
     drawn(fixture, { x: 4, y: 0, z: 2 }, { x: 8, y: 0, z: 2 });
     const origin = handle(runtime, "origin");
-    assert.deepEqual(globalHandleActions(scene(runtime), handle(runtime, "destination").id), [], "a free end offers nothing");
-    assert.deepEqual(slopeRampTool.selectionActions(ctx, origin.id).map((a) => a.id), ["disconnect"]);
+    assert.deepEqual(globalHandleActions(scene(runtime), handle(runtime, "destination").id).map((a) => a.id), ["delete"], "a free end offers nothing but deleting the ramp");
+    assert.deepEqual(slopeRampTool.selectionActions(ctx, origin.id).map((a) => a.id), ["disconnect", "delete"]);
     const standing = ramp(runtime).nodes.map((n) => JSON.stringify(n)).sort();
     assert.equal(slopeRampTool.onSelectionAction(ctx, "disconnect", params, origin.id), true);
     const low = faces(runtime, "platform")[0];
     assert.ok(!welded(low, ramp(runtime), "bottom"), "the origin came off");
     assert.equal(low.outerLoops[0].length, 4, "the floor's edge is whole again");
     assert.deepEqual(ramp(runtime).nodes.map((n) => JSON.stringify(n)).sort(), standing, "the ramp did not move");
-    assert.deepEqual(slopeRampTool.selectionActions(ctx, handle(runtime, "origin").id), [], "nothing more to disconnect");
+    assert.deepEqual(slopeRampTool.selectionActions(ctx, handle(runtime, "origin").id).map((a) => a.id), ["delete"], "nothing more to disconnect");
   } finally { session.free(); }
 });
 
@@ -290,5 +290,52 @@ test("a curved ramp moved or turned by its whole-structure handles carries the s
     close(r(after), r(before), "the floor turned round the ramp's pivot");
     assert.ok(Math.hypot(after.x - before.x, after.z - before.z) > 1, "and moved");
     assert.ok(weldedNow(), "still welded after the turn");
+  } finally { session.free(); }
+});
+
+test("deleting a welded ramp takes it off its floor first: the floor's side is whole again, in one undoable step", () => {
+  const fixture = sessionFixture();
+  const { runtime, session, ctx } = fixture;
+  try {
+    floor(runtime, "low", 0, 0);
+    drawn(fixture, { x: 4, y: 0, z: 2 }, { x: 8, y: 0, z: 2 });
+    const pivot = handle(runtime, "pivot");
+    assert.ok(slopeRampTool.selectionActions(ctx, pivot.id).some((a) => a.id === "delete"), "every structure offers Apagar");
+    assert.equal(slopeRampTool.onSelectionAction(ctx, "delete", params, pivot.id), true);
+    assert.equal(faces(runtime, "platform-ramp").length, 0, "the ramp is gone");
+    assert.equal(faces(runtime, "platform")[0].outerLoops[0].length, 4, "the floor's side is one edge again");
+    assert.equal(ctx.history.undo()?.kind, "transaction", "one step to undo");
+  } finally { session.free(); }
+});
+
+test("deleting a floor leaves a ramp welded into it standing, its end simply free", async () => {
+  const { platformContourTool } = await import("../src/composition/tabletop/tools/platform/platform-contour-tool.ts");
+  const fixture = sessionFixture();
+  const { runtime, session, ctx } = fixture;
+  try {
+    floor(runtime, "low", 0, 0);
+    drawn(fixture, { x: 4, y: 0, z: 2 }, { x: 8, y: 0, z: 2 });
+    const before = ramp(runtime).nodes.map((n) => JSON.stringify(n)).sort();
+    const floorPivot = shownGlobalHandles(scene(runtime)).find((h) => h.kind === "pivot" && h.owner === "platform");
+    assert.equal(platformContourTool.onSelectionAction(ctx, "delete", platformContourTool.defaultParams(), floorPivot.id), true);
+    assert.equal(faces(runtime, "platform").length, 0, "the floor is gone");
+    assert.deepEqual(ramp(runtime).nodes.map((n) => JSON.stringify(n)).sort(), before, "the ramp stands as it was");
+  } finally { session.free(); }
+});
+
+test("deleting a welded curved ramp drops its faces and makes its floor's side whole", async () => {
+  const { commitPlatformSlope } = await import("../src/composition/tabletop/tools/slope/slope-commit.ts");
+  const { slopeCurveTool } = await import("../src/composition/tabletop/tools/slope/slope-tools.ts");
+  const fixture = sessionFixture();
+  const { runtime, session, ctx, calls } = fixture;
+  try {
+    floor(runtime, "low", 0, 0);
+    commitPlatformSlope(ctx, [{ x: 4, y: 0, z: 2 }, { x: 8, y: 2, z: 2 }], { width: 1.5 });
+    assert.ok(faces(runtime, "platform")[0].outerLoops[0].length > 4, "welded at creation");
+    const pivot = shownGlobalHandles(scene(runtime)).find((h) => h.kind === "pivot" && h.owner === "platform-slope");
+    assert.equal(slopeCurveTool.onSelectionAction(ctx, "delete", { width: 1.5, rise: 2 }, pivot.id), true);
+    assert.ok(!calls.feedback.some((f) => f.tone === "error"), JSON.stringify(calls.feedback.slice(-2)));
+    assert.equal(faces(runtime, "platform-slope").length, 0, "the curved ramp is gone");
+    assert.equal(faces(runtime, "platform")[0].outerLoops[0].length, 4, "the floor's side is one edge again");
   } finally { session.free(); }
 });

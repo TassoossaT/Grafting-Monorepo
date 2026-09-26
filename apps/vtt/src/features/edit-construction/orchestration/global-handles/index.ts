@@ -44,8 +44,12 @@ export function planGlobalHandle(scene: GlobalHandleScene, handle: GlobalHandle,
 /** What else the shown global handle `id` offers as it stands -- none for anything that is not one. */
 export function globalHandleActions(scene: GlobalHandleScene, id: string): readonly GlobalHandleAction[] {
   const handle = shownGlobalHandleAt(scene, id);
-  return handle ? PROVIDERS.find((provider) => provider.name === handle.provider)?.actions?.(scene, handle) ?? [] : [];
+  if (!handle) return [];
+  // Every structure can be deleted from any of its handles.
+  return [...(PROVIDERS.find((provider) => provider.name === handle.provider)?.actions?.(scene, handle) ?? []), DELETE];
 }
+
+const DELETE: GlobalHandleAction = Object.freeze({ id: "delete", label: "Apagar", intent: Object.freeze({ kind: "remove" }) });
 
 /**
  * How the handle `id` moves while dragged, whatever it is: a whole-structure

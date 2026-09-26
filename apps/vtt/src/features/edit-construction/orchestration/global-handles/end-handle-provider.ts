@@ -4,6 +4,7 @@ import { globalHandleId } from "../../global-handles/index.ts";
 import type { GlobalHandle, GlobalHandleAction, GlobalHandleEdit, GlobalHandleProvider, GlobalHandleScene } from "../../global-handles/index.ts";
 import { hasTrait, structureTypeFor, type StructureEnd, type StructureEndName, type StructureEnds } from "../../structure-types/index.ts";
 import { handleNodeName } from "./handle-name.ts";
+import { removalOf } from "./structure-removal.ts";
 import { floorLandingNear, floorsWeldedBy, floorsWithout, reweldFloors } from "../../topology/floor-weld.ts";
 
 /** How close an end must still stand to a floor's edge to count as staying welded there. */
@@ -115,6 +116,7 @@ export const endHandleProvider: GlobalHandleProvider = {
     const ends = capabilityOf(handle.topology)?.ends(handle.topology) ?? [];
     const end = ends.find((candidate) => candidate.name === handle.end);
     if (!end) return undefined;
+    if (intent.kind === "remove") return removalOf(scene, [handle.topology], operationId);
     if (intent.kind === "detach") return detached(scene, end, operationId);
     if (intent.kind === "place") return placed(scene, handle, ends, intent.at, intent.under, operationId);
     return undefined;
