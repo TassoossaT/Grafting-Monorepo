@@ -56,9 +56,10 @@ test("the rotate handle turns a platform a quarter round its middle, keeps to it
     assert.ok(shown.length > 0 && shown.every((p) => Math.abs(Math.hypot(p.x - handle.pivot.x, p.z - handle.pivot.z) - reach) < 1e-6), "the handle stayed on its circle");
     const corner = node(runtime, "floor:0").position;
     assert.ok(Math.abs(corner.x - 3) < 1e-6 && Math.abs(corner.z + 1) < 1e-6, `(0,0) turned a quarter round (2,1): ${JSON.stringify(corner)} ${JSON.stringify(calls.feedback.slice(-2))}`);
+    // One transaction: the turn and whatever it reached undo together.
     const entry = ctx.history.undo();
-    assert.equal(entry.kind, "region-edit");
-    runtime.applyRegionEdit(entry.undo);
+    assert.equal(entry.kind, "transaction");
+    session.undo_region_overlay(entry.transactionId);
     const back = node(runtime, "floor:0").position;
     assert.ok(Math.abs(back.x) < 1e-9 && Math.abs(back.z) < 1e-9, "undo puts it back");
   } finally { session.free(); }

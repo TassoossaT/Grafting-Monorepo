@@ -495,6 +495,14 @@ transaction. Throwing anywhere rolls all of it back.
 
 Replaces regions with a patch and lets every cloud the change reaches answer it, atomically.
 
+### `function vtt.effect-commit.commitRegionEdit(runtime: EffectCommitRuntime & { applyRegionEdit: any }, ops: readonly AtomicEditOp[], options: CommitOptions): TransactionResult<RegionEditOutcome>`
+
+Applies region edit ops -- a finished drag, a turn, a raise -- and lets
+every cloud the edit reaches answer it, atomically: a grounded platform
+moved or resized re-cuts the ground it left and the ground it now covers,
+exactly as drawing it did. Each type the edit moved emits its own change;
+a type that cuts nothing reaches nothing.
+
 ### `function vtt.effect-commit.commitSurfaceRemoval(runtime: EffectCommitRuntime, surfaceKey: ConstructionSurfaceKey, options: CommitOptions): TransactionResult<RegionEditOutcome>`
 
 Deletes one surface and lets its own cloud and every cloud it had cut answer, atomically.

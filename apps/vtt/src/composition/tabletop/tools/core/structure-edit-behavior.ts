@@ -2,6 +2,7 @@ import type { ConstructionToolId, StructureEditParams } from "@/features/edit-co
 
 import { beginCurveGesture } from "./curve-edit-gesture.ts";
 import { pointerAtHeight } from "./pointer-ray.ts";
+import { commitRegionEdit } from "../../effects/effect-commit.ts";
 import { beginGlobalHandleGesture, globalHandleActionsAt, runGlobalHandleAction } from "./global-handle-gesture.ts";
 import {
   cloudNodes,
@@ -23,7 +24,7 @@ import type {
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 
 import { distanceToSegmentXZ } from "../shapes/geometry-2d.ts";
-import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
+import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext, type ToolGesture } from "./tool-context.ts";
 
 /**
  * Grab-and-edit an *existing* structure by any of its parts -- a vertex, a
@@ -312,7 +313,17 @@ export function createStructureEditBehavior(options: StructureEditOptions): Stru
     const snapshot = ctx.runtime.getGraphSnapshot();
     const { undo, redo } = restoreOps(drag.before, cloud, snapshot);
     if (undo.length === 0) return;
-    ctx.history.record({ kind: "region-edit", undo, redo });
+    // The drag moved things live, tick by tick; the finished edit is replayed
+    // from where it was grabbed as one transaction, so what it reaches -- the
+    // ground a grounded platform cuts -- answers once, and undoes with it.
+    const transactionId = scopedToolId(ctx, "edit", ctx.nextSequence());
+    ctx.runtime.applyRegionEdit(undo, "local", `${transactionId}:rewind`);
+    try {
+      const { recorded } = commitRegionEdit(ctx.runtime, redo, { transactionId });
+      if (recorded) ctx.history.record({ kind: "transaction", transactionId });
+    } catch (error) {
+      ctx.reportFeedback({ tone: "error", message: `Estrutura preservada: ${error instanceof Error ? error.message : String(error)}` });
+    }
   }
 
   function onCancel(): void {

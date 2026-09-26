@@ -3640,6 +3640,13 @@ export function commitPatchReplacement(
   const origin = options.origin ?? "local";
   return commitChange(runtime, options, () => {
   const before = topologiesOf(runtime, request.sourceSurfaceKeys);
+export function commitRegionEdit(
+  runtime: EffectCommitRuntime & { applyRegionEdit(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): RegionEditOutcome },
+  ops: readonly AtomicEditOp[],
+  options: CommitOptions,
+  ): TransactionResult<RegionEditOutcome> {
+  const origin = options.origin ?? "local";
+  const moved = new Set(ops.flatMap((op) => (op.kind === "move-vertex" ? [op.nodeId] : [])));
 export function commitSurfaceRemoval(
   runtime: EffectCommitRuntime,
   surfaceKey: ConstructionSurfaceKey,

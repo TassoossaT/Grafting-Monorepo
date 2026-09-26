@@ -87,11 +87,12 @@ test("one drag history covers every storey, including after a rejected tick", ()
     behavior.onPointerMove(ctx,{start,current:bad,samples:[start,bad]},{mode:"elevation"});
     behavior.onPointerUp(ctx);
     assert.deepEqual(heights(runtime),[0,4,7]);
+    // The whole drag, every storey it carried, is one transaction.
     const history = ctx.history.undo();
-    assert.equal(history.undo.length,8);
-    runtime.applyRegionEdit(history.undo);
+    assert.equal(history.kind,"transaction");
+    session.undo_region_overlay(history.transactionId);
     assert.deepEqual(heights(runtime),[0,3,6]);
-    runtime.applyRegionEdit(ctx.history.redo().redo);
+    session.redo_region_overlay(ctx.history.redo().transactionId);
     assert.deepEqual(heights(runtime),[0,4,7]);
   } finally { session.free(); }
 });

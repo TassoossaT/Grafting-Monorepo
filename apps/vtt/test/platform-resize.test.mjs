@@ -115,3 +115,28 @@ test("a platform drawn a little crooked still resizes: near-straight edges are o
     close(at(runtime, "f:5").z, 5, "the north side stayed");
   } finally { session.free(); }
 });
+
+test("resizing a grounded platform re-cuts the ground in the same transaction; a floating one reaches no ground", async () => {
+  const { commitRegionEdit } = await import("../src/composition/tabletop/effects/effect-commit.ts");
+  const { latticeRegenerateReaction } = await import("../src/composition/tabletop/terrain/terrain-lattice-reaction.ts");
+  const { runtime, session } = sessionFixture();
+  runtime.getSnapshot = () => ({ tableId: "platform-test", map: { nodePositions: new Map(runtime.getGraphSnapshot().nodes.map((n) => [n.id, { position: n.position }])) } });
+  const reached = [];
+  const real = latticeRegenerateReaction(() => 1);
+  const reactions = { "lattice-regenerate": (rt, effect, hits) => { reached.push({ surfaceType: effect.change.surfaceType, hits: hits.length }); return real(rt, effect, hits); } };
+  try {
+    face(runtime, "g", [[0, 0], [4, 0], [4, 4], [0, 4]], 0, "platform");
+    face(runtime, "fl", [[10, 0], [14, 0], [14, 4], [10, 4]], 0, "platform-floating");
+    addFace(runtime, "ground", "terrain", [[-2, -2], [16, -2], [16, 6], [-2, 6]].map(([x, z], i) => ({ id: `ground:${i}`, position: { x, y: 0, z } })));
+    for (const prefix of ["g", "fl"]) {
+      const topology = floorOf(runtime, prefix);
+      const plan = planEdit(resolveCloudTopology(runtime, topology.surfaceKey), { surfaceKey: topology.surfaceKey, target: { kind: "edge", edgeId: edgeBetween(runtime, prefix, 1, 2) }, delta: { x: 1, y: 0, z: 0 } }, runtime.getGraphSnapshot(), runtime);
+      assert.equal(plan.kind, "apply", plan.reason);
+      const { recorded } = commitRegionEdit(runtime, plan.ops, { transactionId: `resize:${prefix}`, reactions });
+      assert.ok(recorded, "one transaction");
+    }
+    assert.ok(reached.some((r) => r.surfaceType === "platform" && r.hits > 0), `the grounded platform's resize reached the ground: ${JSON.stringify(reached)}`);
+    assert.ok(!reached.some((r) => r.surfaceType === "platform-floating" && r.hits > 0), "the floating one's did not");
+    close(at(runtime, "g:1").x, 5, "and the resize itself stands");
+  } finally { session.free(); }
+});
