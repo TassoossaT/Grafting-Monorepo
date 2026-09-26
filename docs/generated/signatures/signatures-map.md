@@ -5315,7 +5315,7 @@ export type { SpineChain } from "./spine-chains.ts";
 export type { SpineControlNode, SpineCurveEdge, SpineGraph } from "./spine-graph.ts";
 export type { SpineControlNodeAddress } from "./spine-node-id.ts";
 export type { SpineRibbon, SpineRibbonSpan } from "./spine-ribbons.ts";
-export type { SpinePivot } from "./spine-pivot.ts";
+export type { SpineEndHandle, SpineEndHandleKind, SpinePivot } from "./spine-pivot.ts";
 export type { SpineAction } from "./spine-actions.ts";
 export type { SpineEditInput } from "./spine-edit-plan.ts";
 
@@ -5417,6 +5417,10 @@ export function spineComponent(snapshot: ConstructionGraphSnapshot, seedNodeIds:
 export const spinePivotId = (nodeId: string): string => `${PREFIX}${nodeId}`;
 export function isSpinePivotId(id: string): boolean {
   return id.startsWith(PREFIX);
+export type SpineEndHandleKind = "height" | "turns";
+export const spineEndHandleId = (kind: SpineEndHandleKind, nodeId: string): string => `${END_PREFIX[kind]}${nodeId}`;
+export function spineEndHandleOf(id: string): { readonly kind: SpineEndHandleKind; readonly nodeId: string } | undefined {
+  for (const kind of ["height", "turns"] as const) if (id.startsWith(END_PREFIX[kind])) return { kind, nodeId: id.slice(END_PREFIX[kind].length) };
 export function spineMemberOf(graph: ConstructionGraphSnapshot, id: string): string {
   if (isSpinePivotId(id)) return id.slice(PREFIX.length);
 export interface SpinePivot {
@@ -5434,6 +5438,18 @@ export function spinePivotAt(graph: ConstructionGraphSnapshot, id: string): Spin
   const member = spineMemberOf(graph, id);
 export function planSpineTranslate(graph: ConstructionGraphSnapshot, pivot: SpinePivot, delta: ConstructionPosition): ConstructionGraphPatch {
   const positions = new Map(graph.nodes.map((node) => [node.id, node.position]));
+export interface SpineEndHandle {
+  readonly id: string;
+  readonly kind: SpineEndHandleKind;
+  readonly position: ConstructionPosition;
+  readonly owner: string | undefined;
+  /** The spine's two free ends, first to last; the handles stand at the last. */
+  readonly startNodeId: string;
+  readonly endNodeId: string;
+export function spineEndHandles(graph: ConstructionGraphSnapshot): readonly SpineEndHandle[] {
+  return spinePivots(graph).flatMap((pivot) => endHandlesOf(graph, pivot));
+export function spineEndHandleAt(graph: ConstructionGraphSnapshot, id: string): SpineEndHandle | undefined {
+  const named = spineEndHandleOf(id);
 
 // src/features/edit-construction/spine/spine-ribbons.ts
 export interface SpineRibbonSpan {

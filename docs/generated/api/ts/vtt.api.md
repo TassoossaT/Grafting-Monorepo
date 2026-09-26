@@ -4211,6 +4211,26 @@ a curved wall. The graph keeps it on the curve (`CurveHandles.surfaceType`)
 and never reads it; this is where the app does. Every owner stamps its own
 spans, so this module names no type; a span with no owner generates nothing.
 
+### `interface vtt.spine-pivot.SpineEndHandle`
+
+### `property vtt.spine-pivot.SpineEndHandle.center?: readonly [number, number]`
+
+For a spiral: its centre, and the plan direction the end leaves in.
+
+### `property vtt.spine-pivot.SpineEndHandle.endNodeId: string`
+
+### `property vtt.spine-pivot.SpineEndHandle.id: string`
+
+### `property vtt.spine-pivot.SpineEndHandle.kind: SpineEndHandleKind`
+
+### `property vtt.spine-pivot.SpineEndHandle.owner: string | undefined`
+
+### `property vtt.spine-pivot.SpineEndHandle.position: ConstructionPosition`
+
+### `property vtt.spine-pivot.SpineEndHandle.startNodeId: string`
+
+The spine's two free ends, first to last; the handles stand at the last.
+
 ### `interface vtt.spine-pivot.SpinePivot`
 
 ### `property vtt.spine-pivot.SpinePivot.edges: readonly ConstructionEdgeSnapshot[]`
@@ -4225,6 +4245,13 @@ The type the spine generates.
 
 ### `property vtt.spine-pivot.SpinePivot.position: ConstructionPosition`
 
+### `type vtt.spine-pivot.SpineEndHandleKind = "height" | "turns"`
+
+The handles at a spine's far end, beside its pivot: one above the end to
+raise or lower it, and -- on a spiral -- one just past the end, following
+the turn, to wind the spiral on or back. Named after the spine's lowest
+control node like the pivot.
+
 ### `function vtt.spine-pivot.isSpinePivotId(id: string): boolean`
 
 ### `function vtt.spine-pivot.planSpineTranslate(graph: ConstructionGraphSnapshot, pivot: SpinePivot, delta: ConstructionPosition): ConstructionGraphPatch`
@@ -4233,9 +4260,23 @@ The graph patch moving the whole spine of `pivot` by `delta`: every
 control node, and every arc centre, so each span keeps its shape. The
 owner regenerates its surface from it like from any other spine edit.
 
+### `function vtt.spine-pivot.spineEndHandleAt(graph: ConstructionGraphSnapshot, id: string): SpineEndHandle | undefined`
+
+The end handle `id` names, where it stands now.
+
+### `function vtt.spine-pivot.spineEndHandleId(kind: SpineEndHandleKind, nodeId: string): string`
+
+### `function vtt.spine-pivot.spineEndHandleOf(id: string): { kind: SpineEndHandleKind; nodeId: string } | undefined`
+
+Which end handle `id` names, and after which node.
+
+### `function vtt.spine-pivot.spineEndHandles(graph: ConstructionGraphSnapshot): readonly SpineEndHandle[]`
+
+Every open spine's end handles: height always, turns on a spiral.
+
 ### `function vtt.spine-pivot.spineMemberOf(graph: ConstructionGraphSnapshot, id: string): string`
 
-A spine control node `id` stands for: a pivot's own node, a curve handle's span start, or `id` itself.
+A spine control node `id` stands for: a pivot's or end handle's own node, a curve handle's span start, or `id` itself.
 
 ### `function vtt.spine-pivot.spinePivotAt(graph: ConstructionGraphSnapshot, id: string): SpinePivot | undefined`
 
@@ -5703,6 +5744,11 @@ whatever surface this type makes of them.
 ### `property vtt.structure-type.SpineGeneration.defaultOffsets: readonly number[]`
 
 The width a span with no profile of its own is given.
+
+### `property vtt.structure-type.SpineGeneration.endHandles?: boolean`
+
+The spine's far end is shown with a height handle, and -- when it is a
+spiral -- a turns handle that winds it on or back (`spine-pivot.ts`).
 
 ### `property vtt.structure-type.SpineGeneration.pivot?: boolean`
 

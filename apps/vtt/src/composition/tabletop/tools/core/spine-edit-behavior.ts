@@ -1,6 +1,6 @@
 import type { ConstructionToolId, StructureEditParams } from "@/features/edit-construction";
 
-import { curvePick, isSpinePivotId, spinePivotAt, structureTypeFor } from "../../../../features/edit-construction/index.ts";
+import { curvePick, isSpinePivotId, spineEndHandleAt, spineEndHandleOf, spinePivotAt, structureTypeFor } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionPosition } from "../../../../ports/index.ts";
 import { roadBodyTarget } from "../paths/road-body-target.ts";
 import { beginCurveGesture, type CurveGesture, type CurveGestureOptions } from "./curve-edit-gesture.ts";
@@ -107,6 +107,12 @@ export function createSpineEditBehavior({ ownsSpine, onSelect }: SpineEditOption
           ? { sample: { ...sample, point: pivot.position }, options: { mode: "shape", insertOnClick: false, dragThreshold: 5, pointerOrigin: sample.point } }
           : undefined;
       }
+      if (sample.nodeId && spineEndHandleOf(sample.nodeId)) {
+        const handle = spineEndHandleAt(ctx.runtime.getGraphSnapshot(), sample.nodeId);
+        return handle && owned(handle.owner) && structureTypeFor(handle.owner!)?.spine?.endHandles === true
+          ? { sample: { ...sample, point: handle.position }, options: { mode: "shape", insertOnClick: false, dragThreshold: 5, pointerOrigin: sample.point } }
+          : undefined;
+      }
       const target = handleTarget(ctx, sample);
       if (target) {
         const midpoint = curvePick(target.nodeId!)?.index === "midpoint";
@@ -119,6 +125,7 @@ export function createSpineEditBehavior({ ownsSpine, onSelect }: SpineEditOption
     },
     isHandle(ctx, sample) {
       if (sample.nodeId && isSpinePivotId(sample.nodeId)) return owned(spinePivotAt(ctx.runtime.getGraphSnapshot(), sample.nodeId)?.owner);
+      if (sample.nodeId && spineEndHandleOf(sample.nodeId)) return owned(spineEndHandleAt(ctx.runtime.getGraphSnapshot(), sample.nodeId)?.owner);
       const pick = sample.nodeId ? curvePick(sample.nodeId) : undefined;
       return pick !== undefined && owned(ctx.runtime.getGraphSnapshot().edges.find((e) => e.edgeId === pick.edgeId)?.curve?.surfaceType);
     },
@@ -160,7 +167,7 @@ export function createSpineEditBehavior({ ownsSpine, onSelect }: SpineEditOption
     removeSelected(ctx) {
       const id = selections.get(ctx.runtime);
       // A pivot stands for the whole spine; deleting a spine is not a point removal.
-      if (!id || isSpinePivotId(id)) return false;
+      if (!id || isSpinePivotId(id) || spineEndHandleOf(id)) return false;
       const node = ctx.runtime.getGraphSnapshot().nodes.find((n) => n.id === id);
       if (!node) { select(ctx); return false; }
       beginEdit(ctx, { nodeId: id, point: node.position }, { mode: "shape", curveAction: "remove-anchor", allowShapeChange: true })?.commit();

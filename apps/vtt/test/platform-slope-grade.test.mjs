@@ -370,3 +370,63 @@ test("the scene manipulator on a pivot lifts the whole spiral, and picking the p
     assert.ok(pushed().selected?.spiral && Math.abs(pushed().selected.startHeight - 3) < 1e-9, JSON.stringify(pushed().selected));
   } finally { session.free(); }
 });
+
+test("a spiral's end handles: height above its end, turns just past it; a free ramp only has height", async () => {
+  const { spineEndHandles } = await import("../src/features/edit-construction/index.ts");
+  const { ctx, runtime, session } = sessionFixture();
+  try {
+    drawSpiral(slopeSpiralTool, ctx, { center: { x: 0, y: 0, z: 0 }, radius: 3, turns: 1, startY: 0, params: { width: 1.5, rise: 4 } });
+    commitPlatformSlope(ctx, [{ x: 20, y: 0, z: 0 }, { x: 24, y: 0, z: 2 }, { x: 28, y: 2, z: 0 }], { width: 1.5 });
+    const handles = spineEndHandles(runtime.getGraphSnapshot());
+    const spiral = handles.filter((h) => h.center);
+    assert.deepEqual(handles.filter((h) => h.kind === "height").length, 2);
+    assert.equal(spiral.length, 1, "only the spiral winds");
+    const end = node(runtime, spiral[0].endNodeId).position;
+    assert.ok(Math.abs(Math.hypot(spiral[0].position.x - end.x, spiral[0].position.z - end.z) - 1.2) < 1e-6, "just past the end");
+  } finally { session.free(); }
+});
+
+test("dragging the height handle up raises the far end; the ramp stays graded", async () => {
+  const { spineEndHandles } = await import("../src/features/edit-construction/index.ts");
+  const { ctx, runtime, session, calls } = sessionFixture();
+  Object.assign(runtime, { showPreview() {}, clearPreview() {} });
+  const params = { width: 1.5, rise: 2 };
+  try {
+    commitPlatformSlope(ctx, [{ x: 0, y: 0, z: 0 }, { x: 4, y: 0, z: 3 }, { x: 8, y: 2, z: 0 }], { width: 1.5 });
+    const handle = spineEndHandles(runtime.getGraphSnapshot()).find((h) => h.kind === "height");
+    const start = { nodeId: handle.id, point: handle.position, screenX: 100, screenY: 300 };
+    const current = { point: handle.position, screenX: 100, screenY: 180 };
+    slopeCurveTool.onPointerDown(ctx, start, params);
+    slopeCurveTool.onPointerMove(ctx, { start, current, samples: [start, current] }, params);
+    slopeCurveTool.onPointerUp(ctx, { start, current, samples: [start, current] }, params);
+    const heights = walk(runtime).map((s) => s.y);
+    assert.ok(Math.abs(Math.max(...heights) - 5) < 1e-9, `120 px up is 3 m: ${JSON.stringify(heights)} ${JSON.stringify(calls.feedback.slice(-2))}`);
+    assert.ok(constantGrade(runtime));
+  } finally { session.free(); }
+});
+
+test("winding the turns handle a quarter round adds a quarter turn at the same grade", async () => {
+  const { spineEndHandles } = await import("../src/features/edit-construction/index.ts");
+  const { beginCurveGesture } = await import("../src/composition/tabletop/tools/core/curve-edit-gesture.ts");
+  const { ctx, runtime, session, calls } = sessionFixture();
+  Object.assign(runtime, { showPreview() {}, clearPreview() {} });
+  try {
+    drawSpiral(slopeSpiralTool, ctx, { center: { x: 0, y: 0, z: 0 }, radius: 3, turns: 1, startY: 0, params: { width: 1.5, rise: 4 } });
+    const handle = spineEndHandles(runtime.getGraphSnapshot()).find((h) => h.kind === "turns");
+    const gesture = beginCurveGesture(ctx, { nodeId: handle.id, point: handle.position }, { mode: "shape", insertOnClick: false, spatialTarget: true });
+    // The manipulator carried round the centre, a little at a time, in the spiral's own direction.
+    const start = Math.atan2(handle.position.z, handle.position.x);
+    for (let i = 1; i <= 9; i += 1) {
+      const angle = start + (Math.PI / 2) * (i / 9);
+      const point = { x: 4 * Math.cos(angle), y: handle.position.y, z: 4 * Math.sin(angle) };
+      gesture.move({ start: { nodeId: handle.id, point }, current: { nodeId: handle.id, point }, samples: [] });
+    }
+    gesture.commit();
+    const [pivotSpan] = slopeSpans(runtime);
+    const { describeSlope } = await import("../src/features/edit-construction/index.ts");
+    const summary = describeSlope(runtime.getGraphSnapshot(), pivotSpan.startNodeId);
+    assert.ok(Math.abs(summary.spiral.turns - 1.25) < 1e-6, `${JSON.stringify(summary)} ${JSON.stringify(calls.feedback.slice(-2))}`);
+    assert.ok(Math.abs(summary.endHeight - 5) < 1e-6, "same grade: a quarter turn more climbs a quarter more");
+    assert.equal(slopeSpans(runtime).length, 5);
+  } finally { session.free(); }
+});

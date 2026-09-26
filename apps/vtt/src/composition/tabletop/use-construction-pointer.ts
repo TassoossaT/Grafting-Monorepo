@@ -12,7 +12,7 @@ import { GRID_SNAP_UNIT } from "../../adapters/rendering/index.ts";
 import type { TabletopRuntime } from "./tabletop-runtime.ts";
 import { toolFor } from "./tools/index.ts";
 import { beginCurveGesture, type CurveGesture } from "./tools/core/curve-edit-gesture.ts";
-import { isSpinePivotId, spinePivotAt } from "../../features/edit-construction/index.ts";
+import { isSpinePivotId, spineEndHandleAt, spineEndHandleOf, spinePivotAt } from "../../features/edit-construction/index.ts";
 import { gestureMoved } from "./tools/core/tool-context.ts";
 import {
   edgeOverlayChannel,
@@ -27,6 +27,10 @@ function spineHandleAt(runtime: Pick<TabletopRuntime, "getGraphSnapshot">, id: s
   if (isSpinePivotId(id)) {
     const pivot = spinePivotAt(graph, id);
     return pivot && { id: pivot.id, position: pivot.position };
+  }
+  if (spineEndHandleOf(id)) {
+    const handle = spineEndHandleAt(graph, id);
+    return handle && { id: handle.id, position: handle.position };
   }
   const node = graph.nodes.find((n) => n.id === id && n.id.startsWith("spine:"));
   return node && { id: node.id, position: node.position };
@@ -152,7 +156,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
         selectedPoint.current = node?.id;
         runtime.setPointManipulator?.(viewId, node && !branchModifier.current ? {
           // Branching starts a new structure from the point, which only a tool that handles the action can do.
-          id: node.id, position: node.position, branchAction: toolFor(activeTool).onSelectionAction !== undefined && !isSpinePivotId(node.id),
+          id: node.id, position: node.position, branchAction: toolFor(activeTool).onSelectionAction !== undefined && !isSpinePivotId(node.id) && !spineEndHandleOf(node.id),
           onChange(phase, position) {
             if (phase === "start") {
               manipulatorGesture.current?.cancel();

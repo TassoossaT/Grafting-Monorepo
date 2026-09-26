@@ -274,6 +274,11 @@ export interface SpineGeneration {
    * road grid would move as one.
    */
   readonly pivot?: boolean;
+  /**
+   * The spine's far end is shown with a height handle, and -- when it is a
+   * spiral -- a turns handle that winds it on or back (`spine-pivot.ts`).
+   */
+  readonly endHandles?: boolean;
   /** Normalizes the standing graph before an edit reads it -- legacy data, say. */
   readonly prepare?: (snapshot: ConstructionGraphSnapshot, port: BezierPort) => ConstructionGraphSnapshot;
   readonly regenerate: (input: SpineRegenerationInput) => SpineRegeneration | undefined;

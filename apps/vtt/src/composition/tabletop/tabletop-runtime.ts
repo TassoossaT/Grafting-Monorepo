@@ -1,4 +1,4 @@
-import { curveEdgesOf, curveHandles, curvePick, panelHeightWidgets, spinePivots, structureTypeFor } from "../../features/edit-construction/index.ts";
+import { curveEdgesOf, curveHandles, curvePick, panelHeightWidgets, spineEndHandles, spinePivots, structureTypeFor } from "../../features/edit-construction/index.ts";
 import type { BezierPort } from "../../ports/bezier-port.ts";
 import type { RenderPointManipulator } from "../../ports/scene-render-port.ts";
 import type { ConstructionPlanarRequest, ConstructionPlanarShape, ConstructionMotionRequest, ConstructionMotionPlan, ConstructionNodeMotion } from "../../ports/index.ts";
@@ -631,7 +631,8 @@ export class AppTabletopRuntime implements TabletopRuntime {
     const handles = curveHandles(shownEdges, this.#construction).filter(h => !this.#pointHandlesOnly || curvePick(h.id)?.index === "midpoint");
     // One whole-structure handle per spine, shown with its points.
     const pivots = this.#pointHandlesOnly ? spinePivots(graph).filter((pivot) => pivot.owner !== undefined && structureTypeFor(pivot.owner)?.spine?.pivot === true) : [];
-    const livePivots = new Set(pivots.map((pivot) => pivot.id));
+    const ends = this.#pointHandlesOnly ? spineEndHandles(graph).filter((handle) => handle.owner !== undefined && structureTypeFor(handle.owner)?.spine?.endHandles === true) : [];
+    const livePivots = new Set([...pivots, ...ends].map((handle) => handle.id));
     for (const id of this.#pivotHandleIds) if (!livePivots.has(id)) this.#removeNodeHandle(id, origin, causeId, generation);
     if (this.#pointHandlesOnly) {
       const anchors = new Set(shownEdges.flatMap(e => [e.startNodeId,e.endNodeId]));
@@ -641,7 +642,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     }
     // After the allow-list above names them: `#uploadNodeHandle` drops any
     // handle it does not, which would lose a spine's pivot on its first sync.
-    for (const pivot of pivots) this.#uploadNodeHandle(pivot.id, pivot.position, origin, causeId, generation);
+    for (const handle of [...pivots, ...ends]) this.#uploadNodeHandle(handle.id, handle.position, origin, causeId, generation);
     this.#pivotHandleIds = livePivots;
     const live = new Set(handles.map((h) => h.id));
     for (const id of this.#bezierHandleIds) if (!live.has(id)) this.#removeNodeHandle(id, origin, causeId, generation);

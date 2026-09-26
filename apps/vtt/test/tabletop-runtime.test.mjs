@@ -1134,5 +1134,7 @@ test("a spine tool's point presentation shows each ramp's pivot on its first syn
     assert.ok(pivot, `pivot handle uploaded: ${JSON.stringify(upserted.map((h) => h.nodeId))}`);
     assert.ok(Math.hypot(pivot.position.x, pivot.position.z) < 1e-9, "at the spiral's centre");
     assert.ok(upserted.some((handle) => handle.nodeId === "spine:s:1"), "with the spine's own points");
+    assert.ok(upserted.some((handle) => handle.nodeId === "spine-height:spine:s:0"), "and its end's height handle");
+    assert.ok(upserted.some((handle) => handle.nodeId === "spine-turns:spine:s:0"), "and, a spiral, its turns handle");
   } finally { session.free(); }
 });
