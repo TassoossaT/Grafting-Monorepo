@@ -78,8 +78,13 @@ export function spineEndsLanded(snapshot: ConstructionGraphSnapshot, graphPatch:
  * coming off their floors and welding into the floors they land on -- one
  * replacement. An owner that declares no `endRung` regenerates unchanged.
  */
-export function regenerateWithEndWelds(generation: SpineGeneration, input: SpineRegenerationInput): SpineRegeneration | undefined {
-  if (!generation.endRung) return generation.regenerate(input);
+export function regenerateWithEndWelds(
+  generation: SpineGeneration,
+  input: SpineRegenerationInput,
+  /** The ends' floors are carried along with them: their welds stay as they are. */
+  options: { readonly keepsWelds?: boolean } = {},
+): SpineRegeneration | undefined {
+  if (!generation.endRung || options.keepsWelds) return generation.regenerate(input);
   const endRung = generation.endRung;
   const { graphPatch, shifted, landed } = landEnds(input.snapshot, input.graphPatch, generation, input.topologies);
   const regenerated = generation.regenerate({ ...input, graphPatch });

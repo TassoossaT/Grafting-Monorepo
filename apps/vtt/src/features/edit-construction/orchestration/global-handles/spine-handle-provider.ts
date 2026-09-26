@@ -1,5 +1,10 @@
 import { describeSpineChain, planSpineChainEdit, planSpineTransform, spineGlobalHandles, type SpineGlobalHandle } from "../../spine/index.ts";
-import { structureTypeFor } from "../../structure-types/index.ts";
+import type { ConstructionPosition, ConstructionRegionTopology } from "@/ports";
+
+import { hasTrait, structureTypeFor } from "../../structure-types/index.ts";
+import { floorsWeldedBy } from "../../topology/floor-weld.ts";
+import { rotateInPlan } from "../../topology/plan-rotation.ts";
+import { joinedStructures } from "../rigid-carry.ts";
 import type { GlobalHandleProvider } from "../../global-handles/index.ts";
 
 /**
@@ -30,6 +35,31 @@ export const spineHandleProvider: GlobalHandleProvider = {
         }
       }
     })();
-    return graphPatch && { kind: "spine", owner: handle.owner, graphPatch };
+    if (!graphPatch) return undefined;
+    // Moving, turning or raising the spine as a whole carries what is welded
+    // to the ends that move -- solid floors and all they hold -- the same way.
+    const carry = intent.kind === "move" ? { ends: handle.ends ?? [], place: (p: ConstructionPosition) => ({ x: p.x + intent.delta.x, y: p.y + intent.delta.y, z: p.z + intent.delta.z }) }
+      : intent.kind === "rotate" ? { ends: handle.ends ?? [], place: (p: ConstructionPosition) => ({ ...rotateInPlan(p, handle.pivot, intent.angle), y: p.y }) }
+      : intent.kind === "height" ? { ends: handle.ends ? [handle.ends[1]] : [], place: (p: ConstructionPosition) => ({ ...p, y: p.y + intent.dy }) }
+      : undefined;
+    const carried = carry && carriedByEnds(scene.topologies, handle.owner, carry.ends, carry.place);
+    if (!carried || carried.faces.length === 0) return { kind: "spine", owner: handle.owner, graphPatch };
+    const moves = new Map(graphPatch.nodes.map((node) => [node.id, node]));
+    for (const node of carried.nodes) if (!moves.has(node.id)) moves.set(node.id, node);
+    return { kind: "spine", owner: handle.owner, graphPatch: { ...graphPatch, nodes: [...moves.values()] }, carries: carried.faces.map((face) => face.surfaceKey) };
   },
 };
+
+/**
+ * What is welded to the spine's `ends` -- the floors their rungs splice
+ * into, and everything joined to those -- with every node taken by `place`.
+ * Spine-built faces are left out: their own spines regenerate them.
+ */
+function carriedByEnds(topologies: readonly ConstructionRegionTopology[], owner: string, ends: readonly string[], place: (p: ConstructionPosition) => ConstructionPosition) {
+  const endRung = structureTypeFor(owner)?.spine?.endRung;
+  if (!endRung) return undefined;
+  const welded = ends.flatMap((id) => floorsWeldedBy(topologies.filter((topology) => hasTrait(topology.surfaceType, "floor")), endRung(id).edgeId));
+  const faces = joinedStructures(topologies, welded, (surfaceType) => hasTrait(surfaceType, "ground") || structureTypeFor(surfaceType)?.spine !== undefined);
+  const nodes = new Map(faces.flatMap((face) => face.nodes.map((node) => [node.id, { id: node.id, position: place(node.position) }] as const)));
+  return { faces, nodes: [...nodes.values()] };
+}

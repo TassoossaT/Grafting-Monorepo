@@ -249,3 +249,46 @@ test("turning a welded ramp turns the solid floor it lands on with it", () => {
     assert.ok(welded(faces(runtime, "platform")[0], ramp(runtime), "bottom"), "still welded");
   } finally { session.free(); }
 });
+
+test("a curved ramp moved or turned by its whole-structure handles carries the solid floor welded to it, still welded", async () => {
+  const { commitPlatformSlope } = await import("../src/composition/tabletop/tools/slope/slope-commit.ts");
+  const { slopeCurveTool } = await import("../src/composition/tabletop/tools/slope/slope-tools.ts");
+  const { controlSectionId, isSpineControlNodeId } = await import("../src/features/edit-construction/index.ts");
+  const fixture = sessionFixture();
+  const { runtime, session, ctx, calls } = fixture;
+  Object.assign(runtime, { showPreview() {}, clearPreview() {} });
+  const curve = { width: 1.5, rise: 2 };
+  const spineHandle = (kind) => shownGlobalHandles(scene(runtime)).find((h) => h.kind === kind && h.owner === "platform-slope");
+  const dragSpine = (kind, to) => {
+    const grabbed = spineHandle(kind);
+    const start = { nodeId: grabbed.id, point: grabbed.position, screenX: 100, screenY: 300 };
+    const current = { point: to, screenX: 200, screenY: 300 };
+    slopeCurveTool.onPointerDown(ctx, start, curve);
+    slopeCurveTool.onPointerMove(ctx, { start, current, samples: [start, current] }, curve);
+    slopeCurveTool.onPointerUp(ctx, { start, current, samples: [start, current] }, curve);
+  };
+  try {
+    floor(runtime, "low", 0, 0);
+    commitPlatformSlope(ctx, [{ x: 4, y: 0, z: 2 }, { x: 8, y: 2, z: 2 }], curve);
+    const origin = runtime.getGraphSnapshot().nodes.find((n) => isSpineControlNodeId(n.id) && Math.abs(n.position.x - 4) < 1e-6);
+    const weldedNow = () => ["min", "max"].every((side) => faces(runtime, "platform")[0].nodes.some((n) => n.id === controlSectionId(origin.id, side)));
+    assert.ok(weldedNow(), "welded at creation");
+    const pivot = spineHandle("pivot");
+    dragSpine("pivot", { x: pivot.position.x + 3, y: 0, z: pivot.position.z + 1 });
+    assert.ok(!calls.feedback.some((f) => f.tone === "error"), JSON.stringify(calls.feedback.slice(-2)));
+    close(nodeAt(runtime, "low:0").x, 3, "the floor carried in x");
+    close(nodeAt(runtime, "low:0").z, 1, "and in z");
+    assert.ok(weldedNow(), "still welded after the move");
+    const rotate = spineHandle("rotate");
+    const from = Math.atan2(rotate.position.z - rotate.pivot.z, rotate.position.x - rotate.pivot.x);
+    const reach = Math.hypot(rotate.position.x - rotate.pivot.x, rotate.position.z - rotate.pivot.z);
+    const before = nodeAt(runtime, "low:0");
+    dragSpine("rotate", { x: rotate.pivot.x + reach * Math.cos(from + Math.PI / 2), y: 0, z: rotate.pivot.z + reach * Math.sin(from + Math.PI / 2) });
+    assert.ok(!calls.feedback.some((f) => f.tone === "error"), JSON.stringify(calls.feedback.slice(-2)));
+    const after = nodeAt(runtime, "low:0");
+    const r = (p) => Math.hypot(p.x - rotate.pivot.x, p.z - rotate.pivot.z);
+    close(r(after), r(before), "the floor turned round the ramp's pivot");
+    assert.ok(Math.hypot(after.x - before.x, after.z - before.z) > 1, "and moved");
+    assert.ok(weldedNow(), "still welded after the turn");
+  } finally { session.free(); }
+});

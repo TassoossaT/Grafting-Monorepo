@@ -186,7 +186,7 @@ export function planEdit(
       let moved = solve(motionSeeds);
       // A rigid structure the gesture bent without meaning to is carried whole
       // instead, and whatever stands on it follows: solved again from there.
-      const direct = new Set(cloud.members.map((member) => member.surfaceKey.join(" ")));
+      const direct = new Set(cloud.members.map((member) => member.surfaceKey.join("\u0000")));
       for (let round = 0; round < RIGID_ROUNDS; round += 1) {
         const carried = rigidCarries(topologies, moved, direct);
         if (carried.size === 0) break;

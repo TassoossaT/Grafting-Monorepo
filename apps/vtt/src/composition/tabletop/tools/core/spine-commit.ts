@@ -1,6 +1,6 @@
 import { regenerateWithEndWelds, structureTypeFor } from "../../../../features/edit-construction/index.ts";
 import type { SpineRegeneration } from "../../../../features/edit-construction/index.ts";
-import type { ApplyPatchReplacementRequest, ConstructionGraphPatch, ConstructionGraphSnapshot } from "../../../../ports/index.ts";
+import type { ApplyPatchReplacementRequest, ConstructionGraphPatch, ConstructionGraphSnapshot, ConstructionSurfaceKey } from "../../../../ports/index.ts";
 import { commitPatchReplacement } from "../../effects/effect-commit.ts";
 import type { ToolContext } from "./tool-context.ts";
 
@@ -11,15 +11,15 @@ import type { ToolContext } from "./tool-context.ts";
  */
 
 /** What `owner` makes of `graphPatch` applied to `snapshot`; `undefined` when it has no spine or makes nothing. */
-export function regenerateSpine(ctx: ToolContext, snapshot: ConstructionGraphSnapshot, owner: string | undefined, graphPatch: ConstructionGraphPatch, operationId: string): SpineRegeneration | undefined {
+export function regenerateSpine(ctx: ToolContext, snapshot: ConstructionGraphSnapshot, owner: string | undefined, graphPatch: ConstructionGraphPatch, operationId: string, options: { readonly keepsWelds?: boolean } = {}): SpineRegeneration | undefined {
   const generation = owner === undefined ? undefined : structureTypeFor(owner)?.spine;
   return generation && regenerateWithEndWelds(generation, {
     snapshot, graphPatch, topologies: ctx.runtime.getAllRegionTopologies(), port: ctx.runtime, field: ctx.runtime, operationId, tableId: ctx.tableId,
-  });
+  }, options);
 }
 
-/** Commits `request` -- its effects dispatched -- and records it for undo. */
-export function commitSpineRegeneration(ctx: ToolContext, request: ApplyPatchReplacementRequest, operationId: string): void {
-  const { recorded } = commitPatchReplacement(ctx.runtime, request, { transactionId: operationId });
+/** Commits `request` -- its effects dispatched, faces it `carries` along answering their own move -- and records it for undo. */
+export function commitSpineRegeneration(ctx: ToolContext, request: ApplyPatchReplacementRequest, operationId: string, carries: readonly ConstructionSurfaceKey[] = []): void {
+  const { recorded } = commitPatchReplacement(ctx.runtime, request, { transactionId: operationId, carries });
   if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
 }

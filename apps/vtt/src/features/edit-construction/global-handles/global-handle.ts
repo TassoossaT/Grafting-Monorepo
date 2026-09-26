@@ -62,7 +62,17 @@ export type GlobalHandleIntent =
  *   structure rebuilt, and the floors it welds into or leaves.
  */
 export type GlobalHandleEdit =
-  | { readonly kind: "spine"; readonly owner: string; readonly graphPatch: ConstructionGraphPatch }
+  | {
+      readonly kind: "spine";
+      readonly owner: string;
+      readonly graphPatch: ConstructionGraphPatch;
+      /**
+       * Faces the patch moves along with the spine without regenerating them
+       * -- the floors welded to its ends, carried whole. Their welds stay as
+       * they are, and each answers its own move (a grounded floor re-cuts).
+       */
+      readonly carries?: readonly ConstructionSurfaceKey[];
+    }
   | { readonly kind: "region-move"; readonly seed: ConstructionSurfaceKey; readonly delta: ConstructionPosition }
   | {
       readonly kind: "vertices";

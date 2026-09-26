@@ -3635,11 +3635,11 @@ export function commitChange<T>(
 export function commitPatchReplacement(
   runtime: EffectCommitRuntime,
   request: ApplyPatchReplacementRequest,
-  options: CommitOptions,
+  options: CommitOptions & {
+  /** Faces the replacement moves without replacing them -- carried along; each type answers its own move. */
+  readonly carries?: readonly ConstructionSurfaceKey[];
+  },
   ): TransactionResult<ConstructionPatchOutcome> {
-  const origin = options.origin ?? "local";
-  return commitChange(runtime, options, () => {
-  const before = topologiesOf(runtime, request.sourceSurfaceKeys);
 export function commitRegionEdit(
   runtime: EffectCommitRuntime & { applyRegionEdit(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): RegionEditOutcome },
   ops: readonly AtomicEditOp[],
@@ -4294,13 +4294,13 @@ export function spineChainSelection<Id extends ConstructionToolId>(id: Id): Sele
   const operationId = scopedToolId(ctx, "spine-edit", ctx.nextSequence());
 
 // src/composition/tabletop/tools/core/spine-commit.ts
-export function regenerateSpine(ctx: ToolContext, snapshot: ConstructionGraphSnapshot, owner: string | undefined, graphPatch: ConstructionGraphPatch, operationId: string): SpineRegeneration | undefined {
+export function regenerateSpine(ctx: ToolContext, snapshot: ConstructionGraphSnapshot, owner: string | undefined, graphPatch: ConstructionGraphPatch, operationId: string, options: { readonly keepsWelds?: boolean } = {}): SpineRegeneration | undefined {
   const generation = owner === undefined ? undefined : structureTypeFor(owner)?.spine;
   return generation && regenerateWithEndWelds(generation, {
   snapshot, graphPatch, topologies: ctx.runtime.getAllRegionTopologies(), port: ctx.runtime, field: ctx.runtime, operationId, tableId: ctx.tableId,
-  });
-export function commitSpineRegeneration(ctx: ToolContext, request: ApplyPatchReplacementRequest, operationId: string): void {
-  const { recorded } = commitPatchReplacement(ctx.runtime, request, { transactionId: operationId });
+  }, options);
+export function commitSpineRegeneration(ctx: ToolContext, request: ApplyPatchReplacementRequest, operationId: string, carries: readonly ConstructionSurfaceKey[] = []): void {
+  const { recorded } = commitPatchReplacement(ctx.runtime, request, { transactionId: operationId, carries });
 
 // src/composition/tabletop/tools/core/spine-edit-behavior.ts
 export interface SpineEditOptions {
@@ -5495,6 +5495,10 @@ export const endHandleProvider: GlobalHandleProvider = {
   return scene.topologies.flatMap((topology): EndGlobalHandle[] => {
   const capability = capabilityOf(topology);
 
+// src/features/edit-construction/orchestration/global-handles/handle-name.ts
+export function handleNodeName(scene: GlobalHandleScene, own: readonly ConstructionRegionTopology[], sortedNodeIds: readonly string[]): string {
+  const ownKeys = new Set(own.map((topology) => topology.surfaceKey.join("\u0000")));
+
 // src/features/edit-construction/orchestration/global-handles/index.ts
 export function shownGlobalHandles(scene: GlobalHandleScene, owns?: (surfaceType: string) => boolean): readonly GlobalHandle[] {
   return PROVIDERS.flatMap((provider) => provider.handles(scene)).filter((handle) => declared(handle) && (owns === undefined || owns(handle.owner)));
@@ -5531,6 +5535,24 @@ export type {
 export type { EditOpSink, EditPlan } from "./edit-orchestrator.ts";
 export type { CloudGlobalHandle } from "./global-handles/cloud-handle-provider.ts";
 
+// src/features/edit-construction/orchestration/rigid-carry.ts
+export function fitRigidMotion(pairs: readonly { readonly from: ConstructionPosition; readonly to: ConstructionPosition }[]): Place {
+  const n = pairs.length;
+  const mean = (pick: (pair: (typeof pairs)[number]) => number) => pairs.reduce((sum, pair) => sum + pick(pair), 0) / n;
+  const cf = { x: mean((p) => p.from.x), z: mean((p) => p.from.z) };
+export function rigidCarries(
+  topologies: readonly ConstructionRegionTopology[],
+  moved: ReadonlyMap<string, ConstructionPosition>,
+  direct: ReadonlySet<string>,
+  ): ReadonlyMap<string, ConstructionPosition> {
+  const carried = new Map<string, ConstructionPosition>();
+export function joinedStructures(
+  topologies: readonly ConstructionRegionTopology[],
+  seeds: readonly ConstructionRegionTopology[],
+  isGround: (surfaceType: string) => boolean,
+  ): readonly ConstructionRegionTopology[] {
+  const members = new Map(seeds.map((topology) => [keyOf(topology), topology]));
+
 // src/features/edit-construction/orchestration/spine-edit.ts
 export function planBezierEdit(input: SpineEditInput & {
   readonly topologies: readonly ConstructionRegionTopology[];
@@ -5548,8 +5570,13 @@ export function spineChainEnds(graph: ConstructionGraphSnapshot, seeds: Iterable
 export function spineEndsLanded(snapshot: ConstructionGraphSnapshot, graphPatch: ConstructionGraphPatch, generation: SpineGeneration, topologies: readonly ConstructionRegionTopology[]): ConstructionGraphPatch {
   return generation.endRung ? landEnds(snapshot, graphPatch, generation, topologies).graphPatch : graphPatch;
   }
-export function regenerateWithEndWelds(generation: SpineGeneration, input: SpineRegenerationInput): SpineRegeneration | undefined {
-  if (!generation.endRung) return generation.regenerate(input);
+export function regenerateWithEndWelds(
+  generation: SpineGeneration,
+  input: SpineRegenerationInput,
+  /** The ends' floors are carried along with them: their welds stay as they are. */
+  options: { readonly keepsWelds?: boolean } = {},
+  ): SpineRegeneration | undefined {
+  if (!generation.endRung || options.keepsWelds) return generation.regenerate(input);
 export function detachSpineEnd(generation: SpineGeneration, controlNodeId: string, topologies: readonly ConstructionRegionTopology[], operationId: string): ApplyPatchReplacementRequest | undefined {
   const rung = generation.endRung?.(controlNodeId);
 export function spineEndWelded(generation: SpineGeneration, controlNodeId: string, topologies: readonly ConstructionRegionTopology[]): boolean {
@@ -6838,6 +6865,8 @@ export function pushContourCorner(topology: ConstructionRegionTopology, nodeId: 
   const sides = sidesOf(topology);
 export function acrossContourSide(topology: ConstructionRegionTopology, edgeId: string, delta: ConstructionPosition): ConstructionPosition {
   const side = sidesOf(topology)?.find((candidate) => candidate.edgeIds.includes(edgeId));
+export function keepsOutline(topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>): boolean {
+  const sides = sidesOf(topology);
 
 // src/features/edit-construction/topology/curve-handles.ts
 export type CurveHandleIndex = 1 | 2 | "midpoint";

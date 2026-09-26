@@ -491,7 +491,7 @@ Runs `work` -- every mutation one gesture makes -- as one transaction, then
 lets every cloud the reported change reaches answer it inside that same
 transaction. Throwing anywhere rolls all of it back.
 
-### `function vtt.effect-commit.commitPatchReplacement(runtime: EffectCommitRuntime, request: ApplyPatchReplacementRequest, options: CommitOptions): TransactionResult<ConstructionPatchOutcome>`
+### `function vtt.effect-commit.commitPatchReplacement(runtime: EffectCommitRuntime, request: ApplyPatchReplacementRequest, options: CommitOptions & { carries?: readonly ConstructionSurfaceKey[] }): TransactionResult<ConstructionPatchOutcome>`
 
 Replaces regions with a patch and lets every cloud the change reaches answer it, atomically.
 
@@ -2370,11 +2370,11 @@ centre, radius, turns and direction -- in any spine tool's `selected`
 param, edited back from it through the spine's own owner. Any tool that
 edits spines and has a `selected` param uses this unchanged.
 
-### `function vtt.spine-commit.commitSpineRegeneration(ctx: ToolContext, request: ApplyPatchReplacementRequest, operationId: string): void`
+### `function vtt.spine-commit.commitSpineRegeneration(ctx: ToolContext, request: ApplyPatchReplacementRequest, operationId: string, carries: readonly ConstructionSurfaceKey[]): void`
 
-Commits `request` -- its effects dispatched -- and records it for undo.
+Commits `request` -- its effects dispatched, faces it `carries` along answering their own move -- and records it for undo.
 
-### `function vtt.spine-commit.regenerateSpine(ctx: ToolContext, snapshot: ConstructionGraphSnapshot, owner: string | undefined, graphPatch: ConstructionGraphPatch, operationId: string): SpineRegeneration | undefined`
+### `function vtt.spine-commit.regenerateSpine(ctx: ToolContext, snapshot: ConstructionGraphSnapshot, owner: string | undefined, graphPatch: ConstructionGraphPatch, operationId: string, options: { keepsWelds?: boolean }): SpineRegeneration | undefined`
 
 What `owner` makes of `graphPatch` applied to `snapshot`; `undefined` when it has no spine or makes nothing.
 
@@ -4030,7 +4030,7 @@ Which surfaces form one cloud with `seed` (`ADR-0022`) -- the engine decides, ne
 
 ### `property vtt.global-handle.GlobalHandleScene.topologies: readonly ConstructionRegionTopology[]`
 
-### `type vtt.global-handle.GlobalHandleEdit = { graphPatch: ConstructionGraphPatch; kind: "spine"; owner: string } | { delta: ConstructionPosition; kind: "region-move"; seed: ConstructionSurfaceKey } | { kind: "vertices"; moves: readonly { nodeId: string; position: ConstructionPosition }[]; retypes: readonly { edgeId: string; geometry: ConstructionEdgeGeometry }[] } | { kind: "replace"; request: ApplyPatchReplacementRequest }`
+### `type vtt.global-handle.GlobalHandleEdit = { carries?: readonly ConstructionSurfaceKey[]; graphPatch: ConstructionGraphPatch; kind: "spine"; owner: string } | { delta: ConstructionPosition; kind: "region-move"; seed: ConstructionSurfaceKey } | { kind: "vertices"; moves: readonly { nodeId: string; position: ConstructionPosition }[]; retypes: readonly { edgeId: string; geometry: ConstructionEdgeGeometry }[] } | { kind: "replace"; request: ApplyPatchReplacementRequest }`
 
 What a provider makes of an intent, in the terms the edit is carried out
 in:
@@ -4462,7 +4462,7 @@ Which provider made it -- and plans its edits.
 Global handles of structures built from regions -- a platform, a ramp:
 moving and raising go through the type's own region role (so its solver,
 transport and validation apply); turning places every node itself, arc
-centres with them, refused while another structure stands on those nodes.
+centres with them, and turns everything joined to the structure with it.
 
 ### `interface vtt.end-handle-provider.EndGlobalHandle`
 
@@ -4510,10 +4510,34 @@ that end, the other standing, and connects it to the floor edge it lands
 on; each offers to disconnect while welded. What the structure becomes is
 its type's; welding and unwelding is the same for every type.
 
+### `function vtt.handle-name.handleNodeName(scene: GlobalHandleScene, own: readonly ConstructionRegionTopology[], sortedNodeIds: readonly string[]): string`
+
+The node a structure's global handles are named after: its lowest node
+that no other structure holds, so two structures welded together never
+name their handles alike; its lowest node when every one is shared.
+
 ### `variable vtt.spine-handle-provider.spineHandleProvider: GlobalHandleProvider`
 
 Global handles of structures built from a spine: every intent becomes a
 spine graph patch the spine's owner regenerates from.
+
+### `function vtt.rigid-carry.fitRigidMotion(pairs: readonly { from: ConstructionPosition; to: ConstructionPosition }[]): Place`
+
+The rigid motion -- a turn in plan, a shift, a rise -- that best takes every `from` to its `to`.
+
+### `function vtt.rigid-carry.joinedStructures(topologies: readonly ConstructionRegionTopology[], seeds: readonly ConstructionRegionTopology[], isGround: (surfaceType: string) => boolean): readonly ConstructionRegionTopology[]`
+
+Every structure joined to `seeds` through shared nodes, `seeds` included --
+what turns or moves as one when a whole-structure handle acts on one of
+them. Ground is never part of it: it is re-cut around what lands, not
+carried.
+
+### `function vtt.rigid-carry.rigidCarries(topologies: readonly ConstructionRegionTopology[], moved: ReadonlyMap<string, ConstructionPosition>, direct: ReadonlySet<string>): ReadonlyMap<string, ConstructionPosition>`
+
+Where every node of each rigid structure among `topologies` must go so
+that `moved` carries it whole -- empty when none is bent. Structures in
+`direct` are the ones the gesture itself edits: their own controls shape
+them.
 
 ### `function vtt.spine-edit.planBezierEdit(input: SpineEditInput & { field: FieldPort; tableId: string; topologies: readonly ConstructionRegionTopology[] }): { preview: Float32Array; request: ApplyPatchReplacementRequest; selectedId: string } | undefined`
 
@@ -4530,7 +4554,7 @@ Preview only the affected curves; surface regeneration runs once on release.
 
 Takes the free end `controlNodeId` off the floor it is welded into, leaving the spine as it stands; `undefined` when it is welded to none.
 
-### `function vtt.spine-end-welds.regenerateWithEndWelds(generation: SpineGeneration, input: SpineRegenerationInput): SpineRegeneration | undefined`
+### `function vtt.spine-end-welds.regenerateWithEndWelds(generation: SpineGeneration, input: SpineRegenerationInput, options: { keepsWelds?: boolean }): SpineRegeneration | undefined`
 
 `generation`'s regeneration of `input`, with the spine's moved free ends
 coming off their floors and welding into the floors they land on -- one
@@ -6534,6 +6558,13 @@ Whether a gesture on this type can only be planned through the session's
 structural motion solver. Without one, such a gesture is refused instead
 of applying a partial move.
 
+### `property vtt.structure-type.StructureTypeDefinition.rigid?: boolean`
+
+The type's shape changes only through its own controls. Anything else
+moving some of its nodes -- a welded ramp, a wall's foot -- carries the
+whole structure along as one piece (`orchestration/rigid-carry.ts`);
+letting go of it is an explicit detach.
+
 ### `property vtt.structure-type.StructureTypeDefinition.roleFor: (topology: ConstructionRegionTopology, target: EditTarget) => string`
 
 Resolves what the grabbed part of this region means.
@@ -7250,6 +7281,13 @@ The span's own geometry between two of its parameters, walked forward.
 ### `function vtt.contour-offset.acrossContourSide(topology: ConstructionRegionTopology, edgeId: string, delta: ConstructionPosition): ConstructionPosition`
 
 `delta` kept only across the side `edgeId` belongs to, in plan -- how far a push moves it.
+
+### `function vtt.contour-offset.keepsOutline(topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>): boolean`
+
+Whether `topology` at `positions` keeps its outline: its corners where
+they stand, and any node between two corners still on that side, between
+them. A node sliding along its own side -- where something welded into
+the side meets it -- changes nothing a rigid structure cares about.
 
 ### `function vtt.contour-offset.pushContourCorner(topology: ConstructionRegionTopology, nodeId: string, delta: ConstructionPosition): readonly { nodeId: string; position: ConstructionPosition }[] | undefined`
 
