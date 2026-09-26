@@ -56,7 +56,7 @@ import {
   type MapSurfacePickVisualParams,
 } from "./map-surface-pick-scene-item.ts";
 import { clipPlaneForCameraHeight } from "./map-chunk-key.ts";
-import { createHeightHandleTexture, createMarkerTexture, createMidpointHandleTexture, createMoveHandleTexture, createNodeHandleTexture, createRoadBranchTexture, createRotateHandleTexture, createTurnsHandleTexture, createLinkHandleTexture } from "./marker-textures.ts";
+import { createHeightHandleTexture, createMarkerTexture, createMidpointHandleTexture, createMoveHandleTexture, createNodeHandleTexture, createRoadBranchTexture, createRotateHandleTexture, createTurnsHandleTexture, createLinkHandleTexture, createRadiusHandleTexture } from "./marker-textures.ts";
 import {
   NODE_HANDLE_LAYER_ID,
   NODE_HANDLE_VISUAL_KIND,
@@ -161,6 +161,7 @@ export class Render3dSceneAdapter implements SceneRenderPort {
       height: createHeightHandleTexture(),
       turns: createTurnsHandleTexture(),
       link: createLinkHandleTexture(),
+      radius: createRadiusHandleTexture(),
     } as const;
     registry.register<NodeHandleVisualParams>({
       kind: NODE_HANDLE_VISUAL_KIND,

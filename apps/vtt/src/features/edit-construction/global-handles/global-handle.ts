@@ -45,6 +45,8 @@ export type GlobalHandleIntent =
   | { readonly kind: "rotate"; readonly angle: number }
   | { readonly kind: "height"; readonly dy: number }
   | { readonly kind: "wind"; readonly angle: number }
+  /** Push a spiral's rim out (positive) or in, round its centre. */
+  | { readonly kind: "radius"; readonly delta: number }
   /** Take an end to `at`; `under` is the surface the pointer is on, which a landing prefers. */
   | { readonly kind: "place"; readonly at: ConstructionPosition; readonly under?: ConstructionSurfaceKey }
   /** Take an end off whatever it is welded to, leaving it where it stands. */

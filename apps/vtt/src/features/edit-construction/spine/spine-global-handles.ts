@@ -22,6 +22,8 @@ import { isSpineEdge, spineComponent, spineOwnerOf } from "./spine-owner.ts";
 const END_REACH = 1.2;
 /** How far past the structure's farthest point the rotate handle stands. */
 export const ROTATE_REACH = 1.5;
+/** How far above a spiral's rim its radius handle floats, clear of the surface. */
+const RIM_LIFT = 0.3;
 
 /**
  * `reach` out from `pivot` towards `toward`, level with the pivot -- where a
@@ -72,6 +74,15 @@ function handlesOf(graph: ConstructionGraphSnapshot, edges: readonly Constructio
   handles.push({
     ...base, id: spineGlobalHandleId("turns", name), kind: "turns", motion: { kind: "orbit", center: middle },
     position: { x: end.x - Math.sin(angle) * on * END_REACH, y: end.y, z: end.z + Math.cos(angle) * on * END_REACH },
+  });
+  // On the rim, halfway along the spiral: pushed out or in along its own radius.
+  const halfway = positions.get(chain.nodes[Math.floor(chain.nodes.length / 2)]!)!;
+  const radial = planAngle(middle, halfway);
+  const out = { x: Math.cos(radial), z: Math.sin(radial) };
+  const rim = Math.hypot(halfway.x - middle.x, halfway.z - middle.z);
+  handles.push({
+    ...base, id: spineGlobalHandleId("radius", name), kind: "radius", motion: { kind: "line", direction: out },
+    position: { x: middle.x + out.x * rim, y: halfway.y + RIM_LIFT, z: middle.z + out.z * rim },
   });
   return handles;
 }

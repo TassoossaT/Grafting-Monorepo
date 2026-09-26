@@ -54,6 +54,12 @@ export function createConstrainedDrag(motion: HandleMotion, handle: Construction
           return { position: options.spatialTarget ? { ...current.point, y: handle.y } : along(current) };
         case "vertical":
           return { position: { ...handle, y: handle.y + rise(current) } };
+        case "line": {
+          const d = motion.direction;
+          const moved = options.spatialTarget ? current.point : along(current);
+          const reach = (moved.x - handle.x) * d.x + (moved.z - handle.z) * d.z;
+          return { position: { x: handle.x + d.x * reach, y: handle.y, z: handle.z + d.z * reach } };
+        }
         case "orbit": {
           const turned = turning!.turn(current.ray ? pointerAtHeight(current, handle.y) : current.point);
           const angle = current.shiftKey ? Math.round(turned / TURN_STEP) * TURN_STEP : turned;

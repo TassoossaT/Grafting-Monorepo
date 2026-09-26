@@ -102,6 +102,15 @@ export function createHeightHandleTexture(): HTMLCanvasElement {
   });
 }
 
+/** Widens or narrows something round its centre: a double arrow across. */
+export function createRadiusHandleTexture(): HTMLCanvasElement {
+  return glyphDisc("#c2416b", (context) => {
+    context.beginPath(); context.moveTo(17, 32); context.lineTo(47, 32); context.stroke();
+    arrowhead(context, 15, 32, Math.PI);
+    arrowhead(context, 49, 32, 0);
+  });
+}
+
 /** Turns something round: a circular arrow. */
 export function createTurnsHandleTexture(): HTMLCanvasElement {
   return glyphDisc("#e07a1f", (context) => {

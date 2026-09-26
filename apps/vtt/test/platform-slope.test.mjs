@@ -239,3 +239,26 @@ test("a sloped ramp over terrain leaves it alone, on creation and on a spine edi
     assert.equal(faces(runtime, "terrain").length, 1, "the terrain under the ramp is untouched");
   } finally { session.free(); }
 });
+
+test("a spiral's radius handle, dragged out along its own radius, widens the spiral round the same centre", async () => {
+  const { shownGlobalHandles, describeSpineChain } = await import("../src/features/edit-construction/index.ts");
+  const { ctx, runtime, session, calls } = sessionFixture();
+  Object.assign(runtime, { showPreview() {}, clearPreview() {} });
+  try {
+    drawSpiral(slopeSpiralTool, ctx, { center: { x: 20, y: 1, z: 0 }, radius: 3, turns: 1.5, params: { ...params, rise: 4 } });
+    const scene = { graph: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), cloudFor: runtime.cloudFor };
+    const handle = shownGlobalHandles(scene).find((h) => h.kind === "radius");
+    assert.ok(handle && handle.motion.kind === "line", "a spiral shows a radius handle that moves along a line");
+    const d = handle.motion.direction;
+    const start = { nodeId: handle.id, point: handle.position, screenX: 100, screenY: 300 };
+    // The pointer strays sideways; only the part along the radius counts.
+    const current = { point: { x: handle.position.x + d.x * 1 - d.z * 2, y: 0, z: handle.position.z + d.z * 1 + d.x * 2 }, screenX: 200, screenY: 300 };
+    slopeSpiralTool.onPointerDown(ctx, start, params);
+    slopeSpiralTool.onPointerMove(ctx, { start, current, samples: [start, current] }, params);
+    slopeSpiralTool.onPointerUp(ctx, { start, current, samples: [start, current], moved: true }, params);
+    assert.ok(!calls.feedback.some((f) => f && f.tone === "error"), JSON.stringify(calls.feedback.slice(-2)));
+    const shape = describeSpineChain(runtime.getGraphSnapshot(), slopeSpans(runtime)[0].startNodeId);
+    assert.ok(Math.abs(shape.spiral.radius - 4) < 1e-3, `radius 3 pushed out by 1: ${shape.spiral.radius}`);
+    assert.ok(Math.abs(shape.spiral.centerX - 20) < 1e-6 && Math.abs(shape.spiral.centerZ) < 1e-6, "round the same centre");
+  } finally { session.free(); }
+});

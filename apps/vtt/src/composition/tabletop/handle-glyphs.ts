@@ -21,5 +21,5 @@ export const HANDLE_GLYPHS = {
 
 /** A whole-structure handle's glyph, by its kind. */
 export const GLOBAL_HANDLE_GLYPHS: Readonly<Record<GlobalHandleKind, RenderHandleGlyph>> = {
-  pivot: "move", rotate: "rotate", height: "height", turns: "turns", origin: "link", destination: "link",
+  pivot: "move", rotate: "rotate", height: "height", turns: "turns", radius: "radius", origin: "link", destination: "link",
 };

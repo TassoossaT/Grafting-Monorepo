@@ -7,6 +7,9 @@ import { rotateInPlan } from "../../topology/plan-rotation.ts";
 import { joinedStructures } from "../rigid-carry.ts";
 import type { GlobalHandleProvider } from "../../global-handles/index.ts";
 
+/** The narrowest a spiral is pushed in to by its radius handle. */
+const MIN_RADIUS = 0.5;
+
 /**
  * Global handles of structures built from a spine: every intent becomes a
  * spine graph patch the spine's owner regenerates from.
@@ -25,6 +28,11 @@ export const spineHandleProvider: GlobalHandleProvider = {
         case "height": {
           const far = handle.ends && scene.graph.nodes.find((node) => node.id === handle.ends![1]);
           return far ? { nodes: [{ id: far.id, position: { ...far.position, y: far.position.y + intent.dy } }], edges: [] } : undefined;
+        }
+        case "radius": {
+          const shape = describeSpineChain(scene.graph, handle.id);
+          if (!shape?.spiral) return undefined;
+          return planSpineChainEdit(scene.graph, port, handle.id, { ...shape, spiral: { ...shape.spiral, radius: Math.max(MIN_RADIUS, shape.spiral.radius + intent.delta) } }, operationId);
         }
         case "wind": {
           const shape = describeSpineChain(scene.graph, handle.id);
