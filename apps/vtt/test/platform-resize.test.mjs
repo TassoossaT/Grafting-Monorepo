@@ -163,3 +163,23 @@ test("a grounded platform moved far rebuilds the ground its rim nodes dragged al
     assert.ok(consumed.includes(rim.surfaceKey.join(":")), `the stretched rim ground is rebuilt: ${JSON.stringify(consumed)}`);
   } finally { session.free(); }
 });
+
+test("a floor drawn against another of its kind at its height joins it into one floor; another kind stays apart", async () => {
+  const { commitPlatformContour } = await import("../src/composition/tabletop/tools/platform/platform-contour-tool.ts");
+  const { runtime, session, ctx, calls } = sessionFixture();
+  const draw = (corners, support) => commitPlatformContour(ctx, corners.map(([x, z]) => ({ point: { x, y: 1, z } })), { mode: "create", elevation: 1, support, shape: "rectangle" });
+  try {
+    draw([[0, 0], [4, 0], [4, 4], [0, 4]], "floating");
+    // Against the first one's east side, only part of the way along it.
+    draw([[4, 1], [8, 1], [8, 3], [4, 3]], "floating");
+    assert.equal(calls.feedback.at(-1).tone, "success", JSON.stringify(calls.feedback.at(-1)));
+    const floating = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform-floating");
+    assert.equal(floating.length, 1, "one floor now");
+    const xs = floating[0].nodes.map((n) => n.position.x);
+    assert.ok(Math.min(...xs) === 0 && Math.max(...xs) === 8, "covering both");
+    // A grounded floor against it is another kind: it stays its own.
+    draw([[-4, 0], [0, 0], [0, 4], [-4, 4]], "grounded");
+    assert.equal(runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform-floating").length, 1);
+    assert.equal(runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform").length, 1);
+  } finally { session.free(); }
+});

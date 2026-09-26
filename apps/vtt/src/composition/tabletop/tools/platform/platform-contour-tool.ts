@@ -88,7 +88,11 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
     const graph = ctx.runtime.getGraphSnapshot();
     // Picking the terrain below a drawing plane is not an instruction to weld floors.
     const picked = new Set(pickedSamples.flatMap((s) => s.nodeId ? [s.nodeId] : []));
-    const sources = params.mode === "create" ? [] : all.filter((t) => t.surfaceType === surfaceTypeOf(params) && t.nodes.every((n) => Math.abs(n.position.y - params.elevation) < 1e-4));
+    const level = all.filter((t) => t.surfaceType === surfaceTypeOf(params) && t.nodes.every((n) => Math.abs(n.position.y - params.elevation) < 1e-4));
+    // A floor drawn against one of its own kind at its own height joins it: the two become one floor,
+    // as extending would make them, rather than two faces lying edge to edge unconnected.
+    const joins = params.mode === "create" ? level.filter((t) => touchesContour(t, contour)) : [];
+    const sources = params.mode === "create" ? joins : level;
     if (params.mode !== "create" && sources.length === 0) throw new Error("Nenhuma plataforma nessa elevação. Comece sobre a plataforma ou escolha a elevação correta.");
 
     const operationId = scopedToolId(ctx, "platform", ctx.nextSequence());
@@ -196,6 +200,29 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
     ctx.reportFeedback({ tone: "success", message: `Plataforma: ${regions.length} face(s) na elevação ${params.elevation}.` });
   } catch (error) { ctx.reportFeedback({ tone: "error", message: error instanceof Error ? error.message : String(error) }); }
 }
+/**
+ * Whether the drawn `contour` meets `topology`'s outline -- a corner of
+ * either within reach of the other's boundary, or either inside the other --
+ * in plan.
+ */
+function touchesContour(topology: ConstructionRegionTopology, contour: readonly FittedEdge[]): boolean {
+  const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
+  const own = topology.outerLoops.flat().map((use) => [at.get(use.startNodeId)!, at.get(use.endNodeId)!] as const);
+  const drawn = contour.map((edge) => [edge.start, edge.end] as const);
+  const near = (p: { readonly x: number; readonly z: number }, segments: readonly (readonly [{ readonly x: number; readonly z: number }, { readonly x: number; readonly z: number }])[]) =>
+    segments.some(([a, b]) => {
+      const dx = b.x - a.x, dz = b.z - a.z, lengthSq = dx * dx + dz * dz;
+      const t = lengthSq < 1e-12 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.z - a.z) * dz) / lengthSq));
+      return Math.hypot(p.x - (a.x + dx * t), p.z - (a.z + dz * t)) <= WELD_TOLERANCE;
+    });
+  const inside = (p: { readonly x: number; readonly z: number }, segments: readonly (readonly [{ readonly x: number; readonly z: number }, { readonly x: number; readonly z: number }])[]) => {
+    let crossings = 0;
+    for (const [a, b] of segments) if ((a.z > p.z) !== (b.z > p.z) && p.x < a.x + ((p.z - a.z) * (b.x - a.x)) / (b.z - a.z)) crossings += 1;
+    return crossings % 2 === 1;
+  };
+  return drawn.some(([p]) => near(p, own) || inside(p, own)) || own.some(([p]) => near(p, drawn) || inside(p, drawn));
+}
+
 /** Polygon entry point retained for callers that already have explicit corners. */
 export function commitPlatformContour(ctx: ToolContext, samples: readonly PointerSample[], params: Params): void {
   commitPlatformShape(ctx, lines(samples,params.elevation),params,samples);
