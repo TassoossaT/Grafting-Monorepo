@@ -3,6 +3,7 @@ import type { ConstructionPosition, ConstructionRegionTopology, ConstructionSurf
 import { globalHandleId } from "../../global-handles/index.ts";
 import type { GlobalHandle, GlobalHandleAction, GlobalHandleEdit, GlobalHandleProvider, GlobalHandleScene } from "../../global-handles/index.ts";
 import { hasTrait, structureTypeFor, type StructureEnd, type StructureEndName, type StructureEnds } from "../../structure-types/index.ts";
+import { handleNodeName } from "./handle-name.ts";
 import { floorLandingNear, floorsWeldedBy, floorsWithout, reweldFloors, sharedEdgeIds } from "../../topology/floor-weld.ts";
 
 /** How close an end must still stand to a floor's edge to count as staying welded there. */
@@ -96,8 +97,9 @@ export const endHandleProvider: GlobalHandleProvider = {
       const capability = capabilityOf(topology);
       if (!capability) return [];
       const nodeIds = topology.nodes.map((node) => node.id).sort();
+      const name = handleNodeName(scene, [topology], nodeIds);
       return capability.ends(topology).map((end) => ({
-        id: globalHandleId(end.name, nodeIds[0]!),
+        id: globalHandleId(end.name, name),
         kind: end.name,
         position: end.position,
         pivot: end.position,

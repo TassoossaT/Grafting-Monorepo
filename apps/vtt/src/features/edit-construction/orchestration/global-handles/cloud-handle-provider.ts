@@ -3,7 +3,9 @@ import type { ConstructionPosition, ConstructionRegionTopology } from "@/ports";
 import { globalHandleId } from "../../global-handles/index.ts";
 import type { GlobalHandle, GlobalHandleProvider, GlobalHandleScene } from "../../global-handles/index.ts";
 import { outward, ROTATE_REACH } from "../../spine/spine-global-handles.ts";
-import { resolveCreationInteraction, structureTypeFor } from "../../structure-types/index.ts";
+import { hasTrait, structureTypeFor } from "../../structure-types/index.ts";
+import { joinedStructures } from "../rigid-carry.ts";
+import { handleNodeName } from "./handle-name.ts";
 import { reverseGeometry } from "../../topology/boundary-edges.ts";
 import { rotateInPlan } from "../../topology/plan-rotation.ts";
 
@@ -40,7 +42,7 @@ function cloudsOf(scene: GlobalHandleScene): readonly (readonly ConstructionRegi
  * Global handles of structures built from regions -- a platform, a ramp:
  * moving and raising go through the type's own region role (so its solver,
  * transport and validation apply); turning places every node itself, arc
- * centres with them, refused while another structure stands on those nodes.
+ * centres with them, and turns everything joined to the structure with it.
  */
 export const cloudHandleProvider: GlobalHandleProvider = {
   name: "cloud",
@@ -51,7 +53,7 @@ export const cloudHandleProvider: GlobalHandleProvider = {
       const points = [...positions.values()];
       const mean = (axis: "x" | "y" | "z") => points.reduce((sum, p) => sum + p[axis], 0) / points.length;
       const pivot = { x: mean("x"), y: mean("y"), z: mean("z") };
-      const name = nodeIds[0]!;
+      const name = handleNodeName(scene, members, nodeIds);
       const reach = Math.max(...points.map((p) => Math.hypot(p.x - pivot.x, p.z - pivot.z))) + ROTATE_REACH;
       const base = { owner: members[0]!.surfaceType, provider: "cloud", nodeIds, pivot, members };
       return [
@@ -67,23 +69,19 @@ export const cloudHandleProvider: GlobalHandleProvider = {
     if (intent.kind === "move") return { kind: "region-move", seed, delta: intent.delta };
     if (intent.kind === "height") return { kind: "region-move", seed, delta: { x: 0, y: intent.dy, z: 0 } };
     if (intent.kind !== "rotate") return undefined;
-    const own = new Set(handle.members.map((member) => member.surfaceKey.join("|")));
-    const moved = new Set(handle.nodeIds);
-    // What the structure cuts or restacks -- the ground round a grounded
-    // platform -- is rebuilt by the edit's own effect when it lands; only
-    // something else standing on its nodes is in the way.
-    const answered = (surfaceType: string) => ["cut", "restack"].includes(resolveCreationInteraction(handle.owner, surfaceType).kind);
-    const leaning = scene.topologies.find((topology) => !own.has(topology.surfaceKey.join("|")) && !answered(topology.surfaceType) && topology.nodes.some((node) => moved.has(node.id)));
-    if (leaning) throw new Error("Solte o que esta apoiado na estrutura antes de gira-la.");
-    const positions = new Map<string, ConstructionPosition>(handle.members.flatMap((member) => member.nodes.map((node) => [node.id, node.position] as const)));
-    const moves = handle.nodeIds.map((nodeId) => ({ nodeId, position: rotateInPlan(positions.get(nodeId)!, handle.pivot, intent.angle) }));
+    // Everything joined to it turns with it as one piece -- a welded ramp, the
+    // floor it lands on, the walls on that floor. The ground is re-cut round
+    // where it lands, never carried.
+    const turned = joinedStructures(scene.topologies, handle.members, (surfaceType) => hasTrait(surfaceType, "ground"));
+    const positions = new Map<string, ConstructionPosition>(turned.flatMap((member) => member.nodes.map((node) => [node.id, node.position] as const)));
+    const moves = [...positions].map(([nodeId, position]) => ({ nodeId, position: rotateInPlan(position, handle.pivot, intent.angle) }));
     const after = new Map(moves.map((move) => [move.nodeId, move.position]));
-    for (const member of handle.members) {
+    for (const member of turned) {
       const reason = structureTypeFor(member.surfaceType)?.validateMotion?.(member, after);
       if (reason) throw new Error(reason);
     }
     const retypes = new Map<string, import("@/ports").ConstructionEdgeGeometry>();
-    for (const use of handle.members.flatMap((member) => [...member.outerLoops, ...member.holes].flat())) {
+    for (const use of turned.flatMap((member) => [...member.outerLoops, ...member.holes].flat())) {
       if (use.geometry.kind !== "arc" || retypes.has(use.edgeId)) continue;
       const own = use.reversed ? reverseGeometry(use.geometry) : use.geometry;
       if (own.kind !== "arc") continue;

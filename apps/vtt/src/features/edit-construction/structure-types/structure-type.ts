@@ -417,6 +417,13 @@ export interface StructureTypeDefinition {
    * cloud is many structures at once -- a road grid would move as one.
    */
   readonly globalHandles?: readonly GlobalHandleKind[];
+  /**
+   * The type's shape changes only through its own controls. Anything else
+   * moving some of its nodes -- a welded ramp, a wall's foot -- carries the
+   * whole structure along as one piece (`orchestration/rigid-carry.ts`);
+   * letting go of it is an explicit detach.
+   */
+  readonly rigid?: boolean;
   /** Present when this type runs between two ends that land on floors -- see {@link StructureEnds}. */
   readonly ends?: StructureEnds;
   /** Returns a reason when a proposed position batch violates this type. */

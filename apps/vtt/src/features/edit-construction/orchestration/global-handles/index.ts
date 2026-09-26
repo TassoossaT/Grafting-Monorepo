@@ -29,7 +29,11 @@ export function shownGlobalHandles(scene: GlobalHandleScene, owns?: (surfaceType
 export function shownGlobalHandleAt(scene: GlobalHandleScene, id: string): GlobalHandle | undefined {
   const named = globalHandleOf(id);
   if (!named) return undefined;
-  return shownGlobalHandles(scene).find((handle) => handle.kind === named.kind && handle.nodeIds.includes(named.nodeId));
+  const shown = shownGlobalHandles(scene);
+  // The same id first: structures welded together share nodes, so another's
+  // handle may also hold the node this one is named after.
+  return shown.find((handle) => handle.id === id)
+    ?? shown.find((handle) => handle.kind === named.kind && handle.nodeIds.includes(named.nodeId));
 }
 
 /** What `intent` on `handle` edits, from the provider that placed it. */

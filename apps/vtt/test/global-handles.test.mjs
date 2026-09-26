@@ -65,7 +65,7 @@ test("the rotate handle turns a platform a quarter round its middle, keeps to it
   } finally { session.free(); }
 });
 
-test("a platform with a wall standing on it is not turned out from under the wall", () => {
+test("a platform with a wall standing on it turns with the wall, as one piece", () => {
   const fixture = sessionFixture();
   const { runtime, session, calls } = fixture;
   try {
@@ -76,10 +76,14 @@ test("a platform with a wall standing on it is not turned out from under the wal
     ]);
     const handle = shownGlobalHandles(scene(runtime)).find((h) => h.kind === "rotate");
     const from = Math.atan2(handle.position.z - handle.pivot.z, handle.position.x - handle.pivot.x);
-    const before = session.snapshot_json();
-    drag(platformContourTool, fixture, handle, [{ x: handle.pivot.x + 5 * Math.cos(from + 1), y: 0, z: handle.pivot.z + 5 * Math.sin(from + 1) }], platformContourTool.defaultParams());
-    assert.equal(session.snapshot_json(), before);
-    assert.ok(calls.feedback.some((f) => f.tone === "error" && /apoiado/.test(f.message)), JSON.stringify(calls.feedback.slice(-2)));
+    const top = () => node(runtime, "wall:top1").position;
+    const was = top();
+    drag(platformContourTool, fixture, handle, [{ x: handle.pivot.x + 5 * Math.cos(from + Math.PI / 2), y: 0, z: handle.pivot.z + 5 * Math.sin(from + Math.PI / 2) }], platformContourTool.defaultParams());
+    assert.ok(!calls.feedback.some((f) => f.tone === "error"), JSON.stringify(calls.feedback.slice(-2)));
+    const now = top();
+    const r = (p) => Math.hypot(p.x - handle.pivot.x, p.z - handle.pivot.z);
+    assert.ok(Math.abs(r(now) - r(was)) < 1e-6 && Math.hypot(now.x - was.x, now.z - was.z) > 1, `the wall's top turned round the same pivot: ${JSON.stringify(now)}`);
+    assert.equal(now.y, 3, "at its own height");
   } finally { session.free(); }
 });
 

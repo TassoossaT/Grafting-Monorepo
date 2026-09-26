@@ -63,6 +63,8 @@ function contourPlatformStructureType(
     surfaceType, label, creation: "a flat closed contour, without thickness",
     traits: Object.freeze(["floor"] as const),
     requiresMotionSolver: true,
+    // A floor is solid: only its own sides, corners and handles reshape it.
+    rigid: true,
     roleFor: (topology, target) => target.kind === "vertex" && !topology.nodes.some((node) => node.id === target.nodeId) ? "platform-unknown" : `platform-${target.kind}`,
     policyFor: platformPolicy,
     interactionOver,

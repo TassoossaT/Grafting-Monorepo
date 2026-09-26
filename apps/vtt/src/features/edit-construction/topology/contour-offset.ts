@@ -150,3 +150,30 @@ export function acrossContourSide(topology: ConstructionRegionTopology, edgeId: 
   const amount = planDot(side.n, delta);
   return { x: side.n.x * amount, y: 0, z: side.n.z * amount };
 }
+
+/**
+ * Whether `topology` at `positions` keeps its outline: its corners where
+ * they stand, and any node between two corners still on that side, between
+ * them. A node sliding along its own side -- where something welded into
+ * the side meets it -- changes nothing a rigid structure cares about.
+ */
+export function keepsOutline(topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>): boolean {
+  const sides = sidesOf(topology);
+  if (!sides) return true;
+  const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
+  const now = (id: string) => positions.get(id) ?? at.get(id)!;
+  const still = (a: ConstructionPosition, b: ConstructionPosition) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z) < 1e-6;
+  for (const side of sides) {
+    const first = side.nodes[0]!, last = side.nodes.at(-1)!;
+    if (!still(now(first), at.get(first)!) || !still(now(last), at.get(last)!)) return false;
+    const a = at.get(first)!, b = at.get(last)!;
+    const length = Math.hypot(b.x - a.x, b.z - a.z);
+    for (const id of side.nodes.slice(1, -1)) {
+      const p = now(id);
+      if (Math.abs(p.y - at.get(id)!.y) > 1e-6 || Math.abs(side.n.x * p.x + side.n.z * p.z - side.c) > 1e-6) return false;
+      const along = ((p.x - a.x) * (b.x - a.x) + (p.z - a.z) * (b.z - a.z)) / (length || 1);
+      if (along <= 0 || along >= length) return false;
+    }
+  }
+  return true;
+}

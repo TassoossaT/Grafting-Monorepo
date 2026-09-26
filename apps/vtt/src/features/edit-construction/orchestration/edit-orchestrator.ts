@@ -5,6 +5,10 @@ import { addPosition, constrainToAxes } from "./atomic-edit.ts";
 import type { CloudTopology } from "../topology/construction-cloud.ts";
 import { cloudNodes } from "../topology/construction-cloud.ts";
 import { resolvePolicy, structureTypeFor } from "../structure-types/index.ts";
+import { rigidCarries } from "./rigid-carry.ts";
+
+/** How many times rigid structures may pass a carry on to others before the plan settles. */
+const RIGID_ROUNDS = 6;
 import type { EditRole, EditScope } from "../structure-types/index.ts";
 
 /**
@@ -162,18 +166,38 @@ export function planEdit(
         topology,
         policy.transport === true && topology.surfaceType === cloud.seed.surfaceType,
       ) ?? []);
-      const resolved = source.planMotion({ seeds, influences });
-      const moved = new Map(resolved.moves.map((move) => [move.nodeId, move.position]));
-      const resolvedMoves = new Map(moved);
-      for (const surfaceType of new Set(topologies.map((topology) => topology.surfaceType))) {
-        const derive = structureTypeFor(surfaceType)?.deriveMotion;
-        if (!derive) continue;
-        for (const [nodeId, position] of derive(topologies.filter((topology) => topology.surfaceType === surfaceType), resolvedMoves, {
-          graphSnapshot,
-          port: source.curveBatch ? source as Pick<BezierPort, "curveBatch"> : undefined,
-        })) {
-          if (!moved.has(nodeId)) moved.set(nodeId, position);
+      const solve = (motionSeeds: readonly { nodeId: string; delta: ConstructionPosition }[]) => {
+        const resolved = source.planMotion({ seeds: motionSeeds, influences });
+        const solved = new Map(resolved.moves.map((move) => [move.nodeId, move.position]));
+        const resolvedMoves = new Map(solved);
+        for (const surfaceType of new Set(topologies.map((topology) => topology.surfaceType))) {
+          const derive = structureTypeFor(surfaceType)?.deriveMotion;
+          if (!derive) continue;
+          for (const [nodeId, position] of derive(topologies.filter((topology) => topology.surfaceType === surfaceType), resolvedMoves, {
+            graphSnapshot,
+            port: source.curveBatch ? source as Pick<BezierPort, "curveBatch"> : undefined,
+          })) {
+            if (!solved.has(nodeId)) solved.set(nodeId, position);
+          }
         }
+        return solved;
+      };
+      let motionSeeds: readonly { nodeId: string; delta: ConstructionPosition }[] = seeds;
+      let moved = solve(motionSeeds);
+      // A rigid structure the gesture bent without meaning to is carried whole
+      // instead, and whatever stands on it follows: solved again from there.
+      const direct = new Set(cloud.members.map((member) => member.surfaceKey.join(" ")));
+      for (let round = 0; round < RIGID_ROUNDS; round += 1) {
+        const carried = rigidCarries(topologies, moved, direct);
+        if (carried.size === 0) break;
+        motionSeeds = [
+          ...motionSeeds.filter((seed) => !carried.has(seed.nodeId)),
+          ...[...carried].map(([nodeId, position]) => {
+            const before = positions.get(nodeId)!;
+            return { nodeId, delta: { x: position.x - before.x, y: position.y - before.y, z: position.z - before.z } };
+          }),
+        ];
+        moved = solve(motionSeeds);
       }
       let surfaceCount = 0;
       for (const topology of topologies) {

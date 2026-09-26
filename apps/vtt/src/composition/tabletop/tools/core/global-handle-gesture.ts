@@ -61,7 +61,8 @@ function previewOf(ctx: ToolContext, handle: GlobalHandle, edit: GlobalHandleEdi
   if (edit.kind === "spine") return regenerateSpine(ctx, scene.graph, edit.owner, edit.graphPatch, operationId)?.preview;
   if (edit.kind === "replace") return replacementOutline(edit.request);
   const moved = movedPositions(ctx, handle, edit, scene);
-  const nodes = new Set(handle.nodeIds);
+  // Every face the edit moves a node of -- more than the handle's own structure when it carries what is joined to it.
+  const nodes = new Set([...handle.nodeIds, ...moved.keys()]);
   const segments: number[] = [];
   for (const topology of scene.topologies) {
     if (!topology.nodes.some((node) => nodes.has(node.id))) continue;

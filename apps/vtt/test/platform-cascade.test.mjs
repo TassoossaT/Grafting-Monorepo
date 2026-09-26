@@ -52,10 +52,11 @@ test("whole-platform horizontal translation carries upper clouds; local shape ed
     const full = plan(runtime, 0, { x: 2, y: 0, z: 0 });
     assert.equal(full.kind, "apply", full.reason);
     assert.equal(full.ops.length, 12);
+    // Resizing the ground floor by its corner would push the wall standing there,
+    // and that wall the solid storey above -- which, carried whole, would shear
+    // the storey's other walls. Refused rather than bending anything.
     const local = plan(runtime, 0, { x: 1, y: 0, z: 0 }, { kind: "vertex", nodeId: "p0:0" });
-    assert.equal(local.kind, "apply", local.reason);
-    // The corner pushes both sides meeting there: the side across x slides whole, the walls on the corner follow.
-    assert.deepEqual(local.ops.map((op) => op.nodeId).sort(), ["p0:0","p0:3","p1:0","p2:0"]);
+    assert.equal(local.kind, "deny");
     assert.equal(plan(runtime, 1, { x: 1, y: 0, z: 0 }).kind, "deny", "a connected upright wall cannot be sheared by its top");
   } finally { session.free(); }
 });
@@ -184,8 +185,11 @@ test("bottom wall edge moves both paired posts and propagates through actual inc
     const edge=wall.outerLoops.flat().find((e)=>e.startNodeId==="p0:0"&&e.endNodeId==="p0:1");
     const result=planEdit(resolveCloudTopology(runtime,wall.surfaceKey),{surfaceKey:wall.surfaceKey,target:{kind:"edge",edgeId:edge.edgeId},delta:{x:1,y:9,z:0}},runtime.getGraphSnapshot(),runtime);
     assert.equal(result.kind,"apply",result.reason);
-    assert.equal(result.ops.length,6);
+    // The wall's foot is a solid floor's corner: every storey it reaches is carried whole, never bent.
+    assert.equal(result.ops.length,12);
     assert.ok(result.ops.every((op)=>op.position.y===Number(op.nodeId[1])*3));
+    const was=new Map(runtime.getGraphSnapshot().nodes.map((n)=>[n.id,n.position]));
+    assert.ok(result.ops.every((op)=>Math.abs(op.position.x-was.get(op.nodeId).x-1)<1e-9&&Math.abs(op.position.z-was.get(op.nodeId).z)<1e-9),"every storey shifted alike");
   } finally {session.free();}
 });
 test("platform extension welds onto a shared edge instead of crossing it, and topology history covers the whole gesture", () => {

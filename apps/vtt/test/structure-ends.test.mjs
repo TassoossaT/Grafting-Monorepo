@@ -201,3 +201,51 @@ test("a free ramp top stands under the pointer at its own height, not where the 
     close(top.x, 6, `under the pointer at that height, not at the ground hit ${end.point.x}`);
   } finally { session.free(); }
 });
+
+const nodeAt = (runtime, id) => runtime.getGraphSnapshot().nodes.find((n) => n.id === id).position;
+
+test("a welded ramp moved away from its floor carries the solid floor whole; slid along the floor's edge it moves alone", () => {
+  const fixture = sessionFixture();
+  const { runtime, session, calls } = fixture;
+  try {
+    floor(runtime, "low", 0, 0);
+    drawn(fixture, { x: 4, y: 0, z: 2 }, { x: 8, y: 0, z: 2 });
+    const pivot = handle(runtime, "pivot");
+    // Along the edge (z): the ramp slides on the floor's side, the floor keeps its shape and place.
+    dragEnd(fixture, "pivot", { x: pivot.position.x, y: 0, z: pivot.position.z + 0.5 });
+    assert.equal(calls.feedback.at(-1).tone, "success", JSON.stringify(calls.feedback.at(-1)));
+    close(nodeAt(runtime, "low:1").x, 4, "the floor stayed");
+    close(nodeAt(runtime, "low:1").z, 0, "the floor stayed");
+    close(centre(ramp(runtime), "bottom").z, 2.5, "the ramp slid along the edge");
+    // Away from it (x): the floor comes along, whole.
+    const again = handle(runtime, "pivot");
+    dragEnd(fixture, "pivot", { x: again.position.x + 3, y: 0, z: again.position.z });
+    assert.equal(calls.feedback.at(-1).tone, "success", JSON.stringify(calls.feedback.at(-1)));
+    for (const [id, x, z] of [["low:0", 3, 0], ["low:1", 7, 0], ["low:2", 7, 4], ["low:3", 3, 4]]) {
+      close(nodeAt(runtime, id).x, x, `${id} carried in x`);
+      close(nodeAt(runtime, id).z, z, `${id} kept its z`);
+    }
+    assert.ok(welded(faces(runtime, "platform")[0], ramp(runtime), "bottom"), "still welded");
+  } finally { session.free(); }
+});
+
+test("turning a welded ramp turns the solid floor it lands on with it", () => {
+  const fixture = sessionFixture();
+  const { runtime, session, calls } = fixture;
+  try {
+    floor(runtime, "low", 0, 0);
+    drawn(fixture, { x: 4, y: 0, z: 2 }, { x: 8, y: 0, z: 2 });
+    const rotate = handle(runtime, "rotate");
+    const { pivot } = rotate;
+    const from = Math.atan2(rotate.position.z - pivot.z, rotate.position.x - pivot.x);
+    const reach = Math.hypot(rotate.position.x - pivot.x, rotate.position.z - pivot.z);
+    const before = nodeAt(runtime, "low:0");
+    dragEnd(fixture, "rotate", { x: pivot.x + reach * Math.cos(from + Math.PI / 2), y: 0, z: pivot.z + reach * Math.sin(from + Math.PI / 2) });
+    assert.ok(!calls.feedback.some((f) => f.tone === "error"), JSON.stringify(calls.feedback.slice(-2)));
+    const after = nodeAt(runtime, "low:0");
+    const r = (p) => Math.hypot(p.x - pivot.x, p.z - pivot.z);
+    close(r(after), r(before), "the floor's corner turned round the ramp's pivot");
+    assert.ok(Math.hypot(after.x - before.x, after.z - before.z) > 1, "and actually moved");
+    assert.ok(welded(faces(runtime, "platform")[0], ramp(runtime), "bottom"), "still welded");
+  } finally { session.free(); }
+});
