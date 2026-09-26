@@ -162,3 +162,42 @@ test("a curved ramp's welded end dragged away from its floor comes off it", asyn
     close(runtime.getGraphSnapshot().nodes.find((n) => n.id === origin.id).position.z, 6, "the start where it was dragged");
   } finally { session.free(); }
 });
+
+/** A pointer sample as the view gives it: where the camera ray from `eye` through `aim` hits the ground, and that ray. */
+function aimed(eye, aim) {
+  const d = { x: aim.x - eye.x, y: aim.y - eye.y, z: aim.z - eye.z };
+  const length = Math.hypot(d.x, d.y, d.z);
+  const direction = { x: d.x / length, y: d.y / length, z: d.z / length };
+  const t = -eye.y / direction.y;
+  return { point: { x: eye.x + direction.x * t, y: 0, z: eye.z + direction.z * t }, ray: { origin: eye, direction } };
+}
+
+test("the ramp's top lands on a raised floor's edge the pointer aims at, though the ray meets the ground behind it", () => {
+  const fixture = sessionFixture();
+  const { runtime, session, calls } = fixture;
+  try {
+    floor(runtime, "low", 0, 0);
+    floor(runtime, "high", 10, 2, "platform-floating");
+    const eye = { x: 0, y: 12, z: 2 };
+    const end = aimed(eye, { x: 9.8, y: 2, z: 2 });
+    assert.ok(end.point.x > 11, "the ray's ground hit is well past the edge");
+    const start = { point: { x: 4, y: 0, z: 2 } };
+    slopeRampTool.onPointerUp(fixture.ctx, { start, current: end, samples: [start, end] }, params);
+    assert.ok(calls.feedback.at(-1).message.includes("2 ponta"), JSON.stringify(calls.feedback.at(-1)));
+    close(centre(ramp(runtime), "top").x, 10, "the top on the high floor's edge");
+  } finally { session.free(); }
+});
+
+test("a free ramp top stands under the pointer at its own height, not where the ray met the ground", () => {
+  const fixture = sessionFixture();
+  const { runtime, session } = fixture;
+  try {
+    const eye = { x: 0, y: 12, z: 0 };
+    const end = aimed(eye, { x: 6, y: 2, z: 0 });
+    const start = { point: { x: 0, y: 0, z: 0 } };
+    slopeRampTool.onPointerUp(fixture.ctx, { start, current: end, samples: [start, end] }, params);
+    const top = centre(ramp(runtime), "top");
+    close(top.y, 2, "the top climbs the rise");
+    close(top.x, 6, `under the pointer at that height, not at the ground hit ${end.point.x}`);
+  } finally { session.free(); }
+});

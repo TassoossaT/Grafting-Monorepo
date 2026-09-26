@@ -4095,12 +4095,12 @@ export interface ConstrainedDragOptions {
   }
 export function createConstrainedDrag(motion: HandleMotion, handle: ConstructionPosition, sample: PointerSample, options: ConstrainedDragOptions = {}): { at(gesture: ToolGesture): ConstrainedPosition } {
   const origin = options.pointerOrigin ?? sample.point;
-  const turning = motion.kind === "orbit" ? createAngleTracker(motion.center, handle) : undefined;
-  const rise = (current: PointerSample) => options.spatialTarget
-  ? current.point.y - handle.y
-  : sample.screenY !== undefined && current.screenY !== undefined ? (sample.screenY - current.screenY) / PIXELS_PER_UNIT : 0;
-  return {
-  at(gesture) {
+  // Along the ground, the pointer is read at the handle's own height, so a
+  // raised handle keeps under the cursor instead of trailing the ground.
+  const grabbedAt = sample.ray ? pointerAtHeight(sample, handle.y) : origin;
+  const along = (current: PointerSample) => {
+  const at = current.ray ? pointerAtHeight(current, handle.y) : current.point;
+  const from = current.ray ? grabbedAt : origin;
 
 // src/composition/tabletop/tools/core/contour-fusion.ts
 export interface FusionPolyline {
@@ -4231,8 +4231,7 @@ export function floorUnder(floors: readonly ConstructionRegionTopology[], sample
   ? surfaceRefFromNodeSet(topology.surfaceKey) === sample.surfaceRef
   : sample.nodeId !== undefined && topology.nodes.some((node) => node.id === sample.nodeId));
 export function floorLandingAt(floors: readonly ConstructionRegionTopology[], sample: PointerSample): FloorLanding | undefined {
-  const under = floorUnder(floors, sample)?.surfaceKey;
-  return floorLandingNear(floors, sample.point, under ? { under } : {});
+  const under = floorUnder(floors, sample);
 
 // src/composition/tabletop/tools/core/global-handle-gesture.ts
 export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample, ownsType: (surfaceType: string) => boolean, params?: CurveGestureOptions): CurveGesture | undefined {
@@ -4247,6 +4246,13 @@ export const navigateTool: ConstructionTool<"navigate"> = {
   id: "navigate",
   defaultParams: () => ({}),
   };
+
+// src/composition/tabletop/tools/core/pointer-ray.ts
+export function pointerAtHeight(sample: PointerSample, y: number): ConstructionPosition {
+  const ray = sample.ray;
+  if (ray && Math.abs(ray.direction.y) > 1e-6) {
+  const t = (y - ray.origin.y) / ray.direction.y;
+  if (t > 0) return { x: ray.origin.x + ray.direction.x * t, y, z: ray.origin.z + ray.direction.z * t };
 
 // src/composition/tabletop/tools/core/selection-mirror.ts
 export interface SelectionMirrorOptions<Id extends ConstructionToolId, Value> {

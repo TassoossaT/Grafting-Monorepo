@@ -379,6 +379,7 @@ export function createThreeBackend(options: ThreeBackendOptions = {}): RenderBac
           layer: hit.object.userData.layer as LayerId,
           point: toVec3(hit.point),
           distance: hit.distance,
+          ray: { origin: toVec3(raycaster.ray.origin), direction: toVec3(raycaster.ray.direction) },
           data: hit.object.userData.data,
         };
       }

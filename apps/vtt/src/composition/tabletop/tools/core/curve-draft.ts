@@ -4,6 +4,7 @@ import type { ConstructionPosition, ConstructionRegionTopology, CubicBezier, Cur
 import { createRibbonMeshPreview } from "../shapes/ribbon-mesh-preview.ts";
 import type { ConstructionTool, PointerSample, ToolContext } from "./tool-context.ts";
 import { floorLandingAt, floorsOf, floorUnder } from "./floor-landing.ts";
+import { pointerAtHeight } from "./pointer-ray.ts";
 
 /**
  * Drawing a new spine-built structure, one way of laying out its plan per
@@ -88,7 +89,7 @@ const at = (p: CurvePoint): ConstructionPosition => ({ x: p[0], y: p[1], z: p[2]
 /** A click's end: near a floor's edge -- on the floor or just off it -- moved onto that edge at the floor's height, facing off the floor. */
 function endAt(floors: readonly ConstructionRegionTopology[], sample: PointerSample, height: number): End {
   const landing = floorLandingAt(floors, sample);
-  return landing ? { point: landing.point, sample, out: landing.out } : { point: { ...sample.point, y: height }, sample };
+  return landing ? { point: landing.point, sample, out: landing.out } : { point: pointerAtHeight(sample, height), sample };
 }
 
 /** The spans of an arc through three points, or the straight span when they are in line -- from Rust. */
@@ -162,7 +163,7 @@ export function createCurveDraftTool<Id extends ConstructionToolId>(options: Cur
       case "arc": {
         if (ends.length < 2) return ends.length === 1 ? planned(ctx, { ...state, mode: "straight" }, sample, params) : undefined;
         const a = ends[0]!.point, b = ends[1]!.point;
-        return { kind: "spans", spans: spansOf(arcThrough(ctx, a, { ...sample.point, y: (a.y + b.y) / 2 }, b)) };
+        return { kind: "spans", spans: spansOf(arcThrough(ctx, a, pointerAtHeight(sample, (a.y + b.y) / 2), b)) };
       }
       case "points": {
         if (ends.length < 1) return undefined;
@@ -221,9 +222,10 @@ export function createCurveDraftTool<Id extends ConstructionToolId>(options: Cur
     if (state.mode === "spiral" && state.ends.length === 1) {
       // Centre only: the circle the start click will choose the radius of.
       const center = state.ends[0]!.point;
-      const radius = Math.hypot(current.point.x - center.x, current.point.z - center.z);
+      const aimed = pointerAtHeight(current, center.y);
+      const radius = Math.hypot(aimed.x - center.x, aimed.z - center.z);
       if (radius > 0.1) {
-        curves = ctx.runtime.curveBatch({ tolerance: 0.05, commands: [{ kind: "helix", center: xyz(center), radius, startAngle: Math.atan2(current.point.z - center.z, current.point.x - center.x), sweep: 2 * Math.PI, rise: 0 }] })[0]!.curves;
+        curves = ctx.runtime.curveBatch({ tolerance: 0.05, commands: [{ kind: "helix", center: xyz(center), radius, startAngle: Math.atan2(aimed.z - center.z, aimed.x - center.x), sweep: 2 * Math.PI, rise: 0 }] })[0]!.curves;
       }
     } else {
       const draft = planned(ctx, state, current, params, turned);
@@ -233,7 +235,7 @@ export function createCurveDraftTool<Id extends ConstructionToolId>(options: Cur
     if (state.mode !== "spiral" || state.ends.length >= 2) report(ctx, state, curves, ribbons.map((r) => r.lengths[0] ?? 0));
     return createRibbonMeshPreview({
       ribbons,
-      fallbackPoints: [anchors.at(-1)!, { ...current.point, y: anchors.at(-1)!.y }],
+      fallbackPoints: [anchors.at(-1)!, pointerAtHeight(current, anchors.at(-1)!.y)],
       anchors,
       cursor: current.point,
       width,
@@ -286,7 +288,7 @@ export function createCurveDraftTool<Id extends ConstructionToolId>(options: Cur
         state.shift = undefined;
       }
       try {
-        const turned = state.mode === "spiral" && state.ends.length >= 2 ? spiralTurn(state, current.point) : undefined;
+        const turned = state.mode === "spiral" && state.ends.length >= 2 ? spiralTurn(state, pointerAtHeight(current, state.ends[1]!.point.y)) : undefined;
         const key = [current.point.x.toFixed(2), current.point.z.toFixed(2), state.rise ?? "", current.surfaceRef ?? "", turned?.toFixed(3) ?? "", state.ends.length, width].join("|");
         if (state.last?.key === key) return state.last.preview;
         const preview = drawn(ctx, state, current, params, width, turned);
@@ -309,7 +311,7 @@ export function createCurveDraftTool<Id extends ConstructionToolId>(options: Cur
           return;
         }
         if (state.ends.length >= needed) {
-          if (state.mode === "spiral") spiralTurn(state, sample.point);
+          if (state.mode === "spiral") spiralTurn(state, pointerAtHeight(sample, state.ends[1]!.point.y));
           finish(ctx, state, sample, params);
           return;
         }

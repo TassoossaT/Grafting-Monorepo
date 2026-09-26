@@ -14,6 +14,8 @@ export interface PointerSample {
   readonly shiftKey?: boolean;
   readonly nodeId?: string;
   readonly surfaceRef?: string;
+  /** The pointer's ray from the camera, when the view gave one -- see `pointer-ray.ts`. */
+  readonly ray?: { readonly origin: ConstructionPosition; readonly direction: ConstructionPosition };
 }
 
 /** A gesture in progress (or, for a stationary hover, one where `start === current`). */

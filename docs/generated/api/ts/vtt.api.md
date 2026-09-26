@@ -2261,6 +2261,9 @@ RIM_ROLES.
 ### `function vtt.floor-landing.floorLandingAt(floors: readonly ConstructionRegionTopology[], sample: PointerSample): FloorLanding | undefined`
 
 The floor edge `sample` lands on, preferring the floor the pointer is on.
+Each floor is tried where the pointer's ray crosses that floor's own
+level, so aiming at a raised floor's edge from off it lands there, not
+wherever the ray met the ground behind it.
 
 ### `function vtt.floor-landing.floorsOf(ctx: ToolContext): readonly ConstructionRegionTopology[]`
 
@@ -2298,6 +2301,13 @@ No-op: in `navigate` mode the pointer drives camera orbit/pan
 not any construction effect. Exists so `tool-registry.ts` has an entry for
 every `ConstructionToolId` and `use-construction-pointer.ts` never needs a
 "no tool selected" special case.
+
+### `function vtt.pointer-ray.pointerAtHeight(sample: PointerSample, y: number): ConstructionPosition`
+
+Where the pointer is at height `y`: its ray from the camera crossing that
+level, so something drawn at `y` sits right under the cursor rather than
+above or below whatever the ray hit. Without a ray -- or one that never
+reaches that level in front of the camera -- the hit point, at `y`.
 
 ### `interface vtt.selection-mirror.SelectionMirror`
 
@@ -2600,6 +2610,10 @@ What the pointer resolved to at one instant -- `nodeId` present only when it hit
 
 ### `property vtt.tool-context.PointerSample.point: ConstructionPosition`
 
+### `property vtt.tool-context.PointerSample.ray?: { direction: ConstructionPosition; origin: ConstructionPosition }`
+
+The pointer's ray from the camera, when the view gave one -- see `pointer-ray.ts`.
+
 ### `property vtt.tool-context.PointerSample.screenX?: number`
 
 ### `property vtt.tool-context.PointerSample.screenY?: number`
@@ -2850,6 +2864,10 @@ What the pointer resolved to at one instant -- `nodeId` present only when it hit
 ### `property vtt.road-body-target.RoadSnapTarget.nodeId?: string`
 
 ### `property vtt.road-body-target.RoadSnapTarget.point: ConstructionPosition`
+
+### `property vtt.road-body-target.RoadSnapTarget.ray?: { direction: ConstructionPosition; origin: ConstructionPosition }`
+
+The pointer's ray from the camera, when the view gave one -- see `pointer-ray.ts`.
 
 ### `property vtt.road-body-target.RoadSnapTarget.screenX?: number`
 
@@ -8963,6 +8981,10 @@ across the ground.
 ### `property vtt.scene-render-port.ScenePickResult.nodeId?: string`
 
 ### `property vtt.scene-render-port.ScenePickResult.point: { x: number; y: number; z: number }`
+
+### `property vtt.scene-render-port.ScenePickResult.ray?: { direction: { x: number; y: number; z: number }; origin: { x: number; y: number; z: number } }`
+
+The pointer's ray, camera outward -- where the pointer is at any other height.
 
 ### `property vtt.scene-render-port.ScenePickResult.surfaceRef?: string`
 

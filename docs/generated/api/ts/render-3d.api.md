@@ -619,6 +619,12 @@ The layer that item belongs to.
 
 World-space intersection point.
 
+### `property render-3d.PickResult.ray?: { direction: Vec3; origin: Vec3 }`
+
+The pointer's ray: from the camera through the pointer, `direction`
+unit length. Lets a caller place something at a chosen depth or height
+under the pointer rather than only where the ray hit.
+
 ### `interface render-3d.PointManipulator`
 
 One camera onto the scene.

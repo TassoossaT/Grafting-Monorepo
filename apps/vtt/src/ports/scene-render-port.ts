@@ -188,6 +188,8 @@ export interface ScenePickResult {
   readonly nodeId?: string;
   /** Canonical surface identity when map geometry, rather than ground, was hit. */
   readonly surfaceRef?: string;
+  /** The pointer's ray, camera outward -- where the pointer is at any other height. */
+  readonly ray?: { readonly origin: { readonly x: number; readonly y: number; readonly z: number }; readonly direction: { readonly x: number; readonly y: number; readonly z: number } };
 }
 
 /**

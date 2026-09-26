@@ -2,6 +2,7 @@ import { planRamp, rampEdgeId, rampPatch, reweldFloors, sharedEdgeIds, type Plan
 import type { ConstructionPosition } from "../../../../ports/index.ts";
 import { commitPatchReplacement } from "../../effects/effect-commit.ts";
 import { floorLandingAt, floorsOf } from "../core/floor-landing.ts";
+import { pointerAtHeight } from "../core/pointer-ray.ts";
 import { scopedToolId, type PointerSample, type ToolContext } from "../core/tool-context.ts";
 import { slopeControlPoint } from "./slope-commit.ts";
 
@@ -25,7 +26,8 @@ function rampEnds(ctx: ToolContext, start: PointerSample, end: PointerSample, pa
   if (endLanding && endLanding.topology === startLanding?.topology) endLanding = undefined;
   const from: RampEndPlan = startLanding ? { point: startLanding.point, landing: startLanding } : { point: slopeControlPoint(ctx, start) };
   const y = endLanding?.height ?? from.point.y + (params.rise ?? 3);
-  const to: RampEndPlan = endLanding ? { point: { ...endLanding.point, y }, landing: endLanding } : { point: { x: end.point.x, y, z: end.point.z } };
+  // A free end stands where the pointer is at the end's own height -- right under the cursor.
+  const to: RampEndPlan = endLanding ? { point: { ...endLanding.point, y }, landing: endLanding } : { point: pointerAtHeight(end, y) };
   return { from, to };
 }
 

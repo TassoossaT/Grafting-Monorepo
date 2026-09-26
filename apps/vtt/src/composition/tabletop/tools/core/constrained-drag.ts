@@ -1,6 +1,7 @@
 import { createAngleTracker, rotateInPlan, type HandleMotion } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionPosition } from "../../../../ports/index.ts";
 import type { PointerSample, ToolGesture } from "./tool-context.ts";
+import { pointerAtHeight } from "./pointer-ray.ts";
 
 /** Shift snaps an orbit to steps of this many radians -- 15 degrees. */
 const TURN_STEP = Math.PI / 12;
@@ -29,6 +30,14 @@ export interface ConstrainedDragOptions {
  */
 export function createConstrainedDrag(motion: HandleMotion, handle: ConstructionPosition, sample: PointerSample, options: ConstrainedDragOptions = {}): { at(gesture: ToolGesture): ConstrainedPosition } {
   const origin = options.pointerOrigin ?? sample.point;
+  // Along the ground, the pointer is read at the handle's own height, so a
+  // raised handle keeps under the cursor instead of trailing the ground.
+  const grabbedAt = sample.ray ? pointerAtHeight(sample, handle.y) : origin;
+  const along = (current: PointerSample) => {
+    const at = current.ray ? pointerAtHeight(current, handle.y) : current.point;
+    const from = current.ray ? grabbedAt : origin;
+    return { x: handle.x + at.x - from.x, y: handle.y, z: handle.z + at.z - from.z };
+  };
   const turning = motion.kind === "orbit" ? createAngleTracker(motion.center, handle) : undefined;
   const rise = (current: PointerSample) => options.spatialTarget
     ? current.point.y - handle.y
@@ -40,13 +49,13 @@ export function createConstrainedDrag(motion: HandleMotion, handle: Construction
         case "free":
           if (options.spatialTarget) return { position: current.point };
           if (options.elevation) return { position: { ...handle, y: handle.y + rise(current) } };
-          return { position: { x: handle.x + current.point.x - origin.x, y: handle.y, z: handle.z + current.point.z - origin.z } };
+          return { position: along(current) };
         case "plane":
-          return { position: options.spatialTarget ? { ...current.point, y: handle.y } : { x: handle.x + current.point.x - origin.x, y: handle.y, z: handle.z + current.point.z - origin.z } };
+          return { position: options.spatialTarget ? { ...current.point, y: handle.y } : along(current) };
         case "vertical":
           return { position: { ...handle, y: handle.y + rise(current) } };
         case "orbit": {
-          const turned = turning!.turn(current.point);
+          const turned = turning!.turn(current.ray ? pointerAtHeight(current, handle.y) : current.point);
           const angle = current.shiftKey ? Math.round(turned / TURN_STEP) * TURN_STEP : turned;
           return { position: rotateInPlan(handle, motion.center, angle), angle };
         }

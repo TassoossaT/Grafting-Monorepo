@@ -22,6 +22,7 @@ import type { ConstructionCurvedEdge, ConstructionEdgeGeometry, ConstructionPosi
 import type { PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
 import { commitPatchReplacement } from "../../effects/effect-commit.ts";
 import { commitSpineRegeneration } from "./spine-commit.ts";
+import { pointerAtHeight } from "./pointer-ray.ts";
 import { beginGlobalHandleGesture } from "./global-handle-gesture.ts";
 
 /**
@@ -170,9 +171,10 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params: CurveGest
       if (!dragged && !crossedThreshold(sample, gesture, params)) return;
       target = targetOf(sample, gesture, params);
       // A plan-only spine's heights are its owner's: a pointer on the ground
-      // never lends its height. The scene manipulator's vertical arrow and
-      // elevation mode move it on purpose.
-      if (planOnly && params?.mode !== "elevation" && !params?.spatialTarget) target = { ...target, y: sample.point.y };
+      // never lends its height, and the point goes where the pointer is at
+      // its own height, under the cursor. The scene manipulator's vertical
+      // arrow and elevation mode move it on purpose.
+      if (planOnly && params?.mode !== "elevation" && !params?.spatialTarget) target = pointerAtHeight(gesture.current, sample.point.y);
       if (!curvePick(targetId) && !planOnly && params?.snap) {
         const snap = params.snap.find(ctx, { point: target }, targetId);
         if (snap) target = snap.point;
