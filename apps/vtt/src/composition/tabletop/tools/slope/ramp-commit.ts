@@ -97,6 +97,8 @@ function plannedAxis(from: ConstructionPosition, to: ConstructionPosition, start
  */
 function fitAlongEdges(axisStart: ConstructionPosition, axisEnd: ConstructionPosition, welds: readonly EndWeld[], widths: { readonly bottom: number; readonly top: number }) {
   const dx = axisEnd.x - axisStart.x, dz = axisEnd.z - axisStart.z, length = Math.hypot(dx, dz);
+  // No axis yet -- the pointer still on the edge it started from: nothing to slide.
+  if (!(length > 1e-9)) return { axisStart, axisEnd, welds };
   const side = { x: -dz / length, z: dx / length };
   let low = -Infinity, high = Infinity;
   const kept: EndWeld[] = [];

@@ -64,7 +64,7 @@ export function rampCorners(shape: RampShape): RampCorners {
   const { axisStart: start, axisEnd: end } = shape;
   const dx = end.x - start.x, dz = end.z - start.z;
   const length = Math.hypot(dx, dz);
-  if (length < MIN_SPAN) throw new Error("A rampa precisa de comprimento.");
+  if (!(length >= MIN_SPAN)) throw new Error("A rampa precisa de comprimento.");
   if (!(shape.bottomWidth >= MIN_SPAN) || !(shape.topWidth >= MIN_SPAN)) throw new Error("As larguras da rampa devem ser positivas.");
   const nx = -dz / length, nz = dx / length;
   const at = (p: ConstructionPosition, width: number, sign: number) => ({ x: p.x + nx * (width / 2) * sign, y: p.y, z: p.z + nz * (width / 2) * sign });
@@ -249,13 +249,13 @@ export function validateRampMotion(topology: ConstructionRegionTopology, positio
   if (ENDS.some((end) => Math.abs(at[end].min.y - at[end].max.y) > LEVEL)) return "As bordas da rampa devem permanecer niveladas.";
   const start = midpoint(at.bottom.min, at.bottom.max), finish = midpoint(at.top.min, at.top.max);
   const length = Math.hypot(finish.x - start.x, finish.z - start.z);
-  if (length < MIN_SPAN) return "A rampa precisa de comprimento.";
+  if (!(length >= MIN_SPAN)) return "A rampa precisa de comprimento.";
   const ax = (finish.x - start.x) / length, az = (finish.z - start.z) / length;
   let turn: number | undefined;
   for (const end of ENDS) {
     const ex = at[end].max.x - at[end].min.x, ez = at[end].max.z - at[end].min.z;
     const width = Math.hypot(ex, ez);
-    if (width < MIN_SPAN) return "As larguras da rampa devem ser positivas.";
+    if (!(width >= MIN_SPAN)) return "As larguras da rampa devem ser positivas.";
     if (Math.abs(ex * ax + ez * az) / width > SQUARE) return "As bordas da rampa devem ficar perpendiculares ao eixo.";
     const sign = Math.sign(ax * ez - az * ex);
     if (turn !== undefined && sign !== turn) return "A rampa nao pode se torcer.";

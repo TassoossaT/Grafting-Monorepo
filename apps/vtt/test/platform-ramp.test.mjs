@@ -143,6 +143,17 @@ test("an end near a floor's edge, even just off it, lands at that floor's height
   } finally { session.free(); }
 });
 
+test("hovering on a floor's edge before dragging previews nothing rather than a broken ramp", () => {
+  const fixture = sessionFixture();
+  const { runtime, session, ctx } = fixture;
+  try {
+    floor(runtime, "low", 0, 0);
+    const onEdge = { point: { x: 4, y: 0, z: 2 } };
+    const preview = slopeRampTool.previewFor({ start: onEdge, current: onEdge, samples: [onEdge] }, params, ctx);
+    assert.ok(!preview || [...preview.positions].every(Number.isFinite), "no NaN reaches the scene");
+  } finally { session.free(); }
+});
+
 test("an end dragged near a floor's corner slides along the edge until its width fits", () => {
   const fixture = sessionFixture();
   const { runtime, session, calls } = fixture;
