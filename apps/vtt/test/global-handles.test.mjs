@@ -83,6 +83,24 @@ test("a platform with a wall standing on it is not turned out from under the wal
   } finally { session.free(); }
 });
 
+test("a grounded platform turns though the ground it cut rims it: the ground is rebuilt, not in the way", () => {
+  const fixture = sessionFixture();
+  const { runtime, session, calls } = fixture;
+  try {
+    square(runtime, "floor", 0, 0);
+    // The ground next to it shares the platform's own edge, as a cut leaves it.
+    addFace(runtime, "ground", "terrain", [
+      { id: "floor:1", position: { x: 4, y: 0, z: 0 } }, { id: "floor:0", position: { x: 0, y: 0, z: 0 } },
+      { id: "ground:a", position: { x: 0, y: 0, z: -3 } }, { id: "ground:b", position: { x: 4, y: 0, z: -3 } },
+    ]);
+    const handle = shownGlobalHandles(scene(runtime)).find((h) => h.kind === "rotate" && h.owner === "platform");
+    const from = Math.atan2(handle.position.z - handle.pivot.z, handle.position.x - handle.pivot.x);
+    drag(platformContourTool, fixture, handle, [{ x: handle.pivot.x + 5 * Math.cos(from + 0.3), y: 0, z: handle.pivot.z + 5 * Math.sin(from + 0.3) }], platformContourTool.defaultParams());
+    assert.ok(!calls.feedback.some((f) => /apoiado/.test(f.message)), JSON.stringify(calls.feedback.slice(-2)));
+    assert.ok(Math.abs(node(runtime, "floor:2").position.x - 4) > 1e-3, "the platform turned");
+  } finally { session.free(); }
+});
+
 test("the height handle raises a platform, only straight up, through its own role", () => {
   const fixture = sessionFixture();
   const { runtime, session, calls } = fixture;

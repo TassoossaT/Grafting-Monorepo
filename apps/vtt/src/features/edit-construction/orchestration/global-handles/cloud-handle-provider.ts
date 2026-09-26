@@ -3,7 +3,7 @@ import type { ConstructionPosition, ConstructionRegionTopology } from "@/ports";
 import { globalHandleId } from "../../global-handles/index.ts";
 import type { GlobalHandle, GlobalHandleProvider, GlobalHandleScene } from "../../global-handles/index.ts";
 import { outward, ROTATE_REACH } from "../../spine/spine-global-handles.ts";
-import { structureTypeFor } from "../../structure-types/index.ts";
+import { resolveCreationInteraction, structureTypeFor } from "../../structure-types/index.ts";
 import { reverseGeometry } from "../../topology/boundary-edges.ts";
 import { rotateInPlan } from "../../topology/plan-rotation.ts";
 
@@ -69,7 +69,11 @@ export const cloudHandleProvider: GlobalHandleProvider = {
     if (intent.kind !== "rotate") return undefined;
     const own = new Set(handle.members.map((member) => member.surfaceKey.join("|")));
     const moved = new Set(handle.nodeIds);
-    const leaning = scene.topologies.find((topology) => !own.has(topology.surfaceKey.join("|")) && topology.nodes.some((node) => moved.has(node.id)));
+    // What the structure cuts or restacks -- the ground round a grounded
+    // platform -- is rebuilt by the edit's own effect when it lands; only
+    // something else standing on its nodes is in the way.
+    const answered = (surfaceType: string) => ["cut", "restack"].includes(resolveCreationInteraction(handle.owner, surfaceType).kind);
+    const leaning = scene.topologies.find((topology) => !own.has(topology.surfaceKey.join("|")) && !answered(topology.surfaceType) && topology.nodes.some((node) => moved.has(node.id)));
     if (leaning) throw new Error("Solte o que esta apoiado na estrutura antes de gira-la.");
     const positions = new Map<string, ConstructionPosition>(handle.members.flatMap((member) => member.nodes.map((node) => [node.id, node.position] as const)));
     const moves = handle.nodeIds.map((nodeId) => ({ nodeId, position: rotateInPlan(positions.get(nodeId)!, handle.pivot, intent.angle) }));
