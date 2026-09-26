@@ -140,3 +140,26 @@ test("resizing a grounded platform re-cuts the ground in the same transaction; a
     close(at(runtime, "g:1").x, 5, "and the resize itself stands");
   } finally { session.free(); }
 });
+
+test("a grounded platform moved far rebuilds the ground its rim nodes dragged along, not only where it stood and went", async () => {
+  const { commitRegionEdit } = await import("../src/composition/tabletop/effects/effect-commit.ts");
+  const { latticeRegenerateReaction } = await import("../src/composition/tabletop/terrain/terrain-lattice-reaction.ts");
+  const { runtime, session } = sessionFixture();
+  runtime.getSnapshot = () => ({ tableId: "platform-test", map: { nodePositions: new Map(runtime.getGraphSnapshot().nodes.map((n) => [n.id, { position: n.position }])) } });
+  const consumed = [];
+  const reactions = { "lattice-regenerate": latticeRegenerateReaction((_rt, request) => { consumed.push(...request.consumedSurfaceKeys.map((key) => key.join(":"))); return 1; }) };
+  try {
+    face(runtime, "g", [[0, 0], [4, 0], [4, 4], [0, 4]], 0, "platform");
+    // The ground the cut left: its rim is the platform's own south edge.
+    addFace(runtime, "rim", "terrain", [
+      { id: "g:1", position: { x: 4, y: 0, z: 0 } }, { id: "g:0", position: { x: 0, y: 0, z: 0 } },
+      { id: "rim:a", position: { x: 0, y: 0, z: -3 } }, { id: "rim:b", position: { x: 4, y: 0, z: -3 } },
+    ]);
+    const rim = runtime.getAllRegionTopologies().find((t) => t.surfaceType === "terrain");
+    const topology = floorOf(runtime, "g");
+    const plan = planEdit(resolveCloudTopology(runtime, topology.surfaceKey), { surfaceKey: topology.surfaceKey, target: { kind: "region" }, delta: { x: 30, y: 0, z: 30 } }, runtime.getGraphSnapshot(), runtime);
+    assert.equal(plan.kind, "apply", plan.reason);
+    commitRegionEdit(runtime, plan.ops, { transactionId: "move-far", reactions });
+    assert.ok(consumed.includes(rim.surfaceKey.join(":")), `the stretched rim ground is rebuilt: ${JSON.stringify(consumed)}`);
+  } finally { session.free(); }
+});

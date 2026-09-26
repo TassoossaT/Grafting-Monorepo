@@ -235,6 +235,15 @@ function answerCut(runtime: LatticeReactionRuntime, effect: Effect, hits: readon
     }
   }
 
+  // **Ground an edit stretched.** An edit keeps its node ids and moves them;
+  // ground rimmed by those same nodes was carried along, stretched from where
+  // the shape stood to where it went. However far that is, it is rebuilt.
+  const beforePositions = new Map(change.before.flatMap((t) => t.nodes.map((n) => [n.id, n.position] as const)));
+  const carriedNodeIds = new Set(change.after.flatMap((t) => t.nodes.filter((n) => {
+    const was = beforePositions.get(n.id);
+    return was !== undefined && Math.hypot(was.x - n.position.x, was.z - n.position.z) > REALLY_MOVED;
+  }).map((n) => n.id)));
+
   // **Ground about to be orphaned, wherever it stands.** A change regenerating
   // its whole connected component re-mints every node in it, including the
   // corners ground split into its own edges to share them. Every one of those
@@ -244,8 +253,9 @@ function answerCut(runtime: LatticeReactionRuntime, effect: Effect, hits: readon
   if (change.before.length > 0) {
     const beforeBounds = terrainTopologiesBounds(change.before, 4.0);
     for (const t of hits) {
-      if (!hasNodeIn(t, beforeBounds)) continue;
-      const sharesAbandoned = abandonedNodeIds.size > 0 && t.nodes.some((n) => abandonedNodeIds.has(n.id));
+      if (!hasNodeIn(t, beforeBounds) && !t.nodes.some((n) => carriedNodeIds.has(n.id))) continue;
+      const sharesAbandoned = (abandonedNodeIds.size > 0 && t.nodes.some((n) => abandonedNodeIds.has(n.id)))
+        || (carriedNodeIds.size > 0 && t.nodes.some((n) => carriedNodeIds.has(n.id)));
       const insideChanged = changed.length > 0 && t.nodes.length > 0 && (
         t.nodes.some((n) => insideAny(n.position.x, n.position.z, changed)) ||
         insideAny(
@@ -280,13 +290,19 @@ function answerCut(runtime: LatticeReactionRuntime, effect: Effect, hits: readon
     footprintOutline: footprint,
     cutterPolygons: cutters,
   }));
-  if (!plan.requiresRepair && changed.length === 0) return;
+  // Ground the edit dragged along is stale however the planner reads it: it goes.
+  const stretched = orphaned.filter((t) => t.nodes.some((n) => carriedNodeIds.has(n.id)));
+  if (!plan.requiresRepair && changed.length === 0 && stretched.length === 0) return;
 
   const painter = change.after.length > 0
     ? timePhase("perímetro da mudança", () => paintedFalloutOf(change.after))
     : { paintedNodes: [], paintedLoops: [] };
 
   const consumedByType = new Map(plan.consumedByType);
+  for (const t of stretched) {
+    const keys = consumedByType.get(t.surfaceType) ?? [];
+    if (!keys.some((key) => key.join(" ") === t.surfaceKey.join(" "))) consumedByType.set(t.surfaceType, [...keys, t.surfaceKey]);
+  }
   if (consumedByType.size === 0 && changed.length > 0) consumedByType.set(groundTypes[0]!, []);
 
   const tableId = runtime.getSnapshot().tableId;
