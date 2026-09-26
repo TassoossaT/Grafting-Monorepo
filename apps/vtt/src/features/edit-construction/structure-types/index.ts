@@ -7,6 +7,7 @@ export * from "./organic/index.ts";
 export * from "./path/index.ts";
 export { PATH_SURFACE_TYPE } from "./path/path-surface-type.ts";
 export { floatingPlatformStructureType, platformStructureType } from "./platform/platform-structure.ts";
+export { describeSlope, planSlopeEdit, type SlopeSummary } from "./platform/slope-summary.ts";
 export { RAMP_SURFACE_TYPE, rampCornerId, rampCorners, rampEdgeId, rampOutline, rampPatch, type RampCorners, type RampShape } from "./platform/platform-ramp.ts";
 export { roofStructureType } from "./roof/roof-structure.ts";
 export { openingStructureType } from "./panel/panel-structure.ts";

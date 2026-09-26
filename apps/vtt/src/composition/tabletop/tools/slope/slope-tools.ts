@@ -8,6 +8,7 @@ import { withSpineEditing } from "../core/spine-edit-behavior.ts";
 import { polylineSegmentsPreview } from "../shapes/preview-shapes.ts";
 import { commitPlatformSlope } from "./slope-commit.ts";
 import { createCurveDraftTool, type FinishedCurveDraft } from "../core/curve-draft.ts";
+import { slopeSelection } from "./slope-selection.ts";
 import { commitStraightRamp, plannedRamp, straightRampPoints } from "./ramp-commit.ts";
 
 const ownsSlope = (surfaceType: string) => surfaceType === SLOPE_SURFACE_TYPE;
@@ -71,8 +72,16 @@ const rawSlopeSpiralTool = createCurveDraftTool({
   color: COLOR,
 });
 
-/** Also edits an existing spiral by its spine points, exactly as a road is edited -- see `spine-edit-behavior.ts`. */
-export const slopeSpiralTool = withSpineEditing(rawSlopeSpiralTool, { ownsSpine: ownsSlope, drafting: rawSlopeSpiralTool.drafting });
+const spiralSelection = slopeSelection("slope-spiral");
+
+/**
+ * Also edits an existing spiral by its spine points, exactly as a road is
+ * edited -- see `spine-edit-behavior.ts` -- and as a whole from the panel,
+ * once one of its points is picked -- see `slope-selection.ts`.
+ */
+export const slopeSpiralTool = withSpineEditing({ ...rawSlopeSpiralTool, onParamsChange: spiralSelection.onParamsChange }, {
+  ownsSpine: ownsSlope, drafting: rawSlopeSpiralTool.drafting, onSelect: spiralSelection.onSelect,
+});
 
 /** A curved ramp, drawn in any of the shared spine creation modes; R cycles them. */
 const rawSlopeCurveTool = createCurveDraftTool({
@@ -86,5 +95,9 @@ const rawSlopeCurveTool = createCurveDraftTool({
   color: COLOR,
 });
 
-/** Edits an existing curved ramp by its spine points, as the spiral and the road are edited. */
-export const slopeCurveTool = withSpineEditing(rawSlopeCurveTool, { ownsSpine: ownsSlope, drafting: rawSlopeCurveTool.drafting });
+const curveSelection = slopeSelection("slope-curve");
+
+/** Edits an existing curved ramp by its spine points, as the spiral and the road are edited, and as a whole from the panel. */
+export const slopeCurveTool = withSpineEditing({ ...rawSlopeCurveTool, onParamsChange: curveSelection.onParamsChange }, {
+  ownsSpine: ownsSlope, drafting: rawSlopeCurveTool.drafting, onSelect: curveSelection.onSelect,
+});

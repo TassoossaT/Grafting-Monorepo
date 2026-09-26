@@ -238,3 +238,76 @@ test("the draft preview is a filled band at the ramp's width, and hovering never
     assert.ok(perFrame < 5, `a preview frame costs ${perFrame.toFixed(2)} ms`);
   } finally { session.free(); }
 });
+
+/** Picks a slope point with a tool the way a click does, recording what the tool pushes into its params. */
+function pick(tool, ctx, runtime, nodeId, params) {
+  let pushed = params;
+  ctx.updateToolParams = (_id, update) => { pushed = update(pushed); };
+  const sample = { nodeId, point: node(runtime, nodeId).position };
+  tool.onPointerDown(ctx, sample, params);
+  tool.onPointerUp(ctx, { start: sample, current: sample, samples: [sample] }, params);
+  tool.onClick(ctx, sample, params);
+  return () => pushed;
+}
+
+test("the scene manipulator raises a ramp's end even though its points otherwise move in plan only", async () => {
+  const { beginCurveGesture } = await import("../src/composition/tabletop/tools/core/curve-edit-gesture.ts");
+  const { ctx, runtime, session, calls } = sessionFixture();
+  Object.assign(runtime, { showPreview() {}, clearPreview() {} });
+  try {
+    commitPlatformSlope(ctx, [{ x: 0, y: 0, z: 0 }, { x: 4, y: 0, z: 3 }, { x: 8, y: 2, z: 0 }], { width: 1.5 });
+    const end = walk(runtime).at(-1);
+    const from = node(runtime, end.id).position, to = { ...from, y: 5 };
+    const gesture = beginCurveGesture(ctx, { nodeId: end.id, point: from }, { mode: "shape", insertOnClick: false, spatialTarget: true });
+    gesture.move({ start: { nodeId: end.id, point: to }, current: { nodeId: end.id, point: to }, samples: [] });
+    gesture.commit();
+    assert.equal(node(runtime, end.id).position.y, 5, JSON.stringify(calls.feedback));
+    assert.ok(constantGrade(runtime));
+  } finally { session.free(); }
+});
+
+test("picking a spiral mirrors it into the panel; changing radius and turns there rebuilds it, keeping both ends' heights", () => {
+  const { ctx, runtime, session, calls } = sessionFixture();
+  Object.assign(runtime, { showPreview() {}, clearPreview() {} });
+  const params = { width: 1.5, rise: 4 };
+  try {
+    drawSpiral(slopeSpiralTool, ctx, { center: { x: 0, y: 0, z: 0 }, radius: 3, turns: 1, startY: 1, params });
+    const start = walk(runtime)[0].id;
+    const pushed = pick(slopeSpiralTool, ctx, runtime, start, params);
+    const selected = pushed().selected;
+    assert.ok(selected?.spiral, JSON.stringify(calls.feedback));
+    assert.ok(Math.abs(selected.spiral.radius - 3) < 1e-6 && Math.abs(selected.spiral.turns - 1) < 1e-6, JSON.stringify(selected));
+    const next = { ...pushed(), selected: { ...selected, spiral: { ...selected.spiral, radius: 5, turns: 2 } } };
+    slopeSpiralTool.onParamsChange(ctx, next, pushed());
+    const after = pushed().selected;
+    assert.ok(Math.abs(after.spiral.radius - 5) < 1e-6 && Math.abs(after.spiral.turns - 2) < 1e-6, JSON.stringify(after));
+    assert.equal(slopeSpans(runtime).length, 8, "two turns in quarter spans");
+    assert.deepEqual([after.startHeight, after.endHeight], [selected.startHeight, selected.endHeight]);
+    for (const id of new Set(slopeSpans(runtime).flatMap((e) => [e.startNodeId, e.endNodeId]))) {
+      const p = node(runtime, id).position;
+      assert.ok(Math.abs(Math.hypot(p.x, p.z) - 5) < 1e-6, "every point on the new radius");
+    }
+    // Flipping keeps the start and turns the other way.
+    slopeSpiralTool.onParamsChange(ctx, { ...pushed(), selected: { ...after, spiral: { ...after.spiral, positive: !after.spiral.positive } } }, pushed());
+    assert.equal(pushed().selected.spiral.positive, !after.spiral.positive);
+    assert.ok(constantGrade(runtime));
+  } finally { session.free(); }
+});
+
+test("a picked curved ramp takes new end heights and a new width from the panel", () => {
+  const { ctx, runtime, session, calls } = sessionFixture();
+  Object.assign(runtime, { showPreview() {}, clearPreview() {} });
+  const params = { width: 1.5, rise: 2 };
+  try {
+    commitPlatformSlope(ctx, [{ x: 0, y: 0, z: 0 }, { x: 4, y: 0, z: 3 }, { x: 8, y: 2, z: 0 }], { width: 1.5 });
+    const pushed = pick(slopeCurveTool, ctx, runtime, walk(runtime)[0].id, params);
+    const selected = pushed().selected;
+    assert.ok(selected && !selected.spiral, JSON.stringify(calls.feedback));
+    slopeCurveTool.onParamsChange(ctx, { ...pushed(), selected: { ...selected, endHeight: selected.endHeight + 3, width: 3 } }, pushed());
+    const after = pushed().selected;
+    assert.equal(after.width, 3);
+    assert.ok(Math.abs(after.endHeight - (selected.endHeight + 3)) < 1e-9, JSON.stringify(after));
+    assert.ok(slopeSpans(runtime).every((e) => e.curve.bandOffsets[1] === 1.5));
+    assert.ok(constantGrade(runtime));
+  } finally { session.free(); }
+});

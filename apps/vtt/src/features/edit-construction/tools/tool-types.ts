@@ -6,6 +6,8 @@
  * (the tool implementations) and `adapters/rendering/` (turning a
  * {@link PreviewDescriptor} into an actual scene item).
  */
+import type { SlopeSummary } from "../structure-types/platform/slope-summary.ts";
+
 export type ConstructionToolId =
   | "navigate"
   | "platform-contour"
@@ -239,13 +241,17 @@ export interface ToolParamsByTool {
   readonly "platform-contour": { readonly elevation: number; readonly mode: "create" | "extend" | "cut"; readonly support?: "grounded" | "floating"; readonly shape?: "rectangle" | "polygon" | "freehand" | "circle"; readonly radius?: number; readonly tolerance?: number };
   /** A straight ramp dragged from start to end, climbing a fixed rise, with its own width at each end. */
   readonly "slope-ramp": { readonly bottomWidth: number; readonly topWidth: number; readonly rise: number };
-  /** A spiral sloped platform: centre, start, then turned round to its end. `rise` is its climb when the end is not on a floor. */
-  readonly "slope-spiral": { readonly width: number; readonly rise: number };
+  /**
+   * A spiral sloped platform: centre, start, then turned round to its end.
+   * `rise` is its climb when the end is not on a floor. `selected` mirrors the
+   * slope picked for editing: changing it edits that slope.
+   */
+  readonly "slope-spiral": { readonly width: number; readonly rise: number; readonly selected?: SlopeSummary };
   /**
    * A curved ramp, drawn in one of the shared spine creation modes. `rise` is
    * its climb when the end is not on a floor; it climbs at one constant grade.
    */
-  readonly "slope-curve": { readonly width: number; readonly rise: number; readonly mode?: "points" | "straight" | "arc" | "connect" | "spiral" };
+  readonly "slope-curve": { readonly width: number; readonly rise: number; readonly mode?: "points" | "straight" | "arc" | "connect" | "spiral"; readonly selected?: SlopeSummary };
   readonly "path-brush": PathBrushParams;
   readonly "wall-brush": WallBrushParams;
   readonly "wall-line": WallParams;

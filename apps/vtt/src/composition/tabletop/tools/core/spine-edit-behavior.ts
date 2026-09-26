@@ -26,6 +26,8 @@ export interface SpineEditOptions {
   readonly ownsSpine: (surfaceType: string) => boolean;
   /** While this answers true -- a tool midway through drawing -- presses belong to the tool, not to editing. */
   readonly drafting?: (ctx: ToolContext) => boolean;
+  /** Told whenever the selected spine point changes -- `undefined` when nothing is selected. */
+  readonly onSelect?: (ctx: ToolContext, nodeId: string | undefined) => void;
 }
 
 /** What a press on a spine resolved to: the handle it actually takes, and how to drag it. */
@@ -57,7 +59,7 @@ export interface SpineEditBehavior {
 
 const xyz = (p: ConstructionPosition) => [p.x, p.y, p.z] as const;
 
-export function createSpineEditBehavior({ ownsSpine }: SpineEditOptions): SpineEditBehavior {
+export function createSpineEditBehavior({ ownsSpine, onSelect }: SpineEditOptions): SpineEditBehavior {
   const drags = new WeakMap<ToolContext["runtime"], CurveGesture>();
   const selections = new WeakMap<ToolContext["runtime"], string>();
   const owned = (surfaceType: string | undefined) => surfaceType !== undefined && structureTypeFor(surfaceType)?.spine !== undefined && ownsSpine(surfaceType);
@@ -65,12 +67,14 @@ export function createSpineEditBehavior({ ownsSpine }: SpineEditOptions): SpineE
   function select(ctx: ToolContext, sample?: PointerSample): void {
     if (sample?.nodeId) selections.set(ctx.runtime, sample.nodeId); else selections.delete(ctx.runtime);
     ctx.reportSelection(sample?.nodeId ? { id: sample.nodeId, point: sample.point } : undefined);
+    onSelect?.(ctx, sample?.nodeId);
   }
 
   function beginEdit(ctx: ToolContext, sample: PointerSample, options: CurveGestureOptions): CurveGesture | undefined {
     return beginCurveGesture({ ...ctx, reportSelection(info) {
       if (info) selections.set(ctx.runtime, info.id); else selections.delete(ctx.runtime);
       ctx.reportSelection(info);
+      onSelect?.(ctx, info?.id);
     } }, sample, owned, options);
   }
 
@@ -215,6 +219,9 @@ export function withSpineEditing<Id extends ConstructionToolId>(tool: Constructi
       spine.cancel(ctx);
       claimed.delete(ctx.runtime);
       tool.onCancel?.(ctx);
+    },
+    onParamsChange(ctx, next, previous) {
+      tool.onParamsChange?.(ctx, next, previous);
     },
   };
 }

@@ -4171,6 +4171,8 @@ export interface SpineEditOptions {
   readonly ownsSpine: (surfaceType: string) => boolean;
   /** While this answers true -- a tool midway through drawing -- presses belong to the tool, not to editing. */
   readonly drafting?: (ctx: ToolContext) => boolean;
+  /** Told whenever the selected spine point changes -- `undefined` when nothing is selected. */
+  readonly onSelect?: (ctx: ToolContext, nodeId: string | undefined) => void;
   }
 export interface SpinePick {
   readonly sample: PointerSample;
@@ -4184,7 +4186,7 @@ export interface SpineEditBehavior {
   /** Selects and starts dragging `picked`; false when the curve refused the gesture. */
   begin(ctx: ToolContext, picked: SpinePick): boolean;
   move(ctx: ToolContext, gesture: ToolGesture): boolean;
-export function createSpineEditBehavior({ ownsSpine }: SpineEditOptions): SpineEditBehavior {
+export function createSpineEditBehavior({ ownsSpine, onSelect }: SpineEditOptions): SpineEditBehavior {
   const drags = new WeakMap<ToolContext["runtime"], CurveGesture>();
 export function withSpineEditing<Id extends ConstructionToolId>(tool: ConstructionTool<Id>, options: SpineEditOptions): ConstructionTool<Id> {
   const spine = createSpineEditBehavior(options);
@@ -4747,10 +4749,18 @@ export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly Co
   const width = params.width ?? 1.5;
   if (!(width > 0)) throw new Error("A largura deve ser positiva.");
 
+// src/composition/tabletop/tools/slope/slope-selection.ts
+export function slopeSelection(id: SlopeToolId) {
+  const picked = new WeakMap<ToolContext["runtime"], { readonly nodeId: string; readonly summary: SlopeSummary }>();
+
 // src/composition/tabletop/tools/slope/slope-tools.ts
 export const slopeRampTool = withStructureEditing(rawSlopeRampTool, { ownsType: ownsRamp });
-export const slopeSpiralTool = withSpineEditing(rawSlopeSpiralTool, { ownsSpine: ownsSlope, drafting: rawSlopeSpiralTool.drafting });
-export const slopeCurveTool = withSpineEditing(rawSlopeCurveTool, { ownsSpine: ownsSlope, drafting: rawSlopeCurveTool.drafting });
+export const slopeSpiralTool = withSpineEditing({ ...rawSlopeSpiralTool, onParamsChange: spiralSelection.onParamsChange }, {
+  ownsSpine: ownsSlope, drafting: rawSlopeSpiralTool.drafting, onSelect: spiralSelection.onSelect,
+  });
+export const slopeCurveTool = withSpineEditing({ ...rawSlopeCurveTool, onParamsChange: curveSelection.onParamsChange }, {
+  ownsSpine: ownsSlope, drafting: rawSlopeCurveTool.drafting, onSelect: curveSelection.onSelect,
+  });
 
 // src/composition/tabletop/tools/terrain/terrain-sculpt-tool.ts
 export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
@@ -5987,6 +5997,20 @@ export const slopedPlatformStructureType: StructureTypeDefinition = Object.freez
   roleFor: () => "platform-slope-face",
   policyFor: (role) => denied(role, "Edite a plataforma inclinada pela espinha: pontos, alças e largura."),
   // A ramp climbs between levels above the ground; it never carves it.
+
+// src/features/edit-construction/structure-types/platform/slope-summary.ts
+export interface SlopeSummary {
+  /** Height of the chain's first end. */
+  readonly startHeight: number;
+  /** Height of the chain's last end. */
+  readonly endHeight: number;
+  readonly width: number;
+  readonly spiral?: {
+  readonly centerX: number;
+export function describeSlope(graph: ConstructionGraphSnapshot, nodeId: string): SlopeSummary | undefined {
+  const chain = chainAt(graph, nodeId);
+export function planSlopeEdit(graph: ConstructionGraphSnapshot, port: Pick<BezierPort, "curveBatch">, nodeId: string, next: SlopeSummary, operationId: string): ConstructionGraphPatch | undefined {
+  const chain = chainAt(graph, nodeId);
 
 // src/features/edit-construction/structure-types/registry.ts
 export const STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[] = Object.freeze([

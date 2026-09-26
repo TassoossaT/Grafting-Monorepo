@@ -150,8 +150,10 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params: CurveGest
       if (ended) return;
       if (!dragged && !crossedThreshold(sample, gesture, params)) return;
       target = targetOf(sample, gesture, params);
-      // A plan-only spine's heights are its owner's: the grabbed point keeps its own.
-      if (planOnly && params?.mode !== "elevation") target = { ...target, y: sample.point.y };
+      // A plan-only spine's heights are its owner's: a pointer on the ground
+      // never lends its height. The scene manipulator's vertical arrow and
+      // elevation mode move it on purpose.
+      if (planOnly && params?.mode !== "elevation" && !params?.spatialTarget) target = { ...target, y: sample.point.y };
       if (!curvePick(targetId) && !planOnly) {
         const snap = roadSnapTarget(ctx, { point: target }, targetId);
         if (snap) {

@@ -18,6 +18,7 @@ import type {
   WallBrushParams,
   WallParams,
 } from "@/features/edit-construction";
+import type { SlopeSummary } from "@/features/edit-construction";
 import { OPENING_KIND_COLOR, RECTANGLE_OPENING_SHAPE, TOWER_RADIUS_PRESETS, deriveFaceSize, isRectangleShape, openingPath, withOpeningKind } from "@/features/edit-construction";
 
 export interface ConstructionToolParamsPanelProps {
@@ -27,6 +28,52 @@ export interface ConstructionToolParamsPanelProps {
   /** How a grab on an existing structure behaves -- ambient, not tied to `activeTool`, since every construction tool can now grab and edit whatever it owns. */
   readonly structureEditParams: StructureEditParams;
   readonly onStructureEditParamsChange: (next: StructureEditParams) => void;
+}
+
+/**
+ * A number field that applies only when left or confirmed with Enter: each
+ * value it applies is one edit, not one per keystroke.
+ */
+function CommitNumber(props: { readonly label: string; readonly value: number; readonly step?: number; readonly min?: number; readonly onCommit: (value: number) => void }) {
+  const [draft, setDraft] = useState<string | undefined>(undefined);
+  const shown = draft ?? String(Number(props.value.toFixed(3)));
+  const commit = () => {
+    if (draft === undefined) return;
+    const value = Number(draft);
+    setDraft(undefined);
+    if (Number.isFinite(value) && (props.min === undefined || value >= props.min) && Math.abs(value - props.value) > 1e-9) props.onCommit(value);
+  };
+  return (
+    <label>{props.label} <input type="number" step={props.step ?? 0.1} min={props.min} value={shown}
+      onChange={(event) => setDraft(event.currentTarget.value)}
+      onBlur={commit}
+      onKeyDown={(event) => { if (event.key === "Enter") commit(); if (event.key === "Escape") setDraft(undefined); }} /></label>
+  );
+}
+
+/**
+ * A picked slope as a whole: its ends' heights and width, and -- for a
+ * spiral -- its centre, radius, turns and direction. Each change edits it.
+ */
+function SlopeSelectedFields(props: { readonly selected: SlopeSummary; readonly onChange: (next: SlopeSummary) => void }) {
+  const { selected, onChange } = props;
+  const spiral = selected.spiral;
+  return (
+    <div style={{ display: "grid", gap: "0.6rem", borderTop: "1px solid rgba(148, 163, 184, 0.3)", paddingTop: "0.6rem" }}>
+      <strong>{spiral ? "Espiral selecionada" : "Rampa selecionada"}</strong>
+      <CommitNumber label="Altura do início" value={selected.startHeight} onCommit={(startHeight) => onChange({ ...selected, startHeight })} />
+      <CommitNumber label="Altura do fim" value={selected.endHeight} onCommit={(endHeight) => onChange({ ...selected, endHeight })} />
+      <CommitNumber label="Largura" value={selected.width} min={0.1} onCommit={(width) => onChange({ ...selected, width })} />
+      {spiral && <>
+        <CommitNumber label="Raio" value={spiral.radius} min={0.1} onCommit={(radius) => onChange({ ...selected, spiral: { ...spiral, radius } })} />
+        <CommitNumber label="Voltas" value={spiral.turns} step={0.25} min={0.05} onCommit={(turns) => onChange({ ...selected, spiral: { ...spiral, turns } })} />
+        <CommitNumber label="Centro X" value={spiral.centerX} onCommit={(centerX) => onChange({ ...selected, spiral: { ...spiral, centerX } })} />
+        <CommitNumber label="Centro Z" value={spiral.centerZ} onCommit={(centerZ) => onChange({ ...selected, spiral: { ...spiral, centerZ } })} />
+        <SelectableChip label="Inverter sentido" swatchColor="#79b8e8" selected={false} onSelect={() => onChange({ ...selected, spiral: { ...spiral, positive: !spiral.positive } })} />
+      </>}
+      <p>Clique num ponto da rampa para selecioná-la. Os valores valem ao sair do campo ou com Enter; a inclinação fica constante entre as pontas. A seta vertical do ponto selecionado também sobe e desce uma ponta.</p>
+    </div>
+  );
 }
 
 /** The curve-handle/mode controls every construction tool's own grab-and-edit now shares -- `edit-region`'s old params, no longer tied to one retired tool. */
@@ -471,6 +518,7 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
           <label>Subida <input type="number" step="0.1" value={params["slope-spiral"].rise} onChange={(event) => onParamsChange("slope-spiral", { ...params["slope-spiral"], rise: Number(event.currentTarget.value) })} /></label>
           <p>Clique o centro, depois o início: a distância é o raio. Gire o cursor em volta do centro no sentido que quiser, cada volta completa soma uma volta, e clique o fim.</p>
           <p>A espiral começa na altura do início e termina na altura do piso onde você clicou o fim, ou sobe o valor de Subida. Shift e mover o mouse para cima ou para baixo ajusta a subida.</p>
+          {params["slope-spiral"].selected && <SlopeSelectedFields selected={params["slope-spiral"].selected} onChange={(selected) => onParamsChange("slope-spiral", { ...params["slope-spiral"], selected })} />}
         </div>
       ) : activeTool === "slope-curve" ? (
         <div style={{ display: "grid", gap: "0.6rem" }}>
@@ -481,6 +529,7 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
           <label>Subida <input type="number" step="0.1" value={params["slope-curve"].rise} onChange={(event) => onParamsChange("slope-curve", { ...params["slope-curve"], rise: Number(event.currentTarget.value) })} /></label>
           <p>Por pontos: clique por onde a curva passa; clique de novo no último, ou Enter. Reta: início e fim. Arco: início, fim e puxe a curva. Ligar pontas: clique na borda de um piso e depois na do outro, e a rampa sai reta de cada borda. Espiral: centro, início, gire e clique o fim. R troca o modo.</p>
           <p>A rampa começa na altura do primeiro clique e termina na altura do piso do último clique, ou sobe o valor de Subida, sempre na mesma inclinação. Shift e mover o mouse para cima ou para baixo ajusta a subida. Backspace desfaz o último clique e Esc cancela.</p>
+          {params["slope-curve"].selected && <SlopeSelectedFields selected={params["slope-curve"].selected} onChange={(selected) => onParamsChange("slope-curve", { ...params["slope-curve"], selected })} />}
         </div>
       ) : activeTool === "path-brush" ? (<PathBrushFields params={params["path-brush"]} onChange={(next) => onParamsChange("path-brush", next)} />) : activeTool === "wall-brush" ? (
         <WallBrushFields params={params["wall-brush"]} onChange={(next) => onParamsChange("wall-brush", next)} />

@@ -2214,6 +2214,10 @@ tool only says which spine owners it edits, never how.
 
 While this answers true -- a tool midway through drawing -- presses belong to the tool, not to editing.
 
+### `property vtt.spine-edit-behavior.SpineEditOptions.onSelect?: (ctx: ToolContext, nodeId: string | undefined) => void`
+
+Told whenever the selected spine point changes -- `undefined` when nothing is selected.
+
 ### `property vtt.spine-edit-behavior.SpineEditOptions.ownsSpine: (surfaceType: string) => boolean`
 
 Only spines owned by a type this accepts are edited; anything else falls through to the tool.
@@ -3044,9 +3048,19 @@ The welded floor again, with the landing edge split around the ramp end's own ru
 
 A control point's height comes from what the pointer actually touched: a node's own height, else the picked surface.
 
+### `function vtt.slope-selection.slopeSelection(id: SlopeToolId): { onSelect: (ctx: ToolContext, nodeId: string | undefined) => void; onParamsChange: any }`
+
+The global edits of a sloped platform, from the panel: picking a point of
+one mirrors what it is as a whole -- its ends' heights, its width, and the
+spiral it is -- into the tool's `selected` params, and changing any of
+those edits it. The same regeneration a point drag runs does the rest.
+
+This is the panel half of editing a slope as a whole; handles in the scene
+for the same values come with the shared edit-mode components (#318).
+
 ### `variable vtt.slope-tools.slopeCurveTool: ConstructionTool<"slope-curve">`
 
-Edits an existing curved ramp by its spine points, as the spiral and the road are edited.
+Edits an existing curved ramp by its spine points, as the spiral and the road are edited, and as a whole from the panel.
 
 ### `variable vtt.slope-tools.slopeRampTool: ConstructionTool<"slope-ramp">`
 
@@ -3054,7 +3068,9 @@ Also grabs and edits an existing ramp's own corner, side, end or body -- see `st
 
 ### `variable vtt.slope-tools.slopeSpiralTool: ConstructionTool<"slope-spiral">`
 
-Also edits an existing spiral by its spine points, exactly as a road is edited -- see `spine-edit-behavior.ts`.
+Also edits an existing spiral by its spine points, exactly as a road is
+edited -- see `spine-edit-behavior.ts` -- and as a whole from the panel,
+once one of its points is picked -- see `slope-selection.ts`.
 
 ### `variable vtt.terrain-sculpt-tool.terrainSculptTool: ConstructionTool<"terrain-sculpt">`
 
@@ -5202,6 +5218,40 @@ Its faces are never grabbed directly -- the spine is what is edited. A
 floor that moves still carries the end welded to it: the end's control
 node follows, and the ramp re-places itself on the moved curve.
 
+### `interface vtt.slope-summary.SlopeSummary`
+
+What a sloped platform is as a whole -- the values its global edits change
+-- read back from its spine: both ends' heights and its width, and, when
+every span is an arc around one centre, the spiral it is.
+
+Nothing here is stored: the spine is the truth, and this is only how it
+reads to someone editing it from a panel.
+
+### `property vtt.slope-summary.SlopeSummary.endHeight: number`
+
+Height of the chain's last end.
+
+### `property vtt.slope-summary.SlopeSummary.spiral?: { centerX: number; centerZ: number; positive: boolean; radius: number; turns: number }`
+
+### `property vtt.slope-summary.SlopeSummary.startHeight: number`
+
+Height of the chain's first end.
+
+### `property vtt.slope-summary.SlopeSummary.width: number`
+
+### `function vtt.slope-summary.describeSlope(graph: ConstructionGraphSnapshot, nodeId: string): SlopeSummary | undefined`
+
+How the sloped platform through `nodeId` reads as a whole, or `undefined` when there is none.
+
+### `function vtt.slope-summary.planSlopeEdit(graph: ConstructionGraphSnapshot, port: Pick<BezierPort, "curveBatch">, nodeId: string, next: SlopeSummary, operationId: string): ConstructionGraphPatch | undefined`
+
+The spine edit taking the sloped platform through `nodeId` from what it is
+to `next`. Heights move the ends (the owner re-grades between them), width
+re-profiles every span, and any spiral value rebuilds the whole helix in
+Rust from the start end, which keeps its angle round the centre. Node and
+span ids are kept wherever the count allows, so what is welded to either
+end stays welded.
+
 ### `interface vtt.registry.ResolvedCoverage`
 
 One covered region, paired with what the painted type wants to do about it.
@@ -6070,7 +6120,7 @@ floating one -- a storey, a bridge deck -- that leaves the terrain alone.
 
 ### `property vtt.tool-types.ToolParamsByTool.roof: { curvatures: readonly [number, number, number, number]; elevation: number; height: number; radius: number; shape: "rectangle" | "circle" | "platform" }`
 
-### `property vtt.tool-types.ToolParamsByTool.slope-curve: { mode?: "arc" | "points" | "straight" | "connect" | "spiral"; rise: number; width: number }`
+### `property vtt.tool-types.ToolParamsByTool.slope-curve: { mode?: "arc" | "points" | "straight" | "spiral" | "connect"; rise: number; selected?: SlopeSummary; width: number }`
 
 A curved ramp, drawn in one of the shared spine creation modes. `rise` is
 its climb when the end is not on a floor; it climbs at one constant grade.
@@ -6079,9 +6129,11 @@ its climb when the end is not on a floor; it climbs at one constant grade.
 
 A straight ramp dragged from start to end, climbing a fixed rise, with its own width at each end.
 
-### `property vtt.tool-types.ToolParamsByTool.slope-spiral: { rise: number; width: number }`
+### `property vtt.tool-types.ToolParamsByTool.slope-spiral: { rise: number; selected?: SlopeSummary; width: number }`
 
-A spiral sloped platform: centre, start, then turned round to its end. `rise` is its climb when the end is not on a floor.
+A spiral sloped platform: centre, start, then turned round to its end.
+`rise` is its climb when the end is not on a floor. `selected` mirrors the
+slope picked for editing: changing it edits that slope.
 
 ### `property vtt.tool-types.ToolParamsByTool.terrain-sculpt: TerrainSculptParams`
 
@@ -6156,13 +6208,6 @@ Length of a panel's own vertical edge, in world units.
 ### `type vtt.tool-types.BrushShapeKind = "circle" | "square" | "hexagon"`
 
 ### `type vtt.tool-types.ConstructionToolId = "navigate" | "platform-contour" | "slope-ramp" | "slope-spiral" | "slope-curve" | "roof" | "path-brush" | "wall-brush" | "wall-line" | "tower-stamp" | "opening" | "terrain-sculpt"`
-
-The construction-tool vocabulary every layer (widgets, composition) needs
-to agree on: which tools exist, what each one's parameters look like, and
-how a tool describes its own not-yet-committed preview. Pure data, no
-pointer/render logic -- that lives in `composition/tabletop/tools/`
-(the tool implementations) and `adapters/rendering/` (turning a
-PreviewDescriptor into an actual scene item).
 
 ### `type vtt.tool-types.NoToolParams = Record<string, never>`
 
