@@ -5497,10 +5497,10 @@ export type { SpineChain } from "./spine-chains.ts";
 export type { SpineControlNode, SpineCurveEdge, SpineGraph } from "./spine-graph.ts";
 export type { SpineControlNodeAddress } from "./spine-node-id.ts";
 export type { SpineRibbon, SpineRibbonSpan } from "./spine-ribbons.ts";
-export type { SpineGlobalHandleKind, SpineGlobalHandleKind as SpineEndHandleKind } from "./spine-handle-ids.ts";
+export type { SpineGlobalHandleKind } from "./spine-handle-ids.ts";
 export type { SpineTransform } from "./spine-global-handles.ts";
-export type { SpineGlobalHandle, SpineGlobalHandle as SpinePivot, SpineGlobalHandle as SpineEndHandle } from "./spine-global-handles.ts";
-export type { OpenSpineChain, SpineChainShape, SpineChainShape as SlopeSummary, SpineGrade } from "./spine-open-chain.ts";
+export type { SpineGlobalHandle } from "./spine-global-handles.ts";
+export type { OpenSpineChain, SpineChainShape, SpineGrade } from "./spine-open-chain.ts";
 export type { SpineAction } from "./spine-actions.ts";
 export type { SpineEditInput } from "./spine-edit-plan.ts";
 
@@ -5559,20 +5559,6 @@ export interface SpineTransform {
   readonly rotation?: { readonly pivot: PlanPoint; readonly angle: number };
 export function planSpineTransform(graph: ConstructionGraphSnapshot, spine: Pick<SpineGlobalHandle, "nodeIds" | "edges">, transform: SpineTransform): ConstructionGraphPatch {
   const positions = new Map(graph.nodes.map((node) => [node.id, node.position]));
-export const spinePivots = (graph: ConstructionGraphSnapshot): readonly SpineGlobalHandle[] => spineGlobalHandles(graph).filter((h) => h.kind === "pivot");
-export const spinePivotAt = (graph: ConstructionGraphSnapshot, id: string): SpineGlobalHandle | undefined => spineGlobalHandleAt(graph, id);
-export const isSpinePivotId = (id: string): boolean => id.startsWith("spine-pivot:");
-export const spineEndHandles = (graph: ConstructionGraphSnapshot) => {
-  return spineGlobalHandles(graph)
-  .filter((h) => h.kind !== "pivot" && h.ends)
-  .map((h) => ({
-  id: h.id,
-  kind: h.kind,
-  position: h.position,
-  owner: h.owner,
-export const spineEndHandleAt = (graph: ConstructionGraphSnapshot, id: string): SpineGlobalHandle | undefined => spineGlobalHandleAt(graph, id);
-export const spineEndHandleId = (kind: "height" | "turns", nodeId: string): string => spineGlobalHandleId(kind, nodeId);
-export const spineEndHandleOf = (id: string) => spineGlobalHandleOf(id);
 
 // src/features/edit-construction/spine/spine-graph.ts
 export interface SpineControlNode {

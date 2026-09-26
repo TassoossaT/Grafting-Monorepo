@@ -140,23 +140,3 @@ export function planSpineTransform(graph: ConstructionGraphSnapshot, spine: Pick
     }),
   };
 }
-
-export const spinePivots = (graph: ConstructionGraphSnapshot): readonly SpineGlobalHandle[] => spineGlobalHandles(graph).filter((h) => h.kind === "pivot");
-export const spinePivotAt = (graph: ConstructionGraphSnapshot, id: string): SpineGlobalHandle | undefined => spineGlobalHandleAt(graph, id);
-export const isSpinePivotId = (id: string): boolean => id.startsWith("spine-pivot:");
-export const spineEndHandles = (graph: ConstructionGraphSnapshot) => {
-  return spineGlobalHandles(graph)
-    .filter((h) => h.kind !== "pivot" && h.ends)
-    .map((h) => ({
-      id: h.id,
-      kind: h.kind,
-      position: h.position,
-      owner: h.owner,
-      startNodeId: h.ends![0],
-      endNodeId: h.ends![1],
-      center: h.kind === "turns" ? h.center : undefined,
-    }));
-};
-export const spineEndHandleAt = (graph: ConstructionGraphSnapshot, id: string): SpineGlobalHandle | undefined => spineGlobalHandleAt(graph, id);
-export const spineEndHandleId = (kind: "height" | "turns", nodeId: string): string => spineGlobalHandleId(kind, nodeId);
-export const spineEndHandleOf = (id: string) => spineGlobalHandleOf(id);

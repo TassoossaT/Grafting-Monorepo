@@ -3756,23 +3756,9 @@ for it now.
 
 ### `function vtt.token-projection.createTokenProjection(input: TokenProjection): TokenProjection`
 
-### `reference vtt.edit-construction.describeSlope -> vtt.spine-open-chain.describeSpineChain`
-
-### `reference vtt.edit-construction.planSlopeEdit -> vtt.spine-open-chain.planSpineChainEdit`
-
-### `reference vtt.edit-construction.SlopeSummary -> vtt.spine-open-chain.SpineChainShape`
-
-### `reference vtt.edit-construction.SpineEndHandle -> vtt.spine-global-handles.SpineGlobalHandle`
-
-### `reference vtt.edit-construction.SpineEndHandleKind -> vtt.spine-handle-ids.SpineGlobalHandleKind`
-
 ### `reference vtt.edit-construction.spineGlobalHandleId -> vtt.global-handle-ids.globalHandleId`
 
 ### `reference vtt.edit-construction.spineGlobalHandleOf -> vtt.global-handle-ids.globalHandleOf`
-
-### `reference vtt.edit-construction.SpinePivot -> vtt.spine-global-handles.SpineGlobalHandle`
-
-### `reference vtt.edit-construction.spinePivotId -> vtt.global-handle-ids.globalHandleId`
 
 ### `interface vtt.effect.Effect`
 
@@ -4416,23 +4402,9 @@ type are edited by exactly the same handles; only the last step differs.
 
 Preview only the affected curves; surface regeneration runs once on release.
 
-### `reference vtt.spine.describeSlope -> vtt.spine-open-chain.describeSpineChain`
-
-### `reference vtt.spine.planSlopeEdit -> vtt.spine-open-chain.planSpineChainEdit`
-
-### `reference vtt.spine.SlopeSummary -> vtt.spine-open-chain.SpineChainShape`
-
-### `reference vtt.spine.SpineEndHandle -> vtt.spine-global-handles.SpineGlobalHandle`
-
-### `reference vtt.spine.SpineEndHandleKind -> vtt.spine-handle-ids.SpineGlobalHandleKind`
-
 ### `reference vtt.spine.spineGlobalHandleId -> vtt.global-handle-ids.globalHandleId`
 
 ### `reference vtt.spine.spineGlobalHandleOf -> vtt.global-handle-ids.globalHandleOf`
-
-### `reference vtt.spine.SpinePivot -> vtt.spine-global-handles.SpineGlobalHandle`
-
-### `reference vtt.spine.spinePivotId -> vtt.global-handle-ids.globalHandleId`
 
 ### `type vtt.spine-actions.SpineAction = "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"`
 
@@ -4579,8 +4551,6 @@ A whole-spine transform: turned by `angle` round `pivot` in plan, then moved by 
 
 How far past the structure's farthest point the rotate handle stands.
 
-### `function vtt.spine-global-handles.isSpinePivotId(id: string): boolean`
-
 ### `function vtt.spine-global-handles.outward(pivot: ConstructionPosition, toward: ConstructionPosition, reach: number): ConstructionPosition`
 
 `reach` out from `pivot` towards `toward`, level with the pivot -- where a
@@ -4593,14 +4563,6 @@ The graph patch moving and/or turning a whole spine: every control node,
 every span's handles and every arc centre, so each span keeps its shape.
 The owner regenerates its surface from it like from any other spine edit.
 
-### `function vtt.spine-global-handles.spineEndHandleAt(graph: ConstructionGraphSnapshot, id: string): SpineGlobalHandle | undefined`
-
-### `function vtt.spine-global-handles.spineEndHandleId(kind: "height" | "turns", nodeId: string): string`
-
-### `function vtt.spine-global-handles.spineEndHandleOf(id: string): { kind: GlobalHandleKind; nodeId: string } | undefined`
-
-### `function vtt.spine-global-handles.spineEndHandles(graph: ConstructionGraphSnapshot): { center: readonly [number, number] | undefined; endNodeId: string; id: string; kind: GlobalHandleKind; owner: string; position: ConstructionPosition; startNodeId: string }[]`
-
 ### `function vtt.spine-global-handles.spineGlobalHandleAt(graph: ConstructionGraphSnapshot, id: string): SpineGlobalHandle | undefined`
 
 The global handle `id` names -- or, for any other handle of a spine, that spine's pivot -- where it stands now.
@@ -4608,10 +4570,6 @@ The global handle `id` names -- or, for any other handle of a spine, that spine'
 ### `function vtt.spine-global-handles.spineGlobalHandles(graph: ConstructionGraphSnapshot): readonly SpineGlobalHandle[]`
 
 Every spine's global handles, of every kind.
-
-### `function vtt.spine-global-handles.spinePivotAt(graph: ConstructionGraphSnapshot, id: string): SpineGlobalHandle | undefined`
-
-### `function vtt.spine-global-handles.spinePivots(graph: ConstructionGraphSnapshot): readonly SpineGlobalHandle[]`
 
 ### `interface vtt.spine-graph.SpineControlNode`
 
