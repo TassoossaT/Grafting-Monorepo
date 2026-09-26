@@ -154,6 +154,23 @@ test("hovering on a floor's edge before dragging previews nothing rather than a 
   } finally { session.free(); }
 });
 
+test("a ramp drawn from a floor's edge back over the floor does not weld there, so it never lies over its own floor", () => {
+  const fixture = sessionFixture();
+  const { runtime, session, calls } = fixture;
+  try {
+    floor(runtime, "low", 0, 0);
+    floor(runtime, "high", -6, 2, "platform-floating");
+    // Starts on the low floor by its east edge and runs west, across it, to the high floor.
+    drawn({ point: { x: 3.9, y: 0, z: 2 } }, { point: { x: -2.1, y: 0, z: 2 } }, fixture);
+    const last = calls.feedback.at(-1);
+    assert.equal(last.tone, "success", JSON.stringify(last));
+    const low = faces(runtime, "platform")[0];
+    const face = ramp(runtime);
+    assert.ok(!low.nodes.some((n) => face.nodes.some((m) => m.id === n.id)), "not welded into the floor it lies over");
+    close(centre(face, "top").x, -2, "the top still lands on the high floor's edge");
+  } finally { session.free(); }
+});
+
 test("an end dragged near a floor's corner slides along the edge until its width fits", () => {
   const fixture = sessionFixture();
   const { runtime, session, calls } = fixture;

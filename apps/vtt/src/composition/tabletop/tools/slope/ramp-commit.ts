@@ -3,7 +3,7 @@ import type { ConstructionPosition } from "../../../../ports/index.ts";
 import { commitPatchReplacement } from "../../effects/effect-commit.ts";
 import { scopedToolId, type PointerSample, type ToolContext } from "../core/tool-context.ts";
 import { landsInside, project, reweldedFloor, slopeControlPoint, type EndWeld, type Rung } from "./slope-commit.ts";
-import { alongEdge, floorLandingAt, floorsOf, type FloorLanding } from "../core/floor-landing.ts";
+import { alongEdge, floorLandingAt, floorsOf, type FloorLanding, type PlanDirection } from "../core/floor-landing.ts";
 
 /** What drawing a straight ramp may decide. */
 export interface RampParams {
@@ -19,12 +19,15 @@ const CORNER_CLEARANCE = 0.02;
 interface RampEnds {
   readonly from: ConstructionPosition;
   readonly to: ConstructionPosition;
-  readonly start?: EndWeld;
-  readonly end?: EndWeld;
+  readonly start?: RampWeld;
+  readonly end?: RampWeld;
 }
 
-const weldOf = (landing: FloorLanding | undefined, controlIndex: number): EndWeld | undefined =>
-  landing && { controlIndex, topology: landing.topology, use: landing.use, a: landing.a, b: landing.b };
+/** A landing kept as a weld, with the direction off its floor -- the side the ramp must lie on. */
+type RampWeld = EndWeld & { readonly out: PlanDirection };
+
+const weldOf = (landing: FloorLanding | undefined, controlIndex: number): RampWeld | undefined =>
+  landing && { controlIndex, topology: landing.topology, use: landing.use, a: landing.a, b: landing.b, out: landing.out };
 
 /**
  * The drag's two ends. An end within reach of a floor's edge -- on the
@@ -48,43 +51,40 @@ export function straightRampPoints(ctx: ToolContext, start: PointerSample, end: 
   return [from, to];
 }
 
-/** The plan-view unit normal of the welded edge, turned to point from `from` towards `to`. */
-function normalToward(weld: EndWeld, from: ConstructionPosition, to: ConstructionPosition): { readonly x: number; readonly z: number } {
-  const ux = weld.b.x - weld.a.x, uz = weld.b.z - weld.a.z;
-  const length = Math.hypot(ux, uz);
-  const n = { x: -uz / length, z: ux / length };
-  return n.x * (to.x - from.x) + n.z * (to.z - from.z) < 0 ? { x: -n.x, z: -n.z } : n;
-}
-
 /** `point` moved onto the welded edge's line, keeping its own height. */
 function onto(weld: EndWeld, point: ConstructionPosition): ConstructionPosition {
   const { t } = project(weld.a, weld.b, point);
   return { x: weld.a.x + (weld.b.x - weld.a.x) * t, y: point.y, z: weld.a.z + (weld.b.z - weld.a.z) * t };
 }
 
+/** How far `to` lies off `weld`'s floor from `at`, square to its edge; not positive when it lies over the floor. */
+const offFloor = (weld: RampWeld, at: ConstructionPosition, to: ConstructionPosition) => weld.out.x * (to.x - at.x) + weld.out.z * (to.z - at.z);
+
 /**
  * The axis actually built: an end landing on a floor's edge sits on that
- * edge and the axis meets it square on, so the ramp's end edge lies along
- * the floor's. A second landing is kept only if its edge is parallel to the
- * first -- a straight ramp cannot meet two edges square on otherwise.
+ * edge and the axis leaves it square on, off the floor -- a ramp welded
+ * into a floor never lies over it. An end whose other end lies over its
+ * floor does not weld. A second landing is kept only if its edge is
+ * parallel to the first -- a straight ramp cannot meet two edges square on
+ * otherwise.
  */
-function plannedAxis(from: ConstructionPosition, to: ConstructionPosition, start: EndWeld | undefined, end: EndWeld | undefined) {
+function plannedAxis(from: ConstructionPosition, to: ConstructionPosition, start: RampWeld | undefined, end: RampWeld | undefined) {
+  if (start && !(offFloor(start, onto(start, from), to) > 0)) start = undefined;
+  if (end && !(offFloor(end, onto(end, to), from) > 0)) end = undefined;
   const parallel = (a: EndWeld, b: EndWeld) => Math.abs((a.b.x - a.a.x) * (b.b.z - b.a.z) - (a.b.z - a.a.z) * (b.b.x - b.a.x))
     / (Math.hypot(a.b.x - a.a.x, a.b.z - a.a.z) * Math.hypot(b.b.x - b.a.x, b.b.z - b.a.z)) < 1e-3;
   if (start) {
     const axisStart = onto(start, from);
-    const n = normalToward(start, axisStart, to);
-    const both = end !== undefined && parallel(start, end);
-    const reach = both
-      ? n.x * (end!.a.x - axisStart.x) + n.z * (end!.a.z - axisStart.z)
-      : n.x * (to.x - axisStart.x) + n.z * (to.z - axisStart.z);
+    const n = start.out;
+    // Both welded: the far floor's edge must face back at the start, across the gap.
+    const both = end !== undefined && parallel(start, end) && offFloor(end, end.a, axisStart) > 0;
+    const reach = both ? offFloor(start, axisStart, end!.a) : offFloor(start, axisStart, to);
     return { axisStart, axisEnd: { x: axisStart.x + n.x * reach, y: to.y, z: axisStart.z + n.z * reach }, welds: both ? [start, end!] : [start] };
   }
   if (end) {
     const axisEnd = onto(end, to);
-    const n = normalToward(end, axisEnd, from);
-    const reach = n.x * (from.x - axisEnd.x) + n.z * (from.z - axisEnd.z);
-    return { axisStart: { x: axisEnd.x + n.x * reach, y: from.y, z: axisEnd.z + n.z * reach }, axisEnd, welds: [end] };
+    const reach = offFloor(end, axisEnd, from);
+    return { axisStart: { x: axisEnd.x + end.out.x * reach, y: from.y, z: axisEnd.z + end.out.z * reach }, axisEnd, welds: [end] };
   }
   return { axisStart: from, axisEnd: to, welds: [] as EndWeld[] };
 }
