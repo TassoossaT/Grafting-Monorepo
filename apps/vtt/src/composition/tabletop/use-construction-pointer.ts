@@ -74,6 +74,8 @@ function applySnap(sample: PointerSample, snapToGrid: boolean): PointerSample {
 
 export interface ConstructionPointerHandlers {
   readonly onSelectionAction: (action: string) => void;
+  /** What the picked handle offers besides dragging it, as the active tool says -- buttons to show. */
+  readonly selectionActions: () => readonly { readonly id: string; readonly label: string }[];
   readonly onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
   readonly onPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
   readonly onPointerUp: (event: ReactPointerEvent<HTMLDivElement>) => void;
@@ -118,6 +120,8 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
   const manipulatorGesture = useRef<CurveGesture | undefined>(undefined);
   const branchModifier = useRef(false);
   const selectedPoint = useRef<string | undefined>(undefined);
+  /** Whatever was last reported picked, of any kind -- what a selection action acts on. */
+  const selectedId = useRef<string | undefined>(undefined);
 
   const nextSequence = useCallback(() => ++sequenceRef.current, []);
 
@@ -152,13 +156,14 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       nextSequence,
       reportSelection: (info) => {
         const { runtime, viewId, activeTool } = optionsRef.current;
+        selectedId.current = info?.id;
         optionsRef.current.onSelectionChange(info);
         if (viewId === undefined) return;
         const node = info && toolFor(activeTool).handlePresentation === "spine-points" ? spineHandleAt(runtime, info.id) : undefined;
         selectedPoint.current = node?.id;
         runtime.setPointManipulator?.(viewId, node && !branchModifier.current ? {
           // Branching starts a new structure from the point, which only a tool that handles the action can do.
-          id: node.id, position: node.position, branchAction: toolFor(activeTool).onSelectionAction !== undefined && !globalHandleOf(node.id),
+          id: node.id, position: node.position, branchAction: toolFor(activeTool).selectionActions?.(ctx, node.id).some((action) => action.id === "branch") === true,
           onChange(phase, position) {
             if (phase === "start") {
               manipulatorGesture.current?.cancel();
@@ -473,11 +478,17 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
   const onSelectionAction = useCallback((action: string) => {
     if (gestureRef.current || manipulatorGesture.current) return;
     const { activeTool, toolParams } = optionsRef.current;
-    if (toolFor(activeTool).onSelectionAction?.(ctx, action, toolParams[activeTool] as never)) refreshEdgeOverlay();
+    if (toolFor(activeTool).onSelectionAction?.(ctx, action, toolParams[activeTool] as never, selectedId.current)) refreshEdgeOverlay();
   }, [ctx, refreshEdgeOverlay]);
+
+  const selectionActions = useCallback(() => {
+    const id = selectedId.current;
+    return id === undefined ? [] : toolFor(optionsRef.current.activeTool).selectionActions?.(ctx, id) ?? [];
+  }, [ctx]);
 
   return {
     onSelectionAction,
+    selectionActions,
     onPointerDown,
     onPointerMove,
     onPointerUp: finishGesture,

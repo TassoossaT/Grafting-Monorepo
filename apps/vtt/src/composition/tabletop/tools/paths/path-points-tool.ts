@@ -1,4 +1,4 @@
-import { createPathBrushEffect, pathFormationFor, DEFAULT_TOOL_PARAMS, PATH_SURFACE_TYPE } from "../../../../features/edit-construction/index.ts";
+import { createPathBrushEffect, isSpineControlNodeId, pathFormationFor, DEFAULT_TOOL_PARAMS, PATH_SURFACE_TYPE } from "../../../../features/edit-construction/index.ts";
 import type { PathBrushParams } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionPosition, CubicBezier } from "../../../../ports/index.ts";
 import { commitPathCloudIntent } from "../../path/path-cloud-transaction.ts";
@@ -173,6 +173,7 @@ export const pathPointsTool: ConstructionTool<"path-brush"> = {
       }
     });
   },
+  selectionActions: (_ctx, selectedId) => (isSpineControlNodeId(selectedId) ? [{ id: "branch", label: "Criar rua daqui" }] : []),
   onSelectionAction(ctx, action, params) {
     if (action !== "branch" || gestures.has(ctx.runtime) || drafts.has(ctx.runtime)) return false;
     return startBranch(ctx, spine.selected(ctx), params);

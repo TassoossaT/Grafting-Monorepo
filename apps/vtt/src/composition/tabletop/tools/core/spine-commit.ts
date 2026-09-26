@@ -1,4 +1,4 @@
-import { structureTypeFor } from "../../../../features/edit-construction/index.ts";
+import { regenerateWithEndWelds, structureTypeFor } from "../../../../features/edit-construction/index.ts";
 import type { SpineRegeneration } from "../../../../features/edit-construction/index.ts";
 import type { ApplyPatchReplacementRequest, ConstructionGraphPatch, ConstructionGraphSnapshot } from "../../../../ports/index.ts";
 import { commitPatchReplacement } from "../../effects/effect-commit.ts";
@@ -13,7 +13,7 @@ import type { ToolContext } from "./tool-context.ts";
 /** What `owner` makes of `graphPatch` applied to `snapshot`; `undefined` when it has no spine or makes nothing. */
 export function regenerateSpine(ctx: ToolContext, snapshot: ConstructionGraphSnapshot, owner: string | undefined, graphPatch: ConstructionGraphPatch, operationId: string): SpineRegeneration | undefined {
   const generation = owner === undefined ? undefined : structureTypeFor(owner)?.spine;
-  return generation?.regenerate({
+  return generation && regenerateWithEndWelds(generation, {
     snapshot, graphPatch, topologies: ctx.runtime.getAllRegionTopologies(), port: ctx.runtime, field: ctx.runtime, operationId, tableId: ctx.tableId,
   });
 }

@@ -122,6 +122,22 @@ export function createRotateHandleTexture(): HTMLCanvasElement {
   });
 }
 
+/** One end of a structure, which connects where it lands: two chain links. */
+export function createLinkHandleTexture(): HTMLCanvasElement {
+  return glyphDisc("#0e9aa7", (context) => {
+    context.lineWidth = 4;
+    for (const [x, y] of [[25, 39], [39, 25]] as const) {
+      context.save();
+      context.translate(x, y);
+      context.rotate(-Math.PI / 4);
+      context.beginPath();
+      context.roundRect(-11, -6, 22, 12, 6);
+      context.stroke();
+      context.restore();
+    }
+  });
+}
+
 /** A span's midpoint: a small diamond, lighter than a point, so it reads as "in between". */
 export function createMidpointHandleTexture(): HTMLCanvasElement {
   const canvas = document.createElement("canvas");

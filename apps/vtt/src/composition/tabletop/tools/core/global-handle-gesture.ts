@@ -1,4 +1,5 @@
 import {
+  globalHandleActions,
   planEdit,
   planGlobalHandle,
   resolveCloudTopology,
@@ -10,10 +11,12 @@ import {
   type GlobalHandleKind,
   type GlobalHandleScene,
 } from "../../../../features/edit-construction/index.ts";
-import type { ConstructionEdgeGeometry, ConstructionPosition } from "../../../../ports/index.ts";
+import type { ApplyPatchReplacementRequest, ConstructionEdgeGeometry, ConstructionPosition } from "../../../../ports/index.ts";
 import type { CurveGesture, CurveGestureOptions } from "./curve-edit-gesture.ts";
 import { commitSpineRegeneration, regenerateSpine } from "./spine-commit.ts";
 import { createConstrainedDrag } from "./constrained-drag.ts";
+import { floorsOf, floorUnder } from "./floor-landing.ts";
+import { commitPatchReplacement } from "../../effects/effect-commit.ts";
 import type { PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
 
 const CHANNEL = "global-handle";
@@ -22,6 +25,7 @@ const PREVIEW_COLOR = 0xffbc55;
 /** What each global handle reports once its edit is committed. */
 const DONE: Readonly<Record<GlobalHandleKind, string>> = {
   pivot: "Estrutura movida.", rotate: "Estrutura girada.", height: "Altura atualizada.", turns: "Voltas atualizadas.",
+  origin: "Ponta movida.", destination: "Ponta movida.",
 };
 
 function sceneOf(ctx: ToolContext): GlobalHandleScene {
@@ -39,9 +43,23 @@ function movedPositions(ctx: ToolContext, handle: GlobalHandle, edit: GlobalHand
   }));
 }
 
-/** An edit's preview: the owner's regenerated spine, or the moved outline of the structure's faces. */
+/** The outline of every face a replacement puts in place. */
+function replacementOutline(request: ApplyPatchReplacementRequest): Float32Array {
+  const positions = new Map(request.patch.nodes.map((node) => [node.id, node.position]));
+  const edges = new Map(request.patch.edges.map((edge) => [edge.edgeId, edge]));
+  const segments: number[] = [];
+  for (const use of request.patch.regions.flatMap((region) => [region.boundary, ...(region.holes ?? [])]).flat()) {
+    const edge = edges.get(use.edgeId);
+    const a = edge && positions.get(edge.startNodeId), b = edge && positions.get(edge.endNodeId);
+    if (a && b) segments.push(a.x, a.y + 0.05, a.z, b.x, b.y + 0.05, b.z);
+  }
+  return Float32Array.from(segments);
+}
+
+/** An edit's preview: the owner's regenerated spine, the faces a replacement puts in place, or the moved outline of the structure's faces. */
 function previewOf(ctx: ToolContext, handle: GlobalHandle, edit: GlobalHandleEdit, scene: GlobalHandleScene, operationId: string): Float32Array | undefined {
   if (edit.kind === "spine") return regenerateSpine(ctx, scene.graph, edit.owner, edit.graphPatch, operationId)?.preview;
+  if (edit.kind === "replace") return replacementOutline(edit.request);
   const moved = movedPositions(ctx, handle, edit, scene);
   const nodes = new Set(handle.nodeIds);
   const segments: number[] = [];
@@ -79,6 +97,11 @@ function commitEdit(ctx: ToolContext, handle: GlobalHandle, edit: GlobalHandleEd
   if (edit.kind === "spine") {
     const regenerated = regenerateSpine(ctx, scene.graph, edit.owner, edit.graphPatch, operationId);
     if (regenerated) commitSpineRegeneration(ctx, regenerated.request, operationId);
+    return;
+  }
+  if (edit.kind === "replace") {
+    const { recorded } = commitPatchReplacement(ctx.runtime, edit.request, { transactionId: operationId });
+    if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
     return;
   }
   if (edit.kind === "region-move") {
@@ -125,6 +148,11 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
       case "height": return { intent: { kind: "height", dy: delta.y }, at, readout: `altura ${delta.y >= 0 ? "+" : ""}${delta.y.toFixed(2)} m` };
       case "rotate": return { intent: { kind: "rotate", angle }, at, readout: `rotação ${((angle * 180) / Math.PI).toFixed(0)}°` };
       case "turns": return { intent: { kind: "wind", angle }, at, readout: `voltas ${angle >= 0 ? "+" : ""}${(angle / (2 * Math.PI)).toFixed(2)}` };
+      case "origin":
+      case "destination": {
+        const under = floorUnder(floorsOf(ctx), gesture.current)?.surfaceKey;
+        return { intent: { kind: "place", at, ...(under ? { under } : {}) }, at };
+      }
     }
   }
 
@@ -168,4 +196,33 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
       ctx.runtime.previewNodeHandle?.(handle.id, undefined);
     },
   };
+}
+
+/**
+ * Runs the action `actionId` a picked global handle offers -- disconnecting
+ * an end, say -- as one undoable edit. `false` when the handle offers no
+ * such action now.
+ */
+export function runGlobalHandleAction(ctx: ToolContext, handleId: string, actionId: string): boolean {
+  const scene = sceneOf(ctx);
+  const handle = shownGlobalHandleAt(scene, handleId);
+  const action = handle && globalHandleActions(scene, handleId).find((candidate) => candidate.id === actionId);
+  if (!handle || !action) return false;
+  const operationId = `global-${action.id}:${ctx.nextSequence()}`;
+  try {
+    const edit = planGlobalHandle(scene, handle, action.intent, ctx.runtime, operationId);
+    if (!edit) return false;
+    commitEdit(ctx, handle, edit, scene, operationId);
+    const standing = shownGlobalHandleAt(sceneOf(ctx), handle.id);
+    ctx.reportSelection(standing ? { id: standing.id, point: standing.position } : undefined);
+    ctx.reportFeedback({ tone: "success", message: `${action.label}: feito.` });
+  } catch (error) {
+    ctx.reportFeedback({ tone: "error", message: `Estrutura preservada: ${error instanceof Error ? error.message : String(error)}` });
+  }
+  return true;
+}
+
+/** What the picked global handle `handleId` offers besides dragging it, for a panel or toolbar to show. */
+export function globalHandleActionsAt(ctx: ToolContext, handleId: string): readonly { readonly id: string; readonly label: string }[] {
+  return globalHandleActions(sceneOf(ctx), handleId).map(({ id, label }) => ({ id, label }));
 }

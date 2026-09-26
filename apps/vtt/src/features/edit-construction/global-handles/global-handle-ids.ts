@@ -6,7 +6,9 @@
  * - pivot: moves it;
  * - rotate: turns it round its pivot;
  * - height: raises or lowers it (a spine: its far end);
- * - turns: winds a spiral on or back.
+ * - turns: winds a spiral on or back;
+ * - origin, destination: move one end of a structure that runs between two
+ *   ends, connecting it where it lands and disconnecting it where it left.
  *
  * Which of them a structure shows is its type's declaration
  * (`StructureTypeDefinition.globalHandles`). Every one is named after the
@@ -14,9 +16,12 @@
  * that keeps that node; none is a graph node. This module is the only place
  * their ids are made or read.
  */
-export type GlobalHandleKind = "pivot" | "rotate" | "height" | "turns";
+export type GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "origin" | "destination";
 
-const PREFIX: Readonly<Record<GlobalHandleKind, string>> = { pivot: "structure-pivot:", rotate: "structure-rotate:", height: "structure-height:", turns: "structure-turns:" };
+const PREFIX: Readonly<Record<GlobalHandleKind, string>> = {
+  pivot: "structure-pivot:", rotate: "structure-rotate:", height: "structure-height:", turns: "structure-turns:",
+  origin: "structure-origin:", destination: "structure-destination:",
+};
 const KINDS = Object.keys(PREFIX) as readonly GlobalHandleKind[];
 
 export const globalHandleId = (kind: GlobalHandleKind, anchorNodeId: string): string => `${PREFIX[kind]}${anchorNodeId}`;

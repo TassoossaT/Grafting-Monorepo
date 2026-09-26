@@ -1,10 +1,11 @@
 import type { BezierPort } from "@/ports";
 
-import type { GlobalHandle, GlobalHandleEdit, GlobalHandleIntent, GlobalHandleProvider, GlobalHandleScene, HandleMotion } from "../../global-handles/index.ts";
+import type { GlobalHandle, GlobalHandleAction, GlobalHandleEdit, GlobalHandleIntent, GlobalHandleProvider, GlobalHandleScene, HandleMotion } from "../../global-handles/index.ts";
 import { isSpineControlNodeId, spineOwnerAt } from "../../spine/index.ts";
 import { globalHandleOf } from "../../global-handles/index.ts";
 import { structureTypeFor } from "../../structure-types/index.ts";
 import { cloudHandleProvider } from "./cloud-handle-provider.ts";
+import { endHandleProvider } from "./end-handle-provider.ts";
 import { spineHandleProvider } from "./spine-handle-provider.ts";
 
 /**
@@ -12,7 +13,7 @@ import { spineHandleProvider } from "./spine-handle-provider.ts";
  * handles; this is the only place that lists them. What shows the handles,
  * and the gesture that drags them, only ever talk to this module.
  */
-const PROVIDERS: readonly GlobalHandleProvider[] = [spineHandleProvider, cloudHandleProvider];
+const PROVIDERS: readonly GlobalHandleProvider[] = [spineHandleProvider, cloudHandleProvider, endHandleProvider];
 
 /** Whether `handle`'s type declares its kind. */
 function declared(handle: GlobalHandle): boolean {
@@ -34,6 +35,12 @@ export function shownGlobalHandleAt(scene: GlobalHandleScene, id: string): Globa
 /** What `intent` on `handle` edits, from the provider that placed it. */
 export function planGlobalHandle(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: Pick<BezierPort, "curveBatch">, operationId: string): GlobalHandleEdit | undefined {
   return PROVIDERS.find((provider) => provider.name === handle.provider)?.plan(scene, handle, intent, port, operationId);
+}
+
+/** What else the shown global handle `id` offers as it stands -- none for anything that is not one. */
+export function globalHandleActions(scene: GlobalHandleScene, id: string): readonly GlobalHandleAction[] {
+  const handle = shownGlobalHandleAt(scene, id);
+  return handle ? PROVIDERS.find((provider) => provider.name === handle.provider)?.actions?.(scene, handle) ?? [] : [];
 }
 
 /**

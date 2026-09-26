@@ -1,7 +1,7 @@
 import type { ConstructionToolId, StructureEditParams } from "@/features/edit-construction";
 
 import { beginCurveGesture } from "./curve-edit-gesture.ts";
-import { beginGlobalHandleGesture } from "./global-handle-gesture.ts";
+import { beginGlobalHandleGesture, globalHandleActionsAt, runGlobalHandleAction } from "./global-handle-gesture.ts";
 import {
   cloudNodes,
   globalHandleOf,
@@ -328,6 +328,15 @@ export function withStructureEditing<Id extends ConstructionToolId>(
     onCancel(ctx) {
       behavior.onCancel();
       tool.onCancel?.(ctx);
+    },
+
+    selectionActions(ctx, selectedId) {
+      return [...globalHandleActionsAt(ctx, selectedId), ...(tool.selectionActions?.(ctx, selectedId) ?? [])];
+    },
+
+    onSelectionAction(ctx, action, params, selectedId) {
+      if (selectedId !== undefined && runGlobalHandleAction(ctx, selectedId, action)) return true;
+      return tool.onSelectionAction?.(ctx, action, params, selectedId) ?? false;
     },
 
     onClick(ctx, sample, params) {

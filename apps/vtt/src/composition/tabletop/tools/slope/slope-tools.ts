@@ -59,7 +59,7 @@ const rawSlopeRampTool: ConstructionTool<"slope-ramp"> = {
       appendQuad(positions, indices, [corners.bottom.min, corners.bottom.max, corners.top.max, corners.top.min]);
       // A disk at each corner of an end that will be welded into a floor.
       for (const weld of welds) {
-        const end = weld.controlIndex === 0 ? corners.bottom : corners.top;
+        const end = corners[weld.end];
         appendNodeDisk(positions, indices, end.min, WELD_MARK);
         appendNodeDisk(positions, indices, end.max, WELD_MARK);
       }

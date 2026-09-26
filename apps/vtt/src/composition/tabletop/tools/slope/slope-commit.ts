@@ -1,8 +1,6 @@
-import { automaticCurve, controlRungId, controlSectionId, gradeSpineSpans, hasTrait, reverseGeometry, SLOPE_SURFACE_TYPE, slopeFootprint, slopeSurface, spineControlNodeId } from "../../../../features/edit-construction/index.ts";
+import { automaticCurve, controlRungId, controlSectionId, gradeSpineSpans, hasTrait, reweldFloors, sharedEdgeIds, SLOPE_SURFACE_TYPE, slopeFootprint, slopeSurface, spineControlNodeId, type WeldRung } from "../../../../features/edit-construction/index.ts";
 import type {
   ConstructionEdgeSnapshot,
-  ConstructionOrientedEdgeUse,
-  ConstructionPatchEdge,
   ConstructionPosition,
   ConstructionRegionEdge,
   ConstructionRegionTopology,
@@ -88,47 +86,8 @@ function squareTo(handle: CurvePoint, weld: EndWeld): CurvePoint {
   return [nx * reach, handle[1], nz * reach];
 }
 
-/** The edge a ramp's end shares with the floor it is welded into, from one of its end nodes to the other. */
-export interface Rung {
-  readonly edgeId: string;
-  readonly startNodeId: string;
-  readonly endNodeId: string;
-}
-
 /** A spine control node's cross-section, as the rung its spans and a welded floor share. */
-const controlRung = (controlId: string): Rung => ({ edgeId: controlRungId(controlId), startNodeId: controlSectionId(controlId, "min"), endNodeId: controlSectionId(controlId, "max") });
-
-/** The welded floor again, with the landing edge split around the ramp end's own rung. */
-export function reweldedFloor(operationId: string, weld: EndWeld, rung: Rung, sections: ReadonlyMap<string, ConstructionPosition>) {
-  const edges = new Map<string, ConstructionPatchEdge>();
-  const along = (id: string) => project(weld.a, weld.b, sections.get(id)!).t;
-  const [first, second] = along(rung.startNodeId) <= along(rung.endNodeId) ? [rung.startNodeId, rung.endNodeId] : [rung.endNodeId, rung.startNodeId];
-  const walk = (loop: readonly ConstructionRegionEdge[]): ConstructionOrientedEdgeUse[] => loop.flatMap((use) => {
-    if (use.edgeId !== weld.use.edgeId) {
-      edges.set(use.edgeId, use.reversed
-        ? { edgeId: use.edgeId, startNodeId: use.endNodeId, endNodeId: use.startNodeId, geometry: reverseGeometry(use.geometry) }
-        : { edgeId: use.edgeId, startNodeId: use.startNodeId, endNodeId: use.endNodeId, geometry: use.geometry });
-      return [{ edgeId: use.edgeId, reversed: use.reversed }];
-    }
-    const before = `${operationId}:weld:${weld.controlIndex}:before`, after = `${operationId}:weld:${weld.controlIndex}:after`;
-    edges.set(before, { edgeId: before, startNodeId: use.startNodeId, endNodeId: first });
-    edges.set(after, { edgeId: after, startNodeId: second, endNodeId: use.endNodeId });
-    return [{ edgeId: before, reversed: false }, { edgeId: rung.edgeId, reversed: first !== rung.startNodeId }, { edgeId: after, reversed: false }];
-  });
-  // Walked first: the walk is what declares the split edges.
-  const region = { regionId: `${operationId}:floor:${weld.controlIndex}`, boundary: walk(weld.topology.outerLoops[0] ?? []), holes: weld.topology.holes.map(walk), surfaceType: weld.topology.surfaceType, physical: weld.topology.physical };
-  return { nodes: weld.topology.nodes.map((n) => ({ id: n.id, position: n.position })), edges: [...edges.values()], region };
-}
-
-/** Whether both ends of the rung landed strictly inside the edge, clear of its corners. */
-export function landsInside(weld: EndWeld, rung: Rung, sections: ReadonlyMap<string, ConstructionPosition>): boolean {
-  const length = Math.hypot(weld.b.x - weld.a.x, weld.b.z - weld.a.z);
-  return [rung.startNodeId, rung.endNodeId].every((id) => {
-    const { t, distance } = project(weld.a, weld.b, sections.get(id)!);
-    return distance < 1e-3 && t * length > 1e-2 && (1 - t) * length > 1e-2;
-  });
-}
-
+const controlRung = (controlId: string): WeldRung => ({ edgeId: controlRungId(controlId), startNodeId: controlSectionId(controlId, "min"), endNodeId: controlSectionId(controlId, "max") });
 
 /**
  * Commits one sloped platform: a spine owned by the sloped platform type,
@@ -185,25 +144,25 @@ export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly Co
     spans = spans.map((s) => gradedSpans.get(s.edgeId) ?? s);
     const surface = slopeSurface(ctx.runtime, new Map(nodes.map((n) => [n.id, n.position])), spans);
     const sections = new Map(surface.nodes.map((n) => [n.id, n.position]));
-    const welds = landings.filter((weld) => landsInside(weld, controlRung(nodes[weld.controlIndex]!.id), sections));
-    if (welds.length === 2 && welds[0]!.topology === welds[1]!.topology) welds.pop();
-    const floors = welds.map((weld) => ({ weld, ...reweldedFloor(operationId, weld, controlRung(nodes[weld.controlIndex]!.id), sections) }));
+    const attach = landings.map((weld) => ({ rung: controlRung(nodes[weld.controlIndex]!.id), floor: weld.topology.surfaceKey }));
+    if (attach.length === 2 && landings[0]!.topology === landings[1]!.topology) attach.pop();
+    const floors = reweldFloors(topologies.filter((topology) => hasTrait(topology.surfaceType, "floor")), { detach: [], attach }, sections, operationId, sharedEdgeIds(topologies));
     const { recorded } = commitPatchReplacement(ctx.runtime, {
       operationId,
-      sourceSurfaceKeys: floors.map((floor) => floor.weld.topology.surfaceKey),
+      sourceSurfaceKeys: floors.sourceSurfaceKeys,
       patch: {
-        nodes: [...surface.nodes, ...floors.flatMap((floor) => floor.nodes)],
-        edges: [...surface.edges, ...floors.flatMap((floor) => floor.edges)],
+        nodes: [...surface.nodes, ...floors.nodes],
+        edges: [...surface.edges, ...floors.edges],
         // The ramp's own faces first: the first region names the type whose
         // change the commit emits.
-        regions: [...surface.regions, ...floors.map((floor) => floor.region)],
+        regions: [...surface.regions, ...floors.regions],
       },
       graphPatch: { nodes, removedEdgeIds: [], edges: spans },
       footprintOutline: slopeFootprint(ctx.runtime, surface),
     }, { transactionId: operationId });
     if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
     const slope = graded.grade === undefined ? "" : `, inclinação ${(graded.grade * 100).toFixed(0)}%`;
-    ctx.reportFeedback({ tone: "success", message: `Plataforma inclinada: ${surface.regions.length} trecho(s), ${welds.length} ponta(s) soldada(s)${slope}.` });
+    ctx.reportFeedback({ tone: "success", message: `Plataforma inclinada: ${surface.regions.length} trecho(s), ${floors.attached.length} ponta(s) soldada(s)${slope}.` });
   } catch (error) {
     ctx.reportFeedback({ tone: "error", message: error instanceof Error ? error.message : String(error) });
   }

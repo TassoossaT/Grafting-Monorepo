@@ -3,6 +3,8 @@ import type { ConstructionToolId, StructureEditParams } from "@/features/edit-co
 import { curvePick, globalHandleOf, shownGlobalHandleAt, structureTypeFor } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionPosition } from "../../../../ports/index.ts";
 import { spineBodyTarget } from "./spine-body-target.ts";
+import { globalHandleActionsAt, runGlobalHandleAction } from "./global-handle-gesture.ts";
+import { runSpineEndAction, spineEndActionsAt } from "./spine-end-actions.ts";
 import { beginCurveGesture, type AnchorSnap, type CurveGesture, type CurveGestureOptions } from "./curve-edit-gesture.ts";
 import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
 
@@ -236,6 +238,13 @@ export function withSpineEditing<Id extends ConstructionToolId>(tool: Constructi
     },
     onParamsChange(ctx, next, previous) {
       tool.onParamsChange?.(ctx, next, previous);
+    },
+    selectionActions(ctx, selectedId) {
+      return [...globalHandleActionsAt(ctx, selectedId), ...spineEndActionsAt(ctx, selectedId), ...(tool.selectionActions?.(ctx, selectedId) ?? [])];
+    },
+    onSelectionAction(ctx, action, params, selectedId) {
+      if (selectedId !== undefined && (runGlobalHandleAction(ctx, selectedId, action) || runSpineEndAction(ctx, selectedId, action))) return true;
+      return tool.onSelectionAction?.(ctx, action, params, selectedId) ?? false;
     },
   };
 }

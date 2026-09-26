@@ -2,6 +2,8 @@ import type { ConstructionMotionInfluence } from "@/ports";
 import { ALL_AXES } from "../../orchestration/atomic-edit.ts";
 import { CUT, IGNORE } from "../creation-interaction.ts";
 import {
+  controlRungId,
+  controlSectionId,
   deriveSlopeMotion,
   regenerateSlopeSpine,
   SLOPE_DEFAULT_OFFSETS,
@@ -95,6 +97,9 @@ export const slopedPlatformStructureType: StructureTypeDefinition = Object.freez
   motionInfluences: slopeMotionInfluences,
   deriveMotion: deriveSlopeMotion,
   validateMotion: validateSlopeMotion,
-  spine: Object.freeze({ defaultOffsets: SLOPE_DEFAULT_OFFSETS, regenerate: regenerateSlopeSpine, planOnly: true }),
+  spine: Object.freeze({
+    defaultOffsets: SLOPE_DEFAULT_OFFSETS, regenerate: regenerateSlopeSpine, planOnly: true,
+    endRung: (controlNodeId: string) => ({ edgeId: controlRungId(controlNodeId), startNodeId: controlSectionId(controlNodeId, "min"), endNodeId: controlSectionId(controlNodeId, "max") }),
+  }),
   globalHandles: Object.freeze(["pivot", "rotate", "height", "turns"] as const),
 });

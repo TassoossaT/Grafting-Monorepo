@@ -1,6 +1,6 @@
 import { roofStructureType } from "./roof/roof-structure.ts";
 import { floatingPlatformStructureType, platformStructureType, slopedPlatformStructureType } from "./platform/platform-structure.ts";
-import { rampStructureType } from "./platform/platform-ramp.ts";
+import { rampStructureType } from "./platform/platform-ramp-type.ts";
 import type { ConstructionCoveredRegion, ConstructionRegionTopology } from "@/ports";
 
 import type { EditTarget } from "../orchestration/atomic-edit.ts";

@@ -1,4 +1,5 @@
 import type {
+  ApplyPatchReplacementRequest,
   BezierPort,
   ConstructionEdgeGeometry,
   ConstructionGraphPatch,
@@ -43,7 +44,11 @@ export type GlobalHandleIntent =
   | { readonly kind: "move"; readonly delta: ConstructionPosition }
   | { readonly kind: "rotate"; readonly angle: number }
   | { readonly kind: "height"; readonly dy: number }
-  | { readonly kind: "wind"; readonly angle: number };
+  | { readonly kind: "wind"; readonly angle: number }
+  /** Take an end to `at`; `under` is the surface the pointer is on, which a landing prefers. */
+  | { readonly kind: "place"; readonly at: ConstructionPosition; readonly under?: ConstructionSurfaceKey }
+  /** Take an end off whatever it is welded to, leaving it where it stands. */
+  | { readonly kind: "detach" };
 
 /**
  * What a provider makes of an intent, in the terms the edit is carried out
@@ -52,7 +57,9 @@ export type GlobalHandleIntent =
  * - spine: a spine graph patch its owner regenerates from;
  * - region-move: the whole cloud seeded at `seed` moved by `delta` -- through
  *   the type's own role policy, so its solver and validation apply;
- * - vertices: explicit node positions and edge geometry.
+ * - vertices: explicit node positions and edge geometry;
+ * - replace: faces swapped for new ones in one patch replacement -- a
+ *   structure rebuilt, and the floors it welds into or leaves.
  */
 export type GlobalHandleEdit =
   | { readonly kind: "spine"; readonly owner: string; readonly graphPatch: ConstructionGraphPatch }
@@ -61,7 +68,16 @@ export type GlobalHandleEdit =
       readonly kind: "vertices";
       readonly moves: readonly { readonly nodeId: string; readonly position: ConstructionPosition }[];
       readonly retypes: readonly { readonly edgeId: string; readonly geometry: ConstructionEdgeGeometry }[];
-    };
+    }
+  | { readonly kind: "replace"; readonly request: ApplyPatchReplacementRequest };
+
+/** Something a picked handle offers besides dragging it -- a button, say. */
+export interface GlobalHandleAction {
+  /** Names the action to whatever runs it. */
+  readonly id: string;
+  readonly label: string;
+  readonly intent: GlobalHandleIntent;
+}
 
 /**
  * One way structures are built -- from a spine, from a cloud of regions --
@@ -75,4 +91,6 @@ export interface GlobalHandleProvider {
   handles(scene: GlobalHandleScene): readonly GlobalHandle[];
   /** What `intent` on `handle` edits; `undefined` when it edits nothing. Throws to refuse. */
   plan(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: Pick<BezierPort, "curveBatch">, operationId: string): GlobalHandleEdit | undefined;
+  /** What else `handle` offers as it stands now. */
+  actions?(scene: GlobalHandleScene, handle: GlobalHandle): readonly GlobalHandleAction[];
 }

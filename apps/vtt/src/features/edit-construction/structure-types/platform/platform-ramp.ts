@@ -6,8 +6,7 @@ import type {
 } from "@/ports";
 
 import { ALL_AXES, HORIZONTAL_AXES, type EditTarget } from "../../orchestration/atomic-edit.ts";
-import { IGNORE } from "../creation-interaction.ts";
-import { allowed, denied, type ConstrainContext, type EditRole, type RolePolicy, type StructureTypeDefinition } from "../structure-type.ts";
+import { allowed, denied, type ConstrainContext, type EditRole, type RolePolicy } from "../structure-type.ts";
 
 /**
  * The straight ramp: a trapezoid on an inclined plane. Its source of truth
@@ -125,6 +124,24 @@ function cornersOf(topology: ConstructionRegionTopology, positions?: ReadonlyMap
   return complete ? { ids: ids as Corners["ids"], at: at as RampCorners } : undefined;
 }
 
+/**
+ * What `topology` is as a straight ramp: the operation its ids were made
+ * under, its axis and its two widths -- `undefined` when it is not one.
+ */
+export function rampShapeOf(topology: ConstructionRegionTopology): (RampShape & { readonly operationId: string }) | undefined {
+  const corners = cornersOf(topology);
+  if (!corners) return undefined;
+  const { at } = corners;
+  const suffix = ":ramp:bottom:min";
+  return {
+    operationId: corners.ids.bottom.min.slice(0, -suffix.length),
+    axisStart: midpoint(at.bottom.min, at.bottom.max),
+    axisEnd: midpoint(at.top.min, at.top.max),
+    bottomWidth: Math.hypot(at.bottom.max.x - at.bottom.min.x, at.bottom.max.z - at.bottom.min.z),
+    topWidth: Math.hypot(at.top.max.x - at.top.min.x, at.top.max.z - at.top.min.z),
+  };
+}
+
 const midpoint = (a: ConstructionPosition, b: ConstructionPosition): ConstructionPosition => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 });
 
 /** The plan-view unit direction from `from` to `to`, or `undefined` when they coincide. */
@@ -143,7 +160,7 @@ function edgeCorners(topology: ConstructionRegionTopology, edgeId: string) {
   return a && b ? { a, b } : undefined;
 }
 
-function roleFor(topology: ConstructionRegionTopology, target: EditTarget): EditRole {
+export function rampRoleFor(topology: ConstructionRegionTopology, target: EditTarget): EditRole {
   if (target.kind === "region") return "ramp-region";
   if (target.kind === "vertex") {
     return parseCorner(target.nodeId) && topology.nodes.some((node) => node.id === target.nodeId) ? "ramp-corner" : "ramp-unknown";
@@ -182,7 +199,7 @@ function constrainEnd({ topology, delta }: ConstrainContext): ConstructionPositi
   return projected(delta, corners && axisOf(corners.at), true);
 }
 
-function policyFor(role: EditRole): RolePolicy {
+export function rampPolicyFor(role: EditRole): RolePolicy {
   switch (role) {
     case "ramp-corner": return { ...allowed(role, HORIZONTAL_AXES, "surface"), constrain: constrainCorner };
     case "ramp-side": return { ...allowed(role, HORIZONTAL_AXES, "surface"), constrain: constrainSide };
@@ -263,18 +280,3 @@ export function validateRampMotion(topology: ConstructionRegionTopology, positio
   }
   return undefined;
 }
-
-/** The straight ramp's definition: edited by its corners, sides, ends and body, never carving the ground. */
-export const rampStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
-  surfaceType: RAMP_SURFACE_TYPE, label: "Rampa",
-  globalHandles: Object.freeze(["pivot", "rotate", "height"] as const),
-  creation: "a symmetric trapezoid on an inclined plane: an axis and a width at each end",
-  traits: Object.freeze([]),
-  requiresMotionSolver: true,
-  roleFor,
-  policyFor,
-  // A ramp climbs between levels above the ground; it never carves it.
-  interactionOver: () => IGNORE,
-  deriveMotion: deriveRampMotion,
-  validateMotion: validateRampMotion,
-});

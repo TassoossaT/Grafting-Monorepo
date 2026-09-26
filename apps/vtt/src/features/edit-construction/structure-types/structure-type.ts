@@ -1,4 +1,4 @@
-import type { ApplyPatchReplacementRequest, BezierPort, ConstructionEdgeGeometry, ConstructionGraphPatch, ConstructionMotionInfluence } from "@/ports";
+import type { ApplyPatchReplacementRequest, BezierPort, ConstructionEdgeGeometry, ConstructionGraphPatch, ConstructionMotionInfluence, ConstructionPatch } from "@/ports";
 import type {
   ConstructionGraphSnapshot,
   ConstructionNodeId,
@@ -14,6 +14,7 @@ import type { CreationInteraction } from "./creation-interaction.ts";
 import type { EffectKind, ReactionId } from "../effects/effect.ts";
 import type { GlobalHandleKind } from "../global-handles/global-handle-ids.ts";
 import type { PlanarArea } from "../topology/planar-area.ts";
+import type { FloorLanding, WeldRung } from "../topology/floor-weld.ts";
 import type { FieldPort } from "./path/contour/curve-projection.ts";
 
 /**
@@ -263,9 +264,58 @@ export interface SpineGeneration {
    * higher -- the default) or its far end's height (more turns climb gentler).
    */
   readonly windKeeps?: "grade" | "height";
+  /**
+   * The edge a chain end's cross-section makes -- what a floor that end
+   * lands on shares (`topology/floor-weld.ts`). Declaring it makes the
+   * spine's free ends connect to a floor edge they are moved onto, and come
+   * off the floor they are moved away from, on every edit.
+   */
+  readonly endRung?: (controlNodeId: string) => WeldRung;
   /** Normalizes the standing graph before an edit reads it -- legacy data, say. */
   readonly prepare?: (snapshot: ConstructionGraphSnapshot, port: BezierPort) => ConstructionGraphSnapshot;
   readonly regenerate: (input: SpineRegenerationInput) => SpineRegeneration | undefined;
+}
+
+/** Which end of a structure: where it starts, and where it goes. */
+export type StructureEndName = "origin" | "destination";
+
+/** One end of a structure: where it stands, and its end edge -- what a floor it lands on shares. */
+export interface StructureEnd {
+  readonly name: StructureEndName;
+  readonly position: ConstructionPosition;
+  readonly rung: WeldRung;
+}
+
+/** A structure rebuilt from its ends: its own patch, and each end's rung with the floor it now lands on, if any. */
+export interface RebuiltFromEnds {
+  readonly patch: ConstructionPatch;
+  /** Nodes that already stand and move -- a patch only adds. */
+  readonly moved: readonly { readonly id: string; readonly position: ConstructionPosition }[];
+  readonly rungs: readonly { readonly rung: WeldRung; readonly landing?: FloorLanding }[];
+  readonly footprintOutline?: readonly (readonly [number, number])[];
+}
+
+/**
+ * A structure that runs from one end to another, each end able to land on
+ * a floor's edge and weld into it (`topology/floor-weld.ts`). Declaring
+ * this gives the type origin and destination handles that move an end,
+ * connect it where it lands and disconnect it -- nothing else is asked of
+ * the type.
+ */
+export interface StructureEnds {
+  /** Where `topology`'s ends stand; empty when it is not one this type rebuilds. */
+  readonly ends: (topology: ConstructionRegionTopology) => readonly StructureEnd[];
+  /**
+   * `topology` rebuilt with the end `name` at `target` -- on `target.landing`
+   * when it lands on a floor -- and the other end where it stands, still on
+   * `kept` when it stays welded. Throws to refuse.
+   */
+  readonly rebuild: (
+    topology: ConstructionRegionTopology,
+    name: StructureEndName,
+    target: { readonly point: ConstructionPosition; readonly landing?: FloorLanding },
+    kept?: FloorLanding,
+  ) => RebuiltFromEnds;
 }
 
 /**
@@ -358,6 +408,8 @@ export interface StructureTypeDefinition {
    * cloud is many structures at once -- a road grid would move as one.
    */
   readonly globalHandles?: readonly GlobalHandleKind[];
+  /** Present when this type runs between two ends that land on floors -- see {@link StructureEnds}. */
+  readonly ends?: StructureEnds;
   /** Returns a reason when a proposed position batch violates this type. */
   readonly validateMotion?: (topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>) => string | undefined;
   /**
