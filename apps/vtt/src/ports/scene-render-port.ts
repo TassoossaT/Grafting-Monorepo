@@ -139,10 +139,11 @@ export type ConfirmedMapChunkRenderChange =
 /**
  * What a handle does, so it reads as that at a glance: a point to drag, or a
  * control that moves a whole structure, sets a height, or turns something
- * round. Interaction vocabulary, not product vocabulary -- any structure's
+ * round -- winding something on (turns) or turning a whole thing (rotate).
+ * Interaction vocabulary, not product vocabulary -- any structure's
  * handle can take any glyph.
  */
-export type RenderHandleGlyph = "point" | "move" | "height" | "turns";
+export type RenderHandleGlyph = "point" | "move" | "rotate" | "height" | "turns";
 
 export interface RenderNodeHandle {
   readonly nodeId: string;

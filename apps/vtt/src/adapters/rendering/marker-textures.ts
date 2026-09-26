@@ -110,3 +110,14 @@ export function createTurnsHandleTexture(): HTMLCanvasElement {
     arrowhead(context, 32 + Math.cos(end) * 14, 32 + Math.sin(end) * 14, end + Math.PI / 2);
   });
 }
+
+/** Turns a whole structure round: two arrows chasing each other round a circle. */
+export function createRotateHandleTexture(): HTMLCanvasElement {
+  return glyphDisc("#8b5cf6", (context) => {
+    for (const from of [0, Math.PI]) {
+      const to = from + Math.PI * 0.72;
+      context.beginPath(); context.arc(32, 32, 15, from + 0.25, to); context.stroke();
+      arrowhead(context, 32 + Math.cos(to) * 15, 32 + Math.sin(to) * 15, to + Math.PI / 2);
+    }
+  });
+}

@@ -1,4 +1,4 @@
-import { hasTrait } from "../../../../features/edit-construction/index.ts";
+import { createAngleTracker, hasTrait } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionToolId, PreviewDescriptor, ToolParamsFor } from "../../../../features/edit-construction/index.ts";
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import type { ConstructionPosition, ConstructionRegionTopology, CubicBezier, CurveHandles, CurvePoint, CurveResult } from "../../../../ports/index.ts";
@@ -67,9 +67,8 @@ interface End {
 interface DraftState {
   mode: CurveDraftMode;
   ends: End[];
-  /** Spiral only: the angle turned so far, and the pointer's last angle. */
-  turned: number;
-  lastAngle?: number;
+  /** Spiral only: how far the pointer has turned round the centre since the start click. */
+  turning?: ReturnType<typeof createAngleTracker>;
   /** A rise set with Shift, overriding the tool's own. */
   rise?: number;
   shift?: { readonly screenY: number; readonly base: number };
@@ -165,7 +164,7 @@ export function createCurveDraftTool<Id extends ConstructionToolId>(options: Cur
     let state = states.get(ctx.runtime);
     const mode = options.modeOf(params);
     if (!state || state.mode !== mode) {
-      state = { mode, ends: [], turned: 0, floors: floorsOf(ctx) };
+      state = { mode, ends: [], floors: floorsOf(ctx) };
       states.set(ctx.runtime, state);
     }
     return state;
@@ -177,17 +176,10 @@ export function createCurveDraftTool<Id extends ConstructionToolId>(options: Cur
     return floor?.nodes[0]?.position.y ?? startHeight(state) + (state.rise ?? options.riseOf(params));
   };
 
-  /** Where the spiral's pointer has turned it to, unwrapping each move so full circles add up. */
+  /** Where the spiral's pointer has turned it to; full circles add up. */
   const spiralTurn = (state: DraftState, cursor: ConstructionPosition) => {
-    const [center, start] = state.ends;
-    const angle = Math.atan2(cursor.z - center!.point.z, cursor.x - center!.point.x);
-    if (state.lastAngle === undefined) state.lastAngle = Math.atan2(start!.point.z - center!.point.z, start!.point.x - center!.point.x);
-    let step = angle - state.lastAngle;
-    while (step > Math.PI) step -= 2 * Math.PI;
-    while (step <= -Math.PI) step += 2 * Math.PI;
-    state.turned += step;
-    state.lastAngle = angle;
-    return state.turned;
+    state.turning ??= createAngleTracker(state.ends[0]!.point, state.ends[1]!.point);
+    return state.turning.turn(cursor);
   };
 
   /** What finishing now would build, with `sample` as the last click or the pointer. */
@@ -221,7 +213,7 @@ export function createCurveDraftTool<Id extends ConstructionToolId>(options: Cur
         if (ends.length < 2) return undefined;
         const [center, start] = ends;
         const radius = Math.hypot(start!.point.x - center!.point.x, start!.point.z - center!.point.z);
-        const sweep = turned ?? state.turned;
+        const sweep = turned ?? state.turning?.turned ?? 0;
         if (radius < 0.1 || Math.abs(sweep) < 1e-3) return undefined;
         const startAngle = Math.atan2(start!.point.z - center!.point.z, start!.point.x - center!.point.x);
         const result = ctx.runtime.curveBatch({ tolerance: 0.01, commands: [{
@@ -246,7 +238,7 @@ export function createCurveDraftTool<Id extends ConstructionToolId>(options: Cur
     const parts = [`comprimento ${run.toFixed(1)} m`, `subida ${rise.toFixed(2)} m`, `inclinação ${run > 0 ? ((Math.abs(rise) / run) * 100).toFixed(0) : "0"}%`];
     if (state.mode === "spiral" && state.ends.length >= 2) {
       const [center, start] = state.ends;
-      parts.push(`raio ${Math.hypot(start!.point.x - center!.point.x, start!.point.z - center!.point.z).toFixed(2)} m`, `voltas ${(Math.abs(state.turned) / (2 * Math.PI)).toFixed(2)}`);
+      parts.push(`raio ${Math.hypot(start!.point.x - center!.point.x, start!.point.z - center!.point.z).toFixed(2)} m`, `voltas ${(Math.abs(state.turning?.turned ?? 0) / (2 * Math.PI)).toFixed(2)}`);
     }
     const message = parts.join(" · ");
     const now = Date.now();
@@ -366,8 +358,7 @@ export function createCurveDraftTool<Id extends ConstructionToolId>(options: Cur
         if (state.mode === "spiral" && state.ends.length === 2) {
           // The spiral starts at the start click's height; the centre is only a position.
           state.ends[0] = { ...state.ends[0]!, point: { ...state.ends[0]!.point, y: height } };
-          state.turned = 0;
-          state.lastAngle = undefined;
+          state.turning = undefined;
         }
         hint(ctx, state);
       } catch (error) {

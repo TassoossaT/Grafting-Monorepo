@@ -1138,8 +1138,8 @@ test("a spine tool's point presentation shows each ramp's pivot on its first syn
     assert.ok(upserted.some((handle) => handle.nodeId === "spine-turns:spine:s:0"), "and, a spiral, its turns handle");
     const glyphOf = (id) => upserted.find((handle) => handle.nodeId === id)?.glyph;
     assert.deepEqual(
-      [glyphOf("spine-pivot:spine:s:0"), glyphOf("spine-height:spine:s:0"), glyphOf("spine-turns:spine:s:0"), glyphOf("spine:s:1")],
-      ["move", "height", "turns", undefined],
+      [glyphOf("spine-pivot:spine:s:0"), glyphOf("spine-rotate:spine:s:0"), glyphOf("spine-height:spine:s:0"), glyphOf("spine-turns:spine:s:0"), glyphOf("spine:s:1")],
+      ["move", "rotate", "height", "turns", undefined],
       "each whole-spine handle reads as what it does; a point stays a plain point",
     );
   } finally { session.free(); }

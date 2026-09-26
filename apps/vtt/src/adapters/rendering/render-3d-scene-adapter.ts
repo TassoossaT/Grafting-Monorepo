@@ -56,7 +56,7 @@ import {
   type MapSurfacePickVisualParams,
 } from "./map-surface-pick-scene-item.ts";
 import { clipPlaneForCameraHeight } from "./map-chunk-key.ts";
-import { createHeightHandleTexture, createMarkerTexture, createMoveHandleTexture, createNodeHandleTexture, createRoadBranchTexture, createTurnsHandleTexture } from "./marker-textures.ts";
+import { createHeightHandleTexture, createMarkerTexture, createMoveHandleTexture, createNodeHandleTexture, createRoadBranchTexture, createRotateHandleTexture, createTurnsHandleTexture } from "./marker-textures.ts";
 import {
   NODE_HANDLE_LAYER_ID,
   NODE_HANDLE_VISUAL_KIND,
@@ -156,6 +156,7 @@ export class Render3dSceneAdapter implements SceneRenderPort {
     const glyphTextures = {
       point: handleTexture,
       move: createMoveHandleTexture(),
+      rotate: createRotateHandleTexture(),
       height: createHeightHandleTexture(),
       turns: createTurnsHandleTexture(),
     } as const;

@@ -268,6 +268,10 @@ A small ring-dot, visually distinct from the token marker -- an editable constru
 
 In-scene road branching affordance, distinct from a movable anchor.
 
+### `function vtt.marker-textures.createRotateHandleTexture(): HTMLCanvasElement`
+
+Turns a whole structure round: two arrows chasing each other round a circle.
+
 ### `function vtt.marker-textures.createTurnsHandleTexture(): HTMLCanvasElement`
 
 Turns something round: a circular arrow.
@@ -4283,15 +4287,27 @@ Every control node of the spine, lowest id first.
 
 The type the spine generates.
 
+### `property vtt.spine-global-handles.SpineGlobalHandle.pivot: ConstructionPosition`
+
+What the spine moves and turns round: where its pivot handle stands.
+
 ### `property vtt.spine-global-handles.SpineGlobalHandle.position: ConstructionPosition`
+
+### `interface vtt.spine-global-handles.SpineTransform`
+
+A whole-spine transform: turned by `angle` round `pivot` in plan, then moved by `delta`. Either may be absent.
+
+### `property vtt.spine-global-handles.SpineTransform.delta?: ConstructionPosition`
+
+### `property vtt.spine-global-handles.SpineTransform.rotation?: { angle: number; pivot: PlanPoint }`
 
 ### `function vtt.spine-global-handles.isSpinePivotId(id: string): boolean`
 
-### `function vtt.spine-global-handles.planSpineTranslate(graph: ConstructionGraphSnapshot, handle: Pick<SpineGlobalHandle, "nodeIds" | "edges">, delta: ConstructionPosition): ConstructionGraphPatch`
+### `function vtt.spine-global-handles.planSpineTransform(graph: ConstructionGraphSnapshot, spine: Pick<SpineGlobalHandle, "nodeIds" | "edges">, transform: SpineTransform): ConstructionGraphPatch`
 
-The graph patch moving a whole spine by `delta`: every control node, and
-every arc centre, so each span keeps its shape. The owner regenerates its
-surface from it like from any other spine edit.
+The graph patch moving and/or turning a whole spine: every control node,
+every span's handles and every arc centre, so each span keeps its shape.
+The owner regenerates its surface from it like from any other spine edit.
 
 ### `function vtt.spine-global-handles.spineEndHandleAt(graph: ConstructionGraphSnapshot, id: string): SpineGlobalHandle | undefined`
 
@@ -4358,11 +4374,11 @@ run) is reported once.
 
 spineGraphIn over one cloud's own members -- the reading a tool should reach for.
 
-### `type vtt.spine-handle-ids.SpineGlobalHandleKind = "pivot" | "height" | "turns"`
+### `type vtt.spine-handle-ids.SpineGlobalHandleKind = "pivot" | "rotate" | "height" | "turns"`
 
 The handles that stand for a whole spine rather than one of its points:
-the pivot that moves it, and the handles at its far end that raise it and
--- on a spiral -- wind it. Which of them a spine shows is its owner's
+the pivot that moves it, the handle that turns it round the pivot, and the
+handles at its far end that raise it and -- on a spiral -- wind it. Which of them a spine shows is its owner's
 declaration (`SpineGeneration.globalHandles`).
 
 Every one is named after the spine's lowest control node id, so it stays
@@ -6824,6 +6840,38 @@ A curve flattened to line segments, for a preview.
 
 Every top-run widget's two zone positions, across every partition panel `topologies` holds.
 
+### `interface vtt.plan-rotation.PlanPoint`
+
+Turning things round a vertical axis, in plan -- for anything that
+rotates or winds: a whole structure turned by a handle, a spiral wound on
+by one, a spiral laid out by turning the pointer. Heights never change.
+
+### `property vtt.plan-rotation.PlanPoint.x: number`
+
+### `property vtt.plan-rotation.PlanPoint.z: number`
+
+### `function vtt.plan-rotation.createAngleTracker(center: PlanPoint, from: PlanPoint): { turned: number; turn: any }`
+
+How far a pointer has turned round `center` since `from`, counting whole
+circles: each move adds the short way round from the last, so going round
+twice reads as two full turns, not as back where it started.
+
+### `function vtt.plan-rotation.planAngle(center: PlanPoint, point: PlanPoint): number`
+
+The plan angle of `point` round `center`, from +X towards +Z.
+
+### `function vtt.plan-rotation.rotateInPlan(point: P, pivot: PlanPoint, angle: number): P`
+
+`point` turned by `angle` round `pivot` in plan; anything else it carries -- its height -- is kept.
+
+### `function vtt.plan-rotation.rotateVectorInPlan(vector: readonly [number, number, number], angle: number): [number, number, number]`
+
+An `[x, y, z]` direction turned by `angle` in plan.
+
+### `function vtt.plan-rotation.wrapAngle(angle: number): number`
+
+`angle` brought into (-π, π].
+
 ### `interface vtt.planar-area.PlanarPort`
 
 What a boolean needs: the engine's planar operation.
@@ -8441,11 +8489,12 @@ single-ghost behaviour every tool already relies on.
 
 ### `type vtt.scene-render-port.ConfirmedTokenRenderChange = { causeId: string; dependency: RenderDependencyRevision; origin: ChangeOrigin; runtimeGeneration: number; token: RenderToken; type: "token-upserted" } | { causeId: string; dependency: RenderDependencyRevision; origin: ChangeOrigin; runtimeGeneration: number; tokenId: string; type: "token-removed" }`
 
-### `type vtt.scene-render-port.RenderHandleGlyph = "point" | "move" | "height" | "turns"`
+### `type vtt.scene-render-port.RenderHandleGlyph = "point" | "move" | "rotate" | "height" | "turns"`
 
 What a handle does, so it reads as that at a glance: a point to drag, or a
 control that moves a whole structure, sets a height, or turns something
-round. Interaction vocabulary, not product vocabulary -- any structure's
+round -- winding something on (turns) or turning a whole thing (rotate).
+Interaction vocabulary, not product vocabulary -- any structure's
 handle can take any glyph.
 
 ### `type vtt.scene-render-port.RenderLayerKey = "tokens" | "terrain" | "handles" | "surface-picks"`

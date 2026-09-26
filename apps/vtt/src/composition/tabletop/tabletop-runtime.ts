@@ -299,7 +299,7 @@ function renderChange(
 }
 
 /** How each whole-spine handle reads: moving the whole thing, setting a height, turning it round. */
-const GLOBAL_HANDLE_GLYPH: Readonly<Record<SpineGlobalHandleKind, RenderHandleGlyph>> = { pivot: "move", height: "height", turns: "turns" };
+const GLOBAL_HANDLE_GLYPH: Readonly<Record<SpineGlobalHandleKind, RenderHandleGlyph>> = { pivot: "move", rotate: "rotate", height: "height", turns: "turns" };
 
 export class AppTabletopRuntime implements TabletopRuntime {
   readonly #listeners = new Set<TabletopRuntimeListener>();

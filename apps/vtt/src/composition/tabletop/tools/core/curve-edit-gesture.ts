@@ -12,7 +12,8 @@ import {
   curveEdgesOf,
   describeSpineChain,
   planSpineChainEdit,
-  planSpineTranslate,
+  createAngleTracker,
+  planSpineTransform,
   prospectiveGraph,
   resolveCurves,
   reverseGeometry,
@@ -265,10 +266,17 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params: CurveGest
  *
  * - pivot: moves the whole spine along the ground, up and down in
  *   elevation mode, or anywhere with the scene manipulator;
+ * - rotate: dragged round the pivot, turns the whole spine round it; Shift
+ *   snaps the turn to 15 degree steps;
  * - height: dragged up or down, sets the far end's height;
  * - turns: dragged round a spiral's centre, winds it on in its own direction
  *   or back the other way, keeping what its owner's `windKeeps` says.
  */
+/** What each global handle reports once its edit is committed. */
+const DONE: Readonly<Record<import("../../../../features/edit-construction/index.ts").SpineGlobalHandleKind, string>> = {
+  pivot: "Estrutura movida.", rotate: "Estrutura girada.", height: "Altura atualizada.", turns: "Voltas atualizadas.",
+};
+
 function globalHandleGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGestureOptions): CurveGesture | undefined {
   const snapshot = ctx.runtime.getGraphSnapshot();
   const handle = shownSpineGlobalHandleAt(snapshot, sample.nodeId!);
@@ -277,8 +285,9 @@ function globalHandleGesture(ctx: ToolContext, sample: PointerSample, params?: C
   const far = handle.ends && snapshot.nodes.find((node) => node.id === handle.ends![1])!.position;
   const shape = handle.kind === "turns" ? describeSpineChain(snapshot, handle.id) : undefined;
   const keeps = structureTypeFor(handle.owner!)?.spine?.windKeeps ?? "grade";
-  let lastAngle = handle.center && Math.atan2(handle.position.z - handle.center[1], handle.position.x - handle.center[0]);
-  let wound = 0;
+  // Rotate turns round the pivot; turns winds round a spiral's centre.
+  const around = handle.kind === "turns" && handle.center ? { x: handle.center[0], z: handle.center[1] } : handle.pivot;
+  const turning = createAngleTracker(around, handle.position);
   let patch: import("../../../../ports/index.ts").ConstructionGraphPatch | undefined;
   let ended = false;
 
@@ -287,7 +296,14 @@ function globalHandleGesture(ctx: ToolContext, sample: PointerSample, params?: C
     if (handle!.kind === "pivot") {
       // Along the ground the spine keeps its heights; they change on purpose only.
       const y = params?.spatialTarget || params?.mode === "elevation" ? target.y : handle!.position.y;
-      return planSpineTranslate(snapshot, handle!, { x: target.x - handle!.position.x, y: y - handle!.position.y, z: target.z - handle!.position.z });
+      return planSpineTransform(snapshot, handle!, { delta: { x: target.x - handle!.position.x, y: y - handle!.position.y, z: target.z - handle!.position.z } });
+    }
+    if (handle!.kind === "rotate") {
+      const turned = turning.turn(gesture.current.point);
+      const step = Math.PI / 12;
+      const angle = gesture.current.shiftKey ? Math.round(turned / step) * step : turned;
+      ctx.reportFeedback({ tone: "info", message: `rotação ${((angle * 180) / Math.PI).toFixed(0)}°` });
+      return planSpineTransform(snapshot, handle!, { rotation: { pivot: handle!.pivot, angle } });
     }
     if (handle!.kind === "height" && far) {
       const y = params?.spatialTarget
@@ -299,13 +315,7 @@ function globalHandleGesture(ctx: ToolContext, sample: PointerSample, params?: C
       return { nodes: [{ id: handle!.ends![1], position: { ...far, y } }], edges: [] };
     }
     if (handle!.kind !== "turns" || !shape?.spiral || !handle!.center) return undefined;
-    const [cx, cz] = handle!.center;
-    const angle = Math.atan2(gesture.current.point.z - cz, gesture.current.point.x - cx);
-    let step = angle - lastAngle!;
-    while (step > Math.PI) step -= 2 * Math.PI;
-    while (step <= -Math.PI) step += 2 * Math.PI;
-    wound += step;
-    lastAngle = angle;
+    const wound = turning.turn(gesture.current.point);
     // Round the way the spiral already turns winds it on; the other way, back.
     const turns = Math.max(0.05, shape.spiral.turns + (shape.spiral.positive ? wound : -wound) / (2 * Math.PI));
     const endHeight = keeps === "height" ? shape.endHeight : shape.startHeight + ((shape.endHeight - shape.startHeight) * turns) / shape.spiral.turns;
@@ -336,7 +346,7 @@ function globalHandleGesture(ctx: ToolContext, sample: PointerSample, params?: C
         commitSpineRegeneration(ctx, regenerated.request, operationId);
         const moved = shownSpineGlobalHandleAt(ctx.runtime.getGraphSnapshot(), handle.id);
         ctx.reportSelection(moved ? { id: moved.id, point: moved.position } : undefined);
-        ctx.reportFeedback({ tone: "success", message: handle.kind === "pivot" ? "Estrutura movida." : handle.kind === "turns" ? "Voltas atualizadas." : "Altura atualizada." });
+        ctx.reportFeedback({ tone: "success", message: DONE[handle.kind] });
       } catch (error) {
         ctx.reportFeedback({ tone: "error", message: `Estrutura preservada: ${String(error)}` });
       }

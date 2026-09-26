@@ -1,5 +1,6 @@
 import type { ConstructionEdgeSnapshot, ConstructionGraphPatch, ConstructionGraphSnapshot, ConstructionPosition } from "@/ports";
 
+import { planAngle, rotateInPlan, rotateVectorInPlan, wrapAngle, type PlanPoint } from "../topology/plan-rotation.ts";
 import { openSpineChain, sharedArcCenter } from "./spine-open-chain.ts";
 import { spineGlobalHandleId, spineGlobalHandleOf, spineMemberOf, type SpineGlobalHandleKind } from "./spine-handle-ids.ts";
 import { isSpineEdge, spineComponent, spineOwnerOf } from "./spine-owner.ts";
@@ -8,6 +9,7 @@ import { isSpineEdge, spineComponent, spineOwnerOf } from "./spine-owner.ts";
  * Where each spine's global handles stand (ids: `spine-handle-ids.ts`):
  *
  * - pivot: a spiral's centre, or the middle of the control points;
+ * - rotate: out beyond the spine, level with the pivot, to turn it round it;
  * - height: above the far end;
  * - turns: on a spiral, just past the far end, carrying on round the centre.
  *
@@ -17,6 +19,8 @@ import { isSpineEdge, spineComponent, spineOwnerOf } from "./spine-owner.ts";
 
 /** How far from the far end its handles stand, so they never sit on the end point itself. */
 const END_REACH = 1.2;
+/** How far past the spine's farthest point the rotate handle stands. */
+const ROTATE_REACH = 1.5;
 
 export interface SpineGlobalHandle {
   readonly id: string;
@@ -31,6 +35,8 @@ export interface SpineGlobalHandle {
   readonly ends?: readonly [string, string];
   /** A spiral's centre. */
   readonly center?: readonly [number, number];
+  /** What the spine moves and turns round: where its pivot handle stands. */
+  readonly pivot: ConstructionPosition;
 }
 
 function handlesOf(graph: ConstructionGraphSnapshot, edges: readonly ConstructionEdgeSnapshot[]): readonly SpineGlobalHandle[] {
@@ -43,22 +49,22 @@ function handlesOf(graph: ConstructionGraphSnapshot, edges: readonly Constructio
   const center = sharedArcCenter(edges);
   const chain = openSpineChain(edges);
   const ends = chain && ([chain.nodes[0]!, chain.nodes.at(-1)!] as const);
-  const base = { owner: spineOwnerOf(edges[0]!), nodeIds, edges, ...(ends ? { ends } : {}), ...(center ? { center } : {}) };
+  const pivot = center ? { x: center[0], y: mean("y"), z: center[1] } : { x: mean("x"), y: mean("y"), z: mean("z") };
+  const base = { owner: spineOwnerOf(edges[0]!), nodeIds, edges, pivot, ...(ends ? { ends } : {}), ...(center ? { center } : {}) };
   const name = nodeIds[0]!;
-  const handles: SpineGlobalHandle[] = [{
-    ...base, id: spineGlobalHandleId("pivot", name), kind: "pivot",
-    position: center ? { x: center[0], y: mean("y"), z: center[1] } : { x: mean("x"), y: mean("y"), z: mean("z") },
-  }];
+  const reach = Math.max(...points.map((p) => Math.hypot(p.x - pivot.x, p.z - pivot.z))) + ROTATE_REACH;
+  const handles: SpineGlobalHandle[] = [
+    { ...base, id: spineGlobalHandleId("pivot", name), kind: "pivot", position: pivot },
+    { ...base, id: spineGlobalHandleId("rotate", name), kind: "rotate", position: { ...pivot, x: pivot.x + reach } },
+  ];
   if (!chain || !ends) return handles;
   const end = positions.get(ends[1])!;
   handles.push({ ...base, id: spineGlobalHandleId("height", name), kind: "height", position: { ...end, y: end.y + END_REACH } });
   if (!center) return handles;
   const before = positions.get(chain.nodes.at(-2)!)!;
-  const angle = Math.atan2(end.z - center[1], end.x - center[0]);
-  let step = angle - Math.atan2(before.z - center[1], before.x - center[0]);
-  while (step > Math.PI) step -= 2 * Math.PI;
-  while (step <= -Math.PI) step += 2 * Math.PI;
-  const on = step >= 0 ? 1 : -1;
+  const middle = { x: center[0], z: center[1] };
+  const angle = planAngle(middle, end);
+  const on = wrapAngle(angle - planAngle(middle, before)) >= 0 ? 1 : -1;
   handles.push({
     ...base, id: spineGlobalHandleId("turns", name), kind: "turns",
     position: { x: end.x - Math.sin(angle) * on * END_REACH, y: end.y, z: end.z + Math.cos(angle) * on * END_REACH },
@@ -86,25 +92,46 @@ export function spineGlobalHandleAt(graph: ConstructionGraphSnapshot, id: string
   return handlesOf(graph, component).find((handle) => handle.kind === kind);
 }
 
+/** A whole-spine transform: turned by `angle` round `pivot` in plan, then moved by `delta`. Either may be absent. */
+export interface SpineTransform {
+  readonly delta?: ConstructionPosition;
+  readonly rotation?: { readonly pivot: PlanPoint; readonly angle: number };
+}
+
 /**
- * The graph patch moving a whole spine by `delta`: every control node, and
- * every arc centre, so each span keeps its shape. The owner regenerates its
- * surface from it like from any other spine edit.
+ * The graph patch moving and/or turning a whole spine: every control node,
+ * every span's handles and every arc centre, so each span keeps its shape.
+ * The owner regenerates its surface from it like from any other spine edit.
  */
-export function planSpineTranslate(graph: ConstructionGraphSnapshot, handle: Pick<SpineGlobalHandle, "nodeIds" | "edges">, delta: ConstructionPosition): ConstructionGraphPatch {
+export function planSpineTransform(graph: ConstructionGraphSnapshot, spine: Pick<SpineGlobalHandle, "nodeIds" | "edges">, transform: SpineTransform): ConstructionGraphPatch {
   const positions = new Map(graph.nodes.map((node) => [node.id, node.position]));
-  const shaped = handle.edges.filter((edge) => edge.curve?.geometry?.kind === "arc");
+  const delta = transform.delta ?? { x: 0, y: 0, z: 0 };
+  const angle = transform.rotation?.angle ?? 0;
+  const place = <P extends PlanPoint>(p: P): P => {
+    const turned = transform.rotation ? rotateInPlan(p, transform.rotation.pivot, angle) : p;
+    return { ...turned, x: turned.x + delta.x, z: turned.z + delta.z };
+  };
+  // Only a turn changes handle directions; a move alone changes only arc centres.
+  const touched = angle !== 0 ? spine.edges : spine.edges.filter((edge) => edge.curve?.geometry?.kind === "arc");
   return {
-    nodes: handle.nodeIds.map((id) => {
-      const p = positions.get(id)!;
-      return { id, position: { x: p.x + delta.x, y: p.y + delta.y, z: p.z + delta.z } };
+    nodes: spine.nodeIds.map((id) => {
+      const p = place(positions.get(id)!);
+      return { id, position: { ...p, y: p.y + delta.y } };
     }),
-    removedEdgeIds: shaped.map((edge) => edge.edgeId),
-    edges: shaped.map((edge) => {
-      const geometry = edge.curve!.geometry!;
-      return geometry.kind !== "arc" ? edge : {
+    removedEdgeIds: touched.map((edge) => edge.edgeId),
+    edges: touched.map((edge) => {
+      const curve = edge.curve!;
+      const geometry = curve.geometry?.kind === "arc"
+        ? { ...curve.geometry, center: (({ x, z }) => [x, z] as const)(place({ x: curve.geometry.center[0], z: curve.geometry.center[1] })) }
+        : curve.geometry;
+      return {
         ...edge,
-        curve: { ...edge.curve!, geometry: { ...geometry, center: [geometry.center[0] + delta.x, geometry.center[1] + delta.z] as const } },
+        curve: {
+          ...curve,
+          start: rotateVectorInPlan(curve.start, angle),
+          end: rotateVectorInPlan(curve.end, angle),
+          ...(geometry ? { geometry } : {}),
+        },
       };
     }),
   };

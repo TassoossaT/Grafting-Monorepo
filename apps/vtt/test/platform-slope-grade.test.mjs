@@ -436,3 +436,66 @@ test("winding the turns handle a quarter round adds a quarter turn at the same g
     assert.equal(slopeSpans(runtime).length, 5);
   } finally { session.free(); }
 });
+
+test("an angle tracker counts whole circles, either way round", async () => {
+  const { createAngleTracker } = await import("../src/features/edit-construction/index.ts");
+  const tracker = createAngleTracker({ x: 0, z: 0 }, { x: 1, z: 0 });
+  for (let i = 1; i <= 16; i += 1) tracker.turn({ x: Math.cos((i / 8) * Math.PI), z: Math.sin((i / 8) * Math.PI) });
+  assert.ok(Math.abs(tracker.turned - 2 * Math.PI) < 1e-9, "one full turn");
+  for (let i = 15; i >= -8; i -= 1) tracker.turn({ x: Math.cos((i / 8) * Math.PI), z: Math.sin((i / 8) * Math.PI) });
+  assert.ok(Math.abs(tracker.turned + Math.PI) < 1e-9, "and back past the start");
+});
+
+/** Turns a spine's rotate handle `angle` round its pivot, as the scene manipulator would carry it, a little at a time. */
+async function rotate(ctx, runtime, angle, shiftKey = false) {
+  const { spineGlobalHandles } = await import("../src/features/edit-construction/index.ts");
+  const { beginCurveGesture } = await import("../src/composition/tabletop/tools/core/curve-edit-gesture.ts");
+  const handle = spineGlobalHandles(runtime.getGraphSnapshot()).find((h) => h.kind === "rotate");
+  const gesture = beginCurveGesture(ctx, { nodeId: handle.id, point: handle.position }, { mode: "shape", insertOnClick: false, spatialTarget: true });
+  const reach = Math.hypot(handle.position.x - handle.pivot.x, handle.position.z - handle.pivot.z);
+  for (let i = 1; i <= 12; i += 1) {
+    const a = (angle * i) / 12;
+    const point = { x: handle.pivot.x + reach * Math.cos(a), y: handle.position.y, z: handle.pivot.z + reach * Math.sin(a) };
+    gesture.move({ start: { nodeId: handle.id, point }, current: { nodeId: handle.id, point, shiftKey }, samples: [] });
+  }
+  gesture.commit();
+  return handle.pivot;
+}
+
+test("the rotate handle turns a whole spiral round its centre: still the same exact helix", async () => {
+  const { ctx, runtime, session, calls } = sessionFixture();
+  Object.assign(runtime, { showPreview() {}, clearPreview() {} });
+  try {
+    drawSpiral(slopeSpiralTool, ctx, { center: { x: 2, y: 0, z: 1 }, radius: 3, turns: 1, startY: 0, params: { width: 1.5, rise: 4 } });
+    const before = new Map(runtime.getGraphSnapshot().nodes.map((n) => [n.id, n.position]));
+    await rotate(ctx, runtime, Math.PI / 2);
+    const spans = slopeSpans(runtime);
+    assert.ok(spans.every((e) => Math.hypot(e.curve.geometry.center[0] - 2, e.curve.geometry.center[1] - 1) < 1e-9), JSON.stringify(calls.feedback.slice(-2)));
+    for (const id of new Set(spans.flatMap((e) => [e.startNodeId, e.endNodeId]))) {
+      const was = before.get(id), now = node(runtime, id).position;
+      const turned = { x: 2 - (was.z - 1), z: 1 + (was.x - 2) };
+      assert.ok(Math.hypot(now.x - turned.x, now.z - turned.z) < 1e-6 && Math.abs(now.y - was.y) < 1e-9, `${id} turned a quarter round the centre`);
+    }
+    assert.ok(constantGrade(runtime));
+  } finally { session.free(); }
+});
+
+test("the rotate handle turns a free ramp round its middle, handles and all; Shift snaps to 15 degrees", async () => {
+  const { ctx, runtime, session } = sessionFixture();
+  Object.assign(runtime, { showPreview() {}, clearPreview() {} });
+  try {
+    commitPlatformSlope(ctx, [{ x: 0, y: 0, z: 0 }, { x: 4, y: 0, z: 3 }, { x: 8, y: 2, z: 0 }], { width: 1.5 });
+    const midpoint = () => {
+      const [span] = slopeSpans(runtime);
+      const a = node(runtime, span.startNodeId).position, b = node(runtime, span.endNodeId).position;
+      return runtime.curveBatch({ tolerance: 0.01, commands: [{ kind: "split", curve: runtime.curveBatch({ tolerance: 0.01, commands: [{ kind: "resolve", handles: span.curve, start: [a.x, a.y, a.z], end: [b.x, b.y, b.z] }] })[0].curves[0], t: 0.5 }] })[0].curves[0].points[3];
+    };
+    const was = midpoint();
+    // 50 degrees with Shift held lands on 45.
+    const pivot = await rotate(ctx, runtime, (50 * Math.PI) / 180, true);
+    const now = midpoint();
+    const raw = Math.atan2(now[2] - pivot.z, now[0] - pivot.x) - Math.atan2(was[2] - pivot.z, was[0] - pivot.x);
+    const angle = Math.atan2(Math.sin(raw), Math.cos(raw));
+    assert.ok(Math.abs(angle - Math.PI / 4) < 1e-6, `the span's own shape turned with it, snapped to 45 degrees: ${(angle * 180) / Math.PI}`);
+  } finally { session.free(); }
+});

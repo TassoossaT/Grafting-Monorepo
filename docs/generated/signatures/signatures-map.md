@@ -3496,6 +3496,11 @@ export function createHeightHandleTexture(): HTMLCanvasElement {
 export function createTurnsHandleTexture(): HTMLCanvasElement {
   return glyphDisc("#e07a1f", (context) => {
   context.beginPath(); context.arc(32, 32, 14, -Math.PI * 0.35, Math.PI * 1.35); context.stroke();
+export function createRotateHandleTexture(): HTMLCanvasElement {
+  return glyphDisc("#8b5cf6", (context) => {
+  for (const from of [0, Math.PI]) {
+  const to = from + Math.PI * 0.72;
+  context.beginPath(); context.arc(32, 32, 15, from + 0.25, to); context.stroke();
 
 // src/adapters/rendering/node-handle-scene-item.ts
 export const NODE_HANDLE_LAYER_ID = "construction-handles";
@@ -5384,6 +5389,7 @@ export type { SpineControlNode, SpineCurveEdge, SpineGraph } from "./spine-graph
 export type { SpineControlNodeAddress } from "./spine-node-id.ts";
 export type { SpineRibbon, SpineRibbonSpan } from "./spine-ribbons.ts";
 export type { SpineGlobalHandleKind, SpineGlobalHandleKind as SpineEndHandleKind } from "./spine-handle-ids.ts";
+export type { SpineTransform } from "./spine-global-handles.ts";
 export type { SpineGlobalHandle, SpineGlobalHandle as SpinePivot, SpineGlobalHandle as SpineEndHandle } from "./spine-global-handles.ts";
 export type { OpenSpineChain, SpineChainShape, SpineChainShape as SlopeSummary, SpineGrade } from "./spine-open-chain.ts";
 export type { SpineAction } from "./spine-actions.ts";
@@ -5438,7 +5444,10 @@ export function spineGlobalHandles(graph: ConstructionGraphSnapshot): readonly S
 export function spineGlobalHandleAt(graph: ConstructionGraphSnapshot, id: string): SpineGlobalHandle | undefined {
   const kind = spineGlobalHandleOf(id)?.kind ?? "pivot";
   const component = spineComponent(graph, [spineMemberOf(graph, id)]).edges.filter((edge) => edge.curve);
-export function planSpineTranslate(graph: ConstructionGraphSnapshot, handle: Pick<SpineGlobalHandle, "nodeIds" | "edges">, delta: ConstructionPosition): ConstructionGraphPatch {
+export interface SpineTransform {
+  readonly delta?: ConstructionPosition;
+  readonly rotation?: { readonly pivot: PlanPoint; readonly angle: number };
+export function planSpineTransform(graph: ConstructionGraphSnapshot, spine: Pick<SpineGlobalHandle, "nodeIds" | "edges">, transform: SpineTransform): ConstructionGraphPatch {
   const positions = new Map(graph.nodes.map((node) => [node.id, node.position]));
 export const spinePivots = (graph: ConstructionGraphSnapshot): readonly SpineGlobalHandle[] => spineGlobalHandles(graph).filter((h) => h.kind === "pivot");
 export const spinePivotAt = (graph: ConstructionGraphSnapshot, id: string): SpineGlobalHandle | undefined => spineGlobalHandleAt(graph, id);
@@ -5479,7 +5488,7 @@ export function neighborsOf(graph: SpineGraph, nodeId: string): readonly string[
   const found = new Set<string>();
 
 // src/features/edit-construction/spine/spine-handle-ids.ts
-export type SpineGlobalHandleKind = "pivot" | "height" | "turns";
+export type SpineGlobalHandleKind = "pivot" | "rotate" | "height" | "turns";
 export const spineGlobalHandleId = (kind: SpineGlobalHandleKind, nodeId: string): string => `${PREFIX[kind]}${nodeId}`;
 export function spineGlobalHandleOf(id: string): { readonly kind: SpineGlobalHandleKind; readonly nodeId: string } | undefined {
   const kind = KINDS.find((candidate) => id.startsWith(PREFIX[candidate]));
@@ -6687,6 +6696,7 @@ export function curveSegments(port: Pick<BezierPort, "curveBatch">, curve: Cubic
 // src/features/edit-construction/topology/index.ts
 export type { CloudSource, CloudTopology, ConstructionCloud } from "./construction-cloud.ts";
 export type { PerimeterLoop } from "./surface-perimeter.ts";
+export type { PlanPoint } from "./plan-rotation.ts";
 export type { FittedEdge, FitOptions } from "./stroke-fitting.ts";
 export type { BoundaryEdges, EdgeSharing } from "./boundary-edges.ts";
 export type { RibbonRequest } from "./bezier-curve.ts";
@@ -6706,6 +6716,26 @@ export function panelHeightWidgets(
   ): readonly { readonly id: string; readonly position: ConstructionPosition }[] {
   const items: { readonly id: string; readonly position: ConstructionPosition }[] = [];
   const seen = new Set<string>();
+
+// src/features/edit-construction/topology/plan-rotation.ts
+export interface PlanPoint {
+  readonly x: number;
+  readonly z: number;
+  }
+export function wrapAngle(angle: number): number {
+  let wrapped = angle;
+  while (wrapped > Math.PI) wrapped -= 2 * Math.PI;
+  while (wrapped <= -Math.PI) wrapped += 2 * Math.PI;
+  return wrapped;
+  }
+export function planAngle(center: PlanPoint, point: PlanPoint): number {
+  return Math.atan2(point.z - center.z, point.x - center.x);
+export function rotateInPlan<P extends PlanPoint>(point: P, pivot: PlanPoint, angle: number): P {
+  const cos = Math.cos(angle), sin = Math.sin(angle);
+export function rotateVectorInPlan(vector: readonly [number, number, number], angle: number): [number, number, number] {
+  const cos = Math.cos(angle), sin = Math.sin(angle);
+export function createAngleTracker(center: PlanPoint, from: PlanPoint): { turn(point: PlanPoint): number; readonly turned: number } {
+  let last = planAngle(center, from);
 
 // src/features/edit-construction/topology/planar-area.ts
 export type PlanarPoint = readonly [number, number];
@@ -7055,7 +7085,7 @@ export interface RenderSurfacePickTarget {
   }
 export type ConfirmedSurfacePickRenderChange =
 export type ConfirmedMapChunkRenderChange =
-export type RenderHandleGlyph = "point" | "move" | "height" | "turns";
+export type RenderHandleGlyph = "point" | "move" | "rotate" | "height" | "turns";
 export interface RenderNodeHandle {
   readonly nodeId: string;
   readonly position: { readonly x: number; readonly y: number; readonly z: number };
