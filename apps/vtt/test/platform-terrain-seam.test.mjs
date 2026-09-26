@@ -168,3 +168,61 @@ test("a ramp still welds to a platform merged with the ground, whose sides the g
     session.free();
   }
 });
+
+test("ground, a platform, a ramp off it and a floating floor welded on the ramp's top: every structure moves and turns, the ground rebuilt round it", async () => {
+  const { slopeRampTool } = await import("../src/composition/tabletop/tools/slope/slope-tools.ts");
+  const { platformContourTool } = await import("../src/composition/tabletop/tools/platform/platform-contour-tool.ts");
+  const { shownGlobalHandles } = await import("../src/features/edit-construction/index.ts");
+  const info = console.info;
+  const warn = console.warn;
+  console.info = () => {};
+  console.warn = () => {};
+  const build = () => {
+    const fixture = sessionFixture();
+    const { session, runtime, ctx } = fixture;
+    Object.assign(runtime, { showPreview() {}, clearPreview() {} });
+    bowl(runtime, session);
+    commitPlatformContour(ctx, [[-3, -2], [2, -2], [2, 3], [-3, 3]].map(([x, z]) => ({ point: { x, y: 0.3, z } })), { mode: "create", elevation: 0.3, shape: "rectangle" });
+    const s = { point: { x: 2, y: 0.3, z: 0.5 } }, e = { point: { x: 5, y: 0, z: 0.5 } };
+    slopeRampTool.onPointerUp(ctx, { start: s, current: e, samples: [s, e] }, { bottomWidth: 1.5, topWidth: 1.5, rise: 2 });
+    const ramp = runtime.getAllRegionTopologies().find((t) => t.surfaceType === "platform-ramp");
+    const tmin = ramp.nodes.find((n) => n.id.endsWith(":top:min")), tmax = ramp.nodes.find((n) => n.id.endsWith(":top:max"));
+    const { x, y } = tmin.position;
+    commitPlatformContour(ctx, [{ point: tmin.position, nodeId: tmin.id }, { point: { x: x + 3, y, z: tmin.position.z } }, { point: { x: x + 3, y, z: tmax.position.z } }, { point: tmax.position, nodeId: tmax.id }], { mode: "create", elevation: y, support: "floating" });
+    return fixture;
+  };
+  try {
+    for (const owner of ["platform", "platform-ramp", "platform-floating"]) {
+      for (const [kind, amount] of [["pivot", [0, 2]], ["pivot", [-1, 0.5]], ["rotate", 0.5], ["rotate", -1]]) {
+        const fixture = build();
+        const { runtime, ctx, calls } = fixture;
+        try {
+          const scene = { graph: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), cloudFor: runtime.cloudFor };
+          const handle = shownGlobalHandles(scene).find((h) => h.kind === kind && h.owner === owner);
+          const tool = owner === "platform-ramp" ? slopeRampTool : platformContourTool;
+          const params = owner === "platform-ramp" ? { bottomWidth: 1.5, topWidth: 1.5, rise: 2 } : platformContourTool.defaultParams();
+          let to;
+          if (kind === "pivot") to = { x: handle.position.x + amount[0], y: 0, z: handle.position.z + amount[1] };
+          else {
+            const a = Math.atan2(handle.position.z - handle.pivot.z, handle.position.x - handle.pivot.x) + amount;
+            const r = Math.hypot(handle.position.x - handle.pivot.x, handle.position.z - handle.pivot.z);
+            to = { x: handle.pivot.x + r * Math.cos(a), y: 0, z: handle.pivot.z + r * Math.sin(a) };
+          }
+          const start = { nodeId: handle.id, point: handle.position, screenX: 100, screenY: 300 };
+          const current = { point: to, screenX: 200, screenY: 300 };
+          const before = calls.feedback.length;
+          tool.onPointerDown(ctx, start, params);
+          tool.onPointerMove(ctx, { start, current, samples: [start, current] }, params);
+          tool.onPointerUp(ctx, { start, current, samples: [start, current] }, params);
+          const said = calls.feedback.slice(before).filter(Boolean);
+          assert.ok(said.every((f) => f.tone !== "error"), `${owner} ${kind} ${JSON.stringify(amount)}: ${JSON.stringify(said.at(-1))}`);
+          assert.equal(said.at(-1)?.tone, "success", `${owner} ${kind}: the handle's own edit ran, not a new structure`);
+          assert.ok(!/ponta/.test(said.at(-1).message), `${owner} ${kind}: grabbed the handle rather than drawing a ramp`);
+        } finally { fixture.session.free(); }
+      }
+    }
+  } finally {
+    console.info = info;
+    console.warn = warn;
+  }
+});

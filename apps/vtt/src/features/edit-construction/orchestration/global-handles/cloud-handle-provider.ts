@@ -53,12 +53,12 @@ export const cloudHandleProvider: GlobalHandleProvider = {
       const points = [...positions.values()];
       const mean = (axis: "x" | "y" | "z") => points.reduce((sum, p) => sum + p[axis], 0) / points.length;
       const pivot = { x: mean("x"), y: mean("y"), z: mean("z") };
-      const name = handleNodeName(scene, members, nodeIds);
+      const { name, nodeId: anchor } = handleNodeName(scene, members, nodeIds);
       const reach = Math.max(...points.map((p) => Math.hypot(p.x - pivot.x, p.z - pivot.z))) + ROTATE_REACH;
       const base = { owner: members[0]!.surfaceType, provider: "cloud", nodeIds, pivot, members };
       return [
         { ...base, id: globalHandleId("pivot", name), kind: "pivot", position: pivot, motion: { kind: "free" } },
-        { ...base, id: globalHandleId("rotate", name), kind: "rotate", position: outward(pivot, positions.get(name)!, reach), motion: { kind: "orbit", center: pivot } },
+        { ...base, id: globalHandleId("rotate", name), kind: "rotate", position: outward(pivot, positions.get(anchor)!, reach), motion: { kind: "orbit", center: pivot } },
         { ...base, id: globalHandleId("height", name), kind: "height", position: { ...pivot, y: pivot.y + HEIGHT_REACH }, motion: { kind: "vertical" } },
       ];
     });

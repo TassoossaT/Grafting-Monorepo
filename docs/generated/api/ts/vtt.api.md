@@ -4510,11 +4510,13 @@ that end, the other standing, and connects it to the floor edge it lands
 on; each offers to disconnect while welded. What the structure becomes is
 its type's; welding and unwelding is the same for every type.
 
-### `function vtt.handle-name.handleNodeName(scene: GlobalHandleScene, own: readonly ConstructionRegionTopology[], sortedNodeIds: readonly string[]): string`
+### `function vtt.handle-name.handleNodeName(scene: GlobalHandleScene, own: readonly ConstructionRegionTopology[], sortedNodeIds: readonly string[]): { name: string; nodeId: string }`
 
-The node a structure's global handles are named after: its lowest node
-that no other structure holds, so two structures welded together never
-name their handles alike; its lowest node when every one is shared.
+What a structure's global handles are named after: its lowest node that
+no other structure holds -- ground aside, which rims whatever it was cut
+round -- so two structures welded together never name their handles
+alike. When every node is shared, its lowest node and its own type, which
+two structures joined at every node never have in common.
 
 ### `variable vtt.spine-handle-provider.spineHandleProvider: GlobalHandleProvider`
 
@@ -7403,17 +7405,17 @@ Which of the asked-for attachments were made.
 
 ### `property vtt.floor-weld.Rewelding.sourceSurfaceKeys: readonly ConstructionSurfaceKey[]`
 
-The floors changed -- replaced by `regions`.
+The faces changed -- floors, and the ground cut alongside them -- replaced by `regions`.
 
 ### `interface vtt.floor-weld.WeldChanges`
 
 ### `property vtt.floor-weld.WeldChanges.attach: readonly { floor: ConstructionSurfaceKey; rung: WeldRung }[]`
 
-Rungs to splice into a floor, each at the positions its nodes will stand at.
+Rungs to weld into a floor, each at the positions its nodes will stand at.
 
-### `property vtt.floor-weld.WeldChanges.detach: readonly string[]`
+### `property vtt.floor-weld.WeldChanges.detach: readonly WeldRung[]`
 
-Rungs to take back out of whichever floors share them.
+Rungs to take off whichever floors they are welded into.
 
 ### `interface vtt.floor-weld.WeldRung`
 
@@ -7441,33 +7443,36 @@ The floor named `under` -- the one the pointer is on -- wins; otherwise
 the nearest edge does, and among edges stacked in plan -- storeys -- the
 one nearest `point`'s own height.
 
-### `function vtt.floor-weld.floorsWeldedBy(floors: readonly ConstructionRegionTopology[], edgeId: string): readonly ConstructionRegionTopology[]`
+### `function vtt.floor-weld.floorsWeldedBy(floors: readonly ConstructionRegionTopology[], rung: WeldRung): readonly ConstructionRegionTopology[]`
 
-Every floor among `floors` whose outline shares the edge `edgeId` -- what an end welded by that rung is joined to.
+Every floor among `floors` the structure's end `rung` is welded into:
+the floor's outline passes through both of the rung's nodes. The structure
+itself -- the face walking the rung's own edge -- is not one.
 
-### `function vtt.floor-weld.floorsWithout(floors: readonly ConstructionRegionTopology[], edgeIds: readonly string[], shared: ReadonlySet<string>): readonly ConstructionRegionTopology[]`
+### `function vtt.floor-weld.floorsWithout(floors: readonly ConstructionRegionTopology[], rungs: readonly WeldRung[]): readonly ConstructionRegionTopology[]`
 
-`floors` with the rungs `edgeIds` taken back out -- where an end that is about to move looks for its new landing.
+`floors` with the rungs taken off them -- where an end that is about to move looks for its new landing.
 
 ### `function vtt.floor-weld.projectOnto(a: ConstructionPosition, b: ConstructionPosition, p: PlanDirection): { distance: number; t: number }`
 
 Where `p` projects onto the line through `a` and `b`, as a parameter, and how far off it lies.
 
-### `function vtt.floor-weld.reweldFloors(floors: readonly ConstructionRegionTopology[], changes: WeldChanges, positions: ReadonlyMap<string, ConstructionPosition>, operationId: string, shared: ReadonlySet<string>): Rewelding`
+### `function vtt.floor-weld.reweldFloors(faces: readonly ConstructionRegionTopology[], changes: WeldChanges, positions: ReadonlyMap<string, ConstructionPosition>, operationId: string): Rewelding`
 
-The floors among `floors` changed by `changes`, as patch content, detaching
-first so an end can re-land on the floor it left. `positions` is where
-every rung node will stand; those nodes are the structure's own, so they
-are left for its own patch to declare. `shared` names every edge another
-structure is welded along, which detaching must not swallow.
+Every face among `faces` -- all of them, not only floors -- changed by
+`changes`, as patch content, detaching first so an end can re-land on the
+floor it left.
+
+A weld only shares nodes: the floor's outline is cut at the rung's two
+nodes and each keeps its own edges, so the ground laid against the floor
+keeps its side of them -- cut at the same nodes too. Detaching gives every
+face but the structure's own a copy of those nodes instead. `positions` is
+where every rung node will stand; those nodes are the structure's own,
+left for its own patch to declare.
 
 ### `function vtt.floor-weld.rungFits(edge: Pick<FloorEdge, "a" | "b">, rung: WeldRung, positions: ReadonlyMap<string, ConstructionPosition>): boolean`
 
 Whether both nodes of `rung`, at `positions`, lie on `edge` strictly between its corners.
-
-### `function vtt.floor-weld.sharedEdgeIds(topologies: readonly ConstructionRegionTopology[]): ReadonlySet<string>`
-
-Every edge id at least two of `topologies` share -- where something is welded to something else.
 
 ### `type vtt.panel-height-widget.PanelHeightWidgetZone = "group" | "single"`
 

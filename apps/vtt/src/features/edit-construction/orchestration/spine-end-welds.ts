@@ -2,7 +2,7 @@ import type { ApplyPatchReplacementRequest, ConstructionEdgeSnapshot, Constructi
 
 import { isSpineEdge, prospectiveGraph, spineComponent } from "../spine/index.ts";
 import { hasTrait, type SpineGeneration, type SpineRegeneration, type SpineRegenerationInput } from "../structure-types/index.ts";
-import { floorLandingNear, floorsWeldedBy, floorsWithout, reweldFloors, sharedEdgeIds, type FloorLanding } from "../topology/floor-weld.ts";
+import { floorLandingNear, floorsWeldedBy, floorsWithout, reweldFloors, type FloorLanding } from "../topology/floor-weld.ts";
 
 /**
  * A spine's free ends connecting to floors, for any owner that declares
@@ -44,10 +44,9 @@ function landEnds(snapshot: ConstructionGraphSnapshot, graphPatch: ConstructionG
   const shifted = ends.filter((id) => !before.has(id) || moved(before.get(id)!, after.get(id)!));
   if (shifted.length === 0) return { graphPatch, shifted, landed: new Map<string, FloorLanding>() };
   const floors = floorsOf(topologies);
-  const shared = sharedEdgeIds(topologies);
-  const released = floorsWithout(floors, shifted.map((id) => endRung(id).edgeId), shared);
+  const released = floorsWithout(floors, shifted.map((id) => endRung(id)));
   // An end never lands on the floor the chain's other end is welded into.
-  const heldBy = new Set(ends.filter((id) => !shifted.includes(id)).flatMap((id) => floorsWeldedBy(floors, endRung(id).edgeId)).map((floor) => floor.surfaceKey.join("\u0000")));
+  const heldBy = new Set(ends.filter((id) => !shifted.includes(id)).flatMap((id) => floorsWeldedBy(floors, endRung(id))).map((floor) => floor.surfaceKey.join("\u0000")));
   const landed = new Map<string, FloorLanding>();
   const nodes = new Map(graphPatch.nodes.map((node) => [node.id, node]));
   const edges = new Map(graphPatch.edges.map((edge) => [edge.edgeId, edge]));
@@ -91,10 +90,10 @@ export function regenerateWithEndWelds(
   if (!regenerated || shifted.length === 0) return regenerated;
   const { request } = regenerated;
   const positions = new Map(request.patch.nodes.map((node) => [node.id, node.position]));
-  const welds = reweldFloors(floorsOf(input.topologies), {
-    detach: shifted.map((id) => endRung(id).edgeId),
+  const welds = reweldFloors(input.topologies, {
+    detach: shifted.map((id) => endRung(id)),
     attach: [...landed].map(([id, landing]) => ({ rung: endRung(id), floor: landing.topology.surfaceKey })),
-  }, positions, input.operationId, sharedEdgeIds(input.topologies));
+  }, positions, input.operationId);
   if (welds.sourceSurfaceKeys.length === 0) return regenerated;
   const rewelded: ApplyPatchReplacementRequest = {
     ...request,
@@ -111,13 +110,13 @@ export function regenerateWithEndWelds(
 /** Takes the free end `controlNodeId` off the floor it is welded into, leaving the spine as it stands; `undefined` when it is welded to none. */
 export function detachSpineEnd(generation: SpineGeneration, controlNodeId: string, topologies: readonly ConstructionRegionTopology[], operationId: string): ApplyPatchReplacementRequest | undefined {
   const rung = generation.endRung?.(controlNodeId);
-  if (!rung || floorsWeldedBy(floorsOf(topologies), rung.edgeId).length === 0) return undefined;
-  const welds = reweldFloors(floorsOf(topologies), { detach: [rung.edgeId], attach: [] }, new Map(), operationId, sharedEdgeIds(topologies));
+  if (!rung || floorsWeldedBy(floorsOf(topologies), rung).length === 0) return undefined;
+  const welds = reweldFloors(topologies, { detach: [rung], attach: [] }, new Map(), operationId);
   return { operationId, sourceSurfaceKeys: welds.sourceSurfaceKeys, patch: { nodes: welds.nodes, edges: welds.edges, regions: welds.regions } };
 }
 
 /** Whether the free end `controlNodeId` is welded into a floor. */
 export function spineEndWelded(generation: SpineGeneration, controlNodeId: string, topologies: readonly ConstructionRegionTopology[]): boolean {
   const rung = generation.endRung?.(controlNodeId);
-  return rung !== undefined && floorsWeldedBy(floorsOf(topologies), rung.edgeId).length > 0;
+  return rung !== undefined && floorsWeldedBy(floorsOf(topologies), rung).length > 0;
 }

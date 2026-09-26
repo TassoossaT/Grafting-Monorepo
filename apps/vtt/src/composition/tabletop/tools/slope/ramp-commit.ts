@@ -1,4 +1,4 @@
-import { planRamp, rampEdgeId, rampPatch, reweldFloors, sharedEdgeIds, type PlannedRamp, type RampEndPlan } from "../../../../features/edit-construction/index.ts";
+import { planRamp, rampEdgeId, rampPatch, reweldFloors, type PlannedRamp, type RampEndPlan } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionPosition } from "../../../../ports/index.ts";
 import { commitPatchReplacement } from "../../effects/effect-commit.ts";
 import { floorLandingAt, floorsOf } from "../core/floor-landing.ts";
@@ -54,10 +54,10 @@ export function commitStraightRamp(ctx: ToolContext, start: PointerSample, end: 
     const operationId = scopedToolId(ctx, "platform-ramp", ctx.nextSequence());
     const ramp = rampPatch(operationId, corners);
     const topologies = ctx.runtime.getAllRegionTopologies();
-    const welds = reweldFloors(floorsOf(ctx), {
+    const welds = reweldFloors(topologies, {
       detach: [],
       attach: landings.map((weld) => ({ rung: ramp.edges.find((edge) => edge.edgeId === rampEdgeId(operationId, weld.end))!, floor: weld.landing.topology.surfaceKey })),
-    }, new Map(ramp.nodes.map((node) => [node.id, node.position])), operationId, sharedEdgeIds(topologies));
+    }, new Map(ramp.nodes.map((node) => [node.id, node.position])), operationId);
     const { recorded } = commitPatchReplacement(ctx.runtime, {
       operationId,
       sourceSurfaceKeys: welds.sourceSurfaceKeys,

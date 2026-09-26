@@ -5493,7 +5493,7 @@ export const endHandleProvider: GlobalHandleProvider = {
   const capability = capabilityOf(topology);
 
 // src/features/edit-construction/orchestration/global-handles/handle-name.ts
-export function handleNodeName(scene: GlobalHandleScene, own: readonly ConstructionRegionTopology[], sortedNodeIds: readonly string[]): string {
+export function handleNodeName(scene: GlobalHandleScene, own: readonly ConstructionRegionTopology[], sortedNodeIds: readonly string[]): { readonly name: string; readonly nodeId: string } {
   const ownKeys = new Set(own.map((topology) => topology.surfaceKey.join("\u0000")));
 
 // src/features/edit-construction/orchestration/global-handles/index.ts
@@ -6951,10 +6951,11 @@ export function floorLandingNear(
   const underKey = options.under?.join("\u0000");
 export function rungFits(edge: Pick<FloorEdge, "a" | "b">, rung: WeldRung, positions: ReadonlyMap<string, ConstructionPosition>): boolean {
   const length = Math.hypot(edge.b.x - edge.a.x, edge.b.z - edge.a.z);
-export function floorsWeldedBy(floors: readonly ConstructionRegionTopology[], edgeId: string): readonly ConstructionRegionTopology[] {
-  return floors.filter((topology) => [...topology.outerLoops, ...topology.holes].some((loop) => loop.some((use) => use.edgeId === edgeId)));
+export function floorsWeldedBy(floors: readonly ConstructionRegionTopology[], rung: WeldRung): readonly ConstructionRegionTopology[] {
+  return floors.filter((topology) => {
+  const loops = loopsOf(topology).flat();
 export interface Rewelding {
-  /** The floors changed -- replaced by `regions`. */
+  /** The faces changed -- floors, and the ground cut alongside them -- replaced by `regions`. */
   readonly sourceSurfaceKeys: readonly ConstructionSurfaceKey[];
   readonly nodes: readonly { readonly id: string; readonly position: ConstructionPosition }[];
   readonly edges: readonly ConstructionPatchEdge[];
@@ -6962,24 +6963,21 @@ export interface Rewelding {
   /** Which of the asked-for attachments were made. */
   readonly attached: readonly WeldRung[];
 export interface WeldChanges {
-  /** Rungs to take back out of whichever floors share them. */
-  readonly detach: readonly string[];
-  /** Rungs to splice into a floor, each at the positions its nodes will stand at. */
+  /** Rungs to take off whichever floors they are welded into. */
+  readonly detach: readonly WeldRung[];
+  /** Rungs to weld into a floor, each at the positions its nodes will stand at. */
   readonly attach: readonly { readonly rung: WeldRung; readonly floor: ConstructionSurfaceKey }[];
   }
 export function reweldFloors(
-  floors: readonly ConstructionRegionTopology[],
+  faces: readonly ConstructionRegionTopology[],
   changes: WeldChanges,
   positions: ReadonlyMap<string, ConstructionPosition>,
   operationId: string,
-  shared: ReadonlySet<string> = new Set(),
   ): Rewelding {
   const key = (surfaceKey: ConstructionSurfaceKey) => surfaceKey.join("\u0000");
-export function floorsWithout(floors: readonly ConstructionRegionTopology[], edgeIds: readonly string[], shared: ReadonlySet<string> = new Set()): readonly ConstructionRegionTopology[] {
+export function floorsWithout(floors: readonly ConstructionRegionTopology[], rungs: readonly WeldRung[]): readonly ConstructionRegionTopology[] {
   return floors.map((topology) => {
-  const touched = edgeIds.filter((edgeId) => floorsWeldedBy([topology], edgeId).length > 0);
-export function sharedEdgeIds(topologies: readonly ConstructionRegionTopology[]): ReadonlySet<string> {
-  const counts = new Map<string, number>();
+  const off = rungs.filter((rung) => floorsWeldedBy([topology], rung).length > 0);
 
 // src/features/edit-construction/topology/index.ts
 export type { CloudSource, CloudTopology, ConstructionCloud } from "./construction-cloud.ts";

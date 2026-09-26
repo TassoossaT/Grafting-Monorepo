@@ -1,4 +1,4 @@
-import { automaticCurve, controlRungId, controlSectionId, floorLandingNear, gradeSpineSpans, hasTrait, reweldFloors, sharedEdgeIds, SLOPE_SURFACE_TYPE, slopeFootprint, slopeSurface, spineControlNodeId, type WeldRung } from "../../../../features/edit-construction/index.ts";
+import { automaticCurve, controlRungId, controlSectionId, floorLandingNear, gradeSpineSpans, hasTrait, reweldFloors, SLOPE_SURFACE_TYPE, slopeFootprint, slopeSurface, spineControlNodeId, type WeldRung } from "../../../../features/edit-construction/index.ts";
 import type {
   ConstructionEdgeSnapshot,
   ConstructionPosition,
@@ -136,7 +136,7 @@ export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly Co
     const sections = new Map(surface.nodes.map((n) => [n.id, n.position]));
     const attach = landings.map((weld) => ({ rung: controlRung(nodes[weld.controlIndex]!.id), floor: weld.topology.surfaceKey }));
     if (attach.length === 2 && landings[0]!.topology === landings[1]!.topology) attach.pop();
-    const floors = reweldFloors(topologies.filter((topology) => hasTrait(topology.surfaceType, "floor")), { detach: [], attach }, sections, operationId, sharedEdgeIds(topologies));
+    const floors = reweldFloors(topologies, { detach: [], attach }, sections, operationId);
     const { recorded } = commitPatchReplacement(ctx.runtime, {
       operationId,
       sourceSurfaceKeys: floors.sourceSurfaceKeys,

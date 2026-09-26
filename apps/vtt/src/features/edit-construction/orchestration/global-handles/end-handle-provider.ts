@@ -4,7 +4,7 @@ import { globalHandleId } from "../../global-handles/index.ts";
 import type { GlobalHandle, GlobalHandleAction, GlobalHandleEdit, GlobalHandleProvider, GlobalHandleScene } from "../../global-handles/index.ts";
 import { hasTrait, structureTypeFor, type StructureEnd, type StructureEndName, type StructureEnds } from "../../structure-types/index.ts";
 import { handleNodeName } from "./handle-name.ts";
-import { floorLandingNear, floorsWeldedBy, floorsWithout, reweldFloors, sharedEdgeIds } from "../../topology/floor-weld.ts";
+import { floorLandingNear, floorsWeldedBy, floorsWithout, reweldFloors } from "../../topology/floor-weld.ts";
 
 /** How close an end must still stand to a floor's edge to count as staying welded there. */
 const KEPT_REACH = 1e-2;
@@ -26,13 +26,13 @@ const floorsOf = (scene: GlobalHandleScene) => scene.topologies.filter((topology
 
 /** The floor `end` is welded into, if any. */
 function weldedFloor(scene: GlobalHandleScene, end: StructureEnd): ConstructionRegionTopology | undefined {
-  return floorsWeldedBy(floorsOf(scene), end.rung.edgeId)[0];
+  return floorsWeldedBy(floorsOf(scene), end.rung)[0];
 }
 
 /** Takes one end off whatever it is welded to: only the floors change. */
 function detached(scene: GlobalHandleScene, end: StructureEnd, operationId: string): GlobalHandleEdit | undefined {
   if (!weldedFloor(scene, end)) return undefined;
-  const floors = reweldFloors(floorsOf(scene), { detach: [end.rung.edgeId], attach: [] }, new Map(), operationId, sharedEdgeIds(scene.topologies));
+  const floors = reweldFloors(scene.topologies, { detach: [end.rung], attach: [] }, new Map(), operationId);
   return {
     kind: "replace",
     request: {
@@ -51,20 +51,18 @@ function detached(scene: GlobalHandleScene, end: StructureEnd, operationId: stri
  */
 function placed(scene: GlobalHandleScene, handle: EndGlobalHandle, ends: readonly StructureEnd[], at: ConstructionPosition, under: ConstructionSurfaceKey | undefined, operationId: string): GlobalHandleEdit {
   const capability = capabilityOf(handle.topology)!;
-  const shared = sharedEdgeIds(scene.topologies);
-  const rungs = ends.map((end) => end.rung.edgeId);
-  const floors = floorsOf(scene);
-  const released = floorsWithout(floors, rungs, shared);
+  const rungs = ends.map((end) => end.rung);
+  const released = floorsWithout(floorsOf(scene), rungs);
   const standing = ends.find((end) => end.name !== handle.end)!;
   const standingFloor = weldedFloor(scene, standing);
   const kept = standingFloor && floorLandingNear(released.filter((floor) => keyOf(floor) === keyOf(standingFloor)), standing.position, { reach: KEPT_REACH });
   const landing = floorLandingNear(standingFloor ? released.filter((floor) => keyOf(floor) !== keyOf(standingFloor)) : released, at, under ? { under } : {});
   const rebuilt = capability.rebuild(handle.topology, handle.end, { point: landing ? { ...at, y: landing.height } : at, ...(landing ? { landing } : {}) }, kept);
   const positions = new Map(rebuilt.patch.nodes.map((node) => [node.id, node.position]));
-  const welds = reweldFloors(floors, {
+  const welds = reweldFloors(scene.topologies, {
     detach: rungs,
     attach: rebuilt.rungs.flatMap((rung) => (rung.landing ? [{ rung: rung.rung, floor: rung.landing.topology.surfaceKey }] : [])),
-  }, positions, operationId, shared);
+  }, positions, operationId);
   return {
     kind: "replace",
     request: {
@@ -97,7 +95,7 @@ export const endHandleProvider: GlobalHandleProvider = {
       const capability = capabilityOf(topology);
       if (!capability) return [];
       const nodeIds = topology.nodes.map((node) => node.id).sort();
-      const name = handleNodeName(scene, [topology], nodeIds);
+      const { name } = handleNodeName(scene, [topology], nodeIds);
       return capability.ends(topology).map((end) => ({
         id: globalHandleId(end.name, name),
         kind: end.name,

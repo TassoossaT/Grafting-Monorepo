@@ -12,10 +12,10 @@ import type {
 import { reverseGeometry } from "./boundary-edges.ts";
 
 /**
- * How a structure's end joins a floor, whatever the structure is: the end's
- * own edge -- its rung -- is spliced into one straight edge of the floor's
- * outline, so both faces share it and move together. Detaching takes the
- * rung back out and joins the floor's edge whole again.
+ * How a structure's end joins a floor, whatever the structure is: the
+ * floor's outline is cut at the two nodes of the end's own edge -- its
+ * rung -- so both share those nodes and move together, each keeping its own
+ * edges. Detaching gives the floor copies of the nodes instead.
  *
  * Nothing here knows ramps, spirals or which types are floors: callers hand
  * in the floors and name the rungs.
@@ -169,9 +169,21 @@ export function rungFits(edge: Pick<FloorEdge, "a" | "b">, rung: WeldRung, posit
   });
 }
 
-/** Every floor among `floors` whose outline shares the edge `edgeId` -- what an end welded by that rung is joined to. */
-export function floorsWeldedBy(floors: readonly ConstructionRegionTopology[], edgeId: string): readonly ConstructionRegionTopology[] {
-  return floors.filter((topology) => [...topology.outerLoops, ...topology.holes].some((loop) => loop.some((use) => use.edgeId === edgeId)));
+/** Every loop of `topology`: its outer loops, then its holes. */
+const loopsOf = (topology: ConstructionRegionTopology) => [...topology.outerLoops, ...topology.holes];
+
+/**
+ * Every floor among `floors` the structure's end `rung` is welded into:
+ * the floor's outline passes through both of the rung's nodes. The structure
+ * itself -- the face walking the rung's own edge -- is not one.
+ */
+export function floorsWeldedBy(floors: readonly ConstructionRegionTopology[], rung: WeldRung): readonly ConstructionRegionTopology[] {
+  return floors.filter((topology) => {
+    const loops = loopsOf(topology).flat();
+    if (loops.some((use) => use.edgeId === rung.edgeId)) return false;
+    const nodes = new Set(loops.flatMap((use) => [use.startNodeId, use.endNodeId]));
+    return nodes.has(rung.startNodeId) && nodes.has(rung.endNodeId);
+  });
 }
 
 /** One step of a loop, in the direction the loop walks it. */
@@ -184,101 +196,165 @@ interface Step {
   readonly reversed: boolean;
 }
 
-/** A floor being rewelded: its steps and node positions, changed step by step and emitted once. */
-interface FloorDraft {
+/** A face being changed: its loops -- the outer one first -- and node positions, changed step by step and emitted once. */
+interface FaceDraft {
   readonly source: ConstructionRegionTopology;
-  outer: Step[];
-  readonly holes: readonly Step[][];
+  loops: Step[][];
   readonly positions: Map<string, ConstructionPosition>;
 }
 
 const stepsOf = (loop: readonly ConstructionRegionEdge[]): Step[] =>
   loop.map((use) => ({ edgeId: use.edgeId, from: use.startNodeId, to: use.endNodeId, geometry: use.geometry, reversed: use.reversed }));
 
-function draftOf(topology: ConstructionRegionTopology): FloorDraft {
-  return {
-    source: topology,
-    outer: stepsOf(topology.outerLoops[0] ?? []),
-    holes: topology.holes.map(stepsOf),
-    positions: new Map(topology.nodes.map((node) => [node.id, node.position])),
-  };
+function draftOf(topology: ConstructionRegionTopology): FaceDraft {
+  return { source: topology, loops: loopsOf(topology).map(stepsOf), positions: new Map(topology.nodes.map((node) => [node.id, node.position])) };
 }
 
-/** The draft as a topology again, so the next landing is found on the floor as it now stands. */
-function asTopology(draft: FloorDraft): ConstructionRegionTopology {
+/** The draft as a topology again, so the next landing is found on the face as it now stands. */
+function asTopology(draft: FaceDraft): ConstructionRegionTopology {
   const use = (step: Step): ConstructionRegionEdge => ({ edgeId: step.edgeId, reversed: step.reversed, startNodeId: step.from, endNodeId: step.to, geometry: step.geometry });
-  const used = new Set([...draft.outer, ...draft.holes.flat()].flatMap((step) => [step.from, step.to]));
+  const outer = draft.source.outerLoops.length;
+  const used = new Set(draft.loops.flat().flatMap((step) => [step.from, step.to]));
   return {
     ...draft.source,
-    outerLoops: [draft.outer.map(use)],
-    holes: draft.holes.map((loop) => loop.map(use)),
+    outerLoops: draft.loops.slice(0, outer).map((loop) => loop.map(use)),
+    holes: draft.loops.slice(outer).map((loop) => loop.map(use)),
     nodes: [...used].map((id) => ({ id, position: draft.positions.get(id)! })),
   };
 }
 
+/** An edge cut at nodes: the pieces it becomes, from its own start to its own end. */
+type Split = readonly { readonly edgeId: string; readonly from: string; readonly to: string }[];
+
+/** Every step on a split edge replaced by its pieces, walked the way the step walked the edge. */
+function applySplits(draft: FaceDraft, splits: ReadonlyMap<string, Split>): boolean {
+  let changed = false;
+  draft.loops = draft.loops.map((loop) => loop.flatMap((step): Step[] => {
+    const pieces = splits.get(step.edgeId);
+    if (!pieces) return [step];
+    changed = true;
+    const own: Step[] = pieces.map((piece) => ({ edgeId: piece.edgeId, from: piece.from, to: piece.to, geometry: { kind: "line" }, reversed: false }));
+    return step.reversed ? own.reverse().map((piece) => ({ ...piece, from: piece.to, to: piece.from, reversed: true })) : own;
+  }));
+  return changed;
+}
+
 /**
- * Takes the rung `edgeId` back out of the draft: the rung and the straight
- * steps either side of it -- unless another structure is welded along them
- * too (`shared`) -- become one straight step. `false` when the rung is not
- * on this floor.
+ * Where `rung` joins the draft's floor: the straight run it lies on is cut
+ * at the rung's two nodes, so the floor's outline passes through them. The
+ * edges cut are returned, for every other face on them to be cut alike.
+ * `undefined` when it lies on no run, or a rung node would fall on a node
+ * the run already has.
  */
-function detach(draft: FloorDraft, edgeId: string, joinId: string, shared: ReadonlySet<string>): boolean {
-  const steps = draft.outer;
-  const i = steps.findIndex((step) => step.edgeId === edgeId);
-  if (i < 0) return false;
-  const n = steps.length;
-  const prev = steps[(i - 1 + n) % n]!, next = steps[(i + 1) % n]!;
-  const mergesPrev = n > 3 && prev.geometry.kind === "line" && !shared.has(prev.edgeId);
-  const mergesNext = n > 3 && next.geometry.kind === "line" && !shared.has(next.edgeId) && next !== prev;
-  const joined: Step = { edgeId: joinId, from: mergesPrev ? prev.from : steps[i]!.from, to: mergesNext ? next.to : steps[i]!.to, geometry: { kind: "line" }, reversed: false };
-  const drop = new Set([i, ...(mergesPrev ? [(i - 1 + n) % n] : []), ...(mergesNext ? [(i + 1) % n] : [])]);
-  const kept: Step[] = [];
-  for (let k = 0; k < n; k += 1) {
-    if (k === i) kept.push(joined);
-    else if (!drop.has(k)) kept.push(steps[k]!);
+function attach(draft: FaceDraft, rung: WeldRung, positions: ReadonlyMap<string, ConstructionPosition>, weldId: string): { readonly splits: ReadonlyMap<string, Split>; readonly adopted: ReadonlyMap<string, string> } | undefined {
+  const steps = draft.loops[0] ?? [];
+  const at = (id: string) => draft.positions.get(id) ?? positions.get(id)!;
+  const runs = straightRuns(steps.length, (i) => steps[i]!.geometry.kind === "line", (i) => ({ a: at(steps[i]!.from), b: at(steps[i]!.to) }));
+  const run = runs.find(({ first, count }) => rungFits({ a: at(steps[first]!.from), b: at(steps[(first + count - 1) % steps.length]!.to) }, rung, positions));
+  if (!run) return undefined;
+  const inRun = Array.from({ length: run.count }, (_, k) => steps[(run.first + k) % steps.length]!);
+  const splits = new Map<string, Split>();
+  const adopted = new Map<string, string>();
+  for (const node of [rung.startNodeId, rung.endNodeId]) {
+    const p = positions.get(node)!;
+    // A node the run already has right there -- where ground met the floor -- becomes the rung's own.
+    const standing = inRun.map((step) => step.to).slice(0, -1).find((id) => Math.hypot(at(id).x - p.x, at(id).z - p.z) < ON_EDGE);
+    if (standing !== undefined) {
+      adopted.set(standing, node);
+      continue;
+    }
+    // The piece the node falls strictly inside; a node on a piece's own end has no cut to make there.
+    const step = inRun.find((candidate) => {
+      const a = at(candidate.from), b = at(candidate.to);
+      const { t, distance } = projectOnto(a, b, p);
+      const length = Math.hypot(b.x - a.x, b.z - a.z);
+      return distance < ON_EDGE && t * length > ON_EDGE && (1 - t) * length > ON_EDGE;
+    });
+    if (!step) return undefined;
+    // In the edge's own direction; a piece the other rung node already cut is cut again.
+    const [start, end] = step.reversed ? [step.to, step.from] : [step.from, step.to];
+    draft.positions.set(node, p);
+    const along = (id: string) => projectOnto(at(start), at(end), at(id)).t;
+    const before = splits.get(step.edgeId) ?? [{ edgeId: step.edgeId, from: start, to: end }];
+    splits.set(step.edgeId, before.flatMap((piece) => along(piece.from) < along(node) && along(node) < along(piece.to)
+      ? [{ edgeId: `${weldId}:${piece.edgeId}:a`, from: piece.from, to: node }, { edgeId: `${weldId}:${piece.edgeId}:b`, from: node, to: piece.to }]
+      : [piece]));
   }
-  draft.outer = kept;
+  applySplits(draft, splits);
+  return { splits, adopted };
+}
+
+/**
+ * Joins the two straight steps through `node` into one, in every face of
+ * `drafts` alike, so no face passes through it any more -- `false`, with
+ * nothing changed, unless every loop through it runs straight on there.
+ */
+function mergeThrough(drafts: readonly FaceDraft[], node: string, edgeId: string): boolean {
+  const passes: { draft: FaceDraft; loop: number; into: number }[] = [];
+  for (const draft of drafts) {
+    const at = (id: string) => draft.positions.get(id)!;
+    for (const [loop, steps] of draft.loops.entries()) {
+      for (const [into, step] of steps.entries()) {
+        if (step.to !== node) continue;
+        const out = steps[(into + 1) % steps.length]!;
+        if (step.geometry.kind !== "line" || out.geometry.kind !== "line" || out.from !== node) return false;
+        const a = at(step.from), b = at(node), c = at(out.to);
+        const u = { x: b.x - a.x, z: b.z - a.z }, v = { x: c.x - b.x, z: c.z - b.z };
+        const lengths = Math.hypot(u.x, u.z) * Math.hypot(v.x, v.z);
+        if (!(lengths > 0) || Math.abs(u.x * v.z - u.z * v.x) / lengths > IN_LINE || u.x * v.x + u.z * v.z <= 0) return false;
+        passes.push({ draft, loop, into });
+      }
+    }
+  }
+  if (passes.length === 0) return false;
+  const first = passes[0]!;
+  const start = first.draft.loops[first.loop]![first.into]!.from;
+  for (const { draft, loop, into } of passes) {
+    const steps = draft.loops[loop]!;
+    const step = steps[into]!, out = steps[(into + 1) % steps.length]!;
+    const joined: Step = { edgeId, from: step.from, to: out.to, geometry: { kind: "line" }, reversed: step.from !== start };
+    draft.loops[loop] = into + 1 < steps.length
+      ? [...steps.slice(0, into), joined, ...steps.slice(into + 2)]
+      : [joined, ...steps.slice(1, into)];
+  }
   return true;
 }
 
 /**
- * Splices `rung` into the straight run of the draft it lies on: the steps it
- * covers give way to it, the ones it only partly covers are cut short at its
- * ends by two new steps named from `weldId`, and every other step -- ground
- * laid against the floor still holds them -- stays as it is. `false` when it
- * lies on no run.
+ * Takes the draft's face off `nodes`: each is replaced there by a copy of
+ * its own, standing where it stands, and every edge through it by a copy
+ * through the copy -- the same copies for every face; `renamed` keeps them.
  */
-function attach(draft: FloorDraft, rung: WeldRung, positions: ReadonlyMap<string, ConstructionPosition>, weldId: string): boolean {
-  const steps = draft.outer;
-  const at = (id: string) => draft.positions.get(id)!;
-  const runs = straightRuns(steps.length, (i) => steps[i]!.geometry.kind === "line", (i) => ({ a: at(steps[i]!.from), b: at(steps[i]!.to) }));
-  const run = runs.find(({ first, count }) => rungFits({ a: at(steps[first]!.from), b: at(steps[(first + count - 1) % steps.length]!.to) }, rung, positions));
-  if (!run) return false;
-  // Turned so the run starts the loop: it may wrap past the loop's first step.
-  const turned = [...steps.slice(run.first), ...steps.slice(0, run.first)];
-  const a = at(turned[0]!.from), b = at(turned[run.count - 1]!.to);
-  const along = (p: ConstructionPosition) => projectOnto(a, b, p).t;
-  const t = (id: string) => along(positions.get(id)!);
-  const [first, second] = t(rung.startNodeId) <= t(rung.endNodeId) ? [rung.startNodeId, rung.endNodeId] : [rung.endNodeId, rung.startNodeId];
-  const tFirst = t(first), tSecond = t(second);
-  // The step each rung end falls in.
-  const i = turned.slice(0, run.count).findIndex((step) => along(at(step.to)) > tFirst);
-  const j = turned.slice(0, run.count).findIndex((step) => along(at(step.to)) >= tSecond);
-  if (i < 0 || j < 0 || j < i) return false;
-  draft.outer = [
-    ...turned.slice(0, i),
-    { edgeId: `${weldId}:before`, from: turned[i]!.from, to: first, geometry: { kind: "line" }, reversed: false },
-    { edgeId: rung.edgeId, from: first, to: second, geometry: { kind: "line" }, reversed: first !== rung.startNodeId },
-    { edgeId: `${weldId}:after`, from: second, to: turned[j]!.to, geometry: { kind: "line" }, reversed: false },
-    ...turned.slice(j + 1),
-  ];
-  for (const id of [first, second]) draft.positions.set(id, positions.get(id)!);
-  return true;
+function release(draft: FaceDraft, nodes: ReadonlySet<string>, operationId: string, renamed: Map<string, string>): boolean {
+  return renameNodes(draft, new Map([...nodes].map((id) => [id, `${operationId}:free:${id}`])), `${operationId}:free`, renamed);
+}
+
+/**
+ * Every node of the draft's face named in `names` replaced by the node it
+ * maps to, standing where it stands, and every edge through it by a copy --
+ * the same copies for every face; `renamed` keeps them.
+ */
+function renameNodes(draft: FaceDraft, names: ReadonlyMap<string, string>, prefix: string, renamed: Map<string, string>): boolean {
+  const nodes = new Set(names.keys());
+  const copy = (id: string) => names.get(id) ?? id;
+  let changed = false;
+  draft.loops = draft.loops.map((loop) => loop.map((step) => {
+    if (!nodes.has(step.from) && !nodes.has(step.to)) return step;
+    changed = true;
+    let edgeId = renamed.get(step.edgeId);
+    if (!edgeId) renamed.set(step.edgeId, edgeId = `${prefix}:${step.edgeId}`);
+    return { ...step, edgeId, from: copy(step.from), to: copy(step.to) };
+  }));
+  for (const id of nodes) {
+    const p = draft.positions.get(id);
+    if (p && !draft.positions.has(copy(id))) draft.positions.set(copy(id), p);
+  }
+  return changed;
 }
 
 /** What rewelding changes, to add to the patch replacement that carries the structure's own change. */
 export interface Rewelding {
-  /** The floors changed -- replaced by `regions`. */
+  /** The faces changed -- floors, and the ground cut alongside them -- replaced by `regions`. */
   readonly sourceSurfaceKeys: readonly ConstructionSurfaceKey[];
   readonly nodes: readonly { readonly id: string; readonly position: ConstructionPosition }[];
   readonly edges: readonly ConstructionPatchEdge[];
@@ -288,46 +364,77 @@ export interface Rewelding {
 }
 
 export interface WeldChanges {
-  /** Rungs to take back out of whichever floors share them. */
-  readonly detach: readonly string[];
-  /** Rungs to splice into a floor, each at the positions its nodes will stand at. */
+  /** Rungs to take off whichever floors they are welded into. */
+  readonly detach: readonly WeldRung[];
+  /** Rungs to weld into a floor, each at the positions its nodes will stand at. */
   readonly attach: readonly { readonly rung: WeldRung; readonly floor: ConstructionSurfaceKey }[];
 }
 
 /**
- * The floors among `floors` changed by `changes`, as patch content, detaching
- * first so an end can re-land on the floor it left. `positions` is where
- * every rung node will stand; those nodes are the structure's own, so they
- * are left for its own patch to declare. `shared` names every edge another
- * structure is welded along, which detaching must not swallow.
+ * Every face among `faces` -- all of them, not only floors -- changed by
+ * `changes`, as patch content, detaching first so an end can re-land on the
+ * floor it left.
+ *
+ * A weld only shares nodes: the floor's outline is cut at the rung's two
+ * nodes and each keeps its own edges, so the ground laid against the floor
+ * keeps its side of them -- cut at the same nodes too. Detaching gives every
+ * face but the structure's own a copy of those nodes instead. `positions` is
+ * where every rung node will stand; those nodes are the structure's own,
+ * left for its own patch to declare.
  */
 export function reweldFloors(
-  floors: readonly ConstructionRegionTopology[],
+  faces: readonly ConstructionRegionTopology[],
   changes: WeldChanges,
   positions: ReadonlyMap<string, ConstructionPosition>,
   operationId: string,
-  shared: ReadonlySet<string> = new Set(),
 ): Rewelding {
   const key = (surfaceKey: ConstructionSurfaceKey) => surfaceKey.join("\u0000");
-  const drafts = new Map<string, FloorDraft>();
+  const drafts = new Map<string, FaceDraft>();
   const draftFor = (topology: ConstructionRegionTopology) => {
     let draft = drafts.get(key(topology.surfaceKey));
     if (!draft) drafts.set(key(topology.surfaceKey), draft = draftOf(topology));
     return draft;
   };
-  changes.detach.forEach((edgeId, i) => {
-    for (const floor of floorsWeldedBy(floors, edgeId)) detach(draftFor(floor), edgeId, `${operationId}:unweld:${i}`, shared);
-  });
+  const touched = new Set<string>();
+  const renamed = new Map<string, string>();
+  for (const rung of changes.detach) {
+    for (const node of [rung.startNodeId, rung.endNodeId]) {
+      const holding = faces.filter((face) => !loopsOf(face).flat().some((use) => use.edgeId === rung.edgeId) && face.nodes.some((candidate) => candidate.id === node));
+      if (holding.length === 0) continue;
+      for (const face of holding) touched.add(key(face.surfaceKey));
+      // The floor's side made whole again where it runs straight through; else a copy of the node of its own.
+      if (!mergeThrough(holding.map(draftFor), node, `${operationId}:unweld:${node}`)) {
+        for (const face of holding) release(draftFor(face), new Set([node]), operationId, renamed);
+      }
+    }
+  }
   const attached: WeldRung[] = [];
   changes.attach.forEach(({ rung, floor }, i) => {
-    const topology = floors.find((candidate) => key(candidate.surfaceKey) === key(floor));
-    if (topology && attach(draftFor(topology), rung, positions, `${operationId}:weld:${i}`)) attached.push(rung);
+    const topology = faces.find((candidate) => key(candidate.surfaceKey) === key(floor));
+    const joined = topology && attach(draftFor(topology), rung, positions, `${operationId}:weld:${i}`);
+    if (!topology || !joined) return;
+    attached.push(rung);
+    touched.add(key(topology.surfaceKey));
+    // Whatever else stands on the edges cut -- the ground against the floor -- is cut at the same nodes.
+    for (const face of faces) {
+      if (face === topology || !loopsOf(face).flat().some((use) => joined.splits.has(use.edgeId))) continue;
+      if (applySplits(draftFor(face), joined.splits)) touched.add(key(face.surfaceKey));
+    }
+    // And every face through a node the rung took over now passes through the rung's.
+    if (joined.adopted.size > 0) {
+      for (const face of faces) {
+        if (!face.nodes.some((node) => joined.adopted.has(node.id))) continue;
+        const draft = draftFor(face);
+        for (const [from, to] of joined.adopted) draft.positions.set(to, positions.get(to)!);
+        if (renameNodes(draft, joined.adopted, `${operationId}:weld:${i}:adopt`, renamed)) touched.add(key(face.surfaceKey));
+      }
+    }
   });
   const nodes = new Map<string, ConstructionPosition>();
   const edges = new Map<string, ConstructionPatchEdge>();
   const regions: ConstructionPatchRegion[] = [];
-  let index = 0;
-  for (const draft of drafts.values()) {
+  const changed = [...drafts.entries()].filter(([faceKey]) => touched.has(faceKey)).map(([, draft]) => draft);
+  changed.forEach((draft, index) => {
     const walk = (loop: readonly Step[]): ConstructionOrientedEdgeUse[] => loop.map((step) => {
       edges.set(step.edgeId, step.reversed
         ? { edgeId: step.edgeId, startNodeId: step.to, endNodeId: step.from, geometry: reverseGeometry(step.geometry) }
@@ -336,17 +443,19 @@ export function reweldFloors(
       return { edgeId: step.edgeId, reversed: step.reversed };
     });
     const { source } = draft;
+    const outer = source.outerLoops.length;
     regions.push({
-      regionId: `${operationId}:floor:${index++}`,
-      boundary: walk(draft.outer),
-      holes: draft.holes.map(walk),
+      // The face keeps its own name where it has one: the same floor, the same ground.
+      regionId: source.surfaceKey[0] === "@region" && source.surfaceKey[1] ? source.surfaceKey[1] : `${operationId}:face:${index}`,
+      boundary: walk(draft.loops[0] ?? []),
+      holes: draft.loops.slice(outer).map(walk),
       surfaceType: source.surfaceType,
       physical: source.physical,
       ...(source.profile ? { profile: source.profile } : {}),
     });
-  }
+  });
   return {
-    sourceSurfaceKeys: [...drafts.values()].map((draft) => draft.source.surfaceKey),
+    sourceSurfaceKeys: changed.map((draft) => draft.source.surfaceKey),
     nodes: [...nodes].map(([id, position]) => ({ id, position })),
     edges: [...edges.values()],
     regions,
@@ -354,22 +463,15 @@ export function reweldFloors(
   };
 }
 
-/** `floors` with the rungs `edgeIds` taken back out -- where an end that is about to move looks for its new landing. */
-export function floorsWithout(floors: readonly ConstructionRegionTopology[], edgeIds: readonly string[], shared: ReadonlySet<string> = new Set()): readonly ConstructionRegionTopology[] {
+/** `floors` with the rungs taken off them -- where an end that is about to move looks for its new landing. */
+export function floorsWithout(floors: readonly ConstructionRegionTopology[], rungs: readonly WeldRung[]): readonly ConstructionRegionTopology[] {
   return floors.map((topology) => {
-    const touched = edgeIds.filter((edgeId) => floorsWeldedBy([topology], edgeId).length > 0);
-    if (touched.length === 0) return topology;
+    const off = rungs.filter((rung) => floorsWeldedBy([topology], rung).length > 0);
+    if (off.length === 0) return topology;
     const draft = draftOf(topology);
-    touched.forEach((edgeId, i) => detach(draft, edgeId, `detached:${i}`, shared));
+    for (const node of off.flatMap((rung) => [rung.startNodeId, rung.endNodeId])) {
+      if (!mergeThrough([draft], node, `released:${node}`)) release(draft, new Set([node]), "released", new Map());
+    }
     return asTopology(draft);
   });
-}
-
-/** Every edge id at least two of `topologies` share -- where something is welded to something else. */
-export function sharedEdgeIds(topologies: readonly ConstructionRegionTopology[]): ReadonlySet<string> {
-  const counts = new Map<string, number>();
-  for (const topology of topologies) {
-    for (const use of [...topology.outerLoops, ...topology.holes].flat()) counts.set(use.edgeId, (counts.get(use.edgeId) ?? 0) + 1);
-  }
-  return new Set([...counts].filter(([, count]) => count > 1).map(([edgeId]) => edgeId));
 }
