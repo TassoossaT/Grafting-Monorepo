@@ -157,7 +157,8 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
 
   const handleFeedbackChange = useCallback((feedback: ConstructionToolFeedback | undefined) => {
     if (feedback?.tone === "error") {
-      console.error("[VTT Tool Error]", feedback.message, feedback);
+      // A tool refusing an edit is feedback for the person, not a fault in the app: warned, so it never raises the dev error overlay.
+      console.warn("[VTT Tool Error]", feedback.message, feedback);
     } else if (feedback?.tone === "info") {
       console.info("[VTT Tool Info]", feedback.message);
     } else if (feedback?.tone === "success") {

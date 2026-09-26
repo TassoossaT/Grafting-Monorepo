@@ -185,9 +185,6 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
         } : undefined);
       },
       reportFeedback: (feedback) => {
-        if (feedback?.tone === "error") {
-          console.error("[VTT Tool Error]", feedback.message, feedback);
-        }
         optionsRef.current.onFeedbackChange(feedback);
       },
       updateToolParams: (toolId, update) => optionsRef.current.onToolParamsUpdate?.(toolId, update as never),
