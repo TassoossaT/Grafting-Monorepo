@@ -1,6 +1,6 @@
-import { curveEdgesOf, curveHandles, curvePick, panelHeightWidgets, shownGlobalHandles } from "../../features/edit-construction/index.ts";
+import { curvePick, sceneHandles } from "../../features/edit-construction/index.ts";
 import type { RenderHandleGlyph } from "../../ports/index.ts";
-import { GLOBAL_HANDLE_GLYPHS, HANDLE_GLYPHS } from "./handle-glyphs.ts";
+import { HANDLE_GLYPHS } from "./handle-glyphs.ts";
 import type { BezierPort } from "../../ports/bezier-port.ts";
 import type { RenderPointManipulator } from "../../ports/scene-render-port.ts";
 import type { ConstructionPlanarRequest, ConstructionPlanarShape, ConstructionMotionRequest, ConstructionMotionPlan, ConstructionNodeMotion } from "../../ports/index.ts";
@@ -336,14 +336,11 @@ export class AppTabletopRuntime implements TabletopRuntime {
   #handleRevision = 0;
   #pointHandlesOnly = false;
   #pointHandleIds = new Set<string>();
-  #bezierHandleIds = new Set<string>();
-  /** Whole-spine handles currently uploaded -- see `shownSpineGlobalHandles`. */
-  #globalHandleIds = new Set<string>();
-  /** The glyph each shown global handle is drawn with, kept for a gesture's live preview of it. */
-  #globalHandleGlyphs = new Map<string, RenderHandleGlyph>();
+  /** Every handle the scene handle registry listed last, and the glyph each was drawn with. */
+  #sceneHandleIds = new Set<string>();
+  #sceneHandleGlyphs = new Map<string, RenderHandleGlyph>();
   /** Which types' global handles are shown -- see `setGlobalHandleOwners`. */
   #globalHandleOwners: ((surfaceType: string) => boolean) | undefined = undefined;
-  #panelHeightWidgetIds = new Set<string>();
   /** Surfaces holding pinned nodes; `undefined` until next needed after a restore. A host edit moves those nodes without naming them. */
   #pinnedSurfaceRefs: Set<string> | undefined;
   #generation = 0;
@@ -636,42 +633,32 @@ export class AppTabletopRuntime implements TabletopRuntime {
     });
   }
 
-  #syncBezierHandles(origin: ChangeOrigin, causeId: string, generation: number): void {
-    if (typeof this.#construction.curveBatch !== "function") return;
-    const contour = typeof this.#construction.getCurvedEdges === "function" ? this.#construction.getCurvedEdges() : [];
+  /**
+   * Uploads every edit handle the scene handle registry lists and retires the
+   * ones it no longer does -- the one sync for all of them, each drawn with
+   * its kind's glyph from the catalog.
+   */
+  #syncSceneHandles(origin: ChangeOrigin, causeId: string, generation: number): void {
     const graph = this.#construction.getGraphSnapshot();
-    const edges = curveEdgesOf(graph, contour, this.#construction);
-    const shownEdges = this.#pointHandlesOnly ? edges.filter(e => e.store === "spine") : edges;
-    const handles = curveHandles(shownEdges, this.#construction);
-    // The whole-structure handles each type declares, for the types the active tool edits.
-    const owns = this.#globalHandleOwners;
-    const globals = owns ? shownGlobalHandles({ graph, topologies: this.#construction.getAllRegionTopologies(), cloudFor: (request) => this.#construction.cloudFor(request) }, owns) : [];
-    const liveGlobals = new Set(globals.map((handle) => handle.id));
-    for (const id of this.#globalHandleIds) if (!liveGlobals.has(id)) this.#removeNodeHandle(id, origin, causeId, generation);
+    const handles = sceneHandles({
+      graph,
+      topologies: this.#construction.getAllRegionTopologies(),
+      contour: typeof this.#construction.getCurvedEdges === "function" ? this.#construction.getCurvedEdges() : [],
+      ...(typeof this.#construction.curveBatch === "function" ? { port: this.#construction } : {}),
+      cloudFor: (request) => this.#construction.cloudFor(request),
+      pointsOnly: this.#pointHandlesOnly,
+      ...(this.#globalHandleOwners ? { owns: this.#globalHandleOwners } : {}),
+    });
+    const live = new Set(handles.map((handle) => handle.id));
+    for (const id of this.#sceneHandleIds) if (!live.has(id)) this.#removeNodeHandle(id, origin, causeId, generation);
     if (this.#pointHandlesOnly) {
-      const anchors = new Set(shownEdges.flatMap(e => [e.startNodeId,e.endNodeId]));
-      this.#pointHandleIds = new Set([...anchors,...handles.map(h => h.id),...liveGlobals]);
-      for (const id of [...this.#nodeHandleRevisions.keys()]) if (!this.#pointHandleIds.has(id)) this.#removeNodeHandle(id,origin,causeId,generation);
-      for (const node of graph.nodes) if (anchors.has(node.id)) this.#uploadNodeHandle(node.id,node.position,origin,causeId,generation,HANDLE_GLYPHS.anchor);
+      // Only these show while a tool edits spines by their points: every other handle goes.
+      this.#pointHandleIds = live;
+      for (const id of [...this.#nodeHandleRevisions.keys()]) if (!live.has(id)) this.#removeNodeHandle(id, origin, causeId, generation);
     }
-    // After the allow-list above names them: `#uploadNodeHandle` drops any
-    // handle it does not, which would lose a spine's pivot on its first sync.
-    this.#globalHandleGlyphs = new Map(globals.map((handle) => [handle.id, GLOBAL_HANDLE_GLYPHS[handle.kind]]));
-    for (const handle of globals) this.#uploadNodeHandle(handle.id, handle.position, origin, causeId, generation, GLOBAL_HANDLE_GLYPHS[handle.kind]);
-    this.#globalHandleIds = liveGlobals;
-    const live = new Set(handles.map((h) => h.id));
-    for (const id of this.#bezierHandleIds) if (!live.has(id)) this.#removeNodeHandle(id, origin, causeId, generation);
-    for (const handle of handles) this.#uploadNodeHandle(handle.id, handle.position, origin, causeId, generation, HANDLE_GLYPHS.midpoint);
-    this.#bezierHandleIds = live;
-  }
-
-  /** Uploads/retires one widget per top run of every partition panel -- a wall's own per-segment height handle, mirroring `#syncBezierHandles`. */
-  #syncPanelHeightWidgets(origin: ChangeOrigin, causeId: string, generation: number): void {
-    const widgets = panelHeightWidgets(this.#construction.getAllRegionTopologies());
-    const live = new Set(widgets.map((widget) => widget.id));
-    for (const id of this.#panelHeightWidgetIds) if (!live.has(id)) this.#removeNodeHandle(id, origin, causeId, generation);
-    for (const widget of widgets) this.#uploadNodeHandle(widget.id, widget.position, origin, causeId, generation, HANDLE_GLYPHS.panelHeight);
-    this.#panelHeightWidgetIds = live;
+    this.#sceneHandleGlyphs = new Map(handles.map((handle) => [handle.id, HANDLE_GLYPHS[handle.kind]]));
+    for (const handle of handles) this.#uploadNodeHandle(handle.id, handle.position, origin, causeId, generation, HANDLE_GLYPHS[handle.kind]);
+    this.#sceneHandleIds = live;
   }
 
   /** Removes one node's pickable handle -- the counterpart to {@link AppTabletopRuntime.#uploadNodeHandle}, needed once a mutation deletes a node outright. */
@@ -753,8 +740,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
       });
       this.#uploadNodeHandle(node.id, node.position, origin, causeId, generation, HANDLE_GLYPHS.vertex);
     }
-    this.#syncBezierHandles(origin, causeId, generation);
-    this.#syncPanelHeightWidgets(origin, causeId, generation);
+    this.#syncSceneHandles(origin, causeId, generation);
     return applyMapProjectionDeltas(map, deltas);
   }
 
@@ -788,8 +774,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     // Curve handles sit off the anchors and follow a reshaped edge too, so
     // they are re-placed whatever the edit moved or retyped. Height widgets
     // sit at a top run's midpoint for the same reason.
-    this.#syncBezierHandles(origin, causeId, generation);
-    this.#syncPanelHeightWidgets(origin, causeId, generation);
+    this.#syncSceneHandles(origin, causeId, generation);
     return applyMapProjectionDeltas(map, deltas);
   }
 
@@ -1247,16 +1232,16 @@ export class AppTabletopRuntime implements TabletopRuntime {
     if (this.#globalHandleOwners === owns) return;
     this.#globalHandleOwners = owns;
     if (this.#snapshot.status !== "ready") return;
-    this.#syncBezierHandles("programmatic", "global-handle-owners", this.#generation);
+    this.#syncSceneHandles("programmatic", "global-handle-owners", this.#generation);
   }
 
   previewNodeHandle(nodeId: string, position: ConstructionPosition | undefined): void {
     if (this.#snapshot.status !== "ready") return;
     if (position === undefined) {
-      this.#syncBezierHandles("programmatic", "handle-preview", this.#generation);
+      this.#syncSceneHandles("programmatic", "handle-preview", this.#generation);
       return;
     }
-    this.#uploadNodeHandle(nodeId, position, "local", "handle-preview", this.#generation, this.#globalHandleGlyphs.get(nodeId));
+    this.#uploadNodeHandle(nodeId, position, "local", "handle-preview", this.#generation, this.#sceneHandleGlyphs.get(nodeId));
   }
 
   setConstructionHandlePresentation(mode: "all" | "spine-points"): void {
@@ -1267,7 +1252,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     if (!points) {
       for (const node of this.#construction.getNodePositions()) this.#uploadNodeHandle(node.id,node.position,"programmatic","handle-presentation",this.#generation,HANDLE_GLYPHS.vertex);
     }
-    this.#syncBezierHandles("programmatic","handle-presentation",this.#generation);
+    this.#syncSceneHandles("programmatic","handle-presentation",this.#generation);
   }
 
   pick(viewId: RenderViewId, x: number, y: number): ScenePickResult | undefined {

@@ -28,3 +28,4 @@ export { globalHandleActions, handleMotionAt, planGlobalHandle, shownGlobalHandl
 export type { CloudGlobalHandle } from "./global-handles/cloud-handle-provider.ts";
 export { detachSpineEnd, regenerateWithEndWelds, spineChainEnds, spineEndsLanded, spineEndWelded } from "./spine-end-welds.ts";
 export { endJointNear, freeStructureEnds, weldFreeEndsOnto } from "./free-end-welds.ts";
+export { sceneHandles, type SceneHandle, type SceneHandleInput, type SceneHandleKind } from "./scene-handles.ts";

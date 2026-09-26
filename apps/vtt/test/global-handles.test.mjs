@@ -134,3 +134,23 @@ test("a straight ramp is moved by its pivot and turned by its rotate handle, and
     assert.match(calls.feedback.at(-1).message, /girada/, JSON.stringify(calls.feedback.slice(-3)));
   } finally { session.free(); }
 });
+
+test("one registry lists every edit handle the scene shows, each with the kind its look is chosen by", async () => {
+  const { sceneHandles } = await import("../src/features/edit-construction/index.ts");
+  const { commitPlatformSlope } = await import("../src/composition/tabletop/tools/slope/slope-commit.ts");
+  const { HANDLE_GLYPHS } = await import("../src/composition/tabletop/handle-glyphs.ts");
+  const fixture = sessionFixture();
+  const { runtime, session, ctx } = fixture;
+  try {
+    square(runtime, "floor", 0, 0);
+    commitPlatformSlope(ctx, [{ x: 10, y: 0, z: 0 }, { x: 14, y: 2, z: 0 }, { x: 18, y: 4, z: 3 }], { width: 1.5 });
+    const input = { graph: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), contour: [], port: runtime, cloudFor: runtime.cloudFor };
+    const points = sceneHandles({ ...input, pointsOnly: true, owns: (type) => type === "platform-slope" });
+    const kinds = new Set(points.map((h) => h.kind));
+    for (const kind of ["anchor", "midpoint", "pivot", "rotate", "height"]) assert.ok(kinds.has(kind), `a spine tool shows its ${kind} handles`);
+    assert.ok(!points.some((h) => h.kind === "pivot" && h.id.includes("floor")), "not the floor's, which it does not edit");
+    const everything = sceneHandles({ ...input, pointsOnly: false, owns: () => true });
+    assert.ok(everything.every((h) => HANDLE_GLYPHS[h.kind] !== undefined), "every kind has its look in the one catalog");
+    assert.equal(new Set(everything.map((h) => h.id)).size, everything.length, "no two handles share an id");
+  } finally { session.free(); }
+});
