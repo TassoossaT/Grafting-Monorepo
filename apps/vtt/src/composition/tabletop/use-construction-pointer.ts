@@ -208,7 +208,10 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     }
   }, []);
 
-  const activeParams = options.toolParams[options.activeTool];
+  // Runs on a tool switch, never on a change of the active tool's params: a
+  // tool that mirrors its selection into its own params (an opening, a
+  // picked ramp) would otherwise be cancelled -- selection, manipulator and
+  // gesture all dropped -- by the very update that shows what it picked.
   useEffect(() => {
     const tool = toolFor(options.activeTool);
     // Bind cleanup to the runtime that owns this draft, even after a table switch.
@@ -235,7 +238,8 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
         tool.onDeleteKey(ownedContext);
       }
       if (gestureRef.current) return;
-      if (tool.onKeyDown?.(ownedContext, event.key, activeParams as never)) {
+      const { toolParams, activeTool } = optionsRef.current;
+      if (tool.onKeyDown?.(ownedContext, event.key, toolParams[activeTool] as never)) {
         event.preventDefault();
         refreshEdgeOverlay();
       }
@@ -264,7 +268,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       options.runtime.setConstructionHandlePresentation?.("all");
       release();
     };
-  }, [options.activeTool, options.runtime, options.history, options.tableId, options.viewId, activeParams, ctx, refreshEdgeOverlay]);
+  }, [options.activeTool, options.runtime, options.history, options.tableId, options.viewId, ctx, refreshEdgeOverlay]);
 
   // Draw what is already standing as soon as the table is live, not only
   // after the first commit -- an edge that was there before this session
