@@ -4211,6 +4211,42 @@ a curved wall. The graph keeps it on the curve (`CurveHandles.surfaceType`)
 and never reads it; this is where the app does. Every owner stamps its own
 spans, so this module names no type; a span with no owner generates nothing.
 
+### `interface vtt.spine-pivot.SpinePivot`
+
+### `property vtt.spine-pivot.SpinePivot.edges: readonly ConstructionEdgeSnapshot[]`
+
+### `property vtt.spine-pivot.SpinePivot.id: string`
+
+### `property vtt.spine-pivot.SpinePivot.nodeIds: readonly string[]`
+
+### `property vtt.spine-pivot.SpinePivot.owner: string | undefined`
+
+The type the spine generates.
+
+### `property vtt.spine-pivot.SpinePivot.position: ConstructionPosition`
+
+### `function vtt.spine-pivot.isSpinePivotId(id: string): boolean`
+
+### `function vtt.spine-pivot.planSpineTranslate(graph: ConstructionGraphSnapshot, pivot: SpinePivot, delta: ConstructionPosition): ConstructionGraphPatch`
+
+The graph patch moving the whole spine of `pivot` by `delta`: every
+control node, and every arc centre, so each span keeps its shape. The
+owner regenerates its surface from it like from any other spine edit.
+
+### `function vtt.spine-pivot.spineMemberOf(graph: ConstructionGraphSnapshot, id: string): string`
+
+A spine control node `id` stands for: a pivot's own node, a curve handle's span start, or `id` itself.
+
+### `function vtt.spine-pivot.spinePivotAt(graph: ConstructionGraphSnapshot, id: string): SpinePivot | undefined`
+
+The pivot of the spine `id` belongs to -- a pivot, a control node or a curve handle.
+
+### `function vtt.spine-pivot.spinePivotId(nodeId: string): string`
+
+### `function vtt.spine-pivot.spinePivots(graph: ConstructionGraphSnapshot): readonly SpinePivot[]`
+
+Every spine's pivot.
+
 ### `interface vtt.spine-ribbons.SpineRibbon`
 
 One swept span: the resolved curve and its outline, `min` side forward then `max` side back.
@@ -5667,6 +5703,12 @@ whatever surface this type makes of them.
 ### `property vtt.structure-type.SpineGeneration.defaultOffsets: readonly number[]`
 
 The width a span with no profile of its own is given.
+
+### `property vtt.structure-type.SpineGeneration.pivot?: boolean`
+
+The spine is shown with a pivot that moves it whole (`spine-pivot.ts`).
+Off for a network whose connected spine is many structures at once -- a
+road grid would move as one.
 
 ### `property vtt.structure-type.SpineGeneration.planOnly?: boolean`
 

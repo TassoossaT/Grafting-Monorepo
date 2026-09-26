@@ -1,4 +1,4 @@
-import { curveEdgesOf, curveHandles, curvePick, panelHeightWidgets } from "../../features/edit-construction/index.ts";
+import { curveEdgesOf, curveHandles, curvePick, panelHeightWidgets, spinePivots, structureTypeFor } from "../../features/edit-construction/index.ts";
 import type { BezierPort } from "../../ports/bezier-port.ts";
 import type { RenderPointManipulator } from "../../ports/scene-render-port.ts";
 import type { ConstructionPlanarRequest, ConstructionPlanarShape, ConstructionMotionRequest, ConstructionMotionPlan, ConstructionNodeMotion } from "../../ports/index.ts";
@@ -328,6 +328,8 @@ export class AppTabletopRuntime implements TabletopRuntime {
   #pointHandlesOnly = false;
   #pointHandleIds = new Set<string>();
   #bezierHandleIds = new Set<string>();
+  /** Whole-spine pivot handles currently uploaded -- see `spinePivots`. */
+  #pivotHandleIds = new Set<string>();
   #panelHeightWidgetIds = new Set<string>();
   /** Surfaces holding pinned nodes; `undefined` until next needed after a restore. A host edit moves those nodes without naming them. */
   #pinnedSurfaceRefs: Set<string> | undefined;
@@ -627,9 +629,15 @@ export class AppTabletopRuntime implements TabletopRuntime {
     const edges = curveEdgesOf(graph, contour, this.#construction);
     const shownEdges = this.#pointHandlesOnly ? edges.filter(e => e.store === "spine") : edges;
     const handles = curveHandles(shownEdges, this.#construction).filter(h => !this.#pointHandlesOnly || curvePick(h.id)?.index === "midpoint");
+    // One whole-structure handle per spine, shown with its points.
+    const pivots = this.#pointHandlesOnly ? spinePivots(graph).filter((pivot) => pivot.owner !== undefined && structureTypeFor(pivot.owner)?.spine?.pivot === true) : [];
+    const livePivots = new Set(pivots.map((pivot) => pivot.id));
+    for (const id of this.#pivotHandleIds) if (!livePivots.has(id)) this.#removeNodeHandle(id, origin, causeId, generation);
+    for (const pivot of pivots) this.#uploadNodeHandle(pivot.id, pivot.position, origin, causeId, generation);
+    this.#pivotHandleIds = livePivots;
     if (this.#pointHandlesOnly) {
       const anchors = new Set(shownEdges.flatMap(e => [e.startNodeId,e.endNodeId]));
-      this.#pointHandleIds = new Set([...anchors,...handles.map(h => h.id)]);
+      this.#pointHandleIds = new Set([...anchors,...handles.map(h => h.id),...livePivots]);
       for (const id of [...this.#nodeHandleRevisions.keys()]) if (!this.#pointHandleIds.has(id)) this.#removeNodeHandle(id,origin,causeId,generation);
       for (const node of graph.nodes) if (anchors.has(node.id)) this.#uploadNodeHandle(node.id,node.position,origin,causeId,generation);
     }

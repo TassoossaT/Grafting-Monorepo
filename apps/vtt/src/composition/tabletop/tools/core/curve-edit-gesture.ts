@@ -9,9 +9,14 @@ import {
   planEdgeReshape,
   reshapeCurve,
   resolveCloudTopology,
+  curveEdgesOf,
+  isSpinePivotId,
+  planSpineTranslate,
+  prospectiveGraph,
   resolveCurves,
   reverseGeometry,
   spineOwnerAt,
+  spinePivotAt,
   structureTypeFor,
 } from "../../../../features/edit-construction/index.ts";
 import type { AtomicEditOp, StructureEditParams } from "../../../../features/edit-construction/index.ts";
@@ -87,6 +92,10 @@ export function beginCurveGesture(
   const actualParams = typeof ownsTypeOrParams === "function" ? params : ownsTypeOrParams;
   if (!sample.nodeId) return undefined;
   const snapshot = ctx.runtime.getGraphSnapshot();
+  if (isSpinePivotId(sample.nodeId)) {
+    const owner = spinePivotAt(snapshot, sample.nodeId)?.owner;
+    return owner !== undefined && ownsType(owner) ? pivotGesture(ctx, sample, actualParams) : undefined;
+  }
   const contour = ctx.runtime.getCurvedEdges();
   if (!isBezierEditTarget(snapshot, sample.nodeId, contour)) return undefined;
   const pick = curvePick(sample.nodeId);
@@ -236,6 +245,61 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params: CurveGest
       }
     },
     cancel() { ended = true; showRoadSnap(ctx); ctx.runtime.clearPreview(CHANNEL); },
+  };
+}
+
+/**
+ * Moves a whole spine by its pivot: along the ground following the pointer,
+ * up and down in elevation mode, or anywhere with the scene manipulator. The
+ * spine's owner regenerates its surface from the moved spine on release.
+ */
+function pivotGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGestureOptions): CurveGesture | undefined {
+  const snapshot = ctx.runtime.getGraphSnapshot();
+  const pivot = spinePivotAt(snapshot, sample.nodeId!);
+  const generation = pivot?.owner === undefined ? undefined : structureTypeFor(pivot.owner)?.spine;
+  if (!pivot || !generation) return undefined;
+  const operationId = `spine-move:${ctx.nextSequence()}`;
+  let delta = { x: 0, y: 0, z: 0 };
+  let ended = false;
+  const origin = { ...sample, point: pivot.position };
+  return {
+    move(gesture) {
+      if (ended || !crossedThreshold(sample, gesture, params)) return;
+      const target = targetOf(origin, gesture, params);
+      // Along the ground the spine keeps its heights; they change on purpose only.
+      const y = params?.spatialTarget || params?.mode === "elevation" ? target.y : pivot.position.y;
+      delta = { x: target.x - pivot.position.x, y: y - pivot.position.y, z: target.z - pivot.position.z };
+      try {
+        const next = prospectiveGraph(snapshot, planSpineTranslate(snapshot, pivot, delta));
+        const ids = new Set(pivot.edges.map((edge) => edge.edgeId));
+        const curves = curveEdgesOf({ nodes: next.nodes, edges: next.edges.filter((edge) => ids.has(edge.edgeId)) }, [], ctx.runtime);
+        ctx.runtime.showPreview({ kind: "segments", positions: Float32Array.from(curves.flatMap((edge) => Array.from(curveSegments(ctx.runtime, edge.curve)))), color: PREVIEW_COLOR, opacity: 0.9 }, CHANNEL);
+      } catch (error) {
+        ctx.runtime.clearPreview(CHANNEL);
+        ctx.reportFeedback({ tone: "error", message: String(error) });
+      }
+    },
+    commit() {
+      if (ended) return;
+      ended = true;
+      ctx.runtime.clearPreview(CHANNEL);
+      if (Math.hypot(delta.x, delta.y, delta.z) < 1e-6) return;
+      try {
+        const regenerated = generation.regenerate({
+          snapshot, graphPatch: planSpineTranslate(snapshot, pivot, delta), topologies: ctx.runtime.getAllRegionTopologies(),
+          port: ctx.runtime, field: ctx.runtime, operationId, tableId: ctx.tableId,
+        });
+        if (!regenerated) return;
+        const { recorded } = commitPatchReplacement(ctx.runtime, regenerated.request, { transactionId: operationId });
+        if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
+        const moved = spinePivotAt(ctx.runtime.getGraphSnapshot(), pivot.id);
+        ctx.reportSelection(moved ? { id: moved.id, point: moved.position } : undefined);
+        ctx.reportFeedback({ tone: "success", message: "Estrutura movida." });
+      } catch (error) {
+        ctx.reportFeedback({ tone: "error", message: `Estrutura preservada: ${String(error)}` });
+      }
+    },
+    cancel() { ended = true; ctx.runtime.clearPreview(CHANNEL); },
   };
 }
 

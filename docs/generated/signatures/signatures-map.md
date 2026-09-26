@@ -5315,6 +5315,7 @@ export type { SpineChain } from "./spine-chains.ts";
 export type { SpineControlNode, SpineCurveEdge, SpineGraph } from "./spine-graph.ts";
 export type { SpineControlNodeAddress } from "./spine-node-id.ts";
 export type { SpineRibbon, SpineRibbonSpan } from "./spine-ribbons.ts";
+export type { SpinePivot } from "./spine-pivot.ts";
 export type { SpineAction } from "./spine-actions.ts";
 export type { SpineEditInput } from "./spine-edit-plan.ts";
 
@@ -5411,6 +5412,28 @@ export function spineOwnerAt(snapshot: ConstructionGraphSnapshot, edgeOrNodeId: 
   ?? snapshot.edges.find((candidate) => isSpineEdge(candidate) && (candidate.startNodeId === edgeOrNodeId || candidate.endNodeId === edgeOrNodeId));
 export function spineComponent(snapshot: ConstructionGraphSnapshot, seedNodeIds: Iterable<string>): ConstructionGraphSnapshot {
   const spans = snapshot.edges.filter(isSpineEdge);
+
+// src/features/edit-construction/spine/spine-pivot.ts
+export const spinePivotId = (nodeId: string): string => `${PREFIX}${nodeId}`;
+export function isSpinePivotId(id: string): boolean {
+  return id.startsWith(PREFIX);
+export function spineMemberOf(graph: ConstructionGraphSnapshot, id: string): string {
+  if (isSpinePivotId(id)) return id.slice(PREFIX.length);
+export interface SpinePivot {
+  readonly id: string;
+  readonly position: ConstructionPosition;
+  /** The type the spine generates. */
+  readonly owner: string | undefined;
+  readonly nodeIds: readonly string[];
+  readonly edges: readonly ConstructionEdgeSnapshot[];
+  }
+export function spinePivots(graph: ConstructionGraphSnapshot): readonly SpinePivot[] {
+  const pivots: SpinePivot[] = [];
+  const seen = new Set<string>();
+export function spinePivotAt(graph: ConstructionGraphSnapshot, id: string): SpinePivot | undefined {
+  const member = spineMemberOf(graph, id);
+export function planSpineTranslate(graph: ConstructionGraphSnapshot, pivot: SpinePivot, delta: ConstructionPosition): ConstructionGraphPatch {
+  const positions = new Map(graph.nodes.map((node) => [node.id, node.position]));
 
 // src/features/edit-construction/spine/spine-ribbons.ts
 export interface SpineRibbonSpan {

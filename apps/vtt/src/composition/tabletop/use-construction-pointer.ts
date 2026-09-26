@@ -12,6 +12,7 @@ import { GRID_SNAP_UNIT } from "../../adapters/rendering/index.ts";
 import type { TabletopRuntime } from "./tabletop-runtime.ts";
 import { toolFor } from "./tools/index.ts";
 import { beginCurveGesture, type CurveGesture } from "./tools/core/curve-edit-gesture.ts";
+import { isSpinePivotId, spinePivotAt } from "../../features/edit-construction/index.ts";
 import { gestureMoved } from "./tools/core/tool-context.ts";
 import {
   edgeOverlayChannel,
@@ -19,6 +20,17 @@ import {
   edgeOverlayOf,
 } from "./tools/core/edge-overlay.ts";
 import type { ConstructionToolFeedback, PointerSample, ToolContext } from "./tools/index.ts";
+
+/** A spine handle the scene manipulator can sit on -- a control point, or a whole spine's pivot -- where it is now. */
+function spineHandleAt(runtime: Pick<TabletopRuntime, "getGraphSnapshot">, id: string): { readonly id: string; readonly position: { x: number; y: number; z: number } } | undefined {
+  const graph = runtime.getGraphSnapshot();
+  if (isSpinePivotId(id)) {
+    const pivot = spinePivotAt(graph, id);
+    return pivot && { id: pivot.id, position: pivot.position };
+  }
+  const node = graph.nodes.find((n) => n.id === id && n.id.startsWith("spine:"));
+  return node && { id: node.id, position: node.position };
+}
 
 /** Caps how often a continuous tool's `onPointerMove` commits during an active drag -- the preview ghost still updates on every raw event, only the (comparatively expensive) generate/mutate call is rate-limited. */
 const MOVE_COMMIT_THROTTLE_MS = 32;
@@ -136,12 +148,11 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
         const { runtime, viewId, activeTool } = optionsRef.current;
         optionsRef.current.onSelectionChange(info);
         if (viewId === undefined) return;
-        const node = info && toolFor(activeTool).handlePresentation === "spine-points"
-          ? runtime.getGraphSnapshot().nodes.find(n => n.id === info.id && n.id.startsWith("spine:")) : undefined;
+        const node = info && toolFor(activeTool).handlePresentation === "spine-points" ? spineHandleAt(runtime, info.id) : undefined;
         selectedPoint.current = node?.id;
         runtime.setPointManipulator?.(viewId, node && !branchModifier.current ? {
           // Branching starts a new structure from the point, which only a tool that handles the action can do.
-          id: node.id, position: node.position, branchAction: toolFor(activeTool).onSelectionAction !== undefined,
+          id: node.id, position: node.position, branchAction: toolFor(activeTool).onSelectionAction !== undefined && !isSpinePivotId(node.id),
           onChange(phase, position) {
             if (phase === "start") {
               manipulatorGesture.current?.cancel();
@@ -154,7 +165,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
               manipulatorGesture.current = undefined;
               if (phase === "end") gesture?.commit(); else gesture?.cancel();
               // Refresh from confirmed state after success, rejection or cancellation.
-              const current = runtime.getGraphSnapshot().nodes.find(n => n.id === node.id);
+              const current = spineHandleAt(runtime, node.id);
               if (selectedPoint.current === node.id) ctx.reportSelection(current ? { id: current.id, point: current.position } : undefined);
               refreshEdgeOverlay();
             }
@@ -247,7 +258,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     const restoreManipulator = () => {
       if (!branchModifier.current) return;
       branchModifier.current = false;
-      const node = options.runtime.getGraphSnapshot().nodes.find(n => n.id === selectedPoint.current);
+      const node = selectedPoint.current === undefined ? undefined : spineHandleAt(options.runtime, selectedPoint.current);
       if (node) ctx.reportSelection({ id: node.id, point: node.position });
     };
     const keyup = (event: KeyboardEvent) => { if (event.key === "Shift") restoreManipulator(); };
@@ -280,7 +291,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     let drawn = runtime.getSnapshot().status === "ready";
     const unsubscribe = runtime.subscribe(() => {
       if (selectedPoint.current && !manipulatorGesture.current) {
-        const node = runtime.getGraphSnapshot().nodes.find(n => n.id === selectedPoint.current);
+        const node = spineHandleAt(runtime, selectedPoint.current);
         ctx.reportSelection(node ? { id: node.id, point: node.position } : undefined);
       }
       if (drawn || runtime.getSnapshot().status !== "ready") return;

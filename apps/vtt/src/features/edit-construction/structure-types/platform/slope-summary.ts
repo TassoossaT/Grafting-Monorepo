@@ -1,6 +1,6 @@
 import type { BezierPort, ConstructionEdgeSnapshot, ConstructionGraphPatch, ConstructionGraphSnapshot, CurvePoint } from "@/ports";
 
-import { spineComponent } from "../../spine/index.ts";
+import { spineComponent, spineMemberOf } from "../../spine/index.ts";
 import { isSlopeSpan } from "./platform-slope-spine.ts";
 
 /**
@@ -35,8 +35,8 @@ interface Chain {
 }
 
 /** The sloped platform's spine through `nodeId`, walked from one free end to the other; `undefined` for a branch, a loop, or another owner. */
-function chainAt(graph: ConstructionGraphSnapshot, nodeId: string): Chain | undefined {
-  const spans = spineComponent(graph, [nodeId]).edges.filter((edge) => edge.curve && isSlopeSpan(edge));
+function chainAt(graph: ConstructionGraphSnapshot, id: string): Chain | undefined {
+  const spans = spineComponent(graph, [spineMemberOf(graph, id)]).edges.filter((edge) => edge.curve && isSlopeSpan(edge));
   if (spans.length === 0) return undefined;
   const incident = new Map<string, ConstructionEdgeSnapshot[]>();
   for (const span of spans) for (const id of [span.startNodeId, span.endNodeId]) incident.set(id, [...(incident.get(id) ?? []), span]);

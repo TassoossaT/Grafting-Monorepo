@@ -243,7 +243,7 @@ test("the draft preview is a filled band at the ramp's width, and hovering never
 function pick(tool, ctx, runtime, nodeId, params) {
   let pushed = params;
   ctx.updateToolParams = (_id, update) => { pushed = update(pushed); };
-  const sample = { nodeId, point: node(runtime, nodeId).position };
+  const sample = { nodeId, point: node(runtime, nodeId)?.position ?? { x: 0, y: 0, z: 0 } };
   tool.onPointerDown(ctx, sample, params);
   tool.onPointerUp(ctx, { start: sample, current: sample, samples: [sample] }, params);
   tool.onClick(ctx, sample, params);
@@ -309,5 +309,64 @@ test("a picked curved ramp takes new end heights and a new width from the panel"
     assert.ok(Math.abs(after.endHeight - (selected.endHeight + 3)) < 1e-9, JSON.stringify(after));
     assert.ok(slopeSpans(runtime).every((e) => e.curve.bandOffsets[1] === 1.5));
     assert.ok(constantGrade(runtime));
+  } finally { session.free(); }
+});
+
+test("every spine has a pivot: a spiral's at its centre, a free ramp's at the middle of its points", async () => {
+  const { spinePivots } = await import("../src/features/edit-construction/index.ts");
+  const { ctx, runtime, session } = sessionFixture();
+  try {
+    drawSpiral(slopeSpiralTool, ctx, { center: { x: 10, y: 0, z: -4 }, radius: 3, turns: 1.5, startY: 1, params: { width: 1.5, rise: 3 } });
+    commitPlatformSlope(ctx, [{ x: 0, y: 0, z: 0 }, { x: 4, y: 0, z: 2 }, { x: 8, y: 2, z: 0 }], { width: 1.5 });
+    const pivots = spinePivots(runtime.getGraphSnapshot());
+    assert.equal(pivots.length, 2);
+    const spiral = pivots.find((p) => Math.abs(p.position.x - 10) < 1e-6);
+    assert.ok(spiral && Math.abs(spiral.position.z + 4) < 1e-6, "the spiral's pivot is its centre");
+    const ramp = pivots.find((p) => p !== spiral);
+    assert.ok(Math.abs(ramp.position.x - 4) < 1e-6, `the ramp's pivot is the middle of its points: ${JSON.stringify(ramp.position)}`);
+  } finally { session.free(); }
+});
+
+test("dragging a spiral's pivot moves the whole spiral in plan, arc centres and all, keeping its heights", async () => {
+  const { spinePivots } = await import("../src/features/edit-construction/index.ts");
+  const { ctx, runtime, session, calls } = sessionFixture();
+  Object.assign(runtime, { showPreview() {}, clearPreview() {} });
+  const params = { width: 1.5, rise: 3 };
+  try {
+    drawSpiral(slopeSpiralTool, ctx, { center: { x: 0, y: 0, z: 0 }, radius: 3, turns: 1, startY: 1, params });
+    const before = new Map(runtime.getGraphSnapshot().nodes.map((n) => [n.id, n.position]));
+    const [pivot] = spinePivots(runtime.getGraphSnapshot());
+    const start = { nodeId: pivot.id, point: pivot.position };
+    const target = { point: { x: 5, y: 0, z: 2 } };
+    slopeSpiralTool.onPointerDown(ctx, start, params);
+    slopeSpiralTool.onPointerMove(ctx, { start, current: target, samples: [start, target] }, params);
+    slopeSpiralTool.onPointerUp(ctx, { start, current: target, samples: [start, target] }, params);
+    const spans = slopeSpans(runtime);
+    assert.ok(spans.every((e) => Math.hypot(e.curve.geometry.center[0] - 5, e.curve.geometry.center[1] - 2) < 1e-6), JSON.stringify(calls.feedback));
+    for (const id of new Set(spans.flatMap((e) => [e.startNodeId, e.endNodeId]))) {
+      const was = before.get(id), now = node(runtime, id).position;
+      assert.ok(Math.abs(now.x - was.x - 5) < 1e-6 && Math.abs(now.z - was.z - 2) < 1e-6 && Math.abs(now.y - was.y) < 1e-9, `moved by the drag, same height: ${id}`);
+    }
+    assert.equal(faces(runtime, "platform-slope").length, spans.length);
+  } finally { session.free(); }
+});
+
+test("the scene manipulator on a pivot lifts the whole spiral, and picking the pivot mirrors it into the panel", async () => {
+  const { spinePivots } = await import("../src/features/edit-construction/index.ts");
+  const { beginCurveGesture } = await import("../src/composition/tabletop/tools/core/curve-edit-gesture.ts");
+  const { ctx, runtime, session, calls } = sessionFixture();
+  Object.assign(runtime, { showPreview() {}, clearPreview() {} });
+  const params = { width: 1.5, rise: 3 };
+  try {
+    drawSpiral(slopeSpiralTool, ctx, { center: { x: 0, y: 0, z: 0 }, radius: 3, turns: 1, startY: 1, params });
+    const [pivot] = spinePivots(runtime.getGraphSnapshot());
+    const lifted = { ...pivot.position, y: pivot.position.y + 2 };
+    const gesture = beginCurveGesture(ctx, { nodeId: pivot.id, point: pivot.position }, { mode: "shape", insertOnClick: false, spatialTarget: true });
+    gesture.move({ start: { nodeId: pivot.id, point: lifted }, current: { nodeId: pivot.id, point: lifted }, samples: [] });
+    gesture.commit();
+    const heights = walk(runtime).map((s) => s.y);
+    assert.deepEqual([Math.min(...heights), Math.max(...heights)], [3, 6], JSON.stringify(calls.feedback));
+    const pushed = pick(slopeSpiralTool, ctx, runtime, pivot.id, params);
+    assert.ok(pushed().selected?.spiral && Math.abs(pushed().selected.startHeight - 3) < 1e-9, JSON.stringify(pushed().selected));
   } finally { session.free(); }
 });

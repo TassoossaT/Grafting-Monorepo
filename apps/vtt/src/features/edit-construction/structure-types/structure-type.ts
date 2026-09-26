@@ -268,6 +268,12 @@ export interface SpineGeneration {
    * elevation mode.
    */
   readonly planOnly?: boolean;
+  /**
+   * The spine is shown with a pivot that moves it whole (`spine-pivot.ts`).
+   * Off for a network whose connected spine is many structures at once -- a
+   * road grid would move as one.
+   */
+  readonly pivot?: boolean;
   /** Normalizes the standing graph before an edit reads it -- legacy data, say. */
   readonly prepare?: (snapshot: ConstructionGraphSnapshot, port: BezierPort) => ConstructionGraphSnapshot;
   readonly regenerate: (input: SpineRegenerationInput) => SpineRegeneration | undefined;
