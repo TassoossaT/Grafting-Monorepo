@@ -6,12 +6,17 @@ import type { ConstructionPosition, ConstructionRegionTopology } from "@/ports";
  * slide along the sides next to it, so every side keeps its direction and
  * the shape only changes size. Heights never change.
  *
- * A side is a run of straight edges in one line -- a platform's edge split
- * where a ramp is welded into it is still one side, and moves whole.
+ * A side is a run of edges in one line, give or take a slight bend -- a
+ * platform's edge split where a ramp is welded into it, or drawn by hand a
+ * little crooked, is still one side, and moves whole. Where two sides meet
+ * at a shallow angle, sliding the corner along the neighbour would throw it
+ * far away; the corner follows the pushed side instead.
  */
 
-/** Two edges are one side when their directions differ by less than this (sine of the angle). */
-const COLLINEAR = 1e-4;
+/** Two edges are one side when they bend by less than this (sine of the angle): about 3 degrees. */
+const COLLINEAR = 0.05;
+/** Sides meeting at less than this (sine of the angle, about 20 degrees) are too shallow to slide a corner along. */
+const SHALLOW = 0.34;
 
 interface Side {
   /** Nodes along the side, in the loop's order, from its first corner to its last. */
@@ -43,23 +48,25 @@ function sidesOf(topology: ConstructionRegionTopology): readonly Side[] | undefi
   const sides: { nodes: string[]; edgeIds: string[]; n: Side["n"]; c: number }[] = [];
   for (let k = 0; k < loop.length; k += 1) {
     const i = (start + k) % loop.length;
-    if (bends(i)) {
-      const d = dir(i);
-      const n = { x: -d.z, z: d.x };
-      const a = at.get(loop[i]!.startNodeId)!;
-      sides.push({ nodes: [loop[i]!.startNodeId], edgeIds: [], n, c: n.x * a.x + n.z * a.z });
-    }
+    if (bends(i)) sides.push({ nodes: [loop[i]!.startNodeId], edgeIds: [], n: { x: 0, z: 0 }, c: 0 });
     const side = sides.at(-1)!;
     side.edgeIds.push(loop[i]!.edgeId);
     side.nodes.push(loop[i]!.endNodeId);
   }
+  // Each side's line runs through its two corners.
+  for (const side of sides) {
+    const a = at.get(side.nodes[0]!)!, b = at.get(side.nodes.at(-1)!)!;
+    const length = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+    side.n = { x: -(b.z - a.z) / length, z: (b.x - a.x) / length };
+    side.c = side.n.x * a.x + side.n.z * a.z;
+  }
   return sides;
 }
 
-/** Where two side lines cross; `undefined` when they are parallel. */
+/** Where two side lines cross; `undefined` when they meet too shallow for the crossing to stay near. */
 function crossing(p: Side, pc: number, q: Side, qc: number): { readonly x: number; readonly z: number } | undefined {
   const det = p.n.x * q.n.z - p.n.z * q.n.x;
-  if (Math.abs(det) < 1e-9) return undefined;
+  if (Math.abs(det) < SHALLOW) return undefined;
   return { x: (pc * q.n.z - p.n.z * qc) / det, z: (p.n.x * qc - pc * q.n.x) / det };
 }
 
@@ -68,7 +75,13 @@ function crossing(p: Side, pc: number, q: Side, qc: number): { readonly x: numbe
  * index) move square to themselves by that much, and where it goes.
  * Throws when a side would turn over.
  */
-function offsetSides(topology: ConstructionRegionTopology, sides: readonly Side[], offsets: ReadonlyMap<number, number>): readonly { readonly nodeId: string; readonly position: ConstructionPosition }[] {
+function offsetSides(
+  topology: ConstructionRegionTopology,
+  sides: readonly Side[],
+  offsets: ReadonlyMap<number, number>,
+  /** A corner that goes exactly here, whatever its sides' angle -- the one being dragged. */
+  pinned?: { readonly nodeId: string; readonly delta: ConstructionPosition },
+): readonly { readonly nodeId: string; readonly position: ConstructionPosition }[] {
   const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
   const c = (i: number) => sides[i]!.c + (offsets.get(i) ?? 0);
   const placed = new Map<string, ConstructionPosition>();
@@ -79,7 +92,11 @@ function offsetSides(topology: ConstructionRegionTopology, sides: readonly Side[
     if ((offsets.has(i) || offsets.has(next)) && !placed.has(corner)) {
       const p = at.get(corner)!;
       const cross = crossing(side, c(i), sides[next]!, c(next));
-      placed.set(corner, cross ? { x: cross.x, y: p.y, z: cross.z } : { x: p.x + side.n.x * (offsets.get(i) ?? 0), y: p.y, z: p.z + side.n.z * (offsets.get(i) ?? 0) });
+      // Too shallow to slide along: the corner follows whichever side is pushed.
+      const pushed = offsets.has(i) ? side : sides[next]!;
+      const by = offsets.get(offsets.has(i) ? i : next)!;
+      placed.set(corner, pinned?.nodeId === corner ? { x: p.x + pinned.delta.x, y: p.y, z: p.z + pinned.delta.z }
+        : cross ? { x: cross.x, y: p.y, z: cross.z } : { x: p.x + pushed.n.x * by, y: p.y, z: p.z + pushed.n.z * by });
     }
     const offset = offsets.get(i);
     if (offset === undefined) return;
@@ -123,7 +140,7 @@ export function pushContourCorner(topology: ConstructionRegionTopology, nodeId: 
     if (side.nodes.at(-1) === nodeId) offsets.set(i, planDot(side.n, delta)).set((i + 1) % sides.length, planDot(sides[(i + 1) % sides.length]!.n, delta));
     else if (side.nodes.slice(1, -1).includes(nodeId)) offsets.set(i, planDot(side.n, delta));
   });
-  return offsets.size === 0 ? undefined : offsetSides(topology, sides, offsets);
+  return offsets.size === 0 ? undefined : offsetSides(topology, sides, offsets, { nodeId, delta });
 }
 
 /** `delta` kept only across the side `edgeId` belongs to, in plan -- how far a push moves it. */

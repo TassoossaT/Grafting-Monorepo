@@ -100,3 +100,18 @@ test("pressing just off a platform's side, on the ground, grabs that side instea
     assert.equal(runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform").length, 1, "no new area drawn");
   } finally { session.free(); }
 });
+
+test("a platform drawn a little crooked still resizes: near-straight edges are one side, shallow corners follow the push", () => {
+  const { runtime, session } = sessionFixture();
+  try {
+    // The south side is drawn with a slight kink at (2, 0.01), and a shallow corner at (8, 1) before the east side.
+    face(runtime, "f", [[0, 0], [2, 0.01], [4, 0], [8, 1], [8, 5], [0, 5]]);
+    const south = edgeBetween(runtime, "f", 0, 1);
+    for (const delta of [{ x: 0.1, y: 0, z: 0.1 }, { x: 0, y: 0, z: -0.5 }, { x: 0, y: 0, z: 0.5 }]) {
+      const plan = edit(runtime, "f", { kind: "edge", edgeId: south }, delta);
+      assert.equal(plan.kind, "apply", `${JSON.stringify(delta)}: ${plan.reason}`);
+    }
+    close(at(runtime, "f:0").x, 0, "the south-west corner slid along the west side only");
+    close(at(runtime, "f:5").z, 5, "the north side stayed");
+  } finally { session.free(); }
+});
