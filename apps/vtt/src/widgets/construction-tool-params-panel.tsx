@@ -18,7 +18,7 @@ import type {
   WallBrushParams,
   WallParams,
 } from "@/features/edit-construction";
-import type { SlopeSummary } from "@/features/edit-construction";
+import type { SpineChainShape } from "@/features/edit-construction";
 import { OPENING_KIND_COLOR, RECTANGLE_OPENING_SHAPE, TOWER_RADIUS_PRESETS, deriveFaceSize, isRectangleShape, openingPath, withOpeningKind } from "@/features/edit-construction";
 
 export interface ConstructionToolParamsPanelProps {
@@ -55,7 +55,7 @@ function CommitNumber(props: { readonly label: string; readonly value: number; r
  * A picked slope as a whole: its ends' heights and width, and -- for a
  * spiral -- its centre, radius, turns and direction. Each change edits it.
  */
-function SlopeSelectedFields(props: { readonly selected: SlopeSummary; readonly onChange: (next: SlopeSummary) => void }) {
+function SlopeSelectedFields(props: { readonly selected: SpineChainShape; readonly onChange: (next: SpineChainShape) => void }) {
   const { selected, onChange } = props;
   const spiral = selected.spiral;
   return (

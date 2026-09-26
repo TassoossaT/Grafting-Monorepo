@@ -1,4 +1,4 @@
-import { automaticCurve, controlRungId, controlSectionId, gradeSlopeSpans, hasTrait, reverseGeometry, SLOPE_SURFACE_TYPE, slopeFootprint, slopeSurface, spineControlNodeId } from "../../../../features/edit-construction/index.ts";
+import { automaticCurve, controlRungId, controlSectionId, gradeSpineSpans, hasTrait, reverseGeometry, SLOPE_SURFACE_TYPE, slopeFootprint, slopeSurface, spineControlNodeId } from "../../../../features/edit-construction/index.ts";
 import type {
   ConstructionEdgeSnapshot,
   ConstructionOrientedEdgeUse,
@@ -178,7 +178,7 @@ export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly Co
         },
       };
     });
-    const graded = gradeSlopeSpans(ctx.runtime, { nodes, edges: spans }, spans);
+    const graded = gradeSpineSpans(ctx.runtime, { nodes, edges: spans }, spans);
     const gradedNodes = new Map(graded.nodes.map((n) => [n.id, n.position]));
     const gradedSpans = new Map(graded.edges.map((e) => [e.edgeId, e]));
     nodes = nodes.map((n) => ({ ...n, position: gradedNodes.get(n.id) ?? n.position }));

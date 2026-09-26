@@ -93,6 +93,8 @@ export interface ConstructionTool<Id extends ConstructionToolId> {
   readonly id: Id;
   /** Presentation and sampling policy while this tool is active. */
   readonly handlePresentation?: "spine-points";
+  /** How this tool's dragged spine anchors snap -- the scene manipulator uses it too. */
+  readonly anchorSnap?: import("./curve-edit-gesture.ts").AnchorSnap;
   readonly useGridSnap?: boolean;
   defaultParams(): ToolParamsFor<Id>;
   /** Opt in to a stationary drawing preview between gestures. */

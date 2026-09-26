@@ -5,7 +5,7 @@ import { commitPathCloudIntent } from "../../path/path-cloud-transaction.ts";
 import { scopedToolId, type ConstructionTool, type ToolContext, type PointerSample, type ToolGesture } from "../core/tool-context.ts";
 import { createSpineEditBehavior } from "../core/spine-edit-behavior.ts";
 import { pathStrokeTool } from "./path-stroke-tool.ts";
-import { roadSnapTarget, roadSnapIsCurrent, showRoadSnap, type RoadSnapTarget } from "./road-body-target.ts";
+import { roadAnchorSnap, roadSnapTarget, roadSnapIsCurrent, showRoadSnap, type RoadSnapTarget } from "./road-body-target.ts";
 import { createFastRoadPreview } from "./road-preview-mesh.ts";
 
 const CHANNEL = "road-points";
@@ -16,7 +16,7 @@ type Gesture = { kind: "edit" } | { kind: "stroke"; origin?: PointerSample } | {
 const drafts = new WeakMap<ToolContext["runtime"], Draft>();
 const gestures = new WeakMap<ToolContext["runtime"], Gesture>();
 /** Editing a standing road by its points -- the spine editor every spine-built type shares. */
-const spine = createSpineEditBehavior({ ownsSpine: (surfaceType) => surfaceType === PATH_SURFACE_TYPE });
+const spine = createSpineEditBehavior({ ownsSpine: (surfaceType) => surfaceType === PATH_SURFACE_TYPE, snap: roadAnchorSnap });
 
 function seededGesture<G extends ToolGesture>(gesture: G, origin?: PointerSample): G {
   return origin ? { ...gesture, start: origin, samples: [origin, ...gesture.samples.slice(1)] } : gesture;
@@ -81,6 +81,7 @@ function startBranch(ctx: ToolContext, id: string | undefined, params: PathBrush
 export const pathPointsTool: ConstructionTool<"path-brush"> = {
   id: "path-brush",
   handlePresentation: "spine-points",
+  anchorSnap: roadAnchorSnap,
   useGridSnap: false,
   defaultParams: () => DEFAULT_TOOL_PARAMS["path-brush"],
   previewOnHover: true,

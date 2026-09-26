@@ -2,7 +2,7 @@ import { hasTrait } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionToolId, PreviewDescriptor, ToolParamsFor } from "../../../../features/edit-construction/index.ts";
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import type { ConstructionPosition, ConstructionRegionTopology, CubicBezier, CurveHandles, CurvePoint, CurveResult } from "../../../../ports/index.ts";
-import { createRoadMeshPreview } from "../paths/road-preview-mesh.ts";
+import { createRibbonMeshPreview } from "../shapes/ribbon-mesh-preview.ts";
 import type { ConstructionTool, PointerSample, ToolContext } from "./tool-context.ts";
 
 /**
@@ -274,12 +274,12 @@ export function createCurveDraftTool<Id extends ConstructionToolId>(options: Cur
     }
     const ribbons = curves.length === 0 ? [] : ctx.runtime.curveBatch({ tolerance: 0.08, commands: curves.map((curve) => ({ kind: "ribbon" as const, curve, offsets: [-width / 2, width / 2] as const })) });
     if (state.mode !== "spiral" || state.ends.length >= 2) report(ctx, state, curves, ribbons.map((r) => r.lengths[0] ?? 0));
-    return createRoadMeshPreview({
+    return createRibbonMeshPreview({
       ribbons,
       fallbackPoints: [anchors.at(-1)!, { ...current.point, y: anchors.at(-1)!.y }],
       anchors,
       cursor: current.point,
-      bedWidth: width,
+      width,
       color: options.color,
       opacity: PREVIEW_OPACITY,
     });
@@ -321,7 +321,7 @@ export function createCurveDraftTool<Id extends ConstructionToolId>(options: Cur
       const current = gesture.current;
       const width = Math.max(0.1, options.widthOf(params));
       // Before the first click: only where it would start.
-      if (state.ends.length === 0) return createRoadMeshPreview({ anchors: [], cursor: current.point, bedWidth: width, color: options.color, opacity: PREVIEW_OPACITY });
+      if (state.ends.length === 0) return createRibbonMeshPreview({ anchors: [], cursor: current.point, width, color: options.color, opacity: PREVIEW_OPACITY });
       if (current.shiftKey && current.screenY !== undefined) {
         state.shift ??= { screenY: current.screenY, base: state.rise ?? options.riseOf(params) };
         state.rise = state.shift.base + Math.round((state.shift.screenY - current.screenY) / 40 / 0.25) * 0.25;

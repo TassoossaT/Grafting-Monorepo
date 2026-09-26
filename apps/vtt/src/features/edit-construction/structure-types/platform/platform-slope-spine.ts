@@ -12,7 +12,7 @@ import type {
 } from "@/ports";
 
 import { ribbonSections, unionRibbonOutlines } from "../../topology/bezier-curve.ts";
-import { isSpineControlNodeId, ownedBy, spineComponent, spineRibbons } from "../../spine/index.ts";
+import { gradeSpineSpans, isSpineControlNodeId, ownedBy, spineComponent, spineRibbons, type SpineGrade } from "../../spine/index.ts";
 import type { MotionContext, SpineRegeneration, SpineRegenerationInput } from "../structure-type.ts";
 
 /**
@@ -23,7 +23,7 @@ import type { MotionContext, SpineRegeneration, SpineRegenerationInput } from ".
  * Plan and height are kept apart, as ramp tools do: the spine's plan is
  * edited freely, and only its two free ends carry authored heights. Every
  * point between them is re-graded on each regeneration so the whole run
- * climbs at one constant grade by plan length (`gradeSlopeSpans`, computed
+ * climbs at one constant grade by plan length (`gradeSpineSpans`, computed
  * in Rust). A spiral is this same ramp whose plan is a helix. What differs from a road is only the last step -- a road unions its
  * ribbons in plan, and a spiral's turns overlap in plan, so a sloped platform
  * keeps **one face per span** instead: that span's ribbon outline, sampled
@@ -149,75 +149,8 @@ export function slopeFootprint(port: Pick<BezierPort, "planarBoolean">, surface:
 export { prospectiveGraph } from "../../spine/index.ts";
 import { prospectiveGraph } from "../../spine/index.ts";
 
-const xyz = (p: ConstructionPosition) => [p.x, p.y, p.z] as const;
-
-/** `spans`, when they form one open chain, walked from one free end to the other; `undefined` for a branch or a loop. */
-function openChain(spans: readonly ConstructionEdgeSnapshot[]): readonly { readonly span: ConstructionEdgeSnapshot; readonly reversed: boolean }[] | undefined {
-  const incident = new Map<string, ConstructionEdgeSnapshot[]>();
-  for (const span of spans) for (const id of [span.startNodeId, span.endNodeId]) incident.set(id, [...(incident.get(id) ?? []), span]);
-  if ([...incident.values()].some((list) => list.length > 2)) return undefined;
-  const ends = [...incident].filter(([, list]) => list.length === 1).map(([id]) => id).sort();
-  if (ends.length !== 2) return undefined;
-  const walk: { span: ConstructionEdgeSnapshot; reversed: boolean }[] = [];
-  let at = ends[0]!;
-  const used = new Set<string>();
-  while (walk.length < spans.length) {
-    const next = incident.get(at)!.find((span) => !used.has(span.edgeId));
-    if (!next) return undefined;
-    used.add(next.edgeId);
-    const reversed = next.endNodeId === at;
-    walk.push({ span: next, reversed });
-    at = reversed ? next.startNodeId : next.endNodeId;
-  }
-  return walk;
-}
-
-/**
- * The control nodes and spans of `spans` re-graded: the chain's two free
- * ends keep their heights, and every point between takes the height one
- * constant grade by plan length gives it. The plan is untouched. Nothing is
- * returned for a spine that is not one open chain.
- */
-export function gradeSlopeSpans(
-  port: Pick<BezierPort, "curveBatch">,
-  graph: ConstructionGraphSnapshot,
-  spans: readonly ConstructionEdgeSnapshot[],
-): {
-  readonly nodes: readonly { readonly id: string; readonly position: ConstructionPosition }[];
-  readonly edges: readonly ConstructionEdgeSnapshot[];
-  /** Rise over plan length along the whole chain, when it was graded. */
-  readonly grade?: number;
-} {
-  const chain = openChain(spans.filter((span) => span.curve));
-  if (!chain || chain.length === 0) return { nodes: [], edges: [] };
-  const positions = new Map(graph.nodes.map((node) => [node.id, node.position]));
-  const curves = port.curveBatch({ tolerance: TOLERANCE, commands: chain.map(({ span, reversed }) => ({
-    kind: "resolve" as const, handles: span.curve!,
-    start: xyz(positions.get(span.startNodeId)!), end: xyz(positions.get(span.endNodeId)!),
-  })) }).map((result, i) => {
-    const curve = result.curves[0]!;
-    return chain[i]!.reversed ? { points: [curve.points[3], curve.points[2], curve.points[1], curve.points[0]] as const } : curve;
-  });
-  const first = curves[0]!.points[0][1], last = curves.at(-1)!.points[3][1];
-  const result = port.curveBatch({ tolerance: TOLERANCE, commands: [{ kind: "grade", curves, start: first, end: last }] })[0]!;
-  const graded = result.curves;
-  const run = result.lengths.reduce((sum, length) => sum + length, 0);
-  const nodes = new Map<string, ConstructionPosition>();
-  const edges = chain.map(({ span, reversed }, i) => {
-    const walked = graded[i]!.points;
-    const [p0, p1, p2, p3] = reversed ? [walked[3], walked[2], walked[1], walked[0]] : walked;
-    for (const [id, p] of [[span.startNodeId, p0], [span.endNodeId, p3]] as const) {
-      const standing = positions.get(id)!;
-      if (Math.abs(standing.y - p[1]) > 1e-9) nodes.set(id, { ...standing, y: p[1] });
-    }
-    const minus = (a: CurvePoint, b: CurvePoint): CurvePoint => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-    return { ...span, curve: { ...span.curve!, start: minus(p1, p0), end: minus(p2, p3) } };
-  });
-  return { nodes: [...nodes].map(([id, position]) => ({ id, position })), edges, grade: run > 0 ? Math.abs(last - first) / run : undefined };
-}
-
 /** `patch` with `extra` laid over it: a later node or edge of the same id wins. */
-function overlaid(patch: ConstructionGraphPatch, extra: ReturnType<typeof gradeSlopeSpans>): ConstructionGraphPatch {
+function overlaid(patch: ConstructionGraphPatch, extra: SpineGrade): ConstructionGraphPatch {
   const nodes = new Map(patch.nodes.map((node) => [node.id, node]));
   for (const node of extra.nodes) nodes.set(node.id, node);
   const edges = new Map(patch.edges.map((edge) => [edge.edgeId, edge]));
@@ -230,7 +163,7 @@ export function regenerateSlopeSpine(input: SpineRegenerationInput): SpineRegene
   const { snapshot } = input;
   const seeds = [...input.graphPatch.nodes.map((node) => node.id), ...input.graphPatch.edges.flatMap((edge) => [edge.startNodeId, edge.endNodeId])];
   const drafted = prospectiveGraph(snapshot, input.graphPatch);
-  const graphPatch = overlaid(input.graphPatch, gradeSlopeSpans(input.port, drafted, spineComponent(drafted, seeds).edges.filter(isSlopeSpan)));
+  const graphPatch = overlaid(input.graphPatch, gradeSpineSpans(input.port, drafted, spineComponent(drafted, seeds).edges.filter(isSlopeSpan)));
   const after = prospectiveGraph(snapshot, graphPatch);
   const spans = spineComponent(after, seeds).edges.filter((edge) => edge.curve && isSlopeSpan(edge));
   const before = spineComponent(snapshot, seeds).edges.filter(isSlopeSpan);

@@ -94,5 +94,5 @@ export const slopedPlatformStructureType: StructureTypeDefinition = Object.freez
   motionInfluences: slopeMotionInfluences,
   deriveMotion: deriveSlopeMotion,
   validateMotion: validateSlopeMotion,
-  spine: Object.freeze({ defaultOffsets: SLOPE_DEFAULT_OFFSETS, regenerate: regenerateSlopeSpine, planOnly: true, pivot: true, endHandles: true }),
+  spine: Object.freeze({ defaultOffsets: SLOPE_DEFAULT_OFFSETS, regenerate: regenerateSlopeSpine, planOnly: true, globalHandles: ["pivot", "height", "turns"] as const }),
 });

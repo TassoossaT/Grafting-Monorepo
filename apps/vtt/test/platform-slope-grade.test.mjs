@@ -313,7 +313,8 @@ test("a picked curved ramp takes new end heights and a new width from the panel"
 });
 
 test("every spine has a pivot: a spiral's at its centre, a free ramp's at the middle of its points", async () => {
-  const { spinePivots } = await import("../src/features/edit-construction/index.ts");
+  const { spineGlobalHandles } = await import("../src/features/edit-construction/index.ts");
+  const spinePivots = (graph) => spineGlobalHandles(graph).filter((h) => h.kind === "pivot");
   const { ctx, runtime, session } = sessionFixture();
   try {
     drawSpiral(slopeSpiralTool, ctx, { center: { x: 10, y: 0, z: -4 }, radius: 3, turns: 1.5, startY: 1, params: { width: 1.5, rise: 3 } });
@@ -328,7 +329,8 @@ test("every spine has a pivot: a spiral's at its centre, a free ramp's at the mi
 });
 
 test("dragging a spiral's pivot moves the whole spiral in plan, arc centres and all, keeping its heights", async () => {
-  const { spinePivots } = await import("../src/features/edit-construction/index.ts");
+  const { spineGlobalHandles } = await import("../src/features/edit-construction/index.ts");
+  const spinePivots = (graph) => spineGlobalHandles(graph).filter((h) => h.kind === "pivot");
   const { ctx, runtime, session, calls } = sessionFixture();
   Object.assign(runtime, { showPreview() {}, clearPreview() {} });
   const params = { width: 1.5, rise: 3 };
@@ -352,7 +354,8 @@ test("dragging a spiral's pivot moves the whole spiral in plan, arc centres and 
 });
 
 test("the scene manipulator on a pivot lifts the whole spiral, and picking the pivot mirrors it into the panel", async () => {
-  const { spinePivots } = await import("../src/features/edit-construction/index.ts");
+  const { spineGlobalHandles } = await import("../src/features/edit-construction/index.ts");
+  const spinePivots = (graph) => spineGlobalHandles(graph).filter((h) => h.kind === "pivot");
   const { beginCurveGesture } = await import("../src/composition/tabletop/tools/core/curve-edit-gesture.ts");
   const { ctx, runtime, session, calls } = sessionFixture();
   Object.assign(runtime, { showPreview() {}, clearPreview() {} });
@@ -372,22 +375,24 @@ test("the scene manipulator on a pivot lifts the whole spiral, and picking the p
 });
 
 test("a spiral's end handles: height above its end, turns just past it; a free ramp only has height", async () => {
-  const { spineEndHandles } = await import("../src/features/edit-construction/index.ts");
+  const { spineGlobalHandles } = await import("../src/features/edit-construction/index.ts");
+  const spineEndHandles = (graph) => spineGlobalHandles(graph).filter((h) => h.kind !== "pivot");
   const { ctx, runtime, session } = sessionFixture();
   try {
     drawSpiral(slopeSpiralTool, ctx, { center: { x: 0, y: 0, z: 0 }, radius: 3, turns: 1, startY: 0, params: { width: 1.5, rise: 4 } });
     commitPlatformSlope(ctx, [{ x: 20, y: 0, z: 0 }, { x: 24, y: 0, z: 2 }, { x: 28, y: 2, z: 0 }], { width: 1.5 });
     const handles = spineEndHandles(runtime.getGraphSnapshot());
-    const spiral = handles.filter((h) => h.center);
+    const spiral = handles.filter((h) => h.kind === "turns");
     assert.deepEqual(handles.filter((h) => h.kind === "height").length, 2);
     assert.equal(spiral.length, 1, "only the spiral winds");
-    const end = node(runtime, spiral[0].endNodeId).position;
+    const end = node(runtime, spiral[0].ends[1]).position;
     assert.ok(Math.abs(Math.hypot(spiral[0].position.x - end.x, spiral[0].position.z - end.z) - 1.2) < 1e-6, "just past the end");
   } finally { session.free(); }
 });
 
 test("dragging the height handle up raises the far end; the ramp stays graded", async () => {
-  const { spineEndHandles } = await import("../src/features/edit-construction/index.ts");
+  const { spineGlobalHandles } = await import("../src/features/edit-construction/index.ts");
+  const spineEndHandles = (graph) => spineGlobalHandles(graph).filter((h) => h.kind !== "pivot");
   const { ctx, runtime, session, calls } = sessionFixture();
   Object.assign(runtime, { showPreview() {}, clearPreview() {} });
   const params = { width: 1.5, rise: 2 };
@@ -406,7 +411,8 @@ test("dragging the height handle up raises the far end; the ramp stays graded", 
 });
 
 test("winding the turns handle a quarter round adds a quarter turn at the same grade", async () => {
-  const { spineEndHandles } = await import("../src/features/edit-construction/index.ts");
+  const { spineGlobalHandles } = await import("../src/features/edit-construction/index.ts");
+  const spineEndHandles = (graph) => spineGlobalHandles(graph).filter((h) => h.kind !== "pivot");
   const { beginCurveGesture } = await import("../src/composition/tabletop/tools/core/curve-edit-gesture.ts");
   const { ctx, runtime, session, calls } = sessionFixture();
   Object.assign(runtime, { showPreview() {}, clearPreview() {} });
@@ -423,8 +429,8 @@ test("winding the turns handle a quarter round adds a quarter turn at the same g
     }
     gesture.commit();
     const [pivotSpan] = slopeSpans(runtime);
-    const { describeSlope } = await import("../src/features/edit-construction/index.ts");
-    const summary = describeSlope(runtime.getGraphSnapshot(), pivotSpan.startNodeId);
+    const { describeSpineChain } = await import("../src/features/edit-construction/index.ts");
+    const summary = describeSpineChain(runtime.getGraphSnapshot(), pivotSpan.startNodeId);
     assert.ok(Math.abs(summary.spiral.turns - 1.25) < 1e-6, `${JSON.stringify(summary)} ${JSON.stringify(calls.feedback.slice(-2))}`);
     assert.ok(Math.abs(summary.endHeight - 5) < 1e-6, "same grade: a quarter turn more climbs a quarter more");
     assert.equal(slopeSpans(runtime).length, 5);

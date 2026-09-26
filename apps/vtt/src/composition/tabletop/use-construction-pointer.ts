@@ -12,7 +12,7 @@ import { GRID_SNAP_UNIT } from "../../adapters/rendering/index.ts";
 import type { TabletopRuntime } from "./tabletop-runtime.ts";
 import { toolFor } from "./tools/index.ts";
 import { beginCurveGesture, type CurveGesture } from "./tools/core/curve-edit-gesture.ts";
-import { isSpinePivotId, spineEndHandleAt, spineEndHandleOf, spinePivotAt } from "../../features/edit-construction/index.ts";
+import { shownSpineGlobalHandleAt, spineGlobalHandleOf } from "../../features/edit-construction/index.ts";
 import { gestureMoved } from "./tools/core/tool-context.ts";
 import {
   edgeOverlayChannel,
@@ -21,15 +21,11 @@ import {
 } from "./tools/core/edge-overlay.ts";
 import type { ConstructionToolFeedback, PointerSample, ToolContext } from "./tools/index.ts";
 
-/** A spine handle the scene manipulator can sit on -- a control point, or a whole spine's pivot -- where it is now. */
+/** A spine handle the scene manipulator can sit on -- a control point, or a whole-spine handle -- where it is now. */
 function spineHandleAt(runtime: Pick<TabletopRuntime, "getGraphSnapshot">, id: string): { readonly id: string; readonly position: { x: number; y: number; z: number } } | undefined {
   const graph = runtime.getGraphSnapshot();
-  if (isSpinePivotId(id)) {
-    const pivot = spinePivotAt(graph, id);
-    return pivot && { id: pivot.id, position: pivot.position };
-  }
-  if (spineEndHandleOf(id)) {
-    const handle = spineEndHandleAt(graph, id);
+  if (spineGlobalHandleOf(id)) {
+    const handle = shownSpineGlobalHandleAt(graph, id);
     return handle && { id: handle.id, position: handle.position };
   }
   const node = graph.nodes.find((n) => n.id === id && n.id.startsWith("spine:"));
@@ -156,11 +152,12 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
         selectedPoint.current = node?.id;
         runtime.setPointManipulator?.(viewId, node && !branchModifier.current ? {
           // Branching starts a new structure from the point, which only a tool that handles the action can do.
-          id: node.id, position: node.position, branchAction: toolFor(activeTool).onSelectionAction !== undefined && !isSpinePivotId(node.id) && !spineEndHandleOf(node.id),
+          id: node.id, position: node.position, branchAction: toolFor(activeTool).onSelectionAction !== undefined && !spineGlobalHandleOf(node.id),
           onChange(phase, position) {
             if (phase === "start") {
               manipulatorGesture.current?.cancel();
-              manipulatorGesture.current = beginCurveGesture(ctx, { nodeId: node.id, point: position }, { mode: "shape", insertOnClick: false, spatialTarget: true });
+              const snap = toolFor(optionsRef.current.activeTool).anchorSnap;
+              manipulatorGesture.current = beginCurveGesture(ctx, { nodeId: node.id, point: position }, { mode: "shape", insertOnClick: false, spatialTarget: true, ...(snap ? { snap } : {}) });
             } else if (phase === "move") {
               const sample = { nodeId: node.id, point: position };
               manipulatorGesture.current?.move({ start: sample, current: sample, samples: [sample] });

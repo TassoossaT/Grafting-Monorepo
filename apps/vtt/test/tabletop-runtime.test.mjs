@@ -1099,7 +1099,7 @@ test("road presentation exposes only spine anchors and insertion points, restore
     assert.equal(JSON.stringify(graph),before);assert.equal(runtime.getSnapshot(),snapshot);
     const count=render.changes.length;runtime.setConstructionHandlePresentation("spine-points");assert.equal(render.changes.length,count);
     runtime.setConstructionHandlePresentation("all");
-    assert.ok(shown().includes("mesh:vertex"));assert.ok(shown().includes(curvePickId("spine-edge:a",1)));
+    assert.ok(shown().includes("mesh:vertex"));assert.ok(shown().includes(curvePickId("spine-edge:a","midpoint")));assert.ok(!shown().includes(curvePickId("spine-edge:a",1)));
     runtime.setConstructionHandlePresentation("spine-points");
     graph={...graph,nodes:graph.nodes.map(n=>n.id==="spine:b"?{...n,position:{x:11,y:0,z:2}}:n)};
     runtime.addPatch(EMPTY_PATCH,"local","updated-spine");

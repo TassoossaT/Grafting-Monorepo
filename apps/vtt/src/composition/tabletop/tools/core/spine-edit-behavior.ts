@@ -1,9 +1,9 @@
 import type { ConstructionToolId, StructureEditParams } from "@/features/edit-construction";
 
-import { curvePick, isSpinePivotId, spineEndHandleAt, spineEndHandleOf, spinePivotAt, structureTypeFor } from "../../../../features/edit-construction/index.ts";
+import { curvePick, shownSpineGlobalHandleAt, spineGlobalHandleOf, structureTypeFor } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionPosition } from "../../../../ports/index.ts";
-import { roadBodyTarget } from "../paths/road-body-target.ts";
-import { beginCurveGesture, type CurveGesture, type CurveGestureOptions } from "./curve-edit-gesture.ts";
+import { spineBodyTarget } from "./spine-body-target.ts";
+import { beginCurveGesture, type AnchorSnap, type CurveGesture, type CurveGestureOptions } from "./curve-edit-gesture.ts";
 import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
 
 /**
@@ -28,6 +28,8 @@ export interface SpineEditOptions {
   readonly drafting?: (ctx: ToolContext) => boolean;
   /** Told whenever the selected spine point changes -- `undefined` when nothing is selected. */
   readonly onSelect?: (ctx: ToolContext, nodeId: string | undefined) => void;
+  /** How a dragged anchor snaps; absent, anchors never snap. */
+  readonly snap?: AnchorSnap;
 }
 
 /** What a press on a spine resolved to: the handle it actually takes, and how to drag it. */
@@ -59,7 +61,7 @@ export interface SpineEditBehavior {
 
 const xyz = (p: ConstructionPosition) => [p.x, p.y, p.z] as const;
 
-export function createSpineEditBehavior({ ownsSpine, onSelect }: SpineEditOptions): SpineEditBehavior {
+export function createSpineEditBehavior({ ownsSpine, onSelect, snap }: SpineEditOptions): SpineEditBehavior {
   const drags = new WeakMap<ToolContext["runtime"], CurveGesture>();
   const selections = new WeakMap<ToolContext["runtime"], string>();
   const owned = (surfaceType: string | undefined) => surfaceType !== undefined && structureTypeFor(surfaceType)?.spine !== undefined && ownsSpine(surfaceType);
@@ -75,7 +77,7 @@ export function createSpineEditBehavior({ ownsSpine, onSelect }: SpineEditOption
       if (info) selections.set(ctx.runtime, info.id); else selections.delete(ctx.runtime);
       ctx.reportSelection(info);
       onSelect?.(ctx, info?.id);
-    } }, sample, owned, options);
+    } }, sample, owned, snap ? { ...options, snap } : options);
   }
 
   /** A control point or span midpoint of an owned spine, placed where the handle actually is. */
@@ -101,15 +103,9 @@ export function createSpineEditBehavior({ ownsSpine, onSelect }: SpineEditOption
 
   return {
     pick(ctx, sample) {
-      if (sample.nodeId && isSpinePivotId(sample.nodeId)) {
-        const pivot = spinePivotAt(ctx.runtime.getGraphSnapshot(), sample.nodeId);
-        return pivot && owned(pivot.owner) && structureTypeFor(pivot.owner!)?.spine?.pivot === true
-          ? { sample: { ...sample, point: pivot.position }, options: { mode: "shape", insertOnClick: false, dragThreshold: 5, pointerOrigin: sample.point } }
-          : undefined;
-      }
-      if (sample.nodeId && spineEndHandleOf(sample.nodeId)) {
-        const handle = spineEndHandleAt(ctx.runtime.getGraphSnapshot(), sample.nodeId);
-        return handle && owned(handle.owner) && structureTypeFor(handle.owner!)?.spine?.endHandles === true
+      if (sample.nodeId && spineGlobalHandleOf(sample.nodeId)) {
+        const handle = shownSpineGlobalHandleAt(ctx.runtime.getGraphSnapshot(), sample.nodeId);
+        return handle && owned(handle.owner)
           ? { sample: { ...sample, point: handle.position }, options: { mode: "shape", insertOnClick: false, dragThreshold: 5, pointerOrigin: sample.point } }
           : undefined;
       }
@@ -120,12 +116,11 @@ export function createSpineEditBehavior({ ownsSpine, onSelect }: SpineEditOption
           ? { mode: "shape", curveMode: "free", insertOnClick: true, dragThreshold: 5, pointerOrigin: sample.point }
           : { mode: "shape", insertOnClick: false, dragThreshold: 5, pointerOrigin: sample.point } };
       }
-      const body = roadBodyTarget(ctx, sample, undefined, owned);
+      const body = spineBodyTarget(ctx, sample, undefined, owned);
       return body && { sample: body.sample, options: { ...body.options, curveMode: "free", insertOnClick: curvePick(body.sample.nodeId!)?.index === "midpoint" } };
     },
     isHandle(ctx, sample) {
-      if (sample.nodeId && isSpinePivotId(sample.nodeId)) return owned(spinePivotAt(ctx.runtime.getGraphSnapshot(), sample.nodeId)?.owner);
-      if (sample.nodeId && spineEndHandleOf(sample.nodeId)) return owned(spineEndHandleAt(ctx.runtime.getGraphSnapshot(), sample.nodeId)?.owner);
+      if (sample.nodeId && spineGlobalHandleOf(sample.nodeId)) return owned(shownSpineGlobalHandleAt(ctx.runtime.getGraphSnapshot(), sample.nodeId)?.owner);
       const pick = sample.nodeId ? curvePick(sample.nodeId) : undefined;
       return pick !== undefined && owned(ctx.runtime.getGraphSnapshot().edges.find((e) => e.edgeId === pick.edgeId)?.curve?.surfaceType);
     },
@@ -167,7 +162,8 @@ export function createSpineEditBehavior({ ownsSpine, onSelect }: SpineEditOption
     removeSelected(ctx) {
       const id = selections.get(ctx.runtime);
       // A pivot stands for the whole spine; deleting a spine is not a point removal.
-      if (!id || isSpinePivotId(id) || spineEndHandleOf(id)) return false;
+      // A global handle stands for the whole spine; deleting a spine is not a point removal.
+      if (!id || spineGlobalHandleOf(id)) return false;
       const node = ctx.runtime.getGraphSnapshot().nodes.find((n) => n.id === id);
       if (!node) { select(ctx); return false; }
       beginEdit(ctx, { nodeId: id, point: node.position }, { mode: "shape", curveAction: "remove-anchor", allowShapeChange: true })?.commit();
@@ -198,6 +194,7 @@ export function withSpineEditing<Id extends ConstructionToolId>(tool: Constructi
   return {
     ...tool,
     handlePresentation: "spine-points",
+    ...(options.snap ? { anchorSnap: options.snap } : {}),
     previewFor(gesture, params, ctx) {
       return spine.isActive(ctx) ? undefined : tool.previewFor?.(gesture, params, ctx);
     },

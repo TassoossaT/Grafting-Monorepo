@@ -1,4 +1,4 @@
-import { curveEdgesOf, curveHandles, curvePick, panelHeightWidgets, spineEndHandles, spinePivots, structureTypeFor } from "../../features/edit-construction/index.ts";
+import { curveEdgesOf, curveHandles, curvePick, panelHeightWidgets, shownSpineGlobalHandles } from "../../features/edit-construction/index.ts";
 import type { BezierPort } from "../../ports/bezier-port.ts";
 import type { RenderPointManipulator } from "../../ports/scene-render-port.ts";
 import type { ConstructionPlanarRequest, ConstructionPlanarShape, ConstructionMotionRequest, ConstructionMotionPlan, ConstructionNodeMotion } from "../../ports/index.ts";
@@ -328,8 +328,8 @@ export class AppTabletopRuntime implements TabletopRuntime {
   #pointHandlesOnly = false;
   #pointHandleIds = new Set<string>();
   #bezierHandleIds = new Set<string>();
-  /** Whole-spine pivot handles currently uploaded -- see `spinePivots`. */
-  #pivotHandleIds = new Set<string>();
+  /** Whole-spine handles currently uploaded -- see `shownSpineGlobalHandles`. */
+  #globalHandleIds = new Set<string>();
   #panelHeightWidgetIds = new Set<string>();
   /** Surfaces holding pinned nodes; `undefined` until next needed after a restore. A host edit moves those nodes without naming them. */
   #pinnedSurfaceRefs: Set<string> | undefined;
@@ -628,22 +628,21 @@ export class AppTabletopRuntime implements TabletopRuntime {
     const graph = this.#construction.getGraphSnapshot();
     const edges = curveEdgesOf(graph, contour, this.#construction);
     const shownEdges = this.#pointHandlesOnly ? edges.filter(e => e.store === "spine") : edges;
-    const handles = curveHandles(shownEdges, this.#construction).filter(h => !this.#pointHandlesOnly || curvePick(h.id)?.index === "midpoint");
-    // One whole-structure handle per spine, shown with its points.
-    const pivots = this.#pointHandlesOnly ? spinePivots(graph).filter((pivot) => pivot.owner !== undefined && structureTypeFor(pivot.owner)?.spine?.pivot === true) : [];
-    const ends = this.#pointHandlesOnly ? spineEndHandles(graph).filter((handle) => handle.owner !== undefined && structureTypeFor(handle.owner)?.spine?.endHandles === true) : [];
-    const livePivots = new Set([...pivots, ...ends].map((handle) => handle.id));
-    for (const id of this.#pivotHandleIds) if (!livePivots.has(id)) this.#removeNodeHandle(id, origin, causeId, generation);
+    const handles = curveHandles(shownEdges, this.#construction);
+    // The whole-spine handles each owner declares, shown with its points.
+    const globals = this.#pointHandlesOnly ? shownSpineGlobalHandles(graph) : [];
+    const liveGlobals = new Set(globals.map((handle) => handle.id));
+    for (const id of this.#globalHandleIds) if (!liveGlobals.has(id)) this.#removeNodeHandle(id, origin, causeId, generation);
     if (this.#pointHandlesOnly) {
       const anchors = new Set(shownEdges.flatMap(e => [e.startNodeId,e.endNodeId]));
-      this.#pointHandleIds = new Set([...anchors,...handles.map(h => h.id),...livePivots]);
+      this.#pointHandleIds = new Set([...anchors,...handles.map(h => h.id),...liveGlobals]);
       for (const id of [...this.#nodeHandleRevisions.keys()]) if (!this.#pointHandleIds.has(id)) this.#removeNodeHandle(id,origin,causeId,generation);
       for (const node of graph.nodes) if (anchors.has(node.id)) this.#uploadNodeHandle(node.id,node.position,origin,causeId,generation);
     }
     // After the allow-list above names them: `#uploadNodeHandle` drops any
     // handle it does not, which would lose a spine's pivot on its first sync.
-    for (const handle of [...pivots, ...ends]) this.#uploadNodeHandle(handle.id, handle.position, origin, causeId, generation);
-    this.#pivotHandleIds = livePivots;
+    for (const handle of globals) this.#uploadNodeHandle(handle.id, handle.position, origin, causeId, generation);
+    this.#globalHandleIds = liveGlobals;
     const live = new Set(handles.map((h) => h.id));
     for (const id of this.#bezierHandleIds) if (!live.has(id)) this.#removeNodeHandle(id, origin, causeId, generation);
     for (const handle of handles) this.#uploadNodeHandle(handle.id, handle.position, origin, causeId, generation);

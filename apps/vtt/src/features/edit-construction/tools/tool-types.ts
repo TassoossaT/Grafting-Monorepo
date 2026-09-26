@@ -6,7 +6,7 @@
  * (the tool implementations) and `adapters/rendering/` (turning a
  * {@link PreviewDescriptor} into an actual scene item).
  */
-import type { SlopeSummary } from "../structure-types/platform/slope-summary.ts";
+import type { SpineChainShape } from "../spine/spine-open-chain.ts";
 
 export type ConstructionToolId =
   | "navigate"
@@ -246,12 +246,12 @@ export interface ToolParamsByTool {
    * `rise` is its climb when the end is not on a floor. `selected` mirrors the
    * slope picked for editing: changing it edits that slope.
    */
-  readonly "slope-spiral": { readonly width: number; readonly rise: number; readonly selected?: SlopeSummary };
+  readonly "slope-spiral": { readonly width: number; readonly rise: number; readonly selected?: SpineChainShape };
   /**
    * A curved ramp, drawn in one of the shared spine creation modes. `rise` is
    * its climb when the end is not on a floor; it climbs at one constant grade.
    */
-  readonly "slope-curve": { readonly width: number; readonly rise: number; readonly mode?: "points" | "straight" | "arc" | "connect" | "spiral"; readonly selected?: SlopeSummary };
+  readonly "slope-curve": { readonly width: number; readonly rise: number; readonly mode?: "points" | "straight" | "arc" | "connect" | "spiral"; readonly selected?: SpineChainShape };
   readonly "path-brush": PathBrushParams;
   readonly "wall-brush": WallBrushParams;
   readonly "wall-line": WallParams;

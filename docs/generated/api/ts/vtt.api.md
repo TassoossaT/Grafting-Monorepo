@@ -1963,6 +1963,10 @@ on `onClick`). `composition/tabletop/use-construction-pointer.ts` is the
 only caller and never branches on `id` -- it just invokes whichever hook
 the active tool defines.
 
+### `property vtt.curve-draft.CurveDraftTool.anchorSnap?: AnchorSnap`
+
+How this tool's dragged spine anchors snap -- the scene manipulator uses it too.
+
 ### `property vtt.curve-draft.CurveDraftTool.handlePresentation?: "spine-points"`
 
 Presentation and sampling policy while this tool is active.
@@ -2077,6 +2081,18 @@ How each mode is named to the person drawing.
 
 A creation tool drawing spine plans in the modes above; its owner only commits what it is handed.
 
+### `interface vtt.curve-edit-gesture.AnchorSnap`
+
+How a dragged spine anchor snaps onto something else -- a road onto another
+road's node or span, say -- and how the snap is shown. A tool supplies its
+own; the gesture only asks it.
+
+### `method vtt.curve-edit-gesture.AnchorSnap.find(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): PointerSample | undefined`
+
+### `method vtt.curve-edit-gesture.AnchorSnap.show(ctx: ToolContext, target?: PointerSample): void`
+
+Shows `target` as the snap, or clears it when absent.
+
 ### `interface vtt.curve-edit-gesture.CurveGesture`
 
 ### `method vtt.curve-edit-gesture.CurveGesture.cancel(): void`
@@ -2085,7 +2101,7 @@ A creation tool drawing spine plans in the modes above; its owner only commits w
 
 ### `method vtt.curve-edit-gesture.CurveGesture.move(gesture: ToolGesture): void`
 
-### `type vtt.curve-edit-gesture.CurveGestureOptions = StructureEditParams & { allowShapeChange?: boolean; dragThreshold?: number; insertOnClick?: boolean; parameter?: number; pointerOrigin?: ConstructionPosition; spatialTarget?: boolean }`
+### `type vtt.curve-edit-gesture.CurveGestureOptions = StructureEditParams & { allowShapeChange?: boolean; dragThreshold?: number; insertOnClick?: boolean; parameter?: number; pointerOrigin?: ConstructionPosition; snap?: AnchorSnap; spatialTarget?: boolean }`
 
 ### `function vtt.curve-edit-gesture.beginCurveGesture(ctx: ToolContext, sample: PointerSample, ownsTypeOrParams?: CurveGestureOptions | ((surfaceType: string) => boolean), params?: CurveGestureOptions): CurveGesture | undefined`
 
@@ -2156,6 +2172,67 @@ not any construction effect. Exists so `tool-registry.ts` has an entry for
 every `ConstructionToolId` and `use-construction-pointer.ts` never needs a
 "no tool selected" special case.
 
+### `interface vtt.selection-mirror.SelectionMirror`
+
+### `method vtt.selection-mirror.SelectionMirror.onParamsChange(ctx: ToolContext, next: ToolParamsFor<Id>): void`
+
+### `method vtt.selection-mirror.SelectionMirror.onSelect(ctx: ToolContext, selectedId: string | undefined): void`
+
+### `interface vtt.selection-mirror.SelectionMirrorOptions`
+
+A tool's picked structure, mirrored into the tool's own params so its
+panel shows it, and edited back from them: a changed value is applied to
+what was picked. Nothing here knows what is picked or how it is edited --
+the options say how to read it, compare it, apply a change and where in
+the params it lives.
+
+Wire `onSelect` to whatever reports a pick (`undefined` for none) and
+`onParamsChange` to the tool's own hook.
+
+### `property vtt.selection-mirror.SelectionMirrorOptions.apply: (ctx: ToolContext, selectedId: string, next: Value) => string | undefined`
+
+Edits the picked structure to `next`; returns the id that names it afterwards. Throws to refuse.
+
+### `property vtt.selection-mirror.SelectionMirrorOptions.describe: (ctx: ToolContext, selectedId: string) => Value | undefined`
+
+What `selectedId` is as a whole, or `undefined` when it is nothing this mirror edits.
+
+### `property vtt.selection-mirror.SelectionMirrorOptions.id: Id`
+
+### `property vtt.selection-mirror.SelectionMirrorOptions.messages: { applied: string; refused: string }`
+
+Said when a change was applied, and when one was refused.
+
+### `property vtt.selection-mirror.SelectionMirrorOptions.read: (params: ToolParamsFor<Id>) => Value | undefined`
+
+### `property vtt.selection-mirror.SelectionMirrorOptions.same: (a: Value, b: Value) => boolean`
+
+### `property vtt.selection-mirror.SelectionMirrorOptions.write: (params: ToolParamsFor<Id>, value: Value | undefined) => ToolParamsFor<Id>`
+
+### `function vtt.selection-mirror.createSelectionMirror(options: SelectionMirrorOptions<Id, Value>): SelectionMirror<Id>`
+
+### `function vtt.spine-body-target.spineBodyTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string, ownsSpine: (surfaceType: string) => boolean): { options: CurveGestureOptions; sample: PointerSample } | undefined`
+
+A pick on a spine-built body, projected onto its spine through the
+canonical curve query: the nearest control point when the pick is close
+to one, else the span's midpoint handle at the projected parameter.
+`ownsSpine` limits it to the spines of the types a tool edits.
+
+### `function vtt.spine-chain-selection.spineChainSelection(id: Id): SelectionMirror<Id>`
+
+The picked spine as a whole -- its ends' heights, width and, for a spiral,
+centre, radius, turns and direction -- in any spine tool's `selected`
+param, edited back from it through the spine's own owner. Any tool that
+edits spines and has a `selected` param uses this unchanged.
+
+### `function vtt.spine-commit.commitSpineRegeneration(ctx: ToolContext, request: ApplyPatchReplacementRequest, operationId: string): void`
+
+Commits `request` -- its effects dispatched -- and records it for undo.
+
+### `function vtt.spine-commit.regenerateSpine(ctx: ToolContext, snapshot: ConstructionGraphSnapshot, owner: string | undefined, graphPatch: ConstructionGraphPatch, operationId: string): SpineRegeneration | undefined`
+
+What `owner` makes of `graphPatch` applied to `snapshot`; `undefined` when it has no spine or makes nothing.
+
 ### `interface vtt.spine-edit-behavior.SpineEditBehavior`
 
 ### `method vtt.spine-edit-behavior.SpineEditBehavior.abort(ctx: ToolContext): void`
@@ -2222,6 +2299,10 @@ Told whenever the selected spine point changes -- `undefined` when nothing is se
 
 Only spines owned by a type this accepts are edited; anything else falls through to the tool.
 
+### `property vtt.spine-edit-behavior.SpineEditOptions.snap?: AnchorSnap`
+
+How a dragged anchor snaps; absent, anchors never snap.
+
 ### `interface vtt.spine-edit-behavior.SpinePick`
 
 What a press on a spine resolved to: the handle it actually takes, and how to drag it.
@@ -2286,6 +2367,10 @@ actually uses (a click-only tool has no `onPointerUp`, it commits
 on `onClick`). `composition/tabletop/use-construction-pointer.ts` is the
 only caller and never branches on `id` -- it just invokes whichever hook
 the active tool defines.
+
+### `property vtt.tool-context.ConstructionTool.anchorSnap?: AnchorSnap`
+
+How this tool's dragged spine anchors snap -- the scene manipulator uses it too.
 
 ### `property vtt.tool-context.ConstructionTool.handlePresentation?: "spine-points"`
 
@@ -2637,11 +2722,9 @@ Screen coordinate used by explicit elevation gestures.
 
 ### `property vtt.road-body-target.RoadSnapTarget.surfaceRef?: string`
 
-### `function vtt.road-body-target.roadBodyTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string, ownsSpine: (surfaceType: string) => boolean): { options: CurveGestureOptions; sample: PointerSample } | undefined`
+### `variable vtt.road-body-target.roadAnchorSnap: AnchorSnap`
 
-Project a pick on a spine-built body onto its spine using the canonical
-curve query. `ownsSpine` limits it to the spines of the types a tool edits;
-a road's name is historical, any spine owner is projected the same way.
+The road network's anchor snap -- onto another road's node or span -- for a spine gesture.
 
 ### `function vtt.road-body-target.roadSnapIsCurrent(ctx: ToolContext, target: RoadSnapTarget): boolean`
 
@@ -2671,10 +2754,6 @@ Highlight the exact prospective junction without changing the graph.
 
 ### `property vtt.road-preview-mesh.RoadMeshPreviewOptions.ribbons?: readonly { ribbon: { outer: readonly (readonly [number, number, number])[] } | null }[]`
 
-### `variable vtt.road-preview-mesh.NODE_DISK_ELEVATION: 0.055`
-
-### `variable vtt.road-preview-mesh.PREVIEW_ELEVATION: 0.05`
-
 ### `variable vtt.road-preview-mesh.ROAD_ERROR_COLOR: 16281969`
 
 ### `variable vtt.road-preview-mesh.ROAD_ERROR_OPACITY: 0.6`
@@ -2687,25 +2766,13 @@ Highlight the exact prospective junction without changing the graph.
 
 ### `variable vtt.road-preview-mesh.SNAP_DISK_OPACITY: 0.85`
 
-### `function vtt.road-preview-mesh.appendNodeDisk(positions: number[], indices: number[], center: ConstructionPosition, radius: number, elevation: number, segments: number): void`
-
-Append a filled circular disk at a specific anchor node or cursor position.
-
-### `function vtt.road-preview-mesh.appendRibbonQuads(positions: number[], indices: number[], outer: readonly (readonly [number, number, number])[], elevation: number): void`
-
-Append triangulated quad strips for a ribbon outline computed by graph-core.
-
-### `function vtt.road-preview-mesh.appendStraightQuads(positions: number[], indices: number[], points: readonly ConstructionPosition[], halfWidth: number, elevation: number): void`
-
-Fallback straight quads connecting consecutive points when curve fitting is unavailable.
-
 ### `function vtt.road-preview-mesh.createFastRoadPreview(points: readonly ConstructionPosition[], bedWidth: number, cursor?: ConstructionPosition, color?: number, opacity?: number): RenderPreviewDescriptor`
 
 Build a lightweight straight-quad preview mesh connecting path points directly, without WASM round-trips.
 
 ### `function vtt.road-preview-mesh.createRoadMeshPreview(options: RoadMeshPreviewOptions): RenderPreviewDescriptor`
 
-Build a solid translucent 3D mesh preview for a road, including ribbon quads and anchor disks.
+A road's ribbon preview: the shared ribbon mesh in the road's own colours.
 
 ### `function vtt.road-preview-mesh.createSnapMeshPreview(target: ConstructionPosition, radius: number): RenderPreviewDescriptor`
 
@@ -2947,6 +3014,44 @@ An open line ghost from `start` to `end` -- a wall-brush's centerline while drag
 
 Builds a PreviewDescriptor for a set of straight segment pairs (e.g. wall centerline ghost).
 
+### `interface vtt.ribbon-mesh-preview.RibbonMeshPreviewOptions`
+
+### `property vtt.ribbon-mesh-preview.RibbonMeshPreviewOptions.anchors: readonly ConstructionPosition[]`
+
+### `property vtt.ribbon-mesh-preview.RibbonMeshPreviewOptions.color: number`
+
+### `property vtt.ribbon-mesh-preview.RibbonMeshPreviewOptions.cursor?: ConstructionPosition`
+
+### `property vtt.ribbon-mesh-preview.RibbonMeshPreviewOptions.fallbackPoints?: readonly ConstructionPosition[]`
+
+### `property vtt.ribbon-mesh-preview.RibbonMeshPreviewOptions.opacity?: number`
+
+### `property vtt.ribbon-mesh-preview.RibbonMeshPreviewOptions.ribbons?: readonly { ribbon: { outer: readonly (readonly [number, number, number])[] } | null }[]`
+
+### `property vtt.ribbon-mesh-preview.RibbonMeshPreviewOptions.width: number`
+
+### `variable vtt.ribbon-mesh-preview.NODE_DISK_ELEVATION: 0.055`
+
+### `variable vtt.ribbon-mesh-preview.PREVIEW_ELEVATION: 0.05`
+
+Height a preview floats above what it previews, so it never z-fights it.
+
+### `function vtt.ribbon-mesh-preview.appendNodeDisk(positions: number[], indices: number[], center: ConstructionPosition, radius: number, elevation: number, segments: number): void`
+
+Append a filled circular disk at a specific anchor node or cursor position.
+
+### `function vtt.ribbon-mesh-preview.appendRibbonQuads(positions: number[], indices: number[], outer: readonly (readonly [number, number, number])[], elevation: number): void`
+
+Append triangulated quad strips for a ribbon outline computed by graph-core.
+
+### `function vtt.ribbon-mesh-preview.appendStraightQuads(positions: number[], indices: number[], points: readonly ConstructionPosition[], halfWidth: number, elevation: number): void`
+
+Fallback straight quads connecting consecutive points when curve fitting is unavailable.
+
+### `function vtt.ribbon-mesh-preview.createRibbonMeshPreview(options: RibbonMeshPreviewOptions): RenderPreviewDescriptor`
+
+A solid translucent mesh preview of spine ribbons -- quads from the Rust ribbons, straight quads as a fallback -- with a disk at each anchor and at the cursor.
+
 ### `interface vtt.ramp-commit.RampParams`
 
 What drawing a straight ramp may decide.
@@ -3048,16 +3153,6 @@ The welded floor again, with the landing edge split around the ramp end's own ru
 
 A control point's height comes from what the pointer actually touched: a node's own height, else the picked surface.
 
-### `function vtt.slope-selection.slopeSelection(id: SlopeToolId): { onSelect: (ctx: ToolContext, nodeId: string | undefined) => void; onParamsChange: any }`
-
-The global edits of a sloped platform, from the panel: picking a point of
-one mirrors what it is as a whole -- its ends' heights, its width, and the
-spiral it is -- into the tool's `selected` params, and changing any of
-those edits it. The same regeneration a point drag runs does the rest.
-
-This is the panel half of editing a slope as a whole; handles in the scene
-for the same values come with the shared edit-mode components (#318).
-
 ### `variable vtt.slope-tools.slopeCurveTool: ConstructionTool<"slope-curve">`
 
 Edits an existing curved ramp by its spine points, as the spiral and the road are edited, and as a whole from the panel.
@@ -3070,7 +3165,7 @@ Also grabs and edits an existing ramp's own corner, side, end or body -- see `st
 
 Also edits an existing spiral by its spine points, exactly as a road is
 edited -- see `spine-edit-behavior.ts` -- and as a whole from the panel,
-once one of its points is picked -- see `slope-selection.ts`.
+once one of its handles is picked -- see `spine-chain-selection.ts`.
 
 ### `variable vtt.terrain-sculpt-tool.terrainSculptTool: ConstructionTool<"terrain-sculpt">`
 
@@ -3560,6 +3655,20 @@ for it now.
 
 ### `function vtt.token-projection.createTokenProjection(input: TokenProjection): TokenProjection`
 
+### `reference vtt.edit-construction.describeSlope -> vtt.spine-open-chain.describeSpineChain`
+
+### `reference vtt.edit-construction.planSlopeEdit -> vtt.spine-open-chain.planSpineChainEdit`
+
+### `reference vtt.edit-construction.SlopeSummary -> vtt.spine-open-chain.SpineChainShape`
+
+### `reference vtt.edit-construction.SpineEndHandle -> vtt.spine-global-handles.SpineGlobalHandle`
+
+### `reference vtt.edit-construction.SpineEndHandleKind -> vtt.spine-handle-ids.SpineGlobalHandleKind`
+
+### `reference vtt.edit-construction.SpinePivot -> vtt.spine-global-handles.SpineGlobalHandle`
+
+### `reference vtt.edit-construction.spinePivotId -> vtt.spine-handle-ids.spineGlobalHandleId`
+
 ### `interface vtt.effect.Effect`
 
 ### `property vtt.effect.Effect.causeId: string`
@@ -4019,6 +4128,28 @@ type are edited by exactly the same handles; only the last step differs.
 
 Preview only the affected curves; surface regeneration runs once on release.
 
+### `function vtt.spine-global-handles.shownSpineGlobalHandleAt(graph: ConstructionGraphSnapshot, id: string): SpineGlobalHandle | undefined`
+
+The global handle `id` names, where it stands now, if its owner declares it.
+
+### `function vtt.spine-global-handles.shownSpineGlobalHandles(graph: ConstructionGraphSnapshot): readonly SpineGlobalHandle[]`
+
+Every global handle a spine's owner declares -- what the scene shows and a spine tool may grab.
+
+### `reference vtt.spine.describeSlope -> vtt.spine-open-chain.describeSpineChain`
+
+### `reference vtt.spine.planSlopeEdit -> vtt.spine-open-chain.planSpineChainEdit`
+
+### `reference vtt.spine.SlopeSummary -> vtt.spine-open-chain.SpineChainShape`
+
+### `reference vtt.spine.SpineEndHandle -> vtt.spine-global-handles.SpineGlobalHandle`
+
+### `reference vtt.spine.SpineEndHandleKind -> vtt.spine-handle-ids.SpineGlobalHandleKind`
+
+### `reference vtt.spine.SpinePivot -> vtt.spine-global-handles.SpineGlobalHandle`
+
+### `reference vtt.spine.spinePivotId -> vtt.spine-handle-ids.spineGlobalHandleId`
+
 ### `type vtt.spine-actions.SpineAction = "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"`
 
 Structural edits on a spine, the same for every structure generated along one.
@@ -4112,6 +4243,60 @@ through its chain, once, through the Rust conversion. `offsets` is the
 width a span with no profile of its own is given, and `owner`, when given,
 the type it is stamped as generating.
 
+### `interface vtt.spine-global-handles.SpineGlobalHandle`
+
+### `property vtt.spine-global-handles.SpineGlobalHandle.center?: readonly [number, number]`
+
+A spiral's centre.
+
+### `property vtt.spine-global-handles.SpineGlobalHandle.edges: readonly ConstructionEdgeSnapshot[]`
+
+### `property vtt.spine-global-handles.SpineGlobalHandle.ends?: readonly [string, string]`
+
+The spine's free ends, first to last -- the far one is the last. Absent on a branch or a loop.
+
+### `property vtt.spine-global-handles.SpineGlobalHandle.id: string`
+
+### `property vtt.spine-global-handles.SpineGlobalHandle.kind: SpineGlobalHandleKind`
+
+### `property vtt.spine-global-handles.SpineGlobalHandle.nodeIds: readonly string[]`
+
+Every control node of the spine, lowest id first.
+
+### `property vtt.spine-global-handles.SpineGlobalHandle.owner: string | undefined`
+
+The type the spine generates.
+
+### `property vtt.spine-global-handles.SpineGlobalHandle.position: ConstructionPosition`
+
+### `function vtt.spine-global-handles.isSpinePivotId(id: string): boolean`
+
+### `function vtt.spine-global-handles.planSpineTranslate(graph: ConstructionGraphSnapshot, handle: Pick<SpineGlobalHandle, "nodeIds" | "edges">, delta: ConstructionPosition): ConstructionGraphPatch`
+
+The graph patch moving a whole spine by `delta`: every control node, and
+every arc centre, so each span keeps its shape. The owner regenerates its
+surface from it like from any other spine edit.
+
+### `function vtt.spine-global-handles.spineEndHandleAt(graph: ConstructionGraphSnapshot, id: string): SpineGlobalHandle | undefined`
+
+### `function vtt.spine-global-handles.spineEndHandleId(kind: "height" | "turns", nodeId: string): string`
+
+### `function vtt.spine-global-handles.spineEndHandleOf(id: string): { kind: SpineGlobalHandleKind; nodeId: string } | undefined`
+
+### `function vtt.spine-global-handles.spineEndHandles(graph: ConstructionGraphSnapshot): { center: readonly [number, number] | undefined; endNodeId: string; id: string; kind: SpineGlobalHandleKind; owner: string | undefined; position: ConstructionPosition; startNodeId: string }[]`
+
+### `function vtt.spine-global-handles.spineGlobalHandleAt(graph: ConstructionGraphSnapshot, id: string): SpineGlobalHandle | undefined`
+
+The global handle `id` names -- or, for any other handle of a spine, that spine's pivot -- where it stands now.
+
+### `function vtt.spine-global-handles.spineGlobalHandles(graph: ConstructionGraphSnapshot): readonly SpineGlobalHandle[]`
+
+Every spine's global handles, of every kind.
+
+### `function vtt.spine-global-handles.spinePivotAt(graph: ConstructionGraphSnapshot, id: string): SpineGlobalHandle | undefined`
+
+### `function vtt.spine-global-handles.spinePivots(graph: ConstructionGraphSnapshot): readonly SpineGlobalHandle[]`
+
 ### `interface vtt.spine-graph.SpineControlNode`
 
 One control point of a spine curve.
@@ -4157,6 +4342,27 @@ run) is reported once.
 
 spineGraphIn over one cloud's own members -- the reading a tool should reach for.
 
+### `type vtt.spine-handle-ids.SpineGlobalHandleKind = "pivot" | "height" | "turns"`
+
+The handles that stand for a whole spine rather than one of its points:
+the pivot that moves it, and the handles at its far end that raise it and
+-- on a spiral -- wind it. Which of them a spine shows is its owner's
+declaration (`SpineGeneration.globalHandles`).
+
+Every one is named after the spine's lowest control node id, so it stays
+the same handle through any edit that keeps that node. None is a graph
+node. This module is the only place their ids are made or read.
+
+### `function vtt.spine-handle-ids.spineGlobalHandleId(kind: SpineGlobalHandleKind, nodeId: string): string`
+
+### `function vtt.spine-handle-ids.spineGlobalHandleOf(id: string): { kind: SpineGlobalHandleKind; nodeId: string } | undefined`
+
+Which global handle `id` names, and after which node; `undefined` for anything else.
+
+### `function vtt.spine-handle-ids.spineMemberOf(graph: ConstructionGraphSnapshot, id: string): string`
+
+The spine control node `id` stands for: a global handle's own node, a curve handle's span start, or `id` itself.
+
 ### `function vtt.spine-handles.isBezierEditTarget(snapshot: ConstructionGraphSnapshot, id: string, contour: readonly Pick<ConstructionCurvedEdge, "edgeId">[]): boolean`
 
 Whether `id` names a curve handle or midpoint -- on a spine span or on a
@@ -4182,6 +4388,76 @@ The edit that minted this node. Provenance only, never ownership.
 The address inside `id`, or `undefined` for an id no spine edit minted.
 
 ### `function vtt.spine-node-id.spineControlNodeId(operationId: string, index: number): string`
+
+### `interface vtt.spine-open-chain.OpenSpineChain`
+
+An open spine walked from one free end to the other. The ends are ordered by id, so the walk is always the same.
+
+### `property vtt.spine-open-chain.OpenSpineChain.nodes: readonly string[]`
+
+Control node ids, first end to last.
+
+### `property vtt.spine-open-chain.OpenSpineChain.spans: readonly { reversed: boolean; span: ConstructionEdgeSnapshot }[]`
+
+### `interface vtt.spine-open-chain.SpineChainShape`
+
+A spine as a whole, as its global edits read and change it. Nothing here is stored: the spine is the truth.
+
+### `property vtt.spine-open-chain.SpineChainShape.endHeight: number`
+
+Height of the chain's last end.
+
+### `property vtt.spine-open-chain.SpineChainShape.spiral?: { centerX: number; centerZ: number; positive: boolean; radius: number; turns: number }`
+
+### `property vtt.spine-open-chain.SpineChainShape.startHeight: number`
+
+Height of the chain's first end.
+
+### `property vtt.spine-open-chain.SpineChainShape.width: number`
+
+### `interface vtt.spine-open-chain.SpineGrade`
+
+A regrade: control nodes whose height changed, and every span with its handles' heights redone.
+
+### `property vtt.spine-open-chain.SpineGrade.edges: readonly ConstructionEdgeSnapshot[]`
+
+### `property vtt.spine-open-chain.SpineGrade.grade?: number`
+
+Rise over plan length along the whole chain, when it was graded.
+
+### `property vtt.spine-open-chain.SpineGrade.nodes: readonly { id: string; position: ConstructionPosition }[]`
+
+### `function vtt.spine-open-chain.describeSpineChain(graph: ConstructionGraphSnapshot, id: string): SpineChainShape | undefined`
+
+How the open spine `id` belongs to reads as a whole, or `undefined` when there is none.
+
+### `function vtt.spine-open-chain.gradeSpineSpans(port: Pick<BezierPort, "curveBatch">, graph: ConstructionGraphSnapshot, spans: readonly ConstructionEdgeSnapshot[]): SpineGrade`
+
+`spans` re-graded: the chain's two free ends keep their heights, and every
+point between takes the height one constant grade by plan length gives it
+(Rust's `grade`). The plan is untouched. Nothing is returned for spans that
+are not one open chain.
+
+### `function vtt.spine-open-chain.openSpineChain(spans: readonly ConstructionEdgeSnapshot[]): OpenSpineChain | undefined`
+
+`spans` walked end to end, when they form one open chain; `undefined` for a branch or a loop.
+
+### `function vtt.spine-open-chain.planSpineChainEdit(graph: ConstructionGraphSnapshot, port: Pick<BezierPort, "curveBatch">, id: string, next: SpineChainShape, operationId: string): ConstructionGraphPatch | undefined`
+
+The graph patch taking the open spine `id` belongs to from what it is to
+`next`. Heights move the ends; width re-profiles every span; any spiral
+value rebuilds the whole helix in Rust from the first end, which keeps its
+angle round the centre. Node and span ids are kept wherever the count
+allows, so what is welded to either end stays welded. The owner
+regenerates from the patch -- re-grading between the ends if it grades.
+
+### `function vtt.spine-open-chain.sharedArcCenter(spans: readonly ConstructionEdgeSnapshot[]): readonly [number, number] | undefined`
+
+The one centre every span of `spans` turns round, when every span is such an arc.
+
+### `function vtt.spine-open-chain.spineChainAt(graph: ConstructionGraphSnapshot, id: string): OpenSpineChain | undefined`
+
+The open spine `id` belongs to -- a control node, a curve handle or a global handle -- keeping only spans of its own owner.
 
 ### `function vtt.spine-owner.isSpineEdge(edge: ConstructionEdgeSnapshot): boolean`
 
@@ -4210,83 +4486,6 @@ Which structure type a spine span generates -- a road, a sloped platform,
 a curved wall. The graph keeps it on the curve (`CurveHandles.surfaceType`)
 and never reads it; this is where the app does. Every owner stamps its own
 spans, so this module names no type; a span with no owner generates nothing.
-
-### `interface vtt.spine-pivot.SpineEndHandle`
-
-### `property vtt.spine-pivot.SpineEndHandle.center?: readonly [number, number]`
-
-For a spiral: its centre, and the plan direction the end leaves in.
-
-### `property vtt.spine-pivot.SpineEndHandle.endNodeId: string`
-
-### `property vtt.spine-pivot.SpineEndHandle.id: string`
-
-### `property vtt.spine-pivot.SpineEndHandle.kind: SpineEndHandleKind`
-
-### `property vtt.spine-pivot.SpineEndHandle.owner: string | undefined`
-
-### `property vtt.spine-pivot.SpineEndHandle.position: ConstructionPosition`
-
-### `property vtt.spine-pivot.SpineEndHandle.startNodeId: string`
-
-The spine's two free ends, first to last; the handles stand at the last.
-
-### `interface vtt.spine-pivot.SpinePivot`
-
-### `property vtt.spine-pivot.SpinePivot.edges: readonly ConstructionEdgeSnapshot[]`
-
-### `property vtt.spine-pivot.SpinePivot.id: string`
-
-### `property vtt.spine-pivot.SpinePivot.nodeIds: readonly string[]`
-
-### `property vtt.spine-pivot.SpinePivot.owner: string | undefined`
-
-The type the spine generates.
-
-### `property vtt.spine-pivot.SpinePivot.position: ConstructionPosition`
-
-### `type vtt.spine-pivot.SpineEndHandleKind = "height" | "turns"`
-
-The handles at a spine's far end, beside its pivot: one above the end to
-raise or lower it, and -- on a spiral -- one just past the end, following
-the turn, to wind the spiral on or back. Named after the spine's lowest
-control node like the pivot.
-
-### `function vtt.spine-pivot.isSpinePivotId(id: string): boolean`
-
-### `function vtt.spine-pivot.planSpineTranslate(graph: ConstructionGraphSnapshot, pivot: SpinePivot, delta: ConstructionPosition): ConstructionGraphPatch`
-
-The graph patch moving the whole spine of `pivot` by `delta`: every
-control node, and every arc centre, so each span keeps its shape. The
-owner regenerates its surface from it like from any other spine edit.
-
-### `function vtt.spine-pivot.spineEndHandleAt(graph: ConstructionGraphSnapshot, id: string): SpineEndHandle | undefined`
-
-The end handle `id` names, where it stands now.
-
-### `function vtt.spine-pivot.spineEndHandleId(kind: SpineEndHandleKind, nodeId: string): string`
-
-### `function vtt.spine-pivot.spineEndHandleOf(id: string): { kind: SpineEndHandleKind; nodeId: string } | undefined`
-
-Which end handle `id` names, and after which node.
-
-### `function vtt.spine-pivot.spineEndHandles(graph: ConstructionGraphSnapshot): readonly SpineEndHandle[]`
-
-Every open spine's end handles: height always, turns on a spiral.
-
-### `function vtt.spine-pivot.spineMemberOf(graph: ConstructionGraphSnapshot, id: string): string`
-
-A spine control node `id` stands for: a pivot's or end handle's own node, a curve handle's span start, or `id` itself.
-
-### `function vtt.spine-pivot.spinePivotAt(graph: ConstructionGraphSnapshot, id: string): SpinePivot | undefined`
-
-The pivot of the spine `id` belongs to -- a pivot, a control node or a curve handle.
-
-### `function vtt.spine-pivot.spinePivotId(nodeId: string): string`
-
-### `function vtt.spine-pivot.spinePivots(graph: ConstructionGraphSnapshot): readonly SpinePivot[]`
-
-Every spine's pivot.
 
 ### `interface vtt.spine-ribbons.SpineRibbon`
 
@@ -5210,7 +5409,7 @@ them.
 Plan and height are kept apart, as ramp tools do: the spine's plan is
 edited freely, and only its two free ends carry authored heights. Every
 point between them is re-graded on each regeneration so the whole run
-climbs at one constant grade by plan length (`gradeSlopeSpans`, computed
+climbs at one constant grade by plan length (`gradeSpineSpans`, computed
 in Rust). A spiral is this same ramp whose plan is a helix. What differs from a road is only the last step -- a road unions its
 ribbons in plan, and a spiral's turns overlap in plan, so a sloped platform
 keeps **one face per span** instead: that span's ribbon outline, sampled
@@ -5234,13 +5433,6 @@ A cross-section node shared by every span meeting at a control node.
 Re-places every cross-section of a span whose control node moved, at its
 own curve parameter on the moved curve -- the ramp bends with the move
 instead of kinking at the moved end.
-
-### `function vtt.platform-slope-spine.gradeSlopeSpans(port: Pick<BezierPort, "curveBatch">, graph: ConstructionGraphSnapshot, spans: readonly ConstructionEdgeSnapshot[]): { edges: readonly ConstructionEdgeSnapshot[]; grade?: number; nodes: readonly { id: string; position: ConstructionPosition }[] }`
-
-The control nodes and spans of `spans` re-graded: the chain's two free
-ends keep their heights, and every point between takes the height one
-constant grade by plan length gives it. The plan is untouched. Nothing is
-returned for a spine that is not one open chain.
 
 ### `function vtt.platform-slope-spine.regenerateSlopeSpine(input: SpineRegenerationInput): SpineRegeneration`
 
@@ -5294,40 +5486,6 @@ would carry all three.
 Its faces are never grabbed directly -- the spine is what is edited. A
 floor that moves still carries the end welded to it: the end's control
 node follows, and the ramp re-places itself on the moved curve.
-
-### `interface vtt.slope-summary.SlopeSummary`
-
-What a sloped platform is as a whole -- the values its global edits change
--- read back from its spine: both ends' heights and its width, and, when
-every span is an arc around one centre, the spiral it is.
-
-Nothing here is stored: the spine is the truth, and this is only how it
-reads to someone editing it from a panel.
-
-### `property vtt.slope-summary.SlopeSummary.endHeight: number`
-
-Height of the chain's last end.
-
-### `property vtt.slope-summary.SlopeSummary.spiral?: { centerX: number; centerZ: number; positive: boolean; radius: number; turns: number }`
-
-### `property vtt.slope-summary.SlopeSummary.startHeight: number`
-
-Height of the chain's first end.
-
-### `property vtt.slope-summary.SlopeSummary.width: number`
-
-### `function vtt.slope-summary.describeSlope(graph: ConstructionGraphSnapshot, nodeId: string): SlopeSummary | undefined`
-
-How the sloped platform through `nodeId` reads as a whole, or `undefined` when there is none.
-
-### `function vtt.slope-summary.planSlopeEdit(graph: ConstructionGraphSnapshot, port: Pick<BezierPort, "curveBatch">, nodeId: string, next: SlopeSummary, operationId: string): ConstructionGraphPatch | undefined`
-
-The spine edit taking the sloped platform through `nodeId` from what it is
-to `next`. Heights move the ends (the owner re-grades between them), width
-re-profiles every span, and any spiral value rebuilds the whole helix in
-Rust from the start end, which keeps its angle round the centre. Node and
-span ids are kept wherever the count allows, so what is welded to either
-end stays welded.
 
 ### `interface vtt.registry.ResolvedCoverage`
 
@@ -5745,16 +5903,12 @@ whatever surface this type makes of them.
 
 The width a span with no profile of its own is given.
 
-### `property vtt.structure-type.SpineGeneration.endHandles?: boolean`
+### `property vtt.structure-type.SpineGeneration.globalHandles?: readonly SpineGlobalHandleKind[]`
 
-The spine's far end is shown with a height handle, and -- when it is a
-spiral -- a turns handle that winds it on or back (`spine-pivot.ts`).
-
-### `property vtt.structure-type.SpineGeneration.pivot?: boolean`
-
-The spine is shown with a pivot that moves it whole (`spine-pivot.ts`).
-Off for a network whose connected spine is many structures at once -- a
-road grid would move as one.
+The whole-spine handles this owner's spines show (`spine-global-handles.ts`):
+a pivot that moves it, a height handle at its far end, a turns handle
+that winds a spiral. None for a network whose connected spine is many
+structures at once -- a road grid would move as one.
 
 ### `property vtt.structure-type.SpineGeneration.planOnly?: boolean`
 
@@ -5769,6 +5923,11 @@ elevation mode.
 Normalizes the standing graph before an edit reads it -- legacy data, say.
 
 ### `property vtt.structure-type.SpineGeneration.regenerate: (input: SpineRegenerationInput) => SpineRegeneration | undefined`
+
+### `property vtt.structure-type.SpineGeneration.windKeeps?: "grade" | "height"`
+
+What winding a spiral on or back keeps: its grade (more turns climb
+higher -- the default) or its far end's height (more turns climb gentler).
 
 ### `interface vtt.structure-type.SpineRegeneration`
 
@@ -6208,7 +6367,7 @@ floating one -- a storey, a bridge deck -- that leaves the terrain alone.
 
 ### `property vtt.tool-types.ToolParamsByTool.roof: { curvatures: readonly [number, number, number, number]; elevation: number; height: number; radius: number; shape: "rectangle" | "circle" | "platform" }`
 
-### `property vtt.tool-types.ToolParamsByTool.slope-curve: { mode?: "arc" | "points" | "straight" | "spiral" | "connect"; rise: number; selected?: SlopeSummary; width: number }`
+### `property vtt.tool-types.ToolParamsByTool.slope-curve: { mode?: "arc" | "points" | "straight" | "spiral" | "connect"; rise: number; selected?: SpineChainShape; width: number }`
 
 A curved ramp, drawn in one of the shared spine creation modes. `rise` is
 its climb when the end is not on a floor; it climbs at one constant grade.
@@ -6217,7 +6376,7 @@ its climb when the end is not on a floor; it climbs at one constant grade.
 
 A straight ramp dragged from start to end, climbing a fixed rise, with its own width at each end.
 
-### `property vtt.tool-types.ToolParamsByTool.slope-spiral: { rise: number; selected?: SlopeSummary; width: number }`
+### `property vtt.tool-types.ToolParamsByTool.slope-spiral: { rise: number; selected?: SpineChainShape; width: number }`
 
 A spiral sloped platform: centre, start, then turned round to its end.
 `rise` is its climb when the end is not on a floor. `selected` mirrors the
@@ -6623,7 +6782,7 @@ Every curve on the table: spine spans resolved from their stored handles, and cu
 
 ### `function vtt.curve-handles.curveHandles(edges: readonly CurveEdge[], port: Pick<BezierPort, "curveBatch">): readonly { id: string; position: ConstructionPosition }[]`
 
-Each curve's two handles and its midpoint, as pickable positions, in one engine crossing.
+Each curve's midpoint, as a pickable position, in one engine crossing.
 
 ### `function vtt.curve-handles.curvePick(id: string): { edgeId: string; index: CurveHandleIndex } | undefined`
 
