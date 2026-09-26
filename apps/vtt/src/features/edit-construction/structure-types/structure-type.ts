@@ -12,6 +12,7 @@ import type { AtomicEditOp, EditAxis, EditGesture, EditTarget } from "../orchest
 import type { CloudTopology } from "../topology/construction-cloud.ts";
 import type { CreationInteraction } from "./creation-interaction.ts";
 import type { EffectKind, ReactionId } from "../effects/effect.ts";
+import type { GlobalHandleKind } from "../global-handles/global-handle-ids.ts";
 import type { PlanarArea } from "../topology/planar-area.ts";
 import type { FieldPort } from "./path/contour/curve-projection.ts";
 
@@ -78,11 +79,9 @@ export interface RolePolicy {
    */
   readonly cascade?: (context: CascadeContext) => readonly AtomicEditOp[];
   /**
-   * Extra ops matched by a type's own declared value or trait across the
-   * *whole table*, not the grabbed cloud -- the opportunistic case, where
-   * what reaches together is decided at gesture time by comparing current
-   * state, not by any standing weld. A wall's per-segment height widget uses
-   * this to raise every other wall currently level with the one grabbed.
+   * Extra ops matched across the grabbed cloud that are not expressed as
+   * standing welds or structural motion influences (e.g. raising every top run
+   * of a wall cloud together via the height widget's group zone).
    *
    * Applied unconditionally, unlike {@link cascade}: the solver path
    * (`edit-orchestrator.ts`) supersedes `cascade` whenever the type also
@@ -99,6 +98,22 @@ export interface RolePolicy {
    * the edge keeps the curve it has.
    */
   readonly reshape?: (context: ReshapeContext) => readonly AtomicEditOp[];
+  /**
+   * Narrows the gesture's delta past what whole world {@link axes} can say:
+   * onto a direction the type reads off its own shape at gesture time -- a
+   * ramp's corner sliding only along its own edge. Applied after `axes`,
+   * before anything else sees the delta.
+   */
+  readonly constrain?: (context: ConstrainContext) => ConstructionPosition;
+}
+
+/** What a role's {@link RolePolicy.constrain} gets to look at. */
+export interface ConstrainContext {
+  /** The face the gesture landed on. */
+  readonly topology: ConstructionRegionTopology;
+  readonly target: EditTarget;
+  /** The delta already constrained by the role's own axes. */
+  readonly delta: ConstructionPosition;
 }
 
 /** What a reshape cascade gets to look at: the whole cloud, the edge and the geometry it is taking. */
@@ -132,15 +147,6 @@ export interface CascadeContext {
   /** The delta already constrained by the role's own axes. */
   readonly delta: { readonly x: number; readonly y: number; readonly z: number };
   readonly graphSnapshot?: ConstructionGraphSnapshot;
-  /**
-   * Every region topology the plan can see: the whole table when the
-   * session is at hand, only the grabbed cloud's members otherwise. A
-   * `groupCascade` reaches through this for matches outside the grabbed
-   * cloud -- e.g. every wall currently level with the grabbed one, wherever
-   * it stands -- which a cloud, scoped to one connected same-type run, can
-   * never contain by construction.
-   */
-  readonly allTopologies?: readonly ConstructionRegionTopology[];
 }
 
 /**
@@ -244,6 +250,19 @@ export interface SpineRegeneration {
 export interface SpineGeneration {
   /** The width a span with no profile of its own is given. */
   readonly defaultOffsets: readonly number[];
+  /**
+   * The spine's points move in plan only: the owner derives every height
+   * itself on regeneration, so a drag keeps the grabbed point's own height
+   * instead of taking whatever lies under the pointer, and never snaps onto
+   * another network's node by position. Heights still change on purpose, in
+   * elevation mode.
+   */
+  readonly planOnly?: boolean;
+  /**
+   * What winding a spiral on or back keeps: its grade (more turns climb
+   * higher -- the default) or its far end's height (more turns climb gentler).
+   */
+  readonly windKeeps?: "grade" | "height";
   /** Normalizes the standing graph before an edit reads it -- legacy data, say. */
   readonly prepare?: (snapshot: ConstructionGraphSnapshot, port: BezierPort) => ConstructionGraphSnapshot;
   readonly regenerate: (input: SpineRegenerationInput) => SpineRegeneration | undefined;
@@ -332,6 +351,13 @@ export interface StructureTypeDefinition {
   readonly deriveMotion?: (topologies: readonly ConstructionRegionTopology[], positions: ReadonlyMap<string, ConstructionPosition>, context: MotionContext) => ReadonlyMap<string, ConstructionPosition>;
   /** Present when this type is generated along a spine. */
   readonly spine?: SpineGeneration;
+  /**
+   * The whole-structure handles this type shows (`global-handles/`): a pivot
+   * that moves it, a rotate handle that turns it, a height handle, a turns
+   * handle that winds a spiral. None for a network whose connected spine or
+   * cloud is many structures at once -- a road grid would move as one.
+   */
+  readonly globalHandles?: readonly GlobalHandleKind[];
   /** Returns a reason when a proposed position batch violates this type. */
   readonly validateMotion?: (topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>) => string | undefined;
   /**

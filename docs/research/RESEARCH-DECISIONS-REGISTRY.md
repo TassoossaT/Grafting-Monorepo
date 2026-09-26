@@ -316,6 +316,25 @@ Full reasoning: `docs/research/vtt-reactive-construction-and-tiny-glade-ui-model
 | `streemap` | MIT OR Apache-2.0 | Standby, **top pick** | Squarified treemap subdivision for varied room floor plans; compiles clean to `wasm32-unknown-unknown` |
 
 
+## VTT curved ramps and spirals (creation and editing)
+
+Full reasoning: `docs/research/ramps-and-spirals-creation-editing.md`
+
+| Candidate | License | Status | Note |
+| --- | --- | --- | --- |
+| `kurbo` (`Arc`, `ParamCurveArclen`) | MIT OR Apache-2.0 | Adopted | Already a graph-core dependency; now also backs the `helix` (exact arc cut into cubics) and `grade` (constant grade by plan length) curve commands |
+| Revit spiral stair and ramp | Proprietary | Reference only | Spiral laid out from centre and radius, turns derived from the target level; ramp length from base/top level and max slope |
+| AutoCAD HELIX | Proprietary | Reference only | Parametric helix with grips (start, radii, height, location) and a `Constrain` property choosing which of height, turns and turn height stays fixed |
+| Cities: Skylines II road tool | Proprietary | Reference only | Plan curve modes plus elevation as a separate control, with live slope feedback and a too-steep refusal |
+| Planet Zoo / Planet Coaster paths | Proprietary | Reference only | Height as its own gesture; turns into stairs past a slope; "curved slopes" allows helix paths |
+| Unity-Procedural-Stair-Builder | MIT | Reference only | Linear, curved and spiral stair generator in C#; not reusable in the Rust/TS stack |
+| HammerForge | Unknown | Reference only | Godot brush editor; spiral stair as a radial array with rise per copy |
+| Illustrator Curvature tool | Proprietary | Reference only | Click points the curve passes through, live up to the pointer; the model for the shared "points" creation mode |
+| SketchUp 2 Point Arc | Proprietary | Reference only | Start, end, pull the bulge; the model for the "arc" mode and for a shaped span's midpoint drag |
+| Satisfactory conveyor build modes | Proprietary | Reference only | Default/Straight/Curve cycled with R; Curve follows the ends' positions and directions -- the model for "connect" mode |
+| Revit Center-Ends Spiral Run | Proprietary | Reference only | Centre, start, turn the cursor to the end; the model for the "spiral" creation mode |
+| Tiny Glade stair tool | Proprietary | Reference only | Embedded double-arrow height and width handles; context-reactive stairs; input for #318's edit components |
+
 ## Asset and resource management (`@grafting/assets`)
 
 Source: `docs/research/asset-management-prior-art.md`. No dependency is

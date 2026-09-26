@@ -68,6 +68,14 @@ Structural error from surface registration or lookup.
 
 Handle continuity policy.
 
+### `pub enum grafting_graph_core::bezier::SpanGeometry`
+
+The plan shape a span keeps whatever its anchors do. Absent, the span is
+a free cubic defined by its stored handles.
+
+Heights are never part of it: a shaped span climbs linearly between its
+anchors, and whatever owns the spine decides those heights.
+
 ### `pub enum grafting_graph_core::bezier_commands::CurveCommand`
 
 A generic authored-curve operation.
@@ -765,7 +773,9 @@ Interpolates an independently authored width profile.
 
 ### `pub fn grafting_graph_core::bezier::CurveHandles::resolve(&self, start: grafting_graph_core::bezier::CurvePoint, end: grafting_graph_core::bezier::CurvePoint) -> grafting_graph_core::bezier::CubicBezier`
 
-Resolves authored relative controls against current graph anchors.
+Resolves authored relative controls against current graph anchors. A
+shaped span is rebuilt from its [`SpanGeometry`] instead, so it stays
+straight or circular however its anchors move.
 
 ### `pub fn grafting_graph_core::bezier::CurveHandles::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer`
 
@@ -776,6 +786,10 @@ Resolves authored relative controls against current graph anchors.
 ### `pub fn grafting_graph_core::bezier::HandleMode::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>`
 
 ### `pub fn grafting_graph_core::bezier::HandleMode::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer`
+
+### `pub fn grafting_graph_core::bezier::SpanGeometry::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>`
+
+### `pub fn grafting_graph_core::bezier::SpanGeometry::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer`
 
 ### `pub fn grafting_graph_core::bezier::automatic_path(points: &[grafting_graph_core::bezier::CurvePoint]) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::bezier::CubicBezier>, alloc::string::String>`
 
@@ -847,6 +861,31 @@ Nearly tangent/coincident spans do not manufacture arbitrary crossings.
 ### `pub fn grafting_graph_core::bezier_network::plan(request: grafting_graph_core::bezier_network::NetworkRequest) -> core::result::Result<grafting_graph_core::bezier_network::NetworkPatch, alloc::string::String>`
 
 Inserts and splits curves transactionally, enforcing independent height tolerance.
+
+### `pub fn grafting_graph_core::bezier_ramp::arc_through(start: grafting_graph_core::bezier::CurvePoint, through: grafting_graph_core::bezier::CurvePoint, end: grafting_graph_core::bezier::CurvePoint) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::bezier_ramp::ShapedSpan>, alloc::string::String>`
+
+The spans from `start` through `through` to `end`: the circular arc
+through the three in plan, cut into quarter turns, or one straight span
+when they are in line. Heights climb linearly from `start` to `end`. What
+a two-point arc tool draws, and what a straight or circular span's
+midpoint drag makes of it -- pulling its bulge.
+
+### `pub fn grafting_graph_core::bezier_ramp::grade(curves: &[grafting_graph_core::bezier::CubicBezier], start: f64, end: f64, accuracy: f64) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::bezier::CubicBezier>, alloc::string::String>`
+
+`curves`, a chain in order, with its heights redistributed from `start`
+to `end` in proportion to plan length, so the whole chain climbs at one
+constant grade whatever its plan does. Plan positions are untouched.
+
+### `pub fn grafting_graph_core::bezier_ramp::helix(center: grafting_graph_core::bezier::CurvePoint, radius: f64, start_angle: f64, sweep: f64, rise: f64) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::bezier_ramp::ShapedSpan>, alloc::string::String>`
+
+A helix around `center` (its `y` is the starting height), `radius` out,
+starting at `start_angle` and turning `sweep` radians -- positive from
++X towards +Z in plan, negative the other way -- while climbing `rise`
+linearly in the angle.
+
+Every span is a circular arc of at most a quarter turn and carries that
+shape in its handles, so the radius holds everywhere, and keeps holding
+after an anchor is moved.
 
 ### `pub fn grafting_graph_core::bezier_surface::CurveRibbon::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>`
 
@@ -1825,6 +1864,10 @@ Incoming vector relative to the end anchor.
 
 Optional cross-section at the end; empty keeps a constant profile.
 
+### `pub grafting_graph_core::bezier::CurveHandles::geometry: core::option::Option<grafting_graph_core::bezier::SpanGeometry>`
+
+The plan shape this span keeps; absent is a free cubic. See [`SpanGeometry`].
+
 ### `pub grafting_graph_core::bezier::CurveHandles::mode: grafting_graph_core::bezier::HandleMode`
 
 Constraint used when editing paired handles.
@@ -1864,6 +1907,25 @@ Independent control.
 
 Opposite direction and equal length.
 
+### `pub grafting_graph_core::bezier::SpanGeometry::Arc`
+
+A circular arc in plan around `center` (`[x, z]`), from the start
+anchor to the end anchor. `positive` turns from +X towards +Z. An
+anchor moved off the circle is reached by easing the radius from one
+anchor's distance to the other's, so the span stays one smooth turn.
+
+### `pub grafting_graph_core::bezier::SpanGeometry::Arc::center: [f64; 2]`
+
+Plan centre, `[x, z]`.
+
+### `pub grafting_graph_core::bezier::SpanGeometry::Arc::positive: bool`
+
+Turn direction: from +X towards +Z when true.
+
+### `pub grafting_graph_core::bezier::SpanGeometry::Line`
+
+A straight run between the anchors.
+
 ### `pub grafting_graph_core::bezier_commands::CurveBatch::commands: alloc::vec::Vec<grafting_graph_core::bezier_commands::CurveCommand>`
 
 Ordered operations; errors reject the entire batch.
@@ -1871,6 +1933,24 @@ Ordered operations; errors reject the entire batch.
 ### `pub grafting_graph_core::bezier_commands::CurveBatch::tolerance: f64`
 
 World-space approximation tolerance.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::ArcThrough`
+
+The circular arc from `start` through `through` to `end` in plan,
+climbing linearly from `start`'s height to `end`'s; a straight run when
+the three are in line. Its handles carry the span's shape.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::ArcThrough::end: grafting_graph_core::bezier::CurvePoint`
+
+Last anchor.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::ArcThrough::start: grafting_graph_core::bezier::CurvePoint`
+
+First anchor.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::ArcThrough::through: grafting_graph_core::bezier::CurvePoint`
+
+Any point the arc passes through, between the anchors.
 
 ### `pub grafting_graph_core::bezier_commands::CurveCommand::Automatic`
 
@@ -1893,6 +1973,23 @@ stroke is fitted as one smooth run however sharply it was drawn.
 ### `pub grafting_graph_core::bezier_commands::CurveCommand::Fit::points: alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>`
 
 Captured XYZ samples.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Grade`
+
+A chain of curves with its heights redistributed at one constant
+grade by plan length; the plan is untouched.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Grade::curves: alloc::vec::Vec<grafting_graph_core::bezier::CubicBezier>`
+
+The chain, in order, each curve starting where the previous ends.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Grade::end: f64`
+
+Height at the chain's last point.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Grade::start: f64`
+
+Height at the chain's first point.
 
 ### `pub grafting_graph_core::bezier_commands::CurveCommand::Handle`
 
@@ -1917,6 +2014,30 @@ Optional paired handle on another incident edge.
 ### `pub grafting_graph_core::bezier_commands::CurveCommand::Handle::target: grafting_graph_core::bezier::CurvePoint`
 
 Desired control position.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Helix`
+
+A helix: an exact circular arc in plan, climbing linearly in its angle.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Helix::center: grafting_graph_core::bezier::CurvePoint`
+
+Plan centre; its height is where the helix starts.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Helix::radius: f64`
+
+Plan radius.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Helix::rise: f64`
+
+Height climbed over the whole sweep.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Helix::start_angle: f64`
+
+Angle of the first point, radians, measured in plan from +X towards +Z.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::Helix::sweep: f64`
+
+Signed sweep in radians: positive turns from +X towards +Z.
 
 ### `pub grafting_graph_core::bezier_commands::CurveCommand::InterpretStroke`
 
@@ -2374,6 +2495,15 @@ Batched curve operations for runtime adapters.
 
 Curve-aware graph insertion. Topology remains in caller-owned graph primitives.
 
+### `pub mod grafting_graph_core::bezier_ramp`
+
+Curves that climb: a helix, and a plan curve graded between two heights.
+
+Both keep plan and height apart, the way ramp and stair tools do (a
+plan run plus an elevation profile): the plan decides where the curve
+goes, and the height is derived from it instead of being authored per
+point. See `docs/research/ramps-and-spirals-creation-editing.md`.
+
 ### `pub mod grafting_graph_core::bezier_surface`
 
 Curve-derived ribbon contours. No product materials or rendering policy.
@@ -2709,6 +2839,11 @@ One outer ring followed by its holes, without repeated closing points.
 ### `pub type grafting_graph_core::bezier::CurvePoint = [f64; 3]`
 
 An XYZ coordinate.
+
+### `pub type grafting_graph_core::bezier_ramp::ShapedSpan = (grafting_graph_core::bezier::CubicBezier, grafting_graph_core::bezier::CurveHandles)`
+
+One span of a shaped curve: the cubic it resolves to, and the handles
+that keep its shape when its anchors move.
 
 ### `pub type grafting_graph_core::curve_offset::Point = [f32; 2]`
 

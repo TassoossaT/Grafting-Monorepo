@@ -33,6 +33,29 @@ pub enum HandleMode {
     /// Independent control.
     Free,
 }
+/// The plan shape a span keeps whatever its anchors do. Absent, the span is
+/// a free cubic defined by its stored handles.
+///
+/// Heights are never part of it: a shaped span climbs linearly between its
+/// anchors, and whatever owns the spine decides those heights.
+#[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "curve-serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "curve-serde", serde(tag = "kind", rename_all = "camelCase"))]
+pub enum SpanGeometry {
+    /// A straight run between the anchors.
+    Line,
+    /// A circular arc in plan around `center` (`[x, z]`), from the start
+    /// anchor to the end anchor. `positive` turns from +X towards +Z. An
+    /// anchor moved off the circle is reached by easing the radius from one
+    /// anchor's distance to the other's, so the span stays one smooth turn.
+    Arc {
+        /// Plan centre, `[x, z]`.
+        center: [f64; 2],
+        /// Turn direction: from +X towards +Z when true.
+        positive: bool,
+    },
+}
+
 /// Relative controls stored on a graph edge, independent of generated vertices.
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "curve-serde", derive(serde::Serialize, serde::Deserialize))]
@@ -61,6 +84,12 @@ pub struct CurveHandles {
         serde(default, skip_serializing_if = "String::is_empty")
     )]
     pub surface_type: String,
+    /// The plan shape this span keeps; absent is a free cubic. See [`SpanGeometry`].
+    #[cfg_attr(
+        feature = "curve-serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub geometry: Option<SpanGeometry>,
 }
 impl CurveHandles {
     /// Interpolates an independently authored width profile.
@@ -85,8 +114,17 @@ impl CurveHandles {
             .map(|(a, b)| a + (b - a) * t)
             .collect())
     }
-    /// Resolves authored relative controls against current graph anchors.
+    /// Resolves authored relative controls against current graph anchors. A
+    /// shaped span is rebuilt from its [`SpanGeometry`] instead, so it stays
+    /// straight or circular however its anchors move.
     pub fn resolve(&self, start: CurvePoint, end: CurvePoint) -> CubicBezier {
+        match self.geometry {
+            Some(SpanGeometry::Line) => return straight(start, end),
+            Some(SpanGeometry::Arc { center, positive }) => {
+                return arc_span(center, positive, start, end);
+            }
+            None => {}
+        }
         CubicBezier {
             points: [
                 start,
@@ -105,7 +143,49 @@ impl CurveHandles {
             band_offsets,
             end_band_offsets: Vec::new(),
             surface_type: String::new(),
+            geometry: None,
         }
+    }
+}
+
+/// A straight cubic from `a` to `b`, handles at the thirds.
+fn straight(a: CurvePoint, b: CurvePoint) -> CubicBezier {
+    CubicBezier {
+        points: [a, lerp(a, b, 1. / 3.), lerp(a, b, 2. / 3.), b],
+    }
+}
+
+/// The arc around `center` from `a` to `b` in plan, as one cubic, climbing
+/// linearly in height between them.
+fn arc_span(center: [f64; 2], positive: bool, a: CurvePoint, b: CurvePoint) -> CubicBezier {
+    let (ax, az) = (a[0] - center[0], a[2] - center[1]);
+    let (bx, bz) = (b[0] - center[0], b[2] - center[1]);
+    let (ra, rb) = (ax.hypot(az), bx.hypot(bz));
+    let (ta, tb) = (az.atan2(ax), bz.atan2(bx));
+    let mut sweep = tb - ta;
+    if positive {
+        while sweep <= 0. {
+            sweep += std::f64::consts::TAU;
+        }
+    } else {
+        while sweep >= 0. {
+            sweep -= std::f64::consts::TAU;
+        }
+    }
+    if ra < 1e-9 || rb < 1e-9 || !sweep.is_finite() {
+        return straight(a, b);
+    }
+    // The classic circular-arc cubic: handles of length r * 4/3 * tan(sweep / 4)
+    // along each anchor's tangent.
+    let k = 4. / 3. * (sweep / 4.).tan();
+    let dy = b[1] - a[1];
+    CubicBezier {
+        points: [
+            a,
+            [a[0] - k * az, a[1] + dy / 3., a[2] + k * ax],
+            [b[0] + k * bz, a[1] + 2. * dy / 3., b[2] - k * bx],
+            b,
+        ],
     }
 }
 fn tolerance(v: f64) -> Result<(), String> {

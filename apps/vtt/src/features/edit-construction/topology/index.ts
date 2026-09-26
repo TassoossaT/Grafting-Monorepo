@@ -8,6 +8,8 @@ export type { CloudSource, CloudTopology, ConstructionCloud } from "./constructi
 export { edgeUseCounts, outwardPerimeterRings, perimeterOf } from "./surface-perimeter.ts";
 export type { PerimeterLoop } from "./surface-perimeter.ts";
 export { fitPath } from "./stroke-fitting.ts";
+export { createAngleTracker, planAngle, rotateInPlan, rotateVectorInPlan, wrapAngle } from "./plan-rotation.ts";
+export type { PlanPoint } from "./plan-rotation.ts";
 export type { FittedEdge, FitOptions } from "./stroke-fitting.ts";
 export { createBoundaryEdges, reverseGeometry, sameGeometry, sharedEdgeId } from "./boundary-edges.ts";
 export type { BoundaryEdges, EdgeSharing } from "./boundary-edges.ts";

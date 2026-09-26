@@ -9,15 +9,20 @@ import {
   planEdgeReshape,
   reshapeCurve,
   resolveCloudTopology,
+  curveEdgesOf,
+  globalHandleOf,
+  prospectiveGraph,
   resolveCurves,
   reverseGeometry,
   spineOwnerAt,
+  structureTypeFor,
 } from "../../../../features/edit-construction/index.ts";
 import type { AtomicEditOp, StructureEditParams } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionCurvedEdge, ConstructionEdgeGeometry, ConstructionPosition, ConstructionSurfaceKey, CubicBezier } from "../../../../ports/index.ts";
 import type { PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
 import { commitPatchReplacement } from "../../effects/effect-commit.ts";
-import { roadSnapTarget, showRoadSnap } from "../paths/road-body-target.ts";
+import { commitSpineRegeneration } from "./spine-commit.ts";
+import { beginGlobalHandleGesture } from "./global-handle-gesture.ts";
 
 /**
  * One curve-handle gesture for every curve on the table.
@@ -39,7 +44,20 @@ export interface CurveGesture {
   cancel(): void;
 }
 
+/**
+ * How a dragged spine anchor snaps onto something else -- a road onto another
+ * road's node or span, say -- and how the snap is shown. A tool supplies its
+ * own; the gesture only asks it.
+ */
+export interface AnchorSnap {
+  find(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): PointerSample | undefined;
+  /** Shows `target` as the snap, or clears it when absent. */
+  show(ctx: ToolContext, target?: PointerSample): void;
+}
+
 export type CurveGestureOptions = StructureEditParams & {
+  /** How a dragged anchor snaps; absent, it never does. */
+  readonly snap?: AnchorSnap;
   /** A scene manipulator supplies an authoritative XYZ target, unlike a ground pointer. */
   readonly spatialTarget?: boolean;
   readonly parameter?: number;
@@ -86,6 +104,8 @@ export function beginCurveGesture(
   const actualParams = typeof ownsTypeOrParams === "function" ? params : ownsTypeOrParams;
   if (!sample.nodeId) return undefined;
   const snapshot = ctx.runtime.getGraphSnapshot();
+  // A whole-structure handle is dragged by the one gesture every structure shares.
+  if (globalHandleOf(sample.nodeId)) return beginGlobalHandleGesture(ctx, sample, ownsType, actualParams);
   const contour = ctx.runtime.getCurvedEdges();
   if (!isBezierEditTarget(snapshot, sample.nodeId, contour)) return undefined;
   const pick = curvePick(sample.nodeId);
@@ -96,10 +116,10 @@ export function beginCurveGesture(
     return face === undefined ? undefined : contourGesture(ctx, sample, actualParams, contourEdge, pick.index, face.surfaceKey);
   }
   const owner = spineOwnerAt(snapshot, pick?.edgeId ?? sample.nodeId);
-  return owner !== undefined && ownsType(owner) ? spineGesture(ctx, sample, actualParams) : undefined;
+  return owner !== undefined && ownsType(owner) ? spineGesture(ctx, sample, actualParams, structureTypeFor(owner)?.spine?.planOnly === true) : undefined;
 }
 
-function spineGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGestureOptions): CurveGesture {
+function spineGesture(ctx: ToolContext, sample: PointerSample, params: CurveGestureOptions | undefined, planOnly: boolean): CurveGesture {
   const snapshot = ctx.runtime.getGraphSnapshot();
   const targetId = sample.nodeId!;
   const operationId = `curve-edit:${ctx.nextSequence()}`;
@@ -149,14 +169,14 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGes
       if (ended) return;
       if (!dragged && !crossedThreshold(sample, gesture, params)) return;
       target = targetOf(sample, gesture, params);
-      if (!curvePick(targetId)) {
-        const snap = roadSnapTarget(ctx, { point: target }, targetId);
-        if (snap) {
-          target = snap.point;
-          showRoadSnap(ctx, snap);
-        } else {
-          showRoadSnap(ctx);
-        }
+      // A plan-only spine's heights are its owner's: a pointer on the ground
+      // never lends its height. The scene manipulator's vertical arrow and
+      // elevation mode move it on purpose.
+      if (planOnly && params?.mode !== "elevation" && !params?.spatialTarget) target = { ...target, y: sample.point.y };
+      if (!curvePick(targetId) && !planOnly && params?.snap) {
+        const snap = params.snap.find(ctx, { point: target }, targetId);
+        if (snap) target = snap.point;
+        params.snap.show(ctx, snap);
       }
       moved = target.x !== sample.point.x || target.y !== sample.point.y || target.z !== sample.point.z;
       dragged ||= moved;
@@ -207,7 +227,7 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGes
     commit() {
       if (ended) return;
       ended = true;
-      showRoadSnap(ctx);
+      params?.snap?.show(ctx);
       ctx.runtime.clearPreview(CHANNEL);
       if (dragged && !moved) return;
       if (!dragged && params?.insertOnClick === false) return;
@@ -215,11 +235,10 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGes
       try {
         const draft = planBezierEdit(input(!moved && (!params?.curveAction || params.curveAction === "edit")));
         if (!draft) return;
-        const { recorded } = commitPatchReplacement(ctx.runtime, draft.request, { transactionId: operationId });
-        if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
+        commitSpineRegeneration(ctx, draft.request, operationId);
         ctx.reportSelection(isBezierEditTarget(ctx.runtime.getGraphSnapshot(), draft.selectedId) ? { id: draft.selectedId, point: target } : undefined);
         const msg = isWidthDrag
-          ? `Largura da rua ajustada para ${currentWidth.toFixed(2)}m.`
+          ? `Largura ajustada para ${currentWidth.toFixed(2)}m.`
           : params?.curveAction && params.curveAction !== "edit"
           ? "Curva atualizada."
           : moved
@@ -230,10 +249,23 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGes
         ctx.reportFeedback({ tone: "error", message: `Curva preservada: ${String(error)}` });
       }
     },
-    cancel() { ended = true; showRoadSnap(ctx); ctx.runtime.clearPreview(CHANNEL); },
+    cancel() { ended = true; params?.snap?.show(ctx); ctx.runtime.clearPreview(CHANNEL); },
   };
 }
 
+/**
+ * A spine's global handles (`spine-global-handles.ts`), one gesture for all
+ * of them. Each plans a spine graph patch, and the spine's owner
+ * regenerates from it -- previewed while dragging, committed on release:
+ *
+ * - pivot: moves the whole spine along the ground, up and down in
+ *   elevation mode, or anywhere with the scene manipulator;
+ * - rotate: dragged round the pivot, turns the whole spine round it; Shift
+ *   snaps the turn to 15 degree steps;
+ * - height: dragged up or down, sets the far end's height;
+ * - turns: dragged round a spiral's centre, winds it on in its own direction
+ *   or back the other way, keeping what its owner's `windKeeps` says.
+ */
 function contourGesture(
   ctx: ToolContext,
   sample: PointerSample,

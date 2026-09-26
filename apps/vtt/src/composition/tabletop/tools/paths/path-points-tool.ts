@@ -1,21 +1,22 @@
-import { createPathBrushEffect, pathFormationFor, DEFAULT_TOOL_PARAMS, curvePick, structureTypeFor } from "../../../../features/edit-construction/index.ts";
+import { createPathBrushEffect, pathFormationFor, DEFAULT_TOOL_PARAMS, PATH_SURFACE_TYPE } from "../../../../features/edit-construction/index.ts";
 import type { PathBrushParams } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionPosition, CubicBezier } from "../../../../ports/index.ts";
 import { commitPathCloudIntent } from "../../path/path-cloud-transaction.ts";
 import { scopedToolId, type ConstructionTool, type ToolContext, type PointerSample, type ToolGesture } from "../core/tool-context.ts";
-import { beginCurveGesture, type CurveGesture, type CurveGestureOptions } from "../core/curve-edit-gesture.ts";
+import { createSpineEditBehavior } from "../core/spine-edit-behavior.ts";
 import { pathStrokeTool } from "./path-stroke-tool.ts";
-import { roadBodyTarget, roadSnapTarget, roadSnapIsCurrent, showRoadSnap, type RoadSnapTarget } from "./road-body-target.ts";
+import { roadAnchorSnap, roadSnapTarget, roadSnapIsCurrent, showRoadSnap, type RoadSnapTarget } from "./road-body-target.ts";
 import { createFastRoadPreview } from "./road-preview-mesh.ts";
 
 const CHANNEL = "road-points";
 const xyz = (p: ConstructionPosition) => [p.x, p.y, p.z] as const;
 const equal = (a: ConstructionPosition, b: ConstructionPosition) => a.x === b.x && a.y === b.y && a.z === b.z;
 type Draft = { points: ConstructionPosition[]; params: PathBrushParams };
-type Gesture = { kind: "edit"; edit: CurveGesture } | { kind: "stroke"; origin?: PointerSample } | { kind: "point"; point: ConstructionPosition; snapTarget?: RoadSnapTarget } | { kind: "selection" };
+type Gesture = { kind: "edit" } | { kind: "stroke"; origin?: PointerSample } | { kind: "point"; point: ConstructionPosition; snapTarget?: RoadSnapTarget } | { kind: "selection" };
 const drafts = new WeakMap<ToolContext["runtime"], Draft>();
 const gestures = new WeakMap<ToolContext["runtime"], Gesture>();
-const selections = new WeakMap<ToolContext["runtime"], string>();
+/** Editing a standing road by its points -- the spine editor every spine-built type shares. */
+const spine = createSpineEditBehavior({ ownsSpine: (surfaceType) => surfaceType === PATH_SURFACE_TYPE, snap: roadAnchorSnap });
 
 function seededGesture<G extends ToolGesture>(gesture: G, origin?: PointerSample): G {
   return origin ? { ...gesture, start: origin, samples: [origin, ...gesture.samples.slice(1)] } : gesture;
@@ -42,43 +43,12 @@ function preview(ctx: ToolContext, draft: Draft, cursor?: ConstructionPosition):
 }
 function safely(ctx: ToolContext, work: () => void): void {
   try { work(); } catch (error) {
-    const active = gestures.get(ctx.runtime);
-    if (active?.kind === "edit") active.edit.cancel();
+    spine.abort(ctx);
     gestures.delete(ctx.runtime);
     pathStrokeTool.onCancel?.(ctx);
     ctx.reportFeedback({ tone: "error", message: `Caminho preservado: ${String(error)}` });
   }
 }
-function select(ctx: ToolContext, sample?: PointerSample): void {
-  if (sample?.nodeId) selections.set(ctx.runtime, sample.nodeId); else selections.delete(ctx.runtime);
-  ctx.reportSelection(sample?.nodeId ? { id: sample.nodeId, point: sample.point } : undefined);
-}
-function beginEdit(ctx: ToolContext, sample: PointerSample, options: CurveGestureOptions) {
-  return beginCurveGesture({ ...ctx, reportSelection(info) {
-    if (info) selections.set(ctx.runtime, info.id); else selections.delete(ctx.runtime);
-    ctx.reportSelection(info);
-  } }, sample, options);
-}
-function editTarget(ctx: ToolContext, sample: PointerSample): PointerSample | undefined {
-  if (!sample.nodeId) return;
-  const graph = ctx.runtime.getGraphSnapshot();
-  const edges = graph.edges.filter(e => e.curve?.surfaceType && structureTypeFor(e.curve.surfaceType)?.spine);
-  const pick = curvePick(sample.nodeId);
-  if (pick) {
-    if (pick.index !== "midpoint") return;
-    const edge = edges.find(e => e.edgeId === pick.edgeId);
-    if (!edge) return;
-    const a = graph.nodes.find(n => n.id === edge.startNodeId)!;
-    const b = graph.nodes.find(n => n.id === edge.endNodeId)!;
-    const resolved = ctx.runtime.curveBatch({ tolerance: 0.025, commands: [{ kind: "resolve", handles: edge.curve!, start: xyz(a.position), end: xyz(b.position) }] })[0]!;
-    const p = ctx.runtime.curveBatch({ tolerance: 0.025, commands: [{ kind: "split", curve: resolved.curves[0]!, t: 0.5 }] })[0]!.curves[0]!.points[3];
-    return { ...sample, point: { x: p[0], y: p[1], z: p[2] } };
-  }
-  if (!edges.some(e => e.startNodeId === sample.nodeId || e.endNodeId === sample.nodeId)) return;
-  const node = graph.nodes.find(n => n.id === sample.nodeId);
-  return node && { ...sample, point: node.position };
-}
-
 function commitDraft(ctx: ToolContext, draft: Draft): void {
   const points = prunePoints(draft.points);
   if (points.length < 2) return;
@@ -97,11 +67,11 @@ function commitDraft(ctx: ToolContext, draft: Draft): void {
 function startBranch(ctx: ToolContext, id: string | undefined, params: PathBrushParams): boolean {
 
     const node = ctx.runtime.getGraphSnapshot().nodes.find(n => n.id === id);
-    if (!node || !editTarget(ctx, { nodeId: node.id, point: node.position })) return false;
+    if (!node || !spine.pick(ctx, { nodeId: node.id, point: node.position })) return false;
     const draft: Draft = { points: [{ ...node.position }], params: { ...params, creationMode: "points" } };
     showRoadSnap(ctx);
     drafts.set(ctx.runtime, draft);
-    select(ctx);
+    spine.select(ctx);
     preview(ctx, draft);
     ctx.reportFeedback({ tone: "info", message: "Posicione a nova rua com o mouse. Clique num encaixe para finalizar, ou adicione pontos livres; Enter confirma e Esc cancela." });
     return true;
@@ -111,6 +81,7 @@ function startBranch(ctx: ToolContext, id: string | undefined, params: PathBrush
 export const pathPointsTool: ConstructionTool<"path-brush"> = {
   id: "path-brush",
   handlePresentation: "spine-points",
+  anchorSnap: roadAnchorSnap,
   useGridSnap: false,
   defaultParams: () => DEFAULT_TOOL_PARAMS["path-brush"],
   previewOnHover: true,
@@ -133,11 +104,10 @@ export const pathPointsTool: ConstructionTool<"path-brush"> = {
       const snap = drafts.has(ctx.runtime) ? roadSnapTarget(ctx, sample) : undefined;
       if (snap) sample = snap;
       if (!drafts.get(ctx.runtime)?.points.length) {
-        const target = editTarget(ctx, sample);
-        const body = target ? undefined : roadBodyTarget(ctx, sample);
-        const origin = target ?? body?.sample;
+        const picked = spine.pick(ctx, sample);
+        const origin = picked?.sample;
         if (sample.shiftKey && origin) {
-          select(ctx);
+          spine.select(ctx);
           if (drafts.has(ctx.runtime) || (params.creationMode && params.creationMode !== "brush")) {
             gestures.set(ctx.runtime, { kind: "point", point: { ...origin.point } });
           } else {
@@ -146,30 +116,16 @@ export const pathPointsTool: ConstructionTool<"path-brush"> = {
           }
           return;
         }
-        if (target) {
-          select(ctx, target);
-          const midpoint = curvePick(target.nodeId!)?.index === "midpoint";
-          if (midpoint) {
-            const edit = beginEdit(ctx, target, { mode: "shape", curveMode: "free", insertOnClick: true, dragThreshold: 5, pointerOrigin: sample.point });
-            if (edit) gestures.set(ctx.runtime, { kind: "edit", edit });
-          } else {
-            const edit = beginEdit(ctx, target, { mode: "shape", insertOnClick: false, dragThreshold: 5, pointerOrigin: sample.point });
-            if (edit) gestures.set(ctx.runtime, { kind: "edit", edit });
-          }
+        if (picked) {
+          if (spine.begin(ctx, picked)) gestures.set(ctx.runtime, { kind: "edit" });
           return;
         }
-        if (body) {
-          select(ctx, body.sample);
-          const edit = beginEdit(ctx, body.sample, { ...body.options, curveMode: "free", insertOnClick: curvePick(body.sample.nodeId!)?.index === "midpoint" });
-          if (edit) gestures.set(ctx.runtime, { kind: "edit", edit });
-          return;
-        }
-        if (sample.nodeId && curvePick(sample.nodeId)) {
-          select(ctx);
+        if (spine.isHandle(ctx, sample)) {
+          spine.select(ctx);
           gestures.set(ctx.runtime, { kind: "selection" });
           return;
         }
-        select(ctx);
+        spine.select(ctx);
       }
       if (drafts.has(ctx.runtime) || (params.creationMode && params.creationMode !== "brush")) {
         gestures.set(ctx.runtime, { kind: "point", point: { ...sample.point }, snapTarget: snap });
@@ -182,7 +138,7 @@ export const pathPointsTool: ConstructionTool<"path-brush"> = {
   onPointerMove(ctx, g, params) {
     safely(ctx, () => {
       const active = gestures.get(ctx.runtime);
-      if (active?.kind === "edit") active.edit.move(g);
+      if (active?.kind === "edit") spine.move(ctx, g);
       else if (active?.kind === "stroke") pathStrokeTool.onPointerMove?.(ctx, seededGesture(g, active.origin), params);
       else if (active?.kind === "point") {
         const draft = drafts.get(ctx.runtime);
@@ -197,7 +153,7 @@ export const pathPointsTool: ConstructionTool<"path-brush"> = {
     safely(ctx, () => {
       const active = gestures.get(ctx.runtime);
       gestures.delete(ctx.runtime);
-      if (active?.kind === "edit") { active.edit.move(g); active.edit.commit(); }
+      if (active?.kind === "edit") spine.end(ctx, g);
       else if (active?.kind === "stroke") pathStrokeTool.onPointerUp?.(ctx, seededGesture(g, active.origin), params);
       else if (active?.kind === "point") {
         if (active.snapTarget && !roadSnapIsCurrent(ctx, active.snapTarget)) {
@@ -219,7 +175,7 @@ export const pathPointsTool: ConstructionTool<"path-brush"> = {
   },
   onSelectionAction(ctx, action, params) {
     if (action !== "branch" || gestures.has(ctx.runtime) || drafts.has(ctx.runtime)) return false;
-    return startBranch(ctx, selections.get(ctx.runtime), params);
+    return startBranch(ctx, spine.selected(ctx), params);
   },
   onKeyDown(ctx, key) {
     if (gestures.has(ctx.runtime)) return false;
@@ -237,25 +193,17 @@ export const pathPointsTool: ConstructionTool<"path-brush"> = {
       });
       return true;
     }
-    const id = selections.get(ctx.runtime);
-    if (!id || (key !== "Delete" && key !== "Backspace")) return false;
-    const node = ctx.runtime.getGraphSnapshot().nodes.find(n => n.id === id);
-    if (!node) { select(ctx); return false; }
-    safely(ctx, () => {
-      beginEdit(ctx, { nodeId: id, point: node.position }, { mode: "shape", curveAction: "remove-anchor", allowShapeChange: true })?.commit();
-      select(ctx);
-    });
-    return true;
+    if (!spine.selected(ctx) || (key !== "Delete" && key !== "Backspace")) return false;
+    let removed = true;
+    safely(ctx, () => { removed = spine.removeSelected(ctx); });
+    return removed;
   },
   onCancel(ctx) {
-    const active = gestures.get(ctx.runtime);
-    if (active?.kind === "edit") active.edit.cancel();
     gestures.delete(ctx.runtime);
     drafts.delete(ctx.runtime);
-    selections.delete(ctx.runtime);
     pathStrokeTool.onCancel?.(ctx);
     ctx.runtime.clearPreview(CHANNEL);
     showRoadSnap(ctx);
-    select(ctx);
+    spine.cancel(ctx);
   },
 };

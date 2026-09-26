@@ -56,7 +56,7 @@ import {
   type MapSurfacePickVisualParams,
 } from "./map-surface-pick-scene-item.ts";
 import { clipPlaneForCameraHeight } from "./map-chunk-key.ts";
-import { createMarkerTexture, createNodeHandleTexture, createRoadBranchTexture } from "./marker-textures.ts";
+import { createHeightHandleTexture, createMarkerTexture, createMidpointHandleTexture, createMoveHandleTexture, createNodeHandleTexture, createRoadBranchTexture, createRotateHandleTexture, createTurnsHandleTexture } from "./marker-textures.ts";
 import {
   NODE_HANDLE_LAYER_ID,
   NODE_HANDLE_VISUAL_KIND,
@@ -64,6 +64,7 @@ import {
   nodeHandleSceneItemId,
   nodeHandleTransform,
   type NodeHandlePickData,
+  type NodeHandleVisualParams,
 } from "./node-handle-scene-item.ts";
 import {
   TOKEN_LAYER_ID,
@@ -118,6 +119,8 @@ export class Render3dSceneAdapter implements SceneRenderPort {
   readonly #views = new Map<RenderViewId, AttachedView>();
   readonly #tokens = new Map<string, RenderToken>();
   readonly #nodeHandles = new Map<string, { readonly x: number; readonly y: number; readonly z: number }>();
+  /** The glyph each handle is drawn with: a changed one is re-put, not moved. */
+  readonly #nodeHandleGlyphs = new Map<string, import("@/ports").RenderHandleGlyph>();
   /** Which preview channels currently have something on them, so an unnamed clear can empty them all. */
   readonly #previewChannels = new Set<string>();
   // Keyed by `${layer}:${scopeId}` (not scopeId alone) so a terrain chunk id
@@ -150,13 +153,21 @@ export class Render3dSceneAdapter implements SceneRenderPort {
       }),
       equals: (left, right) => left.color === right.color,
     });
-    registry.register<Record<string, never>>({
+    const glyphTextures = {
+      point: handleTexture,
+      midpoint: createMidpointHandleTexture(),
+      move: createMoveHandleTexture(),
+      rotate: createRotateHandleTexture(),
+      height: createHeightHandleTexture(),
+      turns: createTurnsHandleTexture(),
+    } as const;
+    registry.register<NodeHandleVisualParams>({
       kind: NODE_HANDLE_VISUAL_KIND,
-      describe: () => ({
+      describe: (params) => ({
         geometry: { shape: "sprite" },
-        material: { surface: "unlit", color: 0xffffff, texture: handleTexture },
+        material: { surface: "unlit", color: 0xffffff, texture: glyphTextures[params.glyph] },
       }),
-      equals: () => true,
+      equals: (left, right) => left.glyph === right.glyph,
     });
     registry.register<Record<string, never>>({
       kind: "vtt-road-branch-action",
@@ -382,10 +393,13 @@ export class Render3dSceneAdapter implements SceneRenderPort {
     } else if (change.type === "node-handle-removed") {
       engine.scene.remove(nodeHandleSceneItemId(change.nodeId), origin);
       this.#nodeHandles.delete(change.nodeId);
+      this.#nodeHandleGlyphs.delete(change.nodeId);
     } else if (change.type === "node-handle-upserted") {
       const previous = this.#nodeHandles.get(change.handle.nodeId);
-      if (previous === undefined) {
-        engine.scene.put(nodeHandleSceneItem(change.handle.nodeId, change.handle.position), origin);
+      const glyph = change.handle.glyph ?? "point";
+      if (previous === undefined || this.#nodeHandleGlyphs.get(change.handle.nodeId) !== glyph) {
+        engine.scene.put(nodeHandleSceneItem(change.handle.nodeId, change.handle.position, glyph), origin);
+        this.#nodeHandleGlyphs.set(change.handle.nodeId, glyph);
       } else if (
         previous.x !== change.handle.position.x ||
         previous.y !== change.handle.position.y ||
@@ -393,7 +407,7 @@ export class Render3dSceneAdapter implements SceneRenderPort {
       ) {
         engine.scene.setTransform(
           nodeHandleSceneItemId(change.handle.nodeId),
-          nodeHandleTransform(change.handle.position),
+          nodeHandleTransform(change.handle.position, glyph),
           origin,
         );
       }

@@ -1,17 +1,50 @@
-import { DEFAULT_TOOL_PARAMS, SLOPE_SURFACE_TYPE } from "../../../../features/edit-construction/index.ts";
-import type { ConstructionTool } from "../core/tool-context.ts";
+import { DEFAULT_TOOL_PARAMS, hasTrait, RAMP_SURFACE_TYPE, SLOPE_SURFACE_TYPE } from "../../../../features/edit-construction/index.ts";
+import type { ToolParamsByTool } from "../../../../features/edit-construction/index.ts";
+import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
+import type { ConstructionPosition } from "../../../../ports/index.ts";
+import type { ConstructionTool, PointerSample, ToolContext } from "../core/tool-context.ts";
 import { withStructureEditing } from "../core/structure-edit-behavior.ts";
-import { polylineSegmentsPreview } from "../shapes/preview-shapes.ts";
-import { commitPlatformSlope, slopeControlPoint, spiralControlPoints, straightRampOutline, straightRampPoints } from "./slope-commit.ts";
+import { withSpineEditing } from "../core/spine-edit-behavior.ts";
+import { appendNodeDisk, PREVIEW_ELEVATION } from "../shapes/ribbon-mesh-preview.ts";
+import type { RampCorners } from "../../../../features/edit-construction/index.ts";
+import { commitPlatformSlope } from "./slope-commit.ts";
+import { createCurveDraftTool, type FinishedCurveDraft } from "../core/curve-draft.ts";
+import { spineChainSelection } from "../core/spine-chain-selection.ts";
+import { commitStraightRamp, plannedRamp, straightRampPoints } from "./ramp-commit.ts";
 
-const ownsType = (surfaceType: string) => surfaceType === SLOPE_SURFACE_TYPE;
+const ownsSlope = (surfaceType: string) => surfaceType === SLOPE_SURFACE_TYPE;
+const ownsRamp = (surfaceType: string) => surfaceType === RAMP_SURFACE_TYPE;
 
 const COLOR = 0x79b8e8;
+/** Radius of the mark on a corner that will be welded. */
+const WELD_MARK = 0.18;
+const READOUT_INTERVAL_MS = 150;
+let lastReadout = 0;
+
+/** A flat four-cornered face, as two triangles, just above what it previews. */
+function appendQuad(positions: number[], indices: number[], quad: readonly ConstructionPosition[]): void {
+  const base = positions.length / 3;
+  for (const p of quad) positions.push(p.x, p.y + PREVIEW_ELEVATION, p.z);
+  indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+}
+
+/** Length, rise, grade and welds of the ramp being drawn, at most every few frames. */
+function reportRampReadout(ctx: ToolContext, corners: RampCorners, welds: number): void {
+  const now = Date.now();
+  if (now - lastReadout < READOUT_INTERVAL_MS) return;
+  lastReadout = now;
+  const mid = (a: ConstructionPosition, b: ConstructionPosition) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 });
+  const from = mid(corners.bottom.min, corners.bottom.max), to = mid(corners.top.min, corners.top.max);
+  const run = Math.hypot(to.x - from.x, to.z - from.z), rise = to.y - from.y;
+  const grade = run > 0 ? ((Math.abs(rise) / run) * 100).toFixed(0) : "0";
+  ctx.reportFeedback({ tone: "info", message: `comprimento ${run.toFixed(1)} m · subida ${rise.toFixed(2)} m · inclinação ${grade}% · ${welds} ponta(s) encaixada(s)` });
+}
 
 /**
- * Two ways of drawing the same structure. A ramp and a spiral are presets
- * choosing control points; both commit an ordinary sloped-platform spine,
- * edited afterwards by the same spine handles.
+ * Two structures with two different truths. A straight ramp is a trapezoid
+ * edited by its corners, sides and ends; a spiral is a sloped-platform spine
+ * edited by its control points and handles, and is what a ramp with curves
+ * is drawn as.
  */
 
 /** Drag from the start to the end; the ramp climbs the fixed rise. */
@@ -20,8 +53,21 @@ const rawSlopeRampTool: ConstructionTool<"slope-ramp"> = {
   previewOnHover: true,
   defaultParams: () => DEFAULT_TOOL_PARAMS["slope-ramp"],
   previewFor(gesture, params, ctx) {
-    const [from, to] = straightRampPoints(ctx, gesture.start, gesture.current, params);
-    return polylineSegmentsPreview(straightRampOutline(from, to, params.width), COLOR);
+    try {
+      const { corners, welds } = plannedRamp(ctx, gesture.start, gesture.current, params);
+      const positions: number[] = [], indices: number[] = [];
+      appendQuad(positions, indices, [corners.bottom.min, corners.bottom.max, corners.top.max, corners.top.min]);
+      // A disk at each corner of an end that will be welded into a floor.
+      for (const weld of welds) {
+        const end = weld.controlIndex === 0 ? corners.bottom : corners.top;
+        appendNodeDisk(positions, indices, end.min, WELD_MARK);
+        appendNodeDisk(positions, indices, end.max, WELD_MARK);
+      }
+      reportRampReadout(ctx, corners, welds.length);
+      return { kind: "mesh", positions: Float32Array.from(positions), indices: Uint32Array.from(indices), color: COLOR, opacity: 0.55 };
+    } catch {
+      return undefined;
+    }
   },
   onClick(ctx) {
     ctx.reportFeedback({ tone: "info", message: "Arraste do início ao fim da rampa; ela sobe a altura escolhida em Subida." });
@@ -33,29 +79,59 @@ const rawSlopeRampTool: ConstructionTool<"slope-ramp"> = {
       ctx.reportFeedback({ tone: "error", message: "Arraste mais longe para desenhar a rampa." });
       return;
     }
-    commitPlatformSlope(ctx, [from, to], params);
+    commitStraightRamp(ctx, gesture.start, gesture.current, params);
   },
 };
 
-/** Also grabs and edits an existing slope spine's own control point/segment -- see `structure-edit-behavior.ts`. */
-export const slopeRampTool = withStructureEditing(rawSlopeRampTool, { ownsType });
+/** Also grabs and edits an existing ramp's own corner, side, end or body -- see `structure-edit-behavior.ts`. */
+export const slopeRampTool = withStructureEditing(rawSlopeRampTool, { ownsType: ownsRamp });
 
-/** Click the centre; the spiral climbs the rise over its turns. */
-const rawSlopeSpiralTool: ConstructionTool<"slope-spiral"> = {
+/** A finished draft, committed as a sloped platform: laid-out spans as they are, points as a smooth run through them. */
+function commitDraft(ctx: ToolContext, draft: FinishedCurveDraft, params: { readonly width: number }): void {
+  if (draft.kind === "points") commitPlatformSlope(ctx, draft.points, params);
+  else commitPlatformSlope(ctx, [], params, draft.spans);
+}
+
+/**
+ * A spiral, laid out as a centre-ends spiral run: centre, start, then turned
+ * round the centre to its end -- see `curve-draft.ts`.
+ */
+const rawSlopeSpiralTool = createCurveDraftTool({
   id: "slope-spiral",
-  previewOnHover: true,
   defaultParams: () => DEFAULT_TOOL_PARAMS["slope-spiral"],
-  previewFor(gesture, params, ctx) {
-    try {
-      return polylineSegmentsPreview(spiralControlPoints(slopeControlPoint(ctx, gesture.current), params), COLOR);
-    } catch {
-      return undefined;
-    }
-  },
-  onClick(ctx, sample, params) {
-    commitPlatformSlope(ctx, spiralControlPoints(slopeControlPoint(ctx, sample), params), params);
-  },
-};
+  modeOf: () => "spiral",
+  riseOf: (params) => params.rise,
+  widthOf: (params) => params.width,
+  commit: commitDraft,
+  color: COLOR,
+});
 
-/** Also grabs and edits an existing slope spine's own control point/segment -- see `structure-edit-behavior.ts`. */
-export const slopeSpiralTool = withStructureEditing(rawSlopeSpiralTool, { ownsType });
+const spiralSelection = spineChainSelection("slope-spiral");
+
+/**
+ * Also edits an existing spiral by its spine points, exactly as a road is
+ * edited -- see `spine-edit-behavior.ts` -- and as a whole from the panel,
+ * once one of its handles is picked -- see `spine-chain-selection.ts`.
+ */
+export const slopeSpiralTool = withSpineEditing({ ...rawSlopeSpiralTool, onParamsChange: spiralSelection.onParamsChange }, {
+  ownsSpine: ownsSlope, drafting: rawSlopeSpiralTool.drafting, onSelect: spiralSelection.onSelect,
+});
+
+/** A curved ramp, drawn in any of the shared spine creation modes; R cycles them. */
+const rawSlopeCurveTool = createCurveDraftTool({
+  id: "slope-curve",
+  defaultParams: () => DEFAULT_TOOL_PARAMS["slope-curve"],
+  modeOf: (params) => params.mode ?? "points",
+  withMode: (params, mode) => ({ ...params, mode }),
+  riseOf: (params) => params.rise,
+  widthOf: (params) => params.width,
+  commit: commitDraft,
+  color: COLOR,
+});
+
+const curveSelection = spineChainSelection("slope-curve");
+
+/** Edits an existing curved ramp by its spine points, as the spiral and the road are edited, and as a whole from the panel. */
+export const slopeCurveTool = withSpineEditing({ ...rawSlopeCurveTool, onParamsChange: curveSelection.onParamsChange }, {
+  ownsSpine: ownsSlope, drafting: rawSlopeCurveTool.drafting, onSelect: curveSelection.onSelect,
+});

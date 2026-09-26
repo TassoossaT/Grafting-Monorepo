@@ -13,36 +13,62 @@ import { allowed, denied, type StructureTypeDefinition, type StructureView } fro
 
 /** Ground under a platform is cut, and the ground's own repair regenerates around it. */
 const cutsGround = (covered: StructureView) => covered.traits.has("ground") ? CUT : IGNORE;
+/** A floating structure stands over the ground without touching it: the terrain below is left as it is. */
+const ignoresGround = () => IGNORE;
 
-/** A horizontal structural marker, independently usable as floor or ceiling. */
-export const platformStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
-  surfaceType: "platform", label: "Plataforma", creation: "a flat closed contour, without thickness",
-  traits: Object.freeze(["floor"] as const),
-  requiresMotionSolver: true,
-  roleFor: (topology, target) => target.kind === "vertex" && !topology.nodes.some((node) => node.id === target.nodeId) ? "platform-unknown" : `platform-${target.kind}`,
-  policyFor: (role) => role === "platform-unknown" ? denied(role, "Vertice fora da plataforma.") : ({ ...allowed(role, ALL_AXES, role === "platform-region" ? "cloud" : "surface"), transport: role === "platform-region" }),
-  interactionOver: cutsGround,
-  motionInfluences: (topology, transport): readonly ConstructionMotionInfluence[] => {
-    const anchor = topology.nodes[0];
-    if (!anchor) return [];
-    // A star per face is linear; shared nodes connect faces in the Rust solver.
-    const axes = [transport, true, transport] as const;
-    return topology.nodes.slice(1).flatMap((node) => [
-      { from: anchor.id, to: node.id, axes }, { from: node.id, to: anchor.id, axes },
-    ]);
-  },
-  validateMotion: (topology, positions) => {
-    const elevations = topology.nodes.map((node) => (positions.get(node.id) ?? node.position).y);
-    return elevations.some((y) => Math.abs(y - elevations[0]!) > 1e-4)
-      ? "Todos os vertices da plataforma devem permanecer na mesma elevacao." : undefined;
-  },
-});
+/**
+ * A horizontal structural marker, independently usable as floor or ceiling,
+ * drawn as a flat closed contour at one elevation.
+ *
+ * Built twice, once per way of meeting the ground, rather than carrying a
+ * grounded/floating flag on the face. The flag would have to be stored,
+ * undone and read back wherever a cut is decided; the surface type already
+ * is all three. And a cloud is one type (`construction-cloud.ts`), so a
+ * floating storey welded to a grounded floor stays two clouds -- they meet,
+ * but lifting one never carries the other. Which type a platform is, is
+ * decided when it is drawn and never changes afterwards.
+ */
+function contourPlatformStructureType(
+  surfaceType: string,
+  label: string,
+  interactionOver: StructureTypeDefinition["interactionOver"],
+): StructureTypeDefinition {
+  return Object.freeze<StructureTypeDefinition>({
+    surfaceType, label, creation: "a flat closed contour, without thickness",
+    traits: Object.freeze(["floor"] as const),
+    requiresMotionSolver: true,
+    roleFor: (topology, target) => target.kind === "vertex" && !topology.nodes.some((node) => node.id === target.nodeId) ? "platform-unknown" : `platform-${target.kind}`,
+    policyFor: (role) => role === "platform-unknown" ? denied(role, "Vertice fora da plataforma.") : ({ ...allowed(role, ALL_AXES, role === "platform-region" ? "cloud" : "surface"), transport: role === "platform-region" }),
+    interactionOver,
+    globalHandles: Object.freeze(["pivot", "rotate", "height"] as const),
+    motionInfluences: (topology, transport): readonly ConstructionMotionInfluence[] => {
+      const anchor = topology.nodes[0];
+      if (!anchor) return [];
+      // A star per face is linear; shared nodes connect faces in the Rust solver.
+      const axes = [transport, true, transport] as const;
+      return topology.nodes.slice(1).flatMap((node) => [
+        { from: anchor.id, to: node.id, axes }, { from: node.id, to: anchor.id, axes },
+      ]);
+    },
+    validateMotion: (topology, positions) => {
+      const elevations = topology.nodes.map((node) => (positions.get(node.id) ?? node.position).y);
+      return elevations.some((y) => Math.abs(y - elevations[0]!) > 1e-4)
+        ? "Todos os vertices da plataforma devem permanecer na mesma elevacao." : undefined;
+    },
+  });
+}
+
+/** A floor resting on the ground: it takes the ground under it, which regenerates around it. */
+export const platformStructureType = contourPlatformStructureType("platform", "Plataforma", cutsGround);
+
+/** A floor standing over the ground -- a storey, a bridge deck: the terrain under it is left untouched. */
+export const floatingPlatformStructureType = contourPlatformStructureType("platform-floating", "Plataforma flutuante", ignoresGround);
 
 /**
  * The platform built along a spine instead of a contour: a surface whose
  * height varies along its curve and never across it -- a ramp, a sloped
- * walkway, a spiral climb. Stairs are this same shape with a step parameter;
- * steps are appearance, not structure.
+ * walkway, a spiral climb. What dresses it -- steps, treads, rails -- is the
+ * assets' business; the structure only declares where they go.
  *
  * Generated from the shared spine exactly as a road is, so its control
  * points, handles and width are edited with the same gestures; see
@@ -64,9 +90,11 @@ export const slopedPlatformStructureType: StructureTypeDefinition = Object.freez
   requiresMotionSolver: true,
   roleFor: () => "platform-slope-face",
   policyFor: (role) => denied(role, "Edite a plataforma inclinada pela espinha: pontos, alças e largura."),
-  interactionOver: cutsGround,
+  // A ramp climbs between levels above the ground; it never carves it.
+  interactionOver: ignoresGround,
   motionInfluences: slopeMotionInfluences,
   deriveMotion: deriveSlopeMotion,
   validateMotion: validateSlopeMotion,
-  spine: Object.freeze({ defaultOffsets: SLOPE_DEFAULT_OFFSETS, regenerate: regenerateSlopeSpine }),
+  spine: Object.freeze({ defaultOffsets: SLOPE_DEFAULT_OFFSETS, regenerate: regenerateSlopeSpine, planOnly: true }),
+  globalHandles: Object.freeze(["pivot", "rotate", "height", "turns"] as const),
 });

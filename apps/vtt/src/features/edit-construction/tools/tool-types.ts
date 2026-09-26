@@ -6,11 +6,14 @@
  * (the tool implementations) and `adapters/rendering/` (turning a
  * {@link PreviewDescriptor} into an actual scene item).
  */
+import type { SpineChainShape } from "../spine/spine-open-chain.ts";
+
 export type ConstructionToolId =
   | "navigate"
   | "platform-contour"
   | "slope-ramp"
   | "slope-spiral"
+  | "slope-curve"
   | "roof"
   | "path-brush"
   | "wall-brush"
@@ -231,11 +234,24 @@ export const DEFAULT_STRUCTURE_EDIT_PARAMS: StructureEditParams = Object.freeze(
 export interface ToolParamsByTool {
   readonly roof: { readonly shape: "rectangle" | "circle" | "platform"; readonly elevation: number; readonly height: number; readonly radius: number; readonly curvatures: readonly [number, number, number, number] };
   readonly navigate: NoToolParams;
-  readonly "platform-contour": { readonly elevation: number; readonly mode: "create" | "extend" | "cut"; readonly shape?: "rectangle" | "polygon" | "freehand" | "circle"; readonly radius?: number; readonly tolerance?: number };
-  /** A straight sloped platform dragged from start to end, climbing a fixed rise. */
-  readonly "slope-ramp": { readonly width: number; readonly rise: number };
-  /** A spiral sloped platform stamped around a clicked centre. */
-  readonly "slope-spiral": { readonly width: number; readonly rise: number; readonly radius: number; readonly turns: number };
+  /**
+   * `support` picks the type drawn: a floor resting on the ground, or a
+   * floating one -- a storey, a bridge deck -- that leaves the terrain alone.
+   */
+  readonly "platform-contour": { readonly elevation: number; readonly mode: "create" | "extend" | "cut"; readonly support?: "grounded" | "floating"; readonly shape?: "rectangle" | "polygon" | "freehand" | "circle"; readonly radius?: number; readonly tolerance?: number };
+  /** A straight ramp dragged from start to end, climbing a fixed rise, with its own width at each end. */
+  readonly "slope-ramp": { readonly bottomWidth: number; readonly topWidth: number; readonly rise: number };
+  /**
+   * A spiral sloped platform: centre, start, then turned round to its end.
+   * `rise` is its climb when the end is not on a floor. `selected` mirrors the
+   * slope picked for editing: changing it edits that slope.
+   */
+  readonly "slope-spiral": { readonly width: number; readonly rise: number; readonly selected?: SpineChainShape };
+  /**
+   * A curved ramp, drawn in one of the shared spine creation modes. `rise` is
+   * its climb when the end is not on a floor; it climbs at one constant grade.
+   */
+  readonly "slope-curve": { readonly width: number; readonly rise: number; readonly mode?: "points" | "straight" | "arc" | "connect" | "spiral"; readonly selected?: SpineChainShape };
   readonly "path-brush": PathBrushParams;
   readonly "wall-brush": WallBrushParams;
   readonly "wall-line": WallParams;
@@ -249,9 +265,10 @@ export type ToolParamsFor<Id extends ConstructionToolId> = ToolParamsByTool[Id];
 export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
   roof: Object.freeze({ shape: "rectangle", elevation: 3, height: 2, radius: 2.5, curvatures: [0, 0, 0, 0] as const }),
   navigate: Object.freeze({}),
-  "platform-contour": Object.freeze({ elevation: 0, mode: "create", shape: "rectangle", radius: 2.5, tolerance: 0.15 }),
-  "slope-ramp": Object.freeze({ width: 1.5, rise: 3 }),
-  "slope-spiral": Object.freeze({ width: 1.5, rise: 3, radius: 2.5, turns: 1 }),
+  "platform-contour": Object.freeze({ elevation: 0, mode: "create", support: "grounded", shape: "rectangle", radius: 2.5, tolerance: 0.15 }),
+  "slope-ramp": Object.freeze({ bottomWidth: 1.5, topWidth: 1.5, rise: 3 }),
+  "slope-spiral": Object.freeze({ width: 1.5, rise: 3 }),
+  "slope-curve": Object.freeze({ width: 1.5, rise: 3, mode: "points" }),
   "path-brush": Object.freeze({
     // Legacy brush footprint fields remain readable; authoring now uses explicit curves.
     // `street` is the only preset the UI still writes -- its own bed-only

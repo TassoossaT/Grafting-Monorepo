@@ -31,7 +31,7 @@ function editDraft(input: SpineEditInput) {
   const generation = owner === undefined ? undefined : structureTypeFor(owner)?.spine;
   if (generation === undefined) return undefined;
   const snapshot = generation.prepare?.(input.snapshot, input.port) ?? input.snapshot;
-  const edit = planSpineEditPatch({ ...input, snapshot });
+  const edit = planSpineEditPatch({ ...input, snapshot, weld: generation.planOnly !== true });
   return edit && { snapshot, edit, generation };
 }
 

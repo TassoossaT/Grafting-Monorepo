@@ -1,6 +1,6 @@
 import type { SceneItem, Transform } from "@grafting/render-3d";
 
-import type { ConstructionPosition } from "@/ports";
+import type { ConstructionPosition, RenderHandleGlyph } from "@/ports";
 
 export const NODE_HANDLE_LAYER_ID = "construction-handles";
 export const NODE_HANDLE_VISUAL_KIND = "vtt-construction-node-handle";
@@ -17,20 +17,27 @@ export function nodeHandleSceneItemId(nodeId: string): string {
 
 /** Large enough to stay a comfortable pointer/touch target at typical table-view camera distances, small enough not to obscure the geometry it marks. */
 const HANDLE_SCALE = 0.32;
+/** A control for a whole structure reads a little larger than a point on it. */
+const GLYPH_SCALE = 0.44;
 
-export function nodeHandleTransform(position: ConstructionPosition): Transform {
-  return { position, scale: HANDLE_SCALE };
+export interface NodeHandleVisualParams {
+  readonly glyph: RenderHandleGlyph;
+}
+
+export function nodeHandleTransform(position: ConstructionPosition, glyph: RenderHandleGlyph = "point"): Transform {
+  return { position, scale: glyph === "point" ? HANDLE_SCALE : GLYPH_SCALE };
 }
 
 export function nodeHandleSceneItem(
   nodeId: string,
   position: ConstructionPosition,
-): SceneItem<Record<string, never>> {
+  glyph: RenderHandleGlyph = "point",
+): SceneItem<NodeHandleVisualParams> {
   return {
     id: nodeHandleSceneItemId(nodeId),
     layer: NODE_HANDLE_LAYER_ID,
-    visual: { kind: NODE_HANDLE_VISUAL_KIND, params: {} },
-    transform: nodeHandleTransform(position),
+    visual: { kind: NODE_HANDLE_VISUAL_KIND, params: { glyph } },
+    transform: nodeHandleTransform(position, glyph),
     data: Object.freeze({ entity: "construction-node-handle", nodeId }) satisfies NodeHandlePickData,
   };
 }

@@ -164,10 +164,6 @@ export function edgeOverlayOf(
         const result = resolveCurves(curves, [{ handles: source.curve, start: from, end: to }], 0.025)[0]!;
         const samples = result.samples[0]!;
         for (let i = 1; i < samples.length; i += 1) spineInto.push(...samples[i - 1]!.position, ...samples[i]!.position);
-        const p = result.curves[0]!.points;
-        const guides = byRole.get("bezier-handle") ?? [];
-        guides.push(...p[0], ...p[1], ...p[2], ...p[3]);
-        byRole.set("bezier-handle", guides);
       } else {
         spineInto.push(from.x, from.y, from.z, to.x, to.y, to.z);
       }
