@@ -1,4 +1,4 @@
-import { automaticCurve, controlRungId, controlSectionId, gradeSpineSpans, hasTrait, reweldFloors, sharedEdgeIds, SLOPE_SURFACE_TYPE, slopeFootprint, slopeSurface, spineControlNodeId, type WeldRung } from "../../../../features/edit-construction/index.ts";
+import { automaticCurve, controlRungId, controlSectionId, floorLandingNear, gradeSpineSpans, hasTrait, reweldFloors, sharedEdgeIds, SLOPE_SURFACE_TYPE, slopeFootprint, slopeSurface, spineControlNodeId, type WeldRung } from "../../../../features/edit-construction/index.ts";
 import type {
   ConstructionEdgeSnapshot,
   ConstructionPosition,
@@ -59,21 +59,11 @@ export function project(a: ConstructionPosition, b: ConstructionPosition, p: Con
   return { t, distance: Math.hypot(p.x - (a.x + t * dx), p.z - (a.z + t * dz)) };
 }
 
-/** The straight boundary edge of a flat platform at `point`'s height that `point` lands on, if any. */
+/** The straight boundary edge of a flat platform at `point`'s height that `point` lands on, if any -- a whole straight run, however ground split it. */
 export function landingEdge(topologies: readonly ConstructionRegionTopology[], point: ConstructionPosition, controlIndex: number): EndWeld | undefined {
-  let best: (EndWeld & { distance: number }) | undefined;
-  for (const topology of topologies) {
-    if (!hasTrait(topology.surfaceType, "floor") || Math.abs((topology.nodes[0]?.position.y ?? NaN) - point.y) > 1e-3) continue;
-    const positions = new Map(topology.nodes.map((n) => [n.id, n.position]));
-    for (const use of topology.outerLoops.flat()) {
-      if (use.geometry.kind !== "line") continue;
-      const a = positions.get(use.startNodeId)!, b = positions.get(use.endNodeId)!;
-      const { t, distance } = project(a, b, point);
-      if (t <= 0 || t >= 1 || distance > WELD_TOLERANCE || (best && best.distance <= distance)) continue;
-      best = { controlIndex, topology, use, a, b, distance };
-    }
-  }
-  return best;
+  const floors = topologies.filter((topology) => hasTrait(topology.surfaceType, "floor") && Math.abs((topology.nodes[0]?.position.y ?? NaN) - point.y) <= 1e-3);
+  const landing = floorLandingNear(floors, point, { reach: WELD_TOLERANCE });
+  return landing && { controlIndex, topology: landing.topology, use: landing.use, a: landing.a, b: landing.b };
 }
 
 /** `handle` turned to meet the welded edge square on, keeping its length and its climb. */

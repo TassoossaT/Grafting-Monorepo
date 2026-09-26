@@ -135,3 +135,36 @@ test("ground repaired around a platform already stored clockwise splits its edge
     session.free();
   }
 });
+
+test("a ramp still welds to a platform merged with the ground, whose sides the ground split into pieces", async () => {
+  const { slopeRampTool } = await import("../src/composition/tabletop/tools/slope/slope-tools.ts");
+  const { commitPlatformSlope } = await import("../src/composition/tabletop/tools/slope/slope-commit.ts");
+  const { session, runtime, ctx, calls } = sessionFixture();
+  const info = console.info;
+  const warn = console.warn;
+  console.info = () => {};
+  console.warn = () => {};
+  try {
+    bowl(runtime, session);
+    const corners = [[-3, -2], [2, -2], [2, 3], [-3, 3]].map(([x, z]) => ({ point: { x, y: 0.3, z } }));
+    commitPlatformContour(ctx, corners, { mode: "create", elevation: 0.3, shape: "rectangle" });
+    const platform = () => runtime.getAllRegionTopologies().find((t) => t.surfaceType === "platform");
+    assert.ok(platform().outerLoops[0].length > 4, "the ground split the platform's sides");
+    // Straight ramp off the east side, wider than any one piece the ground left there.
+    const s = { point: { x: 2, y: 0.3, z: 0.5 } }, e = { point: { x: 6, y: 0, z: 0.5 } };
+    slopeRampTool.onPointerUp(ctx, { start: s, current: e, samples: [s, e] }, { bottomWidth: 2.5, topWidth: 1.5, rise: 2 });
+    assert.equal(calls.feedback.at(-1).message, "Rampa: 1 ponta(s) soldada(s).", JSON.stringify(calls.feedback.at(-1)));
+    const ramp = runtime.getAllRegionTopologies().find((t) => t.surfaceType === "platform-ramp");
+    for (const side of ["min", "max"]) {
+      const id = ramp.nodes.find((n) => n.id.endsWith(`:ramp:bottom:${side}`)).id;
+      assert.ok(platform().nodes.some((n) => n.id === id), `the platform shares the ramp's bottom ${side}`);
+    }
+    // And a curved one off the west side.
+    commitPlatformSlope(ctx, [{ x: -3, y: 0.3, z: 0.5 }, { x: -7, y: 2, z: 0.5 }], { width: 1.5 });
+    assert.match(calls.feedback.at(-1).message, /1 ponta\(s\) soldada/, JSON.stringify(calls.feedback.at(-1)));
+  } finally {
+    console.info = info;
+    console.warn = warn;
+    session.free();
+  }
+});

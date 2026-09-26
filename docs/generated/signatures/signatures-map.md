@@ -4882,10 +4882,7 @@ export function project(a: ConstructionPosition, b: ConstructionPosition, p: Con
   const lengthSq = dx * dx + dz * dz;
   if (lengthSq < 1e-12) return { t: -1, distance: Infinity };
 export function landingEdge(topologies: readonly ConstructionRegionTopology[], point: ConstructionPosition, controlIndex: number): EndWeld | undefined {
-  let best: (EndWeld & { distance: number }) | undefined;
-  for (const topology of topologies) {
-  if (!hasTrait(topology.surfaceType, "floor") || Math.abs((topology.nodes[0]?.position.y ?? NaN) - point.y) > 1e-3) continue;
-  const positions = new Map(topology.nodes.map((n) => [n.id, n.position]));
+  const floors = topologies.filter((topology) => hasTrait(topology.surfaceType, "floor") && Math.abs((topology.nodes[0]?.position.y ?? NaN) - point.y) <= 1e-3);
 export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly ConstructionPosition[], params: Params, plan?: readonly PlannedSpan[]): void {
   try {
   const width = params.width ?? 1.5;

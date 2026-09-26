@@ -3296,7 +3296,7 @@ The sampled polyline of `curves`, for a preview.
 
 ### `function vtt.slope-commit.landingEdge(topologies: readonly ConstructionRegionTopology[], point: ConstructionPosition, controlIndex: number): EndWeld | undefined`
 
-The straight boundary edge of a flat platform at `point`'s height that `point` lands on, if any.
+The straight boundary edge of a flat platform at `point`'s height that `point` lands on, if any -- a whole straight run, however ground split it.
 
 ### `function vtt.slope-commit.project(a: ConstructionPosition, b: ConstructionPosition, p: ConstructionPosition): { distance: number; t: number }`
 

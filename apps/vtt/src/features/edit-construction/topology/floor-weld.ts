@@ -65,6 +65,39 @@ function signedArea(points: readonly ConstructionPosition[]): number {
   return area;
 }
 
+/** Straight steps in a row whose directions differ by less than this (sine of the angle) are one straight run. */
+const IN_LINE = 1e-4;
+
+/**
+ * The loop's straight runs: consecutive straight steps in one line, as the
+ * index of their first step and how many there are. Ground laid against a
+ * floor splits its edges at the ground's own corners; a run is the edge as
+ * drawn, whatever it was split into.
+ */
+function straightRuns(count: number, isLine: (i: number) => boolean, ends: (i: number) => { readonly a: ConstructionPosition; readonly b: ConstructionPosition }): readonly { readonly first: number; readonly count: number }[] {
+  const dir = (i: number) => {
+    const { a, b } = ends(i);
+    const length = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+    return { x: (b.x - a.x) / length, z: (b.z - a.z) / length };
+  };
+  const continues = (i: number) => {
+    const previous = (i - 1 + count) % count;
+    if (!isLine(i) || !isLine(previous)) return false;
+    const p = dir(previous), q = dir(i);
+    return Math.abs(p.x * q.z - p.z * q.x) < IN_LINE && p.x * q.x + p.z * q.z > 0;
+  };
+  const start = Array.from({ length: count }, (_, i) => i).find((i) => !continues(i));
+  // Every step in one line all the way round is no outline at all.
+  if (start === undefined) return [];
+  const runs: { first: number; count: number }[] = [];
+  for (let k = 0; k < count; k += 1) {
+    const i = (start + k) % count;
+    if (!continues(i)) runs.push({ first: i, count: 0 });
+    runs.at(-1)!.count += 1;
+  }
+  return runs;
+}
+
 /** Where `p` projects onto the line through `a` and `b`, as a parameter, and how far off it lies. */
 export function projectOnto(a: ConstructionPosition, b: ConstructionPosition, p: PlanDirection): { readonly t: number; readonly distance: number } {
   const dx = b.x - a.x, dz = b.z - a.z;
@@ -101,9 +134,13 @@ export function floorLandingNear(
     // The outline's winding says which side of each edge is off the floor.
     const winding = Math.sign(signedArea(outer.map((use) => positions.get(use.startNodeId)!))) || 1;
     const isUnder = underKey !== undefined && topology.surfaceKey.join("\u0000") === underKey;
-    for (const use of outer) {
-      if (use.geometry.kind !== "line") continue;
-      const a = positions.get(use.startNodeId)!, b = positions.get(use.endNodeId)!;
+    const runs = straightRuns(outer.length, (i) => outer[i]!.geometry.kind === "line",
+      (i) => ({ a: positions.get(outer[i]!.startNodeId)!, b: positions.get(outer[i]!.endNodeId)! }));
+    for (const run of runs) {
+      if (outer[run.first]!.geometry.kind !== "line") continue;
+      // The run as one edge: from its first step's start to its last step's end.
+      const use = outer[run.first]!;
+      const a = positions.get(use.startNodeId)!, b = positions.get(outer[(run.first + run.count - 1) % outer.length]!.endNodeId)!;
       const projected = projectOnto(a, b, point);
       if (!Number.isFinite(projected.distance)) continue;
       const t = Math.max(0, Math.min(1, projected.t));
@@ -205,24 +242,35 @@ function detach(draft: FloorDraft, edgeId: string, joinId: string, shared: Reado
 }
 
 /**
- * Splices `rung` into the straight step of the draft it lies on, between
- * two new steps named from `weldId`. `false` when it lies on none.
+ * Splices `rung` into the straight run of the draft it lies on: the steps it
+ * covers give way to it, the ones it only partly covers are cut short at its
+ * ends by two new steps named from `weldId`, and every other step -- ground
+ * laid against the floor still holds them -- stays as it is. `false` when it
+ * lies on no run.
  */
 function attach(draft: FloorDraft, rung: WeldRung, positions: ReadonlyMap<string, ConstructionPosition>, weldId: string): boolean {
   const steps = draft.outer;
-  const i = steps.findIndex((step) => step.geometry.kind === "line"
-    && rungFits({ a: draft.positions.get(step.from)!, b: draft.positions.get(step.to)! }, rung, positions));
-  if (i < 0) return false;
-  const step = steps[i]!;
-  const a = draft.positions.get(step.from)!, b = draft.positions.get(step.to)!;
-  const t = (id: string) => projectOnto(a, b, positions.get(id)!).t;
+  const at = (id: string) => draft.positions.get(id)!;
+  const runs = straightRuns(steps.length, (i) => steps[i]!.geometry.kind === "line", (i) => ({ a: at(steps[i]!.from), b: at(steps[i]!.to) }));
+  const run = runs.find(({ first, count }) => rungFits({ a: at(steps[first]!.from), b: at(steps[(first + count - 1) % steps.length]!.to) }, rung, positions));
+  if (!run) return false;
+  // Turned so the run starts the loop: it may wrap past the loop's first step.
+  const turned = [...steps.slice(run.first), ...steps.slice(0, run.first)];
+  const a = at(turned[0]!.from), b = at(turned[run.count - 1]!.to);
+  const along = (p: ConstructionPosition) => projectOnto(a, b, p).t;
+  const t = (id: string) => along(positions.get(id)!);
   const [first, second] = t(rung.startNodeId) <= t(rung.endNodeId) ? [rung.startNodeId, rung.endNodeId] : [rung.endNodeId, rung.startNodeId];
+  const tFirst = t(first), tSecond = t(second);
+  // The step each rung end falls in.
+  const i = turned.slice(0, run.count).findIndex((step) => along(at(step.to)) > tFirst);
+  const j = turned.slice(0, run.count).findIndex((step) => along(at(step.to)) >= tSecond);
+  if (i < 0 || j < 0 || j < i) return false;
   draft.outer = [
-    ...steps.slice(0, i),
-    { edgeId: `${weldId}:before`, from: step.from, to: first, geometry: { kind: "line" }, reversed: false },
+    ...turned.slice(0, i),
+    { edgeId: `${weldId}:before`, from: turned[i]!.from, to: first, geometry: { kind: "line" }, reversed: false },
     { edgeId: rung.edgeId, from: first, to: second, geometry: { kind: "line" }, reversed: first !== rung.startNodeId },
-    { edgeId: `${weldId}:after`, from: second, to: step.to, geometry: { kind: "line" }, reversed: false },
-    ...steps.slice(i + 1),
+    { edgeId: `${weldId}:after`, from: second, to: turned[j]!.to, geometry: { kind: "line" }, reversed: false },
+    ...turned.slice(j + 1),
   ];
   for (const id of [first, second]) draft.positions.set(id, positions.get(id)!);
   return true;
