@@ -129,11 +129,17 @@ export function planEdit(
       for (const node of graphSnapshot?.nodes ?? []) positions.set(node.id, node.position);
       const seeds: { nodeId: string; delta: ConstructionPosition }[] = [];
       const primarySet = new Set(primary);
+      const placed = policy.place?.({ topology: cloud.seed, target: gesture.target, delta });
+      for (const move of placed ?? []) {
+        const before = positions.get(move.nodeId);
+        if (!before) throw new Error(`Vertice ausente: ${move.nodeId}`);
+        seeds.push({ nodeId: move.nodeId, delta: { x: move.position.x - before.x, y: move.position.y - before.y, z: move.position.z - before.z } });
+      }
       const structural = structureTypeFor(cloud.seed.surfaceType)?.motionInfluences ? []
         : policy.cascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot }) ?? [];
       const grouped = policy.groupCascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot }) ?? [];
       const extras = [...structural, ...grouped];
-      for (const op of [...primary, ...extras]) {
+      for (const op of [...(placed ? [] : primary), ...extras]) {
         if (op.kind === "move-vertex") {
           const before = positions.get(op.nodeId);
           if (!before) throw new Error(`Vertice ausente: ${op.nodeId}`);

@@ -6310,6 +6310,15 @@ cascades from the influence graph instead. A `groupCascade` match is not
 structural -- no influence link could express it -- so it is never
 superseded.
 
+### `property vtt.structure-type.RolePolicy.place?: (context: ConstrainContext) => readonly { nodeId: string; position: ConstructionPosition }[] | undefined`
+
+Where the role puts the nodes a gesture moves, when one delta for the
+grabbed part is not enough -- a side pushed out while its corners slide
+along the sides next to it. Replaces the grabbed part's own move; the
+solver, derivation and validation still run on what it returns. Gets
+the delta after constrain. Throws to refuse; `undefined` falls
+back to the grabbed part's own move.
+
 ### `property vtt.structure-type.RolePolicy.reshape?: (context: ReshapeContext) => readonly AtomicEditOp[]`
 
 Present when the grabbed edge's curve may be reshaped through a curve
@@ -7229,6 +7238,20 @@ The parameters sitting these distances along one span.
 ### `function vtt.contour-geometry.subContour(port: ContourPort, span: ContourSpan, t0: number, t1: number): ConstructionEdgeGeometry`
 
 The span's own geometry between two of its parameters, walked forward.
+
+### `function vtt.contour-offset.acrossContourSide(topology: ConstructionRegionTopology, edgeId: string, delta: ConstructionPosition): ConstructionPosition`
+
+`delta` kept only across the side `edgeId` belongs to, in plan -- how far a push moves it.
+
+### `function vtt.contour-offset.pushContourCorner(topology: ConstructionRegionTopology, nodeId: string, delta: ConstructionPosition): readonly { nodeId: string; position: ConstructionPosition }[] | undefined`
+
+The corner `nodeId` taken by `delta` in plan by moving both sides meeting
+there, each square to itself; a node in the middle of a side moves that
+side alone. `undefined` when the node is not on the outer loop.
+
+### `function vtt.contour-offset.pushContourSide(topology: ConstructionRegionTopology, edgeId: string, delta: ConstructionPosition): readonly { nodeId: string; position: ConstructionPosition }[] | undefined`
+
+The side `edgeId` belongs to moved square to itself by the part of `delta` across it; `undefined` when the edge is not on the outer loop.
 
 ### `interface vtt.curve-handles.CurveEdge`
 

@@ -106,6 +106,15 @@ export interface RolePolicy {
    * before anything else sees the delta.
    */
   readonly constrain?: (context: ConstrainContext) => ConstructionPosition;
+  /**
+   * Where the role puts the nodes a gesture moves, when one delta for the
+   * grabbed part is not enough -- a side pushed out while its corners slide
+   * along the sides next to it. Replaces the grabbed part's own move; the
+   * solver, derivation and validation still run on what it returns. Gets
+   * the delta after {@link constrain}. Throws to refuse; `undefined` falls
+   * back to the grabbed part's own move.
+   */
+  readonly place?: (context: ConstrainContext) => readonly { readonly nodeId: string; readonly position: ConstructionPosition }[] | undefined;
 }
 
 /** What a role's {@link RolePolicy.constrain} gets to look at. */

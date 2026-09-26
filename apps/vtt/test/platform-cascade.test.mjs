@@ -30,10 +30,14 @@ for (const [level, expected] of [[0,[1,4,7]], [1,[0,4,7]], [2,[0,3,7]]]) {
     } finally { session.free(); }
   });
 }
-test("received vertex elevation expands its whole platform; descending cannot cross a wall base", () => {
+test("a platform is lowered whole, never by one corner; descending cannot cross a wall base", () => {
   const { runtime, session } = building();
   try {
-    const valid = plan(runtime, 1, { x: 0, y: -1, z: 0 }, { kind: "vertex", nodeId: "p1:0" });
+    // A corner only resizes the platform: its height is left alone.
+    const corner = plan(runtime, 1, { x: 0, y: -1, z: 0 }, { kind: "vertex", nodeId: "p1:0" });
+    assert.equal(corner.kind, "apply", corner.reason);
+    assert.deepEqual(corner.ops, [], "a corner dragged straight down moves nothing");
+    const valid = plan(runtime, 1, { x: 0, y: -1, z: 0 });
     assert.equal(valid.kind, "apply", valid.reason);
     runtime.applyRegionEdit(valid.ops);
     assert.deepEqual(heights(runtime), [0,2,5]);
@@ -50,7 +54,8 @@ test("whole-platform horizontal translation carries upper clouds; local shape ed
     assert.equal(full.ops.length, 12);
     const local = plan(runtime, 0, { x: 1, y: 0, z: 0 }, { kind: "vertex", nodeId: "p0:0" });
     assert.equal(local.kind, "apply", local.reason);
-    assert.deepEqual(local.ops.map((op) => op.nodeId), ["p0:0","p1:0","p2:0"]);
+    // The corner pushes both sides meeting there: the side across x slides whole, the walls on the corner follow.
+    assert.deepEqual(local.ops.map((op) => op.nodeId).sort(), ["p0:0","p0:3","p1:0","p2:0"]);
     assert.equal(plan(runtime, 1, { x: 1, y: 0, z: 0 }).kind, "deny", "a connected upright wall cannot be sheared by its top");
   } finally { session.free(); }
 });

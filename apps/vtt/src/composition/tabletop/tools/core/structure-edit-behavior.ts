@@ -1,6 +1,7 @@
 import type { ConstructionToolId, StructureEditParams } from "@/features/edit-construction";
 
 import { beginCurveGesture } from "./curve-edit-gesture.ts";
+import { pointerAtHeight } from "./pointer-ray.ts";
 import { beginGlobalHandleGesture, globalHandleActionsAt, runGlobalHandleAction } from "./global-handle-gesture.ts";
 import {
   cloudNodes,
@@ -102,6 +103,9 @@ function edgeOrBodyAt(topology: ConstructionRegionTopology, point: ConstructionP
   return closest === undefined ? { kind: "region" } : { kind: "edge", edgeId: closest.edgeId };
 }
 
+/** Where `sample` points at `height` -- along its ray when it has one, else where it hit. */
+const aimOf = (sample: PointerSample, height: number): ConstructionPosition => (sample.ray ? pointerAtHeight(sample, height) : sample.point);
+
 function delta(from: ConstructionPosition, to: ConstructionPosition): ConstructionPosition {
   return { x: to.x - from.x, y: to.y - from.y, z: to.z - from.z };
 }
@@ -135,6 +139,8 @@ interface ActiveDrag {
   readonly target: EditTarget;
   readonly before: Map<string, ConstructionPosition>;
   previous: ConstructionPosition;
+  /** The height the structure was grabbed at: the pointer is read there, so what is dragged stays under the cursor. */
+  readonly height: number;
   screenY?: number;
 }
 
@@ -184,6 +190,7 @@ export function createStructureEditBehavior(options: StructureEditOptions): Stru
       target: grabbed.target,
       before: new Map(),
       previous: sample.point,
+      height: sample.point.y,
       screenY: sample.screenY,
     };
     if (grabbed.target.kind === "vertex") {
@@ -201,10 +208,10 @@ export function createStructureEditBehavior(options: StructureEditOptions): Stru
     // move everything again on each tick.
     const step = editParams.mode === "elevation" && active.screenY !== undefined && gesture.current.screenY !== undefined
       ? { x: 0, y: (active.screenY - gesture.current.screenY) / 40, z: 0 }
-      : delta(active.previous, gesture.current.point);
+      : delta(active.previous, aimOf(gesture.current, active.height));
     active.screenY = gesture.current.screenY;
     if (step.x === 0 && step.y === 0 && step.z === 0) return;
-    active.previous = gesture.current.point;
+    active.previous = aimOf(gesture.current, active.height);
 
     // Positions are re-read every tick; membership is not. A drag that welds
     // onto a neighbour must not silently enlarge what it is dragging.

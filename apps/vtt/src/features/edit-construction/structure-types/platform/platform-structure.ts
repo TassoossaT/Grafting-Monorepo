@@ -1,5 +1,6 @@
 import type { ConstructionMotionInfluence } from "@/ports";
-import { ALL_AXES } from "../../orchestration/atomic-edit.ts";
+import { ALL_AXES, HORIZONTAL_AXES } from "../../orchestration/atomic-edit.ts";
+import { acrossContourSide, pushContourCorner, pushContourSide } from "../../topology/contour-offset.ts";
 import { CUT, IGNORE } from "../creation-interaction.ts";
 import {
   controlRungId,
@@ -11,7 +12,30 @@ import {
   slopeMotionInfluences,
   validateSlopeMotion,
 } from "./platform-slope-spine.ts";
-import { allowed, denied, type StructureTypeDefinition, type StructureView } from "../structure-type.ts";
+import { allowed, denied, type EditRole, type RolePolicy, type StructureTypeDefinition, type StructureView } from "../structure-type.ts";
+
+/**
+ * What grabbing a platform does: the body moves the whole cloud, anywhere;
+ * a side or a corner only resizes it -- the side, or both sides at the
+ * corner, pushed out or in square to themselves, their neighbours sliding
+ * to follow (`topology/contour-offset.ts`). Heights are the whole
+ * platform's, changed by its height handle, never by a side or a corner.
+ */
+function platformPolicy(role: EditRole): RolePolicy {
+  switch (role) {
+    case "platform-region": return { ...allowed(role, ALL_AXES, "cloud"), transport: true };
+    case "platform-edge": return {
+      ...allowed(role, HORIZONTAL_AXES, "surface"),
+      constrain: ({ topology, target, delta }) => (target.kind === "edge" ? acrossContourSide(topology, target.edgeId, delta) : delta),
+      place: ({ topology, target, delta }) => (target.kind === "edge" ? pushContourSide(topology, target.edgeId, delta) : undefined),
+    };
+    case "platform-vertex": return {
+      ...allowed(role, HORIZONTAL_AXES, "surface"),
+      place: ({ topology, target, delta }) => (target.kind === "vertex" ? pushContourCorner(topology, target.nodeId, delta) : undefined),
+    };
+    default: return denied(role, "Vertice fora da plataforma.");
+  }
+}
 
 /** Ground under a platform is cut, and the ground's own repair regenerates around it. */
 const cutsGround = (covered: StructureView) => covered.traits.has("ground") ? CUT : IGNORE;
@@ -40,7 +64,7 @@ function contourPlatformStructureType(
     traits: Object.freeze(["floor"] as const),
     requiresMotionSolver: true,
     roleFor: (topology, target) => target.kind === "vertex" && !topology.nodes.some((node) => node.id === target.nodeId) ? "platform-unknown" : `platform-${target.kind}`,
-    policyFor: (role) => role === "platform-unknown" ? denied(role, "Vertice fora da plataforma.") : ({ ...allowed(role, ALL_AXES, role === "platform-region" ? "cloud" : "surface"), transport: role === "platform-region" }),
+    policyFor: platformPolicy,
     interactionOver,
     globalHandles: Object.freeze(["pivot", "rotate", "height"] as const),
     motionInfluences: (topology, transport): readonly ConstructionMotionInfluence[] => {

@@ -6824,6 +6824,14 @@ export function arcSweepsOf(port: ContourPort, spans: readonly ContourSpan[]): r
   .queryContours(spans.map((span) => query(span.geometry, span.start, span.end, { kind: "arcSweep" })))
   .map((answer) => scalars(answer)[0] ?? 0);
 
+// src/features/edit-construction/topology/contour-offset.ts
+export function pushContourSide(topology: ConstructionRegionTopology, edgeId: string, delta: ConstructionPosition) {
+  const sides = sidesOf(topology);
+export function pushContourCorner(topology: ConstructionRegionTopology, nodeId: string, delta: ConstructionPosition) {
+  const sides = sidesOf(topology);
+export function acrossContourSide(topology: ConstructionRegionTopology, edgeId: string, delta: ConstructionPosition): ConstructionPosition {
+  const side = sidesOf(topology)?.find((candidate) => candidate.edgeIds.includes(edgeId));
+
 // src/features/edit-construction/topology/curve-handles.ts
 export type CurveHandleIndex = 1 | 2 | "midpoint";
 export type CurveStore = "spine" | "contour";
