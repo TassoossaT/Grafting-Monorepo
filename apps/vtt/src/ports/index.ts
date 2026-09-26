@@ -14,7 +14,7 @@ export type {
   RenderCovering,
   RenderMapChunk,
   RenderMeshData,
-  RenderNodeHandle,
+  RenderHandleGlyph, RenderNodeHandle,
   RenderPreviewDescriptor,
   RenderSurfacePickTarget,
   RenderToken,

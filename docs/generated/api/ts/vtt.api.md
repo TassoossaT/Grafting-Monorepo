@@ -248,9 +248,17 @@ Invisible pick proxy retaining one canonical SurfaceRef per render item.
 
 ### `function vtt.map-surface-pick-scene-item.mapSurfacePickSceneItemId(surfaceRef: string): string`
 
+### `function vtt.marker-textures.createHeightHandleTexture(): HTMLCanvasElement`
+
+Sets a height: a double arrow up and down.
+
 ### `function vtt.marker-textures.createMarkerTexture(): HTMLCanvasElement`
 
 Draws the sprite texture for a placed token marker: a filled circle with a small pointer tail.
+
+### `function vtt.marker-textures.createMoveHandleTexture(): HTMLCanvasElement`
+
+Moves a whole structure: arrows out in four directions.
 
 ### `function vtt.marker-textures.createNodeHandleTexture(): HTMLCanvasElement`
 
@@ -260,6 +268,10 @@ A small ring-dot, visually distinct from the token marker -- an editable constru
 
 In-scene road branching affordance, distinct from a movable anchor.
 
+### `function vtt.marker-textures.createTurnsHandleTexture(): HTMLCanvasElement`
+
+Turns something round: a circular arrow.
+
 ### `interface vtt.node-handle-scene-item.NodeHandlePickData`
 
 Opaque per-item data a pick result echoes back, letting the adapter recover which node a hit handle belongs to without parsing its scene item id.
@@ -268,15 +280,19 @@ Opaque per-item data a pick result echoes back, letting the adapter recover whic
 
 ### `property vtt.node-handle-scene-item.NodeHandlePickData.nodeId: string`
 
+### `interface vtt.node-handle-scene-item.NodeHandleVisualParams`
+
+### `property vtt.node-handle-scene-item.NodeHandleVisualParams.glyph: RenderHandleGlyph`
+
 ### `variable vtt.node-handle-scene-item.NODE_HANDLE_LAYER_ID: "construction-handles"`
 
 ### `variable vtt.node-handle-scene-item.NODE_HANDLE_VISUAL_KIND: "vtt-construction-node-handle"`
 
-### `function vtt.node-handle-scene-item.nodeHandleSceneItem(nodeId: string, position: ConstructionPosition): SceneItem<Record<string, never>>`
+### `function vtt.node-handle-scene-item.nodeHandleSceneItem(nodeId: string, position: ConstructionPosition, glyph: RenderHandleGlyph): SceneItem<NodeHandleVisualParams>`
 
 ### `function vtt.node-handle-scene-item.nodeHandleSceneItemId(nodeId: string): string`
 
-### `function vtt.node-handle-scene-item.nodeHandleTransform(position: ConstructionPosition): Transform`
+### `function vtt.node-handle-scene-item.nodeHandleTransform(position: ConstructionPosition, glyph: RenderHandleGlyph): Transform`
 
 ### `class vtt.render-3d-scene-adapter.Render3dSceneAdapter`
 
@@ -8303,7 +8319,9 @@ already keeps this port renderer-agnostic.
 
 ### `interface vtt.scene-render-port.RenderNodeHandle`
 
-A construction node's live world position, rendered as a small pickable handle -- what edit-mode picking/drag-to-move hit-tests against.
+### `property vtt.scene-render-port.RenderNodeHandle.glyph?: RenderHandleGlyph`
+
+How the handle is drawn; absent is a plain point.
 
 ### `property vtt.scene-render-port.RenderNodeHandle.nodeId: string`
 
@@ -8422,6 +8440,13 @@ single-ghost behaviour every tool already relies on.
 ### `type vtt.scene-render-port.ConfirmedSurfacePickRenderChange = { causeId: string; dependency: RenderDependencyRevision; origin: ChangeOrigin; runtimeGeneration: number; target: RenderSurfacePickTarget; type: "surface-pick-target-upserted" } | { causeId: string; dependency: RenderDependencyRevision; origin: ChangeOrigin; runtimeGeneration: number; surfaceRef: string; type: "surface-pick-target-removed" }`
 
 ### `type vtt.scene-render-port.ConfirmedTokenRenderChange = { causeId: string; dependency: RenderDependencyRevision; origin: ChangeOrigin; runtimeGeneration: number; token: RenderToken; type: "token-upserted" } | { causeId: string; dependency: RenderDependencyRevision; origin: ChangeOrigin; runtimeGeneration: number; tokenId: string; type: "token-removed" }`
+
+### `type vtt.scene-render-port.RenderHandleGlyph = "point" | "move" | "height" | "turns"`
+
+What a handle does, so it reads as that at a glance: a point to drag, or a
+control that moves a whole structure, sets a height, or turns something
+round. Interaction vocabulary, not product vocabulary -- any structure's
+handle can take any glyph.
 
 ### `type vtt.scene-render-port.RenderLayerKey = "tokens" | "terrain" | "handles" | "surface-picks"`
 

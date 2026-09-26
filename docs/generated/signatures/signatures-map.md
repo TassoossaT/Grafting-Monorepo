@@ -3487,6 +3487,15 @@ export function createNodeHandleTexture(): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
 export function createRoadBranchTexture(): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
+export function createMoveHandleTexture(): HTMLCanvasElement {
+  return glyphDisc("#2f6fde", (context) => {
+  context.beginPath(); context.moveTo(14, 32); context.lineTo(50, 32); context.moveTo(32, 14); context.lineTo(32, 50); context.stroke();
+export function createHeightHandleTexture(): HTMLCanvasElement {
+  return glyphDisc("#1f9d62", (context) => {
+  context.beginPath(); context.moveTo(32, 17); context.lineTo(32, 47); context.stroke();
+export function createTurnsHandleTexture(): HTMLCanvasElement {
+  return glyphDisc("#e07a1f", (context) => {
+  context.beginPath(); context.arc(32, 32, 14, -Math.PI * 0.35, Math.PI * 1.35); context.stroke();
 
 // src/adapters/rendering/node-handle-scene-item.ts
 export const NODE_HANDLE_LAYER_ID = "construction-handles";
@@ -3498,16 +3507,19 @@ export interface NodeHandlePickData {
 export function nodeHandleSceneItemId(nodeId: string): string {
   return `construction-node-handle:${nodeId}`;
   }
-export function nodeHandleTransform(position: ConstructionPosition): Transform {
-  return { position, scale: HANDLE_SCALE };
+export interface NodeHandleVisualParams {
+  readonly glyph: RenderHandleGlyph;
+  }
+export function nodeHandleTransform(position: ConstructionPosition, glyph: RenderHandleGlyph = "point"): Transform {
+  return { position, scale: glyph === "point" ? HANDLE_SCALE : GLYPH_SCALE };
 export function nodeHandleSceneItem(
   nodeId: string,
   position: ConstructionPosition,
-  ): SceneItem<Record<string, never>> {
+  glyph: RenderHandleGlyph = "point",
+  ): SceneItem<NodeHandleVisualParams> {
   return {
   id: nodeHandleSceneItemId(nodeId),
   layer: NODE_HANDLE_LAYER_ID,
-  visual: { kind: NODE_HANDLE_VISUAL_KIND, params: {} },
 
 // src/adapters/rendering/render-3d-scene-adapter.ts
 export class Render3dSceneAdapter implements SceneRenderPort {
@@ -7043,10 +7055,10 @@ export interface RenderSurfacePickTarget {
   }
 export type ConfirmedSurfacePickRenderChange =
 export type ConfirmedMapChunkRenderChange =
+export type RenderHandleGlyph = "point" | "move" | "height" | "turns";
 export interface RenderNodeHandle {
   readonly nodeId: string;
   readonly position: { readonly x: number; readonly y: number; readonly z: number };
-export type ConfirmedNodeHandleRenderChange =
 
 // src/ports/terrain-noise-port.ts
 export interface TerrainNoisePort {

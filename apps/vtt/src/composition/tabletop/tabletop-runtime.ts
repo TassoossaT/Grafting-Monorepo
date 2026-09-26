@@ -1,4 +1,6 @@
 import { curveEdgesOf, curveHandles, curvePick, panelHeightWidgets, shownSpineGlobalHandles } from "../../features/edit-construction/index.ts";
+import type { RenderHandleGlyph } from "../../ports/index.ts";
+import type { SpineGlobalHandleKind } from "../../features/edit-construction/index.ts";
 import type { BezierPort } from "../../ports/bezier-port.ts";
 import type { RenderPointManipulator } from "../../ports/scene-render-port.ts";
 import type { ConstructionPlanarRequest, ConstructionPlanarShape, ConstructionMotionRequest, ConstructionMotionPlan, ConstructionNodeMotion } from "../../ports/index.ts";
@@ -295,6 +297,9 @@ function renderChange(
     },
   };
 }
+
+/** How each whole-spine handle reads: moving the whole thing, setting a height, turning it round. */
+const GLOBAL_HANDLE_GLYPH: Readonly<Record<SpineGlobalHandleKind, RenderHandleGlyph>> = { pivot: "move", height: "height", turns: "turns" };
 
 export class AppTabletopRuntime implements TabletopRuntime {
   readonly #listeners = new Set<TabletopRuntimeListener>();
@@ -608,6 +613,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     origin: ChangeOrigin,
     causeId: string,
     generation: number,
+    glyph?: RenderHandleGlyph,
   ): void {
     if (this.#pointHandlesOnly && !this.#pointHandleIds.has(nodeId)) return;
     const revision = ++this.#handleRevision;
@@ -618,7 +624,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
       causeId,
       runtimeGeneration: generation,
       dependency: { layer: "handles", scopeId: nodeId, revision },
-      handle: { nodeId, position },
+      handle: glyph === undefined ? { nodeId, position } : { nodeId, position, glyph },
     });
   }
 
@@ -641,7 +647,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     }
     // After the allow-list above names them: `#uploadNodeHandle` drops any
     // handle it does not, which would lose a spine's pivot on its first sync.
-    for (const handle of globals) this.#uploadNodeHandle(handle.id, handle.position, origin, causeId, generation);
+    for (const handle of globals) this.#uploadNodeHandle(handle.id, handle.position, origin, causeId, generation, GLOBAL_HANDLE_GLYPH[handle.kind]);
     this.#globalHandleIds = liveGlobals;
     const live = new Set(handles.map((h) => h.id));
     for (const id of this.#bezierHandleIds) if (!live.has(id)) this.#removeNodeHandle(id, origin, causeId, generation);
