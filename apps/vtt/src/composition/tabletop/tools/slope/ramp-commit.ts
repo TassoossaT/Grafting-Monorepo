@@ -1,4 +1,4 @@
-import { planRamp, rampEdgeId, rampPatch, reweldFloors, type PlannedRamp, type RampEndPlan } from "../../../../features/edit-construction/index.ts";
+import { endJointNear, jointedRampPatch, planRamp, rampEdgeId, reweldFloors, type PlannedRamp, type RampEndPlan } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionPosition } from "../../../../ports/index.ts";
 import { commitPatchReplacement } from "../../effects/effect-commit.ts";
 import { floorLandingAt, floorsOf } from "../core/floor-landing.ts";
@@ -21,13 +21,20 @@ export interface RampParams {
  */
 function rampEnds(ctx: ToolContext, start: PointerSample, end: PointerSample, params: RampParams): { readonly from: RampEndPlan; readonly to: RampEndPlan } {
   const floors = floorsOf(ctx);
-  const startLanding = floorLandingAt(floors, start);
-  let endLanding = floorLandingAt(floors, end);
+  const graph = ctx.runtime.getGraphSnapshot();
+  const topologies = ctx.runtime.getAllRegionTopologies();
+  // Another structure's free end near the pointer is run on from: it wins over a floor's edge.
+  const startJoint = endJointNear(graph, topologies, (height) => pointerAtHeight(start, height));
+  const endJoint = endJointNear(graph, topologies, (height) => pointerAtHeight(end, height),
+    startJoint ? { own: new Set([startJoint.rung.startNodeId, startJoint.rung.endNodeId]) } : {});
+  const startLanding = startJoint ? undefined : floorLandingAt(floors, start);
+  let endLanding = endJoint ? undefined : floorLandingAt(floors, end);
   if (endLanding && endLanding.topology === startLanding?.topology) endLanding = undefined;
-  const from: RampEndPlan = startLanding ? { point: startLanding.point, landing: startLanding } : { point: slopeControlPoint(ctx, start) };
-  const y = endLanding?.height ?? from.point.y + (params.rise ?? 3);
-  // A free end stands where the pointer is at the end's own height -- right under the cursor.
-  const to: RampEndPlan = endLanding ? { point: { ...endLanding.point, y }, landing: endLanding } : { point: pointerAtHeight(end, y) };
+  const from: RampEndPlan = startJoint ? { point: startJoint.mid, joint: startJoint }
+    : startLanding ? { point: startLanding.point, landing: startLanding } : { point: slopeControlPoint(ctx, start) };
+  const y = endJoint?.height ?? endLanding?.height ?? from.point.y + (params.rise ?? 3);
+  const to: RampEndPlan = endJoint ? { point: endJoint.mid, joint: endJoint }
+    : endLanding ? { point: { ...endLanding.point, y }, landing: endLanding } : { point: pointerAtHeight(end, y) };
   return { from, to };
 }
 
@@ -50,14 +57,16 @@ export function plannedRamp(ctx: ToolContext, start: PointerSample, end: Pointer
  */
 export function commitStraightRamp(ctx: ToolContext, start: PointerSample, end: PointerSample, params: RampParams): void {
   try {
-    const { corners, welds: landings } = plannedRamp(ctx, start, end, params);
+    const plan = plannedRamp(ctx, start, end, params);
+    const { corners, welds: landings } = plan;
     const operationId = scopedToolId(ctx, "platform-ramp", ctx.nextSequence());
-    const ramp = rampPatch(operationId, corners);
+    // An end run on from another structure's end takes that end's nodes.
+    const ramp = jointedRampPatch(operationId, plan);
     const topologies = ctx.runtime.getAllRegionTopologies();
     const welds = reweldFloors(topologies, {
       detach: [],
       attach: landings.map((weld) => ({ rung: ramp.edges.find((edge) => edge.edgeId === rampEdgeId(operationId, weld.end))!, floor: weld.landing.topology.surfaceKey })),
-    }, new Map(ramp.nodes.map((node) => [node.id, node.position])), operationId);
+    }, ramp.positions, operationId);
     const { recorded } = commitPatchReplacement(ctx.runtime, {
       operationId,
       sourceSurfaceKeys: welds.sourceSurfaceKeys,
@@ -70,7 +79,8 @@ export function commitStraightRamp(ctx: ToolContext, start: PointerSample, end: 
       footprintOutline: [corners.bottom.min, corners.bottom.max, corners.top.max, corners.top.min].map((p) => [p.x, p.z] as const),
     }, { transactionId: operationId });
     if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
-    ctx.reportFeedback({ tone: "success", message: `Rampa: ${welds.attached.length} ponta(s) soldada(s).` });
+    const joined = plan.joints.length > 0 ? `, ${plan.joints.length} continuando outra estrutura` : "";
+    ctx.reportFeedback({ tone: "success", message: `Rampa: ${welds.attached.length} ponta(s) soldada(s)${joined}.` });
   } catch (error) {
     ctx.reportFeedback({ tone: "error", message: error instanceof Error ? error.message : String(error) });
   }

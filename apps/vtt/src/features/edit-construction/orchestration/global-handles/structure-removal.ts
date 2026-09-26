@@ -3,6 +3,7 @@ import type { ConstructionRegionTopology } from "@/ports";
 import type { GlobalHandleEdit, GlobalHandleScene } from "../../global-handles/index.ts";
 import { hasTrait, structureTypeFor } from "../../structure-types/index.ts";
 import { floorsWeldedBy, reweldFloors } from "../../topology/floor-weld.ts";
+import { releasableFace } from "../free-end-welds.ts";
 
 /**
  * Deleting whole structures built from regions: every end welded into a
@@ -16,7 +17,7 @@ export function removalOf(scene: GlobalHandleScene, faces: readonly Construction
     .filter((rung) => floorsWeldedBy(floors, rung).length > 0);
   const surfaceKeys = faces.map((face) => face.surfaceKey);
   if (rungs.length === 0) return { kind: "remove", surfaceKeys };
-  const released = reweldFloors(scene.topologies, { detach: rungs, attach: [] }, new Map(), `${operationId}:release`);
+  const released = reweldFloors(scene.topologies, { detach: rungs, attach: [] }, new Map(), `${operationId}:release`, releasableFace);
   return {
     kind: "remove",
     surfaceKeys,

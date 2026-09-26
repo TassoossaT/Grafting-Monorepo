@@ -5,7 +5,8 @@ import type { GlobalHandle, GlobalHandleAction, GlobalHandleEdit, GlobalHandlePr
 import { hasTrait, structureTypeFor, type StructureEnd, type StructureEndName, type StructureEnds } from "../../structure-types/index.ts";
 import { handleNodeName } from "./handle-name.ts";
 import { removalOf } from "./structure-removal.ts";
-import { floorLandingNear, floorsWeldedBy, floorsWithout, reweldFloors } from "../../topology/floor-weld.ts";
+import { endJointNear, releasableFace } from "../free-end-welds.ts";
+import { floorLandingNear, floorsWeldedBy, floorsWithout, reweldFloors, type EndJoint } from "../../topology/floor-weld.ts";
 
 /** How close an end must still stand to a floor's edge to count as staying welded there. */
 const KEPT_REACH = 1e-2;
@@ -33,7 +34,7 @@ function weldedFloor(scene: GlobalHandleScene, end: StructureEnd): ConstructionR
 /** Takes one end off whatever it is welded to: only the floors change. */
 function detached(scene: GlobalHandleScene, end: StructureEnd, operationId: string): GlobalHandleEdit | undefined {
   if (!weldedFloor(scene, end)) return undefined;
-  const floors = reweldFloors(scene.topologies, { detach: [end.rung], attach: [] }, new Map(), operationId);
+  const floors = reweldFloors(scene.topologies, { detach: [end.rung], attach: [] }, new Map(), operationId, releasableFace);
   return {
     kind: "replace",
     request: {
@@ -42,6 +43,23 @@ function detached(scene: GlobalHandleScene, end: StructureEnd, operationId: stri
       patch: { nodes: floors.nodes, edges: floors.edges, regions: floors.regions },
     },
   };
+}
+
+/**
+ * The other structure the standing end `standing` continues, as a joint to
+ * keep running on from -- `undefined` when that end holds only its own
+ * nodes or a floor's. The way on is the structure's own, from that end to
+ * its other one.
+ */
+function continued(scene: GlobalHandleScene, handle: EndGlobalHandle, standing: StructureEnd, ends: readonly StructureEnd[]): EndJoint | undefined {
+  const holders = floorsWeldedBy(scene.topologies.filter((face) => keyOf(face) !== keyOf(handle.topology) && !releasableFace(face)), standing.rung);
+  if (holders.length === 0) return undefined;
+  const at = new Map(handle.topology.nodes.map((node) => [node.id, node.position]));
+  const a = at.get(standing.rung.startNodeId)!, b = at.get(standing.rung.endNodeId)!;
+  const far = ends.find((end) => end !== standing)!.position;
+  const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 };
+  const length = Math.hypot(far.x - mid.x, far.z - mid.z) || 1;
+  return { rung: standing.rung, a, b, mid, out: { x: (far.x - mid.x) / length, z: (far.z - mid.z) / length }, height: mid.y, width: Math.hypot(b.x - a.x, b.z - a.z) };
 }
 
 /**
@@ -57,13 +75,18 @@ function placed(scene: GlobalHandleScene, handle: EndGlobalHandle, ends: readonl
   const standing = ends.find((end) => end.name !== handle.end)!;
   const standingFloor = weldedFloor(scene, standing);
   const kept = standingFloor && floorLandingNear(released.filter((floor) => keyOf(floor) === keyOf(standingFloor)), standing.position, { reach: KEPT_REACH });
-  const landing = floorLandingNear(standingFloor ? released.filter((floor) => keyOf(floor) !== keyOf(standingFloor)) : released, at, under ? { under } : {});
-  const rebuilt = capability.rebuild(handle.topology, handle.end, { point: landing ? { ...at, y: landing.height } : at, ...(landing ? { landing } : {}) }, kept);
-  const positions = new Map(rebuilt.patch.nodes.map((node) => [node.id, node.position]));
+  // Another structure's free end within reach is run on from, before any floor's edge.
+  const own = new Set(handle.topology.nodes.map((node) => node.id));
+  const joint = endJointNear(scene.graph, scene.topologies, at, { own });
+  const landing = joint ? undefined : floorLandingNear(standingFloor ? released.filter((floor) => keyOf(floor) !== keyOf(standingFloor)) : released, at, under ? { under } : {});
+  const target = joint ? { point: joint.mid, joint } : { point: landing ? { ...at, y: landing.height } : at, ...(landing ? { landing } : {}) };
+  const rebuilt = capability.rebuild(handle.topology, handle.end, target, kept, continued(scene, handle, standing, ends));
+  // Every node of the structure where it will stand -- another structure's included, where an end continues one.
+  const positions = new Map(rebuilt.moved.map((node) => [node.id, node.position]));
   const welds = reweldFloors(scene.topologies, {
     detach: rungs,
     attach: rebuilt.rungs.flatMap((rung) => (rung.landing ? [{ rung: rung.rung, floor: rung.landing.topology.surfaceKey }] : [])),
-  }, positions, operationId);
+  }, positions, operationId, releasableFace);
   return {
     kind: "replace",
     request: {

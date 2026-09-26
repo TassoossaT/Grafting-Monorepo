@@ -14,7 +14,7 @@ import type { CreationInteraction } from "./creation-interaction.ts";
 import type { EffectKind, ReactionId } from "../effects/effect.ts";
 import type { GlobalHandleKind } from "../global-handles/global-handle-ids.ts";
 import type { PlanarArea } from "../topology/planar-area.ts";
-import type { FloorLanding, WeldRung } from "../topology/floor-weld.ts";
+import type { EndJoint, FloorLanding, WeldRung } from "../topology/floor-weld.ts";
 import type { FieldPort } from "./path/contour/curve-projection.ts";
 
 /**
@@ -322,8 +322,10 @@ export interface StructureEnds {
   readonly rebuild: (
     topology: ConstructionRegionTopology,
     name: StructureEndName,
-    target: { readonly point: ConstructionPosition; readonly landing?: FloorLanding },
+    target: { readonly point: ConstructionPosition; readonly landing?: FloorLanding; readonly joint?: EndJoint },
     kept?: FloorLanding,
+    /** The other structure's end the standing end continues, when it continues one. */
+    keptJoint?: EndJoint,
   ) => RebuiltFromEnds;
 }
 

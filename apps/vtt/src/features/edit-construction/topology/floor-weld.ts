@@ -387,6 +387,8 @@ export function reweldFloors(
   changes: WeldChanges,
   positions: ReadonlyMap<string, ConstructionPosition>,
   operationId: string,
+  /** Which faces a detach takes off the rung's nodes -- floors and the ground, never another structure continuing the end. */
+  releasable: (face: ConstructionRegionTopology) => boolean = () => true,
 ): Rewelding {
   const key = (surfaceKey: ConstructionSurfaceKey) => surfaceKey.join("\u0000");
   const drafts = new Map<string, FaceDraft>();
@@ -399,7 +401,7 @@ export function reweldFloors(
   const renamed = new Map<string, string>();
   for (const rung of changes.detach) {
     for (const node of [rung.startNodeId, rung.endNodeId]) {
-      const holding = faces.filter((face) => !loopsOf(face).flat().some((use) => use.edgeId === rung.edgeId) && face.nodes.some((candidate) => candidate.id === node));
+      const holding = faces.filter((face) => releasable(face) && !loopsOf(face).flat().some((use) => use.edgeId === rung.edgeId) && face.nodes.some((candidate) => candidate.id === node));
       if (holding.length === 0) continue;
       for (const face of holding) touched.add(key(face.surfaceKey));
       // The floor's side made whole again where it runs straight through; else a copy of the node of its own.
@@ -474,4 +476,19 @@ export function floorsWithout(floors: readonly ConstructionRegionTopology[], run
     }
     return asTopology(draft);
   });
+}
+
+/**
+ * Another structure's free end something can take over and run on from:
+ * its end edge, the two ends of that edge, the way on -- away from the
+ * structure, square to the edge -- and its height and width.
+ */
+export interface EndJoint {
+  readonly rung: WeldRung;
+  readonly a: ConstructionPosition;
+  readonly b: ConstructionPosition;
+  readonly mid: ConstructionPosition;
+  readonly out: PlanDirection;
+  readonly height: number;
+  readonly width: number;
 }

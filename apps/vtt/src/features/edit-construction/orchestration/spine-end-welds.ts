@@ -2,6 +2,7 @@ import type { ApplyPatchReplacementRequest, ConstructionEdgeSnapshot, Constructi
 
 import { isSpineEdge, prospectiveGraph, spineComponent } from "../spine/index.ts";
 import { hasTrait, type SpineGeneration, type SpineRegeneration, type SpineRegenerationInput } from "../structure-types/index.ts";
+import { releasableFace } from "./free-end-welds.ts";
 import { floorLandingNear, floorsWeldedBy, floorsWithout, reweldFloors, type FloorLanding } from "../topology/floor-weld.ts";
 
 /**
@@ -104,7 +105,7 @@ export function regenerateWithEndWelds(
   const welds = reweldFloors(input.topologies, {
     detach: leaving.map((id) => endRung(id)),
     attach: [...landed].map(([id, landing]) => ({ rung: endRung(id), floor: landing.topology.surfaceKey })),
-  }, positions, input.operationId);
+  }, positions, input.operationId, releasableFace);
   if (welds.sourceSurfaceKeys.length === 0) return regenerated;
   const rewelded: ApplyPatchReplacementRequest = {
     ...request,
@@ -122,7 +123,7 @@ export function regenerateWithEndWelds(
 export function detachSpineEnd(generation: SpineGeneration, controlNodeId: string, topologies: readonly ConstructionRegionTopology[], operationId: string): ApplyPatchReplacementRequest | undefined {
   const rung = generation.endRung?.(controlNodeId);
   if (!rung || floorsWeldedBy(floorsOf(topologies), rung).length === 0) return undefined;
-  const welds = reweldFloors(topologies, { detach: [rung], attach: [] }, new Map(), operationId);
+  const welds = reweldFloors(topologies, { detach: [rung], attach: [] }, new Map(), operationId, releasableFace);
   return { operationId, sourceSurfaceKeys: welds.sourceSurfaceKeys, patch: { nodes: welds.nodes, edges: welds.edges, regions: welds.regions } };
 }
 

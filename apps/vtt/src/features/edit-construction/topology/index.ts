@@ -25,4 +25,4 @@ export type { PanelHeightWidgetZone } from "./panel-height-widget.ts";
 export { arcSweepOf, arcSweepsOf, closestOnContours, contourLengths, evaluateContour, parametersAtDistance, subContour } from "./contour-geometry.ts";
 export type { ContourPort, ContourSpan } from "./contour-geometry.ts";
 export { alongEdge, floorLandingNear, floorsWeldedBy, floorsWithout, LANDING_REACH, projectOnto, reweldFloors, rungFits } from "./floor-weld.ts";
-export type { FloorEdge, FloorLanding, PlanDirection, Rewelding, WeldChanges, WeldRung } from "./floor-weld.ts";
+export type { EndJoint, FloorEdge, FloorLanding, PlanDirection, Rewelding, WeldChanges, WeldRung } from "./floor-weld.ts";

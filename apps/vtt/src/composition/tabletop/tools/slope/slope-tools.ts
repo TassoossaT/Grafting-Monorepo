@@ -54,16 +54,17 @@ const rawSlopeRampTool: ConstructionTool<"slope-ramp"> = {
   defaultParams: () => DEFAULT_TOOL_PARAMS["slope-ramp"],
   previewFor(gesture, params, ctx) {
     try {
-      const { corners, welds } = plannedRamp(ctx, gesture.start, gesture.current, params);
+      const { corners, welds, joints } = plannedRamp(ctx, gesture.start, gesture.current, params);
       const positions: number[] = [], indices: number[] = [];
       appendQuad(positions, indices, [corners.bottom.min, corners.bottom.max, corners.top.max, corners.top.min]);
       // A disk at each corner of an end that will be welded into a floor.
-      for (const weld of welds) {
+      // ... and at each corner of an end that runs on from another structure's end.
+      for (const weld of [...welds, ...joints]) {
         const end = corners[weld.end];
         appendNodeDisk(positions, indices, end.min, WELD_MARK);
         appendNodeDisk(positions, indices, end.max, WELD_MARK);
       }
-      reportRampReadout(ctx, corners, welds.length);
+      reportRampReadout(ctx, corners, welds.length + joints.length);
       return { kind: "mesh", positions: Float32Array.from(positions), indices: Uint32Array.from(indices), color: COLOR, opacity: 0.55 };
     } catch {
       return undefined;

@@ -43,10 +43,6 @@ export const rampCornerId = (operationId: string, end: RampEnd, side: RampSide):
 export const rampEdgeId = (operationId: string, name: RampEnd | RampSide): string => `${operationId}:ramp:edge:${name}`;
 export const rampFaceId = (operationId: string): string => `${operationId}:ramp:face`;
 
-function parseCorner(id: string): { readonly end: RampEnd; readonly side: RampSide } | undefined {
-  const match = /:ramp:(bottom|top):(min|max)$/.exec(id);
-  return match ? { end: match[1] as RampEnd, side: match[2] as RampSide } : undefined;
-}
 
 export type RampCorners = Readonly<Record<RampEnd, Readonly<Record<RampSide, ConstructionPosition>>>>;
 
@@ -105,23 +101,50 @@ export function rampPatch(operationId: string, corners: RampCorners): {
   };
 }
 
+/** A ramp's own edge by its name: an end edge by its end, a side edge by its side. */
+const RAMP_EDGE = /^(.*):ramp:edge:(bottom|top|min|max)$/;
+
 interface Corners {
+  readonly operationId: string;
   readonly ids: Readonly<Record<RampEnd, Readonly<Record<RampSide, string>>>>;
   readonly at: RampCorners;
 }
 
-/** `topology`'s four corners, at `positions` where given, or `undefined` if it does not have exactly those. */
+/**
+ * `topology`'s four corners, at `positions` where given, or `undefined` if
+ * it is not a ramp. Read from the ramp's own edges, never from its nodes'
+ * names: an end joined to another structure's end takes that structure's
+ * nodes, and is the same ramp.
+ */
 function cornersOf(topology: ConstructionRegionTopology, positions?: ReadonlyMap<string, ConstructionPosition>): Corners | undefined {
-  const ids: Partial<Record<RampEnd, Partial<Record<RampSide, string>>>> = {};
-  const at: Partial<Record<RampEnd, Partial<Record<RampSide, ConstructionPosition>>>> = {};
-  for (const node of topology.nodes) {
-    const corner = parseCorner(node.id);
-    if (!corner) continue;
-    (ids[corner.end] ??= {})[corner.side] = node.id;
-    (at[corner.end] ??= {})[corner.side] = positions?.get(node.id) ?? node.position;
+  const own = new Map<string, { readonly start: string; readonly end: string; readonly operationId: string }>();
+  for (const use of [...topology.outerLoops, ...topology.holes].flat()) {
+    const match = RAMP_EDGE.exec(use.edgeId);
+    if (!match) continue;
+    own.set(match[2]!, { operationId: match[1]!, start: use.reversed ? use.endNodeId : use.startNodeId, end: use.reversed ? use.startNodeId : use.endNodeId });
   }
-  const complete = ENDS.every((end) => SIDES.every((side) => ids[end]?.[side] !== undefined));
-  return complete ? { ids: ids as Corners["ids"], at: at as RampCorners } : undefined;
+  const bottom = own.get("bottom"), top = own.get("top");
+  if (!bottom || !top) return undefined;
+  // The bottom edge runs min to max, the top one max to min (`rampPatch`).
+  const ids = { bottom: { min: bottom.start, max: bottom.end }, top: { min: top.end, max: top.start } };
+  const standing = new Map(topology.nodes.map((node) => [node.id, node.position]));
+  const place = (id: string) => positions?.get(id) ?? standing.get(id);
+  const at = { bottom: { min: place(ids.bottom.min), max: place(ids.bottom.max) }, top: { min: place(ids.top.min), max: place(ids.top.max) } };
+  if (ENDS.some((end) => SIDES.some((side) => at[end][side] === undefined))) return undefined;
+  return { operationId: bottom.operationId, ids, at: at as RampCorners };
+}
+
+/** The nodes at `topology`'s four corners, if it is a ramp -- its own, or another structure's where an end continues one. */
+export function rampCornerIdsOf(topology: ConstructionRegionTopology): Corners["ids"] | undefined {
+  return cornersOf(topology)?.ids;
+}
+
+/** Which corner of `topology` the node `nodeId` is, if any. */
+function cornerOf(topology: ConstructionRegionTopology, nodeId: string): { readonly end: RampEnd; readonly side: RampSide } | undefined {
+  const corners = cornersOf(topology);
+  if (!corners) return undefined;
+  for (const end of ENDS) for (const side of SIDES) if (corners.ids[end][side] === nodeId) return { end, side };
+  return undefined;
 }
 
 /**
@@ -132,9 +155,8 @@ export function rampShapeOf(topology: ConstructionRegionTopology): (RampShape & 
   const corners = cornersOf(topology);
   if (!corners) return undefined;
   const { at } = corners;
-  const suffix = ":ramp:bottom:min";
   return {
-    operationId: corners.ids.bottom.min.slice(0, -suffix.length),
+    operationId: corners.operationId,
     axisStart: midpoint(at.bottom.min, at.bottom.max),
     axisEnd: midpoint(at.top.min, at.top.max),
     bottomWidth: Math.hypot(at.bottom.max.x - at.bottom.min.x, at.bottom.max.z - at.bottom.min.z),
@@ -153,22 +175,13 @@ function direction(from: ConstructionPosition, to: ConstructionPosition): { read
 
 const axisOf = (at: RampCorners) => direction(midpoint(at.bottom.min, at.bottom.max), midpoint(at.top.min, at.top.max));
 
-function edgeCorners(topology: ConstructionRegionTopology, edgeId: string) {
-  const use = [...topology.outerLoops, ...topology.holes].flat().find((edge) => edge.edgeId === edgeId);
-  if (!use) return undefined;
-  const a = parseCorner(use.startNodeId), b = parseCorner(use.endNodeId);
-  return a && b ? { a, b } : undefined;
-}
-
 export function rampRoleFor(topology: ConstructionRegionTopology, target: EditTarget): EditRole {
   if (target.kind === "region") return "ramp-region";
-  if (target.kind === "vertex") {
-    return parseCorner(target.nodeId) && topology.nodes.some((node) => node.id === target.nodeId) ? "ramp-corner" : "ramp-unknown";
-  }
-  const corners = edgeCorners(topology, target.edgeId);
-  if (!corners) return "ramp-unknown";
-  if (corners.a.end === corners.b.end) return "ramp-end";
-  return corners.a.side === corners.b.side ? "ramp-side" : "ramp-unknown";
+  if (target.kind === "vertex") return cornerOf(topology, target.nodeId) ? "ramp-corner" : "ramp-unknown";
+  const own = [...topology.outerLoops, ...topology.holes].flat().some((use) => use.edgeId === target.edgeId);
+  const name = own ? RAMP_EDGE.exec(target.edgeId)?.[2] : undefined;
+  if (name === "bottom" || name === "top") return "ramp-end";
+  return name === "min" || name === "max" ? "ramp-side" : "ramp-unknown";
 }
 
 /** `delta` kept only along the plan direction `along`, plus its height when `keepHeight`. */
@@ -180,7 +193,7 @@ function projected(delta: ConstructionPosition, along: { readonly x: number; rea
 /** A corner widens or narrows its own end: it slides along that end's edge, and its twin mirrors it. */
 function constrainCorner({ topology, target, delta }: ConstrainContext): ConstructionPosition {
   const corners = cornersOf(topology);
-  const corner = target.kind === "vertex" ? parseCorner(target.nodeId) : undefined;
+  const corner = target.kind === "vertex" ? cornerOf(topology, target.nodeId) : undefined;
   if (!corners || !corner) return { x: 0, y: 0, z: 0 };
   const end = corners.at[corner.end];
   return projected(delta, direction(end[other(["min", "max"], corner.side)], end[corner.side]), false);

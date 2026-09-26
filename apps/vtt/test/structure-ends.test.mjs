@@ -365,3 +365,59 @@ test("a floor drawn against a ramp's free end welds it, without its corners bein
     assert.equal(ctx.history.undo()?.kind, "transaction", "one step with the floor it came with");
   } finally { session.free(); }
 });
+
+test("a straight ramp drawn from another ramp's free top runs straight on from it, sharing its end", () => {
+  const fixture = sessionFixture();
+  const { runtime, session, calls } = fixture;
+  try {
+    drawn(fixture, { x: 0, y: 0, z: 0 }, { x: 6, y: 0, z: 0 });
+    const first = ramp(runtime);
+    // From just by the first ramp's top, at its height, off towards +x and a little sideways.
+    drawn(fixture, { x: 6.2, y: 2, z: 0.1 }, { x: 10, y: 0, z: 0.8 });
+    assert.match(calls.feedback.at(-1).message, /continuando outra estrutura/, JSON.stringify(calls.feedback.at(-1)));
+    const second = faces(runtime, "platform-ramp").find((f) => f.surfaceKey.join() !== first.surfaceKey.join());
+    const top = ["min", "max"].map((side) => first.nodes.find((n) => n.id.endsWith(`:ramp:top:${side}`)).id);
+    assert.ok(top.every((id) => second.nodes.some((n) => n.id === id)), "the second ramp's bottom is the first one's top");
+    const secondTop = second.nodes.filter((n) => !top.includes(n.id));
+    assert.equal(secondTop.length, 2);
+    for (const node of secondTop) close(node.position.z, node.position.z > 0 ? 0.5 : -0.5, "straight on, as wide as the first one's top");
+    close(secondTop[0].position.y, 4, "climbing its own rise from the first one's top");
+  } finally { session.free(); }
+});
+
+test("a straight ramp drawn from a curved ramp's free end takes that end over", async () => {
+  const { commitPlatformSlope } = await import("../src/composition/tabletop/tools/slope/slope-commit.ts");
+  const { controlSectionId, isSpineControlNodeId } = await import("../src/features/edit-construction/index.ts");
+  const fixture = sessionFixture();
+  const { runtime, session, ctx, calls } = fixture;
+  try {
+    commitPlatformSlope(ctx, [{ x: 0, y: 0, z: 8 }, { x: -4, y: 2, z: 8 }], { width: 1.5 });
+    const end = runtime.getGraphSnapshot().nodes.find((n) => isSpineControlNodeId(n.id) && Math.abs(n.position.x + 4) < 1e-6);
+    drawn(fixture, { x: -4.3, y: 0, z: 8 }, { x: -9, y: 0, z: 8 });
+    assert.match(calls.feedback.at(-1).message, /continuando outra estrutura/, JSON.stringify(calls.feedback.at(-1)));
+    const straight = ramp(runtime);
+    assert.ok(["min", "max"].every((side) => straight.nodes.some((n) => n.id === controlSectionId(end.id, side))), "its bottom is the curved ramp's end");
+    for (const side of ["min", "max"]) close(straight.nodes.find((n) => n.id === controlSectionId(end.id, side)).position.y, 2, "at that end's height");
+  } finally { session.free(); }
+});
+
+test("a ramp's free end dragged onto another ramp's free end joins it there", () => {
+  const fixture = sessionFixture();
+  const { runtime, session, calls } = fixture;
+  try {
+    drawn(fixture, { x: 0, y: 0, z: 0 }, { x: 6, y: 0, z: 0 });
+    const first = ramp(runtime);
+    drawn(fixture, { x: 12, y: 2, z: 0 }, { x: 16, y: 0, z: 0 });
+    const second = () => faces(runtime, "platform-ramp").find((f) => f.surfaceKey.join() !== first.surfaceKey.join());
+    const origin = shownGlobalHandles(scene(runtime)).find((h) => h.kind === "origin" && second().nodes.some((n) => h.nodeIds.includes(n.id)) && !first.nodes.some((n) => h.nodeIds.includes(n.id)));
+    const start = { nodeId: origin.id, point: origin.position, screenX: 100, screenY: 300 };
+    const current = { point: { x: 6.3, y: 2, z: 0.2 }, screenX: 200, screenY: 300 };
+    Object.assign(runtime, { showPreview() {}, clearPreview() {} });
+    slopeRampTool.onPointerDown(fixture.ctx, start, params);
+    slopeRampTool.onPointerMove(fixture.ctx, { start, current, samples: [start, current] }, params);
+    slopeRampTool.onPointerUp(fixture.ctx, { start, current, samples: [start, current] }, params);
+    assert.ok(!calls.feedback.some((f) => f && f.tone === "error"), JSON.stringify(calls.feedback.slice(-2)));
+    const top = ["min", "max"].map((side) => first.nodes.find((n) => n.id.endsWith(`:ramp:top:${side}`)).id);
+    assert.ok(top.every((id) => second().nodes.some((n) => n.id === id)), "the dragged end took the first ramp's top over");
+  } finally { session.free(); }
+});

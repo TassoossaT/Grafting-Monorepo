@@ -54,6 +54,10 @@ function assembly() {
 
 const edits = {
   "drawing a welded ramp": (f) => drawRamp(f.ctx, { x: 4, y: 0, z: 1 }, { x: 10, y: 0, z: 1 }),
+  "drawing a ramp on from another ramp's free end": (f) => {
+    drawRamp(f.ctx, { x: 0, y: 0, z: 8 }, { x: 5, y: 0, z: 8 });
+    drawRamp(f.ctx, { x: 5.2, y: 2, z: 8 }, { x: 9, y: 0, z: 8 });
+  },
   "moving a ramp end to reconnect it": (f) => {
     const end = handle(f.runtime, "destination", "platform-ramp");
     drag(slopeRampTool, ramp, f.ctx, end, { x: end.position.x - 2, y: 0, z: end.position.z });
