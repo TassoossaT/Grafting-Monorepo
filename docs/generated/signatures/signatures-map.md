@@ -3493,6 +3493,9 @@ export function createMoveHandleTexture(): HTMLCanvasElement {
 export function createHeightHandleTexture(): HTMLCanvasElement {
   return glyphDisc("#1f9d62", (context) => {
   context.beginPath(); context.moveTo(32, 17); context.lineTo(32, 47); context.stroke();
+export function createRadiusHandleTexture(): HTMLCanvasElement {
+  return glyphDisc("#c2416b", (context) => {
+  context.beginPath(); context.moveTo(17, 32); context.lineTo(47, 32); context.stroke();
 export function createTurnsHandleTexture(): HTMLCanvasElement {
   return glyphDisc("#e07a1f", (context) => {
   context.beginPath(); context.arc(32, 32, 14, -Math.PI * 0.35, Math.PI * 1.35); context.stroke();
@@ -3638,8 +3641,8 @@ export function commitPatchReplacement(
   options: CommitOptions & {
   /** Faces the replacement moves without replacing them -- carried along; each type answers its own move. */
   readonly carries?: readonly ConstructionSurfaceKey[];
-  },
-  ): TransactionResult<ConstructionPatchOutcome> {
+  /** More of the same change, once the replacement stands and before anything answers it. */
+  readonly afterward?: (outcome: ConstructionPatchOutcome) => void;
 export function commitRegionEdit(
   runtime: EffectCommitRuntime & { applyRegionEdit(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): RegionEditOutcome },
   ops: readonly AtomicEditOp[],
@@ -3647,6 +3650,14 @@ export function commitRegionEdit(
   ): TransactionResult<RegionEditOutcome> {
   const origin = options.origin ?? "local";
   const moved = new Set(ops.flatMap((op) => (op.kind === "move-vertex" ? [op.nodeId] : [])));
+export function commitStructureRemoval(
+  runtime: EffectCommitRuntime,
+  surfaceKeys: readonly ConstructionSurfaceKey[],
+  release: ApplyPatchReplacementRequest | undefined,
+  options: CommitOptions,
+  ): TransactionResult<void> {
+  const origin = options.origin ?? "local";
+  return runtime.transact(options.transactionId, origin, () => {
 export function commitSurfaceRemoval(
   runtime: EffectCommitRuntime,
   surfaceKey: ConstructionSurfaceKey,
@@ -3704,7 +3715,7 @@ export const HANDLE_GLYPHS = {
   midpoint: "midpoint",
   /** A wall run's own height widget. */
 export const GLOBAL_HANDLE_GLYPHS: Readonly<Record<GlobalHandleKind, RenderHandleGlyph>> = {
-  pivot: "move", rotate: "rotate", height: "height", turns: "turns", origin: "link", destination: "link",
+  pivot: "move", rotate: "rotate", height: "height", turns: "turns", radius: "radius", origin: "link", destination: "link",
   };
 
 // src/composition/tabletop/index.ts
@@ -4341,6 +4352,8 @@ export type { FittedEdge, FitOptions } from "../../../../features/edit-construct
 export interface StructureEditOptions {
   /** Only a vertex/edge/body/handle whose topology's surface type this accepts is grabbed; anything else falls through to the wrapped tool's own creation gesture. */
   readonly ownsType: (surfaceType: string) => boolean;
+  /** Whether the tool is partway through drawing something -- a press then belongs to the drawing, never to editing what stands. */
+  readonly drafting?: (ctx: ToolContext) => boolean;
   }
 export interface StructureEditBehavior {
   /** Tries to start an edit gesture on whatever `sample` landed on; `true` means the rest of this pointer gesture belongs to this behaviour, not the wrapped tool's own creation gesture. */
@@ -4850,7 +4863,7 @@ export function plannedRamp(ctx: ToolContext, start: PointerSample, end: Pointer
   const { from, to } = rampEnds(ctx, start, end, params);
 export function commitStraightRamp(ctx: ToolContext, start: PointerSample, end: PointerSample, params: RampParams): void {
   try {
-  const { corners, welds: landings } = plannedRamp(ctx, start, end, params);
+  const plan = plannedRamp(ctx, start, end, params);
 
 // src/composition/tabletop/tools/slope/slope-commit.ts
 export interface SlopeParams {
@@ -4889,7 +4902,7 @@ export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly Co
   if (!(width > 0)) throw new Error("A largura deve ser positiva.");
 
 // src/composition/tabletop/tools/slope/slope-tools.ts
-export const slopeRampTool = withStructureEditing(rawSlopeRampTool, { ownsType: ownsRamp });
+export const slopeRampTool = withStructureEditing(rawSlopeRampTool, { ownsType: ownsRamp, drafting: (ctx) => rampDrafts.has(ctx.runtime) });
 export const slopeSpiralTool = withSpineEditing({ ...rawSlopeSpiralTool, onParamsChange: spiralSelection.onParamsChange }, {
   ownsSpine: ownsSlope, drafting: rawSlopeSpiralTool.drafting, onSelect: spiralSelection.onSelect,
   });
@@ -5247,7 +5260,7 @@ export type Reaction<Context> = (
 
 
 // src/features/edit-construction/global-handles/global-handle-ids.ts
-export type GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "origin" | "destination";
+export type GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "radius" | "origin" | "destination";
 export const globalHandleId = (kind: GlobalHandleKind, anchorNodeId: string): string => `${PREFIX[kind]}${anchorNodeId}`;
 export function globalHandleOf(id: string): { readonly kind: GlobalHandleKind; readonly nodeId: string } | undefined {
   const kind = KINDS.find((candidate) => id.startsWith(PREFIX[candidate]));
@@ -5471,6 +5484,26 @@ export function applyEditPlan(sink: EditOpSink, plan: EditPlan): RegionEditOutco
   if (plan.kind !== "apply" || plan.ops.length === 0) return EMPTY_OUTCOME;
   const movements = plan.ops.filter((op) => op.kind === "move-vertex");
 
+// src/features/edit-construction/orchestration/free-end-welds.ts
+export const releasableFace = (face: ConstructionRegionTopology): boolean => hasTrait(face.surfaceType, "floor") || hasTrait(face.surfaceType, "ground");
+export function freeStructureEnds(graph: ConstructionGraphSnapshot, topologies: readonly ConstructionRegionTopology[]): readonly WeldRung[] {
+  const regionEnds = topologies.flatMap((topology) => structureTypeFor(topology.surfaceType)?.ends?.ends(topology).map((end) => end.rung) ?? []);
+export function weldFreeEndsOnto(
+  graph: ConstructionGraphSnapshot,
+  topologies: readonly ConstructionRegionTopology[],
+  floorKeys: readonly ConstructionSurfaceKey[],
+  operationId: string,
+  ): ApplyPatchReplacementRequest | undefined {
+  const rungs = freeStructureEnds(graph, topologies);
+export function endJointNear(
+  graph: ConstructionGraphSnapshot,
+  topologies: readonly ConstructionRegionTopology[],
+  /** Where the pointer is -- at a given height, when it can say, so a raised end is aimed at where it is drawn. */
+  point: ConstructionPosition | ((height: number) => ConstructionPosition),
+  options: { readonly reach?: number; readonly own?: ReadonlySet<string> } = {},
+  ): EndJoint | undefined {
+  const aim = typeof point === "function" ? point : () => point;
+
 // src/features/edit-construction/orchestration/global-handles/cloud-handle-provider.ts
 export interface CloudGlobalHandle extends GlobalHandle {
   readonly members: readonly ConstructionRegionTopology[];
@@ -5518,7 +5551,11 @@ export const spineHandleProvider: GlobalHandleProvider = {
   const handle = generic as SpineGlobalHandle;
   const graphPatch = (() => {
   switch (intent.kind) {
-  case "move": return planSpineTransform(scene.graph, handle, { delta: intent.delta });
+  // Every span of the chain goes; its owner drops their faces, and ends that vanish come off their floors.
+
+// src/features/edit-construction/orchestration/global-handles/structure-removal.ts
+export function removalOf(scene: GlobalHandleScene, faces: readonly ConstructionRegionTopology[], operationId: string): GlobalHandleEdit {
+  const floors = scene.topologies.filter((topology) => hasTrait(topology.surfaceType, "floor"));
 
 // src/features/edit-construction/orchestration/index.ts
 export type {
@@ -6247,13 +6284,18 @@ export function followsOutward(moved: StationNodeAddress, candidate: StationNode
 export interface RampEndPlan {
   readonly point: ConstructionPosition;
   readonly landing?: FloorLanding;
+  /** Another structure's free end this one takes over: its edge, its width and its way on. */
+  readonly joint?: EndJoint;
   }
 export interface PlannedRamp {
   readonly corners: RampCorners;
   readonly welds: readonly { readonly end: RampEnd; readonly landing: FloorLanding }[];
+  readonly joints: readonly { readonly end: RampEnd; readonly joint: EndJoint }[];
   }
 export function planRamp(from: RampEndPlan, to: RampEndPlan, widths: { readonly bottom: number; readonly top: number }): PlannedRamp {
   const axis = plannedAxis(from, to);
+export function jointedRampPatch(operationId: string, plan: PlannedRamp, keep: ReadonlyMap<string, string> = new Map()) {
+  const patch = rampPatch(operationId, plan.corners);
 export const rampEndsCapability: StructureEnds = Object.freeze<StructureEnds>({
   ends: (topology) => (topology.surfaceType === RAMP_SURFACE_TYPE ? rampEnds(topology) : []),
   rebuild: rebuildRamp,
@@ -6296,18 +6338,18 @@ export function rampPatch(operationId: string, corners: RampCorners): {
   readonly region: ConstructionPatchRegion;
   } {
   const id = (end: RampEnd, side: RampSide) => rampCornerId(operationId, end, side);
+export function rampCornerIdsOf(topology: ConstructionRegionTopology): Corners["ids"] | undefined {
+  return cornersOf(topology)?.ids;
+  }
 export function rampShapeOf(topology: ConstructionRegionTopology): (RampShape & { readonly operationId: string }) | undefined {
   const corners = cornersOf(topology);
 export function rampRoleFor(topology: ConstructionRegionTopology, target: EditTarget): EditRole {
   if (target.kind === "region") return "ramp-region";
-  if (target.kind === "vertex") {
-  return parseCorner(target.nodeId) && topology.nodes.some((node) => node.id === target.nodeId) ? "ramp-corner" : "ramp-unknown";
-  }
+  if (target.kind === "vertex") return cornerOf(topology, target.nodeId) ? "ramp-corner" : "ramp-unknown";
+  const own = [...topology.outerLoops, ...topology.holes].flat().some((use) => use.edgeId === target.edgeId);
 export function rampPolicyFor(role: EditRole): RolePolicy {
   switch (role) {
   case "ramp-corner": return { ...allowed(role, HORIZONTAL_AXES, "surface"), constrain: constrainCorner };
-export function deriveRampMotion(topologies: readonly ConstructionRegionTopology[], positions: ReadonlyMap<string, ConstructionPosition>): ReadonlyMap<string, ConstructionPosition> {
-  const derived = new Map<string, ConstructionPosition>();
 
 // src/features/edit-construction/structure-types/platform/platform-slope-spine.ts
 export const SLOPE_SURFACE_TYPE = "platform-slope";
@@ -6973,11 +7015,20 @@ export function reweldFloors(
   changes: WeldChanges,
   positions: ReadonlyMap<string, ConstructionPosition>,
   operationId: string,
+  /** Which faces a detach takes off the rung's nodes -- floors and the ground, never another structure continuing the end. */
+  releasable: (face: ConstructionRegionTopology) => boolean = () => true,
   ): Rewelding {
-  const key = (surfaceKey: ConstructionSurfaceKey) => surfaceKey.join("\u0000");
 export function floorsWithout(floors: readonly ConstructionRegionTopology[], rungs: readonly WeldRung[]): readonly ConstructionRegionTopology[] {
   return floors.map((topology) => {
   const off = rungs.filter((rung) => floorsWeldedBy([topology], rung).length > 0);
+export interface EndJoint {
+  readonly rung: WeldRung;
+  readonly a: ConstructionPosition;
+  readonly b: ConstructionPosition;
+  readonly mid: ConstructionPosition;
+  readonly out: PlanDirection;
+  readonly height: number;
+  readonly width: number;
 
 // src/features/edit-construction/topology/index.ts
 export type { CloudSource, CloudTopology, ConstructionCloud } from "./construction-cloud.ts";
@@ -6990,7 +7041,7 @@ export type { PlanarArea, PlanarPoint, PlanarPolygon, PlanarPort, PlanarRing } f
 export type { CurveEdge, CurveHandleIndex, CurveStore } from "./curve-handles.ts";
 export type { PanelHeightWidgetZone } from "./panel-height-widget.ts";
 export type { ContourPort, ContourSpan } from "./contour-geometry.ts";
-export type { FloorEdge, FloorLanding, PlanDirection, Rewelding, WeldChanges, WeldRung } from "./floor-weld.ts";
+export type { EndJoint, FloorEdge, FloorLanding, PlanDirection, Rewelding, WeldChanges, WeldRung } from "./floor-weld.ts";
 
 // src/features/edit-construction/topology/panel-height-widget.ts
 export type PanelHeightWidgetZone = "group" | "single";
@@ -7372,7 +7423,7 @@ export interface RenderSurfacePickTarget {
   }
 export type ConfirmedSurfacePickRenderChange =
 export type ConfirmedMapChunkRenderChange =
-export type RenderHandleGlyph = "point" | "midpoint" | "move" | "rotate" | "height" | "turns" | "link";
+export type RenderHandleGlyph = "point" | "midpoint" | "move" | "rotate" | "height" | "turns" | "radius" | "link";
 export interface RenderNodeHandle {
   readonly nodeId: string;
   readonly position: { readonly x: number; readonly y: number; readonly z: number };

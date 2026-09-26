@@ -241,3 +241,30 @@ test("a floating and a grounded platform never extend each other or become one c
     assert.deepEqual(faces(runtime, "platform").map((t) => t.surfaceKey), [grounded.surfaceKey], JSON.stringify(calls.feedback));
   } finally { session.free(); }
 });
+
+test("a straight ramp is also drawn by clicks: start, then end; Shift with the pointer sets the rise; Escape drops the draft", () => {
+  const fixture = sessionFixture();
+  const { runtime, session, ctx, calls } = fixture;
+  try {
+    const click = (x, z, extra = {}) => {
+      const sample = { point: { x, y: 0, z }, screenX: 100, screenY: 300, ...extra };
+      slopeRampTool.onPointerDown(ctx, sample, params);
+      slopeRampTool.onPointerUp(ctx, { start: sample, current: sample, samples: [sample, sample], moved: false }, params);
+      slopeRampTool.onClick(ctx, sample, params);
+    };
+    click(0, 0);
+    assert.equal(ramp(runtime), undefined, "one click only starts it");
+    // Shift held, the pointer 80 pixels up: two units more rise than the tool's own.
+    const hover = { point: { x: 6, y: 0, z: 0 }, screenX: 100, screenY: 300, shiftKey: true };
+    slopeRampTool.previewFor({ start: hover, current: hover, samples: [hover] }, params, ctx);
+    const raised = { ...hover, screenY: 220 };
+    assert.ok(slopeRampTool.previewFor({ start: raised, current: raised, samples: [raised] }, params, ctx), "the draft previews to the pointer");
+    click(6, 0);
+    assert.equal(calls.feedback.at(-1).tone, "success", JSON.stringify(calls.feedback.at(-1)));
+    close(centre(ramp(runtime), "top").y, params.rise + 2, "the rise Shift set");
+    click(20, 20);
+    slopeRampTool.onCancel(ctx);
+    click(26, 20);
+    assert.equal(faces(runtime, "platform-ramp").length, 1, "Escape dropped the second draft; its end click only started another");
+  } finally { session.free(); }
+});

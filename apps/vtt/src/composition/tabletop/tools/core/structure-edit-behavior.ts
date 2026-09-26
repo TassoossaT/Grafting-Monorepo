@@ -47,6 +47,8 @@ const ON_FACE_EDGE_TOLERANCE = 0.2;
 export interface StructureEditOptions {
   /** Only a vertex/edge/body/handle whose topology's surface type this accepts is grabbed; anything else falls through to the wrapped tool's own creation gesture. */
   readonly ownsType: (surfaceType: string) => boolean;
+  /** Whether the tool is partway through drawing something -- a press then belongs to the drawing, never to editing what stands. */
+  readonly drafting?: (ctx: ToolContext) => boolean;
 }
 
 interface GrabbedTarget {
@@ -366,7 +368,7 @@ export function withStructureEditing<Id extends ConstructionToolId>(
     },
 
     onPointerDown(ctx, sample, params) {
-      if (behavior.tryGrab(ctx, sample, ctx.structureEditParams)) return;
+      if (!options.drafting?.(ctx) && behavior.tryGrab(ctx, sample, ctx.structureEditParams)) return;
       tool.onPointerDown?.(ctx, sample, params);
     },
 

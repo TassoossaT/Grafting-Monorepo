@@ -48,13 +48,36 @@ function reportRampReadout(ctx: ToolContext, corners: RampCorners, welds: number
  */
 
 /** Drag from the start to the end; the ramp climbs the fixed rise. */
+/** A straight ramp being drawn by clicks: where it starts, and a rise set with Shift. */
+interface RampDraft {
+  readonly start: PointerSample;
+  rise?: number;
+  shift?: { readonly screenY: number; readonly base: number };
+}
+const rampDrafts = new WeakMap<ToolContext["runtime"], RampDraft>();
+
+/** The rise a Shift drag has set -- steps of a quarter, 40 screen pixels a unit -- or the tool's own. */
+function draftRise(draft: RampDraft, current: PointerSample, params: { readonly rise: number }): number {
+  if (current.shiftKey && current.screenY !== undefined) {
+    draft.shift ??= { screenY: current.screenY, base: draft.rise ?? params.rise };
+    draft.rise = draft.shift.base + Math.round((draft.shift.screenY - current.screenY) / 40 / 0.25) * 0.25;
+  } else {
+    draft.shift = undefined;
+  }
+  return draft.rise ?? params.rise;
+}
+
 const rawSlopeRampTool: ConstructionTool<"slope-ramp"> = {
   id: "slope-ramp",
   previewOnHover: true,
   defaultParams: () => DEFAULT_TOOL_PARAMS["slope-ramp"],
-  previewFor(gesture, params, ctx) {
+  previewFor(gesture, toolParams, ctx) {
+    // Drawn by clicks: from the start clicked to the pointer.
+    const draft = rampDrafts.get(ctx.runtime);
+    const params = draft ? { ...toolParams, rise: draftRise(draft, gesture.current, toolParams) } : toolParams;
+    const from = draft?.start ?? gesture.start;
     try {
-      const { corners, welds, joints } = plannedRamp(ctx, gesture.start, gesture.current, params);
+      const { corners, welds, joints } = plannedRamp(ctx, from, gesture.current, params);
       const positions: number[] = [], indices: number[] = [];
       appendQuad(positions, indices, [corners.bottom.min, corners.bottom.max, corners.top.max, corners.top.min]);
       // A disk at each corner of an end that will be welded into a floor.
@@ -70,11 +93,27 @@ const rawSlopeRampTool: ConstructionTool<"slope-ramp"> = {
       return undefined;
     }
   },
-  onClick(ctx) {
-    ctx.reportFeedback({ tone: "info", message: "Arraste do início ao fim da rampa; ela sobe a altura escolhida em Subida." });
+  onClick(ctx, sample, params) {
+    const draft = rampDrafts.get(ctx.runtime);
+    if (!draft) {
+      rampDrafts.set(ctx.runtime, { start: sample });
+      ctx.reportFeedback({ tone: "info", message: "Clique o fim da rampa (Shift e o mouse na vertical ajustam a subida; Esc cancela)." });
+      return;
+    }
+    rampDrafts.delete(ctx.runtime);
+    const [from, to] = straightRampPoints(ctx, draft.start, sample, { ...params, rise: draft.rise ?? params.rise });
+    if (Math.hypot(to.x - from.x, to.z - from.z) < 0.5) {
+      ctx.reportFeedback({ tone: "error", message: "Clique mais longe do início para desenhar a rampa." });
+      return;
+    }
+    commitStraightRamp(ctx, draft.start, sample, { ...params, rise: draft.rise ?? params.rise });
+  },
+  onCancel(ctx) {
+    rampDrafts.delete(ctx.runtime);
   },
   onPointerUp(ctx, gesture, params) {
-    if (gesture.samples.length < 2) return;
+    // A press without a drag is a click: `onClick` draws by clicks.
+    if (gesture.samples.length < 2 || gesture.moved === false || rampDrafts.has(ctx.runtime)) return;
     const [from, to] = straightRampPoints(ctx, gesture.start, gesture.current, params);
     if (Math.hypot(to.x - from.x, to.z - from.z) < 0.5) {
       ctx.reportFeedback({ tone: "error", message: "Arraste mais longe para desenhar a rampa." });
@@ -85,7 +124,7 @@ const rawSlopeRampTool: ConstructionTool<"slope-ramp"> = {
 };
 
 /** Also grabs and edits an existing ramp's own corner, side, end or body -- see `structure-edit-behavior.ts`. */
-export const slopeRampTool = withStructureEditing(rawSlopeRampTool, { ownsType: ownsRamp });
+export const slopeRampTool = withStructureEditing(rawSlopeRampTool, { ownsType: ownsRamp, drafting: (ctx) => rampDrafts.has(ctx.runtime) });
 
 /** A finished draft, committed as a sloped platform: laid-out spans as they are, points as a smooth run through them. */
 function commitDraft(ctx: ToolContext, draft: FinishedCurveDraft, params: { readonly width: number }): void {

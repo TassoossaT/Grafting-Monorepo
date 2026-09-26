@@ -272,6 +272,10 @@ Moves a whole structure: arrows out in four directions.
 
 A small ring-dot, visually distinct from the token marker -- an editable construction-node handle, not a placed token.
 
+### `function vtt.marker-textures.createRadiusHandleTexture(): HTMLCanvasElement`
+
+Widens or narrows something round its centre: a double arrow across.
+
 ### `function vtt.marker-textures.createRoadBranchTexture(): HTMLCanvasElement`
 
 In-scene road branching affordance, distinct from a movable anchor.
@@ -491,7 +495,7 @@ Runs `work` -- every mutation one gesture makes -- as one transaction, then
 lets every cloud the reported change reaches answer it inside that same
 transaction. Throwing anywhere rolls all of it back.
 
-### `function vtt.effect-commit.commitPatchReplacement(runtime: EffectCommitRuntime, request: ApplyPatchReplacementRequest, options: CommitOptions & { carries?: readonly ConstructionSurfaceKey[] }): TransactionResult<ConstructionPatchOutcome>`
+### `function vtt.effect-commit.commitPatchReplacement(runtime: EffectCommitRuntime, request: ApplyPatchReplacementRequest, options: CommitOptions & { afterward?: (outcome: ConstructionPatchOutcome) => void; carries?: readonly ConstructionSurfaceKey[] }): TransactionResult<ConstructionPatchOutcome>`
 
 Replaces regions with a patch and lets every cloud the change reaches answer it, atomically.
 
@@ -502,6 +506,12 @@ every cloud the edit reaches answer it, atomically: a grounded platform
 moved or resized re-cuts the ground it left and the ground it now covers,
 exactly as drawing it did. Each type the edit moved emits its own change;
 a type that cuts nothing reaches nothing.
+
+### `function vtt.effect-commit.commitStructureRemoval(runtime: EffectCommitRuntime, surfaceKeys: readonly ConstructionSurfaceKey[], release: ApplyPatchReplacementRequest | undefined, options: CommitOptions): TransactionResult<void>`
+
+Deletes a whole structure -- every one of `surfaceKeys` -- after `release`
+takes it off what it is welded to, and lets every cloud it had cut answer,
+as one transaction.
 
 ### `function vtt.effect-commit.commitSurfaceRemoval(runtime: EffectCommitRuntime, surfaceKey: ConstructionSurfaceKey, options: CommitOptions): TransactionResult<RegionEditOutcome>`
 
@@ -2495,6 +2505,10 @@ Whether the *last* `tryGrab` succeeded -- read after pointer-up, once `isActive(
 
 ### `interface vtt.structure-edit-behavior.StructureEditOptions`
 
+### `property vtt.structure-edit-behavior.StructureEditOptions.drafting?: (ctx: ToolContext) => boolean`
+
+Whether the tool is partway through drawing something -- a press then belongs to the drawing, never to editing what stands.
+
 ### `property vtt.structure-edit-behavior.StructureEditOptions.ownsType: (surfaceType: string) => boolean`
 
 Only a vertex/edge/body/handle whose topology's surface type this accepts is grabbed; anything else falls through to the wrapped tool's own creation gesture.
@@ -4030,7 +4044,7 @@ Which surfaces form one cloud with `seed` (`ADR-0022`) -- the engine decides, ne
 
 ### `property vtt.global-handle.GlobalHandleScene.topologies: readonly ConstructionRegionTopology[]`
 
-### `type vtt.global-handle.GlobalHandleEdit = { carries?: readonly ConstructionSurfaceKey[]; graphPatch: ConstructionGraphPatch; kind: "spine"; owner: string } | { delta: ConstructionPosition; kind: "region-move"; seed: ConstructionSurfaceKey } | { kind: "vertices"; moves: readonly { nodeId: string; position: ConstructionPosition }[]; retypes: readonly { edgeId: string; geometry: ConstructionEdgeGeometry }[] } | { kind: "replace"; request: ApplyPatchReplacementRequest }`
+### `type vtt.global-handle.GlobalHandleEdit = { carries?: readonly ConstructionSurfaceKey[]; graphPatch: ConstructionGraphPatch; kind: "spine"; owner: string } | { delta: ConstructionPosition; kind: "region-move"; seed: ConstructionSurfaceKey } | { kind: "vertices"; moves: readonly { nodeId: string; position: ConstructionPosition }[]; retypes: readonly { edgeId: string; geometry: ConstructionEdgeGeometry }[] } | { kind: "replace"; request: ApplyPatchReplacementRequest } | { kind: "remove"; release?: ApplyPatchReplacementRequest; surfaceKeys: readonly ConstructionSurfaceKey[] }`
 
 What a provider makes of an intent, in the terms the edit is carried out
 in:
@@ -4042,11 +4056,11 @@ in:
 - replace: faces swapped for new ones in one patch replacement -- a
   structure rebuilt, and the floors it welds into or leaves.
 
-### `type vtt.global-handle.GlobalHandleIntent = { delta: ConstructionPosition; kind: "move" } | { angle: number; kind: "rotate" } | { dy: number; kind: "height" } | { angle: number; kind: "wind" } | { at: ConstructionPosition; kind: "place"; under?: ConstructionSurfaceKey } | { kind: "detach" }`
+### `type vtt.global-handle.GlobalHandleIntent = { delta: ConstructionPosition; kind: "move" } | { angle: number; kind: "rotate" } | { dy: number; kind: "height" } | { angle: number; kind: "wind" } | { delta: number; kind: "radius" } | { at: ConstructionPosition; kind: "place"; under?: ConstructionSurfaceKey } | { kind: "detach" } | { kind: "remove" }`
 
 What a gesture on a global handle asks for, whatever the structure.
 
-### `type vtt.global-handle-ids.GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "origin" | "destination"`
+### `type vtt.global-handle-ids.GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "radius" | "origin" | "destination"`
 
 The handles that stand for a whole structure rather than one of its
 points, whatever the structure is built from -- a spine, a cloud of
@@ -4056,6 +4070,7 @@ regions:
 - rotate: turns it round its pivot;
 - height: raises or lowers it (a spine: its far end);
 - turns: winds a spiral on or back;
+- radius: widens or narrows a spiral round its centre;
 - origin, destination: move one end of a structure that runs between two
   ends, connecting it where it lands and disconnecting it where it left.
 
@@ -4071,7 +4086,7 @@ their ids are made or read.
 
 Which global handle `id` names, and after which node; `undefined` for anything else.
 
-### `type vtt.handle-motion.HandleMotion = { kind: "free" } | { kind: "plane" } | { kind: "vertical" } | { center: PlanPoint; kind: "orbit" }`
+### `type vtt.handle-motion.HandleMotion = { kind: "free" } | { kind: "plane" } | { kind: "vertical" } | { center: PlanPoint; kind: "orbit" } | { direction: PlanPoint; kind: "line" }`
 
 How a handle may move while dragged -- a property of the handle, never of
 the type it belongs to. The gesture keeps the handle on this path, and
@@ -4081,7 +4096,8 @@ only a handle that moves freely carries the scene's 3D arrows:
   anywhere with the arrows;
 - plane: along the ground, keeping its height;
 - vertical: straight up and down;
-- orbit: round `center` in plan, at its own distance and height.
+- orbit: round `center` in plan, at its own distance and height;
+- line: along `direction` in plan through where it stands, keeping its height.
 
 ### `function vtt.handle-motion.carriesArrows(motion: HandleMotion): boolean`
 
@@ -4398,6 +4414,32 @@ Resolves `gesture` against the structure type's own role table. The
 returned ops are already constrained -- a height-only role's horizontal
 movement is gone by this point, never clamped later or inside Rust.
 
+### `function vtt.free-end-welds.endJointNear(graph: ConstructionGraphSnapshot, topologies: readonly ConstructionRegionTopology[], point: ConstructionPosition | ((height: number) => ConstructionPosition), options: { own?: ReadonlySet<string>; reach?: number }): EndJoint | undefined`
+
+The free structure end nearest `point` in plan, within `reach` of its
+middle, as something to run on from: the way on points away from the
+face that owns the end's edge. Ends among `own` -- the structure asking --
+are never offered.
+
+### `function vtt.free-end-welds.freeStructureEnds(graph: ConstructionGraphSnapshot, topologies: readonly ConstructionRegionTopology[]): readonly WeldRung[]`
+
+Every end of every structure that nothing else holds -- not welded into a
+floor, not taken over by another structure: a region
+structure's declared ends (`StructureTypeDefinition.ends`), and a spine's
+free ends whose owner says where their cross-section is
+(`SpineGeneration.endRung`).
+
+### `function vtt.free-end-welds.releasableFace(face: ConstructionRegionTopology): boolean`
+
+What a detach takes off an end's nodes: floors and the ground laid against them, never a structure that continues the end.
+
+### `function vtt.free-end-welds.weldFreeEndsOnto(graph: ConstructionGraphSnapshot, topologies: readonly ConstructionRegionTopology[], floorKeys: readonly ConstructionSurfaceKey[], operationId: string): ApplyPatchReplacementRequest | undefined`
+
+Welds every free structure end whose end edge lies along the outline of
+one of the floors `floorKeys` names -- a floor drawn against a ramp's end
+joins it without the corners having to be picked. `undefined` when none
+does.
+
 ### `function vtt.global-handles.globalHandleActions(scene: GlobalHandleScene, id: string): readonly GlobalHandleAction[]`
 
 What else the shown global handle `id` offers as it stands -- none for anything that is not one.
@@ -4522,6 +4564,13 @@ two structures joined at every node never have in common.
 
 Global handles of structures built from a spine: every intent becomes a
 spine graph patch the spine's owner regenerates from.
+
+### `function vtt.structure-removal.removalOf(scene: GlobalHandleScene, faces: readonly ConstructionRegionTopology[], operationId: string): GlobalHandleEdit`
+
+Deleting whole structures built from regions: every end welded into a
+floor is taken off it first, so the floor's side is whole again, then the
+faces go. What stood on them -- a ramp welded into a deleted floor --
+keeps its own nodes and is simply left with a free end.
 
 ### `function vtt.rigid-carry.fitRigidMotion(pairs: readonly { from: ConstructionPosition; to: ConstructionPosition }[]): Place`
 
@@ -5797,6 +5846,10 @@ Anything else is left for validateRampMotion to judge.
 
 ### `function vtt.platform-ramp.rampCornerId(operationId: string, end: RampEnd, side: RampSide): string`
 
+### `function vtt.platform-ramp.rampCornerIdsOf(topology: ConstructionRegionTopology): Readonly<Record<RampEnd, Readonly<Record<RampSide, string>>>> | undefined`
+
+The nodes at `topology`'s four corners, if it is a ramp -- its own, or another structure's where an end continues one.
+
 ### `function vtt.platform-ramp.rampCorners(shape: RampShape): RampCorners`
 
 The four corners `shape` says: each end level and square to the axis, centred on it.
@@ -5830,15 +5883,21 @@ Both ends level, square to the axis and on the same side of it, with a real leng
 
 ### `interface vtt.platform-ramp-plan.PlannedRamp`
 
-The ramp a plan builds, and which of its ends weld into which floor edge.
+The ramp a plan builds, which of its ends weld into which floor edge, and which continue another structure's end.
 
 ### `property vtt.platform-ramp-plan.PlannedRamp.corners: RampCorners`
+
+### `property vtt.platform-ramp-plan.PlannedRamp.joints: readonly { end: RampEnd; joint: EndJoint }[]`
 
 ### `property vtt.platform-ramp-plan.PlannedRamp.welds: readonly { end: RampEnd; landing: FloorLanding }[]`
 
 ### `interface vtt.platform-ramp-plan.RampEndPlan`
 
-Where one end is asked to be, and the floor edge it lands on, if any.
+Where one end is asked to be, and the floor edge it lands on or the structure's end it continues, if any.
+
+### `property vtt.platform-ramp-plan.RampEndPlan.joint?: EndJoint`
+
+Another structure's free end this one takes over: its edge, its width and its way on.
 
 ### `property vtt.platform-ramp-plan.RampEndPlan.landing?: FloorLanding`
 
@@ -5848,9 +5907,17 @@ Where one end is asked to be, and the floor edge it lands on, if any.
 
 A straight ramp's ends, as the `ends` capability of its type.
 
+### `function vtt.platform-ramp-plan.jointedRampPatch(operationId: string, plan: PlannedRamp, keep: ReadonlyMap<string, string>): { edges: { edgeId: string; endNodeId: string; geometry?: ConstructionEdgeGeometry; startNodeId: string }[]; nodes: { id: string; position: ConstructionPosition }[]; positions: Map<string, ConstructionPosition>; region: ConstructionPatchRegion }`
+
+The ramp's own patch with each end that continues another structure
+taking that end's two nodes as its corners: they already stand, so they
+are not declared again, and the two structures share them from then on.
+
 ### `function vtt.platform-ramp-plan.planRamp(from: RampEndPlan, to: RampEndPlan, widths: { bottom: number; top: number }): PlannedRamp`
 
-The ramp from `from` (its bottom) to `to` (its top), `widths` wide at each end. Throws when it has no length.
+The ramp from `from` (its bottom) to `to` (its top), `widths` wide at each
+end -- an end continuing another structure takes that end's width. Throws
+when it has no length.
 
 ### `variable vtt.platform-ramp-type.rampStructureType: StructureTypeDefinition`
 
@@ -6465,7 +6532,7 @@ the type.
 
 Where `topology`'s ends stand; empty when it is not one this type rebuilds.
 
-### `property vtt.structure-type.StructureEnds.rebuild: (topology: ConstructionRegionTopology, name: StructureEndName, target: { landing?: FloorLanding; point: ConstructionPosition }, kept?: FloorLanding) => RebuiltFromEnds`
+### `property vtt.structure-type.StructureEnds.rebuild: (topology: ConstructionRegionTopology, name: StructureEndName, target: { joint?: EndJoint; landing?: FloorLanding; point: ConstructionPosition }, kept?: FloorLanding, keptJoint?: EndJoint) => RebuiltFromEnds`
 
 `topology` rebuilt with the end `name` at `target` -- on `target.landing`
 when it lands on a floor -- and the other end where it stands, still on
@@ -7351,6 +7418,26 @@ A curve flattened to line segments, for a preview.
 
 `curve` with one handle dragged to `target`, or its midpoint pulled there.
 
+### `interface vtt.floor-weld.EndJoint`
+
+Another structure's free end something can take over and run on from:
+its end edge, the two ends of that edge, the way on -- away from the
+structure, square to the edge -- and its height and width.
+
+### `property vtt.floor-weld.EndJoint.a: ConstructionPosition`
+
+### `property vtt.floor-weld.EndJoint.b: ConstructionPosition`
+
+### `property vtt.floor-weld.EndJoint.height: number`
+
+### `property vtt.floor-weld.EndJoint.mid: ConstructionPosition`
+
+### `property vtt.floor-weld.EndJoint.out: PlanDirection`
+
+### `property vtt.floor-weld.EndJoint.rung: WeldRung`
+
+### `property vtt.floor-weld.EndJoint.width: number`
+
 ### `interface vtt.floor-weld.FloorEdge`
 
 One straight edge of a floor's outline, as the floor walks it.
@@ -7457,7 +7544,7 @@ itself -- the face walking the rung's own edge -- is not one.
 
 Where `p` projects onto the line through `a` and `b`, as a parameter, and how far off it lies.
 
-### `function vtt.floor-weld.reweldFloors(faces: readonly ConstructionRegionTopology[], changes: WeldChanges, positions: ReadonlyMap<string, ConstructionPosition>, operationId: string): Rewelding`
+### `function vtt.floor-weld.reweldFloors(faces: readonly ConstructionRegionTopology[], changes: WeldChanges, positions: ReadonlyMap<string, ConstructionPosition>, operationId: string, releasable: (face: ConstructionRegionTopology) => boolean): Rewelding`
 
 Every face among `faces` -- all of them, not only floors -- changed by
 `changes`, as patch content, detaching first so an end can re-land on the
@@ -9137,7 +9224,7 @@ single-ghost behaviour every tool already relies on.
 
 ### `type vtt.scene-render-port.ConfirmedTokenRenderChange = { causeId: string; dependency: RenderDependencyRevision; origin: ChangeOrigin; runtimeGeneration: number; token: RenderToken; type: "token-upserted" } | { causeId: string; dependency: RenderDependencyRevision; origin: ChangeOrigin; runtimeGeneration: number; tokenId: string; type: "token-removed" }`
 
-### `type vtt.scene-render-port.RenderHandleGlyph = "point" | "midpoint" | "move" | "rotate" | "height" | "turns" | "link"`
+### `type vtt.scene-render-port.RenderHandleGlyph = "point" | "midpoint" | "move" | "rotate" | "height" | "turns" | "radius" | "link"`
 
 What a handle does, so it reads as that at a glance: a point to drag, or a
 control that moves a whole structure, sets a height, or turns something
