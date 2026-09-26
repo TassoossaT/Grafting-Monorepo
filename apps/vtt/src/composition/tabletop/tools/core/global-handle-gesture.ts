@@ -1,9 +1,7 @@
 import {
-  createAngleTracker,
   planEdit,
   planGlobalHandle,
   resolveCloudTopology,
-  rotateInPlan,
   shownGlobalHandleAt,
   type AtomicEditOp,
   type GlobalHandle,
@@ -15,12 +13,11 @@ import {
 import type { ConstructionEdgeGeometry, ConstructionPosition } from "../../../../ports/index.ts";
 import type { CurveGesture, CurveGestureOptions } from "./curve-edit-gesture.ts";
 import { commitSpineRegeneration, regenerateSpine } from "./spine-commit.ts";
+import { createConstrainedDrag } from "./constrained-drag.ts";
 import type { PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
 
 const CHANNEL = "global-handle";
 const PREVIEW_COLOR = 0xffbc55;
-/** Shift snaps a turn to steps of this many radians -- 15 degrees. */
-const TURN_STEP = Math.PI / 12;
 
 /** What each global handle reports once its edit is committed. */
 const DONE: Readonly<Record<GlobalHandleKind, string>> = {
@@ -103,48 +100,31 @@ function commitEdit(ctx: ToolContext, handle: GlobalHandle, edit: GlobalHandleEd
  * only turns the pointer into an intent -- a move, a turn round the pivot, a
  * height, a winding -- and asks the handle's provider what it edits.
  *
- * The handle stays on its own path while dragged -- round its circle, up
- * and down, along with what it moves -- never loose under the pointer, and
- * the structure is previewed as the edit would leave it. Shift snaps a turn
- * to 15 degree steps. The scene manipulator's point is taken as it is.
+ * The handle stays on its own path while dragged -- its `HandleMotion`,
+ * through `constrained-drag.ts` -- never loose under the pointer, and the
+ * structure is previewed as the edit would leave it. The motion gives the
+ * path; the handle's kind gives what the path means.
  */
 export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample, ownsType: (surfaceType: string) => boolean, params?: CurveGestureOptions): CurveGesture | undefined {
   const scene = sceneOf(ctx);
   const handle = sample.nodeId ? shownGlobalHandleAt(scene, sample.nodeId) : undefined;
   if (!handle || !ownsType(handle.owner)) return undefined;
   const operationId = `global-${handle.kind}:${ctx.nextSequence()}`;
-  const around = handle.kind === "turns" && handle.center ? { x: handle.center[0], z: handle.center[1] } : handle.pivot;
-  const turning = createAngleTracker(around, handle.position);
-  const origin = params?.pointerOrigin ?? sample.point;
+  const drag = createConstrainedDrag(handle.motion, handle.position, sample, {
+    spatialTarget: params?.spatialTarget, elevation: params?.mode === "elevation", pointerOrigin: params?.pointerOrigin,
+  });
   let edit: GlobalHandleEdit | undefined;
   let ended = false;
 
-  /** The intent the pointer asks for, and where the handle itself stands for it. */
+  /** Where the handle stands on its path, and what that asks of the structure. */
   function intentOf(gesture: ToolGesture): { readonly intent: GlobalHandleIntent; readonly at: ConstructionPosition; readonly readout?: string } {
-    const current = gesture.current;
-    const vertical = params?.spatialTarget
-      ? current.point.y - handle!.position.y
-      : sample.screenY !== undefined && current.screenY !== undefined ? (sample.screenY - current.screenY) / 40 : 0;
+    const { position: at, angle = 0 } = drag.at(gesture);
+    const delta = { x: at.x - handle!.position.x, y: at.y - handle!.position.y, z: at.z - handle!.position.z };
     switch (handle!.kind) {
-      case "pivot": {
-        const plan = params?.spatialTarget
-          ? { x: current.point.x - handle!.position.x, z: current.point.z - handle!.position.z }
-          : { x: current.point.x - origin.x, z: current.point.z - origin.z };
-        const dy = params?.spatialTarget || params?.mode === "elevation" ? vertical : 0;
-        const delta = params?.mode === "elevation" && !params?.spatialTarget ? { x: 0, y: dy, z: 0 } : { x: plan.x, y: dy, z: plan.z };
-        return { intent: { kind: "move", delta }, at: { x: handle!.position.x + delta.x, y: handle!.position.y + delta.y, z: handle!.position.z + delta.z } };
-      }
-      case "height":
-        return { intent: { kind: "height", dy: vertical }, at: { ...handle!.position, y: handle!.position.y + vertical }, readout: `altura ${vertical >= 0 ? "+" : ""}${vertical.toFixed(2)} m` };
-      case "rotate": {
-        const turned = turning.turn(current.point);
-        const angle = current.shiftKey ? Math.round(turned / TURN_STEP) * TURN_STEP : turned;
-        return { intent: { kind: "rotate", angle }, at: rotateInPlan(handle!.position, handle!.pivot, angle), readout: `rotação ${((angle * 180) / Math.PI).toFixed(0)}°` };
-      }
-      case "turns": {
-        const angle = turning.turn(current.point);
-        return { intent: { kind: "wind", angle }, at: rotateInPlan(handle!.position, around, angle), readout: `voltas ${angle >= 0 ? "+" : ""}${(angle / (2 * Math.PI)).toFixed(2)}` };
-      }
+      case "pivot": return { intent: { kind: "move", delta }, at };
+      case "height": return { intent: { kind: "height", dy: delta.y }, at, readout: `altura ${delta.y >= 0 ? "+" : ""}${delta.y.toFixed(2)} m` };
+      case "rotate": return { intent: { kind: "rotate", angle }, at, readout: `rotação ${((angle * 180) / Math.PI).toFixed(0)}°` };
+      case "turns": return { intent: { kind: "wind", angle }, at, readout: `voltas ${angle >= 0 ? "+" : ""}${(angle / (2 * Math.PI)).toFixed(2)}` };
     }
   }
 

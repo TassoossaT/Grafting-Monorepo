@@ -9,6 +9,7 @@ import type {
 } from "@/ports";
 
 import type { GlobalHandleKind } from "./global-handle-ids.ts";
+import type { HandleMotion } from "./handle-motion.ts";
 
 /** What a global handle's provider reads: the table as it stands, and the engine's own cloud query. */
 export interface GlobalHandleScene {
@@ -33,6 +34,8 @@ export interface GlobalHandle {
   readonly nodeIds: readonly string[];
   /** A spiral's centre, when the structure is one -- what a turns handle winds round. */
   readonly center?: readonly [number, number];
+  /** How the handle moves while dragged -- the path its gesture keeps it on. */
+  readonly motion: HandleMotion;
 }
 
 /** What a gesture on a global handle asks for, whatever the structure. */

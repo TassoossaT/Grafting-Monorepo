@@ -58,19 +58,19 @@ function handlesOf(graph: ConstructionGraphSnapshot, edges: readonly Constructio
   const name = nodeIds[0]!;
   const reach = Math.max(...points.map((p) => Math.hypot(p.x - pivot.x, p.z - pivot.z))) + ROTATE_REACH;
   const handles: SpineGlobalHandle[] = [
-    { ...base, id: spineGlobalHandleId("pivot", name), kind: "pivot", position: pivot },
-    { ...base, id: spineGlobalHandleId("rotate", name), kind: "rotate", position: outward(pivot, positions.get(name)!, reach) },
+    { ...base, id: spineGlobalHandleId("pivot", name), kind: "pivot", position: pivot, motion: { kind: "free" } },
+    { ...base, id: spineGlobalHandleId("rotate", name), kind: "rotate", position: outward(pivot, positions.get(name)!, reach), motion: { kind: "orbit", center: pivot } },
   ];
   if (!chain || !ends) return handles;
   const end = positions.get(ends[1])!;
-  handles.push({ ...base, id: spineGlobalHandleId("height", name), kind: "height", position: { ...end, y: end.y + END_REACH } });
+  handles.push({ ...base, id: spineGlobalHandleId("height", name), kind: "height", position: { ...end, y: end.y + END_REACH }, motion: { kind: "vertical" } });
   if (!center) return handles;
   const before = positions.get(chain.nodes.at(-2)!)!;
   const middle = { x: center[0], z: center[1] };
   const angle = planAngle(middle, end);
   const on = wrapAngle(angle - planAngle(middle, before)) >= 0 ? 1 : -1;
   handles.push({
-    ...base, id: spineGlobalHandleId("turns", name), kind: "turns",
+    ...base, id: spineGlobalHandleId("turns", name), kind: "turns", motion: { kind: "orbit", center: middle },
     position: { x: end.x - Math.sin(angle) * on * END_REACH, y: end.y, z: end.z + Math.cos(angle) * on * END_REACH },
   });
   return handles;

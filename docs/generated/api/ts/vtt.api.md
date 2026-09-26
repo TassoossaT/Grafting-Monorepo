@@ -256,6 +256,10 @@ Sets a height: a double arrow up and down.
 
 Draws the sprite texture for a placed token marker: a filled circle with a small pointer tail.
 
+### `function vtt.marker-textures.createMidpointHandleTexture(): HTMLCanvasElement`
+
+A span's midpoint: a small diamond, lighter than a point, so it reads as "in between".
+
 ### `function vtt.marker-textures.createMoveHandleTexture(): HTMLCanvasElement`
 
 Moves a whole structure: arrows out in four directions.
@@ -536,6 +540,18 @@ A patch's regions as topologies, for when the engine cannot yet be asked for the
 ### `function vtt.shape-change.topologiesOf(runtime: ShapeChangeRuntime, keys: readonly ConstructionSurfaceKey[]): ConstructionRegionTopology[]`
 
 The faces behind `keys` that still exist. A stale key is skipped, not fatal.
+
+### `variable vtt.handle-glyphs.GLOBAL_HANDLE_GLYPHS: Readonly<Record<GlobalHandleKind, RenderHandleGlyph>>`
+
+A whole-structure handle's glyph, by its kind.
+
+### `variable vtt.handle-glyphs.HANDLE_GLYPHS: { anchor: "point"; midpoint: "midpoint"; panelHeight: "height"; vertex: "point" }`
+
+Every handle the scene shows, by what it is for, and the glyph it is drawn
+with -- the one place a handle's look is chosen. The images themselves
+live with the renderer, one per glyph (`adapters/rendering`); changing how
+a kind of handle looks is changing its line here or its glyph's image
+there, never the code that places it.
 
 ### `interface vtt.painted-topologies.PaintedTopologyRuntime`
 
@@ -1884,6 +1900,34 @@ region), not a reason for the preview itself to special-case one tool.
 Only `applyRegion` differs between brushes; the brush -- preview included
 -- is the same for all of them.
 
+### `interface vtt.constrained-drag.ConstrainedDragOptions`
+
+### `property vtt.constrained-drag.ConstrainedDragOptions.elevation?: boolean`
+
+Elevation mode: a free handle's pointer drag moves it up and down instead of along the ground.
+
+### `property vtt.constrained-drag.ConstrainedDragOptions.pointerOrigin?: ConstructionPosition`
+
+Where the pointer was when the drag began; the handle keeps its offset from it.
+
+### `property vtt.constrained-drag.ConstrainedDragOptions.spatialTarget?: boolean`
+
+The scene manipulator is carrying the handle: its point is taken as it is.
+
+### `interface vtt.constrained-drag.ConstrainedPosition`
+
+Where a dragged handle stands now, and -- on an orbit -- how far round it has turned.
+
+### `property vtt.constrained-drag.ConstrainedPosition.angle?: number`
+
+### `property vtt.constrained-drag.ConstrainedPosition.position: ConstructionPosition`
+
+### `function vtt.constrained-drag.createConstrainedDrag(motion: HandleMotion, handle: ConstructionPosition, sample: PointerSample, options: ConstrainedDragOptions): { at: any }`
+
+A handle dragged along its own path (`HandleMotion`): whatever the pointer
+does, the handle only goes where its motion allows. Any handle of any
+structure uses this; the path is the handle's, not its type's.
+
 ### `interface vtt.contour-fusion.ContourFusion`
 
 One place a rim being committed must fuse into a standing one.
@@ -2212,10 +2256,10 @@ Drags any global handle of any structure (`global-handles/`). The gesture
 only turns the pointer into an intent -- a move, a turn round the pivot, a
 height, a winding -- and asks the handle's provider what it edits.
 
-The handle stays on its own path while dragged -- round its circle, up
-and down, along with what it moves -- never loose under the pointer, and
-the structure is previewed as the edit would leave it. Shift snaps a turn
-to 15 degree steps. The scene manipulator's point is taken as it is.
+The handle stays on its own path while dragged -- its `HandleMotion`,
+through `constrained-drag.ts` -- never loose under the pointer, and the
+structure is previewed as the edit would leave it. The motion gives the
+path; the handle's kind gives what the path means.
 
 ### `variable vtt.navigate-tool.navigateTool: ConstructionTool<"navigate">`
 
@@ -3879,6 +3923,10 @@ A spiral's centre, when the structure is one -- what a turns handle winds round.
 
 ### `property vtt.global-handle.GlobalHandle.kind: GlobalHandleKind`
 
+### `property vtt.global-handle.GlobalHandle.motion: HandleMotion`
+
+How the handle moves while dragged -- the path its gesture keeps it on.
+
 ### `property vtt.global-handle.GlobalHandle.nodeIds: readonly string[]`
 
 Every node of the structure, lowest id first.
@@ -3962,6 +4010,22 @@ their ids are made or read.
 ### `function vtt.global-handle-ids.globalHandleOf(id: string): { kind: GlobalHandleKind; nodeId: string } | undefined`
 
 Which global handle `id` names, and after which node; `undefined` for anything else.
+
+### `type vtt.handle-motion.HandleMotion = { kind: "free" } | { kind: "plane" } | { kind: "vertical" } | { center: PlanPoint; kind: "orbit" }`
+
+How a handle may move while dragged -- a property of the handle, never of
+the type it belongs to. The gesture keeps the handle on this path, and
+only a handle that moves freely carries the scene's 3D arrows:
+
+- free: anywhere -- along the ground, up and down in elevation mode, or
+  anywhere with the arrows;
+- plane: along the ground, keeping its height;
+- vertical: straight up and down;
+- orbit: round `center` in plan, at its own distance and height.
+
+### `function vtt.handle-motion.carriesArrows(motion: HandleMotion): boolean`
+
+Whether a handle with `motion` carries the scene's free 3D arrows.
 
 ### `interface vtt.edit-history.EditHistoryStack`
 
@@ -4274,6 +4338,13 @@ Resolves `gesture` against the structure type's own role table. The
 returned ops are already constrained -- a height-only role's horizontal
 movement is gone by this point, never clamped later or inside Rust.
 
+### `function vtt.global-handles.handleMotionAt(scene: GlobalHandleScene, id: string): HandleMotion | undefined`
+
+How the handle `id` moves while dragged, whatever it is: a whole-structure
+handle says so itself; a spine's control point moves along the ground on a
+spine whose owner derives its heights, and freely otherwise. `undefined`
+for anything that is not a handle this knows.
+
 ### `function vtt.global-handles.planGlobalHandle(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: Pick<BezierPort, "curveBatch">, operationId: string): GlobalHandleEdit | undefined`
 
 What `intent` on `handle` edits, from the provider that placed it.
@@ -4299,6 +4370,10 @@ A spiral's centre, when the structure is one -- what a turns handle winds round.
 ### `property vtt.cloud-handle-provider.CloudGlobalHandle.kind: GlobalHandleKind`
 
 ### `property vtt.cloud-handle-provider.CloudGlobalHandle.members: readonly ConstructionRegionTopology[]`
+
+### `property vtt.cloud-handle-provider.CloudGlobalHandle.motion: HandleMotion`
+
+How the handle moves while dragged -- the path its gesture keeps it on.
 
 ### `property vtt.cloud-handle-provider.CloudGlobalHandle.nodeIds: readonly string[]`
 
@@ -4469,6 +4544,10 @@ The spine's free ends, first to last -- the far one is the last. Absent on a bra
 ### `property vtt.spine-global-handles.SpineGlobalHandle.id: string`
 
 ### `property vtt.spine-global-handles.SpineGlobalHandle.kind: GlobalHandleKind`
+
+### `property vtt.spine-global-handles.SpineGlobalHandle.motion: HandleMotion`
+
+How the handle moves while dragged -- the path its gesture keeps it on.
 
 ### `property vtt.spine-global-handles.SpineGlobalHandle.nodeIds: readonly string[]`
 
@@ -8685,7 +8764,7 @@ single-ghost behaviour every tool already relies on.
 
 ### `type vtt.scene-render-port.ConfirmedTokenRenderChange = { causeId: string; dependency: RenderDependencyRevision; origin: ChangeOrigin; runtimeGeneration: number; token: RenderToken; type: "token-upserted" } | { causeId: string; dependency: RenderDependencyRevision; origin: ChangeOrigin; runtimeGeneration: number; tokenId: string; type: "token-removed" }`
 
-### `type vtt.scene-render-port.RenderHandleGlyph = "point" | "move" | "rotate" | "height" | "turns"`
+### `type vtt.scene-render-port.RenderHandleGlyph = "point" | "midpoint" | "move" | "rotate" | "height" | "turns"`
 
 What a handle does, so it reads as that at a glance: a point to drag, or a
 control that moves a whole structure, sets a height, or turns something

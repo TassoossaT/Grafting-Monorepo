@@ -12,7 +12,7 @@ import { GRID_SNAP_UNIT } from "../../adapters/rendering/index.ts";
 import type { TabletopRuntime } from "./tabletop-runtime.ts";
 import { toolFor } from "./tools/index.ts";
 import { beginCurveGesture, type CurveGesture } from "./tools/core/curve-edit-gesture.ts";
-import { globalHandleOf, shownGlobalHandleAt } from "../../features/edit-construction/index.ts";
+import { carriesArrows, globalHandleOf, handleMotionAt, shownGlobalHandleAt } from "../../features/edit-construction/index.ts";
 import { gestureMoved } from "./tools/core/tool-context.ts";
 import {
   edgeOverlayChannel,
@@ -21,17 +21,20 @@ import {
 } from "./tools/core/edge-overlay.ts";
 import type { ConstructionToolFeedback, PointerSample, ToolContext } from "./tools/index.ts";
 
-/** A spine handle the scene manipulator can sit on -- a control point, or a whole-spine handle -- where it is now. */
+/**
+ * A handle the scene's free 3D arrows can sit on -- one whose own motion is
+ * free (`HandleMotion`) -- where it is now. A handle kept to a path gets none.
+ */
 function spineHandleAt(runtime: Pick<TabletopRuntime, "getGraphSnapshot" | "getAllRegionTopologies" | "cloudFor">, id: string): { readonly id: string; readonly position: { x: number; y: number; z: number } } | undefined {
   const graph = runtime.getGraphSnapshot();
-  const global = globalHandleOf(id);
-  if (global) {
-    // Only a pivot is carried freely; every other whole-structure handle keeps to its own path.
-    if (global.kind !== "pivot") return undefined;
-    const handle = shownGlobalHandleAt({ graph, topologies: runtime.getAllRegionTopologies(), cloudFor: (request) => runtime.cloudFor(request) }, id);
+  const scene = { graph, topologies: runtime.getAllRegionTopologies(), cloudFor: (request: Parameters<TabletopRuntime["cloudFor"]>[0]) => runtime.cloudFor(request) };
+  const motion = handleMotionAt(scene, id);
+  if (!motion || !carriesArrows(motion)) return undefined;
+  if (globalHandleOf(id)) {
+    const handle = shownGlobalHandleAt(scene, id);
     return handle && { id: handle.id, position: handle.position };
   }
-  const node = graph.nodes.find((n) => n.id === id && n.id.startsWith("spine:"));
+  const node = graph.nodes.find((n) => n.id === id);
   return node && { id: node.id, position: node.position };
 }
 

@@ -1,6 +1,6 @@
 import { curveEdgesOf, curveHandles, curvePick, panelHeightWidgets, shownGlobalHandles } from "../../features/edit-construction/index.ts";
 import type { RenderHandleGlyph } from "../../ports/index.ts";
-import type { GlobalHandleKind } from "../../features/edit-construction/index.ts";
+import { GLOBAL_HANDLE_GLYPHS, HANDLE_GLYPHS } from "./handle-glyphs.ts";
 import type { BezierPort } from "../../ports/bezier-port.ts";
 import type { RenderPointManipulator } from "../../ports/scene-render-port.ts";
 import type { ConstructionPlanarRequest, ConstructionPlanarShape, ConstructionMotionRequest, ConstructionMotionPlan, ConstructionNodeMotion } from "../../ports/index.ts";
@@ -304,9 +304,6 @@ function renderChange(
     },
   };
 }
-
-/** How each whole-spine handle reads: moving the whole thing, setting a height, turning it round. */
-const GLOBAL_HANDLE_GLYPH: Readonly<Record<GlobalHandleKind, RenderHandleGlyph>> = { pivot: "move", rotate: "rotate", height: "height", turns: "turns" };
 
 export class AppTabletopRuntime implements TabletopRuntime {
   readonly #listeners = new Set<TabletopRuntimeListener>();
@@ -655,16 +652,16 @@ export class AppTabletopRuntime implements TabletopRuntime {
       const anchors = new Set(shownEdges.flatMap(e => [e.startNodeId,e.endNodeId]));
       this.#pointHandleIds = new Set([...anchors,...handles.map(h => h.id),...liveGlobals]);
       for (const id of [...this.#nodeHandleRevisions.keys()]) if (!this.#pointHandleIds.has(id)) this.#removeNodeHandle(id,origin,causeId,generation);
-      for (const node of graph.nodes) if (anchors.has(node.id)) this.#uploadNodeHandle(node.id,node.position,origin,causeId,generation);
+      for (const node of graph.nodes) if (anchors.has(node.id)) this.#uploadNodeHandle(node.id,node.position,origin,causeId,generation,HANDLE_GLYPHS.anchor);
     }
     // After the allow-list above names them: `#uploadNodeHandle` drops any
     // handle it does not, which would lose a spine's pivot on its first sync.
-    this.#globalHandleGlyphs = new Map(globals.map((handle) => [handle.id, GLOBAL_HANDLE_GLYPH[handle.kind]]));
-    for (const handle of globals) this.#uploadNodeHandle(handle.id, handle.position, origin, causeId, generation, GLOBAL_HANDLE_GLYPH[handle.kind]);
+    this.#globalHandleGlyphs = new Map(globals.map((handle) => [handle.id, GLOBAL_HANDLE_GLYPHS[handle.kind]]));
+    for (const handle of globals) this.#uploadNodeHandle(handle.id, handle.position, origin, causeId, generation, GLOBAL_HANDLE_GLYPHS[handle.kind]);
     this.#globalHandleIds = liveGlobals;
     const live = new Set(handles.map((h) => h.id));
     for (const id of this.#bezierHandleIds) if (!live.has(id)) this.#removeNodeHandle(id, origin, causeId, generation);
-    for (const handle of handles) this.#uploadNodeHandle(handle.id, handle.position, origin, causeId, generation);
+    for (const handle of handles) this.#uploadNodeHandle(handle.id, handle.position, origin, causeId, generation, HANDLE_GLYPHS.midpoint);
     this.#bezierHandleIds = live;
   }
 
@@ -673,7 +670,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     const widgets = panelHeightWidgets(this.#construction.getAllRegionTopologies());
     const live = new Set(widgets.map((widget) => widget.id));
     for (const id of this.#panelHeightWidgetIds) if (!live.has(id)) this.#removeNodeHandle(id, origin, causeId, generation);
-    for (const widget of widgets) this.#uploadNodeHandle(widget.id, widget.position, origin, causeId, generation);
+    for (const widget of widgets) this.#uploadNodeHandle(widget.id, widget.position, origin, causeId, generation, HANDLE_GLYPHS.panelHeight);
     this.#panelHeightWidgetIds = live;
   }
 
@@ -754,7 +751,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
         position: node.position,
         revision: (previous?.revision ?? 0) + 1,
       });
-      this.#uploadNodeHandle(node.id, node.position, origin, causeId, generation);
+      this.#uploadNodeHandle(node.id, node.position, origin, causeId, generation, HANDLE_GLYPHS.vertex);
     }
     this.#syncBezierHandles(origin, causeId, generation);
     this.#syncPanelHeightWidgets(origin, causeId, generation);
@@ -786,7 +783,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
         position,
         revision: (previous?.revision ?? 0) + 1,
       });
-      this.#uploadNodeHandle(nodeId, position, origin, causeId, generation);
+      this.#uploadNodeHandle(nodeId, position, origin, causeId, generation, HANDLE_GLYPHS.vertex);
     }
     // Curve handles sit off the anchors and follow a reshaped edge too, so
     // they are re-placed whatever the edit moved or retyped. Height widgets
@@ -1268,7 +1265,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#pointHandlesOnly = points;
     if (this.#snapshot.status !== "ready") return;
     if (!points) {
-      for (const node of this.#construction.getNodePositions()) this.#uploadNodeHandle(node.id,node.position,"programmatic","handle-presentation",this.#generation);
+      for (const node of this.#construction.getNodePositions()) this.#uploadNodeHandle(node.id,node.position,"programmatic","handle-presentation",this.#generation,HANDLE_GLYPHS.vertex);
     }
     this.#syncBezierHandles("programmatic","handle-presentation",this.#generation);
   }

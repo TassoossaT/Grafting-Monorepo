@@ -3501,6 +3501,8 @@ export function createRotateHandleTexture(): HTMLCanvasElement {
   for (const from of [0, Math.PI]) {
   const to = from + Math.PI * 0.72;
   context.beginPath(); context.arc(32, 32, 15, from + 0.25, to); context.stroke();
+export function createMidpointHandleTexture(): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
 
 // src/adapters/rendering/node-handle-scene-item.ts
 export const NODE_HANDLE_LAYER_ID = "construction-handles";
@@ -3679,6 +3681,19 @@ export function shapeChangeOfRemoval(removed: readonly ConstructionRegionTopolog
   const surfaceType = removed[0]?.surfaceType;
   if (surfaceType === undefined) return undefined;
   return { surfaceType, before: removed, after: [], removedNodeIds, declaredPositions: [] };
+
+// src/composition/tabletop/handle-glyphs.ts
+export const HANDLE_GLYPHS = {
+  /** A point of a structure's own outline. */
+  vertex: "point",
+  /** A control point of a spine. */
+  anchor: "point",
+  /** A span's midpoint: bend it, or click to insert a point. */
+  midpoint: "midpoint",
+  /** A wall run's own height widget. */
+export const GLOBAL_HANDLE_GLYPHS: Readonly<Record<GlobalHandleKind, RenderHandleGlyph>> = {
+  pivot: "move", rotate: "rotate", height: "height", turns: "turns",
+  };
 
 // src/composition/tabletop/index.ts
 export type { CreateTabletopRuntimeInput } from "./create-tabletop-runtime.ts";
@@ -4059,6 +4074,28 @@ export interface BrushToolSpec<Id extends BrushableToolId> {
 export function createBrushTool<Id extends BrushableToolId>(spec: BrushToolSpec<Id>): ConstructionTool<Id> {
   const regionFor = (gesture: ToolGesture, params: ToolParamsFor<Id>): BrushRegion => {
   const halfWidth = spec.halfWidth(params);
+
+// src/composition/tabletop/tools/core/constrained-drag.ts
+export interface ConstrainedPosition {
+  readonly position: ConstructionPosition;
+  readonly angle?: number;
+  }
+export interface ConstrainedDragOptions {
+  /** The scene manipulator is carrying the handle: its point is taken as it is. */
+  readonly spatialTarget?: boolean;
+  /** Elevation mode: a free handle's pointer drag moves it up and down instead of along the ground. */
+  readonly elevation?: boolean;
+  /** Where the pointer was when the drag began; the handle keeps its offset from it. */
+  readonly pointerOrigin?: ConstructionPosition;
+  }
+export function createConstrainedDrag(motion: HandleMotion, handle: ConstructionPosition, sample: PointerSample, options: ConstrainedDragOptions = {}): { at(gesture: ToolGesture): ConstrainedPosition } {
+  const origin = options.pointerOrigin ?? sample.point;
+  const turning = motion.kind === "orbit" ? createAngleTracker(motion.center, handle) : undefined;
+  const rise = (current: PointerSample) => options.spatialTarget
+  ? current.point.y - handle.y
+  : sample.screenY !== undefined && current.screenY !== undefined ? (sample.screenY - current.screenY) / PIXELS_PER_UNIT : 0;
+  return {
+  at(gesture) {
 
 // src/composition/tabletop/tools/core/contour-fusion.ts
 export interface FusionPolyline {
@@ -5212,9 +5249,16 @@ export interface GlobalHandleProvider {
   plan(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: Pick<BezierPort, "curveBatch">, operationId: string): GlobalHandleEdit | undefined;
   }
 
+// src/features/edit-construction/global-handles/handle-motion.ts
+export type HandleMotion =
+export function carriesArrows(motion: HandleMotion): boolean {
+  return motion.kind === "free";
+  }
+
 // src/features/edit-construction/global-handles/index.ts
 export type { GlobalHandleKind } from "./global-handle-ids.ts";
 export type { GlobalHandle, GlobalHandleEdit, GlobalHandleIntent, GlobalHandleProvider, GlobalHandleScene } from "./global-handle.ts";
+export type { HandleMotion } from "./handle-motion.ts";
 
 // src/features/edit-construction/history/edit-history.ts
 export interface RegionEditHistoryEntry {
@@ -5410,6 +5454,10 @@ export function shownGlobalHandleAt(scene: GlobalHandleScene, id: string): Globa
   const named = globalHandleOf(id);
 export function planGlobalHandle(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: Pick<BezierPort, "curveBatch">, operationId: string): GlobalHandleEdit | undefined {
   return PROVIDERS.find((provider) => provider.name === handle.provider)?.plan(scene, handle, intent, port, operationId);
+export function handleMotionAt(scene: GlobalHandleScene, id: string): HandleMotion | undefined {
+  if (globalHandleOf(id)) return shownGlobalHandleAt(scene, id)?.motion;
+  if (!isSpineControlNodeId(id)) return undefined;
+  const owner = spineOwnerAt(scene.graph, id);
 
 // src/features/edit-construction/orchestration/global-handles/spine-handle-provider.ts
 export const spineHandleProvider: GlobalHandleProvider = {
@@ -7144,7 +7192,7 @@ export interface RenderSurfacePickTarget {
   }
 export type ConfirmedSurfacePickRenderChange =
 export type ConfirmedMapChunkRenderChange =
-export type RenderHandleGlyph = "point" | "move" | "rotate" | "height" | "turns";
+export type RenderHandleGlyph = "point" | "midpoint" | "move" | "rotate" | "height" | "turns";
 export interface RenderNodeHandle {
   readonly nodeId: string;
   readonly position: { readonly x: number; readonly y: number; readonly z: number };

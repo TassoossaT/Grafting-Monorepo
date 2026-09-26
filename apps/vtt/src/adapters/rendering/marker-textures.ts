@@ -121,3 +121,17 @@ export function createRotateHandleTexture(): HTMLCanvasElement {
     }
   });
 }
+
+/** A span's midpoint: a small diamond, lighter than a point, so it reads as "in between". */
+export function createMidpointHandleTexture(): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = canvas.height = 64;
+  const context = canvas.getContext("2d");
+  if (context === null) throw new Error("midpoint handle texture needs a 2D canvas context");
+  context.fillStyle = "#fdf3c7";
+  context.strokeStyle = "#0b1a17";
+  context.lineWidth = 4;
+  context.beginPath(); context.moveTo(32, 12); context.lineTo(52, 32); context.lineTo(32, 52); context.lineTo(12, 32); context.closePath();
+  context.fill(); context.stroke();
+  return canvas;
+}

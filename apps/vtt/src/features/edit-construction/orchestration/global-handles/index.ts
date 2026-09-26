@@ -1,6 +1,7 @@
 import type { BezierPort } from "@/ports";
 
-import type { GlobalHandle, GlobalHandleEdit, GlobalHandleIntent, GlobalHandleProvider, GlobalHandleScene } from "../../global-handles/index.ts";
+import type { GlobalHandle, GlobalHandleEdit, GlobalHandleIntent, GlobalHandleProvider, GlobalHandleScene, HandleMotion } from "../../global-handles/index.ts";
+import { isSpineControlNodeId, spineOwnerAt } from "../../spine/index.ts";
 import { globalHandleOf } from "../../global-handles/index.ts";
 import { structureTypeFor } from "../../structure-types/index.ts";
 import { cloudHandleProvider } from "./cloud-handle-provider.ts";
@@ -33,4 +34,17 @@ export function shownGlobalHandleAt(scene: GlobalHandleScene, id: string): Globa
 /** What `intent` on `handle` edits, from the provider that placed it. */
 export function planGlobalHandle(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: Pick<BezierPort, "curveBatch">, operationId: string): GlobalHandleEdit | undefined {
   return PROVIDERS.find((provider) => provider.name === handle.provider)?.plan(scene, handle, intent, port, operationId);
+}
+
+/**
+ * How the handle `id` moves while dragged, whatever it is: a whole-structure
+ * handle says so itself; a spine's control point moves along the ground on a
+ * spine whose owner derives its heights, and freely otherwise. `undefined`
+ * for anything that is not a handle this knows.
+ */
+export function handleMotionAt(scene: GlobalHandleScene, id: string): HandleMotion | undefined {
+  if (globalHandleOf(id)) return shownGlobalHandleAt(scene, id)?.motion;
+  if (!isSpineControlNodeId(id)) return undefined;
+  const owner = spineOwnerAt(scene.graph, id);
+  return owner !== undefined && structureTypeFor(owner)?.spine?.planOnly === true ? { kind: "plane" } : { kind: "free" };
 }
