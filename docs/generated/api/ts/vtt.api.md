@@ -2250,6 +2250,58 @@ rim named it from one face, and one face cannot see the other; if the graph
 shows two, the edge is interior whatever it was called -- see
 RIM_ROLES.
 
+### `interface vtt.floor-landing.FloorLanding`
+
+Where a structure drawn off a floor meets it: one straight edge of the
+floor's outline, the point on it nearest the pointer, at the floor's own
+height, and the direction square to the edge pointing off the floor.
+
+### `property vtt.floor-landing.FloorLanding.a: ConstructionPosition`
+
+### `property vtt.floor-landing.FloorLanding.b: ConstructionPosition`
+
+### `property vtt.floor-landing.FloorLanding.height: number`
+
+### `property vtt.floor-landing.FloorLanding.out: PlanDirection`
+
+### `property vtt.floor-landing.FloorLanding.point: ConstructionPosition`
+
+### `property vtt.floor-landing.FloorLanding.topology: ConstructionRegionTopology`
+
+### `property vtt.floor-landing.FloorLanding.use: ConstructionRegionEdge`
+
+### `interface vtt.floor-landing.PlanDirection`
+
+Plan direction.
+
+### `property vtt.floor-landing.PlanDirection.x: number`
+
+### `property vtt.floor-landing.PlanDirection.z: number`
+
+### `variable vtt.floor-landing.LANDING_REACH: 0.75`
+
+How far in plan from a floor's edge a pointer still lands on it -- either side of the edge.
+
+### `function vtt.floor-landing.alongEdge(landing: Pick<FloorLanding, "a" | "b">, point: PlanDirection): number`
+
+How far along `landing`'s edge, in length units, `point` stands.
+
+### `function vtt.floor-landing.floorLandingAt(floors: readonly ConstructionRegionTopology[], sample: PointerSample, reach: number): FloorLanding | undefined`
+
+The floor edge `sample` lands on: a straight edge of a floor's outer
+outline within `reach` of the pointer in plan, whether the pointer is on
+the floor or just off it. The floor the pointer is on wins; otherwise the
+nearest edge does, and among edges stacked in plan -- storeys -- the one
+nearest the height the pointer touched.
+
+### `function vtt.floor-landing.floorsOf(ctx: ToolContext): readonly ConstructionRegionTopology[]`
+
+Every floor on the table -- anything whose type carries the `floor` trait.
+
+### `function vtt.floor-landing.floorUnder(floors: readonly ConstructionRegionTopology[], sample: PointerSample): ConstructionRegionTopology | undefined`
+
+The floor the pointer is on, if any.
+
 ### `function vtt.global-handle-gesture.beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample, ownsType: (surfaceType: string) => boolean, params?: CurveGestureOptions): CurveGesture | undefined`
 
 Drags any global handle of any structure (`global-handles/`). The gesture
@@ -3175,7 +3227,7 @@ The corners a drag from `start` to `end` would build, before anything is committ
 
 ### `function vtt.ramp-commit.straightRampPoints(ctx: ToolContext, start: PointerSample, end: PointerSample, params: RampParams): readonly [ConstructionPosition, ConstructionPosition]`
 
-From where the drag starts, at that height, to where it ends, `rise` higher.
+From where the drag starts to where it ends, at the heights they land at.
 
 ### `interface vtt.slope-commit.EndWeld`
 

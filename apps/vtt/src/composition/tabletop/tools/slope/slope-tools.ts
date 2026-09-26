@@ -1,11 +1,12 @@
-import { DEFAULT_TOOL_PARAMS, hasTrait, RAMP_SURFACE_TYPE, rampOutline, SLOPE_SURFACE_TYPE } from "../../../../features/edit-construction/index.ts";
+import { DEFAULT_TOOL_PARAMS, hasTrait, RAMP_SURFACE_TYPE, SLOPE_SURFACE_TYPE } from "../../../../features/edit-construction/index.ts";
 import type { ToolParamsByTool } from "../../../../features/edit-construction/index.ts";
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import type { ConstructionPosition } from "../../../../ports/index.ts";
 import type { ConstructionTool, PointerSample, ToolContext } from "../core/tool-context.ts";
 import { withStructureEditing } from "../core/structure-edit-behavior.ts";
 import { withSpineEditing } from "../core/spine-edit-behavior.ts";
-import { polylineSegmentsPreview } from "../shapes/preview-shapes.ts";
+import { appendNodeDisk, PREVIEW_ELEVATION } from "../shapes/ribbon-mesh-preview.ts";
+import type { RampCorners } from "../../../../features/edit-construction/index.ts";
 import { commitPlatformSlope } from "./slope-commit.ts";
 import { createCurveDraftTool, type FinishedCurveDraft } from "../core/curve-draft.ts";
 import { spineChainSelection } from "../core/spine-chain-selection.ts";
@@ -15,6 +16,29 @@ const ownsSlope = (surfaceType: string) => surfaceType === SLOPE_SURFACE_TYPE;
 const ownsRamp = (surfaceType: string) => surfaceType === RAMP_SURFACE_TYPE;
 
 const COLOR = 0x79b8e8;
+/** Radius of the mark on a corner that will be welded. */
+const WELD_MARK = 0.18;
+const READOUT_INTERVAL_MS = 150;
+let lastReadout = 0;
+
+/** A flat four-cornered face, as two triangles, just above what it previews. */
+function appendQuad(positions: number[], indices: number[], quad: readonly ConstructionPosition[]): void {
+  const base = positions.length / 3;
+  for (const p of quad) positions.push(p.x, p.y + PREVIEW_ELEVATION, p.z);
+  indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+}
+
+/** Length, rise, grade and welds of the ramp being drawn, at most every few frames. */
+function reportRampReadout(ctx: ToolContext, corners: RampCorners, welds: number): void {
+  const now = Date.now();
+  if (now - lastReadout < READOUT_INTERVAL_MS) return;
+  lastReadout = now;
+  const mid = (a: ConstructionPosition, b: ConstructionPosition) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 });
+  const from = mid(corners.bottom.min, corners.bottom.max), to = mid(corners.top.min, corners.top.max);
+  const run = Math.hypot(to.x - from.x, to.z - from.z), rise = to.y - from.y;
+  const grade = run > 0 ? ((Math.abs(rise) / run) * 100).toFixed(0) : "0";
+  ctx.reportFeedback({ tone: "info", message: `comprimento ${run.toFixed(1)} m · subida ${rise.toFixed(2)} m · inclinação ${grade}% · ${welds} ponta(s) encaixada(s)` });
+}
 
 /**
  * Two structures with two different truths. A straight ramp is a trapezoid
@@ -30,7 +54,17 @@ const rawSlopeRampTool: ConstructionTool<"slope-ramp"> = {
   defaultParams: () => DEFAULT_TOOL_PARAMS["slope-ramp"],
   previewFor(gesture, params, ctx) {
     try {
-      return polylineSegmentsPreview(rampOutline(plannedRamp(ctx, gesture.start, gesture.current, params).corners), COLOR);
+      const { corners, welds } = plannedRamp(ctx, gesture.start, gesture.current, params);
+      const positions: number[] = [], indices: number[] = [];
+      appendQuad(positions, indices, [corners.bottom.min, corners.bottom.max, corners.top.max, corners.top.min]);
+      // A disk at each corner of an end that will be welded into a floor.
+      for (const weld of welds) {
+        const end = weld.controlIndex === 0 ? corners.bottom : corners.top;
+        appendNodeDisk(positions, indices, end.min, WELD_MARK);
+        appendNodeDisk(positions, indices, end.max, WELD_MARK);
+      }
+      reportRampReadout(ctx, corners, welds.length);
+      return { kind: "mesh", positions: Float32Array.from(positions), indices: Uint32Array.from(indices), color: COLOR, opacity: 0.55 };
     } catch {
       return undefined;
     }

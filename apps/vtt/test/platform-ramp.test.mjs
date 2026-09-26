@@ -127,6 +127,37 @@ test("a ramp dragged from one floor to the next welds both ends, square to the f
   } finally { session.free(); }
 });
 
+test("an end near a floor's edge, even just off it, lands at that floor's height whatever the rise says", () => {
+  const fixture = sessionFixture();
+  const { runtime, session, calls } = fixture;
+  try {
+    floor(runtime, "low", 0, 0);
+    floor(runtime, "high", 10, 3.5, "platform-floating");
+    // Both presses fall on the ground just outside each floor's edge.
+    drawn({ point: { x: 4.4, y: 0, z: 2 } }, { point: { x: 9.5, y: 0, z: 2 } }, fixture);
+    assert.ok(calls.feedback.at(-1).message.includes("2 ponta"), JSON.stringify(calls.feedback));
+    const face = ramp(runtime);
+    close(centre(face, "bottom").x, 4, "the bottom snaps onto the low floor's edge");
+    close(centre(face, "top").x, 10, "the top snaps onto the high floor's edge");
+    close(centre(face, "top").y, 3.5, "the top takes the floor's height, not start + rise");
+  } finally { session.free(); }
+});
+
+test("an end dragged near a floor's corner slides along the edge until its width fits", () => {
+  const fixture = sessionFixture();
+  const { runtime, session, calls } = fixture;
+  try {
+    floor(runtime, "high", 10, 2, "platform-floating");
+    drawn({ point: { x: 4, y: 0, z: 0.2 } }, { point: { x: 10, y: 0, z: 0.2 } }, fixture);
+    assert.ok(calls.feedback.at(-1).message.includes("1 ponta"), JSON.stringify(calls.feedback));
+    const face = ramp(runtime);
+    assert.ok(Math.min(corner(face, "top", "min").position.z, corner(face, "top", "max").position.z) > 0, "the top's corners stay inside the edge");
+    close(width(face, "top"), 1, "the top keeps its width");
+    const high = faces(runtime, "platform-floating")[0];
+    assert.ok(high.nodes.some((n) => n.id === corner(face, "top", "min").id), "welded into the floor");
+  } finally { session.free(); }
+});
+
 test("lifting the upper floor carries the ramp's welded end; the ramp stays a clean trapezoid", () => {
   const fixture = sessionFixture();
   const { runtime, session } = fixture;

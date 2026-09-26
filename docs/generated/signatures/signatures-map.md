@@ -4218,6 +4218,32 @@ export function edgeOverlayOf(
 export function edgeOverlayDescriptor(group: EdgeOverlayGroup): PreviewDescriptor {
   return { kind: "segments", positions: group.positions, color: group.color, opacity: 1 };
 
+// src/composition/tabletop/tools/core/floor-landing.ts
+export const LANDING_REACH = 0.75;
+export interface PlanDirection {
+  readonly x: number;
+  readonly z: number;
+  }
+export interface FloorLanding {
+  readonly topology: ConstructionRegionTopology;
+  readonly use: ConstructionRegionEdge;
+  readonly a: ConstructionPosition;
+  readonly b: ConstructionPosition;
+  readonly point: ConstructionPosition;
+  readonly out: PlanDirection;
+  readonly height: number;
+export function floorsOf(ctx: ToolContext): readonly ConstructionRegionTopology[] {
+  return ctx.runtime.getAllRegionTopologies().filter((topology) => hasTrait(topology.surfaceType, "floor"));
+export function floorUnder(floors: readonly ConstructionRegionTopology[], sample: PointerSample): ConstructionRegionTopology | undefined {
+  return floors.find((topology) => sample.surfaceRef
+  ? surfaceRefFromNodeSet(topology.surfaceKey) === sample.surfaceRef
+  : sample.nodeId !== undefined && topology.nodes.some((node) => node.id === sample.nodeId));
+export function floorLandingAt(floors: readonly ConstructionRegionTopology[], sample: PointerSample, reach = LANDING_REACH): FloorLanding | undefined {
+  const under = floorUnder(floors, sample);
+export function alongEdge(landing: Pick<FloorLanding, "a" | "b">, point: PlanDirection): number {
+  const dx = landing.b.x - landing.a.x, dz = landing.b.z - landing.a.z;
+  return ((point.x - landing.a.x) * dx + (point.z - landing.a.z) * dz) / Math.hypot(dx, dz);
+
 // src/composition/tabletop/tools/core/global-handle-gesture.ts
 export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample, ownsType: (surfaceType: string) => boolean, params?: CurveGestureOptions): CurveGesture | undefined {
   const scene = sceneOf(ctx);
@@ -4806,9 +4832,9 @@ export interface RampParams {
   readonly rise?: number;
   }
 export function straightRampPoints(ctx: ToolContext, start: PointerSample, end: PointerSample, params: RampParams): readonly [ConstructionPosition, ConstructionPosition] {
-  const from = slopeControlPoint(ctx, start);
+  const { from, to } = rampEnds(ctx, start, end, params);
 export function plannedRamp(ctx: ToolContext, start: PointerSample, end: PointerSample, params: RampParams): { readonly corners: RampCorners; readonly welds: readonly EndWeld[] } {
-  const [from, to] = straightRampPoints(ctx, start, end, params);
+  const ends = rampEnds(ctx, start, end, params);
 export function commitStraightRamp(ctx: ToolContext, start: PointerSample, end: PointerSample, params: RampParams): void {
   try {
   const { corners, welds: landings } = plannedRamp(ctx, start, end, params);

@@ -1,9 +1,9 @@
-import { createAngleTracker, hasTrait } from "../../../../features/edit-construction/index.ts";
+import { createAngleTracker } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionToolId, PreviewDescriptor, ToolParamsFor } from "../../../../features/edit-construction/index.ts";
-import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import type { ConstructionPosition, ConstructionRegionTopology, CubicBezier, CurveHandles, CurvePoint, CurveResult } from "../../../../ports/index.ts";
 import { createRibbonMeshPreview } from "../shapes/ribbon-mesh-preview.ts";
 import type { ConstructionTool, PointerSample, ToolContext } from "./tool-context.ts";
+import { floorLandingAt, floorsOf, floorUnder } from "./floor-landing.ts";
 
 /**
  * Drawing a new spine-built structure, one way of laying out its plan per
@@ -80,49 +80,15 @@ interface DraftState {
   readoutAt?: number;
 }
 
-const EDGE_REACH = 0.5;
 const READOUT_INTERVAL_MS = 150;
 const PREVIEW_OPACITY = 0.55;
 const xyz = (p: ConstructionPosition): CurvePoint => [p.x, p.y, p.z];
 const at = (p: CurvePoint): ConstructionPosition => ({ x: p[0], y: p[1], z: p[2] });
 
-/** Every floor on the table. */
-function floorsOf(ctx: ToolContext): readonly ConstructionRegionTopology[] {
-  return ctx.runtime.getAllRegionTopologies().filter((topology) => hasTrait(topology.surfaceType, "floor"));
-}
-
-/** The floor `sample` landed on, if any. */
-function floorAt(floors: readonly ConstructionRegionTopology[], sample: PointerSample): ConstructionRegionTopology | undefined {
-  return floors.find((topology) => sample.surfaceRef
-    ? surfaceRefFromNodeSet(topology.surfaceKey) === sample.surfaceRef
-    : sample.nodeId !== undefined && topology.nodes.some((node) => node.id === sample.nodeId));
-}
-
-/** A click's end: on a floor near its edge, moved onto that edge and facing off the floor. */
+/** A click's end: near a floor's edge -- on the floor or just off it -- moved onto that edge at the floor's height, facing off the floor. */
 function endAt(floors: readonly ConstructionRegionTopology[], sample: PointerSample, height: number): End {
-  const point = { ...sample.point, y: height };
-  const floor = floorAt(floors, sample);
-  if (!floor) return { point, sample };
-  const positions = new Map(floor.nodes.map((node) => [node.id, node.position]));
-  let best: { point: ConstructionPosition; out: { x: number; z: number }; distance: number } | undefined;
-  for (const use of floor.outerLoops.flat()) {
-    if (use.geometry.kind !== "line") continue;
-    const a = positions.get(use.startNodeId)!, b = positions.get(use.endNodeId)!;
-    const dx = b.x - a.x, dz = b.z - a.z, lengthSq = dx * dx + dz * dz;
-    if (lengthSq < 1e-12) continue;
-    const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.z - a.z) * dz) / lengthSq));
-    const on = { x: a.x + dx * t, y: height, z: a.z + dz * t };
-    const distance = Math.hypot(on.x - point.x, on.z - point.z);
-    if (distance > EDGE_REACH || (best && best.distance <= distance)) continue;
-    // Off the floor is the side of the edge the floor's own centre is not on.
-    const length = Math.sqrt(lengthSq);
-    let out = { x: dz / length, z: -dx / length };
-    const cx = floor.nodes.reduce((s, n) => s + n.position.x, 0) / floor.nodes.length;
-    const cz = floor.nodes.reduce((s, n) => s + n.position.z, 0) / floor.nodes.length;
-    if (out.x * (cx - on.x) + out.z * (cz - on.z) > 0) out = { x: -out.x, z: -out.z };
-    best = { point: on, out, distance };
-  }
-  return best ? { point: best.point, sample, out: best.out } : { point, sample };
+  const landing = floorLandingAt(floors, sample);
+  return landing ? { point: landing.point, sample, out: landing.out } : { point: { ...sample.point, y: height }, sample };
 }
 
 /** The spans of an arc through three points, or the straight span when they are in line -- from Rust. */
@@ -172,8 +138,7 @@ export function createCurveDraftTool<Id extends ConstructionToolId>(options: Cur
   const clear = (ctx: ToolContext) => states.delete(ctx.runtime);
   const startHeight = (state: DraftState) => state.ends[0]?.point.y ?? 0;
   const endHeight = (state: DraftState, sample: PointerSample, params: ToolParamsFor<Id>) => {
-    const floor = floorAt(state.floors, sample);
-    return floor?.nodes[0]?.position.y ?? startHeight(state) + (state.rise ?? options.riseOf(params));
+    return floorLandingAt(state.floors, sample)?.height ?? floorUnder(state.floors, sample)?.nodes[0]?.position.y ?? startHeight(state) + (state.rise ?? options.riseOf(params));
   };
 
   /** Where the spiral's pointer has turned it to; full circles add up. */
