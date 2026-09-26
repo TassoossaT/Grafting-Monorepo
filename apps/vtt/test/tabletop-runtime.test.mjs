@@ -1107,3 +1107,32 @@ test("road presentation exposes only spine anchors and insertion points, restore
     assert.deepEqual(render.changes.filter(c=>c.type==="node-handle-upserted"&&c.handle.nodeId==="spine:b").at(-1).handle.position,{x:11,y:0,z:2});
   }finally{await runtime.dispose();real.session.free();}
 });
+
+test("a spine tool's point presentation shows each ramp's pivot on its first sync, not only after an edit", async () => {
+  await import("./platform-session-fixture.mjs"); // initialises the construction wasm
+  const { ConstructionSession } = await import("../../../libs/domains/procgen/construction-wasm/pkg/grafting_procgen_construction_wasm.js");
+  const session = new ConstructionSession();
+  try {
+    const renderPort = createFakeRenderPort();
+    const constructionPort = createFakeConstructionPort();
+    const quarter = (a, b, c) => ({ edgeId: a, startNodeId: b, endNodeId: c, curve: { start: [0, 0, 0], end: [0, 0, 0], mode: "aligned", bandOffsets: [-0.75, 0.75], surfaceType: "platform-slope", geometry: { kind: "arc", center: [0, 0], positive: true } } });
+    constructionPort.getGraphSnapshot = () => ({
+      nodes: [
+        { id: "spine:s:0", position: { x: 3, y: 0, z: 0 } },
+        { id: "spine:s:1", position: { x: 0, y: 1, z: 3 } },
+        { id: "spine:s:2", position: { x: -3, y: 2, z: 0 } },
+      ],
+      edges: [quarter("spine-edge:s:0", "spine:s:0", "spine:s:1"), quarter("spine-edge:s:1", "spine:s:1", "spine:s:2")],
+    });
+    constructionPort.getCurvedEdges = () => [];
+    constructionPort.curveBatch = (request) => JSON.parse(session.bezier_batch_json(JSON.stringify(request)));
+    const runtime = createTabletopRuntime({ tableId: "table-pivot", renderPort, constructionPort });
+    await runtime.start();
+    runtime.setConstructionHandlePresentation("spine-points");
+    const upserted = renderPort.changes.filter((change) => change.type === "node-handle-upserted").map((change) => change.handle);
+    const pivot = upserted.find((handle) => handle.nodeId === "spine-pivot:spine:s:0");
+    assert.ok(pivot, `pivot handle uploaded: ${JSON.stringify(upserted.map((h) => h.nodeId))}`);
+    assert.ok(Math.hypot(pivot.position.x, pivot.position.z) < 1e-9, "at the spiral's centre");
+    assert.ok(upserted.some((handle) => handle.nodeId === "spine:s:1"), "with the spine's own points");
+  } finally { session.free(); }
+});

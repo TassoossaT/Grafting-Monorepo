@@ -633,14 +633,16 @@ export class AppTabletopRuntime implements TabletopRuntime {
     const pivots = this.#pointHandlesOnly ? spinePivots(graph).filter((pivot) => pivot.owner !== undefined && structureTypeFor(pivot.owner)?.spine?.pivot === true) : [];
     const livePivots = new Set(pivots.map((pivot) => pivot.id));
     for (const id of this.#pivotHandleIds) if (!livePivots.has(id)) this.#removeNodeHandle(id, origin, causeId, generation);
-    for (const pivot of pivots) this.#uploadNodeHandle(pivot.id, pivot.position, origin, causeId, generation);
-    this.#pivotHandleIds = livePivots;
     if (this.#pointHandlesOnly) {
       const anchors = new Set(shownEdges.flatMap(e => [e.startNodeId,e.endNodeId]));
       this.#pointHandleIds = new Set([...anchors,...handles.map(h => h.id),...livePivots]);
       for (const id of [...this.#nodeHandleRevisions.keys()]) if (!this.#pointHandleIds.has(id)) this.#removeNodeHandle(id,origin,causeId,generation);
       for (const node of graph.nodes) if (anchors.has(node.id)) this.#uploadNodeHandle(node.id,node.position,origin,causeId,generation);
     }
+    // After the allow-list above names them: `#uploadNodeHandle` drops any
+    // handle it does not, which would lose a spine's pivot on its first sync.
+    for (const pivot of pivots) this.#uploadNodeHandle(pivot.id, pivot.position, origin, causeId, generation);
+    this.#pivotHandleIds = livePivots;
     const live = new Set(handles.map((h) => h.id));
     for (const id of this.#bezierHandleIds) if (!live.has(id)) this.#removeNodeHandle(id, origin, causeId, generation);
     for (const handle of handles) this.#uploadNodeHandle(handle.id, handle.position, origin, causeId, generation);
