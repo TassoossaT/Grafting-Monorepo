@@ -1,6 +1,6 @@
-import { curveEdgesOf, curveHandles, curvePick, panelHeightWidgets, shownSpineGlobalHandles } from "../../features/edit-construction/index.ts";
+import { curveEdgesOf, curveHandles, curvePick, panelHeightWidgets, shownGlobalHandles } from "../../features/edit-construction/index.ts";
 import type { RenderHandleGlyph } from "../../ports/index.ts";
-import type { SpineGlobalHandleKind } from "../../features/edit-construction/index.ts";
+import type { GlobalHandleKind } from "../../features/edit-construction/index.ts";
 import type { BezierPort } from "../../ports/bezier-port.ts";
 import type { RenderPointManipulator } from "../../ports/scene-render-port.ts";
 import type { ConstructionPlanarRequest, ConstructionPlanarShape, ConstructionMotionRequest, ConstructionMotionPlan, ConstructionNodeMotion } from "../../ports/index.ts";
@@ -230,6 +230,13 @@ export interface TabletopRuntime extends BezierPort {
   ): Float32Array;
   /** Local editing presentation; never changes the graph or persistence. */
   setConstructionHandlePresentation?(mode: "all" | "spine-points"): void;
+  /**
+   * Which types' whole-structure handles the scene shows -- the active tool's
+   * own; `undefined` shows none.
+   */
+  setGlobalHandleOwners?(owns: ((surfaceType: string) => boolean) | undefined): void;
+  /** Shows a handle at `position` while a gesture carries it; `undefined` puts it back where it stands. */
+  previewNodeHandle?(nodeId: string, position: ConstructionPosition | undefined): void;
   setPointManipulator?(viewId: RenderViewId, target: RenderPointManipulator | undefined): void;
   pick(viewId: RenderViewId, x: number, y: number): ScenePickResult | undefined;
   /** Shows a construction tool's not-yet-committed ghost. Purely visual -- passthrough to `SceneRenderPort`, never touches the construction session. */
@@ -299,7 +306,7 @@ function renderChange(
 }
 
 /** How each whole-spine handle reads: moving the whole thing, setting a height, turning it round. */
-const GLOBAL_HANDLE_GLYPH: Readonly<Record<SpineGlobalHandleKind, RenderHandleGlyph>> = { pivot: "move", rotate: "rotate", height: "height", turns: "turns" };
+const GLOBAL_HANDLE_GLYPH: Readonly<Record<GlobalHandleKind, RenderHandleGlyph>> = { pivot: "move", rotate: "rotate", height: "height", turns: "turns" };
 
 export class AppTabletopRuntime implements TabletopRuntime {
   readonly #listeners = new Set<TabletopRuntimeListener>();
@@ -335,6 +342,10 @@ export class AppTabletopRuntime implements TabletopRuntime {
   #bezierHandleIds = new Set<string>();
   /** Whole-spine handles currently uploaded -- see `shownSpineGlobalHandles`. */
   #globalHandleIds = new Set<string>();
+  /** The glyph each shown global handle is drawn with, kept for a gesture's live preview of it. */
+  #globalHandleGlyphs = new Map<string, RenderHandleGlyph>();
+  /** Which types' global handles are shown -- see `setGlobalHandleOwners`. */
+  #globalHandleOwners: ((surfaceType: string) => boolean) | undefined = undefined;
   #panelHeightWidgetIds = new Set<string>();
   /** Surfaces holding pinned nodes; `undefined` until next needed after a restore. A host edit moves those nodes without naming them. */
   #pinnedSurfaceRefs: Set<string> | undefined;
@@ -635,8 +646,9 @@ export class AppTabletopRuntime implements TabletopRuntime {
     const edges = curveEdgesOf(graph, contour, this.#construction);
     const shownEdges = this.#pointHandlesOnly ? edges.filter(e => e.store === "spine") : edges;
     const handles = curveHandles(shownEdges, this.#construction);
-    // The whole-spine handles each owner declares, shown with its points.
-    const globals = this.#pointHandlesOnly ? shownSpineGlobalHandles(graph) : [];
+    // The whole-structure handles each type declares, for the types the active tool edits.
+    const owns = this.#globalHandleOwners;
+    const globals = owns ? shownGlobalHandles({ graph, topologies: this.#construction.getAllRegionTopologies(), cloudFor: (request) => this.#construction.cloudFor(request) }, owns) : [];
     const liveGlobals = new Set(globals.map((handle) => handle.id));
     for (const id of this.#globalHandleIds) if (!liveGlobals.has(id)) this.#removeNodeHandle(id, origin, causeId, generation);
     if (this.#pointHandlesOnly) {
@@ -647,6 +659,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
     }
     // After the allow-list above names them: `#uploadNodeHandle` drops any
     // handle it does not, which would lose a spine's pivot on its first sync.
+    this.#globalHandleGlyphs = new Map(globals.map((handle) => [handle.id, GLOBAL_HANDLE_GLYPH[handle.kind]]));
     for (const handle of globals) this.#uploadNodeHandle(handle.id, handle.position, origin, causeId, generation, GLOBAL_HANDLE_GLYPH[handle.kind]);
     this.#globalHandleIds = liveGlobals;
     const live = new Set(handles.map((h) => h.id));
@@ -1231,6 +1244,22 @@ export class AppTabletopRuntime implements TabletopRuntime {
       this.#snapshot.map,
     );
     this.#notify();
+  }
+
+  setGlobalHandleOwners(owns: ((surfaceType: string) => boolean) | undefined): void {
+    if (this.#globalHandleOwners === owns) return;
+    this.#globalHandleOwners = owns;
+    if (this.#snapshot.status !== "ready") return;
+    this.#syncBezierHandles("programmatic", "global-handle-owners", this.#generation);
+  }
+
+  previewNodeHandle(nodeId: string, position: ConstructionPosition | undefined): void {
+    if (this.#snapshot.status !== "ready") return;
+    if (position === undefined) {
+      this.#syncBezierHandles("programmatic", "handle-preview", this.#generation);
+      return;
+    }
+    this.#uploadNodeHandle(nodeId, position, "local", "handle-preview", this.#generation, this.#globalHandleGlyphs.get(nodeId));
   }
 
   setConstructionHandlePresentation(mode: "all" | "spine-points"): void {

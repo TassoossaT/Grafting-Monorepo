@@ -453,8 +453,9 @@ async function rotate(ctx, runtime, angle, shiftKey = false) {
   const handle = spineGlobalHandles(runtime.getGraphSnapshot()).find((h) => h.kind === "rotate");
   const gesture = beginCurveGesture(ctx, { nodeId: handle.id, point: handle.position }, { mode: "shape", insertOnClick: false, spatialTarget: true });
   const reach = Math.hypot(handle.position.x - handle.pivot.x, handle.position.z - handle.pivot.z);
+  const from = Math.atan2(handle.position.z - handle.pivot.z, handle.position.x - handle.pivot.x);
   for (let i = 1; i <= 12; i += 1) {
-    const a = (angle * i) / 12;
+    const a = from + (angle * i) / 12;
     const point = { x: handle.pivot.x + reach * Math.cos(a), y: handle.position.y, z: handle.pivot.z + reach * Math.sin(a) };
     gesture.move({ start: { nodeId: handle.id, point }, current: { nodeId: handle.id, point, shiftKey }, samples: [] });
   }

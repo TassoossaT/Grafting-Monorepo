@@ -708,6 +708,10 @@ own policy. The runtime deliberately does not resolve policy itself:
 that belongs to `features/edit-construction`, and the tool layer runs it
 before calling here.
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.previewNodeHandle(nodeId: string, position: ConstructionPosition | undefined): void`
+
+Shows a handle at `position` while a gesture carries it; `undefined` puts it back where it stands.
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.projectToHost(request: { hostSurfaceKey: ConstructionSurfaceKey; points: readonly ConstructionPosition[] }): readonly ConstructionHostPoint[]`
 
 World points in a host face's `(u, v)` frame. Throws when the host is not an upright panel.
@@ -735,6 +739,11 @@ Host `(u, v)` pairs back to world positions. Pure.
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.setConstructionHandlePresentation(mode: "all" | "spine-points"): void`
 
 Local editing presentation; never changes the graph or persistence.
+
+### `method vtt.tabletop-runtime.AppTabletopRuntime.setGlobalHandleOwners(owns: ((surfaceType: string) => boolean) | undefined): void`
+
+Which types' whole-structure handles the scene shows -- the active tool's
+own; `undefined` shows none.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.setPointManipulator(viewId: string, target: RenderPointManipulator | undefined): void`
 
@@ -889,6 +898,10 @@ own policy. The runtime deliberately does not resolve policy itself:
 that belongs to `features/edit-construction`, and the tool layer runs it
 before calling here.
 
+### `method vtt.tabletop-runtime.TabletopRuntime.previewNodeHandle(nodeId: string, position: ConstructionPosition | undefined): void`
+
+Shows a handle at `position` while a gesture carries it; `undefined` puts it back where it stands.
+
 ### `method vtt.tabletop-runtime.TabletopRuntime.projectToHost(request: { hostSurfaceKey: ConstructionSurfaceKey; points: readonly ConstructionPosition[] }): readonly ConstructionHostPoint[]`
 
 World points in a host face's `(u, v)` frame. Throws when the host is not an upright panel.
@@ -916,6 +929,11 @@ Host `(u, v)` pairs back to world positions. Pure.
 ### `method vtt.tabletop-runtime.TabletopRuntime.setConstructionHandlePresentation(mode: "all" | "spine-points"): void`
 
 Local editing presentation; never changes the graph or persistence.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.setGlobalHandleOwners(owns: ((surfaceType: string) => boolean) | undefined): void`
+
+Which types' whole-structure handles the scene shows -- the active tool's
+own; `undefined` shows none.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.setPointManipulator(viewId: string, target: RenderPointManipulator | undefined): void`
 
@@ -1987,6 +2005,10 @@ the active tool defines.
 
 How this tool's dragged spine anchors snap -- the scene manipulator uses it too.
 
+### `property vtt.curve-draft.CurveDraftTool.editsType?: (surfaceType: string) => boolean`
+
+The types this tool edits once they stand -- the scene shows their whole-structure handles while it is active.
+
 ### `property vtt.curve-draft.CurveDraftTool.handlePresentation?: "spine-points"`
 
 Presentation and sampling policy while this tool is active.
@@ -2183,6 +2205,17 @@ Sharing also settles the role. A type that named an edge as some kind of
 rim named it from one face, and one face cannot see the other; if the graph
 shows two, the edge is interior whatever it was called -- see
 RIM_ROLES.
+
+### `function vtt.global-handle-gesture.beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample, ownsType: (surfaceType: string) => boolean, params?: CurveGestureOptions): CurveGesture | undefined`
+
+Drags any global handle of any structure (`global-handles/`). The gesture
+only turns the pointer into an intent -- a move, a turn round the pivot, a
+height, a winding -- and asks the handle's provider what it edits.
+
+The handle stays on its own path while dragged -- round its circle, up
+and down, along with what it moves -- never loose under the pointer, and
+the structure is previewed as the edit would leave it. Shift snaps a turn
+to 15 degree steps. The scene manipulator's point is taken as it is.
 
 ### `variable vtt.navigate-tool.navigateTool: ConstructionTool<"navigate">`
 
@@ -2391,6 +2424,10 @@ the active tool defines.
 ### `property vtt.tool-context.ConstructionTool.anchorSnap?: AnchorSnap`
 
 How this tool's dragged spine anchors snap -- the scene manipulator uses it too.
+
+### `property vtt.tool-context.ConstructionTool.editsType?: (surfaceType: string) => boolean`
+
+The types this tool edits once they stand -- the scene shows their whole-structure handles while it is active.
 
 ### `property vtt.tool-context.ConstructionTool.handlePresentation?: "spine-points"`
 
@@ -3685,9 +3722,13 @@ for it now.
 
 ### `reference vtt.edit-construction.SpineEndHandleKind -> vtt.spine-handle-ids.SpineGlobalHandleKind`
 
+### `reference vtt.edit-construction.spineGlobalHandleId -> vtt.global-handle-ids.globalHandleId`
+
+### `reference vtt.edit-construction.spineGlobalHandleOf -> vtt.global-handle-ids.globalHandleOf`
+
 ### `reference vtt.edit-construction.SpinePivot -> vtt.spine-global-handles.SpineGlobalHandle`
 
-### `reference vtt.edit-construction.spinePivotId -> vtt.spine-handle-ids.spineGlobalHandleId`
+### `reference vtt.edit-construction.spinePivotId -> vtt.global-handle-ids.globalHandleId`
 
 ### `interface vtt.effect.Effect`
 
@@ -3825,6 +3866,102 @@ Dispatches `initial` and everything the reactions emit, breadth first.
 
 Pure orchestration: it holds no state between runs and mutates nothing
 itself -- reactions mutate through `context`.
+
+### `interface vtt.global-handle.GlobalHandle`
+
+One whole-structure handle, where it stands, and what it acts on.
+
+### `property vtt.global-handle.GlobalHandle.center?: readonly [number, number]`
+
+A spiral's centre, when the structure is one -- what a turns handle winds round.
+
+### `property vtt.global-handle.GlobalHandle.id: string`
+
+### `property vtt.global-handle.GlobalHandle.kind: GlobalHandleKind`
+
+### `property vtt.global-handle.GlobalHandle.nodeIds: readonly string[]`
+
+Every node of the structure, lowest id first.
+
+### `property vtt.global-handle.GlobalHandle.owner: string`
+
+The structure's type.
+
+### `property vtt.global-handle.GlobalHandle.pivot: ConstructionPosition`
+
+What the structure moves and turns round.
+
+### `property vtt.global-handle.GlobalHandle.position: ConstructionPosition`
+
+### `property vtt.global-handle.GlobalHandle.provider: string`
+
+Which provider made it -- and plans its edits.
+
+### `interface vtt.global-handle.GlobalHandleProvider`
+
+One way structures are built -- from a spine, from a cloud of regions --
+and so one way their global handles stand and edit. A new way of
+building gets its handles by adding a provider; nothing that shows or
+drags them changes.
+
+### `property vtt.global-handle.GlobalHandleProvider.name: string`
+
+### `method vtt.global-handle.GlobalHandleProvider.handles(scene: GlobalHandleScene): readonly GlobalHandle[]`
+
+Every handle of every kind this provider places, before any type's declaration filters them.
+
+### `method vtt.global-handle.GlobalHandleProvider.plan(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: Pick<BezierPort, "curveBatch">, operationId: string): GlobalHandleEdit | undefined`
+
+What `intent` on `handle` edits; `undefined` when it edits nothing. Throws to refuse.
+
+### `interface vtt.global-handle.GlobalHandleScene`
+
+What a global handle's provider reads: the table as it stands, and the engine's own cloud query.
+
+### `property vtt.global-handle.GlobalHandleScene.cloudFor: (request: { seed: ConstructionSurfaceKey; surfaceType: string }) => { surfaceKeys: readonly ConstructionSurfaceKey[] }`
+
+Which surfaces form one cloud with `seed` (`ADR-0022`) -- the engine decides, never a copy of its rule.
+
+### `property vtt.global-handle.GlobalHandleScene.graph: ConstructionGraphSnapshot`
+
+### `property vtt.global-handle.GlobalHandleScene.topologies: readonly ConstructionRegionTopology[]`
+
+### `type vtt.global-handle.GlobalHandleEdit = { graphPatch: ConstructionGraphPatch; kind: "spine"; owner: string } | { delta: ConstructionPosition; kind: "region-move"; seed: ConstructionSurfaceKey } | { kind: "vertices"; moves: readonly { nodeId: string; position: ConstructionPosition }[]; retypes: readonly { edgeId: string; geometry: ConstructionEdgeGeometry }[] }`
+
+What a provider makes of an intent, in the terms the edit is carried out
+in:
+
+- spine: a spine graph patch its owner regenerates from;
+- region-move: the whole cloud seeded at `seed` moved by `delta` -- through
+  the type's own role policy, so its solver and validation apply;
+- vertices: explicit node positions and edge geometry.
+
+### `type vtt.global-handle.GlobalHandleIntent = { delta: ConstructionPosition; kind: "move" } | { angle: number; kind: "rotate" } | { dy: number; kind: "height" } | { angle: number; kind: "wind" }`
+
+What a gesture on a global handle asks for, whatever the structure.
+
+### `type vtt.global-handle-ids.GlobalHandleKind = "pivot" | "rotate" | "height" | "turns"`
+
+The handles that stand for a whole structure rather than one of its
+points, whatever the structure is built from -- a spine, a cloud of
+regions:
+
+- pivot: moves it;
+- rotate: turns it round its pivot;
+- height: raises or lowers it (a spine: its far end);
+- turns: winds a spiral on or back.
+
+Which of them a structure shows is its type's declaration
+(`StructureTypeDefinition.globalHandles`). Every one is named after the
+structure's lowest node id, so it stays the same handle through any edit
+that keeps that node; none is a graph node. This module is the only place
+their ids are made or read.
+
+### `function vtt.global-handle-ids.globalHandleId(kind: GlobalHandleKind, anchorNodeId: string): string`
+
+### `function vtt.global-handle-ids.globalHandleOf(id: string): { kind: GlobalHandleKind; nodeId: string } | undefined`
+
+Which global handle `id` names, and after which node; `undefined` for anything else.
 
 ### `interface vtt.edit-history.EditHistoryStack`
 
@@ -4137,6 +4274,62 @@ Resolves `gesture` against the structure type's own role table. The
 returned ops are already constrained -- a height-only role's horizontal
 movement is gone by this point, never clamped later or inside Rust.
 
+### `function vtt.global-handles.planGlobalHandle(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: Pick<BezierPort, "curveBatch">, operationId: string): GlobalHandleEdit | undefined`
+
+What `intent` on `handle` edits, from the provider that placed it.
+
+### `function vtt.global-handles.shownGlobalHandleAt(scene: GlobalHandleScene, id: string): GlobalHandle | undefined`
+
+The shown global handle `id` names, where it stands now.
+
+### `function vtt.global-handles.shownGlobalHandles(scene: GlobalHandleScene, owns?: (surfaceType: string) => boolean): readonly GlobalHandle[]`
+
+Every global handle a type declares -- only those of types `owns` accepts, when given.
+
+### `interface vtt.cloud-handle-provider.CloudGlobalHandle`
+
+A global handle placed on a cloud of regions: the generic handle, with the regions it stands for.
+
+### `property vtt.cloud-handle-provider.CloudGlobalHandle.center?: readonly [number, number]`
+
+A spiral's centre, when the structure is one -- what a turns handle winds round.
+
+### `property vtt.cloud-handle-provider.CloudGlobalHandle.id: string`
+
+### `property vtt.cloud-handle-provider.CloudGlobalHandle.kind: GlobalHandleKind`
+
+### `property vtt.cloud-handle-provider.CloudGlobalHandle.members: readonly ConstructionRegionTopology[]`
+
+### `property vtt.cloud-handle-provider.CloudGlobalHandle.nodeIds: readonly string[]`
+
+Every node of the structure, lowest id first.
+
+### `property vtt.cloud-handle-provider.CloudGlobalHandle.owner: string`
+
+The structure's type.
+
+### `property vtt.cloud-handle-provider.CloudGlobalHandle.pivot: ConstructionPosition`
+
+What the structure moves and turns round.
+
+### `property vtt.cloud-handle-provider.CloudGlobalHandle.position: ConstructionPosition`
+
+### `property vtt.cloud-handle-provider.CloudGlobalHandle.provider: string`
+
+Which provider made it -- and plans its edits.
+
+### `variable vtt.cloud-handle-provider.cloudHandleProvider: GlobalHandleProvider`
+
+Global handles of structures built from regions -- a platform, a ramp:
+moving and raising go through the type's own region role (so its solver,
+transport and validation apply); turning places every node itself, arc
+centres with them, refused while another structure stands on those nodes.
+
+### `variable vtt.spine-handle-provider.spineHandleProvider: GlobalHandleProvider`
+
+Global handles of structures built from a spine: every intent becomes a
+spine graph patch the spine's owner regenerates from.
+
 ### `function vtt.spine-edit.planBezierEdit(input: SpineEditInput & { field: FieldPort; tableId: string; topologies: readonly ConstructionRegionTopology[] }): { preview: Float32Array; request: ApplyPatchReplacementRequest; selectedId: string } | undefined`
 
 One spine gesture, end to end: the spine module says what the gesture does
@@ -4148,14 +4341,6 @@ type are edited by exactly the same handles; only the last step differs.
 
 Preview only the affected curves; surface regeneration runs once on release.
 
-### `function vtt.spine-global-handles.shownSpineGlobalHandleAt(graph: ConstructionGraphSnapshot, id: string): SpineGlobalHandle | undefined`
-
-The global handle `id` names, where it stands now, if its owner declares it.
-
-### `function vtt.spine-global-handles.shownSpineGlobalHandles(graph: ConstructionGraphSnapshot): readonly SpineGlobalHandle[]`
-
-Every global handle a spine's owner declares -- what the scene shows and a spine tool may grab.
-
 ### `reference vtt.spine.describeSlope -> vtt.spine-open-chain.describeSpineChain`
 
 ### `reference vtt.spine.planSlopeEdit -> vtt.spine-open-chain.planSpineChainEdit`
@@ -4166,9 +4351,13 @@ Every global handle a spine's owner declares -- what the scene shows and a spine
 
 ### `reference vtt.spine.SpineEndHandleKind -> vtt.spine-handle-ids.SpineGlobalHandleKind`
 
+### `reference vtt.spine.spineGlobalHandleId -> vtt.global-handle-ids.globalHandleId`
+
+### `reference vtt.spine.spineGlobalHandleOf -> vtt.global-handle-ids.globalHandleOf`
+
 ### `reference vtt.spine.SpinePivot -> vtt.spine-global-handles.SpineGlobalHandle`
 
-### `reference vtt.spine.spinePivotId -> vtt.spine-handle-ids.spineGlobalHandleId`
+### `reference vtt.spine.spinePivotId -> vtt.global-handle-ids.globalHandleId`
 
 ### `type vtt.spine-actions.SpineAction = "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"`
 
@@ -4265,9 +4454,11 @@ the type it is stamped as generating.
 
 ### `interface vtt.spine-global-handles.SpineGlobalHandle`
 
+A global handle placed by a spine: the generic handle, with the spine it stands for.
+
 ### `property vtt.spine-global-handles.SpineGlobalHandle.center?: readonly [number, number]`
 
-A spiral's centre.
+A spiral's centre, when the structure is one -- what a turns handle winds round.
 
 ### `property vtt.spine-global-handles.SpineGlobalHandle.edges: readonly ConstructionEdgeSnapshot[]`
 
@@ -4277,21 +4468,25 @@ The spine's free ends, first to last -- the far one is the last. Absent on a bra
 
 ### `property vtt.spine-global-handles.SpineGlobalHandle.id: string`
 
-### `property vtt.spine-global-handles.SpineGlobalHandle.kind: SpineGlobalHandleKind`
+### `property vtt.spine-global-handles.SpineGlobalHandle.kind: GlobalHandleKind`
 
 ### `property vtt.spine-global-handles.SpineGlobalHandle.nodeIds: readonly string[]`
 
-Every control node of the spine, lowest id first.
+Every node of the structure, lowest id first.
 
-### `property vtt.spine-global-handles.SpineGlobalHandle.owner: string | undefined`
+### `property vtt.spine-global-handles.SpineGlobalHandle.owner: string`
 
-The type the spine generates.
+The structure's type.
 
 ### `property vtt.spine-global-handles.SpineGlobalHandle.pivot: ConstructionPosition`
 
-What the spine moves and turns round: where its pivot handle stands.
+What the structure moves and turns round.
 
 ### `property vtt.spine-global-handles.SpineGlobalHandle.position: ConstructionPosition`
+
+### `property vtt.spine-global-handles.SpineGlobalHandle.provider: string`
+
+Which provider made it -- and plans its edits.
 
 ### `interface vtt.spine-global-handles.SpineTransform`
 
@@ -4301,7 +4496,17 @@ A whole-spine transform: turned by `angle` round `pivot` in plan, then moved by 
 
 ### `property vtt.spine-global-handles.SpineTransform.rotation?: { angle: number; pivot: PlanPoint }`
 
+### `variable vtt.spine-global-handles.ROTATE_REACH: 1.5`
+
+How far past the structure's farthest point the rotate handle stands.
+
 ### `function vtt.spine-global-handles.isSpinePivotId(id: string): boolean`
+
+### `function vtt.spine-global-handles.outward(pivot: ConstructionPosition, toward: ConstructionPosition, reach: number): ConstructionPosition`
+
+`reach` out from `pivot` towards `toward`, level with the pivot -- where a
+rotate handle stands, so that turning the structure turns the handle with
+it. Straight out along +X when `toward` is the pivot itself.
 
 ### `function vtt.spine-global-handles.planSpineTransform(graph: ConstructionGraphSnapshot, spine: Pick<SpineGlobalHandle, "nodeIds" | "edges">, transform: SpineTransform): ConstructionGraphPatch`
 
@@ -4313,9 +4518,9 @@ The owner regenerates its surface from it like from any other spine edit.
 
 ### `function vtt.spine-global-handles.spineEndHandleId(kind: "height" | "turns", nodeId: string): string`
 
-### `function vtt.spine-global-handles.spineEndHandleOf(id: string): { kind: SpineGlobalHandleKind; nodeId: string } | undefined`
+### `function vtt.spine-global-handles.spineEndHandleOf(id: string): { kind: GlobalHandleKind; nodeId: string } | undefined`
 
-### `function vtt.spine-global-handles.spineEndHandles(graph: ConstructionGraphSnapshot): { center: readonly [number, number] | undefined; endNodeId: string; id: string; kind: SpineGlobalHandleKind; owner: string | undefined; position: ConstructionPosition; startNodeId: string }[]`
+### `function vtt.spine-global-handles.spineEndHandles(graph: ConstructionGraphSnapshot): { center: readonly [number, number] | undefined; endNodeId: string; id: string; kind: GlobalHandleKind; owner: string; position: ConstructionPosition; startNodeId: string }[]`
 
 ### `function vtt.spine-global-handles.spineGlobalHandleAt(graph: ConstructionGraphSnapshot, id: string): SpineGlobalHandle | undefined`
 
@@ -4374,26 +4579,17 @@ run) is reported once.
 
 spineGraphIn over one cloud's own members -- the reading a tool should reach for.
 
-### `type vtt.spine-handle-ids.SpineGlobalHandleKind = "pivot" | "rotate" | "height" | "turns"`
+### `type vtt.spine-handle-ids.SpineGlobalHandleKind = GlobalHandleKind`
 
-The handles that stand for a whole spine rather than one of its points:
-the pivot that moves it, the handle that turns it round the pivot, and the
-handles at its far end that raise it and -- on a spiral -- wind it. Which of them a spine shows is its owner's
-declaration (`SpineGeneration.globalHandles`).
-
-Every one is named after the spine's lowest control node id, so it stays
-the same handle through any edit that keeps that node. None is a graph
-node. This module is the only place their ids are made or read.
-
-### `function vtt.spine-handle-ids.spineGlobalHandleId(kind: SpineGlobalHandleKind, nodeId: string): string`
-
-### `function vtt.spine-handle-ids.spineGlobalHandleOf(id: string): { kind: SpineGlobalHandleKind; nodeId: string } | undefined`
-
-Which global handle `id` names, and after which node; `undefined` for anything else.
+A spine's global handles are the generic ones (`global-handles/`), named after its lowest control node.
 
 ### `function vtt.spine-handle-ids.spineMemberOf(graph: ConstructionGraphSnapshot, id: string): string`
 
 The spine control node `id` stands for: a global handle's own node, a curve handle's span start, or `id` itself.
+
+### `reference vtt.spine-handle-ids.spineGlobalHandleId -> vtt.global-handle-ids.globalHandleId`
+
+### `reference vtt.spine-handle-ids.spineGlobalHandleOf -> vtt.global-handle-ids.globalHandleOf`
 
 ### `function vtt.spine-handles.isBezierEditTarget(snapshot: ConstructionGraphSnapshot, id: string, contour: readonly Pick<ConstructionCurvedEdge, "edgeId">[]): boolean`
 
@@ -5935,13 +6131,6 @@ whatever surface this type makes of them.
 
 The width a span with no profile of its own is given.
 
-### `property vtt.structure-type.SpineGeneration.globalHandles?: readonly SpineGlobalHandleKind[]`
-
-The whole-spine handles this owner's spines show (`spine-global-handles.ts`):
-a pivot that moves it, a height handle at its far end, a turns handle
-that winds a spiral. None for a network whose connected spine is many
-structures at once -- a road grid would move as one.
-
 ### `property vtt.structure-type.SpineGeneration.planOnly?: boolean`
 
 The spine's points move in plan only: the owner derives every height
@@ -6032,6 +6221,13 @@ Positions this type derives for its own unmoved nodes once motion has
 been resolved -- a shape that bends with a received move instead of
 kinking at it. Handed every face of the type, since the shape may span
 faces the move never reached. Derived moves do not propagate further.
+
+### `property vtt.structure-type.StructureTypeDefinition.globalHandles?: readonly GlobalHandleKind[]`
+
+The whole-structure handles this type shows (`global-handles/`): a pivot
+that moves it, a rotate handle that turns it, a height handle, a turns
+handle that winds a spiral. None for a network whose connected spine or
+cloud is many structures at once -- a road grid would move as one.
 
 ### `property vtt.structure-type.StructureTypeDefinition.interactionOver: (covered: StructureView, paintedSubtype?: string) => CreationInteraction`
 

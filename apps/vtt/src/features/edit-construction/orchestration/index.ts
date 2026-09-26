@@ -24,4 +24,5 @@ export {
   planEdgeReshape,
 } from "./edit-orchestrator.ts";
 export type { EditOpSink, EditPlan } from "./edit-orchestrator.ts";
-export { shownSpineGlobalHandleAt, shownSpineGlobalHandles } from "./spine-global-handles.ts";
+export { planGlobalHandle, shownGlobalHandleAt, shownGlobalHandles } from "./global-handles/index.ts";
+export type { CloudGlobalHandle } from "./global-handles/cloud-handle-provider.ts";

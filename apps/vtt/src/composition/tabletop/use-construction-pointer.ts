@@ -12,7 +12,7 @@ import { GRID_SNAP_UNIT } from "../../adapters/rendering/index.ts";
 import type { TabletopRuntime } from "./tabletop-runtime.ts";
 import { toolFor } from "./tools/index.ts";
 import { beginCurveGesture, type CurveGesture } from "./tools/core/curve-edit-gesture.ts";
-import { shownSpineGlobalHandleAt, spineGlobalHandleOf } from "../../features/edit-construction/index.ts";
+import { globalHandleOf, shownGlobalHandleAt } from "../../features/edit-construction/index.ts";
 import { gestureMoved } from "./tools/core/tool-context.ts";
 import {
   edgeOverlayChannel,
@@ -22,10 +22,13 @@ import {
 import type { ConstructionToolFeedback, PointerSample, ToolContext } from "./tools/index.ts";
 
 /** A spine handle the scene manipulator can sit on -- a control point, or a whole-spine handle -- where it is now. */
-function spineHandleAt(runtime: Pick<TabletopRuntime, "getGraphSnapshot">, id: string): { readonly id: string; readonly position: { x: number; y: number; z: number } } | undefined {
+function spineHandleAt(runtime: Pick<TabletopRuntime, "getGraphSnapshot" | "getAllRegionTopologies" | "cloudFor">, id: string): { readonly id: string; readonly position: { x: number; y: number; z: number } } | undefined {
   const graph = runtime.getGraphSnapshot();
-  if (spineGlobalHandleOf(id)) {
-    const handle = shownSpineGlobalHandleAt(graph, id);
+  const global = globalHandleOf(id);
+  if (global) {
+    // Only a pivot is carried freely; every other whole-structure handle keeps to its own path.
+    if (global.kind !== "pivot") return undefined;
+    const handle = shownGlobalHandleAt({ graph, topologies: runtime.getAllRegionTopologies(), cloudFor: (request) => runtime.cloudFor(request) }, id);
     return handle && { id: handle.id, position: handle.position };
   }
   const node = graph.nodes.find((n) => n.id === id && n.id.startsWith("spine:"));
@@ -152,7 +155,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
         selectedPoint.current = node?.id;
         runtime.setPointManipulator?.(viewId, node && !branchModifier.current ? {
           // Branching starts a new structure from the point, which only a tool that handles the action can do.
-          id: node.id, position: node.position, branchAction: toolFor(activeTool).onSelectionAction !== undefined && !spineGlobalHandleOf(node.id),
+          id: node.id, position: node.position, branchAction: toolFor(activeTool).onSelectionAction !== undefined && !globalHandleOf(node.id),
           onChange(phase, position) {
             if (phase === "start") {
               manipulatorGesture.current?.cancel();
@@ -208,8 +211,10 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     // mount effect below runs before the runtime finishes loading, and asking
     // it for topologies then is an error rather than an empty answer.
     if (runtime.getSnapshot().status !== "ready") return;
-    const presentation = toolFor(optionsRef.current.activeTool).handlePresentation;
+    const tool = toolFor(optionsRef.current.activeTool);
+    const presentation = tool.handlePresentation;
     runtime.setConstructionHandlePresentation?.(presentation ?? "all");
+    runtime.setGlobalHandleOwners?.(tool.editsType);
     for (const channel of shownEdgeChannels.current) runtime.clearPreview(channel);
     shownEdgeChannels.current.clear();
     for (const group of edgeOverlayOf(runtime, runtime.getAllRegionTopologies(), runtime.getGraphSnapshot(), runtime)) {
@@ -278,6 +283,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       if (options.viewId !== undefined) options.runtime.setPointManipulator?.(options.viewId, undefined);
       tool.onCancel?.(ownedContext);
       options.runtime.setConstructionHandlePresentation?.("all");
+      options.runtime.setGlobalHandleOwners?.(undefined);
       release();
     };
   }, [options.activeTool, options.runtime, options.history, options.tableId, options.viewId, ctx, refreshEdgeOverlay]);

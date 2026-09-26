@@ -2,7 +2,8 @@ import type { ConstructionEdgeSnapshot, ConstructionGraphPatch, ConstructionGrap
 
 import { planAngle, rotateInPlan, rotateVectorInPlan, wrapAngle, type PlanPoint } from "../topology/plan-rotation.ts";
 import { openSpineChain, sharedArcCenter } from "./spine-open-chain.ts";
-import { spineGlobalHandleId, spineGlobalHandleOf, spineMemberOf, type SpineGlobalHandleKind } from "./spine-handle-ids.ts";
+import type { GlobalHandle } from "../global-handles/global-handle.ts";
+import { spineGlobalHandleId, spineGlobalHandleOf, spineMemberOf } from "./spine-handle-ids.ts";
 import { isSpineEdge, spineComponent, spineOwnerOf } from "./spine-owner.ts";
 
 /**
@@ -19,24 +20,25 @@ import { isSpineEdge, spineComponent, spineOwnerOf } from "./spine-owner.ts";
 
 /** How far from the far end its handles stand, so they never sit on the end point itself. */
 const END_REACH = 1.2;
-/** How far past the spine's farthest point the rotate handle stands. */
-const ROTATE_REACH = 1.5;
+/** How far past the structure's farthest point the rotate handle stands. */
+export const ROTATE_REACH = 1.5;
 
-export interface SpineGlobalHandle {
-  readonly id: string;
-  readonly kind: SpineGlobalHandleKind;
-  readonly position: ConstructionPosition;
-  /** The type the spine generates. */
-  readonly owner: string | undefined;
-  /** Every control node of the spine, lowest id first. */
-  readonly nodeIds: readonly string[];
+/**
+ * `reach` out from `pivot` towards `toward`, level with the pivot -- where a
+ * rotate handle stands, so that turning the structure turns the handle with
+ * it. Straight out along +X when `toward` is the pivot itself.
+ */
+export function outward(pivot: ConstructionPosition, toward: ConstructionPosition, reach: number): ConstructionPosition {
+  const dx = toward.x - pivot.x, dz = toward.z - pivot.z;
+  const length = Math.hypot(dx, dz);
+  return length < 1e-9 ? { ...pivot, x: pivot.x + reach } : { ...pivot, x: pivot.x + (dx / length) * reach, z: pivot.z + (dz / length) * reach };
+}
+
+/** A global handle placed by a spine: the generic handle, with the spine it stands for. */
+export interface SpineGlobalHandle extends GlobalHandle {
   readonly edges: readonly ConstructionEdgeSnapshot[];
   /** The spine's free ends, first to last -- the far one is the last. Absent on a branch or a loop. */
   readonly ends?: readonly [string, string];
-  /** A spiral's centre. */
-  readonly center?: readonly [number, number];
-  /** What the spine moves and turns round: where its pivot handle stands. */
-  readonly pivot: ConstructionPosition;
 }
 
 function handlesOf(graph: ConstructionGraphSnapshot, edges: readonly ConstructionEdgeSnapshot[]): readonly SpineGlobalHandle[] {
@@ -50,12 +52,14 @@ function handlesOf(graph: ConstructionGraphSnapshot, edges: readonly Constructio
   const chain = openSpineChain(edges);
   const ends = chain && ([chain.nodes[0]!, chain.nodes.at(-1)!] as const);
   const pivot = center ? { x: center[0], y: mean("y"), z: center[1] } : { x: mean("x"), y: mean("y"), z: mean("z") };
-  const base = { owner: spineOwnerOf(edges[0]!), nodeIds, edges, pivot, ...(ends ? { ends } : {}), ...(center ? { center } : {}) };
+  const owner = spineOwnerOf(edges[0]!);
+  if (owner === undefined) return [];
+  const base = { owner, provider: "spine", nodeIds, edges, pivot, ...(ends ? { ends } : {}), ...(center ? { center } : {}) };
   const name = nodeIds[0]!;
   const reach = Math.max(...points.map((p) => Math.hypot(p.x - pivot.x, p.z - pivot.z))) + ROTATE_REACH;
   const handles: SpineGlobalHandle[] = [
     { ...base, id: spineGlobalHandleId("pivot", name), kind: "pivot", position: pivot },
-    { ...base, id: spineGlobalHandleId("rotate", name), kind: "rotate", position: { ...pivot, x: pivot.x + reach } },
+    { ...base, id: spineGlobalHandleId("rotate", name), kind: "rotate", position: outward(pivot, positions.get(name)!, reach) },
   ];
   if (!chain || !ends) return handles;
   const end = positions.get(ends[1])!;

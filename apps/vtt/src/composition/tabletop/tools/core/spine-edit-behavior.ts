@@ -1,6 +1,6 @@
 import type { ConstructionToolId, StructureEditParams } from "@/features/edit-construction";
 
-import { curvePick, shownSpineGlobalHandleAt, spineGlobalHandleOf, structureTypeFor } from "../../../../features/edit-construction/index.ts";
+import { curvePick, globalHandleOf, shownGlobalHandleAt, structureTypeFor } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionPosition } from "../../../../ports/index.ts";
 import { spineBodyTarget } from "./spine-body-target.ts";
 import { beginCurveGesture, type AnchorSnap, type CurveGesture, type CurveGestureOptions } from "./curve-edit-gesture.ts";
@@ -60,6 +60,7 @@ export interface SpineEditBehavior {
 }
 
 const xyz = (p: ConstructionPosition) => [p.x, p.y, p.z] as const;
+const sceneOf = (ctx: ToolContext) => ({ graph: ctx.runtime.getGraphSnapshot(), topologies: ctx.runtime.getAllRegionTopologies(), cloudFor: ctx.runtime.cloudFor.bind(ctx.runtime) });
 
 export function createSpineEditBehavior({ ownsSpine, onSelect, snap }: SpineEditOptions): SpineEditBehavior {
   const drags = new WeakMap<ToolContext["runtime"], CurveGesture>();
@@ -103,8 +104,8 @@ export function createSpineEditBehavior({ ownsSpine, onSelect, snap }: SpineEdit
 
   return {
     pick(ctx, sample) {
-      if (sample.nodeId && spineGlobalHandleOf(sample.nodeId)) {
-        const handle = shownSpineGlobalHandleAt(ctx.runtime.getGraphSnapshot(), sample.nodeId);
+      if (sample.nodeId && globalHandleOf(sample.nodeId)) {
+        const handle = shownGlobalHandleAt(sceneOf(ctx), sample.nodeId);
         return handle && owned(handle.owner)
           ? { sample: { ...sample, point: handle.position }, options: { mode: "shape", insertOnClick: false, dragThreshold: 5, pointerOrigin: sample.point } }
           : undefined;
@@ -120,7 +121,7 @@ export function createSpineEditBehavior({ ownsSpine, onSelect, snap }: SpineEdit
       return body && { sample: body.sample, options: { ...body.options, curveMode: "free", insertOnClick: curvePick(body.sample.nodeId!)?.index === "midpoint" } };
     },
     isHandle(ctx, sample) {
-      if (sample.nodeId && spineGlobalHandleOf(sample.nodeId)) return owned(shownSpineGlobalHandleAt(ctx.runtime.getGraphSnapshot(), sample.nodeId)?.owner);
+      if (sample.nodeId && globalHandleOf(sample.nodeId)) return owned(shownGlobalHandleAt(sceneOf(ctx), sample.nodeId)?.owner);
       const pick = sample.nodeId ? curvePick(sample.nodeId) : undefined;
       return pick !== undefined && owned(ctx.runtime.getGraphSnapshot().edges.find((e) => e.edgeId === pick.edgeId)?.curve?.surfaceType);
     },
@@ -163,7 +164,7 @@ export function createSpineEditBehavior({ ownsSpine, onSelect, snap }: SpineEdit
       const id = selections.get(ctx.runtime);
       // A pivot stands for the whole spine; deleting a spine is not a point removal.
       // A global handle stands for the whole spine; deleting a spine is not a point removal.
-      if (!id || spineGlobalHandleOf(id)) return false;
+      if (!id || globalHandleOf(id)) return false;
       const node = ctx.runtime.getGraphSnapshot().nodes.find((n) => n.id === id);
       if (!node) { select(ctx); return false; }
       beginEdit(ctx, { nodeId: id, point: node.position }, { mode: "shape", curveAction: "remove-anchor", allowShapeChange: true })?.commit();
@@ -194,6 +195,7 @@ export function withSpineEditing<Id extends ConstructionToolId>(tool: Constructi
   return {
     ...tool,
     handlePresentation: "spine-points",
+    editsType: options.ownsSpine,
     ...(options.snap ? { anchorSnap: options.snap } : {}),
     previewFor(gesture, params, ctx) {
       return spine.isActive(ctx) ? undefined : tool.previewFor?.(gesture, params, ctx);

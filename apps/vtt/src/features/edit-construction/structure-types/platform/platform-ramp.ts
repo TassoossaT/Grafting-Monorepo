@@ -267,6 +267,7 @@ export function validateRampMotion(topology: ConstructionRegionTopology, positio
 /** The straight ramp's definition: edited by its corners, sides, ends and body, never carving the ground. */
 export const rampStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
   surfaceType: RAMP_SURFACE_TYPE, label: "Rampa",
+  globalHandles: Object.freeze(["pivot", "rotate", "height"] as const),
   creation: "a symmetric trapezoid on an inclined plane: an axis and a width at each end",
   traits: Object.freeze([]),
   requiresMotionSolver: true,

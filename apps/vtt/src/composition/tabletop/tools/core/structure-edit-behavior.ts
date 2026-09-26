@@ -1,8 +1,10 @@
 import type { ConstructionToolId, StructureEditParams } from "@/features/edit-construction";
 
 import { beginCurveGesture } from "./curve-edit-gesture.ts";
+import { beginGlobalHandleGesture } from "./global-handle-gesture.ts";
 import {
   cloudNodes,
+  globalHandleOf,
   panelHeightWidgetPick,
   planEdit,
   refreshCloudTopology,
@@ -158,7 +160,10 @@ export function createStructureEditBehavior(options: StructureEditOptions): Stru
     active = undefined;
     curveGesture?.cancel();
     grabbedThisGesture = false;
-    curveGesture = beginCurveGesture(ctx, sample, options.ownsType, editParams);
+    // A whole-structure handle, or a curve handle, is its own gesture.
+    curveGesture = sample.nodeId && globalHandleOf(sample.nodeId)
+      ? beginGlobalHandleGesture(ctx, sample, options.ownsType, { ...editParams, dragThreshold: 5, pointerOrigin: sample.point })
+      : beginCurveGesture(ctx, sample, options.ownsType, editParams);
     if (curveGesture) {
       grabbedThisGesture = true;
       return true;
@@ -296,6 +301,7 @@ export function withStructureEditing<Id extends ConstructionToolId>(
   const behavior = createStructureEditBehavior(options);
   return {
     ...tool,
+    editsType: options.ownsType,
     previewOnHover: true,
 
     previewFor(gesture, params, ctx) {

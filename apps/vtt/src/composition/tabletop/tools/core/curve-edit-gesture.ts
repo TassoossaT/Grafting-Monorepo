@@ -10,15 +10,10 @@ import {
   reshapeCurve,
   resolveCloudTopology,
   curveEdgesOf,
-  describeSpineChain,
-  planSpineChainEdit,
-  createAngleTracker,
-  planSpineTransform,
+  globalHandleOf,
   prospectiveGraph,
   resolveCurves,
   reverseGeometry,
-  shownSpineGlobalHandleAt,
-  spineGlobalHandleOf,
   spineOwnerAt,
   structureTypeFor,
 } from "../../../../features/edit-construction/index.ts";
@@ -26,7 +21,8 @@ import type { AtomicEditOp, StructureEditParams } from "../../../../features/edi
 import type { ConstructionCurvedEdge, ConstructionEdgeGeometry, ConstructionPosition, ConstructionSurfaceKey, CubicBezier } from "../../../../ports/index.ts";
 import type { PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
 import { commitPatchReplacement } from "../../effects/effect-commit.ts";
-import { commitSpineRegeneration, regenerateSpine } from "./spine-commit.ts";
+import { commitSpineRegeneration } from "./spine-commit.ts";
+import { beginGlobalHandleGesture } from "./global-handle-gesture.ts";
 
 /**
  * One curve-handle gesture for every curve on the table.
@@ -108,10 +104,8 @@ export function beginCurveGesture(
   const actualParams = typeof ownsTypeOrParams === "function" ? params : ownsTypeOrParams;
   if (!sample.nodeId) return undefined;
   const snapshot = ctx.runtime.getGraphSnapshot();
-  if (spineGlobalHandleOf(sample.nodeId)) {
-    const owner = shownSpineGlobalHandleAt(snapshot, sample.nodeId)?.owner;
-    return owner !== undefined && ownsType(owner) ? globalHandleGesture(ctx, sample, actualParams) : undefined;
-  }
+  // A whole-structure handle is dragged by the one gesture every structure shares.
+  if (globalHandleOf(sample.nodeId)) return beginGlobalHandleGesture(ctx, sample, ownsType, actualParams);
   const contour = ctx.runtime.getCurvedEdges();
   if (!isBezierEditTarget(snapshot, sample.nodeId, contour)) return undefined;
   const pick = curvePick(sample.nodeId);
@@ -272,89 +266,6 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params: CurveGest
  * - turns: dragged round a spiral's centre, winds it on in its own direction
  *   or back the other way, keeping what its owner's `windKeeps` says.
  */
-/** What each global handle reports once its edit is committed. */
-const DONE: Readonly<Record<import("../../../../features/edit-construction/index.ts").SpineGlobalHandleKind, string>> = {
-  pivot: "Estrutura movida.", rotate: "Estrutura girada.", height: "Altura atualizada.", turns: "Voltas atualizadas.",
-};
-
-function globalHandleGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGestureOptions): CurveGesture | undefined {
-  const snapshot = ctx.runtime.getGraphSnapshot();
-  const handle = shownSpineGlobalHandleAt(snapshot, sample.nodeId!);
-  if (!handle) return undefined;
-  const operationId = `spine-${handle.kind}:${ctx.nextSequence()}`;
-  const far = handle.ends && snapshot.nodes.find((node) => node.id === handle.ends![1])!.position;
-  const shape = handle.kind === "turns" ? describeSpineChain(snapshot, handle.id) : undefined;
-  const keeps = structureTypeFor(handle.owner!)?.spine?.windKeeps ?? "grade";
-  // Rotate turns round the pivot; turns winds round a spiral's centre.
-  const around = handle.kind === "turns" && handle.center ? { x: handle.center[0], z: handle.center[1] } : handle.pivot;
-  const turning = createAngleTracker(around, handle.position);
-  let patch: import("../../../../ports/index.ts").ConstructionGraphPatch | undefined;
-  let ended = false;
-
-  function planned(gesture: ToolGesture) {
-    const target = targetOf({ ...sample, point: handle!.position }, gesture, params);
-    if (handle!.kind === "pivot") {
-      // Along the ground the spine keeps its heights; they change on purpose only.
-      const y = params?.spatialTarget || params?.mode === "elevation" ? target.y : handle!.position.y;
-      return planSpineTransform(snapshot, handle!, { delta: { x: target.x - handle!.position.x, y: y - handle!.position.y, z: target.z - handle!.position.z } });
-    }
-    if (handle!.kind === "rotate") {
-      const turned = turning.turn(gesture.current.point);
-      const step = Math.PI / 12;
-      const angle = gesture.current.shiftKey ? Math.round(turned / step) * step : turned;
-      ctx.reportFeedback({ tone: "info", message: `rotação ${((angle * 180) / Math.PI).toFixed(0)}°` });
-      return planSpineTransform(snapshot, handle!, { rotation: { pivot: handle!.pivot, angle } });
-    }
-    if (handle!.kind === "height" && far) {
-      const y = params?.spatialTarget
-        ? gesture.current.point.y - (handle!.position.y - far.y)
-        : sample.screenY !== undefined && gesture.current.screenY !== undefined
-          ? far.y + (sample.screenY - gesture.current.screenY) / 40
-          : gesture.current.point.y;
-      ctx.reportFeedback({ tone: "info", message: `altura do fim ${y.toFixed(2)} m` });
-      return { nodes: [{ id: handle!.ends![1], position: { ...far, y } }], edges: [] };
-    }
-    if (handle!.kind !== "turns" || !shape?.spiral || !handle!.center) return undefined;
-    const wound = turning.turn(gesture.current.point);
-    // Round the way the spiral already turns winds it on; the other way, back.
-    const turns = Math.max(0.05, shape.spiral.turns + (shape.spiral.positive ? wound : -wound) / (2 * Math.PI));
-    const endHeight = keeps === "height" ? shape.endHeight : shape.startHeight + ((shape.endHeight - shape.startHeight) * turns) / shape.spiral.turns;
-    ctx.reportFeedback({ tone: "info", message: `voltas ${turns.toFixed(2)} · altura do fim ${endHeight.toFixed(2)} m` });
-    return planSpineChainEdit(snapshot, ctx.runtime, handle!.id, { ...shape, endHeight, spiral: { ...shape.spiral, turns } }, operationId);
-  }
-
-  return {
-    move(gesture) {
-      if (ended || !crossedThreshold(sample, gesture, params)) return;
-      try {
-        patch = planned(gesture);
-        const preview = patch && regenerateSpine(ctx, snapshot, handle.owner, patch, operationId)?.preview;
-        if (preview) ctx.runtime.showPreview({ kind: "segments", positions: preview, color: PREVIEW_COLOR, opacity: 0.9 }, CHANNEL);
-      } catch (error) {
-        ctx.runtime.clearPreview(CHANNEL);
-        ctx.reportFeedback({ tone: "error", message: String(error) });
-      }
-    },
-    commit() {
-      if (ended) return;
-      ended = true;
-      ctx.runtime.clearPreview(CHANNEL);
-      if (!patch) return;
-      try {
-        const regenerated = regenerateSpine(ctx, snapshot, handle.owner, patch, operationId);
-        if (!regenerated) return;
-        commitSpineRegeneration(ctx, regenerated.request, operationId);
-        const moved = shownSpineGlobalHandleAt(ctx.runtime.getGraphSnapshot(), handle.id);
-        ctx.reportSelection(moved ? { id: moved.id, point: moved.position } : undefined);
-        ctx.reportFeedback({ tone: "success", message: DONE[handle.kind] });
-      } catch (error) {
-        ctx.reportFeedback({ tone: "error", message: `Estrutura preservada: ${String(error)}` });
-      }
-    },
-    cancel() { ended = true; ctx.runtime.clearPreview(CHANNEL); },
-  };
-}
-
 function contourGesture(
   ctx: ToolContext,
   sample: PointerSample,

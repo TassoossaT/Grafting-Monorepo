@@ -1094,12 +1094,16 @@ test("road presentation exposes only spine anchors and insertion points, restore
   };
   try {
     await runtime.start();const before=JSON.stringify(graph),snapshot=runtime.getSnapshot();
+    // The active tool edits sloped platforms: their whole-structure handles show.
+    runtime.setGlobalHandleOwners((surfaceType) => surfaceType === "platform-slope");
     runtime.setConstructionHandlePresentation("spine-points");
     assert.deepEqual(shown(),["spine:a","spine:b",curvePickId("spine-edge:a","midpoint")].sort());
     assert.equal(JSON.stringify(graph),before);assert.equal(runtime.getSnapshot(),snapshot);
     const count=render.changes.length;runtime.setConstructionHandlePresentation("spine-points");assert.equal(render.changes.length,count);
     runtime.setConstructionHandlePresentation("all");
     assert.ok(shown().includes("mesh:vertex"));assert.ok(shown().includes(curvePickId("spine-edge:a","midpoint")));assert.ok(!shown().includes(curvePickId("spine-edge:a",1)));
+    // The active tool edits sloped platforms: their whole-structure handles show.
+    runtime.setGlobalHandleOwners((surfaceType) => surfaceType === "platform-slope");
     runtime.setConstructionHandlePresentation("spine-points");
     graph={...graph,nodes:graph.nodes.map(n=>n.id==="spine:b"?{...n,position:{x:11,y:0,z:2}}:n)};
     runtime.addPatch(EMPTY_PATCH,"local","updated-spine");
@@ -1125,20 +1129,24 @@ test("a spine tool's point presentation shows each ramp's pivot on its first syn
       edges: [quarter("spine-edge:s:0", "spine:s:0", "spine:s:1"), quarter("spine-edge:s:1", "spine:s:1", "spine:s:2")],
     });
     constructionPort.getCurvedEdges = () => [];
+    constructionPort.getAllRegionTopologies = () => [];
+    constructionPort.cloudFor = () => ({ surfaceKeys: [] });
     constructionPort.curveBatch = (request) => JSON.parse(session.bezier_batch_json(JSON.stringify(request)));
     const runtime = createTabletopRuntime({ tableId: "table-pivot", renderPort, constructionPort });
     await runtime.start();
+    // The active tool edits sloped platforms: their whole-structure handles show.
+    runtime.setGlobalHandleOwners((surfaceType) => surfaceType === "platform-slope");
     runtime.setConstructionHandlePresentation("spine-points");
     const upserted = renderPort.changes.filter((change) => change.type === "node-handle-upserted").map((change) => change.handle);
-    const pivot = upserted.find((handle) => handle.nodeId === "spine-pivot:spine:s:0");
+    const pivot = upserted.find((handle) => handle.nodeId === "structure-pivot:spine:s:0");
     assert.ok(pivot, `pivot handle uploaded: ${JSON.stringify(upserted.map((h) => h.nodeId))}`);
     assert.ok(Math.hypot(pivot.position.x, pivot.position.z) < 1e-9, "at the spiral's centre");
     assert.ok(upserted.some((handle) => handle.nodeId === "spine:s:1"), "with the spine's own points");
-    assert.ok(upserted.some((handle) => handle.nodeId === "spine-height:spine:s:0"), "and its end's height handle");
-    assert.ok(upserted.some((handle) => handle.nodeId === "spine-turns:spine:s:0"), "and, a spiral, its turns handle");
+    assert.ok(upserted.some((handle) => handle.nodeId === "structure-height:spine:s:0"), "and its end's height handle");
+    assert.ok(upserted.some((handle) => handle.nodeId === "structure-turns:spine:s:0"), "and, a spiral, its turns handle");
     const glyphOf = (id) => upserted.find((handle) => handle.nodeId === id)?.glyph;
     assert.deepEqual(
-      [glyphOf("spine-pivot:spine:s:0"), glyphOf("spine-rotate:spine:s:0"), glyphOf("spine-height:spine:s:0"), glyphOf("spine-turns:spine:s:0"), glyphOf("spine:s:1")],
+      [glyphOf("structure-pivot:spine:s:0"), glyphOf("structure-rotate:spine:s:0"), glyphOf("structure-height:spine:s:0"), glyphOf("structure-turns:spine:s:0"), glyphOf("spine:s:1")],
       ["move", "rotate", "height", "turns", undefined],
       "each whole-spine handle reads as what it does; a point stays a plain point",
     );

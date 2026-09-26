@@ -12,7 +12,7 @@ import type { AtomicEditOp, EditAxis, EditGesture, EditTarget } from "../orchest
 import type { CloudTopology } from "../topology/construction-cloud.ts";
 import type { CreationInteraction } from "./creation-interaction.ts";
 import type { EffectKind, ReactionId } from "../effects/effect.ts";
-import type { SpineGlobalHandleKind } from "../spine/spine-handle-ids.ts";
+import type { GlobalHandleKind } from "../global-handles/global-handle-ids.ts";
 import type { PlanarArea } from "../topology/planar-area.ts";
 import type { FieldPort } from "./path/contour/curve-projection.ts";
 
@@ -270,13 +270,6 @@ export interface SpineGeneration {
    */
   readonly planOnly?: boolean;
   /**
-   * The whole-spine handles this owner's spines show (`spine-global-handles.ts`):
-   * a pivot that moves it, a height handle at its far end, a turns handle
-   * that winds a spiral. None for a network whose connected spine is many
-   * structures at once -- a road grid would move as one.
-   */
-  readonly globalHandles?: readonly SpineGlobalHandleKind[];
-  /**
    * What winding a spiral on or back keeps: its grade (more turns climb
    * higher -- the default) or its far end's height (more turns climb gentler).
    */
@@ -369,6 +362,13 @@ export interface StructureTypeDefinition {
   readonly deriveMotion?: (topologies: readonly ConstructionRegionTopology[], positions: ReadonlyMap<string, ConstructionPosition>, context: MotionContext) => ReadonlyMap<string, ConstructionPosition>;
   /** Present when this type is generated along a spine. */
   readonly spine?: SpineGeneration;
+  /**
+   * The whole-structure handles this type shows (`global-handles/`): a pivot
+   * that moves it, a rotate handle that turns it, a height handle, a turns
+   * handle that winds a spiral. None for a network whose connected spine or
+   * cloud is many structures at once -- a road grid would move as one.
+   */
+  readonly globalHandles?: readonly GlobalHandleKind[];
   /** Returns a reason when a proposed position batch violates this type. */
   readonly validateMotion?: (topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>) => string | undefined;
   /**

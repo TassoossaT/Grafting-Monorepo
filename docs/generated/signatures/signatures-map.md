@@ -4181,6 +4181,10 @@ export function edgeOverlayOf(
 export function edgeOverlayDescriptor(group: EdgeOverlayGroup): PreviewDescriptor {
   return { kind: "segments", positions: group.positions, color: group.color, opacity: 1 };
 
+// src/composition/tabletop/tools/core/global-handle-gesture.ts
+export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample, ownsType: (surfaceType: string) => boolean, params?: CurveGestureOptions): CurveGesture | undefined {
+  const scene = sceneOf(ctx);
+
 // src/composition/tabletop/tools/core/navigate-tool.ts
 export const navigateTool: ConstructionTool<"navigate"> = {
   id: "navigate",
@@ -4320,10 +4324,10 @@ export interface ConstructionTool<Id extends ConstructionToolId> {
   readonly id: Id;
   /** Presentation and sampling policy while this tool is active. */
   readonly handlePresentation?: "spine-points";
+  /** The types this tool edits once they stand -- the scene shows their whole-structure handles while it is active. */
+  readonly editsType?: (surfaceType: string) => boolean;
   /** How this tool's dragged spine anchors snap -- the scene manipulator uses it too. */
   readonly anchorSnap?: import("./curve-edit-gesture.ts").AnchorSnap;
-  readonly useGridSnap?: boolean;
-  defaultParams(): ToolParamsFor<Id>;
 export function scopedToolId(ctx: ToolContext | string, domain: string, suffix?: string | number): string {
   const tableId = typeof ctx === "string" ? ctx : ctx.tableId;
   return suffix !== undefined ? `${tableId}:${domain}:${suffix}` : `${tableId}:${domain}`;
@@ -5178,6 +5182,40 @@ export type Reaction<Context> = (
   ) => ReactionOutcome;
 
 
+// src/features/edit-construction/global-handles/global-handle-ids.ts
+export type GlobalHandleKind = "pivot" | "rotate" | "height" | "turns";
+export const globalHandleId = (kind: GlobalHandleKind, anchorNodeId: string): string => `${PREFIX[kind]}${anchorNodeId}`;
+export function globalHandleOf(id: string): { readonly kind: GlobalHandleKind; readonly nodeId: string } | undefined {
+  const kind = KINDS.find((candidate) => id.startsWith(PREFIX[candidate]));
+
+// src/features/edit-construction/global-handles/global-handle.ts
+export interface GlobalHandleScene {
+  readonly graph: ConstructionGraphSnapshot;
+  readonly topologies: readonly ConstructionRegionTopology[];
+  /** Which surfaces form one cloud with `seed` (`ADR-0022`) -- the engine decides, never a copy of its rule. */
+  readonly cloudFor: (request: { readonly seed: ConstructionSurfaceKey; readonly surfaceType: string }) => { readonly surfaceKeys: readonly ConstructionSurfaceKey[] };
+export interface GlobalHandle {
+  readonly id: string;
+  readonly kind: GlobalHandleKind;
+  readonly position: ConstructionPosition;
+  /** What the structure moves and turns round. */
+  readonly pivot: ConstructionPosition;
+  /** The structure's type. */
+  readonly owner: string;
+export type GlobalHandleIntent =
+export type GlobalHandleEdit =
+export interface GlobalHandleProvider {
+  readonly name: string;
+  /** Every handle of every kind this provider places, before any type's declaration filters them. */
+  handles(scene: GlobalHandleScene): readonly GlobalHandle[];
+  /** What `intent` on `handle` edits; `undefined` when it edits nothing. Throws to refuse. */
+  plan(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: Pick<BezierPort, "curveBatch">, operationId: string): GlobalHandleEdit | undefined;
+  }
+
+// src/features/edit-construction/global-handles/index.ts
+export type { GlobalHandleKind } from "./global-handle-ids.ts";
+export type { GlobalHandle, GlobalHandleEdit, GlobalHandleIntent, GlobalHandleProvider, GlobalHandleScene } from "./global-handle.ts";
+
 // src/features/edit-construction/history/edit-history.ts
 export interface RegionEditHistoryEntry {
   readonly kind: "region-edit";
@@ -5355,6 +5393,34 @@ export function applyEditPlan(sink: EditOpSink, plan: EditPlan): RegionEditOutco
   if (plan.kind !== "apply" || plan.ops.length === 0) return EMPTY_OUTCOME;
   const movements = plan.ops.filter((op) => op.kind === "move-vertex");
 
+// src/features/edit-construction/orchestration/global-handles/cloud-handle-provider.ts
+export interface CloudGlobalHandle extends GlobalHandle {
+  readonly members: readonly ConstructionRegionTopology[];
+  }
+export const cloudHandleProvider: GlobalHandleProvider = {
+  name: "cloud",
+  handles(scene) {
+  return cloudsOf(scene).flatMap((members): CloudGlobalHandle[] => {
+  const positions = new Map(members.flatMap((member) => member.nodes.map((node) => [node.id, node.position] as const)));
+
+// src/features/edit-construction/orchestration/global-handles/index.ts
+export function shownGlobalHandles(scene: GlobalHandleScene, owns?: (surfaceType: string) => boolean): readonly GlobalHandle[] {
+  return PROVIDERS.flatMap((provider) => provider.handles(scene)).filter((handle) => declared(handle) && (owns === undefined || owns(handle.owner)));
+export function shownGlobalHandleAt(scene: GlobalHandleScene, id: string): GlobalHandle | undefined {
+  const named = globalHandleOf(id);
+export function planGlobalHandle(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: Pick<BezierPort, "curveBatch">, operationId: string): GlobalHandleEdit | undefined {
+  return PROVIDERS.find((provider) => provider.name === handle.provider)?.plan(scene, handle, intent, port, operationId);
+
+// src/features/edit-construction/orchestration/global-handles/spine-handle-provider.ts
+export const spineHandleProvider: GlobalHandleProvider = {
+  name: "spine",
+  handles: (scene) => spineGlobalHandles(scene.graph).filter((handle) => structureTypeFor(handle.owner)?.spine !== undefined),
+  plan(scene, generic, intent, port, operationId) {
+  const handle = generic as SpineGlobalHandle;
+  const graphPatch = (() => {
+  switch (intent.kind) {
+  case "move": return planSpineTransform(scene.graph, handle, { delta: intent.delta });
+
 // src/features/edit-construction/orchestration/index.ts
 export type {
   AtomicEditOp,
@@ -5365,6 +5431,7 @@ export type {
   } from "./atomic-edit.ts";
 
 export type { EditOpSink, EditPlan } from "./edit-orchestrator.ts";
+export type { CloudGlobalHandle } from "./global-handles/cloud-handle-provider.ts";
 
 // src/features/edit-construction/orchestration/spine-edit.ts
 export function planBezierEdit(input: SpineEditInput & {
@@ -5376,12 +5443,6 @@ export function planBezierEdit(input: SpineEditInput & {
   const draft = editDraft(input);
 export function previewBezierEdit(input: SpineEditInput): Float32Array | undefined {
   const draft = editDraft(input);
-
-// src/features/edit-construction/orchestration/spine-global-handles.ts
-export function shownSpineGlobalHandles(graph: ConstructionGraphSnapshot): readonly SpineGlobalHandle[] {
-  return spineGlobalHandles(graph).filter(declared);
-export function shownSpineGlobalHandleAt(graph: ConstructionGraphSnapshot, id: string): SpineGlobalHandle | undefined {
-  const handle = spineGlobalHandleAt(graph, id);
 
 // src/features/edit-construction/spine/index.ts
 export type { SpineChain } from "./spine-chains.ts";
@@ -5430,14 +5491,15 @@ export function moveSpineControlNode(
   return { kind: "move-vertex", nodeId: node.nodeId, position: addPosition(node.position, delta) };
 
 // src/features/edit-construction/spine/spine-global-handles.ts
-export interface SpineGlobalHandle {
-  readonly id: string;
-  readonly kind: SpineGlobalHandleKind;
-  readonly position: ConstructionPosition;
-  /** The type the spine generates. */
-  readonly owner: string | undefined;
-  /** Every control node of the spine, lowest id first. */
-  readonly nodeIds: readonly string[];
+export const ROTATE_REACH = 1.5;
+export function outward(pivot: ConstructionPosition, toward: ConstructionPosition, reach: number): ConstructionPosition {
+  const dx = toward.x - pivot.x, dz = toward.z - pivot.z;
+  const length = Math.hypot(dx, dz);
+export interface SpineGlobalHandle extends GlobalHandle {
+  readonly edges: readonly ConstructionEdgeSnapshot[];
+  /** The spine's free ends, first to last -- the far one is the last. Absent on a branch or a loop. */
+  readonly ends?: readonly [string, string];
+  }
 export function spineGlobalHandles(graph: ConstructionGraphSnapshot): readonly SpineGlobalHandle[] {
   const handles: SpineGlobalHandle[] = [];
   const seen = new Set<string>();
@@ -5488,12 +5550,9 @@ export function neighborsOf(graph: SpineGraph, nodeId: string): readonly string[
   const found = new Set<string>();
 
 // src/features/edit-construction/spine/spine-handle-ids.ts
-export type SpineGlobalHandleKind = "pivot" | "rotate" | "height" | "turns";
-export const spineGlobalHandleId = (kind: SpineGlobalHandleKind, nodeId: string): string => `${PREFIX[kind]}${nodeId}`;
-export function spineGlobalHandleOf(id: string): { readonly kind: SpineGlobalHandleKind; readonly nodeId: string } | undefined {
-  const kind = KINDS.find((candidate) => id.startsWith(PREFIX[candidate]));
+export type SpineGlobalHandleKind = GlobalHandleKind;
 export function spineMemberOf(graph: ConstructionGraphSnapshot, id: string): string {
-  const global = spineGlobalHandleOf(id);
+  const global = globalHandleOf(id);
 
 // src/features/edit-construction/spine/spine-handles.ts
 export function isBezierEditTarget(snapshot: ConstructionGraphSnapshot, id: string, contour: readonly Pick<ConstructionCurvedEdge, "edgeId">[] = []): boolean {
@@ -6096,12 +6155,12 @@ export function validateRampMotion(topology: ConstructionRegionTopology, positio
   const corners = cornersOf(topology, positions);
 export const rampStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
   surfaceType: RAMP_SURFACE_TYPE, label: "Rampa",
+  globalHandles: Object.freeze(["pivot", "rotate", "height"] as const),
   creation: "a symmetric trapezoid on an inclined plane: an axis and a width at each end",
   traits: Object.freeze([]),
   requiresMotionSolver: true,
   roleFor,
   policyFor,
-  // A ramp climbs between levels above the ground; it never carves it.
 
 // src/features/edit-construction/structure-types/platform/platform-slope-spine.ts
 export const SLOPE_SURFACE_TYPE = "platform-slope";

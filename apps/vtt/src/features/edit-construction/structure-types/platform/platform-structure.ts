@@ -40,6 +40,7 @@ function contourPlatformStructureType(
     roleFor: (topology, target) => target.kind === "vertex" && !topology.nodes.some((node) => node.id === target.nodeId) ? "platform-unknown" : `platform-${target.kind}`,
     policyFor: (role) => role === "platform-unknown" ? denied(role, "Vertice fora da plataforma.") : ({ ...allowed(role, ALL_AXES, role === "platform-region" ? "cloud" : "surface"), transport: role === "platform-region" }),
     interactionOver,
+    globalHandles: Object.freeze(["pivot", "rotate", "height"] as const),
     motionInfluences: (topology, transport): readonly ConstructionMotionInfluence[] => {
       const anchor = topology.nodes[0];
       if (!anchor) return [];
@@ -94,5 +95,6 @@ export const slopedPlatformStructureType: StructureTypeDefinition = Object.freez
   motionInfluences: slopeMotionInfluences,
   deriveMotion: deriveSlopeMotion,
   validateMotion: validateSlopeMotion,
-  spine: Object.freeze({ defaultOffsets: SLOPE_DEFAULT_OFFSETS, regenerate: regenerateSlopeSpine, planOnly: true, globalHandles: ["pivot", "rotate", "height", "turns"] as const }),
+  spine: Object.freeze({ defaultOffsets: SLOPE_DEFAULT_OFFSETS, regenerate: regenerateSlopeSpine, planOnly: true }),
+  globalHandles: Object.freeze(["pivot", "rotate", "height", "turns"] as const),
 });
