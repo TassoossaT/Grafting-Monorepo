@@ -563,17 +563,14 @@ A patch's regions as topologies, for when the engine cannot yet be asked for the
 
 The faces behind `keys` that still exist. A stale key is skipped, not fatal.
 
-### `variable vtt.handle-glyphs.GLOBAL_HANDLE_GLYPHS: Readonly<Record<GlobalHandleKind, RenderHandleGlyph>>`
-
-A whole-structure handle's glyph, by its kind.
-
-### `variable vtt.handle-glyphs.HANDLE_GLYPHS: { anchor: "point"; midpoint: "midpoint"; panelHeight: "height"; vertex: "point" }`
+### `variable vtt.handle-glyphs.HANDLE_GLYPHS: Readonly<Record<SceneHandleKind | "vertex", RenderHandleGlyph>>`
 
 Every handle the scene shows, by what it is for, and the glyph it is drawn
-with -- the one place a handle's look is chosen. The images themselves
-live with the renderer, one per glyph (`adapters/rendering`); changing how
-a kind of handle looks is changing its line here or its glyph's image
-there, never the code that places it.
+with -- the one place a handle's look is chosen. Which handles exist is
+the scene handle registry's (`orchestration/scene-handles.ts`); the images
+themselves live with the renderer, one per glyph (`adapters/rendering`).
+Changing how a kind of handle looks is changing its line here or its
+glyph's image there, never the code that places it.
 
 ### `interface vtt.painted-topologies.PaintedTopologyRuntime`
 
@@ -4589,6 +4586,53 @@ Where every node of each rigid structure among `topologies` must go so
 that `moved` carries it whole -- empty when none is bent. Structures in
 `direct` are the ones the gesture itself edits: their own controls shape
 them.
+
+### `interface vtt.scene-handles.SceneHandle`
+
+### `property vtt.scene-handles.SceneHandle.id: string`
+
+### `property vtt.scene-handles.SceneHandle.kind: SceneHandleKind`
+
+### `property vtt.scene-handles.SceneHandle.position: ConstructionPosition`
+
+### `interface vtt.scene-handles.SceneHandleInput`
+
+### `property vtt.scene-handles.SceneHandleInput.cloudFor: (request: { seed: ConstructionSurfaceKey; surfaceType: string }) => { surfaceKeys: readonly ConstructionSurfaceKey[] }`
+
+### `property vtt.scene-handles.SceneHandleInput.contour: readonly ConstructionCurvedEdge[]`
+
+The session's curved contour edges, whose midpoints are handles too.
+
+### `property vtt.scene-handles.SceneHandleInput.graph: ConstructionGraphSnapshot`
+
+### `property vtt.scene-handles.SceneHandleInput.owns?: (surfaceType: string) => boolean`
+
+The types whose whole-structure handles show -- the active tool's; none when absent.
+
+### `property vtt.scene-handles.SceneHandleInput.pointsOnly: boolean`
+
+A tool editing spines by their points: only spines' points and midpoints, never contours' or walls'.
+
+### `property vtt.scene-handles.SceneHandleInput.port?: Pick<BezierPort, "curveBatch">`
+
+Absent without the curve engine: then no curve has a handle.
+
+### `property vtt.scene-handles.SceneHandleInput.topologies: readonly ConstructionRegionTopology[]`
+
+### `type vtt.scene-handles.SceneHandleKind = "anchor" | "midpoint" | "panelHeight" | GlobalHandleKind`
+
+Every edit handle the scene shows, in one list: what each one is for --
+its kind, which is also what its look is chosen by -- and where it stands.
+The one place that says which handles exist; whatever shows them only
+draws this list. (The graph's own node dots are its debug view, not edit
+handles, and are not here.)
+
+- anchor: a spine's control point;
+- midpoint: a span's midpoint -- bend it, or click to insert a point;
+- panelHeight: a wall run's own height widget;
+- every whole-structure handle, by its own kind (`global-handles/`).
+
+### `function vtt.scene-handles.sceneHandles(input: SceneHandleInput): readonly SceneHandle[]`
 
 ### `function vtt.spine-edit.planBezierEdit(input: SpineEditInput & { field: FieldPort; tableId: string; topologies: readonly ConstructionRegionTopology[] }): { preview: Float32Array; request: ApplyPatchReplacementRequest; selectedId: string } | undefined`
 

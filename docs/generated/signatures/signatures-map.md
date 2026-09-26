@@ -3706,17 +3706,14 @@ export function shapeChangeOfRemoval(removed: readonly ConstructionRegionTopolog
   return { surfaceType, before: removed, after: [], removedNodeIds, declaredPositions: [] };
 
 // src/composition/tabletop/handle-glyphs.ts
-export const HANDLE_GLYPHS = {
-  /** A point of a structure's own outline. */
+export const HANDLE_GLYPHS: Readonly<Record<SceneHandleKind | "vertex", RenderHandleGlyph>> = {
+  /** A point of a structure's own outline -- the graph's own node dots. */
   vertex: "point",
   /** A control point of a spine. */
   anchor: "point",
   /** A span's midpoint: bend it, or click to insert a point. */
   midpoint: "midpoint",
   /** A wall run's own height widget. */
-export const GLOBAL_HANDLE_GLYPHS: Readonly<Record<GlobalHandleKind, RenderHandleGlyph>> = {
-  pivot: "move", rotate: "rotate", height: "height", turns: "turns", radius: "radius", origin: "link", destination: "link",
-  };
 
 // src/composition/tabletop/index.ts
 export type { CreateTabletopRuntimeInput } from "./create-tabletop-runtime.ts";
@@ -5586,6 +5583,26 @@ export function joinedStructures(
   isGround: (surfaceType: string) => boolean,
   ): readonly ConstructionRegionTopology[] {
   const members = new Map(seeds.map((topology) => [keyOf(topology), topology]));
+
+// src/features/edit-construction/orchestration/scene-handles.ts
+export type SceneHandleKind = "anchor" | "midpoint" | "panelHeight" | GlobalHandleKind;
+export interface SceneHandle {
+  readonly id: string;
+  readonly kind: SceneHandleKind;
+  readonly position: ConstructionPosition;
+  }
+export interface SceneHandleInput {
+  readonly graph: ConstructionGraphSnapshot;
+  readonly topologies: readonly ConstructionRegionTopology[];
+  /** The session's curved contour edges, whose midpoints are handles too. */
+  readonly contour: readonly ConstructionCurvedEdge[];
+  /** Absent without the curve engine: then no curve has a handle. */
+  readonly port?: Pick<BezierPort, "curveBatch">;
+  readonly cloudFor: (request: { readonly seed: ConstructionSurfaceKey; readonly surfaceType: string }) => { readonly surfaceKeys: readonly ConstructionSurfaceKey[] };
+export function sceneHandles(input: SceneHandleInput): readonly SceneHandle[] {
+  const handles: SceneHandle[] = [];
+  if (input.port) {
+  const edges = curveEdgesOf(input.graph, input.contour, input.port);
 
 // src/features/edit-construction/orchestration/spine-edit.ts
 export function planBezierEdit(input: SpineEditInput & {
