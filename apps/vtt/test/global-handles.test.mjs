@@ -219,3 +219,25 @@ test("with a focus, the scene shows only the focused structure's handles", async
     assert.equal(sceneHandles({ ...input, focus: { faces: new Set(), spineNodes: new Set() } }).length, 0, "nothing under the pointer, nothing shown");
   } finally { session.free(); }
 });
+
+test("a ramp's corner handle opens or closes its own end alone, the other end keeping its width", () => {
+  const fixture = sessionFixture();
+  const { runtime, session, ctx, calls } = fixture;
+  const params = { bottomWidth: 2, topWidth: 1, rise: 2 };
+  try {
+    const start = { point: { x: 0, y: 0, z: 0 } }, end = { point: { x: 6, y: 0, z: 0 } };
+    slopeRampTool.onPointerUp(ctx, { start, current: end, samples: [start, end] }, params);
+    const width = (which) => {
+      const nodes = runtime.getAllRegionTopologies().find((t) => t.surfaceType === "platform-ramp").nodes.filter((n) => n.id.includes(`:ramp:${which}:`));
+      return Math.hypot(nodes[0].position.x - nodes[1].position.x, nodes[0].position.z - nodes[1].position.z);
+    };
+    const corners = shownGlobalHandles(scene(runtime)).filter((h) => h.kind === "corner" && h.owner === "platform-ramp");
+    assert.equal(corners.length, 4, "one outside each corner");
+    const [bottom, top] = [width("bottom"), width("top")];
+    // The corner handle out past the top end, dragged further out across the ramp.
+    const topCorner = corners.filter((h) => h.pivot.x > 3).sort((a, b) => b.position.z - a.position.z)[0];
+    drag(slopeRampTool, fixture, topCorner, [{ x: topCorner.position.x, y: 0, z: topCorner.position.z + 0.5 }], params);
+    assert.ok(Math.abs(width("top") - (top + 1)) < 1e-6, `the top opened by both corners' share: ${top} -> ${width("top")} ${JSON.stringify(calls.feedback.at(-1))}`);
+    assert.ok(Math.abs(width("bottom") - bottom) < 1e-9, "the bottom kept its width");
+  } finally { session.free(); }
+});

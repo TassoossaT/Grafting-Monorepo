@@ -6332,12 +6332,12 @@ export const rampEndsCapability: StructureEnds = Object.freeze<StructureEnds>({
 // src/features/edit-construction/structure-types/platform/platform-ramp-type.ts
 export const rampStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
   surfaceType: RAMP_SURFACE_TYPE, label: "Rampa",
-  globalHandles: Object.freeze(["pivot", "rotate", "height", "origin", "destination", "originHeight", "destinationHeight", "side"] as const),
-  // Its long sides widen it; its ends are the origin and destination handles'.
-  partHandle: (role) => role === "ramp-side",
+  globalHandles: Object.freeze(["pivot", "rotate", "height", "origin", "destination", "originHeight", "destinationHeight", "side", "corner"] as const),
+  // Its long sides widen it; a corner widens or narrows its own end alone --
+  // how the ramp opens or closes; its ends are the origin and destination handles'.
+  partHandle: (role) => role === "ramp-side" || role === "ramp-corner",
   ends: rampEndsCapability,
   creation: "a symmetric trapezoid on an inclined plane: an axis and a width at each end",
-  traits: Object.freeze([]),
 
 // src/features/edit-construction/structure-types/platform/platform-ramp.ts
 export const RAMP_SURFACE_TYPE = "platform-ramp";
