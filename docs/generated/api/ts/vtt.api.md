@@ -511,12 +511,6 @@ moved or resized re-cuts the ground it left and the ground it now covers,
 exactly as drawing it did. Each type the edit moved emits its own change;
 a type that cuts nothing reaches nothing.
 
-### `function vtt.effect-commit.commitStructureRemoval(runtime: EffectCommitRuntime, surfaceKeys: readonly ConstructionSurfaceKey[], release: ApplyPatchReplacementRequest | undefined, options: CommitOptions): TransactionResult<void>`
-
-Deletes a whole structure -- every one of `surfaceKeys` -- after `release`
-takes it off what it is welded to, and lets every cloud it had cut answer,
-as one transaction.
-
 ### `function vtt.effect-commit.commitSurfaceRemoval(runtime: EffectCommitRuntime, surfaceKey: ConstructionSurfaceKey, options: CommitOptions): TransactionResult<RegionEditOutcome>`
 
 Deletes one surface and lets its own cloud and every cloud it had cut answer, atomically.
@@ -4056,7 +4050,7 @@ Which surfaces form one cloud with `seed` (`ADR-0022`) -- the engine decides, ne
 
 ### `property vtt.global-handle.GlobalHandleScene.topologies: readonly ConstructionRegionTopology[]`
 
-### `type vtt.global-handle.GlobalHandleEdit = { carries?: readonly ConstructionSurfaceKey[]; graphPatch: ConstructionGraphPatch; kind: "spine"; owner: string } | { delta: ConstructionPosition; kind: "region-move"; seed: ConstructionSurfaceKey } | { kind: "vertices"; moves: readonly { nodeId: string; position: ConstructionPosition }[]; retypes: readonly { edgeId: string; geometry: ConstructionEdgeGeometry }[] } | { kind: "replace"; request: ApplyPatchReplacementRequest } | { kind: "remove"; release?: ApplyPatchReplacementRequest; surfaceKeys: readonly ConstructionSurfaceKey[] }`
+### `type vtt.global-handle.GlobalHandleEdit = { carries?: readonly ConstructionSurfaceKey[]; graphPatch: ConstructionGraphPatch; kind: "spine"; owner: string } | { delta: ConstructionPosition; kind: "region-move"; seed: ConstructionSurfaceKey } | { kind: "vertices"; moves: readonly { nodeId: string; position: ConstructionPosition }[]; retypes: readonly { edgeId: string; geometry: ConstructionEdgeGeometry }[] } | { kind: "replace"; request: ApplyPatchReplacementRequest }`
 
 What a provider makes of an intent, in the terms the edit is carried out
 in:
@@ -4068,7 +4062,7 @@ in:
 - replace: faces swapped for new ones in one patch replacement -- a
   structure rebuilt, and the floors it welds into or leaves.
 
-### `type vtt.global-handle.GlobalHandleIntent = { delta: ConstructionPosition; kind: "move" } | { angle: number; kind: "rotate" } | { dy: number; kind: "height" } | { angle: number; kind: "wind" } | { delta: number; kind: "radius" } | { at: ConstructionPosition; kind: "place"; under?: ConstructionSurfaceKey } | { dy: number; kind: "lift" } | { kind: "detach" } | { kind: "remove" }`
+### `type vtt.global-handle.GlobalHandleIntent = { delta: ConstructionPosition; kind: "move" } | { angle: number; kind: "rotate" } | { dy: number; kind: "height" } | { angle: number; kind: "wind" } | { delta: number; kind: "radius" } | { at: ConstructionPosition; kind: "place"; under?: ConstructionSurfaceKey } | { dy: number; kind: "lift" } | { kind: "detach" }`
 
 What a gesture on a global handle asks for, whatever the structure.
 
@@ -4588,13 +4582,6 @@ two structures joined at every node never have in common.
 
 Global handles of structures built from a spine: every intent becomes a
 spine graph patch the spine's owner regenerates from.
-
-### `function vtt.structure-removal.removalOf(scene: GlobalHandleScene, faces: readonly ConstructionRegionTopology[], operationId: string): GlobalHandleEdit`
-
-Deleting whole structures built from regions: every end welded into a
-floor is taken off it first, so the floor's side is whole again, then the
-faces go. What stood on them -- a ramp welded into a deleted floor --
-keeps its own nodes and is simply left with a free end.
 
 ### `function vtt.rigid-carry.fitRigidMotion(pairs: readonly { from: ConstructionPosition; to: ConstructionPosition }[]): Place`
 

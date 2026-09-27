@@ -3653,14 +3653,6 @@ export function commitRegionEdit(
   ): TransactionResult<RegionEditOutcome> {
   const origin = options.origin ?? "local";
   const moved = new Set(ops.flatMap((op) => (op.kind === "move-vertex" ? [op.nodeId] : [])));
-export function commitStructureRemoval(
-  runtime: EffectCommitRuntime,
-  surfaceKeys: readonly ConstructionSurfaceKey[],
-  release: ApplyPatchReplacementRequest | undefined,
-  options: CommitOptions,
-  ): TransactionResult<void> {
-  const origin = options.origin ?? "local";
-  return runtime.transact(options.transactionId, origin, () => {
 export function commitSurfaceRemoval(
   runtime: EffectCommitRuntime,
   surfaceKey: ConstructionSurfaceKey,
@@ -5562,11 +5554,7 @@ export const spineHandleProvider: GlobalHandleProvider = {
   const handle = generic as SpineGlobalHandle;
   const graphPatch = (() => {
   switch (intent.kind) {
-  // Every span of the chain goes; its owner drops their faces, and ends that vanish come off their floors.
-
-// src/features/edit-construction/orchestration/global-handles/structure-removal.ts
-export function removalOf(scene: GlobalHandleScene, faces: readonly ConstructionRegionTopology[], operationId: string): GlobalHandleEdit {
-  const floors = scene.topologies.filter((topology) => hasTrait(topology.surfaceType, "floor"));
+  case "move": return planSpineTransform(scene.graph, handle, { delta: intent.delta });
 
 // src/features/edit-construction/orchestration/index.ts
 export type {

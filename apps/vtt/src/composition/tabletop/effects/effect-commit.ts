@@ -136,35 +136,6 @@ export function commitRegionEdit(
   });
 }
 
-/**
- * Deletes a whole structure -- every one of `surfaceKeys` -- after `release`
- * takes it off what it is welded to, and lets every cloud it had cut answer,
- * as one transaction.
- */
-export function commitStructureRemoval(
-  runtime: EffectCommitRuntime,
-  surfaceKeys: readonly ConstructionSurfaceKey[],
-  release: ApplyPatchReplacementRequest | undefined,
-  options: CommitOptions,
-): TransactionResult<void> {
-  const origin = options.origin ?? "local";
-  return runtime.transact(options.transactionId, origin, () => {
-    if (release && release.sourceSurfaceKeys.length > 0) runtime.applyPatchReplacement(release, origin, options.transactionId);
-    for (const surfaceKey of surfaceKeys) {
-      const removed = topologiesOf(runtime, [surfaceKey]);
-      if (removed.length === 0) continue;
-      const outcome = runtime.removeSurface({ surfaceKey }, origin, options.transactionId);
-      const change = shapeChangeOfRemoval(removed, outcome.removedNodeIds);
-      if (change !== undefined) {
-        dispatchEffects(runtime, [
-          { kind: "remove", causeId: options.transactionId, change },
-          { kind: "cut", causeId: options.transactionId, change },
-        ], options.reactions);
-      }
-    }
-  });
-}
-
 /** Deletes one surface and lets its own cloud and every cloud it had cut answer, atomically. */
 export function commitSurfaceRemoval(
   runtime: EffectCommitRuntime,

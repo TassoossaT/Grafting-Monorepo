@@ -21,8 +21,6 @@ export const spineHandleProvider: GlobalHandleProvider = {
     const handle = generic as SpineGlobalHandle;
     const graphPatch = (() => {
       switch (intent.kind) {
-        // Every span of the chain goes; its owner drops their faces, and ends that vanish come off their floors.
-        case "remove": return { nodes: [], edges: [], removedEdgeIds: handle.edges.map((edge) => edge.edgeId) };
         case "move": return planSpineTransform(scene.graph, handle, { delta: intent.delta });
         case "rotate": return planSpineTransform(scene.graph, handle, { rotation: { pivot: handle.pivot, angle: intent.angle } });
         case "height": return planSpineTransform(scene.graph, handle, { delta: { x: 0, y: intent.dy, z: 0 } });

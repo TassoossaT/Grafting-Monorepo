@@ -4,7 +4,6 @@ import { globalHandleId } from "../../global-handles/index.ts";
 import type { GlobalHandle, GlobalHandleAction, GlobalHandleEdit, GlobalHandleProvider, GlobalHandleScene } from "../../global-handles/index.ts";
 import { hasTrait, structureTypeFor, type StructureEnd, type StructureEndName, type StructureEnds } from "../../structure-types/index.ts";
 import { handleNodeName } from "./handle-name.ts";
-import { removalOf } from "./structure-removal.ts";
 import { endJointNear, releasableFace } from "../free-end-welds.ts";
 import { floorLandingNear, floorsWeldedBy, floorsWithout, reweldFloors, type EndJoint } from "../../topology/floor-weld.ts";
 
@@ -147,7 +146,6 @@ export const endHandleProvider: GlobalHandleProvider = {
     const ends = capabilityOf(handle.topology)?.ends(handle.topology) ?? [];
     const end = ends.find((candidate) => candidate.name === handle.end);
     if (!end) return undefined;
-    if (intent.kind === "remove") return removalOf(scene, [handle.topology], operationId);
     if (intent.kind === "detach") return detached(scene, end, operationId);
     if (intent.kind === "place") return placed(scene, handle, ends, intent.at, intent.under, operationId);
     if (intent.kind === "lift") return placed(scene, handle, ends, { ...end.position, y: end.position.y + intent.dy }, undefined, operationId, true);

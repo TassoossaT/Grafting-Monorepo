@@ -52,9 +52,7 @@ export type GlobalHandleIntent =
   /** Raise (positive) or lower one end alone -- the handle's own end -- keeping the other where it is. */
   | { readonly kind: "lift"; readonly dy: number }
   /** Take an end off whatever it is welded to, leaving it where it stands. */
-  | { readonly kind: "detach" }
-  /** Delete the whole structure, taking it off whatever it is welded to first. */
-  | { readonly kind: "remove" };
+  | { readonly kind: "detach" };
 
 /**
  * What a provider makes of an intent, in the terms the edit is carried out
@@ -85,12 +83,7 @@ export type GlobalHandleEdit =
       readonly moves: readonly { readonly nodeId: string; readonly position: ConstructionPosition }[];
       readonly retypes: readonly { readonly edgeId: string; readonly geometry: ConstructionEdgeGeometry }[];
     }
-  | { readonly kind: "replace"; readonly request: ApplyPatchReplacementRequest }
-  /**
-   * The structure's faces deleted, after `release` -- a replacement taking
-   * its ends off the floors they are welded into -- when it has one.
-   */
-  | { readonly kind: "remove"; readonly surfaceKeys: readonly ConstructionSurfaceKey[]; readonly release?: ApplyPatchReplacementRequest };
+  | { readonly kind: "replace"; readonly request: ApplyPatchReplacementRequest };
 
 /** Something a picked handle offers besides dragging it -- a button, say. */
 export interface GlobalHandleAction {

@@ -6,7 +6,6 @@ import { outward, ROTATE_REACH } from "../../spine/spine-global-handles.ts";
 import { hasTrait, structureTypeFor } from "../../structure-types/index.ts";
 import { joinedStructures } from "../rigid-carry.ts";
 import { handleNodeName } from "./handle-name.ts";
-import { removalOf } from "./structure-removal.ts";
 import { reverseGeometry } from "../../topology/boundary-edges.ts";
 import { rotateInPlan } from "../../topology/plan-rotation.ts";
 
@@ -67,7 +66,6 @@ export const cloudHandleProvider: GlobalHandleProvider = {
   plan(scene, generic, intent, _port, operationId) {
     const handle = generic as CloudGlobalHandle;
     const seed = handle.members[0]!.surfaceKey;
-    if (intent.kind === "remove") return removalOf(scene, handle.members, operationId);
     if (intent.kind === "move") return { kind: "region-move", seed, delta: intent.delta };
     if (intent.kind === "height") return { kind: "region-move", seed, delta: { x: 0, y: intent.dy, z: 0 } };
     if (intent.kind !== "rotate") return undefined;

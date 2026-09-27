@@ -87,7 +87,6 @@ const edits = {
     drag(slopeRampTool, ramp, f.ctx, end, { x: end.position.x - 2, y: 0, z: end.position.z });
   },
   "disconnecting a ramp end": (f) => slopeRampTool.onSelectionAction(f.ctx, "disconnect", ramp, handle(f.runtime, "origin", "platform-ramp").id),
-  "deleting a welded ramp": (f) => slopeRampTool.onSelectionAction(f.ctx, "delete", ramp, handle(f.runtime, "pivot", "platform-ramp").id),
   "moving a welded ramp, its floors carried": (f) => {
     const pivot = handle(f.runtime, "pivot", "platform-ramp");
     drag(slopeRampTool, ramp, f.ctx, pivot, { x: pivot.position.x, y: 0, z: pivot.position.z + 3 });
