@@ -347,7 +347,8 @@ function attach(draft: FaceDraft, rung: WeldRung, positions: ReadonlyMap<string,
     // the run's own corner, when the rung spans the whole side -- becomes the rung's own.
     const standing = [inRun[0]!.from, ...inRun.map((step) => step.to)].find((id) => Math.hypot(at(id).x - p.x, at(id).z - p.z) < ON_EDGE);
     if (standing !== undefined) {
-      adopted.set(standing, node);
+      // The run passing through the rung's own node already: nothing to take over, and no face renamed for it.
+      if (standing !== node) adopted.set(standing, node);
       continue;
     }
     // The piece the node falls strictly inside; a node on a piece's own end has no cut to make there.

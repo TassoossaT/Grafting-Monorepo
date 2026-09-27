@@ -1,8 +1,7 @@
 import {
   arcsFollowing,
   floorsWeldedBy,
-  shownGlobalHandles,
-  structureTypeFor,
+  hasTrait,
   rejoinNodes,
   reshapedWelds,
   reweld,
@@ -165,9 +164,13 @@ function resolvedPart(ctx: ToolContext, edit: GlobalHandleEdit, scene: GlobalHan
   const plan = planEdit(cloud, gesture, scene.graph, ctx.runtime);
   if (plan.kind === "apply") {
     const placed = placedBy(plan.ops, scene.topologies);
-    const reshaped = reshapedWelds(links, positions, new Map(placed.moves.map((move) => [move.nodeId, move.position])));
-    if (reshaped.length === 0) return placed;
-    throw new NeedsPause(reshaped);
+    // A floor pushed never takes a joined structure along, not even whole: any join whose nodes it would move is paused.
+    const reshaped = reshapedWelds(links, positions, new Map(placed.moves.map((move) => [move.nodeId, move.position])), face !== undefined && hasTrait(face.surfaceType, "floor"));
+    if (reshaped.length > 0) throw new NeedsPause(reshaped);
+    // Held still by what it is joined to -- a solid floor walking its end's edge: paused, and planned again.
+    const pushes = Math.hypot(edit.delta.x, edit.delta.y, edit.delta.z) > 1e-9;
+    if (pushes && placed.moves.length === 0 && links.length > 0) throw new NeedsPause(links);
+    return placed;
   }
   // Refused as welded: every weld the structure takes part in is paused, and the push planned again.
   if (links.length > 0) throw new NeedsPause(links);
@@ -203,53 +206,9 @@ function targetNow(ctx: ToolContext, part: RegionPart, was: GlobalHandleScene): 
   return { kind: "edge", edgeId: through.edgeId };
 }
 
-/** How far off its floor's edge a paused end may be left and still follow it there. */
-const FOLLOW_REACH = 1.5;
-
-/**
- * Takes a structure end the push left off its floor's edge back onto it --
- * the nearest point of that edge, as dragging the end's own handle there
- * would -- and welds it. `false` when it is welded already, or no edge of
- * that floor is near enough to follow.
- */
-function followEnd(ctx: ToolContext, link: WeldLink, operationId: string, transactionId: string): boolean {
-  const topologies = ctx.runtime.getAllRegionTopologies();
-  const floors = topologies.filter((topology) => link.floors.some((key) => keyOf(key) === keyOf(topology.surfaceKey)));
-  if (floors.length === 0 || floorsWeldedBy(floors, link.rung).length > 0) return false;
-  const owner = topologies.find((topology) => topology.outerLoops.flat().some((use) => use.edgeId === link.rung.edgeId));
-  const end = owner && structureTypeFor(owner.surfaceType)?.ends?.ends(owner).find((candidate) => candidate.rung.edgeId === link.rung.edgeId);
-  if (!owner || !end) return false;
-  // The nearest point, on an edge of the floor running the way the end does -- never one across it.
-  const at = new Map(owner.nodes.map((node) => [node.id, node.position]));
-  const a = at.get(link.rung.startNodeId)!, b = at.get(link.rung.endNodeId)!;
-  const along = { x: b.x - a.x, z: b.z - a.z };
-  const width = Math.hypot(along.x, along.z) || 1;
-  let best: { point: ConstructionPosition; distance: number; floor: (typeof floors)[number] } | undefined;
-  for (const floor of floors) {
-    const positions = new Map(floor.nodes.map((node) => [node.id, node.position]));
-    for (const use of floor.outerLoops.flat()) {
-      if (use.geometry.kind !== "line") continue;
-      const p = positions.get(use.startNodeId)!, q = positions.get(use.endNodeId)!;
-      const dx = q.x - p.x, dz = q.z - p.z, length = Math.hypot(dx, dz);
-      if (length < 1e-9 || Math.abs(dx * along.z - dz * along.x) / (length * width) > 1e-3) continue;
-      const t = Math.max(0, Math.min(1, ((end.position.x - p.x) * dx + (end.position.z - p.z) * dz) / (length * length)));
-      const point = { x: p.x + dx * t, y: p.y, z: p.z + dz * t };
-      const distance = Math.hypot(point.x - end.position.x, point.z - end.position.z);
-      if (distance <= FOLLOW_REACH && (!best || distance < best.distance)) best = { point, distance, floor };
-    }
-  }
-  if (!best) return false;
-  const scene = sceneOf(ctx);
-  const handle = shownGlobalHandles(scene).find((candidate) => candidate.kind === end.name && candidate.faces?.includes(keyOf(owner.surfaceKey)));
-  const edit = handle && planGlobalHandle(scene, handle, { kind: "place", at: best.point, under: best.floor.surfaceKey }, ctx.runtime, operationId);
-  if (edit?.kind !== "replace") return false;
-  ctx.runtime.applyPatchReplacement(edit.request, "local", transactionId);
-  return floorsWeldedBy(ctx.runtime.getAllRegionTopologies().filter((topology) => link.floors.some((key) => keyOf(key) === keyOf(topology.surfaceKey))), link.rung).length > 0;
-}
-
 /** Pauses the welds, pushes the part on the table the pause leaves, and welds them back -- one transaction, one undo. */
 function commitPaused(ctx: ToolContext, handle: GlobalHandle, paused: PausedWelds, scene: GlobalHandleScene, operationId: string): void {
-  let welded = 0;
+  let joined = 0;
   const transactionId = `global-handle:${handle.kind}:${ctx.nextSequence()}`;
   const { recorded } = commitStagedRegionEdit(ctx.runtime, {
     before: () => {
@@ -264,25 +223,19 @@ function commitPaused(ctx: ToolContext, handle: GlobalHandle, paused: PausedWeld
       return opsOf(placedBy(plan.ops, ctx.runtime.getAllRegionTopologies()));
     },
     after: () => {
+      // Welded whole where the end's edge lies along its floor's again.
       const back = reweld(ctx.runtime.getAllRegionTopologies(), paused.links, `${operationId}:reweld`);
       if (back.request) ctx.runtime.applyPatchReplacement(back.request, "local", transactionId);
-      welded = back.welded;
-      // An end node a floor held alone, still standing where the floor's copy of it now is, is shared again.
-      const rejoined = rejoinNodes(ctx.runtime.getAllRegionTopologies(), paused.links.filter((link) => !floorsWeldedBy(ctx.runtime.getAllRegionTopologies().filter((topology) => link.floors.some((key) => keyOf(key) === keyOf(topology.surfaceKey))), link.rung).length), `${operationId}:rejoin`);
+      // Else each end node the floor has a copy of right there, or a side running through, is shared again.
+      const floorsOfLink = (link: WeldLink) => ctx.runtime.getAllRegionTopologies().filter((topology) => link.floors.some((key) => keyOf(key) === keyOf(topology.surfaceKey)));
+      const rejoined = rejoinNodes(ctx.runtime.getAllRegionTopologies(), paused.links.filter((link) => floorsWeldedBy(floorsOfLink(link), link.rung).length === 0), `${operationId}:rejoin`);
       if (rejoined.request) ctx.runtime.applyPatchReplacement(rejoined.request, "local", transactionId);
-      welded += rejoined.joined > 0 ? paused.links.length - welded : 0;
-      if (welded >= paused.links.length) return;
-      // An end the push left off its floor's edge follows it there, as its own end handle would take it --
-      // only one that was welded whole: one sharing a single corner is never moved to keep it.
-      for (const [index, link] of paused.links.entries()) {
-        if (!link.welded) continue;
-        // One that cannot follow -- its floor's edge now too short for it -- is left off it; the push still stands.
-        try { if (followEnd(ctx, link, `${operationId}:follow:${index}`, transactionId)) welded += 1; } catch { /* left off */ }
-      }
+      // Neither structure is ever moved to rejoin the other: one the edit took apart stays apart.
+      joined = paused.links.filter((link) => floorsOfLink(link).some((floor) => floor.nodes.some((node) => node.id === link.rung.startNodeId || node.id === link.rung.endNodeId))).length;
     },
   }, { transactionId });
   if (recorded) ctx.history.record({ kind: "transaction", transactionId });
-  if (welded < paused.links.length) ctx.reportFeedback({ tone: "info", message: "Uma ponta ficou fora da borda e ficou solta." });
+  if (joined < paused.links.length) ctx.reportFeedback({ tone: "info", message: "A rampa não está mais na borda da plataforma e ficou solta." });
 }
 
 /** Applies `ops` as one transaction, so what the edit reaches -- the ground a grounded platform cuts -- answers with it, and undo takes both back. */

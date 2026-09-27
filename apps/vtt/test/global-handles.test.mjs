@@ -362,3 +362,49 @@ test("a floor drawn from one corner of a ramp's end widens on every side without
   // Pushed out along the side through the corner, or away from it: the corner still on its outline, held.
   assert.deepEqual(results, [true, true, true, true]);
 });
+
+test("a floor drawn with the platform tool from a ramp's top vertex, along the ramp's top: widening it anywhere leaves the ramp as it was, and the ramp's ends still open and close", () => {
+  const params = { bottomWidth: 2, topWidth: 2, rise: 2 };
+  const rampOf = (runtime) => runtime.getAllRegionTopologies().find((t) => t.surfaceType === "platform-ramp");
+  const shape = (topology) => topology.nodes.map((n) => `${n.position.x.toFixed(4)},${n.position.y.toFixed(4)},${n.position.z.toFixed(4)}`).sort().join(" ");
+  for (const support of ["grounded", "floating"]) {
+    const build = () => {
+      const fixture = sessionFixture();
+      const { runtime, ctx } = fixture;
+      Object.assign(runtime, { showPreview() {}, clearPreview() {} });
+      commitPlatformContour(ctx, [[-3, -2], [2, -2], [2, 3], [-3, 3]].map(([x, z]) => ({ point: { x, y: 0, z } })), { mode: "create", elevation: 0, shape: "rectangle", support });
+      const s = { point: { x: 2, y: 0, z: 0.5 } }, e = { point: { x: 6, y: 0, z: 0.5 } };
+      slopeRampTool.onPointerUp(ctx, { start: s, current: e, samples: [s, e] }, params);
+      const v = rampOf(runtime).nodes.find((n) => n.id.endsWith("top:min"));
+      // Pressed on the ramp's top vertex and dragged out past its other top corner: the floor runs along the ramp's top.
+      const tool = { ...platformContourTool.defaultParams(), shape: "rectangle", mode: "create", support };
+      const a = { point: v.position, nodeId: v.id, forward: { x: 1, y: -1, z: 0.001 } };
+      const b = { point: { x: v.position.x + 3, y: v.position.y, z: v.position.z + 3 }, forward: a.forward };
+      platformContourTool.onPointerDown(ctx, a, tool);
+      platformContourTool.onPointerMove(ctx, { start: a, current: b, samples: [a, b] }, tool);
+      platformContourTool.onPointerUp(ctx, { start: a, current: b, samples: [a, b], moved: true }, tool);
+      const floor = runtime.getAllRegionTopologies().find((t) => t.surfaceType !== "platform-ramp" && t.nodes.some((n) => n.id === v.id));
+      return { fixture, key: floor.surfaceKey.join("\u0000"), y: v.position.y };
+    };
+    const { fixture: probe, key } = build();
+    const handles = shownGlobalHandles(scene(probe.runtime)).filter((h) => (h.kind === "side" || h.kind === "corner") && h.faces?.includes(key)).map((h) => h.id);
+    probe.session.free();
+    assert.equal(handles.length, 8, `${support}: the new floor's four sides and corners`);
+    for (const id of handles) {
+      const { fixture, y } = build();
+      const { runtime, session, calls } = fixture;
+      try {
+        const h = shownGlobalHandles(scene(runtime)).find((candidate) => candidate.id === id);
+        const out = h.kind === "side" ? h.motion.direction : (() => { const dx = h.position.x - h.pivot.x, dz = h.position.z - h.pivot.z, l = Math.hypot(dx, dz); return { x: dx / l, z: dz / l }; })();
+        const ramp = shape(rampOf(runtime));
+        drag(platformContourTool, fixture, h, [{ x: h.position.x + out.x, y, z: h.position.z + out.z }], platformContourTool.defaultParams());
+        assert.notEqual(calls.feedback.at(-1).tone, "error", `${support} ${h.kind}: ${JSON.stringify(calls.feedback.at(-1))}`);
+        assert.equal(shape(rampOf(runtime)), ramp, `${support} ${h.kind} ${JSON.stringify(out)}: the ramp as it was`);
+        // And the ramp's top still opens by its corner.
+        const top = shownGlobalHandles(scene(runtime)).find((candidate) => candidate.owner === "platform-ramp" && candidate.kind === "corner" && candidate.pivot.x > 5);
+        drag(slopeRampTool, fixture, top, [{ x: top.position.x, y: top.position.y, z: top.position.z + Math.sign(top.position.z - top.pivot.z) * 0.3 }], params);
+        assert.notEqual(shape(rampOf(runtime)), ramp, `${support} ${h.kind}: the ramp's top opened after`);
+      } finally { session.free(); }
+    }
+  }
+});

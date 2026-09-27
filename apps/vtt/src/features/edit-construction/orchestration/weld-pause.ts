@@ -33,23 +33,27 @@ export function weldsOf(graph: ConstructionGraphSnapshot, topologies: readonly C
   const floors = topologies.filter((topology) => hasTrait(topology.surfaceType, "floor"));
   const own = new Set([...face.outerLoops, ...face.holes].flat().map((use) => use.edgeId));
   return structureEndRungs(graph, topologies).flatMap((rung): WeldLink[] => {
-    // Welded, or holding one of the end's nodes -- not the structure itself, whose face walks the end's own edge.
-    const holding = floors.filter((floor) => floorsWeldedBy([floor], rung).length > 0
-      || (!floor.outerLoops.flat().some((use) => use.edgeId === rung.edgeId) && floor.nodes.some((node) => node.id === rung.startNodeId || node.id === rung.endNodeId)));
+    // Holding the end's nodes -- both, welded, or one -- or walking the end's very edge: a floor drawn along it.
+    const holding = floors.filter((floor) => floor.nodes.some((node) => node.id === rung.startNodeId || node.id === rung.endNodeId));
     if (holding.length === 0) return [];
     const mine = own.has(rung.edgeId);
     const intoMe = holding.some((floor) => keyOf(floor.surfaceKey) === keyOf(face.surfaceKey));
-    return mine || intoMe ? [{ rung, floors: holding.map((floor) => floor.surfaceKey), welded: floorsWeldedBy(holding, rung).length > 0 }] : [];
+    const whole = (floor: ConstructionRegionTopology) => [rung.startNodeId, rung.endNodeId].every((id) => floor.nodes.some((node) => node.id === id));
+    return mine || intoMe ? [{ rung, floors: holding.map((floor) => floor.surfaceKey), welded: holding.some(whole) }] : [];
   });
 }
 
-/** The welds among `links` an edit placing nodes at `moves` would reshape: its two nodes moved unlike each other. */
-export function reshapedWelds(links: readonly WeldLink[], positions: ReadonlyMap<string, ConstructionPosition>, moves: ReadonlyMap<string, ConstructionPosition>): readonly WeldLink[] {
+/**
+ * The joins among `links` an edit placing nodes at `moves` would reshape:
+ * its two nodes moved unlike each other -- or, when `anyMove`, moved at all.
+ */
+export function reshapedWelds(links: readonly WeldLink[], positions: ReadonlyMap<string, ConstructionPosition>, moves: ReadonlyMap<string, ConstructionPosition>, anyMove = false): readonly WeldLink[] {
   return links.filter(({ rung }) => {
     const a0 = positions.get(rung.startNodeId), b0 = positions.get(rung.endNodeId);
     if (!a0 || !b0) return false;
     const a1 = moves.get(rung.startNodeId) ?? a0, b1 = moves.get(rung.endNodeId) ?? b0;
     const da = { x: a1.x - a0.x, y: a1.y - a0.y, z: a1.z - a0.z }, db = { x: b1.x - b0.x, y: b1.y - b0.y, z: b1.z - b0.z };
+    if (anyMove && (Math.hypot(da.x, da.y, da.z) > 1e-6 || Math.hypot(db.x, db.y, db.z) > 1e-6)) return true;
     return Math.hypot(da.x - db.x, da.y - db.y, da.z - db.z) > 1e-6;
   });
 }
@@ -57,10 +61,22 @@ export function reshapedWelds(links: readonly WeldLink[], positions: ReadonlyMap
 const replacement = (operationId: string, welds: ReturnType<typeof reweldFloors>): ApplyPatchReplacementRequest | undefined =>
   welds.sourceSurfaceKeys.length === 0 ? undefined : { operationId, sourceSurfaceKeys: welds.sourceSurfaceKeys, patch: { nodes: welds.nodes, edges: welds.edges, regions: welds.regions } };
 
-/** Every end among `links` taken off its floors -- and the ground against them -- as one replacement; `undefined` when none holds it. */
+/**
+ * Every end among `links` taken off its floors -- and the ground against
+ * them -- as one replacement; `undefined` when none holds it. A floor drawn
+ * along the end walks the end's very edge: it is given an edge of its own
+ * there first, so the end keeps its edge and the floor lets go of it.
+ */
 export function unweld(topologies: readonly ConstructionRegionTopology[], links: readonly WeldLink[], operationId: string): ApplyPatchReplacementRequest | undefined {
   const positions = new Map(topologies.flatMap((topology) => topology.nodes.map((node) => [node.id, node.position] as const)));
-  return replacement(operationId, reweldFloors(topologies, { detach: links.map((link) => link.rung), attach: [] }, positions, operationId, releasableFace));
+  const ends = new Set(links.map((link) => link.rung.edgeId));
+  const own = (edgeId: string) => (ends.has(edgeId) ? `${operationId}:own:${edgeId}` : edgeId);
+  const separated = topologies.map((topology) => {
+    if (!hasTrait(topology.surfaceType, "floor") || ![...topology.outerLoops, ...topology.holes].flat().some((use) => ends.has(use.edgeId))) return topology;
+    const loops = (list: ConstructionRegionTopology["outerLoops"]) => list.map((loop) => loop.map((use) => ({ ...use, edgeId: own(use.edgeId) })));
+    return { ...topology, outerLoops: loops(topology.outerLoops), holes: loops(topology.holes) };
+  });
+  return replacement(operationId, reweldFloors(separated, { detach: links.map((link) => link.rung), attach: [] }, positions, operationId, releasableFace));
 }
 
 /**

@@ -4822,9 +4822,10 @@ instead; one with a side running through it is split there. Either way the
 ground against it follows. One replacement, and how many nodes were shared
 again; `undefined` when none could be.
 
-### `function vtt.weld-pause.reshapedWelds(links: readonly WeldLink[], positions: ReadonlyMap<string, ConstructionPosition>, moves: ReadonlyMap<string, ConstructionPosition>): readonly WeldLink[]`
+### `function vtt.weld-pause.reshapedWelds(links: readonly WeldLink[], positions: ReadonlyMap<string, ConstructionPosition>, moves: ReadonlyMap<string, ConstructionPosition>, anyMove: boolean): readonly WeldLink[]`
 
-The welds among `links` an edit placing nodes at `moves` would reshape: its two nodes moved unlike each other.
+The joins among `links` an edit placing nodes at `moves` would reshape:
+its two nodes moved unlike each other -- or, when `anyMove`, moved at all.
 
 ### `function vtt.weld-pause.reweld(topologies: readonly ConstructionRegionTopology[], links: readonly WeldLink[], operationId: string): { request: ApplyPatchReplacementRequest | undefined; welded: number }`
 
@@ -4834,7 +4835,10 @@ edit left off its floor's edge stays off it.
 
 ### `function vtt.weld-pause.unweld(topologies: readonly ConstructionRegionTopology[], links: readonly WeldLink[], operationId: string): ApplyPatchReplacementRequest | undefined`
 
-Every end among `links` taken off its floors -- and the ground against them -- as one replacement; `undefined` when none holds it.
+Every end among `links` taken off its floors -- and the ground against
+them -- as one replacement; `undefined` when none holds it. A floor drawn
+along the end walks the end's very edge: it is given an edge of its own
+there first, so the end keeps its edge and the floor lets go of it.
 
 ### `function vtt.weld-pause.weldsOf(graph: ConstructionGraphSnapshot, topologies: readonly ConstructionRegionTopology[], face: ConstructionRegionTopology): readonly WeldLink[]`
 

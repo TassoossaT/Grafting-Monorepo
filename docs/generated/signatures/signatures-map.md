@@ -5663,7 +5663,7 @@ export interface WeldLink {
 export function weldsOf(graph: ConstructionGraphSnapshot, topologies: readonly ConstructionRegionTopology[], face: ConstructionRegionTopology): readonly WeldLink[] {
   // Only floors are what an end is joined to; the ground laid against them follows them.
   const floors = topologies.filter((topology) => hasTrait(topology.surfaceType, "floor"));
-export function reshapedWelds(links: readonly WeldLink[], positions: ReadonlyMap<string, ConstructionPosition>, moves: ReadonlyMap<string, ConstructionPosition>): readonly WeldLink[] {
+export function reshapedWelds(links: readonly WeldLink[], positions: ReadonlyMap<string, ConstructionPosition>, moves: ReadonlyMap<string, ConstructionPosition>, anyMove = false): readonly WeldLink[] {
   return links.filter(({ rung }) => {
   const a0 = positions.get(rung.startNodeId), b0 = positions.get(rung.endNodeId);
 export function unweld(topologies: readonly ConstructionRegionTopology[], links: readonly WeldLink[], operationId: string): ApplyPatchReplacementRequest | undefined {
