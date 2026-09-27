@@ -4801,11 +4801,26 @@ The free ends -- control nodes on exactly one span -- of the spine a patch touch
 
 ### `interface vtt.weld-pause.WeldLink`
 
-One structure end welded into floors.
+One structure end joined to floors: welded into them -- both of its nodes
+on their outline -- or holding just one node with them, a floor drawn from
+one of its corners.
 
 ### `property vtt.weld-pause.WeldLink.floors: readonly ConstructionSurfaceKey[]`
 
 ### `property vtt.weld-pause.WeldLink.rung: WeldRung`
+
+### `property vtt.weld-pause.WeldLink.welded: boolean`
+
+Whether it was welded whole -- both nodes on the floors' outline -- rather than sharing one corner.
+
+### `function vtt.weld-pause.rejoinNodes(topologies: readonly ConstructionRegionTopology[], links: readonly WeldLink[], operationId: string): { joined: number; request: ApplyPatchReplacementRequest | undefined }`
+
+Every end node among `links` shared again with the floors it was joined
+to: a floor with a node of its own standing exactly there -- the copy a
+pause gave it, where the edit left it -- passes through the end's node
+instead; one with a side running through it is split there. Either way the
+ground against it follows. One replacement, and how many nodes were shared
+again; `undefined` when none could be.
 
 ### `function vtt.weld-pause.reshapedWelds(links: readonly WeldLink[], positions: ReadonlyMap<string, ConstructionPosition>, moves: ReadonlyMap<string, ConstructionPosition>): readonly WeldLink[]`
 
@@ -4813,9 +4828,9 @@ The welds among `links` an edit placing nodes at `moves` would reshape: its two 
 
 ### `function vtt.weld-pause.reweld(topologies: readonly ConstructionRegionTopology[], links: readonly WeldLink[], operationId: string): { request: ApplyPatchReplacementRequest | undefined; welded: number }`
 
-Every end among `links` welded back into the floor it was welded into,
-where it now lies -- one replacement, and how many of them went back.
-An end the edit left off its floor's edge stays off it.
+Every end among `links` welded back into the floor it was joined to, where
+it now lies -- one replacement, and how many of them went back. An end the
+edit left off its floor's edge stays off it.
 
 ### `function vtt.weld-pause.unweld(topologies: readonly ConstructionRegionTopology[], links: readonly WeldLink[], operationId: string): ApplyPatchReplacementRequest | undefined`
 
@@ -4823,7 +4838,7 @@ Every end among `links` taken off its floors -- and the ground against them -- a
 
 ### `function vtt.weld-pause.weldsOf(graph: ConstructionGraphSnapshot, topologies: readonly ConstructionRegionTopology[], face: ConstructionRegionTopology): readonly WeldLink[]`
 
-Every weld `face` takes part in: an end of its own welded into a floor, or another structure's end welded into it.
+Every join `face` takes part in: an end of its own joined to a floor, or another structure's end joined to it.
 
 ### `reference vtt.spine.spineGlobalHandleId -> vtt.global-handle-ids.globalHandleId`
 

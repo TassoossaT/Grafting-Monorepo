@@ -5657,9 +5657,11 @@ export function regenerateWithEndWelds(
 export interface WeldLink {
   readonly rung: WeldRung;
   readonly floors: readonly ConstructionSurfaceKey[];
+  /** Whether it was welded whole -- both nodes on the floors' outline -- rather than sharing one corner. */
+  readonly welded: boolean;
   }
 export function weldsOf(graph: ConstructionGraphSnapshot, topologies: readonly ConstructionRegionTopology[], face: ConstructionRegionTopology): readonly WeldLink[] {
-  // Only floors are what an end is welded into; the ground laid against them follows them.
+  // Only floors are what an end is joined to; the ground laid against them follows them.
   const floors = topologies.filter((topology) => hasTrait(topology.surfaceType, "floor"));
 export function reshapedWelds(links: readonly WeldLink[], positions: ReadonlyMap<string, ConstructionPosition>, moves: ReadonlyMap<string, ConstructionPosition>): readonly WeldLink[] {
   return links.filter(({ rung }) => {
@@ -5668,6 +5670,8 @@ export function unweld(topologies: readonly ConstructionRegionTopology[], links:
   const positions = new Map(topologies.flatMap((topology) => topology.nodes.map((node) => [node.id, node.position] as const)));
 export function reweld(topologies: readonly ConstructionRegionTopology[], links: readonly WeldLink[], operationId: string): { readonly request: ApplyPatchReplacementRequest | undefined; readonly welded: number } {
   const positions = new Map(topologies.flatMap((topology) => topology.nodes.map((node) => [node.id, node.position] as const)));
+export function rejoinNodes(topologies: readonly ConstructionRegionTopology[], links: readonly WeldLink[], operationId: string): { readonly request: ApplyPatchReplacementRequest | undefined; readonly joined: number } {
+  const floorKeys = new Set(links.flatMap((link) => link.floors.map(keyOf)));
 
 // src/features/edit-construction/spine/index.ts
 export type { SpineChain } from "./spine-chains.ts";

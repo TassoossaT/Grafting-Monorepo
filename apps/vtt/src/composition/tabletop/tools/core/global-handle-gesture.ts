@@ -3,6 +3,7 @@ import {
   floorsWeldedBy,
   shownGlobalHandles,
   structureTypeFor,
+  rejoinNodes,
   reshapedWelds,
   reweld,
   unweld,
@@ -266,8 +267,15 @@ function commitPaused(ctx: ToolContext, handle: GlobalHandle, paused: PausedWeld
       const back = reweld(ctx.runtime.getAllRegionTopologies(), paused.links, `${operationId}:reweld`);
       if (back.request) ctx.runtime.applyPatchReplacement(back.request, "local", transactionId);
       welded = back.welded;
-      // An end the push left off its floor's edge follows it there, as its own end handle would take it.
+      // An end node a floor held alone, still standing where the floor's copy of it now is, is shared again.
+      const rejoined = rejoinNodes(ctx.runtime.getAllRegionTopologies(), paused.links.filter((link) => !floorsWeldedBy(ctx.runtime.getAllRegionTopologies().filter((topology) => link.floors.some((key) => keyOf(key) === keyOf(topology.surfaceKey))), link.rung).length), `${operationId}:rejoin`);
+      if (rejoined.request) ctx.runtime.applyPatchReplacement(rejoined.request, "local", transactionId);
+      welded += rejoined.joined > 0 ? paused.links.length - welded : 0;
+      if (welded >= paused.links.length) return;
+      // An end the push left off its floor's edge follows it there, as its own end handle would take it --
+      // only one that was welded whole: one sharing a single corner is never moved to keep it.
       for (const [index, link] of paused.links.entries()) {
+        if (!link.welded) continue;
         // One that cannot follow -- its floor's edge now too short for it -- is left off it; the push still stands.
         try { if (followEnd(ctx, link, `${operationId}:follow:${index}`, transactionId)) welded += 1; } catch { /* left off */ }
       }

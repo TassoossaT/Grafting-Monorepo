@@ -332,3 +332,33 @@ test("a push that would reshape a weld pauses it: the pushed structure alone cha
     } finally { session.free(); }
   }
 });
+
+test("a floor drawn from one corner of a ramp's end widens on every side without touching the ramp, and keeps holding that corner where it can", () => {
+  const params = { bottomWidth: 2, topWidth: 2, rise: 2 };
+  const rampOf = (runtime) => runtime.getAllRegionTopologies().find((t) => t.surfaceType === "platform-ramp");
+  const shape = (topology) => topology.nodes.map((n) => `${n.position.x.toFixed(4)},${n.position.y.toFixed(4)},${n.position.z.toFixed(4)}`).sort().join(" ");
+  const results = [];
+  for (const direction of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const fixture = sessionFixture();
+    const { runtime, session, ctx, calls } = fixture;
+    try {
+      commitPlatformContour(ctx, [[-3, -2], [2, -2], [2, 3], [-3, 3]].map(([x, z]) => ({ point: { x, y: 0, z } })), { mode: "create", elevation: 0, shape: "rectangle", support: "floating" });
+      const s = { point: { x: 2, y: 0, z: 0.5 } }, e = { point: { x: 6, y: 0, z: 0.5 } };
+      slopeRampTool.onPointerUp(ctx, { start: s, current: e, samples: [s, e] }, params);
+      const tmin = rampOf(runtime).nodes.find((n) => n.id.endsWith(":top:min"));
+      const { x, y, z } = tmin.position;
+      // Drawn from the ramp's top corner, away from the ramp: it shares that one corner.
+      commitPlatformContour(ctx, [{ point: tmin.position, nodeId: tmin.id }, { point: { x, y, z: z - 3 } }, { point: { x: x - 3, y, z: z - 3 } }, { point: { x: x - 3, y, z } }], { mode: "create", elevation: y, support: "floating" });
+      const floorKey = runtime.getAllRegionTopologies().find((t) => t.nodes.some((n) => n.id === tmin.id) && t.surfaceType === "platform-floating").surfaceKey.join("\u0000");
+      const ramp = shape(rampOf(runtime));
+      const side = shownGlobalHandles(scene(runtime)).find((h) => h.kind === "side" && h.faces?.includes(floorKey) && Math.abs(h.motion.direction.x - direction[0]) < 1e-6 && Math.abs(h.motion.direction.z - direction[1]) < 1e-6);
+      drag(platformContourTool, fixture, side, [{ x: side.position.x + direction[0], y, z: side.position.z + direction[1] }], platformContourTool.defaultParams());
+      assert.equal(calls.feedback.at(-1).tone === "error", false, `${direction}: ${JSON.stringify(calls.feedback.at(-1))}`);
+      assert.equal(shape(rampOf(runtime)), ramp, `${direction}: the ramp as it was`);
+      const floor = runtime.getAllRegionTopologies().find((t) => t.surfaceKey.join("\u0000") === floorKey);
+      results.push(floor.nodes.some((n) => n.id === tmin.id));
+    } finally { session.free(); }
+  }
+  // Pushed out along the side through the corner, or away from it: the corner still on its outline, held.
+  assert.deepEqual(results, [true, true, true, true]);
+});
