@@ -7756,13 +7756,35 @@ Whether both nodes of `rung`, at `positions`, lie on `edge` strictly between its
 
 Every top-run widget's two zone positions, across every partition panel `topologies` holds.
 
+### `interface vtt.plan-overlap.PlanArea`
+
+An area in plan: its outer outlines, less its holes.
+
+### `property vtt.plan-overlap.PlanArea.holes: readonly (readonly PlanPoint[])[]`
+
+### `property vtt.plan-overlap.PlanArea.outers: readonly (readonly PlanPoint[])[]`
+
+### `function vtt.plan-overlap.areasOverlap(a: PlanArea, b: PlanArea): boolean`
+
+Whether areas `a` and `b` share any area in plan -- not only edges or
+corners. A hole is no part of its area: an outline lying in a floor's
+hole, even along the hole's edge, does not overlap the floor.
+
+### `function vtt.plan-overlap.faceArea(topology: ConstructionRegionTopology): PlanArea`
+
+A face as an area -- its holes left out of it.
+
 ### `function vtt.plan-overlap.faceOutlines(topology: ConstructionRegionTopology): readonly (readonly PlanPoint[])[]`
 
 A face's outer outlines as points in plan.
 
 ### `function vtt.plan-overlap.faceOverlapsOutline(topology: ConstructionRegionTopology, drawn: readonly PlanPoint[]): boolean`
 
-Whether `topology` shares area in plan with the outline `drawn`.
+Whether `topology` shares area in plan with the outline `drawn` -- its holes are none of it.
+
+### `function vtt.plan-overlap.faceTouchesOutline(topology: ConstructionRegionTopology, drawn: readonly PlanPoint[], reach: number): boolean`
+
+Whether `topology` meets the outline `drawn` -- shares area with it, or comes within `reach` of it, holes' edges included.
 
 ### `function vtt.plan-overlap.outlineOf(edges: readonly { end: ConstructionPosition; geometry: ConstructionEdgeGeometry; start: ConstructionPosition }[]): readonly PlanPoint[]`
 

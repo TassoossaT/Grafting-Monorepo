@@ -233,3 +233,26 @@ test("a rectangle's side that comes near a built side lying the same way lands o
     assert.equal(Math.max(...zs), 4, "landed on the old floor's far side, not 4.3");
   } finally { session.free(); }
 });
+
+test("a floor with a hole: what is drawn in the hole against its edge joins it, a bar across splits the hole in two, one floated in it stays apart", async () => {
+  const { commitPlatformContour } = await import("../src/composition/tabletop/tools/platform/platform-contour-tool.ts");
+  const P = (pts) => pts.map(([x, z]) => ({ point: { x, y: 2, z } }));
+  const params = (mode) => ({ mode, elevation: 2, support: "floating", shape: "rectangle" });
+  const cases = {
+    "in the hole, against its edge": [[[2, 2], [4, 2], [4, 3], [2, 3]], { faces: 1, holes: [1] }],
+    "across the hole and out past the floor": [[[1, 2.5], [8, 2.5], [8, 3.5], [1, 3.5]], { faces: 1, holes: [2] }],
+    "floated in the hole": [[[2.5, 2.5], [3.5, 2.5], [3.5, 3], [2.5, 3]], { faces: 2, holes: [0, 1] }],
+  };
+  for (const [name, [corners, expected]] of Object.entries(cases)) {
+    const { runtime, session, ctx, calls } = sessionFixture();
+    try {
+      commitPlatformContour(ctx, P([[0, 0], [6, 0], [6, 6], [0, 6]]), params("create"));
+      commitPlatformContour(ctx, P([[2, 2], [4, 2], [4, 4], [2, 4]]), params("cut"));
+      commitPlatformContour(ctx, P(corners), params("create"));
+      assert.ok(!calls.feedback.some((f) => f.tone === "error"), `${name}: ${JSON.stringify(calls.feedback)}`);
+      const floors = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform-floating");
+      assert.equal(floors.length, expected.faces, `${name}: faces`);
+      assert.deepEqual(floors.map((f) => f.holes.length).sort(), expected.holes, `${name}: holes`);
+    } finally { session.free(); }
+  }
+});

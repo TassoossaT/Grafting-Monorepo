@@ -7086,15 +7086,24 @@ export function panelHeightWidgets(
 export function outlineOf(edges: readonly { readonly start: ConstructionPosition; readonly end: ConstructionPosition; readonly geometry: ConstructionEdgeGeometry }[]): readonly PlanPoint[] {
   return edges.flatMap((edge) => edgePoints(edge.start, edge.end, edge.geometry));
 export function faceOutlines(topology: ConstructionRegionTopology): readonly (readonly PlanPoint[])[] {
-  const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
+  return ringsOf(topology, topology.outerLoops);
+export interface PlanArea {
+  readonly outers: readonly (readonly PlanPoint[])[];
+  readonly holes: readonly (readonly PlanPoint[])[];
+  }
+export function faceArea(topology: ConstructionRegionTopology): PlanArea {
+  return { outers: faceOutlines(topology), holes: ringsOf(topology, topology.holes) };
+export function areasOverlap(a: PlanArea, b: PlanArea): boolean {
+  // Two outlines crossing each other always leave some of each on the same side.
+  const edgesB = edgesOf(b);
 export function outlinesOverlap(a: readonly PlanPoint[], b: readonly PlanPoint[]): boolean {
   if (a.length < 3 || b.length < 3) return false;
-  for (let i = 0; i < a.length; i++) {
-  for (let j = 0; j < b.length; j++) {
-  if (cross(a[i]!, a[(i + 1) % a.length]!, b[j]!, b[(j + 1) % b.length]!)) return true;
-  }
+  return areasOverlap({ outers: [a], holes: [] }, { outers: [b], holes: [] });
 export function faceOverlapsOutline(topology: ConstructionRegionTopology, drawn: readonly PlanPoint[]): boolean {
-  return faceOutlines(topology).some((outline) => outlinesOverlap(outline, drawn));
+  return drawn.length >= 3 && areasOverlap(faceArea(topology), { outers: [drawn], holes: [] });
+export function faceTouchesOutline(topology: ConstructionRegionTopology, drawn: readonly PlanPoint[], reach: number): boolean {
+  if (faceOverlapsOutline(topology, drawn)) return true;
+  const face = faceArea(topology), mine = { outers: [drawn], holes: [] };
 
 // src/features/edit-construction/topology/plan-rotation.ts
 export interface PlanPoint {

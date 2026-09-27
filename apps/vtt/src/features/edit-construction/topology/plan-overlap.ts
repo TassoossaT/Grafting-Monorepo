@@ -36,8 +36,23 @@ export function outlineOf(edges: readonly { readonly start: ConstructionPosition
 
 /** A face's outer outlines as points in plan. */
 export function faceOutlines(topology: ConstructionRegionTopology): readonly (readonly PlanPoint[])[] {
+  return ringsOf(topology, topology.outerLoops);
+}
+
+function ringsOf(topology: ConstructionRegionTopology, loops: ConstructionRegionTopology["outerLoops"]): readonly (readonly PlanPoint[])[] {
   const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
-  return topology.outerLoops.map((loop) => outlineOf(loop.map((use) => ({ start: at.get(use.startNodeId)!, end: at.get(use.endNodeId)!, geometry: use.geometry }))));
+  return loops.map((loop) => outlineOf(loop.map((use) => ({ start: at.get(use.startNodeId)!, end: at.get(use.endNodeId)!, geometry: use.geometry }))));
+}
+
+/** An area in plan: its outer outlines, less its holes. */
+export interface PlanArea {
+  readonly outers: readonly (readonly PlanPoint[])[];
+  readonly holes: readonly (readonly PlanPoint[])[];
+}
+
+/** A face as an area -- its holes left out of it. */
+export function faceArea(topology: ConstructionRegionTopology): PlanArea {
+  return { outers: faceOutlines(topology), holes: ringsOf(topology, topology.holes) };
 }
 
 function distanceToOutline(ring: readonly PlanPoint[], p: PlanPoint): number {
@@ -71,37 +86,65 @@ function cross(a: PlanPoint, b: PlanPoint, c: PlanPoint, d: PlanPoint): boolean 
     && ((d3 > tolerance && d4 < -tolerance) || (d3 < -tolerance && d4 > tolerance));
 }
 
-/** Points just inside `ring`, one off the middle of each of its edges -- what lies over another outline when the two share area. */
-function justInside(ring: readonly PlanPoint[]): readonly PlanPoint[] {
+/** Whether `p` is inside `ring` or on its edge. */
+const insideOrOn = (ring: readonly PlanPoint[], p: PlanPoint) => strictlyInside(ring, p) || distanceToOutline(ring, p) <= EPSILON;
+
+/** Whether `p` is inside `area` and clear of its edges -- neither out of it nor in or on one of its holes. */
+function strictlyInsideArea(area: PlanArea, p: PlanPoint): boolean {
+  return area.outers.some((ring) => strictlyInside(ring, p)) && !area.holes.some((ring) => insideOrOn(ring, p));
+}
+
+/** Points of `area` to test against another: every corner, and a point just off the middle of each edge on the area's own side. */
+function samplesOf(area: PlanArea): readonly PlanPoint[] {
   const points: PlanPoint[] = [];
-  for (let i = 0; i < ring.length; i++) {
-    const a = ring[i]!, b = ring[(i + 1) % ring.length]!;
-    const length = Math.hypot(b.x - a.x, b.z - a.z);
-    if (length < 1e-9) continue;
-    const mid = { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 };
-    const normal = { x: -(b.z - a.z) / length, z: (b.x - a.x) / length };
-    const reach = Math.min(0.01, length / 4);
-    for (const sign of [1, -1]) {
-      const p = { x: mid.x + normal.x * reach * sign, z: mid.z + normal.z * reach * sign };
-      if (strictlyInside(ring, p)) { points.push(p); break; }
+  for (const ring of [...area.outers, ...area.holes]) {
+    for (let i = 0; i < ring.length; i++) {
+      const a = ring[i]!, b = ring[(i + 1) % ring.length]!;
+      points.push(a);
+      const length = Math.hypot(b.x - a.x, b.z - a.z);
+      if (length < 1e-9) continue;
+      const mid = { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 };
+      const normal = { x: -(b.z - a.z) / length, z: (b.x - a.x) / length };
+      const reach = Math.min(0.01, length / 4);
+      for (const sign of [1, -1]) {
+        const p = { x: mid.x + normal.x * reach * sign, z: mid.z + normal.z * reach * sign };
+        if (strictlyInsideArea(area, p)) { points.push(p); break; }
+      }
     }
   }
   return points;
 }
 
+const edgesOf = (area: PlanArea) => [...area.outers, ...area.holes].flatMap((ring) => ring.map((a, i) => [a, ring[(i + 1) % ring.length]!] as const));
+
+/**
+ * Whether areas `a` and `b` share any area in plan -- not only edges or
+ * corners. A hole is no part of its area: an outline lying in a floor's
+ * hole, even along the hole's edge, does not overlap the floor.
+ */
+export function areasOverlap(a: PlanArea, b: PlanArea): boolean {
+  // Two outlines crossing each other always leave some of each on the same side.
+  const edgesB = edgesOf(b);
+  for (const [p, q] of edgesOf(a)) for (const [r, t] of edgesB) if (cross(p, q, r, t)) return true;
+  return samplesOf(a).some((p) => strictlyInsideArea(b, p)) || samplesOf(b).some((p) => strictlyInsideArea(a, p));
+}
+
 /** Whether outlines `a` and `b` share any area in plan -- not only edges or corners. */
 export function outlinesOverlap(a: readonly PlanPoint[], b: readonly PlanPoint[]): boolean {
   if (a.length < 3 || b.length < 3) return false;
-  for (let i = 0; i < a.length; i++) {
-    for (let j = 0; j < b.length; j++) {
-      if (cross(a[i]!, a[(i + 1) % a.length]!, b[j]!, b[(j + 1) % b.length]!)) return true;
-    }
-  }
-  if (a.some((p) => strictlyInside(b, p)) || b.some((p) => strictlyInside(a, p))) return true;
-  return justInside(a).some((p) => strictlyInside(b, p)) || justInside(b).some((p) => strictlyInside(a, p));
+  return areasOverlap({ outers: [a], holes: [] }, { outers: [b], holes: [] });
 }
 
-/** Whether `topology` shares area in plan with the outline `drawn`. */
+/** Whether `topology` shares area in plan with the outline `drawn` -- its holes are none of it. */
 export function faceOverlapsOutline(topology: ConstructionRegionTopology, drawn: readonly PlanPoint[]): boolean {
-  return faceOutlines(topology).some((outline) => outlinesOverlap(outline, drawn));
+  return drawn.length >= 3 && areasOverlap(faceArea(topology), { outers: [drawn], holes: [] });
+}
+
+/** Whether `topology` meets the outline `drawn` -- shares area with it, or comes within `reach` of it, holes' edges included. */
+export function faceTouchesOutline(topology: ConstructionRegionTopology, drawn: readonly PlanPoint[], reach: number): boolean {
+  if (faceOverlapsOutline(topology, drawn)) return true;
+  const face = faceArea(topology), mine = { outers: [drawn], holes: [] };
+  const near = (points: readonly PlanPoint[], edges: readonly (readonly [PlanPoint, PlanPoint])[]) =>
+    points.some((p) => edges.some(([a, b]) => distanceToOutline([a, b], p) <= reach));
+  return near([...face.outers, ...face.holes].flat(), edgesOf(mine)) || near(drawn, edgesOf(face));
 }

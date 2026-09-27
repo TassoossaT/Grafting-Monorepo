@@ -1,4 +1,4 @@
-import { DEFAULT_TOOL_PARAMS, faceOverlapsOutline, fitPath, floatingPlatformStructureType, hasTrait, outlineOf, planarDifference, planarUnion, platformStructureType, weldFreeEndsOnto } from "../../../../features/edit-construction/index.ts";
+import { DEFAULT_TOOL_PARAMS, faceOverlapsOutline, faceTouchesOutline, fitPath, floatingPlatformStructureType, hasTrait, outlineOf, planarDifference, planarUnion, platformStructureType, weldFreeEndsOnto } from "../../../../features/edit-construction/index.ts";
 import type { FittedEdge, ToolParamsByTool } from "../../../../features/edit-construction/index.ts";
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import type { ConstructionPosition, ConstructionRegionTopology } from "../../../../ports/index.ts";
@@ -120,7 +120,7 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
     const drawnOutline = outlineOf(contour);
     const overlapped = params.mode === "create" ? level.filter((t) => faceOverlapsOutline(t, drawnOutline)) : [];
     const straight = (t: ConstructionRegionTopology) => [...t.outerLoops, ...t.holes].flat().every((use) => use.geometry.kind !== "arc");
-    const touching = params.mode === "create" && !options.alone ? level.filter((t) => !overlapped.includes(t) && touchesContour(t, contour)) : [];
+    const touching = params.mode === "create" && !options.alone ? level.filter((t) => !overlapped.includes(t) && faceTouchesOutline(t, drawnOutline, WELD_TOLERANCE)) : [];
     // Already cut back to what the standing floors leave free: any overlap left is rounding, never cut again.
     const unites = !options.clipped && overlapped.length > 0 && contour.every((c) => c.geometry.kind !== "arc") && [...overlapped, ...touching].every(straight);
     const apart = new Set(unites ? [] : overlapped.flatMap((t) => ctx.runtime.cloudFor({ seed: t.surfaceKey, surfaceType: t.surfaceType }).surfaceKeys.map((key) => key.join("\u0000"))));
@@ -342,29 +342,6 @@ function commitUnion(
   });
   if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
   ctx.reportFeedback({ tone: "success", message: `Plataforma unida: ${regions.length} face(s) na elevação ${params.elevation}.` });
-}
-
-/**
- * Whether the drawn `contour` meets `topology`'s outline -- a corner of
- * either within reach of the other's boundary, or either inside the other --
- * in plan.
- */
-function touchesContour(topology: ConstructionRegionTopology, contour: readonly FittedEdge[]): boolean {
-  const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
-  const own = topology.outerLoops.flat().map((use) => [at.get(use.startNodeId)!, at.get(use.endNodeId)!] as const);
-  const drawn = contour.map((edge) => [edge.start, edge.end] as const);
-  const near = (p: { readonly x: number; readonly z: number }, segments: readonly (readonly [{ readonly x: number; readonly z: number }, { readonly x: number; readonly z: number }])[]) =>
-    segments.some(([a, b]) => {
-      const dx = b.x - a.x, dz = b.z - a.z, lengthSq = dx * dx + dz * dz;
-      const t = lengthSq < 1e-12 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.z - a.z) * dz) / lengthSq));
-      return Math.hypot(p.x - (a.x + dx * t), p.z - (a.z + dz * t)) <= WELD_TOLERANCE;
-    });
-  const inside = (p: { readonly x: number; readonly z: number }, segments: readonly (readonly [{ readonly x: number; readonly z: number }, { readonly x: number; readonly z: number }])[]) => {
-    let crossings = 0;
-    for (const [a, b] of segments) if ((a.z > p.z) !== (b.z > p.z) && p.x < a.x + ((p.z - a.z) * (b.x - a.x)) / (b.z - a.z)) crossings += 1;
-    return crossings % 2 === 1;
-  };
-  return drawn.some(([p]) => near(p, own) || inside(p, own)) || own.some(([p]) => near(p, drawn) || inside(p, drawn));
 }
 
 /** Polygon entry point retained for callers that already have explicit corners. */
