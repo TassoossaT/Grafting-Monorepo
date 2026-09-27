@@ -1,6 +1,6 @@
 import { curvePick, globalHandleOf, isSpineEdge, spineComponent, spineMemberOf, structureTypeFor, type HandleFocus } from "../../../../features/edit-construction/index.ts";
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
-import type { ConstructionPosition } from "../../../../ports/index.ts";
+import type { ConstructionPosition, ConstructionRegionTopology } from "../../../../ports/index.ts";
 import { pointerAtHeight } from "./pointer-ray.ts";
 import { spineBodyTarget } from "./spine-body-target.ts";
 import type { PointerSample, ToolContext } from "./tool-context.ts";
@@ -18,13 +18,72 @@ const KEEP = 1.8;
 const keyOf = (surfaceKey: readonly string[]) => surfaceKey.join("\u0000");
 export const NO_FOCUS: HandleFocus = Object.freeze({ faces: new Set<string>(), spineNodes: new Set<string>() });
 
+/** Whether `p` is inside `ring` in plan. */
+function insideRing(ring: readonly ConstructionPosition[], p: { readonly x: number; readonly z: number }): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[i]!, b = ring[j]!;
+    if ((a.z > p.z) !== (b.z > p.z) && p.x < ((b.x - a.x) * (p.z - a.z)) / (b.z - a.z) + a.x) inside = !inside;
+  }
+  return inside;
+}
+
+/**
+ * Where the pointer's ray first meets the face `topology` -- its plane, within
+ * its outline and out of its holes -- as the distance along the ray and the
+ * point; `undefined` when it passes by. The face's own geometry is asked, not
+ * whatever the renderer's pick met first: a ramp lying on the ground, or a
+ * floor the ground was cut round, is found under the pointer all the same.
+ */
+function rayMeets(sample: PointerSample, topology: ConstructionRegionTopology): { readonly t: number; readonly point: ConstructionPosition } | undefined {
+  const ray = sample.ray;
+  if (!ray) return undefined;
+  const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
+  const ringOf = (loop: ConstructionRegionTopology["outerLoops"][number]) => loop.map((use) => at.get(use.startNodeId)!);
+  const outer = topology.outerLoops.map(ringOf);
+  const points = outer.flat();
+  if (points.length < 3) return undefined;
+  // The face's plane, by Newell's method over its outline.
+  let nx = 0, ny = 0, nz = 0;
+  for (const ring of outer) for (let i = 0; i < ring.length; i++) {
+    const a = ring[i]!, b = ring[(i + 1) % ring.length]!;
+    nx += (a.y - b.y) * (a.z + b.z);
+    ny += (a.z - b.z) * (a.x + b.x);
+    nz += (a.x - b.x) * (a.y + b.y);
+  }
+  const length = Math.hypot(nx, ny, nz);
+  if (length < 1e-12) return undefined;
+  const n = { x: nx / length, y: ny / length, z: nz / length };
+  const p0 = points[0]!;
+  const facing = n.x * ray.direction.x + n.y * ray.direction.y + n.z * ray.direction.z;
+  if (Math.abs(facing) < 1e-9) return undefined;
+  const t = (n.x * (p0.x - ray.origin.x) + n.y * (p0.y - ray.origin.y) + n.z * (p0.z - ray.origin.z)) / facing;
+  if (t <= 0) return undefined;
+  const point = { x: ray.origin.x + ray.direction.x * t, y: ray.origin.y + ray.direction.y * t, z: ray.origin.z + ray.direction.z * t };
+  if (!outer.some((ring) => insideRing(ring, point)) || topology.holes.map(ringOf).some((ring) => insideRing(ring, point))) return undefined;
+  return { t, point };
+}
+
+/** The face of a type `owns` accepts that `sample` is over: the nearest its ray meets, else the one the renderer's pick met. */
+function faceUnder(ctx: ToolContext, sample: PointerSample, owns: (surfaceType: string) => boolean): { readonly topology: ConstructionRegionTopology; readonly point: ConstructionPosition } | undefined {
+  const owned = ctx.runtime.getAllRegionTopologies().filter((topology) => owns(topology.surfaceType));
+  let best: { topology: ConstructionRegionTopology; point: ConstructionPosition; t: number } | undefined;
+  for (const topology of owned) {
+    const met = rayMeets(sample, topology);
+    if (met && (!best || met.t < best.t)) best = { topology, ...met };
+  }
+  if (best) return best;
+  const picked = sample.surfaceRef === undefined ? undefined : owned.find((candidate) => surfaceRefFromNodeSet(candidate.surfaceKey) === sample.surfaceRef);
+  return picked && { topology: picked, point: sample.point };
+}
+
 /** The structure of a type `owns` accepts that `sample` is over, if any. */
 function focusUnder(ctx: ToolContext, sample: PointerSample, owns: (surfaceType: string) => boolean): HandleFocus | undefined {
-  const topology = sample.surfaceRef === undefined ? undefined
-    : ctx.runtime.getAllRegionTopologies().find((candidate) => surfaceRefFromNodeSet(candidate.surfaceKey) === sample.surfaceRef);
-  if (!topology || !owns(topology.surfaceType)) return undefined;
+  const under = faceUnder(ctx, sample, owns);
+  if (!under) return undefined;
+  const { topology } = under;
   if (structureTypeFor(topology.surfaceType)?.spine === undefined) return { faces: new Set([keyOf(topology.surfaceKey)]), spineNodes: new Set() };
-  const body = spineBodyTarget(ctx, sample, undefined, owns);
+  const body = spineBodyTarget(ctx, { ...sample, point: under.point, surfaceRef: surfaceRefFromNodeSet(topology.surfaceKey) }, undefined, owns);
   if (!body?.sample.nodeId) return undefined;
   const graph = ctx.runtime.getGraphSnapshot();
   const spans = spineComponent(graph, [spineMemberOf(graph, body.sample.nodeId)]).edges.filter(isSpineEdge);

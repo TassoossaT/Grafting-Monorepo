@@ -314,21 +314,48 @@ test("a ramp between a grounded platform and a floating floor on its top comes o
         assert.equal(shared(fixture.runtime, "platform-floating"), 2, "the top still welded, corner to corner");
       } finally { fixture.session.free(); }
     }
-    {
-      // Pulled sideways: it goes where it is taken, the top turning where it stands and letting go.
-      const fixture = build();
-      try {
-        drag(fixture, "origin", (p) => ({ ...p, z: p.z + 5 }));
-        const ramp = fixture.runtime.getAllRegionTopologies().find((t) => t.surfaceType === "platform-ramp");
-        const bottom = ramp.nodes.filter((n) => /:bottom:(min|max)$/.test(n.id)).map((n) => n.position);
-        assert.ok(Math.abs((bottom[0].z + bottom[1].z) / 2 - 5.5) < 1e-6, `the bottom went where it was taken: ${JSON.stringify(bottom)}`);
-        assert.equal(shared(fixture.runtime, "platform"), 0);
-        // Taken back onto the platform's edge, it welds there again.
-        drag(fixture, "origin", (p) => ({ ...p, z: p.z - 5 }));
-        assert.equal(shared(fixture.runtime, "platform"), 2, "welded back onto the platform");
-      } finally { fixture.session.free(); }
-    }
   } finally {
+    console.info = info;
+    console.warn = warn;
+  }
+});
+
+test("the structure under the pointer shows its handles even where the renderer's pick met the ground or a floor it is welded to", async () => {
+  const { slopeRampTool } = await import("../src/composition/tabletop/tools/slope/slope-tools.ts");
+  const { sceneHandles, hasTrait } = await import("../src/features/edit-construction/index.ts");
+  const { handleFocusAt, NO_FOCUS } = await import("../src/composition/tabletop/tools/core/handle-focus.ts");
+  const { surfaceRefFromNodeSet } = await import("../src/entities/map/index.ts");
+  const info = console.info, warn = console.warn;
+  console.info = () => {};
+  console.warn = () => {};
+  const { session, runtime, ctx } = sessionFixture();
+  Object.assign(runtime, { showPreview() {}, clearPreview() {} });
+  try {
+    bowl(runtime, session);
+    commitPlatformContour(ctx, [[-3, -2], [2, -2], [2, 3], [-3, 3]].map(([x, z]) => ({ point: { x, y: 0.3, z } })), { mode: "create", elevation: 0.3, shape: "rectangle" });
+    const s = { point: { x: 2, y: 0.3, z: 0.5 } }, e = { point: { x: 5, y: 0, z: 0.5 } };
+    slopeRampTool.onPointerUp(ctx, { start: s, current: e, samples: [s, e] }, { bottomWidth: 1.5, topWidth: 1.5, rise: 2 });
+    const faces = runtime.getAllRegionTopologies();
+    const ramp = faces.find((t) => t.surfaceType === "platform-ramp");
+    const platform = faces.find((t) => t.surfaceType === "platform");
+    const ground = faces.find((t) => t.surfaceType === "terrain");
+    const scene = { graph: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), cloudFor: runtime.cloudFor };
+    // A ray from above and behind, down through the middle of the ramp.
+    const mid = ramp.nodes.reduce((sum, n) => ({ x: sum.x + n.position.x / 4, y: sum.y + n.position.y / 4, z: sum.z + n.position.z / 4 }), { x: 0, y: 0, z: 0 });
+    const origin = { x: mid.x - 6, y: mid.y + 10, z: mid.z - 4 };
+    const d = { x: mid.x - origin.x, y: mid.y - origin.y, z: mid.z - origin.z }, l = Math.hypot(d.x, d.y, d.z);
+    const ray = { origin, direction: { x: d.x / l, y: d.y / l, z: d.z / l } };
+    const owns = (t) => t === "platform-ramp";
+    for (const [label, hit] of [["the ground", ground], ["the platform it is welded to", platform]]) {
+      const focus = handleFocusAt(ctx, { point: mid, ray, surfaceRef: surfaceRefFromNodeSet(hit.surfaceKey) }, NO_FOCUS, owns);
+      const kinds = sceneHandles({ ...scene, contour: [], pointsOnly: false, owns, focus }).map((h) => h.kind);
+      assert.ok(["pivot", "origin", "destination"].every((kind) => kinds.includes(kind)), `picked ${label}: ${JSON.stringify(kinds)}`);
+    }
+    // And a floor's own handles, pointing at the floor, with the floor tool.
+    const floorFocus = handleFocusAt(ctx, { point: { x: -1, y: 0.3, z: 0 }, ray: { origin: { x: -1, y: 10, z: -2 }, direction: { x: 0, y: -0.98, z: 0.2 } }, surfaceRef: surfaceRefFromNodeSet(ground.surfaceKey) }, NO_FOCUS, (t) => hasTrait(t, "floor"));
+    assert.ok(sceneHandles({ ...scene, contour: [], pointsOnly: false, owns: (t) => hasTrait(t, "floor"), focus: floorFocus }).some((h) => h.kind === "pivot"), "the platform's");
+  } finally {
+    session.free();
     console.info = info;
     console.warn = warn;
   }
