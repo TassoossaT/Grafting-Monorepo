@@ -310,7 +310,8 @@ export function createStructureEditBehavior(options: StructureEditOptions): Stru
     ctx.reportFeedback({
       tone: "info",
       message:
-        plan.scope === "cloud"
+        plan.surfaceCount === 0 ? `${cloud.cloud.surfaceType}: nada se move por aqui nesta direção.`
+        : plan.scope === "cloud"
           ? `${cloud.cloud.surfaceType}: movendo ${plan.surfaceCount} ${plan.surfaceCount === 1 ? "superficie" : "superficies"} da nuvem.`
           : `${cloud.cloud.surfaceType}: ${plan.role}.`,
     });

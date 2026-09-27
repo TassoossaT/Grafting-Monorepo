@@ -150,3 +150,34 @@ test("the walls' own law holds every post upright wherever it is placed: a wall 
     }
   } finally { session.free(); }
 });
+
+test("in elevation mode a wall grabbed by its body rises whole -- its cloud, feet and tops alike, still upright", async () => {
+  const { surfaceRefFromNodeSet } = await import("../src/entities/map/index.ts");
+  for (const onPlatform of [false, true]) {
+    const fixture = onPlatform ? build() : sessionFixture();
+    const { runtime, ctx, calls, session } = fixture;
+    Object.assign(runtime, { showPreview() {}, clearPreview() {} });
+    try {
+      const y = onPlatform ? 2 : 0;
+      wall(fixture, { x: 1, y, z: 0 }, { x: 5, y, z: 0 });
+      wall(fixture, { x: 5, y, z: 0 }, { x: 5, y, z: 3 });
+      ctx.structureEditParams = { mode: "elevation" };
+      const face = wallsOf(runtime)[0];
+      // Pressed on the wall's face, halfway up.
+      const start = { point: { x: 3, y: y + 1.5, z: 0 }, surfaceRef: surfaceRefFromNodeSet(face.surfaceKey), screenX: 100, screenY: 300 };
+      const current = { ...start, screenY: 260 };
+      wallLineTool.onPointerDown(ctx, start, params);
+      wallLineTool.onPointerMove(ctx, { start, current, samples: [start, current] }, params);
+      wallLineTool.onPointerUp(ctx, { start, current, samples: [start, current] }, params);
+      const feedback = calls.feedback.filter(Boolean);
+      assert.notEqual(feedback.at(-1)?.tone, "error", JSON.stringify(feedback.at(-1)));
+      for (const w of wallsOf(runtime)) {
+        const ys = w.nodes.map((n) => n.position.y);
+        assert.equal(Math.min(...ys), y + 1, `${onPlatform ? "on a platform" : "on the ground"}: every wall of the cloud rose a metre: ${JSON.stringify(feedback.slice(-2))}`);
+        assert.equal(Math.max(...ys), y + 4);
+      }
+      // Joined to the platform, a solid floor, the walls carry it with them.
+      if (onPlatform) assert.deepEqual([...new Set(floorOf(runtime).nodes.map((n) => n.position.y))], [y + 1], "the platform carried whole");
+    } finally { session.free(); }
+  }
+});
