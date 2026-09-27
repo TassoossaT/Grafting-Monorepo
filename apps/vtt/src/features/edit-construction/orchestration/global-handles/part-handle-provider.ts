@@ -5,6 +5,7 @@ import type { GlobalHandle, GlobalHandleProvider, GlobalHandleScene } from "../.
 import { resolvePolicy, structureTypeFor } from "../../structure-types/index.ts";
 import type { EditTarget } from "../atomic-edit.ts";
 import { handleNodeName } from "./handle-name.ts";
+import { outlineOf } from "../../topology/plan-overlap.ts";
 
 /** How far outside a side or a corner its handle stands, so the part itself stays free to build against. */
 export const PART_HANDLE_OUT = 0.7;
@@ -30,43 +31,62 @@ function inside(ring: readonly Plan[], p: Plan): boolean {
   return hit;
 }
 
-/** One straight side of a face's outline: its first edge, where it runs, and which way is out. */
+/** One side of a face's outline: its first edge, where it runs, which way is out -- at its start, middle and end -- and where its middle is. */
 interface Side {
   readonly edgeId: string;
   readonly from: ConstructionPosition;
   readonly to: ConstructionPosition;
   readonly out: Plan;
+  readonly outFrom: Plan;
+  readonly outTo: Plan;
+  readonly mid: ConstructionPosition;
+  readonly arc: boolean;
 }
 
 /**
- * The straight sides of `topology`'s outer outline that no other face of
- * its own cloud shares -- the outline the cloud shows -- with collinear
- * pieces run together as one side. Curved edges are left to their own
- * curve handles.
+ * The sides of `topology`'s outer outline that no other face of its own
+ * cloud shares -- the outline the cloud shows -- with collinear pieces run
+ * together as one side. A curved edge is a side of its own, its middle on
+ * the curve and out square to it there.
  */
 function sidesOf(topology: ConstructionRegionTopology, shared: ReadonlySet<string>): readonly (readonly (readonly Side[])[])[] {
   const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
   return topology.outerLoops.map((loop) => {
-    const ring = loop.map((use) => at.get(use.startNodeId)!);
+    // Curves followed closely, so which side is out is read off the shape itself.
+    const ring = outlineOf(loop.map((use) => ({ start: at.get(use.startNodeId)!, end: at.get(use.endNodeId)!, geometry: use.geometry })));
+    const outward = (p: Plan, normal: Plan): Plan => (inside(ring, { x: p.x + normal.x * 1e-3, z: p.z + normal.z * 1e-3 }) ? { x: -normal.x, z: -normal.z } : normal);
     const pieces = loop.flatMap((use): Side[] => {
       const from = at.get(use.startNodeId)!, to = at.get(use.endNodeId)!;
+      const geometry = use.geometry;
+      if (geometry.kind === "arc") {
+        const [cx, cz] = geometry.center;
+        const radius = Math.hypot(from.x - cx, from.z - cz);
+        if (radius < 1e-6) return [];
+        const start = Math.atan2(from.z - cz, from.x - cx), end = Math.atan2(to.z - cz, to.x - cx);
+        const turn = (x: number) => ((x % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+        const sweep = geometry.clockwise ? -(turn(start - end) || 2 * Math.PI) : (turn(end - start) || 2 * Math.PI);
+        const halfway = start + sweep / 2;
+        const mid = { x: cx + Math.cos(halfway) * radius, y: (from.y + to.y) / 2, z: cz + Math.sin(halfway) * radius };
+        const radial = (p: Plan) => { const l = Math.hypot(p.x - cx, p.z - cz) || 1; return { x: (p.x - cx) / l, z: (p.z - cz) / l }; };
+        return [{ edgeId: use.edgeId, from, to, arc: true, mid, out: outward(mid, radial(mid)), outFrom: outward(from, radial(from)), outTo: outward(to, radial(to)) }];
+      }
       const length = Math.hypot(to.x - from.x, to.z - from.z);
-      if (use.geometry.kind === "arc" || length < 1e-6) return [];
+      if (length < 1e-6) return [];
       const normal = { x: (to.z - from.z) / length, z: -(to.x - from.x) / length };
-      const mid = { x: (from.x + to.x) / 2, z: (from.z + to.z) / 2 };
-      const out = inside(ring, { x: mid.x + normal.x * 1e-3, z: mid.z + normal.z * 1e-3 }) ? { x: -normal.x, z: -normal.z } : normal;
-      return [{ edgeId: use.edgeId, from, to, out }];
+      const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2, z: (from.z + to.z) / 2 };
+      const out = outward(mid, normal);
+      return [{ edgeId: use.edgeId, from, to, arc: false, mid, out, outFrom: out, outTo: out }];
     });
     // Runs of collinear pieces, each kept only where no other face of the cloud shares it.
     const runs: Side[][] = [];
     for (const piece of pieces) {
       const last = runs[runs.length - 1]?.at(-1);
-      const straight = last && last.to === piece.from && Math.abs(last.out.x * piece.out.z - last.out.z * piece.out.x) < STRAIGHT && last.out.x * piece.out.x + last.out.z * piece.out.z > 0;
+      const straight = last && !last.arc && !piece.arc && last.to === piece.from && Math.abs(last.out.x * piece.out.z - last.out.z * piece.out.x) < STRAIGHT && last.out.x * piece.out.x + last.out.z * piece.out.z > 0;
       if (straight) runs[runs.length - 1]!.push(piece); else runs.push([piece]);
     }
     if (runs.length > 1) {
       const first = runs[0]![0]!, last = runs[runs.length - 1]!.at(-1)!;
-      if (last.to === first.from && Math.abs(last.out.x * first.out.z - last.out.z * first.out.x) < STRAIGHT && last.out.x * first.out.x + last.out.z * first.out.z > 0) {
+      if (!last.arc && !first.arc && last.to === first.from && Math.abs(last.out.x * first.out.z - last.out.z * first.out.x) < STRAIGHT && last.out.x * first.out.x + last.out.z * first.out.z > 0) {
         runs[0] = [...runs.pop()!, ...runs[0]!];
       }
     }
@@ -112,7 +132,7 @@ export const partHandleProvider: GlobalHandleProvider = {
           for (const [index, run] of loop.entries()) {
             const from = run[0]!.from, to = run.at(-1)!.to, out = run[0]!.out;
             // The piece holding the side's middle is the one pushed; the type's own rule moves the rest of the side.
-            const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2, z: (from.z + to.z) / 2 };
+            const mid = run.length === 1 ? run[0]!.mid : { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2, z: (from.z + to.z) / 2 };
             const piece = run.find((candidate) => {
               const d = { x: candidate.to.x - candidate.from.x, z: candidate.to.z - candidate.from.z };
               const t = ((mid.x - candidate.from.x) * d.x + (mid.z - candidate.from.z) * d.z) / (d.x ** 2 + d.z ** 2);
@@ -130,7 +150,8 @@ export const partHandleProvider: GlobalHandleProvider = {
             if (nodeId === undefined) continue;
             const corner: PartGlobalHandle["target"] = { kind: "vertex", nodeId };
             if (!type.partHandle!(resolvePolicy(member, corner).role)) continue;
-            const bisector = { x: out.x + next[0]!.out.x, z: out.z + next[0]!.out.z };
+            // Out between the two sides as they leave the corner -- a curve's own way out there.
+            const bisector = { x: run.at(-1)!.outTo.x + next[0]!.outFrom.x, z: run.at(-1)!.outTo.z + next[0]!.outFrom.z };
             const length = Math.hypot(bisector.x, bisector.z) || 1;
             handles.push({ ...base, id: globalHandleId("corner", `${nodeId}@${name}`), kind: "corner", target: corner, pivot: to,
               position: { x: to.x + (bisector.x / length) * PART_HANDLE_OUT, y: to.y, z: to.z + (bisector.z / length) * PART_HANDLE_OUT }, motion: { kind: "plane" } });

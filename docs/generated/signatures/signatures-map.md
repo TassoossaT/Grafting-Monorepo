@@ -6765,6 +6765,13 @@ export function withOpeningKind(params: OpeningParams, kind: OpeningParams["open
   return kind === "door" ? { ...params, openingKind: "door", height: Math.max(params.height, 2) } : { ...params, openingKind: "window" };
 export const OPENING_KIND_COLOR: Readonly<Record<OpeningParams["openingKind"], number>> = Object.freeze({ window: 0x7dd3fc, door: 0xd97706 });
 
+// src/features/edit-construction/topology/arc-follow.ts
+export function arcsFollowing(
+  topologies: readonly ConstructionRegionTopology[],
+  moves: ReadonlyMap<string, ConstructionPosition>,
+  ): readonly { readonly edgeId: string; readonly geometry: ConstructionEdgeGeometry }[] {
+  const retypes = new Map<string, ConstructionEdgeGeometry>();
+
 // src/features/edit-construction/topology/bezier-curve.ts
 export const curvePoint = (p: ConstructionPosition): CurvePoint => [p.x, p.y, p.z];
 export const curvePosition = (p: CurvePoint): ConstructionPosition => ({ x: p[0], y: p[1], z: p[2] });

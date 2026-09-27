@@ -241,3 +241,41 @@ test("a ramp's corner handle opens or closes its own end alone, the other end ke
     assert.ok(Math.abs(width("bottom") - bottom) < 1e-9, "the bottom kept its width");
   } finally { session.free(); }
 });
+
+test("a floor's curved sides and the corners at their ends have handles too, and a push keeps every curve a true arc", async () => {
+  const { commitPlatformShape } = await import("../src/composition/tabletop/tools/platform/platform-contour-tool.ts");
+  const arcsTrue = (runtime) => runtime.getAllRegionTopologies().flatMap((t) => {
+    const at = new Map(t.nodes.map((n) => [n.id, n.position]));
+    return t.outerLoops.flat().filter((u) => u.geometry.kind === "arc").map((u) => {
+      const [cx, cz] = u.geometry.center, a = at.get(u.startNodeId), b = at.get(u.endNodeId);
+      return Math.abs(Math.hypot(a.x - cx, a.z - cz) - Math.hypot(b.x - cx, b.z - cz));
+    });
+  }).every((gap) => gap < 1e-6);
+  for (const [name, contour, sides, corners] of [
+    ["round", [
+      { start: { x: 2, y: 0, z: 0 }, end: { x: -2, y: 0, z: 0 }, geometry: { kind: "arc", center: [0, 0], clockwise: false } },
+      { start: { x: -2, y: 0, z: 0 }, end: { x: 2, y: 0, z: 0 }, geometry: { kind: "arc", center: [0, 0], clockwise: false } },
+    ], 2, 2],
+    ["one curved side", [
+      { start: { x: 0, y: 0, z: 0 }, end: { x: 4, y: 0, z: 0 }, geometry: { kind: "line" } },
+      { start: { x: 4, y: 0, z: 0 }, end: { x: 4, y: 0, z: 3 }, geometry: { kind: "arc", center: [3, 1.5], clockwise: false } },
+      { start: { x: 4, y: 0, z: 3 }, end: { x: 0, y: 0, z: 3 }, geometry: { kind: "line" } },
+      { start: { x: 0, y: 0, z: 3 }, end: { x: 0, y: 0, z: 0 }, geometry: { kind: "line" } },
+    ], 4, 4],
+  ]) {
+    const fixture = sessionFixture();
+    const { runtime, session, ctx, calls } = fixture;
+    try {
+      commitPlatformShape(ctx, contour, { elevation: 0, mode: "create", support: "floating" });
+      const handles = shownGlobalHandles(scene(runtime)).filter((h) => h.owner === "platform-floating");
+      assert.equal(handles.filter((h) => h.kind === "side").length, sides, `${name}: a side handle on every side, curved ones too`);
+      assert.equal(handles.filter((h) => h.kind === "corner").length, corners, `${name}: a corner handle at every corner`);
+      assert.ok(arcsTrue(runtime), `${name}: drawn true`);
+      // Pushed out: the handle on a curved side.
+      const curved = handles.find((h) => h.kind === "side" && Math.hypot(h.position.x, h.position.z) > 2.5 && h.position.x > 3.5) ?? handles.find((h) => h.kind === "side");
+      drag(platformContourTool, fixture, curved, [{ x: curved.position.x + curved.motion.direction.x * 0.5, y: 0, z: curved.position.z + curved.motion.direction.z * 0.5 }], platformContourTool.defaultParams());
+      assert.equal(calls.feedback.at(-1)?.tone, "success", `${name}: ${JSON.stringify(calls.feedback.at(-1))}`);
+      assert.ok(arcsTrue(runtime), `${name}: every curve still a true arc after the push`);
+    } finally { session.free(); }
+  }
+});

@@ -1,4 +1,5 @@
 import {
+  arcsFollowing,
   planEdit,
   planGlobalHandle,
   resolveCloudTopology,
@@ -104,11 +105,16 @@ function resolvedPart(ctx: ToolContext, edit: GlobalHandleEdit, scene: GlobalHan
   const plan = planEdit(cloud, { surfaceKey: edit.seed, target: edit.target, delta: edit.delta }, scene.graph, ctx.runtime);
   if (plan.kind !== "apply") throw new Error(plan.reason);
   const moves: { nodeId: string; position: ConstructionPosition }[] = [];
+  // Every curved edge the push moves an end of keeps its shape, carried along.
   const retypes: { edgeId: string; geometry: ConstructionEdgeGeometry }[] = [];
   for (const op of plan.ops) {
     if (op.kind === "move-vertex") moves.push({ nodeId: op.nodeId, position: op.position });
     else if (op.kind === "retype-edge") retypes.push({ edgeId: op.edgeId, geometry: op.geometry });
     else throw new Error(`Um lado ou canto não faz ${op.kind}.`);
+  }
+  const retyped = new Set(retypes.map((retype) => retype.edgeId));
+  for (const follow of arcsFollowing(scene.topologies, new Map(moves.map((move) => [move.nodeId, move.position])))) {
+    if (!retyped.has(follow.edgeId)) retypes.push({ edgeId: follow.edgeId, geometry: follow.geometry });
   }
   return { kind: "vertices", moves, retypes };
 }

@@ -7296,6 +7296,14 @@ Smaller brush = finer detail work = smaller faces.
 
 `params` switched to `kind`: a door is at least door-tall.
 
+### `function vtt.arc-follow.arcsFollowing(topologies: readonly ConstructionRegionTopology[], moves: ReadonlyMap<string, ConstructionPosition>): readonly { edgeId: string; geometry: ConstructionEdgeGeometry }[]`
+
+Curved edges carried along when their end nodes move: an arc whose ends
+both move alike moves whole, its centre with them; one whose ends move
+apart keeps its shape -- how far its centre stands off the chord, in
+chords -- round the new chord. Without this an arc keeps a centre its ends
+have left, and bends into another curve.
+
 ### `interface vtt.bezier-curve.RibbonRequest`
 
 ### `property vtt.bezier-curve.RibbonRequest.curve: CubicBezier`
