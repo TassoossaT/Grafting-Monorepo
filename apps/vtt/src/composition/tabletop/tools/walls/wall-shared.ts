@@ -313,7 +313,8 @@ function resolveColumn(
   const weldTolerance = Math.max(CORNER_WELD_TOLERANCE, correction);
   const corner = nearestCornerAt(ctx, point, weldTolerance);
   if (corner !== undefined) {
-    const top = { x: point.x, y: point.y + height, z: point.z };
+    // Straight up from where the corner landed -- never from the raw press, which would lean the column by however far it snapped.
+    const top = { x: corner.bottom.x, y: corner.bottom.y + height, z: corner.bottom.z };
     // The corner's own paired top (an existing wall column) wins outright.
     // A bare platform vertex has no top of its own -- what it welds the
     // post's *top* onto is still only ever another platform vertex, never

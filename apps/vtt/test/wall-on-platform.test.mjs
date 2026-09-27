@@ -94,3 +94,28 @@ test("walls joined to a platform go wherever it goes", () => {
     } finally { session.free(); }
   }
 });
+
+test("a wall corner snapped onto a corner stands straight up from where it landed, and stays upright through every edit after", () => {
+  const upright = (runtime) => wallsOf(runtime).every((w) => {
+    const at = new Map(w.nodes.map((n) => [n.id, n.position]));
+    return w.outerLoops.flat().every((use) => {
+      const a = at.get(use.startNodeId), b = at.get(use.endNodeId);
+      return Math.abs(a.y - b.y) < 1 || Math.hypot(a.x - b.x, a.z - b.z) < 1e-9;
+    });
+  });
+  const fixture = build();
+  const { runtime, ctx, calls, session } = fixture;
+  try {
+    // Pressed 0.2 off the platform's corners: the corners weld, and the posts rise from them.
+    wall(fixture, { x: 0.2, y: 2, z: 0.15 }, { x: 5.8, y: 2, z: -0.15 });
+    assert.ok(upright(runtime), "straight up");
+    const h = shownGlobalHandles({ graph: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), cloudFor: runtime.cloudFor }).find((x) => x.kind === "pivot" && hasTrait(x.owner, "floor"));
+    const start = { nodeId: h.id, point: h.position, screenX: 100, screenY: 300 };
+    const current = { point: { x: h.position.x + 1, y: h.position.y, z: h.position.z + 1 }, screenX: 200, screenY: 300 };
+    platformContourTool.onPointerDown(ctx, start, {});
+    platformContourTool.onPointerMove(ctx, { start, current, samples: [start, current] }, {});
+    platformContourTool.onPointerUp(ctx, { start, current, samples: [start, current] }, {});
+    assert.equal(calls.feedback.at(-1).tone, "success");
+    assert.ok(upright(runtime), "still straight up once the platform moved");
+  } finally { session.free(); }
+});
