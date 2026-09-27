@@ -2,6 +2,7 @@
 // test reaches has to spell out any import it needs at run time. A type-only
 // `@/` import is fine -- those are erased.
 import type {
+  ConstructionGraphSnapshot,
   ApplyPatchReplacementRequest,
   ChangeOrigin,
   ConstructionPatchOutcome,
@@ -13,7 +14,7 @@ import type {
 import type { AtomicEditOp, Effect, Reaction, ReactionId, ReactionRecord, ShapeChange } from "@/features/edit-construction";
 import type { TransactionResult } from "../tabletop-runtime.ts";
 
-import { runEffects } from "../../../features/edit-construction/index.ts";
+import { runEffects, settlePatch } from "../../../features/edit-construction/index.ts";
 import { timePhase } from "../commit-timing.ts";
 import { TABLETOP_REACTIONS, type TabletopReactionRuntime } from "./reactions.ts";
 import { shapeChangeOfRemoval, shapeChangeOfReplacement, topologiesOf } from "./shape-change.ts";
@@ -34,6 +35,7 @@ export interface EffectCommitRuntime extends TabletopReactionRuntime {
   applyPatchReplacement(request: ApplyPatchReplacementRequest, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome;
   removeSurface(request: { readonly surfaceKey: ConstructionSurfaceKey }, origin: ChangeOrigin, causeId: string): RegionEditOutcome;
   getAllRegionTopologies(): readonly ConstructionRegionTopology[];
+  getGraphSnapshot(): Pick<ConstructionGraphSnapshot, "nodes" | "edges">;
 }
 
 export type TabletopReactions = Readonly<Record<ReactionId, Reaction<TabletopReactionRuntime>>>;
@@ -95,7 +97,9 @@ export function commitPatchReplacement(
   return commitChange(runtime, options, () => {
     const before = topologiesOf(runtime, request.sourceSurfaceKeys);
     const carriedBefore = topologiesOf(runtime, options.carries ?? []);
-    const outcome = runtime.applyPatchReplacement(request, origin, options.transactionId);
+    // Whatever made the patch, each face it declares keeps its type's law.
+    const settled = { ...request, patch: settlePatch(request.patch, runtime.getGraphSnapshot()) };
+    const outcome = runtime.applyPatchReplacement(settled, origin, options.transactionId);
     options.afterward?.(outcome);
     if (carriedBefore.length > 0) dispatchEffects(runtime, movedEffects(runtime, carriedBefore, outcome.removedNodeIds, [], options.transactionId), options.reactions);
     return { value: outcome, change: shapeChangeOfReplacement(runtime, request, before, outcome, options.subtype) };

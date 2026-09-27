@@ -487,6 +487,8 @@ What committing needs of the runtime.
 
 ### `method vtt.effect-commit.EffectCommitRuntime.getFootprintCoverage(polygon: readonly (readonly [number, number])[]): readonly ConstructionCoveredRegion[]`
 
+### `method vtt.effect-commit.EffectCommitRuntime.getGraphSnapshot(): Pick<ConstructionGraphSnapshot, "nodes" | "edges">`
+
 ### `method vtt.effect-commit.EffectCommitRuntime.getRegionTopologiesInBounds(bounds: FillBounds & { seeds?: readonly CloudRequest[] }): readonly ConstructionRegionTopology[]`
 
 ### `method vtt.effect-commit.EffectCommitRuntime.getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined`
@@ -4820,6 +4822,20 @@ The free ends -- control nodes on exactly one span -- of the spine a patch touch
 
 `graphPatch` with every moved free end placed on the floor edge it lands on -- what a preview draws.
 
+### `function vtt.type-law.settleMoves(topologies: readonly ConstructionRegionTopology[], moved: ReadonlyMap<string, ConstructionPosition>, fixed: ReadonlySet<string>): Map<string, ConstructionPosition>`
+
+`moved` with every face it touches settled by its type's law -- the law's
+placements win, except over `fixed`: the nodes the gesture itself placed.
+A law that would move one of those is left unsettled there, for the type's
+own validation to refuse -- a wall is never sheared from its top by quietly
+undoing what was asked.
+
+### `function vtt.type-law.settlePatch(patch: ConstructionPatch, graph: Pick<ConstructionGraphSnapshot, "nodes" | "edges">): ConstructionPatch`
+
+`patch` with every face it declares settled by its type's law. Only the
+nodes the patch declares move: a node it only references already stands,
+and its own faces hold it.
+
 ### `interface vtt.weld-pause.WeldLink`
 
 One structure end joined to floors: welded into them -- both of its nodes
@@ -5436,6 +5452,10 @@ posts work through successive edges in the shared Rust solver.
 ### `function vtt.panel-structure.panelStructureType(surfaceType: string, label: string, creation: string, traits: readonly StructureTrait[]): StructureTypeDefinition`
 
 Builds one `extrude_path`-generated structure type on the shared panel model.
+
+### `function vtt.panel-structure.settlePanel(topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>): ReadonlyMap<string, ConstructionPosition>`
+
+A panel's law: every post stands straight up from its foot -- its top above it, at the top's own height.
 
 ### `function vtt.panel-structure.topRunsOf(topology: ConstructionRegionTopology): readonly PanelTopRun[]`
 
@@ -6895,6 +6915,14 @@ letting go of it is an explicit detach.
 ### `property vtt.structure-type.StructureTypeDefinition.roleFor: (topology: ConstructionRegionTopology, target: EditTarget) => string`
 
 Resolves what the grabbed part of this region means.
+
+### `property vtt.structure-type.StructureTypeDefinition.settle?: (topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>) => ReadonlyMap<string, ConstructionPosition>`
+
+The type's law: given where one face's nodes stand (`positions`), where
+the nodes it determines must stand instead -- a wall's post tops above
+their feet. Held in every creation and every edit, whatever made it
+(`orchestration/type-law.ts`), so no tool re-implements it and none can
+get round it; its placements win over what an edit asked for.
 
 ### `property vtt.structure-type.StructureTypeDefinition.spine?: SpineGeneration`
 

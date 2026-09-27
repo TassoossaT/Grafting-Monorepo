@@ -107,6 +107,14 @@ function isLevel(topology: ConstructionRegionTopology): boolean {
   return y !== undefined && topology.nodes.every((node) => Math.abs(node.position.y - y) < 1e-4);
 }
 
+/** How far from the segment `a`-`b` the point `p` is, in space -- not in plan, where an upright face's top and bottom runs are one line. */
+function distanceToSegment3D(p: ConstructionPosition, a: ConstructionPosition, b: ConstructionPosition): number {
+  const d = { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z };
+  const lengthSq = d.x * d.x + d.y * d.y + d.z * d.z;
+  const t = lengthSq < 1e-12 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * d.x + (p.y - a.y) * d.y + (p.z - a.z) * d.z) / lengthSq));
+  return Math.hypot(p.x - (a.x + d.x * t), p.y - (a.y + d.y * t), p.z - (a.z + d.z * t));
+}
+
 /** The boundary edge `point` landed on, or the body when it landed on none -- for a face that is not flat, grabbed from on it. */
 function edgeOrBodyAt(topology: ConstructionRegionTopology, point: ConstructionPosition): EditTarget {
   const positionOf = (id: string): ConstructionPosition | undefined =>
@@ -117,7 +125,8 @@ function edgeOrBodyAt(topology: ConstructionRegionTopology, point: ConstructionP
       const start = positionOf(edge.startNodeId);
       const end = positionOf(edge.endNodeId);
       if (start === undefined || end === undefined) continue;
-      const distance = distanceToSegmentXZ(point, start, end);
+      // Measured where the pointer touched the face: the run under it, or the one above -- never whichever comes first in plan.
+      const distance = distanceToSegment3D(point, start, end);
       if (distance > ON_FACE_EDGE_TOLERANCE) continue;
       if (closest === undefined || distance < closest.distance) closest = { edgeId: edge.edgeId, distance };
     }

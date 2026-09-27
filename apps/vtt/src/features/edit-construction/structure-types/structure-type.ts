@@ -416,6 +416,14 @@ export interface StructureTypeDefinition {
    * faces the move never reached. Derived moves do not propagate further.
    */
   readonly deriveMotion?: (topologies: readonly ConstructionRegionTopology[], positions: ReadonlyMap<string, ConstructionPosition>, context: MotionContext) => ReadonlyMap<string, ConstructionPosition>;
+  /**
+   * The type's law: given where one face's nodes stand (`positions`), where
+   * the nodes it determines must stand instead -- a wall's post tops above
+   * their feet. Held in every creation and every edit, whatever made it
+   * (`orchestration/type-law.ts`), so no tool re-implements it and none can
+   * get round it; its placements win over what an edit asked for.
+   */
+  readonly settle?: (topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>) => ReadonlyMap<string, ConstructionPosition>;
   /** Present when this type is generated along a spine. */
   readonly spine?: SpineGeneration;
   /**

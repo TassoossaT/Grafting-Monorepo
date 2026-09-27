@@ -3618,6 +3618,7 @@ export interface EffectCommitRuntime extends TabletopReactionRuntime {
   applyPatchReplacement(request: ApplyPatchReplacementRequest, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome;
   removeSurface(request: { readonly surfaceKey: ConstructionSurfaceKey }, origin: ChangeOrigin, causeId: string): RegionEditOutcome;
   getAllRegionTopologies(): readonly ConstructionRegionTopology[];
+  getGraphSnapshot(): Pick<ConstructionGraphSnapshot, "nodes" | "edges">;
   }
 export type TabletopReactions = Readonly<Record<ReactionId, Reaction<TabletopReactionRuntime>>>;
 export function dispatchEffects(
@@ -5664,6 +5665,13 @@ export function regenerateWithEndWelds(
   ): SpineRegeneration | undefined {
   if (!generation.endRung || options.keepsWelds) return generation.regenerate(input);
 
+// src/features/edit-construction/orchestration/type-law.ts
+export function settleMoves(topologies: readonly ConstructionRegionTopology[], moved: ReadonlyMap<string, ConstructionPosition>, fixed: ReadonlySet<string> = new Set()): Map<string, ConstructionPosition> {
+  const settled = new Map(moved);
+export function settlePatch(patch: ConstructionPatch, graph: Pick<ConstructionGraphSnapshot, "nodes" | "edges">): ConstructionPatch {
+  if (!patch.regions.some((region) => structureTypeFor(region.surfaceType)?.settle)) return patch;
+  const declared = new Map(patch.nodes.map((node) => [node.id, node.position]));
+
 // src/features/edit-construction/orchestration/weld-pause.ts
 export interface WeldLink {
   readonly rung: WeldRung;
@@ -5990,8 +5998,13 @@ export function panelRoleFor(topology: ConstructionRegionTopology, target: EditT
   }
 export function panelMotionInfluences(topology: ConstructionRegionTopology): readonly ConstructionMotionInfluence[] {
   const nodes = new Map(topology.nodes.map((node) => [node.id, node.position]));
+export function settlePanel(topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>): ReadonlyMap<string, ConstructionPosition> {
+  const at = (id: string) => positions.get(id) ?? topology.nodes.find((node) => node.id === id)!.position;
+  const settled = new Map<string, ConstructionPosition>();
 export function validatePanelMotion(topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>): string | undefined {
-  const original = new Map(topology.nodes.map((node) => [node.id, node.position]));
+  const at = (id: string) => positions.get(id) ?? topology.nodes.find((node) => node.id === id)!.position;
+  for (const { foot, top } of panelPosts(topology, new Map())) {
+  const lower = at(foot), upper = at(top);
 export function panelPolicyFor(role: EditRole): RolePolicy {
   switch (role) {
   case PANEL_ROLES.bottomCorner:

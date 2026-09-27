@@ -105,16 +105,40 @@ export function panelMotionInfluences(topology: ConstructionRegionTopology): rea
   });
 }
 
+/**
+ * A panel's posts: every boundary edge running from its bottom run to its
+ * top run -- read from the face's shape, not from being upright, so a post
+ * that leans is still found and set straight. Each as its foot and its top.
+ */
+function panelPosts(topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>): readonly { readonly foot: string; readonly top: string }[] {
+  const at = (id: string) => positions.get(id) ?? topology.nodes.find((node) => node.id === id)?.position;
+  const ys = topology.nodes.map((node) => at(node.id)!.y);
+  const reach = (Math.max(...ys) - Math.min(...ys)) / 2;
+  return topology.outerLoops.flat().flatMap((use) => {
+    const a = at(use.startNodeId), b = at(use.endNodeId);
+    if (!a || !b || Math.abs(a.y - b.y) <= reach || reach < 1e-4) return [];
+    return [a.y < b.y ? { foot: use.startNodeId, top: use.endNodeId } : { foot: use.endNodeId, top: use.startNodeId }];
+  });
+}
+
+/** A panel's law: every post stands straight up from its foot -- its top above it, at the top's own height. */
+export function settlePanel(topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>): ReadonlyMap<string, ConstructionPosition> {
+  const at = (id: string) => positions.get(id) ?? topology.nodes.find((node) => node.id === id)!.position;
+  const settled = new Map<string, ConstructionPosition>();
+  for (const { foot, top } of panelPosts(topology, positions)) {
+    const f = at(foot), t = at(top);
+    if (Math.hypot(f.x - t.x, f.z - t.z) > 1e-9) settled.set(top, { x: f.x, y: t.y, z: f.z });
+  }
+  return settled;
+}
+
 export function validatePanelMotion(topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>): string | undefined {
-  const original = new Map(topology.nodes.map((node) => [node.id, node.position]));
-  for (const link of panelMotionInfluences(topology)) {
-    const lower = positions.get(link.from) ?? original.get(link.from)!;
-    const upper = positions.get(link.to) ?? original.get(link.to)!;
+  const at = (id: string) => positions.get(id) ?? topology.nodes.find((node) => node.id === id)!.position;
+  for (const { foot, top } of panelPosts(topology, new Map())) {
+    const lower = at(foot), upper = at(top);
     if (upper.y - lower.y <= 1e-4) return "O movimento colapsaria ou inverteria uma parede conectada.";
-    const originalLower = original.get(link.from)!;
-    const originalUpper = original.get(link.to)!;
-    if (Math.abs(originalLower.x - originalUpper.x) < 1e-3 && Math.abs(originalLower.z - originalUpper.z) < 1e-3
-      && (Math.abs(lower.x - upper.x) > 1e-3 || Math.abs(lower.z - upper.z) > 1e-3)) {
+    // The law holds every post upright; one still leaning was not settled.
+    if (Math.abs(lower.x - upper.x) > 1e-3 || Math.abs(lower.z - upper.z) > 1e-3) {
       return "O movimento inclinaria uma parede vertical. Mova sua base ou ajuste apenas a elevacao.";
     }
   }
@@ -264,6 +288,7 @@ export function panelStructureType(
     roleFor: panelRoleFor,
     motionInfluences: panelMotionInfluences,
     validateMotion: validatePanelMotion,
+    settle: settlePanel,
     policyFor: panelPolicyFor,
     interactionOver: panelInteractionOver,
   });

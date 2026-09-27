@@ -119,3 +119,34 @@ test("a wall corner snapped onto a corner stands straight up from where it lande
     assert.ok(upright(runtime), "still straight up once the platform moved");
   } finally { session.free(); }
 });
+
+test("the walls' own law holds every post upright wherever it is placed: a wall made leaning is set straight by the next edit that reaches it", async () => {
+  const { runtime, session, ctx, calls } = sessionFixture();
+  Object.assign(runtime, { showPreview() {}, clearPreview() {} });
+  try {
+    // A leaning wall, put straight into the engine the way no tool may any more.
+    runtime.addPatch({
+      nodes: [
+        { id: "lean:a0", position: { x: 10, y: 0, z: 0 } }, { id: "lean:b0", position: { x: 14, y: 0, z: 0 } },
+        { id: "lean:b1", position: { x: 14.4, y: 3, z: 0.3 } }, { id: "lean:a1", position: { x: 10.4, y: 3, z: 0.3 } },
+      ],
+      edges: [
+        { edgeId: "lean:bottom", startNodeId: "lean:a0", endNodeId: "lean:b0", geometry: { kind: "line" } },
+        { edgeId: "lean:post-b", startNodeId: "lean:b0", endNodeId: "lean:b1", geometry: { kind: "line" } },
+        { edgeId: "lean:top", startNodeId: "lean:b1", endNodeId: "lean:a1", geometry: { kind: "line" } },
+        { edgeId: "lean:post-a", startNodeId: "lean:a1", endNodeId: "lean:a0", geometry: { kind: "line" } },
+      ],
+      regions: [{ regionId: "lean:face", boundary: ["lean:bottom", "lean:post-b", "lean:top", "lean:post-a"].map((edgeId) => ({ edgeId, reversed: false })), surfaceType: "wall-white", physical: true }],
+    });
+    const foot = { nodeId: "lean:a0", point: { x: 10, y: 0, z: 0 } };
+    const to = { point: { x: 10.5, y: 0, z: 0.5 } };
+    wallLineTool.onPointerDown(ctx, foot, params);
+    wallLineTool.onPointerMove(ctx, { start: foot, current: to, samples: [foot, to] }, params);
+    wallLineTool.onPointerUp(ctx, { start: foot, current: to, samples: [foot, to] }, params);
+    assert.notEqual(calls.feedback.filter(Boolean).at(-1)?.tone, "error", JSON.stringify(calls.feedback.filter(Boolean).at(-1)));
+    const at = new Map(runtime.getGraphSnapshot().nodes.map((n) => [n.id, n.position]));
+    for (const [f, t] of [["lean:a0", "lean:a1"], ["lean:b0", "lean:b1"]]) {
+      assert.ok(Math.hypot(at.get(f).x - at.get(t).x, at.get(f).z - at.get(t).z) < 1e-6, `${t} straight above ${f}: ${JSON.stringify([at.get(f), at.get(t)])}`);
+    }
+  } finally { session.free(); }
+});

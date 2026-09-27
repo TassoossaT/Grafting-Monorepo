@@ -1,3 +1,4 @@
+import { settleMoves } from "./type-law.ts";
 import type { BezierPort, ConstructionEdgeGeometry, ConstructionGraphSnapshot, RegionEditOutcome, ConstructionSessionPort, ConstructionPosition } from "@/ports";
 
 import type { AtomicEditOp, EditGesture } from "./atomic-edit.ts";
@@ -180,8 +181,10 @@ export function planEdit(
             if (!solved.has(nodeId)) solved.set(nodeId, position);
           }
         }
-        return solved;
+        // Every face the motion reached keeps its type's law -- never at the cost of what the gesture itself placed.
+        return settleMoves(topologies, solved, fixed);
       };
+      const fixed = new Set(seeds.map((seed) => seed.nodeId));
       let motionSeeds: readonly { nodeId: string; delta: ConstructionPosition }[] = seeds;
       let moved = solve(motionSeeds);
       // A rigid structure the gesture bent without meaning to is carried whole
@@ -198,6 +201,10 @@ export function planEdit(
           }),
         ];
         moved = solve(motionSeeds);
+      }
+      // Laws that cannot all hold -- a wall set straight bending the solid floor it carries -- refuse the edit rather than bend anything.
+      if (rigidCarries(topologies, moved, direct).size > 0) {
+        return { kind: "deny", role: policy.role, reason: "A edição deformaria uma estrutura sólida ligada a ela." };
       }
       let surfaceCount = 0;
       for (const topology of topologies) {
