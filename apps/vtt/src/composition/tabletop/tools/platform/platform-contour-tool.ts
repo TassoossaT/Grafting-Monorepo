@@ -1,4 +1,4 @@
-import { DEFAULT_TOOL_PARAMS, faceOverlapsOutline, fitPath, floatingPlatformStructureType, hasTrait, outlineOf, platformStructureType, weldFreeEndsOnto } from "../../../../features/edit-construction/index.ts";
+import { DEFAULT_TOOL_PARAMS, faceOverlapsOutline, fitPath, floatingPlatformStructureType, hasTrait, outlineOf, planarUnion, platformStructureType, weldFreeEndsOnto } from "../../../../features/edit-construction/index.ts";
 import type { FittedEdge, ToolParamsByTool } from "../../../../features/edit-construction/index.ts";
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import type { ConstructionPosition, ConstructionRegionTopology } from "../../../../ports/index.ts";
@@ -109,19 +109,24 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
     // Picking the terrain below a drawing plane is not an instruction to weld floors.
     const picked = new Set(pickedSamples.flatMap((s) => s.nodeId ? [s.nodeId] : []));
     const level = all.filter((t) => t.surfaceType === surfaceTypeOf(params) && t.nodes.every((n) => Math.abs(n.position.y - params.elevation) < 1e-4));
-    // A floor drawn over one of its own kind never joins it: one cloud's faces
-    // lying over each other mesh with holes where they cross. It stands apart
-    // -- its own cloud, sharing not one node -- and so does everything that
-    // floor's cloud holds.
+    // One cloud's faces never lie over each other: they mesh with holes where
+    // they cross. A floor drawn over one of its own kind at its height is
+    // united with it into one floor -- the U closed into a ring, one cloud,
+    // no face over another. Where that union cannot be taken exactly -- a
+    // curved edge on either side -- it stands apart instead: its own cloud,
+    // sharing not one node, and so does everything that floor's cloud holds.
     const drawnOutline = outlineOf(contour);
     const overlapped = params.mode === "create" ? level.filter((t) => faceOverlapsOutline(t, drawnOutline)) : [];
-    const apart = new Set(overlapped.flatMap((t) => ctx.runtime.cloudFor({ seed: t.surfaceKey, surfaceType: t.surfaceType }).surfaceKeys.map((key) => key.join("\u0000"))));
-    for (const t of overlapped) apart.add(t.surfaceKey.join("\u0000"));
+    const straight = (t: ConstructionRegionTopology) => [...t.outerLoops, ...t.holes].flat().every((use) => use.geometry.kind !== "arc");
+    const touching = params.mode === "create" ? level.filter((t) => !overlapped.includes(t) && touchesContour(t, contour)) : [];
+    const unites = overlapped.length > 0 && contour.every((c) => c.geometry.kind !== "arc") && [...overlapped, ...touching].every(straight);
+    const apart = new Set(unites ? [] : overlapped.flatMap((t) => ctx.runtime.cloudFor({ seed: t.surfaceKey, surfaceType: t.surfaceType }).surfaceKeys.map((key) => key.join("\u0000"))));
+    if (!unites) for (const t of overlapped) apart.add(t.surfaceKey.join("\u0000"));
     const apartNodes = new Set(level.filter((t) => apart.has(t.surfaceKey.join("\u0000"))).flatMap((t) => t.nodes.map((n) => n.id)));
     // A floor drawn against one of its own kind at its own height -- only
     // touching it -- joins it: the two become one floor, as extending would
     // make them, rather than two faces lying edge to edge unconnected.
-    const joins = params.mode === "create" ? level.filter((t) => !apart.has(t.surfaceKey.join("\u0000")) && touchesContour(t, contour)) : [];
+    const joins = params.mode === "create" ? [...(unites ? overlapped : []), ...touching.filter((t) => !apart.has(t.surfaceKey.join("\u0000")))] : [];
     const sources = params.mode === "create" ? joins : level;
     if (params.mode !== "create" && sources.length === 0) throw new Error("Nenhuma plataforma nessa elevação. Comece sobre a plataforma ou escolha a elevação correta.");
 
@@ -175,6 +180,10 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
     // at every point the other side actually declares, so a mid-span weld
     // becomes a real shared node before edges are ever compared.
     const standingRaw = sources.flatMap((t) => sourceEdges(t).flat());
+    if (unites) {
+      commitUnion(ctx, params, operationId, sources, contour, nodeAt, positionOf, () => [...nodes.values()]);
+      return;
+    }
     const clipPoints = [...new Set(clipEdges.flatMap((e) => [e.a,e.b]))].map((id) => ({ id, position: positionOf(id) }));
     const standingPoints = [...new Set(standingRaw.flatMap((e) => [e.a,e.b]))].map((id) => ({ id, position: positionOf(id) }));
     const standing = splitContourAtPoints(ctx.runtime, standingRaw, clipPoints, positionOf, WELD_TOLERANCE);
@@ -232,11 +241,65 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
       },
     });
     if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
-    ctx.reportFeedback({ tone: "success", message: overlapped.length > 0
+    ctx.reportFeedback({ tone: "success", message: overlapped.length > 0 && !unites
       ? `Plataforma sobreposta a outra: fica separada dela, na elevação ${params.elevation}.`
       : `Plataforma: ${regions.length} face(s) na elevação ${params.elevation}.` });
   } catch (error) { ctx.reportFeedback({ tone: "error", message: error instanceof Error ? error.message : String(error) }); }
 }
+/**
+ * `sources` and the drawn `contour` replaced by their union, as floors of
+ * the drawn type: every corner the union keeps where a floor already had
+ * one is that floor's own node -- so what is welded there stays welded --
+ * and the rest are new. Only straight edges come here: the union is taken
+ * on points.
+ */
+function commitUnion(
+  ctx: ToolContext,
+  params: Params,
+  operationId: string,
+  sources: readonly ConstructionRegionTopology[],
+  contour: readonly FittedEdge[],
+  nodeAt: (p: readonly [number, number]) => string,
+  positionOf: (id: string) => readonly [number, number],
+  created: () => readonly { id: string; position: ConstructionPosition }[],
+): void {
+  const polygonOf = (t: ConstructionRegionTopology) => {
+    const at = new Map(t.nodes.map((n) => [n.id, n.position]));
+    return [...t.outerLoops, ...t.holes].map((loop) => loop.map((use) => [at.get(use.startNodeId)!.x, at.get(use.startNodeId)!.z] as const));
+  };
+  const area = planarUnion(ctx.runtime, [contour.map((c) => [c.start.x, c.start.z] as const)], ...sources.map(polygonOf));
+  const used = new Set<string>();
+  const loopOf = (ring: readonly (readonly [number, number])[]): DirectedContourEdge[] => {
+    const ids = ring.slice(0, -1).map((p) => nodeAt(p)).filter((id, i, all) => id !== all[(i + all.length - 1) % all.length]);
+    for (const id of ids) used.add(id);
+    return ids.map((a, i) => ({ a, b: ids[(i + 1) % ids.length]!, geometry: { kind: "line" as const } }));
+  };
+  const builder = createBoundaryEdges(operationId, { kind: "private-when-full", runPrefix: operationId, existingUses: new Map() });
+  const regions = area.map((polygon, index) => ({
+    regionId: `${operationId}:face:${index}`,
+    boundary: windLoop(ctx.runtime, loopOf(polygon[0]!), positionOf, "boundary").map((e) => builder.use(e.a, e.b, e.geometry)),
+    holes: polygon.slice(1).map((hole) => windLoop(ctx.runtime, loopOf(hole), positionOf, "hole").map((e) => builder.use(e.a, e.b, e.geometry))),
+    surfaceType: surfaceTypeOf(params),
+    physical: true,
+  })).filter((region) => region.boundary.length >= 3);
+  if (regions.length === 0) throw new Error("O contorno precisa delimitar uma área.");
+  const { recorded } = commitPatchReplacement(ctx.runtime, {
+    operationId,
+    sourceSurfaceKeys: sources.map((t) => t.surfaceKey),
+    // Only the corners the union kept: a drawn corner it swallowed is no node at all.
+    patch: { nodes: created().filter((node) => used.has(node.id)), edges: builder.all(), regions },
+    footprintOutline: area[0]![0]!.slice(0, -1).map(([x, z]) => [x, z] as const),
+  }, {
+    transactionId: operationId,
+    afterward: (outcome) => {
+      const welds = weldFreeEndsOnto(ctx.runtime.getGraphSnapshot(), ctx.runtime.getAllRegionTopologies(), outcome.createdSurfaceKeys, `${operationId}:ends`);
+      if (welds) ctx.runtime.applyPatchReplacement(welds, "local", operationId);
+    },
+  });
+  if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
+  ctx.reportFeedback({ tone: "success", message: `Plataforma unida: ${regions.length} face(s) na elevação ${params.elevation}.` });
+}
+
 /**
  * Whether the drawn `contour` meets `topology`'s outline -- a corner of
  * either within reach of the other's boundary, or either inside the other --
