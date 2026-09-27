@@ -1,5 +1,5 @@
 import type { PreviewDescriptor, WallParams } from "@/features/edit-construction";
-import { hasTrait } from "../../../../features/edit-construction/index.ts";
+import { hasTrait, rejoinNodes, type WeldLink } from "../../../../features/edit-construction/index.ts";
 import type {
   ConstructionEdgeGeometry,
   ConstructionEdgeId,
@@ -9,7 +9,8 @@ import type {
 } from "@/ports";
 
 import { projectOntoLineXZ, xzDistance, pinnedToBaseline } from "../shapes/geometry-2d.ts";
-import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
+import { scopedToolId, type PointerSample, type ToolContext } from "../core/tool-context.ts";
+import { pointerAtHeight } from "../core/pointer-ray.ts";
 import { fitPath, type FittedEdge } from "../core/stroke-fitting.ts";
 import { boundaryUsage, type EdgeSharing } from "../core/boundary-edges.ts";
 import { brushSweptRegionFill } from "../shapes/preview-shapes.ts";
@@ -234,6 +235,67 @@ function nearestCornerAt(
   return undefined;
 }
 
+/**
+ * Where the pointer is, for a wall: on a floor it is over or right at the
+ * edge of, exactly at that floor's height -- read along the pointer's ray,
+ * never whatever the renderer's pick met first (the ground below a raised
+ * floor's edge, a wall standing in front) nor its sub-centimetre noise.
+ * Anywhere else, where it hit. Of several floors, the one the ray meets
+ * first.
+ */
+export function onFloorLevel(ctx: ToolContext, sample: PointerSample): ConstructionPosition {
+  let best: { readonly point: ConstructionPosition; readonly y: number } | undefined;
+  for (const floor of ctx.runtime.getAllRegionTopologies()) {
+    if (!hasTrait(floor.surfaceType, "floor")) continue;
+    const y = floor.nodes[0]?.position.y;
+    if (y === undefined || floor.nodes.some((node) => Math.abs(node.position.y - y) > 1e-6)) continue;
+    const point = sample.ray ? pointerAtHeight(sample, y) : { ...sample.point, y };
+    if (!sample.ray && Math.abs(sample.point.y - y) > 0.25) continue;
+    const at = new Map(floor.nodes.map((node) => [node.id, node.position]));
+    let inside = false;
+    let near = Infinity;
+    for (const loop of floor.outerLoops) {
+      for (const use of loop) {
+        const a = at.get(use.startNodeId)!, b = at.get(use.endNodeId)!;
+        if ((a.z > point.z) !== (b.z > point.z) && point.x < ((b.x - a.x) * (point.z - a.z)) / (b.z - a.z) + a.x) inside = !inside;
+        near = Math.min(near, projectOntoSegment(point, a, b).perp);
+      }
+    }
+    if (!inside && near > CORNER_WELD_TOLERANCE) continue;
+    // The ray meets the higher floor first.
+    if (!best || y > best.y) best = { point, y };
+  }
+  return best?.point ?? sample.point;
+}
+
+/**
+ * The straight side of a floor at `point`'s height that `point` lands on,
+ * within `tolerance` and clear of its corners -- where a wall's corner joins
+ * the floor partway along its outline -- with the point moved onto it.
+ */
+function floorSideAt(
+  ctx: ToolContext,
+  point: ConstructionPosition,
+  tolerance: number,
+): { readonly point: ConstructionPosition; readonly floor: ConstructionSurfaceKey } | undefined {
+  let best: { readonly point: ConstructionPosition; readonly floor: ConstructionSurfaceKey; readonly perp: number } | undefined;
+  for (const floor of ctx.runtime.getAllRegionTopologies()) {
+    if (!hasTrait(floor.surfaceType, "floor")) continue;
+    const at = new Map(floor.nodes.map((node) => [node.id, node.position]));
+    for (const use of [...floor.outerLoops, ...floor.holes].flat()) {
+      if (use.geometry.kind !== "line") continue;
+      const a = at.get(use.startNodeId)!, b = at.get(use.endNodeId)!;
+      if (Math.abs(a.y - point.y) > ELEVATION_WELD_TOLERANCE || Math.abs(b.y - point.y) > ELEVATION_WELD_TOLERANCE) continue;
+      const length = xzDistance(a, b);
+      if (length < 1e-6) continue;
+      const { t, perp, x, z } = projectOntoSegment(point, a, b);
+      if (perp > tolerance || t * length <= CORNER_WELD_TOLERANCE || (1 - t) * length <= CORNER_WELD_TOLERANCE) continue;
+      if (best === undefined || perp < best.perp) best = { point: { x, y: a.y + (b.y - a.y) * t, z }, floor: floor.surfaceKey, perp };
+    }
+  }
+  return best && { point: best.point, floor: best.floor };
+}
+
 function resolveColumn(
   ctx: ToolContext,
   point: ConstructionPosition,
@@ -242,6 +304,7 @@ function resolveColumn(
   index: number,
   causeId: string,
   correction: number,
+  onFloorSides: { nodeId: ConstructionNodeId; floor: ConstructionSurfaceKey }[] = [],
 ): WallColumn {
   const mint = () => ({
     bottomNodeId: `${idPrefix}:c${index}:bottom`,
@@ -268,6 +331,12 @@ function resolveColumn(
   const inserted = insertedColumnAt(ctx, point, mint, causeId, Math.max(CROSSING_TOLERANCE, correction));
   if (inserted !== undefined) return inserted;
   const { bottomNodeId, topNodeId } = mint();
+  // Partway along a floor's side: on it, and the floor is cut there once the wall stands, so the two share the node.
+  const side = floorSideAt(ctx, point, weldTolerance);
+  if (side !== undefined) {
+    onFloorSides.push({ nodeId: bottomNodeId, floor: side.floor });
+    return { bottomNodeId, topNodeId, bottom: side.point, top: { x: side.point.x, y: side.point.y + height, z: side.point.z } };
+  }
   return { bottomNodeId, topNodeId, bottom: point, top: { x: point.x, y: point.y + height, z: point.z } };
 }
 
@@ -279,7 +348,8 @@ function resolveColumn(
  * insertion still previews at the raw point; the commit itself is unaffected.
  */
 export function snappedEndpoint(ctx: ToolContext, point: ConstructionPosition, correction = 0): ConstructionPosition {
-  return nearestCornerAt(ctx, point, Math.max(CORNER_WELD_TOLERANCE, correction))?.bottom ?? point;
+  const tolerance = Math.max(CORNER_WELD_TOLERANCE, correction);
+  return nearestCornerAt(ctx, point, tolerance)?.bottom ?? floorSideAt(ctx, point, tolerance)?.point ?? point;
 }
 
 /**
@@ -388,8 +458,9 @@ export function commitWallContour(
   let committed;
   try {
     committed = commitChange(ctx.runtime, { transactionId: causeId }, () => {
+      const onFloorSides: { nodeId: ConstructionNodeId; floor: ConstructionSurfaceKey }[] = [];
       const columns = points.map((point, index) =>
-        resolveColumn(ctx, point, params.height, idPrefix, index, causeId, correction),
+        resolveColumn(ctx, point, params.height, idPrefix, index, causeId, correction, onFloorSides),
       );
       const contour: WallContour = { columns, geometries, closed };
       // Any number of walls may stand on one column, so a run keeps its own
@@ -401,6 +472,12 @@ export function commitWallContour(
       };
       const patch = wallPatch(ctx.tableId, contour, params.wallType, sharing);
       const added = ctx.runtime.addPatch(patch, "local", causeId);
+      // Each corner that landed partway along a floor's side: the floor -- and the ground against it -- cut there, sharing the wall's node.
+      if (onFloorSides.length > 0) {
+        const links: WeldLink[] = onFloorSides.map(({ nodeId, floor }) => ({ rung: { edgeId: "", startNodeId: nodeId, endNodeId: nodeId }, floors: [floor], welded: false }));
+        const cut = rejoinNodes(ctx.runtime.getAllRegionTopologies(), links, `${causeId}:floor`);
+        if (cut.request) ctx.runtime.applyPatchReplacement(cut.request, "local", causeId);
+      }
       return { value: added, change: shapeChangeOfAddition(ctx.runtime, patch, added) };
     });
   } catch (error) {

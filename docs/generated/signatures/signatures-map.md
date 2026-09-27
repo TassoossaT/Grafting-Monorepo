@@ -4982,9 +4982,15 @@ export function findWallSurfaceAt(ctx: ToolContext, point: ConstructionPosition)
   let best: { readonly surfaceKey: ConstructionSurfaceKey; readonly perp: number } | undefined;
   for (const span of wallSpans(ctx)) {
   const { perp } = projectOntoSegment(point, span.a, span.b);
+export function onFloorLevel(ctx: ToolContext, sample: PointerSample): ConstructionPosition {
+  let best: { readonly point: ConstructionPosition; readonly y: number } | undefined;
+  for (const floor of ctx.runtime.getAllRegionTopologies()) {
+  if (!hasTrait(floor.surfaceType, "floor")) continue;
+  const y = floor.nodes[0]?.position.y;
+  if (y === undefined || floor.nodes.some((node) => Math.abs(node.position.y - y) > 1e-6)) continue;
+  const point = sample.ray ? pointerAtHeight(sample, y) : { ...sample.point, y };
 export function snappedEndpoint(ctx: ToolContext, point: ConstructionPosition, correction = 0): ConstructionPosition {
-  return nearestCornerAt(ctx, point, Math.max(CORNER_WELD_TOLERANCE, correction))?.bottom ?? point;
-  }
+  const tolerance = Math.max(CORNER_WELD_TOLERANCE, correction);
 export function correctedWallCorners(
   ctx: ToolContext,
   samples: readonly ConstructionPosition[],

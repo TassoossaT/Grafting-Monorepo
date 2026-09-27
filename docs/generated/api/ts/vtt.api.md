@@ -3570,6 +3570,15 @@ simplification every other preview in this codebase already makes.
 The wall panel whose own centerline `point` lands closest to (XZ only,
 within WALL_PICK_TOLERANCE), or `undefined` if none qualify.
 
+### `function vtt.wall-shared.onFloorLevel(ctx: ToolContext, sample: PointerSample): ConstructionPosition`
+
+Where the pointer is, for a wall: on a floor it is over or right at the
+edge of, exactly at that floor's height -- read along the pointer's ray,
+never whatever the renderer's pick met first (the ground below a raised
+floor's edge, a wall standing in front) nor its sub-centimetre noise.
+Anywhere else, where it hit. Of several floors, the one the ray meets
+first.
+
 ### `function vtt.wall-shared.snappedEndpoint(ctx: ToolContext, point: ConstructionPosition, correction: number): ConstructionPosition`
 
 A read-only echo of resolveColumn's own corner magnet, for showing

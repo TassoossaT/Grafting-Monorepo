@@ -116,7 +116,8 @@ export function rejoinNodes(topologies: readonly ConstructionRegionTopology[], l
     }
   }
   // A floor's straight side an end node stands partway along, by the side's two nodes: it is cut there.
-  const cuts = new Map<string, string>();
+  // Every node cutting one side, with how far along the side -- from the side's lower node id -- it stands.
+  const cuts = new Map<string, { readonly id: string; readonly t: number }[]>();
   const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
   for (const id of new Set(links.flatMap(({ rung }) => [rung.startNodeId, rung.endNodeId]))) {
     const p = positions.get(id);
@@ -133,7 +134,13 @@ export function rejoinNodes(topologies: readonly ConstructionRegionTopology[], l
         const length = Math.sqrt(lengthSq);
         return t * length > 1e-4 && (1 - t) * length > 1e-4 && Math.hypot(p.x - (a.x + dx * t), p.z - (a.z + dz * t)) < 1e-6;
       });
-      if (side) cuts.set(pairKey(side.startNodeId, side.endNodeId), id);
+      if (side) {
+        const [low, high] = side.startNodeId < side.endNodeId ? [side.startNodeId, side.endNodeId] : [side.endNodeId, side.startNodeId];
+        const a = at.get(low)!, b = at.get(high)!;
+        const t = ((p.x - a.x) * (b.x - a.x) + (p.z - a.z) * (b.z - a.z)) / ((b.x - a.x) ** 2 + (b.z - a.z) ** 2);
+        const key = pairKey(low, high);
+        cuts.set(key, [...(cuts.get(key) ?? []), { id, t }].sort((m, n) => m.t - n.t));
+      }
     }
   }
   if (renamed.size === 0 && cuts.size === 0) return { request: undefined, joined: 0 };
@@ -152,8 +159,12 @@ export function rejoinNodes(topologies: readonly ConstructionRegionTopology[], l
     const walk = (loop: ConstructionRegionTopology["outerLoops"][number]) => loop.flatMap((use) => {
       const from = renamed.get(use.startNodeId) ?? use.startNodeId, to = renamed.get(use.endNodeId) ?? use.endNodeId;
       const cut = cuts.get(pairKey(use.startNodeId, use.endNodeId));
-      // Cut at the end node: two edges, each named after the edge it came from.
-      if (cut) return [put(`${operationId}:${use.edgeId}:a`, from, cut, use), put(`${operationId}:${use.edgeId}:b`, cut, to, use)];
+      // Cut at every end node on it, in order along the walk: a piece between each, named after the edge it came from.
+      if (cut) {
+        const forward = use.startNodeId < use.endNodeId ? cut : [...cut].reverse();
+        const stops = [from, ...forward.map((c) => c.id), to];
+        return stops.slice(1).map((stop, i) => put(`${operationId}:${use.edgeId}:${i}`, stops[i]!, stop, use));
+      }
       const touched = from !== use.startNodeId || to !== use.endNodeId;
       // An edge through a renamed node is a new edge; the face's other edges stay as they are.
       return [put(touched ? `${operationId}:${use.edgeId}` : use.edgeId, from, to, use)];
@@ -168,5 +179,5 @@ export function rejoinNodes(topologies: readonly ConstructionRegionTopology[], l
       ...(face.profile ? { profile: face.profile } : {}),
     });
   }
-  return { request: { operationId, sourceSurfaceKeys: sources, patch: { nodes: [], edges: [...edges.values()], regions } }, joined: renamed.size + cuts.size };
+  return { request: { operationId, sourceSurfaceKeys: sources, patch: { nodes: [], edges: [...edges.values()], regions } }, joined: renamed.size + [...cuts.values()].reduce((sum, list) => sum + list.length, 0) };
 }
