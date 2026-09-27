@@ -85,7 +85,7 @@ test("a spiral is an exact helix: every point on its circle, at one constant gra
   } finally { session.free(); }
 });
 
-test("a spiral is laid out centre, start, end: the start click sets radius and start, the turning sets direction and turns", () => {
+test("a spiral is laid out start, centre, end: the start click sets its start, the centre its radius, the turning its direction and turns", () => {
   const { ctx, runtime, session, calls } = sessionFixture();
   try {
     // Turned the negative way, three quarters round.
@@ -439,5 +439,66 @@ test("the rotate handle turns a free ramp round its middle, handles and all; Shi
     const raw = Math.atan2(now[2] - pivot.z, now[0] - pivot.x) - Math.atan2(was[2] - pivot.z, was[0] - pivot.x);
     const angle = Math.atan2(Math.sin(raw), Math.cos(raw));
     assert.ok(Math.abs(angle - Math.PI / 4) < 1e-6, `the span's own shape turned with it, snapped to 45 degrees: ${(angle * 180) / Math.PI}`);
+  } finally { session.free(); }
+});
+
+test("a spiral begun on a floor's edge leaves it square, curving to the side the pointer is on, and is welded there", async () => {
+  const { addFace } = await import("./platform-session-fixture.mjs");
+  const { controlSectionId, isSpineControlNodeId } = await import("../src/features/edit-construction/index.ts");
+  for (const side of [1, -1]) {
+    const { ctx, runtime, session, calls } = sessionFixture();
+    Object.assign(runtime, { showPreview() {}, clearPreview() {} });
+    try {
+      addFace(runtime, "floor", "platform-floating", [[0, 0], [4, 0], [4, 4], [0, 4]].map(([x, z], i) => ({ id: `floor:${i}`, position: { x, y: 0, z } })));
+      const params = { width: 1, rise: 3 };
+      const hover = (p) => { const s = { point: p }; slopeSpiralTool.previewFor({ start: s, current: s, samples: [s] }, params, ctx); return s; };
+      // Pressed just off the east edge: the start lands on it.
+      slopeSpiralTool.onClick(ctx, hover({ x: 4.1, y: 0, z: 2 }), params);
+      // Taken out and aside: the circle touches the edge's square line at the start, on the pointer's side, 2 wide.
+      slopeSpiralTool.onClick(ctx, hover({ x: 4.5, y: 0, z: 2 + 2 * side }), params);
+      const center = { x: 4, z: 2 + 2 * side };
+      // Turned half round, the way it leaves.
+      const from = Math.atan2(2 - center.z, 4 - center.x);
+      const way = side > 0 ? 1 : -1;
+      for (let i = 1; i <= 8; i += 1) hover({ x: center.x + 2 * Math.cos(from + way * Math.PI * i / 8), y: 0, z: center.z + 2 * Math.sin(from + way * Math.PI * i / 8) });
+      slopeSpiralTool.onClick(ctx, { point: { x: center.x + 2 * Math.cos(from + way * Math.PI), y: 0, z: center.z + 2 * Math.sin(from + way * Math.PI) } }, params);
+      const spans = slopeSpans(runtime);
+      assert.ok(spans.length > 0, JSON.stringify(calls.feedback));
+      const controls = runtime.getGraphSnapshot().nodes.filter((n) => isSpineControlNodeId(n.id));
+      const start = controls.find((n) => Math.abs(n.position.x - 4) < 1e-6 && Math.abs(n.position.z - 2) < 1e-6);
+      assert.ok(start, "the spiral starts on the edge, where it was pressed");
+      for (const p of controls) assert.ok(Math.abs(Math.hypot(p.position.x - center.x, p.position.z - center.z) - 2) < 1e-6, "every point on the circle the pointer picked");
+      // Square off the edge: its first span leaves along +x.
+      const first = spans.find((e) => e.startNodeId === start.id || e.endNodeId === start.id);
+      const handle = first.startNodeId === start.id ? first.curve.start : first.curve.end;
+      assert.ok(handle[0] > 0 && Math.abs(handle[2]) < 1e-6 * Math.abs(handle[0]) + 1e-9, `leaves square to the edge: ${JSON.stringify(handle)}`);
+      const floor = runtime.getAllRegionTopologies().find((t) => t.surfaceType === "platform-floating");
+      assert.ok(["min", "max"].every((s) => floor.nodes.some((n) => n.id === controlSectionId(start.id, s))), "welded into the floor");
+    } finally { session.free(); }
+  }
+});
+
+test("a spiral begun on a straight ramp's free end runs straight on from it before it curves", async () => {
+  const { slopeRampTool } = await import("../src/composition/tabletop/tools/slope/slope-tools.ts");
+  const { isSpineControlNodeId } = await import("../src/features/edit-construction/index.ts");
+  const { ctx, runtime, session, calls } = sessionFixture();
+  Object.assign(runtime, { showPreview() {}, clearPreview() {} });
+  try {
+    const s = { point: { x: 0, y: 0, z: 0 } }, e = { point: { x: 4, y: 0, z: 0 } };
+    slopeRampTool.onPointerUp(ctx, { start: s, current: e, samples: [s, e] }, { bottomWidth: 1, topWidth: 1, rise: 2 });
+    const params = { width: 1, rise: 3 };
+    const hover = (p) => { const sample = { point: p }; slopeSpiralTool.previewFor({ start: sample, current: sample, samples: [sample] }, params, ctx); return sample; };
+    slopeSpiralTool.onClick(ctx, hover({ x: 4, y: 2, z: 0 }), params);
+    // Aside, and a little behind: the way on is still the ramp's.
+    slopeSpiralTool.onClick(ctx, hover({ x: 3.5, y: 2, z: 2 }), params);
+    for (let i = 1; i <= 8; i += 1) hover({ x: 4 + 2 * Math.cos(-Math.PI / 2 + Math.PI * i / 8), y: 2, z: 2 + 2 * Math.sin(-Math.PI / 2 + Math.PI * i / 8) });
+    slopeSpiralTool.onClick(ctx, { point: { x: 4, y: 2, z: 4 } }, params);
+    const spans = slopeSpans(runtime);
+    assert.ok(spans.length > 0, JSON.stringify(calls.feedback));
+    const start = runtime.getGraphSnapshot().nodes.find((n) => isSpineControlNodeId(n.id) && Math.hypot(n.position.x - 4, n.position.z) < 1e-6);
+    assert.ok(start, "it starts at the ramp's end");
+    const first = spans.find((edge) => edge.startNodeId === start.id || edge.endNodeId === start.id);
+    const handle = first.startNodeId === start.id ? first.curve.start : first.curve.end;
+    assert.ok(handle[0] > 0 && Math.abs(handle[2]) < 1e-6, `straight on from the ramp: ${JSON.stringify(handle)}`);
   } finally { session.free(); }
 });

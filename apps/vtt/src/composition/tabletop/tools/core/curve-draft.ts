@@ -19,9 +19,10 @@ import { pointerAtHeight } from "./pointer-ray.ts";
  * - `connect`: two ends, each leaving square to the floor edge it lands on,
  *   and the curve between them follows (a curve build mode between
  *   oriented ends);
- * - `spiral`: centre, start, then turn the pointer round the centre in
- *   either direction -- every full circle adds a turn -- and click the end
- *   (a centre-ends spiral run).
+ * - `spiral`: start -- on a floor's edge or a ramp's end, as any start --
+ *   then the pointer taken aside picks the side it curves to and its radius,
+ *   the circle it leaves on square to that edge (or straight on from that
+ *   end); then turned round -- every full circle adds a turn -- to the end.
  *
  * Heights are never drawn point by point: the start takes the height of
  * what it was clicked on, and the end the height of the floor it is clicked
@@ -64,6 +65,8 @@ interface End {
   readonly sample: PointerSample;
   /** Plan direction square to the floor edge it landed on, pointing off the floor. */
   readonly out?: { readonly x: number; readonly z: number };
+  /** Whether it runs on from another structure's end: `out` is then the way on, never turned back. */
+  readonly joint?: boolean;
 }
 
 interface DraftState {
@@ -71,6 +74,8 @@ interface DraftState {
   ends: End[];
   /** Spiral only: how far the pointer has turned round the centre since the start click. */
   turning?: ReturnType<typeof createAngleTracker>;
+  /** Spiral only: the way round it must turn to leave its start the way the start faces -- absent for a start that faces nowhere. */
+  sign?: 1 | -1;
   /** A rise set with Shift, overriding the tool's own. */
   rise?: number;
   shift?: { readonly screenY: number; readonly base: number };
@@ -107,8 +112,35 @@ function tableOf(ctx: ToolContext): Pick<DraftState, "floors" | "jointAt"> {
  */
 function endAt(state: Pick<DraftState, "floors" | "jointAt">, sample: PointerSample, height: number, from?: ConstructionPosition): End {
   const joint = state.jointAt(sample);
-  if (joint) return { point: joint.mid, sample, out: joint.out };
+  if (joint) return { point: joint.mid, sample, out: joint.out, joint: true };
   return floorEndAt(state.floors, sample, height, from);
+}
+
+/**
+ * The circle a spiral begun at `start` runs round, the pointer at `aimed`:
+ * a start facing some way -- square off a floor's edge, or straight on from
+ * a ramp's end -- leaves that way, so the circle touches that line at the
+ * start, on the side the pointer is, as wide as the pointer is off the line;
+ * a start facing nowhere has the pointer for its centre. With the way round
+ * it must turn to leave as it faces.
+ */
+function spiralCircle(start: End, aimed: ConstructionPosition): { readonly center: ConstructionPosition; readonly radius: number; readonly sign?: 1 | -1 } | undefined {
+  const s = start.point;
+  const d = { x: aimed.x - s.x, z: aimed.z - s.z };
+  if (!start.out) {
+    const radius = Math.hypot(d.x, d.z);
+    return radius < 0.1 ? undefined : { center: { x: aimed.x, y: s.y, z: aimed.z }, radius };
+  }
+  // Off the floor or over it, whichever way the pointer is; on from a ramp's end always on.
+  const way = start.joint || d.x * start.out.x + d.z * start.out.z >= 0 ? start.out : { x: -start.out.x, z: -start.out.z };
+  let side = { x: -way.z, z: way.x };
+  if (d.x * side.x + d.z * side.z < 0) side = { x: -side.x, z: -side.z };
+  const radius = d.x * side.x + d.z * side.z;
+  if (radius < 0.1) return undefined;
+  const center = { x: s.x + side.x * radius, y: s.y, z: s.z + side.z * radius };
+  // Counter-clockwise round the centre, the start moves along (-(s-c).z, (s-c).x): that way or the other.
+  const ccw = { x: -(s.z - center.z) / radius, z: (s.x - center.x) / radius };
+  return { center, radius, sign: ccw.x * way.x + ccw.z * way.z >= 0 ? 1 : -1 };
 }
 
 /** A click's end near a floor's edge, else where the pointer is at `height`. */
@@ -170,10 +202,11 @@ export function createCurveDraftTool<Id extends ConstructionToolId>(options: Cur
     return floorLandingAt(state.floors, sample)?.height ?? floorUnder(state.floors, sample)?.nodes[0]?.position.y ?? startHeight(state) + (state.rise ?? options.riseOf(params));
   };
 
-  /** Where the spiral's pointer has turned it to; full circles add up. */
+  /** Where the spiral's pointer has turned it to; full circles add up -- the way it leaves its start, when that is set. */
   const spiralTurn = (state: DraftState, cursor: ConstructionPosition) => {
-    state.turning ??= createAngleTracker(state.ends[0]!.point, state.ends[1]!.point);
-    return state.turning.turn(cursor);
+    state.turning ??= createAngleTracker(state.ends[1]!.point, state.ends[0]!.point);
+    const turned = state.turning.turn(cursor);
+    return state.sign === undefined ? turned : state.sign * Math.abs(turned);
   };
 
   /** What finishing now would build, with `sample` as the last click or the pointer. */
@@ -205,9 +238,10 @@ export function createCurveDraftTool<Id extends ConstructionToolId>(options: Cur
       }
       case "spiral": {
         if (ends.length < 2) return undefined;
-        const [center, start] = ends;
+        const [start, center] = ends;
         const radius = Math.hypot(start!.point.x - center!.point.x, start!.point.z - center!.point.z);
-        const sweep = turned ?? state.turning?.turned ?? 0;
+        const tracked = state.turning?.turned ?? 0;
+        const sweep = turned ?? (state.sign === undefined ? tracked : state.sign * Math.abs(tracked));
         if (radius < 0.1 || Math.abs(sweep) < 1e-3) return undefined;
         const startAngle = Math.atan2(start!.point.z - center!.point.z, start!.point.x - center!.point.x);
         const result = ctx.runtime.curveBatch({ tolerance: 0.01, commands: [{
@@ -231,7 +265,7 @@ export function createCurveDraftTool<Id extends ConstructionToolId>(options: Cur
     const rise = curves.at(-1)!.points[3][1] - curves[0]!.points[0][1];
     const parts = [`comprimento ${run.toFixed(1)} m`, `subida ${rise.toFixed(2)} m`, `inclinação ${run > 0 ? ((Math.abs(rise) / run) * 100).toFixed(0) : "0"}%`];
     if (state.mode === "spiral" && state.ends.length >= 2) {
-      const [center, start] = state.ends;
+      const [start, center] = state.ends;
       parts.push(`raio ${Math.hypot(start!.point.x - center!.point.x, start!.point.z - center!.point.z).toFixed(2)} m`, `voltas ${(Math.abs(state.turning?.turned ?? 0) / (2 * Math.PI)).toFixed(2)}`);
     }
     const message = parts.join(" · ");
@@ -248,12 +282,12 @@ export function createCurveDraftTool<Id extends ConstructionToolId>(options: Cur
     const anchors = state.ends.map((end) => end.point);
     let curves: readonly CubicBezier[] = [];
     if (state.mode === "spiral" && state.ends.length === 1) {
-      // Centre only: the circle the start click will choose the radius of.
-      const center = state.ends[0]!.point;
-      const aimed = pointerAtHeight(current, center.y);
-      const radius = Math.hypot(aimed.x - center.x, aimed.z - center.z);
-      if (radius > 0.1) {
-        curves = ctx.runtime.curveBatch({ tolerance: 0.05, commands: [{ kind: "helix", center: xyz(center), radius, startAngle: Math.atan2(aimed.z - center.z, aimed.x - center.x), sweep: 2 * Math.PI, rise: 0 }] })[0]!.curves;
+      // The start only: the circle the pointer picks, leaving the start the way it faces.
+      const start = state.ends[0]!.point;
+      const circle = spiralCircle(state.ends[0]!, pointerAtHeight(current, start.y));
+      if (circle) {
+        const { center, radius, sign = 1 } = circle;
+        curves = ctx.runtime.curveBatch({ tolerance: 0.05, commands: [{ kind: "helix", center: xyz(center), radius, startAngle: Math.atan2(start.z - center.z, start.x - center.x), sweep: sign * 2 * Math.PI, rise: 0 }] })[0]!.curves;
       }
     } else {
       const draft = planned(ctx, state, current, params, turned);
@@ -291,7 +325,7 @@ export function createCurveDraftTool<Id extends ConstructionToolId>(options: Cur
     arc: ["Clique o início.", "Clique o fim.", "Puxe a curva e clique."],
     points: ["Clique o início.", "Clique os pontos por onde passa; clique de novo no último, ou Enter, para terminar."],
     connect: ["Clique a primeira ponta, de preferência na borda de um piso.", "Clique a outra ponta."],
-    spiral: ["Clique o centro.", "Clique o início: a distância é o raio.", "Gire em volta do centro no sentido desejado, cada volta completa soma uma volta, e clique o fim."],
+    spiral: ["Clique o início, de preferência na borda de um piso ou na ponta de uma rampa.", "Afaste o mouse para o lado em que ela curva: a distância é o raio. Clique.", "Gire no sentido da curva, cada volta completa soma uma volta, e clique o fim."],
   };
   const hint = (ctx: ToolContext, state: DraftState) => {
     const list = hints[state.mode];
@@ -316,7 +350,7 @@ export function createCurveDraftTool<Id extends ConstructionToolId>(options: Cur
         state.shift = undefined;
       }
       try {
-        const turned = state.mode === "spiral" && state.ends.length >= 2 ? spiralTurn(state, pointerAtHeight(current, state.ends[1]!.point.y)) : undefined;
+        const turned = state.mode === "spiral" && state.ends.length >= 2 ? spiralTurn(state, pointerAtHeight(current, state.ends[0]!.point.y)) : undefined;
         const key = [current.point.x.toFixed(2), current.point.z.toFixed(2), state.rise ?? "", current.surfaceRef ?? "", turned?.toFixed(3) ?? "", state.ends.length, width].join("|");
         if (state.last?.key === key) return state.last.preview;
         const preview = drawn(ctx, state, current, params, width, turned);
@@ -339,22 +373,27 @@ export function createCurveDraftTool<Id extends ConstructionToolId>(options: Cur
           return;
         }
         if (state.ends.length >= needed) {
-          if (state.mode === "spiral") spiralTurn(state, pointerAtHeight(sample, state.ends[1]!.point.y));
+          if (state.mode === "spiral") spiralTurn(state, pointerAtHeight(sample, state.ends[0]!.point.y));
           finish(ctx, state, sample, params);
           return;
         }
         const node = sample.nodeId ? ctx.runtime.getGraphSnapshot().nodes.find((n) => n.id === sample.nodeId) : undefined;
-        // The first click (and a spiral's start) takes the height of what it
-        // hit; an arc's second click is its end; points between are the owner's.
-        const height = state.ends.length === 0 || state.mode === "spiral" ? node?.position.y ?? sample.point.y
+        // A spiral's second click picks its circle: the centre, at the start's height.
+        if (state.mode === "spiral" && state.ends.length === 1) {
+          const circle = spiralCircle(state.ends[0]!, pointerAtHeight(sample, state.ends[0]!.point.y));
+          if (!circle) return;
+          state.ends.push({ point: circle.center, sample });
+          state.sign = circle.sign;
+          state.turning = undefined;
+          hint(ctx, state);
+          return;
+        }
+        // The first click takes the height of what it hit; an arc's second
+        // click is its end; points between are the owner's.
+        const height = state.ends.length === 0 ? node?.position.y ?? sample.point.y
           : state.mode === "arc" ? endHeight(state, sample, params) : startHeight(state);
         if (last && Math.hypot(sample.point.x - last.point.x, sample.point.z - last.point.z) < 0.1) return;
-        state.ends.push(state.ends.length === 0 || state.mode !== "spiral" ? endAt(state, sample, height, state.ends.at(-1)?.point) : { point: { ...sample.point, y: height }, sample });
-        if (state.mode === "spiral" && state.ends.length === 2) {
-          // The spiral starts at the start click's height; the centre is only a position.
-          state.ends[0] = { ...state.ends[0]!, point: { ...state.ends[0]!.point, y: height } };
-          state.turning = undefined;
-        }
+        state.ends.push(endAt(state, sample, height, state.ends.at(-1)?.point));
         hint(ctx, state);
       } catch (error) {
         clear(ctx);

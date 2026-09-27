@@ -2243,9 +2243,10 @@ mode -- the same modes whatever the spine generates:
 - `connect`: two ends, each leaving square to the floor edge it lands on,
   and the curve between them follows (a curve build mode between
   oriented ends);
-- `spiral`: centre, start, then turn the pointer round the centre in
-  either direction -- every full circle adds a turn -- and click the end
-  (a centre-ends spiral run).
+- `spiral`: start -- on a floor's edge or a ramp's end, as any start --
+  then the pointer taken aside picks the side it curves to and its radius,
+  the circle it leaves on square to that edge (or straight on from that
+  end); then turned round -- every full circle adds a turn -- to the end.
 
 Heights are never drawn point by point: the start takes the height of
 what it was clicked on, and the end the height of the floor it is clicked
