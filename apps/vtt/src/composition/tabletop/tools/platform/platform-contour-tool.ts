@@ -6,6 +6,7 @@ import { createBoundaryEdges, reverseGeometry } from "../core/boundary-edges.ts"
 import { commitPatchReplacement } from "../../effects/effect-commit.ts";
 import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext } from "../core/tool-context.ts";
 import { withStructureEditing } from "../core/structure-edit-behavior.ts";
+import { buildFrameAt, frameRectangle, frameStart, snappedInFrame, type BuildFrame } from "../core/build-frame.ts";
 import { polylineSegmentsPreview, segmentsPreview } from "../shapes/preview-shapes.ts";
 import { circleContour, previewOutline } from "../tower/tower-geometry.ts";
 import { groupLoopsByContainment, splitContourAtPoints, weldedMerge, windLoop, type DirectedContourEdge } from "./platform-contour-merge.ts";
@@ -20,13 +21,25 @@ const WELD_TOLERANCE = 0.25;
  */
 const surfaceTypeOf = (params: Params): string =>
   (params.support === "floating" ? floatingPlatformStructureType : platformStructureType).surfaceType;
-const drafts = new WeakMap<object, { key: string; points: PointerSample[] }>();
+const drafts = new WeakMap<object, { key: string; points: PointerSample[]; frame?: BuildFrame }>();
 function draft(ctx: ToolContext, params: Params): PointerSample[] {
+  return draftOf(ctx, params).points;
+}
+function draftOf(ctx: ToolContext, params: Params): { key: string; points: PointerSample[]; frame?: BuildFrame } {
   const key = JSON.stringify(params);
   let current = drafts.get(ctx.runtime);
   if (!current || current.key !== key) { current = { key, points: [] }; drafts.set(ctx.runtime, current); }
-  return current.points;
+  return current;
 }
+/** The frame a gesture that began at `start` builds in, read once per gesture -- see `build-frame.ts`. */
+const frames = new WeakMap<PointerSample, BuildFrame>();
+function frameOf(ctx: ToolContext, start: PointerSample): BuildFrame {
+  let frame = frames.get(start);
+  if (!frame) { frame = buildFrameAt(ctx, start); frames.set(start, frame); }
+  return frame;
+}
+/** `sample` moved to `point`, keeping what it touched. */
+const at = (sample: PointerSample, point: ConstructionPosition): PointerSample => ({ ...sample, point });
 /**
  * A platform floor for a new storey usually starts by pointing at the top of
  * whatever is already there -- a wall, not necessarily another platform. Any
@@ -69,8 +82,15 @@ function lines(samples: readonly PointerSample[], elevation: number): readonly F
   if (points.length > 1 && points[0]!.x === points.at(-1)!.x && points[0]!.z === points.at(-1)!.z) points.pop();
   return points.map((start, i) => ({ start, end: points[(i+1)%points.length]!, geometry: { kind: "line" } }));
 }
-function rectangle(a: PointerSample, b: PointerSample, elevation: number): readonly PointerSample[] {
-  return [a, { point: { x: b.point.x, y: elevation, z: a.point.z } }, b, { point: { x: a.point.x, y: elevation, z: b.point.z } }];
+/**
+ * The rectangle dragged from `a` to `b`, laid along the frame the drag began
+ * in -- a structure's own sides next to it, else the way the camera looks --
+ * never the world's fixed axes. `undefined` when it has no area.
+ */
+function rectangle(ctx: ToolContext, a: PointerSample, b: PointerSample, elevation: number): readonly PointerSample[] | undefined {
+  const frame = frameOf(ctx, a);
+  const corners = frameRectangle(ctx, frame, frameStart(ctx, frame, a), b.point, elevation);
+  return corners && corners.map((corner, i) => (i === 0 ? at(a, corner) : { point: corner }));
 }
 /**
  * Commits the same directed line/arc contour vocabulary consumed by wall
@@ -127,9 +147,14 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
     // relationship an outer ring and its own hole always have. Reversing it
     // once here is what keeps the surviving edges after cancellation
     // decomposable into a single walk instead of a node with two ways in.
-    const clipEdges: DirectedContourEdge[] = contour.map((c) => params.mode === "cut"
-      ? { a: nodeAt([c.end.x,c.end.z]), b: nodeAt([c.start.x,c.start.z]), geometry: reverseGeometry(c.geometry) }
-      : { a: nodeAt([c.start.x,c.start.z]), b: nodeAt([c.end.x,c.end.z]), geometry: c.geometry });
+    // Whichever way it was drawn, the stroke is first wound the way every
+    // standing boundary is: a rectangle dragged the other way round would
+    // otherwise meet a shared side running the same way as its neighbour's,
+    // and the two could never cancel into one floor.
+    const drawn = windLoop(ctx.runtime, contour.map((c) => ({ a: nodeAt([c.start.x,c.start.z]), b: nodeAt([c.end.x,c.end.z]), geometry: c.geometry })), positionOf, "boundary");
+    const clipEdges: DirectedContourEdge[] = params.mode === "cut"
+      ? [...drawn].reverse().map((e) => ({ a: e.b, b: e.a, geometry: reverseGeometry(e.geometry) }))
+      : [...drawn];
     const sourceNodeIds = new Set(sources.flatMap((t) => t.nodes.map((n) => n.id)));
     if (params.mode === "extend" && !clipEdges.some((e) => sourceNodeIds.has(e.a) || sourceNodeIds.has(e.b))) {
       ctx.reportFeedback({ tone: "error", message: "Encoste o traço na borda da plataforma existente para ampliar." }); return;
@@ -227,8 +252,21 @@ function touchesContour(topology: ConstructionRegionTopology, contour: readonly 
 export function commitPlatformContour(ctx: ToolContext, samples: readonly PointerSample[], params: Params): void {
   commitPlatformShape(ctx, lines(samples,params.elevation),params,samples);
 }
+/** A polygon's next corner: its first starts the frame -- against a structure's side when next to one -- and every corner snaps in it. */
+function polygonCorner(ctx: ToolContext, params: Params, sample: PointerSample): PointerSample {
+  const current = draftOf(ctx, params);
+  if (!current.frame || current.points.length === 0) {
+    const frame = buildFrameAt(ctx, sample);
+    if (current.points.length === 0) current.frame = frame;
+    return at(sample, frameStart(ctx, frame, sample));
+  }
+  return sample.nodeId ? sample : at(sample, snappedInFrame(ctx, current.frame, sample.point));
+}
+
 const rawPlatformContourTool: ConstructionTool<"platform-contour"> = {
   id: "platform-contour",
+  // Snapped in the frame each shape is built in, never to the world's fixed grid.
+  useGridSnap: false,
   previewOnHover: true,
   defaultParams: () => DEFAULT_TOOL_PARAMS["platform-contour"],
   onCancel(ctx) { drafts.delete(ctx.runtime); },
@@ -238,7 +276,8 @@ const rawPlatformContourTool: ConstructionTool<"platform-contour"> = {
     const shape = params.shape ?? "rectangle";
     if (shape === "rectangle" && gesture.start.point.x === gesture.current.point.x && gesture.start.point.z === gesture.current.point.z) return undefined;
     if (shape === "circle") return segmentsPreview(previewOutline({ ...gesture.current.point, y: effective.elevation },params.radius ?? 2.5,48),COLOR);
-    const samples = shape === "rectangle" ? rectangle(gesture.start,gesture.current,effective.elevation) : [...points,...gesture.samples];
+    const samples = shape === "rectangle" ? rectangle(ctx,gesture.start,gesture.current,effective.elevation) : shape === "polygon" ? [...points,polygonCorner(ctx,params,gesture.current)] : [...points,...gesture.samples];
+    if (!samples) return undefined;
     const outline = samples.map((s) => ({ ...s.point,y: effective.elevation }));
     return polylineSegmentsPreview(outline.length > 2 ? [...outline,outline[0]!] : outline,COLOR);
   },
@@ -246,14 +285,15 @@ const rawPlatformContourTool: ConstructionTool<"platform-contour"> = {
     const shape = params.shape ?? "rectangle";
     if (shape === "circle") {
       const effective = parametersAt(ctx,sample,params);
-      commitPlatformShape(ctx,circleContour({ ...sample.point,y:effective.elevation },params.radius ?? 2.5),effective);
+      const center = frameStart(ctx,buildFrameAt(ctx,sample),sample);
+      commitPlatformShape(ctx,circleContour({ ...center,y:effective.elevation },params.radius ?? 2.5),effective);
     } else if (shape === "polygon") {
       const points = draft(ctx,params);
       const first = points[0];
       if (first && points.length >= 3 && Math.hypot(first.point.x-sample.point.x,first.point.z-sample.point.z)<0.25) {
         commitPlatformContour(ctx,points,parametersAt(ctx,first,params)); points.length = 0;
       } else {
-        points.push(sample);
+        points.push(polygonCorner(ctx,params,sample));
         ctx.reportFeedback({ tone: "info", message: "Marque os cantos e clique no primeiro para fechar. Esc cancela." });
       }
     } else {
@@ -266,10 +306,11 @@ const rawPlatformContourTool: ConstructionTool<"platform-contour"> = {
     if (gesture.samples.length < 2) return;
     const effective = parametersAt(ctx,gesture.start,params);
     if (shape === "rectangle") {
-      if (Math.abs(gesture.start.point.x-gesture.current.point.x)<1e-5 || Math.abs(gesture.start.point.z-gesture.current.point.z)<1e-5) {
+      const corners = rectangle(ctx,gesture.start,gesture.current,effective.elevation);
+      if (!corners) {
         ctx.reportFeedback({ tone: "error", message: "Arraste na diagonal para desenhar uma área." }); return;
       }
-      commitPlatformContour(ctx,rectangle(gesture.start,gesture.current,effective.elevation),effective);
+      commitPlatformContour(ctx,corners,effective);
     } else {
       const points = gesture.samples.map((s) => ({ ...s.point,y:effective.elevation }));
       const first = points[0]!, last = points.at(-1)!;

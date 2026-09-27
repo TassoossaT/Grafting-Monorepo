@@ -454,7 +454,7 @@ export class Render3dSceneAdapter implements SceneRenderPort {
     const action = result.data as { entity?: string; nodeId?: string } | undefined;
     const constructionAction = action?.entity === "road-branch-action" && action.nodeId
       ? { kind: "branch" as const, nodeId: action.nodeId } : undefined;
-    return { point: result.point, nodeId, surfaceRef, constructionAction, ...(result.ray ? { ray: result.ray } : {}) };
+    return { point: result.point, nodeId, surfaceRef, constructionAction, ...(result.ray ? { ray: result.ray } : {}), ...(result.forward ? { forward: result.forward } : {}) };
   }
 
   showPreview(descriptor: RenderPreviewDescriptor, channel = DEFAULT_PREVIEW_CHANNEL): void {

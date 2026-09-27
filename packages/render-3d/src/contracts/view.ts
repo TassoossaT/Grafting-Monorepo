@@ -43,6 +43,8 @@ export interface PickResult {
    * under the pointer rather than only where the ray hit.
    */
   readonly ray?: { readonly origin: Vec3; readonly direction: Vec3 };
+  /** The way the camera looks, unit length -- the same wherever on the screen the pointer is. */
+  readonly forward?: Vec3;
   /** The item's opaque caller data, carried through unchanged. */
   readonly data?: unknown;
 }

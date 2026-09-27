@@ -1933,6 +1933,46 @@ region), not a reason for the preview itself to special-case one tool.
 Only `applyRegion` differs between brushes; the brush -- preview included
 -- is the same for all of them.
 
+### `interface vtt.build-frame.BuildFrame`
+
+The directions something is built along -- never the world's fixed x and
+z. Built on or next to a structure, it follows that structure's side, so
+a turned platform is built on in its own turned directions; anywhere else
+it follows the way the camera looks. Any tool that lays out square shapes
+asks for one; what a frame is and where it comes from lives only here.
+
+### `property vtt.build-frame.BuildFrame.origin: ConstructionPosition`
+
+Where the frame's grid is anchored: a corner of the structure it follows, or the world's origin.
+
+### `property vtt.build-frame.BuildFrame.start?: ConstructionPosition`
+
+A point of a structure's side or corner `start` was drawn to, when it was near one -- the shape starts there, against it.
+
+### `property vtt.build-frame.BuildFrame.u: { x: number; z: number }`
+
+The frame's first direction in plan, unit length; `v` is square to it.
+
+### `property vtt.build-frame.BuildFrame.v: { x: number; z: number }`
+
+### `function vtt.build-frame.buildFrameAt(ctx: ToolContext, sample: PointerSample): BuildFrame`
+
+The frame a shape begun at `sample` is built in.
+
+### `function vtt.build-frame.frameRectangle(ctx: ToolContext, frame: BuildFrame, a: ConstructionPosition, b: ConstructionPosition, elevation: number): readonly ConstructionPosition[] | undefined`
+
+The rectangle from `a` to the pointer's `b`, its sides along the frame:
+the pointer gives the far corner, its size along each direction whole
+grid steps when the table snaps. `undefined` when it has no area.
+
+### `function vtt.build-frame.frameStart(ctx: ToolContext, frame: BuildFrame, sample: PointerSample): ConstructionPosition`
+
+Where a shape begun at `sample` starts: on the side it was drawn next to, else on the frame's grid.
+
+### `function vtt.build-frame.snappedInFrame(ctx: ToolContext, frame: BuildFrame, p: ConstructionPosition): ConstructionPosition`
+
+`p` on the frame's grid, when the table snaps to one; unchanged otherwise.
+
 ### `interface vtt.constrained-drag.ConstrainedDragOptions`
 
 ### `property vtt.constrained-drag.ConstrainedDragOptions.elevation?: boolean`
@@ -2618,6 +2658,10 @@ What the pointer resolved to at one instant -- `nodeId` present only when it hit
 
 ### `property vtt.tool-context.PointerSample.constructionAction?: { kind: "branch"; nodeId: string }`
 
+### `property vtt.tool-context.PointerSample.forward?: ConstructionPosition`
+
+The way the camera looks, when the view gave it -- see `build-frame.ts`.
+
 ### `property vtt.tool-context.PointerSample.nodeId?: string`
 
 ### `property vtt.tool-context.PointerSample.point: ConstructionPosition`
@@ -2655,6 +2699,10 @@ Ordered samples accumulated by the dispatcher; preview-only until pointer releas
 ### `interface vtt.tool-context.ToolContext`
 
 What every tool implementation is handed to act -- the runtime to call, undo/redo history for the one tool that uses it, and a salt generator so repeated commits never collide (mirrors `tabletop-entry.tsx`'s retired `generateCountRef`).
+
+### `property vtt.tool-context.ToolContext.gridUnit?: number`
+
+The grid's step, when snapping; 1 when absent.
 
 ### `property vtt.tool-context.ToolContext.history: EditHistoryStack`
 
@@ -2872,6 +2920,10 @@ Drag to sketch the centerline. Release commits one fitted curve transaction.
 What the pointer resolved to at one instant -- `nodeId` present only when it hit a node handle.
 
 ### `property vtt.road-body-target.RoadSnapTarget.constructionAction?: { kind: "branch"; nodeId: string }`
+
+### `property vtt.road-body-target.RoadSnapTarget.forward?: ConstructionPosition`
+
+The way the camera looks, when the view gave it -- see `build-frame.ts`.
 
 ### `property vtt.road-body-target.RoadSnapTarget.nodeId?: string`
 
@@ -9263,6 +9315,10 @@ against map geometry) is still useful for continuing an in-progress drag
 across the ground.
 
 ### `property vtt.scene-render-port.ScenePickResult.constructionAction?: { kind: "branch"; nodeId: string }`
+
+### `property vtt.scene-render-port.ScenePickResult.forward?: { x: number; y: number; z: number }`
+
+The way the camera looks -- the same wherever on the screen the pointer is.
 
 ### `property vtt.scene-render-port.ScenePickResult.nodeId?: string`
 

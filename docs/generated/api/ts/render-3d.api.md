@@ -607,6 +607,10 @@ The item's opaque caller data, carried through unchanged.
 
 Distance from the camera, in world units.
 
+### `property render-3d.PickResult.forward?: Vec3`
+
+The way the camera looks, unit length -- the same wherever on the screen the pointer is.
+
 ### `property render-3d.PickResult.itemId: string`
 
 Which item was hit.

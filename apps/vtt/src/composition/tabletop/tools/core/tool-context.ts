@@ -16,6 +16,8 @@ export interface PointerSample {
   readonly surfaceRef?: string;
   /** The pointer's ray from the camera, when the view gave one -- see `pointer-ray.ts`. */
   readonly ray?: { readonly origin: ConstructionPosition; readonly direction: ConstructionPosition };
+  /** The way the camera looks, when the view gave it -- see `build-frame.ts`. */
+  readonly forward?: ConstructionPosition;
 }
 
 /** A gesture in progress (or, for a stationary hover, one where `start === current`). */
@@ -63,6 +65,8 @@ export interface ToolContext {
    * any tool does with it is that tool's own business.
    */
   readonly snapToGrid: boolean;
+  /** The grid's step, when snapping; 1 when absent. */
+  readonly gridUnit?: number;
   /**
    * How a grab on an existing structure behaves -- shape/elevation mode and
    * the bezier handle options (`curveMode`/`curveAction`/`curveWidth`).

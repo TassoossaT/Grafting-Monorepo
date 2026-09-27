@@ -190,6 +190,8 @@ export interface ScenePickResult {
   readonly surfaceRef?: string;
   /** The pointer's ray, camera outward -- where the pointer is at any other height. */
   readonly ray?: { readonly origin: { readonly x: number; readonly y: number; readonly z: number }; readonly direction: { readonly x: number; readonly y: number; readonly z: number } };
+  /** The way the camera looks -- the same wherever on the screen the pointer is. */
+  readonly forward?: { readonly x: number; readonly y: number; readonly z: number };
 }
 
 /**

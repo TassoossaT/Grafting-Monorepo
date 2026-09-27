@@ -380,6 +380,7 @@ export function createThreeBackend(options: ThreeBackendOptions = {}): RenderBac
           point: toVec3(hit.point),
           distance: hit.distance,
           ray: { origin: toVec3(raycaster.ray.origin), direction: toVec3(raycaster.ray.direction) },
+          forward: toVec3(camera.getWorldDirection(new THREE.Vector3())),
           data: hit.object.userData.data,
         };
       }

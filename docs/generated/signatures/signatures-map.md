@@ -4096,6 +4096,28 @@ export function createBrushTool<Id extends BrushableToolId>(spec: BrushToolSpec<
   const regionFor = (gesture: ToolGesture, params: ToolParamsFor<Id>): BrushRegion => {
   const halfWidth = spec.halfWidth(params);
 
+// src/composition/tabletop/tools/core/build-frame.ts
+export interface BuildFrame {
+  /** Where the frame's grid is anchored: a corner of the structure it follows, or the world's origin. */
+  readonly origin: ConstructionPosition;
+  /** The frame's first direction in plan, unit length; `v` is square to it. */
+  readonly u: { readonly x: number; readonly z: number };
+export function buildFrameAt(ctx: ToolContext, sample: PointerSample): BuildFrame {
+  const side = sideNear(ctx, sample);
+export function snappedInFrame(ctx: ToolContext, frame: BuildFrame, p: ConstructionPosition): ConstructionPosition {
+  if (!ctx.snapToGrid) return p;
+  const unit = ctx.gridUnit ?? WORLD_UNIT;
+  const dx = p.x - frame.origin.x, dz = p.z - frame.origin.z;
+  const along = Math.round((dx * frame.u.x + dz * frame.u.z) / unit) * unit;
+  const across = Math.round((dx * frame.v.x + dz * frame.v.z) / unit) * unit;
+  return { x: frame.origin.x + frame.u.x * along + frame.v.x * across, y: p.y, z: frame.origin.z + frame.u.z * along + frame.v.z * across };
+export function frameStart(ctx: ToolContext, frame: BuildFrame, sample: PointerSample): ConstructionPosition {
+  return frame.start ?? snappedInFrame(ctx, frame, sample.point);
+export function frameRectangle(ctx: ToolContext, frame: BuildFrame, a: ConstructionPosition, b: ConstructionPosition, elevation: number): readonly ConstructionPosition[] | undefined {
+  const unit = ctx.gridUnit ?? WORLD_UNIT;
+  const dx = b.x - a.x, dz = b.z - a.z;
+  const step = (length: number) => (ctx.snapToGrid ? Math.round(length / unit) * unit : length);
+
 // src/composition/tabletop/tools/core/constrained-drag.ts
 export interface ConstrainedPosition {
   readonly position: ConstructionPosition;

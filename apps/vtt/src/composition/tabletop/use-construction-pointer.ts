@@ -152,6 +152,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       get tableId() {
         return optionsRef.current.tableId;
       },
+      gridUnit: GRID_SNAP_UNIT,
       get snapToGrid() {
         return optionsRef.current.snapToGrid;
       },
