@@ -4247,6 +4247,8 @@ export function floorUnder(floors: readonly ConstructionRegionTopology[], sample
   : sample.nodeId !== undefined && topology.nodes.some((node) => node.id === sample.nodeId));
 export function floorLandingAt(floors: readonly ConstructionRegionTopology[], sample: PointerSample): FloorLanding | undefined {
   const under = floorUnder(floors, sample);
+export function floorLandingToward(floors: readonly ConstructionRegionTopology[], sample: PointerSample, from: ConstructionPosition | undefined): FloorLanding | undefined {
+  const near = floorLandingAt(floors, sample);
 
 // src/composition/tabletop/tools/core/global-handle-gesture.ts
 export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample, ownsType: (surfaceType: string) => boolean, params?: CurveGestureOptions): CurveGesture | undefined {

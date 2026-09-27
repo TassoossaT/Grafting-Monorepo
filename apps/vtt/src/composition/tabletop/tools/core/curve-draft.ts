@@ -3,7 +3,7 @@ import type { ConstructionToolId, PreviewDescriptor, ToolParamsFor } from "../..
 import type { ConstructionPosition, ConstructionRegionTopology, CubicBezier, CurveHandles, CurvePoint, CurveResult } from "../../../../ports/index.ts";
 import { createRibbonMeshPreview } from "../shapes/ribbon-mesh-preview.ts";
 import type { ConstructionTool, PointerSample, ToolContext } from "./tool-context.ts";
-import { floorLandingAt, floorsOf, floorUnder } from "./floor-landing.ts";
+import { floorLandingAt, floorLandingToward, floorsOf, floorUnder } from "./floor-landing.ts";
 import { adoptsEnds, endJointNear, type EndJoint } from "../../../../features/edit-construction/index.ts";
 import { pointerAtHeight } from "./pointer-ray.ts";
 
@@ -100,16 +100,20 @@ function tableOf(ctx: ToolContext): Pick<DraftState, "floors" | "jointAt"> {
   };
 }
 
-/** A click's end: at a straight ramp's free end, running straight on from it; else as below. */
-function endAt(state: Pick<DraftState, "floors" | "jointAt">, sample: PointerSample, height: number): End {
+/**
+ * A click's end: at a straight ramp's free end, running straight on from it;
+ * else as below -- dropped anywhere on a floor coming `from` somewhere, at
+ * the edge it crosses to get there.
+ */
+function endAt(state: Pick<DraftState, "floors" | "jointAt">, sample: PointerSample, height: number, from?: ConstructionPosition): End {
   const joint = state.jointAt(sample);
   if (joint) return { point: joint.mid, sample, out: joint.out };
-  return floorEndAt(state.floors, sample, height);
+  return floorEndAt(state.floors, sample, height, from);
 }
 
 /** A click's end near a floor's edge, else where the pointer is at `height`. */
-function floorEndAt(floors: readonly ConstructionRegionTopology[], sample: PointerSample, height: number): End {
-  const landing = floorLandingAt(floors, sample);
+function floorEndAt(floors: readonly ConstructionRegionTopology[], sample: PointerSample, height: number, from?: ConstructionPosition): End {
+  const landing = floorLandingToward(floors, sample, from);
   return landing ? { point: landing.point, sample, out: landing.out } : { point: pointerAtHeight(sample, height), sample };
 }
 
@@ -176,7 +180,7 @@ export function createCurveDraftTool<Id extends ConstructionToolId>(options: Cur
     switch (state.mode) {
       case "straight": {
         if (ends.length < 1) return undefined;
-        const end = endAt(state, sample, height).point;
+        const end = endAt(state, sample, height, ends.at(-1)?.point).point;
         const a = ends[0]!.point;
         if (Math.hypot(end.x - a.x, end.z - a.z) < 0.1) return undefined;
         return { kind: "spans", spans: spansOf(arcThrough(ctx, a, { x: (a.x + end.x) / 2, y: (a.y + end.y) / 2, z: (a.z + end.z) / 2 }, end)) };
@@ -188,11 +192,11 @@ export function createCurveDraftTool<Id extends ConstructionToolId>(options: Cur
       }
       case "points": {
         if (ends.length < 1) return undefined;
-        return { kind: "points", points: [...ends.map((end) => end.point), endAt(state, sample, height).point] };
+        return { kind: "points", points: [...ends.map((end) => end.point), endAt(state, sample, height, ends.at(-1)?.point).point] };
       }
       case "connect": {
         if (ends.length < 1) return undefined;
-        const end = endAt(state, sample, height);
+        const end = endAt(state, sample, height, ends.at(-1)?.point);
         if (Math.hypot(end.point.x - ends[0]!.point.x, end.point.z - ends[0]!.point.z) < 0.1) return undefined;
         return { kind: "spans", spans: [connecting(ends[0]!, end)] };
       }
@@ -342,7 +346,7 @@ export function createCurveDraftTool<Id extends ConstructionToolId>(options: Cur
         const height = state.ends.length === 0 || state.mode === "spiral" ? node?.position.y ?? sample.point.y
           : state.mode === "arc" ? endHeight(state, sample, params) : startHeight(state);
         if (last && Math.hypot(sample.point.x - last.point.x, sample.point.z - last.point.z) < 0.1) return;
-        state.ends.push(state.ends.length === 0 || state.mode !== "spiral" ? endAt(state, sample, height) : { point: { ...sample.point, y: height }, sample });
+        state.ends.push(state.ends.length === 0 || state.mode !== "spiral" ? endAt(state, sample, height, state.ends.at(-1)?.point) : { point: { ...sample.point, y: height }, sample });
         if (state.mode === "spiral" && state.ends.length === 2) {
           // The spiral starts at the start click's height; the centre is only a position.
           state.ends[0] = { ...state.ends[0]!, point: { ...state.ends[0]!.point, y: height } };

@@ -226,3 +226,41 @@ test("ground, a platform, a ramp off it and a floating floor welded on the ramp'
     console.warn = warn;
   }
 });
+
+test("a ramp drawn from the ground and dropped well onto a platform stops at the edge it crosses and joins it there", async () => {
+  const { slopeRampTool, slopeCurveTool } = await import("../src/composition/tabletop/tools/slope/slope-tools.ts");
+  const { surfaceRefFromNodeSet } = await import("../src/entities/map/index.ts");
+  const { clickAll } = await import("./curve-draft-fixture.mjs");
+  const info = console.info;
+  const warn = console.warn;
+  console.info = () => {};
+  console.warn = () => {};
+  try {
+    for (const [label, draw] of [
+      ["straight", (ctx, s, e) => slopeRampTool.onPointerUp(ctx, { start: s, current: e, samples: [s, e] }, { bottomWidth: 1.5, topWidth: 1.5, rise: 2 })],
+      ["curved", (ctx, s, e) => clickAll(slopeCurveTool, ctx, [s, e], { width: 1.5, rise: 2, mode: "straight" })],
+    ]) {
+      for (const support of ["grounded", "floating"]) {
+        const { session, runtime, ctx, calls } = sessionFixture();
+        Object.assign(runtime, { showPreview() {}, clearPreview() {} });
+        try {
+          bowl(runtime, session);
+          const y = support === "floating" ? 2 : 0.3;
+          commitPlatformContour(ctx, [[-3, -2], [2, -2], [2, 3], [-3, 3]].map(([x, z]) => ({ point: { x, y, z } })), { mode: "create", elevation: y, shape: "rectangle", support });
+          const platform = runtime.getAllRegionTopologies().find((t) => t.surfaceType === (support === "floating" ? "platform-floating" : "platform"));
+          // From the ground east of it, dropped 2 inside its east edge, on the platform itself.
+          const start = { point: { x: 7, y: 0.04 * (49 + 0.25), z: 0.5 } };
+          const end = { point: { x: 0, y, z: 0.5 }, surfaceRef: surfaceRefFromNodeSet(platform.surfaceKey) };
+          draw(ctx, start, end);
+          assert.match(calls.feedback.at(-1).message, /1 ponta\(s\) soldada/, `${label} ${support}: ${JSON.stringify(calls.feedback.at(-1))}`);
+          const joined = runtime.getAllRegionTopologies().find((t) => t.surfaceKey.join() === platform.surfaceKey.join()) ?? runtime.getAllRegionTopologies().find((t) => t.surfaceType === platform.surfaceType);
+          const edgeNodes = joined.nodes.filter((n) => Math.abs(n.position.x - 2) < 1e-6);
+          assert.ok(edgeNodes.length > 2, `${label} ${support}: the ramp's end stands on the platform's east edge`);
+        } finally { session.free(); }
+      }
+    }
+  } finally {
+    console.info = info;
+    console.warn = warn;
+  }
+});

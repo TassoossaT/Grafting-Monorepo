@@ -1,7 +1,7 @@
 import { endJointNear, jointedRampPatch, planRamp, rampEdgeId, reweldFloors, type PlannedRamp, type RampEndPlan } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionPosition } from "../../../../ports/index.ts";
 import { commitPatchReplacement } from "../../effects/effect-commit.ts";
-import { floorLandingAt, floorsOf } from "../core/floor-landing.ts";
+import { floorLandingToward, floorsOf } from "../core/floor-landing.ts";
 import { pointerAtHeight } from "../core/pointer-ray.ts";
 import { scopedToolId, type PointerSample, type ToolContext } from "../core/tool-context.ts";
 import { slopeControlPoint } from "./slope-commit.ts";
@@ -27,8 +27,9 @@ function rampEnds(ctx: ToolContext, start: PointerSample, end: PointerSample, pa
   const startJoint = endJointNear(graph, topologies, (height) => pointerAtHeight(start, height));
   const endJoint = endJointNear(graph, topologies, (height) => pointerAtHeight(end, height),
     startJoint ? { own: new Set([startJoint.rung.startNodeId, startJoint.rung.endNodeId]) } : {});
-  const startLanding = startJoint ? undefined : floorLandingAt(floors, start);
-  let endLanding = endJoint ? undefined : floorLandingAt(floors, end);
+  // An end dropped anywhere on a floor stops at the edge the ramp crosses to reach it.
+  const startLanding = startJoint ? undefined : floorLandingToward(floors, start, end.point);
+  let endLanding = endJoint ? undefined : floorLandingToward(floors, end, startLanding?.point ?? start.point);
   if (endLanding && endLanding.topology === startLanding?.topology) endLanding = undefined;
   const from: RampEndPlan = startJoint ? { point: startJoint.mid, joint: startJoint }
     : startLanding ? { point: startLanding.point, landing: startLanding } : { point: slopeControlPoint(ctx, start) };

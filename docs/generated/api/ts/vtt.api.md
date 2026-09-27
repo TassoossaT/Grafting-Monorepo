@@ -2280,6 +2280,13 @@ Each floor is tried where the pointer's ray crosses that floor's own
 level, so aiming at a raised floor's edge from off it lands there, not
 wherever the ray met the ground behind it.
 
+### `function vtt.floor-landing.floorLandingToward(floors: readonly ConstructionRegionTopology[], sample: PointerSample, from: ConstructionPosition | undefined): FloorLanding | undefined`
+
+The floor edge `sample` lands on, as above -- or, when the pointer is on a
+floor but nowhere near its edge, the edge a straight line from `from`
+crosses to reach it: a ramp drawn from the ground onto a floor stops at
+the floor's edge and joins it there, wherever on the floor it was dropped.
+
 ### `function vtt.floor-landing.floorsOf(ctx: ToolContext): readonly ConstructionRegionTopology[]`
 
 Every floor on the table -- anything whose type carries the `floor` trait.
