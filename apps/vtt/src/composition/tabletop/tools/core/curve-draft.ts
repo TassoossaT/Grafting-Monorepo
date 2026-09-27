@@ -131,8 +131,11 @@ function connecting(start: End, end: End): { readonly curve: CubicBezier; readon
   const a = start.point, b = end.point;
   const reach = Math.hypot(b.x - a.x, b.z - a.z) / 3;
   const chord = { x: (b.x - a.x) / (3 * reach || 1), z: (b.z - a.z) / (3 * reach || 1) };
-  const leave = start.out ?? chord;
-  const arrive = end.out ?? { x: -chord.x, z: -chord.z };
+  // Square to each end's floor edge, on the side the other end is: off the floor, or over it.
+  const facing = (out: { readonly x: number; readonly z: number } | undefined, toward: { readonly x: number; readonly z: number }) =>
+    out && (out.x * toward.x + out.z * toward.z >= 0 ? out : { x: -out.x, z: -out.z });
+  const leave = facing(start.out, chord) ?? chord;
+  const arrive = facing(end.out, { x: -chord.x, z: -chord.z }) ?? { x: -chord.x, z: -chord.z };
   const dy = b.y - a.y;
   const curve: CubicBezier = { points: [
     xyz(a),

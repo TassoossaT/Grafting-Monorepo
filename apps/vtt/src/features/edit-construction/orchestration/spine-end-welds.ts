@@ -85,7 +85,10 @@ function landEnds(snapshot: ConstructionGraphSnapshot, graphPatch: ConstructionG
     nodes.set(id, { id, position: seat });
     // A span pinned straight or circular cannot also leave square: it is freed to curve.
     const { geometry: _pinned, ...curve } = span.curve;
-    edges.set(span.edgeId, { ...span, curve: { ...curve, [side]: leaving(span.curve[side], landing.out), mode: "aligned" } });
+    // Square to the edge, on the side the spine goes: off the floor, or up over it.
+    const handle = span.curve[side];
+    const way = handle[0] * landing.out.x + handle[2] * landing.out.z >= 0 ? landing.out : { x: -landing.out.x, z: -landing.out.z };
+    edges.set(span.edgeId, { ...span, curve: { ...curve, [side]: leaving(handle, way), mode: "aligned" } });
   }
   return { graphPatch: { ...graphPatch, nodes: [...nodes.values()], edges: [...edges.values()] }, shifted, landed, joined };
 }

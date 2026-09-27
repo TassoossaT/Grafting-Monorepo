@@ -154,20 +154,23 @@ test("hovering on a floor's edge before dragging previews nothing rather than a 
   } finally { session.free(); }
 });
 
-test("a ramp drawn from a floor's edge back over the floor does not weld there, so it never lies over its own floor", () => {
+test("a ramp may leave a floor's edge back over the floor, welded there, climbing over it to the next floor", () => {
   const fixture = sessionFixture();
   const { runtime, session, calls } = fixture;
   try {
     floor(runtime, "low", 0, 0);
     floor(runtime, "high", -6, 2, "platform-floating");
-    // Starts on the low floor by its east edge and runs west, across it, to the high floor.
+    // Starts on the low floor by its east edge and runs west, up over it, to the high floor.
     drawn({ point: { x: 3.9, y: 0, z: 2 } }, { point: { x: -2.1, y: 0, z: 2 } }, fixture);
     const last = calls.feedback.at(-1);
     assert.equal(last.tone, "success", JSON.stringify(last));
-    const low = faces(runtime, "platform")[0];
+    assert.match(last.message, /2 ponta/, "welded at both ends");
     const face = ramp(runtime);
-    assert.ok(!low.nodes.some((n) => face.nodes.some((m) => m.id === n.id)), "not welded into the floor it lies over");
-    close(centre(face, "top").x, -2, "the top still lands on the high floor's edge");
+    close(centre(face, "bottom").x, 4, "the bottom on the low floor's east edge");
+    close(centre(face, "top").x, -2, "the top on the high floor's edge");
+    for (const side of ["min", "max"]) {
+      assert.ok(faces(runtime, "platform")[0].nodes.some((n) => n.id === corner(face, "bottom", side).id), `the low floor shares bottom ${side}`);
+    }
   } finally { session.free(); }
 });
 
@@ -266,5 +269,23 @@ test("a straight ramp is also drawn by clicks: start, then end; Shift with the p
     slopeRampTool.onCancel(ctx);
     click(26, 20);
     assert.equal(faces(runtime, "platform-ramp").length, 1, "Escape dropped the second draft; its end click only started another");
+  } finally { session.free(); }
+});
+
+test("a ramp started on a floor's edge stays welded there however the pointer turns round it, off the floor or over it", async () => {
+  const { plannedRamp } = await import("../src/composition/tabletop/tools/slope/ramp-commit.ts");
+  const fixture = sessionFixture();
+  const { runtime, session, ctx } = fixture;
+  try {
+    floor(runtime, "low", 0, 0);
+    const start = { point: { x: 4.1, y: 0, z: 2 } };
+    for (const degrees of [0, 30, 60, 120, 150, 180, 210, 240, 300, 330]) {
+      const angle = (degrees * Math.PI) / 180;
+      const pointer = { point: { x: 4.1 + 5 * Math.cos(angle), y: 0, z: 2 + 5 * Math.sin(angle) } };
+      const plan = plannedRamp(ctx, start, pointer, params);
+      assert.equal(plan.welds.length, 1, `at ${degrees} degrees the start stays welded`);
+      const bottom = { x: (plan.corners.bottom.min.x + plan.corners.bottom.max.x) / 2 };
+      close(bottom.x, 4, `at ${degrees} degrees on the east edge`);
+    }
   } finally { session.free(); }
 });

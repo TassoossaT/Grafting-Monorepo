@@ -13,11 +13,9 @@ import { RAMP_SURFACE_TYPE, rampCornerId, rampCornerIdsOf as cornerIdsOf, rampCo
  * moved:
  *
  * - an end landing on a floor's edge sits on that edge and the ramp leaves
- *   it square on, off the floor -- a ramp welded into a floor never lies
- *   over it; an end whose other end lies over its floor does not weld;
+ *   it square on, towards the other end -- off the floor, or up over it;
  * - a second landing is kept only if its edge is parallel to the first and
- *   faces it across the gap -- a straight ramp cannot meet two edges square
- *   on otherwise;
+ *   lies ahead -- a straight ramp cannot meet two edges square on otherwise;
  * - welded ends slide together along their edges until each end's width
  *   fits inside its edge, clear of the corners.
  */
@@ -77,7 +75,7 @@ function jointAxis(joint: EndJoint, far: RampEndPlan) {
   }
   const landing = far.landing;
   const square = landing && Math.abs(n.x * (landing.b.x - landing.a.x) + n.z * (landing.b.z - landing.a.z)) < 1e-3 * Math.hypot(landing.b.x - landing.a.x, landing.b.z - landing.a.z)
-    && dot(n, start, landing.a) > 0 && dot(landing.out, landing.a, start) > 0;
+    && dot(n, start, landing.a) > 0;
   const reach = square ? dot(n, start, landing!.a) : dot(n, start, far.point);
   return { start, end: { x: start.x + n.x * reach, y: square ? landing!.height : far.point.y, z: start.z + n.z * reach }, farJoint: undefined, farWeld: square ? landing : undefined };
 }
@@ -97,25 +95,32 @@ function plannedAxis(from: RampEndPlan, to: RampEndPlan): { axisStart: Construct
   return { ...floorAxis(from, to), joints: [] };
 }
 
+/**
+ * Square to `landing`'s edge through `at`, on the side `to` is on: off the
+ * floor, or over it -- a ramp may leave a floor's edge either way, climbing
+ * away from it or up over it.
+ */
+const toward = (landing: FloorLanding, at: ConstructionPosition, to: { readonly x: number; readonly z: number }) =>
+  (offFloor(landing, at, to) >= 0 ? landing.out : { x: -landing.out.x, z: -landing.out.z });
+
 /** The axis the two asked-for ends make between floors, and which of their landings it keeps. */
 function floorAxis(from: RampEndPlan, to: RampEndPlan) {
-  let start = from.landing, end = to.landing;
-  if (start && !(offFloor(start, onto(start, from.point), to.point) > 0)) start = undefined;
-  if (end && !(offFloor(end, onto(end, to.point), from.point) > 0)) end = undefined;
+  const start = from.landing, end = to.landing;
   if (start) {
     const axisStart = onto(start, from.point);
-    const n = start.out;
-    // Both welded: the far floor's edge must face back at the start, across the gap.
-    const both = end !== undefined && parallel(start, end) && offFloor(end, end.a, axisStart) > 0;
-    const reach = both ? offFloor(start, axisStart, end!.a) : offFloor(start, axisStart, to.point);
+    const n = toward(start, axisStart, to.point);
+    // Both welded: the far floor's edge must lie ahead along the way on, square to it too.
+    const both = end !== undefined && parallel(start, end) && dot(n, axisStart, end.a) > 0;
+    const reach = both ? dot(n, axisStart, end!.a) : dot(n, axisStart, to.point);
     const welds: Welds = [{ end: "bottom", landing: start }];
     if (both) welds.push({ end: "top", landing: end! });
     return { axisStart, axisEnd: { x: axisStart.x + n.x * reach, y: to.point.y, z: axisStart.z + n.z * reach }, welds };
   }
   if (end) {
     const axisEnd = onto(end, to.point);
-    const reach = offFloor(end, axisEnd, from.point);
-    return { axisStart: { x: axisEnd.x + end.out.x * reach, y: from.point.y, z: axisEnd.z + end.out.z * reach }, axisEnd, welds: [{ end: "top", landing: end }] as Welds };
+    const n = toward(end, axisEnd, from.point);
+    const reach = dot(n, axisEnd, from.point);
+    return { axisStart: { x: axisEnd.x + n.x * reach, y: from.point.y, z: axisEnd.z + n.z * reach }, axisEnd, welds: [{ end: "top", landing: end }] as Welds };
   }
   return { axisStart: from.point, axisEnd: to.point, welds: [] as Welds };
 }
