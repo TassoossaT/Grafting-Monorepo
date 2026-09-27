@@ -15,8 +15,6 @@ const ownsSlope = (surfaceType: string) => surfaceType === SLOPE_SURFACE_TYPE;
 const ownsRamp = (surfaceType: string) => surfaceType === RAMP_SURFACE_TYPE;
 
 const COLOR = 0x79b8e8;
-/** Where a ramp would start when it snaps: onto a floor's edge, or on from another ramp's end. */
-const SNAP_COLOR = 0x4fd18b;
 /** Radius of the mark where a ramp would start, before it is begun. */
 const START_MARK = 0.14;
 /** How much one press of a width key widens or narrows the ramp. */
@@ -53,29 +51,11 @@ function reportRampReadout(ctx: ToolContext, corners: RampCorners, welds: number
  * is drawn as.
  */
 
-/**
- * The mark where a ramp begun at `sample` would start: a dot, and, where it
- * snaps, the stretch of edge its end would sit on -- the floor's edge its
- * width would take, or the end of the ramp it would run on from.
- */
-function startMark(ctx: ToolContext, sample: PointerSample, params: ToolParamsByTool["slope-ramp"]) {
-  const start = rampStartAt(ctx, sample);
+/** The mark where a ramp begun at `sample` would start -- on the edge or end it would snap to, when it does -- in the ramp's own colour. */
+function startMark(ctx: ToolContext, sample: PointerSample) {
   const positions: number[] = [], indices: number[] = [];
-  appendNodeDisk(positions, indices, start.point, START_MARK);
-  const along = (a: ConstructionPosition, b: ConstructionPosition, centre: ConstructionPosition, width: number) => {
-    const dx = b.x - a.x, dz = b.z - a.z, length = Math.hypot(dx, dz) || 1;
-    const u = { x: dx / length, z: dz / length }, half = width / 2, thick = 0.04;
-    appendQuad(positions, indices, [
-      { x: centre.x - u.x * half - u.z * thick, y: centre.y, z: centre.z - u.z * half + u.x * thick },
-      { x: centre.x + u.x * half - u.z * thick, y: centre.y, z: centre.z + u.z * half + u.x * thick },
-      { x: centre.x + u.x * half + u.z * thick, y: centre.y, z: centre.z + u.z * half - u.x * thick },
-      { x: centre.x - u.x * half + u.z * thick, y: centre.y, z: centre.z - u.z * half - u.x * thick },
-    ]);
-  };
-  if (start.joint) along(start.joint.a, start.joint.b, start.joint.mid, start.joint.width);
-  else if (start.landing) along(start.landing.a, start.landing.b, start.point, params.bottomWidth ?? 1.5);
-  const snapped = start.joint !== undefined || start.landing !== undefined;
-  return { kind: "mesh" as const, positions: Float32Array.from(positions), indices: Uint32Array.from(indices), color: snapped ? SNAP_COLOR : COLOR, opacity: 0.8 };
+  appendNodeDisk(positions, indices, rampStartAt(ctx, sample).point, START_MARK);
+  return { kind: "mesh" as const, positions: Float32Array.from(positions), indices: Uint32Array.from(indices), color: COLOR, opacity: 0.8 };
 }
 
 /** Widths after a width key: `[` `]` narrow or widen the whole ramp, `{` `}` its top alone -- how it opens or closes. */
@@ -120,8 +100,8 @@ const rawSlopeRampTool: ConstructionTool<"slope-ramp"> = {
     const draft = rampDrafts.get(ctx.runtime);
     const params = draft ? { ...toolParams, rise: draftRise(draft, gesture.current, toolParams) } : toolParams;
     const from = draft?.start ?? gesture.start;
-    // Before a ramp is begun, only where it would start -- and, when it snaps, the edge its end would sit on: it is built out as it is drawn.
-    if (Math.hypot(gesture.current.point.x - from.point.x, gesture.current.point.z - from.point.z) < 0.05) return startMark(ctx, from, params);
+    // Before a ramp is begun, only where it would start: it is built out as it is drawn.
+    if (Math.hypot(gesture.current.point.x - from.point.x, gesture.current.point.z - from.point.z) < 0.05) return startMark(ctx, from);
     try {
       const { corners, welds, joints } = plannedRamp(ctx, from, gesture.current, params);
       const positions: number[] = [], indices: number[] = [];

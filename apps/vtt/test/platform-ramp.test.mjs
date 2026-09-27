@@ -293,7 +293,7 @@ test("a ramp started on a floor's edge stays welded there wherever the pointer d
   } finally { session.free(); }
 });
 
-test("before a ramp is begun only where it would start is shown, snapping to a floor's edge; then it is built out as it is drawn", async () => {
+test("before a ramp is begun only a mark where it would start is shown, on the edge it would snap to; then it is built out as it is drawn", async () => {
   const { slopeRampTool } = await import("../src/composition/tabletop/tools/slope/slope-tools.ts");
   const { sessionFixture, addFace } = await import("./platform-session-fixture.mjs");
   const { ctx, runtime, session } = sessionFixture();
@@ -306,12 +306,13 @@ test("before a ramp is begun only where it would start is shown, snapping to a f
     assert.ok(loose.positions.length / 3 < 40, "only a small mark, no ramp");
     const edge = { point: { x: 4.2, y: 0, z: 2 } };
     const snapped = slopeRampTool.previewFor({ start: edge, current: edge, samples: [edge] }, params, ctx);
-    assert.notEqual(snapped.color, loose.color, "it shows it would snap to the floor's edge");
-    assert.ok(snapped.positions.length > loose.positions.length, "and the stretch of edge its end would sit on");
+    assert.equal(snapped.color, loose.color, "the ramp's own colour");
+    const xs = Array.from(snapped.positions).filter((_, i) => i % 3 === 0);
+    assert.ok(Math.abs((Math.min(...xs) + Math.max(...xs)) / 2 - 4) < 1e-6, "the mark stands where it would snap: on the floor's edge");
     slopeRampTool.onClick(ctx, away, params);
     const there = { point: { x: 14, y: 0, z: 10 } };
     const drawn = slopeRampTool.previewFor({ start: there, current: there, samples: [there] }, params, ctx);
-    assert.ok(drawn.positions.length / 3 >= 4 && drawn.color !== snapped.color, "drawn out to the pointer");
+    assert.ok(drawn.positions.length / 3 >= 4, "drawn out to the pointer");
     slopeRampTool.onCancel(ctx);
   } finally { session.free(); }
 });
