@@ -20,7 +20,7 @@ import {
   type TabletopRuntimeStatus,
   type ToolParamsByTool,
 } from "@/composition/tabletop";
-import { Button, IconButton, StatusBadge } from "@/ui";
+import { IconButton, StatusBadge } from "@/ui";
 import {
   ConstructionDock,
   ConstructionHotbar,
@@ -294,16 +294,6 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
             />
           </div>
         ) : null}
-
-        {(() => {
-          // Whatever the picked handle offers besides dragging it -- disconnecting an end, say. The road's branch has its own button above.
-          const actions = selectedNodeInfo ? pointerHandlers.selectionActions().filter((action) => action.id !== "branch") : [];
-          return actions.length > 0 ? (
-            <div role="toolbar" aria-label="Acoes da selecao" style={{ position: "absolute", top: "0.75rem", left: "50%", transform: "translateX(-50%)", zIndex: 15, display: "flex", gap: "0.5rem" }}>
-              {actions.map((action) => <Button key={action.id} label={action.label} tone="accent" onClick={() => pointerHandlers.onSelectionAction(action.id)} />)}
-            </div>
-          ) : null;
-        })()}
 
         <ToolRail
           tool={tool}

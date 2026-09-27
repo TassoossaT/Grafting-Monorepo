@@ -9,7 +9,6 @@ import { appendNodeDisk, PREVIEW_ELEVATION } from "../shapes/ribbon-mesh-preview
 import type { RampCorners } from "../../../../features/edit-construction/index.ts";
 import { commitPlatformSlope } from "./slope-commit.ts";
 import { createCurveDraftTool, type FinishedCurveDraft } from "../core/curve-draft.ts";
-import { spineChainSelection } from "../core/spine-chain-selection.ts";
 import { commitStraightRamp, plannedRamp, straightRampPoints } from "./ramp-commit.ts";
 
 const ownsSlope = (surfaceType: string) => surfaceType === SLOPE_SURFACE_TYPE;
@@ -146,16 +145,11 @@ const rawSlopeSpiralTool = createCurveDraftTool({
   color: COLOR,
 });
 
-const spiralSelection = spineChainSelection("slope-spiral");
-
 /**
  * Also edits an existing spiral by its spine points, exactly as a road is
- * edited -- see `spine-edit-behavior.ts` -- and as a whole from the panel,
- * once one of its handles is picked -- see `spine-chain-selection.ts`.
+ * edited -- see `spine-edit-behavior.ts` -- and as a whole by its handles.
  */
-export const slopeSpiralTool = withSpineEditing({ ...rawSlopeSpiralTool, onParamsChange: spiralSelection.onParamsChange }, {
-  ownsSpine: ownsSlope, drafting: rawSlopeSpiralTool.drafting, onSelect: spiralSelection.onSelect,
-});
+export const slopeSpiralTool = withSpineEditing(rawSlopeSpiralTool, { ownsSpine: ownsSlope, drafting: rawSlopeSpiralTool.drafting });
 
 /** A curved ramp, drawn in any of the shared spine creation modes; R cycles them. */
 const rawSlopeCurveTool = createCurveDraftTool({
@@ -169,9 +163,5 @@ const rawSlopeCurveTool = createCurveDraftTool({
   color: COLOR,
 });
 
-const curveSelection = spineChainSelection("slope-curve");
-
-/** Edits an existing curved ramp by its spine points, as the spiral and the road are edited, and as a whole from the panel. */
-export const slopeCurveTool = withSpineEditing({ ...rawSlopeCurveTool, onParamsChange: curveSelection.onParamsChange }, {
-  ownsSpine: ownsSlope, drafting: rawSlopeCurveTool.drafting, onSelect: curveSelection.onSelect,
-});
+/** Edits an existing curved ramp by its spine points, as the spiral and the road are edited, and as a whole by its handles. */
+export const slopeCurveTool = withSpineEditing(rawSlopeCurveTool, { ownsSpine: ownsSlope, drafting: rawSlopeCurveTool.drafting });

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { globalHandleActions, shownGlobalHandles } from "../src/features/edit-construction/index.ts";
+import { shownGlobalHandles } from "../src/features/edit-construction/index.ts";
 import { slopeRampTool } from "../src/composition/tabletop/tools/slope/slope-tools.ts";
 import { addFace, sessionFixture } from "./platform-session-fixture.mjs";
 
@@ -85,26 +85,7 @@ test("dragging a welded destination away disconnects it, and the floor's edge is
   } finally { session.free(); }
 });
 
-test("a welded end offers Desconectar, which takes it off the floor and leaves the ramp standing", () => {
-  const fixture = sessionFixture();
-  const { runtime, session, ctx } = fixture;
-  try {
-    floor(runtime, "low", 0, 0);
-    drawn(fixture, { x: 4, y: 0, z: 2 }, { x: 8, y: 0, z: 2 });
-    const origin = handle(runtime, "origin");
-    assert.deepEqual(globalHandleActions(scene(runtime), handle(runtime, "destination").id), [], "a free end offers nothing");
-    assert.deepEqual(slopeRampTool.selectionActions(ctx, origin.id).map((a) => a.id), ["disconnect"]);
-    const standing = ramp(runtime).nodes.map((n) => JSON.stringify(n)).sort();
-    assert.equal(slopeRampTool.onSelectionAction(ctx, "disconnect", params, origin.id), true);
-    const low = faces(runtime, "platform")[0];
-    assert.ok(!welded(low, ramp(runtime), "bottom"), "the origin came off");
-    assert.equal(low.outerLoops[0].length, 4, "the floor's edge is whole again");
-    assert.deepEqual(ramp(runtime).nodes.map((n) => JSON.stringify(n)).sort(), standing, "the ramp did not move");
-    assert.deepEqual(slopeRampTool.selectionActions(ctx, handle(runtime, "origin").id), [], "nothing more to disconnect");
-  } finally { session.free(); }
-});
-
-test("a curved ramp's free end dragged onto a floor's edge connects there, and disconnects on request", async () => {
+test("a curved ramp's free end dragged onto a floor's edge connects there", async () => {
   const { commitPlatformSlope } = await import("../src/composition/tabletop/tools/slope/slope-commit.ts");
   const { slopeCurveTool } = await import("../src/composition/tabletop/tools/slope/slope-tools.ts");
   const { controlSectionId, isSpineControlNodeId } = await import("../src/features/edit-construction/index.ts");
@@ -131,11 +112,6 @@ test("a curved ramp's free end dragged onto a floor's edge connects there, and d
     close(placed.y, 2, "at the high floor's height");
     assert.ok(sharesEnd(faces(runtime, "platform-floating")[0], end.id), "the end welded into the high floor");
     assert.ok(sharesEnd(faces(runtime, "platform")[0], origin.id), "the start still welded");
-    assert.deepEqual(slopeCurveTool.selectionActions(ctx, end.id).map((a) => a.id), ["disconnect"]);
-    assert.equal(slopeCurveTool.onSelectionAction(ctx, "disconnect", curve, end.id), true);
-    const high = faces(runtime, "platform-floating")[0];
-    assert.ok(!sharesEnd(high, end.id), "the end came off");
-    assert.equal(high.outerLoops[0].length, 4, "the high floor's edge is whole again");
   } finally { session.free(); }
 });
 
@@ -408,9 +384,14 @@ test("a ramp welds to a round floor's curved edge: its end is the chord, its cor
       const p = round().nodes.find((n) => n.id === controlSectionId(end.id, side)).position;
       close(Math.hypot(p.x, p.z), 4, `its section's ${side} end on the arc`);
     }
-    // Disconnecting the straight ramp makes the arcs it cut whole again.
+    // Pulled away, the straight ramp comes off and the arcs it cut are whole again.
     const origin = shownGlobalHandles(scene(runtime)).find((h) => h.kind === "origin");
-    assert.equal(slopeRampTool.onSelectionAction(ctx, "disconnect", params, origin.id), true);
+    const start = { nodeId: origin.id, point: origin.position, screenX: 100, screenY: 300 };
+    const away = { point: { x: 7 * Math.cos(0.8), y: 0, z: 7 * Math.sin(0.8) }, screenX: 200, screenY: 300 };
+    Object.assign(runtime, { showPreview() {}, clearPreview() {} });
+    slopeRampTool.onPointerDown(ctx, start, params);
+    slopeRampTool.onPointerMove(ctx, { start, current: away, samples: [start, away] }, params);
+    slopeRampTool.onPointerUp(ctx, { start, current: away, samples: [start, away], moved: true }, params);
     assert.ok(!welded(round(), ramp(runtime), "bottom"), "the ramp came off");
     assert.ok(round().outerLoops[0].every((use) => use.geometry.kind === "arc"), "still arcs only");
     // Two half circles, one of them cut in three where the curved ramp still stands.

@@ -2304,16 +2304,6 @@ through `constrained-drag.ts` -- never loose under the pointer, and the
 structure is previewed as the edit would leave it. The motion gives the
 path; the handle's kind gives what the path means.
 
-### `function vtt.global-handle-gesture.globalHandleActionsAt(ctx: ToolContext, handleId: string): readonly { id: string; label: string }[]`
-
-What the picked global handle `handleId` offers besides dragging it, for a panel or toolbar to show.
-
-### `function vtt.global-handle-gesture.runGlobalHandleAction(ctx: ToolContext, handleId: string, actionId: string): boolean`
-
-Runs the action `actionId` a picked global handle offers -- disconnecting
-an end, say -- as one undoable edit. `false` when the handle offers no
-such action now.
-
 ### `variable vtt.navigate-tool.navigateTool: ConstructionTool<"navigate">`
 
 No-op: in `navigate` mode the pointer drives camera orbit/pan
@@ -2329,58 +2319,12 @@ level, so something drawn at `y` sits right under the cursor rather than
 above or below whatever the ray hit. Without a ray -- or one that never
 reaches that level in front of the camera -- the hit point, at `y`.
 
-### `interface vtt.selection-mirror.SelectionMirror`
-
-### `method vtt.selection-mirror.SelectionMirror.onParamsChange(ctx: ToolContext, next: ToolParamsFor<Id>): void`
-
-### `method vtt.selection-mirror.SelectionMirror.onSelect(ctx: ToolContext, selectedId: string | undefined): void`
-
-### `interface vtt.selection-mirror.SelectionMirrorOptions`
-
-A tool's picked structure, mirrored into the tool's own params so its
-panel shows it, and edited back from them: a changed value is applied to
-what was picked. Nothing here knows what is picked or how it is edited --
-the options say how to read it, compare it, apply a change and where in
-the params it lives.
-
-Wire `onSelect` to whatever reports a pick (`undefined` for none) and
-`onParamsChange` to the tool's own hook.
-
-### `property vtt.selection-mirror.SelectionMirrorOptions.apply: (ctx: ToolContext, selectedId: string, next: Value) => string | undefined`
-
-Edits the picked structure to `next`; returns the id that names it afterwards. Throws to refuse.
-
-### `property vtt.selection-mirror.SelectionMirrorOptions.describe: (ctx: ToolContext, selectedId: string) => Value | undefined`
-
-What `selectedId` is as a whole, or `undefined` when it is nothing this mirror edits.
-
-### `property vtt.selection-mirror.SelectionMirrorOptions.id: Id`
-
-### `property vtt.selection-mirror.SelectionMirrorOptions.messages: { applied: string; refused: string }`
-
-Said when a change was applied, and when one was refused.
-
-### `property vtt.selection-mirror.SelectionMirrorOptions.read: (params: ToolParamsFor<Id>) => Value | undefined`
-
-### `property vtt.selection-mirror.SelectionMirrorOptions.same: (a: Value, b: Value) => boolean`
-
-### `property vtt.selection-mirror.SelectionMirrorOptions.write: (params: ToolParamsFor<Id>, value: Value | undefined) => ToolParamsFor<Id>`
-
-### `function vtt.selection-mirror.createSelectionMirror(options: SelectionMirrorOptions<Id, Value>): SelectionMirror<Id>`
-
 ### `function vtt.spine-body-target.spineBodyTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string, ownsSpine: (surfaceType: string) => boolean): { options: CurveGestureOptions; sample: PointerSample } | undefined`
 
 A pick on a spine-built body, projected onto its spine through the
 canonical curve query: the nearest control point when the pick is close
 to one, else the span's midpoint handle at the projected parameter.
 `ownsSpine` limits it to the spines of the types a tool edits.
-
-### `function vtt.spine-chain-selection.spineChainSelection(id: Id): SelectionMirror<Id>`
-
-The picked spine as a whole -- its ends' heights, width and, for a spiral,
-centre, radius, turns and direction -- in any spine tool's `selected`
-param, edited back from it through the spine's own owner. Any tool that
-edits spines and has a `selected` param uses this unchanged.
 
 ### `function vtt.spine-commit.commitSpineRegeneration(ctx: ToolContext, request: ApplyPatchReplacementRequest, operationId: string, carries: readonly ConstructionSurfaceKey[]): void`
 
@@ -2476,14 +2420,6 @@ Composes a creation tool with createSpineEditBehavior: a press on
 a spine this tool owns edits it, and a press anywhere else is the tool's
 own creation gesture, unchanged -- the spine counterpart of
 `withStructureEditing`.
-
-### `function vtt.spine-end-actions.runSpineEndAction(ctx: ToolContext, nodeId: string, action: string): boolean`
-
-Runs `action` on the spine end `nodeId`; `false` when it offers no such action.
-
-### `function vtt.spine-end-actions.spineEndActionsAt(ctx: ToolContext, nodeId: string): readonly { id: string; label: string }[]`
-
-The actions the spine end `nodeId` offers now -- none for anything else.
 
 ### `interface vtt.structure-edit-behavior.StructureEditBehavior`
 
@@ -3326,7 +3262,7 @@ A control point's height comes from what the pointer actually touched: a node's 
 
 ### `variable vtt.slope-tools.slopeCurveTool: ConstructionTool<"slope-curve">`
 
-Edits an existing curved ramp by its spine points, as the spiral and the road are edited, and as a whole from the panel.
+Edits an existing curved ramp by its spine points, as the spiral and the road are edited, and as a whole by its handles.
 
 ### `variable vtt.slope-tools.slopeRampTool: ConstructionTool<"slope-ramp">`
 
@@ -3335,8 +3271,7 @@ Also grabs and edits an existing ramp's own corner, side, end or body -- see `st
 ### `variable vtt.slope-tools.slopeSpiralTool: ConstructionTool<"slope-spiral">`
 
 Also edits an existing spiral by its spine points, exactly as a road is
-edited -- see `spine-edit-behavior.ts` -- and as a whole from the panel,
-once one of its handles is picked -- see `spine-chain-selection.ts`.
+edited -- see `spine-edit-behavior.ts` -- and as a whole by its handles.
 
 ### `variable vtt.terrain-sculpt-tool.terrainSculptTool: ConstructionTool<"terrain-sculpt">`
 
@@ -3571,10 +3506,6 @@ Boundary edges running along the top, the paired half of the same subdivision.
 ### `property vtt.use-construction-pointer.ConstructionPointerHandlers.onPointerUp: (event: PointerEvent<HTMLDivElement>) => void`
 
 ### `property vtt.use-construction-pointer.ConstructionPointerHandlers.onSelectionAction: (action: string) => void`
-
-### `property vtt.use-construction-pointer.ConstructionPointerHandlers.selectionActions: () => readonly { id: string; label: string }[]`
-
-What the picked handle offers besides dragging it, as the active tool says -- buttons to show.
 
 ### `interface vtt.use-construction-pointer.UseConstructionPointerOptions`
 
@@ -4005,18 +3936,6 @@ What the structure moves and turns round.
 
 Which provider made it -- and plans its edits.
 
-### `interface vtt.global-handle.GlobalHandleAction`
-
-Something a picked handle offers besides dragging it -- a button, say.
-
-### `property vtt.global-handle.GlobalHandleAction.id: string`
-
-Names the action to whatever runs it.
-
-### `property vtt.global-handle.GlobalHandleAction.intent: GlobalHandleIntent`
-
-### `property vtt.global-handle.GlobalHandleAction.label: string`
-
 ### `interface vtt.global-handle.GlobalHandleProvider`
 
 One way structures are built -- from a spine, from a cloud of regions --
@@ -4025,10 +3944,6 @@ building gets its handles by adding a provider; nothing that shows or
 drags them changes.
 
 ### `property vtt.global-handle.GlobalHandleProvider.name: string`
-
-### `method vtt.global-handle.GlobalHandleProvider.actions(scene: GlobalHandleScene, handle: GlobalHandle): readonly GlobalHandleAction[]`
-
-What else `handle` offers as it stands now.
 
 ### `method vtt.global-handle.GlobalHandleProvider.handles(scene: GlobalHandleScene): readonly GlobalHandle[]`
 
@@ -4062,7 +3977,7 @@ in:
 - replace: faces swapped for new ones in one patch replacement -- a
   structure rebuilt, and the floors it welds into or leaves.
 
-### `type vtt.global-handle.GlobalHandleIntent = { delta: ConstructionPosition; kind: "move" } | { angle: number; kind: "rotate" } | { dy: number; kind: "height" } | { angle: number; kind: "wind" } | { delta: number; kind: "radius" } | { at: ConstructionPosition; kind: "place"; under?: ConstructionSurfaceKey } | { dy: number; kind: "lift" } | { kind: "detach" }`
+### `type vtt.global-handle.GlobalHandleIntent = { delta: ConstructionPosition; kind: "move" } | { angle: number; kind: "rotate" } | { dy: number; kind: "height" } | { angle: number; kind: "wind" } | { delta: number; kind: "radius" } | { at: ConstructionPosition; kind: "place"; under?: ConstructionSurfaceKey } | { dy: number; kind: "lift" }`
 
 What a gesture on a global handle asks for, whatever the structure.
 
@@ -4458,10 +4373,6 @@ one of the floors `floorKeys` names -- a floor drawn against a ramp's end
 joins it without the corners having to be picked. `undefined` when none
 does.
 
-### `function vtt.global-handles.globalHandleActions(scene: GlobalHandleScene, id: string): readonly GlobalHandleAction[]`
-
-What else the shown global handle `id` offers as it stands -- none for anything that is not one.
-
 ### `function vtt.global-handles.handleMotionAt(scene: GlobalHandleScene, id: string): HandleMotion | undefined`
 
 How the handle `id` moves while dragged, whatever it is: a whole-structure
@@ -4567,7 +4478,7 @@ Which provider made it -- and plans its edits.
 Origin and destination handles of every structure whose type runs
 between two ends (`StructureTypeDefinition.ends`): dragging one moves
 that end, the other standing, and connects it to the floor edge it lands
-on; each offers to disconnect while welded. What the structure becomes is
+on, and takes it off the one it left. What the structure becomes is
 its type's; welding and unwelding is the same for every type.
 
 ### `function vtt.handle-name.handleNodeName(scene: GlobalHandleScene, own: readonly ConstructionRegionTopology[], sortedNodeIds: readonly string[]): { name: string; nodeId: string }`
@@ -4659,10 +4570,6 @@ type are edited by exactly the same handles; only the last step differs.
 
 Preview only the affected curves; surface regeneration runs once on release.
 
-### `function vtt.spine-end-welds.detachSpineEnd(generation: SpineGeneration, controlNodeId: string, topologies: readonly ConstructionRegionTopology[], operationId: string): ApplyPatchReplacementRequest | undefined`
-
-Takes the free end `controlNodeId` off the floor it is welded into, leaving the spine as it stands; `undefined` when it is welded to none.
-
 ### `function vtt.spine-end-welds.regenerateWithEndWelds(generation: SpineGeneration, input: SpineRegenerationInput, options: { keepsWelds?: boolean }): SpineRegeneration | undefined`
 
 `generation`'s regeneration of `input`, with the spine's moved free ends
@@ -4676,10 +4583,6 @@ The free ends -- control nodes on exactly one span -- of the spine a patch touch
 ### `function vtt.spine-end-welds.spineEndsLanded(snapshot: ConstructionGraphSnapshot, graphPatch: ConstructionGraphPatch, generation: SpineGeneration, topologies: readonly ConstructionRegionTopology[]): ConstructionGraphPatch`
 
 `graphPatch` with every moved free end placed on the floor edge it lands on -- what a preview draws.
-
-### `function vtt.spine-end-welds.spineEndWelded(generation: SpineGeneration, controlNodeId: string, topologies: readonly ConstructionRegionTopology[]): boolean`
-
-Whether the free end `controlNodeId` is welded into a floor.
 
 ### `reference vtt.spine.spineGlobalHandleId -> vtt.global-handle-ids.globalHandleId`
 
@@ -7030,7 +6933,7 @@ floating one -- a storey, a bridge deck -- that leaves the terrain alone.
 
 ### `property vtt.tool-types.ToolParamsByTool.roof: { curvatures: readonly [number, number, number, number]; elevation: number; height: number; radius: number; shape: "rectangle" | "circle" | "platform" }`
 
-### `property vtt.tool-types.ToolParamsByTool.slope-curve: { mode?: "arc" | "points" | "straight" | "spiral" | "connect"; rise: number; selected?: SpineChainShape; width: number }`
+### `property vtt.tool-types.ToolParamsByTool.slope-curve: { mode?: "arc" | "points" | "straight" | "spiral" | "connect"; rise: number; width: number }`
 
 A curved ramp, drawn in one of the shared spine creation modes. `rise` is
 its climb when the end is not on a floor; it climbs at one constant grade.
@@ -7039,7 +6942,7 @@ its climb when the end is not on a floor; it climbs at one constant grade.
 
 A straight ramp dragged from start to end, climbing a fixed rise, with its own width at each end.
 
-### `property vtt.tool-types.ToolParamsByTool.slope-spiral: { rise: number; selected?: SpineChainShape; width: number }`
+### `property vtt.tool-types.ToolParamsByTool.slope-spiral: { rise: number; width: number }`
 
 A spiral sloped platform: centre, start, then turned round to its end.
 `rise` is its climb when the end is not on a floor. `selected` mirrors the

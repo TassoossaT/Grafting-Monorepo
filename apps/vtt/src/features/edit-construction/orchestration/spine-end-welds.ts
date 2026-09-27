@@ -150,17 +150,3 @@ export function regenerateWithEndWelds(
   };
   return { ...regenerated, request: rewelded };
 }
-
-/** Takes the free end `controlNodeId` off the floor it is welded into, leaving the spine as it stands; `undefined` when it is welded to none. */
-export function detachSpineEnd(generation: SpineGeneration, controlNodeId: string, topologies: readonly ConstructionRegionTopology[], operationId: string): ApplyPatchReplacementRequest | undefined {
-  const rung = generation.endRung?.(controlNodeId);
-  if (!rung || floorsWeldedBy(floorsOf(topologies), rung).length === 0) return undefined;
-  const welds = reweldFloors(topologies, { detach: [rung], attach: [] }, new Map(), operationId, releasableFace);
-  return { operationId, sourceSurfaceKeys: welds.sourceSurfaceKeys, patch: { nodes: welds.nodes, edges: welds.edges, regions: welds.regions } };
-}
-
-/** Whether the free end `controlNodeId` is welded into a floor. */
-export function spineEndWelded(generation: SpineGeneration, controlNodeId: string, topologies: readonly ConstructionRegionTopology[]): boolean {
-  const rung = generation.endRung?.(controlNodeId);
-  return rung !== undefined && floorsWeldedBy(floorsOf(topologies), rung).length > 0;
-}

@@ -1,5 +1,4 @@
 import {
-  globalHandleActions,
   planEdit,
   planGlobalHandle,
   resolveCloudTopology,
@@ -212,31 +211,3 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
   };
 }
 
-/**
- * Runs the action `actionId` a picked global handle offers -- disconnecting
- * an end, say -- as one undoable edit. `false` when the handle offers no
- * such action now.
- */
-export function runGlobalHandleAction(ctx: ToolContext, handleId: string, actionId: string): boolean {
-  const scene = sceneOf(ctx);
-  const handle = shownGlobalHandleAt(scene, handleId);
-  const action = handle && globalHandleActions(scene, handleId).find((candidate) => candidate.id === actionId);
-  if (!handle || !action) return false;
-  const operationId = `global-${action.id}:${ctx.nextSequence()}`;
-  try {
-    const edit = planGlobalHandle(scene, handle, action.intent, ctx.runtime, operationId);
-    if (!edit) return false;
-    commitEdit(ctx, handle, edit, scene, operationId);
-    const standing = shownGlobalHandleAt(sceneOf(ctx), handle.id);
-    ctx.reportSelection(standing ? { id: standing.id, point: standing.position } : undefined);
-    ctx.reportFeedback({ tone: "success", message: `${action.label}: feito.` });
-  } catch (error) {
-    ctx.reportFeedback({ tone: "error", message: `Estrutura preservada: ${error instanceof Error ? error.message : String(error)}` });
-  }
-  return true;
-}
-
-/** What the picked global handle `handleId` offers besides dragging it, for a panel or toolbar to show. */
-export function globalHandleActionsAt(ctx: ToolContext, handleId: string): readonly { readonly id: string; readonly label: string }[] {
-  return globalHandleActions(sceneOf(ctx), handleId).map(({ id, label }) => ({ id, label }));
-}

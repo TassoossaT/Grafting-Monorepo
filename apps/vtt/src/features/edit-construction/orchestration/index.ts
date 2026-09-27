@@ -24,8 +24,8 @@ export {
   planEdgeReshape,
 } from "./edit-orchestrator.ts";
 export type { EditOpSink, EditPlan } from "./edit-orchestrator.ts";
-export { globalHandleActions, handleMotionAt, planGlobalHandle, shownGlobalHandleAt, shownGlobalHandles } from "./global-handles/index.ts";
+export { handleMotionAt, planGlobalHandle, shownGlobalHandleAt, shownGlobalHandles } from "./global-handles/index.ts";
 export type { CloudGlobalHandle } from "./global-handles/cloud-handle-provider.ts";
-export { detachSpineEnd, regenerateWithEndWelds, spineChainEnds, spineEndsLanded, spineEndWelded } from "./spine-end-welds.ts";
+export { regenerateWithEndWelds, spineChainEnds, spineEndsLanded } from "./spine-end-welds.ts";
 export { adoptJointEnd, adoptsEnds, endJointNear, freeStructureEnds, weldFreeEndsOnto } from "./free-end-welds.ts";
 export { sceneHandles, type SceneHandle, type SceneHandleInput, type SceneHandleKind } from "./scene-handles.ts";

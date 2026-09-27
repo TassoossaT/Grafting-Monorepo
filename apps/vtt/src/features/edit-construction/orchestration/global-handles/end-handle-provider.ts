@@ -1,7 +1,7 @@
 import type { ConstructionPosition, ConstructionRegionTopology, ConstructionSurfaceKey } from "@/ports";
 
 import { globalHandleId } from "../../global-handles/index.ts";
-import type { GlobalHandle, GlobalHandleAction, GlobalHandleEdit, GlobalHandleProvider, GlobalHandleScene } from "../../global-handles/index.ts";
+import type { GlobalHandle, GlobalHandleEdit, GlobalHandleProvider, GlobalHandleScene } from "../../global-handles/index.ts";
 import { hasTrait, structureTypeFor, type StructureEnd, type StructureEndName, type StructureEnds } from "../../structure-types/index.ts";
 import { handleNodeName } from "./handle-name.ts";
 import { endJointNear, releasableFace } from "../free-end-welds.ts";
@@ -34,19 +34,6 @@ function weldedFloor(scene: GlobalHandleScene, end: StructureEnd): ConstructionR
   return floorsWeldedBy(floorsOf(scene), end.rung)[0];
 }
 
-/** Takes one end off whatever it is welded to: only the floors change. */
-function detached(scene: GlobalHandleScene, end: StructureEnd, operationId: string): GlobalHandleEdit | undefined {
-  if (!weldedFloor(scene, end)) return undefined;
-  const floors = reweldFloors(scene.topologies, { detach: [end.rung], attach: [] }, new Map(), operationId, releasableFace);
-  return {
-    kind: "replace",
-    request: {
-      operationId,
-      sourceSurfaceKeys: floors.sourceSurfaceKeys,
-      patch: { nodes: floors.nodes, edges: floors.edges, regions: floors.regions },
-    },
-  };
-}
 
 /**
  * The other structure the standing end `standing` continues, as a joint to
@@ -113,7 +100,7 @@ function placed(scene: GlobalHandleScene, handle: EndGlobalHandle, ends: readonl
  * Origin and destination handles of every structure whose type runs
  * between two ends (`StructureTypeDefinition.ends`): dragging one moves
  * that end, the other standing, and connects it to the floor edge it lands
- * on; each offers to disconnect while welded. What the structure becomes is
+ * on, and takes it off the one it left. What the structure becomes is
  * its type's; welding and unwelding is the same for every type.
  */
 export const endHandleProvider: GlobalHandleProvider = {
@@ -146,14 +133,8 @@ export const endHandleProvider: GlobalHandleProvider = {
     const ends = capabilityOf(handle.topology)?.ends(handle.topology) ?? [];
     const end = ends.find((candidate) => candidate.name === handle.end);
     if (!end) return undefined;
-    if (intent.kind === "detach") return detached(scene, end, operationId);
     if (intent.kind === "place") return placed(scene, handle, ends, intent.at, intent.under, operationId);
     if (intent.kind === "lift") return placed(scene, handle, ends, { ...end.position, y: end.position.y + intent.dy }, undefined, operationId, true);
     return undefined;
-  },
-  actions(scene, generic): readonly GlobalHandleAction[] {
-    const handle = generic as EndGlobalHandle;
-    const end = capabilityOf(handle.topology)?.ends(handle.topology).find((candidate) => candidate.name === handle.end);
-    return end && weldedFloor(scene, end) ? [{ id: "disconnect", label: "Desconectar", intent: { kind: "detach" } }] : [];
   },
 };

@@ -74,8 +74,6 @@ function applySnap(sample: PointerSample, snapToGrid: boolean): PointerSample {
 
 export interface ConstructionPointerHandlers {
   readonly onSelectionAction: (action: string) => void;
-  /** What the picked handle offers besides dragging it, as the active tool says -- buttons to show. */
-  readonly selectionActions: () => readonly { readonly id: string; readonly label: string }[];
   readonly onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
   readonly onPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
   readonly onPointerUp: (event: ReactPointerEvent<HTMLDivElement>) => void;
@@ -478,14 +476,8 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     if (toolFor(activeTool).onSelectionAction?.(ctx, action, toolParams[activeTool] as never, selectedId.current)) refreshEdgeOverlay();
   }, [ctx, refreshEdgeOverlay]);
 
-  const selectionActions = useCallback(() => {
-    const id = selectedId.current;
-    return id === undefined ? [] : toolFor(optionsRef.current.activeTool).selectionActions?.(ctx, id) ?? [];
-  }, [ctx]);
-
   return {
     onSelectionAction,
-    selectionActions,
     onPointerDown,
     onPointerMove,
     onPointerUp: finishGesture,

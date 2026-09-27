@@ -4248,10 +4248,6 @@ export function floorLandingToward(floors: readonly ConstructionRegionTopology[]
 // src/composition/tabletop/tools/core/global-handle-gesture.ts
 export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample, ownsType: (surfaceType: string) => boolean, params?: CurveGestureOptions): CurveGesture | undefined {
   const scene = sceneOf(ctx);
-export function runGlobalHandleAction(ctx: ToolContext, handleId: string, actionId: string): boolean {
-  const scene = sceneOf(ctx);
-export function globalHandleActionsAt(ctx: ToolContext, handleId: string): readonly { readonly id: string; readonly label: string }[] {
-  return globalHandleActions(sceneOf(ctx), handleId).map(({ id, label }) => ({ id, label }));
 
 // src/composition/tabletop/tools/core/navigate-tool.ts
 export const navigateTool: ConstructionTool<"navigate"> = {
@@ -4266,37 +4262,12 @@ export function pointerAtHeight(sample: PointerSample, y: number): ConstructionP
   const t = (y - ray.origin.y) / ray.direction.y;
   if (t > 0) return { x: ray.origin.x + ray.direction.x * t, y, z: ray.origin.z + ray.direction.z * t };
 
-// src/composition/tabletop/tools/core/selection-mirror.ts
-export interface SelectionMirrorOptions<Id extends ConstructionToolId, Value> {
-  readonly id: Id;
-  /** What `selectedId` is as a whole, or `undefined` when it is nothing this mirror edits. */
-  readonly describe: (ctx: ToolContext, selectedId: string) => Value | undefined;
-  readonly same: (a: Value, b: Value) => boolean;
-  /** Edits the picked structure to `next`; returns the id that names it afterwards. Throws to refuse. */
-  readonly apply: (ctx: ToolContext, selectedId: string, next: Value) => string | undefined;
-  readonly read: (params: ToolParamsFor<Id>) => Value | undefined;
-export interface SelectionMirror<Id extends ConstructionToolId> {
-  onSelect(ctx: ToolContext, selectedId: string | undefined): void;
-  onParamsChange(ctx: ToolContext, next: ToolParamsFor<Id>): void;
-  }
-export function createSelectionMirror<Id extends ConstructionToolId, Value>(options: SelectionMirrorOptions<Id, Value>): SelectionMirror<Id> {
-  const picked = new WeakMap<ToolContext["runtime"], { readonly selectedId: string; readonly value: Value }>();
-
 // src/composition/tabletop/tools/core/spine-body-target.ts
 export function spineBodyTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string, ownsSpine: (surfaceType: string) => boolean = () => true): { sample: PointerSample; options: CurveGestureOptions } | undefined {
   const hit = ctx.runtime.getAllRegionTopologies().find((t) =>
   structureTypeFor(t.surfaceType)?.spine && ownsSpine(t.surfaceType) && (sample.surfaceRef
   ? surfaceRefFromNodeSet(t.surfaceKey) === sample.surfaceRef
   : t.nodes.some((n) => n.id === sample.nodeId)));
-
-// src/composition/tabletop/tools/core/spine-chain-selection.ts
-export function spineChainSelection<Id extends ConstructionToolId>(id: Id): SelectionMirror<Id> {
-  return createSelectionMirror<Id, SpineChainShape>({
-  id,
-  describe: (ctx, selectedId) => describeSpineChain(ctx.runtime.getGraphSnapshot(), selectedId),
-  same: sameShape,
-  apply(ctx, selectedId, next) {
-  const operationId = scopedToolId(ctx, "spine-edit", ctx.nextSequence());
 
 // src/composition/tabletop/tools/core/spine-commit.ts
 export function regenerateSpine(ctx: ToolContext, snapshot: ConstructionGraphSnapshot, owner: string | undefined, graphPatch: ConstructionGraphPatch, operationId: string, options: { readonly keepsWelds?: boolean } = {}): SpineRegeneration | undefined {
@@ -4332,12 +4303,6 @@ export function createSpineEditBehavior({ ownsSpine, onSelect, snap }: SpineEdit
   const drags = new WeakMap<ToolContext["runtime"], CurveGesture>();
 export function withSpineEditing<Id extends ConstructionToolId>(tool: ConstructionTool<Id>, options: SpineEditOptions): ConstructionTool<Id> {
   const spine = createSpineEditBehavior(options);
-
-// src/composition/tabletop/tools/core/spine-end-actions.ts
-export function spineEndActionsAt(ctx: ToolContext, nodeId: string): readonly { readonly id: string; readonly label: string }[] {
-  const generation = generationAt(ctx, nodeId);
-export function runSpineEndAction(ctx: ToolContext, nodeId: string, action: string): boolean {
-  const generation = generationAt(ctx, nodeId);
 
 // src/composition/tabletop/tools/core/stroke-fitting.ts
 export type { FittedEdge, FitOptions } from "../../../../features/edit-construction/index.ts";
@@ -4898,12 +4863,8 @@ export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly Co
 
 // src/composition/tabletop/tools/slope/slope-tools.ts
 export const slopeRampTool = withStructureEditing(rawSlopeRampTool, { ownsType: ownsRamp, drafting: (ctx) => rampDrafts.has(ctx.runtime) });
-export const slopeSpiralTool = withSpineEditing({ ...rawSlopeSpiralTool, onParamsChange: spiralSelection.onParamsChange }, {
-  ownsSpine: ownsSlope, drafting: rawSlopeSpiralTool.drafting, onSelect: spiralSelection.onSelect,
-  });
-export const slopeCurveTool = withSpineEditing({ ...rawSlopeCurveTool, onParamsChange: curveSelection.onParamsChange }, {
-  ownsSpine: ownsSlope, drafting: rawSlopeCurveTool.drafting, onSelect: curveSelection.onSelect,
-  });
+export const slopeSpiralTool = withSpineEditing(rawSlopeSpiralTool, { ownsSpine: ownsSlope, drafting: rawSlopeSpiralTool.drafting });
+export const slopeCurveTool = withSpineEditing(rawSlopeCurveTool, { ownsSpine: ownsSlope, drafting: rawSlopeCurveTool.drafting });
 
 // src/composition/tabletop/tools/terrain/terrain-sculpt-tool.ts
 export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
@@ -5024,12 +4985,12 @@ export interface UseConstructionPointerOptions {
   /** When true, a resolved point (other than an existing node handle -- those stay precise) snaps to the nearest grid intersection before any tool sees it, so a new terrain cell/wall/room lands centered on the grid instead of wherever the pointer happened to be. */
 export interface ConstructionPointerHandlers {
   readonly onSelectionAction: (action: string) => void;
-  /** What the picked handle offers besides dragging it, as the active tool says -- buttons to show. */
-  readonly selectionActions: () => readonly { readonly id: string; readonly label: string }[];
   readonly onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
   readonly onPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
   readonly onPointerUp: (event: ReactPointerEvent<HTMLDivElement>) => void;
   readonly onPointerCancel: (event: ReactPointerEvent<HTMLDivElement>) => void;
+  readonly onClick: (event: ReactMouseEvent<HTMLDivElement>) => void;
+  }
 export function useConstructionPointer(options: UseConstructionPointerOptions): ConstructionPointerHandlers {
   const gestureRef = useRef<ActiveGesture | null>(null);
 
@@ -5276,20 +5237,13 @@ export interface GlobalHandle {
   readonly owner: string;
 export type GlobalHandleIntent =
 export type GlobalHandleEdit =
-export interface GlobalHandleAction {
-  /** Names the action to whatever runs it. */
-  readonly id: string;
-  readonly label: string;
-  readonly intent: GlobalHandleIntent;
-  }
 export interface GlobalHandleProvider {
   readonly name: string;
   /** Every handle of every kind this provider places, before any type's declaration filters them. */
   handles(scene: GlobalHandleScene): readonly GlobalHandle[];
   /** What `intent` on `handle` edits; `undefined` when it edits nothing. Throws to refuse. */
   plan(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: Pick<BezierPort, "curveBatch">, operationId: string): GlobalHandleEdit | undefined;
-  /** What else `handle` offers as it stands now. */
-  actions?(scene: GlobalHandleScene, handle: GlobalHandle): readonly GlobalHandleAction[];
+  }
 
 // src/features/edit-construction/global-handles/handle-motion.ts
 export type HandleMotion =
@@ -5299,7 +5253,7 @@ export function carriesArrows(motion: HandleMotion): boolean {
 
 // src/features/edit-construction/global-handles/index.ts
 export type { GlobalHandleKind } from "./global-handle-ids.ts";
-export type { GlobalHandle, GlobalHandleAction, GlobalHandleEdit, GlobalHandleIntent, GlobalHandleProvider, GlobalHandleScene } from "./global-handle.ts";
+export type { GlobalHandle, GlobalHandleEdit, GlobalHandleIntent, GlobalHandleProvider, GlobalHandleScene } from "./global-handle.ts";
 export type { HandleMotion } from "./handle-motion.ts";
 
 // src/features/edit-construction/history/edit-history.ts
@@ -5539,8 +5493,6 @@ export function shownGlobalHandleAt(scene: GlobalHandleScene, id: string): Globa
   const named = globalHandleOf(id);
 export function planGlobalHandle(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: Pick<BezierPort, "curveBatch">, operationId: string): GlobalHandleEdit | undefined {
   return PROVIDERS.find((provider) => provider.name === handle.provider)?.plan(scene, handle, intent, port, operationId);
-export function globalHandleActions(scene: GlobalHandleScene, id: string): readonly GlobalHandleAction[] {
-  const handle = shownGlobalHandleAt(scene, id);
 export function handleMotionAt(scene: GlobalHandleScene, id: string): HandleMotion | undefined {
   if (globalHandleOf(id)) return shownGlobalHandleAt(scene, id)?.motion;
   if (!isSpineControlNodeId(id)) return undefined;
@@ -5630,10 +5582,6 @@ export function regenerateWithEndWelds(
   options: { readonly keepsWelds?: boolean } = {},
   ): SpineRegeneration | undefined {
   if (!generation.endRung || options.keepsWelds) return generation.regenerate(input);
-export function detachSpineEnd(generation: SpineGeneration, controlNodeId: string, topologies: readonly ConstructionRegionTopology[], operationId: string): ApplyPatchReplacementRequest | undefined {
-  const rung = generation.endRung?.(controlNodeId);
-export function spineEndWelded(generation: SpineGeneration, controlNodeId: string, topologies: readonly ConstructionRegionTopology[]): boolean {
-  const rung = generation.endRung?.(controlNodeId);
 
 // src/features/edit-construction/spine/index.ts
 export type { SpineChain } from "./spine-chains.ts";

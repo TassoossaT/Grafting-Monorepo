@@ -50,9 +50,7 @@ export type GlobalHandleIntent =
   /** Take an end to `at`; `under` is the surface the pointer is on, which a landing prefers. */
   | { readonly kind: "place"; readonly at: ConstructionPosition; readonly under?: ConstructionSurfaceKey }
   /** Raise (positive) or lower one end alone -- the handle's own end -- keeping the other where it is. */
-  | { readonly kind: "lift"; readonly dy: number }
-  /** Take an end off whatever it is welded to, leaving it where it stands. */
-  | { readonly kind: "detach" };
+  | { readonly kind: "lift"; readonly dy: number };
 
 /**
  * What a provider makes of an intent, in the terms the edit is carried out
@@ -85,14 +83,6 @@ export type GlobalHandleEdit =
     }
   | { readonly kind: "replace"; readonly request: ApplyPatchReplacementRequest };
 
-/** Something a picked handle offers besides dragging it -- a button, say. */
-export interface GlobalHandleAction {
-  /** Names the action to whatever runs it. */
-  readonly id: string;
-  readonly label: string;
-  readonly intent: GlobalHandleIntent;
-}
-
 /**
  * One way structures are built -- from a spine, from a cloud of regions --
  * and so one way their global handles stand and edit. A new way of
@@ -105,6 +95,4 @@ export interface GlobalHandleProvider {
   handles(scene: GlobalHandleScene): readonly GlobalHandle[];
   /** What `intent` on `handle` edits; `undefined` when it edits nothing. Throws to refuse. */
   plan(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: Pick<BezierPort, "curveBatch">, operationId: string): GlobalHandleEdit | undefined;
-  /** What else `handle` offers as it stands now. */
-  actions?(scene: GlobalHandleScene, handle: GlobalHandle): readonly GlobalHandleAction[];
 }
