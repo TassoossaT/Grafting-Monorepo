@@ -5260,7 +5260,7 @@ export type Reaction<Context> = (
 
 
 // src/features/edit-construction/global-handles/global-handle-ids.ts
-export type GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "radius" | "origin" | "destination";
+export type GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "radius" | "origin" | "destination" | "originHeight" | "destinationHeight";
 export const globalHandleId = (kind: GlobalHandleKind, anchorNodeId: string): string => `${PREFIX[kind]}${anchorNodeId}`;
 export function globalHandleOf(id: string): { readonly kind: GlobalHandleKind; readonly nodeId: string } | undefined {
   const kind = KINDS.find((candidate) => id.startsWith(PREFIX[candidate]));
@@ -6333,7 +6333,7 @@ export const rampEndsCapability: StructureEnds = Object.freeze<StructureEnds>({
 // src/features/edit-construction/structure-types/platform/platform-ramp-type.ts
 export const rampStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
   surfaceType: RAMP_SURFACE_TYPE, label: "Rampa",
-  globalHandles: Object.freeze(["pivot", "rotate", "height", "origin", "destination"] as const),
+  globalHandles: Object.freeze(["pivot", "rotate", "height", "origin", "destination", "originHeight", "destinationHeight"] as const),
   ends: rampEndsCapability,
   creation: "a symmetric trapezoid on an inclined plane: an axis and a width at each end",
   traits: Object.freeze([]),

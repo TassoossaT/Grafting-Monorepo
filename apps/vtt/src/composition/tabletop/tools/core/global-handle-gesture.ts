@@ -26,6 +26,7 @@ const PREVIEW_COLOR = 0xffbc55;
 const DONE: Readonly<Record<GlobalHandleKind, string>> = {
   pivot: "Estrutura movida.", rotate: "Estrutura girada.", height: "Altura atualizada.", turns: "Voltas atualizadas.",
   radius: "Raio atualizado.", origin: "Ponta movida.", destination: "Ponta movida.",
+  originHeight: "Inclinação atualizada.", destinationHeight: "Inclinação atualizada.",
 };
 
 function sceneOf(ctx: ToolContext): GlobalHandleScene {
@@ -164,6 +165,9 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
         const push = delta.x * direction.x + delta.z * direction.z;
         return { intent: { kind: "radius", delta: push }, at, readout: `raio ${push >= 0 ? "+" : ""}${push.toFixed(2)} m` };
       }
+      case "originHeight":
+      case "destinationHeight":
+        return { intent: { kind: "lift", dy: delta.y }, at, readout: `ponta ${delta.y >= 0 ? "+" : ""}${delta.y.toFixed(2)} m` };
       case "origin":
       case "destination": {
         const under = floorUnder(floorsOf(ctx), gesture.current)?.surfaceKey;

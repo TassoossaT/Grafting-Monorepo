@@ -4064,11 +4064,11 @@ in:
 - replace: faces swapped for new ones in one patch replacement -- a
   structure rebuilt, and the floors it welds into or leaves.
 
-### `type vtt.global-handle.GlobalHandleIntent = { delta: ConstructionPosition; kind: "move" } | { angle: number; kind: "rotate" } | { dy: number; kind: "height" } | { angle: number; kind: "wind" } | { delta: number; kind: "radius" } | { at: ConstructionPosition; kind: "place"; under?: ConstructionSurfaceKey } | { kind: "detach" } | { kind: "remove" }`
+### `type vtt.global-handle.GlobalHandleIntent = { delta: ConstructionPosition; kind: "move" } | { angle: number; kind: "rotate" } | { dy: number; kind: "height" } | { angle: number; kind: "wind" } | { delta: number; kind: "radius" } | { at: ConstructionPosition; kind: "place"; under?: ConstructionSurfaceKey } | { dy: number; kind: "lift" } | { kind: "detach" } | { kind: "remove" }`
 
 What a gesture on a global handle asks for, whatever the structure.
 
-### `type vtt.global-handle-ids.GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "radius" | "origin" | "destination"`
+### `type vtt.global-handle-ids.GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "radius" | "origin" | "destination" | "originHeight" | "destinationHeight"`
 
 The handles that stand for a whole structure rather than one of its
 points, whatever the structure is built from -- a spine, a cloud of
@@ -4080,7 +4080,9 @@ regions:
 - turns: winds a spiral on or back;
 - radius: widens or narrows a spiral round its centre;
 - origin, destination: move one end of a structure that runs between two
-  ends, connecting it where it lands and disconnecting it where it left.
+  ends, connecting it where it lands and disconnecting it where it left;
+- originHeight, destinationHeight: raise or lower that one end -- how
+  steeply the structure climbs.
 
 Which of them a structure shows is its type's declaration
 (`StructureTypeDefinition.globalHandles`). Every one is named after the

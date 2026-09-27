@@ -61,6 +61,8 @@ function landEnds(snapshot: ConstructionGraphSnapshot, graphPatch: ConstructionG
   const nodes = new Map(graphPatch.nodes.map((node) => [node.id, node]));
   const edges = new Map(graphPatch.edges.map((edge) => [edge.edgeId, edge]));
   for (const id of shifted) {
+    const was = before.get(id), now = after.get(id)!;
+    if (was && Math.hypot(was.x - now.x, was.z - now.z) < 1e-9) continue;
     const span: ConstructionEdgeSnapshot | undefined = edges.get(drafted.edges.find((edge) => isSpineEdge(edge) && (edge.startNodeId === id || edge.endNodeId === id))?.edgeId ?? "")
       ?? drafted.edges.find((edge) => isSpineEdge(edge) && (edge.startNodeId === id || edge.endNodeId === id));
     if (!span?.curve) continue;

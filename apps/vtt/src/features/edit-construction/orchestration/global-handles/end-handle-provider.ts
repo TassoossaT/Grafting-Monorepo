@@ -8,6 +8,9 @@ import { removalOf } from "./structure-removal.ts";
 import { endJointNear, releasableFace } from "../free-end-welds.ts";
 import { floorLandingNear, floorsWeldedBy, floorsWithout, reweldFloors, type EndJoint } from "../../topology/floor-weld.ts";
 
+/** How far above its end an end's own height handle stands. */
+const LIFT_REACH = 1.2;
+
 /** How close an end must still stand to a floor's edge to count as staying welded there. */
 const KEPT_REACH = 1e-2;
 
@@ -68,7 +71,7 @@ function continued(scene: GlobalHandleScene, handle: EndGlobalHandle, standing: 
  * floor edge it now reaches -- never the floor the other end is on -- and
  * the standing end welds back where it stood.
  */
-function placed(scene: GlobalHandleScene, handle: EndGlobalHandle, ends: readonly StructureEnd[], at: ConstructionPosition, under: ConstructionSurfaceKey | undefined, operationId: string): GlobalHandleEdit {
+function placed(scene: GlobalHandleScene, handle: EndGlobalHandle, ends: readonly StructureEnd[], at: ConstructionPosition, under: ConstructionSurfaceKey | undefined, operationId: string, lifted = false): GlobalHandleEdit {
   const capability = capabilityOf(handle.topology)!;
   const rungs = ends.map((end) => end.rung);
   const released = floorsWithout(floorsOf(scene), rungs);
@@ -77,8 +80,9 @@ function placed(scene: GlobalHandleScene, handle: EndGlobalHandle, ends: readonl
   const kept = standingFloor && floorLandingNear(released.filter((floor) => keyOf(floor) === keyOf(standingFloor)), standing.position, { reach: KEPT_REACH });
   // Another structure's free end within reach is run on from, before any floor's edge.
   const own = new Set(handle.topology.nodes.map((node) => node.id));
-  const joint = endJointNear(scene.graph, scene.topologies, at, { own });
-  const landing = joint ? undefined : floorLandingNear(standingFloor ? released.filter((floor) => keyOf(floor) !== keyOf(standingFloor)) : released, at, under ? { under } : {});
+  // A lifted end stays where it is in plan: it lands nowhere, and comes off whatever held it.
+  const joint = lifted ? undefined : endJointNear(scene.graph, scene.topologies, at, { own });
+  const landing = joint || lifted ? undefined : floorLandingNear(standingFloor ? released.filter((floor) => keyOf(floor) !== keyOf(standingFloor)) : released, at, under ? { under } : {});
   const target = joint ? { point: joint.mid, joint } : { point: landing ? { ...at, y: landing.height } : at, ...(landing ? { landing } : {}) };
   const rebuilt = capability.rebuild(handle.topology, handle.end, target, kept, continued(scene, handle, standing, ends));
   // Every node of the structure where it will stand -- another structure's included, where an end continues one.
@@ -120,18 +124,15 @@ export const endHandleProvider: GlobalHandleProvider = {
       if (!capability) return [];
       const nodeIds = topology.nodes.map((node) => node.id).sort();
       const { name } = handleNodeName(scene, [topology], nodeIds);
-      return capability.ends(topology).map((end) => ({
-        id: globalHandleId(end.name, name),
-        kind: end.name,
-        position: end.position,
-        pivot: end.position,
-        owner: topology.surfaceType,
-        provider: "ends",
-        nodeIds,
-        motion: { kind: "plane" },
-        topology,
-        end: end.name,
-      }));
+      return capability.ends(topology).flatMap((end): EndGlobalHandle[] => {
+        const base = { pivot: end.position, owner: topology.surfaceType, provider: "ends", nodeIds, topology, end: end.name };
+        const lift = end.name === "origin" ? "originHeight" : "destinationHeight";
+        return [
+          { ...base, id: globalHandleId(end.name, name), kind: end.name, position: end.position, motion: { kind: "plane" } },
+          // Above the end: raising or lowering it alone is how steeply the structure climbs.
+          { ...base, id: globalHandleId(lift, name), kind: lift, position: { ...end.position, y: end.position.y + LIFT_REACH }, motion: { kind: "vertical" } },
+        ];
+      });
     });
   },
   plan(scene, generic, intent, _port, operationId) {
@@ -142,6 +143,7 @@ export const endHandleProvider: GlobalHandleProvider = {
     if (intent.kind === "remove") return removalOf(scene, [handle.topology], operationId);
     if (intent.kind === "detach") return detached(scene, end, operationId);
     if (intent.kind === "place") return placed(scene, handle, ends, intent.at, intent.under, operationId);
+    if (intent.kind === "lift") return placed(scene, handle, ends, { ...end.position, y: end.position.y + intent.dy }, undefined, operationId, true);
     return undefined;
   },
   actions(scene, generic): readonly GlobalHandleAction[] {

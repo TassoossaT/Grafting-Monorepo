@@ -49,6 +49,8 @@ export type GlobalHandleIntent =
   | { readonly kind: "radius"; readonly delta: number }
   /** Take an end to `at`; `under` is the surface the pointer is on, which a landing prefers. */
   | { readonly kind: "place"; readonly at: ConstructionPosition; readonly under?: ConstructionSurfaceKey }
+  /** Raise (positive) or lower one end alone -- the handle's own end -- keeping the other where it is. */
+  | { readonly kind: "lift"; readonly dy: number }
   /** Take an end off whatever it is welded to, leaving it where it stands. */
   | { readonly kind: "detach" }
   /** Delete the whole structure, taking it off whatever it is welded to first. */

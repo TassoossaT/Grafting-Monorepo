@@ -524,3 +524,64 @@ test("a curved ramp drawn from a straight ramp's free top runs on from it, the s
     assert.ok(["min", "max"].every((side) => straight.nodes.some((n) => n.id === controlSectionId(start.id, side))), "the straight ramp's top is the curved one's start");
   } finally { session.free(); }
 });
+
+/** Drags the vertical handle `kind` of `owner` up by `dy`, 40 screen pixels a unit, with `tool`. */
+function lift(fixture, tool, toolParams, owner, kind, dy) {
+  Object.assign(fixture.runtime, { showPreview() {}, clearPreview() {} });
+  const grabbed = shownGlobalHandles(scene(fixture.runtime)).find((h) => h.kind === kind && h.owner === owner);
+  assert.ok(grabbed && grabbed.motion.kind === "vertical", `${owner} shows a vertical ${kind} handle`);
+  const start = { nodeId: grabbed.id, point: grabbed.position, screenX: 100, screenY: 300 };
+  const current = { point: grabbed.position, screenX: 100, screenY: 300 - dy * 40 };
+  tool.onPointerDown(fixture.ctx, start, toolParams);
+  tool.onPointerMove(fixture.ctx, { start, current, samples: [start, current] }, toolParams);
+  tool.onPointerUp(fixture.ctx, { start, current, samples: [start, current], moved: true }, toolParams);
+}
+
+test("each end of a straight ramp has its own height handle: raising one changes how steeply it climbs, off any floor it held", () => {
+  const fixture = sessionFixture();
+  const { runtime, session, calls } = fixture;
+  try {
+    floor(runtime, "low", 0, 0);
+    drawn(fixture, { x: 4, y: 0, z: 2 }, { x: 8, y: 0, z: 2 });
+    lift(fixture, slopeRampTool, params, "platform-ramp", "destinationHeight", 1);
+    assert.equal(calls.feedback.at(-1).tone, "success", JSON.stringify(calls.feedback.at(-1)));
+    close(centre(ramp(runtime), "top").y, 3, "the top raised by one");
+    close(centre(ramp(runtime), "bottom").y, 0, "the bottom where it was");
+    close(centre(ramp(runtime), "top").x, 8, "and nowhere else");
+    assert.ok(welded(faces(runtime, "platform")[0], ramp(runtime), "bottom"), "the bottom still welded");
+    lift(fixture, slopeRampTool, params, "platform-ramp", "originHeight", 0.5);
+    close(centre(ramp(runtime), "bottom").y, 0.5, "the bottom raised by a half");
+    assert.ok(!welded(faces(runtime, "platform")[0], ramp(runtime), "bottom"), "off the floor it no longer stands on");
+    for (const i of [0, 1, 2, 3]) close(runtime.getGraphSnapshot().nodes.find((n) => n.id === `low:${i}`).position.y, 0, "the solid floor stays where it was");
+  } finally { session.free(); }
+});
+
+test("a curved ramp has a height handle at each end for its climb, and one in the middle raising it whole with its floor", async () => {
+  const { commitPlatformSlope } = await import("../src/composition/tabletop/tools/slope/slope-commit.ts");
+  const { slopeCurveTool } = await import("../src/composition/tabletop/tools/slope/slope-tools.ts");
+  const { controlSectionId, isSpineControlNodeId } = await import("../src/features/edit-construction/index.ts");
+  const fixture = sessionFixture();
+  const { runtime, session, ctx, calls } = fixture;
+  const curve = { width: 1.5, rise: 2 };
+  const control = (x) => runtime.getGraphSnapshot().nodes.find((n) => isSpineControlNodeId(n.id) && Math.abs(n.position.x - x) < 1e-6);
+  try {
+    floor(runtime, "low", 0, 0);
+    commitPlatformSlope(ctx, [{ x: 4, y: 0, z: 2 }, { x: 8, y: 2, z: 2 }], curve);
+    const start = control(4);
+    lift(fixture, slopeCurveTool, curve, "platform-slope", "destinationHeight", 1);
+    assert.ok(!calls.feedback.some((f) => f && f.tone === "error"), JSON.stringify(calls.feedback.slice(-2)));
+    close(control(8).position.y, 3, "the far end raised by one");
+    close(control(4).position.y, 0, "the near end where it was");
+    // The whole ramp up by a half: the floor welded to it comes along, still welded.
+    lift(fixture, slopeCurveTool, curve, "platform-slope", "height", 0.5);
+    close(control(8).position.y, 3.5, "far end up");
+    close(control(4).position.y, 0.5, "near end up");
+    close(runtime.getGraphSnapshot().nodes.find((n) => n.id === "low:0").position.y, 0.5, "the floor carried up with it");
+    assert.ok(["min", "max"].every((side) => faces(runtime, "platform")[0].nodes.some((n) => n.id === controlSectionId(start.id, side))), "still welded");
+    // The near end alone down again: off the floor, which stays.
+    lift(fixture, slopeCurveTool, curve, "platform-slope", "originHeight", -0.25);
+    close(control(4).position.y, 0.25, "near end lowered");
+    assert.ok(!["min", "max"].some((side) => faces(runtime, "platform")[0].nodes.some((n) => n.id === controlSectionId(start.id, side))), "came off its floor");
+    close(runtime.getGraphSnapshot().nodes.find((n) => n.id === "low:0").position.y, 0.5, "the floor stays");
+  } finally { session.free(); }
+});

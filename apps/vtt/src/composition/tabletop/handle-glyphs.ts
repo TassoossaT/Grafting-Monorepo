@@ -26,4 +26,6 @@ export const HANDLE_GLYPHS: Readonly<Record<SceneHandleKind | "vertex", RenderHa
   radius: "radius",
   origin: "link",
   destination: "link",
+  originHeight: "height",
+  destinationHeight: "height",
 };

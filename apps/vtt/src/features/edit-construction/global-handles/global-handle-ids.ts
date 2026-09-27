@@ -9,7 +9,9 @@
  * - turns: winds a spiral on or back;
  * - radius: widens or narrows a spiral round its centre;
  * - origin, destination: move one end of a structure that runs between two
- *   ends, connecting it where it lands and disconnecting it where it left.
+ *   ends, connecting it where it lands and disconnecting it where it left;
+ * - originHeight, destinationHeight: raise or lower that one end -- how
+ *   steeply the structure climbs.
  *
  * Which of them a structure shows is its type's declaration
  * (`StructureTypeDefinition.globalHandles`). Every one is named after the
@@ -17,11 +19,12 @@
  * that keeps that node; none is a graph node. This module is the only place
  * their ids are made or read.
  */
-export type GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "radius" | "origin" | "destination";
+export type GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "radius" | "origin" | "destination" | "originHeight" | "destinationHeight";
 
 const PREFIX: Readonly<Record<GlobalHandleKind, string>> = {
   pivot: "structure-pivot:", rotate: "structure-rotate:", height: "structure-height:", turns: "structure-turns:", radius: "structure-radius:",
   origin: "structure-origin:", destination: "structure-destination:",
+  originHeight: "structure-origin-height:", destinationHeight: "structure-destination-height:",
 };
 const KINDS = Object.keys(PREFIX) as readonly GlobalHandleKind[];
 

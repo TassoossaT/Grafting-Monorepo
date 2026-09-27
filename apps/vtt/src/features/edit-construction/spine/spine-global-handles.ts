@@ -11,7 +11,8 @@ import { isSpineEdge, spineComponent, spineOwnerOf } from "./spine-owner.ts";
  *
  * - pivot: a spiral's centre, or the middle of the control points;
  * - rotate: out beyond the spine, level with the pivot, to turn it round it;
- * - height: above the far end;
+ * - height: above the middle, raising the whole spine;
+ * - originHeight, destinationHeight: above each end, raising that end alone;
  * - turns: on a spiral, just past the far end, carrying on round the centre.
  *
  * Every kind is listed here for every spine; which a spine actually shows
@@ -65,7 +66,14 @@ function handlesOf(graph: ConstructionGraphSnapshot, edges: readonly Constructio
   ];
   if (!chain || !ends) return handles;
   const end = positions.get(ends[1])!;
-  handles.push({ ...base, id: spineGlobalHandleId("height", name), kind: "height", position: { ...end, y: end.y + END_REACH }, motion: { kind: "vertical" } });
+  const first = positions.get(ends[0])!;
+  handles.push(
+    // Above the middle: the whole spine up or down.
+    { ...base, id: spineGlobalHandleId("height", name), kind: "height", position: { ...pivot, y: pivot.y + END_REACH }, motion: { kind: "vertical" } },
+    // Above each end: that end alone -- how steeply it climbs.
+    { ...base, id: spineGlobalHandleId("originHeight", name), kind: "originHeight", position: { ...first, y: first.y + END_REACH }, motion: { kind: "vertical" } },
+    { ...base, id: spineGlobalHandleId("destinationHeight", name), kind: "destinationHeight", position: { ...end, y: end.y + END_REACH }, motion: { kind: "vertical" } },
+  );
   if (!center) return handles;
   const before = positions.get(chain.nodes.at(-2)!)!;
   const middle = { x: center[0], z: center[1] };

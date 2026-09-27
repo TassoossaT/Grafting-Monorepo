@@ -74,6 +74,14 @@ const edits = {
     ], { elevation: 0, mode: "create", support: "floating" });
     drawRamp(f.ctx, { x: -20 + 3.6 * Math.cos(0.8), y: 0, z: -20 + 3.6 * Math.sin(0.8) }, { x: -20 + 9 * Math.cos(0.8), y: 0, z: -20 + 9 * Math.sin(0.8) });
   },
+  "raising a welded ramp's bottom alone": (f) => {
+    const grabbed = handle(f.runtime, "originHeight", "platform-ramp");
+    const start = { nodeId: grabbed.id, point: grabbed.position, screenX: 100, screenY: 300 };
+    const current = { point: grabbed.position, screenX: 100, screenY: 260 };
+    slopeRampTool.onPointerDown(f.ctx, start, ramp);
+    slopeRampTool.onPointerMove(f.ctx, { start, current, samples: [start, current] }, ramp);
+    slopeRampTool.onPointerUp(f.ctx, { start, current, samples: [start, current], moved: true }, ramp);
+  },
   "moving a ramp end to reconnect it": (f) => {
     const end = handle(f.runtime, "destination", "platform-ramp");
     drag(slopeRampTool, ramp, f.ctx, end, { x: end.position.x - 2, y: 0, z: end.position.z });

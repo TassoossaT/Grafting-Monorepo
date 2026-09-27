@@ -25,9 +25,12 @@ export const spineHandleProvider: GlobalHandleProvider = {
         case "remove": return { nodes: [], edges: [], removedEdgeIds: handle.edges.map((edge) => edge.edgeId) };
         case "move": return planSpineTransform(scene.graph, handle, { delta: intent.delta });
         case "rotate": return planSpineTransform(scene.graph, handle, { rotation: { pivot: handle.pivot, angle: intent.angle } });
-        case "height": {
-          const far = handle.ends && scene.graph.nodes.find((node) => node.id === handle.ends![1]);
-          return far ? { nodes: [{ id: far.id, position: { ...far.position, y: far.position.y + intent.dy } }], edges: [] } : undefined;
+        case "height": return planSpineTransform(scene.graph, handle, { delta: { x: 0, y: intent.dy, z: 0 } });
+        case "lift": {
+          // The handle's own end alone; the owner regrades between the ends.
+          const id = handle.ends?.[handle.kind === "originHeight" ? 0 : 1];
+          const at = id && scene.graph.nodes.find((node) => node.id === id);
+          return at ? { nodes: [{ id: at.id, position: { ...at.position, y: at.position.y + intent.dy } }], edges: [] } : undefined;
         }
         case "radius": {
           const shape = describeSpineChain(scene.graph, handle.id);
@@ -50,7 +53,7 @@ export const spineHandleProvider: GlobalHandleProvider = {
     // to the ends that move -- solid floors and all they hold -- the same way.
     const carry = intent.kind === "move" ? { ends: handle.ends ?? [], place: (p: ConstructionPosition) => ({ x: p.x + intent.delta.x, y: p.y + intent.delta.y, z: p.z + intent.delta.z }) }
       : intent.kind === "rotate" ? { ends: handle.ends ?? [], place: (p: ConstructionPosition) => ({ ...rotateInPlan(p, handle.pivot, intent.angle), y: p.y }) }
-      : intent.kind === "height" ? { ends: handle.ends ? [handle.ends[1]] : [], place: (p: ConstructionPosition) => ({ ...p, y: p.y + intent.dy }) }
+      : intent.kind === "height" ? { ends: handle.ends ?? [], place: (p: ConstructionPosition) => ({ ...p, y: p.y + intent.dy }) }
       : undefined;
     const carried = carry && carriedByEnds(scene.topologies, handle.owner, carry.ends, carry.place);
     if (!carried || carried.faces.length === 0) return { kind: "spine", owner: handle.owner, graphPatch };
