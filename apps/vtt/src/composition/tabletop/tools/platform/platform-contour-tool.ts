@@ -1,4 +1,4 @@
-import { DEFAULT_TOOL_PARAMS, fitPath, floatingPlatformStructureType, hasTrait, platformStructureType, weldFreeEndsOnto } from "../../../../features/edit-construction/index.ts";
+import { DEFAULT_TOOL_PARAMS, faceOverlapsOutline, fitPath, floatingPlatformStructureType, hasTrait, outlineOf, platformStructureType, weldFreeEndsOnto } from "../../../../features/edit-construction/index.ts";
 import type { FittedEdge, ToolParamsByTool } from "../../../../features/edit-construction/index.ts";
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import type { ConstructionPosition, ConstructionRegionTopology } from "../../../../ports/index.ts";
@@ -109,15 +109,25 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
     // Picking the terrain below a drawing plane is not an instruction to weld floors.
     const picked = new Set(pickedSamples.flatMap((s) => s.nodeId ? [s.nodeId] : []));
     const level = all.filter((t) => t.surfaceType === surfaceTypeOf(params) && t.nodes.every((n) => Math.abs(n.position.y - params.elevation) < 1e-4));
-    // A floor drawn against one of its own kind at its own height joins it: the two become one floor,
-    // as extending would make them, rather than two faces lying edge to edge unconnected.
-    const joins = params.mode === "create" ? level.filter((t) => touchesContour(t, contour)) : [];
+    // A floor drawn over one of its own kind never joins it: one cloud's faces
+    // lying over each other mesh with holes where they cross. It stands apart
+    // -- its own cloud, sharing not one node -- and so does everything that
+    // floor's cloud holds.
+    const drawnOutline = outlineOf(contour);
+    const overlapped = params.mode === "create" ? level.filter((t) => faceOverlapsOutline(t, drawnOutline)) : [];
+    const apart = new Set(overlapped.flatMap((t) => ctx.runtime.cloudFor({ seed: t.surfaceKey, surfaceType: t.surfaceType }).surfaceKeys.map((key) => key.join("\u0000"))));
+    for (const t of overlapped) apart.add(t.surfaceKey.join("\u0000"));
+    const apartNodes = new Set(level.filter((t) => apart.has(t.surfaceKey.join("\u0000"))).flatMap((t) => t.nodes.map((n) => n.id)));
+    // A floor drawn against one of its own kind at its own height -- only
+    // touching it -- joins it: the two become one floor, as extending would
+    // make them, rather than two faces lying edge to edge unconnected.
+    const joins = params.mode === "create" ? level.filter((t) => !apart.has(t.surfaceKey.join("\u0000")) && touchesContour(t, contour)) : [];
     const sources = params.mode === "create" ? joins : level;
     if (params.mode !== "create" && sources.length === 0) throw new Error("Nenhuma plataforma nessa elevação. Comece sobre a plataforma ou escolha a elevação correta.");
 
     const operationId = scopedToolId(ctx, "platform", ctx.nextSequence());
     const retained = new Map(sources.flatMap((t) => t.nodes.map((n) => [n.id,n] as const)));
-    for (const n of graph.nodes) if (picked.has(n.id) && Math.abs(n.position.y - params.elevation) < 1e-4) retained.set(n.id,n);
+    for (const n of graph.nodes) if (picked.has(n.id) && !apartNodes.has(n.id) && Math.abs(n.position.y - params.elevation) < 1e-4) retained.set(n.id,n);
     const nodes = new Map<string, { id: string; position: ConstructionPosition }>();
     function nodeAt(p: readonly [number,number]): string {
       const existing = [...retained.values(),...nodes.values()].find((n) => Math.abs(n.position.x-p[0]) < WELD_TOLERANCE && Math.abs(n.position.z-p[1]) < WELD_TOLERANCE);
@@ -128,7 +138,7 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
       // resolve arbitrarily.
       let nearest: { readonly node: (typeof graph.nodes)[number]; readonly distance: number } | undefined;
       if (!existing) for (const n of graph.nodes) {
-        if (Math.abs(n.position.y-params.elevation) > 1e-3) continue;
+        if (Math.abs(n.position.y-params.elevation) > 1e-3 || apartNodes.has(n.id)) continue;
         const distance = Math.hypot(n.position.x-p[0],n.position.z-p[1]);
         if (distance > WELD_TOLERANCE) continue;
         if (nearest === undefined || distance < nearest.distance) nearest = { node:n, distance };
@@ -222,7 +232,9 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
       },
     });
     if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
-    ctx.reportFeedback({ tone: "success", message: `Plataforma: ${regions.length} face(s) na elevação ${params.elevation}.` });
+    ctx.reportFeedback({ tone: "success", message: overlapped.length > 0
+      ? `Plataforma sobreposta a outra: fica separada dela, na elevação ${params.elevation}.`
+      : `Plataforma: ${regions.length} face(s) na elevação ${params.elevation}.` });
   } catch (error) { ctx.reportFeedback({ tone: "error", message: error instanceof Error ? error.message : String(error) }); }
 }
 /**

@@ -82,3 +82,29 @@ test("a floor drawn against part of another's side joins it whichever way round 
     } finally { session.free(); }
   }
 });
+
+test("a floor drawn over another of its kind at its height stays its own cloud: no shared node, no hole in either", async () => {
+  const { commitPlatformContour } = await import("../src/composition/tabletop/tools/platform/platform-contour-tool.ts");
+  const cases = {
+    crossing: [[2, 1], [6, 1], [6, 3], [2, 3]],
+    inside: [[1, 1], [3, 1], [3, 3], [1, 3]],
+    covering: [[-1, -1], [5, -1], [5, 5], [-1, 5]],
+    "over a corner": [[3, 3], [6, 3], [6, 6], [3, 6]],
+    // Its corner right on the old floor's corner: still not one of its nodes.
+    "from its corner": [[4, 4], [2, 4], [2, 7], [4, 7]].map(([x, z]) => [x, z - 1]),
+  };
+  for (const [name, corners] of Object.entries(cases)) {
+    const { runtime, session, ctx, calls } = sessionFixture();
+    try {
+      addFace(runtime, "old", "platform-floating", [[0, 0], [4, 0], [4, 4], [0, 4]].map(([x, z], i) => ({ id: `old:${i}`, position: { x, y: 2, z } })));
+      commitPlatformContour(ctx, corners.map(([x, z]) => ({ point: { x, y: 2, z } })), { mode: "create", elevation: 2, support: "floating", shape: "rectangle" });
+      assert.ok(!calls.feedback.some((f) => f.tone === "error"), `${name}: ${JSON.stringify(calls.feedback)}`);
+      const floors = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform-floating");
+      assert.equal(floors.length, 2, `${name}: two floors`);
+      assert.ok(floors.every((f) => f.holes.length === 0), `${name}: no holes`);
+      const [a, b] = floors.map((f) => new Set(f.nodes.map((n) => n.id)));
+      assert.ok(![...a].some((id) => b.has(id)), `${name}: not one shared node`);
+      assert.equal(runtime.cloudFor({ seed: floors[0].surfaceKey, surfaceType: "platform-floating" }).surfaceKeys.length, 1, `${name}: two clouds`);
+    } finally { session.free(); }
+  }
+});

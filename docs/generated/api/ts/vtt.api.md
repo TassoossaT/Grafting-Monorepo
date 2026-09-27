@@ -7748,6 +7748,22 @@ Whether both nodes of `rung`, at `positions`, lie on `edge` strictly between its
 
 Every top-run widget's two zone positions, across every partition panel `topologies` holds.
 
+### `function vtt.plan-overlap.faceOutlines(topology: ConstructionRegionTopology): readonly (readonly PlanPoint[])[]`
+
+A face's outer outlines as points in plan.
+
+### `function vtt.plan-overlap.faceOverlapsOutline(topology: ConstructionRegionTopology, drawn: readonly PlanPoint[]): boolean`
+
+Whether `topology` shares area in plan with the outline `drawn`.
+
+### `function vtt.plan-overlap.outlineOf(edges: readonly { end: ConstructionPosition; geometry: ConstructionEdgeGeometry; start: ConstructionPosition }[]): readonly PlanPoint[]`
+
+An outline as points in plan, from its edges in order.
+
+### `function vtt.plan-overlap.outlinesOverlap(a: readonly PlanPoint[], b: readonly PlanPoint[]): boolean`
+
+Whether outlines `a` and `b` share any area in plan -- not only edges or corners.
+
 ### `interface vtt.plan-rotation.PlanPoint`
 
 Turning things round a vertical axis, in plan -- for anything that

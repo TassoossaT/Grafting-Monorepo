@@ -7081,6 +7081,20 @@ export function panelHeightWidgets(
   const items: { readonly id: string; readonly position: ConstructionPosition }[] = [];
   const seen = new Set<string>();
 
+// src/features/edit-construction/topology/plan-overlap.ts
+export function outlineOf(edges: readonly { readonly start: ConstructionPosition; readonly end: ConstructionPosition; readonly geometry: ConstructionEdgeGeometry }[]): readonly PlanPoint[] {
+  return edges.flatMap((edge) => edgePoints(edge.start, edge.end, edge.geometry));
+export function faceOutlines(topology: ConstructionRegionTopology): readonly (readonly PlanPoint[])[] {
+  const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
+export function outlinesOverlap(a: readonly PlanPoint[], b: readonly PlanPoint[]): boolean {
+  if (a.length < 3 || b.length < 3) return false;
+  for (let i = 0; i < a.length; i++) {
+  for (let j = 0; j < b.length; j++) {
+  if (cross(a[i]!, a[(i + 1) % a.length]!, b[j]!, b[(j + 1) % b.length]!)) return true;
+  }
+export function faceOverlapsOutline(topology: ConstructionRegionTopology, drawn: readonly PlanPoint[]): boolean {
+  return faceOutlines(topology).some((outline) => outlinesOverlap(outline, drawn));
+
 // src/features/edit-construction/topology/plan-rotation.ts
 export interface PlanPoint {
   readonly x: number;
