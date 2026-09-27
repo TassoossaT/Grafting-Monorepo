@@ -146,7 +146,9 @@ function fitAlongEdges(axisStart: ConstructionPosition, axisEnd: ConstructionPos
     // The edge's own direction, signed so sliding by `s` moves the end by `s` along it.
     const sign = Math.sign(((landing.b.x - landing.a.x) * side.x + (landing.b.z - landing.a.z) * side.z) / edge) || 1;
     const s = alongEdge(landing, at);
-    const [lo, hi] = sign > 0 ? [half - s, edge - half - s] : [s - (edge - half), s - half];
+    let [lo, hi] = sign > 0 ? [half - s, edge - half - s] : [s - (edge - half), s - half];
+    // An end as wide as its edge fills it corner to corner: its corners take the edge's own over.
+    if (lo > hi && Math.abs(edge - 2 * (half - CORNER_CLEARANCE)) < 2 * CORNER_CLEARANCE) lo = hi = sign > 0 ? edge / 2 - s : s - edge / 2;
     if (lo > hi || Math.max(low, lo) > Math.min(high, hi) || (!slidable && (lo > 0 || hi < 0))) continue;
     low = Math.max(low, lo);
     high = Math.min(high, hi);
@@ -169,7 +171,7 @@ export function planRamp(from: RampEndPlan, to: RampEndPlan, widths: { readonly 
   // A curved edge is met along its radius and never slid along; a straight one may be, to fit.
   const straight = axis.welds.filter((weld) => !weld.landing.arc);
   // An end continuing another structure is fixed where that end is: nothing slides.
-  const fitted = straight.length === 0 ? axis : fitAlongEdges(axis.axisStart, axis.axisEnd, straight, own, axis.joints.length === 0);
+  const fitted = straight.length === 0 ? { ...axis, welds: [] as Welds } : fitAlongEdges(axis.axisStart, axis.axisEnd, straight, own, axis.joints.length === 0);
   let { axisStart, axisEnd } = fitted;
   const welds = [...fitted.welds];
   for (const weld of axis.welds.filter((candidate) => candidate.landing.arc)) {

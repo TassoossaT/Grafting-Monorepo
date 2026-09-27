@@ -226,7 +226,9 @@ export function rungFits(edge: Pick<FloorEdge, "a" | "b">, rung: WeldRung, posit
     const p = positions.get(id);
     if (!p) return false;
     const { t, distance } = projectOnto(edge.a, edge.b, p);
-    return distance < ON_EDGE && Math.abs(p.y - edge.a.y) < ON_EDGE && t * length > CORNER_CLEARANCE && (1 - t) * length > CORNER_CLEARANCE;
+    // Clear of the edge's corners -- or right on one, which the rung then takes over.
+    const clear = (along: number) => along > CORNER_CLEARANCE || Math.abs(along) < ON_EDGE;
+    return distance < ON_EDGE && Math.abs(p.y - edge.a.y) < ON_EDGE && clear(t * length) && clear((1 - t) * length);
   });
 }
 
@@ -318,8 +320,9 @@ function attach(draft: FaceDraft, rung: WeldRung, positions: ReadonlyMap<string,
   const adopted = new Map<string, string>();
   for (const node of [rung.startNodeId, rung.endNodeId]) {
     const p = positions.get(node)!;
-    // A node the run already has right there -- where ground met the floor -- becomes the rung's own.
-    const standing = inRun.map((step) => step.to).slice(0, -1).find((id) => Math.hypot(at(id).x - p.x, at(id).z - p.z) < ON_EDGE);
+    // A node the run already has right there -- where ground met the floor, or
+    // the run's own corner, when the rung spans the whole side -- becomes the rung's own.
+    const standing = [inRun[0]!.from, ...inRun.map((step) => step.to)].find((id) => Math.hypot(at(id).x - p.x, at(id).z - p.z) < ON_EDGE);
     if (standing !== undefined) {
       adopted.set(standing, node);
       continue;
@@ -531,7 +534,12 @@ export function reweldFloors(
     // And every face through a node the rung took over now passes through the rung's.
     if (joined.adopted.size > 0) {
       for (const face of faces) {
-        if (!face.nodes.some((node) => joined.adopted.has(node.id))) continue;
+        // As the face now stands in this change: a node a detach just copied is only in its draft.
+        const standing = drafts.get(key(face.surfaceKey));
+        const holds = standing
+          ? standing.loops.flat().some((step) => joined.adopted.has(step.from) || joined.adopted.has(step.to))
+          : face.nodes.some((node) => joined.adopted.has(node.id));
+        if (!holds) continue;
         const draft = draftFor(face);
         for (const [from, to] of joined.adopted) draft.positions.set(to, positions.get(to)!);
         if (renameNodes(draft, joined.adopted, `${operationId}:weld:${i}:adopt`, renamed)) touched.add(key(face.surfaceKey));

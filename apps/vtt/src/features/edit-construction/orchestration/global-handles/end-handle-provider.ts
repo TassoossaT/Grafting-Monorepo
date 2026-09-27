@@ -52,6 +52,19 @@ function continued(scene: GlobalHandleScene, handle: EndGlobalHandle, standing: 
   return { rung: standing.rung, a, b, mid, out: { x: (far.x - mid.x) / length, z: (far.z - mid.z) / length }, height: mid.y, width: Math.hypot(b.x - a.x, b.z - a.z) };
 }
 
+/** How far off where it was taken, in plan, a dragged end held square may end up before the other end lets go instead. */
+const LET_GO = 0.5;
+
+/** How far, in plan, the dragged end of `rebuilt` stands from `at`, where it was taken. */
+function offTarget(rebuilt: ReturnType<StructureEnds["rebuild"]>, handle: EndGlobalHandle, at: ConstructionPosition): number {
+  const own = capabilityOf(handle.topology)!.ends(handle.topology).find((end) => end.name === handle.end)!;
+  const rung = rebuilt.rungs.find((candidate) => candidate.rung.edgeId === own.rung.edgeId)?.rung;
+  const positions = new Map(rebuilt.moved.map((node) => [node.id, node.position]));
+  const a = rung && positions.get(rung.startNodeId), b = rung && positions.get(rung.endNodeId);
+  if (!a || !b) return 0;
+  return Math.hypot((a.x + b.x) / 2 - at.x, (a.z + b.z) / 2 - at.z);
+}
+
 /**
  * The structure rebuilt with one end taken to `at`, as one replacement:
  * both ends come off their floors first, the moved end lands on whatever
@@ -71,7 +84,13 @@ function placed(scene: GlobalHandleScene, handle: EndGlobalHandle, ends: readonl
   const joint = lifted ? undefined : endJointNear(scene.graph, scene.topologies, at, { own });
   const landing = joint || lifted ? undefined : floorLandingNear(standingFloor ? released.filter((floor) => keyOf(floor) !== keyOf(standingFloor)) : released, at, under ? { under } : {});
   const target = joint ? { point: joint.mid, joint } : { point: landing ? { ...at, y: landing.height } : at, ...(landing ? { landing } : {}) };
-  const rebuilt = capability.rebuild(handle.topology, handle.end, target, kept, continued(scene, handle, standing, ends));
+  const keptJoint = continued(scene, handle, standing, ends);
+  let rebuilt = capability.rebuild(handle.topology, handle.end, target, kept, keptJoint);
+  // Held square to where the other end is welded, the dragged end can only
+  // come nearer or go further. Pulled well off that line, it goes where it
+  // is taken instead: the other end stays where it stands, turning, and lets
+  // go of what held it.
+  if ((kept || keptJoint) && !joint && !landing && offTarget(rebuilt, handle, at) > LET_GO) rebuilt = capability.rebuild(handle.topology, handle.end, target);
   // Every node of the structure where it will stand -- another structure's included, where an end continues one.
   const positions = new Map(rebuilt.moved.map((node) => [node.id, node.position]));
   const welds = reweldFloors(scene.topologies, {

@@ -264,3 +264,72 @@ test("a ramp drawn from the ground and dropped well onto a platform stops at the
     console.warn = warn;
   }
 });
+
+test("a ramp between a grounded platform and a floating floor on its top comes off one end and back, the other end staying welded", async () => {
+  const { slopeRampTool } = await import("../src/composition/tabletop/tools/slope/slope-tools.ts");
+  const { shownGlobalHandles } = await import("../src/features/edit-construction/index.ts");
+  const info = console.info, warn = console.warn;
+  console.info = () => {};
+  console.warn = () => {};
+  const params = { bottomWidth: 1.5, topWidth: 1.5, rise: 2 };
+  const build = () => {
+    const fixture = sessionFixture();
+    const { session, runtime, ctx } = fixture;
+    Object.assign(runtime, { showPreview() {}, clearPreview() {} });
+    bowl(runtime, session);
+    commitPlatformContour(ctx, [[-3, -2], [2, -2], [2, 3], [-3, 3]].map(([x, z]) => ({ point: { x, y: 0.3, z } })), { mode: "create", elevation: 0.3, shape: "rectangle" });
+    const s = { point: { x: 2, y: 0.3, z: 0.5 } }, e = { point: { x: 5, y: 0, z: 0.5 } };
+    slopeRampTool.onPointerUp(ctx, { start: s, current: e, samples: [s, e] }, params);
+    const ramp = runtime.getAllRegionTopologies().find((t) => t.surfaceType === "platform-ramp");
+    const tmin = ramp.nodes.find((n) => n.id.endsWith(":top:min")), tmax = ramp.nodes.find((n) => n.id.endsWith(":top:max"));
+    const { x, y } = tmin.position;
+    // Drawn from the ramp's own top corners: the floor's side is exactly as wide as the ramp's end.
+    commitPlatformContour(ctx, [{ point: tmin.position, nodeId: tmin.id }, { point: { x: x + 3, y, z: tmin.position.z } }, { point: { x: x + 3, y, z: tmax.position.z } }, { point: tmax.position, nodeId: tmax.id }], { mode: "create", elevation: y, support: "floating" });
+    return fixture;
+  };
+  const shared = (runtime, type) => {
+    const ramp = runtime.getAllRegionTopologies().find((t) => t.surfaceType === "platform-ramp");
+    const ids = new Set(ramp.nodes.map((n) => n.id));
+    return runtime.getAllRegionTopologies().find((t) => t.surfaceType === type).nodes.filter((n) => ids.has(n.id)).length;
+  };
+  const drag = (fixture, kind, to) => {
+    const { runtime, ctx, calls } = fixture;
+    const handle = shownGlobalHandles({ graph: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), cloudFor: runtime.cloudFor }).find((h) => h.kind === kind && h.owner === "platform-ramp");
+    const start = { nodeId: handle.id, point: handle.position, screenX: 100, screenY: 300 };
+    const current = { point: to(handle.position), screenX: 200, screenY: 300 };
+    slopeRampTool.onPointerDown(ctx, start, params);
+    slopeRampTool.onPointerMove(ctx, { start, current, samples: [start, current] }, params);
+    slopeRampTool.onPointerUp(ctx, { start, current, samples: [start, current] }, params);
+    const said = calls.feedback.at(-1);
+    assert.equal(said.tone, "success", `${kind}: ${JSON.stringify(said)}`);
+  };
+  try {
+    {
+      // Pulled back along the ramp, off the platform's edge: it comes off; the top stays on its floor.
+      const fixture = build();
+      try {
+        assert.deepEqual([shared(fixture.runtime, "platform"), shared(fixture.runtime, "platform-floating")], [2, 2]);
+        drag(fixture, "origin", (p) => ({ ...p, x: p.x + 1 }));
+        assert.equal(shared(fixture.runtime, "platform"), 0, "the bottom came off");
+        assert.equal(shared(fixture.runtime, "platform-floating"), 2, "the top still welded, corner to corner");
+      } finally { fixture.session.free(); }
+    }
+    {
+      // Pulled sideways: it goes where it is taken, the top turning where it stands and letting go.
+      const fixture = build();
+      try {
+        drag(fixture, "origin", (p) => ({ ...p, z: p.z + 5 }));
+        const ramp = fixture.runtime.getAllRegionTopologies().find((t) => t.surfaceType === "platform-ramp");
+        const bottom = ramp.nodes.filter((n) => /:bottom:(min|max)$/.test(n.id)).map((n) => n.position);
+        assert.ok(Math.abs((bottom[0].z + bottom[1].z) / 2 - 5.5) < 1e-6, `the bottom went where it was taken: ${JSON.stringify(bottom)}`);
+        assert.equal(shared(fixture.runtime, "platform"), 0);
+        // Taken back onto the platform's edge, it welds there again.
+        drag(fixture, "origin", (p) => ({ ...p, z: p.z - 5 }));
+        assert.equal(shared(fixture.runtime, "platform"), 2, "welded back onto the platform");
+      } finally { fixture.session.free(); }
+    }
+  } finally {
+    console.info = info;
+    console.warn = warn;
+  }
+});
