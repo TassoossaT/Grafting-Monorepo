@@ -3963,14 +3963,15 @@ export function gridPatch(
   surfaceType: string,
   edgeRooms: ReadonlyMap<string, FreeEdgeUse | null>,
   quadOf?: Map<string, readonly number[]>,
+export function tangledRing(rings: readonly (readonly { readonly x: number; readonly z: number }[])[]): string | undefined {
+  const side = (p: { x: number; z: number }, q: { x: number; z: number }, r: { x: number; z: number }) => (q.x - p.x) * (r.z - p.z) - (q.z - p.z) * (r.x - p.x);
 export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillRequest): TerrainFillOutcome {
   if (request.boundary.length === 0) return NOTHING;
-
-  let bMinX = Infinity;
-  let bMinZ = Infinity;
-  let bMaxX = -Infinity;
-  let bMaxZ = -Infinity;
-  for (const ring of request.boundary) {
+  // A ring that crosses itself describes no ground: the
+  // generator would not refuse them but fail inside the engine, and a failure
+  // there leaves the whole session unusable for every edit after it. They are
+  // refused here instead, and the ground there is left as it stands.
+  const tangled = tangledRing([...request.boundary, ...request.holes].map((ring) => ring.points));
 
 // src/composition/tabletop/terrain/terrain-lattice-reaction.ts
 export interface LatticeReactionRuntime extends TerrainRegenerateRuntime {

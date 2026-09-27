@@ -1675,6 +1675,13 @@ and that node does not exist until the split creates it.
 
 Exported for `terrain-quad-drops.test.mjs`, which holds the rules a cell is dropped by.
 
+### `function vtt.terrain-fill.tangledRing(rings: readonly (readonly { x: number; z: number }[])[]): string | undefined`
+
+Why `rings` are no ground a generator can fill -- a ring with fewer than
+three corners, two corners on top of each other, or a ring crossing itself
+-- or `undefined` when they are sound. Separate rings may overlap: the
+generator joins them.
+
 ### `interface vtt.terrain-lattice-reaction.LatticeReactionRuntime`
 
 What regenerating ground needs of the runtime, read and written inside the pipeline's transaction.

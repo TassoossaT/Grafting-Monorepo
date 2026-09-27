@@ -303,6 +303,29 @@ function applySplits(draft: FaceDraft, splits: ReadonlyMap<string, Split>): bool
 }
 
 /**
+ * `splits` as they fall on `draft`'s own edges: an edge cut there, or an
+ * edge of the draft's own between the same two nodes -- the ground laid
+ * against a floor keeps its own edge along the floor's -- cut at the same
+ * nodes, the pieces named after that edge.
+ */
+function splitsOn(draft: FaceDraft, splits: ReadonlyMap<string, Split>): ReadonlyMap<string, Split> {
+  const byEnds = new Map<string, Split>();
+  for (const pieces of splits.values()) byEnds.set(`${pieces[0]!.from}>${pieces.at(-1)!.to}`, pieces);
+  const own = new Map<string, Split>();
+  for (const step of draft.loops.flat()) {
+    if (own.has(step.edgeId)) continue;
+    const cut = splits.get(step.edgeId);
+    if (cut) { own.set(step.edgeId, cut); continue; }
+    const [start, end] = step.reversed ? [step.to, step.from] : [step.from, step.to];
+    const along = byEnds.get(`${start}>${end}`);
+    const against = byEnds.get(`${end}>${start}`);
+    const pieces = along ?? (against && [...against].reverse().map((piece) => ({ ...piece, from: piece.to, to: piece.from, geometry: reverseGeometry(piece.geometry) })));
+    if (pieces) own.set(step.edgeId, pieces.map((piece, i) => ({ ...piece, edgeId: `${step.edgeId}:cut:${i}:${piece.edgeId}` })));
+  }
+  return own;
+}
+
+/**
  * Where `rung` joins the draft's floor: the straight run it lies on is cut
  * at the rung's two nodes, so the floor's outline passes through them. The
  * edges cut are returned, for every other face on them to be cut alike.
@@ -528,8 +551,10 @@ export function reweldFloors(
     touched.add(key(topology.surfaceKey));
     // Whatever else stands on the edges cut -- the ground against the floor -- is cut at the same nodes.
     for (const face of faces) {
-      if (face === topology || !loopsOf(face).flat().some((use) => joined.splits.has(use.edgeId))) continue;
-      if (applySplits(draftFor(face), joined.splits)) touched.add(key(face.surfaceKey));
+      if (face === topology || !face.nodes.some((node) => [...joined.splits.values()].some((pieces) => pieces[0]!.from === node.id || pieces.at(-1)!.to === node.id))) continue;
+      const draft = draftFor(face);
+      const own = splitsOn(draft, joined.splits);
+      if (own.size > 0 && applySplits(draft, own)) touched.add(key(face.surfaceKey));
     }
     // And every face through a node the rung took over now passes through the rung's.
     if (joined.adopted.size > 0) {

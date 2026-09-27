@@ -360,3 +360,48 @@ test("the structure under the pointer shows its handles even where the renderer'
     console.warn = warn;
   }
 });
+
+test("with ground round a platform and a ramp welded to it, edits in a row never jam the session: the ground is cut at the ramp's end wherever it re-lands", async () => {
+  const { slopeRampTool } = await import("../src/composition/tabletop/tools/slope/slope-tools.ts");
+  const { platformContourTool } = await import("../src/composition/tabletop/tools/platform/platform-contour-tool.ts");
+  const { shownGlobalHandles } = await import("../src/features/edit-construction/index.ts");
+  const info = console.info, warn = console.warn;
+  console.info = () => {};
+  console.warn = () => {};
+  const params = { bottomWidth: 1.5, topWidth: 1.5, rise: 2 };
+  const sequences = {
+    // The ramp's foot slid along the platform's edge, then the platform's corner pushed: the ground had kept the foot's old cut.
+    "slide the foot, push a corner": [["platform-ramp", "origin", { x: 2, y: 0.3, z: 1.1207 }], ["platform", "corner", { x: 1.2394, y: 0.3, z: -2.512 }]],
+    // Turned twice and moved: the ground left to fill came out tangled, and the engine failed on it for good.
+    "turn, turn, move": [["platform", "rotate", { x: -5.2359, y: 0.3, z: -1.0135 }], ["platform", "rotate", { x: -3.9356, y: 0.3, z: -3.4363 }], ["platform", "pivot", { x: 2.0857, y: 0.3, z: 1.1701 }]],
+  };
+  try {
+    for (const [name, steps] of Object.entries(sequences)) {
+      const fixture = sessionFixture();
+      const { session, runtime, ctx, calls } = fixture;
+      Object.assign(runtime, { showPreview() {}, clearPreview() {} });
+      try {
+        bowl(runtime, session);
+        commitPlatformContour(ctx, [[-3, -2], [2, -2], [2, 3], [-3, 3]].map(([x, z]) => ({ point: { x, y: 0.3, z } })), { mode: "create", elevation: 0.3, shape: "rectangle" });
+        const s = { point: { x: 2, y: 0.3, z: 0.5 } }, e = { point: { x: 5, y: 0, z: 0.5 } };
+        slopeRampTool.onPointerUp(ctx, { start: s, current: e, samples: [s, e] }, params);
+        for (const [owner, kind, to] of [...steps, ["platform-ramp", "pivot", null]]) {
+          const handles = shownGlobalHandles({ graph: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), cloudFor: runtime.cloudFor }).filter((h) => h.owner === owner && h.kind === kind);
+          const handle = to ? handles.sort((a, b) => Math.hypot(a.position.x - to.x, a.position.z - to.z) - Math.hypot(b.position.x - to.x, b.position.z - to.z))[0] : handles[0];
+          const target = to ?? { x: handle.position.x + 0.5, y: handle.position.y, z: handle.position.z + 0.5 };
+          const tool = owner === "platform-ramp" ? slopeRampTool : platformContourTool;
+          const p = owner === "platform-ramp" ? params : platformContourTool.defaultParams();
+          const start = { nodeId: handle.id, point: handle.position, screenX: 100, screenY: 300 };
+          const current = { point: target, screenX: 200, screenY: 300 };
+          tool.onPointerDown(ctx, start, p);
+          tool.onPointerMove(ctx, { start, current, samples: [start, current] }, p);
+          tool.onPointerUp(ctx, { start, current, samples: [start, current] }, p);
+          assert.equal(calls.feedback.at(-1)?.tone, "success", `${name}, ${owner} ${kind}: ${JSON.stringify(calls.feedback.at(-1))}`);
+        }
+      } finally { session.free(); }
+    }
+  } finally {
+    console.info = info;
+    console.warn = warn;
+  }
+});

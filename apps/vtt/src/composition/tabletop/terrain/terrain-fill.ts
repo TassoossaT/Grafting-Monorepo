@@ -362,6 +362,37 @@ export function gridPatch(
 }
 
 /**
+ * Why `rings` are no ground a generator can fill -- a ring with fewer than
+ * three corners, two corners on top of each other, or a ring crossing itself
+ * -- or `undefined` when they are sound. Separate rings may overlap: the
+ * generator joins them.
+ */
+export function tangledRing(rings: readonly (readonly { readonly x: number; readonly z: number }[])[]): string | undefined {
+  const side = (p: { x: number; z: number }, q: { x: number; z: number }, r: { x: number; z: number }) => (q.x - p.x) * (r.z - p.z) - (q.z - p.z) * (r.x - p.x);
+  const crosses = (a: { x: number; z: number }, b: { x: number; z: number }, c: { x: number; z: number }, d: { x: number; z: number }) => {
+    const d1 = side(c, d, a), d2 = side(c, d, b), d3 = side(a, b, c), d4 = side(a, b, d);
+    return ((d1 > 1e-12 && d2 < -1e-12) || (d1 < -1e-12 && d2 > 1e-12)) && ((d3 > 1e-12 && d4 < -1e-12) || (d3 < -1e-12 && d4 > 1e-12));
+  };
+  const segments: { ring: number; index: number; a: { x: number; z: number }; b: { x: number; z: number } }[] = [];
+  for (const [ring, points] of rings.entries()) {
+    if (points.length < 3) return `anel ${ring} com ${points.length} ponto(s)`;
+    for (let index = 0; index < points.length; index++) {
+      const a = points[index]!, b = points[(index + 1) % points.length]!;
+      if (Math.hypot(b.x - a.x, b.z - a.z) < 1e-6) return `anel ${ring} com dois cantos no mesmo lugar`;
+      segments.push({ ring, index, a, b });
+    }
+  }
+  for (let i = 0; i < segments.length; i++) {
+    const s = segments[i]!;
+    for (let j = i + 1; j < segments.length; j++) {
+      const t = segments[j]!;
+      if (s.ring === t.ring && crosses(s.a, s.b, t.a, t.b)) return `anel ${s.ring} cruza a si mesmo`;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Generates ground for `boundary` minus `holes`, adopts the nodes it lands on
  * the neighbours' edges, and registers the result.
  *
@@ -371,6 +402,15 @@ export function gridPatch(
  */
 export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillRequest): TerrainFillOutcome {
   if (request.boundary.length === 0) return NOTHING;
+  // A ring that crosses itself describes no ground: the
+  // generator would not refuse them but fail inside the engine, and a failure
+  // there leaves the whole session unusable for every edit after it. They are
+  // refused here instead, and the ground there is left as it stands.
+  const tangled = tangledRing([...request.boundary, ...request.holes].map((ring) => ring.points));
+  if (tangled !== undefined) {
+    console.warn(`[terreno] contorno emaranhado recusado antes do gerador: ${tangled}`);
+    return { ...NOTHING, refused: 1 };
+  }
 
   let bMinX = Infinity;
   let bMinZ = Infinity;
