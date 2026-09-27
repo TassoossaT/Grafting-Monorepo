@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { shownGlobalHandles } from "../src/features/edit-construction/index.ts";
 import { slopeCurveTool, slopeRampTool } from "../src/composition/tabletop/tools/slope/slope-tools.ts";
-import { commitPlatformContour, platformContourTool } from "../src/composition/tabletop/tools/platform/platform-contour-tool.ts";
+import { commitPlatformContour, commitPlatformShape, platformContourTool } from "../src/composition/tabletop/tools/platform/platform-contour-tool.ts";
 import { commitPlatformSlope } from "../src/composition/tabletop/tools/slope/slope-commit.ts";
 import { addFace, sessionFixture } from "./platform-session-fixture.mjs";
 
@@ -57,6 +57,22 @@ const edits = {
   "drawing a ramp on from another ramp's free end": (f) => {
     drawRamp(f.ctx, { x: 0, y: 0, z: 8 }, { x: 5, y: 0, z: 8 });
     drawRamp(f.ctx, { x: 5.2, y: 2, z: 8 }, { x: 9, y: 0, z: 8 });
+  },
+  "a curved ramp's end dragged onto a straight ramp's free end": (f) => {
+    drawRamp(f.ctx, { x: 0, y: 0, z: 8 }, { x: 5, y: 0, z: 8 });
+    commitPlatformSlope(f.ctx, [{ x: 9, y: 2, z: 11 }, { x: 13, y: 4, z: 11 }], curve);
+    const end = f.runtime.getGraphSnapshot().nodes.find((n) => n.id.startsWith("spine:") && Math.abs(n.position.x - 9) < 1e-6);
+    const start = { nodeId: end.id, point: end.position }, current = { point: { x: 5.3, y: 0, z: 8.2 } };
+    slopeCurveTool.onPointerDown(f.ctx, start, curve);
+    slopeCurveTool.onPointerMove(f.ctx, { start, current, samples: [start, current] }, curve);
+    slopeCurveTool.onPointerUp(f.ctx, { start, current, samples: [start, current], moved: true }, curve);
+  },
+  "a ramp welded to a round floor's curved edge": (f) => {
+    commitPlatformShape(f.ctx, [
+      { start: { x: -16, y: 0, z: -20 }, end: { x: -24, y: 0, z: -20 }, geometry: { kind: "arc", center: [-20, -20], clockwise: false } },
+      { start: { x: -24, y: 0, z: -20 }, end: { x: -16, y: 0, z: -20 }, geometry: { kind: "arc", center: [-20, -20], clockwise: false } },
+    ], { elevation: 0, mode: "create", support: "floating" });
+    drawRamp(f.ctx, { x: -20 + 3.6 * Math.cos(0.8), y: 0, z: -20 + 3.6 * Math.sin(0.8) }, { x: -20 + 9 * Math.cos(0.8), y: 0, z: -20 + 9 * Math.sin(0.8) });
   },
   "moving a ramp end to reconnect it": (f) => {
     const end = handle(f.runtime, "destination", "platform-ramp");

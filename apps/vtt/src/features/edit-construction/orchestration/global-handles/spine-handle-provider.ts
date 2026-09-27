@@ -68,7 +68,9 @@ export const spineHandleProvider: GlobalHandleProvider = {
 function carriedByEnds(topologies: readonly ConstructionRegionTopology[], owner: string, ends: readonly string[], place: (p: ConstructionPosition) => ConstructionPosition) {
   const endRung = structureTypeFor(owner)?.spine?.endRung;
   if (!endRung) return undefined;
-  const welded = ends.flatMap((id) => floorsWeldedBy(topologies.filter((topology) => hasTrait(topology.surfaceType, "floor")), endRung(id)));
+  // Floors welded to those ends, and structures that took an end over (a straight ramp run on from it).
+  const holders = topologies.filter((topology) => hasTrait(topology.surfaceType, "floor") || structureTypeFor(topology.surfaceType)?.ends?.adopt !== undefined);
+  const welded = ends.flatMap((id) => floorsWeldedBy(holders, endRung(id)));
   const faces = joinedStructures(topologies, welded, (surfaceType) => hasTrait(surfaceType, "ground") || structureTypeFor(surfaceType)?.spine !== undefined);
   const nodes = new Map(faces.flatMap((face) => face.nodes.map((node) => [node.id, { id: node.id, position: place(node.position) }] as const)));
   return { faces, nodes: [...nodes.values()] };

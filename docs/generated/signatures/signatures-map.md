@@ -4886,7 +4886,8 @@ export interface EndWeld {
   readonly use: ConstructionRegionEdge;
   readonly a: ConstructionPosition;
   readonly b: ConstructionPosition;
-  }
+  /** The floor edge met, as found -- a curved one says its circle. */
+  readonly landing: FloorLanding;
 export function project(a: ConstructionPosition, b: ConstructionPosition, p: ConstructionPosition): { t: number; distance: number } {
   const dx = b.x - a.x, dz = b.z - a.z;
   const lengthSq = dx * dx + dz * dz;
@@ -5497,9 +5498,17 @@ export function endJointNear(
   topologies: readonly ConstructionRegionTopology[],
   /** Where the pointer is -- at a given height, when it can say, so a raised end is aimed at where it is drawn. */
   point: ConstructionPosition | ((height: number) => ConstructionPosition),
-  options: { readonly reach?: number; readonly own?: ReadonlySet<string> } = {},
-  ): EndJoint | undefined {
-  const aim = typeof point === "function" ? point : () => point;
+  options: {
+  readonly reach?: number;
+  readonly own?: ReadonlySet<string>;
+export const adoptsEnds = (face: ConstructionRegionTopology): boolean => structureTypeFor(face.surfaceType)?.ends?.adopt !== undefined;
+export function adoptJointEnd(
+  topologies: readonly ConstructionRegionTopology[],
+  joint: EndJoint,
+  rung: WeldRung,
+  positions: ReadonlyMap<string, ConstructionPosition>,
+  ): { readonly face: ConstructionRegionTopology; readonly rebuilt: RebuiltFromEnds } | undefined {
+  const face = topologies.find((topology) => [...topology.outerLoops, ...topology.holes].flat().some((use) => use.edgeId === joint.rung.edgeId));
 
 // src/features/edit-construction/orchestration/global-handles/cloud-handle-provider.ts
 export interface CloudGlobalHandle extends GlobalHandle {
@@ -6316,6 +6325,7 @@ export function jointedRampPatch(operationId: string, plan: PlannedRamp, keep: R
 export const rampEndsCapability: StructureEnds = Object.freeze<StructureEnds>({
   ends: (topology) => (topology.surfaceType === RAMP_SURFACE_TYPE ? rampEnds(topology) : []),
   rebuild: rebuildRamp,
+  adopt: adoptRampEnd,
   });
 
 // src/features/edit-construction/structure-types/platform/platform-ramp-type.ts
@@ -6988,7 +6998,15 @@ export interface FloorLanding extends FloorEdge {
   readonly point: ConstructionPosition;
   readonly out: PlanDirection;
   readonly height: number;
-  }
+  /**
+  * Present when the edge is an arc: its circle. `a` and `b` are then the
+  * tangent at `point`, so whatever meets the edge square on meets it
+  * along the radius; see {@link landingSeat} for where an end sits.
+export function landingSeat(landing: FloorLanding, width: number): ConstructionPosition | undefined {
+  if (!landing.arc) return landing.point;
+  const { center, radius } = landing.arc;
+  if (!(width / 2 < radius)) return undefined;
+  const inset = Math.sqrt(radius * radius - (width / 2) * (width / 2));
 export interface WeldRung {
   readonly edgeId: string;
   readonly startNodeId: string;
@@ -7038,14 +7056,6 @@ export function reweldFloors(
 export function floorsWithout(floors: readonly ConstructionRegionTopology[], rungs: readonly WeldRung[]): readonly ConstructionRegionTopology[] {
   return floors.map((topology) => {
   const off = rungs.filter((rung) => floorsWeldedBy([topology], rung).length > 0);
-export interface EndJoint {
-  readonly rung: WeldRung;
-  readonly a: ConstructionPosition;
-  readonly b: ConstructionPosition;
-  readonly mid: ConstructionPosition;
-  readonly out: PlanDirection;
-  readonly height: number;
-  readonly width: number;
 
 // src/features/edit-construction/topology/index.ts
 export type { CloudSource, CloudTopology, ConstructionCloud } from "./construction-cloud.ts";

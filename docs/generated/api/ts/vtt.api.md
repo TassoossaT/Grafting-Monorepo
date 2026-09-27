@@ -3264,6 +3264,10 @@ From where the drag starts to where it ends, at the heights they land at.
 
 ### `property vtt.slope-commit.EndWeld.controlIndex: number`
 
+### `property vtt.slope-commit.EndWeld.landing: FloorLanding`
+
+The floor edge met, as found -- a curved one says its circle.
+
 ### `property vtt.slope-commit.EndWeld.topology: ConstructionRegionTopology`
 
 ### `property vtt.slope-commit.EndWeld.use: ConstructionRegionEdge`
@@ -4411,7 +4415,17 @@ Resolves `gesture` against the structure type's own role table. The
 returned ops are already constrained -- a height-only role's horizontal
 movement is gone by this point, never clamped later or inside Rust.
 
-### `function vtt.free-end-welds.endJointNear(graph: ConstructionGraphSnapshot, topologies: readonly ConstructionRegionTopology[], point: ConstructionPosition | ((height: number) => ConstructionPosition), options: { own?: ReadonlySet<string>; reach?: number }): EndJoint | undefined`
+### `function vtt.free-end-welds.adoptJointEnd(topologies: readonly ConstructionRegionTopology[], joint: EndJoint, rung: WeldRung, positions: ReadonlyMap<string, ConstructionPosition>): { face: ConstructionRegionTopology; rebuilt: RebuiltFromEnds } | undefined`
+
+The structure owning `joint`'s end, rebuilt with that end on `rung`'s two
+nodes -- a spine's end joined onto it takes it over. `undefined` when that
+structure cannot take nodes over.
+
+### `function vtt.free-end-welds.adoptsEnds(face: ConstructionRegionTopology): boolean`
+
+A structure whose ends can take another structure's nodes over -- what an end that cannot (a spine's) joins onto.
+
+### `function vtt.free-end-welds.endJointNear(graph: ConstructionGraphSnapshot, topologies: readonly ConstructionRegionTopology[], point: ConstructionPosition | ((height: number) => ConstructionPosition), options: { accept?: (face: ConstructionRegionTopology) => boolean; own?: ReadonlySet<string>; reach?: number }): EndJoint | undefined`
 
 The free structure end nearest `point` in plan, within `reach` of its
 middle, as something to run on from: the way on points away from the
@@ -6572,6 +6586,12 @@ this gives the type origin and destination handles that move an end,
 connect it where it lands and disconnect it -- nothing else is asked of
 the type.
 
+### `property vtt.structure-type.StructureEnds.adopt?: (topology: ConstructionRegionTopology, name: StructureEndName, rung: WeldRung, positions: ReadonlyMap<string, ConstructionPosition>) => RebuiltFromEnds`
+
+`topology` with its end `name` taking over `rung`'s two nodes, standing
+at `positions` -- another structure's end joined onto it, one that
+cannot take nodes over itself. Absent when the type cannot.
+
 ### `property vtt.structure-type.StructureEnds.ends: (topology: ConstructionRegionTopology) => readonly StructureEnd[]`
 
 Where `topology`'s ends stand; empty when it is not one this type rebuilds.
@@ -7500,6 +7520,12 @@ Where something meets a floor: the point on its edge, at the floor's height, and
 
 ### `property vtt.floor-weld.FloorLanding.a: ConstructionPosition`
 
+### `property vtt.floor-weld.FloorLanding.arc?: { center: PlanDirection; radius: number }`
+
+Present when the edge is an arc: its circle. `a` and `b` are then the
+tangent at `point`, so whatever meets the edge square on meets it
+along the radius; see landingSeat for where an end sits.
+
 ### `property vtt.floor-weld.FloorLanding.b: ConstructionPosition`
 
 ### `property vtt.floor-weld.FloorLanding.height: number`
@@ -7583,6 +7609,12 @@ itself -- the face walking the rung's own edge -- is not one.
 ### `function vtt.floor-weld.floorsWithout(floors: readonly ConstructionRegionTopology[], rungs: readonly WeldRung[]): readonly ConstructionRegionTopology[]`
 
 `floors` with the rungs taken off them -- where an end that is about to move looks for its new landing.
+
+### `function vtt.floor-weld.landingSeat(landing: FloorLanding, width: number): ConstructionPosition | undefined`
+
+Where the middle of an end `width` wide sits on `landing` so both its
+corners stand on the edge: the landing point itself on a straight edge;
+on an arc, the middle of the chord that wide, nearer the centre.
 
 ### `function vtt.floor-weld.projectOnto(a: ConstructionPosition, b: ConstructionPosition, p: PlanDirection): { distance: number; t: number }`
 

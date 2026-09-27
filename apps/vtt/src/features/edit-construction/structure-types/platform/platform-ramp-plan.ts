@@ -1,6 +1,6 @@
 import type { ConstructionPosition, ConstructionRegionTopology } from "@/ports";
 
-import { alongEdge, landingSeat, projectOnto, type EndJoint, type FloorLanding } from "../../topology/floor-weld.ts";
+import { alongEdge, landingSeat, projectOnto, type EndJoint, type FloorLanding, type WeldRung } from "../../topology/floor-weld.ts";
 
 /** How far off the line of another structure's end a second one may stand and still be continued in a straight line. */
 const ON_LINE = 1e-3;
@@ -252,8 +252,40 @@ function rebuildRamp(topology: ConstructionRegionTopology, name: StructureEndNam
   };
 }
 
+/**
+ * The ramp with its end `name` on `rung`'s two nodes: those corners take
+ * the nodes over where they stand, the other end keeps its own. The end
+ * stays square to the axis as long as the rung is -- a spine joined on
+ * straight along it.
+ */
+function adoptRampEnd(topology: ConstructionRegionTopology, name: StructureEndName, rung: WeldRung, positions: ReadonlyMap<string, ConstructionPosition>): RebuiltFromEnds {
+  const shape = rampShapeOf(topology);
+  const ids = cornerIdsOf(topology);
+  const a = positions.get(rung.startNodeId), b = positions.get(rung.endNodeId);
+  if (!shape || !ids || !a || !b) throw new Error("A rampa precisa dos seus quatro cantos.");
+  const end = END_OF[name];
+  const other: RampEnd = end === "bottom" ? "top" : "bottom";
+  const standing = new Map(topology.nodes.map((node) => [node.id, node.position]));
+  const current = { bottom: { min: standing.get(ids.bottom.min)!, max: standing.get(ids.bottom.max)! }, top: { min: standing.get(ids.top.min)!, max: standing.get(ids.top.max)! } };
+  // Which of the rung's nodes each corner of the end takes: the nearer.
+  const nearA = (p: ConstructionPosition) => Math.hypot(p.x - a.x, p.z - a.z) <= Math.hypot(p.x - b.x, p.z - b.z);
+  const minTakesA = nearA(current[end].min) || !nearA(current[end].max);
+  const corners = { ...current, [end]: { min: minTakesA ? a : b, max: minTakesA ? b : a } } as RampCorners;
+  const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 };
+  const joint: EndJoint = { rung, a, b, mid, out: { x: 0, z: 0 }, height: mid.y, width: Math.hypot(b.x - a.x, b.z - a.z) };
+  const keep = new Map((["min", "max"] as const).map((side) => [rampCornerId(shape.operationId, other, side), ids[other][side]] as const));
+  const patch = jointedRampPatch(shape.operationId, { corners, welds: [], joints: [{ end, joint }] }, keep);
+  return {
+    patch: { nodes: patch.nodes, edges: patch.edges, regions: [patch.region] },
+    moved: [],
+    rungs: (["bottom", "top"] as const).map((ramp) => ({ rung: patch.edges.find((edge) => edge.edgeId === rampEdgeId(shape.operationId, ramp))! })),
+    footprintOutline: rampOutline(corners).slice(0, 4).map((p) => [p.x, p.z] as const),
+  };
+}
+
 /** A straight ramp's ends, as the `ends` capability of its type. */
 export const rampEndsCapability: StructureEnds = Object.freeze<StructureEnds>({
   ends: (topology) => (topology.surfaceType === RAMP_SURFACE_TYPE ? rampEnds(topology) : []),
   rebuild: rebuildRamp,
+  adopt: adoptRampEnd,
 });

@@ -1,4 +1,4 @@
-import { automaticCurve, controlRungId, controlSectionId, floorLandingNear, gradeSpineSpans, landingSeat, type FloorLanding, hasTrait, reweldFloors, SLOPE_SURFACE_TYPE, slopeFootprint, slopeSurface, spineControlNodeId, type WeldRung } from "../../../../features/edit-construction/index.ts";
+import { adoptJointEnd, adoptsEnds, automaticCurve, controlRungId, endJointNear, controlSectionId, floorLandingNear, gradeSpineSpans, landingSeat, type EndJoint, type FloorLanding, hasTrait, reweldFloors, SLOPE_SURFACE_TYPE, slopeFootprint, slopeSurface, spineControlNodeId, type WeldRung } from "../../../../features/edit-construction/index.ts";
 import type {
   ConstructionEdgeSnapshot,
   ConstructionPosition,
@@ -102,9 +102,19 @@ export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly Co
     const operationId = scopedToolId(ctx, "platform-slope", ctx.nextSequence());
     const topologies = ctx.runtime.getAllRegionTopologies();
     const last = controlPoints.length - 1;
-    const landings = [landingEdge(topologies, controlPoints[0]!, 0), landingEdge(topologies, controlPoints[last]!, last)]
+    // An end at a straight ramp's free end runs straight on from it; the ramp takes the end over.
+    const graph = ctx.runtime.getGraphSnapshot();
+    const jointAt = (point: ConstructionPosition) => endJointNear(graph, topologies, point, { accept: adoptsEnds, reach: WELD_TOLERANCE });
+    const joints = new Map<number, EndJoint>();
+    for (const i of [0, last]) {
+      const joint = jointAt(controlPoints[i]!);
+      if (joint) joints.set(i, joint);
+    }
+    const landings = [joints.has(0) ? undefined : landingEdge(topologies, controlPoints[0]!, 0), joints.has(last) ? undefined : landingEdge(topologies, controlPoints[last]!, last)]
       .filter((weld): weld is EndWeld => weld !== undefined);
     const points = controlPoints.map((point, i) => {
+      const joint = joints.get(i);
+      if (joint) return joint.mid;
       const weld = landings.find((w) => w.controlIndex === i);
       if (!weld) return point;
       // On a curved edge the end sits at the middle of the chord its width makes.
@@ -117,15 +127,23 @@ export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly Co
     let spans: ConstructionEdgeSnapshot[] = handles.map((h, i) => {
       const startWeld = i === 0 ? landings.find((w) => w.controlIndex === 0) : undefined;
       const endWeld = i === last - 1 ? landings.find((w) => w.controlIndex === last) : undefined;
+      // Run straight on from a joined end, the way the structure it joins was going.
+      const startJoint = i === 0 ? joints.get(0) : undefined;
+      const endJoint = i === last - 1 ? joints.get(last) : undefined;
+      const onFrom = (handle: CurvePoint, out: { readonly x: number; readonly z: number }): CurvePoint => {
+        const reach = Math.hypot(handle[0], handle[2]) || 1;
+        return [out.x * reach, handle[1], out.z * reach];
+      };
       return {
         edgeId: `spine-edge:${operationId}:${i}`,
         startNodeId: nodes[i]!.id,
         endNodeId: nodes[i + 1]!.id,
         curve: {
-          ...h,
-          start: startWeld ? squareTo(h.start, startWeld) : h.start,
-          end: endWeld ? squareTo(h.end, endWeld) : h.end,
-          mode: plan || startWeld || endWeld ? "aligned" : "automatic",
+          // A span pinned straight or circular cannot also run on from a joined end: it is freed to curve.
+          ...(startJoint || endJoint ? (({ geometry: _pinned, ...free }) => free)(h) : h),
+          start: startJoint ? onFrom(h.start, startJoint.out) : startWeld ? squareTo(h.start, startWeld) : h.start,
+          end: endJoint ? onFrom(h.end, endJoint.out) : endWeld ? squareTo(h.end, endWeld) : h.end,
+          mode: plan || startWeld || endWeld || startJoint || endJoint ? "aligned" : "automatic",
           bandOffsets: [-width / 2, width / 2],
           surfaceType: SLOPE_SURFACE_TYPE,
         },
@@ -141,22 +159,23 @@ export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly Co
     const attach = landings.map((weld) => ({ rung: controlRung(nodes[weld.controlIndex]!.id), floor: weld.topology.surfaceKey }));
     if (attach.length === 2 && landings[0]!.topology === landings[1]!.topology) attach.pop();
     const floors = reweldFloors(topologies, { detach: [], attach }, sections, operationId);
+    const adopters = [...joints].flatMap(([i, joint]) => adoptJointEnd(topologies, joint, controlRung(nodes[i]!.id), sections) ?? []);
     const { recorded } = commitPatchReplacement(ctx.runtime, {
       operationId,
-      sourceSurfaceKeys: floors.sourceSurfaceKeys,
+      sourceSurfaceKeys: [...floors.sourceSurfaceKeys, ...adopters.map(({ face }) => face.surfaceKey)],
       patch: {
-        nodes: [...surface.nodes, ...floors.nodes],
-        edges: [...surface.edges, ...floors.edges],
+        nodes: [...surface.nodes, ...floors.nodes, ...adopters.flatMap(({ rebuilt }) => rebuilt.patch.nodes)],
+        edges: [...surface.edges, ...floors.edges, ...adopters.flatMap(({ rebuilt }) => rebuilt.patch.edges)],
         // The ramp's own faces first: the first region names the type whose
         // change the commit emits.
-        regions: [...surface.regions, ...floors.regions],
+        regions: [...surface.regions, ...floors.regions, ...adopters.flatMap(({ rebuilt }) => rebuilt.patch.regions)],
       },
       graphPatch: { nodes, removedEdgeIds: [], edges: spans },
       footprintOutline: slopeFootprint(ctx.runtime, surface),
     }, { transactionId: operationId });
     if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
     const slope = graded.grade === undefined ? "" : `, inclinação ${(graded.grade * 100).toFixed(0)}%`;
-    ctx.reportFeedback({ tone: "success", message: `Plataforma inclinada: ${surface.regions.length} trecho(s), ${floors.attached.length} ponta(s) soldada(s)${slope}.` });
+    ctx.reportFeedback({ tone: "success", message: `Plataforma inclinada: ${surface.regions.length} trecho(s), ${floors.attached.length} ponta(s) soldada(s)${adopters.length > 0 ? `, ${adopters.length} continuando uma rampa` : ""}${slope}.` });
   } catch (error) {
     ctx.reportFeedback({ tone: "error", message: error instanceof Error ? error.message : String(error) });
   }

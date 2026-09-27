@@ -327,6 +327,12 @@ export interface StructureEnds {
     /** The other structure's end the standing end continues, when it continues one. */
     keptJoint?: EndJoint,
   ) => RebuiltFromEnds;
+  /**
+   * `topology` with its end `name` taking over `rung`'s two nodes, standing
+   * at `positions` -- another structure's end joined onto it, one that
+   * cannot take nodes over itself. Absent when the type cannot.
+   */
+  readonly adopt?: (topology: ConstructionRegionTopology, name: StructureEndName, rung: WeldRung, positions: ReadonlyMap<string, ConstructionPosition>) => RebuiltFromEnds;
 }
 
 /**

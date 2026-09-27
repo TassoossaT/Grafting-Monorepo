@@ -1,7 +1,7 @@
 import type { ApplyPatchReplacementRequest, ConstructionGraphSnapshot, ConstructionPosition, ConstructionRegionTopology, ConstructionSurfaceKey } from "@/ports";
 
 import { isSpineEdge, spineOwnerOf } from "../spine/index.ts";
-import { hasTrait, structureTypeFor } from "../structure-types/index.ts";
+import { hasTrait, structureTypeFor, type RebuiltFromEnds } from "../structure-types/index.ts";
 import { floorsWeldedBy, LANDING_REACH, reweldFloors, type EndJoint, type WeldRung } from "../topology/floor-weld.ts";
 
 /** What a detach takes off an end's nodes: floors and the ground laid against them, never a structure that continues the end. */
@@ -68,7 +68,12 @@ export function endJointNear(
   topologies: readonly ConstructionRegionTopology[],
   /** Where the pointer is -- at a given height, when it can say, so a raised end is aimed at where it is drawn. */
   point: ConstructionPosition | ((height: number) => ConstructionPosition),
-  options: { readonly reach?: number; readonly own?: ReadonlySet<string> } = {},
+  options: {
+    readonly reach?: number;
+    readonly own?: ReadonlySet<string>;
+    /** Only ends whose own face this accepts -- a structure able to take another's nodes over, say. */
+    readonly accept?: (face: ConstructionRegionTopology) => boolean;
+  } = {},
 ): EndJoint | undefined {
   const aim = typeof point === "function" ? point : () => point;
   const reach = options.reach ?? LANDING_REACH;
@@ -85,11 +90,31 @@ export function endJointNear(
     const width = Math.hypot(b.x - a.x, b.z - a.z);
     if (distance > reach || !(width > 1e-6) || (best && best.distance <= distance)) continue;
     const face = topologies.find((topology) => [...topology.outerLoops, ...topology.holes].flat().some((use) => use.edgeId === rung.edgeId));
-    if (!face) continue;
+    if (!face || (options.accept && !options.accept(face))) continue;
     const centre = face.nodes.reduce((sum, node) => ({ x: sum.x + node.position.x / face.nodes.length, z: sum.z + node.position.z / face.nodes.length }), { x: 0, z: 0 });
     let out = { x: -(b.z - a.z) / width, z: (b.x - a.x) / width };
     if (out.x * (centre.x - mid.x) + out.z * (centre.z - mid.z) > 0) out = { x: -out.x, z: -out.z };
     best = { joint: { rung, a, b, mid, out, height: mid.y, width }, distance };
   }
   return best?.joint;
+}
+
+/** A structure whose ends can take another structure's nodes over -- what an end that cannot (a spine's) joins onto. */
+export const adoptsEnds = (face: ConstructionRegionTopology): boolean => structureTypeFor(face.surfaceType)?.ends?.adopt !== undefined;
+
+/**
+ * The structure owning `joint`'s end, rebuilt with that end on `rung`'s two
+ * nodes -- a spine's end joined onto it takes it over. `undefined` when that
+ * structure cannot take nodes over.
+ */
+export function adoptJointEnd(
+  topologies: readonly ConstructionRegionTopology[],
+  joint: EndJoint,
+  rung: WeldRung,
+  positions: ReadonlyMap<string, ConstructionPosition>,
+): { readonly face: ConstructionRegionTopology; readonly rebuilt: RebuiltFromEnds } | undefined {
+  const face = topologies.find((topology) => [...topology.outerLoops, ...topology.holes].flat().some((use) => use.edgeId === joint.rung.edgeId));
+  const ends = face && structureTypeFor(face.surfaceType)?.ends;
+  const name = face && ends?.ends(face).find((end) => end.rung.edgeId === joint.rung.edgeId)?.name;
+  return face && ends?.adopt && name ? { face, rebuilt: ends.adopt(face, name, rung, positions) } : undefined;
 }

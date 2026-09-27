@@ -464,3 +464,63 @@ test("a ramp welds to a round floor's curved edge: its end is the chord, its cor
     assert.equal(round().outerLoops[0].length, 4, "the pieces the straight ramp cut joined back into one arc");
   } finally { session.free(); }
 });
+
+test("a curved ramp's end dragged onto a straight ramp's free end joins it: the straight ramp takes the end's cross-section over", async () => {
+  const { commitPlatformSlope } = await import("../src/composition/tabletop/tools/slope/slope-commit.ts");
+  const { slopeCurveTool } = await import("../src/composition/tabletop/tools/slope/slope-tools.ts");
+  const { controlSectionId, isSpineControlNodeId } = await import("../src/features/edit-construction/index.ts");
+  const fixture = sessionFixture();
+  const { runtime, session, ctx, calls } = fixture;
+  Object.assign(runtime, { showPreview() {}, clearPreview() {} });
+  const curve = { width: 1.5, rise: 2 };
+  try {
+    // A straight ramp climbing east, its top free at x = 6, y = 2.
+    drawn(fixture, { x: 0, y: 0, z: 0 }, { x: 6, y: 0, z: 0 });
+    // A curved ramp further east, its west end free.
+    commitPlatformSlope(ctx, [{ x: 10, y: 2, z: 3 }, { x: 14, y: 4, z: 3 }], curve);
+    const end = runtime.getGraphSnapshot().nodes.find((n) => isSpineControlNodeId(n.id) && Math.abs(n.position.x - 10) < 1e-6);
+    const start = { nodeId: end.id, point: end.position };
+    const target = { point: { x: 6.3, y: 0, z: 0.2 } };
+    slopeCurveTool.onPointerDown(ctx, start, curve);
+    slopeCurveTool.onPointerMove(ctx, { start, current: target, samples: [start, target] }, curve);
+    slopeCurveTool.onPointerUp(ctx, { start, current: target, samples: [start, target], moved: true }, curve);
+    assert.ok(!calls.feedback.some((f) => f && f.tone === "error"), JSON.stringify(calls.feedback.slice(-2)));
+    const placed = runtime.getGraphSnapshot().nodes.find((n) => n.id === end.id).position;
+    close(placed.x, 6, "the curved ramp's end on the straight one's top");
+    close(placed.z, 0, "at its middle");
+    close(placed.y, 2, "at its height");
+    const straight = ramp(runtime);
+    assert.ok(["min", "max"].every((side) => straight.nodes.some((n) => n.id === controlSectionId(end.id, side))), "the straight ramp's top is the curved one's end");
+    // Pulled away again, the straight ramp keeps an end of its own where it stood.
+    const again = { nodeId: end.id, point: placed };
+    const away = { point: { x: 8, y: 0, z: 5 } };
+    slopeCurveTool.onPointerDown(ctx, again, curve);
+    slopeCurveTool.onPointerMove(ctx, { start: again, current: away, samples: [again, away] }, curve);
+    slopeCurveTool.onPointerUp(ctx, { start: again, current: away, samples: [again, away], moved: true }, curve);
+    const freed = ramp(runtime);
+    assert.ok(!["min", "max"].some((side) => freed.nodes.some((n) => n.id === controlSectionId(end.id, side))), "the straight ramp let go");
+    const tops = freed.nodes.filter((n) => Math.abs(n.position.x - 6) < 1e-6);
+    assert.equal(tops.length, 2, "its top still where it stood");
+  } finally { session.free(); }
+});
+
+test("a curved ramp drawn from a straight ramp's free top runs on from it, the straight ramp taking its end over", async () => {
+  const { slopeCurveTool } = await import("../src/composition/tabletop/tools/slope/slope-tools.ts");
+  const { controlSectionId, isSpineControlNodeId } = await import("../src/features/edit-construction/index.ts");
+  const { clickAll } = await import("./curve-draft-fixture.mjs");
+  const fixture = sessionFixture();
+  const { runtime, session, ctx, calls } = fixture;
+  Object.assign(runtime, { showPreview() {}, clearPreview() {} });
+  const curve = { width: 1.5, rise: 2, mode: "straight" };
+  try {
+    drawn(fixture, { x: 0, y: 0, z: 0 }, { x: 6, y: 0, z: 0 });
+    // Straight mode: start just by the straight ramp's top, end off to the north-east.
+    clickAll(slopeCurveTool, ctx, [{ x: 6.2, y: 2, z: 0.1 }, { x: 11, y: 0, z: 4 }], curve);
+    assert.match(calls.feedback.at(-1).message, /continuando uma rampa/, JSON.stringify(calls.feedback.at(-1)));
+    const start = runtime.getGraphSnapshot().nodes.find((n) => isSpineControlNodeId(n.id) && Math.abs(n.position.x - 6) < 1e-6);
+    assert.ok(start, "the curved ramp starts on the straight one's top");
+    close(start.position.y, 2, "at its height");
+    const straight = ramp(runtime);
+    assert.ok(["min", "max"].every((side) => straight.nodes.some((n) => n.id === controlSectionId(start.id, side))), "the straight ramp's top is the curved one's start");
+  } finally { session.free(); }
+});
