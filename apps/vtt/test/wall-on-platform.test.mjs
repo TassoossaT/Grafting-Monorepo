@@ -151,33 +151,33 @@ test("the walls' own law holds every post upright wherever it is placed: a wall 
   } finally { session.free(); }
 });
 
-test("in elevation mode a wall grabbed by its body rises whole -- its cloud, feet and tops alike, still upright", async () => {
-  const { surfaceRefFromNodeSet } = await import("../src/entities/map/index.ts");
+
+test("a wall's height widget dragged up in the ordinary mode raises its top, on the ground and on a platform", async () => {
+  const { panelHeightWidgets } = await import("../src/features/edit-construction/index.ts");
   for (const onPlatform of [false, true]) {
-    const fixture = onPlatform ? build() : sessionFixture();
-    const { runtime, ctx, calls, session } = fixture;
-    Object.assign(runtime, { showPreview() {}, clearPreview() {} });
-    try {
-      const y = onPlatform ? 2 : 0;
-      wall(fixture, { x: 1, y, z: 0 }, { x: 5, y, z: 0 });
-      wall(fixture, { x: 5, y, z: 0 }, { x: 5, y, z: 3 });
-      ctx.structureEditParams = { mode: "elevation" };
-      const face = wallsOf(runtime)[0];
-      // Pressed on the wall's face, halfway up.
-      const start = { point: { x: 3, y: y + 1.5, z: 0 }, surfaceRef: surfaceRefFromNodeSet(face.surfaceKey), screenX: 100, screenY: 300 };
-      const current = { ...start, screenY: 260 };
-      wallLineTool.onPointerDown(ctx, start, params);
-      wallLineTool.onPointerMove(ctx, { start, current, samples: [start, current] }, params);
-      wallLineTool.onPointerUp(ctx, { start, current, samples: [start, current] }, params);
-      const feedback = calls.feedback.filter(Boolean);
-      assert.notEqual(feedback.at(-1)?.tone, "error", JSON.stringify(feedback.at(-1)));
-      for (const w of wallsOf(runtime)) {
-        const ys = w.nodes.map((n) => n.position.y);
-        assert.equal(Math.min(...ys), y + 1, `${onPlatform ? "on a platform" : "on the ground"}: every wall of the cloud rose a metre: ${JSON.stringify(feedback.slice(-2))}`);
-        assert.equal(Math.max(...ys), y + 4);
-      }
-      // Joined to the platform, a solid floor, the walls carry it with them.
-      if (onPlatform) assert.deepEqual([...new Set(floorOf(runtime).nodes.map((n) => n.position.y))], [y + 1], "the platform carried whole");
-    } finally { session.free(); }
+    for (const zone of ["group", "single"]) {
+      const fixture = onPlatform ? build() : sessionFixture();
+      const { runtime, ctx, calls, session } = fixture;
+      Object.assign(runtime, { showPreview() {}, clearPreview() {} });
+      try {
+        const y = onPlatform ? 2 : 0;
+        wall(fixture, { x: 1, y, z: 0 }, { x: 5, y, z: 0 });
+        ctx.structureEditParams = { mode: "shape" };
+        const widget = panelHeightWidgets(runtime.getAllRegionTopologies()).find((w) => w.id.includes(`:${zone}:`));
+        // As the app samples it: the point the pointer hit, and its ray from a camera in front.
+        const origin = { x: 3, y: y + 4, z: -10 };
+        const sample = (point) => {
+          const d = { x: point.x - origin.x, y: point.y - origin.y, z: point.z - origin.z }, l = Math.hypot(d.x, d.y, d.z);
+          return { point, ray: { origin, direction: { x: d.x / l, y: d.y / l, z: d.z / l } }, screenX: 100, screenY: 300 };
+        };
+        const start = { ...sample(widget.position), nodeId: widget.id };
+        const current = sample({ ...widget.position, y: widget.position.y + 1 });
+        wallLineTool.onPointerDown(ctx, start, params);
+        wallLineTool.onPointerMove(ctx, { start, current, samples: [start, current] }, params);
+        wallLineTool.onPointerUp(ctx, { start, current, samples: [start, current] }, params);
+        const top = Math.max(...wallsOf(runtime).flatMap((w) => w.nodes.map((n) => n.position.y)));
+        assert.ok(Math.abs(top - (y + 4)) < 1e-6, `${onPlatform ? "platform" : "ground"} ${zone}: top at ${top}, ${JSON.stringify(calls.feedback.filter(Boolean).slice(-1))}`);
+      } finally { session.free(); }
+    }
   }
 });

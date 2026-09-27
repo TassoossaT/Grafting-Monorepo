@@ -139,15 +139,15 @@ test("grabbing a wall's body moves the whole run, not the one panel under the po
   assert.equal(plan.kind, "apply");
   assert.equal(plan.scope, "cloud");
   assert.equal(plan.surfaceCount, 2);
-  // Every distinct node of the run, each carried exactly once -- raised with
-  // it too: a wall's body rises whole in elevation mode, feet and tops alike.
+  // Every distinct node of the run, each carried exactly once. Note the
+  // y: 9 in the gesture is gone -- a wall body is horizontal-only.
   assert.deepEqual(plan.ops, [
-    { kind: "move-vertex", nodeId: "wall-1:a-bottom", position: { x: 2, y: 9, z: 0 } },
-    { kind: "move-vertex", nodeId: "wall-1:b-bottom", position: { x: 6, y: 9, z: 0 } },
-    { kind: "move-vertex", nodeId: "wall-1:b-top", position: { x: 6, y: 12, z: 0 } },
-    { kind: "move-vertex", nodeId: "wall-1:a-top", position: { x: 2, y: 12, z: 0 } },
-    { kind: "move-vertex", nodeId: "wall-2:b-bottom", position: { x: 10, y: 9, z: 0 } },
-    { kind: "move-vertex", nodeId: "wall-2:b-top", position: { x: 10, y: 12, z: 0 } },
+    { kind: "move-vertex", nodeId: "wall-1:a-bottom", position: { x: 2, y: 0, z: 0 } },
+    { kind: "move-vertex", nodeId: "wall-1:b-bottom", position: { x: 6, y: 0, z: 0 } },
+    { kind: "move-vertex", nodeId: "wall-1:b-top", position: { x: 6, y: 3, z: 0 } },
+    { kind: "move-vertex", nodeId: "wall-1:a-top", position: { x: 2, y: 3, z: 0 } },
+    { kind: "move-vertex", nodeId: "wall-2:b-bottom", position: { x: 10, y: 0, z: 0 } },
+    { kind: "move-vertex", nodeId: "wall-2:b-top", position: { x: 10, y: 3, z: 0 } },
   ]);
 });
 

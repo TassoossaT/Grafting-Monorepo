@@ -1,7 +1,7 @@
 import type { ConstructionMotionInfluence, ConstructionNodeSnapshot, ConstructionPosition, ConstructionRegionEdge, ConstructionRegionTopology } from "@/ports";
 
 import type { AtomicEditOp, EditTarget } from "../../orchestration/atomic-edit.ts";
-import { addPosition, ALL_AXES, HEIGHT_AXIS, HORIZONTAL_AXES } from "../../orchestration/atomic-edit.ts";
+import { addPosition, HEIGHT_AXIS, HORIZONTAL_AXES } from "../../orchestration/atomic-edit.ts";
 import { cloudNodes } from "../../topology/construction-cloud.ts";
 import { reverseGeometry } from "../../topology/boundary-edges.ts";
 import type { CascadeContext, EditRole, ReshapeContext, RolePolicy, StructureTrait, StructureTypeDefinition, StructureView } from "../structure-type.ts";
@@ -256,9 +256,8 @@ export function panelPolicyFor(role: EditRole): RolePolicy {
       // its neighbours and leaves the rest standing, which shears the run
       // -- the shape a wall can never legitimately take. Every member moves
       // by the same delta instead, and a lone panel is a cloud of one, so
-      // this is not two behaviours. Raised in elevation mode, the whole
-      // wall rises with it, feet and tops alike -- still upright.
-      return allowed(role, ALL_AXES, "cloud");
+      // this is not two behaviours.
+      return allowed(role, HORIZONTAL_AXES, "cloud");
     default:
       return denied(role, "this part of the panel has no editing role");
   }
