@@ -33,6 +33,8 @@ export interface GlobalHandle {
   readonly provider: string;
   /** Every node of the structure, lowest id first. */
   readonly nodeIds: readonly string[];
+  /** The faces the structure is made of, by surface key joined with NUL -- absent for a spine, whose faces its spine regenerates. */
+  readonly faces?: readonly string[];
   /** A spiral's centre, when the structure is one -- what a turns handle winds round. */
   readonly center?: readonly [number, number];
   /** How the handle moves while dragged -- the path its gesture keeps it on. */
@@ -59,6 +61,7 @@ export type GlobalHandleIntent =
  * - spine: a spine graph patch its owner regenerates from;
  * - region-move: the whole cloud seeded at `seed` moved by `delta` -- through
  *   the type's own role policy, so its solver and validation apply;
+ * - region-part: one side or corner of a face, the same way;
  * - vertices: explicit node positions and edge geometry;
  * - replace: faces swapped for new ones in one patch replacement -- a
  *   structure rebuilt, and the floors it welds into or leaves.
@@ -76,6 +79,13 @@ export type GlobalHandleEdit =
       readonly carries?: readonly ConstructionSurfaceKey[];
     }
   | { readonly kind: "region-move"; readonly seed: ConstructionSurfaceKey; readonly delta: ConstructionPosition }
+  /** One part of the face `seed` -- a side, a corner -- moved by `delta` through the type's own role for that part. */
+  | {
+      readonly kind: "region-part";
+      readonly seed: ConstructionSurfaceKey;
+      readonly target: { readonly kind: "edge"; readonly edgeId: string } | { readonly kind: "vertex"; readonly nodeId: string };
+      readonly delta: ConstructionPosition;
+    }
   | {
       readonly kind: "vertices";
       readonly moves: readonly { readonly nodeId: string; readonly position: ConstructionPosition }[];

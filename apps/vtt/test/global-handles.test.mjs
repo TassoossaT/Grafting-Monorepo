@@ -26,13 +26,18 @@ function drag(tool, fixture, handle, points, params, extra = {}) {
   return shown;
 }
 
-test("a platform shows pivot, rotate and height handles; a wall, which declares none, shows nothing", () => {
+test("a platform shows pivot, rotate and height handles and one just outside each side and corner; a wall, which declares none, shows nothing", () => {
   const { runtime, session } = sessionFixture();
   try {
     square(runtime, "floor", 0, 0);
     addFace(runtime, "wall", "wall-white", [[10, 0, 0], [12, 0, 0], [12, 2, 0], [10, 2, 0]].map(([x, y, z], i) => ({ id: `wall:${i}`, position: { x, y, z } })));
     const handles = shownGlobalHandles(scene(runtime));
-    assert.deepEqual(handles.map((h) => h.kind).sort(), ["height", "pivot", "rotate"]);
+    assert.deepEqual(handles.map((h) => h.kind).filter((kind) => kind !== "side" && kind !== "corner").sort(), ["height", "pivot", "rotate"]);
+    const sides = handles.filter((h) => h.kind === "side"), corners = handles.filter((h) => h.kind === "corner");
+    assert.equal(sides.length, 4);
+    assert.equal(corners.length, 4);
+    // Outside the 4 x 2 platform, never on it -- a press on the platform itself builds against it.
+    for (const h of [...sides, ...corners]) assert.ok(h.position.x < 0 || h.position.x > 4 || h.position.z < 0 || h.position.z > 2, JSON.stringify(h.position));
     const pivot = handles.find((h) => h.kind === "pivot");
     assert.ok(Math.abs(pivot.position.x - 2) < 1e-9 && Math.abs(pivot.position.z - 1) < 1e-9, "at the platform's middle");
   } finally { session.free(); }
@@ -152,5 +157,65 @@ test("one registry lists every edit handle the scene shows, each with the kind i
     const everything = sceneHandles({ ...input, pointsOnly: false, owns: () => true });
     assert.ok(everything.every((h) => HANDLE_GLYPHS[h.kind] !== undefined), "every kind has its look in the one catalog");
     assert.equal(new Set(everything.map((h) => h.id)).size, everything.length, "no two handles share an id");
+  } finally { session.free(); }
+});
+
+test("a corner handle, just outside the corner, pushes both sides meeting there", () => {
+  const fixture = sessionFixture();
+  const { runtime, session, calls } = fixture;
+  try {
+    square(runtime, "floor", 0, 0);
+    const corner = shownGlobalHandles(scene(runtime)).find((h) => h.kind === "corner" && h.position.x > 4 && h.position.z > 2);
+    assert.ok(corner, "the north-east corner's handle");
+    drag(platformContourTool, fixture, corner, [{ x: corner.position.x + 1, y: 0, z: corner.position.z + 0.5 }], platformContourTool.defaultParams());
+    const p = node(runtime, "floor:2").position;
+    assert.ok(Math.abs(p.x - 5) < 1e-6 && Math.abs(p.z - 2.5) < 1e-6, `${JSON.stringify(p)} ${JSON.stringify(calls.feedback)}`);
+    assert.ok(Math.abs(node(runtime, "floor:1").position.x - 5) < 1e-6 && Math.abs(node(runtime, "floor:3").position.z - 2.5) < 1e-6, "both sides moved whole");
+    assert.ok(Math.abs(node(runtime, "floor:0").position.x) < 1e-9 && Math.abs(node(runtime, "floor:0").position.z) < 1e-9, "the far corner stays");
+  } finally { session.free(); }
+});
+
+test("a straight ramp's side handles stand off its long sides only and widen it; a press on the ramp itself edits nothing", () => {
+  const fixture = sessionFixture();
+  const { runtime, session, ctx } = fixture;
+  const params = { bottomWidth: 2, topWidth: 1, rise: 2 };
+  try {
+    const start = { point: { x: 0, y: 0, z: 0 } }, end = { point: { x: 6, y: 0, z: 0 } };
+    slopeRampTool.onPointerUp(ctx, { start, current: end, samples: [start, end] }, params);
+    const before = JSON.stringify(runtime.getGraphSnapshot().nodes);
+    const body = { point: { x: 3, y: 1, z: 0 } };
+    slopeRampTool.onPointerDown(ctx, body, params);
+    slopeRampTool.onPointerMove(ctx, { start: body, current: { point: { x: 5, y: 1, z: 2 } }, samples: [body] }, params);
+    slopeRampTool.onCancel?.(ctx);
+    assert.equal(JSON.stringify(runtime.getGraphSnapshot().nodes), before, "the ramp's body is never grabbed");
+    const sides = shownGlobalHandles(scene(runtime)).filter((h) => h.kind === "side" && h.owner === "platform-ramp");
+    assert.equal(sides.length, 2, "its two long sides; its ends are the origin and destination handles'");
+    assert.ok(sides.every((h) => Math.abs(h.position.z) > 0.5), "each outside its side");
+    const width = () => {
+      const zs = runtime.getAllRegionTopologies().find((t) => t.surfaceType === "platform-ramp").nodes.map((n) => n.position.z);
+      return Math.max(...zs) - Math.min(...zs);
+    };
+    const wide = width();
+    const side = sides[0];
+    const out = Math.sign(side.position.z);
+    drag(slopeRampTool, fixture, side, [{ x: side.position.x, y: 0, z: side.position.z + out * 0.5 }], params);
+    assert.ok(width() > wide + 0.5, `widened both ways: ${wide} -> ${width()}`);
+  } finally { session.free(); }
+});
+
+test("with a focus, the scene shows only the focused structure's handles", async () => {
+  const { sceneHandles } = await import("../src/features/edit-construction/index.ts");
+  const { runtime, session } = sessionFixture();
+  try {
+    square(runtime, "a", 0, 0);
+    square(runtime, "b", 10, 0, 3, "platform-floating");
+    const input = { ...scene(runtime), contour: [], pointsOnly: false, owns: () => true };
+    const a = runtime.getAllRegionTopologies().find((t) => t.nodes.some((n) => n.id === "a:0"));
+    const focused = sceneHandles({ ...input, focus: { faces: new Set([a.surfaceKey.join("\u0000")]), spineNodes: new Set() } });
+    const all = sceneHandles(input);
+    assert.ok(focused.length > 0 && focused.length < all.length);
+    const shown = new Set(focused.map((h) => h.id));
+    assert.ok(shownGlobalHandles(scene(runtime)).filter((h) => shown.has(h.id)).every((h) => h.nodeIds.includes("a:0")), "only a's");
+    assert.equal(sceneHandles({ ...input, focus: { faces: new Set(), spineNodes: new Set() } }).length, 0, "nothing under the pointer, nothing shown");
   } finally { session.free(); }
 });

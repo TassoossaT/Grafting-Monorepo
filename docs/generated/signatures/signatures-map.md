@@ -3499,6 +3499,12 @@ export function createTiltHandleTexture(): HTMLCanvasElement {
 export function createRadiusHandleTexture(): HTMLCanvasElement {
   return glyphDisc("#c2416b", (context) => {
   context.beginPath(); context.moveTo(17, 32); context.lineTo(47, 32); context.stroke();
+export function createSideHandleTexture(): HTMLCanvasElement {
+  return glyphDisc("#3a8f3a", (context) => {
+  context.beginPath(); context.moveTo(16, 32); context.lineTo(48, 32); context.stroke();
+export function createCornerHandleTexture(): HTMLCanvasElement {
+  return glyphDisc("#3a8f3a", (context) => {
+  context.beginPath(); context.moveTo(20, 44); context.lineTo(20, 20); context.lineTo(44, 20); context.stroke();
 export function createTurnsHandleTexture(): HTMLCanvasElement {
   return glyphDisc("#e07a1f", (context) => {
   context.beginPath(); context.arc(32, 32, 14, -Math.PI * 0.35, Math.PI * 1.35); context.stroke();
@@ -4249,6 +4255,18 @@ export function floorLandingToward(floors: readonly ConstructionRegionTopology[]
 export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample, ownsType: (surfaceType: string) => boolean, params?: CurveGestureOptions): CurveGesture | undefined {
   const scene = sceneOf(ctx);
 
+// src/composition/tabletop/tools/core/handle-focus.ts
+export const NO_FOCUS: HandleFocus = Object.freeze({ faces: new Set<string>(), spineNodes: new Set<string>() });
+export function handleFocusAt(ctx: ToolContext, sample: PointerSample | undefined, previous: HandleFocus, owns: (surfaceType: string) => boolean): HandleFocus {
+  if (!sample) return NO_FOCUS;
+  // On a handle: whatever it belongs to stays in focus.
+  if (sample.nodeId && (globalHandleOf(sample.nodeId) || curvePick(sample.nodeId))) return previous;
+  const under = focusUnder(ctx, sample, owns);
+export function sameFocus(a: HandleFocus | undefined, b: HandleFocus | undefined): boolean {
+  if (a === b) return true;
+  if (!a || !b || a.faces.size !== b.faces.size || a.spineNodes.size !== b.spineNodes.size) return false;
+  return [...a.faces].every((key) => b.faces.has(key)) && [...a.spineNodes].every((id) => b.spineNodes.has(id));
+
 // src/composition/tabletop/tools/core/navigate-tool.ts
 export const navigateTool: ConstructionTool<"navigate"> = {
   id: "navigate",
@@ -4299,7 +4317,7 @@ export interface SpineEditBehavior {
   /** Selects and starts dragging `picked`; false when the curve refused the gesture. */
   begin(ctx: ToolContext, picked: SpinePick): boolean;
   move(ctx: ToolContext, gesture: ToolGesture): boolean;
-export function createSpineEditBehavior({ ownsSpine, onSelect, snap }: SpineEditOptions): SpineEditBehavior {
+export function createSpineEditBehavior({ ownsSpine, onSelect, snap, handlesOnly }: SpineEditOptions): SpineEditBehavior {
   const drags = new WeakMap<ToolContext["runtime"], CurveGesture>();
 export function withSpineEditing<Id extends ConstructionToolId>(tool: ConstructionTool<Id>, options: SpineEditOptions): ConstructionTool<Id> {
   const spine = createSpineEditBehavior(options);
@@ -4313,7 +4331,9 @@ export interface StructureEditOptions {
   readonly ownsType: (surfaceType: string) => boolean;
   /** Whether the tool is partway through drawing something -- a press then belongs to the drawing, never to editing what stands. */
   readonly drafting?: (ctx: ToolContext) => boolean;
-  }
+  /**
+  * Edited only by its handles: a press on a vertex, an edge or the body is
+  * the tool's own -- it builds against what stands -- and only a handle
 export interface StructureEditBehavior {
   /** Tries to start an edit gesture on whatever `sample` landed on; `true` means the rest of this pointer gesture belongs to this behaviour, not the wrapped tool's own creation gesture. */
   tryGrab(ctx: ToolContext, sample: PointerSample, editParams: StructureEditParams): boolean;
@@ -4374,8 +4394,8 @@ export interface ConstructionTool<Id extends ConstructionToolId> {
   readonly handlePresentation?: "spine-points";
   /** The types this tool edits once they stand -- the scene shows their whole-structure handles while it is active. */
   readonly editsType?: (surfaceType: string) => boolean;
-  /** How this tool's dragged spine anchors snap -- the scene manipulator uses it too. */
-  readonly anchorSnap?: import("./curve-edit-gesture.ts").AnchorSnap;
+  /**
+  * What this tool edits is edited only by its handles, never by grabbing
 export function scopedToolId(ctx: ToolContext | string, domain: string, suffix?: string | number): string {
   const tableId = typeof ctx === "string" ? ctx : ctx.tableId;
   return suffix !== undefined ? `${tableId}:${domain}:${suffix}` : `${tableId}:${domain}`;
@@ -4610,7 +4630,7 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
   if (!Number.isFinite(params.elevation)) throw new Error("A elevação deve ser finita.");
 export function commitPlatformContour(ctx: ToolContext, samples: readonly PointerSample[], params: Params): void {
   commitPlatformShape(ctx, lines(samples,params.elevation),params,samples);
-export const platformContourTool = withStructureEditing(rawPlatformContourTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "floor") });
+export const platformContourTool = withStructureEditing(rawPlatformContourTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "floor"), handlesOnly: true });
 
 // src/composition/tabletop/tools/roof/roof-tool.ts
 export const ROOF_OVERHANG = 0.2;
@@ -4862,9 +4882,9 @@ export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly Co
   if (!(width > 0)) throw new Error("A largura deve ser positiva.");
 
 // src/composition/tabletop/tools/slope/slope-tools.ts
-export const slopeRampTool = withStructureEditing(rawSlopeRampTool, { ownsType: ownsRamp, drafting: (ctx) => rampDrafts.has(ctx.runtime) });
-export const slopeSpiralTool = withSpineEditing(rawSlopeSpiralTool, { ownsSpine: ownsSlope, drafting: rawSlopeSpiralTool.drafting });
-export const slopeCurveTool = withSpineEditing(rawSlopeCurveTool, { ownsSpine: ownsSlope, drafting: rawSlopeCurveTool.drafting });
+export const slopeRampTool = withStructureEditing(rawSlopeRampTool, { ownsType: ownsRamp, drafting: (ctx) => rampDrafts.has(ctx.runtime), handlesOnly: true });
+export const slopeSpiralTool = withSpineEditing(rawSlopeSpiralTool, { ownsSpine: ownsSlope, drafting: rawSlopeSpiralTool.drafting, handlesOnly: true });
+export const slopeCurveTool = withSpineEditing(rawSlopeCurveTool, { ownsSpine: ownsSlope, drafting: rawSlopeCurveTool.drafting, handlesOnly: true });
 
 // src/composition/tabletop/tools/terrain/terrain-sculpt-tool.ts
 export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
@@ -5216,7 +5236,7 @@ export type Reaction<Context> = (
 
 
 // src/features/edit-construction/global-handles/global-handle-ids.ts
-export type GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "radius" | "origin" | "destination" | "originHeight" | "destinationHeight";
+export type GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "radius" | "origin" | "destination" | "originHeight" | "destinationHeight" | "side" | "corner";
 export const globalHandleId = (kind: GlobalHandleKind, anchorNodeId: string): string => `${PREFIX[kind]}${anchorNodeId}`;
 export function globalHandleOf(id: string): { readonly kind: GlobalHandleKind; readonly nodeId: string } | undefined {
   const kind = KINDS.find((candidate) => id.startsWith(PREFIX[candidate]));
@@ -5498,6 +5518,18 @@ export function handleMotionAt(scene: GlobalHandleScene, id: string): HandleMoti
   if (!isSpineControlNodeId(id)) return undefined;
   const owner = spineOwnerAt(scene.graph, id);
 
+// src/features/edit-construction/orchestration/global-handles/part-handle-provider.ts
+export const PART_HANDLE_OUT = 0.7;
+export interface PartGlobalHandle extends GlobalHandle {
+  readonly seed: ConstructionRegionTopology;
+  readonly target: Extract<EditTarget, { kind: "edge" } | { kind: "vertex" }>;
+  }
+export const partHandleProvider: GlobalHandleProvider = {
+  name: "part",
+  handles(scene) {
+  const candidates = scene.topologies.filter((topology) => {
+  const type = structureTypeFor(topology.surfaceType);
+
 // src/features/edit-construction/orchestration/global-handles/spine-handle-provider.ts
 export const spineHandleProvider: GlobalHandleProvider = {
   name: "spine",
@@ -5544,6 +5576,10 @@ export interface SceneHandle {
   readonly id: string;
   readonly kind: SceneHandleKind;
   readonly position: ConstructionPosition;
+  }
+export interface HandleFocus {
+  readonly faces: ReadonlySet<string>;
+  readonly spineNodes: ReadonlySet<string>;
   }
 export interface SceneHandleInput {
   readonly graph: ConstructionGraphSnapshot;
@@ -6272,12 +6308,12 @@ export const rampEndsCapability: StructureEnds = Object.freeze<StructureEnds>({
 // src/features/edit-construction/structure-types/platform/platform-ramp-type.ts
 export const rampStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
   surfaceType: RAMP_SURFACE_TYPE, label: "Rampa",
-  globalHandles: Object.freeze(["pivot", "rotate", "height", "origin", "destination", "originHeight", "destinationHeight"] as const),
+  globalHandles: Object.freeze(["pivot", "rotate", "height", "origin", "destination", "originHeight", "destinationHeight", "side"] as const),
+  // Its long sides widen it; its ends are the origin and destination handles'.
+  partHandle: (role) => role === "ramp-side",
   ends: rampEndsCapability,
   creation: "a symmetric trapezoid on an inclined plane: an axis and a width at each end",
   traits: Object.freeze([]),
-  requiresMotionSolver: true,
-  roleFor: rampRoleFor,
 
 // src/features/edit-construction/structure-types/platform/platform-ramp.ts
 export const RAMP_SURFACE_TYPE = "platform-ramp";
@@ -7391,7 +7427,7 @@ export interface RenderSurfacePickTarget {
   }
 export type ConfirmedSurfacePickRenderChange =
 export type ConfirmedMapChunkRenderChange =
-export type RenderHandleGlyph = "point" | "midpoint" | "move" | "rotate" | "height" | "turns" | "radius" | "tilt" | "link";
+export type RenderHandleGlyph = "point" | "midpoint" | "move" | "rotate" | "height" | "turns" | "radius" | "tilt" | "link" | "side" | "corner";
 export interface RenderNodeHandle {
   readonly nodeId: string;
   readonly position: { readonly x: number; readonly y: number; readonly z: number };

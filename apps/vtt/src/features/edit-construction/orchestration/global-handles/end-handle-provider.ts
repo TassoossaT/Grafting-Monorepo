@@ -117,7 +117,7 @@ export const endHandleProvider: GlobalHandleProvider = {
         const far = ends.find((other) => other !== end)?.position ?? end.position;
         const span = Math.hypot(end.position.x - far.x, end.position.z - far.z) || 1;
         const on = { x: (end.position.x - far.x) / span, z: (end.position.z - far.z) / span };
-        const base = { pivot: end.position, owner: topology.surfaceType, provider: "ends", nodeIds, topology, end: end.name };
+        const base = { pivot: end.position, owner: topology.surfaceType, provider: "ends", nodeIds, faces: [keyOf(topology)], topology, end: end.name };
         const lift = end.name === "origin" ? "originHeight" : "destinationHeight";
         return [
           { ...base, id: globalHandleId(end.name, name), kind: end.name, position: end.position, motion: { kind: "plane" } },

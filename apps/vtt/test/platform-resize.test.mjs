@@ -81,7 +81,8 @@ test("a side pushed in past its neighbours is refused rather than turning the pl
   } finally { session.free(); }
 });
 
-test("pressing just off a platform's side, on the ground, grabs that side instead of starting a new area", async () => {
+test("a press on a platform's side builds against it; the handle just outside the side pushes it", async () => {
+  const { shownGlobalHandles } = await import("../src/features/edit-construction/index.ts");
   const { platformContourTool } = await import("../src/composition/tabletop/tools/platform/platform-contour-tool.ts");
   const fixture = sessionFixture();
   const { runtime, session, ctx, calls } = fixture;
@@ -89,14 +90,23 @@ test("pressing just off a platform's side, on the ground, grabs that side instea
   const params = platformContourTool.defaultParams();
   try {
     face(runtime, "f", [[0, 0], [4, 0], [4, 4], [0, 4]], 0, "platform");
-    const start = { point: { x: 4.25, y: 0, z: 2 } };
-    const current = { point: { x: 5.25, y: 0, z: 2.3 } };
+    const press = { point: { x: 4.05, y: 0, z: 2 } };
+    platformContourTool.onPointerDown(ctx, press, params);
+    platformContourTool.onPointerUp(ctx, { start: press, current: press, samples: [press], moved: false }, params);
+    platformContourTool.onCancel?.(ctx);
+    close(at(runtime, "f:1").x, 4, "the side itself is never grabbed");
+    const scene = { graph: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), cloudFor: runtime.cloudFor };
+    const east = shownGlobalHandles(scene).find((h) => h.kind === "side" && h.position.x > 4);
+    assert.ok(east && Math.abs(east.position.z - 2) < 1e-9, "the east side's handle, just outside its middle");
+    const start = { nodeId: east.id, point: east.position, screenX: 100, screenY: 300 };
+    const current = { point: { x: east.position.x + 1, y: 0, z: 2.3 }, screenX: 200, screenY: 300 };
     platformContourTool.onPointerDown(ctx, start, params);
     platformContourTool.onPointerMove(ctx, { start, current, samples: [start, current] }, params);
     platformContourTool.onPointerUp(ctx, { start, current, samples: [start, current], moved: true }, params);
     assert.ok(!calls.feedback.some((f) => f.tone === "error"), JSON.stringify(calls.feedback));
-    close(at(runtime, "f:1").x, 5, "the east side pushed out");
+    close(at(runtime, "f:1").x, 5, "the east side pushed out, square to itself");
     close(at(runtime, "f:2").x, 5, "whole");
+    close(at(runtime, "f:1").z, 0, "its corners slide along the sides next to it");
     assert.equal(runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform").length, 1, "no new area drawn");
   } finally { session.free(); }
 });

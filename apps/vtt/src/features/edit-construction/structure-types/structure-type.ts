@@ -426,6 +426,12 @@ export interface StructureTypeDefinition {
    */
   readonly globalHandles?: readonly GlobalHandleKind[];
   /**
+   * Which of its own parts get a `side` or `corner` handle, by the role
+   * grabbing that part has (`roleFor`) -- a platform's every side and corner,
+   * a ramp's long sides only. Absent, none does.
+   */
+  readonly partHandle?: (role: EditRole) => boolean;
+  /**
    * The type's shape changes only through its own controls. Anything else
    * moving some of its nodes -- a welded ramp, a wall's foot -- carries the
    * whole structure along as one piece (`orchestration/rigid-carry.ts`);

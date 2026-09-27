@@ -122,8 +122,8 @@ const rawSlopeRampTool: ConstructionTool<"slope-ramp"> = {
   },
 };
 
-/** Also grabs and edits an existing ramp's own corner, side, end or body -- see `structure-edit-behavior.ts`. */
-export const slopeRampTool = withStructureEditing(rawSlopeRampTool, { ownsType: ownsRamp, drafting: (ctx) => rampDrafts.has(ctx.runtime) });
+/** Also edits an existing ramp by its handles -- see `structure-edit-behavior.ts`; a press on the ramp itself builds against it. */
+export const slopeRampTool = withStructureEditing(rawSlopeRampTool, { ownsType: ownsRamp, drafting: (ctx) => rampDrafts.has(ctx.runtime), handlesOnly: true });
 
 /** A finished draft, committed as a sloped platform: laid-out spans as they are, points as a smooth run through them. */
 function commitDraft(ctx: ToolContext, draft: FinishedCurveDraft, params: { readonly width: number }): void {
@@ -149,7 +149,7 @@ const rawSlopeSpiralTool = createCurveDraftTool({
  * Also edits an existing spiral by its spine points, exactly as a road is
  * edited -- see `spine-edit-behavior.ts` -- and as a whole by its handles.
  */
-export const slopeSpiralTool = withSpineEditing(rawSlopeSpiralTool, { ownsSpine: ownsSlope, drafting: rawSlopeSpiralTool.drafting });
+export const slopeSpiralTool = withSpineEditing(rawSlopeSpiralTool, { ownsSpine: ownsSlope, drafting: rawSlopeSpiralTool.drafting, handlesOnly: true });
 
 /** A curved ramp, drawn in any of the shared spine creation modes; R cycles them. */
 const rawSlopeCurveTool = createCurveDraftTool({
@@ -164,4 +164,4 @@ const rawSlopeCurveTool = createCurveDraftTool({
 });
 
 /** Edits an existing curved ramp by its spine points, as the spiral and the road are edited, and as a whole by its handles. */
-export const slopeCurveTool = withSpineEditing(rawSlopeCurveTool, { ownsSpine: ownsSlope, drafting: rawSlopeCurveTool.drafting });
+export const slopeCurveTool = withSpineEditing(rawSlopeCurveTool, { ownsSpine: ownsSlope, drafting: rawSlopeCurveTool.drafting, handlesOnly: true });

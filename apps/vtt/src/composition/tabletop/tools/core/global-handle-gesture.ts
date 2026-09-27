@@ -26,6 +26,7 @@ const DONE: Readonly<Record<GlobalHandleKind, string>> = {
   pivot: "Estrutura movida.", rotate: "Estrutura girada.", height: "Altura atualizada.", turns: "Voltas atualizadas.",
   radius: "Raio atualizado.", origin: "Ponta movida.", destination: "Ponta movida.",
   originHeight: "Inclinação atualizada.", destinationHeight: "Inclinação atualizada.",
+  side: "Lado ajustado.", corner: "Canto ajustado.",
 };
 
 function sceneOf(ctx: ToolContext): GlobalHandleScene {
@@ -90,6 +91,28 @@ function previewOf(ctx: ToolContext, handle: GlobalHandle, edit: GlobalHandleEdi
   return Float32Array.from(segments);
 }
 
+/**
+ * A side or corner push carried out the way grabbing that part would be --
+ * through the type's own role for it, rigid carry and all -- as the nodes it
+ * places. Planned from the table as it stood when the gesture began, so each
+ * move re-plans the whole push.
+ */
+function resolvedPart(ctx: ToolContext, edit: GlobalHandleEdit, scene: GlobalHandleScene): GlobalHandleEdit {
+  if (edit.kind !== "region-part") return edit;
+  const cloud = resolveCloudTopology(ctx.runtime, edit.seed);
+  if (!cloud) throw new Error("A estrutura não está mais aqui.");
+  const plan = planEdit(cloud, { surfaceKey: edit.seed, target: edit.target, delta: edit.delta }, scene.graph, ctx.runtime);
+  if (plan.kind !== "apply") throw new Error(plan.reason);
+  const moves: { nodeId: string; position: ConstructionPosition }[] = [];
+  const retypes: { edgeId: string; geometry: ConstructionEdgeGeometry }[] = [];
+  for (const op of plan.ops) {
+    if (op.kind === "move-vertex") moves.push({ nodeId: op.nodeId, position: op.position });
+    else if (op.kind === "retype-edge") retypes.push({ edgeId: op.edgeId, geometry: op.geometry });
+    else throw new Error(`Um lado ou canto não faz ${op.kind}.`);
+  }
+  return { kind: "vertices", moves, retypes };
+}
+
 /** Applies `ops` as one transaction, so what the edit reaches -- the ground a grounded platform cuts -- answers with it, and undo takes both back. */
 function applyRecorded(ctx: ToolContext, ops: readonly AtomicEditOp[], label: string): void {
   const transactionId = `${label}:${ctx.nextSequence()}`;
@@ -107,6 +130,10 @@ function commitEdit(ctx: ToolContext, handle: GlobalHandle, edit: GlobalHandleEd
   if (edit.kind === "replace") {
     const { recorded } = commitPatchReplacement(ctx.runtime, edit.request, { transactionId: operationId });
     if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
+    return;
+  }
+  if (edit.kind === "region-part") {
+    commitEdit(ctx, handle, resolvedPart(ctx, edit, scene), scene, operationId);
     return;
   }
   if (edit.kind === "region-move") {
@@ -150,6 +177,8 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
     const delta = { x: at.x - handle!.position.x, y: at.y - handle!.position.y, z: at.z - handle!.position.z };
     switch (handle!.kind) {
       case "pivot": return { intent: { kind: "move", delta }, at };
+      case "side": return { intent: { kind: "move", delta }, at, readout: `lado ${(delta.x * (handle!.motion.kind === "line" ? handle!.motion.direction.x : 0) + delta.z * (handle!.motion.kind === "line" ? handle!.motion.direction.z : 0)).toFixed(2)} m` };
+      case "corner": return { intent: { kind: "move", delta }, at };
       case "height": return { intent: { kind: "height", dy: delta.y }, at, readout: `altura ${delta.y >= 0 ? "+" : ""}${delta.y.toFixed(2)} m` };
       case "rotate": return { intent: { kind: "rotate", angle }, at, readout: `rotação ${((angle * 180) / Math.PI).toFixed(0)}°` };
       case "turns": return { intent: { kind: "wind", angle }, at, readout: `voltas ${angle >= 0 ? "+" : ""}${(angle / (2 * Math.PI)).toFixed(2)}` };
@@ -177,7 +206,8 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
       try {
         const { intent, at, readout } = intentOf(gesture);
         ctx.runtime.previewNodeHandle?.(handle.id, at);
-        edit = planGlobalHandle(scene, handle, intent, ctx.runtime, operationId);
+        const planned = planGlobalHandle(scene, handle, intent, ctx.runtime, operationId);
+        edit = planned && resolvedPart(ctx, planned, scene);
         if (readout) ctx.reportFeedback({ tone: "info", message: readout });
         const preview = edit && previewOf(ctx, handle, edit, scene, operationId);
         if (preview) ctx.runtime.showPreview({ kind: "segments", positions: preview, color: PREVIEW_COLOR, opacity: 0.9 }, CHANNEL);

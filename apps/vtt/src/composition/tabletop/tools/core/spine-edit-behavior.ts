@@ -30,6 +30,12 @@ export interface SpineEditOptions {
   readonly onSelect?: (ctx: ToolContext, nodeId: string | undefined) => void;
   /** How a dragged anchor snaps; absent, anchors never snap. */
   readonly snap?: AnchorSnap;
+  /**
+   * Edited only by its handles -- its points, its span midpoints and its
+   * whole-structure handles -- never by a press on its body, which is the
+   * tool's own. Handles show on the spine under the pointer.
+   */
+  readonly handlesOnly?: boolean;
 }
 
 /** What a press on a spine resolved to: the handle it actually takes, and how to drag it. */
@@ -62,7 +68,7 @@ export interface SpineEditBehavior {
 const xyz = (p: ConstructionPosition) => [p.x, p.y, p.z] as const;
 const sceneOf = (ctx: ToolContext) => ({ graph: ctx.runtime.getGraphSnapshot(), topologies: ctx.runtime.getAllRegionTopologies(), cloudFor: ctx.runtime.cloudFor.bind(ctx.runtime) });
 
-export function createSpineEditBehavior({ ownsSpine, onSelect, snap }: SpineEditOptions): SpineEditBehavior {
+export function createSpineEditBehavior({ ownsSpine, onSelect, snap, handlesOnly }: SpineEditOptions): SpineEditBehavior {
   const drags = new WeakMap<ToolContext["runtime"], CurveGesture>();
   const selections = new WeakMap<ToolContext["runtime"], string>();
   const owned = (surfaceType: string | undefined) => surfaceType !== undefined && structureTypeFor(surfaceType)?.spine !== undefined && ownsSpine(surfaceType);
@@ -117,6 +123,7 @@ export function createSpineEditBehavior({ ownsSpine, onSelect, snap }: SpineEdit
           ? { mode: "shape", curveMode: "free", insertOnClick: true, dragThreshold: 5, pointerOrigin: sample.point }
           : { mode: "shape", insertOnClick: false, dragThreshold: 5, pointerOrigin: sample.point } };
       }
+      if (handlesOnly) return undefined;
       const body = spineBodyTarget(ctx, sample, undefined, owned);
       return body && { sample: body.sample, options: { ...body.options, curveMode: "free", insertOnClick: curvePick(body.sample.nodeId!)?.index === "midpoint" } };
     },
@@ -196,6 +203,7 @@ export function withSpineEditing<Id extends ConstructionToolId>(tool: Constructi
     ...tool,
     handlePresentation: "spine-points",
     editsType: options.ownsSpine,
+    ...(options.handlesOnly ? { handlesOnHover: true } : {}),
     ...(options.snap ? { anchorSnap: options.snap } : {}),
     previewFor(gesture, params, ctx) {
       return spine.isActive(ctx) ? undefined : tool.previewFor?.(gesture, params, ctx);

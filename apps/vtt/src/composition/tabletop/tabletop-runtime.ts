@@ -1,4 +1,4 @@
-import { curvePick, sceneHandles } from "../../features/edit-construction/index.ts";
+import { curvePick, sceneHandles, type HandleFocus } from "../../features/edit-construction/index.ts";
 import type { RenderHandleGlyph } from "../../ports/index.ts";
 import { HANDLE_GLYPHS } from "./handle-glyphs.ts";
 import type { BezierPort } from "../../ports/bezier-port.ts";
@@ -235,6 +235,8 @@ export interface TabletopRuntime extends BezierPort {
    * own; `undefined` shows none.
    */
   setGlobalHandleOwners?(owns: ((surfaceType: string) => boolean) | undefined): void;
+  /** Shows only the focused structure's handles -- the one under the pointer; `undefined` shows every one. */
+  setHandleFocus?(focus: HandleFocus | undefined): void;
   /** Shows a handle at `position` while a gesture carries it; `undefined` puts it back where it stands. */
   previewNodeHandle?(nodeId: string, position: ConstructionPosition | undefined): void;
   setPointManipulator?(viewId: RenderViewId, target: RenderPointManipulator | undefined): void;
@@ -341,6 +343,8 @@ export class AppTabletopRuntime implements TabletopRuntime {
   #sceneHandleGlyphs = new Map<string, RenderHandleGlyph>();
   /** Which types' global handles are shown -- see `setGlobalHandleOwners`. */
   #globalHandleOwners: ((surfaceType: string) => boolean) | undefined = undefined;
+  /** Whose handles show -- see `setHandleFocus`. */
+  #handleFocus: HandleFocus | undefined = undefined;
   /** Surfaces holding pinned nodes; `undefined` until next needed after a restore. A host edit moves those nodes without naming them. */
   #pinnedSurfaceRefs: Set<string> | undefined;
   #generation = 0;
@@ -648,6 +652,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
       cloudFor: (request) => this.#construction.cloudFor(request),
       pointsOnly: this.#pointHandlesOnly,
       ...(this.#globalHandleOwners ? { owns: this.#globalHandleOwners } : {}),
+      ...(this.#handleFocus ? { focus: this.#handleFocus } : {}),
     });
     const live = new Set(handles.map((handle) => handle.id));
     for (const id of this.#sceneHandleIds) if (!live.has(id)) this.#removeNodeHandle(id, origin, causeId, generation);
@@ -1233,6 +1238,13 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#globalHandleOwners = owns;
     if (this.#snapshot.status !== "ready") return;
     this.#syncSceneHandles("programmatic", "global-handle-owners", this.#generation);
+  }
+
+  setHandleFocus(focus: HandleFocus | undefined): void {
+    if (this.#handleFocus === focus) return;
+    this.#handleFocus = focus;
+    if (this.#snapshot.status !== "ready") return;
+    this.#syncSceneHandles("programmatic", "handle-focus", this.#generation);
   }
 
   previewNodeHandle(nodeId: string, position: ConstructionPosition | undefined): void {

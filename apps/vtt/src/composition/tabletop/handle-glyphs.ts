@@ -29,4 +29,7 @@ export const HANDLE_GLYPHS: Readonly<Record<SceneHandleKind | "vertex", RenderHa
   /** One end up or down alone: how steeply the structure climbs. */
   originHeight: "tilt",
   destinationHeight: "tilt",
+  /** Just outside a side or a corner: pushes that part. */
+  side: "side",
+  corner: "corner",
 };

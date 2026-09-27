@@ -97,6 +97,12 @@ export interface ConstructionTool<Id extends ConstructionToolId> {
   readonly handlePresentation?: "spine-points";
   /** The types this tool edits once they stand -- the scene shows their whole-structure handles while it is active. */
   readonly editsType?: (surfaceType: string) => boolean;
+  /**
+   * What this tool edits is edited only by its handles, never by grabbing
+   * its geometry -- so a press on it builds against it -- and those handles
+   * show only on the structure under the pointer.
+   */
+  readonly handlesOnHover?: boolean;
   /** How this tool's dragged spine anchors snap -- the scene manipulator uses it too. */
   readonly anchorSnap?: import("./curve-edit-gesture.ts").AnchorSnap;
   readonly useGridSnap?: boolean;

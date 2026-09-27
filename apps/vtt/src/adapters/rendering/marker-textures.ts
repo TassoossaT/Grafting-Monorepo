@@ -122,6 +122,27 @@ export function createRadiusHandleTexture(): HTMLCanvasElement {
   });
 }
 
+/** Pushes one side out or in: the side, and a double arrow square to it. */
+export function createSideHandleTexture(): HTMLCanvasElement {
+  return glyphDisc("#3a8f3a", (context) => {
+    context.beginPath(); context.moveTo(16, 32); context.lineTo(48, 32); context.stroke();
+    context.lineWidth = 4;
+    context.beginPath(); context.moveTo(32, 20); context.lineTo(32, 44); context.stroke();
+    arrowhead(context, 32, 16, -Math.PI / 2);
+    arrowhead(context, 32, 48, Math.PI / 2);
+  });
+}
+
+/** Pushes a corner -- both its sides at once: the corner, and a double arrow across it. */
+export function createCornerHandleTexture(): HTMLCanvasElement {
+  return glyphDisc("#3a8f3a", (context) => {
+    context.beginPath(); context.moveTo(20, 44); context.lineTo(20, 20); context.lineTo(44, 20); context.stroke();
+    context.lineWidth = 4;
+    context.beginPath(); context.moveTo(27, 27); context.lineTo(42, 42); context.stroke();
+    arrowhead(context, 45, 45, Math.PI / 4);
+  });
+}
+
 /** Turns something round: a circular arrow. */
 export function createTurnsHandleTexture(): HTMLCanvasElement {
   return glyphDisc("#e07a1f", (context) => {

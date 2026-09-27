@@ -6,6 +6,7 @@ import { commitRegionEdit } from "../../effects/effect-commit.ts";
 import { beginGlobalHandleGesture } from "./global-handle-gesture.ts";
 import {
   cloudNodes,
+  curvePick,
   globalHandleOf,
   panelHeightWidgetPick,
   planEdit,
@@ -49,6 +50,12 @@ export interface StructureEditOptions {
   readonly ownsType: (surfaceType: string) => boolean;
   /** Whether the tool is partway through drawing something -- a press then belongs to the drawing, never to editing what stands. */
   readonly drafting?: (ctx: ToolContext) => boolean;
+  /**
+   * Edited only by its handles: a press on a vertex, an edge or the body is
+   * the tool's own -- it builds against what stands -- and only a handle
+   * edits. Handles show on the structure under the pointer.
+   */
+  readonly handlesOnly?: boolean;
 }
 
 interface GrabbedTarget {
@@ -210,11 +217,14 @@ export function createStructureEditBehavior(options: StructureEditOptions): Stru
     // A whole-structure handle, or a curve handle, is its own gesture.
     curveGesture = sample.nodeId && globalHandleOf(sample.nodeId)
       ? beginGlobalHandleGesture(ctx, sample, options.ownsType, { ...editParams, dragThreshold: 5, pointerOrigin: sample.point })
-      : beginCurveGesture(ctx, sample, options.ownsType, editParams);
+      : !options.handlesOnly || (sample.nodeId !== undefined && curvePick(sample.nodeId) !== undefined)
+        ? beginCurveGesture(ctx, sample, options.ownsType, editParams)
+        : undefined;
     if (curveGesture) {
       grabbedThisGesture = true;
       return true;
     }
+    if (options.handlesOnly) return false;
     const grabbed = grabbedTarget(ctx, sample, options.ownsType, editParams.mode === "elevation");
     if (grabbed === undefined) {
       ctx.reportSelection(undefined);
@@ -361,6 +371,7 @@ export function withStructureEditing<Id extends ConstructionToolId>(
     ...tool,
     editsType: options.ownsType,
     previewOnHover: true,
+    ...(options.handlesOnly ? { handlesOnHover: true } : {}),
 
     previewFor(gesture, params, ctx) {
       if (behavior.isActive()) return undefined;

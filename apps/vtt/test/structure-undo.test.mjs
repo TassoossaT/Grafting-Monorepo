@@ -95,11 +95,8 @@ const edits = {
     drag(platformContourTool, platformContourTool.defaultParams(), f.ctx, rotate, turn(rotate, 0.6));
   },
   "pushing a floor's side out": (f) => {
-    const params = platformContourTool.defaultParams();
-    const start = { point: { x: -0.2, y: 0, z: 2 } }, current = { point: { x: -1.2, y: 0, z: 2 } };
-    platformContourTool.onPointerDown(f.ctx, start, params);
-    platformContourTool.onPointerMove(f.ctx, { start, current, samples: [start, current] }, params);
-    platformContourTool.onPointerUp(f.ctx, { start, current, samples: [start, current], moved: true }, params);
+    const side = shownGlobalHandles(scene(f.runtime)).find((h) => h.kind === "side" && h.position.x < 0);
+    drag(platformContourTool, platformContourTool.defaultParams(), f.ctx, side, { x: side.position.x - 1, y: 0, z: side.position.z });
   },
   "drawing a floor against a free curved ramp end": (f) => {
     commitPlatformSlope(f.ctx, [{ x: 0, y: 0, z: 10 }, { x: -4, y: 2, z: 10 }], curve);

@@ -248,6 +248,10 @@ Invisible pick proxy retaining one canonical SurfaceRef per render item.
 
 ### `function vtt.map-surface-pick-scene-item.mapSurfacePickSceneItemId(surfaceRef: string): string`
 
+### `function vtt.marker-textures.createCornerHandleTexture(): HTMLCanvasElement`
+
+Pushes a corner -- both its sides at once: the corner, and a double arrow across it.
+
 ### `function vtt.marker-textures.createHeightHandleTexture(): HTMLCanvasElement`
 
 Sets a height: a double arrow up and down.
@@ -283,6 +287,10 @@ In-scene road branching affordance, distinct from a movable anchor.
 ### `function vtt.marker-textures.createRotateHandleTexture(): HTMLCanvasElement`
 
 Turns a whole structure round: two arrows chasing each other round a circle.
+
+### `function vtt.marker-textures.createSideHandleTexture(): HTMLCanvasElement`
+
+Pushes one side out or in: the side, and a double arrow square to it.
 
 ### `function vtt.marker-textures.createTiltHandleTexture(): HTMLCanvasElement`
 
@@ -778,6 +786,10 @@ Local editing presentation; never changes the graph or persistence.
 Which types' whole-structure handles the scene shows -- the active tool's
 own; `undefined` shows none.
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.setHandleFocus(focus: HandleFocus | undefined): void`
+
+Shows only the focused structure's handles -- the one under the pointer; `undefined` shows every one.
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.setPointManipulator(viewId: string, target: RenderPointManipulator | undefined): void`
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): RegionEditOutcome`
@@ -967,6 +979,10 @@ Local editing presentation; never changes the graph or persistence.
 
 Which types' whole-structure handles the scene shows -- the active tool's
 own; `undefined` shows none.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.setHandleFocus(focus: HandleFocus | undefined): void`
+
+Shows only the focused structure's handles -- the one under the pointer; `undefined` shows every one.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.setPointManipulator(viewId: string, target: RenderPointManipulator | undefined): void`
 
@@ -2074,6 +2090,12 @@ The types this tool edits once they stand -- the scene shows their whole-structu
 
 Presentation and sampling policy while this tool is active.
 
+### `property vtt.curve-draft.CurveDraftTool.handlesOnHover?: boolean`
+
+What this tool edits is edited only by its handles, never by grabbing
+its geometry -- so a press on it builds against it -- and those handles
+show only on the structure under the pointer.
+
 ### `property vtt.curve-draft.CurveDraftTool.id: Id`
 
 ### `property vtt.curve-draft.CurveDraftTool.previewOnHover?: boolean | ((params: ToolParamsFor<Id>) => boolean)`
@@ -2304,6 +2326,18 @@ through `constrained-drag.ts` -- never loose under the pointer, and the
 structure is previewed as the edit would leave it. The motion gives the
 path; the handle's kind gives what the path means.
 
+### `variable vtt.handle-focus.NO_FOCUS: HandleFocus`
+
+### `function vtt.handle-focus.handleFocusAt(ctx: ToolContext, sample: PointerSample | undefined, previous: HandleFocus, owns: (surfaceType: string) => boolean): HandleFocus`
+
+The focus after the pointer moved to `sample`: the structure it is over,
+else the one it was on while it stays on that one's handles or near it,
+else none.
+
+### `function vtt.handle-focus.sameFocus(a: HandleFocus | undefined, b: HandleFocus | undefined): boolean`
+
+Whether two foci show the same handles.
+
 ### `variable vtt.navigate-tool.navigateTool: ConstructionTool<"navigate">`
 
 No-op: in `navigate` mode the pointer drives camera orbit/pan
@@ -2392,6 +2426,12 @@ tool only says which spine owners it edits, never how.
 
 While this answers true -- a tool midway through drawing -- presses belong to the tool, not to editing.
 
+### `property vtt.spine-edit-behavior.SpineEditOptions.handlesOnly?: boolean`
+
+Edited only by its handles -- its points, its span midpoints and its
+whole-structure handles -- never by a press on its body, which is the
+tool's own. Handles show on the spine under the pointer.
+
 ### `property vtt.spine-edit-behavior.SpineEditOptions.onSelect?: (ctx: ToolContext, nodeId: string | undefined) => void`
 
 Told whenever the selected spine point changes -- `undefined` when nothing is selected.
@@ -2447,6 +2487,12 @@ Whether the *last* `tryGrab` succeeded -- read after pointer-up, once `isActive(
 
 Whether the tool is partway through drawing something -- a press then belongs to the drawing, never to editing what stands.
 
+### `property vtt.structure-edit-behavior.StructureEditOptions.handlesOnly?: boolean`
+
+Edited only by its handles: a press on a vertex, an edge or the body is
+the tool's own -- it builds against what stands -- and only a handle
+edits. Handles show on the structure under the pointer.
+
 ### `property vtt.structure-edit-behavior.StructureEditOptions.ownsType: (surfaceType: string) => boolean`
 
 Only a vertex/edge/body/handle whose topology's surface type this accepts is grabbed; anything else falls through to the wrapped tool's own creation gesture.
@@ -2484,6 +2530,12 @@ The types this tool edits once they stand -- the scene shows their whole-structu
 ### `property vtt.tool-context.ConstructionTool.handlePresentation?: "spine-points"`
 
 Presentation and sampling policy while this tool is active.
+
+### `property vtt.tool-context.ConstructionTool.handlesOnHover?: boolean`
+
+What this tool edits is edited only by its handles, never by grabbing
+its geometry -- so a press on it builds against it -- and those handles
+show only on the structure under the pointer.
 
 ### `property vtt.tool-context.ConstructionTool.id: Id`
 
@@ -3266,7 +3318,7 @@ Edits an existing curved ramp by its spine points, as the spiral and the road ar
 
 ### `variable vtt.slope-tools.slopeRampTool: ConstructionTool<"slope-ramp">`
 
-Also grabs and edits an existing ramp's own corner, side, end or body -- see `structure-edit-behavior.ts`.
+Also edits an existing ramp by its handles -- see `structure-edit-behavior.ts`; a press on the ramp itself builds against it.
 
 ### `variable vtt.slope-tools.slopeSpiralTool: ConstructionTool<"slope-spiral">`
 
@@ -3910,6 +3962,10 @@ One whole-structure handle, where it stands, and what it acts on.
 
 A spiral's centre, when the structure is one -- what a turns handle winds round.
 
+### `property vtt.global-handle.GlobalHandle.faces?: readonly string[]`
+
+The faces the structure is made of, by surface key joined with NUL -- absent for a spine, whose faces its spine regenerates.
+
 ### `property vtt.global-handle.GlobalHandle.id: string`
 
 ### `property vtt.global-handle.GlobalHandle.kind: GlobalHandleKind`
@@ -3965,7 +4021,7 @@ Which surfaces form one cloud with `seed` (`ADR-0022`) -- the engine decides, ne
 
 ### `property vtt.global-handle.GlobalHandleScene.topologies: readonly ConstructionRegionTopology[]`
 
-### `type vtt.global-handle.GlobalHandleEdit = { carries?: readonly ConstructionSurfaceKey[]; graphPatch: ConstructionGraphPatch; kind: "spine"; owner: string } | { delta: ConstructionPosition; kind: "region-move"; seed: ConstructionSurfaceKey } | { kind: "vertices"; moves: readonly { nodeId: string; position: ConstructionPosition }[]; retypes: readonly { edgeId: string; geometry: ConstructionEdgeGeometry }[] } | { kind: "replace"; request: ApplyPatchReplacementRequest }`
+### `type vtt.global-handle.GlobalHandleEdit = { carries?: readonly ConstructionSurfaceKey[]; graphPatch: ConstructionGraphPatch; kind: "spine"; owner: string } | { delta: ConstructionPosition; kind: "region-move"; seed: ConstructionSurfaceKey } | { delta: ConstructionPosition; kind: "region-part"; seed: ConstructionSurfaceKey; target: { edgeId: string; kind: "edge" } | { kind: "vertex"; nodeId: string } } | { kind: "vertices"; moves: readonly { nodeId: string; position: ConstructionPosition }[]; retypes: readonly { edgeId: string; geometry: ConstructionEdgeGeometry }[] } | { kind: "replace"; request: ApplyPatchReplacementRequest }`
 
 What a provider makes of an intent, in the terms the edit is carried out
 in:
@@ -3973,6 +4029,7 @@ in:
 - spine: a spine graph patch its owner regenerates from;
 - region-move: the whole cloud seeded at `seed` moved by `delta` -- through
   the type's own role policy, so its solver and validation apply;
+- region-part: one side or corner of a face, the same way;
 - vertices: explicit node positions and edge geometry;
 - replace: faces swapped for new ones in one patch replacement -- a
   structure rebuilt, and the floors it welds into or leaves.
@@ -3981,7 +4038,7 @@ in:
 
 What a gesture on a global handle asks for, whatever the structure.
 
-### `type vtt.global-handle-ids.GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "radius" | "origin" | "destination" | "originHeight" | "destinationHeight"`
+### `type vtt.global-handle-ids.GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "radius" | "origin" | "destination" | "originHeight" | "destinationHeight" | "side" | "corner"`
 
 The handles that stand for a whole structure rather than one of its
 points, whatever the structure is built from -- a spine, a cloud of
@@ -3995,7 +4052,10 @@ regions:
 - origin, destination: move one end of a structure that runs between two
   ends, connecting it where it lands and disconnecting it where it left;
 - originHeight, destinationHeight: raise or lower that one end -- how
-  steeply the structure climbs.
+  steeply the structure climbs;
+- side, corner: stand just outside one side or corner of the structure
+  and push that part -- the part itself is never grabbed, so it stays
+  free to build against.
 
 Which of them a structure shows is its type's declaration
 (`StructureTypeDefinition.globalHandles`). Every one is named after the
@@ -4400,6 +4460,10 @@ A global handle placed on a cloud of regions: the generic handle, with the regio
 
 A spiral's centre, when the structure is one -- what a turns handle winds round.
 
+### `property vtt.cloud-handle-provider.CloudGlobalHandle.faces?: readonly string[]`
+
+The faces the structure is made of, by surface key joined with NUL -- absent for a spine, whose faces its spine regenerates.
+
 ### `property vtt.cloud-handle-provider.CloudGlobalHandle.id: string`
 
 ### `property vtt.cloud-handle-provider.CloudGlobalHandle.kind: GlobalHandleKind`
@@ -4445,6 +4509,10 @@ A spiral's centre, when the structure is one -- what a turns handle winds round.
 
 ### `property vtt.end-handle-provider.EndGlobalHandle.end: StructureEndName`
 
+### `property vtt.end-handle-provider.EndGlobalHandle.faces?: readonly string[]`
+
+The faces the structure is made of, by surface key joined with NUL -- absent for a spine, whose faces its spine regenerates.
+
 ### `property vtt.end-handle-provider.EndGlobalHandle.id: string`
 
 ### `property vtt.end-handle-provider.EndGlobalHandle.kind: GlobalHandleKind`
@@ -4489,6 +4557,61 @@ round -- so two structures welded together never name their handles
 alike. When every node is shared, its lowest node and its own type, which
 two structures joined at every node never have in common.
 
+### `interface vtt.part-handle-provider.PartGlobalHandle`
+
+A side or corner handle: the generic handle, with the face and the part of it the handle pushes.
+
+### `property vtt.part-handle-provider.PartGlobalHandle.center?: readonly [number, number]`
+
+A spiral's centre, when the structure is one -- what a turns handle winds round.
+
+### `property vtt.part-handle-provider.PartGlobalHandle.faces?: readonly string[]`
+
+The faces the structure is made of, by surface key joined with NUL -- absent for a spine, whose faces its spine regenerates.
+
+### `property vtt.part-handle-provider.PartGlobalHandle.id: string`
+
+### `property vtt.part-handle-provider.PartGlobalHandle.kind: GlobalHandleKind`
+
+### `property vtt.part-handle-provider.PartGlobalHandle.motion: HandleMotion`
+
+How the handle moves while dragged -- the path its gesture keeps it on.
+
+### `property vtt.part-handle-provider.PartGlobalHandle.nodeIds: readonly string[]`
+
+Every node of the structure, lowest id first.
+
+### `property vtt.part-handle-provider.PartGlobalHandle.owner: string`
+
+The structure's type.
+
+### `property vtt.part-handle-provider.PartGlobalHandle.pivot: ConstructionPosition`
+
+What the structure moves and turns round.
+
+### `property vtt.part-handle-provider.PartGlobalHandle.position: ConstructionPosition`
+
+### `property vtt.part-handle-provider.PartGlobalHandle.provider: string`
+
+Which provider made it -- and plans its edits.
+
+### `property vtt.part-handle-provider.PartGlobalHandle.seed: ConstructionRegionTopology`
+
+### `property vtt.part-handle-provider.PartGlobalHandle.target: { kind: "vertex"; nodeId: string } | { edgeId: string; kind: "edge" }`
+
+### `variable vtt.part-handle-provider.PART_HANDLE_OUT: 0.7`
+
+How far outside a side or a corner its handle stands, so the part itself stays free to build against.
+
+### `variable vtt.part-handle-provider.partHandleProvider: GlobalHandleProvider`
+
+A handle just outside each side and each corner of every structure whose
+type declares `side` or `corner` handles -- for the parts its own
+`partHandle` names. Dragging one edits that part through the type's own
+role for it, exactly as grabbing the part itself used to: the platform
+pushes the side square to itself, a ramp widens. The part itself is never
+grabbed, so it stays free to build against.
+
 ### `variable vtt.spine-handle-provider.spineHandleProvider: GlobalHandleProvider`
 
 Global handles of structures built from a spine: every intent becomes a
@@ -4512,6 +4635,15 @@ that `moved` carries it whole -- empty when none is bent. Structures in
 `direct` are the ones the gesture itself edits: their own controls shape
 them.
 
+### `interface vtt.scene-handles.HandleFocus`
+
+The one structure whose handles show -- the one under the pointer: its
+faces, by surface key joined with NUL, or, for a spine, its control nodes.
+
+### `property vtt.scene-handles.HandleFocus.faces: ReadonlySet<string>`
+
+### `property vtt.scene-handles.HandleFocus.spineNodes: ReadonlySet<string>`
+
 ### `interface vtt.scene-handles.SceneHandle`
 
 ### `property vtt.scene-handles.SceneHandle.id: string`
@@ -4527,6 +4659,10 @@ them.
 ### `property vtt.scene-handles.SceneHandleInput.contour: readonly ConstructionCurvedEdge[]`
 
 The session's curved contour edges, whose midpoints are handles too.
+
+### `property vtt.scene-handles.SceneHandleInput.focus?: HandleFocus`
+
+Only the focused structure's handles and spine points show; absent, every one does.
 
 ### `property vtt.scene-handles.SceneHandleInput.graph: ConstructionGraphSnapshot`
 
@@ -4694,6 +4830,10 @@ A spiral's centre, when the structure is one -- what a turns handle winds round.
 ### `property vtt.spine-global-handles.SpineGlobalHandle.ends?: readonly [string, string]`
 
 The spine's free ends, first to last -- the far one is the last. Absent on a branch or a loop.
+
+### `property vtt.spine-global-handles.SpineGlobalHandle.faces?: readonly string[]`
+
+The faces the structure is made of, by surface key joined with NUL -- absent for a spine, whose faces its spine regenerates.
 
 ### `property vtt.spine-global-handles.SpineGlobalHandle.id: string`
 
@@ -6577,6 +6717,12 @@ and its own logic to keep in step.
 ### `property vtt.structure-type.StructureTypeDefinition.motionInfluences?: (topology: ConstructionRegionTopology, transport: boolean) => readonly ConstructionMotionInfluence[]`
 
 Responses to received motion, independent of direct gesture constraints.
+
+### `property vtt.structure-type.StructureTypeDefinition.partHandle?: (role: string) => boolean`
+
+Which of its own parts get a `side` or `corner` handle, by the role
+grabbing that part has (`roleFor`) -- a platform's every side and corner,
+a ramp's long sides only. Absent, none does.
 
 ### `property vtt.structure-type.StructureTypeDefinition.policyFor: (role: string) => RolePolicy`
 
@@ -9203,7 +9349,7 @@ single-ghost behaviour every tool already relies on.
 
 ### `type vtt.scene-render-port.ConfirmedTokenRenderChange = { causeId: string; dependency: RenderDependencyRevision; origin: ChangeOrigin; runtimeGeneration: number; token: RenderToken; type: "token-upserted" } | { causeId: string; dependency: RenderDependencyRevision; origin: ChangeOrigin; runtimeGeneration: number; tokenId: string; type: "token-removed" }`
 
-### `type vtt.scene-render-port.RenderHandleGlyph = "point" | "midpoint" | "move" | "rotate" | "height" | "turns" | "radius" | "tilt" | "link"`
+### `type vtt.scene-render-port.RenderHandleGlyph = "point" | "midpoint" | "move" | "rotate" | "height" | "turns" | "radius" | "tilt" | "link" | "side" | "corner"`
 
 What a handle does, so it reads as that at a glance: a point to drag, or a
 control that moves a whole structure, sets a height, or turns something

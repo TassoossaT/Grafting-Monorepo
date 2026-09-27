@@ -68,7 +68,8 @@ function contourPlatformStructureType(
     roleFor: (topology, target) => target.kind === "vertex" && !topology.nodes.some((node) => node.id === target.nodeId) ? "platform-unknown" : `platform-${target.kind}`,
     policyFor: platformPolicy,
     interactionOver,
-    globalHandles: Object.freeze(["pivot", "rotate", "height"] as const),
+    globalHandles: Object.freeze(["pivot", "rotate", "height", "side", "corner"] as const),
+    partHandle: (role) => role === "platform-edge" || role === "platform-vertex",
     motionInfluences: (topology, transport): readonly ConstructionMotionInfluence[] => {
       const anchor = topology.nodes[0];
       if (!anchor) return [];

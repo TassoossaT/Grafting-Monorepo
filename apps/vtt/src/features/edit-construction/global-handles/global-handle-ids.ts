@@ -11,7 +11,10 @@
  * - origin, destination: move one end of a structure that runs between two
  *   ends, connecting it where it lands and disconnecting it where it left;
  * - originHeight, destinationHeight: raise or lower that one end -- how
- *   steeply the structure climbs.
+ *   steeply the structure climbs;
+ * - side, corner: stand just outside one side or corner of the structure
+ *   and push that part -- the part itself is never grabbed, so it stays
+ *   free to build against.
  *
  * Which of them a structure shows is its type's declaration
  * (`StructureTypeDefinition.globalHandles`). Every one is named after the
@@ -19,12 +22,13 @@
  * that keeps that node; none is a graph node. This module is the only place
  * their ids are made or read.
  */
-export type GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "radius" | "origin" | "destination" | "originHeight" | "destinationHeight";
+export type GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "radius" | "origin" | "destination" | "originHeight" | "destinationHeight" | "side" | "corner";
 
 const PREFIX: Readonly<Record<GlobalHandleKind, string>> = {
   pivot: "structure-pivot:", rotate: "structure-rotate:", height: "structure-height:", turns: "structure-turns:", radius: "structure-radius:",
   origin: "structure-origin:", destination: "structure-destination:",
   originHeight: "structure-origin-height:", destinationHeight: "structure-destination-height:",
+  side: "structure-side:", corner: "structure-corner:",
 };
 const KINDS = Object.keys(PREFIX) as readonly GlobalHandleKind[];
 

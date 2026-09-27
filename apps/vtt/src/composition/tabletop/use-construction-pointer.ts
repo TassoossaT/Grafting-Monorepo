@@ -14,6 +14,8 @@ import { toolFor } from "./tools/index.ts";
 import { beginCurveGesture, type CurveGesture } from "./tools/core/curve-edit-gesture.ts";
 import { carriesArrows, globalHandleOf, handleMotionAt, shownGlobalHandleAt } from "../../features/edit-construction/index.ts";
 import { gestureMoved } from "./tools/core/tool-context.ts";
+import { handleFocusAt, NO_FOCUS, sameFocus } from "./tools/core/handle-focus.ts";
+import type { HandleFocus } from "../../features/edit-construction/index.ts";
 import {
   edgeOverlayChannel,
   edgeOverlayDescriptor,
@@ -41,6 +43,8 @@ function spineHandleAt(runtime: Pick<TabletopRuntime, "getGraphSnapshot" | "getA
 /** Caps how often a continuous tool's `onPointerMove` commits during an active drag -- the preview ghost still updates on every raw event, only the (comparatively expensive) generate/mutate call is rate-limited. */
 const MOVE_COMMIT_THROTTLE_MS = 32;
 const PREVIEW_THROTTLE_MS = 32;
+/** How often hovering re-reads which structure's handles show. */
+const FOCUS_THROTTLE_MS = 50;
 
 export interface UseConstructionPointerOptions {
   readonly activeTool: ConstructionToolId;
@@ -111,6 +115,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
   const sequenceRef = useRef(0);
   const lastCommitAtRef = useRef(0);
   const lastPreviewAtRef = useRef(0);
+  /** Whose handles show, for a tool that edits only by handles -- `undefined` for any other tool. */
+  const focusRef = useRef<HandleFocus | undefined>(undefined);
+  const lastFocusAtRef = useRef(0);
   const optionsRef = useRef(options);
   optionsRef.current = options;
   /** Channels the edge overlay currently occupies, so a redraw clears exactly what it drew. */
@@ -218,6 +225,8 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     const presentation = tool.handlePresentation;
     runtime.setConstructionHandlePresentation?.(presentation ?? "all");
     runtime.setGlobalHandleOwners?.(tool.editsType);
+    if (!tool.handlesOnHover) runtime.setHandleFocus?.(undefined);
+    else if (!focusRef.current) { focusRef.current = NO_FOCUS; runtime.setHandleFocus?.(NO_FOCUS); }
     for (const channel of shownEdgeChannels.current) runtime.clearPreview(channel);
     shownEdgeChannels.current.clear();
     for (const group of edgeOverlayOf(runtime, runtime.getAllRegionTopologies(), runtime.getGraphSnapshot(), runtime)) {
@@ -287,6 +296,8 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       tool.onCancel?.(ownedContext);
       options.runtime.setConstructionHandlePresentation?.("all");
       options.runtime.setGlobalHandleOwners?.(undefined);
+      focusRef.current = undefined;
+      options.runtime.setHandleFocus?.(undefined);
       release();
     };
   }, [options.activeTool, options.runtime, options.history, options.tableId, options.viewId, ctx, refreshEdgeOverlay]);
@@ -389,7 +400,19 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       // to a circle footprint or unfinished polygon preview between clicks.
       if (gesture === null || gesture.pointerId !== event.pointerId) {
         const hover = typeof tool.previewOnHover === "function" ? tool.previewOnHover(params) : tool.previewOnHover;
-        const sample = hover ? sampleAt(event) : undefined;
+        const sample = hover || tool.handlesOnHover ? sampleAt(event) : undefined;
+        // The structure under the pointer shows its handles.
+        if (tool.handlesOnHover && tool.editsType && focusRef.current) {
+          const now = performance.now();
+          if (now - lastFocusAtRef.current >= FOCUS_THROTTLE_MS) {
+            lastFocusAtRef.current = now;
+            const focus = handleFocusAt(ctx, sample, focusRef.current, tool.editsType);
+            if (!sameFocus(focus, focusRef.current)) {
+              focusRef.current = focus;
+              optionsRef.current.runtime.setHandleFocus?.(focus);
+            }
+          }
+        }
         event.currentTarget.style.cursor = sample?.constructionAction ? "pointer" : sample?.nodeId ? "grab" : "";
         const descriptor = sample ? tool.previewFor?.({ start: sample,current: sample,samples: [sample] },params,ctx) : undefined;
         if (descriptor) optionsRef.current.runtime.showPreview(descriptor,TOOL_GHOST_PREVIEW_CHANNEL);

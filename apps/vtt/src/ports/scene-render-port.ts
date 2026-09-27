@@ -143,7 +143,7 @@ export type ConfirmedMapChunkRenderChange =
  * Interaction vocabulary, not product vocabulary -- any structure's
  * handle can take any glyph.
  */
-export type RenderHandleGlyph = "point" | "midpoint" | "move" | "rotate" | "height" | "turns" | "radius" | "tilt" | "link";
+export type RenderHandleGlyph = "point" | "midpoint" | "move" | "rotate" | "height" | "turns" | "radius" | "tilt" | "link" | "side" | "corner";
 
 export interface RenderNodeHandle {
   readonly nodeId: string;

@@ -25,6 +25,20 @@ export interface SceneHandle {
   readonly position: ConstructionPosition;
 }
 
+/**
+ * The one structure whose handles show -- the one under the pointer: its
+ * faces, by surface key joined with NUL, or, for a spine, its control nodes.
+ */
+export interface HandleFocus {
+  readonly faces: ReadonlySet<string>;
+  readonly spineNodes: ReadonlySet<string>;
+}
+
+/** Whether `handle` belongs to the focused structure. */
+function focused(handle: { readonly nodeIds: readonly string[]; readonly faces?: readonly string[] }, focus: HandleFocus): boolean {
+  return handle.faces ? handle.faces.some((face) => focus.faces.has(face)) : handle.nodeIds.some((id) => focus.spineNodes.has(id));
+}
+
 export interface SceneHandleInput {
   readonly graph: ConstructionGraphSnapshot;
   readonly topologies: readonly ConstructionRegionTopology[];
@@ -37,13 +51,17 @@ export interface SceneHandleInput {
   readonly pointsOnly: boolean;
   /** The types whose whole-structure handles show -- the active tool's; none when absent. */
   readonly owns?: (surfaceType: string) => boolean;
+  /** Only the focused structure's handles and spine points show; absent, every one does. */
+  readonly focus?: HandleFocus;
 }
 
 export function sceneHandles(input: SceneHandleInput): readonly SceneHandle[] {
   const handles: SceneHandle[] = [];
   if (input.port) {
     const edges = curveEdgesOf(input.graph, input.contour, input.port);
-    const shown = input.pointsOnly ? edges.filter((edge) => edge.store === "spine") : edges;
+    const spines = input.pointsOnly ? edges.filter((edge) => edge.store === "spine") : edges;
+    const { focus } = input;
+    const shown = focus ? spines.filter((edge) => edge.store !== "spine" || (focus.spineNodes.has(edge.startNodeId) && focus.spineNodes.has(edge.endNodeId))) : spines;
     if (input.pointsOnly) {
       const anchors = new Set(shown.flatMap((edge) => [edge.startNodeId, edge.endNodeId]));
       for (const node of input.graph.nodes) if (anchors.has(node.id)) handles.push({ id: node.id, kind: "anchor", position: node.position });
@@ -55,6 +73,7 @@ export function sceneHandles(input: SceneHandleInput): readonly SceneHandle[] {
   }
   if (input.owns) {
     for (const handle of shownGlobalHandles({ graph: input.graph, topologies: input.topologies, cloudFor: input.cloudFor }, input.owns)) {
+      if (input.focus && !focused(handle, input.focus)) continue;
       handles.push({ id: handle.id, kind: handle.kind, position: handle.position });
     }
   }
