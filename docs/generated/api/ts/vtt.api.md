@@ -1965,9 +1965,15 @@ The rectangle from `a` to the pointer's `b`, its sides along the frame:
 the pointer gives the far corner, its size along each direction whole
 grid steps when the table snaps. `undefined` when it has no area.
 
-### `function vtt.build-frame.frameStart(ctx: ToolContext, frame: BuildFrame, sample: PointerSample): ConstructionPosition`
+### `function vtt.build-frame.frameStart(ctx: ToolContext, frame: BuildFrame, sample: PointerSample, y: number): ConstructionPosition`
 
-Where a shape begun at `sample` starts: on the side it was drawn next to, else on the frame's grid.
+Where a shape begun at `sample`, on the level `y`, starts: on the side it was drawn next to, else on the frame's grid.
+
+### `function vtt.build-frame.pointerOnLevel(sample: PointerSample, y: number): ConstructionPosition`
+
+Where the pointer is on the level `y` a shape is drawn at -- its ray
+crossing that level, not whatever surface the ray happened to hit first:
+the ground below a raised floor, or the top of one standing in front.
 
 ### `function vtt.build-frame.snappedInFrame(ctx: ToolContext, frame: BuildFrame, p: ConstructionPosition): ConstructionPosition`
 
@@ -3108,7 +3114,7 @@ Also grabs and edits an existing platform's own vertex/edge/body -- see `structu
 
 Polygon entry point retained for callers that already have explicit corners.
 
-### `function vtt.platform-contour-tool.commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; support?: "grounded" | "floating"; tolerance?: number }, pickedSamples: readonly PointerSample[]): void`
+### `function vtt.platform-contour-tool.commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; support?: "grounded" | "floating"; tolerance?: number }, pickedSamples: readonly PointerSample[], options: { clipped?: boolean }): void`
 
 Commits the same directed line/arc contour vocabulary consumed by wall
 construction. Ampliar/juntar and recortar/separar no longer run an

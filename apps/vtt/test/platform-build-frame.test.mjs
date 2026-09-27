@@ -101,6 +101,15 @@ test("a floor drawn over another of its kind at its height is united with it: on
       assert.equal(floors.length, 1, `${name}: one floor`);
       assert.equal(floors[0].holes.length, 0, `${name}: no hole`);
       assert.ok(Math.abs(planArea(floors[0]) - area) < 1e-6, `${name}: the union's area, ${planArea(floors[0])} != ${area}`);
+      if (name !== "covering") {
+        // The standing floor is the new one's limit, never reshaped: its corners
+        // still on the outline stay where they were; one the new floor covers is inside now.
+        for (const [i, [x, z]] of [[0, 0], [4, 0], [4, 4], [0, 4]].entries()) {
+          const node = floors[0].nodes.find((n) => n.id === `old:${i}`);
+          assert.ok(!node || (node.position.x === x && node.position.z === z), `${name}: old:${i} kept at ${x},${z}`);
+        }
+        assert.ok(floors[0].nodes.some((n) => n.id === "old:0"), `${name}: the far corner is the old floor's own`);
+      }
     } finally { session.free(); }
   }
 });
@@ -116,7 +125,14 @@ test("a U of floors closed by a bar drawn over both its arms becomes one ring: o
     const floors = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform-floating");
     assert.equal(floors.length, 1, "one floor");
     assert.equal(floors[0].holes.length, 1, "the courtyard inside the ring");
-    assert.ok(floors[0].nodes.some((n) => n.id === "u:0") && floors[0].nodes.some((n) => n.id === "u:1"), "the U's own corners kept");
+    const u = [[0, 0], [6, 0], [6, 6], [4, 6], [4, 2], [2, 2], [2, 6], [0, 6]];
+    for (const [i, [x, z]] of u.entries()) {
+      const node = floors[0].nodes.find((n) => n.id === `u:${i}`);
+      assert.ok(!node || (node.position.x === x && node.position.z === z), `the U's corner u:${i} kept where it was`);
+    }
+    assert.ok(["u:0", "u:1", "u:4", "u:5"].every((id) => floors[0].nodes.some((n) => n.id === id)), "the U's own corners the bar did not cover");
+    // The U, plus only what of the bar its arms left free; the courtyard closed off at the bar.
+    assert.ok(Math.abs(planArea(floors[0]) - (28 + 8.6)) < 1e-6, `area ${planArea(floors[0])}`);
   } finally { session.free(); }
 });
 
@@ -145,3 +161,30 @@ function planArea(topology) {
   }, 0) / 2);
   return topology.outerLoops.reduce((sum, loop) => sum + ring(loop), 0) - topology.holes.reduce((sum, loop) => sum + ring(loop), 0);
 }
+
+test("a rectangle drawn for a raised floor follows the pointer at that floor's level, not the ground the pointer hits below", () => {
+  const { runtime, session, ctx } = sessionFixture();
+  const shown = [];
+  Object.assign(runtime, { showPreview(d) { shown.push(d); }, clearPreview() {} });
+  try {
+    const params = { ...platformContourTool.defaultParams(), shape: "rectangle", mode: "create", elevation: 3, support: "floating" };
+    // A camera up and behind: the ray reaches the level 3 well before it hits the ground.
+    const origin = { x: 0, y: 10, z: -10 };
+    const sample = (x, z) => {
+      const onLevel = { x, y: 3, z }, direction = { x: onLevel.x - origin.x, y: onLevel.y - origin.y, z: onLevel.z - origin.z };
+      const length = Math.hypot(direction.x, direction.y, direction.z);
+      const d = { x: direction.x / length, y: direction.y / length, z: direction.z / length };
+      const t = -origin.y / d.y;
+      return { point: { x: origin.x + d.x * t, y: 0, z: origin.z + d.z * t }, ray: { origin, direction: d }, forward: { x: 1, y: -0.5, z: 0 } };
+    };
+    const start = sample(0, 0), end = sample(4, 2);
+    platformContourTool.onPointerDown(ctx, start, params);
+    platformContourTool.onPointerMove(ctx, { start, current: end, samples: [start, end] }, params);
+    platformContourTool.onPointerUp(ctx, { start, current: end, samples: [start, end], moved: true }, params);
+    const floor = runtime.getAllRegionTopologies().find((t) => t.surfaceType === "platform-floating");
+    assert.ok(floor, "drawn");
+    const xs = floor.nodes.map((n) => n.position.x), zs = floor.nodes.map((n) => n.position.z);
+    assert.ok(Math.abs(Math.min(...xs)) < 1e-6 && Math.abs(Math.max(...xs) - 4) < 1e-6 && Math.abs(Math.min(...zs)) < 1e-6 && Math.abs(Math.max(...zs) - 2) < 1e-6,
+      `under the pointer at level 3: ${JSON.stringify(floor.nodes.map((n) => n.position))}`);
+  } finally { session.free(); }
+});

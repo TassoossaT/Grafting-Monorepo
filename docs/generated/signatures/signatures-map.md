@@ -4111,8 +4111,10 @@ export function snappedInFrame(ctx: ToolContext, frame: BuildFrame, p: Construct
   const along = Math.round((dx * frame.u.x + dz * frame.u.z) / unit) * unit;
   const across = Math.round((dx * frame.v.x + dz * frame.v.z) / unit) * unit;
   return { x: frame.origin.x + frame.u.x * along + frame.v.x * across, y: p.y, z: frame.origin.z + frame.u.z * along + frame.v.z * across };
-export function frameStart(ctx: ToolContext, frame: BuildFrame, sample: PointerSample): ConstructionPosition {
-  return frame.start ?? snappedInFrame(ctx, frame, sample.point);
+export function pointerOnLevel(sample: PointerSample, y: number): ConstructionPosition {
+  return sample.ray ? pointerAtHeight(sample, y) : { ...sample.point, y };
+export function frameStart(ctx: ToolContext, frame: BuildFrame, sample: PointerSample, y: number = sample.point.y): ConstructionPosition {
+  return frame.start ?? snappedInFrame(ctx, frame, pointerOnLevel(sample, y));
 export function frameRectangle(ctx: ToolContext, frame: BuildFrame, a: ConstructionPosition, b: ConstructionPosition, elevation: number): readonly ConstructionPosition[] | undefined {
   const unit = ctx.gridUnit ?? WORLD_UNIT;
   const dx = b.x - a.x, dz = b.z - a.z;
@@ -4647,7 +4649,7 @@ export function groupLoopsByContainment(
   const areas = loops.map((loop) => Math.abs(loopSignedArea(port, loop, positionOf)));
 
 // src/composition/tabletop/tools/platform/platform-contour-tool.ts
-export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: Params, pickedSamples: readonly PointerSample[] = []): void {
+export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: Params, pickedSamples: readonly PointerSample[] = [], options: { readonly clipped?: boolean } = {}): void {
   try {
   if (!Number.isFinite(params.elevation)) throw new Error("A elevação deve ser finita.");
 export function commitPlatformContour(ctx: ToolContext, samples: readonly PointerSample[], params: Params): void {

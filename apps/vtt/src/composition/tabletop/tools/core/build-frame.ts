@@ -83,9 +83,18 @@ export function snappedInFrame(ctx: ToolContext, frame: BuildFrame, p: Construct
   return { x: frame.origin.x + frame.u.x * along + frame.v.x * across, y: p.y, z: frame.origin.z + frame.u.z * along + frame.v.z * across };
 }
 
-/** Where a shape begun at `sample` starts: on the side it was drawn next to, else on the frame's grid. */
-export function frameStart(ctx: ToolContext, frame: BuildFrame, sample: PointerSample): ConstructionPosition {
-  return frame.start ?? snappedInFrame(ctx, frame, sample.point);
+/**
+ * Where the pointer is on the level `y` a shape is drawn at -- its ray
+ * crossing that level, not whatever surface the ray happened to hit first:
+ * the ground below a raised floor, or the top of one standing in front.
+ */
+export function pointerOnLevel(sample: PointerSample, y: number): ConstructionPosition {
+  return sample.ray ? pointerAtHeight(sample, y) : { ...sample.point, y };
+}
+
+/** Where a shape begun at `sample`, on the level `y`, starts: on the side it was drawn next to, else on the frame's grid. */
+export function frameStart(ctx: ToolContext, frame: BuildFrame, sample: PointerSample, y: number = sample.point.y): ConstructionPosition {
+  return frame.start ?? snappedInFrame(ctx, frame, pointerOnLevel(sample, y));
 }
 
 /**

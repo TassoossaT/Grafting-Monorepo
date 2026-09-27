@@ -1,4 +1,4 @@
-import { DEFAULT_TOOL_PARAMS, faceOverlapsOutline, fitPath, floatingPlatformStructureType, hasTrait, outlineOf, planarUnion, platformStructureType, weldFreeEndsOnto } from "../../../../features/edit-construction/index.ts";
+import { DEFAULT_TOOL_PARAMS, faceOverlapsOutline, fitPath, floatingPlatformStructureType, hasTrait, outlineOf, planarDifference, planarUnion, platformStructureType, weldFreeEndsOnto } from "../../../../features/edit-construction/index.ts";
 import type { FittedEdge, ToolParamsByTool } from "../../../../features/edit-construction/index.ts";
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import type { ConstructionPosition, ConstructionRegionTopology } from "../../../../ports/index.ts";
@@ -6,7 +6,7 @@ import { createBoundaryEdges, reverseGeometry } from "../core/boundary-edges.ts"
 import { commitPatchReplacement } from "../../effects/effect-commit.ts";
 import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext } from "../core/tool-context.ts";
 import { withStructureEditing } from "../core/structure-edit-behavior.ts";
-import { buildFrameAt, frameRectangle, frameStart, snappedInFrame, type BuildFrame } from "../core/build-frame.ts";
+import { buildFrameAt, frameRectangle, frameStart, pointerOnLevel, snappedInFrame, type BuildFrame } from "../core/build-frame.ts";
 import { polylineSegmentsPreview, segmentsPreview } from "../shapes/preview-shapes.ts";
 import { circleContour, previewOutline } from "../tower/tower-geometry.ts";
 import { groupLoopsByContainment, splitContourAtPoints, weldedMerge, windLoop, type DirectedContourEdge } from "./platform-contour-merge.ts";
@@ -89,7 +89,7 @@ function lines(samples: readonly PointerSample[], elevation: number): readonly F
  */
 function rectangle(ctx: ToolContext, a: PointerSample, b: PointerSample, elevation: number): readonly PointerSample[] | undefined {
   const frame = frameOf(ctx, a);
-  const corners = frameRectangle(ctx, frame, frameStart(ctx, frame, a), b.point, elevation);
+  const corners = frameRectangle(ctx, frame, frameStart(ctx, frame, a, elevation), pointerOnLevel(b, elevation), elevation);
   return corners && corners.map((corner, i) => (i === 0 ? at(a, corner) : { point: corner }));
 }
 /**
@@ -100,7 +100,7 @@ function rectangle(ctx: ToolContext, a: PointerSample, b: PointerSample, elevati
  * wall run snaps onto a column with) and the result is assembled from
  * shared/cancelled edges -- see `platform-contour-merge.ts` for why.
  */
-export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: Params, pickedSamples: readonly PointerSample[] = []): void {
+export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: Params, pickedSamples: readonly PointerSample[] = [], options: { readonly clipped?: boolean } = {}): void {
   try {
     if (!Number.isFinite(params.elevation)) throw new Error("A elevação deve ser finita.");
     if (contour.length < 2) throw new Error("Desenhe uma área com largura e comprimento.");
@@ -119,7 +119,8 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
     const overlapped = params.mode === "create" ? level.filter((t) => faceOverlapsOutline(t, drawnOutline)) : [];
     const straight = (t: ConstructionRegionTopology) => [...t.outerLoops, ...t.holes].flat().every((use) => use.geometry.kind !== "arc");
     const touching = params.mode === "create" ? level.filter((t) => !overlapped.includes(t) && touchesContour(t, contour)) : [];
-    const unites = overlapped.length > 0 && contour.every((c) => c.geometry.kind !== "arc") && [...overlapped, ...touching].every(straight);
+    // Already cut back to what the standing floors leave free: any overlap left is rounding, never cut again.
+    const unites = !options.clipped && overlapped.length > 0 && contour.every((c) => c.geometry.kind !== "arc") && [...overlapped, ...touching].every(straight);
     const apart = new Set(unites ? [] : overlapped.flatMap((t) => ctx.runtime.cloudFor({ seed: t.surfaceKey, surfaceType: t.surfaceType }).surfaceKeys.map((key) => key.join("\u0000"))));
     if (!unites) for (const t of overlapped) apart.add(t.surfaceKey.join("\u0000"));
     const apartNodes = new Set(level.filter((t) => apart.has(t.surfaceKey.join("\u0000"))).flatMap((t) => t.nodes.map((n) => n.id)));
@@ -181,7 +182,24 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
     // becomes a real shared node before edges are ever compared.
     const standingRaw = sources.flatMap((t) => sourceEdges(t).flat());
     if (unites) {
-      commitUnion(ctx, params, operationId, sources, contour, nodeAt, positionOf, () => [...nodes.values()]);
+      // The standing floors are the drawn one's limits, never reshaped by it:
+      // it keeps only what they leave free, and that joins them along their
+      // own edges. Only a floor drawn round a standing one -- what is left
+      // would ring it -- takes the standing one in whole.
+      const polygonOf = (t: ConstructionRegionTopology) => {
+        const at = new Map(t.nodes.map((n) => [n.id, n.position]));
+        return [...t.outerLoops, ...t.holes].map((loop) => loop.map((use) => [at.get(use.startNodeId)!.x, at.get(use.startNodeId)!.z] as const));
+      };
+      const free = planarDifference(ctx.runtime, [contour.map((c) => [c.start.x, c.start.z] as const)], ...overlapped.map(polygonOf));
+      if (free.some((polygon) => polygon.length > 1)) {
+        commitUnion(ctx, params, operationId, sources, contour, nodeAt, positionOf, () => [...nodes.values()]);
+        return;
+      }
+      if (free.length === 0) { ctx.reportFeedback({ tone: "info", message: "A área já está coberta pela plataforma." }); return; }
+      for (const polygon of free) {
+        const ring = polygon[0]!.slice(0, -1).map(([x, z]) => ({ x, y: params.elevation, z }));
+        commitPlatformShape(ctx, ring.map((start, i) => ({ start, end: ring[(i + 1) % ring.length]!, geometry: { kind: "line" as const } })), params, [], { clipped: true });
+      }
       return;
     }
     const clipPoints = [...new Set(clipEdges.flatMap((e) => [e.a,e.b]))].map((id) => ({ id, position: positionOf(id) }));
@@ -327,16 +345,19 @@ function touchesContour(topology: ConstructionRegionTopology, contour: readonly 
 export function commitPlatformContour(ctx: ToolContext, samples: readonly PointerSample[], params: Params): void {
   commitPlatformShape(ctx, lines(samples,params.elevation),params,samples);
 }
-/** A polygon's next corner: its first starts the frame -- against a structure's side when next to one -- and every corner snaps in it. */
-function polygonCorner(ctx: ToolContext, params: Params, sample: PointerSample): PointerSample {
+/** A polygon's next corner, on the level `y`: its first starts the frame -- against a structure's side when next to one -- and every corner snaps in it. */
+function polygonCorner(ctx: ToolContext, params: Params, sample: PointerSample, y: number): PointerSample {
   const current = draftOf(ctx, params);
   if (!current.frame || current.points.length === 0) {
     const frame = buildFrameAt(ctx, sample);
     if (current.points.length === 0) current.frame = frame;
-    return at(sample, frameStart(ctx, frame, sample));
+    return at(sample, frameStart(ctx, frame, sample, y));
   }
-  return sample.nodeId ? sample : at(sample, snappedInFrame(ctx, current.frame, sample.point));
+  return sample.nodeId ? sample : at(sample, snappedInFrame(ctx, current.frame, pointerOnLevel(sample, y)));
 }
+
+/** Freehand samples where the pointer is on the level `y` the floor is drawn at. */
+const onLevel = (samples: readonly PointerSample[], y: number): PointerSample[] => samples.map((s) => (s.nodeId ? s : at(s, pointerOnLevel(s, y))));
 
 const rawPlatformContourTool: ConstructionTool<"platform-contour"> = {
   id: "platform-contour",
@@ -351,7 +372,7 @@ const rawPlatformContourTool: ConstructionTool<"platform-contour"> = {
     const shape = params.shape ?? "rectangle";
     if (shape === "rectangle" && gesture.start.point.x === gesture.current.point.x && gesture.start.point.z === gesture.current.point.z) return undefined;
     if (shape === "circle") return segmentsPreview(previewOutline({ ...gesture.current.point, y: effective.elevation },params.radius ?? 2.5,48),COLOR);
-    const samples = shape === "rectangle" ? rectangle(ctx,gesture.start,gesture.current,effective.elevation) : shape === "polygon" ? [...points,polygonCorner(ctx,params,gesture.current)] : [...points,...gesture.samples];
+    const samples = shape === "rectangle" ? rectangle(ctx,gesture.start,gesture.current,effective.elevation) : shape === "polygon" ? [...points,polygonCorner(ctx,params,gesture.current,effective.elevation)] : onLevel(gesture.samples,effective.elevation);
     if (!samples) return undefined;
     const outline = samples.map((s) => ({ ...s.point,y: effective.elevation }));
     return polylineSegmentsPreview(outline.length > 2 ? [...outline,outline[0]!] : outline,COLOR);
@@ -360,7 +381,7 @@ const rawPlatformContourTool: ConstructionTool<"platform-contour"> = {
     const shape = params.shape ?? "rectangle";
     if (shape === "circle") {
       const effective = parametersAt(ctx,sample,params);
-      const center = frameStart(ctx,buildFrameAt(ctx,sample),sample);
+      const center = frameStart(ctx,buildFrameAt(ctx,sample),sample,effective.elevation);
       commitPlatformShape(ctx,circleContour({ ...center,y:effective.elevation },params.radius ?? 2.5),effective);
     } else if (shape === "polygon") {
       const points = draft(ctx,params);
@@ -368,7 +389,7 @@ const rawPlatformContourTool: ConstructionTool<"platform-contour"> = {
       if (first && points.length >= 3 && Math.hypot(first.point.x-sample.point.x,first.point.z-sample.point.z)<0.25) {
         commitPlatformContour(ctx,points,parametersAt(ctx,first,params)); points.length = 0;
       } else {
-        points.push(polygonCorner(ctx,params,sample));
+        points.push(polygonCorner(ctx,params,sample,parametersAt(ctx,first ?? sample,params).elevation));
         ctx.reportFeedback({ tone: "info", message: "Marque os cantos e clique no primeiro para fechar. Esc cancela." });
       }
     } else {
@@ -387,11 +408,11 @@ const rawPlatformContourTool: ConstructionTool<"platform-contour"> = {
       }
       commitPlatformContour(ctx,corners,effective);
     } else {
-      const points = gesture.samples.map((s) => ({ ...s.point,y:effective.elevation }));
+      const points = onLevel(gesture.samples,effective.elevation).map((s) => s.point);
       const first = points[0]!, last = points.at(-1)!;
       if (Math.hypot(first.x-last.x,first.z-last.z)>1e-5) points.push(first);
       const fitted = fitPath(points,params.tolerance ?? 0.15,{ curves: ctx.snapToGrid ? "none" : "arc" });
-      commitPlatformShape(ctx,fitted,effective,gesture.samples);
+      commitPlatformShape(ctx,fitted,effective,onLevel(gesture.samples,effective.elevation));
     }
     drafts.delete(ctx.runtime);
   },
