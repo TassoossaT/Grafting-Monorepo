@@ -106,18 +106,21 @@ test("a corner dragged past the axis is refused rather than twisting the ramp", 
   } finally { session.free(); }
 });
 
-test("a ramp dragged from one floor to the next welds both ends, square to the floors' edges", () => {
+test("a ramp drawn from one floor to the next, as a floor is -- the press one corner, the pointer the far one -- welds both ends, square to the floors' edges", () => {
   const fixture = sessionFixture();
   const { runtime, session, calls } = fixture;
   try {
     floor(runtime, "low", 0, 0);
     floor(runtime, "high", 10, 2, "platform-floating");
-    drawn({ point: { x: 4, y: 0, z: 2 } }, { point: { x: 10, y: 0, z: 2.8 } }, fixture);
+    drawn({ point: { x: 4, y: 0, z: 1 } }, { point: { x: 10, y: 0, z: 3 } }, fixture);
     assert.ok(calls.feedback.at(-1).message.includes("2 ponta"), JSON.stringify(calls.feedback));
     const face = ramp(runtime);
     close(centre(face, "bottom").x, 4, "the bottom lies on the low floor's edge");
     close(centre(face, "top").x, 10, "the top lies on the high floor's edge");
-    close(centre(face, "top").z, 2, "square to the edges, the stray sideways drag dropped");
+    close(centre(face, "top").z, 2, "square to the edges, between the press and the pointer");
+    const width = (end) => Math.abs(corner(face, end, "max").position.z - corner(face, end, "min").position.z);
+    close(width("bottom"), 2, "the width drawn");
+    close(width("top"), 2, "the same at the top");
     const low = faces(runtime, "platform")[0];
     const high = faces(runtime, "platform-floating")[0];
     for (const side of ["min", "max"]) {
@@ -272,16 +275,16 @@ test("a straight ramp is also drawn by clicks: start, then end; Shift with the p
   } finally { session.free(); }
 });
 
-test("a ramp started on a floor's edge stays welded there however the pointer turns round it, off the floor or over it", async () => {
+test("a ramp started on a floor's edge stays welded there wherever the pointer draws it, off the floor or over it, wide or narrow", async () => {
   const { plannedRamp } = await import("../src/composition/tabletop/tools/slope/ramp-commit.ts");
   const fixture = sessionFixture();
   const { runtime, session, ctx } = fixture;
   try {
     floor(runtime, "low", 0, 0);
     const start = { point: { x: 4.1, y: 0, z: 2 } };
-    for (const degrees of [0, 30, 60, 120, 150, 180, 210, 240, 300, 330]) {
-      const angle = (degrees * Math.PI) / 180;
-      const pointer = { point: { x: 4.1 + 5 * Math.cos(angle), y: 0, z: 2 + 5 * Math.sin(angle) } };
+    for (const [along, across] of [[5, 0], [5, 1.5], [5, -1.5], [3, 0.2], [-3, 1], [-3, -1], [-5, 0]]) {
+      const degrees = `${along},${across}`;
+      const pointer = { point: { x: 4.1 + along, y: 0, z: 2 + across } };
       const plan = plannedRamp(ctx, start, pointer, params);
       assert.equal(plan.welds.length, 1, `at ${degrees} degrees the start stays welded`);
       const bottom = { x: (plan.corners.bottom.min.x + plan.corners.bottom.max.x) / 2 };
@@ -323,5 +326,22 @@ test("while drawing, [ ] narrow or widen the ramp and { } its top alone, as the 
     for (const key of ["]", "]", "{"]) assert.equal(slopeRampTool.onKeyDown(ctx, key, params), true, key);
     assert.deepEqual([params.bottomWidth, params.topWidth], [2.5, 2.25]);
     assert.equal(slopeRampTool.onKeyDown(ctx, "x", params), false, "any other key is not the ramp's");
+  } finally { session.free(); }
+});
+
+test("on open ground a ramp is drawn as a floor is: the longer side what it climbs along, the shorter its width", async () => {
+  const { plannedRamp } = await import("../src/composition/tabletop/tools/slope/ramp-commit.ts");
+  const { ctx, session } = sessionFixture();
+  try {
+    const forward = { x: 1, y: -1, z: 0.001 };
+    for (const [dx, dz, length, width] of [[6, 2, 6, 2], [-6, 2, 6, 2], [2, 5, 5, 2], [1.5, -4, 4, 1.5]]) {
+      const plan = plannedRamp(ctx, { point: { x: 20, y: 0, z: 20 }, forward }, { point: { x: 20 + dx, y: 0, z: 20 + dz }, forward }, params);
+      const { bottom, top } = plan.corners;
+      const mid = (e) => ({ x: (e.min.x + e.max.x) / 2, z: (e.min.z + e.max.z) / 2 });
+      close(Math.hypot(mid(top).x - mid(bottom).x, mid(top).z - mid(bottom).z), length, `${dx},${dz}: climbs the longer side`);
+      close(Math.hypot(bottom.max.x - bottom.min.x, bottom.max.z - bottom.min.z), width, `${dx},${dz}: the shorter side is its width`);
+      close(Math.hypot(top.max.x - top.min.x, top.max.z - top.min.z), width, `${dx},${dz}: at the top too`);
+      assert.ok(Math.min(bottom.min.x, bottom.max.x) >= 20 - 1e-6 || dx < 0, `${dx},${dz}: from the press, one of its corners`);
+    }
   } finally { session.free(); }
 });

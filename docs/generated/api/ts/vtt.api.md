@@ -3316,6 +3316,10 @@ Commits one straight ramp. An end landing on a floor's edge -- grounded
 or floating -- is welded into it (`topology/floor-weld.ts`): the floor's
 edge is split around the ramp's end edge, which both faces then share.
 
+### `function vtt.ramp-commit.drawnRampWidth(ctx: ToolContext, start: PointerSample, end: PointerSample, params: RampParams): number | undefined`
+
+The width a drag from `start` to `end` has drawn, if it has drawn one -- else the ramp takes the tool's own.
+
 ### `function vtt.ramp-commit.plannedRamp(ctx: ToolContext, start: PointerSample, end: PointerSample, params: RampParams): PlannedRamp`
 
 The ramp a drag from `start` to `end` would build, before anything is committed -- what the preview draws.
