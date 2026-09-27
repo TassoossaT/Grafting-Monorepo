@@ -421,3 +421,46 @@ test("a ramp's free end dragged onto another ramp's free end joins it there", ()
     assert.ok(top.every((id) => second().nodes.some((n) => n.id === id)), "the dragged end took the first ramp's top over");
   } finally { session.free(); }
 });
+
+test("a ramp welds to a round floor's curved edge: its end is the chord, its corners on the arc, the floor's outline unchanged", async () => {
+  const { commitPlatformShape } = await import("../src/composition/tabletop/tools/platform/platform-contour-tool.ts");
+  const { commitPlatformSlope } = await import("../src/composition/tabletop/tools/slope/slope-commit.ts");
+  const { controlSectionId, isSpineControlNodeId } = await import("../src/features/edit-construction/index.ts");
+  const fixture = sessionFixture();
+  const { runtime, session, ctx, calls } = fixture;
+  try {
+    // A round floating floor of radius 4 round the origin: two half circles.
+    commitPlatformShape(ctx, [
+      { start: { x: 4, y: 0, z: 0 }, end: { x: -4, y: 0, z: 0 }, geometry: { kind: "arc", center: [0, 0], clockwise: false } },
+      { start: { x: -4, y: 0, z: 0 }, end: { x: 4, y: 0, z: 0 }, geometry: { kind: "arc", center: [0, 0], clockwise: false } },
+    ], { elevation: 0, mode: "create", support: "floating" });
+    const round = () => faces(runtime, "platform-floating")[0];
+    assert.equal(round().outerLoops[0].length, 2, JSON.stringify(calls.feedback.at(-1)));
+    // A straight ramp off the arc, from just outside it, running out along the radius.
+    drawn(fixture, { x: 3.5 * Math.cos(0.8), y: 0, z: 3.5 * Math.sin(0.8) }, { x: 9 * Math.cos(0.8), y: 0, z: 9 * Math.sin(0.8) });
+    assert.match(calls.feedback.at(-1).message, /1 ponta\(s\) soldada/, JSON.stringify(calls.feedback.at(-1)));
+    const ends = ramp(runtime);
+    for (const side of ["min", "max"]) {
+      const p = corner(ends, "bottom", side).position;
+      close(Math.hypot(p.x, p.z), 4, `the bottom ${side} corner stands on the arc`);
+    }
+    assert.ok(welded(round(), ends, "bottom"), "welded into the round floor");
+    const arcs = round().outerLoops[0];
+    assert.ok(arcs.every((use) => use.geometry.kind === "arc"), "the floor's outline is still arcs only");
+    // A curved ramp off the other side of it.
+    commitPlatformSlope(ctx, [{ x: 0, y: 0, z: -4 }, { x: 0, y: 2, z: -9 }], { width: 1.5 });
+    const end = runtime.getGraphSnapshot().nodes.find((n) => isSpineControlNodeId(n.id) && Math.abs(n.position.z + 9) > 1 && Math.abs(n.position.x) < 1e-6);
+    assert.ok(["min", "max"].every((side) => round().nodes.some((n) => n.id === controlSectionId(end.id, side))), `the curved ramp welded too ${JSON.stringify(calls.feedback.at(-1))}`);
+    for (const side of ["min", "max"]) {
+      const p = round().nodes.find((n) => n.id === controlSectionId(end.id, side)).position;
+      close(Math.hypot(p.x, p.z), 4, `its section's ${side} end on the arc`);
+    }
+    // Disconnecting the straight ramp makes the arcs it cut whole again.
+    const origin = shownGlobalHandles(scene(runtime)).find((h) => h.kind === "origin");
+    assert.equal(slopeRampTool.onSelectionAction(ctx, "disconnect", params, origin.id), true);
+    assert.ok(!welded(round(), ramp(runtime), "bottom"), "the ramp came off");
+    assert.ok(round().outerLoops[0].every((use) => use.geometry.kind === "arc"), "still arcs only");
+    // Two half circles, one of them cut in three where the curved ramp still stands.
+    assert.equal(round().outerLoops[0].length, 4, "the pieces the straight ramp cut joined back into one arc");
+  } finally { session.free(); }
+});

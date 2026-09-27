@@ -46,6 +46,37 @@ export interface FloorLanding extends FloorEdge {
   readonly point: ConstructionPosition;
   readonly out: PlanDirection;
   readonly height: number;
+  /**
+   * Present when the edge is an arc: its circle. `a` and `b` are then the
+   * tangent at `point`, so whatever meets the edge square on meets it
+   * along the radius; see {@link landingSeat} for where an end sits.
+   */
+  readonly arc?: { readonly center: PlanDirection; readonly radius: number };
+}
+
+/** An angle in plan round `center`, as the rest of this app measures arcs: `atan2(z, x)`, counter-clockwise positive. */
+const angleAt = (center: PlanDirection, p: PlanDirection) => Math.atan2(p.z - center.z, p.x - center.x);
+/** The counter-clockwise turn from angle `from` to `to`, in `[0, 2 PI)`. */
+const turnFrom = (from: number, to: number) => ((to - from) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI);
+
+/** How far, as an angle, `p` lies along an arc step from its start `a`, walked `clockwise` or not; with its whole sweep. */
+function alongArc(center: PlanDirection, a: PlanDirection, b: PlanDirection, clockwise: boolean, p: PlanDirection): { readonly at: number; readonly sweep: number } {
+  const from = angleAt(center, a), to = angleAt(center, b), there = angleAt(center, p);
+  return clockwise ? { at: turnFrom(there, from), sweep: turnFrom(to, from) || 2 * Math.PI } : { at: turnFrom(from, there), sweep: turnFrom(from, to) || 2 * Math.PI };
+}
+
+/**
+ * Where the middle of an end `width` wide sits on `landing` so both its
+ * corners stand on the edge: the landing point itself on a straight edge;
+ * on an arc, the middle of the chord that wide, nearer the centre.
+ */
+export function landingSeat(landing: FloorLanding, width: number): ConstructionPosition | undefined {
+  if (!landing.arc) return landing.point;
+  const { center, radius } = landing.arc;
+  if (!(width / 2 < radius)) return undefined;
+  const inset = Math.sqrt(radius * radius - (width / 2) * (width / 2));
+  const angle = angleAt(center, landing.point);
+  return { x: center.x + Math.cos(angle) * inset, y: landing.point.y, z: center.z + Math.sin(angle) * inset };
 }
 
 /** A structure's end edge, from one of its end nodes to the other -- what a floor shares when welded. */
@@ -154,6 +185,36 @@ export function floorLandingNear(
       if (best && best.score <= score) continue;
       best = { landing: { topology, use, a, b, point: on, out, height: a.y }, score };
     }
+    // Curved edges: the nearest point on the arc, met along its radius.
+    for (const use of outer) {
+      if (use.geometry.kind !== "arc") continue;
+      const a = positions.get(use.startNodeId)!, b = positions.get(use.endNodeId)!;
+      const center = { x: use.geometry.center[0], z: use.geometry.center[1] };
+      const radius = Math.hypot(a.x - center.x, a.z - center.z);
+      if (!(radius > 1e-6)) continue;
+      const { at: along, sweep } = alongArc(center, a, b, use.geometry.clockwise, point);
+      // Past either end of the arc, its nearer end.
+      const clamped = along <= sweep ? along : (along - sweep < 2 * Math.PI - along ? sweep : 0);
+      const angle = angleAt(center, a) + (use.geometry.clockwise ? -clamped : clamped);
+      const radial = { x: Math.cos(angle), z: Math.sin(angle) };
+      const on = { x: center.x + radial.x * radius, y: a.y, z: center.z + radial.z * radius };
+      const distance = Math.hypot(on.x - point.x, on.z - point.z);
+      if (distance > reach) continue;
+      // Walked counter-clockwise round its centre in a counter-clockwise outline, the floor is on the centre's side.
+      const sign = (use.geometry.clockwise ? -1 : 1) * winding;
+      const out = { x: radial.x * sign, z: radial.z * sign };
+      const tangent = { x: -radial.z, z: radial.x };
+      const score = (isUnder ? 0 : 1000) + distance + Math.abs(a.y - point.y) * 0.1;
+      if (best && best.score <= score) continue;
+      best = {
+        landing: {
+          topology, use, point: on, out, height: a.y, arc: { center, radius },
+          a: { x: on.x - tangent.x * radius, y: a.y, z: on.z - tangent.z * radius },
+          b: { x: on.x + tangent.x * radius, y: a.y, z: on.z + tangent.z * radius },
+        },
+        score,
+      };
+    }
   }
   return best?.landing;
 }
@@ -223,8 +284,8 @@ function asTopology(draft: FaceDraft): ConstructionRegionTopology {
   };
 }
 
-/** An edge cut at nodes: the pieces it becomes, from its own start to its own end. */
-type Split = readonly { readonly edgeId: string; readonly from: string; readonly to: string }[];
+/** An edge cut at nodes: the pieces it becomes, from its own start to its own end, each shaped as the edge was (in its own direction). */
+type Split = readonly { readonly edgeId: string; readonly from: string; readonly to: string; readonly geometry: ConstructionEdgeGeometry }[];
 
 /** Every step on a split edge replaced by its pieces, walked the way the step walked the edge. */
 function applySplits(draft: FaceDraft, splits: ReadonlyMap<string, Split>): boolean {
@@ -233,8 +294,8 @@ function applySplits(draft: FaceDraft, splits: ReadonlyMap<string, Split>): bool
     const pieces = splits.get(step.edgeId);
     if (!pieces) return [step];
     changed = true;
-    const own: Step[] = pieces.map((piece) => ({ edgeId: piece.edgeId, from: piece.from, to: piece.to, geometry: { kind: "line" }, reversed: false }));
-    return step.reversed ? own.reverse().map((piece) => ({ ...piece, from: piece.to, to: piece.from, reversed: true })) : own;
+    const own: Step[] = pieces.map((piece) => ({ edgeId: piece.edgeId, from: piece.from, to: piece.to, geometry: piece.geometry, reversed: false }));
+    return step.reversed ? own.reverse().map((piece) => ({ ...piece, from: piece.to, to: piece.from, geometry: reverseGeometry(piece.geometry), reversed: true })) : own;
   }));
   return changed;
 }
@@ -251,7 +312,7 @@ function attach(draft: FaceDraft, rung: WeldRung, positions: ReadonlyMap<string,
   const at = (id: string) => draft.positions.get(id) ?? positions.get(id)!;
   const runs = straightRuns(steps.length, (i) => steps[i]!.geometry.kind === "line", (i) => ({ a: at(steps[i]!.from), b: at(steps[i]!.to) }));
   const run = runs.find(({ first, count }) => rungFits({ a: at(steps[first]!.from), b: at(steps[(first + count - 1) % steps.length]!.to) }, rung, positions));
-  if (!run) return undefined;
+  if (!run) return attachToArc(draft, rung, positions, weldId);
   const inRun = Array.from({ length: run.count }, (_, k) => steps[(run.first + k) % steps.length]!);
   const splits = new Map<string, Split>();
   const adopted = new Map<string, string>();
@@ -275,9 +336,9 @@ function attach(draft: FaceDraft, rung: WeldRung, positions: ReadonlyMap<string,
     const [start, end] = step.reversed ? [step.to, step.from] : [step.from, step.to];
     draft.positions.set(node, p);
     const along = (id: string) => projectOnto(at(start), at(end), at(id)).t;
-    const before = splits.get(step.edgeId) ?? [{ edgeId: step.edgeId, from: start, to: end }];
+    const before = splits.get(step.edgeId) ?? [{ edgeId: step.edgeId, from: start, to: end, geometry: { kind: "line" } as const }];
     splits.set(step.edgeId, before.flatMap((piece) => along(piece.from) < along(node) && along(node) < along(piece.to)
-      ? [{ edgeId: `${weldId}:${piece.edgeId}:a`, from: piece.from, to: node }, { edgeId: `${weldId}:${piece.edgeId}:b`, from: node, to: piece.to }]
+      ? [{ edgeId: `${weldId}:${piece.edgeId}:a`, from: piece.from, to: node, geometry: piece.geometry }, { edgeId: `${weldId}:${piece.edgeId}:b`, from: node, to: piece.to, geometry: piece.geometry }]
       : [piece]));
   }
   applySplits(draft, splits);
@@ -297,11 +358,18 @@ function mergeThrough(drafts: readonly FaceDraft[], node: string, edgeId: string
       for (const [into, step] of steps.entries()) {
         if (step.to !== node) continue;
         const out = steps[(into + 1) % steps.length]!;
-        if (step.geometry.kind !== "line" || out.geometry.kind !== "line" || out.from !== node) return false;
-        const a = at(step.from), b = at(node), c = at(out.to);
-        const u = { x: b.x - a.x, z: b.z - a.z }, v = { x: c.x - b.x, z: c.z - b.z };
-        const lengths = Math.hypot(u.x, u.z) * Math.hypot(v.x, v.z);
-        if (!(lengths > 0) || Math.abs(u.x * v.z - u.z * v.x) / lengths > IN_LINE || u.x * v.x + u.z * v.z <= 0) return false;
+        if (out.from !== node) return false;
+        // Two arcs of one circle, turning the same way, are one arc again.
+        const sameArc = step.geometry.kind === "arc" && out.geometry.kind === "arc"
+          && step.geometry.clockwise === out.geometry.clockwise
+          && Math.hypot(step.geometry.center[0] - out.geometry.center[0], step.geometry.center[1] - out.geometry.center[1]) < ON_EDGE;
+        if (!sameArc) {
+          if (step.geometry.kind !== "line" || out.geometry.kind !== "line") return false;
+          const a = at(step.from), b = at(node), c = at(out.to);
+          const u = { x: b.x - a.x, z: b.z - a.z }, v = { x: c.x - b.x, z: c.z - b.z };
+          const lengths = Math.hypot(u.x, u.z) * Math.hypot(v.x, v.z);
+          if (!(lengths > 0) || Math.abs(u.x * v.z - u.z * v.x) / lengths > IN_LINE || u.x * v.x + u.z * v.z <= 0) return false;
+        }
         passes.push({ draft, loop, into });
       }
     }
@@ -312,12 +380,50 @@ function mergeThrough(drafts: readonly FaceDraft[], node: string, edgeId: string
   for (const { draft, loop, into } of passes) {
     const steps = draft.loops[loop]!;
     const step = steps[into]!, out = steps[(into + 1) % steps.length]!;
-    const joined: Step = { edgeId, from: step.from, to: out.to, geometry: { kind: "line" }, reversed: step.from !== start };
+    // The step keeps the walk's own geometry: a line, or the arc both halves were part of.
+    const joined: Step = { edgeId, from: step.from, to: out.to, geometry: step.geometry, reversed: step.from !== start };
     draft.loops[loop] = into + 1 < steps.length
       ? [...steps.slice(0, into), joined, ...steps.slice(into + 2)]
       : [joined, ...steps.slice(1, into)];
   }
   return true;
+}
+
+/**
+ * Where `rung` joins the draft's floor along a curved edge: both its nodes
+ * stand on one arc of the outline, clear of its ends, and the arc is cut
+ * there into three arcs round the same centre -- the floor's outline keeps
+ * its shape exactly. `undefined` when no arc holds them.
+ */
+function attachToArc(draft: FaceDraft, rung: WeldRung, positions: ReadonlyMap<string, ConstructionPosition>, weldId: string): { readonly splits: ReadonlyMap<string, Split>; readonly adopted: ReadonlyMap<string, string> } | undefined {
+  const at = (id: string) => draft.positions.get(id) ?? positions.get(id)!;
+  const p = positions.get(rung.startNodeId), q = positions.get(rung.endNodeId);
+  if (!p || !q) return undefined;
+  for (const step of draft.loops[0] ?? []) {
+    if (step.geometry.kind !== "arc") continue;
+    const a = at(step.from), b = at(step.to);
+    const center = { x: step.geometry.center[0], z: step.geometry.center[1] };
+    const radius = Math.hypot(a.x - center.x, a.z - center.z);
+    const onCircle = (n: ConstructionPosition) => Math.abs(Math.hypot(n.x - center.x, n.z - center.z) - radius) < ON_EDGE && Math.abs(n.y - a.y) < ON_EDGE;
+    if (!onCircle(p) || !onCircle(q)) continue;
+    const clear = CORNER_CLEARANCE / radius;
+    const tp = alongArc(center, a, b, step.geometry.clockwise, p), tq = alongArc(center, a, b, step.geometry.clockwise, q);
+    if (![tp, tq].every(({ at: along, sweep }) => along > clear && along < sweep - clear)) continue;
+    // Walk order along the step, then in the edge's own direction.
+    const [first, second] = tp.at <= tq.at ? [rung.startNodeId, rung.endNodeId] : [rung.endNodeId, rung.startNodeId];
+    const walked = [
+      { from: step.from, to: first }, { from: first, to: second }, { from: second, to: step.to },
+    ];
+    const ownGeometry = step.reversed ? reverseGeometry(step.geometry) : step.geometry;
+    const own = (step.reversed ? walked.map((piece) => ({ from: piece.to, to: piece.from })).reverse() : walked)
+      .map((piece, i) => ({ edgeId: `${weldId}:${step.edgeId}:${i}`, from: piece.from, to: piece.to, geometry: ownGeometry }));
+    const splits = new Map<string, Split>([[step.edgeId, own]]);
+    draft.positions.set(first, positions.get(first)!);
+    draft.positions.set(second, positions.get(second)!);
+    applySplits(draft, splits);
+    return { splits, adopted: new Map() };
+  }
+  return undefined;
 }
 
 /**

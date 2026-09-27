@@ -3,6 +3,7 @@ import type { ApplyPatchReplacementRequest, ConstructionEdgeSnapshot, Constructi
 import { isSpineEdge, prospectiveGraph, spineComponent } from "../spine/index.ts";
 import { hasTrait, type SpineGeneration, type SpineRegeneration, type SpineRegenerationInput } from "../structure-types/index.ts";
 import { releasableFace } from "./free-end-welds.ts";
+import { landingSeat } from "../topology/floor-weld.ts";
 import { floorLandingNear, floorsWeldedBy, floorsWithout, reweldFloors, type FloorLanding } from "../topology/floor-weld.ts";
 
 /**
@@ -54,13 +55,17 @@ function landEnds(snapshot: ConstructionGraphSnapshot, graphPatch: ConstructionG
   for (const id of shifted) {
     const landing = floorLandingNear(released.filter((floor) => !heldBy.has(floor.surfaceKey.join("\u0000"))), after.get(id)!);
     if (!landing) continue;
-    landed.set(id, landing);
-    heldBy.add(landing.topology.surfaceKey.join("\u0000"));
-    nodes.set(id, { id, position: landing.point });
     const span: ConstructionEdgeSnapshot | undefined = edges.get(drafted.edges.find((edge) => isSpineEdge(edge) && (edge.startNodeId === id || edge.endNodeId === id))?.edgeId ?? "")
       ?? drafted.edges.find((edge) => isSpineEdge(edge) && (edge.startNodeId === id || edge.endNodeId === id));
     if (!span?.curve) continue;
     const side = span.startNodeId === id ? "start" : "end";
+    // Where the end sits so its cross-section's two ends stand on the edge -- on a curved edge, the chord's middle.
+    const band = (side === "end" ? span.curve.endBandOffsets : undefined) ?? span.curve.bandOffsets;
+    const seat = landingSeat(landing, band.length > 1 ? Math.max(...band) - Math.min(...band) : 0);
+    if (!seat) continue;
+    landed.set(id, landing);
+    heldBy.add(landing.topology.surfaceKey.join("\u0000"));
+    nodes.set(id, { id, position: seat });
     // A span pinned straight or circular cannot also leave square: it is freed to curve.
     const { geometry: _pinned, ...curve } = span.curve;
     edges.set(span.edgeId, { ...span, curve: { ...curve, [side]: leaving(span.curve[side], landing.out), mode: "aligned" } });

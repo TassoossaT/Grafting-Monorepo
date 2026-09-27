@@ -1,6 +1,6 @@
 import type { ConstructionPosition, ConstructionRegionTopology } from "@/ports";
 
-import { alongEdge, projectOnto, type EndJoint, type FloorLanding } from "../../topology/floor-weld.ts";
+import { alongEdge, landingSeat, projectOnto, type EndJoint, type FloorLanding } from "../../topology/floor-weld.ts";
 
 /** How far off the line of another structure's end a second one may stand and still be continued in a straight line. */
 const ON_LINE = 1e-3;
@@ -161,11 +161,23 @@ export function planRamp(from: RampEndPlan, to: RampEndPlan, widths: { readonly 
   const axis = plannedAxis(from, to);
   const width = (end: RampEnd) => axis.joints.find((joint) => joint.end === end)?.joint.width ?? (end === "bottom" ? widths.bottom : widths.top);
   const own = { bottom: width("bottom"), top: width("top") };
+  // A curved edge is met along its radius and never slid along; a straight one may be, to fit.
+  const straight = axis.welds.filter((weld) => !weld.landing.arc);
   // An end continuing another structure is fixed where that end is: nothing slides.
-  const fitted = axis.welds.length === 0 ? axis : fitAlongEdges(axis.axisStart, axis.axisEnd, axis.welds, own, axis.joints.length === 0);
+  const fitted = straight.length === 0 ? axis : fitAlongEdges(axis.axisStart, axis.axisEnd, straight, own, axis.joints.length === 0);
+  let { axisStart, axisEnd } = fitted;
+  const welds = [...fitted.welds];
+  for (const weld of axis.welds.filter((candidate) => candidate.landing.arc)) {
+    // On a curved edge the end is the chord its width makes: both corners on the arc.
+    const seat = landingSeat(weld.landing, own[weld.end]);
+    if (!seat) continue;
+    if (weld.end === "bottom") axisStart = { ...axisStart, x: seat.x, z: seat.z };
+    else axisEnd = { ...axisEnd, x: seat.x, z: seat.z };
+    welds.push(weld);
+  }
   return {
-    corners: rampCorners({ axisStart: fitted.axisStart, axisEnd: fitted.axisEnd, bottomWidth: own.bottom, topWidth: own.top }),
-    welds: fitted.welds,
+    corners: rampCorners({ axisStart, axisEnd, bottomWidth: own.bottom, topWidth: own.top }),
+    welds,
     joints: axis.joints,
   };
 }

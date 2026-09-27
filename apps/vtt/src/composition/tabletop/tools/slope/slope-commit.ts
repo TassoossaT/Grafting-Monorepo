@@ -1,4 +1,4 @@
-import { automaticCurve, controlRungId, controlSectionId, floorLandingNear, gradeSpineSpans, hasTrait, reweldFloors, SLOPE_SURFACE_TYPE, slopeFootprint, slopeSurface, spineControlNodeId, type WeldRung } from "../../../../features/edit-construction/index.ts";
+import { automaticCurve, controlRungId, controlSectionId, floorLandingNear, gradeSpineSpans, landingSeat, type FloorLanding, hasTrait, reweldFloors, SLOPE_SURFACE_TYPE, slopeFootprint, slopeSurface, spineControlNodeId, type WeldRung } from "../../../../features/edit-construction/index.ts";
 import type {
   ConstructionEdgeSnapshot,
   ConstructionPosition,
@@ -49,6 +49,8 @@ export interface EndWeld {
   readonly use: ConstructionRegionEdge;
   readonly a: ConstructionPosition;
   readonly b: ConstructionPosition;
+  /** The floor edge met, as found -- a curved one says its circle. */
+  readonly landing: FloorLanding;
 }
 
 export function project(a: ConstructionPosition, b: ConstructionPosition, p: ConstructionPosition): { t: number; distance: number } {
@@ -63,7 +65,7 @@ export function project(a: ConstructionPosition, b: ConstructionPosition, p: Con
 export function landingEdge(topologies: readonly ConstructionRegionTopology[], point: ConstructionPosition, controlIndex: number): EndWeld | undefined {
   const floors = topologies.filter((topology) => hasTrait(topology.surfaceType, "floor") && Math.abs((topology.nodes[0]?.position.y ?? NaN) - point.y) <= 1e-3);
   const landing = floorLandingNear(floors, point, { reach: WELD_TOLERANCE });
-  return landing && { controlIndex, topology: landing.topology, use: landing.use, a: landing.a, b: landing.b };
+  return landing && { controlIndex, topology: landing.topology, use: landing.use, a: landing.a, b: landing.b, landing };
 }
 
 /** `handle` turned to meet the welded edge square on, keeping its length and its climb. */
@@ -105,6 +107,8 @@ export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly Co
     const points = controlPoints.map((point, i) => {
       const weld = landings.find((w) => w.controlIndex === i);
       if (!weld) return point;
+      // On a curved edge the end sits at the middle of the chord its width makes.
+      if (weld.landing.arc) return landingSeat(weld.landing, width) ?? point;
       const { t } = project(weld.a, weld.b, point);
       return { x: weld.a.x + (weld.b.x - weld.a.x) * t, y: weld.a.y, z: weld.a.z + (weld.b.z - weld.a.z) * t };
     });
