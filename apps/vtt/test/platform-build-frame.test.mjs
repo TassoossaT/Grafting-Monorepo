@@ -188,3 +188,48 @@ test("a rectangle drawn for a raised floor follows the pointer at that floor's l
       `under the pointer at level 3: ${JSON.stringify(floor.nodes.map((n) => n.position))}`);
   } finally { session.free(); }
 });
+
+test("rectangles drawn anywhere round a U are never refused, never move it, and never leave one cloud's faces lying over each other", async () => {
+  const { faceOutlines, outlinesOverlap } = await import("../src/features/edit-construction/index.ts");
+  let seed = 7;
+  const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  const U = [[0, 0], [6, 0], [6, 6], [4, 6], [4, 2], [2, 2], [2, 6], [0, 6]];
+  for (let k = 0; k < 80; k++) {
+    const { runtime, session, ctx, calls } = sessionFixture();
+    Object.assign(runtime, { showPreview() {}, clearPreview() {} });
+    try {
+      addFace(runtime, "u", "platform-floating", U.map(([x, z], i) => ({ id: `u:${i}`, position: { x, y: 2, z } })));
+      const a = { point: { x: -1 + rnd() * 8, y: 2, z: -1 + rnd() * 9 }, forward: { x: 1, y: -1, z: 0.001 } };
+      const b = { point: { x: a.point.x + (rnd() - 0.5) * 8, y: 2, z: a.point.z + (rnd() - 0.5) * 8 }, forward: a.forward };
+      drawRectangle(ctx, a, b, { support: "floating", elevation: 2 });
+      const where = JSON.stringify([a.point, b.point]);
+      assert.ok(!calls.feedback.some((f) => f.tone === "error"), `${where}: ${JSON.stringify(calls.feedback)}`);
+      for (const n of runtime.getGraphSnapshot().nodes) {
+        const m = /^u:(\d)$/.exec(n.id);
+        if (m) assert.ok(n.position.x === U[+m[1]][0] && n.position.z === U[+m[1]][1], `${where}: ${n.id} moved`);
+      }
+      const faces = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform-floating");
+      for (let i = 0; i < faces.length; i++) {
+        const cloud = runtime.cloudFor({ seed: faces[i].surfaceKey, surfaceType: faces[i].surfaceType }).surfaceKeys.map((key) => key.join("|"));
+        for (let j = i + 1; j < faces.length; j++) {
+          if (!cloud.includes(faces[j].surfaceKey.join("|"))) continue;
+          assert.ok(!faceOutlines(faces[i]).some((p) => faceOutlines(faces[j]).some((q) => outlinesOverlap(p, q))), `${where}: one cloud's faces overlap`);
+        }
+      }
+    } finally { session.free(); }
+  }
+});
+
+test("a rectangle's side that comes near a built side lying the same way lands on it: flush, never a sliver over or short", () => {
+  const { runtime, session, ctx, calls } = sessionFixture();
+  Object.assign(runtime, { showPreview() {}, clearPreview() {} });
+  try {
+    addFace(runtime, "old", "platform-floating", [[0, 0], [4, 0], [4, 4], [0, 4]].map(([x, z], i) => ({ id: `old:${i}`, position: { x, y: 2, z } })));
+    const forward = { x: 1, y: -1, z: 0.001 };
+    // From beside the old floor, its far side dragged a little past the old floor's far side.
+    drawRectangle(ctx, { point: { x: 4, y: 2, z: 0 }, forward }, { point: { x: 7, y: 2, z: 4.3 }, forward }, { support: "floating", elevation: 2 });
+    assert.ok(!calls.feedback.some((f) => f.tone === "error"), JSON.stringify(calls.feedback));
+    const zs = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform-floating").flatMap((t) => t.nodes.map((n) => n.position.z));
+    assert.equal(Math.max(...zs), 4, "landed on the old floor's far side, not 4.3");
+  } finally { session.free(); }
+});

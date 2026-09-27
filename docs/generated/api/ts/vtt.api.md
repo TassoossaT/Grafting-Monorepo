@@ -1962,8 +1962,10 @@ The frame a shape begun at `sample` is built in.
 ### `function vtt.build-frame.frameRectangle(ctx: ToolContext, frame: BuildFrame, a: ConstructionPosition, b: ConstructionPosition, elevation: number): readonly ConstructionPosition[] | undefined`
 
 The rectangle from `a` to the pointer's `b`, its sides along the frame:
-the pointer gives the far corner, its size along each direction whole
-grid steps when the table snaps. `undefined` when it has no area.
+the pointer gives the far corner. A far side that comes near a built side
+lying the same way lands on it -- the shape is flush with what stands,
+never a sliver over or short of it -- else its size along each direction
+is whole grid steps when the table snaps. `undefined` when it has no area.
 
 ### `function vtt.build-frame.frameStart(ctx: ToolContext, frame: BuildFrame, sample: PointerSample, y: number): ConstructionPosition`
 
@@ -3114,7 +3116,7 @@ Also grabs and edits an existing platform's own vertex/edge/body -- see `structu
 
 Polygon entry point retained for callers that already have explicit corners.
 
-### `function vtt.platform-contour-tool.commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; support?: "grounded" | "floating"; tolerance?: number }, pickedSamples: readonly PointerSample[], options: { clipped?: boolean }): void`
+### `function vtt.platform-contour-tool.commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; support?: "grounded" | "floating"; tolerance?: number }, pickedSamples: readonly PointerSample[], options: { alone?: boolean; clipped?: boolean }): void`
 
 Commits the same directed line/arc contour vocabulary consumed by wall
 construction. Ampliar/juntar and recortar/separar no longer run an

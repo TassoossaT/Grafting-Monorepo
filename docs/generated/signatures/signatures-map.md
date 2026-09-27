@@ -4116,9 +4116,8 @@ export function pointerOnLevel(sample: PointerSample, y: number): ConstructionPo
 export function frameStart(ctx: ToolContext, frame: BuildFrame, sample: PointerSample, y: number = sample.point.y): ConstructionPosition {
   return frame.start ?? snappedInFrame(ctx, frame, pointerOnLevel(sample, y));
 export function frameRectangle(ctx: ToolContext, frame: BuildFrame, a: ConstructionPosition, b: ConstructionPosition, elevation: number): readonly ConstructionPosition[] | undefined {
-  const unit = ctx.gridUnit ?? WORLD_UNIT;
   const dx = b.x - a.x, dz = b.z - a.z;
-  const step = (length: number) => (ctx.snapToGrid ? Math.round(length / unit) * unit : length);
+  const limits = limitsNear(ctx, frame, a, b);
 
 // src/composition/tabletop/tools/core/constrained-drag.ts
 export interface ConstrainedPosition {
@@ -4649,7 +4648,7 @@ export function groupLoopsByContainment(
   const areas = loops.map((loop) => Math.abs(loopSignedArea(port, loop, positionOf)));
 
 // src/composition/tabletop/tools/platform/platform-contour-tool.ts
-export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: Params, pickedSamples: readonly PointerSample[] = [], options: { readonly clipped?: boolean } = {}): void {
+export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: Params, pickedSamples: readonly PointerSample[] = [], options: { readonly clipped?: boolean; readonly alone?: boolean } = {}): void {
   try {
   if (!Number.isFinite(params.elevation)) throw new Error("A elevação deve ser finita.");
 export function commitPlatformContour(ctx: ToolContext, samples: readonly PointerSample[], params: Params): void {

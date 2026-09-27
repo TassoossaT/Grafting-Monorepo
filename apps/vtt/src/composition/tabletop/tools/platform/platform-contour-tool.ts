@@ -12,6 +12,8 @@ import { circleContour, previewOutline } from "../tower/tower-geometry.ts";
 import { groupLoopsByContainment, splitContourAtPoints, weldedMerge, windLoop, type DirectedContourEdge } from "./platform-contour-merge.ts";
 type Params = ToolParamsByTool["platform-contour"];
 const COLOR = 0x79b8e8;
+/** A shape that would add nothing -- it lies wholly over floors of its kind. */
+const BLOCKED_COLOR = 0xd9534f;
 /** Same corner-weld tolerance a wall run already snaps onto an existing column with. */
 const WELD_TOLERANCE = 0.25;
 /**
@@ -100,7 +102,7 @@ function rectangle(ctx: ToolContext, a: PointerSample, b: PointerSample, elevati
  * wall run snaps onto a column with) and the result is assembled from
  * shared/cancelled edges -- see `platform-contour-merge.ts` for why.
  */
-export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: Params, pickedSamples: readonly PointerSample[] = [], options: { readonly clipped?: boolean } = {}): void {
+export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: Params, pickedSamples: readonly PointerSample[] = [], options: { readonly clipped?: boolean; readonly alone?: boolean } = {}): void {
   try {
     if (!Number.isFinite(params.elevation)) throw new Error("A elevação deve ser finita.");
     if (contour.length < 2) throw new Error("Desenhe uma área com largura e comprimento.");
@@ -118,7 +120,7 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
     const drawnOutline = outlineOf(contour);
     const overlapped = params.mode === "create" ? level.filter((t) => faceOverlapsOutline(t, drawnOutline)) : [];
     const straight = (t: ConstructionRegionTopology) => [...t.outerLoops, ...t.holes].flat().every((use) => use.geometry.kind !== "arc");
-    const touching = params.mode === "create" ? level.filter((t) => !overlapped.includes(t) && touchesContour(t, contour)) : [];
+    const touching = params.mode === "create" && !options.alone ? level.filter((t) => !overlapped.includes(t) && touchesContour(t, contour)) : [];
     // Already cut back to what the standing floors leave free: any overlap left is rounding, never cut again.
     const unites = !options.clipped && overlapped.length > 0 && contour.every((c) => c.geometry.kind !== "arc") && [...overlapped, ...touching].every(straight);
     const apart = new Set(unites ? [] : overlapped.flatMap((t) => ctx.runtime.cloudFor({ seed: t.surfaceKey, surfaceType: t.surfaceType }).surfaceKeys.map((key) => key.join("\u0000"))));
@@ -207,7 +209,14 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
     const standing = splitContourAtPoints(ctx.runtime, standingRaw, clipPoints, positionOf, WELD_TOLERANCE);
     const splitClipEdges = splitContourAtPoints(ctx.runtime, clipEdges, standingPoints, positionOf, WELD_TOLERANCE);
     const merged = weldedMerge(standing, splitClipEdges);
-    if (merged.kind === "error") { ctx.reportFeedback({ tone: "error", message: merged.message }); return; }
+    if (merged.kind === "error") {
+      // A piece already cut back to the free area meets the standing floors only along their edges:
+      // their exact union is the same floor, taken on points instead of welded edge by edge.
+      if (options.clipped) { commitUnion(ctx, params, operationId, sources, contour, nodeAt, positionOf, () => [...nodes.values()]); return; }
+      // Touching a floor only at a corner -- no side to weld along -- it is its own face, holding that corner with it.
+      if (params.mode === "create" && !options.alone) { commitPlatformShape(ctx, contour, params, pickedSamples, { alone: true }); return; }
+      ctx.reportFeedback({ tone: "error", message: merged.message }); return;
+    }
     let groups = groupLoopsByContainment(ctx.runtime, merged.loops, positionOf);
     // A cut clip that never touches or nests inside any standing platform
     // removed nothing -- its own loop must not be promoted into a new face.
@@ -264,6 +273,23 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
       : `Plataforma: ${regions.length} face(s) na elevação ${params.elevation}.` });
   } catch (error) { ctx.reportFeedback({ tone: "error", message: error instanceof Error ? error.message : String(error) }); }
 }
+/**
+ * What the closed `outline` would add as a floor of `params`' kind: the
+ * outline less every floor of that kind it lies over at its level -- what
+ * `commitPlatformShape` commits. `undefined` when it lies over none, or a
+ * curved edge makes that area inexact, so the outline stands as drawn.
+ */
+function freeArea(ctx: ToolContext, outline: readonly ConstructionPosition[], params: Params) {
+  const level = ctx.runtime.getAllRegionTopologies().filter((t) => t.surfaceType === surfaceTypeOf(params) && t.nodes.every((n) => Math.abs(n.position.y - params.elevation) < 1e-4));
+  const overlapped = level.filter((t) => faceOverlapsOutline(t, outline));
+  if (overlapped.length === 0 || overlapped.some((t) => [...t.outerLoops, ...t.holes].flat().some((use) => use.geometry.kind === "arc"))) return undefined;
+  const polygonOf = (t: ConstructionRegionTopology) => {
+    const at = new Map(t.nodes.map((n) => [n.id, n.position]));
+    return [...t.outerLoops, ...t.holes].map((loop) => loop.map((use) => [at.get(use.startNodeId)!.x, at.get(use.startNodeId)!.z] as const));
+  };
+  return planarDifference(ctx.runtime, [outline.map((p) => [p.x, p.z] as const)], ...overlapped.map(polygonOf));
+}
+
 /**
  * `sources` and the drawn `contour` replaced by their union, as floors of
  * the drawn type: every corner the union keeps where a floor already had
@@ -375,6 +401,16 @@ const rawPlatformContourTool: ConstructionTool<"platform-contour"> = {
     const samples = shape === "rectangle" ? rectangle(ctx,gesture.start,gesture.current,effective.elevation) : shape === "polygon" ? [...points,polygonCorner(ctx,params,gesture.current,effective.elevation)] : onLevel(gesture.samples,effective.elevation);
     if (!samples) return undefined;
     const outline = samples.map((s) => ({ ...s.point,y: effective.elevation }));
+    // A closed shape shows only what it will add: the floors of its kind it lies over are its limits.
+    if (shape !== "polygon" && outline.length > 2 && effective.mode === "create") {
+      const free = freeArea(ctx, outline, effective);
+      if (free) return free.length === 0
+        ? polylineSegmentsPreview([...outline,outline[0]!],BLOCKED_COLOR,0.45)
+        : segmentsPreview(free.flatMap((polygon) => polygon.flatMap((ring) => ring.slice(0,-1).flatMap(([x,z],i) => {
+          const [nx,nz] = ring[i+1]!;
+          return [x,effective.elevation,z,nx,effective.elevation,nz];
+        }))),COLOR);
+    }
     return polylineSegmentsPreview(outline.length > 2 ? [...outline,outline[0]!] : outline,COLOR);
   },
   onClick(ctx,sample,params) {
