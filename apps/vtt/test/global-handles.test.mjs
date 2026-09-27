@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { shownGlobalHandles } from "../src/features/edit-construction/index.ts";
-import { platformContourTool } from "../src/composition/tabletop/tools/platform/platform-contour-tool.ts";
+import { commitPlatformContour, platformContourTool } from "../src/composition/tabletop/tools/platform/platform-contour-tool.ts";
 import { slopeRampTool } from "../src/composition/tabletop/tools/slope/slope-tools.ts";
 import { addFace, sessionFixture } from "./platform-session-fixture.mjs";
 
@@ -276,6 +276,59 @@ test("a floor's curved sides and the corners at their ends have handles too, and
       drag(platformContourTool, fixture, curved, [{ x: curved.position.x + curved.motion.direction.x * 0.5, y: 0, z: curved.position.z + curved.motion.direction.z * 0.5 }], platformContourTool.defaultParams());
       assert.equal(calls.feedback.at(-1)?.tone, "success", `${name}: ${JSON.stringify(calls.feedback.at(-1))}`);
       assert.ok(arcsTrue(runtime), `${name}: every curve still a true arc after the push`);
+    } finally { session.free(); }
+  }
+});
+
+test("a push that would reshape a weld pauses it: the pushed structure alone changes, the two are welded again, and one undo takes it all back", () => {
+  const params = { bottomWidth: 2, topWidth: 2, rise: 2 };
+  const rampOf = (runtime) => runtime.getAllRegionTopologies().find((t) => t.surfaceType === "platform-ramp");
+  const shape = (topology) => topology.nodes.map((n) => `${n.position.x.toFixed(4)},${n.position.y.toFixed(4)},${n.position.z.toFixed(4)}`).sort().join(" ");
+  const shared = (runtime, type) => {
+    const ids = new Set(rampOf(runtime).nodes.map((n) => n.id));
+    return runtime.getAllRegionTopologies().filter((t) => t.surfaceType === type).flatMap((t) => t.nodes).filter((n) => ids.has(n.id)).length;
+  };
+  const state = (runtime) => JSON.stringify(runtime.getAllRegionTopologies().map((t) => [t.surfaceType, shape(t)]).sort());
+  {
+    // A ramp's foot welded partway along a floor's side, opened by its corner handle.
+    const fixture = sessionFixture();
+    const { runtime, session, ctx, calls } = fixture;
+    try {
+      commitPlatformContour(ctx, [[-3, -2], [2, -2], [2, 3], [-3, 3]].map(([x, z]) => ({ point: { x, y: 0, z } })), { mode: "create", elevation: 0, shape: "rectangle", support: "floating" });
+      const s = { point: { x: 2, y: 0, z: 0.5 } }, e = { point: { x: 6, y: 0, z: 0.5 } };
+      slopeRampTool.onPointerUp(ctx, { start: s, current: e, samples: [s, e] }, params);
+      assert.equal(shared(runtime, "platform-floating"), 2, "welded");
+      const before = state(runtime);
+      const corner = shownGlobalHandles(scene(runtime)).filter((h) => h.owner === "platform-ramp" && h.kind === "corner" && h.pivot.x < 3).sort((a, b) => b.position.z - a.position.z)[0];
+      drag(slopeRampTool, fixture, corner, [{ x: corner.position.x, y: 0, z: corner.position.z + 0.5 }], params);
+      assert.equal(calls.feedback.at(-1).tone, "success", JSON.stringify(calls.feedback.at(-1)));
+      const foot = rampOf(runtime).nodes.filter((n) => n.id.includes(":ramp:bottom:"));
+      assert.ok(Math.abs(Math.abs(foot[0].position.z - foot[1].position.z) - 3) < 1e-6, "the foot opened");
+      assert.equal(shared(runtime, "platform-floating"), 2, "welded again");
+      const floor = runtime.getAllRegionTopologies().find((t) => t.surfaceType === "platform-floating");
+      for (const [x, z] of [[-3, -2], [2, -2], [2, 3], [-3, 3]]) assert.ok(floor.nodes.some((n) => n.position.x === x && n.position.z === z), `the floor's corner ${x},${z} where it was`);
+      session.undo_region_overlay(ctx.history.undo().transactionId);
+      assert.equal(state(runtime), before, "one undo: the foot as it was, welded as it was");
+    } finally { session.free(); }
+  }
+  {
+    // A floor drawn from a ramp's top corners, widened along the ramp's end.
+    const fixture = sessionFixture();
+    const { runtime, session, ctx, calls } = fixture;
+    try {
+      const s = { point: { x: 0, y: 0, z: 0.5 } }, e = { point: { x: 4, y: 0, z: 0.5 } };
+      slopeRampTool.onPointerUp(ctx, { start: s, current: e, samples: [s, e] }, params);
+      const tmin = rampOf(runtime).nodes.find((n) => n.id.endsWith(":top:min")), tmax = rampOf(runtime).nodes.find((n) => n.id.endsWith(":top:max"));
+      const y = tmin.position.y;
+      commitPlatformContour(ctx, [{ point: tmin.position, nodeId: tmin.id }, { point: { x: 7, y, z: tmin.position.z } }, { point: { x: 7, y, z: tmax.position.z } }, { point: tmax.position, nodeId: tmax.id }], { mode: "create", elevation: y, support: "floating" });
+      const ramp = shape(rampOf(runtime));
+      const side = shownGlobalHandles(scene(runtime)).find((h) => h.owner === "platform-floating" && h.kind === "side" && h.motion.direction.z < -0.9);
+      drag(platformContourTool, fixture, side, [{ x: side.position.x, y, z: side.position.z - 1 }], platformContourTool.defaultParams());
+      assert.equal(calls.feedback.at(-1).tone, "success", JSON.stringify(calls.feedback.at(-1)));
+      assert.equal(shape(rampOf(runtime)), ramp, "the ramp as it was -- not widened with the floor");
+      const zs = runtime.getAllRegionTopologies().find((t) => t.surfaceType === "platform-floating").nodes.map((n) => n.position.z);
+      assert.ok(Math.abs(Math.min(...zs) - (tmin.position.z - 1)) < 1e-6, "the floor widened");
+      assert.equal(shared(runtime, "platform-floating"), 2, "and the ramp welded into it again, partway along its side now");
     } finally { session.free(); }
   }
 });

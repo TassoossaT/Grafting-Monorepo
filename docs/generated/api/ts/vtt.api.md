@@ -519,6 +519,14 @@ moved or resized re-cuts the ground it left and the ground it now covers,
 exactly as drawing it did. Each type the edit moved emits its own change;
 a type that cuts nothing reaches nothing.
 
+### `function vtt.effect-commit.commitStagedRegionEdit(runtime: EffectCommitRuntime & { applyRegionEdit: any }, stages: { after?: () => void; before?: () => void; ops: () => readonly AtomicEditOp[] }, options: CommitOptions): TransactionResult<RegionEditOutcome>`
+
+A region edit in stages, as one transaction: `before` changes the table
+first -- a weld paused -- the ops are then worked out on the table as
+`before` left it and applied, every cloud they reach answers them, and
+`after` finishes the change -- the weld made again. Throwing anywhere
+rolls all of it back.
+
 ### `function vtt.effect-commit.commitSurfaceRemoval(runtime: EffectCommitRuntime, surfaceKey: ConstructionSurfaceKey, options: CommitOptions): TransactionResult<RegionEditOutcome>`
 
 Deletes one surface and lets its own cloud and every cloud it had cut answer, atomically.
@@ -4493,6 +4501,10 @@ free ends whose owner says where their cross-section is
 
 What a detach takes off an end's nodes: floors and the ground laid against them, never a structure that continues the end.
 
+### `function vtt.free-end-welds.structureEndRungs(graph: ConstructionGraphSnapshot, topologies: readonly ConstructionRegionTopology[]): readonly WeldRung[]`
+
+Every end of every structure, held or free -- see freeStructureEnds.
+
 ### `function vtt.free-end-welds.weldFreeEndsOnto(graph: ConstructionGraphSnapshot, topologies: readonly ConstructionRegionTopology[], floorKeys: readonly ConstructionSurfaceKey[], operationId: string): ApplyPatchReplacementRequest | undefined`
 
 Welds every free structure end whose end edge lies along the outline of
@@ -4786,6 +4798,32 @@ The free ends -- control nodes on exactly one span -- of the spine a patch touch
 ### `function vtt.spine-end-welds.spineEndsLanded(snapshot: ConstructionGraphSnapshot, graphPatch: ConstructionGraphPatch, generation: SpineGeneration, topologies: readonly ConstructionRegionTopology[]): ConstructionGraphPatch`
 
 `graphPatch` with every moved free end placed on the floor edge it lands on -- what a preview draws.
+
+### `interface vtt.weld-pause.WeldLink`
+
+One structure end welded into floors.
+
+### `property vtt.weld-pause.WeldLink.floors: readonly ConstructionSurfaceKey[]`
+
+### `property vtt.weld-pause.WeldLink.rung: WeldRung`
+
+### `function vtt.weld-pause.reshapedWelds(links: readonly WeldLink[], positions: ReadonlyMap<string, ConstructionPosition>, moves: ReadonlyMap<string, ConstructionPosition>): readonly WeldLink[]`
+
+The welds among `links` an edit placing nodes at `moves` would reshape: its two nodes moved unlike each other.
+
+### `function vtt.weld-pause.reweld(topologies: readonly ConstructionRegionTopology[], links: readonly WeldLink[], operationId: string): { request: ApplyPatchReplacementRequest | undefined; welded: number }`
+
+Every end among `links` welded back into the floor it was welded into,
+where it now lies -- one replacement, and how many of them went back.
+An end the edit left off its floor's edge stays off it.
+
+### `function vtt.weld-pause.unweld(topologies: readonly ConstructionRegionTopology[], links: readonly WeldLink[], operationId: string): ApplyPatchReplacementRequest | undefined`
+
+Every end among `links` taken off its floors -- and the ground against them -- as one replacement; `undefined` when none holds it.
+
+### `function vtt.weld-pause.weldsOf(graph: ConstructionGraphSnapshot, topologies: readonly ConstructionRegionTopology[], face: ConstructionRegionTopology): readonly WeldLink[]`
+
+Every weld `face` takes part in: an end of its own welded into a floor, or another structure's end welded into it.
 
 ### `reference vtt.spine.spineGlobalHandleId -> vtt.global-handle-ids.globalHandleId`
 

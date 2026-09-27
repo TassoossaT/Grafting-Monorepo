@@ -136,6 +136,33 @@ export function commitRegionEdit(
   });
 }
 
+/**
+ * A region edit in stages, as one transaction: `before` changes the table
+ * first -- a weld paused -- the ops are then worked out on the table as
+ * `before` left it and applied, every cloud they reach answers them, and
+ * `after` finishes the change -- the weld made again. Throwing anywhere
+ * rolls all of it back.
+ */
+export function commitStagedRegionEdit(
+  runtime: EffectCommitRuntime & { applyRegionEdit(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): RegionEditOutcome },
+  stages: { readonly before?: () => void; readonly ops: () => readonly AtomicEditOp[]; readonly after?: () => void },
+  options: CommitOptions,
+): TransactionResult<RegionEditOutcome> {
+  const origin = options.origin ?? "local";
+  return runtime.transact(options.transactionId, origin, () => {
+    stages.before?.();
+    const ops = stages.ops();
+    const moved = new Set(ops.flatMap((op) => (op.kind === "move-vertex" ? [op.nodeId] : [])));
+    const before = runtime.getAllRegionTopologies().filter((topology) => topology.nodes.some((node) => moved.has(node.id)));
+    const outcome = runtime.applyRegionEdit(ops, origin, options.transactionId);
+    const declaredPositions = ops.flatMap((op) => (op.kind === "move-vertex" ? [op.position] : []));
+    const effects = movedEffects(runtime, before, outcome.removedNodeIds, declaredPositions, options.transactionId);
+    if (effects.length > 0) dispatchEffects(runtime, effects, options.reactions);
+    stages.after?.();
+    return outcome;
+  });
+}
+
 /** Deletes one surface and lets its own cloud and every cloud it had cut answer, atomically. */
 export function commitSurfaceRemoval(
   runtime: EffectCommitRuntime,

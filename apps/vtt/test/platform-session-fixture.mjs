@@ -91,6 +91,9 @@ export function sessionFixture() {
       }
       return { value, recorded: session.commit_transaction(transactionId) };
     },
+    undoTransaction(transactionId) {
+      session.undo_region_overlay(transactionId);
+    },
     applyPatchReplacement(request) {
       const wire = JSON.parse(session.apply_patch_replacement_json(JSON.stringify({ ...request, patch: wirePatch(request.patch), graphPatch: request.graphPatch && wirePatch(request.graphPatch) })));
       // The port's shape: the outcome flattened beside what was skipped.

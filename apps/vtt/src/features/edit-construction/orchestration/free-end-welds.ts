@@ -15,6 +15,11 @@ export const releasableFace = (face: ConstructionRegionTopology): boolean => has
  * (`SpineGeneration.endRung`).
  */
 export function freeStructureEnds(graph: ConstructionGraphSnapshot, topologies: readonly ConstructionRegionTopology[]): readonly WeldRung[] {
+  return structureEndRungs(graph, topologies).filter((rung) => floorsWeldedBy(topologies, rung).length === 0);
+}
+
+/** Every end of every structure, held or free -- see {@link freeStructureEnds}. */
+export function structureEndRungs(graph: ConstructionGraphSnapshot, topologies: readonly ConstructionRegionTopology[]): readonly WeldRung[] {
   const regionEnds = topologies.flatMap((topology) => structureTypeFor(topology.surfaceType)?.ends?.ends(topology).map((end) => end.rung) ?? []);
   const degree = new Map<string, { count: number; owner?: string }>();
   for (const span of graph.edges.filter(isSpineEdge)) {
@@ -29,7 +34,7 @@ export function freeStructureEnds(graph: ConstructionGraphSnapshot, topologies: 
     const endRung = count === 1 && owner !== undefined ? structureTypeFor(owner)?.spine?.endRung : undefined;
     return endRung ? [endRung(id)] : [];
   });
-  return [...regionEnds, ...spineEnds].filter((rung) => floorsWeldedBy(topologies, rung).length === 0);
+  return [...regionEnds, ...spineEnds];
 }
 
 /**

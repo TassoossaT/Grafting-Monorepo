@@ -3659,6 +3659,14 @@ export function commitRegionEdit(
   ): TransactionResult<RegionEditOutcome> {
   const origin = options.origin ?? "local";
   const moved = new Set(ops.flatMap((op) => (op.kind === "move-vertex" ? [op.nodeId] : [])));
+export function commitStagedRegionEdit(
+  runtime: EffectCommitRuntime & { applyRegionEdit(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): RegionEditOutcome },
+  stages: { readonly before?: () => void; readonly ops: () => readonly AtomicEditOp[]; readonly after?: () => void },
+  options: CommitOptions,
+  ): TransactionResult<RegionEditOutcome> {
+  const origin = options.origin ?? "local";
+  return runtime.transact(options.transactionId, origin, () => {
+  stages.before?.();
 export function commitSurfaceRemoval(
   runtime: EffectCommitRuntime,
   surfaceKey: ConstructionSurfaceKey,
@@ -4277,7 +4285,7 @@ export function floorLandingToward(floors: readonly ConstructionRegionTopology[]
 
 // src/composition/tabletop/tools/core/global-handle-gesture.ts
 export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample, ownsType: (surfaceType: string) => boolean, params?: CurveGestureOptions): CurveGesture | undefined {
-  const scene = sceneOf(ctx);
+  let scene = sceneOf(ctx);
 
 // src/composition/tabletop/tools/core/handle-focus.ts
 export const NO_FOCUS: HandleFocus = Object.freeze({ faces: new Set<string>(), spineNodes: new Set<string>() });
@@ -5480,6 +5488,8 @@ export function applyEditPlan(sink: EditOpSink, plan: EditPlan): RegionEditOutco
 // src/features/edit-construction/orchestration/free-end-welds.ts
 export const releasableFace = (face: ConstructionRegionTopology): boolean => hasTrait(face.surfaceType, "floor") || hasTrait(face.surfaceType, "ground");
 export function freeStructureEnds(graph: ConstructionGraphSnapshot, topologies: readonly ConstructionRegionTopology[]): readonly WeldRung[] {
+  return structureEndRungs(graph, topologies).filter((rung) => floorsWeldedBy(topologies, rung).length === 0);
+export function structureEndRungs(graph: ConstructionGraphSnapshot, topologies: readonly ConstructionRegionTopology[]): readonly WeldRung[] {
   const regionEnds = topologies.flatMap((topology) => structureTypeFor(topology.surfaceType)?.ends?.ends(topology).map((end) => end.rung) ?? []);
 export function weldFreeEndsOnto(
   graph: ConstructionGraphSnapshot,
@@ -5642,6 +5652,22 @@ export function regenerateWithEndWelds(
   options: { readonly keepsWelds?: boolean } = {},
   ): SpineRegeneration | undefined {
   if (!generation.endRung || options.keepsWelds) return generation.regenerate(input);
+
+// src/features/edit-construction/orchestration/weld-pause.ts
+export interface WeldLink {
+  readonly rung: WeldRung;
+  readonly floors: readonly ConstructionSurfaceKey[];
+  }
+export function weldsOf(graph: ConstructionGraphSnapshot, topologies: readonly ConstructionRegionTopology[], face: ConstructionRegionTopology): readonly WeldLink[] {
+  // Only floors are what an end is welded into; the ground laid against them follows them.
+  const floors = topologies.filter((topology) => hasTrait(topology.surfaceType, "floor"));
+export function reshapedWelds(links: readonly WeldLink[], positions: ReadonlyMap<string, ConstructionPosition>, moves: ReadonlyMap<string, ConstructionPosition>): readonly WeldLink[] {
+  return links.filter(({ rung }) => {
+  const a0 = positions.get(rung.startNodeId), b0 = positions.get(rung.endNodeId);
+export function unweld(topologies: readonly ConstructionRegionTopology[], links: readonly WeldLink[], operationId: string): ApplyPatchReplacementRequest | undefined {
+  const positions = new Map(topologies.flatMap((topology) => topology.nodes.map((node) => [node.id, node.position] as const)));
+export function reweld(topologies: readonly ConstructionRegionTopology[], links: readonly WeldLink[], operationId: string): { readonly request: ApplyPatchReplacementRequest | undefined; readonly welded: number } {
+  const positions = new Map(topologies.flatMap((topology) => topology.nodes.map((node) => [node.id, node.position] as const)));
 
 // src/features/edit-construction/spine/index.ts
 export type { SpineChain } from "./spine-chains.ts";
