@@ -8,8 +8,9 @@ import { removalOf } from "./structure-removal.ts";
 import { endJointNear, releasableFace } from "../free-end-welds.ts";
 import { floorLandingNear, floorsWeldedBy, floorsWithout, reweldFloors, type EndJoint } from "../../topology/floor-weld.ts";
 
-/** How far above its end an end's own height handle stands. */
-const LIFT_REACH = 1.2;
+/** Where an end's own tilt handle stands: this far on past the end, the way the structure runs out there, and this high. */
+const TILT_OUT = 1;
+const TILT_UP = 0.5;
 
 /** How close an end must still stand to a floor's edge to count as staying welded there. */
 const KEPT_REACH = 1e-2;
@@ -124,13 +125,19 @@ export const endHandleProvider: GlobalHandleProvider = {
       if (!capability) return [];
       const nodeIds = topology.nodes.map((node) => node.id).sort();
       const { name } = handleNodeName(scene, [topology], nodeIds);
-      return capability.ends(topology).flatMap((end): EndGlobalHandle[] => {
+      const ends = capability.ends(topology);
+      return ends.flatMap((end): EndGlobalHandle[] => {
+        // On past the end, away from the other one: clear of the middle's handles.
+        const far = ends.find((other) => other !== end)?.position ?? end.position;
+        const span = Math.hypot(end.position.x - far.x, end.position.z - far.z) || 1;
+        const on = { x: (end.position.x - far.x) / span, z: (end.position.z - far.z) / span };
         const base = { pivot: end.position, owner: topology.surfaceType, provider: "ends", nodeIds, topology, end: end.name };
         const lift = end.name === "origin" ? "originHeight" : "destinationHeight";
         return [
           { ...base, id: globalHandleId(end.name, name), kind: end.name, position: end.position, motion: { kind: "plane" } },
           // Above the end: raising or lowering it alone is how steeply the structure climbs.
-          { ...base, id: globalHandleId(lift, name), kind: lift, position: { ...end.position, y: end.position.y + LIFT_REACH }, motion: { kind: "vertical" } },
+          { ...base, id: globalHandleId(lift, name), kind: lift, motion: { kind: "vertical" },
+            position: { x: end.position.x + on.x * TILT_OUT, y: end.position.y + TILT_UP, z: end.position.z + on.z * TILT_OUT } },
         ];
       });
     });

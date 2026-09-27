@@ -23,6 +23,14 @@ import { isSpineEdge, spineComponent, spineOwnerOf } from "./spine-owner.ts";
 const END_REACH = 1.2;
 /** How far past the structure's farthest point the rotate handle stands. */
 export const ROTATE_REACH = 1.5;
+/** Where an end's tilt handle stands: on past `end`, away from its neighbour `inner`, a little above it. */
+function tiltAt(end: ConstructionPosition, inner: ConstructionPosition): ConstructionPosition {
+  const span = Math.hypot(end.x - inner.x, end.z - inner.z) || 1;
+  return { x: end.x + ((end.x - inner.x) / span) * TILT_OUT, y: end.y + TILT_UP, z: end.z + ((end.z - inner.z) / span) * TILT_OUT };
+}
+const TILT_OUT = 1;
+const TILT_UP = 0.5;
+
 /** How far above a spiral's rim its radius handle floats, clear of the surface. */
 const RIM_LIFT = 0.3;
 
@@ -70,9 +78,9 @@ function handlesOf(graph: ConstructionGraphSnapshot, edges: readonly Constructio
   handles.push(
     // Above the middle: the whole spine up or down.
     { ...base, id: spineGlobalHandleId("height", name), kind: "height", position: { ...pivot, y: pivot.y + END_REACH }, motion: { kind: "vertical" } },
-    // Above each end: that end alone -- how steeply it climbs.
-    { ...base, id: spineGlobalHandleId("originHeight", name), kind: "originHeight", position: { ...first, y: first.y + END_REACH }, motion: { kind: "vertical" } },
-    { ...base, id: spineGlobalHandleId("destinationHeight", name), kind: "destinationHeight", position: { ...end, y: end.y + END_REACH }, motion: { kind: "vertical" } },
+    // On past each end: that end alone -- how steeply the spine climbs.
+    { ...base, id: spineGlobalHandleId("originHeight", name), kind: "originHeight", position: tiltAt(first, positions.get(chain.nodes[1]!)!), motion: { kind: "vertical" } },
+    { ...base, id: spineGlobalHandleId("destinationHeight", name), kind: "destinationHeight", position: tiltAt(end, positions.get(chain.nodes.at(-2)!)!), motion: { kind: "vertical" } },
   );
   if (!center) return handles;
   const before = positions.get(chain.nodes.at(-2)!)!;

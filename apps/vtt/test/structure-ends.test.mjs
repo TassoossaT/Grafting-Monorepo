@@ -585,3 +585,17 @@ test("a curved ramp has a height handle at each end for its climb, and one in th
     close(runtime.getGraphSnapshot().nodes.find((n) => n.id === "low:0").position.y, 0.5, "the floor stays");
   } finally { session.free(); }
 });
+
+test("each end's tilt handle stands on past that end, clear of the middle's height handle, and has its own look", async () => {
+  const { HANDLE_GLYPHS } = await import("../src/composition/tabletop/handle-glyphs.ts");
+  const fixture = sessionFixture();
+  const { runtime, session } = fixture;
+  try {
+    drawn(fixture, { x: 0, y: 0, z: 0 }, { x: 6, y: 0, z: 0 });
+    const top = handle(runtime, "destinationHeight"), bottom = handle(runtime, "originHeight"), whole = handle(runtime, "height");
+    assert.ok(top.position.x > 6 && bottom.position.x < 0, "each on past its own end");
+    assert.ok(Math.abs(whole.position.x - 3) < 1e-6, "the whole-ramp height handle stays in the middle");
+    assert.equal(HANDLE_GLYPHS.destinationHeight, "tilt");
+    assert.notEqual(HANDLE_GLYPHS.destinationHeight, HANDLE_GLYPHS.height, "not drawn like the whole-ramp height handle");
+  } finally { session.free(); }
+});

@@ -26,6 +26,7 @@ export const HANDLE_GLYPHS: Readonly<Record<SceneHandleKind | "vertex", RenderHa
   radius: "radius",
   origin: "link",
   destination: "link",
-  originHeight: "height",
-  destinationHeight: "height",
+  /** One end up or down alone: how steeply the structure climbs. */
+  originHeight: "tilt",
+  destinationHeight: "tilt",
 };

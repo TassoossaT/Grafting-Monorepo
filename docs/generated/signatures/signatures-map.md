@@ -3493,6 +3493,9 @@ export function createMoveHandleTexture(): HTMLCanvasElement {
 export function createHeightHandleTexture(): HTMLCanvasElement {
   return glyphDisc("#1f9d62", (context) => {
   context.beginPath(); context.moveTo(32, 17); context.lineTo(32, 47); context.stroke();
+export function createTiltHandleTexture(): HTMLCanvasElement {
+  return glyphDisc("#d98b0b", (context) => {
+  context.beginPath(); context.moveTo(13, 46); context.lineTo(38, 30); context.stroke();
 export function createRadiusHandleTexture(): HTMLCanvasElement {
   return glyphDisc("#c2416b", (context) => {
   context.beginPath(); context.moveTo(17, 32); context.lineTo(47, 32); context.stroke();
@@ -7452,7 +7455,7 @@ export interface RenderSurfacePickTarget {
   }
 export type ConfirmedSurfacePickRenderChange =
 export type ConfirmedMapChunkRenderChange =
-export type RenderHandleGlyph = "point" | "midpoint" | "move" | "rotate" | "height" | "turns" | "radius" | "link";
+export type RenderHandleGlyph = "point" | "midpoint" | "move" | "rotate" | "height" | "turns" | "radius" | "tilt" | "link";
 export interface RenderNodeHandle {
   readonly nodeId: string;
   readonly position: { readonly x: number; readonly y: number; readonly z: number };

@@ -102,6 +102,17 @@ export function createHeightHandleTexture(): HTMLCanvasElement {
   });
 }
 
+/** Tilts something by one end: a slope, and a double arrow up and down at its high end. */
+export function createTiltHandleTexture(): HTMLCanvasElement {
+  return glyphDisc("#d98b0b", (context) => {
+    context.beginPath(); context.moveTo(13, 46); context.lineTo(38, 30); context.stroke();
+    context.lineWidth = 4;
+    context.beginPath(); context.moveTo(46, 22); context.lineTo(46, 44); context.stroke();
+    arrowhead(context, 46, 18, -Math.PI / 2);
+    arrowhead(context, 46, 48, Math.PI / 2);
+  });
+}
+
 /** Widens or narrows something round its centre: a double arrow across. */
 export function createRadiusHandleTexture(): HTMLCanvasElement {
   return glyphDisc("#c2416b", (context) => {

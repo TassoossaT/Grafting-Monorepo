@@ -284,6 +284,10 @@ In-scene road branching affordance, distinct from a movable anchor.
 
 Turns a whole structure round: two arrows chasing each other round a circle.
 
+### `function vtt.marker-textures.createTiltHandleTexture(): HTMLCanvasElement`
+
+Tilts something by one end: a slope, and a double arrow up and down at its high end.
+
 ### `function vtt.marker-textures.createTurnsHandleTexture(): HTMLCanvasElement`
 
 Turns something round: a circular arrow.
@@ -9309,7 +9313,7 @@ single-ghost behaviour every tool already relies on.
 
 ### `type vtt.scene-render-port.ConfirmedTokenRenderChange = { causeId: string; dependency: RenderDependencyRevision; origin: ChangeOrigin; runtimeGeneration: number; token: RenderToken; type: "token-upserted" } | { causeId: string; dependency: RenderDependencyRevision; origin: ChangeOrigin; runtimeGeneration: number; tokenId: string; type: "token-removed" }`
 
-### `type vtt.scene-render-port.RenderHandleGlyph = "point" | "midpoint" | "move" | "rotate" | "height" | "turns" | "radius" | "link"`
+### `type vtt.scene-render-port.RenderHandleGlyph = "point" | "midpoint" | "move" | "rotate" | "height" | "turns" | "radius" | "tilt" | "link"`
 
 What a handle does, so it reads as that at a glance: a point to drag, or a
 control that moves a whole structure, sets a height, or turns something
