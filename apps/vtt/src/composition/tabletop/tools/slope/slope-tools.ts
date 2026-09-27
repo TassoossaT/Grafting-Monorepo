@@ -75,6 +75,8 @@ const rawSlopeRampTool: ConstructionTool<"slope-ramp"> = {
     const draft = rampDrafts.get(ctx.runtime);
     const params = draft ? { ...toolParams, rise: draftRise(draft, gesture.current, toolParams) } : toolParams;
     const from = draft?.start ?? gesture.start;
+    // Nothing stands at the pointer before a ramp is begun, as with a floor: it is built out as it is drawn.
+    if (Math.hypot(gesture.current.point.x - from.point.x, gesture.current.point.z - from.point.z) < 0.05) return undefined;
     try {
       const { corners, welds, joints } = plannedRamp(ctx, from, gesture.current, params);
       const positions: number[] = [], indices: number[] = [];

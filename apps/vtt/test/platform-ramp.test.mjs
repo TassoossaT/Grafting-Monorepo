@@ -289,3 +289,19 @@ test("a ramp started on a floor's edge stays welded there however the pointer tu
     }
   } finally { session.free(); }
 });
+
+test("nothing is previewed at the pointer before a ramp is begun; it is built out as it is drawn", async () => {
+  const { slopeRampTool } = await import("../src/composition/tabletop/tools/slope/slope-tools.ts");
+  const { sessionFixture } = await import("./platform-session-fixture.mjs");
+  const { ctx, session } = sessionFixture();
+  try {
+    const params = { bottomWidth: 2, topWidth: 1, rise: 2 };
+    const here = { point: { x: 1, y: 0, z: 1 } };
+    assert.equal(slopeRampTool.previewFor({ start: here, current: here, samples: [here] }, params, ctx), undefined, "hovering shows no ramp");
+    slopeRampTool.onClick(ctx, here, params);
+    assert.equal(slopeRampTool.previewFor({ start: here, current: here, samples: [here] }, params, ctx), undefined, "just begun: still nothing");
+    const there = { point: { x: 5, y: 0, z: 1 } };
+    assert.equal(slopeRampTool.previewFor({ start: there, current: there, samples: [there] }, params, ctx)?.kind, "mesh", "drawn out to the pointer");
+    slopeRampTool.onCancel(ctx);
+  } finally { session.free(); }
+});
