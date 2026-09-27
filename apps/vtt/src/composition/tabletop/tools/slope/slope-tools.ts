@@ -9,12 +9,19 @@ import { appendNodeDisk, PREVIEW_ELEVATION } from "../shapes/ribbon-mesh-preview
 import type { RampCorners } from "../../../../features/edit-construction/index.ts";
 import { commitPlatformSlope } from "./slope-commit.ts";
 import { createCurveDraftTool, type FinishedCurveDraft } from "../core/curve-draft.ts";
-import { commitStraightRamp, plannedRamp, straightRampPoints } from "./ramp-commit.ts";
+import { commitStraightRamp, plannedRamp, rampStartAt, straightRampPoints } from "./ramp-commit.ts";
 
 const ownsSlope = (surfaceType: string) => surfaceType === SLOPE_SURFACE_TYPE;
 const ownsRamp = (surfaceType: string) => surfaceType === RAMP_SURFACE_TYPE;
 
 const COLOR = 0x79b8e8;
+/** Where a ramp would start when it snaps: onto a floor's edge, or on from another ramp's end. */
+const SNAP_COLOR = 0x4fd18b;
+/** Radius of the mark where a ramp would start, before it is begun. */
+const START_MARK = 0.14;
+/** How much one press of a width key widens or narrows the ramp. */
+const WIDTH_STEP = 0.25;
+const MIN_WIDTH = 0.5;
 /** Radius of the mark on a corner that will be welded. */
 const WELD_MARK = 0.18;
 const READOUT_INTERVAL_MS = 150;
@@ -46,6 +53,44 @@ function reportRampReadout(ctx: ToolContext, corners: RampCorners, welds: number
  * is drawn as.
  */
 
+/**
+ * The mark where a ramp begun at `sample` would start: a dot, and, where it
+ * snaps, the stretch of edge its end would sit on -- the floor's edge its
+ * width would take, or the end of the ramp it would run on from.
+ */
+function startMark(ctx: ToolContext, sample: PointerSample, params: ToolParamsByTool["slope-ramp"]) {
+  const start = rampStartAt(ctx, sample);
+  const positions: number[] = [], indices: number[] = [];
+  appendNodeDisk(positions, indices, start.point, START_MARK);
+  const along = (a: ConstructionPosition, b: ConstructionPosition, centre: ConstructionPosition, width: number) => {
+    const dx = b.x - a.x, dz = b.z - a.z, length = Math.hypot(dx, dz) || 1;
+    const u = { x: dx / length, z: dz / length }, half = width / 2, thick = 0.04;
+    appendQuad(positions, indices, [
+      { x: centre.x - u.x * half - u.z * thick, y: centre.y, z: centre.z - u.z * half + u.x * thick },
+      { x: centre.x + u.x * half - u.z * thick, y: centre.y, z: centre.z + u.z * half + u.x * thick },
+      { x: centre.x + u.x * half + u.z * thick, y: centre.y, z: centre.z + u.z * half - u.x * thick },
+      { x: centre.x - u.x * half + u.z * thick, y: centre.y, z: centre.z - u.z * half - u.x * thick },
+    ]);
+  };
+  if (start.joint) along(start.joint.a, start.joint.b, start.joint.mid, start.joint.width);
+  else if (start.landing) along(start.landing.a, start.landing.b, start.point, params.bottomWidth ?? 1.5);
+  const snapped = start.joint !== undefined || start.landing !== undefined;
+  return { kind: "mesh" as const, positions: Float32Array.from(positions), indices: Uint32Array.from(indices), color: snapped ? SNAP_COLOR : COLOR, opacity: 0.8 };
+}
+
+/** Widths after a width key: `[` `]` narrow or widen the whole ramp, `{` `}` its top alone -- how it opens or closes. */
+function widthsAfter(key: string, params: ToolParamsByTool["slope-ramp"]): ToolParamsByTool["slope-ramp"] | undefined {
+  const bottom = params.bottomWidth ?? 1.5, top = params.topWidth ?? 1.5;
+  const step = (width: number, by: number) => Math.max(MIN_WIDTH, Math.round((width + by) / WIDTH_STEP) * WIDTH_STEP);
+  switch (key) {
+    case "[": return { ...params, bottomWidth: step(bottom, -WIDTH_STEP), topWidth: step(top, -WIDTH_STEP) };
+    case "]": return { ...params, bottomWidth: step(bottom, WIDTH_STEP), topWidth: step(top, WIDTH_STEP) };
+    case "{": return { ...params, topWidth: step(top, -WIDTH_STEP) };
+    case "}": return { ...params, topWidth: step(top, WIDTH_STEP) };
+    default: return undefined;
+  }
+}
+
 /** Drag from the start to the end; the ramp climbs the fixed rise. */
 /** A straight ramp being drawn by clicks: where it starts, and a rise set with Shift. */
 interface RampDraft {
@@ -75,8 +120,8 @@ const rawSlopeRampTool: ConstructionTool<"slope-ramp"> = {
     const draft = rampDrafts.get(ctx.runtime);
     const params = draft ? { ...toolParams, rise: draftRise(draft, gesture.current, toolParams) } : toolParams;
     const from = draft?.start ?? gesture.start;
-    // Nothing stands at the pointer before a ramp is begun, as with a floor: it is built out as it is drawn.
-    if (Math.hypot(gesture.current.point.x - from.point.x, gesture.current.point.z - from.point.z) < 0.05) return undefined;
+    // Before a ramp is begun, only where it would start -- and, when it snaps, the edge its end would sit on: it is built out as it is drawn.
+    if (Math.hypot(gesture.current.point.x - from.point.x, gesture.current.point.z - from.point.z) < 0.05) return startMark(ctx, from, params);
     try {
       const { corners, welds, joints } = plannedRamp(ctx, from, gesture.current, params);
       const positions: number[] = [], indices: number[] = [];
@@ -98,7 +143,7 @@ const rawSlopeRampTool: ConstructionTool<"slope-ramp"> = {
     const draft = rampDrafts.get(ctx.runtime);
     if (!draft) {
       rampDrafts.set(ctx.runtime, { start: sample });
-      ctx.reportFeedback({ tone: "info", message: "Clique o fim da rampa (Shift e o mouse na vertical ajustam a subida; Esc cancela)." });
+      ctx.reportFeedback({ tone: "info", message: "Clique o fim da rampa (Shift e o mouse na vertical ajustam a subida; [ ] a largura, { } só em cima; Esc cancela)." });
       return;
     }
     rampDrafts.delete(ctx.runtime);
@@ -111,6 +156,14 @@ const rawSlopeRampTool: ConstructionTool<"slope-ramp"> = {
   },
   onCancel(ctx) {
     rampDrafts.delete(ctx.runtime);
+  },
+  onKeyDown(ctx, key, params) {
+    // The width is the tool's own calibration, set here without leaving the drawing.
+    const next = widthsAfter(key, params);
+    if (!next || !ctx.updateToolParams) return false;
+    ctx.updateToolParams("slope-ramp", () => next);
+    ctx.reportFeedback({ tone: "info", message: `largura embaixo ${(next.bottomWidth ?? 1.5).toFixed(2)} m · em cima ${(next.topWidth ?? 1.5).toFixed(2)} m ([ ] a rampa, { } só em cima)` });
+    return true;
   },
   onPointerUp(ctx, gesture, params) {
     // A press without a drag is a click: `onClick` draws by clicks.

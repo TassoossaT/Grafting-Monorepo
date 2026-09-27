@@ -3320,6 +3320,13 @@ edge is split around the ramp's end edge, which both faces then share.
 
 The ramp a drag from `start` to `end` would build, before anything is committed -- what the preview draws.
 
+### `function vtt.ramp-commit.rampStartAt(ctx: ToolContext, start: PointerSample): RampEndPlan`
+
+Where a ramp begun at `start` would start, before it is drawn: on another
+structure's free end it would run on from, on a floor's edge it would weld
+into, or loose where the pointer is -- what the pointer shows before the
+first click.
+
 ### `function vtt.ramp-commit.straightRampPoints(ctx: ToolContext, start: PointerSample, end: PointerSample, params: RampParams): readonly [ConstructionPosition, ConstructionPosition]`
 
 From where the drag starts to where it ends, at the heights they land at.

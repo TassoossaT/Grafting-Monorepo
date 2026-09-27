@@ -290,18 +290,38 @@ test("a ramp started on a floor's edge stays welded there however the pointer tu
   } finally { session.free(); }
 });
 
-test("nothing is previewed at the pointer before a ramp is begun; it is built out as it is drawn", async () => {
+test("before a ramp is begun only where it would start is shown, snapping to a floor's edge; then it is built out as it is drawn", async () => {
+  const { slopeRampTool } = await import("../src/composition/tabletop/tools/slope/slope-tools.ts");
+  const { sessionFixture, addFace } = await import("./platform-session-fixture.mjs");
+  const { ctx, runtime, session } = sessionFixture();
+  try {
+    addFace(runtime, "floor", "platform-floating", [[0, 0], [4, 0], [4, 4], [0, 4]].map(([x, z], i) => ({ id: `floor:${i}`, position: { x, y: 0, z } })));
+    const params = { bottomWidth: 2, topWidth: 1, rise: 2 };
+    const away = { point: { x: 10, y: 0, z: 10 } };
+    const loose = slopeRampTool.previewFor({ start: away, current: away, samples: [away] }, params, ctx);
+    assert.equal(loose?.kind, "mesh", "a mark where it would start");
+    assert.ok(loose.positions.length / 3 < 40, "only a small mark, no ramp");
+    const edge = { point: { x: 4.2, y: 0, z: 2 } };
+    const snapped = slopeRampTool.previewFor({ start: edge, current: edge, samples: [edge] }, params, ctx);
+    assert.notEqual(snapped.color, loose.color, "it shows it would snap to the floor's edge");
+    assert.ok(snapped.positions.length > loose.positions.length, "and the stretch of edge its end would sit on");
+    slopeRampTool.onClick(ctx, away, params);
+    const there = { point: { x: 14, y: 0, z: 10 } };
+    const drawn = slopeRampTool.previewFor({ start: there, current: there, samples: [there] }, params, ctx);
+    assert.ok(drawn.positions.length / 3 >= 4 && drawn.color !== snapped.color, "drawn out to the pointer");
+    slopeRampTool.onCancel(ctx);
+  } finally { session.free(); }
+});
+
+test("while drawing, [ ] narrow or widen the ramp and { } its top alone, as the tool's own widths", async () => {
   const { slopeRampTool } = await import("../src/composition/tabletop/tools/slope/slope-tools.ts");
   const { sessionFixture } = await import("./platform-session-fixture.mjs");
   const { ctx, session } = sessionFixture();
   try {
-    const params = { bottomWidth: 2, topWidth: 1, rise: 2 };
-    const here = { point: { x: 1, y: 0, z: 1 } };
-    assert.equal(slopeRampTool.previewFor({ start: here, current: here, samples: [here] }, params, ctx), undefined, "hovering shows no ramp");
-    slopeRampTool.onClick(ctx, here, params);
-    assert.equal(slopeRampTool.previewFor({ start: here, current: here, samples: [here] }, params, ctx), undefined, "just begun: still nothing");
-    const there = { point: { x: 5, y: 0, z: 1 } };
-    assert.equal(slopeRampTool.previewFor({ start: there, current: there, samples: [there] }, params, ctx)?.kind, "mesh", "drawn out to the pointer");
-    slopeRampTool.onCancel(ctx);
+    let params = { bottomWidth: 2, topWidth: 2, rise: 2 };
+    ctx.updateToolParams = (_id, update) => { params = update(params); };
+    for (const key of ["]", "]", "{"]) assert.equal(slopeRampTool.onKeyDown(ctx, key, params), true, key);
+    assert.deepEqual([params.bottomWidth, params.topWidth], [2.5, 2.25]);
+    assert.equal(slopeRampTool.onKeyDown(ctx, "x", params), false, "any other key is not the ramp's");
   } finally { session.free(); }
 });

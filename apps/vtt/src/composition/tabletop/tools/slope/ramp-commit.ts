@@ -39,6 +39,20 @@ function rampEnds(ctx: ToolContext, start: PointerSample, end: PointerSample, pa
   return { from, to };
 }
 
+/**
+ * Where a ramp begun at `start` would start, before it is drawn: on another
+ * structure's free end it would run on from, on a floor's edge it would weld
+ * into, or loose where the pointer is -- what the pointer shows before the
+ * first click.
+ */
+export function rampStartAt(ctx: ToolContext, start: PointerSample): RampEndPlan {
+  const graph = ctx.runtime.getGraphSnapshot();
+  const joint = endJointNear(graph, ctx.runtime.getAllRegionTopologies(), (height) => pointerAtHeight(start, height));
+  if (joint) return { point: joint.mid, joint };
+  const landing = floorLandingToward(floorsOf(ctx), start, start.point);
+  return landing ? { point: landing.point, landing } : { point: slopeControlPoint(ctx, start) };
+}
+
 /** From where the drag starts to where it ends, at the heights they land at. */
 export function straightRampPoints(ctx: ToolContext, start: PointerSample, end: PointerSample, params: RampParams): readonly [ConstructionPosition, ConstructionPosition] {
   const { from, to } = rampEnds(ctx, start, end, params);

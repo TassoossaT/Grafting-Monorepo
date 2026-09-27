@@ -4868,6 +4868,8 @@ export interface RampParams {
   readonly topWidth?: number;
   readonly rise?: number;
   }
+export function rampStartAt(ctx: ToolContext, start: PointerSample): RampEndPlan {
+  const graph = ctx.runtime.getGraphSnapshot();
 export function straightRampPoints(ctx: ToolContext, start: PointerSample, end: PointerSample, params: RampParams): readonly [ConstructionPosition, ConstructionPosition] {
   const { from, to } = rampEnds(ctx, start, end, params);
 export function plannedRamp(ctx: ToolContext, start: PointerSample, end: PointerSample, params: RampParams): PlannedRamp {
