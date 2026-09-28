@@ -2439,6 +2439,10 @@ rim named it from one face, and one face cannot see the other; if the graph
 shows two, the edge is interior whatever it was called -- see
 RIM_ROLES.
 
+### `function vtt.face-props.keepFaceProps(runtime: TabletopRuntime, created: readonly ConstructionSurfaceKey[], faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>): void`
+
+Gives each face a patch just made the properties its generator named for its region.
+
 ### `function vtt.floor-landing.floorLandingAt(floors: readonly ConstructionRegionTopology[], sample: PointerSample): FloorLanding | undefined`
 
 The floor edge `sample` lands on, preferring the floor the pointer is on.
@@ -3255,17 +3259,9 @@ The base under a click: a floor's contour, or -- clicking a wall -- the
 loop its tops close round the room it bounds. Throws a message for the
 user when what was clicked cannot carry a roof.
 
-### `variable vtt.roof-tool.ROOF_OVERHANG: 0.2`
-
-How far every eave reaches past its footprint when a roof is made.
-
-### `variable vtt.roof-tool.ROOF_RECIPE_PROP: "roof"`
-
-Region property carrying the roof's recipe, which every edit regenerates the roof from.
-
 ### `variable vtt.roof-tool.roofTool: ConstructionTool<"roof">`
 
-Also grabs and edits an existing roof's own vertex/edge/body -- see `structure-edit-behavior.ts`.
+Also edits an existing roof, through its handles only -- see `structure-edit-behavior.ts` and `roof-recipe.ts`.
 
 ### `function vtt.roof-tool.commitRoof(ctx: ToolContext, capRequest: CapRequest): void`
 
@@ -3274,16 +3270,6 @@ Assigns identities to a native cone and applies it atomically.
 ### `function vtt.roof-tool.commitRoofRecipe(ctx: ToolContext, request: RoofRequest): void`
 
 Commits a roof generated from `request`, keeping the recipe on every face it made.
-
-### `function vtt.roof-tool.presetSlopes(contour: readonly Point[], waters: 1 | 2 | 4): number[]`
-
-Which sides of a footprint rise, for a number of waters: every side; the
-longest side and the one facing it most squarely; or the longest alone.
-The rest are gables.
-
-### `function vtt.roof-tool.roofOver(blocks: readonly (readonly Point[])[], elevation: number, params: { curvatures: readonly [number, number, number, number]; elevation: number; height: number; radius: number; shape: "rectangle" | "circle" | "base"; waters: 1 | 2 | 4 }): RoofRequest`
-
-A roof over a footprint's convex blocks, each shaped by the tool's waters.
 
 ### `interface vtt.geometry-2d.PointXZ`
 
@@ -4249,7 +4235,7 @@ drags them changes.
 
 Every handle of every kind this provider places, before any type's declaration filters them.
 
-### `method vtt.global-handle.GlobalHandleProvider.plan(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: Pick<BezierPort, "curveBatch">, operationId: string): GlobalHandleEdit | undefined`
+### `method vtt.global-handle.GlobalHandleProvider.plan(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: GlobalHandlePort, operationId: string): GlobalHandleEdit | undefined`
 
 What `intent` on `handle` edits; `undefined` when it edits nothing. Throws to refuse.
 
@@ -4265,7 +4251,7 @@ Which surfaces form one cloud with `seed` (`ADR-0022`) -- the engine decides, ne
 
 ### `property vtt.global-handle.GlobalHandleScene.topologies: readonly ConstructionRegionTopology[]`
 
-### `type vtt.global-handle.GlobalHandleEdit = { carries?: readonly ConstructionSurfaceKey[]; graphPatch: ConstructionGraphPatch; kind: "spine"; owner: string } | { delta: ConstructionPosition; kind: "region-move"; seed: ConstructionSurfaceKey } | { delta: ConstructionPosition; kind: "region-part"; seed: ConstructionSurfaceKey; target: HandlePart } | { kind: "vertices"; moves: readonly { nodeId: string; position: ConstructionPosition }[]; retypes: readonly { edgeId: string; geometry: ConstructionEdgeGeometry }[] } | { kind: "replace"; request: ApplyPatchReplacementRequest }`
+### `type vtt.global-handle.GlobalHandleEdit = { carries?: readonly ConstructionSurfaceKey[]; graphPatch: ConstructionGraphPatch; kind: "spine"; owner: string } | { delta: ConstructionPosition; kind: "region-move"; seed: ConstructionSurfaceKey } | { delta: ConstructionPosition; kind: "region-part"; seed: ConstructionSurfaceKey; target: HandlePart } | { kind: "vertices"; moves: readonly { nodeId: string; position: ConstructionPosition }[]; retypes: readonly { edgeId: string; geometry: ConstructionEdgeGeometry }[] } | { faceProps?: ReadonlyMap<string, Readonly<Record<string, unknown>>>; kind: "replace"; request: ApplyPatchReplacementRequest }`
 
 What a provider makes of an intent, in the terms the edit is carried out
 in:
@@ -4282,11 +4268,15 @@ in:
 
 What a gesture on a global handle asks for, whatever the structure.
 
+### `type vtt.global-handle.GlobalHandlePort = Pick<BezierPort, "curveBatch"> & Pick<RoofPort, "generateRoof">`
+
+What a provider may ask of the engine while planning: curves, and structures generated from a recipe.
+
 ### `type vtt.global-handle.HandlePart = { edgeId: string; kind: "edge" } | { kind: "vertex"; nodeId: string }`
 
 One part of a face a handle drags: a side, or a corner.
 
-### `type vtt.global-handle-ids.GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "radius" | "origin" | "destination" | "originHeight" | "destinationHeight" | "side" | "corner" | "foot" | "top" | "detach"`
+### `type vtt.global-handle-ids.GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "radius" | "origin" | "destination" | "originHeight" | "destinationHeight" | "side" | "corner" | "foot" | "top" | "detach" | "rise" | "slope" | "seam" | "insert"`
 
 The handles that stand for a whole structure rather than one of its
 points, whatever the structure is built from -- a spine, a cloud of
@@ -4306,7 +4296,13 @@ regions:
   free to build against;
 - foot, top: an upright structure's post -- where it stands, and how high
   that side rises;
-- detach: clicked, the structure lets go of whatever it is joined to.
+- detach: clicked, the structure lets go of whatever it is joined to;
+- rise: how high a structure grown from its base rises above it; brought
+  down to nothing, the structure is gone;
+- slope: how steeply one of its faces climbs; brought down to nothing,
+  the face stands upright instead;
+- seam: how steeply the two faces meeting along a seam climb, together;
+- insert: from the middle of one side, a new corner pulled out of it.
 
 Which of them a structure shows is its type's declaration
 (`StructureTypeDefinition.globalHandles`). Every one is named after the
@@ -4715,7 +4711,7 @@ handle says so itself; a spine's control point moves along the ground on a
 spine whose owner derives its heights, and freely otherwise. `undefined`
 for anything that is not a handle this knows.
 
-### `function vtt.global-handles.planGlobalHandle(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: Pick<BezierPort, "curveBatch">, operationId: string): GlobalHandleEdit | undefined`
+### `function vtt.global-handles.planGlobalHandle(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: GlobalHandlePort, operationId: string): GlobalHandleEdit | undefined`
 
 What `intent` on `handle` edits, from the provider that placed it.
 
@@ -4928,6 +4924,69 @@ type declares `side` or `corner` handles -- for the parts its own
 role for it, exactly as grabbing the part itself used to: the platform
 pushes the side square to itself, a ramp widens. The part itself is never
 grabbed, so it stays free to build against.
+
+### `interface vtt.recipe-handle-provider.RecipeGlobalHandle`
+
+A handle of a structure regenerated from a recipe: the generic handle, with its type's own reading of it.
+
+### `property vtt.recipe-handle-provider.RecipeGlobalHandle.center?: readonly [number, number]`
+
+A spiral's centre, when the structure is one -- what a turns handle winds round.
+
+### `property vtt.recipe-handle-provider.RecipeGlobalHandle.faces?: readonly string[]`
+
+The faces the structure is made of, by surface key joined with NUL -- absent for a spine, whose faces its spine regenerates.
+
+### `property vtt.recipe-handle-provider.RecipeGlobalHandle.facing?: { x: number; z: number }`
+
+The way a handle standing off one side of a face looks out, in plan --
+absent for one that is seen from anywhere. The scene shows only the
+sides facing the viewer.
+
+### `property vtt.recipe-handle-provider.RecipeGlobalHandle.group: string`
+
+### `property vtt.recipe-handle-provider.RecipeGlobalHandle.id: string`
+
+### `property vtt.recipe-handle-provider.RecipeGlobalHandle.kind: GlobalHandleKind`
+
+### `property vtt.recipe-handle-provider.RecipeGlobalHandle.motion: HandleMotion`
+
+How the handle moves while dragged -- the path its gesture keeps it on.
+
+### `property vtt.recipe-handle-provider.RecipeGlobalHandle.nodeIds: readonly string[]`
+
+Every node of the structure, lowest id first.
+
+### `property vtt.recipe-handle-provider.RecipeGlobalHandle.owner: string`
+
+The structure's type.
+
+### `property vtt.recipe-handle-provider.RecipeGlobalHandle.pivot: ConstructionPosition`
+
+What the structure moves and turns round.
+
+### `property vtt.recipe-handle-provider.RecipeGlobalHandle.position: ConstructionPosition`
+
+### `property vtt.recipe-handle-provider.RecipeGlobalHandle.provider: string`
+
+Which provider made it -- and plans its edits.
+
+### `property vtt.recipe-handle-provider.RecipeGlobalHandle.recipeHandle: RecipeHandle`
+
+### `property vtt.recipe-handle-provider.RecipeGlobalHandle.snaps?: boolean`
+
+Whether what it drags snaps onto other structures' outlines (`orchestration/outline-snap.ts`).
+
+### `property vtt.recipe-handle-provider.RecipeGlobalHandle.target?: HandlePart`
+
+The part of the structure it drags -- a side, a corner; absent when it moves the whole.
+
+### `variable vtt.recipe-handle-provider.recipeHandleProvider: GlobalHandleProvider`
+
+Global handles of structures regenerated whole from a recipe -- a roof:
+the type places them and says what each does to the recipe, and every edit
+replaces the structure's faces by the ones the new recipe makes, in one
+patch replacement. A recipe left with nothing removes the structure.
 
 ### `variable vtt.spine-handle-provider.spineHandleProvider: GlobalHandleProvider`
 
@@ -6768,9 +6827,68 @@ Every declared surface type carrying `trait`, in registry order.
 
 The traits one surface type declares. An undeclared type has none.
 
+### `interface vtt.roof-recipe.RoofFaceRole`
+
+Which side of which block a face rises from, and whether it is that side's upright gable.
+
+### `property vtt.roof-recipe.RoofFaceRole.block: number`
+
+### `property vtt.roof-recipe.RoofFaceRole.gable: boolean`
+
+### `property vtt.roof-recipe.RoofFaceRole.side: number`
+
+### `interface vtt.roof-recipe.RoofRecipe`
+
+A roof's recipe: what the generator is asked, and the group of faces it made.
+
+### `property vtt.roof-recipe.RoofRecipe.blocks: readonly RoofBlock[]`
+
+### `property vtt.roof-recipe.RoofRecipe.elevation: number`
+
+### `property vtt.roof-recipe.RoofRecipe.group: string`
+
+### `property vtt.roof-recipe.RoofRecipe.height: number`
+
+Rise of the roof's highest point above its eaves.
+
+### `variable vtt.roof-recipe.ROOF_FACE_PROP: "roofFace"`
+
+Region property naming which side of which block a roof face rises from.
+
+### `variable vtt.roof-recipe.ROOF_OVERHANG: 0.2`
+
+How far every eave reaches past its footprint when a roof is made.
+
+### `variable vtt.roof-recipe.ROOF_RECIPE_PROP: "roof"`
+
+Region property carrying a roof's recipe, which every edit regenerates the roof from.
+
+### `variable vtt.roof-recipe.roofRecipeGeneration: RecipeGeneration`
+
+How a roof is regenerated from the recipe its faces keep.
+
+### `function vtt.roof-recipe.presetSlopes(contour: readonly Point[], waters: 1 | 2 | 4): number[]`
+
+Which sides of a footprint rise, for a number of waters: every side; the
+longest side and the one facing it most squarely; or the longest alone.
+The rest are gables.
+
+### `function vtt.roof-recipe.roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: RoofRequest, operationId: string): { faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>; patch: ConstructionPatch }`
+
+The roof `request` makes, as a patch named under `operationId`, and what
+each face keeps, by region id: the recipe, under that name as its group,
+and its role.
+
+### `function vtt.roof-recipe.roofOver(blocks: readonly (readonly Point[])[], elevation: number, height: number, waters: 1 | 2 | 4): RoofRequest`
+
+A roof over convex blocks, each shaped by a number of waters.
+
 ### `variable vtt.roof-structure.roofStructureType: StructureTypeDefinition`
 
-Roof profiles move as a connected cloud; this delivery adds no shape handles.
+A roof is regenerated whole from the recipe its faces keep: every handle
+-- its rise, a leaf's slope, a seam, an eave, a footprint corner -- edits
+the recipe (`roof-recipe.ts`). A curved cone keeps no recipe and moves as
+a connected cloud.
 
 ### `interface vtt.structural-cut.StructuralCutArea`
 
@@ -7027,6 +7145,49 @@ Nodes that already stand and move -- a patch only adds.
 
 ### `property vtt.structure-type.RebuiltFromEnds.rungs: readonly { landing?: FloorLanding; rung: WeldRung }[]`
 
+### `interface vtt.structure-type.RecipeGeneration`
+
+A structure regenerated whole from a recipe its faces keep, rather than
+edited node by node: every handle changes the recipe, and the structure is
+made again from it (`orchestration/global-handles/recipe-handle-provider.ts`).
+The recipe itself is the type's own business; nothing outside it reads one.
+
+### `property vtt.structure-type.RecipeGeneration.edit: (recipe: unknown, handle: RecipeHandle, intent: GlobalHandleIntent) => unknown`
+
+The recipe `intent` on `handle` leaves -- `null` when it leaves nothing, `undefined` when it changes nothing. Throws to refuse.
+
+### `property vtt.structure-type.RecipeGeneration.generate: (port: GlobalHandlePort, recipe: unknown, operationId: string) => { faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>; patch: ConstructionPatch }`
+
+The structure `recipe` makes, named under `operationId`, with what each face keeps, by region id.
+
+### `property vtt.structure-type.RecipeGeneration.handles: (members: readonly ConstructionRegionTopology[], recipe: unknown) => readonly RecipeHandle[]`
+
+The handles of one structure: `members` are every face sharing `recipe`.
+
+### `property vtt.structure-type.RecipeGeneration.of: (topology: ConstructionRegionTopology) => { group: string; recipe: unknown } | undefined`
+
+The recipe `topology` keeps, and the group of faces sharing it.
+
+### `interface vtt.structure-type.RecipeHandle`
+
+One handle of a recipe structure, as its type places it.
+
+### `property vtt.structure-type.RecipeHandle.anchor: string`
+
+Names the handle within its structure.
+
+### `property vtt.structure-type.RecipeHandle.facing?: { x: number; z: number }`
+
+### `property vtt.structure-type.RecipeHandle.kind: GlobalHandleKind`
+
+### `property vtt.structure-type.RecipeHandle.motion: HandleMotion`
+
+### `property vtt.structure-type.RecipeHandle.part?: unknown`
+
+What part of the recipe it stands for -- the type's own reading.
+
+### `property vtt.structure-type.RecipeHandle.position: ConstructionPosition`
+
 ### `interface vtt.structure-type.ReshapeContext`
 
 What a reshape cascade gets to look at: the whole cloud, the edge and the geometry it is taking.
@@ -7211,27 +7372,6 @@ when it lands on a floor -- and the other end where it stands, still on
 
 ### `interface vtt.structure-type.StructureTypeDefinition`
 
-One structure type's definition -- which is to say, **what a cloud of this
-type does**, since the cloud is what the type names (`ADR-0022`, and
-`construction-cloud.ts`). Nothing below is a property of a single face;
-a face only carries the string that selects this table.
-
-It pairs the halves the design doc keeps together on purpose:
-
-1. **How it is created** -- which generation call produced it, in what
-   expected shape.
-2. **The role table derived from that shape**, each role declaring its own
-   reach. Because this side *asked* for a specific shape, it already knows
-   by construction what index 0 of the engine's deterministically-ordered
-   response means. Nothing travels back from Rust to say so.
-3. **How it meets every other type** when painted over one.
-
-A tool preset -- "a tower," "a house" -- is not a type and never appears
-here. A preset chooses parameters and a generator; the geometry it
-produces lands in a cloud whose type is one of these, and that cloud is
-where its behaviour comes from. This is why a tower needs no editing code
-of its own.
-
 ### `property vtt.structure-type.StructureTypeDefinition.conformsTo?: (support: ReadonlySet<StructureTrait>, subtype?: string) => boolean`
 
 Whether regions of this type vertically conform to a support with these traits beneath them
@@ -7297,6 +7437,10 @@ The policy for one role.
 How a cloud of this type answers each effect that reaches it, by declared
 reaction name (`effects/effect.ts`). An effect kind absent here leaves the
 cloud as the change left it.
+
+### `property vtt.structure-type.StructureTypeDefinition.recipe?: RecipeGeneration`
+
+Present when this type is regenerated whole from a recipe its faces keep -- see RecipeGeneration.
 
 ### `property vtt.structure-type.StructureTypeDefinition.requiresMotionSolver?: boolean`
 
@@ -8928,6 +9072,16 @@ Relative steepness per side; zero makes that side a gable.
 ### `property vtt.cap-port.RoofPatch.nodes: readonly (readonly [number, number, number])[]`
 
 ### `property vtt.cap-port.RoofPatch.preview: readonly (readonly [number, number, number, number, number, number])[]`
+
+### `interface vtt.cap-port.RoofPort`
+
+The engine's roof generator.
+
+### `method vtt.cap-port.RoofPort.generateRoof(request: RoofRequest): RoofPatch`
+
+### `method vtt.cap-port.RoofPort.roofFootprintBlocks(contour: readonly (readonly [number, number])[]): readonly (readonly [number, number])[][]`
+
+A footprint as the convex blocks a roof is raised over; throws for a concave plan without square corners.
 
 ### `interface vtt.cap-port.RoofRequest`
 

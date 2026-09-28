@@ -17,7 +17,13 @@
  *   free to build against;
  * - foot, top: an upright structure's post -- where it stands, and how high
  *   that side rises;
- * - detach: clicked, the structure lets go of whatever it is joined to.
+ * - detach: clicked, the structure lets go of whatever it is joined to;
+ * - rise: how high a structure grown from its base rises above it; brought
+ *   down to nothing, the structure is gone;
+ * - slope: how steeply one of its faces climbs; brought down to nothing,
+ *   the face stands upright instead;
+ * - seam: how steeply the two faces meeting along a seam climb, together;
+ * - insert: from the middle of one side, a new corner pulled out of it.
  *
  * Which of them a structure shows is its type's declaration
  * (`StructureTypeDefinition.globalHandles`). Every one is named after the
@@ -25,7 +31,7 @@
  * that keeps that node; none is a graph node. This module is the only place
  * their ids are made or read.
  */
-export type GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "radius" | "origin" | "destination" | "originHeight" | "destinationHeight" | "side" | "corner" | "foot" | "top" | "detach";
+export type GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "radius" | "origin" | "destination" | "originHeight" | "destinationHeight" | "side" | "corner" | "foot" | "top" | "detach" | "rise" | "slope" | "seam" | "insert";
 
 const PREFIX: Readonly<Record<GlobalHandleKind, string>> = {
   pivot: "structure-pivot:", rotate: "structure-rotate:", height: "structure-height:", turns: "structure-turns:", radius: "structure-radius:",
@@ -33,6 +39,7 @@ const PREFIX: Readonly<Record<GlobalHandleKind, string>> = {
   originHeight: "structure-origin-height:", destinationHeight: "structure-destination-height:",
   side: "structure-side:", corner: "structure-corner:",
   foot: "structure-foot:", top: "structure-top:", detach: "structure-detach:",
+  rise: "structure-rise:", slope: "structure-slope:", seam: "structure-seam:", insert: "structure-insert:",
 };
 const KINDS = Object.keys(PREFIX) as readonly GlobalHandleKind[];
 

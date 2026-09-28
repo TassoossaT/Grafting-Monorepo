@@ -3735,6 +3735,7 @@ export const HANDLE_DONE: Readonly<Record<GlobalHandleKind, string>> = {
   originHeight: "Inclinação atualizada.", destinationHeight: "Inclinação atualizada.",
   side: "Lado ajustado.", corner: "Canto ajustado.",
   foot: "Coluna movida.", top: "Altura atualizada.", detach: "Estrutura solta.",
+  rise: "Altura atualizada.", slope: "Inclinação atualizada.", seam: "Inclinação atualizada.", insert: "Canto inserido.",
   };
 
 // src/composition/tabletop/index.ts
@@ -4324,6 +4325,11 @@ export function edgeOverlayOf(
 export function edgeOverlayDescriptor(group: EdgeOverlayGroup): PreviewDescriptor {
   return { kind: "segments", positions: group.positions, color: group.color, opacity: 1 };
 
+// src/composition/tabletop/tools/core/face-props.ts
+export function keepFaceProps(runtime: ToolContext["runtime"], created: readonly ConstructionSurfaceKey[], faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>): void {
+  for (const key of created) {
+  const regionId = regionIdOf(key);
+
 // src/composition/tabletop/tools/core/floor-landing.ts
 export function floorsOf(ctx: ToolContext): readonly ConstructionRegionTopology[] {
   return ctx.runtime.getAllRegionTopologies().filter((topology) => hasTrait(topology.surfaceType, "floor"));
@@ -4745,24 +4751,13 @@ export function roofBaseAt(topologies: readonly ConstructionRegionTopology[], sa
   sample.surfaceRef ? surfaceRefFromNodeSet(face.surfaceKey) === sample.surfaceRef : sample.nodeId !== undefined && face.nodes.some((node) => node.id === sample.nodeId)));
 
 // src/composition/tabletop/tools/roof/roof-tool.ts
-export const ROOF_OVERHANG = 0.2;
-export const ROOF_RECIPE_PROP = "roof";
-export function presetSlopes(contour: readonly Point[], waters: Params["waters"]): number[] {
-  const sides = contour.map((a, i) => {
-  const b = contour[(i + 1) % contour.length]!;
-  const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
-export function roofOver(blocks: readonly (readonly Point[])[], elevation: number, params: Params): RoofRequest {
-  return {
-  elevation, height: params.height,
-  blocks: blocks.map((contour) => ({ contour, slopes: presetSlopes(contour, params.waters), overhangs: contour.map(() => ROOF_OVERHANG) })),
-  };
 export function commitRoofRecipe(ctx: ToolContext, request: RoofRequest): void {
   try {
-  const roof = ctx.runtime.generateRoof(request);
+  const operationId = scopedToolId(ctx, "roof", ctx.nextSequence());
 export function commitRoof(ctx: ToolContext, capRequest: CapRequest): void {
   try {
   const cap = ctx.runtime.generateCap(capRequest);
-export const roofTool = withStructureEditing(rawRoofTool, { ownsType: (surfaceType) => surfaceType === roofStructureType.surfaceType });
+export const roofTool = withStructureEditing(rawRoofTool, { ownsType: (surfaceType) => surfaceType === roofStructureType.surfaceType, handlesOnly: true });
 
 // src/composition/tabletop/tools/shapes/geometry-2d.ts
 export interface PointXZ {
@@ -5371,7 +5366,7 @@ export type Reaction<Context> = (
 
 
 // src/features/edit-construction/global-handles/global-handle-ids.ts
-export type GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "radius" | "origin" | "destination" | "originHeight" | "destinationHeight" | "side" | "corner" | "foot" | "top" | "detach";
+export type GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "radius" | "origin" | "destination" | "originHeight" | "destinationHeight" | "side" | "corner" | "foot" | "top" | "detach" | "rise" | "slope" | "seam" | "insert";
 export const globalHandleId = (kind: GlobalHandleKind, anchorNodeId: string): string => `${PREFIX[kind]}${anchorNodeId}`;
 export function globalHandleOf(id: string): { readonly kind: GlobalHandleKind; readonly nodeId: string } | undefined {
   const kind = KINDS.find((candidate) => id.startsWith(PREFIX[candidate]));
@@ -5398,8 +5393,9 @@ export interface GlobalHandleProvider {
   /** Every handle of every kind this provider places, before any type's declaration filters them. */
   handles(scene: GlobalHandleScene): readonly GlobalHandle[];
   /** What `intent` on `handle` edits; `undefined` when it edits nothing. Throws to refuse. */
-  plan(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: Pick<BezierPort, "curveBatch">, operationId: string): GlobalHandleEdit | undefined;
+  plan(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: GlobalHandlePort, operationId: string): GlobalHandleEdit | undefined;
   }
+export type GlobalHandlePort = Pick<BezierPort, "curveBatch"> & Pick<RoofPort, "generateRoof">;
 
 // src/features/edit-construction/global-handles/handle-motion.ts
 export type HandleMotion =
@@ -5409,7 +5405,7 @@ export function carriesArrows(motion: HandleMotion): boolean {
 
 // src/features/edit-construction/global-handles/index.ts
 export type { GlobalHandleKind } from "./global-handle-ids.ts";
-export type { GlobalHandle, GlobalHandleEdit, GlobalHandleIntent, GlobalHandleProvider, GlobalHandleScene, HandlePart } from "./global-handle.ts";
+export type { GlobalHandle, GlobalHandleEdit, GlobalHandleIntent, GlobalHandlePort, GlobalHandleProvider, GlobalHandleScene, HandlePart } from "./global-handle.ts";
 export type { HandleMotion } from "./handle-motion.ts";
 
 // src/features/edit-construction/history/edit-history.ts
@@ -5675,7 +5671,7 @@ export function shownGlobalHandles(scene: GlobalHandleScene, owns?: (surfaceType
   return PROVIDERS.flatMap((provider) => provider.handles(scene)).filter((handle) => declared(handle) && (owns === undefined || owns(handle.owner)));
 export function shownGlobalHandleAt(scene: GlobalHandleScene, id: string): GlobalHandle | undefined {
   const named = globalHandleOf(id);
-export function planGlobalHandle(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: Pick<BezierPort, "curveBatch">, operationId: string): GlobalHandleEdit | undefined {
+export function planGlobalHandle(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: GlobalHandlePort, operationId: string): GlobalHandleEdit | undefined {
   return PROVIDERS.find((provider) => provider.name === handle.provider)?.plan(scene, handle, intent, port, operationId);
 export function handleMotionAt(scene: GlobalHandleScene, id: string): HandleMotion | undefined {
   if (globalHandleOf(id)) return shownGlobalHandleAt(scene, id)?.motion;
@@ -5693,6 +5689,17 @@ export const partHandleProvider: GlobalHandleProvider = {
   handles(scene) {
   const candidates = scene.topologies.filter((topology) => {
   const type = structureTypeFor(topology.surfaceType);
+
+// src/features/edit-construction/orchestration/global-handles/recipe-handle-provider.ts
+export interface RecipeGlobalHandle extends GlobalHandle {
+  readonly group: string;
+  readonly recipeHandle: RecipeHandle;
+  }
+export const recipeHandleProvider: GlobalHandleProvider = {
+  name: "recipe",
+  handles(scene) {
+  return [...structuresOf(scene)].flatMap(([group, structure]): RecipeGlobalHandle[] => {
+  const points = structure.members.flatMap((member) => member.nodes.map((node) => node.position));
 
 // src/features/edit-construction/orchestration/global-handles/spine-handle-provider.ts
 export const spineHandleProvider: GlobalHandleProvider = {
@@ -6705,6 +6712,36 @@ export function firstRefusal(resolved: readonly ResolvedCoverage[]): string | un
   if (entry.interaction.kind === "forbid") return entry.interaction.reason;
   }
 
+// src/features/edit-construction/structure-types/roof/roof-recipe.ts
+export const ROOF_RECIPE_PROP = "roof";
+export const ROOF_FACE_PROP = "roofFace";
+export const ROOF_OVERHANG = 0.2;
+export interface RoofRecipe extends RoofRequest {
+  readonly group: string;
+  }
+export interface RoofFaceRole {
+  readonly block: number;
+  readonly side: number;
+  readonly gable: boolean;
+  }
+export function presetSlopes(contour: readonly Point[], waters: 1 | 2 | 4): number[] {
+  const sides = contour.map((a, i) => {
+  const b = contour[(i + 1) % contour.length]!;
+  const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+export function roofOver(blocks: readonly (readonly Point[])[], elevation: number, height: number, waters: 1 | 2 | 4): RoofRequest {
+  return {
+  elevation, height,
+  blocks: blocks.map((contour) => ({ contour, slopes: presetSlopes(contour, waters), overhangs: contour.map(() => ROOF_OVERHANG) })),
+  };
+export function roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: RoofRequest, operationId: string): {
+  readonly patch: ConstructionPatch;
+  readonly faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>;
+  } {
+  const roof: RoofPatch = port.generateRoof(request);
+export const roofRecipeGeneration: RecipeGeneration = {
+  of: (topology) => {
+  const recipe = recipeOf(topology);
+
 // src/features/edit-construction/structure-types/roof/roof-structure.ts
 export const roofStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
   surfaceType: "roof", label: "Telhado", creation: "analytic sheets with one horizontal base and maximum height",
@@ -7704,6 +7741,11 @@ export interface RoofRequest {
   /** Rise of the roof's highest point above its eaves. */
   readonly height: number;
   readonly blocks: readonly RoofBlock[];
+  }
+export interface RoofPort {
+  generateRoof(request: RoofRequest): RoofPatch;
+  /** A footprint as the convex blocks a roof is raised over; throws for a concave plan without square corners. */
+  roofFootprintBlocks(contour: readonly (readonly [number, number])[]): readonly (readonly [number, number])[][];
   }
 export interface RoofPatch {
   readonly preview: readonly (readonly [number, number, number, number, number, number])[];

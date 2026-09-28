@@ -9,6 +9,7 @@ import type {
   ConstructionSurfaceKey,
 } from "@/ports";
 
+import type { RoofPort } from "../../../ports/cap-port.ts";
 import type { GlobalHandleKind } from "./global-handle-ids.ts";
 import type { HandleMotion } from "./handle-motion.ts";
 
@@ -106,7 +107,12 @@ export type GlobalHandleEdit =
       readonly moves: readonly { readonly nodeId: string; readonly position: ConstructionPosition }[];
       readonly retypes: readonly { readonly edgeId: string; readonly geometry: ConstructionEdgeGeometry }[];
     }
-  | { readonly kind: "replace"; readonly request: ApplyPatchReplacementRequest };
+  | {
+      readonly kind: "replace";
+      readonly request: ApplyPatchReplacementRequest;
+      /** Properties each new face keeps, by region id -- a structure regenerated from a recipe keeps it this way. */
+      readonly faceProps?: ReadonlyMap<string, Readonly<Record<string, unknown>>>;
+    };
 
 /**
  * One way structures are built -- from a spine, from a cloud of regions --
@@ -119,5 +125,8 @@ export interface GlobalHandleProvider {
   /** Every handle of every kind this provider places, before any type's declaration filters them. */
   handles(scene: GlobalHandleScene): readonly GlobalHandle[];
   /** What `intent` on `handle` edits; `undefined` when it edits nothing. Throws to refuse. */
-  plan(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: Pick<BezierPort, "curveBatch">, operationId: string): GlobalHandleEdit | undefined;
+  plan(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: GlobalHandlePort, operationId: string): GlobalHandleEdit | undefined;
 }
+
+/** What a provider may ask of the engine while planning: curves, and structures generated from a recipe. */
+export type GlobalHandlePort = Pick<BezierPort, "curveBatch"> & Pick<RoofPort, "generateRoof">;

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { commitRoof, roofTool } from "../src/composition/tabletop/tools/roof/roof-tool.ts";
-import { DEFAULT_TOOL_PARAMS, planEdit, resolveCloudTopology } from "../src/features/edit-construction/index.ts";
+import { DEFAULT_TOOL_PARAMS, planEdit, resolveCloudTopology, shownGlobalHandles } from "../src/features/edit-construction/index.ts";
 import { sessionFixture, addFace } from "./platform-session-fixture.mjs";
 import { surfaceRefFromNodeSet } from "../src/entities/map/index.ts";
 
@@ -128,5 +128,95 @@ test("a wall run that closes no room carries no roof", () => {
     roofTool.onClick(ctx, { point: { x: 1, y: 3, z: 0 }, surfaceRef: surfaceRefFromNodeSet(wall.surfaceKey) }, { ...DEFAULT_TOOL_PARAMS.roof, shape: "base" });
     assert.equal(operations(), 0);
     assert.equal(calls.feedback.at(-1).tone, "error");
+  } finally { session.free(); }
+});
+
+// ---- Handles: every edit regenerates the roof from its recipe ----
+
+const scene = (runtime) => ({ graph: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), cloudFor: runtime.cloudFor });
+const roofs = (runtime) => runtime.getAllRegionTopologies().filter((f) => f.surfaceType === "roof");
+const top = (runtime) => Math.max(...roofs(runtime).flatMap((f) => f.nodes.map((n) => n.position.y)));
+
+/** A roof dragged over 8 x 4 at elevation 3, rising 2. */
+function roofed(waters = 4) {
+  const value = fixture();
+  Object.assign(value.runtime, { showPreview() {}, clearPreview() {} });
+  const start = { point: { x: 0, y: 0, z: 0 } }, current = { point: { x: 8, y: 0, z: 4 } };
+  roofTool.onPointerUp(value.ctx, { start, current, samples: [start, current] }, { ...DEFAULT_TOOL_PARAMS.roof, waters, elevation: 3, height: 2 });
+  return value;
+}
+
+/** Drags `handle` to `point`; `screenY` below 300 is up, 40 px a metre. */
+function dragHandle({ ctx }, handle, point, screenY = 300) {
+  const params = { ...DEFAULT_TOOL_PARAMS.roof };
+  const start = { nodeId: handle.id, point: handle.position, screenX: 100, screenY: 300 };
+  const current = { point, screenX: 200, screenY };
+  roofTool.onPointerDown(ctx, start, params);
+  roofTool.onPointerMove(ctx, { start, current, samples: [start, current] }, params);
+  roofTool.onPointerUp(ctx, { start, current, samples: [start, current] }, params);
+}
+
+test("a recipe roof shows its rise, a slope per leaf, its seams and a side, corner and insert per eave", () => {
+  const { runtime, session } = roofed();
+  try {
+    const kinds = shownGlobalHandles(scene(runtime)).filter((h) => h.owner === "roof").map((h) => h.kind);
+    const count = (kind) => kinds.filter((k) => k === kind).length;
+    assert.deepEqual([count("pivot"), count("rotate"), count("rise")], [1, 1, 1]);
+    assert.equal(count("slope"), 4);
+    assert.equal(count("seam"), 5, "four hips and the ridge");
+    assert.deepEqual([count("side"), count("corner"), count("insert")], [4, 4, 4]);
+  } finally { session.free(); }
+});
+
+test("the rise handle raises the whole roof, keeps its recipe, and undoes", () => {
+  const value = roofed();
+  const { runtime, session, ctx } = value;
+  try {
+    const rise = shownGlobalHandles(scene(runtime)).find((h) => h.kind === "rise");
+    dragHandle(value, rise, rise.position, 220);
+    assert.ok(Math.abs(top(runtime) - 7) < 1e-6, `${top(runtime)}`);
+    assert.equal(roofs(runtime)[0].props.roof.height, 4);
+    assert.ok(roofs(runtime).every((f) => f.props.roofFace !== undefined));
+    session.undo_region_overlay(ctx.history.undo().transactionId);
+    assert.ok(Math.abs(top(runtime) - 5) < 1e-6);
+  } finally { session.free(); }
+});
+
+test("bringing the rise down to nothing removes the roof", () => {
+  const value = roofed();
+  const { runtime, session } = value;
+  try {
+    const rise = shownGlobalHandles(scene(runtime)).find((h) => h.kind === "rise");
+    dragHandle(value, rise, rise.position, 400);
+    assert.equal(roofs(runtime).length, 0);
+  } finally { session.free(); }
+});
+
+test("raising a gable's slope turns two waters into a hip end, and an eave pushed out overhangs further", () => {
+  const value = roofed(2);
+  const { runtime, session } = value;
+  try {
+    assert.equal(roofs(runtime)[0].props.roof.blocks[0].slopes.filter((s) => s === 0).length, 2);
+    const gable = shownGlobalHandles(scene(runtime)).find((h) => h.kind === "slope" && roofs(runtime).some((f) => f.props.roofFace.gable
+      && f.props.roofFace.side === h.recipeHandle.part.side));
+    dragHandle(value, gable, gable.position, 260);
+    assert.equal(roofs(runtime)[0].props.roof.blocks[0].slopes.filter((s) => s === 0).length, 1);
+    const side = shownGlobalHandles(scene(runtime)).find((h) => h.kind === "side" && h.recipeHandle.part.side === 0);
+    const out = side.recipeHandle.part.outward;
+    dragHandle(value, side, { x: side.position.x + out[0], y: side.position.y, z: side.position.z + out[1] });
+    assert.ok(Math.abs(roofs(runtime)[0].props.roof.blocks[0].overhangs[0] - 1.2) < 1e-6);
+  } finally { session.free(); }
+});
+
+test("pulling a corner out of a side adds a leaf", () => {
+  const value = roofed();
+  const { runtime, session } = value;
+  try {
+    const insert = shownGlobalHandles(scene(runtime)).find((h) => h.kind === "insert" && h.recipeHandle.part.side === 0);
+    const out = insert.recipeHandle.part.outward;
+    dragHandle(value, insert, { x: insert.position.x + out[0], y: insert.position.y, z: insert.position.z + out[1] });
+    const recipe = roofs(runtime)[0].props.roof;
+    assert.equal(recipe.blocks[0].contour.length, 5);
+    assert.equal(new Set(roofs(runtime).map((f) => `${f.props.roofFace.block}:${f.props.roofFace.side}`)).size, 5);
   } finally { session.free(); }
 });

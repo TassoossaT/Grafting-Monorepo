@@ -34,6 +34,13 @@ export interface RoofRequest {
   readonly blocks: readonly RoofBlock[];
 }
 
+/** The engine's roof generator. */
+export interface RoofPort {
+  generateRoof(request: RoofRequest): RoofPatch;
+  /** A footprint as the convex blocks a roof is raised over; throws for a concave plan without square corners. */
+  roofFootprintBlocks(contour: readonly (readonly [number, number])[]): readonly (readonly [number, number])[][];
+}
+
 export interface RoofPatch {
   readonly preview: readonly (readonly [number, number, number, number, number, number])[];
   readonly nodes: readonly (readonly [number, number, number])[];

@@ -33,6 +33,7 @@ import { commitPatchReplacement, commitRegionEdit, commitStagedRegionEdit } from
 import type { PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
 import { HANDLE_DONE } from "../../handle-glyphs.ts";
 import { surfaceKeyText } from "../../../../features/edit-construction/index.ts";
+import { keepFaceProps } from "./face-props.ts";
 
 const CHANNEL = "global-handle";
 const PREVIEW_COLOR = 0xffbc55;
@@ -305,7 +306,11 @@ function commitEdit(ctx: ToolContext, handle: GlobalHandle, edit: GlobalHandleEd
     return;
   }
   if (edit.kind === "replace") {
-    const { recorded } = commitPatchReplacement(ctx.runtime, edit.request, { transactionId: operationId });
+    const faceProps = edit.faceProps;
+    const { recorded } = commitPatchReplacement(ctx.runtime, edit.request, {
+      transactionId: operationId,
+      ...(faceProps ? { afterward: (outcome) => keepFaceProps(ctx.runtime, outcome.createdSurfaceKeys, faceProps) } : {}),
+    });
     if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
     return;
   }
@@ -381,6 +386,11 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
       case "foot": return { intent: { kind: "move", delta }, at };
       case "top": return { intent: { kind: "move", delta }, at, readout: `altura ${delta.y >= 0 ? "+" : ""}${delta.y.toFixed(2)} m` };
       case "detach": return { intent: { kind: "detach" }, at };
+      case "rise": return { intent: { kind: "height", dy: delta.y }, at, readout: `altura ${delta.y >= 0 ? "+" : ""}${delta.y.toFixed(2)} m` };
+      case "slope":
+      case "seam":
+        return { intent: { kind: "height", dy: delta.y }, at, readout: `inclinação ${delta.y >= 0 ? "+" : ""}${delta.y.toFixed(2)} m` };
+      case "insert": return { intent: { kind: "move", delta }, at };
       case "height": return { intent: { kind: "height", dy: delta.y }, at, readout: `altura ${delta.y >= 0 ? "+" : ""}${delta.y.toFixed(2)} m` };
       case "rotate": return { intent: { kind: "rotate", angle }, at, readout: `rotação ${((angle * 180) / Math.PI).toFixed(0)}°` };
       case "turns": return { intent: { kind: "wind", angle }, at, readout: `voltas ${angle >= 0 ? "+" : ""}${(angle / (2 * Math.PI)).toFixed(2)}` };

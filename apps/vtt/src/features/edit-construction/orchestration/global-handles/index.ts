@@ -1,6 +1,4 @@
-import type { BezierPort } from "@/ports";
-
-import type { GlobalHandle, GlobalHandleEdit, GlobalHandleIntent, GlobalHandleProvider, GlobalHandleScene, HandleMotion } from "../../global-handles/index.ts";
+import type { GlobalHandle, GlobalHandleEdit, GlobalHandleIntent, GlobalHandlePort, GlobalHandleProvider, GlobalHandleScene, HandleMotion } from "../../global-handles/index.ts";
 import { isSpineControlNodeId, spineOwnerAt } from "../../spine/index.ts";
 import { globalHandleOf } from "../../global-handles/index.ts";
 import { structureTypeFor } from "../../structure-types/index.ts";
@@ -10,13 +8,14 @@ import { partHandleProvider } from "./part-handle-provider.ts";
 import { uprightHandleProvider } from "./upright-handle-provider.ts";
 import { detachHandleProvider } from "./detach-handle-provider.ts";
 import { spineHandleProvider } from "./spine-handle-provider.ts";
+import { recipeHandleProvider } from "./recipe-handle-provider.ts";
 
 /**
  * Every way structures are built has one provider of whole-structure
  * handles; this is the only place that lists them. What shows the handles,
  * and the gesture that drags them, only ever talk to this module.
  */
-const PROVIDERS: readonly GlobalHandleProvider[] = [spineHandleProvider, cloudHandleProvider, endHandleProvider, partHandleProvider, uprightHandleProvider, detachHandleProvider];
+const PROVIDERS: readonly GlobalHandleProvider[] = [spineHandleProvider, cloudHandleProvider, endHandleProvider, partHandleProvider, uprightHandleProvider, detachHandleProvider, recipeHandleProvider];
 
 /** Whether `handle`'s type declares its kind. */
 function declared(handle: GlobalHandle): boolean {
@@ -40,7 +39,7 @@ export function shownGlobalHandleAt(scene: GlobalHandleScene, id: string): Globa
 }
 
 /** What `intent` on `handle` edits, from the provider that placed it. */
-export function planGlobalHandle(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: Pick<BezierPort, "curveBatch">, operationId: string): GlobalHandleEdit | undefined {
+export function planGlobalHandle(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: GlobalHandlePort, operationId: string): GlobalHandleEdit | undefined {
   return PROVIDERS.find((provider) => provider.name === handle.provider)?.plan(scene, handle, intent, port, operationId);
 }
 

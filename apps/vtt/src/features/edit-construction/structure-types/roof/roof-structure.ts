@@ -1,8 +1,14 @@
 import { ALL_AXES } from "../../orchestration/atomic-edit.ts";
 import { IGNORE } from "../creation-interaction.ts";
 import { allowed, denied, type StructureTypeDefinition } from "../structure-type.ts";
+import { roofRecipeGeneration } from "./roof-recipe.ts";
 
-/** Roof profiles move as a connected cloud; this delivery adds no shape handles. */
+/**
+ * A roof is regenerated whole from the recipe its faces keep: every handle
+ * -- its rise, a leaf's slope, a seam, an eave, a footprint corner -- edits
+ * the recipe (`roof-recipe.ts`). A curved cone keeps no recipe and moves as
+ * a connected cloud.
+ */
 export const roofStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
   surfaceType: "roof", label: "Telhado", creation: "analytic sheets with one horizontal base and maximum height",
   traits: Object.freeze([]),
@@ -11,6 +17,8 @@ export const roofStructureType: StructureTypeDefinition = Object.freeze<Structur
     ? { ...allowed(role, ALL_AXES, "cloud"), transport: true }
     : denied(role, "Mova o telhado pela face."),
   interactionOver: () => IGNORE,
+  recipe: roofRecipeGeneration,
+  globalHandles: Object.freeze(["pivot", "rotate", "rise", "slope", "seam", "side", "corner", "insert"] as const),
   motionInfluences: (topology) => {
     const anchor = topology.nodes[0];
     return anchor ? topology.nodes.slice(1).flatMap((node) => [

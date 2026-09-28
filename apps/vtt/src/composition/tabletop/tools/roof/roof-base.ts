@@ -1,6 +1,5 @@
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
-import { hasTrait } from "../../../../features/edit-construction/index.ts";
-import { uprightPosts } from "../../../../features/edit-construction/orchestration/global-handles/upright-handle-provider.ts";
+import { hasTrait, uprightPosts } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionPosition, ConstructionRegionTopology } from "@/ports";
 import type { PointerSample } from "../core/tool-context.ts";
 

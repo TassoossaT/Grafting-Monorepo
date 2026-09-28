@@ -13,6 +13,8 @@ import type { CloudTopology } from "../topology/construction-cloud.ts";
 import type { CreationInteraction } from "./creation-interaction.ts";
 import type { EffectKind, ReactionId } from "../effects/effect.ts";
 import type { GlobalHandleKind } from "../global-handles/global-handle-ids.ts";
+import type { GlobalHandleIntent, GlobalHandlePort } from "../global-handles/global-handle.ts";
+import type { HandleMotion } from "../global-handles/handle-motion.ts";
 import type { PlanarArea } from "../topology/planar-area.ts";
 import type { EndJoint, FloorLanding, WeldRung } from "../topology/floor-weld.ts";
 import type { FieldPort } from "./path/contour/curve-projection.ts";
@@ -403,6 +405,38 @@ export interface MotionContext {
  * where its behaviour comes from. This is why a tower needs no editing code
  * of its own.
  */
+/**
+ * A structure regenerated whole from a recipe its faces keep, rather than
+ * edited node by node: every handle changes the recipe, and the structure is
+ * made again from it (`orchestration/global-handles/recipe-handle-provider.ts`).
+ * The recipe itself is the type's own business; nothing outside it reads one.
+ */
+export interface RecipeGeneration {
+  /** The recipe `topology` keeps, and the group of faces sharing it. */
+  readonly of: (topology: ConstructionRegionTopology) => { readonly group: string; readonly recipe: unknown } | undefined;
+  /** The handles of one structure: `members` are every face sharing `recipe`. */
+  readonly handles: (members: readonly ConstructionRegionTopology[], recipe: unknown) => readonly RecipeHandle[];
+  /** The recipe `intent` on `handle` leaves -- `null` when it leaves nothing, `undefined` when it changes nothing. Throws to refuse. */
+  readonly edit: (recipe: unknown, handle: RecipeHandle, intent: GlobalHandleIntent) => unknown;
+  /** The structure `recipe` makes, named under `operationId`, with what each face keeps, by region id. */
+  readonly generate: (port: GlobalHandlePort, recipe: unknown, operationId: string) => {
+    readonly patch: ConstructionPatch;
+    readonly faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>;
+  };
+}
+
+/** One handle of a recipe structure, as its type places it. */
+export interface RecipeHandle {
+  readonly kind: GlobalHandleKind;
+  /** Names the handle within its structure. */
+  readonly anchor: string;
+  readonly position: ConstructionPosition;
+  readonly motion: HandleMotion;
+  readonly facing?: { readonly x: number; readonly z: number };
+  /** What part of the recipe it stands for -- the type's own reading. */
+  readonly part?: unknown;
+}
+
 export interface StructureTypeDefinition {
   /** The `surfaceType` the engine reports for regions of this kind. */
   readonly surfaceType: string;
@@ -439,6 +473,8 @@ export interface StructureTypeDefinition {
   readonly settle?: (topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>, placed: ReadonlySet<string>) => ReadonlyMap<string, ConstructionPosition>;
   /** Present when this type is generated along a spine. */
   readonly spine?: SpineGeneration;
+  /** Present when this type is regenerated whole from a recipe its faces keep -- see {@link RecipeGeneration}. */
+  readonly recipe?: RecipeGeneration;
   /**
    * The whole-structure handles this type shows (`global-handles/`): a pivot
    * that moves it, a rotate handle that turns it, a height handle, a turns
