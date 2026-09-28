@@ -28,5 +28,5 @@ export { arcsFollowing } from "./arc-follow.ts";
 export { areasOverlap, faceArea, faceOutlines, faceOverlapsOutline, faceTouchesOutline, outlineOf, outlinesOverlap, type PlanArea } from "./plan-overlap.ts";
 export { alongEdge, floorLandingNear, floorsWeldedBy, floorsWithout, LANDING_REACH, landingSeat, projectOnto, reweldFloors, rungFits } from "./floor-weld.ts";
 export type { EndJoint, FloorEdge, FloorLanding, PlanDirection, Rewelding, WeldChanges, WeldRung } from "./floor-weld.ts";
-export { GROUND_CONTACT_CELL, GROUND_CONTACT_CLEARANCE, groundContactOf, groundHeightsOf, groundSurfaceOf, surfaceHeightOf, touchesGround, type ContactCell, type GroundContact, type GroundHeightAt } from "./ground-contact.ts";
-export { faceKey, faceRings, insideFace, insideRing, nearestOnSegment, planeOf, ringCrossesItself, segmentGap, segmentsCross, surfaceKeyText, twiceSignedArea, twiceSignedAreaXZ } from "./plan-geometry.ts";
+export { GROUND_CONTACT_CELL, GROUND_CONTACT_CLEARANCE, GROUND_SIDE_REST_ROOM, GROUND_THROUGH_TOLERANCE, groundContactOf, groundHeightsOf, groundSurfaceOf, surfaceHeightOf, touchesGround, type ContactCell, type GroundContact, type GroundHeightAt } from "./ground-contact.ts";
+export { faceKey, faceRings, insideFace, insideRing, insideRingXZ, nearestOnSegment, planeOf, ringCrossesItself, segmentGap, segmentsCross, surfaceKeyText, twiceSignedArea, twiceSignedAreaXZ } from "./plan-geometry.ts";

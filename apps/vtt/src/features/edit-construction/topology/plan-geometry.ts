@@ -23,6 +23,16 @@ export function insideRing(ring: readonly PlanPoint[], p: PlanPoint): boolean {
   return inside;
 }
 
+/** The same, for a ring given as `[x, z]` pairs. */
+export function insideRingXZ(ring: readonly (readonly [number, number])[], p: PlanPoint): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [ax, az] = ring[i]!, [bx, bz] = ring[j]!;
+    if ((az > p.z) !== (bz > p.z) && p.x < ((bx - ax) * (p.z - az)) / (bz - az) + ax) inside = !inside;
+  }
+  return inside;
+}
+
 /** Where on the segment `a`-`b` the point `p` is nearest, in plan: how far along it (`t`, 0 to 1), the point, and how far off. */
 export function nearestOnSegment(p: PlanPoint, a: PlanPoint, b: PlanPoint): { readonly t: number; readonly x: number; readonly z: number; readonly distance: number } {
   const dx = b.x - a.x, dz = b.z - a.z, lengthSq = dx * dx + dz * dz;
