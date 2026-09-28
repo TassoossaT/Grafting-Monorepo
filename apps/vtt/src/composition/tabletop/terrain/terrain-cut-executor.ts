@@ -17,6 +17,7 @@ import {
   distanceAndElevationOnPath,
   hasTrait,
   insideRingXZ,
+  groundSurfaceOf,
 } from "../../../features/edit-construction/index.ts";
 
 import {
@@ -516,6 +517,13 @@ export function executeTerrainCut(
   const wideReach = Math.max(effectiveFaceSide * 3, radius);
   const localKept = heightFieldOf(standingNodes, localReach);
   const wideKept = heightFieldOf(standingNodes, wideReach);
+  // Over a face of the ground, the height that face is drawn at -- never a
+  // blend of nodes metres away, which on coarse ground over a hill sinks the
+  // new ground below the old, and its seam with a structure through its side.
+  // A face an edit dragged out of shape is no drawing of the ground at all.
+  const staleShapes = new Set((request.staleRegions ?? []).map((key) => key.join(" ")));
+  const structureNodes = new Set(terrainStanding.flatMap((topology) => topology.nodes).filter((node) => structures.holds(node.id)).map((node) => node.id));
+  const drawnGround = groundSurfaceOf(terrainStanding.filter((topology) => !staleShapes.has(topology.surfaceKey.join(" "))), structureNodes);
 
   const strokePath = request.area.path;
   const centerOrPath = strokePath && strokePath.length > 0 ? strokePath : center;
@@ -523,7 +531,7 @@ export function executeTerrainCut(
   const sampleBase = (point: { readonly x: number; readonly z: number }): number => {
     const meeting = structures.heightAt(point);
     if (meeting !== undefined) return meeting;
-    let base = localKept.at(point);
+    let base = drawnGround(point) ?? localKept.at(point);
     if (base === undefined) {
       base = wideKept.at(point);
     }

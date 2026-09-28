@@ -226,7 +226,7 @@ export function meetStructures(
       }
       // On the line the cut ends at under a face: on the face's underside.
       if (undersides.length === 0 || !cutLine.some(([a, b]) => nearestOnSegment(point, a, b).distance < ON)) return undefined;
-      const under = undersides.find(({ ring }) => insideRing(ring, point));
+      const under = undersides.find(({ ring }) => insideRing(ring, point) || ring.some((a, index) => nearestOnSegment(point, a, ring[(index + 1) % ring.length]!).distance < ON));
       return under?.surfaceAt(point);
     },
   };
