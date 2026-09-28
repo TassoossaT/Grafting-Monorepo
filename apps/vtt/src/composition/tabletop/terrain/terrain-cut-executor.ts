@@ -19,6 +19,7 @@ import {
   GROUND_CONTACT_CELL,
   GROUND_CONTACT_CLEARANCE,
   groundContactOf,
+  groundSurfaceOf,
   hasTrait,
   resolveCreationInteraction,
   structureTypeFor,
@@ -170,9 +171,11 @@ function loopToPolygon(
 }
 
 /**
- * A sealed structure's outline as constraint rings the ground meets without
- * sharing it: no edge to split, and a corner carries its node only where
- * another structure holds that node too -- a ramp's end welded into a floor.
+ * A structure's outline as constraint rings where a corner carries its node
+ * only when `shared` names it. Sealed, the ground meets it without sharing it
+ * -- no edge to split, and a node only where another structure holds it too,
+ * a ramp's end welded into a floor. Otherwise (`withEdges`) its sides stay
+ * edges the ground may split, and `shared` is the nodes resting on the ground.
  */
 function sealedConstraints(
   rings: readonly (readonly ConstructionRegionEdge[])[],
@@ -181,6 +184,7 @@ function sealedConstraints(
   shared: ReadonlySet<ConstructionNodeId>,
   /** Sources numbered just before, from `startingIndex` on: a node already among them keeps its number. */
   before: readonly ConstructionNodeId[] = [],
+  withEdges = false,
 ): ConstraintTable {
   const sources: ConstructionNodeId[] = [];
   const index = new Map<ConstructionNodeId, number>(before.map((id, i) => [id, startingIndex + i]));
@@ -202,9 +206,40 @@ function sealedConstraints(
       }
       points.push(source === undefined ? { x: position.x, z: position.z } : { x: position.x, z: position.z, source });
     }
-    if (points.length === ring.length && points.length >= 3) built.push({ points, edges: ring.map(() => undefined) });
+    if (points.length === ring.length && points.length >= 3) built.push({ points, edges: withEdges ? ring : ring.map(() => undefined) });
   }
   return { rings: built, sources };
+}
+
+/** How far past the resting line a corner on a structure's side may stand and still meet the side. */
+const SIDE_REST_ROOM = 0.25;
+
+/** Twice the signed area of a ring, closed or not. */
+function signedRingArea(ring: readonly (readonly [number, number])[]): number {
+  let twice = 0;
+  for (let index = 0; index < ring.length; index += 1) {
+    const [ax, az] = ring[index]!;
+    const [bx, bz] = ring[(index + 1) % ring.length]!;
+    twice += ax * bz - bx * az;
+  }
+  return twice;
+}
+
+/** Whether two sides of a ring that do not meet at a corner cross each other. */
+function ringCrossesItself(ring: readonly (readonly [number, number])[]): boolean {
+  const points = ring.length > 1 && ring[0]![0] === ring[ring.length - 1]![0] && ring[0]![1] === ring[ring.length - 1]![1] ? ring.slice(0, -1) : ring;
+  const count = points.length;
+  const cross = (o: readonly [number, number], a: readonly [number, number], b: readonly [number, number]) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  for (let i = 0; i < count; i += 1) {
+    const a = points[i]!, b = points[(i + 1) % count]!;
+    for (let j = i + 2; j < count; j += 1) {
+      if (i === 0 && j === count - 1) continue;
+      const c = points[j]!, d = points[(j + 1) % count]!;
+      const d1 = cross(c, d, a), d2 = cross(c, d, b), d3 = cross(a, b, c), d4 = cross(a, b, d);
+      if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) return true;
+    }
+  }
+  return false;
 }
 
 function topologyToPolygonWithHoles(
@@ -506,6 +541,13 @@ export function buildConstraintRings(
   targetPolygon: PlanarArea,
   faceSize: number,
   perimeters: ConstraintTable,
+  /**
+   * Whether a corner lies on a structure's side -- where the ground meets it,
+   * a place a cut gave way partway along it. Such a corner is exactly where
+   * the ground must meet that side, so it takes a node only standing right
+   * there, never one snapped to from beside it.
+   */
+  pinned: (point: { readonly x: number; readonly z: number }) => boolean = () => false,
 ): readonly (ConstraintRing & { readonly isHole: boolean })[] {
   const snapDist = Math.max(0.25, faceSize * 0.18);
 
@@ -554,11 +596,17 @@ export function buildConstraintRings(
       const from = fromPoint.source;
       const to = toPoint.source;
       const edge = ring.edges[index];
-      if (from === undefined || to === undefined || edge === undefined) continue;
-      const key = pairKey(from, to);
-      if (!edgeBetween.has(key)) edgeBetween.set(key, edge);
+      // A side with only one end the ground may take -- a structure's side
+      // running from where it rests out to where it stands clear -- is still
+      // a side a corner partway along it can split.
+      if (edge === undefined || (from === undefined && to === undefined)) continue;
+      if (from !== undefined && to !== undefined) {
+        const key = pairKey(from, to);
+        if (!edgeBetween.has(key)) edgeBetween.set(key, edge);
+      }
       const span = { edge, from: fromPoint, to: toPoint };
       for (const node of [from, to]) {
+        if (node === undefined) continue;
         const held = spansAtNode.get(node);
         if (held === undefined) spansAtNode.set(node, [span]);
         else held.push(span);
@@ -593,6 +641,7 @@ export function buildConstraintRings(
     const points = raw[ring]!.points;
     for (let point = 0; point < points.length; point += 1) {
       const [x, z] = points[point]!;
+      const reach = pinned({ x, z }) ? 1e-3 : snapDist;
       const column = Math.floor(x / cell);
       const row = Math.floor(z / cell);
       for (let dx = -1; dx <= 1; dx += 1) {
@@ -600,7 +649,7 @@ export function buildConstraintRings(
           for (const source of buckets.get(`${column + dx}:${row + dz}`) ?? []) {
             const at = candidateAt.get(source)!;
             const distance = Math.hypot(x - at.x, z - at.z);
-            if (distance < snapDist) proposals.push({ ring, point, source, distance });
+            if (distance < reach) proposals.push({ ring, point, source, distance });
           }
         }
       }
@@ -904,11 +953,17 @@ export function executeTerrainCut(
   /** The ground's height without the structures standing in it, when there are any. */
   let groundOnly: ReturnType<typeof heightFieldOf> | undefined;
   /**
-   * A structure whose outline is sealed shares nothing with the ground laid
-   * round it but the nodes it holds with another structure -- so reshaping
-   * it, welding it or rebuilding it never breaks the ground's loops. The
-   * ground meets it all the same: its corners along the structure's sides
-   * take the side's height there.
+   * The sides of every structure cutting the ground here: a corner of the
+   * ground's ring on one is exactly where the ground meets that side, and is
+   * never snapped away from it.
+   */
+  const structureSides: { readonly a: ConstructionPosition; readonly b: ConstructionPosition }[] = [];
+  /**
+   * The sides of the sealed ones. The ground shares no node with them, so a
+   * corner of its own on one takes the side's height there; on any other
+   * structure's side the corner splits the side and becomes its node, and one
+   * that cannot stays at the ground's own height rather than stand in the
+   * air once the structure moves on.
    */
   const sealedSides: { readonly a: ConstructionPosition; readonly b: ConstructionPosition }[] = [];
   /** Rings of the structures whose outlines the ground shares, matched back to their real nodes and edges. */
@@ -917,6 +972,13 @@ export function executeTerrainCut(
   let sealedLoops: readonly (readonly ConstructionRegionEdge[])[] = [];
   /** A sealed structure's nodes another structure holds too -- a ramp's end welded into a floor: the ground may still meet those. */
   let sealedButShared: ReadonlySet<ConstructionNodeId> = new Set();
+  /**
+   * The structures' nodes the ground may take as its own corners: those
+   * resting on it. A node standing clear of the ground -- a floor's corner
+   * moved out over a valley -- is no corner of the ground's, however near it
+   * is in plan.
+   */
+  let restingNodes: ReadonlySet<ConstructionNodeId> | undefined;
   const connectPositions = new Map<ConstructionNodeId, { x: number; z: number }>();
   let connectSeeds: { readonly seed: readonly string[]; readonly surfaceType: string }[] = [];
   if (request.profile.kind === "regenerate" && request.profile.connectTo) {
@@ -996,7 +1058,8 @@ export function executeTerrainCut(
     // says which part of each face runs into it; the ground passes under the
     // rest, however it was joined before.
     const painted = new Set(connectPositions.keys());
-    groundOnly = heightFieldOf(terrainStanding.flatMap((topology) => topology.nodes).filter((node) => !painted.has(node.id)).map((node) => node.position), effectiveFaceSide * 4);
+    const surface = groundSurfaceOf(terrainStanding, painted);
+    groundOnly = { at: (point) => surface(point) };
     const facePolygons = connectTopologies.flatMap((topology): (PlanarPolygon | PlanarArea)[] => {
       const polygon = topologyToPolygonWithHoles(topology, connectPositions);
       if (polygon.length === 0) return [];
@@ -1032,18 +1095,32 @@ export function executeTerrainCut(
     const sealedHeld = new Set<ConstructionNodeId>();
     for (const [surfaceType, faces] of byType) {
       const { paintedLoops } = timePhase("perímetro das estruturas", () => paintedFalloutOf(faces));
+      const isSealed = structureTypeFor(surfaceType)?.sealedOutline === true;
+      for (const topology of faces) {
+        const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
+        for (const use of [...topology.outerLoops, ...topology.holes].flat()) {
+          const side = { a: at.get(use.startNodeId)!, b: at.get(use.endNodeId)! };
+          structureSides.push(side);
+          if (isSealed) sealedSides.push(side);
+        }
+      }
       if (structureTypeFor(surfaceType)?.sealedOutline !== true) {
         shared.push(...paintedLoops);
         continue;
       }
       sealed.push(...paintedLoops);
       for (const id of heldFor(surfaceType)) if (faces.some((face) => face.nodes.some((node) => node.id === id))) sealedHeld.add(id);
-      for (const topology of faces) {
-        const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
-        for (const use of [...topology.outerLoops, ...topology.holes].flat()) sealedSides.push({ a: at.get(use.startNodeId)!, b: at.get(use.endNodeId)! });
-      }
     }
     connectLoops = shared;
+    const resting = new Set<ConstructionNodeId>();
+    for (const topology of connectTopologies) {
+      for (const node of topology.nodes) {
+        const ground = groundOnly.at(node.position);
+        if (ground !== undefined && node.position.y <= ground + GROUND_CONTACT_CLEARANCE + SIDE_REST_ROOM) resting.add(node.id);
+      }
+    }
+    for (const topology of connectTopologies) for (const id of heldFor(topology.surfaceType)) if (topology.nodes.some((node) => node.id === id)) resting.add(id);
+    restingNodes = resting;
     sealedLoops = sealed;
     sealedButShared = sealedHeld;
     connectSeeds = connectTopologies.map((topology) => ({
@@ -1054,7 +1131,14 @@ export function executeTerrainCut(
 
   /** The affected faces as one polygon, with `connectArea` taken out of it. */
   const groundFor = (faces: readonly ConstructionRegionTopology[]): PlanarArea => {
-    const polygons = faces.map(topologyToPolygon).filter((p) => p.length > 0);
+    // A face an edit dragged out of shape -- its rim node carried past its
+    // other corners -- crosses itself or winds backwards, and in a union it
+    // takes away the very ground it lies over. The ground it covered comes in
+    // as vacated instead; what it has become is no area at all.
+    const shaped = faces.map(topologyToPolygon).filter((p) => p.length > 0);
+    const winding = (polygon: PlanarPolygon) => Math.sign(signedRingArea(polygon[0]!));
+    const usual = Math.sign(shaped.reduce((sum, polygon) => sum + winding(polygon), 0)) || 1;
+    const polygons = shaped.filter((polygon) => winding(polygon) === usual && !ringCrossesItself(polygon[0]!));
     const allPolygons =
       request.vacatedArea && request.vacatedArea.length > 0
         ? [...polygons, ...request.vacatedArea]
@@ -1133,7 +1217,9 @@ export function executeTerrainCut(
   // One numbering across the retained rim and the connected structure, because
   // the generator answers with one `source` index per corner.
   const retainedPerimeters = timePhase(`perímetro do terreno retido (${retained.length} faces)`, () => perimeterConstraints(retained, 0));
-  const sharedTable = constraintsFromRings(connectLoops, (nodeId) => connectPositions.get(nodeId), retainedPerimeters.sources.length);
+  const sharedTable = restingNodes === undefined
+    ? constraintsFromRings(connectLoops, (nodeId) => connectPositions.get(nodeId), retainedPerimeters.sources.length)
+    : sealedConstraints(connectLoops, connectPositions, retainedPerimeters.sources.length, restingNodes, [], true);
   const sealedTable = sealedConstraints(sealedLoops, connectPositions, retainedPerimeters.sources.length, sealedButShared, sharedTable.sources);
   const connectTable: ConstraintTable = { rings: [...sharedTable.rings, ...sealedTable.rings], sources: [...sharedTable.sources, ...sealedTable.sources] };
   const perimeters: ConstraintTable = {
@@ -1142,7 +1228,13 @@ export function executeTerrainCut(
   };
   const extraHoleRings: ConstraintRing[] = [];
 
-  const targetRings = timePhase("anéis de restrição", () => buildConstraintRings(targetPolygon, effectiveFaceSide, perimeters));
+  const onSide = (point: { readonly x: number; readonly z: number }) => structureSides.some(({ a, b }) => {
+    const dx = b.x - a.x, dz = b.z - a.z, lengthSq = dx * dx + dz * dz;
+    if (lengthSq < 1e-12) return false;
+    const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.z - a.z) * dz) / lengthSq));
+    return Math.hypot(point.x - (a.x + dx * t), point.z - (a.z + dz * t)) < 1e-3;
+  });
+  const targetRings = timePhase("anéis de restrição", () => buildConstraintRings(targetPolygon, effectiveFaceSide, perimeters, onSide));
   const boundaryRings = targetRings.filter((r) => !r.isHole && r.points.length >= 3);
   const holeRings = [...targetRings.filter((r) => r.isHole && r.points.length >= 3), ...extraHoleRings];
 
@@ -1161,12 +1253,12 @@ export function executeTerrainCut(
   const extentRadius = Math.max((coveredExtent.maxX - coveredExtent.minX) / 2, (coveredExtent.maxZ - coveredExtent.minZ) / 2, effectiveFaceSide);
   const radius = request.area.radius ?? extentRadius;
 
-  // A structure's node standing clear of the ground -- a floor lifted off it -- is no height the ground should take.
-  const standingNodes = terrainStanding.flatMap((topology) => topology.nodes.map((node) => node.position)).filter((position) => {
-    if (!groundOnly || !connectPositions.size) return true;
-    const ground = groundOnly.at(position);
-    return ground === undefined || position.y <= ground + GROUND_CONTACT_CLEARANCE;
-  });
+  // **The ground's own heights, never a structure's.** New ground lies where
+  // the ground lay; it meets a structure only at the nodes it shares with it
+  // -- its corners on the structure's sides -- instead of being drawn up
+  // toward it all round, into a bank that is left standing in the air when
+  // the structure moves on.
+  const standingNodes = terrainStanding.flatMap((topology) => topology.nodes).filter((node) => !connectPositions.has(node.id)).map((node) => node.position);
   const localReach = effectiveFaceSide * 2.0;
   const wideReach = Math.max(effectiveFaceSide * 3, radius);
   const localKept = heightFieldOf(standingNodes, localReach);
@@ -1175,18 +1267,23 @@ export function executeTerrainCut(
   const strokePath = request.area.path;
   const centerOrPath = strokePath && strokePath.length > 0 ? strokePath : center;
 
-  /** The height of a sealed structure's side a point lies on, if it lies on one. */
-  const onSealedSide = (point: { readonly x: number; readonly z: number }): number | undefined => {
+  /** The height of the side of a sealed structure resting on the ground a point lies on, if it lies on one. */
+  const onStructureSide = (point: { readonly x: number; readonly z: number }): number | undefined => {
     for (const { a, b } of sealedSides) {
       const dx = b.x - a.x, dz = b.z - a.z, lengthSq = dx * dx + dz * dz;
       if (lengthSq < 1e-12) continue;
       const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.z - a.z) * dz) / lengthSq));
-      if (Math.hypot(point.x - (a.x + dx * t), point.z - (a.z + dz * t)) < 1e-3) return a.y + (b.y - a.y) * t;
+      if (Math.hypot(point.x - (a.x + dx * t), point.z - (a.z + dz * t)) >= 1e-3) continue;
+      const y = a.y + (b.y - a.y) * t;
+      // Over the ground, clear of it: the ground there passes under, at its own height. The
+      // point where resting gives way is on the line itself, so it is given a little room.
+      const ground = groundOnly?.at(point);
+      if (ground === undefined || y <= ground + GROUND_CONTACT_CLEARANCE + SIDE_REST_ROOM) return y;
     }
     return undefined;
   };
   const sampleBase = (point: { readonly x: number; readonly z: number }): number => {
-    const side = onSealedSide(point);
+    const side = onStructureSide(point);
     if (side !== undefined) return side;
     let base = localKept.at(point);
     if (base === undefined) {

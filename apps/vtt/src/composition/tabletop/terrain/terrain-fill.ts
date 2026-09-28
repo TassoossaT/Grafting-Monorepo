@@ -551,6 +551,35 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     return Math.min(1, Math.max(0, ((point.x - from.x) * dx + (point.z - from.z) * dz) / lengthSq));
   };
 
+  // **A ring's own corner with no node, partway along a neighbour's edge** --
+  // where a cut gave way partway along a structure's side -- splits that edge
+  // like any node the grid puts along it. The ground and the structure then
+  // share it, so it goes wherever the structure goes, and the ground there is
+  // laid again when it does; a node of the ground's own only coinciding with
+  // the side would be left standing in the air.
+  const adoptedVertices = new Set(effectiveAdoptions.map((candidate) => candidate.vertex));
+  for (const ring of [...request.boundary, ...request.holes]) {
+    const count = ring.points.length;
+    for (let index = 0; index < count; index += 1) {
+      const point = ring.points[index]!;
+      if (point.source !== undefined) continue;
+      const vertex = grid.vertices.findIndex((candidate) => Math.hypot(candidate.x - point.x, candidate.z - point.z) < 1e-4);
+      if (vertex < 0 || adoptedVertices.has(vertex) || snapped.has(vertex) || grid.vertices[vertex]!.source !== undefined) continue;
+      for (const edge of [ring.edges[index], ring.edges[(index - 1 + count) % count]]) {
+        if (edge === undefined) continue;
+        const from = live.get(edge.startNodeId)?.position, to = live.get(edge.endNodeId)?.position;
+        if (from === undefined || to === undefined) continue;
+        const length = Math.hypot(to.x - from.x, to.z - from.z);
+        const along = alongEdge(point, from, to, -1);
+        const off = Math.hypot(point.x - (from.x + (to.x - from.x) * along), point.z - (from.z + (to.z - from.z) * along));
+        if (length <= 0 || off > 1e-3 || along * length < 1e-3 || (1 - along) * length < 1e-3) continue;
+        effectiveAdoptions.push({ vertex, edge, along, edgeLength: length });
+        adoptedVertices.add(vertex);
+        break;
+      }
+    }
+  }
+
   const adoptionPositions = new Map<number, ConstructionPosition>();
   for (const [index, adoption] of effectiveAdoptions.entries()) {
     const vertex = grid.vertices[adoption.vertex];

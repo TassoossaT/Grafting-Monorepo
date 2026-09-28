@@ -1309,7 +1309,7 @@ quadrangulation put a midpoint on each of the pieces, so an edge of the
 neighbour can owe two or three nodes, and they have to be inserted in the
 order they sit -- each split shortens what is left to split.
 
-### `function vtt.terrain-cut-executor.buildConstraintRings(targetPolygon: PlanarArea, faceSize: number, perimeters: ConstraintTable): readonly (ConstraintRing & { isHole: boolean })[]`
+### `function vtt.terrain-cut-executor.buildConstraintRings(targetPolygon: PlanarArea, faceSize: number, perimeters: ConstraintTable, pinned: (point: { x: number; z: number }) => boolean): readonly (ConstraintRing & { isHole: boolean })[]`
 
 Giving the boolean's output its identity back.
 
@@ -8061,21 +8061,35 @@ unevenness of ground a floor is drawn on.
 ### `function vtt.ground-contact.groundContactOf(topology: ConstructionRegionTopology, groundAt: GroundHeightAt, cell: number, clearance: number, held: ReadonlySet<string>): GroundContact`
 
 How `topology` meets the ground `groundAt` describes, sampled on a grid of
-`cell`: at its corners, and at the middle of every cell of its footprint.
-A cell whose middle stands clear of the ground is clear; where no ground is
-known, nothing is touched. A face standing upright is left as it always
-was -- wholly in contact.
+`cell` over its footprint. Where it gives way from resting to standing
+clear is found between the samples, by marching squares -- the line where
+it stands exactly `clearance` over the ground -- so the cut follows it
+instead of stepping round whole cells, and the ground meets the
+structure's side right where it lets go. Where no ground is known it is
+clear. A face standing upright is left as it always was -- wholly in
+contact.
 
 A side whose two ends `held` names -- joined to another structure, a
 ramp's end welded into a floor -- has that structure on its far side and
-this one on the near side: no ground fits under it too, so the cells along
-it count as touching, and the ground goes round them.
+this one on the near side: no ground fits under it too, so it counts as
+touching for a cell round it, and the ground goes round.
 
 ### `function vtt.ground-contact.groundHeightsOf(nodes: readonly ConstructionPosition[], reach: number): GroundHeightAt`
 
 The ground's height over a point in plan, read from `nodes` near it --
 weighted by closeness, so the relief there is kept; `undefined` with none
 within GROUND_READ_REACH.
+
+### `function vtt.ground-contact.groundSurfaceOf(ground: readonly ConstructionRegionTopology[], own: ReadonlySet<string>): GroundHeightAt`
+
+The ground's own surface over a point in plan: the height of the ground
+face it lies in, on that face's plane -- exactly the ground drawn there,
+never a blend of relief metres away. A face holding a node of `own` -- the
+structures in question, which the ground may have been drawn up to meet --
+is not read; where no other face lies over the point -- the middle of a
+hole a resting floor cut -- the nearest ground nodes but those answer,
+within GROUND_HOLE_REACH, and failing that within
+GROUND_READ_REACH.
 
 ### `function vtt.ground-contact.surfaceHeightOf(topology: ConstructionRegionTopology): ((point: Plan) => number) | undefined`
 

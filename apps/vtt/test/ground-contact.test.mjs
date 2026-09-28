@@ -31,7 +31,8 @@ function bowl(runtime, session, heightAt = (x, z) => 0.04 * (x * x + z * z)) {
   };
   const regions = [];
   for (let i = 0; i < cells; i++) for (let j = 0; j < cells; j++) {
-    const ring = [id(i, j), id(i, j + 1), id(i + 1, j + 1), id(i + 1, j)];
+    // Counter-clockwise in plan, as the ground the generator lays winds: a seam against the other way refuses every cell.
+    const ring = [id(i, j), id(i + 1, j), id(i + 1, j + 1), id(i, j + 1)];
     regions.push({ regionId: `q:${i}:${j}`, boundary: ring.map((a, n) => use(a, ring[(n + 1) % 4])), surfaceType: "terrain", physical: true });
   }
   runtime.addPatch({ nodes, edges: [...edges.values()], regions });
@@ -144,4 +145,61 @@ test("a floor drawn on uneven ground, a little above or below it here and there,
       assert.ok(!groundUnder(runtime, [-2.3, -1.7, 3.7, 2.3]), `at ${y}: none left under it`);
     } finally { session.free(); }
   }
+}));
+
+/** A plateau at 0 that drops 3 m into a valley past x = 1..3 -- where a bridge leaves the ground. */
+const cliff = (x) => (x < 1 ? 0 : x > 3 ? -3 : -1.5 * (x - 1));
+const insidePlan = (t, x, z) => {
+  const ring = t.outerLoops[0].map((use) => t.nodes.find((n) => n.id === use.startNodeId).position);
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[i], b = ring[j];
+    if ((a.z > z) !== (b.z > z) && x < ((b.x - a.x) * (z - a.z)) / (b.z - a.z) + a.x) inside = !inside;
+  }
+  return inside;
+};
+/** Points with no ground over them, sampled off the ground's grid lines, but where `rests` says a structure takes the ground. */
+const holesIn = (runtime, rests) => {
+  const ground = terrain(runtime), holes = [];
+  for (let x = -9.37; x < 10; x += 0.5) for (let z = -9.37; z < 10; z += 0.5) {
+    if (!rests(x, z) && !ground.some((t) => insidePlan(t, x, z))) holes.push([+x.toFixed(2), +z.toFixed(2)]);
+  }
+  return holes;
+};
+
+test("a floor half on the plateau, half out over the valley -- a bridge leaving the ground -- leaves no hole in the ground, and its far end is not joined to it", quiet(() => {
+  const { runtime, ctx, calls, session } = setup((x) => cliff(x));
+  try {
+    floorAt(ctx, [-4.3, -1.7, 6.7, 2.3], 0);
+    assert.equal(calls.feedback.at(-1)?.tone, "success", JSON.stringify(calls.feedback.at(-1)));
+    // The floor rests where it is within 1.5 m of the ground: up to x = 2.
+    const holes = holesIn(runtime, (x, z) => x > -4.3 && x < 2.3 && z > -1.7 && z < 2.3);
+    assert.deepEqual(holes, [], "the ground stands everywhere the floor does not rest, under its raised end too");
+    const floor = of(runtime, "platform");
+    const held = new Set(groundHolding(runtime, floor).flatMap((t) => t.nodes.map((n) => n.id)));
+    assert.ok(floor.nodes.filter((n) => n.position.x > 4).every((n) => !held.has(n.id)), "its end over the valley is joined to no ground");
+  } finally { session.free(); }
+}));
+
+test("a floor moved step by step out over the valley leaves no hole where it stood, and the ground lets go of the end that went out over the drop", quiet(() => {
+  const { runtime, ctx, calls, session } = setup((x) => cliff(x));
+  try {
+    floorAt(ctx, [-6.3, -1.7, -0.3, 2.3], 0);
+    for (const step of [2.5, 2.5]) {
+      const handle = shownGlobalHandles({ graph: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), cloudFor: (q) => runtime.cloudFor(q) }).find((h) => h.kind === "pivot");
+      const params = platformContourTool.defaultParams();
+      const start = { nodeId: handle.id, point: handle.position, screenX: 100, screenY: 300 };
+      const current = { point: { ...handle.position, x: handle.position.x + step }, screenX: 200, screenY: 300 };
+      platformContourTool.onPointerDown(ctx, start, params);
+      platformContourTool.onPointerMove(ctx, { start, current, samples: [start, current] }, params);
+      platformContourTool.onPointerUp(ctx, { start, current, samples: [start, current] }, params);
+      assert.equal(calls.feedback.at(-1)?.tone, "success", JSON.stringify(calls.feedback.at(-1)));
+    }
+    // Now over x = -1.3..4.7: resting up to x = 2, out over the valley past it.
+    const holes = holesIn(runtime, (x, z) => x > -1.3 && x < 2.3 && z > -1.7 && z < 2.3);
+    assert.deepEqual(holes, [], "no hole where it stood, nor under its raised end");
+    const floor = of(runtime, "platform");
+    const held = new Set(groundHolding(runtime, floor).flatMap((t) => t.nodes.map((n) => n.id)));
+    assert.ok(floor.nodes.filter((n) => n.position.x > 3).every((n) => !held.has(n.id)), "nothing out over the drop is joined to the ground");
+  } finally { session.free(); }
 }));

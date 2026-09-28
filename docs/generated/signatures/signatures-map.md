@@ -3900,8 +3900,10 @@ export function buildConstraintRings(
   targetPolygon: PlanarArea,
   faceSize: number,
   perimeters: ConstraintTable,
-  ): readonly (ConstraintRing & { readonly isHole: boolean })[] {
-  const snapDist = Math.max(0.25, faceSize * 0.18);
+  /**
+  * Whether a corner lies on a structure's side -- where the ground meets it,
+  * a place a cut gave way partway along it. Such a corner is exactly where
+  * the ground must meet that side, so it takes a node only standing right
 export function executeTerrainCut(
   runtime: TerrainCutRuntime,
   request: StructuralCutRequest,
@@ -7201,6 +7203,9 @@ export function groundContactOf(topology: ConstructionRegionTopology, groundAt: 
 export const GROUND_CONTACT_CELL = 0.5;
 export function groundHeightsOf(nodes: readonly ConstructionPosition[], reach = GROUND_READ_REACH): GroundHeightAt {
   const buckets = new Map<string, ConstructionPosition[]>();
+export function groundSurfaceOf(ground: readonly ConstructionRegionTopology[], own: ReadonlySet<string>): GroundHeightAt {
+  const faces = ground.filter((topology) => !topology.nodes.some((node) => own.has(node.id))).flatMap((topology) => {
+  const heightAt = surfaceHeightOf(topology);
 export function touchesGround(
   change: { readonly before: readonly ConstructionRegionTopology[]; readonly after: readonly ConstructionRegionTopology[] },
   ground: readonly ConstructionRegionTopology[],

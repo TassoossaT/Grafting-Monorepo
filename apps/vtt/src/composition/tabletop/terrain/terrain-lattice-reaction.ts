@@ -14,7 +14,7 @@ import type { CutFallout, Effect, Reaction, ReactionOutcome } from "@/features/e
 import {
   GROUND_CONTACT_CELL,
   groundContactOf,
-  groundHeightsOf,
+  groundSurfaceOf,
   planTerrainCloudCutRepair,
   pointInOrOnPolygon,
   terrainTopologiesBounds,
@@ -179,7 +179,7 @@ function cutterPolygonsOf(runtime: LatticeReactionRuntime, faces: readonly Const
  */
 function letGoOf(change: Effect["change"], hits: readonly ConstructionRegionTopology[]): PlanarArea {
   const own = new Set([...change.before, ...change.after].flatMap((topology) => topology.nodes.map((node) => node.id)));
-  const groundAt = groundHeightsOf(hits.flatMap((topology) => topology.nodes).filter((node) => !own.has(node.id)).map((node) => node.position));
+  const groundAt = groundSurfaceOf(hits, own);
   const held = new Set(hits.flatMap((topology) => topology.nodes.map((node) => node.id)));
   const after = new Map(change.after.map((face) => [face.surfaceKey.join("\u0000"), face]));
   return change.before.flatMap((face): PlanarArea => {
@@ -331,6 +331,18 @@ function answerCut(runtime: LatticeReactionRuntime, effect: Effect, hits: readon
   }
   if (consumedByType.size === 0 && changed.length > 0) consumedByType.set(groundTypes[0]!, []);
 
+  // **Where the dragged ground lay, not where it was dragged to.** A face
+  // rimmed by a node the edit carried is consumed as it now stands --
+  // stretched out to where the node went -- so its own shape no longer covers
+  // the ground it covered. That ground is laid again as vacated, or the
+  // structure leaves a hole wherever it moves away from.
+  const draggedFrom: PlanarArea = stretched.flatMap((topology): PlanarArea => {
+    const at = new Map(topology.nodes.map((node) => [node.id, carriedNodeIds.has(node.id) ? beforePositions.get(node.id) ?? node.position : node.position]));
+    const ring = (topology.outerLoops[0] ?? []).map((use) => at.get(use.startNodeId)).filter((p): p is ConstructionPosition => p !== undefined).map((p) => [p.x, p.z] as [number, number]);
+    return ring.length >= 3 ? [[[...ring, ring[0]!]]] : [];
+  });
+  const vacatedGround: PlanarArea = [...changed, ...draggedFrom];
+
   const tableId = runtime.getSnapshot().tableId;
   for (const [surfaceType, consumedSurfaceKeys] of consumedByType) {
     timePhase(`regeneração de ${surfaceType}`, () => executor(
@@ -344,7 +356,7 @@ function answerCut(runtime: LatticeReactionRuntime, effect: Effect, hits: readon
         // instead of laying ground over it.
         footprintOutline: footprint,
         painterSurfaceType: change.surfaceType,
-        vacatedGround: changed,
+        vacatedGround,
       },
       effect.causeId,
       tableId,
