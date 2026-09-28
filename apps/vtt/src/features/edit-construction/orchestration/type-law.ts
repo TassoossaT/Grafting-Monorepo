@@ -24,7 +24,8 @@ export function settleMoves(topologies: readonly ConstructionRegionTopology[], m
     const settle = structureTypeFor(topology.surfaceType)?.settle;
     if (!settle || !topology.nodes.some((node) => settled.has(node.id))) continue;
     const at = new Map(topology.nodes.map((node) => [node.id, settled.get(node.id) ?? node.position]));
-    for (const [id, position] of settle(topology, at)) if (!fixed.has(id)) settled.set(id, position);
+    const placed = new Set(topology.nodes.filter((node) => settled.has(node.id)).map((node) => node.id));
+    for (const [id, position] of settle(topology, at, placed)) if (!fixed.has(id)) settled.set(id, position);
   }
   return settled;
 }
@@ -62,7 +63,7 @@ export function settlePatch(patch: ConstructionPatch, graph: Pick<ConstructionGr
       holes: loops.slice(1),
     } as unknown as ConstructionRegionTopology;
     const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
-    for (const [id, position] of settle(topology, at)) if (declared.has(id)) placed.set(id, position);
+    for (const [id, position] of settle(topology, at, new Set(declared.keys()))) if (declared.has(id)) placed.set(id, position);
   }
   return { ...patch, nodes: patch.nodes.map((node) => ({ ...node, position: placed.get(node.id) ?? node.position })) };
 }

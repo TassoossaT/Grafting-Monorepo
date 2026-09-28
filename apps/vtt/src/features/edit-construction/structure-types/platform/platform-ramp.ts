@@ -228,6 +228,16 @@ const same = (a: ConstructionPosition, b: ConstructionPosition) => Math.hypot(a.
 const mirrored = (centre: ConstructionPosition, moved: ConstructionPosition): ConstructionPosition => ({ x: 2 * centre.x - moved.x, y: moved.y, z: 2 * centre.z - moved.z });
 
 /**
+ * The straight ramp's law (`StructureTypeDefinition.settle`): kept a
+ * symmetric trapezoid whatever moved its corners -- see {@link deriveRampMotion},
+ * which it applies to this one face, reading what moved from `placed`.
+ */
+export function settleRamp(topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>, placed: ReadonlySet<string>): ReadonlyMap<string, ConstructionPosition> {
+  const moved = new Map([...positions].filter(([id]) => placed.has(id)));
+  return deriveRampMotion([topology], moved);
+}
+
+/**
  * Keeps each ramp a symmetric trapezoid when some of its corners were moved:
  *
  * - one corner, or one whole side: each moved corner's twin mirrors it

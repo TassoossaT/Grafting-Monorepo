@@ -1,5 +1,5 @@
 import type { StructureTypeDefinition } from "../structure-type.ts";
-import { deriveRampMotion, RAMP_SURFACE_TYPE, rampPolicyFor, rampRoleFor, validateRampMotion } from "./platform-ramp.ts";
+import { RAMP_SURFACE_TYPE, rampPolicyFor, rampRoleFor, settleRamp, validateRampMotion } from "./platform-ramp.ts";
 import { rampEndsCapability } from "./platform-ramp-plan.ts";
 import { cutsGround } from "./platform-structure.ts";
 
@@ -20,6 +20,7 @@ export const rampStructureType: StructureTypeDefinition = Object.freeze<Structur
   policyFor: rampPolicyFor,
   // Where it runs into the ground -- a flight dug into a slope -- it cuts it; over it, it leaves it.
   interactionOver: cutsGround,
-  deriveMotion: deriveRampMotion,
+  // Its law: a symmetric trapezoid, both ends level and square to the axis, whatever moved it.
+  settle: settleRamp,
   validateMotion: validateRampMotion,
 });

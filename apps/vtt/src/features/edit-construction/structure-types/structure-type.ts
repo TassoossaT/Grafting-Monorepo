@@ -422,8 +422,13 @@ export interface StructureTypeDefinition {
    * their feet. Held in every creation and every edit, whatever made it
    * (`orchestration/type-law.ts`), so no tool re-implements it and none can
    * get round it; its placements win over what an edit asked for.
+   *
+   * `placed` names the nodes the change itself put where they now are -- an
+   * edit's moved nodes, a patch's declared ones -- for a law that answers
+   * differently depending on what moved: a ramp's corner moved alone is
+   * mirrored by its twin, a whole end moved drags the far end square.
    */
-  readonly settle?: (topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>) => ReadonlyMap<string, ConstructionPosition>;
+  readonly settle?: (topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>, placed: ReadonlySet<string>) => ReadonlyMap<string, ConstructionPosition>;
   /** Present when this type is generated along a spine. */
   readonly spine?: SpineGeneration;
   /**

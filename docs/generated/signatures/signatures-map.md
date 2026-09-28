@@ -5673,6 +5673,15 @@ export function snapToOutlines(anchors: readonly SnapAnchor[], delta: Constructi
   const p = { x: anchor.position.x + delta.x, y: anchor.position.y + delta.y, z: anchor.position.z + delta.z };
 
 // src/features/edit-construction/orchestration/rigid-carry.ts
+export function standsOn(upper: ConstructionRegionTopology, base: ConstructionRegionTopology): boolean {
+  if (upper === base || upper.nodes.length === 0) return false;
+  const surfaceAt = surfaceHeightOf(base);
+export function standingOn(
+  topologies: readonly ConstructionRegionTopology[],
+  bases: readonly ConstructionRegionTopology[],
+  isGround: (surfaceType: string) => boolean,
+  ): readonly ConstructionRegionTopology[] {
+  const own = new Set(bases.map(keyOf));
 export function fitRigidMotion(pairs: readonly { readonly from: ConstructionPosition; readonly to: ConstructionPosition }[]): Place {
   const n = pairs.length;
   const mean = (pick: (pair: (typeof pairs)[number]) => number) => pairs.reduce((sum, pair) => sum + pick(pair), 0) / n;
@@ -7198,6 +7207,8 @@ export type GroundHeightAt = (point: Plan) => number | undefined;
 export type ContactCell = readonly (readonly [number, number])[];
 export type GroundContact =
 export function surfaceHeightOf(topology: ConstructionRegionTopology): ((point: Plan) => number) | undefined {
+  const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
+export function insideFace(topology: ConstructionRegionTopology, p: Plan): boolean {
   const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
 export function groundContactOf(topology: ConstructionRegionTopology, groundAt: GroundHeightAt, cell: number, clearance = GROUND_CONTACT_CLEARANCE, held: ReadonlySet<string> = new Set()): GroundContact {
   const surfaceAt = surfaceHeightOf(topology);

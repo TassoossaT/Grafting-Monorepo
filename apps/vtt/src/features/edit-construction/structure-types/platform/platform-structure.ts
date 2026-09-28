@@ -1,4 +1,4 @@
-import type { ConstructionMotionInfluence } from "@/ports";
+import type { ConstructionMotionInfluence, ConstructionPosition, ConstructionRegionTopology } from "@/ports";
 import { ALL_AXES, HORIZONTAL_AXES } from "../../orchestration/atomic-edit.ts";
 import { acrossContourSide, pushContourCorner, pushContourSide } from "../../topology/contour-offset.ts";
 import { CUT, IGNORE } from "../creation-interaction.ts";
@@ -45,6 +45,26 @@ function platformPolicy(role: EditRole): RolePolicy {
  */
 export const cutsGround = (covered: StructureView) => covered.traits.has("ground") ? CUT : IGNORE;
 
+/** How far apart two heights may be and still be one elevation. */
+const LEVEL = 1e-4;
+
+/**
+ * A flat structure's law: every node at one elevation -- the one the nodes the
+ * change placed agree on; with none placed, or placed at different heights,
+ * nothing is settled and the type's validation judges it.
+ */
+function settleLevel(topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>, placed: ReadonlySet<string>): ReadonlyMap<string, ConstructionPosition> {
+  const heights = topology.nodes.filter((node) => placed.has(node.id)).map((node) => (positions.get(node.id) ?? node.position).y);
+  if (heights.length === 0 || heights.some((y) => Math.abs(y - heights[0]!) > LEVEL)) return new Map();
+  const y = heights[0]!;
+  const settled = new Map<string, ConstructionPosition>();
+  for (const node of topology.nodes) {
+    const at = positions.get(node.id) ?? node.position;
+    if (!placed.has(node.id) && Math.abs(at.y - y) > 1e-9) settled.set(node.id, { ...at, y });
+  }
+  return settled;
+}
+
 /**
  * A horizontal structural marker, independently usable as floor or ceiling,
  * drawn as a flat closed contour at one elevation. Whether it rests on the
@@ -76,6 +96,8 @@ function contourPlatformStructureType(
         { from: anchor.id, to: node.id, axes }, { from: node.id, to: anchor.id, axes },
       ]);
     },
+    // Its law: one elevation. What the change placed sets it; the rest of the face follows.
+    settle: settleLevel,
     validateMotion: (topology, positions) => {
       const elevations = topology.nodes.map((node) => (positions.get(node.id) ?? node.position).y);
       return elevations.some((y) => Math.abs(y - elevations[0]!) > 1e-4)

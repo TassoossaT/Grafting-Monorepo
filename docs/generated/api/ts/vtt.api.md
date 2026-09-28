@@ -4885,10 +4885,10 @@ The rigid motion -- a turn in plan, a shift, a rise -- that best takes every `fr
 
 ### `function vtt.rigid-carry.joinedStructures(topologies: readonly ConstructionRegionTopology[], seeds: readonly ConstructionRegionTopology[], isGround: (surfaceType: string) => boolean): readonly ConstructionRegionTopology[]`
 
-Every structure joined to `seeds` through shared nodes, `seeds` included --
-what turns or moves as one when a whole-structure handle acts on one of
-them. Ground is never part of it: it is re-cut around what lands, not
-carried.
+Every structure joined to `seeds` through shared nodes, or standing on one
+of them -- a wall in the middle of a floor -- `seeds` included: what turns
+or moves as one when a whole-structure handle acts on one of them. Ground
+is never part of it: it is re-cut around what lands, not carried.
 
 ### `function vtt.rigid-carry.rigidCarries(topologies: readonly ConstructionRegionTopology[], moved: ReadonlyMap<string, ConstructionPosition>, direct: ReadonlySet<string>): ReadonlyMap<string, ConstructionPosition>`
 
@@ -4896,6 +4896,17 @@ Where every node of each rigid structure among `topologies` must go so
 that `moved` carries it whole -- empty when none is bent. Structures in
 `direct` are the ones the gesture itself edits: their own controls shape
 them.
+
+### `function vtt.rigid-carry.standingOn(topologies: readonly ConstructionRegionTopology[], bases: readonly ConstructionRegionTopology[], isGround: (surfaceType: string) => boolean): readonly ConstructionRegionTopology[]`
+
+The structures among `topologies` standing on any of `bases`, the ground excepted.
+
+### `function vtt.rigid-carry.standsOn(upper: ConstructionRegionTopology, base: ConstructionRegionTopology): boolean`
+
+Whether `upper` stands on `base`: its lowest nodes -- a wall's feet, a
+ramp's foot -- all lie on `base`'s face, inside its outline in plan and at
+its surface's height, without being joined to it by a node. Read from the
+shapes alone; nothing asks what either structure is.
 
 ### `interface vtt.scene-handles.HandleFocus`
 
@@ -6305,6 +6316,12 @@ The ramp's own nodes, edges and face. Its end edges are what a floor it lands on
 What `topology` is as a straight ramp: the operation its ids were made
 under, its axis and its two widths -- `undefined` when it is not one.
 
+### `function vtt.platform-ramp.settleRamp(topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>, placed: ReadonlySet<string>): ReadonlyMap<string, ConstructionPosition>`
+
+The straight ramp's law (`StructureTypeDefinition.settle`): kept a
+symmetric trapezoid whatever moved its corners -- see deriveRampMotion,
+which it applies to this one face, reading what moved from `placed`.
+
 ### `function vtt.platform-ramp.validateRampMotion(topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>): string | undefined`
 
 Both ends level, square to the axis and on the same side of it, with a real length and width.
@@ -7088,13 +7105,18 @@ sides -- the ground cut round it -- meets it there without splitting the
 side, so its corners stay exactly its own. For a type whose shape is its
 corners, a ramp's four.
 
-### `property vtt.structure-type.StructureTypeDefinition.settle?: (topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>) => ReadonlyMap<string, ConstructionPosition>`
+### `property vtt.structure-type.StructureTypeDefinition.settle?: (topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>, placed: ReadonlySet<string>) => ReadonlyMap<string, ConstructionPosition>`
 
 The type's law: given where one face's nodes stand (`positions`), where
 the nodes it determines must stand instead -- a wall's post tops above
 their feet. Held in every creation and every edit, whatever made it
 (`orchestration/type-law.ts`), so no tool re-implements it and none can
 get round it; its placements win over what an edit asked for.
+
+`placed` names the nodes the change itself put where they now are -- an
+edit's moved nodes, a patch's declared ones -- for a law that answers
+differently depending on what moved: a ramp's corner moved alone is
+mirrored by its twin, a whole end moved drags the far end square.
 
 ### `property vtt.structure-type.StructureTypeDefinition.spine?: SpineGeneration`
 
@@ -8095,6 +8117,10 @@ is not read; where no other face lies over the point -- the middle of a
 hole a resting floor cut -- the nearest ground nodes but those answer,
 within GROUND_HOLE_REACH, and failing that within
 GROUND_READ_REACH.
+
+### `function vtt.ground-contact.insideFace(topology: ConstructionRegionTopology, p: Plan): boolean`
+
+Whether `p` is inside the face's outline and out of its holes, in plan.
 
 ### `function vtt.ground-contact.surfaceHeightOf(topology: ConstructionRegionTopology): ((point: Plan) => number) | undefined`
 
