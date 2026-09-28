@@ -68,7 +68,7 @@ export function surfaceHeightOf(topology: ConstructionRegionTopology): ((point: 
 }
 
 /** Whether `p` is inside the face's outline and out of its holes, in plan. */
-function insideFace(topology: ConstructionRegionTopology, p: Plan): boolean {
+export function insideFace(topology: ConstructionRegionTopology, p: Plan): boolean {
   const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
   const inRing = (loop: ConstructionRegionTopology["outerLoops"][number]) => {
     let inside = false;

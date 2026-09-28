@@ -2,6 +2,39 @@ import type { ConstructionPosition, ConstructionRegionTopology } from "@/ports";
 
 import { structureTypeFor } from "../structure-types/index.ts";
 import { keepsOutline } from "../topology/contour-offset.ts";
+import { insideFace, surfaceHeightOf } from "../topology/ground-contact.ts";
+
+/** How near a structure's foot must stand to another's surface to stand on it. */
+const STANDING = 1e-3;
+
+/**
+ * Whether `upper` stands on `base`: its lowest nodes -- a wall's feet, a
+ * ramp's foot -- all lie on `base`'s face, inside its outline in plan and at
+ * its surface's height, without being joined to it by a node. Read from the
+ * shapes alone; nothing asks what either structure is.
+ */
+export function standsOn(upper: ConstructionRegionTopology, base: ConstructionRegionTopology): boolean {
+  if (upper === base || upper.nodes.length === 0) return false;
+  const surfaceAt = surfaceHeightOf(base);
+  if (!surfaceAt) return false;
+  const low = Math.min(...upper.nodes.map((node) => node.position.y));
+  const feet = upper.nodes.filter((node) => node.position.y - low < STANDING);
+  return feet.every((node) => {
+    const p = node.position;
+    return Math.abs(surfaceAt(p) - p.y) < STANDING && insideFace(base, p);
+  });
+}
+
+/** The structures among `topologies` standing on any of `bases`, the ground excepted. */
+export function standingOn(
+  topologies: readonly ConstructionRegionTopology[],
+  bases: readonly ConstructionRegionTopology[],
+  isGround: (surfaceType: string) => boolean,
+): readonly ConstructionRegionTopology[] {
+  const own = new Set(bases.map(keyOf));
+  return topologies.filter((topology) => !own.has(keyOf(topology)) && !isGround(topology.surfaceType)
+    && bases.some((base) => !isGround(base.surfaceType) && standsOn(topology, base)));
+}
 
 /**
  * Rigid structures (`StructureTypeDefinition.rigid`) change shape only
@@ -68,10 +101,10 @@ export function rigidCarries(
 }
 
 /**
- * Every structure joined to `seeds` through shared nodes, `seeds` included --
- * what turns or moves as one when a whole-structure handle acts on one of
- * them. Ground is never part of it: it is re-cut around what lands, not
- * carried.
+ * Every structure joined to `seeds` through shared nodes, or standing on one
+ * of them -- a wall in the middle of a floor -- `seeds` included: what turns
+ * or moves as one when a whole-structure handle acts on one of them. Ground
+ * is never part of it: it is re-cut around what lands, not carried.
  */
 export function joinedStructures(
   topologies: readonly ConstructionRegionTopology[],
@@ -82,8 +115,10 @@ export function joinedStructures(
   const nodes = new Set(seeds.flatMap((topology) => topology.nodes.map((node) => node.id)));
   for (let grew = true; grew;) {
     grew = false;
+    const standing = new Set(standingOn(topologies, [...members.values()], isGround).map(keyOf));
     for (const topology of topologies) {
-      if (members.has(keyOf(topology)) || isGround(topology.surfaceType) || !topology.nodes.some((node) => nodes.has(node.id))) continue;
+      if (members.has(keyOf(topology)) || isGround(topology.surfaceType)) continue;
+      if (!topology.nodes.some((node) => nodes.has(node.id)) && !standing.has(keyOf(topology))) continue;
       members.set(keyOf(topology), topology);
       for (const node of topology.nodes) nodes.add(node.id);
       grew = true;

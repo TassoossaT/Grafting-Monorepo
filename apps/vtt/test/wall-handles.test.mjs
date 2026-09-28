@@ -241,3 +241,35 @@ test("a platform's side pushed out snaps onto the run a wall beside it stands on
     assert.ok(posts(f.runtime).every(({ foot }) => floorHolds(f.runtime, foot)), `the wall's feet in the platform's outline: ${lastFeedback(f.calls)}`);
   } finally { f.session.free(); }
 });
+
+test("a wall standing in the middle of a platform, joined to it by no node, goes wherever the platform goes: moved, raised and turned with it", () => {
+  const platformHandle = (runtime, kind) => shownGlobalHandles(scene(runtime)).find((h) => h.kind === kind && hasTrait(h.owner, "floor"));
+  for (const [kind, delta, rise] of [["pivot", { x: 1, y: 0, z: 1 }, 0], ["height", { x: 0, y: 0, z: 0 }, 1], ["rotate", null, 0]]) {
+    const f = sessionFixture();
+    Object.assign(f.runtime, { showPreview() {}, clearPreview() {} });
+    try {
+      commitPlatformContour(f.ctx, [[0, 0], [6, 0], [6, 4], [0, 4]].map(([x, z]) => ({ point: { x, y: 2, z } })), { mode: "create", elevation: 2, shape: "rectangle" });
+      const start = { point: { x: 2, y: 2, z: 1.5 } }, end = { point: { x: 4, y: 2, z: 1.5 } };
+      wallLineTool.onPointerDown(f.ctx, start, params);
+      wallLineTool.onPointerUp(f.ctx, { start, current: end, samples: [start, end] }, params);
+      const floorIds = new Set(f.runtime.getAllRegionTopologies().filter((t) => hasTrait(t.surfaceType, "floor")).flatMap((t) => t.nodes.map((n) => n.id)));
+      assert.ok(wallOf(f.runtime).nodes.every((n) => !floorIds.has(n.id)), "the wall shares no node with the platform");
+      const before = posts(f.runtime);
+      const handle = platformHandle(f.runtime, kind);
+      if (kind === "rotate") {
+        const a = Math.atan2(handle.position.z - handle.pivot.z, handle.position.x - handle.pivot.x) + Math.PI / 2;
+        const r = Math.hypot(handle.position.x - handle.pivot.x, handle.position.z - handle.pivot.z);
+        const to = { x: handle.pivot.x + r * Math.cos(a) - handle.position.x, y: 0, z: handle.pivot.z + r * Math.sin(a) - handle.position.z };
+        drag(f, handle, to, 0, platformContourTool, platformContourTool.defaultParams());
+      } else drag(f, handle, delta, rise, platformContourTool, platformContourTool.defaultParams());
+      assert.equal(f.calls.feedback.filter(Boolean).at(-1)?.tone, "success", `${kind}: ${lastFeedback(f.calls)}`);
+      const after = posts(f.runtime);
+      const floor = f.runtime.getAllRegionTopologies().find((t) => hasTrait(t.surfaceType, "floor"));
+      const floorY = floor.nodes[0].position.y;
+      for (const post of after) assert.ok(close(post.foot.y, floorY, 1e-6), `${kind}: the wall still stands on the platform: ${JSON.stringify(post)} at ${floorY}`);
+      if (kind === "pivot") for (const [i, post] of after.entries()) assert.ok(close(post.foot.x, before[i].foot.x + 1, 1e-6) && close(post.foot.z, before[i].foot.z + 1, 1e-6), `pivot: moved with it ${JSON.stringify(post)}`);
+      if (kind === "height") assert.ok(close(floorY, 3, 1e-6), "raised");
+      if (kind === "rotate") assert.ok(after.some((post, i) => Math.hypot(post.foot.x - before[i].foot.x, post.foot.z - before[i].foot.z) > 0.5), "turned with it");
+    } finally { f.session.free(); }
+  }
+});

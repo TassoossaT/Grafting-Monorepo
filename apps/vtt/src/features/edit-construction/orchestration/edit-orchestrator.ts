@@ -5,8 +5,8 @@ import type { AtomicEditOp, EditGesture } from "./atomic-edit.ts";
 import { addPosition, constrainToAxes } from "./atomic-edit.ts";
 import type { CloudTopology } from "../topology/construction-cloud.ts";
 import { cloudNodes } from "../topology/construction-cloud.ts";
-import { resolvePolicy, structureTypeFor } from "../structure-types/index.ts";
-import { rigidCarries } from "./rigid-carry.ts";
+import { hasTrait, resolvePolicy, structureTypeFor } from "../structure-types/index.ts";
+import { rigidCarries, standingOn, standsOn } from "./rigid-carry.ts";
 
 /** How many times rigid structures may pass a carry on to others before the plan settles. */
 const RIGID_ROUNDS = 6;
@@ -167,6 +167,22 @@ export function planEdit(
         topology,
         policy.transport === true && topology.surfaceType === cloud.seed.surfaceType,
       ) ?? []);
+      // Moved whole, a structure takes along what stands on it -- a wall in the
+      // middle of a floor, joined to it by no node -- and what stands on that.
+      if (policy.transport === true) {
+        const isGround = (surfaceType: string) => hasTrait(surfaceType, "ground");
+        const reached = topologies.filter((topology) => topology.surfaceType === cloud.seed.surfaceType);
+        for (let bases = reached; bases.length > 0;) {
+          const standing = standingOn(topologies, bases, isGround).filter((topology) => !reached.includes(topology));
+          for (const upper of standing) {
+            const base = bases.find((candidate) => standsOn(upper, candidate))!;
+            const anchor = base.nodes[0]!.id;
+            for (const node of upper.nodes) influences.push({ from: anchor, to: node.id, axes: [true, true, true] });
+            reached.push(upper);
+          }
+          bases = standing;
+        }
+      }
       const solve = (motionSeeds: readonly { nodeId: string; delta: ConstructionPosition }[]) => {
         const resolved = source.planMotion({ seeds: motionSeeds, influences });
         const solved = new Map(resolved.moves.map((move) => [move.nodeId, move.position]));
