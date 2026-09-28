@@ -1197,6 +1197,15 @@ Generates a cap with shared seam identities and no degenerate apex edges.
 
 ### `pub fn grafting_graph_core::profile_roof::RoofRequest::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer`
 
+### `pub fn grafting_graph_core::profile_roof::footprint_blocks(contour: &[[f64; 2]]) -> core::result::Result<alloc::vec::Vec<alloc::vec::Vec<[f64; 2]>>, alloc::string::String>`
+
+Splits a footprint into the convex blocks a roof is raised over.
+
+A convex footprint is its own block. An orthogonal one -- every corner
+square, as an L, T, U or cross plan is -- becomes its maximal rectangles,
+which overlap where its arms meet so the joined roof gets its valleys
+there. Other concave footprints are refused.
+
 ### `pub fn grafting_graph_core::profile_roof::generate_roof_patch(request: grafting_graph_core::profile_roof::RoofRequest) -> core::result::Result<grafting_graph_core::profile_roof::RoofPatch, alloc::string::String>`
 
 Generates a roof with shared seam identities between all its faces.

@@ -209,6 +209,10 @@ Unregisters a surface outright and prunes any nodes it orphaned. See
 
 Ends the open transaction by restoring the state it began from.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::roof_footprint_blocks_json(&self, json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Splits a footprint into the convex blocks a roof is raised over.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::set_region_props_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 Replaces the regions' property bag, or clears it when `props` is

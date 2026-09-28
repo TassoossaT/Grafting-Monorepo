@@ -191,6 +191,14 @@ impl ConstructionSession {
         )
     }
 
+    /// Splits a footprint into the convex blocks a roof is raised over.
+    pub fn roof_footprint_blocks_json(&self, json: &str) -> Result<String, JsValue> {
+        let contour = parse::<Vec<[f64; 2]>>(json)?;
+        serialize(
+            &grafting_graph_core::profile_roof::footprint_blocks(&contour).map_err(to_js_error)?,
+        )
+    }
+
     /// Evaluates a batch of generic curve-authoring commands without mutation.
     pub fn bezier_batch_json(&self, json: &str) -> Result<String, JsValue> {
         let request = parse::<grafting_graph_core::bezier_commands::CurveBatch>(json)?;

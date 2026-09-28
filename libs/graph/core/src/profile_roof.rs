@@ -330,6 +330,128 @@ struct Face3 {
     rings: Vec<Vec<[f64; 3]>>,
 }
 
+fn inside_polygon(polygon: &[Point], x: Point) -> bool {
+    let mut inside = false;
+    for i in 0..polygon.len() {
+        let (a, b) = (polygon[i], polygon[(i + 1) % polygon.len()]);
+        if (a[1] > x[1]) != (b[1] > x[1])
+            && x[0] < a[0] + (x[1] - a[1]) * (b[0] - a[0]) / (b[1] - a[1])
+        {
+            inside = !inside;
+        }
+    }
+    inside
+}
+
+/// Distinct values of one coordinate, in order.
+fn cuts(values: impl Iterator<Item = f64>, eps: f64) -> Vec<f64> {
+    let mut values: Vec<f64> = values.collect();
+    values.sort_by(f64::total_cmp);
+    values.dedup_by(|a, b| (*a - *b).abs() < eps);
+    values
+}
+
+/// Splits a footprint into the convex blocks a roof is raised over.
+///
+/// A convex footprint is its own block. An orthogonal one -- every corner
+/// square, as an L, T, U or cross plan is -- becomes its maximal rectangles,
+/// which overlap where its arms meet so the joined roof gets its valleys
+/// there. Other concave footprints are refused.
+pub fn footprint_blocks(contour: &[[f64; 2]]) -> Result<Vec<Vec<[f64; 2]>>, String> {
+    if contour.iter().flatten().any(|v| !v.is_finite()) {
+        return Err("footprint coordinates must be finite".into());
+    }
+    // Drop repeated and straight-through corners.
+    let mut points = contour.to_vec();
+    loop {
+        let n = points.len();
+        if n < 3 {
+            return Err("a footprint needs three or more corners".into());
+        }
+        let redundant = (0..n).find(|&i| {
+            let (a, b, c) = (points[(i + n - 1) % n], points[i], points[(i + 1) % n]);
+            let cross = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+            let scale = (b[0] - a[0]).hypot(b[1] - a[1]) * (c[0] - b[0]).hypot(c[1] - b[1]);
+            scale < 1e-18 || cross.abs() < 1e-9 * scale
+        });
+        match redundant {
+            Some(i) => {
+                points.remove(i);
+            }
+            None => break,
+        }
+    }
+    let n = points.len();
+    let winding = area(&points).signum();
+    let convex = (0..n).all(|i| {
+        let (a, b, c) = (points[i], points[(i + 1) % n], points[(i + 2) % n]);
+        ((b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0])) * winding > 0.0
+    });
+    if convex {
+        return Ok(vec![points]);
+    }
+    // Work in the frame of the first side, where an orthogonal plan is axis-aligned.
+    let d = [points[1][0] - points[0][0], points[1][1] - points[0][1]];
+    let length = d[0].hypot(d[1]);
+    let (cos, sin) = (d[0] / length, d[1] / length);
+    let local: Vec<Point> = points
+        .iter()
+        .map(|p| [p[0] * cos + p[1] * sin, -p[0] * sin + p[1] * cos])
+        .collect();
+    let extent = local.iter().flatten().fold(1.0_f64, |m, v| m.max(v.abs()));
+    let eps = 1e-7 * extent;
+    let orthogonal = (0..n).all(|i| {
+        let (a, b) = (local[i], local[(i + 1) % n]);
+        (a[0] - b[0]).abs() < eps || (a[1] - b[1]).abs() < eps
+    });
+    if !orthogonal {
+        return Err(
+            "a concave footprint must have square corners, or be drawn as joined convex blocks"
+                .into(),
+        );
+    }
+    let xs = cuts(local.iter().map(|p| p[0]), eps);
+    let zs = cuts(local.iter().map(|p| p[1]), eps);
+    let (nx, nz) = (xs.len() - 1, zs.len() - 1);
+    // Prefix sums of the grid cells lying inside, to test any rectangle at once.
+    let mut filled = vec![vec![0usize; nz + 1]; nx + 1];
+    for i in 0..nx {
+        for j in 0..nz {
+            let centre = [(xs[i] + xs[i + 1]) * 0.5, (zs[j] + zs[j + 1]) * 0.5];
+            filled[i + 1][j + 1] =
+                usize::from(inside_polygon(&local, centre)) + filled[i][j + 1] + filled[i + 1][j]
+                    - filled[i][j];
+        }
+    }
+    let full = |i0: usize, i1: usize, j0: usize, j1: usize| {
+        filled[i1][j1] + filled[i0][j0] - filled[i0][j1] - filled[i1][j0] == (i1 - i0) * (j1 - j0)
+    };
+    let mut blocks = Vec::new();
+    for i0 in 0..nx {
+        for i1 in i0 + 1..=nx {
+            for j0 in 0..nz {
+                for j1 in j0 + 1..=nz {
+                    let maximal = full(i0, i1, j0, j1)
+                        && !(i0 > 0 && full(i0 - 1, i1, j0, j1))
+                        && !(i1 < nx && full(i0, i1 + 1, j0, j1))
+                        && !(j0 > 0 && full(i0, i1, j0 - 1, j1))
+                        && !(j1 < nz && full(i0, i1, j0, j1 + 1));
+                    if maximal {
+                        let world = |x: f64, z: f64| [x * cos - z * sin, x * sin + z * cos];
+                        blocks.push(vec![
+                            world(xs[i0], zs[j0]),
+                            world(xs[i1], zs[j0]),
+                            world(xs[i1], zs[j1]),
+                            world(xs[i0], zs[j1]),
+                        ]);
+                    }
+                }
+            }
+        }
+    }
+    Ok(blocks)
+}
+
 /// Generates a roof with shared seam identities between all its faces.
 pub fn generate_roof_patch(request: RoofRequest) -> Result<RoofPatch, String> {
     if !request.elevation.is_finite() || !request.height.is_finite() || request.height <= 0.0 {
@@ -689,6 +811,94 @@ mod tests {
         assert!(patch.faces.iter().any(|f| f.block == 1));
         // Nothing but eaves and the free gable end is used once.
         assert!(edge_uses(&patch).iter().all(|n| (1..=2).contains(n)));
+    }
+
+    #[test]
+    fn footprints_split_into_convex_blocks() {
+        let square = [[0.0, 0.0], [4.0, 0.0], [4.0, 2.0], [4.0, 4.0], [0.0, 4.0]];
+        assert_eq!(
+            footprint_blocks(&square).unwrap().len(),
+            1,
+            "a straight-through corner is dropped"
+        );
+        let l = [
+            [0.0, 0.0],
+            [10.0, 0.0],
+            [10.0, 4.0],
+            [4.0, 4.0],
+            [4.0, 10.0],
+            [0.0, 10.0],
+        ];
+        let blocks = footprint_blocks(&l).unwrap();
+        assert_eq!(blocks.len(), 2, "the two arms, overlapping at the corner");
+        let cross = [
+            [4.0, 0.0],
+            [6.0, 0.0],
+            [6.0, 4.0],
+            [10.0, 4.0],
+            [10.0, 6.0],
+            [6.0, 6.0],
+            [6.0, 10.0],
+            [4.0, 10.0],
+            [4.0, 6.0],
+            [0.0, 6.0],
+            [0.0, 4.0],
+            [4.0, 4.0],
+        ];
+        assert_eq!(footprint_blocks(&cross).unwrap().len(), 2);
+        // A rotated L is still orthogonal in its own frame.
+        let (c, s) = (0.6_f64, 0.8_f64);
+        let turned: Vec<_> = l
+            .iter()
+            .map(|p| [p[0] * c - p[1] * s, p[0] * s + p[1] * c])
+            .collect();
+        assert_eq!(footprint_blocks(&turned).unwrap().len(), 2);
+        let arrow = [[0.0, 0.0], [4.0, 0.0], [2.0, 1.0], [4.0, 4.0], [0.0, 4.0]];
+        assert!(footprint_blocks(&arrow).is_err());
+    }
+
+    #[test]
+    fn an_l_plan_roofs_over_without_open_seams() {
+        let l = [
+            [0.0, 0.0],
+            [10.0, 0.0],
+            [10.0, 4.0],
+            [4.0, 4.0],
+            [4.0, 10.0],
+            [0.0, 10.0],
+        ];
+        let blocks = footprint_blocks(&l)
+            .unwrap()
+            .into_iter()
+            .map(|contour| RoofBlock {
+                slopes: vec![1.0; 4],
+                overhangs: vec![0.0; 4],
+                contour,
+            })
+            .collect();
+        let patch = generate_roof_patch(RoofRequest {
+            elevation: 0.0,
+            height: 2.0,
+            blocks,
+        })
+        .unwrap();
+        assert!(edge_uses(&patch).iter().all(|n| (1..=2).contains(n)));
+        // The eave runs round the L's six sides and nowhere else.
+        let eave: f64 = patch
+            .edges
+            .iter()
+            .zip(edge_uses(&patch))
+            .filter(|(_, uses)| *uses == 1)
+            .map(|(e, _)| {
+                let (a, b) = (patch.nodes[e.start], patch.nodes[e.end]);
+                assert!(
+                    a[1].abs() < 1e-6 && b[1].abs() < 1e-6,
+                    "a free edge off the eave"
+                );
+                (a[0] - b[0]).hypot(a[2] - b[2])
+            })
+            .sum();
+        assert!((eave - 40.0).abs() < 1e-3, "{eave}");
     }
 
     #[test]

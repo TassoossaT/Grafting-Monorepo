@@ -668,6 +668,7 @@ impl core::marker::Sync for grafting_graph_core::profile_roof::RoofRequest
 impl core::marker::Unpin for grafting_graph_core::profile_roof::RoofRequest
 impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::profile_roof::RoofRequest
 impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::profile_roof::RoofRequest
+pub fn grafting_graph_core::profile_roof::footprint_blocks(contour: &[[f64; 2]]) -> core::result::Result<alloc::vec::Vec<alloc::vec::Vec<[f64; 2]>>, alloc::string::String>
 pub fn grafting_graph_core::profile_roof::generate_roof_patch(request: grafting_graph_core::profile_roof::RoofRequest) -> core::result::Result<grafting_graph_core::profile_roof::RoofPatch, alloc::string::String>
 pub mod grafting_graph_core::profile_surface
 pub enum grafting_graph_core::profile_surface::Section
@@ -2809,6 +2810,15 @@ Resolves a supported authored contour without approximating its footprint.
 ### `pub fn grafting_graph_core::profile_cap_patch::generate_cap_patch(request: grafting_graph_core::profile_cap_patch::CapRequest) -> core::result::Result<grafting_graph_core::profile_cap_patch::CapPatch, alloc::string::String>`
 
 Generates a cap with shared seam identities and no degenerate apex edges.
+
+### `pub fn grafting_graph_core::profile_roof::footprint_blocks(contour: &[[f64; 2]]) -> core::result::Result<alloc::vec::Vec<alloc::vec::Vec<[f64; 2]>>, alloc::string::String>`
+
+Splits a footprint into the convex blocks a roof is raised over.
+
+A convex footprint is its own block. An orthogonal one -- every corner
+square, as an L, T, U or cross plan is -- becomes its maximal rectangles,
+which overlap where its arms meet so the joined roof gets its valleys
+there. Other concave footprints are refused.
 
 ### `pub fn grafting_graph_core::profile_roof::generate_roof_patch(request: grafting_graph_core::profile_roof::RoofRequest) -> core::result::Result<grafting_graph_core::profile_roof::RoofPatch, alloc::string::String>`
 

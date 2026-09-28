@@ -1,11 +1,11 @@
-import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
-import { DEFAULT_TOOL_PARAMS, hasTrait, roofStructureType, type ToolParamsByTool } from "../../../../features/edit-construction/index.ts";
+import { DEFAULT_TOOL_PARAMS, roofStructureType, type ToolParamsByTool } from "../../../../features/edit-construction/index.ts";
 import type { CapRequest } from "@/ports";
 import type { RoofRequest } from "../../../../ports/cap-port.ts";
 import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext } from "../core/tool-context.ts";
 import { withStructureEditing } from "../core/structure-edit-behavior.ts";
 import { segmentsPreview } from "../shapes/preview-shapes.ts";
 import { commitPatchReplacement } from "../../effects/effect-commit.ts";
+import { roofBaseAt } from "./roof-base.ts";
 
 /** How far every eave reaches past its footprint when a roof is made. */
 export const ROOF_OVERHANG = 0.2;
@@ -35,11 +35,11 @@ export function presetSlopes(contour: readonly Point[], waters: Params["waters"]
   return sides.map((_, i) => (i === longest || i === facing ? 1 : 0));
 }
 
-/** A one-block roof over a convex footprint, shaped by the tool's waters. */
-export function roofOver(contour: readonly Point[], elevation: number, params: Params): RoofRequest {
+/** A roof over a footprint's convex blocks, each shaped by the tool's waters. */
+export function roofOver(blocks: readonly (readonly Point[])[], elevation: number, params: Params): RoofRequest {
   return {
     elevation, height: params.height,
-    blocks: [{ contour, slopes: presetSlopes(contour, params.waters), overhangs: contour.map(() => ROOF_OVERHANG) }],
+    blocks: blocks.map((contour) => ({ contour, slopes: presetSlopes(contour, params.waters), overhangs: contour.map(() => ROOF_OVERHANG) })),
   };
 }
 
@@ -55,7 +55,7 @@ function startElevation(ctx: ToolContext, start: PointerSample, params: Params):
 function dragged(ctx: ToolContext, start: PointerSample, end: PointerSample, params: Params): RoofRequest {
   const [x0, x1] = [Math.min(start.point.x, end.point.x), Math.max(start.point.x, end.point.x)];
   const [z0, z1] = [Math.min(start.point.z, end.point.z), Math.max(start.point.z, end.point.z)];
-  return roofOver([[x0, z0], [x1, z0], [x1, z1], [x0, z1]], startElevation(ctx, start, params), params);
+  return roofOver([[[x0, z0], [x1, z0], [x1, z1], [x0, z1]]], startElevation(ctx, start, params), params);
 }
 
 /** Commits a roof generated from `request`, keeping the recipe on every face it made. */
@@ -78,7 +78,10 @@ export function commitRoofRecipe(ctx: ToolContext, request: RoofRequest): void {
       },
     }, {
       transactionId: operationId,
-      afterward: (outcome) => { ctx.runtime.setRegionProps(outcome.createdSurfaceKeys, { [ROOF_RECIPE_PROP]: { ...request, group: operationId } }); },
+      afterward: (outcome) => {
+        const recipe = { elevation: request.elevation, height: request.height, blocks: request.blocks, group: operationId };
+        ctx.runtime.setRegionProps(outcome.createdSurfaceKeys, { [ROOF_RECIPE_PROP]: recipe });
+      },
     });
     if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
     ctx.reportFeedback({ tone: "success", message: "Telhado criado." });
@@ -115,7 +118,7 @@ const rawRoofTool: ConstructionTool<"roof"> = {
   id: "roof", previewOnHover: true,
   defaultParams: () => DEFAULT_TOOL_PARAMS.roof,
   previewFor(gesture, params, ctx) {
-    if (params.shape === "platform") return undefined;
+    if (params.shape === "base") return undefined;
     try {
       const preview = params.shape === "circle"
         ? ctx.runtime.generateCap(coneRequest([gesture.current.point.x, gesture.current.point.z], params.radius, startElevation(ctx, gesture.start, params), params)).preview
@@ -124,33 +127,11 @@ const rawRoofTool: ConstructionTool<"roof"> = {
     } catch { return undefined; }
   },
   onClick(ctx, sample, params) {
-    if (params.shape === "platform") {
+    if (params.shape === "base") {
       try {
-        const source = ctx.runtime.getAllRegionTopologies().find((face) => hasTrait(face.surfaceType, "floor") && (
-          sample.surfaceRef ? surfaceRefFromNodeSet(face.surfaceKey) === sample.surfaceRef : sample.nodeId && face.nodes.some((node) => node.id === sample.nodeId)));
-        if (!source || source.outerLoops.length !== 1 || source.holes.length) {
-          throw new Error("Selecione uma plataforma sem aberturas.");
-        }
-        const boundary = source.outerLoops[0]!;
-        if (!source.nodes.every((node) => node.position.y === source.nodes[0]!.position.y)) {
-          throw new Error("A base do telhado precisa estar no mesmo nível.");
-        }
-        const elevation = source.nodes[0]!.position.y;
-        const point = (nodeId: string): Point => {
-          const node = source.nodes.find((node) => node.id === nodeId);
-          if (!node) throw new Error("A plataforma contém um contorno incompleto.");
-          return [node.position.x, node.position.z];
-        };
-        const centers = boundary.flatMap((use) => (use.geometry.kind === "arc" ? [use.geometry.center] : []));
-        const center = centers[0];
-        if (center === undefined) {
-          commitRoofRecipe(ctx, roofOver(boundary.map((use) => point(use.startNodeId)), elevation, params));
-        } else if (centers.length === boundary.length && centers.every((other) => other[0] === center[0] && other[1] === center[1])) {
-          const rim = point(boundary[0]!.startNodeId);
-          commitRoof(ctx, coneRequest(center, Math.hypot(rim[0] - center[0], rim[1] - center[1]), elevation, params));
-        } else {
-          throw new Error("O telhado cobre plataformas de lados retos ou circulares.");
-        }
+        const base = roofBaseAt(ctx.runtime.getAllRegionTopologies(), sample);
+        if (base.kind === "circle") commitRoof(ctx, coneRequest(base.center, base.radius, base.elevation, params));
+        else commitRoofRecipe(ctx, roofOver(ctx.runtime.roofFootprintBlocks(base.contour), base.elevation, params));
       } catch (error) { ctx.reportFeedback({ tone: "error", message: error instanceof Error ? error.message : String(error) }); }
       return;
     }

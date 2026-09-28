@@ -134,6 +134,7 @@ pub fn set_region_props(
 pub struct ConstructionSession
 pub fn profile_cap_json(&self, json: &str) -> Result<String, JsValue>
 pub fn profile_roof_json(&self, json: &str) -> Result<String, JsValue>
+pub fn roof_footprint_blocks_json(&self, json: &str) -> Result<String, JsValue>
 pub fn bezier_batch_json(&self, json: &str) -> Result<String, JsValue>
 pub fn bezier_network_json(&self, json: &str) -> Result<String, JsValue>
 pub fn new() -> ConstructionSession
@@ -145,7 +146,6 @@ pub fn planar_boolean_json(&self, request_json: &str) -> Result<String, JsValue>
 pub fn plan_motion_json(&self, request_json: &str) -> Result<String, JsValue>
 pub fn move_vertices_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn move_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue>
-pub fn insert_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue>
 
 // src/spatial_index.rs
 pub const DEFAULT_GRID_CELL_SIZE: f32 = 4.0;
@@ -3811,11 +3811,11 @@ export interface TransactionResult<T> {
 export interface TabletopRuntime extends BezierPort {
   generateCap(request: import("../../ports/cap-port.ts").CapRequest): import("../../ports/cap-port.ts").CapPatch;
   generateRoof(request: import("../../ports/cap-port.ts").RoofRequest): import("../../ports/cap-port.ts").RoofPatch;
+  roofFootprintBlocks(contour: readonly (readonly [number, number])[]): readonly (readonly [number, number])[][];
   start(): Promise<void>;
   applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void;
   /**
   * Applies a resolved sequence of atomic edit ops as one transaction --
-  * what `planEdit` produced from the user's gesture and the grabbed role's
 export class AppTabletopRuntime implements TabletopRuntime {
   readonly #listeners = new Set<TabletopRuntimeListener>();
 
@@ -4738,6 +4738,12 @@ export function commitPlatformContour(ctx: ToolContext, samples: readonly Pointe
   commitPlatformShape(ctx, lines(samples,params.elevation),params,samples);
 export const platformContourTool = withStructureEditing(rawPlatformContourTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "floor"), handlesOnly: true });
 
+// src/composition/tabletop/tools/roof/roof-base.ts
+export type RoofBase =
+export function roofBaseAt(topologies: readonly ConstructionRegionTopology[], sample: PointerSample): RoofBase {
+  const clicked = topologies.find((face) => (
+  sample.surfaceRef ? surfaceRefFromNodeSet(face.surfaceKey) === sample.surfaceRef : sample.nodeId !== undefined && face.nodes.some((node) => node.id === sample.nodeId)));
+
 // src/composition/tabletop/tools/roof/roof-tool.ts
 export const ROOF_OVERHANG = 0.2;
 export const ROOF_RECIPE_PROP = "roof";
@@ -4745,10 +4751,10 @@ export function presetSlopes(contour: readonly Point[], waters: Params["waters"]
   const sides = contour.map((a, i) => {
   const b = contour[(i + 1) % contour.length]!;
   const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
-export function roofOver(contour: readonly Point[], elevation: number, params: Params): RoofRequest {
+export function roofOver(blocks: readonly (readonly Point[])[], elevation: number, params: Params): RoofRequest {
   return {
   elevation, height: params.height,
-  blocks: [{ contour, slopes: presetSlopes(contour, params.waters), overhangs: contour.map(() => ROOF_OVERHANG) }],
+  blocks: blocks.map((contour) => ({ contour, slopes: presetSlopes(contour, params.waters), overhangs: contour.map(() => ROOF_OVERHANG) })),
   };
 export function commitRoofRecipe(ctx: ToolContext, request: RoofRequest): void {
   try {

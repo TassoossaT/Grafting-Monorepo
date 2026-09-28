@@ -797,6 +797,8 @@ Unregisters a surface outright, prunes orphaned nodes, and folds the outcome int
 
 Host `(u, v)` pairs back to world positions. Pure.
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.roofFootprintBlocks(contour: readonly (readonly [number, number])[]): readonly (readonly [number, number])[][]`
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.setConstructionHandlePresentation(mode: "all" | "spine-points"): void`
 
 Local editing presentation; never changes the graph or persistence.
@@ -992,6 +994,8 @@ Unregisters a surface outright, prunes orphaned nodes, and folds the outcome int
 ### `method vtt.tabletop-runtime.TabletopRuntime.resolveOnHost(request: { hostSurfaceKey: ConstructionSurfaceKey; uv: readonly (readonly [number, number])[] }): readonly ConstructionPosition[]`
 
 Host `(u, v)` pairs back to world positions. Pure.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.roofFootprintBlocks(contour: readonly (readonly [number, number])[]): readonly (readonly [number, number])[][]`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.setConstructionHandlePresentation(mode: "all" | "spine-points"): void`
 
@@ -3241,6 +3245,16 @@ onto the existing boundary (within WELD_TOLERANCE, the same one a
 wall run snaps onto a column with) and the result is assembled from
 shared/cancelled edges -- see `platform-contour-merge.ts` for why.
 
+### `type vtt.roof-base.RoofBase = { contour: readonly Point[]; elevation: number; kind: "contour" } | { center: Point; elevation: number; kind: "circle"; radius: number }`
+
+What a roof stands on: a closed footprint at one elevation, or the circle of a round floor.
+
+### `function vtt.roof-base.roofBaseAt(topologies: readonly ConstructionRegionTopology[], sample: PointerSample): RoofBase`
+
+The base under a click: a floor's contour, or -- clicking a wall -- the
+loop its tops close round the room it bounds. Throws a message for the
+user when what was clicked cannot carry a roof.
+
 ### `variable vtt.roof-tool.ROOF_OVERHANG: 0.2`
 
 How far every eave reaches past its footprint when a roof is made.
@@ -3267,9 +3281,9 @@ Which sides of a footprint rise, for a number of waters: every side; the
 longest side and the one facing it most squarely; or the longest alone.
 The rest are gables.
 
-### `function vtt.roof-tool.roofOver(contour: readonly Point[], elevation: number, params: { curvatures: readonly [number, number, number, number]; elevation: number; height: number; radius: number; shape: "rectangle" | "circle" | "platform"; waters: 1 | 2 | 4 }): RoofRequest`
+### `function vtt.roof-tool.roofOver(blocks: readonly (readonly Point[])[], elevation: number, params: { curvatures: readonly [number, number, number, number]; elevation: number; height: number; radius: number; shape: "rectangle" | "circle" | "base"; waters: 1 | 2 | 4 }): RoofRequest`
 
-A one-block roof over a convex footprint, shaped by the tool's waters.
+A roof over a footprint's convex blocks, each shaped by the tool's waters.
 
 ### `interface vtt.geometry-2d.PointXZ`
 
@@ -7644,7 +7658,7 @@ Perlin `scale` -- smaller values are smoother/larger-scale terrain features.
 
 ### `property vtt.tool-types.ToolParamsByTool.platform-contour: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; tolerance?: number }`
 
-### `property vtt.tool-types.ToolParamsByTool.roof: { curvatures: readonly [number, number, number, number]; elevation: number; height: number; radius: number; shape: "rectangle" | "circle" | "platform"; waters: 1 | 2 | 4 }`
+### `property vtt.tool-types.ToolParamsByTool.roof: { curvatures: readonly [number, number, number, number]; elevation: number; height: number; radius: number; shape: "rectangle" | "circle" | "base"; waters: 1 | 2 | 4 }`
 
 ### `property vtt.tool-types.ToolParamsByTool.slope-curve: { mode?: "arc" | "points" | "straight" | "spiral" | "connect"; rise: number; width: number }`
 
@@ -9742,6 +9756,10 @@ Swaps one edge's geometry without touching either endpoint.
 ### `method vtt.construction-session-port.ConstructionSessionPort.rollbackTransaction(transactionId: string): void`
 
 Ends the open transaction by restoring the exact state it began from.
+
+### `method vtt.construction-session-port.ConstructionSessionPort.roofFootprintBlocks(contour: readonly (readonly [number, number])[]): readonly (readonly [number, number])[][]`
+
+A footprint as the convex blocks a roof is raised over; throws for a concave plan without square corners.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): RegionEditOutcome`
 

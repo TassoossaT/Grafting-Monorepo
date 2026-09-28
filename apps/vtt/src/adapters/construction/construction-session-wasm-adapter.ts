@@ -700,9 +700,14 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     const session = this.#require();
     return JSON.parse(session.profile_cap_json(JSON.stringify(request))) as import("../../ports/cap-port.ts").CapPatch;
   }
+
   generateRoof(request: import("../../ports/cap-port.ts").RoofRequest): import("../../ports/cap-port.ts").RoofPatch {
     const session = this.#require();
     return JSON.parse(session.profile_roof_json(JSON.stringify(request))) as import("../../ports/cap-port.ts").RoofPatch;
+  }
+
+  roofFootprintBlocks(contour: readonly (readonly [number, number])[]): readonly (readonly [number, number])[][] {
+    return JSON.parse(this.#require().roof_footprint_blocks_json(JSON.stringify(contour))) as (readonly [number, number])[][];
   }
 
   curveBatch(request: CurveBatch): readonly CurveResult[] {
