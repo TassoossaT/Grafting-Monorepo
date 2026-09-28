@@ -12,7 +12,10 @@ import { GRID_SNAP_UNIT } from "../../adapters/rendering/index.ts";
 import type { TabletopRuntime } from "./tabletop-runtime.ts";
 import { toolFor } from "./tools/index.ts";
 import { beginCurveGesture, type CurveGesture } from "./tools/core/curve-edit-gesture.ts";
+import { carriesArrows, globalHandleOf, handleMotionAt, shownGlobalHandleAt } from "../../features/edit-construction/index.ts";
 import { gestureMoved } from "./tools/core/tool-context.ts";
+import { handleFocusAt, NO_FOCUS, sameFocus } from "./tools/core/handle-focus.ts";
+import type { HandleFocus } from "../../features/edit-construction/index.ts";
 import {
   edgeOverlayChannel,
   edgeOverlayDescriptor,
@@ -20,9 +23,28 @@ import {
 } from "./tools/core/edge-overlay.ts";
 import type { ConstructionToolFeedback, PointerSample, ToolContext } from "./tools/index.ts";
 
+/**
+ * A handle the scene's free 3D arrows can sit on -- one whose own motion is
+ * free (`HandleMotion`) -- where it is now. A handle kept to a path gets none.
+ */
+function spineHandleAt(runtime: Pick<TabletopRuntime, "getGraphSnapshot" | "getAllRegionTopologies" | "cloudFor">, id: string): { readonly id: string; readonly position: { x: number; y: number; z: number } } | undefined {
+  const graph = runtime.getGraphSnapshot();
+  const scene = { graph, topologies: runtime.getAllRegionTopologies(), cloudFor: (request: Parameters<TabletopRuntime["cloudFor"]>[0]) => runtime.cloudFor(request) };
+  const motion = handleMotionAt(scene, id);
+  if (!motion || !carriesArrows(motion)) return undefined;
+  if (globalHandleOf(id)) {
+    const handle = shownGlobalHandleAt(scene, id);
+    return handle && { id: handle.id, position: handle.position };
+  }
+  const node = graph.nodes.find((n) => n.id === id);
+  return node && { id: node.id, position: node.position };
+}
+
 /** Caps how often a continuous tool's `onPointerMove` commits during an active drag -- the preview ghost still updates on every raw event, only the (comparatively expensive) generate/mutate call is rate-limited. */
 const MOVE_COMMIT_THROTTLE_MS = 32;
 const PREVIEW_THROTTLE_MS = 32;
+/** How often hovering re-reads which structure's handles show. */
+const FOCUS_THROTTLE_MS = 50;
 
 export interface UseConstructionPointerOptions {
   readonly activeTool: ConstructionToolId;
@@ -93,6 +115,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
   const sequenceRef = useRef(0);
   const lastCommitAtRef = useRef(0);
   const lastPreviewAtRef = useRef(0);
+  /** Whose handles show, for a tool that edits only by handles -- `undefined` for any other tool. */
+  const focusRef = useRef<HandleFocus | undefined>(undefined);
+  const lastFocusAtRef = useRef(0);
   const optionsRef = useRef(options);
   optionsRef.current = options;
   /** Channels the edge overlay currently occupies, so a redraw clears exactly what it drew. */
@@ -100,6 +125,8 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
   const manipulatorGesture = useRef<CurveGesture | undefined>(undefined);
   const branchModifier = useRef(false);
   const selectedPoint = useRef<string | undefined>(undefined);
+  /** Whatever was last reported picked, of any kind -- what a selection action acts on. */
+  const selectedId = useRef<string | undefined>(undefined);
 
   const nextSequence = useCallback(() => ++sequenceRef.current, []);
 
@@ -125,6 +152,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       get tableId() {
         return optionsRef.current.tableId;
       },
+      gridUnit: GRID_SNAP_UNIT,
       get snapToGrid() {
         return optionsRef.current.snapToGrid;
       },
@@ -134,17 +162,19 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       nextSequence,
       reportSelection: (info) => {
         const { runtime, viewId, activeTool } = optionsRef.current;
+        selectedId.current = info?.id;
         optionsRef.current.onSelectionChange(info);
         if (viewId === undefined) return;
-        const node = info && toolFor(activeTool).handlePresentation === "spine-points"
-          ? runtime.getGraphSnapshot().nodes.find(n => n.id === info.id && n.id.startsWith("spine:")) : undefined;
+        const node = info && toolFor(activeTool).handlePresentation === "spine-points" ? spineHandleAt(runtime, info.id) : undefined;
         selectedPoint.current = node?.id;
         runtime.setPointManipulator?.(viewId, node && !branchModifier.current ? {
-          id: node.id, position: node.position, branchAction: true,
+          // Branching starts a new structure from the point, which only a tool that handles the action can do.
+          id: node.id, position: node.position, branchAction: toolFor(activeTool).selectionActions?.(ctx, node.id).some((action) => action.id === "branch") === true,
           onChange(phase, position) {
             if (phase === "start") {
               manipulatorGesture.current?.cancel();
-              manipulatorGesture.current = beginCurveGesture(ctx, { nodeId: node.id, point: position }, { mode: "shape", insertOnClick: false, spatialTarget: true });
+              const snap = toolFor(optionsRef.current.activeTool).anchorSnap;
+              manipulatorGesture.current = beginCurveGesture(ctx, { nodeId: node.id, point: position }, { mode: "shape", insertOnClick: false, spatialTarget: true, ...(snap ? { snap } : {}) });
             } else if (phase === "move") {
               const sample = { nodeId: node.id, point: position };
               manipulatorGesture.current?.move({ start: sample, current: sample, samples: [sample] });
@@ -153,7 +183,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
               manipulatorGesture.current = undefined;
               if (phase === "end") gesture?.commit(); else gesture?.cancel();
               // Refresh from confirmed state after success, rejection or cancellation.
-              const current = runtime.getGraphSnapshot().nodes.find(n => n.id === node.id);
+              const current = spineHandleAt(runtime, node.id);
               if (selectedPoint.current === node.id) ctx.reportSelection(current ? { id: current.id, point: current.position } : undefined);
               refreshEdgeOverlay();
             }
@@ -161,9 +191,6 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
         } : undefined);
       },
       reportFeedback: (feedback) => {
-        if (feedback?.tone === "error") {
-          console.error("[VTT Tool Error]", feedback.message, feedback);
-        }
         optionsRef.current.onFeedbackChange(feedback);
       },
       updateToolParams: (toolId, update) => optionsRef.current.onToolParamsUpdate?.(toolId, update as never),
@@ -195,8 +222,12 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     // mount effect below runs before the runtime finishes loading, and asking
     // it for topologies then is an error rather than an empty answer.
     if (runtime.getSnapshot().status !== "ready") return;
-    const presentation = toolFor(optionsRef.current.activeTool).handlePresentation;
+    const tool = toolFor(optionsRef.current.activeTool);
+    const presentation = tool.handlePresentation;
     runtime.setConstructionHandlePresentation?.(presentation ?? "all");
+    runtime.setGlobalHandleOwners?.(tool.editsType);
+    if (!tool.handlesOnHover) runtime.setHandleFocus?.(undefined);
+    else if (!focusRef.current) { focusRef.current = NO_FOCUS; runtime.setHandleFocus?.(NO_FOCUS); }
     for (const channel of shownEdgeChannels.current) runtime.clearPreview(channel);
     shownEdgeChannels.current.clear();
     for (const group of edgeOverlayOf(runtime, runtime.getAllRegionTopologies(), runtime.getGraphSnapshot(), runtime)) {
@@ -207,7 +238,10 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     }
   }, []);
 
-  const activeParams = options.toolParams[options.activeTool];
+  // Runs on a tool switch, never on a change of the active tool's params: a
+  // tool that mirrors its selection into its own params (an opening, a
+  // picked ramp) would otherwise be cancelled -- selection, manipulator and
+  // gesture all dropped -- by the very update that shows what it picked.
   useEffect(() => {
     const tool = toolFor(options.activeTool);
     // Bind cleanup to the runtime that owns this draft, even after a table switch.
@@ -234,7 +268,8 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
         tool.onDeleteKey(ownedContext);
       }
       if (gestureRef.current) return;
-      if (tool.onKeyDown?.(ownedContext, event.key, activeParams as never)) {
+      const { toolParams, activeTool } = optionsRef.current;
+      if (tool.onKeyDown?.(ownedContext, event.key, toolParams[activeTool] as never)) {
         event.preventDefault();
         refreshEdgeOverlay();
       }
@@ -242,7 +277,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     const restoreManipulator = () => {
       if (!branchModifier.current) return;
       branchModifier.current = false;
-      const node = options.runtime.getGraphSnapshot().nodes.find(n => n.id === selectedPoint.current);
+      const node = selectedPoint.current === undefined ? undefined : spineHandleAt(options.runtime, selectedPoint.current);
       if (node) ctx.reportSelection({ id: node.id, point: node.position });
     };
     const keyup = (event: KeyboardEvent) => { if (event.key === "Shift") restoreManipulator(); };
@@ -261,9 +296,12 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       if (options.viewId !== undefined) options.runtime.setPointManipulator?.(options.viewId, undefined);
       tool.onCancel?.(ownedContext);
       options.runtime.setConstructionHandlePresentation?.("all");
+      options.runtime.setGlobalHandleOwners?.(undefined);
+      focusRef.current = undefined;
+      options.runtime.setHandleFocus?.(undefined);
       release();
     };
-  }, [options.activeTool, options.runtime, options.history, options.tableId, options.viewId, activeParams, ctx, refreshEdgeOverlay]);
+  }, [options.activeTool, options.runtime, options.history, options.tableId, options.viewId, ctx, refreshEdgeOverlay]);
 
   // Draw what is already standing as soon as the table is live, not only
   // after the first commit -- an edge that was there before this session
@@ -275,7 +313,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     let drawn = runtime.getSnapshot().status === "ready";
     const unsubscribe = runtime.subscribe(() => {
       if (selectedPoint.current && !manipulatorGesture.current) {
-        const node = runtime.getGraphSnapshot().nodes.find(n => n.id === selectedPoint.current);
+        const node = spineHandleAt(runtime, selectedPoint.current);
         ctx.reportSelection(node ? { id: node.id, point: node.position } : undefined);
       }
       if (drawn || runtime.getSnapshot().status !== "ready") return;
@@ -363,7 +401,19 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       // to a circle footprint or unfinished polygon preview between clicks.
       if (gesture === null || gesture.pointerId !== event.pointerId) {
         const hover = typeof tool.previewOnHover === "function" ? tool.previewOnHover(params) : tool.previewOnHover;
-        const sample = hover ? sampleAt(event) : undefined;
+        const sample = hover || tool.handlesOnHover ? sampleAt(event) : undefined;
+        // The structure under the pointer shows its handles.
+        if (tool.handlesOnHover && tool.editsType && focusRef.current) {
+          const now = performance.now();
+          if (now - lastFocusAtRef.current >= FOCUS_THROTTLE_MS) {
+            lastFocusAtRef.current = now;
+            const focus = handleFocusAt(ctx, sample, focusRef.current, tool.editsType);
+            if (!sameFocus(focus, focusRef.current)) {
+              focusRef.current = focus;
+              optionsRef.current.runtime.setHandleFocus?.(focus);
+            }
+          }
+        }
         event.currentTarget.style.cursor = sample?.constructionAction ? "pointer" : sample?.nodeId ? "grab" : "";
         const descriptor = sample ? tool.previewFor?.({ start: sample,current: sample,samples: [sample] },params,ctx) : undefined;
         if (descriptor) optionsRef.current.runtime.showPreview(descriptor,TOOL_GHOST_PREVIEW_CHANNEL);
@@ -447,7 +497,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
   const onSelectionAction = useCallback((action: string) => {
     if (gestureRef.current || manipulatorGesture.current) return;
     const { activeTool, toolParams } = optionsRef.current;
-    if (toolFor(activeTool).onSelectionAction?.(ctx, action, toolParams[activeTool] as never)) refreshEdgeOverlay();
+    if (toolFor(activeTool).onSelectionAction?.(ctx, action, toolParams[activeTool] as never, selectedId.current)) refreshEdgeOverlay();
   }, [ctx, refreshEdgeOverlay]);
 
   return {

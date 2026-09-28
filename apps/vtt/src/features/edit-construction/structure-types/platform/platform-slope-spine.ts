@@ -1,6 +1,7 @@
 import type {
   BezierPort,
   ConstructionEdgeSnapshot,
+  CurvePoint,
   ConstructionGraphPatch,
   ConstructionGraphSnapshot,
   ConstructionMotionInfluence,
@@ -11,13 +12,19 @@ import type {
 } from "@/ports";
 
 import { ribbonSections, unionRibbonOutlines } from "../../topology/bezier-curve.ts";
-import { isSpineControlNodeId, ownedBy, spineComponent, spineRibbons } from "../../spine/index.ts";
+import { gradeSpineSpans, isSpineControlNodeId, ownedBy, spineComponent, spineRibbons, type SpineGrade } from "../../spine/index.ts";
 import type { MotionContext, SpineRegeneration, SpineRegenerationInput } from "../structure-type.ts";
 
 /**
  * A sloped platform generated from a spine, the way a road is: the spine's
  * bezier spans are the source of truth, and the surface is regenerated from
- * them. What differs from a road is only the last step -- a road unions its
+ * them.
+ *
+ * Plan and height are kept apart, as ramp tools do: the spine's plan is
+ * edited freely, and only its two free ends carry authored heights. Every
+ * point between them is re-graded on each regeneration so the whole run
+ * climbs at one constant grade by plan length (`gradeSpineSpans`, computed
+ * in Rust). A spiral is this same ramp whose plan is a helix. What differs from a road is only the last step -- a road unions its
  * ribbons in plan, and a spiral's turns overlap in plan, so a sloped platform
  * keeps **one face per span** instead: that span's ribbon outline, sampled
  * along the curve on both margins. No face ever overlaps itself in plan, and
@@ -142,11 +149,22 @@ export function slopeFootprint(port: Pick<BezierPort, "planarBoolean">, surface:
 export { prospectiveGraph } from "../../spine/index.ts";
 import { prospectiveGraph } from "../../spine/index.ts";
 
-/** Regenerates every sloped-platform span on the spine a graph patch touches. */
+/** `patch` with `extra` laid over it: a later node or edge of the same id wins. */
+function overlaid(patch: ConstructionGraphPatch, extra: SpineGrade): ConstructionGraphPatch {
+  const nodes = new Map(patch.nodes.map((node) => [node.id, node]));
+  for (const node of extra.nodes) nodes.set(node.id, node);
+  const edges = new Map(patch.edges.map((edge) => [edge.edgeId, edge]));
+  for (const edge of extra.edges) edges.set(edge.edgeId, edge);
+  return { ...patch, nodes: [...nodes.values()], edges: [...edges.values()] };
+}
+
+/** Regenerates every sloped-platform span on the spine a graph patch touches, re-graded between its ends. */
 export function regenerateSlopeSpine(input: SpineRegenerationInput): SpineRegeneration {
-  const { snapshot, graphPatch } = input;
+  const { snapshot } = input;
+  const seeds = [...input.graphPatch.nodes.map((node) => node.id), ...input.graphPatch.edges.flatMap((edge) => [edge.startNodeId, edge.endNodeId])];
+  const drafted = prospectiveGraph(snapshot, input.graphPatch);
+  const graphPatch = overlaid(input.graphPatch, gradeSpineSpans(input.port, drafted, spineComponent(drafted, seeds).edges.filter(isSlopeSpan)));
   const after = prospectiveGraph(snapshot, graphPatch);
-  const seeds = [...graphPatch.nodes.map((node) => node.id), ...graphPatch.edges.flatMap((edge) => [edge.startNodeId, edge.endNodeId])];
   const spans = spineComponent(after, seeds).edges.filter((edge) => edge.curve && isSlopeSpan(edge));
   const before = spineComponent(snapshot, seeds).edges.filter(isSlopeSpan);
   const touched = new Set([...spans, ...before].map((edge) => slopeFaceId(edge.edgeId)).concat((graphPatch.removedEdgeIds ?? []).map(slopeFaceId)));

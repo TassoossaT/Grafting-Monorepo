@@ -54,12 +54,12 @@ test("a curved contour edge gets the same handles and picks a spine span does", 
     const edges = curveEdgesOf(runtime.getGraphSnapshot(), contour, runtime);
     assert.ok(edges.every((edge) => edge.store === "contour"));
     const handles = curveHandles(edges, runtime);
-    assert.equal(handles.length, 6, "two handles and a midpoint per curve");
+    assert.equal(handles.length, 2, "one midpoint handle per curve");
 
-    const first = handles.find((handle) => handle.id === curvePickId("bottom", 1));
-    assert.deepEqual([first.position.x, first.position.z], [1, -1], "the handle sits on the edge's own XZ control point");
+    const first = handles.find((handle) => handle.id === curvePickId("bottom", "midpoint"));
+    assert.ok(first !== undefined, "the handle sits on the edge's midpoint");
     assert.deepEqual(curvePick(curvePickId("bottom", "midpoint")), { edgeId: "bottom", index: "midpoint" });
-    assert.ok(isBezierEditTarget(runtime.getGraphSnapshot(), curvePickId("bottom", 2), contour));
+    assert.ok(isBezierEditTarget(runtime.getGraphSnapshot(), curvePickId("bottom", "midpoint"), contour));
   } finally { session.free(); }
 });
 

@@ -388,6 +388,7 @@ const TOOL_LABELS: Partial<Record<ConstructionToolId, string>> = {
   "platform-contour": "Plataforma",
   "slope-ramp": "Rampa",
   "slope-spiral": "Espiral",
+  "slope-curve": "Rampa curva",
   "path-brush": "Parâmetros: Caminho",
   "wall-brush": "Parâmetros: Parede (Pincel Livre)",
   "wall-line": "Parâmetros: Parede (Linha Reta)",
@@ -450,23 +451,34 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
           {params["platform-contour"].shape === "circle" &&<div className="gm-material-grid">{TOWER_RADIUS_PRESETS.map((radius) => <SelectableChip key={radius} label={`Raio ${radius}`} swatchColor="#79b8e8" selected={(params["platform-contour"].radius ?? 2.5) === radius} onSelect={() => onParamsChange("platform-contour",{ ...params["platform-contour"],radius })} />)}</div>}
           {params["platform-contour"].shape === "freehand" && <label>Correção <input type="number" min="0" max="1" step="0.05" value={params["platform-contour"].tolerance ?? 0.15} onChange={(event) => onParamsChange("platform-contour",{ ...params["platform-contour"],tolerance:Number(event.currentTarget.value) })} /></label>}
           <p>Retângulo: arraste na diagonal. Círculo: clique no centro. Polígono: clique nos cantos e no primeiro para fechar. Livre: arraste o contorno. Esc cancela.</p>
+          <p>O terreno só é cortado onde o piso encosta nele: no chão ele ocupa o terreno embaixo; no alto, o terreno embaixo fica intacto.</p>
           <p>Para ampliar, desenhe sobre a borda e a área nova. Começar sobre uma plataforma usa a elevação dela; fora dela, vale a elevação escolhida. Vértices de outro andar não são conectados.</p>
         </div>
       ) : activeTool === "slope-ramp" ? (
         <div style={{ display: "grid", gap: "0.6rem" }}>
-          <label>Largura <input type="number" min="0.1" step="0.1" value={params["slope-ramp"].width} onChange={(event) => onParamsChange("slope-ramp", { ...params["slope-ramp"], width: Number(event.currentTarget.value) })} /></label>
+          <label>Largura embaixo <input type="number" min="0.1" step="0.1" value={params["slope-ramp"].bottomWidth ?? 1.5} onChange={(event) => onParamsChange("slope-ramp", { ...params["slope-ramp"], bottomWidth: Number(event.currentTarget.value) })} /></label>
+          <label>Largura em cima <input type="number" min="0.1" step="0.1" value={params["slope-ramp"].topWidth ?? 1.5} onChange={(event) => onParamsChange("slope-ramp", { ...params["slope-ramp"], topWidth: Number(event.currentTarget.value) })} /></label>
           <label>Subida <input type="number" step="0.1" value={params["slope-ramp"].rise} onChange={(event) => onParamsChange("slope-ramp", { ...params["slope-ramp"], rise: Number(event.currentTarget.value) })} /></label>
           <p>Arraste do início ao fim. A rampa começa na altura de onde você clicou e sobe o valor de Subida. Uma ponta que cai na borda de uma plataforma na mesma altura é soldada a ela.</p>
+          <p>Depois de criada: um canto muda a largura daquela ponta, uma lateral muda as duas larguras juntas, uma ponta muda o comprimento e a subida. Para uma rampa com curvas, use a Espiral.</p>
         </div>
       ) : activeTool === "slope-spiral" ? (
         <div style={{ display: "grid", gap: "0.6rem" }}>
           <label>Largura <input type="number" min="0.1" step="0.1" value={params["slope-spiral"].width} onChange={(event) => onParamsChange("slope-spiral", { ...params["slope-spiral"], width: Number(event.currentTarget.value) })} /></label>
-          <label>Raio <input type="number" min="0.5" step="0.1" value={params["slope-spiral"].radius} onChange={(event) => onParamsChange("slope-spiral", { ...params["slope-spiral"], radius: Number(event.currentTarget.value) })} /></label>
-          <label>Voltas <input type="number" min="0.25" step="0.25" value={params["slope-spiral"].turns} onChange={(event) => onParamsChange("slope-spiral", { ...params["slope-spiral"], turns: Number(event.currentTarget.value) })} /></label>
           <label>Subida <input type="number" step="0.1" value={params["slope-spiral"].rise} onChange={(event) => onParamsChange("slope-spiral", { ...params["slope-spiral"], rise: Number(event.currentTarget.value) })} /></label>
-          <p>Clique no centro. A espiral começa na altura de onde você clicou e sobe o valor de Subida ao longo das voltas.</p>
+          <p>Clique o centro, depois o início: a distância é o raio. Gire o cursor em volta do centro no sentido que quiser, cada volta completa soma uma volta, e clique o fim.</p>
+          <p>A espiral começa na altura do início e termina na altura do piso onde você clicou o fim, ou sobe o valor de Subida. Shift e mover o mouse para cima ou para baixo ajusta a subida.</p>
         </div>
-
+      ) : activeTool === "slope-curve" ? (
+        <div style={{ display: "grid", gap: "0.6rem" }}>
+          <div className="gm-material-grid">
+            {(["points", "straight", "arc", "connect", "spiral"] as const).map((mode, i) => <SelectableChip key={mode} label={["Por pontos", "Reta", "Arco", "Ligar pontas", "Espiral"][i]!} swatchColor="#79b8e8" selected={(params["slope-curve"].mode ?? "points") === mode} onSelect={() => onParamsChange("slope-curve", { ...params["slope-curve"], mode })} />)}
+          </div>
+          <label>Largura <input type="number" min="0.1" step="0.1" value={params["slope-curve"].width} onChange={(event) => onParamsChange("slope-curve", { ...params["slope-curve"], width: Number(event.currentTarget.value) })} /></label>
+          <label>Subida <input type="number" step="0.1" value={params["slope-curve"].rise} onChange={(event) => onParamsChange("slope-curve", { ...params["slope-curve"], rise: Number(event.currentTarget.value) })} /></label>
+          <p>Por pontos: clique por onde a curva passa; clique de novo no último, ou Enter. Reta: início e fim. Arco: início, fim e puxe a curva. Ligar pontas: clique na borda de um piso e depois na do outro, e a rampa sai reta de cada borda. Espiral: centro, início, gire e clique o fim. R troca o modo.</p>
+          <p>A rampa começa na altura do primeiro clique e termina na altura do piso do último clique, ou sobe o valor de Subida, sempre na mesma inclinação. Shift e mover o mouse para cima ou para baixo ajusta a subida. Backspace desfaz o último clique e Esc cancela.</p>
+        </div>
       ) : activeTool === "path-brush" ? (<PathBrushFields params={params["path-brush"]} onChange={(next) => onParamsChange("path-brush", next)} />) : activeTool === "wall-brush" ? (
         <WallBrushFields params={params["wall-brush"]} onChange={(next) => onParamsChange("wall-brush", next)} />
       ) : activeTool === "wall-line" ? (

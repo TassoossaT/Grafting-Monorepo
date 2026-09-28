@@ -478,7 +478,7 @@ test("projected snap near an endpoint reuses it instead of introducing a tiny sp
 });
 
 test("world-distance endpoint reuse does not snap five percent of a long road",async()=>{
-  const {roadBodyTarget}=await import("../src/composition/tabletop/tools/paths/road-body-target.ts");
+  const {spineBodyTarget:roadBodyTarget}=await import("../src/composition/tabletop/tools/core/spine-body-target.ts");
   const f=fixture();
   try {
     f.click(sample(0,0));f.click(sample(100,0));f.finish();

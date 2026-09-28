@@ -2,6 +2,7 @@ import type { ConstructionGridConstraintPoint, ConstructionIrregularQuadGrid } f
 
 const TOOL_DIAGNOSTIC_PREFIX = "[grafting:vtt]";
 import type { ConstraintRing } from "./terrain-constraints.ts";
+import { twiceSignedArea } from "../../../features/edit-construction/index.ts";
 
 /**
  * What one terrain commit actually did, on the console.
@@ -61,19 +62,9 @@ function segmentLengths(rings: readonly ConstraintRing[]): number[] {
  * So the orientations are measured here first, against a real drawing, rather
  * than assumed either way again.
  */
-function twiceSignedArea(ring: ConstraintRing): number {
-  let twice = 0;
-  for (let index = 0; index < ring.points.length; index += 1) {
-    const from = ring.points[index]!;
-    const to = ring.points[(index + 1) % ring.points.length]!;
-    twice += from.x * to.z - to.x * from.z;
-  }
-  return twice;
-}
-
-/** `+`/`-` per ring, in order, so a disagreement is visible at a glance. */
 function orientations(rings: readonly ConstraintRing[]): string {
-  return rings.map((ring) => (twiceSignedArea(ring) >= 0 ? "+" : "-")).join("") || "·";
+  // `+`/`-` per ring, in order, so a disagreement is visible at a glance.
+  return rings.map((ring) => (twiceSignedArea(ring.points) >= 0 ? "+" : "-")).join("") || "·";
 }
 
 function pointCount(rings: readonly ConstraintRing[]): number {
@@ -221,17 +212,6 @@ export interface TerrainCommitReport {
   };
 }
 
-/** Plan-view area of a ring of constraint points, unsigned. */
-function ringArea(points: readonly { readonly x: number; readonly z: number }[]): number {
-  let twice = 0;
-  for (let index = 0; index < points.length; index += 1) {
-    const from = points[index]!;
-    const to = points[(index + 1) % points.length]!;
-    twice += from.x * to.z - to.x * from.z;
-  }
-  return Math.abs(twice) / 2;
-}
-
 /**
  * Never throws, whatever it is handed.
  *
@@ -259,8 +239,8 @@ function describe(report: TerrainCommitReport): void {
     aneisBoundary: report.boundary.length,
     aneisHoles: report.holes.length,
     areaPedida: round(
-      report.boundary.reduce((sum, ring) => sum + ringArea(ring.points), 0) -
-        report.holes.reduce((sum, ring) => sum + ringArea(ring.points), 0),
+      report.boundary.reduce((sum, ring) => sum + Math.abs(twiceSignedArea(ring.points)) / 2, 0) -
+        report.holes.reduce((sum, ring) => sum + Math.abs(twiceSignedArea(ring.points)) / 2, 0),
     ),
     areaCoberta: round(report.coveredArea ?? 0),
     celulasEvitadas: report.quadDrops?.avoided ?? 0,

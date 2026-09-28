@@ -136,9 +136,20 @@ export type ConfirmedMapChunkRenderChange =
     };
 
 /** A construction node's live world position, rendered as a small pickable handle -- what edit-mode picking/drag-to-move hit-tests against. */
+/**
+ * What a handle does, so it reads as that at a glance: a point to drag, or a
+ * control that moves a whole structure, sets a height, or turns something
+ * round -- winding something on (turns) or turning a whole thing (rotate).
+ * Interaction vocabulary, not product vocabulary -- any structure's
+ * handle can take any glyph.
+ */
+export type RenderHandleGlyph = "point" | "midpoint" | "move" | "rotate" | "height" | "turns" | "radius" | "tilt" | "link" | "side" | "corner" | "unlink";
+
 export interface RenderNodeHandle {
   readonly nodeId: string;
   readonly position: { readonly x: number; readonly y: number; readonly z: number };
+  /** How the handle is drawn; absent is a plain point. */
+  readonly glyph?: RenderHandleGlyph;
 }
 
 export type ConfirmedNodeHandleRenderChange =
@@ -177,6 +188,10 @@ export interface ScenePickResult {
   readonly nodeId?: string;
   /** Canonical surface identity when map geometry, rather than ground, was hit. */
   readonly surfaceRef?: string;
+  /** The pointer's ray, camera outward -- where the pointer is at any other height. */
+  readonly ray?: { readonly origin: { readonly x: number; readonly y: number; readonly z: number }; readonly direction: { readonly x: number; readonly y: number; readonly z: number } };
+  /** The way the camera looks -- the same wherever on the screen the pointer is. */
+  readonly forward?: { readonly x: number; readonly y: number; readonly z: number };
 }
 
 /**

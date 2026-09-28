@@ -54,6 +54,7 @@ const TOOL_LABEL: Record<ConstructionToolId, string> = {
   "platform-contour": "Plataforma",
   "slope-ramp": "Rampa",
   "slope-spiral": "Espiral",
+  "slope-curve": "Rampa curva",
   "path-brush": "Caminho",
   navigate: "Navegação da Câmera",
   "wall-brush": "Pincel de Parede (Livre)",
@@ -156,7 +157,8 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
 
   const handleFeedbackChange = useCallback((feedback: ConstructionToolFeedback | undefined) => {
     if (feedback?.tone === "error") {
-      console.error("[VTT Tool Error]", feedback.message, feedback);
+      // A tool refusing an edit is feedback for the person, not a fault in the app: warned, so it never raises the dev error overlay.
+      console.warn("[VTT Tool Error]", feedback.message, feedback);
     } else if (feedback?.tone === "info") {
       console.info("[VTT Tool Info]", feedback.message);
     } else if (feedback?.tone === "success") {

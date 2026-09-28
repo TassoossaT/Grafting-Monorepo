@@ -1,5 +1,5 @@
 import type { PreviewDescriptor, WallParams } from "@/features/edit-construction";
-import { hasTrait } from "../../../../features/edit-construction/index.ts";
+import { rejoinNodes, settlePatch, type WeldLink } from "../../../../features/edit-construction/index.ts";
 import type {
   ConstructionEdgeGeometry,
   ConstructionEdgeId,
@@ -9,7 +9,8 @@ import type {
 } from "@/ports";
 
 import { projectOntoLineXZ, xzDistance, pinnedToBaseline } from "../shapes/geometry-2d.ts";
-import { scopedToolId, type ToolContext } from "../core/tool-context.ts";
+import { scopedToolId, type PointerSample, type ToolContext } from "../core/tool-context.ts";
+import { surfaceRefFromNodeSet as surfaceRefOf } from "../../../../entities/map/index.ts";
 import { fitPath, type FittedEdge } from "../core/stroke-fitting.ts";
 import { boundaryUsage, type EdgeSharing } from "../core/boundary-edges.ts";
 import { brushSweptRegionFill } from "../shapes/preview-shapes.ts";
@@ -17,6 +18,7 @@ import { commitChange } from "../../effects/effect-commit.ts";
 import { shapeChangeOfAddition } from "../../effects/shape-change.ts";
 import { wallPatch, type WallColumn, type WallContour } from "./wall-patch.ts";
 import { wallSpans, type WallSpan } from "./wall-spans.ts";
+import { floorSideAt, nearestFloorNode, onFloorLevel } from "../core/floor-landing.ts";
 
 export { xzDistance, pinnedToBaseline };
 
@@ -185,31 +187,6 @@ export function findWallSurfaceAt(ctx: ToolContext, point: ConstructionPosition)
  * whole type is built on.
  */
 /**
- * The closest platform vertex within `weldTolerance` (XZ) at the same
- * elevation ({@link ELEVATION_WELD_TOLERANCE}) as `position`, or `undefined`
- * -- the XZ half of endpoint welding is a magnet, same tolerance a wall
- * corner snaps onto another wall's column with, never a reuse of a lower
- * storey merely by XZ.
- */
-function nearestPlatformNodeAt(
-  ctx: ToolContext,
-  position: ConstructionPosition,
-  weldTolerance: number,
-): { readonly node: { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }; readonly distance: number } | undefined {
-  let best: { readonly node: { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }; readonly distance: number } | undefined;
-  for (const region of ctx.runtime.getAllRegionTopologies()) {
-    if (!hasTrait(region.surfaceType, "floor")) continue;
-    for (const node of region.nodes) {
-      if (Math.abs(node.position.y - position.y) > ELEVATION_WELD_TOLERANCE) continue;
-      const distance = xzDistance(node.position, position);
-      if (distance > weldTolerance) continue;
-      if (best === undefined || distance < best.distance) best = { node, distance };
-    }
-  }
-  return best;
-}
-
-/**
  * The single corner magnet both `resolveColumn` and its read-only preview
  * echo pull from: an existing wall column and a platform vertex are the same
  * strength, so whichever actually sits closer wins, rather than a wall
@@ -224,7 +201,7 @@ function nearestCornerAt(
   weldTolerance: number,
 ): { readonly bottomNodeId: ConstructionNodeId; readonly topNodeId: ConstructionNodeId | undefined; readonly bottom: ConstructionPosition; readonly top: ConstructionPosition | undefined } | undefined {
   const wall = existingColumnAt(ctx, point, weldTolerance);
-  const platform = nearestPlatformNodeAt(ctx, point, weldTolerance);
+  const platform = nearestFloorNode(ctx, point, weldTolerance, ELEVATION_WELD_TOLERANCE);
   if (wall !== undefined && (platform === undefined || wall.distance <= platform.distance)) {
     return { bottomNodeId: wall.column.bottomNodeId, topNodeId: wall.column.topNodeId, bottom: wall.column.bottom, top: wall.column.top };
   }
@@ -232,6 +209,26 @@ function nearestCornerAt(
     return { bottomNodeId: platform.node.id, topNodeId: undefined, bottom: platform.node.position, top: undefined };
   }
   return undefined;
+}
+
+/** Where the pointer puts a wall's foot: on a floor's level when over or at the edge of one ({@link onFloorLevel}), else where it hit. */
+export const wallFootAt = (ctx: ToolContext, sample: PointerSample): ConstructionPosition => onFloorLevel(ctx, sample, CORNER_WELD_TOLERANCE);
+
+/**
+ * Where a wall begins when pressed on: on another wall, at the foot of that
+ * wall straight below where it was pressed -- a new wall joins it there, at
+ * a column or partway along its run, never halfway up its face; else on a
+ * floor it is over, at the floor's height ({@link wallFootAt}).
+ */
+export function wallStartAt(ctx: ToolContext, sample: PointerSample): ConstructionPosition {
+  if (sample.surfaceRef !== undefined) {
+    for (const span of wallSpans(ctx)) {
+      if (surfaceRefOf(span.surfaceKey) !== sample.surfaceRef) continue;
+      const t = Math.max(0, Math.min(1, projectOntoSegment(sample.point, span.a, span.b).t));
+      return { x: span.a.x + (span.b.x - span.a.x) * t, y: span.a.y + (span.b.y - span.a.y) * t, z: span.a.z + (span.b.z - span.a.z) * t };
+    }
+  }
+  return wallFootAt(ctx, sample);
 }
 
 function resolveColumn(
@@ -242,6 +239,7 @@ function resolveColumn(
   index: number,
   causeId: string,
   correction: number,
+  onFloorSides: { nodeId: ConstructionNodeId; floor: ConstructionSurfaceKey }[] = [],
 ): WallColumn {
   const mint = () => ({
     bottomNodeId: `${idPrefix}:c${index}:bottom`,
@@ -257,7 +255,7 @@ function resolveColumn(
     // another wall's unrelated base that merely happens to sit at the same
     // height: two walls at different elevations lining up by coincidence is
     // not the same intention as a post actually landing on a floor.
-    const upper = corner.topNodeId !== undefined ? undefined : nearestPlatformNodeAt(ctx, top, weldTolerance);
+    const upper = corner.topNodeId !== undefined ? undefined : nearestFloorNode(ctx, top, weldTolerance, ELEVATION_WELD_TOLERANCE);
     return {
       bottomNodeId: corner.bottomNodeId,
       topNodeId: corner.topNodeId ?? upper?.node.id ?? mint().topNodeId,
@@ -268,6 +266,12 @@ function resolveColumn(
   const inserted = insertedColumnAt(ctx, point, mint, causeId, Math.max(CROSSING_TOLERANCE, correction));
   if (inserted !== undefined) return inserted;
   const { bottomNodeId, topNodeId } = mint();
+  // Partway along a floor's side: on it, and the floor is cut there once the wall stands, so the two share the node.
+  const side = floorSideAt(ctx, point, weldTolerance, CORNER_WELD_TOLERANCE, ELEVATION_WELD_TOLERANCE);
+  if (side !== undefined) {
+    onFloorSides.push({ nodeId: bottomNodeId, floor: side.floor });
+    return { bottomNodeId, topNodeId, bottom: side.point, top: { x: side.point.x, y: side.point.y + height, z: side.point.z } };
+  }
   return { bottomNodeId, topNodeId, bottom: point, top: { x: point.x, y: point.y + height, z: point.z } };
 }
 
@@ -279,7 +283,8 @@ function resolveColumn(
  * insertion still previews at the raw point; the commit itself is unaffected.
  */
 export function snappedEndpoint(ctx: ToolContext, point: ConstructionPosition, correction = 0): ConstructionPosition {
-  return nearestCornerAt(ctx, point, Math.max(CORNER_WELD_TOLERANCE, correction))?.bottom ?? point;
+  const tolerance = Math.max(CORNER_WELD_TOLERANCE, correction);
+  return nearestCornerAt(ctx, point, tolerance)?.bottom ?? floorSideAt(ctx, point, tolerance, CORNER_WELD_TOLERANCE, ELEVATION_WELD_TOLERANCE)?.point ?? point;
 }
 
 /**
@@ -388,8 +393,9 @@ export function commitWallContour(
   let committed;
   try {
     committed = commitChange(ctx.runtime, { transactionId: causeId }, () => {
+      const onFloorSides: { nodeId: ConstructionNodeId; floor: ConstructionSurfaceKey }[] = [];
       const columns = points.map((point, index) =>
-        resolveColumn(ctx, point, params.height, idPrefix, index, causeId, correction),
+        resolveColumn(ctx, point, params.height, idPrefix, index, causeId, correction, onFloorSides),
       );
       const contour: WallContour = { columns, geometries, closed };
       // Any number of walls may stand on one column, so a run keeps its own
@@ -399,8 +405,15 @@ export function commitWallContour(
         runPrefix: idPrefix,
         existingUses: boundaryUsage(ctx),
       };
-      const patch = wallPatch(ctx.tableId, contour, params.wallType, sharing);
+      // The walls' own law -- every post straight up from its foot -- settles the patch, whatever the corners snapped to.
+      const patch = settlePatch(wallPatch(ctx.tableId, contour, params.wallType, sharing), ctx.runtime.getGraphSnapshot());
       const added = ctx.runtime.addPatch(patch, "local", causeId);
+      // Each corner that landed partway along a floor's side: the floor -- and the ground against it -- cut there, sharing the wall's node.
+      if (onFloorSides.length > 0) {
+        const links: WeldLink[] = onFloorSides.map(({ nodeId, floor }) => ({ rung: { edgeId: "", startNodeId: nodeId, endNodeId: nodeId }, floors: [floor], welded: false }));
+        const cut = rejoinNodes(ctx.runtime.getAllRegionTopologies(), links, `${causeId}:floor`);
+        if (cut.request) ctx.runtime.applyPatchReplacement(cut.request, "local", causeId);
+      }
       return { value: added, change: shapeChangeOfAddition(ctx.runtime, patch, added) };
     });
   } catch (error) {

@@ -4,7 +4,7 @@ import type { WallBrushParams } from "@/features/edit-construction";
 import { createBrushTool, type BrushRegion } from "../core/brush-tool.ts";
 import { withStructureEditing } from "../core/structure-edit-behavior.ts";
 import type { ToolContext } from "../core/tool-context.ts";
-import { WALL_COLOR, commitWallStroke } from "./wall-shared.ts";
+import { WALL_COLOR, commitWallStroke, wallFootAt } from "./wall-shared.ts";
 
 /**
  * A free wall stroke, built on the same brush every other brush uses: press,
@@ -33,7 +33,8 @@ const rawWallBrushTool = createBrushTool<"wall-brush">({
   halfWidth: () => 0,
 
   applyRegion(region: BrushRegion, ctx: ToolContext, params: WallBrushParams): void {
-    commitWallStroke(ctx, region.samples, region.tolerance, params, "wall-brush");
+    // Over a floor, the stroke stands on it: at its height exactly, whatever the pick's noise.
+    commitWallStroke(ctx, region.samples.map((point) => wallFootAt(ctx, { point })), region.tolerance, params, "wall-brush");
   },
 
   // No `previewContour` override: the corrected/fitted result is only
@@ -46,5 +47,5 @@ const rawWallBrushTool = createBrushTool<"wall-brush">({
   // eventual fit may spend, exactly what `path-brush` already shows.
 });
 
-/** Also grabs and edits an existing wall's own vertex/edge/body/height-widget -- see `structure-edit-behavior.ts`. */
-export const wallBrushTool = withStructureEditing(rawWallBrushTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "partition") });
+/** Also edits an existing wall by its handles -- see `structure-edit-behavior.ts`; a press on a wall itself builds from it. */
+export const wallBrushTool = withStructureEditing(rawWallBrushTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "partition"), handlesOnly: true });

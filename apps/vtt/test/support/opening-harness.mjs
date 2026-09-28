@@ -40,7 +40,9 @@ export async function harness() {
       else if (c.type === "map-chunk-removed") chunks.delete(c.chunkId);
     },
   };
-  const runtime = new AppTabletopRuntime("t", renderPort, createConstructionSessionAdapter(), { async start() {}, async dispose() {} }, []);
+  // Anything else the render port is asked -- previews, handle markers -- draws nothing here.
+  const quietPort = new Proxy(renderPort, { get: (target, key) => (key in target || key === "then" ? target[key] : () => undefined) });
+  const runtime = new AppTabletopRuntime("t", quietPort, createConstructionSessionAdapter(), { async start() {}, async dispose() {} }, []);
   await runtime.start();
   let seq = 0;
   const feedback = [];

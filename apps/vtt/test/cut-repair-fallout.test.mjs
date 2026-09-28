@@ -957,12 +957,12 @@ test("platform interacts with terrain via CUT and ignores other structures", () 
 test("a platform over terrain reaches it, consuming covered terrain and providing platform fallout", () => {
   let receivedFallout;
   const positions = new Map();
-  // Platform at x = 0..4, z = 0..4 at elevation 3
+  // Platform at x = 0..4, z = 0..4, resting on the ground -- the ground is cut only where a structure touches it
   for (const [id, pos] of [
-    ["pn0", { x: 0, y: 3, z: 0 }],
-    ["pn1", { x: 4, y: 3, z: 0 }],
-    ["pn2", { x: 4, y: 3, z: 4 }],
-    ["pn3", { x: 0, y: 3, z: 4 }],
+    ["pn0", { x: 0, y: 0.1, z: 0 }],
+    ["pn1", { x: 4, y: 0.1, z: 0 }],
+    ["pn2", { x: 4, y: 0.1, z: 4 }],
+    ["pn3", { x: 0, y: 0.1, z: 4 }],
   ]) {
     positions.set(id, pos);
   }

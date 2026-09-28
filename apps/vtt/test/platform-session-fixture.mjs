@@ -32,6 +32,7 @@ export function sessionFixture() {
     curveBatch: (request) => JSON.parse(session.bezier_batch_json(JSON.stringify(request))),
     curveNetwork: (request) => JSON.parse(session.bezier_network_json(JSON.stringify(request))),
     planarBoolean: (request) => JSON.parse(session.planar_boolean_json(JSON.stringify(request))),
+    removeSurface: (request) => JSON.parse(session.remove_surface_json(JSON.stringify({ surfaceKey: request.surfaceKey }))),
     applyRegionEdit(ops) {
       if (ops.every((op) => op.kind === "move-vertex")) {
         calls.batches++;
@@ -39,9 +40,11 @@ export function sessionFixture() {
       }
       // Ground regenerating inside a commit splits and deletes; nothing else reaches here.
       for (const op of ops) {
-        if (op.kind === "insert-vertex") session.insert_vertex_json(JSON.stringify({ ...op, position: vector(op.position) }));
+        if (op.kind === "move-vertex") session.move_vertex_json(JSON.stringify({ nodeId: op.nodeId, position: vector(op.position) }));
+        else if (op.kind === "insert-vertex") session.insert_vertex_json(JSON.stringify({ ...op, position: vector(op.position) }));
         else if (op.kind === "retype-edge") session.retype_edge_json(JSON.stringify({ edgeId: op.edgeId, geometry: op.geometry }));
         else if (op.kind === "delete-region") session.delete_region_json(JSON.stringify({ surfaceKey: op.surfaceKey }));
+        else if (op.kind === "remove-vertex") session.remove_vertex_json(JSON.stringify({ nodeId: op.nodeId, weldedEdgeId: op.weldedEdgeId }));
         else throw new Error(`the fixture does not apply ${op.kind}`);
       }
       return {};
@@ -88,6 +91,9 @@ export function sessionFixture() {
         throw error;
       }
       return { value, recorded: session.commit_transaction(transactionId) };
+    },
+    undoTransaction(transactionId) {
+      session.undo_region_overlay(transactionId);
     },
     applyPatchReplacement(request) {
       const wire = JSON.parse(session.apply_patch_replacement_json(JSON.stringify({ ...request, patch: wirePatch(request.patch), graphPatch: request.graphPatch && wirePatch(request.graphPatch) })));

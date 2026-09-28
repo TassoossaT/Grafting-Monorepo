@@ -607,6 +607,10 @@ The item's opaque caller data, carried through unchanged.
 
 Distance from the camera, in world units.
 
+### `property render-3d.PickResult.forward?: Vec3`
+
+The way the camera looks, unit length -- the same wherever on the screen the pointer is.
+
 ### `property render-3d.PickResult.itemId: string`
 
 Which item was hit.
@@ -618,6 +622,12 @@ The layer that item belongs to.
 ### `property render-3d.PickResult.point: Vec3`
 
 World-space intersection point.
+
+### `property render-3d.PickResult.ray?: { direction: Vec3; origin: Vec3 }`
+
+The pointer's ray: from the camera through the pointer, `direction`
+unit length. Lets a caller place something at a chosen depth or height
+under the pointer rather than only where the ray hit.
 
 ### `interface render-3d.PointManipulator`
 

@@ -248,17 +248,61 @@ Invisible pick proxy retaining one canonical SurfaceRef per render item.
 
 ### `function vtt.map-surface-pick-scene-item.mapSurfacePickSceneItemId(surfaceRef: string): string`
 
+### `function vtt.marker-textures.createCornerHandleTexture(): HTMLCanvasElement`
+
+Pushes a corner -- both its sides at once: the corner, and a double arrow across it.
+
+### `function vtt.marker-textures.createHeightHandleTexture(): HTMLCanvasElement`
+
+Sets a height: a double arrow up and down.
+
+### `function vtt.marker-textures.createLinkHandleTexture(): HTMLCanvasElement`
+
+One end of a structure, which connects where it lands: two chain links.
+
 ### `function vtt.marker-textures.createMarkerTexture(): HTMLCanvasElement`
 
 Draws the sprite texture for a placed token marker: a filled circle with a small pointer tail.
+
+### `function vtt.marker-textures.createMidpointHandleTexture(): HTMLCanvasElement`
+
+A span's midpoint: a small diamond, lighter than a point, so it reads as "in between".
+
+### `function vtt.marker-textures.createMoveHandleTexture(): HTMLCanvasElement`
+
+Moves a whole structure: arrows out in four directions.
 
 ### `function vtt.marker-textures.createNodeHandleTexture(): HTMLCanvasElement`
 
 A small ring-dot, visually distinct from the token marker -- an editable construction-node handle, not a placed token.
 
+### `function vtt.marker-textures.createRadiusHandleTexture(): HTMLCanvasElement`
+
+Widens or narrows something round its centre: a double arrow across.
+
 ### `function vtt.marker-textures.createRoadBranchTexture(): HTMLCanvasElement`
 
 In-scene road branching affordance, distinct from a movable anchor.
+
+### `function vtt.marker-textures.createRotateHandleTexture(): HTMLCanvasElement`
+
+Turns a whole structure round: two arrows chasing each other round a circle.
+
+### `function vtt.marker-textures.createSideHandleTexture(): HTMLCanvasElement`
+
+Pushes one side out or in: the side, and a double arrow square to it.
+
+### `function vtt.marker-textures.createTiltHandleTexture(): HTMLCanvasElement`
+
+Tilts something by one end: a slope, and a double arrow up and down at its high end.
+
+### `function vtt.marker-textures.createTurnsHandleTexture(): HTMLCanvasElement`
+
+Turns something round: a circular arrow.
+
+### `function vtt.marker-textures.createUnlinkHandleTexture(): HTMLCanvasElement`
+
+Lets go of what a structure is joined to: two chain links pulled apart.
 
 ### `interface vtt.node-handle-scene-item.NodeHandlePickData`
 
@@ -268,15 +312,19 @@ Opaque per-item data a pick result echoes back, letting the adapter recover whic
 
 ### `property vtt.node-handle-scene-item.NodeHandlePickData.nodeId: string`
 
+### `interface vtt.node-handle-scene-item.NodeHandleVisualParams`
+
+### `property vtt.node-handle-scene-item.NodeHandleVisualParams.glyph: RenderHandleGlyph`
+
 ### `variable vtt.node-handle-scene-item.NODE_HANDLE_LAYER_ID: "construction-handles"`
 
 ### `variable vtt.node-handle-scene-item.NODE_HANDLE_VISUAL_KIND: "vtt-construction-node-handle"`
 
-### `function vtt.node-handle-scene-item.nodeHandleSceneItem(nodeId: string, position: ConstructionPosition): SceneItem<Record<string, never>>`
+### `function vtt.node-handle-scene-item.nodeHandleSceneItem(nodeId: string, position: ConstructionPosition, glyph: RenderHandleGlyph): SceneItem<NodeHandleVisualParams>`
 
 ### `function vtt.node-handle-scene-item.nodeHandleSceneItemId(nodeId: string): string`
 
-### `function vtt.node-handle-scene-item.nodeHandleTransform(position: ConstructionPosition): Transform`
+### `function vtt.node-handle-scene-item.nodeHandleTransform(position: ConstructionPosition, glyph: RenderHandleGlyph): Transform`
 
 ### `class vtt.render-3d-scene-adapter.Render3dSceneAdapter`
 
@@ -443,6 +491,8 @@ What committing needs of the runtime.
 
 ### `method vtt.effect-commit.EffectCommitRuntime.getFootprintCoverage(polygon: readonly (readonly [number, number])[]): readonly ConstructionCoveredRegion[]`
 
+### `method vtt.effect-commit.EffectCommitRuntime.getGraphSnapshot(): Pick<ConstructionGraphSnapshot, "nodes" | "edges">`
+
 ### `method vtt.effect-commit.EffectCommitRuntime.getRegionTopologiesInBounds(bounds: FillBounds & { seeds?: readonly CloudRequest[] }): readonly ConstructionRegionTopology[]`
 
 ### `method vtt.effect-commit.EffectCommitRuntime.getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined`
@@ -463,9 +513,25 @@ Runs `work` -- every mutation one gesture makes -- as one transaction, then
 lets every cloud the reported change reaches answer it inside that same
 transaction. Throwing anywhere rolls all of it back.
 
-### `function vtt.effect-commit.commitPatchReplacement(runtime: EffectCommitRuntime, request: ApplyPatchReplacementRequest, options: CommitOptions): TransactionResult<ConstructionPatchOutcome>`
+### `function vtt.effect-commit.commitPatchReplacement(runtime: EffectCommitRuntime, request: ApplyPatchReplacementRequest, options: CommitOptions & { afterward?: (outcome: ConstructionPatchOutcome) => void; carries?: readonly ConstructionSurfaceKey[] }): TransactionResult<ConstructionPatchOutcome>`
 
 Replaces regions with a patch and lets every cloud the change reaches answer it, atomically.
+
+### `function vtt.effect-commit.commitRegionEdit(runtime: EffectCommitRuntime & { applyRegionEdit: any }, ops: readonly AtomicEditOp[], options: CommitOptions): TransactionResult<RegionEditOutcome>`
+
+Applies region edit ops -- a finished drag, a turn, a raise -- and lets
+every cloud the edit reaches answer it, atomically: a grounded platform
+moved or resized re-cuts the ground it left and the ground it now covers,
+exactly as drawing it did. Each type the edit moved emits its own change;
+a type that cuts nothing reaches nothing.
+
+### `function vtt.effect-commit.commitStagedRegionEdit(runtime: EffectCommitRuntime & { applyRegionEdit: any }, stages: { after?: () => void; before?: () => void; ops: () => readonly AtomicEditOp[] }, options: CommitOptions): TransactionResult<RegionEditOutcome>`
+
+A region edit in stages, as one transaction: `before` changes the table
+first -- a weld paused -- the ops are then worked out on the table as
+`before` left it and applied, every cloud they reach answers them, and
+`after` finishes the change -- the weld made again. Throwing anywhere
+rolls all of it back.
 
 ### `function vtt.effect-commit.commitSurfaceRemoval(runtime: EffectCommitRuntime, surfaceKey: ConstructionSurfaceKey, options: CommitOptions): TransactionResult<RegionEditOutcome>`
 
@@ -516,6 +582,19 @@ A patch's regions as topologies, for when the engine cannot yet be asked for the
 ### `function vtt.shape-change.topologiesOf(runtime: ShapeChangeRuntime, keys: readonly ConstructionSurfaceKey[]): ConstructionRegionTopology[]`
 
 The faces behind `keys` that still exist. A stale key is skipped, not fatal.
+
+### `variable vtt.handle-glyphs.HANDLE_DONE: Readonly<Record<GlobalHandleKind, string>>`
+
+What each whole-structure handle reports once its edit is committed -- said here, with how it looks.
+
+### `variable vtt.handle-glyphs.HANDLE_GLYPHS: Readonly<Record<SceneHandleKind | "vertex", RenderHandleGlyph>>`
+
+Every handle the scene shows, by what it is for, and the glyph it is drawn
+with -- the one place a handle's look is chosen. Which handles exist is
+the scene handle registry's (`orchestration/scene-handles.ts`); the images
+themselves live with the renderer, one per glyph (`adapters/rendering`).
+Changing how a kind of handle looks is changing its line here or its
+glyph's image there, never the code that places it.
 
 ### `interface vtt.painted-topologies.PaintedTopologyRuntime`
 
@@ -688,6 +767,10 @@ own policy. The runtime deliberately does not resolve policy itself:
 that belongs to `features/edit-construction`, and the tool layer runs it
 before calling here.
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.previewNodeHandle(nodeId: string, position: ConstructionPosition | undefined): void`
+
+Shows a handle at `position` while a gesture carries it; `undefined` puts it back where it stands.
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.projectToHost(request: { hostSurfaceKey: ConstructionSurfaceKey; points: readonly ConstructionPosition[] }): readonly ConstructionHostPoint[]`
 
 World points in a host face's `(u, v)` frame. Throws when the host is not an upright panel.
@@ -715,6 +798,15 @@ Host `(u, v)` pairs back to world positions. Pure.
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.setConstructionHandlePresentation(mode: "all" | "spine-points"): void`
 
 Local editing presentation; never changes the graph or persistence.
+
+### `method vtt.tabletop-runtime.AppTabletopRuntime.setGlobalHandleOwners(owns: ((surfaceType: string) => boolean) | undefined): void`
+
+Which types' whole-structure handles the scene shows -- the active tool's
+own; `undefined` shows none.
+
+### `method vtt.tabletop-runtime.AppTabletopRuntime.setHandleFocus(focus: HandleFocus | undefined): void`
+
+Shows only the focused structure's handles -- the one under the pointer; `undefined` shows every one.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.setPointManipulator(viewId: string, target: RenderPointManipulator | undefined): void`
 
@@ -869,6 +961,10 @@ own policy. The runtime deliberately does not resolve policy itself:
 that belongs to `features/edit-construction`, and the tool layer runs it
 before calling here.
 
+### `method vtt.tabletop-runtime.TabletopRuntime.previewNodeHandle(nodeId: string, position: ConstructionPosition | undefined): void`
+
+Shows a handle at `position` while a gesture carries it; `undefined` puts it back where it stands.
+
 ### `method vtt.tabletop-runtime.TabletopRuntime.projectToHost(request: { hostSurfaceKey: ConstructionSurfaceKey; points: readonly ConstructionPosition[] }): readonly ConstructionHostPoint[]`
 
 World points in a host face's `(u, v)` frame. Throws when the host is not an upright panel.
@@ -896,6 +992,15 @@ Host `(u, v)` pairs back to world positions. Pure.
 ### `method vtt.tabletop-runtime.TabletopRuntime.setConstructionHandlePresentation(mode: "all" | "spine-points"): void`
 
 Local editing presentation; never changes the graph or persistence.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.setGlobalHandleOwners(owns: ((surfaceType: string) => boolean) | undefined): void`
+
+Which types' whole-structure handles the scene shows -- the active tool's
+own; `undefined` shows none.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.setHandleFocus(focus: HandleFocus | undefined): void`
+
+Shows only the focused structure's handles -- the one under the pointer; `undefined` shows every one.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.setPointManipulator(viewId: string, target: RenderPointManipulator | undefined): void`
 
@@ -948,6 +1053,102 @@ What a committed transaction produced, and whether it made an undo entry.
 ### `type vtt.tabletop-runtime.TabletopRuntimeListener = () => void`
 
 ### `type vtt.tabletop-runtime.TabletopRuntimeStatus = "idle" | "starting" | "ready" | "disposed"`
+
+### `function vtt.constraint-rings.anchoredConstraints(rings: readonly (readonly ConstructionRegionEdge[])[], positionOf: ReadonlyMap<string, { x: number; z: number }>, startingIndex: number, anchored: ReadonlySet<string>, before: readonly string[], withEdges: boolean): ConstraintTable`
+
+A structure's outline as constraint rings where a corner carries its node
+only when `anchored` names it. Sealed, the ground meets it without sharing it
+-- no edge to split, and a node only where another structure holds it too,
+a ramp's end welded into a floor. Otherwise (`withEdges`) its sides stay
+edges the ground may split, and `anchored` is the nodes resting on the ground.
+
+### `function vtt.constraint-rings.buildConstraintRings(targetPolygon: PlanarArea, faceSize: number, perimeters: ConstraintTable, pinned: (point: { x: number; z: number }) => boolean): readonly (ConstraintRing & { isHole: boolean })[]`
+
+Giving the boolean's output its identity back.
+
+The boolean answers in bare floats: a corner that was a node going in
+comes out as a pair of numbers with nothing attached. So every corner of the
+result is matched against the corners that *did* carry a node -- the retained
+terrain's rim and the painter's contour -- and takes that node's id.
+
+**This is the one place a position is matched back to a node, and it is here
+under protest.** `terrain-constraints.ts` states the invariant it breaks. It
+survives because the alternative is threading identity through a third-party
+boolean that has no room for it; what it must not do is *guess badly*, and
+three things it used to do were guesses:
+
+1. **Two corners could take the same node.** Nothing checked. The engine's
+   answer to that is not a duplicate but a collapse -- two distinct mesh
+   edges become one, two faces walk it the same way, and the second is
+   refused ("no room on edge"), or the cell is dropped outright for naming
+   one node twice. Every road junction puts more nodes within snapping
+   distance of each other, so this went from rare to routine as the network
+   grew. Each node is now claimed at most once.
+2. **First come, first served.** Corners were matched in ring order, so a
+   corner a third of a face away could take a node before the corner sitting
+   exactly on it was ever considered. Matching is now global and ordered by
+   distance: the true coincidence always wins, whatever order it is in.
+3. **Welding ran first and threw corners away before they could be
+   matched.** A corner dropped for being close to its neighbour took its
+   identity with it. Welding now runs last and never drops a corner that
+   names a node.
+
+The search is bucketed rather than exhaustive, which is why the whole thing
+stays linear as the road network grows instead of squaring with it.
+
+### `interface vtt.structure-contact.StructureMeeting`
+
+How the ground laid again in a repair meets the structures standing in it
+-- every one that cuts the ground there, not only the one that changed, so
+the ground laid round one never runs over another standing beside it.
+
+- **Where:** the part of each face resting on the ground
+  (`topology/ground-contact.ts`), which the ground goes round; the ground
+  runs on under the rest.
+- **At which nodes:** a structure's corners the ground may take as its own
+  -- those resting on it; a sealed structure only where another holds the
+  node too -- and the sides it may split.
+- **At what height:** a ground corner on a sealed structure's side takes the
+  side's height; one on the line the cut ends at under a structure lies on
+  its underside.
+
+Nothing here asks what any structure is: whether it cuts is its type's
+declared interaction with the ground, whether it is sealed its declared
+capability.
+
+### `property vtt.structure-contact.StructureMeeting.area: PlanarArea`
+
+Where the structures rest on the ground: the area the ground goes round.
+
+### `property vtt.structure-contact.StructureMeeting.seeds: readonly { seed: readonly string[]; surfaceType: string }[]`
+
+The structures, as the fill reads back which edges already have a face on them.
+
+### `method vtt.structure-contact.StructureMeeting.constraints(startingIndex: number): ConstraintTable`
+
+The structures' outlines as constraint rings, numbered from `startingIndex`.
+
+### `method vtt.structure-contact.StructureMeeting.heightAt(point: { x: number; z: number }): number | undefined`
+
+The height the ground must take at a point meeting a structure -- on a sealed side, or on the cut line under a face -- if it meets one.
+
+### `method vtt.structure-contact.StructureMeeting.holds(nodeId: string): boolean`
+
+Whether a node is a structure's -- never a height the ground should take.
+
+### `method vtt.structure-contact.StructureMeeting.liesOnSide(point: { x: number; z: number }): boolean`
+
+Whether a point lies on a structure's side: where the ground meets it, never snapped away from it.
+
+### `variable vtt.structure-contact.NO_STRUCTURES: StructureMeeting`
+
+No structure in the ground: nothing to go round, nothing to meet.
+
+### `function vtt.structure-contact.meetStructures(runtime: TerrainCutRuntime, bounds: ConstructionTopologyBoundsQuery, groundType: string, terrainStanding: readonly ConstructionRegionTopology[]): StructureMeeting`
+
+The structures standing in the ground within `bounds`, and how the ground
+about to be laid there meets them. `terrainStanding` is the ground around,
+read for the ground's own height.
 
 ### `interface vtt.terrain-constraints.AdoptionDrops`
 
@@ -1207,40 +1408,6 @@ one. The triangulation may already have split a supplied segment before
 quadrangulation put a midpoint on each of the pieces, so an edge of the
 neighbour can owe two or three nodes, and they have to be inserted in the
 order they sit -- each split shortens what is left to split.
-
-### `function vtt.terrain-cut-executor.buildConstraintRings(targetPolygon: PlanarArea, faceSize: number, perimeters: ConstraintTable): readonly (ConstraintRing & { isHole: boolean })[]`
-
-Giving the boolean's output its identity back.
-
-The boolean answers in bare floats: a corner that was a node going in
-comes out as a pair of numbers with nothing attached. So every corner of the
-result is matched against the corners that *did* carry a node -- the retained
-terrain's rim and the painter's contour -- and takes that node's id.
-
-**This is the one place a position is matched back to a node, and it is here
-under protest.** `terrain-constraints.ts` states the invariant it breaks. It
-survives because the alternative is threading identity through a third-party
-boolean that has no room for it; what it must not do is *guess badly*, and
-three things it used to do were guesses:
-
-1. **Two corners could take the same node.** Nothing checked. The engine's
-   answer to that is not a duplicate but a collapse -- two distinct mesh
-   edges become one, two faces walk it the same way, and the second is
-   refused ("no room on edge"), or the cell is dropped outright for naming
-   one node twice. Every road junction puts more nodes within snapping
-   distance of each other, so this went from rare to routine as the network
-   grew. Each node is now claimed at most once.
-2. **First come, first served.** Corners were matched in ring order, so a
-   corner a third of a face away could take a node before the corner sitting
-   exactly on it was ever considered. Matching is now global and ordered by
-   distance: the true coincidence always wins, whatever order it is in.
-3. **Welding ran first and threw corners away before they could be
-   matched.** A corner dropped for being close to its neighbour took its
-   identity with it. Welding now runs last and never drops a corner that
-   names a node.
-
-The search is bucketed rather than exhaustive, which is why the whole thing
-stays linear as the road network grows instead of squaring with it.
 
 ### `function vtt.terrain-cut-executor.executeTerrainCut(runtime: TerrainCutRuntime, request: StructuralCutRequest): StructuralCutOutcome`
 
@@ -1588,6 +1755,13 @@ and that node does not exist until the split creates it.
 
 Exported for `terrain-quad-drops.test.mjs`, which holds the rules a cell is dropped by.
 
+### `function vtt.terrain-fill.tangledRing(rings: readonly (readonly { x: number; z: number }[])[]): string | undefined`
+
+Why `rings` are no ground a generator can fill -- a ring with fewer than
+three corners, two corners on top of each other, or a ring crossing itself
+-- or `undefined` when they are sound. Separate rings may overlap: the
+generator joins them.
+
 ### `interface vtt.terrain-lattice-reaction.LatticeReactionRuntime`
 
 What regenerating ground needs of the runtime, read and written inside the pipeline's transaction.
@@ -1622,6 +1796,8 @@ tests hand in a recorder to see exactly what a regeneration would be given.
 ### `function vtt.terrain-lattice-reaction.pointBucketIndex(points: readonly ConstructionPosition[], cellSize: number): { isNear: any }`
 
 Fast spatial bucketing for proximity queries against a set of points.
+
+### `function vtt.terrain-lattice-reaction.topologyIntersectsPolygon(topology: ConstructionRegionTopology, polygon: readonly (readonly [number, number])[]): boolean`
 
 ### `interface vtt.terrain-neighborhood.HeightField`
 
@@ -1846,6 +2022,82 @@ region), not a reason for the preview itself to special-case one tool.
 Only `applyRegion` differs between brushes; the brush -- preview included
 -- is the same for all of them.
 
+### `interface vtt.build-frame.BuildFrame`
+
+The directions something is built along -- never the world's fixed x and
+z. Built on or next to a structure, it follows that structure's side, so
+a turned platform is built on in its own turned directions; anywhere else
+it follows the way the camera looks. Any tool that lays out square shapes
+asks for one; what a frame is and where it comes from lives only here.
+
+### `property vtt.build-frame.BuildFrame.origin: ConstructionPosition`
+
+Where the frame's grid is anchored: a corner of the structure it follows, or the world's origin.
+
+### `property vtt.build-frame.BuildFrame.start?: ConstructionPosition`
+
+A point of a structure's side or corner `start` was drawn to, when it was near one -- the shape starts there, against it.
+
+### `property vtt.build-frame.BuildFrame.u: { x: number; z: number }`
+
+The frame's first direction in plan, unit length; `v` is square to it.
+
+### `property vtt.build-frame.BuildFrame.v: { x: number; z: number }`
+
+### `function vtt.build-frame.buildFrameAt(ctx: ToolContext, sample: PointerSample): BuildFrame`
+
+The frame a shape begun at `sample` is built in.
+
+### `function vtt.build-frame.frameRectangle(ctx: ToolContext, frame: BuildFrame, a: ConstructionPosition, b: ConstructionPosition, elevation: number): readonly ConstructionPosition[] | undefined`
+
+The rectangle from `a` to the pointer's `b`, its sides along the frame:
+the pointer gives the far corner. A far side that comes near a built side
+lying the same way lands on it -- the shape is flush with what stands,
+never a sliver over or short of it -- else its size along each direction
+is whole grid steps when the table snaps. `undefined` when it has no area.
+
+### `function vtt.build-frame.frameStart(ctx: ToolContext, frame: BuildFrame, sample: PointerSample, y: number): ConstructionPosition`
+
+Where a shape begun at `sample`, on the level `y`, starts: on the side it was drawn next to, else on the frame's grid.
+
+### `function vtt.build-frame.pointerOnLevel(sample: PointerSample, y: number): ConstructionPosition`
+
+Where the pointer is on the level `y` a shape is drawn at -- its ray
+crossing that level, not whatever surface the ray happened to hit first:
+the ground below a raised floor, or the top of one standing in front.
+
+### `function vtt.build-frame.snappedInFrame(ctx: ToolContext, frame: BuildFrame, p: ConstructionPosition): ConstructionPosition`
+
+`p` on the frame's grid, when the table snaps to one; unchanged otherwise.
+
+### `interface vtt.constrained-drag.ConstrainedDragOptions`
+
+### `property vtt.constrained-drag.ConstrainedDragOptions.elevation?: boolean`
+
+Elevation mode: a free handle's pointer drag moves it up and down instead of along the ground.
+
+### `property vtt.constrained-drag.ConstrainedDragOptions.pointerOrigin?: ConstructionPosition`
+
+Where the pointer was when the drag began; the handle keeps its offset from it.
+
+### `property vtt.constrained-drag.ConstrainedDragOptions.spatialTarget?: boolean`
+
+The scene manipulator is carrying the handle: its point is taken as it is.
+
+### `interface vtt.constrained-drag.ConstrainedPosition`
+
+Where a dragged handle stands now, and -- on an orbit -- how far round it has turned.
+
+### `property vtt.constrained-drag.ConstrainedPosition.angle?: number`
+
+### `property vtt.constrained-drag.ConstrainedPosition.position: ConstructionPosition`
+
+### `function vtt.constrained-drag.createConstrainedDrag(motion: HandleMotion, handle: ConstructionPosition, sample: PointerSample, options: ConstrainedDragOptions): { at: any }`
+
+A handle dragged along its own path (`HandleMotion`): whatever the pointer
+does, the handle only goes where its motion allows. Any handle of any
+structure uses this; the path is the handle's, not its type's.
+
 ### `interface vtt.contour-fusion.ContourFusion`
 
 One place a rim being committed must fuse into a standing one.
@@ -1928,6 +2180,186 @@ when a traveller passing through it keeps them both on the same hand --
 which, since one run's direction points *into* the joint and the other's
 points *out* of it, means their signs are opposite.
 
+### `interface vtt.curve-draft.CurveDraftOptions`
+
+### `property vtt.curve-draft.CurveDraftOptions.color: number`
+
+### `property vtt.curve-draft.CurveDraftOptions.commit: (ctx: ToolContext, draft: FinishedCurveDraft, params: ToolParamsFor<Id>) => void`
+
+### `property vtt.curve-draft.CurveDraftOptions.defaultParams: () => ToolParamsFor<Id>`
+
+### `property vtt.curve-draft.CurveDraftOptions.id: Id`
+
+### `property vtt.curve-draft.CurveDraftOptions.modeOf: (params: ToolParamsFor<Id>) => CurveDraftMode`
+
+The mode this tool draws in now.
+
+### `property vtt.curve-draft.CurveDraftOptions.riseOf: (params: ToolParamsFor<Id>) => number`
+
+The default climb from start to end when the end is not on a floor.
+
+### `property vtt.curve-draft.CurveDraftOptions.widthOf: (params: ToolParamsFor<Id>) => number`
+
+The width the preview band is drawn at.
+
+### `property vtt.curve-draft.CurveDraftOptions.withMode?: (params: ToolParamsFor<Id>, mode: CurveDraftMode) => ToolParamsFor<Id>`
+
+Whether R cycles the mode, and how the tool stores the next one.
+
+### `interface vtt.curve-draft.CurveDraftTool`
+
+One construction tool's behavior, generic over its own parameter shape.
+Every hook is optional -- a tool implements only the lifecycle stages it
+actually uses (a click-only tool has no `onPointerUp`, it commits
+on `onClick`). `composition/tabletop/use-construction-pointer.ts` is the
+only caller and never branches on `id` -- it just invokes whichever hook
+the active tool defines.
+
+### `property vtt.curve-draft.CurveDraftTool.anchorSnap?: AnchorSnap`
+
+How this tool's dragged spine anchors snap -- the scene manipulator uses it too.
+
+### `property vtt.curve-draft.CurveDraftTool.editsType?: (surfaceType: string) => boolean`
+
+The types this tool edits once they stand -- the scene shows their whole-structure handles while it is active.
+
+### `property vtt.curve-draft.CurveDraftTool.handlePresentation?: "spine-points"`
+
+Presentation and sampling policy while this tool is active.
+
+### `property vtt.curve-draft.CurveDraftTool.handlesOnHover?: boolean`
+
+What this tool edits is edited only by its handles, never by grabbing
+its geometry -- so a press on it builds against it -- and those handles
+show only on the structure under the pointer.
+
+### `property vtt.curve-draft.CurveDraftTool.id: Id`
+
+### `property vtt.curve-draft.CurveDraftTool.previewOnHover?: boolean | ((params: ToolParamsFor<Id>) => boolean)`
+
+Opt in to a stationary drawing preview between gestures.
+
+### `property vtt.curve-draft.CurveDraftTool.snapsToSurface?: boolean`
+
+This tool always projects the pointer onto an existing surface's own
+parametrization (a wall's rail, say) rather than reading raw world X/Z --
+so the dispatcher's world-space grid magnet, applied before any tool
+ever sees the point, is redundant at best. At worst it is actively
+harmful: rounding X/Z to a world grid *before* a nonlinear projection
+(onto a rotated or curved rail) can jump the projected result across
+much more than one grid cell, which reads as the pointer "teleporting"
+rather than the smooth follow every other tool gets from the same
+magnet. A tool that opts in reads its own samples unsnapped and is
+responsible for whatever continuity it wants.
+
+### `property vtt.curve-draft.CurveDraftTool.useGridSnap?: boolean`
+
+### `method vtt.curve-draft.CurveDraftTool.defaultParams(): ToolParamsFor<Id>`
+
+### `method vtt.curve-draft.CurveDraftTool.drafting(ctx: ToolContext): boolean`
+
+Whether a draft is under way -- presses then belong to drawing, not to editing what stands.
+
+### `method vtt.curve-draft.CurveDraftTool.onCancel(ctx: ToolContext): void`
+
+Discards an unfinished tool draft on Escape, cancellation or tool switch.
+
+### `method vtt.curve-draft.CurveDraftTool.onClick(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void`
+
+A press+release with no intervening drag. Batch/stamp tools (room) commit here instead of `onPointerUp`.
+
+### `method vtt.curve-draft.CurveDraftTool.onDeleteKey(ctx: ToolContext): void`
+
+Delete/Backspace with the tool active -- a tool holding a selection (an opening picked for editing, say) removes it here.
+
+### `method vtt.curve-draft.CurveDraftTool.onKeyDown(ctx: ToolContext, key: string, params: ToolParamsFor<Id>): boolean`
+
+Handles a tool key outside text controls; true prevents the browser default.
+
+### `method vtt.curve-draft.CurveDraftTool.onParamsChange(ctx: ToolContext, next: ToolParamsFor<Id>, previous: ToolParamsFor<Id>): void`
+
+The active tool's params changed (the panel, or `updateToolParams`) -- a tool holding a selection may apply them to it.
+
+### `method vtt.curve-draft.CurveDraftTool.onPointerDown(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void`
+
+Left-button press. Continuous tools (brushes, move-node) start their gesture here.
+
+### `method vtt.curve-draft.CurveDraftTool.onPointerMove(ctx: ToolContext, gesture: ToolGesture, params: ToolParamsFor<Id>): void`
+
+Called while a gesture is active (left button held). Brushes that paint continuously (terrain) commit here, throttled by the dispatcher.
+
+### `method vtt.curve-draft.CurveDraftTool.onPointerUp(ctx: ToolContext, gesture: ReleasedGesture, params: ToolParamsFor<Id>): void`
+
+Gesture end. Tools that commit a single shape from a drag (wall, move-node's history entry) act here.
+
+### `method vtt.curve-draft.CurveDraftTool.onSelectionAction(ctx: ToolContext, action: string, params: ToolParamsFor<Id>, selectedId?: string): boolean`
+
+Runs an explicit action on the current selection, `selectedId` when something is picked.
+
+### `method vtt.curve-draft.CurveDraftTool.previewFor(gesture: ToolGesture, params: ToolParamsFor<Id>, ctx: ToolContext): PreviewDescriptor | undefined`
+
+The tool's not-yet-committed ghost for the current gesture (or stationary hover, when `gesture.start === gesture.current`).
+
+### `method vtt.curve-draft.CurveDraftTool.selectionActions(ctx: ToolContext, selectedId: string): readonly { id: string; label: string }[]`
+
+What the picked `selectedId` offers besides dragging it -- shown as buttons; `id` is what `onSelectionAction` receives.
+
+### `type vtt.curve-draft.CurveDraftMode = "straight" | "arc" | "points" | "connect" | "spiral"`
+
+Drawing a new spine-built structure, one way of laying out its plan per
+mode -- the same modes whatever the spine generates:
+
+- `straight`: start, end;
+- `arc`: start, end, then the bulge pulled out from the chord (a two-point
+  arc tool);
+- `points`: clicks the curve passes through, drawn live up to the pointer
+  (a curvature tool); the last point clicked again, or Enter, ends it;
+- `connect`: two ends, each leaving square to the floor edge it lands on,
+  and the curve between them follows (a curve build mode between
+  oriented ends);
+- `spiral`: start -- on a floor's edge or a ramp's end, as any start --
+  then the pointer taken aside picks the side it curves to and its radius,
+  the circle it leaves on square to that edge (or straight on from that
+  end); then turned round -- every full circle adds a turn -- to the end.
+
+Heights are never drawn point by point: the start takes the height of
+what it was clicked on, and the end the height of the floor it is clicked
+on, or the tool's rise above the start. Shift and a vertical pointer move
+change that rise in quarter steps. Everything between is the owner's to
+derive. Live readouts say the length, rise, grade, and -- for arcs and
+spirals -- the radius and turns.
+
+All the geometry is computed in Rust through the curve batch; this module
+only keeps the gesture's state.
+
+### `type vtt.curve-draft.FinishedCurveDraft = { kind: "spans"; spans: readonly { curve: CubicBezier; handles: CurveHandles }[] } | { kind: "points"; points: readonly ConstructionPosition[] }`
+
+A finished draft: laid-out spans, or -- for `points` -- the points a smooth curve passes through. Ends carry their heights.
+
+### `variable vtt.curve-draft.CURVE_DRAFT_MODES: readonly CurveDraftMode[]`
+
+Every mode a multi-mode tool cycles through with R, in order.
+
+### `variable vtt.curve-draft.MODE_LABELS: Record<CurveDraftMode, string>`
+
+How each mode is named to the person drawing.
+
+### `function vtt.curve-draft.createCurveDraftTool(options: CurveDraftOptions<Id>): CurveDraftTool<Id>`
+
+A creation tool drawing spine plans in the modes above; its owner only commits what it is handed.
+
+### `interface vtt.curve-edit-gesture.AnchorSnap`
+
+How a dragged spine anchor snaps onto something else -- a road onto another
+road's node or span, say -- and how the snap is shown. A tool supplies its
+own; the gesture only asks it.
+
+### `method vtt.curve-edit-gesture.AnchorSnap.find(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): PointerSample | undefined`
+
+### `method vtt.curve-edit-gesture.AnchorSnap.show(ctx: ToolContext, target?: PointerSample): void`
+
+Shows `target` as the snap, or clears it when absent.
+
 ### `interface vtt.curve-edit-gesture.CurveGesture`
 
 ### `method vtt.curve-edit-gesture.CurveGesture.cancel(): void`
@@ -1936,7 +2368,7 @@ points *out* of it, means their signs are opposite.
 
 ### `method vtt.curve-edit-gesture.CurveGesture.move(gesture: ToolGesture): void`
 
-### `type vtt.curve-edit-gesture.CurveGestureOptions = StructureEditParams & { allowShapeChange?: boolean; dragThreshold?: number; insertOnClick?: boolean; parameter?: number; pointerOrigin?: ConstructionPosition; spatialTarget?: boolean }`
+### `type vtt.curve-edit-gesture.CurveGestureOptions = StructureEditParams & { allowShapeChange?: boolean; dragThreshold?: number; insertOnClick?: boolean; parameter?: number; pointerOrigin?: ConstructionPosition; snap?: AnchorSnap; spatialTarget?: boolean }`
 
 ### `function vtt.curve-edit-gesture.beginCurveGesture(ctx: ToolContext, sample: PointerSample, ownsTypeOrParams?: CurveGestureOptions | ((surfaceType: string) => boolean), params?: CurveGestureOptions): CurveGesture | undefined`
 
@@ -1999,6 +2431,73 @@ rim named it from one face, and one face cannot see the other; if the graph
 shows two, the edge is interior whatever it was called -- see
 RIM_ROLES.
 
+### `function vtt.floor-landing.floorLandingAt(floors: readonly ConstructionRegionTopology[], sample: PointerSample): FloorLanding | undefined`
+
+The floor edge `sample` lands on, preferring the floor the pointer is on.
+Each floor is tried where the pointer's ray crosses that floor's own
+level, so aiming at a raised floor's edge from off it lands there, not
+wherever the ray met the ground behind it.
+
+### `function vtt.floor-landing.floorLandingToward(floors: readonly ConstructionRegionTopology[], sample: PointerSample, from: ConstructionPosition | undefined): FloorLanding | undefined`
+
+The floor edge `sample` lands on, as above -- or, when the pointer is on a
+floor but nowhere near its edge, the edge a straight line from `from`
+crosses to reach it: a ramp drawn from the ground onto a floor stops at
+the floor's edge and joins it there, wherever on the floor it was dropped.
+
+### `function vtt.floor-landing.floorSideAt(ctx: ToolContext, point: ConstructionPosition, reach: number, cornerClearance: number, levelTolerance: number): { floor: ConstructionSurfaceKey; point: ConstructionPosition } | undefined`
+
+The straight floor side at `point`'s height (within `levelTolerance`) that
+`point` lands on -- within `reach`, and more than `cornerClearance` from
+either corner -- with the point moved onto it: where something joins the
+floor partway along its outline.
+
+### `function vtt.floor-landing.floorsOf(ctx: ToolContext): readonly ConstructionRegionTopology[]`
+
+Every floor on the table -- anything whose type carries the `floor` trait.
+
+### `function vtt.floor-landing.floorUnder(floors: readonly ConstructionRegionTopology[], sample: PointerSample): ConstructionRegionTopology | undefined`
+
+The floor the pointer is on, if any.
+
+### `function vtt.floor-landing.nearestFloorNode(ctx: ToolContext, position: ConstructionPosition, reach: number, levelTolerance: number): { distance: number; node: { id: string; position: ConstructionPosition } } | undefined`
+
+The closest floor node within `reach` in plan, at `position`'s own
+elevation (within `levelTolerance`) -- a magnet, never a floor of another
+storey merely because it lies below in plan.
+
+### `function vtt.floor-landing.onFloorLevel(ctx: ToolContext, sample: PointerSample, edgeReach: number): ConstructionPosition`
+
+Where the pointer is on a floor's level: on a floor it is over, or within
+`edgeReach` of the edge of, exactly at that floor's height -- read along
+the pointer's ray, never whatever the renderer's pick met first (the
+ground below a raised floor's edge, something standing in front) nor its
+sub-centimetre noise. Anywhere else, where it hit. Of several floors, the
+one the ray meets first.
+
+### `function vtt.global-handle-gesture.beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample, ownsType: (surfaceType: string) => boolean, params?: CurveGestureOptions): CurveGesture | undefined`
+
+Drags any global handle of any structure (`global-handles/`). The gesture
+only turns the pointer into an intent -- a move, a turn round the pivot, a
+height, a winding -- and asks the handle's provider what it edits.
+
+The handle stays on its own path while dragged -- its `HandleMotion`,
+through `constrained-drag.ts` -- never loose under the pointer, and the
+structure is previewed as the edit would leave it. The motion gives the
+path; the handle's kind gives what the path means.
+
+### `variable vtt.handle-focus.NO_FOCUS: HandleFocus`
+
+### `function vtt.handle-focus.handleFocusAt(ctx: ToolContext, sample: PointerSample | undefined, previous: HandleFocus, owns: (surfaceType: string) => boolean): HandleFocus`
+
+The focus after the pointer moved to `sample`: the structure it is over,
+else the one it was on while it stays on that one's handles or near it,
+else the one it comes within reach of, else none.
+
+### `function vtt.handle-focus.sameFocus(a: HandleFocus | undefined, b: HandleFocus | undefined): boolean`
+
+Whether two foci show the same handles.
+
 ### `variable vtt.navigate-tool.navigateTool: ConstructionTool<"navigate">`
 
 No-op: in `navigate` mode the pointer drives camera orbit/pan
@@ -2006,6 +2505,121 @@ No-op: in `navigate` mode the pointer drives camera orbit/pan
 not any construction effect. Exists so `tool-registry.ts` has an entry for
 every `ConstructionToolId` and `use-construction-pointer.ts` never needs a
 "no tool selected" special case.
+
+### `function vtt.pointer-ray.pointerAtHeight(sample: PointerSample, y: number): ConstructionPosition`
+
+Where the pointer is at height `y`: its ray from the camera crossing that
+level, so something drawn at `y` sits right under the cursor rather than
+above or below whatever the ray hit. Without a ray -- or one that never
+reaches that level in front of the camera -- the hit point, at `y`.
+
+### `function vtt.spine-body-target.spineBodyTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string, ownsSpine: (surfaceType: string) => boolean): { options: CurveGestureOptions; sample: PointerSample } | undefined`
+
+A pick on a spine-built body, projected onto its spine through the
+canonical curve query: the nearest control point when the pick is close
+to one, else the span's midpoint handle at the projected parameter.
+`ownsSpine` limits it to the spines of the types a tool edits.
+
+### `function vtt.spine-commit.commitSpineRegeneration(ctx: ToolContext, request: ApplyPatchReplacementRequest, operationId: string, carries: readonly ConstructionSurfaceKey[]): void`
+
+Commits `request` -- its effects dispatched, faces it `carries` along answering their own move -- and records it for undo.
+
+### `function vtt.spine-commit.regenerateSpine(ctx: ToolContext, snapshot: ConstructionGraphSnapshot, owner: string | undefined, graphPatch: ConstructionGraphPatch, operationId: string, options: { keepsWelds?: boolean }): SpineRegeneration | undefined`
+
+What `owner` makes of `graphPatch` applied to `snapshot`; `undefined` when it has no spine or makes nothing.
+
+### `interface vtt.spine-edit-behavior.SpineEditBehavior`
+
+### `method vtt.spine-edit-behavior.SpineEditBehavior.abort(ctx: ToolContext): void`
+
+Drops an active drag without committing it, keeping the selection.
+
+### `method vtt.spine-edit-behavior.SpineEditBehavior.begin(ctx: ToolContext, picked: SpinePick): boolean`
+
+Selects and starts dragging `picked`; false when the curve refused the gesture.
+
+### `method vtt.spine-edit-behavior.SpineEditBehavior.cancel(ctx: ToolContext): void`
+
+Drops any drag and the selection.
+
+### `method vtt.spine-edit-behavior.SpineEditBehavior.end(ctx: ToolContext, gesture: ToolGesture): boolean`
+
+Ends and commits an active drag; false when none was active.
+
+### `method vtt.spine-edit-behavior.SpineEditBehavior.isActive(ctx: ToolContext): boolean`
+
+### `method vtt.spine-edit-behavior.SpineEditBehavior.isHandle(ctx: ToolContext, sample: PointerSample): boolean`
+
+Whether `sample` is any curve handle of an owned spine, including one this editor does not drag.
+
+### `method vtt.spine-edit-behavior.SpineEditBehavior.move(ctx: ToolContext, gesture: ToolGesture): boolean`
+
+### `method vtt.spine-edit-behavior.SpineEditBehavior.pick(ctx: ToolContext, sample: PointerSample): SpinePick | undefined`
+
+The handle of an owned spine `sample` lands on -- a control point, a midpoint, or the body projected onto the spine.
+
+### `method vtt.spine-edit-behavior.SpineEditBehavior.removeSelected(ctx: ToolContext): boolean`
+
+Removes the selected control point; false when nothing was selected.
+
+### `method vtt.spine-edit-behavior.SpineEditBehavior.select(ctx: ToolContext, sample?: PointerSample): void`
+
+### `method vtt.spine-edit-behavior.SpineEditBehavior.selected(ctx: ToolContext): string | undefined`
+
+### `interface vtt.spine-edit-behavior.SpineEditOptions`
+
+Editing an existing spine by its points -- the one editor every
+spine-built type shares, whatever surface it regenerates from the spine:
+
+- drag a control point, or the point manipulator the scene shows on the
+  selected one;
+- drag a span's midpoint to bend it, or click it to insert a point there;
+- drag the body itself, projected onto the spine under it;
+- Delete/Backspace removes the selected control point;
+- whatever the shared edit panel asks for instead: raising or lowering,
+  or a curve action such as a span's width.
+
+The road was first to have this, and the spiral uses the same thing; a
+tool only says which spine owners it edits, never how.
+
+### `property vtt.spine-edit-behavior.SpineEditOptions.drafting?: (ctx: ToolContext) => boolean`
+
+While this answers true -- a tool midway through drawing -- presses belong to the tool, not to editing.
+
+### `property vtt.spine-edit-behavior.SpineEditOptions.handlesOnly?: boolean`
+
+Edited only by its handles -- its points, its span midpoints and its
+whole-structure handles -- never by a press on its body, which is the
+tool's own. Handles show on the spine under the pointer.
+
+### `property vtt.spine-edit-behavior.SpineEditOptions.onSelect?: (ctx: ToolContext, nodeId: string | undefined) => void`
+
+Told whenever the selected spine point changes -- `undefined` when nothing is selected.
+
+### `property vtt.spine-edit-behavior.SpineEditOptions.ownsSpine: (surfaceType: string) => boolean`
+
+Only spines owned by a type this accepts are edited; anything else falls through to the tool.
+
+### `property vtt.spine-edit-behavior.SpineEditOptions.snap?: AnchorSnap`
+
+How a dragged anchor snaps; absent, anchors never snap.
+
+### `interface vtt.spine-edit-behavior.SpinePick`
+
+What a press on a spine resolved to: the handle it actually takes, and how to drag it.
+
+### `property vtt.spine-edit-behavior.SpinePick.options: CurveGestureOptions`
+
+### `property vtt.spine-edit-behavior.SpinePick.sample: PointerSample`
+
+### `function vtt.spine-edit-behavior.createSpineEditBehavior(__namedParameters: SpineEditOptions): SpineEditBehavior`
+
+### `function vtt.spine-edit-behavior.withSpineEditing(tool: ConstructionTool<Id>, options: SpineEditOptions): ConstructionTool<Id>`
+
+Composes a creation tool with createSpineEditBehavior: a press on
+a spine this tool owns edits it, and a press anywhere else is the tool's
+own creation gesture, unchanged -- the spine counterpart of
+`withStructureEditing`.
 
 ### `interface vtt.structure-edit-behavior.StructureEditBehavior`
 
@@ -2028,6 +2642,16 @@ Tries to start an edit gesture on whatever `sample` landed on; `true` means the 
 Whether the *last* `tryGrab` succeeded -- read after pointer-up, once `isActive()` has already gone back to `false`, to decide whether a plain click (no drag) belongs to this behaviour or should still fall through to the wrapped tool's own `onClick`.
 
 ### `interface vtt.structure-edit-behavior.StructureEditOptions`
+
+### `property vtt.structure-edit-behavior.StructureEditOptions.drafting?: (ctx: ToolContext) => boolean`
+
+Whether the tool is partway through drawing something -- a press then belongs to the drawing, never to editing what stands.
+
+### `property vtt.structure-edit-behavior.StructureEditOptions.handlesOnly?: boolean`
+
+Edited only by its handles: a press on a vertex, an edge or the body is
+the tool's own -- it builds against what stands -- and only a handle
+edits. Handles show on the structure under the pointer.
 
 ### `property vtt.structure-edit-behavior.StructureEditOptions.ownsType: (surfaceType: string) => boolean`
 
@@ -2055,9 +2679,23 @@ on `onClick`). `composition/tabletop/use-construction-pointer.ts` is the
 only caller and never branches on `id` -- it just invokes whichever hook
 the active tool defines.
 
+### `property vtt.tool-context.ConstructionTool.anchorSnap?: AnchorSnap`
+
+How this tool's dragged spine anchors snap -- the scene manipulator uses it too.
+
+### `property vtt.tool-context.ConstructionTool.editsType?: (surfaceType: string) => boolean`
+
+The types this tool edits once they stand -- the scene shows their whole-structure handles while it is active.
+
 ### `property vtt.tool-context.ConstructionTool.handlePresentation?: "spine-points"`
 
 Presentation and sampling policy while this tool is active.
+
+### `property vtt.tool-context.ConstructionTool.handlesOnHover?: boolean`
+
+What this tool edits is edited only by its handles, never by grabbing
+its geometry -- so a press on it builds against it -- and those handles
+show only on the structure under the pointer.
 
 ### `property vtt.tool-context.ConstructionTool.id: Id`
 
@@ -2114,13 +2752,17 @@ Called while a gesture is active (left button held). Brushes that paint continuo
 
 Gesture end. Tools that commit a single shape from a drag (wall, move-node's history entry) act here.
 
-### `method vtt.tool-context.ConstructionTool.onSelectionAction(ctx: ToolContext, action: string, params: ToolParamsFor<Id>): boolean`
+### `method vtt.tool-context.ConstructionTool.onSelectionAction(ctx: ToolContext, action: string, params: ToolParamsFor<Id>, selectedId?: string): boolean`
 
-Runs an explicit action on the current selection.
+Runs an explicit action on the current selection, `selectedId` when something is picked.
 
 ### `method vtt.tool-context.ConstructionTool.previewFor(gesture: ToolGesture, params: ToolParamsFor<Id>, ctx: ToolContext): PreviewDescriptor | undefined`
 
 The tool's not-yet-committed ghost for the current gesture (or stationary hover, when `gesture.start === gesture.current`).
+
+### `method vtt.tool-context.ConstructionTool.selectionActions(ctx: ToolContext, selectedId: string): readonly { id: string; label: string }[]`
+
+What the picked `selectedId` offers besides dragging it -- shown as buttons; `id` is what `onSelectionAction` receives.
 
 ### `interface vtt.tool-context.ConstructionToolFeedback`
 
@@ -2136,9 +2778,17 @@ What the pointer resolved to at one instant -- `nodeId` present only when it hit
 
 ### `property vtt.tool-context.PointerSample.constructionAction?: { kind: "branch"; nodeId: string }`
 
+### `property vtt.tool-context.PointerSample.forward?: ConstructionPosition`
+
+The way the camera looks, when the view gave it -- see `build-frame.ts`.
+
 ### `property vtt.tool-context.PointerSample.nodeId?: string`
 
 ### `property vtt.tool-context.PointerSample.point: ConstructionPosition`
+
+### `property vtt.tool-context.PointerSample.ray?: { direction: ConstructionPosition; origin: ConstructionPosition }`
+
+The pointer's ray from the camera, when the view gave one -- see `pointer-ray.ts`.
 
 ### `property vtt.tool-context.PointerSample.screenX?: number`
 
@@ -2169,6 +2819,10 @@ Ordered samples accumulated by the dispatcher; preview-only until pointer releas
 ### `interface vtt.tool-context.ToolContext`
 
 What every tool implementation is handed to act -- the runtime to call, undo/redo history for the one tool that uses it, and a salt generator so repeated commits never collide (mirrors `tabletop-entry.tsx`'s retired `generateCountRef`).
+
+### `property vtt.tool-context.ToolContext.gridUnit?: number`
+
+The grid's step, when snapping; 1 when absent.
 
 ### `property vtt.tool-context.ToolContext.history: EditHistoryStack`
 
@@ -2387,9 +3041,17 @@ What the pointer resolved to at one instant -- `nodeId` present only when it hit
 
 ### `property vtt.road-body-target.RoadSnapTarget.constructionAction?: { kind: "branch"; nodeId: string }`
 
+### `property vtt.road-body-target.RoadSnapTarget.forward?: ConstructionPosition`
+
+The way the camera looks, when the view gave it -- see `build-frame.ts`.
+
 ### `property vtt.road-body-target.RoadSnapTarget.nodeId?: string`
 
 ### `property vtt.road-body-target.RoadSnapTarget.point: ConstructionPosition`
+
+### `property vtt.road-body-target.RoadSnapTarget.ray?: { direction: ConstructionPosition; origin: ConstructionPosition }`
+
+The pointer's ray from the camera, when the view gave one -- see `pointer-ray.ts`.
 
 ### `property vtt.road-body-target.RoadSnapTarget.screenX?: number`
 
@@ -2405,9 +3067,9 @@ Screen coordinate used by explicit elevation gestures.
 
 ### `property vtt.road-body-target.RoadSnapTarget.surfaceRef?: string`
 
-### `function vtt.road-body-target.roadBodyTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): { options: CurveGestureOptions; sample: PointerSample } | undefined`
+### `variable vtt.road-body-target.roadAnchorSnap: AnchorSnap`
 
-Project a road-body pick onto its spine using the canonical curve query.
+The road network's anchor snap -- onto another road's node or span -- for a spine gesture.
 
 ### `function vtt.road-body-target.roadSnapIsCurrent(ctx: ToolContext, target: RoadSnapTarget): boolean`
 
@@ -2437,10 +3099,6 @@ Highlight the exact prospective junction without changing the graph.
 
 ### `property vtt.road-preview-mesh.RoadMeshPreviewOptions.ribbons?: readonly { ribbon: { outer: readonly (readonly [number, number, number])[] } | null }[]`
 
-### `variable vtt.road-preview-mesh.NODE_DISK_ELEVATION: 0.055`
-
-### `variable vtt.road-preview-mesh.PREVIEW_ELEVATION: 0.05`
-
 ### `variable vtt.road-preview-mesh.ROAD_ERROR_COLOR: 16281969`
 
 ### `variable vtt.road-preview-mesh.ROAD_ERROR_OPACITY: 0.6`
@@ -2453,25 +3111,13 @@ Highlight the exact prospective junction without changing the graph.
 
 ### `variable vtt.road-preview-mesh.SNAP_DISK_OPACITY: 0.85`
 
-### `function vtt.road-preview-mesh.appendNodeDisk(positions: number[], indices: number[], center: ConstructionPosition, radius: number, elevation: number, segments: number): void`
-
-Append a filled circular disk at a specific anchor node or cursor position.
-
-### `function vtt.road-preview-mesh.appendRibbonQuads(positions: number[], indices: number[], outer: readonly (readonly [number, number, number])[], elevation: number): void`
-
-Append triangulated quad strips for a ribbon outline computed by graph-core.
-
-### `function vtt.road-preview-mesh.appendStraightQuads(positions: number[], indices: number[], points: readonly ConstructionPosition[], halfWidth: number, elevation: number): void`
-
-Fallback straight quads connecting consecutive points when curve fitting is unavailable.
-
 ### `function vtt.road-preview-mesh.createFastRoadPreview(points: readonly ConstructionPosition[], bedWidth: number, cursor?: ConstructionPosition, color?: number, opacity?: number): RenderPreviewDescriptor`
 
 Build a lightweight straight-quad preview mesh connecting path points directly, without WASM round-trips.
 
 ### `function vtt.road-preview-mesh.createRoadMeshPreview(options: RoadMeshPreviewOptions): RenderPreviewDescriptor`
 
-Build a solid translucent 3D mesh preview for a road, including ribbon quads and anchor disks.
+A road's ribbon preview: the shared ribbon mesh in the road's own colours.
 
 ### `function vtt.road-preview-mesh.createSnapMeshPreview(target: ConstructionPosition, radius: number): RenderPreviewDescriptor`
 
@@ -2582,7 +3228,7 @@ Also grabs and edits an existing platform's own vertex/edge/body -- see `structu
 
 Polygon entry point retained for callers that already have explicit corners.
 
-### `function vtt.platform-contour-tool.commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; tolerance?: number }, pickedSamples: readonly PointerSample[]): void`
+### `function vtt.platform-contour-tool.commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; tolerance?: number }, pickedSamples: readonly PointerSample[], options: { alone?: boolean; clipped?: boolean }): void`
 
 Commits the same directed line/arc contour vocabulary consumed by wall
 construction. Ampliar/juntar and recortar/separar no longer run an
@@ -2713,6 +3359,103 @@ An open line ghost from `start` to `end` -- a wall-brush's centerline while drag
 
 Builds a PreviewDescriptor for a set of straight segment pairs (e.g. wall centerline ghost).
 
+### `interface vtt.ribbon-mesh-preview.RibbonMeshPreviewOptions`
+
+### `property vtt.ribbon-mesh-preview.RibbonMeshPreviewOptions.anchors: readonly ConstructionPosition[]`
+
+### `property vtt.ribbon-mesh-preview.RibbonMeshPreviewOptions.color: number`
+
+### `property vtt.ribbon-mesh-preview.RibbonMeshPreviewOptions.cursor?: ConstructionPosition`
+
+### `property vtt.ribbon-mesh-preview.RibbonMeshPreviewOptions.fallbackPoints?: readonly ConstructionPosition[]`
+
+### `property vtt.ribbon-mesh-preview.RibbonMeshPreviewOptions.opacity?: number`
+
+### `property vtt.ribbon-mesh-preview.RibbonMeshPreviewOptions.ribbons?: readonly { ribbon: { outer: readonly (readonly [number, number, number])[] } | null }[]`
+
+### `property vtt.ribbon-mesh-preview.RibbonMeshPreviewOptions.width: number`
+
+### `variable vtt.ribbon-mesh-preview.NODE_DISK_ELEVATION: 0.055`
+
+### `variable vtt.ribbon-mesh-preview.PREVIEW_ELEVATION: 0.05`
+
+Height a preview floats above what it previews, so it never z-fights it.
+
+### `function vtt.ribbon-mesh-preview.appendNodeDisk(positions: number[], indices: number[], center: ConstructionPosition, radius: number, elevation: number, segments: number): void`
+
+Append a filled circular disk at a specific anchor node or cursor position.
+
+### `function vtt.ribbon-mesh-preview.appendRibbonQuads(positions: number[], indices: number[], outer: readonly (readonly [number, number, number])[], elevation: number): void`
+
+Append triangulated quad strips for a ribbon outline computed by graph-core.
+
+### `function vtt.ribbon-mesh-preview.appendStraightQuads(positions: number[], indices: number[], points: readonly ConstructionPosition[], halfWidth: number, elevation: number): void`
+
+Fallback straight quads connecting consecutive points when curve fitting is unavailable.
+
+### `function vtt.ribbon-mesh-preview.createRibbonMeshPreview(options: RibbonMeshPreviewOptions): RenderPreviewDescriptor`
+
+A solid translucent mesh preview of spine ribbons -- quads from the Rust ribbons, straight quads as a fallback -- with a disk at each anchor and at the cursor.
+
+### `interface vtt.ramp-commit.RampParams`
+
+What drawing a straight ramp may decide.
+
+### `property vtt.ramp-commit.RampParams.bottomWidth?: number`
+
+### `property vtt.ramp-commit.RampParams.rise?: number`
+
+### `property vtt.ramp-commit.RampParams.topWidth?: number`
+
+### `function vtt.ramp-commit.commitStraightRamp(ctx: ToolContext, start: PointerSample, end: PointerSample, params: RampParams): void`
+
+Commits one straight ramp. An end landing on a floor's edge -- on the
+ground or high over it -- is welded into it (`topology/floor-weld.ts`): the floor's
+edge is split around the ramp's end edge, which both faces then share.
+
+### `function vtt.ramp-commit.drawnRampWidth(ctx: ToolContext, start: PointerSample, end: PointerSample, params: RampParams): number | undefined`
+
+The width a drag from `start` to `end` has drawn, if it has drawn one -- else the ramp takes the tool's own.
+
+### `function vtt.ramp-commit.plannedRamp(ctx: ToolContext, start: PointerSample, end: PointerSample, params: RampParams): PlannedRamp`
+
+The ramp a drag from `start` to `end` would build, before anything is committed -- what the preview draws.
+
+### `function vtt.ramp-commit.rampStartAt(ctx: ToolContext, start: PointerSample): RampEndPlan`
+
+Where a ramp begun at `start` would start, before it is drawn: on another
+structure's free end it would run on from, on a floor's edge it would weld
+into, or loose where the pointer is -- what the pointer shows before the
+first click.
+
+### `function vtt.ramp-commit.straightRampPoints(ctx: ToolContext, start: PointerSample, end: PointerSample, params: RampParams): readonly [ConstructionPosition, ConstructionPosition]`
+
+From where the drag starts to where it ends, at the heights they land at.
+
+### `interface vtt.slope-commit.EndWeld`
+
+### `property vtt.slope-commit.EndWeld.a: ConstructionPosition`
+
+### `property vtt.slope-commit.EndWeld.b: ConstructionPosition`
+
+### `property vtt.slope-commit.EndWeld.controlIndex: number`
+
+### `property vtt.slope-commit.EndWeld.landing: FloorLanding`
+
+The floor edge met, as found -- a curved one says its circle.
+
+### `property vtt.slope-commit.EndWeld.topology: ConstructionRegionTopology`
+
+### `property vtt.slope-commit.EndWeld.use: ConstructionRegionEdge`
+
+### `interface vtt.slope-commit.PlannedSpan`
+
+One span a creation gesture already laid out: the cubic it resolves to, and its handles -- a straight or circular span's carry that shape.
+
+### `property vtt.slope-commit.PlannedSpan.curve: CubicBezier`
+
+### `property vtt.slope-commit.PlannedSpan.handles: CurveHandles`
+
 ### `interface vtt.slope-commit.SlopeParams`
 
 What every way of drawing a sloped platform may decide; each tool fills the part it offers.
@@ -2725,40 +3468,45 @@ What every way of drawing a sloped platform may decide; each tool fills the part
 
 ### `property vtt.slope-commit.SlopeParams.width?: number`
 
-### `function vtt.slope-commit.commitPlatformSlope(ctx: ToolContext, controlPoints: readonly ConstructionPosition[], params: SlopeParams): void`
+### `function vtt.slope-commit.commitPlatformSlope(ctx: ToolContext, controlPoints: readonly ConstructionPosition[], params: SlopeParams, plan?: readonly PlannedSpan[]): void`
 
-Commits one sloped platform: a spine through `controlPoints`, owned by the
-sloped platform type, and the faces generated from it. An end that lands
-on a flat platform's edge at its own height meets that edge square on and
-is welded into it.
+Commits one sloped platform: a spine owned by the sloped platform type,
+and the faces generated from it.
+
+The spine runs smoothly through `controlPoints`, or follows `plan` exactly
+when a creation gesture already laid its spans out -- straight, circular
+or free. Either way only the
+two ends' heights are kept: everything between is graded at one constant
+grade by plan length. An end of a free run that lands on a flat
+platform's edge at its own height meets that edge square on and is
+welded into it.
+
+### `function vtt.slope-commit.curvesPolyline(ctx: ToolContext, curves: readonly CubicBezier[]): readonly ConstructionPosition[]`
+
+The sampled polyline of `curves`, for a preview.
+
+### `function vtt.slope-commit.landingEdge(topologies: readonly ConstructionRegionTopology[], point: ConstructionPosition, controlIndex: number): EndWeld | undefined`
+
+The straight boundary edge of a flat platform at `point`'s height that `point` lands on, if any -- a whole straight run, however ground split it.
+
+### `function vtt.slope-commit.project(a: ConstructionPosition, b: ConstructionPosition, p: ConstructionPosition): { distance: number; t: number }`
 
 ### `function vtt.slope-commit.slopeControlPoint(ctx: ToolContext, sample: PointerSample): ConstructionPosition`
 
 A control point's height comes from what the pointer actually touched: a node's own height, else the picked surface.
 
-### `function vtt.slope-commit.spiralControlPoints(center: ConstructionPosition, params: SlopeParams): readonly ConstructionPosition[]`
+### `variable vtt.slope-tools.slopeCurveTool: ConstructionTool<"slope-curve">`
 
-The spiral preset: control points of a helix around `center`, climbing
-`rise` over `turns` turns. Eight per turn keeps the automatic curve round.
-A preset only chooses points -- the result is an ordinary spine.
-
-### `function vtt.slope-commit.straightRampOutline(from: ConstructionPosition, to: ConstructionPosition, width: number): readonly ConstructionPosition[]`
-
-The ramp's outline while dragging: both margins at its real width, climbing with it.
-
-### `function vtt.slope-commit.straightRampPoints(ctx: ToolContext, start: PointerSample, end: PointerSample, params: SlopeParams): readonly [ConstructionPosition, ConstructionPosition]`
-
-The straight ramp preset: from where the drag starts, at that height, to
-where it ends, `rise` higher. A preset only chooses points -- the result is
-an ordinary spine.
+Edits an existing curved ramp by its spine points, as the spiral and the road are edited, and as a whole by its handles.
 
 ### `variable vtt.slope-tools.slopeRampTool: ConstructionTool<"slope-ramp">`
 
-Also grabs and edits an existing slope spine's own control point/segment -- see `structure-edit-behavior.ts`.
+Also edits an existing ramp by its handles -- see `structure-edit-behavior.ts`; a press on the ramp itself builds against it.
 
 ### `variable vtt.slope-tools.slopeSpiralTool: ConstructionTool<"slope-spiral">`
 
-Also grabs and edits an existing slope spine's own control point/segment -- see `structure-edit-behavior.ts`.
+Also edits an existing spiral by its spine points, exactly as a road is
+edited -- see `spine-edit-behavior.ts` -- and as a whole by its handles.
 
 ### `variable vtt.terrain-sculpt-tool.terrainSculptTool: ConstructionTool<"terrain-sculpt">`
 
@@ -2794,11 +3542,11 @@ Also grabs and edits an existing wall's own vertex/edge/body/height-widget -- a 
 
 ### `variable vtt.wall-brush-tool.wallBrushTool: ConstructionTool<"wall-brush">`
 
-Also grabs and edits an existing wall's own vertex/edge/body/height-widget -- see `structure-edit-behavior.ts`.
+Also edits an existing wall by its handles -- see `structure-edit-behavior.ts`; a press on a wall itself builds from it.
 
 ### `variable vtt.wall-line-tool.wallLineTool: ConstructionTool<"wall-line">`
 
-Also grabs and edits an existing wall's own vertex/edge/body/height-widget -- see `structure-edit-behavior.ts`.
+Also edits an existing wall by its handles -- see `structure-edit-behavior.ts`; a press on a wall itself builds from it.
 
 ### `interface vtt.wall-patch.WallColumn`
 
@@ -2934,6 +3682,17 @@ the hand drift this far and still weld -- a thin centerline alone showed
 the correct result but not *why* it was correct, which is what read as
 "not really snapping." The floor is CORNER_WELD_TOLERANCE itself,
 so a zero-tolerance straight line still shows its own magnet reach.
+
+### `function vtt.wall-shared.wallFootAt(ctx: ToolContext, sample: PointerSample): ConstructionPosition`
+
+Where the pointer puts a wall's foot: on a floor's level when over or at the edge of one (onFloorLevel), else where it hit.
+
+### `function vtt.wall-shared.wallStartAt(ctx: ToolContext, sample: PointerSample): ConstructionPosition`
+
+Where a wall begins when pressed on: on another wall, at the foot of that
+wall straight below where it was pressed -- a new wall joins it there, at
+a column or partway along its run, never halfway up its face; else on a
+floor it is over, at the floor's height (wallFootAt).
 
 ### `interface vtt.wall-spans.WallSpan`
 
@@ -3248,6 +4007,10 @@ for it now.
 
 ### `function vtt.token-projection.createTokenProjection(input: TokenProjection): TokenProjection`
 
+### `reference vtt.edit-construction.spineGlobalHandleId -> vtt.global-handle-ids.globalHandleId`
+
+### `reference vtt.edit-construction.spineGlobalHandleOf -> vtt.global-handle-ids.globalHandleOf`
+
 ### `interface vtt.effect.Effect`
 
 ### `property vtt.effect.Effect.causeId: string`
@@ -3384,6 +4147,160 @@ Dispatches `initial` and everything the reactions emit, breadth first.
 
 Pure orchestration: it holds no state between runs and mutates nothing
 itself -- reactions mutate through `context`.
+
+### `interface vtt.global-handle.GlobalHandle`
+
+One whole-structure handle, where it stands, and what it acts on.
+
+### `property vtt.global-handle.GlobalHandle.center?: readonly [number, number]`
+
+A spiral's centre, when the structure is one -- what a turns handle winds round.
+
+### `property vtt.global-handle.GlobalHandle.faces?: readonly string[]`
+
+The faces the structure is made of, by surface key joined with NUL -- absent for a spine, whose faces its spine regenerates.
+
+### `property vtt.global-handle.GlobalHandle.facing?: { x: number; z: number }`
+
+The way a handle standing off one side of a face looks out, in plan --
+absent for one that is seen from anywhere. The scene shows only the
+sides facing the viewer.
+
+### `property vtt.global-handle.GlobalHandle.id: string`
+
+### `property vtt.global-handle.GlobalHandle.kind: GlobalHandleKind`
+
+### `property vtt.global-handle.GlobalHandle.motion: HandleMotion`
+
+How the handle moves while dragged -- the path its gesture keeps it on.
+
+### `property vtt.global-handle.GlobalHandle.nodeIds: readonly string[]`
+
+Every node of the structure, lowest id first.
+
+### `property vtt.global-handle.GlobalHandle.owner: string`
+
+The structure's type.
+
+### `property vtt.global-handle.GlobalHandle.pivot: ConstructionPosition`
+
+What the structure moves and turns round.
+
+### `property vtt.global-handle.GlobalHandle.position: ConstructionPosition`
+
+### `property vtt.global-handle.GlobalHandle.provider: string`
+
+Which provider made it -- and plans its edits.
+
+### `property vtt.global-handle.GlobalHandle.snaps?: boolean`
+
+Whether what it drags snaps onto other structures' outlines (`orchestration/outline-snap.ts`).
+
+### `property vtt.global-handle.GlobalHandle.target?: HandlePart`
+
+The part of the structure it drags -- a side, a corner; absent when it moves the whole.
+
+### `interface vtt.global-handle.GlobalHandleProvider`
+
+One way structures are built -- from a spine, from a cloud of regions --
+and so one way their global handles stand and edit. A new way of
+building gets its handles by adding a provider; nothing that shows or
+drags them changes.
+
+### `property vtt.global-handle.GlobalHandleProvider.name: string`
+
+### `method vtt.global-handle.GlobalHandleProvider.handles(scene: GlobalHandleScene): readonly GlobalHandle[]`
+
+Every handle of every kind this provider places, before any type's declaration filters them.
+
+### `method vtt.global-handle.GlobalHandleProvider.plan(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: Pick<BezierPort, "curveBatch">, operationId: string): GlobalHandleEdit | undefined`
+
+What `intent` on `handle` edits; `undefined` when it edits nothing. Throws to refuse.
+
+### `interface vtt.global-handle.GlobalHandleScene`
+
+What a global handle's provider reads: the table as it stands, and the engine's own cloud query.
+
+### `property vtt.global-handle.GlobalHandleScene.cloudFor: (request: { seed: ConstructionSurfaceKey; surfaceType: string }) => { surfaceKeys: readonly ConstructionSurfaceKey[] }`
+
+Which surfaces form one cloud with `seed` (`ADR-0022`) -- the engine decides, never a copy of its rule.
+
+### `property vtt.global-handle.GlobalHandleScene.graph: ConstructionGraphSnapshot`
+
+### `property vtt.global-handle.GlobalHandleScene.topologies: readonly ConstructionRegionTopology[]`
+
+### `type vtt.global-handle.GlobalHandleEdit = { carries?: readonly ConstructionSurfaceKey[]; graphPatch: ConstructionGraphPatch; kind: "spine"; owner: string } | { delta: ConstructionPosition; kind: "region-move"; seed: ConstructionSurfaceKey } | { delta: ConstructionPosition; kind: "region-part"; seed: ConstructionSurfaceKey; target: HandlePart } | { kind: "vertices"; moves: readonly { nodeId: string; position: ConstructionPosition }[]; retypes: readonly { edgeId: string; geometry: ConstructionEdgeGeometry }[] } | { kind: "replace"; request: ApplyPatchReplacementRequest }`
+
+What a provider makes of an intent, in the terms the edit is carried out
+in:
+
+- spine: a spine graph patch its owner regenerates from;
+- region-move: the whole cloud seeded at `seed` moved by `delta` -- through
+  the type's own role policy, so its solver and validation apply;
+- region-part: one side or corner of a face, the same way;
+- vertices: explicit node positions and edge geometry;
+- replace: faces swapped for new ones in one patch replacement -- a
+  structure rebuilt, and the floors it welds into or leaves.
+
+### `type vtt.global-handle.GlobalHandleIntent = { delta: ConstructionPosition; kind: "move" } | { angle: number; kind: "rotate" } | { dy: number; kind: "height" } | { angle: number; kind: "wind" } | { delta: number; kind: "radius" } | { at: ConstructionPosition; kind: "place"; under?: ConstructionSurfaceKey } | { dy: number; kind: "lift" } | { kind: "detach" }`
+
+What a gesture on a global handle asks for, whatever the structure.
+
+### `type vtt.global-handle.HandlePart = { edgeId: string; kind: "edge" } | { kind: "vertex"; nodeId: string }`
+
+One part of a face a handle drags: a side, or a corner.
+
+### `type vtt.global-handle-ids.GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "radius" | "origin" | "destination" | "originHeight" | "destinationHeight" | "side" | "corner" | "foot" | "top" | "detach"`
+
+The handles that stand for a whole structure rather than one of its
+points, whatever the structure is built from -- a spine, a cloud of
+regions:
+
+- pivot: moves it;
+- rotate: turns it round its pivot;
+- height: raises or lowers it (a spine: its far end);
+- turns: winds a spiral on or back;
+- radius: widens or narrows a spiral round its centre;
+- origin, destination: move one end of a structure that runs between two
+  ends, connecting it where it lands and disconnecting it where it left;
+- originHeight, destinationHeight: raise or lower that one end -- how
+  steeply the structure climbs;
+- side, corner: stand just outside one side or corner of the structure
+  and push that part -- the part itself is never grabbed, so it stays
+  free to build against;
+- foot, top: an upright structure's post -- where it stands, and how high
+  that side rises;
+- detach: clicked, the structure lets go of whatever it is joined to.
+
+Which of them a structure shows is its type's declaration
+(`StructureTypeDefinition.globalHandles`). Every one is named after the
+structure's lowest node id, so it stays the same handle through any edit
+that keeps that node; none is a graph node. This module is the only place
+their ids are made or read.
+
+### `function vtt.global-handle-ids.globalHandleId(kind: GlobalHandleKind, anchorNodeId: string): string`
+
+### `function vtt.global-handle-ids.globalHandleOf(id: string): { kind: GlobalHandleKind; nodeId: string } | undefined`
+
+Which global handle `id` names, and after which node; `undefined` for anything else.
+
+### `type vtt.handle-motion.HandleMotion = { kind: "free" } | { kind: "plane" } | { kind: "vertical" } | { center: PlanPoint; kind: "orbit" } | { direction: PlanPoint; kind: "line" } | { kind: "fixed" }`
+
+How a handle may move while dragged -- a property of the handle, never of
+the type it belongs to. The gesture keeps the handle on this path, and
+only a handle that moves freely carries the scene's 3D arrows:
+
+- free: anywhere -- along the ground, up and down in elevation mode, or
+  anywhere with the arrows;
+- plane: along the ground, keeping its height;
+- vertical: straight up and down;
+- orbit: round `center` in plan, at its own distance and height;
+- line: along `direction` in plan through where it stands, keeping its height;
+- fixed: nowhere -- a handle that is clicked, not dragged.
+
+### `function vtt.handle-motion.carriesArrows(motion: HandleMotion): boolean`
+
+Whether a handle with `motion` carries the scene's free 3D arrows.
 
 ### `interface vtt.edit-history.EditHistoryStack`
 
@@ -3625,6 +4542,25 @@ Which part of a region the user grabbed.
 
 ### `function vtt.atomic-edit.scalePosition(position: ConstructionPosition, factor: number): ConstructionPosition`
 
+### `function vtt.detach.detachStructure(topologies: readonly ConstructionRegionTopology[], members: readonly ConstructionRegionTopology[], isGround: (surfaceType: string) => boolean, operationId: string, only?: ReadonlySet<string>): ApplyPatchReplacementRequest | undefined`
+
+`members` given nodes of their own for every one they share -- or, with
+`only`, for those of them only -- as one replacement; `undefined` when they
+share none.
+
+### `function vtt.detach.releaseFromSolid(topologies: readonly ConstructionRegionTopology[], nodeIds: ReadonlySet<string>, isGround: (surfaceType: string) => boolean, isSolid: (surfaceType: string) => boolean, operationId: string): ApplyPatchReplacementRequest | undefined`
+
+`nodeIds` let go of by every structure holding them that is not solid:
+those structures get copies of their own, and the solid ones they were
+shared with -- a platform under a wall's foot -- keep theirs, so moving the
+copies moves nothing solid. Structures sharing a node that are not solid,
+a corner column two walls stand on, keep sharing it. `undefined` when no
+solid structure holds any of them.
+
+### `function vtt.detach.sharedNodes(topologies: readonly ConstructionRegionTopology[], members: readonly ConstructionRegionTopology[], isGround: (surfaceType: string) => boolean): ReadonlySet<string>`
+
+The nodes `members` shares with any other structure but the ground.
+
 ### `interface vtt.edit-orchestrator.EditOpSink`
 
 The slice of `ConstructionSessionPort` an edit plan actually needs.
@@ -3696,6 +4632,499 @@ Resolves `gesture` against the structure type's own role table. The
 returned ops are already constrained -- a height-only role's horizontal
 movement is gone by this point, never clamped later or inside Rust.
 
+### `function vtt.free-end-welds.adoptJointEnd(topologies: readonly ConstructionRegionTopology[], joint: EndJoint, rung: WeldRung, positions: ReadonlyMap<string, ConstructionPosition>): { face: ConstructionRegionTopology; rebuilt: RebuiltFromEnds } | undefined`
+
+The structure owning `joint`'s end, rebuilt with that end on `rung`'s two
+nodes -- a spine's end joined onto it takes it over. `undefined` when that
+structure cannot take nodes over.
+
+### `function vtt.free-end-welds.adoptsEnds(face: ConstructionRegionTopology): boolean`
+
+A structure whose ends can take another structure's nodes over -- what an end that cannot (a spine's) joins onto.
+
+### `function vtt.free-end-welds.endJointNear(graph: ConstructionGraphSnapshot, topologies: readonly ConstructionRegionTopology[], point: ConstructionPosition | ((height: number) => ConstructionPosition), options: { accept?: (face: ConstructionRegionTopology) => boolean; own?: ReadonlySet<string>; reach?: number }): EndJoint | undefined`
+
+The free structure end nearest `point` in plan, within `reach` of its
+middle, as something to run on from: the way on points away from the
+face that owns the end's edge. Ends among `own` -- the structure asking --
+are never offered.
+
+### `function vtt.free-end-welds.freeStructureEnds(graph: ConstructionGraphSnapshot, topologies: readonly ConstructionRegionTopology[]): readonly WeldRung[]`
+
+Every end of every structure that nothing else holds -- not welded into a
+floor, not taken over by another structure: a region
+structure's declared ends (`StructureTypeDefinition.ends`), and a spine's
+free ends whose owner says where their cross-section is
+(`SpineGeneration.endRung`).
+
+### `function vtt.free-end-welds.releasableFace(face: ConstructionRegionTopology): boolean`
+
+What a detach takes off an end's nodes: floors and the ground laid against them, never a structure that continues the end.
+
+### `function vtt.free-end-welds.structureEndRungs(graph: ConstructionGraphSnapshot, topologies: readonly ConstructionRegionTopology[]): readonly WeldRung[]`
+
+Every end of every structure, held or free -- see freeStructureEnds.
+
+### `function vtt.free-end-welds.weldFreeEndsOnto(graph: ConstructionGraphSnapshot, topologies: readonly ConstructionRegionTopology[], floorKeys: readonly ConstructionSurfaceKey[], operationId: string): ApplyPatchReplacementRequest | undefined`
+
+Welds every free structure end whose end edge lies along the outline of
+one of the floors `floorKeys` names -- a floor drawn against a ramp's end
+joins it without the corners having to be picked. `undefined` when none
+does.
+
+### `function vtt.global-handles.handleMotionAt(scene: GlobalHandleScene, id: string): HandleMotion | undefined`
+
+How the handle `id` moves while dragged, whatever it is: a whole-structure
+handle says so itself; a spine's control point moves along the ground on a
+spine whose owner derives its heights, and freely otherwise. `undefined`
+for anything that is not a handle this knows.
+
+### `function vtt.global-handles.planGlobalHandle(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: Pick<BezierPort, "curveBatch">, operationId: string): GlobalHandleEdit | undefined`
+
+What `intent` on `handle` edits, from the provider that placed it.
+
+### `function vtt.global-handles.shownGlobalHandleAt(scene: GlobalHandleScene, id: string): GlobalHandle | undefined`
+
+The shown global handle `id` names, where it stands now.
+
+### `function vtt.global-handles.shownGlobalHandles(scene: GlobalHandleScene, owns?: (surfaceType: string) => boolean): readonly GlobalHandle[]`
+
+Every global handle a type declares -- only those of types `owns` accepts, when given.
+
+### `interface vtt.cloud-handle-provider.CloudGlobalHandle`
+
+A global handle placed on a cloud of regions: the generic handle, with the regions it stands for.
+
+### `property vtt.cloud-handle-provider.CloudGlobalHandle.center?: readonly [number, number]`
+
+A spiral's centre, when the structure is one -- what a turns handle winds round.
+
+### `property vtt.cloud-handle-provider.CloudGlobalHandle.faces?: readonly string[]`
+
+The faces the structure is made of, by surface key joined with NUL -- absent for a spine, whose faces its spine regenerates.
+
+### `property vtt.cloud-handle-provider.CloudGlobalHandle.facing?: { x: number; z: number }`
+
+The way a handle standing off one side of a face looks out, in plan --
+absent for one that is seen from anywhere. The scene shows only the
+sides facing the viewer.
+
+### `property vtt.cloud-handle-provider.CloudGlobalHandle.id: string`
+
+### `property vtt.cloud-handle-provider.CloudGlobalHandle.kind: GlobalHandleKind`
+
+### `property vtt.cloud-handle-provider.CloudGlobalHandle.members: readonly ConstructionRegionTopology[]`
+
+### `property vtt.cloud-handle-provider.CloudGlobalHandle.motion: HandleMotion`
+
+How the handle moves while dragged -- the path its gesture keeps it on.
+
+### `property vtt.cloud-handle-provider.CloudGlobalHandle.nodeIds: readonly string[]`
+
+Every node of the structure, lowest id first.
+
+### `property vtt.cloud-handle-provider.CloudGlobalHandle.owner: string`
+
+The structure's type.
+
+### `property vtt.cloud-handle-provider.CloudGlobalHandle.pivot: ConstructionPosition`
+
+What the structure moves and turns round.
+
+### `property vtt.cloud-handle-provider.CloudGlobalHandle.position: ConstructionPosition`
+
+### `property vtt.cloud-handle-provider.CloudGlobalHandle.provider: string`
+
+Which provider made it -- and plans its edits.
+
+### `property vtt.cloud-handle-provider.CloudGlobalHandle.snaps?: boolean`
+
+Whether what it drags snaps onto other structures' outlines (`orchestration/outline-snap.ts`).
+
+### `property vtt.cloud-handle-provider.CloudGlobalHandle.target?: HandlePart`
+
+The part of the structure it drags -- a side, a corner; absent when it moves the whole.
+
+### `variable vtt.cloud-handle-provider.cloudHandleProvider: GlobalHandleProvider`
+
+Global handles of structures built from regions -- a platform, a ramp:
+moving and raising go through the type's own region role (so its solver,
+transport and validation apply); turning places every node itself, arc
+centres with them, and turns everything joined to the structure with it.
+
+### `variable vtt.detach-handle-provider.detachHandleProvider: GlobalHandleProvider`
+
+### `interface vtt.end-handle-provider.EndGlobalHandle`
+
+An end handle: the generic handle, with the structure it moves and which end.
+
+### `property vtt.end-handle-provider.EndGlobalHandle.center?: readonly [number, number]`
+
+A spiral's centre, when the structure is one -- what a turns handle winds round.
+
+### `property vtt.end-handle-provider.EndGlobalHandle.end: StructureEndName`
+
+### `property vtt.end-handle-provider.EndGlobalHandle.faces?: readonly string[]`
+
+The faces the structure is made of, by surface key joined with NUL -- absent for a spine, whose faces its spine regenerates.
+
+### `property vtt.end-handle-provider.EndGlobalHandle.facing?: { x: number; z: number }`
+
+The way a handle standing off one side of a face looks out, in plan --
+absent for one that is seen from anywhere. The scene shows only the
+sides facing the viewer.
+
+### `property vtt.end-handle-provider.EndGlobalHandle.id: string`
+
+### `property vtt.end-handle-provider.EndGlobalHandle.kind: GlobalHandleKind`
+
+### `property vtt.end-handle-provider.EndGlobalHandle.motion: HandleMotion`
+
+How the handle moves while dragged -- the path its gesture keeps it on.
+
+### `property vtt.end-handle-provider.EndGlobalHandle.nodeIds: readonly string[]`
+
+Every node of the structure, lowest id first.
+
+### `property vtt.end-handle-provider.EndGlobalHandle.owner: string`
+
+The structure's type.
+
+### `property vtt.end-handle-provider.EndGlobalHandle.pivot: ConstructionPosition`
+
+What the structure moves and turns round.
+
+### `property vtt.end-handle-provider.EndGlobalHandle.position: ConstructionPosition`
+
+### `property vtt.end-handle-provider.EndGlobalHandle.provider: string`
+
+Which provider made it -- and plans its edits.
+
+### `property vtt.end-handle-provider.EndGlobalHandle.snaps?: boolean`
+
+Whether what it drags snaps onto other structures' outlines (`orchestration/outline-snap.ts`).
+
+### `property vtt.end-handle-provider.EndGlobalHandle.target?: HandlePart`
+
+The part of the structure it drags -- a side, a corner; absent when it moves the whole.
+
+### `property vtt.end-handle-provider.EndGlobalHandle.topology: ConstructionRegionTopology`
+
+### `variable vtt.end-handle-provider.endHandleProvider: GlobalHandleProvider`
+
+Origin and destination handles of every structure whose type runs
+between two ends (`StructureTypeDefinition.ends`): dragging one moves
+that end, the other standing, and connects it to the floor edge it lands
+on, and takes it off the one it left. What the structure becomes is
+its type's; welding and unwelding is the same for every type.
+
+### `function vtt.handle-name.handleNodeName(scene: GlobalHandleScene, own: readonly ConstructionRegionTopology[], sortedNodeIds: readonly string[]): { name: string; nodeId: string }`
+
+What a structure's global handles are named after: its lowest node that
+no other structure holds -- ground aside, which rims whatever it was cut
+round -- so two structures welded together never name their handles
+alike. When every node is shared, its lowest node and its own type, which
+two structures joined at every node never have in common.
+
+### `interface vtt.part-handle-provider.PartGlobalHandle`
+
+A side or corner handle: the generic handle, with the face and the part of it the handle pushes.
+
+### `property vtt.part-handle-provider.PartGlobalHandle.center?: readonly [number, number]`
+
+A spiral's centre, when the structure is one -- what a turns handle winds round.
+
+### `property vtt.part-handle-provider.PartGlobalHandle.faces?: readonly string[]`
+
+The faces the structure is made of, by surface key joined with NUL -- absent for a spine, whose faces its spine regenerates.
+
+### `property vtt.part-handle-provider.PartGlobalHandle.facing?: { x: number; z: number }`
+
+The way a handle standing off one side of a face looks out, in plan --
+absent for one that is seen from anywhere. The scene shows only the
+sides facing the viewer.
+
+### `property vtt.part-handle-provider.PartGlobalHandle.id: string`
+
+### `property vtt.part-handle-provider.PartGlobalHandle.kind: GlobalHandleKind`
+
+### `property vtt.part-handle-provider.PartGlobalHandle.motion: HandleMotion`
+
+How the handle moves while dragged -- the path its gesture keeps it on.
+
+### `property vtt.part-handle-provider.PartGlobalHandle.nodeIds: readonly string[]`
+
+Every node of the structure, lowest id first.
+
+### `property vtt.part-handle-provider.PartGlobalHandle.owner: string`
+
+The structure's type.
+
+### `property vtt.part-handle-provider.PartGlobalHandle.pivot: ConstructionPosition`
+
+What the structure moves and turns round.
+
+### `property vtt.part-handle-provider.PartGlobalHandle.position: ConstructionPosition`
+
+### `property vtt.part-handle-provider.PartGlobalHandle.provider: string`
+
+Which provider made it -- and plans its edits.
+
+### `property vtt.part-handle-provider.PartGlobalHandle.seed: ConstructionRegionTopology`
+
+### `property vtt.part-handle-provider.PartGlobalHandle.snaps?: boolean`
+
+Whether what it drags snaps onto other structures' outlines (`orchestration/outline-snap.ts`).
+
+### `property vtt.part-handle-provider.PartGlobalHandle.target: { kind: "vertex"; nodeId: string } | { edgeId: string; kind: "edge" }`
+
+The part of the structure it drags -- a side, a corner; absent when it moves the whole.
+
+### `variable vtt.part-handle-provider.PART_HANDLE_OUT: 0.7`
+
+How far outside a side or a corner its handle stands, so the part itself stays free to build against.
+
+### `variable vtt.part-handle-provider.partHandleProvider: GlobalHandleProvider`
+
+A handle just outside each side and each corner of every structure whose
+type declares `side` or `corner` handles -- for the parts its own
+`partHandle` names. Dragging one edits that part through the type's own
+role for it, exactly as grabbing the part itself used to: the platform
+pushes the side square to itself, a ramp widens. The part itself is never
+grabbed, so it stays free to build against.
+
+### `variable vtt.spine-handle-provider.spineHandleProvider: GlobalHandleProvider`
+
+Global handles of structures built from a spine: every intent becomes a
+spine graph patch the spine's owner regenerates from.
+
+### `interface vtt.upright-handle-provider.UprightGlobalHandle`
+
+An upright handle: the generic handle, with the face and the part it edits.
+
+### `property vtt.upright-handle-provider.UprightGlobalHandle.center?: readonly [number, number]`
+
+A spiral's centre, when the structure is one -- what a turns handle winds round.
+
+### `property vtt.upright-handle-provider.UprightGlobalHandle.faces?: readonly string[]`
+
+The faces the structure is made of, by surface key joined with NUL -- absent for a spine, whose faces its spine regenerates.
+
+### `property vtt.upright-handle-provider.UprightGlobalHandle.facing?: { x: number; z: number }`
+
+The way a handle standing off one side of a face looks out, in plan --
+absent for one that is seen from anywhere. The scene shows only the
+sides facing the viewer.
+
+### `property vtt.upright-handle-provider.UprightGlobalHandle.id: string`
+
+### `property vtt.upright-handle-provider.UprightGlobalHandle.kind: GlobalHandleKind`
+
+### `property vtt.upright-handle-provider.UprightGlobalHandle.motion: HandleMotion`
+
+How the handle moves while dragged -- the path its gesture keeps it on.
+
+### `property vtt.upright-handle-provider.UprightGlobalHandle.nodeIds: readonly string[]`
+
+Every node of the structure, lowest id first.
+
+### `property vtt.upright-handle-provider.UprightGlobalHandle.owner: string`
+
+The structure's type.
+
+### `property vtt.upright-handle-provider.UprightGlobalHandle.pivot: ConstructionPosition`
+
+What the structure moves and turns round.
+
+### `property vtt.upright-handle-provider.UprightGlobalHandle.position: ConstructionPosition`
+
+### `property vtt.upright-handle-provider.UprightGlobalHandle.provider: string`
+
+Which provider made it -- and plans its edits.
+
+### `property vtt.upright-handle-provider.UprightGlobalHandle.seed: ConstructionRegionTopology`
+
+### `property vtt.upright-handle-provider.UprightGlobalHandle.snaps?: boolean`
+
+Whether what it drags snaps onto other structures' outlines (`orchestration/outline-snap.ts`).
+
+### `property vtt.upright-handle-provider.UprightGlobalHandle.target: { kind: "vertex"; nodeId: string } | { edgeId: string; kind: "edge" }`
+
+The part of the structure it drags -- a side, a corner; absent when it moves the whole.
+
+### `variable vtt.upright-handle-provider.uprightHandleProvider: GlobalHandleProvider`
+
+### `function vtt.upright-handle-provider.isUpright(topology: ConstructionRegionTopology): boolean`
+
+Whether `topology` stands upright.
+
+### `function vtt.upright-handle-provider.uprightPosts(topology: ConstructionRegionTopology): readonly { foot: string; top: string }[]`
+
+The posts of an upright face: edges rising more than half the face's own
+height, and steeply -- far more up than across -- each as its foot and top.
+A sloped face (a ramp) has none; a leaning post is still found.
+
+### `function vtt.handle-release.joinWhereLanded(topologies: readonly ConstructionRegionTopology[], ids: readonly string[], operationId: string): ApplyPatchReplacementRequest | undefined`
+
+The nodes among `ids` that stand on a floor's outline without being its,
+joined to it there -- the floor passes through them, cut where they stand
+partway along a side -- as one replacement; `undefined` when none does.
+Nothing is moved to join.
+
+### `function vtt.handle-release.partNodes(topologies: readonly ConstructionRegionTopology[], target: HandlePart | undefined): readonly string[]`
+
+The nodes of the part `target` names -- a corner, or a side's two ends; none for the whole.
+
+### `function vtt.handle-release.releasePart(topologies: readonly ConstructionRegionTopology[], graph: ConstructionGraphSnapshot, part: { delta: ConstructionPosition; kind: "region-part"; seed: ConstructionSurfaceKey; target: HandlePart }, operationId: string): ApplyPatchReplacementRequest | undefined`
+
+A part of a structure that is not solid -- a wall's foot, its foot run --
+held with a solid one -- the platform it stands on -- is let go of for the
+drag, so it slides along instead of carrying the solid one whole; where it
+lands on an outline it is joined again (`joinWhereLanded`). A structure
+joined by a weld has its own pause instead. `undefined` when there is
+nothing to let go.
+
+### `function vtt.handle-release.snapAnchorsOf(scene: GlobalHandleScene, handle: GlobalHandle): readonly SnapAnchor[]`
+
+What of `handle`'s drag snaps: the nodes of the part it drags, or -- dragging the whole -- the lowest of its structure's.
+
+### `function vtt.handle-release.snapMagnetsOf(scene: GlobalHandleScene, handle: GlobalHandle): readonly Magnet[]`
+
+What `handle`'s drag snaps onto: every other structure's outline -- but, dragging the whole, not what goes with it.
+
+### `interface vtt.outline-snap.Magnet`
+
+A level run of another structure's outline, by its two nodes.
+
+### `property vtt.outline-snap.Magnet.a: { id: string; position: ConstructionPosition }`
+
+### `property vtt.outline-snap.Magnet.b: { id: string; position: ConstructionPosition }`
+
+### `interface vtt.outline-snap.OutlineSnap`
+
+The snapped displacement, which anchor snapped, and the nodes of what it snapped onto.
+
+### `property vtt.outline-snap.OutlineSnap.anchor: string`
+
+### `property vtt.outline-snap.OutlineSnap.delta: ConstructionPosition`
+
+### `property vtt.outline-snap.OutlineSnap.magnet: readonly string[]`
+
+### `interface vtt.outline-snap.SnapAnchor`
+
+A node the handle drags that may snap, where it stood when the drag began.
+
+### `property vtt.outline-snap.SnapAnchor.id: string`
+
+### `property vtt.outline-snap.SnapAnchor.position: ConstructionPosition`
+
+### `variable vtt.outline-snap.SNAP_REACH: 0.2`
+
+How close, in plan, an anchor must come to a magnet to snap onto it.
+
+### `function vtt.outline-snap.outlineMagnets(topologies: readonly ConstructionRegionTopology[], skip: ReadonlySet<string>, isGround: (surfaceType: string) => boolean): readonly Magnet[]`
+
+Every level run of the outlines of `topologies` but those `skip` names, and the ground's -- what a dragged structure snaps onto.
+
+### `function vtt.outline-snap.snapToOutlines(anchors: readonly SnapAnchor[], delta: ConstructionPosition, motion: HandleMotion, magnets: readonly Magnet[], reach: number): OutlineSnap | undefined`
+
+`delta` snapped: the anchors, moved by it, onto the nearest magnet corner
+within SNAP_REACH, else onto the nearest magnet run -- only ever
+along the handle's own `motion`; `undefined` when none is within reach.
+
+### `function vtt.rigid-carry.fitRigidMotion(pairs: readonly { from: ConstructionPosition; to: ConstructionPosition }[]): Place`
+
+The rigid motion -- a turn in plan, a shift, a rise -- that best takes every `from` to its `to`.
+
+### `function vtt.rigid-carry.joinedStructures(topologies: readonly ConstructionRegionTopology[], seeds: readonly ConstructionRegionTopology[], isGround: (surfaceType: string) => boolean): readonly ConstructionRegionTopology[]`
+
+Every structure joined to `seeds` through shared nodes, or standing on one
+of them -- a wall in the middle of a floor -- `seeds` included: what turns
+or moves as one when a whole-structure handle acts on one of them. Ground
+is never part of it: it is re-cut around what lands, not carried.
+
+### `function vtt.rigid-carry.rigidCarries(topologies: readonly ConstructionRegionTopology[], moved: ReadonlyMap<string, ConstructionPosition>, direct: ReadonlySet<string>): ReadonlyMap<string, ConstructionPosition>`
+
+Where every node of each rigid structure among `topologies` must go so
+that `moved` carries it whole -- empty when none is bent. Structures in
+`direct` are the ones the gesture itself edits: their own controls shape
+them.
+
+### `function vtt.rigid-carry.standingOn(topologies: readonly ConstructionRegionTopology[], bases: readonly ConstructionRegionTopology[], isGround: (surfaceType: string) => boolean): readonly ConstructionRegionTopology[]`
+
+The structures among `topologies` standing on any of `bases`, the ground excepted.
+
+### `function vtt.rigid-carry.standsOn(upper: ConstructionRegionTopology, base: ConstructionRegionTopology): boolean`
+
+Whether `upper` stands on `base`: its lowest nodes -- a wall's feet, a
+ramp's foot -- all lie on `base`'s face, inside its outline in plan and at
+its surface's height, without being joined to it by a node. Read from the
+shapes alone; nothing asks what either structure is.
+
+### `interface vtt.scene-handles.HandleFocus`
+
+The one structure whose handles show -- the one under the pointer: its
+faces, by surface key joined with NUL, or, for a spine, its control nodes.
+
+### `property vtt.scene-handles.HandleFocus.faces: ReadonlySet<string>`
+
+### `property vtt.scene-handles.HandleFocus.spineNodes: ReadonlySet<string>`
+
+### `property vtt.scene-handles.HandleFocus.viewer?: { x: number; z: number }`
+
+The way the viewer looks, in plan: of a handle standing off each side of a face, only the side facing it shows.
+
+### `interface vtt.scene-handles.SceneHandle`
+
+### `property vtt.scene-handles.SceneHandle.id: string`
+
+### `property vtt.scene-handles.SceneHandle.kind: SceneHandleKind`
+
+### `property vtt.scene-handles.SceneHandle.position: ConstructionPosition`
+
+### `interface vtt.scene-handles.SceneHandleInput`
+
+### `property vtt.scene-handles.SceneHandleInput.cloudFor: (request: { seed: ConstructionSurfaceKey; surfaceType: string }) => { surfaceKeys: readonly ConstructionSurfaceKey[] }`
+
+### `property vtt.scene-handles.SceneHandleInput.contour: readonly ConstructionCurvedEdge[]`
+
+The session's curved contour edges, whose midpoints are handles too.
+
+### `property vtt.scene-handles.SceneHandleInput.focus?: HandleFocus`
+
+Only the focused structure's handles and spine points show; absent, every one does.
+
+### `property vtt.scene-handles.SceneHandleInput.graph: ConstructionGraphSnapshot`
+
+### `property vtt.scene-handles.SceneHandleInput.owns?: (surfaceType: string) => boolean`
+
+The types whose whole-structure handles show -- the active tool's; none when absent.
+
+### `property vtt.scene-handles.SceneHandleInput.pointsOnly: boolean`
+
+A tool editing spines by their points: only spines' points and midpoints, never contours' or walls'.
+
+### `property vtt.scene-handles.SceneHandleInput.port?: Pick<BezierPort, "curveBatch">`
+
+Absent without the curve engine: then no curve has a handle.
+
+### `property vtt.scene-handles.SceneHandleInput.topologies: readonly ConstructionRegionTopology[]`
+
+### `type vtt.scene-handles.SceneHandleKind = "anchor" | "midpoint" | "panelHeight" | GlobalHandleKind`
+
+Every edit handle the scene shows, in one list: what each one is for --
+its kind, which is also what its look is chosen by -- and where it stands.
+The one place that says which handles exist; whatever shows them only
+draws this list. (The graph's own node dots are its debug view, not edit
+handles, and are not here.)
+
+- anchor: a spine's control point;
+- midpoint: a span's midpoint -- bend it, or click to insert a point;
+- panelHeight: a wall run's own height widget;
+- every whole-structure handle, by its own kind (`global-handles/`).
+
+### `function vtt.scene-handles.sceneHandles(input: SceneHandleInput): readonly SceneHandle[]`
+
 ### `function vtt.spine-edit.planBezierEdit(input: SpineEditInput & { field: FieldPort; tableId: string; topologies: readonly ConstructionRegionTopology[] }): { preview: Float32Array; request: ApplyPatchReplacementRequest; selectedId: string } | undefined`
 
 One spine gesture, end to end: the spine module says what the gesture does
@@ -3703,9 +5132,86 @@ to the curve, and the structure type that owns the spine regenerates its
 surface from that. A road, a sloped platform and any future curve-built
 type are edited by exactly the same handles; only the last step differs.
 
-### `function vtt.spine-edit.previewBezierEdit(input: SpineEditInput): Float32Array<ArrayBufferLike> | undefined`
+### `function vtt.spine-edit.previewBezierEdit(input: SpineEditInput & { topologies?: readonly ConstructionRegionTopology[] }): Float32Array<ArrayBufferLike> | undefined`
 
 Preview only the affected curves; surface regeneration runs once on release.
+
+### `function vtt.spine-end-welds.regenerateWithEndWelds(generation: SpineGeneration, input: SpineRegenerationInput, options: { keepsWelds?: boolean }): SpineRegeneration | undefined`
+
+`generation`'s regeneration of `input`, with the spine's moved free ends
+coming off their floors and welding into the floors they land on -- one
+replacement. An owner that declares no `endRung` regenerates unchanged.
+
+### `function vtt.spine-end-welds.spineChainEnds(graph: ConstructionGraphSnapshot, seeds: Iterable<string>): readonly string[]`
+
+The free ends -- control nodes on exactly one span -- of the spine a patch touches, as it would stand.
+
+### `function vtt.spine-end-welds.spineEndsLanded(snapshot: ConstructionGraphSnapshot, graphPatch: ConstructionGraphPatch, generation: SpineGeneration, topologies: readonly ConstructionRegionTopology[]): ConstructionGraphPatch`
+
+`graphPatch` with every moved free end placed on the floor edge it lands on -- what a preview draws.
+
+### `function vtt.type-law.settleMoves(topologies: readonly ConstructionRegionTopology[], moved: ReadonlyMap<string, ConstructionPosition>, fixed: ReadonlySet<string>): Map<string, ConstructionPosition>`
+
+`moved` with every face it touches settled by its type's law -- the law's
+placements win, except over `fixed`: the nodes the gesture itself placed.
+A law that would move one of those is left unsettled there, for the type's
+own validation to refuse -- a wall is never sheared from its top by quietly
+undoing what was asked.
+
+### `function vtt.type-law.settlePatch(patch: ConstructionPatch, graph: Pick<ConstructionGraphSnapshot, "nodes" | "edges">): ConstructionPatch`
+
+`patch` with every face it declares settled by its type's law. Only the
+nodes the patch declares move: a node it only references already stands,
+and its own faces hold it.
+
+### `interface vtt.weld-pause.WeldLink`
+
+One structure end joined to floors: welded into them -- both of its nodes
+on their outline -- or holding just one node with them, a floor drawn from
+one of its corners.
+
+### `property vtt.weld-pause.WeldLink.floors: readonly ConstructionSurfaceKey[]`
+
+### `property vtt.weld-pause.WeldLink.rung: WeldRung`
+
+### `property vtt.weld-pause.WeldLink.welded: boolean`
+
+Whether it was welded whole -- both nodes on the floors' outline -- rather than sharing one corner.
+
+### `function vtt.weld-pause.endJoinsOf(graph: ConstructionGraphSnapshot, topologies: readonly ConstructionRegionTopology[], face: ConstructionRegionTopology): readonly WeldLink[]`
+
+Every structure end -- a ramp's, a spine's -- joined to a floor that `face` takes part in: an end of its own, or another structure's end joined to it. Joins of any other kind, a wall's feet on a floor, are not ends and are not among them.
+
+### `function vtt.weld-pause.rejoinNodes(topologies: readonly ConstructionRegionTopology[], links: readonly WeldLink[], operationId: string): { joined: number; request: ApplyPatchReplacementRequest | undefined }`
+
+Every end node among `links` shared again with the floors it was joined
+to: a floor with a node of its own standing exactly there -- the copy a
+pause gave it, where the edit left it -- passes through the end's node
+instead; one with a side running through it is split there. Either way the
+ground against it follows. One replacement, and how many nodes were shared
+again; `undefined` when none could be.
+
+### `function vtt.weld-pause.reshapedWelds(links: readonly WeldLink[], positions: ReadonlyMap<string, ConstructionPosition>, moves: ReadonlyMap<string, ConstructionPosition>, anyMove: boolean): readonly WeldLink[]`
+
+The joins among `links` an edit placing nodes at `moves` would reshape:
+its two nodes moved unlike each other -- or, when `anyMove`, moved at all.
+
+### `function vtt.weld-pause.reweld(topologies: readonly ConstructionRegionTopology[], links: readonly WeldLink[], operationId: string): { request: ApplyPatchReplacementRequest | undefined; welded: number }`
+
+Every end among `links` welded back into the floor it was joined to, where
+it now lies -- one replacement, and how many of them went back. An end the
+edit left off its floor's edge stays off it.
+
+### `function vtt.weld-pause.unweld(topologies: readonly ConstructionRegionTopology[], links: readonly WeldLink[], operationId: string): ApplyPatchReplacementRequest | undefined`
+
+Every end among `links` taken off its floors -- and the ground against
+them -- as one replacement; `undefined` when none holds it. A floor drawn
+along the end walks the end's very edge: it is given an edge of its own
+there first, so the end keeps its edge and the floor lets go of it.
+
+### `reference vtt.spine.spineGlobalHandleId -> vtt.global-handle-ids.globalHandleId`
+
+### `reference vtt.spine.spineGlobalHandleOf -> vtt.global-handle-ids.globalHandleOf`
 
 ### `type vtt.spine-actions.SpineAction = "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"`
 
@@ -3778,6 +5284,12 @@ Parameter of the grabbed span, supplied by the curve nearest-point query.
 
 ### `property vtt.spine-edit-plan.SpineEditInput.targetId: string`
 
+### `property vtt.spine-edit-plan.SpineEditInput.weld?: boolean`
+
+Whether a dragged anchor may weld onto another spine's node or split a
+span into a junction by landing near it. Off for an owner whose spine
+moves in plan only: a spiral's turns pass right over each other.
+
 ### `property vtt.spine-edit-plan.SpineEditInput.width?: number`
 
 ### `function vtt.spine-edit-plan.planSpineEditPatch(input: SpineEditInput): { graphPatch: ConstructionGraphPatch; selectedId: string } | undefined`
@@ -3793,6 +5305,96 @@ Gives every spine span without authored handles the automatic curve
 through its chain, once, through the Rust conversion. `offsets` is the
 width a span with no profile of its own is given, and `owner`, when given,
 the type it is stamped as generating.
+
+### `interface vtt.spine-global-handles.SpineGlobalHandle`
+
+A global handle placed by a spine: the generic handle, with the spine it stands for.
+
+### `property vtt.spine-global-handles.SpineGlobalHandle.center?: readonly [number, number]`
+
+A spiral's centre, when the structure is one -- what a turns handle winds round.
+
+### `property vtt.spine-global-handles.SpineGlobalHandle.edges: readonly ConstructionEdgeSnapshot[]`
+
+### `property vtt.spine-global-handles.SpineGlobalHandle.ends?: readonly [string, string]`
+
+The spine's free ends, first to last -- the far one is the last. Absent on a branch or a loop.
+
+### `property vtt.spine-global-handles.SpineGlobalHandle.faces?: readonly string[]`
+
+The faces the structure is made of, by surface key joined with NUL -- absent for a spine, whose faces its spine regenerates.
+
+### `property vtt.spine-global-handles.SpineGlobalHandle.facing?: { x: number; z: number }`
+
+The way a handle standing off one side of a face looks out, in plan --
+absent for one that is seen from anywhere. The scene shows only the
+sides facing the viewer.
+
+### `property vtt.spine-global-handles.SpineGlobalHandle.id: string`
+
+### `property vtt.spine-global-handles.SpineGlobalHandle.kind: GlobalHandleKind`
+
+### `property vtt.spine-global-handles.SpineGlobalHandle.motion: HandleMotion`
+
+How the handle moves while dragged -- the path its gesture keeps it on.
+
+### `property vtt.spine-global-handles.SpineGlobalHandle.nodeIds: readonly string[]`
+
+Every node of the structure, lowest id first.
+
+### `property vtt.spine-global-handles.SpineGlobalHandle.owner: string`
+
+The structure's type.
+
+### `property vtt.spine-global-handles.SpineGlobalHandle.pivot: ConstructionPosition`
+
+What the structure moves and turns round.
+
+### `property vtt.spine-global-handles.SpineGlobalHandle.position: ConstructionPosition`
+
+### `property vtt.spine-global-handles.SpineGlobalHandle.provider: string`
+
+Which provider made it -- and plans its edits.
+
+### `property vtt.spine-global-handles.SpineGlobalHandle.snaps?: boolean`
+
+Whether what it drags snaps onto other structures' outlines (`orchestration/outline-snap.ts`).
+
+### `property vtt.spine-global-handles.SpineGlobalHandle.target?: HandlePart`
+
+The part of the structure it drags -- a side, a corner; absent when it moves the whole.
+
+### `interface vtt.spine-global-handles.SpineTransform`
+
+A whole-spine transform: turned by `angle` round `pivot` in plan, then moved by `delta`. Either may be absent.
+
+### `property vtt.spine-global-handles.SpineTransform.delta?: ConstructionPosition`
+
+### `property vtt.spine-global-handles.SpineTransform.rotation?: { angle: number; pivot: PlanPoint }`
+
+### `variable vtt.spine-global-handles.ROTATE_REACH: 1.5`
+
+How far past the structure's farthest point the rotate handle stands.
+
+### `function vtt.spine-global-handles.outward(pivot: ConstructionPosition, toward: ConstructionPosition, reach: number): ConstructionPosition`
+
+`reach` out from `pivot` towards `toward`, level with the pivot -- where a
+rotate handle stands, so that turning the structure turns the handle with
+it. Straight out along +X when `toward` is the pivot itself.
+
+### `function vtt.spine-global-handles.planSpineTransform(graph: ConstructionGraphSnapshot, spine: Pick<SpineGlobalHandle, "nodeIds" | "edges">, transform: SpineTransform): ConstructionGraphPatch`
+
+The graph patch moving and/or turning a whole spine: every control node,
+every span's handles and every arc centre, so each span keeps its shape.
+The owner regenerates its surface from it like from any other spine edit.
+
+### `function vtt.spine-global-handles.spineGlobalHandleAt(graph: ConstructionGraphSnapshot, id: string): SpineGlobalHandle | undefined`
+
+The global handle `id` names -- or, for any other handle of a spine, that spine's pivot -- where it stands now.
+
+### `function vtt.spine-global-handles.spineGlobalHandles(graph: ConstructionGraphSnapshot): readonly SpineGlobalHandle[]`
+
+Every spine's global handles, of every kind.
 
 ### `interface vtt.spine-graph.SpineControlNode`
 
@@ -3839,6 +5441,18 @@ run) is reported once.
 
 spineGraphIn over one cloud's own members -- the reading a tool should reach for.
 
+### `type vtt.spine-handle-ids.SpineGlobalHandleKind = GlobalHandleKind`
+
+A spine's global handles are the generic ones (`global-handles/`), named after its lowest control node.
+
+### `function vtt.spine-handle-ids.spineMemberOf(graph: ConstructionGraphSnapshot, id: string): string`
+
+The spine control node `id` stands for: a global handle's own node, a curve handle's span start, or `id` itself.
+
+### `reference vtt.spine-handle-ids.spineGlobalHandleId -> vtt.global-handle-ids.globalHandleId`
+
+### `reference vtt.spine-handle-ids.spineGlobalHandleOf -> vtt.global-handle-ids.globalHandleOf`
+
 ### `function vtt.spine-handles.isBezierEditTarget(snapshot: ConstructionGraphSnapshot, id: string, contour: readonly Pick<ConstructionCurvedEdge, "edgeId">[]): boolean`
 
 Whether `id` names a curve handle or midpoint -- on a spine span or on a
@@ -3864,6 +5478,76 @@ The edit that minted this node. Provenance only, never ownership.
 The address inside `id`, or `undefined` for an id no spine edit minted.
 
 ### `function vtt.spine-node-id.spineControlNodeId(operationId: string, index: number): string`
+
+### `interface vtt.spine-open-chain.OpenSpineChain`
+
+An open spine walked from one free end to the other. The ends are ordered by id, so the walk is always the same.
+
+### `property vtt.spine-open-chain.OpenSpineChain.nodes: readonly string[]`
+
+Control node ids, first end to last.
+
+### `property vtt.spine-open-chain.OpenSpineChain.spans: readonly { reversed: boolean; span: ConstructionEdgeSnapshot }[]`
+
+### `interface vtt.spine-open-chain.SpineChainShape`
+
+A spine as a whole, as its global edits read and change it. Nothing here is stored: the spine is the truth.
+
+### `property vtt.spine-open-chain.SpineChainShape.endHeight: number`
+
+Height of the chain's last end.
+
+### `property vtt.spine-open-chain.SpineChainShape.spiral?: { centerX: number; centerZ: number; positive: boolean; radius: number; turns: number }`
+
+### `property vtt.spine-open-chain.SpineChainShape.startHeight: number`
+
+Height of the chain's first end.
+
+### `property vtt.spine-open-chain.SpineChainShape.width: number`
+
+### `interface vtt.spine-open-chain.SpineGrade`
+
+A regrade: control nodes whose height changed, and every span with its handles' heights redone.
+
+### `property vtt.spine-open-chain.SpineGrade.edges: readonly ConstructionEdgeSnapshot[]`
+
+### `property vtt.spine-open-chain.SpineGrade.grade?: number`
+
+Rise over plan length along the whole chain, when it was graded.
+
+### `property vtt.spine-open-chain.SpineGrade.nodes: readonly { id: string; position: ConstructionPosition }[]`
+
+### `function vtt.spine-open-chain.describeSpineChain(graph: ConstructionGraphSnapshot, id: string): SpineChainShape | undefined`
+
+How the open spine `id` belongs to reads as a whole, or `undefined` when there is none.
+
+### `function vtt.spine-open-chain.gradeSpineSpans(port: Pick<BezierPort, "curveBatch">, graph: ConstructionGraphSnapshot, spans: readonly ConstructionEdgeSnapshot[]): SpineGrade`
+
+`spans` re-graded: the chain's two free ends keep their heights, and every
+point between takes the height one constant grade by plan length gives it
+(Rust's `grade`). The plan is untouched. Nothing is returned for spans that
+are not one open chain.
+
+### `function vtt.spine-open-chain.openSpineChain(spans: readonly ConstructionEdgeSnapshot[]): OpenSpineChain | undefined`
+
+`spans` walked end to end, when they form one open chain; `undefined` for a branch or a loop.
+
+### `function vtt.spine-open-chain.planSpineChainEdit(graph: ConstructionGraphSnapshot, port: Pick<BezierPort, "curveBatch">, id: string, next: SpineChainShape, operationId: string): ConstructionGraphPatch | undefined`
+
+The graph patch taking the open spine `id` belongs to from what it is to
+`next`. Heights move the ends; width re-profiles every span; any spiral
+value rebuilds the whole helix in Rust from the first end, which keeps its
+angle round the centre. Node and span ids are kept wherever the count
+allows, so what is welded to either end stays welded. The owner
+regenerates from the patch -- re-grading between the ends if it grades.
+
+### `function vtt.spine-open-chain.sharedArcCenter(spans: readonly ConstructionEdgeSnapshot[]): readonly [number, number] | undefined`
+
+The one centre every span of `spans` turns round, when every span is such an arc.
+
+### `function vtt.spine-open-chain.spineChainAt(graph: ConstructionGraphSnapshot, id: string): OpenSpineChain | undefined`
+
+The open spine `id` belongs to -- a control node, a curve handle or a global handle -- keeping only spans of its own owner.
 
 ### `function vtt.spine-owner.isSpineEdge(edge: ConstructionEdgeSnapshot): boolean`
 
@@ -3968,7 +5652,7 @@ what the vertex means.
 
 ### `function vtt.organic-structure.organicStructureType(surfaceType: string, label: string, creation: string, structural: "deny" | "regenerate", interactionOver: (covered: StructureView, paintedSubtype?: string) => CreationInteraction, traits: readonly StructureTrait[]): StructureTypeDefinition`
 
-### `function vtt.organic-structure.pathInteractionOver(_covered: StructureView, paintedSubtype?: string): CreationInteraction`
+### `function vtt.organic-structure.pathInteractionOver(_covered: StructureView, _paintedSubtype?: string): CreationInteraction`
 
 A path **carves**: it consumes what it crosses and keeps the leftover with
 the path's own shape cut out of it. Over terrain that is a road; over a
@@ -3978,10 +5662,9 @@ Over another path the two formations become one connected path surface:
 the same cut-and-refill flow consumes the overlap instead of leaving
 coincident path geometry behind.
 
-Except a deck, which spans rather than carves. That is a declared property
-of the subtype, not something read back from geometry -- which is exactly
-why an overpass needs no height-aware coverage query to be told apart from
-a crossing at the same level. The run that passes over says so.
+Every subtype alike: a deck carves the ground only where it touches it, at
+its ends, because the ground is only ever cut where a structure touches it
+(`topology/ground-contact.ts`) -- height tells an overpass from a crossing.
 
 ### `function vtt.organic-structure.terrainInteractionOver(covered: StructureView): CreationInteraction`
 
@@ -4110,6 +5793,10 @@ posts work through successive edges in the shared Rust solver.
 ### `function vtt.panel-structure.panelStructureType(surfaceType: string, label: string, creation: string, traits: readonly StructureTrait[]): StructureTypeDefinition`
 
 Builds one `extrude_path`-generated structure type on the shared panel model.
+
+### `function vtt.panel-structure.settlePanel(topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>): ReadonlyMap<string, ConstructionPosition>`
+
+A panel's law: every post stands straight up from its foot -- its top above it, at the top's own height.
 
 ### `function vtt.panel-structure.topRunsOf(topology: ConstructionRegionTopology): readonly PanelTopRun[]`
 
@@ -4557,14 +6244,6 @@ than being a number the generator forgot. Any further line a product wants
 to be first-class -- a lane, a rail -- is just another profile point, and
 needs no machinery of its own.
 
-### `function vtt.path-recipe.pathCarvesGround(kind: PathKind): boolean`
-
-Whether this subtype carves what it is drawn over.
-
-Declared rather than inferred, which is what dissolves the awkward part of
-an overpass: nothing has to work out from a flat XZ footprint whether a
-crossing is at the same level, because the run that spans says so itself.
-
 ### `function vtt.path-recipe.pathFormationFor(params: PathBrushParams): PathFormationRecipe`
 
 Resolves the VTT's named path recipe without constructing any mesh or graph.
@@ -4600,9 +6279,10 @@ Whether this subtype's stations take their height from the ground beneath
 them.
 
 A deck does not: it spans, so its height comes from its own ends and the
-middle stays level instead of sagging onto whatever it crosses. That, plus
-declaring that it consumes nothing, is the whole of what makes a subtype a
-bridge -- no separate type, no separate role table, no separate logic.
+middle stays level instead of sagging onto whatever it crosses. That is the
+whole of what makes a subtype a bridge -- no separate type, no separate
+role table, no separate logic. What it cuts is the ground's own law: only
+where it touches it.
 
 ### `function vtt.path-recipe.pathSpineSlot(profile: readonly PathProfilePoint[]): number`
 
@@ -4715,6 +6395,140 @@ The address inside `id`, or `undefined` for an id no sweep minted.
 
 ### `function vtt.station-node-id.stationNodeId(operationId: string, station: number, across: number): string`
 
+### `interface vtt.platform-ramp.RampShape`
+
+What a straight ramp is: an axis from the bottom end's centre to the top end's, and a width at each end.
+
+### `property vtt.platform-ramp.RampShape.axisEnd: ConstructionPosition`
+
+### `property vtt.platform-ramp.RampShape.axisStart: ConstructionPosition`
+
+### `property vtt.platform-ramp.RampShape.bottomWidth: number`
+
+### `property vtt.platform-ramp.RampShape.topWidth: number`
+
+### `type vtt.platform-ramp.RampCorners = Readonly<Record<RampEnd, Readonly<Record<RampSide, ConstructionPosition>>>>`
+
+### `type vtt.platform-ramp.RampEnd = "bottom" | "top"`
+
+### `type vtt.platform-ramp.RampSide = "min" | "max"`
+
+### `variable vtt.platform-ramp.RAMP_SURFACE_TYPE: "platform-ramp"`
+
+The straight ramp: a trapezoid on an inclined plane. Its source of truth
+is its own four corners, read as an axis -- the midpoint of the bottom
+edge to the midpoint of the top edge, their height difference being the
+rise -- and one width at each end. Both ends stay level and square to the
+axis, centred on it, so the four corners always say exactly those four
+numbers and nothing else is stored.
+
+Like every structure, it is a declarative placeholder: where the assets
+that dress it will go, not what they look like. Steps, treads or rails
+are the assets' business, never a parameter here.
+
+A type of its own rather than a spine of two points, because the spine is
+a different truth: a curve edited by its control points and handles. A
+straight ramp edits by its widths and its ends, and never turns into a
+curve -- that is the sloped platform, drawn as one.
+
+### `function vtt.platform-ramp.deriveRampMotion(topologies: readonly ConstructionRegionTopology[], positions: ReadonlyMap<string, ConstructionPosition>): ReadonlyMap<string, ConstructionPosition>`
+
+Keeps each ramp a symmetric trapezoid when some of its corners were moved:
+
+- one corner, or one whole side: each moved corner's twin mirrors it
+  across its end's centre, so the width changes and the axis stays;
+- one whole end, together: the other end follows only the part of the
+  move square to the axis, so a floor carrying a welded end sideways drags
+  the ramp with it, while moving that end along the axis or up changes
+  the ramp's length or rise.
+
+Anything else is left for validateRampMotion to judge.
+
+### `function vtt.platform-ramp.rampCornerId(operationId: string, end: RampEnd, side: RampSide): string`
+
+### `function vtt.platform-ramp.rampCornerIdsOf(topology: ConstructionRegionTopology): Readonly<Record<RampEnd, Readonly<Record<RampSide, string>>>> | undefined`
+
+The nodes at `topology`'s four corners, if it is a ramp -- its own, or another structure's where an end continues one.
+
+### `function vtt.platform-ramp.rampCorners(shape: RampShape): RampCorners`
+
+The four corners `shape` says: each end level and square to the axis, centred on it.
+
+### `function vtt.platform-ramp.rampEdgeId(operationId: string, name: RampEnd | RampSide): string`
+
+An end edge is named by its end, a side edge by its side.
+
+### `function vtt.platform-ramp.rampFaceId(operationId: string): string`
+
+### `function vtt.platform-ramp.rampOutline(corners: RampCorners): readonly ConstructionPosition[]`
+
+The outline of `corners` as a closed plan loop, for a preview.
+
+### `function vtt.platform-ramp.rampPatch(operationId: string, corners: RampCorners): { edges: readonly ConstructionPatchEdge[]; nodes: readonly { id: string; position: ConstructionPosition }[]; region: ConstructionPatchRegion }`
+
+The ramp's own nodes, edges and face. Its end edges are what a floor it lands on welds onto.
+
+### `function vtt.platform-ramp.rampPolicyFor(role: string): RolePolicy`
+
+### `function vtt.platform-ramp.rampRoleFor(topology: ConstructionRegionTopology, target: EditTarget): string`
+
+### `function vtt.platform-ramp.rampShapeOf(topology: ConstructionRegionTopology): RampShape & { operationId: string } | undefined`
+
+What `topology` is as a straight ramp: the operation its ids were made
+under, its axis and its two widths -- `undefined` when it is not one.
+
+### `function vtt.platform-ramp.settleRamp(topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>, placed: ReadonlySet<string>): ReadonlyMap<string, ConstructionPosition>`
+
+The straight ramp's law (`StructureTypeDefinition.settle`): kept a
+symmetric trapezoid whatever moved its corners -- see deriveRampMotion,
+which it applies to this one face, reading what moved from `placed`.
+
+### `function vtt.platform-ramp.validateRampMotion(topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>): string | undefined`
+
+Both ends level, square to the axis and on the same side of it, with a real length and width.
+
+### `interface vtt.platform-ramp-plan.PlannedRamp`
+
+The ramp a plan builds, which of its ends weld into which floor edge, and which continue another structure's end.
+
+### `property vtt.platform-ramp-plan.PlannedRamp.corners: RampCorners`
+
+### `property vtt.platform-ramp-plan.PlannedRamp.joints: readonly { end: RampEnd; joint: EndJoint }[]`
+
+### `property vtt.platform-ramp-plan.PlannedRamp.welds: readonly { end: RampEnd; landing: FloorLanding }[]`
+
+### `interface vtt.platform-ramp-plan.RampEndPlan`
+
+Where one end is asked to be, and the floor edge it lands on or the structure's end it continues, if any.
+
+### `property vtt.platform-ramp-plan.RampEndPlan.joint?: EndJoint`
+
+Another structure's free end this one takes over: its edge, its width and its way on.
+
+### `property vtt.platform-ramp-plan.RampEndPlan.landing?: FloorLanding`
+
+### `property vtt.platform-ramp-plan.RampEndPlan.point: ConstructionPosition`
+
+### `variable vtt.platform-ramp-plan.rampEndsCapability: StructureEnds`
+
+A straight ramp's ends, as the `ends` capability of its type.
+
+### `function vtt.platform-ramp-plan.jointedRampPatch(operationId: string, plan: PlannedRamp, keep: ReadonlyMap<string, string>): { edges: { edgeId: string; endNodeId: string; geometry?: ConstructionEdgeGeometry; startNodeId: string }[]; nodes: { id: string; position: ConstructionPosition }[]; positions: Map<string, ConstructionPosition>; region: ConstructionPatchRegion }`
+
+The ramp's own patch with each end that continues another structure
+taking that end's two nodes as its corners: they already stand, so they
+are not declared again, and the two structures share them from then on.
+
+### `function vtt.platform-ramp-plan.planRamp(from: RampEndPlan, to: RampEndPlan, widths: { bottom: number; top: number }): PlannedRamp`
+
+The ramp from `from` (its bottom) to `to` (its top), `widths` wide at each
+end -- an end continuing another structure takes that end's width. Throws
+when it has no length.
+
+### `variable vtt.platform-ramp-type.rampStructureType: StructureTypeDefinition`
+
+The straight ramp's definition: edited by its corners, sides, ends and body; it cuts the ground only where it runs into it.
+
 ### `interface vtt.platform-slope-spine.SlopeSurface`
 
 ### `property vtt.platform-slope-spine.SlopeSurface.edges: readonly ConstructionPatchEdge[]`
@@ -4733,7 +6547,13 @@ The address inside `id`, or `undefined` for an id no sweep minted.
 
 A sloped platform generated from a spine, the way a road is: the spine's
 bezier spans are the source of truth, and the surface is regenerated from
-them. What differs from a road is only the last step -- a road unions its
+them.
+
+Plan and height are kept apart, as ramp tools do: the spine's plan is
+edited freely, and only its two free ends carry authored heights. Every
+point between them is re-graded on each regeneration so the whole run
+climbs at one constant grade by plan length (`gradeSpineSpans`, computed
+in Rust). A spiral is this same ramp whose plan is a helix. What differs from a road is only the last step -- a road unions its
 ribbons in plan, and a spiral's turns overlap in plan, so a sloped platform
 keeps **one face per span** instead: that span's ribbon outline, sampled
 along the curve on both margins. No face ever overlaps itself in plan, and
@@ -4759,7 +6579,7 @@ instead of kinking at the moved end.
 
 ### `function vtt.platform-slope-spine.regenerateSlopeSpine(input: SpineRegenerationInput): SpineRegeneration`
 
-Regenerates every sloped-platform span on the spine a graph patch touches.
+Regenerates every sloped-platform span on the spine a graph patch touches, re-graded between its ends.
 
 ### `function vtt.platform-slope-spine.slopeFaceId(edgeId: string): string`
 
@@ -4784,14 +6604,14 @@ Every cross-section stays level from margin to margin.
 
 ### `variable vtt.platform-structure.platformStructureType: StructureTypeDefinition`
 
-A horizontal structural marker, independently usable as floor or ceiling.
+A floor: on the ground it takes the ground under it, which regenerates around it; over it, the ground is left as it is.
 
 ### `variable vtt.platform-structure.slopedPlatformStructureType: StructureTypeDefinition`
 
 The platform built along a spine instead of a contour: a surface whose
 height varies along its curve and never across it -- a ramp, a sloped
-walkway, a spiral climb. Stairs are this same shape with a step parameter;
-steps are appearance, not structure.
+walkway, a spiral climb. What dresses it -- steps, treads, rails -- is the
+assets' business; the structure only declares where they go.
 
 Generated from the shared spine exactly as a road is, so its control
 points, handles and width are edited with the same gestures; see
@@ -4805,6 +6625,13 @@ would carry all three.
 Its faces are never grabbed directly -- the spine is what is edited. A
 floor that moves still carries the end welded to it: the end's control
 node follows, and the ramp re-places itself on the moved curve.
+
+### `function vtt.platform-structure.cutsGround(covered: StructureView): CreationInteraction`
+
+Ground under a platform may be cut, and the ground's own repair regenerates
+around it -- only where the platform touches it (`topology/ground-contact.ts`):
+one high over the terrain leaves it whole, one on a hillside cuts only the
+hill it runs into.
 
 ### `interface vtt.registry.ResolvedCoverage`
 
@@ -4850,6 +6677,14 @@ The first refusal in a resolved coverage, if any.
 ### `function vtt.registry.hasTrait(surfaceType: string, trait: StructureTrait): boolean`
 
 Whether `surfaceType` declares `trait` -- the question to ask instead of comparing type names.
+
+### `function vtt.registry.isGroundType(surfaceType: string): boolean`
+
+Whether `surfaceType` is ground -- re-cut round what stands on it, never carried or joined.
+
+### `function vtt.registry.isSolidType(surfaceType: string): boolean`
+
+Whether `surfaceType` is solid (`StructureTypeDefinition.rigid`): reshaped only by its own controls, carried whole otherwise.
 
 ### `function vtt.registry.resolveConformance(structureType: string, surfaceType: string, subtype?: string): boolean`
 
@@ -4957,6 +6792,10 @@ Optional noise function for base terrain when expanding onto empty ground.
 
 ### `property vtt.structural-cut.StructuralCutRequest.seed?: number`
 
+### `property vtt.structural-cut.StructuralCutRequest.staleRegions?: readonly (readonly string[])[]`
+
+Covered regions whose own shape is stale -- dragged out of place by an edit: replaced, but never laid again where their shape now runs.
+
 ### `property vtt.structural-cut.StructuralCutRequest.tableId: string`
 
 ### `property vtt.structural-cut.StructuralCutRequest.targetSurfaceType: string`
@@ -5019,15 +6858,6 @@ beside this one. The cloud already *is* that list, resolved by the layer
 whose job it is (`construction-cloud.ts`) instead of recomputed by
 whichever tool happens to be calling.
 
-### `property vtt.structure-type.CascadeContext.allTopologies?: readonly ConstructionRegionTopology[]`
-
-Every region topology the plan can see: the whole table when the
-session is at hand, only the grabbed cloud's members otherwise. A
-`groupCascade` reaches through this for matches outside the grabbed
-cloud -- e.g. every wall currently level with the grabbed one, wherever
-it stands -- which a cloud, scoped to one connected same-type run, can
-never contain by construction.
-
 ### `property vtt.structure-type.CascadeContext.cloud: CloudTopology`
 
 ### `property vtt.structure-type.CascadeContext.delta: { x: number; y: number; z: number }`
@@ -5041,6 +6871,20 @@ The delta already constrained by the role's own axes.
 ### `property vtt.structure-type.CascadeContext.topology: ConstructionRegionTopology`
 
 The face the gesture landed on -- `cloud.seed`, offered directly for the common case.
+
+### `interface vtt.structure-type.ConstrainContext`
+
+What a role's RolePolicy.constrain gets to look at.
+
+### `property vtt.structure-type.ConstrainContext.delta: ConstructionPosition`
+
+The delta already constrained by the role's own axes.
+
+### `property vtt.structure-type.ConstrainContext.target: EditTarget`
+
+### `property vtt.structure-type.ConstrainContext.topology: ConstructionRegionTopology`
+
+The face the gesture landed on.
 
 ### `interface vtt.structure-type.CutFallout`
 
@@ -5056,6 +6900,14 @@ runtime this pure layer does not have.
 ### `property vtt.structure-type.CutFallout.consumedSurfaceKeys: readonly ConstructionSurfaceKey[]`
 
 Exactly the regions this cut consumed -- the covered type's own to delete and repair around.
+
+### `property vtt.structure-type.CutFallout.draggedSurfaceKeys?: readonly ConstructionSurfaceKey[]`
+
+Those of `consumedSurfaceKeys` an edit dragged out of shape -- rimmed by a
+node the structure carried away -- so their own shape now runs from where
+they lay to where the node went, over ground that was never touched. The
+ground they covered is in the vacated area; their shape is no ground to
+lay again.
 
 ### `property vtt.structure-type.CutFallout.footprintOutline?: readonly (readonly [number, number])[]`
 
@@ -5125,6 +6977,20 @@ What a type's derived motion may consult beyond the positions themselves.
 
 ### `property vtt.structure-type.MotionContext.port?: Pick<BezierPort, "curveBatch">`
 
+### `interface vtt.structure-type.RebuiltFromEnds`
+
+A structure rebuilt from its ends: its own patch, and each end's rung with the floor it now lands on, if any.
+
+### `property vtt.structure-type.RebuiltFromEnds.footprintOutline?: readonly (readonly [number, number])[]`
+
+### `property vtt.structure-type.RebuiltFromEnds.moved: readonly { id: string; position: ConstructionPosition }[]`
+
+Nodes that already stand and move -- a patch only adds.
+
+### `property vtt.structure-type.RebuiltFromEnds.patch: ConstructionPatch`
+
+### `property vtt.structure-type.RebuiltFromEnds.rungs: readonly { landing?: FloorLanding; rung: WeldRung }[]`
+
 ### `interface vtt.structure-type.ReshapeContext`
 
 What a reshape cascade gets to look at: the whole cloud, the edge and the geometry it is taking.
@@ -5154,13 +7020,18 @@ moving a wall's bottom corner moves its paired top corner by the *same*
 delta. Same-delta cascades are all this model needs so far; there is no
 scaled or cross-axis variant.
 
+### `property vtt.structure-type.RolePolicy.constrain?: (context: ConstrainContext) => ConstructionPosition`
+
+Narrows the gesture's delta past what whole world axes can say:
+onto a direction the type reads off its own shape at gesture time -- a
+ramp's corner sliding only along its own edge. Applied after `axes`,
+before anything else sees the delta.
+
 ### `property vtt.structure-type.RolePolicy.groupCascade?: (context: CascadeContext) => readonly AtomicEditOp[]`
 
-Extra ops matched by a type's own declared value or trait across the
-*whole table*, not the grabbed cloud -- the opportunistic case, where
-what reaches together is decided at gesture time by comparing current
-state, not by any standing weld. A wall's per-segment height widget uses
-this to raise every other wall currently level with the one grabbed.
+Extra ops matched across the grabbed cloud that are not expressed as
+standing welds or structural motion influences (e.g. raising every top run
+of a wall cloud together via the height widget's group zone).
 
 Applied unconditionally, unlike cascade: the solver path
 (`edit-orchestrator.ts`) supersedes `cascade` whenever the type also
@@ -5168,6 +7039,15 @@ declares `motionInfluences`, because that path derives structural
 cascades from the influence graph instead. A `groupCascade` match is not
 structural -- no influence link could express it -- so it is never
 superseded.
+
+### `property vtt.structure-type.RolePolicy.place?: (context: ConstrainContext) => readonly { nodeId: string; position: ConstructionPosition }[] | undefined`
+
+Where the role puts the nodes a gesture moves, when one delta for the
+grabbed part is not enough -- a side pushed out while its corners slide
+along the sides next to it. Replaces the grabbed part's own move; the
+solver, derivation and validation still run on what it returns. Gets
+the delta after constrain. Throws to refuse; `undefined` falls
+back to the grabbed part's own move.
 
 ### `property vtt.structure-type.RolePolicy.reshape?: (context: ReshapeContext) => readonly AtomicEditOp[]`
 
@@ -5201,11 +7081,31 @@ whatever surface this type makes of them.
 
 The width a span with no profile of its own is given.
 
+### `property vtt.structure-type.SpineGeneration.endRung?: (controlNodeId: string) => WeldRung`
+
+The edge a chain end's cross-section makes -- what a floor that end
+lands on shares (`topology/floor-weld.ts`). Declaring it makes the
+spine's free ends connect to a floor edge they are moved onto, and come
+off the floor they are moved away from, on every edit.
+
+### `property vtt.structure-type.SpineGeneration.planOnly?: boolean`
+
+The spine's points move in plan only: the owner derives every height
+itself on regeneration, so a drag keeps the grabbed point's own height
+instead of taking whatever lies under the pointer, and never snaps onto
+another network's node by position. Heights still change on purpose, in
+elevation mode.
+
 ### `property vtt.structure-type.SpineGeneration.prepare?: (snapshot: ConstructionGraphSnapshot, port: BezierPort) => ConstructionGraphSnapshot`
 
 Normalizes the standing graph before an edit reads it -- legacy data, say.
 
 ### `property vtt.structure-type.SpineGeneration.regenerate: (input: SpineRegenerationInput) => SpineRegeneration | undefined`
+
+### `property vtt.structure-type.SpineGeneration.windKeeps?: "grade" | "height"`
+
+What winding a spiral on or back keeps: its grade (more turns climb
+higher -- the default) or its far end's height (more turns climb gentler).
 
 ### `interface vtt.structure-type.SpineRegeneration`
 
@@ -5238,6 +7138,40 @@ The graph before the edit, already prepared by the owner.
 ### `property vtt.structure-type.SpineRegenerationInput.tableId: string`
 
 ### `property vtt.structure-type.SpineRegenerationInput.topologies: readonly ConstructionRegionTopology[]`
+
+### `interface vtt.structure-type.StructureEnd`
+
+One end of a structure: where it stands, and its end edge -- what a floor it lands on shares.
+
+### `property vtt.structure-type.StructureEnd.name: StructureEndName`
+
+### `property vtt.structure-type.StructureEnd.position: ConstructionPosition`
+
+### `property vtt.structure-type.StructureEnd.rung: WeldRung`
+
+### `interface vtt.structure-type.StructureEnds`
+
+A structure that runs from one end to another, each end able to land on
+a floor's edge and weld into it (`topology/floor-weld.ts`). Declaring
+this gives the type origin and destination handles that move an end,
+connect it where it lands and disconnect it -- nothing else is asked of
+the type.
+
+### `property vtt.structure-type.StructureEnds.adopt?: (topology: ConstructionRegionTopology, name: StructureEndName, rung: WeldRung, positions: ReadonlyMap<string, ConstructionPosition>) => RebuiltFromEnds`
+
+`topology` with its end `name` taking over `rung`'s two nodes, standing
+at `positions` -- another structure's end joined onto it, one that
+cannot take nodes over itself. Absent when the type cannot.
+
+### `property vtt.structure-type.StructureEnds.ends: (topology: ConstructionRegionTopology) => readonly StructureEnd[]`
+
+Where `topology`'s ends stand; empty when it is not one this type rebuilds.
+
+### `property vtt.structure-type.StructureEnds.rebuild: (topology: ConstructionRegionTopology, name: StructureEndName, target: { joint?: EndJoint; landing?: FloorLanding; point: ConstructionPosition }, kept?: FloorLanding, keptJoint?: EndJoint) => RebuiltFromEnds`
+
+`topology` rebuilt with the end `name` at `target` -- on `target.landing`
+when it lands on a floor -- and the other end where it stands, still on
+`kept` when it stays welded. Throws to refuse.
 
 ### `interface vtt.structure-type.StructureTypeDefinition`
 
@@ -5279,6 +7213,17 @@ been resolved -- a shape that bends with a received move instead of
 kinking at it. Handed every face of the type, since the shape may span
 faces the move never reached. Derived moves do not propagate further.
 
+### `property vtt.structure-type.StructureTypeDefinition.ends?: StructureEnds`
+
+Present when this type runs between two ends that land on floors -- see StructureEnds.
+
+### `property vtt.structure-type.StructureTypeDefinition.globalHandles?: readonly GlobalHandleKind[]`
+
+The whole-structure handles this type shows (`global-handles/`): a pivot
+that moves it, a rotate handle that turns it, a height handle, a turns
+handle that winds a spiral. None for a network whose connected spine or
+cloud is many structures at once -- a road grid would move as one.
+
 ### `property vtt.structure-type.StructureTypeDefinition.interactionOver: (covered: StructureView, paintedSubtype?: string) => CreationInteraction`
 
 What happens when **this** type is painted over `covered` -- the
@@ -5301,6 +7246,12 @@ and its own logic to keep in step.
 
 Responses to received motion, independent of direct gesture constraints.
 
+### `property vtt.structure-type.StructureTypeDefinition.partHandle?: (role: string) => boolean`
+
+Which of its own parts get a `side` or `corner` handle, by the role
+grabbing that part has (`roleFor`) -- a platform's every side and corner,
+a ramp's long sides only. Absent, none does.
+
 ### `property vtt.structure-type.StructureTypeDefinition.policyFor: (role: string) => RolePolicy`
 
 The policy for one role.
@@ -5317,9 +7268,36 @@ Whether a gesture on this type can only be planned through the session's
 structural motion solver. Without one, such a gesture is refused instead
 of applying a partial move.
 
+### `property vtt.structure-type.StructureTypeDefinition.rigid?: boolean`
+
+The type's shape changes only through its own controls. Anything else
+moving some of its nodes -- a welded ramp, a wall's foot -- carries the
+whole structure along as one piece (`orchestration/rigid-carry.ts`);
+letting go of it is an explicit detach.
+
 ### `property vtt.structure-type.StructureTypeDefinition.roleFor: (topology: ConstructionRegionTopology, target: EditTarget) => string`
 
 Resolves what the grabbed part of this region means.
+
+### `property vtt.structure-type.StructureTypeDefinition.sealedOutline?: boolean`
+
+Its outline takes no node from anything else: whatever meets one of its
+sides -- the ground cut round it -- meets it there without splitting the
+side, so its corners stay exactly its own. For a type whose shape is its
+corners, a ramp's four.
+
+### `property vtt.structure-type.StructureTypeDefinition.settle?: (topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>, placed: ReadonlySet<string>) => ReadonlyMap<string, ConstructionPosition>`
+
+The type's law: given where one face's nodes stand (`positions`), where
+the nodes it determines must stand instead -- a wall's post tops above
+their feet. Held in every creation and every edit, whatever made it
+(`orchestration/type-law.ts`), so no tool re-implements it and none can
+get round it; its placements win over what an edit asked for.
+
+`placed` names the nodes the change itself put where they now are -- an
+edit's moved nodes, a patch's declared ones -- for a law that answers
+differently depending on what moved: a ramp's corner moved alone is
+mirrored by its twin, a whole end moved drags the far end square.
 
 ### `property vtt.structure-type.StructureTypeDefinition.spine?: SpineGeneration`
 
@@ -5370,6 +7348,10 @@ to reference the node, which is a consequence of the graph rather than a
 scope decision. `"cloud"` is for the roles that name the *whole thing*:
 grabbing a wall's body means the wall, not the one panel under the
 pointer.
+
+### `type vtt.structure-type.StructureEndName = "origin" | "destination"`
+
+Which end of a structure: where it starts, and where it goes.
 
 ### `type vtt.structure-type.StructureTrait = "ground" | "floor" | "partition" | "cuts" | "accepts-cuts"`
 
@@ -5642,13 +7624,20 @@ Perlin `scale` -- smaller values are smoother/larger-scale terrain features.
 
 ### `property vtt.tool-types.ToolParamsByTool.roof: { curvatures: readonly [number, number, number, number]; elevation: number; height: number; radius: number; shape: "rectangle" | "circle" | "platform" }`
 
-### `property vtt.tool-types.ToolParamsByTool.slope-ramp: { rise: number; width: number }`
+### `property vtt.tool-types.ToolParamsByTool.slope-curve: { mode?: "arc" | "points" | "straight" | "spiral" | "connect"; rise: number; width: number }`
 
-A straight sloped platform dragged from start to end, climbing a fixed rise.
+A curved ramp, drawn in one of the shared spine creation modes. `rise` is
+its climb when the end is not on a floor; it climbs at one constant grade.
 
-### `property vtt.tool-types.ToolParamsByTool.slope-spiral: { radius: number; rise: number; turns: number; width: number }`
+### `property vtt.tool-types.ToolParamsByTool.slope-ramp: { bottomWidth: number; rise: number; topWidth: number }`
 
-A spiral sloped platform stamped around a clicked centre.
+A straight ramp dragged from start to end, climbing a fixed rise, with its own width at each end.
+
+### `property vtt.tool-types.ToolParamsByTool.slope-spiral: { rise: number; width: number }`
+
+A spiral sloped platform: centre, start, then turned round to its end.
+`rise` is its climb when the end is not on a floor. `selected` mirrors the
+slope picked for editing: changing it edits that slope.
 
 ### `property vtt.tool-types.ToolParamsByTool.terrain-sculpt: TerrainSculptParams`
 
@@ -5722,14 +7711,7 @@ Length of a panel's own vertical edge, in world units.
 
 ### `type vtt.tool-types.BrushShapeKind = "circle" | "square" | "hexagon"`
 
-### `type vtt.tool-types.ConstructionToolId = "navigate" | "platform-contour" | "slope-ramp" | "slope-spiral" | "roof" | "path-brush" | "wall-brush" | "wall-line" | "tower-stamp" | "opening" | "terrain-sculpt"`
-
-The construction-tool vocabulary every layer (widgets, composition) needs
-to agree on: which tools exist, what each one's parameters look like, and
-how a tool describes its own not-yet-committed preview. Pure data, no
-pointer/render logic -- that lives in `composition/tabletop/tools/`
-(the tool implementations) and `adapters/rendering/` (turning a
-PreviewDescriptor into an actual scene item).
+### `type vtt.tool-types.ConstructionToolId = "navigate" | "platform-contour" | "slope-ramp" | "slope-spiral" | "slope-curve" | "roof" | "path-brush" | "wall-brush" | "wall-line" | "tower-stamp" | "opening" | "terrain-sculpt"`
 
 ### `type vtt.tool-types.NoToolParams = Record<string, never>`
 
@@ -5791,6 +7773,14 @@ Smaller brush = finer detail work = smaller faces.
 ### `function vtt.tool-types.withOpeningKind(params: OpeningParams, kind: "window" | "door"): OpeningParams`
 
 `params` switched to `kind`: a door is at least door-tall.
+
+### `function vtt.arc-follow.arcsFollowing(topologies: readonly ConstructionRegionTopology[], moves: ReadonlyMap<string, ConstructionPosition>): readonly { edgeId: string; geometry: ConstructionEdgeGeometry }[]`
+
+Curved edges carried along when their end nodes move: an arc whose ends
+both move alike moves whole, its centre with them; one whose ends move
+apart keeps its shape -- how far its centre stands off the chord, in
+chords -- round the new chord. Without this an arc keeps a centre its ends
+have left, and bends into another curve.
 
 ### `interface vtt.bezier-curve.RibbonRequest`
 
@@ -6023,6 +8013,27 @@ The parameters sitting these distances along one span.
 
 The span's own geometry between two of its parameters, walked forward.
 
+### `function vtt.contour-offset.acrossContourSide(topology: ConstructionRegionTopology, edgeId: string, delta: ConstructionPosition): ConstructionPosition`
+
+`delta` kept only across the side `edgeId` belongs to, in plan -- how far a push moves it.
+
+### `function vtt.contour-offset.keepsOutline(topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>): boolean`
+
+Whether `topology` at `positions` keeps its outline: its corners where
+they stand, and any node between two corners still on that side, between
+them. A node sliding along its own side -- where something welded into
+the side meets it -- changes nothing a rigid structure cares about.
+
+### `function vtt.contour-offset.pushContourCorner(topology: ConstructionRegionTopology, nodeId: string, delta: ConstructionPosition): readonly { nodeId: string; position: ConstructionPosition }[] | undefined`
+
+The corner `nodeId` taken by `delta` in plan by moving both sides meeting
+there, each square to itself; a node in the middle of a side moves that
+side alone. `undefined` when the node is not on the outer loop.
+
+### `function vtt.contour-offset.pushContourSide(topology: ConstructionRegionTopology, edgeId: string, delta: ConstructionPosition): readonly { nodeId: string; position: ConstructionPosition }[] | undefined`
+
+The side `edgeId` belongs to moved square to itself by the part of `delta` across it; `undefined` when the edge is not on the outer loop.
+
 ### `interface vtt.curve-handles.CurveEdge`
 
 One editable cubic between two anchor nodes.
@@ -6057,7 +8068,7 @@ Every curve on the table: spine spans resolved from their stored handles, and cu
 
 ### `function vtt.curve-handles.curveHandles(edges: readonly CurveEdge[], port: Pick<BezierPort, "curveBatch">): readonly { id: string; position: ConstructionPosition }[]`
 
-Each curve's two handles and its midpoint, as pickable positions, in one engine crossing.
+Each curve's midpoint, as a pickable position, in one engine crossing.
 
 ### `function vtt.curve-handles.curvePick(id: string): { edgeId: string; index: CurveHandleIndex } | undefined`
 
@@ -6073,6 +8084,258 @@ A curve flattened to line segments, for a preview.
 
 `curve` with one handle dragged to `target`, or its midpoint pulled there.
 
+### `interface vtt.face-rewrite.EdgePiece`
+
+One piece an edge use becomes: the edge it is, walked from node `from` to node `to`.
+
+### `property vtt.face-rewrite.EdgePiece.edgeId: string`
+
+### `property vtt.face-rewrite.EdgePiece.from: string`
+
+### `property vtt.face-rewrite.EdgePiece.to: string`
+
+### `function vtt.face-rewrite.renamedPiece(use: ConstructionRegionEdge, rename: (nodeId: string) => string, operationId: string): EdgePiece`
+
+The single piece an edge use becomes when its nodes are renamed by
+`rename`: the edge itself when neither end changed, else a new edge of the
+operation's own, since an edge through a renamed node is another edge.
+
+### `function vtt.face-rewrite.rewriteFaces(faces: readonly ConstructionRegionTopology[], piecesOf: (use: ConstructionRegionEdge) => readonly EdgePiece[], operationId: string): { edges: readonly ConstructionPatchEdge[]; regions: readonly ConstructionPatchRegion[] }`
+
+`faces` written again, every edge use replaced by the pieces `piecesOf` answers for it.
+
+### `interface vtt.floor-weld.EndJoint`
+
+Another structure's free end something can take over and run on from:
+its end edge, the two ends of that edge, the way on -- away from the
+structure, square to the edge -- and its height and width.
+
+### `property vtt.floor-weld.EndJoint.a: ConstructionPosition`
+
+### `property vtt.floor-weld.EndJoint.b: ConstructionPosition`
+
+### `property vtt.floor-weld.EndJoint.height: number`
+
+### `property vtt.floor-weld.EndJoint.mid: ConstructionPosition`
+
+### `property vtt.floor-weld.EndJoint.out: PlanDirection`
+
+### `property vtt.floor-weld.EndJoint.rung: WeldRung`
+
+### `property vtt.floor-weld.EndJoint.width: number`
+
+### `interface vtt.floor-weld.FloorEdge`
+
+One straight edge of a floor's outline, as the floor walks it.
+
+### `property vtt.floor-weld.FloorEdge.a: ConstructionPosition`
+
+### `property vtt.floor-weld.FloorEdge.b: ConstructionPosition`
+
+### `property vtt.floor-weld.FloorEdge.topology: ConstructionRegionTopology`
+
+### `property vtt.floor-weld.FloorEdge.use: ConstructionRegionEdge`
+
+### `interface vtt.floor-weld.FloorLanding`
+
+Where something meets a floor: the point on its edge, at the floor's height, and the direction off the floor.
+
+### `property vtt.floor-weld.FloorLanding.a: ConstructionPosition`
+
+### `property vtt.floor-weld.FloorLanding.arc?: { center: PlanDirection; radius: number }`
+
+Present when the edge is an arc: its circle. `a` and `b` are then the
+tangent at `point`, so whatever meets the edge square on meets it
+along the radius; see landingSeat for where an end sits.
+
+### `property vtt.floor-weld.FloorLanding.b: ConstructionPosition`
+
+### `property vtt.floor-weld.FloorLanding.height: number`
+
+### `property vtt.floor-weld.FloorLanding.out: PlanDirection`
+
+### `property vtt.floor-weld.FloorLanding.point: ConstructionPosition`
+
+### `property vtt.floor-weld.FloorLanding.topology: ConstructionRegionTopology`
+
+### `property vtt.floor-weld.FloorLanding.use: ConstructionRegionEdge`
+
+### `interface vtt.floor-weld.PlanDirection`
+
+Plan direction.
+
+### `property vtt.floor-weld.PlanDirection.x: number`
+
+### `property vtt.floor-weld.PlanDirection.z: number`
+
+### `interface vtt.floor-weld.Rewelding`
+
+What rewelding changes, to add to the patch replacement that carries the structure's own change.
+
+### `property vtt.floor-weld.Rewelding.attached: readonly WeldRung[]`
+
+Which of the asked-for attachments were made.
+
+### `property vtt.floor-weld.Rewelding.edges: readonly ConstructionPatchEdge[]`
+
+### `property vtt.floor-weld.Rewelding.nodes: readonly { id: string; position: ConstructionPosition }[]`
+
+### `property vtt.floor-weld.Rewelding.regions: readonly ConstructionPatchRegion[]`
+
+### `property vtt.floor-weld.Rewelding.sourceSurfaceKeys: readonly ConstructionSurfaceKey[]`
+
+The faces changed -- floors, and the ground cut alongside them -- replaced by `regions`.
+
+### `interface vtt.floor-weld.WeldChanges`
+
+### `property vtt.floor-weld.WeldChanges.attach: readonly { floor: ConstructionSurfaceKey; rung: WeldRung }[]`
+
+Rungs to weld into a floor, each at the positions its nodes will stand at.
+
+### `property vtt.floor-weld.WeldChanges.detach: readonly WeldRung[]`
+
+Rungs to take off whichever floors they are welded into.
+
+### `interface vtt.floor-weld.WeldRung`
+
+A structure's end edge, from one of its end nodes to the other -- what a floor shares when welded.
+
+### `property vtt.floor-weld.WeldRung.edgeId: string`
+
+### `property vtt.floor-weld.WeldRung.endNodeId: string`
+
+### `property vtt.floor-weld.WeldRung.startNodeId: string`
+
+### `variable vtt.floor-weld.LANDING_REACH: 0.75`
+
+How far in plan from a floor's edge a point still lands on it -- either side of the edge.
+
+### `function vtt.floor-weld.alongEdge(edge: Pick<FloorEdge, "a" | "b">, point: PlanDirection): number`
+
+How far along `edge`, in length units, `point` stands.
+
+### `function vtt.floor-weld.floorLandingNear(floors: readonly ConstructionRegionTopology[], point: ConstructionPosition, options: { reach?: number; under?: ConstructionSurfaceKey }): FloorLanding | undefined`
+
+The floor edge `point` lands on: a straight edge of a floor's outline
+within `reach` of it in plan, whether it is on the floor or just off it.
+The floor named `under` -- the one the pointer is on -- wins; otherwise
+the nearest edge does, and among edges stacked in plan -- storeys -- the
+one nearest `point`'s own height.
+
+### `function vtt.floor-weld.floorsWeldedBy(floors: readonly ConstructionRegionTopology[], rung: WeldRung): readonly ConstructionRegionTopology[]`
+
+Every floor among `floors` the structure's end `rung` is welded into:
+the floor's outline passes through both of the rung's nodes. The structure
+itself -- the face walking the rung's own edge -- is not one.
+
+### `function vtt.floor-weld.floorsWithout(floors: readonly ConstructionRegionTopology[], rungs: readonly WeldRung[]): readonly ConstructionRegionTopology[]`
+
+`floors` with the rungs taken off them -- where an end that is about to move looks for its new landing.
+
+### `function vtt.floor-weld.landingSeat(landing: FloorLanding, width: number): ConstructionPosition | undefined`
+
+Where the middle of an end `width` wide sits on `landing` so both its
+corners stand on the edge: the landing point itself on a straight edge;
+on an arc, the middle of the chord that wide, nearer the centre.
+
+### `function vtt.floor-weld.projectOnto(a: ConstructionPosition, b: ConstructionPosition, p: PlanDirection): { distance: number; t: number }`
+
+Where `p` projects onto the line through `a` and `b`, as a parameter, and how far off it lies.
+
+### `function vtt.floor-weld.reweldFloors(faces: readonly ConstructionRegionTopology[], changes: WeldChanges, positions: ReadonlyMap<string, ConstructionPosition>, operationId: string, releasable: (face: ConstructionRegionTopology) => boolean): Rewelding`
+
+Every face among `faces` -- all of them, not only floors -- changed by
+`changes`, as patch content, detaching first so an end can re-land on the
+floor it left.
+
+A weld only shares nodes: the floor's outline is cut at the rung's two
+nodes and each keeps its own edges, so the ground laid against the floor
+keeps its side of them -- cut at the same nodes too. Detaching gives every
+face but the structure's own a copy of those nodes instead. `positions` is
+where every rung node will stand; those nodes are the structure's own,
+left for its own patch to declare.
+
+### `function vtt.floor-weld.rungFits(edge: Pick<FloorEdge, "a" | "b">, rung: WeldRung, positions: ReadonlyMap<string, ConstructionPosition>): boolean`
+
+Whether both nodes of `rung`, at `positions`, lie on `edge` strictly between its corners.
+
+### `type vtt.ground-contact.ContactCell = readonly (readonly [number, number])[]`
+
+One square of a contact sampling grid, as a closed ring.
+
+### `type vtt.ground-contact.GroundContact = { kind: "whole" } | { kind: "none" } | { clear: readonly ContactCell[]; kind: "part" }`
+
+How a face meets the ground: wholly, not at all, or in part -- with the cells of its footprint that stand clear of it.
+
+### `type vtt.ground-contact.GroundHeightAt = (point: Plan) => number | undefined`
+
+The ground's height at a point in plan; `undefined` where there is no ground to speak of.
+
+### `variable vtt.ground-contact.GROUND_CONTACT_CELL: 0.5`
+
+How finely a structure's footprint is sampled for contact.
+
+### `variable vtt.ground-contact.GROUND_CONTACT_CLEARANCE: 1.5`
+
+How far above the ground a structure's surface may stand and still rest on
+it, the ground rising to meet it. Well short of a storey, well past the
+unevenness of ground a floor is drawn on.
+
+### `variable vtt.ground-contact.GROUND_SIDE_REST_ROOM: 0.25`
+
+How far past the resting line a ground corner on a structure's side may stand and still meet the side.
+
+### `variable vtt.ground-contact.GROUND_THROUGH_TOLERANCE: 0.05`
+
+How near the ground a surface standing partly clear of it may run and still
+count as the ground rising through it -- a floor laid flush on the ground,
+whose every sample would otherwise flicker in and out of it.
+
+### `function vtt.ground-contact.groundContactOf(topology: ConstructionRegionTopology, groundAt: GroundHeightAt, cell: number, clearance: number, held: ReadonlySet<string>): GroundContact`
+
+How `topology` meets the ground `groundAt` describes, sampled on a grid of
+`cell` over its footprint. Within `clearance` of the ground all over, it
+rests wholly. Standing clear somewhere, it is cut only where the ground
+runs through it: that line is found between the samples, by marching
+squares, so the cut follows it instead of stepping round whole cells.
+Where no ground is known it is clear. A face standing upright is left as
+it always was -- wholly in contact.
+
+A side whose two ends `held` names -- joined to another structure, a
+ramp's end welded into a floor -- has that structure on its far side and
+this one on the near side: no ground fits under it too, so it counts as
+touching for a cell round it, and the ground goes round.
+
+### `function vtt.ground-contact.groundHeightsOf(nodes: readonly ConstructionPosition[], reach: number): GroundHeightAt`
+
+The ground's height over a point in plan, read from `nodes` near it --
+weighted by closeness, so the relief there is kept; `undefined` with none
+within GROUND_READ_REACH.
+
+### `function vtt.ground-contact.groundSurfaceOf(ground: readonly ConstructionRegionTopology[], own: ReadonlySet<string>): GroundHeightAt`
+
+The ground's own surface over a point in plan: the height of the ground
+face it lies in, on that face's plane -- exactly the ground drawn there,
+never a blend of relief metres away. A face holding a node of `own` -- the
+structures in question, which the ground may have been drawn up to meet --
+is not read; where no other face lies over the point -- the middle of a
+hole a resting floor cut -- the nearest ground nodes but those answer,
+within GROUND_HOLE_REACH, and failing that within
+GROUND_READ_REACH.
+
+### `function vtt.ground-contact.surfaceHeightOf(topology: ConstructionRegionTopology): ((point: Plan) => number) | undefined`
+
+The height of `topology`'s surface over a point in plan -- its best plane; `undefined` for a face standing upright.
+
+### `function vtt.ground-contact.touchesGround(change: { after: readonly ConstructionRegionTopology[]; before: readonly ConstructionRegionTopology[] }, ground: readonly ConstructionRegionTopology[]): boolean`
+
+Whether a change to a structure is the business of the `ground` it stands
+over at all: the structure touches it now (`after`), touched it before
+(`before`) -- the ground it had cut has to heal -- or the ground is still
+joined to it by a node. The ground's height is read from the ground alone,
+never from the structure's nodes it shares. A structure built, moved or
+deleted high over the ground is none of these.
+
 ### `type vtt.panel-height-widget.PanelHeightWidgetZone = "group" | "single"`
 
 ### `function vtt.panel-height-widget.panelHeightWidgetPick(id: string): { edgeId: string; zone: PanelHeightWidgetZone } | undefined`
@@ -6082,6 +8345,130 @@ A curve flattened to line segments, for a preview.
 ### `function vtt.panel-height-widget.panelHeightWidgets(topologies: readonly ConstructionRegionTopology[]): readonly { id: string; position: ConstructionPosition }[]`
 
 Every top-run widget's two zone positions, across every partition panel `topologies` holds.
+
+### `function vtt.plan-geometry.faceKey(topology: Pick<ConstructionRegionTopology, "surfaceKey">): string`
+
+A face's key as one string -- see surfaceKeyText.
+
+### `function vtt.plan-geometry.faceRings(topology: ConstructionRegionTopology, loops: readonly (readonly ConstructionRegionEdge[])[]): readonly (readonly ConstructionPosition[])[]`
+
+A face's outer loops as rings of its node positions.
+
+### `function vtt.plan-geometry.insideFace(topology: ConstructionRegionTopology, p: PlanPoint): boolean`
+
+Whether `p` lies inside the face in plan: in an outer loop and out of its holes.
+
+### `function vtt.plan-geometry.insideRing(ring: readonly PlanPoint[], p: PlanPoint): boolean`
+
+Whether `p` lies inside `ring` in plan, by the even-odd rule; a point on an edge may fall either way.
+
+### `function vtt.plan-geometry.insideRingXZ(ring: readonly (readonly [number, number])[], p: PlanPoint): boolean`
+
+The same, for a ring given as `[x, z]` pairs.
+
+### `function vtt.plan-geometry.nearestOnSegment(p: PlanPoint, a: PlanPoint, b: PlanPoint): { distance: number; t: number; x: number; z: number }`
+
+Where on the segment `a`-`b` the point `p` is nearest, in plan: how far along it (`t`, 0 to 1), the point, and how far off.
+
+### `function vtt.plan-geometry.planeOf(ring: readonly ConstructionPosition[]): { centre: ConstructionPosition; normal: ConstructionPosition } | undefined`
+
+The best plane through a ring of positions, by Newell's method: its unit normal and a point on it; `undefined` for a degenerate ring.
+
+### `function vtt.plan-geometry.ringCrossesItself(ring: readonly PlanPoint[]): boolean`
+
+Whether two sides of a ring that do not meet at a corner cross each other, in plan.
+
+### `function vtt.plan-geometry.segmentGap(p: PlanPoint, q: PlanPoint, a: PlanPoint, b: PlanPoint): number`
+
+How far apart, in plan, the segments `p`-`q` and `a`-`b` come: zero where they cross.
+
+### `function vtt.plan-geometry.segmentsCross(a: PlanPoint, b: PlanPoint, c: PlanPoint, d: PlanPoint, tolerance: number): boolean`
+
+Whether segments `a`-`b` and `c`-`d` cross each other at a point inside
+both -- not merely touch or run along each other -- in plan. `tolerance`
+is how far clear of the other's line each end must lie to count.
+
+### `function vtt.plan-geometry.surfaceKeyText(surfaceKey: readonly string[] | ConstructionSurfaceKey): string`
+
+A face's key as one string: its surface key's parts joined by NUL, which no part contains.
+
+### `function vtt.plan-geometry.twiceSignedArea(ring: readonly PlanPoint[]): number`
+
+Twice the signed area of a ring in plan, closed or not: positive one way round, negative the other.
+
+### `function vtt.plan-geometry.twiceSignedAreaXZ(ring: readonly (readonly [number, number])[]): number`
+
+The same, for a ring given as `[x, z]` pairs.
+
+### `interface vtt.plan-overlap.PlanArea`
+
+An area in plan: its outer outlines, less its holes.
+
+### `property vtt.plan-overlap.PlanArea.holes: readonly (readonly PlanPoint[])[]`
+
+### `property vtt.plan-overlap.PlanArea.outers: readonly (readonly PlanPoint[])[]`
+
+### `function vtt.plan-overlap.areasOverlap(a: PlanArea, b: PlanArea): boolean`
+
+Whether areas `a` and `b` share any area in plan -- not only edges or
+corners. A hole is no part of its area: an outline lying in a floor's
+hole, even along the hole's edge, does not overlap the floor.
+
+### `function vtt.plan-overlap.faceArea(topology: ConstructionRegionTopology): PlanArea`
+
+A face as an area -- its holes left out of it.
+
+### `function vtt.plan-overlap.faceOutlines(topology: ConstructionRegionTopology): readonly (readonly PlanPoint[])[]`
+
+A face's outer outlines as points in plan.
+
+### `function vtt.plan-overlap.faceOverlapsOutline(topology: ConstructionRegionTopology, drawn: readonly PlanPoint[]): boolean`
+
+Whether `topology` shares area in plan with the outline `drawn` -- its holes are none of it.
+
+### `function vtt.plan-overlap.faceTouchesOutline(topology: ConstructionRegionTopology, drawn: readonly PlanPoint[], reach: number): boolean`
+
+Whether `topology` meets the outline `drawn` -- shares area with it, or comes within `reach` of it, holes' edges included.
+
+### `function vtt.plan-overlap.outlineOf(edges: readonly { end: ConstructionPosition; geometry: ConstructionEdgeGeometry; start: ConstructionPosition }[]): readonly PlanPoint[]`
+
+An outline as points in plan, from its edges in order.
+
+### `function vtt.plan-overlap.outlinesOverlap(a: readonly PlanPoint[], b: readonly PlanPoint[]): boolean`
+
+Whether outlines `a` and `b` share any area in plan -- not only edges or corners.
+
+### `interface vtt.plan-rotation.PlanPoint`
+
+Turning things round a vertical axis, in plan -- for anything that
+rotates or winds: a whole structure turned by a handle, a spiral wound on
+by one, a spiral laid out by turning the pointer. Heights never change.
+
+### `property vtt.plan-rotation.PlanPoint.x: number`
+
+### `property vtt.plan-rotation.PlanPoint.z: number`
+
+### `function vtt.plan-rotation.createAngleTracker(center: PlanPoint, from: PlanPoint): { turned: number; turn: any }`
+
+How far a pointer has turned round `center` since `from`, counting whole
+circles: each move adds the short way round from the last, so going round
+twice reads as two full turns, not as back where it started.
+
+### `function vtt.plan-rotation.planAngle(center: PlanPoint, point: PlanPoint): number`
+
+The plan angle of `point` round `center`, from +X towards +Z.
+
+### `function vtt.plan-rotation.rotateInPlan(point: P, pivot: PlanPoint, angle: number): P`
+
+`point` turned by `angle` round `pivot` in plan; anything else it carries -- its height -- is kept.
+
+### `function vtt.plan-rotation.rotateVectorInPlan(vector: readonly [number, number, number], angle: number): [number, number, number]`
+
+An `[x, y, z]` direction turned by `angle` in plan.
+
+### `function vtt.plan-rotation.wrapAngle(angle: number): number`
+
+`angle` brought into (-π, π].
 
 ### `interface vtt.planar-area.PlanarPort`
 
@@ -6113,6 +8500,21 @@ A ring of points; a closed ring repeats its first point last.
 
 The union of every polygon or area given.
 
+### `interface vtt.ring-simplify.SimplifiableTopologyRuntime`
+
+### `method vtt.ring-simplify.SimplifiableTopologyRuntime.applyRegionEdit(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): unknown`
+
+### `method vtt.ring-simplify.SimplifiableTopologyRuntime.getAllRegionTopologies(): readonly ConstructionRegionTopology[]`
+
+### `method vtt.ring-simplify.SimplifiableTopologyRuntime.getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined`
+
+### `method vtt.ring-simplify.SimplifiableTopologyRuntime.getSnapshot(): { map?: { nodePositions?: ReadonlyMap<string, { position: ConstructionPosition }> }; tableId?: string }`
+
+### `function vtt.ring-simplify.planNextCollinearVertexRemoval(topology: ConstructionRegionTopology, allTopologies: readonly ConstructionRegionTopology[], posOf: (nodeId: string) => ConstructionPosition | undefined, tableId: string): { nodeId: string; weldedEdgeId: string } | undefined`
+
+Finds the next collinear degree-2 vertex on an unshared straight perimeter edge of a region topology
+that can safely be removed via a `remove-vertex` op. Returns `undefined` if the boundary is already minimal.
+
 ### `function vtt.ring-simplify.simplifyClosedRing(points: readonly ConstructionPosition[], geometryFor: (fromIndex: number, toIndex: number) => ConstructionEdgeGeometry | undefined): readonly number[]`
 
 The indices of `points` (a closed ring, no repeated closing vertex) that
@@ -6127,6 +8529,11 @@ parallel array (node ids, say) never has to search `points` back for
 which entry a position belonged to. Read fresh for each candidate pair
 rather than cached, since dropping a vertex changes which pairs are
 adjacent.
+
+### `function vtt.ring-simplify.simplifyCollinearVertices(runtime: SimplifiableTopologyRuntime, topology: ConstructionRegionTopology, tableId: string, causeId: string): number`
+
+Removes redundant collinear degree-2 vertices along straight perimeter edges of a floor
+(such as a platform) to prevent edge accumulation when moving or editing the structure.
 
 ### `function vtt.ring-simplify.simplifyPolygonRdp(ring: readonly (readonly [number, number])[], epsilon: number): (readonly [number, number])[]`
 
@@ -6354,6 +8761,10 @@ callers MUST invoke it on unmount/view-detach, the same lifecycle discipline
 
 ### `property vtt.bezier-port.CurveHandles.endBandOffsets?: readonly number[]`
 
+### `property vtt.bezier-port.CurveHandles.geometry?: SpanGeometry`
+
+Keeps the span straight or circular when its anchors move; see SpanGeometry.
+
 ### `property vtt.bezier-port.CurveHandles.mode: CurveHandleMode`
 
 ### `property vtt.bezier-port.CurveHandles.start: CurvePoint`
@@ -6422,13 +8833,19 @@ The structure type generated along this spine span; a span with no owner generat
 
 ### `property vtt.bezier-port.CurveResult.samples: readonly (readonly { position: CurvePoint; t: number }[])[]`
 
-### `type vtt.bezier-port.CurveCommand = { correction: number; curved: boolean; kind: "interpretStroke"; points: readonly CurvePoint[] } | { kind: "automatic"; points: readonly CurvePoint[] } | { cornerDegrees?: number; kind: "fit"; points: readonly CurvePoint[] } | { kind: "join"; sections: readonly (readonly [CurvePoint, CurvePoint])[] } | { curve: CubicBezier; endOffsets?: readonly [number, number]; kind: "ribbon"; offsets: readonly [number, number]; parameters?: readonly number[] } | { curves: readonly CubicBezier[]; kind: "sample" } | { curve: CubicBezier; kind: "split"; profile?: CurveHandles; t: number } | { curve: CubicBezier; kind: "merge"; next: CubicBezier } | { curve: CubicBezier; kind: "pull"; t: number; target: CurvePoint } | { curve: CubicBezier; index: 1 | 2; kind: "handle"; mode: CurveHandleMode; opposite: CurvePoint | null; target: CurvePoint } | { curve: CubicBezier; kind: "nearest"; point: CurvePoint } | { end: CurvePoint; handles: CurveHandles; kind: "resolve"; start: CurvePoint }`
+### `type vtt.bezier-port.CurveCommand = { correction: number; curved: boolean; kind: "interpretStroke"; points: readonly CurvePoint[] } | { kind: "automatic"; points: readonly CurvePoint[] } | { cornerDegrees?: number; kind: "fit"; points: readonly CurvePoint[] } | { kind: "join"; sections: readonly (readonly [CurvePoint, CurvePoint])[] } | { curve: CubicBezier; endOffsets?: readonly [number, number]; kind: "ribbon"; offsets: readonly [number, number]; parameters?: readonly number[] } | { curves: readonly CubicBezier[]; kind: "sample" } | { curve: CubicBezier; kind: "split"; profile?: CurveHandles; t: number } | { curve: CubicBezier; kind: "merge"; next: CubicBezier } | { curve: CubicBezier; kind: "pull"; t: number; target: CurvePoint } | { curve: CubicBezier; index: 1 | 2; kind: "handle"; mode: CurveHandleMode; opposite: CurvePoint | null; target: CurvePoint } | { curve: CubicBezier; kind: "nearest"; point: CurvePoint } | { end: CurvePoint; handles: CurveHandles; kind: "resolve"; start: CurvePoint } | { center: CurvePoint; kind: "helix"; radius: number; rise: number; startAngle: number; sweep: number } | { end: CurvePoint; kind: "arcThrough"; start: CurvePoint; through: CurvePoint } | { curves: readonly CubicBezier[]; end: number; kind: "grade"; start: number }`
 
 ### `type vtt.bezier-port.CurveHandleMode = "automatic" | "aligned" | "mirrored" | "free"`
 
 ### `type vtt.bezier-port.CurvePoint = readonly [number, number, number]`
 
 Explicit wire values owned by Grafting; all curve calculations run in Rust.
+
+### `type vtt.bezier-port.SpanGeometry = { kind: "line" } | { center: readonly [number, number]; kind: "arc"; positive: boolean }`
+
+The plan shape a span keeps whatever its anchors do; absent is a free cubic.
+A shaped span climbs linearly between its anchors. `positive` turns from
++X towards +Z; `center` is `[x, z]`.
 
 ### `interface vtt.cap-port.CapPatch`
 
@@ -7568,7 +9985,9 @@ already keeps this port renderer-agnostic.
 
 ### `interface vtt.scene-render-port.RenderNodeHandle`
 
-A construction node's live world position, rendered as a small pickable handle -- what edit-mode picking/drag-to-move hit-tests against.
+### `property vtt.scene-render-port.RenderNodeHandle.glyph?: RenderHandleGlyph`
+
+How the handle is drawn; absent is a plain point.
 
 ### `property vtt.scene-render-port.RenderNodeHandle.nodeId: string`
 
@@ -7607,9 +10026,17 @@ across the ground.
 
 ### `property vtt.scene-render-port.ScenePickResult.constructionAction?: { kind: "branch"; nodeId: string }`
 
+### `property vtt.scene-render-port.ScenePickResult.forward?: { x: number; y: number; z: number }`
+
+The way the camera looks -- the same wherever on the screen the pointer is.
+
 ### `property vtt.scene-render-port.ScenePickResult.nodeId?: string`
 
 ### `property vtt.scene-render-port.ScenePickResult.point: { x: number; y: number; z: number }`
+
+### `property vtt.scene-render-port.ScenePickResult.ray?: { direction: { x: number; y: number; z: number }; origin: { x: number; y: number; z: number } }`
+
+The pointer's ray, camera outward -- where the pointer is at any other height.
 
 ### `property vtt.scene-render-port.ScenePickResult.surfaceRef?: string`
 
@@ -7687,6 +10114,14 @@ single-ghost behaviour every tool already relies on.
 ### `type vtt.scene-render-port.ConfirmedSurfacePickRenderChange = { causeId: string; dependency: RenderDependencyRevision; origin: ChangeOrigin; runtimeGeneration: number; target: RenderSurfacePickTarget; type: "surface-pick-target-upserted" } | { causeId: string; dependency: RenderDependencyRevision; origin: ChangeOrigin; runtimeGeneration: number; surfaceRef: string; type: "surface-pick-target-removed" }`
 
 ### `type vtt.scene-render-port.ConfirmedTokenRenderChange = { causeId: string; dependency: RenderDependencyRevision; origin: ChangeOrigin; runtimeGeneration: number; token: RenderToken; type: "token-upserted" } | { causeId: string; dependency: RenderDependencyRevision; origin: ChangeOrigin; runtimeGeneration: number; tokenId: string; type: "token-removed" }`
+
+### `type vtt.scene-render-port.RenderHandleGlyph = "point" | "midpoint" | "move" | "rotate" | "height" | "turns" | "radius" | "tilt" | "link" | "side" | "corner" | "unlink"`
+
+What a handle does, so it reads as that at a glance: a point to drag, or a
+control that moves a whole structure, sets a height, or turns something
+round -- winding something on (turns) or turning a whole thing (rotate).
+Interaction vocabulary, not product vocabulary -- any structure's
+handle can take any glyph.
 
 ### `type vtt.scene-render-port.RenderLayerKey = "tokens" | "terrain" | "handles" | "surface-picks"`
 
@@ -8018,7 +10453,7 @@ Invoked when the drawer requests to close, e.g. its own close button or Escape.
 
 Whether the drawer is currently shown.
 
-### `property vtt.ui.DrawerProps.placement?: "top" | "right" | "bottom" | "left"`
+### `property vtt.ui.DrawerProps.placement?: "top" | "bottom" | "right" | "left"`
 
 Which screen edge the drawer slides in from.
 
@@ -8109,7 +10544,7 @@ Ant Design does not do that on its own. Uncontrolled (starts collapsed,
 closes only on its own trigger/outside click) when omitted. Ignored
 when `alwaysExpanded` is set.
 
-### `property vtt.ui.FloatButtonGroupProps.placement?: "top" | "right" | "bottom" | "left"`
+### `property vtt.ui.FloatButtonGroupProps.placement?: "top" | "bottom" | "right" | "left"`
 
 Which side the group expands toward from the trigger -- `"top"`/`"bottom"`
 stack items in a vertical column, `"left"`/`"right"` lay them out in a
@@ -8367,7 +10802,7 @@ Invoked when the popover requests to close, e.g. an outside click or Escape.
 
 Whether the popover is currently shown.
 
-### `property vtt.ui.PopoverProps.placement?: "top" | "right" | "bottom" | "left"`
+### `property vtt.ui.PopoverProps.placement?: "top" | "bottom" | "right" | "left"`
 
 Which side of `anchor` the popover opens toward.
 
@@ -8729,8 +11164,9 @@ Houses the 8 core construction verbs in a centered, glassmorphic dock:
    preset radius, never freehand-drawn, see `tower-stamp-tool.ts`)
 2. 🚪 Aberturas (Portas & Janelas -- one click on a wall panel opens it
    and stands a face in the opening, see `opening-tool.ts`)
-3. 🪜 Escadas (Conexão de elevações -- Rampa, arrastada do início ao fim,
-   e Espiral, clicada no centro; both draw a sloped platform)
+3. 🪜 Rampas (Conexão de elevações -- Rampa reta, arrastada do início ao
+   fim; Rampa curva, nos modos de criação compartilhados de espinha; e
+   Espiral, centro-início-fim. Degraus são dos assets, não da estrutura)
 4. 🛤️ Caminhos (Trilhas & química de portais)
 5. ⛰️ Terreno & Água (Escultura de Terreno)
 6. 🌲 Vegetação (Adornos & Flora)

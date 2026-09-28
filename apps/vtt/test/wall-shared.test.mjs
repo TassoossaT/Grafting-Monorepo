@@ -34,6 +34,11 @@ function contextFor(topologies, snapToGrid = false) {
       runtime: {
         curveBatch: curveFixture.runtime.curveBatch,
         getAllRegionTopologies: () => topologies,
+        // The graph the walls stand in, as the faces hold it -- what the walls' own law reads a referenced node from.
+        getGraphSnapshot: () => ({
+          nodes: [...new Map(topologies.flatMap((t) => t.nodes.map((n) => [n.id, n]))).values()],
+          edges: [...new Map(topologies.flatMap((t) => [...t.outerLoops, ...t.holes].flat().map((u) => [u.edgeId, { edgeId: u.edgeId, startNodeId: u.reversed ? u.endNodeId : u.startNodeId, endNodeId: u.reversed ? u.startNodeId : u.endNodeId }]))).values()],
+        }),
         addPatch: (patch, origin, causeId) => {
           patches.push({ patch, origin, causeId });
           return {

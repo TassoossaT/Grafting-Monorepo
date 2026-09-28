@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { pathCorridorId, pathSubtypeOf } from "../src/features/edit-construction/structure-types/path/path-corridor.ts";
-import { pathCarvesGround, pathRidesTerrain } from "../src/features/edit-construction/structure-types/path/path-recipe.ts";
+import { pathRidesTerrain } from "../src/features/edit-construction/structure-types/path/path-recipe.ts";
 import { parseStationNodeId, stationNodeId } from "../src/features/edit-construction/structure-types/path/station-node-id.ts";
 import { resolveCreationInteraction } from "../src/features/edit-construction/structure-types/index.ts";
 
@@ -35,20 +35,14 @@ test("a corridor id carries its subtype without disturbing station addressing", 
   assert.equal(pathSubtypeOf("some-wall-node"), undefined);
 });
 
-test("a deck spans and consumes nothing; every other subtype rides and carves", () => {
+test("a deck spans; every other subtype rides the terrain", () => {
   assert.equal(pathRidesTerrain("bridge"), false);
-  assert.equal(pathCarvesGround("bridge"), false);
-  for (const kind of ["road", "street", "trail"]) {
-    assert.equal(pathRidesTerrain(kind), true, kind);
-    assert.equal(pathCarvesGround(kind), true, kind);
-  }
+  for (const kind of ["road", "street", "trail"]) assert.equal(pathRidesTerrain(kind), true, kind);
 });
 
-test("the interaction table reads the painted subtype, so an overpass declares itself", () => {
-  // Same pair of types, opposite outcomes -- decided by the run that spans,
-  // never inferred from a flat footprint that cannot see height at all.
+test("every path subtype may cut the ground -- a deck too, where it touches it", () => {
+  // Height, not the subtype, tells an overpass from a crossing (`topology/ground-contact.ts`).
   assert.equal(resolveCreationInteraction("path", "terrain", "road").kind, "cut");
-  assert.equal(resolveCreationInteraction("path", "terrain", "bridge").kind, "ignore");
-  assert.equal(resolveCreationInteraction("path", "path", "bridge").kind, "ignore");
+  assert.equal(resolveCreationInteraction("path", "terrain", "bridge").kind, "cut");
   assert.equal(resolveCreationInteraction("path", "terrain").kind, "cut");
 });

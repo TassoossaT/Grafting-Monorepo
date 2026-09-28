@@ -1,0 +1,161 @@
+import type { ConstructionPosition, ConstructionRegionTopology } from "@/ports";
+
+import { globalHandleId } from "../../global-handles/index.ts";
+import type { GlobalHandle, GlobalHandleProvider, GlobalHandleScene } from "../../global-handles/index.ts";
+import { resolvePolicy, structureTypeFor } from "../../structure-types/index.ts";
+import type { EditTarget } from "../atomic-edit.ts";
+import { handleNodeName } from "./handle-name.ts";
+import { outlineOf } from "../../topology/plan-overlap.ts";
+import { isUpright } from "./upright-handle-provider.ts";
+import { faceKey, insideRing } from "../../topology/plan-geometry.ts";
+
+/** How far outside a side or a corner its handle stands, so the part itself stays free to build against. */
+export const PART_HANDLE_OUT = 0.7;
+/** Sides meeting at less than this turn run on as one side, and hold no corner between them. */
+const STRAIGHT = 0.05;
+
+/** A side or corner handle: the generic handle, with the face and the part of it the handle pushes. */
+export interface PartGlobalHandle extends GlobalHandle {
+  readonly seed: ConstructionRegionTopology;
+  readonly target: Extract<EditTarget, { kind: "edge" } | { kind: "vertex" }>;
+}
+
+type Plan = { readonly x: number; readonly z: number };
+
+/** One side of a face's outline: its first edge, where it runs, which way is out -- at its start, middle and end -- and where its middle is. */
+interface Side {
+  readonly edgeId: string;
+  readonly from: ConstructionPosition;
+  readonly to: ConstructionPosition;
+  readonly out: Plan;
+  readonly outFrom: Plan;
+  readonly outTo: Plan;
+  readonly mid: ConstructionPosition;
+  readonly arc: boolean;
+}
+
+/**
+ * The sides of `topology`'s outer outline that no other face of its own
+ * cloud shares -- the outline the cloud shows -- with collinear pieces run
+ * together as one side. A curved edge is a side of its own, its middle on
+ * the curve and out square to it there.
+ */
+function sidesOf(topology: ConstructionRegionTopology, shared: ReadonlySet<string>): readonly (readonly (readonly Side[])[])[] {
+  const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
+  return topology.outerLoops.map((loop) => {
+    // Curves followed closely, so which side is out is read off the shape itself.
+    const ring = outlineOf(loop.map((use) => ({ start: at.get(use.startNodeId)!, end: at.get(use.endNodeId)!, geometry: use.geometry })));
+    const outward = (p: Plan, normal: Plan): Plan => (insideRing(ring, { x: p.x + normal.x * 1e-3, z: p.z + normal.z * 1e-3 }) ? { x: -normal.x, z: -normal.z } : normal);
+    const pieces = loop.flatMap((use): Side[] => {
+      const from = at.get(use.startNodeId)!, to = at.get(use.endNodeId)!;
+      const geometry = use.geometry;
+      if (geometry.kind === "arc") {
+        const [cx, cz] = geometry.center;
+        const radius = Math.hypot(from.x - cx, from.z - cz);
+        if (radius < 1e-6) return [];
+        const start = Math.atan2(from.z - cz, from.x - cx), end = Math.atan2(to.z - cz, to.x - cx);
+        const turn = (x: number) => ((x % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+        const sweep = geometry.clockwise ? -(turn(start - end) || 2 * Math.PI) : (turn(end - start) || 2 * Math.PI);
+        const halfway = start + sweep / 2;
+        const mid = { x: cx + Math.cos(halfway) * radius, y: (from.y + to.y) / 2, z: cz + Math.sin(halfway) * radius };
+        const radial = (p: Plan) => { const l = Math.hypot(p.x - cx, p.z - cz) || 1; return { x: (p.x - cx) / l, z: (p.z - cz) / l }; };
+        return [{ edgeId: use.edgeId, from, to, arc: true, mid, out: outward(mid, radial(mid)), outFrom: outward(from, radial(from)), outTo: outward(to, radial(to)) }];
+      }
+      const length = Math.hypot(to.x - from.x, to.z - from.z);
+      if (length < 1e-6) return [];
+      const normal = { x: (to.z - from.z) / length, z: -(to.x - from.x) / length };
+      const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2, z: (from.z + to.z) / 2 };
+      const out = outward(mid, normal);
+      return [{ edgeId: use.edgeId, from, to, arc: false, mid, out, outFrom: out, outTo: out }];
+    });
+    // Runs of collinear pieces, each kept only where no other face of the cloud shares it.
+    const runs: Side[][] = [];
+    for (const piece of pieces) {
+      const last = runs[runs.length - 1]?.at(-1);
+      const straight = last && !last.arc && !piece.arc && last.to === piece.from && Math.abs(last.out.x * piece.out.z - last.out.z * piece.out.x) < STRAIGHT && last.out.x * piece.out.x + last.out.z * piece.out.z > 0;
+      if (straight) runs[runs.length - 1]!.push(piece); else runs.push([piece]);
+    }
+    if (runs.length > 1) {
+      const first = runs[0]![0]!, last = runs[runs.length - 1]!.at(-1)!;
+      if (!last.arc && !first.arc && last.to === first.from && Math.abs(last.out.x * first.out.z - last.out.z * first.out.x) < STRAIGHT && last.out.x * first.out.x + last.out.z * first.out.z > 0) {
+        runs[0] = [...runs.pop()!, ...runs[0]!];
+      }
+    }
+    return runs.filter((run) => run.every((piece) => !shared.has(piece.edgeId)));
+  });
+}
+
+/**
+ * A handle just outside each side and each corner of every structure whose
+ * type declares `side` or `corner` handles -- for the parts its own
+ * `partHandle` names. Dragging one edits that part through the type's own
+ * role for it, exactly as grabbing the part itself used to: the platform
+ * pushes the side square to itself, a ramp widens. The part itself is never
+ * grabbed, so it stays free to build against.
+ */
+export const partHandleProvider: GlobalHandleProvider = {
+  name: "part",
+  handles(scene) {
+    const candidates = scene.topologies.filter((topology) => {
+      const type = structureTypeFor(topology.surfaceType);
+      // An upright face's parts are the upright provider's: in plan it is only a line.
+      return type?.partHandle !== undefined && type.spine === undefined && !isUpright(topology);
+    });
+    const byKey = new Map(candidates.map((topology) => [faceKey(topology), topology]));
+    const placed = new Set<string>();
+    const handles: PartGlobalHandle[] = [];
+    for (const topology of candidates) {
+      if (placed.has(faceKey(topology))) continue;
+      const members = [topology, ...scene.cloudFor({ seed: topology.surfaceKey, surfaceType: topology.surfaceType }).surfaceKeys
+        .map((key) => byKey.get(key.join("\u0000")))
+        .filter((member): member is ConstructionRegionTopology => member !== undefined && member !== topology)];
+      for (const member of members) placed.add(faceKey(member));
+      const nodeIds = [...new Set(members.flatMap((member) => member.nodes.map((node) => node.id)))].sort();
+      const { name } = handleNodeName(scene, members, nodeIds);
+      const faces = members.map(faceKey);
+      // An edge two faces of the cloud both hold is inside it, not a side.
+      const uses = new Map<string, number>();
+      for (const use of members.flatMap((member) => member.outerLoops.flat())) uses.set(use.edgeId, (uses.get(use.edgeId) ?? 0) + 1);
+      const shared = new Set([...uses].filter(([, count]) => count > 1).map(([edgeId]) => edgeId));
+      for (const member of members) {
+        const type = structureTypeFor(member.surfaceType)!;
+        const base = { owner: member.surfaceType, provider: "part", nodeIds, faces, seed: member };
+        for (const loop of sidesOf(member, shared)) {
+          for (const [index, run] of loop.entries()) {
+            const from = run[0]!.from, to = run.at(-1)!.to, out = run[0]!.out;
+            // The piece holding the side's middle is the one pushed; the type's own rule moves the rest of the side.
+            const mid = run.length === 1 ? run[0]!.mid : { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2, z: (from.z + to.z) / 2 };
+            const piece = run.find((candidate) => {
+              const d = { x: candidate.to.x - candidate.from.x, z: candidate.to.z - candidate.from.z };
+              const t = ((mid.x - candidate.from.x) * d.x + (mid.z - candidate.from.z) * d.z) / (d.x ** 2 + d.z ** 2);
+              return t >= -1e-9 && t <= 1 + 1e-9;
+            }) ?? run[0]!;
+            const side: PartGlobalHandle["target"] = { kind: "edge", edgeId: piece.edgeId };
+            if (type.globalHandles?.includes("side") && type.partHandle!(resolvePolicy(member, side).role)) {
+              handles.push({ ...base, id: globalHandleId("side", `${piece.edgeId}@${name}`), kind: "side", target: side, snaps: true, pivot: mid,
+                position: { x: mid.x + out.x * PART_HANDLE_OUT, y: mid.y, z: mid.z + out.z * PART_HANDLE_OUT }, motion: { kind: "line", direction: out } });
+            }
+            // The corner where this side ends and the next begins.
+            const next = loop[(index + 1) % loop.length];
+            if (!next || next === run || next[0]!.from !== to || !type.globalHandles?.includes("corner")) continue;
+            const nodeId = member.nodes.find((node) => node.position === to)?.id;
+            if (nodeId === undefined) continue;
+            const corner: PartGlobalHandle["target"] = { kind: "vertex", nodeId };
+            if (!type.partHandle!(resolvePolicy(member, corner).role)) continue;
+            // Out between the two sides as they leave the corner -- a curve's own way out there.
+            const bisector = { x: run.at(-1)!.outTo.x + next[0]!.outFrom.x, z: run.at(-1)!.outTo.z + next[0]!.outFrom.z };
+            const length = Math.hypot(bisector.x, bisector.z) || 1;
+            handles.push({ ...base, id: globalHandleId("corner", `${nodeId}@${name}`), kind: "corner", target: corner, snaps: true, pivot: to,
+              position: { x: to.x + (bisector.x / length) * PART_HANDLE_OUT, y: to.y, z: to.z + (bisector.z / length) * PART_HANDLE_OUT }, motion: { kind: "plane" } });
+          }
+        }
+      }
+    }
+    return handles;
+  },
+  plan(_scene: GlobalHandleScene, generic, intent) {
+    const handle = generic as PartGlobalHandle;
+    if (intent.kind !== "move") return undefined;
+    return { kind: "region-part", seed: handle.seed.surfaceKey, target: handle.target, delta: intent.delta };
+  },
+};

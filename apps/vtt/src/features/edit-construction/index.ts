@@ -20,4 +20,5 @@ export * from "./topology/index.ts";
 export * from "./modes/index.ts";
 export * from "./tools/index.ts";
 export * from "./structure-types/index.ts";
+export * from "./global-handles/index.ts";
 export * from "./effects/index.ts";

@@ -1,10 +1,15 @@
+import { settleMoves } from "./type-law.ts";
 import type { BezierPort, ConstructionEdgeGeometry, ConstructionGraphSnapshot, RegionEditOutcome, ConstructionSessionPort, ConstructionPosition } from "@/ports";
 
 import type { AtomicEditOp, EditGesture } from "./atomic-edit.ts";
 import { addPosition, constrainToAxes } from "./atomic-edit.ts";
 import type { CloudTopology } from "../topology/construction-cloud.ts";
 import { cloudNodes } from "../topology/construction-cloud.ts";
-import { resolvePolicy, structureTypeFor } from "../structure-types/index.ts";
+import { isGroundType, resolvePolicy, structureTypeFor } from "../structure-types/index.ts";
+import { rigidCarries, standingOn, standsOn } from "./rigid-carry.ts";
+
+/** How many times rigid structures may pass a carry on to others before the plan settles. */
+const RIGID_ROUNDS = 6;
 import type { EditRole, EditScope } from "../structure-types/index.ts";
 
 /**
@@ -112,7 +117,8 @@ export function planEdit(
     return { kind: "regenerate", role: policy.role, reason: policy.resolve.reason };
   }
 
-  const delta = constrainToAxes(gesture.delta, policy.axes);
+  const axisDelta = constrainToAxes(gesture.delta, policy.axes);
+  const delta = policy.constrain?.({ topology: cloud.seed, target: gesture.target, delta: axisDelta }) ?? axisDelta;
   const primary = primaryOps(cloud, gesture, policy.scope, delta, graphSnapshot);
   if (primary.length === 0) {
     return {
@@ -128,11 +134,17 @@ export function planEdit(
       for (const node of graphSnapshot?.nodes ?? []) positions.set(node.id, node.position);
       const seeds: { nodeId: string; delta: ConstructionPosition }[] = [];
       const primarySet = new Set(primary);
+      const placed = policy.place?.({ topology: cloud.seed, target: gesture.target, delta });
+      for (const move of placed ?? []) {
+        const before = positions.get(move.nodeId);
+        if (!before) throw new Error(`Vertice ausente: ${move.nodeId}`);
+        seeds.push({ nodeId: move.nodeId, delta: { x: move.position.x - before.x, y: move.position.y - before.y, z: move.position.z - before.z } });
+      }
       const structural = structureTypeFor(cloud.seed.surfaceType)?.motionInfluences ? []
         : policy.cascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot }) ?? [];
-      const grouped = policy.groupCascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot, allTopologies: topologies }) ?? [];
+      const grouped = policy.groupCascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot }) ?? [];
       const extras = [...structural, ...grouped];
-      for (const op of [...primary, ...extras]) {
+      for (const op of [...(placed ? [] : primary), ...extras]) {
         if (op.kind === "move-vertex") {
           const before = positions.get(op.nodeId);
           if (!before) throw new Error(`Vertice ausente: ${op.nodeId}`);
@@ -155,18 +167,64 @@ export function planEdit(
         topology,
         policy.transport === true && topology.surfaceType === cloud.seed.surfaceType,
       ) ?? []);
-      const resolved = source.planMotion({ seeds, influences });
-      const moved = new Map(resolved.moves.map((move) => [move.nodeId, move.position]));
-      const resolvedMoves = new Map(moved);
-      for (const surfaceType of new Set(topologies.map((topology) => topology.surfaceType))) {
-        const derive = structureTypeFor(surfaceType)?.deriveMotion;
-        if (!derive) continue;
-        for (const [nodeId, position] of derive(topologies.filter((topology) => topology.surfaceType === surfaceType), resolvedMoves, {
-          graphSnapshot,
-          port: source.curveBatch ? source as Pick<BezierPort, "curveBatch"> : undefined,
-        })) {
-          if (!moved.has(nodeId)) moved.set(nodeId, position);
+      // Moved whole, a structure takes along what stands on it -- a wall in the
+      // middle of a floor, joined to it by no node -- and what stands on that.
+      if (policy.transport === true) {
+        const reached = topologies.filter((topology) => topology.surfaceType === cloud.seed.surfaceType);
+        for (let bases = reached; bases.length > 0;) {
+          const standing = standingOn(topologies, bases, isGroundType).filter((topology) => !reached.includes(topology));
+          for (const upper of standing) {
+            const base = bases.find((candidate) => standsOn(upper, candidate))!;
+            const anchor = base.nodes[0]!.id;
+            for (const node of upper.nodes) influences.push({ from: anchor, to: node.id, axes: [true, true, true] });
+            reached.push(upper);
+          }
+          bases = standing;
         }
+      }
+      const solve = (motionSeeds: readonly { nodeId: string; delta: ConstructionPosition }[]) => {
+        const resolved = source.planMotion({ seeds: motionSeeds, influences });
+        const solved = new Map(resolved.moves.map((move) => [move.nodeId, move.position]));
+        const resolvedMoves = new Map(solved);
+        for (const surfaceType of new Set(topologies.map((topology) => topology.surfaceType))) {
+          const derive = structureTypeFor(surfaceType)?.deriveMotion;
+          if (!derive) continue;
+          for (const [nodeId, position] of derive(topologies.filter((topology) => topology.surfaceType === surfaceType), resolvedMoves, {
+            graphSnapshot,
+            port: source.curveBatch ? source as Pick<BezierPort, "curveBatch"> : undefined,
+          })) {
+            if (!solved.has(nodeId)) solved.set(nodeId, position);
+          }
+        }
+        // Every face the motion reached keeps its type's law -- never at the cost of what the gesture itself placed.
+        return settleMoves(topologies, solved, fixed);
+      };
+      const fixed = new Set(seeds.map((seed) => seed.nodeId));
+      let motionSeeds: readonly { nodeId: string; delta: ConstructionPosition }[] = seeds;
+      let moved = solve(motionSeeds);
+      // A rigid structure the gesture bent without meaning to is carried whole
+      // instead, and whatever stands on it follows: solved again from there.
+      const direct = new Set(cloud.members.map((member) => member.surfaceKey.join("\u0000")));
+      for (let round = 0; round < RIGID_ROUNDS; round += 1) {
+        const carried = rigidCarries(topologies, moved, direct);
+        if (carried.size === 0) break;
+        const seeded = new Map(motionSeeds.map((seed) => [seed.nodeId, seed.delta]));
+        motionSeeds = [
+          ...motionSeeds.filter((seed) => !carried.has(seed.nodeId)),
+          ...[...carried].map(([nodeId, position]) => {
+            const before = positions.get(nodeId)!;
+            const delta = { x: position.x - before.x, y: position.y - before.y, z: position.z - before.z };
+            // Carried where it was already going: its displacement is copied, not refitted -- the
+            // engine holds copies to exact equality, and a refit differs in the last digits.
+            const own = seeded.get(nodeId);
+            return { nodeId, delta: own && Math.hypot(own.x - delta.x, own.y - delta.y, own.z - delta.z) < 1e-6 ? own : delta };
+          }),
+        ];
+        moved = solve(motionSeeds);
+      }
+      // Laws that cannot all hold -- a wall set straight bending the solid floor it carries -- refuse the edit rather than bend anything.
+      if (rigidCarries(topologies, moved, direct).size > 0) {
+        return { kind: "deny", role: policy.role, reason: "A edição deformaria uma estrutura sólida ligada a ela." };
       }
       let surfaceCount = 0;
       for (const topology of topologies) {
@@ -189,8 +247,7 @@ export function planEdit(
     return { kind: "deny", role: policy.role, reason: `${solverBound.label} requer o resolvedor estrutural da sessao.` };
   }
   const cascade = policy.cascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot }) ?? [];
-  // Without a session the grabbed cloud is all of the table this plan can see.
-  const grouped = policy.groupCascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot, allTopologies: cloud.members }) ?? [];
+  const grouped = policy.groupCascade?.({ cloud, topology: cloud.seed, target: gesture.target, delta, graphSnapshot }) ?? [];
   return {
     kind: "apply",
     role: policy.role,

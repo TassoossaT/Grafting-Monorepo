@@ -1,8 +1,13 @@
 import type { ConstructionToolId, StructureEditParams } from "@/features/edit-construction";
 
 import { beginCurveGesture } from "./curve-edit-gesture.ts";
+import { pointerAtHeight } from "./pointer-ray.ts";
+import { commitRegionEdit } from "../../effects/effect-commit.ts";
+import { beginGlobalHandleGesture } from "./global-handle-gesture.ts";
 import {
   cloudNodes,
+  curvePick,
+  globalHandleOf,
   panelHeightWidgetPick,
   planEdit,
   refreshCloudTopology,
@@ -20,7 +25,7 @@ import type {
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 
 import { distanceToSegmentXZ } from "../shapes/geometry-2d.ts";
-import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
+import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext, type ToolGesture } from "./tool-context.ts";
 
 /**
  * Grab-and-edit an *existing* structure by any of its parts -- a vertex, a
@@ -36,11 +41,21 @@ import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "
  * everywhere else `hasTrait` is the question to ask.
  */
 
-const EDGE_PICK_TOLERANCE = 0.2;
+const EDGE_PICK_TOLERANCE = 0.35;
+/** How near an edge a press on a face that is not flat -- a wall -- must land to grab the edge rather than the body. */
+const ON_FACE_EDGE_TOLERANCE = 0.2;
 
 export interface StructureEditOptions {
   /** Only a vertex/edge/body/handle whose topology's surface type this accepts is grabbed; anything else falls through to the wrapped tool's own creation gesture. */
   readonly ownsType: (surfaceType: string) => boolean;
+  /** Whether the tool is partway through drawing something -- a press then belongs to the drawing, never to editing what stands. */
+  readonly drafting?: (ctx: ToolContext) => boolean;
+  /**
+   * Edited only by its handles: a press on a vertex, an edge or the body is
+   * the tool's own -- it builds against what stands -- and only a handle
+   * edits. Handles show on the structure under the pointer.
+   */
+  readonly handlesOnly?: boolean;
 }
 
 interface GrabbedTarget {
@@ -73,16 +88,34 @@ function grabbedTarget(ctx: ToolContext, sample: PointerSample, ownsType: Struct
       : { seedKey: topology.surfaceKey, target };
   }
 
+  // A flat structure's edge is grabbed from either side of it -- a press
+  // just off it lands on the ground, but still means its edge.
+  const edge = nearestEdge(topologies.filter(isLevel), sample);
+  if (edge) return edge;
   if (sample.surfaceRef === undefined) return undefined;
   const surfaceRef = sample.surfaceRef;
   const topology = topologies.find(
     (candidate) => surfaceRefFromNodeSet(candidate.surfaceKey) === surfaceRef,
   );
   if (topology === undefined) return undefined;
-  return { seedKey: topology.surfaceKey, target: edgeOrBodyAt(topology, sample.point) };
+  return { seedKey: topology.surfaceKey, target: isLevel(topology) ? { kind: "region" } : edgeOrBodyAt(topology, sample.point) };
 }
 
-/** The boundary edge `point` landed on, or the body when it landed on none. */
+/** Whether every node of `topology` stands at one height -- a flat face, whose edges are apart in plan. */
+function isLevel(topology: ConstructionRegionTopology): boolean {
+  const y = topology.nodes[0]?.position.y;
+  return y !== undefined && topology.nodes.every((node) => Math.abs(node.position.y - y) < 1e-4);
+}
+
+/** How far from the segment `a`-`b` the point `p` is, in space -- not in plan, where an upright face's top and bottom runs are one line. */
+function distanceToSegment3D(p: ConstructionPosition, a: ConstructionPosition, b: ConstructionPosition): number {
+  const d = { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z };
+  const lengthSq = d.x * d.x + d.y * d.y + d.z * d.z;
+  const t = lengthSq < 1e-12 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * d.x + (p.y - a.y) * d.y + (p.z - a.z) * d.z) / lengthSq));
+  return Math.hypot(p.x - (a.x + d.x * t), p.y - (a.y + d.y * t), p.z - (a.z + d.z * t));
+}
+
+/** The boundary edge `point` landed on, or the body when it landed on none -- for a face that is not flat, grabbed from on it. */
 function edgeOrBodyAt(topology: ConstructionRegionTopology, point: ConstructionPosition): EditTarget {
   const positionOf = (id: string): ConstructionPosition | undefined =>
     topology.nodes.find((node) => node.id === id)?.position;
@@ -92,13 +125,52 @@ function edgeOrBodyAt(topology: ConstructionRegionTopology, point: ConstructionP
       const start = positionOf(edge.startNodeId);
       const end = positionOf(edge.endNodeId);
       if (start === undefined || end === undefined) continue;
-      const distance = distanceToSegmentXZ(point, start, end);
-      if (distance > EDGE_PICK_TOLERANCE) continue;
+      // Measured where the pointer touched the face: the run under it, or the one above -- never whichever comes first in plan.
+      const distance = distanceToSegment3D(point, start, end);
+      if (distance > ON_FACE_EDGE_TOLERANCE) continue;
       if (closest === undefined || distance < closest.distance) closest = { edgeId: edge.edgeId, distance };
     }
   }
   return closest === undefined ? { kind: "region" } : { kind: "edge", edgeId: closest.edgeId };
 }
+
+/**
+ * The boundary edge nearest the pointer among `topologies`, within reach,
+ * each read where the pointer is at that structure's own height -- so a
+ * raised floor's edge is grabbed where it is drawn, not where the pointer's
+ * ray met the ground under it.
+ */
+function nearestEdge(topologies: readonly ConstructionRegionTopology[], sample: PointerSample): GrabbedTarget | undefined {
+  let closest: { readonly grabbed: GrabbedTarget; readonly distance: number } | undefined;
+  for (const topology of topologies) {
+    const positions = new Map(topology.nodes.map((node) => [node.id, node.position]));
+    const height = topology.nodes[0]?.position.y;
+    const point = sample.ray && height !== undefined ? pointerAtHeight(sample, height) : sample.point;
+    for (const loop of [...topology.outerLoops, ...topology.holes]) {
+      for (const use of loop) {
+        const start = positions.get(use.startNodeId);
+        const end = positions.get(use.endNodeId);
+        if (start === undefined || end === undefined) continue;
+        const distance = distanceToSegmentXZ(point, start, end);
+        if (distance > EDGE_PICK_TOLERANCE || (closest && closest.distance <= distance)) continue;
+        closest = { grabbed: { seedKey: topology.surfaceKey, target: { kind: "edge", edgeId: use.edgeId } }, distance };
+      }
+    }
+  }
+  return closest?.grabbed;
+}
+
+/** Where `sample` points at `height` -- along its ray when it has one, else where it hit. */
+const aimOf = (sample: PointerSample, height: number): ConstructionPosition => (sample.ray ? pointerAtHeight(sample, height) : sample.point);
+
+/**
+ * Where the pointer is for the drag under way: on the level it was grabbed
+ * at, for what only moves across -- a raised floor's side stays under the
+ * cursor -- and where it hit, for what may rise, whose height the pointer
+ * sets.
+ */
+const aimAt = (active: { readonly height: number; readonly rises: boolean }, sample: PointerSample): ConstructionPosition =>
+  (active.rises ? sample.point : aimOf(sample, active.height));
 
 function delta(from: ConstructionPosition, to: ConstructionPosition): ConstructionPosition {
   return { x: to.x - from.x, y: to.y - from.y, z: to.z - from.z };
@@ -133,6 +205,10 @@ interface ActiveDrag {
   readonly target: EditTarget;
   readonly before: Map<string, ConstructionPosition>;
   previous: ConstructionPosition;
+  /** The height the structure was grabbed at: the pointer is read there, so what is dragged stays under the cursor. */
+  readonly height: number;
+  /** Whether what was grabbed may move up or down -- a wall's top, its height widget: the pointer is then read where it points, never flattened onto the grab's level. */
+  readonly rises: boolean;
   screenY?: number;
 }
 
@@ -158,11 +234,18 @@ export function createStructureEditBehavior(options: StructureEditOptions): Stru
     active = undefined;
     curveGesture?.cancel();
     grabbedThisGesture = false;
-    curveGesture = beginCurveGesture(ctx, sample, options.ownsType, editParams);
+    // A whole-structure handle, or a curve handle, is its own gesture.
+    curveGesture = sample.nodeId && globalHandleOf(sample.nodeId)
+      ? beginGlobalHandleGesture(ctx, sample, options.ownsType, { ...editParams, dragThreshold: 5, pointerOrigin: sample.point })
+      : !options.handlesOnly || (sample.nodeId !== undefined && curvePick(sample.nodeId) !== undefined)
+        ? beginCurveGesture(ctx, sample, options.ownsType, editParams)
+        : undefined;
     if (curveGesture) {
       grabbedThisGesture = true;
       return true;
     }
+    // A wall's own height widget is a handle too: it edits; any other part pressed is the tool's own.
+    if (options.handlesOnly && !(sample.nodeId !== undefined && panelHeightWidgetPick(sample.nodeId) !== undefined)) return false;
     const grabbed = grabbedTarget(ctx, sample, options.ownsType, editParams.mode === "elevation");
     if (grabbed === undefined) {
       ctx.reportSelection(undefined);
@@ -179,6 +262,8 @@ export function createStructureEditBehavior(options: StructureEditOptions): Stru
       target: grabbed.target,
       before: new Map(),
       previous: sample.point,
+      height: sample.point.y,
+      rises: resolvePolicy(cloud.seed, grabbed.target).axes.includes("y"),
       screenY: sample.screenY,
     };
     if (grabbed.target.kind === "vertex") {
@@ -196,10 +281,10 @@ export function createStructureEditBehavior(options: StructureEditOptions): Stru
     // move everything again on each tick.
     const step = editParams.mode === "elevation" && active.screenY !== undefined && gesture.current.screenY !== undefined
       ? { x: 0, y: (active.screenY - gesture.current.screenY) / 40, z: 0 }
-      : delta(active.previous, gesture.current.point);
+      : delta(active.previous, aimAt(active, gesture.current));
     active.screenY = gesture.current.screenY;
     if (step.x === 0 && step.y === 0 && step.z === 0) return;
-    active.previous = gesture.current.point;
+    active.previous = aimAt(active, gesture.current);
 
     // Positions are re-read every tick; membership is not. A drag that welds
     // onto a neighbour must not silently enlarge what it is dragging.
@@ -238,7 +323,8 @@ export function createStructureEditBehavior(options: StructureEditOptions): Stru
     ctx.reportFeedback({
       tone: "info",
       message:
-        plan.scope === "cloud"
+        plan.surfaceCount === 0 ? `${cloud.cloud.surfaceType}: nada se move por aqui nesta direção.`
+        : plan.scope === "cloud"
           ? `${cloud.cloud.surfaceType}: movendo ${plan.surfaceCount} ${plan.surfaceCount === 1 ? "superficie" : "superficies"} da nuvem.`
           : `${cloud.cloud.surfaceType}: ${plan.role}.`,
     });
@@ -262,7 +348,17 @@ export function createStructureEditBehavior(options: StructureEditOptions): Stru
     const snapshot = ctx.runtime.getGraphSnapshot();
     const { undo, redo } = restoreOps(drag.before, cloud, snapshot);
     if (undo.length === 0) return;
-    ctx.history.record({ kind: "region-edit", undo, redo });
+    // The drag moved things live, tick by tick; the finished edit is replayed
+    // from where it was grabbed as one transaction, so what it reaches -- the
+    // ground a grounded platform cuts -- answers once, and undoes with it.
+    const transactionId = scopedToolId(ctx, "edit", ctx.nextSequence());
+    ctx.runtime.applyRegionEdit(undo, "local", `${transactionId}:rewind`);
+    try {
+      const { recorded } = commitRegionEdit(ctx.runtime, redo, { transactionId });
+      if (recorded) ctx.history.record({ kind: "transaction", transactionId });
+    } catch (error) {
+      ctx.reportFeedback({ tone: "error", message: `Estrutura preservada: ${error instanceof Error ? error.message : String(error)}` });
+    }
   }
 
   function onCancel(): void {
@@ -296,7 +392,9 @@ export function withStructureEditing<Id extends ConstructionToolId>(
   const behavior = createStructureEditBehavior(options);
   return {
     ...tool,
+    editsType: options.ownsType,
     previewOnHover: true,
+    ...(options.handlesOnly ? { handlesOnHover: true } : {}),
 
     previewFor(gesture, params, ctx) {
       if (behavior.isActive()) return undefined;
@@ -304,7 +402,7 @@ export function withStructureEditing<Id extends ConstructionToolId>(
     },
 
     onPointerDown(ctx, sample, params) {
-      if (behavior.tryGrab(ctx, sample, ctx.structureEditParams)) return;
+      if (!options.drafting?.(ctx) && behavior.tryGrab(ctx, sample, ctx.structureEditParams)) return;
       tool.onPointerDown?.(ctx, sample, params);
     },
 

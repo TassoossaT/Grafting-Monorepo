@@ -1,6 +1,5 @@
 export {
   PATH_SPINE_OFFSET,
-  pathCarvesGround,
   pathFormationFor,
   pathHalfWidth,
   pathRidesTerrain,

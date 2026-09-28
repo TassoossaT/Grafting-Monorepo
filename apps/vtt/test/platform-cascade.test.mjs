@@ -30,10 +30,14 @@ for (const [level, expected] of [[0,[1,4,7]], [1,[0,4,7]], [2,[0,3,7]]]) {
     } finally { session.free(); }
   });
 }
-test("received vertex elevation expands its whole platform; descending cannot cross a wall base", () => {
+test("a platform is lowered whole, never by one corner; descending cannot cross a wall base", () => {
   const { runtime, session } = building();
   try {
-    const valid = plan(runtime, 1, { x: 0, y: -1, z: 0 }, { kind: "vertex", nodeId: "p1:0" });
+    // A corner only resizes the platform: its height is left alone.
+    const corner = plan(runtime, 1, { x: 0, y: -1, z: 0 }, { kind: "vertex", nodeId: "p1:0" });
+    assert.equal(corner.kind, "apply", corner.reason);
+    assert.deepEqual(corner.ops, [], "a corner dragged straight down moves nothing");
+    const valid = plan(runtime, 1, { x: 0, y: -1, z: 0 });
     assert.equal(valid.kind, "apply", valid.reason);
     runtime.applyRegionEdit(valid.ops);
     assert.deepEqual(heights(runtime), [0,2,5]);
@@ -48,9 +52,11 @@ test("whole-platform horizontal translation carries upper clouds; local shape ed
     const full = plan(runtime, 0, { x: 2, y: 0, z: 0 });
     assert.equal(full.kind, "apply", full.reason);
     assert.equal(full.ops.length, 12);
+    // Resizing the ground floor by its corner would push the wall standing there,
+    // and that wall the solid storey above -- which, carried whole, would shear
+    // the storey's other walls. Refused rather than bending anything.
     const local = plan(runtime, 0, { x: 1, y: 0, z: 0 }, { kind: "vertex", nodeId: "p0:0" });
-    assert.equal(local.kind, "apply", local.reason);
-    assert.deepEqual(local.ops.map((op) => op.nodeId), ["p0:0","p1:0","p2:0"]);
+    assert.equal(local.kind, "deny");
     assert.equal(plan(runtime, 1, { x: 1, y: 0, z: 0 }).kind, "deny", "a connected upright wall cannot be sheared by its top");
   } finally { session.free(); }
 });
@@ -82,11 +88,12 @@ test("one drag history covers every storey, including after a rejected tick", ()
     behavior.onPointerMove(ctx,{start,current:bad,samples:[start,bad]},{mode:"elevation"});
     behavior.onPointerUp(ctx);
     assert.deepEqual(heights(runtime),[0,4,7]);
+    // The whole drag, every storey it carried, is one transaction.
     const history = ctx.history.undo();
-    assert.equal(history.undo.length,8);
-    runtime.applyRegionEdit(history.undo);
+    assert.equal(history.kind,"transaction");
+    session.undo_region_overlay(history.transactionId);
     assert.deepEqual(heights(runtime),[0,3,6]);
-    runtime.applyRegionEdit(ctx.history.redo().redo);
+    session.redo_region_overlay(ctx.history.redo().transactionId);
     assert.deepEqual(heights(runtime),[0,4,7]);
   } finally { session.free(); }
 });
@@ -178,8 +185,11 @@ test("bottom wall edge moves both paired posts and propagates through actual inc
     const edge=wall.outerLoops.flat().find((e)=>e.startNodeId==="p0:0"&&e.endNodeId==="p0:1");
     const result=planEdit(resolveCloudTopology(runtime,wall.surfaceKey),{surfaceKey:wall.surfaceKey,target:{kind:"edge",edgeId:edge.edgeId},delta:{x:1,y:9,z:0}},runtime.getGraphSnapshot(),runtime);
     assert.equal(result.kind,"apply",result.reason);
-    assert.equal(result.ops.length,6);
+    // The wall's foot is a solid floor's corner: every storey it reaches is carried whole, never bent.
+    assert.equal(result.ops.length,12);
     assert.ok(result.ops.every((op)=>op.position.y===Number(op.nodeId[1])*3));
+    const was=new Map(runtime.getGraphSnapshot().nodes.map((n)=>[n.id,n.position]));
+    assert.ok(result.ops.every((op)=>Math.abs(op.position.x-was.get(op.nodeId).x-1)<1e-9&&Math.abs(op.position.z-was.get(op.nodeId).z)<1e-9),"every storey shifted alike");
   } finally {session.free();}
 });
 test("platform extension welds onto a shared edge instead of crossing it, and topology history covers the whole gesture", () => {

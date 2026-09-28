@@ -48,6 +48,12 @@ export interface SpineEditInput {
   /** Parameter of the grabbed span, supplied by the curve nearest-point query. */
   readonly parameter?: number;
   readonly mode?: CurveHandleMode;
+  /**
+   * Whether a dragged anchor may weld onto another spine's node or split a
+   * span into a junction by landing near it. Off for an owner whose spine
+   * moves in plan only: a spiral's turns pass right over each other.
+   */
+  readonly weld?: boolean;
 }
 
 /**
@@ -83,8 +89,14 @@ export function planSpineEditPatch(input: SpineEditInput): { readonly graphPatch
       handleTarget = automatic.curves.at(-1)!.points[1];
       if (paired) automaticOpposite = automatic.curves[0]!.points[2];
     }
+    // A straight or circular span keeps a shape when its midpoint is pulled:
+    // it becomes the arc through its two anchors and the pointer, as a
+    // two-point arc tool pulls a bulge. A free span is pulled as a cubic.
+    const shapedPull = pick.index === "midpoint" && !input.insert && edge.curve.geometry !== undefined;
     const edited = input.port.curveBatch({ tolerance: 0.025, commands: [
-      pick.index === "midpoint"
+      shapedPull
+        ? { kind: "arcThrough", start: curve.points[0], through: curvePoint(input.position), end: curve.points[3] }
+        : pick.index === "midpoint"
         ? input.insert ? { kind: "split", curve, t: input.parameter ?? 0.5, profile: edge.curve } : { kind: "pull", curve, t: input.parameter ?? 0.5, target: curvePoint(input.position) }
         : { kind: "handle", curve, index: pick.index, target: handleTarget, mode: mode === "automatic" ? "free" : mode, opposite: pairedCurve ? pairedCurve.points[pairedIndex] : null },
     ] })[0]!;
@@ -95,6 +107,23 @@ export function planSpineEditPatch(input: SpineEditInput): { readonly graphPatch
         { ...edge, endNodeId: selectedId, curve: handles[0]! },
         { ...edge, edgeId: `${edge.edgeId}:split:${input.operationId}`, startNodeId: selectedId, curve: handles[1]! },
       ] };
+    } else if (handles.length > 1) {
+      // A pulled arc past a quarter turn comes back in quarter turns: the
+      // span is replaced by that many, joined at new anchors on the arc.
+      const ids = handles.slice(1).map((_, i) => `spine:${input.operationId}:${i}`);
+      selectedId = ids[0]!;
+      const anchors = [edge.startNodeId, ...ids, edge.endNodeId];
+      graphPatch = {
+        nodes: ids.map((id, i) => ({ id, position: curvePosition(edited.curves[i]!.points[3]) })),
+        removedEdgeIds: [edge.edgeId],
+        edges: handles.map((h, i) => ({
+          ...edge,
+          edgeId: i === 0 ? edge.edgeId : `${edge.edgeId}:arc:${input.operationId}:${i}`,
+          startNodeId: anchors[i]!,
+          endNodeId: anchors[i + 1]!,
+          curve: { ...h, endBandOffsets: undefined },
+        })),
+      };
     } else {
       const opposite = automaticOpposite ?? edited.opposite;
       const pairResult = paired && pairedCurve && opposite && input.port.curveBatch({ tolerance: 0.025, commands: [{
@@ -105,7 +134,8 @@ export function planSpineEditPatch(input: SpineEditInput): { readonly graphPatch
     }
   } else {
     if (!isBezierEditTarget(source, input.targetId)) return undefined;
-    const snapNode = source.nodes.find((n) => n.id !== input.targetId &&
+    const weld = input.weld ?? true;
+    const snapNode = weld && source.nodes.find((n) => n.id !== input.targetId &&
       isSpineControlNodeId(n.id) &&
       Math.hypot(n.position.x - input.position.x, n.position.z - input.position.z) <= 0.55 &&
       Math.abs(n.position.y - input.position.y) <= 1.5);
@@ -167,7 +197,7 @@ export function planSpineEditPatch(input: SpineEditInput): { readonly graphPatch
       };
     } else {
       // Check if target node was moved to meet an existing road edge (T-junction snap):
-      const candidateEdges = source.edges.filter((e) =>
+      const candidateEdges = !weld ? [] : source.edges.filter((e) =>
         e.curve &&
         e.startNodeId !== input.targetId &&
         e.endNodeId !== input.targetId &&

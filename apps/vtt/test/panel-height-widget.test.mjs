@@ -40,24 +40,33 @@ test("the widget's single zone reaches exactly what grabbing the top edge itself
 test("the widget's group zone alone, with no other topology in view, still moves only the grabbed run", () => {
   const plan = planEdit(LONE_WALL, gesture({ kind: "edge-zone", edgeId: TOP_EDGE, zone: "group" }, { x: 0, y: 1.5, z: 0 }));
   assert.equal(plan.kind, "apply");
+  assert.equal(plan.scope, "cloud");
   assert.deepEqual(plan.ops, [{ kind: "move-edge", edgeId: TOP_EDGE, delta: { x: 0, y: 1.5, z: 0 } }]);
 });
 
-test("the group cascade raises every other level top run at the grabbed height, across clouds and across partition types", () => {
+test("the group cascade raises every top run in the grabbed cloud, and never touches other clouds", () => {
+  const CLOUD_WITH_WALLS = cloudOf(WALL, LEVEL_GRAY);
   const groupCascade = panelPolicyFor(PANEL_ROLES.topSegmentGroup).groupCascade;
   const ops = groupCascade({
+    cloud: CLOUD_WITH_WALLS,
+    topology: WALL,
+    target: { kind: "edge-zone", edgeId: TOP_EDGE, zone: "group" },
+    delta: { x: 0, y: 1.5, z: 0 },
+  });
+  const moved = new Set(ops.map((op) => op.nodeId));
+  assert.deepEqual(moved, new Set(["wall-2:a-top", "wall-2:b-top"]), "moves other partitions in the same cloud");
+  for (const op of ops) {
+    assert.equal(op.kind, "move-vertex");
+    assert.equal(op.position.y, 3 + 1.5, "delta applied on top of the matched node's own current height");
+  }
+
+  const loneOps = groupCascade({
     cloud: LONE_WALL,
     topology: WALL,
     target: { kind: "edge-zone", edgeId: TOP_EDGE, zone: "group" },
     delta: { x: 0, y: 1.5, z: 0 },
-    allTopologies: [WALL, LEVEL_GRAY, TALLER],
   });
-  const moved = new Set(ops.map((op) => op.nodeId));
-  assert.deepEqual(moved, new Set(["wall-2:a-top", "wall-2:b-top"]), "only the level wall-gray run matches, by trait rather than by name");
-  for (const op of ops) {
-    assert.equal(op.kind, "move-vertex");
-    assert.equal(op.position.y, 3 + 1.5, "the delta is applied on top of the matched node's own current height");
-  }
+  assert.deepEqual(loneOps, [], "a lone wall cloud has no other members to move");
 });
 
 test("the group cascade never re-emits the grabbed edge's own nodes", () => {
@@ -67,19 +76,22 @@ test("the group cascade never re-emits the grabbed edge's own nodes", () => {
     topology: WALL,
     target: { kind: "edge-zone", edgeId: TOP_EDGE, zone: "group" },
     delta: { x: 0, y: 1.5, z: 0 },
-    allTopologies: [WALL],
   });
   assert.deepEqual(ops, []);
 });
 
-test("a ramped run -- its own two top corners at different heights -- names no height to match against", () => {
+test("a run in the cloud with different corner heights moves along with the cloud", () => {
+  const CLOUD_WITH_RAMPED = cloudOf(WALL, TALLER);
   const groupCascade = panelPolicyFor(PANEL_ROLES.topSegmentGroup).groupCascade;
   const ops = groupCascade({
-    cloud: LONE_WALL,
+    cloud: CLOUD_WITH_RAMPED,
     topology: WALL,
     target: { kind: "edge-zone", edgeId: TOP_EDGE, zone: "group" },
     delta: { x: 0, y: 1, z: 0 },
-    allTopologies: [WALL, TALLER],
   });
-  assert.deepEqual(ops, [], "wall-3's top run is a ramp (its two corners differ), so it has no single height to compare");
+  const moved = new Set(ops.map((op) => op.nodeId));
+  assert.deepEqual(moved, new Set(["wall-3:a-top", "wall-3:b-top"]), "all top nodes of the cloud's partitions move regardless of individual height differences");
+  const bTop = ops.find((op) => op.nodeId === "wall-3:b-top");
+  assert.equal(bTop.position.y, 5 + 1, "offset is added to its existing height");
 });
+

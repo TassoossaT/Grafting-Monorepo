@@ -23,6 +23,20 @@ export type CreationInteraction =
    * region is destroyed and its leftover kept with the new shape as a hole.
    * A path cut through terrain, and a path crossing a wall -- which reads as
    * an opening in that wall.
+   *
+   * Declaring `cut` says a type *may* cut; where it does is the ground
+   * contact law (`topology/ground-contact.ts`): only where the structure
+   * rests on the ground, and, partly clear of it, only where the ground rises
+   * through it.
+   *
+   * **Calibration is global for now, and is meant to become per type and per
+   * interaction.** Every cutting type reads the same constants -- how far
+   * above the ground a structure still rests, the tolerance where the ground
+   * rises through it, how finely contact is sampled. A later pass lets each
+   * type -- and each operation, creation or edit -- carry its own values
+   * here, so a road and a platform meet the ground differently. Until then
+   * no type overrides them; they are to be moved into the VTT's global
+   * calibration menu first.
    */
   | { readonly kind: "cut" }
   /**

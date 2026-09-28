@@ -8,10 +8,13 @@ export type { CloudSource, CloudTopology, ConstructionCloud } from "./constructi
 export { edgeUseCounts, outwardPerimeterRings, perimeterOf } from "./surface-perimeter.ts";
 export type { PerimeterLoop } from "./surface-perimeter.ts";
 export { fitPath } from "./stroke-fitting.ts";
+export { createAngleTracker, planAngle, rotateInPlan, rotateVectorInPlan, wrapAngle } from "./plan-rotation.ts";
+export type { PlanPoint } from "./plan-rotation.ts";
 export type { FittedEdge, FitOptions } from "./stroke-fitting.ts";
 export { createBoundaryEdges, reverseGeometry, sameGeometry, sharedEdgeId } from "./boundary-edges.ts";
 export type { BoundaryEdges, EdgeSharing } from "./boundary-edges.ts";
-export { simplifyClosedRing, simplifyPolygonRdp } from "./ring-simplify.ts";
+export { planNextCollinearVertexRemoval, simplifyClosedRing, simplifyCollinearVertices, simplifyPolygonRdp } from "./ring-simplify.ts";
+export type { SimplifiableTopologyRuntime } from "./ring-simplify.ts";
 export { automaticCurve, curvePoint, curvePosition, resolveCurves, ribbonSections, sampleRibbons, unionRibbonOutlines } from "./bezier-curve.ts";
 export type { RibbonRequest } from "./bezier-curve.ts";
 export { planarDifference, planarUnion } from "./planar-area.ts";
@@ -22,3 +25,9 @@ export { panelHeightWidgetPick, panelHeightWidgetPickId, panelHeightWidgets } fr
 export type { PanelHeightWidgetZone } from "./panel-height-widget.ts";
 export { arcSweepOf, arcSweepsOf, closestOnContours, contourLengths, evaluateContour, parametersAtDistance, subContour } from "./contour-geometry.ts";
 export type { ContourPort, ContourSpan } from "./contour-geometry.ts";
+export { arcsFollowing } from "./arc-follow.ts";
+export { areasOverlap, faceArea, faceOutlines, faceOverlapsOutline, faceTouchesOutline, outlineOf, outlinesOverlap, type PlanArea } from "./plan-overlap.ts";
+export { alongEdge, floorLandingNear, floorsWeldedBy, floorsWithout, LANDING_REACH, landingSeat, projectOnto, reweldFloors, rungFits } from "./floor-weld.ts";
+export type { EndJoint, FloorEdge, FloorLanding, PlanDirection, Rewelding, WeldChanges, WeldRung } from "./floor-weld.ts";
+export { GROUND_CONTACT_CELL, GROUND_CONTACT_CLEARANCE, GROUND_SIDE_REST_ROOM, GROUND_THROUGH_TOLERANCE, groundContactOf, groundHeightsOf, groundSurfaceOf, surfaceHeightOf, touchesGround, type ContactCell, type GroundContact, type GroundHeightAt } from "./ground-contact.ts";
+export { faceKey, faceRings, insideFace, insideRing, insideRingXZ, nearestOnSegment, planeOf, ringCrossesItself, segmentGap, segmentsCross, surfaceKeyText, twiceSignedArea, twiceSignedAreaXZ } from "./plan-geometry.ts";

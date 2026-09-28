@@ -1,4 +1,4 @@
-import type { ApplyPatchReplacementRequest, BezierPort, ConstructionEdgeGeometry, ConstructionGraphPatch, ConstructionMotionInfluence } from "@/ports";
+import type { ApplyPatchReplacementRequest, BezierPort, ConstructionEdgeGeometry, ConstructionGraphPatch, ConstructionMotionInfluence, ConstructionPatch } from "@/ports";
 import type {
   ConstructionGraphSnapshot,
   ConstructionNodeId,
@@ -12,7 +12,9 @@ import type { AtomicEditOp, EditAxis, EditGesture, EditTarget } from "../orchest
 import type { CloudTopology } from "../topology/construction-cloud.ts";
 import type { CreationInteraction } from "./creation-interaction.ts";
 import type { EffectKind, ReactionId } from "../effects/effect.ts";
+import type { GlobalHandleKind } from "../global-handles/global-handle-ids.ts";
 import type { PlanarArea } from "../topology/planar-area.ts";
+import type { EndJoint, FloorLanding, WeldRung } from "../topology/floor-weld.ts";
 import type { FieldPort } from "./path/contour/curve-projection.ts";
 
 /**
@@ -78,11 +80,9 @@ export interface RolePolicy {
    */
   readonly cascade?: (context: CascadeContext) => readonly AtomicEditOp[];
   /**
-   * Extra ops matched by a type's own declared value or trait across the
-   * *whole table*, not the grabbed cloud -- the opportunistic case, where
-   * what reaches together is decided at gesture time by comparing current
-   * state, not by any standing weld. A wall's per-segment height widget uses
-   * this to raise every other wall currently level with the one grabbed.
+   * Extra ops matched across the grabbed cloud that are not expressed as
+   * standing welds or structural motion influences (e.g. raising every top run
+   * of a wall cloud together via the height widget's group zone).
    *
    * Applied unconditionally, unlike {@link cascade}: the solver path
    * (`edit-orchestrator.ts`) supersedes `cascade` whenever the type also
@@ -99,6 +99,31 @@ export interface RolePolicy {
    * the edge keeps the curve it has.
    */
   readonly reshape?: (context: ReshapeContext) => readonly AtomicEditOp[];
+  /**
+   * Narrows the gesture's delta past what whole world {@link axes} can say:
+   * onto a direction the type reads off its own shape at gesture time -- a
+   * ramp's corner sliding only along its own edge. Applied after `axes`,
+   * before anything else sees the delta.
+   */
+  readonly constrain?: (context: ConstrainContext) => ConstructionPosition;
+  /**
+   * Where the role puts the nodes a gesture moves, when one delta for the
+   * grabbed part is not enough -- a side pushed out while its corners slide
+   * along the sides next to it. Replaces the grabbed part's own move; the
+   * solver, derivation and validation still run on what it returns. Gets
+   * the delta after {@link constrain}. Throws to refuse; `undefined` falls
+   * back to the grabbed part's own move.
+   */
+  readonly place?: (context: ConstrainContext) => readonly { readonly nodeId: string; readonly position: ConstructionPosition }[] | undefined;
+}
+
+/** What a role's {@link RolePolicy.constrain} gets to look at. */
+export interface ConstrainContext {
+  /** The face the gesture landed on. */
+  readonly topology: ConstructionRegionTopology;
+  readonly target: EditTarget;
+  /** The delta already constrained by the role's own axes. */
+  readonly delta: ConstructionPosition;
 }
 
 /** What a reshape cascade gets to look at: the whole cloud, the edge and the geometry it is taking. */
@@ -132,15 +157,6 @@ export interface CascadeContext {
   /** The delta already constrained by the role's own axes. */
   readonly delta: { readonly x: number; readonly y: number; readonly z: number };
   readonly graphSnapshot?: ConstructionGraphSnapshot;
-  /**
-   * Every region topology the plan can see: the whole table when the
-   * session is at hand, only the grabbed cloud's members otherwise. A
-   * `groupCascade` reaches through this for matches outside the grabbed
-   * cloud -- e.g. every wall currently level with the grabbed one, wherever
-   * it stands -- which a cloud, scoped to one connected same-type run, can
-   * never contain by construction.
-   */
-  readonly allTopologies?: readonly ConstructionRegionTopology[];
 }
 
 /**
@@ -193,6 +209,14 @@ export interface CutFallout {
   /** Exactly the regions this cut consumed -- the covered type's own to delete and repair around. */
   readonly consumedSurfaceKeys: readonly ConstructionSurfaceKey[];
   /**
+   * Those of `consumedSurfaceKeys` an edit dragged out of shape -- rimmed by a
+   * node the structure carried away -- so their own shape now runs from where
+   * they lay to where the node went, over ground that was never touched. The
+   * ground they covered is in the vacated area; their shape is no ground to
+   * lay again.
+   */
+  readonly draggedSurfaceKeys?: readonly ConstructionSurfaceKey[];
+  /**
    * The XZ shape the cut was asked about -- the painter's own footprint.
    *
    * A repair that regrows ground through the same generator the sculpt brush
@@ -244,9 +268,79 @@ export interface SpineRegeneration {
 export interface SpineGeneration {
   /** The width a span with no profile of its own is given. */
   readonly defaultOffsets: readonly number[];
+  /**
+   * The spine's points move in plan only: the owner derives every height
+   * itself on regeneration, so a drag keeps the grabbed point's own height
+   * instead of taking whatever lies under the pointer, and never snaps onto
+   * another network's node by position. Heights still change on purpose, in
+   * elevation mode.
+   */
+  readonly planOnly?: boolean;
+  /**
+   * What winding a spiral on or back keeps: its grade (more turns climb
+   * higher -- the default) or its far end's height (more turns climb gentler).
+   */
+  readonly windKeeps?: "grade" | "height";
+  /**
+   * The edge a chain end's cross-section makes -- what a floor that end
+   * lands on shares (`topology/floor-weld.ts`). Declaring it makes the
+   * spine's free ends connect to a floor edge they are moved onto, and come
+   * off the floor they are moved away from, on every edit.
+   */
+  readonly endRung?: (controlNodeId: string) => WeldRung;
   /** Normalizes the standing graph before an edit reads it -- legacy data, say. */
   readonly prepare?: (snapshot: ConstructionGraphSnapshot, port: BezierPort) => ConstructionGraphSnapshot;
   readonly regenerate: (input: SpineRegenerationInput) => SpineRegeneration | undefined;
+}
+
+/** Which end of a structure: where it starts, and where it goes. */
+export type StructureEndName = "origin" | "destination";
+
+/** One end of a structure: where it stands, and its end edge -- what a floor it lands on shares. */
+export interface StructureEnd {
+  readonly name: StructureEndName;
+  readonly position: ConstructionPosition;
+  readonly rung: WeldRung;
+}
+
+/** A structure rebuilt from its ends: its own patch, and each end's rung with the floor it now lands on, if any. */
+export interface RebuiltFromEnds {
+  readonly patch: ConstructionPatch;
+  /** Nodes that already stand and move -- a patch only adds. */
+  readonly moved: readonly { readonly id: string; readonly position: ConstructionPosition }[];
+  readonly rungs: readonly { readonly rung: WeldRung; readonly landing?: FloorLanding }[];
+  readonly footprintOutline?: readonly (readonly [number, number])[];
+}
+
+/**
+ * A structure that runs from one end to another, each end able to land on
+ * a floor's edge and weld into it (`topology/floor-weld.ts`). Declaring
+ * this gives the type origin and destination handles that move an end,
+ * connect it where it lands and disconnect it -- nothing else is asked of
+ * the type.
+ */
+export interface StructureEnds {
+  /** Where `topology`'s ends stand; empty when it is not one this type rebuilds. */
+  readonly ends: (topology: ConstructionRegionTopology) => readonly StructureEnd[];
+  /**
+   * `topology` rebuilt with the end `name` at `target` -- on `target.landing`
+   * when it lands on a floor -- and the other end where it stands, still on
+   * `kept` when it stays welded. Throws to refuse.
+   */
+  readonly rebuild: (
+    topology: ConstructionRegionTopology,
+    name: StructureEndName,
+    target: { readonly point: ConstructionPosition; readonly landing?: FloorLanding; readonly joint?: EndJoint },
+    kept?: FloorLanding,
+    /** The other structure's end the standing end continues, when it continues one. */
+    keptJoint?: EndJoint,
+  ) => RebuiltFromEnds;
+  /**
+   * `topology` with its end `name` taking over `rung`'s two nodes, standing
+   * at `positions` -- another structure's end joined onto it, one that
+   * cannot take nodes over itself. Absent when the type cannot.
+   */
+  readonly adopt?: (topology: ConstructionRegionTopology, name: StructureEndName, rung: WeldRung, positions: ReadonlyMap<string, ConstructionPosition>) => RebuiltFromEnds;
 }
 
 /**
@@ -330,8 +424,50 @@ export interface StructureTypeDefinition {
    * faces the move never reached. Derived moves do not propagate further.
    */
   readonly deriveMotion?: (topologies: readonly ConstructionRegionTopology[], positions: ReadonlyMap<string, ConstructionPosition>, context: MotionContext) => ReadonlyMap<string, ConstructionPosition>;
+  /**
+   * The type's law: given where one face's nodes stand (`positions`), where
+   * the nodes it determines must stand instead -- a wall's post tops above
+   * their feet. Held in every creation and every edit, whatever made it
+   * (`orchestration/type-law.ts`), so no tool re-implements it and none can
+   * get round it; its placements win over what an edit asked for.
+   *
+   * `placed` names the nodes the change itself put where they now are -- an
+   * edit's moved nodes, a patch's declared ones -- for a law that answers
+   * differently depending on what moved: a ramp's corner moved alone is
+   * mirrored by its twin, a whole end moved drags the far end square.
+   */
+  readonly settle?: (topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>, placed: ReadonlySet<string>) => ReadonlyMap<string, ConstructionPosition>;
   /** Present when this type is generated along a spine. */
   readonly spine?: SpineGeneration;
+  /**
+   * The whole-structure handles this type shows (`global-handles/`): a pivot
+   * that moves it, a rotate handle that turns it, a height handle, a turns
+   * handle that winds a spiral. None for a network whose connected spine or
+   * cloud is many structures at once -- a road grid would move as one.
+   */
+  readonly globalHandles?: readonly GlobalHandleKind[];
+  /**
+   * Which of its own parts get a `side` or `corner` handle, by the role
+   * grabbing that part has (`roleFor`) -- a platform's every side and corner,
+   * a ramp's long sides only. Absent, none does.
+   */
+  readonly partHandle?: (role: EditRole) => boolean;
+  /**
+   * The type's shape changes only through its own controls. Anything else
+   * moving some of its nodes -- a welded ramp, a wall's foot -- carries the
+   * whole structure along as one piece (`orchestration/rigid-carry.ts`);
+   * letting go of it is an explicit detach.
+   */
+  readonly rigid?: boolean;
+  /**
+   * Its outline takes no node from anything else: whatever meets one of its
+   * sides -- the ground cut round it -- meets it there without splitting the
+   * side, so its corners stay exactly its own. For a type whose shape is its
+   * corners, a ramp's four.
+   */
+  readonly sealedOutline?: boolean;
+  /** Present when this type runs between two ends that land on floors -- see {@link StructureEnds}. */
+  readonly ends?: StructureEnds;
   /** Returns a reason when a proposed position batch violates this type. */
   readonly validateMotion?: (topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>) => string | undefined;
   /**

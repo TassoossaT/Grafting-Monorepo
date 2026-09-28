@@ -104,8 +104,8 @@ test("firstRefusal is undefined when every region resolved", () => {
   assert.equal(firstRefusal(resolveCoverage("terrain", [covered("terrain")])), undefined);
 });
 
-test("a platform cuts whatever is ground and stands on everything else", () => {
-  for (const painted of ["platform", "platform-slope"]) {
+test("a platform and both ramps may cut whatever is ground -- only where they touch it -- and stand on everything else", () => {
+  for (const painted of ["platform", "platform-ramp", "platform-slope"]) {
     for (const ground of surfaceTypesWithTrait("ground")) {
       assert.equal(resolveCreationInteraction(painted, ground).kind, "cut", `${painted} over ${ground}`);
     }
@@ -119,7 +119,7 @@ test("ground declares how it answers a cut or a deleted face; nothing else answe
   for (const ground of surfaceTypesWithTrait("ground")) {
     assert.deepEqual(structureTypeFor(ground).reactions, { cut: "lattice-regenerate", remove: "lattice-regenerate" });
   }
-  for (const other of ["wall-white", "opening", "platform", "platform-slope", "roof", "path"]) {
+  for (const other of ["wall-white", "opening", "platform", "platform-ramp", "platform-slope", "roof", "path"]) {
     assert.equal(structureTypeFor(other).reactions, undefined, `${other} declares no reaction`);
   }
 });

@@ -1,4 +1,13 @@
-import type { ConstructionEdgeGeometry, ConstructionPosition } from "@/ports";
+import type {
+  ChangeOrigin,
+  ConstructionEdgeGeometry,
+  ConstructionPosition,
+  ConstructionRegionTopology,
+  ConstructionSurfaceKey,
+  RegionEditOutcome,
+} from "@/ports";
+import type { AtomicEditOp } from "../orchestration/atomic-edit.ts";
+import { sharedEdgeId } from "./boundary-edges.ts";
 
 /**
  * Drops every vertex of a closed ring that carries no shape of its own -- a
@@ -193,3 +202,109 @@ export function simplifyClosedRing(
   }
   return indices;
 }
+
+/**
+ * Finds the next collinear degree-2 vertex on an unshared straight perimeter edge of a region topology
+ * that can safely be removed via a `remove-vertex` op. Returns `undefined` if the boundary is already minimal.
+ */
+export function planNextCollinearVertexRemoval(
+  topology: ConstructionRegionTopology,
+  allTopologies: readonly ConstructionRegionTopology[],
+  posOf: (nodeId: string) => ConstructionPosition | undefined,
+  tableId: string,
+): { readonly nodeId: string; readonly weldedEdgeId: string } | undefined {
+  if (topology.nodes.length <= 3) return undefined;
+
+  // Node usage across all region boundaries on the tabletop
+  const nodeUsage = new Map<string, number>();
+  for (const t of allTopologies) {
+    for (const loop of [...t.outerLoops, ...t.holes]) {
+      for (const edge of loop) {
+        nodeUsage.set(edge.startNodeId, (nodeUsage.get(edge.startNodeId) ?? 0) + 1);
+        nodeUsage.set(edge.endNodeId, (nodeUsage.get(edge.endNodeId) ?? 0) + 1);
+      }
+    }
+  }
+
+  for (const loop of topology.outerLoops) {
+    if (loop.length <= 3) continue;
+    for (let i = 0; i < loop.length; i++) {
+      const edgeIn = loop[(i - 1 + loop.length) % loop.length]!;
+      const edgeOut = loop[i]!;
+
+      const vertexId = edgeOut.startNodeId;
+      if (edgeIn.endNodeId !== vertexId) continue;
+
+      // Only unshared degree-2 vertices (meaning only the two incident edges on this face use it)
+      if (nodeUsage.get(vertexId) !== 2) continue;
+
+      // Straight line segments only
+      if (!isStraight(edgeIn.geometry) || !isStraight(edgeOut.geometry)) continue;
+
+      const prevId = edgeIn.startNodeId;
+      const nextId = edgeOut.endNodeId;
+      const pPrev = posOf(prevId);
+      const pCurr = posOf(vertexId);
+      const pNext = posOf(nextId);
+      if (!pPrev || !pCurr || !pNext) continue;
+
+      if (!collinear(pPrev, pCurr, pNext)) continue;
+
+      // Positive forward direction along the edge
+      const inX = pCurr.x - pPrev.x;
+      const inZ = pCurr.z - pPrev.z;
+      const outX = pNext.x - pCurr.x;
+      const outZ = pNext.z - pCurr.z;
+      if (inX * outX + inZ * outZ <= 0) continue;
+
+      const weldedEdgeId = sharedEdgeId(tableId, prevId, nextId);
+      return { nodeId: vertexId, weldedEdgeId };
+    }
+  }
+  return undefined;
+}
+
+export interface SimplifiableTopologyRuntime {
+  getAllRegionTopologies?(): readonly ConstructionRegionTopology[];
+  getRegionTopology?(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined;
+  applyRegionEdit?(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): unknown;
+  getSnapshot?(): { readonly tableId?: string; readonly map?: { readonly nodePositions?: ReadonlyMap<string, { readonly position: ConstructionPosition }> } };
+}
+
+/**
+ * Removes redundant collinear degree-2 vertices along straight perimeter edges of a floor
+ * (such as a platform) to prevent edge accumulation when moving or editing the structure.
+ */
+export function simplifyCollinearVertices(
+  runtime: SimplifiableTopologyRuntime,
+  topology: ConstructionRegionTopology,
+  tableId: string,
+  causeId: string,
+): number {
+  if (typeof runtime.applyRegionEdit !== "function" || typeof runtime.getAllRegionTopologies !== "function") return 0;
+  let simplifiedCount = 0;
+  let current: ConstructionRegionTopology | undefined = topology;
+
+  while (current) {
+    const all = runtime.getAllRegionTopologies();
+    const liveNodes = typeof runtime.getSnapshot === "function" ? runtime.getSnapshot().map?.nodePositions : undefined;
+    const posOf = (id: string) => liveNodes?.get(id)?.position ?? current?.nodes.find((n) => n.id === id)?.position;
+
+    const planned = planNextCollinearVertexRemoval(current, all, posOf, tableId);
+    if (!planned) break;
+
+    try {
+      runtime.applyRegionEdit([{
+        kind: "remove-vertex",
+        nodeId: planned.nodeId,
+        weldedEdgeId: planned.weldedEdgeId,
+      }], "local", `${causeId}:simplify`);
+      simplifiedCount++;
+      current = typeof runtime.getRegionTopology === "function" ? runtime.getRegionTopology(current.surfaceKey) : undefined;
+    } catch {
+      break;
+    }
+  }
+  return simplifiedCount;
+}
+

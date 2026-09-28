@@ -33,7 +33,7 @@ export const PANEL_ROLES = {
   topEdge: "panel-top-edge",
   post: "panel-post",
   body: "panel-body",
-  /** The height widget's upper zone: raises every other level top run currently at the grabbed one's height, table-wide. */
+  /** The height widget's upper zone: raises every top run across the grabbed cloud together. */
   topSegmentGroup: "panel-top-segment-group",
   /** The height widget's lower zone: the grabbed top run alone -- the same reach as grabbing {@link topEdge} directly. */
   topSegmentSingle: "panel-top-segment-single",
@@ -105,16 +105,40 @@ export function panelMotionInfluences(topology: ConstructionRegionTopology): rea
   });
 }
 
+/**
+ * A panel's posts: every boundary edge running from its bottom run to its
+ * top run -- read from the face's shape, not from being upright, so a post
+ * that leans is still found and set straight. Each as its foot and its top.
+ */
+function panelPosts(topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>): readonly { readonly foot: string; readonly top: string }[] {
+  const at = (id: string) => positions.get(id) ?? topology.nodes.find((node) => node.id === id)?.position;
+  const ys = topology.nodes.map((node) => at(node.id)!.y);
+  const reach = (Math.max(...ys) - Math.min(...ys)) / 2;
+  return topology.outerLoops.flat().flatMap((use) => {
+    const a = at(use.startNodeId), b = at(use.endNodeId);
+    if (!a || !b || Math.abs(a.y - b.y) <= reach || reach < 1e-4) return [];
+    return [a.y < b.y ? { foot: use.startNodeId, top: use.endNodeId } : { foot: use.endNodeId, top: use.startNodeId }];
+  });
+}
+
+/** A panel's law: every post stands straight up from its foot -- its top above it, at the top's own height. */
+export function settlePanel(topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>): ReadonlyMap<string, ConstructionPosition> {
+  const at = (id: string) => positions.get(id) ?? topology.nodes.find((node) => node.id === id)!.position;
+  const settled = new Map<string, ConstructionPosition>();
+  for (const { foot, top } of panelPosts(topology, positions)) {
+    const f = at(foot), t = at(top);
+    if (Math.hypot(f.x - t.x, f.z - t.z) > 1e-9) settled.set(top, { x: f.x, y: t.y, z: f.z });
+  }
+  return settled;
+}
+
 export function validatePanelMotion(topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>): string | undefined {
-  const original = new Map(topology.nodes.map((node) => [node.id, node.position]));
-  for (const link of panelMotionInfluences(topology)) {
-    const lower = positions.get(link.from) ?? original.get(link.from)!;
-    const upper = positions.get(link.to) ?? original.get(link.to)!;
+  const at = (id: string) => positions.get(id) ?? topology.nodes.find((node) => node.id === id)!.position;
+  for (const { foot, top } of panelPosts(topology, new Map())) {
+    const lower = at(foot), upper = at(top);
     if (upper.y - lower.y <= 1e-4) return "O movimento colapsaria ou inverteria uma parede conectada.";
-    const originalLower = original.get(link.from)!;
-    const originalUpper = original.get(link.to)!;
-    if (Math.abs(originalLower.x - originalUpper.x) < 1e-3 && Math.abs(originalLower.z - originalUpper.z) < 1e-3
-      && (Math.abs(lower.x - upper.x) > 1e-3 || Math.abs(lower.z - upper.z) > 1e-3)) {
+    // The law holds every post upright; one still leaning was not settled.
+    if (Math.abs(lower.x - upper.x) > 1e-3 || Math.abs(lower.z - upper.z) > 1e-3) {
       return "O movimento inclinaria uma parede vertical. Mova sua base ou ajuste apenas a elevacao.";
     }
   }
@@ -167,40 +191,32 @@ function pairedRun(context: ReshapeContext): readonly AtomicEditOp[] {
 }
 
 /**
- * The height widget's group zone: every *other* level top run, of any
- * `"partition"`-trait panel anywhere on the table, currently at the same
- * height as the grabbed one -- matched by value at gesture time, never by a
- * standing weld, which is exactly what a structural cascade cannot express
- * and why this is a `groupCascade` rather than a `cascade`.
- *
- * Membership is re-read every tick from `context.allTopologies`, which the
- * orchestrator refreshes each call. Segments that move together by the same
- * delta stay equal throughout the gesture, so this converges to the same
- * group a press-time snapshot would have picked -- it only differs if some
- * other, unrelated edit changes a candidate's height mid-gesture, which
- * would have to race this drag to matter.
+ * The height widget's group zone: raises every top run across the grabbed
+ * cloud together. Only the grabbed run moves through the primary op; every
+ * other top run in the cloud moves by the same delta here, with shared nodes
+ * between adjacent segments visited only once.
  */
-function sameHeightGroupCascade(context: CascadeContext): readonly AtomicEditOp[] {
+function cloudHeightCascade(context: CascadeContext): readonly AtomicEditOp[] {
   if (context.target.kind !== "edge-zone") return [];
   const grabbed = canonicalEdge(context.cloud, context.target.edgeId);
-  if (grabbed === undefined) return [];
-  const cloudPositions = new Map(cloudNodes(context.cloud).map((node) => [node.id, node.position]));
-  const grabbedStart = cloudPositions.get(grabbed.start);
-  const grabbedEnd = cloudPositions.get(grabbed.end);
-  if (grabbedStart === undefined || grabbedEnd === undefined) return [];
-  if (Math.abs(grabbedStart.y - grabbedEnd.y) > 1e-3) return []; // The grabbed run itself is not level -- it names no single height to match.
-  const height = grabbedStart.y;
+  const seen = new Set<string>();
+  if (grabbed !== undefined) {
+    seen.add(grabbed.start);
+    seen.add(grabbed.end);
+  }
   const ops: AtomicEditOp[] = [];
-  for (const topology of context.allTopologies ?? []) {
+  for (const topology of context.cloud.members) {
     if (!hasTrait(topology.surfaceType, "partition")) continue;
     for (const { edge, start, end } of topRunsOf(topology)) {
       if (edge.edgeId === context.target.edgeId) continue;
-      if (Math.abs(start.position.y - end.position.y) > 1e-3) continue; // Only a level run has one height.
-      if (Math.abs(start.position.y - height) > 1e-3) continue;
-      ops.push(
-        { kind: "move-vertex", nodeId: start.id, position: addPosition(start.position, context.delta) },
-        { kind: "move-vertex", nodeId: end.id, position: addPosition(end.position, context.delta) },
-      );
+      if (!seen.has(start.id)) {
+        seen.add(start.id);
+        ops.push({ kind: "move-vertex", nodeId: start.id, position: addPosition(start.position, context.delta) });
+      }
+      if (!seen.has(end.id)) {
+        seen.add(end.id);
+        ops.push({ kind: "move-vertex", nodeId: end.id, position: addPosition(end.position, context.delta) });
+      }
     }
   }
   return ops;
@@ -227,9 +243,9 @@ export function panelPolicyFor(role: EditRole): RolePolicy {
       // itself, nothing more.
       return allowed(role, HEIGHT_AXIS, "surface");
     case PANEL_ROLES.topSegmentGroup:
-      // The widget's upper zone: the grabbed run, plus every other level run
-      // currently at its height, wherever it stands.
-      return { ...allowed(role, HEIGHT_AXIS, "surface"), groupCascade: sameHeightGroupCascade };
+      // The widget's upper zone: the grabbed run, plus every other top run
+      // across the grabbed cloud.
+      return { ...allowed(role, HEIGHT_AXIS, "cloud"), groupCascade: cloudHeightCascade };
     case PANEL_ROLES.post:
       // A vertical post moves as one rigid unit -- `moveEdge` already
       // carries both of its endpoints.
@@ -272,6 +288,10 @@ export function panelStructureType(
     roleFor: panelRoleFor,
     motionInfluences: panelMotionInfluences,
     validateMotion: validatePanelMotion,
+    settle: settlePanel,
+    // Moved and turned whole, its posts moved by their feet, each side raised by its top, its runs dragged across -- and let go of what it stands on.
+    globalHandles: Object.freeze(["pivot", "rotate", "foot", "top", "side", "detach"] as const),
+    partHandle: (role: EditRole) => role === PANEL_ROLES.bottomCorner || role === PANEL_ROLES.topCorner || role === PANEL_ROLES.bottomEdge,
     policyFor: panelPolicyFor,
     interactionOver: panelInteractionOver,
   });

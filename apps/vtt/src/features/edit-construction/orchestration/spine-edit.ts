@@ -4,6 +4,7 @@ import { curvePick, planSpineEditPatch, spineOwnerAt, prospectiveGraph, type Spi
 import { structureTypeFor } from "../structure-types/index.ts";
 import { curveEdgesOf, curveSegments } from "../topology/curve-handles.ts";
 import type { FieldPort } from "../structure-types/path/contour/curve-projection.ts";
+import { spineEndsLanded, regenerateWithEndWelds } from "./spine-end-welds.ts";
 
 /**
  * One spine gesture, end to end: the spine module says what the gesture does
@@ -20,7 +21,7 @@ export function planBezierEdit(input: SpineEditInput & {
   const draft = editDraft(input);
   if (!draft) return undefined;
   const { snapshot, edit, generation } = draft;
-  const regenerated = generation.regenerate({
+  const regenerated = regenerateWithEndWelds(generation, {
     snapshot, graphPatch: edit.graphPatch, topologies: input.topologies, port: input.port, field: input.field, operationId: input.operationId, tableId: input.tableId,
   });
   return regenerated && { ...regenerated, selectedId: edit.selectedId };
@@ -31,16 +32,17 @@ function editDraft(input: SpineEditInput) {
   const generation = owner === undefined ? undefined : structureTypeFor(owner)?.spine;
   if (generation === undefined) return undefined;
   const snapshot = generation.prepare?.(input.snapshot, input.port) ?? input.snapshot;
-  const edit = planSpineEditPatch({ ...input, snapshot });
+  const edit = planSpineEditPatch({ ...input, snapshot, weld: generation.planOnly !== true });
   return edit && { snapshot, edit, generation };
 }
 
 /** Preview only the affected curves; surface regeneration runs once on release. */
-export function previewBezierEdit(input: SpineEditInput): Float32Array | undefined {
+export function previewBezierEdit(input: SpineEditInput & { readonly topologies?: readonly ConstructionRegionTopology[] }): Float32Array | undefined {
   const draft = editDraft(input);
   if (!draft) return undefined;
-  const next = prospectiveGraph(draft.snapshot, draft.edit.graphPatch);
-  const touched = new Set(draft.edit.graphPatch.nodes.map(n => n.id));
+  const graphPatch = input.topologies ? spineEndsLanded(draft.snapshot, draft.edit.graphPatch, draft.generation, input.topologies) : draft.edit.graphPatch;
+  const next = prospectiveGraph(draft.snapshot, graphPatch);
+  const touched = new Set(graphPatch.nodes.map(n => n.id));
   const edges = next.edges.filter(e => touched.has(e.startNodeId) || touched.has(e.endNodeId));
   const curves = curveEdgesOf({nodes: next.nodes, edges}, [], input.port);
   return Float32Array.from(curves.flatMap(e => Array.from(curveSegments(input.port, e.curve))));

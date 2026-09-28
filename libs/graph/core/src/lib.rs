@@ -12,6 +12,7 @@ pub mod bezier;
 mod stroke_interpretation;
 pub mod bezier_commands;
 pub mod bezier_network;
+pub mod bezier_ramp;
 pub mod bezier_surface;
 mod construction;
 mod contour;

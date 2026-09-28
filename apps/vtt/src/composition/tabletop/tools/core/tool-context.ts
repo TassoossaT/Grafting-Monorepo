@@ -14,6 +14,10 @@ export interface PointerSample {
   readonly shiftKey?: boolean;
   readonly nodeId?: string;
   readonly surfaceRef?: string;
+  /** The pointer's ray from the camera, when the view gave one -- see `pointer-ray.ts`. */
+  readonly ray?: { readonly origin: ConstructionPosition; readonly direction: ConstructionPosition };
+  /** The way the camera looks, when the view gave it -- see `build-frame.ts`. */
+  readonly forward?: ConstructionPosition;
 }
 
 /** A gesture in progress (or, for a stationary hover, one where `start === current`). */
@@ -61,6 +65,8 @@ export interface ToolContext {
    * any tool does with it is that tool's own business.
    */
   readonly snapToGrid: boolean;
+  /** The grid's step, when snapping; 1 when absent. */
+  readonly gridUnit?: number;
   /**
    * How a grab on an existing structure behaves -- shape/elevation mode and
    * the bezier handle options (`curveMode`/`curveAction`/`curveWidth`).
@@ -93,6 +99,16 @@ export interface ConstructionTool<Id extends ConstructionToolId> {
   readonly id: Id;
   /** Presentation and sampling policy while this tool is active. */
   readonly handlePresentation?: "spine-points";
+  /** The types this tool edits once they stand -- the scene shows their whole-structure handles while it is active. */
+  readonly editsType?: (surfaceType: string) => boolean;
+  /**
+   * What this tool edits is edited only by its handles, never by grabbing
+   * its geometry -- so a press on it builds against it -- and those handles
+   * show only on the structure under the pointer.
+   */
+  readonly handlesOnHover?: boolean;
+  /** How this tool's dragged spine anchors snap -- the scene manipulator uses it too. */
+  readonly anchorSnap?: import("./curve-edit-gesture.ts").AnchorSnap;
   readonly useGridSnap?: boolean;
   defaultParams(): ToolParamsFor<Id>;
   /** Opt in to a stationary drawing preview between gestures. */
@@ -120,8 +136,10 @@ export interface ConstructionTool<Id extends ConstructionToolId> {
   onPointerUp?(ctx: ToolContext, gesture: ReleasedGesture, params: ToolParamsFor<Id>): void;
   /** Discards an unfinished tool draft on Escape, cancellation or tool switch. */
   onCancel?(ctx: ToolContext): void;
-  /** Runs an explicit action on the current selection. */
-  onSelectionAction?(ctx: ToolContext, action: string, params: ToolParamsFor<Id>): boolean;
+  /** What the picked `selectedId` offers besides dragging it -- shown as buttons; `id` is what `onSelectionAction` receives. */
+  selectionActions?(ctx: ToolContext, selectedId: string): readonly { readonly id: string; readonly label: string }[];
+  /** Runs an explicit action on the current selection, `selectedId` when something is picked. */
+  onSelectionAction?(ctx: ToolContext, action: string, params: ToolParamsFor<Id>, selectedId?: string): boolean;
   /** Handles a tool key outside text controls; true prevents the browser default. */
   onKeyDown?(ctx: ToolContext, key: string, params: ToolParamsFor<Id>): boolean;
   /** Delete/Backspace with the tool active -- a tool holding a selection (an opening picked for editing, say) removes it here. */

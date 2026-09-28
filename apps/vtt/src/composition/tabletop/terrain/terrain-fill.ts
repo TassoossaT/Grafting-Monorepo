@@ -23,7 +23,7 @@ import {
 } from "./terrain-constraints.ts";
 import { logTerrainCommit } from "./terrain-diagnostics.ts";
 import { countInCommit, timePhase } from "../commit-timing.ts";
-import { createBoundaryEdges, hasTrait, pointInOrOnPolygon, sharedEdgeId } from "../../../features/edit-construction/index.ts";
+import { createBoundaryEdges, hasTrait, pointInOrOnPolygon, sharedEdgeId, structureTypeFor } from "../../../features/edit-construction/index.ts";
 import type { PlanarArea } from "@/features/edit-construction";
 
 
@@ -258,6 +258,83 @@ export interface QuadDrops {
   coveredByStanding: number;
 }
 
+function triangleArea(p0: { x: number; z: number }, p1: { x: number; z: number }, p2: { x: number; z: number }): number {
+  return 0.5 * (p0.x * (p1.z - p2.z) + p1.x * (p2.z - p0.z) + p2.x * (p0.z - p1.z));
+}
+
+/**
+ * Splits a concave (non-convex / chevron) quad into two convex triangles along
+ * its interior diagonal. A quad wrapping around a reflex corner of an obstacle
+ * has its arithmetic centroid lying outside the quad in the notch (inside the
+ * obstacle), causing avoidArea to falsely drop it as covered or groundUnder to
+ * falsely see it as under the obstacle. Splitting it restores convex cells
+ * whose centroids lie strictly inside each triangle.
+ */
+function convexifyCell(grid: ConstructionIrregularQuadGrid, cell: readonly number[]): (readonly number[])[] {
+  if (cell.length !== 4) return [cell];
+  const pts = cell.map((i) => grid.vertices[i]);
+  if (pts.some((p) => p === undefined)) return [cell];
+  const [p0, p1, p2, p3] = pts as [{ x: number; z: number }, { x: number; z: number }, { x: number; z: number }, { x: number; z: number }];
+
+  const e0x = p1.x - p0.x, e0z = p1.z - p0.z;
+  const e1x = p2.x - p1.x, e1z = p2.z - p1.z;
+  const e2x = p3.x - p2.x, e2z = p3.z - p2.z;
+  const e3x = p0.x - p3.x, e3z = p0.z - p3.z;
+
+  const cp0 = e0x * e1z - e0z * e1x;
+  const cp1 = e1x * e2z - e1z * e2x;
+  const cp2 = e2x * e3z - e2z * e3x;
+  const cp3 = e3x * e0z - e3z * e0x;
+
+  const eps = 1e-6;
+  const pos = (cp0 > eps ? 1 : 0) + (cp1 > eps ? 1 : 0) + (cp2 > eps ? 1 : 0) + (cp3 > eps ? 1 : 0);
+  const neg = (cp0 < -eps ? 1 : 0) + (cp1 < -eps ? 1 : 0) + (cp2 < -eps ? 1 : 0) + (cp3 < -eps ? 1 : 0);
+
+  // Strictly convex quad
+  if ((pos === 4 && neg === 0) || (neg === 4 && pos === 0)) return [cell];
+
+  // Try splitting along diagonal 0-2
+  const a02_1 = triangleArea(p0, p1, p2);
+  const a02_2 = triangleArea(p0, p2, p3);
+
+  // Try splitting along diagonal 1-3
+  const a13_1 = triangleArea(p1, p2, p3);
+  const a13_2 = triangleArea(p1, p3, p0);
+
+  const isCCW = (pos >= neg);
+  const sign = isCCW ? 1 : -1;
+
+  const s02_1 = sign * a02_1;
+  const s02_2 = sign * a02_2;
+  const s13_1 = sign * a13_1;
+  const s13_2 = sign * a13_2;
+
+  // Prefer the split where both triangles are strictly positive
+  if (s02_1 > eps && s02_2 > eps) {
+    return [[cell[0]!, cell[1]!, cell[2]!], [cell[0]!, cell[2]!, cell[3]!]];
+  }
+  if (s13_1 > eps && s13_2 > eps) {
+    return [[cell[1]!, cell[2]!, cell[3]!], [cell[1]!, cell[3]!, cell[0]!]];
+  }
+
+  // If one diagonal has a valid non-degenerate triangle while the other triangle is a degenerate/inverted sliver:
+  const sliverThreshold = 0.05;
+  if (s02_1 > eps && s02_2 <= eps && Math.abs(s02_2) < sliverThreshold) {
+    return [[cell[0]!, cell[1]!, cell[2]!]];
+  }
+  if (s02_2 > eps && s02_1 <= eps && Math.abs(s02_1) < sliverThreshold) {
+    return [[cell[0]!, cell[2]!, cell[3]!]];
+  }
+  if (s13_1 > eps && s13_2 <= eps && Math.abs(s13_2) < sliverThreshold) {
+    return [[cell[1]!, cell[2]!, cell[3]!]];
+  }
+  if (s13_2 > eps && s13_1 <= eps && Math.abs(s13_1) < sliverThreshold) {
+    return [[cell[1]!, cell[3]!, cell[0]!]];
+  }
+
+  return [cell];
+}
+
 /** Exported for `terrain-quad-drops.test.mjs`, which holds the rules a cell is dropped by. */
 export function gridPatch(
   tableId: string,
@@ -291,7 +368,10 @@ export function gridPatch(
     }
   }
 
-  quad: for (const quad of grid.quads) {
+  const cells = (avoidArea !== undefined && avoidArea.length > 0)
+    ? grid.quads.flatMap((q) => convexifyCell(grid, q))
+    : grid.quads;
+  quad: for (const quad of cells) {
     if (avoidArea !== undefined && avoidArea.length > 0) {
       let cx = 0;
       let cz = 0;
@@ -362,6 +442,37 @@ export function gridPatch(
 }
 
 /**
+ * Why `rings` are no ground a generator can fill -- a ring with fewer than
+ * three corners, two corners on top of each other, or a ring crossing itself
+ * -- or `undefined` when they are sound. Separate rings may overlap: the
+ * generator joins them.
+ */
+export function tangledRing(rings: readonly (readonly { readonly x: number; readonly z: number }[])[]): string | undefined {
+  const side = (p: { x: number; z: number }, q: { x: number; z: number }, r: { x: number; z: number }) => (q.x - p.x) * (r.z - p.z) - (q.z - p.z) * (r.x - p.x);
+  const crosses = (a: { x: number; z: number }, b: { x: number; z: number }, c: { x: number; z: number }, d: { x: number; z: number }) => {
+    const d1 = side(c, d, a), d2 = side(c, d, b), d3 = side(a, b, c), d4 = side(a, b, d);
+    return ((d1 > 1e-12 && d2 < -1e-12) || (d1 < -1e-12 && d2 > 1e-12)) && ((d3 > 1e-12 && d4 < -1e-12) || (d3 < -1e-12 && d4 > 1e-12));
+  };
+  const segments: { ring: number; index: number; a: { x: number; z: number }; b: { x: number; z: number } }[] = [];
+  for (const [ring, points] of rings.entries()) {
+    if (points.length < 3) return `anel ${ring} com ${points.length} ponto(s)`;
+    for (let index = 0; index < points.length; index++) {
+      const a = points[index]!, b = points[(index + 1) % points.length]!;
+      if (Math.hypot(b.x - a.x, b.z - a.z) < 1e-6) return `anel ${ring} com dois cantos no mesmo lugar`;
+      segments.push({ ring, index, a, b });
+    }
+  }
+  for (let i = 0; i < segments.length; i++) {
+    const s = segments[i]!;
+    for (let j = i + 1; j < segments.length; j++) {
+      const t = segments[j]!;
+      if (s.ring === t.ring && crosses(s.a, s.b, t.a, t.b)) return `anel ${s.ring} cruza a si mesmo`;
+    }
+  }
+  return undefined;
+}
+
+/**
  * Generates ground for `boundary` minus `holes`, adopts the nodes it lands on
  * the neighbours' edges, and registers the result.
  *
@@ -371,6 +482,15 @@ export function gridPatch(
  */
 export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillRequest): TerrainFillOutcome {
   if (request.boundary.length === 0) return NOTHING;
+  // A ring that crosses itself describes no ground: the
+  // generator would not refuse them but fail inside the engine, and a failure
+  // there leaves the whole session unusable for every edit after it. They are
+  // refused here instead, and the ground there is left as it stands.
+  const tangled = tangledRing([...request.boundary, ...request.holes].map((ring) => ring.points));
+  if (tangled !== undefined) {
+    console.warn(`[terreno] contorno emaranhado recusado antes do gerador: ${tangled}`);
+    return { ...NOTHING, refused: 1 };
+  }
 
   let bMinX = Infinity;
   let bMinZ = Infinity;
@@ -511,6 +631,35 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     return Math.min(1, Math.max(0, ((point.x - from.x) * dx + (point.z - from.z) * dz) / lengthSq));
   };
 
+  // **A ring's own corner with no node, partway along a neighbour's edge** --
+  // where a cut gave way partway along a structure's side -- splits that edge
+  // like any node the grid puts along it. The ground and the structure then
+  // share it, so it goes wherever the structure goes, and the ground there is
+  // laid again when it does; a node of the ground's own only coinciding with
+  // the side would be left standing in the air.
+  const adoptedVertices = new Set(effectiveAdoptions.map((candidate) => candidate.vertex));
+  for (const ring of [...request.boundary, ...request.holes]) {
+    const count = ring.points.length;
+    for (let index = 0; index < count; index += 1) {
+      const point = ring.points[index]!;
+      if (point.source !== undefined) continue;
+      const vertex = grid.vertices.findIndex((candidate) => Math.hypot(candidate.x - point.x, candidate.z - point.z) < 1e-4);
+      if (vertex < 0 || adoptedVertices.has(vertex) || snapped.has(vertex) || grid.vertices[vertex]!.source !== undefined) continue;
+      for (const edge of [ring.edges[index], ring.edges[(index - 1 + count) % count]]) {
+        if (edge === undefined) continue;
+        const from = live.get(edge.startNodeId)?.position, to = live.get(edge.endNodeId)?.position;
+        if (from === undefined || to === undefined) continue;
+        const length = Math.hypot(to.x - from.x, to.z - from.z);
+        const along = alongEdge(point, from, to, -1);
+        const off = Math.hypot(point.x - (from.x + (to.x - from.x) * along), point.z - (from.z + (to.z - from.z) * along));
+        if (length <= 0 || off > 1e-3 || along * length < 1e-3 || (1 - along) * length < 1e-3) continue;
+        effectiveAdoptions.push({ vertex, edge, along, edgeLength: length });
+        adoptedVertices.add(vertex);
+        break;
+      }
+    }
+  }
+
   const adoptionPositions = new Map<number, ConstructionPosition>();
   for (const [index, adoption] of effectiveAdoptions.entries()) {
     const vertex = grid.vertices[adoption.vertex];
@@ -541,11 +690,17 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     adoptionPositions.set(adoption.vertex, { x: vertex.x, y, z: vertex.z });
   }
 
-  const adoption = timePhase(`adoção de nós (${effectiveAdoptions.length})`, () => adoptContourNodes(
+  // A side of a structure whose outline is sealed is met, never split: the
+  // corner stays where the side runs, at its height, as a node of the ground's own.
+  const sealed = new Set(runtime.getRegionTopologiesInBounds(bounds)
+    .filter((topology) => structureTypeFor(topology.surfaceType)?.sealedOutline === true)
+    .flatMap((topology) => [...topology.outerLoops, ...topology.holes].flat().map((use) => use.edgeId)));
+  const splitting = sealed.size === 0 ? effectiveAdoptions : effectiveAdoptions.filter((candidate) => !sealed.has(candidate.edge.edgeId));
+  const adoption = timePhase(`adoção de nós (${splitting.length})`, () => adoptContourNodes(
     runtime,
     request.tableId,
     request.causeId,
-    effectiveAdoptions,
+    splitting,
     (vertex) => nodeId(request.mint, vertex),
     (vertex) => adoptionPositions.get(vertex),
   ));
@@ -619,7 +774,11 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     if (uses.length === 1 && occupiedUse !== undefined) {
       edgeRooms.set(edgeId, {
         edgeId,
-        reversed: !occupiedUse.reversed,
+        // The free side walks the standing use backwards. Under its own id that
+        // is simply the opposite flag; under the shared id -- another edge on the
+        // same two nodes, stored lowest id first -- it is read against that
+        // storage, or the face walks it backwards and never closes.
+        reversed: occupiedUse.edgeId === edgeId ? !occupiedUse.reversed : !(occupiedUse.endNodeId < occupiedUse.startNodeId),
         startNodeId: occupiedUse.endNodeId,
         endNodeId: occupiedUse.startNodeId,
       });

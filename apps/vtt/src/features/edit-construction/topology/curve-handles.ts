@@ -84,18 +84,17 @@ export function curveEdgesOf(
   ];
 }
 
-/** Each curve's two handles and its midpoint, as pickable positions, in one engine crossing. */
+/** Each curve's midpoint, as a pickable position, in one engine crossing. */
 export function curveHandles(
   edges: readonly CurveEdge[],
   port: Pick<BezierPort, "curveBatch">,
 ): readonly { readonly id: string; readonly position: ConstructionPosition }[] {
   if (edges.length === 0) return [];
   const halves = port.curveBatch({ tolerance: 0.025, commands: edges.map((edge) => ({ kind: "split" as const, curve: edge.curve, t: 0.5 })) });
-  return edges.flatMap((edge, i) => [
-    { id: curvePickId(edge.edgeId, 1), position: curvePosition(edge.curve.points[1]) },
-    { id: curvePickId(edge.edgeId, 2), position: curvePosition(edge.curve.points[2]) },
-    { id: curvePickId(edge.edgeId, "midpoint"), position: curvePosition(halves[i]!.curves[0]!.points[3]) },
-  ]);
+  return edges.map((edge, i) => ({
+    id: curvePickId(edge.edgeId, "midpoint"),
+    position: curvePosition(halves[i]!.curves[0]!.points[3]),
+  }));
 }
 
 /** `curve` with one handle dragged to `target`, or its midpoint pulled there. */
