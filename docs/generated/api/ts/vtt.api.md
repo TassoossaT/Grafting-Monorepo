@@ -2402,7 +2402,7 @@ path; the handle's kind gives what the path means.
 
 The focus after the pointer moved to `sample`: the structure it is over,
 else the one it was on while it stays on that one's handles or near it,
-else none.
+else the one it comes within reach of, else none.
 
 ### `function vtt.handle-focus.sameFocus(a: HandleFocus | undefined, b: HandleFocus | undefined): boolean`
 

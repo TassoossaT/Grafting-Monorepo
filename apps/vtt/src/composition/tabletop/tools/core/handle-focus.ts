@@ -6,14 +6,20 @@ import { spineBodyTarget } from "./spine-body-target.ts";
 import type { PointerSample, ToolContext } from "./tool-context.ts";
 
 /**
- * Which structure's handles show: the one under the pointer. The handles
- * stand just outside it, so the focus holds while the pointer is on one of
- * them, or still within {@link KEEP} of the structure on its way to one --
- * and moves on as soon as it is over another structure.
+ * Which structure's handles show: the one under the pointer, else the one
+ * it passes nearest, within {@link REACH} -- the handles stand just outside
+ * a structure, so coming up to it from outside shows them as well as
+ * crossing it does. The focus holds while the pointer is on one of them, or
+ * still within {@link KEEP} of the structure on its way to one -- and moves
+ * on as soon as it is over another structure.
  */
 
 /** How far outside a focused structure, in plan, the pointer may go and keep its handles showing. */
 const KEEP = 1.8;
+/** How close the pointer's ray must pass to a structure -- its outline, or the upright through its middle -- to show its handles. */
+const REACH = 1.2;
+/** How high above a structure's middle the handles standing over it reach. */
+const ABOVE = 2;
 
 const keyOf = (surfaceKey: readonly string[]) => surfaceKey.join("\u0000");
 export const NO_FOCUS: HandleFocus = Object.freeze({ faces: new Set<string>(), spineNodes: new Set<string>() });
@@ -77,9 +83,54 @@ function faceUnder(ctx: ToolContext, sample: PointerSample, owns: (surfaceType: 
   return picked && { topology: picked, point: sample.point };
 }
 
-/** The structure of a type `owns` accepts that `sample` is over, if any. */
-function focusUnder(ctx: ToolContext, sample: PointerSample, owns: (surfaceType: string) => boolean): HandleFocus | undefined {
-  const under = faceUnder(ctx, sample, owns);
+/** Where on the segment `a`-`b` the ray passes nearest, how near, and how far along the ray. */
+function rayToSegment(ray: NonNullable<PointerSample["ray"]>, a: ConstructionPosition, b: ConstructionPosition): { readonly distance: number; readonly point: ConstructionPosition; readonly t: number } {
+  const d = ray.direction, e = { x: b.x - a.x, y: b.y - a.y, z: b.z - a.z }, w = { x: ray.origin.x - a.x, y: ray.origin.y - a.y, z: ray.origin.z - a.z };
+  const dot = (u: { x: number; y: number; z: number }, v: { x: number; y: number; z: number }) => u.x * v.x + u.y * v.y + u.z * v.z;
+  const dd = dot(d, d), de = dot(d, e), ee = dot(e, e), dw = dot(d, w), ew = dot(e, w);
+  const denominator = dd * ee - de * de;
+  // Along the segment, then back along the ray, each clamped to its own extent.
+  let u = ee < 1e-12 ? 0 : Math.min(1, Math.max(0, denominator < 1e-12 ? ew / ee : (dd * ew - de * dw) / denominator));
+  const t = Math.max(0, (de * u - dw) / dd);
+  if (ee >= 1e-12) u = Math.min(1, Math.max(0, (t * de + ew) / ee));
+  const point = { x: a.x + e.x * u, y: a.y + e.y * u, z: a.z + e.z * u };
+  const on = { x: ray.origin.x + d.x * t, y: ray.origin.y + d.y * t, z: ray.origin.z + d.z * t };
+  return { distance: Math.hypot(on.x - point.x, on.y - point.y, on.z - point.z), point, t };
+}
+
+/**
+ * The face of a type `owns` accepts whose outline -- or the upright through
+ * its middle, where the handles over it stand -- the pointer's ray passes
+ * nearest, within {@link REACH}; with the point of the outline it passed nearest.
+ * Of two as near -- a wall standing on a floor's edge -- the one the ray
+ * reaches first, nearest the viewer.
+ */
+function faceNear(ctx: ToolContext, sample: PointerSample, owns: (surfaceType: string) => boolean): { readonly topology: ConstructionRegionTopology; readonly point: ConstructionPosition } | undefined {
+  const ray = sample.ray;
+  if (!ray) return undefined;
+  let best: { topology: ConstructionRegionTopology; point: ConstructionPosition; distance: number; t: number } | undefined;
+  const nearer = (a: { distance: number; t: number }, b: { distance: number; t: number } | undefined) => !b || a.distance < b.distance - 1e-6 || (a.distance <= b.distance + 1e-6 && a.t < b.t);
+  for (const topology of ctx.runtime.getAllRegionTopologies()) {
+    if (!owns(topology.surfaceType) || topology.nodes.length === 0) continue;
+    const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
+    let nearest: { distance: number; point: ConstructionPosition; t: number } | undefined;
+    for (const use of topology.outerLoops.flat()) {
+      const met = rayToSegment(ray, at.get(use.startNodeId)!, at.get(use.endNodeId)!);
+      if (nearer(met, nearest)) nearest = met;
+    }
+    if (!nearest) continue;
+    const points = topology.nodes.map((node) => node.position);
+    const middle = { x: points.reduce((sum, p) => sum + p.x, 0) / points.length, y: Math.max(...points.map((p) => p.y)), z: points.reduce((sum, p) => sum + p.z, 0) / points.length };
+    const over = rayToSegment(ray, middle, { ...middle, y: middle.y + ABOVE });
+    const reached = nearer(over, nearest) ? { ...over, point: nearest.point } : nearest;
+    if (reached.distance <= REACH && nearer(reached, best)) best = { topology, ...reached };
+  }
+  return best;
+}
+
+/** The structure of a type `owns` accepts found by `find` -- the one `sample` is over, or passes nearest -- if any. */
+function focusOn(ctx: ToolContext, sample: PointerSample, owns: (surfaceType: string) => boolean, find: typeof faceUnder): HandleFocus | undefined {
+  const under = find(ctx, sample, owns);
   if (!under) return undefined;
   const { topology } = under;
   if (structureTypeFor(topology.surfaceType)?.spine === undefined) return { faces: new Set([keyOf(topology.surfaceKey)]), spineNodes: new Set() };
@@ -111,7 +162,7 @@ function near(ctx: ToolContext, sample: PointerSample, focus: HandleFocus): bool
 /**
  * The focus after the pointer moved to `sample`: the structure it is over,
  * else the one it was on while it stays on that one's handles or near it,
- * else none.
+ * else the one it comes within reach of, else none.
  */
 export function handleFocusAt(ctx: ToolContext, sample: PointerSample | undefined, previous: HandleFocus, owns: (surfaceType: string) => boolean): HandleFocus {
   if (!sample) return NO_FOCUS;
@@ -126,10 +177,12 @@ export function handleFocusAt(ctx: ToolContext, sample: PointerSample | undefine
 function focusFrom(ctx: ToolContext, sample: PointerSample, previous: HandleFocus, owns: (surfaceType: string) => boolean): HandleFocus {
   // On a handle: whatever it belongs to stays in focus.
   if (sample.nodeId && (globalHandleOf(sample.nodeId) || curvePick(sample.nodeId))) return previous;
-  const under = focusUnder(ctx, sample, owns);
+  const under = focusOn(ctx, sample, owns, faceUnder);
   if (under) return under;
   if (sample.nodeId && previous.spineNodes.has(sample.nodeId)) return previous;
-  return (previous.faces.size > 0 || previous.spineNodes.size > 0) && near(ctx, sample, previous) ? previous : NO_FOCUS;
+  if ((previous.faces.size > 0 || previous.spineNodes.size > 0) && near(ctx, sample, previous)) return previous;
+  // Over none and away from the last: the one it comes up to.
+  return focusOn(ctx, sample, owns, faceNear) ?? NO_FOCUS;
 }
 
 /** Whether two foci show the same handles. */

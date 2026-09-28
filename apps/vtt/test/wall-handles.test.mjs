@@ -144,3 +144,25 @@ test("a wall on a platform can be let go of: its detach handle gives it feet of 
     assert.equal(wallHandles(f.runtime).filter((h) => h.kind === "detach").length, 0);
   } finally { f.session.free(); }
 });
+
+test("a structure's handles show as the pointer comes near it, not only once it is over it -- and the nearest one's, and none far away", async () => {
+  const { handleFocusAt, NO_FOCUS } = await import("../src/composition/tabletop/tools/core/handle-focus.ts");
+  const f = fixture(true);
+  try {
+    const all = () => true;
+    // Straight down at a point on the ground.
+    const down = (x, z) => ({ point: { x, y: 0, z }, ray: { origin: { x, y: 20, z }, direction: { x: 0, y: -1, z: 0 } } });
+    const focused = (sample) => {
+      const focus = handleFocusAt(f.ctx, sample, NO_FOCUS, all);
+      return f.runtime.getAllRegionTopologies().filter((t) => focus.faces.has(t.surfaceKey.join("\u0000"))).map((t) => t.surfaceType);
+    };
+    // The platform spans 0..6 by 0..4 at height 2: just past its far side, where its handles stand.
+    assert.deepEqual(focused(down(3, 4.8)), ["platform-floating"]);
+    // The wall stands along z = 0 from x = 1 to 5, on the platform's near side: just off it, beside its foot handles.
+    assert.ok(focused(down(3, -0.5)).some((type) => hasTrait(type, "partition")), JSON.stringify(focused(down(3, -0.5))));
+    assert.deepEqual(focused(down(3, 9)), [], "far from everything, nothing");
+    // Level with a wall's top, from the side: its top handles are within reach.
+    const side = { point: { x: 3, y: 5.3, z: -5 }, ray: { origin: { x: 3, y: 5.3, z: -10 }, direction: { x: 0, y: 0, z: 1 } } };
+    assert.ok(focused(side).some((type) => hasTrait(type, "partition")), JSON.stringify(focused(side)));
+  } finally { f.session.free(); }
+});
