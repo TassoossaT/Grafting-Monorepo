@@ -44,6 +44,7 @@ export function sessionFixture() {
         else if (op.kind === "insert-vertex") session.insert_vertex_json(JSON.stringify({ ...op, position: vector(op.position) }));
         else if (op.kind === "retype-edge") session.retype_edge_json(JSON.stringify({ edgeId: op.edgeId, geometry: op.geometry }));
         else if (op.kind === "delete-region") session.delete_region_json(JSON.stringify({ surfaceKey: op.surfaceKey }));
+        else if (op.kind === "remove-vertex") session.remove_vertex_json(JSON.stringify({ nodeId: op.nodeId, weldedEdgeId: op.weldedEdgeId }));
         else throw new Error(`the fixture does not apply ${op.kind}`);
       }
       return {};

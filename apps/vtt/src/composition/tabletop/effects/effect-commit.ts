@@ -14,7 +14,7 @@ import type {
 import type { AtomicEditOp, Effect, Reaction, ReactionId, ReactionRecord, ShapeChange } from "@/features/edit-construction";
 import type { TransactionResult } from "../tabletop-runtime.ts";
 
-import { runEffects, settlePatch } from "../../../features/edit-construction/index.ts";
+import { hasTrait, runEffects, settlePatch, simplifyCollinearVertices } from "../../../features/edit-construction/index.ts";
 import { timePhase } from "../commit-timing.ts";
 import { TABLETOP_REACTIONS, type TabletopReactionRuntime } from "./reactions.ts";
 import { shapeChangeOfRemoval, shapeChangeOfReplacement, topologiesOf } from "./shape-change.ts";
@@ -136,6 +136,15 @@ export function commitRegionEdit(
     const declaredPositions = ops.flatMap((op) => (op.kind === "move-vertex" ? [op.position] : []));
     const effects = movedEffects(runtime, before, outcome.removedNodeIds, declaredPositions, options.transactionId);
     if (effects.length > 0) dispatchEffects(runtime, effects, options.reactions);
+    if (typeof runtime.getRegionTopology === "function" && typeof runtime.applyRegionEdit === "function") {
+      const tableId = typeof runtime.getSnapshot === "function" ? runtime.getSnapshot().tableId : "table";
+      for (const topology of before) {
+        if (hasTrait(topology.surfaceType, "floor")) {
+          const live = runtime.getRegionTopology(topology.surfaceKey);
+          if (live) simplifyCollinearVertices(runtime, live, tableId, options.transactionId);
+        }
+      }
+    }
     return outcome;
   });
 }
@@ -162,6 +171,15 @@ export function commitStagedRegionEdit(
     const declaredPositions = ops.flatMap((op) => (op.kind === "move-vertex" ? [op.position] : []));
     const effects = movedEffects(runtime, before, outcome.removedNodeIds, declaredPositions, options.transactionId);
     if (effects.length > 0) dispatchEffects(runtime, effects, options.reactions);
+    if (typeof runtime.getRegionTopology === "function" && typeof runtime.applyRegionEdit === "function") {
+      const tableId = typeof runtime.getSnapshot === "function" ? runtime.getSnapshot().tableId : "table";
+      for (const topology of before) {
+        if (hasTrait(topology.surfaceType, "floor")) {
+          const live = runtime.getRegionTopology(topology.surfaceKey);
+          if (live) simplifyCollinearVertices(runtime, live, tableId, options.transactionId);
+        }
+      }
+    }
     stages.after?.();
     return outcome;
   });

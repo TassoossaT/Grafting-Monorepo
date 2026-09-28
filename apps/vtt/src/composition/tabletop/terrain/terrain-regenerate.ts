@@ -145,32 +145,7 @@ export function repairTerrainCut(
   const hasVacated = fallout.vacatedGround && fallout.vacatedGround.length > 0;
   const hasFootprint = fallout.footprintOutline !== undefined && fallout.footprintOutline.length >= 3;
 
-  // Check if vacated ground and footprint are spatially separated (e.g. moved across the map)
-  let separated = false;
   if (hasVacated && hasFootprint) {
-    let vMinX = Infinity, vMaxX = -Infinity, vMinZ = Infinity, vMaxZ = -Infinity;
-    for (const piece of fallout.vacatedGround!) {
-      for (const ring of piece) {
-        for (const [x, z] of ring) {
-          if (x < vMinX) vMinX = x;
-          if (x > vMaxX) vMaxX = x;
-          if (z < vMinZ) vMinZ = z;
-          if (z > vMaxZ) vMaxZ = z;
-        }
-      }
-    }
-    let fMinX = Infinity, fMaxX = -Infinity, fMinZ = Infinity, fMaxZ = -Infinity;
-    for (const [x, z] of fallout.footprintOutline!) {
-      if (x < fMinX) fMinX = x;
-      if (x > fMaxX) fMaxX = x;
-      if (z < fMinZ) fMinZ = z;
-      if (z > fMaxZ) fMaxZ = z;
-    }
-    const margin = DEFAULT_FACE_SIDE * 1.5;
-    separated = (vMaxX + margin < fMinX || fMaxX + margin < vMinX || vMaxZ + margin < fMinZ || fMaxZ + margin < vMinZ);
-  }
-
-  if (separated) {
     let builtTotal = 0;
     // 1. Where the structure left: regrow vacated ground and clear dragged stale regions.
     const vacatedOutline = outlineAroundMultiPolygon(fallout.vacatedGround!);
@@ -226,18 +201,23 @@ export function repairTerrainCut(
     return builtTotal;
   }
 
-  // Single cut (in-place edit, overlapping movement, creation, or pure deletion)
+  // Single cut (creation, pure deletion, or pure vacated without footprint)
   const outline =
     hasFootprint
       ? fallout.footprintOutline!
-      : (consumed.length > 0
-          ? outlineAroundConsumed(consumed)
-          : (hasVacated ? outlineAroundMultiPolygon(fallout.vacatedGround!) : []));
+      : (hasVacated
+          ? outlineAroundMultiPolygon(fallout.vacatedGround!)
+          : (consumed.length > 0 ? outlineAroundConsumed(consumed) : []));
   if (outline.length < 3) return 0;
+
+  const draggedKeys = new Set((fallout.draggedSurfaceKeys ?? []).map((k) => k.join(" ")));
+  const covered = (hasVacated && !hasFootprint)
+    ? consumed.filter((t) => draggedKeys.has(t.surfaceKey.join(" ")) || (fallout.vacatedGround && fallout.vacatedGround.some((p) => p[0] && topologyIntersectsPolygon(t, p[0]))))
+    : consumed;
 
   const outcome = executeTerrainCut(runtime, {
     area: { outline },
-    coveredRegions: consumed.map((topology) => ({
+    coveredRegions: covered.map((topology) => ({
       surfaceKey: topology.surfaceKey,
       surfaceType: topology.surfaceType,
     })),
