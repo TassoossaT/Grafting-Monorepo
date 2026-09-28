@@ -13,6 +13,14 @@ import type { ConstructionPosition, ConstructionRegionTopology } from "@/ports";
  * again -- nothing is stored, nothing asks what the structure is.
  */
 
+/*
+ * Calibration. These values are global for now: every cutting type reads the
+ * same ones. They are to move into the VTT's global calibration menu, and
+ * later to be declared per type and per interaction -- a road and a platform,
+ * a creation and an edit, meeting the ground differently (see `cut` in
+ * `structure-types/creation-interaction.ts`).
+ */
+
 /**
  * How far above the ground a structure's surface may stand and still rest on
  * it, the ground rising to meet it. Well short of a storey, well past the
