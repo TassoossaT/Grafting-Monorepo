@@ -39,7 +39,8 @@ function slopedTerrain(runtime, session) {
   const regions = [];
   for (let i = 0; i < cells; i++) {
     for (let j = 0; j < cells; j++) {
-      const ring = [id(i, j), id(i, j + 1), id(i + 1, j + 1), id(i + 1, j)];
+      // Counter-clockwise in plan, as the ground the generator lays winds: a seam against the other way refuses every cell.
+      const ring = [id(i, j), id(i + 1, j), id(i + 1, j + 1), id(i, j + 1)];
       regions.push({ regionId: `q:${i}:${j}`, boundary: ring.map((a, n) => use(a, ring[(n + 1) % 4])), surfaceType: "terrain", physical: true });
     }
   }

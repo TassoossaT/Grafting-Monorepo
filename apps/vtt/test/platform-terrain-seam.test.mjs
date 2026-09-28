@@ -45,7 +45,8 @@ function bowl(runtime, session) {
   };
   const regions = [];
   for (let i = 0; i < cells; i++) for (let j = 0; j < cells; j++) {
-    const ring = [id(i, j), id(i, j + 1), id(i + 1, j + 1), id(i + 1, j)];
+    // Counter-clockwise in plan, as the ground the generator lays winds: a seam against the other way refuses every cell.
+    const ring = [id(i, j), id(i + 1, j), id(i + 1, j + 1), id(i, j + 1)];
     regions.push({ regionId: `q:${i}:${j}`, boundary: ring.map((a, n) => use(a, ring[(n + 1) % 4])), surfaceType: "terrain", physical: true });
   }
   runtime.addPatch({ nodes, edges: [...edges.values()], regions });
@@ -84,6 +85,23 @@ for (const [label, from, to] of [
 
       assert.equal(calls.feedback.at(-1)?.tone, "success", JSON.stringify(calls.feedback));
       assert.equal(bareSides(runtime), 0, "no side of the platform is left without ground against it");
+      // And no hole in the ground round it: every point just off its outline has ground over it.
+      const ground = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "terrain");
+      const covered = (x, z) => ground.some((t) => {
+        const ring = t.outerLoops[0].map((use) => t.nodes.find((n) => n.id === use.startNodeId).position);
+        let inside = false;
+        for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+          const a = ring[i], b = ring[j];
+          if ((a.z > z) !== (b.z > z) && x < ((b.x - a.x) * (z - a.z)) / (b.z - a.z) + a.x) inside = !inside;
+        }
+        return inside;
+      });
+      const [x0, x1] = [Math.min(from[0], to[0]), Math.max(from[0], to[0])], [z0, z1] = [Math.min(from[1], to[1]), Math.max(from[1], to[1])];
+      const around = [];
+      for (let t = 0.07; t < 1; t += 0.1) {
+        around.push([x0 + (x1 - x0) * t, z0 - 0.3], [x0 + (x1 - x0) * t, z1 + 0.3], [x0 - 0.3, z0 + (z1 - z0) * t], [x1 + 0.3, z0 + (z1 - z0) * t]);
+      }
+      assert.deepEqual(around.filter(([x, z]) => !covered(x, z)), [], "no hole in the ground round the platform");
     } finally {
       console.info = info;
       console.warn = warn;

@@ -3615,7 +3615,7 @@ export function largestOuterRing(area: PlanarArea): readonly (readonly [number, 
   for (const piece of area) {
   const ring = piece[0];
   if (ring === undefined || ring.length < 3) continue;
-  const size = Math.abs(twiceArea(ring));
+  const size = Math.abs(twiceSignedAreaXZ(ring));
 
 // src/composition/tabletop/effects/effect-commit.ts
 export interface EffectCommitRuntime extends TabletopReactionRuntime {
@@ -3729,6 +3729,13 @@ export const HANDLE_GLYPHS: Readonly<Record<SceneHandleKind | "vertex", RenderHa
   /** A span's midpoint: bend it, or click to insert a point. */
   midpoint: "midpoint",
   /** A wall run's own height widget. */
+export const HANDLE_DONE: Readonly<Record<GlobalHandleKind, string>> = {
+  pivot: "Estrutura movida.", rotate: "Estrutura girada.", height: "Altura atualizada.", turns: "Voltas atualizadas.",
+  radius: "Raio atualizado.", origin: "Ponta movida.", destination: "Ponta movida.",
+  originHeight: "Inclinação atualizada.", destinationHeight: "Inclinação atualizada.",
+  side: "Lado ajustado.", corner: "Canto ajustado.",
+  foot: "Coluna movida.", top: "Altura atualizada.", detach: "Estrutura solta.",
+  };
 
 // src/composition/tabletop/index.ts
 export type { CreateTabletopRuntimeInput } from "./create-tabletop-runtime.ts";
@@ -3811,6 +3818,49 @@ export interface TabletopRuntime extends BezierPort {
   * own policy. The runtime deliberately does not resolve policy itself:
 export class AppTabletopRuntime implements TabletopRuntime {
   readonly #listeners = new Set<TabletopRuntimeListener>();
+
+// src/composition/tabletop/terrain/constraint-rings.ts
+export function anchoredConstraints(
+  rings: readonly (readonly ConstructionRegionEdge[])[],
+  positionOf: ReadonlyMap<ConstructionNodeId, { readonly x: number; readonly z: number }>,
+  startingIndex: number,
+  anchored: ReadonlySet<ConstructionNodeId>,
+  /** Sources numbered just before, from `startingIndex` on: a node already among them keeps its number. */
+  before: readonly ConstructionNodeId[] = [],
+  withEdges = false,
+export function buildConstraintRings(
+  targetPolygon: PlanarArea,
+  faceSize: number,
+  perimeters: ConstraintTable,
+  /**
+  * Whether a corner lies on a structure's side -- where the ground meets it,
+  * a place a cut gave way partway along it. Such a corner is exactly where
+  * the ground must meet that side, so it takes a node only standing right
+
+// src/composition/tabletop/terrain/structure-contact.ts
+export interface StructureMeeting {
+  /** Where the structures rest on the ground: the area the ground goes round. */
+  readonly area: PlanarArea;
+  /** The structures, as the fill reads back which edges already have a face on them. */
+  readonly seeds: readonly { readonly seed: readonly string[]; readonly surfaceType: string }[];
+  /** Whether a node is a structure's -- never a height the ground should take. */
+  holds(nodeId: ConstructionNodeId): boolean;
+  /** The structures' outlines as constraint rings, numbered from `startingIndex`. */
+export const NO_STRUCTURES: StructureMeeting = Object.freeze({
+  area: [],
+  seeds: [],
+  holds: () => false,
+  constraints: () => ({ rings: [], sources: [] }),
+  liesOnSide: () => false,
+  heightAt: () => undefined,
+  });
+export function meetStructures(
+  runtime: TerrainCutRuntime,
+  bounds: ConstructionTopologyBoundsQuery,
+  groundType: string,
+  terrainStanding: readonly ConstructionRegionTopology[],
+  ): StructureMeeting {
+  const standingHere = timePhase("estruturas no lugar", () => runtime.getRegionTopologiesInBounds(bounds));
 
 // src/composition/tabletop/terrain/terrain-constraints.ts
 export interface ConstraintRing {
@@ -3896,14 +3946,6 @@ export function adoptContourNodes(
   positionOf: (vertex: number) => ConstructionPosition | undefined,
 
 // src/composition/tabletop/terrain/terrain-cut-executor.ts
-export function buildConstraintRings(
-  targetPolygon: PlanarArea,
-  faceSize: number,
-  perimeters: ConstraintTable,
-  /**
-  * Whether a corner lies on a structure's side -- where the ground meets it,
-  * a place a cut gave way partway along it. Such a corner is exactly where
-  * the ground must meet that side, so it takes a node only standing right
 export function executeTerrainCut(
   runtime: TerrainCutRuntime,
   request: StructuralCutRequest,
@@ -4290,6 +4332,28 @@ export function floorLandingAt(floors: readonly ConstructionRegionTopology[], sa
   const under = floorUnder(floors, sample);
 export function floorLandingToward(floors: readonly ConstructionRegionTopology[], sample: PointerSample, from: ConstructionPosition | undefined): FloorLanding | undefined {
   const near = floorLandingAt(floors, sample);
+export function nearestFloorNode(
+  ctx: ToolContext,
+  position: ConstructionPosition,
+  reach: number,
+  levelTolerance: number,
+  ): { readonly node: { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }; readonly distance: number } | undefined {
+  let best: { readonly node: { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }; readonly distance: number } | undefined;
+  for (const floor of floorsOf(ctx)) {
+export function onFloorLevel(ctx: ToolContext, sample: PointerSample, edgeReach: number): ConstructionPosition {
+  let best: { readonly point: ConstructionPosition; readonly y: number } | undefined;
+  for (const floor of floorsOf(ctx)) {
+  const y = floor.nodes[0]?.position.y;
+  if (y === undefined || floor.nodes.some((node) => Math.abs(node.position.y - y) > 1e-6)) continue;
+  const point = sample.ray ? pointerAtHeight(sample, y) : { ...sample.point, y };
+export function floorSideAt(
+  ctx: ToolContext,
+  point: ConstructionPosition,
+  reach: number,
+  cornerClearance: number,
+  levelTolerance: number,
+  ): { readonly point: ConstructionPosition; readonly floor: ConstructionSurfaceKey } | undefined {
+  let best: { readonly point: ConstructionPosition; readonly floor: ConstructionSurfaceKey; readonly off: number } | undefined;
 
 // src/composition/tabletop/tools/core/global-handle-gesture.ts
 export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample, ownsType: (surfaceType: string) => boolean, params?: CurveGestureOptions): CurveGesture | undefined {
@@ -4989,13 +5053,7 @@ export function findWallSurfaceAt(ctx: ToolContext, point: ConstructionPosition)
   let best: { readonly surfaceKey: ConstructionSurfaceKey; readonly perp: number } | undefined;
   for (const span of wallSpans(ctx)) {
   const { perp } = projectOntoSegment(point, span.a, span.b);
-export function onFloorLevel(ctx: ToolContext, sample: PointerSample): ConstructionPosition {
-  let best: { readonly point: ConstructionPosition; readonly y: number } | undefined;
-  for (const floor of ctx.runtime.getAllRegionTopologies()) {
-  if (!hasTrait(floor.surfaceType, "floor")) continue;
-  const y = floor.nodes[0]?.position.y;
-  if (y === undefined || floor.nodes.some((node) => Math.abs(node.position.y - y) > 1e-6)) continue;
-  const point = sample.ray ? pointerAtHeight(sample, y) : { ...sample.point, y };
+export const wallFootAt = (ctx: ToolContext, sample: PointerSample): ConstructionPosition => onFloorLevel(ctx, sample, CORNER_WELD_TOLERANCE);
 export function wallStartAt(ctx: ToolContext, sample: PointerSample): ConstructionPosition {
   if (sample.surfaceRef !== undefined) {
   for (const span of wallSpans(ctx)) {
@@ -5310,6 +5368,7 @@ export interface GlobalHandle {
   readonly pivot: ConstructionPosition;
   /** The structure's type. */
   readonly owner: string;
+export type HandlePart = { readonly kind: "edge"; readonly edgeId: string } | { readonly kind: "vertex"; readonly nodeId: string };
 export type GlobalHandleIntent =
 export type GlobalHandleEdit =
 export interface GlobalHandleProvider {
@@ -5328,7 +5387,7 @@ export function carriesArrows(motion: HandleMotion): boolean {
 
 // src/features/edit-construction/global-handles/index.ts
 export type { GlobalHandleKind } from "./global-handle-ids.ts";
-export type { GlobalHandle, GlobalHandleEdit, GlobalHandleIntent, GlobalHandleProvider, GlobalHandleScene } from "./global-handle.ts";
+export type { GlobalHandle, GlobalHandleEdit, GlobalHandleIntent, GlobalHandleProvider, GlobalHandleScene, HandlePart } from "./global-handle.ts";
 export type { HandleMotion } from "./handle-motion.ts";
 
 // src/features/edit-construction/history/edit-history.ts
@@ -5468,7 +5527,7 @@ export const HEIGHT_AXIS: readonly EditAxis[] = Object.freeze(["y"] as const);
 
 // src/features/edit-construction/orchestration/detach.ts
 export function sharedNodes(topologies: readonly ConstructionRegionTopology[], members: readonly ConstructionRegionTopology[], isGround: (surfaceType: string) => boolean): ReadonlySet<string> {
-  const own = new Set(members.map(keyOf));
+  const own = new Set(members.map(faceKey));
 export function detachStructure(
   topologies: readonly ConstructionRegionTopology[],
   members: readonly ConstructionRegionTopology[],
@@ -5637,6 +5696,20 @@ export const uprightHandleProvider: GlobalHandleProvider = {
   const candidates = scene.topologies.filter((topology) => {
   const type = structureTypeFor(topology.surfaceType);
 
+// src/features/edit-construction/orchestration/handle-release.ts
+export function partNodes(topologies: readonly ConstructionRegionTopology[], target: GlobalHandle["target"]): readonly string[] {
+  if (target?.kind === "vertex") return [target.nodeId];
+  if (target?.kind !== "edge") return [];
+  const use = topologies.flatMap((topology) => topology.outerLoops.flat()).find((candidate) => candidate.edgeId === target.edgeId);
+export function snapAnchorsOf(scene: GlobalHandleScene, handle: GlobalHandle): readonly SnapAnchor[] {
+  const at = new Map(scene.graph.nodes.map((node) => [node.id, node.position]));
+export function snapMagnetsOf(scene: GlobalHandleScene, handle: GlobalHandle): readonly Magnet[] {
+  const faces = scene.topologies.filter((topology) => handle.faces?.includes(faceKey(topology)));
+export function releasePart(topologies: readonly ConstructionRegionTopology[], graph: GlobalHandleScene["graph"], part: RegionPart, operationId: string): ApplyPatchReplacementRequest | undefined {
+  const face = topologies.find((topology) => faceKey(topology) === surfaceKeyText(part.seed));
+export function joinWhereLanded(topologies: readonly ConstructionRegionTopology[], ids: readonly string[], operationId: string): ApplyPatchReplacementRequest | undefined {
+  const floors = topologies.filter((topology) => hasTrait(topology.surfaceType, "floor"));
+
 // src/features/edit-construction/orchestration/index.ts
 export type {
   AtomicEditOp,
@@ -5681,7 +5754,7 @@ export function standingOn(
   bases: readonly ConstructionRegionTopology[],
   isGround: (surfaceType: string) => boolean,
   ): readonly ConstructionRegionTopology[] {
-  const own = new Set(bases.map(keyOf));
+  const own = new Set(bases.map(faceKey));
 export function fitRigidMotion(pairs: readonly { readonly from: ConstructionPosition; readonly to: ConstructionPosition }[]): Place {
   const n = pairs.length;
   const mean = (pick: (pair: (typeof pairs)[number]) => number) => pairs.reduce((sum, pair) => sum + pick(pair), 0) / n;
@@ -5697,7 +5770,7 @@ export function joinedStructures(
   seeds: readonly ConstructionRegionTopology[],
   isGround: (surfaceType: string) => boolean,
   ): readonly ConstructionRegionTopology[] {
-  const members = new Map(seeds.map((topology) => [keyOf(topology), topology]));
+  const members = new Map(seeds.map((topology) => [faceKey(topology), topology]));
 
 // src/features/edit-construction/orchestration/scene-handles.ts
 export type SceneHandleKind = "anchor" | "midpoint" | "panelHeight" | GlobalHandleKind;
@@ -5763,7 +5836,7 @@ export interface WeldLink {
   /** Whether it was welded whole -- both nodes on the floors' outline -- rather than sharing one corner. */
   readonly welded: boolean;
   }
-export function weldsOf(graph: ConstructionGraphSnapshot, topologies: readonly ConstructionRegionTopology[], face: ConstructionRegionTopology): readonly WeldLink[] {
+export function endJoinsOf(graph: ConstructionGraphSnapshot, topologies: readonly ConstructionRegionTopology[], face: ConstructionRegionTopology): readonly WeldLink[] {
   // Only floors are what an end is joined to; the ground laid against them follows them.
   const floors = topologies.filter((topology) => hasTrait(topology.surfaceType, "floor"));
 export function reshapedWelds(links: readonly WeldLink[], positions: ReadonlyMap<string, ConstructionPosition>, moves: ReadonlyMap<string, ConstructionPosition>, anyMove = false): readonly WeldLink[] {
@@ -5774,7 +5847,7 @@ export function unweld(topologies: readonly ConstructionRegionTopology[], links:
 export function reweld(topologies: readonly ConstructionRegionTopology[], links: readonly WeldLink[], operationId: string): { readonly request: ApplyPatchReplacementRequest | undefined; readonly welded: number } {
   const positions = new Map(topologies.flatMap((topology) => topology.nodes.map((node) => [node.id, node.position] as const)));
 export function rejoinNodes(topologies: readonly ConstructionRegionTopology[], links: readonly WeldLink[], operationId: string): { readonly request: ApplyPatchReplacementRequest | undefined; readonly joined: number } {
-  const floorKeys = new Set(links.flatMap((link) => link.floors.map(keyOf)));
+  const floorKeys = new Set(links.flatMap((link) => link.floors.map(surfaceKeyText)));
 
 // src/features/edit-construction/spine/index.ts
 export type { SpineChain } from "./spine-chains.ts";
@@ -6568,6 +6641,8 @@ export function traitsOf(surfaceType: string): ReadonlySet<StructureTrait> {
   }
 export function hasTrait(surfaceType: string, trait: StructureTrait): boolean {
   return traitsOf(surfaceType).has(trait);
+export const isGroundType = (surfaceType: string): boolean => hasTrait(surfaceType, "ground");
+export const isSolidType = (surfaceType: string): boolean => structureTypeFor(surfaceType)?.rigid === true;
 export function surfaceTypesWithTrait(trait: StructureTrait): readonly string[] {
   return STRUCTURE_TYPE_DEFINITIONS.filter((definition) => definition.traits.includes(trait)).map((definition) => definition.surfaceType);
 export function resolvePolicy(topology: ConstructionRegionTopology, target: EditTarget): RolePolicy {
@@ -7125,6 +7200,21 @@ export function reshapeCurve(
 export function curveSegments(port: Pick<BezierPort, "curveBatch">, curve: CubicBezier): Float32Array {
   const [result] = port.curveBatch({ tolerance: 0.025, commands: [{ kind: "sample", curves: [curve] }] });
 
+// src/features/edit-construction/topology/face-rewrite.ts
+export interface EdgePiece {
+  readonly edgeId: string;
+  readonly from: string;
+  readonly to: string;
+  }
+export function renamedPiece(use: EdgeUse, rename: (nodeId: string) => string, operationId: string): EdgePiece {
+  const from = rename(use.startNodeId), to = rename(use.endNodeId);
+export function rewriteFaces(
+  faces: readonly ConstructionRegionTopology[],
+  piecesOf: (use: EdgeUse) => readonly EdgePiece[],
+  operationId: string,
+  ): { readonly edges: readonly ConstructionPatchEdge[]; readonly regions: readonly ConstructionPatchRegion[] } {
+  const edges = new Map<string, ConstructionPatchEdge>();
+
 // src/features/edit-construction/topology/floor-weld.ts
 export const LANDING_REACH = 0.75;
 export interface PlanDirection {
@@ -7203,13 +7293,12 @@ export function floorsWithout(floors: readonly ConstructionRegionTopology[], run
 // src/features/edit-construction/topology/ground-contact.ts
 export const GROUND_CONTACT_CLEARANCE = 1.5;
 export const GROUND_THROUGH_TOLERANCE = 0.05;
+export const GROUND_SIDE_REST_ROOM = 0.25;
 export type GroundHeightAt = (point: Plan) => number | undefined;
 export type ContactCell = readonly (readonly [number, number])[];
 export type GroundContact =
 export function surfaceHeightOf(topology: ConstructionRegionTopology): ((point: Plan) => number) | undefined {
-  const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
-export function insideFace(topology: ConstructionRegionTopology, p: Plan): boolean {
-  const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
+  const plane = planeOf(faceRings(topology)[0] ?? []);
 export function groundContactOf(topology: ConstructionRegionTopology, groundAt: GroundHeightAt, cell: number, clearance = GROUND_CONTACT_CLEARANCE, held: ReadonlySet<string> = new Set()): GroundContact {
   const surfaceAt = surfaceHeightOf(topology);
 export const GROUND_CONTACT_CELL = 0.5;
@@ -7248,6 +7337,55 @@ export function panelHeightWidgets(
   ): readonly { readonly id: string; readonly position: ConstructionPosition }[] {
   const items: { readonly id: string; readonly position: ConstructionPosition }[] = [];
   const seen = new Set<string>();
+
+// src/features/edit-construction/topology/plan-geometry.ts
+export const surfaceKeyText = (surfaceKey: ConstructionSurfaceKey | readonly string[]): string => surfaceKey.join("\u0000");
+export const faceKey = (topology: Pick<ConstructionRegionTopology, "surfaceKey">): string => surfaceKeyText(topology.surfaceKey);
+export function insideRing(ring: readonly PlanPoint[], p: PlanPoint): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+  const a = ring[i]!, b = ring[j]!;
+  if ((a.z > p.z) !== (b.z > p.z) && p.x < ((b.x - a.x) * (p.z - a.z)) / (b.z - a.z) + a.x) inside = !inside;
+  }
+export function insideRingXZ(ring: readonly (readonly [number, number])[], p: PlanPoint): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+  const [ax, az] = ring[i]!, [bx, bz] = ring[j]!;
+  if ((az > p.z) !== (bz > p.z) && p.x < ((bx - ax) * (p.z - az)) / (bz - az) + ax) inside = !inside;
+  }
+export function nearestOnSegment(p: PlanPoint, a: PlanPoint, b: PlanPoint): { readonly t: number; readonly x: number; readonly z: number; readonly distance: number } {
+  const dx = b.x - a.x, dz = b.z - a.z, lengthSq = dx * dx + dz * dz;
+  const t = lengthSq < 1e-18 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.z - a.z) * dz) / lengthSq));
+export function twiceSignedArea(ring: readonly PlanPoint[]): number {
+  let twice = 0;
+  for (let i = 0; i < ring.length; i++) {
+  const a = ring[i]!, b = ring[(i + 1) % ring.length]!;
+  twice += a.x * b.z - b.x * a.z;
+  }
+export const twiceSignedAreaXZ = (ring: readonly (readonly [number, number])[]): number => twiceSignedArea(ring.map(([x, z]) => ({ x, z })));
+export function planeOf(ring: readonly ConstructionPosition[]): { readonly normal: ConstructionPosition; readonly centre: ConstructionPosition } | undefined {
+  if (ring.length < 3) return undefined;
+  let nx = 0, ny = 0, nz = 0;
+  for (let i = 0; i < ring.length; i++) {
+  const a = ring[i]!, b = ring[(i + 1) % ring.length]!;
+  nx += (a.y - b.y) * (a.z + b.z);
+export function faceRings(topology: ConstructionRegionTopology, loops: ConstructionRegionTopology["outerLoops"] = topology.outerLoops): readonly (readonly ConstructionPosition[])[] {
+  const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
+export function insideFace(topology: ConstructionRegionTopology, p: PlanPoint): boolean {
+  return faceRings(topology).some((ring) => insideRing(ring, p)) && !faceRings(topology, topology.holes).some((ring) => insideRing(ring, p));
+export function segmentsCross(a: PlanPoint, b: PlanPoint, c: PlanPoint, d: PlanPoint, tolerance = 0): boolean {
+  const side = (o: PlanPoint, u: PlanPoint, v: PlanPoint) => (u.x - o.x) * (v.z - o.z) - (u.z - o.z) * (v.x - o.x);
+export function segmentGap(p: PlanPoint, q: PlanPoint, a: PlanPoint, b: PlanPoint): number {
+  if (segmentsCross(p, q, a, b)) return 0;
+  return Math.min(nearestOnSegment(p, a, b).distance, nearestOnSegment(q, a, b).distance, nearestOnSegment(a, p, q).distance, nearestOnSegment(b, p, q).distance);
+export function ringCrossesItself(ring: readonly PlanPoint[]): boolean {
+  const closed = ring.length > 1 && ring[0]!.x === ring[ring.length - 1]!.x && ring[0]!.z === ring[ring.length - 1]!.z;
+  const points = closed ? ring.slice(0, -1) : ring;
+  const count = points.length;
+  for (let i = 0; i < count; i += 1) {
+  for (let j = i + 2; j < count; j += 1) {
+  if (i === 0 && j === count - 1) continue;
+  if (segmentsCross(points[i]!, points[(i + 1) % count]!, points[j]!, points[(j + 1) % count]!)) return true;
 
 // src/features/edit-construction/topology/plan-overlap.ts
 export function outlineOf(edges: readonly { readonly start: ConstructionPosition; readonly end: ConstructionPosition; readonly geometry: ConstructionEdgeGeometry }[]): readonly PlanPoint[] {
