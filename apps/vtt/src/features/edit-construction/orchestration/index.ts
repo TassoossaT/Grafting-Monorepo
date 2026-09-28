@@ -30,6 +30,7 @@ export { regenerateWithEndWelds, spineChainEnds, spineEndsLanded } from "./spine
 export { adoptJointEnd, adoptsEnds, endJointNear, freeStructureEnds, weldFreeEndsOnto } from "./free-end-welds.ts";
 export { settleMoves, settlePatch } from "./type-law.ts";
 export { releaseFromSolid } from "./detach.ts";
+export { joinWhereLanded, partNodes, releasePart, snapAnchorsOf, snapMagnetsOf } from "./handle-release.ts";
 export { joinedStructures, standingOn, standsOn } from "./rigid-carry.ts";
 export { outlineMagnets, snapToOutlines, SNAP_REACH, type Magnet, type OutlineSnap, type SnapAnchor } from "./outline-snap.ts";
 export { rejoinNodes, reshapedWelds, reweld, unweld, weldsOf, type WeldLink } from "./weld-pause.ts";

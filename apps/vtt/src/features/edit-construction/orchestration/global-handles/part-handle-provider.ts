@@ -132,7 +132,7 @@ export const partHandleProvider: GlobalHandleProvider = {
             }) ?? run[0]!;
             const side: PartGlobalHandle["target"] = { kind: "edge", edgeId: piece.edgeId };
             if (type.globalHandles?.includes("side") && type.partHandle!(resolvePolicy(member, side).role)) {
-              handles.push({ ...base, id: globalHandleId("side", `${piece.edgeId}@${name}`), kind: "side", target: side, pivot: mid,
+              handles.push({ ...base, id: globalHandleId("side", `${piece.edgeId}@${name}`), kind: "side", target: side, snaps: true, pivot: mid,
                 position: { x: mid.x + out.x * PART_HANDLE_OUT, y: mid.y, z: mid.z + out.z * PART_HANDLE_OUT }, motion: { kind: "line", direction: out } });
             }
             // The corner where this side ends and the next begins.
@@ -145,7 +145,7 @@ export const partHandleProvider: GlobalHandleProvider = {
             // Out between the two sides as they leave the corner -- a curve's own way out there.
             const bisector = { x: run.at(-1)!.outTo.x + next[0]!.outFrom.x, z: run.at(-1)!.outTo.z + next[0]!.outFrom.z };
             const length = Math.hypot(bisector.x, bisector.z) || 1;
-            handles.push({ ...base, id: globalHandleId("corner", `${nodeId}@${name}`), kind: "corner", target: corner, pivot: to,
+            handles.push({ ...base, id: globalHandleId("corner", `${nodeId}@${name}`), kind: "corner", target: corner, snaps: true, pivot: to,
               position: { x: to.x + (bisector.x / length) * PART_HANDLE_OUT, y: to.y, z: to.z + (bisector.z / length) * PART_HANDLE_OUT }, motion: { kind: "plane" } });
           }
         }

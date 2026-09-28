@@ -2,17 +2,13 @@ import {
   arcsFollowing,
   floorsWeldedBy,
   hasTrait,
-  isGroundType,
-  isSolidType,
-  joinedStructures,
-  outlineMagnets,
+  joinWhereLanded,
   rejoinNodes,
-  releaseFromSolid,
+  releasePart,
+  snapAnchorsOf,
+  snapMagnetsOf,
   snapToOutlines,
-  type EditTarget,
-  type Magnet,
   type OutlineSnap,
-  type SnapAnchor,
   reshapedWelds,
   reweld,
   unweld,
@@ -26,7 +22,6 @@ import {
   type GlobalHandle,
   type GlobalHandleEdit,
   type GlobalHandleIntent,
-  type GlobalHandleKind,
   type GlobalHandleScene,
 } from "../../../../features/edit-construction/index.ts";
 import type { ApplyPatchReplacementRequest, ConstructionEdgeGeometry, ConstructionPosition } from "../../../../ports/index.ts";
@@ -36,19 +31,12 @@ import { createConstrainedDrag } from "./constrained-drag.ts";
 import { floorsOf, floorUnder } from "./floor-landing.ts";
 import { commitPatchReplacement, commitRegionEdit, commitStagedRegionEdit } from "../../effects/effect-commit.ts";
 import type { PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
+import { HANDLE_DONE } from "../../handle-glyphs.ts";
 import { surfaceKeyText } from "../../../../features/edit-construction/index.ts";
 
 const CHANNEL = "global-handle";
 const PREVIEW_COLOR = 0xffbc55;
 
-/** What each global handle reports once its edit is committed. */
-const DONE: Readonly<Record<GlobalHandleKind, string>> = {
-  pivot: "Estrutura movida.", rotate: "Estrutura girada.", height: "Altura atualizada.", turns: "Voltas atualizadas.",
-  radius: "Raio atualizado.", origin: "Ponta movida.", destination: "Ponta movida.",
-  originHeight: "Inclinação atualizada.", destinationHeight: "Inclinação atualizada.",
-  side: "Lado ajustado.", corner: "Canto ajustado.",
-  foot: "Coluna movida.", top: "Altura atualizada.", detach: "Estrutura solta.",
-};
 
 function sceneOf(ctx: ToolContext): GlobalHandleScene {
   return { graph: ctx.runtime.getGraphSnapshot(), topologies: ctx.runtime.getAllRegionTopologies(), cloudFor: (request) => ctx.runtime.cloudFor(request) };
@@ -136,64 +124,6 @@ class NeedsPause extends Error {
   }
 }
 
-
-/** The handles whose drag snaps onto other structures' outlines: those moving a structure, or a part of it, across the plan. */
-const SNAPS: ReadonlySet<GlobalHandleKind> = new Set(["pivot", "foot", "side", "corner"]);
-
-/** The nodes of the part a handle drags -- its corner, or its side's two ends. */
-function partNodes(topologies: GlobalHandleScene["topologies"], target: EditTarget | undefined): readonly string[] {
-  if (target?.kind === "vertex") return [target.nodeId];
-  if (target?.kind !== "edge") return [];
-  const use = topologies.flatMap((topology) => topology.outerLoops.flat()).find((candidate) => candidate.edgeId === target.edgeId);
-  return use ? [use.startNodeId, use.endNodeId] : [];
-}
-
-/** What of `handle`'s drag snaps: its part's nodes, or -- dragging the whole -- the lowest of its structure's. */
-function snapAnchors(scene: GlobalHandleScene, handle: GlobalHandle): readonly SnapAnchor[] {
-  const at = new Map(scene.graph.nodes.map((node) => [node.id, node.position]));
-  let ids = partNodes(scene.topologies, (handle as { readonly target?: EditTarget }).target);
-  if (ids.length === 0) {
-    const low = Math.min(...handle.nodeIds.map((id) => at.get(id)?.y ?? Infinity));
-    ids = handle.nodeIds.filter((id) => Math.abs((at.get(id)?.y ?? Infinity) - low) < 0.05);
-  }
-  return ids.flatMap((id) => { const position = at.get(id); return position ? [{ id, position }] : []; });
-}
-
-/** What `handle`'s drag snaps onto: every other structure's outline -- but, dragging the whole, not what goes with it. */
-function magnetsFor(scene: GlobalHandleScene, handle: GlobalHandle): readonly Magnet[] {
-  const faces = scene.topologies.filter((topology) => handle.faces?.includes(surfaceKeyText(topology.surfaceKey)));
-  const moving = handle.kind === "pivot" ? joinedStructures(scene.topologies, faces, isGroundType) : faces;
-  return outlineMagnets(scene.topologies, new Set(moving.map((topology) => surfaceKeyText(topology.surfaceKey))), isGroundType);
-}
-
-/**
- * A part of a structure that is not solid -- a wall's foot, its foot run --
- * held with a solid one -- the platform it stands on -- is let go of for the
- * drag, so it slides along instead of carrying the solid one whole; where it
- * lands on an outline it is joined again. A structure joined by a weld has
- * its own pause instead. `undefined` when there is nothing to let go.
- */
-function releaseFor(topologies: GlobalHandleScene["topologies"], graph: GlobalHandleScene["graph"], part: RegionPart, operationId: string): ApplyPatchReplacementRequest | undefined {
-  const face = topologies.find((topology) => surfaceKeyText(topology.surfaceKey) === surfaceKeyText(part.seed));
-  if (!face || isSolidType(face.surfaceType) || weldsOf(graph, topologies, face).length > 0) return undefined;
-  return releaseFromSolid(topologies, new Set(partNodes(topologies, part.target)), isGroundType, isSolidType, operationId);
-}
-
-/**
- * The nodes among `ids` that stand on a floor's outline without being its --
- * joined to it there: the floor passes through them, cut where they stand
- * partway along a side. Nothing is moved to join.
- */
-function joinWhereLanded(ctx: ToolContext, ids: readonly string[], operationId: string, transactionId: string): void {
-  const topologies = ctx.runtime.getAllRegionTopologies();
-  const floors = topologies.filter((topology) => hasTrait(topology.surfaceType, "floor"));
-  const onFloor = new Set(floors.flatMap((floor) => floor.nodes.map((node) => node.id)));
-  const loose = [...new Set(ids)].filter((id) => !onFloor.has(id));
-  if (loose.length === 0) return;
-  const links = loose.map((id) => ({ rung: { edgeId: id, startNodeId: id, endNodeId: id }, floors: floors.map((floor) => floor.surfaceKey), welded: false }));
-  const joined = rejoinNodes(topologies, links, operationId);
-  if (joined.request) ctx.runtime.applyPatchReplacement(joined.request, "local", transactionId);
-}
 
 /** `ops` as the nodes they place and the edges they retype, every curved edge they move an end of carried along. */
 function placedBy(ops: readonly AtomicEditOp[], topologies: GlobalHandleScene["topologies"]): Placed {
@@ -343,7 +273,7 @@ function commitJoining(ctx: ToolContext, handle: GlobalHandle, edit: GlobalHandl
   const { recorded } = commitStagedRegionEdit(ctx.runtime, {
     before: () => {
       if (!release) return;
-      const request = releaseFor(ctx.runtime.getAllRegionTopologies(), ctx.runtime.getGraphSnapshot(), release, `${operationId}:release`);
+      const request = releasePart(ctx.runtime.getAllRegionTopologies(), ctx.runtime.getGraphSnapshot(), release, `${operationId}:release`);
       if (request) ctx.runtime.applyPatchReplacement(request, "local", transactionId);
     },
     ops: () => {
@@ -358,7 +288,10 @@ function commitJoining(ctx: ToolContext, handle: GlobalHandle, edit: GlobalHandl
       placed = ops.flatMap((op) => (op.kind === "move-vertex" ? [op.nodeId] : []));
       return ops;
     },
-    after: () => joinWhereLanded(ctx, [...placed, ...magnet], `${operationId}:join`, transactionId),
+    after: () => {
+      const joined = joinWhereLanded(ctx.runtime.getAllRegionTopologies(), [...placed, ...magnet], `${operationId}:join`);
+      if (joined) ctx.runtime.applyPatchReplacement(joined, "local", transactionId);
+    },
   }, { transactionId });
   if (recorded) ctx.history.record({ kind: "transaction", transactionId });
   return true;
@@ -430,8 +363,8 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
   let edit: GlobalHandleEdit | undefined;
   let ended = false;
   // Snapping onto the other structures' outlines, as they stood when the drag began -- never while lifting.
-  const snap = SNAPS.has(handle.kind) && handle.faces !== undefined && params?.mode !== "elevation"
-    ? { anchors: snapAnchors(scene, handle), magnets: magnetsFor(scene, handle) }
+  const snap = handle.snaps === true && handle.faces !== undefined && params?.mode !== "elevation"
+    ? { anchors: snapAnchorsOf(scene, handle), magnets: snapMagnetsOf(scene, handle) }
     : undefined;
   let snapped: OutlineSnap | undefined;
 
@@ -481,7 +414,7 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
           // A part held with a solid structure slides off it: let go for the drag, so the preview is the real thing.
           if (!pause && !released) {
             const transactionId = `${operationId}:release`;
-            const request = releaseFor(scene.topologies, scene.graph, planned, transactionId);
+            const request = releasePart(scene.topologies, scene.graph, planned, transactionId);
             if (request) {
               ctx.runtime.transact(transactionId, "local", () => ctx.runtime.applyPatchReplacement(request, "local", transactionId));
               released = { transactionId, was: scene };
@@ -535,7 +468,7 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
         // Named after a node the edit keeps, so the same id finds it where it now stands.
         const moved = shownGlobalHandleAt(sceneOf(ctx), handle.id);
         ctx.reportSelection(moved ? { id: moved.id, point: moved.position } : undefined);
-        ctx.reportFeedback({ tone: "success", message: DONE[handle.kind] });
+        ctx.reportFeedback({ tone: "success", message: HANDLE_DONE[handle.kind] });
       } catch (error) {
         ctx.reportFeedback({ tone: "error", message: `Estrutura preservada: ${error instanceof Error ? error.message : String(error)}` });
       }

@@ -1,4 +1,4 @@
-import type { SceneHandleKind } from "../../features/edit-construction/index.ts";
+import type { GlobalHandleKind, SceneHandleKind } from "../../features/edit-construction/index.ts";
 import type { RenderHandleGlyph } from "../../ports/index.ts";
 
 /**
@@ -37,4 +37,13 @@ export const HANDLE_GLYPHS: Readonly<Record<SceneHandleKind | "vertex", RenderHa
   top: "height",
   /** Let go of what the structure is joined to. */
   detach: "unlink",
+};
+
+/** What each whole-structure handle reports once its edit is committed -- said here, with how it looks. */
+export const HANDLE_DONE: Readonly<Record<GlobalHandleKind, string>> = {
+  pivot: "Estrutura movida.", rotate: "Estrutura girada.", height: "Altura atualizada.", turns: "Voltas atualizadas.",
+  radius: "Raio atualizado.", origin: "Ponta movida.", destination: "Ponta movida.",
+  originHeight: "Inclinação atualizada.", destinationHeight: "Inclinação atualizada.",
+  side: "Lado ajustado.", corner: "Canto ajustado.",
+  foot: "Coluna movida.", top: "Altura atualizada.", detach: "Estrutura solta.",
 };

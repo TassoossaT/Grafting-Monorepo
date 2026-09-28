@@ -45,7 +45,14 @@ export interface GlobalHandle {
    * sides facing the viewer.
    */
   readonly facing?: { readonly x: number; readonly z: number };
+  /** The part of the structure it drags -- a side, a corner; absent when it moves the whole. */
+  readonly target?: HandlePart;
+  /** Whether what it drags snaps onto other structures' outlines (`orchestration/outline-snap.ts`). */
+  readonly snaps?: boolean;
 }
+
+/** One part of a face a handle drags: a side, or a corner. */
+export type HandlePart = { readonly kind: "edge"; readonly edgeId: string } | { readonly kind: "vertex"; readonly nodeId: string };
 
 /** What a gesture on a global handle asks for, whatever the structure. */
 export type GlobalHandleIntent =
@@ -91,7 +98,7 @@ export type GlobalHandleEdit =
   | {
       readonly kind: "region-part";
       readonly seed: ConstructionSurfaceKey;
-      readonly target: { readonly kind: "edge"; readonly edgeId: string } | { readonly kind: "vertex"; readonly nodeId: string };
+      readonly target: HandlePart;
       readonly delta: ConstructionPosition;
     }
   | {

@@ -98,7 +98,7 @@ export const uprightHandleProvider: GlobalHandleProvider = {
             const id = globalHandleId("foot", `${foot}@${name}@${i}`);
             if (seen.has(id) || !declares("foot", footTarget)) continue;
             seen.add(id);
-            handles.push({ ...base, id, kind: "foot", target: footTarget, pivot: f, position: off(f, n, 0.05), motion: { kind: "plane" }, facing: n });
+            handles.push({ ...base, id, kind: "foot", target: footTarget, snaps: true, pivot: f, position: off(f, n, 0.05), motion: { kind: "plane" }, facing: n });
           }
           const topTarget = { kind: "vertex" as const, nodeId: top };
           const topId = globalHandleId("top", `${top}@${name}`);
@@ -119,7 +119,7 @@ export const uprightHandleProvider: GlobalHandleProvider = {
             const id = globalHandleId("side", `${use.edgeId}@${name}@${i}`);
             if (seen.has(id) || !declares("side", sideTarget)) continue;
             seen.add(id);
-            handles.push({ ...base, id, kind: "side", target: sideTarget, pivot: mid, position: off(mid, n, height / 2), motion: { kind: "line", direction: n }, facing: n });
+            handles.push({ ...base, id, kind: "side", target: sideTarget, snaps: true, pivot: mid, position: off(mid, n, height / 2), motion: { kind: "line", direction: n }, facing: n });
           }
         }
       }
