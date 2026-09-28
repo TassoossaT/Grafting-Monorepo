@@ -4,6 +4,7 @@ import type { ConstructionPosition, ConstructionRegionTopology } from "../../../
 import { pointerAtHeight } from "./pointer-ray.ts";
 import { spineBodyTarget } from "./spine-body-target.ts";
 import type { PointerSample, ToolContext } from "./tool-context.ts";
+import { faceRings, insideFace, planeOf, surfaceKeyText } from "../../../../features/edit-construction/index.ts";
 
 /**
  * Which structure's handles show: the one under the pointer, else the one
@@ -21,18 +22,7 @@ const REACH = 1.2;
 /** How high above a structure's middle the handles standing over it reach. */
 const ABOVE = 2;
 
-const keyOf = (surfaceKey: readonly string[]) => surfaceKey.join("\u0000");
 export const NO_FOCUS: HandleFocus = Object.freeze({ faces: new Set<string>(), spineNodes: new Set<string>() });
-
-/** Whether `p` is inside `ring` in plan. */
-function insideRing(ring: readonly ConstructionPosition[], p: { readonly x: number; readonly z: number }): boolean {
-  let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const a = ring[i]!, b = ring[j]!;
-    if ((a.z > p.z) !== (b.z > p.z) && p.x < ((b.x - a.x) * (p.z - a.z)) / (b.z - a.z) + a.x) inside = !inside;
-  }
-  return inside;
-}
 
 /**
  * Where the pointer's ray first meets the face `topology` -- its plane, within
@@ -44,30 +34,15 @@ function insideRing(ring: readonly ConstructionPosition[], p: { readonly x: numb
 function rayMeets(sample: PointerSample, topology: ConstructionRegionTopology): { readonly t: number; readonly point: ConstructionPosition } | undefined {
   const ray = sample.ray;
   if (!ray) return undefined;
-  const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
-  const ringOf = (loop: ConstructionRegionTopology["outerLoops"][number]) => loop.map((use) => at.get(use.startNodeId)!);
-  const outer = topology.outerLoops.map(ringOf);
-  const points = outer.flat();
-  if (points.length < 3) return undefined;
-  // The face's plane, by Newell's method over its outline.
-  let nx = 0, ny = 0, nz = 0;
-  for (const ring of outer) for (let i = 0; i < ring.length; i++) {
-    const a = ring[i]!, b = ring[(i + 1) % ring.length]!;
-    nx += (a.y - b.y) * (a.z + b.z);
-    ny += (a.z - b.z) * (a.x + b.x);
-    nz += (a.x - b.x) * (a.y + b.y);
-  }
-  const length = Math.hypot(nx, ny, nz);
-  if (length < 1e-12) return undefined;
-  const n = { x: nx / length, y: ny / length, z: nz / length };
-  const p0 = points[0]!;
+  const plane = planeOf(faceRings(topology)[0] ?? []);
+  if (!plane) return undefined;
+  const { normal: n, centre: c } = plane;
   const facing = n.x * ray.direction.x + n.y * ray.direction.y + n.z * ray.direction.z;
   if (Math.abs(facing) < 1e-9) return undefined;
-  const t = (n.x * (p0.x - ray.origin.x) + n.y * (p0.y - ray.origin.y) + n.z * (p0.z - ray.origin.z)) / facing;
+  const t = (n.x * (c.x - ray.origin.x) + n.y * (c.y - ray.origin.y) + n.z * (c.z - ray.origin.z)) / facing;
   if (t <= 0) return undefined;
   const point = { x: ray.origin.x + ray.direction.x * t, y: ray.origin.y + ray.direction.y * t, z: ray.origin.z + ray.direction.z * t };
-  if (!outer.some((ring) => insideRing(ring, point)) || topology.holes.map(ringOf).some((ring) => insideRing(ring, point))) return undefined;
-  return { t, point };
+  return insideFace(topology, point) ? { t, point } : undefined;
 }
 
 /** The face of a type `owns` accepts that `sample` is over: the nearest its ray meets, else the one the renderer's pick met. */
@@ -133,7 +108,7 @@ function focusOn(ctx: ToolContext, sample: PointerSample, owns: (surfaceType: st
   const under = find(ctx, sample, owns);
   if (!under) return undefined;
   const { topology } = under;
-  if (structureTypeFor(topology.surfaceType)?.spine === undefined) return { faces: new Set([keyOf(topology.surfaceKey)]), spineNodes: new Set() };
+  if (structureTypeFor(topology.surfaceType)?.spine === undefined) return { faces: new Set([surfaceKeyText(topology.surfaceKey)]), spineNodes: new Set() };
   const body = spineBodyTarget(ctx, { ...sample, point: under.point, surfaceRef: surfaceRefFromNodeSet(topology.surfaceKey) }, undefined, owns);
   if (!body?.sample.nodeId) return undefined;
   const graph = ctx.runtime.getGraphSnapshot();
@@ -143,7 +118,7 @@ function focusOn(ctx: ToolContext, sample: PointerSample, owns: (surfaceType: st
 
 /** Every point of the focused structure, where it stands. */
 function focusPoints(ctx: ToolContext, focus: HandleFocus): readonly ConstructionPosition[] {
-  const faces = ctx.runtime.getAllRegionTopologies().filter((topology) => focus.faces.has(keyOf(topology.surfaceKey)));
+  const faces = ctx.runtime.getAllRegionTopologies().filter((topology) => focus.faces.has(surfaceKeyText(topology.surfaceKey)));
   const nodes = faces.flatMap((face) => face.nodes.map((node) => node.position));
   if (focus.spineNodes.size === 0) return nodes;
   return [...nodes, ...ctx.runtime.getGraphSnapshot().nodes.filter((node) => focus.spineNodes.has(node.id)).map((node) => node.position)];

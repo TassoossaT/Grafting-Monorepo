@@ -5,6 +5,7 @@ import type { GlobalHandle, GlobalHandleProvider, GlobalHandleScene } from "../.
 import { resolvePolicy, structureTypeFor } from "../../structure-types/index.ts";
 import type { EditTarget } from "../atomic-edit.ts";
 import { handleNodeName } from "./handle-name.ts";
+import { faceKey } from "../../topology/plan-geometry.ts";
 
 /**
  * Handles of structures standing upright -- faces rising from a foot run to
@@ -26,7 +27,6 @@ const OFF_FACE = 0.45;
 /** How far above a post's top its height handle stands. */
 const ABOVE_TOP = 0.35;
 
-const keyOf = (topology: ConstructionRegionTopology) => topology.surfaceKey.join("\u0000");
 
 /** An upright handle: the generic handle, with the face and the part it edits. */
 export interface UprightGlobalHandle extends GlobalHandle {
@@ -62,18 +62,18 @@ export const uprightHandleProvider: GlobalHandleProvider = {
       const type = structureTypeFor(topology.surfaceType);
       return type?.partHandle !== undefined && type.spine === undefined && isUpright(topology);
     });
-    const byKey = new Map(candidates.map((topology) => [keyOf(topology), topology]));
+    const byKey = new Map(candidates.map((topology) => [faceKey(topology), topology]));
     const placed = new Set<string>();
     const handles: UprightGlobalHandle[] = [];
     for (const topology of candidates) {
-      if (placed.has(keyOf(topology))) continue;
+      if (placed.has(faceKey(topology))) continue;
       const members = [topology, ...scene.cloudFor({ seed: topology.surfaceKey, surfaceType: topology.surfaceType }).surfaceKeys
         .map((key) => byKey.get(key.join("\u0000")))
         .filter((member): member is ConstructionRegionTopology => member !== undefined && member !== topology)];
-      for (const member of members) placed.add(keyOf(member));
+      for (const member of members) placed.add(faceKey(member));
       const nodeIds = [...new Set(members.flatMap((member) => member.nodes.map((node) => node.id)))].sort();
       const { name } = handleNodeName(scene, members, nodeIds);
-      const faces = members.map(keyOf);
+      const faces = members.map(faceKey);
       const seen = new Set<string>();
       for (const member of members) {
         const type = structureTypeFor(member.surfaceType)!;

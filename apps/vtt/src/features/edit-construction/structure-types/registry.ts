@@ -101,6 +101,12 @@ export function hasTrait(surfaceType: string, trait: StructureTrait): boolean {
   return traitsOf(surfaceType).has(trait);
 }
 
+/** Whether `surfaceType` is ground -- re-cut round what stands on it, never carried or joined. */
+export const isGroundType = (surfaceType: string): boolean => hasTrait(surfaceType, "ground");
+
+/** Whether `surfaceType` is solid (`StructureTypeDefinition.rigid`): reshaped only by its own controls, carried whole otherwise. */
+export const isSolidType = (surfaceType: string): boolean => structureTypeFor(surfaceType)?.rigid === true;
+
 /** Every declared surface type carrying `trait`, in registry order. */
 export function surfaceTypesWithTrait(trait: StructureTrait): readonly string[] {
   return STRUCTURE_TYPE_DEFINITIONS.filter((definition) => definition.traits.includes(trait)).map((definition) => definition.surfaceType);

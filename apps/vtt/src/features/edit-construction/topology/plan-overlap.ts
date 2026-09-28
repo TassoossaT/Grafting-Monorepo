@@ -1,5 +1,6 @@
 import type { ConstructionEdgeGeometry, ConstructionPosition, ConstructionRegionTopology } from "@/ports";
 
+import { insideRing, nearestOnSegment, segmentsCross } from "./plan-geometry.ts";
 import type { PlanPoint } from "./plan-rotation.ts";
 
 /**
@@ -57,33 +58,18 @@ export function faceArea(topology: ConstructionRegionTopology): PlanArea {
 
 function distanceToOutline(ring: readonly PlanPoint[], p: PlanPoint): number {
   let best = Infinity;
-  for (let i = 0; i < ring.length; i++) {
-    const a = ring[i]!, b = ring[(i + 1) % ring.length]!;
-    const dx = b.x - a.x, dz = b.z - a.z, lengthSq = dx * dx + dz * dz;
-    const t = lengthSq < 1e-18 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.z - a.z) * dz) / lengthSq));
-    best = Math.min(best, Math.hypot(p.x - (a.x + dx * t), p.z - (a.z + dz * t)));
-  }
+  for (let i = 0; i < ring.length; i++) best = Math.min(best, nearestOnSegment(p, ring[i]!, ring[(i + 1) % ring.length]!).distance);
   return best;
 }
 
 /** Whether `p` is inside `ring` and clear of its edges. */
 function strictlyInside(ring: readonly PlanPoint[], p: PlanPoint): boolean {
-  let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const a = ring[i]!, b = ring[j]!;
-    if ((a.z > p.z) !== (b.z > p.z) && p.x < ((b.x - a.x) * (p.z - a.z)) / (b.z - a.z) + a.x) inside = !inside;
-  }
-  return inside && distanceToOutline(ring, p) > EPSILON;
+  return insideRing(ring, p) && distanceToOutline(ring, p) > EPSILON;
 }
 
 /** Whether segments `a`-`b` and `c`-`d` cross each other at a point inside both, not merely touch or run along each other. */
 function cross(a: PlanPoint, b: PlanPoint, c: PlanPoint, d: PlanPoint): boolean {
-  const side = (p: PlanPoint, q: PlanPoint, r: PlanPoint) => (q.x - p.x) * (r.z - p.z) - (q.z - p.z) * (r.x - p.x);
-  const d1 = side(c, d, a), d2 = side(c, d, b), d3 = side(a, b, c), d4 = side(a, b, d);
-  const scale = Math.max(Math.hypot(b.x - a.x, b.z - a.z), Math.hypot(d.x - c.x, d.z - c.z), 1);
-  const tolerance = EPSILON * scale;
-  return ((d1 > tolerance && d2 < -tolerance) || (d1 < -tolerance && d2 > tolerance))
-    && ((d3 > tolerance && d4 < -tolerance) || (d3 < -tolerance && d4 > tolerance));
+  return segmentsCross(a, b, c, d, EPSILON * Math.max(Math.hypot(b.x - a.x, b.z - a.z), Math.hypot(d.x - c.x, d.z - c.z), 1));
 }
 
 /** Whether `p` is inside `ring` or on its edge. */

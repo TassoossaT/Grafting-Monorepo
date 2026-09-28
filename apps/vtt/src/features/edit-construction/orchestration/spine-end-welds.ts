@@ -6,6 +6,7 @@ import { adoptJointEnd, adoptsEnds, endJointNear, releasableFace } from "./free-
 import type { EndJoint } from "../topology/floor-weld.ts";
 import { landingSeat } from "../topology/floor-weld.ts";
 import { floorLandingNear, floorsWeldedBy, floorsWithout, reweldFloors, type FloorLanding } from "../topology/floor-weld.ts";
+import { faceKey } from "../topology/plan-geometry.ts";
 
 /**
  * A spine's free ends connecting to floors, for any owner that declares
@@ -36,7 +37,6 @@ function leaving(handle: CurvePoint, out: FloorLanding["out"]): CurvePoint {
   return [out.x * reach, handle[1], out.z * reach];
 }
 
-const keyOf = (face: ConstructionRegionTopology) => face.surfaceKey.join("\u0000");
 
 /**
  * The ends `graphPatch` moves, and where each now lands -- onto a free end
@@ -131,9 +131,9 @@ export function regenerateWithEndWelds(
   const positions = new Map(request.patch.nodes.map((node) => [node.id, node.position]));
   // Each structure an end now joins takes the end's cross-section over; it is rebuilt here, not released.
   const adopters = [...joined].flatMap(([id, joint]) => adoptJointEnd(input.topologies, joint, endRung(id), positions) ?? []);
-  const adopting = new Set(adopters.map(({ face }) => keyOf(face)));
+  const adopting = new Set(adopters.map(({ face }) => faceKey(face)));
   // Leaving an end gives back its nodes to floors, the ground, and a structure it had joined.
-  const releasable = (face: ConstructionRegionTopology) => !adopting.has(keyOf(face)) && (releasableFace(face) || adoptsEnds(face));
+  const releasable = (face: ConstructionRegionTopology) => !adopting.has(faceKey(face)) && (releasableFace(face) || adoptsEnds(face));
   const welds = reweldFloors(input.topologies, {
     detach: leaving.map((id) => endRung(id)),
     attach: [...landed].map(([id, landing]) => ({ rung: endRung(id), floor: landing.topology.surfaceKey })),

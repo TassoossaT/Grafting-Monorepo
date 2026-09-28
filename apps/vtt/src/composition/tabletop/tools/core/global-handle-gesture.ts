@@ -2,12 +2,13 @@ import {
   arcsFollowing,
   floorsWeldedBy,
   hasTrait,
+  isGroundType,
+  isSolidType,
   joinedStructures,
   outlineMagnets,
   rejoinNodes,
   releaseFromSolid,
   snapToOutlines,
-  structureTypeFor,
   type EditTarget,
   type Magnet,
   type OutlineSnap,
@@ -35,6 +36,7 @@ import { createConstrainedDrag } from "./constrained-drag.ts";
 import { floorsOf, floorUnder } from "./floor-landing.ts";
 import { commitPatchReplacement, commitRegionEdit, commitStagedRegionEdit } from "../../effects/effect-commit.ts";
 import type { PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
+import { surfaceKeyText } from "../../../../features/edit-construction/index.ts";
 
 const CHANNEL = "global-handle";
 const PREVIEW_COLOR = 0xffbc55;
@@ -134,9 +136,6 @@ class NeedsPause extends Error {
   }
 }
 
-const keyOf = (surfaceKey: readonly string[]) => surfaceKey.join("\u0000");
-const isGround = (surfaceType: string) => hasTrait(surfaceType, "ground");
-const isSolid = (surfaceType: string) => structureTypeFor(surfaceType)?.rigid === true;
 
 /** The handles whose drag snaps onto other structures' outlines: those moving a structure, or a part of it, across the plan. */
 const SNAPS: ReadonlySet<GlobalHandleKind> = new Set(["pivot", "foot", "side", "corner"]);
@@ -162,9 +161,9 @@ function snapAnchors(scene: GlobalHandleScene, handle: GlobalHandle): readonly S
 
 /** What `handle`'s drag snaps onto: every other structure's outline -- but, dragging the whole, not what goes with it. */
 function magnetsFor(scene: GlobalHandleScene, handle: GlobalHandle): readonly Magnet[] {
-  const faces = scene.topologies.filter((topology) => handle.faces?.includes(keyOf(topology.surfaceKey)));
-  const moving = handle.kind === "pivot" ? joinedStructures(scene.topologies, faces, isGround) : faces;
-  return outlineMagnets(scene.topologies, new Set(moving.map((topology) => keyOf(topology.surfaceKey))), isGround);
+  const faces = scene.topologies.filter((topology) => handle.faces?.includes(surfaceKeyText(topology.surfaceKey)));
+  const moving = handle.kind === "pivot" ? joinedStructures(scene.topologies, faces, isGroundType) : faces;
+  return outlineMagnets(scene.topologies, new Set(moving.map((topology) => surfaceKeyText(topology.surfaceKey))), isGroundType);
 }
 
 /**
@@ -175,9 +174,9 @@ function magnetsFor(scene: GlobalHandleScene, handle: GlobalHandle): readonly Ma
  * its own pause instead. `undefined` when there is nothing to let go.
  */
 function releaseFor(topologies: GlobalHandleScene["topologies"], graph: GlobalHandleScene["graph"], part: RegionPart, operationId: string): ApplyPatchReplacementRequest | undefined {
-  const face = topologies.find((topology) => keyOf(topology.surfaceKey) === keyOf(part.seed));
-  if (!face || isSolid(face.surfaceType) || weldsOf(graph, topologies, face).length > 0) return undefined;
-  return releaseFromSolid(topologies, new Set(partNodes(topologies, part.target)), isGround, isSolid, operationId);
+  const face = topologies.find((topology) => surfaceKeyText(topology.surfaceKey) === surfaceKeyText(part.seed));
+  if (!face || isSolidType(face.surfaceType) || weldsOf(graph, topologies, face).length > 0) return undefined;
+  return releaseFromSolid(topologies, new Set(partNodes(topologies, part.target)), isGroundType, isSolidType, operationId);
 }
 
 /**
@@ -228,7 +227,7 @@ function resolvedPart(ctx: ToolContext, edit: GlobalHandleEdit, scene: GlobalHan
   const cloud = resolveCloudTopology(ctx.runtime, edit.seed);
   if (!cloud) throw new Error("A estrutura não está mais aqui.");
   const gesture = { surfaceKey: edit.seed, target: edit.target, delta: edit.delta };
-  const face = scene.topologies.find((topology) => keyOf(topology.surfaceKey) === keyOf(edit.seed));
+  const face = scene.topologies.find((topology) => surfaceKeyText(topology.surfaceKey) === surfaceKeyText(edit.seed));
   const links = face ? weldsOf(scene.graph, scene.topologies, face) : [];
   const positions = new Map(scene.graph.nodes.map((node) => [node.id, node.position]));
   const plan = planEdit(cloud, gesture, scene.graph, ctx.runtime);
@@ -249,7 +248,7 @@ function resolvedPart(ctx: ToolContext, edit: GlobalHandleEdit, scene: GlobalHan
 
 /** `part`'s target on the table as it now stands: the same corner, or the edge now running through the same side's middle. */
 function targetNow(ctx: ToolContext, part: RegionPart, was: GlobalHandleScene): RegionPart["target"] {
-  const face = ctx.runtime.getAllRegionTopologies().find((topology) => keyOf(topology.surfaceKey) === keyOf(part.seed));
+  const face = ctx.runtime.getAllRegionTopologies().find((topology) => surfaceKeyText(topology.surfaceKey) === surfaceKeyText(part.seed));
   if (!face) throw new Error("A estrutura não está mais aqui.");
   const at = new Map(face.nodes.map((node) => [node.id, node.position]));
   const before = new Map(was.graph.nodes.map((node) => [node.id, node.position]));
@@ -297,7 +296,7 @@ function commitPaused(ctx: ToolContext, handle: GlobalHandle, paused: PausedWeld
       const back = reweld(ctx.runtime.getAllRegionTopologies(), paused.links, `${operationId}:reweld`);
       if (back.request) ctx.runtime.applyPatchReplacement(back.request, "local", transactionId);
       // Else each end node the floor has a copy of right there, or a side running through, is shared again.
-      const floorsOfLink = (link: WeldLink) => ctx.runtime.getAllRegionTopologies().filter((topology) => link.floors.some((key) => keyOf(key) === keyOf(topology.surfaceKey)));
+      const floorsOfLink = (link: WeldLink) => ctx.runtime.getAllRegionTopologies().filter((topology) => link.floors.some((key) => surfaceKeyText(key) === surfaceKeyText(topology.surfaceKey)));
       const rejoined = rejoinNodes(ctx.runtime.getAllRegionTopologies(), paused.links.filter((link) => floorsWeldedBy(floorsOfLink(link), link.rung).length === 0), `${operationId}:rejoin`);
       if (rejoined.request) ctx.runtime.applyPatchReplacement(rejoined.request, "local", transactionId);
       // Neither structure is ever moved to rejoin the other: one the edit took apart stays apart.

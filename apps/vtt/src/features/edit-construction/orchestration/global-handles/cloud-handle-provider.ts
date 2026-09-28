@@ -3,7 +3,7 @@ import type { ConstructionPosition, ConstructionRegionTopology } from "@/ports";
 import { globalHandleId } from "../../global-handles/index.ts";
 import type { GlobalHandle, GlobalHandleProvider, GlobalHandleScene } from "../../global-handles/index.ts";
 import { outward, ROTATE_REACH } from "../../spine/spine-global-handles.ts";
-import { hasTrait, structureTypeFor } from "../../structure-types/index.ts";
+import { isGroundType, structureTypeFor } from "../../structure-types/index.ts";
 import { joinedStructures } from "../rigid-carry.ts";
 import { handleNodeName } from "./handle-name.ts";
 import { reverseGeometry } from "../../topology/boundary-edges.ts";
@@ -72,7 +72,7 @@ export const cloudHandleProvider: GlobalHandleProvider = {
     // Everything joined to it turns with it as one piece -- a welded ramp, the
     // floor it lands on, the walls on that floor. The ground is re-cut round
     // where it lands, never carried.
-    const turned = joinedStructures(scene.topologies, handle.members, (surfaceType) => hasTrait(surfaceType, "ground"));
+    const turned = joinedStructures(scene.topologies, handle.members, isGroundType);
     const positions = new Map<string, ConstructionPosition>(turned.flatMap((member) => member.nodes.map((node) => [node.id, node.position] as const)));
     const moves = [...positions].map(([nodeId, position]) => ({ nodeId, position: rotateInPlan(position, handle.pivot, intent.angle) }));
     const after = new Map(moves.map((move) => [move.nodeId, move.position]));

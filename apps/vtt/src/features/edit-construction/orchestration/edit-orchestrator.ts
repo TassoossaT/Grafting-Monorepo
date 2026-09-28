@@ -5,7 +5,7 @@ import type { AtomicEditOp, EditGesture } from "./atomic-edit.ts";
 import { addPosition, constrainToAxes } from "./atomic-edit.ts";
 import type { CloudTopology } from "../topology/construction-cloud.ts";
 import { cloudNodes } from "../topology/construction-cloud.ts";
-import { hasTrait, resolvePolicy, structureTypeFor } from "../structure-types/index.ts";
+import { isGroundType, resolvePolicy, structureTypeFor } from "../structure-types/index.ts";
 import { rigidCarries, standingOn, standsOn } from "./rigid-carry.ts";
 
 /** How many times rigid structures may pass a carry on to others before the plan settles. */
@@ -170,10 +170,9 @@ export function planEdit(
       // Moved whole, a structure takes along what stands on it -- a wall in the
       // middle of a floor, joined to it by no node -- and what stands on that.
       if (policy.transport === true) {
-        const isGround = (surfaceType: string) => hasTrait(surfaceType, "ground");
         const reached = topologies.filter((topology) => topology.surfaceType === cloud.seed.surfaceType);
         for (let bases = reached; bases.length > 0;) {
-          const standing = standingOn(topologies, bases, isGround).filter((topology) => !reached.includes(topology));
+          const standing = standingOn(topologies, bases, isGroundType).filter((topology) => !reached.includes(topology));
           for (const upper of standing) {
             const base = bases.find((candidate) => standsOn(upper, candidate))!;
             const anchor = base.nodes[0]!.id;

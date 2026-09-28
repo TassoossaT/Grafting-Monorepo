@@ -4,6 +4,7 @@ import { hasTrait } from "../structure-types/index.ts";
 import { reverseGeometry } from "../topology/boundary-edges.ts";
 import { floorsWeldedBy, reweldFloors, type WeldRung } from "../topology/floor-weld.ts";
 import { releasableFace, structureEndRungs } from "./free-end-welds.ts";
+import { surfaceKeyText } from "../topology/plan-geometry.ts";
 
 /**
  * A weld paused for one edit: a structure's end comes off the floor it is
@@ -25,7 +26,6 @@ export interface WeldLink {
   readonly welded: boolean;
 }
 
-const keyOf = (surfaceKey: ConstructionSurfaceKey) => surfaceKey.join("\u0000");
 
 /** How near a node must stand to another, or to a side, to be joined there -- positions are held in single precision. */
 const JOIN = 1e-4;
@@ -40,7 +40,7 @@ export function weldsOf(graph: ConstructionGraphSnapshot, topologies: readonly C
     const holding = floors.filter((floor) => floor.nodes.some((node) => node.id === rung.startNodeId || node.id === rung.endNodeId));
     if (holding.length === 0) return [];
     const mine = own.has(rung.edgeId);
-    const intoMe = holding.some((floor) => keyOf(floor.surfaceKey) === keyOf(face.surfaceKey));
+    const intoMe = holding.some((floor) => surfaceKeyText(floor.surfaceKey) === surfaceKeyText(face.surfaceKey));
     const whole = (floor: ConstructionRegionTopology) => [rung.startNodeId, rung.endNodeId].every((id) => floor.nodes.some((node) => node.id === id));
     return mine || intoMe ? [{ rung, floors: holding.map((floor) => floor.surfaceKey), welded: holding.some(whole) }] : [];
   });
@@ -105,14 +105,14 @@ export function reweld(topologies: readonly ConstructionRegionTopology[], links:
  * again; `undefined` when none could be.
  */
 export function rejoinNodes(topologies: readonly ConstructionRegionTopology[], links: readonly WeldLink[], operationId: string): { readonly request: ApplyPatchReplacementRequest | undefined; readonly joined: number } {
-  const floorKeys = new Set(links.flatMap((link) => link.floors.map(keyOf)));
+  const floorKeys = new Set(links.flatMap((link) => link.floors.map(surfaceKeyText)));
   const positions = new Map(topologies.flatMap((topology) => topology.nodes.map((node) => [node.id, node.position] as const)));
   // Which node each copy standing on an end node becomes.
   const renamed = new Map<string, string>();
   for (const id of new Set(links.flatMap(({ rung }) => [rung.startNodeId, rung.endNodeId]))) {
     const p = positions.get(id);
     if (!p) continue;
-    for (const floor of topologies.filter((topology) => floorKeys.has(keyOf(topology.surfaceKey)))) {
+    for (const floor of topologies.filter((topology) => floorKeys.has(surfaceKeyText(topology.surfaceKey)))) {
       if (floor.nodes.some((node) => node.id === id)) continue;
       const copy = floor.nodes.find((node) => Math.hypot(node.position.x - p.x, node.position.y - p.y, node.position.z - p.z) < JOIN);
       if (copy) renamed.set(copy.id, id);
@@ -125,7 +125,7 @@ export function rejoinNodes(topologies: readonly ConstructionRegionTopology[], l
   for (const id of new Set(links.flatMap(({ rung }) => [rung.startNodeId, rung.endNodeId]))) {
     const p = positions.get(id);
     if (!p || [...renamed.values()].includes(id)) continue;
-    for (const floor of topologies.filter((topology) => floorKeys.has(keyOf(topology.surfaceKey)))) {
+    for (const floor of topologies.filter((topology) => floorKeys.has(surfaceKeyText(topology.surfaceKey)))) {
       if (floor.nodes.some((node) => node.id === id)) continue;
       const at = new Map(floor.nodes.map((node) => [node.id, node.position]));
       const side = [...floor.outerLoops, ...floor.holes].flat().find((use) => {

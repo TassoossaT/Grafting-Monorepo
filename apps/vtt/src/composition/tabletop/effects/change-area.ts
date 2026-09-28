@@ -5,6 +5,7 @@ import type { ConstructionRegionEdge, ConstructionRegionTopology } from "@/ports
 import type { PlanarArea, PlanarPolygon, PlanarPort, ShapeChange } from "@/features/edit-construction";
 
 import { planarDifference, planarUnion } from "../../../features/edit-construction/index.ts";
+import { twiceSignedAreaXZ } from "../../../features/edit-construction/index.ts";
 
 /**
  * Where a change actually went, read from its shape alone.
@@ -115,17 +116,6 @@ export function changeAreaOf(port: Partial<PlanarPort>, change: Pick<ShapeChange
   return { claimed: realDifference(planar, is, was), vacated: realDifference(planar, was, is) };
 }
 
-/** Twice the signed area of a ring, closed or not. */
-function twiceArea(ring: readonly (readonly [number, number])[]): number {
-  let twice = 0;
-  for (let index = 0; index < ring.length; index += 1) {
-    const [ax, az] = ring[index]!;
-    const [bx, bz] = ring[(index + 1) % ring.length]!;
-    twice += ax * bz - bx * az;
-  }
-  return twice;
-}
-
 /**
  * The outer ring of an area's largest piece: the one outline a footprint
  * contract carries. Every piece still reaches the reaction through the area
@@ -137,7 +127,7 @@ export function largestOuterRing(area: PlanarArea): readonly (readonly [number, 
   for (const piece of area) {
     const ring = piece[0];
     if (ring === undefined || ring.length < 3) continue;
-    const size = Math.abs(twiceArea(ring));
+    const size = Math.abs(twiceSignedAreaXZ(ring));
     if (size > bestArea) {
       bestArea = size;
       best = ring;

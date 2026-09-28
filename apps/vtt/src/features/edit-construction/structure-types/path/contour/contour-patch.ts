@@ -3,6 +3,9 @@ import type { ConstructionEdgeId, ConstructionPatch, ConstructionPosition } from
 import { createBoundaryEdges, simplifyClosedRing, simplifyPolygonRdp } from "../../../topology/index.ts";
 import { heightsOnCurves, type FieldPort, type ReferenceCurve } from "./curve-projection.ts";
 import type { PlanarArea, PlanarPoint, PlanarRing } from "../../../topology/planar-area.ts";
+import { twiceSignedAreaXZ } from "../../../topology/plan-geometry.ts";
+
+const halfSignedArea = (ring: PlanarRing): number => twiceSignedAreaXZ(ring) / 2;
 
 /**
  * How close (world units, XZ) a union's own vertex may sit to a node already
@@ -36,19 +39,9 @@ const MIN_SHAPE_AREA = 1e-4;
  */
 const MIN_HOLE_AREA = 16.0;
 
-function signedRingArea(ring: PlanarRing): number {
-  let total = 0;
-  for (let index = 0; index < ring.length; index += 1) {
-    const [x1, z1] = ring[index]!;
-    const [x2, z2] = ring[(index + 1) % ring.length]!;
-    total += x1 * z2 - x2 * z1;
-  }
-  return total / 2;
-}
-
 /** The shoelace area of a ring, unsigned. */
 function ringArea(ring: PlanarRing): number {
-  return Math.abs(signedRingArea(ring));
+  return Math.abs(halfSignedArea(ring));
 }
 
 /**
@@ -57,7 +50,7 @@ function ringArea(ring: PlanarRing): number {
  * points up (+Y). If total < 0, reversing the ring flips the normal to point up (+Y).
  */
 function ensureUpwardWinding(ring: PlanarRing, isHole: boolean): PlanarRing {
-  const area = signedRingArea(ring);
+  const area = halfSignedArea(ring);
   const shouldReverse = isHole ? area > 0 : area < 0;
   return shouldReverse ? [...ring].reverse() : ring;
 }

@@ -1,4 +1,4 @@
-import { hasTrait } from "../../../../features/edit-construction/index.ts";
+import { hasTrait, nearestOnSegment } from "../../../../features/edit-construction/index.ts";
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import type { ConstructionPosition, ConstructionRegionTopology } from "../../../../ports/index.ts";
 import { pointerAtHeight } from "./pointer-ray.ts";
@@ -46,11 +46,10 @@ function sideNear(ctx: ToolContext, sample: PointerSample): { readonly a: Constr
       if (use.geometry.kind === "arc") continue;
       const a = positions.get(use.startNodeId)!, b = positions.get(use.endNodeId)!;
       const point = sample.ray ? pointerAtHeight(sample, (a.y + b.y) / 2) : sample.point;
-      const dx = b.x - a.x, dz = b.z - a.z, lengthSq = dx * dx + dz * dz;
-      if (lengthSq < 1e-9) continue;
-      const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.z - a.z) * dz) / lengthSq));
-      const at = { x: a.x + dx * t, y: a.y + (b.y - a.y) * t, z: a.z + dz * t };
-      const distance = Math.hypot(point.x - at.x, point.z - at.z);
+      if (Math.hypot(b.x - a.x, b.z - a.z) < 1e-4) continue;
+      const nearest = nearestOnSegment(point, a, b);
+      const at = { x: nearest.x, y: a.y + (b.y - a.y) * nearest.t, z: nearest.z };
+      const distance = nearest.distance;
       if ((!under && distance > SIDE_REACH) || (best && best.distance <= distance)) continue;
       best = { a, b, at, distance };
     }

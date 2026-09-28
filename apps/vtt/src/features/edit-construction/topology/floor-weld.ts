@@ -10,6 +10,7 @@ import type {
 } from "@/ports";
 
 import { reverseGeometry } from "./boundary-edges.ts";
+import { twiceSignedArea } from "./plan-geometry.ts";
 
 /**
  * How a structure's end joins a floor, whatever the structure is: the
@@ -86,16 +87,6 @@ export interface WeldRung {
   readonly endNodeId: string;
 }
 
-/** Twice the signed area of a loop in plan -- its winding. */
-function signedArea(points: readonly ConstructionPosition[]): number {
-  let area = 0;
-  for (let i = 0; i < points.length; i++) {
-    const p = points[i]!, q = points[(i + 1) % points.length]!;
-    area += p.x * q.z - q.x * p.z;
-  }
-  return area;
-}
-
 /** Straight steps in a row whose directions differ by less than this (sine of the angle) are one straight run. */
 const IN_LINE = 1e-4;
 
@@ -163,7 +154,7 @@ export function floorLandingNear(
     const positions = new Map(topology.nodes.map((node) => [node.id, node.position]));
     const outer = topology.outerLoops[0] ?? [];
     // The outline's winding says which side of each edge is off the floor.
-    const winding = Math.sign(signedArea(outer.map((use) => positions.get(use.startNodeId)!))) || 1;
+    const winding = Math.sign(twiceSignedArea(outer.map((use) => positions.get(use.startNodeId)!))) || 1;
     const isUnder = underKey !== undefined && topology.surfaceKey.join("\u0000") === underKey;
     const runs = straightRuns(outer.length, (i) => outer[i]!.geometry.kind === "line",
       (i) => ({ a: positions.get(outer[i]!.startNodeId)!, b: positions.get(outer[i]!.endNodeId)! }));

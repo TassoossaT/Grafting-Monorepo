@@ -1,6 +1,7 @@
 import type { ConstructionPosition, ConstructionRegionTopology } from "@/ports";
 
 import type { HandleMotion } from "../global-handles/index.ts";
+import { faceKey, nearestOnSegment, segmentGap } from "../topology/plan-geometry.ts";
 
 /**
  * A structure dragged by a handle snaps onto the outline of the others
@@ -37,14 +38,13 @@ export interface OutlineSnap {
   readonly magnet: readonly string[];
 }
 
-const keyOf = (topology: ConstructionRegionTopology) => topology.surfaceKey.join("\u0000");
 
 /** Every level run of the outlines of `topologies` but those `skip` names, and the ground's -- what a dragged structure snaps onto. */
 export function outlineMagnets(topologies: readonly ConstructionRegionTopology[], skip: ReadonlySet<string>, isGround: (surfaceType: string) => boolean): readonly Magnet[] {
   const seen = new Set<string>();
   const magnets: Magnet[] = [];
   for (const topology of topologies) {
-    if (skip.has(keyOf(topology)) || isGround(topology.surfaceType)) continue;
+    if (skip.has(faceKey(topology)) || isGround(topology.surfaceType)) continue;
     const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
     for (const use of topology.outerLoops.flat()) {
       if (use.geometry.kind !== "line") continue;
@@ -58,28 +58,6 @@ export function outlineMagnets(topologies: readonly ConstructionRegionTopology[]
   return magnets;
 }
 
-/** Where on `magnet`'s run, in plan, `p` is nearest. */
-function nearestOn(magnet: Magnet, p: ConstructionPosition): { readonly x: number; readonly z: number } {
-  const a = magnet.a.position, b = magnet.b.position;
-  const dx = b.x - a.x, dz = b.z - a.z;
-  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.z - a.z) * dz) / (dx * dx + dz * dz)));
-  return { x: a.x + dx * t, z: a.z + dz * t };
-}
-
-type Plan = { readonly x: number; readonly z: number };
-
-/** How far apart, in plan, the segments `p`-`q` and `a`-`b` come. */
-function segmentGap(p: Plan, q: Plan, a: Plan, b: Plan): number {
-  const cross = (o: Plan, u: Plan, v: Plan) => (u.x - o.x) * (v.z - o.z) - (u.z - o.z) * (v.x - o.x);
-  const d1 = cross(a, b, p), d2 = cross(a, b, q), d3 = cross(p, q, a), d4 = cross(p, q, b);
-  if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) return 0;
-  const toSegment = (o: Plan, s: Plan, e: Plan) => {
-    const dx = e.x - s.x, dz = e.z - s.z, lengthSq = dx * dx + dz * dz;
-    const t = lengthSq < 1e-18 ? 0 : Math.max(0, Math.min(1, ((o.x - s.x) * dx + (o.z - s.z) * dz) / lengthSq));
-    return Math.hypot(o.x - (s.x + dx * t), o.z - (s.z + dz * t));
-  };
-  return Math.min(toSegment(p, a, b), toSegment(q, a, b), toSegment(a, p, q), toSegment(b, p, q));
-}
 
 /**
  * `delta` snapped: the anchors, moved by it, onto the nearest magnet corner
@@ -122,7 +100,7 @@ export function snapToOutlines(anchors: readonly SnapAnchor[], delta: Constructi
         const moved = anchors.map((other) => ({ x: other.position.x + delta.x + fix!.x, z: other.position.z + delta.z + fix!.z }));
         if (segmentGap(moved[0]!, moved[moved.length - 1]!, a, b) > 1e-3) continue;
       } else {
-        const q = nearestOn(magnet, p);
+        const q = nearestOnSegment(p, magnet.a.position, magnet.b.position);
         fix = { x: q.x - p.x, z: q.z - p.z };
       }
       const distance = Math.hypot(fix.x, fix.z);

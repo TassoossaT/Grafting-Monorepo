@@ -6,6 +6,7 @@ import { hasTrait, structureTypeFor, type StructureEnd, type StructureEndName, t
 import { handleNodeName } from "./handle-name.ts";
 import { endJointNear, releasableFace } from "../free-end-welds.ts";
 import { floorLandingNear, floorsWeldedBy, floorsWithout, reweldFloors, type EndJoint } from "../../topology/floor-weld.ts";
+import { faceKey } from "../../topology/plan-geometry.ts";
 
 /** Where an end's own tilt handle stands: this far on past the end, the way the structure runs out there, and this high. */
 const TILT_OUT = 1;
@@ -20,7 +21,6 @@ export interface EndGlobalHandle extends GlobalHandle {
   readonly end: StructureEndName;
 }
 
-const keyOf = (topology: ConstructionRegionTopology) => topology.surfaceKey.join("\u0000");
 
 function capabilityOf(topology: ConstructionRegionTopology): StructureEnds | undefined {
   return structureTypeFor(topology.surfaceType)?.ends;
@@ -42,7 +42,7 @@ function weldedFloor(scene: GlobalHandleScene, end: StructureEnd): ConstructionR
  * its other one.
  */
 function continued(scene: GlobalHandleScene, handle: EndGlobalHandle, standing: StructureEnd, ends: readonly StructureEnd[]): EndJoint | undefined {
-  const holders = floorsWeldedBy(scene.topologies.filter((face) => keyOf(face) !== keyOf(handle.topology) && !releasableFace(face)), standing.rung);
+  const holders = floorsWeldedBy(scene.topologies.filter((face) => faceKey(face) !== faceKey(handle.topology) && !releasableFace(face)), standing.rung);
   if (holders.length === 0) return undefined;
   const at = new Map(handle.topology.nodes.map((node) => [node.id, node.position]));
   const a = at.get(standing.rung.startNodeId)!, b = at.get(standing.rung.endNodeId)!;
@@ -64,12 +64,12 @@ function placed(scene: GlobalHandleScene, handle: EndGlobalHandle, ends: readonl
   const released = floorsWithout(floorsOf(scene), rungs);
   const standing = ends.find((end) => end.name !== handle.end)!;
   const standingFloor = weldedFloor(scene, standing);
-  const kept = standingFloor && floorLandingNear(released.filter((floor) => keyOf(floor) === keyOf(standingFloor)), standing.position, { reach: KEPT_REACH });
+  const kept = standingFloor && floorLandingNear(released.filter((floor) => faceKey(floor) === faceKey(standingFloor)), standing.position, { reach: KEPT_REACH });
   // Another structure's free end within reach is run on from, before any floor's edge.
   const own = new Set(handle.topology.nodes.map((node) => node.id));
   // A lifted end stays where it is in plan: it lands nowhere, and comes off whatever held it.
   const joint = lifted ? undefined : endJointNear(scene.graph, scene.topologies, at, { own });
-  const landing = joint || lifted ? undefined : floorLandingNear(standingFloor ? released.filter((floor) => keyOf(floor) !== keyOf(standingFloor)) : released, at, under ? { under } : {});
+  const landing = joint || lifted ? undefined : floorLandingNear(standingFloor ? released.filter((floor) => faceKey(floor) !== faceKey(standingFloor)) : released, at, under ? { under } : {});
   const target = joint ? { point: joint.mid, joint } : { point: landing ? { ...at, y: landing.height } : at, ...(landing ? { landing } : {}) };
   const rebuilt = capability.rebuild(handle.topology, handle.end, target, kept, continued(scene, handle, standing, ends));
   // Every node of the structure where it will stand -- another structure's included, where an end continues one.
@@ -117,7 +117,7 @@ export const endHandleProvider: GlobalHandleProvider = {
         const far = ends.find((other) => other !== end)?.position ?? end.position;
         const span = Math.hypot(end.position.x - far.x, end.position.z - far.z) || 1;
         const on = { x: (end.position.x - far.x) / span, z: (end.position.z - far.z) / span };
-        const base = { pivot: end.position, owner: topology.surfaceType, provider: "ends", nodeIds, faces: [keyOf(topology)], topology, end: end.name };
+        const base = { pivot: end.position, owner: topology.surfaceType, provider: "ends", nodeIds, faces: [faceKey(topology)], topology, end: end.name };
         const lift = end.name === "origin" ? "originHeight" : "destinationHeight";
         return [
           { ...base, id: globalHandleId(end.name, name), kind: end.name, position: end.position, motion: { kind: "plane" } },

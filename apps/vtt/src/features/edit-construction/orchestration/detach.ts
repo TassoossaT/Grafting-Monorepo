@@ -1,6 +1,7 @@
 import type { ApplyPatchReplacementRequest, ConstructionPatchEdge, ConstructionPatchRegion, ConstructionRegionTopology } from "@/ports";
 
 import { reverseGeometry } from "../topology/boundary-edges.ts";
+import { faceKey } from "../topology/plan-geometry.ts";
 
 /**
  * Letting go: the structure `members` makes gets nodes of its own wherever
@@ -11,15 +12,14 @@ import { reverseGeometry } from "../topology/boundary-edges.ts";
  * anything. Any type may let go this way: nothing here asks what it is.
  */
 
-const keyOf = (topology: ConstructionRegionTopology) => topology.surfaceKey.join("\u0000");
 
 /** The nodes `members` shares with any other structure but the ground. */
 export function sharedNodes(topologies: readonly ConstructionRegionTopology[], members: readonly ConstructionRegionTopology[], isGround: (surfaceType: string) => boolean): ReadonlySet<string> {
-  const own = new Set(members.map(keyOf));
+  const own = new Set(members.map(faceKey));
   const mine = new Set(members.flatMap((member) => member.nodes.map((node) => node.id)));
   const shared = new Set<string>();
   for (const topology of topologies) {
-    if (own.has(keyOf(topology)) || isGround(topology.surfaceType)) continue;
+    if (own.has(faceKey(topology)) || isGround(topology.surfaceType)) continue;
     for (const node of topology.nodes) if (mine.has(node.id)) shared.add(node.id);
   }
   return shared;

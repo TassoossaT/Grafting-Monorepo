@@ -1,5 +1,7 @@
 import type { ConstructionPosition, ConstructionRegionTopology } from "@/ports";
 
+import { faceRings, insideFace, nearestOnSegment, planeOf } from "./plan-geometry.ts";
+
 /**
  * Where a structure rests on the ground. A structure that cuts the ground --
  * a floor, a ramp, a road -- cuts it only where it rests on it: where its
@@ -33,6 +35,8 @@ export const GROUND_CONTACT_CLEARANCE = 1.5;
  * whose every sample would otherwise flicker in and out of it.
  */
 export const GROUND_THROUGH_TOLERANCE = 0.05;
+/** How far past the resting line a ground corner on a structure's side may stand and still meet the side. */
+export const GROUND_SIDE_REST_ROOM = 0.25;
 
 type Plan = { readonly x: number; readonly z: number };
 
@@ -50,35 +54,10 @@ export type GroundContact =
 
 /** The height of `topology`'s surface over a point in plan -- its best plane; `undefined` for a face standing upright. */
 export function surfaceHeightOf(topology: ConstructionRegionTopology): ((point: Plan) => number) | undefined {
-  const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
-  const ring = (topology.outerLoops[0] ?? []).map((use) => at.get(use.startNodeId)).filter((p): p is ConstructionPosition => p !== undefined);
-  if (ring.length < 3) return undefined;
-  // Newell's normal, through the ring's middle.
-  let nx = 0, ny = 0, nz = 0;
-  for (let i = 0; i < ring.length; i++) {
-    const a = ring[i]!, b = ring[(i + 1) % ring.length]!;
-    nx += (a.y - b.y) * (a.z + b.z);
-    ny += (a.z - b.z) * (a.x + b.x);
-    nz += (a.x - b.x) * (a.y + b.y);
-  }
-  const length = Math.hypot(nx, ny, nz);
-  if (length < 1e-12 || Math.abs(ny / length) < 0.05) return undefined;
-  const c = { x: ring.reduce((s, p) => s + p.x, 0) / ring.length, y: ring.reduce((s, p) => s + p.y, 0) / ring.length, z: ring.reduce((s, p) => s + p.z, 0) / ring.length };
-  return (point) => c.y - (nx * (point.x - c.x) + nz * (point.z - c.z)) / ny;
-}
-
-/** Whether `p` is inside the face's outline and out of its holes, in plan. */
-export function insideFace(topology: ConstructionRegionTopology, p: Plan): boolean {
-  const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
-  const inRing = (loop: ConstructionRegionTopology["outerLoops"][number]) => {
-    let inside = false;
-    for (let i = 0, j = loop.length - 1; i < loop.length; j = i++) {
-      const a = at.get(loop[i]!.startNodeId)!, b = at.get(loop[j]!.startNodeId)!;
-      if ((a.z > p.z) !== (b.z > p.z) && p.x < ((b.x - a.x) * (p.z - a.z)) / (b.z - a.z) + a.x) inside = !inside;
-    }
-    return inside;
-  };
-  return topology.outerLoops.some(inRing) && !topology.holes.some(inRing);
+  const plane = planeOf(faceRings(topology)[0] ?? []);
+  if (!plane || Math.abs(plane.normal.y) < 0.05) return undefined;
+  const { normal: n, centre: c } = plane;
+  return (point) => c.y - (n.x * (point.x - c.x) + n.z * (point.z - c.z)) / n.y;
 }
 
 /**
@@ -100,11 +79,7 @@ export function groundContactOf(topology: ConstructionRegionTopology, groundAt: 
   if (!surfaceAt) return { kind: "whole" };
   const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
   const heldSides = topology.outerLoops.flat().filter((use) => held.has(use.startNodeId) && held.has(use.endNodeId)).map((use) => [at.get(use.startNodeId)!, at.get(use.endNodeId)!] as const);
-  const alongHeld = (p: Plan) => heldSides.some(([a, b]) => {
-    const dx = b.x - a.x, dz = b.z - a.z, lengthSq = dx * dx + dz * dz;
-    const t = lengthSq < 1e-12 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.z - a.z) * dz) / lengthSq));
-    return Math.hypot(p.x - (a.x + dx * t), p.z - (a.z + dz * t)) < cell;
-  });
+  const alongHeld = (p: Plan) => heldSides.some(([a, b]) => nearestOnSegment(p, a, b).distance < cell);
   const points = topology.nodes.map((node) => node.position);
   const min = { x: Math.min(...points.map((p) => p.x)), z: Math.min(...points.map((p) => p.z)) };
   const max = { x: Math.max(...points.map((p) => p.x)), z: Math.max(...points.map((p) => p.z)) };

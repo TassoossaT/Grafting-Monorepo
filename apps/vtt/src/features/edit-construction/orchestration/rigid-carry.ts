@@ -2,7 +2,8 @@ import type { ConstructionPosition, ConstructionRegionTopology } from "@/ports";
 
 import { structureTypeFor } from "../structure-types/index.ts";
 import { keepsOutline } from "../topology/contour-offset.ts";
-import { insideFace, surfaceHeightOf } from "../topology/ground-contact.ts";
+import { surfaceHeightOf } from "../topology/ground-contact.ts";
+import { faceKey, insideFace } from "../topology/plan-geometry.ts";
 
 /** How near a structure's foot must stand to another's surface to stand on it. */
 const STANDING = 1e-3;
@@ -31,8 +32,8 @@ export function standingOn(
   bases: readonly ConstructionRegionTopology[],
   isGround: (surfaceType: string) => boolean,
 ): readonly ConstructionRegionTopology[] {
-  const own = new Set(bases.map(keyOf));
-  return topologies.filter((topology) => !own.has(keyOf(topology)) && !isGround(topology.surfaceType)
+  const own = new Set(bases.map(faceKey));
+  return topologies.filter((topology) => !own.has(faceKey(topology)) && !isGround(topology.surfaceType)
     && bases.some((base) => !isGround(base.surfaceType) && standsOn(topology, base)));
 }
 
@@ -69,7 +70,6 @@ export function fitRigidMotion(pairs: readonly { readonly from: ConstructionPosi
   };
 }
 
-const keyOf = (topology: ConstructionRegionTopology) => topology.surfaceKey.join("\u0000");
 const same = (a: ConstructionPosition, b: ConstructionPosition) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z) < 1e-6;
 
 /**
@@ -85,7 +85,7 @@ export function rigidCarries(
 ): ReadonlyMap<string, ConstructionPosition> {
   const carried = new Map<string, ConstructionPosition>();
   for (const topology of topologies) {
-    if (structureTypeFor(topology.surfaceType)?.rigid !== true || direct.has(keyOf(topology))) continue;
+    if (structureTypeFor(topology.surfaceType)?.rigid !== true || direct.has(faceKey(topology))) continue;
     const pairs = topology.nodes.flatMap((node) => {
       const to = moved.get(node.id);
       return to && !same(to, node.position) ? [{ from: node.position, to }] : [];
@@ -111,15 +111,15 @@ export function joinedStructures(
   seeds: readonly ConstructionRegionTopology[],
   isGround: (surfaceType: string) => boolean,
 ): readonly ConstructionRegionTopology[] {
-  const members = new Map(seeds.map((topology) => [keyOf(topology), topology]));
+  const members = new Map(seeds.map((topology) => [faceKey(topology), topology]));
   const nodes = new Set(seeds.flatMap((topology) => topology.nodes.map((node) => node.id)));
   for (let grew = true; grew;) {
     grew = false;
-    const standing = new Set(standingOn(topologies, [...members.values()], isGround).map(keyOf));
+    const standing = new Set(standingOn(topologies, [...members.values()], isGround).map(faceKey));
     for (const topology of topologies) {
-      if (members.has(keyOf(topology)) || isGround(topology.surfaceType)) continue;
-      if (!topology.nodes.some((node) => nodes.has(node.id)) && !standing.has(keyOf(topology))) continue;
-      members.set(keyOf(topology), topology);
+      if (members.has(faceKey(topology)) || isGround(topology.surfaceType)) continue;
+      if (!topology.nodes.some((node) => nodes.has(node.id)) && !standing.has(faceKey(topology))) continue;
+      members.set(faceKey(topology), topology);
       for (const node of topology.nodes) nodes.add(node.id);
       grew = true;
     }

@@ -7,6 +7,7 @@ import type { EditTarget } from "../atomic-edit.ts";
 import { handleNodeName } from "./handle-name.ts";
 import { outlineOf } from "../../topology/plan-overlap.ts";
 import { isUpright } from "./upright-handle-provider.ts";
+import { faceKey, insideRing } from "../../topology/plan-geometry.ts";
 
 /** How far outside a side or a corner its handle stands, so the part itself stays free to build against. */
 export const PART_HANDLE_OUT = 0.7;
@@ -20,17 +21,6 @@ export interface PartGlobalHandle extends GlobalHandle {
 }
 
 type Plan = { readonly x: number; readonly z: number };
-const keyOf = (topology: ConstructionRegionTopology) => topology.surfaceKey.join("\u0000");
-
-/** Whether `p` is inside the outline `ring` in plan. */
-function inside(ring: readonly Plan[], p: Plan): boolean {
-  let hit = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const a = ring[i]!, b = ring[j]!;
-    if ((a.z > p.z) !== (b.z > p.z) && p.x < ((b.x - a.x) * (p.z - a.z)) / (b.z - a.z) + a.x) hit = !hit;
-  }
-  return hit;
-}
 
 /** One side of a face's outline: its first edge, where it runs, which way is out -- at its start, middle and end -- and where its middle is. */
 interface Side {
@@ -55,7 +45,7 @@ function sidesOf(topology: ConstructionRegionTopology, shared: ReadonlySet<strin
   return topology.outerLoops.map((loop) => {
     // Curves followed closely, so which side is out is read off the shape itself.
     const ring = outlineOf(loop.map((use) => ({ start: at.get(use.startNodeId)!, end: at.get(use.endNodeId)!, geometry: use.geometry })));
-    const outward = (p: Plan, normal: Plan): Plan => (inside(ring, { x: p.x + normal.x * 1e-3, z: p.z + normal.z * 1e-3 }) ? { x: -normal.x, z: -normal.z } : normal);
+    const outward = (p: Plan, normal: Plan): Plan => (insideRing(ring, { x: p.x + normal.x * 1e-3, z: p.z + normal.z * 1e-3 }) ? { x: -normal.x, z: -normal.z } : normal);
     const pieces = loop.flatMap((use): Side[] => {
       const from = at.get(use.startNodeId)!, to = at.get(use.endNodeId)!;
       const geometry = use.geometry;
@@ -111,18 +101,18 @@ export const partHandleProvider: GlobalHandleProvider = {
       // An upright face's parts are the upright provider's: in plan it is only a line.
       return type?.partHandle !== undefined && type.spine === undefined && !isUpright(topology);
     });
-    const byKey = new Map(candidates.map((topology) => [keyOf(topology), topology]));
+    const byKey = new Map(candidates.map((topology) => [faceKey(topology), topology]));
     const placed = new Set<string>();
     const handles: PartGlobalHandle[] = [];
     for (const topology of candidates) {
-      if (placed.has(keyOf(topology))) continue;
+      if (placed.has(faceKey(topology))) continue;
       const members = [topology, ...scene.cloudFor({ seed: topology.surfaceKey, surfaceType: topology.surfaceType }).surfaceKeys
         .map((key) => byKey.get(key.join("\u0000")))
         .filter((member): member is ConstructionRegionTopology => member !== undefined && member !== topology)];
-      for (const member of members) placed.add(keyOf(member));
+      for (const member of members) placed.add(faceKey(member));
       const nodeIds = [...new Set(members.flatMap((member) => member.nodes.map((node) => node.id)))].sort();
       const { name } = handleNodeName(scene, members, nodeIds);
-      const faces = members.map(keyOf);
+      const faces = members.map(faceKey);
       // An edge two faces of the cloud both hold is inside it, not a side.
       const uses = new Map<string, number>();
       for (const use of members.flatMap((member) => member.outerLoops.flat())) uses.set(use.edgeId, (uses.get(use.edgeId) ?? 0) + 1);
