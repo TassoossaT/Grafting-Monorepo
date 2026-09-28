@@ -406,6 +406,13 @@ export interface MotionContext {
  * of its own.
  */
 /**
+ * Region property naming a regenerated face's role in its structure -- the
+ * same for the face that replaces it, so what is pinned to one is pinned to
+ * the other once the structure is made again.
+ */
+export const RECIPE_ROLE_PROP = "recipeRole";
+
+/**
  * A structure regenerated whole from a recipe its faces keep, rather than
  * edited node by node: every handle changes the recipe, and the structure is
  * made again from it (`orchestration/global-handles/recipe-handle-provider.ts`).

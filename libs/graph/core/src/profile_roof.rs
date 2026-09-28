@@ -1,11 +1,16 @@
 //! Roofs raised over convex footprints, one leaf per footprint side.
 //!
 //! Every side of a block either rises inward at its own slope -- a pitched
-//! leaf -- or does not rise at all -- a gable, closed by a vertical face. A
-//! block's roof is the lower envelope of its leaf planes, which is exactly the
-//! weighted straight skeleton of a convex footprint. Overlapping blocks join
-//! as the upper envelope of their roofs: an L, T or cross plan gets its
-//! valleys from where one block's roof climbs out of another's.
+//! leaf -- or does not rise at all -- a gable. A block's roof is the lower
+//! envelope of its leaf planes, which is exactly the weighted straight
+//! skeleton of a convex footprint. Overlapping blocks join as the upper
+//! envelope of their roofs: an L, T or cross plan gets its valleys from where
+//! one block's roof climbs out of another's.
+//!
+//! A dormer is one more block, raised on a leaf: its eaves stand above the
+//! leaf, so where its roof is higher the leaf is opened, and upright faces
+//! close the gap between the two -- its front and its cheeks. The same
+//! upright faces close every gable, from whatever roof lies under it.
 //!
 //! One water, two waters and four waters are only which sides are pitched.
 use crate::planar::{PlanarBoolean, planar_boolean};
@@ -24,6 +29,27 @@ pub struct RoofBlock {
     pub overhangs: Vec<f64>,
 }
 
+/// A dormer raised on one leaf: a small roof of its own, over a front wall.
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "curve-serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct RoofDormer {
+    /// The block whose leaf carries it.
+    pub block: usize,
+    /// The side of that block the leaf rises from; it must be pitched.
+    pub side: usize,
+    /// Where its middle stands along that side, as a fraction of it.
+    pub along: f64,
+    /// How far in from that side its front stands.
+    pub setback: f64,
+    /// Its width along the side.
+    pub width: f64,
+    /// How high its front wall rises above the leaf.
+    pub front: f64,
+    /// Relative steepness of its front, right, back and left sides; zero
+    /// makes a side a gable. Two waters pitch the right and left.
+    pub slopes: [f64; 4],
+}
+
 /// A whole roof: its blocks, where they stand and how high the roof rises.
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "curve-serde", derive(serde::Serialize, serde::Deserialize))]
@@ -34,18 +60,24 @@ pub struct RoofRequest {
     pub height: f64,
     /// Convex blocks joined into one roof.
     pub blocks: Vec<RoofBlock>,
+    /// Dormers raised on its leaves.
+    #[cfg_attr(feature = "curve-serde", serde(default))]
+    pub dormers: Vec<RoofDormer>,
 }
 
 /// One logical roof face over shared indexed edges.
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "curve-serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct RoofFace {
-    /// Index of the block this face belongs to.
+    /// Index of the block this face belongs to; dormers follow the blocks,
+    /// in their own order.
     pub block: usize,
-    /// Index of the footprint side this face rises from.
+    /// Index of the footprint side this face rises from. A dormer's sides
+    /// are front, right, back and left; four is where it meets its leaf.
     pub side: usize,
-    /// Whether this is the vertical face closing a gable side.
-    pub gable: bool,
+    /// Whether this is an upright face: under a gable, or a dormer's front
+    /// and cheeks.
+    pub upright: bool,
     /// `(edge index, reversed)` uses of the outer loop.
     pub boundary: Vec<(usize, bool)>,
     /// Inner loops, where another block's roof climbs through this face.
@@ -60,7 +92,7 @@ pub struct RoofPatch {
     pub nodes: Vec<[f64; 3]>,
     /// Shared straight edges.
     pub edges: Vec<CapEdge>,
-    /// Pitched leaves and gable faces.
+    /// Pitched leaves and upright faces.
     pub faces: Vec<RoofFace>,
     /// Transient XYZ segment endpoints of every edge, for a preview.
     pub preview: Vec<[f64; 6]>,
@@ -68,23 +100,30 @@ pub struct RoofPatch {
 
 type Point = [f64; 2];
 
-/// The plane a side's leaf lies in: `slope * (normal . x - offset)` above the eave.
+/// A side's leaf plane: height `grad . x + base`. `normal` points into the
+/// block, square to the side, whose eave runs along `normal . x = line`.
 #[derive(Clone, Copy)]
 struct Leaf {
     normal: Point,
-    offset: f64,
-    slope: f64,
+    line: f64,
+    grad: Point,
+    base: f64,
+    pitched: bool,
 }
 
 impl Leaf {
-    fn rise(&self, x: Point) -> f64 {
-        self.slope * (dot(self.normal, x) - self.offset)
+    fn z(&self, x: Point) -> f64 {
+        dot(self.grad, x) + self.base
     }
 }
 
 struct Block {
     contour: Vec<Point>,
     leaves: Vec<Leaf>,
+    /// Which side of the authored block each side is; `None` for a side a
+    /// dormer took from where it meets its leaf.
+    origin: Vec<Option<usize>>,
+    elevation: f64,
 }
 
 impl Block {
@@ -92,7 +131,49 @@ impl Block {
         self.leaves
             .iter()
             .enumerate()
-            .filter(|(_, leaf)| leaf.slope > 0.0)
+            .filter(|(_, leaf)| leaf.pitched)
+    }
+
+    /// The height of this block's own roof over `x`.
+    fn z(&self, x: Point) -> f64 {
+        self.pitched()
+            .map(|(_, leaf)| leaf.z(x))
+            .fold(f64::INFINITY, f64::min)
+    }
+
+    /// Heights measured in `scale` above `elevation` instead of as bare rise.
+    fn scaled(mut self, scale: f64) -> Self {
+        for leaf in &mut self.leaves {
+            leaf.grad = [leaf.grad[0] * scale, leaf.grad[1] * scale];
+            leaf.base = leaf.base * scale + self.elevation;
+        }
+        self
+    }
+
+    /// The part of side `side`'s plan its own leaf is the roof of.
+    fn own(&self, side: usize) -> Vec<Point> {
+        let leaf = self.leaves[side];
+        let mut own = self.contour.clone();
+        for (j, other) in self.pitched() {
+            if j == side {
+                continue;
+            }
+            match half_plane(&leaf, other) {
+                HalfPlane::Line(a, c) => own = clip(&own, a, c),
+                HalfPlane::Nowhere => return Vec::new(),
+                HalfPlane::Everywhere => {}
+                HalfPlane::Tie if j > side => {}
+                HalfPlane::Tie => return Vec::new(),
+            }
+            if own.len() < 3 {
+                return Vec::new();
+            }
+        }
+        if area(&own).abs() < 1e-9 {
+            Vec::new()
+        } else {
+            own
+        }
     }
 
     /// The part of this block where its roof reaches at least `other`'s plane,
@@ -124,11 +205,8 @@ enum HalfPlane {
 
 /// Where `low` stays at or below `high`: `a . x <= b`.
 fn half_plane(low: &Leaf, high: &Leaf) -> HalfPlane {
-    let a = [
-        low.slope * low.normal[0] - high.slope * high.normal[0],
-        low.slope * low.normal[1] - high.slope * high.normal[1],
-    ];
-    let b = low.slope * low.offset - high.slope * high.offset;
+    let a = [low.grad[0] - high.grad[0], low.grad[1] - high.grad[1]];
+    let b = high.base - low.base;
     if a[0].hypot(a[1]) > 1e-12 {
         HalfPlane::Line(a, b)
     } else if b > 1e-9 {
@@ -171,7 +249,9 @@ fn clip(polygon: &[Point], a: Point, b: f64) -> Vec<Point> {
     out
 }
 
-fn prepare(block: &RoofBlock) -> Result<Block, String> {
+/// A block as authored, its eaves pushed out by their overhangs, heights as
+/// bare rise above `elevation` until [`Block::scaled`].
+fn prepare(block: &RoofBlock, elevation: f64) -> Result<Block, String> {
     let n = block.contour.len();
     if n < 3 || block.slopes.len() != n || block.overhangs.len() != n {
         return Err(
@@ -200,10 +280,14 @@ fn prepare(block: &RoofBlock) -> Result<Block, String> {
             return Err("a roof block has a zero-length side".into());
         }
         let normal = [-d[1] * winding / length, d[0] * winding / length];
+        let line = dot(normal, a) - block.overhangs[i];
+        let slope = block.slopes[i];
         leaves.push(Leaf {
             normal,
-            offset: dot(normal, a) - block.overhangs[i],
-            slope: block.slopes[i],
+            line,
+            grad: [slope * normal[0], slope * normal[1]],
+            base: -slope * line,
+            pitched: slope > 0.0,
         });
         let next = block.contour[(i + 2) % n];
         let e = [next[0] - b[0], next[1] - b[1]];
@@ -230,12 +314,142 @@ fn prepare(block: &RoofBlock) -> Result<Block, String> {
             ]);
         } else {
             contour.push([
-                (p.offset * q.normal[1] - q.offset * p.normal[1]) / det,
-                (p.normal[0] * q.offset - q.normal[0] * p.offset) / det,
+                (p.line * q.normal[1] - q.line * p.normal[1]) / det,
+                (p.normal[0] * q.line - q.normal[0] * p.line) / det,
             ]);
         }
     }
-    Ok(Block { contour, leaves })
+    Ok(Block {
+        contour,
+        leaves,
+        origin: (0..n).map(Some).collect(),
+        elevation,
+    })
+}
+
+/// A dormer as a block raised on its host leaf, the host already scaled.
+/// Its footprint reaches from its front deep into the host, clipped to the
+/// part of the plan its host leaf covers, so it never reappears past it.
+fn dormer_block(
+    host: &Block,
+    request: &RoofRequest,
+    dormer: &RoofDormer,
+    scale: f64,
+) -> Result<Block, String> {
+    let authored = request
+        .blocks
+        .get(dormer.block)
+        .ok_or("a dormer names a block the roof does not have")?;
+    let leaf = *host
+        .leaves
+        .get(dormer.side)
+        .ok_or("a dormer names a side its block does not have")?;
+    if !leaf.pitched {
+        return Err("a dormer stands only on a pitched leaf".into());
+    }
+    if ![dormer.along, dormer.setback, dormer.width, dormer.front]
+        .iter()
+        .chain(&dormer.slopes)
+        .all(|v| v.is_finite() && *v >= 0.0)
+        || dormer.width <= 0.0
+        || dormer.along > 1.0
+    {
+        return Err("a dormer needs a positive width and finite, nonnegative measures".into());
+    }
+    let (a, c) = (
+        authored.contour[dormer.side],
+        authored.contour[(dormer.side + 1) % authored.contour.len()],
+    );
+    let length = (c[0] - a[0]).hypot(c[1] - a[1]);
+    let u = [(c[0] - a[0]) / length, (c[1] - a[1]) / length];
+    let n = leaf.normal;
+    let middle = [
+        a[0] + dormer.along * (c[0] - a[0]),
+        a[1] + dormer.along * (c[1] - a[1]),
+    ];
+    let front = [
+        middle[0] + n[0] * dormer.setback,
+        middle[1] + n[1] * dormer.setback,
+    ];
+    let depth = authored
+        .contour
+        .iter()
+        .map(|q| dot(n, [q[0] - front[0], q[1] - front[1]]))
+        .fold(0.0_f64, f64::max);
+    if depth <= 1e-9 {
+        return Err("a dormer must stand inside its roof".into());
+    }
+    let half = dormer.width * 0.5;
+    let at = |s: f64, t: f64| {
+        [
+            front[0] + u[0] * s + n[0] * t,
+            front[1] + u[1] * s + n[1] * t,
+        ]
+    };
+    let rectangle = RoofBlock {
+        contour: vec![
+            at(-half, 0.0),
+            at(half, 0.0),
+            at(half, depth),
+            at(-half, depth),
+        ],
+        slopes: dormer.slopes.to_vec(),
+        overhangs: vec![0.0; 4],
+    };
+    let elevation = leaf.z(front) + dormer.front;
+    let raised = prepare(&rectangle, elevation)?.scaled(scale);
+    // Only over its host leaf.
+    let region = host.own(dormer.side);
+    if region.is_empty() {
+        return Err("a dormer's leaf has no roof to stand on".into());
+    }
+    let winding = area(&region).signum();
+    let mut contour = raised.contour.clone();
+    for i in 0..region.len() {
+        let (p, q) = (region[i], region[(i + 1) % region.len()]);
+        let inward = [-(q[1] - p[1]) * winding, (q[0] - p[0]) * winding];
+        contour = clip(&contour, [-inward[0], -inward[1]], -dot(inward, p));
+        if contour.len() < 3 {
+            return Err("a dormer must stand on its leaf".into());
+        }
+    }
+    // Each side of what is left keeps the leaf of the rectangle side it lies on.
+    let mut leaves = Vec::with_capacity(contour.len());
+    let mut origin = Vec::with_capacity(contour.len());
+    for i in 0..contour.len() {
+        let (p, q) = (contour[i], contour[(i + 1) % contour.len()]);
+        let middle = [(p[0] + q[0]) * 0.5, (p[1] + q[1]) * 0.5];
+        let on = (0..4).find(|&j| {
+            (dot(raised.leaves[j].normal, middle) - raised.leaves[j].line).abs()
+                < 1e-7 * (1.0 + depth)
+        });
+        match on {
+            Some(j) => {
+                leaves.push(raised.leaves[j]);
+                origin.push(Some(j));
+            }
+            None => {
+                let d = [q[0] - p[0], q[1] - p[1]];
+                let l = d[0].hypot(d[1]).max(1e-12);
+                let w = area(&contour).signum();
+                let normal = [-d[1] * w / l, d[0] * w / l];
+                leaves.push(Leaf {
+                    normal,
+                    line: dot(normal, p),
+                    grad: [0.0; 2],
+                    base: elevation,
+                    pitched: false,
+                });
+                origin.push(None);
+            }
+        }
+    }
+    Ok(Block {
+        contour,
+        leaves,
+        origin,
+        elevation,
+    })
 }
 
 /// Rings of one face in plan: outer first, then holes.
@@ -245,23 +459,8 @@ type PlanFace = Vec<Vec<Point>>;
 fn visible_leaf(blocks: &[Block], b: usize, side: usize) -> Result<Vec<PlanFace>, String> {
     let block = &blocks[b];
     let leaf = block.leaves[side];
-    let mut own = block.contour.clone();
-    for (j, other) in block.pitched() {
-        if j == side {
-            continue;
-        }
-        match half_plane(&leaf, other) {
-            HalfPlane::Line(a, c) => own = clip(&own, a, c),
-            HalfPlane::Nowhere => return Ok(Vec::new()),
-            HalfPlane::Everywhere => {}
-            HalfPlane::Tie if j > side => {}
-            HalfPlane::Tie => return Ok(Vec::new()),
-        }
-        if own.len() < 3 {
-            return Ok(Vec::new());
-        }
-    }
-    if area(&own).abs() < 1e-9 {
+    let own = block.own(side);
+    if own.is_empty() {
         return Ok(Vec::new());
     }
     let covers: Vec<Vec<Point>> = blocks
@@ -311,6 +510,110 @@ fn inside_convex(polygon: &[Point], x: Point) -> bool {
     })
 }
 
+/// Where segment `a`-`c` crosses segment `p`-`q`, as a fraction along `a`-`c`.
+fn crossing(a: Point, c: Point, p: Point, q: Point) -> Option<f64> {
+    let d = [c[0] - a[0], c[1] - a[1]];
+    let e = [q[0] - p[0], q[1] - p[1]];
+    let det = d[0] * e[1] - d[1] * e[0];
+    if det.abs() < 1e-12 {
+        return None;
+    }
+    let w = [p[0] - a[0], p[1] - a[1]];
+    let t = (w[0] * e[1] - w[1] * e[0]) / det;
+    let s = (w[0] * d[1] - w[1] * d[0]) / det;
+    ((-1e-9..=1.0 + 1e-9).contains(&s) && (0.0..=1.0).contains(&t)).then_some(t)
+}
+
+/// The upright faces along side `side` of block `b`: between whatever roof
+/// lies under it -- another block's, or its own eaves where none does -- and
+/// its own roof's edge along it, wherever that edge stands higher.
+fn upright_faces(blocks: &[Block], b: usize, side: usize) -> Vec<Vec<[f64; 3]>> {
+    let block = &blocks[b];
+    let n = block.contour.len();
+    let (a, c) = (block.contour[side], block.contour[(side + 1) % n]);
+    let at = |t: f64| [a[0] + t * (c[0] - a[0]), a[1] + t * (c[1] - a[1])];
+    // Every place along the side where either height bends or jumps.
+    let mut ts = vec![0.0, 1.0];
+    for (o, other) in blocks.iter().enumerate() {
+        let mut outlines = vec![other.contour.clone()];
+        outlines.extend(other.pitched().map(|(j, _)| other.own(j)));
+        for outline in outlines.iter().filter(|outline| outline.len() >= 3) {
+            if o == b && outline == &other.contour {
+                continue;
+            }
+            for i in 0..outline.len() {
+                ts.extend(crossing(a, c, outline[i], outline[(i + 1) % outline.len()]));
+            }
+        }
+    }
+    ts.sort_by(f64::total_cmp);
+    ts.dedup_by(|x, y| (*x - *y).abs() < 1e-9);
+    let top = |t: f64| block.z(at(t));
+    let point = |t: f64, y: f64| {
+        let x = at(t);
+        [x[0], y, x[1]]
+    };
+    const GAP: f64 = 1e-6;
+    let mut faces = Vec::new();
+    // The run being traced: its top edge and its bottom edge, both in order along the side.
+    let (mut upper, mut lower): (Vec<[f64; 3]>, Vec<[f64; 3]>) = (Vec::new(), Vec::new());
+    let mut close = |upper: &mut Vec<[f64; 3]>, lower: &mut Vec<[f64; 3]>| {
+        let mut ring = std::mem::take(upper);
+        ring.extend(std::mem::take(lower).into_iter().rev());
+        ring.dedup_by(|p, q| (0..3).all(|k| (p[k] - q[k]).abs() < 1e-9));
+        if ring.len() >= 3 {
+            faces.push(ring);
+        }
+    };
+    for pair in ts.windows(2) {
+        let (t0, t1) = (pair[0], pair[1]);
+        if t1 - t0 < 1e-12 {
+            continue;
+        }
+        let middle = at((t0 + t1) * 0.5);
+        let under: Vec<&Block> = blocks
+            .iter()
+            .enumerate()
+            .filter(|(o, other)| *o != b && inside_convex(&other.contour, middle))
+            .map(|(_, other)| other)
+            .collect();
+        let bottom = |t: f64| {
+            if under.is_empty() {
+                block.elevation
+            } else {
+                under
+                    .iter()
+                    .map(|other| other.z(at(t)))
+                    .fold(f64::NEG_INFINITY, f64::max)
+            }
+        };
+        let (g0, g1) = (top(t0) - bottom(t0), top(t1) - bottom(t1));
+        let (open0, open1) = (g0 > GAP, g1 > GAP);
+        let tc = || t0 + (t1 - t0) * (g0 / (g0 - g1)).clamp(0.0, 1.0);
+        if open0 {
+            if upper.is_empty() {
+                upper.push(point(t0, top(t0)));
+            }
+            // Continuing, the ground under it may have stepped here.
+            lower.push(point(t0, bottom(t0)));
+        } else if open1 {
+            close(&mut upper, &mut lower);
+            upper.push(point(tc(), top(tc())));
+        }
+        if open1 {
+            upper.push(point(t1, top(t1)));
+            lower.push(point(t1, bottom(t1)));
+        } else {
+            if open0 {
+                upper.push(point(tc(), top(tc())));
+            }
+            close(&mut upper, &mut lower);
+        }
+    }
+    close(&mut upper, &mut lower);
+    faces
+}
+
 /// Newell normal of a 3D ring.
 fn normal(ring: &[[f64; 3]]) -> [f64; 3] {
     let mut n = [0.0; 3];
@@ -326,7 +629,8 @@ fn normal(ring: &[[f64; 3]]) -> [f64; 3] {
 struct Face3 {
     block: usize,
     side: usize,
-    gable: bool,
+    /// For an upright face, the way out of its block in plan.
+    outward: Option<Point>,
     rings: Vec<Vec<[f64; 3]>>,
 }
 
@@ -460,99 +764,66 @@ pub fn generate_roof_patch(request: RoofRequest) -> Result<RoofPatch, String> {
     if request.blocks.is_empty() {
         return Err("a roof needs at least one block".into());
     }
-    let blocks = request
+    let main = request
         .blocks
         .iter()
-        .map(prepare)
+        .map(|block| prepare(block, request.elevation))
         .collect::<Result<Vec<_>, _>>()?;
-    let mut leaves = Vec::new();
-    for (b, block) in blocks.iter().enumerate() {
-        for (side, _) in block.pitched() {
-            for face in visible_leaf(&blocks, b, side)? {
-                leaves.push((b, side, face));
-            }
-        }
-    }
-    let peak = leaves
+    // The highest any block's own roof rises is the roof's height.
+    let peak = main
         .iter()
-        .flat_map(|(b, side, face)| face[0].iter().map(|p| blocks[*b].leaves[*side].rise(*p)))
+        .flat_map(|block| {
+            block
+                .pitched()
+                .flat_map(move |(side, leaf)| block.own(side).into_iter().map(move |p| leaf.z(p)))
+        })
         .fold(0.0_f64, f64::max);
     if peak.is_nan() || peak <= 1e-9 {
         return Err("the roof does not rise".into());
     }
     let scale = request.height / peak;
-    let lift = |b: usize, side: usize, p: Point| {
-        [
-            p[0],
-            request.elevation + scale * blocks[b].leaves[side].rise(p),
-            p[1],
-        ]
-    };
-    let mut faces: Vec<Face3> = leaves
-        .iter()
-        .map(|(b, side, face)| Face3 {
-            block: *b,
-            side: *side,
-            gable: false,
-            rings: face
-                .iter()
-                .map(|ring| ring.iter().map(|p| lift(*b, *side, *p)).collect())
-                .collect(),
-        })
-        .collect();
-    // Gables: the vertical face under the leaves' edge along each gable side.
+    let mut blocks: Vec<Block> = main.into_iter().map(|block| block.scaled(scale)).collect();
+    for dormer in &request.dormers {
+        let host = blocks
+            .get(dormer.block)
+            .ok_or("a dormer names a block the roof does not have")?;
+        let raised = dormer_block(host, &request, dormer, scale)?;
+        blocks.push(raised);
+    }
+    let mut faces = Vec::new();
     for (b, block) in blocks.iter().enumerate() {
-        let n = block.contour.len();
-        for side in (0..n).filter(|side| block.leaves[*side].slope == 0.0) {
-            let (a, c) = (block.contour[side], block.contour[(side + 1) % n]);
-            let middle = [(a[0] + c[0]) * 0.5, (a[1] + c[1]) * 0.5];
-            if blocks
-                .iter()
-                .enumerate()
-                .any(|(o, other)| o != b && inside_convex(&other.contour, middle))
-            {
-                continue;
+        let role = |side: usize| block.origin[side].unwrap_or(4);
+        for (side, leaf) in block.pitched() {
+            for face in visible_leaf(&blocks, b, side)? {
+                faces.push(Face3 {
+                    block: b,
+                    side: role(side),
+                    outward: None,
+                    rings: face
+                        .iter()
+                        .map(|ring| ring.iter().map(|p| [p[0], leaf.z(*p), p[1]]).collect())
+                        .collect(),
+                });
             }
-            let d = [c[0] - a[0], c[1] - a[1]];
-            let length_sq = dot(d, d);
-            let mut rim: Vec<(f64, [f64; 3])> = faces
-                .iter()
-                .filter(|face| face.block == b)
-                .flat_map(|face| face.rings.iter().flatten())
-                .filter_map(|p| {
-                    let x = [p[0], p[2]];
-                    let t = dot([x[0] - a[0], x[1] - a[1]], d) / length_sq;
-                    let off = (x[0] - a[0]) * d[1] - (x[1] - a[1]) * d[0];
-                    (off.abs() < 1e-4 * length_sq.sqrt()
-                        && (-1e-6..=1.0 + 1e-6).contains(&t)
-                        && p[1] > request.elevation + 1e-6)
-                        .then_some((t, *p))
-                })
-                .collect();
-            if rim.is_empty() {
-                continue;
+        }
+        for side in 0..block.contour.len() {
+            let inward = block.leaves[side].normal;
+            for ring in upright_faces(&blocks, b, side) {
+                faces.push(Face3 {
+                    block: b,
+                    side: role(side),
+                    outward: Some([-inward[0], -inward[1]]),
+                    rings: vec![ring],
+                });
             }
-            rim.sort_by(|x, y| y.0.total_cmp(&x.0));
-            rim.dedup_by(|x, y| (x.0 - y.0).abs() < 1e-6 && (x.1[1] - y.1[1]).abs() < 1e-6);
-            let mut ring = vec![
-                [a[0], request.elevation, a[1]],
-                [c[0], request.elevation, c[1]],
-            ];
-            ring.extend(rim.into_iter().map(|(_, p)| p));
-            faces.push(Face3 {
-                block: b,
-                side,
-                gable: true,
-                rings: vec![ring],
-            });
         }
     }
-    weld(faces, &blocks)
+    weld(faces)
 }
 
 /// Shares nodes and edges between faces, splitting any edge another face's
 /// corner lies on, and winds every face the same way round.
-fn weld(faces: Vec<Face3>, blocks: &[Block]) -> Result<RoofPatch, String> {
+fn weld(faces: Vec<Face3>) -> Result<RoofPatch, String> {
     let extent = faces
         .iter()
         .flat_map(|face| face.rings.iter().flatten())
@@ -624,13 +895,11 @@ fn weld(faces: Vec<Face3>, blocks: &[Block]) -> Result<RoofPatch, String> {
     for (face, mut rings) in indexed {
         let points = |ring: &[usize]| ring.iter().map(|k| nodes[*k]).collect::<Vec<_>>();
         let n = normal(&points(&rings[0]));
-        // Leaves wind with their normal down, as generated caps do; a gable's
-        // points into the block, which is the same way round across a seam.
-        let flipped = if face.gable {
-            let leaf = blocks[face.block].leaves[face.side];
-            n[0] * leaf.normal[0] + n[2] * leaf.normal[1] < 0.0
-        } else {
-            n[1] > 0.0
+        // Leaves wind with their normal down, as generated caps do; an upright
+        // face's points into its block, which is the same way round across a seam.
+        let flipped = match face.outward {
+            Some(out) => n[0] * out[0] + n[2] * out[1] > 0.0,
+            None => n[1] > 0.0,
         };
         if flipped {
             rings[0].reverse();
@@ -668,7 +937,7 @@ fn weld(faces: Vec<Face3>, blocks: &[Block]) -> Result<RoofPatch, String> {
         result.push(RoofFace {
             block: face.block,
             side: face.side,
-            gable: face.gable,
+            upright: face.outward.is_some(),
             boundary,
             holes,
         });
@@ -704,6 +973,7 @@ mod tests {
                 slopes: slopes.to_vec(),
                 overhangs: vec![0.0; 4],
             }],
+            dormers: Vec::new(),
         }
     }
 
@@ -721,7 +991,7 @@ mod tests {
     fn four_waters_make_a_hip_roof_with_a_ridge() {
         let patch = generate_roof_patch(rectangle([1.0; 4])).unwrap();
         assert_eq!(patch.faces.len(), 4);
-        assert!(patch.faces.iter().all(|f| !f.gable));
+        assert!(patch.faces.iter().all(|f| !f.upright));
         let top: Vec<_> = patch
             .nodes
             .iter()
@@ -737,8 +1007,8 @@ mod tests {
     #[test]
     fn two_waters_close_their_ends_with_gables() {
         let patch = generate_roof_patch(rectangle([1.0, 0.0, 1.0, 0.0])).unwrap();
-        assert_eq!(patch.faces.iter().filter(|f| !f.gable).count(), 2);
-        assert_eq!(patch.faces.iter().filter(|f| f.gable).count(), 2);
+        assert_eq!(patch.faces.iter().filter(|f| !f.upright).count(), 2);
+        assert_eq!(patch.faces.iter().filter(|f| f.upright).count(), 2);
         let top: Vec<_> = patch
             .nodes
             .iter()
@@ -754,7 +1024,7 @@ mod tests {
     #[test]
     fn one_water_rises_to_the_far_side() {
         let patch = generate_roof_patch(rectangle([1.0, 0.0, 0.0, 0.0])).unwrap();
-        assert_eq!(patch.faces.iter().filter(|f| !f.gable).count(), 1);
+        assert_eq!(patch.faces.iter().filter(|f| !f.upright).count(), 1);
         let high: Vec<_> = patch
             .nodes
             .iter()
@@ -762,7 +1032,7 @@ mod tests {
             .collect();
         assert!(high.len() == 2 && high.iter().all(|p| (p[2] - 4.0).abs() < 1e-9));
         // The far side is a gable closed up to the high eave.
-        assert_eq!(patch.faces.iter().filter(|f| f.gable).count(), 3);
+        assert_eq!(patch.faces.iter().filter(|f| f.upright).count(), 3);
     }
 
     #[test]
@@ -806,6 +1076,7 @@ mod tests {
                     overhangs: vec![0.0; 4],
                 },
             ],
+            dormers: Vec::new(),
         };
         let patch = generate_roof_patch(request).unwrap();
         assert!(patch.faces.iter().any(|f| f.block == 1));
@@ -880,6 +1151,7 @@ mod tests {
             elevation: 0.0,
             height: 2.0,
             blocks,
+            dormers: Vec::new(),
         })
         .unwrap();
         assert!(edge_uses(&patch).iter().all(|n| (1..=2).contains(n)));
@@ -899,6 +1171,88 @@ mod tests {
             })
             .sum();
         assert!((eave - 40.0).abs() < 1e-3, "{eave}");
+    }
+
+    fn dormer(slopes: [f64; 4]) -> RoofDormer {
+        RoofDormer {
+            block: 0,
+            side: 0,
+            along: 0.5,
+            setback: 0.5,
+            width: 2.0,
+            front: 1.0,
+            slopes,
+        }
+    }
+
+    #[test]
+    fn a_gable_dormer_opens_its_leaf_and_closes_the_gap_with_a_front_and_cheeks() {
+        let mut request = rectangle([1.0, 0.0, 1.0, 0.0]);
+        request.height = 4.0;
+        request.dormers.push(dormer([0.0, 1.0, 0.0, 1.0]));
+        let patch = generate_roof_patch(request).unwrap();
+        let dormer_faces: Vec<_> = patch.faces.iter().filter(|f| f.block == 1).collect();
+        // Two leaves of its own, a front, and a cheek on each side.
+        assert_eq!(dormer_faces.iter().filter(|f| !f.upright).count(), 2);
+        assert!(
+            dormer_faces.iter().any(|f| f.upright && f.side == 0),
+            "a front"
+        );
+        assert!(
+            dormer_faces.iter().any(|f| f.upright && f.side == 1)
+                && dormer_faces.iter().any(|f| f.upright && f.side == 3),
+            "two cheeks"
+        );
+        // The leaf under it is opened: a hole, or a notch in its outline.
+        let leaf_edges: usize = patch
+            .faces
+            .iter()
+            .filter(|f| f.block == 0 && f.side == 0 && !f.upright)
+            .map(|f| f.boundary.len() + f.holes.iter().map(Vec::len).sum::<usize>())
+            .sum();
+        assert!(leaf_edges > 4, "{leaf_edges}");
+        // Closed: every edge is either an eave, a free gable edge, or shared by two faces.
+        assert!(edge_uses(&patch).iter().all(|n| (1..=2).contains(n)));
+        let free: Vec<_> = patch
+            .edges
+            .iter()
+            .zip(edge_uses(&patch))
+            .filter(|(_, n)| *n == 1)
+            .map(|(e, _)| (patch.nodes[e.start], patch.nodes[e.end]))
+            .collect();
+        assert!(
+            free.iter()
+                .all(|(a, b)| (a[1] - 3.0).abs() < 1e-6 && (b[1] - 3.0).abs() < 1e-6),
+            "only the roof's own eaves stay open: {free:?}"
+        );
+    }
+
+    #[test]
+    fn shed_and_hip_dormers_raise_as_well() {
+        for slopes in [[0.5, 0.0, 0.0, 0.0], [1.0, 1.0, 0.0, 1.0]] {
+            let mut request = rectangle([1.0; 4]);
+            request.height = 4.0;
+            request.dormers.push(dormer(slopes));
+            let patch = generate_roof_patch(request).unwrap();
+            assert!(
+                patch.faces.iter().any(|f| f.block == 1 && !f.upright),
+                "{slopes:?}"
+            );
+            assert!(
+                edge_uses(&patch).iter().all(|n| (1..=2).contains(n)),
+                "{slopes:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_dormer_needs_a_pitched_leaf() {
+        let mut request = rectangle([1.0, 0.0, 1.0, 0.0]);
+        request.dormers.push(RoofDormer {
+            side: 1,
+            ..dormer([0.0, 1.0, 0.0, 1.0])
+        });
+        assert!(generate_roof_patch(request).is_err());
     }
 
     #[test]

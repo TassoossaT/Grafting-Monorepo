@@ -1185,6 +1185,10 @@ Generates a cap with shared seam identities and no degenerate apex edges.
 
 ### `pub fn grafting_graph_core::profile_roof::RoofBlock::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer`
 
+### `pub fn grafting_graph_core::profile_roof::RoofDormer::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>`
+
+### `pub fn grafting_graph_core::profile_roof::RoofDormer::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer`
+
 ### `pub fn grafting_graph_core::profile_roof::RoofFace::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>`
 
 ### `pub fn grafting_graph_core::profile_roof::RoofFace::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer`
@@ -2459,17 +2463,43 @@ How far each side's eave reaches out past the footprint.
 
 Relative steepness of each side's leaf; zero makes that side a gable.
 
+### `pub grafting_graph_core::profile_roof::RoofDormer::along: f64`
+
+Where its middle stands along that side, as a fraction of it.
+
+### `pub grafting_graph_core::profile_roof::RoofDormer::block: usize`
+
+The block whose leaf carries it.
+
+### `pub grafting_graph_core::profile_roof::RoofDormer::front: f64`
+
+How high its front wall rises above the leaf.
+
+### `pub grafting_graph_core::profile_roof::RoofDormer::setback: f64`
+
+How far in from that side its front stands.
+
+### `pub grafting_graph_core::profile_roof::RoofDormer::side: usize`
+
+The side of that block the leaf rises from; it must be pitched.
+
+### `pub grafting_graph_core::profile_roof::RoofDormer::slopes: [f64; 4]`
+
+Relative steepness of its front, right, back and left sides; zero
+makes a side a gable. Two waters pitch the right and left.
+
+### `pub grafting_graph_core::profile_roof::RoofDormer::width: f64`
+
+Its width along the side.
+
 ### `pub grafting_graph_core::profile_roof::RoofFace::block: usize`
 
-Index of the block this face belongs to.
+Index of the block this face belongs to; dormers follow the blocks,
+in their own order.
 
 ### `pub grafting_graph_core::profile_roof::RoofFace::boundary: alloc::vec::Vec<(usize, bool)>`
 
 `(edge index, reversed)` uses of the outer loop.
-
-### `pub grafting_graph_core::profile_roof::RoofFace::gable: bool`
-
-Whether this is the vertical face closing a gable side.
 
 ### `pub grafting_graph_core::profile_roof::RoofFace::holes: alloc::vec::Vec<alloc::vec::Vec<(usize, bool)>>`
 
@@ -2477,7 +2507,13 @@ Inner loops, where another block's roof climbs through this face.
 
 ### `pub grafting_graph_core::profile_roof::RoofFace::side: usize`
 
-Index of the footprint side this face rises from.
+Index of the footprint side this face rises from. A dormer's sides
+are front, right, back and left; four is where it meets its leaf.
+
+### `pub grafting_graph_core::profile_roof::RoofFace::upright: bool`
+
+Whether this is an upright face: under a gable, or a dormer's front
+and cheeks.
 
 ### `pub grafting_graph_core::profile_roof::RoofPatch::edges: alloc::vec::Vec<grafting_graph_core::profile_cap_patch::CapEdge>`
 
@@ -2485,7 +2521,7 @@ Shared straight edges.
 
 ### `pub grafting_graph_core::profile_roof::RoofPatch::faces: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofFace>`
 
-Pitched leaves and gable faces.
+Pitched leaves and upright faces.
 
 ### `pub grafting_graph_core::profile_roof::RoofPatch::nodes: alloc::vec::Vec<[f64; 3]>`
 
@@ -2498,6 +2534,10 @@ Transient XYZ segment endpoints of every edge, for a preview.
 ### `pub grafting_graph_core::profile_roof::RoofRequest::blocks: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofBlock>`
 
 Convex blocks joined into one roof.
+
+### `pub grafting_graph_core::profile_roof::RoofRequest::dormers: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofDormer>`
+
+Dormers raised on its leaves.
 
 ### `pub grafting_graph_core::profile_roof::RoofRequest::elevation: f64`
 
@@ -2615,11 +2655,16 @@ Indexed, shared-boundary topology for analytic caps. No live graph mutation.
 Roofs raised over convex footprints, one leaf per footprint side.
 
 Every side of a block either rises inward at its own slope -- a pitched
-leaf -- or does not rise at all -- a gable, closed by a vertical face. A
-block's roof is the lower envelope of its leaf planes, which is exactly the
-weighted straight skeleton of a convex footprint. Overlapping blocks join
-as the upper envelope of their roofs: an L, T or cross plan gets its
-valleys from where one block's roof climbs out of another's.
+leaf -- or does not rise at all -- a gable. A block's roof is the lower
+envelope of its leaf planes, which is exactly the weighted straight
+skeleton of a convex footprint. Overlapping blocks join as the upper
+envelope of their roofs: an L, T or cross plan gets its valleys from where
+one block's roof climbs out of another's.
+
+A dormer is one more block, raised on a leaf: its eaves stand above the
+leaf, so where its roof is higher the leaf is opened, and upright faces
+close the gap between the two -- its front and its cheeks. The same
+upright faces close every gable, from whatever roof lies under it.
 
 One water, two waters and four waters are only which sides are pitched.
 
@@ -2898,6 +2943,10 @@ Pure generation request with one common elevation and height.
 ### `pub struct grafting_graph_core::profile_roof::RoofBlock`
 
 One convex footprint and the role of each of its sides.
+
+### `pub struct grafting_graph_core::profile_roof::RoofDormer`
+
+A dormer raised on one leaf: a small roof of its own, over a front wall.
 
 ### `pub struct grafting_graph_core::profile_roof::RoofFace`
 

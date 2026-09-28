@@ -2439,9 +2439,21 @@ rim named it from one face, and one face cannot see the other; if the graph
 shows two, the edge is interior whatever it was called -- see
 RIM_ROLES.
 
-### `function vtt.face-props.keepFaceProps(runtime: TabletopRuntime, created: readonly ConstructionSurfaceKey[], faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>): void`
+### `interface vtt.face-props.PinnedToRoles`
 
-Gives each face a patch just made the properties its generator named for its region.
+What was pinned to faces about to be regenerated, by the role of the face each is pinned to.
+
+### `property vtt.face-props.PinnedToRoles.pins: readonly { nodeId: string; role: string; u: number; v: number }[]`
+
+### `function vtt.face-props.keepFaceProps(runtime: TabletopRuntime, causeId: string, created: readonly ConstructionSurfaceKey[], faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>, pinned?: PinnedToRoles): void`
+
+Gives each face a patch just made the properties its generator named for
+its region, and pins what was pinned to a replaced face onto the new face
+with the same role, where it stood on it -- a window stays in its gable.
+
+### `function vtt.face-props.pinnedToRoles(topologies: readonly ConstructionRegionTopology[], sources: readonly ConstructionSurfaceKey[]): PinnedToRoles`
+
+Reads, before `sources` are replaced, every node pinned to one of them whose face names its role -- pins ride on the faces' nodes.
 
 ### `function vtt.floor-landing.floorLandingAt(floors: readonly ConstructionRegionTopology[], sample: PointerSample): FloorLanding | undefined`
 
@@ -3267,9 +3279,9 @@ Also edits an existing roof, through its handles only -- see `structure-edit-beh
 
 Assigns identities to a native cone and applies it atomically.
 
-### `function vtt.roof-tool.commitRoofRecipe(ctx: ToolContext, request: RoofRequest): void`
+### `function vtt.roof-tool.commitRoofRecipe(ctx: ToolContext, request: RoofRequest, replaces: readonly ConstructionSurfaceKey[]): void`
 
-Commits a roof generated from `request`, keeping the recipe on every face it made.
+Commits a roof generated from `request` in place of the faces `replaces` names, keeping the recipe on every face it made.
 
 ### `interface vtt.geometry-2d.PointXZ`
 
@@ -6829,19 +6841,23 @@ The traits one surface type declares. An undeclared type has none.
 
 ### `interface vtt.roof-recipe.RoofFaceRole`
 
-Which side of which block a face rises from, and whether it is that side's upright gable.
+Which side of which block a face rises from -- dormers numbered after the
+blocks, their sides front, right, back and left -- and whether it is an
+upright face under that side.
 
 ### `property vtt.roof-recipe.RoofFaceRole.block: number`
 
-### `property vtt.roof-recipe.RoofFaceRole.gable: boolean`
-
 ### `property vtt.roof-recipe.RoofFaceRole.side: number`
+
+### `property vtt.roof-recipe.RoofFaceRole.upright: boolean`
 
 ### `interface vtt.roof-recipe.RoofRecipe`
 
 A roof's recipe: what the generator is asked, and the group of faces it made.
 
 ### `property vtt.roof-recipe.RoofRecipe.blocks: readonly RoofBlock[]`
+
+### `property vtt.roof-recipe.RoofRecipe.dormers?: readonly RoofDormer[]`
 
 ### `property vtt.roof-recipe.RoofRecipe.elevation: number`
 
@@ -6867,6 +6883,19 @@ Region property carrying a roof's recipe, which every edit regenerates the roof 
 
 How a roof is regenerated from the recipe its faces keep.
 
+### `function vtt.roof-recipe.dormerAt(recipe: RoofRequest, block: number, side: number, at: Point, width: number, front: number, waters: 1 | 2 | 4): RoofDormer`
+
+A dormer standing with its front's middle at `at`, on the leaf rising from
+side `side` of block `block`: where along that side and how far in.
+
+### `function vtt.roof-recipe.dormerSlopes(waters: 1 | 2 | 4): readonly [number, number, number, number]`
+
+A dormer's sides, by waters: two pitch its cheeks, one its front alone -- shallower, so it runs back into the leaf -- four all but its back.
+
+### `function vtt.roof-recipe.inwardNormals(contour: readonly Point[]): Point[]`
+
+Inward unit normal of each side of an outline, whichever way it winds.
+
 ### `function vtt.roof-recipe.presetSlopes(contour: readonly Point[], waters: 1 | 2 | 4): number[]`
 
 Which sides of a footprint rise, for a number of waters: every side; the
@@ -6877,7 +6906,7 @@ The rest are gables.
 
 The roof `request` makes, as a patch named under `operationId`, and what
 each face keeps, by region id: the recipe, under that name as its group,
-and its role.
+its role, and that role as the key an edit finds the same face again by.
 
 ### `function vtt.roof-recipe.roofOver(blocks: readonly (readonly Point[])[], elevation: number, height: number, waters: 1 | 2 | 4): RoofRequest`
 
@@ -7544,6 +7573,12 @@ joins every existing relation by declaring the trait, with no edit anywhere
 else. The set is closed on purpose: adding a trait is a deliberate design
 change, not a string a caller invents.
 
+### `variable vtt.structure-type.RECIPE_ROLE_PROP: "recipeRole"`
+
+Region property naming a regenerated face's role in its structure -- the
+same for the face that replaces it, so what is pinned to one is pinned to
+the other once the structure is made again.
+
 ### `function vtt.structure-type.allowed(role: string, axes: readonly EditAxis[], scope: EditScope, cascade?: (context: CascadeContext) => readonly AtomicEditOp[]): RolePolicy`
 
 Convenience for the common "allowed, on these axes, at this reach, no cascade" policy.
@@ -7736,7 +7771,7 @@ which type owns the grabbed part. Used to live as one tool's own params
 ambiently via `ToolContext.structureEditParams` instead of declaring it
 as its own.
 
-### `property vtt.tool-types.StructureEditParams.curveAction?: "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"`
+### `property vtt.tool-types.StructureEditParams.curveAction?: "width" | "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close"`
 
 ### `property vtt.tool-types.StructureEditParams.curveEndWidth?: number`
 
@@ -7802,7 +7837,7 @@ Perlin `scale` -- smaller values are smoother/larger-scale terrain features.
 
 ### `property vtt.tool-types.ToolParamsByTool.platform-contour: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; tolerance?: number }`
 
-### `property vtt.tool-types.ToolParamsByTool.roof: { curvatures: readonly [number, number, number, number]; elevation: number; height: number; radius: number; shape: "rectangle" | "circle" | "base"; waters: 1 | 2 | 4 }`
+### `property vtt.tool-types.ToolParamsByTool.roof: { curvatures: readonly [number, number, number, number]; dormerFront: number; dormerWidth: number; elevation: number; height: number; radius: number; shape: "rectangle" | "circle" | "base" | "dormer"; waters: 1 | 2 | 4 }`
 
 ### `property vtt.tool-types.ToolParamsByTool.slope-curve: { mode?: "arc" | "points" | "straight" | "spiral" | "connect"; rise: number; width: number }`
 
@@ -9063,11 +9098,37 @@ One convex footprint of a roof; side `i` runs from corner `i` to corner `i + 1`.
 
 Relative steepness per side; zero makes that side a gable.
 
+### `interface vtt.cap-port.RoofDormer`
+
+A dormer raised on one pitched leaf of a roof: side `side` of block `block`.
+
+### `property vtt.cap-port.RoofDormer.along: number`
+
+Where its middle stands along that side, as a fraction of it.
+
+### `property vtt.cap-port.RoofDormer.block: number`
+
+### `property vtt.cap-port.RoofDormer.front: number`
+
+How high its front wall rises above the leaf.
+
+### `property vtt.cap-port.RoofDormer.setback: number`
+
+How far in from that side its front stands.
+
+### `property vtt.cap-port.RoofDormer.side: number`
+
+### `property vtt.cap-port.RoofDormer.slopes: readonly [number, number, number, number]`
+
+Relative steepness of its front, right, back and left sides; zero makes a gable.
+
+### `property vtt.cap-port.RoofDormer.width: number`
+
 ### `interface vtt.cap-port.RoofPatch`
 
 ### `property vtt.cap-port.RoofPatch.edges: readonly { center: null; end: number; start: number }[]`
 
-### `property vtt.cap-port.RoofPatch.faces: readonly { block: number; boundary: readonly (readonly [number, boolean])[]; gable: boolean; holes: readonly (readonly (readonly [number, boolean])[])[]; side: number }[]`
+### `property vtt.cap-port.RoofPatch.faces: readonly { block: number; boundary: readonly (readonly [number, boolean])[]; holes: readonly (readonly (readonly [number, boolean])[])[]; side: number; upright: boolean }[]`
 
 ### `property vtt.cap-port.RoofPatch.nodes: readonly (readonly [number, number, number])[]`
 
@@ -9085,9 +9146,11 @@ A footprint as the convex blocks a roof is raised over; throws for a concave pla
 
 ### `interface vtt.cap-port.RoofRequest`
 
-Wire data for the native roof generator: convex blocks joined into one roof.
+Wire data for the native roof generator: convex blocks joined into one roof, and dormers on its leaves.
 
 ### `property vtt.cap-port.RoofRequest.blocks: readonly RoofBlock[]`
+
+### `property vtt.cap-port.RoofRequest.dormers?: readonly RoofDormer[]`
 
 ### `property vtt.cap-port.RoofRequest.elevation: number`
 
@@ -10683,7 +10746,7 @@ Invoked when the drawer requests to close, e.g. its own close button or Escape.
 
 Whether the drawer is currently shown.
 
-### `property vtt.ui.DrawerProps.placement?: "top" | "bottom" | "right" | "left"`
+### `property vtt.ui.DrawerProps.placement?: "top" | "right" | "left" | "bottom"`
 
 Which screen edge the drawer slides in from.
 
@@ -10774,7 +10837,7 @@ Ant Design does not do that on its own. Uncontrolled (starts collapsed,
 closes only on its own trigger/outside click) when omitted. Ignored
 when `alwaysExpanded` is set.
 
-### `property vtt.ui.FloatButtonGroupProps.placement?: "top" | "bottom" | "right" | "left"`
+### `property vtt.ui.FloatButtonGroupProps.placement?: "top" | "right" | "left" | "bottom"`
 
 Which side the group expands toward from the trigger -- `"top"`/`"bottom"`
 stack items in a vertical column, `"left"`/`"right"` lay them out in a
@@ -11032,7 +11095,7 @@ Invoked when the popover requests to close, e.g. an outside click or Escape.
 
 Whether the popover is currently shown.
 
-### `property vtt.ui.PopoverProps.placement?: "top" | "bottom" | "right" | "left"`
+### `property vtt.ui.PopoverProps.placement?: "top" | "right" | "left" | "bottom"`
 
 Which side of `anchor` the popover opens toward.
 

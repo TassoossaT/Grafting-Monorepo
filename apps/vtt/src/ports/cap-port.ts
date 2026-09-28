@@ -26,12 +26,28 @@ export interface RoofBlock {
   readonly overhangs: readonly number[];
 }
 
-/** Wire data for the native roof generator: convex blocks joined into one roof. */
+/** A dormer raised on one pitched leaf of a roof: side `side` of block `block`. */
+export interface RoofDormer {
+  readonly block: number;
+  readonly side: number;
+  /** Where its middle stands along that side, as a fraction of it. */
+  readonly along: number;
+  /** How far in from that side its front stands. */
+  readonly setback: number;
+  readonly width: number;
+  /** How high its front wall rises above the leaf. */
+  readonly front: number;
+  /** Relative steepness of its front, right, back and left sides; zero makes a gable. */
+  readonly slopes: readonly [number, number, number, number];
+}
+
+/** Wire data for the native roof generator: convex blocks joined into one roof, and dormers on its leaves. */
 export interface RoofRequest {
   readonly elevation: number;
   /** Rise of the roof's highest point above its eaves. */
   readonly height: number;
   readonly blocks: readonly RoofBlock[];
+  readonly dormers?: readonly RoofDormer[];
 }
 
 /** The engine's roof generator. */
@@ -48,7 +64,8 @@ export interface RoofPatch {
   readonly faces: readonly {
     readonly block: number;
     readonly side: number;
-    readonly gable: boolean;
+    /** Under a gable, or a dormer's front and cheeks. */
+    readonly upright: boolean;
     readonly boundary: readonly (readonly [number, boolean])[];
     readonly holes: readonly (readonly (readonly [number, boolean])[])[];
   }[];

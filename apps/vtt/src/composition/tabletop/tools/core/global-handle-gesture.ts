@@ -33,7 +33,7 @@ import { commitPatchReplacement, commitRegionEdit, commitStagedRegionEdit } from
 import type { PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
 import { HANDLE_DONE } from "../../handle-glyphs.ts";
 import { surfaceKeyText } from "../../../../features/edit-construction/index.ts";
-import { keepFaceProps } from "./face-props.ts";
+import { keepFaceProps, pinnedToRoles } from "./face-props.ts";
 
 const CHANNEL = "global-handle";
 const PREVIEW_COLOR = 0xffbc55;
@@ -307,9 +307,11 @@ function commitEdit(ctx: ToolContext, handle: GlobalHandle, edit: GlobalHandleEd
   }
   if (edit.kind === "replace") {
     const faceProps = edit.faceProps;
+    // What was pinned to the faces replaced -- a window in a gable -- is pinned to their successors.
+    const pinned = faceProps && pinnedToRoles(scene.topologies, edit.request.sourceSurfaceKeys);
     const { recorded } = commitPatchReplacement(ctx.runtime, edit.request, {
       transactionId: operationId,
-      ...(faceProps ? { afterward: (outcome) => keepFaceProps(ctx.runtime, outcome.createdSurfaceKeys, faceProps) } : {}),
+      ...(faceProps ? { afterward: (outcome) => keepFaceProps(ctx.runtime, operationId, outcome.createdSurfaceKeys, faceProps, pinned) } : {}),
     });
     if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
     return;

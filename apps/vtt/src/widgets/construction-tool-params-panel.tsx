@@ -427,10 +427,12 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
       activeTool === "roof" ? (
         <div style={{ display: "grid", gap: "0.6rem" }}>
           <div className="gm-material-grid">
-            {(["rectangle", "circle", "base"] as const).map((shape, index) => <SelectableChip key={shape} label={["Retangular", "Circular", "Sobre base"][index]!} swatchColor="#b96e48" selected={params.roof.shape === shape} onSelect={() => onParamsChange("roof", { ...params.roof, shape })} />)}
+            {(["rectangle", "circle", "base", "dormer"] as const).map((shape, index) => <SelectableChip key={shape} label={["Retangular", "Circular", "Sobre base", "Lucarna"][index]!} swatchColor="#b96e48" selected={params.roof.shape === shape} onSelect={() => onParamsChange("roof", { ...params.roof, shape })} />)}
           </div>
-          {params.roof.shape !== "base" && <label>Elevação da base <input type="number" step="0.1" value={params.roof.elevation} onChange={(event) => onParamsChange("roof", { ...params.roof, elevation: Number(event.currentTarget.value) })} /></label>}
-          <label>Altura máxima <input type="number" min="0.1" step="0.1" value={params.roof.height} onChange={(event) => onParamsChange("roof", { ...params.roof, height: Number(event.currentTarget.value) })} /></label>
+          {params.roof.shape !== "base" && params.roof.shape !== "dormer" && <label>Elevação da base <input type="number" step="0.1" value={params.roof.elevation} onChange={(event) => onParamsChange("roof", { ...params.roof, elevation: Number(event.currentTarget.value) })} /></label>}
+          {params.roof.shape === "dormer" && <label>Largura da lucarna <input type="number" min="0.3" step="0.1" value={params.roof.dormerWidth} onChange={(event) => onParamsChange("roof", { ...params.roof, dormerWidth: Number(event.currentTarget.value) })} /></label>}
+          {params.roof.shape === "dormer" && <label>Altura da frente <input type="number" min="0" step="0.1" value={params.roof.dormerFront} onChange={(event) => onParamsChange("roof", { ...params.roof, dormerFront: Number(event.currentTarget.value) })} /></label>}
+          {params.roof.shape !== "dormer" && <label>Altura máxima <input type="number" min="0.1" step="0.1" value={params.roof.height} onChange={(event) => onParamsChange("roof", { ...params.roof, height: Number(event.currentTarget.value) })} /></label>}
           {params.roof.shape === "circle" && <label>Raio <input type="number" min="0.1" step="0.1" value={params.roof.radius} onChange={(event) => onParamsChange("roof", { ...params.roof, radius: Number(event.currentTarget.value) })} /></label>}
           {params.roof.shape !== "circle" && (
             <div className="gm-material-grid">
@@ -442,7 +444,7 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
             curvatures[index] = Number(event.currentTarget.value);
             onParamsChange("roof", { ...params.roof, curvatures });
           }} /></label>)}
-          <p>Retangular: arraste entre dois cantos. Circular: clique no centro. Sobre base: clique na plataforma ou numa parede do cômodo que deseja cobrir.</p>
+          <p>Retangular: arraste entre dois cantos. Circular: clique no centro. Sobre base: clique na plataforma ou numa parede do cômodo que deseja cobrir. Lucarna: clique na água do telhado onde fica a frente dela.</p>
         </div>
       ) : activeTool === "platform-contour" ? (
         <div style={{ display: "grid", gap: "0.6rem" }}>

@@ -133,6 +133,8 @@ test("a wall run that closes no room carries no roof", () => {
 
 // ---- Handles: every edit regenerates the roof from its recipe ----
 
+/** Where node `id` is pinned: pins ride on the faces' nodes. */
+const pinOf = (runtime, id) => runtime.getAllRegionTopologies().flatMap((f) => f.nodes).find((n) => n.id === id)?.pin;
 const scene = (runtime) => ({ graph: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), cloudFor: runtime.cloudFor });
 const roofs = (runtime) => runtime.getAllRegionTopologies().filter((f) => f.surfaceType === "roof");
 const top = (runtime) => Math.max(...roofs(runtime).flatMap((f) => f.nodes.map((n) => n.position.y)));
@@ -197,7 +199,7 @@ test("raising a gable's slope turns two waters into a hip end, and an eave pushe
   const { runtime, session } = value;
   try {
     assert.equal(roofs(runtime)[0].props.roof.blocks[0].slopes.filter((s) => s === 0).length, 2);
-    const gable = shownGlobalHandles(scene(runtime)).find((h) => h.kind === "slope" && roofs(runtime).some((f) => f.props.roofFace.gable
+    const gable = shownGlobalHandles(scene(runtime)).find((h) => h.kind === "slope" && roofs(runtime).some((f) => f.props.roofFace.upright
       && f.props.roofFace.side === h.recipeHandle.part.side));
     dragHandle(value, gable, gable.position, 260);
     assert.equal(roofs(runtime)[0].props.roof.blocks[0].slopes.filter((s) => s === 0).length, 1);
@@ -233,5 +235,72 @@ test("a rectangle drawn into a standing roof joins it as a cross gable, one roof
     assert.equal(recipe.blocks.length, 2);
     assert.equal(recipe.elevation, 3, "the arm stands on the roof it joins");
     assert.ok(roofs(runtime).some((f) => f.props.roofFace.block === 1));
+  } finally { session.free(); }
+});
+
+// ---- Dormers ----
+
+/** A two-water roof over 8 x 4, rising 4, with a dormer clicked onto its front leaf. */
+function dormered() {
+  const value = roofed(2);
+  const { runtime, ctx } = value;
+  const rise = shownGlobalHandles(scene(runtime)).find((h) => h.kind === "rise");
+  dragHandle(value, rise, rise.position, 220);
+  const leaf = roofs(runtime).find((f) => !f.props.roofFace.upright && f.nodes.some((n) => n.position.z < 0));
+  // A click is a press and a release on the same spot.
+  const sample = { point: { x: 4, y: 3.6, z: 0.6 }, surfaceRef: surfaceRefFromNodeSet(leaf.surfaceKey) };
+  const params = { ...DEFAULT_TOOL_PARAMS.roof, shape: "dormer", waters: 2 };
+  roofTool.onPointerDown(ctx, sample, params);
+  roofTool.onPointerUp(ctx, { start: sample, current: sample, samples: [sample] }, params);
+  roofTool.onClick(ctx, sample, params);
+  return value;
+}
+
+test("a dormer clicked onto a leaf opens it and stands on a front and two cheeks", () => {
+  const value = dormered();
+  const { runtime, session, calls } = value;
+  try {
+    const recipe = roofs(runtime)[0].props.roof;
+    assert.equal(recipe.dormers.length, 1, JSON.stringify(calls.feedback.at(-1)));
+    const own = roofs(runtime).filter((f) => f.props.roofFace.block === 1);
+    assert.equal(own.filter((f) => !f.props.roofFace.upright).length, 2, "its two leaves");
+    assert.ok(own.some((f) => f.props.roofFace.upright && f.props.roofFace.side === 0), "a front");
+    const kinds = shownGlobalHandles(scene(runtime)).filter((h) => h.recipeHandle?.anchor?.startsWith("dormer:")).map((h) => h.kind).sort();
+    assert.deepEqual(kinds, ["pivot", "rise", "side", "side"]);
+  } finally { session.free(); }
+});
+
+test("a dormer is widened from a cheek, and brought below its leaf is removed", () => {
+  const value = dormered();
+  const { runtime, session } = value;
+  try {
+    const right = shownGlobalHandles(scene(runtime)).find((h) => h.recipeHandle?.anchor === "dormer:0:right");
+    const along = right.recipeHandle.part.along;
+    dragHandle(value, right, { x: right.position.x + along[0] * 0.5, y: right.position.y, z: right.position.z + along[1] * 0.5 });
+    assert.ok(Math.abs(roofs(runtime)[0].props.roof.dormers[0].width - 2) < 1e-6);
+    const front = shownGlobalHandles(scene(runtime)).find((h) => h.recipeHandle?.anchor === "dormer:0:front");
+    dragHandle(value, front, front.position, 400);
+    assert.equal(roofs(runtime)[0].props.roof.dormers.length, 0);
+    assert.ok(roofs(runtime).every((f) => f.props.roofFace.block === 0));
+  } finally { session.free(); }
+});
+
+test("what is pinned to a dormer's front stays pinned to it where it was when the roof is made again", () => {
+  const value = dormered();
+  const { runtime, session, ctx } = value;
+  try {
+    const front = roofs(runtime).find((f) => f.props.roofFace.block === 1 && f.props.roofFace.upright && f.props.roofFace.side === 0);
+    const window = addFace(runtime, "window", "opening", [[0.4, 0.3], [0.6, 0.3], [0.6, 0.7], [0.4, 0.7]].map(([u, v], i) => ({ id: `w${i}`, position: { x: 0, y: 0, z: 0 } })));
+    runtime.pinNodes([0, 1, 2, 3].map((i) => ({ nodeId: `w${i}`, hostSurfaceKey: front.surfaceKey, u: [0.4, 0.6, 0.6, 0.4][i], v: [0.3, 0.3, 0.7, 0.7][i] })), "local", "test-pin");
+    const pinnedBefore = pinOf(runtime, "w2");
+    assert.deepEqual(pinnedBefore?.hostSurfaceKey, front.surfaceKey);
+    const rise = shownGlobalHandles(scene(runtime)).find((h) => h.kind === "rise" && h.recipeHandle.anchor === "rise");
+    dragHandle(value, rise, rise.position, 260);
+    const now = roofs(runtime).find((f) => f.props.roofFace.block === 1 && f.props.roofFace.upright && f.props.roofFace.side === 0);
+    assert.notEqual(now.surfaceKey.join(), front.surfaceKey.join(), "the roof was made again");
+    const pin = pinOf(runtime, "w2");
+    assert.deepEqual(pin?.hostSurfaceKey, now.surfaceKey);
+    assert.ok(Math.abs(pin.u - 0.6) < 1e-9 && Math.abs(pin.v - 0.7) < 1e-9);
+    void window; void ctx;
   } finally { session.free(); }
 });

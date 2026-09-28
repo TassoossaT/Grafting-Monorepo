@@ -4326,9 +4326,13 @@ export function edgeOverlayDescriptor(group: EdgeOverlayGroup): PreviewDescripto
   return { kind: "segments", positions: group.positions, color: group.color, opacity: 1 };
 
 // src/composition/tabletop/tools/core/face-props.ts
-export function keepFaceProps(runtime: ToolContext["runtime"], created: readonly ConstructionSurfaceKey[], faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>): void {
-  for (const key of created) {
-  const regionId = regionIdOf(key);
+export interface PinnedToRoles {
+  readonly pins: readonly { readonly nodeId: string; readonly role: string; readonly u: number; readonly v: number }[];
+  }
+export function pinnedToRoles(topologies: readonly ConstructionRegionTopology[], sources: readonly ConstructionSurfaceKey[]): PinnedToRoles {
+  const replaced = new Set(sources.map(keyText));
+export function keepFaceProps(runtime: ToolContext["runtime"], causeId: string, created: readonly ConstructionSurfaceKey[], faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>, pinned?: PinnedToRoles): void {
+  const byRole = new Map<string, ConstructionSurfaceKey>();
 
 // src/composition/tabletop/tools/core/floor-landing.ts
 export function floorsOf(ctx: ToolContext): readonly ConstructionRegionTopology[] {
@@ -4751,7 +4755,7 @@ export function roofBaseAt(topologies: readonly ConstructionRegionTopology[], sa
   sample.surfaceRef ? surfaceRefFromNodeSet(face.surfaceKey) === sample.surfaceRef : sample.nodeId !== undefined && face.nodes.some((node) => node.id === sample.nodeId)));
 
 // src/composition/tabletop/tools/roof/roof-tool.ts
-export function commitRoofRecipe(ctx: ToolContext, request: RoofRequest): void {
+export function commitRoofRecipe(ctx: ToolContext, request: RoofRequest, replaces: readonly ConstructionSurfaceKey[] = []): void {
   try {
   const operationId = scopedToolId(ctx, "roof", ctx.nextSequence());
 export function commitRoof(ctx: ToolContext, capRequest: CapRequest): void {
@@ -6722,7 +6726,10 @@ export interface RoofRecipe extends RoofRequest {
 export interface RoofFaceRole {
   readonly block: number;
   readonly side: number;
-  readonly gable: boolean;
+  readonly upright: boolean;
+  }
+export function dormerSlopes(waters: 1 | 2 | 4): readonly [number, number, number, number] {
+  return waters === 2 ? [0, 1, 0, 1] : waters === 1 ? [0.5, 0, 0, 0] : [1, 1, 0, 1];
   }
 export function presetSlopes(contour: readonly Point[], waters: 1 | 2 | 4): number[] {
   const sides = contour.map((a, i) => {
@@ -6733,6 +6740,15 @@ export function roofOver(blocks: readonly (readonly Point[])[], elevation: numbe
   elevation, height,
   blocks: blocks.map((contour) => ({ contour, slopes: presetSlopes(contour, waters), overhangs: contour.map(() => ROOF_OVERHANG) })),
   };
+export function inwardNormals(contour: readonly Point[]): Point[] {
+  const winding = Math.sign(contour.reduce((sum, a, i) => {
+  const b = contour[(i + 1) % contour.length]!;
+  return sum + a[0] * b[1] - b[0] * a[1];
+  }, 0));
+export function dormerAt(recipe: RoofRequest, block: number, side: number, at: Point, width: number, front: number, waters: 1 | 2 | 4): RoofDormer {
+  const contour = recipe.blocks[block]!.contour;
+  const a = contour[side]!, c = contour[(side + 1) % contour.length]!;
+  const length = Math.hypot(c[0] - a[0], c[1] - a[1]);
 export function roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: RoofRequest, operationId: string): {
   readonly patch: ConstructionPatch;
   readonly faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>;
@@ -6745,12 +6761,12 @@ export const roofRecipeGeneration: RecipeGeneration = {
 // src/features/edit-construction/structure-types/roof/roof-structure.ts
 export const roofStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
   surfaceType: "roof", label: "Telhado", creation: "analytic sheets with one horizontal base and maximum height",
-  traits: Object.freeze([]),
+  // Its upright faces -- gables, a dormer's front -- take windows like any wall.
+  traits: Object.freeze(["accepts-cuts"] as const),
   roleFor: (_topology, target) => `roof-${target.kind}`,
   policyFor: (role) => role === "roof-region"
   ? { ...allowed(role, ALL_AXES, "cloud"), transport: true }
   : denied(role, "Mova o telhado pela face."),
-  interactionOver: () => IGNORE,
 
 // src/features/edit-construction/structure-types/structural-cut.ts
 export type CutProfile =
@@ -7736,11 +7752,20 @@ export interface RoofBlock {
   readonly slopes: readonly number[];
   readonly overhangs: readonly number[];
   }
+export interface RoofDormer {
+  readonly block: number;
+  readonly side: number;
+  /** Where its middle stands along that side, as a fraction of it. */
+  readonly along: number;
+  /** How far in from that side its front stands. */
+  readonly setback: number;
+  readonly width: number;
 export interface RoofRequest {
   readonly elevation: number;
   /** Rise of the roof's highest point above its eaves. */
   readonly height: number;
   readonly blocks: readonly RoofBlock[];
+  readonly dormers?: readonly RoofDormer[];
   }
 export interface RoofPort {
   generateRoof(request: RoofRequest): RoofPatch;
@@ -7754,7 +7779,7 @@ export interface RoofPatch {
   readonly faces: readonly {
   readonly block: number;
   readonly side: number;
-  readonly gable: boolean;
+  /** Under a gable, or a dormer's front and cheeks. */
 
 // src/ports/construction-session-port.ts
 export type ConstructionNodeId = string;
