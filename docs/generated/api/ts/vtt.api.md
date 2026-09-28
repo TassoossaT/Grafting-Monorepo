@@ -701,6 +701,8 @@ One irregular quad grid, generated against the contours given -- what
 ground is made of, whether it is being created or regenerated. Pure: it
 reads nothing from the live graph and changes nothing in it.
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.generateRoof(request: RoofRequest): RoofPatch`
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.getAllRegionTopologies(): readonly ConstructionRegionTopology[]`
 
 Every region's boundary.
@@ -894,6 +896,8 @@ Passthrough to `TerrainNoisePort.generateHeightmap` -- see that port for paramet
 One irregular quad grid, generated against the contours given -- what
 ground is made of, whether it is being created or regenerated. Pure: it
 reads nothing from the live graph and changes nothing in it.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.generateRoof(request: RoofRequest): RoofPatch`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.getAllRegionTopologies(): readonly ConstructionRegionTopology[]`
 
@@ -3239,7 +3243,11 @@ shared/cancelled edges -- see `platform-contour-merge.ts` for why.
 
 ### `variable vtt.roof-tool.ROOF_OVERHANG: 0.2`
 
-Application-wide overhang; no individual roof/band control in this delivery.
+How far every eave reaches past its footprint when a roof is made.
+
+### `variable vtt.roof-tool.ROOF_RECIPE_PROP: "roof"`
+
+Region property carrying the roof's recipe, which every edit regenerates the roof from.
 
 ### `variable vtt.roof-tool.roofTool: ConstructionTool<"roof">`
 
@@ -3247,7 +3255,21 @@ Also grabs and edits an existing roof's own vertex/edge/body -- see `structure-e
 
 ### `function vtt.roof-tool.commitRoof(ctx: ToolContext, capRequest: CapRequest): void`
 
-Assigns identities to native geometry and applies the entire covering atomically.
+Assigns identities to a native cone and applies it atomically.
+
+### `function vtt.roof-tool.commitRoofRecipe(ctx: ToolContext, request: RoofRequest): void`
+
+Commits a roof generated from `request`, keeping the recipe on every face it made.
+
+### `function vtt.roof-tool.presetSlopes(contour: readonly Point[], waters: 1 | 2 | 4): number[]`
+
+Which sides of a footprint rise, for a number of waters: every side; the
+longest side and the one facing it most squarely; or the longest alone.
+The rest are gables.
+
+### `function vtt.roof-tool.roofOver(contour: readonly Point[], elevation: number, params: { curvatures: readonly [number, number, number, number]; elevation: number; height: number; radius: number; shape: "rectangle" | "circle" | "platform"; waters: 1 | 2 | 4 }): RoofRequest`
+
+A one-block roof over a convex footprint, shaped by the tool's waters.
 
 ### `interface vtt.geometry-2d.PointXZ`
 
@@ -7622,7 +7644,7 @@ Perlin `scale` -- smaller values are smoother/larger-scale terrain features.
 
 ### `property vtt.tool-types.ToolParamsByTool.platform-contour: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; tolerance?: number }`
 
-### `property vtt.tool-types.ToolParamsByTool.roof: { curvatures: readonly [number, number, number, number]; elevation: number; height: number; radius: number; shape: "rectangle" | "circle" | "platform" }`
+### `property vtt.tool-types.ToolParamsByTool.roof: { curvatures: readonly [number, number, number, number]; elevation: number; height: number; radius: number; shape: "rectangle" | "circle" | "platform"; waters: 1 | 2 | 4 }`
 
 ### `property vtt.tool-types.ToolParamsByTool.slope-curve: { mode?: "arc" | "points" | "straight" | "spiral" | "connect"; rise: number; width: number }`
 
@@ -8871,6 +8893,40 @@ Grafting-owned wire data for the native analytic cap generator.
 
 ### `property vtt.cap-port.CapRequest.overhang: number`
 
+### `interface vtt.cap-port.RoofBlock`
+
+One convex footprint of a roof; side `i` runs from corner `i` to corner `i + 1`.
+
+### `property vtt.cap-port.RoofBlock.contour: readonly (readonly [number, number])[]`
+
+### `property vtt.cap-port.RoofBlock.overhangs: readonly number[]`
+
+### `property vtt.cap-port.RoofBlock.slopes: readonly number[]`
+
+Relative steepness per side; zero makes that side a gable.
+
+### `interface vtt.cap-port.RoofPatch`
+
+### `property vtt.cap-port.RoofPatch.edges: readonly { center: null; end: number; start: number }[]`
+
+### `property vtt.cap-port.RoofPatch.faces: readonly { block: number; boundary: readonly (readonly [number, boolean])[]; gable: boolean; holes: readonly (readonly (readonly [number, boolean])[])[]; side: number }[]`
+
+### `property vtt.cap-port.RoofPatch.nodes: readonly (readonly [number, number, number])[]`
+
+### `property vtt.cap-port.RoofPatch.preview: readonly (readonly [number, number, number, number, number, number])[]`
+
+### `interface vtt.cap-port.RoofRequest`
+
+Wire data for the native roof generator: convex blocks joined into one roof.
+
+### `property vtt.cap-port.RoofRequest.blocks: readonly RoofBlock[]`
+
+### `property vtt.cap-port.RoofRequest.elevation: number`
+
+### `property vtt.cap-port.RoofRequest.height: number`
+
+Rise of the roof's highest point above its eaves.
+
 ### `interface vtt.construction-session-port.AffectedSurfaces`
 
 ### `property vtt.construction-session-port.AffectedSurfaces.affectedSurfaceKeys: readonly ConstructionSurfaceKey[]`
@@ -9540,6 +9596,8 @@ ConstructionIrregularQuadGrid for why that split is deliberate.
 `undefined` where the contours describe no ground that can be
 triangulated. That is a refusal, not an error: a caller that gets one
 leaves what is standing alone rather than substituting something.
+
+### `method vtt.construction-session-port.ConstructionSessionPort.generateRoof(request: RoofRequest): RoofPatch`
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.getAllRegionTopologies(): readonly ConstructionRegionTopology[]`
 

@@ -633,6 +633,7 @@ export interface ConstructionPlanarRequest {
 }
 export interface ConstructionSessionPort extends BezierPort {
   generateCap(request: import("./cap-port.ts").CapRequest): import("./cap-port.ts").CapPatch;
+  generateRoof(request: import("./cap-port.ts").RoofRequest): import("./cap-port.ts").RoofPatch;
   planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[];
   /** Pure cascade resolution, using one consistent engine state. */
   planMotion(request: ConstructionMotionRequest): ConstructionMotionPlan;

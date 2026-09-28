@@ -1181,6 +1181,26 @@ Resolves a supported authored contour without approximating its footprint.
 
 Generates a cap with shared seam identities and no degenerate apex edges.
 
+### `pub fn grafting_graph_core::profile_roof::RoofBlock::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>`
+
+### `pub fn grafting_graph_core::profile_roof::RoofBlock::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer`
+
+### `pub fn grafting_graph_core::profile_roof::RoofFace::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>`
+
+### `pub fn grafting_graph_core::profile_roof::RoofFace::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer`
+
+### `pub fn grafting_graph_core::profile_roof::RoofPatch::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>`
+
+### `pub fn grafting_graph_core::profile_roof::RoofPatch::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer`
+
+### `pub fn grafting_graph_core::profile_roof::RoofRequest::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>`
+
+### `pub fn grafting_graph_core::profile_roof::RoofRequest::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer`
+
+### `pub fn grafting_graph_core::profile_roof::generate_roof_patch(request: grafting_graph_core::profile_roof::RoofRequest) -> core::result::Result<grafting_graph_core::profile_roof::RoofPatch, alloc::string::String>`
+
+Generates a roof with shared seam identities between all its faces.
+
 ### `pub fn grafting_graph_core::profile_surface::ProfileSheet::point(&self, u: f64, v: f64) -> core::result::Result<[f64; 3], alloc::string::String>`
 
 Evaluates the surface without replacing its analytic source by vertices.
@@ -2417,6 +2437,67 @@ Maximum rise above the base.
 
 Horizontal expansion of the base contour.
 
+### `pub grafting_graph_core::profile_roof::RoofBlock::contour: alloc::vec::Vec<[f64; 2]>`
+
+Footprint corners in XZ, in either winding. Side `i` runs from corner
+`i` to corner `i + 1`.
+
+### `pub grafting_graph_core::profile_roof::RoofBlock::overhangs: alloc::vec::Vec<f64>`
+
+How far each side's eave reaches out past the footprint.
+
+### `pub grafting_graph_core::profile_roof::RoofBlock::slopes: alloc::vec::Vec<f64>`
+
+Relative steepness of each side's leaf; zero makes that side a gable.
+
+### `pub grafting_graph_core::profile_roof::RoofFace::block: usize`
+
+Index of the block this face belongs to.
+
+### `pub grafting_graph_core::profile_roof::RoofFace::boundary: alloc::vec::Vec<(usize, bool)>`
+
+`(edge index, reversed)` uses of the outer loop.
+
+### `pub grafting_graph_core::profile_roof::RoofFace::gable: bool`
+
+Whether this is the vertical face closing a gable side.
+
+### `pub grafting_graph_core::profile_roof::RoofFace::holes: alloc::vec::Vec<alloc::vec::Vec<(usize, bool)>>`
+
+Inner loops, where another block's roof climbs through this face.
+
+### `pub grafting_graph_core::profile_roof::RoofFace::side: usize`
+
+Index of the footprint side this face rises from.
+
+### `pub grafting_graph_core::profile_roof::RoofPatch::edges: alloc::vec::Vec<grafting_graph_core::profile_cap_patch::CapEdge>`
+
+Shared straight edges.
+
+### `pub grafting_graph_core::profile_roof::RoofPatch::faces: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofFace>`
+
+Pitched leaves and gable faces.
+
+### `pub grafting_graph_core::profile_roof::RoofPatch::nodes: alloc::vec::Vec<[f64; 3]>`
+
+Unique XYZ nodes.
+
+### `pub grafting_graph_core::profile_roof::RoofPatch::preview: alloc::vec::Vec<[f64; 6]>`
+
+Transient XYZ segment endpoints of every edge, for a preview.
+
+### `pub grafting_graph_core::profile_roof::RoofRequest::blocks: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofBlock>`
+
+Convex blocks joined into one roof.
+
+### `pub grafting_graph_core::profile_roof::RoofRequest::elevation: f64`
+
+Elevation of every eave.
+
+### `pub grafting_graph_core::profile_roof::RoofRequest::height: f64`
+
+Rise of the highest point of the roof above the eaves.
+
 ### `pub grafting_graph_core::profile_surface::ProfileSheet::lower: grafting_graph_core::profile_surface::Section`
 
 Lower analytic section.
@@ -2519,6 +2600,19 @@ Four-sheet caps with one shared base and maximum elevation.
 ### `pub mod grafting_graph_core::profile_cap_patch`
 
 Indexed, shared-boundary topology for analytic caps. No live graph mutation.
+
+### `pub mod grafting_graph_core::profile_roof`
+
+Roofs raised over convex footprints, one leaf per footprint side.
+
+Every side of a block either rises inward at its own slope -- a pitched
+leaf -- or does not rise at all -- a gable, closed by a vertical face. A
+block's roof is the lower envelope of its leaf planes, which is exactly the
+weighted straight skeleton of a convex footprint. Overlapping blocks join
+as the upper envelope of their roofs: an L, T or cross plan gets its
+valleys from where one block's roof climbs out of another's.
+
+One water, two waters and four waters are only which sides are pitched.
 
 ### `pub mod grafting_graph_core::profile_surface`
 
@@ -2791,6 +2885,22 @@ Transient cap description ready for a caller to assign graph identities.
 ### `pub struct grafting_graph_core::profile_cap_patch::CapRequest`
 
 Pure generation request with one common elevation and height.
+
+### `pub struct grafting_graph_core::profile_roof::RoofBlock`
+
+One convex footprint and the role of each of its sides.
+
+### `pub struct grafting_graph_core::profile_roof::RoofFace`
+
+One logical roof face over shared indexed edges.
+
+### `pub struct grafting_graph_core::profile_roof::RoofPatch`
+
+Transient roof description ready for a caller to assign graph identities.
+
+### `pub struct grafting_graph_core::profile_roof::RoofRequest`
+
+A whole roof: its blocks, where they stand and how high the roof rises.
 
 ### `pub struct grafting_graph_core::profile_surface::ProfileSheet`
 

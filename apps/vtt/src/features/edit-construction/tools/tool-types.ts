@@ -232,7 +232,7 @@ export interface StructureEditParams {
 export const DEFAULT_STRUCTURE_EDIT_PARAMS: StructureEditParams = Object.freeze({ mode: "shape" });
 
 export interface ToolParamsByTool {
-  readonly roof: { readonly shape: "rectangle" | "circle" | "platform"; readonly elevation: number; readonly height: number; readonly radius: number; readonly curvatures: readonly [number, number, number, number] };
+  readonly roof: { readonly shape: "rectangle" | "circle" | "platform"; readonly waters: 1 | 2 | 4; readonly elevation: number; readonly height: number; readonly radius: number; readonly curvatures: readonly [number, number, number, number] };
   readonly navigate: NoToolParams;
   readonly "platform-contour": { readonly elevation: number; readonly mode: "create" | "extend" | "cut"; readonly shape?: "rectangle" | "polygon" | "freehand" | "circle"; readonly radius?: number; readonly tolerance?: number };
   /** A straight ramp dragged from start to end, climbing a fixed rise, with its own width at each end. */
@@ -259,7 +259,7 @@ export interface ToolParamsByTool {
 export type ToolParamsFor<Id extends ConstructionToolId> = ToolParamsByTool[Id];
 
 export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
-  roof: Object.freeze({ shape: "rectangle", elevation: 3, height: 2, radius: 2.5, curvatures: [0, 0, 0, 0] as const }),
+  roof: Object.freeze({ shape: "rectangle", waters: 4 as const, elevation: 3, height: 2, radius: 2.5, curvatures: [0, 0, 0, 0] as const }),
   navigate: Object.freeze({}),
   "platform-contour": Object.freeze({ elevation: 0, mode: "create", support: "grounded", shape: "rectangle", radius: 2.5, tolerance: 0.15 }),
   "slope-ramp": Object.freeze({ bottomWidth: 1.5, topWidth: 1.5, rise: 3 }),

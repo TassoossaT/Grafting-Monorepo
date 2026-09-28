@@ -432,7 +432,12 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
           {params.roof.shape !== "platform" && <label>Elevação da base <input type="number" step="0.1" value={params.roof.elevation} onChange={(event) => onParamsChange("roof", { ...params.roof, elevation: Number(event.currentTarget.value) })} /></label>}
           <label>Altura máxima <input type="number" min="0.1" step="0.1" value={params.roof.height} onChange={(event) => onParamsChange("roof", { ...params.roof, height: Number(event.currentTarget.value) })} /></label>
           {params.roof.shape === "circle" && <label>Raio <input type="number" min="0.1" step="0.1" value={params.roof.radius} onChange={(event) => onParamsChange("roof", { ...params.roof, radius: Number(event.currentTarget.value) })} /></label>}
-          {params.roof.curvatures.map((curvature, index) => <label key={index}>Curvatura da folha {index + 1} <input type="number" min="-1" max="1" step="0.1" value={curvature} onChange={(event) => {
+          {params.roof.shape !== "circle" && (
+            <div className="gm-material-grid">
+              {([4, 2, 1] as const).map((waters) => <SelectableChip key={waters} label={`${waters} ${waters === 1 ? "água" : "águas"}`} swatchColor="#b96e48" selected={params.roof.waters === waters} onSelect={() => onParamsChange("roof", { ...params.roof, waters })} />)}
+            </div>
+          )}
+          {params.roof.shape === "circle" && params.roof.curvatures.map((curvature, index) => <label key={index}>Curvatura da folha {index + 1} <input type="number" min="-1" max="1" step="0.1" value={curvature} onChange={(event) => {
             const curvatures: [number, number, number, number] = [...params.roof.curvatures];
             curvatures[index] = Number(event.currentTarget.value);
             onParamsChange("roof", { ...params.roof, curvatures });

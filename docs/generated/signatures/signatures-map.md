@@ -133,6 +133,7 @@ pub fn set_region_props(
 // src/session.rs
 pub struct ConstructionSession
 pub fn profile_cap_json(&self, json: &str) -> Result<String, JsValue>
+pub fn profile_roof_json(&self, json: &str) -> Result<String, JsValue>
 pub fn bezier_batch_json(&self, json: &str) -> Result<String, JsValue>
 pub fn bezier_network_json(&self, json: &str) -> Result<String, JsValue>
 pub fn new() -> ConstructionSession
@@ -145,7 +146,6 @@ pub fn plan_motion_json(&self, request_json: &str) -> Result<String, JsValue>
 pub fn move_vertices_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn move_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn insert_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue>
-pub fn remove_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue>
 
 // src/spatial_index.rs
 pub const DEFAULT_GRID_CELL_SIZE: f32 = 4.0;
@@ -3810,12 +3810,12 @@ export interface TransactionResult<T> {
   }
 export interface TabletopRuntime extends BezierPort {
   generateCap(request: import("../../ports/cap-port.ts").CapRequest): import("../../ports/cap-port.ts").CapPatch;
+  generateRoof(request: import("../../ports/cap-port.ts").RoofRequest): import("../../ports/cap-port.ts").RoofPatch;
   start(): Promise<void>;
   applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void;
   /**
   * Applies a resolved sequence of atomic edit ops as one transaction --
   * what `planEdit` produced from the user's gesture and the grabbed role's
-  * own policy. The runtime deliberately does not resolve policy itself:
 export class AppTabletopRuntime implements TabletopRuntime {
   readonly #listeners = new Set<TabletopRuntimeListener>();
 
@@ -4740,6 +4740,19 @@ export const platformContourTool = withStructureEditing(rawPlatformContourTool, 
 
 // src/composition/tabletop/tools/roof/roof-tool.ts
 export const ROOF_OVERHANG = 0.2;
+export const ROOF_RECIPE_PROP = "roof";
+export function presetSlopes(contour: readonly Point[], waters: Params["waters"]): number[] {
+  const sides = contour.map((a, i) => {
+  const b = contour[(i + 1) % contour.length]!;
+  const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+export function roofOver(contour: readonly Point[], elevation: number, params: Params): RoofRequest {
+  return {
+  elevation, height: params.height,
+  blocks: [{ contour, slopes: presetSlopes(contour, params.waters), overhangs: contour.map(() => ROOF_OVERHANG) }],
+  };
+export function commitRoofRecipe(ctx: ToolContext, request: RoofRequest): void {
+  try {
+  const roof = ctx.runtime.generateRoof(request);
 export function commitRoof(ctx: ToolContext, capRequest: CapRequest): void {
   try {
   const cap = ctx.runtime.generateCap(capRequest);
@@ -7674,6 +7687,26 @@ export interface CapPatch {
   readonly edges: readonly { readonly start: number; readonly end: number; readonly center: readonly [number, number] | null }[];
   readonly faces: readonly { readonly boundary: readonly (readonly [number, boolean])[]; readonly profile: ConstructionSheetProfile }[];
   }
+export interface RoofBlock {
+  readonly contour: readonly (readonly [number, number])[];
+  /** Relative steepness per side; zero makes that side a gable. */
+  readonly slopes: readonly number[];
+  readonly overhangs: readonly number[];
+  }
+export interface RoofRequest {
+  readonly elevation: number;
+  /** Rise of the roof's highest point above its eaves. */
+  readonly height: number;
+  readonly blocks: readonly RoofBlock[];
+  }
+export interface RoofPatch {
+  readonly preview: readonly (readonly [number, number, number, number, number, number])[];
+  readonly nodes: readonly (readonly [number, number, number])[];
+  readonly edges: readonly { readonly start: number; readonly end: number; readonly center: null }[];
+  readonly faces: readonly {
+  readonly block: number;
+  readonly side: number;
+  readonly gable: boolean;
 
 // src/ports/construction-session-port.ts
 export type ConstructionNodeId = string;

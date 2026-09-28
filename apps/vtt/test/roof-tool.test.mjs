@@ -8,17 +8,18 @@ import { surfaceRefFromNodeSet } from "../src/entities/map/index.ts";
 function fixture() {
   const value = sessionFixture();
   value.runtime.generateCap = (request) => JSON.parse(value.session.profile_cap_json(JSON.stringify(request)));
+  value.runtime.generateRoof = (request) => JSON.parse(value.session.profile_roof_json(JSON.stringify(request)));
   let operations = 0;
   const apply = value.runtime.applyPatchReplacement;
   value.runtime.applyPatchReplacement = (request) => { operations++; return apply(request); };
   return { ...value, operations: () => operations };
 }
 
-test("roof drag commits four native sheets exactly once, preserving per-face profiles", () => {
+test("roof drag commits a four-water roof exactly once, keeping its recipe on every face", () => {
   const { ctx, runtime, session, operations } = fixture();
   try {
     const start = { point: { x: 0, y: 0, z: 0 } }, current = { point: { x: 8, y: 0, z: 4 } };
-    const params = { ...DEFAULT_TOOL_PARAMS.roof, elevation: 3, height: 5, curvatures: [-1, 0, 1, 0.5] };
+    const params = { ...DEFAULT_TOOL_PARAMS.roof, elevation: 3, height: 5 };
     const gesture = { start, current, samples: [start, current] };
     roofTool.previewFor(gesture, params, ctx);
     assert.equal(operations(), 0);
@@ -26,7 +27,8 @@ test("roof drag commits four native sheets exactly once, preserving per-face pro
     assert.equal(operations(), 1);
     const faces = runtime.getAllRegionTopologies();
     assert.equal(faces.length, 4);
-    assert.deepEqual(faces.map((f) => f.profile.middle), params.curvatures);
+    assert.ok(faces.every((f) => f.props.roof.blocks[0].slopes.every((slope) => slope === 1)));
+    assert.equal(new Set(faces.map((f) => f.props.roof.group)).size, 1);
     assert.equal(Math.max(...faces.flatMap((f) => f.nodes.map((n) => n.position.y))), 8);
     const cloud = resolveCloudTopology(runtime, faces[0].surfaceKey);
     const plan = planEdit(cloud, { surfaceKey: faces[0].surfaceKey, target: { kind: "region" }, delta: { x: 0, y: 2, z: 0 } }, runtime.getGraphSnapshot(), runtime);
@@ -72,4 +74,20 @@ test("roof on a platform takes its contour and elevation without replacing the p
     session.redo_region_overlay(ctx.history.redo().transactionId);
     assert.equal(runtime.getAllRegionTopologies().length, 5);
   } finally { session.free(); }
+});
+
+test("two and one waters close their unpitched sides with vertical gables", () => {
+  for (const [waters, leaves, gables] of [[2, 2, 2], [1, 1, 3]]) {
+    const { ctx, runtime, session } = fixture();
+    try {
+      const start = { point: { x: 0, y: 0, z: 0 } }, current = { point: { x: 8, y: 0, z: 4 } };
+      roofTool.onPointerUp(ctx, { start, current, samples: [start, current] }, { ...DEFAULT_TOOL_PARAMS.roof, waters, elevation: 3, height: 2 });
+      const faces = runtime.getAllRegionTopologies();
+      // A vertical face stands on one line in plan.
+      const vertical = ({ nodes: [a, b, ...rest] }) => rest.every((c) => Math.abs((b.position.x - a.position.x) * (c.position.z - a.position.z) - (b.position.z - a.position.z) * (c.position.x - a.position.x)) < 1e-6);
+      assert.equal(faces.length, leaves + gables, `${waters} waters`);
+      assert.equal(faces.filter(vertical).length, gables, `${waters} waters`);
+      assert.equal(Math.max(...faces.flatMap((f) => f.nodes.map((n) => n.position.y))), 5);
+    } finally { session.free(); }
+  }
 });

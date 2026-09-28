@@ -182,6 +182,15 @@ impl ConstructionSession {
         )
     }
 
+    /// Generates an indexed roof over convex blocks without mutating the live graph.
+    pub fn profile_roof_json(&self, json: &str) -> Result<String, JsValue> {
+        let request = parse::<grafting_graph_core::profile_roof::RoofRequest>(json)?;
+        serialize(
+            &grafting_graph_core::profile_roof::generate_roof_patch(request)
+                .map_err(to_js_error)?,
+        )
+    }
+
     /// Evaluates a batch of generic curve-authoring commands without mutation.
     pub fn bezier_batch_json(&self, json: &str) -> Result<String, JsValue> {
         let request = parse::<grafting_graph_core::bezier_commands::CurveBatch>(json)?;

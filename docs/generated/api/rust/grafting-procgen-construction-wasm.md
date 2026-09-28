@@ -167,6 +167,10 @@ Generic closed-contour union/subtraction. Product selection stays in the caller.
 
 Generates an indexed analytic cap without mutating the live graph.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::profile_roof_json(&self, json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Generates an indexed roof over convex blocks without mutating the live graph.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::project_to_host_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
 World points as unclamped `(u, v)` on an upright host face.
