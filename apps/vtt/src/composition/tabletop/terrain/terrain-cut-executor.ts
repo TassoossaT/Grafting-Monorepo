@@ -344,8 +344,9 @@ export function executeTerrainCut(
 
   const coveredKeys = new Set(covered.map((c) => c.surfaceKey.join(" ")));
 
+  const stale = new Set((request.staleRegions ?? []).map((key) => key.join(" ")));
   // The target is ground by construction above, so every ground face matches it.
-  const terrainStanding = standing.filter((topology) => hasTrait(topology.surfaceType, "ground"));
+  const terrainStanding = standing.filter((topology) => hasTrait(topology.surfaceType, "ground") && !stale.has(topology.surfaceKey.join(" ")));
   let affected = terrainStanding.filter(
     (topology) =>
       coveredKeys.has(topology.surfaceKey.join(" ")) ||
@@ -462,7 +463,7 @@ export function executeTerrainCut(
 
       affected = [...affected, ...absorbed];
       affectedKeys = new Set(affected.map((t) => t.surfaceKey.join(" ")));
-      retained = terrainStanding.filter((t) => !affectedKeys.has(t.surfaceKey.join(" ")));
+      retained = terrainStanding.filter((t) => !affectedKeys.has(t.surfaceKey.join(" ")) && !stale.has(t.surfaceKey.join(" ")));
       targetPolygon = timePhase(`chão a regerar com vizinhas (${affected.length} faces)`, () => groundFor(affected));
     }
   }
@@ -605,7 +606,13 @@ export function executeTerrainCut(
     boundary: boundaryRings,
     holes: holeRings,
     sources: perimeters.sources,
-    replaceSurfaceKeys: affected.length > 0 ? affected.map((f) => f.surfaceKey) : undefined,
+    replaceSurfaceKeys:
+      affected.length > 0 || (request.vacatedArea && request.staleRegions && request.staleRegions.length > 0)
+        ? [
+            ...affected.map((f) => f.surfaceKey),
+            ...(request.vacatedArea ? ((request.staleRegions ?? []) as readonly ConstructionSurfaceKey[]) : []),
+          ]
+        : undefined,
     // The road belongs here as much as the retained terrain does. These seeds
     // are what `fillTerrain` reads back to learn which edges already have a
     // face on them and which way that face walks; a road left out of them is a

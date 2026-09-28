@@ -4042,6 +4042,9 @@ export type LatticeRepairExecutor = (
   ) => number;
 
   const DONE: ReactionOutcome = Object.freeze({ kind: "done" });
+export function topologyIntersectsPolygon(topology: ConstructionRegionTopology, polygon: readonly (readonly [number, number])[]): boolean {
+  if (polygon.length < 3 || topology.nodes.length === 0) return false;
+  const positions = new Map(topology.nodes.map((node) => [node.id, [node.position.x, node.position.z] as [number, number]]));
 export function pointBucketIndex(points: readonly ConstructionPosition[], cellSize: number) {
   const buckets = new Map<string, ConstructionPosition[]>();
 export function latticeRegenerateReaction(executor: LatticeRepairExecutor = repairTerrainCut): Reaction<LatticeReactionRuntime> {

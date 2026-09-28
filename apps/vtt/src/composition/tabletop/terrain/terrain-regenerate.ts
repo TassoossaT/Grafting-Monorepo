@@ -8,6 +8,7 @@ import { executeTerrainCut } from "./terrain-cut-executor.ts";
 import { DEFAULT_FACE_SIDE } from "./terrain-fill.ts";
 import type { TerrainCutRuntime } from "./terrain-neighborhood.ts";
 import { hasTrait } from "../../../features/edit-construction/index.ts";
+import { topologyIntersectsPolygon } from "./terrain-lattice-reaction.ts";
 
 /**
  * Growing terrain back where something cut through it.
@@ -136,19 +137,106 @@ export function repairTerrainCut(
     .filter((topology): topology is ConstructionRegionTopology => topology !== undefined);
   if (consumed.length === 0 && (!fallout.vacatedGround || fallout.vacatedGround.length === 0)) return 0;
 
+  const connectTo =
+    fallout.painterSurfaceType !== undefined
+      ? { surfaceType: fallout.painterSurfaceType }
+      : undefined;
+
+  const hasVacated = fallout.vacatedGround && fallout.vacatedGround.length > 0;
+  const hasFootprint = fallout.footprintOutline !== undefined && fallout.footprintOutline.length >= 3;
+
+  // Check if vacated ground and footprint are spatially separated (e.g. moved across the map)
+  let separated = false;
+  if (hasVacated && hasFootprint) {
+    let vMinX = Infinity, vMaxX = -Infinity, vMinZ = Infinity, vMaxZ = -Infinity;
+    for (const piece of fallout.vacatedGround!) {
+      for (const ring of piece) {
+        for (const [x, z] of ring) {
+          if (x < vMinX) vMinX = x;
+          if (x > vMaxX) vMaxX = x;
+          if (z < vMinZ) vMinZ = z;
+          if (z > vMaxZ) vMaxZ = z;
+        }
+      }
+    }
+    let fMinX = Infinity, fMaxX = -Infinity, fMinZ = Infinity, fMaxZ = -Infinity;
+    for (const [x, z] of fallout.footprintOutline!) {
+      if (x < fMinX) fMinX = x;
+      if (x > fMaxX) fMaxX = x;
+      if (z < fMinZ) fMinZ = z;
+      if (z > fMaxZ) fMaxZ = z;
+    }
+    const margin = DEFAULT_FACE_SIDE * 1.5;
+    separated = (vMaxX + margin < fMinX || fMaxX + margin < vMinX || vMaxZ + margin < fMinZ || fMaxZ + margin < vMinZ);
+  }
+
+  if (separated) {
+    let builtTotal = 0;
+    // 1. Where the structure left: regrow vacated ground and clear dragged stale regions.
+    const vacatedOutline = outlineAroundMultiPolygon(fallout.vacatedGround!);
+    if (vacatedOutline.length >= 3) {
+      const draggedKeys = new Set((fallout.draggedSurfaceKeys ?? []).map((k) => k.join(" ")));
+      const vacatedConsumed = consumed.filter((t) => draggedKeys.has(t.surfaceKey.join(" ")) || topologyIntersectsPolygon(t, vacatedOutline));
+      const outcome = executeTerrainCut(runtime, {
+        area: { outline: vacatedOutline },
+        coveredRegions: vacatedConsumed.map((topology) => ({
+          surfaceKey: topology.surfaceKey,
+          surfaceType: topology.surfaceType,
+        })),
+        targetSurfaceType: (consumed[0] && hasTrait(consumed[0].surfaceType, "ground")) ? consumed[0].surfaceType : "terrain",
+        profile: {
+          kind: "regenerate",
+          connectTo,
+        },
+        vacatedArea: fallout.vacatedGround,
+        staleRegions: fallout.draggedSurfaceKeys,
+        causeId: `${causeId}:vacated`,
+        tableId,
+        faceSide: DEFAULT_FACE_SIDE,
+        seed: Math.max(1, Math.abs(hashOf(fallout.draggedSurfaceKeys ?? []))),
+        irregularity: 0.7,
+      });
+      builtTotal += outcome.builtFaces;
+    }
+
+    // 2. Where the structure arrived: re-cut ground around it.
+    const outline = fallout.footprintOutline!;
+    const draggedKeys = new Set((fallout.draggedSurfaceKeys ?? []).map((k) => k.join(" ")));
+    const arrivalConsumed = consumed
+      .filter((t) => !draggedKeys.has(t.surfaceKey.join(" ")))
+      .filter((t) => topologyIntersectsPolygon(t, outline));
+    const outcome = executeTerrainCut(runtime, {
+      area: { outline },
+      coveredRegions: arrivalConsumed.map((topology) => ({
+        surfaceKey: topology.surfaceKey,
+        surfaceType: topology.surfaceType,
+      })),
+      targetSurfaceType: (consumed[0] && hasTrait(consumed[0].surfaceType, "ground")) ? consumed[0].surfaceType : "terrain",
+      profile: {
+        kind: "regenerate",
+        connectTo,
+      },
+      causeId,
+      tableId,
+      faceSide: DEFAULT_FACE_SIDE,
+      seed: Math.max(1, Math.abs(hashOf(fallout.consumedSurfaceKeys))),
+      irregularity: 0.7,
+    });
+    builtTotal += outcome.builtFaces;
+    return builtTotal;
+  }
+
+  // Single cut (in-place edit, overlapping movement, creation, or pure deletion)
   const outline =
-    fallout.footprintOutline !== undefined && fallout.footprintOutline.length >= 3
-      ? fallout.footprintOutline
+    hasFootprint
+      ? fallout.footprintOutline!
       : (consumed.length > 0
           ? outlineAroundConsumed(consumed)
-          : (fallout.vacatedGround ? outlineAroundMultiPolygon(fallout.vacatedGround) : []));
+          : (hasVacated ? outlineAroundMultiPolygon(fallout.vacatedGround!) : []));
   if (outline.length < 3) return 0;
 
   const outcome = executeTerrainCut(runtime, {
     area: { outline },
-    // The planner already resolved which ground this cut consumed. Handing it
-    // over rather than letting the executor re-derive it from the outline
-    // keeps one answer to that question instead of two.
     coveredRegions: consumed.map((topology) => ({
       surfaceKey: topology.surfaceKey,
       surfaceType: topology.surfaceType,
@@ -156,19 +244,13 @@ export function repairTerrainCut(
     targetSurfaceType: (consumed[0] && hasTrait(consumed[0].surfaceType, "ground")) ? consumed[0].surfaceType : "terrain",
     profile: {
       kind: "regenerate",
-      connectTo:
-        fallout.painterSurfaceType !== undefined
-          ? { surfaceType: fallout.painterSurfaceType }
-          : undefined,
+      connectTo,
     },
     vacatedArea: fallout.vacatedGround,
     staleRegions: fallout.draggedSurfaceKeys,
     causeId,
     tableId,
     faceSide: DEFAULT_FACE_SIDE,
-    // Deterministic in the ground itself rather than in the clock, so the same
-    // neighbourhood regenerated twice comes back the same: replayable from the
-    // same log.
     seed: Math.max(1, Math.abs(hashOf(fallout.consumedSurfaceKeys))),
     irregularity: 0.7,
   });

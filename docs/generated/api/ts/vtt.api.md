@@ -1797,6 +1797,8 @@ tests hand in a recorder to see exactly what a regeneration would be given.
 
 Fast spatial bucketing for proximity queries against a set of points.
 
+### `function vtt.terrain-lattice-reaction.topologyIntersectsPolygon(topology: ConstructionRegionTopology, polygon: readonly (readonly [number, number])[]): boolean`
+
 ### `interface vtt.terrain-neighborhood.HeightField`
 
 Heights sampled from the ground around an area, so what is laid inside it

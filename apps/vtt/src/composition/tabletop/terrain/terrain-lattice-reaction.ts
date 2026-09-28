@@ -12,10 +12,13 @@ import type {
 import type { CutFallout, Effect, Reaction, ReactionOutcome } from "@/features/edit-construction";
 
 import {
+  type ContactCell,
   GROUND_CONTACT_CELL,
   groundContactOf,
   groundSurfaceOf,
   planTerrainCloudCutRepair,
+  planarDifference,
+  planarUnion,
   pointInOrOnPolygon,
   terrainTopologiesBounds,
 } from "../../../features/edit-construction/index.ts";
@@ -23,7 +26,7 @@ import { timePhase } from "../commit-timing.ts";
 import { paintedFalloutOf } from "../interference/painted-topologies.ts";
 import { repairTerrainCut, type TerrainRegenerateRuntime } from "./terrain-regenerate.ts";
 import { REALLY_MOVED, changeAreaOf, largestOuterRing } from "../effects/change-area.ts";
-import type { PlanarArea } from "@/features/edit-construction";
+import type { PlanarArea, PlanarPolygon } from "@/features/edit-construction";
 
 /**
  * The `"lattice-regenerate"` reaction: how a ground cloud answers a change
@@ -67,7 +70,7 @@ function segmentsIntersect(a: readonly [number, number], b: readonly [number, nu
     ((abC > 0) !== (abD > 0) && (cdA > 0) !== (cdB > 0));
 }
 
-function topologyIntersectsPolygon(topology: ConstructionRegionTopology, polygon: readonly (readonly [number, number])[]): boolean {
+export function topologyIntersectsPolygon(topology: ConstructionRegionTopology, polygon: readonly (readonly [number, number])[]): boolean {
   if (polygon.length < 3 || topology.nodes.length === 0) return false;
   const positions = new Map(topology.nodes.map((node) => [node.id, [node.position.x, node.position.z] as [number, number]]));
   const rings = [...topology.outerLoops, ...topology.holes];
@@ -142,7 +145,13 @@ export function pointBucketIndex(points: readonly ConstructionPosition[], cellSi
   };
 }
 
-function centroidInside(topology: ConstructionRegionTopology, cutters: readonly { outer: [number, number][]; holes: [number, number][][] }[]): boolean {
+function centroidInside(
+  topology: ConstructionRegionTopology,
+  cutters: readonly {
+    readonly outer: readonly (readonly [number, number])[];
+    readonly holes: readonly (readonly (readonly [number, number])[])[];
+  }[],
+): boolean {
   if (topology.nodes.length === 0) return false;
   const cx = topology.nodes.reduce((sum, n) => sum + n.position.x, 0) / topology.nodes.length;
   const cz = topology.nodes.reduce((sum, n) => sum + n.position.z, 0) / topology.nodes.length;
@@ -150,7 +159,12 @@ function centroidInside(topology: ConstructionRegionTopology, cutters: readonly 
 }
 
 /** The changed cloud's faces as solid XZ polygons, read at their live node positions. */
-function cutterPolygonsOf(runtime: LatticeReactionRuntime, faces: readonly ConstructionRegionTopology[]) {
+/** The changed cloud's faces as solid XZ polygons, read at their live node positions, restricted to where they touch ground. */
+function cutterPolygonsOf(
+  runtime: LatticeReactionRuntime,
+  faces: readonly ConstructionRegionTopology[],
+  groundAt?: (p: { readonly x: number; readonly z: number }) => number | undefined,
+) {
   const liveNodes = runtime.getSnapshot().map.nodePositions;
   const ringOf = (face: ConstructionRegionTopology, loop: readonly ConstructionRegionEdge[]): [number, number][] => {
     const ring: [number, number][] = [];
@@ -166,6 +180,22 @@ function cutterPolygonsOf(runtime: LatticeReactionRuntime, faces: readonly Const
     const outer = ringOf(face, face.outerLoops[0]!);
     if (outer.length < 4) return [];
     const holes = face.holes.map((loop) => ringOf(face, loop)).filter((ring) => ring.length >= 4);
+
+    if (groundAt) {
+      const contact = groundContactOf(face, groundAt, GROUND_CONTACT_CELL);
+      if (contact.kind === "none") return [];
+      if (contact.kind === "part" && contact.clear.length > 0) {
+        try {
+          const clearPolygons: PlanarArea = contact.clear.map((ring) => [ring.map(([x, z]) => [x, z] as [number, number])]);
+          const unionClear = planarUnion(runtime, clearPolygons[0]!, ...clearPolygons.slice(1));
+          const facePoly: PlanarPolygon = [outer, ...holes];
+          const cutArea = planarDifference(runtime, [facePoly], unionClear);
+          return cutArea.map((poly) => ({ outer: poly[0]!, holes: poly.slice(1) }));
+        } catch {
+          return [{ outer, holes }];
+        }
+      }
+    }
     return [{ outer, holes }];
   });
 }
@@ -177,7 +207,7 @@ function cutterPolygonsOf(runtime: LatticeReactionRuntime, faces: readonly Const
  * structure still touches it; a move across the plan alone is already the
  * change's vacated area.
  */
-function letGoOf(change: Effect["change"], hits: readonly ConstructionRegionTopology[]): PlanarArea {
+function letGoOf(runtime: LatticeReactionRuntime, change: Effect["change"], hits: readonly ConstructionRegionTopology[]): PlanarArea {
   const own = new Set([...change.before, ...change.after].flatMap((topology) => topology.nodes.map((node) => node.id)));
   const groundAt = groundSurfaceOf(hits, own);
   const held = new Set(hits.flatMap((topology) => topology.nodes.map((node) => node.id)));
@@ -188,7 +218,20 @@ function letGoOf(change: Effect["change"], hits: readonly ConstructionRegionTopo
     if (now && groundContactOf(now, groundAt, GROUND_CONTACT_CELL).kind === "whole") return [];
     const at = new Map(face.nodes.map((node) => [node.id, node.position]));
     const ring = (face.outerLoops[0] ?? []).map((use) => at.get(use.startNodeId)).filter((p): p is ConstructionPosition => p !== undefined).map((p) => [p.x, p.z] as [number, number]);
-    return ring.length >= 3 ? [[[...ring, ring[0]!]]] : [];
+    if (ring.length < 3) return [];
+    const facePoly: PlanarPolygon = [[...ring, ring[0]!]];
+    const beforeContact = groundContactOf(face, groundAt, GROUND_CONTACT_CELL);
+    if (beforeContact.kind === "none") return [];
+    if (beforeContact.kind === "part" && beforeContact.clear.length > 0) {
+      try {
+        const clearPolygons: PlanarArea = beforeContact.clear.map((r) => [r.map(([x, z]) => [x, z] as [number, number])]);
+        const unionClear = planarUnion(runtime, clearPolygons[0]!, ...clearPolygons.slice(1));
+        return planarDifference(runtime, [facePoly], unionClear);
+      } catch {
+        return [facePoly];
+      }
+    }
+    return [facePoly];
   });
 }
 
@@ -199,14 +242,60 @@ function letGoOf(change: Effect["change"], hits: readonly ConstructionRegionTopo
  * behind; laying the ground again there would only draw its outline into
  * ground nobody touched.
  */
-function vacatedGroundOf(runtime: LatticeReactionRuntime, change: Effect["change"], hits: readonly ConstructionRegionTopology[], vacated: PlanarArea): PlanarArea {
-  const own = new Set([...change.before, ...change.after].flatMap((topology) => topology.nodes.map((node) => node.id)));
+function vacatedGroundOf(
+  runtime: LatticeReactionRuntime,
+  change: Effect["change"],
+  hits: readonly ConstructionRegionTopology[],
+  vacated: PlanarArea,
+  groundAt: (p: { readonly x: number; readonly z: number }) => number | undefined,
+): PlanarArea {
   const held = new Set(hits.flatMap((topology) => topology.nodes.map((node) => node.id)));
-  const groundAt = groundSurfaceOf(hits, own);
   const met = change.before.filter((face) => face.nodes.some((node) => held.has(node.id)) || groundContactOf(face, groundAt, GROUND_CONTACT_CELL).kind !== "none");
-  if (met.length === change.before.length) return vacated;
   if (met.length === 0) return [];
-  return changeAreaOf(runtime, { before: met, after: change.after })?.vacated ?? vacated;
+  const baseVacated =
+    met.length === change.before.length
+      ? vacated
+      : (changeAreaOf(runtime, { before: met, after: change.after })?.vacated ?? vacated);
+
+  return baseVacated;
+}
+
+/**
+ * Where a structure newly claimed ground it cuts: the plan it claimed, but only
+ * of the faces that actually touch the ground. Suspended portions standing clear
+ * of the ground are subtracted so the ground below remains whole.
+ */
+function claimedGroundOf(
+  runtime: LatticeReactionRuntime,
+  change: Effect["change"],
+  groundAt: (p: { readonly x: number; readonly z: number }) => number | undefined,
+  claimed: PlanarArea,
+): PlanarArea {
+  if (claimed.length === 0) return [];
+  const met = change.after.filter((face) => groundContactOf(face, groundAt, GROUND_CONTACT_CELL).kind !== "none");
+  if (met.length === 0) return [];
+  const baseClaimed =
+    met.length === change.after.length
+      ? claimed
+      : (changeAreaOf(runtime, { before: change.before, after: met })?.claimed ?? claimed);
+
+  const clearCells: ContactCell[] = [];
+  for (const face of met) {
+    const contact = groundContactOf(face, groundAt, GROUND_CONTACT_CELL);
+    if (contact.kind === "part") {
+      clearCells.push(...contact.clear);
+    }
+  }
+  if (clearCells.length > 0) {
+    try {
+      const clearPolygons: PlanarArea = clearCells.map((ring) => [ring.map(([x, z]) => [x, z] as [number, number])]);
+      const unionClear = planarUnion(runtime, clearPolygons[0]!, ...clearPolygons.slice(1));
+      return planarDifference(runtime, baseClaimed, unionClear);
+    } catch {
+      return baseClaimed;
+    }
+  }
+  return baseClaimed;
 }
 
 function answerCut(runtime: LatticeReactionRuntime, effect: Effect, hits: readonly ConstructionRegionTopology[], executor: LatticeRepairExecutor): void {
@@ -229,14 +318,20 @@ function answerCut(runtime: LatticeReactionRuntime, effect: Effect, hits: readon
   // nothing, so there the type's own footprint is exactly the new ground.
   // Without a boolean to answer, it falls back to the type's footprint and the
   // change's whole extent: wider, never narrower than what is needed.
+  const own = new Set([...change.before, ...change.after].flatMap((topology) => topology.nodes.map((node) => node.id)));
+  const groundAt = groundSurfaceOf(hits, own);
+
   const area = change.before.length > 0 ? timePhase("área mudada", () => changeAreaOf(runtime, change)) : undefined;
   const isEdit = area !== undefined;
-  const claimed: PlanarArea = area?.claimed ?? [];
-  const changed: PlanarArea = [...(isEdit ? vacatedGroundOf(runtime, change, hits, area.vacated) : []), ...(isEdit ? letGoOf(change, hits) : [])];
+  const rawClaimed: PlanarArea = area?.claimed ?? [];
+  const claimed: PlanarArea = isEdit ? claimedGroundOf(runtime, change, groundAt, rawClaimed) : [];
+  const vacOf = isEdit ? vacatedGroundOf(runtime, change, hits, area.vacated, groundAt) : [];
+  const letGo = isEdit ? letGoOf(runtime, change, hits) : [];
+  const changed: PlanarArea = [...vacOf, ...letGo];
   const editArea: PlanarArea = [...claimed, ...changed];
 
   const typeFootprint = change.footprintOutline !== undefined && change.footprintOutline.length >= 3 ? change.footprintOutline : undefined;
-  const footprint = isEdit ? (largestOuterRing(claimed) ?? largestOuterRing(changed)) : typeFootprint;
+  const footprint = isEdit ? largestOuterRing(claimed) : typeFootprint;
   const extentOf = (points: readonly (readonly [number, number])[]) => {
     const margin = 2.5;
     return {
@@ -260,7 +355,7 @@ function answerCut(runtime: LatticeReactionRuntime, effect: Effect, hits: readon
     : hits.filter((t) => hasNodeIn(t, extentOf(footprint ?? changedPositions.map((p) => [p.x, p.z] as const))) &&
         (footprint === undefined || topologyIntersectsPolygon(t, footprint)));
 
-  const cutters = cutterPolygonsOf(runtime, change.after);
+  const cutters = cutterPolygonsOf(runtime, change.after, groundAt);
 
   const afterNodeIds = new Set(change.after.flatMap((t) => t.nodes.map((n) => n.id)));
   const destroyedNodeIds = new Set<ConstructionNodeId>(change.removedNodeIds);

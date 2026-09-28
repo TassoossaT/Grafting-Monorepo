@@ -258,6 +258,83 @@ export interface QuadDrops {
   coveredByStanding: number;
 }
 
+function triangleArea(p0: { x: number; z: number }, p1: { x: number; z: number }, p2: { x: number; z: number }): number {
+  return 0.5 * (p0.x * (p1.z - p2.z) + p1.x * (p2.z - p0.z) + p2.x * (p0.z - p1.z));
+}
+
+/**
+ * Splits a concave (non-convex / chevron) quad into two convex triangles along
+ * its interior diagonal. A quad wrapping around a reflex corner of an obstacle
+ * has its arithmetic centroid lying outside the quad in the notch (inside the
+ * obstacle), causing avoidArea to falsely drop it as covered or groundUnder to
+ * falsely see it as under the obstacle. Splitting it restores convex cells
+ * whose centroids lie strictly inside each triangle.
+ */
+function convexifyCell(grid: ConstructionIrregularQuadGrid, cell: readonly number[]): (readonly number[])[] {
+  if (cell.length !== 4) return [cell];
+  const pts = cell.map((i) => grid.vertices[i]);
+  if (pts.some((p) => p === undefined)) return [cell];
+  const [p0, p1, p2, p3] = pts as [{ x: number; z: number }, { x: number; z: number }, { x: number; z: number }, { x: number; z: number }];
+
+  const e0x = p1.x - p0.x, e0z = p1.z - p0.z;
+  const e1x = p2.x - p1.x, e1z = p2.z - p1.z;
+  const e2x = p3.x - p2.x, e2z = p3.z - p2.z;
+  const e3x = p0.x - p3.x, e3z = p0.z - p3.z;
+
+  const cp0 = e0x * e1z - e0z * e1x;
+  const cp1 = e1x * e2z - e1z * e2x;
+  const cp2 = e2x * e3z - e2z * e3x;
+  const cp3 = e3x * e0z - e3z * e0x;
+
+  const eps = 1e-6;
+  const pos = (cp0 > eps ? 1 : 0) + (cp1 > eps ? 1 : 0) + (cp2 > eps ? 1 : 0) + (cp3 > eps ? 1 : 0);
+  const neg = (cp0 < -eps ? 1 : 0) + (cp1 < -eps ? 1 : 0) + (cp2 < -eps ? 1 : 0) + (cp3 < -eps ? 1 : 0);
+
+  // Strictly convex quad
+  if ((pos === 4 && neg === 0) || (neg === 4 && pos === 0)) return [cell];
+
+  // Try splitting along diagonal 0-2
+  const a02_1 = triangleArea(p0, p1, p2);
+  const a02_2 = triangleArea(p0, p2, p3);
+
+  // Try splitting along diagonal 1-3
+  const a13_1 = triangleArea(p1, p2, p3);
+  const a13_2 = triangleArea(p1, p3, p0);
+
+  const isCCW = (pos >= neg);
+  const sign = isCCW ? 1 : -1;
+
+  const s02_1 = sign * a02_1;
+  const s02_2 = sign * a02_2;
+  const s13_1 = sign * a13_1;
+  const s13_2 = sign * a13_2;
+
+  // Prefer the split where both triangles are strictly positive
+  if (s02_1 > eps && s02_2 > eps) {
+    return [[cell[0]!, cell[1]!, cell[2]!], [cell[0]!, cell[2]!, cell[3]!]];
+  }
+  if (s13_1 > eps && s13_2 > eps) {
+    return [[cell[1]!, cell[2]!, cell[3]!], [cell[1]!, cell[3]!, cell[0]!]];
+  }
+
+  // If one diagonal has a valid non-degenerate triangle while the other triangle is a degenerate/inverted sliver:
+  const sliverThreshold = 0.05;
+  if (s02_1 > eps && s02_2 <= eps && Math.abs(s02_2) < sliverThreshold) {
+    return [[cell[0]!, cell[1]!, cell[2]!]];
+  }
+  if (s02_2 > eps && s02_1 <= eps && Math.abs(s02_1) < sliverThreshold) {
+    return [[cell[0]!, cell[2]!, cell[3]!]];
+  }
+  if (s13_1 > eps && s13_2 <= eps && Math.abs(s13_2) < sliverThreshold) {
+    return [[cell[1]!, cell[2]!, cell[3]!]];
+  }
+  if (s13_2 > eps && s13_1 <= eps && Math.abs(s13_1) < sliverThreshold) {
+    return [[cell[1]!, cell[3]!, cell[0]!]];
+  }
+
+  return [cell];
+}
+
 /** Exported for `terrain-quad-drops.test.mjs`, which holds the rules a cell is dropped by. */
 export function gridPatch(
   tableId: string,
@@ -291,7 +368,10 @@ export function gridPatch(
     }
   }
 
-  quad: for (const quad of grid.quads) {
+  const cells = (avoidArea !== undefined && avoidArea.length > 0)
+    ? grid.quads.flatMap((q) => convexifyCell(grid, q))
+    : grid.quads;
+  quad: for (const quad of cells) {
     if (avoidArea !== undefined && avoidArea.length > 0) {
       let cx = 0;
       let cz = 0;
