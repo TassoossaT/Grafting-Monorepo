@@ -5472,8 +5472,17 @@ export function detachStructure(
   members: readonly ConstructionRegionTopology[],
   isGround: (surfaceType: string) => boolean,
   operationId: string,
+  only?: ReadonlySet<string>,
   ): ApplyPatchReplacementRequest | undefined {
-  const shared = sharedNodes(topologies, members, isGround);
+  const shared = new Set([...sharedNodes(topologies, members, isGround)].filter((id) => !only || only.has(id)));
+export function releaseFromSolid(
+  topologies: readonly ConstructionRegionTopology[],
+  nodeIds: ReadonlySet<string>,
+  isGround: (surfaceType: string) => boolean,
+  isSolid: (surfaceType: string) => boolean,
+  operationId: string,
+  ): ApplyPatchReplacementRequest | undefined {
+  const holds = (topology: ConstructionRegionTopology) => topology.nodes.some((node) => nodeIds.has(node.id));
 
 // src/features/edit-construction/orchestration/edit-orchestrator.ts
 export type EditPlan =
@@ -5637,6 +5646,29 @@ export type {
 
 export type { EditOpSink, EditPlan } from "./edit-orchestrator.ts";
 export type { CloudGlobalHandle } from "./global-handles/cloud-handle-provider.ts";
+
+// src/features/edit-construction/orchestration/outline-snap.ts
+export const SNAP_REACH = 0.2;
+export interface Magnet {
+  readonly a: { readonly id: string; readonly position: ConstructionPosition };
+export interface SnapAnchor {
+  readonly id: string;
+  readonly position: ConstructionPosition;
+  }
+export interface OutlineSnap {
+  readonly delta: ConstructionPosition;
+  readonly anchor: string;
+  readonly magnet: readonly string[];
+  }
+export function outlineMagnets(topologies: readonly ConstructionRegionTopology[], skip: ReadonlySet<string>, isGround: (surfaceType: string) => boolean): readonly Magnet[] {
+  const seen = new Set<string>();
+export function snapToOutlines(anchors: readonly SnapAnchor[], delta: ConstructionPosition, motion: HandleMotion, magnets: readonly Magnet[], reach = SNAP_REACH): OutlineSnap | undefined {
+  const line = motion.kind === "line" ? motion.direction : undefined;
+  if (!line && motion.kind !== "plane" && motion.kind !== "free") return undefined;
+  let corner: (OutlineSnap & { readonly distance: number }) | undefined;
+  let side: (OutlineSnap & { readonly distance: number }) | undefined;
+  for (const anchor of anchors) {
+  const p = { x: anchor.position.x + delta.x, y: anchor.position.y + delta.y, z: anchor.position.z + delta.z };
 
 // src/features/edit-construction/orchestration/rigid-carry.ts
 export function fitRigidMotion(pairs: readonly { readonly from: ConstructionPosition; readonly to: ConstructionPosition }[]): Place {

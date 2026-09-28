@@ -27,6 +27,9 @@ export interface WeldLink {
 
 const keyOf = (surfaceKey: ConstructionSurfaceKey) => surfaceKey.join("\u0000");
 
+/** How near a node must stand to another, or to a side, to be joined there -- positions are held in single precision. */
+const JOIN = 1e-4;
+
 /** Every join `face` takes part in: an end of its own joined to a floor, or another structure's end joined to it. */
 export function weldsOf(graph: ConstructionGraphSnapshot, topologies: readonly ConstructionRegionTopology[], face: ConstructionRegionTopology): readonly WeldLink[] {
   // Only floors are what an end is joined to; the ground laid against them follows them.
@@ -111,7 +114,7 @@ export function rejoinNodes(topologies: readonly ConstructionRegionTopology[], l
     if (!p) continue;
     for (const floor of topologies.filter((topology) => floorKeys.has(keyOf(topology.surfaceKey)))) {
       if (floor.nodes.some((node) => node.id === id)) continue;
-      const copy = floor.nodes.find((node) => Math.hypot(node.position.x - p.x, node.position.y - p.y, node.position.z - p.z) < 1e-6);
+      const copy = floor.nodes.find((node) => Math.hypot(node.position.x - p.x, node.position.y - p.y, node.position.z - p.z) < JOIN);
       if (copy) renamed.set(copy.id, id);
     }
   }
@@ -129,10 +132,10 @@ export function rejoinNodes(topologies: readonly ConstructionRegionTopology[], l
         if (use.geometry.kind !== "line") return false;
         const a = at.get(use.startNodeId)!, b = at.get(use.endNodeId)!;
         const dx = b.x - a.x, dz = b.z - a.z, lengthSq = dx * dx + dz * dz;
-        if (lengthSq < 1e-12 || Math.abs(p.y - a.y) > 1e-6) return false;
+        if (lengthSq < 1e-12 || Math.abs(p.y - a.y) > JOIN) return false;
         const t = ((p.x - a.x) * dx + (p.z - a.z) * dz) / lengthSq;
         const length = Math.sqrt(lengthSq);
-        return t * length > 1e-4 && (1 - t) * length > 1e-4 && Math.hypot(p.x - (a.x + dx * t), p.z - (a.z + dz * t)) < 1e-6;
+        return t * length > JOIN && (1 - t) * length > JOIN && Math.hypot(p.x - (a.x + dx * t), p.z - (a.z + dz * t)) < JOIN;
       });
       if (side) {
         const [low, high] = side.startNodeId < side.endNodeId ? [side.startNodeId, side.endNodeId] : [side.endNodeId, side.startNodeId];

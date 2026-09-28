@@ -4445,9 +4445,20 @@ Which part of a region the user grabbed.
 
 ### `function vtt.atomic-edit.scalePosition(position: ConstructionPosition, factor: number): ConstructionPosition`
 
-### `function vtt.detach.detachStructure(topologies: readonly ConstructionRegionTopology[], members: readonly ConstructionRegionTopology[], isGround: (surfaceType: string) => boolean, operationId: string): ApplyPatchReplacementRequest | undefined`
+### `function vtt.detach.detachStructure(topologies: readonly ConstructionRegionTopology[], members: readonly ConstructionRegionTopology[], isGround: (surfaceType: string) => boolean, operationId: string, only?: ReadonlySet<string>): ApplyPatchReplacementRequest | undefined`
 
-`members` given nodes of their own for every one they share, as one replacement; `undefined` when they share none.
+`members` given nodes of their own for every one they share -- or, with
+`only`, for those of them only -- as one replacement; `undefined` when they
+share none.
+
+### `function vtt.detach.releaseFromSolid(topologies: readonly ConstructionRegionTopology[], nodeIds: ReadonlySet<string>, isGround: (surfaceType: string) => boolean, isSolid: (surfaceType: string) => boolean, operationId: string): ApplyPatchReplacementRequest | undefined`
+
+`nodeIds` let go of by every structure holding them that is not solid:
+those structures get copies of their own, and the solid ones they were
+shared with -- a platform under a wall's foot -- keep theirs, so moving the
+copies moves nothing solid. Structures sharing a node that are not solid,
+a corner column two walls stand on, keep sharing it. `undefined` when no
+solid structure holds any of them.
 
 ### `function vtt.detach.sharedNodes(topologies: readonly ConstructionRegionTopology[], members: readonly ConstructionRegionTopology[], isGround: (surfaceType: string) => boolean): ReadonlySet<string>`
 
@@ -4827,6 +4838,46 @@ Whether `topology` stands upright.
 The posts of an upright face: edges rising more than half the face's own
 height, and steeply -- far more up than across -- each as its foot and top.
 A sloped face (a ramp) has none; a leaning post is still found.
+
+### `interface vtt.outline-snap.Magnet`
+
+A level run of another structure's outline, by its two nodes.
+
+### `property vtt.outline-snap.Magnet.a: { id: string; position: ConstructionPosition }`
+
+### `property vtt.outline-snap.Magnet.b: { id: string; position: ConstructionPosition }`
+
+### `interface vtt.outline-snap.OutlineSnap`
+
+The snapped displacement, which anchor snapped, and the nodes of what it snapped onto.
+
+### `property vtt.outline-snap.OutlineSnap.anchor: string`
+
+### `property vtt.outline-snap.OutlineSnap.delta: ConstructionPosition`
+
+### `property vtt.outline-snap.OutlineSnap.magnet: readonly string[]`
+
+### `interface vtt.outline-snap.SnapAnchor`
+
+A node the handle drags that may snap, where it stood when the drag began.
+
+### `property vtt.outline-snap.SnapAnchor.id: string`
+
+### `property vtt.outline-snap.SnapAnchor.position: ConstructionPosition`
+
+### `variable vtt.outline-snap.SNAP_REACH: 0.2`
+
+How close, in plan, an anchor must come to a magnet to snap onto it.
+
+### `function vtt.outline-snap.outlineMagnets(topologies: readonly ConstructionRegionTopology[], skip: ReadonlySet<string>, isGround: (surfaceType: string) => boolean): readonly Magnet[]`
+
+Every level run of the outlines of `topologies` but those `skip` names, and the ground's -- what a dragged structure snaps onto.
+
+### `function vtt.outline-snap.snapToOutlines(anchors: readonly SnapAnchor[], delta: ConstructionPosition, motion: HandleMotion, magnets: readonly Magnet[], reach: number): OutlineSnap | undefined`
+
+`delta` snapped: the anchors, moved by it, onto the nearest magnet corner
+within SNAP_REACH, else onto the nearest magnet run -- only ever
+along the handle's own `motion`; `undefined` when none is within reach.
 
 ### `function vtt.rigid-carry.fitRigidMotion(pairs: readonly { from: ConstructionPosition; to: ConstructionPosition }[]): Place`
 

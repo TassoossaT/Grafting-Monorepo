@@ -2,7 +2,16 @@ import {
   arcsFollowing,
   floorsWeldedBy,
   hasTrait,
+  joinedStructures,
+  outlineMagnets,
   rejoinNodes,
+  releaseFromSolid,
+  snapToOutlines,
+  structureTypeFor,
+  type EditTarget,
+  type Magnet,
+  type OutlineSnap,
+  type SnapAnchor,
   reshapedWelds,
   reweld,
   unweld,
@@ -126,6 +135,66 @@ class NeedsPause extends Error {
 }
 
 const keyOf = (surfaceKey: readonly string[]) => surfaceKey.join("\u0000");
+const isGround = (surfaceType: string) => hasTrait(surfaceType, "ground");
+const isSolid = (surfaceType: string) => structureTypeFor(surfaceType)?.rigid === true;
+
+/** The handles whose drag snaps onto other structures' outlines: those moving a structure, or a part of it, across the plan. */
+const SNAPS: ReadonlySet<GlobalHandleKind> = new Set(["pivot", "foot", "side", "corner"]);
+
+/** The nodes of the part a handle drags -- its corner, or its side's two ends. */
+function partNodes(topologies: GlobalHandleScene["topologies"], target: EditTarget | undefined): readonly string[] {
+  if (target?.kind === "vertex") return [target.nodeId];
+  if (target?.kind !== "edge") return [];
+  const use = topologies.flatMap((topology) => topology.outerLoops.flat()).find((candidate) => candidate.edgeId === target.edgeId);
+  return use ? [use.startNodeId, use.endNodeId] : [];
+}
+
+/** What of `handle`'s drag snaps: its part's nodes, or -- dragging the whole -- the lowest of its structure's. */
+function snapAnchors(scene: GlobalHandleScene, handle: GlobalHandle): readonly SnapAnchor[] {
+  const at = new Map(scene.graph.nodes.map((node) => [node.id, node.position]));
+  let ids = partNodes(scene.topologies, (handle as { readonly target?: EditTarget }).target);
+  if (ids.length === 0) {
+    const low = Math.min(...handle.nodeIds.map((id) => at.get(id)?.y ?? Infinity));
+    ids = handle.nodeIds.filter((id) => Math.abs((at.get(id)?.y ?? Infinity) - low) < 0.05);
+  }
+  return ids.flatMap((id) => { const position = at.get(id); return position ? [{ id, position }] : []; });
+}
+
+/** What `handle`'s drag snaps onto: every other structure's outline -- but, dragging the whole, not what goes with it. */
+function magnetsFor(scene: GlobalHandleScene, handle: GlobalHandle): readonly Magnet[] {
+  const faces = scene.topologies.filter((topology) => handle.faces?.includes(keyOf(topology.surfaceKey)));
+  const moving = handle.kind === "pivot" ? joinedStructures(scene.topologies, faces, isGround) : faces;
+  return outlineMagnets(scene.topologies, new Set(moving.map((topology) => keyOf(topology.surfaceKey))), isGround);
+}
+
+/**
+ * A part of a structure that is not solid -- a wall's foot, its foot run --
+ * held with a solid one -- the platform it stands on -- is let go of for the
+ * drag, so it slides along instead of carrying the solid one whole; where it
+ * lands on an outline it is joined again. A structure joined by a weld has
+ * its own pause instead. `undefined` when there is nothing to let go.
+ */
+function releaseFor(topologies: GlobalHandleScene["topologies"], graph: GlobalHandleScene["graph"], part: RegionPart, operationId: string): ApplyPatchReplacementRequest | undefined {
+  const face = topologies.find((topology) => keyOf(topology.surfaceKey) === keyOf(part.seed));
+  if (!face || isSolid(face.surfaceType) || weldsOf(graph, topologies, face).length > 0) return undefined;
+  return releaseFromSolid(topologies, new Set(partNodes(topologies, part.target)), isGround, isSolid, operationId);
+}
+
+/**
+ * The nodes among `ids` that stand on a floor's outline without being its --
+ * joined to it there: the floor passes through them, cut where they stand
+ * partway along a side. Nothing is moved to join.
+ */
+function joinWhereLanded(ctx: ToolContext, ids: readonly string[], operationId: string, transactionId: string): void {
+  const topologies = ctx.runtime.getAllRegionTopologies();
+  const floors = topologies.filter((topology) => hasTrait(topology.surfaceType, "floor"));
+  const onFloor = new Set(floors.flatMap((floor) => floor.nodes.map((node) => node.id)));
+  const loose = [...new Set(ids)].filter((id) => !onFloor.has(id));
+  if (loose.length === 0) return;
+  const links = loose.map((id) => ({ rung: { edgeId: id, startNodeId: id, endNodeId: id }, floors: floors.map((floor) => floor.surfaceKey), welded: false }));
+  const joined = rejoinNodes(topologies, links, operationId);
+  if (joined.request) ctx.runtime.applyPatchReplacement(joined.request, "local", transactionId);
+}
 
 /** `ops` as the nodes they place and the edges they retype, every curved edge they move an end of carried along. */
 function placedBy(ops: readonly AtomicEditOp[], topologies: GlobalHandleScene["topologies"]): Placed {
@@ -246,6 +315,56 @@ function applyRecorded(ctx: ToolContext, ops: readonly AtomicEditOp[], label: st
   if (recorded) ctx.history.record({ kind: "transaction", transactionId });
 }
 
+/** The ops `edit` places nodes with, planned on the table as it now stands; `undefined` for an edit that is not a placing of nodes. */
+function opsOfEdit(ctx: ToolContext, edit: GlobalHandleEdit, scene: GlobalHandleScene): readonly AtomicEditOp[] | undefined {
+  if (edit.kind === "vertices") return opsOf(edit);
+  if (edit.kind === "region-part") {
+    const placed = resolvedPart(ctx, edit, scene);
+    return placed.kind === "vertices" ? opsOf(placed) : undefined;
+  }
+  if (edit.kind !== "region-move") return undefined;
+  const cloud = resolveCloudTopology(ctx.runtime, edit.seed);
+  if (!cloud) throw new Error("A estrutura não está mais aqui.");
+  const plan = planEdit(cloud, { surfaceKey: edit.seed, target: { kind: "region" }, delta: edit.delta }, scene.graph, ctx.runtime);
+  if (plan.kind !== "apply") throw new Error(plan.reason);
+  return plan.ops;
+}
+
+/**
+ * Carries out an edit that lets go of a solid structure, or snapped onto an
+ * outline, as one transaction, one undo: the part let go of (`release`), the
+ * edit planned on the table that leaves, and everything it placed -- and
+ * whatever it snapped onto -- joined to the floor whose outline it now
+ * stands on. `false` when the edit is not one placing nodes.
+ */
+function commitJoining(ctx: ToolContext, handle: GlobalHandle, edit: GlobalHandleEdit, scene: GlobalHandleScene, operationId: string, release: RegionPart | undefined, magnet: readonly string[]): boolean {
+  if (!release && edit.kind !== "vertices" && edit.kind !== "region-part" && edit.kind !== "region-move") return false;
+  const transactionId = `global-handle:${handle.kind}:${ctx.nextSequence()}`;
+  let placed: readonly string[] = [];
+  const { recorded } = commitStagedRegionEdit(ctx.runtime, {
+    before: () => {
+      if (!release) return;
+      const request = releaseFor(ctx.runtime.getAllRegionTopologies(), ctx.runtime.getGraphSnapshot(), release, `${operationId}:release`);
+      if (request) ctx.runtime.applyPatchReplacement(request, "local", transactionId);
+    },
+    ops: () => {
+      let ops: readonly AtomicEditOp[] | undefined;
+      if (release) {
+        const cloud = resolveCloudTopology(ctx.runtime, release.seed);
+        if (!cloud) throw new Error("A estrutura não está mais aqui.");
+        const plan = planEdit(cloud, { surfaceKey: release.seed, target: targetNow(ctx, release, scene), delta: release.delta }, ctx.runtime.getGraphSnapshot(), ctx.runtime);
+        if (plan.kind !== "apply") throw new Error(plan.reason);
+        ops = opsOf(placedBy(plan.ops, ctx.runtime.getAllRegionTopologies()));
+      } else ops = opsOfEdit(ctx, edit, scene)!;
+      placed = ops.flatMap((op) => (op.kind === "move-vertex" ? [op.nodeId] : []));
+      return ops;
+    },
+    after: () => joinWhereLanded(ctx, [...placed, ...magnet], `${operationId}:join`, transactionId),
+  }, { transactionId });
+  if (recorded) ctx.history.record({ kind: "transaction", transactionId });
+  return true;
+}
+
 /** Carries out `edit`: a spine regenerated by its owner, a cloud moved through its own role, or placed nodes. */
 function commitEdit(ctx: ToolContext, handle: GlobalHandle, edit: GlobalHandleEdit, scene: GlobalHandleScene, operationId: string): void {
   if (edit.kind === "spine") {
@@ -292,11 +411,16 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
   /** The table before a pause, and the pause itself -- while a push that reshapes a weld is dragged, the weld stands paused so the preview is the real thing. */
   let pause: { readonly transactionId: string; readonly was: GlobalHandleScene; readonly links: readonly WeldLink[] } | undefined;
   let pausedPart: RegionPart | undefined;
+  /** The table before a part was let go of a solid structure for the drag, and that letting go. */
+  let released: { readonly transactionId: string; readonly was: GlobalHandleScene } | undefined;
   const resume = () => {
-    if (!pause) return;
-    ctx.runtime.undoTransaction(pause.transactionId, "local");
-    scene = pause.was;
+    for (const held of [pause, released]) {
+      if (!held) continue;
+      ctx.runtime.undoTransaction(held.transactionId, "local");
+      scene = held.was;
+    }
     pause = undefined;
+    released = undefined;
   };
   const handle = sample.nodeId ? shownGlobalHandleAt(scene, sample.nodeId) : undefined;
   if (!handle || !ownsType(handle.owner)) return undefined;
@@ -306,10 +430,17 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
   });
   let edit: GlobalHandleEdit | undefined;
   let ended = false;
+  // Snapping onto the other structures' outlines, as they stood when the drag began -- never while lifting.
+  const snap = SNAPS.has(handle.kind) && handle.faces !== undefined && params?.mode !== "elevation"
+    ? { anchors: snapAnchors(scene, handle), magnets: magnetsFor(scene, handle) }
+    : undefined;
+  let snapped: OutlineSnap | undefined;
 
   /** Where the handle stands on its path, and what that asks of the structure. */
   function intentOf(gesture: ToolGesture): { readonly intent: GlobalHandleIntent; readonly at: ConstructionPosition; readonly readout?: string } {
-    const { position: at, angle = 0 } = drag.at(gesture);
+    const { position: free, angle = 0 } = drag.at(gesture);
+    snapped = snap && snapToOutlines(snap.anchors, { x: free.x - handle!.position.x, y: free.y - handle!.position.y, z: free.z - handle!.position.z }, handle!.motion, snap.magnets);
+    const at = snapped ? { x: handle!.position.x + snapped.delta.x, y: handle!.position.y + snapped.delta.y, z: handle!.position.z + snapped.delta.z } : free;
     const delta = { x: at.x - handle!.position.x, y: at.y - handle!.position.y, z: at.z - handle!.position.z };
     switch (handle!.kind) {
       case "pivot": return { intent: { kind: "move", delta }, at };
@@ -345,15 +476,26 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
       try {
         const { intent, at, readout } = intentOf(gesture);
         ctx.runtime.previewNodeHandle?.(handle.id, at);
-        const planned = planGlobalHandle(pause?.was ?? scene, handle, intent, ctx.runtime, operationId);
+        const planned = planGlobalHandle((pause ?? released)?.was ?? scene, handle, intent, ctx.runtime, operationId);
         if (planned?.kind === "region-part") {
           pausedPart = planned;
-          // Once paused, the push is planned on the paused table, its target found there again.
-          const part = pause ? { ...planned, target: targetNow(ctx, planned, pause.was) } : planned;
+          // A part held with a solid structure slides off it: let go for the drag, so the preview is the real thing.
+          if (!pause && !released) {
+            const transactionId = `${operationId}:release`;
+            const request = releaseFor(scene.topologies, scene.graph, planned, transactionId);
+            if (request) {
+              ctx.runtime.transact(transactionId, "local", () => ctx.runtime.applyPatchReplacement(request, "local", transactionId));
+              released = { transactionId, was: scene };
+              scene = sceneOf(ctx);
+            }
+          }
+          // Once paused or let go, the push is planned on the table that leaves, its target found there again.
+          const was = (pause ?? released)?.was;
+          const part = was ? { ...planned, target: targetNow(ctx, planned, was) } : planned;
           try {
             edit = resolvedPart(ctx, part, scene);
           } catch (error) {
-            if (!(error instanceof NeedsPause) || pause) throw error;
+            if (!(error instanceof NeedsPause) || pause || released) throw error;
             const transactionId = `${operationId}:pause`;
             const request = unweld(scene.topologies, error.links, transactionId);
             if (!request) throw error;
@@ -380,6 +522,7 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
       ctx.runtime.clearPreview(CHANNEL);
       ctx.runtime.previewNodeHandle?.(handle.id, undefined);
       const paused = pause && pausedPart ? { part: pausedPart, links: pause.links } : undefined;
+      const release = released ? pausedPart : undefined;
       resume();
       // A handle that is clicked, not dragged, acts on release.
       if (handle.motion.kind === "fixed") {
@@ -389,7 +532,7 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
       if (!edit) return;
       try {
         if (paused) commitPaused(ctx, handle, paused, scene, operationId);
-        else commitEdit(ctx, handle, edit, scene, operationId);
+        else if (!((release || snapped) && commitJoining(ctx, handle, edit, scene, operationId, release, snapped?.magnet ?? []))) commitEdit(ctx, handle, edit, scene, operationId);
         // Named after a node the edit keeps, so the same id finds it where it now stands.
         const moved = shownGlobalHandleAt(sceneOf(ctx), handle.id);
         ctx.reportSelection(moved ? { id: moved.id, point: moved.position } : undefined);

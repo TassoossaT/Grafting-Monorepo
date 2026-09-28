@@ -403,7 +403,7 @@ test("a floor drawn with the platform tool from a ramp's top vertex, along the r
         // And the ramp's top still opens by its corner.
         const top = shownGlobalHandles(scene(runtime)).find((candidate) => candidate.owner === "platform-ramp" && candidate.kind === "corner" && candidate.pivot.x > 5);
         drag(slopeRampTool, fixture, top, [{ x: top.position.x, y: top.position.y, z: top.position.z + Math.sign(top.position.z - top.pivot.z) * 0.3 }], params);
-        assert.notEqual(shape(rampOf(runtime)), ramp, `${support} ${h.kind}: the ramp's top opened after`);
+        assert.notEqual(shape(rampOf(runtime)), ramp, `${support} ${h.kind}: the ramp's top opened after ${JSON.stringify(calls.feedback.slice(-3))}`);
       } finally { session.free(); }
     }
   }

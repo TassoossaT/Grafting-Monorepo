@@ -3,7 +3,7 @@ import test from "node:test";
 import { registerHooks } from "node:module";
 import { createAliasResolveHook } from "./support/alias-resolve-hook.mjs";
 import { sessionFixture } from "./platform-session-fixture.mjs";
-import { commitPlatformContour } from "../src/composition/tabletop/tools/platform/platform-contour-tool.ts";
+import { commitPlatformContour, platformContourTool } from "../src/composition/tabletop/tools/platform/platform-contour-tool.ts";
 import { hasTrait, sceneHandles, shownGlobalHandles } from "../src/features/edit-construction/index.ts";
 
 registerHooks(createAliasResolveHook(new URL("../src/", import.meta.url)));
@@ -41,12 +41,12 @@ function posts(runtime) {
   return feet.sort((a, b) => a.x - b.x).map((foot) => ({ foot, top: near(foot) }));
 }
 /** Drags `handle` by `delta` in the world, `rise` units up the screen. */
-function drag({ ctx }, handle, delta, rise = 0) {
+function drag({ ctx }, handle, delta, rise = 0, tool = wallLineTool, toolParams = params) {
   const start = { nodeId: handle.id, point: handle.position, screenX: 100, screenY: 300 };
   const current = { point: { x: handle.position.x + delta.x, y: handle.position.y + delta.y, z: handle.position.z + delta.z }, screenX: 100 + 40 * Math.hypot(delta.x, delta.z), screenY: 300 - rise * 40 };
-  wallLineTool.onPointerDown(ctx, start, params);
-  wallLineTool.onPointerMove(ctx, { start, current, samples: [start, current] }, params);
-  wallLineTool.onPointerUp(ctx, { start, current, samples: [start, current] }, params);
+  tool.onPointerDown(ctx, start, toolParams);
+  tool.onPointerMove(ctx, { start, current, samples: [start, current] }, toolParams);
+  tool.onPointerUp(ctx, { start, current, samples: [start, current] }, toolParams);
 }
 const lastFeedback = (calls) => JSON.stringify(calls.feedback.filter(Boolean));
 const close = (a, b, eps = 1e-6) => Math.abs(a - b) < eps;
@@ -164,5 +164,80 @@ test("a structure's handles show as the pointer comes near it, not only once it 
     // Level with a wall's top, from the side: its top handles are within reach.
     const side = { point: { x: 3, y: 5.3, z: -5 }, ray: { origin: { x: 3, y: 5.3, z: -10 }, direction: { x: 0, y: 0, z: 1 } } };
     assert.ok(focused(side).some((type) => hasTrait(type, "partition")), JSON.stringify(focused(side)));
+  } finally { f.session.free(); }
+});
+
+/** The platform's corners, where they stand -- what must not change when a wall on it is edited. */
+const platformCorners = (runtime) => {
+  const floor = runtime.getAllRegionTopologies().find((t) => hasTrait(t.surfaceType, "floor"));
+  return floor.nodes.map((n) => n.position).filter((p) => [0, 6].includes(Math.round(p.x * 1e4) / 1e4) && [0, 4].includes(Math.round(p.z * 1e4) / 1e4))
+    .map((p) => `${p.x.toFixed(4)},${p.z.toFixed(4)}`).sort();
+};
+const floorHolds = (runtime, position) => runtime.getAllRegionTopologies().find((t) => hasTrait(t.surfaceType, "floor")).nodes
+  .some((n) => Math.hypot(n.position.x - position.x, n.position.y - position.y, n.position.z - position.z) < 1e-4);
+const floorNodeIds = (runtime) => new Set(runtime.getAllRegionTopologies().filter((t) => hasTrait(t.surfaceType, "floor")).flatMap((t) => t.nodes.map((n) => n.id)));
+
+test("a wall's foot on a platform slides along its side without moving it, snaps onto the side, and is joined to it where it lands -- one undo", () => {
+  const f = fixture(true);
+  try {
+    const corners = platformCorners(f.runtime);
+    const handle = wallHandles(f.runtime).find((h) => h.kind === "foot" && close(h.pivot.x, 1));
+    // Along the side, a little off it.
+    drag(f, handle, { x: -0.5, y: 0, z: 0.1 });
+    const foot = posts(f.runtime)[0].foot;
+    assert.ok(close(foot.x, 0.5, 1e-4) && close(foot.z, 0, 1e-4), `onto the side: ${JSON.stringify(foot)} ${lastFeedback(f.calls)}`);
+    assert.deepEqual(platformCorners(f.runtime), corners, "the platform stays where it was");
+    const w = wallOf(f.runtime), floors = floorNodeIds(f.runtime);
+    assert.ok(w.nodes.some((n) => floors.has(n.id) && close(n.position.x, 0.5, 1e-4)), "joined where it landed");
+    const entry = f.ctx.history.undo();
+    assert.equal(entry.kind, "transaction");
+    f.session.undo_region_overlay(entry.transactionId);
+    assert.ok(close(posts(f.runtime)[0].foot.x, 1, 1e-6), "undone whole");
+  } finally { f.session.free(); }
+});
+
+test("a wall's foot on a platform dragged in off its side stands loose there, the platform left as it was", () => {
+  const f = fixture(true);
+  try {
+    const corners = platformCorners(f.runtime);
+    const handle = wallHandles(f.runtime).find((h) => h.kind === "foot" && close(h.pivot.x, 1));
+    drag(f, handle, { x: 0.5, y: 0, z: 1.5 });
+    const foot = posts(f.runtime)[0].foot;
+    assert.ok(close(foot.x, 1.5, 1e-4) && close(foot.z, 1.5, 1e-4), `${JSON.stringify(foot)} ${lastFeedback(f.calls)}`);
+    assert.deepEqual(platformCorners(f.runtime), corners);
+    assert.ok(!floorHolds(f.runtime, foot), "not joined");
+    // Its other foot stays joined.
+    assert.ok(floorHolds(f.runtime, posts(f.runtime)[1].foot));
+  } finally { f.session.free(); }
+});
+
+test("a loose wall moved whole snaps onto a platform's side and is joined to it along it", () => {
+  const f = sessionFixture();
+  Object.assign(f.runtime, { showPreview() {}, clearPreview() {} });
+  try {
+    commitPlatformContour(f.ctx, [[0, 0], [6, 0], [6, 4], [0, 4]].map(([x, z]) => ({ point: { x, y: 2, z } })), { mode: "create", elevation: 2, support: "floating", shape: "rectangle" });
+    const start = { point: { x: 1, y: 2, z: 1 } }, end = { point: { x: 5, y: 2, z: 1 } };
+    wallLineTool.onPointerDown(f.ctx, start, params);
+    wallLineTool.onPointerUp(f.ctx, { start, current: end, samples: [start, end] }, params);
+    const pivot = wallHandles(f.runtime).find((h) => h.kind === "pivot");
+    drag(f, pivot, { x: 0, y: 0, z: -0.9 });
+    for (const { foot } of posts(f.runtime)) {
+      assert.ok(close(foot.z, 0, 1e-4), `onto the side: ${JSON.stringify(foot)} ${lastFeedback(f.calls)}`);
+      assert.ok(floorHolds(f.runtime, foot) && floorNodeIds(f.runtime).size > 4, "joined");
+    }
+  } finally { f.session.free(); }
+});
+
+test("a platform's side pushed out snaps onto the run a wall beside it stands on, and takes the wall's feet into its outline", () => {
+  const f = sessionFixture();
+  Object.assign(f.runtime, { showPreview() {}, clearPreview() {} });
+  try {
+    commitPlatformContour(f.ctx, [[0, 0], [6, 0], [6, 4], [0, 4]].map(([x, z]) => ({ point: { x, y: 0, z } })), { mode: "create", elevation: 0, support: "floating", shape: "rectangle" });
+    const start = { point: { x: 1, y: 0, z: 5 } }, end = { point: { x: 5, y: 0, z: 5 } };
+    wallLineTool.onPointerDown(f.ctx, start, params);
+    wallLineTool.onPointerUp(f.ctx, { start, current: end, samples: [start, end] }, params);
+    const side = shownGlobalHandles(scene(f.runtime)).find((h) => h.owner.startsWith("platform") && h.kind === "side" && h.motion.direction.z > 0.9);
+    drag(f, side, { x: 0, y: 0, z: 0.9 }, 0, platformContourTool, platformContourTool.defaultParams());
+    assert.ok(posts(f.runtime).every(({ foot }) => floorHolds(f.runtime, foot)), `the wall's feet in the platform's outline: ${lastFeedback(f.calls)}`);
   } finally { f.session.free(); }
 });

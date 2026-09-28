@@ -29,5 +29,8 @@ export type { CloudGlobalHandle } from "./global-handles/cloud-handle-provider.t
 export { regenerateWithEndWelds, spineChainEnds, spineEndsLanded } from "./spine-end-welds.ts";
 export { adoptJointEnd, adoptsEnds, endJointNear, freeStructureEnds, weldFreeEndsOnto } from "./free-end-welds.ts";
 export { settleMoves, settlePatch } from "./type-law.ts";
+export { releaseFromSolid } from "./detach.ts";
+export { joinedStructures } from "./rigid-carry.ts";
+export { outlineMagnets, snapToOutlines, SNAP_REACH, type Magnet, type OutlineSnap, type SnapAnchor } from "./outline-snap.ts";
 export { rejoinNodes, reshapedWelds, reweld, unweld, weldsOf, type WeldLink } from "./weld-pause.ts";
 export { sceneHandles, type HandleFocus, type SceneHandle, type SceneHandleInput, type SceneHandleKind } from "./scene-handles.ts";
