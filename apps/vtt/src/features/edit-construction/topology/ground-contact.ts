@@ -19,6 +19,12 @@ import type { ConstructionPosition, ConstructionRegionTopology } from "@/ports";
  * unevenness of ground a floor is drawn on.
  */
 export const GROUND_CONTACT_CLEARANCE = 1.5;
+/**
+ * How near the ground a surface standing partly clear of it may run and still
+ * count as the ground rising through it -- a floor laid flush on the ground,
+ * whose every sample would otherwise flicker in and out of it.
+ */
+export const GROUND_THROUGH_TOLERANCE = 0.05;
 
 type Plan = { readonly x: number; readonly z: number };
 
@@ -69,13 +75,12 @@ function insideFace(topology: ConstructionRegionTopology, p: Plan): boolean {
 
 /**
  * How `topology` meets the ground `groundAt` describes, sampled on a grid of
- * `cell` over its footprint. Where it gives way from resting to standing
- * clear is found between the samples, by marching squares -- the line where
- * it stands exactly `clearance` over the ground -- so the cut follows it
- * instead of stepping round whole cells, and the ground meets the
- * structure's side right where it lets go. Where no ground is known it is
- * clear. A face standing upright is left as it always was -- wholly in
- * contact.
+ * `cell` over its footprint. Within `clearance` of the ground all over, it
+ * rests wholly. Standing clear somewhere, it is cut only where the ground
+ * runs through it: that line is found between the samples, by marching
+ * squares, so the cut follows it instead of stepping round whole cells.
+ * Where no ground is known it is clear. A face standing upright is left as
+ * it always was -- wholly in contact.
  *
  * A side whose two ends `held` names -- joined to another structure, a
  * ramp's end welded into a floor -- has that structure on its far side and
@@ -92,32 +97,46 @@ export function groundContactOf(topology: ConstructionRegionTopology, groundAt: 
     const t = lengthSq < 1e-12 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.z - a.z) * dz) / lengthSq));
     return Math.hypot(p.x - (a.x + dx * t), p.z - (a.z + dz * t)) < cell;
   });
-  /** How far over resting the surface stands: above zero it stands clear. */
-  const over = (p: Plan) => {
-    if (alongHeld(p)) return -1;
-    const ground = groundAt(p);
-    return ground === undefined ? 1 : surfaceAt(p) - ground - clearance;
-  };
   const points = topology.nodes.map((node) => node.position);
   const min = { x: Math.min(...points.map((p) => p.x)), z: Math.min(...points.map((p) => p.z)) };
   const max = { x: Math.max(...points.map((p) => p.x)), z: Math.max(...points.map((p) => p.z)) };
   const nx = Math.max(1, Math.ceil((max.x - min.x) / cell)), nz = Math.max(1, Math.ceil((max.z - min.z) / cell));
   const corner = (i: number, j: number) => ({ x: min.x + ((max.x - min.x) * i) / nx, z: min.z + ((max.z - min.z) * j) / nz });
-  const values: number[][] = [];
-  let touched = points.some((p) => over(p) <= 0);
-  let clearAnywhere = false;
-  for (let i = 0; i <= nx; i++) {
-    values.push([]);
-    for (let j = 0; j <= nz; j++) {
-      const p = corner(i, j), v = over(p);
-      values[i]!.push(v);
-      if (!insideFace(topology, p)) continue;
-      if (v <= 0) touched = true;
-      else clearAnywhere = true;
+  /** How far the surface stands over the ground and `reach` more, sampled at every grid corner: above zero it stands clear. */
+  const sampled = (reach: number) => {
+    const over = (p: Plan) => {
+      if (alongHeld(p)) return -1;
+      const ground = groundAt(p);
+      return ground === undefined ? 1 : surfaceAt(p) - ground - reach;
+    };
+    const values: number[][] = [];
+    let touched = points.some((p) => over(p) <= 0);
+    let clearAnywhere = points.some((p) => over(p) > 0);
+    for (let i = 0; i <= nx; i++) {
+      values.push([]);
+      for (let j = 0; j <= nz; j++) {
+        const p = corner(i, j), v = over(p);
+        values[i]!.push(v);
+        if (!insideFace(topology, p)) continue;
+        if (v <= 0) touched = true;
+        else clearAnywhere = true;
+      }
     }
-  }
-  if (!touched) return { kind: "none" };
-  if (!clearAnywhere && points.every((p) => over(p) <= 0)) return { kind: "whole" };
+    return { values, touched, clearAnywhere };
+  };
+  const resting = sampled(clearance);
+  if (!resting.touched) return { kind: "none" };
+  if (!resting.clearAnywhere) return { kind: "whole" };
+  // **Partly clear of the ground: cut only where the ground runs through it.**
+  // Resting all over, the ground is cut and meets every side. Standing clear
+  // somewhere -- a floor run out of a hillside -- the ground under the rest
+  // cannot meet a side there, so cutting it down to the resting line would
+  // leave a basin open under the structure. Cut instead where the ground
+  // rises through the surface: there the two meet exactly, and beyond it the
+  // ground runs on under, at its own height.
+  const through = sampled(GROUND_THROUGH_TOLERANCE);
+  if (!through.touched) return { kind: "none" };
+  const values = through.values;
   const clear: ContactCell[] = [];
   for (let i = 0; i < nx; i++) {
     for (let j = 0; j < nz; j++) {

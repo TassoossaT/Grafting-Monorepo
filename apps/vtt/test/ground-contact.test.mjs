@@ -76,19 +76,19 @@ test("a floor built high over the ground leaves the ground exactly as it was", q
   } finally { session.free(); }
 }));
 
-test("a floor on the bowl's side cuts the ground only where it runs into it; the ground passes under the rest", quiet(() => {
+test("a floor on the bowl's side cuts the ground only where the ground rises through it; the ground passes under the rest", quiet(() => {
   const { runtime, ctx, calls, session } = setup();
   try {
-    // At 3 m: well clear of the ground near x = -2.3, resting on it past x = 6 -- off the ground's own grid lines.
-    floorAt(ctx, [-2.3, -1.3, 8.3, 1.3], 3);
+    // At 3 m: well clear of the ground near x = -2.3; the bowl's wall rises through it past x = 8.7 -- off the ground's own grid lines.
+    floorAt(ctx, [-2.3, -1.3, 9.3, 1.3], 3);
     assert.equal(calls.feedback.at(-1)?.tone, "success", JSON.stringify(calls.feedback.at(-1)));
     const floor = of(runtime, "platform");
     const held = new Set(groundHolding(runtime, floor).flatMap((t) => t.nodes.map((n) => n.id)));
     const joined = floor.nodes.filter((n) => held.has(n.id));
     assert.ok(joined.length >= 2, "the ground is joined to it where it runs into it");
-    assert.ok(joined.every((n) => n.position.x > 5), `and only there: ${JSON.stringify(joined.map((n) => n.position))}`);
-    assert.ok(groundUnder(runtime, [-2.3, -1.3, 4, 1.3]), "the ground still stands under the part clear of it");
-    assert.ok(!groundUnder(runtime, [7.3, -1.1, 8.3, 1.1]), "and none where it rests on it");
+    assert.ok(joined.every((n) => n.position.x > 8), `and only there: ${JSON.stringify(joined.map((n) => n.position))}`);
+    assert.ok(groundUnder(runtime, [-2.3, -1.3, 7, 1.3]), "the ground still stands under the part clear of it, however near it comes");
+    assert.ok(!groundUnder(runtime, [8.9, -1.1, 9.3, 1.1]), "and none where it rises through it");
   } finally { session.free(); }
 }));
 
@@ -201,5 +201,23 @@ test("a floor moved step by step out over the valley leaves no hole where it sto
     const floor = of(runtime, "platform");
     const held = new Set(groundHolding(runtime, floor).flatMap((t) => t.nodes.map((n) => n.id)));
     assert.ok(floor.nodes.filter((n) => n.position.x > 3).every((n) => !held.has(n.id)), "nothing out over the drop is joined to the ground");
+  } finally { session.free(); }
+}));
+
+test("a floor half run into a hill, half out of it, leaves no basin open under it: the ground is cut only where it rises through the floor, and runs on under the rest", quiet(() => {
+  // A hill peaking at (6, 0), 8 m high, falling away towards the floor's open end.
+  const hill = (x, z) => Math.max(0, 8 - 0.35 * ((x - 6) ** 2 + z * z));
+  const { runtime, ctx, calls, session } = setup(hill);
+  try {
+    const y = 5.6;
+    floorAt(ctx, [-1.3, -2.3, 5.3, 2.3], y);
+    assert.equal(calls.feedback.at(-1)?.tone, "success", JSON.stringify(calls.feedback.at(-1)));
+    const ground = terrain(runtime), basin = [];
+    for (let x = -1.23; x < 5.3; x += 0.25) for (let z = -2.23; z < 2.3; z += 0.25) {
+      // Well below the floor -- clear of where the hill crosses it -- the ground must still be there.
+      if (hill(x, z) < y - 0.6 && !ground.some((t) => insidePlan(t, x, z))) basin.push([+x.toFixed(2), +z.toFixed(2)]);
+    }
+    assert.deepEqual(basin, [], "no ground missing under the floor where the hill does not reach it");
+    assert.ok(!groundUnder(runtime, [4.5, -0.8, 5.3, 0.8]), "and none left where the hill rises through it");
   } finally { session.free(); }
 }));

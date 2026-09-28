@@ -8058,16 +8058,21 @@ How far above the ground a structure's surface may stand and still rest on
 it, the ground rising to meet it. Well short of a storey, well past the
 unevenness of ground a floor is drawn on.
 
+### `variable vtt.ground-contact.GROUND_THROUGH_TOLERANCE: 0.05`
+
+How near the ground a surface standing partly clear of it may run and still
+count as the ground rising through it -- a floor laid flush on the ground,
+whose every sample would otherwise flicker in and out of it.
+
 ### `function vtt.ground-contact.groundContactOf(topology: ConstructionRegionTopology, groundAt: GroundHeightAt, cell: number, clearance: number, held: ReadonlySet<string>): GroundContact`
 
 How `topology` meets the ground `groundAt` describes, sampled on a grid of
-`cell` over its footprint. Where it gives way from resting to standing
-clear is found between the samples, by marching squares -- the line where
-it stands exactly `clearance` over the ground -- so the cut follows it
-instead of stepping round whole cells, and the ground meets the
-structure's side right where it lets go. Where no ground is known it is
-clear. A face standing upright is left as it always was -- wholly in
-contact.
+`cell` over its footprint. Within `clearance` of the ground all over, it
+rests wholly. Standing clear somewhere, it is cut only where the ground
+runs through it: that line is found between the samples, by marching
+squares, so the cut follows it instead of stepping round whole cells.
+Where no ground is known it is clear. A face standing upright is left as
+it always was -- wholly in contact.
 
 A side whose two ends `held` names -- joined to another structure, a
 ramp's end welded into a floor -- has that structure on its far side and
