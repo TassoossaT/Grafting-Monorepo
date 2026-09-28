@@ -39,6 +39,12 @@ export interface GlobalHandle {
   readonly center?: readonly [number, number];
   /** How the handle moves while dragged -- the path its gesture keeps it on. */
   readonly motion: HandleMotion;
+  /**
+   * The way a handle standing off one side of a face looks out, in plan --
+   * absent for one that is seen from anywhere. The scene shows only the
+   * sides facing the viewer.
+   */
+  readonly facing?: { readonly x: number; readonly z: number };
 }
 
 /** What a gesture on a global handle asks for, whatever the structure. */
@@ -52,7 +58,9 @@ export type GlobalHandleIntent =
   /** Take an end to `at`; `under` is the surface the pointer is on, which a landing prefers. */
   | { readonly kind: "place"; readonly at: ConstructionPosition; readonly under?: ConstructionSurfaceKey }
   /** Raise (positive) or lower one end alone -- the handle's own end -- keeping the other where it is. */
-  | { readonly kind: "lift"; readonly dy: number };
+  | { readonly kind: "lift"; readonly dy: number }
+  /** Let go of whatever the structure is joined to. */
+  | { readonly kind: "detach" };
 
 /**
  * What a provider makes of an intent, in the terms the edit is carried out

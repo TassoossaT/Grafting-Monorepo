@@ -36,6 +36,7 @@ const DONE: Readonly<Record<GlobalHandleKind, string>> = {
   radius: "Raio atualizado.", origin: "Ponta movida.", destination: "Ponta movida.",
   originHeight: "Inclinação atualizada.", destinationHeight: "Inclinação atualizada.",
   side: "Lado ajustado.", corner: "Canto ajustado.",
+  foot: "Coluna movida.", top: "Altura atualizada.", detach: "Estrutura solta.",
 };
 
 function sceneOf(ctx: ToolContext): GlobalHandleScene {
@@ -314,6 +315,9 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
       case "pivot": return { intent: { kind: "move", delta }, at };
       case "side": return { intent: { kind: "move", delta }, at, readout: `lado ${(delta.x * (handle!.motion.kind === "line" ? handle!.motion.direction.x : 0) + delta.z * (handle!.motion.kind === "line" ? handle!.motion.direction.z : 0)).toFixed(2)} m` };
       case "corner": return { intent: { kind: "move", delta }, at };
+      case "foot": return { intent: { kind: "move", delta }, at };
+      case "top": return { intent: { kind: "move", delta }, at, readout: `altura ${delta.y >= 0 ? "+" : ""}${delta.y.toFixed(2)} m` };
+      case "detach": return { intent: { kind: "detach" }, at };
       case "height": return { intent: { kind: "height", dy: delta.y }, at, readout: `altura ${delta.y >= 0 ? "+" : ""}${delta.y.toFixed(2)} m` };
       case "rotate": return { intent: { kind: "rotate", angle }, at, readout: `rotação ${((angle * 180) / Math.PI).toFixed(0)}°` };
       case "turns": return { intent: { kind: "wind", angle }, at, readout: `voltas ${angle >= 0 ? "+" : ""}${(angle / (2 * Math.PI)).toFixed(2)}` };
@@ -377,6 +381,11 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
       ctx.runtime.previewNodeHandle?.(handle.id, undefined);
       const paused = pause && pausedPart ? { part: pausedPart, links: pause.links } : undefined;
       resume();
+      // A handle that is clicked, not dragged, acts on release.
+      if (handle.motion.kind === "fixed") {
+        try { edit = planGlobalHandle(scene, handle, intentOf({ start: sample, current: sample, samples: [sample] }).intent, ctx.runtime, operationId); }
+        catch (error) { ctx.reportFeedback({ tone: "error", message: error instanceof Error ? error.message : String(error) }); return; }
+      }
       if (!edit) return;
       try {
         if (paused) commitPaused(ctx, handle, paused, scene, operationId);

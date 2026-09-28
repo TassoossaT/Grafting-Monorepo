@@ -4,7 +4,7 @@ import type { ConstructionPosition } from "@/ports";
 
 import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "../core/tool-context.ts";
 import { withStructureEditing } from "../core/structure-edit-behavior.ts";
-import { WALL_COLOR, commitWallContour, onFloorLevel, pinnedToBaseline, wallCorrectionPreview } from "./wall-shared.ts";
+import { WALL_COLOR, commitWallContour, onFloorLevel, pinnedToBaseline, wallCorrectionPreview, wallStartAt } from "./wall-shared.ts";
 
 /**
  * The pressed drag's own anchor, or `undefined` before a press. Cleared the
@@ -41,8 +41,8 @@ const rawWallLineTool: ConstructionTool<"wall-line"> = {
   },
 
   onPointerDown(ctx: ToolContext, sample: PointerSample): void {
-    // On a floor, at its height exactly: a wall on a platform stands on it.
-    anchor = onFloorLevel(ctx, sample);
+    // On a floor, at its height exactly: a wall on a platform stands on it. On another wall, at its foot: it joins there.
+    anchor = wallStartAt(ctx, sample);
   },
 
   onPointerUp(ctx: ToolContext, gesture: ToolGesture, params: WallParams): void {
@@ -53,5 +53,5 @@ const rawWallLineTool: ConstructionTool<"wall-line"> = {
   },
 };
 
-/** Also grabs and edits an existing wall's own vertex/edge/body/height-widget -- see `structure-edit-behavior.ts`. */
-export const wallLineTool = withStructureEditing(rawWallLineTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "partition") });
+/** Also edits an existing wall by its handles -- see `structure-edit-behavior.ts`; a press on a wall itself builds from it. */
+export const wallLineTool = withStructureEditing(rawWallLineTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "partition"), handlesOnly: true });

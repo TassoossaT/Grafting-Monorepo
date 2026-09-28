@@ -26,12 +26,12 @@ function drag(tool, fixture, handle, points, params, extra = {}) {
   return shown;
 }
 
-test("a platform shows pivot, rotate and height handles and one just outside each side and corner; a wall, which declares none, shows nothing", () => {
+test("a platform shows pivot, rotate and height handles and one just outside each side and corner", () => {
   const { runtime, session } = sessionFixture();
   try {
     square(runtime, "floor", 0, 0);
     addFace(runtime, "wall", "wall-white", [[10, 0, 0], [12, 0, 0], [12, 2, 0], [10, 2, 0]].map(([x, y, z], i) => ({ id: `wall:${i}`, position: { x, y, z } })));
-    const handles = shownGlobalHandles(scene(runtime));
+    const handles = shownGlobalHandles(scene(runtime)).filter((h) => h.owner === "platform");
     assert.deepEqual(handles.map((h) => h.kind).filter((kind) => kind !== "side" && kind !== "corner").sort(), ["height", "pivot", "rotate"]);
     const sides = handles.filter((h) => h.kind === "side"), corners = handles.filter((h) => h.kind === "corner");
     assert.equal(sides.length, 4);

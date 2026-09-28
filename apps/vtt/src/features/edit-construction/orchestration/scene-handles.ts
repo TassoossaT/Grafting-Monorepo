@@ -32,6 +32,8 @@ export interface SceneHandle {
 export interface HandleFocus {
   readonly faces: ReadonlySet<string>;
   readonly spineNodes: ReadonlySet<string>;
+  /** The way the viewer looks, in plan: of a handle standing off each side of a face, only the side facing it shows. */
+  readonly viewer?: { readonly x: number; readonly z: number };
 }
 
 /** Whether `handle` belongs to the focused structure. */
@@ -69,11 +71,16 @@ export function sceneHandles(input: SceneHandleInput): readonly SceneHandle[] {
     for (const handle of curveHandles(shown, input.port)) handles.push({ id: handle.id, kind: "midpoint", position: handle.position });
   }
   if (!input.pointsOnly) {
-    for (const widget of panelHeightWidgets(input.topologies)) handles.push({ id: widget.id, kind: "panelHeight", position: widget.position });
+    // With a focus, only the focused structure's own.
+    const widgetFaces = input.focus ? input.topologies.filter((topology) => input.focus!.faces.has(topology.surfaceKey.join("\u0000"))) : input.topologies;
+    for (const widget of panelHeightWidgets(widgetFaces)) handles.push({ id: widget.id, kind: "panelHeight", position: widget.position });
   }
   if (input.owns) {
     for (const handle of shownGlobalHandles({ graph: input.graph, topologies: input.topologies, cloudFor: input.cloudFor }, input.owns)) {
       if (input.focus && !focused(handle, input.focus)) continue;
+      // The side of a face turned away from the viewer.
+      const viewer = input.focus?.viewer;
+      if (viewer && handle.facing && handle.facing.x * viewer.x + handle.facing.z * viewer.z > 0) continue;
       handles.push({ id: handle.id, kind: handle.kind, position: handle.position });
     }
   }

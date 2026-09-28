@@ -54,6 +54,8 @@ export function createConstrainedDrag(motion: HandleMotion, handle: Construction
           return { position: options.spatialTarget ? { ...current.point, y: handle.y } : along(current) };
         case "vertical":
           return { position: { ...handle, y: handle.y + rise(current) } };
+        case "fixed":
+          return { position: handle };
         case "line": {
           const d = motion.direction;
           const moved = options.spatialTarget ? current.point : along(current);

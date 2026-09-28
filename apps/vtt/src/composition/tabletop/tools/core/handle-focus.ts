@@ -115,6 +115,15 @@ function near(ctx: ToolContext, sample: PointerSample, focus: HandleFocus): bool
  */
 export function handleFocusAt(ctx: ToolContext, sample: PointerSample | undefined, previous: HandleFocus, owns: (surfaceType: string) => boolean): HandleFocus {
   if (!sample) return NO_FOCUS;
+  const focus = focusFrom(ctx, sample, previous, owns);
+  // Where the viewer looks, in steps of 15 degrees: a handle's side shows or hides only as the camera really turns.
+  const look = sample.forward;
+  if (!look || Math.hypot(look.x, look.z) < 1e-6 || focus === NO_FOCUS) return focus;
+  const heading = Math.round(Math.atan2(look.z, look.x) / (Math.PI / 12)) * (Math.PI / 12);
+  return { ...focus, viewer: { x: Math.cos(heading), z: Math.sin(heading) } };
+}
+
+function focusFrom(ctx: ToolContext, sample: PointerSample, previous: HandleFocus, owns: (surfaceType: string) => boolean): HandleFocus {
   // On a handle: whatever it belongs to stays in focus.
   if (sample.nodeId && (globalHandleOf(sample.nodeId) || curvePick(sample.nodeId))) return previous;
   const under = focusUnder(ctx, sample, owns);
@@ -127,5 +136,6 @@ export function handleFocusAt(ctx: ToolContext, sample: PointerSample | undefine
 export function sameFocus(a: HandleFocus | undefined, b: HandleFocus | undefined): boolean {
   if (a === b) return true;
   if (!a || !b || a.faces.size !== b.faces.size || a.spineNodes.size !== b.spineNodes.size) return false;
+  if (Math.hypot((a.viewer?.x ?? 0) - (b.viewer?.x ?? 0), (a.viewer?.z ?? 0) - (b.viewer?.z ?? 0)) > 1e-6) return false;
   return [...a.faces].every((key) => b.faces.has(key)) && [...a.spineNodes].every((id) => b.spineNodes.has(id));
 }

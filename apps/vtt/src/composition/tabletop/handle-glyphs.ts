@@ -32,4 +32,9 @@ export const HANDLE_GLYPHS: Readonly<Record<SceneHandleKind | "vertex", RenderHa
   /** Just outside a side or a corner: pushes that part. */
   side: "side",
   corner: "corner",
+  /** An upright post: where it stands, and how high that side rises. */
+  foot: "corner",
+  top: "height",
+  /** Let go of what the structure is joined to. */
+  detach: "unlink",
 };

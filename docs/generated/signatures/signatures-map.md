@@ -3518,6 +3518,11 @@ export function createLinkHandleTexture(): HTMLCanvasElement {
   context.lineWidth = 4;
   for (const [x, y] of [[25, 39], [39, 25]] as const) {
   context.save();
+export function createUnlinkHandleTexture(): HTMLCanvasElement {
+  return glyphDisc("#b4533a", (context) => {
+  context.lineWidth = 4;
+  for (const [x, y] of [[21, 43], [43, 21]] as const) {
+  context.save();
 export function createMidpointHandleTexture(): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
 
@@ -4292,12 +4297,11 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
 export const NO_FOCUS: HandleFocus = Object.freeze({ faces: new Set<string>(), spineNodes: new Set<string>() });
 export function handleFocusAt(ctx: ToolContext, sample: PointerSample | undefined, previous: HandleFocus, owns: (surfaceType: string) => boolean): HandleFocus {
   if (!sample) return NO_FOCUS;
-  // On a handle: whatever it belongs to stays in focus.
-  if (sample.nodeId && (globalHandleOf(sample.nodeId) || curvePick(sample.nodeId))) return previous;
-  const under = focusUnder(ctx, sample, owns);
+  const focus = focusFrom(ctx, sample, previous, owns);
 export function sameFocus(a: HandleFocus | undefined, b: HandleFocus | undefined): boolean {
   if (a === b) return true;
   if (!a || !b || a.faces.size !== b.faces.size || a.spineNodes.size !== b.spineNodes.size) return false;
+  if (Math.hypot((a.viewer?.x ?? 0) - (b.viewer?.x ?? 0), (a.viewer?.z ?? 0) - (b.viewer?.z ?? 0)) > 1e-6) return false;
   return [...a.faces].every((key) => b.faces.has(key)) && [...a.spineNodes].every((id) => b.spineNodes.has(id));
 
 // src/composition/tabletop/tools/core/navigate-tool.ts
@@ -4948,10 +4952,10 @@ export function previewOutline(center: ConstructionPosition, radius: number, seg
 export const towerStampTool = withStructureEditing(rawTowerStampTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "partition") });
 
 // src/composition/tabletop/tools/walls/wall-brush-tool.ts
-export const wallBrushTool = withStructureEditing(rawWallBrushTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "partition") });
+export const wallBrushTool = withStructureEditing(rawWallBrushTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "partition"), handlesOnly: true });
 
 // src/composition/tabletop/tools/walls/wall-line-tool.ts
-export const wallLineTool = withStructureEditing(rawWallLineTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "partition") });
+export const wallLineTool = withStructureEditing(rawWallLineTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "partition"), handlesOnly: true });
 
 // src/composition/tabletop/tools/walls/wall-patch.ts
 export interface WallColumn {
@@ -4990,6 +4994,11 @@ export function onFloorLevel(ctx: ToolContext, sample: PointerSample): Construct
   const y = floor.nodes[0]?.position.y;
   if (y === undefined || floor.nodes.some((node) => Math.abs(node.position.y - y) > 1e-6)) continue;
   const point = sample.ray ? pointerAtHeight(sample, y) : { ...sample.point, y };
+export function wallStartAt(ctx: ToolContext, sample: PointerSample): ConstructionPosition {
+  if (sample.surfaceRef !== undefined) {
+  for (const span of wallSpans(ctx)) {
+  if (surfaceRefOf(span.surfaceKey) !== sample.surfaceRef) continue;
+  const t = Math.max(0, Math.min(1, projectOntoSegment(sample.point, span.a, span.b).t));
 export function snappedEndpoint(ctx: ToolContext, point: ConstructionPosition, correction = 0): ConstructionPosition {
   const tolerance = Math.max(CORNER_WELD_TOLERANCE, correction);
 export function correctedWallCorners(
@@ -5280,7 +5289,7 @@ export type Reaction<Context> = (
 
 
 // src/features/edit-construction/global-handles/global-handle-ids.ts
-export type GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "radius" | "origin" | "destination" | "originHeight" | "destinationHeight" | "side" | "corner";
+export type GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "radius" | "origin" | "destination" | "originHeight" | "destinationHeight" | "side" | "corner" | "foot" | "top" | "detach";
 export const globalHandleId = (kind: GlobalHandleKind, anchorNodeId: string): string => `${PREFIX[kind]}${anchorNodeId}`;
 export function globalHandleOf(id: string): { readonly kind: GlobalHandleKind; readonly nodeId: string } | undefined {
   const kind = KINDS.find((candidate) => id.startsWith(PREFIX[candidate]));
@@ -5455,6 +5464,17 @@ export const ALL_AXES: readonly EditAxis[] = Object.freeze(["x", "y", "z"] as co
 export const HORIZONTAL_AXES: readonly EditAxis[] = Object.freeze(["x", "z"] as const);
 export const HEIGHT_AXIS: readonly EditAxis[] = Object.freeze(["y"] as const);
 
+// src/features/edit-construction/orchestration/detach.ts
+export function sharedNodes(topologies: readonly ConstructionRegionTopology[], members: readonly ConstructionRegionTopology[], isGround: (surfaceType: string) => boolean): ReadonlySet<string> {
+  const own = new Set(members.map(keyOf));
+export function detachStructure(
+  topologies: readonly ConstructionRegionTopology[],
+  members: readonly ConstructionRegionTopology[],
+  isGround: (surfaceType: string) => boolean,
+  operationId: string,
+  ): ApplyPatchReplacementRequest | undefined {
+  const shared = sharedNodes(topologies, members, isGround);
+
 // src/features/edit-construction/orchestration/edit-orchestrator.ts
 export type EditPlan =
 export function planEdit(
@@ -5537,6 +5557,12 @@ export const cloudHandleProvider: GlobalHandleProvider = {
   return cloudsOf(scene).flatMap((members): CloudGlobalHandle[] => {
   const positions = new Map(members.flatMap((member) => member.nodes.map((node) => [node.id, node.position] as const)));
 
+// src/features/edit-construction/orchestration/global-handles/detach-handle-provider.ts
+export const detachHandleProvider: GlobalHandleProvider = {
+  name: "detach",
+  handles(scene) {
+  const candidates = scene.topologies.filter((topology) => structureTypeFor(topology.surfaceType)?.globalHandles?.includes("detach") === true);
+
 // src/features/edit-construction/orchestration/global-handles/end-handle-provider.ts
 export interface EndGlobalHandle extends GlobalHandle {
   readonly topology: ConstructionRegionTopology;
@@ -5586,6 +5612,20 @@ export const spineHandleProvider: GlobalHandleProvider = {
   switch (intent.kind) {
   case "move": return planSpineTransform(scene.graph, handle, { delta: intent.delta });
 
+// src/features/edit-construction/orchestration/global-handles/upright-handle-provider.ts
+export interface UprightGlobalHandle extends GlobalHandle {
+  readonly seed: ConstructionRegionTopology;
+  readonly target: Extract<EditTarget, { kind: "edge" } | { kind: "vertex" }>;
+  }
+export function uprightPosts(topology: ConstructionRegionTopology): readonly { readonly foot: string; readonly top: string }[] {
+  const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
+export const isUpright = (topology: ConstructionRegionTopology) => uprightPosts(topology).length > 0;
+export const uprightHandleProvider: GlobalHandleProvider = {
+  name: "upright",
+  handles(scene) {
+  const candidates = scene.topologies.filter((topology) => {
+  const type = structureTypeFor(topology.surfaceType);
+
 // src/features/edit-construction/orchestration/index.ts
 export type {
   AtomicEditOp,
@@ -5626,7 +5666,8 @@ export interface SceneHandle {
 export interface HandleFocus {
   readonly faces: ReadonlySet<string>;
   readonly spineNodes: ReadonlySet<string>;
-  }
+  /** The way the viewer looks, in plan: of a handle standing off each side of a face, only the side facing it shows. */
+  readonly viewer?: { readonly x: number; readonly z: number };
 export interface SceneHandleInput {
   readonly graph: ConstructionGraphSnapshot;
   readonly topologies: readonly ConstructionRegionTopology[];
@@ -6386,7 +6427,7 @@ export const rampEndsCapability: StructureEnds = Object.freeze<StructureEnds>({
 // src/features/edit-construction/structure-types/platform/platform-ramp-type.ts
 export const rampStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
   surfaceType: RAMP_SURFACE_TYPE, label: "Rampa",
-  globalHandles: Object.freeze(["pivot", "rotate", "height", "origin", "destination", "originHeight", "destinationHeight", "side", "corner"] as const),
+  globalHandles: Object.freeze(["pivot", "rotate", "height", "origin", "destination", "originHeight", "destinationHeight", "side", "corner", "detach"] as const),
   // Its long sides widen it; a corner widens or narrows its own end alone --
   // how the ramp opens or closes; its ends are the origin and destination handles'.
   partHandle: (role) => role === "ramp-side" || role === "ramp-corner",
@@ -7535,7 +7576,7 @@ export interface RenderSurfacePickTarget {
   }
 export type ConfirmedSurfacePickRenderChange =
 export type ConfirmedMapChunkRenderChange =
-export type RenderHandleGlyph = "point" | "midpoint" | "move" | "rotate" | "height" | "turns" | "radius" | "tilt" | "link" | "side" | "corner";
+export type RenderHandleGlyph = "point" | "midpoint" | "move" | "rotate" | "height" | "turns" | "radius" | "tilt" | "link" | "side" | "corner" | "unlink";
 export interface RenderNodeHandle {
   readonly nodeId: string;
   readonly position: { readonly x: number; readonly y: number; readonly z: number };

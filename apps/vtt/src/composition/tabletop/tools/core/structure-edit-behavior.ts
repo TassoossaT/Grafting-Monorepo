@@ -244,7 +244,8 @@ export function createStructureEditBehavior(options: StructureEditOptions): Stru
       grabbedThisGesture = true;
       return true;
     }
-    if (options.handlesOnly) return false;
+    // A wall's own height widget is a handle too: it edits; any other part pressed is the tool's own.
+    if (options.handlesOnly && !(sample.nodeId !== undefined && panelHeightWidgetPick(sample.nodeId) !== undefined)) return false;
     const grabbed = grabbedTarget(ctx, sample, options.ownsType, editParams.mode === "elevation");
     if (grabbed === undefined) {
       ctx.reportSelection(undefined);

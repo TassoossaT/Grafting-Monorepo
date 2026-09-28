@@ -30,7 +30,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { curvyBrushStroke, curvyBrushWall, dispatchGesture, groupOf, harness, hitMesh, inPoly, isOpening, isPartition, line, ref } from "./support/opening-harness.mjs";
-import { DEFAULT_TOOL_PARAMS, panelHeightWidgetPickId } from "../src/features/edit-construction/index.ts";
+import { DEFAULT_TOOL_PARAMS, panelHeightWidgetPickId, shownGlobalHandles } from "../src/features/edit-construction/index.ts";
 import { surfaceRefFromNodeSet } from "../src/entities/map/index.ts";
 import { openingTool } from "../src/composition/tabletop/tools/openings/opening-tool.ts";
 import { commitWallContour } from "../src/composition/tabletop/tools/walls/wall-shared.ts";
@@ -464,13 +464,26 @@ async function runSeed(seed, opsCount = 40, hostKind = "straight") {
         const steps = 1 + Math.floor(rnd() * 6);
         const delta = { x: r(-2, 2), y: r(-1.5, 1.5), z: rnd() < 0.5 ? 0 : r(-2, 2) };
         let down, extra;
+        // A wall is edited by its handles: a post by its foot (where it stands) or its top (how high), a run by its side handle.
+        const handles = shownGlobalHandles({ graph: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), cloudFor: (q) => runtime.cloudFor(q) });
+        const handleOf = (kind, match) => handles.find((h) => h.kind === kind && h.faces?.includes(w.surfaceKey.join(" ")) && match(h.target));
         if (mode === "vertex") {
           const n = pick(w.nodes.filter((node) => outer.some((e) => e.startNodeId === node.id)));
-          down = n.position; extra = { nodeId: n.id, surfaceRef: ref(w) };
+          const h = handleOf("foot", (t) => t.nodeId === n.id) ?? handleOf("top", (t) => t.nodeId === n.id);
+          if (!h) continue;
+          down = h.position; extra = { nodeId: h.id, screenX: 100, screenY: 300 };
+          if (h.kind === "top") { delta.x = 0; delta.z = 0; }
         } else if (mode === "edge") {
           const e = pick(outer);
-          const a = w.nodes.find((n) => n.id === e.startNodeId).position, b = w.nodes.find((n) => n.id === e.endNodeId).position;
-          down = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 }; extra = { surfaceRef: ref(w) };
+          const h = handleOf("side", (t) => t.edgeId === e.edgeId);
+          if (h) { down = h.position; extra = { nodeId: h.id, screenX: 100, screenY: 300 }; }
+          else {
+            // A top run's height is its widget's.
+            const a = w.nodes.find((n) => n.id === e.startNodeId).position, b = w.nodes.find((n) => n.id === e.endNodeId).position;
+            down = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 };
+            extra = { nodeId: panelHeightWidgetPickId(e.edgeId, "single") };
+            delta.x = 0; delta.z = 0;
+          }
         } else {
           const e = pick(outer);
           const a = w.nodes.find((n) => n.id === e.startNodeId).position, b = w.nodes.find((n) => n.id === e.endNodeId).position;
@@ -480,7 +493,8 @@ async function runSeed(seed, opsCount = 40, hostKind = "straight") {
         }
         desc = `wall-${mode} ${q(down)} +${q(delta)} in ${steps} ticks`;
         const pts = Array.from({ length: steps + 1 }, (_, k) => ({ x: down.x + delta.x * k / steps, y: down.y + delta.y * k / steps, z: down.z + delta.z * k / steps }));
-        const samples = pts.map((point) => ({ point }));
+        // Heights are dragged up the screen: 40 pixels a unit.
+        const samples = pts.map((point, k) => ({ point, screenX: 100 + (Math.hypot(delta.x, delta.z) * 40 * k) / steps, screenY: 300 - (delta.y * 40 * k) / steps }));
         wallLineTool.onPointerDown(ctx, { point: down, ...extra }, WALL);
         for (let k = 1; k < pts.length; k++) wallLineTool.onPointerMove(ctx, { start: samples[0], current: samples[k], samples: samples.slice(0, k + 1) }, WALL);
         wallLineTool.onPointerUp(ctx, { start: samples[0], current: samples.at(-1), samples }, WALL);
@@ -715,20 +729,20 @@ async function runMultiPanelSeed(seed, opsCount, hostKind) {
         const outer = w.outerLoops[0];
         const mode = pick(["vertex", "edge"]);
         const delta = { x: r(-1.5, 1.5), y: r(-1, 1), z: r(-1.5, 1.5) };
-        let down, extra;
-        if (mode === "vertex") {
-          const n = pick(w.nodes.filter((node) => outer.some((e) => e.startNodeId === node.id)));
-          down = n.position; extra = { nodeId: n.id, surfaceRef: ref(w) };
-        } else {
-          const e = pick(outer);
-          const a = w.nodes.find((n) => n.id === e.startNodeId).position, b = w.nodes.find((n) => n.id === e.endNodeId).position;
-          down = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 }; extra = { surfaceRef: ref(w) };
-        }
+        // A wall is edited by its handles: a post's foot or top, or a run's side.
+        const face = w.surfaceKey.join(" ");
+        const kinds = mode === "vertex" ? ["foot", "top"] : ["side"];
+        const handles = shownGlobalHandles({ graph: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), cloudFor: (q) => runtime.cloudFor(q) })
+          .filter((h) => kinds.includes(h.kind) && h.faces?.includes(face) && outer.some((e) => e.edgeId === h.target?.edgeId || e.startNodeId === h.target?.nodeId));
+        if (handles.length === 0) continue;
+        const h = pick(handles);
+        if (h.kind === "top") { delta.x = 0; delta.z = 0; }
+        const down = h.position;
         const up = { x: down.x + delta.x, y: down.y + delta.y, z: down.z + delta.z };
-        desc = `wall-${mode} ${q(down)} -> ${q(up)}`;
-        wallLineTool.onPointerDown(ctx, { point: down, ...extra }, WALL_LINE());
-        wallLineTool.onPointerUp(ctx, { start: { point: down }, current: { point: up }, samples: [{ point: down }, { point: up }] }, WALL_LINE());
-        wallLineTool.onClick?.(ctx, { point: up }, WALL_LINE());
+        desc = `wall-${h.kind} ${q(down)} -> ${q(up)}`;
+        const at = (point, rise) => ({ point, screenX: 100 + 40 * Math.hypot(point.x - down.x, point.z - down.z), screenY: 300 - rise * 40 });
+        wallLineTool.onPointerDown(ctx, { ...at(down, 0), nodeId: h.id }, WALL_LINE());
+        wallLineTool.onPointerUp(ctx, { start: at(down, 0), current: at(up, delta.y), samples: [at(down, 0), at(up, delta.y)] }, WALL_LINE());
       } else if (choice < 0.94) {
         const o = pick(os), bx = bbox(o);
         const a = { x: (bx.x0 + bx.x1) / 2, y: (bx.y0 + bx.y1) / 2, z: 0 }; desc = `delete at ${q(a)}`;

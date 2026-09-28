@@ -300,6 +300,10 @@ Tilts something by one end: a slope, and a double arrow up and down at its high 
 
 Turns something round: a circular arrow.
 
+### `function vtt.marker-textures.createUnlinkHandleTexture(): HTMLCanvasElement`
+
+Lets go of what a structure is joined to: two chain links pulled apart.
+
 ### `interface vtt.node-handle-scene-item.NodeHandlePickData`
 
 Opaque per-item data a pick result echoes back, letting the adapter recover which node a hit handle belongs to without parsing its scene item id.
@@ -3448,11 +3452,11 @@ Also grabs and edits an existing wall's own vertex/edge/body/height-widget -- a 
 
 ### `variable vtt.wall-brush-tool.wallBrushTool: ConstructionTool<"wall-brush">`
 
-Also grabs and edits an existing wall's own vertex/edge/body/height-widget -- see `structure-edit-behavior.ts`.
+Also edits an existing wall by its handles -- see `structure-edit-behavior.ts`; a press on a wall itself builds from it.
 
 ### `variable vtt.wall-line-tool.wallLineTool: ConstructionTool<"wall-line">`
 
-Also grabs and edits an existing wall's own vertex/edge/body/height-widget -- see `structure-edit-behavior.ts`.
+Also edits an existing wall by its handles -- see `structure-edit-behavior.ts`; a press on a wall itself builds from it.
 
 ### `interface vtt.wall-patch.WallColumn`
 
@@ -3597,6 +3601,13 @@ the hand drift this far and still weld -- a thin centerline alone showed
 the correct result but not *why* it was correct, which is what read as
 "not really snapping." The floor is CORNER_WELD_TOLERANCE itself,
 so a zero-tolerance straight line still shows its own magnet reach.
+
+### `function vtt.wall-shared.wallStartAt(ctx: ToolContext, sample: PointerSample): ConstructionPosition`
+
+Where a wall begins when pressed on: on another wall, at the foot of that
+wall straight below where it was pressed -- a new wall joins it there, at
+a column or partway along its run, never halfway up its face; else on a
+floor it is over, at the floor's height (onFloorLevel).
 
 ### `interface vtt.wall-spans.WallSpan`
 
@@ -4064,6 +4075,12 @@ A spiral's centre, when the structure is one -- what a turns handle winds round.
 
 The faces the structure is made of, by surface key joined with NUL -- absent for a spine, whose faces its spine regenerates.
 
+### `property vtt.global-handle.GlobalHandle.facing?: { x: number; z: number }`
+
+The way a handle standing off one side of a face looks out, in plan --
+absent for one that is seen from anywhere. The scene shows only the
+sides facing the viewer.
+
 ### `property vtt.global-handle.GlobalHandle.id: string`
 
 ### `property vtt.global-handle.GlobalHandle.kind: GlobalHandleKind`
@@ -4132,11 +4149,11 @@ in:
 - replace: faces swapped for new ones in one patch replacement -- a
   structure rebuilt, and the floors it welds into or leaves.
 
-### `type vtt.global-handle.GlobalHandleIntent = { delta: ConstructionPosition; kind: "move" } | { angle: number; kind: "rotate" } | { dy: number; kind: "height" } | { angle: number; kind: "wind" } | { delta: number; kind: "radius" } | { at: ConstructionPosition; kind: "place"; under?: ConstructionSurfaceKey } | { dy: number; kind: "lift" }`
+### `type vtt.global-handle.GlobalHandleIntent = { delta: ConstructionPosition; kind: "move" } | { angle: number; kind: "rotate" } | { dy: number; kind: "height" } | { angle: number; kind: "wind" } | { delta: number; kind: "radius" } | { at: ConstructionPosition; kind: "place"; under?: ConstructionSurfaceKey } | { dy: number; kind: "lift" } | { kind: "detach" }`
 
 What a gesture on a global handle asks for, whatever the structure.
 
-### `type vtt.global-handle-ids.GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "radius" | "origin" | "destination" | "originHeight" | "destinationHeight" | "side" | "corner"`
+### `type vtt.global-handle-ids.GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "radius" | "origin" | "destination" | "originHeight" | "destinationHeight" | "side" | "corner" | "foot" | "top" | "detach"`
 
 The handles that stand for a whole structure rather than one of its
 points, whatever the structure is built from -- a spine, a cloud of
@@ -4153,7 +4170,10 @@ regions:
   steeply the structure climbs;
 - side, corner: stand just outside one side or corner of the structure
   and push that part -- the part itself is never grabbed, so it stays
-  free to build against.
+  free to build against;
+- foot, top: an upright structure's post -- where it stands, and how high
+  that side rises;
+- detach: clicked, the structure lets go of whatever it is joined to.
 
 Which of them a structure shows is its type's declaration
 (`StructureTypeDefinition.globalHandles`). Every one is named after the
@@ -4167,7 +4187,7 @@ their ids are made or read.
 
 Which global handle `id` names, and after which node; `undefined` for anything else.
 
-### `type vtt.handle-motion.HandleMotion = { kind: "free" } | { kind: "plane" } | { kind: "vertical" } | { center: PlanPoint; kind: "orbit" } | { direction: PlanPoint; kind: "line" }`
+### `type vtt.handle-motion.HandleMotion = { kind: "free" } | { kind: "plane" } | { kind: "vertical" } | { center: PlanPoint; kind: "orbit" } | { direction: PlanPoint; kind: "line" } | { kind: "fixed" }`
 
 How a handle may move while dragged -- a property of the handle, never of
 the type it belongs to. The gesture keeps the handle on this path, and
@@ -4178,7 +4198,8 @@ only a handle that moves freely carries the scene's 3D arrows:
 - plane: along the ground, keeping its height;
 - vertical: straight up and down;
 - orbit: round `center` in plan, at its own distance and height;
-- line: along `direction` in plan through where it stands, keeping its height.
+- line: along `direction` in plan through where it stands, keeping its height;
+- fixed: nowhere -- a handle that is clicked, not dragged.
 
 ### `function vtt.handle-motion.carriesArrows(motion: HandleMotion): boolean`
 
@@ -4424,6 +4445,14 @@ Which part of a region the user grabbed.
 
 ### `function vtt.atomic-edit.scalePosition(position: ConstructionPosition, factor: number): ConstructionPosition`
 
+### `function vtt.detach.detachStructure(topologies: readonly ConstructionRegionTopology[], members: readonly ConstructionRegionTopology[], isGround: (surfaceType: string) => boolean, operationId: string): ApplyPatchReplacementRequest | undefined`
+
+`members` given nodes of their own for every one they share, as one replacement; `undefined` when they share none.
+
+### `function vtt.detach.sharedNodes(topologies: readonly ConstructionRegionTopology[], members: readonly ConstructionRegionTopology[], isGround: (surfaceType: string) => boolean): ReadonlySet<string>`
+
+The nodes `members` shares with any other structure but the ground.
+
 ### `interface vtt.edit-orchestrator.EditOpSink`
 
 The slice of `ConstructionSessionPort` an edit plan actually needs.
@@ -4566,6 +4595,12 @@ A spiral's centre, when the structure is one -- what a turns handle winds round.
 
 The faces the structure is made of, by surface key joined with NUL -- absent for a spine, whose faces its spine regenerates.
 
+### `property vtt.cloud-handle-provider.CloudGlobalHandle.facing?: { x: number; z: number }`
+
+The way a handle standing off one side of a face looks out, in plan --
+absent for one that is seen from anywhere. The scene shows only the
+sides facing the viewer.
+
 ### `property vtt.cloud-handle-provider.CloudGlobalHandle.id: string`
 
 ### `property vtt.cloud-handle-provider.CloudGlobalHandle.kind: GlobalHandleKind`
@@ -4601,6 +4636,8 @@ moving and raising go through the type's own region role (so its solver,
 transport and validation apply); turning places every node itself, arc
 centres with them, and turns everything joined to the structure with it.
 
+### `variable vtt.detach-handle-provider.detachHandleProvider: GlobalHandleProvider`
+
 ### `interface vtt.end-handle-provider.EndGlobalHandle`
 
 An end handle: the generic handle, with the structure it moves and which end.
@@ -4614,6 +4651,12 @@ A spiral's centre, when the structure is one -- what a turns handle winds round.
 ### `property vtt.end-handle-provider.EndGlobalHandle.faces?: readonly string[]`
 
 The faces the structure is made of, by surface key joined with NUL -- absent for a spine, whose faces its spine regenerates.
+
+### `property vtt.end-handle-provider.EndGlobalHandle.facing?: { x: number; z: number }`
+
+The way a handle standing off one side of a face looks out, in plan --
+absent for one that is seen from anywhere. The scene shows only the
+sides facing the viewer.
 
 ### `property vtt.end-handle-provider.EndGlobalHandle.id: string`
 
@@ -4671,6 +4714,12 @@ A spiral's centre, when the structure is one -- what a turns handle winds round.
 
 The faces the structure is made of, by surface key joined with NUL -- absent for a spine, whose faces its spine regenerates.
 
+### `property vtt.part-handle-provider.PartGlobalHandle.facing?: { x: number; z: number }`
+
+The way a handle standing off one side of a face looks out, in plan --
+absent for one that is seen from anywhere. The scene shows only the
+sides facing the viewer.
+
 ### `property vtt.part-handle-provider.PartGlobalHandle.id: string`
 
 ### `property vtt.part-handle-provider.PartGlobalHandle.kind: GlobalHandleKind`
@@ -4719,6 +4768,66 @@ grabbed, so it stays free to build against.
 Global handles of structures built from a spine: every intent becomes a
 spine graph patch the spine's owner regenerates from.
 
+### `interface vtt.upright-handle-provider.UprightGlobalHandle`
+
+An upright handle: the generic handle, with the face and the part it edits.
+
+### `property vtt.upright-handle-provider.UprightGlobalHandle.center?: readonly [number, number]`
+
+A spiral's centre, when the structure is one -- what a turns handle winds round.
+
+### `property vtt.upright-handle-provider.UprightGlobalHandle.faces?: readonly string[]`
+
+The faces the structure is made of, by surface key joined with NUL -- absent for a spine, whose faces its spine regenerates.
+
+### `property vtt.upright-handle-provider.UprightGlobalHandle.facing?: { x: number; z: number }`
+
+The way a handle standing off one side of a face looks out, in plan --
+absent for one that is seen from anywhere. The scene shows only the
+sides facing the viewer.
+
+### `property vtt.upright-handle-provider.UprightGlobalHandle.id: string`
+
+### `property vtt.upright-handle-provider.UprightGlobalHandle.kind: GlobalHandleKind`
+
+### `property vtt.upright-handle-provider.UprightGlobalHandle.motion: HandleMotion`
+
+How the handle moves while dragged -- the path its gesture keeps it on.
+
+### `property vtt.upright-handle-provider.UprightGlobalHandle.nodeIds: readonly string[]`
+
+Every node of the structure, lowest id first.
+
+### `property vtt.upright-handle-provider.UprightGlobalHandle.owner: string`
+
+The structure's type.
+
+### `property vtt.upright-handle-provider.UprightGlobalHandle.pivot: ConstructionPosition`
+
+What the structure moves and turns round.
+
+### `property vtt.upright-handle-provider.UprightGlobalHandle.position: ConstructionPosition`
+
+### `property vtt.upright-handle-provider.UprightGlobalHandle.provider: string`
+
+Which provider made it -- and plans its edits.
+
+### `property vtt.upright-handle-provider.UprightGlobalHandle.seed: ConstructionRegionTopology`
+
+### `property vtt.upright-handle-provider.UprightGlobalHandle.target: { kind: "vertex"; nodeId: string } | { edgeId: string; kind: "edge" }`
+
+### `variable vtt.upright-handle-provider.uprightHandleProvider: GlobalHandleProvider`
+
+### `function vtt.upright-handle-provider.isUpright(topology: ConstructionRegionTopology): boolean`
+
+Whether `topology` stands upright.
+
+### `function vtt.upright-handle-provider.uprightPosts(topology: ConstructionRegionTopology): readonly { foot: string; top: string }[]`
+
+The posts of an upright face: edges rising more than half the face's own
+height, and steeply -- far more up than across -- each as its foot and top.
+A sloped face (a ramp) has none; a leaning post is still found.
+
 ### `function vtt.rigid-carry.fitRigidMotion(pairs: readonly { from: ConstructionPosition; to: ConstructionPosition }[]): Place`
 
 The rigid motion -- a turn in plan, a shift, a rise -- that best takes every `from` to its `to`.
@@ -4745,6 +4854,10 @@ faces, by surface key joined with NUL, or, for a spine, its control nodes.
 ### `property vtt.scene-handles.HandleFocus.faces: ReadonlySet<string>`
 
 ### `property vtt.scene-handles.HandleFocus.spineNodes: ReadonlySet<string>`
+
+### `property vtt.scene-handles.HandleFocus.viewer?: { x: number; z: number }`
+
+The way the viewer looks, in plan: of a handle standing off each side of a face, only the side facing it shows.
 
 ### `interface vtt.scene-handles.SceneHandle`
 
@@ -4995,6 +5108,12 @@ The spine's free ends, first to last -- the far one is the last. Absent on a bra
 ### `property vtt.spine-global-handles.SpineGlobalHandle.faces?: readonly string[]`
 
 The faces the structure is made of, by surface key joined with NUL -- absent for a spine, whose faces its spine regenerates.
+
+### `property vtt.spine-global-handles.SpineGlobalHandle.facing?: { x: number; z: number }`
+
+The way a handle standing off one side of a face looks out, in plan --
+absent for one that is seen from anywhere. The scene shows only the
+sides facing the viewer.
 
 ### `property vtt.spine-global-handles.SpineGlobalHandle.id: string`
 
@@ -9572,7 +9691,7 @@ single-ghost behaviour every tool already relies on.
 
 ### `type vtt.scene-render-port.ConfirmedTokenRenderChange = { causeId: string; dependency: RenderDependencyRevision; origin: ChangeOrigin; runtimeGeneration: number; token: RenderToken; type: "token-upserted" } | { causeId: string; dependency: RenderDependencyRevision; origin: ChangeOrigin; runtimeGeneration: number; tokenId: string; type: "token-removed" }`
 
-### `type vtt.scene-render-port.RenderHandleGlyph = "point" | "midpoint" | "move" | "rotate" | "height" | "turns" | "radius" | "tilt" | "link" | "side" | "corner"`
+### `type vtt.scene-render-port.RenderHandleGlyph = "point" | "midpoint" | "move" | "rotate" | "height" | "turns" | "radius" | "tilt" | "link" | "side" | "corner" | "unlink"`
 
 What a handle does, so it reads as that at a glance: a point to drag, or a
 control that moves a whole structure, sets a height, or turns something
@@ -9910,7 +10029,7 @@ Invoked when the drawer requests to close, e.g. its own close button or Escape.
 
 Whether the drawer is currently shown.
 
-### `property vtt.ui.DrawerProps.placement?: "bottom" | "top" | "right" | "left"`
+### `property vtt.ui.DrawerProps.placement?: "top" | "bottom" | "right" | "left"`
 
 Which screen edge the drawer slides in from.
 
@@ -10001,7 +10120,7 @@ Ant Design does not do that on its own. Uncontrolled (starts collapsed,
 closes only on its own trigger/outside click) when omitted. Ignored
 when `alwaysExpanded` is set.
 
-### `property vtt.ui.FloatButtonGroupProps.placement?: "bottom" | "top" | "right" | "left"`
+### `property vtt.ui.FloatButtonGroupProps.placement?: "top" | "bottom" | "right" | "left"`
 
 Which side the group expands toward from the trigger -- `"top"`/`"bottom"`
 stack items in a vertical column, `"left"`/`"right"` lay them out in a
@@ -10259,7 +10378,7 @@ Invoked when the popover requests to close, e.g. an outside click or Escape.
 
 Whether the popover is currently shown.
 
-### `property vtt.ui.PopoverProps.placement?: "bottom" | "top" | "right" | "left"`
+### `property vtt.ui.PopoverProps.placement?: "top" | "bottom" | "right" | "left"`
 
 Which side of `anchor` the popover opens toward.
 

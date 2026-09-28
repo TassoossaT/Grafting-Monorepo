@@ -11,6 +11,7 @@ import type {
 import { projectOntoLineXZ, xzDistance, pinnedToBaseline } from "../shapes/geometry-2d.ts";
 import { scopedToolId, type PointerSample, type ToolContext } from "../core/tool-context.ts";
 import { pointerAtHeight } from "../core/pointer-ray.ts";
+import { surfaceRefFromNodeSet as surfaceRefOf } from "../../../../entities/map/index.ts";
 import { fitPath, type FittedEdge } from "../core/stroke-fitting.ts";
 import { boundaryUsage, type EdgeSharing } from "../core/boundary-edges.ts";
 import { brushSweptRegionFill } from "../shapes/preview-shapes.ts";
@@ -266,6 +267,23 @@ export function onFloorLevel(ctx: ToolContext, sample: PointerSample): Construct
     if (!best || y > best.y) best = { point, y };
   }
   return best?.point ?? sample.point;
+}
+
+/**
+ * Where a wall begins when pressed on: on another wall, at the foot of that
+ * wall straight below where it was pressed -- a new wall joins it there, at
+ * a column or partway along its run, never halfway up its face; else on a
+ * floor it is over, at the floor's height ({@link onFloorLevel}).
+ */
+export function wallStartAt(ctx: ToolContext, sample: PointerSample): ConstructionPosition {
+  if (sample.surfaceRef !== undefined) {
+    for (const span of wallSpans(ctx)) {
+      if (surfaceRefOf(span.surfaceKey) !== sample.surfaceRef) continue;
+      const t = Math.max(0, Math.min(1, projectOntoSegment(sample.point, span.a, span.b).t));
+      return { x: span.a.x + (span.b.x - span.a.x) * t, y: span.a.y + (span.b.y - span.a.y) * t, z: span.a.z + (span.b.z - span.a.z) * t };
+    }
+  }
+  return onFloorLevel(ctx, sample);
 }
 
 /**

@@ -6,6 +6,7 @@ import { resolvePolicy, structureTypeFor } from "../../structure-types/index.ts"
 import type { EditTarget } from "../atomic-edit.ts";
 import { handleNodeName } from "./handle-name.ts";
 import { outlineOf } from "../../topology/plan-overlap.ts";
+import { isUpright } from "./upright-handle-provider.ts";
 
 /** How far outside a side or a corner its handle stands, so the part itself stays free to build against. */
 export const PART_HANDLE_OUT = 0.7;
@@ -107,7 +108,8 @@ export const partHandleProvider: GlobalHandleProvider = {
   handles(scene) {
     const candidates = scene.topologies.filter((topology) => {
       const type = structureTypeFor(topology.surfaceType);
-      return type?.partHandle !== undefined && type.spine === undefined;
+      // An upright face's parts are the upright provider's: in plan it is only a line.
+      return type?.partHandle !== undefined && type.spine === undefined && !isUpright(topology);
     });
     const byKey = new Map(candidates.map((topology) => [keyOf(topology), topology]));
     const placed = new Set<string>();

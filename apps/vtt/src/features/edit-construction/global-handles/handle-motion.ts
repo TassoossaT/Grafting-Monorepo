@@ -10,14 +10,16 @@ import type { PlanPoint } from "../topology/plan-rotation.ts";
  * - plane: along the ground, keeping its height;
  * - vertical: straight up and down;
  * - orbit: round `center` in plan, at its own distance and height;
- * - line: along `direction` in plan through where it stands, keeping its height.
+ * - line: along `direction` in plan through where it stands, keeping its height;
+ * - fixed: nowhere -- a handle that is clicked, not dragged.
  */
 export type HandleMotion =
   | { readonly kind: "free" }
   | { readonly kind: "plane" }
   | { readonly kind: "vertical" }
   | { readonly kind: "orbit"; readonly center: PlanPoint }
-  | { readonly kind: "line"; readonly direction: PlanPoint };
+  | { readonly kind: "line"; readonly direction: PlanPoint }
+  | { readonly kind: "fixed" };
 
 /** Whether a handle with `motion` carries the scene's free 3D arrows. */
 export function carriesArrows(motion: HandleMotion): boolean {

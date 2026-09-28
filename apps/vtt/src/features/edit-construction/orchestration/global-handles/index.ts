@@ -7,6 +7,8 @@ import { structureTypeFor } from "../../structure-types/index.ts";
 import { cloudHandleProvider } from "./cloud-handle-provider.ts";
 import { endHandleProvider } from "./end-handle-provider.ts";
 import { partHandleProvider } from "./part-handle-provider.ts";
+import { uprightHandleProvider } from "./upright-handle-provider.ts";
+import { detachHandleProvider } from "./detach-handle-provider.ts";
 import { spineHandleProvider } from "./spine-handle-provider.ts";
 
 /**
@@ -14,7 +16,7 @@ import { spineHandleProvider } from "./spine-handle-provider.ts";
  * handles; this is the only place that lists them. What shows the handles,
  * and the gesture that drags them, only ever talk to this module.
  */
-const PROVIDERS: readonly GlobalHandleProvider[] = [spineHandleProvider, cloudHandleProvider, endHandleProvider, partHandleProvider];
+const PROVIDERS: readonly GlobalHandleProvider[] = [spineHandleProvider, cloudHandleProvider, endHandleProvider, partHandleProvider, uprightHandleProvider, detachHandleProvider];
 
 /** Whether `handle`'s type declares its kind. */
 function declared(handle: GlobalHandle): boolean {

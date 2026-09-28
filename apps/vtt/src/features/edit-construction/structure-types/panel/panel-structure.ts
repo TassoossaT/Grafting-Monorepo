@@ -289,6 +289,9 @@ export function panelStructureType(
     motionInfluences: panelMotionInfluences,
     validateMotion: validatePanelMotion,
     settle: settlePanel,
+    // Moved and turned whole, its posts moved by their feet, each side raised by its top, its runs dragged across -- and let go of what it stands on.
+    globalHandles: Object.freeze(["pivot", "rotate", "foot", "top", "side", "detach"] as const),
+    partHandle: (role: EditRole) => role === PANEL_ROLES.bottomCorner || role === PANEL_ROLES.topCorner || role === PANEL_ROLES.bottomEdge,
     policyFor: panelPolicyFor,
     interactionOver: panelInteractionOver,
   });

@@ -179,6 +179,22 @@ export function createLinkHandleTexture(): HTMLCanvasElement {
   });
 }
 
+/** Lets go of what a structure is joined to: two chain links pulled apart. */
+export function createUnlinkHandleTexture(): HTMLCanvasElement {
+  return glyphDisc("#b4533a", (context) => {
+    context.lineWidth = 4;
+    for (const [x, y] of [[21, 43], [43, 21]] as const) {
+      context.save();
+      context.translate(x, y);
+      context.rotate(-Math.PI / 4);
+      context.beginPath();
+      context.roundRect(-9, -6, 18, 12, 6);
+      context.stroke();
+      context.restore();
+    }
+  });
+}
+
 /** A span's midpoint: a small diamond, lighter than a point, so it reads as "in between". */
 export function createMidpointHandleTexture(): HTMLCanvasElement {
   const canvas = document.createElement("canvas");

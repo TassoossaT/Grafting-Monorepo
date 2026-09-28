@@ -138,13 +138,17 @@ test("the walls' own law holds every post upright wherever it is placed: a wall 
       ],
       regions: [{ regionId: "lean:face", boundary: ["lean:bottom", "lean:post-b", "lean:top", "lean:post-a"].map((edgeId) => ({ edgeId, reversed: false })), surfaceType: "wall-white", physical: true }],
     });
-    const foot = { nodeId: "lean:a0", point: { x: 10, y: 0, z: 0 } };
-    const to = { point: { x: 10.5, y: 0, z: 0.5 } };
+    // Moved by its foot handle, as a wall is edited.
+    const handle = shownGlobalHandles({ graph: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), cloudFor: (q) => runtime.cloudFor(q) })
+      .find((h) => h.kind === "foot" && h.target.nodeId === "lean:a0");
+    const foot = { nodeId: handle.id, point: handle.position, screenX: 100, screenY: 300 };
+    const to = { point: { x: handle.position.x + 0.5, y: handle.position.y, z: handle.position.z + 0.5 }, screenX: 120, screenY: 300 };
     wallLineTool.onPointerDown(ctx, foot, params);
     wallLineTool.onPointerMove(ctx, { start: foot, current: to, samples: [foot, to] }, params);
     wallLineTool.onPointerUp(ctx, { start: foot, current: to, samples: [foot, to] }, params);
     assert.notEqual(calls.feedback.filter(Boolean).at(-1)?.tone, "error", JSON.stringify(calls.feedback.filter(Boolean).at(-1)));
     const at = new Map(runtime.getGraphSnapshot().nodes.map((n) => [n.id, n.position]));
+    assert.ok(Math.abs(at.get("lean:a0").x - 10.5) < 1e-6 && Math.abs(at.get("lean:a0").z - 0.5) < 1e-6, `the foot moved: ${JSON.stringify(at.get("lean:a0"))}`);
     for (const [f, t] of [["lean:a0", "lean:a1"], ["lean:b0", "lean:b1"]]) {
       assert.ok(Math.hypot(at.get(f).x - at.get(t).x, at.get(f).z - at.get(t).z) < 1e-6, `${t} straight above ${f}: ${JSON.stringify([at.get(f), at.get(t)])}`);
     }
