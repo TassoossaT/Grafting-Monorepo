@@ -228,6 +228,33 @@ export interface StructureEditParams {
 
 export const DEFAULT_STRUCTURE_EDIT_PARAMS: StructureEditParams = Object.freeze({ mode: "shape" });
 
+/** Shared construction aids available across creation tools and structure editing. */
+export interface ConstructionGuideParams {
+  readonly enabled: boolean;
+  readonly pointSnap: boolean;
+  readonly horizontalAlignment: boolean;
+  readonly equalHeight: boolean;
+  readonly equalSpacing: boolean;
+  readonly distanceStep: number;
+  readonly tolerance: number;
+}
+
+export const DEFAULT_CONSTRUCTION_GUIDE_PARAMS: ConstructionGuideParams = Object.freeze({
+  enabled: true,
+  pointSnap: true,
+  horizontalAlignment: true,
+  equalHeight: true,
+  equalSpacing: true,
+  distanceStep: 0,
+  tolerance: 0.18,
+});
+
+/** Safe fallback for callers that have not supplied the new ambient settings yet. */
+export const DISABLED_CONSTRUCTION_GUIDE_PARAMS: ConstructionGuideParams = Object.freeze({
+  ...DEFAULT_CONSTRUCTION_GUIDE_PARAMS,
+  enabled: false,
+});
+
 export interface ToolParamsByTool {
   readonly roof: { readonly shape: "rectangle" | "circle" | "platform"; readonly elevation: number; readonly height: number; readonly radius: number; readonly curvatures: readonly [number, number, number, number] };
   readonly navigate: NoToolParams;

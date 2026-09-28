@@ -12,7 +12,7 @@ export {
   startAtLowest,
   type OutlineSegment,
 } from "./opening-path.ts";
-export { DEFAULT_STRUCTURE_EDIT_PARAMS, DEFAULT_TOOL_PARAMS, OPENING_KIND_COLOR, RECTANGLE_OPENING_SHAPE, TOWER_RADIUS_PRESETS, deriveFaceSize, withOpeningKind } from "./tool-types.ts";
+export { DEFAULT_CONSTRUCTION_GUIDE_PARAMS, DEFAULT_STRUCTURE_EDIT_PARAMS, DEFAULT_TOOL_PARAMS, DISABLED_CONSTRUCTION_GUIDE_PARAMS, OPENING_KIND_COLOR, RECTANGLE_OPENING_SHAPE, TOWER_RADIUS_PRESETS, deriveFaceSize, withOpeningKind } from "./tool-types.ts";
 export type {
   BrushShapeKind,
   BrushShapeParams,
@@ -32,4 +32,5 @@ export type {
   TowerStampParams,
   WallBrushParams,
   WallParams,
+  ConstructionGuideParams,
 } from "./tool-types.ts";

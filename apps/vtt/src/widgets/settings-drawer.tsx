@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { Card, SlidingPanel } from "@/ui";
-import type { ConstructionToolId, StructureEditParams, ToolParamsByTool } from "@/features/edit-construction";
+import type { ConstructionGuideParams, ConstructionToolId, StructureEditParams, ToolParamsByTool } from "@/features/edit-construction";
 
 import { ConstructionToolParamsPanel } from "./construction-tool-params-panel.tsx";
 
@@ -22,6 +22,8 @@ export interface SettingsDrawerProps {
   readonly onToolParamsChange: <Id extends ConstructionToolId>(toolId: Id, next: ToolParamsByTool[Id]) => void;
   readonly structureEditParams: StructureEditParams;
   readonly onStructureEditParamsChange: (next: StructureEditParams) => void;
+  readonly constructionGuideParams: ConstructionGuideParams;
+  readonly onConstructionGuideParamsChange: (next: ConstructionGuideParams) => void;
   readonly tokenCount: number;
   readonly open?: boolean;
   readonly onOpenChange?: (open: boolean) => void;
@@ -81,6 +83,8 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
         onParamsChange={props.onToolParamsChange}
         structureEditParams={props.structureEditParams}
         onStructureEditParamsChange={props.onStructureEditParamsChange}
+        constructionGuideParams={props.constructionGuideParams}
+        onConstructionGuideParamsChange={props.onConstructionGuideParamsChange}
       />
 
       <Card className="gm-panel-card" backgroundColor="#182234" accentColor="#1e293b">

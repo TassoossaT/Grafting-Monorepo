@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Card, Collapse, SelectableChip, type CollapsePanel } from "@/ui";
 import type {
   BrushShapeParams,
+  ConstructionGuideParams,
   ConstructionToolId,
   OpeningParams,
   OpeningShape,
@@ -27,6 +28,30 @@ export interface ConstructionToolParamsPanelProps {
   /** How a grab on an existing structure behaves -- ambient, not tied to `activeTool`, since every construction tool can now grab and edit whatever it owns. */
   readonly structureEditParams: StructureEditParams;
   readonly onStructureEditParamsChange: (next: StructureEditParams) => void;
+  readonly constructionGuideParams: ConstructionGuideParams;
+  readonly onConstructionGuideParamsChange: (next: ConstructionGuideParams) => void;
+}
+
+function ConstructionGuideFields(props: { readonly params: ConstructionGuideParams; readonly onChange: (next: ConstructionGuideParams) => void }) {
+  const { params, onChange } = props;
+  const toggle = (label: string, key: "enabled" | "pointSnap" | "horizontalAlignment" | "equalHeight" | "equalSpacing") => (
+    <label key={key} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.78rem" }}>
+      <input type="checkbox" checked={params[key]} onChange={(event) => onChange({ ...params, [key]: event.currentTarget.checked })} />
+      {label}
+    </label>
+  );
+  return (
+    <div style={{ display: "grid", gap: "0.55rem" }}>
+      {toggle("Ativar auxiliares", "enabled")}
+      {toggle("Encaixe em pontos", "pointSnap")}
+      {toggle("Alinhamento entre elementos", "horizontalAlignment")}
+      {toggle("Alturas iguais", "equalHeight")}
+      {toggle("Distâncias iguais", "equalSpacing")}
+      <label>Passo da régua (m; 0 desativa) <input type="number" min="0" step="0.05" value={params.distanceStep} onChange={(event) => onChange({ ...params, distanceStep: Number(event.currentTarget.value) })} /></label>
+      <label>Alcance do encaixe (m) <input type="number" min="0.01" step="0.01" value={params.tolerance} onChange={(event) => onChange({ ...params, tolerance: Number(event.currentTarget.value) })} /></label>
+      <p>As guias aparecem durante o gesto. O passo preserva a direção do arraste; alturas e alinhamentos seguem referências declaradas pelas estruturas.</p>
+    </div>
+  );
 }
 
 /** The curve-handle/mode controls every construction tool's own grab-and-edit now shares -- `edit-region`'s old params, no longer tied to one retired tool. */
@@ -404,7 +429,7 @@ const TOOL_LABELS: Partial<Record<ConstructionToolId, string>> = {
  * `composition/tabletop/tools/*.ts`.
  */
 export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelProps) {
-  const { activeTool, params, onParamsChange, structureEditParams, onStructureEditParamsChange } = props;
+  const { activeTool, params, onParamsChange, structureEditParams, onStructureEditParamsChange, constructionGuideParams, onConstructionGuideParamsChange } = props;
   const label = TOOL_LABELS[activeTool];
 
   if (label === undefined) {
@@ -490,11 +515,15 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
   // pattern, not a drag) now also grabs and edits whatever it owns
   // (`structure-edit-behavior.ts`), so this stays a second, always-present
   // panel rather than a per-tool branch.
-  const panels = activeTool === "opening" ? [panel] : [panel, {
+  const panels = [panel, {
+    key: "construction-guides",
+    header: "Auxílios de construção",
+    content: <ConstructionGuideFields params={constructionGuideParams} onChange={onConstructionGuideParamsChange} />,
+  }, ...(activeTool === "opening" ? [] : [{
     key: "structure-edit",
     header: "Editar estrutura existente",
     content: <StructureEditFields params={structureEditParams} onChange={onStructureEditParamsChange} />,
-  }];
+  }])];
 
   // `Collapse` owns its expanded keys internally. Remount it when the tool
   // changes so its new single panel starts expanded rather than inheriting

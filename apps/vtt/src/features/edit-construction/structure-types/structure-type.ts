@@ -14,6 +14,7 @@ import type { CreationInteraction } from "./creation-interaction.ts";
 import type { EffectKind, ReactionId } from "../effects/effect.ts";
 import type { PlanarArea } from "../topology/planar-area.ts";
 import type { FieldPort } from "./path/contour/curve-projection.ts";
+import type { ConstructionGuideReference } from "../guides/construction-guides.ts";
 
 /**
  * A role is this app's own name for "what a particular node/edge of a
@@ -373,6 +374,8 @@ export interface StructureTypeDefinition {
    * (e.g. taking height from ground), optionally parameterized by `subtype`.
    */
   readonly conformsTo?: (support: ReadonlySet<StructureTrait>, subtype?: string) => boolean;
+  /** Geometric references this type exposes to the shared construction-guide resolver. */
+  readonly guideReferences: (topology: ConstructionRegionTopology) => readonly ConstructionGuideReference[];
 }
 
 /** The policy every unknown role falls back to: refuse rather than guess. */

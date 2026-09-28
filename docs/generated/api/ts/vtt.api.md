@@ -2170,6 +2170,10 @@ Ordered samples accumulated by the dispatcher; preview-only until pointer releas
 
 What every tool implementation is handed to act -- the runtime to call, undo/redo history for the one tool that uses it, and a salt generator so repeated commits never collide (mirrors `tabletop-entry.tsx`'s retired `generateCountRef`).
 
+### `property vtt.tool-context.ToolContext.constructionGuideParams: ConstructionGuideParams`
+
+Shared snap, alignment, height and spacing behaviour for every construction tool.
+
 ### `property vtt.tool-context.ToolContext.history: EditHistoryStack`
 
 ### `property vtt.tool-context.ToolContext.runtime: TabletopRuntime`
@@ -2998,6 +3002,8 @@ Boundary edges running along the top, the paired half of the same subdivision.
 
 ### `property vtt.use-construction-pointer.UseConstructionPointerOptions.activeTool: ConstructionToolId`
 
+### `property vtt.use-construction-pointer.UseConstructionPointerOptions.constructionGuideParams: ConstructionGuideParams`
+
 ### `property vtt.use-construction-pointer.UseConstructionPointerOptions.history: EditHistoryStack`
 
 ### `property vtt.use-construction-pointer.UseConstructionPointerOptions.onFeedbackChange: (feedback: ConstructionToolFeedback | undefined) => void`
@@ -3384,6 +3390,84 @@ Dispatches `initial` and everything the reactions emit, breadth first.
 
 Pure orchestration: it holds no state between runs and mutates nothing
 itself -- reactions mutate through `context`.
+
+### `interface vtt.construction-guides.ConstructionGuide`
+
+A visible guide returned alongside the resolved point.
+
+### `property vtt.construction-guides.ConstructionGuide.axis: "x" | "y" | "z" | "point" | "distance"`
+
+### `property vtt.construction-guides.ConstructionGuide.end: ConstructionPosition`
+
+### `property vtt.construction-guides.ConstructionGuide.id: string`
+
+### `property vtt.construction-guides.ConstructionGuide.label?: string`
+
+### `property vtt.construction-guides.ConstructionGuide.start: ConstructionPosition`
+
+### `interface vtt.construction-guides.ConstructionGuideOptions`
+
+### `property vtt.construction-guides.ConstructionGuideOptions.equalHeight: boolean`
+
+### `property vtt.construction-guides.ConstructionGuideOptions.equalSpacing: boolean`
+
+### `property vtt.construction-guides.ConstructionGuideOptions.horizontalAlignment: boolean`
+
+### `property vtt.construction-guides.ConstructionGuideOptions.pointSnap: boolean`
+
+### `interface vtt.construction-guides.ConstructionGuideReference`
+
+A type-neutral geometric reference a construction tool may snap to.
+
+### `property vtt.construction-guides.ConstructionGuideReference.axes: readonly ("x" | "y" | "z")[]`
+
+Axes this reference makes available to alignment.
+
+### `property vtt.construction-guides.ConstructionGuideReference.group?: string`
+
+References in the same declared group can form equal-spacing guides.
+
+### `property vtt.construction-guides.ConstructionGuideReference.id: string`
+
+Stable identity used to break ties consistently.
+
+### `property vtt.construction-guides.ConstructionGuideReference.label?: string`
+
+Optional user-facing description for measurement feedback.
+
+### `property vtt.construction-guides.ConstructionGuideReference.position: ConstructionPosition`
+
+World-space point carrying the reference.
+
+### `property vtt.construction-guides.ConstructionGuideReference.surfaceKey?: ConstructionSurfaceKey`
+
+### `interface vtt.construction-guides.ConstructionGuideResolution`
+
+### `property vtt.construction-guides.ConstructionGuideResolution.guides: readonly ConstructionGuide[]`
+
+### `property vtt.construction-guides.ConstructionGuideResolution.point: ConstructionPosition`
+
+### `function vtt.construction-guides.constructionGuideSegments(guides: readonly ConstructionGuide[]): Float32Array`
+
+Converts guide lines to short segments so the 3D overlay reads as dashed.
+
+### `function vtt.construction-guides.nodeGuideReferences(topology: ConstructionRegionTopology): readonly ConstructionGuideReference[]`
+
+Publishes graph nodes as generic point and axis references for one type.
+
+### `function vtt.construction-guides.noGuideReferences(): readonly ConstructionGuideReference[]`
+
+Procedurally generated terrain has no stable authored points to guide to.
+
+### `function vtt.construction-guides.resolveConstructionGuides(proposed: ConstructionPosition, references: readonly ConstructionGuideReference[], tolerance: number, options: ConstructionGuideOptions): ConstructionGuideResolution`
+
+Aligns a proposed world point to declared references within a world-space
+tolerance. The same resolver serves creation and editing; structure types
+decide which of their geometric features are eligible references.
+
+### `function vtt.construction-guides.snapConstructionDistance(proposed: ConstructionPosition, origin: ConstructionPosition, step: number): ConstructionGuideResolution`
+
+Snaps a drag's length while preserving its direction.
 
 ### `interface vtt.edit-history.EditHistoryStack`
 
@@ -4843,6 +4927,10 @@ real roles to name, where terrain has none and can only regenerate. Shape
 is what decides whether two products share a table -- not whether they
 happen to share a generator.
 
+### `function vtt.registry.constructionGuideReferences(topologies: readonly ConstructionRegionTopology[]): readonly ConstructionGuideReference[]`
+
+Collects type-declared guide references from every visible structure.
+
 ### `function vtt.registry.firstRefusal(resolved: readonly ResolvedCoverage[]): string | undefined`
 
 The first refusal in a resolved coverage, if any.
@@ -5279,6 +5367,10 @@ been resolved -- a shape that bends with a received move instead of
 kinking at it. Handed every face of the type, since the shape may span
 faces the move never reached. Derived moves do not propagate further.
 
+### `property vtt.structure-type.StructureTypeDefinition.guideReferences: (topology: ConstructionRegionTopology) => readonly ConstructionGuideReference[]`
+
+Geometric references this type exposes to the shared construction-guide resolver.
+
 ### `property vtt.structure-type.StructureTypeDefinition.interactionOver: (covered: StructureView, paintedSubtype?: string) => CreationInteraction`
 
 What happens when **this** type is painted over `covered` -- the
@@ -5484,6 +5576,24 @@ Rotation around world Y; ignored by circles.
 ### `property vtt.tool-types.BrushShapeParams.shape: BrushShapeKind`
 
 Convex footprint shared by terrain and path brushes.
+
+### `interface vtt.tool-types.ConstructionGuideParams`
+
+Shared construction aids available across creation tools and structure editing.
+
+### `property vtt.tool-types.ConstructionGuideParams.distanceStep: number`
+
+### `property vtt.tool-types.ConstructionGuideParams.enabled: boolean`
+
+### `property vtt.tool-types.ConstructionGuideParams.equalHeight: boolean`
+
+### `property vtt.tool-types.ConstructionGuideParams.equalSpacing: boolean`
+
+### `property vtt.tool-types.ConstructionGuideParams.horizontalAlignment: boolean`
+
+### `property vtt.tool-types.ConstructionGuideParams.pointSnap: boolean`
+
+### `property vtt.tool-types.ConstructionGuideParams.tolerance: number`
 
 ### `interface vtt.tool-types.OpeningParams`
 
@@ -5760,9 +5870,15 @@ Sculpt mode determining whether a stroke adds terrain/height ("add"), digs/remov
 
 ### `type vtt.tool-types.ToolParamsFor = ToolParamsByTool[Id]`
 
+### `variable vtt.tool-types.DEFAULT_CONSTRUCTION_GUIDE_PARAMS: ConstructionGuideParams`
+
 ### `variable vtt.tool-types.DEFAULT_STRUCTURE_EDIT_PARAMS: StructureEditParams`
 
 ### `variable vtt.tool-types.DEFAULT_TOOL_PARAMS: ToolParamsByTool`
+
+### `variable vtt.tool-types.DISABLED_CONSTRUCTION_GUIDE_PARAMS: ConstructionGuideParams`
+
+Safe fallback for callers that have not supplied the new ambient settings yet.
 
 ### `variable vtt.tool-types.OPENING_KIND_COLOR: Readonly<Record<OpeningParams["openingKind"], number>>`
 
@@ -8658,6 +8774,10 @@ Which opening preset the Aberturas blocks show as picked.
 
 ### `property vtt.widgets.ConstructionToolParamsPanelProps.activeTool: ConstructionToolId`
 
+### `property vtt.widgets.ConstructionToolParamsPanelProps.constructionGuideParams: ConstructionGuideParams`
+
+### `property vtt.widgets.ConstructionToolParamsPanelProps.onConstructionGuideParamsChange: (next: ConstructionGuideParams) => void`
+
 ### `property vtt.widgets.ConstructionToolParamsPanelProps.onParamsChange: (toolId: Id, next: ToolParamsByTool[Id]) => void`
 
 ### `property vtt.widgets.ConstructionToolParamsPanelProps.onStructureEditParamsChange: (next: StructureEditParams) => void`
@@ -8679,6 +8799,10 @@ A plain `{x,y,z}` shape rather than importing `ConstructionPosition` -- `widgets
 ### `interface vtt.widgets.SettingsDrawerProps`
 
 ### `property vtt.widgets.SettingsDrawerProps.activeTool: ConstructionToolId`
+
+### `property vtt.widgets.SettingsDrawerProps.constructionGuideParams: ConstructionGuideParams`
+
+### `property vtt.widgets.SettingsDrawerProps.onConstructionGuideParamsChange: (next: ConstructionGuideParams) => void`
 
 ### `property vtt.widgets.SettingsDrawerProps.onOpenChange?: (open: boolean) => void`
 

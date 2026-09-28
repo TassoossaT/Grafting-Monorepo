@@ -3,7 +3,15 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 
-import type { ConstructionToolId, EditHistoryStack, StructureEditParams, ToolParamsByTool } from "@/features/edit-construction";
+import {
+  DEFAULT_CONSTRUCTION_GUIDE_PARAMS,
+  DISABLED_CONSTRUCTION_GUIDE_PARAMS,
+  constructionGuideReferences,
+  constructionGuideSegments,
+  resolveConstructionGuides,
+  snapConstructionDistance,
+} from "../../features/edit-construction/index.ts";
+import type { ConstructionGuide, ConstructionGuideParams, ConstructionToolId, EditHistoryStack, StructureEditParams, ToolParamsByTool } from "@/features/edit-construction";
 import { TOOL_GHOST_PREVIEW_CHANNEL } from "@/ports";
 import type { RenderViewId } from "@/ports";
 import type { SelectedNodeInfo } from "@/widgets";
@@ -35,6 +43,7 @@ export interface UseConstructionPointerOptions {
   readonly snapToGrid: boolean;
   /** How a grab on an existing structure behaves -- ambient across every construction tool, not one tool's own params. See `ToolContext.structureEditParams`. */
   readonly structureEditParams: StructureEditParams;
+  readonly constructionGuideParams: ConstructionGuideParams;
   readonly onSelectionChange: (info: SelectedNodeInfo | undefined) => void;
   readonly onFeedbackChange: (feedback: ConstructionToolFeedback | undefined) => void;
   /** Lets a tool rewrite its own params, e.g. to show its selection's settings in the panel. */
@@ -52,6 +61,27 @@ function applySnap(sample: PointerSample, snapToGrid: boolean): PointerSample {
     ...sample,
     point: { x: snappedTo(sample.point.x, GRID_SNAP_UNIT), y: sample.point.y, z: snappedTo(sample.point.z, GRID_SNAP_UNIT) },
   };
+}
+
+const CONSTRUCTION_GUIDE_PREVIEW_CHANNEL = "construction-guides";
+const CONSTRUCTION_RULER_PREVIEW_CHANNEL = "construction-ruler";
+
+function rulerPositions(guide: ConstructionGuide, tickSize: number): Float32Array {
+  const { start, end } = guide;
+  const dx = end.x - start.x;
+  const dz = end.z - start.z;
+  const horizontalLength = Math.hypot(dx, dz);
+  const normal = horizontalLength > 0 ? { x: -dz / horizontalLength, z: dx / horizontalLength } : { x: 1, z: 0 };
+  const values = [start.x, start.y, start.z, end.x, end.y, end.z];
+  for (let index = 0; index <= 4; index += 1) {
+    const t = index / 4;
+    const point = { x: start.x + dx * t, y: start.y + (end.y - start.y) * t, z: start.z + dz * t };
+    values.push(
+      point.x - normal.x * tickSize, point.y, point.z - normal.z * tickSize,
+      point.x + normal.x * tickSize, point.y, point.z + normal.z * tickSize,
+    );
+  }
+  return new Float32Array(values);
 }
 
 export interface ConstructionPointerHandlers {
@@ -100,6 +130,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
   const manipulatorGesture = useRef<CurveGesture | undefined>(undefined);
   const branchModifier = useRef(false);
   const selectedPoint = useRef<string | undefined>(undefined);
+  const guideReferencesRef = useRef<{ readonly runtime: TabletopRuntime; readonly revision: number; readonly references: ReturnType<typeof constructionGuideReferences> } | undefined>(undefined);
 
   const nextSequence = useCallback(() => ++sequenceRef.current, []);
 
@@ -110,6 +141,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     lastCommitAtRef.current = 0;
     lastPreviewAtRef.current = 0;
     options.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
+    options.runtime.clearPreview(CONSTRUCTION_GUIDE_PREVIEW_CHANNEL);
+    options.runtime.clearPreview(CONSTRUCTION_RULER_PREVIEW_CHANNEL);
+    options.onFeedbackChange(undefined);
   }, [options.activeTool, options.runtime]);
 
 
@@ -130,6 +164,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       },
       get structureEditParams() {
         return optionsRef.current.structureEditParams;
+      },
+      get constructionGuideParams() {
+        return optionsRef.current.constructionGuideParams ?? DISABLED_CONSTRUCTION_GUIDE_PARAMS;
       },
       nextSequence,
       reportSelection: (info) => {
@@ -288,12 +325,68 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
   const sampleAt = useCallback(
     (event: { currentTarget: HTMLElement; clientX: number; clientY: number; shiftKey?: boolean }): PointerSample | undefined => {
       const { viewId, runtime, snapToGrid, activeTool } = optionsRef.current;
+      const constructionGuideParams = optionsRef.current.constructionGuideParams ?? DISABLED_CONSTRUCTION_GUIDE_PARAMS;
       if (viewId === undefined) return undefined;
       const { x, y } = pointerOffset(event);
       const hit = runtime.pick(viewId, x, y);
       if (hit === undefined) return undefined;
-      const snap = snapToGrid && !toolFor(activeTool).snapsToSurface && toolFor(activeTool).useGridSnap !== false;
-      return { ...applySnap(hit, snap), screenY: event.clientY, screenX: event.clientX, shiftKey: event.shiftKey };
+      const active = toolFor(activeTool);
+      const canSnap = !active.snapsToSurface;
+      const snap = snapToGrid && canSnap && active.useGridSnap !== false;
+      const gridPoint = applySnap(hit, snap).point;
+      let point = hit.point;
+      const guides: ConstructionGuide[] = [];
+      const origin = gestureRef.current?.start.point;
+
+      if (constructionGuideParams.enabled && canSnap) {
+        if (origin !== undefined && constructionGuideParams.distanceStep > 0) {
+          const distance = snapConstructionDistance(point, origin, constructionGuideParams.distanceStep);
+          point = distance.point;
+          guides.push(...distance.guides);
+        }
+        const revision = runtime.getSnapshot().revision;
+        if (guideReferencesRef.current?.runtime !== runtime || guideReferencesRef.current.revision !== revision) {
+          const references = runtime.getSnapshot().status === "ready"
+            ? constructionGuideReferences(runtime.getAllRegionTopologies())
+            : [];
+          guideReferencesRef.current = { runtime, revision, references };
+        }
+        const references = guideReferencesRef.current.references.filter((reference) => reference.surfaceKey !== hit.surfaceRef);
+        const alignment = resolveConstructionGuides(point, references, constructionGuideParams.tolerance, {
+          pointSnap: constructionGuideParams.pointSnap,
+          horizontalAlignment: constructionGuideParams.horizontalAlignment,
+          equalHeight: constructionGuideParams.equalHeight,
+          equalSpacing: constructionGuideParams.equalSpacing,
+        });
+        point = alignment.guides.length > 0
+          ? alignment.point
+          : guides.some((guide) => guide.axis === "distance") ? point : gridPoint;
+        guides.push(...alignment.guides);
+      } else point = gridPoint;
+
+      if (guides.length > 0) {
+        const alignmentGuides = guides.filter((guide) => guide.axis !== "distance");
+        const distanceGuides = guides.filter((guide) => guide.axis === "distance");
+        if (alignmentGuides.length > 0) runtime.showPreview({ kind: "segments", positions: constructionGuideSegments(alignmentGuides), color: 0x22d3ee, opacity: 0.95 }, CONSTRUCTION_GUIDE_PREVIEW_CHANNEL);
+        else runtime.clearPreview(CONSTRUCTION_GUIDE_PREVIEW_CHANNEL);
+        if (distanceGuides.length > 0) {
+          const distanceGuide = distanceGuides[0]!;
+          const positions = rulerPositions(distanceGuide, Math.max(0.04, constructionGuideParams.distanceStep * 0.2));
+          runtime.showPreview({ kind: "segments", positions, color: 0xfacc15, opacity: 0.95 }, CONSTRUCTION_RULER_PREVIEW_CHANNEL);
+        } else runtime.clearPreview(CONSTRUCTION_RULER_PREVIEW_CHANNEL);
+      } else {
+        runtime.clearPreview(CONSTRUCTION_GUIDE_PREVIEW_CHANNEL);
+        runtime.clearPreview(CONSTRUCTION_RULER_PREVIEW_CHANNEL);
+      }
+
+      if (origin !== undefined && constructionGuideParams.enabled) {
+        const distance = Math.hypot(point.x - origin.x, point.y - origin.y, point.z - origin.z);
+        const labels = guides.flatMap((guide) => guide.axis === "y" ? ["Altura alinhada"] : guide.axis === "distance" ? [] : guide.axis === "point" ? ["Ponto alinhado"] : guide.id.endsWith(":spacing") ? ["Distância igual"] : []);
+        const detail = labels.length > 0 ? ` · ${[...new Set(labels)].join(" · ")}` : "";
+        optionsRef.current.onFeedbackChange({ tone: "info", message: `${distance.toFixed(2)} m${detail}` });
+      } else optionsRef.current.onFeedbackChange(undefined);
+
+      return { ...applySnap({ ...hit, point }, false), screenY: event.clientY, screenX: event.clientX, shiftKey: event.shiftKey };
     },
     [],
   );
@@ -414,6 +507,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
         event.currentTarget.releasePointerCapture(event.pointerId);
       }
       optionsRef.current.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
+      optionsRef.current.runtime.clearPreview(CONSTRUCTION_GUIDE_PREVIEW_CHANNEL);
+      optionsRef.current.runtime.clearPreview(CONSTRUCTION_RULER_PREVIEW_CHANNEL);
+      optionsRef.current.onFeedbackChange(undefined);
       refreshEdgeOverlay();
     },
     [ctx, refreshEdgeOverlay, sampleAt],
@@ -429,6 +525,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     optionsRef.current.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
+    optionsRef.current.runtime.clearPreview(CONSTRUCTION_GUIDE_PREVIEW_CHANNEL);
+    optionsRef.current.runtime.clearPreview(CONSTRUCTION_RULER_PREVIEW_CHANNEL);
+    optionsRef.current.onFeedbackChange(undefined);
   }, [ctx]);
   const onClick = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
@@ -439,6 +538,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       const sample = sampleAt(event);
       if (sample === undefined) return;
       tool.onClick(ctx, sample, toolParams[activeTool] as never);
+      optionsRef.current.runtime.clearPreview(CONSTRUCTION_GUIDE_PREVIEW_CHANNEL);
+      optionsRef.current.runtime.clearPreview(CONSTRUCTION_RULER_PREVIEW_CHANNEL);
+      optionsRef.current.onFeedbackChange(undefined);
       refreshEdgeOverlay();
     },
     [ctx, refreshEdgeOverlay, sampleAt],

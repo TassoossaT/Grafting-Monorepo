@@ -1,6 +1,7 @@
 import { ALL_AXES } from "../../orchestration/atomic-edit.ts";
 import { IGNORE } from "../creation-interaction.ts";
 import { allowed, denied, type StructureTypeDefinition } from "../structure-type.ts";
+import { nodeGuideReferences } from "../../guides/construction-guides.ts";
 
 /** Roof profiles move as a connected cloud; this delivery adds no shape handles. */
 export const roofStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
@@ -11,6 +12,7 @@ export const roofStructureType: StructureTypeDefinition = Object.freeze<Structur
     ? { ...allowed(role, ALL_AXES, "cloud"), transport: true }
     : denied(role, "Mova o telhado pela face."),
   interactionOver: () => IGNORE,
+  guideReferences: nodeGuideReferences,
   motionInfluences: (topology) => {
     const anchor = topology.nodes[0];
     return anchor ? topology.nodes.slice(1).flatMap((node) => [

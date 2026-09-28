@@ -9,6 +9,7 @@ import { regeneratePathSpine } from "./bezier-road-edit.ts";
 import { explicitSpineSnapshot } from "./bezier-road-plan.ts";
 import { allowed, denied } from "../structure-type.ts";
 import type { CreationInteraction } from "../creation-interaction.ts";
+import { nodeGuideReferences } from "../../guides/construction-guides.ts";
 
 /**
  * The role model for anything swept along a travel line: a spine, whatever
@@ -259,6 +260,7 @@ export function pathStructureType(
     roleFor: pathRoleFor,
     policyFor: pathPolicyFor,
     interactionOver,
+    guideReferences: nodeGuideReferences,
     // A deck spans instead of riding what is under it.
     conformsTo: (support: ReadonlySet<StructureTrait>, subtype?: string) => support.has("ground") && subtype !== "bridge",
     spine: PATH_SPINE,

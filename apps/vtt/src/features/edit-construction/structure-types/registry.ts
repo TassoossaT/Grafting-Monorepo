@@ -3,6 +3,7 @@ import { platformStructureType, slopedPlatformStructureType } from "./platform/p
 import type { ConstructionCoveredRegion, ConstructionRegionTopology } from "@/ports";
 
 import type { EditTarget } from "../orchestration/atomic-edit.ts";
+import type { ConstructionGuideReference } from "../guides/construction-guides.ts";
 import {
   organicStructureType,
   pathInteractionOver,
@@ -87,6 +88,15 @@ const NO_TRAITS: ReadonlySet<StructureTrait> = new Set();
 /** The definition governing one surface type, or `undefined` if it has none. */
 export function structureTypeFor(surfaceType: string): StructureTypeDefinition | undefined {
   return DEFINITION_BY_SURFACE_TYPE.get(surfaceType);
+}
+
+/** Collects type-declared guide references from every visible structure. */
+export function constructionGuideReferences(
+  topologies: readonly ConstructionRegionTopology[],
+): readonly ConstructionGuideReference[] {
+  return topologies.flatMap((topology) =>
+    structureTypeFor(topology.surfaceType)?.guideReferences(topology) ?? [],
+  );
 }
 
 /** The traits one surface type declares. An undeclared type has none. */

@@ -3679,7 +3679,7 @@ export type {
   RegionEditHistoryEntry,
   } from "../../features/edit-construction/index.ts";
 export type { CameraControlHandle, CameraControlOptions, ConstructionPosition, RenderViewId } from "@/ports";
-export type { ConstructionToolId, OpeningParams, StructureEditParams, ToolParamsByTool, ToolParamsFor } from "../../features/edit-construction/index.ts";
+export type { ConstructionGuideParams, ConstructionToolId, OpeningParams, StructureEditParams, ToolParamsByTool, ToolParamsFor } from "../../features/edit-construction/index.ts";
 export type { ConstructionPointerHandlers, UseConstructionPointerOptions } from "./use-construction-pointer.ts";
 export type { ConstructionToolFeedback } from "./tools/index.ts";
 
@@ -5011,6 +5011,66 @@ export type Reaction<Context> = (
   ) => ReactionOutcome;
 
 
+// src/features/edit-construction/guides/construction-guides.ts
+export interface ConstructionGuideReference {
+  /** Stable identity used to break ties consistently. */
+  readonly id: string;
+  readonly surfaceKey?: ConstructionSurfaceKey;
+  /** References in the same declared group can form equal-spacing guides. */
+  readonly group?: string;
+  /** World-space point carrying the reference. */
+  readonly position: ConstructionPosition;
+export interface ConstructionGuide {
+  readonly id: string;
+  readonly axis: "x" | "y" | "z" | "point" | "distance";
+  readonly start: ConstructionPosition;
+  readonly end: ConstructionPosition;
+  readonly label?: string;
+  }
+export function snapConstructionDistance(
+  proposed: ConstructionPosition,
+  origin: ConstructionPosition,
+  step: number,
+  ): ConstructionGuideResolution {
+  if (!Number.isFinite(step) || step <= 0) return { point: proposed, guides: [] };
+export interface ConstructionGuideResolution {
+  readonly point: ConstructionPosition;
+  readonly guides: readonly ConstructionGuide[];
+  }
+export function constructionGuideSegments(guides: readonly ConstructionGuide[]): Float32Array {
+  const values: number[] = [];
+  for (const guide of guides) {
+  for (let index = 0; index < 12; index += 2) {
+  const startT = index / 12;
+  const endT = (index + 1) / 12;
+  values.push(
+  guide.start.x + (guide.end.x - guide.start.x) * startT,
+export interface ConstructionGuideOptions {
+  readonly pointSnap: boolean;
+  readonly horizontalAlignment: boolean;
+  readonly equalHeight: boolean;
+  readonly equalSpacing: boolean;
+  }
+export function nodeGuideReferences(
+  topology: ConstructionRegionTopology,
+  ): readonly ConstructionGuideReference[] {
+  return topology.nodes.map((node) => ({
+  id: node.id,
+  surfaceKey: topology.surfaceKey,
+  group: topology.surfaceType,
+  position: node.position,
+export function noGuideReferences(): readonly ConstructionGuideReference[] {
+  return [];
+  }
+export function resolveConstructionGuides(
+  proposed: ConstructionPosition,
+  references: readonly ConstructionGuideReference[],
+  tolerance: number,
+  options: ConstructionGuideOptions = {
+  pointSnap: true,
+  horizontalAlignment: true,
+  equalHeight: true,
+
 // src/features/edit-construction/history/edit-history.ts
 export interface RegionEditHistoryEntry {
   readonly kind: "region-edit";
@@ -5845,7 +5905,7 @@ export const platformStructureType: StructureTypeDefinition = Object.freeze<Stru
   roleFor: (topology, target) => target.kind === "vertex" && !topology.nodes.some((node) => node.id === target.nodeId) ? "platform-unknown" : `platform-${target.kind}`,
   policyFor: (role) => role === "platform-unknown" ? denied(role, "Vertice fora da plataforma.") : ({ ...allowed(role, ALL_AXES, role === "platform-region" ? "cloud" : "surface"), transport: role === "platform-region" }),
   interactionOver: cutsGround,
-  motionInfluences: (topology, transport): readonly ConstructionMotionInfluence[] => {
+  guideReferences: nodeGuideReferences,
 export const slopedPlatformStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
   surfaceType: SLOPE_SURFACE_TYPE, label: "Plataforma inclinada",
   creation: "one face per spine span: the span's ribbon, sampled along its bezier curve",
@@ -5859,6 +5919,12 @@ export const slopedPlatformStructureType: StructureTypeDefinition = Object.freez
 export const STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[] = Object.freeze([
 export function structureTypeFor(surfaceType: string): StructureTypeDefinition | undefined {
   return DEFINITION_BY_SURFACE_TYPE.get(surfaceType);
+export function constructionGuideReferences(
+  topologies: readonly ConstructionRegionTopology[],
+  ): readonly ConstructionGuideReference[] {
+  return topologies.flatMap((topology) =>
+  structureTypeFor(topology.surfaceType)?.guideReferences(topology) ?? [],
+  );
 export function traitsOf(surfaceType: string): ReadonlySet<StructureTrait> {
   return TRAITS_BY_SURFACE_TYPE.get(surfaceType) ?? NO_TRAITS;
   }

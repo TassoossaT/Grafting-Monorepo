@@ -12,8 +12,13 @@ import {
   resolveCurves,
   reverseGeometry,
   spineOwnerAt,
+  DISABLED_CONSTRUCTION_GUIDE_PARAMS,
+  constructionGuideReferences,
+  constructionGuideSegments,
+  resolveConstructionGuides,
+  snapConstructionDistance,
 } from "../../../../features/edit-construction/index.ts";
-import type { AtomicEditOp, StructureEditParams } from "../../../../features/edit-construction/index.ts";
+import type { AtomicEditOp, ConstructionGuide, StructureEditParams } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionCurvedEdge, ConstructionEdgeGeometry, ConstructionPosition, ConstructionSurfaceKey, CubicBezier } from "../../../../ports/index.ts";
 import type { PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
 import { commitPatchReplacement } from "../../effects/effect-commit.ts";
@@ -31,7 +36,46 @@ import { roadSnapTarget, showRoadSnap } from "../paths/road-body-target.ts";
  */
 
 const CHANNEL = "curve-edit";
+const GUIDE_CHANNEL = "construction-guides";
+const RULER_CHANNEL = "construction-ruler";
 const PREVIEW_COLOR = 0xffbc55;
+
+function guidedCurveTarget(
+  ctx: ToolContext,
+  proposed: ConstructionPosition,
+  origin: ConstructionPosition,
+  references: ReturnType<typeof constructionGuideReferences>,
+): ConstructionPosition {
+  const params = ctx.constructionGuideParams ?? DISABLED_CONSTRUCTION_GUIDE_PARAMS;
+  if (!params.enabled) return proposed;
+  const distance = params.distanceStep > 0
+    ? snapConstructionDistance(proposed, origin, params.distanceStep)
+    : { point: proposed, guides: [] as readonly ConstructionGuide[] };
+  const alignment = resolveConstructionGuides(distance.point, references, params.tolerance, {
+    pointSnap: params.pointSnap,
+    horizontalAlignment: params.horizontalAlignment,
+    equalHeight: params.equalHeight,
+    equalSpacing: params.equalSpacing,
+  });
+  const guides = [...distance.guides, ...alignment.guides];
+  const alignmentGuides = guides.filter((guide) => guide.axis !== "distance");
+  const ruler = guides.find((guide) => guide.axis === "distance");
+  if (alignmentGuides.length > 0) ctx.runtime.showPreview({ kind: "segments", positions: constructionGuideSegments(alignmentGuides), color: 0x22d3ee, opacity: 0.95 }, GUIDE_CHANNEL);
+  else ctx.runtime.clearPreview(GUIDE_CHANNEL);
+  if (ruler) ctx.runtime.showPreview({ kind: "segments", positions: new Float32Array([ruler.start.x, ruler.start.y, ruler.start.z, ruler.end.x, ruler.end.y, ruler.end.z]), color: 0xfacc15, opacity: 0.95 }, RULER_CHANNEL);
+  else ctx.runtime.clearPreview(RULER_CHANNEL);
+  const movedDistance = Math.hypot(alignment.point.x - origin.x, alignment.point.y - origin.y, alignment.point.z - origin.z);
+  const labels = alignmentGuides.flatMap((guide) => guide.axis === "y" ? ["Altura alinhada"] : guide.axis === "point" ? ["Ponto alinhado"] : guide.id.endsWith(":spacing") ? ["Distância igual"] : []);
+  const detail = labels.length > 0 ? ` · ${[...new Set(labels)].join(" · ")}` : "";
+  ctx.reportFeedback({ tone: "info", message: `${movedDistance.toFixed(2)} m${detail}` });
+  return alignment.guides.length > 0 ? alignment.point : distance.point;
+}
+
+function clearGuidePreviews(ctx: ToolContext): void {
+  ctx.runtime.clearPreview(GUIDE_CHANNEL);
+  ctx.runtime.clearPreview(RULER_CHANNEL);
+  ctx.reportFeedback(undefined);
+}
 
 export interface CurveGesture {
   move(gesture: ToolGesture): void;
@@ -104,6 +148,7 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGes
   const targetId = sample.nodeId!;
   const operationId = `curve-edit:${ctx.nextSequence()}`;
   const topologies = ctx.runtime.getAllRegionTopologies();
+  const guideReferences = constructionGuideReferences(topologies).filter((reference) => reference.id !== targetId);
   let target: ConstructionPosition = sample.point;
   let moved = false;
   let dragged = false;
@@ -158,6 +203,7 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGes
           showRoadSnap(ctx);
         }
       }
+      target = guidedCurveTarget(ctx, target, sample.point, guideReferences);
       moved = target.x !== sample.point.x || target.y !== sample.point.y || target.z !== sample.point.z;
       dragged ||= moved;
       if (lastRenderedTarget &&
@@ -209,6 +255,7 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGes
       ended = true;
       showRoadSnap(ctx);
       ctx.runtime.clearPreview(CHANNEL);
+      if (ctx.constructionGuideParams?.enabled) clearGuidePreviews(ctx);
       if (dragged && !moved) return;
       if (!dragged && params?.insertOnClick === false) return;
       if (!moved && curvePick(targetId)?.index !== "midpoint" && (!params?.curveAction || params.curveAction === "edit")) return;
@@ -230,7 +277,7 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params?: CurveGes
         ctx.reportFeedback({ tone: "error", message: `Curva preservada: ${String(error)}` });
       }
     },
-    cancel() { ended = true; showRoadSnap(ctx); ctx.runtime.clearPreview(CHANNEL); },
+    cancel() { ended = true; showRoadSnap(ctx); ctx.runtime.clearPreview(CHANNEL); if (ctx.constructionGuideParams?.enabled) clearGuidePreviews(ctx); },
   };
 }
 
@@ -243,13 +290,15 @@ function contourGesture(
   faceKey: ConstructionSurfaceKey,
 ): CurveGesture {
   const original = contourCurve(edge);
+  const guideReferences = constructionGuideReferences(ctx.runtime.getAllRegionTopologies())
+    .filter((reference) => reference.surfaceKey !== faceKey && reference.id !== sample.nodeId);
   let reshaped: CubicBezier | undefined;
   let ended = false;
   return {
     move(gesture) {
       if (ended) return;
       reshaped = undefined;
-      const target = targetOf(sample, gesture, params);
+      const target = guidedCurveTarget(ctx, targetOf(sample, gesture, params), sample.point, guideReferences);
       if (target.x === sample.point.x && target.y === sample.point.y && target.z === sample.point.z) {
         ctx.runtime.clearPreview(CHANNEL);
         return;
@@ -266,6 +315,7 @@ function contourGesture(
       if (ended) return;
       ended = true;
       ctx.runtime.clearPreview(CHANNEL);
+      if (ctx.constructionGuideParams?.enabled) clearGuidePreviews(ctx);
       if (reshaped === undefined) return;
       const cloud = resolveCloudTopology(ctx.runtime, faceKey);
       if (cloud === undefined) return;
@@ -296,6 +346,6 @@ function contourGesture(
       ctx.history.record({ kind: "region-edit", undo, redo: plan.ops });
       ctx.reportFeedback({ tone: "success", message: "Curva atualizada." });
     },
-    cancel() { ended = true; reshaped = undefined; ctx.runtime.clearPreview(CHANNEL); },
+    cancel() { ended = true; reshaped = undefined; ctx.runtime.clearPreview(CHANNEL); if (ctx.constructionGuideParams?.enabled) clearGuidePreviews(ctx); },
   };
 }

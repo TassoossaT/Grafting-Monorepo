@@ -1,5 +1,5 @@
 import type { EditHistoryStack } from "@/features/edit-construction";
-import type { ConstructionToolId, PreviewDescriptor, StructureEditParams, ToolParamsFor } from "@/features/edit-construction";
+import type { ConstructionGuideParams, ConstructionToolId, PreviewDescriptor, StructureEditParams, ToolParamsFor } from "@/features/edit-construction";
 import type { ConstructionPosition } from "@/ports";
 
 import type { TabletopRuntime } from "../../tabletop-runtime.ts";
@@ -69,6 +69,8 @@ export interface ToolContext {
    * one tool's own params.
    */
   readonly structureEditParams: StructureEditParams;
+  /** Shared snap, alignment, height and spacing behaviour for every construction tool. */
+  readonly constructionGuideParams: ConstructionGuideParams;
   /** A fresh integer each call, monotonically increasing for the runtime's lifetime -- feeds id-namespacing salts and cell/room indices, mirroring `tabletop-entry.tsx`'s retired `generateCountRef`. */
   nextSequence(): number;
   /** Reports the node a tool just selected/moved, for `SettingsDrawer`'s inspector. `undefined` clears the inspector. */

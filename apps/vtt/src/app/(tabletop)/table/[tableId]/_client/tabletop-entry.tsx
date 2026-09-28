@@ -6,11 +6,13 @@ import {
   attachCameraNavigation,
   createEditHistoryStack,
   createTabletopRuntime,
+  DEFAULT_CONSTRUCTION_GUIDE_PARAMS,
   DEFAULT_STRUCTURE_EDIT_PARAMS,
   DEFAULT_TOOL_PARAMS,
   useConstructionPointer,
   withOpeningKind,
   type ConstructionToolFeedback,
+  type ConstructionGuideParams,
   type ConstructionToolId,
   type EditHistoryStack,
   type OpeningParams,
@@ -81,6 +83,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
   const [tool, setTool] = useState<EditTool>("navigate");
   const [toolParams, setToolParams] = useState<ToolParamsByTool>(DEFAULT_TOOL_PARAMS);
   const [structureEditParams, setStructureEditParams] = useState<StructureEditParams>(DEFAULT_STRUCTURE_EDIT_PARAMS);
+  const [constructionGuideParams, setConstructionGuideParams] = useState<ConstructionGuideParams>(DEFAULT_CONSTRUCTION_GUIDE_PARAMS);
   const [snapToGrid, setSnapToGrid] = useState(true);
   const [editorMode, setEditorMode] = useState<"gm" | "player">("gm");
   const [selectedNodeInfo, setSelectedNodeInfo] = useState<SelectedNodeInfo | null>(null);
@@ -181,6 +184,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     viewId: viewIdRef.current,
     snapToGrid,
     structureEditParams,
+    constructionGuideParams,
     onSelectionChange: (info) => setSelectedNodeInfo(info ?? null),
     onFeedbackChange: handleFeedbackChange,
     onToolParamsUpdate: handleToolParamsUpdate,
@@ -331,6 +335,8 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           onToolParamsChange={handleToolParamsChange}
           structureEditParams={structureEditParams}
           onStructureEditParamsChange={setStructureEditParams}
+          constructionGuideParams={constructionGuideParams}
+          onConstructionGuideParamsChange={setConstructionGuideParams}
           tokenCount={current.tokens.byId.size}
         />
       </section>

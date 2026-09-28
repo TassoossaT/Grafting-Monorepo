@@ -10,6 +10,7 @@ import {
   validateSlopeMotion,
 } from "./platform-slope-spine.ts";
 import { allowed, denied, type StructureTypeDefinition, type StructureView } from "../structure-type.ts";
+import { nodeGuideReferences } from "../../guides/construction-guides.ts";
 
 /** Ground under a platform is cut, and the ground's own repair regenerates around it. */
 const cutsGround = (covered: StructureView) => covered.traits.has("ground") ? CUT : IGNORE;
@@ -22,6 +23,7 @@ export const platformStructureType: StructureTypeDefinition = Object.freeze<Stru
   roleFor: (topology, target) => target.kind === "vertex" && !topology.nodes.some((node) => node.id === target.nodeId) ? "platform-unknown" : `platform-${target.kind}`,
   policyFor: (role) => role === "platform-unknown" ? denied(role, "Vertice fora da plataforma.") : ({ ...allowed(role, ALL_AXES, role === "platform-region" ? "cloud" : "surface"), transport: role === "platform-region" }),
   interactionOver: cutsGround,
+  guideReferences: nodeGuideReferences,
   motionInfluences: (topology, transport): readonly ConstructionMotionInfluence[] => {
     const anchor = topology.nodes[0];
     if (!anchor) return [];
@@ -65,6 +67,7 @@ export const slopedPlatformStructureType: StructureTypeDefinition = Object.freez
   roleFor: () => "platform-slope-face",
   policyFor: (role) => denied(role, "Edite a plataforma inclinada pela espinha: pontos, alças e largura."),
   interactionOver: cutsGround,
+  guideReferences: nodeGuideReferences,
   motionInfluences: slopeMotionInfluences,
   deriveMotion: deriveSlopeMotion,
   validateMotion: validateSlopeMotion,
