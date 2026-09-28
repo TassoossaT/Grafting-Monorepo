@@ -23,6 +23,7 @@ import {
   hasTrait,
   resolveCreationInteraction,
   structureTypeFor,
+  surfaceHeightOf,
 } from "../../../features/edit-construction/index.ts";
 
 import {
@@ -966,6 +967,14 @@ export function executeTerrainCut(
    * air once the structure moves on.
    */
   const sealedSides: { readonly a: ConstructionPosition; readonly b: ConstructionPosition }[] = [];
+  /**
+   * The faces of the structures cutting the ground here, each with its own
+   * surface. Where the cut ends under one -- the line the ground rises through
+   * it, a floor run half out of a hill -- the ground's corners on that line
+   * lie on the face itself: the ground meets its underside along the whole
+   * line, instead of ending in the air below it or poking through above.
+   */
+  const undersides: { readonly ring: readonly ConstructionPosition[]; readonly surfaceAt: (point: { readonly x: number; readonly z: number }) => number }[] = [];
   /** Rings of the structures whose outlines the ground shares, matched back to their real nodes and edges. */
   let connectLoops: readonly (readonly ConstructionRegionEdge[])[] = [];
   /** Rings of the structures whose outlines are sealed. */
@@ -1022,6 +1031,12 @@ export function executeTerrainCut(
     const structures = standingHere.filter((topology) => !hasTrait(topology.surfaceType, "ground"));
     const connectTopologies = structures.filter((topology) => resolveCreationInteraction(topology.surfaceType, targetSurfaceType).kind === "cut");
     for (const topology of connectTopologies) for (const node of topology.nodes) connectPositions.set(node.id, { x: node.position.x, z: node.position.z });
+    for (const topology of connectTopologies) {
+      const surfaceAt = surfaceHeightOf(topology);
+      const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
+      const ring = (topology.outerLoops[0] ?? []).map((use) => at.get(use.startNodeId)).filter((p): p is ConstructionPosition => p !== undefined);
+      if (surfaceAt && ring.length >= 3) undersides.push({ ring, surfaceAt });
+    }
 
     // Which types hold each node: a node another type holds too is a join -- a
     // ramp's end welded into a floor -- and the side between two of them has
@@ -1282,9 +1297,32 @@ export function executeTerrainCut(
     }
     return undefined;
   };
+  /** Where the cut ends under a structure: the edge of the ground left standing that lies within one of its faces. */
+  const cutLine = connectArea.flatMap((piece) => piece.flatMap((ring) => ring.slice(0, -1).map((a, index) => [a, ring[index + 1]!] as const)));
+  /** The height of the face a point lies under, if it lies on the line the cut ends at under one. */
+  const onUnderside = (point: { readonly x: number; readonly z: number }): number | undefined => {
+    if (undersides.length === 0) return undefined;
+    const onLine = cutLine.some(([a, b]) => {
+      const dx = b[0] - a[0], dz = b[1] - a[1], lengthSq = dx * dx + dz * dz;
+      const t = lengthSq < 1e-18 ? 0 : Math.max(0, Math.min(1, ((point.x - a[0]) * dx + (point.z - a[1]) * dz) / lengthSq));
+      return Math.hypot(point.x - (a[0] + dx * t), point.z - (a[1] + dz * t)) < 1e-3;
+    });
+    if (!onLine) return undefined;
+    for (const { ring, surfaceAt } of undersides) {
+      let inside = false;
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const a = ring[i]!, b = ring[j]!;
+        if ((a.z > point.z) !== (b.z > point.z) && point.x < ((b.x - a.x) * (point.z - a.z)) / (b.z - a.z) + a.x) inside = !inside;
+      }
+      if (inside) return surfaceAt(point);
+    }
+    return undefined;
+  };
   const sampleBase = (point: { readonly x: number; readonly z: number }): number => {
     const side = onStructureSide(point);
     if (side !== undefined) return side;
+    const under = onUnderside(point);
+    if (under !== undefined) return under;
     let base = localKept.at(point);
     if (base === undefined) {
       base = wideKept.at(point);

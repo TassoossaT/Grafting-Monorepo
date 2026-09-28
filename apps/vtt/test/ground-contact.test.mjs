@@ -221,3 +221,26 @@ test("a floor half run into a hill, half out of it, leaves no basin open under i
     assert.ok(!groundUnder(runtime, [4.5, -0.8, 5.3, 0.8]), "and none left where the hill rises through it");
   } finally { session.free(); }
 }));
+
+test("where the ground ends under a floor run half out of a hill, its edge lies on the floor's underside all along: no gap below it, no ground through it", quiet(() => {
+  const hill = (x, z) => Math.max(0, 8 - 0.35 * ((x - 6) ** 2 + z * z));
+  const { runtime, ctx, calls, session } = setup(hill);
+  try {
+    const y = 5.6, box = [-1.3, -2.3, 5.3, 2.3];
+    floorAt(ctx, box, y);
+    assert.equal(calls.feedback.at(-1)?.tone, "success", JSON.stringify(calls.feedback.at(-1)));
+    const ground = terrain(runtime);
+    const uses = new Map();
+    for (const t of ground) for (const use of t.outerLoops.flat()) {
+      const key = [use.startNodeId, use.endNodeId].sort().join("|");
+      uses.set(key, (uses.get(key) ?? 0) + 1);
+    }
+    const at = new Map(ground.flatMap((t) => t.nodes.map((n) => [n.id, n.position])));
+    const under = (p) => p.x > box[0] + 0.05 && p.x < box[2] - 0.05 && p.z > box[1] + 0.05 && p.z < box[3] - 0.05;
+    // The ground's own edge -- walked by one ground face only -- where it runs under the floor.
+    const edge = [...uses].filter(([, count]) => count === 1).flatMap(([key]) => key.split("|")).map((id) => at.get(id)).filter((p) => p && under(p));
+    assert.ok(edge.length >= 2, "the ground ends under the floor");
+    for (const p of edge) assert.ok(Math.abs(p.y - y) < 0.02, `on the floor's underside: ${JSON.stringify(p)}`);
+    assert.ok([...at.values()].every((p) => !under(p) || p.y <= y + 0.02), "no ground rises through the floor");
+  } finally { session.free(); }
+}));
