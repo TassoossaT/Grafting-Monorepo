@@ -1,10 +1,10 @@
-import type { ApplyPatchReplacementRequest, ConstructionGraphSnapshot, ConstructionPatchEdge, ConstructionPatchRegion, ConstructionPosition, ConstructionRegionTopology, ConstructionSurfaceKey } from "@/ports";
+import type { ApplyPatchReplacementRequest, ConstructionGraphSnapshot, ConstructionPosition, ConstructionRegionTopology, ConstructionSurfaceKey } from "@/ports";
 
 import { hasTrait } from "../structure-types/index.ts";
-import { reverseGeometry } from "../topology/boundary-edges.ts";
 import { floorsWeldedBy, reweldFloors, type WeldRung } from "../topology/floor-weld.ts";
 import { releasableFace, structureEndRungs } from "./free-end-welds.ts";
 import { surfaceKeyText } from "../topology/plan-geometry.ts";
+import { renamedPiece, rewriteFaces } from "../topology/face-rewrite.ts";
 
 /**
  * A weld paused for one edit: a structure's end comes off the floor it is
@@ -30,8 +30,8 @@ export interface WeldLink {
 /** How near a node must stand to another, or to a side, to be joined there -- positions are held in single precision. */
 const JOIN = 1e-4;
 
-/** Every join `face` takes part in: an end of its own joined to a floor, or another structure's end joined to it. */
-export function weldsOf(graph: ConstructionGraphSnapshot, topologies: readonly ConstructionRegionTopology[], face: ConstructionRegionTopology): readonly WeldLink[] {
+/** Every structure end -- a ramp's, a spine's -- joined to a floor that `face` takes part in: an end of its own, or another structure's end joined to it. Joins of any other kind, a wall's feet on a floor, are not ends and are not among them. */
+export function endJoinsOf(graph: ConstructionGraphSnapshot, topologies: readonly ConstructionRegionTopology[], face: ConstructionRegionTopology): readonly WeldLink[] {
   // Only floors are what an end is joined to; the ground laid against them follows them.
   const floors = topologies.filter((topology) => hasTrait(topology.surfaceType, "floor"));
   const own = new Set([...face.outerLoops, ...face.holes].flat().map((use) => use.edgeId));
@@ -147,40 +147,18 @@ export function rejoinNodes(topologies: readonly ConstructionRegionTopology[], l
     }
   }
   if (renamed.size === 0 && cuts.size === 0) return { request: undefined, joined: 0 };
-  const edges = new Map<string, ConstructionPatchEdge>();
-  const regions: ConstructionPatchRegion[] = [];
-  const sources: ConstructionSurfaceKey[] = [];
   const reaches = (topology: ConstructionRegionTopology) => topology.nodes.some((node) => renamed.has(node.id))
     || [...topology.outerLoops, ...topology.holes].flat().some((use) => cuts.has(pairKey(use.startNodeId, use.endNodeId)));
-  for (const face of topologies.filter(reaches)) {
-    const put = (edgeId: string, from: string, to: string, use: ConstructionRegionTopology["outerLoops"][number][number]) => {
-      edges.set(edgeId, use.reversed
-        ? { edgeId, startNodeId: to, endNodeId: from, geometry: reverseGeometry(use.geometry) }
-        : { edgeId, startNodeId: from, endNodeId: to, geometry: use.geometry });
-      return { edgeId, reversed: use.reversed };
-    };
-    const walk = (loop: ConstructionRegionTopology["outerLoops"][number]) => loop.flatMap((use) => {
-      const from = renamed.get(use.startNodeId) ?? use.startNodeId, to = renamed.get(use.endNodeId) ?? use.endNodeId;
-      const cut = cuts.get(pairKey(use.startNodeId, use.endNodeId));
-      // Cut at every end node on it, in order along the walk: a piece between each, named after the edge it came from.
-      if (cut) {
-        const forward = use.startNodeId < use.endNodeId ? cut : [...cut].reverse();
-        const stops = [from, ...forward.map((c) => c.id), to];
-        return stops.slice(1).map((stop, i) => put(`${operationId}:${use.edgeId}:${i}`, stops[i]!, stop, use));
-      }
-      const touched = from !== use.startNodeId || to !== use.endNodeId;
-      // An edge through a renamed node is a new edge; the face's other edges stay as they are.
-      return [put(touched ? `${operationId}:${use.edgeId}` : use.edgeId, from, to, use)];
-    });
-    sources.push(face.surfaceKey);
-    regions.push({
-      regionId: face.surfaceKey[0] === "@region" && face.surfaceKey[1] ? face.surfaceKey[1] : `${operationId}:face:${regions.length}`,
-      boundary: walk(face.outerLoops[0] ?? []),
-      holes: [...face.outerLoops.slice(1), ...face.holes].map(walk),
-      surfaceType: face.surfaceType,
-      physical: face.physical,
-      ...(face.profile ? { profile: face.profile } : {}),
-    });
-  }
-  return { request: { operationId, sourceSurfaceKeys: sources, patch: { nodes: [], edges: [...edges.values()], regions } }, joined: renamed.size + [...cuts.values()].reduce((sum, list) => sum + list.length, 0) };
+  const faces = topologies.filter(reaches);
+  const rename = (id: string) => renamed.get(id) ?? id;
+  const { edges, regions } = rewriteFaces(faces, (use) => {
+    const cut = cuts.get(pairKey(use.startNodeId, use.endNodeId));
+    // An edge through a renamed node is a new edge; the face's other edges stay as they are.
+    if (!cut) return [renamedPiece(use, rename, operationId)];
+    // Cut at every end node on it, in order along the walk: a piece between each, named after the edge it came from.
+    const forward = use.startNodeId < use.endNodeId ? cut : [...cut].reverse();
+    const stops = [rename(use.startNodeId), ...forward.map((c) => c.id), rename(use.endNodeId)];
+    return stops.slice(1).map((stop, i) => ({ edgeId: `${operationId}:${use.edgeId}:${i}`, from: stops[i]!, to: stop }));
+  }, operationId);
+  return { request: { operationId, sourceSurfaceKeys: faces.map((face) => face.surfaceKey), patch: { nodes: [], edges, regions } }, joined: renamed.size + [...cuts.values()].reduce((sum, list) => sum + list.length, 0) };
 }

@@ -33,5 +33,5 @@ export { releaseFromSolid } from "./detach.ts";
 export { joinWhereLanded, partNodes, releasePart, snapAnchorsOf, snapMagnetsOf } from "./handle-release.ts";
 export { joinedStructures, standingOn, standsOn } from "./rigid-carry.ts";
 export { outlineMagnets, snapToOutlines, SNAP_REACH, type Magnet, type OutlineSnap, type SnapAnchor } from "./outline-snap.ts";
-export { rejoinNodes, reshapedWelds, reweld, unweld, weldsOf, type WeldLink } from "./weld-pause.ts";
+export { rejoinNodes, reshapedWelds, reweld, unweld, endJoinsOf, type WeldLink } from "./weld-pause.ts";
 export { sceneHandles, type HandleFocus, type SceneHandle, type SceneHandleInput, type SceneHandleKind } from "./scene-handles.ts";

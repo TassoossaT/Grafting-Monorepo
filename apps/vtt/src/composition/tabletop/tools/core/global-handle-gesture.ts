@@ -12,7 +12,7 @@ import {
   reshapedWelds,
   reweld,
   unweld,
-  weldsOf,
+  endJoinsOf,
   type WeldLink,
   planEdit,
   planGlobalHandle,
@@ -158,7 +158,7 @@ function resolvedPart(ctx: ToolContext, edit: GlobalHandleEdit, scene: GlobalHan
   if (!cloud) throw new Error("A estrutura não está mais aqui.");
   const gesture = { surfaceKey: edit.seed, target: edit.target, delta: edit.delta };
   const face = scene.topologies.find((topology) => surfaceKeyText(topology.surfaceKey) === surfaceKeyText(edit.seed));
-  const links = face ? weldsOf(scene.graph, scene.topologies, face) : [];
+  const links = face ? endJoinsOf(scene.graph, scene.topologies, face) : [];
   const positions = new Map(scene.graph.nodes.map((node) => [node.id, node.position]));
   const plan = planEdit(cloud, gesture, scene.graph, ctx.runtime);
   if (plan.kind === "apply") {

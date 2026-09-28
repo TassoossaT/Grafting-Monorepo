@@ -6,7 +6,7 @@ import { faceKey, surfaceKeyText } from "../topology/plan-geometry.ts";
 import { releaseFromSolid } from "./detach.ts";
 import { outlineMagnets, type Magnet, type SnapAnchor } from "./outline-snap.ts";
 import { joinedStructures } from "./rigid-carry.ts";
-import { rejoinNodes, weldsOf } from "./weld-pause.ts";
+import { rejoinNodes, endJoinsOf } from "./weld-pause.ts";
 
 /**
  * What a handle's drag lets go of, snaps and joins -- the structural half of
@@ -54,7 +54,7 @@ export function snapMagnetsOf(scene: GlobalHandleScene, handle: GlobalHandle): r
  */
 export function releasePart(topologies: readonly ConstructionRegionTopology[], graph: GlobalHandleScene["graph"], part: RegionPart, operationId: string): ApplyPatchReplacementRequest | undefined {
   const face = topologies.find((topology) => faceKey(topology) === surfaceKeyText(part.seed));
-  if (!face || isSolidType(face.surfaceType) || weldsOf(graph, topologies, face).length > 0) return undefined;
+  if (!face || isSolidType(face.surfaceType) || endJoinsOf(graph, topologies, face).length > 0) return undefined;
   return releaseFromSolid(topologies, new Set(partNodes(topologies, part.target)), isGroundType, isSolidType, operationId);
 }
 

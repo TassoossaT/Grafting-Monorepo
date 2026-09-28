@@ -4,7 +4,7 @@ import type { ConstructionPosition } from "@/ports";
 
 import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "../core/tool-context.ts";
 import { withStructureEditing } from "../core/structure-edit-behavior.ts";
-import { WALL_COLOR, commitWallContour, onFloorLevel, pinnedToBaseline, wallCorrectionPreview, wallStartAt } from "./wall-shared.ts";
+import { WALL_COLOR, commitWallContour, wallFootAt, pinnedToBaseline, wallCorrectionPreview, wallStartAt } from "./wall-shared.ts";
 
 /**
  * The pressed drag's own anchor, or `undefined` before a press. Cleared the
@@ -37,7 +37,7 @@ const rawWallLineTool: ConstructionTool<"wall-line"> = {
     // Same correction-and-weld band the brush preview draws from -- the raw
     // press/cursor points never showed where the run will actually land, or
     // the reach that let it land there.
-    return wallCorrectionPreview(ctx, [anchor, pinnedToBaseline(anchor, onFloorLevel(ctx, gesture.current))], 0, WALL_COLOR[params.wallType]);
+    return wallCorrectionPreview(ctx, [anchor, pinnedToBaseline(anchor, wallFootAt(ctx, gesture.current))], 0, WALL_COLOR[params.wallType]);
   },
 
   onPointerDown(ctx: ToolContext, sample: PointerSample): void {
@@ -47,7 +47,7 @@ const rawWallLineTool: ConstructionTool<"wall-line"> = {
 
   onPointerUp(ctx: ToolContext, gesture: ToolGesture, params: WallParams): void {
     if (anchor === undefined) return;
-    const end = pinnedToBaseline(anchor, onFloorLevel(ctx, gesture.current));
+    const end = pinnedToBaseline(anchor, wallFootAt(ctx, gesture.current));
     commitWallContour(ctx, [{ start: anchor, end, geometry: { kind: "line" } }], params, "wall-line");
     anchor = undefined;
   },

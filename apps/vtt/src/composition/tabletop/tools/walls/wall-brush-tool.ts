@@ -4,7 +4,7 @@ import type { WallBrushParams } from "@/features/edit-construction";
 import { createBrushTool, type BrushRegion } from "../core/brush-tool.ts";
 import { withStructureEditing } from "../core/structure-edit-behavior.ts";
 import type { ToolContext } from "../core/tool-context.ts";
-import { WALL_COLOR, commitWallStroke, onFloorLevel } from "./wall-shared.ts";
+import { WALL_COLOR, commitWallStroke, wallFootAt } from "./wall-shared.ts";
 
 /**
  * A free wall stroke, built on the same brush every other brush uses: press,
@@ -34,7 +34,7 @@ const rawWallBrushTool = createBrushTool<"wall-brush">({
 
   applyRegion(region: BrushRegion, ctx: ToolContext, params: WallBrushParams): void {
     // Over a floor, the stroke stands on it: at its height exactly, whatever the pick's noise.
-    commitWallStroke(ctx, region.samples.map((point) => onFloorLevel(ctx, { point })), region.tolerance, params, "wall-brush");
+    commitWallStroke(ctx, region.samples.map((point) => wallFootAt(ctx, { point })), region.tolerance, params, "wall-brush");
   },
 
   // No `previewContour` override: the corrected/fitted result is only

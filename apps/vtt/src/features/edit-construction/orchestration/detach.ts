@@ -1,7 +1,7 @@
-import type { ApplyPatchReplacementRequest, ConstructionPatchEdge, ConstructionPatchRegion, ConstructionRegionTopology } from "@/ports";
+import type { ApplyPatchReplacementRequest, ConstructionRegionTopology } from "@/ports";
 
-import { reverseGeometry } from "../topology/boundary-edges.ts";
 import { faceKey } from "../topology/plan-geometry.ts";
+import { renamedPiece, rewriteFaces } from "../topology/face-rewrite.ts";
 
 /**
  * Letting go: the structure `members` makes gets nodes of its own wherever
@@ -41,31 +41,12 @@ export function detachStructure(
   if (shared.size === 0) return undefined;
   const own = (id: string) => (shared.has(id) ? `${operationId}:own:${id}` : id);
   const positions = new Map(members.flatMap((member) => member.nodes.map((node) => [node.id, node.position] as const)));
-  const edges = new Map<string, ConstructionPatchEdge>();
-  const regions: ConstructionPatchRegion[] = [];
-  for (const member of members) {
-    const walk = (loop: ConstructionRegionTopology["outerLoops"][number]) => loop.map((use) => {
-      const from = own(use.startNodeId), to = own(use.endNodeId);
-      // An edge through a node let go of is a new edge of its own; the rest stay as they are.
-      const edgeId = from !== use.startNodeId || to !== use.endNodeId ? `${operationId}:${use.edgeId}` : use.edgeId;
-      edges.set(edgeId, use.reversed
-        ? { edgeId, startNodeId: to, endNodeId: from, geometry: reverseGeometry(use.geometry) }
-        : { edgeId, startNodeId: from, endNodeId: to, geometry: use.geometry });
-      return { edgeId, reversed: use.reversed };
-    });
-    regions.push({
-      regionId: member.surfaceKey[0] === "@region" && member.surfaceKey[1] ? member.surfaceKey[1] : `${operationId}:face:${regions.length}`,
-      boundary: walk(member.outerLoops[0] ?? []),
-      holes: [...member.outerLoops.slice(1), ...member.holes].map(walk),
-      surfaceType: member.surfaceType,
-      physical: member.physical,
-      ...(member.profile ? { profile: member.profile } : {}),
-    });
-  }
+  // An edge through a node let go of is a new edge of its own; the rest stay as they are.
+  const { edges, regions } = rewriteFaces(members, (use) => [renamedPiece(use, own, operationId)], operationId);
   return {
     operationId,
     sourceSurfaceKeys: members.map((member) => member.surfaceKey),
-    patch: { nodes: [...shared].map((id) => ({ id: own(id), position: positions.get(id)! })), edges: [...edges.values()], regions },
+    patch: { nodes: [...shared].map((id) => ({ id: own(id), position: positions.get(id)! })), edges, regions },
   };
 }
 

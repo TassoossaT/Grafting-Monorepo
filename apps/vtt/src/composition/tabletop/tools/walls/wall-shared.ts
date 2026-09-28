@@ -1,5 +1,5 @@
 import type { PreviewDescriptor, WallParams } from "@/features/edit-construction";
-import { hasTrait, rejoinNodes, settlePatch, type WeldLink } from "../../../../features/edit-construction/index.ts";
+import { rejoinNodes, settlePatch, type WeldLink } from "../../../../features/edit-construction/index.ts";
 import type {
   ConstructionEdgeGeometry,
   ConstructionEdgeId,
@@ -10,7 +10,6 @@ import type {
 
 import { projectOntoLineXZ, xzDistance, pinnedToBaseline } from "../shapes/geometry-2d.ts";
 import { scopedToolId, type PointerSample, type ToolContext } from "../core/tool-context.ts";
-import { pointerAtHeight } from "../core/pointer-ray.ts";
 import { surfaceRefFromNodeSet as surfaceRefOf } from "../../../../entities/map/index.ts";
 import { fitPath, type FittedEdge } from "../core/stroke-fitting.ts";
 import { boundaryUsage, type EdgeSharing } from "../core/boundary-edges.ts";
@@ -19,6 +18,7 @@ import { commitChange } from "../../effects/effect-commit.ts";
 import { shapeChangeOfAddition } from "../../effects/shape-change.ts";
 import { wallPatch, type WallColumn, type WallContour } from "./wall-patch.ts";
 import { wallSpans, type WallSpan } from "./wall-spans.ts";
+import { floorSideAt, nearestFloorNode, onFloorLevel } from "../core/floor-landing.ts";
 
 export { xzDistance, pinnedToBaseline };
 
@@ -187,31 +187,6 @@ export function findWallSurfaceAt(ctx: ToolContext, point: ConstructionPosition)
  * whole type is built on.
  */
 /**
- * The closest platform vertex within `weldTolerance` (XZ) at the same
- * elevation ({@link ELEVATION_WELD_TOLERANCE}) as `position`, or `undefined`
- * -- the XZ half of endpoint welding is a magnet, same tolerance a wall
- * corner snaps onto another wall's column with, never a reuse of a lower
- * storey merely by XZ.
- */
-function nearestPlatformNodeAt(
-  ctx: ToolContext,
-  position: ConstructionPosition,
-  weldTolerance: number,
-): { readonly node: { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }; readonly distance: number } | undefined {
-  let best: { readonly node: { readonly id: ConstructionNodeId; readonly position: ConstructionPosition }; readonly distance: number } | undefined;
-  for (const region of ctx.runtime.getAllRegionTopologies()) {
-    if (!hasTrait(region.surfaceType, "floor")) continue;
-    for (const node of region.nodes) {
-      if (Math.abs(node.position.y - position.y) > ELEVATION_WELD_TOLERANCE) continue;
-      const distance = xzDistance(node.position, position);
-      if (distance > weldTolerance) continue;
-      if (best === undefined || distance < best.distance) best = { node, distance };
-    }
-  }
-  return best;
-}
-
-/**
  * The single corner magnet both `resolveColumn` and its read-only preview
  * echo pull from: an existing wall column and a platform vertex are the same
  * strength, so whichever actually sits closer wins, rather than a wall
@@ -226,7 +201,7 @@ function nearestCornerAt(
   weldTolerance: number,
 ): { readonly bottomNodeId: ConstructionNodeId; readonly topNodeId: ConstructionNodeId | undefined; readonly bottom: ConstructionPosition; readonly top: ConstructionPosition | undefined } | undefined {
   const wall = existingColumnAt(ctx, point, weldTolerance);
-  const platform = nearestPlatformNodeAt(ctx, point, weldTolerance);
+  const platform = nearestFloorNode(ctx, point, weldTolerance, ELEVATION_WELD_TOLERANCE);
   if (wall !== undefined && (platform === undefined || wall.distance <= platform.distance)) {
     return { bottomNodeId: wall.column.bottomNodeId, topNodeId: wall.column.topNodeId, bottom: wall.column.bottom, top: wall.column.top };
   }
@@ -236,44 +211,14 @@ function nearestCornerAt(
   return undefined;
 }
 
-/**
- * Where the pointer is, for a wall: on a floor it is over or right at the
- * edge of, exactly at that floor's height -- read along the pointer's ray,
- * never whatever the renderer's pick met first (the ground below a raised
- * floor's edge, a wall standing in front) nor its sub-centimetre noise.
- * Anywhere else, where it hit. Of several floors, the one the ray meets
- * first.
- */
-export function onFloorLevel(ctx: ToolContext, sample: PointerSample): ConstructionPosition {
-  let best: { readonly point: ConstructionPosition; readonly y: number } | undefined;
-  for (const floor of ctx.runtime.getAllRegionTopologies()) {
-    if (!hasTrait(floor.surfaceType, "floor")) continue;
-    const y = floor.nodes[0]?.position.y;
-    if (y === undefined || floor.nodes.some((node) => Math.abs(node.position.y - y) > 1e-6)) continue;
-    const point = sample.ray ? pointerAtHeight(sample, y) : { ...sample.point, y };
-    if (!sample.ray && Math.abs(sample.point.y - y) > 0.25) continue;
-    const at = new Map(floor.nodes.map((node) => [node.id, node.position]));
-    let inside = false;
-    let near = Infinity;
-    for (const loop of floor.outerLoops) {
-      for (const use of loop) {
-        const a = at.get(use.startNodeId)!, b = at.get(use.endNodeId)!;
-        if ((a.z > point.z) !== (b.z > point.z) && point.x < ((b.x - a.x) * (point.z - a.z)) / (b.z - a.z) + a.x) inside = !inside;
-        near = Math.min(near, projectOntoSegment(point, a, b).perp);
-      }
-    }
-    if (!inside && near > CORNER_WELD_TOLERANCE) continue;
-    // The ray meets the higher floor first.
-    if (!best || y > best.y) best = { point, y };
-  }
-  return best?.point ?? sample.point;
-}
+/** Where the pointer puts a wall's foot: on a floor's level when over or at the edge of one ({@link onFloorLevel}), else where it hit. */
+export const wallFootAt = (ctx: ToolContext, sample: PointerSample): ConstructionPosition => onFloorLevel(ctx, sample, CORNER_WELD_TOLERANCE);
 
 /**
  * Where a wall begins when pressed on: on another wall, at the foot of that
  * wall straight below where it was pressed -- a new wall joins it there, at
  * a column or partway along its run, never halfway up its face; else on a
- * floor it is over, at the floor's height ({@link onFloorLevel}).
+ * floor it is over, at the floor's height ({@link wallFootAt}).
  */
 export function wallStartAt(ctx: ToolContext, sample: PointerSample): ConstructionPosition {
   if (sample.surfaceRef !== undefined) {
@@ -283,35 +228,7 @@ export function wallStartAt(ctx: ToolContext, sample: PointerSample): Constructi
       return { x: span.a.x + (span.b.x - span.a.x) * t, y: span.a.y + (span.b.y - span.a.y) * t, z: span.a.z + (span.b.z - span.a.z) * t };
     }
   }
-  return onFloorLevel(ctx, sample);
-}
-
-/**
- * The straight side of a floor at `point`'s height that `point` lands on,
- * within `tolerance` and clear of its corners -- where a wall's corner joins
- * the floor partway along its outline -- with the point moved onto it.
- */
-function floorSideAt(
-  ctx: ToolContext,
-  point: ConstructionPosition,
-  tolerance: number,
-): { readonly point: ConstructionPosition; readonly floor: ConstructionSurfaceKey } | undefined {
-  let best: { readonly point: ConstructionPosition; readonly floor: ConstructionSurfaceKey; readonly perp: number } | undefined;
-  for (const floor of ctx.runtime.getAllRegionTopologies()) {
-    if (!hasTrait(floor.surfaceType, "floor")) continue;
-    const at = new Map(floor.nodes.map((node) => [node.id, node.position]));
-    for (const use of [...floor.outerLoops, ...floor.holes].flat()) {
-      if (use.geometry.kind !== "line") continue;
-      const a = at.get(use.startNodeId)!, b = at.get(use.endNodeId)!;
-      if (Math.abs(a.y - point.y) > ELEVATION_WELD_TOLERANCE || Math.abs(b.y - point.y) > ELEVATION_WELD_TOLERANCE) continue;
-      const length = xzDistance(a, b);
-      if (length < 1e-6) continue;
-      const { t, perp, x, z } = projectOntoSegment(point, a, b);
-      if (perp > tolerance || t * length <= CORNER_WELD_TOLERANCE || (1 - t) * length <= CORNER_WELD_TOLERANCE) continue;
-      if (best === undefined || perp < best.perp) best = { point: { x, y: a.y + (b.y - a.y) * t, z }, floor: floor.surfaceKey, perp };
-    }
-  }
-  return best && { point: best.point, floor: best.floor };
+  return wallFootAt(ctx, sample);
 }
 
 function resolveColumn(
@@ -338,7 +255,7 @@ function resolveColumn(
     // another wall's unrelated base that merely happens to sit at the same
     // height: two walls at different elevations lining up by coincidence is
     // not the same intention as a post actually landing on a floor.
-    const upper = corner.topNodeId !== undefined ? undefined : nearestPlatformNodeAt(ctx, top, weldTolerance);
+    const upper = corner.topNodeId !== undefined ? undefined : nearestFloorNode(ctx, top, weldTolerance, ELEVATION_WELD_TOLERANCE);
     return {
       bottomNodeId: corner.bottomNodeId,
       topNodeId: corner.topNodeId ?? upper?.node.id ?? mint().topNodeId,
@@ -350,7 +267,7 @@ function resolveColumn(
   if (inserted !== undefined) return inserted;
   const { bottomNodeId, topNodeId } = mint();
   // Partway along a floor's side: on it, and the floor is cut there once the wall stands, so the two share the node.
-  const side = floorSideAt(ctx, point, weldTolerance);
+  const side = floorSideAt(ctx, point, weldTolerance, CORNER_WELD_TOLERANCE, ELEVATION_WELD_TOLERANCE);
   if (side !== undefined) {
     onFloorSides.push({ nodeId: bottomNodeId, floor: side.floor });
     return { bottomNodeId, topNodeId, bottom: side.point, top: { x: side.point.x, y: side.point.y + height, z: side.point.z } };
@@ -367,7 +284,7 @@ function resolveColumn(
  */
 export function snappedEndpoint(ctx: ToolContext, point: ConstructionPosition, correction = 0): ConstructionPosition {
   const tolerance = Math.max(CORNER_WELD_TOLERANCE, correction);
-  return nearestCornerAt(ctx, point, tolerance)?.bottom ?? floorSideAt(ctx, point, tolerance)?.point ?? point;
+  return nearestCornerAt(ctx, point, tolerance)?.bottom ?? floorSideAt(ctx, point, tolerance, CORNER_WELD_TOLERANCE, ELEVATION_WELD_TOLERANCE)?.point ?? point;
 }
 
 /**
