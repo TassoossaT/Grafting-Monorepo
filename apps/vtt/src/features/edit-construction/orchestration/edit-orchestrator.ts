@@ -193,11 +193,16 @@ export function planEdit(
       for (let round = 0; round < RIGID_ROUNDS; round += 1) {
         const carried = rigidCarries(topologies, moved, direct);
         if (carried.size === 0) break;
+        const seeded = new Map(motionSeeds.map((seed) => [seed.nodeId, seed.delta]));
         motionSeeds = [
           ...motionSeeds.filter((seed) => !carried.has(seed.nodeId)),
           ...[...carried].map(([nodeId, position]) => {
             const before = positions.get(nodeId)!;
-            return { nodeId, delta: { x: position.x - before.x, y: position.y - before.y, z: position.z - before.z } };
+            const delta = { x: position.x - before.x, y: position.y - before.y, z: position.z - before.z };
+            // Carried where it was already going: its displacement is copied, not refitted -- the
+            // engine holds copies to exact equality, and a refit differs in the last digits.
+            const own = seeded.get(nodeId);
+            return { nodeId, delta: own && Math.hypot(own.x - delta.x, own.y - delta.y, own.z - delta.z) < 1e-6 ? own : delta };
           }),
         ];
         moved = solve(motionSeeds);
