@@ -1,5 +1,5 @@
 import { roofStructureType } from "./roof/roof-structure.ts";
-import { floatingPlatformStructureType, platformStructureType, slopedPlatformStructureType } from "./platform/platform-structure.ts";
+import { platformStructureType, slopedPlatformStructureType } from "./platform/platform-structure.ts";
 import { rampStructureType } from "./platform/platform-ramp-type.ts";
 import type { ConstructionCoveredRegion, ConstructionRegionTopology } from "@/ports";
 
@@ -46,7 +46,6 @@ import { forbid, type CreationInteraction } from "./creation-interaction.ts";
  */
 export const STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[] = Object.freeze([
   platformStructureType,
-  floatingPlatformStructureType,
   rampStructureType,
   slopedPlatformStructureType,
   roofStructureType,

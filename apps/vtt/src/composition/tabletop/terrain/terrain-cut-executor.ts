@@ -16,7 +16,11 @@ import {
   calculateProfileDisplacement,
   calculateProfileHeight,
   distanceAndElevationOnPath,
+  GROUND_CONTACT_CLEARANCE,
+  groundContactOf,
   hasTrait,
+  resolveCreationInteraction,
+  structureTypeFor,
 } from "../../../features/edit-construction/index.ts";
 
 import {
@@ -33,7 +37,7 @@ import {
   type TerrainCutRuntime,
   type TerrainStrokeBounds,
 } from "./terrain-neighborhood.ts";
-import { paintedFalloutOf, paintedTopologiesOf } from "../interference/painted-topologies.ts";
+import { paintedFalloutOf } from "../interference/painted-topologies.ts";
 import { planarUnion, planarDifference } from "../../../features/edit-construction/index.ts";
 import type { PlanarArea, PlanarPolygon } from "@/features/edit-construction";
 
@@ -162,6 +166,44 @@ function loopToPolygon(
 ): PlanarPolygon {
   const ring = loopToRing(loop, positionOf);
   return ring ? [ring] : [];
+}
+
+/**
+ * A sealed structure's outline as constraint rings the ground meets without
+ * sharing it: no edge to split, and a corner carries its node only where
+ * another structure holds that node too -- a ramp's end welded into a floor.
+ */
+function sealedConstraints(
+  rings: readonly (readonly ConstructionRegionEdge[])[],
+  positionOf: ReadonlyMap<ConstructionNodeId, { readonly x: number; readonly z: number }>,
+  startingIndex: number,
+  shared: ReadonlySet<ConstructionNodeId>,
+  /** Sources numbered just before, from `startingIndex` on: a node already among them keeps its number. */
+  before: readonly ConstructionNodeId[] = [],
+): ConstraintTable {
+  const sources: ConstructionNodeId[] = [];
+  const index = new Map<ConstructionNodeId, number>(before.map((id, i) => [id, startingIndex + i]));
+  startingIndex += before.length;
+  const built: ConstraintRing[] = [];
+  for (const ring of rings) {
+    const points: ConstructionGridConstraintPoint[] = [];
+    for (const edge of ring) {
+      const position = positionOf.get(edge.startNodeId);
+      if (!position) break;
+      let source: number | undefined;
+      if (shared.has(edge.startNodeId)) {
+        source = index.get(edge.startNodeId);
+        if (source === undefined) {
+          source = startingIndex + sources.length;
+          sources.push(edge.startNodeId);
+          index.set(edge.startNodeId, source);
+        }
+      }
+      points.push(source === undefined ? { x: position.x, z: position.z } : { x: position.x, z: position.z, source });
+    }
+    if (points.length === ring.length && points.length >= 3) built.push({ points, edges: ring.map(() => undefined) });
+  }
+  return { rings: built, sources };
 }
 
 function topologyToPolygonWithHoles(
@@ -858,7 +900,22 @@ export function executeTerrainCut(
   // *minus* this, and how much ground has to be taken in for that remainder to
   // be layable depends on it.
   let connectArea: PlanarArea = [];
+  /** The ground's height without the structures standing in it, when there are any. */
+  let groundOnly: ReturnType<typeof heightFieldOf> | undefined;
+  /**
+   * A structure whose outline is sealed shares nothing with the ground laid
+   * round it but the nodes it holds with another structure -- so reshaping
+   * it, welding it or rebuilding it never breaks the ground's loops. The
+   * ground meets it all the same: its corners along the structure's sides
+   * take the side's height there.
+   */
+  const sealedSides: { readonly a: ConstructionPosition; readonly b: ConstructionPosition }[] = [];
+  /** Rings of the structures whose outlines the ground shares, matched back to their real nodes and edges. */
   let connectLoops: readonly (readonly ConstructionRegionEdge[])[] = [];
+  /** Rings of the structures whose outlines are sealed. */
+  let sealedLoops: readonly (readonly ConstructionRegionEdge[])[] = [];
+  /** A sealed structure's nodes another structure holds too -- a ramp's end welded into a floor: the ground may still meet those. */
+  let sealedButShared: ReadonlySet<ConstructionNodeId> = new Set();
   const connectPositions = new Map<ConstructionNodeId, { x: number; z: number }>();
   let connectSeeds: { readonly seed: readonly string[]; readonly surfaceType: string }[] = [];
   if (request.profile.kind === "regenerate" && request.profile.connectTo) {
@@ -889,21 +946,42 @@ export function executeTerrainCut(
         }
       }
     }
-    const connectType = request.profile.connectTo.surfaceType;
-    const connectTopologies = timePhase("topologias da rua", () => paintedTopologiesOf(
-      runtime as unknown as Parameters<typeof paintedTopologiesOf>[0],
-      connectType,
-      {
-        minX: connMinX - connectReach,
-        minZ: connMinZ - connectReach,
-        maxX: connMaxX + connectReach,
-        maxZ: connMaxZ + connectReach,
-      },
-    ));
-    const { paintedNodes, paintedLoops } = timePhase("perímetro da rua", () => paintedFalloutOf(connectTopologies));
-    for (const n of paintedNodes) connectPositions.set(n.id, { x: n.position.x, z: n.position.z });
+    // **Every structure cutting the ground here, not only the one that
+    // changed.** The ground is cut wherever a structure touches it, so the
+    // ground laid again round one never runs over another standing beside
+    // it -- a ramp a moved floor carried along, a road next to it.
+    const standingHere = timePhase("estruturas no lugar", () => runtime.getRegionTopologiesInBounds({
+      minX: connMinX - connectReach,
+      minZ: connMinZ - connectReach,
+      maxX: connMaxX + connectReach,
+      maxZ: connMaxZ + connectReach,
+    }));
+    const structures = standingHere.filter((topology) => !hasTrait(topology.surfaceType, "ground"));
+    const connectTopologies = structures.filter((topology) => resolveCreationInteraction(topology.surfaceType, targetSurfaceType).kind === "cut");
+    for (const topology of connectTopologies) for (const node of topology.nodes) connectPositions.set(node.id, { x: node.position.x, z: node.position.z });
 
-    // **The area it occupies is a union of its faces, never its perimeter
+    // Which types hold each node: a node another type holds too is a join -- a
+    // ramp's end welded into a floor -- and the side between two of them has
+    // that structure on its far side, so no ground fits under it.
+    const holders = new Map<ConstructionNodeId, Set<string>>();
+    for (const topology of structures) {
+      for (const node of topology.nodes) {
+        const types = holders.get(node.id) ?? new Set<string>();
+        types.add(topology.surfaceType);
+        holders.set(node.id, types);
+      }
+    }
+    const heldByOthers = new Map<string, ReadonlySet<ConstructionNodeId>>();
+    const heldFor = (surfaceType: string): ReadonlySet<ConstructionNodeId> => {
+      let held = heldByOthers.get(surfaceType);
+      if (held === undefined) {
+        held = new Set([...holders].filter(([, types]) => [...types].some((type) => type !== surfaceType)).map(([id]) => id));
+        heldByOthers.set(surfaceType, held);
+      }
+      return held;
+    };
+
+    // **The area they occupy is a union of their faces, never their perimeter
     // rings.** `outwardPerimeterRings` answers with every free-boundary ring
     // of the set undifferentiated -- the cloud's outer contour and any ring
     // around a gap *inside* it, with nothing saying which is which. Subtracting
@@ -911,25 +989,62 @@ export function executeTerrainCut(
     // and a gap inside a road that also gets no ground is a hole in the road.
     // Unioning the faces themselves produces the same outline with its holes
     // correctly holes.
-    const facePolygons = connectTopologies
-      .map((topology) => topologyToPolygonWithHoles(topology, connectPositions))
-      .filter((polygon) => polygon.length > 0);
+    //
+    // **Only where each touches the ground.** The ground's own height -- read
+    // from the ground alone, never from the structures' nodes it shares --
+    // says which part of each face runs into it; the ground passes under the
+    // rest, however it was joined before.
+    const painted = new Set(connectPositions.keys());
+    groundOnly = heightFieldOf(terrainStanding.flatMap((topology) => topology.nodes).filter((node) => !painted.has(node.id)).map((node) => node.position), effectiveFaceSide * 4);
+    const facePolygons = connectTopologies.flatMap((topology): (PlanarPolygon | PlanarArea)[] => {
+      const polygon = topologyToPolygonWithHoles(topology, connectPositions);
+      if (polygon.length === 0) return [];
+      const contact = groundContactOf(topology, (point) => groundOnly!.at(point), effectiveFaceSide / 2, GROUND_CONTACT_CLEARANCE, heldFor(topology.surfaceType));
+      if (contact.kind === "none") return [];
+      if (contact.kind === "whole") return [polygon];
+      try {
+        const clear = planarUnion(runtime, [contact.clear[0]!.map(([x, z]) => [x, z] as [number, number])], ...contact.clear.slice(1).map((cell) => [cell.map(([x, z]) => [x, z] as [number, number])]));
+        return [planarDifference(runtime, polygon, clear)];
+      } catch {
+        return [polygon];
+      }
+    }).filter((piece) => piece.length > 0);
     if (facePolygons.length > 0) {
       try {
-        connectArea = timePhase(`união da rua (${facePolygons.length} faces)`, () => planarUnion(runtime, facePolygons[0]!, ...facePolygons.slice(1)));
+        connectArea = timePhase(`união das estruturas (${facePolygons.length} faces)`, () => planarUnion(runtime, facePolygons[0]!, ...facePolygons.slice(1)));
       } catch {
         connectArea = [];
       }
     }
 
-
     // The loops stay, separately, for identity: they are what the subtraction's
     // bare-float output is matched back against, so the ground comes back
-    // meeting the road at its actual nodes and edges rather than at coincident
-    // positions. They are numbered later, once, alongside the retained rim --
-    // the generator answers with a single index per corner and knows nothing
-    // of which ring it came from.
-    connectLoops = paintedLoops;
+    // meeting each structure at its actual nodes and edges rather than at
+    // coincident positions -- except a sealed one, met only at the nodes it
+    // holds with another. They are numbered later, once, alongside the
+    // retained rim -- the generator answers with a single index per corner and
+    // knows nothing of which ring it came from.
+    const byType = new Map<string, ConstructionRegionTopology[]>();
+    for (const topology of connectTopologies) byType.set(topology.surfaceType, [...(byType.get(topology.surfaceType) ?? []), topology]);
+    const shared: (readonly ConstructionRegionEdge[])[] = [];
+    const sealed: (readonly ConstructionRegionEdge[])[] = [];
+    const sealedHeld = new Set<ConstructionNodeId>();
+    for (const [surfaceType, faces] of byType) {
+      const { paintedLoops } = timePhase("perímetro das estruturas", () => paintedFalloutOf(faces));
+      if (structureTypeFor(surfaceType)?.sealedOutline !== true) {
+        shared.push(...paintedLoops);
+        continue;
+      }
+      sealed.push(...paintedLoops);
+      for (const id of heldFor(surfaceType)) if (faces.some((face) => face.nodes.some((node) => node.id === id))) sealedHeld.add(id);
+      for (const topology of faces) {
+        const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
+        for (const use of [...topology.outerLoops, ...topology.holes].flat()) sealedSides.push({ a: at.get(use.startNodeId)!, b: at.get(use.endNodeId)! });
+      }
+    }
+    connectLoops = shared;
+    sealedLoops = sealed;
+    sealedButShared = sealedHeld;
     connectSeeds = connectTopologies.map((topology) => ({
       seed: topology.surfaceKey,
       surfaceType: topology.surfaceType,
@@ -1017,11 +1132,9 @@ export function executeTerrainCut(
   // One numbering across the retained rim and the connected structure, because
   // the generator answers with one `source` index per corner.
   const retainedPerimeters = timePhase(`perímetro do terreno retido (${retained.length} faces)`, () => perimeterConstraints(retained, 0));
-  const connectTable = constraintsFromRings(
-    connectLoops,
-    (nodeId) => connectPositions.get(nodeId),
-    retainedPerimeters.sources.length,
-  );
+  const sharedTable = constraintsFromRings(connectLoops, (nodeId) => connectPositions.get(nodeId), retainedPerimeters.sources.length);
+  const sealedTable = sealedConstraints(sealedLoops, connectPositions, retainedPerimeters.sources.length, sealedButShared, sharedTable.sources);
+  const connectTable: ConstraintTable = { rings: [...sharedTable.rings, ...sealedTable.rings], sources: [...sharedTable.sources, ...sealedTable.sources] };
   const perimeters: ConstraintTable = {
     rings: [...retainedPerimeters.rings, ...connectTable.rings],
     sources: [...retainedPerimeters.sources, ...connectTable.sources],
@@ -1047,7 +1160,12 @@ export function executeTerrainCut(
   const extentRadius = Math.max((coveredExtent.maxX - coveredExtent.minX) / 2, (coveredExtent.maxZ - coveredExtent.minZ) / 2, effectiveFaceSide);
   const radius = request.area.radius ?? extentRadius;
 
-  const standingNodes = terrainStanding.flatMap((topology) => topology.nodes.map((node) => node.position));
+  // A structure's node standing clear of the ground -- a floor lifted off it -- is no height the ground should take.
+  const standingNodes = terrainStanding.flatMap((topology) => topology.nodes.map((node) => node.position)).filter((position) => {
+    if (!groundOnly || !connectPositions.size) return true;
+    const ground = groundOnly.at(position);
+    return ground === undefined || position.y <= ground + GROUND_CONTACT_CLEARANCE;
+  });
   const localReach = effectiveFaceSide * 2.0;
   const wideReach = Math.max(effectiveFaceSide * 3, radius);
   const localKept = heightFieldOf(standingNodes, localReach);
@@ -1056,7 +1174,19 @@ export function executeTerrainCut(
   const strokePath = request.area.path;
   const centerOrPath = strokePath && strokePath.length > 0 ? strokePath : center;
 
+  /** The height of a sealed structure's side a point lies on, if it lies on one. */
+  const onSealedSide = (point: { readonly x: number; readonly z: number }): number | undefined => {
+    for (const { a, b } of sealedSides) {
+      const dx = b.x - a.x, dz = b.z - a.z, lengthSq = dx * dx + dz * dz;
+      if (lengthSq < 1e-12) continue;
+      const t = Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.z - a.z) * dz) / lengthSq));
+      if (Math.hypot(point.x - (a.x + dx * t), point.z - (a.z + dz * t)) < 1e-3) return a.y + (b.y - a.y) * t;
+    }
+    return undefined;
+  };
   const sampleBase = (point: { readonly x: number; readonly z: number }): number => {
+    const side = onSealedSide(point);
+    if (side !== undefined) return side;
     let base = localKept.at(point);
     if (base === undefined) {
       base = wideKept.at(point);

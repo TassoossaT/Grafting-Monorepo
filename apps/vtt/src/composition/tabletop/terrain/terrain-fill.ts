@@ -23,7 +23,7 @@ import {
 } from "./terrain-constraints.ts";
 import { logTerrainCommit } from "./terrain-diagnostics.ts";
 import { countInCommit, timePhase } from "../commit-timing.ts";
-import { createBoundaryEdges, hasTrait, pointInOrOnPolygon, sharedEdgeId } from "../../../features/edit-construction/index.ts";
+import { createBoundaryEdges, hasTrait, pointInOrOnPolygon, sharedEdgeId, structureTypeFor } from "../../../features/edit-construction/index.ts";
 import type { PlanarArea } from "@/features/edit-construction";
 
 
@@ -581,11 +581,17 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     adoptionPositions.set(adoption.vertex, { x: vertex.x, y, z: vertex.z });
   }
 
-  const adoption = timePhase(`adoção de nós (${effectiveAdoptions.length})`, () => adoptContourNodes(
+  // A side of a structure whose outline is sealed is met, never split: the
+  // corner stays where the side runs, at its height, as a node of the ground's own.
+  const sealed = new Set(runtime.getRegionTopologiesInBounds(bounds)
+    .filter((topology) => structureTypeFor(topology.surfaceType)?.sealedOutline === true)
+    .flatMap((topology) => [...topology.outerLoops, ...topology.holes].flat().map((use) => use.edgeId)));
+  const splitting = sealed.size === 0 ? effectiveAdoptions : effectiveAdoptions.filter((candidate) => !sealed.has(candidate.edge.edgeId));
+  const adoption = timePhase(`adoção de nós (${splitting.length})`, () => adoptContourNodes(
     runtime,
     request.tableId,
     request.causeId,
-    effectiveAdoptions,
+    splitting,
     (vertex) => nodeId(request.mint, vertex),
     (vertex) => adoptionPositions.get(vertex),
   ));
@@ -659,7 +665,11 @@ export function fillTerrain(runtime: TerrainFillRuntime, request: TerrainFillReq
     if (uses.length === 1 && occupiedUse !== undefined) {
       edgeRooms.set(edgeId, {
         edgeId,
-        reversed: !occupiedUse.reversed,
+        // The free side walks the standing use backwards. Under its own id that
+        // is simply the opposite flag; under the shared id -- another edge on the
+        // same two nodes, stored lowest id first -- it is read against that
+        // storage, or the face walks it backwards and never closes.
+        reversed: occupiedUse.edgeId === edgeId ? !occupiedUse.reversed : !(occupiedUse.endNodeId < occupiedUse.startNodeId),
         startNodeId: occupiedUse.endNodeId,
         endNodeId: occupiedUse.startNodeId,
       });

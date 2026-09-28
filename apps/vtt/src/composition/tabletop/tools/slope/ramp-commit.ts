@@ -135,8 +135,8 @@ export function plannedRamp(ctx: ToolContext, start: PointerSample, end: Pointer
 }
 
 /**
- * Commits one straight ramp. An end landing on a floor's edge -- grounded
- * or floating -- is welded into it (`topology/floor-weld.ts`): the floor's
+ * Commits one straight ramp. An end landing on a floor's edge -- on the
+ * ground or high over it -- is welded into it (`topology/floor-weld.ts`): the floor's
  * edge is split around the ramp's end edge, which both faces then share.
  */
 export function commitStraightRamp(ctx: ToolContext, start: PointerSample, end: PointerSample, params: RampParams): void {

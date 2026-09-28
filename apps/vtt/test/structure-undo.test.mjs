@@ -47,7 +47,7 @@ function assembly() {
   const fixture = sessionFixture();
   Object.assign(fixture.runtime, { showPreview() {}, clearPreview() {} });
   floor(fixture.runtime, "low", 0, 0);
-  floor(fixture.runtime, "high", 10, 2, "platform-floating");
+  floor(fixture.runtime, "high", 10, 2, "platform");
   drawRamp(fixture.ctx, { x: 4, y: 0, z: 2 }, { x: 10, y: 0, z: 2 });
   return fixture;
 }

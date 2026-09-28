@@ -59,7 +59,7 @@ test("a curved ramp ending on a floor ends at that floor's height, welded into i
   const fixture = sessionFixture();
   const { runtime, session, calls } = fixture;
   try {
-    const high = addFace(runtime, "high", "platform-floating", [[10, 0], [14, 0], [14, 4], [10, 4]].map(([x, z], i) => ({ id: `high:${i}`, position: { x, y: 2.5, z } })));
+    const high = addFace(runtime, "high", "platform", [[10, 0], [14, 0], [14, 4], [10, 4]].map(([x, z], i) => ({ id: `high:${i}`, position: { x, y: 2.5, z } })));
     const onFloor = { point: { x: 10, y: 2.5, z: 2 }, surfaceRef: surfaceRefFromNodeSet(high.surfaceKey) };
     curveRamp(fixture, [{ point: { x: 0, y: 0, z: 0 } }, { point: { x: 5, y: 0, z: 4 } }, onFloor], { width: 1.5, rise: 9 });
     const steps = walk(runtime);
@@ -169,7 +169,7 @@ test("connect mode: a ramp between two floor edges leaves each square to its edg
   const params = { width: 1.5, rise: 9, mode: "connect" };
   try {
     const low = addFace(runtime, "low", "platform", [[0, 0], [4, 0], [4, 4], [0, 4]].map(([x, z], i) => ({ id: `low:${i}`, position: { x, y: 0, z } })));
-    const high = addFace(runtime, "high", "platform-floating", [[8, 6], [12, 6], [12, 10], [8, 10]].map(([x, z], i) => ({ id: `high:${i}`, position: { x, y: 2, z } })));
+    const high = addFace(runtime, "high", "platform", [[8, 6], [12, 6], [12, 10], [8, 10]].map(([x, z], i) => ({ id: `high:${i}`, position: { x, y: 2, z } })));
     clickAll(slopeCurveTool, ctx, [
       { point: { x: 4.2, y: 0, z: 2 }, surfaceRef: surfaceRefFromNodeSet(low.surfaceKey) },
       { point: { x: 10, y: 2, z: 5.9 }, surfaceRef: surfaceRefFromNodeSet(high.surfaceKey) },
@@ -449,7 +449,7 @@ test("a spiral begun on a floor's edge leaves it square, curving to the side the
     const { ctx, runtime, session, calls } = sessionFixture();
     Object.assign(runtime, { showPreview() {}, clearPreview() {} });
     try {
-      addFace(runtime, "floor", "platform-floating", [[0, 0], [4, 0], [4, 4], [0, 4]].map(([x, z], i) => ({ id: `floor:${i}`, position: { x, y: 0, z } })));
+      addFace(runtime, "floor", "platform", [[0, 0], [4, 0], [4, 4], [0, 4]].map(([x, z], i) => ({ id: `floor:${i}`, position: { x, y: 0, z } })));
       const params = { width: 1, rise: 3 };
       const hover = (p) => { const s = { point: p }; slopeSpiralTool.previewFor({ start: s, current: s, samples: [s] }, params, ctx); return s; };
       // Pressed just off the east edge: the start lands on it.
@@ -472,7 +472,7 @@ test("a spiral begun on a floor's edge leaves it square, curving to the side the
       const first = spans.find((e) => e.startNodeId === start.id || e.endNodeId === start.id);
       const handle = first.startNodeId === start.id ? first.curve.start : first.curve.end;
       assert.ok(handle[0] > 0 && Math.abs(handle[2]) < 1e-6 * Math.abs(handle[0]) + 1e-9, `leaves square to the edge: ${JSON.stringify(handle)}`);
-      const floor = runtime.getAllRegionTopologies().find((t) => t.surfaceType === "platform-floating");
+      const floor = runtime.getAllRegionTopologies().find((t) => t.surfaceType === "platform");
       assert.ok(["min", "max"].every((s) => floor.nodes.some((n) => n.id === controlSectionId(start.id, s))), "welded into the floor");
     } finally { session.free(); }
   }

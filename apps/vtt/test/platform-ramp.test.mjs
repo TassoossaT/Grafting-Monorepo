@@ -111,7 +111,7 @@ test("a ramp drawn from one floor to the next, as a floor is -- the press one co
   const { runtime, session, calls } = fixture;
   try {
     floor(runtime, "low", 0, 0);
-    floor(runtime, "high", 10, 2, "platform-floating");
+    floor(runtime, "high", 10, 2, "platform");
     drawn({ point: { x: 4, y: 0, z: 1 } }, { point: { x: 10, y: 0, z: 3 } }, fixture);
     assert.ok(calls.feedback.at(-1).message.includes("2 ponta"), JSON.stringify(calls.feedback));
     const face = ramp(runtime);
@@ -121,8 +121,8 @@ test("a ramp drawn from one floor to the next, as a floor is -- the press one co
     const width = (end) => Math.abs(corner(face, end, "max").position.z - corner(face, end, "min").position.z);
     close(width("bottom"), 2, "the width drawn");
     close(width("top"), 2, "the same at the top");
-    const low = faces(runtime, "platform")[0];
-    const high = faces(runtime, "platform-floating")[0];
+    const low = faces(runtime, "platform").find((f) => f.nodes[0].position.y < 1);
+    const high = faces(runtime, "platform").find((f) => f.nodes[0].position.y > 1);
     for (const side of ["min", "max"]) {
       assert.ok(low.nodes.some((n) => n.id === corner(face, "bottom", side).id), `the low floor shares bottom ${side}`);
       assert.ok(high.nodes.some((n) => n.id === corner(face, "top", side).id), `the high floor shares top ${side}`);
@@ -135,7 +135,7 @@ test("an end near a floor's edge, even just off it, lands at that floor's height
   const { runtime, session, calls } = fixture;
   try {
     floor(runtime, "low", 0, 0);
-    floor(runtime, "high", 10, 3.5, "platform-floating");
+    floor(runtime, "high", 10, 3.5, "platform");
     // Both presses fall on the ground just outside each floor's edge.
     drawn({ point: { x: 4.4, y: 0, z: 2 } }, { point: { x: 9.5, y: 0, z: 2 } }, fixture);
     assert.ok(calls.feedback.at(-1).message.includes("2 ponta"), JSON.stringify(calls.feedback));
@@ -162,7 +162,7 @@ test("a ramp may leave a floor's edge back over the floor, welded there, climbin
   const { runtime, session, calls } = fixture;
   try {
     floor(runtime, "low", 0, 0);
-    floor(runtime, "high", -6, 2, "platform-floating");
+    floor(runtime, "high", -6, 2, "platform");
     // Starts on the low floor by its east edge and runs west, up over it, to the high floor.
     drawn({ point: { x: 3.9, y: 0, z: 2 } }, { point: { x: -2.1, y: 0, z: 2 } }, fixture);
     const last = calls.feedback.at(-1);
@@ -172,7 +172,7 @@ test("a ramp may leave a floor's edge back over the floor, welded there, climbin
     close(centre(face, "bottom").x, 4, "the bottom on the low floor's east edge");
     close(centre(face, "top").x, -2, "the top on the high floor's edge");
     for (const side of ["min", "max"]) {
-      assert.ok(faces(runtime, "platform")[0].nodes.some((n) => n.id === corner(face, "bottom", side).id), `the low floor shares bottom ${side}`);
+      assert.ok(faces(runtime, "platform").find((f) => f.nodes[0].position.y < 1).nodes.some((n) => n.id === corner(face, "bottom", side).id), `the low floor shares bottom ${side}`);
     }
   } finally { session.free(); }
 });
@@ -181,13 +181,13 @@ test("an end dragged near a floor's corner slides along the edge until its width
   const fixture = sessionFixture();
   const { runtime, session, calls } = fixture;
   try {
-    floor(runtime, "high", 10, 2, "platform-floating");
+    floor(runtime, "high", 10, 2, "platform");
     drawn({ point: { x: 4, y: 0, z: 0.2 } }, { point: { x: 10, y: 0, z: 0.2 } }, fixture);
     assert.ok(calls.feedback.at(-1).message.includes("1 ponta"), JSON.stringify(calls.feedback));
     const face = ramp(runtime);
     assert.ok(Math.min(corner(face, "top", "min").position.z, corner(face, "top", "max").position.z) > 0, "the top's corners stay inside the edge");
     close(width(face, "top"), 1, "the top keeps its width");
-    const high = faces(runtime, "platform-floating")[0];
+    const high = faces(runtime, "platform").find((f) => f.nodes[0].position.y > 1);
     assert.ok(high.nodes.some((n) => n.id === corner(face, "top", "min").id), "welded into the floor");
   } finally { session.free(); }
 });
@@ -197,9 +197,9 @@ test("lifting the upper floor carries the ramp's welded end; the ramp stays a cl
   const { runtime, session } = fixture;
   try {
     floor(runtime, "low", 0, 0);
-    floor(runtime, "high", 10, 2, "platform-floating");
+    floor(runtime, "high", 10, 2, "platform");
     drawn({ point: { x: 4, y: 0, z: 2 } }, { point: { x: 10, y: 0, z: 2 } }, fixture);
-    const high = faces(runtime, "platform-floating")[0];
+    const high = faces(runtime, "platform").find((f) => f.nodes[0].position.y > 1);
     const plan = planEdit(resolveCloudTopology(runtime, high.surfaceKey), { surfaceKey: high.surfaceKey, target: { kind: "region" }, delta: { x: 0, y: 1, z: 1 } }, runtime.getGraphSnapshot(), runtime);
     assert.equal(plan.kind, "apply", plan.reason);
     runtime.applyRegionEdit(plan.ops);
@@ -211,7 +211,7 @@ test("lifting the upper floor carries the ramp's welded end; the ramp stays a cl
   } finally { session.free(); }
 });
 
-test("a floating platform leaves the terrain alone, where a grounded one cuts it", () => {
+test("a platform high over the terrain leaves it alone, where one resting on it cuts it -- the ground is cut only where a structure touches it", () => {
   const { ctx, runtime, session } = sessionFixture();
   const requests = [];
   const apply = runtime.applyPatchReplacement;
@@ -227,24 +227,10 @@ test("a floating platform leaves the terrain alone, where a grounded one cuts it
     commitPlatformShape(ctx, square(4, 0), { elevation: 0, mode: "create", support: "grounded" });
     const [floating, grounded] = requests;
     addFace(runtime, "ground", "terrain", [[-1, -1], [7, -1], [7, 3], [-1, 3]].map(([x, z], i) => ({ id: `ground:${i}`, position: { x, y: 0, z } })));
-    assert.equal(floating.patch.regions[0].surfaceType, "platform-floating");
-    assert.equal(reached(floating), false, "a floating platform reaches no ground");
+    assert.equal(floating.patch.regions[0].surfaceType, "platform");
+    assert.equal(reached(floating), false, "a platform 3 m up reaches no ground");
     assert.equal(grounded.patch.regions[0].surfaceType, "platform");
-    assert.equal(reached(grounded), true, "a grounded platform cuts the ground under it");
-  } finally { session.free(); }
-});
-
-test("a floating and a grounded platform never extend each other or become one cloud", () => {
-  const { ctx, runtime, session, calls } = sessionFixture();
-  const rectangle = (x0, x1, y) => [[x0, 0], [x1, 0], [x1, 2], [x0, 2]].map(([x, z], i, all) => ({ start: { x, y, z }, end: { x: all[(i + 1) % 4][0], y, z: all[(i + 1) % 4][1] }, geometry: { kind: "line" } }));
-  try {
-    commitPlatformShape(ctx, rectangle(0, 2, 0), { elevation: 0, mode: "create", support: "grounded" });
-    commitPlatformShape(ctx, rectangle(2, 4, 0), { elevation: 0, mode: "create", support: "floating" });
-    const grounded = faces(runtime, "platform")[0];
-    const cloud = resolveCloudTopology(runtime, grounded.surfaceKey);
-    assert.equal(cloud.members.length, 1, "the floating platform beside it is its own cloud");
-    commitPlatformShape(ctx, rectangle(1, 3, 0), { elevation: 0, mode: "extend", support: "floating" });
-    assert.deepEqual(faces(runtime, "platform").map((t) => t.surfaceKey), [grounded.surfaceKey], JSON.stringify(calls.feedback));
+    assert.equal(reached(grounded), true, "a platform on the ground cuts the ground under it");
   } finally { session.free(); }
 });
 
@@ -298,7 +284,7 @@ test("before a ramp is begun only a mark where it would start is shown, on the e
   const { sessionFixture, addFace } = await import("./platform-session-fixture.mjs");
   const { ctx, runtime, session } = sessionFixture();
   try {
-    addFace(runtime, "floor", "platform-floating", [[0, 0], [4, 0], [4, 4], [0, 4]].map(([x, z], i) => ({ id: `floor:${i}`, position: { x, y: 0, z } })));
+    addFace(runtime, "floor", "platform", [[0, 0], [4, 0], [4, 4], [0, 4]].map(([x, z], i) => ({ id: `floor:${i}`, position: { x, y: 0, z } })));
     const params = { bottomWidth: 2, topWidth: 1, rise: 2 };
     const away = { point: { x: 10, y: 0, z: 10 } };
     const loose = slopeRampTool.previewFor({ start: away, current: away, samples: [away] }, params, ctx);

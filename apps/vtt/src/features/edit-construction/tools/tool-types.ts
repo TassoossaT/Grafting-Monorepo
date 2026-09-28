@@ -234,11 +234,7 @@ export const DEFAULT_STRUCTURE_EDIT_PARAMS: StructureEditParams = Object.freeze(
 export interface ToolParamsByTool {
   readonly roof: { readonly shape: "rectangle" | "circle" | "platform"; readonly elevation: number; readonly height: number; readonly radius: number; readonly curvatures: readonly [number, number, number, number] };
   readonly navigate: NoToolParams;
-  /**
-   * `support` picks the type drawn: a floor resting on the ground, or a
-   * floating one -- a storey, a bridge deck -- that leaves the terrain alone.
-   */
-  readonly "platform-contour": { readonly elevation: number; readonly mode: "create" | "extend" | "cut"; readonly support?: "grounded" | "floating"; readonly shape?: "rectangle" | "polygon" | "freehand" | "circle"; readonly radius?: number; readonly tolerance?: number };
+  readonly "platform-contour": { readonly elevation: number; readonly mode: "create" | "extend" | "cut"; readonly shape?: "rectangle" | "polygon" | "freehand" | "circle"; readonly radius?: number; readonly tolerance?: number };
   /** A straight ramp dragged from start to end, climbing a fixed rise, with its own width at each end. */
   readonly "slope-ramp": { readonly bottomWidth: number; readonly topWidth: number; readonly rise: number };
   /**

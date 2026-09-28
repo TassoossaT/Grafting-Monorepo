@@ -12,6 +12,9 @@ import type {
 import type { CutFallout, Effect, Reaction, ReactionOutcome } from "@/features/edit-construction";
 
 import {
+  GROUND_CONTACT_CELL,
+  groundContactOf,
+  groundHeightsOf,
   planTerrainCloudCutRepair,
   pointInOrOnPolygon,
   terrainTopologiesBounds,
@@ -167,6 +170,28 @@ function cutterPolygonsOf(runtime: LatticeReactionRuntime, faces: readonly Const
   });
 }
 
+/**
+ * What a structure the ground was joined to no longer holds of it: where it
+ * stood, when it now touches the ground less than wholly -- lifted off it,
+ * tilted out of it. That ground heals, and is cut again only where the
+ * structure still touches it; a move across the plan alone is already the
+ * change's vacated area.
+ */
+function letGoOf(change: Effect["change"], hits: readonly ConstructionRegionTopology[]): PlanarArea {
+  const own = new Set([...change.before, ...change.after].flatMap((topology) => topology.nodes.map((node) => node.id)));
+  const groundAt = groundHeightsOf(hits.flatMap((topology) => topology.nodes).filter((node) => !own.has(node.id)).map((node) => node.position));
+  const held = new Set(hits.flatMap((topology) => topology.nodes.map((node) => node.id)));
+  const after = new Map(change.after.map((face) => [face.surfaceKey.join("\u0000"), face]));
+  return change.before.flatMap((face): PlanarArea => {
+    if (!face.nodes.some((node) => held.has(node.id))) return [];
+    const now = after.get(face.surfaceKey.join("\u0000"));
+    if (now && groundContactOf(now, groundAt, GROUND_CONTACT_CELL).kind === "whole") return [];
+    const at = new Map(face.nodes.map((node) => [node.id, node.position]));
+    const ring = (face.outerLoops[0] ?? []).map((use) => at.get(use.startNodeId)).filter((p): p is ConstructionPosition => p !== undefined).map((p) => [p.x, p.z] as [number, number]);
+    return ring.length >= 3 ? [[[...ring, ring[0]!]]] : [];
+  });
+}
+
 function answerCut(runtime: LatticeReactionRuntime, effect: Effect, hits: readonly ConstructionRegionTopology[], executor: LatticeRepairExecutor): void {
   const { change } = effect;
   const groundTypes = [...new Set(hits.map((hit) => hit.surfaceType))];
@@ -190,7 +215,7 @@ function answerCut(runtime: LatticeReactionRuntime, effect: Effect, hits: readon
   const area = change.before.length > 0 ? timePhase("área mudada", () => changeAreaOf(runtime, change)) : undefined;
   const isEdit = area !== undefined;
   const claimed: PlanarArea = area?.claimed ?? [];
-  const changed: PlanarArea = area?.vacated ?? [];
+  const changed: PlanarArea = [...(area?.vacated ?? []), ...(isEdit ? letGoOf(change, hits) : [])];
   const editArea: PlanarArea = [...claimed, ...changed];
 
   const typeFootprint = change.footprintOutline !== undefined && change.footprintOutline.length >= 3 ? change.footprintOutline : undefined;
@@ -241,7 +266,8 @@ function answerCut(runtime: LatticeReactionRuntime, effect: Effect, hits: readon
   const beforePositions = new Map(change.before.flatMap((t) => t.nodes.map((n) => [n.id, n.position] as const)));
   const carriedNodeIds = new Set(change.after.flatMap((t) => t.nodes.filter((n) => {
     const was = beforePositions.get(n.id);
-    return was !== undefined && Math.hypot(was.x - n.position.x, was.z - n.position.z) > REALLY_MOVED;
+    // Lifted as much as moved across: ground rimmed by a node raised off it is stretched all the same.
+    return was !== undefined && Math.hypot(was.x - n.position.x, was.y - n.position.y, was.z - n.position.z) > REALLY_MOVED;
   }).map((n) => n.id)));
 
   // **Ground about to be orphaned, wherever it stands.** A change regenerating

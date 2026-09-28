@@ -28,3 +28,4 @@ export { arcsFollowing } from "./arc-follow.ts";
 export { areasOverlap, faceArea, faceOutlines, faceOverlapsOutline, faceTouchesOutline, outlineOf, outlinesOverlap, type PlanArea } from "./plan-overlap.ts";
 export { alongEdge, floorLandingNear, floorsWeldedBy, floorsWithout, LANDING_REACH, landingSeat, projectOnto, reweldFloors, rungFits } from "./floor-weld.ts";
 export type { EndJoint, FloorEdge, FloorLanding, PlanDirection, Rewelding, WeldChanges, WeldRung } from "./floor-weld.ts";
+export { GROUND_CONTACT_CELL, GROUND_CONTACT_CLEARANCE, groundContactOf, groundHeightsOf, surfaceHeightOf, touchesGround, type ContactCell, type GroundContact, type GroundHeightAt } from "./ground-contact.ts";

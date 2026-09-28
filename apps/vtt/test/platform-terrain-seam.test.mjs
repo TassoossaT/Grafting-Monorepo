@@ -192,7 +192,7 @@ test("ground, a platform, a ramp off it and a floating floor welded on the ramp'
     return fixture;
   };
   try {
-    for (const owner of ["platform", "platform-ramp", "platform-floating"]) {
+    for (const owner of ["platform", "platform-ramp", "platform"]) {
       for (const [kind, amount] of [["pivot", [0, 2]], ["pivot", [-1, 0.5]], ["rotate", 0.5], ["rotate", -1]]) {
         const fixture = build();
         const { runtime, ctx, calls } = fixture;
@@ -247,7 +247,7 @@ test("a ramp drawn from the ground and dropped well onto a platform stops at the
           bowl(runtime, session);
           const y = support === "floating" ? 2 : 0.3;
           commitPlatformContour(ctx, [[-3, -2], [2, -2], [2, 3], [-3, 3]].map(([x, z]) => ({ point: { x, y, z } })), { mode: "create", elevation: y, shape: "rectangle", support });
-          const platform = runtime.getAllRegionTopologies().find((t) => t.surfaceType === (support === "floating" ? "platform-floating" : "platform"));
+          const platform = runtime.getAllRegionTopologies().find((t) => t.surfaceType === (support === "floating" ? "platform" : "platform"));
           // From the ground east of it, dropped 2 inside its east edge, on the platform itself.
           const start = { point: { x: 7, y: 0.04 * (49 + 0.25), z: 0.5 } };
           const end = { point: { x: 0, y, z: 0.5 }, surfaceRef: surfaceRefFromNodeSet(platform.surfaceKey) };
@@ -265,7 +265,7 @@ test("a ramp drawn from the ground and dropped well onto a platform stops at the
   }
 });
 
-test("a ramp between a grounded platform and a floating floor on its top comes off one end and back, the other end staying welded", async () => {
+test("a ramp between a platform on the ground and a floor on its top comes off one end and back, the other end staying welded", async () => {
   const { slopeRampTool } = await import("../src/composition/tabletop/tools/slope/slope-tools.ts");
   const { shownGlobalHandles } = await import("../src/features/edit-construction/index.ts");
   const info = console.info, warn = console.warn;
@@ -287,10 +287,11 @@ test("a ramp between a grounded platform and a floating floor on its top comes o
     commitPlatformContour(ctx, [{ point: tmin.position, nodeId: tmin.id }, { point: { x: x + 3, y, z: tmin.position.z } }, { point: { x: x + 3, y, z: tmax.position.z } }, { point: tmax.position, nodeId: tmax.id }], { mode: "create", elevation: y, support: "floating" });
     return fixture;
   };
-  const shared = (runtime, type) => {
+  /** How many of the ramp's nodes the low floor, or the high one, holds. */
+  const shared = (runtime, level) => {
     const ramp = runtime.getAllRegionTopologies().find((t) => t.surfaceType === "platform-ramp");
     const ids = new Set(ramp.nodes.map((n) => n.id));
-    return runtime.getAllRegionTopologies().find((t) => t.surfaceType === type).nodes.filter((n) => ids.has(n.id)).length;
+    return runtime.getAllRegionTopologies().find((t) => t.surfaceType === "platform" && (level === "high") === (t.nodes[0].position.y > 1)).nodes.filter((n) => ids.has(n.id)).length;
   };
   const drag = (fixture, kind, to) => {
     const { runtime, ctx, calls } = fixture;
@@ -308,10 +309,10 @@ test("a ramp between a grounded platform and a floating floor on its top comes o
       // Pulled back along the ramp, off the platform's edge: it comes off; the top stays on its floor.
       const fixture = build();
       try {
-        assert.deepEqual([shared(fixture.runtime, "platform"), shared(fixture.runtime, "platform-floating")], [2, 2]);
+        assert.deepEqual([shared(fixture.runtime, "low"), shared(fixture.runtime, "high")], [2, 2]);
         drag(fixture, "origin", (p) => ({ ...p, x: p.x + 1 }));
-        assert.equal(shared(fixture.runtime, "platform"), 0, "the bottom came off");
-        assert.equal(shared(fixture.runtime, "platform-floating"), 2, "the top still welded, corner to corner");
+        assert.equal(shared(fixture.runtime, "low"), 0, "the bottom came off");
+        assert.equal(shared(fixture.runtime, "high"), 2, "the top still welded, corner to corner");
       } finally { fixture.session.free(); }
     }
   } finally {

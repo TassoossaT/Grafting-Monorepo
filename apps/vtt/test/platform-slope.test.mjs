@@ -208,7 +208,7 @@ test("a road drawn across a ramp's spine never welds into it", () => {
   } finally { session.free(); }
 });
 
-test("a sloped ramp over terrain leaves it alone, on creation and on a spine edit", () => {
+test("a sloped ramp standing over the terrain, never touching it, leaves it alone, on creation and on a spine edit", () => {
   const { ctx, runtime, session, calls } = sessionFixture();
   const requests = [];
   const apply = runtime.applyPatchReplacement;
@@ -224,7 +224,7 @@ test("a sloped ramp over terrain leaves it alone, on creation and on a spine edi
     // The ground laid after the ramp is what the recorded reaction below is
     // asked about; its corners sit near the ramp because the pipeline reaches
     // faces by their nodes, as the engine's bounds query does.
-    commitPlatformSlope(ctx, [{ x: -3, y: 0, z: 0 }, { x: 0.5, y: 1, z: 0.5 }, { x: 4, y: 2, z: 1 }], params);
+    commitPlatformSlope(ctx, [{ x: -3, y: 1, z: 0 }, { x: 0.5, y: 2, z: 0.5 }, { x: 4, y: 3, z: 1 }], params);
     addFace(runtime, "ground", "terrain", [[-4, -3], [5, -3], [5, 3], [-4, 3]].map(([x, z], i) => ({ id: `ground:${i}`, position: { x, y: 0, z } })));
     const created = requests.at(-1);
     assert.equal(created.patch.regions[0].surfaceType, "platform-slope", JSON.stringify(calls.feedback));
@@ -233,7 +233,7 @@ test("a sloped ramp over terrain leaves it alone, on creation and on a spine edi
     const span = slopeSpans(runtime)[0];
     const before = faces(runtime, "platform-slope");
     const plan = planBezierEdit({ snapshot: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), port: runtime, field: runtime,
-      targetId: curvePickId(span.edgeId, "midpoint"), position: { x: -1, y: 0.5, z: 2 }, operationId: "slope:bend", tableId: "platform-test" });
+      targetId: curvePickId(span.edgeId, "midpoint"), position: { x: -1, y: 1.5, z: 2 }, operationId: "slope:bend", tableId: "platform-test" });
     runtime.applyPatchReplacement(plan.request);
     assert.equal(repairOf(plan.request, before), undefined, "editing the ramp reaches no ground either");
     assert.equal(faces(runtime, "terrain").length, 1, "the terrain under the ramp is untouched");

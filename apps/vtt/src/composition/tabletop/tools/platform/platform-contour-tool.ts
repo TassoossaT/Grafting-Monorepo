@@ -1,4 +1,4 @@
-import { DEFAULT_TOOL_PARAMS, faceOverlapsOutline, faceTouchesOutline, fitPath, floatingPlatformStructureType, hasTrait, outlineOf, planarDifference, planarUnion, platformStructureType, weldFreeEndsOnto } from "../../../../features/edit-construction/index.ts";
+import { DEFAULT_TOOL_PARAMS, faceOverlapsOutline, faceTouchesOutline, fitPath, hasTrait, outlineOf, planarDifference, planarUnion, platformStructureType, weldFreeEndsOnto } from "../../../../features/edit-construction/index.ts";
 import type { FittedEdge, ToolParamsByTool } from "../../../../features/edit-construction/index.ts";
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import type { ConstructionPosition, ConstructionRegionTopology } from "../../../../ports/index.ts";
@@ -16,13 +16,8 @@ const COLOR = 0x79b8e8;
 const BLOCKED_COLOR = 0xd9534f;
 /** Same corner-weld tolerance a wall run already snaps onto an existing column with. */
 const WELD_TOLERANCE = 0.25;
-/**
- * The type a stroke draws, and the only type it extends or cuts: a floor on
- * the ground and a floating storey never become one cloud, so neither
- * reshapes the other either.
- */
-const surfaceTypeOf = (params: Params): string =>
-  (params.support === "floating" ? floatingPlatformStructureType : platformStructureType).surfaceType;
+/** The type a stroke draws, and the only type it extends or cuts. */
+const surfaceTypeOf = (_params: Params): string => platformStructureType.surfaceType;
 const drafts = new WeakMap<object, { key: string; points: PointerSample[]; frame?: BuildFrame }>();
 function draft(ctx: ToolContext, params: Params): PointerSample[] {
   return draftOf(ctx, params).points;

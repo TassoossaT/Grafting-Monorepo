@@ -16,14 +16,14 @@ import {
  * reactions can be exercised before real types declare one.
  */
 
-function face(key, surfaceType, x = 0, z = 0) {
+function face(key, surfaceType, x = 0, z = 0, y = 0) {
   const ids = [`${key}:0`, `${key}:1`, `${key}:2`, `${key}:3`];
   const corners = [[x, z], [x + 1, z], [x + 1, z + 1], [x, z + 1]];
   return {
     surfaceKey: ["@region", key],
     surfaceType,
     physical: true,
-    nodes: ids.map((id, index) => ({ id, position: { x: corners[index][0], y: 0, z: corners[index][1] } })),
+    nodes: ids.map((id, index) => ({ id, position: { x: corners[index][0], y, z: corners[index][1] } })),
     outerLoops: [ids.map((id, index) => ({ edgeId: `${key}:e${index}`, reversed: false, startNodeId: id, endNodeId: ids[(index + 1) % 4], geometry: { kind: "line" } }))],
     holes: [],
   };
@@ -33,7 +33,7 @@ function effect(kind, surfaceType, options = {}) {
   return {
     kind,
     causeId: "cause",
-    change: { surfaceType, subtype: options.subtype, before: [], after: [face(`${surfaceType}-changed`, surfaceType)], removedNodeIds: [], declaredPositions: [] },
+    change: { surfaceType, subtype: options.subtype, before: [], after: [face(`${surfaceType}-changed`, surfaceType, 0, 0, options.y ?? 0)], removedNodeIds: [], declaredPositions: [] },
   };
 }
 
@@ -57,10 +57,16 @@ test("an effect reaches only what the changed type's interaction cuts, one call 
   assert.deepEqual(calls, [["ground", ["terrain-grass", "terrain"]]], "a platform cuts ground only, and ground answers once for both of its types");
 });
 
-test("a preset that spans instead of carving reaches nothing", () => {
-  let called = false;
-  runEffects(undefined, sourceOf([face("t", "terrain")]), [effect("cut", "path", { subtype: "bridge" })], { ground: () => { called = true; return done(); } }, declaredBy({ "terrain/cut": "ground" }));
-  assert.equal(called, false);
+test("a cut reaches only what the structure touches: one high over the ground reaches nothing, a deck included", () => {
+  let called = 0;
+  const reactions = { ground: () => { called += 1; return done(); } };
+  for (const options of [{ y: 3 }, { y: 3, subtype: "bridge" }]) {
+    runEffects(undefined, sourceOf([face("t", "terrain")]), [effect("cut", "path", options)], reactions, declaredBy({ "terrain/cut": "ground" }));
+  }
+  assert.equal(called, 0, "high over it");
+  // Just above it, within the clearance, it touches.
+  runEffects(undefined, sourceOf([face("t", "terrain")]), [effect("cut", "path", { y: 0.1, subtype: "bridge" })], reactions, declaredBy({ "terrain/cut": "ground" }));
+  assert.equal(called, 1, "resting on it");
 });
 
 test("a reaction's emitted effect reaches the next cloud, which answers from its own declaration", () => {

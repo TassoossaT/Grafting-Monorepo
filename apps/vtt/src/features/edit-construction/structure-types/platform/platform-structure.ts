@@ -37,22 +37,19 @@ function platformPolicy(role: EditRole): RolePolicy {
   }
 }
 
-/** Ground under a platform is cut, and the ground's own repair regenerates around it. */
-const cutsGround = (covered: StructureView) => covered.traits.has("ground") ? CUT : IGNORE;
-/** A floating structure stands over the ground without touching it: the terrain below is left as it is. */
-const ignoresGround = () => IGNORE;
+/**
+ * Ground under a platform may be cut, and the ground's own repair regenerates
+ * around it -- only where the platform touches it (`topology/ground-contact.ts`):
+ * one high over the terrain leaves it whole, one on a hillside cuts only the
+ * hill it runs into.
+ */
+export const cutsGround = (covered: StructureView) => covered.traits.has("ground") ? CUT : IGNORE;
 
 /**
  * A horizontal structural marker, independently usable as floor or ceiling,
- * drawn as a flat closed contour at one elevation.
- *
- * Built twice, once per way of meeting the ground, rather than carrying a
- * grounded/floating flag on the face. The flag would have to be stored,
- * undone and read back wherever a cut is decided; the surface type already
- * is all three. And a cloud is one type (`construction-cloud.ts`), so a
- * floating storey welded to a grounded floor stays two clouds -- they meet,
- * but lifting one never carries the other. Which type a platform is, is
- * decided when it is drawn and never changes afterwards.
+ * drawn as a flat closed contour at one elevation. Whether it rests on the
+ * ground or stands over it is not declared: it is where it is, and the
+ * ground is cut only where it touches it.
  */
 function contourPlatformStructureType(
   surfaceType: string,
@@ -87,11 +84,8 @@ function contourPlatformStructureType(
   });
 }
 
-/** A floor resting on the ground: it takes the ground under it, which regenerates around it. */
+/** A floor: on the ground it takes the ground under it, which regenerates around it; over it, the ground is left as it is. */
 export const platformStructureType = contourPlatformStructureType("platform", "Plataforma", cutsGround);
-
-/** A floor standing over the ground -- a storey, a bridge deck: the terrain under it is left untouched. */
-export const floatingPlatformStructureType = contourPlatformStructureType("platform-floating", "Plataforma flutuante", ignoresGround);
 
 /**
  * The platform built along a spine instead of a contour: a surface whose
@@ -119,8 +113,10 @@ export const slopedPlatformStructureType: StructureTypeDefinition = Object.freez
   requiresMotionSolver: true,
   roleFor: () => "platform-slope-face",
   policyFor: (role) => denied(role, "Edite a plataforma inclinada pela espinha: pontos, alças e largura."),
-  // A ramp climbs between levels above the ground; it never carves it.
-  interactionOver: ignoresGround,
+  // Where it runs into the ground -- a flight dug into a slope -- it cuts it; over it, it leaves it.
+  interactionOver: cutsGround,
+  // Rebuilt from its spine and welded by its ends: ground cut round it meets it without sharing its nodes.
+  sealedOutline: true,
   motionInfluences: slopeMotionInfluences,
   deriveMotion: deriveSlopeMotion,
   validateMotion: validateSlopeMotion,

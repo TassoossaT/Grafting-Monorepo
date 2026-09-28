@@ -49,10 +49,10 @@ test("dragging a free destination onto a floor's edge connects it there, the wel
   const { runtime, session, calls } = fixture;
   try {
     floor(runtime, "low", 0, 0);
-    floor(runtime, "high", 10, 2, "platform-floating");
+    floor(runtime, "high", 10, 2, "platform");
     drawn(fixture, { x: 4, y: 0, z: 2 }, { x: 7, y: 0, z: 2 });
     const before = ramp(runtime);
-    assert.ok(welded(faces(runtime, "platform")[0], before, "bottom"), "the origin starts welded");
+    assert.ok(welded(faces(runtime, "platform").find((f) => f.nodes[0].position.y < 1), before, "bottom"), "the origin starts welded");
     dragEnd(fixture, "destination", { x: 10.3, y: 0, z: 2.5 });
     assert.equal(calls.feedback.at(-1).tone, "success", JSON.stringify(calls.feedback.at(-1)));
     const after = ramp(runtime);
@@ -61,8 +61,8 @@ test("dragging a free destination onto a floor's edge connects it there, the wel
     close(centre(after, "top").z, 2, "square to the edges, the sideways drag dropped");
     close(centre(after, "top").y, 2, "at the high floor's height");
     close(centre(after, "bottom").x, 4, "the origin did not move");
-    assert.ok(welded(faces(runtime, "platform-floating")[0], after, "top"), "the destination welded into the high floor");
-    assert.ok(welded(faces(runtime, "platform")[0], after, "bottom"), "the origin still welded");
+    assert.ok(welded(faces(runtime, "platform").find((f) => f.nodes[0].position.y > 1), after, "top"), "the destination welded into the high floor");
+    assert.ok(welded(faces(runtime, "platform").find((f) => f.nodes[0].position.y < 1), after, "bottom"), "the origin still welded");
     assert.equal(fixture.ctx.history.undo()?.kind, "transaction", "recorded for undo as one transaction");
   } finally { session.free(); }
 });
@@ -72,15 +72,15 @@ test("dragging a welded destination away disconnects it, and the floor's edge is
   const { runtime, session, calls } = fixture;
   try {
     floor(runtime, "low", 0, 0);
-    floor(runtime, "high", 10, 2, "platform-floating");
+    floor(runtime, "high", 10, 2, "platform");
     drawn(fixture, { x: 4, y: 0, z: 2 }, { x: 10, y: 0, z: 2 });
-    assert.ok(welded(faces(runtime, "platform-floating")[0], ramp(runtime), "top"), "both ends start welded");
+    assert.ok(welded(faces(runtime, "platform").find((f) => f.nodes[0].position.y > 1), ramp(runtime), "top"), "both ends start welded");
     dragEnd(fixture, "destination", { x: 7, y: 0, z: 2 });
     assert.equal(calls.feedback.at(-1).tone, "success", JSON.stringify(calls.feedback.at(-1)));
-    const high = faces(runtime, "platform-floating")[0];
+    const high = faces(runtime, "platform").find((f) => f.nodes[0].position.y > 1);
     assert.ok(!welded(high, ramp(runtime), "top"), "the top came off the high floor");
     assert.equal(high.outerLoops[0].length, 4, "the high floor's west edge is one edge again");
-    assert.ok(welded(faces(runtime, "platform")[0], ramp(runtime), "bottom"), "the origin still welded");
+    assert.ok(welded(faces(runtime, "platform").find((f) => f.nodes[0].position.y < 1), ramp(runtime), "bottom"), "the origin still welded");
     close(centre(ramp(runtime), "top").x, 7, "the top where it was left");
   } finally { session.free(); }
 });
@@ -96,12 +96,12 @@ test("a curved ramp's free end dragged onto a floor's edge connects there", asyn
   const sharesEnd = (floorFace, id) => ["min", "max"].every((side) => floorFace.nodes.some((n) => n.id === controlSectionId(id, side)));
   try {
     floor(runtime, "low", 0, 0);
-    floor(runtime, "high", 10, 2, "platform-floating");
+    floor(runtime, "high", 10, 2, "platform");
     commitPlatformSlope(ctx, [{ x: 4, y: 0, z: 2 }, { x: 7, y: 2, z: 2 }], curve);
     const controls = runtime.getGraphSnapshot().nodes.filter((n) => isSpineControlNodeId(n.id));
     const end = controls.find((n) => Math.abs(n.position.x - 7) < 1e-6);
     const origin = controls.find((n) => Math.abs(n.position.x - 4) < 1e-6);
-    assert.ok(sharesEnd(faces(runtime, "platform")[0], origin.id), "the start is welded at creation");
+    assert.ok(sharesEnd(faces(runtime, "platform").find((f) => f.nodes[0].position.y < 1), origin.id), "the start is welded at creation");
     const start = { nodeId: end.id, point: end.position };
     const target = { point: { x: 10.3, y: 0, z: 2.5 } };
     slopeCurveTool.onPointerDown(ctx, start, curve);
@@ -110,8 +110,8 @@ test("a curved ramp's free end dragged onto a floor's edge connects there", asyn
     const placed = runtime.getGraphSnapshot().nodes.find((n) => n.id === end.id).position;
     close(placed.x, 10, `the end sits on the high floor's edge ${JSON.stringify(calls.feedback.slice(-2))}`);
     close(placed.y, 2, "at the high floor's height");
-    assert.ok(sharesEnd(faces(runtime, "platform-floating")[0], end.id), "the end welded into the high floor");
-    assert.ok(sharesEnd(faces(runtime, "platform")[0], origin.id), "the start still welded");
+    assert.ok(sharesEnd(faces(runtime, "platform").find((f) => f.nodes[0].position.y > 1), end.id), "the end welded into the high floor");
+    assert.ok(sharesEnd(faces(runtime, "platform").find((f) => f.nodes[0].position.y < 1), origin.id), "the start still welded");
   } finally { session.free(); }
 });
 
@@ -153,7 +153,7 @@ test("the ramp's top lands on a raised floor's edge the pointer aims at, though 
   const { runtime, session, calls } = fixture;
   try {
     floor(runtime, "low", 0, 0);
-    floor(runtime, "high", 10, 2, "platform-floating");
+    floor(runtime, "high", 10, 2, "platform");
     const eye = { x: 0, y: 12, z: 2 };
     const end = aimed(eye, { x: 9.8, y: 2, z: 2 });
     assert.ok(end.point.x > 11, "the ray's ground hit is well past the edge");
@@ -201,7 +201,7 @@ test("a welded ramp moved away from its floor carries the solid floor whole; sli
       close(nodeAt(runtime, id).x, x, `${id} carried in x`);
       close(nodeAt(runtime, id).z, z, `${id} kept its z`);
     }
-    assert.ok(welded(faces(runtime, "platform")[0], ramp(runtime), "bottom"), "still welded");
+    assert.ok(welded(faces(runtime, "platform").find((f) => f.nodes[0].position.y < 1), ramp(runtime), "bottom"), "still welded");
   } finally { session.free(); }
 });
 
@@ -222,7 +222,7 @@ test("turning a welded ramp turns the solid floor it lands on with it", () => {
     const r = (p) => Math.hypot(p.x - pivot.x, p.z - pivot.z);
     close(r(after), r(before), "the floor's corner turned round the ramp's pivot");
     assert.ok(Math.hypot(after.x - before.x, after.z - before.z) > 1, "and actually moved");
-    assert.ok(welded(faces(runtime, "platform")[0], ramp(runtime), "bottom"), "still welded");
+    assert.ok(welded(faces(runtime, "platform").find((f) => f.nodes[0].position.y < 1), ramp(runtime), "bottom"), "still welded");
   } finally { session.free(); }
 });
 
@@ -285,7 +285,7 @@ test("a floor drawn against a ramp's free end welds it, without its corners bein
     commitPlatformContour(ctx, [[8, -2], [12, -2], [12, 6], [8, 6]].map(([x, z]) => ({ point: { x, y: 2, z } })), { mode: "create", elevation: 2, support: "floating", shape: "rectangle" });
     assert.equal(calls.feedback.at(-1).tone, "success", JSON.stringify(calls.feedback.at(-1)));
     commitPlatformContour(ctx, [[-8, 4], [-4, 4], [-4, 12], [-8, 12]].map(([x, z]) => ({ point: { x, y: 2, z } })), { mode: "create", elevation: 2, support: "floating", shape: "rectangle" });
-    const floors = faces(runtime, "platform-floating");
+    const floors = faces(runtime, "platform");
     assert.equal(floors.length, 2);
     const east = floors.find((f) => f.nodes.some((n) => n.position.x > 10));
     const west = floors.find((f) => f.nodes.some((n) => n.position.x < -6));
@@ -363,7 +363,7 @@ test("a ramp welds to a round floor's curved edge: its end is the chord, its cor
       { start: { x: 4, y: 0, z: 0 }, end: { x: -4, y: 0, z: 0 }, geometry: { kind: "arc", center: [0, 0], clockwise: false } },
       { start: { x: -4, y: 0, z: 0 }, end: { x: 4, y: 0, z: 0 }, geometry: { kind: "arc", center: [0, 0], clockwise: false } },
     ], { elevation: 0, mode: "create", support: "floating" });
-    const round = () => faces(runtime, "platform-floating")[0];
+    const round = () => faces(runtime, "platform")[0];
     assert.equal(round().outerLoops[0].length, 2, JSON.stringify(calls.feedback.at(-1)));
     // A straight ramp off the arc, from just outside it, running out along the radius.
     drawn(fixture, { x: 3.5 * Math.cos(0.8), y: 0, z: 3.5 * Math.sin(0.8) }, { x: 9 * Math.cos(0.8), y: 0, z: 9 * Math.sin(0.8) });
@@ -482,10 +482,10 @@ test("each end of a straight ramp has its own height handle: raising one changes
     close(centre(ramp(runtime), "top").y, 3, "the top raised by one");
     close(centre(ramp(runtime), "bottom").y, 0, "the bottom where it was");
     close(centre(ramp(runtime), "top").x, 8, "and nowhere else");
-    assert.ok(welded(faces(runtime, "platform")[0], ramp(runtime), "bottom"), "the bottom still welded");
+    assert.ok(welded(faces(runtime, "platform").find((f) => f.nodes[0].position.y < 1), ramp(runtime), "bottom"), "the bottom still welded");
     lift(fixture, slopeRampTool, params, "platform-ramp", "originHeight", 0.5);
     close(centre(ramp(runtime), "bottom").y, 0.5, "the bottom raised by a half");
-    assert.ok(!welded(faces(runtime, "platform")[0], ramp(runtime), "bottom"), "off the floor it no longer stands on");
+    assert.ok(!welded(faces(runtime, "platform").find((f) => f.nodes[0].position.y < 1), ramp(runtime), "bottom"), "off the floor it no longer stands on");
     for (const i of [0, 1, 2, 3]) close(runtime.getGraphSnapshot().nodes.find((n) => n.id === `low:${i}`).position.y, 0, "the solid floor stays where it was");
   } finally { session.free(); }
 });

@@ -127,14 +127,13 @@ export function terrainInteractionOver(covered: StructureView): CreationInteract
  * the same cut-and-refill flow consumes the overlap instead of leaving
  * coincident path geometry behind.
  *
- * Except a deck, which spans rather than carves. That is a declared property
- * of the subtype, not something read back from geometry -- which is exactly
- * why an overpass needs no height-aware coverage query to be told apart from
- * a crossing at the same level. The run that passes over says so.
+ * Every subtype alike: a deck carves the ground only where it touches it, at
+ * its ends, because the ground is only ever cut where a structure touches it
+ * (`topology/ground-contact.ts`) -- height tells an overpass from a crossing.
  */
 export function pathInteractionOver(
   _covered: StructureView,
-  paintedSubtype?: string,
+  _paintedSubtype?: string,
 ): CreationInteraction {
-  return paintedSubtype === "bridge" ? IGNORE : CUT;
+  return CUT;
 }

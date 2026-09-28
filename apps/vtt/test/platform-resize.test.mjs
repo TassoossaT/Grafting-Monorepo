@@ -7,7 +7,7 @@ import { addFace, sessionFixture } from "./platform-session-fixture.mjs";
 const close = (actual, expected, message) => assert.ok(Math.abs(actual - expected) < 1e-6, `${message}: ${actual} != ${expected}`);
 const floorOf = (runtime, prefix) => runtime.getAllRegionTopologies().find((t) => t.nodes.some((n) => n.id === `${prefix}:0`));
 const at = (runtime, id) => runtime.getGraphSnapshot().nodes.find((n) => n.id === id).position;
-const face = (runtime, prefix, corners, y = 1, type = "platform-floating") =>
+const face = (runtime, prefix, corners, y = 1, type = "platform") =>
   addFace(runtime, prefix, type, corners.map(([x, z], i) => ({ id: `${prefix}:${i}`, position: { x, y, z } })));
 
 function edit(runtime, prefix, target, delta) {
@@ -126,7 +126,7 @@ test("a platform drawn a little crooked still resizes: near-straight edges are o
   } finally { session.free(); }
 });
 
-test("resizing a grounded platform re-cuts the ground in the same transaction; a floating one reaches no ground", async () => {
+test("resizing a platform on the ground re-cuts it in the same transaction; one high over it reaches no ground", async () => {
   const { commitRegionEdit } = await import("../src/composition/tabletop/effects/effect-commit.ts");
   const { latticeRegenerateReaction } = await import("../src/composition/tabletop/terrain/terrain-lattice-reaction.ts");
   const { runtime, session } = sessionFixture();
@@ -136,7 +136,7 @@ test("resizing a grounded platform re-cuts the ground in the same transaction; a
   const reactions = { "lattice-regenerate": (rt, effect, hits) => { reached.push({ surfaceType: effect.change.surfaceType, hits: hits.length }); return real(rt, effect, hits); } };
   try {
     face(runtime, "g", [[0, 0], [4, 0], [4, 4], [0, 4]], 0, "platform");
-    face(runtime, "fl", [[10, 0], [14, 0], [14, 4], [10, 4]], 0, "platform-floating");
+    face(runtime, "fl", [[10, 0], [14, 0], [14, 4], [10, 4]], 3, "platform");
     addFace(runtime, "ground", "terrain", [[-2, -2], [16, -2], [16, 6], [-2, 6]].map(([x, z], i) => ({ id: `ground:${i}`, position: { x, y: 0, z } })));
     for (const prefix of ["g", "fl"]) {
       const topology = floorOf(runtime, prefix);
@@ -145,8 +145,7 @@ test("resizing a grounded platform re-cuts the ground in the same transaction; a
       const { recorded } = commitRegionEdit(runtime, plan.ops, { transactionId: `resize:${prefix}`, reactions });
       assert.ok(recorded, "one transaction");
     }
-    assert.ok(reached.some((r) => r.surfaceType === "platform" && r.hits > 0), `the grounded platform's resize reached the ground: ${JSON.stringify(reached)}`);
-    assert.ok(!reached.some((r) => r.surfaceType === "platform-floating" && r.hits > 0), "the floating one's did not");
+    assert.equal(reached.filter((r) => r.hits > 0).length, 1, `only the resize on the ground reached it: ${JSON.stringify(reached)}`);
     close(at(runtime, "g:1").x, 5, "and the resize itself stands");
   } finally { session.free(); }
 });
@@ -183,13 +182,13 @@ test("a floor drawn against another of its kind at its height joins it into one 
     // Against the first one's east side, only part of the way along it.
     draw([[4, 1], [8, 1], [8, 3], [4, 3]], "floating");
     assert.equal(calls.feedback.at(-1).tone, "success", JSON.stringify(calls.feedback.at(-1)));
-    const floating = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform-floating");
+    const floating = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform");
     assert.equal(floating.length, 1, "one floor now");
     const xs = floating[0].nodes.map((n) => n.position.x);
     assert.ok(Math.min(...xs) === 0 && Math.max(...xs) === 8, "covering both");
     // A grounded floor against it is another kind: it stays its own.
     draw([[-4, 0], [0, 0], [0, 4], [-4, 4]], "grounded");
-    assert.equal(runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform-floating").length, 1);
+    assert.equal(runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform").length, 1);
     assert.equal(runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform").length, 1);
   } finally { session.free(); }
 });

@@ -104,18 +104,12 @@ test("firstRefusal is undefined when every region resolved", () => {
   assert.equal(firstRefusal(resolveCoverage("terrain", [covered("terrain")])), undefined);
 });
 
-test("a grounded platform cuts whatever is ground and stands on everything else", () => {
-  for (const ground of surfaceTypesWithTrait("ground")) {
-    assert.equal(resolveCreationInteraction("platform", ground).kind, "cut", `platform over ${ground}`);
-  }
-  for (const other of ["wall-white", "path", "roof", "platform", "platform-floating"]) {
-    assert.equal(resolveCreationInteraction("platform", other).kind, "ignore", `platform over ${other}`);
-  }
-});
-
-test("a floating platform and both ramps stand over the ground without touching it", () => {
-  for (const painted of ["platform-floating", "platform-ramp", "platform-slope"]) {
-    for (const other of [...surfaceTypesWithTrait("ground"), "wall-white", "path", "roof", "platform", "platform-floating"]) {
+test("a platform and both ramps may cut whatever is ground -- only where they touch it -- and stand on everything else", () => {
+  for (const painted of ["platform", "platform-ramp", "platform-slope"]) {
+    for (const ground of surfaceTypesWithTrait("ground")) {
+      assert.equal(resolveCreationInteraction(painted, ground).kind, "cut", `${painted} over ${ground}`);
+    }
+    for (const other of ["wall-white", "path", "roof", "platform"]) {
       assert.equal(resolveCreationInteraction(painted, other).kind, "ignore", `${painted} over ${other}`);
     }
   }
@@ -125,13 +119,13 @@ test("ground declares how it answers a cut or a deleted face; nothing else answe
   for (const ground of surfaceTypesWithTrait("ground")) {
     assert.deepEqual(structureTypeFor(ground).reactions, { cut: "lattice-regenerate", remove: "lattice-regenerate" });
   }
-  for (const other of ["wall-white", "opening", "platform", "platform-floating", "platform-ramp", "platform-slope", "roof", "path"]) {
+  for (const other of ["wall-white", "opening", "platform", "platform-ramp", "platform-slope", "roof", "path"]) {
     assert.equal(structureTypeFor(other).reactions, undefined, `${other} declares no reaction`);
   }
 });
 
 test("relations are declared by traits: floors, partitions and ground", () => {
-  assert.deepEqual(surfaceTypesWithTrait("floor"), ["platform", "platform-floating"]);
+  assert.deepEqual(surfaceTypesWithTrait("floor"), ["platform"]);
   assert.deepEqual(surfaceTypesWithTrait("partition"), ["wall-white", "wall-gray"]);
 });
 

@@ -6002,9 +6002,9 @@ export function terrainInteractionOver(covered: StructureView): CreationInteract
   return forbid(`terrain cannot be created above "${covered.label}"`);
 export function pathInteractionOver(
   _covered: StructureView,
-  paintedSubtype?: string,
+  _paintedSubtype?: string,
   ): CreationInteraction {
-  return paintedSubtype === "bridge" ? IGNORE : CUT;
+  return CUT;
   }
 
 // src/features/edit-construction/structure-types/organic/terrain-cloud.ts
@@ -6349,9 +6349,6 @@ export function pathSpineSlot(profile: readonly PathProfilePoint[]): number {
 export function pathRidesTerrain(kind: PathKind): boolean {
   return kind !== "bridge";
   }
-export function pathCarvesGround(kind: PathKind): boolean {
-  return kind !== "bridge";
-  }
 export function pathHalfWidth(params: PathBrushParams): number {
   return pathFormationFor(params).profile.reduce(
   (widest, point) => Math.max(widest, Math.abs(point.lateralOffset)),
@@ -6540,8 +6537,8 @@ export function validateSlopeMotion(topology: ConstructionRegionTopology, positi
   const levels = new Map<string, number>();
 
 // src/features/edit-construction/structure-types/platform/platform-structure.ts
+export const cutsGround = (covered: StructureView) => covered.traits.has("ground") ? CUT : IGNORE;
 export const platformStructureType = contourPlatformStructureType("platform", "Plataforma", cutsGround);
-export const floatingPlatformStructureType = contourPlatformStructureType("platform-floating", "Plataforma flutuante", ignoresGround);
 export const slopedPlatformStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
   surfaceType: SLOPE_SURFACE_TYPE, label: "Plataforma inclinada",
   creation: "one face per spine span: the span's ribbon, sampled along its bezier curve",
@@ -6549,7 +6546,7 @@ export const slopedPlatformStructureType: StructureTypeDefinition = Object.freez
   requiresMotionSolver: true,
   roleFor: () => "platform-slope-face",
   policyFor: (role) => denied(role, "Edite a plataforma inclinada pela espinha: pontos, alças e largura."),
-  // A ramp climbs between levels above the ground; it never carves it.
+  // Where it runs into the ground -- a flight dug into a slope -- it cuts it; over it, it leaves it.
 
 // src/features/edit-construction/structure-types/registry.ts
 export const STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[] = Object.freeze([
@@ -7191,6 +7188,24 @@ export function reweldFloors(
 export function floorsWithout(floors: readonly ConstructionRegionTopology[], rungs: readonly WeldRung[]): readonly ConstructionRegionTopology[] {
   return floors.map((topology) => {
   const off = rungs.filter((rung) => floorsWeldedBy([topology], rung).length > 0);
+
+// src/features/edit-construction/topology/ground-contact.ts
+export const GROUND_CONTACT_CLEARANCE = 0.15;
+export type GroundHeightAt = (point: Plan) => number | undefined;
+export type ContactCell = readonly (readonly [number, number])[];
+export type GroundContact =
+export function surfaceHeightOf(topology: ConstructionRegionTopology): ((point: Plan) => number) | undefined {
+  const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
+export function groundContactOf(topology: ConstructionRegionTopology, groundAt: GroundHeightAt, cell: number, clearance = GROUND_CONTACT_CLEARANCE, held: ReadonlySet<string> = new Set()): GroundContact {
+  const surfaceAt = surfaceHeightOf(topology);
+export const GROUND_CONTACT_CELL = 1;
+export function groundHeightsOf(nodes: readonly ConstructionPosition[], reach = GROUND_READ_REACH): GroundHeightAt {
+  const buckets = new Map<string, ConstructionPosition[]>();
+export function touchesGround(
+  change: { readonly before: readonly ConstructionRegionTopology[]; readonly after: readonly ConstructionRegionTopology[] },
+  ground: readonly ConstructionRegionTopology[],
+  ): boolean {
+  const own = new Set([...change.after, ...change.before].flatMap((topology) => topology.nodes.map((node) => node.id)));
 
 // src/features/edit-construction/topology/index.ts
 export type { CloudSource, CloudTopology, ConstructionCloud } from "./construction-cloud.ts";

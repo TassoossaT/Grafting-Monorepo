@@ -3134,11 +3134,11 @@ for sitting on ground already there, and that whole side stays empty.
 
 Also grabs and edits an existing platform's own vertex/edge/body -- see `structure-edit-behavior.ts`.
 
-### `function vtt.platform-contour-tool.commitPlatformContour(ctx: ToolContext, samples: readonly PointerSample[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; support?: "grounded" | "floating"; tolerance?: number }): void`
+### `function vtt.platform-contour-tool.commitPlatformContour(ctx: ToolContext, samples: readonly PointerSample[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; tolerance?: number }): void`
 
 Polygon entry point retained for callers that already have explicit corners.
 
-### `function vtt.platform-contour-tool.commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; support?: "grounded" | "floating"; tolerance?: number }, pickedSamples: readonly PointerSample[], options: { alone?: boolean; clipped?: boolean }): void`
+### `function vtt.platform-contour-tool.commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; tolerance?: number }, pickedSamples: readonly PointerSample[], options: { alone?: boolean; clipped?: boolean }): void`
 
 Commits the same directed line/arc contour vocabulary consumed by wall
 construction. Ampliar/juntar and recortar/separar no longer run an
@@ -3319,8 +3319,8 @@ What drawing a straight ramp may decide.
 
 ### `function vtt.ramp-commit.commitStraightRamp(ctx: ToolContext, start: PointerSample, end: PointerSample, params: RampParams): void`
 
-Commits one straight ramp. An end landing on a floor's edge -- grounded
-or floating -- is welded into it (`topology/floor-weld.ts`): the floor's
+Commits one straight ramp. An end landing on a floor's edge -- on the
+ground or high over it -- is welded into it (`topology/floor-weld.ts`): the floor's
 edge is split around the ramp's end edge, which both faces then share.
 
 ### `function vtt.ramp-commit.drawnRampWidth(ctx: ToolContext, start: PointerSample, end: PointerSample, params: RampParams): number | undefined`
@@ -5480,7 +5480,7 @@ what the vertex means.
 
 ### `function vtt.organic-structure.organicStructureType(surfaceType: string, label: string, creation: string, structural: "deny" | "regenerate", interactionOver: (covered: StructureView, paintedSubtype?: string) => CreationInteraction, traits: readonly StructureTrait[]): StructureTypeDefinition`
 
-### `function vtt.organic-structure.pathInteractionOver(_covered: StructureView, paintedSubtype?: string): CreationInteraction`
+### `function vtt.organic-structure.pathInteractionOver(_covered: StructureView, _paintedSubtype?: string): CreationInteraction`
 
 A path **carves**: it consumes what it crosses and keeps the leftover with
 the path's own shape cut out of it. Over terrain that is a road; over a
@@ -5490,10 +5490,9 @@ Over another path the two formations become one connected path surface:
 the same cut-and-refill flow consumes the overlap instead of leaving
 coincident path geometry behind.
 
-Except a deck, which spans rather than carves. That is a declared property
-of the subtype, not something read back from geometry -- which is exactly
-why an overpass needs no height-aware coverage query to be told apart from
-a crossing at the same level. The run that passes over says so.
+Every subtype alike: a deck carves the ground only where it touches it, at
+its ends, because the ground is only ever cut where a structure touches it
+(`topology/ground-contact.ts`) -- height tells an overpass from a crossing.
 
 ### `function vtt.organic-structure.terrainInteractionOver(covered: StructureView): CreationInteraction`
 
@@ -6073,14 +6072,6 @@ than being a number the generator forgot. Any further line a product wants
 to be first-class -- a lane, a rail -- is just another profile point, and
 needs no machinery of its own.
 
-### `function vtt.path-recipe.pathCarvesGround(kind: PathKind): boolean`
-
-Whether this subtype carves what it is drawn over.
-
-Declared rather than inferred, which is what dissolves the awkward part of
-an overpass: nothing has to work out from a flat XZ footprint whether a
-crossing is at the same level, because the run that spans says so itself.
-
 ### `function vtt.path-recipe.pathFormationFor(params: PathBrushParams): PathFormationRecipe`
 
 Resolves the VTT's named path recipe without constructing any mesh or graph.
@@ -6116,9 +6107,10 @@ Whether this subtype's stations take their height from the ground beneath
 them.
 
 A deck does not: it spans, so its height comes from its own ends and the
-middle stays level instead of sagging onto whatever it crosses. That, plus
-declaring that it consumes nothing, is the whole of what makes a subtype a
-bridge -- no separate type, no separate role table, no separate logic.
+middle stays level instead of sagging onto whatever it crosses. That is the
+whole of what makes a subtype a bridge -- no separate type, no separate
+role table, no separate logic. What it cuts is the ground's own law: only
+where it touches it.
 
 ### `function vtt.path-recipe.pathSpineSlot(profile: readonly PathProfilePoint[]): number`
 
@@ -6357,7 +6349,7 @@ when it has no length.
 
 ### `variable vtt.platform-ramp-type.rampStructureType: StructureTypeDefinition`
 
-The straight ramp's definition: edited by its corners, sides, ends and body, never carving the ground.
+The straight ramp's definition: edited by its corners, sides, ends and body; it cuts the ground only where it runs into it.
 
 ### `interface vtt.platform-slope-spine.SlopeSurface`
 
@@ -6432,13 +6424,9 @@ The faces of every sloped-platform span in `spans`, sampled along their curves.
 
 Every cross-section stays level from margin to margin.
 
-### `variable vtt.platform-structure.floatingPlatformStructureType: StructureTypeDefinition`
-
-A floor standing over the ground -- a storey, a bridge deck: the terrain under it is left untouched.
-
 ### `variable vtt.platform-structure.platformStructureType: StructureTypeDefinition`
 
-A floor resting on the ground: it takes the ground under it, which regenerates around it.
+A floor: on the ground it takes the ground under it, which regenerates around it; over it, the ground is left as it is.
 
 ### `variable vtt.platform-structure.slopedPlatformStructureType: StructureTypeDefinition`
 
@@ -6459,6 +6447,13 @@ would carry all three.
 Its faces are never grabbed directly -- the spine is what is edited. A
 floor that moves still carries the end welded to it: the end's control
 node follows, and the ramp re-places itself on the moved curve.
+
+### `function vtt.platform-structure.cutsGround(covered: StructureView): CreationInteraction`
+
+Ground under a platform may be cut, and the ground's own repair regenerates
+around it -- only where the platform touches it (`topology/ground-contact.ts`):
+one high over the terrain leaves it whole, one on a hillside cuts only the
+hill it runs into.
 
 ### `interface vtt.registry.ResolvedCoverage`
 
@@ -7086,6 +7081,13 @@ letting go of it is an explicit detach.
 
 Resolves what the grabbed part of this region means.
 
+### `property vtt.structure-type.StructureTypeDefinition.sealedOutline?: boolean`
+
+Its outline takes no node from anything else: whatever meets one of its
+sides -- the ground cut round it -- meets it there without splitting the
+side, so its corners stay exactly its own. For a type whose shape is its
+corners, a ramp's four.
+
 ### `property vtt.structure-type.StructureTypeDefinition.settle?: (topology: ConstructionRegionTopology, positions: ReadonlyMap<string, ConstructionPosition>) => ReadonlyMap<string, ConstructionPosition>`
 
 The type's law: given where one face's nodes stand (`positions`), where
@@ -7415,10 +7417,7 @@ Perlin `scale` -- smaller values are smoother/larger-scale terrain features.
 
 ### `property vtt.tool-types.ToolParamsByTool.path-brush: PathBrushParams`
 
-### `property vtt.tool-types.ToolParamsByTool.platform-contour: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; support?: "grounded" | "floating"; tolerance?: number }`
-
-`support` picks the type drawn: a floor resting on the ground, or a
-floating one -- a storey, a bridge deck -- that leaves the terrain alone.
+### `property vtt.tool-types.ToolParamsByTool.platform-contour: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; tolerance?: number }`
 
 ### `property vtt.tool-types.ToolParamsByTool.roof: { curvatures: readonly [number, number, number, number]; elevation: number; height: number; radius: number; shape: "rectangle" | "circle" | "platform" }`
 
@@ -8036,6 +8035,58 @@ left for its own patch to declare.
 ### `function vtt.floor-weld.rungFits(edge: Pick<FloorEdge, "a" | "b">, rung: WeldRung, positions: ReadonlyMap<string, ConstructionPosition>): boolean`
 
 Whether both nodes of `rung`, at `positions`, lie on `edge` strictly between its corners.
+
+### `type vtt.ground-contact.ContactCell = readonly (readonly [number, number])[]`
+
+One square of a contact sampling grid, as a closed ring.
+
+### `type vtt.ground-contact.GroundContact = { kind: "whole" } | { kind: "none" } | { clear: readonly ContactCell[]; kind: "part" }`
+
+How a face meets the ground: wholly, not at all, or in part -- with the cells of its footprint that stand clear of it.
+
+### `type vtt.ground-contact.GroundHeightAt = (point: Plan) => number | undefined`
+
+The ground's height at a point in plan; `undefined` where there is no ground to speak of.
+
+### `variable vtt.ground-contact.GROUND_CONTACT_CELL: 1`
+
+How finely a structure's footprint is sampled for contact.
+
+### `variable vtt.ground-contact.GROUND_CONTACT_CLEARANCE: 0.15`
+
+How far above the ground a structure's surface may stand and still touch it.
+
+### `function vtt.ground-contact.groundContactOf(topology: ConstructionRegionTopology, groundAt: GroundHeightAt, cell: number, clearance: number, held: ReadonlySet<string>): GroundContact`
+
+How `topology` meets the ground `groundAt` describes, sampled on a grid of
+`cell`: at its corners, and at the middle of every cell of its footprint.
+A cell whose middle stands clear of the ground is clear; where no ground is
+known, nothing is touched. A face standing upright is left as it always
+was -- wholly in contact.
+
+A side whose two ends `held` names -- joined to another structure, a
+ramp's end welded into a floor -- has that structure on its far side and
+this one on the near side: no ground fits under it too, so the cells along
+it count as touching, and the ground goes round them.
+
+### `function vtt.ground-contact.groundHeightsOf(nodes: readonly ConstructionPosition[], reach: number): GroundHeightAt`
+
+The ground's height over a point in plan, read from `nodes` near it --
+weighted by closeness, so the relief there is kept; `undefined` with none
+within GROUND_READ_REACH.
+
+### `function vtt.ground-contact.surfaceHeightOf(topology: ConstructionRegionTopology): ((point: Plan) => number) | undefined`
+
+The height of `topology`'s surface over a point in plan -- its best plane; `undefined` for a face standing upright.
+
+### `function vtt.ground-contact.touchesGround(change: { after: readonly ConstructionRegionTopology[]; before: readonly ConstructionRegionTopology[] }, ground: readonly ConstructionRegionTopology[]): boolean`
+
+Whether a change to a structure is the business of the `ground` it stands
+over at all: the structure touches it now (`after`), touched it before
+(`before`) -- the ground it had cut has to heal -- or the ground is still
+joined to it by a node. The ground's height is read from the ground alone,
+never from the structure's nodes it shares. A structure built, moved or
+deleted high over the ground is none of these.
 
 ### `type vtt.panel-height-widget.PanelHeightWidgetZone = "group" | "single"`
 

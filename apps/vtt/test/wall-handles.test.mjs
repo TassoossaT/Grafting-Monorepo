@@ -157,7 +157,7 @@ test("a structure's handles show as the pointer comes near it, not only once it 
       return f.runtime.getAllRegionTopologies().filter((t) => focus.faces.has(t.surfaceKey.join("\u0000"))).map((t) => t.surfaceType);
     };
     // The platform spans 0..6 by 0..4 at height 2: just past its far side, where its handles stand.
-    assert.deepEqual(focused(down(3, 4.8)), ["platform-floating"]);
+    assert.deepEqual(focused(down(3, 4.8)), ["platform"]);
     // The wall stands along z = 0 from x = 1 to 5, on the platform's near side: just off it, beside its foot handles.
     assert.ok(focused(down(3, -0.5)).some((type) => hasTrait(type, "partition")), JSON.stringify(focused(down(3, -0.5))));
     assert.deepEqual(focused(down(3, 9)), [], "far from everything, nothing");

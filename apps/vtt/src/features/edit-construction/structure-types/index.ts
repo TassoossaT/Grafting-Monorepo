@@ -6,7 +6,7 @@ export * from "./panel/index.ts";
 export * from "./organic/index.ts";
 export * from "./path/index.ts";
 export { PATH_SURFACE_TYPE } from "./path/path-surface-type.ts";
-export { floatingPlatformStructureType, platformStructureType } from "./platform/platform-structure.ts";
+export { cutsGround, platformStructureType } from "./platform/platform-structure.ts";
 export { RAMP_SURFACE_TYPE, rampCornerId, rampCorners, rampEdgeId, rampOutline, rampPatch, rampShapeOf, type RampCorners, type RampEnd, type RampShape } from "./platform/platform-ramp.ts";
 export { jointedRampPatch, planRamp, rampEndsCapability, type PlannedRamp, type RampEndPlan } from "./platform/platform-ramp-plan.ts";
 export { roofStructureType } from "./roof/roof-structure.ts";

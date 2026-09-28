@@ -446,6 +446,13 @@ export interface StructureTypeDefinition {
    * letting go of it is an explicit detach.
    */
   readonly rigid?: boolean;
+  /**
+   * Its outline takes no node from anything else: whatever meets one of its
+   * sides -- the ground cut round it -- meets it there without splitting the
+   * side, so its corners stay exactly its own. For a type whose shape is its
+   * corners, a ramp's four.
+   */
+  readonly sealedOutline?: boolean;
   /** Present when this type runs between two ends that land on floors -- see {@link StructureEnds}. */
   readonly ends?: StructureEnds;
   /** Returns a reason when a proposed position batch violates this type. */

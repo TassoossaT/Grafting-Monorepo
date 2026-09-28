@@ -33,12 +33,12 @@ test("a platform begun next to a turned platform's side is built along that side
   const { runtime, session, ctx, calls } = sessionFixture();
   Object.assign(runtime, { showPreview() {}, clearPreview() {} });
   try {
-    addFace(runtime, "old", "platform-floating", [[0, 0], [4, 0], [4, 4], [0, 4]].map(([x, z], i) => ({ id: `old:${i}`, position: { ...turned(x, z), y: 2 } })));
+    addFace(runtime, "old", "platform", [[0, 0], [4, 0], [4, 4], [0, 4]].map(([x, z], i) => ({ id: `old:${i}`, position: { ...turned(x, z), y: 2 } })));
     // Just off the turned platform's east side, dragged out and across -- in world terms, diagonally.
     const start = { point: { ...turned(4.2, 1), y: 2 } }, end = { point: { ...turned(7, 3), y: 2 } };
     drawRectangle(ctx, start, end, { support: "floating" });
     assert.ok(!calls.feedback.some((f) => f.tone === "error"), JSON.stringify(calls.feedback));
-    const faces = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform-floating");
+    const faces = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform");
     for (const face of faces) {
       for (const angle of sideAngles(face)) {
         const off = Math.min(Math.abs(angle - turn), Math.abs(angle - turn + Math.PI / 2), Math.abs(angle - turn - Math.PI / 2));
@@ -73,10 +73,10 @@ test("a floor drawn against part of another's side joins it whichever way round 
   for (const corners of [[[4, 1], [7, 1], [7, 3], [4, 3]], [[4, 1], [4, 3], [7, 3], [7, 1]], [[4, 0], [4, 4], [7, 4], [7, 0]]]) {
     const { runtime, session, ctx, calls } = sessionFixture();
     try {
-      addFace(runtime, "old", "platform-floating", [[0, 0], [4, 0], [4, 4], [0, 4]].map(([x, z], i) => ({ id: `old:${i}`, position: { x, y: 2, z } })));
+      addFace(runtime, "old", "platform", [[0, 0], [4, 0], [4, 4], [0, 4]].map(([x, z], i) => ({ id: `old:${i}`, position: { x, y: 2, z } })));
       commitPlatformContour(ctx, corners.map(([x, z]) => ({ point: { x, y: 2, z } })), { mode: "create", elevation: 2, support: "floating", shape: "rectangle" });
       assert.ok(!calls.feedback.some((f) => f.tone === "error"), `${JSON.stringify(corners)}: ${JSON.stringify(calls.feedback)}`);
-      const floors = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform-floating");
+      const floors = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform");
       assert.equal(floors.length, 1, "one floor");
       assert.ok(floors[0].nodes.some((n) => Math.abs(n.position.x - 7) < 1e-9), "reaching out to the new part");
     } finally { session.free(); }
@@ -94,10 +94,10 @@ test("a floor drawn over another of its kind at its height is united with it: on
   for (const [name, [corners, area]] of Object.entries(cases)) {
     const { runtime, session, ctx, calls } = sessionFixture();
     try {
-      addFace(runtime, "old", "platform-floating", [[0, 0], [4, 0], [4, 4], [0, 4]].map(([x, z], i) => ({ id: `old:${i}`, position: { x, y: 2, z } })));
+      addFace(runtime, "old", "platform", [[0, 0], [4, 0], [4, 4], [0, 4]].map(([x, z], i) => ({ id: `old:${i}`, position: { x, y: 2, z } })));
       commitPlatformContour(ctx, corners.map(([x, z]) => ({ point: { x, y: 2, z } })), { mode: "create", elevation: 2, support: "floating", shape: "rectangle" });
       assert.ok(!calls.feedback.some((f) => f.tone === "error"), `${name}: ${JSON.stringify(calls.feedback)}`);
-      const floors = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform-floating");
+      const floors = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform");
       assert.equal(floors.length, 1, `${name}: one floor`);
       assert.equal(floors[0].holes.length, 0, `${name}: no hole`);
       assert.ok(Math.abs(planArea(floors[0]) - area) < 1e-6, `${name}: the union's area, ${planArea(floors[0])} != ${area}`);
@@ -118,11 +118,11 @@ test("a U of floors closed by a bar drawn over both its arms becomes one ring: o
   const { commitPlatformContour } = await import("../src/composition/tabletop/tools/platform/platform-contour-tool.ts");
   const { runtime, session, ctx, calls } = sessionFixture();
   try {
-    addFace(runtime, "u", "platform-floating", [[0, 0], [6, 0], [6, 6], [4, 6], [4, 2], [2, 2], [2, 6], [0, 6]].map(([x, z], i) => ({ id: `u:${i}`, position: { x, y: 2, z } })));
+    addFace(runtime, "u", "platform", [[0, 0], [6, 0], [6, 6], [4, 6], [4, 2], [2, 2], [2, 6], [0, 6]].map(([x, z], i) => ({ id: `u:${i}`, position: { x, y: 2, z } })));
     // Begun on one arm's outer side and dragged past the other's: it lies over both.
     commitPlatformContour(ctx, [[0, 5], [6.3, 5], [6.3, 7], [0, 7]].map(([x, z]) => ({ point: { x, y: 2, z } })), { mode: "create", elevation: 2, support: "floating", shape: "rectangle" });
     assert.ok(!calls.feedback.some((f) => f.tone === "error"), JSON.stringify(calls.feedback));
-    const floors = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform-floating");
+    const floors = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform");
     assert.equal(floors.length, 1, "one floor");
     assert.equal(floors[0].holes.length, 1, "the courtyard inside the ring");
     const u = [[0, 0], [6, 0], [6, 6], [4, 6], [4, 2], [2, 2], [2, 6], [0, 6]];
@@ -141,10 +141,10 @@ test("a round floor drawn over a floor stays its own cloud, sharing no node: a c
   const { circleContour } = await import("../src/composition/tabletop/tools/tower/tower-geometry.ts");
   const { runtime, session, ctx, calls } = sessionFixture();
   try {
-    addFace(runtime, "old", "platform-floating", [[0, 0], [4, 0], [4, 4], [0, 4]].map(([x, z], i) => ({ id: `old:${i}`, position: { x, y: 2, z } })));
+    addFace(runtime, "old", "platform", [[0, 0], [4, 0], [4, 4], [0, 4]].map(([x, z], i) => ({ id: `old:${i}`, position: { x, y: 2, z } })));
     commitPlatformShape(ctx, circleContour({ x: 4, y: 2, z: 2 }, 1.5), { mode: "create", elevation: 2, support: "floating", shape: "circle" });
     assert.ok(!calls.feedback.some((f) => f.tone === "error"), JSON.stringify(calls.feedback));
-    const floors = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform-floating");
+    const floors = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform");
     assert.equal(floors.length, 2);
     assert.ok(floors.every((f) => f.holes.length === 0), "no holes");
     const [a, b] = floors.map((f) => new Set(f.nodes.map((n) => n.id)));
@@ -181,7 +181,7 @@ test("a rectangle drawn for a raised floor follows the pointer at that floor's l
     platformContourTool.onPointerDown(ctx, start, params);
     platformContourTool.onPointerMove(ctx, { start, current: end, samples: [start, end] }, params);
     platformContourTool.onPointerUp(ctx, { start, current: end, samples: [start, end], moved: true }, params);
-    const floor = runtime.getAllRegionTopologies().find((t) => t.surfaceType === "platform-floating");
+    const floor = runtime.getAllRegionTopologies().find((t) => t.surfaceType === "platform");
     assert.ok(floor, "drawn");
     const xs = floor.nodes.map((n) => n.position.x), zs = floor.nodes.map((n) => n.position.z);
     assert.ok(Math.abs(Math.min(...xs)) < 1e-6 && Math.abs(Math.max(...xs) - 4) < 1e-6 && Math.abs(Math.min(...zs)) < 1e-6 && Math.abs(Math.max(...zs) - 2) < 1e-6,
@@ -198,7 +198,7 @@ test("rectangles drawn anywhere round a U are never refused, never move it, and 
     const { runtime, session, ctx, calls } = sessionFixture();
     Object.assign(runtime, { showPreview() {}, clearPreview() {} });
     try {
-      addFace(runtime, "u", "platform-floating", U.map(([x, z], i) => ({ id: `u:${i}`, position: { x, y: 2, z } })));
+      addFace(runtime, "u", "platform", U.map(([x, z], i) => ({ id: `u:${i}`, position: { x, y: 2, z } })));
       const a = { point: { x: -1 + rnd() * 8, y: 2, z: -1 + rnd() * 9 }, forward: { x: 1, y: -1, z: 0.001 } };
       const b = { point: { x: a.point.x + (rnd() - 0.5) * 8, y: 2, z: a.point.z + (rnd() - 0.5) * 8 }, forward: a.forward };
       drawRectangle(ctx, a, b, { support: "floating", elevation: 2 });
@@ -208,7 +208,7 @@ test("rectangles drawn anywhere round a U are never refused, never move it, and 
         const m = /^u:(\d)$/.exec(n.id);
         if (m) assert.ok(n.position.x === U[+m[1]][0] && n.position.z === U[+m[1]][1], `${where}: ${n.id} moved`);
       }
-      const faces = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform-floating");
+      const faces = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform");
       for (let i = 0; i < faces.length; i++) {
         const cloud = runtime.cloudFor({ seed: faces[i].surfaceKey, surfaceType: faces[i].surfaceType }).surfaceKeys.map((key) => key.join("|"));
         for (let j = i + 1; j < faces.length; j++) {
@@ -224,12 +224,12 @@ test("a rectangle's side that comes near a built side lying the same way lands o
   const { runtime, session, ctx, calls } = sessionFixture();
   Object.assign(runtime, { showPreview() {}, clearPreview() {} });
   try {
-    addFace(runtime, "old", "platform-floating", [[0, 0], [4, 0], [4, 4], [0, 4]].map(([x, z], i) => ({ id: `old:${i}`, position: { x, y: 2, z } })));
+    addFace(runtime, "old", "platform", [[0, 0], [4, 0], [4, 4], [0, 4]].map(([x, z], i) => ({ id: `old:${i}`, position: { x, y: 2, z } })));
     const forward = { x: 1, y: -1, z: 0.001 };
     // From beside the old floor, its far side dragged a little past the old floor's far side.
     drawRectangle(ctx, { point: { x: 4, y: 2, z: 0 }, forward }, { point: { x: 7, y: 2, z: 4.3 }, forward }, { support: "floating", elevation: 2 });
     assert.ok(!calls.feedback.some((f) => f.tone === "error"), JSON.stringify(calls.feedback));
-    const zs = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform-floating").flatMap((t) => t.nodes.map((n) => n.position.z));
+    const zs = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform").flatMap((t) => t.nodes.map((n) => n.position.z));
     assert.equal(Math.max(...zs), 4, "landed on the old floor's far side, not 4.3");
   } finally { session.free(); }
 });
@@ -250,7 +250,7 @@ test("a floor with a hole: what is drawn in the hole against its edge joins it, 
       commitPlatformContour(ctx, P([[2, 2], [4, 2], [4, 4], [2, 4]]), params("cut"));
       commitPlatformContour(ctx, P(corners), params("create"));
       assert.ok(!calls.feedback.some((f) => f.tone === "error"), `${name}: ${JSON.stringify(calls.feedback)}`);
-      const floors = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform-floating");
+      const floors = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform");
       assert.equal(floors.length, expected.faces, `${name}: faces`);
       assert.deepEqual(floors.map((f) => f.holes.length).sort(), expected.holes, `${name}: holes`);
     } finally { session.free(); }
