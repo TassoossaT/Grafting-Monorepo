@@ -267,8 +267,8 @@ export function planNextCollinearVertexRemoval(
 export interface SimplifiableTopologyRuntime {
   getAllRegionTopologies?(): readonly ConstructionRegionTopology[];
   getRegionTopology?(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined;
-  applyRegionEdit?(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): RegionEditOutcome;
-  getSnapshot?(): { readonly tableId: string; readonly map: { readonly nodePositions: ReadonlyMap<string, { readonly position: ConstructionPosition }> } };
+  applyRegionEdit?(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): unknown;
+  getSnapshot?(): { readonly tableId?: string; readonly map?: { readonly nodePositions?: ReadonlyMap<string, { readonly position: ConstructionPosition }> } };
 }
 
 /**

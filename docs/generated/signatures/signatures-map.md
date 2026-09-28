@@ -7322,6 +7322,7 @@ export type { PerimeterLoop } from "./surface-perimeter.ts";
 export type { PlanPoint } from "./plan-rotation.ts";
 export type { FittedEdge, FitOptions } from "./stroke-fitting.ts";
 export type { BoundaryEdges, EdgeSharing } from "./boundary-edges.ts";
+export type { SimplifiableTopologyRuntime } from "./ring-simplify.ts";
 export type { RibbonRequest } from "./bezier-curve.ts";
 export type { PlanarArea, PlanarPoint, PlanarPolygon, PlanarPort, PlanarRing } from "./planar-area.ts";
 export type { CurveEdge, CurveHandleIndex, CurveStore } from "./curve-handles.ts";
@@ -7470,6 +7471,27 @@ export function simplifyClosedRing(
   if (points.length < 3) return points.map((_point, index) => index); // nothing spare to drop below a real edge pair.
 
   let indices = points.map((_point, index) => index);
+export function planNextCollinearVertexRemoval(
+  topology: ConstructionRegionTopology,
+  allTopologies: readonly ConstructionRegionTopology[],
+  posOf: (nodeId: string) => ConstructionPosition | undefined,
+  tableId: string,
+  ): { readonly nodeId: string; readonly weldedEdgeId: string } | undefined {
+  if (topology.nodes.length <= 3) return undefined;
+
+export interface SimplifiableTopologyRuntime {
+  getAllRegionTopologies?(): readonly ConstructionRegionTopology[];
+  getRegionTopology?(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined;
+  applyRegionEdit?(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): unknown;
+  getSnapshot?(): { readonly tableId?: string; readonly map?: { readonly nodePositions?: ReadonlyMap<string, { readonly position: ConstructionPosition }> } };
+export function simplifyCollinearVertices(
+  runtime: SimplifiableTopologyRuntime,
+  topology: ConstructionRegionTopology,
+  tableId: string,
+  causeId: string,
+  ): number {
+  if (typeof runtime.applyRegionEdit !== "function" || typeof runtime.getAllRegionTopologies !== "function") return 0;
+  let simplifiedCount = 0;
 
 // src/features/edit-construction/topology/stroke-fitting.ts
 export interface FittedEdge {

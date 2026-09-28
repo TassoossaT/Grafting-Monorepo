@@ -8500,6 +8500,21 @@ A ring of points; a closed ring repeats its first point last.
 
 The union of every polygon or area given.
 
+### `interface vtt.ring-simplify.SimplifiableTopologyRuntime`
+
+### `method vtt.ring-simplify.SimplifiableTopologyRuntime.applyRegionEdit(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): unknown`
+
+### `method vtt.ring-simplify.SimplifiableTopologyRuntime.getAllRegionTopologies(): readonly ConstructionRegionTopology[]`
+
+### `method vtt.ring-simplify.SimplifiableTopologyRuntime.getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined`
+
+### `method vtt.ring-simplify.SimplifiableTopologyRuntime.getSnapshot(): { map?: { nodePositions?: ReadonlyMap<string, { position: ConstructionPosition }> }; tableId?: string }`
+
+### `function vtt.ring-simplify.planNextCollinearVertexRemoval(topology: ConstructionRegionTopology, allTopologies: readonly ConstructionRegionTopology[], posOf: (nodeId: string) => ConstructionPosition | undefined, tableId: string): { nodeId: string; weldedEdgeId: string } | undefined`
+
+Finds the next collinear degree-2 vertex on an unshared straight perimeter edge of a region topology
+that can safely be removed via a `remove-vertex` op. Returns `undefined` if the boundary is already minimal.
+
 ### `function vtt.ring-simplify.simplifyClosedRing(points: readonly ConstructionPosition[], geometryFor: (fromIndex: number, toIndex: number) => ConstructionEdgeGeometry | undefined): readonly number[]`
 
 The indices of `points` (a closed ring, no repeated closing vertex) that
@@ -8514,6 +8529,11 @@ parallel array (node ids, say) never has to search `points` back for
 which entry a position belonged to. Read fresh for each candidate pair
 rather than cached, since dropping a vertex changes which pairs are
 adjacent.
+
+### `function vtt.ring-simplify.simplifyCollinearVertices(runtime: SimplifiableTopologyRuntime, topology: ConstructionRegionTopology, tableId: string, causeId: string): number`
+
+Removes redundant collinear degree-2 vertices along straight perimeter edges of a floor
+(such as a platform) to prevent edge accumulation when moving or editing the structure.
 
 ### `function vtt.ring-simplify.simplifyPolygonRdp(ring: readonly (readonly [number, number])[], epsilon: number): (readonly [number, number])[]`
 

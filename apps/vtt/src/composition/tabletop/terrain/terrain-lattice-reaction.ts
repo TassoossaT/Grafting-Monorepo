@@ -13,6 +13,7 @@ import type { AtomicEditOp, CutFallout, Effect, Reaction, ReactionOutcome } from
 
 import {
   type ContactCell,
+  type GroundContact,
   GROUND_CONTACT_CELL,
   GROUND_CONTACT_CLEARANCE,
   GROUND_SIDE_REST_ROOM,
