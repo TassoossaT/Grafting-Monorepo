@@ -162,6 +162,7 @@ export function repairTerrainCut(
           : undefined,
     },
     vacatedArea: fallout.vacatedGround,
+    staleRegions: fallout.draggedSurfaceKeys,
     causeId,
     tableId,
     faceSide: DEFAULT_FACE_SIDE,

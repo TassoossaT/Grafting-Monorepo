@@ -17,8 +17,6 @@ import {
   distanceAndElevationOnPath,
   hasTrait,
   insideRingXZ,
-  ringCrossesItself,
-  twiceSignedAreaXZ,
 } from "../../../features/edit-construction/index.ts";
 
 import {
@@ -398,14 +396,12 @@ export function executeTerrainCut(
 
   /** The affected faces as one polygon, with `connectArea` taken out of it. */
   const groundFor = (faces: readonly ConstructionRegionTopology[]): PlanarArea => {
-    // A face an edit dragged out of shape -- its rim node carried past its
-    // other corners -- crosses itself or winds backwards, and in a union it
-    // takes away the very ground it lies over. The ground it covered comes in
-    // as vacated instead; what it has become is no area at all.
-    const shaped = faces.map(topologyToPolygon).filter((p) => p.length > 0);
-    const winding = (polygon: PlanarPolygon) => Math.sign(twiceSignedAreaXZ(polygon[0]!));
-    const usual = Math.sign(shaped.reduce((sum, polygon) => sum + winding(polygon), 0)) || 1;
-    const polygons = shaped.filter((polygon) => winding(polygon) === usual && !ringCrossesItself(polygon[0]!.map(([x, z]) => ({ x, z }))));
+    // A face an edit dragged out of place -- rimmed by a node the structure
+    // carried away -- never counts by its shape: that runs from where it lay to
+    // where the node went, over ground nobody touched, and laying ground there
+    // leaves a trail behind the structure. Where it lay comes in as vacated.
+    const stale = new Set((request.staleRegions ?? []).map((key) => key.join(" ")));
+    const polygons = faces.filter((face) => !stale.has(face.surfaceKey.join(" "))).map(topologyToPolygon).filter((p) => p.length > 0);
     const allPolygons =
       request.vacatedArea && request.vacatedArea.length > 0
         ? [...polygons, ...request.vacatedArea]

@@ -244,3 +244,28 @@ test("where the ground ends under a floor run half out of a hill, its edge lies 
     assert.ok([...at.values()].every((p) => !under(p) || p.y <= y + 0.02), "no ground rises through the floor");
   } finally { session.free(); }
 }));
+
+test("a floor moved a long way across the ground is two cuts, where it left and where it arrived: the ground it passed over is left exactly as it was", quiet(() => {
+  const { runtime, ctx, calls, session } = setup(() => 0);
+  try {
+    floorAt(ctx, [-8.3, -1.7, -4.3, 1.7], 0);
+    const keyOf = (t) => t.surfaceKey.join(" ");
+    const middle = (t) => ({ x: t.nodes.reduce((s, n) => s + n.position.x, 0) / t.nodes.length, z: t.nodes.reduce((s, n) => s + n.position.z, 0) / t.nodes.length });
+    // Halfway between where it stood and where it arrived: out of reach of either cut.
+    const onPath = (t) => { const { x, z } = middle(t); return x > -1.5 && x < -0.5 && z > -4 && z < 4; };
+    const before = new Set(terrain(runtime).filter(onPath).map(keyOf));
+    const handle = shownGlobalHandles({ graph: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), cloudFor: (q) => runtime.cloudFor(q) }).find((h) => h.kind === "pivot");
+    const params = platformContourTool.defaultParams();
+    const start = { nodeId: handle.id, point: handle.position, screenX: 100, screenY: 300 };
+    const current = { point: { ...handle.position, x: handle.position.x + 12 }, screenX: 400, screenY: 300 };
+    platformContourTool.onPointerDown(ctx, start, params);
+    platformContourTool.onPointerMove(ctx, { start, current, samples: [start, current] }, params);
+    platformContourTool.onPointerUp(ctx, { start, current, samples: [start, current] }, params);
+    assert.equal(calls.feedback.at(-1)?.tone, "success", JSON.stringify(calls.feedback.at(-1)));
+    const after = new Set(terrain(runtime).filter(onPath).map(keyOf));
+    assert.deepEqual([...after].filter((key) => !before.has(key)), [], "no ground laid again along the way");
+    assert.deepEqual([...before].filter((key) => !after.has(key)), [], "none taken away along the way");
+    // Now over x = 3.7..7.7: the ground heals where it stood and goes round where it is.
+    assert.deepEqual(holesIn(runtime, (x, z) => x > 3.7 && x < 7.7 && z > -1.7 && z < 1.7), [], "no hole where it stood, nor round where it is");
+  } finally { session.free(); }
+}));

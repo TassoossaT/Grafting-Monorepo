@@ -357,6 +357,7 @@ function answerCut(runtime: LatticeReactionRuntime, effect: Effect, hits: readon
         footprintOutline: footprint,
         painterSurfaceType: change.surfaceType,
         vacatedGround,
+        draggedSurfaceKeys: stretched.filter((topology) => topology.surfaceType === surfaceType).map((topology) => topology.surfaceKey),
       },
       effect.causeId,
       tableId,

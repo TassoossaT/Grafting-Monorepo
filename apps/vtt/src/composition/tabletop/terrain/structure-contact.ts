@@ -126,11 +126,15 @@ export function meetStructures(
   // where each rests on the ground**, read from the ground alone, never from
   // the structures' nodes it shares.
   const groundAt = groundSurfaceOf(terrainStanding, new Set(positions.keys()));
+  // A structure standing clear of the ground all over is no business of the
+  // ground's: nothing is cut round it, its outline is no line the ground meets.
+  const meeting: ConstructionRegionTopology[] = [];
   const pieces = cutting.flatMap((topology): (PlanarPolygon | PlanarArea)[] => {
     const polygon = polygonOf(topology, positions);
     if (polygon.length === 0) return [];
     const contact = groundContactOf(topology, groundAt, GROUND_CONTACT_CELL, GROUND_CONTACT_CLEARANCE, heldFor(topology.surfaceType));
     if (contact.kind === "none") return [];
+    meeting.push(topology);
     if (contact.kind === "whole") return [polygon];
     try {
       const clear = planarUnion(runtime, [contact.clear[0]!.map(([x, z]) => [x, z] as [number, number])], ...contact.clear.slice(1).map((cell) => [cell.map(([x, z]) => [x, z] as [number, number])]));
@@ -153,7 +157,7 @@ export function meetStructures(
   // its actual nodes and edges -- except a sealed one, met only at the nodes
   // it holds with another.
   const byType = new Map<string, ConstructionRegionTopology[]>();
-  for (const topology of cutting) byType.set(topology.surfaceType, [...(byType.get(topology.surfaceType) ?? []), topology]);
+  for (const topology of meeting) byType.set(topology.surfaceType, [...(byType.get(topology.surfaceType) ?? []), topology]);
   const sharedLoops: (readonly ConstructionRegionEdge[])[] = [];
   const sealedLoops: (readonly ConstructionRegionEdge[])[] = [];
   const sealedHeld = new Set<ConstructionNodeId>();

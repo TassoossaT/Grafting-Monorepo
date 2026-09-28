@@ -209,6 +209,14 @@ export interface CutFallout {
   /** Exactly the regions this cut consumed -- the covered type's own to delete and repair around. */
   readonly consumedSurfaceKeys: readonly ConstructionSurfaceKey[];
   /**
+   * Those of `consumedSurfaceKeys` an edit dragged out of shape -- rimmed by a
+   * node the structure carried away -- so their own shape now runs from where
+   * they lay to where the node went, over ground that was never touched. The
+   * ground they covered is in the vacated area; their shape is no ground to
+   * lay again.
+   */
+  readonly draggedSurfaceKeys?: readonly ConstructionSurfaceKey[];
+  /**
    * The XZ shape the cut was asked about -- the painter's own footprint.
    *
    * A repair that regrows ground through the same generator the sculpt brush

@@ -6790,6 +6790,10 @@ Optional noise function for base terrain when expanding onto empty ground.
 
 ### `property vtt.structural-cut.StructuralCutRequest.seed?: number`
 
+### `property vtt.structural-cut.StructuralCutRequest.staleRegions?: readonly (readonly string[])[]`
+
+Covered regions whose own shape is stale -- dragged out of place by an edit: replaced, but never laid again where their shape now runs.
+
 ### `property vtt.structural-cut.StructuralCutRequest.tableId: string`
 
 ### `property vtt.structural-cut.StructuralCutRequest.targetSurfaceType: string`
@@ -6894,6 +6898,14 @@ runtime this pure layer does not have.
 ### `property vtt.structure-type.CutFallout.consumedSurfaceKeys: readonly ConstructionSurfaceKey[]`
 
 Exactly the regions this cut consumed -- the covered type's own to delete and repair around.
+
+### `property vtt.structure-type.CutFallout.draggedSurfaceKeys?: readonly ConstructionSurfaceKey[]`
+
+Those of `consumedSurfaceKeys` an edit dragged out of shape -- rimmed by a
+node the structure carried away -- so their own shape now runs from where
+they lay to where the node went, over ground that was never touched. The
+ground they covered is in the vacated area; their shape is no ground to
+lay again.
 
 ### `property vtt.structure-type.CutFallout.footprintOutline?: readonly (readonly [number, number])[]`
 

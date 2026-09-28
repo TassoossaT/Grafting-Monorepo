@@ -71,6 +71,8 @@ export interface StructuralCutRequest {
   }[];
   /** Ground vacated by an acting structure (e.g. road moved off) to be restored as terrain. */
   readonly vacatedArea?: PlanarArea;
+  /** Covered regions whose own shape is stale -- dragged out of place by an edit: replaced, but never laid again where their shape now runs. */
+  readonly staleRegions?: readonly (readonly string[])[];
   /** Optional noise function for base terrain when expanding onto empty ground. */
   readonly noiseAt?: (point: { readonly x: number; readonly z: number }) => number;
 }
