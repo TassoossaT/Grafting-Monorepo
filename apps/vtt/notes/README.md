@@ -16,3 +16,4 @@ an ADR or by a design that makes it impossible, and then says so at the top.
 | [0008](0008-openings-pinned-to-host.md) | Openings pinned to their host, cut at mesh time; groups across faces; no merge | implemented |
 | [0010](0010-construction-graph-is-structural-demarcation.md) | The construction graph is structural demarcation; thickness, linings and detail belong to a future asset engine | owner decision |
 | [0009](0009-graph-overlay-is-debug-only.md) | Graph node dots are debug-only; edit handles and node identity must not depend on them | decision recorded, refactor pending (#318) |
+| [0011](0011-terrain-cut-before-task-333.md) | The terrain cut before TASK-333: pre-branch diff of every cut file, and how to recover it | reference snapshot; cut refinement pending at epic end |
