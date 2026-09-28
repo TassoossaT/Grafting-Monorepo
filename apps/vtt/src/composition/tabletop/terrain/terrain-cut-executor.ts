@@ -16,6 +16,7 @@ import {
   calculateProfileDisplacement,
   calculateProfileHeight,
   distanceAndElevationOnPath,
+  GROUND_CONTACT_CELL,
   GROUND_CONTACT_CLEARANCE,
   groundContactOf,
   hasTrait,
@@ -999,7 +1000,7 @@ export function executeTerrainCut(
     const facePolygons = connectTopologies.flatMap((topology): (PlanarPolygon | PlanarArea)[] => {
       const polygon = topologyToPolygonWithHoles(topology, connectPositions);
       if (polygon.length === 0) return [];
-      const contact = groundContactOf(topology, (point) => groundOnly!.at(point), effectiveFaceSide / 2, GROUND_CONTACT_CLEARANCE, heldFor(topology.surfaceType));
+      const contact = groundContactOf(topology, (point) => groundOnly!.at(point), GROUND_CONTACT_CELL, GROUND_CONTACT_CLEARANCE, heldFor(topology.surfaceType));
       if (contact.kind === "none") return [];
       if (contact.kind === "whole") return [polygon];
       try {

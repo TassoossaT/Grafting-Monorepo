@@ -8048,13 +8048,15 @@ How a face meets the ground: wholly, not at all, or in part -- with the cells of
 
 The ground's height at a point in plan; `undefined` where there is no ground to speak of.
 
-### `variable vtt.ground-contact.GROUND_CONTACT_CELL: 1`
+### `variable vtt.ground-contact.GROUND_CONTACT_CELL: 0.5`
 
 How finely a structure's footprint is sampled for contact.
 
-### `variable vtt.ground-contact.GROUND_CONTACT_CLEARANCE: 0.15`
+### `variable vtt.ground-contact.GROUND_CONTACT_CLEARANCE: 1.5`
 
-How far above the ground a structure's surface may stand and still touch it.
+How far above the ground a structure's surface may stand and still rest on
+it, the ground rising to meet it. Well short of a storey, well past the
+unevenness of ground a floor is drawn on.
 
 ### `function vtt.ground-contact.groundContactOf(topology: ConstructionRegionTopology, groundAt: GroundHeightAt, cell: number, clearance: number, held: ReadonlySet<string>): GroundContact`
 

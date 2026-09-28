@@ -1,18 +1,24 @@
 import type { ConstructionPosition, ConstructionRegionTopology } from "@/ports";
 
 /**
- * Where a structure touches the ground. A structure that cuts the ground --
- * a floor, a ramp, a road -- cuts it only where it touches it: where its
- * surface stands below the ground, or within {@link GROUND_CONTACT_CLEARANCE}
- * above it. A floor high over the terrain leaves the terrain whole under it; a
- * floor on a hillside cuts the hill only where it runs into it, and the ground
- * passes under the rest. Worked out from the geometry every time, so an edit
+ * Where a structure rests on the ground. A structure that cuts the ground --
+ * a floor, a ramp, a road -- cuts it only where it rests on it: where its
+ * surface stands below the ground, or no more than
+ * {@link GROUND_CONTACT_CLEARANCE} above it. There the ground is cut and
+ * rises or falls to meet its edge -- a foundation. A floor high over the
+ * terrain, a storey, leaves the terrain whole under it; a floor on a
+ * hillside cuts the hill only where it rests on it, and the ground passes
+ * under the rest. Worked out from the geometry every time, so an edit
  * that lifts a structure off the ground frees it, and one that lowers it cuts
  * again -- nothing is stored, nothing asks what the structure is.
  */
 
-/** How far above the ground a structure's surface may stand and still touch it. */
-export const GROUND_CONTACT_CLEARANCE = 0.15;
+/**
+ * How far above the ground a structure's surface may stand and still rest on
+ * it, the ground rising to meet it. Well short of a storey, well past the
+ * unevenness of ground a floor is drawn on.
+ */
+export const GROUND_CONTACT_CLEARANCE = 1.5;
 
 type Plan = { readonly x: number; readonly z: number };
 
@@ -110,7 +116,7 @@ export function groundContactOf(topology: ConstructionRegionTopology, groundAt: 
 }
 
 /** How finely a structure's footprint is sampled for contact. */
-export const GROUND_CONTACT_CELL = 1;
+export const GROUND_CONTACT_CELL = 0.5;
 /** How far around a point the ground's own nodes are read for its height. */
 const GROUND_READ_REACH = 8;
 

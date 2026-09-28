@@ -13,7 +13,7 @@ import { shownGlobalHandles } from "../src/features/edit-construction/index.ts";
  * heal; a ramp run into the ground is cut round without losing a corner.
  */
 
-function bowl(runtime, session) {
+function bowl(runtime, session, heightAt = (x, z) => 0.04 * (x * x + z * z)) {
   runtime.getSnapshot = () => ({
     tableId: "t",
     map: { nodePositions: new Map(JSON.parse(session.snapshot_json()).nodes.map((n) => [n.id, { position: { x: n.position[0], y: n.position[1], z: n.position[2] } }])) },
@@ -21,7 +21,7 @@ function bowl(runtime, session) {
   const cell = 2, cells = 10, id = (i, j) => `g:${i}:${j}`, nodes = [];
   for (let i = 0; i <= cells; i++) for (let j = 0; j <= cells; j++) {
     const x = -10 + i * cell, z = -10 + j * cell;
-    nodes.push({ id: id(i, j), position: { x, y: 0.04 * (x * x + z * z), z } });
+    nodes.push({ id: id(i, j), position: { x, y: heightAt(x, z), z } });
   }
   const edges = new Map();
   const use = (a, b) => {
@@ -37,10 +37,10 @@ function bowl(runtime, session) {
   runtime.addPatch({ nodes, edges: [...edges.values()], regions });
 }
 
-function setup() {
+function setup(heightAt) {
   const fixture = sessionFixture();
   Object.assign(fixture.runtime, { showPreview() {}, clearPreview() {} });
-  bowl(fixture.runtime, fixture.session);
+  bowl(fixture.runtime, fixture.session, heightAt);
   return fixture;
 }
 const quiet = (body) => async () => {
@@ -78,16 +78,16 @@ test("a floor built high over the ground leaves the ground exactly as it was", q
 test("a floor on the bowl's side cuts the ground only where it runs into it; the ground passes under the rest", quiet(() => {
   const { runtime, ctx, calls, session } = setup();
   try {
-    // At 1 m: clear of the ground near x = -2.3, run into it past x = 5 -- off the ground's own grid lines.
-    floorAt(ctx, [-2.3, -1.3, 6.7, 1.3], 1);
+    // At 3 m: well clear of the ground near x = -2.3, resting on it past x = 6 -- off the ground's own grid lines.
+    floorAt(ctx, [-2.3, -1.3, 8.3, 1.3], 3);
     assert.equal(calls.feedback.at(-1)?.tone, "success", JSON.stringify(calls.feedback.at(-1)));
     const floor = of(runtime, "platform");
     const held = new Set(groundHolding(runtime, floor).flatMap((t) => t.nodes.map((n) => n.id)));
     const joined = floor.nodes.filter((n) => held.has(n.id));
     assert.ok(joined.length >= 2, "the ground is joined to it where it runs into it");
-    assert.ok(joined.every((n) => n.position.x > 3), `and only there: ${JSON.stringify(joined.map((n) => n.position))}`);
-    assert.ok(groundUnder(runtime, [-2.3, -1.3, 3, 1.3]), "the ground still stands under the part clear of it");
-    assert.ok(!groundUnder(runtime, [5.5, -1.1, 6.7, 1.1]), "and none where it runs into it");
+    assert.ok(joined.every((n) => n.position.x > 5), `and only there: ${JSON.stringify(joined.map((n) => n.position))}`);
+    assert.ok(groundUnder(runtime, [-2.3, -1.3, 4, 1.3]), "the ground still stands under the part clear of it");
+    assert.ok(!groundUnder(runtime, [7.3, -1.1, 8.3, 1.1]), "and none where it rests on it");
   } finally { session.free(); }
 }));
 
@@ -127,4 +127,21 @@ test("a ramp run into the ground is cut round where it touches it, keeps its fou
     assert.ok(foot.length === 2 && foot.every((n) => meets(n.position)), "the ground comes up to its foot");
     assert.ok(groundUnder(runtime, [1, -0.8, 3, 0.8]), "and runs on under its raised end");
   } finally { session.free(); }
+}));
+
+test("a floor drawn on uneven ground, a little above or below it here and there, rests on it all round: the ground meets every side and none is left under it", quiet(() => {
+  const wavy = (x, z) => 0.5 * (Math.sin(x * 0.9) + Math.cos(z * 1.3));
+  // Within the reach everywhere: the lowest trough under it is at most 1.5 m down.
+  for (const y of [-0.3, 0.2, 0.5]) {
+    const { runtime, ctx, calls, session } = setup(wavy);
+    try {
+      floorAt(ctx, [-2.3, -1.7, 3.7, 2.3], y);
+      assert.equal(calls.feedback.at(-1)?.tone, "success", JSON.stringify(calls.feedback.at(-1)));
+      const floor = of(runtime, "platform");
+      const held = new Set(groundHolding(runtime, floor).flatMap((t) => t.nodes.map((n) => n.id)));
+      const sides = floor.outerLoops[0];
+      assert.ok(sides.every((use) => held.has(use.startNodeId) && held.has(use.endNodeId)), `at ${y}: the ground meets every side`);
+      assert.ok(!groundUnder(runtime, [-2.3, -1.7, 3.7, 2.3]), `at ${y}: none left under it`);
+    } finally { session.free(); }
+  }
 }));

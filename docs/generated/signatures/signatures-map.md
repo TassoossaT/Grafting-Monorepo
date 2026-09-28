@@ -7190,7 +7190,7 @@ export function floorsWithout(floors: readonly ConstructionRegionTopology[], run
   const off = rungs.filter((rung) => floorsWeldedBy([topology], rung).length > 0);
 
 // src/features/edit-construction/topology/ground-contact.ts
-export const GROUND_CONTACT_CLEARANCE = 0.15;
+export const GROUND_CONTACT_CLEARANCE = 1.5;
 export type GroundHeightAt = (point: Plan) => number | undefined;
 export type ContactCell = readonly (readonly [number, number])[];
 export type GroundContact =
@@ -7198,7 +7198,7 @@ export function surfaceHeightOf(topology: ConstructionRegionTopology): ((point: 
   const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
 export function groundContactOf(topology: ConstructionRegionTopology, groundAt: GroundHeightAt, cell: number, clearance = GROUND_CONTACT_CLEARANCE, held: ReadonlySet<string> = new Set()): GroundContact {
   const surfaceAt = surfaceHeightOf(topology);
-export const GROUND_CONTACT_CELL = 1;
+export const GROUND_CONTACT_CELL = 0.5;
 export function groundHeightsOf(nodes: readonly ConstructionPosition[], reach = GROUND_READ_REACH): GroundHeightAt {
   const buckets = new Map<string, ConstructionPosition[]>();
 export function touchesGround(
