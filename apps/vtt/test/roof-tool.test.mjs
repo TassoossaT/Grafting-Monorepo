@@ -220,3 +220,18 @@ test("pulling a corner out of a side adds a leaf", () => {
     assert.equal(new Set(roofs(runtime).map((f) => `${f.props.roofFace.block}:${f.props.roofFace.side}`)).size, 5);
   } finally { session.free(); }
 });
+
+test("a rectangle drawn into a standing roof joins it as a cross gable, one roof", () => {
+  const value = roofed();
+  const { runtime, session, ctx } = value;
+  try {
+    const start = { point: { x: 3, y: 0, z: -4 } }, current = { point: { x: 5, y: 0, z: 2 } };
+    roofTool.onPointerUp(ctx, { start, current, samples: [start, current] }, { ...DEFAULT_TOOL_PARAMS.roof, waters: 2, elevation: 0, height: 9 });
+    const groups = new Set(roofs(runtime).map((f) => f.props.roof.group));
+    assert.equal(groups.size, 1);
+    const recipe = roofs(runtime)[0].props.roof;
+    assert.equal(recipe.blocks.length, 2);
+    assert.equal(recipe.elevation, 3, "the arm stands on the roof it joins");
+    assert.ok(roofs(runtime).some((f) => f.props.roofFace.block === 1));
+  } finally { session.free(); }
+});

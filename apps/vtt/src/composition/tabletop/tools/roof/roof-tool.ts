@@ -1,5 +1,5 @@
-import { DEFAULT_TOOL_PARAMS, ROOF_OVERHANG, roofGraphPatch, roofOver, roofStructureType, type ToolParamsByTool } from "../../../../features/edit-construction/index.ts";
-import type { CapRequest } from "@/ports";
+import { DEFAULT_TOOL_PARAMS, ROOF_OVERHANG, ROOF_RECIPE_PROP, roofGraphPatch, roofOver, roofStructureType, type RoofRecipe, type ToolParamsByTool } from "../../../../features/edit-construction/index.ts";
+import type { CapRequest, ConstructionSurfaceKey } from "@/ports";
 import type { RoofRequest } from "../../../../ports/cap-port.ts";
 import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext } from "../core/tool-context.ts";
 import { withStructureEditing } from "../core/structure-edit-behavior.ts";
@@ -20,18 +20,43 @@ function startElevation(ctx: ToolContext, start: PointerSample, params: Params):
   return picked?.position.y ?? params.elevation;
 }
 
-function dragged(ctx: ToolContext, start: PointerSample, end: PointerSample, params: Params): RoofRequest {
-  const [x0, x1] = [Math.min(start.point.x, end.point.x), Math.max(start.point.x, end.point.x)];
-  const [z0, z1] = [Math.min(start.point.z, end.point.z), Math.max(start.point.z, end.point.z)];
-  return roofOver([[[x0, z0], [x1, z0], [x1, z1], [x0, z1]]], startElevation(ctx, start, params), params.height, params.waters);
+/** Whether two convex outlines overlap or touch: no side of either separates them. */
+function meets(a: readonly Point[], b: readonly Point[]): boolean {
+  return ![a, b].some((outline) => outline.some((p, i) => {
+    const q = outline[(i + 1) % outline.length]!;
+    const axis = [q[1] - p[1], p[0] - q[0]] as const;
+    const span = (points: readonly Point[]) => points.map((x) => x[0] * axis[0] + x[1] * axis[1]);
+    const [sa, sb] = [span(a), span(b)];
+    const gap = Math.max(Math.min(...sb) - Math.max(...sa), Math.min(...sa) - Math.max(...sb));
+    return gap > 1e-6 * Math.hypot(axis[0], axis[1]);
+  }));
 }
 
-/** Commits a roof generated from `request`, keeping the recipe on every face it made. */
-export function commitRoofRecipe(ctx: ToolContext, request: RoofRequest): void {
+/**
+ * What a rectangle drawn from `start` to `end` makes: a roof of its own, or
+ * -- reaching into a roof already standing -- that roof with the rectangle
+ * joined to it as one more block, its faces to replace.
+ */
+function dragged(ctx: ToolContext, start: PointerSample, end: PointerSample, params: Params): { readonly request: RoofRequest; readonly replaces: readonly ConstructionSurfaceKey[] } {
+  const [x0, x1] = [Math.min(start.point.x, end.point.x), Math.max(start.point.x, end.point.x)];
+  const [z0, z1] = [Math.min(start.point.z, end.point.z), Math.max(start.point.z, end.point.z)];
+  const outline: Point[] = [[x0, z0], [x1, z0], [x1, z1], [x0, z1]];
+  const faces = ctx.runtime.getAllRegionTopologies().filter((face) => face.props?.[ROOF_RECIPE_PROP] !== undefined);
+  const joined = faces.map((face) => face.props![ROOF_RECIPE_PROP] as RoofRecipe).find((recipe) => recipe.blocks.some((block) => meets(block.contour, outline)));
+  if (!joined) return { request: roofOver([outline], startElevation(ctx, start, params), params.height, params.waters), replaces: [] };
+  const arm = roofOver([outline], joined.elevation, joined.height, params.waters).blocks[0]!;
+  return {
+    request: { elevation: joined.elevation, height: joined.height, blocks: [...joined.blocks, arm] },
+    replaces: faces.filter((face) => (face.props![ROOF_RECIPE_PROP] as RoofRecipe).group === joined.group).map((face) => face.surfaceKey),
+  };
+}
+
+/** Commits a roof generated from `request` in place of the faces `replaces` names, keeping the recipe on every face it made. */
+export function commitRoofRecipe(ctx: ToolContext, request: RoofRequest, replaces: readonly ConstructionSurfaceKey[] = []): void {
   try {
     const operationId = scopedToolId(ctx, "roof", ctx.nextSequence());
     const { patch, faceProps } = roofGraphPatch(ctx.runtime, request, operationId);
-    const { recorded } = commitPatchReplacement(ctx.runtime, { operationId, sourceSurfaceKeys: [], patch }, {
+    const { recorded } = commitPatchReplacement(ctx.runtime, { operationId, sourceSurfaceKeys: replaces, patch }, {
       transactionId: operationId,
       afterward: (outcome) => keepFaceProps(ctx.runtime, outcome.createdSurfaceKeys, faceProps),
     });
@@ -74,7 +99,7 @@ const rawRoofTool: ConstructionTool<"roof"> = {
     try {
       const preview = params.shape === "circle"
         ? ctx.runtime.generateCap(coneRequest([gesture.current.point.x, gesture.current.point.z], params.radius, startElevation(ctx, gesture.start, params), params)).preview
-        : ctx.runtime.generateRoof(dragged(ctx, gesture.start, gesture.current, params)).preview;
+        : ctx.runtime.generateRoof(dragged(ctx, gesture.start, gesture.current, params).request).preview;
       return segmentsPreview(Float32Array.from(preview.flat()), 0xb96e48);
     } catch { return undefined; }
   },
@@ -92,7 +117,8 @@ const rawRoofTool: ConstructionTool<"roof"> = {
   },
   onPointerUp(ctx, gesture, params) {
     if (params.shape !== "rectangle" || gesture.samples.length < 2) return;
-    commitRoofRecipe(ctx, dragged(ctx, gesture.start, gesture.current, params));
+    const { request, replaces } = dragged(ctx, gesture.start, gesture.current, params);
+    commitRoofRecipe(ctx, request, replaces);
   },
 };
 
