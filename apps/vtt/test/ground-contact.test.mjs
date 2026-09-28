@@ -269,3 +269,26 @@ test("a floor moved a long way across the ground is two cuts, where it left and 
     assert.deepEqual(holesIn(runtime, (x, z) => x > 3.7 && x < 7.7 && z > -1.7 && z < 1.7), [], "no hole where it stood, nor round where it is");
   } finally { session.free(); }
 }));
+
+test("a floor standing clear of the ground, moved to where it rests on it, cuts only where it arrived: where it stood it had cut nothing, so nothing there is laid again", quiet(() => {
+  // A valley 2 m down on the west, level ground on the east.
+  const { runtime, ctx, calls, session } = setup((x) => (x < 0 ? -2 : 0));
+  try {
+    floorAt(ctx, [-8.3, -1.7, -4.3, 1.7], 0.3);
+    const keyOf = (t) => t.surfaceKey.join(" ");
+    assert.equal(groundHolding(runtime, of(runtime, "platform")).length, 0, "clear of the valley floor to begin with");
+    const middle = (t) => ({ x: t.nodes.reduce((s, n) => s + n.position.x, 0) / t.nodes.length, z: t.nodes.reduce((s, n) => s + n.position.z, 0) / t.nodes.length });
+    const whereItStood = (t) => { const { x, z } = middle(t); return x > -10 && x < -2.5 && z > -4 && z < 4; };
+    const before = new Set(terrain(runtime).filter(whereItStood).map(keyOf));
+    const handle = shownGlobalHandles({ graph: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), cloudFor: (q) => runtime.cloudFor(q) }).find((h) => h.kind === "pivot");
+    const params = platformContourTool.defaultParams();
+    const start = { nodeId: handle.id, point: handle.position, screenX: 100, screenY: 300 };
+    const current = { point: { ...handle.position, x: handle.position.x + 12 }, screenX: 400, screenY: 300 };
+    platformContourTool.onPointerDown(ctx, start, params);
+    platformContourTool.onPointerMove(ctx, { start, current, samples: [start, current] }, params);
+    platformContourTool.onPointerUp(ctx, { start, current, samples: [start, current] }, params);
+    assert.equal(calls.feedback.at(-1)?.tone, "success", JSON.stringify(calls.feedback.at(-1)));
+    assert.ok(groundHolding(runtime, of(runtime, "platform")).length > 0, "cut into the level ground where it arrived");
+    assert.deepEqual(terrain(runtime).filter(whereItStood).map(keyOf).sort(), [...before].sort(), "the valley where it stood is left exactly as it was");
+  } finally { session.free(); }
+}));

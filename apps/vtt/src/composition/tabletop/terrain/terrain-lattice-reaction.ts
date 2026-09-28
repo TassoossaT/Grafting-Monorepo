@@ -192,6 +192,23 @@ function letGoOf(change: Effect["change"], hits: readonly ConstructionRegionTopo
   });
 }
 
+/**
+ * Where a structure left ground it had cut: the plan it vacated, but only of
+ * the faces that met the ground where they stood -- joined to it by a node,
+ * or resting on it. A face that stood clear of the ground left nothing cut
+ * behind; laying the ground again there would only draw its outline into
+ * ground nobody touched.
+ */
+function vacatedGroundOf(runtime: LatticeReactionRuntime, change: Effect["change"], hits: readonly ConstructionRegionTopology[], vacated: PlanarArea): PlanarArea {
+  const own = new Set([...change.before, ...change.after].flatMap((topology) => topology.nodes.map((node) => node.id)));
+  const held = new Set(hits.flatMap((topology) => topology.nodes.map((node) => node.id)));
+  const groundAt = groundSurfaceOf(hits, own);
+  const met = change.before.filter((face) => face.nodes.some((node) => held.has(node.id)) || groundContactOf(face, groundAt, GROUND_CONTACT_CELL).kind !== "none");
+  if (met.length === change.before.length) return vacated;
+  if (met.length === 0) return [];
+  return changeAreaOf(runtime, { before: met, after: change.after })?.vacated ?? vacated;
+}
+
 function answerCut(runtime: LatticeReactionRuntime, effect: Effect, hits: readonly ConstructionRegionTopology[], executor: LatticeRepairExecutor): void {
   const { change } = effect;
   const groundTypes = [...new Set(hits.map((hit) => hit.surfaceType))];
@@ -215,7 +232,7 @@ function answerCut(runtime: LatticeReactionRuntime, effect: Effect, hits: readon
   const area = change.before.length > 0 ? timePhase("área mudada", () => changeAreaOf(runtime, change)) : undefined;
   const isEdit = area !== undefined;
   const claimed: PlanarArea = area?.claimed ?? [];
-  const changed: PlanarArea = [...(area?.vacated ?? []), ...(isEdit ? letGoOf(change, hits) : [])];
+  const changed: PlanarArea = [...(isEdit ? vacatedGroundOf(runtime, change, hits, area.vacated) : []), ...(isEdit ? letGoOf(change, hits) : [])];
   const editArea: PlanarArea = [...claimed, ...changed];
 
   const typeFootprint = change.footprintOutline !== undefined && change.footprintOutline.length >= 3 ? change.footprintOutline : undefined;
