@@ -109,7 +109,7 @@ export function runNxAffected(paths, { root, exec = execFileSync } = {}) {
   const stdout = exec(
     "nx",
     ["show", "projects", "--affected", `--files=${paths.join(",")}`, "--json"],
-    { cwd: root, encoding: "utf8", shell: true },
+    { cwd: root, encoding: "utf8", shell: true, windowsHide: true },
   );
   // Nx may print diagnostic preamble before the JSON payload;
   // the payload is always the last successfully-parseable JSON line.
