@@ -66,6 +66,36 @@ test("a window clicked on a roof leaf stands there upright, filling the front of
   } finally { await runtime.dispose?.(); }
 });
 
+test("dragging over a roof leaf draws the window corner to corner, as on a wall", async () => {
+  const h = await gabled();
+  try {
+    const leaf = ref(southLeaf(h.runtime));
+    // Along the eave for its width, up the leaf for its height: 1.5 wide, 2 x 0.4 tall.
+    dispatchGesture(openingTool, h.ctx, window, [{ point: { x: 3, y: 2, z: 1 }, surfaceRef: leaf }, { point: { x: 4.5, y: 2.8, z: 1.4 }, surfaceRef: leaf }]);
+    assert.equal(h.feedback.at(-1)?.tone, "success", JSON.stringify(h.feedback.at(-1)));
+    const b = openingBox(h);
+    assert.ok(near(b.x0, 3) && near(b.x1, 4.5) && near(b.y0, 2) && near(b.y1, 2.8) && near(b.z, 1), `drawn from corner to corner: ${JSON.stringify(b)}`);
+  } finally { await h.runtime.dispose?.(); }
+});
+
+test("the roof made again round a window it holds keeps it -- never welded onto the window's own corners", async () => {
+  const h = await roofWithWindow();
+  const { runtime, ctx } = h;
+  try {
+    const nodes = h.openings().flatMap((o) => o.nodes);
+    const scene = { graph: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), cloudFor: (r) => runtime.cloudFor(r) };
+    const rise = shownGlobalHandles(scene).find((handle) => handle.kind === "rise" && handle.recipeHandle.anchor === "rise");
+    const params = { ...DEFAULT_TOOL_PARAMS.roof };
+    const start = { nodeId: rise.id, point: rise.position, screenX: 100, screenY: 300 };
+    const up = { point: rise.position, screenX: 100, screenY: 260 };
+    roofTool.onPointerDown(ctx, start, params);
+    roofTool.onPointerMove(ctx, { start, current: up, samples: [start, up] }, params);
+    roofTool.onPointerUp(ctx, { start, current: up, samples: [start, up] }, params);
+    assert.notEqual(h.feedback.at(-1)?.tone, "error", JSON.stringify(h.feedback.at(-1)));
+    assert.ok(nodes.every((n) => JSON.stringify(pinOf(runtime, n.id)?.hostSurfaceKey) === JSON.stringify(front(runtime).surfaceKey)), "the window stays in its front");
+  } finally { await runtime.dispose?.(); }
+});
+
 test("a roof drawn the other way round takes the window where it was clicked, not mirrored", async () => {
   const h = await gabled({ x: 8, z: 4 }, { x: 0, z: 0 });
   try {

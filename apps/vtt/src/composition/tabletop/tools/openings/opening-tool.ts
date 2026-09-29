@@ -329,12 +329,24 @@ function ringPreview(ring: readonly ConstructionPosition[], color: number): Retu
   return segmentsPreview(Float32Array.from(positions), color);
 }
 
-/** A press on a face that raises a stand: an opening at the sliders' size, its stand raised round it. */
-function raiseStand(ctx: ToolContext, pressed: Extract<Press, { kind: "stand" }>, params: OpeningParams): void {
+/** Where and how big the opening a press on a stand face makes: drawn corner to corner by a drag, the sliders' size at a click. */
+function standPlacement(pressed: Extract<Press, { kind: "stand" }>, current: ConstructionPosition | undefined, params: OpeningParams): { readonly at: ConstructionPosition; readonly look: StandLook } | undefined {
   const look = lookOfNew(params);
+  if (current === undefined) return { at: pressed.at, look };
+  return pressed.stand.drawn(pressed.face, pressed.at, current, look.shape, look.isDoor);
+}
+
+/** A press on a face that raises a stand: the opening it drew, or one at the sliders' size, its stand raised round it. */
+function raiseStand(ctx: ToolContext, pressed: Extract<Press, { kind: "stand" }>, gesture: ReleasedGesture, params: OpeningParams): void {
+  const placed = standPlacement(pressed, gesture.moved ? gesture.current.point : undefined, params);
+  if (placed === undefined || placed.look.width < MIN_OPENING_SIZE || placed.look.height < MIN_OPENING_SIZE) {
+    ctx.reportFeedback({ tone: "error", message: "Abertura: arraste mais, ao longo do beiral para a largura e subindo a agua para a altura." });
+    return;
+  }
+  const { at, look } = placed;
   if (selected !== undefined) clearSelection(ctx);
   const causeId = scopedToolId(ctx, "opening", ctx.nextSequence());
-  const result = pressed.stand.raise(ctx, causeId, pressed.face, pressed.at, look);
+  const result = pressed.stand.raise(ctx, causeId, pressed.face, at, look);
   reportCommit(ctx, causeId, result, look.isDoor ? "Porta aberta no telhado." : "Janela aberta no telhado.");
 }
 
@@ -518,9 +530,15 @@ export const openingTool: ConstructionTool<"opening"> = {
     if (press?.kind === "grab") return press.drag.stand === undefined ? dragPreview(gesture, ctx, press.drag) : undefined;
     const fresh = forNew(params);
     // Over a face that raises a stand: the opening's outline, upright where it would stand.
-    const onStand = press?.kind === "stand" ? press : standUnder(ctx, gesture.current);
+    if (press?.kind === "stand") {
+      const moved = gesture.current.point.x !== press.at.x || gesture.current.point.z !== press.at.z;
+      const placed = standPlacement(press, moved ? gesture.current.point : undefined, fresh);
+      const ring = placed === undefined ? undefined : press.stand.outline(press.face, placed.at, placed.look);
+      return ring === undefined ? undefined : ringPreview(ring, OPENING_KIND_COLOR[fresh.openingKind]);
+    }
+    const onStand = standUnder(ctx, gesture.current);
     if (onStand !== undefined) {
-      const ring = onStand.stand.outline(onStand.face, press?.kind === "stand" ? press.at : gesture.current.point, lookOfNew(fresh));
+      const ring = onStand.stand.outline(onStand.face, gesture.current.point, lookOfNew(fresh));
       return ring === undefined ? undefined : ringPreview(ring, OPENING_KIND_COLOR[fresh.openingKind]);
     }
     if (press?.kind === "wall" && press.anchor !== undefined) return createPreview(gesture, fresh, ctx, press.anchor);
@@ -554,7 +572,7 @@ export const openingTool: ConstructionTool<"opening"> = {
     press = undefined;
     if (released?.kind === "grab") releaseGrab(ctx, gesture, released.drag, params);
     else if (released?.kind === "wall") releaseOnWall(ctx, gesture, released.anchor, forNew(params));
-    else if (released?.kind === "stand") raiseStand(ctx, released, forNew(params));
+    else if (released?.kind === "stand") raiseStand(ctx, released, gesture, forNew(params));
   },
 
   onParamsChange(ctx: ToolContext, next: OpeningParams): void {

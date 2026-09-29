@@ -256,7 +256,9 @@ export function roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: Ro
       footprint: { outer, holes: holes.filter((hole) => hole.length >= 3 && insideRingXZ(outer, { x: hole[0]![0], z: hole[0]![1] })) },
     }));
   });
-  const others = standing.filter((face) => face.props?.[ROOF_RECIPE_PROP] === undefined);
+  // What cuts is pinned onto a face, not built beside it: never welded to --
+  // an opening filling a front shares its corners without being structure.
+  const others = standing.filter((face) => face.props?.[ROOF_RECIPE_PROP] === undefined && !hasTrait(face.surfaceType, "cuts"));
   // Roof-generated upright closures can support another roof at a different
   // elevation. Share their vertices, while each roof keeps its own recipe.
   const supports = standing.filter((face) => hasTrait(face.surfaceType, "partition") && hasTrait(face.surfaceType, "roof-generated"));

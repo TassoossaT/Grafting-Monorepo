@@ -3115,6 +3115,12 @@ that can raise an upright stand to hold one: the stand exists only for
 its opening, follows it when it moves or changes size, and goes with it.
 Each call is one transaction, the stand and the opening together.
 
+### `method vtt.opening-stand.OpeningStand.drawn(face: ConstructionRegionTopology, from: ConstructionPosition, to: ConstructionPosition, shape: OpeningShape, isDoor: boolean): { at: ConstructionPosition; look: StandLook } | undefined`
+
+The opening a drag from `from` to `to` over `face` draws, as a wall's
+drag does from corner to corner: where its front's middle stands and its
+size -- `shape` its outline -- or `undefined` when it draws nothing.
+
 ### `method vtt.opening-stand.OpeningStand.drop(ctx: ToolContext, causeId: string, pieces: readonly ConstructionSurfaceKey[], host: ConstructionSurfaceKey): OpeningCommit`
 
 Removes the opening and the stand at `host` holding it.

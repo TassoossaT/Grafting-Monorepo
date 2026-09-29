@@ -1,6 +1,6 @@
 import type { ConstructionPosition, ConstructionRegionTopology, ConstructionSurfaceKey } from "@/ports";
 
-import { dormerAt, dormerFrame, openingPath, pointAt, ROOF_FACE_PROP, ROOF_RECIPE_PROP, type RoofFaceRole, type RoofRecipe } from "../../../../features/edit-construction/index.ts";
+import { dormerAt, dormerFrame, faceRings, openingPath, planeOf, pointAt, ROOF_FACE_PROP, ROOF_RECIPE_PROP, type RoofFaceRole, type RoofRecipe } from "../../../../features/edit-construction/index.ts";
 import type { RoofDormer } from "../../../../ports/cap-port.ts";
 import type { ToolContext } from "../core/tool-context.ts";
 import { commitOpeningGroup, runFrame, type OpeningCommit } from "../openings/opening-shared.ts";
@@ -84,6 +84,21 @@ export const roofOpeningStand: OpeningStand = {
   raisesOn(face) {
     const recipe = recipeOf(face), role = roleOf(face);
     return !!recipe && !!role && !role.upright && role.dormer === undefined && role.subroof === undefined && (recipe.slopes[role.side] ?? 0) > 0;
+  },
+
+  drawn(face, from, to, shape, isDoor) {
+    const recipe = recipeOf(face), role = roleOf(face);
+    const plane = planeOf(faceRings(face)[0] ?? []);
+    if (!recipe || !role || !plane || Math.abs(plane.normal.y) < 1e-9) return undefined;
+    const { normal: n, centre: c } = plane;
+    const leafAt = (p: ConstructionPosition) => ({ ...p, y: c.y - (n.x * (p.x - c.x) + n.z * (p.z - c.z)) / n.y });
+    const [a, b] = [leafAt(from), leafAt(to)];
+    // The lower corner stands the front; the upper is where the level top meets the leaf.
+    const [low, high] = a.y <= b.y ? [a, b] : [b, a];
+    const { u } = dormerFrame(recipe, standFor(recipe, role.side, [low.x, low.z], { width: 1, height: 1, shape, isDoor }));
+    const along = (high.x - low.x) * u[0] + (high.z - low.z) * u[1];
+    const look = { width: Math.abs(along), height: high.y - low.y, shape, isDoor };
+    return { at: { x: low.x + (u[0] * along) / 2, y: low.y, z: low.z + (u[1] * along) / 2 }, look };
   },
 
   outline(face, at, look) {
