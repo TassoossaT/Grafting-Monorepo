@@ -79,6 +79,9 @@ pub struct RoofRequest {
     /// Horizontal platforms that trim higher roof faces while retaining lower slopes.
     #[cfg_attr(feature = "curve-serde", serde(default))]
     pub platform_cuts: Vec<RoofPlatformCut>,
+    /// Smaller roofs joined into this roof's visible envelope.
+    #[cfg_attr(feature = "curve-serde", serde(default))]
+    pub subroofs: Vec<RoofRequest>,
 }
 
 /// One logical roof face over shared indexed edges.
@@ -92,6 +95,9 @@ pub struct RoofFace {
     pub side: usize,
     /// The dormer it belongs to, if any.
     pub dormer: Option<usize>,
+    /// Which directly owned subroof made this face, if any.
+    #[cfg_attr(feature = "curve-serde", serde(default))]
+    pub subroof: Option<usize>,
     /// Whether this is an upright face: under a gable, or a dormer's front
     /// and cheeks.
     pub upright: bool,
@@ -947,9 +953,11 @@ fn normal(ring: &[[f64; 3]]) -> [f64; 3] {
     n
 }
 
+#[derive(Clone)]
 struct Face3 {
     side: usize,
     dormer: Option<usize>,
+    subroof: Option<usize>,
     /// For an upright face, the way out of the roof in plan.
     outward: Option<Point>,
     rings: Vec<Vec<[f64; 3]>>,
@@ -1004,6 +1012,7 @@ fn platform_uprights(cut: &RoofPlatformCut, leaves: &[MainLeaf]) -> Vec<Face3> {
                     faces.push(Face3 {
                         side: 0,
                         dormer: None,
+                        subroof: None,
                         outward: Some(outward),
                         rings: vec![vec![
                             [p[0], cut.elevation, p[1]],
@@ -1053,8 +1062,8 @@ fn crosses_itself(rings: &[&Vec<[f64; 2]>]) -> bool {
     })
 }
 
-/// Generates a roof with shared seam identities between all its faces.
-pub fn generate_roof_patch(request: RoofRequest) -> Result<RoofPatch, String> {
+/// Generates one roof before its visible envelope is joined to any subroofs.
+fn generate_single_roof_patch(request: RoofRequest) -> Result<RoofPatch, String> {
     if !request.elevation.is_finite() || !request.height.is_finite() || request.height <= 0.0 {
         return Err("a roof needs a finite elevation and a positive height".into());
     }
@@ -1187,6 +1196,7 @@ pub fn generate_roof_patch(request: RoofRequest) -> Result<RoofPatch, String> {
                 faces.push(Face3 {
                     side: front.side,
                     dormer: None,
+                    subroof: None,
                     outward: Some([-front.normal[0], -front.normal[1]]),
                     rings: vec![ring.iter().map(|n| lift(*n)).collect()],
                 });
@@ -1236,6 +1246,7 @@ pub fn generate_roof_patch(request: RoofRequest) -> Result<RoofPatch, String> {
             faces.push(Face3 {
                 side,
                 dormer: None,
+                subroof: None,
                 outward: None,
                 rings: vec![
                     leaf.plan
@@ -1269,6 +1280,7 @@ pub fn generate_roof_patch(request: RoofRequest) -> Result<RoofPatch, String> {
             faces.push(Face3 {
                 side,
                 dormer: None,
+                subroof: None,
                 outward: None,
                 rings: face
                     .iter()
@@ -1319,6 +1331,7 @@ pub fn generate_roof_patch(request: RoofRequest) -> Result<RoofPatch, String> {
                 faces.push(Face3 {
                     side: dormer.roles[j],
                     dormer: Some(k),
+                    subroof: None,
                     outward: None,
                     rings: face
                         .iter()
@@ -1333,6 +1346,7 @@ pub fn generate_roof_patch(request: RoofRequest) -> Result<RoofPatch, String> {
                 faces.push(Face3 {
                     side: dormer.roles[side],
                     dormer: Some(k),
+                    subroof: None,
                     outward: Some([-inward[0], -inward[1]]),
                     rings: vec![ring],
                 });
@@ -1343,6 +1357,164 @@ pub fn generate_roof_patch(request: RoofRequest) -> Result<RoofPatch, String> {
         faces.extend(platform_uprights(cut, &main));
     }
     weld(faces)
+}
+
+/// A generated face back in geometric form, so several roof profiles can be
+/// intersected before their shared seams receive graph identities.
+fn patch_faces(patch: &RoofPatch, subroof: Option<usize>) -> Vec<Face3> {
+    let ring = |uses: &[(usize, bool)]| {
+        uses.iter()
+            .map(|(edge, reversed)| {
+                let edge = &patch.edges[*edge];
+                patch.nodes[if *reversed { edge.end } else { edge.start }]
+            })
+            .collect::<Vec<_>>()
+    };
+    patch.faces.iter().map(|face| {
+        let rings = std::iter::once(ring(&face.boundary))
+            .chain(face.holes.iter().map(|hole| ring(hole)))
+            .collect::<Vec<_>>();
+        let n = normal(&rings[0]);
+        Face3 {
+            side: face.side,
+            dormer: face.dormer,
+            subroof: subroof.or(face.subroof),
+            outward: face.upright.then_some([-n[0], -n[2]]),
+            rings,
+        }
+    }).collect()
+}
+
+fn face_plane(face: &Face3) -> Option<Plane> {
+    if face.outward.is_some() { return None; }
+    let n = normal(&face.rings[0]);
+    if n[1].abs() < 1e-9 { return None; }
+    let p = face.rings[0][0];
+    Some(Plane {
+        grad: [-n[0] / n[1], -n[2] / n[1]],
+        base: (n[0] * p[0] + n[1] * p[1] + n[2] * p[2]) / n[1],
+    })
+}
+
+/// Keep only the upper visible surface where independent roof profiles overlap.
+fn visible_roof_faces(groups: &[Vec<Face3>]) -> Result<Vec<Face3>, String> {
+    let mut visible = Vec::new();
+    for (owner, faces) in groups.iter().enumerate() {
+        for face in faces {
+            let Some(plane) = face_plane(face) else {
+                visible.push(face.clone());
+                continue;
+            };
+            let mut covers: Vec<PlanFace> = face.rings.iter().skip(1).map(|ring| vec![ring.iter().map(|p| [p[0], p[2]]).collect()]).collect();
+            for (other_owner, others) in groups.iter().enumerate().filter(|(index, _)| *index != owner) {
+                for other in others {
+                    let Some(higher) = face_plane(other) else { continue; };
+                    let rings = other.rings.iter().map(|ring| at_or_below(
+                        &ring.iter().map(|p| [p[0], p[2]]).collect::<Vec<_>>(),
+                        &plane, &higher, other_owner > owner,
+                    )).enumerate().filter_map(|(index, ring)| (index == 0 || ring.len() >= 3).then_some(ring)).collect::<PlanFace>();
+                    if rings.first().is_some_and(|ring| ring.len() >= 3) { covers.push(rings); }
+                }
+            }
+            let subject = face.rings[0].iter().map(|p| [p[0], p[2]]).collect::<Vec<_>>();
+            for shape in minus(&subject, &covers)? {
+                visible.push(Face3 {
+                    side: face.side, dormer: face.dormer, subroof: face.subroof,
+                    outward: None,
+                    rings: shape.into_iter().map(|ring| ring.into_iter().map(|p| [p[0], plane.z(p), p[1]]).collect()).collect(),
+                });
+            }
+        }
+    }
+    Ok(visible)
+}
+
+fn in_footprint(footprint: &RoofFootprint, point: Point) -> bool {
+    inside(&footprint.outer, point) && !footprint.holes.iter().any(|hole| inside(hole, point))
+}
+
+/// Close the gap from a subroof's eaves down to the parent roof or a platform
+/// that has already cut it. The roof planes themselves meet through clipping.
+fn subroof_uprights(child: &RoofRequest, parent: &RoofRequest, parent_faces: &[Face3], index: usize) -> Vec<Face3> {
+    let surfaces = parent_faces.iter().filter_map(|face| face_plane(face).map(|plane| (face, plane))).collect::<Vec<_>>();
+    let mut result = Vec::new();
+    let mut side = 0;
+    for footprint in &child.footprints {
+        for (ring_index, ring) in std::iter::once(&footprint.outer).chain(&footprint.holes).enumerate() {
+            let toward_inside = if (area(ring) > 0.0) == (ring_index == 0) { 1.0 } else { -1.0 };
+            for i in 0..ring.len() {
+                let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
+                let d = sub(b, a);
+                let at = |t: f64| [a[0] + d[0] * t, a[1] + d[1] * t];
+                let mut stops = vec![0.0, 1.0];
+                for (face, _) in &surfaces {
+                    for boundary in &face.rings {
+                        let plan = boundary.iter().map(|p| [p[0], p[2]]).collect::<Vec<_>>();
+                        for j in 0..plan.len() {
+                            stops.extend(crossing(a, b, plan[j], plan[(j + 1) % plan.len()]));
+                        }
+                    }
+                }
+                for cut in &parent.platform_cuts {
+                    for boundary in std::iter::once(&cut.footprint.outer).chain(&cut.footprint.holes) {
+                        for j in 0..boundary.len() {
+                            stops.extend(crossing(a, b, boundary[j], boundary[(j + 1) % boundary.len()]));
+                        }
+                    }
+                }
+                stops.sort_by(f64::total_cmp);
+                stops.dedup_by(|x, y| (*x - *y).abs() < 1e-9);
+                for pair in stops.windows(2) {
+                    let (t0, t1) = (pair[0], pair[1]);
+                    if t1 - t0 < 1e-9 { continue; }
+                    let middle = at((t0 + t1) / 2.0);
+                    let under = surfaces.iter().filter(|(face, _)| {
+                        let outer = face.rings[0].iter().map(|p| [p[0], p[2]]).collect::<Vec<_>>();
+                        inside(&outer, middle) && !face.rings.iter().skip(1).any(|hole| inside(&hole.iter().map(|p| [p[0], p[2]]).collect::<Vec<_>>(), middle))
+                    }).map(|(_, plane)| *plane).max_by(|left, right| left.z(middle).total_cmp(&right.z(middle)));
+                    let floor = parent.platform_cuts.iter().filter(|cut| in_footprint(&cut.footprint, middle))
+                        .map(|cut| cut.elevation).fold(f64::NEG_INFINITY, f64::max);
+                    let bottom = |t: f64| under.map_or(parent.elevation, |plane| plane.z(at(t))).max(floor);
+                    let (mut lo, mut hi) = (t0, t1);
+                    let (g0, g1) = (child.elevation - bottom(t0), child.elevation - bottom(t1));
+                    if g0 <= 1e-7 && g1 <= 1e-7 { continue; }
+                    if g0 * g1 < 0.0 {
+                        let crossing = t0 + (t1 - t0) * g0 / (g0 - g1);
+                        if g0 > 0.0 { hi = crossing; } else { lo = crossing; }
+                    }
+                    if hi - lo < 1e-9 { continue; }
+                    let (p, q) = (at(lo), at(hi));
+                    result.push(Face3 {
+                        side, dormer: None, subroof: Some(index),
+                        outward: Some([d[1] * toward_inside, -d[0] * toward_inside]),
+                        rings: vec![vec![
+                            [p[0], bottom(lo), p[1]], [q[0], bottom(hi), q[1]],
+                            [q[0], child.elevation, q[1]], [p[0], child.elevation, p[1]],
+                        ]],
+                    });
+                }
+                side += 1;
+            }
+        }
+    }
+    result
+}
+
+/// Generates the connected visible envelope of a roof and its owned subroofs.
+pub fn generate_roof_patch(mut request: RoofRequest) -> Result<RoofPatch, String> {
+    let subroofs = std::mem::take(&mut request.subroofs);
+    let main = generate_single_roof_patch(request.clone())?;
+    if subroofs.is_empty() { return Ok(main); }
+    let mut groups = vec![patch_faces(&main, None)];
+    for (index, mut child) in subroofs.into_iter().enumerate() {
+        if !child.subroofs.is_empty() { return Err("a subroof cannot contain another subroof".into()); }
+        child.subroofs.clear();
+        let patch = generate_single_roof_patch(child.clone())?;
+        let mut faces = patch_faces(&patch, Some(index));
+        faces.extend(subroof_uprights(&child, &request, &groups[0], index));
+        groups.push(faces);
+    }
+    weld(visible_roof_faces(&groups)?)
 }
 
 /// Shares nodes and edges between faces, splitting any edge another face's
@@ -1461,6 +1633,7 @@ fn weld(faces: Vec<Face3>) -> Result<RoofPatch, String> {
         result.push(RoofFace {
             side: face.side,
             dormer: face.dormer,
+            subroof: face.subroof,
             upright: face.outward.is_some(),
             boundary,
             holes,
@@ -1497,6 +1670,7 @@ mod tests {
             dormers: Vec::new(),
             cutouts: Vec::new(),
             platform_cuts: Vec::new(),
+            subroofs: Vec::new(),
         }
     }
 
@@ -1540,6 +1714,32 @@ mod tests {
         assert_eq!(top.len(), 2, "a ridge, not an apex");
         assert!(top.iter().all(|p| (p[2] - 2.0).abs() < 1e-9));
         assert!(closed(&patch, 3.0));
+    }
+
+    #[test]
+    fn a_subroof_in_the_middle_replaces_hidden_parent_leaves_and_closes_its_eaves() {
+        let mut parent = roof(
+            vec![[0.0, 0.0], [8.0, 0.0], [8.0, 6.0], [0.0, 6.0]],
+            Vec::new(), vec![1.0; 4],
+        );
+        parent.elevation = 0.0;
+        parent.height = 2.0;
+        let mut child = roof(
+            vec![[2.0, 2.0], [6.0, 2.0], [6.0, 4.0], [2.0, 4.0]],
+            Vec::new(), vec![1.0; 4],
+        );
+        child.elevation = 1.5;
+        child.height = 2.0;
+        parent.subroofs.push(child);
+        let patch = generate_roof_patch(parent).unwrap();
+        let faces = patch_faces(&patch, None);
+        let at_center = |face: &Face3| {
+            let plan = face.rings[0].iter().map(|p| [p[0], p[2]]).collect::<Vec<_>>();
+            inside(&plan, [3.5, 2.5]) && !face.rings.iter().skip(1).any(|ring| inside(&ring.iter().map(|p| [p[0], p[2]]).collect::<Vec<_>>(), [3.5, 2.5]))
+        };
+        assert!(faces.iter().any(|face| face.subroof == Some(0) && face.outward.is_none() && at_center(face)));
+        assert!(!faces.iter().any(|face| face.subroof.is_none() && face.outward.is_none() && at_center(face)));
+        assert!(faces.iter().any(|face| face.subroof == Some(0) && face.outward.is_some()));
     }
 
     #[test]

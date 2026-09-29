@@ -15,6 +15,26 @@ export interface FollowBaseRuntime extends FacePropsRuntime, Pick<RoofPort, "gen
 const DONE: ReactionOutcome = Object.freeze({ kind: "done" });
 const keyOf = (key: readonly string[]) => key.join("\u0000");
 
+/** A roof's eave corners follow their supporting nodes, keeping its own rise. */
+function followedAnchors(source: RoofSource, at: ReadonlyMap<string, ConstructionRegionTopology["nodes"][number]["position"]>): RoofSource | undefined {
+  if (!source.anchors?.length) return undefined;
+  const rings = ringsOf(source.footprints);
+  const changed = source.anchors.some(({ ring, corner, nodeId }) => {
+    const point = rings[ring]?.points[corner];
+    const position = at.get(nodeId);
+    return point && position && (Math.abs(point[0] - position.x) > 1e-6 || Math.abs(point[1] - position.z) > 1e-6 || Math.abs(source.elevation - position.y) > 1e-6);
+  });
+  if (!changed) return undefined;
+  const footprints = footprintsOf(rings.map((ring, r) => ({ ...ring, points: ring.points.map((point, corner) => {
+    const anchor = source.anchors!.find((candidate) => candidate.ring === r && candidate.corner === corner);
+    const position = anchor ? at.get(anchor.nodeId) : undefined;
+    return position ? [position.x, position.z] as const : point;
+  }) })));
+  const levels = source.anchors.map(({ nodeId }) => at.get(nodeId)?.y).filter((level): level is number => level !== undefined);
+  const elevation = levels.length && levels.every((level) => Math.abs(level - levels[0]!) < 1e-4) ? levels[0]! : source.elevation;
+  return { ...source, footprints, elevation };
+}
+
 /**
  * The `"follow-base"` reaction: a roof standing on a floor or a room is made
  * again over it whenever that changes -- moved, widened, raised, a wall of
@@ -35,19 +55,15 @@ export function followBaseReaction(): Reaction<FollowBaseRuntime> {
     // changed face is also a roof, so inspect anchored dependants directly.
     const anchoredHits = present.filter((face) => {
       const recipe = face.props?.[ROOF_RECIPE_PROP] as RoofRecipe | undefined;
-      return (recipe?.anchors?.length ?? 0) > 0;
+      return (recipe?.anchors?.length ?? 0) > 0 || recipe?.subroofs?.some((child) => (child.anchors?.length ?? 0) > 0);
     });
     for (const hit of [...hits, ...anchoredHits]) {
       const recipe = hit.props?.[ROOF_RECIPE_PROP] as RoofRecipe | undefined;
       if (!recipe) continue;
       const baseChanged = !!recipe.base && (faces.has(keyOf(recipe.base.surfaceKey)) || recipe.base.nodeIds.some((id) => nodes.has(id)));
       const cutChanged = changed.some((face) => hasTrait(face.surfaceType, "floor") && face.nodes.some((node) => node.position.y > recipe.elevation + 1e-4 && node.position.y <= recipe.elevation + recipe.height + 1e-4));
-      const rings = ringsOf(recipe.footprints);
-      const anchorsChanged = recipe.anchors?.some(({ ring, corner, nodeId }) => {
-        const point = rings[ring]?.points[corner];
-        const position = current.get(nodeId);
-        return point && position && (Math.abs(point[0] - position.x) > 1e-6 || Math.abs(point[1] - position.z) > 1e-6 || Math.abs(recipe.elevation - position.y) > 1e-6);
-      }) ?? false;
+      const anchorsChanged = followedAnchors(recipe, current) !== undefined
+        || (recipe.subroofs?.some((child) => followedAnchors(child, current) !== undefined) ?? false);
       if (baseChanged || cutChanged || anchorsChanged) recipes.set(recipe.group, { recipe, baseChanged, cutChanged, anchorsChanged });
     }
     for (const { recipe, baseChanged, cutChanged, anchorsChanged } of recipes.values()) {
@@ -56,20 +72,18 @@ export function followBaseReaction(): Reaction<FollowBaseRuntime> {
       const { group, ...source } = recipe;
       const was = ringsOf(recipe.footprints).map((ring) => ring.points);
       const at = new Map(topologies.flatMap((face) => face.nodes).map((node) => [node.id, node.position] as const));
-      const anchored = anchorsChanged && recipe.anchors ? footprintsOf(ringsOf(recipe.footprints).map((ring, r) => ({ ...ring, points: ring.points.map((point, corner) => {
-        const anchor = recipe.anchors!.find((candidate) => candidate.ring === r && candidate.corner === corner);
-        const position = anchor ? at.get(anchor.nodeId) : undefined;
-        return position ? [position.x, position.z] as const : point;
-      }) }))) : undefined;
-      const anchorLevels = recipe.anchors?.map(({ nodeId }) => at.get(nodeId)?.y).filter((level): level is number => level !== undefined) ?? [];
-      const anchorElevation = anchorLevels.length && anchorLevels.every((level) => Math.abs(level - anchorLevels[0]!) < 1e-4) ? anchorLevels[0] : undefined;
+      const followed = followedAnchors(recipe, at);
+      const anchored = followed?.footprints;
+      const anchorElevation = followed?.elevation;
+      const subroofs = source.subroofs?.map((child) => followedAnchors(child, at) ?? child);
       const now = base ? ringsOf([base.footprint]).map((ring) => ring.points) : anchored ? ringsOf(anchored).map((ring) => ring.points) : was;
       const same = (a: readonly (readonly [number, number])[], b: readonly (readonly [number, number])[]) => a.length === b.length && a.every((p, i) => Math.abs(p[0] - b[i]![0]) < 1e-9 && Math.abs(p[1] - b[i]![1]) < 1e-9);
-      if (!cutChanged && (!base || Math.abs(base.elevation - recipe.elevation) < 1e-9) && (!anchored || anchorElevation === undefined || Math.abs(anchorElevation - recipe.elevation) < 1e-9) && was.length === now.length && was.every((ring, r) => same(ring, now[r]!))) continue;
+      if (!anchorsChanged && !cutChanged && (!base || Math.abs(base.elevation - recipe.elevation) < 1e-9) && was.length === now.length && was.every((ring, r) => same(ring, now[r]!))) continue;
       // Corner for corner, each side keeps its own slope; reshaped, by the sides it still lies along.
-      const request: RoofSource = anchored && !base ? { ...source, footprints: anchored, elevation: anchorElevation ?? recipe.elevation } : !base ? source : was.length === now.length && was.every((ring, r) => ring.length === now[r]!.length)
-        ? { ...source, footprints: [base.footprint], elevation: base.elevation, base: base.ref }
-        : { ...source, elevation: base.elevation, base: base.ref, ...carriedOnto([base.footprint], [recipe]) };
+      const withChildren = { ...source, subroofs };
+      const request: RoofSource = anchored && !base ? { ...withChildren, footprints: anchored, elevation: anchorElevation ?? recipe.elevation } : !base ? withChildren : was.length === now.length && was.every((ring, r) => ring.length === now[r]!.length)
+        ? { ...withChildren, footprints: [base.footprint], elevation: base.elevation, base: base.ref }
+        : { ...withChildren, elevation: base.elevation, base: base.ref, ...carriedOnto([base.footprint], [recipe]) };
       const own = topologies.filter((face) => (face.props?.[ROOF_RECIPE_PROP] as RoofRecipe | undefined)?.group === group).map((face) => face.surfaceKey);
       const operationId = `${effect.causeId}:follow:${group}`;
       let made: ReturnType<typeof roofGraphPatch>;

@@ -6954,6 +6954,8 @@ four where it meets its leaf; and whether it is an upright face under it.
 
 ### `property vtt.roof-recipe.RoofFaceRole.side: number`
 
+### `property vtt.roof-recipe.RoofFaceRole.subroof?: number`
+
 ### `property vtt.roof-recipe.RoofFaceRole.upright: boolean`
 
 ### `interface vtt.roof-recipe.RoofRecipe`
@@ -6989,6 +6991,10 @@ Rise of the roof's highest point above its eaves.
 Platform outlines trim only roof surface above the platform level.
 
 ### `property vtt.roof-recipe.RoofRecipe.slopes: readonly number[]`
+
+### `property vtt.roof-recipe.RoofRecipe.subroofs?: readonly RoofSource[]`
+
+Smaller roofs joined into this roof's visible envelope.
 
 ### `interface vtt.roof-recipe.RoofRing`
 
@@ -7031,6 +7037,10 @@ Rise of the roof's highest point above its eaves.
 Platform outlines trim only roof surface above the platform level.
 
 ### `property vtt.roof-recipe.RoofSource.slopes: readonly number[]`
+
+### `property vtt.roof-recipe.RoofSource.subroofs?: readonly RoofSource[]`
+
+Smaller roofs joined into this roof's visible envelope.
 
 ### `type vtt.roof-recipe.Point = readonly [number, number]`
 
@@ -9308,7 +9318,7 @@ The plan a roof covers: one outline and the holes through it, as `[x, z]` corner
 
 ### `property vtt.cap-port.RoofPatch.edges: readonly { center: null; end: number; start: number }[]`
 
-### `property vtt.cap-port.RoofPatch.faces: readonly { boundary: readonly (readonly [number, boolean])[]; dormer: number | null; holes: readonly (readonly (readonly [number, boolean])[])[]; side: number; upright: boolean }[]`
+### `property vtt.cap-port.RoofPatch.faces: readonly { boundary: readonly (readonly [number, boolean])[]; dormer: number | null; holes: readonly (readonly (readonly [number, boolean])[])[]; side: number; subroof: number | null; upright: boolean }[]`
 
 ### `property vtt.cap-port.RoofPatch.nodes: readonly (readonly [number, number, number])[]`
 
@@ -9347,6 +9357,10 @@ Rise of the roof's highest point above its eaves.
 Platform outlines trim only roof surface above the platform level.
 
 ### `property vtt.cap-port.RoofRequest.slopes: readonly number[]`
+
+### `property vtt.cap-port.RoofRequest.subroofs?: readonly RoofRequest[]`
+
+Smaller roofs joined into this roof's visible envelope.
 
 ### `interface vtt.construction-session-port.AffectedSurfaces`
 

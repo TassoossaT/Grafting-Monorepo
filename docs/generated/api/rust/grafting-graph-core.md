@@ -1207,7 +1207,7 @@ Generates a cap with shared seam identities and no degenerate apex edges.
 
 ### `pub fn grafting_graph_core::profile_roof::generate_roof_patch(request: grafting_graph_core::profile_roof::RoofRequest) -> core::result::Result<grafting_graph_core::profile_roof::RoofPatch, alloc::string::String>`
 
-Generates a roof with shared seam identities between all its faces.
+Generates the connected visible envelope of a roof and its owned subroofs.
 
 ### `pub fn grafting_graph_core::profile_surface::ProfileSheet::point(&self, u: f64, v: f64) -> core::result::Result<[f64; 3], alloc::string::String>`
 
@@ -2489,6 +2489,10 @@ top, where only gables were left to close it; for a dormer's face, the
 dormer's own side -- front, right, back, left -- or four where it
 meets its leaf.
 
+### `pub grafting_graph_core::profile_roof::RoofFace::subroof: core::option::Option<usize>`
+
+Which directly owned subroof made this face, if any.
+
 ### `pub grafting_graph_core::profile_roof::RoofFace::upright: bool`
 
 Whether this is an upright face: under a gable, or a dormer's front
@@ -2555,6 +2559,10 @@ Horizontal platforms that trim higher roof faces while retaining lower slopes.
 Relative steepness of every side -- footprint by footprint, its
 outline's then each hole's, side `i` running from corner `i` to
 corner `i + 1`; zero makes a gable.
+
+### `pub grafting_graph_core::profile_roof::RoofRequest::subroofs: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofRequest>`
+
+Smaller roofs joined into this roof's visible envelope.
 
 ### `pub grafting_graph_core::profile_surface::ProfileSheet::lower: grafting_graph_core::profile_surface::Section`
 

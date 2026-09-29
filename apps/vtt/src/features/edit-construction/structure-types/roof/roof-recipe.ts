@@ -32,6 +32,7 @@ export interface RoofSource extends RoofRequest {
   readonly base?: RoofBaseRef;
   /** Eave corners that follow the top nodes of their supporting walls. */
   readonly anchors?: readonly { readonly ring: number; readonly corner: number; readonly nodeId: string }[];
+  readonly subroofs?: readonly RoofSource[];
 }
 
 /** A roof's recipe: what the generator is asked, the base it follows, and the group of faces it made. */
@@ -47,6 +48,7 @@ export interface RoofRecipe extends RoofSource {
 export interface RoofFaceRole {
   readonly side: number;
   readonly dormer?: number;
+  readonly subroof?: number;
   readonly upright: boolean;
 }
 
@@ -254,18 +256,46 @@ export function roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: Ro
       footprint: { outer, holes: holes.filter((hole) => hole.length >= 3 && insideRingXZ(outer, { x: hole[0]![0], z: hole[0]![1] })) },
     }));
   });
-  const roof: RoofPatch = port.generateRoof({ ...wire, platform_cuts: platformCuts });
   const others = standing.filter((face) => face.props?.[ROOF_RECIPE_PROP] === undefined);
   // Roof-generated upright closures can support another roof at a different
   // elevation. Share their vertices, while each roof keeps its own recipe.
   const supports = standing.filter((face) => hasTrait(face.surfaceType, "partition") && hasTrait(face.surfaceType, "roof-generated"));
   const standingNodes = [...others, ...supports].flatMap((face) => face.nodes);
-  const supportedNodes = standing.filter((face) => hasTrait(face.surfaceType, "partition")).flatMap((face) => face.nodes)
-    .filter((node) => Math.abs(node.position.y - request.elevation) < WELD);
-  const inferredAnchors = base ? [] : ringsOf(request.footprints).flatMap((ring, r) => ring.points.flatMap(([x, z], corner) => {
-    const node = supportedNodes.find((candidate) => Math.abs(candidate.position.x - x) < WELD && Math.abs(candidate.position.z - z) < WELD);
+  const supportedNodes = standing.filter((face) => hasTrait(face.surfaceType, "partition")).flatMap((face) => face.nodes);
+  const inferAnchors = (footprints: readonly RoofFootprint[], elevation: number) => ringsOf(footprints).flatMap((ring, r) => ring.points.flatMap(([x, z], corner) => {
+    const node = supportedNodes.find((candidate) => Math.abs(candidate.position.y - elevation) < WELD && Math.abs(candidate.position.x - x) < WELD && Math.abs(candidate.position.z - z) < WELD);
     return node ? [{ ring: r, corner, nodeId: node.id }] : [];
   }));
+  const inferredAnchors = base ? [] : inferAnchors(request.footprints, request.elevation);
+  const generate = (children: readonly RoofSource[]): RoofPatch => port.generateRoof({ ...wire, subroofs: children.map(({ base: _, anchors: __, ...child }) => child), platform_cuts: platformCuts });
+  /** Tops of this roof's own upright closures, by plan position: where a subroof can stand. */
+  const wallTops = (made: RoofPatch) => {
+    const upright = new Set(made.faces.filter((face) => face.upright && face.subroof === null)
+      .flatMap((face) => [face.boundary, ...face.holes].flat().flatMap(([edge]) => [made.edges[edge]!.start, made.edges[edge]!.end])));
+    return (x: number, z: number) => [...upright].filter((index) => Math.abs(made.nodes[index]![0] - x) < WELD && Math.abs(made.nodes[index]![2] - z) < WELD);
+  };
+  let subroofs: RoofSource[] = (request.subroofs ?? []).map((child) => ({ ...child, anchors: child.anchors ?? inferAnchors(child.footprints, child.elevation) }));
+  let roof: RoofPatch = generate(subroofs);
+  // A subroof standing on this roof's own walls rises and falls with their
+  // tops: a wall pushed out up the slope lifts the eaves it carries.
+  const lifted = subroofs.map((child) => {
+    if (!child.anchors?.length) return child;
+    const rings = ringsOf(child.footprints);
+    const at = wallTops(roof);
+    const levels = child.anchors.flatMap(({ ring, corner }) => {
+      const point = rings[ring]?.points[corner];
+      const tops = point ? at(point[0], point[1]).map((index) => roof.nodes[index]![1]) : [];
+      // Generated nodes come back in single precision; an eave a hair below
+      // the wall top would leave a sliver between it and the slope it meets.
+      return tops.length ? [Math.round(Math.max(...tops) * 1e6) / 1e6] : [];
+    });
+    return levels.length && levels.every((level) => Math.abs(level - levels[0]!) < 1e-4) && Math.abs(levels[0]! - child.elevation) > 1e-6
+      ? { ...child, elevation: levels[0]! } : child;
+  });
+  if (lifted.some((child, k) => child !== subroofs[k])) {
+    subroofs = lifted;
+    roof = generate(subroofs);
+  }
   const welded = roof.nodes.map(([x, y, z]) => standingNodes.find((node) => Math.abs(node.position.x - x) < WELD && Math.abs(node.position.y - y) < WELD && Math.abs(node.position.z - z) < WELD));
   const sides = new Map(others.flatMap((face) => [...face.outerLoops, ...face.holes].flat()).map((use) => [[use.startNodeId, use.endNodeId].sort().join("\u0000"), use] as const));
   const nodeId = (index: number) => welded[index]?.id ?? `${operationId}:node:${index}`;
@@ -295,11 +325,23 @@ export function roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: Ro
     });
   };
   const keptAnchors = anchors ?? inferredAnchors;
-  const recipe: RoofRecipe = { elevation: request.elevation, height: request.height, footprints: request.footprints, slopes: request.slopes, dormers: request.dormers ?? [], cutouts: request.cutouts ?? [], ...(base ? { base } : {}), ...(keptAnchors.length ? { anchors: keptAnchors } : {}), group: operationId };
+  // This roof's own nodes are named anew each time it is made: a subroof on
+  // its walls re-anchors to the tops just made; one on another roof keeps its nodes.
+  const tops = wallTops(roof);
+  subroofs = subroofs.map((child) => {
+    const rings = ringsOf(child.footprints);
+    const own = (child.anchors ?? []).flatMap(({ ring, corner, nodeId: kept }) => {
+      const point = rings[ring]?.points[corner];
+      const top = point ? tops(point[0], point[1]).find((index) => Math.abs(roof.nodes[index]![1] - child.elevation) < 1e-4) : undefined;
+      return [{ ring, corner, nodeId: top === undefined ? kept : nodeId(top) }];
+    });
+    return { ...child, anchors: own };
+  });
+  const recipe: RoofRecipe = { elevation: request.elevation, height: request.height, footprints: request.footprints, slopes: request.slopes, dormers: request.dormers ?? [], cutouts: request.cutouts ?? [], subroofs, ...(base ? { base } : {}), ...(keptAnchors.length ? { anchors: keptAnchors } : {}), group: operationId };
   const faceProps = new Map<string, Readonly<Record<string, unknown>>>();
   roof.faces.forEach((face, index) => {
-    const role: RoofFaceRole = { side: face.side, upright: face.upright, ...(face.dormer === null ? {} : { dormer: face.dormer }) };
-    faceProps.set(regionId(index), { [ROOF_RECIPE_PROP]: recipe, [ROOF_FACE_PROP]: role, [RECIPE_ROLE_PROP]: `${face.dormer ?? "-"}:${face.side}:${face.upright ? "upright" : "leaf"}` });
+    const role: RoofFaceRole = { side: face.side, upright: face.upright, ...(face.dormer === null ? {} : { dormer: face.dormer }), ...(face.subroof === null ? {} : { subroof: face.subroof }) };
+    faceProps.set(regionId(index), { [ROOF_RECIPE_PROP]: recipe, [ROOF_FACE_PROP]: role, [RECIPE_ROLE_PROP]: `${face.subroof ?? "-"}:${face.dormer ?? "-"}:${face.side}:${face.upright ? "upright" : "leaf"}` });
   });
   return {
     patch: {

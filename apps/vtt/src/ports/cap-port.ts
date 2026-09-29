@@ -35,6 +35,8 @@ export interface RoofRequest {
   readonly cutouts?: readonly RoofFootprint[];
   /** Platform outlines trim only roof surface above the platform level. */
   readonly platform_cuts?: readonly { readonly footprint: RoofFootprint; readonly elevation: number }[];
+  /** Smaller roofs joined into this roof's visible envelope. */
+  readonly subroofs?: readonly RoofRequest[];
 }
 
 /** The engine's roof generator. */
@@ -50,6 +52,7 @@ export interface RoofPatch {
     /** The footprint side it rises from -- one past the last for a flat top; a dormer's own side 0-3, or 4 where it meets its leaf. */
     readonly side: number;
     readonly dormer: number | null;
+    readonly subroof: number | null;
     /** Under a gable, or a dormer's front and cheeks. */
     readonly upright: boolean;
     readonly boundary: readonly (readonly [number, boolean])[];

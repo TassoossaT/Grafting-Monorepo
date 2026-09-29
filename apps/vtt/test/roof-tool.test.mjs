@@ -475,7 +475,7 @@ test("a roof can start from a cut wall when its wall cloud closes a room", () =>
   } finally { session.free(); }
 });
 
-test("drawing from an open cut wall starts a separate roof at its top", () => {
+test("drawing from an open cut wall adds a subroof at its top", () => {
   const value = roofed(2);
   const { ctx, runtime, session } = value;
   try {
@@ -489,18 +489,41 @@ test("drawing from an open cut wall starts a separate roof at its top", () => {
     const params = { ...DEFAULT_TOOL_PARAMS.roof, action: "draw", height: 1 };
     roofTool.onPointerDown(ctx, start, params);
     roofTool.onPointerUp(ctx, { start, current, samples: [start, current] }, params);
-    assert.equal(groups(runtime).size, before + 1, "an open wall supports a drawn roof");
-    assert.ok(roofs(runtime).some((face) => Math.abs(face.props.roof.elevation - 4.5) < 1e-5), "the new eaves stand on the wall top");
+    assert.equal(groups(runtime).size, before, "the drawn roof belongs to its host roof");
+    assert.ok(roofs(runtime).some((face) => Math.abs(face.props.roof.subroofs?.[0]?.elevation - 4.5) < 1e-5), `the new eaves stand on the wall top: ${JSON.stringify(value.calls.feedback.at(-1))}`);
     const oldNodes = new Set(wall.nodes.map((node) => node.id));
-    const joined = roofs(runtime).filter((face) => Math.abs(face.props.roof.elevation - 4.5) < 1e-5);
+    const joined = roofs(runtime).filter((face) => face.props.roofFace.subroof === 0);
     assert.ok(joined.some((face) => face.nodes.some((node) => oldNodes.has(node.id))), "the new roof shares its support's nodes");
-    assert.ok(joined.some((face) => face.props.roof.anchors?.length >= 2), "the upper roof tracks its wall anchors");
+    assert.ok(joined.some((face) => face.props.roof.subroofs?.[0]?.anchors?.length >= 2), "the subroof tracks its supporting corners");
     const handle = shownGlobalHandles({ ...scene(runtime), cloudFor: runtime.cloudFor.bind(runtime) }).find((candidate) => candidate.owner === "roof-transition" && candidate.kind === "side" && Math.abs(candidate.pivot.z - 1.5) < 1e-5);
     assert.ok(handle);
     dragWith(wallLineTool, value, handle, { ...handle.position, z: handle.position.z + 0.3 }, DEFAULT_TOOL_PARAMS["wall-line"]);
-    const moved = roofs(runtime).filter((face) => Math.abs(face.props.roof.elevation - 4.5) < 1e-5);
-    assert.ok(moved.some((face) => face.nodes.some((node) => Math.abs(node.position.z - 1.8) < 1e-4)), "the upper roof follows the moved wall");
-    assert.ok(moved.some((face) => face.props.roof.footprints.some((footprint) => footprint.outer.some(([, z]) => Math.abs(z - 1.8) < 1e-4))), "the upper roof recipe follows the moved wall");
+    const moved = roofs(runtime).filter((face) => face.props.roofFace.subroof === 0);
+    assert.ok(moved.some((face) => face.nodes.some((node) => Math.abs(node.position.z - 1.8) < 1e-4)), `the upper roof follows the moved wall: ${JSON.stringify(value.calls.feedback.at(-1))}`);
+    assert.ok(moved.some((face) => face.props.roof.subroofs[0].footprints.some((footprint) => footprint.outer.some(([, z]) => Math.abs(z - 1.8) < 1e-4))), "the upper roof recipe follows the moved wall");
+  } finally { session.free(); }
+});
+
+test("a roof drawn in the middle of a larger roof joins it as one surface", () => {
+  const value = roofed(2);
+  const { ctx, runtime, session } = value;
+  try {
+    const leaf = roofs(runtime).find((face) => !face.props.roofFace.upright && face.nodes.some((node) => node.position.z < 1e-6));
+    const start = { point: { x: 3, y: 4, z: 1 }, surfaceRef: surfaceRefFromNodeSet(leaf.surfaceKey) };
+    const current = { point: { x: 5, y: 4, z: 3 } };
+    const params = { ...DEFAULT_TOOL_PARAMS.roof, action: "draw", height: 2 };
+    roofTool.onPointerDown(ctx, start, params);
+    roofTool.onPointerUp(ctx, { start, current, samples: [start, current] }, params);
+    assert.equal(groups(runtime).size, 1, `the small roof belongs to the large one: ${JSON.stringify(value.calls.feedback.at(-1))}`);
+    const faces = roofs(runtime);
+    assert.ok(faces.some((face) => face.props.roofFace.subroof === 0), "the small roof's leaves are generated");
+    assert.ok(Math.abs(faces[0].props.roof.subroofs[0].elevation - 4) < 1e-6, "its eaves sit on the larger roof's surface");
+    assert.ok(faces.some((face) => face.props.roofFace.subroof === undefined), "the large roof keeps its visible leaves");
+    const uses = new Map();
+    for (const face of faces) for (const use of [...face.outerLoops, ...face.holes].flat()) uses.set(use.edgeId, (uses.get(use.edgeId) ?? 0) + 1);
+    assert.ok([...uses.values()].every((count) => count <= 2), "no seam is shared by more than two faces");
+    const subNodes = new Set(faces.filter((face) => face.props.roofFace.subroof === 0).flatMap((face) => face.nodes.map((node) => node.id)));
+    assert.ok(faces.some((face) => face.props.roofFace.subroof === undefined && face.nodes.some((node) => subNodes.has(node.id))), "the two roofs meet on shared vertices");
   } finally { session.free(); }
 });
 
