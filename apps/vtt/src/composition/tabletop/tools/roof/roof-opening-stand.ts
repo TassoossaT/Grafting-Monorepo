@@ -1,8 +1,8 @@
 import type { ConstructionPosition, ConstructionRegionTopology, ConstructionSurfaceKey } from "@/ports";
 
 import {
-  DORMER_RIM, dormerAt, dormerFrame, faceRings, heightOnPlane, insideRing, OPENING_DORMER_PITCH, openingPath, planeOf, pointAt, rayToRing,
-  roofRecipeOf, roofRoleOf, surfaceKeyText, type RoofRecipe,
+  DORMER_RIM, dormerAt, dormerFrame, faceRings, heightOnPlane, insideRing, OPENING_DORMER_PITCH, openingPath, ownerOf, planeOf, pointAt, rayToRing,
+  roofRecipeOf, roofRoleOf, surfaceKeyText, type RoofRecipe, type RoofSource,
 } from "../../../../features/edit-construction/index.ts";
 import type { RoofDormer } from "../../../../ports/cap-port.ts";
 import type { ToolContext } from "../core/tool-context.ts";
@@ -15,6 +15,29 @@ type Placed = { readonly at: ConstructionPosition; readonly look: StandLook };
 
 const faceAt = (ctx: ToolContext, key: ConstructionSurfaceKey) => ctx.runtime.getAllRegionTopologies().find((face) => surfaceKeyText(face.surfaceKey) === surfaceKeyText(key));
 const facesOf = (ctx: ToolContext, group: string) => ctx.runtime.getAllRegionTopologies().filter((face) => roofRecipeOf(face)?.group === group).map((face) => face.surfaceKey);
+
+/**
+ * The roof a face was made by -- the roof itself, or one of its subroofs,
+ * each a whole roof with its own sides and dormers -- and the roof it is
+ * kept in. What a stand stands on is always its owner's.
+ */
+interface Owner {
+  readonly recipe: RoofRecipe;
+  readonly subroof: number | undefined;
+  readonly own: RoofSource;
+}
+function ownerOfFace(face: ConstructionRegionTopology | undefined): Owner | undefined {
+  const recipe = roofRecipeOf(face), role = roofRoleOf(face);
+  if (!recipe || !role || (role.subroof !== undefined && recipe.subroofs?.[role.subroof] === undefined)) return undefined;
+  return { recipe, subroof: role.subroof, own: ownerOf(recipe, role.subroof) };
+}
+
+/** The whole roof, as a request, with `owner`'s dormers now `dormers`. */
+function withDormers(owner: Owner, dormers: readonly RoofDormer[]) {
+  const { group: _group, ...source } = owner.recipe;
+  if (owner.subroof === undefined) return { ...source, dormers };
+  return { ...source, subroofs: (source.subroofs ?? []).map((child, i) => (i === owner.subroof ? { ...child, dormers } : child)) };
+}
 
 /** Points each curved piece of a ghost outline is drawn by. */
 const CURVE_SAMPLES = 12;
@@ -48,7 +71,7 @@ function riseOf(waters: Waters, width: number): number {
  * are its own, so a roof made steeper or flatter leaves it and its opening
  * as they stand.
  */
-function standFor(recipe: RoofRecipe, side: number, at: Point, look: StandLook, waters: Waters = TWO_WATERS): RoofDormer {
+function standFor(recipe: RoofSource, side: number, at: Point, look: StandLook, waters: Waters = TWO_WATERS): RoofDormer {
   return { ...dormerAt(recipe, side, at, look.width, look.height, 2), slopes: [0, waters.right, 0, waters.left], absolute: true, gableApart: true, opening: true };
 }
 
@@ -59,13 +82,13 @@ function standFor(recipe: RoofRecipe, side: number, at: Point, look: StandLook, 
  * committed; `undefined` where not even the smallest opening fits.
  */
 function fit(leaf: ConstructionRegionTopology, at: Point, look: StandLook, waters: Waters = TWO_WATERS): Placed | undefined {
-  const recipe = roofRecipeOf(leaf), role = roofRoleOf(leaf);
+  const owner = ownerOfFace(leaf), role = roofRoleOf(leaf);
   const ring3 = faceRings(leaf)[0] ?? [];
   const plane = planeOf(ring3);
-  if (!recipe || !role || !plane || heightOnPlane(plane, { x: at[0], z: at[1] }) === undefined) return undefined;
+  if (!owner || !role || !plane || heightOnPlane(plane, { x: at[0], z: at[1] }) === undefined) return undefined;
   const heightAt = (p: Point) => heightOnPlane(plane, { x: p[0], z: p[1] })!;
   const ring = ring3.map((p) => [p.x, p.z] as const);
-  const { u, n } = dormerFrame(recipe, standFor(recipe, role.side, at, look));
+  const { u, n } = dormerFrame(owner.own, standFor(owner.own, role.side, at, look));
   const along = (s: number): Point => [at[0] + u[0] * s, at[1] + u[1] * s];
   const s0 = Math.max(-look.width / 2, -(rayToRing(ring, at, [-u[0], -u[1]]) - DORMER_RIM));
   const s1 = Math.min(look.width / 2, rayToRing(ring, at, u) - DORMER_RIM);
@@ -86,26 +109,26 @@ function fit(leaf: ConstructionRegionTopology, at: Point, look: StandLook, water
 }
 
 /** The dormer raised for an opening whose front is `host`, and the roof it stands on. */
-function heldBy(ctx: ToolContext, host: ConstructionSurfaceKey): { readonly recipe: RoofRecipe; readonly k: number } | undefined {
+function heldBy(ctx: ToolContext, host: ConstructionSurfaceKey): { readonly owner: Owner; readonly k: number } | undefined {
   const face = faceAt(ctx, host);
-  const recipe = roofRecipeOf(face), role = roofRoleOf(face);
-  if (!recipe || !role || role.dormer === undefined || role.subroof !== undefined) return undefined;
-  return recipe.dormers?.[role.dormer]?.opening ? { recipe, k: role.dormer } : undefined;
+  const owner = ownerOfFace(face), role = roofRoleOf(face);
+  if (!owner || !role || role.dormer === undefined) return undefined;
+  return owner.own.dormers?.[role.dormer]?.opening ? { owner, k: role.dormer } : undefined;
 }
 
 /** Where the opening at `host`, now `look` and moved by `shift`, stands once stopped by its leaf -- and what holds it. */
 function refitted(ctx: ToolContext, host: ConstructionSurfaceKey, look: StandLook, shift: { readonly x: number; readonly z: number }) {
   const held = heldBy(ctx, host);
   if (held === undefined) return undefined;
-  const { recipe, k } = held;
-  const was = recipe.dormers![k]!;
-  const { front } = dormerFrame(recipe, was);
+  const { owner, k } = held;
+  const was = owner.own.dormers![k]!;
+  const { front } = dormerFrame(owner.own, was);
   const at: Point = [front[0] + shift.x, front[1] + shift.z];
-  // The leaf it stands on: a main leaf of its side whose outline -- its own
+  // The leaf it stands on: a leaf of its owner's side whose outline -- its own
   // cut is a hole in it -- holds where its front now stands.
   const leaves = ctx.runtime.getAllRegionTopologies().filter((face) => {
     const role = roofRoleOf(face);
-    return roofRecipeOf(face)?.group === recipe.group && role !== undefined && !role.upright && role.dormer === undefined && role.subroof === undefined && role.side === was.side;
+    return roofRecipeOf(face)?.group === owner.recipe.group && role !== undefined && !role.upright && role.dormer === undefined && role.subroof === owner.subroof && role.side === was.side;
   });
   const leaf = leaves.find((face) => insideRing(faceRings(face)[0] ?? [], { x: at[0], z: at[1] })) ?? leaves[0];
   // It keeps the waters it was given: two, or one a user left it with.
@@ -115,14 +138,14 @@ function refitted(ctx: ToolContext, host: ConstructionSurfaceKey, look: StandLoo
 }
 
 /**
- * The opening filling dormer `k`'s front whole -- on the roof just made as
- * `group` -- placed as any opening is placed in any wall: the front is all
+ * The opening filling dormer `k`'s front whole -- of the roof just made as
+ * `group`, or of its subroof `subroof` -- placed as any opening is placed in any wall: the front is all
  * opening, its outline laid over the front's own shape.
  */
-function placeInFront(ctx: ToolContext, causeId: string, group: string, k: number, look: StandLook): OpeningCommit {
+function placeInFront(ctx: ToolContext, causeId: string, group: string, subroof: number | undefined, k: number, look: StandLook): OpeningCommit {
   const front = ctx.runtime.getAllRegionTopologies().find((face) => {
     const role = roofRoleOf(face);
-    return roofRecipeOf(face)?.group === group && role?.subroof === undefined && role?.dormer === k && role.upright && role.side === 0;
+    return roofRecipeOf(face)?.group === group && role?.subroof === subroof && role?.dormer === k && role.upright && role.side === 0;
   });
   const run = front === undefined ? undefined : runFrame(ctx.runtime, front.surfaceKey);
   const panel = front === undefined ? undefined : run?.panelOf(front.surfaceKey);
@@ -145,12 +168,6 @@ function inOne(ctx: ToolContext, causeId: string, work: () => OpeningCommit): Op
   } catch (error) {
     return { recorded: false, error: error instanceof Error ? error.message : String(error) };
   }
-}
-
-/** The roof `recipe` with its dormers `dormers`, as a request. */
-function withDormers(recipe: RoofRecipe, dormers: readonly RoofDormer[]) {
-  const { group: _group, ...source } = recipe;
-  return { ...source, dormers };
 }
 
 /** The outline an opening `placed` stands on: the tool's own outline, upright, its front along `u`. */
@@ -176,8 +193,8 @@ function outlineAt(placed: Placed, u: Point): readonly ConstructionPosition[] {
  */
 export const roofOpeningStand: OpeningStand = {
   raisesOn(face) {
-    const recipe = roofRecipeOf(face), role = roofRoleOf(face);
-    return !!recipe && !!role && !role.upright && role.dormer === undefined && role.subroof === undefined && (recipe.slopes[role.side] ?? 0) > 0;
+    const owner = ownerOfFace(face), role = roofRoleOf(face);
+    return !!owner && !!role && !role.upright && role.dormer === undefined && (owner.own.slopes[role.side] ?? 0) > 0;
   },
 
   fitted(face, at, look) {
@@ -185,38 +202,38 @@ export const roofOpeningStand: OpeningStand = {
   },
 
   drawn(face, from, to, shape, isDoor) {
-    const recipe = roofRecipeOf(face), role = roofRoleOf(face);
+    const owner = ownerOfFace(face), role = roofRoleOf(face);
     const plane = planeOf(faceRings(face)[0] ?? []);
-    if (!recipe || !role || !plane || heightOnPlane(plane, from) === undefined) return undefined;
+    if (!owner || !role || !plane || heightOnPlane(plane, from) === undefined) return undefined;
     const leafAt = (p: ConstructionPosition) => ({ ...p, y: heightOnPlane(plane, p)! });
     const [a, b] = [leafAt(from), leafAt(to)];
     // The lower corner stands the front; the upper is where its ridge meets the leaf.
     const [low, high] = a.y <= b.y ? [a, b] : [b, a];
-    const { u } = dormerFrame(recipe, standFor(recipe, role.side, [low.x, low.z], { width: 1, height: 1, shape, isDoor }));
+    const { u } = dormerFrame(owner.own, standFor(owner.own, role.side, [low.x, low.z], { width: 1, height: 1, shape, isDoor }));
     const along = (high.x - low.x) * u[0] + (high.z - low.z) * u[1];
     return fit(face, [low.x + (u[0] * along) / 2, low.z + (u[1] * along) / 2], { width: Math.abs(along), height: high.y - low.y, shape, isDoor });
   },
 
   outline(face, placed) {
-    const recipe = roofRecipeOf(face), role = roofRoleOf(face);
-    if (!recipe || !role) return undefined;
-    const { u } = dormerFrame(recipe, standFor(recipe, role.side, [placed.at.x, placed.at.z], placed.look));
+    const owner = ownerOfFace(face), role = roofRoleOf(face);
+    if (!owner || !role) return undefined;
+    const { u } = dormerFrame(owner.own, standFor(owner.own, role.side, [placed.at.x, placed.at.z], placed.look));
     return outlineAt(placed, u);
   },
 
   refitOutline(ctx, host, look, shift) {
     const made = refitted(ctx, host, look, shift);
     if (made === undefined) return undefined;
-    const { u } = dormerFrame(made.recipe, made.was);
+    const { u } = dormerFrame(made.owner.own, made.was);
     return outlineAt(made.placed, u);
   },
 
   raise(ctx, causeId, face, placed) {
-    const recipe = roofRecipeOf(face)!, role = roofRoleOf(face)!;
-    const dormers = recipe.dormers ?? [];
+    const owner = ownerOfFace(face)!, role = roofRoleOf(face)!;
+    const dormers = owner.own.dormers ?? [];
     return inOne(ctx, causeId, () => {
-      const made = replaceRoofs(ctx, [withDormers(recipe, [...dormers, standFor(recipe, role.side, [placed.at.x, placed.at.z], placed.look)])], facesOf(ctx, recipe.group), causeId);
-      return placeInFront(ctx, causeId, made.group, dormers.length, placed.look);
+      const made = replaceRoofs(ctx, [withDormers(owner, [...dormers, standFor(owner.own, role.side, [placed.at.x, placed.at.z], placed.look)])], facesOf(ctx, owner.recipe.group), causeId);
+      return placeInFront(ctx, causeId, made.group, owner.subroof, dormers.length, placed.look);
     });
   },
 
@@ -228,25 +245,25 @@ export const roofOpeningStand: OpeningStand = {
     const made = refitted(ctx, host, look, shift);
     // Stopped short of any room at all: the opening stays as it stood.
     if (made === undefined) return { recorded: false };
-    const { recipe, k, was, placed } = made;
-    const next = { ...standFor(recipe, was.side, [placed.at.x, placed.at.z], placed.look, made.waters), ...(was.id ? { id: was.id } : {}) };
+    const { owner, k, was, placed } = made;
+    const next = { ...standFor(owner.own, was.side, [placed.at.x, placed.at.z], placed.look, made.waters), ...(was.id ? { id: was.id } : {}) };
     return inOne(ctx, causeId, () => {
       // The opening goes first, so nothing of it is carried onto the new front.
       const removed = commitOpeningGroup(ctx, causeId, pieces, []);
       if (removed.error !== undefined) throw new Error(removed.error);
-      const regenerated = replaceRoofs(ctx, [withDormers(recipe, recipe.dormers!.map((dormer, i) => (i === k ? next : dormer)))], facesOf(ctx, recipe.group), causeId);
-      return placeInFront(ctx, causeId, regenerated.group, k, placed.look);
+      const regenerated = replaceRoofs(ctx, [withDormers(owner, owner.own.dormers!.map((dormer, i) => (i === k ? next : dormer)))], facesOf(ctx, owner.recipe.group), causeId);
+      return placeInFront(ctx, causeId, regenerated.group, owner.subroof, k, placed.look);
     });
   },
 
   drop(ctx, causeId, pieces, host) {
     const held = heldBy(ctx, host);
     if (held === undefined) return { recorded: false, error: "esta abertura nao esta numa lucarna do telhado." };
-    const { recipe, k } = held;
+    const { owner, k } = held;
     return inOne(ctx, causeId, () => {
       const removed = commitOpeningGroup(ctx, causeId, pieces, []);
       if (removed.error !== undefined) throw new Error(removed.error);
-      replaceRoofs(ctx, [withDormers(recipe, recipe.dormers!.filter((_, i) => i !== k))], facesOf(ctx, recipe.group), causeId);
+      replaceRoofs(ctx, [withDormers(owner, owner.own.dormers!.filter((_, i) => i !== k))], facesOf(ctx, owner.recipe.group), causeId);
       return { recorded: false };
     });
   },

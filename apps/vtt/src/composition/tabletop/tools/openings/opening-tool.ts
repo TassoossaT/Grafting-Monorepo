@@ -504,7 +504,7 @@ function releaseOnWall(ctx: ToolContext, gesture: ReleasedGesture, anchor: Creat
   if (!gesture.moved) {
     const placed = resolvePlacement(ctx, gesture.start, params);
     if (placed === undefined) {
-      ctx.reportFeedback({ tone: "error", message: "Abertura: clique sobre uma parede reta ou curva, com espaco para a abertura caber nela." });
+      ctx.reportFeedback({ tone: "error", message: "Abertura: clique numa parede ou na agua de um telhado, com espaco para a abertura caber." });
       return;
     }
     placeNew(ctx, placed.run, placed.rect, params);

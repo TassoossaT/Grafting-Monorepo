@@ -4831,7 +4831,7 @@ export function followBaseReaction(): Reaction<FollowBaseRuntime> {
 // src/composition/tabletop/tools/roof/roof-opening-stand.ts
 export const roofOpeningStand: OpeningStand = {
   raisesOn(face) {
-  const recipe = roofRecipeOf(face), role = roofRoleOf(face);
+  const owner = ownerOfFace(face), role = roofRoleOf(face);
 
 // src/composition/tabletop/tools/roof/roof-tool.ts
 export const roofTool = withStructureEditing(rawRoofTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "roof-generated"), handlesOnly: true });

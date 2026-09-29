@@ -346,3 +346,38 @@ test("deleting the window removes its cut", async () => {
     assert.ok(roofs(runtime).length > 0, "the roof stays");
   } finally { await runtime.dispose?.(); }
 });
+
+test("a subroof's leaf takes a window as any roof's leaf does, its dormer kept in the subroof", async () => {
+  const h = await gabled();
+  const { runtime } = h;
+  try {
+    // A subroof drawn over the middle of the south leaf.
+    dispatchGesture(roofTool, h.ctx, { ...DEFAULT_TOOL_PARAMS.roof, action: "draw", waters: 2, height: 5 }, [{ point: { x: 2, y: 1, z: 0.5 }, surfaceRef: ref(southLeaf(runtime)) }, { point: { x: 6, y: 5, z: 2.5 } }]);
+    assert.equal(h.feedback.at(-1)?.tone, "success", JSON.stringify(h.feedback.at(-1)));
+    const leaf = roofs(runtime).find((f) => f.props.roofFace.subroof === 0 && !f.props.roofFace.upright && f.props.roofFace.dormer === undefined && f.nodes.some((n) => n.position.z < 0.5 + 1e-6));
+    assert.ok(leaf, "the subroof has a leaf over its south eave");
+    const xs = leaf.nodes.map((n) => n.position.x), zs = leaf.nodes.map((n) => n.position.z), ys = leaf.nodes.map((n) => n.position.y);
+    // Its lowest eave, a little up the leaf.
+    const low = Math.min(...ys), eave = leaf.nodes.filter((n) => n.position.y < low + 1e-6);
+    const at = { x: eave.reduce((s, n) => s + n.position.x, 0) / eave.length, z: Math.min(...zs) + 0.3 };
+    const high = leaf.nodes.find((n) => n.position.y > low + 1e-6);
+    const rise = (high.position.y - low) / (high.position.z - Math.min(...zs));
+    dispatchGesture(openingTool, h.ctx, window, [{ point: { x: at.x, y: low + rise * 0.3, z: at.z }, surfaceRef: ref(leaf) }]);
+    assert.equal(h.feedback.at(-1)?.tone, "success", JSON.stringify({ feedback: h.feedback.at(-1), xs, zs, ys }));
+    const subroof = roofs(runtime)[0].props.roof.subroofs[0];
+    assert.equal(subroof.dormers?.length, 1, "the dormer is the subroof's");
+    assert.equal(dormers(runtime).length, 0, "not the larger roof's");
+    const wall = roofs(runtime).find((f) => f.props.roofFace.subroof === 0 && f.props.roofFace.dormer === 0 && f.props.roofFace.upright && f.props.roofFace.side === 0);
+    const nodes = h.openings().flatMap((o) => o.nodes);
+    assert.ok(wall && nodes.length === 4 && nodes.every((n) => JSON.stringify(pinOf(runtime, n.id)?.hostSurfaceKey) === JSON.stringify(wall.surfaceKey)), "the window fills the front of the subroof's dormer");
+
+    // And it goes with its window.
+    const b = box(wall.nodes);
+    press(h, window, { x: (b.x0 + b.x1) / 2, y: (b.y0 + b.y1) / 2, z: b.z });
+    openingTool.onDeleteKey(h.ctx);
+    assert.equal(h.feedback.at(-1)?.tone, "success", JSON.stringify(h.feedback.at(-1)));
+    assert.equal(h.openings().length, 0);
+    assert.equal(roofs(runtime)[0].props.roof.subroofs[0].dormers?.length ?? 0, 0, "its dormer goes with it");
+    assert.ok(roofs(runtime).some((f) => f.props.roofFace.subroof === 0), "the subroof stays");
+  } finally { await runtime.dispose?.(); }
+});
