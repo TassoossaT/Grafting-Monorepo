@@ -594,8 +594,10 @@ impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::profile_cap_p
 pub fn grafting_graph_core::profile_cap_patch::generate_cap_patch(request: grafting_graph_core::profile_cap_patch::CapRequest) -> core::result::Result<grafting_graph_core::profile_cap_patch::CapPatch, alloc::string::String>
 pub mod grafting_graph_core::profile_roof
 pub struct grafting_graph_core::profile_roof::RoofDormer
+pub grafting_graph_core::profile_roof::RoofDormer::absolute: bool
 pub grafting_graph_core::profile_roof::RoofDormer::along: f64
 pub grafting_graph_core::profile_roof::RoofDormer::front: f64
+pub grafting_graph_core::profile_roof::RoofDormer::gable_apart: bool
 pub grafting_graph_core::profile_roof::RoofDormer::setback: f64
 pub grafting_graph_core::profile_roof::RoofDormer::side: usize
 pub grafting_graph_core::profile_roof::RoofDormer::slopes: [f64; 4]
@@ -619,6 +621,7 @@ pub grafting_graph_core::profile_roof::RoofFace::boundary: alloc::vec::Vec<(usiz
 pub grafting_graph_core::profile_roof::RoofFace::dormer: core::option::Option<usize>
 pub grafting_graph_core::profile_roof::RoofFace::holes: alloc::vec::Vec<alloc::vec::Vec<(usize, bool)>>
 pub grafting_graph_core::profile_roof::RoofFace::side: usize
+pub grafting_graph_core::profile_roof::RoofFace::subroof: core::option::Option<usize>
 pub grafting_graph_core::profile_roof::RoofFace::upright: bool
 impl core::clone::Clone for grafting_graph_core::profile_roof::RoofFace
 pub fn grafting_graph_core::profile_roof::RoofFace::clone(&self) -> grafting_graph_core::profile_roof::RoofFace
@@ -695,6 +698,7 @@ pub grafting_graph_core::profile_roof::RoofRequest::footprints: alloc::vec::Vec<
 pub grafting_graph_core::profile_roof::RoofRequest::height: f64
 pub grafting_graph_core::profile_roof::RoofRequest::platform_cuts: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofPlatformCut>
 pub grafting_graph_core::profile_roof::RoofRequest::slopes: alloc::vec::Vec<f64>
+pub grafting_graph_core::profile_roof::RoofRequest::subroofs: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofRequest>
 impl core::clone::Clone for grafting_graph_core::profile_roof::RoofRequest
 pub fn grafting_graph_core::profile_roof::RoofRequest::clone(&self) -> grafting_graph_core::profile_roof::RoofRequest
 impl core::fmt::Debug for grafting_graph_core::profile_roof::RoofRequest
@@ -709,6 +713,7 @@ impl core::marker::Sync for grafting_graph_core::profile_roof::RoofRequest
 impl core::marker::Unpin for grafting_graph_core::profile_roof::RoofRequest
 impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::profile_roof::RoofRequest
 impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::profile_roof::RoofRequest
+pub const grafting_graph_core::profile_roof::GABLE_OVER_FRONT: usize
 pub fn grafting_graph_core::profile_roof::generate_roof_patch(request: grafting_graph_core::profile_roof::RoofRequest) -> core::result::Result<grafting_graph_core::profile_roof::RoofPatch, alloc::string::String>
 pub mod grafting_graph_core::profile_surface
 pub enum grafting_graph_core::profile_surface::Section
@@ -1797,6 +1802,10 @@ can only do the first -- every anchor it produces is G1 by construction --
 which is why an L drawn in one gesture has always come back rounded no
 matter how sharply it was drawn.
 
+### `pub const grafting_graph_core::profile_roof::GABLE_OVER_FRONT: usize`
+
+The side a dormer's gable is given when it stands apart from its front wall.
+
 ### `pub enum grafting_graph_core::ArcBulge`
 
 Which side of the chord (walking from an arc's own start to its end) it
@@ -2853,7 +2862,7 @@ Generates a cap with shared seam identities and no degenerate apex edges.
 
 ### `pub fn grafting_graph_core::profile_roof::generate_roof_patch(request: grafting_graph_core::profile_roof::RoofRequest) -> core::result::Result<grafting_graph_core::profile_roof::RoofPatch, alloc::string::String>`
 
-Generates a roof with shared seam identities between all its faces.
+Generates the connected visible envelope of a roof and its owned subroofs.
 
 ### `pub fn grafting_graph_core::profile_surface::ProfileSheet::point(&self, u: f64, v: f64) -> core::result::Result<[f64; 3], alloc::string::String>`
 
@@ -4087,6 +4096,11 @@ Maximum rise above the base.
 
 Horizontal expansion of the base contour.
 
+### `pub grafting_graph_core::profile_roof::RoofDormer::absolute: bool`
+
+Its slopes are rises per unit run, its own, not shares of the
+roof's: a roof made steeper or flatter leaves it as it stands.
+
 ### `pub grafting_graph_core::profile_roof::RoofDormer::along: f64`
 
 Where its middle stands along that side, as a fraction of it.
@@ -4094,6 +4108,11 @@ Where its middle stands along that side, as a fraction of it.
 ### `pub grafting_graph_core::profile_roof::RoofDormer::front: f64`
 
 How high its front wall rises above the leaf.
+
+### `pub grafting_graph_core::profile_roof::RoofDormer::gable_apart: bool`
+
+Its front wall stops at its eaves, a plain upright rectangle; the
+gable over it is a face of its own, side [`GABLE_OVER_FRONT`].
 
 ### `pub grafting_graph_core::profile_roof::RoofDormer::setback: f64`
 
@@ -4130,6 +4149,10 @@ The footprint side it rises from -- one past the last side for a flat
 top, where only gables were left to close it; for a dormer's face, the
 dormer's own side -- front, right, back, left -- or four where it
 meets its leaf.
+
+### `pub grafting_graph_core::profile_roof::RoofFace::subroof: core::option::Option<usize>`
+
+Which directly owned subroof made this face, if any.
 
 ### `pub grafting_graph_core::profile_roof::RoofFace::upright: bool`
 
@@ -4197,6 +4220,10 @@ Horizontal platforms that trim higher roof faces while retaining lower slopes.
 Relative steepness of every side -- footprint by footprint, its
 outline's then each hole's, side `i` running from corner `i` to
 corner `i + 1`; zero makes a gable.
+
+### `pub grafting_graph_core::profile_roof::RoofRequest::subroofs: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofRequest>`
+
+Smaller roofs joined into this roof's visible envelope.
 
 ### `pub grafting_graph_core::profile_surface::ProfileSheet::lower: grafting_graph_core::profile_surface::Section`
 
