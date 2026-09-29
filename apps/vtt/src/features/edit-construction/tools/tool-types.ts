@@ -232,7 +232,7 @@ export interface StructureEditParams {
 export const DEFAULT_STRUCTURE_EDIT_PARAMS: StructureEditParams = Object.freeze({ mode: "shape" });
 
 export interface ToolParamsByTool {
-  readonly roof: { readonly action: "draw" | "cut" | "base" | "dormer"; readonly shape: "rectangle" | "polygon" | "freehand" | "circle"; readonly waters: 1 | 2 | 4; readonly dormerWidth: number; readonly dormerFront: number; readonly elevation: number; readonly height: number; readonly radius: number; readonly tolerance: number };
+  readonly roof: { readonly action: "draw" | "cut" | "hole" | "base" | "dormer"; readonly shape: "rectangle" | "polygon" | "freehand" | "circle"; readonly waters: 1 | 2 | 4; readonly dormerWidth: number; readonly dormerFront: number; readonly elevation: number; readonly height: number; readonly radius: number; readonly tolerance: number };
   readonly navigate: NoToolParams;
   readonly "platform-contour": { readonly elevation: number; readonly mode: "create" | "extend" | "cut"; readonly shape?: "rectangle" | "polygon" | "freehand" | "circle"; readonly radius?: number; readonly tolerance?: number };
   /** A straight ramp dragged from start to end, climbing a fixed rise, with its own width at each end. */

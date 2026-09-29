@@ -155,13 +155,25 @@ function stroked(ctx: ToolContext, contour: readonly FittedEdge[], level: number
       return [];
     }
   });
-  const outline = landed(cornersOf(contour), [...roofRings(roofs.map(({ recipe }) => recipe)), ...floors.map((floor) => floor.footprint.outer)]);
+  const outline = params.action === "hole" ? cornersOf(contour) : landed(cornersOf(contour), [...roofRings(roofs.map(({ recipe }) => recipe)), ...floors.map((floor) => floor.footprint.outer)]);
   // Drawn round a floor's own outline, the roof stands on that floor: at its height, and following it.
   const same = (a: readonly Point[], b: readonly Point[]) => a.length === b.length && a.every((p) => b.some((q) => Math.hypot(p[0] - q[0], p[1] - q[1]) < 1e-6));
   const on = floors.find((floor) => same(outline, floor.footprint.outer));
   const drawn: RoofSource = on
     ? { ...roofOver([on.footprint], on.elevation, params.height, params.waters), base: on.ref }
     : roofOver([{ outer: outline, holes: [] }], level, params.height, params.waters);
+  if (params.action === "hole") {
+    const area = polygonsOf(drawn.footprints);
+    const cut = roofs.filter(({ recipe }) => areaOf(planarDifference(ctx.runtime, polygonsOf(recipe.footprints), area)) < areaOf(polygonsOf(recipe.footprints)) - 1e-6);
+    if (cut.length === 0) throw new Error("O buraco não passa por nenhum telhado.");
+    return {
+      requests: cut.map(({ recipe }) => {
+        const { group: _group, ...source } = recipe;
+        return { ...source, cutouts: [...(recipe.cutouts ?? []), { outer: outline, holes: [] }] };
+      }),
+      replaces: cut.flatMap(({ faces }) => faces),
+    };
+  }
   if (params.action === "cut") {
     const cut = roofs.flatMap(({ recipe, faces }) => {
       const whole = polygonsOf(recipe.footprints);
@@ -235,14 +247,14 @@ const stroke = contourStroke<"roof", Params>({
   commit: (ctx, contour, level, params) => {
     try {
       const { requests, replaces } = stroked(ctx, contour, level, params);
-      commitRoofRecipes(ctx, requests, replaces, params.action === "cut" ? "Telhado recortado." : replaces.length > 0 ? "Telhados fundidos." : "Telhado criado.");
+      commitRoofRecipes(ctx, requests, replaces, params.action === "hole" ? "Buraco aberto no telhado." : params.action === "cut" ? "Telhado recortado." : replaces.length > 0 ? "Telhados fundidos." : "Telhado criado.");
     } catch (error) {
       ctx.reportFeedback({ tone: "error", message: error instanceof Error ? error.message : String(error) });
     }
   },
   // What a drawn outline makes, fused with whatever it meets.
   previewClosed: (ctx, outline, level, params) => {
-    if (params.action !== "draw") return undefined;
+    if (params.action !== "draw" && params.action !== "hole") return undefined;
     try {
       const contour = outline.map((start, i) => ({ start, end: outline[(i + 1) % outline.length]!, geometry: { kind: "line" as const } }));
       const { requests } = stroked(ctx, contour, level, params);
@@ -254,7 +266,7 @@ const stroke = contourStroke<"roof", Params>({
   dragHint: (shape) => (shape === "rectangle" ? "Arraste de um canto ao canto oposto. Encostando num telhado, os dois viram um só." : "Arraste um contorno fechado."),
 });
 
-const drawing = (params: Params) => params.action === "draw" || params.action === "cut";
+const drawing = (params: Params) => params.action === "draw" || params.action === "cut" || params.action === "hole";
 
 const rawRoofTool: ConstructionTool<"roof"> = {
   id: "roof",

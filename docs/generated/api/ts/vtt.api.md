@@ -6954,6 +6954,10 @@ A roof's recipe: what the generator is asked, the base it follows, and the group
 
 ### `property vtt.roof-recipe.RoofRecipe.base?: RoofBaseRef`
 
+### `property vtt.roof-recipe.RoofRecipe.cutouts?: readonly RoofFootprint[]`
+
+Areas removed from finished roof faces without reshaping its skeleton.
+
 ### `property vtt.roof-recipe.RoofRecipe.dormers?: readonly RoofDormer[]`
 
 ### `property vtt.roof-recipe.RoofRecipe.elevation: number`
@@ -6986,6 +6990,10 @@ A roof's request, and the base it follows when it stands on one.
 
 ### `property vtt.roof-recipe.RoofSource.base?: RoofBaseRef`
 
+### `property vtt.roof-recipe.RoofSource.cutouts?: readonly RoofFootprint[]`
+
+Areas removed from finished roof faces without reshaping its skeleton.
+
 ### `property vtt.roof-recipe.RoofSource.dormers?: readonly RoofDormer[]`
 
 ### `property vtt.roof-recipe.RoofSource.elevation: number`
@@ -7016,7 +7024,7 @@ Region property carrying a roof's recipe, which every edit regenerates the roof 
 
 How a roof is regenerated from the recipe its faces keep.
 
-### `function vtt.roof-recipe.carriedOnto(footprints: readonly RoofFootprint[], sources: readonly RoofRequest[], drawn?: { outline: readonly Point[]; slopes: readonly number[] }): { dormers: RoofDormer[]; footprints: RoofFootprint[]; slopes: number[] }`
+### `function vtt.roof-recipe.carriedOnto(footprints: readonly RoofFootprint[], sources: readonly RoofRequest[], drawn?: { outline: readonly Point[]; slopes: readonly number[] }): { cutouts: RoofFootprint[]; dormers: RoofDormer[]; footprints: RoofFootprint[]; slopes: number[] }`
 
 New footprints that take over from `sources`: each side keeps the slope
 of a side it lies along -- of a roof it came from, then of what was drawn
@@ -7999,7 +8007,7 @@ Perlin `scale` -- smaller values are smoother/larger-scale terrain features.
 
 ### `property vtt.tool-types.ToolParamsByTool.platform-contour: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "circle" | "rectangle" | "polygon" | "freehand"; tolerance?: number }`
 
-### `property vtt.tool-types.ToolParamsByTool.roof: { action: "base" | "cut" | "dormer" | "draw"; dormerFront: number; dormerWidth: number; elevation: number; height: number; radius: number; shape: "circle" | "rectangle" | "polygon" | "freehand"; tolerance: number; waters: 1 | 2 | 4 }`
+### `property vtt.tool-types.ToolParamsByTool.roof: { action: "hole" | "base" | "cut" | "dormer" | "draw"; dormerFront: number; dormerWidth: number; elevation: number; height: number; radius: number; shape: "circle" | "rectangle" | "polygon" | "freehand"; tolerance: number; waters: 1 | 2 | 4 }`
 
 ### `property vtt.tool-types.ToolParamsByTool.slope-curve: { mode?: "arc" | "points" | "straight" | "spiral" | "connect"; rise: number; width: number }`
 
@@ -9277,6 +9285,10 @@ The engine's roof generator.
 Wire data for the native roof generator: its footprints, how steeply each
 of their sides rises -- footprint by footprint, the outline's, then each hole's, side `i` running from
 corner `i` to `i + 1`, zero for a gable -- and dormers on its leaves.
+
+### `property vtt.cap-port.RoofRequest.cutouts?: readonly RoofFootprint[]`
+
+Areas removed from finished roof faces without reshaping its skeleton.
 
 ### `property vtt.cap-port.RoofRequest.dormers?: readonly RoofDormer[]`
 

@@ -64,6 +64,9 @@ pub struct RoofRequest {
     /// Dormers raised on its leaves.
     #[cfg_attr(feature = "curve-serde", serde(default))]
     pub dormers: Vec<RoofDormer>,
+    /// Areas removed from the finished leaves, without changing the skeleton.
+    #[cfg_attr(feature = "curve-serde", serde(default))]
+    pub cutouts: Vec<RoofFootprint>,
 }
 
 /// One logical roof face over shared indexed edges.
@@ -755,24 +758,38 @@ fn dormer_block(
 type PlanFace = Vec<Vec<Point>>;
 
 /// `subject` less `covers`, as faces with their holes.
-fn minus(subject: &[Point], covers: &[Vec<Point>]) -> Result<Vec<PlanFace>, String> {
-    let covers: Vec<&Vec<Point>> = covers
+fn minus(subject: &[Point], covers: &[PlanFace]) -> Result<Vec<PlanFace>, String> {
+    let covers: Vec<&PlanFace> = covers
         .iter()
-        .filter(|c| c.len() >= 3 && area(c).abs() > 1e-9)
+        .filter(|c| {
+            c.first()
+                .is_some_and(|ring| ring.len() >= 3 && area(ring).abs() > 1e-9)
+        })
         .collect();
     if covers.is_empty() {
         return Ok(vec![vec![subject.to_vec()]]);
     }
-    let to32 = |ring: &[Point]| {
-        ring.iter()
+    let to32 = |ring: &[Point], hole: bool| {
+        let mut oriented = ring.to_vec();
+        if (area(ring) < 0.0) != hole {
+            oriented.reverse();
+        }
+        oriented
+            .iter()
             .map(|p| [p[0] as f32, p[1] as f32])
             .collect::<Vec<_>>()
     };
     let shapes = planar_boolean(
-        &[vec![to32(subject)]],
+        &[vec![to32(subject, false)]],
         &covers
             .iter()
-            .map(|ring| vec![to32(ring)])
+            .map(|polygon| {
+                polygon
+                    .iter()
+                    .enumerate()
+                    .map(|(r, ring)| to32(ring, r > 0))
+                    .collect()
+            })
             .collect::<Vec<_>>(),
         PlanarBoolean::Difference,
     )?;
@@ -996,6 +1013,17 @@ pub fn generate_roof_patch(request: RoofRequest) -> Result<RoofPatch, String> {
     if request.slopes.iter().all(|s| *s == 0.0) {
         return Err("a roof needs at least one pitched side".into());
     }
+    if request.cutouts.iter().any(|cutout| {
+        std::iter::once(&cutout.outer)
+            .chain(&cutout.holes)
+            .any(|ring| {
+                ring.len() < 3
+                    || ring.iter().flatten().any(|value| !value.is_finite())
+                    || area(ring).abs() < 1e-9
+            })
+    }) {
+        return Err("a roof cutout needs three finite corners and a nonzero area".into());
+    }
     if crosses_itself(
         &authored
             .iter()
@@ -1115,7 +1143,7 @@ pub fn generate_roof_patch(request: RoofRequest) -> Result<RoofPatch, String> {
     // Main leaves, opened where a dormer stands higher.
     for (front, leaf) in &leaves {
         let side = front.map_or(count, |front| front.side);
-        if dormers.is_empty() {
+        if dormers.is_empty() && request.cutouts.is_empty() {
             faces.push(Face3 {
                 side,
                 dormer: None,
@@ -1129,7 +1157,15 @@ pub fn generate_roof_patch(request: RoofRequest) -> Result<RoofPatch, String> {
             });
             continue;
         }
-        let covers: Vec<Vec<Point>> = dormers.iter().map(|d| d.above(&leaf.plane, true)).collect();
+        let mut covers: Vec<PlanFace> = dormers
+            .iter()
+            .map(|d| vec![d.above(&leaf.plane, true)])
+            .collect();
+        covers.extend(request.cutouts.iter().map(|cutout| {
+            std::iter::once(cutout.outer.clone())
+                .chain(cutout.holes.iter().cloned())
+                .collect()
+        }));
         for face in minus(&leaf.plan, &covers)? {
             faces.push(Face3 {
                 side,
@@ -1154,17 +1190,22 @@ pub fn generate_roof_patch(request: RoofRequest) -> Result<RoofPatch, String> {
                 continue;
             }
             let plane = dormer.planes[j];
-            let mut covers: Vec<Vec<Point>> = main
+            let mut covers: Vec<PlanFace> = main
                 .iter()
-                .map(|leaf| at_or_below(&leaf.plan, &plane, &leaf.plane, false))
+                .map(|leaf| vec![at_or_below(&leaf.plan, &plane, &leaf.plane, false)])
                 .collect();
             covers.extend(
                 dormers
                     .iter()
                     .enumerate()
                     .filter(|(o, _)| *o != k)
-                    .map(|(o, other)| other.above(&plane, o > k)),
+                    .map(|(o, other)| vec![other.above(&plane, o > k)]),
             );
+            covers.extend(request.cutouts.iter().map(|cutout| {
+                std::iter::once(cutout.outer.clone())
+                    .chain(cutout.holes.iter().cloned())
+                    .collect()
+            }));
             for face in minus(&own, &covers)? {
                 faces.push(Face3 {
                     side: dormer.roles[j],
@@ -1342,6 +1383,7 @@ mod tests {
             footprints: vec![RoofFootprint { outer, holes }],
             slopes,
             dormers: Vec::new(),
+            cutouts: Vec::new(),
         }
     }
 
@@ -1522,6 +1564,74 @@ mod tests {
         .unwrap();
         assert_eq!(patch.faces.len(), 8);
         assert!(closed(&patch, 3.0));
+    }
+
+    #[test]
+    fn a_cutout_opens_a_leaf_without_moving_the_ridge() {
+        let original = generate_roof_patch(rectangle([1.0, 0.0, 1.0, 0.0])).unwrap();
+        let mut request = rectangle([1.0, 0.0, 1.0, 0.0]);
+        request.cutouts.push(RoofFootprint {
+            outer: vec![[2.0, 0.5], [4.0, 0.5], [4.0, 1.5], [2.0, 1.5]],
+            holes: Vec::new(),
+        });
+        let cut = generate_roof_patch(request).unwrap();
+        assert!(cut.faces.iter().any(|face| !face.holes.is_empty()));
+        let peak = |patch: &RoofPatch| {
+            patch
+                .nodes
+                .iter()
+                .map(|p| p[1])
+                .fold(f64::NEG_INFINITY, f64::max)
+        };
+        assert!((peak(&cut) - peak(&original)).abs() < 1e-9);
+        assert!(cut.faces.iter().all(|face| face.side < 4));
+    }
+
+    #[test]
+    fn a_cutout_crossing_a_ridge_opens_both_leaves() {
+        let mut request = rectangle([1.0, 0.0, 1.0, 0.0]);
+        request.cutouts.push(RoofFootprint {
+            outer: vec![[2.0, 1.5], [4.0, 1.5], [4.0, 2.5], [2.0, 2.5]],
+            holes: Vec::new(),
+        });
+        let cut = generate_roof_patch(request).unwrap();
+        // At the ridge the cut becomes a notch in both leaves, rather than
+        // an inner loop in either one.
+        for x in [2.0, 4.0] {
+            assert!(cut.nodes.iter().any(|p| (p[0] - x).abs() < 1e-5
+                && (p[1] - 5.0).abs() < 1e-5
+                && (p[2] - 2.0).abs() < 1e-5));
+        }
+    }
+
+    #[test]
+    fn an_invalid_cutout_is_refused() {
+        let mut request = rectangle([1.0; 4]);
+        request.cutouts.push(RoofFootprint {
+            outer: vec![[0.0, 0.0], [1.0, 0.0]],
+            holes: Vec::new(),
+        });
+        assert!(generate_roof_patch(request).is_err());
+    }
+
+    #[test]
+    fn a_cutout_respects_its_own_hole() {
+        let mut request = rectangle([1.0, 0.0, 1.0, 0.0]);
+        request.cutouts.push(RoofFootprint {
+            outer: vec![[1.0, 0.4], [5.0, 0.4], [5.0, 1.6], [1.0, 1.6]],
+            holes: vec![vec![[2.0, 0.8], [4.0, 0.8], [4.0, 1.2], [2.0, 1.2]]],
+        });
+        let patch = generate_roof_patch(request).unwrap();
+        assert!(
+            patch
+                .faces
+                .iter()
+                .filter(|face| face.side == 0 && !face.upright)
+                .count()
+                > 1,
+            "{:?}",
+            patch.faces
+        );
     }
 
     #[test]

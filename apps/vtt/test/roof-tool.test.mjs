@@ -118,6 +118,28 @@ test("a rectangle cut out of a roof leaves the rest of it roofed, its hole or no
   } finally { session.free(); }
 });
 
+test("a drawn hole removes roof surface without changing the roof footprint or ridge", () => {
+  const value = roofed(2);
+  const { runtime, session, ctx } = value;
+  try {
+    const before = JSON.stringify(roofs(runtime)[0].props.roof.footprints);
+    const ridge = top(runtime);
+    drag(value, [2, 0.8], [4, 1.2], { ...DEFAULT_TOOL_PARAMS.roof, action: "hole" });
+    assert.equal(JSON.stringify(roofs(runtime)[0].props.roof.footprints), before);
+    assert.equal(roofs(runtime)[0].props.roof.cutouts.length, 1);
+    assert.ok(roofs(runtime).some((face) => face.holes.length > 0), JSON.stringify(roofs(runtime)[0].props.roof.cutouts));
+    assert.ok(Math.abs(top(runtime) - ridge) < 1e-6);
+    const move = shownGlobalHandles(scene(runtime)).find((h) => h.recipeHandle?.anchor === "cutout:0:move");
+    assert.ok(move, "the hole has an editing handle");
+    dragHandle(value, move, { x: move.position.x + 1, y: move.position.y, z: move.position.z });
+    assert.ok(roofs(runtime)[0].props.roof.cutouts[0].outer.every(([x]) => x >= 3 - 1e-6));
+    session.undo_region_overlay(ctx.history.undo().transactionId);
+    assert.ok(roofs(runtime).some((face) => face.holes.length > 0), "undo restores the prior opening");
+    session.undo_region_overlay(ctx.history.undo().transactionId);
+    assert.ok(roofs(runtime).every((face) => face.holes.length === 0), "undo removes the authored opening");
+  } finally { session.free(); }
+});
+
 test("a roof on a platform takes its outline, holes and elevation, and undoes", () => {
   const value = fixture();
   const { ctx, runtime, session, operations } = value;
@@ -334,8 +356,44 @@ test("a roof touching another only at a corner joins it there: one roof, two out
 
 // ---- Standing on a base: the roof follows it ----
 
-import { platformContourTool } from "../src/composition/tabletop/tools/platform/platform-contour-tool.ts";
-import { commitRegionEdit } from "../src/composition/tabletop/effects/effect-commit.ts";
+import { commitPlatformContour, platformContourTool } from "../src/composition/tabletop/tools/platform/platform-contour-tool.ts";
+import { commitRegionEdit, commitSurfaceRemoval } from "../src/composition/tabletop/effects/effect-commit.ts";
+
+test("a platform cuts the roof with its own edges and restores it when removed", () => {
+  const value = roofed(2);
+  const { ctx, runtime, session } = value;
+  try {
+    const params = { ...DEFAULT_TOOL_PARAMS["platform-contour"], elevation: 4 };
+    commitPlatformContour(ctx, [[2, 0.5], [4, 0.5], [4, 1.5], [2, 1.5]].map(([x, z]) => ({ point: { x, y: 4, z } })), params);
+    const floor = runtime.getAllRegionTopologies().find((face) => face.surfaceType === "platform");
+    assert.ok(floor, "the platform was created");
+    assert.ok(roofs(runtime).some((face) => face.holes.length > 0), "its contour cuts the roof");
+    assert.equal(roofs(runtime)[0].props.roof.cutouts.length, 0, "the cut is derived from the live platform");
+    commitRegionEdit(runtime, floor.nodes.map((node) => ({ kind: "move-vertex", nodeId: node.id, position: { ...node.position, x: node.position.x + 2 } })), { transactionId: "move-roof-platform" });
+    const holeXs = roofs(runtime).flatMap((face) => face.holes.flatMap((loop) => loop.map((use) => face.nodes.find((node) => node.id === use.startNodeId)?.position.x))).filter((x) => x !== undefined);
+    assert.ok(holeXs.length > 0 && Math.min(...holeXs) >= 4 - 1e-5, "the cut follows the moved platform");
+    const moved = runtime.getAllRegionTopologies().find((face) => face.surfaceType === "platform");
+    commitSurfaceRemoval(runtime, moved.surfaceKey, { transactionId: "remove-roof-platform" });
+    assert.ok(roofs(runtime).every((face) => face.holes.length === 0), "removing the platform restores the roof");
+  } finally { session.free(); }
+});
+
+test("drawing a platform from a roof hit uses that level and cuts the roof", () => {
+  const value = roofed(2);
+  const { ctx, runtime, session } = value;
+  try {
+    const leaf = roofs(runtime).find((face) => !face.props.roofFace.upright && face.nodes.some((node) => node.position.z < 1e-6));
+    const start = { point: { x: 2, y: 4, z: 1 }, surfaceRef: surfaceRefFromNodeSet(leaf.surfaceKey) };
+    const current = { point: { x: 4, y: 4, z: 1.5 } };
+    const params = { ...DEFAULT_TOOL_PARAMS["platform-contour"] };
+    platformContourTool.onPointerDown(ctx, start, params);
+    platformContourTool.onPointerUp(ctx, { start, current, samples: [start, current] }, params);
+    const floor = runtime.getAllRegionTopologies().find((face) => face.surfaceType === "platform");
+    assert.ok(floor, "the roof hit creates a floor");
+    assert.ok(floor.nodes.every((node) => Math.abs(node.position.y - 4) < 1e-6));
+    assert.ok(roofs(runtime).some((face) => face.holes.length > 0), "the floor's outline opens the roof");
+  } finally { session.free(); }
+});
 
 /** Drags `handle` with `tool` to `point`; `screenY` below 300 is up, 40 px a metre. */
 function dragWith(tool, { ctx, runtime }, handle, point, params, screenY = 300) {

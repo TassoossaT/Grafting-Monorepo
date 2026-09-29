@@ -2514,6 +2514,10 @@ Unique XYZ nodes.
 
 Transient XYZ segment endpoints of every edge, for a preview.
 
+### `pub grafting_graph_core::profile_roof::RoofRequest::cutouts: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofFootprint>`
+
+Areas removed from the finished leaves, without changing the skeleton.
+
 ### `pub grafting_graph_core::profile_roof::RoofRequest::dormers: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofDormer>`
 
 Dormers raised on its leaves.

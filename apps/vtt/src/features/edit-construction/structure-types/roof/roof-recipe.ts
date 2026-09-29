@@ -4,6 +4,9 @@ import type { RoofDormer, RoofFootprint, RoofPatch, RoofPort, RoofRequest } from
 import type { GlobalHandleIntent } from "../../global-handles/global-handle.ts";
 import { outward, ROTATE_REACH } from "../../spine/spine-global-handles.ts";
 import { rotateInPlan } from "../../topology/plan-rotation.ts";
+import { insideRingXZ } from "../../topology/plan-geometry.ts";
+import { faceArea } from "../../topology/plan-overlap.ts";
+import { hasTrait } from "../registry.ts";
 import { RECIPE_ROLE_PROP, type RecipeGeneration, type RecipeHandle } from "../structure-type.ts";
 
 /** Region property carrying a roof's recipe, which every edit regenerates the roof from. */
@@ -161,7 +164,7 @@ function sameLine(a: Point, b: Point, c: Point, d: Point): boolean {
  * steep is dropped, so no seam runs across one plane; each dormer stays on
  * the side its old one lies along.
  */
-export function carriedOnto(footprints: readonly RoofFootprint[], sources: readonly RoofRequest[], drawn?: { readonly outline: readonly Point[]; readonly slopes: readonly number[] }): { readonly footprints: RoofFootprint[]; readonly slopes: number[]; readonly dormers: RoofDormer[] } {
+export function carriedOnto(footprints: readonly RoofFootprint[], sources: readonly RoofRequest[], drawn?: { readonly outline: readonly Point[]; readonly slopes: readonly number[] }): { readonly footprints: RoofFootprint[]; readonly slopes: number[]; readonly dormers: RoofDormer[]; readonly cutouts: RoofFootprint[] } {
   const known = [
     ...sources.flatMap((source) => ringsOf(source.footprints).flatMap(({ points }, r) => points.map((a, i) => ({ a, c: points[(i + 1) % points.length]!, slope: source.slopes[sideNumber(source.footprints, r, i)]! })))),
     ...(drawn ? drawn.outline.map((a, i) => ({ a, c: drawn.outline[(i + 1) % drawn.outline.length]!, slope: drawn.slopes[i]! })) : []),
@@ -192,7 +195,7 @@ export function carriedOnto(footprints: readonly RoofFootprint[], sources: reado
     const along = ((middle[0]! - a[0]) * (c[0] - a[0]) + (middle[1]! - a[1]) * (c[1] - a[1])) / (length * length);
     return [{ ...dormer, side, along: Math.min(1, Math.max(0, along)) }];
   }));
-  return { footprints: merged, slopes, dormers };
+  return { footprints: merged, slopes, dormers, cutouts: sources.flatMap((source) => source.cutouts ?? []) };
 }
 
 /**
@@ -231,7 +234,23 @@ export function roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: Ro
   readonly faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>;
 } {
   const { base, ...wire } = request;
-  const roof: RoofPatch = port.generateRoof(wire);
+  const plan = (ring: readonly { readonly x: number; readonly z: number }[]): Point[] => ring.map(({ x, z }) => [x, z]);
+  // A floor placed inside a roof's rise replaces the leaves beneath its own
+  // boundary. Its live edges supply the cut each time either structure changes.
+  // A floor at the eaves is the roof's base, so it does not cut its own roof.
+  const platformCuts: RoofFootprint[] = standing.flatMap((face) => {
+    if (!hasTrait(face.surfaceType, "floor") || face.nodes.length === 0) return [];
+    const level = face.nodes[0]!.position.y;
+    if (!face.nodes.every((node) => Math.abs(node.position.y - level) < 1e-4)
+      || level <= request.elevation + 1e-4 || level > request.elevation + request.height + 1e-4) return [];
+    const area = faceArea(face);
+    const holes = area.holes.map(plan);
+    return area.outers.map(plan).filter((outer) => outer.length >= 3).map((outer) => ({
+      outer,
+      holes: holes.filter((hole) => hole.length >= 3 && insideRingXZ(outer, { x: hole[0]![0], z: hole[0]![1] })),
+    }));
+  });
+  const roof: RoofPatch = port.generateRoof({ ...wire, cutouts: [...(request.cutouts ?? []), ...platformCuts] });
   const others = standing.filter((face) => face.props?.[ROOF_RECIPE_PROP] === undefined);
   const standingNodes = others.flatMap((face) => face.nodes);
   const welded = roof.nodes.map(([x, y, z]) => (Math.abs(y - request.elevation) > WELD ? undefined
@@ -263,7 +282,7 @@ export function roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: Ro
       return { edgeId: edgeId(edge), reversed: shared ? walkStart(edge, reversed) !== stored(shared).start : reversed };
     });
   };
-  const recipe: RoofRecipe = { elevation: request.elevation, height: request.height, footprints: request.footprints, slopes: request.slopes, dormers: request.dormers ?? [], ...(base ? { base } : {}), group: operationId };
+  const recipe: RoofRecipe = { elevation: request.elevation, height: request.height, footprints: request.footprints, slopes: request.slopes, dormers: request.dormers ?? [], cutouts: request.cutouts ?? [], ...(base ? { base } : {}), group: operationId };
   const faceProps = new Map<string, Readonly<Record<string, unknown>>>();
   roof.faces.forEach((face, index) => {
     const role: RoofFaceRole = { side: face.side, upright: face.upright, ...(face.dormer === null ? {} : { dormer: face.dormer }) };
@@ -299,7 +318,9 @@ type RoofPart =
   | { readonly kind: "corner"; readonly ring: number; readonly corner: number }
   | { readonly kind: "insert"; readonly side: number }
   | { readonly kind: "dormer"; readonly dormer: number; readonly along: Point; readonly into: Point }
-  | { readonly kind: "dormer-side"; readonly dormer: number; readonly right: boolean; readonly along: Point };
+  | { readonly kind: "dormer-side"; readonly dormer: number; readonly right: boolean; readonly along: Point }
+  | { readonly kind: "cutout"; readonly cutout: number }
+  | { readonly kind: "cutout-corner"; readonly cutout: number; readonly corner: number };
 
 const recipeOf = (topology: ConstructionRegionTopology) => topology.props?.[ROOF_RECIPE_PROP] as RoofRecipe | undefined;
 const roleOf = (topology: ConstructionRegionTopology) => topology.props?.[ROOF_FACE_PROP] as RoofFaceRole | undefined;
@@ -431,6 +452,19 @@ function roofHandles(members: readonly ConstructionRegionTopology[], generic: un
       });
     }
   });
+  // An authored opening is moved by its centre and reshaped by its corners.
+  // Platform cuts are derived from their own floor handles, so appear nowhere here.
+  (recipe.cutouts ?? []).forEach((cutout, k) => {
+    const ring = cutout.outer;
+    if (ring.length < 3) return;
+    const heightAt = (p: Point) => points.reduce((best, node) => {
+      const distance = Math.hypot(node.position.x - p[0], node.position.z - p[1]);
+      return distance < best.distance ? { distance, y: node.position.y } : best;
+    }, { distance: Infinity, y: recipe.elevation + recipe.height / 2 }).y;
+    const centre: Point = [ring.reduce((sum, p) => sum + p[0], 0) / ring.length, ring.reduce((sum, p) => sum + p[1], 0) / ring.length];
+    handles.push({ kind: "pivot", anchor: `cutout:${k}:move`, motion: { kind: "plane" }, position: { x: centre[0], y: heightAt(centre) + STAND_OFF, z: centre[1] }, part: { kind: "cutout", cutout: k } satisfies RoofPart });
+    ring.forEach((p, corner) => handles.push({ kind: "corner", anchor: `cutout:${k}:corner:${corner}`, motion: { kind: "plane" }, position: { x: p[0], y: heightAt(p) + STAND_OFF, z: p[1] }, part: { kind: "cutout-corner", cutout: k, corner } satisfies RoofPart }));
+  });
   return handles;
 }
 
@@ -467,12 +501,23 @@ function reslope(slopes: readonly number[], side: number, dy: number, height: nu
 function editRoof(generic: unknown, handle: RecipeHandle, intent: GlobalHandleIntent): unknown {
   const recipe = generic as RoofRecipe;
   const part = handle.part as RoofPart;
-  const moveAll = (place: (p: Point) => Point, dy = 0): RoofRecipe => ({ ...withRings(recipe, (ring) => ring.map(place)), elevation: recipe.elevation + dy });
+  const moveAll = (place: (p: Point) => Point, dy = 0): RoofRecipe => ({
+    ...withRings(recipe, (ring) => ring.map(place)),
+    cutouts: recipe.cutouts?.map((cutout) => ({ outer: cutout.outer.map(place), holes: cutout.holes.map((hole) => hole.map(place)) })) ?? [],
+    elevation: recipe.elevation + dy,
+  });
   // Moved or reshaped by its own hand, it no longer stands where its base does: it lets go of it.
   const free = (next: RoofRecipe): RoofRecipe => {
     const { base: _base, ...rest } = next;
     return rest;
   };
+  if (part.kind === "cutout" && handle.kind === "pivot" && intent.kind === "move") {
+    const place = (p: Point): Point => [p[0] + intent.delta.x, p[1] + intent.delta.z];
+    return { ...recipe, cutouts: (recipe.cutouts ?? []).map((cutout, i) => i === part.cutout ? { outer: cutout.outer.map(place), holes: cutout.holes.map((hole) => hole.map(place)) } : cutout) };
+  }
+  if (part.kind === "cutout-corner" && handle.kind === "corner" && intent.kind === "move") {
+    return { ...recipe, cutouts: (recipe.cutouts ?? []).map((cutout, i) => i === part.cutout ? { ...cutout, outer: cutout.outer.map((p, corner): Point => corner === part.corner ? [p[0] + intent.delta.x, p[1] + intent.delta.z] : p) } : cutout) };
+  }
   if (part.kind === "dormer") {
     if (handle.kind === "pivot" && intent.kind === "move") {
       // Along its side and into its leaf; the generator refuses one pushed off it.
