@@ -4354,7 +4354,7 @@ export interface PinnedToRoles {
   readonly pins: readonly { readonly nodeId: string; readonly role: string; readonly u: number; readonly v: number }[];
   }
 export function pinnedToRoles(topologies: readonly ConstructionRegionTopology[], sources: readonly ConstructionSurfaceKey[]): PinnedToRoles {
-  const replaced = new Set(sources.map(keyText));
+  const replaced = new Set(sources.map(surfaceKeyText));
 export function keepFaceProps(runtime: FacePropsRuntime, causeId: string, created: readonly ConstructionSurfaceKey[], faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>, pinned?: PinnedToRoles): void {
   const byRole = new Map<string, ConstructionSurfaceKey>();
 
@@ -4805,6 +4805,18 @@ export function roofBaseAt(topologies: readonly ConstructionRegionTopology[], sa
 export function roofBaseOf(topologies: readonly ConstructionRegionTopology[], ref: RoofBaseRef): RoofBase | undefined {
   const key = ref.surfaceKey.join("\u0000");
 
+// src/composition/tabletop/tools/roof/roof-commit.ts
+export function replaceRoofs(
+  ctx: ToolContext,
+  requests: readonly RoofSource[],
+  replaces: readonly ConstructionSurfaceKey[],
+  transactionId?: string,
+  ): { readonly group: string; readonly recorded: boolean } {
+  const operationId = scopedToolId(ctx, "roof", ctx.nextSequence());
+export function commitRoofRecipes(ctx: ToolContext, requests: readonly RoofSource[], replaces: readonly ConstructionSurfaceKey[] = [], done = "Telhado criado."): void {
+  try {
+  const { group: operationId, recorded } = replaceRoofs(ctx, requests, replaces);
+
 // src/composition/tabletop/tools/roof/roof-follow-base.ts
 export interface FollowBaseRuntime extends FacePropsRuntime, Pick<RoofPort, "generateRoof"> {
   getAllRegionTopologies(): readonly ConstructionRegionTopology[];
@@ -4818,19 +4830,9 @@ export function followBaseReaction(): Reaction<FollowBaseRuntime> {
 // src/composition/tabletop/tools/roof/roof-opening-stand.ts
 export const roofOpeningStand: OpeningStand = {
   raisesOn(face) {
-  const recipe = recipeOf(face), role = roleOf(face);
+  const recipe = roofRecipeOf(face), role = roofRoleOf(face);
 
 // src/composition/tabletop/tools/roof/roof-tool.ts
-export function replaceRoofs(
-  ctx: ToolContext,
-  requests: readonly RoofSource[],
-  replaces: readonly ConstructionSurfaceKey[],
-  transactionId?: string,
-  ): { readonly group: string; readonly recorded: boolean } {
-  const operationId = scopedToolId(ctx, "roof", ctx.nextSequence());
-export function commitRoofRecipes(ctx: ToolContext, requests: readonly RoofSource[], replaces: readonly ConstructionSurfaceKey[] = [], done = "Telhado criado."): void {
-  try {
-  const { group: operationId, recorded } = replaceRoofs(ctx, requests, replaces);
 export const roofTool = withStructureEditing(rawRoofTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "roof-generated"), handlesOnly: true });
 
 // src/composition/tabletop/tools/shapes/geometry-2d.ts
@@ -6789,6 +6791,19 @@ export function firstRefusal(resolved: readonly ResolvedCoverage[]): string | un
   if (entry.interaction.kind === "forbid") return entry.interaction.reason;
   }
 
+// src/features/edit-construction/structure-types/roof/roof-editing.ts
+export const roofRecipeGeneration: RecipeGeneration = {
+  of: (topology) => {
+  const recipe = roofRecipeOf(topology);
+
+// src/features/edit-construction/structure-types/roof/roof-graph-patch.ts
+export function roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: RoofSource, operationId: string, standing: readonly ConstructionRegionTopology[] = []): {
+  readonly patch: ConstructionPatch;
+  readonly faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>;
+  } {
+  const { base, anchors, ...wire } = request;
+  const plan = (ring: readonly { readonly x: number; readonly z: number }[]): Point[] => ring.map(({ x, z }) => [x, z]);
+
 // src/features/edit-construction/structure-types/roof/roof-recipe.ts
 export const ROOF_RECIPE_PROP = "roof";
 export const ROOF_FACE_PROP = "roofFace";
@@ -7534,6 +7549,19 @@ export function planeOf(ring: readonly ConstructionPosition[]): { readonly norma
   for (let i = 0; i < ring.length; i++) {
   const a = ring[i]!, b = ring[(i + 1) % ring.length]!;
   nx += (a.y - b.y) * (a.z + b.z);
+export function heightOnPlane(plane: { readonly normal: ConstructionPosition; readonly centre: ConstructionPosition }, p: PlanPoint): number | undefined {
+  const { normal: n, centre: c } = plane;
+  if (Math.abs(n.y) < 1e-9) return undefined;
+  return c.y - (n.x * (p.x - c.x) + n.z * (p.z - c.z)) / n.y;
+  }
+export function rayToRing(ring: readonly (readonly [number, number])[], origin: readonly [number, number], direction: readonly [number, number]): number {
+  let nearest = Infinity;
+  for (let i = 0; i < ring.length; i++) {
+  const a = ring[i]!, b = ring[(i + 1) % ring.length]!;
+  const e = [b[0] - a[0], b[1] - a[1]] as const;
+  const det = direction[0] * e[1] - direction[1] * e[0];
+  if (Math.abs(det) < 1e-12) continue;
+  const w = [a[0] - origin[0], a[1] - origin[1]] as const;
 export function faceRings(topology: ConstructionRegionTopology, loops: ConstructionRegionTopology["outerLoops"] = topology.outerLoops): readonly (readonly ConstructionPosition[])[] {
   const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
 export function insideFace(topology: ConstructionRegionTopology, p: PlanPoint): boolean {

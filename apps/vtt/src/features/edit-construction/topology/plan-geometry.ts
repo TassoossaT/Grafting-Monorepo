@@ -70,6 +70,29 @@ export function planeOf(ring: readonly ConstructionPosition[]): { readonly norma
   return { normal: { x: nx / length, y: ny / length, z: nz / length }, centre };
 }
 
+/** How high `plane` stands over plan point `p`; `undefined` for an upright plane, which stands over a line only. */
+export function heightOnPlane(plane: { readonly normal: ConstructionPosition; readonly centre: ConstructionPosition }, p: PlanPoint): number | undefined {
+  const { normal: n, centre: c } = plane;
+  if (Math.abs(n.y) < 1e-9) return undefined;
+  return c.y - (n.x * (p.x - c.x) + n.z * (p.z - c.z)) / n.y;
+}
+
+/** How far from `origin` along the unit `direction` a ray first meets `ring`, given as `[x, z]` pairs; infinite when never. */
+export function rayToRing(ring: readonly (readonly [number, number])[], origin: readonly [number, number], direction: readonly [number, number]): number {
+  let nearest = Infinity;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i]!, b = ring[(i + 1) % ring.length]!;
+    const e = [b[0] - a[0], b[1] - a[1]] as const;
+    const det = direction[0] * e[1] - direction[1] * e[0];
+    if (Math.abs(det) < 1e-12) continue;
+    const w = [a[0] - origin[0], a[1] - origin[1]] as const;
+    const t = (w[0] * e[1] - w[1] * e[0]) / det;
+    const s = (w[0] * direction[1] - w[1] * direction[0]) / det;
+    if (t > 1e-9 && s >= -1e-9 && s <= 1 + 1e-9) nearest = Math.min(nearest, t);
+  }
+  return nearest;
+}
+
 /** A face's outer loops as rings of its node positions. */
 export function faceRings(topology: ConstructionRegionTopology, loops: ConstructionRegionTopology["outerLoops"] = topology.outerLoops): readonly (readonly ConstructionPosition[])[] {
   const at = new Map(topology.nodes.map((node) => [node.id, node.position]));

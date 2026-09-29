@@ -1,7 +1,7 @@
 import type { Reaction, ReactionOutcome } from "@/features/edit-construction";
 import type { ApplyPatchReplacementRequest, ChangeOrigin, ConstructionPatchOutcome, ConstructionRegionTopology } from "@/ports";
 
-import { carriedOnto, footprintsOf, hasTrait, ringsOf, ROOF_RECIPE_PROP, roofGraphPatch, type RoofRecipe, type RoofSource } from "../../../../features/edit-construction/index.ts";
+import { carriedOnto, footprintsOf, hasTrait, ringsOf, roofGraphPatch, roofRecipeOf, surfaceKeyText, type RoofRecipe, type RoofSource } from "../../../../features/edit-construction/index.ts";
 import type { RoofPort } from "../../../../ports/cap-port.ts";
 import { keepFaceProps, pinnedToRoles, type FacePropsRuntime } from "../core/face-props.ts";
 import { roofBaseOf } from "./roof-base.ts";
@@ -13,7 +13,6 @@ export interface FollowBaseRuntime extends FacePropsRuntime, Pick<RoofPort, "gen
 }
 
 const DONE: ReactionOutcome = Object.freeze({ kind: "done" });
-const keyOf = (key: readonly string[]) => key.join("\u0000");
 
 /** A roof's eave corners follow their supporting nodes, keeping its own rise. */
 function followedAnchors(source: RoofSource, at: ReadonlyMap<string, ConstructionRegionTopology["nodes"][number]["position"]>): RoofSource | undefined {
@@ -46,7 +45,7 @@ export function followBaseReaction(): Reaction<FollowBaseRuntime> {
   return (runtime, effect, hits) => {
     const changed = [...effect.change.before, ...effect.change.after];
     const nodes = new Set(changed.flatMap((face) => face.nodes.map((node) => node.id)));
-    const faces = new Set(changed.map((face) => keyOf(face.surfaceKey)));
+    const faces = new Set(changed.map((face) => surfaceKeyText(face.surfaceKey)));
     const recipes = new Map<string, { readonly recipe: RoofRecipe; readonly baseChanged: boolean; readonly cutChanged: boolean; readonly anchorsChanged: boolean }>();
     const present = runtime.getAllRegionTopologies();
     const current = new Map(present.flatMap((face) => face.nodes).map((node) => [node.id, node.position] as const));
@@ -54,13 +53,13 @@ export function followBaseReaction(): Reaction<FollowBaseRuntime> {
     // roof is excluded from the generic reaction's hit list when the first
     // changed face is also a roof, so inspect anchored dependants directly.
     const anchoredHits = present.filter((face) => {
-      const recipe = face.props?.[ROOF_RECIPE_PROP] as RoofRecipe | undefined;
+      const recipe = roofRecipeOf(face);
       return (recipe?.anchors?.length ?? 0) > 0 || recipe?.subroofs?.some((child) => (child.anchors?.length ?? 0) > 0);
     });
     for (const hit of [...hits, ...anchoredHits]) {
-      const recipe = hit.props?.[ROOF_RECIPE_PROP] as RoofRecipe | undefined;
+      const recipe = roofRecipeOf(hit);
       if (!recipe) continue;
-      const baseChanged = !!recipe.base && (faces.has(keyOf(recipe.base.surfaceKey)) || recipe.base.nodeIds.some((id) => nodes.has(id)));
+      const baseChanged = !!recipe.base && (faces.has(surfaceKeyText(recipe.base.surfaceKey)) || recipe.base.nodeIds.some((id) => nodes.has(id)));
       const cutChanged = changed.some((face) => hasTrait(face.surfaceType, "floor") && face.nodes.some((node) => node.position.y > recipe.elevation + 1e-4 && node.position.y <= recipe.elevation + recipe.height + 1e-4));
       const anchorsChanged = followedAnchors(recipe, current) !== undefined
         || (recipe.subroofs?.some((child) => followedAnchors(child, current) !== undefined) ?? false);
@@ -84,7 +83,7 @@ export function followBaseReaction(): Reaction<FollowBaseRuntime> {
       const request: RoofSource = anchored && !base ? { ...withChildren, footprints: anchored, elevation: anchorElevation ?? recipe.elevation } : !base ? withChildren : was.length === now.length && was.every((ring, r) => ring.length === now[r]!.length)
         ? { ...withChildren, footprints: [base.footprint], elevation: base.elevation, base: base.ref }
         : { ...withChildren, elevation: base.elevation, base: base.ref, ...carriedOnto([base.footprint], [recipe]) };
-      const own = topologies.filter((face) => (face.props?.[ROOF_RECIPE_PROP] as RoofRecipe | undefined)?.group === group).map((face) => face.surfaceKey);
+      const own = topologies.filter((face) => (roofRecipeOf(face))?.group === group).map((face) => face.surfaceKey);
       const operationId = `${effect.causeId}:follow:${group}`;
       let made: ReturnType<typeof roofGraphPatch>;
       try {

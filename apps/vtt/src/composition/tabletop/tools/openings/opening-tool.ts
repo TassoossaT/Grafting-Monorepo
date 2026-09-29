@@ -12,7 +12,7 @@ import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import { DEFAULT_TOOL_PARAMS, OPENING_KIND_COLOR, RECTANGLE_OPENING_SHAPE, hasTrait, openingStructureType, sameShape } from "../../../../features/edit-construction/index.ts";
 
 import { gestureMoved, scopedToolId, type ConstructionTool, type PointerSample, type ReleasedGesture, type ToolContext, type ToolGesture } from "../core/tool-context.ts";
-import { segmentsPreview } from "../shapes/preview-shapes.ts";
+import { polylineSegmentsPreview, segmentsPreview } from "../shapes/preview-shapes.ts";
 import { findWallSurfaceAt } from "../walls/wall-shared.ts";
 import { openingStands } from "../opening-stands.ts";
 import type { OpeningStand, StandLook, StandPlacement } from "./opening-stand.ts";
@@ -331,16 +331,6 @@ function lookOfNew(params: OpeningParams): StandLook {
   return { width: params.width, height: params.height, shape: shapeOf(params), isDoor: params.openingKind === "door" };
 }
 
-/** A closed ring of world points as preview segments. */
-function ringPreview(ring: readonly ConstructionPosition[], color: number): ReturnType<typeof segmentsPreview> {
-  const positions: number[] = [];
-  ring.forEach((from, index) => {
-    const to = ring[(index + 1) % ring.length]!;
-    positions.push(from.x, from.y, from.z, to.x, to.y, to.z);
-  });
-  return segmentsPreview(Float32Array.from(positions), color);
-}
-
 /** Where and how big the opening a press on a stand face makes -- drawn corner to corner by a drag, the sliders' size at a click -- stopped by the face. */
 function standPlacement(stand: OpeningStand, face: ConstructionRegionTopology, from: ConstructionPosition, current: ConstructionPosition | undefined, params: OpeningParams): StandPlacement | undefined {
   const look = lookOfNew(params);
@@ -543,7 +533,7 @@ export const openingTool: ConstructionTool<"opening"> = {
       if (!moved) return undefined;
       const edit = standEdit(drag, gesture.start.point, gesture.current.point, true, params);
       const ring = edit === undefined ? undefined : drag.stand.refitOutline(ctx, drag.hostSurfaceKey, edit.look, edit.shift);
-      return ring === undefined ? undefined : ringPreview(ring, OPENING_KIND_COLOR[drag.isDoor ? "door" : "window"]);
+      return ring === undefined ? undefined : polylineSegmentsPreview([...ring, ring[0]!], OPENING_KIND_COLOR[drag.isDoor ? "door" : "window"]);
     }
     const fresh = forNew(params);
     // Over a face that raises a stand: the opening's outline, upright where it would stand, stopped by the face.
@@ -552,7 +542,7 @@ export const openingTool: ConstructionTool<"opening"> = {
       const from = press?.kind === "stand" ? press.at : gesture.current.point;
       const placed = standPlacement(onStand.stand, onStand.face, from, press?.kind === "stand" && moved ? gesture.current.point : undefined, fresh);
       const ring = placed === undefined ? undefined : onStand.stand.outline(onStand.face, placed);
-      return ring === undefined ? undefined : ringPreview(ring, OPENING_KIND_COLOR[fresh.openingKind]);
+      return ring === undefined ? undefined : polylineSegmentsPreview([...ring, ring[0]!], OPENING_KIND_COLOR[fresh.openingKind]);
     }
     if (press?.kind === "wall" && press.anchor !== undefined) return createPreview(gesture, fresh, ctx, press.anchor);
     const placed = resolvePlacement(ctx, gesture.current, fresh);

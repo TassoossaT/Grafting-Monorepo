@@ -1,25 +1,23 @@
 import type { ConstructionPosition, ConstructionRegionTopology, ConstructionSurfaceKey } from "@/ports";
 
-import { dormerAt, dormerFrame, faceRings, insideRing, OPENING_DORMER_PITCH, openingPath, planeOf, pointAt, ROOF_FACE_PROP, ROOF_RECIPE_PROP, type RoofFaceRole, type RoofRecipe } from "../../../../features/edit-construction/index.ts";
+import {
+  DORMER_RIM, dormerAt, dormerFrame, faceRings, heightOnPlane, insideRing, OPENING_DORMER_PITCH, openingPath, planeOf, pointAt, rayToRing,
+  roofRecipeOf, roofRoleOf, surfaceKeyText, type RoofRecipe,
+} from "../../../../features/edit-construction/index.ts";
 import type { RoofDormer } from "../../../../ports/cap-port.ts";
 import type { ToolContext } from "../core/tool-context.ts";
 import { commitOpeningGroup, MIN_OPENING_SIZE, runFrame, type OpeningCommit } from "../openings/opening-shared.ts";
 import type { OpeningStand, StandLook } from "../openings/opening-stand.ts";
-import { replaceRoofs } from "./roof-tool.ts";
+import { replaceRoofs } from "./roof-commit.ts";
 
 type Point = readonly [number, number];
 type Placed = { readonly at: ConstructionPosition; readonly look: StandLook };
 
-const recipeOf = (face: ConstructionRegionTopology | undefined) => face?.props?.[ROOF_RECIPE_PROP] as RoofRecipe | undefined;
-const roleOf = (face: ConstructionRegionTopology | undefined) => face?.props?.[ROOF_FACE_PROP] as RoofFaceRole | undefined;
-const keyText = (key: ConstructionSurfaceKey) => key.join("\u0000");
-const faceAt = (ctx: ToolContext, key: ConstructionSurfaceKey) => ctx.runtime.getAllRegionTopologies().find((face) => keyText(face.surfaceKey) === keyText(key));
-const facesOf = (ctx: ToolContext, group: string) => ctx.runtime.getAllRegionTopologies().filter((face) => recipeOf(face)?.group === group).map((face) => face.surfaceKey);
+const faceAt = (ctx: ToolContext, key: ConstructionSurfaceKey) => ctx.runtime.getAllRegionTopologies().find((face) => surfaceKeyText(face.surfaceKey) === surfaceKeyText(key));
+const facesOf = (ctx: ToolContext, group: string) => ctx.runtime.getAllRegionTopologies().filter((face) => roofRecipeOf(face)?.group === group).map((face) => face.surfaceKey);
 
 /** Points each curved piece of a ghost outline is drawn by. */
 const CURVE_SAMPLES = 12;
-/** The generator's clearance between a dormer and its leaf's rim. */
-const RIM = 0.01;
 /** How far below the leaf a stopped opening's top stays, so it still meets the leaf. */
 const STOP_SHORT = 0.005;
 
@@ -54,22 +52,6 @@ function standFor(recipe: RoofRecipe, side: number, at: Point, look: StandLook, 
   return { ...dormerAt(recipe, side, at, look.width, look.height, 2), slopes: [0, waters.right, 0, waters.left], absolute: true, gableApart: true, opening: true };
 }
 
-/** How far from `o` along `d` the ring `ring` is first met; infinite when never. */
-function reach(ring: readonly Point[], o: Point, d: Point): number {
-  let best = Infinity;
-  for (let i = 0; i < ring.length; i++) {
-    const a = ring[i]!, b = ring[(i + 1) % ring.length]!;
-    const e = [b[0] - a[0], b[1] - a[1]] as const;
-    const det = d[0] * e[1] - d[1] * e[0];
-    if (Math.abs(det) < 1e-12) continue;
-    const w = [a[0] - o[0], a[1] - o[1]] as const;
-    const t = (w[0] * e[1] - w[1] * e[0]) / det;
-    const s = (w[0] * d[1] - w[1] * d[0]) / det;
-    if (t > 1e-9 && s >= -1e-9 && s <= 1 + 1e-9) best = Math.min(best, t);
-  }
-  return best;
-}
-
 /**
  * `look` at `at` on `leaf`, stopped where the leaf stops it: no wider than
  * the leaf runs along its eave there, no taller than lets the ridge of
@@ -77,17 +59,16 @@ function reach(ring: readonly Point[], o: Point, d: Point): number {
  * committed; `undefined` where not even the smallest opening fits.
  */
 function fit(leaf: ConstructionRegionTopology, at: Point, look: StandLook, waters: Waters = TWO_WATERS): Placed | undefined {
-  const recipe = recipeOf(leaf), role = roleOf(leaf);
+  const recipe = roofRecipeOf(leaf), role = roofRoleOf(leaf);
   const ring3 = faceRings(leaf)[0] ?? [];
   const plane = planeOf(ring3);
-  if (!recipe || !role || !plane || Math.abs(plane.normal.y) < 1e-9) return undefined;
-  const { normal: nn, centre: c } = plane;
-  const heightAt = (p: Point) => c.y - (nn.x * (p[0] - c.x) + nn.z * (p[1] - c.z)) / nn.y;
+  if (!recipe || !role || !plane || heightOnPlane(plane, { x: at[0], z: at[1] }) === undefined) return undefined;
+  const heightAt = (p: Point) => heightOnPlane(plane, { x: p[0], z: p[1] })!;
   const ring = ring3.map((p) => [p.x, p.z] as const);
   const { u, n } = dormerFrame(recipe, standFor(recipe, role.side, at, look));
   const along = (s: number): Point => [at[0] + u[0] * s, at[1] + u[1] * s];
-  const s0 = Math.max(-look.width / 2, -(reach(ring, at, [-u[0], -u[1]]) - 2 * RIM));
-  const s1 = Math.min(look.width / 2, reach(ring, at, u) - 2 * RIM);
+  const s0 = Math.max(-look.width / 2, -(rayToRing(ring, at, [-u[0], -u[1]]) - DORMER_RIM));
+  const s1 = Math.min(look.width / 2, rayToRing(ring, at, u) - DORMER_RIM);
   if (!(s1 - s0 >= MIN_OPENING_SIZE)) return undefined;
   const front = along((s0 + s1) / 2);
   const base = heightAt(front);
@@ -95,7 +76,7 @@ function fit(leaf: ConstructionRegionTopology, at: Point, look: StandLook, water
   // front corners and middle, less two clearances -- where its ridge has to
   // have met the leaf already.
   const [left, right] = [along(s0), along(s1)];
-  const depth = Math.min(...[left, front, right].map((p) => reach(ring, p, n))) - 2 * RIM;
+  const depth = Math.min(...[left, front, right].map((p) => rayToRing(ring, p, n))) - DORMER_RIM;
   if (!(depth > 0) || !Number.isFinite(depth)) return undefined;
   const room = Math.min(...[left, front, right].map((p) => heightAt([p[0] + n[0] * depth, p[1] + n[1] * depth]))) - base - STOP_SHORT;
   const width = s1 - s0;
@@ -107,7 +88,7 @@ function fit(leaf: ConstructionRegionTopology, at: Point, look: StandLook, water
 /** The dormer raised for an opening whose front is `host`, and the roof it stands on. */
 function heldBy(ctx: ToolContext, host: ConstructionSurfaceKey): { readonly recipe: RoofRecipe; readonly k: number } | undefined {
   const face = faceAt(ctx, host);
-  const recipe = recipeOf(face), role = roleOf(face);
+  const recipe = roofRecipeOf(face), role = roofRoleOf(face);
   if (!recipe || !role || role.dormer === undefined || role.subroof !== undefined) return undefined;
   return recipe.dormers?.[role.dormer]?.opening ? { recipe, k: role.dormer } : undefined;
 }
@@ -123,8 +104,8 @@ function refitted(ctx: ToolContext, host: ConstructionSurfaceKey, look: StandLoo
   // The leaf it stands on: a main leaf of its side whose outline -- its own
   // cut is a hole in it -- holds where its front now stands.
   const leaves = ctx.runtime.getAllRegionTopologies().filter((face) => {
-    const role = roleOf(face);
-    return recipeOf(face)?.group === recipe.group && role !== undefined && !role.upright && role.dormer === undefined && role.subroof === undefined && role.side === was.side;
+    const role = roofRoleOf(face);
+    return roofRecipeOf(face)?.group === recipe.group && role !== undefined && !role.upright && role.dormer === undefined && role.subroof === undefined && role.side === was.side;
   });
   const leaf = leaves.find((face) => insideRing(faceRings(face)[0] ?? [], { x: at[0], z: at[1] })) ?? leaves[0];
   // It keeps the waters it was given: two, or one a user left it with.
@@ -140,8 +121,8 @@ function refitted(ctx: ToolContext, host: ConstructionSurfaceKey, look: StandLoo
  */
 function placeInFront(ctx: ToolContext, causeId: string, group: string, k: number, look: StandLook): OpeningCommit {
   const front = ctx.runtime.getAllRegionTopologies().find((face) => {
-    const role = roleOf(face);
-    return recipeOf(face)?.group === group && role?.subroof === undefined && role?.dormer === k && role.upright && role.side === 0;
+    const role = roofRoleOf(face);
+    return roofRecipeOf(face)?.group === group && role?.subroof === undefined && role?.dormer === k && role.upright && role.side === 0;
   });
   const run = front === undefined ? undefined : runFrame(ctx.runtime, front.surfaceKey);
   const panel = front === undefined ? undefined : run?.panelOf(front.surfaceKey);
@@ -195,7 +176,7 @@ function outlineAt(placed: Placed, u: Point): readonly ConstructionPosition[] {
  */
 export const roofOpeningStand: OpeningStand = {
   raisesOn(face) {
-    const recipe = recipeOf(face), role = roleOf(face);
+    const recipe = roofRecipeOf(face), role = roofRoleOf(face);
     return !!recipe && !!role && !role.upright && role.dormer === undefined && role.subroof === undefined && (recipe.slopes[role.side] ?? 0) > 0;
   },
 
@@ -204,11 +185,10 @@ export const roofOpeningStand: OpeningStand = {
   },
 
   drawn(face, from, to, shape, isDoor) {
-    const recipe = recipeOf(face), role = roleOf(face);
+    const recipe = roofRecipeOf(face), role = roofRoleOf(face);
     const plane = planeOf(faceRings(face)[0] ?? []);
-    if (!recipe || !role || !plane || Math.abs(plane.normal.y) < 1e-9) return undefined;
-    const { normal: n, centre: c } = plane;
-    const leafAt = (p: ConstructionPosition) => ({ ...p, y: c.y - (n.x * (p.x - c.x) + n.z * (p.z - c.z)) / n.y });
+    if (!recipe || !role || !plane || heightOnPlane(plane, from) === undefined) return undefined;
+    const leafAt = (p: ConstructionPosition) => ({ ...p, y: heightOnPlane(plane, p)! });
     const [a, b] = [leafAt(from), leafAt(to)];
     // The lower corner stands the front; the upper is where its ridge meets the leaf.
     const [low, high] = a.y <= b.y ? [a, b] : [b, a];
@@ -218,7 +198,7 @@ export const roofOpeningStand: OpeningStand = {
   },
 
   outline(face, placed) {
-    const recipe = recipeOf(face), role = roleOf(face);
+    const recipe = roofRecipeOf(face), role = roofRoleOf(face);
     if (!recipe || !role) return undefined;
     const { u } = dormerFrame(recipe, standFor(recipe, role.side, [placed.at.x, placed.at.z], placed.look));
     return outlineAt(placed, u);
@@ -232,7 +212,7 @@ export const roofOpeningStand: OpeningStand = {
   },
 
   raise(ctx, causeId, face, placed) {
-    const recipe = recipeOf(face)!, role = roleOf(face)!;
+    const recipe = roofRecipeOf(face)!, role = roofRoleOf(face)!;
     const dormers = recipe.dormers ?? [];
     return inOne(ctx, causeId, () => {
       const made = replaceRoofs(ctx, [withDormers(recipe, [...dormers, standFor(recipe, role.side, [placed.at.x, placed.at.z], placed.look)])], facesOf(ctx, recipe.group), causeId);

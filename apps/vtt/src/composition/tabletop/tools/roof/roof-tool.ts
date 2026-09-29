@@ -12,25 +12,23 @@ import {
   planarDifference,
   planarUnion,
   ringsOf,
-  ROOF_FACE_PROP,
-  ROOF_RECIPE_PROP,
-  roofGraphPatch,
+  heightOnPlane,
+  roofRecipeOf,
+  roofRoleOf,
   roofOver,
   type FittedEdge,
-  type RoofFaceRole,
   type RoofRecipe,
   type RoofSource,
   type ToolParamsByTool,
 } from "../../../../features/edit-construction/index.ts";
-import type { ConstructionPatch, ConstructionRegionTopology, ConstructionSurfaceKey } from "@/ports";
-import type { RoofFootprint, RoofRequest } from "../../../../ports/cap-port.ts";
-import { scopedToolId, type ConstructionTool, type PointerSample, type ToolContext } from "../core/tool-context.ts";
+import type { ConstructionRegionTopology, ConstructionSurfaceKey } from "@/ports";
+import type { RoofFootprint } from "../../../../ports/cap-port.ts";
+import type { ConstructionTool, PointerSample, ToolContext } from "../core/tool-context.ts";
 import { withStructureEditing } from "../core/structure-edit-behavior.ts";
 import { contourStroke } from "../core/contour-stroke.ts";
 import { segmentsPreview } from "../shapes/preview-shapes.ts";
-import { commitPatchReplacement } from "../../effects/effect-commit.ts";
 import { roofBaseAt } from "./roof-base.ts";
-import { keepFaceProps, pinnedToRoles } from "../core/face-props.ts";
+import { commitRoofRecipes } from "./roof-commit.ts";
 
 type Params = ToolParamsByTool["roof"];
 type Point = readonly [number, number];
@@ -60,7 +58,7 @@ const areaOf = (polygons: readonly (readonly (readonly Point[])[])[]) => polygon
 function roofsOf(ctx: ToolContext): Map<string, { readonly recipe: RoofRecipe; readonly faces: ConstructionSurfaceKey[] }> {
   const roofs = new Map<string, { recipe: RoofRecipe; faces: ConstructionSurfaceKey[] }>();
   for (const face of ctx.runtime.getAllRegionTopologies()) {
-    const recipe = face.props?.[ROOF_RECIPE_PROP] as RoofRecipe | undefined;
+    const recipe = roofRecipeOf(face);
     if (!recipe) continue;
     const known = roofs.get(recipe.group) ?? { recipe, faces: [] };
     known.faces.push(face.surfaceKey);
@@ -151,14 +149,12 @@ function meets(ctx: ToolContext, outline: readonly Point[], recipe: RoofRecipe):
 /** The lowest height roof `group`'s leaves reach over `outline`'s corners; `undefined` where no leaf lies under them. */
 function surfaceLevelUnder(topologies: readonly ConstructionRegionTopology[], group: string, outline: readonly Point[]): number | undefined {
   const leaves = topologies.flatMap((face) => {
-    const recipe = face.props?.[ROOF_RECIPE_PROP] as RoofRecipe | undefined;
-    const role = face.props?.[ROOF_FACE_PROP] as RoofFaceRole | undefined;
-    const plane = recipe?.group === group && role && !role.upright ? planeOf(faceRings(face)[0] ?? []) : undefined;
-    return plane && Math.abs(plane.normal.y) > 1e-9 ? [{ face, plane }] : [];
+    const role = roofRoleOf(face);
+    const plane = roofRecipeOf(face)?.group === group && role && !role.upright ? planeOf(faceRings(face)[0] ?? []) : undefined;
+    return plane ? [{ face, plane }] : [];
   });
   const heights = outline.flatMap(([x, z]) => {
-    const under = leaves.filter(({ face }) => insideFace(face, { x, z }))
-      .map(({ plane: { normal: n, centre: c } }) => c.y - (n.x * (x - c.x) + n.z * (z - c.z)) / n.y);
+    const under = leaves.filter(({ face }) => insideFace(face, { x, z })).flatMap(({ plane }) => heightOnPlane(plane, { x, z }) ?? []);
     return under.length ? [Math.max(...under)] : [];
   });
   // Read off single-precision nodes: a hair below an eave would leave a sliver along it.
@@ -243,51 +239,12 @@ function stroked(ctx: ToolContext, contour: readonly FittedEdge[], level: number
 }
 
 /** Commits the roofs `requests` make in place of the faces `replaces` names, each keeping its recipe on every face it made. */
-/**
- * Makes the roofs `requests` describe in place of the faces `replaces` names,
- * under transaction `transactionId` -- joining it when it is already under
- * way -- and returns the new faces' group name and whether it was recorded.
- * What was pinned to a replaced face moves to the new face of the same role.
- */
-export function replaceRoofs(
-  ctx: ToolContext,
-  requests: readonly RoofSource[],
-  replaces: readonly ConstructionSurfaceKey[],
-  transactionId?: string,
-): { readonly group: string; readonly recorded: boolean } {
-  const operationId = scopedToolId(ctx, "roof", ctx.nextSequence());
-  const standing = ctx.runtime.getAllRegionTopologies();
-  const made = requests.map((request, i) => roofGraphPatch(ctx.runtime, request, requests.length === 1 ? operationId : `${operationId}:${i}`, standing));
-  const patch: ConstructionPatch = {
-    nodes: made.flatMap(({ patch }) => patch.nodes),
-    edges: made.flatMap(({ patch }) => patch.edges),
-    regions: made.flatMap(({ patch }) => patch.regions),
-  };
-  const faceProps = new Map(made.flatMap(({ faceProps }) => [...faceProps]));
-  const pinned = pinnedToRoles(ctx.runtime.getAllRegionTopologies(), replaces);
-  const { recorded } = commitPatchReplacement(ctx.runtime, { operationId, sourceSurfaceKeys: replaces, patch }, {
-    transactionId: transactionId ?? operationId,
-    afterward: (outcome) => keepFaceProps(ctx.runtime, operationId, outcome.createdSurfaceKeys, faceProps, pinned),
-  });
-  return { group: operationId, recorded };
-}
-
-export function commitRoofRecipes(ctx: ToolContext, requests: readonly RoofSource[], replaces: readonly ConstructionSurfaceKey[] = [], done = "Telhado criado."): void {
-  try {
-    const { group: operationId, recorded } = replaceRoofs(ctx, requests, replaces);
-    if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
-    ctx.reportFeedback({ tone: "success", message: done });
-  } catch (error) {
-    ctx.reportFeedback({ tone: "error", message: error instanceof Error ? error.message : String(error) });
-  }
-}
-
 /** A dormer set on the roof leaf under `sample`, its front's middle where the click landed. */
 function addDormer(ctx: ToolContext, sample: PointerSample, params: Params): void {
   const faces = ctx.runtime.getAllRegionTopologies();
   const leaf = faces.find((face) => sample.surfaceRef !== undefined && surfaceRefFromNodeSet(face.surfaceKey) === sample.surfaceRef);
-  const recipe = leaf?.props?.[ROOF_RECIPE_PROP] as RoofRecipe | undefined;
-  const role = leaf?.props?.[ROOF_FACE_PROP] as RoofFaceRole | undefined;
+  const recipe = roofRecipeOf(leaf);
+  const role = roofRoleOf(leaf);
   if (!recipe || !role || role.upright || role.dormer !== undefined || role.side >= recipe.slopes.length) {
     ctx.reportFeedback({ tone: "error", message: "Clique numa água do telhado para pôr a lucarna." });
     return;

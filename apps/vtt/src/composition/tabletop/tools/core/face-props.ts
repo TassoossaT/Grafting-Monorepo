@@ -1,4 +1,4 @@
-import { RECIPE_ROLE_PROP, type AtomicEditOp } from "../../../../features/edit-construction/index.ts";
+import { RECIPE_ROLE_PROP, surfaceKeyText, type AtomicEditOp } from "../../../../features/edit-construction/index.ts";
 import type { ChangeOrigin, ConstructionPinRequest, ConstructionRegionTopology, ConstructionSurfaceKey, RegionEditOutcome } from "../../../../ports/index.ts";
 
 /** What keeping a regenerated structure's properties and pins needs of the runtime. */
@@ -11,7 +11,6 @@ export interface FacePropsRuntime {
 
 /** A region-backed face's key names it as `["@region", regionId]`. */
 const regionIdOf = (key: ConstructionSurfaceKey): string | undefined => (key.length === 2 && key[0] === "@region" ? key[1] : undefined);
-const keyText = (key: ConstructionSurfaceKey) => key.join("\u0000");
 
 /** What was pinned to faces about to be regenerated, by the role of the face each is pinned to. */
 export interface PinnedToRoles {
@@ -20,13 +19,13 @@ export interface PinnedToRoles {
 
 /** Reads, before `sources` are replaced, every node pinned to one of them whose face names its role -- pins ride on the faces' nodes. */
 export function pinnedToRoles(topologies: readonly ConstructionRegionTopology[], sources: readonly ConstructionSurfaceKey[]): PinnedToRoles {
-  const replaced = new Set(sources.map(keyText));
+  const replaced = new Set(sources.map(surfaceKeyText));
   const roles = new Map(topologies
-    .filter((face) => replaced.has(keyText(face.surfaceKey)) && typeof face.props?.[RECIPE_ROLE_PROP] === "string")
-    .map((face) => [keyText(face.surfaceKey), face.props![RECIPE_ROLE_PROP] as string]));
+    .filter((face) => replaced.has(surfaceKeyText(face.surfaceKey)) && typeof face.props?.[RECIPE_ROLE_PROP] === "string")
+    .map((face) => [surfaceKeyText(face.surfaceKey), face.props![RECIPE_ROLE_PROP] as string]));
   const pins = new Map<string, PinnedToRoles["pins"][number]>();
   for (const node of topologies.flatMap((face) => face.nodes)) {
-    const role = node.pin && roles.get(keyText(node.pin.hostSurfaceKey));
+    const role = node.pin && roles.get(surfaceKeyText(node.pin.hostSurfaceKey));
     if (role && node.pin) pins.set(node.id, { nodeId: node.id, role, u: node.pin.u, v: node.pin.v });
   }
   return { pins: [...pins.values()] };

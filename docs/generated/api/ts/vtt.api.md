@@ -3431,6 +3431,15 @@ stands, else the face of its kind now holding its outline's nodes -- a
 floor made again when it was widened, a wall split. `undefined` once
 nothing of it is left to stand on.
 
+### `function vtt.roof-commit.commitRoofRecipes(ctx: ToolContext, requests: readonly RoofSource[], replaces: readonly ConstructionSurfaceKey[], done: string): void`
+
+### `function vtt.roof-commit.replaceRoofs(ctx: ToolContext, requests: readonly RoofSource[], replaces: readonly ConstructionSurfaceKey[], transactionId?: string): { group: string; recorded: boolean }`
+
+Makes the roofs `requests` describe in place of the faces `replaces` names,
+under transaction `transactionId` -- joining it when it is already under
+way -- and returns the new faces' group name and whether it was recorded.
+What was pinned to a replaced face moves to the new face of the same role.
+
 ### `interface vtt.roof-follow-base.FollowBaseRuntime`
 
 What following a base needs of the runtime, inside the pipeline's transaction.
@@ -3468,15 +3477,6 @@ whenever the roof is made again.
 ### `variable vtt.roof-tool.roofTool: ConstructionTool<"roof">`
 
 Also edits an existing roof, through its handles only -- see `structure-edit-behavior.ts` and `roof-recipe.ts`.
-
-### `function vtt.roof-tool.commitRoofRecipes(ctx: ToolContext, requests: readonly RoofSource[], replaces: readonly ConstructionSurfaceKey[], done: string): void`
-
-### `function vtt.roof-tool.replaceRoofs(ctx: ToolContext, requests: readonly RoofSource[], replaces: readonly ConstructionSurfaceKey[], transactionId?: string): { group: string; recorded: boolean }`
-
-Makes the roofs `requests` describe in place of the faces `replaces` names,
-under transaction `transactionId` -- joining it when it is already under
-way -- and returns the new faces' group name and whether it was recorded.
-What was pinned to a replaced face moves to the new face of the same role.
 
 ### `interface vtt.geometry-2d.PointXZ`
 
@@ -7038,6 +7038,21 @@ Every declared surface type carrying `trait`, in registry order.
 
 The traits one surface type declares. An undeclared type has none.
 
+### `variable vtt.roof-editing.roofRecipeGeneration: RecipeGeneration`
+
+How a roof is regenerated from the recipe its faces keep.
+
+### `function vtt.roof-graph-patch.roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: RoofSource, operationId: string, standing: readonly ConstructionRegionTopology[]): { faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>; patch: ConstructionPatch }`
+
+The roof `request` makes, as a patch named under `operationId`, and what
+each face keeps, by region id: the recipe, under that name as its group,
+its role, and that role as the key an edit finds the same face again by.
+
+Welded to what stands under it: every eave corner lying exactly on a node
+of `standing` -- a floor's corner, a wall's top -- is that node, and every
+eave between two of them that already has a side there is that side. So a
+roof on a floor shares its corners and sides, and goes where they go.
+
 ### `interface vtt.roof-recipe.RoofBaseRef`
 
 What a roof stands on, found again as it now stands: a floor, or the room a
@@ -7172,10 +7187,6 @@ Region property naming which side a roof face rises from.
 
 Region property carrying a roof's recipe, which every edit regenerates the roof from.
 
-### `variable vtt.roof-recipe.roofRecipeGeneration: RecipeGeneration`
-
-How a roof is regenerated from the recipe its faces keep.
-
 ### `function vtt.roof-recipe.carriedOnto(footprints: readonly RoofFootprint[], sources: readonly RoofRequest[], drawn?: { outline: readonly Point[]; slopes: readonly number[] }): { cutouts: RoofFootprint[]; dormers: RoofDormer[]; footprints: RoofFootprint[]; slopes: number[] }`
 
 New footprints that take over from `sources`: each side keeps the slope
@@ -7205,6 +7216,16 @@ Rings back into footprints.
 
 Each side's normal into the roof: off the outline inward, off a hole away from it.
 
+### `function vtt.roof-recipe.openingDormerSlopes(slopes: readonly number[]): readonly [number, number, number, number]`
+
+The law of a dormer raised for an opening: two waters, or one where the
+other is brought down to a gable -- never none. Its front and back stay
+upright; the opening fills its front, whatever shape its waters give it.
+
+### `function vtt.roof-recipe.ownerOf(recipe: RoofSource, subroof: number | undefined): RoofSource`
+
+The roof a side belongs to: the roof itself, or one of its subroofs.
+
 ### `function vtt.roof-recipe.presetSlopes(contour: readonly Point[], waters: Waters): number[]`
 
 Which sides of an outline rise, for a number of waters: every side; the
@@ -7215,20 +7236,17 @@ The rest are gables.
 
 Every ring of a roof, footprint by footprint: its outline, then its holes -- the order its sides are numbered in.
 
-### `function vtt.roof-recipe.roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: RoofSource, operationId: string, standing: readonly ConstructionRegionTopology[]): { faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>; patch: ConstructionPatch }`
-
-The roof `request` makes, as a patch named under `operationId`, and what
-each face keeps, by region id: the recipe, under that name as its group,
-its role, and that role as the key an edit finds the same face again by.
-
-Welded to what stands under it: every eave corner lying exactly on a node
-of `standing` -- a floor's corner, a wall's top -- is that node, and every
-eave between two of them that already has a side there is that side. So a
-roof on a floor shares its corners and sides, and goes where they go.
-
 ### `function vtt.roof-recipe.roofOver(footprints: readonly RoofFootprint[], elevation: number, height: number, waters: Waters): RoofRequest`
 
 A roof over `footprints`, each outline shaped by a number of waters; round a hole it always falls toward it.
+
+### `function vtt.roof-recipe.roofRecipeOf(face: ConstructionRegionTopology | undefined): RoofRecipe | undefined`
+
+The recipe a roof face keeps, if it is a roof's.
+
+### `function vtt.roof-recipe.roofRoleOf(face: ConstructionRegionTopology | undefined): RoofFaceRole | undefined`
+
+The role a roof face plays in its roof, if it is a roof's.
 
 ### `function vtt.roof-recipe.sideNumber(footprints: readonly RoofFootprint[], ring: number, index: number): number`
 
@@ -7242,7 +7260,7 @@ Where side `side` -- numbered through every ring in turn -- lies: its ring, its 
 
 A roof is regenerated whole from the recipe its faces keep: every handle
 -- its rise, a side's slope, a seam, a footprint corner, a corner pulled
-out of a side, a dormer -- edits the recipe (`roof-recipe.ts`). How far
+out of a side, a dormer -- edits the recipe (`roof-recipe.ts`, through `roof-editing.ts`). How far
 its eaves reach and whether its leaves curve are the covering's business.
 
 ### `variable vtt.roof-structure.roofTransitionStructureType: StructureTypeDefinition`
@@ -8911,6 +8929,10 @@ A face's key as one string -- see surfaceKeyText.
 
 A face's outer loops as rings of its node positions.
 
+### `function vtt.plan-geometry.heightOnPlane(plane: { centre: ConstructionPosition; normal: ConstructionPosition }, p: PlanPoint): number | undefined`
+
+How high `plane` stands over plan point `p`; `undefined` for an upright plane, which stands over a line only.
+
 ### `function vtt.plan-geometry.insideFace(topology: ConstructionRegionTopology, p: PlanPoint): boolean`
 
 Whether `p` lies inside the face in plan: in an outer loop and out of its holes.
@@ -8930,6 +8952,10 @@ Where on the segment `a`-`b` the point `p` is nearest, in plan: how far along it
 ### `function vtt.plan-geometry.planeOf(ring: readonly ConstructionPosition[]): { centre: ConstructionPosition; normal: ConstructionPosition } | undefined`
 
 The best plane through a ring of positions, by Newell's method: its unit normal and a point on it; `undefined` for a degenerate ring.
+
+### `function vtt.plan-geometry.rayToRing(ring: readonly (readonly [number, number])[], origin: readonly [number, number], direction: readonly [number, number]): number`
+
+How far from `origin` along the unit `direction` a ray first meets `ring`, given as `[x, z]` pairs; infinite when never.
 
 ### `function vtt.plan-geometry.ringCrossesItself(ring: readonly PlanPoint[]): boolean`
 
