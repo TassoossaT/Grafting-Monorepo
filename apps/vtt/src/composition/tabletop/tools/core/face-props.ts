@@ -1,6 +1,11 @@
 import { RECIPE_ROLE_PROP } from "../../../../features/edit-construction/index.ts";
-import type { ConstructionPinRequest, ConstructionRegionTopology, ConstructionSurfaceKey } from "../../../../ports/index.ts";
-import type { ToolContext } from "./tool-context.ts";
+import type { ChangeOrigin, ConstructionPinRequest, ConstructionRegionTopology, ConstructionSurfaceKey } from "../../../../ports/index.ts";
+
+/** What keeping a regenerated structure's properties and pins needs of the runtime. */
+export interface FacePropsRuntime {
+  setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): unknown;
+  pinNodes(pins: readonly ConstructionPinRequest[], origin: ChangeOrigin, causeId: string): unknown;
+}
 
 /** A region-backed face's key names it as `["@region", regionId]`. */
 const regionIdOf = (key: ConstructionSurfaceKey): string | undefined => (key.length === 2 && key[0] === "@region" ? key[1] : undefined);
@@ -30,7 +35,7 @@ export function pinnedToRoles(topologies: readonly ConstructionRegionTopology[],
  * its region, and pins what was pinned to a replaced face onto the new face
  * with the same role, where it stood on it -- a window stays in its gable.
  */
-export function keepFaceProps(runtime: ToolContext["runtime"], causeId: string, created: readonly ConstructionSurfaceKey[], faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>, pinned?: PinnedToRoles): void {
+export function keepFaceProps(runtime: FacePropsRuntime, causeId: string, created: readonly ConstructionSurfaceKey[], faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>, pinned?: PinnedToRoles): void {
   const byRole = new Map<string, ConstructionSurfaceKey>();
   for (const key of created) {
     const regionId = regionIdOf(key);

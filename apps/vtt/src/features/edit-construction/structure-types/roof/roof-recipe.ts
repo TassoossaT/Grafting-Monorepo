@@ -11,8 +11,24 @@ export const ROOF_RECIPE_PROP = "roof";
 /** Region property naming which side a roof face rises from. */
 export const ROOF_FACE_PROP = "roofFace";
 
-/** A roof's recipe: what the generator is asked, and the group of faces it made. */
-export interface RoofRecipe extends RoofRequest {
+/**
+ * What a roof stands on, found again as it now stands: a floor, or the room a
+ * wall loop closes -- by a face of it, and the nodes of its outline, which
+ * outlive the face being replaced.
+ */
+export interface RoofBaseRef {
+  readonly kind: "floor" | "walls";
+  readonly surfaceKey: readonly string[];
+  readonly nodeIds: readonly string[];
+}
+
+/** A roof's request, and the base it follows when it stands on one. */
+export interface RoofSource extends RoofRequest {
+  readonly base?: RoofBaseRef;
+}
+
+/** A roof's recipe: what the generator is asked, the base it follows, and the group of faces it made. */
+export interface RoofRecipe extends RoofSource {
   readonly group: string;
 }
 
@@ -202,16 +218,17 @@ export function dormerAt(recipe: RoofRequest, side: number, at: Point, width: nu
  * each face keeps, by region id: the recipe, under that name as its group,
  * its role, and that role as the key an edit finds the same face again by.
  */
-export function roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: RoofRequest, operationId: string): {
+export function roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: RoofSource, operationId: string): {
   readonly patch: ConstructionPatch;
   readonly faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>;
 } {
-  const roof: RoofPatch = port.generateRoof(request);
+  const { base, ...wire } = request;
+  const roof: RoofPatch = port.generateRoof(wire);
   const nodeId = (index: number) => `${operationId}:node:${index}`;
   const edgeId = (index: number) => `${operationId}:edge:${index}`;
   const regionId = (index: number) => `${operationId}:face:${index}`;
   const uses = (loop: readonly (readonly [number, boolean])[]) => loop.map(([edge, reversed]) => ({ edgeId: edgeId(edge), reversed }));
-  const recipe: RoofRecipe = { elevation: request.elevation, height: request.height, footprints: request.footprints, slopes: request.slopes, dormers: request.dormers ?? [], group: operationId };
+  const recipe: RoofRecipe = { elevation: request.elevation, height: request.height, footprints: request.footprints, slopes: request.slopes, dormers: request.dormers ?? [], ...(base ? { base } : {}), group: operationId };
   const faceProps = new Map<string, Readonly<Record<string, unknown>>>();
   roof.faces.forEach((face, index) => {
     const role: RoofFaceRole = { side: face.side, upright: face.upright, ...(face.dormer === null ? {} : { dormer: face.dormer }) };
@@ -411,6 +428,11 @@ function editRoof(generic: unknown, handle: RecipeHandle, intent: GlobalHandleIn
   const recipe = generic as RoofRecipe;
   const part = handle.part as RoofPart;
   const moveAll = (place: (p: Point) => Point, dy = 0): RoofRecipe => ({ ...withRings(recipe, (ring) => ring.map(place)), elevation: recipe.elevation + dy });
+  // Moved or reshaped by its own hand, it no longer stands where its base does: it lets go of it.
+  const free = (next: RoofRecipe): RoofRecipe => {
+    const { base: _base, ...rest } = next;
+    return rest;
+  };
   if (part.kind === "dormer") {
     if (handle.kind === "pivot" && intent.kind === "move") {
       // Along its side and into its leaf; the generator refuses one pushed off it.
@@ -439,14 +461,14 @@ function editRoof(generic: unknown, handle: RecipeHandle, intent: GlobalHandleIn
   switch (handle.kind) {
     case "pivot":
       if (intent.kind !== "move") return undefined;
-      return moveAll((p) => [p[0] + intent.delta.x, p[1] + intent.delta.z], intent.delta.y);
+      return free(moveAll((p) => [p[0] + intent.delta.x, p[1] + intent.delta.z], intent.delta.y));
     case "rotate": {
       if (intent.kind !== "rotate") return undefined;
       const centre = handle.motion.kind === "orbit" ? handle.motion.center : { x: 0, z: 0 };
-      return moveAll((p) => {
+      return free(moveAll((p) => {
         const turned = rotateInPlan({ x: p[0], z: p[1] }, centre, intent.angle);
         return [turned.x, turned.z];
-      });
+      }));
     }
     case "rise": {
       if (intent.kind !== "height") return undefined;
@@ -469,7 +491,7 @@ function editRoof(generic: unknown, handle: RecipeHandle, intent: GlobalHandleIn
     }
     case "corner": {
       if (intent.kind !== "move" || part.kind !== "corner") return undefined;
-      return withRings(recipe, (ring, r) => (r !== part.ring ? ring : ring.map((p, i) => (i === part.corner ? [p[0] + intent.delta.x, p[1] + intent.delta.z] as const : p))));
+      return free(withRings(recipe, (ring, r) => (r !== part.ring ? ring : ring.map((p, i) => (i === part.corner ? [p[0] + intent.delta.x, p[1] + intent.delta.z] as const : p)))));
     }
     case "insert": {
       if (intent.kind !== "move" || part.kind !== "insert") return undefined;
@@ -479,7 +501,7 @@ function editRoof(generic: unknown, handle: RecipeHandle, intent: GlobalHandleIn
       const corner: Point = [(a[0] + c[0]) / 2 + intent.delta.x, (a[1] + c[1]) / 2 + intent.delta.z];
       const next = withRings(recipe, (points, r) => (r !== ring ? points : [...points.slice(0, index + 1), corner, ...points.slice(index + 1)]));
       return {
-        ...next,
+        ...free(next),
         slopes: [...recipe.slopes.slice(0, part.side + 1), recipe.slopes[part.side]!, ...recipe.slopes.slice(part.side + 1)],
         dormers: (recipe.dormers ?? []).map((dormer) => (dormer.side > part.side ? { ...dormer, side: dormer.side + 1 } : dormer)),
       };

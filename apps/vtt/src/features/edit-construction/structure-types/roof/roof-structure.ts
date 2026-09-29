@@ -19,6 +19,8 @@ export const roofStructureType: StructureTypeDefinition = Object.freeze<Structur
     : denied(role, "Mova o telhado pela face."),
   interactionOver: () => IGNORE,
   recipe: roofRecipeGeneration,
+  // Stood on a floor or a room, it is made again over it whenever that changes.
+  reactions: Object.freeze({ reshape: "follow-base" } as const),
   globalHandles: Object.freeze(["pivot", "rotate", "rise", "slope", "seam", "side", "corner", "insert"] as const),
   motionInfluences: (topology) => {
     const anchor = topology.nodes[0];

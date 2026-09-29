@@ -1,13 +1,14 @@
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
-import { hasTrait, outlineOf, uprightPosts } from "../../../../features/edit-construction/index.ts";
+import { hasTrait, outlineOf, uprightPosts, type RoofBaseRef } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionPosition, ConstructionRegionEdge, ConstructionRegionTopology } from "@/ports";
 import type { RoofFootprint } from "../../../../ports/cap-port.ts";
 import type { PointerSample } from "../core/tool-context.ts";
 
-/** What a roof stands on: a footprint at one elevation. */
+/** What a roof stands on: a footprint at one elevation, and how to find it again. */
 export interface RoofBase {
   readonly footprint: RoofFootprint;
   readonly elevation: number;
+  readonly ref: RoofBaseRef;
 }
 
 const LEVEL = 1e-3;
@@ -26,6 +27,26 @@ export function roofBaseAt(topologies: readonly ConstructionRegionTopology[], sa
   throw new Error("Clique numa plataforma ou numa parede que feche um cômodo.");
 }
 
+/**
+ * The base `ref` names, as it stands now: its own face if that still
+ * stands, else the face of its kind now holding its outline's nodes -- a
+ * floor made again when it was widened, a wall split. `undefined` once
+ * nothing of it is left to stand on.
+ */
+export function roofBaseOf(topologies: readonly ConstructionRegionTopology[], ref: RoofBaseRef): RoofBase | undefined {
+  const key = ref.surfaceKey.join("\u0000");
+  const trait = ref.kind === "floor" ? "floor" : "partition";
+  const nodes = new Set(ref.nodeIds);
+  const face = topologies.find((t) => t.surfaceKey.join("\u0000") === key && hasTrait(t.surfaceType, trait))
+    ?? topologies.find((t) => hasTrait(t.surfaceType, trait) && t.nodes.some((node) => nodes.has(node.id)));
+  if (!face) return undefined;
+  try {
+    return ref.kind === "floor" ? floorBase(face) : wallLoopBase(topologies, face, ref.nodeIds);
+  } catch {
+    return undefined;
+  }
+}
+
 /** A loop of a face as plan corners, curved sides followed by short straight ones. */
 function ringOf(loop: readonly ConstructionRegionEdge[], at: ReadonlyMap<string, ConstructionPosition>): (readonly [number, number])[] {
   return outlineOf(loop.map((use) => ({ start: at.get(use.startNodeId)!, end: at.get(use.endNodeId)!, geometry: use.geometry }))).map((p) => [p.x, p.z] as const);
@@ -36,15 +57,17 @@ function floorBase(source: ConstructionRegionTopology): RoofBase {
   const elevation = source.nodes[0]!.position.y;
   if (!source.nodes.every((node) => Math.abs(node.position.y - elevation) < LEVEL)) throw new Error("A base do telhado precisa estar no mesmo nível.");
   const at = new Map(source.nodes.map((node) => [node.id, node.position]));
-  return { footprint: { outer: ringOf(source.outerLoops[0]!, at), holes: source.holes.map((hole) => ringOf(hole, at)) }, elevation };
+  const ref: RoofBaseRef = { kind: "floor", surfaceKey: source.surfaceKey, nodeIds: source.outerLoops[0]!.map((use) => use.startNodeId) };
+  return { footprint: { outer: ringOf(source.outerLoops[0]!, at), holes: source.holes.map((hole) => ringOf(hole, at)) }, elevation, ref };
 }
 
 /**
  * The room a wall bounds: the tops of every wall form a plan graph, and the
  * room is the smallest face of it along the clicked wall's top -- traced by
  * always taking the next top clockwise, which keeps the face on the left.
+ * Found again, the room is the one along two of the tops it had.
  */
-function wallLoopBase(topologies: readonly ConstructionRegionTopology[], clicked: ConstructionRegionTopology): RoofBase {
+function wallLoopBase(topologies: readonly ConstructionRegionTopology[], clicked: ConstructionRegionTopology, known?: readonly string[]): RoofBase {
   const at = new Map<string, ConstructionPosition>();
   const next = new Map<string, Set<string>>();
   const tops = new Map<string, ConstructionRegionEdge>();
@@ -63,6 +86,8 @@ function wallLoopBase(topologies: readonly ConstructionRegionTopology[], clicked
       if (wall === clicked) seed ??= [use.startNodeId, use.endNodeId];
     }
   }
+  const along = known?.findIndex((id, i) => next.get(id)?.has(known[(i + 1) % known.length]!));
+  if (known && along !== undefined && along >= 0) seed = [known[along]!, known[(along + 1) % known.length]!];
   if (!seed) throw new Error("Esta parede não tem topo para apoiar o telhado.");
   const angle = (from: string, to: string) => Math.atan2(at.get(to)!.z - at.get(from)!.z, at.get(to)!.x - at.get(from)!.x);
   const trace = (start: string, second: string): string[] | undefined => {
@@ -99,5 +124,5 @@ function wallLoopBase(topologies: readonly ConstructionRegionTopology[], clicked
     const geometry = forward?.geometry ?? tops.get(pair(b, a))!.geometry;
     return { start: at.get(a)!, end: at.get(b)!, geometry: !forward && geometry.kind === "arc" ? { ...geometry, clockwise: !geometry.clockwise } : geometry };
   });
-  return { footprint: { outer: outlineOf(edges).map((p) => [p.x, p.z] as const), holes: [] }, elevation };
+  return { footprint: { outer: outlineOf(edges).map((p) => [p.x, p.z] as const), holes: [] }, elevation, ref: { kind: "walls", surfaceKey: clicked.surfaceKey, nodeIds: room } };
 }

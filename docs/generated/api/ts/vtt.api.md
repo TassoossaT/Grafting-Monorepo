@@ -465,7 +465,7 @@ itself; this only names the one a single-ring consumer answers for.
 
 ### `property vtt.effect-commit.CommitOptions.origin?: ChangeOrigin`
 
-### `property vtt.effect-commit.CommitOptions.reactions?: Readonly<Record<"lattice-regenerate", Reaction<LatticeReactionRuntime>>>`
+### `property vtt.effect-commit.CommitOptions.reactions?: Readonly<Record<ReactionId, Reaction<TabletopReactionRuntime>>>`
 
 ### `property vtt.effect-commit.CommitOptions.subtype?: string`
 
@@ -487,6 +487,8 @@ What committing needs of the runtime.
 
 ### `method vtt.effect-commit.EffectCommitRuntime.generateIrregularQuadGrid(request: ConstructionIrregularQuadGridRequest): ConstructionIrregularQuadGrid | undefined`
 
+### `method vtt.effect-commit.EffectCommitRuntime.generateRoof(request: RoofRequest): RoofPatch`
+
 ### `method vtt.effect-commit.EffectCommitRuntime.getAllRegionTopologies(): readonly ConstructionRegionTopology[]`
 
 ### `method vtt.effect-commit.EffectCommitRuntime.getFootprintCoverage(polygon: readonly (readonly [number, number])[]): readonly ConstructionCoveredRegion[]`
@@ -499,9 +501,13 @@ What committing needs of the runtime.
 
 ### `method vtt.effect-commit.EffectCommitRuntime.getSnapshot(): { map: { nodePositions: ReadonlyMap<string, { position: ConstructionPosition }> }; tableId: string }`
 
+### `method vtt.effect-commit.EffectCommitRuntime.pinNodes(pins: readonly ConstructionPinRequest[], origin: ChangeOrigin, causeId: string): unknown`
+
 ### `method vtt.effect-commit.EffectCommitRuntime.planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[]`
 
 ### `method vtt.effect-commit.EffectCommitRuntime.removeSurface(request: { surfaceKey: ConstructionSurfaceKey }, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
+
+### `method vtt.effect-commit.EffectCommitRuntime.setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): unknown`
 
 ### `method vtt.effect-commit.EffectCommitRuntime.transact(transactionId: string, origin: ChangeOrigin, work: () => T): TransactionResult<T>`
 
@@ -541,7 +547,7 @@ Deletes one surface and lets its own cloud and every cloud it had cut answer, at
 
 Dispatches `effects` against the live state. Call inside a transaction.
 
-### `type vtt.reactions.TabletopReactionRuntime = LatticeReactionRuntime`
+### `type vtt.reactions.TabletopReactionRuntime = LatticeReactionRuntime & FollowBaseRuntime`
 
 What every tabletop reaction may read and mutate, inside the pipeline's transaction.
 
@@ -2478,13 +2484,21 @@ rim named it from one face, and one face cannot see the other; if the graph
 shows two, the edge is interior whatever it was called -- see
 RIM_ROLES.
 
+### `interface vtt.face-props.FacePropsRuntime`
+
+What keeping a regenerated structure's properties and pins needs of the runtime.
+
+### `method vtt.face-props.FacePropsRuntime.pinNodes(pins: readonly ConstructionPinRequest[], origin: ChangeOrigin, causeId: string): unknown`
+
+### `method vtt.face-props.FacePropsRuntime.setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): unknown`
+
 ### `interface vtt.face-props.PinnedToRoles`
 
 What was pinned to faces about to be regenerated, by the role of the face each is pinned to.
 
 ### `property vtt.face-props.PinnedToRoles.pins: readonly { nodeId: string; role: string; u: number; v: number }[]`
 
-### `function vtt.face-props.keepFaceProps(runtime: TabletopRuntime, causeId: string, created: readonly ConstructionSurfaceKey[], faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>, pinned?: PinnedToRoles): void`
+### `function vtt.face-props.keepFaceProps(runtime: FacePropsRuntime, causeId: string, created: readonly ConstructionSurfaceKey[], faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>, pinned?: PinnedToRoles): void`
 
 Gives each face a patch just made the properties its generator named for
 its region, and pins what was pinned to a replaced face onto the new face
@@ -3302,11 +3316,13 @@ shared/cancelled edges -- see `platform-contour-merge.ts` for why.
 
 ### `interface vtt.roof-base.RoofBase`
 
-What a roof stands on: a footprint at one elevation.
+What a roof stands on: a footprint at one elevation, and how to find it again.
 
 ### `property vtt.roof-base.RoofBase.elevation: number`
 
 ### `property vtt.roof-base.RoofBase.footprint: RoofFootprint`
+
+### `property vtt.roof-base.RoofBase.ref: RoofBaseRef`
 
 ### `function vtt.roof-base.roofBaseAt(topologies: readonly ConstructionRegionTopology[], sample: PointerSample): RoofBase`
 
@@ -3315,11 +3331,40 @@ wall -- the loop its tops close round the room it bounds. Curved sides are
 followed by short straight ones. Throws a message for the user when what
 was clicked cannot carry a roof.
 
+### `function vtt.roof-base.roofBaseOf(topologies: readonly ConstructionRegionTopology[], ref: RoofBaseRef): RoofBase | undefined`
+
+The base `ref` names, as it stands now: its own face if that still
+stands, else the face of its kind now holding its outline's nodes -- a
+floor made again when it was widened, a wall split. `undefined` once
+nothing of it is left to stand on.
+
+### `interface vtt.roof-follow-base.FollowBaseRuntime`
+
+What following a base needs of the runtime, inside the pipeline's transaction.
+
+### `method vtt.roof-follow-base.FollowBaseRuntime.applyPatchReplacement(request: ApplyPatchReplacementRequest, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome`
+
+### `method vtt.roof-follow-base.FollowBaseRuntime.generateRoof(request: RoofRequest): RoofPatch`
+
+### `method vtt.roof-follow-base.FollowBaseRuntime.getAllRegionTopologies(): readonly ConstructionRegionTopology[]`
+
+### `method vtt.roof-follow-base.FollowBaseRuntime.pinNodes(pins: readonly ConstructionPinRequest[], origin: ChangeOrigin, causeId: string): unknown`
+
+### `method vtt.roof-follow-base.FollowBaseRuntime.setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): unknown`
+
+### `function vtt.roof-follow-base.followBaseReaction(): Reaction<FollowBaseRuntime>`
+
+The `"follow-base"` reaction: a roof standing on a floor or a room is made
+again over it whenever that changes -- moved, widened, raised, a wall of
+the room pushed out. Its sides keep their slopes, its dormers their
+places, and what is pinned to it stays pinned. A roof whose base is gone
+stays as it stood.
+
 ### `variable vtt.roof-tool.roofTool: ConstructionTool<"roof">`
 
 Also edits an existing roof, through its handles only -- see `structure-edit-behavior.ts` and `roof-recipe.ts`.
 
-### `function vtt.roof-tool.commitRoofRecipes(ctx: ToolContext, requests: readonly RoofRequest[], replaces: readonly ConstructionSurfaceKey[], done: string): void`
+### `function vtt.roof-tool.commitRoofRecipes(ctx: ToolContext, requests: readonly RoofSource[], replaces: readonly ConstructionSurfaceKey[], done: string): void`
 
 Commits the roofs `requests` make in place of the faces `replaces` names, each keeping its recipe on every face it made.
 
@@ -4093,7 +4138,7 @@ The transaction's cause id; reactions mint their own ids from it.
 
 ### `property vtt.effect.Effect.change: ShapeChange`
 
-### `property vtt.effect.Effect.emittedBy?: "lattice-regenerate"`
+### `property vtt.effect.Effect.emittedBy?: ReactionId`
 
 The reaction that emitted this effect, excluded from receiving it. Absent for the first effect.
 
@@ -4131,7 +4176,7 @@ The preset the change was made with, when its type has presets at all.
 
 The type of the cloud whose shape changed.
 
-### `type vtt.effect.EffectKind = "cut" | "remove"`
+### `type vtt.effect.EffectKind = "cut" | "remove" | "reshape"`
 
 What can happen to a cloud that other clouds may have to answer.
 
@@ -4149,7 +4194,7 @@ effect's kind -- a family answers once, across all its types -- and it may
 mutate only through `context`, inside the pipeline's transaction. It never
 calls another cloud's reaction: anything it causes elsewhere, it emits.
 
-### `type vtt.effect.ReactionId = "lattice-regenerate"`
+### `type vtt.effect.ReactionId = "lattice-regenerate" | "follow-base"`
 
 A declared reaction, by name. The type registry names reactions as data;
 the implementation behind each name lives with the runtime that can execute
@@ -4171,11 +4216,11 @@ A chain kept emitting past MAX_EFFECT_DEPTH.
 
 A reaction refused, so the whole transaction must be rolled back.
 
-### `constructor vtt.effect-pipeline.EffectRefusedError.constructor(reactionId: "lattice-regenerate", effectKind: EffectKind, reason: string): EffectRefusedError`
+### `constructor vtt.effect-pipeline.EffectRefusedError.constructor(reactionId: ReactionId, effectKind: EffectKind, reason: string): EffectRefusedError`
 
 ### `property vtt.effect-pipeline.EffectRefusedError.effectKind: EffectKind`
 
-### `property vtt.effect-pipeline.EffectRefusedError.reactionId: "lattice-regenerate"`
+### `property vtt.effect-pipeline.EffectRefusedError.reactionId: ReactionId`
 
 ### `property vtt.effect-pipeline.EffectRefusedError.reason: string`
 
@@ -4195,7 +4240,7 @@ One reaction that ran, in the order it ran.
 
 ### `property vtt.effect-pipeline.ReactionRecord.hitCount: number`
 
-### `property vtt.effect-pipeline.ReactionRecord.reactionId: "lattice-regenerate"`
+### `property vtt.effect-pipeline.ReactionRecord.reactionId: ReactionId`
 
 ### `type vtt.effect-pipeline.DeclaredReaction = (surfaceType: string, kind: EffectKind) => ReactionId | undefined`
 
@@ -6879,6 +6924,18 @@ Every declared surface type carrying `trait`, in registry order.
 
 The traits one surface type declares. An undeclared type has none.
 
+### `interface vtt.roof-recipe.RoofBaseRef`
+
+What a roof stands on, found again as it now stands: a floor, or the room a
+wall loop closes -- by a face of it, and the nodes of its outline, which
+outlive the face being replaced.
+
+### `property vtt.roof-recipe.RoofBaseRef.kind: "floor" | "walls"`
+
+### `property vtt.roof-recipe.RoofBaseRef.nodeIds: readonly string[]`
+
+### `property vtt.roof-recipe.RoofBaseRef.surfaceKey: readonly string[]`
+
 ### `interface vtt.roof-recipe.RoofFaceRole`
 
 Which footprint side a face rises from -- one past the last for a flat
@@ -6893,7 +6950,9 @@ four where it meets its leaf; and whether it is an upright face under it.
 
 ### `interface vtt.roof-recipe.RoofRecipe`
 
-A roof's recipe: what the generator is asked, and the group of faces it made.
+A roof's recipe: what the generator is asked, the base it follows, and the group of faces it made.
+
+### `property vtt.roof-recipe.RoofRecipe.base?: RoofBaseRef`
 
 ### `property vtt.roof-recipe.RoofRecipe.dormers?: readonly RoofDormer[]`
 
@@ -6920,6 +6979,26 @@ One ring of a roof's footprints: an outline, or a hole through it.
 ### `property vtt.roof-recipe.RoofRing.hole: boolean`
 
 ### `property vtt.roof-recipe.RoofRing.points: readonly Point[]`
+
+### `interface vtt.roof-recipe.RoofSource`
+
+A roof's request, and the base it follows when it stands on one.
+
+### `property vtt.roof-recipe.RoofSource.base?: RoofBaseRef`
+
+### `property vtt.roof-recipe.RoofSource.dormers?: readonly RoofDormer[]`
+
+### `property vtt.roof-recipe.RoofSource.elevation: number`
+
+### `property vtt.roof-recipe.RoofSource.footprints: readonly RoofFootprint[]`
+
+The plans it covers: one, or several joined at a corner.
+
+### `property vtt.roof-recipe.RoofSource.height: number`
+
+Rise of the roof's highest point above its eaves.
+
+### `property vtt.roof-recipe.RoofSource.slopes: readonly number[]`
 
 ### `type vtt.roof-recipe.Point = readonly [number, number]`
 
@@ -6972,7 +7051,7 @@ The rest are gables.
 
 Every ring of a roof, footprint by footprint: its outline, then its holes -- the order its sides are numbered in.
 
-### `function vtt.roof-recipe.roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: RoofRequest, operationId: string): { faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>; patch: ConstructionPatch }`
+### `function vtt.roof-recipe.roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: RoofSource, operationId: string): { faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>; patch: ConstructionPatch }`
 
 The roof `request` makes, as a patch named under `operationId`, and what
 each face keeps, by region id: the recipe, under that name as its group,
@@ -7539,7 +7618,7 @@ a ramp's long sides only. Absent, none does.
 
 The policy for one role.
 
-### `property vtt.structure-type.StructureTypeDefinition.reactions?: Readonly<Partial<Record<EffectKind, "lattice-regenerate">>>`
+### `property vtt.structure-type.StructureTypeDefinition.reactions?: Readonly<Partial<Record<EffectKind, ReactionId>>>`
 
 How a cloud of this type answers each effect that reaches it, by declared
 reaction name (`effects/effect.ts`). An effect kind absent here leaves the
@@ -7857,7 +7936,7 @@ as its own.
 
 ### `property vtt.tool-types.StructureEditParams.curveWidth?: number`
 
-### `property vtt.tool-types.StructureEditParams.mode: "shape" | "elevation"`
+### `property vtt.tool-types.StructureEditParams.mode: "elevation" | "shape"`
 
 ### `interface vtt.tool-types.TerrainSculptParams`
 

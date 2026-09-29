@@ -46,11 +46,13 @@ export function dispatchEffects(
   effects: readonly Effect[],
   reactions: TabletopReactions = TABLETOP_REACTIONS,
 ): readonly ReactionRecord[] {
+  // Every shape change is also a reshape, for what stands on the changed cloud to follow.
+  const reshaped = effects.flatMap((effect): Effect[] => (effect.kind === "cut" ? [effect, { ...effect, kind: "reshape" }] : [effect]));
   return timePhase("reações", () => runEffects(runtime, {
     regionsNear: (bounds) => typeof runtime.getRegionTopologiesInBounds === "function"
       ? runtime.getRegionTopologiesInBounds(bounds)
       : runtime.getAllRegionTopologies(),
-  }, effects, reactions));
+  }, reshaped, reactions));
 }
 
 export interface CommitOptions {

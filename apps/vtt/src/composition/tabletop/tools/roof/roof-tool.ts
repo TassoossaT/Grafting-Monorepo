@@ -15,6 +15,7 @@ import {
   type FittedEdge,
   type RoofFaceRole,
   type RoofRecipe,
+  type RoofSource,
   type ToolParamsByTool,
 } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionPatch, ConstructionSurfaceKey } from "@/ports";
@@ -165,7 +166,7 @@ function stroked(ctx: ToolContext, contour: readonly FittedEdge[], level: number
 }
 
 /** Commits the roofs `requests` make in place of the faces `replaces` names, each keeping its recipe on every face it made. */
-export function commitRoofRecipes(ctx: ToolContext, requests: readonly RoofRequest[], replaces: readonly ConstructionSurfaceKey[] = [], done = "Telhado criado."): void {
+export function commitRoofRecipes(ctx: ToolContext, requests: readonly RoofSource[], replaces: readonly ConstructionSurfaceKey[] = [], done = "Telhado criado."): void {
   try {
     const operationId = scopedToolId(ctx, "roof", ctx.nextSequence());
     const made = requests.map((request, i) => roofGraphPatch(ctx.runtime, request, requests.length === 1 ? operationId : `${operationId}:${i}`));
@@ -198,7 +199,8 @@ function addDormer(ctx: ToolContext, sample: PointerSample, params: Params): voi
     return;
   }
   const dormer = dormerAt(recipe, role.side, [sample.point.x, sample.point.z], params.dormerWidth, params.dormerFront, params.waters);
-  const { group, ...request } = recipe;
+  const { group: _group, ...request } = recipe;
+  const group = recipe.group;
   commitRoofRecipes(ctx, [{ ...request, dormers: [...(recipe.dormers ?? []), dormer] }], roofsOf(ctx).get(group)!.faces, "Lucarna criada.");
 }
 
@@ -244,7 +246,7 @@ const rawRoofTool: ConstructionTool<"roof"> = {
     if (params.action === "base") {
       try {
         const base = roofBaseAt(ctx.runtime.getAllRegionTopologies(), sample);
-        commitRoofRecipes(ctx, [roofOver([base.footprint], base.elevation, params.height, params.waters)]);
+        commitRoofRecipes(ctx, [{ ...roofOver([base.footprint], base.elevation, params.height, params.waters), base: base.ref }]);
       } catch (error) {
         ctx.reportFeedback({ tone: "error", message: error instanceof Error ? error.message : String(error) });
       }

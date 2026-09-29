@@ -12,6 +12,7 @@ import type { Effect, EffectKind, Reaction, ReactionId, ShapeChange } from "./ef
 const EFFECT_REACH: Readonly<Record<EffectKind, (change: ShapeChange, hitType: string) => boolean>> = Object.freeze({
   cut: (change, hitType) => resolveCreationInteraction(change.surfaceType, hitType, change.subtype).kind === "cut",
   remove: (change, hitType) => hitType === change.surfaceType,
+  reshape: (change, hitType) => hitType !== change.surfaceType,
 });
 
 /** How far past the change a reaction may need to look: a lattice regenerates a ring of neighbours around it. */

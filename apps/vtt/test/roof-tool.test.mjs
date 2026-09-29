@@ -331,3 +331,69 @@ test("a roof touching another only at a corner joins it there: one roof, two out
     assert.equal(new Set(at.map((n) => n.id)).size, 1, "the corner is one node of both");
   } finally { session.free(); }
 });
+
+// ---- Standing on a base: the roof follows it ----
+
+import { platformContourTool } from "../src/composition/tabletop/tools/platform/platform-contour-tool.ts";
+import { commitRegionEdit } from "../src/composition/tabletop/effects/effect-commit.ts";
+
+/** Drags `handle` with `tool` to `point`; `screenY` below 300 is up, 40 px a metre. */
+function dragWith(tool, { ctx, runtime }, handle, point, params, screenY = 300) {
+  Object.assign(runtime, { previewNodeHandle() {} });
+  const start = { nodeId: handle.id, point: handle.position, screenX: 100, screenY: 300 };
+  const current = { point, screenX: 200, screenY };
+  tool.onPointerDown(ctx, start, params);
+  tool.onPointerMove(ctx, { start, current, samples: [start, current] }, params);
+  tool.onPointerUp(ctx, { start, current, samples: [start, current] }, params);
+}
+
+/** A roof on an 8 x 4 floor at 3. */
+function onFloor() {
+  const value = fixture();
+  const floor = addFace(value.runtime, "floor", "platform", [[0, 0], [8, 0], [8, 4], [0, 4]].map(([x, z], i) => ({ id: `p${i}`, position: { x, y: 3, z } })));
+  click(value, { point: { x: 3, y: 3, z: 2 }, surfaceRef: surfaceRefFromNodeSet(floor.surfaceKey) }, { ...DEFAULT_TOOL_PARAMS.roof, action: "base", height: 2 });
+  return value;
+}
+
+test("a roof on a floor goes where the floor is moved, and rises with it", () => {
+  const value = onFloor();
+  const { runtime, session, calls } = value;
+  try {
+    const params = { ...DEFAULT_TOOL_PARAMS["platform-contour"], support: "floating" };
+    const pivot = shownGlobalHandles(scene(runtime)).find((h) => h.kind === "pivot" && h.owner === "platform");
+    dragWith(platformContourTool, value, pivot, { x: pivot.position.x + 5, y: pivot.position.y, z: pivot.position.z });
+    const xs = roofs(runtime)[0].props.roof.footprints[0].outer.map(([x]) => x);
+    assert.deepEqual([Math.min(...xs), Math.max(...xs)], [5, 13], JSON.stringify(calls.feedback.at(-1)));
+    const height = shownGlobalHandles(scene(runtime)).find((h) => h.kind === "height" && h.owner === "platform");
+    dragWith(platformContourTool, value, height, height.position, params, 260);
+    assert.ok(Math.abs(Math.min(...roofs(runtime).flatMap((f) => f.nodes.map((n) => n.position.y))) - 4) < 1e-6, "its eaves on the raised floor");
+  } finally { session.free(); }
+});
+
+test("a roof over a room is reshaped when a wall of it is pushed out", () => {
+  const value = fixture();
+  const { runtime, session } = value;
+  try {
+    const walls = lRoom(runtime);
+    click(value, { point: { x: 5, y: 3, z: 0 }, surfaceRef: surfaceRefFromNodeSet(walls[0].surfaceKey) }, { ...DEFAULT_TOOL_PARAMS.roof, action: "base", height: 2 });
+    // The first wall pushed 2 out, feet and tops, as its side handle pushes it.
+    const at = (id) => runtime.getGraphSnapshot().nodes.find((n) => n.id === id).position;
+    commitRegionEdit(runtime, ["f0", "f1", "t0", "t1"].map((nodeId) => ({ kind: "move-vertex", nodeId, position: { ...at(nodeId), z: at(nodeId).z - 2 } })), { transactionId: "push-wall" });
+    const zs = roofs(runtime)[0].props.roof.footprints[0].outer.map(([, z]) => z);
+    assert.ok(Math.abs(Math.min(...zs) + 2) < 1e-6, JSON.stringify(zs));
+  } finally { session.free(); }
+});
+
+test("a roof moved by its own hand lets go of its floor", () => {
+  const value = onFloor();
+  const { runtime, session } = value;
+  try {
+    const pivot = shownGlobalHandles(scene(runtime)).find((h) => h.kind === "pivot" && h.owner === "roof");
+    dragHandle(value, pivot, { x: pivot.position.x, y: pivot.position.y, z: pivot.position.z + 10 });
+    assert.equal(roofs(runtime)[0].props.roof.base, undefined);
+    const before = JSON.stringify(roofs(runtime)[0].props.roof.footprints);
+    const floorPivot = shownGlobalHandles(scene(runtime)).find((h) => h.kind === "pivot" && h.owner === "platform");
+    dragWith(platformContourTool, value, floorPivot, { x: floorPivot.position.x + 3, y: floorPivot.position.y, z: floorPivot.position.z });
+    assert.equal(JSON.stringify(roofs(runtime)[0].props.roof.footprints), before);
+  } finally { session.free(); }
+});

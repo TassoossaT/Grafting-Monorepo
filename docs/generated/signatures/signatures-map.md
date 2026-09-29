@@ -3631,9 +3631,8 @@ export function dispatchEffects(
   effects: readonly Effect[],
   reactions: TabletopReactions = TABLETOP_REACTIONS,
   ): readonly ReactionRecord[] {
-  return timePhase("reações", () => runEffects(runtime, {
-  regionsNear: (bounds) => typeof runtime.getRegionTopologiesInBounds === "function"
-  ? runtime.getRegionTopologiesInBounds(bounds)
+  // Every shape change is also a reshape, for what stands on the changed cloud to follow.
+  const reshaped = effects.flatMap((effect): Effect[] => (effect.kind === "cut" ? [effect, { ...effect, kind: "reshape" }] : [effect]));
 export interface CommitOptions {
   /** Names the transaction and its undo entry; reactions mint their ids from it. */
   readonly transactionId: string;
@@ -3683,9 +3682,10 @@ export function commitSurfaceRemoval(
   const removed = topologiesOf(runtime, [surfaceKey]);
 
 // src/composition/tabletop/effects/reactions.ts
-export type TabletopReactionRuntime = LatticeReactionRuntime;
+export type TabletopReactionRuntime = LatticeReactionRuntime & FollowBaseRuntime;
 export const TABLETOP_REACTIONS: Readonly<Record<ReactionId, Reaction<TabletopReactionRuntime>>> = Object.freeze({
   "lattice-regenerate": latticeRegenerateReaction(),
+  "follow-base": followBaseReaction(),
   });
 
 // src/composition/tabletop/effects/shape-change.ts
@@ -4344,12 +4344,16 @@ export function edgeOverlayDescriptor(group: EdgeOverlayGroup): PreviewDescripto
   return { kind: "segments", positions: group.positions, color: group.color, opacity: 1 };
 
 // src/composition/tabletop/tools/core/face-props.ts
+export interface FacePropsRuntime {
+  setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): unknown;
+  pinNodes(pins: readonly ConstructionPinRequest[], origin: ChangeOrigin, causeId: string): unknown;
+  }
 export interface PinnedToRoles {
   readonly pins: readonly { readonly nodeId: string; readonly role: string; readonly u: number; readonly v: number }[];
   }
 export function pinnedToRoles(topologies: readonly ConstructionRegionTopology[], sources: readonly ConstructionSurfaceKey[]): PinnedToRoles {
   const replaced = new Set(sources.map(keyText));
-export function keepFaceProps(runtime: ToolContext["runtime"], causeId: string, created: readonly ConstructionSurfaceKey[], faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>, pinned?: PinnedToRoles): void {
+export function keepFaceProps(runtime: FacePropsRuntime, causeId: string, created: readonly ConstructionSurfaceKey[], faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>, pinned?: PinnedToRoles): void {
   const byRole = new Map<string, ConstructionSurfaceKey>();
 
 // src/composition/tabletop/tools/core/floor-landing.ts
@@ -4770,13 +4774,26 @@ export const platformContourTool = withStructureEditing(rawPlatformContourTool, 
 export interface RoofBase {
   readonly footprint: RoofFootprint;
   readonly elevation: number;
+  readonly ref: RoofBaseRef;
   }
 export function roofBaseAt(topologies: readonly ConstructionRegionTopology[], sample: PointerSample): RoofBase {
   const clicked = topologies.find((face) => (
   sample.surfaceRef ? surfaceRefFromNodeSet(face.surfaceKey) === sample.surfaceRef : sample.nodeId !== undefined && face.nodes.some((node) => node.id === sample.nodeId)));
+export function roofBaseOf(topologies: readonly ConstructionRegionTopology[], ref: RoofBaseRef): RoofBase | undefined {
+  const key = ref.surfaceKey.join("\u0000");
+
+// src/composition/tabletop/tools/roof/roof-follow-base.ts
+export interface FollowBaseRuntime extends FacePropsRuntime, Pick<RoofPort, "generateRoof"> {
+  getAllRegionTopologies(): readonly ConstructionRegionTopology[];
+  applyPatchReplacement(request: ApplyPatchReplacementRequest, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome;
+  }
+export function followBaseReaction(): Reaction<FollowBaseRuntime> {
+  return (runtime, effect, hits) => {
+  const changed = [...effect.change.before, ...effect.change.after];
+  const nodes = new Set(changed.flatMap((face) => face.nodes.map((node) => node.id)));
 
 // src/composition/tabletop/tools/roof/roof-tool.ts
-export function commitRoofRecipes(ctx: ToolContext, requests: readonly RoofRequest[], replaces: readonly ConstructionSurfaceKey[] = [], done = "Telhado criado."): void {
+export function commitRoofRecipes(ctx: ToolContext, requests: readonly RoofSource[], replaces: readonly ConstructionSurfaceKey[] = [], done = "Telhado criado."): void {
   try {
   const operationId = scopedToolId(ctx, "roof", ctx.nextSequence());
 export const roofTool = withStructureEditing(rawRoofTool, { ownsType: (surfaceType) => surfaceType === roofStructureType.surfaceType, handlesOnly: true });
@@ -6737,7 +6754,15 @@ export function firstRefusal(resolved: readonly ResolvedCoverage[]): string | un
 // src/features/edit-construction/structure-types/roof/roof-recipe.ts
 export const ROOF_RECIPE_PROP = "roof";
 export const ROOF_FACE_PROP = "roofFace";
-export interface RoofRecipe extends RoofRequest {
+export interface RoofBaseRef {
+  readonly kind: "floor" | "walls";
+  readonly surfaceKey: readonly string[];
+  readonly nodeIds: readonly string[];
+  }
+export interface RoofSource extends RoofRequest {
+  readonly base?: RoofBaseRef;
+  }
+export interface RoofRecipe extends RoofSource {
   readonly group: string;
   }
 export interface RoofFaceRole {
@@ -6771,12 +6796,6 @@ export function inwardNormals(ring: readonly Point[], hole: boolean): Point[] {
 export function dormerSlopes(waters: Waters): readonly [number, number, number, number] {
   return waters === 2 ? [0, 1, 0, 1] : waters === 1 ? [0.5, 0, 0, 0] : [1, 1, 0, 1];
   }
-export function presetSlopes(contour: readonly Point[], waters: Waters): number[] {
-  const sides = contour.map((a, i) => {
-  const b = contour[(i + 1) % contour.length]!;
-  const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
-export function roofOver(footprints: readonly RoofFootprint[], elevation: number, height: number, waters: Waters): RoofRequest {
-  return { elevation, height, footprints, slopes: ringsOf(footprints).flatMap((ring) => (ring.hole ? ring.points.map(() => 1) : presetSlopes(ring.points, waters))) };
 
 // src/features/edit-construction/structure-types/roof/roof-structure.ts
 export const roofStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
