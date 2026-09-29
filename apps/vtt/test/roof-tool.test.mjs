@@ -16,7 +16,7 @@ function fixture() {
 }
 
 const scene = (runtime) => ({ graph: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), cloudFor: runtime.cloudFor });
-const roofs = (runtime) => runtime.getAllRegionTopologies().filter((f) => f.surfaceType === "roof");
+const roofs = (runtime) => runtime.getAllRegionTopologies().filter((f) => f.props?.roof !== undefined);
 const top = (runtime) => Math.max(...roofs(runtime).flatMap((f) => f.nodes.map((n) => n.position.y)));
 const groups = (runtime) => new Set(roofs(runtime).map((f) => f.props.roof.group));
 /** Where node `id` is pinned: pins ride on the faces' nodes. */
@@ -76,6 +76,8 @@ test("two and one waters close their unpitched sides with upright gables", () =>
       const faces = roofs(runtime);
       assert.equal(faces.length, leaves + gables, `${waters} waters`);
       assert.equal(faces.filter(vertical).length, gables, `${waters} waters`);
+      assert.ok(faces.filter((face) => face.props.roofFace.upright).every((face) => face.surfaceType === "roof-transition"), "gable closures use transition assets");
+      assert.ok(faces.filter((face) => !face.props.roofFace.upright).every((face) => face.surfaceType === "roof"), "pitched leaves remain roof assets");
     } finally { session.free(); }
   }
 });
@@ -373,6 +375,7 @@ test("a platform cuts the roof with its own edges and restores it when removed",
       && Math.abs(node.position.z - 1) < 1e-5 && Math.abs(node.position.y - 4) < 1e-5), "the slope below the platform survives up to its level");
     const rim = floor.nodes.find((node) => Math.abs(node.position.x - 2) < 1e-5 && Math.abs(node.position.z - 1.5) < 1e-5);
     assert.ok(roofs(runtime).some((face) => face.props.roofFace.upright && face.nodes.some((node) => node.id === rim.id)), "the vertical cut is welded to the platform rim");
+    assert.ok(roofs(runtime).filter((face) => face.props.roofFace.upright).every((face) => face.surfaceType === "roof-transition"), "the cut wall has a wall-like asset type");
     assert.equal(roofs(runtime)[0].props.roof.cutouts.length, 0, "the cut is derived from the live platform");
     commitRegionEdit(runtime, floor.nodes.map((node) => ({ kind: "move-vertex", nodeId: node.id, position: { ...node.position, x: node.position.x + 2 } })), { transactionId: "move-roof-platform" });
     const holeXs = roofs(runtime).flatMap((face) => face.holes.flatMap((loop) => loop.map((use) => face.nodes.find((node) => node.id === use.startNodeId)?.position.x))).filter((x) => x !== undefined);

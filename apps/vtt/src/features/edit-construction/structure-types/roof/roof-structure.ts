@@ -12,7 +12,7 @@ import { roofRecipeGeneration } from "./roof-recipe.ts";
 export const roofStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
   surfaceType: "roof", label: "Telhado", creation: "the weighted straight skeleton of its footprint, welded to what it stands on",
   // Its upright faces -- gables, a dormer's front -- take windows like any wall.
-  traits: Object.freeze(["accepts-cuts"] as const),
+  traits: Object.freeze(["accepts-cuts", "roof-generated"] as const),
   roleFor: (_topology, target) => `roof-${target.kind}`,
   policyFor: (role) => role === "roof-region"
     ? { ...allowed(role, ALL_AXES, "cloud"), transport: true }
@@ -25,4 +25,11 @@ export const roofStructureType: StructureTypeDefinition = Object.freeze<Structur
   // must reshape the floor, not carry the roof -- and the floor with it --
   // whole. The roof is made again over what it stands on instead.
   globalHandles: Object.freeze(["pivot", "rotate", "rise", "slope", "seam", "side", "corner", "insert"] as const),
+});
+
+/** Upright closures belong to the roof recipe but have their own wall-like asset identity. */
+export const roofTransitionStructureType: StructureTypeDefinition = Object.freeze({
+  ...roofStructureType,
+  surfaceType: "roof-transition",
+  label: "Transição parede/telhado",
 });

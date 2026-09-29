@@ -7097,6 +7097,10 @@ A roof is regenerated whole from the recipe its faces keep: every handle
 out of a side, a dormer -- edits the recipe (`roof-recipe.ts`). How far
 its eaves reach and whether its leaves curve are the covering's business.
 
+### `variable vtt.roof-structure.roofTransitionStructureType: StructureTypeDefinition`
+
+Upright closures belong to the roof recipe but have their own wall-like asset identity.
+
 ### `interface vtt.structural-cut.StructuralCutArea`
 
 ### `property vtt.structural-cut.StructuralCutArea.center?: { x: number; y: number; z: number }`
@@ -7740,7 +7744,7 @@ pointer.
 
 Which end of a structure: where it starts, and where it goes.
 
-### `type vtt.structure-type.StructureTrait = "ground" | "floor" | "partition" | "cuts" | "accepts-cuts"`
+### `type vtt.structure-type.StructureTrait = "ground" | "floor" | "partition" | "roof-generated" | "cuts" | "accepts-cuts"`
 
 A tag a structure type carries so other code can ask what the type *is for*
 without naming it.

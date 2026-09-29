@@ -7,7 +7,7 @@ import { dispatchGesture, harness, press, ref } from "./support/opening-harness.
 import { DEFAULT_TOOL_PARAMS, shownGlobalHandles } from "../src/features/edit-construction/index.ts";
 import { roofTool } from "../src/composition/tabletop/tools/roof/roof-tool.ts";
 
-const roofs = (runtime) => runtime.getAllRegionTopologies().filter((f) => f.surfaceType === "roof");
+const roofs = (runtime) => runtime.getAllRegionTopologies().filter((f) => f.props?.roof !== undefined);
 const front = (runtime) => roofs(runtime).find((f) => f.props.roofFace.dormer === 0 && f.props.roofFace.upright && f.props.roofFace.side === 0);
 const pinOf = (runtime, id) => runtime.getAllRegionTopologies().flatMap((f) => f.nodes).find((n) => n.id === id)?.pin;
 

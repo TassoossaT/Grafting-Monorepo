@@ -4796,7 +4796,7 @@ export function followBaseReaction(): Reaction<FollowBaseRuntime> {
 export function commitRoofRecipes(ctx: ToolContext, requests: readonly RoofSource[], replaces: readonly ConstructionSurfaceKey[] = [], done = "Telhado criado."): void {
   try {
   const operationId = scopedToolId(ctx, "roof", ctx.nextSequence());
-export const roofTool = withStructureEditing(rawRoofTool, { ownsType: (surfaceType) => surfaceType === roofStructureType.surfaceType, handlesOnly: true });
+export const roofTool = withStructureEditing(rawRoofTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "roof-generated"), handlesOnly: true });
 
 // src/composition/tabletop/tools/shapes/geometry-2d.ts
 export interface PointXZ {
@@ -5269,9 +5269,9 @@ export function colorForSurfaceType(surfaceType: string, physical: boolean): num
   switch (surfaceType) {
   case "wall":
   case "wall-white":
+  case "roof-transition":
   return 0xe2e8f0; // White / light gray block prototype
   case "wall-gray":
-  return 0x64748b; // Slate gray block prototype
 export const NONE_COVERING: SurfaceCovering = Object.freeze({
   kind: NONE_COVERING_KIND,
   key: NONE_COVERING_KIND,
@@ -6801,11 +6801,16 @@ export function dormerSlopes(waters: Waters): readonly [number, number, number, 
 export const roofStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
   surfaceType: "roof", label: "Telhado", creation: "the weighted straight skeleton of its footprint, welded to what it stands on",
   // Its upright faces -- gables, a dormer's front -- take windows like any wall.
-  traits: Object.freeze(["accepts-cuts"] as const),
+  traits: Object.freeze(["accepts-cuts", "roof-generated"] as const),
   roleFor: (_topology, target) => `roof-${target.kind}`,
   policyFor: (role) => role === "roof-region"
   ? { ...allowed(role, ALL_AXES, "cloud"), transport: true }
   : denied(role, "Mova o telhado pela face."),
+export const roofTransitionStructureType: StructureTypeDefinition = Object.freeze({
+  ...roofStructureType,
+  surfaceType: "roof-transition",
+  label: "Transição parede/telhado",
+  });
 
 // src/features/edit-construction/structure-types/structural-cut.ts
 export type CutProfile =

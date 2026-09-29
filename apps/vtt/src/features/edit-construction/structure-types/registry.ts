@@ -1,4 +1,4 @@
-import { roofStructureType } from "./roof/roof-structure.ts";
+import { roofStructureType, roofTransitionStructureType } from "./roof/roof-structure.ts";
 import { platformStructureType, slopedPlatformStructureType } from "./platform/platform-structure.ts";
 import { rampStructureType } from "./platform/platform-ramp-type.ts";
 import type { ConstructionCoveredRegion, ConstructionRegionTopology } from "@/ports";
@@ -49,6 +49,7 @@ export const STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[] = Ob
   rampStructureType,
   slopedPlatformStructureType,
   roofStructureType,
+  roofTransitionStructureType,
   panelStructureType("wall-white", "Parede branca", "one upright panel per contour edge, drawn or stamped", ["partition", "accepts-cuts"]),
   panelStructureType("wall-gray", "Parede cinza", "one upright panel per contour edge, drawn or stamped", ["partition", "accepts-cuts"]),
   openingStructureType,

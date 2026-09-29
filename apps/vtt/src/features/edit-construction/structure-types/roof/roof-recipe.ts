@@ -297,7 +297,7 @@ export function roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: Ro
           : { edgeId: edgeId(index), startNodeId: nodeId(edge.start), endNodeId: nodeId(edge.end) };
       }),
       regions: roof.faces.map((face, index) => ({
-        regionId: regionId(index), surfaceType: "roof", physical: true,
+        regionId: regionId(index), surfaceType: face.upright ? "roof-transition" : "roof", physical: true,
         boundary: uses(face.boundary), ...(face.holes.length > 0 ? { holes: face.holes.map(uses) } : {}),
       })),
     },
