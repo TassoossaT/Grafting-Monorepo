@@ -109,6 +109,50 @@ test("pathPointsTool emits mesh preview on hover with active draft", () => {
   }
 });
 
+test("point-mode preview renders the same Rust ribbon as its confirmed spine",()=>{
+  const f=sessionFixture(),previews=new Map();
+  f.runtime.showPreview=(d,c)=>previews.set(c,d);
+  f.runtime.clearPreview=c=>previews.delete(c);
+  f.runtime.getFootprintCoverage=()=>[];
+  f.ctx.reportSelection=()=>{};
+  const params={...pathPointsTool.defaultParams(),creationMode:"points",bedWidth:0.6};
+  const authored=[{x:-10,y:0,z:0},{x:0,y:3,z:4},{x:10,y:0,z:0}];
+  try {
+    for(const point of authored){const a={point};pathPointsTool.onPointerDown(f.ctx,a,params);pathPointsTool.onPointerUp(f.ctx,{start:a,current:a,samples:[a]},params);}
+    const preview=previews.get("road-points");
+    const before=f.session.snapshot_json();
+    pathPointsTool.onKeyDown(f.ctx,"Enter",params);
+    assert.notEqual(f.session.snapshot_json(),before);
+    const graph=f.runtime.getGraphSnapshot(),nodes=new Map(graph.nodes.map(n=>[n.id,n.position]));
+    const xyz=p=>[p.x,p.y,p.z];
+    const curves=graph.edges.filter(e=>e.curve).map(e=>f.runtime.curveBatch({tolerance:0.025,commands:[{kind:"resolve",handles:e.curve,start:xyz(nodes.get(e.startNodeId)),end:xyz(nodes.get(e.endNodeId))}]})[0].curves[0]);
+    const ribbons=f.runtime.curveBatch({tolerance:0.05,commands:curves.map(curve=>({kind:"ribbon",curve,offsets:[-0.3,0.3]}))});
+    const expected=createRoadMeshPreview({ribbons,anchors:authored,bedWidth:0.6});
+    assert.deepEqual(preview.positions,expected.positions);
+    assert.deepEqual(preview.indices,expected.indices);
+    assert.equal(previews.has("road-points"),false);
+  } finally {pathPointsTool.onCancel(f.ctx);f.session.free();}
+});
+
+test("invalid hover displays an error preview without changing the valid draft",()=>{
+  const f=sessionFixture(),previews=new Map();
+  f.runtime.showPreview=(d,c)=>previews.set(c,d);
+  f.runtime.clearPreview=c=>previews.delete(c);
+  const params={...pathPointsTool.defaultParams(),creationMode:"points",bedWidth:0.6};
+  const a={point:{x:-4,y:0,z:0}},invalid={point:{x:-4,y:4,z:0}},valid={point:{x:4,y:4,z:0}};
+  try {
+    pathPointsTool.onPointerDown(f.ctx,a,params);
+    pathPointsTool.onPointerUp(f.ctx,{start:a,current:a,samples:[a]},params);
+    const before=f.session.snapshot_json();
+    pathPointsTool.previewFor({start:a,current:invalid,samples:[a,invalid]},params,f.ctx);
+    assert.equal(previews.get("road-points").color,ROAD_ERROR_COLOR);
+    assert.equal(f.session.snapshot_json(),before);
+    pathPointsTool.previewFor({start:a,current:valid,samples:[a,valid]},params,f.ctx);
+    assert.equal(previews.get("road-points").color,ROAD_PREVIEW_COLOR);
+    assert.equal(f.session.snapshot_json(),before);
+  } finally {pathPointsTool.onCancel(f.ctx);f.session.free();}
+});
+
 test("pathStrokeTool emits mesh preview during drag", () => {
   const f = sessionFixture();
   f.previews = new Map();

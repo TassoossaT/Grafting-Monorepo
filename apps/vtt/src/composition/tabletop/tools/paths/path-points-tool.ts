@@ -6,7 +6,7 @@ import { scopedToolId, type ConstructionTool, type ToolContext, type PointerSamp
 import { createSpineEditBehavior } from "../core/spine-edit-behavior.ts";
 import { pathStrokeTool } from "./path-stroke-tool.ts";
 import { roadAnchorSnap, roadSnapTarget, roadSnapIsCurrent, showRoadSnap, type RoadSnapTarget } from "./road-body-target.ts";
-import { createFastRoadPreview } from "./road-preview-mesh.ts";
+import { createRoadMeshPreview, ROAD_ERROR_COLOR, ROAD_ERROR_OPACITY } from "./road-preview-mesh.ts";
 
 const CHANNEL = "road-points";
 const xyz = (p: ConstructionPosition) => [p.x, p.y, p.z] as const;
@@ -36,10 +36,22 @@ export function prunePoints(points: readonly ConstructionPosition[]): Constructi
 }
 
 function preview(ctx: ToolContext, draft: Draft, cursor?: ConstructionPosition): void {
-  ctx.runtime.showPreview(
-    createFastRoadPreview(draft.points, draft.params.bedWidth, cursor),
-    CHANNEL,
-  );
+  const points = cursor && (!draft.points.length || !equal(draft.points.at(-1)!, cursor))
+    ? [...draft.points, cursor] : draft.points;
+  const options = { anchors: points, bedWidth: draft.params.bedWidth };
+  try {
+    const ribbons = points.length < 2 ? [] : ctx.runtime.curveBatch({
+      tolerance: 0.05,
+      commands: curves(ctx, points).map((curve) => ({ kind: "ribbon" as const, curve,
+        offsets: [-draft.params.bedWidth / 2, draft.params.bedWidth / 2] as const })),
+    });
+    ctx.runtime.showPreview(createRoadMeshPreview({ ...options, ribbons }), CHANNEL);
+  } catch {
+    // Invalid hover is visible but never replaces the confirmed draft or
+    // commits the previous valid preview. Confirmation validates again.
+    ctx.runtime.showPreview(createRoadMeshPreview({ ...options, fallbackPoints: points,
+      color: ROAD_ERROR_COLOR, opacity: ROAD_ERROR_OPACITY }), CHANNEL);
+  }
 }
 function safely(ctx: ToolContext, work: () => void): void {
   try { work(); } catch (error) {
@@ -50,7 +62,7 @@ function safely(ctx: ToolContext, work: () => void): void {
   }
 }
 function commitDraft(ctx: ToolContext, draft: Draft): void {
-  const points = prunePoints(draft.points);
+  const points = draft.points;
   if (points.length < 2) return;
   const operationId = scopedToolId(ctx, "road-points", ctx.nextSequence());
   const effect = createPathBrushEffect({
@@ -162,14 +174,14 @@ export const pathPointsTool: ConstructionTool<"path-brush"> = {
         }
         const draft = drafts.get(ctx.runtime) ?? { points: [], params: { ...params } };
         const last = draft.points.at(-1);
-        if (!last || Math.hypot(active.point.x - last.x, active.point.z - last.z) >= 0.1 || Math.abs(active.point.y - last.y) >= 0.05) {
-          draft.points.push(active.point);
-        } else {
-          draft.points[draft.points.length - 1] = active.point;
-        }
-        drafts.set(ctx.runtime, draft);
-        if (active.snapTarget && draft.points.length >= 2) commitDraft(ctx, draft);
-        else preview(ctx, draft);
+        const next = { ...draft, points: last && equal(last, active.point)
+          ? draft.points : [...draft.points, active.point] };
+        // Rust validates the authored chain before it replaces the draft. An
+        // invalid click must not silently remove a point or change its height.
+        if (next.points.length >= 2) curves(ctx, next.points);
+        drafts.set(ctx.runtime, next);
+        if (active.snapTarget && next.points.length >= 2) commitDraft(ctx, next);
+        else preview(ctx, next);
       }
     });
   },

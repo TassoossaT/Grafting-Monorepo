@@ -11,6 +11,36 @@ const brush={...points,creationMode:"brush"};
 const state=f=>JSON.parse(f.session.snapshot_json());
 const edges=f=>f.runtime.getGraphSnapshot().edges.filter(e=>e.curve);
 const closeCurves=(actual,expected,tolerance=1e-10)=>{assert.equal(actual.length,expected.length);actual.forEach((c,i)=>c.points.forEach((p,j)=>p.forEach((v,k)=>assert.ok(Math.abs(v-expected[i].points[j][k])<tolerance, `curve coordinate changed at ${i}/${j}/${k}: ${v} != ${expected[i].points[j][k]}`))));};
+for(const [name,coordinates,width] of [
+  ["line",[[-8,0,0],[0,0,0],[8,0,0]],0.6],
+  ["S",[[-8,0,-4],[-3,0,4],[3,0,-4],[8,0,4]],0.6],
+  ["U",[[-4,0,0],[-4,0,6],[4,0,6],[4,0,0]],0.6],
+  ["unequal spacing",[[-10,0,0],[-9.96,0,0.04],[0,0,4],[20,0,0]],0.6],
+  ["elevation",[[-8,0,0],[0,5,4],[8,0,0]],0.6],
+  ["short wide turn",[[0,0,0],[0.1,0,0.1],[0.2,0,0]],8],
+]) test(`road stability matrix: ${name} preserves authorship and produces finite indexed meshes`,()=>{
+  const f=fixture();
+  try {
+    const params={...points,bedWidth:width};
+    for(const [x,y,z] of coordinates) f.click({point:{x,y,z}},undefined,params);
+    tool.onKeyDown(f.ctx,"Enter",params);
+    assert.equal(f.calls.feedback.at(-1)?.tone,"success");
+    assert.deepEqual(f.runtime.getGraphSnapshot().nodes.filter(n=>n.id.startsWith("spine:")).map(n=>n.position),coordinates.map(([x,y,z])=>({x,y,z})));
+    assert.equal(edges(f).length,coordinates.length-1);
+    const expected=f.runtime.curveBatch({tolerance:0.025,commands:[{kind:"automatic",points:coordinates}]})[0].curves;
+    closeCurves(edges(f).map(e=>resolve(f,e)),expected);
+    const meshes=JSON.parse(f.session.all_surface_meshes_json());
+    assert.ok(meshes.length>0);
+    for(const mesh of meshes) {
+      assert.ok(mesh.positions.length>0);
+      assert.equal(mesh.positions.length%3,0);
+      assert.ok(mesh.positions.every(Number.isFinite));
+      assert.ok(mesh.indices.length>0);
+      assert.equal(mesh.indices.length%3,0);
+      assert.ok(mesh.indices.every(i=>Number.isInteger(i)&&i>=0&&i<mesh.positions.length/3));
+    }
+  } finally {f.close();}
+});
 function fixture() {
   const f=sessionFixture();f.previews=new Map();f.selected=undefined;
   f.ctx.reportSelection=value=>{f.selected=value;};
@@ -90,6 +120,34 @@ test("road points: duplicate click, Backspace, cancellation and late release nev
     build(f);assert.equal(edges(f).length,2);
   }finally{f.close();}
 });
+test("road points: distinct nearby clicks preserve every authored point",()=>{
+  const f=fixture();
+  try {
+    const positions=[{x:-10,y:0,z:0},{x:-9.96,y:0,z:0.04},{x:0,y:0,z:4},{x:10,y:0,z:0}];
+    for(const point of positions) f.click({point});
+    f.finish();
+    const graph=f.runtime.getGraphSnapshot();
+    const actual=graph.nodes.filter(n=>n.id.startsWith("spine:")).map(n=>n.position);
+    assert.deepEqual(actual,positions);
+    assert.equal(edges(f).length,3);
+  } finally {f.close();}
+});
+test("road points: invalid vertical click reports an error and preserves the valid draft",()=>{
+  const f=fixture();
+  try {
+    const before=state(f);
+    f.click({point:{x:-4,y:0,z:0}});
+    const preview=f.previews.get("road-points");
+    f.click({point:{x:-4,y:4,z:0}});
+    assert.deepEqual(state(f),before);
+    assert.deepEqual(f.previews.get("road-points"),preview);
+    assert.equal(f.calls.feedback.at(-1)?.tone,"error");
+    f.click({point:{x:4,y:4,z:0}});
+    f.finish();
+    assert.deepEqual(f.runtime.getGraphSnapshot().nodes.filter(n=>n.id.startsWith("spine:")).map(n=>n.position),[{x:-4,y:0,z:0},{x:4,y:4,z:0}]);
+    assert.equal(edges(f).length,1);
+  } finally {f.close();}
+});
 test("road points: a rejected commit retains the draft and rolls back for retry",()=>{
   const f=fixture();
   try {
@@ -99,6 +157,28 @@ test("road points: a rejected commit retains the draft and rolls back for retry"
     f.finish();assert.deepEqual(state(f),before);assert.ok(f.previews.has("road-points"));
     f.runtime.applyPatchReplacement=apply;f.finish();assert.equal(edges(f).length,1);
   }finally{f.close();}
+});
+
+test("editing one road preserves every node, edge and control of a disconnected road",()=>{
+  const f=fixture();
+  try {
+    build(f);
+    const editedId=edges(f)[0].endNodeId;
+    for(const point of [{x:90,y:4,z:0},{x:100,y:5,z:4},{x:110,y:4,z:0}]) f.click({point});
+    f.finish();
+    const untouched=graph=>{
+      const nodes=graph.nodes.filter(n=>n.position.x>70);
+      const ids=new Set(nodes.map(n=>n.id));
+      return {nodes,edges:graph.edges.filter(e=>ids.has(e.startNodeId)||ids.has(e.endNodeId))};
+    };
+    const before=state(f),other=untouched(f.runtime.getGraphSnapshot());
+    const a={...sample(0,4),nodeId:editedId},b=sample(1,6);
+    tool.onPointerDown(f.ctx,a,points);
+    tool.onPointerUp(f.ctx,gesture(a,b),points);
+    assert.notDeepEqual(state(f),before);
+    assert.deepEqual(untouched(f.runtime.getGraphSnapshot()),other);
+    assert.equal(f.calls.feedback.some(e=>e.tone==="error"),false);
+  } finally {f.close();}
 });
 test("same road tool: anchor drag uses last sample, preserves grab offset and regenerates road",()=>{
   const f=fixture();
@@ -559,4 +639,3 @@ test("dragging an endpoint onto another road's vertex welds the two roads into a
     assert.equal(graph.nodes.some(n => n.id === road2End.id), false, "welded endpoint is absorbed by the target node");
   } finally { f.close(); }
 });
-
