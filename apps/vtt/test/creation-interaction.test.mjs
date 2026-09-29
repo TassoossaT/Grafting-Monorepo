@@ -127,7 +127,7 @@ test("ground answers a cut or a deleted face, a roof follows its base reshaped; 
 
 test("relations are declared by traits: floors, partitions and ground", () => {
   assert.deepEqual(surfaceTypesWithTrait("floor"), ["platform"]);
-  assert.deepEqual(surfaceTypesWithTrait("partition"), ["wall-white", "wall-gray"]);
+  assert.deepEqual(surfaceTypesWithTrait("partition"), ["roof-transition", "wall-white", "wall-gray"]);
 });
 
 test("resolveConformance checks vertical conformance capability across structure types", () => {
@@ -139,4 +139,3 @@ test("resolveConformance checks vertical conformance capability across structure
   assert.equal(resolveConformance("wall-white", "terrain"), false, "walls do not declare vertical conformance");
   assert.equal(resolveConformance("unknown-type", "terrain"), false, "unknown type defaults to false");
 });
-

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { initSync, ConstructionSession } from "../../../libs/domains/procgen/construction-wasm/pkg/grafting_procgen_construction_wasm.js";
-import { createEditHistoryStack, hasTrait, surfaceTypesWithTrait } from "../src/features/edit-construction/index.ts";
+import { cloudTypesFor, createEditHistoryStack, hasTrait, surfaceTypesWithTrait } from "../src/features/edit-construction/index.ts";
 
 initSync({ module: readFileSync(new URL("../../../libs/domains/procgen/construction-wasm/pkg/grafting_procgen_construction_wasm_bg.wasm", import.meta.url)) });
 const vector = (p) => [p.x, p.y, p.z];
@@ -23,7 +23,7 @@ export function sessionFixture() {
     getGraphSnapshot() { const s = JSON.parse(session.snapshot_json()); return { nodes: s.nodes.map((n) => ({ ...n, position: position(n.position) })), edges: s.edges.map((e) => ({ edgeId: e.id, startNodeId: e.source, endNodeId: e.target, curve: e.curve ?? undefined })) }; },
     getAllRegionTopologies: () => JSON.parse(session.all_region_topologies_json()).map(topology),
     getRegionTopology: (surfaceKey) => topology(JSON.parse(session.region_topology_json(JSON.stringify({ surfaceKey })))),
-    cloudFor: (request) => JSON.parse(session.cloud_json(JSON.stringify(request))),
+    cloudFor: (request) => JSON.parse(session.cloud_json(JSON.stringify({ ...request, surfaceTypes: request.surfaceTypes ?? cloudTypesFor(request.surfaceType) }))),
     planMotion(request) {
       calls.plans++;
       const result = JSON.parse(session.plan_motion_json(JSON.stringify({ ...request, seeds: request.seeds.map((s) => ({ ...s, delta: vector(s.delta) })) })));

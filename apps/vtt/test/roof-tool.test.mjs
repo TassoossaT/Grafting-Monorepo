@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { registerHooks } from "node:module";
+import { createAliasResolveHook } from "./support/alias-resolve-hook.mjs";
 import { roofTool } from "../src/composition/tabletop/tools/roof/roof-tool.ts";
 import { DEFAULT_TOOL_PARAMS, shownGlobalHandles } from "../src/features/edit-construction/index.ts";
 import { sessionFixture, addFace } from "./platform-session-fixture.mjs";
 import { surfaceRefFromNodeSet } from "../src/entities/map/index.ts";
+
+registerHooks(createAliasResolveHook(new URL("../src/", import.meta.url)));
+const { wallLineTool } = await import("../src/composition/tabletop/tools/walls/wall-line-tool.ts");
 
 function fixture() {
   const value = sessionFixture();
@@ -243,6 +248,20 @@ test("raising a gable's slope turns two waters into a hip end", () => {
   } finally { session.free(); }
 });
 
+test("lowering two slopes turns four waters into two wall closures", () => {
+  const value = roofed(4);
+  const { runtime, session } = value;
+  try {
+    for (const side of [1, 3]) {
+      const slope = shownGlobalHandles(scene(runtime)).find((handle) => handle.kind === "slope" && handle.recipeHandle.part.of.side === side && handle.recipeHandle.part.of.dormer === undefined);
+      assert.ok(slope);
+      dragHandle(value, slope, slope.position, 340);
+    }
+    assert.equal(roofs(runtime)[0].props.roof.slopes.filter((slope) => slope === 0).length, 2);
+    assert.equal(roofs(runtime).filter((face) => face.surfaceType === "roof-transition" && face.props.roofFace.upright).length, 2);
+  } finally { session.free(); }
+});
+
 test("pulling a corner out of a side adds a leaf, and moving a corner reshapes the roof", () => {
   const value = roofed();
   const { runtime, session } = value;
@@ -383,6 +402,103 @@ test("a platform cuts the roof with its own edges and restores it when removed",
     const moved = runtime.getAllRegionTopologies().find((face) => face.surfaceType === "platform");
     commitSurfaceRemoval(runtime, moved.surfaceKey, { transactionId: "remove-roof-platform" });
     assert.ok(roofs(runtime).every((face) => face.holes.length === 0), "removing the platform restores the roof");
+  } finally { session.free(); }
+});
+
+test("a cut closure joins the connected wall cloud", () => {
+  const value = roofed(2);
+  const { ctx, runtime, session } = value;
+  try {
+    commitPlatformContour(ctx, [[2, 0.5], [4, 0.5], [4, 1.5], [2, 1.5]].map(([x, z]) => ({ point: { x, y: 4, z } })), { ...DEFAULT_TOOL_PARAMS["platform-contour"], elevation: 4 });
+    const closure = roofs(runtime).find((face) => face.surfaceType === "roof-transition" && face.nodes.some((node) => Math.abs(node.position.x - 2) < 1e-5 && Math.abs(node.position.z - 1.5) < 1e-5 && Math.abs(node.position.y - 4) < 1e-5));
+    assert.ok(closure);
+    const shared = closure.nodes.find((node) => Math.abs(node.position.x - 2) < 1e-5 && Math.abs(node.position.z - 1.5) < 1e-5 && Math.abs(node.position.y - 4) < 1e-5);
+    assert.ok(shared);
+    const wall = addFace(runtime, "balcony-wall", "wall-white", [
+      shared,
+      { id: "balcony:foot", position: { x: 2, y: 4, z: 2.5 } },
+      { id: "balcony:head", position: { x: 2, y: 5, z: 2.5 } },
+      { id: "balcony:joint", position: { x: 2, y: 5, z: 1.5 } },
+    ]);
+    const cloud = runtime.cloudFor({ seed: closure.surfaceKey, surfaceType: closure.surfaceType }).surfaceKeys.map((key) => key.join("\u0000"));
+    assert.ok(cloud.includes(wall.surfaceKey.join("\u0000")), "roof closure and wall share one editable cloud");
+    const handles = shownGlobalHandles({ ...scene(runtime), cloudFor: runtime.cloudFor.bind(runtime) });
+    assert.ok(handles.some((handle) => handle.owner === "roof-transition" && handle.kind === "height"), "the closure exposes wall-cloud controls");
+  } finally { session.free(); }
+});
+
+test("a wall handle on the platform cut enlarges the connected roof opening", () => {
+  const value = roofed(2);
+  const { ctx, runtime, session } = value;
+  try {
+    commitPlatformContour(ctx, [[2, 0.5], [4, 0.5], [4, 1.5], [2, 1.5]].map(([x, z]) => ({ point: { x, y: 4, z } })), { ...DEFAULT_TOOL_PARAMS["platform-contour"], elevation: 4 });
+    const handle = shownGlobalHandles({ ...scene(runtime), cloudFor: runtime.cloudFor.bind(runtime) }).find((candidate) => candidate.owner === "roof-transition" && candidate.kind === "side" && Math.abs(candidate.pivot.z - 1.5) < 1e-5);
+    assert.ok(handle, "the cut exposes a wall side handle");
+    dragWith(wallLineTool, value, handle, { ...handle.position, z: handle.position.z + 0.3 }, DEFAULT_TOOL_PARAMS["wall-line"]);
+    const floor = runtime.getAllRegionTopologies().find((face) => face.surfaceType === "platform");
+    assert.ok(floor.nodes.some((node) => Math.abs(node.position.z - 1.8) < 1e-4), "wall edit moves the platform rim");
+    assert.ok(roofs(runtime).some((face) => face.nodes.some((node) => Math.abs(node.position.z - 1.8) < 1e-4)), "the roof cut follows the edited rim");
+  } finally { session.free(); }
+});
+
+test("a roof can start from a cut wall when its wall cloud closes a room", () => {
+  const value = roofed(2);
+  const { ctx, runtime, session } = value;
+  try {
+    commitPlatformContour(ctx, [[2, 0.5], [4, 0.5], [4, 1.5], [2, 1.5]].map(([x, z]) => ({ point: { x, y: 4, z } })), { ...DEFAULT_TOOL_PARAMS["platform-contour"], elevation: 4 });
+    const closure = roofs(runtime).find((face) => face.surfaceType === "roof-transition" && face.nodes.some((node) => Math.abs(node.position.x - 2) < 1e-5 && Math.abs(node.position.y - 4.5) < 1e-5 && Math.abs(node.position.z - 1.5) < 1e-5)
+      && face.nodes.some((node) => Math.abs(node.position.x - 4) < 1e-5 && Math.abs(node.position.y - 4.5) < 1e-5 && Math.abs(node.position.z - 1.5) < 1e-5));
+    assert.ok(closure);
+    const a = closure.nodes.find((node) => Math.abs(node.position.x - 2) < 1e-5 && Math.abs(node.position.y - 4.5) < 1e-5 && Math.abs(node.position.z - 1.5) < 1e-5);
+    const b = closure.nodes.find((node) => Math.abs(node.position.x - 4) < 1e-5 && Math.abs(node.position.y - 4.5) < 1e-5 && Math.abs(node.position.z - 1.5) < 1e-5);
+    const c = { id: "balcony-roof:c", position: { x: 4, y: 4.5, z: 3 } };
+    const d = { id: "balcony-roof:d", position: { x: 2, y: 4.5, z: 3 } };
+    const bottom = (node) => ({ id: `${node.id}:foot`, position: { ...node.position, y: 4 } });
+    addFace(runtime, "balcony-roof:right", "wall-white", [bottom(b), bottom(c), c, b]);
+    addFace(runtime, "balcony-roof:back", "wall-white", [bottom(c), bottom(d), d, c]);
+    addFace(runtime, "balcony-roof:left", "wall-white", [bottom(d), bottom(a), a, d]);
+    const before = groups(runtime).size;
+    click(value, { point: { x: 3, y: 4.25, z: 1.5 }, surfaceRef: surfaceRefFromNodeSet(closure.surfaceKey) }, { ...DEFAULT_TOOL_PARAMS.roof, action: "base", height: 1 });
+    assert.equal(groups(runtime).size, before + 1, "clicking the cut wall creates the second roof");
+  } finally { session.free(); }
+});
+
+test("drawing from an open cut wall starts a separate roof at its top", () => {
+  const value = roofed(2);
+  const { ctx, runtime, session } = value;
+  try {
+    commitPlatformContour(ctx, [[2, 0.5], [4, 0.5], [4, 1.5], [2, 1.5]].map(([x, z]) => ({ point: { x, y: 4, z } })), { ...DEFAULT_TOOL_PARAMS["platform-contour"], elevation: 4 });
+    const wall = roofs(runtime).find((face) => face.surfaceType === "roof-transition" && face.nodes.some((node) => Math.abs(node.position.x - 2) < 1e-5 && Math.abs(node.position.y - 4.5) < 1e-5 && Math.abs(node.position.z - 1.5) < 1e-5)
+      && face.nodes.some((node) => Math.abs(node.position.x - 4) < 1e-5 && Math.abs(node.position.y - 4.5) < 1e-5 && Math.abs(node.position.z - 1.5) < 1e-5));
+    assert.ok(wall);
+    const before = groups(runtime).size;
+    const start = { point: { x: 2, y: 4.25, z: 1.5 }, surfaceRef: surfaceRefFromNodeSet(wall.surfaceKey) };
+    const current = { point: { x: 4, y: 4.25, z: 3 } };
+    const params = { ...DEFAULT_TOOL_PARAMS.roof, action: "draw", height: 1 };
+    roofTool.onPointerDown(ctx, start, params);
+    roofTool.onPointerUp(ctx, { start, current, samples: [start, current] }, params);
+    assert.equal(groups(runtime).size, before + 1, "an open wall supports a drawn roof");
+    assert.ok(roofs(runtime).some((face) => Math.abs(face.props.roof.elevation - 4.5) < 1e-5), "the new eaves stand on the wall top");
+  } finally { session.free(); }
+});
+
+test("a cut wall can roof its supporting platform with one base click", () => {
+  const value = roofed(2);
+  const { ctx, runtime, session } = value;
+  try {
+    commitPlatformContour(ctx, [[2, 0.5], [4, 0.5], [4, 1.5], [2, 1.5]].map(([x, z]) => ({ point: { x, y: 4, z } })), { ...DEFAULT_TOOL_PARAMS["platform-contour"], elevation: 4 });
+    const wall = roofs(runtime).find((face) => face.surfaceType === "roof-transition" && face.nodes.some((node) => Math.abs(node.position.x - 2) < 1e-5 && Math.abs(node.position.y - 4.5) < 1e-5 && Math.abs(node.position.z - 1.5) < 1e-5)
+      && face.nodes.some((node) => Math.abs(node.position.x - 4) < 1e-5 && Math.abs(node.position.y - 4.5) < 1e-5 && Math.abs(node.position.z - 1.5) < 1e-5));
+    assert.ok(wall);
+    const before = groups(runtime).size;
+    click(value, { point: { x: 3, y: 4.25, z: 1.5 }, surfaceRef: surfaceRefFromNodeSet(wall.surfaceKey) }, { ...DEFAULT_TOOL_PARAMS.roof, action: "base", height: 1 });
+    assert.equal(groups(runtime).size, before + 1);
+    const balcony = roofs(runtime).find((face) => Math.abs(face.props.roof.elevation - 4.5) < 1e-5);
+    assert.equal(balcony?.props.roof.base?.offset, 0.5);
+    const floor = runtime.getAllRegionTopologies().find((face) => face.surfaceType === "platform");
+    commitRegionEdit(runtime, floor.nodes.map((node) => ({ kind: "move-vertex", nodeId: node.id, position: { ...node.position, x: node.position.x + 1 } })), { transactionId: "move-balcony-roof-base" });
+    const followed = roofs(runtime).find((face) => Math.abs(face.props.roof.elevation - 4.5) < 1e-5);
+    assert.equal(Math.min(...followed.props.roof.footprints[0].outer.map(([x]) => x)), 3, "the second roof follows the moved platform");
   } finally { session.free(); }
 });
 

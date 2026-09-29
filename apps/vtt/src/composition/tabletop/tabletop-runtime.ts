@@ -72,6 +72,7 @@ import type {
 import {
   EMPTY_OUTCOME,
   applyEditOp,
+  cloudTypesFor,
   hasTrait,
   mergeOutcomes,
   surfaceTypesWithTrait,
@@ -649,7 +650,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
       topologies: this.#construction.getAllRegionTopologies(),
       contour: typeof this.#construction.getCurvedEdges === "function" ? this.#construction.getCurvedEdges() : [],
       ...(typeof this.#construction.curveBatch === "function" ? { port: this.#construction } : {}),
-      cloudFor: (request) => this.#construction.cloudFor(request),
+      cloudFor: (request) => this.cloudFor(request),
       pointsOnly: this.#pointHandlesOnly,
       ...(this.#globalHandleOwners ? { owns: this.#globalHandleOwners } : {}),
       ...(this.#handleFocus ? { focus: this.#handleFocus } : {}),
@@ -1212,7 +1213,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
 
   cloudFor(request: CloudRequest): CloudOutcome {
     this.#requireReady("querying a cloud");
-    return this.#construction.cloudFor(request);
+    return this.#construction.cloudFor({ ...request, surfaceTypes: request.surfaceTypes ?? cloudTypesFor(request.surfaceType) });
   }
 
   applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void {

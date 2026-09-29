@@ -74,6 +74,8 @@ export interface RolePolicy {
   readonly scope: EditScope;
   /** Whole-object translation also transports connected support clouds horizontally. */
   readonly transport?: boolean;
+  /** This edit deliberately reshapes geometry sharing the grabbed boundary; keep that join in place. */
+  readonly preserveJoined?: boolean;
   /**
    * Extra ops fired alongside the primary one, as one transaction -- e.g.
    * moving a wall's bottom corner moves its paired top corner by the *same*
@@ -452,6 +454,8 @@ export interface StructureTypeDefinition {
   readonly label: string;
   /** What this type is for, as other types and tools see it. See {@link StructureTrait}. */
   readonly traits: readonly StructureTrait[];
+  /** Connected types sharing this family form one editable cloud despite different surface materials. */
+  readonly cloudFamily?: string;
   /**
    * Whether a gesture on this type can only be planned through the session's
    * structural motion solver. Without one, such a gesture is refused instead
@@ -484,6 +488,8 @@ export interface StructureTypeDefinition {
   readonly spine?: SpineGeneration;
   /** Present when this type is regenerated whole from a recipe its faces keep -- see {@link RecipeGeneration}. */
   readonly recipe?: RecipeGeneration;
+  /** Whether this type also exposes its connected cloud's handles when it carries a recipe. */
+  readonly cloudHandlesWithRecipe?: boolean;
   /**
    * The whole-structure handles this type shows (`global-handles/`): a pivot
    * that moves it, a rotate handle that turns it, a height handle, a turns

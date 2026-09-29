@@ -17,6 +17,7 @@ import {
   planEdit,
   planGlobalHandle,
   resolveCloudTopology,
+  resolvePolicy,
   shownGlobalHandleAt,
   type AtomicEditOp,
   type GlobalHandle,
@@ -159,6 +160,7 @@ function resolvedPart(ctx: ToolContext, edit: GlobalHandleEdit, scene: GlobalHan
   if (!cloud) throw new Error("A estrutura não está mais aqui.");
   const gesture = { surfaceKey: edit.seed, target: edit.target, delta: edit.delta };
   const face = scene.topologies.find((topology) => surfaceKeyText(topology.surfaceKey) === surfaceKeyText(edit.seed));
+  const preserveJoined = face !== undefined && resolvePolicy(face, edit.target).preserveJoined === true;
   const links = face ? endJoinsOf(scene.graph, scene.topologies, face) : [];
   const positions = new Map(scene.graph.nodes.map((node) => [node.id, node.position]));
   const plan = planEdit(cloud, gesture, scene.graph, ctx.runtime);
@@ -166,10 +168,10 @@ function resolvedPart(ctx: ToolContext, edit: GlobalHandleEdit, scene: GlobalHan
     const placed = placedBy(plan.ops, scene.topologies);
     // A floor pushed never takes a joined structure along, not even whole: any join whose nodes it would move is paused.
     const reshaped = reshapedWelds(links, positions, new Map(placed.moves.map((move) => [move.nodeId, move.position])), face !== undefined && hasTrait(face.surfaceType, "floor"));
-    if (reshaped.length > 0) throw new NeedsPause(reshaped);
+    if (reshaped.length > 0 && !preserveJoined) throw new NeedsPause(reshaped);
     // Held still by what it is joined to -- a solid floor walking its end's edge: paused, and planned again.
     const pushes = Math.hypot(edit.delta.x, edit.delta.y, edit.delta.z) > 1e-9;
-    if (pushes && placed.moves.length === 0 && links.length > 0) throw new NeedsPause(links);
+    if (pushes && placed.moves.length === 0 && links.length > 0 && !preserveJoined) throw new NeedsPause(links);
     return placed;
   }
   // Refused as welded: every weld the structure takes part in is paused, and the push planned again.
@@ -426,7 +428,9 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
           // A part held with a solid structure slides off it: let go for the drag, so the preview is the real thing.
           if (!pause && !released) {
             const transactionId = `${operationId}:release`;
-            const request = releasePart(scene.topologies, scene.graph, planned, transactionId);
+            const source = scene.topologies.find((topology) => surfaceKeyText(topology.surfaceKey) === surfaceKeyText(planned.seed));
+            const keepJoined = source !== undefined && resolvePolicy(source, planned.target).preserveJoined === true;
+            const request = keepJoined ? undefined : releasePart(scene.topologies, scene.graph, planned, transactionId);
             if (request) {
               ctx.runtime.transact(transactionId, "local", () => ctx.runtime.applyPatchReplacement(request, "local", transactionId));
               released = { transactionId, was: scene };
@@ -493,4 +497,3 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
     },
   };
 }
-

@@ -385,6 +385,8 @@ export interface RemoveSurfaceRequest {
 export interface CloudRequest {
   readonly seed: ConstructionSurfaceKey;
   readonly surfaceType: string;
+  /** Optional compatible types in the seed's editable cloud family. */
+  readonly surfaceTypes?: readonly string[];
 }
 
 export interface CloudOutcome {

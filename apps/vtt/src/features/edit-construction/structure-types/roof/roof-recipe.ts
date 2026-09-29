@@ -23,6 +23,8 @@ export interface RoofBaseRef {
   readonly kind: "floor" | "walls";
   readonly surfaceKey: readonly string[];
   readonly nodeIds: readonly string[];
+  /** Height above a floor when a wall on its rim supports the roof. */
+  readonly offset?: number;
 }
 
 /** A roof's request, and the base it follows when it stands on one. */

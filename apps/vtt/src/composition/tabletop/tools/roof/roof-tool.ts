@@ -3,6 +3,7 @@ import {
   carriedOnto,
   DEFAULT_TOOL_PARAMS,
   hasTrait,
+  uprightPosts,
   dormerAt,
   outlineOf,
   planarDifference,
@@ -70,12 +71,16 @@ function floorsOf(ctx: ToolContext) {
   return ctx.runtime.getAllRegionTopologies().filter((face) => hasTrait(face.surfaceType, "floor") && face.outerLoops.length === 1);
 }
 
-/** Where a roof begun at `start` stands: on the node or the floor it was begun on, else at the tool's elevation. */
+/** Where a roof begun at `start` stands: on a node, floor, or wall top. */
 function startElevation(ctx: ToolContext, start: PointerSample, params: Params): number {
   const picked = start.nodeId ? ctx.runtime.getGraphSnapshot().nodes.find((node) => node.id === start.nodeId) : undefined;
   if (picked) return picked.position.y;
   const floor = start.surfaceRef ? floorsOf(ctx).find((face) => surfaceRefFromNodeSet(face.surfaceKey) === start.surfaceRef) : undefined;
-  return floor?.nodes[0]?.position.y ?? params.elevation;
+  if (floor) return floor.nodes[0]!.position.y;
+  const wall = start.surfaceRef ? ctx.runtime.getAllRegionTopologies().find((face) => surfaceRefFromNodeSet(face.surfaceKey) === start.surfaceRef && hasTrait(face.surfaceType, "partition")) : undefined;
+  const tops = wall ? new Set(uprightPosts(wall).map((post) => post.top)) : undefined;
+  const topY = wall?.nodes.filter((node) => tops?.has(node.id)).map((node) => node.position.y);
+  return topY?.length ? Math.max(...topY) : params.elevation;
 }
 
 /** A drawn outline as plan corners, curved sides followed by short straight ones. */
@@ -186,7 +191,8 @@ function stroked(ctx: ToolContext, contour: readonly FittedEdge[], level: number
     }));
     return { requests, replaces: cut.flatMap(({ faces }) => faces) };
   }
-  const fused = roofs.filter(({ recipe }) => meets(ctx, outline, recipe));
+  const unanchored = Math.abs(level - params.elevation) < 1e-4;
+  const fused = roofs.filter(({ recipe }) => (unanchored || Math.abs(recipe.elevation - level) < 1e-4) && meets(ctx, outline, recipe));
   if (fused.length === 0) return { requests: [drawn], replaces: [] };
   // Their union: one piece where they overlap or share a side, pieces joined at a corner where they only touch there.
   const area = planarUnion(ctx.runtime, polygonsOf(drawn.footprints), ...fused.map(({ recipe }) => polygonsOf(recipe.footprints)));

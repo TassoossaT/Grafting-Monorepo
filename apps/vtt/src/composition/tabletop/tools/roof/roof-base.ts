@@ -23,7 +23,14 @@ export function roofBaseAt(topologies: readonly ConstructionRegionTopology[], sa
   const clicked = topologies.find((face) => (
     sample.surfaceRef ? surfaceRefFromNodeSet(face.surfaceKey) === sample.surfaceRef : sample.nodeId !== undefined && face.nodes.some((node) => node.id === sample.nodeId)));
   if (clicked && hasTrait(clicked.surfaceType, "floor")) return floorBase(clicked);
-  if (clicked && hasTrait(clicked.surfaceType, "partition")) return wallLoopBase(topologies, clicked);
+  if (clicked && hasTrait(clicked.surfaceType, "partition")) {
+    try { return wallLoopBase(topologies, clicked); }
+    catch (error) {
+      const platform = floorAboveWall(topologies, clicked);
+      if (platform) return platform;
+      throw error;
+    }
+  }
   throw new Error("Clique numa plataforma ou numa parede que feche um cômodo.");
 }
 
@@ -41,7 +48,11 @@ export function roofBaseOf(topologies: readonly ConstructionRegionTopology[], re
     ?? topologies.find((t) => hasTrait(t.surfaceType, trait) && t.nodes.some((node) => nodes.has(node.id)));
   if (!face) return undefined;
   try {
-    return ref.kind === "floor" ? floorBase(face) : wallLoopBase(topologies, face, ref.nodeIds);
+    if (ref.kind === "floor") {
+      const floor = floorBase(face);
+      return { ...floor, elevation: floor.elevation + (ref.offset ?? 0), ref };
+    }
+    return wallLoopBase(topologies, face, ref.nodeIds);
   } catch {
     return undefined;
   }
@@ -59,6 +70,24 @@ function floorBase(source: ConstructionRegionTopology): RoofBase {
   const at = new Map(source.nodes.map((node) => [node.id, node.position]));
   const ref: RoofBaseRef = { kind: "floor", surfaceKey: source.surfaceKey, nodeIds: source.outerLoops[0]!.map((use) => use.startNodeId) };
   return { footprint: { outer: ringOf(source.outerLoops[0]!, at), holes: source.holes.map((hole) => ringOf(hole, at)) }, elevation, ref };
+}
+
+/** A level wall top on a platform rim can cover that platform without a closed room. */
+function floorAboveWall(topologies: readonly ConstructionRegionTopology[], wall: ConstructionRegionTopology): RoofBase | undefined {
+  const posts = uprightPosts(wall);
+  const tops = wall.nodes.filter((node) => posts.some((post) => post.top === node.id));
+  if (tops.length < 2 || !tops.every((node) => Math.abs(node.position.y - tops[0]!.position.y) < LEVEL)) return undefined;
+  const feet = new Set(posts.map((post) => post.foot));
+  for (const face of topologies.filter((candidate) => hasTrait(candidate.surfaceType, "floor"))) {
+    if (face.nodes.filter((node) => feet.has(node.id)).length < 2) continue;
+    try {
+      const floor = floorBase(face);
+      const offset = tops[0]!.position.y - floor.elevation;
+      if (offset <= LEVEL) continue;
+      return { ...floor, elevation: tops[0]!.position.y, ref: { ...floor.ref, offset } };
+    } catch { /* A different floor may share the wall's vertices. */ }
+  }
+  return undefined;
 }
 
 /**

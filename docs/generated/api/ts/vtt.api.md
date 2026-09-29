@@ -6862,6 +6862,10 @@ real roles to name, where terrain has none and can only regenerate. Shape
 is what decides whether two products share a table -- not whether they
 happen to share a generator.
 
+### `function vtt.registry.cloudTypesFor(surfaceType: string): readonly string[]`
+
+Surface types admitted to the same connected cloud as `surfaceType`.
+
 ### `function vtt.registry.firstRefusal(resolved: readonly ResolvedCoverage[]): string | undefined`
 
 The first refusal in a resolved coverage, if any.
@@ -6933,6 +6937,10 @@ outlive the face being replaced.
 ### `property vtt.roof-recipe.RoofBaseRef.kind: "floor" | "walls"`
 
 ### `property vtt.roof-recipe.RoofBaseRef.nodeIds: readonly string[]`
+
+### `property vtt.roof-recipe.RoofBaseRef.offset?: number`
+
+Height above a floor when a wall on its rim supports the roof.
 
 ### `property vtt.roof-recipe.RoofBaseRef.surfaceKey: readonly string[]`
 
@@ -7099,7 +7107,7 @@ its eaves reach and whether its leaves curve are the covering's business.
 
 ### `variable vtt.roof-structure.roofTransitionStructureType: StructureTypeDefinition`
 
-Upright closures belong to the roof recipe but have their own wall-like asset identity.
+Upright closures follow the roof recipe while joining wall-cloud editing.
 
 ### `interface vtt.structural-cut.StructuralCutArea`
 
@@ -7457,6 +7465,10 @@ solver, derivation and validation still run on what it returns. Gets
 the delta after constrain. Throws to refuse; `undefined` falls
 back to the grabbed part's own move.
 
+### `property vtt.structure-type.RolePolicy.preserveJoined?: boolean`
+
+This edit deliberately reshapes geometry sharing the grabbed boundary; keep that join in place.
+
 ### `property vtt.structure-type.RolePolicy.reshape?: (context: ReshapeContext) => readonly AtomicEditOp[]`
 
 Present when the grabbed edge's curve may be reshaped through a curve
@@ -7582,6 +7594,14 @@ when it lands on a floor -- and the other end where it stands, still on
 `kept` when it stays welded. Throws to refuse.
 
 ### `interface vtt.structure-type.StructureTypeDefinition`
+
+### `property vtt.structure-type.StructureTypeDefinition.cloudFamily?: string`
+
+Connected types sharing this family form one editable cloud despite different surface materials.
+
+### `property vtt.structure-type.StructureTypeDefinition.cloudHandlesWithRecipe?: boolean`
+
+Whether this type also exposes its connected cloud's handles when it carries a recipe.
 
 ### `property vtt.structure-type.StructureTypeDefinition.conformsTo?: (support: ReadonlySet<StructureTrait>, subtype?: string) => boolean`
 
@@ -9373,6 +9393,10 @@ surfaces reachable from `seed` by shared graph nodes.
 ### `property vtt.construction-session-port.CloudRequest.seed: ConstructionSurfaceKey`
 
 ### `property vtt.construction-session-port.CloudRequest.surfaceType: string`
+
+### `property vtt.construction-session-port.CloudRequest.surfaceTypes?: readonly string[]`
+
+Optional compatible types in the seed's editable cloud family.
 
 ### `interface vtt.construction-session-port.ConstructionBoundsXZ`
 

@@ -670,7 +670,7 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
 
   cloudFor(request: CloudRequest): CloudOutcome {
     const response = JSON.parse(
-      this.#require().cloud_json(JSON.stringify({ seed: request.seed, surfaceType: request.surfaceType })),
+      this.#require().cloud_json(JSON.stringify({ seed: request.seed, surfaceType: request.surfaceType, surfaceTypes: request.surfaceTypes })),
     ) as { surfaceKeys: readonly (readonly string[])[] };
     return { surfaceKeys: response.surfaceKeys };
   }

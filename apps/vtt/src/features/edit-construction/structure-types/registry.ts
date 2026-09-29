@@ -50,8 +50,8 @@ export const STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[] = Ob
   slopedPlatformStructureType,
   roofStructureType,
   roofTransitionStructureType,
-  panelStructureType("wall-white", "Parede branca", "one upright panel per contour edge, drawn or stamped", ["partition", "accepts-cuts"]),
-  panelStructureType("wall-gray", "Parede cinza", "one upright panel per contour edge, drawn or stamped", ["partition", "accepts-cuts"]),
+  Object.freeze({ ...panelStructureType("wall-white", "Parede branca", "one upright panel per contour edge, drawn or stamped", ["partition", "accepts-cuts"]), cloudFamily: "wall" }),
+  Object.freeze({ ...panelStructureType("wall-gray", "Parede cinza", "one upright panel per contour edge, drawn or stamped", ["partition", "accepts-cuts"]), cloudFamily: "wall" }),
   openingStructureType,
   organicStructureType(
     "terrain",
@@ -90,6 +90,12 @@ const NO_TRAITS: ReadonlySet<StructureTrait> = new Set();
 /** The definition governing one surface type, or `undefined` if it has none. */
 export function structureTypeFor(surfaceType: string): StructureTypeDefinition | undefined {
   return DEFINITION_BY_SURFACE_TYPE.get(surfaceType);
+}
+
+/** Surface types admitted to the same connected cloud as `surfaceType`. */
+export function cloudTypesFor(surfaceType: string): readonly string[] {
+  const family = structureTypeFor(surfaceType)?.cloudFamily;
+  return family === undefined ? [surfaceType] : STRUCTURE_TYPE_DEFINITIONS.filter((type) => type.cloudFamily === family).map((type) => type.surfaceType);
 }
 
 /** The traits one surface type declares. An undeclared type has none. */

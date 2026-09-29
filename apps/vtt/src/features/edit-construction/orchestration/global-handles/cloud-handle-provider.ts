@@ -22,7 +22,7 @@ function cloudsOf(scene: GlobalHandleScene): readonly (readonly ConstructionRegi
   const candidates = scene.topologies.filter((topology) => {
     const type = structureTypeFor(topology.surfaceType);
     // A face keeping a recipe is its recipe's to edit (`recipe-handle-provider.ts`).
-    return type !== undefined && type.spine === undefined && type.recipe?.of(topology) === undefined && (type.globalHandles?.length ?? 0) > 0;
+    return type !== undefined && type.spine === undefined && (type.cloudHandlesWithRecipe || type.recipe?.of(topology) === undefined) && (type.globalHandles?.length ?? 0) > 0;
   });
   const byKey = new Map(candidates.map((topology) => [topology.surfaceKey.join("|"), topology]));
   const placed = new Set<string>();

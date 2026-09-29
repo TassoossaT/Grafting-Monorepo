@@ -19,13 +19,13 @@ use crate::footprint;
 use crate::geometry::connected_component;
 use crate::grid_generation;
 use crate::mesh::{self, region_id_to_wire};
-use crate::patch_replacement;
 use crate::panel_runs;
+use crate::patch_replacement;
 use crate::pins::{self, Cutting, HostTracer, SurfaceCapabilities};
 use crate::region_annotations::RegionAnnotations;
 use crate::region_editing;
-use crate::region_props;
 use crate::region_overlay;
+use crate::region_props;
 
 fn parse<T: serde::de::DeserializeOwned>(json: &str) -> Result<T, JsValue> {
     serde_json::from_str(json)
@@ -493,8 +493,12 @@ impl ConstructionSession {
 
     /// Drops pins; the nodes stay where they are.
     pub fn unpin_nodes_json(&mut self, request_json: &str) -> Result<String, JsValue> {
-        let mut response = pins::unpin_nodes(&self.topology, &mut self.annotations.pins, parse(request_json)?)
-            .map_err(to_js_error)?;
+        let mut response = pins::unpin_nodes(
+            &self.topology,
+            &mut self.annotations.pins,
+            parse(request_json)?,
+        )
+        .map_err(to_js_error)?;
         self.track(&mut response);
         serialize(&response)
     }
@@ -548,13 +552,12 @@ impl ConstructionSession {
     /// Replaces the regions' property bag, or clears it when `props` is
     /// null. See `region_props::set_region_props`.
     pub fn set_region_props_json(&mut self, request_json: &str) -> Result<String, JsValue> {
-        let mut response =
-            region_props::set_region_props(
+        let mut response = region_props::set_region_props(
             &self.topology,
             &mut self.annotations.props,
             parse(request_json)?,
         )
-                .map_err(to_js_error)?;
+        .map_err(to_js_error)?;
         self.track(&mut response);
         serialize(&response)
     }
@@ -841,12 +844,18 @@ impl ConstructionSession {
     pub fn cloud_json(&self, request_json: &str) -> Result<String, JsValue> {
         let request: CloudRequest = parse(request_json)?;
         let seed = mesh::region_id_from_wire(&request.seed).map_err(to_js_error)?;
+        let compatible = request
+            .surface_types
+            .unwrap_or_else(|| vec![request.surface_type])
+            .into_iter()
+            .map(SurfaceType::new)
+            .collect::<Vec<_>>();
         let cloud = connected_component(
             &self.surfaces,
             &self.topology,
             &self.known_regions,
             &seed,
-            &SurfaceType::new(request.surface_type),
+            &compatible,
         );
         let mut surface_keys: Vec<Vec<String>> = cloud.iter().map(region_id_to_wire).collect();
         surface_keys.sort();
@@ -994,6 +1003,8 @@ struct SnapshotResponse {
 struct CloudRequest {
     seed: Vec<String>,
     surface_type: String,
+    #[serde(default)]
+    surface_types: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize)]
