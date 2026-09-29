@@ -16,57 +16,52 @@ const keyText = (key: ConstructionSurfaceKey) => key.join("\u0000");
 const faceAt = (ctx: ToolContext, key: ConstructionSurfaceKey) => ctx.runtime.getAllRegionTopologies().find((face) => keyText(face.surfaceKey) === keyText(key));
 const facesOf = (ctx: ToolContext, group: string) => ctx.runtime.getAllRegionTopologies().filter((face) => recipeOf(face)?.group === group).map((face) => face.surfaceKey);
 
-/** Points each curved piece of an outline is set down by. */
-const CURVE_SAMPLES = 8;
-/** How far a side of an opening set down in a front may stray from its true line before it is broken. */
-const BEND = 0.005;
+/** Points each curved piece of a ghost outline is drawn by. */
+const CURVE_SAMPLES = 12;
+/** The least upright wall a stand's front keeps at its sides, under its eaves. */
+const MIN_EAVE = 0.1;
+/** The generator's clearance between a dormer and its leaf's rim. */
+const RIM = 0.01;
+/** How far below the leaf a stopped opening's top stays, so it still meets the leaf. */
+const STOP_SHORT = 0.005;
 
 /** A stand's waters: how steeply each rises from its left and right sides, zero a gable. */
 interface Waters {
   readonly left: number;
   readonly right: number;
 }
-/** Two waters at the gentlest the law allows: what a stand starts with. */
+/** What a stand starts with: two waters at a right angle's pitch. */
 const TWO_WATERS: Waters = { left: OPENING_DORMER_PITCH, right: OPENING_DORMER_PITCH };
 const watersOf = (dormer: RoofDormer): Waters => ({ right: dormer.slopes[1], left: dormer.slopes[3] });
 
-/** How high its waters stand above its eaves at `x` across a front `width` wide: the lower of the two, one alone where the other is a gable. */
+/** How high `waters` stand above their eaves at `x` across a front `width` wide: the lower of the two, one alone where the other is a gable. */
 function roofOver(waters: Waters, width: number, x: number): number {
   return Math.min(waters.left > 0 ? waters.left * x : Infinity, waters.right > 0 ? waters.right * (width - x) : Infinity);
 }
 
-/** `look`'s outline as points `[x, y]` across its box, `x` from its left side, `y` up from its sill. */
-function outlinePoints(look: StandLook): [number, number][] {
-  return openingPath(look.shape, look.width, look.height).flatMap((segment) => {
-    const steps = segment.controls === undefined ? 1 : CURVE_SAMPLES;
-    return Array.from({ length: steps }, (_, i) => pointAt(segment, i / steps) as [number, number]);
-  });
-}
-
 /**
- * The waters over an opening of `look`: their eaves as low as lets them clear
- * every point of its outline -- at its top for a plain rectangle, touching the
- * curve of an arch or a round one -- and how high their ridge stands.
+ * The front a stand raises for an opening of `look`: the opening is that
+ * whole front, its ridge the opening's top. Its eaves stand as far below as
+ * its waters rise across it -- the waters made gentler where the opening is
+ * too low to keep `MIN_EAVE` of wall at its sides.
  */
-function gableFor(look: StandLook, waters: Waters): { readonly eave: number; readonly ridge: number } {
-  const eave = outlinePoints(look).reduce((low, [x, y]) => Math.max(low, y - roofOver(waters, look.width, x)), 0);
-  const across = Array.from({ length: 33 }, (_, i) => roofOver(waters, look.width, (look.width * i) / 32));
-  return { eave, ridge: eave + Math.max(...across) };
+function frontFor(look: StandLook, waters: Waters): { readonly eave: number; readonly waters: Waters } {
+  const rise = Math.max(...Array.from({ length: 33 }, (_, i) => roofOver(waters, look.width, (look.width * i) / 32)));
+  if (!Number.isFinite(rise) || rise <= 0) return { eave: look.height, waters };
+  const room = look.height - MIN_EAVE;
+  const gentler = rise > room ? room / rise : 1;
+  return { eave: look.height - rise * gentler, waters: { left: waters.left * gentler, right: waters.right * gentler } };
 }
-/** The generator's clearance between a dormer and its leaf's rim. */
-const RIM = 0.01;
-/** How far below the leaf a stopped opening's top stays, so it still meets the leaf. */
-const STOP_SHORT = 0.005;
 
 /**
  * The dormer for an opening of `look` whose front's middle stands at `at` on
- * leaf side `side`: as wide as the opening, `waters` over it -- its gabled
- * front holding whatever outline it has. Its slopes are its own, so a roof
- * made steeper or flatter leaves it and its opening as they stand.
+ * leaf side `side`: as wide and as high as the opening, `waters` over it.
+ * Its slopes are its own, so a roof made steeper or flatter leaves it and
+ * its opening as they stand.
  */
 function standFor(recipe: RoofRecipe, side: number, at: Point, look: StandLook, waters: Waters = TWO_WATERS): RoofDormer {
-  const { eave } = gableFor(look, waters);
-  return { ...dormerAt(recipe, side, at, look.width, eave, 2), slopes: [0, waters.right, 0, waters.left], absolute: true, opening: true };
+  const front = frontFor(look, waters);
+  return { ...dormerAt(recipe, side, at, look.width, front.eave, 2), slopes: [0, front.waters.right, 0, front.waters.left], absolute: true, opening: true };
 }
 
 /** How far from `o` along `d` the ring `ring` is first met; infinite when never. */
@@ -87,11 +82,11 @@ function reach(ring: readonly Point[], o: Point, d: Point): number {
 
 /**
  * `look` at `at` on `leaf`, stopped where the leaf stops it: no wider than
- * the leaf runs along its eave there, no taller than lets the ridge over it
- * meet the leaf behind. What a preview shows and what is committed;
- * `undefined` where not even the smallest opening fits.
+ * the leaf runs along its eave there, its ridge -- the opening's top -- no
+ * higher than the leaf reaches behind it. What a preview shows and what is
+ * committed; `undefined` where not even the smallest opening fits.
  */
-function fit(leaf: ConstructionRegionTopology, at: Point, look: StandLook, waters: Waters = TWO_WATERS): Placed | undefined {
+function fit(leaf: ConstructionRegionTopology, at: Point, look: StandLook): Placed | undefined {
   const recipe = recipeOf(leaf), role = roleOf(leaf);
   const ring3 = faceRings(leaf)[0] ?? [];
   const plane = planeOf(ring3);
@@ -107,27 +102,15 @@ function fit(leaf: ConstructionRegionTopology, at: Point, look: StandLook, water
   const front = along((s0 + s1) / 2);
   const base = heightAt(front);
   // As deep as the generator makes it: the leaf's nearest rim behind its
-  // front corners and middle, less two clearances -- where its top has to
+  // front corners and middle, less two clearances -- where its ridge has to
   // have met the leaf already.
   const [left, right] = [along(s0), along(s1)];
   const depth = Math.min(...[left, front, right].map((p) => reach(ring, p, n))) - 2 * RIM;
   if (!(depth > 0) || !Number.isFinite(depth)) return undefined;
   const room = Math.min(...[left, front, right].map((p) => heightAt([p[0] + n[0] * depth, p[1] + n[1] * depth]))) - base - STOP_SHORT;
-  // Its ridge -- eaves and rise both growing with it -- no higher than the leaf reaches there.
-  const width = s1 - s0;
-  const ridge = (height: number) => gableFor({ ...look, width, height }, waters).ridge;
-  let height = look.height;
-  if (ridge(height) > room) {
-    if (ridge(MIN_OPENING_SIZE) > room) return undefined;
-    let [low, high] = [MIN_OPENING_SIZE, look.height];
-    for (let i = 0; i < 40; i++) {
-      const middle = (low + high) / 2;
-      if (ridge(middle) <= room) low = middle;
-      else high = middle;
-    }
-    height = low;
-  }
-  return { at: { x: front[0], y: base, z: front[1] }, look: { ...look, width, height } };
+  const height = Math.min(look.height, room);
+  if (!(height >= MIN_OPENING_SIZE)) return undefined;
+  return { at: { x: front[0], y: base, z: front[1] }, look: { ...look, width: s1 - s0, height } };
 }
 
 /** The dormer raised for an opening whose front is `host`, and the roof it stands on. */
@@ -153,14 +136,17 @@ function refitted(ctx: ToolContext, host: ConstructionSurfaceKey, look: StandLoo
     return recipeOf(face)?.group === recipe.group && role !== undefined && !role.upright && role.dormer === undefined && role.subroof === undefined && role.side === was.side;
   });
   const leaf = leaves.find((face) => insideRing(faceRings(face)[0] ?? [], { x: at[0], z: at[1] })) ?? leaves[0];
+  const placed = leaf === undefined ? undefined : fit(leaf, at, look);
   // It keeps the waters it was given: two, or one a user left it with.
-  const waters = watersOf(was);
-  const placed = leaf === undefined ? undefined : fit(leaf, at, look, waters);
-  return placed === undefined ? undefined : { ...held, was, placed, waters };
+  return placed === undefined ? undefined : { ...held, was, placed, waters: watersOf(was) };
 }
 
-/** The opening of `look` filling dormer `k`'s front whole -- on the roof just made as `group`. */
-function placeInFront(ctx: ToolContext, causeId: string, group: string, k: number, look: StandLook, waters: Waters): OpeningCommit {
+/**
+ * The opening filling dormer `k`'s front whole -- on the roof just made as
+ * `group` -- placed as any opening is placed in any wall: the front is all
+ * opening, its outline laid over the front's own shape.
+ */
+function placeInFront(ctx: ToolContext, causeId: string, group: string, k: number, look: StandLook): OpeningCommit {
   const front = ctx.runtime.getAllRegionTopologies().find((face) => {
     const role = roleOf(face);
     return recipeOf(face)?.group === group && role?.subroof === undefined && role?.dormer === k && role.upright && role.side === 0;
@@ -168,46 +154,9 @@ function placeInFront(ctx: ToolContext, causeId: string, group: string, k: numbe
   const run = front === undefined ? undefined : runFrame(ctx.runtime, front.surfaceKey);
   const panel = front === undefined ? undefined : run?.panelOf(front.surfaceKey);
   if (run === undefined || panel === undefined) throw new Error("a lucarna para a abertura nao ficou de pe aqui.");
-  // The front's `v` is a share of its local height, which rises under its
-  // waters: a straight side between two corners set down at their true
-  // heights sags or bulges between them. Each side is broken where the
-  // front's top turns -- its ridge -- and then only where it would stray
-  // from its true line by more than `BEND`.
-  const width = panel.length;
-  const toFront = ([x, y]: readonly [number, number]): readonly [number, number] => {
-    const t = Math.min(1, Math.max(0, x / width));
-    const u = panel.reversed ? 1 - t : t;
-    return [u, y / panel.frame.heightAt(u)];
-  };
-  const strays = (a: readonly [number, number], b: readonly [number, number]) => {
-    const [[ua, va], [ub, vb]] = [toFront(a), toFront(b)];
-    return Math.abs(((va + vb) / 2) * panel.frame.heightAt((ua + ub) / 2) - (a[1] + b[1]) / 2) > BEND;
-  };
-  const refined = (a: readonly [number, number], b: readonly [number, number], depth = 0): (readonly [number, number])[] => {
-    if (depth >= 8 || !strays(a, b)) return [a];
-    const m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] as const;
-    return [...refined(a, m, depth + 1), ...refined(m, b, depth + 1)];
-  };
-  // Where its waters meet over the front, when two do.
-  const ridgeAt = waters.left > 0 && waters.right > 0 ? (waters.right * width) / (waters.left + waters.right) : undefined;
-  const outline = outlinePoints({ ...look, width });
-  const dense = outline.flatMap((a, i) => {
-    const b = outline[(i + 1) % outline.length]!;
-    const crosses = ridgeAt !== undefined && (a[0] - ridgeAt) * (b[0] - ridgeAt) < 0;
-    if (!crosses) return refined(a, b);
-    const t = (ridgeAt - a[0]) / (b[0] - a[0]);
-    const m = [ridgeAt, a[1] + (b[1] - a[1]) * t] as const;
-    return [...refined(a, m), ...refined(m, b)];
-  });
-  // Counter-clockwise in the front's own frame, whichever way it runs.
-  const ring = (panel.reversed ? [...dense].reverse() : dense).map(toFront);
-  const us = ring.map(([u]) => u), vs = ring.map(([, v]) => v);
-  const piece = {
-    panel,
-    rect: { u0: Math.min(...us), u1: Math.max(...us), v0: Math.min(...vs), v1: Math.max(...vs) },
-    path: ring.map((from, i) => ({ from, to: ring[(i + 1) % ring.length]! })),
-  };
-  const placed = commitOpeningGroup(ctx, causeId, [], [piece], look.shape);
+  const pieces = run.pieces({ s0: panel.offset, s1: panel.offset + panel.length, v0: 0, v1: 1 }, look.shape);
+  if (pieces === undefined || pieces.length === 0) throw new Error("a abertura nao cabe aqui.");
+  const placed = commitOpeningGroup(ctx, causeId, [], pieces, look.shape);
   if (placed.error !== undefined) throw new Error(placed.error);
   return placed;
 }
@@ -231,25 +180,30 @@ function withDormers(recipe: RoofRecipe, dormers: readonly RoofDormer[]) {
   return { ...source, dormers };
 }
 
-/** An opening's outline standing upright at `placed`, its front along `u`. */
-function outlineAt(placed: Placed, u: Point): readonly ConstructionPosition[] {
+/**
+ * The outline an opening `placed` with `waters` over it takes: its shape
+ * laid over its front, each height a share of the front's own there -- as
+ * an opening filling a wall whole takes the wall's shape.
+ */
+function outlineAt(placed: Placed, u: Point, waters: Waters): readonly ConstructionPosition[] {
   const { at, look } = placed;
-  return openingPath(look.shape, look.width, look.height).flatMap((segment) => {
-    const steps = segment.controls === undefined ? 1 : CURVE_SAMPLES;
-    return Array.from({ length: steps }, (_, i) => {
-      const [x, y] = pointAt(segment, i / steps);
-      return { x: at.x + u[0] * (x - look.width / 2), y: at.y + y, z: at.z + u[1] * (x - look.width / 2) };
-    });
-  });
+  const front = frontFor(look, waters);
+  // Traced over the front's shape: a side straight in the opening's own frame
+  // follows the gable over it, so each is drawn in steps -- the ghost only.
+  return openingPath(look.shape, look.width, look.height).flatMap((segment) => Array.from({ length: CURVE_SAMPLES }, (_, i) => {
+    const [x, y] = pointAt(segment, i / CURVE_SAMPLES);
+    const up = (y / look.height) * (front.eave + roofOver(front.waters, look.width, x));
+    return { x: at.x + u[0] * (x - look.width / 2), y: at.y + up, z: at.z + u[1] * (x - look.width / 2) };
+  }));
 }
 
 /**
  * A roof leaf holds an opening upright, the way a floor inside a roof is met
- * by transition walls: the opening's box is cut back into the leaf, its top
- * level, its cheeks upright, until the leaf rises past it. The opening fills
- * that front whole, stopped wherever the leaf stops it. The roof keeps this
- * as a dormer in its recipe, marked as the opening's, so the opening pinned
- * to its front is carried whenever the roof is made again.
+ * by transition walls: a dormer is cut back into the leaf, its front the
+ * opening's whole, two waters over it -- or one, as its user makes it --
+ * until the leaf rises past it. The roof keeps it as a dormer in its recipe,
+ * marked as the opening's, so the opening pinned to its front is carried
+ * whenever the roof is made again.
  */
 export const roofOpeningStand: OpeningStand = {
   raisesOn(face) {
@@ -268,7 +222,7 @@ export const roofOpeningStand: OpeningStand = {
     const { normal: n, centre: c } = plane;
     const leafAt = (p: ConstructionPosition) => ({ ...p, y: c.y - (n.x * (p.x - c.x) + n.z * (p.z - c.z)) / n.y });
     const [a, b] = [leafAt(from), leafAt(to)];
-    // The lower corner stands the front; the upper is where the level top meets the leaf.
+    // The lower corner stands the front; the upper is where its ridge meets the leaf.
     const [low, high] = a.y <= b.y ? [a, b] : [b, a];
     const { u } = dormerFrame(recipe, standFor(recipe, role.side, [low.x, low.z], { width: 1, height: 1, shape, isDoor }));
     const along = (high.x - low.x) * u[0] + (high.z - low.z) * u[1];
@@ -279,14 +233,14 @@ export const roofOpeningStand: OpeningStand = {
     const recipe = recipeOf(face), role = roleOf(face);
     if (!recipe || !role) return undefined;
     const { u } = dormerFrame(recipe, standFor(recipe, role.side, [placed.at.x, placed.at.z], placed.look));
-    return outlineAt(placed, u);
+    return outlineAt(placed, u, TWO_WATERS);
   },
 
   refitOutline(ctx, host, look, shift) {
     const made = refitted(ctx, host, look, shift);
     if (made === undefined) return undefined;
     const { u } = dormerFrame(made.recipe, made.was);
-    return outlineAt(made.placed, u);
+    return outlineAt(made.placed, u, made.waters);
   },
 
   raise(ctx, causeId, face, placed) {
@@ -294,7 +248,7 @@ export const roofOpeningStand: OpeningStand = {
     const dormers = recipe.dormers ?? [];
     return inOne(ctx, causeId, () => {
       const made = replaceRoofs(ctx, [withDormers(recipe, [...dormers, standFor(recipe, role.side, [placed.at.x, placed.at.z], placed.look)])], facesOf(ctx, recipe.group), causeId);
-      return placeInFront(ctx, causeId, made.group, dormers.length, placed.look, TWO_WATERS);
+      return placeInFront(ctx, causeId, made.group, dormers.length, placed.look);
     });
   },
 
@@ -313,7 +267,7 @@ export const roofOpeningStand: OpeningStand = {
       const removed = commitOpeningGroup(ctx, causeId, pieces, []);
       if (removed.error !== undefined) throw new Error(removed.error);
       const regenerated = replaceRoofs(ctx, [withDormers(recipe, recipe.dormers!.map((dormer, i) => (i === k ? next : dormer)))], facesOf(ctx, recipe.group), causeId);
-      return placeInFront(ctx, causeId, regenerated.group, k, placed.look, made.waters);
+      return placeInFront(ctx, causeId, regenerated.group, k, placed.look);
     });
   },
 

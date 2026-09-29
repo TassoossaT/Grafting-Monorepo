@@ -39,7 +39,8 @@ const box = (nodes) => {
   const at = (axis) => nodes.map((n) => n.position[axis]);
   return { x0: Math.min(...at("x")), x1: Math.max(...at("x")), y0: Math.min(...at("y")), y1: Math.max(...at("y")), z: at("z")[0] };
 };
-const openingBox = (h) => box(h.openings().flatMap((o) => o.nodes));
+// The window fills its dormer's front whole: its extent is the front's, ridge and all.
+const openingBox = (h) => box(front(h.runtime).nodes);
 const near = (a, b, eps = 1e-3) => Math.abs(a - b) < eps;
 
 test("a window clicked on a roof leaf stands there upright, filling the front of its cut, all in one undo step", async () => {
@@ -54,12 +55,12 @@ test("a window clicked on a roof leaf stands there upright, filling the front of
     assert.ok(wall, "the cut's front stands");
     const nodes = h.openings().flatMap((o) => o.nodes);
     assert.ok(nodes.length > 0 && nodes.every((n) => JSON.stringify(pinOf(runtime, n.id)?.hostSurfaceKey) === JSON.stringify(wall.surfaceKey)), "the window is pinned to that front");
-    const b = openingBox(h), f = box(wall.nodes);
-    assert.ok(near(b.x1 - b.x0, 0.8) && near(b.y1 - b.y0, 0.6), `the window keeps its size: ${JSON.stringify(b)}`);
-    assert.ok(near(b.x0, f.x0) && near(b.x1, f.x1) && near(b.y0, f.y0), `the window fills its front's width from the sill: ${JSON.stringify({ b, f })}`);
-    assert.ok(near(f.y1 - b.y1, 0.4), "the gable rises over it at a right angle's pitch");
-    // Set down at its true heights: no side bends up under the ridge.
-    assert.ok(nodes.every((n) => n.position.y <= b.y0 + 0.6 + 1e-4), "its top runs straight");
+    const b = openingBox(h);
+    assert.ok(near(b.x1 - b.x0, 0.8) && near(b.y1 - b.y0, 0.6), `the window keeps its size, its top the front's ridge: ${JSON.stringify(b)}`);
+    // Placed as a wall's opening filling it: its four corners at its front's, its top laid over the gable.
+    const pins = nodes.map((n) => pinOf(runtime, n.id));
+    assert.equal(nodes.length, 4, "a plain window takes its four corners");
+    assert.ok(pins.every((p) => (near(p.u, 0) || near(p.u, 1)) && (near(p.v, 0) || near(p.v, 1))), `the front is all window: ${JSON.stringify(pins)}`);
     assert.ok(near((b.x0 + b.x1) / 2, 4) && near(b.z, 1.2) && near(b.y0, 2.4), `it stands where it was clicked, on the leaf: ${JSON.stringify(b)}`);
     const scene = { graph: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), cloudFor: (r) => runtime.cloudFor(r) };
     assert.ok(!shownGlobalHandles(scene).some((handle) => handle.recipeHandle?.anchor?.startsWith("dormer:")), "it has no handles of its own");
@@ -130,9 +131,9 @@ test("a window asked taller than the roof behind it stops there: the ghost shows
     clickLeaf(h, 4, 1.2, tall);
     assert.equal(h.feedback.at(-1)?.tone, "success", JSON.stringify(h.feedback.at(-1)));
     const b = openingBox(h);
-    // The leaf rises to its ridge at 4, 0.8 behind the front standing at 2.4: the gable over the window, rising half its
-    // width, meets the leaf just short of that ridge.
-    assert.ok(b.y1 + 0.4 < 4 && b.y1 + 0.4 > 3.9, `stopped with its gable under the ridge: ${JSON.stringify(b)}`);
+    // The leaf rises to its ridge at 4, 0.8 behind the front standing at 2.4: the window's top -- its front's ridge --
+    // meets the leaf just short of that ridge.
+    assert.ok(b.y1 < 4 && b.y1 > 3.9, `stopped under the ridge: ${JSON.stringify(b)}`);
     assert.ok(near(Math.max(...ys), b.y1) && near(Math.min(...ys), b.y0), `the ghost showed what was made: ${Math.min(...ys)}..${Math.max(...ys)} vs ${b.y0}..${b.y1}`);
   } finally { await h.runtime.dispose?.(); }
 });
@@ -220,31 +221,20 @@ function dragRoofHandle(h, anchor, dy) {
   roofTool.onPointerUp(ctx, { start, current, samples: [start, current] }, params);
 }
 
-test("a window's dormer is made one water by bringing one of its waters down, the window keeping its size", async () => {
+test("a window's dormer is made one water by bringing one of its waters down, the window filling its new front", async () => {
   const h = await roofWithWindow();
   const { runtime } = h;
   try {
-    const was = openingBox(h);
     dragRoofHandle(h, "slope:-:0:1", 200);
     assert.notEqual(h.feedback.at(-1)?.tone, "error", JSON.stringify(h.feedback.at(-1)));
     const slopes = dormers(runtime)[0].slopes;
     assert.ok(slopes[1] === 0 && slopes[3] > 0, `one water: ${slopes}`);
-    const now = openingBox(h);
-    assert.ok(near(now.y1 - now.y0, was.y1 - was.y0) && near(now.x1 - now.x0, was.x1 - was.x0), `the window kept its size: ${JSON.stringify({ was, now })}`);
+    const b = openingBox(h), f = box(front(runtime).nodes);
+    assert.ok(near(b.x0, f.x0) && near(b.x1, f.x1) && near(b.y0, f.y0) && near(b.y1, f.y1), `still all window: ${JSON.stringify({ b, f })}`);
     // Brought down again, the other stays: never no water at all.
     dragRoofHandle(h, "slope:-:0:3", 200);
     const still = dormers(runtime)[0].slopes;
     assert.ok(still[1] > 0 || still[3] > 0, `a water is kept: ${still}`);
-  } finally { await runtime.dispose?.(); }
-});
-
-test("a window's dormer is no gentler than its law: a water brought down a little stops at its pitch", async () => {
-  const h = await roofWithWindow();
-  const { runtime } = h;
-  try {
-    const was = dormers(runtime)[0].slopes[1];
-    dragRoofHandle(h, "slope:-:0:1", 8);
-    assert.equal(dormers(runtime)[0].slopes[1], was, "stopped at the gentlest the window allows");
   } finally { await runtime.dispose?.(); }
 });
 
@@ -260,26 +250,24 @@ test("raising the roof leaves a window's dormer and the window as they stand", a
   } finally { await runtime.dispose?.(); }
 });
 
-test("reshaping a selected roof window round remakes its dormer round the new outline, keeping its size", async () => {
+test("reshaping a selected roof window round keeps its size and its dormer", async () => {
   const h = await roofWithWindow();
   const { runtime, ctx } = h;
   try {
     const was = openingBox(h);
     const middle = { x: (was.x0 + was.x1) / 2, y: (was.y0 + was.y1) / 2, z: was.z };
     press(h, window, middle);
-    const eaveBefore = dormers(runtime)[0].front;
+    const dormerBefore = dormers(runtime)[0];
     openingTool.onParamsChange(ctx, { ...window, shape: { ellipse: true, radii: { top: 0, right: 0, bottom: 0, left: 0 } } });
     assert.equal(h.feedback.at(-1)?.tone, "success", JSON.stringify(h.feedback.at(-1)));
     assert.ok(h.openings().every((piece) => piece.props?.openingShape?.ellipse === true), "it is round now");
-    const now = openingBox(h);
-    assert.ok(near(now.y1 - now.y0, was.y1 - was.y0, 0.02) && near(now.x1 - now.x0, was.x1 - was.x0, 0.02), `its size kept: ${JSON.stringify({ was, now })}`);
-    assert.ok(dormers(runtime)[0].front !== eaveBefore, "its dormer's eaves moved to clear the round outline");
+    assert.ok(near(dormers(runtime)[0].width, dormerBefore.width) && near(dormers(runtime)[0].front, dormerBefore.front), "its dormer as it stood");
   } finally { await runtime.dispose?.(); }
 });
 
 for (const [name, shape, most] of [
-  ["a plain window", undefined, 16],
-  ["a round window", { ellipse: true, radii: { top: 0, right: 0, bottom: 0, left: 0 } }, 40],
+  ["a plain window", undefined, 4],
+  ["a round window", { ellipse: true, radii: { top: 0, right: 0, bottom: 0, left: 0 } }, 8],
 ]) {
   test(`${name} in a gabled front takes only the corners it needs`, async () => {
     const h = await gabled();

@@ -7,7 +7,7 @@ import { rotateInPlan } from "../../topology/plan-rotation.ts";
 import { insideRingXZ } from "../../topology/plan-geometry.ts";
 import { faceArea } from "../../topology/plan-overlap.ts";
 import { hasTrait } from "../registry.ts";
-import { PINS_KEEP_HEIGHT_PROP, RECIPE_ROLE_PROP, type RecipeGeneration, type RecipeHandle } from "../structure-type.ts";
+import { RECIPE_ROLE_PROP, type RecipeGeneration, type RecipeHandle } from "../structure-type.ts";
 
 /** Region property carrying a roof's recipe, which every edit regenerates the roof from. */
 export const ROOF_RECIPE_PROP = "roof";
@@ -343,13 +343,7 @@ export function roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: Ro
   const faceProps = new Map<string, Readonly<Record<string, unknown>>>();
   roof.faces.forEach((face, index) => {
     const role: RoofFaceRole = { side: face.side, upright: face.upright, ...(face.dormer === null ? {} : { dormer: face.dormer }), ...(face.subroof === null ? {} : { subroof: face.subroof }) };
-    // A dormer raised for an opening exists to hold it: the opening keeps its size as the dormer's waters change round it.
-    const holds = face.dormer !== null && face.subroof === null && !!request.dormers?.[face.dormer]?.opening;
-    faceProps.set(regionId(index), {
-      [ROOF_RECIPE_PROP]: recipe, [ROOF_FACE_PROP]: role,
-      [RECIPE_ROLE_PROP]: `${face.subroof ?? "-"}:${face.dormer ?? "-"}:${face.side}:${face.upright ? "upright" : "leaf"}`,
-      ...(holds ? { [PINS_KEEP_HEIGHT_PROP]: true } : {}),
-    });
+    faceProps.set(regionId(index), { [ROOF_RECIPE_PROP]: recipe, [ROOF_FACE_PROP]: role, [RECIPE_ROLE_PROP]: `${face.subroof ?? "-"}:${face.dormer ?? "-"}:${face.side}:${face.upright ? "upright" : "leaf"}` });
   });
   return {
     patch: {
@@ -399,17 +393,16 @@ const raisable = (recipe: RoofSource, role: RoofFaceRole) => {
   return owner.dormers?.[role.dormer]?.opening ? role.side === 1 || role.side === 3 : role.side <= 3;
 };
 
-/** The gentlest the waters over an opening's dormer rise -- a right angle at its ridge -- so the opening stays under them. */
+/** How steeply the two waters over an opening's dormer rise when it is raised: a right angle at its ridge. */
 export const OPENING_DORMER_PITCH = 1;
 
 /**
- * The law of a dormer raised for an opening: each of its two waters no
- * gentler than `OPENING_DORMER_PITCH` -- or none at all, a gable, making it
- * one water -- and never both gone. Its front and back stay upright.
+ * The law of a dormer raised for an opening: two waters, or one where the
+ * other is brought down to a gable -- never none. Its front and back stay
+ * upright; the opening fills its front, whatever shape its waters give it.
  */
 function openingDormerSlopes(slopes: readonly number[]): RoofDormer["slopes"] {
-  const cheek = (slope: number) => (slope <= 0 ? 0 : Math.max(OPENING_DORMER_PITCH, slope));
-  let [right, left] = [cheek(slopes[1] ?? 0), cheek(slopes[3] ?? 0)];
+  let [right, left] = [Math.max(0, slopes[1] ?? 0), Math.max(0, slopes[3] ?? 0)];
   if (right === 0 && left === 0) [right, left] = [OPENING_DORMER_PITCH, OPENING_DORMER_PITCH];
   return [0, right, 0, left];
 }

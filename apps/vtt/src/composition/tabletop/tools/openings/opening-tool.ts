@@ -145,8 +145,6 @@ interface Drag {
   readonly hostSurfaceKey: ConstructionSurfaceKey;
   /** The stand that face is, when it was raised for this opening: it follows every edit. */
   readonly stand?: OpeningStand;
-  /** In a stand, the opening's sill and top in the world. */
-  readonly world?: { readonly bottom: number; readonly top: number };
 }
 
 interface CreateAnchor extends RunPoint {
@@ -237,39 +235,29 @@ function beginGrab(ctx: ToolContext, opening: ConstructionRegionTopology, sample
   const centerS = (span.s0 + span.s1) / 2;
   const centerV = (span.v0 + span.v1) / 2;
   const held = standOf(ctx, hostKey!);
-  // In a stand's front the opening is measured in the world: the front's
-  // local height rises under a gable, so its `v` says nothing of its size.
-  const ys = pieces.flatMap((piece) => piece.nodes.map((node) => node.position.y));
-  const world = held.stand === undefined ? undefined : { bottom: Math.min(...ys), top: Math.max(...ys) };
   if (!wasSelected) {
-    const look = { width: span.s1 - span.s0, height: world === undefined ? (span.v1 - span.v0) * run.heightAt(centerS) : world.top - world.bottom, shape };
+    const look = { width: span.s1 - span.s0, height: (span.v1 - span.v0) * run.heightAt(centerS), shape };
     select(ctx, { groupKey: group, pieceKeys, shape }, look, params);
   }
   ctx.reportSelection({ id: surfaceRefFromNodeSet(opening.surfaceKey), point: run.resolveAt(centerS, centerV) });
+  const grabbed = handleAt(run, span, at);
 
   return {
     run,
     pieceKeys,
     pieceRefs: new Set(pieceKeys.map(surfaceRefFromNodeSet)),
     originalSpan: span,
-    handle: world === undefined ? handleAt(run, span, at) : worldHandleAt(span, world, at.s, sample.point.y),
+    // In a stand its sill stands on the leaf: no handle there.
+    handle: held.stand === undefined || grabbed.v !== "bottom" ? grabbed : { s: grabbed.s },
     isDoor: isDoorRect(span),
     shape,
     wasSelected,
     grabOffset: { s: at.s - centerS, v: at.v - centerV },
     hostSurfaceKey: hostKey!,
     ...held,
-    ...(world === undefined ? {} : { world }),
   };
 }
 
-/** The handle of an opening in a stand under a press at `s` along its front and height `y`: its sides, its top -- its sill stands on the leaf. */
-function worldHandleAt(span: RunRect, world: { readonly bottom: number; readonly top: number }, s: number, y: number): GrabHandle {
-  return {
-    s: Math.abs(s - span.s0) <= HANDLE_TOLERANCE ? "left" : Math.abs(s - span.s1) <= HANDLE_TOLERANCE ? "right" : undefined,
-    v: Math.abs(y - world.top) <= HANDLE_TOLERANCE ? "top" : undefined,
-  };
-}
 
 /** The stand `host` is, if one was raised for the opening in it. */
 function standOf(ctx: ToolContext, host: ConstructionSurfaceKey): { readonly stand?: OpeningStand } {
@@ -292,9 +280,9 @@ function standOf(ctx: ToolContext, host: ConstructionSurfaceKey): { readonly sta
  */
 function standEdit(active: Drag, start: ConstructionPosition, current: ConstructionPosition, moved: boolean, params: OpeningParams): { readonly look: StandLook; readonly shift: { readonly x: number; readonly z: number } } | undefined {
   const { run, originalSpan: span, handle } = active;
-  const world = active.world ?? { bottom: 0, top: (span.v1 - span.v0) * run.heightAt((span.s0 + span.s1) / 2) };
   const middle = (span.s0 + span.s1) / 2;
-  let [s0, s1, height] = [span.s0, span.s1, world.top - world.bottom];
+  const was = (span.v1 - span.v0) * run.heightAt(middle);
+  let [s0, s1, height] = [span.s0, span.s1, was];
   let shift = { x: 0, z: 0 };
   if (!moved) {
     [s0, s1, height] = [middle - params.width / 2, middle + params.width / 2, params.height];
@@ -305,7 +293,8 @@ function standEdit(active: Drag, start: ConstructionPosition, current: Construct
     if (at === undefined) return undefined;
     if (handle.s === "left") s0 = Math.min(at.s, span.s1 - MIN_OPENING_SIZE);
     if (handle.s === "right") s1 = Math.max(at.s, span.s0 + MIN_OPENING_SIZE);
-    if (handle.v === "top") height = Math.max(current.y - world.bottom, MIN_OPENING_SIZE);
+    // Its top rises as far as the pointer did: it is its front's ridge, standing only over its middle.
+    if (handle.v === "top") height = Math.max(was + current.y - start.y, MIN_OPENING_SIZE);
     // Its middle moved along the front: the stand moves with it.
     const step = 0.01;
     const a = run.resolveAt(middle, span.v0), b = run.resolveAt(middle + step, span.v0);
@@ -633,8 +622,7 @@ function reshapeSelected(ctx: ToolContext, current: Selected, shape: OpeningShap
   // In a stand, the stand is made again round the new outline, the opening keeping its size.
   const stand = hostKey === undefined ? undefined : standOf(ctx, hostKey).stand;
   if (stand !== undefined && span !== undefined) {
-    const ys = pieces.flatMap((piece) => piece.nodes.map((node) => node.position.y));
-    const look = { width: span.s1 - span.s0, height: Math.max(...ys) - Math.min(...ys), shape, isDoor: isDoorRect(span) };
+    const look = { width: span.s1 - span.s0, height: (span.v1 - span.v0) * run!.heightAt((span.s0 + span.s1) / 2), shape, isDoor: isDoorRect(span) };
     const causeId = scopedToolId(ctx, "opening-edit-shape", ctx.nextSequence());
     const result = stand.refit(ctx, causeId, current.pieceKeys, hostKey!, look, { x: 0, z: 0 });
     if (result.created !== undefined) selected = { groupKey: result.created.group, pieceKeys: result.created.surfaceKeys, shape };
