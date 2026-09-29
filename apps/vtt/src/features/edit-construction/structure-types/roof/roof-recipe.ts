@@ -7,7 +7,7 @@ import { rotateInPlan } from "../../topology/plan-rotation.ts";
 import { insideRingXZ } from "../../topology/plan-geometry.ts";
 import { faceArea } from "../../topology/plan-overlap.ts";
 import { hasTrait } from "../registry.ts";
-import { RECIPE_ROLE_PROP, type RecipeGeneration, type RecipeHandle } from "../structure-type.ts";
+import { PINS_KEEP_HEIGHT_PROP, RECIPE_ROLE_PROP, type RecipeGeneration, type RecipeHandle } from "../structure-type.ts";
 
 /** Region property carrying a roof's recipe, which every edit regenerates the roof from. */
 export const ROOF_RECIPE_PROP = "roof";
@@ -343,7 +343,13 @@ export function roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: Ro
   const faceProps = new Map<string, Readonly<Record<string, unknown>>>();
   roof.faces.forEach((face, index) => {
     const role: RoofFaceRole = { side: face.side, upright: face.upright, ...(face.dormer === null ? {} : { dormer: face.dormer }), ...(face.subroof === null ? {} : { subroof: face.subroof }) };
-    faceProps.set(regionId(index), { [ROOF_RECIPE_PROP]: recipe, [ROOF_FACE_PROP]: role, [RECIPE_ROLE_PROP]: `${face.subroof ?? "-"}:${face.dormer ?? "-"}:${face.side}:${face.upright ? "upright" : "leaf"}` });
+    // A dormer raised for an opening exists to hold it: the opening keeps its size as the dormer's waters change round it.
+    const holds = face.dormer !== null && face.subroof === null && !!request.dormers?.[face.dormer]?.opening;
+    faceProps.set(regionId(index), {
+      [ROOF_RECIPE_PROP]: recipe, [ROOF_FACE_PROP]: role,
+      [RECIPE_ROLE_PROP]: `${face.subroof ?? "-"}:${face.dormer ?? "-"}:${face.side}:${face.upright ? "upright" : "leaf"}`,
+      ...(holds ? { [PINS_KEEP_HEIGHT_PROP]: true } : {}),
+    });
   });
   return {
     patch: {
@@ -389,9 +395,24 @@ const ownerOf = (recipe: RoofSource, subroof: number | undefined): RoofSource =>
 const raisable = (recipe: RoofSource, role: RoofFaceRole) => {
   const owner = ownerOf(recipe, role.subroof);
   if (role.dormer === undefined) return role.side < owner.slopes.length;
-  // A dormer raised for an opening is shaped through that opening alone.
-  return role.side <= 3 && !owner.dormers?.[role.dormer]?.opening;
+  // A dormer raised for an opening is sized through that opening; only its two waters are its own.
+  return owner.dormers?.[role.dormer]?.opening ? role.side === 1 || role.side === 3 : role.side <= 3;
 };
+
+/** The gentlest the waters over an opening's dormer rise -- a right angle at its ridge -- so the opening stays under them. */
+export const OPENING_DORMER_PITCH = 1;
+
+/**
+ * The law of a dormer raised for an opening: each of its two waters no
+ * gentler than `OPENING_DORMER_PITCH` -- or none at all, a gable, making it
+ * one water -- and never both gone. Its front and back stay upright.
+ */
+function openingDormerSlopes(slopes: readonly number[]): RoofDormer["slopes"] {
+  const cheek = (slope: number) => (slope <= 0 ? 0 : Math.max(OPENING_DORMER_PITCH, slope));
+  let [right, left] = [cheek(slopes[1] ?? 0), cheek(slopes[3] ?? 0)];
+  if (right === 0 && left === 0) [right, left] = [OPENING_DORMER_PITCH, OPENING_DORMER_PITCH];
+  return [0, right, 0, left];
+}
 
 /** A face's centre and unit Newell normal. */
 function centreAndNormal(face: ConstructionRegionTopology): { readonly centre: ConstructionPosition; readonly normal: ConstructionPosition } {
@@ -553,8 +574,13 @@ function slopesOf(recipe: RoofRecipe, ref: SideRef): readonly number[] {
 }
 
 function withSlopes(recipe: RoofRecipe, ref: SideRef, slopes: readonly number[]): RoofRecipe {
-  if (slopes.every((slope) => slope === 0)) throw new Error(ref.dormer === undefined ? "O telhado precisa de ao menos uma água." : "A lucarna precisa de ao menos uma água.");
-  return withSubroof(recipe, ref.subroof, (owner) => (ref.dormer === undefined ? { ...owner, slopes } : withDormer(owner, ref.dormer, (dormer) => ({ ...dormer, slopes: slopes as unknown as RoofDormer["slopes"] }))));
+  // An opening's dormer keeps a water by its own law, never refused.
+  const openingDormer = ref.dormer !== undefined && ownerOf(recipe, ref.subroof).dormers?.[ref.dormer]?.opening;
+  if (!openingDormer && slopes.every((slope) => slope === 0)) throw new Error(ref.dormer === undefined ? "O telhado precisa de ao menos uma água." : "A lucarna precisa de ao menos uma água.");
+  return withSubroof(recipe, ref.subroof, (owner) => (ref.dormer === undefined ? { ...owner, slopes } : withDormer(owner, ref.dormer, (dormer) => ({
+    ...dormer,
+    slopes: dormer.opening ? openingDormerSlopes(slopes) : (slopes as unknown as RoofDormer["slopes"]),
+  }))));
 }
 
 /** `change` made to the roof itself, or to its subroof `k`; a subroof it drops is removed. */

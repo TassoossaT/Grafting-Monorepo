@@ -507,6 +507,10 @@ What committing needs of the runtime.
 
 ### `method vtt.effect-commit.EffectCommitRuntime.removeSurface(request: { surfaceKey: ConstructionSurfaceKey }, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
+### `method vtt.effect-commit.EffectCommitRuntime.resolveOnHost(request: { hostSurfaceKey: ConstructionSurfaceKey; uv: readonly (readonly [number, number])[] }): readonly ConstructionPosition[]`
+
+Where relative points of a face stand -- to set down a pin that keeps its true height.
+
 ### `method vtt.effect-commit.EffectCommitRuntime.setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): unknown`
 
 ### `method vtt.effect-commit.EffectCommitRuntime.transact(transactionId: string, origin: ChangeOrigin, work: () => T): TransactionResult<T>`
@@ -2490,13 +2494,17 @@ What keeping a regenerated structure's properties and pins needs of the runtime.
 
 ### `method vtt.face-props.FacePropsRuntime.pinNodes(pins: readonly ConstructionPinRequest[], origin: ChangeOrigin, causeId: string): unknown`
 
+### `method vtt.face-props.FacePropsRuntime.resolveOnHost(request: { hostSurfaceKey: ConstructionSurfaceKey; uv: readonly (readonly [number, number])[] }): readonly ConstructionPosition[]`
+
+Where relative points of a face stand -- to set down a pin that keeps its true height.
+
 ### `method vtt.face-props.FacePropsRuntime.setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): unknown`
 
 ### `interface vtt.face-props.PinnedToRoles`
 
 What was pinned to faces about to be regenerated, by the role of the face each is pinned to.
 
-### `property vtt.face-props.PinnedToRoles.pins: readonly { nodeId: string; role: string; u: number; v: number }[]`
+### `property vtt.face-props.PinnedToRoles.pins: readonly { nodeId: string; rise?: number; role: string; u: number; v: number }[]`
 
 ### `function vtt.face-props.keepFaceProps(runtime: FacePropsRuntime, causeId: string, created: readonly ConstructionSurfaceKey[], faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>, pinned?: PinnedToRoles): void`
 
@@ -3434,6 +3442,10 @@ What following a base needs of the runtime, inside the pipeline's transaction.
 ### `method vtt.roof-follow-base.FollowBaseRuntime.getAllRegionTopologies(): readonly ConstructionRegionTopology[]`
 
 ### `method vtt.roof-follow-base.FollowBaseRuntime.pinNodes(pins: readonly ConstructionPinRequest[], origin: ChangeOrigin, causeId: string): unknown`
+
+### `method vtt.roof-follow-base.FollowBaseRuntime.resolveOnHost(request: { hostSurfaceKey: ConstructionSurfaceKey; uv: readonly (readonly [number, number])[] }): readonly ConstructionPosition[]`
+
+Where relative points of a face stand -- to set down a pin that keeps its true height.
 
 ### `method vtt.roof-follow-base.FollowBaseRuntime.setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): unknown`
 
@@ -7146,6 +7158,10 @@ Smaller roofs joined into this roof's visible envelope.
 
 ### `type vtt.roof-recipe.Waters = 1 | 2 | 4`
 
+### `variable vtt.roof-recipe.OPENING_DORMER_PITCH: 1`
+
+The gentlest the waters over an opening's dormer rise -- a right angle at its ridge -- so the opening stays under them.
+
 ### `variable vtt.roof-recipe.ROOF_FACE_PROP: "roofFace"`
 
 Region property naming which side a roof face rises from.
@@ -7896,6 +7912,13 @@ not cut `"terrain"`; it cuts whatever is `"ground"`. A new kind of ground
 joins every existing relation by declaring the trait, with no edit anywhere
 else. The set is closed on purpose: adding a trait is a deliberate design
 change, not a string a caller invents.
+
+### `variable vtt.structure-type.PINS_KEEP_HEIGHT_PROP: "pinsKeepHeight"`
+
+Region property saying what is pinned to a regenerated face keeps its true
+height above the face's foot, not its share of the face's height: set on a
+face that exists to hold what is pinned to it, whose own height changes
+round it.
 
 ### `variable vtt.structure-type.RECIPE_ROLE_PROP: "recipeRole"`
 
@@ -9389,6 +9412,10 @@ A shaped span climbs linearly between its anchors. `positive` turns from
 ### `interface vtt.cap-port.RoofDormer`
 
 A dormer raised on the pitched leaf of footprint side `side`.
+
+### `property vtt.cap-port.RoofDormer.absolute?: boolean`
+
+Its slopes are rises per unit run, its own, not shares of the roof's.
 
 ### `property vtt.cap-port.RoofDormer.along: number`
 

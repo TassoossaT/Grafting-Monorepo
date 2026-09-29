@@ -145,6 +145,8 @@ interface Drag {
   readonly hostSurfaceKey: ConstructionSurfaceKey;
   /** The stand that face is, when it was raised for this opening: it follows every edit. */
   readonly stand?: OpeningStand;
+  /** In a stand, the opening's sill and top in the world. */
+  readonly world?: { readonly bottom: number; readonly top: number };
 }
 
 interface CreateAnchor extends RunPoint {
@@ -234,8 +236,13 @@ function beginGrab(ctx: ToolContext, opening: ConstructionRegionTopology, sample
   const shape = shapeOfGroup(pieces);
   const centerS = (span.s0 + span.s1) / 2;
   const centerV = (span.v0 + span.v1) / 2;
+  const held = standOf(ctx, hostKey!);
+  // In a stand's front the opening is measured in the world: the front's
+  // local height rises under a gable, so its `v` says nothing of its size.
+  const ys = pieces.flatMap((piece) => piece.nodes.map((node) => node.position.y));
+  const world = held.stand === undefined ? undefined : { bottom: Math.min(...ys), top: Math.max(...ys) };
   if (!wasSelected) {
-    const look = { width: span.s1 - span.s0, height: (span.v1 - span.v0) * run.heightAt(centerS), shape };
+    const look = { width: span.s1 - span.s0, height: world === undefined ? (span.v1 - span.v0) * run.heightAt(centerS) : world.top - world.bottom, shape };
     select(ctx, { groupKey: group, pieceKeys, shape }, look, params);
   }
   ctx.reportSelection({ id: surfaceRefFromNodeSet(opening.surfaceKey), point: run.resolveAt(centerS, centerV) });
@@ -245,13 +252,22 @@ function beginGrab(ctx: ToolContext, opening: ConstructionRegionTopology, sample
     pieceKeys,
     pieceRefs: new Set(pieceKeys.map(surfaceRefFromNodeSet)),
     originalSpan: span,
-    handle: handleAt(run, span, at),
+    handle: world === undefined ? handleAt(run, span, at) : worldHandleAt(span, world, at.s, sample.point.y),
     isDoor: isDoorRect(span),
     shape,
     wasSelected,
     grabOffset: { s: at.s - centerS, v: at.v - centerV },
     hostSurfaceKey: hostKey!,
-    ...standOf(ctx, hostKey!),
+    ...held,
+    ...(world === undefined ? {} : { world }),
+  };
+}
+
+/** The handle of an opening in a stand under a press at `s` along its front and height `y`: its sides, its top -- its sill stands on the leaf. */
+function worldHandleAt(span: RunRect, world: { readonly bottom: number; readonly top: number }, s: number, y: number): GrabHandle {
+  return {
+    s: Math.abs(s - span.s0) <= HANDLE_TOLERANCE ? "left" : Math.abs(s - span.s1) <= HANDLE_TOLERANCE ? "right" : undefined,
+    v: Math.abs(y - world.top) <= HANDLE_TOLERANCE ? "top" : undefined,
   };
 }
 
@@ -275,26 +291,28 @@ function standOf(ctx: ToolContext, host: ConstructionSurfaceKey): { readonly sta
  * already selected.
  */
 function standEdit(active: Drag, start: ConstructionPosition, current: ConstructionPosition, moved: boolean, params: OpeningParams): { readonly look: StandLook; readonly shift: { readonly x: number; readonly z: number } } | undefined {
-  const { run, originalSpan: span } = active;
+  const { run, originalSpan: span, handle } = active;
+  const world = active.world ?? { bottom: 0, top: (span.v1 - span.v0) * run.heightAt((span.s0 + span.s1) / 2) };
   const middle = (span.s0 + span.s1) / 2;
-  let rect = span;
+  let [s0, s1, height] = [span.s0, span.s1, world.top - world.bottom];
   let shift = { x: 0, z: 0 };
   if (!moved) {
-    rect = sliderRect(active, params);
-  } else if (isBody(active.handle)) {
+    [s0, s1, height] = [middle - params.width / 2, middle + params.width / 2, params.height];
+  } else if (isBody(handle)) {
     shift = { x: current.x - start.x, z: current.z - start.z };
   } else {
     const at = run.project(current);
     if (at === undefined) return undefined;
-    rect = rawRectFor(active, at);
+    if (handle.s === "left") s0 = Math.min(at.s, span.s1 - MIN_OPENING_SIZE);
+    if (handle.s === "right") s1 = Math.max(at.s, span.s0 + MIN_OPENING_SIZE);
+    if (handle.v === "top") height = Math.max(current.y - world.bottom, MIN_OPENING_SIZE);
     // Its middle moved along the front: the stand moves with it.
     const step = 0.01;
     const a = run.resolveAt(middle, span.v0), b = run.resolveAt(middle + step, span.v0);
-    const along = ((rect.s0 + rect.s1) / 2 - middle) / step;
+    const along = ((s0 + s1) / 2 - middle) / step;
     shift = { x: (b.x - a.x) * along, z: (b.z - a.z) * along };
   }
-  const look: StandLook = { width: rect.s1 - rect.s0, height: (rect.v1 - rect.v0) * run.heightAt(middle), shape: active.shape, isDoor: active.isDoor };
-  return { look, shift };
+  return { look: { width: s1 - s0, height, shape: active.shape, isDoor: active.isDoor }, shift };
 }
 
 function refitStand(ctx: ToolContext, gesture: ReleasedGesture, active: Drag & { readonly stand: OpeningStand }, params: OpeningParams): void {
@@ -612,6 +630,17 @@ function reshapeSelected(ctx: ToolContext, current: Selected, shape: OpeningShap
   const hostKey = pieces.length === current.pieceKeys.length && pieces.length > 0 ? primaryHostOf(pieces[0]!) : undefined;
   const run = hostKey === undefined ? undefined : runFrame(ctx.runtime, hostKey);
   const span = run === undefined ? undefined : groupRunSpan(run, pieces);
+  // In a stand, the stand is made again round the new outline, the opening keeping its size.
+  const stand = hostKey === undefined ? undefined : standOf(ctx, hostKey).stand;
+  if (stand !== undefined && span !== undefined) {
+    const ys = pieces.flatMap((piece) => piece.nodes.map((node) => node.position.y));
+    const look = { width: span.s1 - span.s0, height: Math.max(...ys) - Math.min(...ys), shape, isDoor: isDoorRect(span) };
+    const causeId = scopedToolId(ctx, "opening-edit-shape", ctx.nextSequence());
+    const result = stand.refit(ctx, causeId, current.pieceKeys, hostKey!, look, { x: 0, z: 0 });
+    if (result.created !== undefined) selected = { groupKey: result.created.group, pieceKeys: result.created.surfaceKeys, shape };
+    reportCommit(ctx, causeId, result, "Formato da abertura alterado.");
+    return;
+  }
   const split = run === undefined || span === undefined ? undefined : run.pieces(span, shape);
   if (split === undefined || split.length === 0) {
     ctx.reportFeedback({ tone: "error", message: "Abertura: nao foi possivel mudar o formato desta abertura." });

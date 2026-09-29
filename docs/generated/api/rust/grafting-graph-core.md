@@ -2445,6 +2445,11 @@ Maximum rise above the base.
 
 Horizontal expansion of the base contour.
 
+### `pub grafting_graph_core::profile_roof::RoofDormer::absolute: bool`
+
+Its slopes are rises per unit run, its own, not shares of the
+roof's: a roof made steeper or flatter leaves it as it stands.
+
 ### `pub grafting_graph_core::profile_roof::RoofDormer::along: f64`
 
 Where its middle stands along that side, as a fraction of it.

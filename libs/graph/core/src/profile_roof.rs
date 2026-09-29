@@ -54,6 +54,10 @@ pub struct RoofDormer {
     /// Relative steepness of its front, right, back and left sides; zero
     /// makes a side a gable. Two waters pitch the right and left.
     pub slopes: [f64; 4],
+    /// Its slopes are rises per unit run, its own, not shares of the
+    /// roof's: a roof made steeper or flatter leaves it as it stands.
+    #[cfg_attr(feature = "curve-serde", serde(default))]
+    pub absolute: bool,
 }
 
 /// A whole roof: its footprint, how each side rises, and its dormers.
@@ -826,10 +830,6 @@ fn dormer_block(
         at(-half, depth),
     ];
     let elevation = leaf.plane.z(front) + dormer.front;
-    // A level top must meet its leaf before the leaf ends: none higher than the roof reaches behind it.
-    if flat && [at(-half, depth), at(half, depth)].iter().any(|p| leaf.plane.z(*p) <= elevation + 1e-6) {
-        return Err("a level dormer top must meet its leaf: it cannot stand higher than the roof behind it".into());
-    }
     let mut planes = Vec::new();
     let mut normals = Vec::new();
     for i in 0..4 {
@@ -837,7 +837,7 @@ fn dormer_block(
         let d = sub(b, a);
         let length = d[0].hypot(d[1]);
         let normal = [-d[1] / length, d[0] / length];
-        let slope = dormer.slopes[i] * scale;
+        let slope = if dormer.absolute { dormer.slopes[i] } else { dormer.slopes[i] * scale };
         planes.push(Plane {
             grad: [slope * normal[0], slope * normal[1]],
             base: elevation - slope * dot(normal, a),
@@ -1902,7 +1902,7 @@ mod tests {
             slopes[side] = 1.0;
             slopes[(side + 2) % 4] = 1.0;
             let mut request = roof(outer.clone(), vec![], slopes);
-            request.dormers = vec![RoofDormer { side, along, setback: 1.0, width: 1.0, front: 0.5, slopes: [0.0; 4] }];
+            request.dormers = vec![RoofDormer { side, along, setback: 1.0, width: 1.0, front: 0.5, slopes: [0.0; 4], absolute: false }];
             let patch = generate_roof_patch(request).unwrap_or_else(|e| panic!("{outer:?}: {e}"));
             let front = patch.faces.iter().find(|f| f.dormer == Some(0) && f.upright && f.side == 0).expect("a front");
             let xs: Vec<f64> = front.boundary.iter().map(|(e, _)| patch.nodes[patch.edges[*e].start][0]).collect();
@@ -2354,6 +2354,7 @@ mod tests {
                     width: 1.0,
                     front: 0.6,
                     slopes: [0.0, 1.0, 0.0, 1.0],
+                    absolute: false,
                 });
                 if let Ok(patch) = generate_roof_patch(request) {
                     raised += 1;
@@ -2378,6 +2379,7 @@ mod tests {
             width: 2.0,
             front: 1.0,
             slopes,
+            absolute: false,
         }
     }
 

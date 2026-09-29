@@ -417,6 +417,14 @@ export interface MotionContext {
 export const RECIPE_ROLE_PROP = "recipeRole";
 
 /**
+ * Region property saying what is pinned to a regenerated face keeps its true
+ * height above the face's foot, not its share of the face's height: set on a
+ * face that exists to hold what is pinned to it, whose own height changes
+ * round it.
+ */
+export const PINS_KEEP_HEIGHT_PROP = "pinsKeepHeight";
+
+/**
  * A structure regenerated whole from a recipe its faces keep, rather than
  * edited node by node: every handle changes the recipe, and the structure is
  * made again from it (`orchestration/global-handles/recipe-handle-provider.ts`).

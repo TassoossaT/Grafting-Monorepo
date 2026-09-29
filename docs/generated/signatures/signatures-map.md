@@ -4347,9 +4347,15 @@ export function edgeOverlayDescriptor(group: EdgeOverlayGroup): PreviewDescripto
 export interface FacePropsRuntime {
   setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): unknown;
   pinNodes(pins: readonly ConstructionPinRequest[], origin: ChangeOrigin, causeId: string): unknown;
+  /** Where relative points of a face stand -- to set down a pin that keeps its true height. */
+  resolveOnHost?(request: { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly uv: readonly (readonly [number, number])[] }): readonly ConstructionPosition[];
   }
 export interface PinnedToRoles {
-  readonly pins: readonly { readonly nodeId: string; readonly role: string; readonly u: number; readonly v: number }[];
+  readonly pins: readonly {
+  readonly nodeId: string; readonly role: string; readonly u: number; readonly v: number;
+  /** On a face whose pins keep their true height: how high above the face's foot it stands. */
+  readonly rise?: number;
+  }[];
   }
 export function pinnedToRoles(topologies: readonly ConstructionRegionTopology[], sources: readonly ConstructionSurfaceKey[]): PinnedToRoles {
   const replaced = new Set(sources.map(keyText));

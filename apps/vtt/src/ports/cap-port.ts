@@ -18,6 +18,8 @@ export interface RoofDormer {
   readonly slopes: readonly [number, number, number, number];
   /** Raised only to hold the opening in its front: it follows that opening, and goes with it. */
   readonly opening?: boolean;
+  /** Its slopes are rises per unit run, its own, not shares of the roof's. */
+  readonly absolute?: boolean;
 }
 
 /**
