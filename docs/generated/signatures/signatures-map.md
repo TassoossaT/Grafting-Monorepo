@@ -6799,7 +6799,7 @@ export function dormerSlopes(waters: Waters): readonly [number, number, number, 
 
 // src/features/edit-construction/structure-types/roof/roof-structure.ts
 export const roofStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
-  surfaceType: "roof", label: "Telhado", creation: "analytic sheets with one horizontal base and maximum height",
+  surfaceType: "roof", label: "Telhado", creation: "the weighted straight skeleton of its footprint, welded to what it stands on",
   // Its upright faces -- gables, a dormer's front -- take windows like any wall.
   traits: Object.freeze(["accepts-cuts"] as const),
   roleFor: (_topology, target) => `roof-${target.kind}`,

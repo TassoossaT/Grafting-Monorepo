@@ -2,6 +2,7 @@ import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import {
   carriedOnto,
   DEFAULT_TOOL_PARAMS,
+  hasTrait,
   dormerAt,
   outlineOf,
   planarDifference,
@@ -65,9 +66,17 @@ function roofsOf(ctx: ToolContext): Map<string, { readonly recipe: RoofRecipe; r
   return roofs;
 }
 
+/** The floors standing, with their outlines in plan -- what a roof is drawn onto. */
+function floorsOf(ctx: ToolContext) {
+  return ctx.runtime.getAllRegionTopologies().filter((face) => hasTrait(face.surfaceType, "floor") && face.outerLoops.length === 1);
+}
+
+/** Where a roof begun at `start` stands: on the node or the floor it was begun on, else at the tool's elevation. */
 function startElevation(ctx: ToolContext, start: PointerSample, params: Params): number {
   const picked = start.nodeId ? ctx.runtime.getGraphSnapshot().nodes.find((node) => node.id === start.nodeId) : undefined;
-  return picked?.position.y ?? params.elevation;
+  if (picked) return picked.position.y;
+  const floor = start.surfaceRef ? floorsOf(ctx).find((face) => surfaceRefFromNodeSet(face.surfaceKey) === start.surfaceRef) : undefined;
+  return floor?.nodes[0]?.position.y ?? params.elevation;
 }
 
 /** A drawn outline as plan corners, curved sides followed by short straight ones. */
@@ -79,9 +88,11 @@ function cornersOf(contour: readonly FittedEdge[]): Point[] {
   });
 }
 
-/** Every corner and every side of the standing roofs' footprints. */
-function rimsOf(recipes: readonly RoofRecipe[]): { readonly corners: Point[]; readonly sides: (readonly [Point, Point])[] } {
-  const rings = recipes.flatMap((recipe) => ringsOf(recipe.footprints).map((ring) => ring.points));
+/** Every ring of the standing roofs' footprints. */
+const roofRings = (recipes: readonly RoofRecipe[]) => recipes.flatMap((recipe) => ringsOf(recipe.footprints).map((ring) => ring.points));
+
+/** Every corner and every side of `rings`. */
+function rimsOf(rings: readonly (readonly Point[])[]): { readonly corners: Point[]; readonly sides: (readonly [Point, Point])[] } {
   return {
     corners: rings.flat(),
     sides: rings.flatMap((ring) => ring.map((a, i) => [a, ring[(i + 1) % ring.length]!] as const)),
@@ -89,12 +100,12 @@ function rimsOf(recipes: readonly RoofRecipe[]): { readonly corners: Point[]; re
 }
 
 /**
- * A drawn corner landed on a roof's own corner when it comes within reach
- * of one, else on its side -- so what is drawn against a roof meets it
- * exactly, along a side or at a corner, never a sliver off it.
+ * A drawn corner landed on a roof's or a floor's own corner when it comes
+ * within reach of one, else on its side -- so what is drawn against a roof,
+ * or over a floor, meets it exactly, never a sliver off it.
  */
-function landed(outline: readonly Point[], recipes: readonly RoofRecipe[]): Point[] {
-  const { corners, sides } = rimsOf(recipes);
+function landed(outline: readonly Point[], rings: readonly (readonly Point[])[]): Point[] {
+  const { corners, sides } = rimsOf(rings);
   return outline.map((p) => {
     const corner = corners.reduce<{ at?: Point; d: number }>((best, q) => {
       const d = Math.hypot(p[0] - q[0], p[1] - q[1]);
@@ -116,7 +127,7 @@ function meets(ctx: ToolContext, outline: readonly Point[], recipe: RoofRecipe):
   const mine = polygonsOf([{ outer: outline, holes: [] }]);
   const theirs = polygonsOf(recipe.footprints);
   if (planarUnion(ctx.runtime, mine, theirs).length < mine.length + theirs.length) return true;
-  const { corners, sides } = rimsOf([recipe]);
+  const { corners, sides } = rimsOf(roofRings([recipe]));
   const touches = (p: Point, list: readonly Point[], rims: readonly (readonly [Point, Point])[]) =>
     list.some((q) => Math.hypot(p[0] - q[0], p[1] - q[1]) < 1e-6)
     || rims.some(([a, b]) => {
@@ -124,7 +135,7 @@ function meets(ctx: ToolContext, outline: readonly Point[], recipe: RoofRecipe):
       const t = ((p[0] - a[0]) * d[0] + (p[1] - a[1]) * d[1]) / (d[0] * d[0] + d[1] * d[1] || 1);
       return t >= 0 && t <= 1 && Math.hypot(p[0] - (a[0] + d[0] * t), p[1] - (a[1] + d[1] * t)) < 1e-6;
     });
-  const own = rimsOf([{ ...recipe, footprints: [{ outer: outline, holes: [] }] }]);
+  const own = rimsOf([outline]);
   return outline.some((p) => touches(p, corners, sides)) || corners.some((p) => touches(p, own.corners, own.sides));
 }
 
@@ -134,10 +145,23 @@ function meets(ctx: ToolContext, outline: readonly Point[], recipe: RoofRecipe):
  * roofs and it fused into one, every side they had keeping its slope; cut,
  * what is left of each roof it takes a piece of, as many roofs as pieces.
  */
-function stroked(ctx: ToolContext, contour: readonly FittedEdge[], level: number, params: Params): { readonly requests: readonly RoofRequest[]; readonly replaces: readonly ConstructionSurfaceKey[] } {
+function stroked(ctx: ToolContext, contour: readonly FittedEdge[], level: number, params: Params): { readonly requests: readonly RoofSource[]; readonly replaces: readonly ConstructionSurfaceKey[] } {
   const roofs = [...roofsOf(ctx).values()];
-  const outline = landed(cornersOf(contour), roofs.map(({ recipe }) => recipe));
-  const drawn = roofOver([{ outer: outline, holes: [] }], level, params.height, params.waters);
+  const topologies = ctx.runtime.getAllRegionTopologies();
+  const floors = floorsOf(ctx).flatMap((face) => {
+    try {
+      return [roofBaseAt(topologies, { point: { x: 0, y: 0, z: 0 }, surfaceRef: surfaceRefFromNodeSet(face.surfaceKey) })];
+    } catch {
+      return [];
+    }
+  });
+  const outline = landed(cornersOf(contour), [...roofRings(roofs.map(({ recipe }) => recipe)), ...floors.map((floor) => floor.footprint.outer)]);
+  // Drawn round a floor's own outline, the roof stands on that floor: at its height, and following it.
+  const same = (a: readonly Point[], b: readonly Point[]) => a.length === b.length && a.every((p) => b.some((q) => Math.hypot(p[0] - q[0], p[1] - q[1]) < 1e-6));
+  const on = floors.find((floor) => same(outline, floor.footprint.outer));
+  const drawn: RoofSource = on
+    ? { ...roofOver([on.footprint], on.elevation, params.height, params.waters), base: on.ref }
+    : roofOver([{ outer: outline, holes: [] }], level, params.height, params.waters);
   if (params.action === "cut") {
     const cut = roofs.flatMap(({ recipe, faces }) => {
       const whole = polygonsOf(recipe.footprints);
@@ -169,7 +193,8 @@ function stroked(ctx: ToolContext, contour: readonly FittedEdge[], level: number
 export function commitRoofRecipes(ctx: ToolContext, requests: readonly RoofSource[], replaces: readonly ConstructionSurfaceKey[] = [], done = "Telhado criado."): void {
   try {
     const operationId = scopedToolId(ctx, "roof", ctx.nextSequence());
-    const made = requests.map((request, i) => roofGraphPatch(ctx.runtime, request, requests.length === 1 ? operationId : `${operationId}:${i}`));
+    const standing = ctx.runtime.getAllRegionTopologies();
+    const made = requests.map((request, i) => roofGraphPatch(ctx.runtime, request, requests.length === 1 ? operationId : `${operationId}:${i}`, standing));
     const patch: ConstructionPatch = {
       nodes: made.flatMap(({ patch }) => patch.nodes),
       edges: made.flatMap(({ patch }) => patch.edges),

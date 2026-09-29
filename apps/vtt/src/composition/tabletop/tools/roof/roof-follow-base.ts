@@ -49,7 +49,7 @@ export function followBaseReaction(): Reaction<FollowBaseRuntime> {
       const operationId = `${effect.causeId}:follow:${group}`;
       let made: ReturnType<typeof roofGraphPatch>;
       try {
-        made = roofGraphPatch(runtime, request, operationId);
+        made = roofGraphPatch(runtime, request, operationId, topologies);
       } catch {
         // A base the roof cannot be raised over as it now stands: the roof stays as it stood.
         continue;

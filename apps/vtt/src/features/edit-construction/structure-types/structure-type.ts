@@ -425,8 +425,8 @@ export interface RecipeGeneration {
   readonly handles: (members: readonly ConstructionRegionTopology[], recipe: unknown) => readonly RecipeHandle[];
   /** The recipe `intent` on `handle` leaves -- `null` when it leaves nothing, `undefined` when it changes nothing. Throws to refuse. */
   readonly edit: (recipe: unknown, handle: RecipeHandle, intent: GlobalHandleIntent) => unknown;
-  /** The structure `recipe` makes, named under `operationId`, with what each face keeps, by region id. */
-  readonly generate: (port: GlobalHandlePort, recipe: unknown, operationId: string) => {
+  /** The structure `recipe` makes, named under `operationId` among what is `standing`, with what each face keeps, by region id. */
+  readonly generate: (port: GlobalHandlePort, recipe: unknown, operationId: string, standing: readonly ConstructionRegionTopology[]) => {
     readonly patch: ConstructionPatch;
     readonly faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>;
   };

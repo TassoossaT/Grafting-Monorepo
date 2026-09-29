@@ -1,4 +1,4 @@
-import type { ConstructionPatch, ConstructionPosition, ConstructionRegionTopology } from "@/ports";
+import type { ConstructionPatch, ConstructionPosition, ConstructionRegionEdge, ConstructionRegionTopology } from "@/ports";
 import type { RoofDormer, RoofFootprint, RoofPatch, RoofPort, RoofRequest } from "../../../../ports/cap-port.ts";
 
 import type { GlobalHandleIntent } from "../../global-handles/global-handle.ts";
@@ -213,21 +213,56 @@ export function dormerAt(recipe: RoofRequest, side: number, at: Point, width: nu
   };
 }
 
+/** How close a roof corner must stand to a standing node to be that node. */
+const WELD = 1e-6;
+
 /**
  * The roof `request` makes, as a patch named under `operationId`, and what
  * each face keeps, by region id: the recipe, under that name as its group,
  * its role, and that role as the key an edit finds the same face again by.
+ *
+ * Welded to what stands under it: every eave corner lying exactly on a node
+ * of `standing` -- a floor's corner, a wall's top -- is that node, and every
+ * eave between two of them that already has a side there is that side. So a
+ * roof on a floor shares its corners and sides, and goes where they go.
  */
-export function roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: RoofSource, operationId: string): {
+export function roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: RoofSource, operationId: string, standing: readonly ConstructionRegionTopology[] = []): {
   readonly patch: ConstructionPatch;
   readonly faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>;
 } {
   const { base, ...wire } = request;
   const roof: RoofPatch = port.generateRoof(wire);
-  const nodeId = (index: number) => `${operationId}:node:${index}`;
-  const edgeId = (index: number) => `${operationId}:edge:${index}`;
+  const others = standing.filter((face) => face.props?.[ROOF_RECIPE_PROP] === undefined);
+  const standingNodes = others.flatMap((face) => face.nodes);
+  const welded = roof.nodes.map(([x, y, z]) => (Math.abs(y - request.elevation) > WELD ? undefined
+    : standingNodes.find((node) => Math.abs(node.position.x - x) < WELD && Math.abs(node.position.y - y) < WELD && Math.abs(node.position.z - z) < WELD)));
+  const sides = new Map(others.flatMap((face) => [...face.outerLoops, ...face.holes].flat()).map((use) => [[use.startNodeId, use.endNodeId].sort().join("\u0000"), use] as const));
+  const nodeId = (index: number) => welded[index]?.id ?? `${operationId}:node:${index}`;
+  const sharedSide = (index: number) => {
+    const edge = roof.edges[index]!;
+    const [a, b] = [welded[edge.start], welded[edge.end]];
+    return a && b ? sides.get([a.id, b.id].sort().join("\u0000")) : undefined;
+  };
+  const edgeId = (index: number) => sharedSide(index)?.edgeId ?? `${operationId}:edge:${index}`;
   const regionId = (index: number) => `${operationId}:face:${index}`;
-  const uses = (loop: readonly (readonly [number, boolean])[]) => loop.map(([edge, reversed]) => ({ edgeId: edgeId(edge), reversed }));
+  /** A shared side as it is stored, whichever way the face standing on it walks it. */
+  const stored = (use: ConstructionRegionEdge) => (use.reversed ? { start: use.endNodeId, end: use.startNodeId } : { start: use.startNodeId, end: use.endNodeId });
+  /** Where a roof loop's use of edge `edge` starts walking. */
+  const walkStart = (edge: number, reversed: boolean) => nodeId(reversed ? roof.edges[edge]!.end : roof.edges[edge]!.start);
+  // A side two faces share is walked one way by each: welded to a floor, the
+  // roof takes the side it leaves free -- the whole roof wound the other way
+  // round when it would walk a shared side the way the floor does.
+  const turned = roof.faces.some((face) => [face.boundary, ...face.holes].flat().some(([edge, reversed]) => {
+    const shared = sharedSide(edge);
+    return shared !== undefined && walkStart(edge, reversed) === shared.startNodeId;
+  }));
+  const uses = (loop: readonly (readonly [number, boolean])[]) => {
+    const walked = (turned ? [...loop].reverse().map(([edge, reversed]) => [edge, !reversed] as const) : loop);
+    return walked.map(([edge, reversed]) => {
+      const shared = sharedSide(edge);
+      return { edgeId: edgeId(edge), reversed: shared ? walkStart(edge, reversed) !== stored(shared).start : reversed };
+    });
+  };
   const recipe: RoofRecipe = { elevation: request.elevation, height: request.height, footprints: request.footprints, slopes: request.slopes, dormers: request.dormers ?? [], ...(base ? { base } : {}), group: operationId };
   const faceProps = new Map<string, Readonly<Record<string, unknown>>>();
   roof.faces.forEach((face, index) => {
@@ -236,8 +271,13 @@ export function roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: Ro
   });
   return {
     patch: {
-      nodes: roof.nodes.map(([x, y, z], index) => ({ id: nodeId(index), position: { x, y, z } })),
-      edges: roof.edges.map((edge, index) => ({ edgeId: edgeId(index), startNodeId: nodeId(edge.start), endNodeId: nodeId(edge.end) })),
+      nodes: roof.nodes.map(([x, y, z], index) => ({ id: nodeId(index), position: welded[index]?.position ?? { x, y, z } })),
+      edges: roof.edges.map((edge, index) => {
+        const shared = sharedSide(index);
+        return shared
+          ? { edgeId: shared.edgeId, startNodeId: stored(shared).start, endNodeId: stored(shared).end }
+          : { edgeId: edgeId(index), startNodeId: nodeId(edge.start), endNodeId: nodeId(edge.end) };
+      }),
       regions: roof.faces.map((face, index) => ({
         regionId: regionId(index), surfaceType: "roof", physical: true,
         boundary: uses(face.boundary), ...(face.holes.length > 0 ? { holes: face.holes.map(uses) } : {}),
@@ -519,5 +559,5 @@ export const roofRecipeGeneration: RecipeGeneration = {
   },
   handles: roofHandles,
   edit: editRoof,
-  generate: (port, recipe, operationId) => roofGraphPatch(port, recipe as RoofRecipe, operationId),
+  generate: (port, recipe, operationId, standing) => roofGraphPatch(port, recipe as RoofRecipe, operationId, standing),
 };

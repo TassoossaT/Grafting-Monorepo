@@ -7051,11 +7051,16 @@ The rest are gables.
 
 Every ring of a roof, footprint by footprint: its outline, then its holes -- the order its sides are numbered in.
 
-### `function vtt.roof-recipe.roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: RoofSource, operationId: string): { faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>; patch: ConstructionPatch }`
+### `function vtt.roof-recipe.roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: RoofSource, operationId: string, standing: readonly ConstructionRegionTopology[]): { faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>; patch: ConstructionPatch }`
 
 The roof `request` makes, as a patch named under `operationId`, and what
 each face keeps, by region id: the recipe, under that name as its group,
 its role, and that role as the key an edit finds the same face again by.
+
+Welded to what stands under it: every eave corner lying exactly on a node
+of `standing` -- a floor's corner, a wall's top -- is that node, and every
+eave between two of them that already has a side there is that side. So a
+roof on a floor shares its corners and sides, and goes where they go.
 
 ### `function vtt.roof-recipe.roofOver(footprints: readonly RoofFootprint[], elevation: number, height: number, waters: Waters): RoofRequest`
 
@@ -7342,9 +7347,9 @@ The recipe itself is the type's own business; nothing outside it reads one.
 
 The recipe `intent` on `handle` leaves -- `null` when it leaves nothing, `undefined` when it changes nothing. Throws to refuse.
 
-### `property vtt.structure-type.RecipeGeneration.generate: (port: GlobalHandlePort, recipe: unknown, operationId: string) => { faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>; patch: ConstructionPatch }`
+### `property vtt.structure-type.RecipeGeneration.generate: (port: GlobalHandlePort, recipe: unknown, operationId: string, standing: readonly ConstructionRegionTopology[]) => { faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>; patch: ConstructionPatch }`
 
-The structure `recipe` makes, named under `operationId`, with what each face keeps, by region id.
+The structure `recipe` makes, named under `operationId` among what is `standing`, with what each face keeps, by region id.
 
 ### `property vtt.structure-type.RecipeGeneration.handles: (members: readonly ConstructionRegionTopology[], recipe: unknown) => readonly RecipeHandle[]`
 

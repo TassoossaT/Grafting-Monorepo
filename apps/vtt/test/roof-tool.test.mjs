@@ -397,3 +397,49 @@ test("a roof moved by its own hand lets go of its floor", () => {
     assert.equal(JSON.stringify(roofs(runtime)[0].props.roof.footprints), before);
   } finally { session.free(); }
 });
+
+test("a roof on a floor is welded to it: its eaves are the floor's own corners and sides", () => {
+  const value = onFloor();
+  const { runtime, session } = value;
+  try {
+    const nodes = new Set(roofs(runtime).flatMap((f) => f.nodes.map((n) => n.id)));
+    assert.ok(["p0", "p1", "p2", "p3"].every((id) => nodes.has(id)), [...nodes].join());
+    const floor = runtime.getAllRegionTopologies().find((f) => f.surfaceType === "platform");
+    const floorSides = new Set(floor.outerLoops[0].map((use) => use.edgeId));
+    const roofSides = new Set(roofs(runtime).flatMap((f) => f.outerLoops.flat().map((use) => use.edgeId)));
+    assert.ok([...floorSides].every((id) => roofSides.has(id)), "every side of the floor is an eave of the roof");
+  } finally { session.free(); }
+});
+
+test("pushing a side of the floor out widens the floor, and the roof with it", () => {
+  const value = onFloor();
+  const { runtime, session, calls } = value;
+  try {
+    const side = shownGlobalHandles(scene(runtime)).find((h) => h.kind === "side" && h.owner === "platform" && h.position.x > 8);
+    dragWith(platformContourTool, value, side, { x: side.position.x + 2, y: side.position.y, z: side.position.z }, { ...DEFAULT_TOOL_PARAMS["platform-contour"] });
+    const floorXs = runtime.getAllRegionTopologies().find((f) => f.surfaceType === "platform").nodes.map((n) => n.position.x);
+    assert.deepEqual([Math.min(...floorXs), Math.max(...floorXs)], [0, 10], JSON.stringify(calls.feedback.slice(-2)));
+    const xs = roofs(runtime)[0].props.roof.footprints[0].outer.map(([x]) => x);
+    assert.deepEqual([Math.min(...xs), Math.max(...xs)], [0, 10]);
+    const nodes = new Set(roofs(runtime).flatMap((f) => f.nodes.map((n) => n.id)));
+    assert.ok(["p0", "p1", "p2", "p3"].every((id) => nodes.has(id)), "still welded");
+  } finally { session.free(); }
+});
+
+test("a roof drawn over a floor's outline lands on it, stands at its height and is welded to it", () => {
+  const value = fixture();
+  const { runtime, session } = value;
+  try {
+    const floor = addFace(runtime, "floor", "platform", [[0, 0], [8, 0], [8, 4], [0, 4]].map(([x, z], i) => ({ id: `p${i}`, position: { x, y: 3, z } })));
+    const start = { point: { x: 0.1, y: 3, z: -0.1 }, surfaceRef: surfaceRefFromNodeSet(floor.surfaceKey) };
+    const current = { point: { x: 7.9, y: 3, z: 4.15 } };
+    const params = { ...DEFAULT_TOOL_PARAMS.roof, elevation: 0, height: 2 };
+    roofTool.onPointerDown(value.ctx, start, params);
+    roofTool.onPointerUp(value.ctx, { start, current, samples: [start, current] }, params);
+    const recipe = roofs(runtime)[0].props.roof;
+    assert.equal(recipe.elevation, 3);
+    assert.equal(recipe.base?.kind, "floor");
+    const nodes = new Set(roofs(runtime).flatMap((f) => f.nodes.map((n) => n.id)));
+    assert.ok(["p0", "p1", "p2", "p3"].every((id) => nodes.has(id)));
+  } finally { session.free(); }
+});

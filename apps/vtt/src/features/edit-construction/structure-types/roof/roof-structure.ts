@@ -10,7 +10,7 @@ import { roofRecipeGeneration } from "./roof-recipe.ts";
  * its eaves reach and whether its leaves curve are the covering's business.
  */
 export const roofStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
-  surfaceType: "roof", label: "Telhado", creation: "analytic sheets with one horizontal base and maximum height",
+  surfaceType: "roof", label: "Telhado", creation: "the weighted straight skeleton of its footprint, welded to what it stands on",
   // Its upright faces -- gables, a dormer's front -- take windows like any wall.
   traits: Object.freeze(["accepts-cuts"] as const),
   roleFor: (_topology, target) => `roof-${target.kind}`,
@@ -21,12 +21,8 @@ export const roofStructureType: StructureTypeDefinition = Object.freeze<Structur
   recipe: roofRecipeGeneration,
   // Stood on a floor or a room, it is made again over it whenever that changes.
   reactions: Object.freeze({ reshape: "follow-base" } as const),
+  // Its nodes never drag one another: welded to a floor, a side of it pushed
+  // must reshape the floor, not carry the roof -- and the floor with it --
+  // whole. The roof is made again over what it stands on instead.
   globalHandles: Object.freeze(["pivot", "rotate", "rise", "slope", "seam", "side", "corner", "insert"] as const),
-  motionInfluences: (topology) => {
-    const anchor = topology.nodes[0];
-    return anchor ? topology.nodes.slice(1).flatMap((node) => [
-      { from: anchor.id, to: node.id, axes: [true, true, true] as const },
-      { from: node.id, to: anchor.id, axes: [true, true, true] as const },
-    ]) : [];
-  },
 });

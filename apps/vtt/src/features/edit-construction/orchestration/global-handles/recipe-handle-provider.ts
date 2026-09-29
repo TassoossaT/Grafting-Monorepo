@@ -62,7 +62,7 @@ export const recipeHandleProvider: GlobalHandleProvider = {
     if (next === undefined) return undefined;
     const sourceSurfaceKeys = structure.members.map((member) => member.surfaceKey);
     if (next === null) return { kind: "replace", request: { operationId, sourceSurfaceKeys, patch: { nodes: [], edges: [], regions: [] } } };
-    const { patch, faceProps } = structure.type.generate(port, next, operationId);
+    const { patch, faceProps } = structure.type.generate(port, next, operationId, scene.topologies);
     return { kind: "replace", request: { operationId, sourceSurfaceKeys, patch }, faceProps };
   },
 };
