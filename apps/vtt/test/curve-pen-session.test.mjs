@@ -418,58 +418,6 @@ test("edge curvature drag previews transiently, cancels, and undoes without addi
 });
 
 
-test("branch icon action starts a mouse-following draft from an inserted vertex even in brush mode",()=>{
-  const f=fixture();
-  try {
-    f.click(sample(-10,0));f.click(sample(10,0));f.finish();
-    const face=f.runtime.getAllRegionTopologies()[0];
-    f.click({...sample(3,0),surfaceRef:surfaceRefFromNodeSet(face.surfaceKey)});
-    const id=f.selected.id,before=state(f);
-    assert.equal(tool.onSelectionAction(f.ctx,"branch",brush),true);
-    assert.equal(f.selected,undefined);
-    assert.equal(tool.onSelectionAction(f.ctx,"branch",brush),false,"double activation must not restart the draft");
-    const cursor=sample(3,8);
-    tool.previewFor(gesture(cursor,cursor),brush,f.ctx);
-    assert.ok(f.previews.get("road-points").positions.length>12);
-    assert.deepEqual(state(f),before,"hover must not construct or move the source vertex");
-    f.click(cursor,cursor,brush);
-    assert.deepEqual(state(f),before);
-    tool.onKeyDown(f.ctx,"Enter",brush);
-    assert.equal(edges(f).filter(e=>e.startNodeId===id||e.endNodeId===id).length,3,JSON.stringify(f.calls.feedback));
-    assert.equal(f.previews.has("road-points"),false);
-    f.session.undo_region_overlay("platform-test:road-points:3");assert.deepEqual(state(f),before);
-  }finally{f.close();}
-});
-
-test("branch action cancellation and missing selection leave the road unchanged",()=>{
-  const f=fixture();
-  try {
-    assert.equal(tool.onSelectionAction(f.ctx,"branch",brush),false);
-    build(f);const e=edges(f)[0],node=f.runtime.getGraphSnapshot().nodes.find(n=>n.id===e.endNodeId);
-    f.click({nodeId:node.id,point:node.position});const before=state(f);
-    assert.equal(tool.onSelectionAction(f.ctx,"branch",brush),true);
-    tool.onCancel(f.ctx);assert.deepEqual(state(f),before);
-    assert.equal(tool.onKeyDown(f.ctx,"Enter",brush),false);
-    assert.equal(f.previews.has("road-points"),false);
-  }finally{f.close();}
-});
-
-
-test("in-scene branch action starts from its vertex without requiring toolbar selection",()=>{
-  const f=fixture();
-  try {
-    build(f);const edge=edges(f)[0],id=edge.endNodeId;
-    const action={...sample(0.8,4.8),constructionAction:{kind:"branch",nodeId:id}};
-    const before=state(f);
-    f.click(action,action,brush);
-    const cursor=sample(0,9);tool.previewFor(gesture(cursor,cursor),brush,f.ctx);
-    assert.ok(f.previews.get("road-points").positions.length>12);
-    assert.deepEqual(state(f),before);
-    f.click(cursor,cursor,brush);tool.onKeyDown(f.ctx,"Enter",brush);
-    assert.equal(edges(f).filter(e=>e.startNodeId===id||e.endNodeId===id).length,3,JSON.stringify(f.calls.feedback));
-  }finally{f.close();}
-});
-
 for(const mode of ["points","brush"])for(const destination of ["vertex","edge"]){
   test(`snap to ${destination} while drawing in ${mode} mode commits the highlighted junction`,()=>{
     const f=fixture();

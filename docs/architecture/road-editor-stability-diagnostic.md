@@ -51,3 +51,7 @@ Foram acrescentadas regressões reais-WASM para preservação de pontos próximo
 ## Custo medido da prévia
 
 Medição Node/WASM, sem navegador ou renderer: nove pontos autorados, largura 0.6, 20 hovers de aquecimento e 200 hovers medidos. Cada hover estende a mesma cadeia com um cursor variando X de 8 a 8.219, Y=0 e Z=-2. Tempo total do handler: mediana 0.280 ms, p95 0.491 ms, máximo 1.068 ms. Soma dos comandos curveBatch Rust por hover: mediana 0.229 ms, p95 0.397 ms, máximo 0.828 ms. Não inclui picking de tela, GPU, renderização ou latência do usuário; não é orçamento acordado nem promessa para redes maiores.
+
+## Remoção dos botões de geração
+
+A pedido do dono, foram retirados o botão superior Criar rua daqui e o + flutuante do ponto selecionado, incluindo registro visual, picking e callbacks que iniciavam a geração por esses controles. A criação a partir da geometria usa os handles/trechos com Shift; as instruções do painel refletem esse fluxo. Os três testes exclusivos dos botões foram removidos, preservando os testes dos gestos por handles. A prévia desta worktree é servida em http://127.0.0.1:4514/table/road-stability-324; HTTP 200 não constitui validação visual.

@@ -3999,8 +3999,6 @@ Boundary edges running along the top, the paired half of the same subdivision.
 
 ### `property vtt.use-construction-pointer.ConstructionPointerHandlers.onPointerUp: (event: PointerEvent<HTMLDivElement>) => void`
 
-### `property vtt.use-construction-pointer.ConstructionPointerHandlers.onSelectionAction: (action: string) => void`
-
 ### `interface vtt.use-construction-pointer.UseConstructionPointerOptions`
 
 ### `property vtt.use-construction-pointer.UseConstructionPointerOptions.activeTool: ConstructionToolId`

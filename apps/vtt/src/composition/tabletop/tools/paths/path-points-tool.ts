@@ -1,4 +1,4 @@
-import { createPathBrushEffect, isSpineControlNodeId, pathFormationFor, DEFAULT_TOOL_PARAMS, PATH_SURFACE_TYPE } from "../../../../features/edit-construction/index.ts";
+import { createPathBrushEffect, pathFormationFor, DEFAULT_TOOL_PARAMS, PATH_SURFACE_TYPE } from "../../../../features/edit-construction/index.ts";
 import type { PathBrushParams } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionPosition, CubicBezier } from "../../../../ports/index.ts";
 import { commitPathCloudIntent } from "../../path/path-cloud-transaction.ts";
@@ -76,19 +76,6 @@ function commitDraft(ctx: ToolContext, draft: Draft): void {
   }
 }
 
-function startBranch(ctx: ToolContext, id: string | undefined, params: PathBrushParams): boolean {
-
-    const node = ctx.runtime.getGraphSnapshot().nodes.find(n => n.id === id);
-    if (!node || !spine.pick(ctx, { nodeId: node.id, point: node.position })) return false;
-    const draft: Draft = { points: [{ ...node.position }], params: { ...params, creationMode: "points" } };
-    showRoadSnap(ctx);
-    drafts.set(ctx.runtime, draft);
-    spine.select(ctx);
-    preview(ctx, draft);
-    ctx.reportFeedback({ tone: "info", message: "Posicione a nova rua com o mouse. Clique num encaixe para finalizar, ou adicione pontos livres; Enter confirma e Esc cancela." });
-    return true;
-}
-
 /** A road is drawn freely or through explicit points, and edited by its spine points. */
 export const pathPointsTool: ConstructionTool<"path-brush"> = {
   id: "path-brush",
@@ -109,10 +96,6 @@ export const pathPointsTool: ConstructionTool<"path-brush"> = {
   onPointerDown(ctx, sample, params) {
     safely(ctx, () => {
       if (gestures.has(ctx.runtime)) return;
-      if (sample.constructionAction?.kind === "branch") {
-        if (!drafts.has(ctx.runtime)) startBranch(ctx, sample.constructionAction.nodeId, params);
-        return;
-      }
       const snap = drafts.has(ctx.runtime) ? roadSnapTarget(ctx, sample) : undefined;
       if (snap) sample = snap;
       if (!drafts.get(ctx.runtime)?.points.length) {
@@ -184,11 +167,6 @@ export const pathPointsTool: ConstructionTool<"path-brush"> = {
         else preview(ctx, next);
       }
     });
-  },
-  selectionActions: (_ctx, selectedId) => (isSpineControlNodeId(selectedId) ? [{ id: "branch", label: "Criar rua daqui" }] : []),
-  onSelectionAction(ctx, action, params) {
-    if (action !== "branch" || gestures.has(ctx.runtime) || drafts.has(ctx.runtime)) return false;
-    return startBranch(ctx, spine.selected(ctx), params);
   },
   onKeyDown(ctx, key) {
     if (gestures.has(ctx.runtime)) return false;

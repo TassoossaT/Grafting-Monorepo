@@ -78,7 +78,6 @@ function applySnap(sample: PointerSample, snapToGrid: boolean): PointerSample {
 }
 
 export interface ConstructionPointerHandlers {
-  readonly onSelectionAction: (action: string) => void;
   readonly onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
   readonly onPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
   readonly onPointerUp: (event: ReactPointerEvent<HTMLDivElement>) => void;
@@ -169,8 +168,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
         const node = info && toolFor(activeTool).handlePresentation === "spine-points" ? spineHandleAt(runtime, info.id) : undefined;
         selectedPoint.current = node?.id;
         runtime.setPointManipulator?.(viewId, node && !branchModifier.current ? {
-          // Branching starts a new structure from the point, which only a tool that handles the action can do.
-          id: node.id, position: node.position, branchAction: toolFor(activeTool).selectionActions?.(ctx, node.id).some((action) => action.id === "branch") === true,
+          id: node.id, position: node.position,
           onChange(phase, position) {
             if (phase === "start") {
               manipulatorGesture.current?.cancel();
@@ -415,7 +413,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
             }
           }
         }
-        event.currentTarget.style.cursor = sample?.constructionAction ? "pointer" : sample?.nodeId ? "grab" : "";
+        event.currentTarget.style.cursor = sample?.nodeId ? "grab" : "";
         const descriptor = sample ? tool.previewFor?.({ start: sample,current: sample,samples: [sample] },params,ctx) : undefined;
         if (descriptor) optionsRef.current.runtime.showPreview(descriptor,TOOL_GHOST_PREVIEW_CHANNEL);
         else optionsRef.current.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
@@ -495,14 +493,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     [ctx, refreshEdgeOverlay, sampleAt],
   );
 
-  const onSelectionAction = useCallback((action: string) => {
-    if (gestureRef.current || manipulatorGesture.current) return;
-    const { activeTool, toolParams } = optionsRef.current;
-    if (toolFor(activeTool).onSelectionAction?.(ctx, action, toolParams[activeTool] as never, selectedId.current)) refreshEdgeOverlay();
-  }, [ctx, refreshEdgeOverlay]);
-
   return {
-    onSelectionAction,
     onPointerDown,
     onPointerMove,
     onPointerUp: finishGesture,
