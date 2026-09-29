@@ -670,7 +670,7 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
 
   cloudFor(request: CloudRequest): CloudOutcome {
     const response = JSON.parse(
-      this.#require().cloud_json(JSON.stringify({ seed: request.seed, surfaceType: request.surfaceType })),
+      this.#require().cloud_json(JSON.stringify({ seed: request.seed, surfaceType: request.surfaceType, surfaceTypes: request.surfaceTypes })),
     ) as { surfaceKeys: readonly (readonly string[])[] };
     return { surfaceKeys: response.surfaceKeys };
   }
@@ -696,9 +696,9 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     return this.getGraphSnapshot().nodes;
   }
 
-  generateCap(request: import("../../ports/cap-port.ts").CapRequest): import("../../ports/cap-port.ts").CapPatch {
+  generateRoof(request: import("../../ports/cap-port.ts").RoofRequest): import("../../ports/cap-port.ts").RoofPatch {
     const session = this.#require();
-    return JSON.parse(session.profile_cap_json(JSON.stringify(request))) as import("../../ports/cap-port.ts").CapPatch;
+    return JSON.parse(session.profile_roof_json(JSON.stringify(request))) as import("../../ports/cap-port.ts").RoofPatch;
   }
 
   curveBatch(request: CurveBatch): readonly CurveResult[] {

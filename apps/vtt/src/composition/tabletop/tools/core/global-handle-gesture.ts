@@ -17,6 +17,7 @@ import {
   planEdit,
   planGlobalHandle,
   resolveCloudTopology,
+  resolvePolicy,
   shownGlobalHandleAt,
   type AtomicEditOp,
   type GlobalHandle,
@@ -33,6 +34,7 @@ import { commitPatchReplacement, commitRegionEdit, commitStagedRegionEdit } from
 import type { PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
 import { HANDLE_DONE } from "../../handle-glyphs.ts";
 import { surfaceKeyText } from "../../../../features/edit-construction/index.ts";
+import { keepFaceProps, pinnedToRoles } from "./face-props.ts";
 
 const CHANNEL = "global-handle";
 const PREVIEW_COLOR = 0xffbc55;
@@ -158,6 +160,7 @@ function resolvedPart(ctx: ToolContext, edit: GlobalHandleEdit, scene: GlobalHan
   if (!cloud) throw new Error("A estrutura não está mais aqui.");
   const gesture = { surfaceKey: edit.seed, target: edit.target, delta: edit.delta };
   const face = scene.topologies.find((topology) => surfaceKeyText(topology.surfaceKey) === surfaceKeyText(edit.seed));
+  const preserveJoined = face !== undefined && resolvePolicy(face, edit.target).preserveJoined === true;
   const links = face ? endJoinsOf(scene.graph, scene.topologies, face) : [];
   const positions = new Map(scene.graph.nodes.map((node) => [node.id, node.position]));
   const plan = planEdit(cloud, gesture, scene.graph, ctx.runtime);
@@ -165,10 +168,10 @@ function resolvedPart(ctx: ToolContext, edit: GlobalHandleEdit, scene: GlobalHan
     const placed = placedBy(plan.ops, scene.topologies);
     // A floor pushed never takes a joined structure along, not even whole: any join whose nodes it would move is paused.
     const reshaped = reshapedWelds(links, positions, new Map(placed.moves.map((move) => [move.nodeId, move.position])), face !== undefined && hasTrait(face.surfaceType, "floor"));
-    if (reshaped.length > 0) throw new NeedsPause(reshaped);
+    if (reshaped.length > 0 && !preserveJoined) throw new NeedsPause(reshaped);
     // Held still by what it is joined to -- a solid floor walking its end's edge: paused, and planned again.
     const pushes = Math.hypot(edit.delta.x, edit.delta.y, edit.delta.z) > 1e-9;
-    if (pushes && placed.moves.length === 0 && links.length > 0) throw new NeedsPause(links);
+    if (pushes && placed.moves.length === 0 && links.length > 0 && !preserveJoined) throw new NeedsPause(links);
     return placed;
   }
   // Refused as welded: every weld the structure takes part in is paused, and the push planned again.
@@ -305,7 +308,13 @@ function commitEdit(ctx: ToolContext, handle: GlobalHandle, edit: GlobalHandleEd
     return;
   }
   if (edit.kind === "replace") {
-    const { recorded } = commitPatchReplacement(ctx.runtime, edit.request, { transactionId: operationId });
+    const faceProps = edit.faceProps;
+    // What was pinned to the faces replaced -- a window in a gable -- is pinned to their successors.
+    const pinned = faceProps && pinnedToRoles(scene.topologies, edit.request.sourceSurfaceKeys);
+    const { recorded } = commitPatchReplacement(ctx.runtime, edit.request, {
+      transactionId: operationId,
+      ...(faceProps ? { afterward: (outcome) => keepFaceProps(ctx.runtime, operationId, outcome.createdSurfaceKeys, faceProps, pinned) } : {}),
+    });
     if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
     return;
   }
@@ -381,6 +390,11 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
       case "foot": return { intent: { kind: "move", delta }, at };
       case "top": return { intent: { kind: "move", delta }, at, readout: `altura ${delta.y >= 0 ? "+" : ""}${delta.y.toFixed(2)} m` };
       case "detach": return { intent: { kind: "detach" }, at };
+      case "rise": return { intent: { kind: "height", dy: delta.y }, at, readout: `altura ${delta.y >= 0 ? "+" : ""}${delta.y.toFixed(2)} m` };
+      case "slope":
+      case "seam":
+        return { intent: { kind: "height", dy: delta.y }, at, readout: `inclinação ${delta.y >= 0 ? "+" : ""}${delta.y.toFixed(2)} m` };
+      case "insert": return { intent: { kind: "move", delta }, at };
       case "height": return { intent: { kind: "height", dy: delta.y }, at, readout: `altura ${delta.y >= 0 ? "+" : ""}${delta.y.toFixed(2)} m` };
       case "rotate": return { intent: { kind: "rotate", angle }, at, readout: `rotação ${((angle * 180) / Math.PI).toFixed(0)}°` };
       case "turns": return { intent: { kind: "wind", angle }, at, readout: `voltas ${angle >= 0 ? "+" : ""}${(angle / (2 * Math.PI)).toFixed(2)}` };
@@ -414,7 +428,9 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
           // A part held with a solid structure slides off it: let go for the drag, so the preview is the real thing.
           if (!pause && !released) {
             const transactionId = `${operationId}:release`;
-            const request = releasePart(scene.topologies, scene.graph, planned, transactionId);
+            const source = scene.topologies.find((topology) => surfaceKeyText(topology.surfaceKey) === surfaceKeyText(planned.seed));
+            const keepJoined = source !== undefined && resolvePolicy(source, planned.target).preserveJoined === true;
+            const request = keepJoined ? undefined : releasePart(scene.topologies, scene.graph, planned, transactionId);
             if (request) {
               ctx.runtime.transact(transactionId, "local", () => ctx.runtime.applyPatchReplacement(request, "local", transactionId));
               released = { transactionId, was: scene };
@@ -481,4 +497,3 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
     },
   };
 }
-

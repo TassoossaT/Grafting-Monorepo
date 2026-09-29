@@ -385,6 +385,8 @@ export interface RemoveSurfaceRequest {
 export interface CloudRequest {
   readonly seed: ConstructionSurfaceKey;
   readonly surfaceType: string;
+  /** Optional compatible types in the seed's editable cloud family. */
+  readonly surfaceTypes?: readonly string[];
 }
 
 export interface CloudOutcome {
@@ -632,7 +634,7 @@ export interface ConstructionPlanarRequest {
   readonly operation: "union" | "difference" | "extend";
 }
 export interface ConstructionSessionPort extends BezierPort {
-  generateCap(request: import("./cap-port.ts").CapRequest): import("./cap-port.ts").CapPatch;
+  generateRoof(request: import("./cap-port.ts").RoofRequest): import("./cap-port.ts").RoofPatch;
   planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[];
   /** Pure cascade resolution, using one consistent engine state. */
   planMotion(request: ConstructionMotionRequest): ConstructionMotionPlan;

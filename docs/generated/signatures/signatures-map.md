@@ -133,6 +133,7 @@ pub fn set_region_props(
 // src/session.rs
 pub struct ConstructionSession
 pub fn profile_cap_json(&self, json: &str) -> Result<String, JsValue>
+pub fn profile_roof_json(&self, json: &str) -> Result<String, JsValue>
 pub fn bezier_batch_json(&self, json: &str) -> Result<String, JsValue>
 pub fn bezier_network_json(&self, json: &str) -> Result<String, JsValue>
 pub fn new() -> ConstructionSession
@@ -145,7 +146,6 @@ pub fn plan_motion_json(&self, request_json: &str) -> Result<String, JsValue>
 pub fn move_vertices_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn move_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn insert_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue>
-pub fn remove_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue>
 
 // src/spatial_index.rs
 pub const DEFAULT_GRID_CELL_SIZE: f32 = 4.0;
@@ -3631,9 +3631,8 @@ export function dispatchEffects(
   effects: readonly Effect[],
   reactions: TabletopReactions = TABLETOP_REACTIONS,
   ): readonly ReactionRecord[] {
-  return timePhase("reações", () => runEffects(runtime, {
-  regionsNear: (bounds) => typeof runtime.getRegionTopologiesInBounds === "function"
-  ? runtime.getRegionTopologiesInBounds(bounds)
+  // Every shape change is also a reshape, for what stands on the changed cloud to follow.
+  const reshaped = effects.flatMap((effect): Effect[] => (effect.kind === "cut" ? [effect, { ...effect, kind: "reshape" }] : [effect]));
 export interface CommitOptions {
   /** Names the transaction and its undo entry; reactions mint their ids from it. */
   readonly transactionId: string;
@@ -3683,9 +3682,10 @@ export function commitSurfaceRemoval(
   const removed = topologiesOf(runtime, [surfaceKey]);
 
 // src/composition/tabletop/effects/reactions.ts
-export type TabletopReactionRuntime = LatticeReactionRuntime;
+export type TabletopReactionRuntime = LatticeReactionRuntime & FollowBaseRuntime;
 export const TABLETOP_REACTIONS: Readonly<Record<ReactionId, Reaction<TabletopReactionRuntime>>> = Object.freeze({
   "lattice-regenerate": latticeRegenerateReaction(),
+  "follow-base": followBaseReaction(),
   });
 
 // src/composition/tabletop/effects/shape-change.ts
@@ -3735,6 +3735,7 @@ export const HANDLE_DONE: Readonly<Record<GlobalHandleKind, string>> = {
   originHeight: "Inclinação atualizada.", destinationHeight: "Inclinação atualizada.",
   side: "Lado ajustado.", corner: "Canto ajustado.",
   foot: "Coluna movida.", top: "Altura atualizada.", detach: "Estrutura solta.",
+  rise: "Altura atualizada.", slope: "Inclinação atualizada.", seam: "Inclinação atualizada.", insert: "Canto inserido.",
   };
 
 // src/composition/tabletop/index.ts
@@ -3809,7 +3810,7 @@ export interface TransactionResult<T> {
   readonly recorded: boolean;
   }
 export interface TabletopRuntime extends BezierPort {
-  generateCap(request: import("../../ports/cap-port.ts").CapRequest): import("../../ports/cap-port.ts").CapPatch;
+  generateRoof(request: import("../../ports/cap-port.ts").RoofRequest): import("../../ports/cap-port.ts").RoofPatch;
   start(): Promise<void>;
   applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void;
   /**
@@ -4240,6 +4241,24 @@ export function mitrePoint(
   limit: number,
   ): ConstructionPosition {
 
+// src/composition/tabletop/tools/core/contour-stroke.ts
+export type ContourShape = "rectangle" | "polygon" | "freehand" | "circle";
+export interface ContourStrokeParams {
+  readonly shape?: ContourShape;
+  readonly radius?: number;
+  readonly tolerance?: number;
+  }
+export interface ContourStrokeOptions<P extends ContourStrokeParams> {
+  /** The level a stroke begun at `first` draws on. */
+  readonly levelAt: (ctx: ToolContext, first: PointerSample, params: P) => number;
+  /** Takes a closed outline on `level`; `samples` are what drew it -- the corners, or the pointer's path. */
+  readonly commit: (ctx: ToolContext, contour: readonly FittedEdge[], level: number, params: P, samples: readonly PointerSample[]) => void;
+  /** A preview of a closed outline, when the tool shows more than the outline itself. */
+  readonly previewClosed?: (ctx: ToolContext, outline: readonly ConstructionPosition[], level: number, params: P) => PreviewDescriptor | undefined;
+  readonly color: number;
+export function contourStroke<K extends ConstructionToolId, P extends ContourStrokeParams>(options: ContourStrokeOptions<P>): Pick<ConstructionTool<K>, "previewFor" | "onClick" | "onPointerUp" | "onCancel"> {
+  const drafts = new WeakMap<object, { key: string; points: PointerSample[]; frame?: BuildFrame }>();
+
 // src/composition/tabletop/tools/core/curve-draft.ts
 export type CurveDraftMode = "straight" | "arc" | "points" | "connect" | "spiral";
 export const CURVE_DRAFT_MODES: readonly CurveDraftMode[] = Object.freeze(["points", "straight", "arc", "connect", "spiral"]);
@@ -4324,6 +4343,21 @@ export function edgeOverlayOf(
 export function edgeOverlayDescriptor(group: EdgeOverlayGroup): PreviewDescriptor {
   return { kind: "segments", positions: group.positions, color: group.color, opacity: 1 };
 
+// src/composition/tabletop/tools/core/face-props.ts
+export interface FacePropsRuntime {
+  setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): unknown;
+  pinNodes(pins: readonly ConstructionPinRequest[], origin: ChangeOrigin, causeId: string): unknown;
+  getAllRegionTopologies(): readonly ConstructionRegionTopology[];
+  applyRegionEdit(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): RegionEditOutcome;
+  }
+export interface PinnedToRoles {
+  readonly pins: readonly { readonly nodeId: string; readonly role: string; readonly u: number; readonly v: number }[];
+  }
+export function pinnedToRoles(topologies: readonly ConstructionRegionTopology[], sources: readonly ConstructionSurfaceKey[]): PinnedToRoles {
+  const replaced = new Set(sources.map(surfaceKeyText));
+export function keepFaceProps(runtime: FacePropsRuntime, causeId: string, created: readonly ConstructionSurfaceKey[], faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>, pinned?: PinnedToRoles): void {
+  const byRole = new Map<string, ConstructionSurfaceKey>();
+
 // src/composition/tabletop/tools/core/floor-landing.ts
 export function floorsOf(ctx: ToolContext): readonly ConstructionRegionTopology[] {
   return ctx.runtime.getAllRegionTopologies().filter((topology) => hasTrait(topology.surfaceType, "floor"));
@@ -4382,9 +4416,10 @@ export const navigateTool: ConstructionTool<"navigate"> = {
 // src/composition/tabletop/tools/core/pointer-ray.ts
 export function pointerAtHeight(sample: PointerSample, y: number): ConstructionPosition {
   const ray = sample.ray;
-  if (ray && Math.abs(ray.direction.y) > 1e-6) {
-  const t = (y - ray.origin.y) / ray.direction.y;
-  if (t > 0) return { x: ray.origin.x + ray.direction.x * t, y, z: ray.origin.z + ray.direction.z * t };
+  if (!ray) return { ...sample.point, y };
+export function withFacePlane(sample: PointerSample, topologies: readonly ConstructionRegionTopology[]): PointerSample {
+  if (sample.surfaceRef === undefined) return sample;
+  const topology = topologies.find((candidate) => surfaceRefFromNodeSet(candidate.surfaceKey) === sample.surfaceRef);
 
 // src/composition/tabletop/tools/core/spine-body-target.ts
 export function spineBodyTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string, ownsSpine: (surfaceType: string) => boolean = () => true): { sample: PointerSample; options: CurveGestureOptions } | undefined {
@@ -4536,8 +4571,12 @@ export function toolFor<Id extends ConstructionToolId>(id: Id): ConstructionTool
   return TOOL_REGISTRY[id];
   }
 
+// src/composition/tabletop/tools/opening-stands.ts
+export const openingStands: readonly OpeningStand[] = [roofOpeningStand];
+
 // src/composition/tabletop/tools/openings/opening-shared.ts
 export const MARGIN = 0.15;
+export const MIN_OPENING_SIZE = 0.3;
 export interface RunRect {
   readonly s0: number;
   readonly s1: number;
@@ -4590,9 +4629,26 @@ export function overlapsOther(ctx: ToolContext, run: RunFrame, rect: RunRect, ex
   if (!hasTrait(region.surfaceType, "cuts") || excluded.has(surfaceRefFromNodeSet(region.surfaceKey))) return false;
   if (!region.nodes.some((node) => node.pin !== undefined && run.panelOf(node.pin.hostSurfaceKey) !== undefined)) return false;
   const other = regionRunSpan(run, region);
-export function piecePolyline(piece: OpeningPiece, step: number): readonly (readonly [number, number])[] {
-  const { frame } = piece.panel;
-  const bends = bendsBetween(frame, piece.rect);
+
+// src/composition/tabletop/tools/openings/opening-stand.ts
+export interface StandLook {
+  readonly width: number;
+  readonly height: number;
+  readonly shape: OpeningShape;
+  readonly isDoor: boolean;
+  }
+export interface StandPlacement {
+  readonly at: ConstructionPosition;
+  readonly look: StandLook;
+  }
+export interface OpeningStand {
+  /** Whether a press on `face` raises a stand there. */
+  raisesOn(face: ConstructionRegionTopology): boolean;
+  /** An opening of `look` at `at` on `face`, stopped by the face; `undefined` where not even the smallest fits. */
+  fitted(face: ConstructionRegionTopology, at: ConstructionPosition, look: StandLook): StandPlacement | undefined;
+  /** The opening a drag from `from` to `to` over `face` draws corner to corner, as on a wall -- stopped by the face. */
+  drawn(face: ConstructionRegionTopology, from: ConstructionPosition, to: ConstructionPosition, shape: OpeningShape, isDoor: boolean): StandPlacement | undefined;
+  /** The world outline an opening `placed` on `face` stands on. */
 
 // src/composition/tabletop/tools/openings/opening-tool.ts
 export const openingTool: ConstructionTool<"opening"> = {
@@ -4738,12 +4794,47 @@ export function commitPlatformContour(ctx: ToolContext, samples: readonly Pointe
   commitPlatformShape(ctx, lines(samples,params.elevation),params,samples);
 export const platformContourTool = withStructureEditing(rawPlatformContourTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "floor"), handlesOnly: true });
 
-// src/composition/tabletop/tools/roof/roof-tool.ts
-export const ROOF_OVERHANG = 0.2;
-export function commitRoof(ctx: ToolContext, capRequest: CapRequest): void {
+// src/composition/tabletop/tools/roof/roof-base.ts
+export interface RoofBase {
+  readonly footprint: RoofFootprint;
+  readonly elevation: number;
+  readonly ref: RoofBaseRef;
+  }
+export function roofBaseAt(topologies: readonly ConstructionRegionTopology[], sample: PointerSample): RoofBase {
+  const clicked = topologies.find((face) => (
+  sample.surfaceRef ? surfaceRefFromNodeSet(face.surfaceKey) === sample.surfaceRef : sample.nodeId !== undefined && face.nodes.some((node) => node.id === sample.nodeId)));
+export function roofBaseOf(topologies: readonly ConstructionRegionTopology[], ref: RoofBaseRef): RoofBase | undefined {
+  const key = ref.surfaceKey.join("\u0000");
+
+// src/composition/tabletop/tools/roof/roof-commit.ts
+export function replaceRoofs(
+  ctx: ToolContext,
+  requests: readonly RoofSource[],
+  replaces: readonly ConstructionSurfaceKey[],
+  transactionId?: string,
+  ): { readonly group: string; readonly recorded: boolean } {
+  const operationId = scopedToolId(ctx, "roof", ctx.nextSequence());
+export function commitRoofRecipes(ctx: ToolContext, requests: readonly RoofSource[], replaces: readonly ConstructionSurfaceKey[] = [], done = "Telhado criado."): void {
   try {
-  const cap = ctx.runtime.generateCap(capRequest);
-export const roofTool = withStructureEditing(rawRoofTool, { ownsType: (surfaceType) => surfaceType === roofStructureType.surfaceType });
+  const { group: operationId, recorded } = replaceRoofs(ctx, requests, replaces);
+
+// src/composition/tabletop/tools/roof/roof-follow-base.ts
+export interface FollowBaseRuntime extends FacePropsRuntime, Pick<RoofPort, "generateRoof"> {
+  getAllRegionTopologies(): readonly ConstructionRegionTopology[];
+  applyPatchReplacement(request: ApplyPatchReplacementRequest, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome;
+  }
+export function followBaseReaction(): Reaction<FollowBaseRuntime> {
+  return (runtime, effect, hits) => {
+  const changed = [...effect.change.before, ...effect.change.after];
+  const nodes = new Set(changed.flatMap((face) => face.nodes.map((node) => node.id)));
+
+// src/composition/tabletop/tools/roof/roof-opening-stand.ts
+export const roofOpeningStand: OpeningStand = {
+  raisesOn(face) {
+  const owner = ownerOfFace(face), role = roofRoleOf(face);
+
+// src/composition/tabletop/tools/roof/roof-tool.ts
+export const roofTool = withStructureEditing(rawRoofTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "roof-generated"), handlesOnly: true });
 
 // src/composition/tabletop/tools/shapes/geometry-2d.ts
 export interface PointXZ {
@@ -5216,9 +5307,9 @@ export function colorForSurfaceType(surfaceType: string, physical: boolean): num
   switch (surfaceType) {
   case "wall":
   case "wall-white":
+  case "roof-transition":
   return 0xe2e8f0; // White / light gray block prototype
   case "wall-gray":
-  return 0x64748b; // Slate gray block prototype
 export const NONE_COVERING: SurfaceCovering = Object.freeze({
   kind: NONE_COVERING_KIND,
   key: NONE_COVERING_KIND,
@@ -5352,7 +5443,7 @@ export type Reaction<Context> = (
 
 
 // src/features/edit-construction/global-handles/global-handle-ids.ts
-export type GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "radius" | "origin" | "destination" | "originHeight" | "destinationHeight" | "side" | "corner" | "foot" | "top" | "detach";
+export type GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "radius" | "origin" | "destination" | "originHeight" | "destinationHeight" | "side" | "corner" | "foot" | "top" | "detach" | "rise" | "slope" | "seam" | "insert";
 export const globalHandleId = (kind: GlobalHandleKind, anchorNodeId: string): string => `${PREFIX[kind]}${anchorNodeId}`;
 export function globalHandleOf(id: string): { readonly kind: GlobalHandleKind; readonly nodeId: string } | undefined {
   const kind = KINDS.find((candidate) => id.startsWith(PREFIX[candidate]));
@@ -5379,8 +5470,9 @@ export interface GlobalHandleProvider {
   /** Every handle of every kind this provider places, before any type's declaration filters them. */
   handles(scene: GlobalHandleScene): readonly GlobalHandle[];
   /** What `intent` on `handle` edits; `undefined` when it edits nothing. Throws to refuse. */
-  plan(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: Pick<BezierPort, "curveBatch">, operationId: string): GlobalHandleEdit | undefined;
+  plan(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: GlobalHandlePort, operationId: string): GlobalHandleEdit | undefined;
   }
+export type GlobalHandlePort = Pick<BezierPort, "curveBatch"> & Pick<RoofPort, "generateRoof">;
 
 // src/features/edit-construction/global-handles/handle-motion.ts
 export type HandleMotion =
@@ -5390,7 +5482,7 @@ export function carriesArrows(motion: HandleMotion): boolean {
 
 // src/features/edit-construction/global-handles/index.ts
 export type { GlobalHandleKind } from "./global-handle-ids.ts";
-export type { GlobalHandle, GlobalHandleEdit, GlobalHandleIntent, GlobalHandleProvider, GlobalHandleScene, HandlePart } from "./global-handle.ts";
+export type { GlobalHandle, GlobalHandleEdit, GlobalHandleIntent, GlobalHandlePort, GlobalHandleProvider, GlobalHandleScene, HandlePart } from "./global-handle.ts";
 export type { HandleMotion } from "./handle-motion.ts";
 
 // src/features/edit-construction/history/edit-history.ts
@@ -5656,7 +5748,7 @@ export function shownGlobalHandles(scene: GlobalHandleScene, owns?: (surfaceType
   return PROVIDERS.flatMap((provider) => provider.handles(scene)).filter((handle) => declared(handle) && (owns === undefined || owns(handle.owner)));
 export function shownGlobalHandleAt(scene: GlobalHandleScene, id: string): GlobalHandle | undefined {
   const named = globalHandleOf(id);
-export function planGlobalHandle(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: Pick<BezierPort, "curveBatch">, operationId: string): GlobalHandleEdit | undefined {
+export function planGlobalHandle(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: GlobalHandlePort, operationId: string): GlobalHandleEdit | undefined {
   return PROVIDERS.find((provider) => provider.name === handle.provider)?.plan(scene, handle, intent, port, operationId);
 export function handleMotionAt(scene: GlobalHandleScene, id: string): HandleMotion | undefined {
   if (globalHandleOf(id)) return shownGlobalHandleAt(scene, id)?.motion;
@@ -5674,6 +5766,17 @@ export const partHandleProvider: GlobalHandleProvider = {
   handles(scene) {
   const candidates = scene.topologies.filter((topology) => {
   const type = structureTypeFor(topology.surfaceType);
+
+// src/features/edit-construction/orchestration/global-handles/recipe-handle-provider.ts
+export interface RecipeGlobalHandle extends GlobalHandle {
+  readonly group: string;
+  readonly recipeHandle: RecipeHandle;
+  }
+export const recipeHandleProvider: GlobalHandleProvider = {
+  name: "recipe",
+  handles(scene) {
+  return [...structuresOf(scene)].flatMap(([group, structure]): RecipeGlobalHandle[] => {
+  const points = structure.members.flatMap((member) => member.nodes.map((node) => node.position));
 
 // src/features/edit-construction/orchestration/global-handles/spine-handle-provider.ts
 export const spineHandleProvider: GlobalHandleProvider = {
@@ -6639,6 +6742,9 @@ export const slopedPlatformStructureType: StructureTypeDefinition = Object.freez
 export const STRUCTURE_TYPE_DEFINITIONS: readonly StructureTypeDefinition[] = Object.freeze([
 export function structureTypeFor(surfaceType: string): StructureTypeDefinition | undefined {
   return DEFINITION_BY_SURFACE_TYPE.get(surfaceType);
+export function cloudTypesFor(surfaceType: string): readonly string[] {
+  const family = structureTypeFor(surfaceType)?.cloudFamily;
+  return family === undefined ? [surfaceType] : STRUCTURE_TYPE_DEFINITIONS.filter((type) => type.cloudFamily === family).map((type) => type.surfaceType);
 export function traitsOf(surfaceType: string): ReadonlySet<StructureTrait> {
   return TRAITS_BY_SURFACE_TYPE.get(surfaceType) ?? NO_TRAITS;
   }
@@ -6686,15 +6792,86 @@ export function firstRefusal(resolved: readonly ResolvedCoverage[]): string | un
   if (entry.interaction.kind === "forbid") return entry.interaction.reason;
   }
 
+// src/features/edit-construction/structure-types/roof/roof-editing.ts
+export const roofRecipeGeneration: RecipeGeneration = {
+  of: (topology) => {
+  const recipe = roofRecipeOf(topology);
+
+// src/features/edit-construction/structure-types/roof/roof-graph-patch.ts
+export function roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: RoofSource, operationId: string, standing: readonly ConstructionRegionTopology[] = []): {
+  readonly patch: ConstructionPatch;
+  readonly faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>;
+  } {
+  const { base, anchors, ...wire } = request;
+  const plan = (ring: readonly { readonly x: number; readonly z: number }[]): Point[] => ring.map(({ x, z }) => [x, z]);
+
+// src/features/edit-construction/structure-types/roof/roof-recipe.ts
+export const ROOF_RECIPE_PROP = "roof";
+export const ROOF_FACE_PROP = "roofFace";
+export interface RoofBaseRef {
+  readonly kind: "floor" | "walls";
+  readonly surfaceKey: readonly string[];
+  readonly nodeIds: readonly string[];
+  /** Height above a floor when a wall on its rim supports the roof. */
+  readonly offset?: number;
+  }
+export interface RoofSource extends RoofRequest {
+  readonly base?: RoofBaseRef;
+  /** Eave corners that follow the top nodes of their supporting walls. */
+  readonly anchors?: readonly { readonly ring: number; readonly corner: number; readonly nodeId: string }[];
+  readonly subroofs?: readonly RoofSource[];
+  }
+export interface RoofRecipe extends RoofSource {
+  readonly group: string;
+  }
+export interface RoofFaceRole {
+  readonly side: number;
+  readonly dormer?: number;
+  readonly subroof?: number;
+  readonly upright: boolean;
+  }
+export type Point = readonly [number, number];
+export type Waters = 1 | 2 | 4;
+export const DORMER_RIM = 0.02;
+export interface RoofRing {
+  readonly points: readonly Point[];
+  readonly hole: boolean;
+  readonly footprint: number;
+  }
+export const ringsOf = (footprints: readonly RoofFootprint[]): readonly RoofRing[] => footprints.flatMap((footprint, f) => [
+export function footprintsOf(rings: readonly RoofRing[]): RoofFootprint[] {
+  const footprints: { outer: readonly Point[]; holes: (readonly Point[])[] }[] = [];
+  for (const ring of rings) {
+  if (!ring.hole) footprints[ring.footprint] = { outer: ring.points, holes: [] };
+export function sideOf(footprints: readonly RoofFootprint[], side: number): { readonly ring: number; readonly index: number; readonly a: Point; readonly c: Point } {
+  let first = 0;
+  const rings = ringsOf(footprints);
+export function sideNumber(footprints: readonly RoofFootprint[], ring: number, index: number): number {
+  return ringsOf(footprints).slice(0, ring).reduce((sum, r) => sum + r.points.length, 0) + index;
+  }
+export function inwardNormals(ring: readonly Point[], hole: boolean): Point[] {
+  const signed = ring.reduce((sum, a, i) => {
+  const b = ring[(i + 1) % ring.length]!;
+  return sum + a[0] * b[1] - b[0] * a[1];
+  }, 0);
+
 // src/features/edit-construction/structure-types/roof/roof-structure.ts
 export const roofStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
-  surfaceType: "roof", label: "Telhado", creation: "analytic sheets with one horizontal base and maximum height",
-  traits: Object.freeze([]),
+  surfaceType: "roof", label: "Telhado", creation: "the weighted straight skeleton of its footprint, welded to what it stands on",
+  // Its upright faces -- gables, a dormer's front -- take windows like any wall.
+  traits: Object.freeze(["accepts-cuts", "roof-generated"] as const),
   roleFor: (_topology, target) => `roof-${target.kind}`,
   policyFor: (role) => role === "roof-region"
   ? { ...allowed(role, ALL_AXES, "cloud"), transport: true }
   : denied(role, "Mova o telhado pela face."),
-  interactionOver: () => IGNORE,
+export const roofTransitionStructureType: StructureTypeDefinition = Object.freeze({
+  ...panelStructureType("roof-transition", "Transição parede/telhado", "upright closures generated by a roof", ["partition", "accepts-cuts", "roof-generated"]),
+  cloudFamily: "wall",
+  // Their upper boundary follows a sloped roof, so the rectangular-panel
+  // post law cannot straighten it. Shared lower nodes still edit the platform.
+  settle: undefined,
+  validateMotion: undefined,
+  recipe: roofRecipeGeneration,
 
 // src/features/edit-construction/structure-types/structural-cut.ts
 export type CutProfile =
@@ -7373,6 +7550,19 @@ export function planeOf(ring: readonly ConstructionPosition[]): { readonly norma
   for (let i = 0; i < ring.length; i++) {
   const a = ring[i]!, b = ring[(i + 1) % ring.length]!;
   nx += (a.y - b.y) * (a.z + b.z);
+export function heightOnPlane(plane: { readonly normal: ConstructionPosition; readonly centre: ConstructionPosition }, p: PlanPoint): number | undefined {
+  const { normal: n, centre: c } = plane;
+  if (Math.abs(n.y) < 1e-9) return undefined;
+  return c.y - (n.x * (p.x - c.x) + n.z * (p.z - c.z)) / n.y;
+  }
+export function rayToRing(ring: readonly (readonly [number, number])[], origin: readonly [number, number], direction: readonly [number, number]): number {
+  let nearest = Infinity;
+  for (let i = 0; i < ring.length; i++) {
+  const a = ring[i]!, b = ring[(i + 1) % ring.length]!;
+  const e = [b[0] - a[0], b[1] - a[1]] as const;
+  const det = direction[0] * e[1] - direction[1] * e[0];
+  if (Math.abs(det) < 1e-12) continue;
+  const w = [a[0] - origin[0], a[1] - origin[1]] as const;
 export function faceRings(topology: ConstructionRegionTopology, loops: ConstructionRegionTopology["outerLoops"] = topology.outerLoops): readonly (readonly ConstructionPosition[])[] {
   const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
 export function insideFace(topology: ConstructionRegionTopology, p: PlanPoint): boolean {
@@ -7664,16 +7854,37 @@ export interface BezierPort {
   }
 
 // src/ports/cap-port.ts
-export interface CapRequest {
-  readonly base: { readonly kind: "rectangle"; readonly min: readonly [number, number]; readonly max: readonly [number, number] }
-  | { readonly kind: "circle"; readonly center: readonly [number, number]; readonly radius: number }
-  | { readonly kind: "contour"; readonly points: readonly [readonly [number, number], readonly [number, number], readonly [number, number], readonly [number, number]]; readonly centers: readonly [readonly [number, number] | null, readonly [number, number] | null, readonly [number, number] | null, readonly [number, number] | null] };
-export interface CapPatch {
+export interface RoofFootprint {
+  readonly outer: readonly (readonly [number, number])[];
+  readonly holes: readonly (readonly (readonly [number, number])[])[];
+  }
+export interface RoofDormer {
+  /** Its own name, kept while dormers come and go before it: what is pinned to its faces keeps to it. */
+  readonly id?: string;
+  readonly side: number;
+  /** Where its middle stands along that side, as a fraction of it. */
+  readonly along: number;
+  /** How far in from that side its front stands. */
+  readonly setback: number;
+export interface RoofRequest {
+  readonly elevation: number;
+  /** Rise of the roof's highest point above its eaves. */
+  readonly height: number;
+  /** The plans it covers: one, or several joined at a corner. */
+  readonly footprints: readonly RoofFootprint[];
+  readonly slopes: readonly number[];
+  readonly dormers?: readonly RoofDormer[];
+export interface RoofPort {
+  generateRoof(request: RoofRequest): RoofPatch;
+  }
+export interface RoofPatch {
   readonly preview: readonly (readonly [number, number, number, number, number, number])[];
   readonly nodes: readonly (readonly [number, number, number])[];
-  readonly edges: readonly { readonly start: number; readonly end: number; readonly center: readonly [number, number] | null }[];
-  readonly faces: readonly { readonly boundary: readonly (readonly [number, boolean])[]; readonly profile: ConstructionSheetProfile }[];
-  }
+  readonly edges: readonly { readonly start: number; readonly end: number; readonly center: null }[];
+  readonly faces: readonly {
+  /** The footprint side it rises from -- one past the last for a flat top; a dormer's own side 0-3, or 4 where it meets its leaf. */
+  readonly side: number;
+  readonly dormer: number | null;
 
 // src/ports/construction-session-port.ts
 export type ConstructionNodeId = string;
@@ -7738,7 +7949,7 @@ export interface ConstructionCurvedEdge {
   readonly handle2: readonly [number, number];
 
 // src/ports/index.ts
-export type { CapRequest, CapPatch } from "./cap-port.ts";
+export type { RoofDormer, RoofFootprint, RoofPatch, RoofPort, RoofRequest } from "./cap-port.ts";
 export type { BezierPort, CurveBatch, CurveCommand, CurveResult, CurveHandles, CurvePoint, CubicBezier, CurveHandleMode, SpanGeometry, CurveNetworkRequest, CurveNetworkPatch } from "./bezier-port.ts";
 export type {
   CameraControlHandle,

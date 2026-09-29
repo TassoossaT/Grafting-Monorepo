@@ -23,7 +23,12 @@ export type EffectKind =
    * Faces were deleted from a cloud outright. Reaches the rest of that same
    * cloud, which answers for the hole the deletion left.
    */
-  | "remove";
+  | "remove"
+  /**
+   * A cloud's shape changed -- the same change a cut reports -- reaching every
+   * other cloud near it, whatever it touches: one that stands on it follows.
+   */
+  | "reshape";
 
 /**
  * A declared reaction, by name. The type registry names reactions as data;
@@ -32,7 +37,9 @@ export type EffectKind =
  */
 export type ReactionId =
   /** Regenerates an irregular lattice around the change, pinned to what now bounds it. */
-  | "lattice-regenerate";
+  | "lattice-regenerate"
+  /** Made again over the base it stands on, as that base now stands. */
+  | "follow-base";
 
 /** What changed about one cloud, in the terms every reaction reads. */
 export interface ShapeChange {

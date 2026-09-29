@@ -32,13 +32,13 @@ pub(crate) fn connected_component(
     topology: &ContourTopology,
     known_regions: &HashSet<RegionId>,
     seed: &RegionId,
-    same_type: &SurfaceType,
+    compatible_types: &[SurfaceType],
 ) -> HashSet<RegionId> {
     let matches = |id: &RegionId| {
         known_regions.contains(id)
             && surfaces
                 .region_surface(id)
-                .is_some_and(|surface| surface.surface_type() == same_type)
+                .is_some_and(|surface| compatible_types.contains(surface.surface_type()))
     };
 
     let mut visited: HashSet<RegionId> = HashSet::new();
@@ -133,7 +133,7 @@ mod cloud_tests {
             &topology,
             &known,
             &left,
-            &SurfaceType::new("terrain"),
+            &[SurfaceType::new("terrain")],
         );
         assert!(cloud.contains(&left));
         assert!(cloud.contains(&right));
@@ -149,10 +149,22 @@ mod cloud_tests {
             &topology,
             &known,
             &left,
-            &SurfaceType::new("terrain"),
+            &[SurfaceType::new("terrain")],
         );
         assert!(cloud.contains(&left));
         assert!(!cloud.contains(&right));
+    }
+
+    #[test]
+    fn compatible_wall_types_share_a_connected_cloud() {
+        let (surfaces, topology, left, right) = two_regions("wall-white", "roof-transition");
+        let known = HashSet::from([left.clone(), right.clone()]);
+        let compatible = [
+            SurfaceType::new("wall-white"),
+            SurfaceType::new("roof-transition"),
+        ];
+        let cloud = connected_component(&surfaces, &topology, &known, &left, &compatible);
+        assert!(cloud.contains(&left) && cloud.contains(&right));
     }
 
     #[test]
@@ -164,7 +176,7 @@ mod cloud_tests {
             &topology,
             &HashSet::new(),
             &left,
-            &SurfaceType::new("terrain"),
+            &[SurfaceType::new("terrain")],
         );
         assert!(cloud.is_empty());
     }

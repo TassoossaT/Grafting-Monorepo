@@ -45,6 +45,8 @@ function sideNear(ctx: ToolContext, sample: PointerSample): { readonly a: Constr
     for (const use of topology.outerLoops.flat()) {
       if (use.geometry.kind === "arc") continue;
       const a = positions.get(use.startNodeId)!, b = positions.get(use.endNodeId)!;
+      // A hip or a rake climbs: only a level side is one to build along.
+      if (Math.abs(a.y - b.y) > 1e-4) continue;
       const point = sample.ray ? pointerAtHeight(sample, (a.y + b.y) / 2) : sample.point;
       if (Math.hypot(b.x - a.x, b.z - a.z) < 1e-4) continue;
       const nearest = nearestOnSegment(point, a, b);
@@ -82,11 +84,7 @@ export function snappedInFrame(ctx: ToolContext, frame: BuildFrame, p: Construct
   return { x: frame.origin.x + frame.u.x * along + frame.v.x * across, y: p.y, z: frame.origin.z + frame.u.z * along + frame.v.z * across };
 }
 
-/**
- * Where the pointer is on the level `y` a shape is drawn at -- its ray
- * crossing that level, not whatever surface the ray happened to hit first:
- * the ground below a raised floor, or the top of one standing in front.
- */
+/** Where the pointer is on the level `y` a shape is drawn at -- see {@link pointerAtHeight}. */
 export function pointerOnLevel(sample: PointerSample, y: number): ConstructionPosition {
   return sample.ray ? pointerAtHeight(sample, y) : { ...sample.point, y };
 }

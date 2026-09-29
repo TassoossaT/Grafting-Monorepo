@@ -37,6 +37,13 @@ export const HANDLE_GLYPHS: Readonly<Record<SceneHandleKind | "vertex", RenderHa
   top: "height",
   /** Let go of what the structure is joined to. */
   detach: "unlink",
+  /** How high a structure grown from its base rises. */
+  rise: "height",
+  /** How steeply one face, or the two along a seam, climb. */
+  slope: "tilt",
+  seam: "tilt",
+  /** A new corner pulled out of a side. */
+  insert: "midpoint",
 };
 
 /** What each whole-structure handle reports once its edit is committed -- said here, with how it looks. */
@@ -46,4 +53,5 @@ export const HANDLE_DONE: Readonly<Record<GlobalHandleKind, string>> = {
   originHeight: "Inclinação atualizada.", destinationHeight: "Inclinação atualizada.",
   side: "Lado ajustado.", corner: "Canto ajustado.",
   foot: "Coluna movida.", top: "Altura atualizada.", detach: "Estrutura solta.",
+  rise: "Altura atualizada.", slope: "Inclinação atualizada.", seam: "Inclinação atualizada.", insert: "Canto inserido.",
 };

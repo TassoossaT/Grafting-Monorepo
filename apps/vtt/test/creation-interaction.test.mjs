@@ -115,18 +115,19 @@ test("a platform and both ramps may cut whatever is ground -- only where they to
   }
 });
 
-test("ground declares how it answers a cut or a deleted face; nothing else answers yet", () => {
+test("ground answers a cut or a deleted face, a roof follows its base reshaped; nothing else answers yet", () => {
   for (const ground of surfaceTypesWithTrait("ground")) {
     assert.deepEqual(structureTypeFor(ground).reactions, { cut: "lattice-regenerate", remove: "lattice-regenerate" });
   }
-  for (const other of ["wall-white", "opening", "platform", "platform-ramp", "platform-slope", "roof", "path"]) {
+  assert.deepEqual(structureTypeFor("roof").reactions, { reshape: "follow-base" });
+  for (const other of ["wall-white", "opening", "platform", "platform-ramp", "platform-slope", "path"]) {
     assert.equal(structureTypeFor(other).reactions, undefined, `${other} declares no reaction`);
   }
 });
 
 test("relations are declared by traits: floors, partitions and ground", () => {
   assert.deepEqual(surfaceTypesWithTrait("floor"), ["platform"]);
-  assert.deepEqual(surfaceTypesWithTrait("partition"), ["wall-white", "wall-gray"]);
+  assert.deepEqual(surfaceTypesWithTrait("partition"), ["roof-transition", "wall-white", "wall-gray"]);
 });
 
 test("resolveConformance checks vertical conformance capability across structure types", () => {
@@ -138,4 +139,3 @@ test("resolveConformance checks vertical conformance capability across structure
   assert.equal(resolveConformance("wall-white", "terrain"), false, "walls do not declare vertical conformance");
   assert.equal(resolveConformance("unknown-type", "terrain"), false, "unknown type defaults to false");
 });
-

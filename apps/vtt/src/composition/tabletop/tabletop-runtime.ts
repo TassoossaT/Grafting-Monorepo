@@ -72,6 +72,7 @@ import type {
 import {
   EMPTY_OUTCOME,
   applyEditOp,
+  cloudTypesFor,
   hasTrait,
   mergeOutcomes,
   surfaceTypesWithTrait,
@@ -113,7 +114,7 @@ export interface TransactionResult<T> {
 }
 
 export interface TabletopRuntime extends BezierPort {
-  generateCap(request: import("../../ports/cap-port.ts").CapRequest): import("../../ports/cap-port.ts").CapPatch;
+  generateRoof(request: import("../../ports/cap-port.ts").RoofRequest): import("../../ports/cap-port.ts").RoofPatch;
   start(): Promise<void>;
   applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void;
   /**
@@ -336,6 +337,8 @@ export class AppTabletopRuntime implements TabletopRuntime {
   readonly #nodeHandleRevisions = new Map<string, number>();
   /** Monotonic across hide/show cycles so renderer revision guards accept restored controls. */
   #handleRevision = 0;
+  /** The construction transaction under way, which a nested commit of the same id joins. */
+  #openTransaction: string | undefined;
   #pointHandlesOnly = false;
   #pointHandleIds = new Set<string>();
   /** Every handle the scene handle registry listed last, and the glyph each was drawn with. */
@@ -649,7 +652,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
       topologies: this.#construction.getAllRegionTopologies(),
       contour: typeof this.#construction.getCurvedEdges === "function" ? this.#construction.getCurvedEdges() : [],
       ...(typeof this.#construction.curveBatch === "function" ? { port: this.#construction } : {}),
-      cloudFor: (request) => this.#construction.cloudFor(request),
+      cloudFor: (request) => this.cloudFor(request),
       pointsOnly: this.#pointHandlesOnly,
       ...(this.#globalHandleOwners ? { owns: this.#globalHandleOwners } : {}),
       ...(this.#handleFocus ? { focus: this.#handleFocus } : {}),
@@ -1017,9 +1020,9 @@ export class AppTabletopRuntime implements TabletopRuntime {
     return this.#construction.getRegionTopologiesInBounds(bounds);
   }
 
-  generateCap(request: import("../../ports/cap-port.ts").CapRequest): import("../../ports/cap-port.ts").CapPatch {
+  generateRoof(request: import("../../ports/cap-port.ts").RoofRequest): import("../../ports/cap-port.ts").RoofPatch {
     this.#requireReady("generating a covering");
-    return this.#construction.generateCap(request);
+    return this.#construction.generateRoof(request);
   }
 
   curveBatch(request: import("../../ports/bezier-port.ts").CurveBatch): readonly import("../../ports/bezier-port.ts").CurveResult[] {
@@ -1177,17 +1180,23 @@ export class AppTabletopRuntime implements TabletopRuntime {
   }
   transact<T>(transactionId: string, origin: ChangeOrigin, work: () => T): TransactionResult<T> {
     this.#requireReady("running a construction transaction");
+    // A commit made inside a transaction of its own id is part of it: the
+    // outer one records the whole, and rolls it all back on a throw.
+    if (this.#openTransaction === transactionId) return { value: work(), recorded: false };
     this.#construction.beginTransaction(transactionId);
+    this.#openTransaction = transactionId;
     let result: T;
     try {
       result = work();
     } catch (error) {
+      this.#openTransaction = undefined;
       this.#construction.rollbackTransaction(transactionId);
       // The rolled-back mutations were already folded into the projection
       // one by one; only a full resync knows every surface they touched.
       this.#refreshConstructionProjection(origin, `rollback:${transactionId}`);
       throw error;
     }
+    this.#openTransaction = undefined;
     return { value: result, recorded: this.#construction.commitTransaction(transactionId) };
   }
 
@@ -1212,7 +1221,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
 
   cloudFor(request: CloudRequest): CloudOutcome {
     this.#requireReady("querying a cloud");
-    return this.#construction.cloudFor(request);
+    return this.#construction.cloudFor({ ...request, surfaceTypes: request.surfaceTypes ?? cloudTypesFor(request.surfaceType) });
   }
 
   applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void {

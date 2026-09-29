@@ -1,9 +1,10 @@
 import type { Reaction, ReactionId } from "@/features/edit-construction";
 
 import { latticeRegenerateReaction, type LatticeReactionRuntime } from "../terrain/terrain-lattice-reaction.ts";
+import { followBaseReaction, type FollowBaseRuntime } from "../tools/roof/roof-follow-base.ts";
 
 /** What every tabletop reaction may read and mutate, inside the pipeline's transaction. */
-export type TabletopReactionRuntime = LatticeReactionRuntime;
+export type TabletopReactionRuntime = LatticeReactionRuntime & FollowBaseRuntime;
 
 /**
  * The implementation behind every reaction name the type registry can
@@ -12,4 +13,5 @@ export type TabletopReactionRuntime = LatticeReactionRuntime;
  */
 export const TABLETOP_REACTIONS: Readonly<Record<ReactionId, Reaction<TabletopReactionRuntime>>> = Object.freeze({
   "lattice-regenerate": latticeRegenerateReaction(),
+  "follow-base": followBaseReaction(),
 });

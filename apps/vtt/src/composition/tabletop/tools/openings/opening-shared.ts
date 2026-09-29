@@ -48,6 +48,8 @@ import { shapeChangeOfAddition } from "../../effects/shape-change.ts";
 
 /** How much wall (world units) must be left standing at either end of a run, and above and below an opening. */
 export const MARGIN = 0.15;
+/** The smallest world width or height a drawn or dragged opening may settle at. */
+export const MIN_OPENING_SIZE = 0.3;
 /** A cut edge closer than this (world units) past a seam is moved onto it, so no sliver piece is left on the far face. */
 const SEAM_SNAP = 0.02;
 const PIECE_EPS = 1e-6;
@@ -552,7 +554,7 @@ export function commitOpeningGroup(
   return created === undefined ? { recorded } : { recorded, created };
 }
 
-interface OpeningCommit {
+export interface OpeningCommit {
   readonly recorded: boolean;
   readonly error?: string;
   /** The new group, when pieces were added. */

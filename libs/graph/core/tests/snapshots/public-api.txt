@@ -592,6 +592,129 @@ impl core::marker::Unpin for grafting_graph_core::profile_cap_patch::CapRequest
 impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::profile_cap_patch::CapRequest
 impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::profile_cap_patch::CapRequest
 pub fn grafting_graph_core::profile_cap_patch::generate_cap_patch(request: grafting_graph_core::profile_cap_patch::CapRequest) -> core::result::Result<grafting_graph_core::profile_cap_patch::CapPatch, alloc::string::String>
+pub mod grafting_graph_core::profile_roof
+pub struct grafting_graph_core::profile_roof::RoofDormer
+pub grafting_graph_core::profile_roof::RoofDormer::absolute: bool
+pub grafting_graph_core::profile_roof::RoofDormer::along: f64
+pub grafting_graph_core::profile_roof::RoofDormer::front: f64
+pub grafting_graph_core::profile_roof::RoofDormer::gable_apart: bool
+pub grafting_graph_core::profile_roof::RoofDormer::setback: f64
+pub grafting_graph_core::profile_roof::RoofDormer::side: usize
+pub grafting_graph_core::profile_roof::RoofDormer::slopes: [f64; 4]
+pub grafting_graph_core::profile_roof::RoofDormer::width: f64
+impl core::clone::Clone for grafting_graph_core::profile_roof::RoofDormer
+pub fn grafting_graph_core::profile_roof::RoofDormer::clone(&self) -> grafting_graph_core::profile_roof::RoofDormer
+impl core::fmt::Debug for grafting_graph_core::profile_roof::RoofDormer
+pub fn grafting_graph_core::profile_roof::RoofDormer::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for grafting_graph_core::profile_roof::RoofDormer
+pub fn grafting_graph_core::profile_roof::RoofDormer::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for grafting_graph_core::profile_roof::RoofDormer
+pub fn grafting_graph_core::profile_roof::RoofDormer::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for grafting_graph_core::profile_roof::RoofDormer
+impl core::marker::Send for grafting_graph_core::profile_roof::RoofDormer
+impl core::marker::Sync for grafting_graph_core::profile_roof::RoofDormer
+impl core::marker::Unpin for grafting_graph_core::profile_roof::RoofDormer
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::profile_roof::RoofDormer
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::profile_roof::RoofDormer
+pub struct grafting_graph_core::profile_roof::RoofFace
+pub grafting_graph_core::profile_roof::RoofFace::boundary: alloc::vec::Vec<(usize, bool)>
+pub grafting_graph_core::profile_roof::RoofFace::dormer: core::option::Option<usize>
+pub grafting_graph_core::profile_roof::RoofFace::holes: alloc::vec::Vec<alloc::vec::Vec<(usize, bool)>>
+pub grafting_graph_core::profile_roof::RoofFace::side: usize
+pub grafting_graph_core::profile_roof::RoofFace::subroof: core::option::Option<usize>
+pub grafting_graph_core::profile_roof::RoofFace::upright: bool
+impl core::clone::Clone for grafting_graph_core::profile_roof::RoofFace
+pub fn grafting_graph_core::profile_roof::RoofFace::clone(&self) -> grafting_graph_core::profile_roof::RoofFace
+impl core::fmt::Debug for grafting_graph_core::profile_roof::RoofFace
+pub fn grafting_graph_core::profile_roof::RoofFace::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for grafting_graph_core::profile_roof::RoofFace
+pub fn grafting_graph_core::profile_roof::RoofFace::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for grafting_graph_core::profile_roof::RoofFace
+pub fn grafting_graph_core::profile_roof::RoofFace::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for grafting_graph_core::profile_roof::RoofFace
+impl core::marker::Send for grafting_graph_core::profile_roof::RoofFace
+impl core::marker::Sync for grafting_graph_core::profile_roof::RoofFace
+impl core::marker::Unpin for grafting_graph_core::profile_roof::RoofFace
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::profile_roof::RoofFace
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::profile_roof::RoofFace
+pub struct grafting_graph_core::profile_roof::RoofFootprint
+pub grafting_graph_core::profile_roof::RoofFootprint::holes: alloc::vec::Vec<alloc::vec::Vec<[f64; 2]>>
+pub grafting_graph_core::profile_roof::RoofFootprint::outer: alloc::vec::Vec<[f64; 2]>
+impl core::clone::Clone for grafting_graph_core::profile_roof::RoofFootprint
+pub fn grafting_graph_core::profile_roof::RoofFootprint::clone(&self) -> grafting_graph_core::profile_roof::RoofFootprint
+impl core::fmt::Debug for grafting_graph_core::profile_roof::RoofFootprint
+pub fn grafting_graph_core::profile_roof::RoofFootprint::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for grafting_graph_core::profile_roof::RoofFootprint
+pub fn grafting_graph_core::profile_roof::RoofFootprint::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for grafting_graph_core::profile_roof::RoofFootprint
+pub fn grafting_graph_core::profile_roof::RoofFootprint::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for grafting_graph_core::profile_roof::RoofFootprint
+impl core::marker::Send for grafting_graph_core::profile_roof::RoofFootprint
+impl core::marker::Sync for grafting_graph_core::profile_roof::RoofFootprint
+impl core::marker::Unpin for grafting_graph_core::profile_roof::RoofFootprint
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::profile_roof::RoofFootprint
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::profile_roof::RoofFootprint
+pub struct grafting_graph_core::profile_roof::RoofPatch
+pub grafting_graph_core::profile_roof::RoofPatch::edges: alloc::vec::Vec<grafting_graph_core::profile_cap_patch::CapEdge>
+pub grafting_graph_core::profile_roof::RoofPatch::faces: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofFace>
+pub grafting_graph_core::profile_roof::RoofPatch::nodes: alloc::vec::Vec<[f64; 3]>
+pub grafting_graph_core::profile_roof::RoofPatch::preview: alloc::vec::Vec<[f64; 6]>
+impl core::clone::Clone for grafting_graph_core::profile_roof::RoofPatch
+pub fn grafting_graph_core::profile_roof::RoofPatch::clone(&self) -> grafting_graph_core::profile_roof::RoofPatch
+impl core::fmt::Debug for grafting_graph_core::profile_roof::RoofPatch
+pub fn grafting_graph_core::profile_roof::RoofPatch::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for grafting_graph_core::profile_roof::RoofPatch
+pub fn grafting_graph_core::profile_roof::RoofPatch::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for grafting_graph_core::profile_roof::RoofPatch
+pub fn grafting_graph_core::profile_roof::RoofPatch::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for grafting_graph_core::profile_roof::RoofPatch
+impl core::marker::Send for grafting_graph_core::profile_roof::RoofPatch
+impl core::marker::Sync for grafting_graph_core::profile_roof::RoofPatch
+impl core::marker::Unpin for grafting_graph_core::profile_roof::RoofPatch
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::profile_roof::RoofPatch
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::profile_roof::RoofPatch
+pub struct grafting_graph_core::profile_roof::RoofPlatformCut
+pub grafting_graph_core::profile_roof::RoofPlatformCut::elevation: f64
+pub grafting_graph_core::profile_roof::RoofPlatformCut::footprint: grafting_graph_core::profile_roof::RoofFootprint
+impl core::clone::Clone for grafting_graph_core::profile_roof::RoofPlatformCut
+pub fn grafting_graph_core::profile_roof::RoofPlatformCut::clone(&self) -> grafting_graph_core::profile_roof::RoofPlatformCut
+impl core::fmt::Debug for grafting_graph_core::profile_roof::RoofPlatformCut
+pub fn grafting_graph_core::profile_roof::RoofPlatformCut::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for grafting_graph_core::profile_roof::RoofPlatformCut
+pub fn grafting_graph_core::profile_roof::RoofPlatformCut::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for grafting_graph_core::profile_roof::RoofPlatformCut
+pub fn grafting_graph_core::profile_roof::RoofPlatformCut::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for grafting_graph_core::profile_roof::RoofPlatformCut
+impl core::marker::Send for grafting_graph_core::profile_roof::RoofPlatformCut
+impl core::marker::Sync for grafting_graph_core::profile_roof::RoofPlatformCut
+impl core::marker::Unpin for grafting_graph_core::profile_roof::RoofPlatformCut
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::profile_roof::RoofPlatformCut
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::profile_roof::RoofPlatformCut
+pub struct grafting_graph_core::profile_roof::RoofRequest
+pub grafting_graph_core::profile_roof::RoofRequest::cutouts: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofFootprint>
+pub grafting_graph_core::profile_roof::RoofRequest::dormers: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofDormer>
+pub grafting_graph_core::profile_roof::RoofRequest::elevation: f64
+pub grafting_graph_core::profile_roof::RoofRequest::footprints: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofFootprint>
+pub grafting_graph_core::profile_roof::RoofRequest::height: f64
+pub grafting_graph_core::profile_roof::RoofRequest::platform_cuts: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofPlatformCut>
+pub grafting_graph_core::profile_roof::RoofRequest::slopes: alloc::vec::Vec<f64>
+pub grafting_graph_core::profile_roof::RoofRequest::subroofs: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofRequest>
+impl core::clone::Clone for grafting_graph_core::profile_roof::RoofRequest
+pub fn grafting_graph_core::profile_roof::RoofRequest::clone(&self) -> grafting_graph_core::profile_roof::RoofRequest
+impl core::fmt::Debug for grafting_graph_core::profile_roof::RoofRequest
+pub fn grafting_graph_core::profile_roof::RoofRequest::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for grafting_graph_core::profile_roof::RoofRequest
+pub fn grafting_graph_core::profile_roof::RoofRequest::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for grafting_graph_core::profile_roof::RoofRequest
+pub fn grafting_graph_core::profile_roof::RoofRequest::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for grafting_graph_core::profile_roof::RoofRequest
+impl core::marker::Send for grafting_graph_core::profile_roof::RoofRequest
+impl core::marker::Sync for grafting_graph_core::profile_roof::RoofRequest
+impl core::marker::Unpin for grafting_graph_core::profile_roof::RoofRequest
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::profile_roof::RoofRequest
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::profile_roof::RoofRequest
+pub const grafting_graph_core::profile_roof::GABLE_OVER_FRONT: usize
+pub fn grafting_graph_core::profile_roof::generate_roof_patch(request: grafting_graph_core::profile_roof::RoofRequest) -> core::result::Result<grafting_graph_core::profile_roof::RoofPatch, alloc::string::String>
 pub mod grafting_graph_core::profile_surface
 pub enum grafting_graph_core::profile_surface::Section
 pub grafting_graph_core::profile_surface::Section::Arc
@@ -1679,6 +1802,10 @@ can only do the first -- every anchor it produces is G1 by construction --
 which is why an L drawn in one gesture has always come back rounded no
 matter how sharply it was drawn.
 
+### `pub const grafting_graph_core::profile_roof::GABLE_OVER_FRONT: usize`
+
+The side a dormer's gable is given when it stands apart from its front wall.
+
 ### `pub enum grafting_graph_core::ArcBulge`
 
 Which side of the chord (walking from an arc's own start to its end) it
@@ -2732,6 +2859,10 @@ Resolves a supported authored contour without approximating its footprint.
 ### `pub fn grafting_graph_core::profile_cap_patch::generate_cap_patch(request: grafting_graph_core::profile_cap_patch::CapRequest) -> core::result::Result<grafting_graph_core::profile_cap_patch::CapPatch, alloc::string::String>`
 
 Generates a cap with shared seam identities and no degenerate apex edges.
+
+### `pub fn grafting_graph_core::profile_roof::generate_roof_patch(request: grafting_graph_core::profile_roof::RoofRequest) -> core::result::Result<grafting_graph_core::profile_roof::RoofPatch, alloc::string::String>`
+
+Generates the connected visible envelope of a roof and its owned subroofs.
 
 ### `pub fn grafting_graph_core::profile_surface::ProfileSheet::point(&self, u: f64, v: f64) -> core::result::Result<[f64; 3], alloc::string::String>`
 
@@ -3965,6 +4096,135 @@ Maximum rise above the base.
 
 Horizontal expansion of the base contour.
 
+### `pub grafting_graph_core::profile_roof::RoofDormer::absolute: bool`
+
+Its slopes are rises per unit run, its own, not shares of the
+roof's: a roof made steeper or flatter leaves it as it stands.
+
+### `pub grafting_graph_core::profile_roof::RoofDormer::along: f64`
+
+Where its middle stands along that side, as a fraction of it.
+
+### `pub grafting_graph_core::profile_roof::RoofDormer::front: f64`
+
+How high its front wall rises above the leaf.
+
+### `pub grafting_graph_core::profile_roof::RoofDormer::gable_apart: bool`
+
+Its front wall stops at its eaves, a plain upright rectangle; the
+gable over it is a face of its own, side [`GABLE_OVER_FRONT`].
+
+### `pub grafting_graph_core::profile_roof::RoofDormer::setback: f64`
+
+How far in from that side its front stands.
+
+### `pub grafting_graph_core::profile_roof::RoofDormer::side: usize`
+
+The footprint side whose leaf carries it; it must be pitched.
+
+### `pub grafting_graph_core::profile_roof::RoofDormer::slopes: [f64; 4]`
+
+Relative steepness of its front, right, back and left sides; zero
+makes a side a gable. Two waters pitch the right and left.
+
+### `pub grafting_graph_core::profile_roof::RoofDormer::width: f64`
+
+Its width along the side.
+
+### `pub grafting_graph_core::profile_roof::RoofFace::boundary: alloc::vec::Vec<(usize, bool)>`
+
+`(edge index, reversed)` uses of the outer loop.
+
+### `pub grafting_graph_core::profile_roof::RoofFace::dormer: core::option::Option<usize>`
+
+The dormer it belongs to, if any.
+
+### `pub grafting_graph_core::profile_roof::RoofFace::holes: alloc::vec::Vec<alloc::vec::Vec<(usize, bool)>>`
+
+Inner loops, where a dormer climbs through this face.
+
+### `pub grafting_graph_core::profile_roof::RoofFace::side: usize`
+
+The footprint side it rises from -- one past the last side for a flat
+top, where only gables were left to close it; for a dormer's face, the
+dormer's own side -- front, right, back, left -- or four where it
+meets its leaf.
+
+### `pub grafting_graph_core::profile_roof::RoofFace::subroof: core::option::Option<usize>`
+
+Which directly owned subroof made this face, if any.
+
+### `pub grafting_graph_core::profile_roof::RoofFace::upright: bool`
+
+Whether this is an upright face: under a gable, or a dormer's front
+and cheeks.
+
+### `pub grafting_graph_core::profile_roof::RoofFootprint::holes: alloc::vec::Vec<alloc::vec::Vec<[f64; 2]>>`
+
+Holes' corners in XZ, in either winding.
+
+### `pub grafting_graph_core::profile_roof::RoofFootprint::outer: alloc::vec::Vec<[f64; 2]>`
+
+Outline corners in XZ, in either winding.
+
+### `pub grafting_graph_core::profile_roof::RoofPatch::edges: alloc::vec::Vec<grafting_graph_core::profile_cap_patch::CapEdge>`
+
+Shared straight edges.
+
+### `pub grafting_graph_core::profile_roof::RoofPatch::faces: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofFace>`
+
+Leaves and upright faces.
+
+### `pub grafting_graph_core::profile_roof::RoofPatch::nodes: alloc::vec::Vec<[f64; 3]>`
+
+Unique XYZ nodes.
+
+### `pub grafting_graph_core::profile_roof::RoofPatch::preview: alloc::vec::Vec<[f64; 6]>`
+
+Transient XYZ segment endpoints of every edge, for a preview.
+
+### `pub grafting_graph_core::profile_roof::RoofPlatformCut::elevation: f64`
+
+Height of the platform's walking surface.
+
+### `pub grafting_graph_core::profile_roof::RoofPlatformCut::footprint: grafting_graph_core::profile_roof::RoofFootprint`
+
+Platform boundary and any internal voids in plan.
+
+### `pub grafting_graph_core::profile_roof::RoofRequest::cutouts: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofFootprint>`
+
+Areas removed from the finished leaves, without changing the skeleton.
+
+### `pub grafting_graph_core::profile_roof::RoofRequest::dormers: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofDormer>`
+
+Dormers raised on its leaves.
+
+### `pub grafting_graph_core::profile_roof::RoofRequest::elevation: f64`
+
+Elevation of every eave.
+
+### `pub grafting_graph_core::profile_roof::RoofRequest::footprints: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofFootprint>`
+
+The plans it covers -- one, or several joined at a corner.
+
+### `pub grafting_graph_core::profile_roof::RoofRequest::height: f64`
+
+Rise of the roof's highest point above the eaves.
+
+### `pub grafting_graph_core::profile_roof::RoofRequest::platform_cuts: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofPlatformCut>`
+
+Horizontal platforms that trim higher roof faces while retaining lower slopes.
+
+### `pub grafting_graph_core::profile_roof::RoofRequest::slopes: alloc::vec::Vec<f64>`
+
+Relative steepness of every side -- footprint by footprint, its
+outline's then each hole's, side `i` running from corner `i` to
+corner `i + 1`; zero makes a gable.
+
+### `pub grafting_graph_core::profile_roof::RoofRequest::subroofs: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofRequest>`
+
+Smaller roofs joined into this roof's visible envelope.
+
 ### `pub grafting_graph_core::profile_surface::ProfileSheet::lower: grafting_graph_core::profile_surface::Section`
 
 Lower analytic section.
@@ -4067,6 +4327,25 @@ Four-sheet caps with one shared base and maximum elevation.
 ### `pub mod grafting_graph_core::profile_cap_patch`
 
 Indexed, shared-boundary topology for analytic caps. No live graph mutation.
+
+### `pub mod grafting_graph_core::profile_roof`
+
+Roofs raised over any footprint by its weighted straight skeleton.
+
+Every side of the footprint -- its outline and the rims of its holes --
+is a leaf that rises inward at its own slope, or a gable that does not
+rise at all and stands upright. The wavefront each side sweeps inward, at
+a speed of one over its slope, meets the others along the roof's hips,
+valleys and ridges; the time it reaches a point is the roof's height
+there. Any simple outline is covered this way, holes included, and two
+roofs fused are one footprint.
+
+A dormer is a small block raised on one leaf: its eaves stand above the
+leaf, so where its roof is higher the leaf is opened, and upright faces
+close the gap between the two -- its front and its cheeks.
+
+The roof is only the volume a covering is placed on: how far its eaves
+reach out and whether its leaves curve are the covering's business.
 
 ### `pub mod grafting_graph_core::profile_surface`
 
@@ -4339,6 +4618,30 @@ Transient cap description ready for a caller to assign graph identities.
 ### `pub struct grafting_graph_core::profile_cap_patch::CapRequest`
 
 Pure generation request with one common elevation and height.
+
+### `pub struct grafting_graph_core::profile_roof::RoofDormer`
+
+A dormer raised on one leaf: a small roof of its own, over a front wall.
+
+### `pub struct grafting_graph_core::profile_roof::RoofFace`
+
+One logical roof face over shared indexed edges.
+
+### `pub struct grafting_graph_core::profile_roof::RoofFootprint`
+
+The plan a roof covers: one outline and the holes through it.
+
+### `pub struct grafting_graph_core::profile_roof::RoofPatch`
+
+Transient roof description ready for a caller to assign graph identities.
+
+### `pub struct grafting_graph_core::profile_roof::RoofPlatformCut`
+
+A horizontal platform removes only roof surface above its walking plane.
+
+### `pub struct grafting_graph_core::profile_roof::RoofRequest`
+
+A whole roof: its footprint, how each side rises, and its dormers.
 
 ### `pub struct grafting_graph_core::profile_surface::ProfileSheet`
 

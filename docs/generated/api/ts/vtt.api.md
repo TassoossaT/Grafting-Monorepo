@@ -465,7 +465,7 @@ itself; this only names the one a single-ring consumer answers for.
 
 ### `property vtt.effect-commit.CommitOptions.origin?: ChangeOrigin`
 
-### `property vtt.effect-commit.CommitOptions.reactions?: Readonly<Record<"lattice-regenerate", Reaction<LatticeReactionRuntime>>>`
+### `property vtt.effect-commit.CommitOptions.reactions?: Readonly<Record<ReactionId, Reaction<TabletopReactionRuntime>>>`
 
 ### `property vtt.effect-commit.CommitOptions.subtype?: string`
 
@@ -485,7 +485,11 @@ What committing needs of the runtime.
 
 ### `method vtt.effect-commit.EffectCommitRuntime.applyRegionEdit(ops: readonly AtomicEditOp[], origin: "local", causeId: string): unknown`
 
+### `method vtt.effect-commit.EffectCommitRuntime.applyRegionEdit(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): RegionEditOutcome`
+
 ### `method vtt.effect-commit.EffectCommitRuntime.generateIrregularQuadGrid(request: ConstructionIrregularQuadGridRequest): ConstructionIrregularQuadGrid | undefined`
+
+### `method vtt.effect-commit.EffectCommitRuntime.generateRoof(request: RoofRequest): RoofPatch`
 
 ### `method vtt.effect-commit.EffectCommitRuntime.getAllRegionTopologies(): readonly ConstructionRegionTopology[]`
 
@@ -499,9 +503,13 @@ What committing needs of the runtime.
 
 ### `method vtt.effect-commit.EffectCommitRuntime.getSnapshot(): { map: { nodePositions: ReadonlyMap<string, { position: ConstructionPosition }> }; tableId: string }`
 
+### `method vtt.effect-commit.EffectCommitRuntime.pinNodes(pins: readonly ConstructionPinRequest[], origin: ChangeOrigin, causeId: string): unknown`
+
 ### `method vtt.effect-commit.EffectCommitRuntime.planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[]`
 
 ### `method vtt.effect-commit.EffectCommitRuntime.removeSurface(request: { surfaceKey: ConstructionSurfaceKey }, origin: ChangeOrigin, causeId: string): RegionEditOutcome`
+
+### `method vtt.effect-commit.EffectCommitRuntime.setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): unknown`
 
 ### `method vtt.effect-commit.EffectCommitRuntime.transact(transactionId: string, origin: ChangeOrigin, work: () => T): TransactionResult<T>`
 
@@ -541,7 +549,7 @@ Deletes one surface and lets its own cloud and every cloud it had cut answer, at
 
 Dispatches `effects` against the live state. Call inside a transaction.
 
-### `type vtt.reactions.TabletopReactionRuntime = LatticeReactionRuntime`
+### `type vtt.reactions.TabletopReactionRuntime = LatticeReactionRuntime & FollowBaseRuntime`
 
 What every tabletop reaction may read and mutate, inside the pipeline's transaction.
 
@@ -689,8 +697,6 @@ Hides the active tool preview, if any.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.dispose(): Promise<void>`
 
-### `method vtt.tabletop-runtime.AppTabletopRuntime.generateCap(request: CapRequest): CapPatch`
-
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.generateHeightmap(width: number, height: number, seed: number, scale: number, originX: number, originY: number): Float32Array`
 
 Passthrough to `TerrainNoisePort.generateHeightmap` -- see that port for parameter meaning.
@@ -700,6 +706,8 @@ Passthrough to `TerrainNoisePort.generateHeightmap` -- see that port for paramet
 One irregular quad grid, generated against the contours given -- what
 ground is made of, whether it is being created or regenerated. Pure: it
 reads nothing from the live graph and changes nothing in it.
+
+### `method vtt.tabletop-runtime.AppTabletopRuntime.generateRoof(request: RoofRequest): RoofPatch`
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.getAllRegionTopologies(): readonly ConstructionRegionTopology[]`
 
@@ -883,8 +891,6 @@ Hides the active tool preview, if any.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.dispose(): Promise<void>`
 
-### `method vtt.tabletop-runtime.TabletopRuntime.generateCap(request: CapRequest): CapPatch`
-
 ### `method vtt.tabletop-runtime.TabletopRuntime.generateHeightmap(width: number, height: number, seed: number, scale: number, originX: number, originY: number): Float32Array`
 
 Passthrough to `TerrainNoisePort.generateHeightmap` -- see that port for parameter meaning.
@@ -894,6 +900,8 @@ Passthrough to `TerrainNoisePort.generateHeightmap` -- see that port for paramet
 One irregular quad grid, generated against the contours given -- what
 ground is made of, whether it is being created or regenerated. Pure: it
 reads nothing from the live graph and changes nothing in it.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.generateRoof(request: RoofRequest): RoofPatch`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.getAllRegionTopologies(): readonly ConstructionRegionTopology[]`
 
@@ -2062,9 +2070,7 @@ Where a shape begun at `sample`, on the level `y`, starts: on the side it was dr
 
 ### `function vtt.build-frame.pointerOnLevel(sample: PointerSample, y: number): ConstructionPosition`
 
-Where the pointer is on the level `y` a shape is drawn at -- its ray
-crossing that level, not whatever surface the ray happened to hit first:
-the ground below a raised floor, or the top of one standing in front.
+Where the pointer is on the level `y` a shape is drawn at -- see pointerAtHeight.
 
 ### `function vtt.build-frame.snappedInFrame(ctx: ToolContext, frame: BuildFrame, p: ConstructionPosition): ConstructionPosition`
 
@@ -2179,6 +2185,53 @@ The sign is all that is used. Two rims belong to the same side of a joint
 when a traveller passing through it keeps them both on the same hand --
 which, since one run's direction points *into* the joint and the other's
 points *out* of it, means their signs are opposite.
+
+### `interface vtt.contour-stroke.ContourStrokeOptions`
+
+How a tool uses the contour stroke: the level each outline is drawn on,
+and what it makes of an outline once it is closed.
+
+### `property vtt.contour-stroke.ContourStrokeOptions.color: number`
+
+### `property vtt.contour-stroke.ContourStrokeOptions.commit: (ctx: ToolContext, contour: readonly FittedEdge[], level: number, params: P, samples: readonly PointerSample[]) => void`
+
+Takes a closed outline on `level`; `samples` are what drew it -- the corners, or the pointer's path.
+
+### `property vtt.contour-stroke.ContourStrokeOptions.dragHint?: (shape: ContourShape) => string`
+
+What a plain click with a dragged shape says.
+
+### `property vtt.contour-stroke.ContourStrokeOptions.levelAt: (ctx: ToolContext, first: PointerSample, params: P) => number`
+
+The level a stroke begun at `first` draws on.
+
+### `property vtt.contour-stroke.ContourStrokeOptions.previewClosed?: (ctx: ToolContext, outline: readonly ConstructionPosition[], level: number, params: P) => PreviewDescriptor | undefined`
+
+A preview of a closed outline, when the tool shows more than the outline itself.
+
+### `interface vtt.contour-stroke.ContourStrokeParams`
+
+What the stroke reads of a tool's parameters.
+
+### `property vtt.contour-stroke.ContourStrokeParams.radius?: number`
+
+### `property vtt.contour-stroke.ContourStrokeParams.shape?: ContourShape`
+
+### `property vtt.contour-stroke.ContourStrokeParams.tolerance?: number`
+
+### `type vtt.contour-stroke.ContourShape = "rectangle" | "polygon" | "freehand" | "circle"`
+
+The shapes a closed outline is drawn as.
+
+### `function vtt.contour-stroke.contourStroke(options: ContourStrokeOptions<P>): Pick<ConstructionTool<K>, "previewFor" | "onClick" | "onPointerUp" | "onCancel">`
+
+A closed outline drawn on one level, as any tool that lays out an area
+draws it: a rectangle dragged corner to corner, a polygon clicked corner
+by corner, a freehand loop fitted into lines and arcs, or a circle
+clicked at its centre. Squared shapes are laid along the frame the stroke
+began in -- a structure's own sides next to it, else the way the camera
+looks (`build-frame.ts`) -- never the world's fixed axes. What the
+outline becomes is the tool's own business.
 
 ### `interface vtt.curve-draft.CurveDraftOptions`
 
@@ -2431,6 +2484,36 @@ rim named it from one face, and one face cannot see the other; if the graph
 shows two, the edge is interior whatever it was called -- see
 RIM_ROLES.
 
+### `interface vtt.face-props.FacePropsRuntime`
+
+What keeping a regenerated structure's properties and pins needs of the runtime.
+
+### `method vtt.face-props.FacePropsRuntime.applyRegionEdit(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): RegionEditOutcome`
+
+### `method vtt.face-props.FacePropsRuntime.getAllRegionTopologies(): readonly ConstructionRegionTopology[]`
+
+### `method vtt.face-props.FacePropsRuntime.pinNodes(pins: readonly ConstructionPinRequest[], origin: ChangeOrigin, causeId: string): unknown`
+
+### `method vtt.face-props.FacePropsRuntime.setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): unknown`
+
+### `interface vtt.face-props.PinnedToRoles`
+
+What was pinned to faces about to be regenerated, by the role of the face each is pinned to.
+
+### `property vtt.face-props.PinnedToRoles.pins: readonly { nodeId: string; role: string; u: number; v: number }[]`
+
+### `function vtt.face-props.keepFaceProps(runtime: FacePropsRuntime, causeId: string, created: readonly ConstructionSurfaceKey[], faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>, pinned?: PinnedToRoles): void`
+
+Gives each face a patch just made the properties its generator named for
+its region, and pins what was pinned to a replaced face onto the new face
+with the same role, where it stood on it -- a window stays in its gable.
+What was pinned to a face with no successor goes with it: a window in a
+dormer the roof no longer has, or in a roof taken away whole.
+
+### `function vtt.face-props.pinnedToRoles(topologies: readonly ConstructionRegionTopology[], sources: readonly ConstructionSurfaceKey[]): PinnedToRoles`
+
+Reads, before `sources` are replaced, every node pinned to one of them whose face names its role -- pins ride on the faces' nodes.
+
 ### `function vtt.floor-landing.floorLandingAt(floors: readonly ConstructionRegionTopology[], sample: PointerSample): FloorLanding | undefined`
 
 The floor edge `sample` lands on, preferring the floor the pointer is on.
@@ -2508,10 +2591,23 @@ every `ConstructionToolId` and `use-construction-pointer.ts` never needs a
 
 ### `function vtt.pointer-ray.pointerAtHeight(sample: PointerSample, y: number): ConstructionPosition`
 
-Where the pointer is at height `y`: its ray from the camera crossing that
-level, so something drawn at `y` sits right under the cursor rather than
-above or below whatever the ray hit. Without a ray -- or one that never
-reaches that level in front of the camera -- the hit point, at `y`.
+Where the pointer is at height `y` -- the one rule every tool reads the
+pointer by, so a point lands under the cursor the same way for all of them.
+On a face standing above `y` that is not a wall -- a roof's leaf, a
+platform's top -- it is where the ray meets that face, laid down onto `y`:
+carried on down the ray it would land far behind what the cursor is on.
+Anywhere else, the ray crossing `y` itself, so something drawn at `y`
+sits right under the cursor rather than above or below whatever the ray
+hit. Without a ray -- or one that never reaches there in front of the
+camera -- the hit point, at `y`. Always exact: the hit point may be
+snapped to the grid, the ray never is.
+
+### `function vtt.pointer-ray.withFacePlane(sample: PointerSample, topologies: readonly ConstructionRegionTopology[]): PointerSample`
+
+`sample` knowing the face it is on: that face's slope, through the exact
+point the pointer hit -- read before the hit is snapped to the grid, and
+right on uneven faces too, the ground or a road, whose slope differs from
+place to place. The pointer gives every sample this.
 
 ### `function vtt.spine-body-target.spineBodyTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string, ownsSpine: (surfaceType: string) => boolean): { options: CurveGestureOptions; sample: PointerSample } | undefined`
 
@@ -2778,6 +2874,10 @@ What the pointer resolved to at one instant -- `nodeId` present only when it hit
 
 ### `property vtt.tool-context.PointerSample.constructionAction?: { kind: "branch"; nodeId: string }`
 
+### `property vtt.tool-context.PointerSample.face?: { centre: ConstructionPosition; normal: ConstructionPosition }`
+
+The face under the pointer, when it is on one: its slope through the exact point hit -- see `pointer-ray.ts`.
+
 ### `property vtt.tool-context.PointerSample.forward?: ConstructionPosition`
 
 The way the camera looks, when the view gave it -- see `build-frame.ts`.
@@ -2904,6 +3004,20 @@ Something a commit survived but should not have had to.
 
 ### `function vtt.tool-registry.toolFor(id: Id): ConstructionTool<Id>`
 
+### `variable vtt.opening-stands.openingStands: readonly OpeningStand[]`
+
+Every kind of face that raises an upright stand to hold an opening -- the opening tool asks each in turn.
+
+### `interface vtt.opening-shared.OpeningCommit`
+
+### `property vtt.opening-shared.OpeningCommit.created?: { group: string; surfaceKeys: readonly ConstructionSurfaceKey[] }`
+
+The new group, when pieces were added.
+
+### `property vtt.opening-shared.OpeningCommit.error?: string`
+
+### `property vtt.opening-shared.OpeningCommit.recorded: boolean`
+
 ### `interface vtt.opening-shared.OpeningPiece`
 
 One face's share of a run rectangle: its bounds, and its outline as straight and cubic segments counter-clockwise in the face's `(u, v)`.
@@ -2957,6 +3071,10 @@ An axis-aligned rectangle in a run's `(s, v)` frame; `s` is in world units.
 ### `variable vtt.opening-shared.MARGIN: 0.15`
 
 How much wall (world units) must be left standing at either end of a run, and above and below an opening.
+
+### `variable vtt.opening-shared.MIN_OPENING_SIZE: 0.3`
+
+The smallest world width or height a drawn or dragged opening may settle at.
 
 ### `function vtt.opening-shared.commitOpeningGroup(ctx: ToolContext, causeId: string, removals: readonly ConstructionSurfaceKey[], pieces: readonly OpeningPiece[], shape?: OpeningShape): OpeningCommit`
 
@@ -3017,6 +3135,73 @@ rect may not reach round onto itself.
 
 The shape an opening group carries, read from any piece's property bag.
 
+### `interface vtt.opening-stand.OpeningStand`
+
+A face an opening cannot be cut into as it lies -- a sloped leaf -- but
+that can raise an upright stand to hold one: the stand exists only for
+its opening, follows it when it moves or changes size, and goes with it.
+
+The face stops an opening where it has no more room, the way a wall
+stops one at its ends: every placement comes back already stopped, and
+the preview shows exactly what the commit makes -- never an error for
+having gone too far.
+
+### `method vtt.opening-stand.OpeningStand.drawn(face: ConstructionRegionTopology, from: ConstructionPosition, to: ConstructionPosition, shape: OpeningShape, isDoor: boolean): StandPlacement | undefined`
+
+The opening a drag from `from` to `to` over `face` draws corner to corner, as on a wall -- stopped by the face.
+
+### `method vtt.opening-stand.OpeningStand.drop(ctx: ToolContext, causeId: string, pieces: readonly ConstructionSurfaceKey[], host: ConstructionSurfaceKey): OpeningCommit`
+
+Removes the opening and the stand at `host` holding it. One transaction.
+
+### `method vtt.opening-stand.OpeningStand.fitted(face: ConstructionRegionTopology, at: ConstructionPosition, look: StandLook): StandPlacement | undefined`
+
+An opening of `look` at `at` on `face`, stopped by the face; `undefined` where not even the smallest fits.
+
+### `method vtt.opening-stand.OpeningStand.holds(ctx: ToolContext, host: ConstructionSurfaceKey): boolean`
+
+Whether the face `host` is one of this kind's stands.
+
+### `method vtt.opening-stand.OpeningStand.outline(face: ConstructionRegionTopology, placed: StandPlacement): readonly ConstructionPosition[] | undefined`
+
+The world outline an opening `placed` on `face` stands on.
+
+### `method vtt.opening-stand.OpeningStand.raise(ctx: ToolContext, causeId: string, face: ConstructionRegionTopology, placed: StandPlacement): OpeningCommit`
+
+Raises a stand on `face` for the opening `placed`, and places it there. One transaction.
+
+### `method vtt.opening-stand.OpeningStand.raisesOn(face: ConstructionRegionTopology): boolean`
+
+Whether a press on `face` raises a stand there.
+
+### `method vtt.opening-stand.OpeningStand.refit(ctx: ToolContext, causeId: string, pieces: readonly ConstructionSurfaceKey[], host: ConstructionSurfaceKey, look: StandLook, shift: { x: number; z: number }): OpeningCommit`
+
+Remakes the stand at `host` for its opening, now `look` and moved by `shift` -- stopped by its face. One transaction.
+
+### `method vtt.opening-stand.OpeningStand.refitOutline(ctx: ToolContext, host: ConstructionSurfaceKey, look: StandLook, shift: { x: number; z: number }): readonly ConstructionPosition[] | undefined`
+
+The world outline the opening at `host` would stand on, now `look` and moved by `shift` -- stopped by its face.
+
+### `interface vtt.opening-stand.StandLook`
+
+An opening's size and outline, in world units, as a stand is asked to hold it.
+
+### `property vtt.opening-stand.StandLook.height: number`
+
+### `property vtt.opening-stand.StandLook.isDoor: boolean`
+
+### `property vtt.opening-stand.StandLook.shape: OpeningShape`
+
+### `property vtt.opening-stand.StandLook.width: number`
+
+### `interface vtt.opening-stand.StandPlacement`
+
+An opening as its stand will hold it: where its front's middle stands, and its size, already stopped by the face.
+
+### `property vtt.opening-stand.StandPlacement.at: ConstructionPosition`
+
+### `property vtt.opening-stand.StandPlacement.look: StandLook`
+
 ### `variable vtt.opening-tool.openingTool: ConstructionTool<"opening">`
 
 ### `variable vtt.path-brush-tool.pathBrushTool: ConstructionTool<"path-brush">`
@@ -3040,6 +3225,10 @@ Drag to sketch the centerline. Release commits one fitted curve transaction.
 What the pointer resolved to at one instant -- `nodeId` present only when it hit a node handle.
 
 ### `property vtt.road-body-target.RoadSnapTarget.constructionAction?: { kind: "branch"; nodeId: string }`
+
+### `property vtt.road-body-target.RoadSnapTarget.face?: { centre: ConstructionPosition; normal: ConstructionPosition }`
+
+The face under the pointer, when it is on one: its slope through the exact point hit -- see `pointer-ray.ts`.
 
 ### `property vtt.road-body-target.RoadSnapTarget.forward?: ConstructionPosition`
 
@@ -3224,11 +3413,11 @@ for sitting on ground already there, and that whole side stays empty.
 
 Also grabs and edits an existing platform's own vertex/edge/body -- see `structure-edit-behavior.ts`.
 
-### `function vtt.platform-contour-tool.commitPlatformContour(ctx: ToolContext, samples: readonly PointerSample[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; tolerance?: number }): void`
+### `function vtt.platform-contour-tool.commitPlatformContour(ctx: ToolContext, samples: readonly PointerSample[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "circle" | "rectangle" | "polygon" | "freehand"; tolerance?: number }): void`
 
 Polygon entry point retained for callers that already have explicit corners.
 
-### `function vtt.platform-contour-tool.commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; tolerance?: number }, pickedSamples: readonly PointerSample[], options: { alone?: boolean; clipped?: boolean }): void`
+### `function vtt.platform-contour-tool.commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "circle" | "rectangle" | "polygon" | "freehand"; tolerance?: number }, pickedSamples: readonly PointerSample[], options: { alone?: boolean; clipped?: boolean }): void`
 
 Commits the same directed line/arc contour vocabulary consumed by wall
 construction. Ampliar/juntar and recortar/separar no longer run an
@@ -3237,17 +3426,76 @@ onto the existing boundary (within WELD_TOLERANCE, the same one a
 wall run snaps onto a column with) and the result is assembled from
 shared/cancelled edges -- see `platform-contour-merge.ts` for why.
 
-### `variable vtt.roof-tool.ROOF_OVERHANG: 0.2`
+### `interface vtt.roof-base.RoofBase`
 
-Application-wide overhang; no individual roof/band control in this delivery.
+What a roof stands on: a footprint at one elevation, and how to find it again.
+
+### `property vtt.roof-base.RoofBase.elevation: number`
+
+### `property vtt.roof-base.RoofBase.footprint: RoofFootprint`
+
+### `property vtt.roof-base.RoofBase.ref: RoofBaseRef`
+
+### `function vtt.roof-base.roofBaseAt(topologies: readonly ConstructionRegionTopology[], sample: PointerSample): RoofBase`
+
+The base under a click: a floor's outline and holes, or -- clicking a
+wall -- the loop its tops close round the room it bounds. Curved sides are
+followed by short straight ones. Throws a message for the user when what
+was clicked cannot carry a roof.
+
+### `function vtt.roof-base.roofBaseOf(topologies: readonly ConstructionRegionTopology[], ref: RoofBaseRef): RoofBase | undefined`
+
+The base `ref` names, as it stands now: its own face if that still
+stands, else the face of its kind now holding its outline's nodes -- a
+floor made again when it was widened, a wall split. `undefined` once
+nothing of it is left to stand on.
+
+### `function vtt.roof-commit.commitRoofRecipes(ctx: ToolContext, requests: readonly RoofSource[], replaces: readonly ConstructionSurfaceKey[], done: string): void`
+
+### `function vtt.roof-commit.replaceRoofs(ctx: ToolContext, requests: readonly RoofSource[], replaces: readonly ConstructionSurfaceKey[], transactionId?: string): { group: string; recorded: boolean }`
+
+Makes the roofs `requests` describe in place of the faces `replaces` names,
+under transaction `transactionId` -- joining it when it is already under
+way -- and returns the new faces' group name and whether it was recorded.
+What was pinned to a replaced face moves to the new face of the same role.
+
+### `interface vtt.roof-follow-base.FollowBaseRuntime`
+
+What following a base needs of the runtime, inside the pipeline's transaction.
+
+### `method vtt.roof-follow-base.FollowBaseRuntime.applyPatchReplacement(request: ApplyPatchReplacementRequest, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome`
+
+### `method vtt.roof-follow-base.FollowBaseRuntime.applyRegionEdit(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): RegionEditOutcome`
+
+### `method vtt.roof-follow-base.FollowBaseRuntime.generateRoof(request: RoofRequest): RoofPatch`
+
+### `method vtt.roof-follow-base.FollowBaseRuntime.getAllRegionTopologies(): readonly ConstructionRegionTopology[]`
+
+### `method vtt.roof-follow-base.FollowBaseRuntime.pinNodes(pins: readonly ConstructionPinRequest[], origin: ChangeOrigin, causeId: string): unknown`
+
+### `method vtt.roof-follow-base.FollowBaseRuntime.setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): unknown`
+
+### `function vtt.roof-follow-base.followBaseReaction(): Reaction<FollowBaseRuntime>`
+
+The `"follow-base"` reaction: a roof standing on a floor or a room is made
+again over it whenever that changes -- moved, widened, raised, a wall of
+the room pushed out. Its sides keep their slopes, its dormers their
+places, and what is pinned to it stays pinned. A roof whose base is gone
+stays as it stood.
+
+### `variable vtt.roof-opening-stand.roofOpeningStand: OpeningStand`
+
+A roof leaf holds an opening upright, the way a floor inside a roof is met
+by transition walls: a dormer is cut back into the leaf, its front a plain
+wall the opening's size which the opening fills, as any opening fills a
+wall -- its outline the tool's own -- two waters over it, or one as its
+user makes it, their gable a wall apart. The roof keeps it as a dormer in its recipe,
+marked as the opening's, so the opening pinned to its front is carried
+whenever the roof is made again.
 
 ### `variable vtt.roof-tool.roofTool: ConstructionTool<"roof">`
 
-Also grabs and edits an existing roof's own vertex/edge/body -- see `structure-edit-behavior.ts`.
-
-### `function vtt.roof-tool.commitRoof(ctx: ToolContext, capRequest: CapRequest): void`
-
-Assigns identities to native geometry and applies the entire covering atomically.
+Also edits an existing roof, through its handles only -- see `structure-edit-behavior.ts` and `roof-recipe.ts`.
 
 ### `interface vtt.geometry-2d.PointXZ`
 
@@ -4019,7 +4267,7 @@ The transaction's cause id; reactions mint their own ids from it.
 
 ### `property vtt.effect.Effect.change: ShapeChange`
 
-### `property vtt.effect.Effect.emittedBy?: "lattice-regenerate"`
+### `property vtt.effect.Effect.emittedBy?: ReactionId`
 
 The reaction that emitted this effect, excluded from receiving it. Absent for the first effect.
 
@@ -4057,7 +4305,7 @@ The preset the change was made with, when its type has presets at all.
 
 The type of the cloud whose shape changed.
 
-### `type vtt.effect.EffectKind = "cut" | "remove"`
+### `type vtt.effect.EffectKind = "cut" | "remove" | "reshape"`
 
 What can happen to a cloud that other clouds may have to answer.
 
@@ -4075,7 +4323,7 @@ effect's kind -- a family answers once, across all its types -- and it may
 mutate only through `context`, inside the pipeline's transaction. It never
 calls another cloud's reaction: anything it causes elsewhere, it emits.
 
-### `type vtt.effect.ReactionId = "lattice-regenerate"`
+### `type vtt.effect.ReactionId = "lattice-regenerate" | "follow-base"`
 
 A declared reaction, by name. The type registry names reactions as data;
 the implementation behind each name lives with the runtime that can execute
@@ -4097,11 +4345,11 @@ A chain kept emitting past MAX_EFFECT_DEPTH.
 
 A reaction refused, so the whole transaction must be rolled back.
 
-### `constructor vtt.effect-pipeline.EffectRefusedError.constructor(reactionId: "lattice-regenerate", effectKind: EffectKind, reason: string): EffectRefusedError`
+### `constructor vtt.effect-pipeline.EffectRefusedError.constructor(reactionId: ReactionId, effectKind: EffectKind, reason: string): EffectRefusedError`
 
 ### `property vtt.effect-pipeline.EffectRefusedError.effectKind: EffectKind`
 
-### `property vtt.effect-pipeline.EffectRefusedError.reactionId: "lattice-regenerate"`
+### `property vtt.effect-pipeline.EffectRefusedError.reactionId: ReactionId`
 
 ### `property vtt.effect-pipeline.EffectRefusedError.reason: string`
 
@@ -4121,7 +4369,7 @@ One reaction that ran, in the order it ran.
 
 ### `property vtt.effect-pipeline.ReactionRecord.hitCount: number`
 
-### `property vtt.effect-pipeline.ReactionRecord.reactionId: "lattice-regenerate"`
+### `property vtt.effect-pipeline.ReactionRecord.reactionId: ReactionId`
 
 ### `type vtt.effect-pipeline.DeclaredReaction = (surfaceType: string, kind: EffectKind) => ReactionId | undefined`
 
@@ -4213,7 +4461,7 @@ drags them changes.
 
 Every handle of every kind this provider places, before any type's declaration filters them.
 
-### `method vtt.global-handle.GlobalHandleProvider.plan(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: Pick<BezierPort, "curveBatch">, operationId: string): GlobalHandleEdit | undefined`
+### `method vtt.global-handle.GlobalHandleProvider.plan(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: GlobalHandlePort, operationId: string): GlobalHandleEdit | undefined`
 
 What `intent` on `handle` edits; `undefined` when it edits nothing. Throws to refuse.
 
@@ -4229,7 +4477,7 @@ Which surfaces form one cloud with `seed` (`ADR-0022`) -- the engine decides, ne
 
 ### `property vtt.global-handle.GlobalHandleScene.topologies: readonly ConstructionRegionTopology[]`
 
-### `type vtt.global-handle.GlobalHandleEdit = { carries?: readonly ConstructionSurfaceKey[]; graphPatch: ConstructionGraphPatch; kind: "spine"; owner: string } | { delta: ConstructionPosition; kind: "region-move"; seed: ConstructionSurfaceKey } | { delta: ConstructionPosition; kind: "region-part"; seed: ConstructionSurfaceKey; target: HandlePart } | { kind: "vertices"; moves: readonly { nodeId: string; position: ConstructionPosition }[]; retypes: readonly { edgeId: string; geometry: ConstructionEdgeGeometry }[] } | { kind: "replace"; request: ApplyPatchReplacementRequest }`
+### `type vtt.global-handle.GlobalHandleEdit = { carries?: readonly ConstructionSurfaceKey[]; graphPatch: ConstructionGraphPatch; kind: "spine"; owner: string } | { delta: ConstructionPosition; kind: "region-move"; seed: ConstructionSurfaceKey } | { delta: ConstructionPosition; kind: "region-part"; seed: ConstructionSurfaceKey; target: HandlePart } | { kind: "vertices"; moves: readonly { nodeId: string; position: ConstructionPosition }[]; retypes: readonly { edgeId: string; geometry: ConstructionEdgeGeometry }[] } | { faceProps?: ReadonlyMap<string, Readonly<Record<string, unknown>>>; kind: "replace"; request: ApplyPatchReplacementRequest }`
 
 What a provider makes of an intent, in the terms the edit is carried out
 in:
@@ -4246,11 +4494,15 @@ in:
 
 What a gesture on a global handle asks for, whatever the structure.
 
+### `type vtt.global-handle.GlobalHandlePort = Pick<BezierPort, "curveBatch"> & Pick<RoofPort, "generateRoof">`
+
+What a provider may ask of the engine while planning: curves, and structures generated from a recipe.
+
 ### `type vtt.global-handle.HandlePart = { edgeId: string; kind: "edge" } | { kind: "vertex"; nodeId: string }`
 
 One part of a face a handle drags: a side, or a corner.
 
-### `type vtt.global-handle-ids.GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "radius" | "origin" | "destination" | "originHeight" | "destinationHeight" | "side" | "corner" | "foot" | "top" | "detach"`
+### `type vtt.global-handle-ids.GlobalHandleKind = "pivot" | "rotate" | "height" | "turns" | "radius" | "origin" | "destination" | "originHeight" | "destinationHeight" | "side" | "corner" | "foot" | "top" | "detach" | "rise" | "slope" | "seam" | "insert"`
 
 The handles that stand for a whole structure rather than one of its
 points, whatever the structure is built from -- a spine, a cloud of
@@ -4270,7 +4522,13 @@ regions:
   free to build against;
 - foot, top: an upright structure's post -- where it stands, and how high
   that side rises;
-- detach: clicked, the structure lets go of whatever it is joined to.
+- detach: clicked, the structure lets go of whatever it is joined to;
+- rise: how high a structure grown from its base rises above it; brought
+  down to nothing, the structure is gone;
+- slope: how steeply one of its faces climbs; brought down to nothing,
+  the face stands upright instead;
+- seam: how steeply the two faces meeting along a seam climb, together;
+- insert: from the middle of one side, a new corner pulled out of it.
 
 Which of them a structure shows is its type's declaration
 (`StructureTypeDefinition.globalHandles`). Every one is named after the
@@ -4679,7 +4937,7 @@ handle says so itself; a spine's control point moves along the ground on a
 spine whose owner derives its heights, and freely otherwise. `undefined`
 for anything that is not a handle this knows.
 
-### `function vtt.global-handles.planGlobalHandle(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: Pick<BezierPort, "curveBatch">, operationId: string): GlobalHandleEdit | undefined`
+### `function vtt.global-handles.planGlobalHandle(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: GlobalHandlePort, operationId: string): GlobalHandleEdit | undefined`
 
 What `intent` on `handle` edits, from the provider that placed it.
 
@@ -4892,6 +5150,69 @@ type declares `side` or `corner` handles -- for the parts its own
 role for it, exactly as grabbing the part itself used to: the platform
 pushes the side square to itself, a ramp widens. The part itself is never
 grabbed, so it stays free to build against.
+
+### `interface vtt.recipe-handle-provider.RecipeGlobalHandle`
+
+A handle of a structure regenerated from a recipe: the generic handle, with its type's own reading of it.
+
+### `property vtt.recipe-handle-provider.RecipeGlobalHandle.center?: readonly [number, number]`
+
+A spiral's centre, when the structure is one -- what a turns handle winds round.
+
+### `property vtt.recipe-handle-provider.RecipeGlobalHandle.faces?: readonly string[]`
+
+The faces the structure is made of, by surface key joined with NUL -- absent for a spine, whose faces its spine regenerates.
+
+### `property vtt.recipe-handle-provider.RecipeGlobalHandle.facing?: { x: number; z: number }`
+
+The way a handle standing off one side of a face looks out, in plan --
+absent for one that is seen from anywhere. The scene shows only the
+sides facing the viewer.
+
+### `property vtt.recipe-handle-provider.RecipeGlobalHandle.group: string`
+
+### `property vtt.recipe-handle-provider.RecipeGlobalHandle.id: string`
+
+### `property vtt.recipe-handle-provider.RecipeGlobalHandle.kind: GlobalHandleKind`
+
+### `property vtt.recipe-handle-provider.RecipeGlobalHandle.motion: HandleMotion`
+
+How the handle moves while dragged -- the path its gesture keeps it on.
+
+### `property vtt.recipe-handle-provider.RecipeGlobalHandle.nodeIds: readonly string[]`
+
+Every node of the structure, lowest id first.
+
+### `property vtt.recipe-handle-provider.RecipeGlobalHandle.owner: string`
+
+The structure's type.
+
+### `property vtt.recipe-handle-provider.RecipeGlobalHandle.pivot: ConstructionPosition`
+
+What the structure moves and turns round.
+
+### `property vtt.recipe-handle-provider.RecipeGlobalHandle.position: ConstructionPosition`
+
+### `property vtt.recipe-handle-provider.RecipeGlobalHandle.provider: string`
+
+Which provider made it -- and plans its edits.
+
+### `property vtt.recipe-handle-provider.RecipeGlobalHandle.recipeHandle: RecipeHandle`
+
+### `property vtt.recipe-handle-provider.RecipeGlobalHandle.snaps?: boolean`
+
+Whether what it drags snaps onto other structures' outlines (`orchestration/outline-snap.ts`).
+
+### `property vtt.recipe-handle-provider.RecipeGlobalHandle.target?: HandlePart`
+
+The part of the structure it drags -- a side, a corner; absent when it moves the whole.
+
+### `variable vtt.recipe-handle-provider.recipeHandleProvider: GlobalHandleProvider`
+
+Global handles of structures regenerated whole from a recipe -- a roof:
+the type places them and says what each does to the recipe, and every edit
+replaces the structure's faces by the ones the new recipe makes, in one
+patch replacement. A recipe left with nothing removes the structure.
 
 ### `variable vtt.spine-handle-provider.spineHandleProvider: GlobalHandleProvider`
 
@@ -6670,6 +6991,10 @@ real roles to name, where terrain has none and can only regenerate. Shape
 is what decides whether two products share a table -- not whether they
 happen to share a generator.
 
+### `function vtt.registry.cloudTypesFor(surfaceType: string): readonly string[]`
+
+Surface types admitted to the same connected cloud as `surfaceType`.
+
 ### `function vtt.registry.firstRefusal(resolved: readonly ResolvedCoverage[]): string | undefined`
 
 The first refusal in a resolved coverage, if any.
@@ -6732,9 +7057,235 @@ Every declared surface type carrying `trait`, in registry order.
 
 The traits one surface type declares. An undeclared type has none.
 
+### `variable vtt.roof-editing.roofRecipeGeneration: RecipeGeneration`
+
+How a roof is regenerated from the recipe its faces keep.
+
+### `function vtt.roof-graph-patch.roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: RoofSource, operationId: string, standing: readonly ConstructionRegionTopology[]): { faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>; patch: ConstructionPatch }`
+
+The roof `request` makes, as a patch named under `operationId`, and what
+each face keeps, by region id: the recipe, under that name as its group,
+its role, and that role as the key an edit finds the same face again by.
+
+Welded to what stands under it: every eave corner lying exactly on a node
+of `standing` -- a floor's corner, a wall's top -- is that node, and every
+eave between two of them that already has a side there is that side. So a
+roof on a floor shares its corners and sides, and goes where they go.
+
+### `interface vtt.roof-recipe.RoofBaseRef`
+
+What a roof stands on, found again as it now stands: a floor, or the room a
+wall loop closes -- by a face of it, and the nodes of its outline, which
+outlive the face being replaced.
+
+### `property vtt.roof-recipe.RoofBaseRef.kind: "floor" | "walls"`
+
+### `property vtt.roof-recipe.RoofBaseRef.nodeIds: readonly string[]`
+
+### `property vtt.roof-recipe.RoofBaseRef.offset?: number`
+
+Height above a floor when a wall on its rim supports the roof.
+
+### `property vtt.roof-recipe.RoofBaseRef.surfaceKey: readonly string[]`
+
+### `interface vtt.roof-recipe.RoofFaceRole`
+
+Which footprint side a face rises from -- one past the last for a flat
+top -- or, on a dormer, which of its sides: front, right, back, left, or
+four where it meets its leaf; and whether it is an upright face under it.
+
+### `property vtt.roof-recipe.RoofFaceRole.dormer?: number`
+
+### `property vtt.roof-recipe.RoofFaceRole.side: number`
+
+### `property vtt.roof-recipe.RoofFaceRole.subroof?: number`
+
+### `property vtt.roof-recipe.RoofFaceRole.upright: boolean`
+
+### `interface vtt.roof-recipe.RoofRecipe`
+
+A roof's recipe: what the generator is asked, the base it follows, and the group of faces it made.
+
+### `property vtt.roof-recipe.RoofRecipe.anchors?: readonly { corner: number; nodeId: string; ring: number }[]`
+
+Eave corners that follow the top nodes of their supporting walls.
+
+### `property vtt.roof-recipe.RoofRecipe.base?: RoofBaseRef`
+
+### `property vtt.roof-recipe.RoofRecipe.cutouts?: readonly RoofFootprint[]`
+
+Areas removed from finished roof faces without reshaping its skeleton.
+
+### `property vtt.roof-recipe.RoofRecipe.dormers?: readonly RoofDormer[]`
+
+### `property vtt.roof-recipe.RoofRecipe.elevation: number`
+
+### `property vtt.roof-recipe.RoofRecipe.footprints: readonly RoofFootprint[]`
+
+The plans it covers: one, or several joined at a corner.
+
+### `property vtt.roof-recipe.RoofRecipe.group: string`
+
+### `property vtt.roof-recipe.RoofRecipe.height: number`
+
+Rise of the roof's highest point above its eaves.
+
+### `property vtt.roof-recipe.RoofRecipe.platform_cuts?: readonly { elevation: number; footprint: RoofFootprint }[]`
+
+Platform outlines trim only roof surface above the platform level.
+
+### `property vtt.roof-recipe.RoofRecipe.slopes: readonly number[]`
+
+### `property vtt.roof-recipe.RoofRecipe.subroofs?: readonly RoofSource[]`
+
+Smaller roofs joined into this roof's visible envelope.
+
+### `interface vtt.roof-recipe.RoofRing`
+
+One ring of a roof's footprints: an outline, or a hole through it.
+
+### `property vtt.roof-recipe.RoofRing.footprint: number`
+
+### `property vtt.roof-recipe.RoofRing.hole: boolean`
+
+### `property vtt.roof-recipe.RoofRing.points: readonly Point[]`
+
+### `interface vtt.roof-recipe.RoofSource`
+
+A roof's request, and the base it follows when it stands on one.
+
+### `property vtt.roof-recipe.RoofSource.anchors?: readonly { corner: number; nodeId: string; ring: number }[]`
+
+Eave corners that follow the top nodes of their supporting walls.
+
+### `property vtt.roof-recipe.RoofSource.base?: RoofBaseRef`
+
+### `property vtt.roof-recipe.RoofSource.cutouts?: readonly RoofFootprint[]`
+
+Areas removed from finished roof faces without reshaping its skeleton.
+
+### `property vtt.roof-recipe.RoofSource.dormers?: readonly RoofDormer[]`
+
+### `property vtt.roof-recipe.RoofSource.elevation: number`
+
+### `property vtt.roof-recipe.RoofSource.footprints: readonly RoofFootprint[]`
+
+The plans it covers: one, or several joined at a corner.
+
+### `property vtt.roof-recipe.RoofSource.height: number`
+
+Rise of the roof's highest point above its eaves.
+
+### `property vtt.roof-recipe.RoofSource.platform_cuts?: readonly { elevation: number; footprint: RoofFootprint }[]`
+
+Platform outlines trim only roof surface above the platform level.
+
+### `property vtt.roof-recipe.RoofSource.slopes: readonly number[]`
+
+### `property vtt.roof-recipe.RoofSource.subroofs?: readonly RoofSource[]`
+
+Smaller roofs joined into this roof's visible envelope.
+
+### `type vtt.roof-recipe.Point = readonly [number, number]`
+
+### `type vtt.roof-recipe.Waters = 1 | 2 | 4`
+
+### `variable vtt.roof-recipe.DORMER_RIM: 0.02`
+
+How far inside its side's ends a dormer has to stand: twice the generator's clearance from its leaf's rim.
+
+### `variable vtt.roof-recipe.OPENING_DORMER_PITCH: 1`
+
+How steeply the two waters over an opening's dormer rise when it is raised: a right angle at its ridge.
+
+### `variable vtt.roof-recipe.ROOF_FACE_PROP: "roofFace"`
+
+Region property naming which side a roof face rises from.
+
+### `variable vtt.roof-recipe.ROOF_RECIPE_PROP: "roof"`
+
+Region property carrying a roof's recipe, which every edit regenerates the roof from.
+
+### `function vtt.roof-recipe.carriedOnto(footprints: readonly RoofFootprint[], sources: readonly RoofRequest[], drawn?: { outline: readonly Point[]; slopes: readonly number[] }): { cutouts: RoofFootprint[]; dormers: RoofDormer[]; footprints: RoofFootprint[]; slopes: number[]; subroofs: RoofRequest[] }`
+
+New footprints that take over from `sources`: each side keeps the slope
+of a side it lies along -- of a roof it came from, then of what was drawn
+-- else rises; a corner where one side runs straight on into another as
+steep is dropped, so no seam runs across one plane; each dormer stays on
+the side its old one lies along; each subroof still standing wholly
+within them stays joined to them.
+
+### `function vtt.roof-recipe.dormerAt(recipe: RoofRequest, side: number, at: Point, width: number, front: number, waters: Waters): RoofDormer`
+
+A dormer standing with its front's middle at `at`, on the leaf rising from
+footprint side `side`: where along that side and how far in.
+
+### `function vtt.roof-recipe.dormerFrame(recipe: RoofRequest, dormer: RoofDormer): { front: Point; length: number; n: Point; u: Point }`
+
+A dormer's frame: along its host side, into its host leaf, and where its front's middle stands.
+
+### `function vtt.roof-recipe.dormerSlopes(waters: Waters): readonly [number, number, number, number]`
+
+A dormer's sides, by waters: two pitch its cheeks, one its front alone -- shallower, so it runs back into the leaf -- four all but its back.
+
+### `function vtt.roof-recipe.footprintsOf(rings: readonly RoofRing[]): RoofFootprint[]`
+
+Rings back into footprints.
+
+### `function vtt.roof-recipe.inwardNormals(ring: readonly Point[], hole: boolean): Point[]`
+
+Each side's normal into the roof: off the outline inward, off a hole away from it.
+
+### `function vtt.roof-recipe.openingDormerSlopes(slopes: readonly number[]): readonly [number, number, number, number]`
+
+The law of a dormer raised for an opening: two waters, or one where the
+other is brought down to a gable -- never none. Its front and back stay
+upright; the opening fills its front, whatever shape its waters give it.
+
+### `function vtt.roof-recipe.ownerOf(recipe: RoofSource, subroof: number | undefined): RoofSource`
+
+The roof a side belongs to: the roof itself, or one of its subroofs.
+
+### `function vtt.roof-recipe.presetSlopes(contour: readonly Point[], waters: Waters): number[]`
+
+Which sides of an outline rise, for a number of waters: every side; the
+longest side and the one facing it most squarely; or the longest alone.
+The rest are gables.
+
+### `function vtt.roof-recipe.ringsOf(footprints: readonly RoofFootprint[]): readonly RoofRing[]`
+
+Every ring of a roof, footprint by footprint: its outline, then its holes -- the order its sides are numbered in.
+
+### `function vtt.roof-recipe.roofOver(footprints: readonly RoofFootprint[], elevation: number, height: number, waters: Waters): RoofRequest`
+
+A roof over `footprints`, each outline shaped by a number of waters; round a hole it always falls toward it.
+
+### `function vtt.roof-recipe.roofRecipeOf(face: ConstructionRegionTopology | undefined): RoofRecipe | undefined`
+
+The recipe a roof face keeps, if it is a roof's.
+
+### `function vtt.roof-recipe.roofRoleOf(face: ConstructionRegionTopology | undefined): RoofFaceRole | undefined`
+
+The role a roof face plays in its roof, if it is a roof's.
+
+### `function vtt.roof-recipe.sideNumber(footprints: readonly RoofFootprint[], ring: number, index: number): number`
+
+The number of side `index` of ring `ring`.
+
+### `function vtt.roof-recipe.sideOf(footprints: readonly RoofFootprint[], side: number): { a: Point; c: Point; index: number; ring: number }`
+
+Where side `side` -- numbered through every ring in turn -- lies: its ring, its index there, and its ends.
+
 ### `variable vtt.roof-structure.roofStructureType: StructureTypeDefinition`
 
-Roof profiles move as a connected cloud; this delivery adds no shape handles.
+A roof is regenerated whole from the recipe its faces keep: every handle
+-- its rise, a side's slope, a seam, a footprint corner, a corner pulled
+out of a side, a dormer -- edits the recipe (`roof-recipe.ts`, through `roof-editing.ts`). How far
+its eaves reach and whether its leaves curve are the covering's business.
+
+### `variable vtt.roof-structure.roofTransitionStructureType: StructureTypeDefinition`
+
+Upright closures follow the roof recipe while joining wall-cloud editing.
 
 ### `interface vtt.structural-cut.StructuralCutArea`
 
@@ -6991,6 +7542,49 @@ Nodes that already stand and move -- a patch only adds.
 
 ### `property vtt.structure-type.RebuiltFromEnds.rungs: readonly { landing?: FloorLanding; rung: WeldRung }[]`
 
+### `interface vtt.structure-type.RecipeGeneration`
+
+A structure regenerated whole from a recipe its faces keep, rather than
+edited node by node: every handle changes the recipe, and the structure is
+made again from it (`orchestration/global-handles/recipe-handle-provider.ts`).
+The recipe itself is the type's own business; nothing outside it reads one.
+
+### `property vtt.structure-type.RecipeGeneration.edit: (recipe: unknown, handle: RecipeHandle, intent: GlobalHandleIntent) => unknown`
+
+The recipe `intent` on `handle` leaves -- `null` when it leaves nothing, `undefined` when it changes nothing. Throws to refuse.
+
+### `property vtt.structure-type.RecipeGeneration.generate: (port: GlobalHandlePort, recipe: unknown, operationId: string, standing: readonly ConstructionRegionTopology[]) => { faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>; patch: ConstructionPatch }`
+
+The structure `recipe` makes, named under `operationId` among what is `standing`, with what each face keeps, by region id.
+
+### `property vtt.structure-type.RecipeGeneration.handles: (members: readonly ConstructionRegionTopology[], recipe: unknown) => readonly RecipeHandle[]`
+
+The handles of one structure: `members` are every face sharing `recipe`.
+
+### `property vtt.structure-type.RecipeGeneration.of: (topology: ConstructionRegionTopology) => { group: string; recipe: unknown } | undefined`
+
+The recipe `topology` keeps, and the group of faces sharing it.
+
+### `interface vtt.structure-type.RecipeHandle`
+
+One handle of a recipe structure, as its type places it.
+
+### `property vtt.structure-type.RecipeHandle.anchor: string`
+
+Names the handle within its structure.
+
+### `property vtt.structure-type.RecipeHandle.facing?: { x: number; z: number }`
+
+### `property vtt.structure-type.RecipeHandle.kind: GlobalHandleKind`
+
+### `property vtt.structure-type.RecipeHandle.motion: HandleMotion`
+
+### `property vtt.structure-type.RecipeHandle.part?: unknown`
+
+What part of the recipe it stands for -- the type's own reading.
+
+### `property vtt.structure-type.RecipeHandle.position: ConstructionPosition`
+
 ### `interface vtt.structure-type.ReshapeContext`
 
 What a reshape cascade gets to look at: the whole cloud, the edge and the geometry it is taking.
@@ -7049,6 +7643,10 @@ solver, derivation and validation still run on what it returns. Gets
 the delta after constrain. Throws to refuse; `undefined` falls
 back to the grabbed part's own move.
 
+### `property vtt.structure-type.RolePolicy.preserveJoined?: boolean`
+
+This edit deliberately reshapes geometry sharing the grabbed boundary; keep that join in place.
+
 ### `property vtt.structure-type.RolePolicy.reshape?: (context: ReshapeContext) => readonly AtomicEditOp[]`
 
 Present when the grabbed edge's curve may be reshaped through a curve
@@ -7102,7 +7700,7 @@ Normalizes the standing graph before an edit reads it -- legacy data, say.
 
 ### `property vtt.structure-type.SpineGeneration.regenerate: (input: SpineRegenerationInput) => SpineRegeneration | undefined`
 
-### `property vtt.structure-type.SpineGeneration.windKeeps?: "grade" | "height"`
+### `property vtt.structure-type.SpineGeneration.windKeeps?: "height" | "grade"`
 
 What winding a spiral on or back keeps: its grade (more turns climb
 higher -- the default) or its far end's height (more turns climb gentler).
@@ -7175,26 +7773,13 @@ when it lands on a floor -- and the other end where it stands, still on
 
 ### `interface vtt.structure-type.StructureTypeDefinition`
 
-One structure type's definition -- which is to say, **what a cloud of this
-type does**, since the cloud is what the type names (`ADR-0022`, and
-`construction-cloud.ts`). Nothing below is a property of a single face;
-a face only carries the string that selects this table.
+### `property vtt.structure-type.StructureTypeDefinition.cloudFamily?: string`
 
-It pairs the halves the design doc keeps together on purpose:
+Connected types sharing this family form one editable cloud despite different surface materials.
 
-1. **How it is created** -- which generation call produced it, in what
-   expected shape.
-2. **The role table derived from that shape**, each role declaring its own
-   reach. Because this side *asked* for a specific shape, it already knows
-   by construction what index 0 of the engine's deterministically-ordered
-   response means. Nothing travels back from Rust to say so.
-3. **How it meets every other type** when painted over one.
+### `property vtt.structure-type.StructureTypeDefinition.cloudHandlesWithRecipe?: boolean`
 
-A tool preset -- "a tower," "a house" -- is not a type and never appears
-here. A preset chooses parameters and a generator; the geometry it
-produces lands in a cloud whose type is one of these, and that cloud is
-where its behaviour comes from. This is why a tower needs no editing code
-of its own.
+Whether this type also exposes its connected cloud's handles when it carries a recipe.
 
 ### `property vtt.structure-type.StructureTypeDefinition.conformsTo?: (support: ReadonlySet<StructureTrait>, subtype?: string) => boolean`
 
@@ -7256,11 +7841,15 @@ a ramp's long sides only. Absent, none does.
 
 The policy for one role.
 
-### `property vtt.structure-type.StructureTypeDefinition.reactions?: Readonly<Partial<Record<EffectKind, "lattice-regenerate">>>`
+### `property vtt.structure-type.StructureTypeDefinition.reactions?: Readonly<Partial<Record<EffectKind, ReactionId>>>`
 
 How a cloud of this type answers each effect that reaches it, by declared
 reaction name (`effects/effect.ts`). An effect kind absent here leaves the
 cloud as the change left it.
+
+### `property vtt.structure-type.StructureTypeDefinition.recipe?: RecipeGeneration`
+
+Present when this type is regenerated whole from a recipe its faces keep -- see RecipeGeneration.
 
 ### `property vtt.structure-type.StructureTypeDefinition.requiresMotionSolver?: boolean`
 
@@ -7353,7 +7942,7 @@ pointer.
 
 Which end of a structure: where it starts, and where it goes.
 
-### `type vtt.structure-type.StructureTrait = "ground" | "floor" | "partition" | "cuts" | "accepts-cuts"`
+### `type vtt.structure-type.StructureTrait = "ground" | "floor" | "partition" | "roof-generated" | "cuts" | "accepts-cuts"`
 
 A tag a structure type carries so other code can ask what the type *is for*
 without naming it.
@@ -7363,6 +7952,12 @@ not cut `"terrain"`; it cuts whatever is `"ground"`. A new kind of ground
 joins every existing relation by declaring the trait, with no edit anywhere
 else. The set is closed on purpose: adding a trait is a deliberate design
 change, not a string a caller invents.
+
+### `variable vtt.structure-type.RECIPE_ROLE_PROP: "recipeRole"`
+
+Region property naming a regenerated face's role in its structure -- the
+same for the face that replaces it, so what is pinned to one is pinned to
+the other once the structure is made again.
 
 ### `function vtt.structure-type.allowed(role: string, axes: readonly EditAxis[], scope: EditScope, cascade?: (context: CascadeContext) => readonly AtomicEditOp[]): RolePolicy`
 
@@ -7556,7 +8151,7 @@ which type owns the grabbed part. Used to live as one tool's own params
 ambiently via `ToolContext.structureEditParams` instead of declaring it
 as its own.
 
-### `property vtt.tool-types.StructureEditParams.curveAction?: "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close" | "width"`
+### `property vtt.tool-types.StructureEditParams.curveAction?: "width" | "edit" | "remove-anchor" | "disconnect" | "delete-segment" | "close"`
 
 ### `property vtt.tool-types.StructureEditParams.curveEndWidth?: number`
 
@@ -7564,7 +8159,7 @@ as its own.
 
 ### `property vtt.tool-types.StructureEditParams.curveWidth?: number`
 
-### `property vtt.tool-types.StructureEditParams.mode: "shape" | "elevation"`
+### `property vtt.tool-types.StructureEditParams.mode: "elevation" | "shape"`
 
 ### `interface vtt.tool-types.TerrainSculptParams`
 
@@ -7620,9 +8215,9 @@ Perlin `scale` -- smaller values are smoother/larger-scale terrain features.
 
 ### `property vtt.tool-types.ToolParamsByTool.path-brush: PathBrushParams`
 
-### `property vtt.tool-types.ToolParamsByTool.platform-contour: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; tolerance?: number }`
+### `property vtt.tool-types.ToolParamsByTool.platform-contour: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "circle" | "rectangle" | "polygon" | "freehand"; tolerance?: number }`
 
-### `property vtt.tool-types.ToolParamsByTool.roof: { curvatures: readonly [number, number, number, number]; elevation: number; height: number; radius: number; shape: "rectangle" | "circle" | "platform" }`
+### `property vtt.tool-types.ToolParamsByTool.roof: { action: "hole" | "base" | "cut" | "dormer" | "draw"; dormerFront: number; dormerWidth: number; height: number; radius: number; shape: "circle" | "rectangle" | "polygon" | "freehand"; tolerance: number; waters: 1 | 2 | 4 }`
 
 ### `property vtt.tool-types.ToolParamsByTool.slope-curve: { mode?: "arc" | "points" | "straight" | "spiral" | "connect"; rise: number; width: number }`
 
@@ -8354,6 +8949,10 @@ A face's key as one string -- see surfaceKeyText.
 
 A face's outer loops as rings of its node positions.
 
+### `function vtt.plan-geometry.heightOnPlane(plane: { centre: ConstructionPosition; normal: ConstructionPosition }, p: PlanPoint): number | undefined`
+
+How high `plane` stands over plan point `p`; `undefined` for an upright plane, which stands over a line only.
+
 ### `function vtt.plan-geometry.insideFace(topology: ConstructionRegionTopology, p: PlanPoint): boolean`
 
 Whether `p` lies inside the face in plan: in an outer loop and out of its holes.
@@ -8373,6 +8972,10 @@ Where on the segment `a`-`b` the point `p` is nearest, in plan: how far along it
 ### `function vtt.plan-geometry.planeOf(ring: readonly ConstructionPosition[]): { centre: ConstructionPosition; normal: ConstructionPosition } | undefined`
 
 The best plane through a ring of positions, by Newell's method: its unit normal and a point on it; `undefined` for a degenerate ring.
+
+### `function vtt.plan-geometry.rayToRing(ring: readonly (readonly [number, number])[], origin: readonly [number, number], direction: readonly [number, number]): number`
+
+How far from `origin` along the unit `direction` a ray first meets `ring`, given as `[x, z]` pairs; infinite when never.
 
 ### `function vtt.plan-geometry.ringCrossesItself(ring: readonly PlanPoint[]): boolean`
 
@@ -8847,29 +9450,101 @@ The plan shape a span keeps whatever its anchors do; absent is a free cubic.
 A shaped span climbs linearly between its anchors. `positive` turns from
 +X towards +Z; `center` is `[x, z]`.
 
-### `interface vtt.cap-port.CapPatch`
+### `interface vtt.cap-port.RoofDormer`
 
-### `property vtt.cap-port.CapPatch.edges: readonly { center: readonly [number, number] | null; end: number; start: number }[]`
+A dormer raised on the pitched leaf of footprint side `side`.
 
-### `property vtt.cap-port.CapPatch.faces: readonly { boundary: readonly (readonly [number, boolean])[]; profile: ConstructionSheetProfile }[]`
+### `property vtt.cap-port.RoofDormer.absolute?: boolean`
 
-### `property vtt.cap-port.CapPatch.nodes: readonly (readonly [number, number, number])[]`
+Its slopes are rises per unit run, its own, not shares of the roof's.
 
-### `property vtt.cap-port.CapPatch.preview: readonly (readonly [number, number, number, number, number, number])[]`
+### `property vtt.cap-port.RoofDormer.along: number`
 
-### `interface vtt.cap-port.CapRequest`
+Where its middle stands along that side, as a fraction of it.
 
-Grafting-owned wire data for the native analytic cap generator.
+### `property vtt.cap-port.RoofDormer.front: number`
 
-### `property vtt.cap-port.CapRequest.base: { kind: "rectangle"; max: readonly [number, number]; min: readonly [number, number] } | { center: readonly [number, number]; kind: "circle"; radius: number } | { centers: readonly [readonly [number, number] | null, readonly [number, number] | null, readonly [number, number] | null, readonly [number, number] | null]; kind: "contour"; points: readonly [readonly [number, number], readonly [number, number], readonly [number, number], readonly [number, number]] }`
+How high its front wall rises above the leaf.
 
-### `property vtt.cap-port.CapRequest.curvatures: readonly [number, number, number, number]`
+### `property vtt.cap-port.RoofDormer.gableApart?: boolean`
 
-### `property vtt.cap-port.CapRequest.elevation: number`
+Its front wall stops at its eaves, a plain rectangle; the gable over it is a face of its own.
 
-### `property vtt.cap-port.CapRequest.height: number`
+### `property vtt.cap-port.RoofDormer.id?: string`
 
-### `property vtt.cap-port.CapRequest.overhang: number`
+Its own name, kept while dormers come and go before it: what is pinned to its faces keeps to it.
+
+### `property vtt.cap-port.RoofDormer.opening?: boolean`
+
+Raised only to hold the opening in its front: it follows that opening, and goes with it.
+
+### `property vtt.cap-port.RoofDormer.setback: number`
+
+How far in from that side its front stands.
+
+### `property vtt.cap-port.RoofDormer.side: number`
+
+### `property vtt.cap-port.RoofDormer.slopes: readonly [number, number, number, number]`
+
+Relative steepness of its front, right, back and left sides; zero makes a gable.
+
+### `property vtt.cap-port.RoofDormer.width: number`
+
+### `interface vtt.cap-port.RoofFootprint`
+
+The plan a roof covers: one outline and the holes through it, as `[x, z]` corners in either winding.
+
+### `property vtt.cap-port.RoofFootprint.holes: readonly (readonly (readonly [number, number])[])[]`
+
+### `property vtt.cap-port.RoofFootprint.outer: readonly (readonly [number, number])[]`
+
+### `interface vtt.cap-port.RoofPatch`
+
+### `property vtt.cap-port.RoofPatch.edges: readonly { center: null; end: number; start: number }[]`
+
+### `property vtt.cap-port.RoofPatch.faces: readonly { boundary: readonly (readonly [number, boolean])[]; dormer: number | null; holes: readonly (readonly (readonly [number, boolean])[])[]; side: number; subroof: number | null; upright: boolean }[]`
+
+### `property vtt.cap-port.RoofPatch.nodes: readonly (readonly [number, number, number])[]`
+
+### `property vtt.cap-port.RoofPatch.preview: readonly (readonly [number, number, number, number, number, number])[]`
+
+### `interface vtt.cap-port.RoofPort`
+
+The engine's roof generator.
+
+### `method vtt.cap-port.RoofPort.generateRoof(request: RoofRequest): RoofPatch`
+
+### `interface vtt.cap-port.RoofRequest`
+
+Wire data for the native roof generator: its footprints, how steeply each
+of their sides rises -- footprint by footprint, the outline's, then each hole's, side `i` running from
+corner `i` to `i + 1`, zero for a gable -- and dormers on its leaves.
+
+### `property vtt.cap-port.RoofRequest.cutouts?: readonly RoofFootprint[]`
+
+Areas removed from finished roof faces without reshaping its skeleton.
+
+### `property vtt.cap-port.RoofRequest.dormers?: readonly RoofDormer[]`
+
+### `property vtt.cap-port.RoofRequest.elevation: number`
+
+### `property vtt.cap-port.RoofRequest.footprints: readonly RoofFootprint[]`
+
+The plans it covers: one, or several joined at a corner.
+
+### `property vtt.cap-port.RoofRequest.height: number`
+
+Rise of the roof's highest point above its eaves.
+
+### `property vtt.cap-port.RoofRequest.platform_cuts?: readonly { elevation: number; footprint: RoofFootprint }[]`
+
+Platform outlines trim only roof surface above the platform level.
+
+### `property vtt.cap-port.RoofRequest.slopes: readonly number[]`
+
+### `property vtt.cap-port.RoofRequest.subroofs?: readonly RoofRequest[]`
+
+Smaller roofs joined into this roof's visible envelope.
 
 ### `interface vtt.construction-session-port.AffectedSurfaces`
 
@@ -8924,6 +9599,10 @@ surfaces reachable from `seed` by shared graph nodes.
 ### `property vtt.construction-session-port.CloudRequest.seed: ConstructionSurfaceKey`
 
 ### `property vtt.construction-session-port.CloudRequest.surfaceType: string`
+
+### `property vtt.construction-session-port.CloudRequest.surfaceTypes?: readonly string[]`
+
+Optional compatible types in the seed's editable cloud family.
 
 ### `interface vtt.construction-session-port.ConstructionBoundsXZ`
 
@@ -9524,8 +10203,6 @@ Unregisters a region, leaving zero orphaned nodes or edges behind.
 
 Mints a parallel copy; the same `suffix` always reproduces the same copy.
 
-### `method vtt.construction-session-port.ConstructionSessionPort.generateCap(request: CapRequest): CapPatch`
-
 ### `method vtt.construction-session-port.ConstructionSessionPort.generateIrregularQuadGrid(request: ConstructionIrregularQuadGridRequest): ConstructionIrregularQuadGrid | undefined`
 
 One irregular quad grid, generated against the contours the request
@@ -9540,6 +10217,8 @@ ConstructionIrregularQuadGrid for why that split is deliberate.
 `undefined` where the contours describe no ground that can be
 triangulated. That is a refusal, not an error: a caller that gets one
 leaves what is standing alone rather than substituting something.
+
+### `method vtt.construction-session-port.ConstructionSessionPort.generateRoof(request: RoofRequest): RoofPatch`
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.getAllRegionTopologies(): readonly ConstructionRegionTopology[]`
 
@@ -10453,7 +11132,7 @@ Invoked when the drawer requests to close, e.g. its own close button or Escape.
 
 Whether the drawer is currently shown.
 
-### `property vtt.ui.DrawerProps.placement?: "top" | "bottom" | "right" | "left"`
+### `property vtt.ui.DrawerProps.placement?: "top" | "right" | "left" | "bottom"`
 
 Which screen edge the drawer slides in from.
 
@@ -10544,7 +11223,7 @@ Ant Design does not do that on its own. Uncontrolled (starts collapsed,
 closes only on its own trigger/outside click) when omitted. Ignored
 when `alwaysExpanded` is set.
 
-### `property vtt.ui.FloatButtonGroupProps.placement?: "top" | "bottom" | "right" | "left"`
+### `property vtt.ui.FloatButtonGroupProps.placement?: "top" | "right" | "left" | "bottom"`
 
 Which side the group expands toward from the trigger -- `"top"`/`"bottom"`
 stack items in a vertical column, `"left"`/`"right"` lay them out in a
@@ -10552,7 +11231,7 @@ horizontal row. When `alwaysExpanded` is set, this only picks the row's
 axis (vertical for `"top"`/`"bottom"`, horizontal for `"left"`/`"right"`),
 since there is no trigger to expand away from.
 
-### `property vtt.ui.FloatButtonGroupProps.shape?: "circle" | "square"`
+### `property vtt.ui.FloatButtonGroupProps.shape?: "square" | "circle"`
 
 Outline. `"square"` renders the items as one joined, gapless block
 (Ant Design's own compact-group styling) instead of separate floating
@@ -10617,7 +11296,7 @@ Caller-rendered icon content. Vendor-neutral -- this atom never ships its own ic
 
 Invoked when this button is activated.
 
-### `property vtt.ui.FloatButtonProps.shape?: "circle" | "square"`
+### `property vtt.ui.FloatButtonProps.shape?: "square" | "circle"`
 
 Outline. `"square"` reads as part of a joined block -- pair it with a
 `FloatButtonGroup` molecule using the same shape so the two visually
@@ -10729,7 +11408,7 @@ Default submenu expand direction for every branch that does not set its own.
 
 The tree's single entry point. Always a branch: a tree with nothing to expand is just a `FloatButton`.
 
-### `property vtt.ui.FloatButtonTreeProps.shape?: "circle" | "square"`
+### `property vtt.ui.FloatButtonTreeProps.shape?: "square" | "circle"`
 
 Outline for every button in the tree.
 
@@ -10802,7 +11481,7 @@ Invoked when the popover requests to close, e.g. an outside click or Escape.
 
 Whether the popover is currently shown.
 
-### `property vtt.ui.PopoverProps.placement?: "top" | "bottom" | "right" | "left"`
+### `property vtt.ui.PopoverProps.placement?: "top" | "right" | "left" | "bottom"`
 
 Which side of `anchor` the popover opens toward.
 

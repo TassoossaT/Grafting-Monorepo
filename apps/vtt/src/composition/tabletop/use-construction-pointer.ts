@@ -14,6 +14,7 @@ import { toolFor } from "./tools/index.ts";
 import { beginCurveGesture, type CurveGesture } from "./tools/core/curve-edit-gesture.ts";
 import { carriesArrows, globalHandleOf, handleMotionAt, shownGlobalHandleAt } from "../../features/edit-construction/index.ts";
 import { gestureMoved } from "./tools/core/tool-context.ts";
+import { withFacePlane } from "./tools/core/pointer-ray.ts";
 import { handleFocusAt, NO_FOCUS, sameFocus } from "./tools/core/handle-focus.ts";
 import type { HandleFocus } from "../../features/edit-construction/index.ts";
 import {
@@ -331,7 +332,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       const hit = runtime.pick(viewId, x, y);
       if (hit === undefined) return undefined;
       const snap = snapToGrid && !toolFor(activeTool).snapsToSurface && toolFor(activeTool).useGridSnap !== false;
-      return { ...applySnap(hit, snap), screenY: event.clientY, screenX: event.clientX, shiftKey: event.shiftKey };
+      return { ...applySnap(withFacePlane(hit, runtime.getAllRegionTopologies()), snap), screenY: event.clientY, screenX: event.clientX, shiftKey: event.shiftKey };
     },
     [],
   );
