@@ -82,7 +82,8 @@ export function followBaseReaction(): Reaction<FollowBaseRuntime> {
       const withChildren = { ...source, subroofs };
       const request: RoofSource = anchored && !base ? { ...withChildren, footprints: anchored, elevation: anchorElevation ?? recipe.elevation } : !base ? withChildren : was.length === now.length && was.every((ring, r) => ring.length === now[r]!.length)
         ? { ...withChildren, footprints: [base.footprint], elevation: base.elevation, base: base.ref }
-        : { ...withChildren, elevation: base.elevation, base: base.ref, ...carriedOnto([base.footprint], [recipe]) };
+        // Its subroofs as they already followed their own supports.
+        : { ...withChildren, elevation: base.elevation, base: base.ref, ...carriedOnto([base.footprint], [recipe]), subroofs: withChildren.subroofs ?? [] };
       const own = topologies.filter((face) => (roofRecipeOf(face))?.group === group).map((face) => face.surfaceKey);
       const operationId = `${effect.causeId}:follow:${group}`;
       let made: ReturnType<typeof roofGraphPatch>;

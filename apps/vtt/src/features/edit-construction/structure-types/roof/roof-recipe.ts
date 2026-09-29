@@ -1,6 +1,8 @@
 import type { ConstructionRegionTopology } from "@/ports";
 import type { RoofDormer, RoofFootprint, RoofRequest } from "../../../../ports/cap-port.ts";
 
+import { insideRingXZ } from "../../topology/plan-geometry.ts";
+
 /** Region property carrying a roof's recipe, which every edit regenerates the roof from. */
 export const ROOF_RECIPE_PROP = "roof";
 /** Region property naming which side a roof face rises from. */
@@ -154,9 +156,10 @@ function sameLine(a: Point, b: Point, c: Point, d: Point): boolean {
  * of a side it lies along -- of a roof it came from, then of what was drawn
  * -- else rises; a corner where one side runs straight on into another as
  * steep is dropped, so no seam runs across one plane; each dormer stays on
- * the side its old one lies along.
+ * the side its old one lies along; each subroof still standing wholly
+ * within them stays joined to them.
  */
-export function carriedOnto(footprints: readonly RoofFootprint[], sources: readonly RoofRequest[], drawn?: { readonly outline: readonly Point[]; readonly slopes: readonly number[] }): { readonly footprints: RoofFootprint[]; readonly slopes: number[]; readonly dormers: RoofDormer[]; readonly cutouts: RoofFootprint[] } {
+export function carriedOnto(footprints: readonly RoofFootprint[], sources: readonly RoofRequest[], drawn?: { readonly outline: readonly Point[]; readonly slopes: readonly number[] }): { readonly footprints: RoofFootprint[]; readonly slopes: number[]; readonly dormers: RoofDormer[]; readonly cutouts: RoofFootprint[]; readonly subroofs: RoofRequest[] } {
   const known = [
     ...sources.flatMap((source) => ringsOf(source.footprints).flatMap(({ points }, r) => points.map((a, i) => ({ a, c: points[(i + 1) % points.length]!, slope: source.slopes[sideNumber(source.footprints, r, i)]! })))),
     ...(drawn ? drawn.outline.map((a, i) => ({ a, c: drawn.outline[(i + 1) % drawn.outline.length]!, slope: drawn.slopes[i]! })) : []),
@@ -190,7 +193,22 @@ export function carriedOnto(footprints: readonly RoofFootprint[], sources: reado
     if (reach - dormer.width / 2 < DORMER_RIM || reach + dormer.width / 2 > length - DORMER_RIM) return [];
     return [{ ...dormer, side, along }];
   }));
-  return { footprints: merged, slopes, dormers, cutouts: sources.flatMap((source) => source.cutouts ?? []) };
+  // A subroof goes where its roof goes, while it still stands on it: fused into a larger roof, kept; cut away with a part, gone.
+  const subroofs = sources.flatMap((source) => source.subroofs ?? []).filter((child) => ringsOf(child.footprints).every(({ points }) => points.every((p) => onFootprints(merged, p))));
+  return { footprints: merged, slopes, dormers, cutouts: sources.flatMap((source) => source.cutouts ?? []), subroofs };
+}
+
+/** Whether `p` lies on `footprints` in plan: inside one, off its holes, or on a rim. */
+function onFootprints(footprints: readonly RoofFootprint[], p: Point): boolean {
+  const onRim = (ring: readonly Point[]) => ring.some((a, i) => {
+    const b = ring[(i + 1) % ring.length]!;
+    const d = [b[0] - a[0], b[1] - a[1]] as const;
+    const t = Math.min(1, Math.max(0, ((p[0] - a[0]) * d[0] + (p[1] - a[1]) * d[1]) / (d[0] * d[0] + d[1] * d[1] || 1)));
+    return Math.hypot(p[0] - a[0] - d[0] * t, p[1] - a[1] - d[1] * t) < 1e-6;
+  });
+  const at = { x: p[0], z: p[1] };
+  return footprints.some((footprint) => onRim(footprint.outer)
+    || (insideRingXZ(footprint.outer, at) && !footprint.holes.some((hole) => insideRingXZ(hole, at) && !onRim(hole))));
 }
 
 /**

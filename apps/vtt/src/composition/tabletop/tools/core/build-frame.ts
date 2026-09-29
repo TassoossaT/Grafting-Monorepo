@@ -93,17 +93,6 @@ export function pointerOnLevel(sample: PointerSample, y: number): ConstructionPo
   return sample.ray ? pointerAtHeight(sample, y) : { ...sample.point, y };
 }
 
-/**
- * Where the pointer is on the level `y`, for a shape laid over what it rests
- * on: where it points, when what it rests on stands above that level -- the
- * level lies hidden behind it there -- else its ray crossing the level, as
- * {@link pointerOnLevel}. An outline drawn on a roof's leaf at the roof's
- * eaves stays under the cursor instead of sliding down the ray to them.
- */
-export function pointerOnSurfaceOrLevel(sample: PointerSample, y: number): ConstructionPosition {
-  return sample.point.y > y + 1e-6 ? { ...sample.point, y } : pointerOnLevel(sample, y);
-}
-
 /** Where a shape begun at `sample`, on the level `y`, starts: on the side it was drawn next to, else on the frame's grid. */
 export function frameStart(ctx: ToolContext, frame: BuildFrame, sample: PointerSample, y: number = sample.point.y): ConstructionPosition {
   return frame.start ?? snappedInFrame(ctx, frame, pointerOnLevel(sample, y));

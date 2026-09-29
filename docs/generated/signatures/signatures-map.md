@@ -4176,8 +4176,6 @@ export function snappedInFrame(ctx: ToolContext, frame: BuildFrame, p: Construct
   return { x: frame.origin.x + frame.u.x * along + frame.v.x * across, y: p.y, z: frame.origin.z + frame.u.z * along + frame.v.z * across };
 export function pointerOnLevel(sample: PointerSample, y: number): ConstructionPosition {
   return sample.ray ? pointerAtHeight(sample, y) : { ...sample.point, y };
-export function pointerOnSurfaceOrLevel(sample: PointerSample, y: number): ConstructionPosition {
-  return sample.point.y > y + 1e-6 ? { ...sample.point, y } : pointerOnLevel(sample, y);
 export function frameStart(ctx: ToolContext, frame: BuildFrame, sample: PointerSample, y: number = sample.point.y): ConstructionPosition {
   return frame.start ?? snappedInFrame(ctx, frame, pointerOnLevel(sample, y));
 export function frameRectangle(ctx: ToolContext, frame: BuildFrame, a: ConstructionPosition, b: ConstructionPosition, elevation: number): readonly ConstructionPosition[] | undefined {
