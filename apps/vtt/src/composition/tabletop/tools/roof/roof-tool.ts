@@ -195,10 +195,11 @@ function stroked(ctx: ToolContext, contour: readonly FittedEdge[], level: number
     const contained = roofs.find(({ recipe }) => areaOf(planarDifference(ctx.runtime, polygonsOf(drawn.footprints), polygonsOf(recipe.footprints))) < 1e-6);
     if (contained) {
       const elevation = level > contained.recipe.elevation + 1e-4 ? level : surfaceLevelUnder(topologies, contained.recipe.group, outline) ?? contained.recipe.elevation;
-      return {
-        requests: [{ ...contained.recipe, subroofs: [...(contained.recipe.subroofs ?? []), { ...drawn, elevation }] }],
-        replaces: contained.faces,
-      };
+      const joined: RoofSource = { ...contained.recipe, subroofs: [...(contained.recipe.subroofs ?? []), { ...drawn, elevation }] };
+      // One lower than the roof around it would stand wholly inside it, out of reach.
+      const index = joined.subroofs!.length - 1;
+      if (!ctx.runtime.generateRoof(joined).faces.some((face) => face.subroof === index)) throw new Error("O telhado novo ficaria escondido dentro do maior: aumente a altura.");
+      return { requests: [joined], replaces: contained.faces };
     }
   }
   if (params.action === "hole") {

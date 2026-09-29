@@ -550,6 +550,47 @@ test("a subroof rises from its own tip, the larger roof keeping its height", () 
   } finally { session.free(); }
 });
 
+/** A roof drawn from `a` to `b` on the 8 x 4 roof `roofed` makes, rising `height`. */
+function drawOnRoof(value, a, b, height) {
+  const leaf = roofs(value.runtime).find((face) => !face.props.roofFace.upright);
+  const start = { point: { x: a[0], y: 4, z: a[1] }, surfaceRef: surfaceRefFromNodeSet(leaf.surfaceKey) };
+  const current = { point: { x: b[0], y: 4, z: b[1] } };
+  const params = { ...DEFAULT_TOOL_PARAMS.roof, action: "draw", height };
+  roofTool.onPointerDown(value.ctx, start, params);
+  roofTool.onPointerUp(value.ctx, { start, current, samples: [start, current] }, params);
+}
+
+for (const [anchor, a, b, screenY] of [
+  // The larger roof's valley lands on the subroof's hip: the boolean must not leave a spike along it.
+  ["slope:-:-:3", [1, 1], [3, 3], 270],
+  // A subroof's gable, lowered upright, runs partly inside the larger roof: only what shows is kept.
+  ["seam:0:-:0|0:-:1", [1, 1], [2, 3], 330],
+]) {
+  test(`reshaping a roof joined to a subroof keeps one valid surface (${anchor})`, () => {
+    const value = roofed(2);
+    const { runtime, session } = value;
+    try {
+      drawOnRoof(value, a, b, 1);
+      const handle = shownGlobalHandles(scene(runtime)).find((h) => h.recipeHandle?.anchor === anchor);
+      assert.ok(handle);
+      dragHandle(value, handle, handle.position, screenY);
+      assert.notEqual(value.calls.feedback.at(-1)?.tone, "error", JSON.stringify(value.calls.feedback.at(-1)));
+    } finally { session.free(); }
+  });
+}
+
+test("a subroof that would stand wholly inside its roof is refused", () => {
+  const value = roofed(2);
+  const { runtime, session } = value;
+  try {
+    const before = roofs(runtime).length;
+    drawOnRoof(value, [5, 0.5], [7.5, 3.5], 1);
+    assert.equal(value.calls.feedback.at(-1)?.tone, "error");
+    assert.equal(roofs(runtime).length, before);
+    assert.equal(roofs(runtime)[0].props.roof.subroofs?.length ?? 0, 0);
+  } finally { session.free(); }
+});
+
 test("a cut wall can roof its supporting platform with one base click", () => {
   const value = roofed(2);
   const { ctx, runtime, session } = value;

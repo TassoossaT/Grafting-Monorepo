@@ -817,14 +817,48 @@ fn minus(subject: &[Point], covers: &[PlanFace]) -> Result<Vec<PlanFace>, String
             shape
                 .into_iter()
                 .map(|ring| {
-                    ring.into_iter()
-                        .map(|p| [f64::from(p[0]), f64::from(p[1])])
-                        .collect()
+                    without_spikes(
+                        ring.into_iter()
+                            .map(|p| [f64::from(p[0]), f64::from(p[1])])
+                            .collect(),
+                    )
                 })
+                .enumerate()
+                .filter(|(index, ring)| *index == 0 || (ring.len() >= 3 && area(ring).abs() > 1e-9))
+                .map(|(_, ring)| ring)
                 .collect::<PlanFace>()
         })
-        .filter(|face: &PlanFace| area(&face[0]).abs() > 1e-6)
+        .filter(|face: &PlanFace| face[0].len() >= 3 && area(&face[0]).abs() > 1e-6)
         .collect())
+}
+
+/// A ring without repeated corners, nor spikes that run out along a side and
+/// back: where two cut lines coincide, the boolean can walk one both ways,
+/// which would use that side twice from the same face.
+fn without_spikes(mut ring: Vec<Point>) -> Vec<Point> {
+    let same = |a: Point, b: Point| (a[0] - b[0]).abs() < 1e-6 && (a[1] - b[1]).abs() < 1e-6;
+    loop {
+        let n = ring.len();
+        if n < 3 {
+            return ring;
+        }
+        let Some(i) = (0..n).find(|&i| {
+            let (prev, here, next) = (ring[(i + n - 1) % n], ring[i], ring[(i + 1) % n]);
+            same(here, next) || same(prev, next)
+        }) else {
+            return ring;
+        };
+        let (here, next) = (ring[i], ring[(i + 1) % n]);
+        if same(here, next) {
+            ring.remove(i);
+        } else {
+            // prev, here, prev: the spike's tip and its way back both go.
+            let back = (i + 1) % n;
+            let (first, second) = if back > i { (back, i) } else { (i, back) };
+            ring.remove(first);
+            ring.remove(second);
+        }
+    }
 }
 
 /// Where segment `a`-`c` crosses segment `p`-`q`, as a fraction along `a`-`c`.
@@ -1402,7 +1436,7 @@ fn visible_roof_faces(groups: &[Vec<Face3>]) -> Result<Vec<Face3>, String> {
     for (owner, faces) in groups.iter().enumerate() {
         for face in faces {
             let Some(plane) = face_plane(face) else {
-                visible.push(face.clone());
+                visible.extend(visible_upright(face, groups, owner)?);
                 continue;
             };
             let mut covers: Vec<PlanFace> = face.rings.iter().skip(1).map(|ring| vec![ring.iter().map(|p| [p[0], p[2]]).collect()]).collect();
@@ -1427,6 +1461,54 @@ fn visible_roof_faces(groups: &[Vec<Face3>]) -> Result<Vec<Face3>, String> {
         }
     }
     Ok(visible)
+}
+
+/// The part of upright face `face` of roof `owner` standing above the other
+/// roofs' surfaces: a gable or a closure is hidden where it runs inside them.
+/// Worked in the face's own plane -- along its line in plan, and up.
+fn visible_upright(face: &Face3, groups: &[Vec<Face3>], owner: usize) -> Result<Vec<Face3>, String> {
+    let ring = &face.rings[0];
+    let plan = ring.iter().map(|p| [p[0], p[2]]).collect::<Vec<_>>();
+    let origin = plan[0];
+    let Some(far) = plan.iter().copied().max_by(|a, b| sub(*a, origin).map(f64::abs).iter().sum::<f64>().total_cmp(&sub(*b, origin).map(f64::abs).iter().sum::<f64>())) else {
+        return Ok(vec![face.clone()]);
+    };
+    let length = (far[0] - origin[0]).hypot(far[1] - origin[1]);
+    if length < 1e-9 { return Ok(vec![face.clone()]); }
+    let dir = [(far[0] - origin[0]) / length, (far[1] - origin[1]) / length];
+    let along = |p: Point| dot(sub(p, origin), dir);
+    let at = |s: f64| [origin[0] + dir[0] * s, origin[1] + dir[1] * s];
+    let subject = ring.iter().map(|p| [along([p[0], p[2]]), p[1]]).collect::<Vec<_>>();
+    let (lo, hi) = subject.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), p| (lo.min(p[0]), hi.max(p[0])));
+    let floor = subject.iter().map(|p| p[1]).fold(f64::INFINITY, f64::min) - 1.0;
+    let (a, c) = (at(lo), at(hi));
+    // Under every other roof's leaf the face crosses: from below the face up to that leaf.
+    let mut covers: Vec<PlanFace> = Vec::new();
+    for other in groups.iter().enumerate().filter(|(index, _)| *index != owner).flat_map(|(_, faces)| faces) {
+        let Some(plane) = face_plane(other) else { continue; };
+        let rings = other.rings.iter().map(|r| r.iter().map(|q| [q[0], q[2]]).collect::<Vec<_>>()).collect::<Vec<_>>();
+        let mut stops = vec![0.0, 1.0];
+        for r in &rings {
+            for j in 0..r.len() { stops.extend(crossing(a, c, r[j], r[(j + 1) % r.len()])); }
+        }
+        stops.sort_by(f64::total_cmp);
+        stops.dedup_by(|x, y| (*x - *y).abs() < 1e-9);
+        for pair in stops.windows(2) {
+            let (s0, s1) = (lo + (hi - lo) * pair[0], lo + (hi - lo) * pair[1]);
+            if s1 - s0 < 1e-9 { continue; }
+            // Looked at from the side it faces: a leaf whose rim runs along
+            // the face -- one the face holds up -- does not hide it.
+            let out = face.outward.map_or([0.0, 0.0], |o| { let l = o[0].hypot(o[1]).max(1e-12); [o[0] / l * 1e-4, o[1] / l * 1e-4] });
+            let middle = { let m = at((s0 + s1) / 2.0); [m[0] + out[0], m[1] + out[1]] };
+            if !inside(&rings[0], middle) || rings.iter().skip(1).any(|hole| inside(hole, middle)) { continue; }
+            covers.push(vec![vec![[s0, floor], [s1, floor], [s1, plane.z(at(s1))], [s0, plane.z(at(s0))]]]);
+        }
+    }
+    if covers.is_empty() { return Ok(vec![face.clone()]); }
+    Ok(minus(&subject, &covers)?.into_iter().map(|shape| Face3 {
+        side: face.side, dormer: face.dormer, subroof: face.subroof, outward: face.outward,
+        rings: shape.into_iter().map(|r| r.into_iter().map(|[s, y]| { let p = at(s); [p[0], y, p[1]] }).collect()).collect(),
+    }).collect())
 }
 
 fn in_footprint(footprint: &RoofFootprint, point: Point) -> bool {
