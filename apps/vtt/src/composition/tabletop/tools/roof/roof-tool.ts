@@ -243,22 +243,41 @@ function stroked(ctx: ToolContext, contour: readonly FittedEdge[], level: number
 }
 
 /** Commits the roofs `requests` make in place of the faces `replaces` names, each keeping its recipe on every face it made. */
+/**
+ * Makes the roofs `requests` describe in place of the faces `replaces` names,
+ * under transaction `transactionId` -- joining it when it is already under
+ * way -- and returns the new faces' group name and whether it was recorded.
+ * What was pinned to a replaced face moves to the new face of the same role,
+ * `renameRole` first saying what that role is now called.
+ */
+export function replaceRoofs(
+  ctx: ToolContext,
+  requests: readonly RoofSource[],
+  replaces: readonly ConstructionSurfaceKey[],
+  transactionId?: string,
+  renameRole: (role: string) => string = (role) => role,
+): { readonly group: string; readonly recorded: boolean } {
+  const operationId = scopedToolId(ctx, "roof", ctx.nextSequence());
+  const standing = ctx.runtime.getAllRegionTopologies();
+  const made = requests.map((request, i) => roofGraphPatch(ctx.runtime, request, requests.length === 1 ? operationId : `${operationId}:${i}`, standing));
+  const patch: ConstructionPatch = {
+    nodes: made.flatMap(({ patch }) => patch.nodes),
+    edges: made.flatMap(({ patch }) => patch.edges),
+    regions: made.flatMap(({ patch }) => patch.regions),
+  };
+  const faceProps = new Map(made.flatMap(({ faceProps }) => [...faceProps]));
+  const was = pinnedToRoles(ctx.runtime.getAllRegionTopologies(), replaces);
+  const pinned = { pins: was.pins.map((pin) => ({ ...pin, role: renameRole(pin.role) })) };
+  const { recorded } = commitPatchReplacement(ctx.runtime, { operationId, sourceSurfaceKeys: replaces, patch }, {
+    transactionId: transactionId ?? operationId,
+    afterward: (outcome) => keepFaceProps(ctx.runtime, operationId, outcome.createdSurfaceKeys, faceProps, pinned),
+  });
+  return { group: operationId, recorded };
+}
+
 export function commitRoofRecipes(ctx: ToolContext, requests: readonly RoofSource[], replaces: readonly ConstructionSurfaceKey[] = [], done = "Telhado criado."): void {
   try {
-    const operationId = scopedToolId(ctx, "roof", ctx.nextSequence());
-    const standing = ctx.runtime.getAllRegionTopologies();
-    const made = requests.map((request, i) => roofGraphPatch(ctx.runtime, request, requests.length === 1 ? operationId : `${operationId}:${i}`, standing));
-    const patch: ConstructionPatch = {
-      nodes: made.flatMap(({ patch }) => patch.nodes),
-      edges: made.flatMap(({ patch }) => patch.edges),
-      regions: made.flatMap(({ patch }) => patch.regions),
-    };
-    const faceProps = new Map(made.flatMap(({ faceProps }) => [...faceProps]));
-    const pinned = pinnedToRoles(ctx.runtime.getAllRegionTopologies(), replaces);
-    const { recorded } = commitPatchReplacement(ctx.runtime, { operationId, sourceSurfaceKeys: replaces, patch }, {
-      transactionId: operationId,
-      afterward: (outcome) => keepFaceProps(ctx.runtime, operationId, outcome.createdSurfaceKeys, faceProps, pinned),
-    });
+    const { group: operationId, recorded } = replaceRoofs(ctx, requests, replaces);
     if (recorded) ctx.history.record({ kind: "transaction", transactionId: operationId });
     ctx.reportFeedback({ tone: "success", message: done });
   } catch (error) {

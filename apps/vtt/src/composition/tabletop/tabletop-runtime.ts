@@ -337,6 +337,8 @@ export class AppTabletopRuntime implements TabletopRuntime {
   readonly #nodeHandleRevisions = new Map<string, number>();
   /** Monotonic across hide/show cycles so renderer revision guards accept restored controls. */
   #handleRevision = 0;
+  /** The construction transaction under way, which a nested commit of the same id joins. */
+  #openTransaction: string | undefined;
   #pointHandlesOnly = false;
   #pointHandleIds = new Set<string>();
   /** Every handle the scene handle registry listed last, and the glyph each was drawn with. */
@@ -1178,17 +1180,23 @@ export class AppTabletopRuntime implements TabletopRuntime {
   }
   transact<T>(transactionId: string, origin: ChangeOrigin, work: () => T): TransactionResult<T> {
     this.#requireReady("running a construction transaction");
+    // A commit made inside a transaction of its own id is part of it: the
+    // outer one records the whole, and rolls it all back on a throw.
+    if (this.#openTransaction === transactionId) return { value: work(), recorded: false };
     this.#construction.beginTransaction(transactionId);
+    this.#openTransaction = transactionId;
     let result: T;
     try {
       result = work();
     } catch (error) {
+      this.#openTransaction = undefined;
       this.#construction.rollbackTransaction(transactionId);
       // The rolled-back mutations were already folded into the projection
       // one by one; only a full resync knows every surface they touched.
       this.#refreshConstructionProjection(origin, `rollback:${transactionId}`);
       throw error;
     }
+    this.#openTransaction = undefined;
     return { value: result, recorded: this.#construction.commitTransaction(transactionId) };
   }
 

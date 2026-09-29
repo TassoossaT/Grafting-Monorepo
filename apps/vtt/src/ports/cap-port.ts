@@ -16,6 +16,8 @@ export interface RoofDormer {
   readonly front: number;
   /** Relative steepness of its front, right, back and left sides; zero makes a gable. */
   readonly slopes: readonly [number, number, number, number];
+  /** Raised only to hold the opening in its front: it follows that opening, and goes with it. */
+  readonly opening?: boolean;
 }
 
 /**

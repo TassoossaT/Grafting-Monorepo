@@ -384,7 +384,12 @@ const refOf = (role: RoofFaceRole): SideRef => ({ ...(role.subroof === undefined
 /** The roof a side belongs to: the roof itself, or one of its subroofs. */
 const ownerOf = (recipe: RoofSource, subroof: number | undefined): RoofSource => (subroof === undefined ? recipe : recipe.subroofs?.[subroof] ?? recipe);
 /** Whether a face's side is one a handle raises: not a flat top, nor where a dormer meets its leaf. */
-const raisable = (recipe: RoofSource, role: RoofFaceRole) => (role.dormer === undefined ? role.side < ownerOf(recipe, role.subroof).slopes.length : role.side <= 3);
+const raisable = (recipe: RoofSource, role: RoofFaceRole) => {
+  const owner = ownerOf(recipe, role.subroof);
+  if (role.dormer === undefined) return role.side < owner.slopes.length;
+  // A dormer raised for an opening is shaped through that opening alone.
+  return role.side <= 3 && !owner.dormers?.[role.dormer]?.opening;
+};
 
 /** A face's centre and unit Newell normal. */
 function centreAndNormal(face: ConstructionRegionTopology): { readonly centre: ConstructionPosition; readonly normal: ConstructionPosition } {
@@ -403,7 +408,7 @@ function centreAndNormal(face: ConstructionRegionTopology): { readonly centre: C
 }
 
 /** A dormer's frame: along its host side, into its host leaf, and where its front's middle stands. */
-function dormerFrame(recipe: RoofRecipe, dormer: RoofDormer): { readonly u: Point; readonly n: Point; readonly front: Point; readonly length: number } {
+export function dormerFrame(recipe: RoofRequest, dormer: RoofDormer): { readonly u: Point; readonly n: Point; readonly front: Point; readonly length: number } {
   const { ring, index, a, c } = sideOf(recipe.footprints, dormer.side);
   const length = Math.hypot(c[0] - a[0], c[1] - a[1]);
   const u = [(c[0] - a[0]) / length, (c[1] - a[1]) / length] as const;
@@ -501,6 +506,8 @@ function roofHandles(members: readonly ConstructionRegionTopology[], generic: un
   });
   // Dormers: moved over their leaf from before their front, widened from beside their cheeks, raised from above their front.
   (recipe.dormers ?? []).forEach((dormer, k) => {
+    // One raised for an opening is moved, sized and removed through that opening.
+    if (dormer.opening) return;
     const { u, n, front } = dormerFrame(recipe, dormer);
     const faces = members.filter((face) => roleOf(face)?.dormer === k);
     if (faces.length === 0) return;

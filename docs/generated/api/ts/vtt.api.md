@@ -2981,6 +2981,20 @@ Something a commit survived but should not have had to.
 
 ### `function vtt.tool-registry.toolFor(id: Id): ConstructionTool<Id>`
 
+### `variable vtt.opening-stands.openingStands: readonly OpeningStand[]`
+
+Every kind of face that raises an upright stand to hold an opening -- the opening tool asks each in turn.
+
+### `interface vtt.opening-shared.OpeningCommit`
+
+### `property vtt.opening-shared.OpeningCommit.created?: { group: string; surfaceKeys: readonly ConstructionSurfaceKey[] }`
+
+The new group, when pieces were added.
+
+### `property vtt.opening-shared.OpeningCommit.error?: string`
+
+### `property vtt.opening-shared.OpeningCommit.recorded: boolean`
+
 ### `interface vtt.opening-shared.OpeningPiece`
 
 One face's share of a run rectangle: its bounds, and its outline as straight and cubic segments counter-clockwise in the face's `(u, v)`.
@@ -3093,6 +3107,45 @@ rect may not reach round onto itself.
 ### `function vtt.opening-shared.shapeOfGroup(pieces: readonly ConstructionRegionTopology[]): OpeningShape`
 
 The shape an opening group carries, read from any piece's property bag.
+
+### `interface vtt.opening-stand.OpeningStand`
+
+A face an opening cannot be cut into as it lies -- a sloped leaf -- but
+that can raise an upright stand to hold one: the stand exists only for
+its opening, follows it when it moves or changes size, and goes with it.
+Each call is one transaction, the stand and the opening together.
+
+### `method vtt.opening-stand.OpeningStand.drop(ctx: ToolContext, causeId: string, pieces: readonly ConstructionSurfaceKey[], host: ConstructionSurfaceKey): OpeningCommit`
+
+Removes the opening and the stand at `host` holding it.
+
+### `method vtt.opening-stand.OpeningStand.holds(ctx: ToolContext, host: ConstructionSurfaceKey): boolean`
+
+Whether the face `host` is one of this kind's stands.
+
+### `method vtt.opening-stand.OpeningStand.raise(ctx: ToolContext, causeId: string, face: ConstructionRegionTopology, at: ConstructionPosition, look: StandLook): OpeningCommit`
+
+Raises a stand on `face` at `at` and places an opening of `look` in it.
+
+### `method vtt.opening-stand.OpeningStand.raisesOn(face: ConstructionRegionTopology): boolean`
+
+Whether a press on `face` raises a stand there.
+
+### `method vtt.opening-stand.OpeningStand.refit(ctx: ToolContext, causeId: string, pieces: readonly ConstructionSurfaceKey[], host: ConstructionSurfaceKey, look: StandLook, shift: { x: number; z: number }): OpeningCommit`
+
+Remakes the stand at `host` for its opening, now `look`, moved by `shift` in plan.
+
+### `interface vtt.opening-stand.StandLook`
+
+An opening's size and outline, in world units, as a stand is asked to hold it.
+
+### `property vtt.opening-stand.StandLook.height: number`
+
+### `property vtt.opening-stand.StandLook.isDoor: boolean`
+
+### `property vtt.opening-stand.StandLook.shape: OpeningShape`
+
+### `property vtt.opening-stand.StandLook.width: number`
 
 ### `variable vtt.opening-tool.openingTool: ConstructionTool<"opening">`
 
@@ -3360,13 +3413,26 @@ the room pushed out. Its sides keep their slopes, its dormers their
 places, and what is pinned to it stays pinned. A roof whose base is gone
 stays as it stood.
 
+### `variable vtt.roof-opening-stand.roofOpeningStand: OpeningStand`
+
+A roof leaf holds an opening in a dormer raised for it: its front stands
+where the opening goes, its size the opening's with a margin round it.
+The roof keeps that dormer in its recipe, marked as the opening's, so the
+opening pinned to its front is carried whenever the roof is made again.
+
 ### `variable vtt.roof-tool.roofTool: ConstructionTool<"roof">`
 
 Also edits an existing roof, through its handles only -- see `structure-edit-behavior.ts` and `roof-recipe.ts`.
 
 ### `function vtt.roof-tool.commitRoofRecipes(ctx: ToolContext, requests: readonly RoofSource[], replaces: readonly ConstructionSurfaceKey[], done: string): void`
 
-Commits the roofs `requests` make in place of the faces `replaces` names, each keeping its recipe on every face it made.
+### `function vtt.roof-tool.replaceRoofs(ctx: ToolContext, requests: readonly RoofSource[], replaces: readonly ConstructionSurfaceKey[], transactionId?: string, renameRole: (role: string) => string): { group: string; recorded: boolean }`
+
+Makes the roofs `requests` describe in place of the faces `replaces` names,
+under transaction `transactionId` -- joining it when it is already under
+way -- and returns the new faces' group name and whether it was recorded.
+What was pinned to a replaced face moves to the new face of the same role,
+`renameRole` first saying what that role is now called.
 
 ### `interface vtt.geometry-2d.PointXZ`
 
@@ -7071,6 +7137,10 @@ the side its old one lies along.
 A dormer standing with its front's middle at `at`, on the leaf rising from
 footprint side `side`: where along that side and how far in.
 
+### `function vtt.roof-recipe.dormerFrame(recipe: RoofRequest, dormer: RoofDormer): { front: Point; length: number; n: Point; u: Point }`
+
+A dormer's frame: along its host side, into its host leaf, and where its front's middle stands.
+
 ### `function vtt.roof-recipe.dormerSlopes(waters: Waters): readonly [number, number, number, number]`
 
 A dormer's sides, by waters: two pitch its cheeks, one its front alone -- shallower, so it runs back into the leaf -- four all but its back.
@@ -9293,6 +9363,10 @@ Where its middle stands along that side, as a fraction of it.
 ### `property vtt.cap-port.RoofDormer.front: number`
 
 How high its front wall rises above the leaf.
+
+### `property vtt.cap-port.RoofDormer.opening?: boolean`
+
+Raised only to hold the opening in its front: it follows that opening, and goes with it.
 
 ### `property vtt.cap-port.RoofDormer.setback: number`
 

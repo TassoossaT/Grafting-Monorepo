@@ -10,6 +10,6 @@ export { cutsGround, platformStructureType } from "./platform/platform-structure
 export { RAMP_SURFACE_TYPE, rampCornerId, rampCorners, rampEdgeId, rampOutline, rampPatch, rampShapeOf, type RampCorners, type RampEnd, type RampShape } from "./platform/platform-ramp.ts";
 export { jointedRampPatch, planRamp, rampEndsCapability, type PlannedRamp, type RampEndPlan } from "./platform/platform-ramp-plan.ts";
 export { roofStructureType } from "./roof/roof-structure.ts";
-export { carriedOnto, dormerAt, dormerSlopes, footprintsOf, presetSlopes, ringsOf, roofGraphPatch, roofOver, ROOF_FACE_PROP, ROOF_RECIPE_PROP, type RoofBaseRef, type RoofFaceRole, type RoofRecipe, type RoofSource, type Waters } from "./roof/roof-recipe.ts";
+export { carriedOnto, dormerAt, dormerFrame, dormerSlopes, footprintsOf, presetSlopes, ringsOf, roofGraphPatch, roofOver, ROOF_FACE_PROP, ROOF_RECIPE_PROP, type RoofBaseRef, type RoofFaceRole, type RoofRecipe, type RoofSource, type Waters } from "./roof/roof-recipe.ts";
 export { openingStructureType } from "./panel/panel-structure.ts";
 export { controlRungId, controlSectionId, prospectiveGraph, regenerateSlopeSpine, SLOPE_SURFACE_TYPE, slopeFaceId, slopeFootprint, slopeSurface } from "./platform/platform-slope-spine.ts";

@@ -4568,6 +4568,9 @@ export function toolFor<Id extends ConstructionToolId>(id: Id): ConstructionTool
   return TOOL_REGISTRY[id];
   }
 
+// src/composition/tabletop/tools/opening-stands.ts
+export const openingStands: readonly OpeningStand[] = [roofOpeningStand];
+
 // src/composition/tabletop/tools/openings/opening-shared.ts
 export const MARGIN = 0.15;
 export interface RunRect {
@@ -4625,6 +4628,22 @@ export function overlapsOther(ctx: ToolContext, run: RunFrame, rect: RunRect, ex
 export function piecePolyline(piece: OpeningPiece, step: number): readonly (readonly [number, number])[] {
   const { frame } = piece.panel;
   const bends = bendsBetween(frame, piece.rect);
+
+// src/composition/tabletop/tools/openings/opening-stand.ts
+export interface StandLook {
+  readonly width: number;
+  readonly height: number;
+  readonly shape: OpeningShape;
+  readonly isDoor: boolean;
+  }
+export interface OpeningStand {
+  /** Whether a press on `face` raises a stand there. */
+  raisesOn(face: ConstructionRegionTopology): boolean;
+  /** Raises a stand on `face` at `at` and places an opening of `look` in it. */
+  raise(ctx: ToolContext, causeId: string, face: ConstructionRegionTopology, at: ConstructionPosition, look: StandLook): OpeningCommit;
+  /** Whether the face `host` is one of this kind's stands. */
+  holds(ctx: ToolContext, host: ConstructionSurfaceKey): boolean;
+  /** Remakes the stand at `host` for its opening, now `look`, moved by `shift` in plan. */
 
 // src/composition/tabletop/tools/openings/opening-tool.ts
 export const openingTool: ConstructionTool<"opening"> = {
@@ -4792,10 +4811,23 @@ export function followBaseReaction(): Reaction<FollowBaseRuntime> {
   const changed = [...effect.change.before, ...effect.change.after];
   const nodes = new Set(changed.flatMap((face) => face.nodes.map((node) => node.id)));
 
+// src/composition/tabletop/tools/roof/roof-opening-stand.ts
+export const roofOpeningStand: OpeningStand = {
+  raisesOn(face) {
+  const recipe = recipeOf(face), role = roleOf(face);
+
 // src/composition/tabletop/tools/roof/roof-tool.ts
+export function replaceRoofs(
+  ctx: ToolContext,
+  requests: readonly RoofSource[],
+  replaces: readonly ConstructionSurfaceKey[],
+  transactionId?: string,
+  renameRole: (role: string) => string = (role) => role,
+  ): { readonly group: string; readonly recorded: boolean } {
+  const operationId = scopedToolId(ctx, "roof", ctx.nextSequence());
 export function commitRoofRecipes(ctx: ToolContext, requests: readonly RoofSource[], replaces: readonly ConstructionSurfaceKey[] = [], done = "Telhado criado."): void {
   try {
-  const operationId = scopedToolId(ctx, "roof", ctx.nextSequence());
+  const { group: operationId, recorded } = replaceRoofs(ctx, requests, replaces);
 export const roofTool = withStructureEditing(rawRoofTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "roof-generated"), handlesOnly: true });
 
 // src/composition/tabletop/tools/shapes/geometry-2d.ts

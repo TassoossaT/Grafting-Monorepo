@@ -552,7 +552,7 @@ export function commitOpeningGroup(
   return created === undefined ? { recorded } : { recorded, created };
 }
 
-interface OpeningCommit {
+export interface OpeningCommit {
   readonly recorded: boolean;
   readonly error?: string;
   /** The new group, when pieces were added. */
