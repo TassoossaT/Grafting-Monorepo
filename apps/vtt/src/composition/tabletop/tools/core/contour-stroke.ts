@@ -29,6 +29,8 @@ export interface ContourStrokeOptions<P extends ContourStrokeParams> {
   readonly color: number;
   /** What a plain click with a dragged shape says. */
   readonly dragHint?: (shape: ContourShape) => string;
+  /** Where a sample stands on `level`: its ray crossing that level (`pointerOnLevel`) unless the tool says otherwise. */
+  readonly pointOn?: (sample: PointerSample, level: number) => ConstructionPosition;
 }
 
 /**
@@ -61,10 +63,13 @@ export function contourStroke<K extends ConstructionToolId, P extends ContourStr
     return frame;
   };
   const at = (sample: PointerSample, point: ConstructionPosition): PointerSample => ({ ...sample, point });
+  const place = options.pointOn ?? pointerOnLevel;
+  /** `sample` standing where the tool places it on `level`, its ray spent. */
+  const placed = (sample: PointerSample, level: number): PointerSample => ({ ...sample, point: place(sample, level), ray: undefined });
   /** The rectangle dragged from `a` to `b`, in the frame the drag began in; `undefined` when it has no area. */
   const rectangle = (ctx: ToolContext, a: PointerSample, b: PointerSample, level: number) => {
     const frame = frameOf(ctx, a);
-    const corners = frameRectangle(ctx, frame, frameStart(ctx, frame, a, level), pointerOnLevel(b, level), level);
+    const corners = frameRectangle(ctx, frame, frameStart(ctx, frame, placed(a, level), level), place(b, level), level);
     return corners && corners.map((corner, i) => (i === 0 ? at(a, corner) : { point: corner }));
   };
   /** A polygon's next corner: its first starts the frame, every later one snaps in it. */
@@ -73,11 +78,11 @@ export function contourStroke<K extends ConstructionToolId, P extends ContourStr
     if (!current.frame || current.points.length === 0) {
       const frame = buildFrameAt(ctx, sample);
       if (current.points.length === 0) current.frame = frame;
-      return at(sample, frameStart(ctx, frame, sample, level));
+      return at(sample, frameStart(ctx, frame, placed(sample, level), level));
     }
-    return sample.nodeId ? sample : at(sample, snappedInFrame(ctx, current.frame, pointerOnLevel(sample, level)));
+    return sample.nodeId ? sample : at(sample, snappedInFrame(ctx, current.frame, place(sample, level)));
   };
-  const onLevel = (samples: readonly PointerSample[], level: number) => samples.map((s) => (s.nodeId ? s : at(s, pointerOnLevel(s, level))));
+  const onLevel = (samples: readonly PointerSample[], level: number) => samples.map((s) => (s.nodeId ? s : at(s, place(s, level))));
   const lines = (samples: readonly PointerSample[], level: number): FittedEdge[] => {
     const points = samples.map((s) => ({ ...s.point, y: level })).filter((p, i, all) => i === 0 || p.x !== all[i - 1]!.x || p.z !== all[i - 1]!.z);
     if (points.length > 1 && points[0]!.x === points.at(-1)!.x && points[0]!.z === points.at(-1)!.z) points.pop();
@@ -110,7 +115,7 @@ export function contourStroke<K extends ConstructionToolId, P extends ContourStr
       const shape = own.shape ?? "rectangle";
       if (shape === "circle") {
         const level = options.levelAt(ctx, sample, own);
-        const center = frameStart(ctx, buildFrameAt(ctx, sample), sample, level);
+        const center = frameStart(ctx, buildFrameAt(ctx, sample), placed(sample, level), level);
         options.commit(ctx, circleContour({ ...center, y: level }, own.radius ?? 2.5), level, own, []);
       } else if (shape === "polygon") {
         const points = draftOf(ctx, own).points;

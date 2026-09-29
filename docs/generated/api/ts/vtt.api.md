@@ -2074,6 +2074,14 @@ Where the pointer is on the level `y` a shape is drawn at -- its ray
 crossing that level, not whatever surface the ray happened to hit first:
 the ground below a raised floor, or the top of one standing in front.
 
+### `function vtt.build-frame.pointerOnSurfaceOrLevel(sample: PointerSample, y: number): ConstructionPosition`
+
+Where the pointer is on the level `y`, for a shape laid over what it rests
+on: where it points, when what it rests on stands above that level -- the
+level lies hidden behind it there -- else its ray crossing the level, as
+pointerOnLevel. An outline drawn on a roof's leaf at the roof's
+eaves stays under the cursor instead of sliding down the ray to them.
+
 ### `function vtt.build-frame.snappedInFrame(ctx: ToolContext, frame: BuildFrame, p: ConstructionPosition): ConstructionPosition`
 
 `p` on the frame's grid, when the table snaps to one; unchanged otherwise.
@@ -2206,6 +2214,10 @@ What a plain click with a dragged shape says.
 ### `property vtt.contour-stroke.ContourStrokeOptions.levelAt: (ctx: ToolContext, first: PointerSample, params: P) => number`
 
 The level a stroke begun at `first` draws on.
+
+### `property vtt.contour-stroke.ContourStrokeOptions.pointOn?: (sample: PointerSample, level: number) => ConstructionPosition`
+
+Where a sample stands on `level`: its ray crossing that level (`pointerOnLevel`) unless the tool says otherwise.
 
 ### `property vtt.contour-stroke.ContourStrokeOptions.previewClosed?: (ctx: ToolContext, outline: readonly ConstructionPosition[], level: number, params: P) => PreviewDescriptor | undefined`
 

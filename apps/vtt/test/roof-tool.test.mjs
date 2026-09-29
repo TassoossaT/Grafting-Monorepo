@@ -527,6 +527,31 @@ test("a roof drawn in the middle of a larger roof joins it as one surface", () =
   } finally { session.free(); }
 });
 
+test("a roof drawn over a larger roof's leaf lands under the cursor, not slid down the camera's ray to the eaves", () => {
+  const value = roofed(2);
+  const { ctx, runtime, session } = value;
+  try {
+    const leaf = roofs(runtime).find((face) => !face.props.roofFace.upright && face.nodes.some((node) => node.position.z < 1e-6));
+    // A camera looking down at a slant, as a player views the table; the pointer rests on the leaf (height 3 + z).
+    const camera = { x: 4, y: 12, z: -8 };
+    const onLeaf = (x, z) => {
+      const point = { x, y: 3 + z, z };
+      const d = { x: point.x - camera.x, y: point.y - camera.y, z: point.z - camera.z };
+      const length = Math.hypot(d.x, d.y, d.z);
+      return { point, surfaceRef: surfaceRefFromNodeSet(leaf.surfaceKey), ray: { origin: camera, direction: { x: d.x / length, y: d.y / length, z: d.z / length } } };
+    };
+    const [start, current] = [onLeaf(3, 1), onLeaf(5, 1.5)];
+    const params = { ...DEFAULT_TOOL_PARAMS.roof, action: "draw", height: 2 };
+    roofTool.onPointerDown(ctx, start, params);
+    roofTool.onPointerUp(ctx, { start, current, samples: [start, current] }, params);
+    assert.notEqual(value.calls.feedback.at(-1)?.tone, "error", JSON.stringify(value.calls.feedback.at(-1)));
+    const outline = roofs(runtime)[0].props.roof.subroofs?.[0]?.footprints[0].outer ?? [];
+    const xs = outline.map(([x]) => x), zs = outline.map(([, z]) => z);
+    assert.ok(Math.abs(Math.min(...xs) - 3) < 1e-6 && Math.abs(Math.max(...xs) - 5) < 1e-6 && Math.abs(Math.min(...zs) - 1) < 1e-6 && Math.abs(Math.max(...zs) - 1.5) < 1e-6,
+      `drawn where the cursor was: ${JSON.stringify(outline)}`);
+  } finally { session.free(); }
+});
+
 test("a subroof rises from its own tip, the larger roof keeping its height", () => {
   const value = roofed(2);
   const { ctx, runtime, session } = value;
