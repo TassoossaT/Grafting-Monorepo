@@ -30,6 +30,8 @@ export interface RoofBaseRef {
 /** A roof's request, and the base it follows when it stands on one. */
 export interface RoofSource extends RoofRequest {
   readonly base?: RoofBaseRef;
+  /** Eave corners that follow the top nodes of their supporting walls. */
+  readonly anchors?: readonly { readonly ring: number; readonly corner: number; readonly nodeId: string }[];
 }
 
 /** A roof's recipe: what the generator is asked, the base it follows, and the group of faces it made. */
@@ -235,7 +237,7 @@ export function roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: Ro
   readonly patch: ConstructionPatch;
   readonly faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>;
 } {
-  const { base, ...wire } = request;
+  const { base, anchors, ...wire } = request;
   const plan = (ring: readonly { readonly x: number; readonly z: number }[]): Point[] => ring.map(({ x, z }) => [x, z]);
   // A floor placed inside a roof's rise replaces the leaves beneath its own
   // boundary. Its live edges supply the cut each time either structure changes.
@@ -254,7 +256,16 @@ export function roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: Ro
   });
   const roof: RoofPatch = port.generateRoof({ ...wire, platform_cuts: platformCuts });
   const others = standing.filter((face) => face.props?.[ROOF_RECIPE_PROP] === undefined);
-  const standingNodes = others.flatMap((face) => face.nodes);
+  // Roof-generated upright closures can support another roof at a different
+  // elevation. Share their vertices, while each roof keeps its own recipe.
+  const supports = standing.filter((face) => hasTrait(face.surfaceType, "partition") && hasTrait(face.surfaceType, "roof-generated"));
+  const standingNodes = [...others, ...supports].flatMap((face) => face.nodes);
+  const supportedNodes = standing.filter((face) => hasTrait(face.surfaceType, "partition")).flatMap((face) => face.nodes)
+    .filter((node) => Math.abs(node.position.y - request.elevation) < WELD);
+  const inferredAnchors = base ? [] : ringsOf(request.footprints).flatMap((ring, r) => ring.points.flatMap(([x, z], corner) => {
+    const node = supportedNodes.find((candidate) => Math.abs(candidate.position.x - x) < WELD && Math.abs(candidate.position.z - z) < WELD);
+    return node ? [{ ring: r, corner, nodeId: node.id }] : [];
+  }));
   const welded = roof.nodes.map(([x, y, z]) => standingNodes.find((node) => Math.abs(node.position.x - x) < WELD && Math.abs(node.position.y - y) < WELD && Math.abs(node.position.z - z) < WELD));
   const sides = new Map(others.flatMap((face) => [...face.outerLoops, ...face.holes].flat()).map((use) => [[use.startNodeId, use.endNodeId].sort().join("\u0000"), use] as const));
   const nodeId = (index: number) => welded[index]?.id ?? `${operationId}:node:${index}`;
@@ -283,7 +294,8 @@ export function roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: Ro
       return { edgeId: edgeId(edge), reversed: shared ? walkStart(edge, reversed) !== stored(shared).start : reversed };
     });
   };
-  const recipe: RoofRecipe = { elevation: request.elevation, height: request.height, footprints: request.footprints, slopes: request.slopes, dormers: request.dormers ?? [], cutouts: request.cutouts ?? [], ...(base ? { base } : {}), group: operationId };
+  const keptAnchors = anchors ?? inferredAnchors;
+  const recipe: RoofRecipe = { elevation: request.elevation, height: request.height, footprints: request.footprints, slopes: request.slopes, dormers: request.dormers ?? [], cutouts: request.cutouts ?? [], ...(base ? { base } : {}), ...(keptAnchors.length ? { anchors: keptAnchors } : {}), group: operationId };
   const faceProps = new Map<string, Readonly<Record<string, unknown>>>();
   roof.faces.forEach((face, index) => {
     const role: RoofFaceRole = { side: face.side, upright: face.upright, ...(face.dormer === null ? {} : { dormer: face.dormer }) };
@@ -509,7 +521,7 @@ function editRoof(generic: unknown, handle: RecipeHandle, intent: GlobalHandleIn
   });
   // Moved or reshaped by its own hand, it no longer stands where its base does: it lets go of it.
   const free = (next: RoofRecipe): RoofRecipe => {
-    const { base: _base, ...rest } = next;
+    const { base: _base, anchors: _anchors, ...rest } = next;
     return rest;
   };
   if (part.kind === "cutout" && handle.kind === "pivot" && intent.kind === "move") {

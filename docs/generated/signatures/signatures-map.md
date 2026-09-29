@@ -6766,6 +6766,8 @@ export interface RoofBaseRef {
   }
 export interface RoofSource extends RoofRequest {
   readonly base?: RoofBaseRef;
+  /** Eave corners that follow the top nodes of their supporting walls. */
+  readonly anchors?: readonly { readonly ring: number; readonly corner: number; readonly nodeId: string }[];
   }
 export interface RoofRecipe extends RoofSource {
   readonly group: string;

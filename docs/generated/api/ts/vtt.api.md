@@ -6960,6 +6960,10 @@ four where it meets its leaf; and whether it is an upright face under it.
 
 A roof's recipe: what the generator is asked, the base it follows, and the group of faces it made.
 
+### `property vtt.roof-recipe.RoofRecipe.anchors?: readonly { corner: number; nodeId: string; ring: number }[]`
+
+Eave corners that follow the top nodes of their supporting walls.
+
 ### `property vtt.roof-recipe.RoofRecipe.base?: RoofBaseRef`
 
 ### `property vtt.roof-recipe.RoofRecipe.cutouts?: readonly RoofFootprint[]`
@@ -6999,6 +7003,10 @@ One ring of a roof's footprints: an outline, or a hole through it.
 ### `interface vtt.roof-recipe.RoofSource`
 
 A roof's request, and the base it follows when it stands on one.
+
+### `property vtt.roof-recipe.RoofSource.anchors?: readonly { corner: number; nodeId: string; ring: number }[]`
+
+Eave corners that follow the top nodes of their supporting walls.
 
 ### `property vtt.roof-recipe.RoofSource.base?: RoofBaseRef`
 
@@ -8039,7 +8047,7 @@ Perlin `scale` -- smaller values are smoother/larger-scale terrain features.
 
 ### `property vtt.tool-types.ToolParamsByTool.platform-contour: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "circle" | "rectangle" | "polygon" | "freehand"; tolerance?: number }`
 
-### `property vtt.tool-types.ToolParamsByTool.roof: { action: "hole" | "base" | "cut" | "dormer" | "draw"; dormerFront: number; dormerWidth: number; elevation: number; height: number; radius: number; shape: "circle" | "rectangle" | "polygon" | "freehand"; tolerance: number; waters: 1 | 2 | 4 }`
+### `property vtt.tool-types.ToolParamsByTool.roof: { action: "hole" | "base" | "cut" | "dormer" | "draw"; dormerFront: number; dormerWidth: number; height: number; radius: number; shape: "circle" | "rectangle" | "polygon" | "freehand"; tolerance: number; waters: 1 | 2 | 4 }`
 
 ### `property vtt.tool-types.ToolParamsByTool.slope-curve: { mode?: "arc" | "points" | "straight" | "spiral" | "connect"; rise: number; width: number }`
 

@@ -31,7 +31,7 @@ const vertical = ({ nodes: [a, b, ...rest] }) => rest.every((c) => Math.abs((b.p
 
 /** A rectangle dragged from `a` to `b` with the roof tool. */
 function drag({ ctx }, a, b, params) {
-  const start = { point: { x: a[0], y: 0, z: a[1] } }, current = { point: { x: b[0], y: 0, z: b[1] } };
+  const start = { point: { x: a[0], y: params.elevation ?? 0, z: a[1] } }, current = { point: { x: b[0], y: params.elevation ?? 0, z: b[1] } };
   roofTool.onPointerDown(ctx, start, params);
   roofTool.onPointerUp(ctx, { start, current, samples: [start, current] }, params);
 }
@@ -74,6 +74,18 @@ test("a dragged rectangle makes one four-water roof, keeping its recipe on every
   } finally { session.free(); }
 });
 
+test("a roof drawn on the ground uses the clicked height even with a saved elevation setting", () => {
+  const value = fixture();
+  try {
+    const params = { ...DEFAULT_TOOL_PARAMS.roof, elevation: 3 };
+    const start = { point: { x: 0, y: 0, z: 0 } };
+    const current = { point: { x: 8, y: 0, z: 4 } };
+    roofTool.onPointerDown(value.ctx, start, params);
+    roofTool.onPointerUp(value.ctx, { start, current, samples: [start, current] }, params);
+    assert.equal(roofs(value.runtime)[0].props.roof.elevation, 0);
+  } finally { value.session.free(); }
+});
+
 test("two and one waters close their unpitched sides with upright gables", () => {
   for (const [waters, leaves, gables] of [[2, 2, 2], [1, 1, 3]]) {
     const { runtime, session } = roofed(waters);
@@ -92,7 +104,7 @@ test("any outline clicked corner by corner is roofed, concave and slanted", () =
   const { runtime, session, calls } = value;
   try {
     const params = { ...DEFAULT_TOOL_PARAMS.roof, shape: "polygon", elevation: 3, height: 2 };
-    for (const [x, z] of [[0, 0], [7, 1], [9, 5], [5, 4], [2, 7], [0, 0]]) click(value, { point: { x, y: 0, z } }, params);
+    for (const [x, z] of [[0, 0], [7, 1], [9, 5], [5, 4], [2, 7], [0, 0]]) click(value, { point: { x, y: 3, z } }, params);
     assert.equal(roofs(runtime).length, 5, JSON.stringify(calls.feedback.at(-1)));
     assert.equal(roofs(runtime)[0].props.roof.footprints[0].outer.length, 5);
   } finally { session.free(); }
@@ -102,7 +114,7 @@ test("a rectangle drawn into a standing roof fuses with it: one roof over their 
   const value = roofed(2);
   const { runtime, session } = value;
   try {
-    drag(value, [3, -4], [5, 2], { ...DEFAULT_TOOL_PARAMS.roof, waters: 2, elevation: 0, height: 9 });
+    drag(value, [3, -4], [5, 2], { ...DEFAULT_TOOL_PARAMS.roof, waters: 2, elevation: 3, height: 9 });
     assert.equal(groups(runtime).size, 1);
     const recipe = roofs(runtime)[0].props.roof;
     assert.equal(recipe.elevation, 3, "the fused roof stands where the standing one did");
@@ -479,6 +491,16 @@ test("drawing from an open cut wall starts a separate roof at its top", () => {
     roofTool.onPointerUp(ctx, { start, current, samples: [start, current] }, params);
     assert.equal(groups(runtime).size, before + 1, "an open wall supports a drawn roof");
     assert.ok(roofs(runtime).some((face) => Math.abs(face.props.roof.elevation - 4.5) < 1e-5), "the new eaves stand on the wall top");
+    const oldNodes = new Set(wall.nodes.map((node) => node.id));
+    const joined = roofs(runtime).filter((face) => Math.abs(face.props.roof.elevation - 4.5) < 1e-5);
+    assert.ok(joined.some((face) => face.nodes.some((node) => oldNodes.has(node.id))), "the new roof shares its support's nodes");
+    assert.ok(joined.some((face) => face.props.roof.anchors?.length >= 2), "the upper roof tracks its wall anchors");
+    const handle = shownGlobalHandles({ ...scene(runtime), cloudFor: runtime.cloudFor.bind(runtime) }).find((candidate) => candidate.owner === "roof-transition" && candidate.kind === "side" && Math.abs(candidate.pivot.z - 1.5) < 1e-5);
+    assert.ok(handle);
+    dragWith(wallLineTool, value, handle, { ...handle.position, z: handle.position.z + 0.3 }, DEFAULT_TOOL_PARAMS["wall-line"]);
+    const moved = roofs(runtime).filter((face) => Math.abs(face.props.roof.elevation - 4.5) < 1e-5);
+    assert.ok(moved.some((face) => face.nodes.some((node) => Math.abs(node.position.z - 1.8) < 1e-4)), "the upper roof follows the moved wall");
+    assert.ok(moved.some((face) => face.props.roof.footprints.some((footprint) => footprint.outer.some(([, z]) => Math.abs(z - 1.8) < 1e-4))), "the upper roof recipe follows the moved wall");
   } finally { session.free(); }
 });
 
