@@ -527,6 +527,29 @@ test("a roof drawn in the middle of a larger roof joins it as one surface", () =
   } finally { session.free(); }
 });
 
+test("a subroof rises from its own tip, the larger roof keeping its height", () => {
+  const value = roofed(2);
+  const { ctx, runtime, session } = value;
+  try {
+    const leaf = roofs(runtime).find((face) => !face.props.roofFace.upright && face.nodes.some((node) => node.position.z < 1e-6));
+    const start = { point: { x: 3, y: 4, z: 1 }, surfaceRef: surfaceRefFromNodeSet(leaf.surfaceKey) };
+    const current = { point: { x: 5, y: 4, z: 3 } };
+    const params = { ...DEFAULT_TOOL_PARAMS.roof, action: "draw", height: 2 };
+    roofTool.onPointerDown(ctx, start, params);
+    roofTool.onPointerUp(ctx, { start, current, samples: [start, current] }, params);
+    const shown = shownGlobalHandles(scene(runtime));
+    const own = shown.find((h) => h.kind === "rise" && h.recipeHandle.anchor === "rise");
+    const tip = shown.find((h) => h.kind === "rise" && h.recipeHandle.anchor === "subroof:0:rise");
+    assert.ok(own && tip, "the roof and its subroof each have a rise handle");
+    assert.ok(Math.abs(own.position.y - tip.position.y) > 1e-6, "each stands on its own peak");
+    dragHandle(value, tip, tip.position, 260);
+    const recipe = roofs(runtime)[0].props.roof;
+    assert.equal(recipe.subroofs[0].height, 3, "the subroof rose by a metre");
+    assert.equal(recipe.height, 2, "the larger roof kept its height");
+    assert.ok(roofs(runtime).some((face) => face.props.roofFace.subroof === 0 && face.nodes.some((node) => Math.abs(node.position.y - 7) < 1e-4)), "its tip stands higher");
+  } finally { session.free(); }
+});
+
 test("a cut wall can roof its supporting platform with one base click", () => {
   const value = roofed(2);
   const { ctx, runtime, session } = value;

@@ -363,11 +363,11 @@ export function roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: Ro
 
 // ---- Handles ----
 
-/** A side of the roof -- `dormer` absent -- or of one of its dormers. */
-type SideRef = { readonly dormer?: number; readonly side: number };
+/** A side of the roof -- or of one of its subroofs -- or of one of their dormers. */
+type SideRef = { readonly subroof?: number; readonly dormer?: number; readonly side: number };
 
 type RoofPart =
-  | { readonly kind: "whole" }
+  | { readonly kind: "whole"; readonly subroof?: number }
   | { readonly kind: "leaf"; readonly of: SideRef }
   | { readonly kind: "seam"; readonly leaves: readonly [SideRef, SideRef] }
   | { readonly kind: "corner"; readonly ring: number; readonly corner: number }
@@ -379,7 +379,12 @@ type RoofPart =
 
 const recipeOf = (topology: ConstructionRegionTopology) => topology.props?.[ROOF_RECIPE_PROP] as RoofRecipe | undefined;
 const roleOf = (topology: ConstructionRegionTopology) => topology.props?.[ROOF_FACE_PROP] as RoofFaceRole | undefined;
-const refKey = (ref: SideRef) => `${ref.dormer ?? "-"}:${ref.side}`;
+const refKey = (ref: SideRef) => `${ref.subroof ?? "-"}:${ref.dormer ?? "-"}:${ref.side}`;
+const refOf = (role: RoofFaceRole): SideRef => ({ ...(role.subroof === undefined ? {} : { subroof: role.subroof }), ...(role.dormer === undefined ? {} : { dormer: role.dormer }), side: role.side });
+/** The roof a side belongs to: the roof itself, or one of its subroofs. */
+const ownerOf = (recipe: RoofSource, subroof: number | undefined): RoofSource => (subroof === undefined ? recipe : recipe.subroofs?.[subroof] ?? recipe);
+/** Whether a face's side is one a handle raises: not a flat top, nor where a dormer meets its leaf. */
+const raisable = (recipe: RoofSource, role: RoofFaceRole) => (role.dormer === undefined ? role.side < ownerOf(recipe, role.subroof).slopes.length : role.side <= 3);
 
 /** A face's centre and unit Newell normal. */
 function centreAndNormal(face: ConstructionRegionTopology): { readonly centre: ConstructionPosition; readonly normal: ConstructionPosition } {
@@ -410,9 +415,10 @@ function dormerFrame(recipe: RoofRecipe, dormer: RoofDormer): { readonly u: Poin
 
 function roofHandles(members: readonly ConstructionRegionTopology[], generic: unknown): RecipeHandle[] {
   const recipe = generic as RoofRecipe;
-  const sideCount = recipe.slopes.length;
   const points = members.flatMap((member) => member.nodes);
-  const peak = points.reduce((best, node) => (node.position.y > best.position.y ? node : best));
+  const peakOf = (faces: readonly ConstructionRegionTopology[]) => faces.flatMap((face) => face.nodes).reduce((best, node) => (node.position.y > best.position.y ? node : best));
+  const own = members.filter((face) => roleOf(face)?.subroof === undefined);
+  const peak = peakOf(own.length ? own : members);
   const mean = (axis: "x" | "y" | "z") => points.reduce((sum, node) => sum + node.position[axis], 0) / points.length;
   const pivot = { x: mean("x"), y: mean("y"), z: mean("z") };
   const reach = Math.max(...points.map((node) => Math.hypot(node.position.x - pivot.x, node.position.z - pivot.z))) + ROTATE_REACH;
@@ -422,13 +428,20 @@ function roofHandles(members: readonly ConstructionRegionTopology[], generic: un
     { kind: "rotate", anchor: "rotate", position: outward(pivot, peak.position, reach), motion: { kind: "orbit", center: pivot }, part: whole },
     { kind: "rise", anchor: "rise", position: { ...peak.position, y: peak.position.y + STAND_OFF }, motion: { kind: "vertical" }, part: whole },
   ];
+  // Each subroof rises from its own tip, the larger roof keeping its height.
+  (recipe.subroofs ?? []).forEach((_, k) => {
+    const faces = members.filter((face) => roleOf(face)?.subroof === k);
+    if (faces.length === 0) return;
+    const tip = peakOf(faces);
+    handles.push({ kind: "rise", anchor: `subroof:${k}:rise`, position: { ...tip.position, y: tip.position.y + STAND_OFF }, motion: { kind: "vertical" }, part: { kind: "whole", subroof: k } satisfies RoofPart });
+  });
   // One slope handle per side, off its largest leaf -- or, a gable having none, off its upright face.
   const bySide = new Map<string, { readonly face: ConstructionRegionTopology; readonly ref: SideRef; readonly rank: number }>();
   for (const face of members) {
     const role = roleOf(face);
     // A flat top, and where a dormer meets its leaf, have no side to raise.
-    if (!role || (role.dormer === undefined ? role.side >= sideCount : role.side > 3)) continue;
-    const ref: SideRef = role.dormer === undefined ? { side: role.side } : { dormer: role.dormer, side: role.side };
+    if (!role || !raisable(recipe, role)) continue;
+    const ref = refOf(role);
     const rank = (role.upright ? 0 : 1000) + face.nodes.length;
     if ((bySide.get(refKey(ref))?.rank ?? -1) < rank) bySide.set(refKey(ref), { face, ref, rank });
   }
@@ -445,11 +458,11 @@ function roofHandles(members: readonly ConstructionRegionTopology[], generic: un
   const byEdge = new Map<string, { refs: SideRef[]; a: ConstructionPosition; b: ConstructionPosition }>();
   for (const face of members) {
     const role = roleOf(face);
-    if (!role || role.upright || (role.dormer === undefined ? role.side >= sideCount : role.side > 3)) continue;
+    if (!role || role.upright || !raisable(recipe, role)) continue;
     const at = new Map(face.nodes.map((node) => [node.id, node.position]));
     for (const use of [...face.outerLoops, ...face.holes].flat()) {
       const entry = byEdge.get(use.edgeId) ?? { refs: [], a: at.get(use.startNodeId)!, b: at.get(use.endNodeId)! };
-      entry.refs.push(role.dormer === undefined ? { side: role.side } : { dormer: role.dormer, side: role.side });
+      entry.refs.push(refOf(role));
       byEdge.set(use.edgeId, entry);
     }
   }
@@ -526,16 +539,22 @@ function roofHandles(members: readonly ConstructionRegionTopology[], generic: un
 // ---- Edits ----
 
 function slopesOf(recipe: RoofRecipe, ref: SideRef): readonly number[] {
-  return ref.dormer === undefined ? recipe.slopes : recipe.dormers![ref.dormer]!.slopes;
+  const owner = ownerOf(recipe, ref.subroof);
+  return ref.dormer === undefined ? owner.slopes : owner.dormers![ref.dormer]!.slopes;
 }
 
 function withSlopes(recipe: RoofRecipe, ref: SideRef, slopes: readonly number[]): RoofRecipe {
   if (slopes.every((slope) => slope === 0)) throw new Error(ref.dormer === undefined ? "O telhado precisa de ao menos uma água." : "A lucarna precisa de ao menos uma água.");
-  if (ref.dormer === undefined) return { ...recipe, slopes };
-  return withDormer(recipe, ref.dormer, (dormer) => ({ ...dormer, slopes: slopes as unknown as RoofDormer["slopes"] }));
+  return withSubroof(recipe, ref.subroof, (owner) => (ref.dormer === undefined ? { ...owner, slopes } : withDormer(owner, ref.dormer, (dormer) => ({ ...dormer, slopes: slopes as unknown as RoofDormer["slopes"] }))));
 }
 
-function withDormer(recipe: RoofRecipe, k: number, change: (dormer: RoofDormer) => RoofDormer | undefined): RoofRecipe {
+/** `change` made to the roof itself, or to its subroof `k`; a subroof it drops is removed. */
+function withSubroof<R extends RoofSource>(recipe: R, k: number | undefined, change: (owner: RoofSource) => RoofSource | undefined): R {
+  if (k === undefined) return change(recipe) as R;
+  return { ...recipe, subroofs: (recipe.subroofs ?? []).flatMap((child, i) => (i === k ? change(child) ?? [] : [child])) };
+}
+
+function withDormer<R extends RoofSource>(recipe: R, k: number, change: (dormer: RoofDormer) => RoofDormer | undefined): R {
   return { ...recipe, dormers: (recipe.dormers ?? []).flatMap((dormer, i) => (i === k ? change(dormer) ?? [] : [dormer])) };
 }
 
@@ -611,21 +630,23 @@ function editRoof(generic: unknown, handle: RecipeHandle, intent: GlobalHandleIn
       }));
     }
     case "rise": {
-      if (intent.kind !== "height") return undefined;
-      const height = recipe.height + intent.dy;
+      if (intent.kind !== "height" || part.kind !== "whole") return undefined;
+      const height = ownerOf(recipe, part.subroof).height + intent.dy;
+      // Brought down flat, a subroof is gone and the roof it joined stays.
+      if (part.subroof !== undefined) return withSubroof(recipe, part.subroof, (child) => (height < MIN_RISE ? undefined : { ...child, height }));
       return height < MIN_RISE ? null : { ...recipe, height };
     }
     case "slope": {
       if (intent.kind !== "height" || part.kind !== "leaf") return undefined;
       const slopes = slopesOf(recipe, part.of);
-      return withSlopes(recipe, part.of, slopes.map((slope, i) => (i === part.of.side ? reslope(slopes, i, intent.dy, recipe.height) : slope)));
+      return withSlopes(recipe, part.of, slopes.map((slope, i) => (i === part.of.side ? reslope(slopes, i, intent.dy, ownerOf(recipe, part.of.subroof).height) : slope)));
     }
     case "seam": {
       if (intent.kind !== "height" || part.kind !== "seam") return undefined;
       let next = recipe;
       for (const ref of part.leaves) {
         const slopes = slopesOf(next, ref);
-        next = withSlopes(next, ref, slopes.map((slope, i) => (i === ref.side ? reslope(slopesOf(recipe, ref), i, intent.dy, recipe.height) : slope)));
+        next = withSlopes(next, ref, slopes.map((slope, i) => (i === ref.side ? reslope(slopesOf(recipe, ref), i, intent.dy, ownerOf(recipe, ref.subroof).height) : slope)));
       }
       return next;
     }
