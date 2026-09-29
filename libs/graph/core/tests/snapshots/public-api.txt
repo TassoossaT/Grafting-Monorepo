@@ -671,6 +671,7 @@ impl core::marker::Unpin for grafting_graph_core::profile_roof::RoofPatch
 impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::profile_roof::RoofPatch
 impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::profile_roof::RoofPatch
 pub struct grafting_graph_core::profile_roof::RoofRequest
+pub grafting_graph_core::profile_roof::RoofRequest::cutouts: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofFootprint>
 pub grafting_graph_core::profile_roof::RoofRequest::dormers: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofDormer>
 pub grafting_graph_core::profile_roof::RoofRequest::elevation: f64
 pub grafting_graph_core::profile_roof::RoofRequest::footprints: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofFootprint>
@@ -4140,6 +4141,10 @@ Unique XYZ nodes.
 ### `pub grafting_graph_core::profile_roof::RoofPatch::preview: alloc::vec::Vec<[f64; 6]>`
 
 Transient XYZ segment endpoints of every edge, for a preview.
+
+### `pub grafting_graph_core::profile_roof::RoofRequest::cutouts: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofFootprint>`
+
+Areas removed from the finished leaves, without changing the skeleton.
 
 ### `pub grafting_graph_core::profile_roof::RoofRequest::dormers: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofDormer>`
 
