@@ -111,7 +111,7 @@ function PathBrushFields(props: { readonly params: PathBrushParams; readonly onC
       {(!params.creationMode || params.creationMode === "brush")
         ? <p>Arraste pelo terreno e solte para construir o caminho.</p>
         : <p>Clique por onde o caminho deve passar. Enter constrói; Backspace retira o último ponto.</p>}
-      <p>Arraste os handles da espinha para editar; use o eixo Y para altura. Segure Shift ao iniciar num handle ou trecho para criar uma ramificacao (por desenho ou por pontos). O alvo azul indica o encaixe com outra rua: clique nele para confirmar e encerrar. Clique em um trecho para inserir um ponto, ou arraste o trecho para curvar. Delete remove o ponto selecionado; Esc cancela.</p>
+      <p>Clique no + verde junto ao ponto selecionado da espinha para criar uma nova rua a partir dele. Arraste os handles da espinha para editar; use o eixo Y para altura. Segure Shift ao iniciar num handle ou trecho para criar uma ramificacao (por desenho ou por pontos). O alvo azul indica o encaixe com outra rua: clique nele para confirmar e encerrar. Clique em um trecho para inserir um ponto, ou arraste o trecho para curvar. Delete remove o ponto selecionado; Esc cancela.</p>
       {sliderRow("Largura do leito", params.bedWidth, 0.5, 12, 0.25, (bedWidth) => onChange({ ...params, bedWidth }))}
     </div>
   );

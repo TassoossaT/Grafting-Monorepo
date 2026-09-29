@@ -54,4 +54,4 @@ Medição Node/WASM, sem navegador ou renderer: nove pontos autorados, largura 0
 
 ## Remoção dos botões de geração
 
-A pedido do dono, foram retirados o botão superior Criar rua daqui e o + flutuante do ponto selecionado, incluindo registro visual, picking e callbacks que iniciavam a geração por esses controles. A criação a partir da geometria usa os handles/trechos com Shift; as instruções do painel refletem esse fluxo. Os três testes exclusivos dos botões foram removidos, preservando os testes dos gestos por handles. A prévia desta worktree é servida em http://127.0.0.1:4514/table/road-stability-324; HTTP 200 não constitui validação visual.
+O botão superior Criar rua daqui foi removido. O + verde junto ao ponto selecionado é o handle de criação de novas ruas a partir da espinha e permanece disponível, com seu registro visual, picking e início de ramificação. Sua remoção anterior foi um erro de interpretação, corrigido a pedido do dono. As instruções do painel e regressões cobrem esse handle, incluindo criação e cancelamento. A prévia desta worktree é servida em http://127.0.0.1:4514/table/road-stability-324; HTTP 200 não constitui validação visual.

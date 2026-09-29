@@ -418,6 +418,35 @@ test("edge curvature drag previews transiently, cancels, and undoes without addi
 });
 
 
+test("in-scene creation handle branches from its vertex without a toolbar",()=>{
+  const f=fixture();
+  try {
+    build(f);const edge=edges(f)[0],id=edge.endNodeId;
+    const action={...sample(0.8,4.8),constructionAction:{kind:"branch",nodeId:id}};
+    const before=state(f);
+    f.click(action,action,brush);
+    const cursor=sample(0,9);tool.previewFor(gesture(cursor,cursor),brush,f.ctx);
+    assert.ok(f.previews.get("road-points").positions.length>12);
+    assert.deepEqual(state(f),before);
+    f.click(cursor,cursor,brush);tool.onKeyDown(f.ctx,"Enter",brush);
+    assert.equal(edges(f).filter(e=>e.startNodeId===id||e.endNodeId===id).length,3,JSON.stringify(f.calls.feedback));
+  }finally{f.close();}
+});
+
+test("creation handle cancellation preserves the source spine",()=>{
+  const f=fixture();
+  try {
+    build(f);const edge=edges(f)[0],id=edge.endNodeId,before=state(f);
+    const action={...sample(0.8,4.8),constructionAction:{kind:"branch",nodeId:id}};
+    f.click(action,action,brush);
+    f.click(action,action,brush);
+    tool.onCancel(f.ctx);
+    assert.deepEqual(state(f),before);
+    assert.equal(f.previews.has("road-points"),false);
+    assert.equal(tool.onKeyDown(f.ctx,"Enter",brush),false);
+  }finally{f.close();}
+});
+
 for(const mode of ["points","brush"])for(const destination of ["vertex","edge"]){
   test(`snap to ${destination} while drawing in ${mode} mode commits the highlighted junction`,()=>{
     const f=fixture();
