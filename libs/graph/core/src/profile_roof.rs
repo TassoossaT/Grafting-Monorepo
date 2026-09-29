@@ -253,6 +253,30 @@ enum Event {
     },
 }
 
+/// Why a skeleton gave up on events tied at one point and instant.
+const TIED: &str = "the roof skeleton did not close";
+
+/// The skeleton of `rings`, its ties broken: where events meet at one point
+/// and instant and cannot be resolved in order, the slopes are nudged by a
+/// part in a million -- far below where the weld tells corners apart.
+fn skeleton_untied(rings: &[Vec<Point>], speeds: &[f64], sides: &[usize]) -> Result<Skeleton, String> {
+    let mut last = Err(TIED.to_string());
+    for attempt in 0..4 {
+        let nudged: Vec<f64> = speeds.iter().enumerate().map(|(k, s)| {
+            if attempt == 0 { return *s; }
+            // A fixed, uneven nudge per side, different each attempt.
+            let h = ((k * 2_654_435_761 + attempt * 40_503) % 1000) as f64 / 1000.0 - 0.5;
+            s * (1.0 + 2e-6 * h * attempt as f64)
+        }).collect();
+        last = skeleton(rings, &nudged, sides);
+        match &last {
+            Err(e) if e == TIED => continue,
+            _ => return last,
+        }
+    }
+    last
+}
+
 /// The weighted straight skeleton of `rings` -- the outline wound
 /// counter-clockwise, holes clockwise -- each side with its speed and the
 /// number the caller knows it by.
@@ -300,6 +324,8 @@ fn skeleton(rings: &[Vec<Point>], speeds: &[f64], sides: &[usize]) -> Result<Ske
     }
     let total: usize = rings.iter().map(Vec::len).sum();
     let mut now = 0.0_f64;
+    // Splits made at `split_at`, by the reflex corner's fronts and the front it split.
+    let (mut splits, mut split_at): (Vec<(usize, usize, usize)>, f64) = (Vec::new(), f64::NAN);
     for _ in 0..(40 * total + 200) {
         pass_over_gables(&mut sk, &mut lavs, now);
         // A wavefront down to two corners is a ridge, or a point.
@@ -433,6 +459,12 @@ fn skeleton(rings: &[Vec<Point>], speeds: &[f64], sides: &[usize]) -> Result<Ske
                 let r = lavs[l][i];
                 let m = lavs[o].len();
                 let e = lavs[o][j].right;
+                // The same corner splitting the same front again at the same
+                // instant only parts and rejoins the wavefront: a tie the
+                // caller breaks by nudging the slopes.
+                if !((now - split_at).abs() < 1e-9) { splits.clear(); split_at = now; }
+                if splits.contains(&(r.left, r.right, e)) { return Err(TIED.into()); }
+                splits.push((r.left, r.right, e));
                 let at = r.at(now);
                 let node = sk.node(at, now);
                 sk.arcs.push((r.node, node, r.left, r.right));
@@ -471,13 +503,15 @@ fn skeleton(rings: &[Vec<Point>], speeds: &[f64], sides: &[usize]) -> Result<Ske
             }
         }
     }
-    Err("the roof skeleton did not close".into())
+    Err(TIED.into())
 }
 
-/// A pitched front that has come level with a gable beside it, running the
-/// same way, rises on over it: the gable stops there -- its top is its line
-/// at that moment -- and leaves the wavefront, the pitched front taking its
-/// place up to the gable's far corner.
+/// Of two fronts side by side on one line, the faster -- the shallower
+/// water -- is the lower surface from there on: it rises on over the slower
+/// one, a steeper water or a gable, which stops there -- its top is its line
+/// at that moment -- and leaves the wavefront, the faster front taking its
+/// place up to its far corner. Moving their shared corner at their mean
+/// speed instead would draw it off both lines.
 fn pass_over_gables(sk: &mut Skeleton, lavs: &mut [Vec<Corner>], now: f64) {
     for lav in lavs.iter_mut() {
         while lav.len() >= 3 {
@@ -487,8 +521,8 @@ fn pass_over_gables(sk: &mut Skeleton, lavs: &mut [Vec<Corner>], now: f64) {
                 let (l, r) = (sk.fronts[c.left], sk.fronts[c.right]);
                 let level = |f: &Front| f.line + f.speed * now;
                 let together = dot(l.normal, r.normal) > 1.0 - 1e-9 && (level(&l) - level(&r)).abs() < 1e-7;
-                if !together || (l.speed == 0.0) == (r.speed == 0.0) { return None; }
-                Some((i, r.speed == 0.0))
+                if !together || (l.speed - r.speed).abs() < 1e-12 { return None; }
+                Some((i, r.speed < l.speed))
             });
             let Some((i, gable_right)) = found else { break; };
             // The gable runs from `c` to `n`; the pitched front keeps `c`'s other side.
@@ -1259,7 +1293,7 @@ fn generate_single_roof_patch(request: RoofRequest) -> Result<RoofPatch, String>
         if speeds.iter().all(|s| *s == 0.0) {
             return Err("every footprint of a roof needs a pitched side".into());
         }
-        skeletons.push(skeleton(&rings, &speeds, &sides)?);
+        skeletons.push(skeleton_untied(&rings, &speeds, &sides)?);
     }
     let peak = skeletons
         .iter()
@@ -1839,6 +1873,25 @@ fn weld(faces: Vec<Face3>) -> Result<RoofPatch, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A reflex corner landing exactly on another front's corner once parted
+    /// and rejoined the wavefront forever at that instant.
+    #[test]
+    fn a_reflex_corner_landing_on_a_corner_closes_the_skeleton() {
+        let cases: Vec<(Vec<[f64; 2]>, Vec<f64>)> = vec![
+            (vec![[4.,0.],[5.,2.],[1.,2.],[0.,3.],[-1.,2.],[-2.,2.],[-3.,1.],[-3.,-1.],[-3.,-2.],[-3.,-5.],[1.,-5.],[1.,-2.],[3.,-2.]],
+             vec![0.9367653311230242,1.,2.1598419638350608,0.,0.,1.0612861400470137,1.,0.,0.9891455749049782,1.,2.0597839414142074,2.1776038066484036,0.3200293707661331]),
+            (vec![[3.,0.],[2.5,1.],[3.,4.5],[1.,5.],[-1.,5.5],[-3.,3.],[-4.,2.],[-2.5,0.],[-5.,-2.],[-3.5,-4.],[-1.,-5.],[1.,-6.],[2.,-2.],[2.,-1.]],
+             vec![1.6112339597195386,1.,0.304359517339617,1.1410708020441234,0.,0.8817245054990053,1.2556521965190768,1.5376726023852825,1.8549506234005093,1.,1.,0.,1.4373796277679503,1.3197040225379169]),
+            (vec![[2.,0.],[5.,2.],[2.,2.],[1.,5.],[0.,5.],[-2.,4.],[-4.,3.],[-5.,1.],[-6.,-1.],[-4.,-3.],[-2.,-3.],[0.,-3.],[2.,-5.],[4.,-4.],[5.,-2.]],
+             vec![1.,1.7528951520100235,1.0216088656336069,1.,1.6503604979254305,2.077596903126687,0.4171107758767903,1.,0.7263207470998168,0.,1.,1.8246315846219658,0.,2.1540795772336425,1.]),
+        ];
+        for (outer, slopes) in cases {
+            let patch = generate_roof_patch(roof(outer.clone(), vec![], slopes))
+                .unwrap_or_else(|e| panic!("{outer:?}: {e}"));
+            assert!(closed(&patch, 3.0), "{outer:?}");
+        }
+    }
 
     fn roof(outer: Vec<[f64; 2]>, holes: Vec<Vec<[f64; 2]>>, slopes: Vec<f64>) -> RoofRequest {
         RoofRequest {
