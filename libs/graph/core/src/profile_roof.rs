@@ -811,32 +811,56 @@ fn minus(subject: &[Point], covers: &[PlanFace]) -> Result<Vec<PlanFace>, String
             .collect::<Vec<_>>(),
         PlanarBoolean::Difference,
     )?;
-    Ok(shapes
-        .into_iter()
-        .map(|shape| {
-            shape
-                .into_iter()
-                .map(|ring| {
-                    without_spikes(
-                        ring.into_iter()
-                            .map(|p| [f64::from(p[0]), f64::from(p[1])])
-                            .collect(),
-                    )
-                })
-                .enumerate()
-                .filter(|(index, ring)| *index == 0 || (ring.len() >= 3 && area(ring).abs() > 1e-9))
-                .map(|(_, ring)| ring)
-                .collect::<PlanFace>()
-        })
-        .filter(|face: &PlanFace| face[0].len() >= 3 && area(&face[0]).abs() > 1e-6)
-        .collect())
+    let mut faces = Vec::new();
+    for shape in shapes {
+        let mut rings = shape.into_iter().map(|ring| ring.into_iter().map(|p| [f64::from(p[0]), f64::from(p[1])]).collect::<Vec<Point>>());
+        let Some(outer) = rings.next() else { continue; };
+        let sign = area(&outer).signum();
+        // An outline pinched through one corner is as many outlines; a loop
+        // turning the other way inside it is a hole.
+        let (mut outers, mut holes): (Vec<Vec<Point>>, Vec<Vec<Point>>) = (Vec::new(), Vec::new());
+        for part in loops(outer) {
+            if area(&part).signum() == sign { outers.push(part); } else { holes.push(part); }
+        }
+        holes.extend(rings.flat_map(loops));
+        for outer in outers.into_iter().filter(|ring| area(ring).abs() > 1e-6) {
+            let mine = holes.iter().filter(|hole| inside(&outer, hole[0]) || inside(&outer, centroid(hole))).cloned();
+            faces.push(std::iter::once(outer.clone()).chain(mine).collect::<PlanFace>());
+        }
+    }
+    Ok(faces)
+}
+
+fn centroid(ring: &[Point]) -> Point {
+    let n = ring.len().max(1) as f64;
+    ring.iter().fold([0.0, 0.0], |s, p| [s[0] + p[0] / n, s[1] + p[1] / n])
+}
+
+/// A ring's simple loops: split wherever it passes a corner twice, each loop
+/// rid of spikes, and loops with no area -- a side walked there and back -- dropped.
+fn loops(ring: Vec<Point>) -> Vec<Vec<Point>> {
+    let ring = without_spikes(ring);
+    let extent = ring.iter().flat_map(|p| p.iter().map(|v| v.abs())).fold(1.0_f64, f64::max);
+    let same = |a: Point, b: Point| (a[0] - b[0]).abs() < 5e-6 * extent && (a[1] - b[1]).abs() < 5e-6 * extent;
+    let mut found = Vec::new();
+    let mut path: Vec<Point> = Vec::new();
+    for p in ring {
+        if let Some(k) = path.iter().position(|q| same(*q, p)) {
+            found.push(path.split_off(k));
+        }
+        path.push(p);
+    }
+    found.push(path);
+    found.into_iter().map(without_spikes).filter(|part| part.len() >= 3 && area(part).abs() > 1e-9).collect()
 }
 
 /// A ring without repeated corners, nor spikes that run out along a side and
 /// back: where two cut lines coincide, the boolean can walk one both ways,
 /// which would use that side twice from the same face.
 fn without_spikes(mut ring: Vec<Point>) -> Vec<Point> {
-    let same = |a: Point, b: Point| (a[0] - b[0]).abs() < 1e-6 && (a[1] - b[1]).abs() < 1e-6;
+    // As close as `weld` later makes one corner of two: nearer, a spike would come back.
+    let extent = ring.iter().flat_map(|p| p.iter().map(|v| v.abs())).fold(1.0_f64, f64::max);
+    let same = |a: Point, b: Point| (a[0] - b[0]).abs() < 5e-6 * extent && (a[1] - b[1]).abs() < 5e-6 * extent;
     loop {
         let n = ring.len();
         if n < 3 {
@@ -1484,6 +1508,14 @@ fn visible_upright(face: &Face3, groups: &[Vec<Face3>], owner: usize) -> Result<
     let (a, c) = (at(lo), at(hi));
     // Under every other roof's leaf the face crosses: from below the face up to that leaf.
     let mut covers: Vec<PlanFace> = Vec::new();
+    // An earlier roof's upright face in the same plane, facing the same way,
+    // is that face already: two gables on one wall are one gable.
+    let on_line = |p: &[f64; 3]| { let d = sub([p[0], p[2]], origin); (d[0] * dir[1] - d[1] * dir[0]).abs() < 1e-6 };
+    for other in groups.iter().take(owner).flatten() {
+        let (Some(mine), Some(theirs)) = (face.outward, other.outward) else { continue; };
+        if face_plane(other).is_some() || dot(mine, theirs) <= 0.0 || !other.rings[0].iter().all(on_line) { continue; }
+        covers.push(other.rings.iter().map(|r| r.iter().map(|p| [along([p[0], p[2]]), p[1]]).collect()).collect());
+    }
     for other in groups.iter().enumerate().filter(|(index, _)| *index != owner).flat_map(|(_, faces)| faces) {
         let Some(plane) = face_plane(other) else { continue; };
         let rings = other.rings.iter().map(|r| r.iter().map(|q| [q[0], q[2]]).collect::<Vec<_>>()).collect::<Vec<_>>();

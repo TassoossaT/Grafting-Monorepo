@@ -551,11 +551,11 @@ test("a subroof rises from its own tip, the larger roof keeping its height", () 
 });
 
 /** A roof drawn from `a` to `b` on the 8 x 4 roof `roofed` makes, rising `height`. */
-function drawOnRoof(value, a, b, height) {
+function drawOnRoof(value, a, b, height, waters = DEFAULT_TOOL_PARAMS.roof.waters) {
   const leaf = roofs(value.runtime).find((face) => !face.props.roofFace.upright);
   const start = { point: { x: a[0], y: 4, z: a[1] }, surfaceRef: surfaceRefFromNodeSet(leaf.surfaceKey) };
   const current = { point: { x: b[0], y: 4, z: b[1] } };
-  const params = { ...DEFAULT_TOOL_PARAMS.roof, action: "draw", height };
+  const params = { ...DEFAULT_TOOL_PARAMS.roof, action: "draw", height, waters };
   roofTool.onPointerDown(value.ctx, start, params);
   roofTool.onPointerUp(value.ctx, { start, current, samples: [start, current] }, params);
 }
@@ -576,6 +576,28 @@ for (const [anchor, a, b, screenY] of [
       dragHandle(value, handle, handle.position, screenY);
       assert.notEqual(value.calls.feedback.at(-1)?.tone, "error", JSON.stringify(value.calls.feedback.at(-1)));
     } finally { session.free(); }
+  });
+}
+
+for (const { name, host, subroofs } of [
+  // Its gable on the larger roof's gable: one wall, not two overlapping.
+  { name: "a subroof against the larger roof's gable", host: 2, subroofs: [[[0, 0], [1, 1], 1, 2]] },
+  // Its eaves read off single-precision nodes, a hair below the larger roof's.
+  { name: "a second subroof on a larger roof's eave", host: 1, subroofs: [[[6, 2], [8, 4], 1, 2], [[2, 0], [4, 2], 1, 2]] },
+  // Its waters coplanar with the larger roof's: no out-and-back spike along the shared line.
+  { name: "a subroof beside another on a hip", host: 4, subroofs: [[[0, 0], [8, 1], 1, 2], [[1, 1], [3, 3], 1, 2]] },
+  // What is left of a leaf between two subroofs: two pieces, not one bridged across a line.
+  { name: "two subroofs along a whole roof", host: 1, subroofs: [[[0, 0], [8, 1], 2, 4], [[0, 1], [8, 3], 1, 2]] },
+]) {
+  test(`${name} joins it as one valid surface`, () => {
+    const value = roofed(host);
+    try {
+      for (const [a, b, height, waters] of subroofs) {
+        drawOnRoof(value, a, b, height, waters);
+        assert.notEqual(value.calls.feedback.at(-1)?.tone, "error", JSON.stringify(value.calls.feedback.at(-1)));
+      }
+      assert.equal(roofs(value.runtime)[0].props.roof.subroofs.length, subroofs.length);
+    } finally { value.session.free(); }
   });
 }
 

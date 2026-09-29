@@ -161,7 +161,8 @@ function surfaceLevelUnder(topologies: readonly ConstructionRegionTopology[], gr
       .map(({ plane: { normal: n, centre: c } }) => c.y - (n.x * (x - c.x) + n.z * (z - c.z)) / n.y);
     return under.length ? [Math.max(...under)] : [];
   });
-  return heights.length ? Math.min(...heights) : undefined;
+  // Read off single-precision nodes: a hair below an eave would leave a sliver along it.
+  return heights.length ? Math.round(Math.min(...heights) * 1e6) / 1e6 : undefined;
 }
 
 /**
