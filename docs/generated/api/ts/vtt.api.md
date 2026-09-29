@@ -2068,20 +2068,9 @@ is whole grid steps when the table snaps. `undefined` when it has no area.
 
 Where a shape begun at `sample`, on the level `y`, starts: on the side it was drawn next to, else on the frame's grid.
 
-### `function vtt.build-frame.pointerOnFace(ctx: ToolContext, sample: PointerSample, y: number): ConstructionPosition`
-
-Where the pointer is, laid on the level `y`, for a shape drawn over the
-face it points at: its ray meeting that face's plane -- exactly under the
-cursor, unsnapped, as the ground gives it -- when the face slopes and
-stands above the level, a roof's leaf under a shape drawn at its eaves.
-Anything else, as pointerOnLevel. Carried down the ray to the
-level instead, a point on a leaf would land far behind it.
-
 ### `function vtt.build-frame.pointerOnLevel(sample: PointerSample, y: number): ConstructionPosition`
 
-Where the pointer is on the level `y` a shape is drawn at -- its ray
-crossing that level, not whatever surface the ray happened to hit first:
-the ground below a raised floor, or the top of one standing in front.
+Where the pointer is on the level `y` a shape is drawn at -- see pointerAtHeight.
 
 ### `function vtt.build-frame.snappedInFrame(ctx: ToolContext, frame: BuildFrame, p: ConstructionPosition): ConstructionPosition`
 
@@ -2215,10 +2204,6 @@ What a plain click with a dragged shape says.
 ### `property vtt.contour-stroke.ContourStrokeOptions.levelAt: (ctx: ToolContext, first: PointerSample, params: P) => number`
 
 The level a stroke begun at `first` draws on.
-
-### `property vtt.contour-stroke.ContourStrokeOptions.pointOn?: (ctx: ToolContext, sample: PointerSample, level: number) => ConstructionPosition`
-
-Where a sample stands on `level`: its ray crossing that level (`pointerOnLevel`) unless the tool says otherwise.
 
 ### `property vtt.contour-stroke.ContourStrokeOptions.previewClosed?: (ctx: ToolContext, outline: readonly ConstructionPosition[], level: number, params: P) => PreviewDescriptor | undefined`
 
@@ -2606,10 +2591,23 @@ every `ConstructionToolId` and `use-construction-pointer.ts` never needs a
 
 ### `function vtt.pointer-ray.pointerAtHeight(sample: PointerSample, y: number): ConstructionPosition`
 
-Where the pointer is at height `y`: its ray from the camera crossing that
-level, so something drawn at `y` sits right under the cursor rather than
-above or below whatever the ray hit. Without a ray -- or one that never
-reaches that level in front of the camera -- the hit point, at `y`.
+Where the pointer is at height `y` -- the one rule every tool reads the
+pointer by, so a point lands under the cursor the same way for all of them.
+On a face standing above `y` that is not a wall -- a roof's leaf, a
+platform's top -- it is where the ray meets that face, laid down onto `y`:
+carried on down the ray it would land far behind what the cursor is on.
+Anywhere else, the ray crossing `y` itself, so something drawn at `y`
+sits right under the cursor rather than above or below whatever the ray
+hit. Without a ray -- or one that never reaches there in front of the
+camera -- the hit point, at `y`. Always exact: the hit point may be
+snapped to the grid, the ray never is.
+
+### `function vtt.pointer-ray.withFacePlane(sample: PointerSample, topologies: readonly ConstructionRegionTopology[]): PointerSample`
+
+`sample` knowing the face it is on: that face's slope, through the exact
+point the pointer hit -- read before the hit is snapped to the grid, and
+right on uneven faces too, the ground or a road, whose slope differs from
+place to place. The pointer gives every sample this.
 
 ### `function vtt.spine-body-target.spineBodyTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string, ownsSpine: (surfaceType: string) => boolean): { options: CurveGestureOptions; sample: PointerSample } | undefined`
 
@@ -2875,6 +2873,10 @@ What the picked `selectedId` offers besides dragging it -- shown as buttons; `id
 What the pointer resolved to at one instant -- `nodeId` present only when it hit a node handle.
 
 ### `property vtt.tool-context.PointerSample.constructionAction?: { kind: "branch"; nodeId: string }`
+
+### `property vtt.tool-context.PointerSample.face?: { centre: ConstructionPosition; normal: ConstructionPosition }`
+
+The face under the pointer, when it is on one: its slope through the exact point hit -- see `pointer-ray.ts`.
 
 ### `property vtt.tool-context.PointerSample.forward?: ConstructionPosition`
 
@@ -3223,6 +3225,10 @@ Drag to sketch the centerline. Release commits one fitted curve transaction.
 What the pointer resolved to at one instant -- `nodeId` present only when it hit a node handle.
 
 ### `property vtt.road-body-target.RoadSnapTarget.constructionAction?: { kind: "branch"; nodeId: string }`
+
+### `property vtt.road-body-target.RoadSnapTarget.face?: { centre: ConstructionPosition; normal: ConstructionPosition }`
+
+The face under the pointer, when it is on one: its slope through the exact point hit -- see `pointer-ray.ts`.
 
 ### `property vtt.road-body-target.RoadSnapTarget.forward?: ConstructionPosition`
 

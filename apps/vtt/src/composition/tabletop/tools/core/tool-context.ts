@@ -16,6 +16,8 @@ export interface PointerSample {
   readonly surfaceRef?: string;
   /** The pointer's ray from the camera, when the view gave one -- see `pointer-ray.ts`. */
   readonly ray?: { readonly origin: ConstructionPosition; readonly direction: ConstructionPosition };
+  /** The face under the pointer, when it is on one: its slope through the exact point hit -- see `pointer-ray.ts`. */
+  readonly face?: { readonly normal: ConstructionPosition; readonly centre: ConstructionPosition };
   /** The way the camera looks, when the view gave it -- see `build-frame.ts`. */
   readonly forward?: ConstructionPosition;
 }

@@ -26,7 +26,6 @@ import type { RoofFootprint } from "../../../../ports/cap-port.ts";
 import type { ConstructionTool, PointerSample, ToolContext } from "../core/tool-context.ts";
 import { withStructureEditing } from "../core/structure-edit-behavior.ts";
 import { contourStroke } from "../core/contour-stroke.ts";
-import { pointerOnFace } from "../core/build-frame.ts";
 import { segmentsPreview } from "../shapes/preview-shapes.ts";
 import { roofBaseAt } from "./roof-base.ts";
 import { commitRoofRecipes } from "./roof-commit.ts";
@@ -259,8 +258,6 @@ function addDormer(ctx: ToolContext, sample: PointerSample, params: Params): voi
 const stroke = contourStroke<"roof", Params>({
   color: COLOR,
   levelAt: (ctx, first) => startElevation(ctx, first),
-  // Drawn over a roof's leaf at its eaves: where the pointer meets the leaf, not far behind it down the ray.
-  pointOn: pointerOnFace,
   commit: (ctx, contour, level, params) => {
     try {
       const { requests, replaces, done } = stroked(ctx, contour, level, params);

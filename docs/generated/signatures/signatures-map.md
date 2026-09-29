@@ -4176,9 +4176,6 @@ export function snappedInFrame(ctx: ToolContext, frame: BuildFrame, p: Construct
   return { x: frame.origin.x + frame.u.x * along + frame.v.x * across, y: p.y, z: frame.origin.z + frame.u.z * along + frame.v.z * across };
 export function pointerOnLevel(sample: PointerSample, y: number): ConstructionPosition {
   return sample.ray ? pointerAtHeight(sample, y) : { ...sample.point, y };
-export function pointerOnFace(ctx: ToolContext, sample: PointerSample, y: number): ConstructionPosition {
-  const ray = sample.ray;
-  const face = sample.surfaceRef === undefined ? undefined : ctx.runtime.getAllRegionTopologies().find((topology) => surfaceRefFromNodeSet(topology.surfaceKey) === sample.surfaceRef);
 export function frameStart(ctx: ToolContext, frame: BuildFrame, sample: PointerSample, y: number = sample.point.y): ConstructionPosition {
   return frame.start ?? snappedInFrame(ctx, frame, pointerOnLevel(sample, y));
 export function frameRectangle(ctx: ToolContext, frame: BuildFrame, a: ConstructionPosition, b: ConstructionPosition, elevation: number): readonly ConstructionPosition[] | undefined {
@@ -4419,9 +4416,10 @@ export const navigateTool: ConstructionTool<"navigate"> = {
 // src/composition/tabletop/tools/core/pointer-ray.ts
 export function pointerAtHeight(sample: PointerSample, y: number): ConstructionPosition {
   const ray = sample.ray;
-  if (ray && Math.abs(ray.direction.y) > 1e-6) {
-  const t = (y - ray.origin.y) / ray.direction.y;
-  if (t > 0) return { x: ray.origin.x + ray.direction.x * t, y, z: ray.origin.z + ray.direction.z * t };
+  if (!ray) return { ...sample.point, y };
+export function withFacePlane(sample: PointerSample, topologies: readonly ConstructionRegionTopology[]): PointerSample {
+  if (sample.surfaceRef === undefined) return sample;
+  const topology = topologies.find((candidate) => surfaceRefFromNodeSet(candidate.surfaceKey) === sample.surfaceRef);
 
 // src/composition/tabletop/tools/core/spine-body-target.ts
 export function spineBodyTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string, ownsSpine: (surfaceType: string) => boolean = () => true): { sample: PointerSample; options: CurveGestureOptions } | undefined {

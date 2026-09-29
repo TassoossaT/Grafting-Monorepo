@@ -6,6 +6,7 @@ import { roofTool } from "../src/composition/tabletop/tools/roof/roof-tool.ts";
 import { DEFAULT_TOOL_PARAMS, shownGlobalHandles } from "../src/features/edit-construction/index.ts";
 import { sessionFixture, addFace } from "./platform-session-fixture.mjs";
 import { surfaceRefFromNodeSet } from "../src/entities/map/index.ts";
+import { withFacePlane } from "../src/composition/tabletop/tools/core/pointer-ray.ts";
 
 registerHooks(createAliasResolveHook(new URL("../src/", import.meta.url)));
 const { wallLineTool } = await import("../src/composition/tabletop/tools/walls/wall-line-tool.ts");
@@ -564,7 +565,9 @@ for (const camera of [{ x: 4, y: 14, z: -10 }, { x: 4, y: 8, z: -8 }, { x: -4, y
         const hit = { x, y: 3 + z, z };
         const d = { x: hit.x - camera.x, y: hit.y - camera.y, z: hit.z - camera.z };
         const n = Math.hypot(d.x, d.y, d.z);
-        return { point: { x: Math.round(x), y: hit.y, z: Math.round(z) }, surfaceRef: surfaceRefFromNodeSet(leaf.surfaceKey), ray: { origin: camera, direction: { x: d.x / n, y: d.y / n, z: d.z / n } } };
+        // As the pointer gives it: the face read at the exact hit, then the hit snapped.
+        const sample = withFacePlane({ point: hit, surfaceRef: surfaceRefFromNodeSet(leaf.surfaceKey), ray: { origin: camera, direction: { x: d.x / n, y: d.y / n, z: d.z / n } } }, runtime.getAllRegionTopologies());
+        return { ...sample, point: { x: Math.round(x), y: hit.y, z: Math.round(z) } };
       };
       const [start, current] = [over(3, 1), over(6, 2.9)];
       const params = { ...DEFAULT_TOOL_PARAMS.roof, action: "draw", height: 1 };

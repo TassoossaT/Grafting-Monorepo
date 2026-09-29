@@ -1,4 +1,4 @@
-import { faceRings, hasTrait, nearestOnSegment, planeOf } from "../../../../features/edit-construction/index.ts";
+import { hasTrait, nearestOnSegment } from "../../../../features/edit-construction/index.ts";
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import type { ConstructionPosition, ConstructionRegionTopology } from "../../../../ports/index.ts";
 import { pointerAtHeight } from "./pointer-ray.ts";
@@ -84,33 +84,9 @@ export function snappedInFrame(ctx: ToolContext, frame: BuildFrame, p: Construct
   return { x: frame.origin.x + frame.u.x * along + frame.v.x * across, y: p.y, z: frame.origin.z + frame.u.z * along + frame.v.z * across };
 }
 
-/**
- * Where the pointer is on the level `y` a shape is drawn at -- its ray
- * crossing that level, not whatever surface the ray happened to hit first:
- * the ground below a raised floor, or the top of one standing in front.
- */
+/** Where the pointer is on the level `y` a shape is drawn at -- see {@link pointerAtHeight}. */
 export function pointerOnLevel(sample: PointerSample, y: number): ConstructionPosition {
   return sample.ray ? pointerAtHeight(sample, y) : { ...sample.point, y };
-}
-
-/**
- * Where the pointer is, laid on the level `y`, for a shape drawn over the
- * face it points at: its ray meeting that face's plane -- exactly under the
- * cursor, unsnapped, as the ground gives it -- when the face slopes and
- * stands above the level, a roof's leaf under a shape drawn at its eaves.
- * Anything else, as {@link pointerOnLevel}. Carried down the ray to the
- * level instead, a point on a leaf would land far behind it.
- */
-export function pointerOnFace(ctx: ToolContext, sample: PointerSample, y: number): ConstructionPosition {
-  const ray = sample.ray;
-  const face = sample.surfaceRef === undefined ? undefined : ctx.runtime.getAllRegionTopologies().find((topology) => surfaceRefFromNodeSet(topology.surfaceKey) === sample.surfaceRef);
-  const plane = face === undefined ? undefined : planeOf(faceRings(face)[0] ?? []);
-  if (!ray || !plane || Math.abs(plane.normal.y) < 1e-9 || sample.point.y <= y + 1e-6) return pointerOnLevel(sample, y);
-  const { normal: n, centre: c } = plane;
-  const facing = n.x * ray.direction.x + n.y * ray.direction.y + n.z * ray.direction.z;
-  if (Math.abs(facing) < 1e-9) return pointerOnLevel(sample, y);
-  const t = (n.x * (c.x - ray.origin.x) + n.y * (c.y - ray.origin.y) + n.z * (c.z - ray.origin.z)) / facing;
-  return t > 0 ? { x: ray.origin.x + ray.direction.x * t, y, z: ray.origin.z + ray.direction.z * t } : pointerOnLevel(sample, y);
 }
 
 /** Where a shape begun at `sample`, on the level `y`, starts: on the side it was drawn next to, else on the frame's grid. */
