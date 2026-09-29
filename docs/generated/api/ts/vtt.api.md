@@ -6899,7 +6899,9 @@ A roof's recipe: what the generator is asked, and the group of faces it made.
 
 ### `property vtt.roof-recipe.RoofRecipe.elevation: number`
 
-### `property vtt.roof-recipe.RoofRecipe.footprint: RoofFootprint`
+### `property vtt.roof-recipe.RoofRecipe.footprints: readonly RoofFootprint[]`
+
+The plans it covers: one, or several joined at a corner.
 
 ### `property vtt.roof-recipe.RoofRecipe.group: string`
 
@@ -6908,6 +6910,16 @@ A roof's recipe: what the generator is asked, and the group of faces it made.
 Rise of the roof's highest point above its eaves.
 
 ### `property vtt.roof-recipe.RoofRecipe.slopes: readonly number[]`
+
+### `interface vtt.roof-recipe.RoofRing`
+
+One ring of a roof's footprints: an outline, or a hole through it.
+
+### `property vtt.roof-recipe.RoofRing.footprint: number`
+
+### `property vtt.roof-recipe.RoofRing.hole: boolean`
+
+### `property vtt.roof-recipe.RoofRing.points: readonly Point[]`
 
 ### `type vtt.roof-recipe.Point = readonly [number, number]`
 
@@ -6925,11 +6937,13 @@ Region property carrying a roof's recipe, which every edit regenerates the roof 
 
 How a roof is regenerated from the recipe its faces keep.
 
-### `function vtt.roof-recipe.carriedOnto(footprint: RoofFootprint, sources: readonly RoofRequest[], drawn?: { outline: readonly Point[]; slopes: readonly number[] }): { dormers: RoofDormer[]; slopes: number[] }`
+### `function vtt.roof-recipe.carriedOnto(footprints: readonly RoofFootprint[], sources: readonly RoofRequest[], drawn?: { outline: readonly Point[]; slopes: readonly number[] }): { dormers: RoofDormer[]; footprints: RoofFootprint[]; slopes: number[] }`
 
-A new footprint that takes over from `sources`: each of its sides keeps
-the slope of a side it lies along -- of a roof it came from, then of what
-was drawn -- else rises; each dormer stays on the side its old one lies along.
+New footprints that take over from `sources`: each side keeps the slope
+of a side it lies along -- of a roof it came from, then of what was drawn
+-- else rises; a corner where one side runs straight on into another as
+steep is dropped, so no seam runs across one plane; each dormer stays on
+the side its old one lies along.
 
 ### `function vtt.roof-recipe.dormerAt(recipe: RoofRequest, side: number, at: Point, width: number, front: number, waters: Waters): RoofDormer`
 
@@ -6939,6 +6953,10 @@ footprint side `side`: where along that side and how far in.
 ### `function vtt.roof-recipe.dormerSlopes(waters: Waters): readonly [number, number, number, number]`
 
 A dormer's sides, by waters: two pitch its cheeks, one its front alone -- shallower, so it runs back into the leaf -- four all but its back.
+
+### `function vtt.roof-recipe.footprintsOf(rings: readonly RoofRing[]): RoofFootprint[]`
+
+Rings back into footprints.
 
 ### `function vtt.roof-recipe.inwardNormals(ring: readonly Point[], hole: boolean): Point[]`
 
@@ -6950,9 +6968,9 @@ Which sides of an outline rise, for a number of waters: every side; the
 longest side and the one facing it most squarely; or the longest alone.
 The rest are gables.
 
-### `function vtt.roof-recipe.ringsOf(footprint: RoofFootprint): readonly (readonly Point[])[]`
+### `function vtt.roof-recipe.ringsOf(footprints: readonly RoofFootprint[]): readonly RoofRing[]`
 
-A footprint's rings, outline first.
+Every ring of a roof, footprint by footprint: its outline, then its holes -- the order its sides are numbered in.
 
 ### `function vtt.roof-recipe.roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: RoofRequest, operationId: string): { faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>; patch: ConstructionPatch }`
 
@@ -6960,17 +6978,17 @@ The roof `request` makes, as a patch named under `operationId`, and what
 each face keeps, by region id: the recipe, under that name as its group,
 its role, and that role as the key an edit finds the same face again by.
 
-### `function vtt.roof-recipe.roofOver(footprint: RoofFootprint, elevation: number, height: number, waters: Waters): RoofRequest`
+### `function vtt.roof-recipe.roofOver(footprints: readonly RoofFootprint[], elevation: number, height: number, waters: Waters): RoofRequest`
 
-A roof over `footprint`, its outline shaped by a number of waters; round its holes it always falls toward them.
+A roof over `footprints`, each outline shaped by a number of waters; round a hole it always falls toward it.
 
-### `function vtt.roof-recipe.sideNumber(footprint: RoofFootprint, ring: number, index: number): number`
+### `function vtt.roof-recipe.sideNumber(footprints: readonly RoofFootprint[], ring: number, index: number): number`
 
 The number of side `index` of ring `ring`.
 
-### `function vtt.roof-recipe.sideOf(footprint: RoofFootprint, side: number): { a: Point; c: Point; index: number; ring: number }`
+### `function vtt.roof-recipe.sideOf(footprints: readonly RoofFootprint[], side: number): { a: Point; c: Point; index: number; ring: number }`
 
-Where side `side` -- numbered through the outline, then each hole -- lies: its ring, its index there, and its ends.
+Where side `side` -- numbered through every ring in turn -- lies: its ring, its index there, and its ends.
 
 ### `variable vtt.roof-structure.roofStructureType: StructureTypeDefinition`
 
@@ -9172,15 +9190,17 @@ The engine's roof generator.
 
 ### `interface vtt.cap-port.RoofRequest`
 
-Wire data for the native roof generator: a footprint, how steeply each of
-its sides rises -- the outline's, then each hole's, side `i` running from
+Wire data for the native roof generator: its footprints, how steeply each
+of their sides rises -- footprint by footprint, the outline's, then each hole's, side `i` running from
 corner `i` to `i + 1`, zero for a gable -- and dormers on its leaves.
 
 ### `property vtt.cap-port.RoofRequest.dormers?: readonly RoofDormer[]`
 
 ### `property vtt.cap-port.RoofRequest.elevation: number`
 
-### `property vtt.cap-port.RoofRequest.footprint: RoofFootprint`
+### `property vtt.cap-port.RoofRequest.footprints: readonly RoofFootprint[]`
+
+The plans it covers: one, or several joined at a corner.
 
 ### `property vtt.cap-port.RoofRequest.height: number`
 

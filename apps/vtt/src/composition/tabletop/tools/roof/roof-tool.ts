@@ -31,13 +31,17 @@ type Params = ToolParamsByTool["roof"];
 type Point = readonly [number, number];
 const COLOR = 0xb96e48;
 
-/** A footprint as a planar polygon: its rings closed, outline first. */
-const polygonOf = (footprint: RoofFootprint) => ringsOf(footprint).map((ring) => [...ring, ring[0]!]);
-/** A planar polygon as a footprint: its rings opened again. */
-const footprintOf = (polygon: readonly (readonly Point[])[]): RoofFootprint => {
+/** How near a roof's corner or side a drawn corner lands on it. */
+const MAGNET = 0.25;
+
+type Polygon = readonly (readonly Point[])[];
+/** Footprints as planar polygons: each one's rings closed, outline first. */
+const polygonsOf = (footprints: readonly RoofFootprint[]): Polygon[] => footprints.map((footprint) => [footprint.outer, ...footprint.holes].map((ring) => [...ring, ring[0]!]));
+/** Planar polygons as footprints: their rings opened again. */
+const footprintsFrom = (polygons: readonly Polygon[]): RoofFootprint[] => polygons.map((polygon) => {
   const open = (ring: readonly Point[]) => ring.slice(0, -1);
   return { outer: open(polygon[0]!), holes: polygon.slice(1).map(open) };
-};
+});
 /** How much ground planar polygons cover: outlines less holes. */
 const areaOf = (polygons: readonly (readonly (readonly Point[])[])[]) => polygons.reduce((sum, polygon) => sum + polygon.reduce((own, ring, r) => {
   const signed = Math.abs(ring.reduce((s, a, i) => {
@@ -74,39 +78,87 @@ function cornersOf(contour: readonly FittedEdge[]): Point[] {
   });
 }
 
+/** Every corner and every side of the standing roofs' footprints. */
+function rimsOf(recipes: readonly RoofRecipe[]): { readonly corners: Point[]; readonly sides: (readonly [Point, Point])[] } {
+  const rings = recipes.flatMap((recipe) => ringsOf(recipe.footprints).map((ring) => ring.points));
+  return {
+    corners: rings.flat(),
+    sides: rings.flatMap((ring) => ring.map((a, i) => [a, ring[(i + 1) % ring.length]!] as const)),
+  };
+}
+
+/**
+ * A drawn corner landed on a roof's own corner when it comes within reach
+ * of one, else on its side -- so what is drawn against a roof meets it
+ * exactly, along a side or at a corner, never a sliver off it.
+ */
+function landed(outline: readonly Point[], recipes: readonly RoofRecipe[]): Point[] {
+  const { corners, sides } = rimsOf(recipes);
+  return outline.map((p) => {
+    const corner = corners.reduce<{ at?: Point; d: number }>((best, q) => {
+      const d = Math.hypot(p[0] - q[0], p[1] - q[1]);
+      return d <= MAGNET && d < best.d ? { at: q, d } : best;
+    }, { d: Infinity }).at;
+    if (corner) return corner;
+    return sides.reduce<{ at?: Point; d: number }>((best, [a, b]) => {
+      const d2 = [b[0] - a[0], b[1] - a[1]] as const;
+      const t = Math.min(1, Math.max(0, ((p[0] - a[0]) * d2[0] + (p[1] - a[1]) * d2[1]) / (d2[0] * d2[0] + d2[1] * d2[1] || 1)));
+      const at: Point = [a[0] + d2[0] * t, a[1] + d2[1] * t];
+      const d = Math.hypot(p[0] - at[0], p[1] - at[1]);
+      return d <= MAGNET && d < best.d ? { at, d } : best;
+    }, { d: Infinity }).at ?? p;
+  });
+}
+
+/** Whether a drawn outline meets a roof: they overlap, share a side, or touch at a corner. */
+function meets(ctx: ToolContext, outline: readonly Point[], recipe: RoofRecipe): boolean {
+  const mine = polygonsOf([{ outer: outline, holes: [] }]);
+  const theirs = polygonsOf(recipe.footprints);
+  if (planarUnion(ctx.runtime, mine, theirs).length < mine.length + theirs.length) return true;
+  const { corners, sides } = rimsOf([recipe]);
+  const touches = (p: Point, list: readonly Point[], rims: readonly (readonly [Point, Point])[]) =>
+    list.some((q) => Math.hypot(p[0] - q[0], p[1] - q[1]) < 1e-6)
+    || rims.some(([a, b]) => {
+      const d = [b[0] - a[0], b[1] - a[1]] as const;
+      const t = ((p[0] - a[0]) * d[0] + (p[1] - a[1]) * d[1]) / (d[0] * d[0] + d[1] * d[1] || 1);
+      return t >= 0 && t <= 1 && Math.hypot(p[0] - (a[0] + d[0] * t), p[1] - (a[1] + d[1] * t)) < 1e-6;
+    });
+  const own = rimsOf([{ ...recipe, footprints: [{ outer: outline, holes: [] }] }]);
+  return outline.some((p) => touches(p, corners, sides)) || corners.some((p) => touches(p, own.corners, own.sides));
+}
+
 /**
  * What an outline drawn on `level` makes: drawn, a roof of its own -- or,
- * where it meets roofs already standing, those roofs and it fused into one
- * footprint, every side they had keeping its slope; cut, what is left of
- * each roof it takes a piece of, as many roofs as pieces.
+ * where it meets roofs already standing, along a side or at a corner, those
+ * roofs and it fused into one, every side they had keeping its slope; cut,
+ * what is left of each roof it takes a piece of, as many roofs as pieces.
  */
 function stroked(ctx: ToolContext, contour: readonly FittedEdge[], level: number, params: Params): { readonly requests: readonly RoofRequest[]; readonly replaces: readonly ConstructionSurfaceKey[] } {
-  const outline = cornersOf(contour);
-  const drawn = roofOver({ outer: outline, holes: [] }, level, params.height, params.waters);
   const roofs = [...roofsOf(ctx).values()];
+  const outline = landed(cornersOf(contour), roofs.map(({ recipe }) => recipe));
+  const drawn = roofOver([{ outer: outline, holes: [] }], level, params.height, params.waters);
   if (params.action === "cut") {
     const cut = roofs.flatMap(({ recipe, faces }) => {
-      const whole = polygonOf(recipe.footprint);
-      const left = planarDifference(ctx.runtime, whole, polygonOf(drawn.footprint));
-      return areaOf(left) < areaOf([whole]) - 1e-6 ? [{ recipe, faces, left }] : [];
+      const whole = polygonsOf(recipe.footprints);
+      const left = planarDifference(ctx.runtime, whole, polygonsOf(drawn.footprints));
+      return areaOf(left) < areaOf(whole) - 1e-6 ? [{ recipe, faces, left }] : [];
     });
     if (cut.length === 0) throw new Error("O recorte não passa por nenhum telhado.");
     const requests = cut.flatMap(({ recipe, left }) => left.map((piece) => {
-      const footprint = footprintOf(piece);
-      return { elevation: recipe.elevation, height: recipe.height, footprint, ...carriedOnto(footprint, [recipe]) };
+      const footprints = footprintsFrom([piece]);
+      return { elevation: recipe.elevation, height: recipe.height, ...carriedOnto(footprints, [recipe]) };
     }));
     return { requests, replaces: cut.flatMap(({ faces }) => faces) };
   }
-  // Touching or overlapping, their union is one piece.
-  const fused = roofs.filter(({ recipe }) => planarUnion(ctx.runtime, polygonOf(drawn.footprint), polygonOf(recipe.footprint)).length === 1);
+  const fused = roofs.filter(({ recipe }) => meets(ctx, outline, recipe));
   if (fused.length === 0) return { requests: [drawn], replaces: [] };
-  const [area] = planarUnion(ctx.runtime, polygonOf(drawn.footprint), ...fused.map(({ recipe }) => polygonOf(recipe.footprint)));
-  const footprint = footprintOf(area!);
+  // Their union: one piece where they overlap or share a side, pieces joined at a corner where they only touch there.
+  const area = planarUnion(ctx.runtime, polygonsOf(drawn.footprints), ...fused.map(({ recipe }) => polygonsOf(recipe.footprints)));
   const first = fused[0]!.recipe;
   return {
     requests: [{
-      elevation: first.elevation, height: Math.max(...fused.map(({ recipe }) => recipe.height)), footprint,
-      ...carriedOnto(footprint, fused.map(({ recipe }) => recipe), { outline, slopes: drawn.slopes }),
+      elevation: first.elevation, height: Math.max(...fused.map(({ recipe }) => recipe.height)),
+      ...carriedOnto(footprintsFrom(area), fused.map(({ recipe }) => recipe), { outline, slopes: drawn.slopes }),
     }],
     replaces: fused.flatMap(({ faces }) => faces),
   };
@@ -192,7 +244,7 @@ const rawRoofTool: ConstructionTool<"roof"> = {
     if (params.action === "base") {
       try {
         const base = roofBaseAt(ctx.runtime.getAllRegionTopologies(), sample);
-        commitRoofRecipes(ctx, [roofOver(base.footprint, base.elevation, params.height, params.waters)]);
+        commitRoofRecipes(ctx, [roofOver([base.footprint], base.elevation, params.height, params.waters)]);
       } catch (error) {
         ctx.reportFeedback({ tone: "error", message: error instanceof Error ? error.message : String(error) });
       }

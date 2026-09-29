@@ -39,15 +39,35 @@ const MIN_SLOPE_SHARE = 0.05;
 /** The narrowest a dormer is made by its side handles. */
 const MIN_DORMER_WIDTH = 0.3;
 
-/** A footprint's rings, outline first. */
-export const ringsOf = (footprint: RoofFootprint): readonly (readonly Point[])[] => [footprint.outer, ...footprint.holes];
+/** One ring of a roof's footprints: an outline, or a hole through it. */
+export interface RoofRing {
+  readonly points: readonly Point[];
+  readonly hole: boolean;
+  readonly footprint: number;
+}
 
-/** Where side `side` -- numbered through the outline, then each hole -- lies: its ring, its index there, and its ends. */
-export function sideOf(footprint: RoofFootprint, side: number): { readonly ring: number; readonly index: number; readonly a: Point; readonly c: Point } {
+/** Every ring of a roof, footprint by footprint: its outline, then its holes -- the order its sides are numbered in. */
+export const ringsOf = (footprints: readonly RoofFootprint[]): readonly RoofRing[] => footprints.flatMap((footprint, f) => [
+  { points: footprint.outer, hole: false, footprint: f },
+  ...footprint.holes.map((points) => ({ points, hole: true, footprint: f })),
+]);
+
+/** Rings back into footprints. */
+export function footprintsOf(rings: readonly RoofRing[]): RoofFootprint[] {
+  const footprints: { outer: readonly Point[]; holes: (readonly Point[])[] }[] = [];
+  for (const ring of rings) {
+    if (!ring.hole) footprints[ring.footprint] = { outer: ring.points, holes: [] };
+    else footprints[ring.footprint]!.holes.push(ring.points);
+  }
+  return footprints.filter(Boolean);
+}
+
+/** Where side `side` -- numbered through every ring in turn -- lies: its ring, its index there, and its ends. */
+export function sideOf(footprints: readonly RoofFootprint[], side: number): { readonly ring: number; readonly index: number; readonly a: Point; readonly c: Point } {
   let first = 0;
-  const rings = ringsOf(footprint);
+  const rings = ringsOf(footprints);
   for (let r = 0; r < rings.length; r++) {
-    const ring = rings[r]!;
+    const ring = rings[r]!.points;
     if (side < first + ring.length) {
       const index = side - first;
       return { ring: r, index, a: ring[index]!, c: ring[(index + 1) % ring.length]! };
@@ -58,8 +78,8 @@ export function sideOf(footprint: RoofFootprint, side: number): { readonly ring:
 }
 
 /** The number of side `index` of ring `ring`. */
-export function sideNumber(footprint: RoofFootprint, ring: number, index: number): number {
-  return ringsOf(footprint).slice(0, ring).reduce((sum, r) => sum + r.length, 0) + index;
+export function sideNumber(footprints: readonly RoofFootprint[], ring: number, index: number): number {
+  return ringsOf(footprints).slice(0, ring).reduce((sum, r) => sum + r.points.length, 0) + index;
 }
 
 /** Each side's normal into the roof: off the outline inward, off a hole away from it. */
@@ -101,9 +121,9 @@ export function presetSlopes(contour: readonly Point[], waters: Waters): number[
   return sides.map((_, i) => (i === longest || i === facing ? 1 : 0));
 }
 
-/** A roof over `footprint`, its outline shaped by a number of waters; round its holes it always falls toward them. */
-export function roofOver(footprint: RoofFootprint, elevation: number, height: number, waters: Waters): RoofRequest {
-  return { elevation, height, footprint, slopes: [...presetSlopes(footprint.outer, waters), ...footprint.holes.flatMap((hole) => hole.map(() => 1))] };
+/** A roof over `footprints`, each outline shaped by a number of waters; round a hole it always falls toward it. */
+export function roofOver(footprints: readonly RoofFootprint[], elevation: number, height: number, waters: Waters): RoofRequest {
+  return { elevation, height, footprints, slopes: ringsOf(footprints).flatMap((ring) => (ring.hole ? ring.points.map(() => 1) : presetSlopes(ring.points, waters))) };
 }
 
 /** Whether segments `a`-`b` and `c`-`d` lie on one line and share a stretch of it. */
@@ -119,19 +139,34 @@ function sameLine(a: Point, b: Point, c: Point, d: Point): boolean {
 }
 
 /**
- * A new footprint that takes over from `sources`: each of its sides keeps
- * the slope of a side it lies along -- of a roof it came from, then of what
- * was drawn -- else rises; each dormer stays on the side its old one lies along.
+ * New footprints that take over from `sources`: each side keeps the slope
+ * of a side it lies along -- of a roof it came from, then of what was drawn
+ * -- else rises; a corner where one side runs straight on into another as
+ * steep is dropped, so no seam runs across one plane; each dormer stays on
+ * the side its old one lies along.
  */
-export function carriedOnto(footprint: RoofFootprint, sources: readonly RoofRequest[], drawn?: { readonly outline: readonly Point[]; readonly slopes: readonly number[] }): { readonly slopes: number[]; readonly dormers: RoofDormer[] } {
-  const sides = ringsOf(footprint).flatMap((ring) => ring.map((a, i) => [a, ring[(i + 1) % ring.length]!] as const));
+export function carriedOnto(footprints: readonly RoofFootprint[], sources: readonly RoofRequest[], drawn?: { readonly outline: readonly Point[]; readonly slopes: readonly number[] }): { readonly footprints: RoofFootprint[]; readonly slopes: number[]; readonly dormers: RoofDormer[] } {
   const known = [
-    ...sources.flatMap((source) => ringsOf(source.footprint).flatMap((ring, r) => ring.map((a, i) => ({ a, c: ring[(i + 1) % ring.length]!, slope: source.slopes[sideNumber(source.footprint, r, i)]! })))),
+    ...sources.flatMap((source) => ringsOf(source.footprints).flatMap(({ points }, r) => points.map((a, i) => ({ a, c: points[(i + 1) % points.length]!, slope: source.slopes[sideNumber(source.footprints, r, i)]! })))),
     ...(drawn ? drawn.outline.map((a, i) => ({ a, c: drawn.outline[(i + 1) % drawn.outline.length]!, slope: drawn.slopes[i]! })) : []),
   ];
-  const slopes = sides.map(([a, c]) => known.find((side) => sameLine(a, c, side.a, side.c))?.slope ?? 1);
+  const slopeAlong = (a: Point, c: Point) => known.find((side) => sameLine(a, c, side.a, side.c))?.slope ?? 1;
+  const rings = ringsOf(footprints).map((ring) => {
+    let points = [...ring.points];
+    for (let i = 0; points.length > 3 && i < points.length; ) {
+      const prev = points[(i + points.length - 1) % points.length]!, at = points[i]!, next = points[(i + 1) % points.length]!;
+      const cross = (at[0] - prev[0]) * (next[1] - at[1]) - (at[1] - prev[1]) * (next[0] - at[0]);
+      const straight = Math.abs(cross) < 1e-9 * Math.hypot(at[0] - prev[0], at[1] - prev[1]) * Math.hypot(next[0] - at[0], next[1] - at[1]) + 1e-12;
+      if (straight && slopeAlong(prev, at) === slopeAlong(at, next)) points = points.filter((_, k) => k !== i);
+      else i++;
+    }
+    return { ...ring, points };
+  });
+  const merged = footprintsOf(rings);
+  const sides = ringsOf(merged).flatMap(({ points }) => points.map((a, i) => [a, points[(i + 1) % points.length]!] as const));
+  const slopes = sides.map(([a, c]) => slopeAlong(a, c));
   const dormers = sources.flatMap((source) => (source.dormers ?? []).flatMap((dormer) => {
-    const old = sideOf(source.footprint, dormer.side);
+    const old = sideOf(source.footprints, dormer.side);
     const side = sides.findIndex(([a, c]) => sameLine(a, c, old.a, old.c));
     if (side < 0) return [];
     // The same place along the side, measured afresh on the side it now stands on.
@@ -141,7 +176,7 @@ export function carriedOnto(footprint: RoofFootprint, sources: readonly RoofRequ
     const along = ((middle[0]! - a[0]) * (c[0] - a[0]) + (middle[1]! - a[1]) * (c[1] - a[1])) / (length * length);
     return [{ ...dormer, side, along: Math.min(1, Math.max(0, along)) }];
   }));
-  return { slopes, dormers };
+  return { footprints: merged, slopes, dormers };
 }
 
 /**
@@ -149,10 +184,11 @@ export function carriedOnto(footprint: RoofFootprint, sources: readonly RoofRequ
  * footprint side `side`: where along that side and how far in.
  */
 export function dormerAt(recipe: RoofRequest, side: number, at: Point, width: number, front: number, waters: Waters): RoofDormer {
-  const { ring, index, a, c } = sideOf(recipe.footprint, side);
+  const { ring, index, a, c } = sideOf(recipe.footprints, side);
   const length = Math.hypot(c[0] - a[0], c[1] - a[1]);
   const u = [(c[0] - a[0]) / length, (c[1] - a[1]) / length] as const;
-  const n = inwardNormals(ringsOf(recipe.footprint)[ring]!, ring > 0)[index]!;
+  const { points, hole } = ringsOf(recipe.footprints)[ring]!;
+  const n = inwardNormals(points, hole)[index]!;
   const w = [at[0] - a[0], at[1] - a[1]] as const;
   return {
     side, width, front, slopes: dormerSlopes(waters),
@@ -175,7 +211,7 @@ export function roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: Ro
   const edgeId = (index: number) => `${operationId}:edge:${index}`;
   const regionId = (index: number) => `${operationId}:face:${index}`;
   const uses = (loop: readonly (readonly [number, boolean])[]) => loop.map(([edge, reversed]) => ({ edgeId: edgeId(edge), reversed }));
-  const recipe: RoofRecipe = { elevation: request.elevation, height: request.height, footprint: request.footprint, slopes: request.slopes, dormers: request.dormers ?? [], group: operationId };
+  const recipe: RoofRecipe = { elevation: request.elevation, height: request.height, footprints: request.footprints, slopes: request.slopes, dormers: request.dormers ?? [], group: operationId };
   const faceProps = new Map<string, Readonly<Record<string, unknown>>>();
   roof.faces.forEach((face, index) => {
     const role: RoofFaceRole = { side: face.side, upright: face.upright, ...(face.dormer === null ? {} : { dormer: face.dormer }) };
@@ -230,10 +266,11 @@ function centreAndNormal(face: ConstructionRegionTopology): { readonly centre: C
 
 /** A dormer's frame: along its host side, into its host leaf, and where its front's middle stands. */
 function dormerFrame(recipe: RoofRecipe, dormer: RoofDormer): { readonly u: Point; readonly n: Point; readonly front: Point; readonly length: number } {
-  const { ring, index, a, c } = sideOf(recipe.footprint, dormer.side);
+  const { ring, index, a, c } = sideOf(recipe.footprints, dormer.side);
   const length = Math.hypot(c[0] - a[0], c[1] - a[1]);
   const u = [(c[0] - a[0]) / length, (c[1] - a[1]) / length] as const;
-  const n = inwardNormals(ringsOf(recipe.footprint)[ring]!, ring > 0)[index]!;
+  const { points, hole } = ringsOf(recipe.footprints)[ring]!;
+  const n = inwardNormals(points, hole)[index]!;
   const middle = [a[0] + dormer.along * (c[0] - a[0]), a[1] + dormer.along * (c[1] - a[1])] as const;
   return { u, n, length, front: [middle[0] + n[0] * dormer.setback, middle[1] + n[1] * dormer.setback] };
 }
@@ -297,8 +334,8 @@ function roofHandles(members: readonly ConstructionRegionTopology[], generic: un
     });
   }
   // Every corner of the footprint, stood off outward; every side's middle, below the eave, to pull a new corner from.
-  ringsOf(recipe.footprint).forEach((ring, r) => {
-    const normals = inwardNormals(ring, r > 0);
+  ringsOf(recipe.footprints).forEach(({ points: ring, hole }, r) => {
+    const normals = inwardNormals(ring, hole);
     ring.forEach((a, i) => {
       const n = normals[i]!, previous = normals[(i + ring.length - 1) % ring.length]!;
       const out = [-(n[0] + previous[0]), -(n[1] + previous[1])];
@@ -312,7 +349,7 @@ function roofHandles(members: readonly ConstructionRegionTopology[], generic: un
       handles.push({
         kind: "insert", anchor: `insert:${r}:${i}`, motion: { kind: "plane" },
         position: { x: (a[0] + c[0]) / 2 - n[0] * STAND_OFF, y: recipe.elevation - STAND_OFF, z: (a[1] + c[1]) / 2 - n[1] * STAND_OFF },
-        part: { kind: "insert", side: sideNumber(recipe.footprint, r, i) } satisfies RoofPart,
+        part: { kind: "insert", side: sideNumber(recipe.footprints, r, i) } satisfies RoofPart,
       });
     });
   });
@@ -357,8 +394,7 @@ function withDormer(recipe: RoofRecipe, k: number, change: (dormer: RoofDormer) 
 }
 
 function withRings(recipe: RoofRecipe, change: (ring: readonly Point[], r: number) => readonly Point[]): RoofRecipe {
-  const rings = ringsOf(recipe.footprint).map(change);
-  return { ...recipe, footprint: { outer: rings[0]!, holes: rings.slice(1) } };
+  return { ...recipe, footprints: footprintsOf(ringsOf(recipe.footprints).map((ring, r) => ({ ...ring, points: change(ring.points, r) }))) };
 }
 
 /** A side's slope after its handle rose by `dy`: steeper up, shallower down, and a gable once it stops rising. */
@@ -439,7 +475,7 @@ function editRoof(generic: unknown, handle: RecipeHandle, intent: GlobalHandleIn
       if (intent.kind !== "move" || part.kind !== "insert") return undefined;
       if (Math.hypot(intent.delta.x, intent.delta.z) < 1e-3) return undefined;
       // A new corner pulled out of a side: both halves keep its slope, and dormers on later sides keep to their own.
-      const { ring, index, a, c } = sideOf(recipe.footprint, part.side);
+      const { ring, index, a, c } = sideOf(recipe.footprints, part.side);
       const corner: Point = [(a[0] + c[0]) / 2 + intent.delta.x, (a[1] + c[1]) / 2 + intent.delta.z];
       const next = withRings(recipe, (points, r) => (r !== ring ? points : [...points.slice(0, index + 1), corner, ...points.slice(index + 1)]));
       return {

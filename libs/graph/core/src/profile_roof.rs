@@ -55,10 +55,11 @@ pub struct RoofRequest {
     pub elevation: f64,
     /// Rise of the roof's highest point above the eaves.
     pub height: f64,
-    /// The plan it covers.
-    pub footprint: RoofFootprint,
-    /// Relative steepness of every side -- the outline's, then each hole's,
-    /// side `i` running from corner `i` to corner `i + 1`; zero makes a gable.
+    /// The plans it covers -- one, or several joined at a corner.
+    pub footprints: Vec<RoofFootprint>,
+    /// Relative steepness of every side -- footprint by footprint, its
+    /// outline's then each hole's, side `i` running from corner `i` to
+    /// corner `i + 1`; zero makes a gable.
     pub slopes: Vec<f64>,
     /// Dormers raised on its leaves.
     #[cfg_attr(feature = "curve-serde", serde(default))]
@@ -925,8 +926,8 @@ struct Face3 {
     rings: Vec<Vec<[f64; 3]>>,
 }
 
-/// Whether any two sides of the footprint cross or touch, other than
-/// neighbours meeting at their shared corner.
+/// Whether any two sides of the footprints cross or touch, other than
+/// neighbours meeting at their shared corner and rings sharing a corner.
 fn crosses_itself(rings: &[&Vec<[f64; 2]>]) -> bool {
     let sides: Vec<(usize, usize, Point, Point)> = rings
         .iter()
@@ -947,6 +948,13 @@ fn crosses_itself(rings: &[&Vec<[f64; 2]>]) -> bool {
             }
             let (d1, d2) = (orient(a, b, c), orient(a, b, d));
             let (d3, d4) = (orient(c, d, a), orient(c, d, b));
+            // Two rings may share a corner: footprints joined there, a hole touching its outline.
+            let same =
+                |p: Point, q: Point| (p[0] - q[0]).abs() < 1e-9 && (p[1] - q[1]).abs() < 1e-9;
+            let cornered = r != q && (same(a, c) || same(a, d) || same(b, c) || same(b, d));
+            if cornered && !(d1 == 0.0 && d2 == 0.0) {
+                return false;
+            }
             d1 * d2 <= 0.0 && d3 * d4 <= 0.0 && !(d1 == 0.0 && d2 == 0.0)
         })
     })
@@ -957,19 +965,28 @@ pub fn generate_roof_patch(request: RoofRequest) -> Result<RoofPatch, String> {
     if !request.elevation.is_finite() || !request.height.is_finite() || request.height <= 0.0 {
         return Err("a roof needs a finite elevation and a positive height".into());
     }
-    let footprint = &request.footprint;
-    let authored: Vec<&Vec<[f64; 2]>> = std::iter::once(&footprint.outer)
-        .chain(&footprint.holes)
+    // Every ring, footprint by footprint: its outline, then its holes.
+    let authored: Vec<(usize, bool, &Vec<[f64; 2]>)> = request
+        .footprints
+        .iter()
+        .enumerate()
+        .flat_map(|(f, footprint)| {
+            std::iter::once((f, false, &footprint.outer))
+                .chain(footprint.holes.iter().map(move |hole| (f, true, hole)))
+        })
         .collect();
-    let count: usize = authored.iter().map(|ring| ring.len()).sum();
-    if authored.iter().any(|ring| ring.len() < 3) || request.slopes.len() != count {
+    let count: usize = authored.iter().map(|(_, _, ring)| ring.len()).sum();
+    if authored.is_empty()
+        || authored.iter().any(|(_, _, ring)| ring.len() < 3)
+        || request.slopes.len() != count
+    {
         return Err(
             "a roof footprint needs rings of three or more corners and a slope per side".into(),
         );
     }
     if authored
         .iter()
-        .flat_map(|ring| ring.iter())
+        .flat_map(|(_, _, ring)| ring.iter())
         .flatten()
         .any(|v| !v.is_finite())
         || request.slopes.iter().any(|s| !s.is_finite() || *s < 0.0)
@@ -979,89 +996,101 @@ pub fn generate_roof_patch(request: RoofRequest) -> Result<RoofPatch, String> {
     if request.slopes.iter().all(|s| *s == 0.0) {
         return Err("a roof needs at least one pitched side".into());
     }
-    if crosses_itself(&authored) {
+    if crosses_itself(
+        &authored
+            .iter()
+            .map(|(_, _, ring)| *ring)
+            .collect::<Vec<_>>(),
+    ) {
         return Err("a roof footprint must not cross itself".into());
     }
-    // Wound the way the skeleton walks -- outline counter-clockwise, holes
-    // clockwise -- each side keeping the number the caller gave it.
-    let mut rings = Vec::new();
-    let mut speeds = Vec::new();
-    let mut sides = Vec::new();
+    // Each footprint's own skeleton -- footprints only touching at a corner
+    // never meet inward -- its rings wound the way the skeleton walks, each
+    // side keeping the number the caller gave it.
+    let mut skeletons = Vec::new();
     let mut first = 0;
-    for (r, ring) in authored.iter().enumerate() {
-        let m = ring.len();
-        let wanted = if r == 0 { 1.0 } else { -1.0 };
-        let turned = area(ring).signum() != wanted;
-        if area(ring).abs() < 1e-9 {
-            return Err("a roof footprint ring has no area".into());
+    for f in 0..request.footprints.len() {
+        let (mut rings, mut speeds, mut sides) = (Vec::new(), Vec::new(), Vec::new());
+        for (_, hole, ring) in authored.iter().filter(|(g, _, _)| *g == f) {
+            let m = ring.len();
+            if area(ring).abs() < 1e-9 {
+                return Err("a roof footprint ring has no area".into());
+            }
+            let turned = area(ring).signum() != if *hole { -1.0 } else { 1.0 };
+            for i in 0..m {
+                let side = first + if turned { (2 * m - 2 - i) % m } else { i };
+                let slope = request.slopes[side];
+                speeds.push(if slope > 0.0 { 1.0 / slope } else { 0.0 });
+                sides.push(side);
+            }
+            rings.push(if turned {
+                ring.iter().rev().copied().collect()
+            } else {
+                ring.to_vec()
+            });
+            first += m;
         }
-        let points: Vec<Point> = if turned {
-            ring.iter().rev().copied().collect()
-        } else {
-            ring.to_vec()
-        };
-        for i in 0..m {
-            let side = first + if turned { (2 * m - 2 - i) % m } else { i };
-            let slope = request.slopes[side];
-            speeds.push(if slope > 0.0 { 1.0 / slope } else { 0.0 });
-            sides.push(side);
+        if speeds.iter().all(|s| *s == 0.0) {
+            return Err("every footprint of a roof needs a pitched side".into());
         }
-        rings.push(points);
-        first += m;
+        skeletons.push(skeleton(&rings, &speeds, &sides)?);
     }
-    let sk = skeleton(&rings, &speeds, &sides)?;
-    let peak = sk.nodes.iter().map(|(_, t)| *t).fold(0.0_f64, f64::max);
+    let peak = skeletons
+        .iter()
+        .flat_map(|sk| sk.nodes.iter().map(|(_, t)| *t))
+        .fold(0.0_f64, f64::max);
     if peak.is_nan() || peak <= 1e-9 {
         return Err("the roof does not rise".into());
     }
     let scale = request.height / peak;
-    let lift = |node: usize| {
-        let (p, t) = sk.nodes[node];
-        [p[0], request.elevation + scale * t, p[1]]
-    };
-    let rings3 = skeleton_faces(&sk)?;
     // Main leaves, with their planes, for dormers to stand on.
-    let mut leaves: Vec<(usize, MainLeaf)> = Vec::new();
+    let mut leaves: Vec<(Option<Front>, MainLeaf)> = Vec::new();
     let mut faces = Vec::new();
-    for (f, ring) in rings3.iter().enumerate() {
-        let front = sk.fronts[f];
-        if front.speed > 0.0 {
-            let slope = scale / front.speed;
-            let plane = Plane {
-                grad: [slope * front.normal[0], slope * front.normal[1]],
-                base: request.elevation - slope * front.line,
-            };
-            leaves.push((
-                f,
-                MainLeaf {
-                    plan: ring.iter().map(|n| sk.nodes[*n].0).collect(),
-                    plane,
-                },
-            ));
-        } else {
-            faces.push(Face3 {
-                side: front.side,
-                dormer: None,
-                outward: Some([-front.normal[0], -front.normal[1]]),
-                rings: vec![ring.iter().map(|n| lift(*n)).collect()],
-            });
-        }
-    }
-    // Flat tops: leaves of no side, level where the roof stopped rising.
-    for top in &sk.tops {
-        let ring: Vec<[f64; 3]> = top.iter().map(|n| lift(*n)).collect();
-        let plan: Vec<Point> = top.iter().map(|n| sk.nodes[*n].0).collect();
-        if plan.len() >= 3 && area(&plan).abs() > 1e-9 {
-            leaves.push((
-                usize::MAX,
-                MainLeaf {
-                    plan,
-                    plane: Plane {
-                        grad: [0.0; 2],
-                        base: ring[0][1],
+    for sk in &skeletons {
+        let lift = |node: usize| {
+            let (p, t) = sk.nodes[node];
+            [p[0], request.elevation + scale * t, p[1]]
+        };
+        for (f, ring) in skeleton_faces(sk)?.iter().enumerate() {
+            let front = sk.fronts[f];
+            if front.speed > 0.0 {
+                let slope = scale / front.speed;
+                let plane = Plane {
+                    grad: [slope * front.normal[0], slope * front.normal[1]],
+                    base: request.elevation - slope * front.line,
+                };
+                leaves.push((
+                    Some(front),
+                    MainLeaf {
+                        plan: ring.iter().map(|n| sk.nodes[*n].0).collect(),
+                        plane,
                     },
-                },
-            ));
+                ));
+            } else {
+                faces.push(Face3 {
+                    side: front.side,
+                    dormer: None,
+                    outward: Some([-front.normal[0], -front.normal[1]]),
+                    rings: vec![ring.iter().map(|n| lift(*n)).collect()],
+                });
+            }
+        }
+        // Flat tops: leaves of no side, level where the roof stopped rising.
+        for top in &sk.tops {
+            let ring: Vec<[f64; 3]> = top.iter().map(|n| lift(*n)).collect();
+            let plan: Vec<Point> = top.iter().map(|n| sk.nodes[*n].0).collect();
+            if plan.len() >= 3 && area(&plan).abs() > 1e-9 {
+                leaves.push((
+                    None,
+                    MainLeaf {
+                        plan,
+                        plane: Plane {
+                            grad: [0.0; 2],
+                            base: ring[0][1],
+                        },
+                    },
+                ));
+            }
         }
     }
     let main: Vec<MainLeaf> = leaves
@@ -1073,21 +1102,19 @@ pub fn generate_roof_patch(request: RoofRequest) -> Result<RoofPatch, String> {
         .collect();
     let mut dormers = Vec::new();
     for dormer in &request.dormers {
-        let f = sk
-            .fronts
+        let (front, leaf) = leaves
             .iter()
-            .position(|front| front.side == dormer.side)
-            .ok_or("a dormer names a side the roof does not have")?;
-        let leaf = leaves
-            .iter()
-            .find(|(g, _)| *g == f)
-            .map(|(_, leaf)| leaf)
-            .ok_or("a dormer stands only on a pitched leaf")?;
-        dormers.push(dormer_block(&sk.fronts[f], leaf, dormer, scale)?);
+            .find_map(|(front, leaf)| {
+                front
+                    .filter(|front| front.side == dormer.side)
+                    .map(|front| (front, leaf))
+            })
+            .ok_or("a dormer stands only on a pitched leaf of the roof")?;
+        dormers.push(dormer_block(&front, leaf, dormer, scale)?);
     }
     // Main leaves, opened where a dormer stands higher.
-    for (f, leaf) in &leaves {
-        let side = sk.fronts.get(*f).map_or(count, |front| front.side);
+    for (front, leaf) in &leaves {
+        let side = front.map_or(count, |front| front.side);
         if dormers.is_empty() {
             faces.push(Face3 {
                 side,
@@ -1312,7 +1339,7 @@ mod tests {
         RoofRequest {
             elevation: 3.0,
             height: 2.0,
-            footprint: RoofFootprint { outer, holes },
+            footprints: vec![RoofFootprint { outer, holes }],
             slopes,
             dormers: Vec::new(),
         }
@@ -1500,7 +1527,7 @@ mod tests {
     #[test]
     fn sides_keep_their_numbers_whichever_way_a_ring_winds() {
         let mut request = rectangle([1.0, 0.0, 1.0, 0.0]);
-        request.footprint.outer.reverse();
+        request.footprints[0].outer.reverse();
         // Reversed, side i runs from corner i to i + 1 of the new order: the gables are now sides 0 and 2.
         request.slopes = vec![0.0, 1.0, 0.0, 1.0];
         let patch = generate_roof_patch(request).unwrap();
@@ -1671,6 +1698,40 @@ mod tests {
             );
             assert!(closed(&patch, 3.0), "{slopes:?}");
         }
+    }
+
+    #[test]
+    fn footprints_joined_at_a_corner_are_one_roof_meeting_there() {
+        let mut request = roof(
+            vec![[0.0, 0.0], [4.0, 0.0], [4.0, 4.0], [0.0, 4.0]],
+            Vec::new(),
+            vec![1.0; 8],
+        );
+        request.footprints.push(RoofFootprint {
+            outer: vec![[4.0, 4.0], [8.0, 4.0], [8.0, 8.0], [4.0, 8.0]],
+            holes: Vec::new(),
+        });
+        let patch = generate_roof_patch(request).unwrap();
+        assert_eq!(patch.faces.len(), 8);
+        assert!(closed(&patch, 3.0));
+        // The corner they share is one node of both.
+        let shared = patch
+            .nodes
+            .iter()
+            .position(|p| {
+                (p[0] - 4.0).abs() < 1e-9 && (p[2] - 4.0).abs() < 1e-9 && (p[1] - 3.0).abs() < 1e-9
+            })
+            .unwrap();
+        let faces_at = patch
+            .faces
+            .iter()
+            .filter(|f| {
+                f.boundary
+                    .iter()
+                    .any(|(e, _)| patch.edges[*e].start == shared || patch.edges[*e].end == shared)
+            })
+            .count();
+        assert_eq!(faces_at, 4, "two leaves of each roof meet at it");
     }
 
     #[test]

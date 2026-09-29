@@ -6747,12 +6747,21 @@ export interface RoofFaceRole {
   }
 export type Point = readonly [number, number];
 export type Waters = 1 | 2 | 4;
-export const ringsOf = (footprint: RoofFootprint): readonly (readonly Point[])[] => [footprint.outer, ...footprint.holes];
-export function sideOf(footprint: RoofFootprint, side: number): { readonly ring: number; readonly index: number; readonly a: Point; readonly c: Point } {
+export interface RoofRing {
+  readonly points: readonly Point[];
+  readonly hole: boolean;
+  readonly footprint: number;
+  }
+export const ringsOf = (footprints: readonly RoofFootprint[]): readonly RoofRing[] => footprints.flatMap((footprint, f) => [
+export function footprintsOf(rings: readonly RoofRing[]): RoofFootprint[] {
+  const footprints: { outer: readonly Point[]; holes: (readonly Point[])[] }[] = [];
+  for (const ring of rings) {
+  if (!ring.hole) footprints[ring.footprint] = { outer: ring.points, holes: [] };
+export function sideOf(footprints: readonly RoofFootprint[], side: number): { readonly ring: number; readonly index: number; readonly a: Point; readonly c: Point } {
   let first = 0;
-  const rings = ringsOf(footprint);
-export function sideNumber(footprint: RoofFootprint, ring: number, index: number): number {
-  return ringsOf(footprint).slice(0, ring).reduce((sum, r) => sum + r.length, 0) + index;
+  const rings = ringsOf(footprints);
+export function sideNumber(footprints: readonly RoofFootprint[], ring: number, index: number): number {
+  return ringsOf(footprints).slice(0, ring).reduce((sum, r) => sum + r.points.length, 0) + index;
   }
 export function inwardNormals(ring: readonly Point[], hole: boolean): Point[] {
   const signed = ring.reduce((sum, a, i) => {
@@ -6766,12 +6775,8 @@ export function presetSlopes(contour: readonly Point[], waters: Waters): number[
   const sides = contour.map((a, i) => {
   const b = contour[(i + 1) % contour.length]!;
   const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
-export function roofOver(footprint: RoofFootprint, elevation: number, height: number, waters: Waters): RoofRequest {
-  return { elevation, height, footprint, slopes: [...presetSlopes(footprint.outer, waters), ...footprint.holes.flatMap((hole) => hole.map(() => 1))] };
-export function carriedOnto(footprint: RoofFootprint, sources: readonly RoofRequest[], drawn?: { readonly outline: readonly Point[]; readonly slopes: readonly number[] }): { readonly slopes: number[]; readonly dormers: RoofDormer[] } {
-  const sides = ringsOf(footprint).flatMap((ring) => ring.map((a, i) => [a, ring[(i + 1) % ring.length]!] as const));
-export function dormerAt(recipe: RoofRequest, side: number, at: Point, width: number, front: number, waters: Waters): RoofDormer {
-  const { ring, index, a, c } = sideOf(recipe.footprint, side);
+export function roofOver(footprints: readonly RoofFootprint[], elevation: number, height: number, waters: Waters): RoofRequest {
+  return { elevation, height, footprints, slopes: ringsOf(footprints).flatMap((ring) => (ring.hole ? ring.points.map(() => 1) : presetSlopes(ring.points, waters))) };
 
 // src/features/edit-construction/structure-types/roof/roof-structure.ts
 export const roofStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
@@ -7767,10 +7772,10 @@ export interface RoofRequest {
   readonly elevation: number;
   /** Rise of the roof's highest point above its eaves. */
   readonly height: number;
-  readonly footprint: RoofFootprint;
+  /** The plans it covers: one, or several joined at a corner. */
+  readonly footprints: readonly RoofFootprint[];
   readonly slopes: readonly number[];
   readonly dormers?: readonly RoofDormer[];
-  }
 export interface RoofPort {
   generateRoof(request: RoofRequest): RoofPatch;
   }

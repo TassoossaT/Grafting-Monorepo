@@ -19,15 +19,16 @@ export interface RoofDormer {
 }
 
 /**
- * Wire data for the native roof generator: a footprint, how steeply each of
- * its sides rises -- the outline's, then each hole's, side `i` running from
+ * Wire data for the native roof generator: its footprints, how steeply each
+ * of their sides rises -- footprint by footprint, the outline's, then each hole's, side `i` running from
  * corner `i` to `i + 1`, zero for a gable -- and dormers on its leaves.
  */
 export interface RoofRequest {
   readonly elevation: number;
   /** Rise of the roof's highest point above its eaves. */
   readonly height: number;
-  readonly footprint: RoofFootprint;
+  /** The plans it covers: one, or several joined at a corner. */
+  readonly footprints: readonly RoofFootprint[];
   readonly slopes: readonly number[];
   readonly dormers?: readonly RoofDormer[];
 }

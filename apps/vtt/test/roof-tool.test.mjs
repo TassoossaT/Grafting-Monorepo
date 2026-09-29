@@ -87,7 +87,7 @@ test("any outline clicked corner by corner is roofed, concave and slanted", () =
     const params = { ...DEFAULT_TOOL_PARAMS.roof, shape: "polygon", elevation: 3, height: 2 };
     for (const [x, z] of [[0, 0], [7, 1], [9, 5], [5, 4], [2, 7], [0, 0]]) click(value, { point: { x, y: 0, z } }, params);
     assert.equal(roofs(runtime).length, 5, JSON.stringify(calls.feedback.at(-1)));
-    assert.equal(roofs(runtime)[0].props.roof.footprint.outer.length, 5);
+    assert.equal(roofs(runtime)[0].props.roof.footprints[0].outer.length, 5);
   } finally { session.free(); }
 });
 
@@ -99,7 +99,7 @@ test("a rectangle drawn into a standing roof fuses with it: one roof over their 
     assert.equal(groups(runtime).size, 1);
     const recipe = roofs(runtime)[0].props.roof;
     assert.equal(recipe.elevation, 3, "the fused roof stands where the standing one did");
-    assert.equal(recipe.footprint.outer.length, 8, "a T");
+    assert.equal(recipe.footprints[0].outer.length, 8, "a T");
     assert.equal(recipe.slopes.filter((s) => s === 0).length >= 2, true, "the gables it had are gables still");
   } finally { session.free(); }
 });
@@ -110,10 +110,10 @@ test("a rectangle cut out of a roof leaves the rest of it roofed, its hole or no
   try {
     drag(value, [3, 1], [5, 3], { ...DEFAULT_TOOL_PARAMS.roof, action: "cut" });
     const recipe = roofs(runtime)[0].props.roof;
-    assert.equal(recipe.footprint.holes.length, 1, "a courtyard");
+    assert.equal(recipe.footprints[0].holes.length, 1, "a courtyard");
     assert.equal(recipe.slopes.length, 8);
     drag(value, [6, -1], [9, 5], { ...DEFAULT_TOOL_PARAMS.roof, action: "cut" });
-    assert.equal(roofs(runtime)[0].props.roof.footprint.outer.length, 4);
+    assert.equal(roofs(runtime)[0].props.roof.footprints[0].outer.length, 4);
     assert.ok(roofs(runtime).every((f) => f.nodes.every((n) => n.position.x <= 6 + 1e-6)));
   } finally { session.free(); }
 });
@@ -150,7 +150,7 @@ test("a roof over a wall loop takes the room's own outline at the wall tops", ()
   try {
     const walls = lRoom(runtime);
     click(value, { point: { x: 5, y: 3, z: 0 }, surfaceRef: surfaceRefFromNodeSet(walls[0].surfaceKey) }, { ...DEFAULT_TOOL_PARAMS.roof, action: "base", height: 2 });
-    assert.equal(roofs(runtime)[0].props.roof.footprint.outer.length, 6);
+    assert.equal(roofs(runtime)[0].props.roof.footprints[0].outer.length, 6);
     assert.equal(Math.min(...roofs(runtime).flatMap((f) => f.nodes.map((n) => n.position.y))), 3);
     assert.ok(Math.abs(top(runtime) - 5) < 1e-6);
   } finally { session.free(); }
@@ -225,11 +225,11 @@ test("pulling a corner out of a side adds a leaf, and moving a corner reshapes t
   try {
     const insert = shownGlobalHandles(scene(runtime)).find((h) => h.kind === "insert" && h.recipeHandle.part.side === 0);
     dragHandle(value, insert, { x: insert.position.x, y: insert.position.y, z: insert.position.z - 1 });
-    assert.equal(roofs(runtime)[0].props.roof.footprint.outer.length, 5);
+    assert.equal(roofs(runtime)[0].props.roof.footprints[0].outer.length, 5);
     assert.equal(new Set(roofs(runtime).map((f) => f.props.roofFace.side)).size, 5);
     const corner = shownGlobalHandles(scene(runtime)).find((h) => h.kind === "corner" && h.recipeHandle.part.corner === 0);
     dragHandle(value, corner, { x: corner.position.x - 1, y: corner.position.y, z: corner.position.z });
-    const [x] = roofs(runtime)[0].props.roof.footprint.outer[0];
+    const [x] = roofs(runtime)[0].props.roof.footprints[0].outer[0];
     assert.ok(Math.abs(x + 1) < 1e-6);
   } finally { session.free(); }
 });
@@ -291,5 +291,43 @@ test("what is pinned to a dormer's front stays pinned to it where it was when th
     const pin = pinOf(runtime, "w2");
     assert.deepEqual(pin?.hostSurfaceKey, now.surfaceKey);
     assert.ok(Math.abs(pin.u - 0.6) < 1e-9 && Math.abs(pin.v - 0.7) < 1e-9);
+  } finally { session.free(); }
+});
+
+// ---- Fusing along a side or at a corner ----
+
+test("a roof drawn along a roof's side fuses with it, with no seam across the side they now run on", () => {
+  const value = roofed();
+  const { runtime, session } = value;
+  try {
+    drag(value, [8, 0], [12, 4], { ...DEFAULT_TOOL_PARAMS.roof, elevation: 3, height: 2 });
+    assert.equal(groups(runtime).size, 1);
+    const [footprint] = roofs(runtime)[0].props.roof.footprints;
+    assert.equal(footprint.outer.length, 4, "one 12 x 4 outline: the corners where the sides ran straight on are gone");
+    assert.equal(roofs(runtime).length, 4);
+  } finally { session.free(); }
+});
+
+test("a roof drawn a hand's breadth off a roof's side lands on it and fuses", () => {
+  const value = roofed();
+  const { runtime, session } = value;
+  try {
+    drag(value, [8.15, 1], [12, 3], { ...DEFAULT_TOOL_PARAMS.roof, elevation: 3, height: 2 });
+    assert.equal(groups(runtime).size, 1);
+    const xs = roofs(runtime)[0].props.roof.footprints[0].outer.map(([x]) => x);
+    assert.ok(xs.includes(8) && xs.includes(12), JSON.stringify(xs));
+  } finally { session.free(); }
+});
+
+test("a roof touching another only at a corner joins it there: one roof, two outlines, one shared corner", () => {
+  const value = roofed();
+  const { runtime, session } = value;
+  try {
+    drag(value, [8.1, 4.1], [12, 8], { ...DEFAULT_TOOL_PARAMS.roof, elevation: 3, height: 2 });
+    assert.equal(groups(runtime).size, 1);
+    const recipe = roofs(runtime)[0].props.roof;
+    assert.equal(recipe.footprints.length, 2);
+    const at = roofs(runtime).flatMap((f) => f.nodes).filter((n) => Math.abs(n.position.x - 8) < 1e-6 && Math.abs(n.position.z - 4) < 1e-6);
+    assert.equal(new Set(at.map((n) => n.id)).size, 1, "the corner is one node of both");
   } finally { session.free(); }
 });

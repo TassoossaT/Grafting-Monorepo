@@ -673,7 +673,7 @@ impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::profile_roof:
 pub struct grafting_graph_core::profile_roof::RoofRequest
 pub grafting_graph_core::profile_roof::RoofRequest::dormers: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofDormer>
 pub grafting_graph_core::profile_roof::RoofRequest::elevation: f64
-pub grafting_graph_core::profile_roof::RoofRequest::footprint: grafting_graph_core::profile_roof::RoofFootprint
+pub grafting_graph_core::profile_roof::RoofRequest::footprints: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofFootprint>
 pub grafting_graph_core::profile_roof::RoofRequest::height: f64
 pub grafting_graph_core::profile_roof::RoofRequest::slopes: alloc::vec::Vec<f64>
 impl core::clone::Clone for grafting_graph_core::profile_roof::RoofRequest
@@ -4149,9 +4149,9 @@ Dormers raised on its leaves.
 
 Elevation of every eave.
 
-### `pub grafting_graph_core::profile_roof::RoofRequest::footprint: grafting_graph_core::profile_roof::RoofFootprint`
+### `pub grafting_graph_core::profile_roof::RoofRequest::footprints: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofFootprint>`
 
-The plan it covers.
+The plans it covers -- one, or several joined at a corner.
 
 ### `pub grafting_graph_core::profile_roof::RoofRequest::height: f64`
 
@@ -4159,8 +4159,9 @@ Rise of the roof's highest point above the eaves.
 
 ### `pub grafting_graph_core::profile_roof::RoofRequest::slopes: alloc::vec::Vec<f64>`
 
-Relative steepness of every side -- the outline's, then each hole's,
-side `i` running from corner `i` to corner `i + 1`; zero makes a gable.
+Relative steepness of every side -- footprint by footprint, its
+outline's then each hole's, side `i` running from corner `i` to
+corner `i + 1`; zero makes a gable.
 
 ### `pub grafting_graph_core::profile_surface::ProfileSheet::lower: grafting_graph_core::profile_surface::Section`
 
