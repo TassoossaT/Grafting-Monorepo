@@ -4573,6 +4573,7 @@ export const openingStands: readonly OpeningStand[] = [roofOpeningStand];
 
 // src/composition/tabletop/tools/openings/opening-shared.ts
 export const MARGIN = 0.15;
+export const MIN_OPENING_SIZE = 0.3;
 export interface RunRect {
   readonly s0: number;
   readonly s1: number;
@@ -4625,9 +4626,6 @@ export function overlapsOther(ctx: ToolContext, run: RunFrame, rect: RunRect, ex
   if (!hasTrait(region.surfaceType, "cuts") || excluded.has(surfaceRefFromNodeSet(region.surfaceKey))) return false;
   if (!region.nodes.some((node) => node.pin !== undefined && run.panelOf(node.pin.hostSurfaceKey) !== undefined)) return false;
   const other = regionRunSpan(run, region);
-export function piecePolyline(piece: OpeningPiece, step: number): readonly (readonly [number, number])[] {
-  const { frame } = piece.panel;
-  const bends = bendsBetween(frame, piece.rect);
 
 // src/composition/tabletop/tools/openings/opening-stand.ts
 export interface StandLook {
@@ -4636,14 +4634,18 @@ export interface StandLook {
   readonly shape: OpeningShape;
   readonly isDoor: boolean;
   }
+export interface StandPlacement {
+  readonly at: ConstructionPosition;
+  readonly look: StandLook;
+  }
 export interface OpeningStand {
   /** Whether a press on `face` raises a stand there. */
   raisesOn(face: ConstructionRegionTopology): boolean;
-  /**
-  * The opening a drag from `from` to `to` over `face` draws, as a wall's
-  * drag does from corner to corner: where its front's middle stands and its
-  * size -- `shape` its outline -- or `undefined` when it draws nothing.
-  */
+  /** An opening of `look` at `at` on `face`, stopped by the face; `undefined` where not even the smallest fits. */
+  fitted(face: ConstructionRegionTopology, at: ConstructionPosition, look: StandLook): StandPlacement | undefined;
+  /** The opening a drag from `from` to `to` over `face` draws corner to corner, as on a wall -- stopped by the face. */
+  drawn(face: ConstructionRegionTopology, from: ConstructionPosition, to: ConstructionPosition, shape: OpeningShape, isDoor: boolean): StandPlacement | undefined;
+  /** The world outline an opening `placed` on `face` stands on. */
 
 // src/composition/tabletop/tools/openings/opening-tool.ts
 export const openingTool: ConstructionTool<"opening"> = {

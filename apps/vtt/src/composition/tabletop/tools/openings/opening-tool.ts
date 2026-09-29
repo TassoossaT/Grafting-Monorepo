@@ -11,11 +11,11 @@ import type {
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import { DEFAULT_TOOL_PARAMS, OPENING_KIND_COLOR, RECTANGLE_OPENING_SHAPE, hasTrait, openingStructureType, sameShape } from "../../../../features/edit-construction/index.ts";
 
-import { scopedToolId, type ConstructionTool, type PointerSample, type ReleasedGesture, type ToolContext, type ToolGesture } from "../core/tool-context.ts";
+import { gestureMoved, scopedToolId, type ConstructionTool, type PointerSample, type ReleasedGesture, type ToolContext, type ToolGesture } from "../core/tool-context.ts";
 import { segmentsPreview } from "../shapes/preview-shapes.ts";
 import { findWallSurfaceAt } from "../walls/wall-shared.ts";
 import { openingStands } from "../opening-stands.ts";
-import type { OpeningStand, StandLook } from "./opening-stand.ts";
+import type { OpeningStand, StandLook, StandPlacement } from "./opening-stand.ts";
 import {
   commitOpeningGroup,
   groupIdOf,
@@ -23,6 +23,7 @@ import {
   groupRunSpan,
   hostBoxOf,
   isDoorRect,
+  MIN_OPENING_SIZE,
   overlapsOther,
   piecePolyline,
   primaryHostOf,
@@ -105,8 +106,6 @@ interface GrabHandle {
 
 /** How close (world units) a press must land to a rim edge to grab that edge instead of the body. */
 const HANDLE_TOLERANCE = 0.12;
-/** The smallest world width or height a drawn or dragged opening may settle at. */
-const MIN_OPENING_SIZE = 0.3;
 /** How far off an opening's own face a point may land and still count as on it. */
 const OPENING_PICK_TOLERANCE = 0.2;
 /** The longest straight step (world units) a preview ring takes along a curved face. */
@@ -269,37 +268,43 @@ function standOf(ctx: ToolContext, host: ConstructionSurfaceKey): { readonly sta
  * longer bounded by the stand, which grows with it; a click on the opening
  * already selected applies the sliders.
  */
-function refitStand(ctx: ToolContext, gesture: ReleasedGesture, active: Drag & { readonly stand: OpeningStand }, params: OpeningParams): void {
+/**
+ * What a drag of an opening in a stand asks for -- its new size and how far
+ * it moved in plan -- before the stand stops it where its face runs out.
+ * `moved` false is a click: the sliders' size, when the opening was
+ * already selected.
+ */
+function standEdit(active: Drag, start: ConstructionPosition, current: ConstructionPosition, moved: boolean, params: OpeningParams): { readonly look: StandLook; readonly shift: { readonly x: number; readonly z: number } } | undefined {
   const { run, originalSpan: span } = active;
   const middle = (span.s0 + span.s1) / 2;
   let rect = span;
   let shift = { x: 0, z: 0 };
-  if (!gesture.moved) {
-    if (!active.wasSelected) {
-      ctx.reportFeedback({ tone: "info", message: SELECTED_MESSAGE });
-      return;
-    }
+  if (!moved) {
     rect = sliderRect(active, params);
   } else if (isBody(active.handle)) {
-    shift = { x: gesture.current.point.x - gesture.start.point.x, z: gesture.current.point.z - gesture.start.point.z };
+    shift = { x: current.x - start.x, z: current.z - start.z };
   } else {
-    const at = run.project(gesture.current.point);
-    if (at === undefined) {
-      ctx.reportFeedback({ tone: "error", message: NO_FIT_MESSAGE });
-      return;
-    }
+    const at = run.project(current);
+    if (at === undefined) return undefined;
     rect = rawRectFor(active, at);
     // Its middle moved along the front: the stand moves with it.
     const step = 0.01;
     const a = run.resolveAt(middle, span.v0), b = run.resolveAt(middle + step, span.v0);
-    const moved = ((rect.s0 + rect.s1) / 2 - middle) / step;
-    shift = { x: (b.x - a.x) * moved, z: (b.z - a.z) * moved };
+    const along = ((rect.s0 + rect.s1) / 2 - middle) / step;
+    shift = { x: (b.x - a.x) * along, z: (b.z - a.z) * along };
   }
   const look: StandLook = { width: rect.s1 - rect.s0, height: (rect.v1 - rect.v0) * run.heightAt(middle), shape: active.shape, isDoor: active.isDoor };
-  if (look.width < MIN_OPENING_SIZE - 1e-9 || look.height < MIN_OPENING_SIZE - 1e-9) {
-    ctx.reportFeedback({ tone: "error", message: NO_FIT_MESSAGE });
+  return { look, shift };
+}
+
+function refitStand(ctx: ToolContext, gesture: ReleasedGesture, active: Drag & { readonly stand: OpeningStand }, params: OpeningParams): void {
+  if (!gesture.moved && !active.wasSelected) {
+    ctx.reportFeedback({ tone: "info", message: SELECTED_MESSAGE });
     return;
   }
+  const edit = standEdit(active, gesture.start.point, gesture.current.point, gesture.moved, params);
+  if (edit === undefined) return;
+  const { look, shift } = edit;
   const causeId = scopedToolId(ctx, "opening-edit", ctx.nextSequence());
   const result = active.stand.refit(ctx, causeId, active.pieceKeys, active.hostSurfaceKey, look, shift);
   clearSelection(ctx);
@@ -329,25 +334,21 @@ function ringPreview(ring: readonly ConstructionPosition[], color: number): Retu
   return segmentsPreview(Float32Array.from(positions), color);
 }
 
-/** Where and how big the opening a press on a stand face makes: drawn corner to corner by a drag, the sliders' size at a click. */
-function standPlacement(pressed: Extract<Press, { kind: "stand" }>, current: ConstructionPosition | undefined, params: OpeningParams): { readonly at: ConstructionPosition; readonly look: StandLook } | undefined {
+/** Where and how big the opening a press on a stand face makes -- drawn corner to corner by a drag, the sliders' size at a click -- stopped by the face. */
+function standPlacement(stand: OpeningStand, face: ConstructionRegionTopology, from: ConstructionPosition, current: ConstructionPosition | undefined, params: OpeningParams): StandPlacement | undefined {
   const look = lookOfNew(params);
-  if (current === undefined) return { at: pressed.at, look };
-  return pressed.stand.drawn(pressed.face, pressed.at, current, look.shape, look.isDoor);
+  return current === undefined ? stand.fitted(face, from, look) : stand.drawn(face, from, current, look.shape, look.isDoor);
 }
 
-/** A press on a face that raises a stand: the opening it drew, or one at the sliders' size, its stand raised round it. */
+/** A press on a face that raises a stand: the opening its preview showed, its stand raised round it. */
 function raiseStand(ctx: ToolContext, pressed: Extract<Press, { kind: "stand" }>, gesture: ReleasedGesture, params: OpeningParams): void {
-  const placed = standPlacement(pressed, gesture.moved ? gesture.current.point : undefined, params);
-  if (placed === undefined || placed.look.width < MIN_OPENING_SIZE || placed.look.height < MIN_OPENING_SIZE) {
-    ctx.reportFeedback({ tone: "error", message: "Abertura: arraste mais, ao longo do beiral para a largura e subindo a agua para a altura." });
-    return;
-  }
-  const { at, look } = placed;
+  const placed = standPlacement(pressed.stand, pressed.face, pressed.at, gesture.moved ? gesture.current.point : undefined, params);
+  // Not even the smallest opening had room: the preview showed none, and none is made.
+  if (placed === undefined) return;
   if (selected !== undefined) clearSelection(ctx);
   const causeId = scopedToolId(ctx, "opening", ctx.nextSequence());
-  const result = pressed.stand.raise(ctx, causeId, pressed.face, at, look);
-  reportCommit(ctx, causeId, result, look.isDoor ? "Porta aberta no telhado." : "Janela aberta no telhado.");
+  const result = pressed.stand.raise(ctx, causeId, pressed.face, placed);
+  reportCommit(ctx, causeId, result, placed.look.isDoor ? "Porta aberta no telhado." : "Janela aberta no telhado.");
 }
 
 /** Where `active`'s opening would stand, before settling, if released at `at`. */
@@ -526,19 +527,24 @@ export const openingTool: ConstructionTool<"opening"> = {
   snapsToSurface: true,
 
   previewFor(gesture: ToolGesture, params: OpeningParams, ctx: ToolContext) {
-    // A stand is made again on release; its opening shows no ghost bounded by the old one.
-    if (press?.kind === "grab") return press.drag.stand === undefined ? dragPreview(gesture, ctx, press.drag) : undefined;
-    const fresh = forNew(params);
-    // Over a face that raises a stand: the opening's outline, upright where it would stand.
-    if (press?.kind === "stand") {
-      const moved = gesture.current.point.x !== press.at.x || gesture.current.point.z !== press.at.z;
-      const placed = standPlacement(press, moved ? gesture.current.point : undefined, fresh);
-      const ring = placed === undefined ? undefined : press.stand.outline(press.face, placed.at, placed.look);
-      return ring === undefined ? undefined : ringPreview(ring, OPENING_KIND_COLOR[fresh.openingKind]);
+    // The same move a release will read, so the ghost is what the commit makes.
+    const moved = gestureMoved(gesture.start, gesture.samples);
+    if (press?.kind === "grab") {
+      const { drag } = press;
+      if (drag.stand === undefined) return dragPreview(gesture, ctx, drag);
+      // Stopped by its face exactly as the release will stop it.
+      if (!moved) return undefined;
+      const edit = standEdit(drag, gesture.start.point, gesture.current.point, true, params);
+      const ring = edit === undefined ? undefined : drag.stand.refitOutline(ctx, drag.hostSurfaceKey, edit.look, edit.shift);
+      return ring === undefined ? undefined : ringPreview(ring, OPENING_KIND_COLOR[drag.isDoor ? "door" : "window"]);
     }
-    const onStand = standUnder(ctx, gesture.current);
+    const fresh = forNew(params);
+    // Over a face that raises a stand: the opening's outline, upright where it would stand, stopped by the face.
+    const onStand = press?.kind === "stand" ? press : standUnder(ctx, gesture.current);
     if (onStand !== undefined) {
-      const ring = onStand.stand.outline(onStand.face, gesture.current.point, lookOfNew(fresh));
+      const from = press?.kind === "stand" ? press.at : gesture.current.point;
+      const placed = standPlacement(onStand.stand, onStand.face, from, press?.kind === "stand" && moved ? gesture.current.point : undefined, fresh);
+      const ring = placed === undefined ? undefined : onStand.stand.outline(onStand.face, placed);
       return ring === undefined ? undefined : ringPreview(ring, OPENING_KIND_COLOR[fresh.openingKind]);
     }
     if (press?.kind === "wall" && press.anchor !== undefined) return createPreview(gesture, fresh, ctx, press.anchor);

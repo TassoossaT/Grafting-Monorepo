@@ -806,10 +806,13 @@ fn dormer_block(
                     && t < depth + DORMER_CLEARANCE
             })
     };
+    // As deep as the leaf runs behind it, stopped clear of the rim; shorter
+    // only where a concave leaf reaches round in between.
     let mut depth = corners
         .iter()
         .map(|c| exit(*c))
-        .fold(f64::INFINITY, f64::min);
+        .fold(f64::INFINITY, f64::min)
+        - 2.0 * DORMER_CLEARANCE;
     while depth.is_finite() && depth > DORMER_CLEARANCE && !fits(depth) {
         depth -= DORMER_CLEARANCE.max(depth * 0.05);
     }

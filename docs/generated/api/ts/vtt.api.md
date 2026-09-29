@@ -3049,6 +3049,10 @@ An axis-aligned rectangle in a run's `(s, v)` frame; `s` is in world units.
 
 How much wall (world units) must be left standing at either end of a run, and above and below an opening.
 
+### `variable vtt.opening-shared.MIN_OPENING_SIZE: 0.3`
+
+The smallest world width or height a drawn or dragged opening may settle at.
+
 ### `function vtt.opening-shared.commitOpeningGroup(ctx: ToolContext, causeId: string, removals: readonly ConstructionSurfaceKey[], pieces: readonly OpeningPiece[], shape?: OpeningShape): OpeningCommit`
 
 One transaction: delete every region in `removals`, then add `pieces` as
@@ -3113,29 +3117,35 @@ The shape an opening group carries, read from any piece's property bag.
 A face an opening cannot be cut into as it lies -- a sloped leaf -- but
 that can raise an upright stand to hold one: the stand exists only for
 its opening, follows it when it moves or changes size, and goes with it.
-Each call is one transaction, the stand and the opening together.
 
-### `method vtt.opening-stand.OpeningStand.drawn(face: ConstructionRegionTopology, from: ConstructionPosition, to: ConstructionPosition, shape: OpeningShape, isDoor: boolean): { at: ConstructionPosition; look: StandLook } | undefined`
+The face stops an opening where it has no more room, the way a wall
+stops one at its ends: every placement comes back already stopped, and
+the preview shows exactly what the commit makes -- never an error for
+having gone too far.
 
-The opening a drag from `from` to `to` over `face` draws, as a wall's
-drag does from corner to corner: where its front's middle stands and its
-size -- `shape` its outline -- or `undefined` when it draws nothing.
+### `method vtt.opening-stand.OpeningStand.drawn(face: ConstructionRegionTopology, from: ConstructionPosition, to: ConstructionPosition, shape: OpeningShape, isDoor: boolean): StandPlacement | undefined`
+
+The opening a drag from `from` to `to` over `face` draws corner to corner, as on a wall -- stopped by the face.
 
 ### `method vtt.opening-stand.OpeningStand.drop(ctx: ToolContext, causeId: string, pieces: readonly ConstructionSurfaceKey[], host: ConstructionSurfaceKey): OpeningCommit`
 
-Removes the opening and the stand at `host` holding it.
+Removes the opening and the stand at `host` holding it. One transaction.
+
+### `method vtt.opening-stand.OpeningStand.fitted(face: ConstructionRegionTopology, at: ConstructionPosition, look: StandLook): StandPlacement | undefined`
+
+An opening of `look` at `at` on `face`, stopped by the face; `undefined` where not even the smallest fits.
 
 ### `method vtt.opening-stand.OpeningStand.holds(ctx: ToolContext, host: ConstructionSurfaceKey): boolean`
 
 Whether the face `host` is one of this kind's stands.
 
-### `method vtt.opening-stand.OpeningStand.outline(face: ConstructionRegionTopology, at: ConstructionPosition, look: StandLook): readonly ConstructionPosition[] | undefined`
+### `method vtt.opening-stand.OpeningStand.outline(face: ConstructionRegionTopology, placed: StandPlacement): readonly ConstructionPosition[] | undefined`
 
-The outline, in world space, an opening of `look` raised on `face` at `at` would stand on.
+The world outline an opening `placed` on `face` stands on.
 
-### `method vtt.opening-stand.OpeningStand.raise(ctx: ToolContext, causeId: string, face: ConstructionRegionTopology, at: ConstructionPosition, look: StandLook): OpeningCommit`
+### `method vtt.opening-stand.OpeningStand.raise(ctx: ToolContext, causeId: string, face: ConstructionRegionTopology, placed: StandPlacement): OpeningCommit`
 
-Raises a stand on `face` at `at` and places an opening of `look` in it.
+Raises a stand on `face` for the opening `placed`, and places it there. One transaction.
 
 ### `method vtt.opening-stand.OpeningStand.raisesOn(face: ConstructionRegionTopology): boolean`
 
@@ -3143,7 +3153,11 @@ Whether a press on `face` raises a stand there.
 
 ### `method vtt.opening-stand.OpeningStand.refit(ctx: ToolContext, causeId: string, pieces: readonly ConstructionSurfaceKey[], host: ConstructionSurfaceKey, look: StandLook, shift: { x: number; z: number }): OpeningCommit`
 
-Remakes the stand at `host` for its opening, now `look`, moved by `shift` in plan.
+Remakes the stand at `host` for its opening, now `look` and moved by `shift` -- stopped by its face. One transaction.
+
+### `method vtt.opening-stand.OpeningStand.refitOutline(ctx: ToolContext, host: ConstructionSurfaceKey, look: StandLook, shift: { x: number; z: number }): readonly ConstructionPosition[] | undefined`
+
+The world outline the opening at `host` would stand on, now `look` and moved by `shift` -- stopped by its face.
 
 ### `interface vtt.opening-stand.StandLook`
 
@@ -3156,6 +3170,14 @@ An opening's size and outline, in world units, as a stand is asked to hold it.
 ### `property vtt.opening-stand.StandLook.shape: OpeningShape`
 
 ### `property vtt.opening-stand.StandLook.width: number`
+
+### `interface vtt.opening-stand.StandPlacement`
+
+An opening as its stand will hold it: where its front's middle stands, and its size, already stopped by the face.
+
+### `property vtt.opening-stand.StandPlacement.at: ConstructionPosition`
+
+### `property vtt.opening-stand.StandPlacement.look: StandLook`
 
 ### `variable vtt.opening-tool.openingTool: ConstructionTool<"opening">`
 
@@ -3428,9 +3450,9 @@ stays as it stood.
 A roof leaf holds an opening upright, the way a floor inside a roof is met
 by transition walls: the opening's box is cut back into the leaf, its top
 level, its cheeks upright, until the leaf rises past it. The opening fills
-that front whole. The roof keeps this as a dormer in its recipe, marked as
-the opening's, so the opening pinned to its front is carried whenever the
-roof is made again.
+that front whole, stopped wherever the leaf stops it. The roof keeps this
+as a dormer in its recipe, marked as the opening's, so the opening pinned
+to its front is carried whenever the roof is made again.
 
 ### `variable vtt.roof-tool.roofTool: ConstructionTool<"roof">`
 

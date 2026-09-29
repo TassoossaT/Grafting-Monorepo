@@ -115,14 +115,42 @@ test("hovering a roof leaf shows the window's outline standing there", async () 
   } finally { await h.runtime.dispose?.(); }
 });
 
-test("a window reaching above the roof behind it is refused", async () => {
+test("a window asked taller than the roof behind it stops there: the ghost shows the stop, and the commit makes just that", async () => {
   const h = await gabled();
   try {
-    clickLeaf(h, 4, 1.2, { ...window, height: 3 });
-    assert.equal(h.feedback.at(-1)?.tone, "error");
-    assert.match(h.feedback.at(-1).message, /altura do telhado/);
-    assert.equal(dormers(h.runtime).length, 0);
-    assert.equal(h.openings().length, 0);
+    const tall = { ...window, height: 3 };
+    const at = { point: { x: 4, y: 2.4, z: 1.2 }, surfaceRef: ref(southLeaf(h.runtime)) };
+    const preview = openingTool.previewFor({ start: at, current: at, samples: [at] }, tall, h.ctx);
+    const ys = [];
+    for (let i = 1; i < preview.positions.length; i += 3) ys.push(preview.positions[i]);
+    clickLeaf(h, 4, 1.2, tall);
+    assert.equal(h.feedback.at(-1)?.tone, "success", JSON.stringify(h.feedback.at(-1)));
+    const b = openingBox(h);
+    // The leaf rises to its ridge at 4, 0.8 behind the front standing at 2.4: the top meets it just short of the ridge.
+    assert.ok(b.y1 < 4 && b.y1 > 3.9, `stopped under the ridge: ${JSON.stringify(b)}`);
+    assert.ok(near(Math.max(...ys), b.y1) && near(Math.min(...ys), b.y0), `the ghost showed what was made: ${Math.min(...ys)}..${Math.max(...ys)} vs ${b.y0}..${b.y1}`);
+  } finally { await h.runtime.dispose?.(); }
+});
+
+test("a window asked wider than its leaf runs stops at the leaf's end", async () => {
+  const h = await gabled();
+  try {
+    clickLeaf(h, 0.5, 1.2, { ...window, width: 2 });
+    assert.equal(h.feedback.at(-1)?.tone, "success", JSON.stringify(h.feedback.at(-1)));
+    const b = openingBox(h);
+    assert.ok(b.x0 > 0 && b.x0 < 0.05 && near(b.x1, 1.5), `stopped at the gable end, its far side where asked: ${JSON.stringify(b)}`);
+  } finally { await h.runtime.dispose?.(); }
+});
+
+test("resizing a roof window past the roof stops it there instead of refusing", async () => {
+  const h = await roofWithWindow();
+  try {
+    const b = openingBox(h);
+    const top = { x: (b.x0 + b.x1) / 2, y: b.y1, z: b.z };
+    press(h, window, top, { ...top, y: top.y + 5 });
+    assert.equal(h.feedback.at(-1)?.tone, "success", JSON.stringify(h.feedback.at(-1)));
+    const grown = openingBox(h);
+    assert.ok(grown.y1 > b.y1 + 0.5 && grown.y1 < 4, `grown up to the stop: ${JSON.stringify(grown)}`);
   } finally { await h.runtime.dispose?.(); }
 });
 
