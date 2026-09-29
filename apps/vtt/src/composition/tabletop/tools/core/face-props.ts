@@ -1,10 +1,12 @@
-import { RECIPE_ROLE_PROP } from "../../../../features/edit-construction/index.ts";
-import type { ChangeOrigin, ConstructionPinRequest, ConstructionRegionTopology, ConstructionSurfaceKey } from "../../../../ports/index.ts";
+import { RECIPE_ROLE_PROP, type AtomicEditOp } from "../../../../features/edit-construction/index.ts";
+import type { ChangeOrigin, ConstructionPinRequest, ConstructionRegionTopology, ConstructionSurfaceKey, RegionEditOutcome } from "../../../../ports/index.ts";
 
 /** What keeping a regenerated structure's properties and pins needs of the runtime. */
 export interface FacePropsRuntime {
   setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): unknown;
   pinNodes(pins: readonly ConstructionPinRequest[], origin: ChangeOrigin, causeId: string): unknown;
+  getAllRegionTopologies(): readonly ConstructionRegionTopology[];
+  applyRegionEdit(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): RegionEditOutcome;
 }
 
 /** A region-backed face's key names it as `["@region", regionId]`. */
@@ -34,6 +36,8 @@ export function pinnedToRoles(topologies: readonly ConstructionRegionTopology[],
  * Gives each face a patch just made the properties its generator named for
  * its region, and pins what was pinned to a replaced face onto the new face
  * with the same role, where it stood on it -- a window stays in its gable.
+ * What was pinned to a face with no successor goes with it: a window in a
+ * dormer the roof no longer has, or in a roof taken away whole.
  */
 export function keepFaceProps(runtime: FacePropsRuntime, causeId: string, created: readonly ConstructionSurfaceKey[], faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>, pinned?: PinnedToRoles): void {
   const byRole = new Map<string, ConstructionSurfaceKey>();
@@ -45,9 +49,14 @@ export function keepFaceProps(runtime: FacePropsRuntime, causeId: string, create
     const role = props[RECIPE_ROLE_PROP];
     if (typeof role === "string" && !byRole.has(role)) byRole.set(role, key);
   }
-  const pins: ConstructionPinRequest[] = (pinned?.pins ?? []).flatMap((pin) => {
+  const pins: ConstructionPinRequest[] = [];
+  const stranded = new Set<string>();
+  for (const pin of pinned?.pins ?? []) {
     const host = byRole.get(pin.role);
-    return host ? [{ nodeId: pin.nodeId, hostSurfaceKey: host, u: pin.u, v: pin.v }] : [];
-  });
+    if (host) pins.push({ nodeId: pin.nodeId, hostSurfaceKey: host, u: pin.u, v: pin.v });
+    else stranded.add(pin.nodeId);
+  }
   if (pins.length > 0) runtime.pinNodes(pins, "local", causeId);
+  const gone = runtime.getAllRegionTopologies().filter((region) => region.nodes.some((node) => stranded.has(node.id)));
+  if (gone.length > 0) runtime.applyRegionEdit(gone.map((region) => ({ kind: "delete-region" as const, surfaceKey: region.surfaceKey })), "local", causeId);
 }

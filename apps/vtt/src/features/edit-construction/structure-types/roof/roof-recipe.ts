@@ -63,6 +63,8 @@ const MIN_RISE = 0.05;
 const MIN_SLOPE_SHARE = 0.05;
 /** The narrowest a dormer is made by its side handles. */
 const MIN_DORMER_WIDTH = 0.3;
+/** How far inside its side's ends a dormer has to stand: twice the generator's clearance from its leaf's rim. */
+export const DORMER_RIM = 0.02;
 
 /** One ring of a roof's footprints: an outline, or a hole through it. */
 export interface RoofRing {
@@ -199,7 +201,10 @@ export function carriedOnto(footprints: readonly RoofFootprint[], sources: reado
     const length = Math.hypot(c[0] - a[0], c[1] - a[1]);
     const middle = [old.a[0] + dormer.along * (old.c[0] - old.a[0]), old.a[1] + dormer.along * (old.c[1] - old.a[1])];
     const along = ((middle[0]! - a[0]) * (c[0] - a[0]) + (middle[1]! - a[1]) * (c[1] - a[1])) / (length * length);
-    return [{ ...dormer, side, along: Math.min(1, Math.max(0, along)) }];
+    // A dormer is on its leaf or it is gone: one the new outline leaves hanging over its end goes with that part.
+    const reach = along * length;
+    if (reach - dormer.width / 2 < DORMER_RIM || reach + dormer.width / 2 > length - DORMER_RIM) return [];
+    return [{ ...dormer, side, along }];
   }));
   return { footprints: merged, slopes, dormers, cutouts: sources.flatMap((source) => source.cutouts ?? []) };
 }
@@ -216,10 +221,16 @@ export function dormerAt(recipe: RoofRequest, side: number, at: Point, width: nu
   const n = inwardNormals(points, hole)[index]!;
   const w = [at[0] - a[0], at[1] - a[1]] as const;
   return {
+    id: globalThis.crypto.randomUUID(),
     side, width, front, slopes: dormerSlopes(waters),
     along: Math.min(1, Math.max(0, (w[0] * u[0] + w[1] * u[1]) / length)),
     setback: Math.max(0, w[0] * n[0] + w[1] * n[1]),
   };
+}
+
+/** The name a dormer's faces are known by across regeneration: its own, or -- one made before dormers had names -- its place. */
+function dormerKey(dormers: readonly RoofDormer[] | undefined, index: number | null): string {
+  return index === null ? "-" : dormers?.[index]?.id ?? String(index);
 }
 
 /** How close a roof corner must stand to a standing node to be that node. */
@@ -343,7 +354,8 @@ export function roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: Ro
   const faceProps = new Map<string, Readonly<Record<string, unknown>>>();
   roof.faces.forEach((face, index) => {
     const role: RoofFaceRole = { side: face.side, upright: face.upright, ...(face.dormer === null ? {} : { dormer: face.dormer }), ...(face.subroof === null ? {} : { subroof: face.subroof }) };
-    faceProps.set(regionId(index), { [ROOF_RECIPE_PROP]: recipe, [ROOF_FACE_PROP]: role, [RECIPE_ROLE_PROP]: `${face.subroof ?? "-"}:${face.dormer ?? "-"}:${face.side}:${face.upright ? "upright" : "leaf"}` });
+    const dormer = dormerKey(face.subroof === null ? request.dormers : request.subroofs?.[face.subroof]?.dormers, face.dormer);
+    faceProps.set(regionId(index), { [ROOF_RECIPE_PROP]: recipe, [ROOF_FACE_PROP]: role, [RECIPE_ROLE_PROP]: `${face.subroof ?? "-"}:${dormer}:${face.side}:${face.upright ? "upright" : "leaf"}` });
   });
   return {
     patch: {

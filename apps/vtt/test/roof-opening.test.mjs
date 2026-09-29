@@ -282,6 +282,56 @@ for (const [name, shape, most] of [
   });
 }
 
+test("a roof brought down to nothing takes the windows standing in it", async () => {
+  const h = await roofWithWindow();
+  try {
+    dragRoofHandle(h, "rise", 400);
+    assert.equal(roofs(h.runtime).length, 0);
+    assert.equal(h.openings().length, 0, "no window is left hanging where the roof was");
+  } finally { await h.runtime.dispose?.(); }
+});
+
+test("cutting a roof across a window's dormer takes both, no refusal; a cut clear of it keeps them", async () => {
+  const across = await roofWithWindow();
+  try {
+    dispatchGesture(roofTool, across.ctx, { ...DEFAULT_TOOL_PARAMS.roof, action: "cut" }, [{ point: { x: 3, y: 0, z: -1 } }, { point: { x: 9, y: 0, z: 5 } }]);
+    assert.equal(across.feedback.at(-1)?.tone, "success", JSON.stringify(across.feedback.at(-1)));
+    assert.equal(dormers(across.runtime).length, 0, "the dormer went with the part cut away");
+    assert.equal(across.openings().length, 0, "and its window with it");
+  } finally { await across.runtime.dispose?.(); }
+  const clear = await roofWithWindow();
+  try {
+    dispatchGesture(roofTool, clear.ctx, { ...DEFAULT_TOOL_PARAMS.roof, action: "cut" }, [{ point: { x: 6, y: 0, z: -1 } }, { point: { x: 9, y: 0, z: 5 } }]);
+    assert.equal(clear.feedback.at(-1)?.tone, "success", JSON.stringify(clear.feedback.at(-1)));
+    const kept = roofs(clear.runtime).find((f) => f.props.roof.dormers?.length)?.props.roof.dormers ?? [];
+    assert.equal(kept.length, 1, "the dormer stays on what is left");
+    assert.ok(clear.openings().length > 0, "with its window");
+  } finally { await clear.runtime.dispose?.(); }
+});
+
+test("removing one dormer leaves the windows of the others in their own dormers", async () => {
+  const h = await gabled();
+  const { runtime, ctx } = h;
+  try {
+    const plain = { ...DEFAULT_TOOL_PARAMS.roof, action: "dormer", waters: 2 };
+    dispatchGesture(roofTool, ctx, plain, [{ point: { x: 2, y: 1.2, z: 0.6 }, surfaceRef: ref(southLeaf(runtime)) }]);
+    dispatchGesture(roofTool, ctx, plain, [{ point: { x: 6, y: 1.2, z: 0.6 }, surfaceRef: ref(southLeaf(runtime)) }]);
+    // A window in the second dormer's front, set there with the opening tool as in any wall.
+    const second = front(runtime, 1);
+    const ys = second.nodes.map((n) => n.position.y);
+    const middle = { x: 6, y: (Math.min(...ys) + Math.max(...ys)) / 2, z: 0.6 };
+    press(h, { ...window, width: 0.4, height: 0.3 }, middle, middle, { surfaceRef: ref(second) });
+    const node = h.openings()[0].nodes[0];
+    // The first dormer's front brought below its leaf removes it: the second is now first.
+    dragRoofHandle(h, "dormer:0:front", 400);
+    assert.equal(dormers(runtime).length, 1);
+    const pin = pinOf(runtime, node.id);
+    assert.ok(pin, "the window is still pinned");
+    const host = runtime.getAllRegionTopologies().find((f) => JSON.stringify(f.surfaceKey) === JSON.stringify(pin.hostSurfaceKey));
+    assert.ok(host && box(host.nodes).x0 > 4, "in the dormer it stood in, not the one that took its place in the list");
+  } finally { await runtime.dispose?.(); }
+});
+
 test("deleting the window removes its cut", async () => {
   const h = await roofWithWindow();
   const { runtime, ctx } = h;

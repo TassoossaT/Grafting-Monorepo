@@ -4347,6 +4347,8 @@ export function edgeOverlayDescriptor(group: EdgeOverlayGroup): PreviewDescripto
 export interface FacePropsRuntime {
   setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): unknown;
   pinNodes(pins: readonly ConstructionPinRequest[], origin: ChangeOrigin, causeId: string): unknown;
+  getAllRegionTopologies(): readonly ConstructionRegionTopology[];
+  applyRegionEdit(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): RegionEditOutcome;
   }
 export interface PinnedToRoles {
   readonly pins: readonly { readonly nodeId: string; readonly role: string; readonly u: number; readonly v: number }[];
@@ -4824,7 +4826,6 @@ export function replaceRoofs(
   requests: readonly RoofSource[],
   replaces: readonly ConstructionSurfaceKey[],
   transactionId?: string,
-  renameRole: (role: string) => string = (role) => role,
   ): { readonly group: string; readonly recorded: boolean } {
   const operationId = scopedToolId(ctx, "roof", ctx.nextSequence());
 export function commitRoofRecipes(ctx: ToolContext, requests: readonly RoofSource[], replaces: readonly ConstructionSurfaceKey[] = [], done = "Telhado criado."): void {
@@ -6815,6 +6816,7 @@ export interface RoofFaceRole {
   }
 export type Point = readonly [number, number];
 export type Waters = 1 | 2 | 4;
+export const DORMER_RIM = 0.02;
 export interface RoofRing {
   readonly points: readonly Point[];
   readonly hole: boolean;
@@ -6836,9 +6838,6 @@ export function inwardNormals(ring: readonly Point[], hole: boolean): Point[] {
   const b = ring[(i + 1) % ring.length]!;
   return sum + a[0] * b[1] - b[0] * a[1];
   }, 0);
-export function dormerSlopes(waters: Waters): readonly [number, number, number, number] {
-  return waters === 2 ? [0, 1, 0, 1] : waters === 1 ? [0.5, 0, 0, 0] : [1, 1, 0, 1];
-  }
 
 // src/features/edit-construction/structure-types/roof/roof-structure.ts
 export const roofStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
@@ -7831,13 +7830,13 @@ export interface RoofFootprint {
   readonly holes: readonly (readonly (readonly [number, number])[])[];
   }
 export interface RoofDormer {
+  /** Its own name, kept while dormers come and go before it: what is pinned to its faces keeps to it. */
+  readonly id?: string;
   readonly side: number;
   /** Where its middle stands along that side, as a fraction of it. */
   readonly along: number;
   /** How far in from that side its front stands. */
   readonly setback: number;
-  readonly width: number;
-  /** How high its front wall rises above the leaf. */
 export interface RoofRequest {
   readonly elevation: number;
   /** Rise of the roof's highest point above its eaves. */

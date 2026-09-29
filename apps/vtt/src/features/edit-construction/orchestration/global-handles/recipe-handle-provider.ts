@@ -61,7 +61,8 @@ export const recipeHandleProvider: GlobalHandleProvider = {
     const next = structure.type.edit(structure.recipe, handle.recipeHandle, intent);
     if (next === undefined) return undefined;
     const sourceSurfaceKeys = structure.members.map((member) => member.surfaceKey);
-    if (next === null) return { kind: "replace", request: { operationId, sourceSurfaceKeys, patch: { nodes: [], edges: [], regions: [] } } };
+    // Removed whole: no face succeeds any, so what was pinned to them goes with them.
+    if (next === null) return { kind: "replace", request: { operationId, sourceSurfaceKeys, patch: { nodes: [], edges: [], regions: [] } }, faceProps: new Map() };
     const { patch, faceProps } = structure.type.generate(port, next, operationId, scene.topologies);
     return { kind: "replace", request: { operationId, sourceSurfaceKeys, patch }, faceProps };
   },

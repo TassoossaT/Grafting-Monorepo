@@ -249,7 +249,7 @@ export const roofOpeningStand: OpeningStand = {
     // Stopped short of any room at all: the opening stays as it stood.
     if (made === undefined) return { recorded: false };
     const { recipe, k, was, placed } = made;
-    const next = standFor(recipe, was.side, [placed.at.x, placed.at.z], placed.look, made.waters);
+    const next = { ...standFor(recipe, was.side, [placed.at.x, placed.at.z], placed.look, made.waters), ...(was.id ? { id: was.id } : {}) };
     return inOne(ctx, causeId, () => {
       // The opening goes first, so nothing of it is carried onto the new front.
       const removed = commitOpeningGroup(ctx, causeId, pieces, []);
@@ -263,15 +263,10 @@ export const roofOpeningStand: OpeningStand = {
     const held = heldBy(ctx, host);
     if (held === undefined) return { recorded: false, error: "esta abertura nao esta numa lucarna do telhado." };
     const { recipe, k } = held;
-    // Every later dormer moves down one place: what is pinned to its faces follows.
-    const renamed = (role: string) => {
-      const [subroof, dormer, ...rest] = role.split(":");
-      return subroof === "-" && dormer !== "-" && Number(dormer) > k ? [subroof, String(Number(dormer) - 1), ...rest].join(":") : role;
-    };
     return inOne(ctx, causeId, () => {
       const removed = commitOpeningGroup(ctx, causeId, pieces, []);
       if (removed.error !== undefined) throw new Error(removed.error);
-      replaceRoofs(ctx, [withDormers(recipe, recipe.dormers!.filter((_, i) => i !== k))], facesOf(ctx, recipe.group), causeId, renamed);
+      replaceRoofs(ctx, [withDormers(recipe, recipe.dormers!.filter((_, i) => i !== k))], facesOf(ctx, recipe.group), causeId);
       return { recorded: false };
     });
   },

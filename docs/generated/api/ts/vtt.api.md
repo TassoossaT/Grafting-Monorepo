@@ -485,6 +485,8 @@ What committing needs of the runtime.
 
 ### `method vtt.effect-commit.EffectCommitRuntime.applyRegionEdit(ops: readonly AtomicEditOp[], origin: "local", causeId: string): unknown`
 
+### `method vtt.effect-commit.EffectCommitRuntime.applyRegionEdit(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): RegionEditOutcome`
+
 ### `method vtt.effect-commit.EffectCommitRuntime.generateIrregularQuadGrid(request: ConstructionIrregularQuadGridRequest): ConstructionIrregularQuadGrid | undefined`
 
 ### `method vtt.effect-commit.EffectCommitRuntime.generateRoof(request: RoofRequest): RoofPatch`
@@ -2488,6 +2490,10 @@ RIM_ROLES.
 
 What keeping a regenerated structure's properties and pins needs of the runtime.
 
+### `method vtt.face-props.FacePropsRuntime.applyRegionEdit(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): RegionEditOutcome`
+
+### `method vtt.face-props.FacePropsRuntime.getAllRegionTopologies(): readonly ConstructionRegionTopology[]`
+
 ### `method vtt.face-props.FacePropsRuntime.pinNodes(pins: readonly ConstructionPinRequest[], origin: ChangeOrigin, causeId: string): unknown`
 
 ### `method vtt.face-props.FacePropsRuntime.setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): unknown`
@@ -2503,6 +2509,8 @@ What was pinned to faces about to be regenerated, by the role of the face each i
 Gives each face a patch just made the properties its generator named for
 its region, and pins what was pinned to a replaced face onto the new face
 with the same role, where it stood on it -- a window stays in its gable.
+What was pinned to a face with no successor goes with it: a window in a
+dormer the roof no longer has, or in a roof taken away whole.
 
 ### `function vtt.face-props.pinnedToRoles(topologies: readonly ConstructionRegionTopology[], sources: readonly ConstructionSurfaceKey[]): PinnedToRoles`
 
@@ -3429,6 +3437,8 @@ What following a base needs of the runtime, inside the pipeline's transaction.
 
 ### `method vtt.roof-follow-base.FollowBaseRuntime.applyPatchReplacement(request: ApplyPatchReplacementRequest, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome`
 
+### `method vtt.roof-follow-base.FollowBaseRuntime.applyRegionEdit(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): RegionEditOutcome`
+
 ### `method vtt.roof-follow-base.FollowBaseRuntime.generateRoof(request: RoofRequest): RoofPatch`
 
 ### `method vtt.roof-follow-base.FollowBaseRuntime.getAllRegionTopologies(): readonly ConstructionRegionTopology[]`
@@ -3461,13 +3471,12 @@ Also edits an existing roof, through its handles only -- see `structure-edit-beh
 
 ### `function vtt.roof-tool.commitRoofRecipes(ctx: ToolContext, requests: readonly RoofSource[], replaces: readonly ConstructionSurfaceKey[], done: string): void`
 
-### `function vtt.roof-tool.replaceRoofs(ctx: ToolContext, requests: readonly RoofSource[], replaces: readonly ConstructionSurfaceKey[], transactionId?: string, renameRole: (role: string) => string): { group: string; recorded: boolean }`
+### `function vtt.roof-tool.replaceRoofs(ctx: ToolContext, requests: readonly RoofSource[], replaces: readonly ConstructionSurfaceKey[], transactionId?: string): { group: string; recorded: boolean }`
 
 Makes the roofs `requests` describe in place of the faces `replaces` names,
 under transaction `transactionId` -- joining it when it is already under
 way -- and returns the new faces' group name and whether it was recorded.
-What was pinned to a replaced face moves to the new face of the same role,
-`renameRole` first saying what that role is now called.
+What was pinned to a replaced face moves to the new face of the same role.
 
 ### `interface vtt.geometry-2d.PointXZ`
 
@@ -7147,6 +7156,10 @@ Smaller roofs joined into this roof's visible envelope.
 
 ### `type vtt.roof-recipe.Waters = 1 | 2 | 4`
 
+### `variable vtt.roof-recipe.DORMER_RIM: 0.02`
+
+How far inside its side's ends a dormer has to stand: twice the generator's clearance from its leaf's rim.
+
 ### `variable vtt.roof-recipe.OPENING_DORMER_PITCH: 1`
 
 How steeply the two waters over an opening's dormer rise when it is raised: a right angle at its ridge.
@@ -9410,6 +9423,10 @@ How high its front wall rises above the leaf.
 ### `property vtt.cap-port.RoofDormer.gableApart?: boolean`
 
 Its front wall stops at its eaves, a plain rectangle; the gable over it is a face of its own.
+
+### `property vtt.cap-port.RoofDormer.id?: string`
+
+Its own name, kept while dormers come and go before it: what is pinned to its faces keeps to it.
 
 ### `property vtt.cap-port.RoofDormer.opening?: boolean`
 

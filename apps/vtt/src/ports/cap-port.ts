@@ -6,6 +6,8 @@ export interface RoofFootprint {
 
 /** A dormer raised on the pitched leaf of footprint side `side`. */
 export interface RoofDormer {
+  /** Its own name, kept while dormers come and go before it: what is pinned to its faces keeps to it. */
+  readonly id?: string;
   readonly side: number;
   /** Where its middle stands along that side, as a fraction of it. */
   readonly along: number;

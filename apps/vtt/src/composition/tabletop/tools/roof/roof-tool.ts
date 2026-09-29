@@ -247,15 +247,13 @@ function stroked(ctx: ToolContext, contour: readonly FittedEdge[], level: number
  * Makes the roofs `requests` describe in place of the faces `replaces` names,
  * under transaction `transactionId` -- joining it when it is already under
  * way -- and returns the new faces' group name and whether it was recorded.
- * What was pinned to a replaced face moves to the new face of the same role,
- * `renameRole` first saying what that role is now called.
+ * What was pinned to a replaced face moves to the new face of the same role.
  */
 export function replaceRoofs(
   ctx: ToolContext,
   requests: readonly RoofSource[],
   replaces: readonly ConstructionSurfaceKey[],
   transactionId?: string,
-  renameRole: (role: string) => string = (role) => role,
 ): { readonly group: string; readonly recorded: boolean } {
   const operationId = scopedToolId(ctx, "roof", ctx.nextSequence());
   const standing = ctx.runtime.getAllRegionTopologies();
@@ -266,8 +264,7 @@ export function replaceRoofs(
     regions: made.flatMap(({ patch }) => patch.regions),
   };
   const faceProps = new Map(made.flatMap(({ faceProps }) => [...faceProps]));
-  const was = pinnedToRoles(ctx.runtime.getAllRegionTopologies(), replaces);
-  const pinned = { pins: was.pins.map((pin) => ({ ...pin, role: renameRole(pin.role) })) };
+  const pinned = pinnedToRoles(ctx.runtime.getAllRegionTopologies(), replaces);
   const { recorded } = commitPatchReplacement(ctx.runtime, { operationId, sourceSurfaceKeys: replaces, patch }, {
     transactionId: transactionId ?? operationId,
     afterward: (outcome) => keepFaceProps(ctx.runtime, operationId, outcome.createdSurfaceKeys, faceProps, pinned),

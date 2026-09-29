@@ -763,12 +763,13 @@ fn dormer_block(
         .all(|v| v.is_finite() && *v >= 0.0)
         || dormer.width <= 0.0
         || dormer.along > 1.0
+        || dormer.slopes.iter().all(|s| *s == 0.0)
     {
-        return Err("a dormer needs a positive width and finite, nonnegative measures".into());
+        return Err(
+            "a dormer needs a positive width, a pitched side and finite, nonnegative measures"
+                .into(),
+        );
     }
-    // No side pitched: its top is level, at its front's height, running back
-    // until the leaf rises past it.
-    let flat = dormer.slopes.iter().all(|s| *s == 0.0);
     let (u, n) = (host.direction, host.normal);
     let middle = [
         host.a[0] + dormer.along * (host.b[0] - host.a[0]),
@@ -871,8 +872,7 @@ fn dormer_block(
     Ok(Dormer {
         contour,
         planes,
-        // A level top is its front's plane, lying flat.
-        pitched: dormer.slopes.iter().enumerate().map(|(i, s)| *s > 0.0 || (flat && i == 0)).collect(),
+        pitched: dormer.slopes.iter().map(|s| *s > 0.0).collect(),
         normals,
         roles: vec![0, 1, 2, 3],
         elevation,
@@ -1941,7 +1941,7 @@ mod tests {
             slopes[side] = 1.0;
             slopes[(side + 2) % 4] = 1.0;
             let mut request = roof(outer.clone(), vec![], slopes);
-            request.dormers = vec![RoofDormer { side, along, setback: 1.0, width: 1.0, front: 0.5, slopes: [0.0; 4], absolute: false, gable_apart: false }];
+            request.dormers = vec![RoofDormer { side, along, setback: 1.0, width: 1.0, front: 0.5, slopes: [0.0, 1.0, 0.0, 1.0], absolute: false, gable_apart: false }];
             let patch = generate_roof_patch(request).unwrap_or_else(|e| panic!("{outer:?}: {e}"));
             let front = patch.faces.iter().find(|f| f.dormer == Some(0) && f.upright && f.side == 0).expect("a front");
             let xs: Vec<f64> = front.boundary.iter().map(|(e, _)| patch.nodes[patch.edges[*e].start][0]).collect();
