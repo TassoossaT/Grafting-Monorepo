@@ -301,6 +301,7 @@ fn skeleton(rings: &[Vec<Point>], speeds: &[f64], sides: &[usize]) -> Result<Ske
     let total: usize = rings.iter().map(Vec::len).sum();
     let mut now = 0.0_f64;
     for _ in 0..(40 * total + 200) {
+        pass_over_gables(&mut sk, &mut lavs, now);
         // A wavefront down to two corners is a ridge, or a point.
         let mut open = Vec::new();
         for lav in lavs.drain(..) {
@@ -471,6 +472,47 @@ fn skeleton(rings: &[Vec<Point>], speeds: &[f64], sides: &[usize]) -> Result<Ske
         }
     }
     Err("the roof skeleton did not close".into())
+}
+
+/// A pitched front that has come level with a gable beside it, running the
+/// same way, rises on over it: the gable stops there -- its top is its line
+/// at that moment -- and leaves the wavefront, the pitched front taking its
+/// place up to the gable's far corner.
+fn pass_over_gables(sk: &mut Skeleton, lavs: &mut [Vec<Corner>], now: f64) {
+    for lav in lavs.iter_mut() {
+        while lav.len() >= 3 {
+            let m = lav.len();
+            let found = (0..m).find_map(|i| {
+                let c = lav[i];
+                let (l, r) = (sk.fronts[c.left], sk.fronts[c.right]);
+                let level = |f: &Front| f.line + f.speed * now;
+                let together = dot(l.normal, r.normal) > 1.0 - 1e-9 && (level(&l) - level(&r)).abs() < 1e-7;
+                if !together || (l.speed == 0.0) == (r.speed == 0.0) { return None; }
+                Some((i, r.speed == 0.0))
+            });
+            let Some((i, gable_right)) = found else { break; };
+            // The gable runs from `c` to `n`; the pitched front keeps `c`'s other side.
+            let (ci, ni) = if gable_right { (i, (i + 1) % m) } else { ((i + m - 1) % m, i) };
+            let (c, n) = (lav[ci], lav[ni]);
+            let gable = c.right;
+            let (c_end, n_end) = (sk.end(&c, now), sk.end(&n, now));
+            let pitched = if gable_right { c.left } else { n.right };
+            if c_end != n_end { sk.arcs.push((c_end, n_end, gable, pitched)); }
+            let (at, left, right, node) = if gable_right {
+                (n.at(now), c.left, n.right, n_end)
+            } else {
+                (c.at(now), c.left, n.right, c_end)
+            };
+            let merged = sk.corner(at, now, left, right, node);
+            if ni == (ci + 1) % m && ni > ci {
+                lav.splice(ci..=ni, [merged]);
+            } else {
+                // `n` wrapped round to the start.
+                lav.remove(ci);
+                lav[0] = merged;
+            }
+        }
+    }
 }
 
 /// Each side's face: its own side, then the skeleton arcs round to its start.
@@ -1700,6 +1742,29 @@ fn weld(faces: Vec<Face3>) -> Result<RoofPatch, String> {
             *ring = split;
         }
     }
+    // A strip with no width -- a side walked out and straight back, where two
+    // events met at one instant -- is no part of its face.
+    for (_, rings) in &mut indexed {
+        for ring in rings.iter_mut() {
+            loop {
+                let n = ring.len();
+                if n < 3 { break; }
+                let Some(i) = (0..n).find(|&i| ring[i] == ring[(i + 1) % n] || ring[(i + n - 1) % n] == ring[(i + 1) % n]) else { break; };
+                if ring[i] == ring[(i + 1) % n] {
+                    ring.remove(i);
+                } else {
+                    let back = (i + 1) % n;
+                    let (first, second) = if back > i { (back, i) } else { (i, back) };
+                    ring.remove(first);
+                    ring.remove(second);
+                }
+            }
+        }
+        let outer_kept = rings.first().is_some_and(|ring| ring.len() >= 3);
+        rings.retain(|ring| ring.len() >= 3);
+        if !outer_kept { rings.clear(); }
+    }
+    indexed.retain(|(_, rings)| !rings.is_empty());
     let mut edges: Vec<CapEdge> = Vec::new();
     let mut result = Vec::new();
     for (face, mut rings) in indexed {

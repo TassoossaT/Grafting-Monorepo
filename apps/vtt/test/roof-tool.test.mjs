@@ -601,6 +601,27 @@ for (const { name, host, subroofs } of [
   });
 }
 
+for (const { name, host, a, b, waters } of [
+  // Its one water rises level with the larger roof's gable line and passes over it.
+  { name: "a one-water wing out of a hip roof's side", host: 4, a: [8, 1], b: [11, 3], waters: 1 },
+  // Its water meets the gable line at the instant the ridge forms.
+  { name: "a one-water wing flush with a gabled roof's corner", host: 2, a: [8, 0], b: [10, 2], waters: 1 },
+]) {
+  test(`${name} fuses into one valid roof`, () => {
+    const value = roofed(host);
+    try {
+      const start = { point: { x: a[0], y: 3, z: a[1] } }, current = { point: { x: b[0], y: 3, z: b[1] } };
+      const params = { ...DEFAULT_TOOL_PARAMS.roof, action: "draw", height: 2, waters };
+      roofTool.onPointerDown(value.ctx, start, params);
+      roofTool.onPointerUp(value.ctx, { start, current, samples: [start, current] }, params);
+      assert.notEqual(value.calls.feedback.at(-1)?.tone, "error", JSON.stringify(value.calls.feedback.at(-1)));
+      assert.equal(groups(value.runtime).size, 1);
+      // Every upright face stands in one vertical plane.
+      assert.ok(roofs(value.runtime).filter((face) => face.props.roofFace.upright).every(vertical));
+    } finally { value.session.free(); }
+  });
+}
+
 test("a subroof that would stand wholly inside its roof is refused", () => {
   const value = roofed(2);
   const { runtime, session } = value;
