@@ -26,6 +26,7 @@ import type { RoofFootprint } from "../../../../ports/cap-port.ts";
 import type { ConstructionTool, PointerSample, ToolContext } from "../core/tool-context.ts";
 import { withStructureEditing } from "../core/structure-edit-behavior.ts";
 import { contourStroke } from "../core/contour-stroke.ts";
+import { pointerOnFace } from "../core/build-frame.ts";
 import { segmentsPreview } from "../shapes/preview-shapes.ts";
 import { roofBaseAt } from "./roof-base.ts";
 import { commitRoofRecipes } from "./roof-commit.ts";
@@ -167,7 +168,7 @@ function surfaceLevelUnder(topologies: readonly ConstructionRegionTopology[], gr
  * roofs and it fused into one, every side they had keeping its slope; cut,
  * what is left of each roof it takes a piece of, as many roofs as pieces.
  */
-function stroked(ctx: ToolContext, contour: readonly FittedEdge[], level: number, params: Params): { readonly requests: readonly RoofSource[]; readonly replaces: readonly ConstructionSurfaceKey[] } {
+function stroked(ctx: ToolContext, contour: readonly FittedEdge[], level: number, params: Params): { readonly requests: readonly RoofSource[]; readonly replaces: readonly ConstructionSurfaceKey[]; readonly done?: string } {
   const roofs = [...roofsOf(ctx).values()];
   const topologies = ctx.runtime.getAllRegionTopologies();
   const floors = floorsOf(ctx).flatMap((face) => {
@@ -196,7 +197,7 @@ function stroked(ctx: ToolContext, contour: readonly FittedEdge[], level: number
       // One lower than the roof around it would stand wholly inside it, out of reach.
       const index = joined.subroofs!.length - 1;
       if (!ctx.runtime.generateRoof(joined).faces.some((face) => face.subroof === index)) throw new Error("O telhado novo ficaria escondido dentro do maior: aumente a altura.");
-      return { requests: [joined], replaces: contained.faces };
+      return { requests: [joined], replaces: contained.faces, done: "Telhado criado sobre o telhado." };
     }
   }
   if (params.action === "hole") {
@@ -258,10 +259,12 @@ function addDormer(ctx: ToolContext, sample: PointerSample, params: Params): voi
 const stroke = contourStroke<"roof", Params>({
   color: COLOR,
   levelAt: (ctx, first) => startElevation(ctx, first),
+  // Drawn over a roof's leaf at its eaves: where the pointer meets the leaf, not far behind it down the ray.
+  pointOn: pointerOnFace,
   commit: (ctx, contour, level, params) => {
     try {
-      const { requests, replaces } = stroked(ctx, contour, level, params);
-      commitRoofRecipes(ctx, requests, replaces, params.action === "hole" ? "Buraco aberto no telhado." : params.action === "cut" ? "Telhado recortado." : replaces.length > 0 ? "Telhados fundidos." : "Telhado criado.");
+      const { requests, replaces, done } = stroked(ctx, contour, level, params);
+      commitRoofRecipes(ctx, requests, replaces, done ?? (params.action === "hole" ? "Buraco aberto no telhado." : params.action === "cut" ? "Telhado recortado." : replaces.length > 0 ? "Telhados fundidos." : "Telhado criado."));
     } catch (error) {
       ctx.reportFeedback({ tone: "error", message: error instanceof Error ? error.message : String(error) });
     }

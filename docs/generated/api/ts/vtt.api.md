@@ -2068,6 +2068,15 @@ is whole grid steps when the table snaps. `undefined` when it has no area.
 
 Where a shape begun at `sample`, on the level `y`, starts: on the side it was drawn next to, else on the frame's grid.
 
+### `function vtt.build-frame.pointerOnFace(ctx: ToolContext, sample: PointerSample, y: number): ConstructionPosition`
+
+Where the pointer is, laid on the level `y`, for a shape drawn over the
+face it points at: its ray meeting that face's plane -- exactly under the
+cursor, unsnapped, as the ground gives it -- when the face slopes and
+stands above the level, a roof's leaf under a shape drawn at its eaves.
+Anything else, as pointerOnLevel. Carried down the ray to the
+level instead, a point on a leaf would land far behind it.
+
 ### `function vtt.build-frame.pointerOnLevel(sample: PointerSample, y: number): ConstructionPosition`
 
 Where the pointer is on the level `y` a shape is drawn at -- its ray
@@ -2206,6 +2215,10 @@ What a plain click with a dragged shape says.
 ### `property vtt.contour-stroke.ContourStrokeOptions.levelAt: (ctx: ToolContext, first: PointerSample, params: P) => number`
 
 The level a stroke begun at `first` draws on.
+
+### `property vtt.contour-stroke.ContourStrokeOptions.pointOn?: (ctx: ToolContext, sample: PointerSample, level: number) => ConstructionPosition`
+
+Where a sample stands on `level`: its ray crossing that level (`pointerOnLevel`) unless the tool says otherwise.
 
 ### `property vtt.contour-stroke.ContourStrokeOptions.previewClosed?: (ctx: ToolContext, outline: readonly ConstructionPosition[], level: number, params: P) => PreviewDescriptor | undefined`
 
