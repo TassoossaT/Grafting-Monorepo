@@ -368,6 +368,11 @@ test("a platform cuts the roof with its own edges and restores it when removed",
     const floor = runtime.getAllRegionTopologies().find((face) => face.surfaceType === "platform");
     assert.ok(floor, "the platform was created");
     assert.ok(roofs(runtime).some((face) => face.holes.length > 0), "its contour cuts the roof");
+    const roofNodes = roofs(runtime).flatMap((face) => face.nodes);
+    assert.ok(roofNodes.some((node) => Math.abs(node.position.x - 2) < 1e-5
+      && Math.abs(node.position.z - 1) < 1e-5 && Math.abs(node.position.y - 4) < 1e-5), "the slope below the platform survives up to its level");
+    const rim = floor.nodes.find((node) => Math.abs(node.position.x - 2) < 1e-5 && Math.abs(node.position.z - 1.5) < 1e-5);
+    assert.ok(roofs(runtime).some((face) => face.props.roofFace.upright && face.nodes.some((node) => node.id === rim.id)), "the vertical cut is welded to the platform rim");
     assert.equal(roofs(runtime)[0].props.roof.cutouts.length, 0, "the cut is derived from the live platform");
     commitRegionEdit(runtime, floor.nodes.map((node) => ({ kind: "move-vertex", nodeId: node.id, position: { ...node.position, x: node.position.x + 2 } })), { transactionId: "move-roof-platform" });
     const holeXs = roofs(runtime).flatMap((face) => face.holes.flatMap((loop) => loop.map((use) => face.nodes.find((node) => node.id === use.startNodeId)?.position.x))).filter((x) => x !== undefined);

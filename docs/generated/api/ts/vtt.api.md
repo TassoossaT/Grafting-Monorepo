@@ -6972,6 +6972,10 @@ The plans it covers: one, or several joined at a corner.
 
 Rise of the roof's highest point above its eaves.
 
+### `property vtt.roof-recipe.RoofRecipe.platform_cuts?: readonly { elevation: number; footprint: RoofFootprint }[]`
+
+Platform outlines trim only roof surface above the platform level.
+
 ### `property vtt.roof-recipe.RoofRecipe.slopes: readonly number[]`
 
 ### `interface vtt.roof-recipe.RoofRing`
@@ -7005,6 +7009,10 @@ The plans it covers: one, or several joined at a corner.
 ### `property vtt.roof-recipe.RoofSource.height: number`
 
 Rise of the roof's highest point above its eaves.
+
+### `property vtt.roof-recipe.RoofSource.platform_cuts?: readonly { elevation: number; footprint: RoofFootprint }[]`
+
+Platform outlines trim only roof surface above the platform level.
 
 ### `property vtt.roof-recipe.RoofSource.slopes: readonly number[]`
 
@@ -9301,6 +9309,10 @@ The plans it covers: one, or several joined at a corner.
 ### `property vtt.cap-port.RoofRequest.height: number`
 
 Rise of the roof's highest point above its eaves.
+
+### `property vtt.cap-port.RoofRequest.platform_cuts?: readonly { elevation: number; footprint: RoofFootprint }[]`
+
+Platform outlines trim only roof surface above the platform level.
 
 ### `property vtt.cap-port.RoofRequest.slopes: readonly number[]`
 

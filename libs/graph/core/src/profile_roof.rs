@@ -27,6 +27,15 @@ pub struct RoofFootprint {
     #[cfg_attr(feature = "curve-serde", serde(default))]
     pub holes: Vec<Vec<[f64; 2]>>,
 }
+/// A horizontal platform removes only roof surface above its walking plane.
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "curve-serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct RoofPlatformCut {
+    /// Platform boundary and any internal voids in plan.
+    pub footprint: RoofFootprint,
+    /// Height of the platform's walking surface.
+    pub elevation: f64,
+}
 
 /// A dormer raised on one leaf: a small roof of its own, over a front wall.
 #[derive(Clone, Debug)]
@@ -67,6 +76,9 @@ pub struct RoofRequest {
     /// Areas removed from the finished leaves, without changing the skeleton.
     #[cfg_attr(feature = "curve-serde", serde(default))]
     pub cutouts: Vec<RoofFootprint>,
+    /// Horizontal platforms that trim higher roof faces while retaining lower slopes.
+    #[cfg_attr(feature = "curve-serde", serde(default))]
+    pub platform_cuts: Vec<RoofPlatformCut>,
 }
 
 /// One logical roof face over shared indexed edges.
@@ -942,6 +954,70 @@ struct Face3 {
     outward: Option<Point>,
     rings: Vec<Vec<[f64; 3]>>,
 }
+/// Close the vertical cut between a platform rim and the surviving roof.
+fn platform_uprights(cut: &RoofPlatformCut, leaves: &[MainLeaf]) -> Vec<Face3> {
+    let mut faces = Vec::new();
+    for (ring_index, ring) in std::iter::once(&cut.footprint.outer)
+        .chain(&cut.footprint.holes)
+        .enumerate()
+    {
+        let toward_cut = if (area(ring) > 0.0) == (ring_index == 0) {
+            1.0
+        } else {
+            -1.0
+        };
+        for i in 0..ring.len() {
+            let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
+            let d = sub(b, a);
+            let outward = [-d[1] * toward_cut, d[0] * toward_cut];
+            let at = |t: f64| [a[0] + d[0] * t, a[1] + d[1] * t];
+            for leaf in leaves {
+                let mut stops = vec![0.0, 1.0];
+                for j in 0..leaf.plan.len() {
+                    if let Some(t) =
+                        crossing(a, b, leaf.plan[j], leaf.plan[(j + 1) % leaf.plan.len()])
+                    {
+                        stops.push(t);
+                    }
+                }
+                let (ha, hb) = (
+                    leaf.plane.z(a) - cut.elevation,
+                    leaf.plane.z(b) - cut.elevation,
+                );
+                if (ha - hb).abs() > 1e-12 {
+                    let t = ha / (ha - hb);
+                    if t > 0.0 && t < 1.0 {
+                        stops.push(t);
+                    }
+                }
+                stops.sort_by(f64::total_cmp);
+                stops.dedup_by(|x, y| (*x - *y).abs() < 1e-9);
+                for pair in stops.windows(2) {
+                    let (t0, t1) = (pair[0], pair[1]);
+                    if t1 - t0 < 1e-9
+                        || !inside(&leaf.plan, at((t0 + t1) / 2.0))
+                        || leaf.plane.z(at((t0 + t1) / 2.0)) <= cut.elevation + 1e-9
+                    {
+                        continue;
+                    }
+                    let (p, q) = (at(t0), at(t1));
+                    faces.push(Face3 {
+                        side: 0,
+                        dormer: None,
+                        outward: Some(outward),
+                        rings: vec![vec![
+                            [p[0], cut.elevation, p[1]],
+                            [q[0], cut.elevation, q[1]],
+                            [q[0], leaf.plane.z(q), q[1]],
+                            [p[0], leaf.plane.z(p), p[1]],
+                        ]],
+                    });
+                }
+            }
+        }
+    }
+    faces
+}
 
 /// Whether any two sides of the footprints cross or touch, other than
 /// neighbours meeting at their shared corner and rings sharing a corner.
@@ -1023,6 +1099,19 @@ pub fn generate_roof_patch(request: RoofRequest) -> Result<RoofPatch, String> {
             })
     }) {
         return Err("a roof cutout needs three finite corners and a nonzero area".into());
+    }
+    if request.platform_cuts.iter().any(|cut| {
+        !cut.elevation.is_finite()
+            || cut.elevation <= request.elevation
+            || cut.footprint.outer.len() < 3
+            || area(&cut.footprint.outer).abs() < 1e-9
+            || std::iter::once(&cut.footprint.outer)
+                .chain(&cut.footprint.holes)
+                .flatten()
+                .flatten()
+                .any(|value| !value.is_finite())
+    }) {
+        return Err("a platform cut needs a finite elevation and footprint above the eaves".into());
     }
     if crosses_itself(
         &authored
@@ -1143,7 +1232,7 @@ pub fn generate_roof_patch(request: RoofRequest) -> Result<RoofPatch, String> {
     // Main leaves, opened where a dormer stands higher.
     for (front, leaf) in &leaves {
         let side = front.map_or(count, |front| front.side);
-        if dormers.is_empty() && request.cutouts.is_empty() {
+        if dormers.is_empty() && request.cutouts.is_empty() && request.platform_cuts.is_empty() {
             faces.push(Face3 {
                 side,
                 dormer: None,
@@ -1165,6 +1254,16 @@ pub fn generate_roof_patch(request: RoofRequest) -> Result<RoofPatch, String> {
             std::iter::once(cutout.outer.clone())
                 .chain(cutout.holes.iter().cloned())
                 .collect()
+        }));
+        covers.extend(request.platform_cuts.iter().map(|cut| {
+            let level = Plane {
+                grad: [0.0; 2],
+                base: cut.elevation,
+            };
+            std::iter::once(&cut.footprint.outer)
+                .chain(&cut.footprint.holes)
+                .map(|ring| at_or_below(ring, &level, &leaf.plane, false))
+                .collect::<PlanFace>()
         }));
         for face in minus(&leaf.plan, &covers)? {
             faces.push(Face3 {
@@ -1206,6 +1305,16 @@ pub fn generate_roof_patch(request: RoofRequest) -> Result<RoofPatch, String> {
                     .chain(cutout.holes.iter().cloned())
                     .collect()
             }));
+            covers.extend(request.platform_cuts.iter().map(|cut| {
+                let level = Plane {
+                    grad: [0.0; 2],
+                    base: cut.elevation,
+                };
+                std::iter::once(&cut.footprint.outer)
+                    .chain(&cut.footprint.holes)
+                    .map(|ring| at_or_below(ring, &level, &plane, false))
+                    .collect::<PlanFace>()
+            }));
             for face in minus(&own, &covers)? {
                 faces.push(Face3 {
                     side: dormer.roles[j],
@@ -1229,6 +1338,9 @@ pub fn generate_roof_patch(request: RoofRequest) -> Result<RoofPatch, String> {
                 });
             }
         }
+    }
+    for cut in &request.platform_cuts {
+        faces.extend(platform_uprights(cut, &main));
     }
     weld(faces)
 }
@@ -1384,6 +1496,7 @@ mod tests {
             slopes,
             dormers: Vec::new(),
             cutouts: Vec::new(),
+            platform_cuts: Vec::new(),
         }
     }
 
@@ -1632,6 +1745,41 @@ mod tests {
             "{:?}",
             patch.faces
         );
+    }
+
+    #[test]
+    fn platform_cut_keeps_lower_slope_and_closes_its_rim() {
+        let mut request = rectangle([1.0, 0.0, 1.0, 0.0]);
+        request.platform_cuts.push(RoofPlatformCut {
+            footprint: RoofFootprint {
+                outer: vec![[2.0, 0.5], [4.0, 0.5], [4.0, 1.5], [2.0, 1.5]],
+                holes: Vec::new(),
+            },
+            elevation: 4.2,
+        });
+        let patch = generate_roof_patch(request).unwrap();
+        assert!(patch.nodes.iter().any(|p| (p[0] - 2.0).abs() < 1e-5
+            && (p[1] - 4.2).abs() < 1e-5
+            && (p[2] - 1.2).abs() < 1e-5));
+        let upright = patch.faces.iter().find(|face| {
+            face.upright
+                && face.boundary.iter().any(|(edge, _)| {
+                    let edge = &patch.edges[*edge];
+                    [edge.start, edge.end].iter().any(|node| {
+                        let p = patch.nodes[*node];
+                        (p[0] - 2.0).abs() < 1e-5
+                            && (p[1] - 4.2).abs() < 1e-5
+                            && (p[2] - 1.5).abs() < 1e-5
+                    })
+                })
+        });
+        assert!(
+            upright.is_some(),
+            "the cut must meet the platform at its rim"
+        );
+        assert!(patch.nodes.iter().any(|p| (p[0] - 2.0).abs() < 1e-5
+            && (p[1] - 4.5).abs() < 1e-5
+            && (p[2] - 1.5).abs() < 1e-5));
     }
 
     #[test]

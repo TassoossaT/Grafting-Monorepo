@@ -33,6 +33,8 @@ export interface RoofRequest {
   readonly dormers?: readonly RoofDormer[];
   /** Areas removed from finished roof faces without reshaping its skeleton. */
   readonly cutouts?: readonly RoofFootprint[];
+  /** Platform outlines trim only roof surface above the platform level. */
+  readonly platform_cuts?: readonly { readonly footprint: RoofFootprint; readonly elevation: number }[];
 }
 
 /** The engine's roof generator. */

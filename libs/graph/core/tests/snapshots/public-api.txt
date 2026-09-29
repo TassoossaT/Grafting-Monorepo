@@ -670,12 +670,30 @@ impl core::marker::Sync for grafting_graph_core::profile_roof::RoofPatch
 impl core::marker::Unpin for grafting_graph_core::profile_roof::RoofPatch
 impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::profile_roof::RoofPatch
 impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::profile_roof::RoofPatch
+pub struct grafting_graph_core::profile_roof::RoofPlatformCut
+pub grafting_graph_core::profile_roof::RoofPlatformCut::elevation: f64
+pub grafting_graph_core::profile_roof::RoofPlatformCut::footprint: grafting_graph_core::profile_roof::RoofFootprint
+impl core::clone::Clone for grafting_graph_core::profile_roof::RoofPlatformCut
+pub fn grafting_graph_core::profile_roof::RoofPlatformCut::clone(&self) -> grafting_graph_core::profile_roof::RoofPlatformCut
+impl core::fmt::Debug for grafting_graph_core::profile_roof::RoofPlatformCut
+pub fn grafting_graph_core::profile_roof::RoofPlatformCut::fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl serde_core::ser::Serialize for grafting_graph_core::profile_roof::RoofPlatformCut
+pub fn grafting_graph_core::profile_roof::RoofPlatformCut::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for grafting_graph_core::profile_roof::RoofPlatformCut
+pub fn grafting_graph_core::profile_roof::RoofPlatformCut::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for grafting_graph_core::profile_roof::RoofPlatformCut
+impl core::marker::Send for grafting_graph_core::profile_roof::RoofPlatformCut
+impl core::marker::Sync for grafting_graph_core::profile_roof::RoofPlatformCut
+impl core::marker::Unpin for grafting_graph_core::profile_roof::RoofPlatformCut
+impl core::panic::unwind_safe::RefUnwindSafe for grafting_graph_core::profile_roof::RoofPlatformCut
+impl core::panic::unwind_safe::UnwindSafe for grafting_graph_core::profile_roof::RoofPlatformCut
 pub struct grafting_graph_core::profile_roof::RoofRequest
 pub grafting_graph_core::profile_roof::RoofRequest::cutouts: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofFootprint>
 pub grafting_graph_core::profile_roof::RoofRequest::dormers: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofDormer>
 pub grafting_graph_core::profile_roof::RoofRequest::elevation: f64
 pub grafting_graph_core::profile_roof::RoofRequest::footprints: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofFootprint>
 pub grafting_graph_core::profile_roof::RoofRequest::height: f64
+pub grafting_graph_core::profile_roof::RoofRequest::platform_cuts: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofPlatformCut>
 pub grafting_graph_core::profile_roof::RoofRequest::slopes: alloc::vec::Vec<f64>
 impl core::clone::Clone for grafting_graph_core::profile_roof::RoofRequest
 pub fn grafting_graph_core::profile_roof::RoofRequest::clone(&self) -> grafting_graph_core::profile_roof::RoofRequest
@@ -4142,6 +4160,14 @@ Unique XYZ nodes.
 
 Transient XYZ segment endpoints of every edge, for a preview.
 
+### `pub grafting_graph_core::profile_roof::RoofPlatformCut::elevation: f64`
+
+Height of the platform's walking surface.
+
+### `pub grafting_graph_core::profile_roof::RoofPlatformCut::footprint: grafting_graph_core::profile_roof::RoofFootprint`
+
+Platform boundary and any internal voids in plan.
+
 ### `pub grafting_graph_core::profile_roof::RoofRequest::cutouts: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofFootprint>`
 
 Areas removed from the finished leaves, without changing the skeleton.
@@ -4161,6 +4187,10 @@ The plans it covers -- one, or several joined at a corner.
 ### `pub grafting_graph_core::profile_roof::RoofRequest::height: f64`
 
 Rise of the roof's highest point above the eaves.
+
+### `pub grafting_graph_core::profile_roof::RoofRequest::platform_cuts: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofPlatformCut>`
+
+Horizontal platforms that trim higher roof faces while retaining lower slopes.
 
 ### `pub grafting_graph_core::profile_roof::RoofRequest::slopes: alloc::vec::Vec<f64>`
 
@@ -4577,6 +4607,10 @@ The plan a roof covers: one outline and the holes through it.
 ### `pub struct grafting_graph_core::profile_roof::RoofPatch`
 
 Transient roof description ready for a caller to assign graph identities.
+
+### `pub struct grafting_graph_core::profile_roof::RoofPlatformCut`
+
+A horizontal platform removes only roof surface above its walking plane.
 
 ### `pub struct grafting_graph_core::profile_roof::RoofRequest`
 

@@ -1197,6 +1197,10 @@ Generates a cap with shared seam identities and no degenerate apex edges.
 
 ### `pub fn grafting_graph_core::profile_roof::RoofPatch::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer`
 
+### `pub fn grafting_graph_core::profile_roof::RoofPlatformCut::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>`
+
+### `pub fn grafting_graph_core::profile_roof::RoofPlatformCut::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer`
+
 ### `pub fn grafting_graph_core::profile_roof::RoofRequest::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>`
 
 ### `pub fn grafting_graph_core::profile_roof::RoofRequest::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer`
@@ -2514,6 +2518,14 @@ Unique XYZ nodes.
 
 Transient XYZ segment endpoints of every edge, for a preview.
 
+### `pub grafting_graph_core::profile_roof::RoofPlatformCut::elevation: f64`
+
+Height of the platform's walking surface.
+
+### `pub grafting_graph_core::profile_roof::RoofPlatformCut::footprint: grafting_graph_core::profile_roof::RoofFootprint`
+
+Platform boundary and any internal voids in plan.
+
 ### `pub grafting_graph_core::profile_roof::RoofRequest::cutouts: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofFootprint>`
 
 Areas removed from the finished leaves, without changing the skeleton.
@@ -2533,6 +2545,10 @@ The plans it covers -- one, or several joined at a corner.
 ### `pub grafting_graph_core::profile_roof::RoofRequest::height: f64`
 
 Rise of the roof's highest point above the eaves.
+
+### `pub grafting_graph_core::profile_roof::RoofRequest::platform_cuts: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofPlatformCut>`
+
+Horizontal platforms that trim higher roof faces while retaining lower slopes.
 
 ### `pub grafting_graph_core::profile_roof::RoofRequest::slopes: alloc::vec::Vec<f64>`
 
@@ -2949,6 +2965,10 @@ The plan a roof covers: one outline and the holes through it.
 ### `pub struct grafting_graph_core::profile_roof::RoofPatch`
 
 Transient roof description ready for a caller to assign graph identities.
+
+### `pub struct grafting_graph_core::profile_roof::RoofPlatformCut`
+
+A horizontal platform removes only roof surface above its walking plane.
 
 ### `pub struct grafting_graph_core::profile_roof::RoofRequest`
 

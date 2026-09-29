@@ -238,7 +238,7 @@ export function roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: Ro
   // A floor placed inside a roof's rise replaces the leaves beneath its own
   // boundary. Its live edges supply the cut each time either structure changes.
   // A floor at the eaves is the roof's base, so it does not cut its own roof.
-  const platformCuts: RoofFootprint[] = standing.flatMap((face) => {
+  const platformCuts: NonNullable<RoofRequest["platform_cuts"]>[number][] = standing.flatMap((face) => {
     if (!hasTrait(face.surfaceType, "floor") || face.nodes.length === 0) return [];
     const level = face.nodes[0]!.position.y;
     if (!face.nodes.every((node) => Math.abs(node.position.y - level) < 1e-4)
@@ -246,15 +246,14 @@ export function roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: Ro
     const area = faceArea(face);
     const holes = area.holes.map(plan);
     return area.outers.map(plan).filter((outer) => outer.length >= 3).map((outer) => ({
-      outer,
-      holes: holes.filter((hole) => hole.length >= 3 && insideRingXZ(outer, { x: hole[0]![0], z: hole[0]![1] })),
+      elevation: level,
+      footprint: { outer, holes: holes.filter((hole) => hole.length >= 3 && insideRingXZ(outer, { x: hole[0]![0], z: hole[0]![1] })) },
     }));
   });
-  const roof: RoofPatch = port.generateRoof({ ...wire, cutouts: [...(request.cutouts ?? []), ...platformCuts] });
+  const roof: RoofPatch = port.generateRoof({ ...wire, platform_cuts: platformCuts });
   const others = standing.filter((face) => face.props?.[ROOF_RECIPE_PROP] === undefined);
   const standingNodes = others.flatMap((face) => face.nodes);
-  const welded = roof.nodes.map(([x, y, z]) => (Math.abs(y - request.elevation) > WELD ? undefined
-    : standingNodes.find((node) => Math.abs(node.position.x - x) < WELD && Math.abs(node.position.y - y) < WELD && Math.abs(node.position.z - z) < WELD)));
+  const welded = roof.nodes.map(([x, y, z]) => standingNodes.find((node) => Math.abs(node.position.x - x) < WELD && Math.abs(node.position.y - y) < WELD && Math.abs(node.position.z - z) < WELD));
   const sides = new Map(others.flatMap((face) => [...face.outerLoops, ...face.holes].flat()).map((use) => [[use.startNodeId, use.endNodeId].sort().join("\u0000"), use] as const));
   const nodeId = (index: number) => welded[index]?.id ?? `${operationId}:node:${index}`;
   const sharedSide = (index: number) => {
