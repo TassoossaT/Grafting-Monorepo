@@ -21,6 +21,8 @@ export interface StandLook {
 export interface OpeningStand {
   /** Whether a press on `face` raises a stand there. */
   raisesOn(face: ConstructionRegionTopology): boolean;
+  /** The outline, in world space, an opening of `look` raised on `face` at `at` would stand on. */
+  outline(face: ConstructionRegionTopology, at: ConstructionPosition, look: StandLook): readonly ConstructionPosition[] | undefined;
   /** Raises a stand on `face` at `at` and places an opening of `look` in it. */
   raise(ctx: ToolContext, causeId: string, face: ConstructionRegionTopology, at: ConstructionPosition, look: StandLook): OpeningCommit;
   /** Whether the face `host` is one of this kind's stands. */

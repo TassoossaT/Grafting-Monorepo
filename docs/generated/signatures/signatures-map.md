@@ -4639,11 +4639,11 @@ export interface StandLook {
 export interface OpeningStand {
   /** Whether a press on `face` raises a stand there. */
   raisesOn(face: ConstructionRegionTopology): boolean;
+  /** The outline, in world space, an opening of `look` raised on `face` at `at` would stand on. */
+  outline(face: ConstructionRegionTopology, at: ConstructionPosition, look: StandLook): readonly ConstructionPosition[] | undefined;
   /** Raises a stand on `face` at `at` and places an opening of `look` in it. */
   raise(ctx: ToolContext, causeId: string, face: ConstructionRegionTopology, at: ConstructionPosition, look: StandLook): OpeningCommit;
   /** Whether the face `host` is one of this kind's stands. */
-  holds(ctx: ToolContext, host: ConstructionSurfaceKey): boolean;
-  /** Remakes the stand at `host` for its opening, now `look`, moved by `shift` in plan. */
 
 // src/composition/tabletop/tools/openings/opening-tool.ts
 export const openingTool: ConstructionTool<"opening"> = {

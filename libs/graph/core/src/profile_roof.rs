@@ -735,13 +735,12 @@ fn dormer_block(
         .all(|v| v.is_finite() && *v >= 0.0)
         || dormer.width <= 0.0
         || dormer.along > 1.0
-        || dormer.slopes.iter().all(|s| *s == 0.0)
     {
-        return Err(
-            "a dormer needs a positive width, a pitched side and finite, nonnegative measures"
-                .into(),
-        );
+        return Err("a dormer needs a positive width and finite, nonnegative measures".into());
     }
+    // No side pitched: its top is level, at its front's height, running back
+    // until the leaf rises past it.
+    let flat = dormer.slopes.iter().all(|s| *s == 0.0);
     let (u, n) = (host.direction, host.normal);
     let middle = [
         host.a[0] + dormer.along * (host.b[0] - host.a[0]),
@@ -824,6 +823,10 @@ fn dormer_block(
         at(-half, depth),
     ];
     let elevation = leaf.plane.z(front) + dormer.front;
+    // A level top must meet its leaf before the leaf ends: none higher than the roof reaches behind it.
+    if flat && [at(-half, depth), at(half, depth)].iter().any(|p| leaf.plane.z(*p) <= elevation + 1e-6) {
+        return Err("a level dormer top must meet its leaf: it cannot stand higher than the roof behind it".into());
+    }
     let mut planes = Vec::new();
     let mut normals = Vec::new();
     for i in 0..4 {
@@ -841,7 +844,8 @@ fn dormer_block(
     Ok(Dormer {
         contour,
         planes,
-        pitched: dormer.slopes.iter().map(|s| *s > 0.0).collect(),
+        // A level top is its front's plane, lying flat.
+        pitched: dormer.slopes.iter().enumerate().map(|(i, s)| *s > 0.0 || (flat && i == 0)).collect(),
         normals,
         roles: vec![0, 1, 2, 3],
         elevation,
@@ -1361,6 +1365,9 @@ fn generate_single_roof_patch(request: RoofRequest) -> Result<RoofPatch, String>
             plane: leaf.plane,
         })
         .collect();
+    // Where each side starts, as the caller drew it: a ring the skeleton
+    // walks the other way round runs each of its fronts backwards.
+    let side_starts: Vec<Point> = authored.iter().flat_map(|(_, _, ring)| ring.iter().copied()).collect();
     let mut dormers = Vec::new();
     for dormer in &request.dormers {
         let (front, leaf) = leaves
@@ -1371,7 +1378,11 @@ fn generate_single_roof_patch(request: RoofRequest) -> Result<RoofPatch, String>
                     .map(|front| (front, leaf))
             })
             .ok_or("a dormer stands only on a pitched leaf of the roof")?;
-        dormers.push(dormer_block(&front, leaf, dormer, scale)?);
+        // `along` runs the way the caller drew the side.
+        let start = side_starts.get(dormer.side).copied().unwrap_or(front.a);
+        let turned = (front.a[0] - start[0]).hypot(front.a[1] - start[1]) > 1e-9;
+        let placed = RoofDormer { along: if turned { 1.0 - dormer.along } else { dormer.along }, ..dormer.clone() };
+        dormers.push(dormer_block(&front, leaf, &placed, scale)?);
     }
     // Main leaves, opened where a dormer stands higher.
     for (front, leaf) in &leaves {
@@ -1873,6 +1884,29 @@ fn weld(faces: Vec<Face3>) -> Result<RoofPatch, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `along` runs the way the caller drew the side, whichever way round the
+    /// ring winds: a clockwise outline once mirrored its dormers.
+    #[test]
+    fn a_dormer_stands_along_its_side_as_drawn_whichever_way_the_ring_winds() {
+        for outer in [
+            vec![[0.0, 0.0], [8.0, 0.0], [8.0, 4.0], [0.0, 4.0]],
+            vec![[0.0, 0.0], [0.0, 4.0], [8.0, 4.0], [8.0, 0.0]],
+        ] {
+            // The side from (0,0) running along x is side 0 in the first ring, side 3 -- drawn from (8,0) -- in the second.
+            let (side, along) = if outer[1][0] > 0.0 { (0, 0.25) } else { (3, 0.75) };
+            let mut slopes = vec![0.0; 4];
+            slopes[side] = 1.0;
+            slopes[(side + 2) % 4] = 1.0;
+            let mut request = roof(outer.clone(), vec![], slopes);
+            request.dormers = vec![RoofDormer { side, along, setback: 1.0, width: 1.0, front: 0.5, slopes: [0.0; 4] }];
+            let patch = generate_roof_patch(request).unwrap_or_else(|e| panic!("{outer:?}: {e}"));
+            let front = patch.faces.iter().find(|f| f.dormer == Some(0) && f.upright && f.side == 0).expect("a front");
+            let xs: Vec<f64> = front.boundary.iter().map(|(e, _)| patch.nodes[patch.edges[*e].start][0]).collect();
+            let middle = (xs.iter().copied().fold(f64::INFINITY, f64::min) + xs.iter().copied().fold(f64::NEG_INFINITY, f64::max)) / 2.0;
+            assert!((middle - 2.0).abs() < 1e-6, "{outer:?}: its front's middle at x = {middle}, not 2");
+        }
+    }
 
     /// A reflex corner landing exactly on another front's corner once parted
     /// and rejoined the wavefront forever at that instant.

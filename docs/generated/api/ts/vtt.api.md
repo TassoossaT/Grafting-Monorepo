@@ -3123,6 +3123,10 @@ Removes the opening and the stand at `host` holding it.
 
 Whether the face `host` is one of this kind's stands.
 
+### `method vtt.opening-stand.OpeningStand.outline(face: ConstructionRegionTopology, at: ConstructionPosition, look: StandLook): readonly ConstructionPosition[] | undefined`
+
+The outline, in world space, an opening of `look` raised on `face` at `at` would stand on.
+
 ### `method vtt.opening-stand.OpeningStand.raise(ctx: ToolContext, causeId: string, face: ConstructionRegionTopology, at: ConstructionPosition, look: StandLook): OpeningCommit`
 
 Raises a stand on `face` at `at` and places an opening of `look` in it.
@@ -3415,10 +3419,12 @@ stays as it stood.
 
 ### `variable vtt.roof-opening-stand.roofOpeningStand: OpeningStand`
 
-A roof leaf holds an opening in a dormer raised for it: its front stands
-where the opening goes, its size the opening's with a margin round it.
-The roof keeps that dormer in its recipe, marked as the opening's, so the
-opening pinned to its front is carried whenever the roof is made again.
+A roof leaf holds an opening upright, the way a floor inside a roof is met
+by transition walls: the opening's box is cut back into the leaf, its top
+level, its cheeks upright, until the leaf rises past it. The opening fills
+that front whole. The roof keeps this as a dormer in its recipe, marked as
+the opening's, so the opening pinned to its front is carried whenever the
+roof is made again.
 
 ### `variable vtt.roof-tool.roofTool: ConstructionTool<"roof">`
 

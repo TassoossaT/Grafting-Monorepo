@@ -306,9 +306,32 @@ function refitStand(ctx: ToolContext, gesture: ReleasedGesture, active: Drag & {
   reportCommit(ctx, causeId, result, gesture.moved && isBody(active.handle) ? "Abertura movida." : "Abertura redimensionada.");
 }
 
+/** The face under `sample`, when it raises a stand for an opening, and the kind of stand. */
+function standUnder(ctx: ToolContext, sample: PointerSample): { readonly stand: OpeningStand; readonly face: ConstructionRegionTopology } | undefined {
+  const picked = sample.surfaceRef;
+  if (picked === undefined) return undefined;
+  const face = ctx.runtime.getAllRegionTopologies().find((topology) => surfaceRefFromNodeSet(topology.surfaceKey) === picked);
+  const stand = face === undefined ? undefined : openingStands.find((candidate) => candidate.raisesOn(face));
+  return stand === undefined || face === undefined ? undefined : { stand, face };
+}
+
+function lookOfNew(params: OpeningParams): StandLook {
+  return { width: params.width, height: params.height, shape: shapeOf(params), isDoor: params.openingKind === "door" };
+}
+
+/** A closed ring of world points as preview segments. */
+function ringPreview(ring: readonly ConstructionPosition[], color: number): ReturnType<typeof segmentsPreview> {
+  const positions: number[] = [];
+  ring.forEach((from, index) => {
+    const to = ring[(index + 1) % ring.length]!;
+    positions.push(from.x, from.y, from.z, to.x, to.y, to.z);
+  });
+  return segmentsPreview(Float32Array.from(positions), color);
+}
+
 /** A press on a face that raises a stand: an opening at the sliders' size, its stand raised round it. */
 function raiseStand(ctx: ToolContext, pressed: Extract<Press, { kind: "stand" }>, params: OpeningParams): void {
-  const look: StandLook = { width: params.width, height: params.height, shape: shapeOf(params), isDoor: params.openingKind === "door" };
+  const look = lookOfNew(params);
   if (selected !== undefined) clearSelection(ctx);
   const causeId = scopedToolId(ctx, "opening", ctx.nextSequence());
   const result = pressed.stand.raise(ctx, causeId, pressed.face, pressed.at, look);
@@ -493,9 +516,14 @@ export const openingTool: ConstructionTool<"opening"> = {
   previewFor(gesture: ToolGesture, params: OpeningParams, ctx: ToolContext) {
     // A stand is made again on release; its opening shows no ghost bounded by the old one.
     if (press?.kind === "grab") return press.drag.stand === undefined ? dragPreview(gesture, ctx, press.drag) : undefined;
-    if (press?.kind === "stand") return undefined;
     const fresh = forNew(params);
-    if (press?.anchor !== undefined) return createPreview(gesture, fresh, ctx, press.anchor);
+    // Over a face that raises a stand: the opening's outline, upright where it would stand.
+    const onStand = press?.kind === "stand" ? press : standUnder(ctx, gesture.current);
+    if (onStand !== undefined) {
+      const ring = onStand.stand.outline(onStand.face, press?.kind === "stand" ? press.at : gesture.current.point, lookOfNew(fresh));
+      return ring === undefined ? undefined : ringPreview(ring, OPENING_KIND_COLOR[fresh.openingKind]);
+    }
+    if (press?.kind === "wall" && press.anchor !== undefined) return createPreview(gesture, fresh, ctx, press.anchor);
     const placed = resolvePlacement(ctx, gesture.current, fresh);
     if (placed?.rect === undefined) return undefined;
     return rectPreview(ctx, placed.run, placed.rect, shapeOf(fresh), OPENING_KIND_COLOR[fresh.openingKind]);
@@ -510,14 +538,13 @@ export const openingTool: ConstructionTool<"opening"> = {
       else ctx.reportFeedback({ tone: "error", message: "Nao foi possivel identificar a parede desta abertura." });
       return;
     }
-    const hostSurfaceKey = wallUnder(ctx, sample);
     // A face an opening cannot lie in raises a stand for it instead.
-    const face = hostSurfaceKey === undefined ? undefined : ctx.runtime.getAllRegionTopologies().find((topology) => surfaceRefFromNodeSet(topology.surfaceKey) === surfaceRefFromNodeSet(hostSurfaceKey));
-    const stand = face === undefined ? undefined : openingStands.find((candidate) => candidate.raisesOn(face));
-    if (stand !== undefined && face !== undefined) {
-      press = { kind: "stand", stand, face, at: sample.point };
+    const onStand = standUnder(ctx, sample);
+    if (onStand !== undefined) {
+      press = { kind: "stand", ...onStand, at: sample.point };
       return;
     }
+    const hostSurfaceKey = wallUnder(ctx, sample);
     const placed = hostSurfaceKey === undefined ? undefined : runPointAt(ctx, hostSurfaceKey, sample.point);
     press = { kind: "wall", anchor: hostSurfaceKey === undefined || placed === undefined ? undefined : { run: placed.run, hostSurfaceKey, ...placed.at } };
   },
