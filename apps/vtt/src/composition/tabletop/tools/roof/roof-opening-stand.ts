@@ -16,9 +16,10 @@ const keyText = (key: ConstructionSurfaceKey) => key.join("\u0000");
 const faceAt = (ctx: ToolContext, key: ConstructionSurfaceKey) => ctx.runtime.getAllRegionTopologies().find((face) => keyText(face.surfaceKey) === keyText(key));
 const facesOf = (ctx: ToolContext, group: string) => ctx.runtime.getAllRegionTopologies().filter((face) => recipeOf(face)?.group === group).map((face) => face.surfaceKey);
 
-const CURVE_SAMPLES = 12;
-/** The longest straight step an opening's outline takes across a gabled front, whose local height bends under the ridge. */
-const OUTLINE_STEP = 0.05;
+/** Points each curved piece of an outline is set down by. */
+const CURVE_SAMPLES = 8;
+/** How far a side of an opening set down in a front may stray from its true line before it is broken. */
+const BEND = 0.005;
 
 /** A stand's waters: how steeply each rises from its left and right sides, zero a gable. */
 interface Waters {
@@ -159,7 +160,7 @@ function refitted(ctx: ToolContext, host: ConstructionSurfaceKey, look: StandLoo
 }
 
 /** The opening of `look` filling dormer `k`'s front whole -- on the roof just made as `group`. */
-function placeInFront(ctx: ToolContext, causeId: string, group: string, k: number, look: StandLook): OpeningCommit {
+function placeInFront(ctx: ToolContext, causeId: string, group: string, k: number, look: StandLook, waters: Waters): OpeningCommit {
   const front = ctx.runtime.getAllRegionTopologies().find((face) => {
     const role = roleOf(face);
     return recipeOf(face)?.group === group && role?.subroof === undefined && role?.dormer === k && role.upright && role.side === 0;
@@ -167,22 +168,36 @@ function placeInFront(ctx: ToolContext, causeId: string, group: string, k: numbe
   const run = front === undefined ? undefined : runFrame(ctx.runtime, front.surfaceKey);
   const panel = front === undefined ? undefined : run?.panelOf(front.surfaceKey);
   if (run === undefined || panel === undefined) throw new Error("a lucarna para a abertura nao ficou de pe aqui.");
-  // The front's `v` is a share of its local height, which rises under the
-  // gable: the outline is set down point by point at its true heights,
-  // closely enough that no side of it bends, and through the ridge's line.
+  // The front's `v` is a share of its local height, which rises under its
+  // waters: a straight side between two corners set down at their true
+  // heights sags or bulges between them. Each side is broken where the
+  // front's top turns -- its ridge -- and then only where it would stray
+  // from its true line by more than `BEND`.
+  const width = panel.length;
   const toFront = ([x, y]: readonly [number, number]): readonly [number, number] => {
-    const t = Math.min(1, Math.max(0, x / panel.length));
+    const t = Math.min(1, Math.max(0, x / width));
     const u = panel.reversed ? 1 - t : t;
     return [u, y / panel.frame.heightAt(u)];
   };
-  const dense: [number, number][] = [];
-  const outline = outlinePoints({ ...look, width: panel.length });
-  outline.forEach((a, i) => {
+  const strays = (a: readonly [number, number], b: readonly [number, number]) => {
+    const [[ua, va], [ub, vb]] = [toFront(a), toFront(b)];
+    return Math.abs(((va + vb) / 2) * panel.frame.heightAt((ua + ub) / 2) - (a[1] + b[1]) / 2) > BEND;
+  };
+  const refined = (a: readonly [number, number], b: readonly [number, number], depth = 0): (readonly [number, number])[] => {
+    if (depth >= 8 || !strays(a, b)) return [a];
+    const m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] as const;
+    return [...refined(a, m, depth + 1), ...refined(m, b, depth + 1)];
+  };
+  // Where its waters meet over the front, when two do.
+  const ridgeAt = waters.left > 0 && waters.right > 0 ? (waters.right * width) / (waters.left + waters.right) : undefined;
+  const outline = outlinePoints({ ...look, width });
+  const dense = outline.flatMap((a, i) => {
     const b = outline[(i + 1) % outline.length]!;
-    const cuts = [0, 1, ...((a[0] - panel.length / 2) * (b[0] - panel.length / 2) < 0 ? [(panel.length / 2 - a[0]) / (b[0] - a[0])] : [])];
-    const steps = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / OUTLINE_STEP));
-    for (let k = 0; k < steps; k++) cuts.push(k / steps);
-    [...new Set(cuts)].sort((p, q) => p - q).filter((t) => t < 1).forEach((t) => dense.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]));
+    const crosses = ridgeAt !== undefined && (a[0] - ridgeAt) * (b[0] - ridgeAt) < 0;
+    if (!crosses) return refined(a, b);
+    const t = (ridgeAt - a[0]) / (b[0] - a[0]);
+    const m = [ridgeAt, a[1] + (b[1] - a[1]) * t] as const;
+    return [...refined(a, m), ...refined(m, b)];
   });
   // Counter-clockwise in the front's own frame, whichever way it runs.
   const ring = (panel.reversed ? [...dense].reverse() : dense).map(toFront);
@@ -279,7 +294,7 @@ export const roofOpeningStand: OpeningStand = {
     const dormers = recipe.dormers ?? [];
     return inOne(ctx, causeId, () => {
       const made = replaceRoofs(ctx, [withDormers(recipe, [...dormers, standFor(recipe, role.side, [placed.at.x, placed.at.z], placed.look)])], facesOf(ctx, recipe.group), causeId);
-      return placeInFront(ctx, causeId, made.group, dormers.length, placed.look);
+      return placeInFront(ctx, causeId, made.group, dormers.length, placed.look, TWO_WATERS);
     });
   },
 
@@ -298,7 +313,7 @@ export const roofOpeningStand: OpeningStand = {
       const removed = commitOpeningGroup(ctx, causeId, pieces, []);
       if (removed.error !== undefined) throw new Error(removed.error);
       const regenerated = replaceRoofs(ctx, [withDormers(recipe, recipe.dormers!.map((dormer, i) => (i === k ? next : dormer)))], facesOf(ctx, recipe.group), causeId);
-      return placeInFront(ctx, causeId, regenerated.group, k, placed.look);
+      return placeInFront(ctx, causeId, regenerated.group, k, placed.look, made.waters);
     });
   },
 

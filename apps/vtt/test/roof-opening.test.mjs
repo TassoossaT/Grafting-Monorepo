@@ -277,6 +277,20 @@ test("reshaping a selected roof window round remakes its dormer round the new ou
   } finally { await runtime.dispose?.(); }
 });
 
+for (const [name, shape, most] of [
+  ["a plain window", undefined, 16],
+  ["a round window", { ellipse: true, radii: { top: 0, right: 0, bottom: 0, left: 0 } }, 40],
+]) {
+  test(`${name} in a gabled front takes only the corners it needs`, async () => {
+    const h = await gabled();
+    try {
+      clickLeaf(h, 4, 1.2, { ...window, height: 0.8, ...(shape ? { shape } : {}) });
+      const count = h.openings().reduce((sum, piece) => sum + piece.nodes.length, 0);
+      assert.ok(count > 3 && count <= most, `${count} corners`);
+    } finally { await h.runtime.dispose?.(); }
+  });
+}
+
 test("deleting the window removes its cut", async () => {
   const h = await roofWithWindow();
   const { runtime, ctx } = h;
