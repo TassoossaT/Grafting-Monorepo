@@ -169,7 +169,7 @@ Generates an indexed analytic cap without mutating the live graph.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::profile_roof_json(&self, json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
-Generates an indexed roof over convex blocks without mutating the live graph.
+Generates an indexed roof over a footprint without mutating the live graph.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::project_to_host_json(&self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 
@@ -208,10 +208,6 @@ Unregisters a surface outright and prunes any nodes it orphaned. See
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::rollback_transaction(&mut self, id: &str) -> core::result::Result<(), wasm_bindgen::JsValue>`
 
 Ends the open transaction by restoring the state it began from.
-
-### `pub fn grafting_procgen_construction_wasm::ConstructionSession::roof_footprint_blocks_json(&self, json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
-
-Splits a footprint into the convex blocks a roof is raised over.
 
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::set_region_props_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
 

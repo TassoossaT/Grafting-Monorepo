@@ -182,20 +182,12 @@ impl ConstructionSession {
         )
     }
 
-    /// Generates an indexed roof over convex blocks without mutating the live graph.
+    /// Generates an indexed roof over a footprint without mutating the live graph.
     pub fn profile_roof_json(&self, json: &str) -> Result<String, JsValue> {
         let request = parse::<grafting_graph_core::profile_roof::RoofRequest>(json)?;
         serialize(
             &grafting_graph_core::profile_roof::generate_roof_patch(request)
                 .map_err(to_js_error)?,
-        )
-    }
-
-    /// Splits a footprint into the convex blocks a roof is raised over.
-    pub fn roof_footprint_blocks_json(&self, json: &str) -> Result<String, JsValue> {
-        let contour = parse::<Vec<[f64; 2]>>(json)?;
-        serialize(
-            &grafting_graph_core::profile_roof::footprint_blocks(&contour).map_err(to_js_error)?,
         )
     }
 

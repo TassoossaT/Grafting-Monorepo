@@ -632,10 +632,7 @@ export interface ConstructionPlanarRequest {
   readonly operation: "union" | "difference" | "extend";
 }
 export interface ConstructionSessionPort extends BezierPort {
-  generateCap(request: import("./cap-port.ts").CapRequest): import("./cap-port.ts").CapPatch;
   generateRoof(request: import("./cap-port.ts").RoofRequest): import("./cap-port.ts").RoofPatch;
-  /** A footprint as the convex blocks a roof is raised over; throws for a concave plan without square corners. */
-  roofFootprintBlocks(contour: readonly (readonly [number, number])[]): readonly (readonly [number, number])[][];
   planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[];
   /** Pure cascade resolution, using one consistent engine state. */
   planMotion(request: ConstructionMotionRequest): ConstructionMotionPlan;

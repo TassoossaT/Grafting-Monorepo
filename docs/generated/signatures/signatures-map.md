@@ -134,7 +134,6 @@ pub fn set_region_props(
 pub struct ConstructionSession
 pub fn profile_cap_json(&self, json: &str) -> Result<String, JsValue>
 pub fn profile_roof_json(&self, json: &str) -> Result<String, JsValue>
-pub fn roof_footprint_blocks_json(&self, json: &str) -> Result<String, JsValue>
 pub fn bezier_batch_json(&self, json: &str) -> Result<String, JsValue>
 pub fn bezier_network_json(&self, json: &str) -> Result<String, JsValue>
 pub fn new() -> ConstructionSession
@@ -146,6 +145,7 @@ pub fn planar_boolean_json(&self, request_json: &str) -> Result<String, JsValue>
 pub fn plan_motion_json(&self, request_json: &str) -> Result<String, JsValue>
 pub fn move_vertices_json(&mut self, request_json: &str) -> Result<String, JsValue>
 pub fn move_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue>
+pub fn insert_vertex_json(&mut self, request_json: &str) -> Result<String, JsValue>
 
 // src/spatial_index.rs
 pub const DEFAULT_GRID_CELL_SIZE: f32 = 4.0;
@@ -3810,13 +3810,13 @@ export interface TransactionResult<T> {
   readonly recorded: boolean;
   }
 export interface TabletopRuntime extends BezierPort {
-  generateCap(request: import("../../ports/cap-port.ts").CapRequest): import("../../ports/cap-port.ts").CapPatch;
   generateRoof(request: import("../../ports/cap-port.ts").RoofRequest): import("../../ports/cap-port.ts").RoofPatch;
-  roofFootprintBlocks(contour: readonly (readonly [number, number])[]): readonly (readonly [number, number])[][];
   start(): Promise<void>;
   applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void;
   /**
   * Applies a resolved sequence of atomic edit ops as one transaction --
+  * what `planEdit` produced from the user's gesture and the grabbed role's
+  * own policy. The runtime deliberately does not resolve policy itself:
 export class AppTabletopRuntime implements TabletopRuntime {
   readonly #listeners = new Set<TabletopRuntimeListener>();
 
@@ -4240,6 +4240,24 @@ export function mitrePoint(
   standingDirection: PointXZ,
   limit: number,
   ): ConstructionPosition {
+
+// src/composition/tabletop/tools/core/contour-stroke.ts
+export type ContourShape = "rectangle" | "polygon" | "freehand" | "circle";
+export interface ContourStrokeParams {
+  readonly shape?: ContourShape;
+  readonly radius?: number;
+  readonly tolerance?: number;
+  }
+export interface ContourStrokeOptions<P extends ContourStrokeParams> {
+  /** The level a stroke begun at `first` draws on. */
+  readonly levelAt: (ctx: ToolContext, first: PointerSample, params: P) => number;
+  /** Takes a closed outline on `level`; `samples` are what drew it -- the corners, or the pointer's path. */
+  readonly commit: (ctx: ToolContext, contour: readonly FittedEdge[], level: number, params: P, samples: readonly PointerSample[]) => void;
+  /** A preview of a closed outline, when the tool shows more than the outline itself. */
+  readonly previewClosed?: (ctx: ToolContext, outline: readonly ConstructionPosition[], level: number, params: P) => PreviewDescriptor | undefined;
+  readonly color: number;
+export function contourStroke<K extends ConstructionToolId, P extends ContourStrokeParams>(options: ContourStrokeOptions<P>): Pick<ConstructionTool<K>, "previewFor" | "onClick" | "onPointerUp" | "onCancel"> {
+  const drafts = new WeakMap<object, { key: string; points: PointerSample[]; frame?: BuildFrame }>();
 
 // src/composition/tabletop/tools/core/curve-draft.ts
 export type CurveDraftMode = "straight" | "arc" | "points" | "connect" | "spiral";
@@ -4749,18 +4767,18 @@ export function commitPlatformContour(ctx: ToolContext, samples: readonly Pointe
 export const platformContourTool = withStructureEditing(rawPlatformContourTool, { ownsType: (surfaceType) => hasTrait(surfaceType, "floor"), handlesOnly: true });
 
 // src/composition/tabletop/tools/roof/roof-base.ts
-export type RoofBase =
+export interface RoofBase {
+  readonly footprint: RoofFootprint;
+  readonly elevation: number;
+  }
 export function roofBaseAt(topologies: readonly ConstructionRegionTopology[], sample: PointerSample): RoofBase {
   const clicked = topologies.find((face) => (
   sample.surfaceRef ? surfaceRefFromNodeSet(face.surfaceKey) === sample.surfaceRef : sample.nodeId !== undefined && face.nodes.some((node) => node.id === sample.nodeId)));
 
 // src/composition/tabletop/tools/roof/roof-tool.ts
-export function commitRoofRecipe(ctx: ToolContext, request: RoofRequest, replaces: readonly ConstructionSurfaceKey[] = []): void {
+export function commitRoofRecipes(ctx: ToolContext, requests: readonly RoofRequest[], replaces: readonly ConstructionSurfaceKey[] = [], done = "Telhado criado."): void {
   try {
   const operationId = scopedToolId(ctx, "roof", ctx.nextSequence());
-export function commitRoof(ctx: ToolContext, capRequest: CapRequest): void {
-  try {
-  const cap = ctx.runtime.generateCap(capRequest);
 export const roofTool = withStructureEditing(rawRoofTool, { ownsType: (surfaceType) => surfaceType === roofStructureType.surfaceType, handlesOnly: true });
 
 // src/composition/tabletop/tools/shapes/geometry-2d.ts
@@ -6719,44 +6737,41 @@ export function firstRefusal(resolved: readonly ResolvedCoverage[]): string | un
 // src/features/edit-construction/structure-types/roof/roof-recipe.ts
 export const ROOF_RECIPE_PROP = "roof";
 export const ROOF_FACE_PROP = "roofFace";
-export const ROOF_OVERHANG = 0.2;
 export interface RoofRecipe extends RoofRequest {
   readonly group: string;
   }
 export interface RoofFaceRole {
-  readonly block: number;
   readonly side: number;
+  readonly dormer?: number;
   readonly upright: boolean;
   }
-export function dormerSlopes(waters: 1 | 2 | 4): readonly [number, number, number, number] {
+export type Point = readonly [number, number];
+export type Waters = 1 | 2 | 4;
+export const ringsOf = (footprint: RoofFootprint): readonly (readonly Point[])[] => [footprint.outer, ...footprint.holes];
+export function sideOf(footprint: RoofFootprint, side: number): { readonly ring: number; readonly index: number; readonly a: Point; readonly c: Point } {
+  let first = 0;
+  const rings = ringsOf(footprint);
+export function sideNumber(footprint: RoofFootprint, ring: number, index: number): number {
+  return ringsOf(footprint).slice(0, ring).reduce((sum, r) => sum + r.length, 0) + index;
+  }
+export function inwardNormals(ring: readonly Point[], hole: boolean): Point[] {
+  const signed = ring.reduce((sum, a, i) => {
+  const b = ring[(i + 1) % ring.length]!;
+  return sum + a[0] * b[1] - b[0] * a[1];
+  }, 0);
+export function dormerSlopes(waters: Waters): readonly [number, number, number, number] {
   return waters === 2 ? [0, 1, 0, 1] : waters === 1 ? [0.5, 0, 0, 0] : [1, 1, 0, 1];
   }
-export function presetSlopes(contour: readonly Point[], waters: 1 | 2 | 4): number[] {
+export function presetSlopes(contour: readonly Point[], waters: Waters): number[] {
   const sides = contour.map((a, i) => {
   const b = contour[(i + 1) % contour.length]!;
   const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
-export function roofOver(blocks: readonly (readonly Point[])[], elevation: number, height: number, waters: 1 | 2 | 4): RoofRequest {
-  return {
-  elevation, height,
-  blocks: blocks.map((contour) => ({ contour, slopes: presetSlopes(contour, waters), overhangs: contour.map(() => ROOF_OVERHANG) })),
-  };
-export function inwardNormals(contour: readonly Point[]): Point[] {
-  const winding = Math.sign(contour.reduce((sum, a, i) => {
-  const b = contour[(i + 1) % contour.length]!;
-  return sum + a[0] * b[1] - b[0] * a[1];
-  }, 0));
-export function dormerAt(recipe: RoofRequest, block: number, side: number, at: Point, width: number, front: number, waters: 1 | 2 | 4): RoofDormer {
-  const contour = recipe.blocks[block]!.contour;
-  const a = contour[side]!, c = contour[(side + 1) % contour.length]!;
-  const length = Math.hypot(c[0] - a[0], c[1] - a[1]);
-export function roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: RoofRequest, operationId: string): {
-  readonly patch: ConstructionPatch;
-  readonly faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>;
-  } {
-  const roof: RoofPatch = port.generateRoof(request);
-export const roofRecipeGeneration: RecipeGeneration = {
-  of: (topology) => {
-  const recipe = recipeOf(topology);
+export function roofOver(footprint: RoofFootprint, elevation: number, height: number, waters: Waters): RoofRequest {
+  return { elevation, height, footprint, slopes: [...presetSlopes(footprint.outer, waters), ...footprint.holes.flatMap((hole) => hole.map(() => 1))] };
+export function carriedOnto(footprint: RoofFootprint, sources: readonly RoofRequest[], drawn?: { readonly outline: readonly Point[]; readonly slopes: readonly number[] }): { readonly slopes: number[]; readonly dormers: RoofDormer[] } {
+  const sides = ringsOf(footprint).flatMap((ring) => ring.map((a, i) => [a, ring[(i + 1) % ring.length]!] as const));
+export function dormerAt(recipe: RoofRequest, side: number, at: Point, width: number, front: number, waters: Waters): RoofDormer {
+  const { ring, index, a, c } = sideOf(recipe.footprint, side);
 
 // src/features/edit-construction/structure-types/roof/roof-structure.ts
 export const roofStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
@@ -7736,50 +7751,37 @@ export interface BezierPort {
   }
 
 // src/ports/cap-port.ts
-export interface CapRequest {
-  readonly base: { readonly kind: "rectangle"; readonly min: readonly [number, number]; readonly max: readonly [number, number] }
-  | { readonly kind: "circle"; readonly center: readonly [number, number]; readonly radius: number }
-  | { readonly kind: "contour"; readonly points: readonly [readonly [number, number], readonly [number, number], readonly [number, number], readonly [number, number]]; readonly centers: readonly [readonly [number, number] | null, readonly [number, number] | null, readonly [number, number] | null, readonly [number, number] | null] };
-export interface CapPatch {
-  readonly preview: readonly (readonly [number, number, number, number, number, number])[];
-  readonly nodes: readonly (readonly [number, number, number])[];
-  readonly edges: readonly { readonly start: number; readonly end: number; readonly center: readonly [number, number] | null }[];
-  readonly faces: readonly { readonly boundary: readonly (readonly [number, boolean])[]; readonly profile: ConstructionSheetProfile }[];
-  }
-export interface RoofBlock {
-  readonly contour: readonly (readonly [number, number])[];
-  /** Relative steepness per side; zero makes that side a gable. */
-  readonly slopes: readonly number[];
-  readonly overhangs: readonly number[];
+export interface RoofFootprint {
+  readonly outer: readonly (readonly [number, number])[];
+  readonly holes: readonly (readonly (readonly [number, number])[])[];
   }
 export interface RoofDormer {
-  readonly block: number;
   readonly side: number;
   /** Where its middle stands along that side, as a fraction of it. */
   readonly along: number;
   /** How far in from that side its front stands. */
   readonly setback: number;
   readonly width: number;
+  /** How high its front wall rises above the leaf. */
 export interface RoofRequest {
   readonly elevation: number;
   /** Rise of the roof's highest point above its eaves. */
   readonly height: number;
-  readonly blocks: readonly RoofBlock[];
+  readonly footprint: RoofFootprint;
+  readonly slopes: readonly number[];
   readonly dormers?: readonly RoofDormer[];
   }
 export interface RoofPort {
   generateRoof(request: RoofRequest): RoofPatch;
-  /** A footprint as the convex blocks a roof is raised over; throws for a concave plan without square corners. */
-  roofFootprintBlocks(contour: readonly (readonly [number, number])[]): readonly (readonly [number, number])[][];
   }
 export interface RoofPatch {
   readonly preview: readonly (readonly [number, number, number, number, number, number])[];
   readonly nodes: readonly (readonly [number, number, number])[];
   readonly edges: readonly { readonly start: number; readonly end: number; readonly center: null }[];
   readonly faces: readonly {
-  readonly block: number;
+  /** The footprint side it rises from -- one past the last for a flat top; a dormer's own side 0-3, or 4 where it meets its leaf. */
   readonly side: number;
-  /** Under a gable, or a dormer's front and cheeks. */
+  readonly dormer: number | null;
 
 // src/ports/construction-session-port.ts
 export type ConstructionNodeId = string;
@@ -7844,7 +7846,7 @@ export interface ConstructionCurvedEdge {
   readonly handle2: readonly [number, number];
 
 // src/ports/index.ts
-export type { CapRequest, CapPatch } from "./cap-port.ts";
+export type { RoofDormer, RoofFootprint, RoofPatch, RoofPort, RoofRequest } from "./cap-port.ts";
 export type { BezierPort, CurveBatch, CurveCommand, CurveResult, CurveHandles, CurvePoint, CubicBezier, CurveHandleMode, SpanGeometry, CurveNetworkRequest, CurveNetworkPatch } from "./bezier-port.ts";
 export type {
   CameraControlHandle,

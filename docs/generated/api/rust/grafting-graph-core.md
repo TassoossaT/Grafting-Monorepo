@@ -1181,10 +1181,6 @@ Resolves a supported authored contour without approximating its footprint.
 
 Generates a cap with shared seam identities and no degenerate apex edges.
 
-### `pub fn grafting_graph_core::profile_roof::RoofBlock::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>`
-
-### `pub fn grafting_graph_core::profile_roof::RoofBlock::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer`
-
 ### `pub fn grafting_graph_core::profile_roof::RoofDormer::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>`
 
 ### `pub fn grafting_graph_core::profile_roof::RoofDormer::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer`
@@ -1193,6 +1189,10 @@ Generates a cap with shared seam identities and no degenerate apex edges.
 
 ### `pub fn grafting_graph_core::profile_roof::RoofFace::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer`
 
+### `pub fn grafting_graph_core::profile_roof::RoofFootprint::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>`
+
+### `pub fn grafting_graph_core::profile_roof::RoofFootprint::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer`
+
 ### `pub fn grafting_graph_core::profile_roof::RoofPatch::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>`
 
 ### `pub fn grafting_graph_core::profile_roof::RoofPatch::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer`
@@ -1200,15 +1200,6 @@ Generates a cap with shared seam identities and no degenerate apex edges.
 ### `pub fn grafting_graph_core::profile_roof::RoofRequest::deserialize<__D>(__deserializer: __D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>`
 
 ### `pub fn grafting_graph_core::profile_roof::RoofRequest::serialize<__S>(&self, __serializer: __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer`
-
-### `pub fn grafting_graph_core::profile_roof::footprint_blocks(contour: &[[f64; 2]]) -> core::result::Result<alloc::vec::Vec<alloc::vec::Vec<[f64; 2]>>, alloc::string::String>`
-
-Splits a footprint into the convex blocks a roof is raised over.
-
-A convex footprint is its own block. An orthogonal one -- every corner
-square, as an L, T, U or cross plan is -- becomes its maximal rectangles,
-which overlap where its arms meet so the joined roof gets its valleys
-there. Other concave footprints are refused.
 
 ### `pub fn grafting_graph_core::profile_roof::generate_roof_patch(request: grafting_graph_core::profile_roof::RoofRequest) -> core::result::Result<grafting_graph_core::profile_roof::RoofPatch, alloc::string::String>`
 
@@ -2450,26 +2441,9 @@ Maximum rise above the base.
 
 Horizontal expansion of the base contour.
 
-### `pub grafting_graph_core::profile_roof::RoofBlock::contour: alloc::vec::Vec<[f64; 2]>`
-
-Footprint corners in XZ, in either winding. Side `i` runs from corner
-`i` to corner `i + 1`.
-
-### `pub grafting_graph_core::profile_roof::RoofBlock::overhangs: alloc::vec::Vec<f64>`
-
-How far each side's eave reaches out past the footprint.
-
-### `pub grafting_graph_core::profile_roof::RoofBlock::slopes: alloc::vec::Vec<f64>`
-
-Relative steepness of each side's leaf; zero makes that side a gable.
-
 ### `pub grafting_graph_core::profile_roof::RoofDormer::along: f64`
 
 Where its middle stands along that side, as a fraction of it.
-
-### `pub grafting_graph_core::profile_roof::RoofDormer::block: usize`
-
-The block whose leaf carries it.
 
 ### `pub grafting_graph_core::profile_roof::RoofDormer::front: f64`
 
@@ -2481,7 +2455,7 @@ How far in from that side its front stands.
 
 ### `pub grafting_graph_core::profile_roof::RoofDormer::side: usize`
 
-The side of that block the leaf rises from; it must be pitched.
+The footprint side whose leaf carries it; it must be pitched.
 
 ### `pub grafting_graph_core::profile_roof::RoofDormer::slopes: [f64; 4]`
 
@@ -2492,28 +2466,37 @@ makes a side a gable. Two waters pitch the right and left.
 
 Its width along the side.
 
-### `pub grafting_graph_core::profile_roof::RoofFace::block: usize`
-
-Index of the block this face belongs to; dormers follow the blocks,
-in their own order.
-
 ### `pub grafting_graph_core::profile_roof::RoofFace::boundary: alloc::vec::Vec<(usize, bool)>`
 
 `(edge index, reversed)` uses of the outer loop.
 
+### `pub grafting_graph_core::profile_roof::RoofFace::dormer: core::option::Option<usize>`
+
+The dormer it belongs to, if any.
+
 ### `pub grafting_graph_core::profile_roof::RoofFace::holes: alloc::vec::Vec<alloc::vec::Vec<(usize, bool)>>`
 
-Inner loops, where another block's roof climbs through this face.
+Inner loops, where a dormer climbs through this face.
 
 ### `pub grafting_graph_core::profile_roof::RoofFace::side: usize`
 
-Index of the footprint side this face rises from. A dormer's sides
-are front, right, back and left; four is where it meets its leaf.
+The footprint side it rises from -- one past the last side for a flat
+top, where only gables were left to close it; for a dormer's face, the
+dormer's own side -- front, right, back, left -- or four where it
+meets its leaf.
 
 ### `pub grafting_graph_core::profile_roof::RoofFace::upright: bool`
 
 Whether this is an upright face: under a gable, or a dormer's front
 and cheeks.
+
+### `pub grafting_graph_core::profile_roof::RoofFootprint::holes: alloc::vec::Vec<alloc::vec::Vec<[f64; 2]>>`
+
+Holes' corners in XZ, in either winding.
+
+### `pub grafting_graph_core::profile_roof::RoofFootprint::outer: alloc::vec::Vec<[f64; 2]>`
+
+Outline corners in XZ, in either winding.
 
 ### `pub grafting_graph_core::profile_roof::RoofPatch::edges: alloc::vec::Vec<grafting_graph_core::profile_cap_patch::CapEdge>`
 
@@ -2521,7 +2504,7 @@ Shared straight edges.
 
 ### `pub grafting_graph_core::profile_roof::RoofPatch::faces: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofFace>`
 
-Pitched leaves and upright faces.
+Leaves and upright faces.
 
 ### `pub grafting_graph_core::profile_roof::RoofPatch::nodes: alloc::vec::Vec<[f64; 3]>`
 
@@ -2531,10 +2514,6 @@ Unique XYZ nodes.
 
 Transient XYZ segment endpoints of every edge, for a preview.
 
-### `pub grafting_graph_core::profile_roof::RoofRequest::blocks: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofBlock>`
-
-Convex blocks joined into one roof.
-
 ### `pub grafting_graph_core::profile_roof::RoofRequest::dormers: alloc::vec::Vec<grafting_graph_core::profile_roof::RoofDormer>`
 
 Dormers raised on its leaves.
@@ -2543,9 +2522,18 @@ Dormers raised on its leaves.
 
 Elevation of every eave.
 
+### `pub grafting_graph_core::profile_roof::RoofRequest::footprint: grafting_graph_core::profile_roof::RoofFootprint`
+
+The plan it covers.
+
 ### `pub grafting_graph_core::profile_roof::RoofRequest::height: f64`
 
-Rise of the highest point of the roof above the eaves.
+Rise of the roof's highest point above the eaves.
+
+### `pub grafting_graph_core::profile_roof::RoofRequest::slopes: alloc::vec::Vec<f64>`
+
+Relative steepness of every side -- the outline's, then each hole's,
+side `i` running from corner `i` to corner `i + 1`; zero makes a gable.
 
 ### `pub grafting_graph_core::profile_surface::ProfileSheet::lower: grafting_graph_core::profile_surface::Section`
 
@@ -2652,21 +2640,22 @@ Indexed, shared-boundary topology for analytic caps. No live graph mutation.
 
 ### `pub mod grafting_graph_core::profile_roof`
 
-Roofs raised over convex footprints, one leaf per footprint side.
+Roofs raised over any footprint by its weighted straight skeleton.
 
-Every side of a block either rises inward at its own slope -- a pitched
-leaf -- or does not rise at all -- a gable. A block's roof is the lower
-envelope of its leaf planes, which is exactly the weighted straight
-skeleton of a convex footprint. Overlapping blocks join as the upper
-envelope of their roofs: an L, T or cross plan gets its valleys from where
-one block's roof climbs out of another's.
+Every side of the footprint -- its outline and the rims of its holes --
+is a leaf that rises inward at its own slope, or a gable that does not
+rise at all and stands upright. The wavefront each side sweeps inward, at
+a speed of one over its slope, meets the others along the roof's hips,
+valleys and ridges; the time it reaches a point is the roof's height
+there. Any simple outline is covered this way, holes included, and two
+roofs fused are one footprint.
 
-A dormer is one more block, raised on a leaf: its eaves stand above the
+A dormer is a small block raised on one leaf: its eaves stand above the
 leaf, so where its roof is higher the leaf is opened, and upright faces
-close the gap between the two -- its front and its cheeks. The same
-upright faces close every gable, from whatever roof lies under it.
+close the gap between the two -- its front and its cheeks.
 
-One water, two waters and four waters are only which sides are pitched.
+The roof is only the volume a covering is placed on: how far its eaves
+reach out and whether its leaves curve are the covering's business.
 
 ### `pub mod grafting_graph_core::profile_surface`
 
@@ -2940,10 +2929,6 @@ Transient cap description ready for a caller to assign graph identities.
 
 Pure generation request with one common elevation and height.
 
-### `pub struct grafting_graph_core::profile_roof::RoofBlock`
-
-One convex footprint and the role of each of its sides.
-
 ### `pub struct grafting_graph_core::profile_roof::RoofDormer`
 
 A dormer raised on one leaf: a small roof of its own, over a front wall.
@@ -2952,13 +2937,17 @@ A dormer raised on one leaf: a small roof of its own, over a front wall.
 
 One logical roof face over shared indexed edges.
 
+### `pub struct grafting_graph_core::profile_roof::RoofFootprint`
+
+The plan a roof covers: one outline and the holes through it.
+
 ### `pub struct grafting_graph_core::profile_roof::RoofPatch`
 
 Transient roof description ready for a caller to assign graph identities.
 
 ### `pub struct grafting_graph_core::profile_roof::RoofRequest`
 
-A whole roof: its blocks, where they stand and how high the roof rises.
+A whole roof: its footprint, how each side rises, and its dormers.
 
 ### `pub struct grafting_graph_core::profile_surface::ProfileSheet`
 

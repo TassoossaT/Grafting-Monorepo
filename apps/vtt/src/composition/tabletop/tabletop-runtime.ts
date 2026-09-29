@@ -113,9 +113,7 @@ export interface TransactionResult<T> {
 }
 
 export interface TabletopRuntime extends BezierPort {
-  generateCap(request: import("../../ports/cap-port.ts").CapRequest): import("../../ports/cap-port.ts").CapPatch;
   generateRoof(request: import("../../ports/cap-port.ts").RoofRequest): import("../../ports/cap-port.ts").RoofPatch;
-  roofFootprintBlocks(contour: readonly (readonly [number, number])[]): readonly (readonly [number, number])[][];
   start(): Promise<void>;
   applyConfirmedToken(envelope: ConfirmedTokenDeltaEnvelope): void;
   /**
@@ -1019,19 +1017,9 @@ export class AppTabletopRuntime implements TabletopRuntime {
     return this.#construction.getRegionTopologiesInBounds(bounds);
   }
 
-  generateCap(request: import("../../ports/cap-port.ts").CapRequest): import("../../ports/cap-port.ts").CapPatch {
-    this.#requireReady("generating a covering");
-    return this.#construction.generateCap(request);
-  }
-
   generateRoof(request: import("../../ports/cap-port.ts").RoofRequest): import("../../ports/cap-port.ts").RoofPatch {
     this.#requireReady("generating a covering");
     return this.#construction.generateRoof(request);
-  }
-
-  roofFootprintBlocks(contour: readonly (readonly [number, number])[]): readonly (readonly [number, number])[][] {
-    this.#requireReady("generating a covering");
-    return this.#construction.roofFootprintBlocks(contour);
   }
 
   curveBatch(request: import("../../ports/bezier-port.ts").CurveBatch): readonly import("../../ports/bezier-port.ts").CurveResult[] {

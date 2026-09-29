@@ -427,24 +427,25 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
       activeTool === "roof" ? (
         <div style={{ display: "grid", gap: "0.6rem" }}>
           <div className="gm-material-grid">
-            {(["rectangle", "circle", "base", "dormer"] as const).map((shape, index) => <SelectableChip key={shape} label={["Retangular", "Circular", "Sobre base", "Lucarna"][index]!} swatchColor="#b96e48" selected={params.roof.shape === shape} onSelect={() => onParamsChange("roof", { ...params.roof, shape })} />)}
+            {(["draw", "cut", "base", "dormer"] as const).map((action, i) => <SelectableChip key={action} label={["Desenhar / fundir", "Recortar", "Sobre base", "Lucarna"][i]!} swatchColor="#b96e48" selected={params.roof.action === action} onSelect={() => onParamsChange("roof", { ...params.roof, action })} />)}
           </div>
-          {params.roof.shape !== "base" && params.roof.shape !== "dormer" && <label>Elevação da base <input type="number" step="0.1" value={params.roof.elevation} onChange={(event) => onParamsChange("roof", { ...params.roof, elevation: Number(event.currentTarget.value) })} /></label>}
-          {params.roof.shape === "dormer" && <label>Largura da lucarna <input type="number" min="0.3" step="0.1" value={params.roof.dormerWidth} onChange={(event) => onParamsChange("roof", { ...params.roof, dormerWidth: Number(event.currentTarget.value) })} /></label>}
-          {params.roof.shape === "dormer" && <label>Altura da frente <input type="number" min="0" step="0.1" value={params.roof.dormerFront} onChange={(event) => onParamsChange("roof", { ...params.roof, dormerFront: Number(event.currentTarget.value) })} /></label>}
-          {params.roof.shape !== "dormer" && <label>Altura máxima <input type="number" min="0.1" step="0.1" value={params.roof.height} onChange={(event) => onParamsChange("roof", { ...params.roof, height: Number(event.currentTarget.value) })} /></label>}
-          {params.roof.shape === "circle" && <label>Raio <input type="number" min="0.1" step="0.1" value={params.roof.radius} onChange={(event) => onParamsChange("roof", { ...params.roof, radius: Number(event.currentTarget.value) })} /></label>}
-          {params.roof.shape !== "circle" && (
+          {(params.roof.action === "draw" || params.roof.action === "cut") && (
             <div className="gm-material-grid">
-              {([4, 2, 1] as const).map((waters) => <SelectableChip key={waters} label={`${waters} ${waters === 1 ? "água" : "águas"}`} swatchColor="#b96e48" selected={params.roof.waters === waters} onSelect={() => onParamsChange("roof", { ...params.roof, waters })} />)}
+              {(["rectangle", "circle", "polygon", "freehand"] as const).map((shape, i) => <SelectableChip key={shape} label={["Retângulo", "Círculo", "Polígono", "Livre / curvas"][i]!} swatchColor="#b96e48" selected={params.roof.shape === shape} onSelect={() => onParamsChange("roof", { ...params.roof, shape })} />)}
             </div>
           )}
-          {params.roof.shape === "circle" && params.roof.curvatures.map((curvature, index) => <label key={index}>Curvatura da folha {index + 1} <input type="number" min="-1" max="1" step="0.1" value={curvature} onChange={(event) => {
-            const curvatures: [number, number, number, number] = [...params.roof.curvatures];
-            curvatures[index] = Number(event.currentTarget.value);
-            onParamsChange("roof", { ...params.roof, curvatures });
-          }} /></label>)}
-          <p>Retangular: arraste entre dois cantos. Circular: clique no centro. Sobre base: clique na plataforma ou numa parede do cômodo que deseja cobrir. Lucarna: clique na água do telhado onde fica a frente dela.</p>
+          {(params.roof.action === "draw" || params.roof.action === "cut") && params.roof.shape === "circle" && <div className="gm-material-grid">{TOWER_RADIUS_PRESETS.map((radius) => <SelectableChip key={radius} label={`Raio ${radius}`} swatchColor="#b96e48" selected={params.roof.radius === radius} onSelect={() => onParamsChange("roof", { ...params.roof, radius })} />)}</div>}
+          {(params.roof.action === "draw" || params.roof.action === "cut") && params.roof.shape === "freehand" && <label>Correção <input type="number" min="0" max="1" step="0.05" value={params.roof.tolerance} onChange={(event) => onParamsChange("roof", { ...params.roof, tolerance: Number(event.currentTarget.value) })} /></label>}
+          {params.roof.action === "draw" && <label>Elevação da base <input type="number" step="0.1" value={params.roof.elevation} onChange={(event) => onParamsChange("roof", { ...params.roof, elevation: Number(event.currentTarget.value) })} /></label>}
+          {(params.roof.action === "draw" || params.roof.action === "base") && <label>Altura máxima <input type="number" min="0.1" step="0.1" value={params.roof.height} onChange={(event) => onParamsChange("roof", { ...params.roof, height: Number(event.currentTarget.value) })} /></label>}
+          {params.roof.action === "dormer" && <label>Largura da lucarna <input type="number" min="0.3" step="0.1" value={params.roof.dormerWidth} onChange={(event) => onParamsChange("roof", { ...params.roof, dormerWidth: Number(event.currentTarget.value) })} /></label>}
+          {params.roof.action === "dormer" && <label>Altura da frente <input type="number" min="0" step="0.1" value={params.roof.dormerFront} onChange={(event) => onParamsChange("roof", { ...params.roof, dormerFront: Number(event.currentTarget.value) })} /></label>}
+          {params.roof.action !== "cut" && (
+            <div className="gm-material-grid">
+              {([4, 2, 1] as const).map((waters) => <SelectableChip key={waters} label={params.roof.action === "dormer" ? ["Quatro águas", "Duas águas", "Uma água"][[4, 2, 1].indexOf(waters)]! : `${waters} ${waters === 1 ? "água" : "águas"}`} swatchColor="#b96e48" selected={params.roof.waters === waters} onSelect={() => onParamsChange("roof", { ...params.roof, waters })} />)}
+            </div>
+          )}
+          <p>Desenhar: retângulo na diagonal, círculo no centro, polígono pelos cantos, livre pelo contorno; encostando num telhado, os dois viram um só. Recortar tira a área desenhada dos telhados. Sobre base: clique na plataforma ou numa parede do cômodo. Lucarna: clique na água do telhado onde fica a frente dela.</p>
         </div>
       ) : activeTool === "platform-contour" ? (
         <div style={{ display: "grid", gap: "0.6rem" }}>

@@ -8,7 +8,7 @@ import { DEFAULT_TOOL_PARAMS, shownGlobalHandles } from "../src/features/edit-co
 import { roofTool } from "../src/composition/tabletop/tools/roof/roof-tool.ts";
 
 const roofs = (runtime) => runtime.getAllRegionTopologies().filter((f) => f.surfaceType === "roof");
-const front = (runtime) => roofs(runtime).find((f) => f.props.roofFace.block === 1 && f.props.roofFace.upright && f.props.roofFace.side === 0);
+const front = (runtime) => roofs(runtime).find((f) => f.props.roofFace.dormer === 0 && f.props.roofFace.upright && f.props.roofFace.side === 0);
 const pinOf = (runtime, id) => runtime.getAllRegionTopologies().flatMap((f) => f.nodes).find((n) => n.id === id)?.pin;
 
 test("a dormer's front takes a window from the opening tool, and keeps it when the roof rises", async () => {
@@ -16,8 +16,8 @@ test("a dormer's front takes a window from the opening tool, and keeps it when t
   const { runtime, ctx } = h;
   const roofParams = { ...DEFAULT_TOOL_PARAMS.roof, waters: 2, elevation: 3, height: 4 };
   dispatchGesture(roofTool, ctx, roofParams, [{ point: { x: 0, y: 0, z: 0 } }, { point: { x: 8, y: 0, z: 4 } }]);
-  const leaf = roofs(runtime).find((f) => !f.props.roofFace.upright && f.nodes.some((n) => n.position.z < 0));
-  dispatchGesture(roofTool, ctx, { ...roofParams, shape: "dormer" }, [{ point: { x: 4, y: 4, z: 0.6 }, surfaceRef: ref(leaf) }]);
+  const leaf = roofs(runtime).find((f) => !f.props.roofFace.upright && f.nodes.some((n) => n.position.z < 1e-6));
+  dispatchGesture(roofTool, ctx, { ...roofParams, action: "dormer" }, [{ point: { x: 4, y: 4, z: 0.6 }, surfaceRef: ref(leaf) }]);
   const wall = front(runtime);
   assert.ok(wall, JSON.stringify(h.feedback.at(-1)));
   const ys = wall.nodes.map((n) => n.position.y);

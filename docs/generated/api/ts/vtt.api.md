@@ -689,8 +689,6 @@ Hides the active tool preview, if any.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.dispose(): Promise<void>`
 
-### `method vtt.tabletop-runtime.AppTabletopRuntime.generateCap(request: CapRequest): CapPatch`
-
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.generateHeightmap(width: number, height: number, seed: number, scale: number, originX: number, originY: number): Float32Array`
 
 Passthrough to `TerrainNoisePort.generateHeightmap` -- see that port for parameter meaning.
@@ -797,8 +795,6 @@ Unregisters a surface outright, prunes orphaned nodes, and folds the outcome int
 
 Host `(u, v)` pairs back to world positions. Pure.
 
-### `method vtt.tabletop-runtime.AppTabletopRuntime.roofFootprintBlocks(contour: readonly (readonly [number, number])[]): readonly (readonly [number, number])[][]`
-
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.setConstructionHandlePresentation(mode: "all" | "spine-points"): void`
 
 Local editing presentation; never changes the graph or persistence.
@@ -886,8 +882,6 @@ Hides the active tool preview, if any.
 ### `method vtt.tabletop-runtime.TabletopRuntime.detachView(viewId: string): void`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.dispose(): Promise<void>`
-
-### `method vtt.tabletop-runtime.TabletopRuntime.generateCap(request: CapRequest): CapPatch`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.generateHeightmap(width: number, height: number, seed: number, scale: number, originX: number, originY: number): Float32Array`
 
@@ -994,8 +988,6 @@ Unregisters a surface outright, prunes orphaned nodes, and folds the outcome int
 ### `method vtt.tabletop-runtime.TabletopRuntime.resolveOnHost(request: { hostSurfaceKey: ConstructionSurfaceKey; uv: readonly (readonly [number, number])[] }): readonly ConstructionPosition[]`
 
 Host `(u, v)` pairs back to world positions. Pure.
-
-### `method vtt.tabletop-runtime.TabletopRuntime.roofFootprintBlocks(contour: readonly (readonly [number, number])[]): readonly (readonly [number, number])[][]`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.setConstructionHandlePresentation(mode: "all" | "spine-points"): void`
 
@@ -2188,6 +2180,53 @@ when a traveller passing through it keeps them both on the same hand --
 which, since one run's direction points *into* the joint and the other's
 points *out* of it, means their signs are opposite.
 
+### `interface vtt.contour-stroke.ContourStrokeOptions`
+
+How a tool uses the contour stroke: the level each outline is drawn on,
+and what it makes of an outline once it is closed.
+
+### `property vtt.contour-stroke.ContourStrokeOptions.color: number`
+
+### `property vtt.contour-stroke.ContourStrokeOptions.commit: (ctx: ToolContext, contour: readonly FittedEdge[], level: number, params: P, samples: readonly PointerSample[]) => void`
+
+Takes a closed outline on `level`; `samples` are what drew it -- the corners, or the pointer's path.
+
+### `property vtt.contour-stroke.ContourStrokeOptions.dragHint?: (shape: ContourShape) => string`
+
+What a plain click with a dragged shape says.
+
+### `property vtt.contour-stroke.ContourStrokeOptions.levelAt: (ctx: ToolContext, first: PointerSample, params: P) => number`
+
+The level a stroke begun at `first` draws on.
+
+### `property vtt.contour-stroke.ContourStrokeOptions.previewClosed?: (ctx: ToolContext, outline: readonly ConstructionPosition[], level: number, params: P) => PreviewDescriptor | undefined`
+
+A preview of a closed outline, when the tool shows more than the outline itself.
+
+### `interface vtt.contour-stroke.ContourStrokeParams`
+
+What the stroke reads of a tool's parameters.
+
+### `property vtt.contour-stroke.ContourStrokeParams.radius?: number`
+
+### `property vtt.contour-stroke.ContourStrokeParams.shape?: ContourShape`
+
+### `property vtt.contour-stroke.ContourStrokeParams.tolerance?: number`
+
+### `type vtt.contour-stroke.ContourShape = "rectangle" | "polygon" | "freehand" | "circle"`
+
+The shapes a closed outline is drawn as.
+
+### `function vtt.contour-stroke.contourStroke(options: ContourStrokeOptions<P>): Pick<ConstructionTool<K>, "previewFor" | "onClick" | "onPointerUp" | "onCancel">`
+
+A closed outline drawn on one level, as any tool that lays out an area
+draws it: a rectangle dragged corner to corner, a polygon clicked corner
+by corner, a freehand loop fitted into lines and arcs, or a circle
+clicked at its centre. Squared shapes are laid along the frame the stroke
+began in -- a structure's own sides next to it, else the way the camera
+looks (`build-frame.ts`) -- never the world's fixed axes. What the
+outline becomes is the tool's own business.
+
 ### `interface vtt.curve-draft.CurveDraftOptions`
 
 ### `property vtt.curve-draft.CurveDraftOptions.color: number`
@@ -3248,11 +3287,11 @@ for sitting on ground already there, and that whole side stays empty.
 
 Also grabs and edits an existing platform's own vertex/edge/body -- see `structure-edit-behavior.ts`.
 
-### `function vtt.platform-contour-tool.commitPlatformContour(ctx: ToolContext, samples: readonly PointerSample[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; tolerance?: number }): void`
+### `function vtt.platform-contour-tool.commitPlatformContour(ctx: ToolContext, samples: readonly PointerSample[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "circle" | "rectangle" | "polygon" | "freehand"; tolerance?: number }): void`
 
 Polygon entry point retained for callers that already have explicit corners.
 
-### `function vtt.platform-contour-tool.commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; tolerance?: number }, pickedSamples: readonly PointerSample[], options: { alone?: boolean; clipped?: boolean }): void`
+### `function vtt.platform-contour-tool.commitPlatformShape(ctx: ToolContext, contour: readonly FittedEdge[], params: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "circle" | "rectangle" | "polygon" | "freehand"; tolerance?: number }, pickedSamples: readonly PointerSample[], options: { alone?: boolean; clipped?: boolean }): void`
 
 Commits the same directed line/arc contour vocabulary consumed by wall
 construction. Ampliar/juntar and recortar/separar no longer run an
@@ -3261,27 +3300,28 @@ onto the existing boundary (within WELD_TOLERANCE, the same one a
 wall run snaps onto a column with) and the result is assembled from
 shared/cancelled edges -- see `platform-contour-merge.ts` for why.
 
-### `type vtt.roof-base.RoofBase = { contour: readonly Point[]; elevation: number; kind: "contour" } | { center: Point; elevation: number; kind: "circle"; radius: number }`
+### `interface vtt.roof-base.RoofBase`
 
-What a roof stands on: a closed footprint at one elevation, or the circle of a round floor.
+What a roof stands on: a footprint at one elevation.
+
+### `property vtt.roof-base.RoofBase.elevation: number`
+
+### `property vtt.roof-base.RoofBase.footprint: RoofFootprint`
 
 ### `function vtt.roof-base.roofBaseAt(topologies: readonly ConstructionRegionTopology[], sample: PointerSample): RoofBase`
 
-The base under a click: a floor's contour, or -- clicking a wall -- the
-loop its tops close round the room it bounds. Throws a message for the
-user when what was clicked cannot carry a roof.
+The base under a click: a floor's outline and holes, or -- clicking a
+wall -- the loop its tops close round the room it bounds. Curved sides are
+followed by short straight ones. Throws a message for the user when what
+was clicked cannot carry a roof.
 
 ### `variable vtt.roof-tool.roofTool: ConstructionTool<"roof">`
 
 Also edits an existing roof, through its handles only -- see `structure-edit-behavior.ts` and `roof-recipe.ts`.
 
-### `function vtt.roof-tool.commitRoof(ctx: ToolContext, capRequest: CapRequest): void`
+### `function vtt.roof-tool.commitRoofRecipes(ctx: ToolContext, requests: readonly RoofRequest[], replaces: readonly ConstructionSurfaceKey[], done: string): void`
 
-Assigns identities to a native cone and applies it atomically.
-
-### `function vtt.roof-tool.commitRoofRecipe(ctx: ToolContext, request: RoofRequest, replaces: readonly ConstructionSurfaceKey[]): void`
-
-Commits a roof generated from `request` in place of the faces `replaces` names, keeping the recipe on every face it made.
+Commits the roofs `requests` make in place of the faces `replaces` names, each keeping its recipe on every face it made.
 
 ### `interface vtt.geometry-2d.PointXZ`
 
@@ -6841,11 +6881,11 @@ The traits one surface type declares. An undeclared type has none.
 
 ### `interface vtt.roof-recipe.RoofFaceRole`
 
-Which side of which block a face rises from -- dormers numbered after the
-blocks, their sides front, right, back and left -- and whether it is an
-upright face under that side.
+Which footprint side a face rises from -- one past the last for a flat
+top -- or, on a dormer, which of its sides: front, right, back, left, or
+four where it meets its leaf; and whether it is an upright face under it.
 
-### `property vtt.roof-recipe.RoofFaceRole.block: number`
+### `property vtt.roof-recipe.RoofFaceRole.dormer?: number`
 
 ### `property vtt.roof-recipe.RoofFaceRole.side: number`
 
@@ -6855,11 +6895,11 @@ upright face under that side.
 
 A roof's recipe: what the generator is asked, and the group of faces it made.
 
-### `property vtt.roof-recipe.RoofRecipe.blocks: readonly RoofBlock[]`
-
 ### `property vtt.roof-recipe.RoofRecipe.dormers?: readonly RoofDormer[]`
 
 ### `property vtt.roof-recipe.RoofRecipe.elevation: number`
+
+### `property vtt.roof-recipe.RoofRecipe.footprint: RoofFootprint`
 
 ### `property vtt.roof-recipe.RoofRecipe.group: string`
 
@@ -6867,13 +6907,15 @@ A roof's recipe: what the generator is asked, and the group of faces it made.
 
 Rise of the roof's highest point above its eaves.
 
+### `property vtt.roof-recipe.RoofRecipe.slopes: readonly number[]`
+
+### `type vtt.roof-recipe.Point = readonly [number, number]`
+
+### `type vtt.roof-recipe.Waters = 1 | 2 | 4`
+
 ### `variable vtt.roof-recipe.ROOF_FACE_PROP: "roofFace"`
 
-Region property naming which side of which block a roof face rises from.
-
-### `variable vtt.roof-recipe.ROOF_OVERHANG: 0.2`
-
-How far every eave reaches past its footprint when a roof is made.
+Region property naming which side a roof face rises from.
 
 ### `variable vtt.roof-recipe.ROOF_RECIPE_PROP: "roof"`
 
@@ -6883,24 +6925,34 @@ Region property carrying a roof's recipe, which every edit regenerates the roof 
 
 How a roof is regenerated from the recipe its faces keep.
 
-### `function vtt.roof-recipe.dormerAt(recipe: RoofRequest, block: number, side: number, at: Point, width: number, front: number, waters: 1 | 2 | 4): RoofDormer`
+### `function vtt.roof-recipe.carriedOnto(footprint: RoofFootprint, sources: readonly RoofRequest[], drawn?: { outline: readonly Point[]; slopes: readonly number[] }): { dormers: RoofDormer[]; slopes: number[] }`
+
+A new footprint that takes over from `sources`: each of its sides keeps
+the slope of a side it lies along -- of a roof it came from, then of what
+was drawn -- else rises; each dormer stays on the side its old one lies along.
+
+### `function vtt.roof-recipe.dormerAt(recipe: RoofRequest, side: number, at: Point, width: number, front: number, waters: Waters): RoofDormer`
 
 A dormer standing with its front's middle at `at`, on the leaf rising from
-side `side` of block `block`: where along that side and how far in.
+footprint side `side`: where along that side and how far in.
 
-### `function vtt.roof-recipe.dormerSlopes(waters: 1 | 2 | 4): readonly [number, number, number, number]`
+### `function vtt.roof-recipe.dormerSlopes(waters: Waters): readonly [number, number, number, number]`
 
 A dormer's sides, by waters: two pitch its cheeks, one its front alone -- shallower, so it runs back into the leaf -- four all but its back.
 
-### `function vtt.roof-recipe.inwardNormals(contour: readonly Point[]): Point[]`
+### `function vtt.roof-recipe.inwardNormals(ring: readonly Point[], hole: boolean): Point[]`
 
-Inward unit normal of each side of an outline, whichever way it winds.
+Each side's normal into the roof: off the outline inward, off a hole away from it.
 
-### `function vtt.roof-recipe.presetSlopes(contour: readonly Point[], waters: 1 | 2 | 4): number[]`
+### `function vtt.roof-recipe.presetSlopes(contour: readonly Point[], waters: Waters): number[]`
 
-Which sides of a footprint rise, for a number of waters: every side; the
+Which sides of an outline rise, for a number of waters: every side; the
 longest side and the one facing it most squarely; or the longest alone.
 The rest are gables.
+
+### `function vtt.roof-recipe.ringsOf(footprint: RoofFootprint): readonly (readonly Point[])[]`
+
+A footprint's rings, outline first.
 
 ### `function vtt.roof-recipe.roofGraphPatch(port: Pick<RoofPort, "generateRoof">, request: RoofRequest, operationId: string): { faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>>; patch: ConstructionPatch }`
 
@@ -6908,16 +6960,24 @@ The roof `request` makes, as a patch named under `operationId`, and what
 each face keeps, by region id: the recipe, under that name as its group,
 its role, and that role as the key an edit finds the same face again by.
 
-### `function vtt.roof-recipe.roofOver(blocks: readonly (readonly Point[])[], elevation: number, height: number, waters: 1 | 2 | 4): RoofRequest`
+### `function vtt.roof-recipe.roofOver(footprint: RoofFootprint, elevation: number, height: number, waters: Waters): RoofRequest`
 
-A roof over convex blocks, each shaped by a number of waters.
+A roof over `footprint`, its outline shaped by a number of waters; round its holes it always falls toward them.
+
+### `function vtt.roof-recipe.sideNumber(footprint: RoofFootprint, ring: number, index: number): number`
+
+The number of side `index` of ring `ring`.
+
+### `function vtt.roof-recipe.sideOf(footprint: RoofFootprint, side: number): { a: Point; c: Point; index: number; ring: number }`
+
+Where side `side` -- numbered through the outline, then each hole -- lies: its ring, its index there, and its ends.
 
 ### `variable vtt.roof-structure.roofStructureType: StructureTypeDefinition`
 
 A roof is regenerated whole from the recipe its faces keep: every handle
--- its rise, a leaf's slope, a seam, an eave, a footprint corner -- edits
-the recipe (`roof-recipe.ts`). A curved cone keeps no recipe and moves as
-a connected cloud.
+-- its rise, a side's slope, a seam, a footprint corner, a corner pulled
+out of a side, a dormer -- edits the recipe (`roof-recipe.ts`). How far
+its eaves reach and whether its leaves curve are the covering's business.
 
 ### `interface vtt.structural-cut.StructuralCutArea`
 
@@ -7328,7 +7388,7 @@ Normalizes the standing graph before an edit reads it -- legacy data, say.
 
 ### `property vtt.structure-type.SpineGeneration.regenerate: (input: SpineRegenerationInput) => SpineRegeneration | undefined`
 
-### `property vtt.structure-type.SpineGeneration.windKeeps?: "grade" | "height"`
+### `property vtt.structure-type.SpineGeneration.windKeeps?: "height" | "grade"`
 
 What winding a spiral on or back keeps: its grade (more turns climb
 higher -- the default) or its far end's height (more turns climb gentler).
@@ -7835,9 +7895,9 @@ Perlin `scale` -- smaller values are smoother/larger-scale terrain features.
 
 ### `property vtt.tool-types.ToolParamsByTool.path-brush: PathBrushParams`
 
-### `property vtt.tool-types.ToolParamsByTool.platform-contour: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "rectangle" | "circle" | "polygon" | "freehand"; tolerance?: number }`
+### `property vtt.tool-types.ToolParamsByTool.platform-contour: { elevation: number; mode: "extend" | "cut" | "create"; radius?: number; shape?: "circle" | "rectangle" | "polygon" | "freehand"; tolerance?: number }`
 
-### `property vtt.tool-types.ToolParamsByTool.roof: { curvatures: readonly [number, number, number, number]; dormerFront: number; dormerWidth: number; elevation: number; height: number; radius: number; shape: "rectangle" | "circle" | "base" | "dormer"; waters: 1 | 2 | 4 }`
+### `property vtt.tool-types.ToolParamsByTool.roof: { action: "base" | "cut" | "dormer" | "draw"; dormerFront: number; dormerWidth: number; elevation: number; height: number; radius: number; shape: "circle" | "rectangle" | "polygon" | "freehand"; tolerance: number; waters: 1 | 2 | 4 }`
 
 ### `property vtt.tool-types.ToolParamsByTool.slope-curve: { mode?: "arc" | "points" | "straight" | "spiral" | "connect"; rise: number; width: number }`
 
@@ -9062,51 +9122,13 @@ The plan shape a span keeps whatever its anchors do; absent is a free cubic.
 A shaped span climbs linearly between its anchors. `positive` turns from
 +X towards +Z; `center` is `[x, z]`.
 
-### `interface vtt.cap-port.CapPatch`
-
-### `property vtt.cap-port.CapPatch.edges: readonly { center: readonly [number, number] | null; end: number; start: number }[]`
-
-### `property vtt.cap-port.CapPatch.faces: readonly { boundary: readonly (readonly [number, boolean])[]; profile: ConstructionSheetProfile }[]`
-
-### `property vtt.cap-port.CapPatch.nodes: readonly (readonly [number, number, number])[]`
-
-### `property vtt.cap-port.CapPatch.preview: readonly (readonly [number, number, number, number, number, number])[]`
-
-### `interface vtt.cap-port.CapRequest`
-
-Grafting-owned wire data for the native analytic cap generator.
-
-### `property vtt.cap-port.CapRequest.base: { kind: "rectangle"; max: readonly [number, number]; min: readonly [number, number] } | { center: readonly [number, number]; kind: "circle"; radius: number } | { centers: readonly [readonly [number, number] | null, readonly [number, number] | null, readonly [number, number] | null, readonly [number, number] | null]; kind: "contour"; points: readonly [readonly [number, number], readonly [number, number], readonly [number, number], readonly [number, number]] }`
-
-### `property vtt.cap-port.CapRequest.curvatures: readonly [number, number, number, number]`
-
-### `property vtt.cap-port.CapRequest.elevation: number`
-
-### `property vtt.cap-port.CapRequest.height: number`
-
-### `property vtt.cap-port.CapRequest.overhang: number`
-
-### `interface vtt.cap-port.RoofBlock`
-
-One convex footprint of a roof; side `i` runs from corner `i` to corner `i + 1`.
-
-### `property vtt.cap-port.RoofBlock.contour: readonly (readonly [number, number])[]`
-
-### `property vtt.cap-port.RoofBlock.overhangs: readonly number[]`
-
-### `property vtt.cap-port.RoofBlock.slopes: readonly number[]`
-
-Relative steepness per side; zero makes that side a gable.
-
 ### `interface vtt.cap-port.RoofDormer`
 
-A dormer raised on one pitched leaf of a roof: side `side` of block `block`.
+A dormer raised on the pitched leaf of footprint side `side`.
 
 ### `property vtt.cap-port.RoofDormer.along: number`
 
 Where its middle stands along that side, as a fraction of it.
-
-### `property vtt.cap-port.RoofDormer.block: number`
 
 ### `property vtt.cap-port.RoofDormer.front: number`
 
@@ -9124,11 +9146,19 @@ Relative steepness of its front, right, back and left sides; zero makes a gable.
 
 ### `property vtt.cap-port.RoofDormer.width: number`
 
+### `interface vtt.cap-port.RoofFootprint`
+
+The plan a roof covers: one outline and the holes through it, as `[x, z]` corners in either winding.
+
+### `property vtt.cap-port.RoofFootprint.holes: readonly (readonly (readonly [number, number])[])[]`
+
+### `property vtt.cap-port.RoofFootprint.outer: readonly (readonly [number, number])[]`
+
 ### `interface vtt.cap-port.RoofPatch`
 
 ### `property vtt.cap-port.RoofPatch.edges: readonly { center: null; end: number; start: number }[]`
 
-### `property vtt.cap-port.RoofPatch.faces: readonly { block: number; boundary: readonly (readonly [number, boolean])[]; holes: readonly (readonly (readonly [number, boolean])[])[]; side: number; upright: boolean }[]`
+### `property vtt.cap-port.RoofPatch.faces: readonly { boundary: readonly (readonly [number, boolean])[]; dormer: number | null; holes: readonly (readonly (readonly [number, boolean])[])[]; side: number; upright: boolean }[]`
 
 ### `property vtt.cap-port.RoofPatch.nodes: readonly (readonly [number, number, number])[]`
 
@@ -9140,23 +9170,23 @@ The engine's roof generator.
 
 ### `method vtt.cap-port.RoofPort.generateRoof(request: RoofRequest): RoofPatch`
 
-### `method vtt.cap-port.RoofPort.roofFootprintBlocks(contour: readonly (readonly [number, number])[]): readonly (readonly [number, number])[][]`
-
-A footprint as the convex blocks a roof is raised over; throws for a concave plan without square corners.
-
 ### `interface vtt.cap-port.RoofRequest`
 
-Wire data for the native roof generator: convex blocks joined into one roof, and dormers on its leaves.
-
-### `property vtt.cap-port.RoofRequest.blocks: readonly RoofBlock[]`
+Wire data for the native roof generator: a footprint, how steeply each of
+its sides rises -- the outline's, then each hole's, side `i` running from
+corner `i` to `i + 1`, zero for a gable -- and dormers on its leaves.
 
 ### `property vtt.cap-port.RoofRequest.dormers?: readonly RoofDormer[]`
 
 ### `property vtt.cap-port.RoofRequest.elevation: number`
 
+### `property vtt.cap-port.RoofRequest.footprint: RoofFootprint`
+
 ### `property vtt.cap-port.RoofRequest.height: number`
 
 Rise of the roof's highest point above its eaves.
+
+### `property vtt.cap-port.RoofRequest.slopes: readonly number[]`
 
 ### `interface vtt.construction-session-port.AffectedSurfaces`
 
@@ -9811,8 +9841,6 @@ Unregisters a region, leaving zero orphaned nodes or edges behind.
 
 Mints a parallel copy; the same `suffix` always reproduces the same copy.
 
-### `method vtt.construction-session-port.ConstructionSessionPort.generateCap(request: CapRequest): CapPatch`
-
 ### `method vtt.construction-session-port.ConstructionSessionPort.generateIrregularQuadGrid(request: ConstructionIrregularQuadGridRequest): ConstructionIrregularQuadGrid | undefined`
 
 One irregular quad grid, generated against the contours the request
@@ -9973,10 +10001,6 @@ Swaps one edge's geometry without touching either endpoint.
 ### `method vtt.construction-session-port.ConstructionSessionPort.rollbackTransaction(transactionId: string): void`
 
 Ends the open transaction by restoring the exact state it began from.
-
-### `method vtt.construction-session-port.ConstructionSessionPort.roofFootprintBlocks(contour: readonly (readonly [number, number])[]): readonly (readonly [number, number])[][]`
-
-A footprint as the convex blocks a roof is raised over; throws for a concave plan without square corners.
 
 ### `method vtt.construction-session-port.ConstructionSessionPort.setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): RegionEditOutcome`
 
@@ -10845,7 +10869,7 @@ horizontal row. When `alwaysExpanded` is set, this only picks the row's
 axis (vertical for `"top"`/`"bottom"`, horizontal for `"left"`/`"right"`),
 since there is no trigger to expand away from.
 
-### `property vtt.ui.FloatButtonGroupProps.shape?: "circle" | "square"`
+### `property vtt.ui.FloatButtonGroupProps.shape?: "square" | "circle"`
 
 Outline. `"square"` renders the items as one joined, gapless block
 (Ant Design's own compact-group styling) instead of separate floating
@@ -10910,7 +10934,7 @@ Caller-rendered icon content. Vendor-neutral -- this atom never ships its own ic
 
 Invoked when this button is activated.
 
-### `property vtt.ui.FloatButtonProps.shape?: "circle" | "square"`
+### `property vtt.ui.FloatButtonProps.shape?: "square" | "circle"`
 
 Outline. `"square"` reads as part of a joined block -- pair it with a
 `FloatButtonGroup` molecule using the same shape so the two visually
@@ -11022,7 +11046,7 @@ Default submenu expand direction for every branch that does not set its own.
 
 The tree's single entry point. Always a branch: a tree with nothing to expand is just a `FloatButton`.
 
-### `property vtt.ui.FloatButtonTreeProps.shape?: "circle" | "square"`
+### `property vtt.ui.FloatButtonTreeProps.shape?: "square" | "circle"`
 
 Outline for every button in the tree.
 

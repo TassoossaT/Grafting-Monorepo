@@ -5,9 +5,9 @@ import { roofRecipeGeneration } from "./roof-recipe.ts";
 
 /**
  * A roof is regenerated whole from the recipe its faces keep: every handle
- * -- its rise, a leaf's slope, a seam, an eave, a footprint corner -- edits
- * the recipe (`roof-recipe.ts`). A curved cone keeps no recipe and moves as
- * a connected cloud.
+ * -- its rise, a side's slope, a seam, a footprint corner, a corner pulled
+ * out of a side, a dormer -- edits the recipe (`roof-recipe.ts`). How far
+ * its eaves reach and whether its leaves curve are the covering's business.
  */
 export const roofStructureType: StructureTypeDefinition = Object.freeze<StructureTypeDefinition>({
   surfaceType: "roof", label: "Telhado", creation: "analytic sheets with one horizontal base and maximum height",
