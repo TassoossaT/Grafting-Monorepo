@@ -3448,9 +3448,10 @@ stays as it stood.
 ### `variable vtt.roof-opening-stand.roofOpeningStand: OpeningStand`
 
 A roof leaf holds an opening upright, the way a floor inside a roof is met
-by transition walls: a dormer is cut back into the leaf, its front the
-opening's whole, two waters over it -- or one, as its user makes it --
-until the leaf rises past it. The roof keeps it as a dormer in its recipe,
+by transition walls: a dormer is cut back into the leaf, its front a plain
+wall the opening's size which the opening fills, as any opening fills a
+wall -- its outline the tool's own -- two waters over it, or one as its
+user makes it, their gable a wall apart. The roof keeps it as a dormer in its recipe,
 marked as the opening's, so the opening pinned to its front is carried
 whenever the roof is made again.
 
@@ -9405,6 +9406,10 @@ Where its middle stands along that side, as a fraction of it.
 ### `property vtt.cap-port.RoofDormer.front: number`
 
 How high its front wall rises above the leaf.
+
+### `property vtt.cap-port.RoofDormer.gableApart?: boolean`
+
+Its front wall stops at its eaves, a plain rectangle; the gable over it is a face of its own.
 
 ### `property vtt.cap-port.RoofDormer.opening?: boolean`
 

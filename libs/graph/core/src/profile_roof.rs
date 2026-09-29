@@ -58,7 +58,14 @@ pub struct RoofDormer {
     /// roof's: a roof made steeper or flatter leaves it as it stands.
     #[cfg_attr(feature = "curve-serde", serde(default))]
     pub absolute: bool,
+    /// Its front wall stops at its eaves, a plain upright rectangle; the
+    /// gable over it is a face of its own, side [`GABLE_OVER_FRONT`].
+    #[cfg_attr(feature = "curve-serde", serde(default, rename = "gableApart"))]
+    pub gable_apart: bool,
 }
+
+/// The side a dormer's gable is given when it stands apart from its front wall.
+pub const GABLE_OVER_FRONT: usize = 5;
 
 /// A whole roof: its footprint, how each side rises, and its dormers.
 #[derive(Clone, Debug)]
@@ -718,6 +725,23 @@ fn inside(polygon: &[Point], x: Point) -> bool {
         }
     }
     inside
+}
+
+/// The part of the upright ring `ring` below height `y` -- or above it, `above`.
+fn level_part(ring: &[[f64; 3]], y: f64, above: bool) -> Vec<[f64; 3]> {
+    let keeps = |p: &[f64; 3]| if above { p[1] >= y - 1e-9 } else { p[1] <= y + 1e-9 };
+    let mut out = Vec::with_capacity(ring.len() + 2);
+    for i in 0..ring.len() {
+        let (p, q) = (ring[i], ring[(i + 1) % ring.len()]);
+        if keeps(&p) {
+            out.push(p);
+        }
+        if (p[1] - y) * (q[1] - y) < 0.0 {
+            let t = (y - p[1]) / (q[1] - p[1]);
+            out.push([p[0] + (q[0] - p[0]) * t, y, p[2] + (q[2] - p[2]) * t]);
+        }
+    }
+    out
 }
 
 /// How far inside its leaf's rim every corner of a dormer stays.
@@ -1491,13 +1515,28 @@ fn generate_single_roof_patch(request: RoofRequest) -> Result<RoofPatch, String>
         for side in 0..dormer.contour.len() {
             let inward = dormer.normals[side];
             for ring in dormer_uprights(&main, &dormers, k, side) {
-                faces.push(Face3 {
-                    side: dormer.roles[side],
-                    dormer: Some(k),
-                    subroof: None,
-                    outward: Some([-inward[0], -inward[1]]),
-                    rings: vec![ring],
-                });
+                // A front set apart from its gable: the wall up to the eaves, the gable over them.
+                let parts = if request.dormers[k].gable_apart && dormer.roles[side] == 0 {
+                    vec![
+                        (dormer.roles[side], level_part(&ring, dormer.elevation, false)),
+                        (GABLE_OVER_FRONT, level_part(&ring, dormer.elevation, true)),
+                    ]
+                } else {
+                    vec![(dormer.roles[side], ring)]
+                };
+                for (role, part) in parts {
+                    let span = part.iter().map(|p| p[1]).fold(f64::NEG_INFINITY, f64::max) - part.iter().map(|p| p[1]).fold(f64::INFINITY, f64::min);
+                    if part.len() < 3 || span < 1e-9 {
+                        continue;
+                    }
+                    faces.push(Face3 {
+                        side: role,
+                        dormer: Some(k),
+                        subroof: None,
+                        outward: Some([-inward[0], -inward[1]]),
+                        rings: vec![part],
+                    });
+                }
             }
         }
     }
@@ -1902,7 +1941,7 @@ mod tests {
             slopes[side] = 1.0;
             slopes[(side + 2) % 4] = 1.0;
             let mut request = roof(outer.clone(), vec![], slopes);
-            request.dormers = vec![RoofDormer { side, along, setback: 1.0, width: 1.0, front: 0.5, slopes: [0.0; 4], absolute: false }];
+            request.dormers = vec![RoofDormer { side, along, setback: 1.0, width: 1.0, front: 0.5, slopes: [0.0; 4], absolute: false, gable_apart: false }];
             let patch = generate_roof_patch(request).unwrap_or_else(|e| panic!("{outer:?}: {e}"));
             let front = patch.faces.iter().find(|f| f.dormer == Some(0) && f.upright && f.side == 0).expect("a front");
             let xs: Vec<f64> = front.boundary.iter().map(|(e, _)| patch.nodes[patch.edges[*e].start][0]).collect();
@@ -2355,6 +2394,7 @@ mod tests {
                     front: 0.6,
                     slopes: [0.0, 1.0, 0.0, 1.0],
                     absolute: false,
+                    gable_apart: false,
                 });
                 if let Ok(patch) = generate_roof_patch(request) {
                     raised += 1;
@@ -2380,7 +2420,26 @@ mod tests {
             front: 1.0,
             slopes,
             absolute: false,
+            gable_apart: false,
         }
+    }
+
+    #[test]
+    fn a_dormer_front_set_apart_from_its_gable_is_a_plain_wall_to_its_eaves() {
+        let mut request = rectangle([1.0, 0.0, 1.0, 0.0]);
+        request.height = 4.0;
+        request.dormers.push(RoofDormer { gable_apart: true, ..dormer([0.0, 1.0, 0.0, 1.0]) });
+        let patch = generate_roof_patch(request).unwrap();
+        let ring = |f: &RoofFace| f.boundary.iter().map(|(e, rev)| patch.nodes[if *rev { patch.edges[*e].end } else { patch.edges[*e].start }]).collect::<Vec<_>>();
+        let front = patch.faces.iter().find(|f| f.dormer == Some(0) && f.upright && f.side == 0).expect("a front");
+        let gable = patch.faces.iter().find(|f| f.dormer == Some(0) && f.upright && f.side == GABLE_OVER_FRONT).expect("a gable apart");
+        let ys = ring(front).iter().map(|p| p[1]).collect::<Vec<_>>();
+        let (low, high) = (ys.iter().copied().fold(f64::INFINITY, f64::min), ys.iter().copied().fold(f64::NEG_INFINITY, f64::max));
+        // Its foot may be split where the leaf's cut meets it; it stands only at its foot and its eaves.
+        assert!(ring(front).iter().all(|p| (p[1] - low).abs() < 1e-6 || (p[1] - high).abs() < 1e-6), "the front is a rectangle: {:?}", ring(front));
+        assert!((high - low - 1.0).abs() < 1e-6, "as high as the dormer's front: {low}..{high}");
+        assert!(ring(gable).iter().all(|p| p[1] >= high - 1e-6), "the gable stands over it");
+        assert!(closed(&patch, 3.0));
     }
 
     #[test]

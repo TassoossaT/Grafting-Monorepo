@@ -20,6 +20,8 @@ export interface RoofDormer {
   readonly opening?: boolean;
   /** Its slopes are rises per unit run, its own, not shares of the roof's. */
   readonly absolute?: boolean;
+  /** Its front wall stops at its eaves, a plain rectangle; the gable over it is a face of its own. */
+  readonly gableApart?: boolean;
 }
 
 /**

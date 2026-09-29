@@ -17,6 +17,10 @@ can only do the first -- every anchor it produces is G1 by construction --
 which is why an L drawn in one gesture has always come back rounded no
 matter how sharply it was drawn.
 
+### `pub const grafting_graph_core::profile_roof::GABLE_OVER_FRONT: usize`
+
+The side a dormer's gable is given when it stands apart from its front wall.
+
 ### `pub enum grafting_graph_core::ArcBulge`
 
 Which side of the chord (walking from an arc's own start to its end) it
@@ -2457,6 +2461,11 @@ Where its middle stands along that side, as a fraction of it.
 ### `pub grafting_graph_core::profile_roof::RoofDormer::front: f64`
 
 How high its front wall rises above the leaf.
+
+### `pub grafting_graph_core::profile_roof::RoofDormer::gable_apart: bool`
+
+Its front wall stops at its eaves, a plain upright rectangle; the
+gable over it is a face of its own, side [`GABLE_OVER_FRONT`].
 
 ### `pub grafting_graph_core::profile_roof::RoofDormer::setback: f64`
 

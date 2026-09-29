@@ -61,6 +61,9 @@ test("a window clicked on a roof leaf stands there upright, filling the front of
     const pins = nodes.map((n) => pinOf(runtime, n.id));
     assert.equal(nodes.length, 4, "a plain window takes its four corners");
     assert.ok(pins.every((p) => (near(p.u, 0) || near(p.u, 1)) && (near(p.v, 0) || near(p.v, 1))), `the front is all window: ${JSON.stringify(pins)}`);
+    // The gable over it is wall of its own: the opening keeps the tool's outline, no triangle in it.
+    const gable = roofs(runtime).find((f) => f.props.roofFace.dormer === 0 && f.props.roofFace.upright && f.props.roofFace.side === 5);
+    assert.ok(gable && box(gable.nodes).y0 >= b.y1 - 1e-4, "the gable stands over the window, apart");
     assert.ok(near((b.x0 + b.x1) / 2, 4) && near(b.z, 1.2) && near(b.y0, 2.4), `it stands where it was clicked, on the leaf: ${JSON.stringify(b)}`);
     const scene = { graph: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), cloudFor: (r) => runtime.cloudFor(r) };
     assert.ok(!shownGlobalHandles(scene).some((handle) => handle.recipeHandle?.anchor?.startsWith("dormer:")), "it has no handles of its own");
@@ -131,9 +134,9 @@ test("a window asked taller than the roof behind it stops there: the ghost shows
     clickLeaf(h, 4, 1.2, tall);
     assert.equal(h.feedback.at(-1)?.tone, "success", JSON.stringify(h.feedback.at(-1)));
     const b = openingBox(h);
-    // The leaf rises to its ridge at 4, 0.8 behind the front standing at 2.4: the window's top -- its front's ridge --
-    // meets the leaf just short of that ridge.
-    assert.ok(b.y1 < 4 && b.y1 > 3.9, `stopped under the ridge: ${JSON.stringify(b)}`);
+    // The leaf rises to its ridge at 4, 0.8 behind the front standing at 2.4: the gable over the window, rising half
+    // its width, meets the leaf just short of that ridge.
+    assert.ok(b.y1 + 0.4 < 4 && b.y1 + 0.4 > 3.9, `stopped with its gable under the ridge: ${JSON.stringify(b)}`);
     assert.ok(near(Math.max(...ys), b.y1) && near(Math.min(...ys), b.y0), `the ghost showed what was made: ${Math.min(...ys)}..${Math.max(...ys)} vs ${b.y0}..${b.y1}`);
   } finally { await h.runtime.dispose?.(); }
 });
