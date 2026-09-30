@@ -6,8 +6,8 @@ Status: auditado em 2026-09-30 no PR #341. Toda a matemática está em Rust (`li
 
 | Operação | Algoritmo | Contrato | Evidência |
 |---|---|---|---|
-| Trecho por clique-clique | `interpretStroke` com 2 pontos, `curved: false`, `maxGrade` | Reta entre as pontas; altura limitada à inclinação da rua; vertical não lança nada | `curve-pen-session`: "a span straight up lays nothing…" |
-| Traço livre | `interpretStroke` + `stroke_shaping` (laços, raio mínimo, inclinação) | Aproximação dentro de 1 m de tremor; não passa pelas amostras, passa pela forma reparada | `stroke_shaping.rs` tests; `curve-pen-session`: loop, largura, colina |
+| Trecho por clique-clique | `interpretStroke` com 2 pontos, `curved: false`, `maxGrade` | Reta entre as pontas; altura limitada à inclinação da rua; vertical não lança nada | `road-tool.test`: "a span straight up lays nothing…" |
+| Traço livre | `interpretStroke` + `stroke_shaping` (laços, raio mínimo, inclinação) | Aproximação dentro de 1 m de tremor; não passa pelas amostras, passa pela forma reparada | `stroke_shaping.rs` tests; `road-tool.test`: loop, largura, colina |
 | Cadeia por pontos (`automatic`) | `automatic_path`: Catmull-Rom centrípeta → cúbicas, nós medidos em **XZ** | Passa por cada âncora exatamente; controles finitos | `bezier.rs`: "an automatic path passes through every anchor finitely"; matriz de estabilidade VTT |
 | Mover âncora, espinha `automatic` | Recalcula a cadeia inteira com `withAutomaticHandles` | Os vizinhos reinterpolam; modo continua `automatic` | "an automatic road reinterpolates moved anchors…" |
 | Mover âncora, espinha `free` | Mantém os controles relativos | Só os trechos incidentes mudam | "same road tool: anchor drag…" |

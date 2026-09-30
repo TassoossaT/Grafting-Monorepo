@@ -35,16 +35,21 @@ export interface ReleasedGesture extends ToolGesture {
   readonly moved: boolean;
 }
 
-/** How far the pointer may wander, in screen pixels (or world units when a sample has no screen position), and still count as a click. */
-const CLICK_SLOP_PIXELS = 3;
-const CLICK_SLOP_WORLD = 0.05;
+/** How far the pointer may wander, in screen pixels -- or world units when a sample has no screen position -- and still count as not having moved. */
+export interface PointerSlop {
+  readonly pixels: number;
+  readonly world: number;
+}
 
-/** Whether any of `samples` strayed from `start` past the click slop. */
-export function gestureMoved(start: PointerSample, samples: readonly PointerSample[]): boolean {
+/** A click: the pointer barely stirred. */
+const CLICK_SLOP: PointerSlop = { pixels: 3, world: 0.05 };
+
+/** Whether any of `samples` strayed from `start` past `slop` -- a click's, unless said otherwise. */
+export function gestureMoved(start: PointerSample, samples: readonly PointerSample[], slop: PointerSlop = CLICK_SLOP): boolean {
   return samples.some((sample) =>
     sample.screenX !== undefined && sample.screenY !== undefined && start.screenX !== undefined && start.screenY !== undefined
-      ? Math.hypot(sample.screenX - start.screenX, sample.screenY - start.screenY) > CLICK_SLOP_PIXELS
-      : Math.hypot(sample.point.x - start.point.x, sample.point.y - start.point.y, sample.point.z - start.point.z) > CLICK_SLOP_WORLD,
+      ? Math.hypot(sample.screenX - start.screenX, sample.screenY - start.screenY) > slop.pixels
+      : Math.hypot(sample.point.x - start.point.x, sample.point.y - start.point.y, sample.point.z - start.point.z) > slop.world,
   );
 }
 

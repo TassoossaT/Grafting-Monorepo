@@ -8,23 +8,16 @@
 //! the end height gives way, when the climb to it is too steep to make.
 use crate::bezier::CurvePoint;
 
-fn plan(a: CurvePoint, b: CurvePoint) -> f64 {
+/// Plan distance between two points -- heights ignored.
+pub(crate) fn plan(a: CurvePoint, b: CurvePoint) -> f64 {
     (a[0] - b[0]).hypot(a[2] - b[2])
 }
 
 /// Where the plan segments `a`-`b` and `c`-`d` properly cross, as the
 /// parameter along `a`-`b`; touching ends do not count.
 fn crossing(a: CurvePoint, b: CurvePoint, c: CurvePoint, d: CurvePoint) -> Option<f64> {
-    let r = [b[0] - a[0], b[2] - a[2]];
-    let s = [d[0] - c[0], d[2] - c[2]];
-    let denominator = r[0] * s[1] - r[1] * s[0];
-    if denominator.abs() < 1e-12 {
-        return None;
-    }
-    let q = [c[0] - a[0], c[2] - a[2]];
-    let t = (q[0] * s[1] - q[1] * s[0]) / denominator;
-    let u = (q[0] * r[1] - q[1] * r[0]) / denominator;
     const EDGE: f64 = 1e-9;
+    let (t, u) = crate::bezier_network::segment_crossing(a, b, c, d)?;
     (t > EDGE && t < 1. - EDGE && u > EDGE && u < 1. - EDGE).then_some(t)
 }
 
@@ -33,22 +26,20 @@ fn crossing(a: CurvePoint, b: CurvePoint, c: CurvePoint, d: CurvePoint) -> Optio
 /// between is dropped. A road does not cross itself.
 pub(crate) fn remove_loops(points: &[CurvePoint]) -> Vec<CurvePoint> {
     let mut path = points.to_vec();
-    'scan: loop {
-        for i in 0..path.len().saturating_sub(1) {
-            for j in (i + 2)..path.len().saturating_sub(1) {
-                if let Some(t) = crossing(path[i], path[i + 1], path[j], path[j + 1]) {
-                    let at: CurvePoint =
-                        std::array::from_fn(|k| path[i][k] + (path[i + 1][k] - path[i][k]) * t);
-                    let mut next = path[..=i].to_vec();
-                    next.push(at);
-                    next.extend_from_slice(&path[j + 1..]);
-                    path = next;
-                    continue 'scan;
-                }
+    // Segments before `i` were already checked against all that follows, and
+    // a cut only drops what came after them: the scan resumes where it cut.
+    let mut i = 0;
+    while i + 1 < path.len() {
+        let cut = ((i + 2)..path.len().saturating_sub(1)).find_map(|j| crossing(path[i], path[i + 1], path[j], path[j + 1]).map(|t| (j, t)));
+        match cut {
+            Some((j, t)) => {
+                let at: CurvePoint = std::array::from_fn(|k| path[i][k] + (path[i + 1][k] - path[i][k]) * t);
+                path.splice(i + 1..=j, [at]);
             }
+            None => i += 1,
         }
-        return path;
     }
+    path
 }
 
 /// The radius of the circle through three points, in plan; infinite when in line.

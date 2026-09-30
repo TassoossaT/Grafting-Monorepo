@@ -2616,48 +2616,6 @@ Commits `request` -- its effects dispatched, faces it `carries` along answering 
 
 What `owner` makes of `graphPatch` applied to `snapshot`; `undefined` when it has no spine or makes nothing.
 
-### `interface vtt.spine-edit-behavior.SpineEditBehavior`
-
-### `method vtt.spine-edit-behavior.SpineEditBehavior.abort(ctx: ToolContext): void`
-
-Drops an active drag without committing it, keeping the selection.
-
-### `method vtt.spine-edit-behavior.SpineEditBehavior.begin(ctx: ToolContext, picked: SpinePick): boolean`
-
-Selects and starts dragging `picked`; false when the curve refused the gesture.
-
-### `method vtt.spine-edit-behavior.SpineEditBehavior.cancel(ctx: ToolContext): void`
-
-Drops any drag and the selection.
-
-### `method vtt.spine-edit-behavior.SpineEditBehavior.end(ctx: ToolContext, gesture: ToolGesture): boolean`
-
-Ends and commits an active drag; false when none was active.
-
-### `method vtt.spine-edit-behavior.SpineEditBehavior.isActive(ctx: ToolContext): boolean`
-
-### `method vtt.spine-edit-behavior.SpineEditBehavior.isHandle(ctx: ToolContext, sample: PointerSample): boolean`
-
-Whether `sample` is any curve handle of an owned spine, including one this editor does not drag.
-
-### `method vtt.spine-edit-behavior.SpineEditBehavior.move(ctx: ToolContext, gesture: ToolGesture): boolean`
-
-### `method vtt.spine-edit-behavior.SpineEditBehavior.pick(ctx: ToolContext, sample: PointerSample): SpinePick | undefined`
-
-The handle of an owned spine `sample` lands on -- a control point, a midpoint, a width handle or a whole-structure handle.
-
-### `method vtt.spine-edit-behavior.SpineEditBehavior.removeSelected(ctx: ToolContext): boolean`
-
-Removes the selected control point; false when nothing was selected.
-
-### `method vtt.spine-edit-behavior.SpineEditBehavior.resizeSelected(ctx: ToolContext, width: number): boolean`
-
-### `method vtt.spine-edit-behavior.SpineEditBehavior.select(ctx: ToolContext, sample?: PointerSample): void`
-
-### `method vtt.spine-edit-behavior.SpineEditBehavior.selected(ctx: ToolContext): string | undefined`
-
-### `method vtt.spine-edit-behavior.SpineEditBehavior.selection(ctx: ToolContext): { id: string; point: ConstructionPosition; segment: boolean; width: number } | undefined`
-
 ### `interface vtt.spine-edit-behavior.SpineEditOptions`
 
 Editing an existing spine by its points -- the one editor every
@@ -2682,10 +2640,6 @@ tool only says which spine owners it edits, never how.
 
 While this answers true -- a tool midway through drawing -- presses belong to the tool, except on a handle, which drops the draft and edits.
 
-### `property vtt.spine-edit-behavior.SpineEditOptions.onSelect?: (ctx: ToolContext, nodeId: string | undefined) => void`
-
-Told whenever the selected spine point changes -- `undefined` when nothing is selected.
-
 ### `property vtt.spine-edit-behavior.SpineEditOptions.ownsSpine: (surfaceType: string) => boolean`
 
 Only spines owned by a type this accepts are edited; anything else falls through to the tool.
@@ -2698,19 +2652,9 @@ Whether this tool reads the ambient legacy curve-action panel.
 
 How a dragged anchor snaps; absent, anchors never snap.
 
-### `interface vtt.spine-edit-behavior.SpinePick`
-
-What a press on a spine resolved to: the handle it actually takes, and how to drag it.
-
-### `property vtt.spine-edit-behavior.SpinePick.options: CurveGestureOptions`
-
-### `property vtt.spine-edit-behavior.SpinePick.sample: PointerSample`
-
-### `function vtt.spine-edit-behavior.createSpineEditBehavior(__namedParameters: SpineEditOptions): SpineEditBehavior`
-
 ### `function vtt.spine-edit-behavior.withSpineEditing(tool: ConstructionTool<Id>, options: SpineEditOptions): ConstructionTool<Id>`
 
-Composes a creation tool with createSpineEditBehavior: a press on
+Composes a creation tool with the spine editor above: a press on
 a spine this tool owns edits it, and a press anywhere else is the tool's
 own creation gesture, unchanged -- the spine counterpart of
 `withStructureEditing`.
@@ -2782,7 +2726,7 @@ How this tool's dragged spine anchors snap -- the scene manipulator uses it too.
 
 ### `property vtt.spine-sketch.SpineSketchTool.drafting: (ctx: ToolContext) => boolean`
 
-Whether a straight run is waiting for its next click -- presses then belong to it, even on a handle.
+Whether a straight run is waiting for its next click -- presses then belong to it, though a handle still edits and drops the run.
 
 ### `property vtt.spine-sketch.SpineSketchTool.editsType?: (surfaceType: string) => boolean`
 
@@ -2861,9 +2805,11 @@ The tool's not-yet-committed ghost for the current gesture (or stationary hover,
 
 ### `function vtt.spine-sketch.isStroke(gesture: ToolGesture): boolean`
 
-Whether the pointer has travelled far enough from the press to be drawing
-a stroke rather than clicking -- the tolerance that keeps a shaky click a
-click: 5 px on screen, or 0.15 m in the world when there is no screen.
+Whether the pointer has travelled far enough from the press to be drawing a stroke rather than clicking.
+
+### `function vtt.spine-sketch.samePlace(a: ConstructionPosition, b: ConstructionPosition): boolean`
+
+Whether two positions are the same place, to within rounding through the engine.
 
 ### `interface vtt.structure-edit-behavior.StructureEditBehavior`
 
@@ -3038,6 +2984,14 @@ Screen coordinate used by explicit elevation gestures.
 
 ### `property vtt.tool-context.PointerSample.surfaceRef?: string`
 
+### `interface vtt.tool-context.PointerSlop`
+
+How far the pointer may wander, in screen pixels -- or world units when a sample has no screen position -- and still count as not having moved.
+
+### `property vtt.tool-context.PointerSlop.pixels: number`
+
+### `property vtt.tool-context.PointerSlop.world: number`
+
 ### `interface vtt.tool-context.ReleasedGesture`
 
 A finished gesture, as `onPointerUp` gets it.
@@ -3111,9 +3065,9 @@ Ordered samples accumulated by the dispatcher; preview-only until pointer releas
 
 ### `property vtt.tool-context.ToolGesture.start: PointerSample`
 
-### `function vtt.tool-context.gestureMoved(start: PointerSample, samples: readonly PointerSample[]): boolean`
+### `function vtt.tool-context.gestureMoved(start: PointerSample, samples: readonly PointerSample[], slop: PointerSlop): boolean`
 
-Whether any of `samples` strayed from `start` past the click slop.
+Whether any of `samples` strayed from `start` past `slop` -- a click's, unless said otherwise.
 
 ### `function vtt.tool-context.scopedToolId(ctx: string | ToolContext, domain: string, suffix?: string | number): string`
 
@@ -3351,7 +3305,9 @@ the next road.
 
 ### `variable vtt.path-stroke-tool.pathStroke: SpineSketchStroke<"path-brush">`
 
-A road's centerline sketched by dragging; release lays one fitted curve transaction.
+A road's centre line drawn by dragging, laid on release as one fitted
+curve transaction. The sketch owns the gesture; this only shapes, shows
+and lays what it is handed.
 
 ### `interface vtt.road-body-target.RoadSnapTarget`
 
@@ -3403,6 +3359,43 @@ Keep the displayed position and edge parameter until the pointer exits the wider
 
 Highlight the exact prospective junction without changing the graph.
 
+### `interface vtt.road-lay.ShapedRoad`
+
+### `property vtt.road-lay.ShapedRoad.curves: readonly CubicBezier[]`
+
+### `property vtt.road-lay.ShapedRoad.end: ConstructionPosition | undefined`
+
+Where the road ends -- short of the last point when its laws stop it; undefined when nothing is laid.
+
+### `variable vtt.road-lay.ROAD_SPINE_CHANNEL: "road-draft-spine"`
+
+Where a road's spine is drawn while it is only proposed.
+
+### `function vtt.road-lay.clearRoadPreview(ctx: ToolContext, channel: string): void`
+
+Clears a road preview on `channel`, spine included.
+
+### `function vtt.road-lay.layRoad(ctx: ToolContext, curves: readonly CubicBezier[], params: PathBrushParams, gesture: string, curveMode?: "automatic"): boolean`
+
+Lays `curves` as one road transaction, named for the gesture that drew it;
+false when it was refused or laid nothing. An automatic road's anchors
+reinterpolate when one is moved; any other keeps its controls.
+
+### `function vtt.road-lay.previewRoad(ctx: ToolContext, curves: readonly CubicBezier[], params: PathBrushParams, channel: string, waiting?: ConstructionPosition): void`
+
+Shows `curves` as the road they would lay -- spine and ribbon from one
+engine crossing -- or, with none, only the point a road waits at.
+
+### `function vtt.road-lay.previewRoadError(ctx: ToolContext, points: readonly ConstructionPosition[], params: PathBrushParams, channel: string): void`
+
+Shows raw `points` in red: what was drawn, which no road could be laid along. Never a candidate to confirm.
+
+### `function vtt.road-lay.shapeRoad(ctx: ToolContext, points: readonly ConstructionPosition[], params: PathBrushParams, drawn: boolean): ShapedRoad`
+
+The road through `points`, held in Rust to its laws: a stroke loses its
+loops, eases its turns and keeps to its grade; a click-to-click span is
+straight and keeps to its grade.
+
 ### `interface vtt.road-preview-mesh.RoadMeshPreviewOptions`
 
 ### `property vtt.road-preview-mesh.RoadMeshPreviewOptions.anchors: readonly ConstructionPosition[]`
@@ -3410,8 +3403,6 @@ Highlight the exact prospective junction without changing the graph.
 ### `property vtt.road-preview-mesh.RoadMeshPreviewOptions.bedWidth: number`
 
 ### `property vtt.road-preview-mesh.RoadMeshPreviewOptions.color?: number`
-
-### `property vtt.road-preview-mesh.RoadMeshPreviewOptions.cursor?: ConstructionPosition`
 
 ### `property vtt.road-preview-mesh.RoadMeshPreviewOptions.fallbackPoints?: readonly ConstructionPosition[]`
 
@@ -3431,10 +3422,6 @@ Highlight the exact prospective junction without changing the graph.
 
 ### `variable vtt.road-preview-mesh.SNAP_DISK_OPACITY: 0.85`
 
-### `function vtt.road-preview-mesh.createFastRoadPreview(points: readonly ConstructionPosition[], bedWidth: number, cursor?: ConstructionPosition, color?: number, opacity?: number): RenderPreviewDescriptor`
-
-Build a lightweight straight-quad preview mesh connecting path points directly, without WASM round-trips.
-
 ### `function vtt.road-preview-mesh.createRoadMeshPreview(options: RoadMeshPreviewOptions): RenderPreviewDescriptor`
 
 A road's ribbon preview: the shared ribbon mesh in the road's own colours.
@@ -3442,8 +3429,6 @@ A road's ribbon preview: the shared ribbon mesh in the road's own colours.
 ### `function vtt.road-preview-mesh.createSnapMeshPreview(target: ConstructionPosition, radius: number): RenderPreviewDescriptor`
 
 Build a glowing circular snap preview mesh at the target junction location.
-
-### `function vtt.road-preview-mesh.showRoadSpinePreview(ctx: ToolContext, curves: readonly CubicBezier[], channel: string): void`
 
 ### `interface vtt.platform-contour-merge.DirectedContourEdge`
 
@@ -5920,7 +5905,7 @@ contour edge are ordinary vertices, edited through their own role.
 
 How wide the band `edge` sweeps is halfway along it, and how far its farther side stands from the spine there.
 
-### `function vtt.spine-handles.spineWidthHandles(spans: readonly CurveEdge[], graph: ConstructionGraphSnapshot, port: Pick<BezierPort, "curveBatch">, defaultsFor: SpineDefaultOffsets): readonly { id: string; position: ConstructionPosition }[]`
+### `function vtt.spine-handles.spineWidthHandles(frames: readonly CurveMidframe[], graph: ConstructionGraphSnapshot, defaultsFor: SpineDefaultOffsets): readonly { id: string; position: ConstructionPosition }[]`
 
 Each spine span's width handle: on the edge of its band, halfway along
 it -- pushed out or in, it widens or narrows that span.
@@ -6709,6 +6694,12 @@ One VTT-owned sample of the cross-section the generic Rust sweep executes.
 
 ### `property vtt.path-recipe.PathProfilePoint.lateralOffset: number`
 
+### `variable vtt.path-recipe.PATH_HEIGHT_TOLERANCE: 0.5`
+
+How far a road's fitted height may stray from the ground it was drawn over
+before a span is split: the ground rises or falls to meet a road where it
+rests on it, so a road need not trace every bump -- only a hill.
+
 ### `variable vtt.path-recipe.PATH_MAX_GRADE: 0.2`
 
 The steepest a road climbs, as rise per plan length -- the road-building
@@ -6769,6 +6760,10 @@ PATH_SPINE_OFFSET, or `-1` for a profile that declares none.
 Node identity is minted relative to this slot, so that "outward" is a fact
 an id carries rather than something a later edit has to infer from
 geometry that has since moved.
+
+### `function vtt.path-recipe.pathStrokeShape(params: PathBrushParams): { heightTolerance: number; maxGrade: number; minRadius: number; simple: true }`
+
+Everything a drawn road is held to before it is laid, as the engine's stroke shape.
 
 ### `interface vtt.path-spine-draft.PathSpineDraft`
 
@@ -7200,6 +7195,10 @@ guessing would corrupt geometry.
 
 Whether `structureType` vertically conforms to a support with these traits
 (e.g. riding on top of ground and sampling its height). Defaults to `false`.
+
+### `function vtt.registry.spineDefaultOffsets(surfaceType: string): readonly number[] | undefined`
+
+The band offsets `surfaceType`'s spine sweeps a span at when the span keeps none of its own; undefined for a type not built on a spine.
 
 ### `function vtt.registry.structureTypeFor(surfaceType: string): StructureTypeDefinition | undefined`
 
@@ -8261,10 +8260,6 @@ and inscribes an ellipse (a circle when the rectangle is square).
 
 Width of the flat traversable bed, in world units.
 
-### `property vtt.tool-types.PathBrushParams.curveMode?: "automatic" | "aligned" | "mirrored" | "free"`
-
-Constraint for editing an existing curve with this same tool.
-
 ### `property vtt.tool-types.PathBrushParams.miterLimit: number`
 
 Maximum corner extension, in multiples of the local half width.
@@ -8795,6 +8790,16 @@ One editable cubic between two anchor nodes.
 
 ### `property vtt.curve-handles.CurveEdge.store: CurveStore`
 
+### `interface vtt.curve-handles.CurveMidframe`
+
+A curve halfway along: where it stands, and which way it runs there.
+
+### `property vtt.curve-handles.CurveMidframe.edge: CurveEdge`
+
+### `property vtt.curve-handles.CurveMidframe.position: ConstructionPosition`
+
+### `property vtt.curve-handles.CurveMidframe.tangent: CurvePoint`
+
 ### `type vtt.curve-handles.CurveHandleIndex = 1 | 2 | "midpoint"`
 
 ### `type vtt.curve-handles.CurveStore = "spine" | "contour"`
@@ -8813,9 +8818,13 @@ The boundary geometry a contour edge keeps for `curve`, walked from its own star
 
 Every curve on the table: spine spans resolved from their stored handles, and curved contour edges.
 
-### `function vtt.curve-handles.curveHandles(edges: readonly CurveEdge[], port: Pick<BezierPort, "curveBatch">): readonly { id: string; position: ConstructionPosition }[]`
+### `function vtt.curve-handles.curveHandles(frames: readonly CurveMidframe[]): readonly { id: string; position: ConstructionPosition }[]`
 
-Each curve's midpoint, as a pickable position, in one engine crossing.
+Each curve's midpoint handle, placed from its midframe.
+
+### `function vtt.curve-handles.curveMidframes(edges: readonly CurveEdge[], port: Pick<BezierPort, "curveBatch">): readonly CurveMidframe[]`
+
+Each curve halfway along, in one engine crossing -- what every handle standing on a span's middle is placed from.
 
 ### `function vtt.curve-handles.curvePick(id: string): { edgeId: string; index: CurveHandleIndex } | undefined`
 
@@ -9596,7 +9605,7 @@ The structure type generated along this spine span; a span with no owner generat
 
 ### `property vtt.bezier-port.CurveResult.samples: readonly (readonly { position: CurvePoint; t: number }[])[]`
 
-### `type vtt.bezier-port.CurveCommand = { correction: number; curved: boolean; kind: "interpretStroke"; maxGrade?: number; minRadius?: number; points: readonly CurvePoint[] } | { kind: "automatic"; points: readonly CurvePoint[] } | { cornerDegrees?: number; kind: "fit"; points: readonly CurvePoint[] } | { kind: "join"; sections: readonly (readonly [CurvePoint, CurvePoint])[] } | { curve: CubicBezier; endOffsets?: readonly [number, number]; kind: "ribbon"; offsets: readonly [number, number]; parameters?: readonly number[] } | { curves: readonly CubicBezier[]; kind: "sample" } | { curve: CubicBezier; kind: "split"; profile?: CurveHandles; t: number } | { curve: CubicBezier; kind: "merge"; next: CubicBezier } | { curve: CubicBezier; kind: "pull"; t: number; target: CurvePoint } | { curve: CubicBezier; index: 1 | 2; kind: "handle"; mode: CurveHandleMode; opposite: CurvePoint | null; target: CurvePoint } | { curve: CubicBezier; kind: "nearest"; point: CurvePoint } | { end: CurvePoint; handles: CurveHandles; kind: "resolve"; start: CurvePoint } | { center: CurvePoint; kind: "helix"; radius: number; rise: number; startAngle: number; sweep: number } | { end: CurvePoint; kind: "arcThrough"; start: CurvePoint; through: CurvePoint } | { curves: readonly CubicBezier[]; end: number; kind: "grade"; start: number }`
+### `type vtt.bezier-port.CurveCommand = { correction: number; curved: boolean; heightTolerance?: number; kind: "interpretStroke"; maxGrade?: number; minRadius?: number; points: readonly CurvePoint[]; simple?: boolean } | { kind: "automatic"; points: readonly CurvePoint[] } | { cornerDegrees?: number; kind: "fit"; points: readonly CurvePoint[] } | { kind: "join"; sections: readonly (readonly [CurvePoint, CurvePoint])[] } | { curve: CubicBezier; endOffsets?: readonly [number, number]; kind: "ribbon"; offsets: readonly [number, number]; parameters?: readonly number[] } | { curves: readonly CubicBezier[]; kind: "sample" } | { curve: CubicBezier; kind: "split"; profile?: CurveHandles; t: number } | { curve: CubicBezier; kind: "merge"; next: CubicBezier } | { curve: CubicBezier; kind: "pull"; t: number; target: CurvePoint } | { curve: CubicBezier; index: 1 | 2; kind: "handle"; mode: CurveHandleMode; opposite: CurvePoint | null; target: CurvePoint } | { curve: CubicBezier; kind: "nearest"; point: CurvePoint } | { end: CurvePoint; handles: CurveHandles; kind: "resolve"; start: CurvePoint } | { center: CurvePoint; kind: "helix"; radius: number; rise: number; startAngle: number; sweep: number } | { end: CurvePoint; kind: "arcThrough"; start: CurvePoint; through: CurvePoint } | { curves: readonly CubicBezier[]; end: number; kind: "grade"; start: number }`
 
 ### `type vtt.bezier-port.CurveHandleMode = "automatic" | "aligned" | "mirrored" | "free"`
 

@@ -219,22 +219,16 @@ pub fn move_vertices<E>(
                 (start[0] as f64 + scale_cos * relative[0] - scale_sin * relative[1]) as f32,
                 (start[2] as f64 + scale_sin * relative[0] + scale_cos * relative[1]) as f32,
             ];
-            transformed
-                .iter()
-                .all(|v| v.is_finite())
-                .then_some(transformed)
+            transformed.iter().all(|v| v.is_finite()).then_some(transformed)
         };
         let new_geometry = match geometry {
             ContourGeometry::CircularArc { center, clockwise } => ContourGeometry::CircularArc {
-                center: transform(center)
-                    .ok_or_else(|| MotionError::NonFinite(edge.start_node().clone()))?,
+                center: transform(center).ok_or_else(|| MotionError::NonFinite(edge.start_node().clone()))?,
                 clockwise,
             },
             ContourGeometry::Bezier { handle1, handle2 } => ContourGeometry::Bezier {
-                handle1: transform(handle1)
-                    .ok_or_else(|| MotionError::NonFinite(edge.start_node().clone()))?,
-                handle2: transform(handle2)
-                    .ok_or_else(|| MotionError::NonFinite(edge.start_node().clone()))?,
+                handle1: transform(handle1).ok_or_else(|| MotionError::NonFinite(edge.start_node().clone()))?,
+                handle2: transform(handle2).ok_or_else(|| MotionError::NonFinite(edge.start_node().clone()))?,
             },
             ContourGeometry::Line => unreachable!("filtered out above"),
         };

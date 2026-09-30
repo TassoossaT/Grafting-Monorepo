@@ -1,96 +1,50 @@
-import { roadSnapTarget, showRoadSnap } from "./road-body-target.ts";
-import { createRoadMeshPreview, showRoadSpinePreview, ROAD_PREVIEW_COLOR, ROAD_PREVIEW_OPACITY, ROAD_ERROR_COLOR, ROAD_ERROR_OPACITY } from "./road-preview-mesh.ts";
-import { createPathBrushEffect, pathFormationFor, pathHalfWidth, pathMinRadius, PATH_MAX_GRADE } from "../../../../features/edit-construction/index.ts";
 import type { PathBrushParams } from "../../../../features/edit-construction/index.ts";
-import { commitPathCloudIntent } from "../../path/path-cloud-transaction.ts";
-import { scopedToolId, type ToolContext, type ToolGesture, type PointerSample } from "../core/tool-context.ts";
-import { isStroke, type SpineSketchStroke } from "../core/spine-sketch.ts";
+import type { ToolContext, ToolGesture } from "../core/tool-context.ts";
+import { samePlace, type SpineSketchStroke } from "../core/spine-sketch.ts";
+import { roadSnapTarget, showRoadSnap } from "./road-body-target.ts";
+import { clearRoadPreview, layRoad, previewRoad, previewRoadError, shapeRoad, type ShapedRoad } from "./road-lay.ts";
 
 const CHANNEL = "road-stroke";
-/** The plan deviation, in metres, a freehand stroke is smoothed within. */
-const HAND_WOBBLE = 1;
-const active = new WeakMap<ToolContext["runtime"], PointerSample>();
-const point = (p: PointerSample) => [p.point.x,p.point.y,p.point.z] as const;
 
-function draft(ctx: ToolContext,g: ToolGesture,params: PathBrushParams) {
-  const samples = [...g.samples, g.current].filter((sample, index, all) => {
-    const previous = all[index - 1];
-    return !previous || sample.point.x !== previous.point.x || sample.point.y !== previous.point.y || sample.point.z !== previous.point.z;
-  });
+/**
+ * The road a stroke draws, its last sample snapped onto a road it ends on.
+ * A road too steep to climb to that target stops short of it and does not
+ * join it, so the snap only shows when the road reaches it.
+ */
+function draft(ctx: ToolContext, g: ToolGesture, params: PathBrushParams): ShapedRoad {
+  const samples = [...g.samples, g.current].filter((sample, index, all) => index === 0 || !samePlace(sample.point, all[index - 1]!.point));
   const target = roadSnapTarget(ctx, g.current);
   if (target) samples[samples.length - 1] = target;
-
-  // Held to the road's laws in Rust: no loops, no turn tighter than its
-  // width, no climb past its grade. Wobble is smoothed whatever the width --
-  // tied to it, a wide road had none left and kept every sample as an anchor.
-  const fitted=ctx.runtime.curveBatch({tolerance:0.025,commands:[{kind:"interpretStroke",points:samples.map(point),correction:HAND_WOBBLE,curved:true,minRadius:pathMinRadius(params),maxGrade:PATH_MAX_GRADE}]})[0]!;
-  // A road too steep to climb to the target stops short of it, and does not join it.
-  const last=fitted.curves.at(-1)?.points[3];
-  const reached=last&&{x:last[0],y:last[1],z:last[2]};
-  const joins=target!==undefined&&reached!==undefined&&Math.abs(reached.y-target.point.y)<1e-6;
-  if(reached&&!joins)samples[samples.length-1]={...g.current,point:reached};
-  showRoadSnap(ctx, joins ? target : undefined);
-  const halfWidth=pathHalfWidth(params);
-  const ribbons=ctx.runtime.curveBatch({tolerance:0.025,commands:fitted.curves.map(curve=>({kind:"ribbon" as const,curve,offsets:[-halfWidth,halfWidth] as const}))});
-  return {fitted,ribbons,samples};
+  const road = shapeRoad(ctx, samples.map((sample) => sample.point), params, true);
+  showRoadSnap(ctx, target && road.end && samePlace(road.end, target.point) ? target : undefined);
+  return road;
 }
-/** A road's centerline sketched by dragging; release lays one fitted curve transaction. */
+
+/**
+ * A road's centre line drawn by dragging, laid on release as one fitted
+ * curve transaction. The sketch owns the gesture; this only shapes, shows
+ * and lays what it is handed.
+ */
 export const pathStroke: SpineSketchStroke<"path-brush"> = {
-  begin(ctx,sample){showRoadSnap(ctx);active.set(ctx.runtime,sample);},
-  move(ctx,g,params) {
-    if(!active.has(ctx.runtime)||!isStroke(g))return;
+  begin(ctx) { showRoadSnap(ctx); },
+  move(ctx, g, params) {
     try {
-      const d=draft(ctx,g,params);
-      showRoadSpinePreview(ctx, d.fitted.curves, "road-draft-spine");
-      const anchors = [d.samples[0]!.point];
-      if (d.samples.length > 1) anchors.push(d.samples[d.samples.length - 1]!.point);
-      ctx.runtime.showPreview(createRoadMeshPreview({
-        ribbons: d.ribbons,
-        anchors,
-        bedWidth: pathHalfWidth(params) * 2,
-        color: ROAD_PREVIEW_COLOR,
-        opacity: ROAD_PREVIEW_OPACITY,
-      }), CHANNEL);
+      previewRoad(ctx, draft(ctx, g, params).curves, params, CHANNEL);
     } catch {
-      ctx.runtime.clearPreview("road-draft-spine");
       showRoadSnap(ctx);
-      // Red raw input is presentation only, never a candidate for confirmation.
-      const points=g.samples.filter(s=>Object.values(s.point).every(Number.isFinite)).map(s=>s.point);
-      ctx.runtime.showPreview(createRoadMeshPreview({
-        fallbackPoints: points,
-        anchors: points.length > 0 ? [points[0]!, points[points.length - 1]!] : [],
-        bedWidth: pathHalfWidth(params) * 2,
-        color: ROAD_ERROR_COLOR,
-        opacity: ROAD_ERROR_OPACITY,
-      }), CHANNEL);
+      previewRoadError(ctx, g.samples.map((sample) => sample.point).filter((p) => Object.values(p).every(Number.isFinite)), params, CHANNEL);
     }
   },
-  finish: finishPathStroke,
-  cancel(ctx){active.delete(ctx.runtime);ctx.runtime.clearPreview(CHANNEL);ctx.runtime.clearPreview("road-draft-spine");showRoadSnap(ctx);},
-};
-
-/** The single release/commit path. */
-function finishPathStroke(ctx: ToolContext, g: ToolGesture, params: PathBrushParams): boolean {
-    if(!active.delete(ctx.runtime))return false;
-    ctx.runtime.clearPreview(CHANNEL);
-    ctx.runtime.clearPreview("road-draft-spine");
-    const final={...g,samples:[...g.samples,g.current]};
-    if(!isStroke(final)){showRoadSnap(ctx);return false;}
+  finish(ctx, g, params) {
+    clearRoadPreview(ctx, CHANNEL);
     try {
-      const d=draft(ctx,final,params);
-      const operationId=scopedToolId(ctx,"road-stroke",ctx.nextSequence());
-      const effect=createPathBrushEffect({
-        brushShape:{kind:"circle",radius:0.025},
-        // The anchors of the road as shaped, never the raw input it was shaped from: a cut-out loop is not laid.
-        brushRegion:{samples:[d.fitted.curves[0]!.points[0],...d.fitted.curves.map(c=>c.points[3])].map(([x,y,z])=>({x,y,z}))},
-        authoredCurves:d.fitted.curves,parameters:pathFormationFor(params),
-      },{operationId,tableId:ctx.tableId,initiatedBy:"road-stroke"});
-      const committed=commitPathCloudIntent(ctx,effect,0.025);
-      showRoadSnap(ctx);
-      return committed;
-    } catch(error) {
-      showRoadSnap(ctx);
-      ctx.reportFeedback({tone:"error",message:`Traçado não aplicado: ${String(error)}`});
+      return layRoad(ctx, draft(ctx, g, params).curves, params, "road-stroke");
+    } catch (error) {
+      ctx.reportFeedback({ tone: "error", message: `Traçado não aplicado: ${String(error)}` });
       return false;
+    } finally {
+      showRoadSnap(ctx);
     }
-}
+  },
+  cancel(ctx) { clearRoadPreview(ctx, CHANNEL); showRoadSnap(ctx); },
+};

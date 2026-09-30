@@ -87,6 +87,18 @@ export function pathMinRadius(params: PathBrushParams): number {
 }
 
 /**
+ * How far a road's fitted height may stray from the ground it was drawn over
+ * before a span is split: the ground rises or falls to meet a road where it
+ * rests on it, so a road need not trace every bump -- only a hill.
+ */
+export const PATH_HEIGHT_TOLERANCE = 0.5;
+
+/** Everything a drawn road is held to before it is laid, as the engine's stroke shape. */
+export function pathStrokeShape(params: PathBrushParams): { readonly simple: true; readonly minRadius: number; readonly maxGrade: number; readonly heightTolerance: number } {
+  return { simple: true, minRadius: pathMinRadius(params), maxGrade: PATH_MAX_GRADE, heightTolerance: PATH_HEIGHT_TOLERANCE };
+}
+
+/**
  * How far this recipe's own product reaches from the reference line -- the
  * outermost lateral offset of the profile it produces.
  *

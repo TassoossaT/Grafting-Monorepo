@@ -4,12 +4,11 @@ import test from "node:test";
 import {
   createRoadMeshPreview,
   createSnapMeshPreview,
-  PREVIEW_ELEVATION,
-  NODE_DISK_ELEVATION,
   ROAD_PREVIEW_COLOR,
   ROAD_ERROR_COLOR,
   SNAP_DISK_COLOR,
 } from "../src/composition/tabletop/tools/paths/road-preview-mesh.ts";
+import { NODE_DISK_ELEVATION, PREVIEW_ELEVATION } from "../src/composition/tabletop/tools/shapes/ribbon-mesh-preview.ts";
 import { sessionFixture } from "./platform-session-fixture.mjs";
 import { pathBrushTool as tool } from "../src/composition/tabletop/tools/paths/path-brush-tool.ts";
 import { pathHalfWidth } from "../src/features/edit-construction/index.ts";

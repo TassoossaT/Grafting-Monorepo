@@ -1,9 +1,7 @@
 //! Brush-area interpretation extracted from the existing wall curve fitter.
 use crate::bezier::{CubicBezier, CurvePoint};
 
-fn distance(a: CurvePoint, b: CurvePoint) -> f64 {
-    (a[0] - b[0]).hypot(a[2] - b[2])
-}
+use crate::stroke_shaping::plan as distance;
 fn line(a: CurvePoint, b: CurvePoint) -> CubicBezier {
     CubicBezier {
         points: [
@@ -120,15 +118,19 @@ fn fit_height(curve: &mut CubicBezier, points: &[CurvePoint], parameters: &[f64]
     }
 }
 
-/// Returns cubic spans and their straight/curved classification. The correction
-/// budget measures captured XZ samples, not tessellation density or mesh validity.
 /// What a stroke is held to before it is fitted -- see `stroke_shaping`.
+/// Every field is opt-in: absent, a stroke is fitted as drawn.
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct StrokeShape {
+    /// Whether the stroke may not cross itself: its loops are cut out.
+    pub simple: bool,
     /// The tightest turn, in plan, the swept structure can make.
     pub min_radius: Option<f64>,
     /// The steepest rise per plan length it may climb.
     pub max_grade: Option<f64>,
+    /// How far the fitted height may stray from the drawn one before a span
+    /// is split; absent, heights are traced as closely as the plan.
+    pub height_tolerance: Option<f64>,
 }
 
 #[cfg(test)]
@@ -140,8 +142,9 @@ pub(crate) fn interpret(
     interpret_shaped(points, correction, curved, StrokeShape::default())
 }
 
-/// `interpret`, the stroke first held to `shape`: loops cut out, turns
-/// eased to the minimum radius, the climb held to the grade.
+/// Returns cubic spans and their straight/curved classification, the stroke
+/// first held to `shape`. The correction budget measures captured XZ samples,
+/// not tessellation density or mesh validity.
 pub(crate) fn interpret_shaped(
     points: &[CurvePoint],
     correction: f64,
@@ -157,26 +160,20 @@ pub(crate) fn interpret_shaped(
     if points.iter().flatten().any(|v| !v.is_finite()) {
         return Err("stroke coordinates must be finite".into());
     }
-    if [shape.min_radius, shape.max_grade]
+    if [shape.min_radius, shape.max_grade, shape.height_tolerance]
         .into_iter()
         .flatten()
         .any(|v| !v.is_finite() || v < 0.)
     {
         return Err("stroke shape limits must be finite and non-negative".into());
     }
-    let mut shaped = crate::stroke_shaping::remove_loops(points);
-    if let Some(radius) = shape.min_radius {
-        shaped = crate::stroke_shaping::limit_curvature(&shaped, radius);
-    }
-    if let Some(grade) = shape.max_grade {
-        shaped = crate::stroke_shaping::limit_grade(&shaped, grade);
-    }
-    let points = shaped.as_slice();
     let min_step = if correction > 0.0 {
         (correction * 0.08).clamp(0.06, 0.20)
     } else {
         1e-6
     };
+    // Thinned before it is shaped: a raw pointer stroke carries a sample every
+    // centimetre or two, and shaping cost grows with the samples it is handed.
     let mut clean = Vec::new();
     if let Some(&first) = points.first() {
         clean.push(first);
@@ -191,14 +188,24 @@ pub(crate) fn interpret_shaped(
     if points.len() >= 2 {
         clean.push(*points.last().unwrap());
     }
+    if shape.simple {
+        clean = crate::stroke_shaping::remove_loops(&clean);
+    }
+    if let Some(radius) = shape.min_radius {
+        clean = crate::stroke_shaping::limit_curvature(&clean, radius);
+    }
+    if let Some(grade) = shape.max_grade {
+        clean = crate::stroke_shaping::limit_grade(&clean, grade);
+    }
     if clean.len() < 2 {
         return Ok(Vec::new());
     }
-    // Anchors are for the plan shape. A structure laid along the stroke need
-    // not trace every bump of the ground it was drawn over -- the ground rises
-    // or falls to meet it where it rests -- so height splits a span only past
-    // half a metre: a bump, not a hill.
-    let height_tolerance = if correction > 0.0 { 0.5 } else { 0.025 };
+    let height_tolerance = shape.height_tolerance.unwrap_or(if correction > 0.0 {
+        (correction * 0.4).max(0.18)
+    } else {
+        0.025
+    });
+    let line_height_tolerance = shape.height_tolerance.unwrap_or(if correction > 0.0 { 0.08 } else { 0.025 });
     let min_split_len = if correction > 0.0 {
         (correction * 0.5).max(0.75)
     } else {
@@ -255,7 +262,7 @@ pub(crate) fn interpret_shaped(
                 height_residual = height_residual.max((point[1] - fitted[1]).abs());
             }
         }
-        let line_fits = straight <= correction && height_error <= height_tolerance;
+        let line_fits = straight <= correction && height_error <= line_height_tolerance;
         let curve_fits = residual <= correction && height_residual <= height_tolerance;
         if !line_fits && !curve_fits && span.len() > 2 && (chord < 1e-6 || chord >= min_split_len) {
             if height_error > height_tolerance {
@@ -350,7 +357,8 @@ mod tests {
                 [x, 0.3 * (x * 0.7).sin() + 0.1 * (x * 2.3).sin(), 0.]
             })
             .collect();
-        let spans = interpret(&points, 1.0, true).unwrap();
+        let shape = StrokeShape { height_tolerance: Some(0.5), ..StrokeShape::default() };
+        let spans = interpret_shaped(&points, 1.0, true, shape).unwrap();
         assert_eq!(spans.len(), 1, "produced {} spans", spans.len());
     }
 

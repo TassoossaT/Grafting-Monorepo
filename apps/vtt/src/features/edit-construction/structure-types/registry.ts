@@ -92,6 +92,9 @@ export function structureTypeFor(surfaceType: string): StructureTypeDefinition |
   return DEFINITION_BY_SURFACE_TYPE.get(surfaceType);
 }
 
+/** The band offsets `surfaceType`'s spine sweeps a span at when the span keeps none of its own; undefined for a type not built on a spine. */
+export const spineDefaultOffsets = (surfaceType: string): readonly number[] | undefined => structureTypeFor(surfaceType)?.spine?.defaultOffsets;
+
 /** Surface types admitted to the same connected cloud as `surfaceType`. */
 export function cloudTypesFor(surfaceType: string): readonly string[] {
   const family = structureTypeFor(surfaceType)?.cloudFamily;

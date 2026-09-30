@@ -2,8 +2,8 @@ import type { BezierPort, ConstructionCurvedEdge, ConstructionGraphSnapshot, Con
 
 import type { GlobalHandleKind } from "../global-handles/index.ts";
 import { spineWidthHandles } from "../spine/spine-handles.ts";
-import { structureTypeFor } from "../structure-types/index.ts";
-import { curveEdgesOf, curveHandles } from "../topology/curve-handles.ts";
+import { spineDefaultOffsets } from "../structure-types/index.ts";
+import { curveEdgesOf, curveHandles, curveMidframes } from "../topology/curve-handles.ts";
 import { panelHeightWidgets } from "../topology/panel-height-widget.ts";
 import { shownGlobalHandles } from "./global-handles/index.ts";
 
@@ -67,14 +67,14 @@ export function sceneHandles(input: SceneHandleInput): readonly SceneHandle[] {
     const spines = input.pointsOnly ? edges.filter((edge) => edge.store === "spine") : edges;
     const { focus } = input;
     const shown = focus ? spines.filter((edge) => edge.store !== "spine" || (focus.spineNodes.has(edge.startNodeId) && focus.spineNodes.has(edge.endNodeId))) : spines;
+    // One split per span places both the handles standing on its middle.
+    const frames = curveMidframes(shown, input.port);
     if (input.pointsOnly) {
       const anchors = new Set(shown.flatMap((edge) => [edge.startNodeId, edge.endNodeId]));
       for (const node of input.graph.nodes) if (anchors.has(node.id)) handles.push({ id: node.id, kind: "anchor", position: node.position });
-      for (const handle of spineWidthHandles(shown, input.graph, input.port, (surfaceType) => structureTypeFor(surfaceType)?.spine?.defaultOffsets)) {
-        handles.push({ id: handle.id, kind: "width", position: handle.position });
-      }
+      for (const handle of spineWidthHandles(frames, input.graph, spineDefaultOffsets)) handles.push({ id: handle.id, kind: "width", position: handle.position });
     }
-    for (const handle of curveHandles(shown, input.port)) handles.push({ id: handle.id, kind: "midpoint", position: handle.position });
+    for (const handle of curveHandles(frames)) handles.push({ id: handle.id, kind: "midpoint", position: handle.position });
   }
   if (!input.pointsOnly) {
     // With a focus, only the focused structure's own.

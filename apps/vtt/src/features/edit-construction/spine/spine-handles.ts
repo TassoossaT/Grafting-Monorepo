@@ -1,6 +1,6 @@
-import type { BezierPort, ConstructionCurvedEdge, ConstructionEdgeSnapshot, ConstructionGraphSnapshot, ConstructionPosition } from "@/ports";
+import type { ConstructionCurvedEdge, ConstructionEdgeSnapshot, ConstructionGraphSnapshot, ConstructionPosition } from "@/ports";
 
-import { curvePick, curveWidthPickId, type CurveEdge } from "../topology/curve-handles.ts";
+import { curvePick, curveWidthPickId, type CurveMidframe } from "../topology/curve-handles.ts";
 import { spanOffsets } from "./spine-ribbons.ts";
 
 export { curvePick, curvePickId, curveWidthPick, curveWidthPickId } from "../topology/curve-handles.ts";
@@ -22,25 +22,18 @@ export function spanWidth(edge: Pick<ConstructionEdgeSnapshot, "curve">, default
  * it -- pushed out or in, it widens or narrows that span.
  */
 export function spineWidthHandles(
-  spans: readonly CurveEdge[],
+  frames: readonly CurveMidframe[],
   graph: ConstructionGraphSnapshot,
-  port: Pick<BezierPort, "curveBatch">,
   defaultsFor: SpineDefaultOffsets,
 ): readonly { readonly id: string; readonly position: ConstructionPosition }[] {
   const edges = new Map(graph.edges.map((edge) => [edge.edgeId, edge]));
-  const sized = spans.flatMap((span) => {
+  return frames.flatMap(({ edge: span, position, tangent }) => {
     const edge = span.store === "spine" ? edges.get(span.edgeId) : undefined;
     const width = edge && spanWidth(edge, defaultsFor);
-    return width ? [{ span, reach: width.reach }] : [];
-  });
-  if (sized.length === 0) return [];
-  const halves = port.curveBatch({ tolerance: 0.025, commands: sized.map(({ span }) => ({ kind: "split" as const, curve: span.curve, t: 0.5 })) });
-  return sized.flatMap(({ span, reach }, i) => {
-    const [, , before, mid] = halves[i]!.curves[0]!.points;
-    const dx = mid[0] - before[0], dz = mid[2] - before[2], length = Math.hypot(dx, dz);
-    if (length < 1e-9) return [];
-    const side = { x: -dz / length, z: dx / length };
-    return [{ id: curveWidthPickId(span.edgeId), position: { x: mid[0] + side.x * reach, y: mid[1], z: mid[2] + side.z * reach } }];
+    const length = Math.hypot(tangent[0], tangent[2]);
+    if (!width || length < 1e-9) return [];
+    const side = { x: -tangent[2] / length, z: tangent[0] / length };
+    return [{ id: curveWidthPickId(span.edgeId), position: { x: position.x + side.x * width.reach, y: position.y, z: position.z + side.z * width.reach } }];
   });
 }
 

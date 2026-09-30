@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { sessionFixture } from "./platform-session-fixture.mjs";
+import { capturePreviews, sessionFixture } from "./platform-session-fixture.mjs";
 import { pathBrushTool as tool } from "../src/composition/tabletop/tools/paths/path-brush-tool.ts";
 import { commitPathCloudIntent } from "../src/composition/tabletop/path/path-cloud-transaction.ts";
-import { createPathBrushEffect, curveEdgesOf, curvePickId, curveWidthPickId, pathFormationFor, spineWidthHandles, structureTypeFor } from "../src/features/edit-construction/index.ts";
+import { createPathBrushEffect, curveEdgesOf, curveMidframes, curvePickId, curveWidthPickId, pathFormationFor, spineDefaultOffsets, spineWidthHandles } from "../src/features/edit-construction/index.ts";
 import { surfaceRefFromNodeSet } from "../src/entities/map/index.ts";
 const sample=(x,z)=>({point:{x,y:0,z}});
 const gesture=(a,b)=>({start:a,current:b,samples:[a,b]});
@@ -17,11 +17,8 @@ const closeCurves=(actual,expected,tolerance=1e-10)=>{assert.equal(actual.length
 const bodyOf=(f,x,z)=>({...sample(x,z),surfaceRef:surfaceRefFromNodeSet(f.runtime.getAllRegionTopologies()[0].surfaceKey)});
 
 function fixture() {
-  const f=sessionFixture();f.previews=new Map();f.selected=undefined;
+  const f=capturePreviews(sessionFixture());f.selected=undefined;
   f.ctx.reportSelection=value=>{f.selected=value;};
-  f.runtime.showPreview=(d,c)=>f.previews.set(c,d);
-  f.runtime.clearPreview=c=>f.previews.delete(c);
-  f.runtime.getFootprintCoverage=()=>[];
   f.click=(a,b=a,p=params)=>{tool.onPointerDown(f.ctx,a,p);tool.onPointerUp(f.ctx,gesture(a,b),p);};
   f.drag=(a,b,p=params)=>{tool.onPointerDown(f.ctx,a,p);tool.onPointerMove(f.ctx,gesture(a,b),p);tool.onPointerUp(f.ctx,gesture(a,b),p);};
   f.end=()=>tool.onKeyDown(f.ctx,"Enter",params);
@@ -214,7 +211,7 @@ test("the panel only sets up the next road; standing roads keep their width",()=
   try {
     lay(f,[[-10,0,0],[10,0,0]]);const before=state(f);
     const wide={...params,bedWidth:5};
-    tool.onParamsChange(f.ctx,wide,params);
+    tool.onParamsChange?.(f.ctx,wide,params);
     assert.deepEqual(state(f),before);
     f.click(sample(-10,8),sample(-10,8),wide);f.click(sample(10,8),sample(10,8),wide);
     const added=edges(f).find(e=>f.runtime.getGraphSnapshot().nodes.find(n=>n.id===e.startNodeId).position.z===8);
@@ -227,7 +224,7 @@ test("a span's width handle widens that span alone, in one reversible transactio
   try {
     lay(f,[[-10,0,0],[0,0,0],[10,0,0]]);
     const graph=f.runtime.getGraphSnapshot(),span=edges(f)[0],other=edges(f)[1];
-    const handle=spineWidthHandles(curveEdgesOf(graph,[],f.runtime),graph,f.runtime,(t)=>structureTypeFor(t)?.spine?.defaultOffsets).find(h=>h.id===curveWidthPickId(span.edgeId));
+    const handle=spineWidthHandles(curveMidframes(curveEdgesOf(graph,[],f.runtime),f.runtime),graph,spineDefaultOffsets).find(h=>h.id===curveWidthPickId(span.edgeId));
     assert.ok(handle,"every span shows a width handle");
     const mid=midpointOf(f,span).point;
     assert.ok(Math.abs(Math.hypot(handle.position.x-mid.x,handle.position.z-mid.z)-0.3)<1e-6,"it stands on the band's edge");

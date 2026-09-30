@@ -1,18 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { sessionFixture } from "./platform-session-fixture.mjs";
+import { capturePreviews, sessionFixture } from "./platform-session-fixture.mjs";
 import { pathBrushTool as tool } from "../src/composition/tabletop/tools/paths/path-brush-tool.ts";
 import { PATH_SURFACE_TYPE } from "../src/features/edit-construction/structure-types/path/path-surface-type.ts";
 import { surfaceRefFromNodeSet } from "../src/entities/map/index.ts";
 
-const points = { ...tool.defaultParams(), creationMode: "points", bedWidth: 4 };
+const points = { ...tool.defaultParams(), bedWidth: 4 };
 
 function createRoadFixture() {
-  const f = sessionFixture();
-  f.previews = new Map();
-  f.runtime.showPreview = (d, c) => f.previews.set(c, d);
-  f.runtime.clearPreview = (c) => f.previews.delete(c);
-  f.runtime.getFootprintCoverage = () => [];
+  const f = capturePreviews(sessionFixture());
   const sample = (x, z, y = 0) => ({ point: { x, y, z } });
   const gesture = (a, b) => ({ start: a, current: b, samples: [a, b] });
   f.click = (a, b = a, params = points) => {

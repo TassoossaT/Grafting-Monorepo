@@ -1,7 +1,7 @@
 import type { ConstructionToolId, ToolParamsFor } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionPosition } from "../../../../ports/index.ts";
 import type { AnchorSnap } from "./curve-edit-gesture.ts";
-import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
+import { gestureMoved, type ConstructionTool, type PointerSample, type PointerSlop, type ToolContext, type ToolGesture } from "./tool-context.ts";
 
 /**
  * Laying a new spine by gesture alone -- there is no mode to pick:
@@ -44,7 +44,7 @@ export interface SpineSketchOptions<Id extends ConstructionToolId> {
 }
 
 export interface SpineSketchTool<Id extends ConstructionToolId> extends ConstructionTool<Id> {
-  /** Whether a straight run is waiting for its next click -- presses then belong to it, even on a handle. */
+  /** Whether a straight run is waiting for its next click -- presses then belong to it, though a handle still edits and drops the run. */
   readonly drafting: (ctx: ToolContext) => boolean;
 }
 
@@ -54,20 +54,18 @@ interface Press {
   readonly target?: PointerSample;
 }
 
-/**
- * Whether the pointer has travelled far enough from the press to be drawing
- * a stroke rather than clicking -- the tolerance that keeps a shaky click a
- * click: 5 px on screen, or 0.15 m in the world when there is no screen.
- */
+/** The wander a shaky click may have and stay a click: wider than a plain click's, since here a drag draws. */
+const STROKE_SLOP: PointerSlop = { pixels: 5, world: 0.15 };
+
+/** Whether the pointer has travelled far enough from the press to be drawing a stroke rather than clicking. */
 export function isStroke(gesture: ToolGesture): boolean {
-  const { start } = gesture;
-  return [...gesture.samples, gesture.current].some((sample) =>
-    sample.screenX !== undefined && sample.screenY !== undefined && start.screenX !== undefined && start.screenY !== undefined
-      ? Math.hypot(sample.screenX - start.screenX, sample.screenY - start.screenY) >= 5
-      : Math.hypot(sample.point.x - start.point.x, sample.point.z - start.point.z) >= 0.15);
+  return gestureMoved(gesture.start, gesture.samples, STROKE_SLOP) || gestureMoved(gesture.start, [gesture.current], STROKE_SLOP);
 }
 
-const samePlace = (a: ConstructionPosition, b: ConstructionPosition) => a.x === b.x && a.y === b.y && a.z === b.z;
+/** Whether two positions are the same place, to within rounding through the engine. */
+export function samePlace(a: ConstructionPosition, b: ConstructionPosition): boolean {
+  return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z) < 1e-6;
+}
 
 /** `gesture` begun at `origin` rather than where the pointer went down. */
 function from(gesture: ToolGesture, origin: PointerSample): ToolGesture {
@@ -77,6 +75,8 @@ function from(gesture: ToolGesture, origin: PointerSample): ToolGesture {
 export function createSpineSketchTool<Id extends ConstructionToolId>(options: SpineSketchOptions<Id>): SpineSketchTool<Id> {
   const origins = new WeakMap<ToolContext["runtime"], PointerSample>();
   const presses = new WeakMap<ToolContext["runtime"], Press>();
+  /** Where the last hover preview was drawn from and to, so a pointer that has not moved costs nothing. */
+  const hovered = new WeakMap<ToolContext["runtime"], { readonly origin: PointerSample; readonly at: ConstructionPosition }>();
   const { snap, stroke } = options;
 
   function end(ctx: ToolContext): void {
@@ -124,7 +124,10 @@ export function createSpineSketchTool<Id extends ConstructionToolId>(options: Sp
     drafting: (ctx) => origins.has(ctx.runtime),
     previewFor(gesture, params, ctx) {
       const origin = origins.get(ctx.runtime);
+      const last = hovered.get(ctx.runtime);
+      if (origin && last?.origin === origin && samePlace(last.at, gesture.current.point)) return undefined;
       if (origin && !presses.has(ctx.runtime)) {
+        hovered.set(ctx.runtime, { origin, at: gesture.current.point });
         const target = snap.find(ctx, gesture.current);
         const reached = options.showSpan(ctx, origin.point, (target ?? gesture.current).point, params);
         // A target the span cannot reach is not shown as joined.

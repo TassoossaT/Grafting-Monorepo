@@ -5,6 +5,7 @@ import type {
   ConstructionGraphSnapshot,
   ConstructionPosition,
   CubicBezier,
+  CurvePoint,
 } from "@/ports";
 
 import { curvePoint, curvePosition, resolveCurves } from "./bezier-curve.ts";
@@ -95,17 +96,26 @@ export function curveEdgesOf(
   ];
 }
 
-/** Each curve's midpoint, as a pickable position, in one engine crossing. */
-export function curveHandles(
-  edges: readonly CurveEdge[],
-  port: Pick<BezierPort, "curveBatch">,
-): readonly { readonly id: string; readonly position: ConstructionPosition }[] {
+/** A curve halfway along: where it stands, and which way it runs there. */
+export interface CurveMidframe {
+  readonly edge: CurveEdge;
+  readonly position: ConstructionPosition;
+  readonly tangent: CurvePoint;
+}
+
+/** Each curve halfway along, in one engine crossing -- what every handle standing on a span's middle is placed from. */
+export function curveMidframes(edges: readonly CurveEdge[], port: Pick<BezierPort, "curveBatch">): readonly CurveMidframe[] {
   if (edges.length === 0) return [];
   const halves = port.curveBatch({ tolerance: 0.025, commands: edges.map((edge) => ({ kind: "split" as const, curve: edge.curve, t: 0.5 })) });
-  return edges.map((edge, i) => ({
-    id: curvePickId(edge.edgeId, "midpoint"),
-    position: curvePosition(halves[i]!.curves[0]!.points[3]),
-  }));
+  return edges.map((edge, i) => {
+    const [, , before, mid] = halves[i]!.curves[0]!.points;
+    return { edge, position: curvePosition(mid), tangent: [mid[0] - before[0], mid[1] - before[1], mid[2] - before[2]] };
+  });
+}
+
+/** Each curve's midpoint handle, placed from its midframe. */
+export function curveHandles(frames: readonly CurveMidframe[]): readonly { readonly id: string; readonly position: ConstructionPosition }[] {
+  return frames.map((frame) => ({ id: curvePickId(frame.edge.edgeId, "midpoint"), position: frame.position }));
 }
 
 /** `curve` with one handle dragged to `target`, or its midpoint pulled there. */

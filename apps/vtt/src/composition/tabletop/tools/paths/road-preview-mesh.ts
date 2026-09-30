@@ -1,10 +1,5 @@
-import { curveSegments } from "../../../../features/edit-construction/index.ts";
-import type { CubicBezier } from "../../../../ports/index.ts";
-import type { ToolContext } from "../core/tool-context.ts";
 import type { ConstructionPosition, RenderPreviewDescriptor } from "../../../../ports/index.ts";
-import { appendNodeDisk, appendStraightQuads, createRibbonMeshPreview, NODE_DISK_ELEVATION, PREVIEW_ELEVATION } from "../shapes/ribbon-mesh-preview.ts";
-
-export { NODE_DISK_ELEVATION, PREVIEW_ELEVATION };
+import { appendNodeDisk, createRibbonMeshPreview, NODE_DISK_ELEVATION } from "../shapes/ribbon-mesh-preview.ts";
 
 export const ROAD_PREVIEW_COLOR = 0x38bdf8;
 export const ROAD_PREVIEW_OPACITY = 0.65;
@@ -17,7 +12,6 @@ export interface RoadMeshPreviewOptions {
   readonly ribbons?: readonly { readonly ribbon: { readonly outer: readonly (readonly [number, number, number])[] } | null }[];
   readonly fallbackPoints?: readonly ConstructionPosition[];
   readonly anchors: readonly ConstructionPosition[];
-  readonly cursor?: ConstructionPosition;
   readonly bedWidth: number;
   readonly color?: number;
   readonly opacity?: number;
@@ -26,39 +20,6 @@ export interface RoadMeshPreviewOptions {
 /** A road's ribbon preview: the shared ribbon mesh in the road's own colours. */
 export function createRoadMeshPreview(options: RoadMeshPreviewOptions): RenderPreviewDescriptor {
   return createRibbonMeshPreview({ ...options, width: options.bedWidth, color: options.color ?? ROAD_PREVIEW_COLOR, opacity: options.opacity ?? ROAD_PREVIEW_OPACITY });
-}
-
-/** Build a lightweight straight-quad preview mesh connecting path points directly, without WASM round-trips. */
-export function createFastRoadPreview(
-  points: readonly ConstructionPosition[],
-  bedWidth: number,
-  cursor?: ConstructionPosition,
-  color?: number,
-  opacity?: number,
-): RenderPreviewDescriptor {
-  const positions: number[] = [];
-  const indices: number[] = [];
-  const allPoints = cursor && (points.length === 0 || Math.hypot(cursor.x - points.at(-1)!.x, cursor.z - points.at(-1)!.z) > 1e-3)
-    ? [...points, cursor]
-    : points;
-  const halfWidth = Math.max(0.1, bedWidth / 2);
-  const diskRadius = Math.max(0.35, bedWidth * 0.52);
-
-  if (allPoints.length >= 2) {
-    appendStraightQuads(positions, indices, allPoints, halfWidth, PREVIEW_ELEVATION);
-  }
-
-  for (const p of allPoints) {
-    appendNodeDisk(positions, indices, p, diskRadius, NODE_DISK_ELEVATION, 12);
-  }
-
-  return {
-    kind: "mesh",
-    positions: Float32Array.from(positions),
-    indices: Uint32Array.from(indices),
-    color: color ?? ROAD_PREVIEW_COLOR,
-    opacity: opacity ?? ROAD_PREVIEW_OPACITY,
-  };
 }
 
 /** Build a glowing circular snap preview mesh at the target junction location. */
@@ -76,12 +37,3 @@ export function createSnapMeshPreview(target: ConstructionPosition, radius = 0.4
     opacity: SNAP_DISK_OPACITY,
   };
 }
-
-
-export function showRoadSpinePreview(ctx: ToolContext, curves: readonly CubicBezier[], channel: string): void {
-  if (!curves.length) { ctx.runtime.clearPreview(channel); return; }
-  const positions = Float32Array.from(curves.flatMap(curve => Array.from(curveSegments(ctx.runtime, curve))));
-  for (let i = 1; i < positions.length; i += 3) positions[i] += 0.09;
-  ctx.runtime.showPreview({ kind: "segments", positions, color: 0xfde047, opacity: 1 }, channel);
-}
-

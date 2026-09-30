@@ -2083,6 +2083,11 @@ Non-negative allowed sample deviation in XZ world units.
 
 Allow cubic approximation in addition to straight spans.
 
+### `pub grafting_graph_core::bezier_commands::CurveCommand::InterpretStroke::height_tolerance: core::option::Option<f64>`
+
+How far the fitted height may stray from the drawn one before a
+span is split; absent, heights are traced as closely as the plan.
+
 ### `pub grafting_graph_core::bezier_commands::CurveCommand::InterpretStroke::max_grade: core::option::Option<f64>`
 
 The steepest rise per plan length it may climb; absent, any.
@@ -2095,6 +2100,10 @@ The tightest turn, in plan, the stroke is eased to; absent, any.
 ### `pub grafting_graph_core::bezier_commands::CurveCommand::InterpretStroke::points: alloc::vec::Vec<grafting_graph_core::bezier::CurvePoint>`
 
 Ordered captured XYZ observations.
+
+### `pub grafting_graph_core::bezier_commands::CurveCommand::InterpretStroke::simple: bool`
+
+Whether loops the stroke draws over itself are cut out.
 
 ### `pub grafting_graph_core::bezier_commands::CurveCommand::Join`
 

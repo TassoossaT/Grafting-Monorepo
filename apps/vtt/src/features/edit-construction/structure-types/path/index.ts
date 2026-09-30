@@ -4,6 +4,7 @@ export {
   pathFormationFor,
   pathHalfWidth,
   pathMinRadius,
+  pathStrokeShape,
   pathSpineSlot,
 } from "./path-recipe.ts";
 export type { PathFormationRecipe, PathProfilePoint } from "./path-recipe.ts";
