@@ -27,7 +27,7 @@ import { gestureMoved, type ConstructionTool, type PointerSample, type ToolConte
 export interface SpineEditOptions {
   /** Only spines owned by a type this accepts are edited; anything else falls through to the tool. */
   readonly ownsSpine: (surfaceType: string) => boolean;
-  /** While this answers true -- a tool midway through drawing -- presses belong to the tool, not to editing. */
+  /** While this answers true -- a tool midway through drawing -- presses belong to the tool, except on a handle, which drops the draft and edits. */
   readonly drafting?: (ctx: ToolContext) => boolean;
   /** Told whenever the selected spine point changes -- `undefined` when nothing is selected. */
   readonly onSelect?: (ctx: ToolContext, nodeId: string | undefined) => void;
@@ -260,10 +260,11 @@ export function withSpineEditing<Id extends ConstructionToolId>(tool: Constructi
     },
     onPointerDown(ctx, sample, params) {
       claimed.delete(ctx.runtime);
-      if (options.drafting?.(ctx)) { tool.onPointerDown?.(ctx, sample, params); return; }
       try {
+        // A handle always edits: a draft waiting for its next press is dropped, never drawn from it.
         const picked = spine.pick(ctx, sample);
-        if (picked) { claimed.set(ctx.runtime, true); spine.begin(ctx, picked); return; }
+        if (picked) { if (options.drafting?.(ctx)) tool.onCancel?.(ctx); claimed.set(ctx.runtime, true); spine.begin(ctx, picked); return; }
+        if (options.drafting?.(ctx)) { tool.onPointerDown?.(ctx, sample, params); return; }
         // A tangent handle this editor does not drag still belongs to the spine, not to a new structure.
         if (spine.isHandle(ctx, sample)) { claimed.set(ctx.runtime, true); spine.select(ctx); return; }
       } catch (error) { report(ctx, error); return; }

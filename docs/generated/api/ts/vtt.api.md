@@ -2680,7 +2680,7 @@ tool only says which spine owners it edits, never how.
 
 ### `property vtt.spine-edit-behavior.SpineEditOptions.drafting?: (ctx: ToolContext) => boolean`
 
-While this answers true -- a tool midway through drawing -- presses belong to the tool, not to editing.
+While this answers true -- a tool midway through drawing -- presses belong to the tool, except on a handle, which drops the draft and edits.
 
 ### `property vtt.spine-edit-behavior.SpineEditOptions.onSelect?: (ctx: ToolContext, nodeId: string | undefined) => void`
 

@@ -153,6 +153,21 @@ test("a refused span keeps its origin for a retry",()=>{
   }finally{f.close();}
 });
 
+test("a waiting origin never takes a handle: dragging the midpoint bends the road and drops the origin",()=>{
+  const f=fixture();
+  try {
+    lay(f,[[-10,0,0],[10,0,0]]);
+    f.click(bodyOf(f,-3,0.1));
+    assert.ok(f.previews.has("road-span"),"a click on the body waits as an origin");
+    const a=midpointOf(f,edges(f)[0]);
+    f.drag(a,sample(0,4));
+    assert.equal(edges(f).length,1,"no new spine is drawn from the waiting origin");
+    assert.ok(resolve(f,edges(f)[0]).points.some(p=>p[2]>1),"the handle bent the road");
+    assert.equal(f.previews.has("road-span"),false);
+    assert.equal(f.end(),false);
+  }finally{f.close();}
+});
+
 test("a drag drops a waiting straight origin and draws its own stroke",()=>{
   const f=fixture();
   try {

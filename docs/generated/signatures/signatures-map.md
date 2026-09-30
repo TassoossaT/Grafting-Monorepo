@@ -4441,7 +4441,7 @@ export function commitSpineRegeneration(ctx: ToolContext, request: ApplyPatchRep
 export interface SpineEditOptions {
   /** Only spines owned by a type this accepts are edited; anything else falls through to the tool. */
   readonly ownsSpine: (surfaceType: string) => boolean;
-  /** While this answers true -- a tool midway through drawing -- presses belong to the tool, not to editing. */
+  /** While this answers true -- a tool midway through drawing -- presses belong to the tool, except on a handle, which drops the draft and edits. */
   readonly drafting?: (ctx: ToolContext) => boolean;
   /** Told whenever the selected spine point changes -- `undefined` when nothing is selected. */
   readonly onSelect?: (ctx: ToolContext, nodeId: string | undefined) => void;
