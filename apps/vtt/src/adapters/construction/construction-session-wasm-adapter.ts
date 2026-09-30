@@ -190,6 +190,12 @@ function primitiveToWire(primitive: "passage" | "boundary" | "surface"): number 
 
 class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
   #session?: ConstructionSession;
+  /**
+   * The graph as last read, until a call that may change the session runs.
+   * Read on every pointer move by several tools at once, and parsed whole
+   * from JSON each time before; handed out shared, so never changed in place.
+   */
+  #graph?: ConstructionGraphSnapshot;
 
   async start(): Promise<void> {
     if (this.#session !== undefined) throw new Error("construction session is already started");
@@ -197,10 +203,10 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     this.#session = new ConstructionSession();
   }
 
-  planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[] { return JSON.parse(this.#require().planar_boolean_json(JSON.stringify(request))) as ConstructionPlanarShape[]; }
+  planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[] { return JSON.parse(this.#read().planar_boolean_json(JSON.stringify(request))) as ConstructionPlanarShape[]; }
 
   planMotion(request: ConstructionMotionRequest): ConstructionMotionPlan {
-    const result = JSON.parse(this.#require().plan_motion_json(JSON.stringify({
+    const result = JSON.parse(this.#read().plan_motion_json(JSON.stringify({
       seeds: request.seeds.map((seed) => ({ ...seed, delta: toWirePosition(seed.delta) })),
       influences: request.influences,
     }))) as { moves: { nodeId: string; position: [number, number, number] }[]; resolvedAxes: number; visitedInfluences: number };
@@ -272,17 +278,17 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
   }
 
   hostOutline(surfaceKey: ConstructionSurfaceKey): ConstructionHostOutline {
-    return JSON.parse(this.#require().host_outline_json(JSON.stringify({ surfaceKey }))) as ConstructionHostOutline;
+    return JSON.parse(this.#read().host_outline_json(JSON.stringify({ surfaceKey }))) as ConstructionHostOutline;
   }
 
   projectToHost(request: { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly points: readonly ConstructionPosition[] }): readonly ConstructionHostPoint[] {
     return JSON.parse(
-      this.#require().project_to_host_json(JSON.stringify({ hostSurfaceKey: request.hostSurfaceKey, points: request.points.map(toWirePosition) })),
+      this.#read().project_to_host_json(JSON.stringify({ hostSurfaceKey: request.hostSurfaceKey, points: request.points.map(toWirePosition) })),
     ) as ConstructionHostPoint[];
   }
 
   resolveOnHost(request: { readonly hostSurfaceKey: ConstructionSurfaceKey; readonly uv: readonly (readonly [number, number])[] }): readonly ConstructionPosition[] {
-    const wire = JSON.parse(this.#require().resolve_on_host_json(JSON.stringify(request))) as WirePosition[];
+    const wire = JSON.parse(this.#read().resolve_on_host_json(JSON.stringify(request))) as WirePosition[];
     return wire.map(fromWirePosition);
   }
 
@@ -291,7 +297,7 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
   }
 
   panelRun(surfaceKey: ConstructionSurfaceKey): ConstructionPanelRun {
-    return JSON.parse(this.#require().panel_run_json(JSON.stringify({ surfaceKey }))) as ConstructionPanelRun;
+    return JSON.parse(this.#read().panel_run_json(JSON.stringify({ surfaceKey }))) as ConstructionPanelRun;
   }
 
   addPatch(patch: ConstructionPatch): ConstructionPatchOutcome {
@@ -312,7 +318,7 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
 
   getUnfilledLoops(scope: readonly ConstructionNodeId[]): readonly ConstructionUnfilledLoop[] {
     if (scope.length === 0) return [];
-    const wire = JSON.parse(this.#require().unfilled_loops_json(JSON.stringify({ nodeIds: scope }))) as {
+    const wire = JSON.parse(this.#read().unfilled_loops_json(JSON.stringify({ nodeIds: scope }))) as {
       readonly loops: readonly {
         readonly boundary: readonly { readonly edgeId: string; readonly reversed: boolean }[];
         readonly nodeIds: readonly string[];
@@ -341,7 +347,7 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
   getFootprintCoverage(
     polygon: readonly (readonly [number, number])[],
   ): readonly ConstructionCoveredRegion[] {
-    const wire = JSON.parse(this.#require().footprint_coverage_json(JSON.stringify({ polygon }))) as {
+    const wire = JSON.parse(this.#read().footprint_coverage_json(JSON.stringify({ polygon }))) as {
       covered: readonly {
         surfaceKey: readonly string[];
         surfaceType: string;
@@ -378,7 +384,7 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
   classifyPoints(
     points: readonly (readonly [number, number])[],
   ): readonly { readonly index: number; readonly surfaceKey: ConstructionSurfaceKey; readonly surfaceType: string }[] {
-    const wire = JSON.parse(this.#require().classify_points_json(JSON.stringify({ points }))) as {
+    const wire = JSON.parse(this.#read().classify_points_json(JSON.stringify({ points }))) as {
       hits: readonly { index: number; surfaceKey: readonly string[]; surfaceType: string }[];
     };
     return wire.hits;
@@ -524,7 +530,7 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     let raw: string;
     try {
       const { relaxStrength, ...rest } = request;
-      raw = this.#require().irregular_quad_grid_json(
+      raw = this.#read().irregular_quad_grid_json(
         // `relax` only when there is something to say: the engine fills in
         // every knob the caller left out, so an absent block is its standard
         // rather than a set of values this side would have to keep in step.
@@ -560,20 +566,20 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
   }
 
   getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined {
-    const wire = JSON.parse(this.#require().region_topology_json(JSON.stringify({ surfaceKey }))) as
+    const wire = JSON.parse(this.#read().region_topology_json(JSON.stringify({ surfaceKey }))) as
       | RegionTopologyWire
       | null;
     return wire === null ? undefined : fromWireTopology(wire);
   }
 
   getAllRegionTopologies(): readonly ConstructionRegionTopology[] {
-    const wire = JSON.parse(this.#require().all_region_topologies_json()) as readonly RegionTopologyWire[];
+    const wire = JSON.parse(this.#read().all_region_topologies_json()) as readonly RegionTopologyWire[];
     return wire.map(fromWireTopology);
   }
 
   queryContours(queries: readonly ConstructionContourQuery[]): readonly ConstructionContourAnswer[] {
     if (queries.length === 0) return [];
-    return JSON.parse(this.#require().contour_query_json(JSON.stringify(queries))) as readonly ConstructionContourAnswer[];
+    return JSON.parse(this.#read().contour_query_json(JSON.stringify(queries))) as readonly ConstructionContourAnswer[];
   }
 
   queryField(query: ConstructionFieldQuery): readonly ConstructionFieldSample[] {
@@ -586,11 +592,11 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
       points: query.points,
       near: query.near ?? null,
     };
-    return JSON.parse(this.#require().field_query_json(JSON.stringify(wire))) as readonly ConstructionFieldSample[];
+    return JSON.parse(this.#read().field_query_json(JSON.stringify(wire))) as readonly ConstructionFieldSample[];
   }
 
   getCurvedEdges(): readonly ConstructionCurvedEdge[] {
-    const wire = JSON.parse(this.#require().curved_edges_json()) as readonly (Omit<ConstructionCurvedEdge, "start" | "end"> & { readonly start: WirePosition; readonly end: WirePosition })[];
+    const wire = JSON.parse(this.#read().curved_edges_json()) as readonly (Omit<ConstructionCurvedEdge, "start" | "end"> & { readonly start: WirePosition; readonly end: WirePosition })[];
     return wire.map((edge) => ({ ...edge, start: fromWirePosition(edge.start), end: fromWirePosition(edge.end) }));
   }
 
@@ -670,14 +676,14 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
 
   cloudFor(request: CloudRequest): CloudOutcome {
     const response = JSON.parse(
-      this.#require().cloud_json(JSON.stringify({ seed: request.seed, surfaceType: request.surfaceType, surfaceTypes: request.surfaceTypes })),
+      this.#read().cloud_json(JSON.stringify({ seed: request.seed, surfaceType: request.surfaceType, surfaceTypes: request.surfaceTypes })),
     ) as { surfaceKeys: readonly (readonly string[])[] };
     return { surfaceKeys: response.surfaceKeys };
   }
 
 
   getAllSurfaceMeshes(): readonly SurfaceMeshResult[] {
-    const wire = JSON.parse(this.#require().all_surface_meshes_json()) as readonly SurfaceMeshWire[];
+    const wire = JSON.parse(this.#read().all_surface_meshes_json()) as readonly SurfaceMeshWire[];
     return wire.map(toMeshResult);
   }
 
@@ -685,7 +691,7 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
     readonly meshes: readonly SurfaceMeshResult[];
     readonly failed: readonly { readonly surfaceKey: ConstructionSurfaceKey; readonly reason: string }[];
   } {
-    const wire = JSON.parse(this.#require().surface_meshes_report_json(JSON.stringify({ surfaceKeys }))) as {
+    const wire = JSON.parse(this.#read().surface_meshes_report_json(JSON.stringify({ surfaceKeys }))) as {
       readonly meshes: readonly SurfaceMeshWire[];
       readonly failed: readonly { readonly surfaceKey: readonly string[]; readonly reason: string }[];
     };
@@ -702,28 +708,42 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
   }
 
   curveBatch(request: CurveBatch): readonly CurveResult[] {
-    return JSON.parse(this.#require().bezier_batch_json(JSON.stringify(request))) as readonly CurveResult[];
+    return JSON.parse(this.#read().bezier_batch_json(JSON.stringify(request))) as readonly CurveResult[];
   }
 
   curveNetwork(request: CurveNetworkRequest): CurveNetworkPatch {
-    return JSON.parse(this.#require().bezier_network_json(JSON.stringify(request))) as CurveNetworkPatch;
+    return JSON.parse(this.#read().bezier_network_json(JSON.stringify(request))) as CurveNetworkPatch;
   }
 
   getGraphSnapshot(): ConstructionGraphSnapshot {
-    const wire = JSON.parse(this.#require().snapshot_json()) as SnapshotWire;
-    return {
+    if (this.#graph) return this.#graph;
+    const wire = JSON.parse(this.#read().snapshot_json()) as SnapshotWire;
+    this.#graph = {
       nodes: wire.nodes.map((node) => ({ id: node.id, position: fromWirePosition(node.position) })),
       edges: wire.edges.map((edge) => ({ edgeId: edge.id, startNodeId: edge.source, endNodeId: edge.target, curve: edge.curve })),
     };
+    return this.#graph;
   }
 
   async dispose(): Promise<void> {
     if (this.#session === undefined) return;
     this.#session.free();
     this.#session = undefined;
+    this.#graph = undefined;
   }
 
+  /**
+   * The session, for any call that may change it: whatever graph was read
+   * before no longer holds. Every call goes through here unless it is known
+   * to change nothing -- see {@link #read} -- so a new one is safe by default.
+   */
   #require(): ConstructionSession {
+    this.#graph = undefined;
+    return this.#read();
+  }
+
+  /** The session, for a call its engine takes by shared reference (`&self`): it changes nothing, so the graph read still holds. */
+  #read(): ConstructionSession {
     if (this.#session === undefined) throw new Error("construction session is not started");
     return this.#session;
   }
