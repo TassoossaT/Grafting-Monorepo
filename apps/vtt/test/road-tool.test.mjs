@@ -19,7 +19,8 @@ const bodyOf=(f,x,z)=>({...sample(x,z),surfaceRef:surfaceRefFromNodeSet(f.runtim
 function fixture() {
   const f=capturePreviews(sessionFixture());f.selected=undefined;
   f.ctx.reportSelection=value=>{f.selected=value;};
-  f.click=(a,b=a,p=params)=>{tool.onPointerDown(f.ctx,a,p);tool.onPointerUp(f.ctx,gesture(a,b),p);};
+  // `clicks`: which click of a quick run this is, as the dispatcher counts it -- 2 for a double-click.
+  f.click=(a,b=a,p=params,clicks=1)=>{tool.onPointerDown(f.ctx,a,p);tool.onPointerUp(f.ctx,{...gesture(a,b),clicks},p);};
   f.drag=(a,b,p=params)=>{tool.onPointerDown(f.ctx,a,p);tool.onPointerMove(f.ctx,gesture(a,b),p);tool.onPointerUp(f.ctx,gesture(a,b),p);};
   f.end=()=>tool.onKeyDown(f.ctx,"Enter",params);
   f.close=()=>{tool.onCancel(f.ctx);f.session.free();};
@@ -356,7 +357,7 @@ test("a midpoint click only selects; a double-click inserts a point without chan
     f.click(mid);
     assert.deepEqual(state(f),before,"one click is not an insertion");
     assert.equal(f.selected?.id,mid.nodeId);
-    f.click(mid);
+    f.click(mid,mid,params,2);
     assert.equal(edges(f).length,3,JSON.stringify(f.calls.feedback));
     const split=edges(f).filter(e=>e.edgeId===original.edgeId||e.edgeId.startsWith(original.edgeId+":split:"));
     closeCurves(split.map(e=>resolve(f,e)),half);
@@ -367,13 +368,14 @@ test("a midpoint click only selects; a double-click inserts a point without chan
     assert.ok(edges(f).every(e=>e.startNodeId!==id&&e.endNodeId!==id));
   }finally{f.close();}
 });
-test("clicks on two different midpoints never insert",()=>{
-  const f=fixture();
-  try {
-    build(f);const before=state(f);
-    f.click(midpointOf(f,edges(f)[0]));f.click(midpointOf(f,edges(f)[1]));
-    assert.deepEqual(state(f),before);
-  }finally{f.close();}
+test("a double-click is two clicks soon and near: two midpoints apart, or a pause, start a new run",async()=>{
+  const {nextClickRun}=await import("../src/composition/tabletop/tools/core/tool-context.ts");
+  const at=(x,z)=>({...sample(x,z),screenX:x*20,screenY:z*20});
+  const first=nextClickRun(undefined,at(0,0),1000);
+  assert.equal(first.count,1);
+  assert.equal(nextClickRun(first,at(0.05,0),1300).count,2,"soon and near: a double-click");
+  assert.equal(nextClickRun(first,at(5,0),1100).count,1,"another midpoint: a new run");
+  assert.equal(nextClickRun(first,at(0,0),1500).count,1,"after a pause: a new run");
 });
 test("road deletion: removes a deliberate bend; endpoint deletion fails without altering road",()=>{
   const f=fixture();

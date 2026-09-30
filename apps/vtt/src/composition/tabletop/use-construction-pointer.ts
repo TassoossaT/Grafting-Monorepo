@@ -13,7 +13,7 @@ import type { TabletopRuntime } from "./tabletop-runtime.ts";
 import { toolFor } from "./tools/index.ts";
 import { beginCurveGesture, type CurveGesture } from "./tools/core/curve-edit-gesture.ts";
 import { carriesArrows, globalHandleOf, handleMotionAt, shownGlobalHandleAt } from "../../features/edit-construction/index.ts";
-import { gestureMoved } from "./tools/core/tool-context.ts";
+import { gestureMoved, nextClickRun, type ClickRun } from "./tools/core/tool-context.ts";
 import { withFacePlane } from "./tools/core/pointer-ray.ts";
 import { handleFocusAt, NO_FOCUS, sameFocus } from "./tools/core/handle-focus.ts";
 import type { HandleFocus } from "../../features/edit-construction/index.ts";
@@ -112,6 +112,8 @@ function pointerOffset(event: { currentTarget: HTMLElement; clientX: number; cli
 export function useConstructionPointer(options: UseConstructionPointerOptions): ConstructionPointerHandlers {
   const gestureRef = useRef<ActiveGesture | null>(null);
   const suppressClickRef = useRef(false);
+  /** The run of quick clicks the last releases made -- what tells a double-click. */
+  const clickRunRef = useRef<ClickRun | undefined>(undefined);
   const sequenceRef = useRef(0);
   const lastCommitAtRef = useRef(0);
   const lastPreviewAtRef = useRef(0);
@@ -436,7 +438,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       }
       const moved = gestureMoved(gesture.start, gesture.samples);
       suppressClickRef.current = moved;
-      tool.onPointerUp?.(ctx, { start: gesture.start, current: gesture.last, samples: gesture.samples, moved }, params);
+      clickRunRef.current = moved ? undefined : nextClickRun(clickRunRef.current, gesture.start, performance.now());
+      const clicks = clickRunRef.current?.count ?? 0;
+      tool.onPointerUp?.(ctx, { start: gesture.start, current: gesture.last, samples: gesture.samples, moved, clicks }, params);
       gestureRef.current = null;
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId);

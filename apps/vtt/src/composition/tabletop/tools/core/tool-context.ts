@@ -33,6 +33,8 @@ export interface ToolGesture {
 export interface ReleasedGesture extends ToolGesture {
   /** Whether the pointer travelled far enough to be a drag rather than a click -- decided once, by the dispatcher. */
   readonly moved: boolean;
+  /** Which click in a quick run this release ends -- 2 for a double-click -- or 0 for a drag. Counted once, by the dispatcher. */
+  readonly clicks?: number;
 }
 
 /** How far the pointer may wander, in screen pixels -- or world units when a sample has no screen position -- and still count as not having moved. */
@@ -43,6 +45,22 @@ export interface PointerSlop {
 
 /** A click: the pointer barely stirred. */
 const CLICK_SLOP: PointerSlop = { pixels: 3, world: 0.05 };
+
+/** How soon a click must follow the last, in milliseconds, to count as the next in a run. */
+const MULTI_CLICK_MS = 400;
+
+/** A run of quick clicks in one place: where and when the last landed, and how many it has been. */
+export interface ClickRun {
+  readonly sample: PointerSample;
+  readonly at: number;
+  readonly count: number;
+}
+
+/** The run a click at `sample`, at time `at`, makes: the next in `previous` when soon and near enough, else a first click. */
+export function nextClickRun(previous: ClickRun | undefined, sample: PointerSample, at: number): ClickRun {
+  const continues = previous !== undefined && at - previous.at <= MULTI_CLICK_MS && !gestureMoved(previous.sample, [sample]);
+  return { sample, at, count: continues ? previous.count + 1 : 1 };
+}
 
 /** Whether any of `samples` strayed from `start` past `slop` -- a click's, unless said otherwise. */
 export function gestureMoved(start: PointerSample, samples: readonly PointerSample[], slop: PointerSlop = CLICK_SLOP): boolean {

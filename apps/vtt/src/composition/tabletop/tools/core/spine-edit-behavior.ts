@@ -2,7 +2,7 @@ import type { ConstructionToolId, StructureEditParams } from "@/features/edit-co
 
 import { curveEdgesOf, curveHandles, curveMidframes, curvePick, curvePickId, curveWidthPick, globalHandleOf, shownGlobalHandleAt, spanWidth, spineDefaultOffsets, spineWidthHandles, structureTypeFor } from "../../../../features/edit-construction/index.ts";
 import { beginCurveGesture, type AnchorSnap, type CurveGesture, type CurveGestureOptions } from "./curve-edit-gesture.ts";
-import { gestureMoved, type ConstructionTool, type PointerSample, type ToolContext, type ToolGesture } from "./tool-context.ts";
+import type { ConstructionTool, PointerSample, ReleasedGesture, ToolContext, ToolGesture } from "./tool-context.ts";
 
 /**
  * Editing an existing spine by its points -- the one editor every
@@ -48,8 +48,8 @@ interface SpineEditBehavior {
   /** Selects and starts dragging `picked`; false when the curve refused the gesture. */
   begin(ctx: ToolContext, picked: SpinePick): boolean;
   move(ctx: ToolContext, gesture: ToolGesture): boolean;
-  /** Ends and commits an active drag; false when none was active. */
-  end(ctx: ToolContext, gesture: ToolGesture): boolean;
+  /** Ends and commits an active drag -- a double-click on a midpoint inserts a point there; false when none was active. */
+  end(ctx: ToolContext, gesture: ReleasedGesture): boolean;
   isActive(ctx: ToolContext): boolean;
   /** Drops an active drag without committing it, keeping the selection. */
   abort(ctx: ToolContext): void;
@@ -60,16 +60,12 @@ interface SpineEditBehavior {
   cancel(ctx: ToolContext): void;
 }
 
-/** How soon a second click on the same midpoint makes a double-click. */
-const DOUBLE_CLICK_MS = 400;
 /** A handle's drag: past a few pixels, and keeping where on the handle the pointer took it. */
 const dragOf = (sample: PointerSample, extra: Partial<CurveGestureOptions> = {}): CurveGestureOptions => ({ mode: "shape", insertOnClick: false, dragThreshold: 5, pointerOrigin: sample.point, ...extra });
 const sceneOf = (ctx: ToolContext) => ({ graph: ctx.runtime.getGraphSnapshot(), topologies: ctx.runtime.getAllRegionTopologies(), cloudFor: ctx.runtime.cloudFor.bind(ctx.runtime) });
 
 function createSpineEditBehavior({ ownsSpine, snap, panelActions = true }: SpineEditOptions): SpineEditBehavior {
-  const drags = new WeakMap<ToolContext["runtime"], { readonly edit: CurveGesture; readonly id: string }>();
-  /** The midpoint last clicked, and when -- a second click on it soon after inserts a point. */
-  const clicks = new WeakMap<ToolContext["runtime"], { readonly id: string; readonly at: number }>();
+  const drags = new WeakMap<ToolContext["runtime"], { readonly edit: CurveGesture; readonly picked: SpinePick }>();
   const selections = new WeakMap<ToolContext["runtime"], string>();
   const owned = (surfaceType: string | undefined) => surfaceType !== undefined && structureTypeFor(surfaceType)?.spine !== undefined && ownsSpine(surfaceType);
 
@@ -99,13 +95,6 @@ function createSpineEditBehavior({ ownsSpine, snap, panelActions = true }: Spine
     return node && { ...sample, point: node.position };
   }
 
-  /** A second click on the midpoint `id`, soon enough after the first. */
-  function doubleClick(ctx: ToolContext, id: string): boolean {
-    const last = clicks.get(ctx.runtime);
-    clicks.delete(ctx.runtime);
-    return last !== undefined && last.id === id && performance.now() - last.at <= DOUBLE_CLICK_MS;
-  }
-
   /** A span's width handle, standing where it is drawn: a width drag of that span. */
   function widthPick(ctx: ToolContext, sample: PointerSample, edgeId: string): SpinePick | undefined {
     const graph = ctx.runtime.getGraphSnapshot();
@@ -133,7 +122,7 @@ function createSpineEditBehavior({ ownsSpine, snap, panelActions = true }: Spine
       const target = handleTarget(ctx, sample);
       if (target) {
         const midpoint = curvePick(target.nodeId!)?.index === "midpoint";
-        return { sample: target, options: midpoint ? dragOf(sample, { curveMode: "free", insertOnClick: doubleClick(ctx, target.nodeId!) }) : dragOf(sample) };
+        return { sample: target, options: midpoint ? dragOf(sample, { curveMode: "free" }) : dragOf(sample) };
       }
       return undefined;
     },
@@ -153,7 +142,7 @@ function createSpineEditBehavior({ ownsSpine, snap, panelActions = true }: Spine
         ? { curveAction: panel.curveAction, curveWidth: panel.curveWidth, curveEndWidth: panel.curveEndWidth, allowShapeChange: true }
         : {};
       const edit = beginEdit(ctx, picked.sample, { ...picked.options, mode: panel.mode ?? picked.options.mode, ...action });
-      if (edit) drags.set(ctx.runtime, { edit, id: picked.sample.nodeId! });
+      if (edit) drags.set(ctx.runtime, { edit, picked });
       return edit !== undefined;
     },
     move(ctx, gesture) {
@@ -168,8 +157,11 @@ function createSpineEditBehavior({ ownsSpine, snap, panelActions = true }: Spine
       drags.delete(ctx.runtime);
       drag.edit.move(gesture);
       drag.edit.commit();
-      const clicked = curvePick(drag.id)?.index === "midpoint" && !gestureMoved(gesture.start, [...gesture.samples, gesture.current]);
-      if (clicked) clicks.set(ctx.runtime, { id: drag.id, at: performance.now() }); else clicks.delete(ctx.runtime);
+      // The second click of a double-click on a span's midpoint inserts a point there, the curve unchanged.
+      const { sample, options } = drag.picked;
+      if (!gesture.moved && (gesture.clicks ?? 0) >= 2 && curvePick(sample.nodeId!)?.index === "midpoint") {
+        beginEdit(ctx, sample, { ...options, insertOnClick: true })?.commit();
+      }
       return true;
     },
     isActive: (ctx) => drags.has(ctx.runtime),
@@ -189,7 +181,6 @@ function createSpineEditBehavior({ ownsSpine, snap, panelActions = true }: Spine
       return true;
     },
     cancel(ctx) {
-      clicks.delete(ctx.runtime);
       this.abort(ctx);
       select(ctx);
     },
