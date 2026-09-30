@@ -812,6 +812,39 @@ mod tests {
         assert!(constrain_handle(a, p, other, HandleMode::Automatic).is_err());
     }
     #[test]
+    fn anchors_coinciding_in_plan_are_an_error_whatever_their_heights() {
+        // Knots are measured in plan, so a point straight above its neighbour
+        // has no parameter span: declared, never a NaN curve.
+        let error = automatic_path(&[[0., 0., 0.], [0., 3., 0.], [5., 0., 0.]]).unwrap_err();
+        assert!(error.contains("coincide"), "{error}");
+        assert!(automatic_path(&[[1., 0., 1.], [1., 0., 1.]]).is_err());
+        assert!(automatic_path(&[[1., 0., 1.]]).is_err());
+    }
+
+    #[test]
+    fn an_automatic_path_passes_through_every_anchor_finitely() {
+        for anchors in [
+            vec![[-8., 0., -4.], [-3., 0., 4.], [3., 0., -4.], [8., 0., 4.]],
+            vec![[-4., 0., 0.], [-4., 0., 6.], [4., 0., 6.], [4., 0., 0.]],
+            vec![
+                [-10., 0., 0.],
+                [-9.96, 0., 0.04],
+                [0., 0., 4.],
+                [20., 0., 0.],
+            ],
+            vec![[-8., 0., 0.], [0., 5., 4.], [8., 0., 0.]],
+        ] {
+            let curves = automatic_path(&anchors).unwrap();
+            assert_eq!(curves.len(), anchors.len() - 1);
+            for (i, curve) in curves.iter().enumerate() {
+                assert_eq!(curve.points[0], anchors[i]);
+                assert_eq!(curve.points[3], anchors[i + 1]);
+                assert!(curve.points.iter().flatten().all(|v| v.is_finite()));
+            }
+        }
+    }
+
+    #[test]
     fn two_anchors_are_straight() {
         let c = automatic_path(&[[0., 0., 0.], [9., 0., 0.]]).unwrap()[0];
         assert_eq!(c.points[1], [3., 0., 0.]);
