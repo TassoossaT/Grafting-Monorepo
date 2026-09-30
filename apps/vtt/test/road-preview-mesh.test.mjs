@@ -9,16 +9,13 @@ import {
   SNAP_DISK_COLOR,
 } from "../src/composition/tabletop/tools/paths/road-preview-mesh.ts";
 import { NODE_DISK_ELEVATION, PREVIEW_ELEVATION } from "../src/composition/tabletop/tools/shapes/ribbon-mesh-preview.ts";
-import { sessionFixture } from "./platform-session-fixture.mjs";
+import { capturePreviews, sessionFixture } from "./platform-session-fixture.mjs";
 import { pathBrushTool as tool } from "../src/composition/tabletop/tools/paths/path-brush-tool.ts";
 import { pathHalfWidth } from "../src/features/edit-construction/index.ts";
 
 for (const way of ["click", "drag"]) for (const pathKind of ["street", "road"]) {
   test(`${way} preview preserves the confirmed ${pathKind} profile and sampling`, () => {
-    const f=sessionFixture(), previews=new Map();
-    f.runtime.showPreview=(d,c)=>previews.set(c,d);
-    f.runtime.clearPreview=c=>previews.delete(c);
-    f.runtime.getFootprintCoverage=()=>[];
+    const f=capturePreviews(sessionFixture()), previews=f.previews;
     f.ctx.reportSelection=()=>{};
     const params={...tool.defaultParams(),pathKind,bedWidth:0.6,shoulderWidth:0.8};
     const samples=[{point:{x:-10,y:0,z:0}},{point:{x:0,y:2,z:3}},{point:{x:10,y:0,z:0}}];
@@ -123,10 +120,7 @@ test("createSnapMeshPreview generates glowing circular target at target coordina
 });
 
 test("the road tool previews the span to the pointer while an origin waits", () => {
-  const f = sessionFixture();
-  f.previews = new Map();
-  f.runtime.showPreview = (d, c) => f.previews.set(c, d);
-  f.runtime.clearPreview = (c) => f.previews.delete(c);
+  const f = capturePreviews(sessionFixture());
 
   const params = { ...tool.defaultParams(), bedWidth: 1.5 };
   const origin = { point: { x: 0, y: 0, z: 0 } };
@@ -149,9 +143,7 @@ test("the road tool previews the span to the pointer while an origin waits", () 
 });
 
 test("a hover too steep to climb previews the span stopping short, never an error",()=>{
-  const f=sessionFixture(),previews=new Map();
-  f.runtime.showPreview=(d,c)=>previews.set(c,d);
-  f.runtime.clearPreview=c=>previews.delete(c);
+  const f=capturePreviews(sessionFixture()),previews=f.previews;
   const params={...tool.defaultParams(),bedWidth:0.6};
   const a={point:{x:-4,y:0,z:0}},steep={point:{x:4,y:4,z:0}};
   try {
@@ -167,10 +159,7 @@ test("a hover too steep to climb previews the span stopping short, never an erro
 });
 
 test("the road tool previews a stroke during a drag", () => {
-  const f = sessionFixture();
-  f.previews = new Map();
-  f.runtime.showPreview = (d, c) => f.previews.set(c, d);
-  f.runtime.clearPreview = (c) => f.previews.delete(c);
+  const f = capturePreviews(sessionFixture());
 
   const params = { ...tool.defaultParams(), bedWidth: 2 };
   const a = { point: { x: 0, y: 0, z: 0 } };

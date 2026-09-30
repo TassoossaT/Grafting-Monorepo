@@ -64,16 +64,8 @@ fn near(a: CurvePoint, b: CurvePoint, xy: f64, height: f64) -> bool {
 /// Where the plan segments `a`-`b` and `c`-`d` meet, ends included, as the
 /// parameter along each.
 pub(crate) fn segment_crossing(a: CurvePoint, b: CurvePoint, c: CurvePoint, d: CurvePoint) -> Option<(f64, f64)> {
-    let x = b[0] - a[0];
-    let z = b[2] - a[2];
-    let u = d[0] - c[0];
-    let v = d[2] - c[2];
-    let det = x * v - z * u;
-    if det.abs() < 1e-14 {
-        return None;
-    }
-    let t = ((c[0] - a[0]) * v - (c[2] - a[2]) * u) / det;
-    let s = ((c[0] - a[0]) * z - (c[2] - a[2]) * x) / det;
+    let plan = |p: CurvePoint| [p[0], p[2]];
+    let (t, s) = crate::plan_lines::line_parameters(plan(a), plan(b), plan(c), plan(d), 1e-14)?;
     if (-1e-9..=1. + 1e-9).contains(&t) && (-1e-9..=1. + 1e-9).contains(&s) {
         Some((t.clamp(0., 1.), s.clamp(0., 1.)))
     } else {

@@ -11,6 +11,7 @@
 pub mod bezier;
 mod stroke_interpretation;
 mod stroke_shaping;
+mod plan_lines;
 pub mod bezier_commands;
 pub mod bezier_network;
 pub mod bezier_ramp;

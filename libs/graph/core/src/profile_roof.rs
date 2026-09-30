@@ -994,15 +994,7 @@ fn without_spikes(mut ring: Vec<Point>) -> Vec<Point> {
 
 /// Where segment `a`-`c` crosses segment `p`-`q`, as a fraction along `a`-`c`.
 fn crossing(a: Point, c: Point, p: Point, q: Point) -> Option<f64> {
-    let d = sub(c, a);
-    let e = sub(q, p);
-    let det = d[0] * e[1] - d[1] * e[0];
-    if det.abs() < 1e-12 {
-        return None;
-    }
-    let w = sub(p, a);
-    let t = (w[0] * e[1] - w[1] * e[0]) / det;
-    let s = (w[0] * d[1] - w[1] * d[0]) / det;
+    let (t, s) = crate::plan_lines::line_parameters(a, c, p, q, 1e-12)?;
     ((-1e-9..=1.0 + 1e-9).contains(&s) && (0.0..=1.0).contains(&t)).then_some(t)
 }
 
