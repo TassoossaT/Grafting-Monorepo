@@ -335,6 +335,7 @@ export class Render3dSceneAdapter implements SceneRenderPort {
   }
 
   detachView(viewId: RenderViewId): void {
+    this.setCreationHandle(undefined);
     this.#engine?.scene.remove(`road-branch-action:${viewId}`, "engine");
     const attached = this.#views.get(viewId);
     if (attached === undefined) return;
@@ -454,7 +455,9 @@ export class Render3dSceneAdapter implements SceneRenderPort {
         : undefined;
     const action = result.data as { entity?: string; nodeId?: string } | undefined;
     const constructionAction = action?.entity === "road-branch-action" && action.nodeId
-      ? { kind: "branch" as const, nodeId: action.nodeId } : undefined;
+      ? { kind: "branch" as const, nodeId: action.nodeId }
+      : action?.entity === "construction-creation-handle" && action.nodeId
+        ? { kind: "continue" as const, nodeId: action.nodeId } : undefined;
     return { point: result.point, nodeId, surfaceRef, constructionAction, ...(result.ray ? { ray: result.ray } : {}), ...(result.forward ? { forward: result.forward } : {}) };
   }
 
@@ -469,14 +472,21 @@ export class Render3dSceneAdapter implements SceneRenderPort {
 
   setPointManipulator(viewId: RenderViewId, target: RenderPointManipulator | undefined): void {
     const actionId = `road-branch-action:${viewId}`;
-    if (target?.branchAction) {
-      this.#requireEngine().scene.put({ id: actionId, layer: NODE_HANDLE_LAYER_ID,
-        visual: { kind: "vtt-road-branch-action", params: {} },
-        transform: { position: { x: target.position.x + 0.8, y: target.position.y + 0.55, z: target.position.z + 0.8 }, scale: 0.65 },
-        data: { entity: "road-branch-action", nodeId: target.id },
-      }, "engine");
-    } else this.#engine?.scene.remove(actionId, "engine");
+    this.#putCreationAction(actionId, target?.branchAction ? target : undefined, "road-branch-action");
     this.#views.get(viewId)?.view.setPointManipulator(target ? { ...target, axes: ["x", "y", "z"], size: 1 } : undefined);
+  }
+
+  setCreationHandle(target: Pick<RenderPointManipulator, "id" | "position"> | undefined): void {
+    this.#putCreationAction("construction-creation-handle", target, "construction-creation-handle");
+  }
+
+  #putCreationAction(id: string, target: Pick<RenderPointManipulator, "id" | "position"> | undefined, entity: string): void {
+    if (!target) { this.#engine?.scene.remove(id, "engine"); return; }
+    this.#requireEngine().scene.put({ id, layer: NODE_HANDLE_LAYER_ID,
+      visual: { kind: "vtt-road-branch-action", params: {} },
+      transform: { position: { x: target.position.x + 0.8, y: target.position.y + 0.55, z: target.position.z + 0.8 }, scale: 0.65 },
+      data: { entity, nodeId: target.id },
+    }, "engine");
   }
 
   clearPreview(channel?: string): void {

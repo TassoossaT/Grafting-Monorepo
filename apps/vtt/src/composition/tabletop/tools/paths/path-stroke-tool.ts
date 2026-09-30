@@ -1,5 +1,5 @@
 import { roadSnapTarget, showRoadSnap } from "./road-body-target.ts";
-import { createRoadMeshPreview, ROAD_PREVIEW_COLOR, ROAD_PREVIEW_OPACITY, ROAD_ERROR_COLOR, ROAD_ERROR_OPACITY } from "./road-preview-mesh.ts";
+import { createRoadMeshPreview, showRoadSpinePreview, ROAD_PREVIEW_COLOR, ROAD_PREVIEW_OPACITY, ROAD_ERROR_COLOR, ROAD_ERROR_OPACITY } from "./road-preview-mesh.ts";
 import { createPathBrushEffect, pathFormationFor, pathHalfWidth, DEFAULT_TOOL_PARAMS } from "../../../../features/edit-construction/index.ts";
 import type { PathBrushParams } from "../../../../features/edit-construction/index.ts";
 import { commitPathCloudIntent } from "../../path/path-cloud-transaction.ts";
@@ -39,6 +39,7 @@ export const pathStrokeTool: ConstructionTool<"path-brush"> = {
     if(!active.has(ctx.runtime)||!meaningful(g))return;
     try {
       const d=draft(ctx,g,params);
+      showRoadSpinePreview(ctx, d.fitted.curves, "road-draft-spine");
       const anchors = [d.samples[0]!.point];
       if (d.samples.length > 1) anchors.push(d.samples[d.samples.length - 1]!.point);
       ctx.runtime.showPreview(createRoadMeshPreview({
@@ -49,6 +50,7 @@ export const pathStrokeTool: ConstructionTool<"path-brush"> = {
         opacity: ROAD_PREVIEW_OPACITY,
       }), CHANNEL);
     } catch {
+      ctx.runtime.clearPreview("road-draft-spine");
       showRoadSnap(ctx);
       // Red raw input is presentation only, never a candidate for confirmation.
       const points=g.samples.filter(s=>Object.values(s.point).every(Number.isFinite)).map(s=>s.point);
@@ -61,11 +63,17 @@ export const pathStrokeTool: ConstructionTool<"path-brush"> = {
       }), CHANNEL);
     }
   },
-  onPointerUp(ctx,g,params) {
-    if(!active.delete(ctx.runtime))return;
+  onPointerUp: finishPathStroke,
+  onCancel(ctx){active.delete(ctx.runtime);ctx.runtime.clearPreview(CHANNEL);ctx.runtime.clearPreview("road-draft-spine");showRoadSnap(ctx);},
+};
+
+/** The single release/commit path, also used by a continuation draft. */
+export function finishPathStroke(ctx: ToolContext, g: ToolGesture, params: PathBrushParams): boolean {
+    if(!active.delete(ctx.runtime))return false;
     ctx.runtime.clearPreview(CHANNEL);
+    ctx.runtime.clearPreview("road-draft-spine");
     const final={...g,samples:[...g.samples,g.current]};
-    if(!meaningful(final)){showRoadSnap(ctx);return;}
+    if(!meaningful(final)){showRoadSnap(ctx);return false;}
     try {
       const d=draft(ctx,final,params);
       const operationId=scopedToolId(ctx,"road-stroke",ctx.nextSequence());
@@ -74,12 +82,12 @@ export const pathStrokeTool: ConstructionTool<"path-brush"> = {
         brushRegion:{samples:d.samples.map(s=>s.point)},
         authoredCurves:d.fitted.curves,parameters:pathFormationFor(params),
       },{operationId,tableId:ctx.tableId,initiatedBy:"road-stroke"});
-      commitPathCloudIntent(ctx,effect,0.025);
+      const committed=commitPathCloudIntent(ctx,effect,0.025);
       showRoadSnap(ctx);
+      return committed;
     } catch(error) {
       showRoadSnap(ctx);
       ctx.reportFeedback({tone:"error",message:`Traçado não aplicado: ${String(error)}`});
+      return false;
     }
-  },
-  onCancel(ctx){active.delete(ctx.runtime);ctx.runtime.clearPreview(CHANNEL);showRoadSnap(ctx);},
-};
+}

@@ -359,6 +359,10 @@ Resolves a pointer position (in the view's CSS pixels) to what it hit, or `undef
 
 ### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.resizeView(viewId: string, width: number, height: number): void`
 
+### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.setCreationHandle(target: Pick<RenderPointManipulator, "position" | "id"> | undefined): void`
+
+A pickable continuation handle for an unconfirmed construction draft.
+
 ### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.setFloorClipHeight(height: number | undefined): void`
 
 Sets the floor-cutaway height in continuous world-space Y. `undefined` disables cutaway.
@@ -807,6 +811,8 @@ Host `(u, v)` pairs back to world positions. Pure.
 
 Local editing presentation; never changes the graph or persistence.
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.setCreationHandle(target: Pick<RenderPointManipulator, "position" | "id"> | undefined): void`
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.setGlobalHandleOwners(owns: ((surfaceType: string) => boolean) | undefined): void`
 
 Which types' whole-structure handles the scene shows -- the active tool's
@@ -1000,6 +1006,8 @@ Host `(u, v)` pairs back to world positions. Pure.
 ### `method vtt.tabletop-runtime.TabletopRuntime.setConstructionHandlePresentation(mode: "all" | "spine-points"): void`
 
 Local editing presentation; never changes the graph or persistence.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.setCreationHandle(target: Pick<RenderPointManipulator, "position" | "id"> | undefined): void`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.setGlobalHandleOwners(owns: ((surfaceType: string) => boolean) | undefined): void`
 
@@ -2658,9 +2666,13 @@ The handle of an owned spine `sample` lands on -- a control point, a midpoint, o
 
 Removes the selected control point; false when nothing was selected.
 
+### `method vtt.spine-edit-behavior.SpineEditBehavior.resizeSelected(ctx: ToolContext, width: number): boolean`
+
 ### `method vtt.spine-edit-behavior.SpineEditBehavior.select(ctx: ToolContext, sample?: PointerSample): void`
 
 ### `method vtt.spine-edit-behavior.SpineEditBehavior.selected(ctx: ToolContext): string | undefined`
+
+### `method vtt.spine-edit-behavior.SpineEditBehavior.selection(ctx: ToolContext): { id: string; point: ConstructionPosition; segment: boolean; width: number } | undefined`
 
 ### `interface vtt.spine-edit-behavior.SpineEditOptions`
 
@@ -2695,6 +2707,14 @@ Told whenever the selected spine point changes -- `undefined` when nothing is se
 ### `property vtt.spine-edit-behavior.SpineEditOptions.ownsSpine: (surfaceType: string) => boolean`
 
 Only spines owned by a type this accepts are edited; anything else falls through to the tool.
+
+### `property vtt.spine-edit-behavior.SpineEditOptions.panelActions?: boolean`
+
+Whether this tool reads the ambient legacy curve-action panel.
+
+### `property vtt.spine-edit-behavior.SpineEditOptions.selectBodyOnClick?: boolean`
+
+A body click selects its span without inserting an anchor.
 
 ### `property vtt.spine-edit-behavior.SpineEditOptions.snap?: AnchorSnap`
 
@@ -2872,7 +2892,7 @@ What the picked `selectedId` offers besides dragging it -- shown as buttons; `id
 
 What the pointer resolved to at one instant -- `nodeId` present only when it hit a node handle.
 
-### `property vtt.tool-context.PointerSample.constructionAction?: { kind: "branch"; nodeId: string }`
+### `property vtt.tool-context.PointerSample.constructionAction?: { kind: "branch" | "continue"; nodeId: string }`
 
 ### `property vtt.tool-context.PointerSample.face?: { centre: ConstructionPosition; normal: ConstructionPosition }`
 
@@ -3220,11 +3240,15 @@ Prunes accidental duplicate or jitter points (< 0.1m) from a draft spine.
 
 Drag to sketch the centerline. Release commits one fitted curve transaction.
 
+### `function vtt.path-stroke-tool.finishPathStroke(ctx: ToolContext, g: ToolGesture, params: PathBrushParams): boolean`
+
+The single release/commit path, also used by a continuation draft.
+
 ### `interface vtt.road-body-target.RoadSnapTarget`
 
 What the pointer resolved to at one instant -- `nodeId` present only when it hit a node handle.
 
-### `property vtt.road-body-target.RoadSnapTarget.constructionAction?: { kind: "branch"; nodeId: string }`
+### `property vtt.road-body-target.RoadSnapTarget.constructionAction?: { kind: "branch" | "continue"; nodeId: string }`
 
 ### `property vtt.road-body-target.RoadSnapTarget.face?: { centre: ConstructionPosition; normal: ConstructionPosition }`
 
@@ -3311,6 +3335,8 @@ A road's ribbon preview: the shared ribbon mesh in the road's own colours.
 ### `function vtt.road-preview-mesh.createSnapMeshPreview(target: ConstructionPosition, radius: number): RenderPreviewDescriptor`
 
 Build a glowing circular snap preview mesh at the target junction location.
+
+### `function vtt.road-preview-mesh.showRoadSpinePreview(ctx: ToolContext, curves: readonly CubicBezier[], channel: string): void`
 
 ### `interface vtt.platform-contour-merge.DirectedContourEdge`
 
@@ -5895,6 +5921,10 @@ Which structure type a spine span generates -- a road, a sloped platform,
 a curved wall. The graph keeps it on the curve (`CurveHandles.surfaceType`)
 and never reads it; this is where the app does. Every owner stamps its own
 spans, so this module names no type; a span with no owner generates nothing.
+
+### `function vtt.spine-profile.withSpanWidth(curve: CurveHandles, width: number, endWidth?: number): CurveHandles`
+
+Assigns a symmetric profile to an authored span without changing its shape.
 
 ### `interface vtt.spine-ribbons.SpineRibbon`
 
@@ -10707,7 +10737,7 @@ pointer actually hit a node handle -- otherwise `point` alone (e.g. a hit
 against map geometry) is still useful for continuing an in-progress drag
 across the ground.
 
-### `property vtt.scene-render-port.ScenePickResult.constructionAction?: { kind: "branch"; nodeId: string }`
+### `property vtt.scene-render-port.ScenePickResult.constructionAction?: { kind: "branch" | "continue"; nodeId: string }`
 
 ### `property vtt.scene-render-port.ScenePickResult.forward?: { x: number; y: number; z: number }`
 
@@ -10767,6 +10797,10 @@ Hides one channel, or every channel when none is named.
 Resolves a pointer position (in the view's CSS pixels) to what it hit, or `undefined` if it hit nothing.
 
 ### `method vtt.scene-render-port.SceneRenderPort.resizeView(viewId: string, width: number, height: number): void`
+
+### `method vtt.scene-render-port.SceneRenderPort.setCreationHandle(target: Pick<RenderPointManipulator, "position" | "id"> | undefined): void`
+
+A pickable continuation handle for an unconfirmed construction draft.
 
 ### `method vtt.scene-render-port.SceneRenderPort.setFloorClipHeight(height: number | undefined): void`
 
@@ -11781,6 +11815,8 @@ Which opening preset the Aberturas blocks show as picked.
 ### `property vtt.widgets.ConstructionToolParamsPanelProps.onStructureEditParamsChange: (next: StructureEditParams) => void`
 
 ### `property vtt.widgets.ConstructionToolParamsPanelProps.params: ToolParamsByTool`
+
+### `property vtt.widgets.ConstructionToolParamsPanelProps.selectedNodeId?: string`
 
 ### `property vtt.widgets.ConstructionToolParamsPanelProps.structureEditParams: StructureEditParams`
 

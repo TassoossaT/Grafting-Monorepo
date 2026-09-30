@@ -4458,7 +4458,7 @@ export interface SpineEditBehavior {
   /** Selects and starts dragging `picked`; false when the curve refused the gesture. */
   begin(ctx: ToolContext, picked: SpinePick): boolean;
   move(ctx: ToolContext, gesture: ToolGesture): boolean;
-export function createSpineEditBehavior({ ownsSpine, onSelect, snap, handlesOnly }: SpineEditOptions): SpineEditBehavior {
+export function createSpineEditBehavior({ ownsSpine, onSelect, snap, handlesOnly, selectBodyOnClick, panelActions = true }: SpineEditOptions): SpineEditBehavior {
   const drags = new WeakMap<ToolContext["runtime"], CurveGesture>();
 export function withSpineEditing<Id extends ConstructionToolId>(tool: ConstructionTool<Id>, options: SpineEditOptions): ConstructionTool<Id> {
   const spine = createSpineEditBehavior(options);
@@ -4499,7 +4499,7 @@ export function withStructureEditing<Id extends ConstructionToolId>(
 
 // src/composition/tabletop/tools/core/tool-context.ts
 export interface PointerSample {
-  readonly constructionAction?: { readonly kind: "branch"; readonly nodeId: string };
+  readonly constructionAction?: { readonly kind: "branch" | "continue"; readonly nodeId: string };
 export interface ToolGesture {
   readonly start: PointerSample;
   readonly current: PointerSample;
@@ -4677,7 +4677,7 @@ export const pathPointsTool: ConstructionTool<"path-brush"> = {
   useGridSnap: false,
   defaultParams: () => DEFAULT_TOOL_PARAMS["path-brush"],
   previewOnHover: true,
-  previewFor(g, _params, ctx) {
+  onParamsChange(ctx, next, previous) {
 
 // src/composition/tabletop/tools/paths/path-stroke-tool.ts
 export const pathStrokeTool: ConstructionTool<"path-brush"> = {
@@ -4687,6 +4687,9 @@ export const pathStrokeTool: ConstructionTool<"path-brush"> = {
   if(!active.has(ctx.runtime)||!meaningful(g))return;
   try {
   const d=draft(ctx,g,params);
+export function finishPathStroke(ctx: ToolContext, g: ToolGesture, params: PathBrushParams): boolean {
+  if(!active.delete(ctx.runtime))return false;
+  ctx.runtime.clearPreview(CHANNEL);
 
 // src/composition/tabletop/tools/paths/road-body-target.ts
 export interface RoadSnapTarget extends PointerSample {
@@ -4732,6 +4735,9 @@ export function createSnapMeshPreview(target: ConstructionPosition, radius = 0.4
   const indices: number[] = [];
   // Elevated disk for clear junction target visual
   appendNodeDisk(positions, indices, target, radius, NODE_DISK_ELEVATION + 0.01, 12);
+export function showRoadSpinePreview(ctx: ToolContext, curves: readonly CubicBezier[], channel: string): void {
+  if (!curves.length) { ctx.runtime.clearPreview(channel); return; }
+  const positions = Float32Array.from(curves.flatMap(curve => Array.from(curveSegments(ctx.runtime, curve))));
 
 // src/composition/tabletop/tools/platform/platform-contour-merge.ts
 export interface DirectedContourEdge {
@@ -6124,6 +6130,10 @@ export function spineOwnerAt(snapshot: ConstructionGraphSnapshot, edgeOrNodeId: 
   ?? snapshot.edges.find((candidate) => isSpineEdge(candidate) && (candidate.startNodeId === edgeOrNodeId || candidate.endNodeId === edgeOrNodeId));
 export function spineComponent(snapshot: ConstructionGraphSnapshot, seedNodeIds: Iterable<string>): ConstructionGraphSnapshot {
   const spans = snapshot.edges.filter(isSpineEdge);
+
+// src/features/edit-construction/spine/spine-profile.ts
+export function withSpanWidth(curve: NonNullable<ConstructionEdgeSnapshot["curve"]>, width: number, endWidth?: number): NonNullable<ConstructionEdgeSnapshot["curve"]> {
+  if (!Number.isFinite(width) || width <= 0 || (endWidth !== undefined && (!Number.isFinite(endWidth) || endWidth <= 0))) throw Error("Informe uma largura positiva.");
 
 // src/features/edit-construction/spine/spine-ribbons.ts
 export interface SpineRibbonSpan {

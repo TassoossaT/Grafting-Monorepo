@@ -78,6 +78,7 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
       <ConstructionToolParamsPanel
         activeTool={props.activeTool}
         params={props.toolParams}
+        selectedNodeId={props.selectedNodeInfo?.id}
         onParamsChange={props.onToolParamsChange}
         structureEditParams={props.structureEditParams}
         onStructureEditParamsChange={props.onStructureEditParamsChange}

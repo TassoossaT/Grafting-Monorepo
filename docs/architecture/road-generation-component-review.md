@@ -71,3 +71,13 @@ Fixture WASM: 61 nós e 60 spans de 5 unidades, perfil [-0.3,0.3]. Primeira aval
 packages/assets resolve e mantém recursos; não há contrato atual de distribuição/extrusão de assets numa curva. Esta entrega prepara as referências geométricas para essa integração. Não adiciona modelos, catálogo, placement persistido, extrusão ou escolha de assets na interface. Referências de attachments ao dividir/remover spans exigirão contrato e operação próprios na fase de assets. A referência source é derivada do grafo vigente e não cria uma segunda autoridade.
 
 A prévia de criação representa os ribbons do novo percurso; não inclui toda a união com ruas existentes, terreno ou assets. As regressões numéricas não substituem observação visual de costuras e auto-interseções. #331 e o aceite visual permanecem pendentes.
+
+## Fluxo visível aplicado na ferramenta
+
+- No desenho livre, um clique no terreno posiciona a origem e o handle verde de continuação sem criar uma superfície. Arrastar esse handle usa a posição da origem, não o deslocamento visual do ícone; soltar confirma uma transação. Um arraste inicial direto continua disponível.
+- O + de um ponto existente inicia uma ramificação conectada e respeita o modo selecionado. Por pontos, cliques acrescentam autoria, Enter confirma e Esc cancela. No modo livre, o arraste continua a partir da origem compartilhada.
+- A prévia dos dois modos mostra a espinha amarela e a faixa azul. Um clique no corpo seleciona o trecho sem inserir pontos. O handle central mantém a inserção e o arraste para curvar; o gizmo mantém a edição de posição.
+- O painel identifica o perfil da próxima criação, da espinha conectada selecionada ou do trecho selecionado. A largura altera os trechos pertencentes ao mesmo tipo na componente conectada quando uma âncora está selecionada; a seleção pelo corpo altera apenas aquele trecho. A operação usa a transação existente, com undo/redo.
+- O painel de ações estruturais antigo não aparece para a ferramenta de rua. O botão superior de criação permanece removido; os handles verdes permanecem.
+
+As regressões executam sessões WASM reais e verificam rascunho sem commit, origem exata da continuação, confirmação única, ramificação livre, seleção sem inserção, largura e undo/redo. A cena encaminha o handle de continuação por uma ação própria no mesmo layer dos handles existentes. O build confirma a integração de tipos; a inspeção visual no navegador e o aceite de costuras continuam pendentes em #331.

@@ -183,7 +183,7 @@ export type ConfirmedRenderChange =
  * across the ground.
  */
 export interface ScenePickResult {
-  readonly constructionAction?: { readonly kind: "branch"; readonly nodeId: string };
+  readonly constructionAction?: { readonly kind: "branch" | "continue"; readonly nodeId: string };
   readonly point: { readonly x: number; readonly y: number; readonly z: number };
   readonly nodeId?: string;
   /** Canonical surface identity when map geometry, rather than ground, was hit. */
@@ -255,6 +255,8 @@ export interface CameraControlHandle {
 
 export interface SceneRenderPort {
   setPointManipulator?(viewId: RenderViewId, target: RenderPointManipulator | undefined): void;
+  /** A pickable continuation handle for an unconfirmed construction draft. */
+  setCreationHandle?(target: Pick<RenderPointManipulator, "id" | "position"> | undefined): void;
   start(runtimeGeneration: number): Promise<void>;
   attachView(target: HTMLElement): RenderViewId;
   detachView(viewId: RenderViewId): void;

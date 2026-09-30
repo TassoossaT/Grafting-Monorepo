@@ -1,3 +1,6 @@
+import { curveSegments } from "../../../../features/edit-construction/index.ts";
+import type { CubicBezier } from "../../../../ports/index.ts";
+import type { ToolContext } from "../core/tool-context.ts";
 import type { ConstructionPosition, RenderPreviewDescriptor } from "../../../../ports/index.ts";
 import { appendNodeDisk, appendStraightQuads, createRibbonMeshPreview, NODE_DISK_ELEVATION, PREVIEW_ELEVATION } from "../shapes/ribbon-mesh-preview.ts";
 
@@ -72,5 +75,13 @@ export function createSnapMeshPreview(target: ConstructionPosition, radius = 0.4
     color: SNAP_DISK_COLOR,
     opacity: SNAP_DISK_OPACITY,
   };
+}
+
+
+export function showRoadSpinePreview(ctx: ToolContext, curves: readonly CubicBezier[], channel: string): void {
+  if (!curves.length) { ctx.runtime.clearPreview(channel); return; }
+  const positions = Float32Array.from(curves.flatMap(curve => Array.from(curveSegments(ctx.runtime, curve))));
+  for (let i = 1; i < positions.length; i += 3) positions[i] += 0.09;
+  ctx.runtime.showPreview({ kind: "segments", positions, color: 0xfde047, opacity: 1 }, channel);
 }
 

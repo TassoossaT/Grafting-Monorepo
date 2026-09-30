@@ -59,6 +59,99 @@ function resolve(f,e) {
   return f.runtime.curveBatch({tolerance:0.025,commands:[{kind:"resolve",handles:e.curve,start:xyz(nodes.get(e.startNodeId)),end:xyz(nodes.get(e.endNodeId))}]})[0].curves[0];
 }
 
+test("freehand initial click leaves a visible continuation handle without committing",()=>{
+  const f=fixture();let handle;
+  f.runtime.setCreationHandle=value=>{handle=value;};
+  try {
+    const before=state(f),a=sample(2,3);
+    f.click(a,a,brush);
+    assert.deepEqual(state(f),before);
+    assert.deepEqual(handle.position,a.point);
+    assert.ok(f.previews.has("road-points"));
+    tool.onCancel(f.ctx);
+    assert.equal(handle,undefined);
+    assert.equal(f.previews.size,0);
+  }finally{f.close();}
+});
+
+test("dragging the continuation handle starts at the authored origin and commits once",()=>{
+  const f=fixture();let handle;
+  f.runtime.setCreationHandle=value=>{handle=value;};
+  try {
+    const a=sample(-8,0),end=sample(8,4);
+    f.click(a,a,brush);const before=state(f);
+    const picked={...sample(-7.2,0.8),constructionAction:{kind:"continue",nodeId:handle.id}};
+    tool.onPointerDown(f.ctx,picked,brush);
+    const g=gesture(picked,end);
+    tool.onPointerMove(f.ctx,g,brush);
+    assert.equal(f.previews.get("road-draft-spine")?.kind,"segments");
+    assert.ok(Array.from(f.previews.get("road-draft-spine").positions).every(Number.isFinite));
+    assert.deepEqual(state(f),before);
+    tool.onPointerUp(f.ctx,g,brush);
+    const graph=f.runtime.getGraphSnapshot();
+    assert.ok(graph.nodes.some(n=>n.position.x===a.point.x&&n.position.z===a.point.z));
+    assert.equal(handle,undefined);
+    const after=state(f);tool.onPointerUp(f.ctx,g,brush);assert.deepEqual(state(f),after);
+  }finally{f.close();}
+});
+
+test("existing + respects freehand mode and creates a shared branch junction",()=>{
+  const f=fixture();let handle;
+  f.runtime.setCreationHandle=value=>{handle=value;};
+  try {
+    build(f);const edge=edges(f)[0],id=edge.endNodeId,before=state(f);
+    const action={...sample(0.8,4.8),constructionAction:{kind:"branch",nodeId:id}};
+    f.click(action,action,brush);
+    const picked={...action,constructionAction:{kind:"continue",nodeId:handle.id}},end=sample(0,12),g=gesture(picked,end);
+    tool.onPointerDown(f.ctx,picked,brush);tool.onPointerMove(f.ctx,g,brush);
+    assert.deepEqual(state(f),before);
+    tool.onPointerUp(f.ctx,g,brush);
+    assert.equal(edges(f).filter(e=>e.startNodeId===id||e.endNodeId===id).length,3);
+    assert.equal(handle,undefined);
+  }finally{f.close();}
+});
+
+for(const targetKind of ["point","segment"]){
+  test(`width panel edits the selected ${targetKind} in one reversible transaction`,()=>{
+    const f=fixture();let params={...points};const transactions=[];
+    f.ctx.updateToolParams=(_id,update)=>{params=update(params);};
+    const record=f.ctx.history.record.bind(f.ctx.history);
+    f.ctx.history.record=entry=>{transactions.push(entry);record(entry);};
+    try {
+      build(f);const originalEdges=structuredClone(edges(f));
+      if(targetKind==="point"){
+        const id=originalEdges[0].endNodeId,node=f.runtime.getGraphSnapshot().nodes.find(n=>n.id===id);
+        f.click({nodeId:id,point:node.position});
+      }else{
+        const face=f.runtime.getAllRegionTopologies()[0];
+        f.click({...sample(-5,2),surfaceRef:surfaceRefFromNodeSet(face.surfaceKey)});
+      }
+      const before=state(f),count=transactions.length,previous={...params},next={...params,bedWidth:params.bedWidth+1};
+      tool.onParamsChange(f.ctx,next,previous);
+      assert.equal(transactions.length,count+1);
+      const changed=edges(f).filter(e=>JSON.stringify(e.curve.bandOffsets)!==JSON.stringify(originalEdges.find(o=>o.edgeId===e.edgeId).curve.bandOffsets));
+      assert.equal(changed.length,targetKind==="point"?originalEdges.length:1);
+      assert.ok(changed.every(e=>e.curve.bandOffsets[1]-e.curve.bandOffsets[0]===next.bedWidth));
+      const after=state(f),id=transactions.at(-1).transactionId;
+      f.session.undo_region_overlay(id);assert.deepEqual(state(f),before);
+      f.session.redo_region_overlay(id);assert.deepEqual(state(f),after);
+    }finally{f.close();}
+  });
+}
+
+test("mode change cancels continuation; draft width changes never edit confirmed roads",()=>{
+  const f=fixture();let handle;
+  f.runtime.setCreationHandle=value=>{handle=value;};
+  try {
+    const before=state(f);f.click(sample(1,2),sample(1,2),brush);
+    tool.onParamsChange(f.ctx,{...brush,bedWidth:5},brush);
+    assert.deepEqual(state(f),before);assert.ok(handle);
+    tool.onParamsChange(f.ctx,points,brush);
+    assert.equal(handle,undefined);assert.equal(f.previews.size,0);
+    assert.deepEqual(state(f),before);
+  }finally{f.close();}
+});
+
 test("point-authored road reinterpolates moved anchors, with reversible automatic policy",()=>{
   const f=fixture();
   try {
@@ -377,15 +470,20 @@ for(const mode of ["points","brush"])for(const originKind of ["vertex","edge"]){
   });
 }
 
-test("edge click inserts at the clicked parameter and preserves the original curve",()=>{
+test("body click selects the span without editing; the central handle inserts exactly",()=>{
   const f=fixture();
   try {
     f.click(sample(-10,0));f.click(sample(10,0));f.finish();
     const face=f.runtime.getAllRegionTopologies()[0];
+    const before=state(f);
     f.click({...sample(3,0.1),surfaceRef:surfaceRefFromNodeSet(face.surfaceKey)});
+    assert.deepEqual(state(f),before);
+    assert.ok(f.selected.id.startsWith("bezier-midpoint:"));
+    assert.ok(f.previews.has("road-selection"));
+    f.click({...sample(0,0),nodeId:f.selected.id});
     assert.equal(edges(f).length,2,JSON.stringify(f.calls.feedback));
     const node=f.runtime.getGraphSnapshot().nodes.find(n=>n.id===f.selected?.id);
-    assert.ok(Math.abs(node.position.x-3)<0.01&&Math.abs(node.position.z)<0.01);
+    assert.ok(Math.abs(node.position.x)<0.01&&Math.abs(node.position.z)<0.01);
     for(const e of edges(f))for(const p of resolve(f,e).points)assert.ok(Math.abs(p[2])<1e-9);
   }finally{f.close();}
 });
@@ -424,11 +522,11 @@ test("in-scene creation handle branches from its vertex without a toolbar",()=>{
     build(f);const edge=edges(f)[0],id=edge.endNodeId;
     const action={...sample(0.8,4.8),constructionAction:{kind:"branch",nodeId:id}};
     const before=state(f);
-    f.click(action,action,brush);
-    const cursor=sample(0,9);tool.previewFor(gesture(cursor,cursor),brush,f.ctx);
+    f.click(action,action,points);
+    const cursor=sample(0,9);tool.previewFor(gesture(cursor,cursor),points,f.ctx);
     assert.ok(f.previews.get("road-points").positions.length>12);
     assert.deepEqual(state(f),before);
-    f.click(cursor,cursor,brush);tool.onKeyDown(f.ctx,"Enter",brush);
+    f.click(cursor,cursor,points);tool.onKeyDown(f.ctx,"Enter",points);
     assert.equal(edges(f).filter(e=>e.startNodeId===id||e.endNodeId===id).length,3,JSON.stringify(f.calls.feedback));
   }finally{f.close();}
 });

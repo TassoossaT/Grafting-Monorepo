@@ -1,6 +1,6 @@
 import type { ConstructionToolId, StructureEditParams } from "@/features/edit-construction";
 
-import { curvePick, globalHandleOf, shownGlobalHandleAt, structureTypeFor } from "../../../../features/edit-construction/index.ts";
+import { curvePick, globalHandleOf, shownGlobalHandleAt, spanOffsets, structureTypeFor } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionPosition } from "../../../../ports/index.ts";
 import { spineBodyTarget } from "./spine-body-target.ts";
 import { beginCurveGesture, type AnchorSnap, type CurveGesture, type CurveGestureOptions } from "./curve-edit-gesture.ts";
@@ -36,6 +36,10 @@ export interface SpineEditOptions {
    * tool's own. Handles show on the spine under the pointer.
    */
   readonly handlesOnly?: boolean;
+  /** A body click selects its span without inserting an anchor. */
+  readonly selectBodyOnClick?: boolean;
+  /** Whether this tool reads the ambient legacy curve-action panel. */
+  readonly panelActions?: boolean;
 }
 
 /** What a press on a spine resolved to: the handle it actually takes, and how to drag it. */
@@ -59,6 +63,8 @@ export interface SpineEditBehavior {
   abort(ctx: ToolContext): void;
   select(ctx: ToolContext, sample?: PointerSample): void;
   selected(ctx: ToolContext): string | undefined;
+  selection(ctx: ToolContext): { readonly id: string; readonly point: ConstructionPosition; readonly width: number; readonly segment: boolean } | undefined;
+  resizeSelected(ctx: ToolContext, width: number): boolean;
   /** Removes the selected control point; false when nothing was selected. */
   removeSelected(ctx: ToolContext): boolean;
   /** Drops any drag and the selection. */
@@ -68,7 +74,7 @@ export interface SpineEditBehavior {
 const xyz = (p: ConstructionPosition) => [p.x, p.y, p.z] as const;
 const sceneOf = (ctx: ToolContext) => ({ graph: ctx.runtime.getGraphSnapshot(), topologies: ctx.runtime.getAllRegionTopologies(), cloudFor: ctx.runtime.cloudFor.bind(ctx.runtime) });
 
-export function createSpineEditBehavior({ ownsSpine, onSelect, snap, handlesOnly }: SpineEditOptions): SpineEditBehavior {
+export function createSpineEditBehavior({ ownsSpine, onSelect, snap, handlesOnly, selectBodyOnClick, panelActions = true }: SpineEditOptions): SpineEditBehavior {
   const drags = new WeakMap<ToolContext["runtime"], CurveGesture>();
   const selections = new WeakMap<ToolContext["runtime"], string>();
   const owned = (surfaceType: string | undefined) => surfaceType !== undefined && structureTypeFor(surfaceType)?.spine !== undefined && ownsSpine(surfaceType);
@@ -125,7 +131,7 @@ export function createSpineEditBehavior({ ownsSpine, onSelect, snap, handlesOnly
       }
       if (handlesOnly) return undefined;
       const body = spineBodyTarget(ctx, sample, undefined, owned);
-      return body && { sample: body.sample, options: { ...body.options, curveMode: "free", insertOnClick: curvePick(body.sample.nodeId!)?.index === "midpoint" } };
+      return body && { sample: body.sample, options: { ...body.options, curveMode: "free", insertOnClick: !selectBodyOnClick && curvePick(body.sample.nodeId!)?.index === "midpoint" } };
     },
     isHandle(ctx, sample) {
       if (sample.nodeId && globalHandleOf(sample.nodeId)) return owned(shownGlobalHandleAt(sceneOf(ctx), sample.nodeId)?.owner);
@@ -138,7 +144,7 @@ export function createSpineEditBehavior({ ownsSpine, onSelect, snap, handlesOnly
       // curve action other than plain editing -- remove, disconnect, close,
       // delete a span, set its width -- applied to whatever was picked.
       // Absent where a host never wired the panel; plain shape editing then.
-      const panel: Partial<StructureEditParams> = ctx.structureEditParams ?? {};
+      const panel: Partial<StructureEditParams> = panelActions ? ctx.structureEditParams ?? {} : {};
       const action = panel.curveAction && panel.curveAction !== "edit"
         ? { curveAction: panel.curveAction, curveWidth: panel.curveWidth, curveEndWidth: panel.curveEndWidth, allowShapeChange: true }
         : {};
@@ -167,6 +173,25 @@ export function createSpineEditBehavior({ ownsSpine, onSelect, snap, handlesOnly
     },
     select,
     selected: (ctx) => selections.get(ctx.runtime),
+    selection(ctx) {
+      const id = selections.get(ctx.runtime);
+      if (!id) return;
+      const sample = handleTarget(ctx, { nodeId: id, point: { x: 0, y: 0, z: 0 } });
+      if (!sample) return;
+      const pick = curvePick(id);
+      const edge = ctx.runtime.getGraphSnapshot().edges.find(e => owned(e.curve?.surfaceType) &&
+        (pick ? e.edgeId === pick.edgeId : e.startNodeId === id || e.endNodeId === id));
+      if (!edge?.curve) return;
+      const { offsets } = spanOffsets(edge.curve, structureTypeFor(edge.curve.surfaceType!)!.spine!.defaultOffsets);
+      return { id, point: sample.point, width: offsets[1] - offsets[0], segment: pick !== undefined };
+    },
+    resizeSelected(ctx, width) {
+      const selected = this.selection(ctx);
+      if (!selected || selected.width === width || drags.has(ctx.runtime)) return false;
+      beginEdit(ctx, { nodeId: selected.id, point: selected.point }, { mode: "shape", curveAction: "width", curveWidth: width, allowShapeChange: true })?.commit();
+      select(ctx, { nodeId: selected.id, point: selected.point });
+      return true;
+    },
     removeSelected(ctx) {
       const id = selections.get(ctx.runtime);
       // A pivot stands for the whole spine; deleting a spine is not a point removal.
