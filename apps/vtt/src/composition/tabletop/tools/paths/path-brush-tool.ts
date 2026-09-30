@@ -1,4 +1,4 @@
-import { createPathBrushEffect, curvePick, pathFormationFor, pathHalfWidth, DEFAULT_TOOL_PARAMS, PATH_SURFACE_TYPE } from "../../../../features/edit-construction/index.ts";
+import { createPathBrushEffect, pathFormationFor, pathHalfWidth, DEFAULT_TOOL_PARAMS, PATH_SURFACE_TYPE } from "../../../../features/edit-construction/index.ts";
 import type { PathBrushParams } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionPosition, CubicBezier } from "../../../../ports/index.ts";
 import { commitPathCloudIntent } from "../../path/path-cloud-transaction.ts";
@@ -53,18 +53,6 @@ function commitSpan(ctx: ToolContext, from: ConstructionPosition, to: Constructi
   }
 }
 
-/** The span or point picked on a road, outlined along its spine. */
-function showSelection(ctx: ToolContext, id: string | undefined): void {
-  ctx.runtime.clearPreview("road-selection");
-  if (!id) return;
-  const graph = ctx.runtime.getGraphSnapshot();
-  const edgeId = curvePick(id)?.edgeId;
-  const edges = graph.edges.filter((e) => e.curve?.surfaceType === PATH_SURFACE_TYPE && (edgeId ? e.edgeId === edgeId : e.startNodeId === id || e.endNodeId === id));
-  const nodes = new Map(graph.nodes.map((n) => [n.id, n.position]));
-  const resolved = ctx.runtime.curveBatch({ tolerance: 0.025, commands: edges.map((e) => ({ kind: "resolve" as const, handles: e.curve!, start: xyz(nodes.get(e.startNodeId)!), end: xyz(nodes.get(e.endNodeId)!) })) });
-  showRoadSpinePreview(ctx, resolved.flatMap((result) => result.curves), "road-selection");
-}
-
 const sketch = createSpineSketchTool({
   id: "path-brush",
   defaultParams: () => DEFAULT_TOOL_PARAMS["path-brush"],
@@ -90,5 +78,4 @@ export const pathBrushTool = withSpineEditing({
   snap: roadAnchorSnap,
   panelActions: false,
   drafting: sketch.drafting,
-  onSelect: showSelection,
 });

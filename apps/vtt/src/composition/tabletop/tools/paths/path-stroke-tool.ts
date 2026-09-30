@@ -7,6 +7,8 @@ import { scopedToolId, type ToolContext, type ToolGesture, type PointerSample } 
 import { isStroke, type SpineSketchStroke } from "../core/spine-sketch.ts";
 
 const CHANNEL = "road-stroke";
+/** The plan deviation, in metres, a freehand stroke is smoothed within. */
+const HAND_WOBBLE = 1;
 const active = new WeakMap<ToolContext["runtime"], PointerSample>();
 const point = (p: PointerSample) => [p.point.x,p.point.y,p.point.z] as const;
 
@@ -19,9 +21,8 @@ function draft(ctx: ToolContext,g: ToolGesture,params: PathBrushParams) {
   if (target) samples[samples.length - 1] = target;
   showRoadSnap(ctx, target);
 
-  // The brush reserves half the road width; the remaining area may correct hand wobble.
-  const correction=Math.max(0,params.radius-params.bedWidth/2);
-  const fitted=ctx.runtime.curveBatch({tolerance:0.025,commands:[{kind:"interpretStroke",points:samples.map(point),correction,curved:true}]})[0]!;
+  // Whatever the road's width: tied to it, a wide road had no wobble left and kept every sample as an anchor.
+  const fitted=ctx.runtime.curveBatch({tolerance:0.025,commands:[{kind:"interpretStroke",points:samples.map(point),correction:HAND_WOBBLE,curved:true}]})[0]!;
   const halfWidth=pathHalfWidth(params);
   const ribbons=ctx.runtime.curveBatch({tolerance:0.025,commands:fitted.curves.map(curve=>({kind:"ribbon" as const,curve,offsets:[-halfWidth,halfWidth] as const}))});
   return {fitted,ribbons,samples};

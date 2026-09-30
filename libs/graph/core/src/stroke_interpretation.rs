@@ -158,11 +158,11 @@ pub(crate) fn interpret(
     if clean.len() < 2 {
         return Ok(Vec::new());
     }
-    let height_tolerance = if correction > 0.0 {
-        (correction * 0.4).max(0.18)
-    } else {
-        0.025
-    };
+    // Anchors are for the plan shape. A structure laid along the stroke need
+    // not trace every bump of the ground it was drawn over -- the ground rises
+    // or falls to meet it where it rests -- so height splits a span only past
+    // half a metre: a bump, not a hill.
+    let height_tolerance = if correction > 0.0 { 0.5 } else { 0.025 };
     let min_split_len = if correction > 0.0 {
         (correction * 0.5).max(0.75)
     } else {
@@ -219,8 +219,7 @@ pub(crate) fn interpret(
                 height_residual = height_residual.max((point[1] - fitted[1]).abs());
             }
         }
-        let line_height_tol = if correction > 0.0 { 0.08 } else { 0.025 };
-        let line_fits = straight <= correction && height_error <= line_height_tol;
+        let line_fits = straight <= correction && height_error <= height_tolerance;
         let curve_fits = residual <= correction && height_residual <= height_tolerance;
         if !line_fits && !curve_fits && span.len() > 2 && (chord < 1e-6 || chord >= min_split_len) {
             if height_error > height_tolerance {
@@ -305,6 +304,18 @@ mod tests {
         // A 20m terrain stroke with 4cm facet roughness must produce a clean,
         // compact spine (<= 5 spans), never fragmenting into 20+ micro-segments.
         assert!(spans.len() <= 5, "produced {} spans", spans.len());
+    }
+
+    #[test]
+    fn ground_bumps_under_a_straight_stroke_do_not_split_it() {
+        let points: Vec<_> = (0..=300)
+            .map(|i| {
+                let x = 30. * i as f64 / 300.;
+                [x, 0.3 * (x * 0.7).sin() + 0.1 * (x * 2.3).sin(), 0.]
+            })
+            .collect();
+        let spans = interpret(&points, 1.0, true).unwrap();
+        assert_eq!(spans.len(), 1, "produced {} spans", spans.len());
     }
 
     #[test]

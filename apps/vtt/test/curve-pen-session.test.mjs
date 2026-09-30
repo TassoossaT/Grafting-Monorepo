@@ -438,6 +438,17 @@ test("scene gizmo raises a road anchor and direct editing fits to surface height
   }finally{f.close();}
 });
 
+test("a wide road's freehand stroke keeps a few anchors, never one per sample",()=>{
+  const f=fixture();
+  try {
+    const wide={...params,bedWidth:8};
+    const samples=Array.from({length:301},(_,i)=>{const t=i/300;return {...sample(40*t+0.02*Math.sin(97*i),6*Math.sin(Math.PI*t)),screenX:800*t,screenY:120*Math.sin(Math.PI*t)};});
+    const g={start:samples[0],current:samples.at(-1),samples};
+    tool.onPointerDown(f.ctx,g.start,wide);tool.onPointerMove(f.ctx,g,wide);tool.onPointerUp(f.ctx,g,wide);
+    assert.ok(edges(f).length>0&&edges(f).length<=3,`${edges(f).length} spans`);
+  }finally{f.close();}
+});
+
 test("freehand road retains a hill between endpoints at zero elevation",()=>{
   const f=fixture();
   try {
