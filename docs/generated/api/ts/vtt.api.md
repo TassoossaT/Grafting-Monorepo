@@ -6303,6 +6303,12 @@ The chain's own ribbon, plus any junction ribbon joining it to a neighbour.
 
 The curve as the engine sampled it -- the height authority for the contour.
 
+### `property vtt.plan-spine-contour.SpineChainInput.source?: { curve: CubicBezier; endNodeId: string; profile: CurveHandles; startNodeId: string; stations: readonly { position: CurvePoint; t: number }[] }`
+
+Authoritative span reference for consumers composing along this chain.
+Derived stations are never authoring points. Consumers keep the edge id
+and curve parameter as their attachment reference, not a mesh vertex id.
+
 ### `property vtt.plan-spine-contour.SpineChainInput.tolerance: number`
 
 ### `function vtt.plan-spine-contour.planSpineContour(input: PlanSpineContourInput): PlanSpineContourResult | undefined`

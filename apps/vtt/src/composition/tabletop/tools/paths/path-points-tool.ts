@@ -1,4 +1,4 @@
-import { createPathBrushEffect, isSpineControlNodeId, pathFormationFor, DEFAULT_TOOL_PARAMS, PATH_SURFACE_TYPE } from "../../../../features/edit-construction/index.ts";
+import { createPathBrushEffect, isSpineControlNodeId, pathFormationFor, pathHalfWidth, DEFAULT_TOOL_PARAMS, PATH_SURFACE_TYPE } from "../../../../features/edit-construction/index.ts";
 import type { PathBrushParams } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionPosition, CubicBezier } from "../../../../ports/index.ts";
 import { commitPathCloudIntent } from "../../path/path-cloud-transaction.ts";
@@ -38,12 +38,13 @@ export function prunePoints(points: readonly ConstructionPosition[]): Constructi
 function preview(ctx: ToolContext, draft: Draft, cursor?: ConstructionPosition): void {
   const points = cursor && (!draft.points.length || !equal(draft.points.at(-1)!, cursor))
     ? [...draft.points, cursor] : draft.points;
-  const options = { anchors: points, bedWidth: draft.params.bedWidth };
+  const halfWidth = pathHalfWidth(draft.params);
+  const options = { anchors: points, bedWidth: halfWidth * 2 };
   try {
     const ribbons = points.length < 2 ? [] : ctx.runtime.curveBatch({
-      tolerance: 0.05,
+      tolerance: 0.025,
       commands: curves(ctx, points).map((curve) => ({ kind: "ribbon" as const, curve,
-        offsets: [-draft.params.bedWidth / 2, draft.params.bedWidth / 2] as const })),
+        offsets: [-halfWidth, halfWidth] as const })),
     });
     ctx.runtime.showPreview(createRoadMeshPreview({ ...options, ribbons }), CHANNEL);
   } catch {

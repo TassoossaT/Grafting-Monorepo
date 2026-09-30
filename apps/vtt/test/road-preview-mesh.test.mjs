@@ -13,6 +13,46 @@ import {
 import { sessionFixture } from "./platform-session-fixture.mjs";
 import { pathPointsTool } from "../src/composition/tabletop/tools/paths/path-points-tool.ts";
 import { pathStrokeTool } from "../src/composition/tabletop/tools/paths/path-stroke-tool.ts";
+import { pathHalfWidth } from "../src/features/edit-construction/index.ts";
+
+for (const mode of ["points", "brush"]) for (const pathKind of ["street", "road"]) {
+  test(`${mode} preview preserves the confirmed ${pathKind} profile and sampling`, () => {
+    const f=sessionFixture(), previews=new Map();
+    f.runtime.showPreview=(d,c)=>previews.set(c,d);
+    f.runtime.clearPreview=c=>previews.delete(c);
+    f.runtime.getFootprintCoverage=()=>[];
+    f.ctx.reportSelection=()=>{};
+    const params={...pathPointsTool.defaultParams(),creationMode:mode,pathKind,bedWidth:0.6,shoulderWidth:0.8};
+    const samples=[{point:{x:-10,y:0,z:0}},{point:{x:0,y:2,z:3}},{point:{x:10,y:0,z:0}}];
+    try {
+      const before=f.session.snapshot_json();
+      let preview;
+      if(mode==="points") {
+        for(const a of samples){pathPointsTool.onPointerDown(f.ctx,a,params);pathPointsTool.onPointerUp(f.ctx,{start:a,current:a,samples:[a]},params);}
+        preview=previews.get("road-points");
+        assert.equal(f.session.snapshot_json(),before);
+        pathPointsTool.onKeyDown(f.ctx,"Enter",params);
+      } else {
+        const g={start:samples[0],current:samples[2],samples};
+        pathStrokeTool.onPointerDown(f.ctx,samples[0],params);
+        pathStrokeTool.onPointerMove(f.ctx,g,params);
+        preview=previews.get("road-stroke");
+        assert.equal(f.session.snapshot_json(),before);
+        pathStrokeTool.onPointerUp(f.ctx,g,params);
+      }
+      assert.notEqual(f.session.snapshot_json(),before);
+      const graph=f.runtime.getGraphSnapshot(), nodes=new Map(graph.nodes.map(n=>[n.id,n.position]));
+      const xyz=p=>[p.x,p.y,p.z];
+      const curves=graph.edges.filter(e=>e.curve).map(e=>f.runtime.curveBatch({tolerance:0.025,commands:[{kind:"resolve",handles:e.curve,start:xyz(nodes.get(e.startNodeId)),end:xyz(nodes.get(e.endNodeId))}]})[0].curves[0]);
+      const half=pathHalfWidth(params);
+      const ribbons=f.runtime.curveBatch({tolerance:0.025,commands:curves.map(curve=>({kind:"ribbon",curve,offsets:[-half,half]}))});
+      const anchors=mode==="points"?samples.map(s=>s.point):[samples[0].point,samples[2].point];
+      const expected=createRoadMeshPreview({ribbons,anchors,bedWidth:half*2});
+      assert.deepEqual(preview.positions,expected.positions);
+      assert.deepEqual(preview.indices,expected.indices);
+    }finally{pathPointsTool.onCancel(f.ctx);pathStrokeTool.onCancel(f.ctx);f.session.free();}
+  });
+}
 
 test("createRoadMeshPreview generates solid ribbon quads and anchor disks with anti-clipping elevation", () => {
   const outer = [
@@ -126,7 +166,7 @@ test("point-mode preview renders the same Rust ribbon as its confirmed spine",()
     const graph=f.runtime.getGraphSnapshot(),nodes=new Map(graph.nodes.map(n=>[n.id,n.position]));
     const xyz=p=>[p.x,p.y,p.z];
     const curves=graph.edges.filter(e=>e.curve).map(e=>f.runtime.curveBatch({tolerance:0.025,commands:[{kind:"resolve",handles:e.curve,start:xyz(nodes.get(e.startNodeId)),end:xyz(nodes.get(e.endNodeId))}]})[0].curves[0]);
-    const ribbons=f.runtime.curveBatch({tolerance:0.05,commands:curves.map(curve=>({kind:"ribbon",curve,offsets:[-0.3,0.3]}))});
+    const ribbons=f.runtime.curveBatch({tolerance:0.025,commands:curves.map(curve=>({kind:"ribbon",curve,offsets:[-0.3,0.3]}))});
     const expected=createRoadMeshPreview({ribbons,anchors:authored,bedWidth:0.6});
     assert.deepEqual(preview.positions,expected.positions);
     assert.deepEqual(preview.indices,expected.indices);

@@ -6149,7 +6149,7 @@ export function spineRibbons(
   tolerance: number,
   parametersFor?: (resolved: CurveResult, index: number) => readonly number[] | undefined,
   ): readonly SpineRibbon[] {
-  const resolved = resolveCurves(port, spans, tolerance);
+  const cache = derivedSegments.get(port) ?? new Map<string, SpineRibbon>();
 
 // src/features/edit-construction/structure-types/creation-interaction.ts
 export type CreationInteraction =
@@ -6369,12 +6369,12 @@ export interface BandRibbon {
   }
 export interface SpineChainInput {
   readonly chainId: string;
-  /** The curve as the engine sampled it -- the height authority for the contour. */
-  readonly sampledPoints: readonly ConstructionPosition[];
-  /** The chain's own ribbon, plus any junction ribbon joining it to a neighbour. */
-  readonly ribbons: readonly BandRibbon[];
-  readonly controlPoints: readonly ConstructionPosition[];
-  readonly bandOffsets: readonly number[];
+  /**
+  * Authoritative span reference for consumers composing along this chain.
+  * Derived stations are never authoring points. Consumers keep the edge id
+  * and curve parameter as their attachment reference, not a mesh vertex id.
+  */
+  readonly source?: {
 export interface PlanSpineContourInput {
   /** The engine, which elevates every vertex the plan-view union hands back flat. */
   readonly field: FieldPort;

@@ -6,6 +6,9 @@ import type {
   ConstructionPosition,
   ConstructionRegionTopology,
   ConstructionSurfaceKey,
+  CubicBezier,
+  CurveHandles,
+  CurveResult,
 } from "@/ports";
 
 import type { ReferenceCurve } from "./curve-projection.ts";
@@ -26,6 +29,19 @@ export interface BandRibbon {
  */
 export interface SpineChainInput {
   readonly chainId: string;
+  /**
+   * Authoritative span reference for consumers composing along this chain.
+   * Derived stations are never authoring points. Consumers keep the edge id
+   * and curve parameter as their attachment reference, not a mesh vertex id.
+   */
+  readonly source?: {
+    readonly startNodeId: string;
+    readonly endNodeId: string;
+    readonly curve: CubicBezier;
+    readonly profile: CurveHandles;
+    /** Rust stations carry curve parameters for composing along the span. */
+    readonly stations: CurveResult["samples"][number];
+  };
   /** The curve as the engine sampled it -- the height authority for the contour. */
   readonly sampledPoints: readonly ConstructionPosition[];
   /** The chain's own ribbon, plus any junction ribbon joining it to a neighbour. */

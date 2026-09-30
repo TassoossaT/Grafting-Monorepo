@@ -1,6 +1,6 @@
 import { roadSnapTarget, showRoadSnap } from "./road-body-target.ts";
 import { createRoadMeshPreview, ROAD_PREVIEW_COLOR, ROAD_PREVIEW_OPACITY, ROAD_ERROR_COLOR, ROAD_ERROR_OPACITY } from "./road-preview-mesh.ts";
-import { createPathBrushEffect, pathFormationFor, DEFAULT_TOOL_PARAMS } from "../../../../features/edit-construction/index.ts";
+import { createPathBrushEffect, pathFormationFor, pathHalfWidth, DEFAULT_TOOL_PARAMS } from "../../../../features/edit-construction/index.ts";
 import type { PathBrushParams } from "../../../../features/edit-construction/index.ts";
 import { commitPathCloudIntent } from "../../path/path-cloud-transaction.ts";
 import { scopedToolId, type ConstructionTool, type ToolContext, type ToolGesture, type PointerSample } from "../core/tool-context.ts";
@@ -27,7 +27,8 @@ function draft(ctx: ToolContext,g: ToolGesture,params: PathBrushParams) {
   // The brush reserves half the road width; the remaining area may correct hand wobble.
   const correction=Math.max(0,params.radius-params.bedWidth/2);
   const fitted=ctx.runtime.curveBatch({tolerance:0.025,commands:[{kind:"interpretStroke",points:samples.map(point),correction,curved:true}]})[0]!;
-  const ribbons=ctx.runtime.curveBatch({tolerance:0.05,commands:fitted.curves.map(curve=>({kind:"ribbon" as const,curve,offsets:[-params.bedWidth/2,params.bedWidth/2] as const}))});
+  const halfWidth=pathHalfWidth(params);
+  const ribbons=ctx.runtime.curveBatch({tolerance:0.025,commands:fitted.curves.map(curve=>({kind:"ribbon" as const,curve,offsets:[-halfWidth,halfWidth] as const}))});
   return {fitted,ribbons,samples};
 }
 /** Drag to sketch the centerline. Release commits one fitted curve transaction. */
@@ -43,7 +44,7 @@ export const pathStrokeTool: ConstructionTool<"path-brush"> = {
       ctx.runtime.showPreview(createRoadMeshPreview({
         ribbons: d.ribbons,
         anchors,
-        bedWidth: params.bedWidth,
+        bedWidth: pathHalfWidth(params) * 2,
         color: ROAD_PREVIEW_COLOR,
         opacity: ROAD_PREVIEW_OPACITY,
       }), CHANNEL);
@@ -54,7 +55,7 @@ export const pathStrokeTool: ConstructionTool<"path-brush"> = {
       ctx.runtime.showPreview(createRoadMeshPreview({
         fallbackPoints: points,
         anchors: points.length > 0 ? [points[0]!, points[points.length - 1]!] : [],
-        bedWidth: params.bedWidth,
+        bedWidth: pathHalfWidth(params) * 2,
         color: ROAD_ERROR_COLOR,
         opacity: ROAD_ERROR_OPACITY,
       }), CHANNEL);

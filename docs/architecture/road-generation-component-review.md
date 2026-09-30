@@ -39,3 +39,35 @@ O defeito reproduzido é a divergência entre prévia reta e curva confirmada, a
 Os testes adicionais cobrem S/U, espaçamento desigual, elevação, faixa curta/larga, coordenadas e índices finitos, e preservação de todos os nós/arestas/controles de outra rua desconectada. Testes anteriores cobrem divisão exata, largura variável, rollback, cruzamento em alturas distintas e undo/redo. A finitude de uma malha não prova costura ou aparência correta. Permanecem pendentes a medição visual de junções/terreno, orçamento de latência e custo de picking/render.
 
 Uma otimização por segmento exigiria medir a região afetada e preservar dependências da união e das junções; não será inferida apenas do padrão dirty. A regeneração atual é por componente conectado. Nenhum código licenciado foi copiado; se uma futura adaptação copiar trechos MIT, deverá manter licença, copyright e origem fixada junto ao destino.
+
+
+## Composição aprovada e execução — #329/#330
+
+O dono aprovou a composição em 2026-09-29: handles autoram a espinha, seus trechos têm extremidades/dependências explícitas, o perfil é independente do percurso, a malha é derivada com resolução própria, e assets devem acompanhar a mesma referência. O + da espinha permanece como criação de ramificação; o botão superior permanece removido. Os modos livre/por pontos, Shift, seleção, inserir/remover, cancelamento e uma transação por confirmação são preservados.
+
+### Recortes selecionados
+
+| Recorte | Entrada → saída / invariantes | Dependências e decisão | Evidência e custo |
+|---|---|---|---|
+| Godot RoadSegment, check_rebuild/_update_curve/_build_geo | Dois RoadPoints, orientação, perfil e densidade → curva e malha de um segmento; as estações geradas não são pontos autorados | Curve3D, Node3D e SurfaceTool são privados do motor. Adotar a separação de responsabilidades; conservar os cálculos Rust existentes | Código fixado acima; quantidade de loops cresce com comprimento/densidade e faixas. Não há benchmark externo |
+| Godot orientação lateral, _normal_for_offset_eased | Tangente amostrada e vetores de orientação das extremidades → direção lateral normalizada | Usar como referência, não copiar: o próprio código admite sobreposição ao manter largura, portanto não é uma correção geral para curvas apertadas | Sem garantia global de ausência de sobreposição; ribbon Rust continua validando suas entradas |
+| Godot perfis interpolados / conexões entre containers | Parâmetros das extremidades → largura variável; referências entre containers → conexão virtual | Perfil e conexão são responsabilidades diferentes. Preservar perfil por aresta e nó compartilhado Grafting; descartar a ligação por pontos sobrepostos | Testes reais já cobrem taper/subdivisão, cruzamentos em alturas distintas e ownership depois de desconexão |
+| Road Architect SplineC/GetSplineValue, RoadCreationT/RoadJobPrelim | Spline e configuração de largura → amostras, offsets laterais e buffers | Hermite e chamadas Unity não substituem automatic/fit/resolve/ribbon. Aproveitar a composição ao redor da espinha, não portar a spline | GetSplineValue na revisão fixada, região Hermite math; roadDefinition/distância controla passo. Não comprova comprimento de arco exato |
+| Road Architect Road/UpdateRoadNoMultiThreading e MeshSetup1/2 | Spline/perfil/terreno/interseções → preparação → buffers → Mesh | Separar etapas e dependências; não copiar terrain history, editor, colliders ou assets de tráfego | Road.cs L856–897 chama RoadJobPrelim, RoadJob1, MeshSetup1, RoadJob2 e MeshSetup2. Não comprova invalidação mínima por segmento |
+
+### Alterações concretas
+
+- A prévia dos dois modos agora usa pathHalfWidth, que lê a receita de perfil existente. Antes, ignorava o acostamento. Com bedWidth=0.6 e shoulderWidth=0.8, o perfil road mede 2.2 de largura, enquanto a prévia mostrava 0.6; street mantém 0.6. Testes reproduziram a diferença em ambos os modos antes da correção.
+- A amostragem da prévia usa 0.025, a mesma tolerância da geração. O teste anterior comparava ambas em 0.05 e não detectava a diferença. Com a cadeia inclinada do teste, a prévia antiga tinha 330 valores de posição versus 366 esperados com 0.025.
+- spineRibbons, compartilhado por consumidores de espinha, reutiliza resultados derivados do Rust por entradas exatas: extremidades, handles, perfil, defaults e tolerância. Cache limitado a 256 entradas e ao ciclo de vida do port; nenhuma geometria é calculada em JS, nenhum dado de autoria é persistido no cache. Políticas customizadas de estações são reavaliadas em toda chamada.
+- Cada cadeia gerada fornece source: IDs das extremidades, cúbica resolvida, perfil original e estações Rust com parâmetro t. Composição futura pode referenciar chainId+t, sem tratar mesh vertices como handles de autoria.
+
+### Região de atualização medida
+
+Fixture WASM: 61 nós e 60 spans de 5 unidades, perfil [-0.3,0.3]. Primeira avaliação: 60 resolve, 60 ribbon e 59 join. Mover Y do nó 25 de 0 a 0.3: 2 resolve, 2 ribbon, 59 join. As amostras e fontes dos outros 58 spans permanecem iguais. A união e substituição das faces continuam abrangendo o componente conectado: isto reduz trabalho de sweep, não promete uma malha independente por segmento ou custo constante de junções.
+
+### Integração de assets e limites
+
+packages/assets resolve e mantém recursos; não há contrato atual de distribuição/extrusão de assets numa curva. Esta entrega prepara as referências geométricas para essa integração. Não adiciona modelos, catálogo, placement persistido, extrusão ou escolha de assets na interface. Referências de attachments ao dividir/remover spans exigirão contrato e operação próprios na fase de assets. A referência source é derivada do grafo vigente e não cria uma segunda autoridade.
+
+A prévia de criação representa os ribbons do novo percurso; não inclui toda a união com ruas existentes, terreno ou assets. As regressões numéricas não substituem observação visual de costuras e auto-interseções. #331 e o aceite visual permanecem pendentes.
