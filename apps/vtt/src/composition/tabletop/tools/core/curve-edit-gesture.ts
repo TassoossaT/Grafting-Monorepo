@@ -54,6 +54,8 @@ export interface AnchorSnap {
   find(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): PointerSample | undefined;
   /** Shows `target` as the snap, or clears it when absent. */
   show(ctx: ToolContext, target?: PointerSample): void;
+  /** Whether `target`, found earlier, still stands as it was found; absent, a target never goes stale. */
+  isCurrent?(ctx: ToolContext, target: PointerSample): boolean;
 }
 
 export type CurveGestureOptions = StructureEditParams & {

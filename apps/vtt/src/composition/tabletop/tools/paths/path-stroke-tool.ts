@@ -1,20 +1,15 @@
 import { roadSnapTarget, showRoadSnap } from "./road-body-target.ts";
 import { createRoadMeshPreview, showRoadSpinePreview, ROAD_PREVIEW_COLOR, ROAD_PREVIEW_OPACITY, ROAD_ERROR_COLOR, ROAD_ERROR_OPACITY } from "./road-preview-mesh.ts";
-import { createPathBrushEffect, pathFormationFor, pathHalfWidth, DEFAULT_TOOL_PARAMS } from "../../../../features/edit-construction/index.ts";
+import { createPathBrushEffect, pathFormationFor, pathHalfWidth } from "../../../../features/edit-construction/index.ts";
 import type { PathBrushParams } from "../../../../features/edit-construction/index.ts";
 import { commitPathCloudIntent } from "../../path/path-cloud-transaction.ts";
-import { scopedToolId, type ConstructionTool, type ToolContext, type ToolGesture, type PointerSample } from "../core/tool-context.ts";
+import { scopedToolId, type ToolContext, type ToolGesture, type PointerSample } from "../core/tool-context.ts";
+import { isStroke, type SpineSketchStroke } from "../core/spine-sketch.ts";
 
 const CHANNEL = "road-stroke";
 const active = new WeakMap<ToolContext["runtime"], PointerSample>();
 const point = (p: PointerSample) => [p.point.x,p.point.y,p.point.z] as const;
 
-/** Product gesture threshold; fitting and curve geometry stay behind the Rust port. */
-function meaningful(g: ToolGesture): boolean {
-  return g.samples.some(s => g.start.screenX !== undefined && s.screenX !== undefined && g.start.screenY !== undefined && s.screenY !== undefined
-    ? Math.hypot(s.screenX-g.start.screenX,s.screenY-g.start.screenY) >= 5
-    : Math.hypot(s.point.x-g.start.point.x,s.point.z-g.start.point.z) >= 0.15);
-}
 function draft(ctx: ToolContext,g: ToolGesture,params: PathBrushParams) {
   const samples = [...g.samples, g.current].filter((sample, index, all) => {
     const previous = all[index - 1];
@@ -31,12 +26,11 @@ function draft(ctx: ToolContext,g: ToolGesture,params: PathBrushParams) {
   const ribbons=ctx.runtime.curveBatch({tolerance:0.025,commands:fitted.curves.map(curve=>({kind:"ribbon" as const,curve,offsets:[-halfWidth,halfWidth] as const}))});
   return {fitted,ribbons,samples};
 }
-/** Drag to sketch the centerline. Release commits one fitted curve transaction. */
-export const pathStrokeTool: ConstructionTool<"path-brush"> = {
-  id:"path-brush",defaultParams:()=>DEFAULT_TOOL_PARAMS["path-brush"],
-  onPointerDown(ctx,sample){showRoadSnap(ctx);active.set(ctx.runtime,sample);},
-  onPointerMove(ctx,g,params) {
-    if(!active.has(ctx.runtime)||!meaningful(g))return;
+/** A road's centerline sketched by dragging; release lays one fitted curve transaction. */
+export const pathStroke: SpineSketchStroke<"path-brush"> = {
+  begin(ctx,sample){showRoadSnap(ctx);active.set(ctx.runtime,sample);},
+  move(ctx,g,params) {
+    if(!active.has(ctx.runtime)||!isStroke(g))return;
     try {
       const d=draft(ctx,g,params);
       showRoadSpinePreview(ctx, d.fitted.curves, "road-draft-spine");
@@ -63,17 +57,17 @@ export const pathStrokeTool: ConstructionTool<"path-brush"> = {
       }), CHANNEL);
     }
   },
-  onPointerUp: finishPathStroke,
-  onCancel(ctx){active.delete(ctx.runtime);ctx.runtime.clearPreview(CHANNEL);ctx.runtime.clearPreview("road-draft-spine");showRoadSnap(ctx);},
+  finish: finishPathStroke,
+  cancel(ctx){active.delete(ctx.runtime);ctx.runtime.clearPreview(CHANNEL);ctx.runtime.clearPreview("road-draft-spine");showRoadSnap(ctx);},
 };
 
-/** The single release/commit path, also used by a continuation draft. */
-export function finishPathStroke(ctx: ToolContext, g: ToolGesture, params: PathBrushParams): boolean {
+/** The single release/commit path. */
+function finishPathStroke(ctx: ToolContext, g: ToolGesture, params: PathBrushParams): boolean {
     if(!active.delete(ctx.runtime))return false;
     ctx.runtime.clearPreview(CHANNEL);
     ctx.runtime.clearPreview("road-draft-spine");
     const final={...g,samples:[...g.samples,g.current]};
-    if(!meaningful(final)){showRoadSnap(ctx);return false;}
+    if(!isStroke(final)){showRoadSnap(ctx);return false;}
     try {
       const d=draft(ctx,final,params);
       const operationId=scopedToolId(ctx,"road-stroke",ctx.nextSequence());

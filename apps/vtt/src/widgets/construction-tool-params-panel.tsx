@@ -18,12 +18,11 @@ import type {
   WallBrushParams,
   WallParams,
 } from "@/features/edit-construction";
-import { OPENING_KIND_COLOR, RECTANGLE_OPENING_SHAPE, TOWER_RADIUS_PRESETS, deriveFaceSize, curvePick, isRectangleShape, openingPath, withOpeningKind } from "@/features/edit-construction";
+import { OPENING_KIND_COLOR, RECTANGLE_OPENING_SHAPE, TOWER_RADIUS_PRESETS, deriveFaceSize, isRectangleShape, openingPath, withOpeningKind } from "@/features/edit-construction";
 
 export interface ConstructionToolParamsPanelProps {
   readonly activeTool: ConstructionToolId;
   readonly params: ToolParamsByTool;
-  readonly selectedNodeId?: string;
   readonly onParamsChange: <Id extends ConstructionToolId>(toolId: Id, next: ToolParamsByTool[Id]) => void;
   /** How a grab on an existing structure behaves -- ambient, not tied to `activeTool`, since every construction tool can now grab and edit whatever it owns. */
   readonly structureEditParams: StructureEditParams;
@@ -101,21 +100,12 @@ function BrushShapeFields<Params extends BrushShapeParams>(props: {
  * shows the one slider `street`'s own profile actually answers to: bed
  * width.
  */
-function PathBrushFields(props: { readonly params: PathBrushParams; readonly selectedNodeId?: string; readonly onChange: (next: PathBrushParams) => void }) {
+function PathBrushFields(props: { readonly params: PathBrushParams; readonly onChange: (next: PathBrushParams) => void }) {
   const { params, onChange } = props;
   return (
     <div style={{ display: "grid", gap: "0.6rem" }}>
-      <strong>Rua pela espinha</strong>
-      <label>Continuar a espinha <select value={params.creationMode === "pen" ? "points" : params.creationMode ?? "brush"} onChange={(event) => onChange({ ...params, creationMode: event.currentTarget.value as "brush" | "points" })}>
-        <option value="brush">Desenho livre</option>
-        <option value="points">Por pontos</option>
-      </select></label>
-      {(!params.creationMode || params.creationMode === "brush")
-        ? <p>Clique no terreno para posicionar o início. Arraste o + para desenhar a continuação; solte para confirmar.</p>
-        : <p>Clique no terreno para posicionar o início e continue pelos pontos. Enter confirma; Backspace retira o último ponto.</p>}
-      <p>O + de um ponto existente cria uma ramificação no modo escolhido. A linha amarela mostra a espinha; a faixa azul mostra a rua. Clique no corpo para selecionar um trecho; seu handle central insere um ponto ou, ao arrastar, curva o trecho. Os eixos do ponto ajustam posição e altura. Delete remove o ponto; Esc cancela.</p>
-      <p>{props.selectedNodeId ? (curvePick(props.selectedNodeId)?.index === "midpoint" ? "Perfil do trecho selecionado" : "Perfil da espinha conectada selecionada") : "Perfil da próxima criação"}</p>
-      {sliderRow("Largura da rua", params.bedWidth, 0.5, 12, 0.25, (bedWidth) => onChange({ ...params, bedWidth }))}
+      <strong>Rua</strong>
+      {sliderRow("Largura da próxima rua", params.bedWidth, 0.5, 12, 0.25, (bedWidth) => onChange({ ...params, bedWidth }))}
     </div>
   );
 }
@@ -489,7 +479,7 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
           <p>Por pontos: clique por onde a curva passa; clique de novo no último, ou Enter. Reta: início e fim. Arco: início, fim e puxe a curva. Ligar pontas: clique na borda de um piso e depois na do outro, e a rampa sai reta de cada borda. Espiral: centro, início, gire e clique o fim. R troca o modo.</p>
           <p>A rampa começa na altura do primeiro clique e termina na altura do piso do último clique, ou sobe o valor de Subida, sempre na mesma inclinação. Shift e mover o mouse para cima ou para baixo ajusta a subida. Backspace desfaz o último clique e Esc cancela.</p>
         </div>
-      ) : activeTool === "path-brush" ? (<PathBrushFields params={params["path-brush"]} selectedNodeId={props.selectedNodeId} onChange={(next) => onParamsChange("path-brush", next)} />) : activeTool === "wall-brush" ? (
+      ) : activeTool === "path-brush" ? (<PathBrushFields params={params["path-brush"]} onChange={(next) => onParamsChange("path-brush", next)} />) : activeTool === "wall-brush" ? (
         <WallBrushFields params={params["wall-brush"]} onChange={(next) => onParamsChange("wall-brush", next)} />
       ) : activeTool === "wall-line" ? (
         <WallLineFields params={params["wall-line"]} onChange={(next) => onParamsChange("wall-line", next)} />

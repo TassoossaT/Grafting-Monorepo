@@ -123,10 +123,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
   /** Channels the edge overlay currently occupies, so a redraw clears exactly what it drew. */
   const shownEdgeChannels = useRef(new Set<string>());
   const manipulatorGesture = useRef<CurveGesture | undefined>(undefined);
-  const branchModifier = useRef(false);
   const selectedPoint = useRef<string | undefined>(undefined);
-  /** Whatever was last reported picked, of any kind -- what a selection action acts on. */
-  const selectedId = useRef<string | undefined>(undefined);
 
   const nextSequence = useCallback(() => ++sequenceRef.current, []);
 
@@ -162,13 +159,12 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       nextSequence,
       reportSelection: (info) => {
         const { runtime, viewId, activeTool } = optionsRef.current;
-        selectedId.current = info?.id;
         optionsRef.current.onSelectionChange(info);
         if (viewId === undefined) return;
         const node = info && toolFor(activeTool).handlePresentation === "spine-points" ? spineHandleAt(runtime, info.id) : undefined;
         selectedPoint.current = node?.id;
-        runtime.setPointManipulator?.(viewId, node && !branchModifier.current ? {
-          id: node.id, position: node.position, branchAction: toolFor(activeTool).selectionActions?.(ctx, node.id).some((action) => action.id === "branch") === true,
+        runtime.setPointManipulator?.(viewId, node ? {
+          id: node.id, position: node.position,
           onChange(phase, position) {
             if (phase === "start") {
               manipulatorGesture.current?.cancel();
@@ -255,11 +251,6 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     const keydown = (event: KeyboardEvent) => {
       if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
       if (event.target instanceof HTMLElement && (event.target.isContentEditable || event.target.closest("input, textarea, select"))) return;
-      if (event.key === "Shift" && tool.handlePresentation === "spine-points" && !manipulatorGesture.current) {
-        branchModifier.current = true;
-        if (options.viewId !== undefined) options.runtime.setPointManipulator?.(options.viewId, undefined);
-        return;
-      }
       if (event.key === "Escape" && tool.onCancel) {
         tool.onCancel(ownedContext); release(); event.preventDefault(); return;
       }
@@ -273,22 +264,10 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
         refreshEdgeOverlay();
       }
     };
-    const restoreManipulator = () => {
-      if (!branchModifier.current) return;
-      branchModifier.current = false;
-      const node = selectedPoint.current === undefined ? undefined : spineHandleAt(options.runtime, selectedPoint.current);
-      if (node) ctx.reportSelection({ id: node.id, point: node.position });
-    };
-    const keyup = (event: KeyboardEvent) => { if (event.key === "Shift") restoreManipulator(); };
     refreshEdgeOverlay();
-    window.addEventListener("keyup", keyup);
-    window.addEventListener("blur", restoreManipulator);
     window.addEventListener("keydown", keydown);
     return () => {
       window.removeEventListener("keydown", keydown);
-      window.removeEventListener("keyup", keyup);
-      window.removeEventListener("blur", restoreManipulator);
-      branchModifier.current = false;
       selectedPoint.current = undefined;
       manipulatorGesture.current?.cancel();
       manipulatorGesture.current = undefined;
@@ -413,7 +392,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
             }
           }
         }
-        event.currentTarget.style.cursor = sample?.constructionAction ? "pointer" : sample?.nodeId ? "grab" : "";
+        event.currentTarget.style.cursor = sample?.nodeId ? "grab" : "";
         const descriptor = sample ? tool.previewFor?.({ start: sample,current: sample,samples: [sample] },params,ctx) : undefined;
         if (descriptor) optionsRef.current.runtime.showPreview(descriptor,TOOL_GHOST_PREVIEW_CHANNEL);
         else optionsRef.current.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);

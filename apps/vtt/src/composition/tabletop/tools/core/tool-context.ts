@@ -6,7 +6,6 @@ import type { TabletopRuntime } from "../../tabletop-runtime.ts";
 
 /** What the pointer resolved to at one instant -- `nodeId` present only when it hit a node handle. */
 export interface PointerSample {
-  readonly constructionAction?: { readonly kind: "branch" | "continue"; readonly nodeId: string };
   readonly point: ConstructionPosition;
   /** Screen coordinate used by explicit elevation gestures. */
   readonly screenY?: number;
@@ -138,10 +137,6 @@ export interface ConstructionTool<Id extends ConstructionToolId> {
   onPointerUp?(ctx: ToolContext, gesture: ReleasedGesture, params: ToolParamsFor<Id>): void;
   /** Discards an unfinished tool draft on Escape, cancellation or tool switch. */
   onCancel?(ctx: ToolContext): void;
-  /** What the picked `selectedId` offers besides dragging it -- shown as buttons; `id` is what `onSelectionAction` receives. */
-  selectionActions?(ctx: ToolContext, selectedId: string): readonly { readonly id: string; readonly label: string }[];
-  /** Runs an explicit action on the current selection, `selectedId` when something is picked. */
-  onSelectionAction?(ctx: ToolContext, action: string, params: ToolParamsFor<Id>, selectedId?: string): boolean;
   /** Handles a tool key outside text controls; true prevents the browser default. */
   onKeyDown?(ctx: ToolContext, key: string, params: ToolParamsFor<Id>): boolean;
   /** Delete/Backspace with the tool active -- a tool holding a selection (an opening picked for editing, say) removes it here. */

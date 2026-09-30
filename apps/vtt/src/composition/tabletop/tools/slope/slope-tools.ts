@@ -184,7 +184,7 @@ const rawSlopeSpiralTool = createCurveDraftTool({
  * Also edits an existing spiral by its spine points, exactly as a road is
  * edited -- see `spine-edit-behavior.ts` -- and as a whole by its handles.
  */
-export const slopeSpiralTool = withSpineEditing(rawSlopeSpiralTool, { ownsSpine: ownsSlope, drafting: rawSlopeSpiralTool.drafting, handlesOnly: true });
+export const slopeSpiralTool = withSpineEditing(rawSlopeSpiralTool, { ownsSpine: ownsSlope, drafting: rawSlopeSpiralTool.drafting });
 
 /** A curved ramp, drawn in any of the shared spine creation modes; R cycles them. */
 const rawSlopeCurveTool = createCurveDraftTool({
@@ -199,4 +199,4 @@ const rawSlopeCurveTool = createCurveDraftTool({
 });
 
 /** Edits an existing curved ramp by its spine points, as the spiral and the road are edited, and as a whole by its handles. */
-export const slopeCurveTool = withSpineEditing(rawSlopeCurveTool, { ownsSpine: ownsSlope, drafting: rawSlopeCurveTool.drafting, handlesOnly: true });
+export const slopeCurveTool = withSpineEditing(rawSlopeCurveTool, { ownsSpine: ownsSlope, drafting: rawSlopeCurveTool.drafting });

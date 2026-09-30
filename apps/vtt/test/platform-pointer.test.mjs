@@ -108,20 +108,23 @@ test("road pointer lifecycle: one selected tool creates and edits the curve, and
     clearPreview(){},showPreview(){},
   });
   const target={getBoundingClientRect:()=>({left:0,top:0}),setPointerCapture:id=>captures.add(id),hasPointerCapture:id=>captures.has(id),releasePointerCapture:id=>captures.delete(id)};
-  const params={...DEFAULT_TOOL_PARAMS,"path-brush":{...DEFAULT_TOOL_PARAMS["path-brush"],creationMode:"points",bedWidth:0.6}};
+  const params={...DEFAULT_TOOL_PARAMS,"path-brush":{...DEFAULT_TOOL_PARAMS["path-brush"],bedWidth:0.6}};
   try {
     const handlers=useConstructionPointer({activeTool:"path-brush",toolParams:params,runtime:f.runtime,history:f.ctx.history,tableId:"pointer-road",viewId:"view",snapToGrid:false,onSelectionChange(){},onFeedbackChange:v=>f.calls.feedback.push(v)});
     for(const effect of effects)cleanups.push(effect());
     const event=(x,z)=>({button:0,pointerId:1,currentTarget:target,clientX:x,clientY:z});
     const draw=(a,b)=>{handlers.onPointerDown(event(...a));handlers.onPointerUp(event(...b));handlers.onClick(event(...b));};
     const blank=f.session.snapshot_json();
-    draw([0,0],[20,20]);draw([100,0],[110,-20]);
-    assert.equal(f.session.snapshot_json(),blank);
+    draw([0,0],[0,0]);
+    assert.equal(f.session.snapshot_json(),blank,"a click only sets the origin");
     const input=Object.assign(new globalThis.HTMLElement(),{isContentEditable:false,closest:()=>true});
     listeners.get("keydown")({key:"Enter",target:input,preventDefault(){throw Error("input consumed");}});
-    assert.equal(f.session.snapshot_json(),blank);
-    listeners.get("keydown")({key:"Enter",preventDefault(){}});
+    draw([100,0],[100,0]);
     const edge=f.runtime.getGraphSnapshot().edges.find(e=>e.curve);
+    assert.ok(edge,"a form's Enter never ended the run: the second click laid the span");
+    let consumed=false;
+    listeners.get("keydown")({key:"Enter",preventDefault(){consumed=true;}});
+    assert.ok(consumed,"Enter ends the run");
     assert.ok(edge,JSON.stringify(f.calls.feedback));
     pickedId=edge.startNodeId;
     handlers.onPointerDown(event(0,0));pickedId=undefined;

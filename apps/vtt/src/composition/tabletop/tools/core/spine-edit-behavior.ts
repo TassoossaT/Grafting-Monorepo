@@ -1,10 +1,9 @@
 import type { ConstructionToolId, StructureEditParams } from "@/features/edit-construction";
 
-import { curvePick, globalHandleOf, shownGlobalHandleAt, spanOffsets, structureTypeFor } from "../../../../features/edit-construction/index.ts";
+import { curveEdgesOf, curvePick, curvePickId, curveWidthPick, globalHandleOf, shownGlobalHandleAt, spanOffsets, spanWidth, spineWidthHandles, structureTypeFor } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionPosition } from "../../../../ports/index.ts";
-import { spineBodyTarget } from "./spine-body-target.ts";
 import { beginCurveGesture, type AnchorSnap, type CurveGesture, type CurveGestureOptions } from "./curve-edit-gesture.ts";
-import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
+import { gestureMoved, type ConstructionTool, type PointerSample, type ToolContext, type ToolGesture } from "./tool-context.ts";
 
 /**
  * Editing an existing spine by its points -- the one editor every
@@ -12,11 +11,15 @@ import type { ConstructionTool, PointerSample, ToolContext, ToolGesture } from "
  *
  * - drag a control point, or the point manipulator the scene shows on the
  *   selected one;
- * - drag a span's midpoint to bend it, or click it to insert a point there;
- * - drag the body itself, projected onto the spine under it;
+ * - drag a span's midpoint to bend it, or double-click it to insert a point there;
+ * - push a span's width handle out or in to widen or narrow it;
  * - Delete/Backspace removes the selected control point;
  * - whatever the shared edit panel asks for instead: raising or lowering,
  *   or a curve action such as a span's width.
+ *
+ * A press on the body is never an edit: it belongs to the tool, which
+ * builds against what it lands on. Handles show on the spine under the
+ * pointer.
  *
  * The road was first to have this, and the spiral uses the same thing; a
  * tool only says which spine owners it edits, never how.
@@ -30,14 +33,6 @@ export interface SpineEditOptions {
   readonly onSelect?: (ctx: ToolContext, nodeId: string | undefined) => void;
   /** How a dragged anchor snaps; absent, anchors never snap. */
   readonly snap?: AnchorSnap;
-  /**
-   * Edited only by its handles -- its points, its span midpoints and its
-   * whole-structure handles -- never by a press on its body, which is the
-   * tool's own. Handles show on the spine under the pointer.
-   */
-  readonly handlesOnly?: boolean;
-  /** A body click selects its span without inserting an anchor. */
-  readonly selectBodyOnClick?: boolean;
   /** Whether this tool reads the ambient legacy curve-action panel. */
   readonly panelActions?: boolean;
 }
@@ -49,7 +44,7 @@ export interface SpinePick {
 }
 
 export interface SpineEditBehavior {
-  /** The handle of an owned spine `sample` lands on -- a control point, a midpoint, or the body projected onto the spine. */
+  /** The handle of an owned spine `sample` lands on -- a control point, a midpoint, a width handle or a whole-structure handle. */
   pick(ctx: ToolContext, sample: PointerSample): SpinePick | undefined;
   /** Whether `sample` is any curve handle of an owned spine, including one this editor does not drag. */
   isHandle(ctx: ToolContext, sample: PointerSample): boolean;
@@ -72,10 +67,15 @@ export interface SpineEditBehavior {
 }
 
 const xyz = (p: ConstructionPosition) => [p.x, p.y, p.z] as const;
+/** How soon a second click on the same midpoint makes a double-click. */
+const DOUBLE_CLICK_MS = 400;
+const defaultOffsets = (surfaceType: string) => structureTypeFor(surfaceType)?.spine?.defaultOffsets;
 const sceneOf = (ctx: ToolContext) => ({ graph: ctx.runtime.getGraphSnapshot(), topologies: ctx.runtime.getAllRegionTopologies(), cloudFor: ctx.runtime.cloudFor.bind(ctx.runtime) });
 
-export function createSpineEditBehavior({ ownsSpine, onSelect, snap, handlesOnly, selectBodyOnClick, panelActions = true }: SpineEditOptions): SpineEditBehavior {
-  const drags = new WeakMap<ToolContext["runtime"], CurveGesture>();
+export function createSpineEditBehavior({ ownsSpine, onSelect, snap, panelActions = true }: SpineEditOptions): SpineEditBehavior {
+  const drags = new WeakMap<ToolContext["runtime"], { readonly edit: CurveGesture; readonly id: string }>();
+  /** The midpoint last clicked, and when -- a second click on it soon after inserts a point. */
+  const clicks = new WeakMap<ToolContext["runtime"], { readonly id: string; readonly at: number }>();
   const selections = new WeakMap<ToolContext["runtime"], string>();
   const owned = (surfaceType: string | undefined) => surfaceType !== undefined && structureTypeFor(surfaceType)?.spine !== undefined && ownsSpine(surfaceType);
 
@@ -114,8 +114,32 @@ export function createSpineEditBehavior({ ownsSpine, onSelect, snap, handlesOnly
     return node && { ...sample, point: node.position };
   }
 
+  /** A second click on the midpoint `id`, soon enough after the first. */
+  function doubleClick(ctx: ToolContext, id: string): boolean {
+    const last = clicks.get(ctx.runtime);
+    clicks.delete(ctx.runtime);
+    return last !== undefined && last.id === id && performance.now() - last.at <= DOUBLE_CLICK_MS;
+  }
+
+  /** A span's width handle, standing where it is drawn: a width drag of that span. */
+  function widthPick(ctx: ToolContext, sample: PointerSample, edgeId: string): SpinePick | undefined {
+    const graph = ctx.runtime.getGraphSnapshot();
+    const edge = graph.edges.find((e) => e.edgeId === edgeId && owned(e.curve?.surfaceType));
+    const width = edge && spanWidth(edge, defaultOffsets);
+    if (!width) return undefined;
+    const spans = curveEdgesOf({ ...graph, edges: [edge] }, [], ctx.runtime);
+    const handle = spineWidthHandles(spans, graph, ctx.runtime, defaultOffsets)[0];
+    if (!handle) return undefined;
+    return {
+      sample: { ...sample, nodeId: curvePickId(edgeId, "midpoint"), point: handle.position },
+      options: { mode: "shape", curveAction: "width", curveWidth: width.width, allowShapeChange: true, insertOnClick: false, dragThreshold: 5, pointerOrigin: sample.point },
+    };
+  }
+
   return {
     pick(ctx, sample) {
+      const widthOf = sample.nodeId ? curveWidthPick(sample.nodeId) : undefined;
+      if (widthOf !== undefined) return widthPick(ctx, sample, widthOf);
       if (sample.nodeId && globalHandleOf(sample.nodeId)) {
         const handle = shownGlobalHandleAt(sceneOf(ctx), sample.nodeId);
         return handle && owned(handle.owner)
@@ -126,17 +150,15 @@ export function createSpineEditBehavior({ ownsSpine, onSelect, snap, handlesOnly
       if (target) {
         const midpoint = curvePick(target.nodeId!)?.index === "midpoint";
         return { sample: target, options: midpoint
-          ? { mode: "shape", curveMode: "free", insertOnClick: true, dragThreshold: 5, pointerOrigin: sample.point }
+          ? { mode: "shape", curveMode: "free", insertOnClick: doubleClick(ctx, target.nodeId!), dragThreshold: 5, pointerOrigin: sample.point }
           : { mode: "shape", insertOnClick: false, dragThreshold: 5, pointerOrigin: sample.point } };
       }
-      if (handlesOnly) return undefined;
-      const body = spineBodyTarget(ctx, sample, undefined, owned);
-      return body && { sample: body.sample, options: { ...body.options, curveMode: "free", insertOnClick: !selectBodyOnClick && curvePick(body.sample.nodeId!)?.index === "midpoint" } };
+      return undefined;
     },
     isHandle(ctx, sample) {
       if (sample.nodeId && globalHandleOf(sample.nodeId)) return owned(shownGlobalHandleAt(sceneOf(ctx), sample.nodeId)?.owner);
-      const pick = sample.nodeId ? curvePick(sample.nodeId) : undefined;
-      return pick !== undefined && owned(ctx.runtime.getGraphSnapshot().edges.find((e) => e.edgeId === pick.edgeId)?.curve?.surfaceType);
+      const edgeId = sample.nodeId ? curveWidthPick(sample.nodeId) ?? curvePick(sample.nodeId)?.edgeId : undefined;
+      return edgeId !== undefined && owned(ctx.runtime.getGraphSnapshot().edges.find((e) => e.edgeId === edgeId)?.curve?.surfaceType);
     },
     begin(ctx, picked) {
       select(ctx, picked.sample);
@@ -149,26 +171,28 @@ export function createSpineEditBehavior({ ownsSpine, onSelect, snap, handlesOnly
         ? { curveAction: panel.curveAction, curveWidth: panel.curveWidth, curveEndWidth: panel.curveEndWidth, allowShapeChange: true }
         : {};
       const edit = beginEdit(ctx, picked.sample, { ...picked.options, mode: panel.mode ?? picked.options.mode, ...action });
-      if (edit) drags.set(ctx.runtime, edit);
+      if (edit) drags.set(ctx.runtime, { edit, id: picked.sample.nodeId! });
       return edit !== undefined;
     },
     move(ctx, gesture) {
-      const edit = drags.get(ctx.runtime);
-      if (!edit) return false;
-      edit.move(gesture);
+      const drag = drags.get(ctx.runtime);
+      if (!drag) return false;
+      drag.edit.move(gesture);
       return true;
     },
     end(ctx, gesture) {
-      const edit = drags.get(ctx.runtime);
-      if (!edit) return false;
+      const drag = drags.get(ctx.runtime);
+      if (!drag) return false;
       drags.delete(ctx.runtime);
-      edit.move(gesture);
-      edit.commit();
+      drag.edit.move(gesture);
+      drag.edit.commit();
+      const clicked = curvePick(drag.id)?.index === "midpoint" && !gestureMoved(gesture.start, [...gesture.samples, gesture.current]);
+      if (clicked) clicks.set(ctx.runtime, { id: drag.id, at: performance.now() }); else clicks.delete(ctx.runtime);
       return true;
     },
     isActive: (ctx) => drags.has(ctx.runtime),
     abort(ctx) {
-      drags.get(ctx.runtime)?.cancel();
+      drags.get(ctx.runtime)?.edit.cancel();
       drags.delete(ctx.runtime);
     },
     select,
@@ -204,7 +228,8 @@ export function createSpineEditBehavior({ ownsSpine, onSelect, snap, handlesOnly
       return true;
     },
     cancel(ctx) {
-      drags.get(ctx.runtime)?.cancel();
+      clicks.delete(ctx.runtime);
+      drags.get(ctx.runtime)?.edit.cancel();
       drags.delete(ctx.runtime);
       select(ctx);
     },
@@ -228,7 +253,7 @@ export function withSpineEditing<Id extends ConstructionToolId>(tool: Constructi
     ...tool,
     handlePresentation: "spine-points",
     editsType: options.ownsSpine,
-    ...(options.handlesOnly ? { handlesOnHover: true } : {}),
+    handlesOnHover: true,
     ...(options.snap ? { anchorSnap: options.snap } : {}),
     previewFor(gesture, params, ctx) {
       return spine.isActive(ctx) ? undefined : tool.previewFor?.(gesture, params, ctx);

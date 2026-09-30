@@ -1071,10 +1071,11 @@ test("transact rolls back, resyncs the projection and rethrows when the work fai
 
 
 
-test("road presentation exposes only spine anchors and insertion points, restores other controls, and survives graph refresh",async()=>{
+test("road presentation exposes only spine anchors, insertion points and width handles, restores other controls, and survives graph refresh",async()=>{
   const {sessionFixture}=await import("./platform-session-fixture.mjs");
-  const {curvePickId}=await import("../src/features/edit-construction/index.ts");
+  const {curvePickId,curveWidthPickId}=await import("../src/features/edit-construction/index.ts");
   const real=sessionFixture(),render=createFakeRenderPort(),construction=createFakeConstructionPort();
+  const spineHandles=["spine:a","spine:b",curvePickId("spine-edge:a","midpoint"),curveWidthPickId("spine-edge:a")].sort();
   let graph={
     nodes:[{id:"spine:a",position:{x:0,y:0,z:0}},{id:"spine:b",position:{x:10,y:0,z:0}},{id:"mesh:vertex",position:{x:5,y:0,z:1}}],
     edges:[{edgeId:"spine-edge:a",startNodeId:"spine:a",endNodeId:"spine:b",curve:{start:[3,0,0],end:[-3,0,0],mode:"free",bandOffsets:[-1,1],surfaceType:"path"}}],
@@ -1097,7 +1098,7 @@ test("road presentation exposes only spine anchors and insertion points, restore
     // The active tool edits sloped platforms: their whole-structure handles show.
     runtime.setGlobalHandleOwners((surfaceType) => surfaceType === "platform-slope");
     runtime.setConstructionHandlePresentation("spine-points");
-    assert.deepEqual(shown(),["spine:a","spine:b",curvePickId("spine-edge:a","midpoint")].sort());
+    assert.deepEqual(shown(),spineHandles);
     assert.equal(JSON.stringify(graph),before);assert.equal(runtime.getSnapshot(),snapshot);
     const count=render.changes.length;runtime.setConstructionHandlePresentation("spine-points");assert.equal(render.changes.length,count);
     runtime.setConstructionHandlePresentation("all");
@@ -1107,7 +1108,7 @@ test("road presentation exposes only spine anchors and insertion points, restore
     runtime.setConstructionHandlePresentation("spine-points");
     graph={...graph,nodes:graph.nodes.map(n=>n.id==="spine:b"?{...n,position:{x:11,y:0,z:2}}:n)};
     runtime.addPatch(EMPTY_PATCH,"local","updated-spine");
-    assert.deepEqual(shown(),["spine:a","spine:b",curvePickId("spine-edge:a","midpoint")].sort());
+    assert.deepEqual(shown(),spineHandles);
     assert.deepEqual(render.changes.filter(c=>c.type==="node-handle-upserted"&&c.handle.nodeId==="spine:b").at(-1).handle.position,{x:11,y:0,z:2});
   }finally{await runtime.dispose();real.session.free();}
 });

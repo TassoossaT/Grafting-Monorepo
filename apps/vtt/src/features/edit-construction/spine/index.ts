@@ -16,7 +16,8 @@ export { isSpineEdge, ownedBy, spineComponent, spineOwnerAt, spineOwnerOf } from
 export { spanOffsets, spineRibbons } from "./spine-ribbons.ts";
 export type { SpineRibbon, SpineRibbonSpan } from "./spine-ribbons.ts";
 export { prospectiveGraph } from "./spine-owner.ts";
-export { curvePick, curvePickId, isBezierEditTarget } from "./spine-handles.ts";
+export { curvePick, curvePickId, curveWidthPick, curveWidthPickId, isBezierEditTarget, spanWidth, spineWidthHandles } from "./spine-handles.ts";
+export type { SpineDefaultOffsets } from "./spine-handles.ts";
 export { planSpineAction } from "./spine-actions.ts";
 export { spineGlobalHandleId, spineGlobalHandleOf, spineMemberOf } from "./spine-handle-ids.ts";
 export type { SpineGlobalHandleKind } from "./spine-handle-ids.ts";

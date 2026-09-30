@@ -241,7 +241,6 @@ export interface TabletopRuntime extends BezierPort {
   /** Shows a handle at `position` while a gesture carries it; `undefined` puts it back where it stands. */
   previewNodeHandle?(nodeId: string, position: ConstructionPosition | undefined): void;
   setPointManipulator?(viewId: RenderViewId, target: RenderPointManipulator | undefined): void;
-  setCreationHandle?(target: Pick<RenderPointManipulator, "id" | "position"> | undefined): void;
   pick(viewId: RenderViewId, x: number, y: number): ScenePickResult | undefined;
   /** Shows a construction tool's not-yet-committed ghost. Purely visual -- passthrough to `SceneRenderPort`, never touches the construction session. */
   showPreview(descriptor: RenderPreviewDescriptor, channel?: string): void;
@@ -1283,10 +1282,6 @@ export class AppTabletopRuntime implements TabletopRuntime {
 
   setPointManipulator(viewId: RenderViewId, target: RenderPointManipulator | undefined): void {
     this.#render.setPointManipulator?.(viewId, target);
-  }
-
-  setCreationHandle(target: Pick<RenderPointManipulator, "id" | "position"> | undefined): void {
-    this.#render.setCreationHandle?.(target);
   }
 
   showPreview(descriptor: RenderPreviewDescriptor, channel?: string): void {

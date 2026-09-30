@@ -56,7 +56,7 @@ import {
   type MapSurfacePickVisualParams,
 } from "./map-surface-pick-scene-item.ts";
 import { clipPlaneForCameraHeight } from "./map-chunk-key.ts";
-import { createHeightHandleTexture, createMarkerTexture, createMidpointHandleTexture, createMoveHandleTexture, createNodeHandleTexture, createRoadBranchTexture, createRotateHandleTexture, createTurnsHandleTexture, createLinkHandleTexture, createRadiusHandleTexture, createTiltHandleTexture, createSideHandleTexture, createCornerHandleTexture, createUnlinkHandleTexture } from "./marker-textures.ts";
+import { createHeightHandleTexture, createMarkerTexture, createMidpointHandleTexture, createMoveHandleTexture, createNodeHandleTexture, createRotateHandleTexture, createTurnsHandleTexture, createLinkHandleTexture, createRadiusHandleTexture, createTiltHandleTexture, createSideHandleTexture, createCornerHandleTexture, createUnlinkHandleTexture } from "./marker-textures.ts";
 import {
   NODE_HANDLE_LAYER_ID,
   NODE_HANDLE_VISUAL_KIND,
@@ -174,11 +174,6 @@ export class Render3dSceneAdapter implements SceneRenderPort {
         material: { surface: "unlit", color: 0xffffff, texture: glyphTextures[params.glyph] },
       }),
       equals: (left, right) => left.glyph === right.glyph,
-    });
-    registry.register<Record<string, never>>({
-      kind: "vtt-road-branch-action",
-      describe: () => ({ geometry: { shape: "sprite" }, material: { surface: "unlit", color: 0xffffff, texture: createRoadBranchTexture() } }),
-      equals: () => true,
     });
     registry.register<MapChunkVisualParams>({
       kind: MAP_SURFACE_VISUAL_KIND,
@@ -335,8 +330,6 @@ export class Render3dSceneAdapter implements SceneRenderPort {
   }
 
   detachView(viewId: RenderViewId): void {
-    this.setCreationHandle(undefined);
-    this.#engine?.scene.remove(`road-branch-action:${viewId}`, "engine");
     const attached = this.#views.get(viewId);
     if (attached === undefined) return;
     attached.observer?.disconnect();
@@ -453,12 +446,7 @@ export class Render3dSceneAdapter implements SceneRenderPort {
       data?.entity === "map-surface-pick" && typeof data.surfaceRef === "string"
         ? data.surfaceRef
         : undefined;
-    const action = result.data as { entity?: string; nodeId?: string } | undefined;
-    const constructionAction = action?.entity === "road-branch-action" && action.nodeId
-      ? { kind: "branch" as const, nodeId: action.nodeId }
-      : action?.entity === "construction-creation-handle" && action.nodeId
-        ? { kind: "continue" as const, nodeId: action.nodeId } : undefined;
-    return { point: result.point, nodeId, surfaceRef, constructionAction, ...(result.ray ? { ray: result.ray } : {}), ...(result.forward ? { forward: result.forward } : {}) };
+    return { point: result.point, nodeId, surfaceRef, ...(result.ray ? { ray: result.ray } : {}), ...(result.forward ? { forward: result.forward } : {}) };
   }
 
   showPreview(descriptor: RenderPreviewDescriptor, channel = DEFAULT_PREVIEW_CHANNEL): void {
@@ -471,22 +459,7 @@ export class Render3dSceneAdapter implements SceneRenderPort {
   }
 
   setPointManipulator(viewId: RenderViewId, target: RenderPointManipulator | undefined): void {
-    const actionId = `road-branch-action:${viewId}`;
-    this.#putCreationAction(actionId, target?.branchAction ? target : undefined, "road-branch-action");
     this.#views.get(viewId)?.view.setPointManipulator(target ? { ...target, axes: ["x", "y", "z"], size: 1 } : undefined);
-  }
-
-  setCreationHandle(target: Pick<RenderPointManipulator, "id" | "position"> | undefined): void {
-    this.#putCreationAction("construction-creation-handle", target, "construction-creation-handle");
-  }
-
-  #putCreationAction(id: string, target: Pick<RenderPointManipulator, "id" | "position"> | undefined, entity: string): void {
-    if (!target) { this.#engine?.scene.remove(id, "engine"); return; }
-    this.#requireEngine().scene.put({ id, layer: NODE_HANDLE_LAYER_ID,
-      visual: { kind: "vtt-road-branch-action", params: {} },
-      transform: { position: { x: target.position.x + 0.8, y: target.position.y + 0.55, z: target.position.z + 0.8 }, scale: 0.65 },
-      data: { entity, nodeId: target.id },
-    }, "engine");
   }
 
   clearPreview(channel?: string): void {

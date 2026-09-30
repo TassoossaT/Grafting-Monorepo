@@ -34,8 +34,6 @@ export interface BrushShapeParams {
 }
 
 export interface PathBrushParams extends BrushShapeParams {
-  /** Freehand or through-point road authoring; pen is a legacy alias for points. */
-  readonly creationMode?: "brush" | "points" | "pen";
   /** Constraint for editing an existing curve with this same tool. */
   readonly curveMode?: "automatic" | "aligned" | "mirrored" | "free";
   /** Product recipe; every variant still creates the single `path` surface type. */

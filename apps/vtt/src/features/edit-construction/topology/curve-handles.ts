@@ -22,6 +22,7 @@ import { curvePoint, curvePosition, resolveCurves } from "./bezier-curve.ts";
 
 const HANDLE = "bezier-handle:";
 const MIDPOINT = "bezier-midpoint:";
+const WIDTH = "bezier-width:";
 
 export type CurveHandleIndex = 1 | 2 | "midpoint";
 
@@ -48,6 +49,16 @@ export function curvePick(id: string): { edgeId: string; index: CurveHandleIndex
     return { edgeId: decodeURIComponent(id.slice(HANDLE.length + 2)), index: id[HANDLE.length] === "1" ? 1 : 2 };
   }
   return undefined;
+}
+
+/** The pick id of a span's width handle, standing on the edge of the band it sweeps. */
+export function curveWidthPickId(edgeId: string): string {
+  return WIDTH + encodeURIComponent(edgeId);
+}
+
+/** The span a width handle stands for, when `id` is one. */
+export function curveWidthPick(id: string): string | undefined {
+  return id.startsWith(WIDTH) ? decodeURIComponent(id.slice(WIDTH.length)) : undefined;
 }
 
 /** A contour edge's cubic in 3D: its XZ handles, at the height the edge climbs through between its anchors. */
