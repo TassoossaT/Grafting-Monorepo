@@ -2860,6 +2860,16 @@ creation gesture, unchanged. One tool, not a second "edit mode" -- the
 same reasoning `opening-tool.ts` already applies to openings, generalized
 to every other construction tool via the type-filtered grab above.
 
+### `interface vtt.tool-context.ClickRun`
+
+A run of quick clicks in one place: where and when the last landed, and how many it has been.
+
+### `property vtt.tool-context.ClickRun.at: number`
+
+### `property vtt.tool-context.ClickRun.count: number`
+
+### `property vtt.tool-context.ClickRun.sample: PointerSample`
+
 ### `interface vtt.tool-context.ConstructionTool`
 
 One construction tool's behavior, generic over its own parameter shape.
@@ -2996,6 +3006,10 @@ How far the pointer may wander, in screen pixels -- or world units when a sample
 
 A finished gesture, as `onPointerUp` gets it.
 
+### `property vtt.tool-context.ReleasedGesture.clicks?: number`
+
+Which click in a quick run this release ends -- 2 for a double-click -- or 0 for a drag. Counted once, by the dispatcher.
+
 ### `property vtt.tool-context.ReleasedGesture.current: PointerSample`
 
 ### `property vtt.tool-context.ReleasedGesture.moved: boolean`
@@ -3068,6 +3082,10 @@ Ordered samples accumulated by the dispatcher; preview-only until pointer releas
 ### `function vtt.tool-context.gestureMoved(start: PointerSample, samples: readonly PointerSample[], slop: PointerSlop): boolean`
 
 Whether any of `samples` strayed from `start` past `slop` -- a click's, unless said otherwise.
+
+### `function vtt.tool-context.nextClickRun(previous: ClickRun | undefined, sample: PointerSample, at: number): ClickRun`
+
+The run a click at `sample`, at time `at`, makes: the next in `previous` when soon and near enough, else a first click.
 
 ### `function vtt.tool-context.scopedToolId(ctx: string | ToolContext, domain: string, suffix?: string | number): string`
 
@@ -5834,6 +5852,17 @@ The global handle `id` names -- or, for any other handle of a spine, that spine'
 
 Every spine's global handles, of every kind.
 
+### `function vtt.spine-grade.holdSpineGrade(snapshot: ConstructionGraphSnapshot, nodeId: string, position: ConstructionPosition, maxGrade: number): ConstructionPosition`
+
+`position` for the spine anchor `nodeId`, its height held so no span from
+it to a neighbouring anchor climbs steeper than `maxGrade` -- rise per plan
+length between the two anchors. A span's own length is never shorter than
+the line between its anchors, so the span is held at least as gently.
+
+Where its neighbours pull apart -- one far above, one far below -- it
+settles between them. Plan position is never touched: only the height
+gives way, the same as a road drawn toward one too high to climb to.
+
 ### `interface vtt.spine-graph.SpineControlNode`
 
 One control point of a spine curve.
@@ -7840,6 +7869,12 @@ The edge a chain end's cross-section makes -- what a floor that end
 lands on shares (`topology/floor-weld.ts`). Declaring it makes the
 spine's free ends connect to a floor edge they are moved onto, and come
 off the floor they are moved away from, on every edit.
+
+### `property vtt.structure-type.SpineGeneration.maxGrade?: number`
+
+The steepest the spine may climb, as rise per plan length -- a law held
+on every edit: an anchor moved up or down stops at the height its spans
+can climb to. Absent, a spine climbs as steep as it is drawn.
 
 ### `property vtt.structure-type.SpineGeneration.planOnly?: boolean`
 

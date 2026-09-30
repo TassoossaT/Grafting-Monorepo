@@ -467,10 +467,11 @@ test("scene gizmo raises a road anchor and direct editing fits to surface height
     const id=edge.endNodeId;
     const node=()=>f.runtime.getGraphSnapshot().nodes.find(n=>n.id===id);
     const start={nodeId:id,point:node().position};
-    const raised={nodeId:id,point:{...start.point,y:3}};
+    // 2 m over the ~10.8 m to either neighbour: within the road's grade.
+    const raised={nodeId:id,point:{...start.point,y:2}};
     const edit=beginCurveGesture(f.ctx,start,{mode:"shape",insertOnClick:false,spatialTarget:true});
     edit.move(gesture(start,raised));edit.commit();
-    assert.equal(node().position.y,3,JSON.stringify(f.calls.feedback));
+    assert.equal(node().position.y,2,JSON.stringify(f.calls.feedback));
     const above={nodeId:id,point:node().position};
     const direct=beginCurveGesture(f.ctx,above,{mode:"shape",insertOnClick:false});
     direct.move(gesture(above,{point:{x:above.point.x+1,y:1.5,z:above.point.z}}));direct.commit();
@@ -492,6 +493,23 @@ test("a wide road's freehand stroke keeps a few anchors, never one per sample",(
     const g={start:samples[0],current:samples.at(-1),samples};
     tool.onPointerDown(f.ctx,g.start,wide);tool.onPointerMove(f.ctx,g,wide);tool.onPointerUp(f.ctx,g,wide);
     assert.ok(edges(f).length>0&&edges(f).length<=3,`${edges(f).length} spans`);
+  }finally{f.close();}
+});
+
+test("raising a road's anchor past its grade stops where its spans can climb to, preview and commit alike",async()=>{
+  const {beginCurveGesture}=await import("../src/composition/tabletop/tools/core/curve-edit-gesture.ts");
+  const f=fixture();
+  try {
+    lay(f,[[-10,0,0],[0,0,0],[10,0,0]]);
+    const id=edges(f)[0].endNodeId,node=()=>f.runtime.getGraphSnapshot().nodes.find(n=>n.id===id);
+    const start={nodeId:id,point:node().position},raised={nodeId:id,point:{...start.point,y:6}};
+    const edit=beginCurveGesture(f.ctx,start,{mode:"shape",insertOnClick:false,spatialTarget:true});
+    edit.move(gesture(start,raised));
+    const preview=f.previews.get("curve-edit").positions;
+    assert.ok(Math.max(...preview.filter((_,i)=>i%3===1))<=2+1e-4,"the preview stops at the grade too");
+    edit.commit();
+    assert.ok(Math.abs(node().position.y-2)<1e-6,`10 m climbs 2 m at 20 %, not 6: ${node().position.y}`);
+    assert.equal(errors(f).length,0,"a limit is a stop, never an error");
   }finally{f.close();}
 });
 

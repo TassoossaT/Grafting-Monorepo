@@ -7,6 +7,7 @@ import { isSpineControlNodeId } from "../../spine/spine-node-id.ts";
 import type { CascadeContext, EditRole, RolePolicy, SpineGeneration, StructureTrait, StructureTypeDefinition, StructureView } from "../structure-type.ts";
 import { regeneratePathSpine } from "./bezier-road-edit.ts";
 import { explicitSpineSnapshot } from "./bezier-road-plan.ts";
+import { PATH_MAX_GRADE } from "./path-recipe.ts";
 import { allowed, denied } from "../structure-type.ts";
 import type { CreationInteraction } from "../creation-interaction.ts";
 
@@ -240,6 +241,7 @@ export function pathPolicyFor(role: EditRole): RolePolicy {
 /** A road on the shared spine: legacy spans get automatic handles, and an edit regenerates the unioned contour. */
 const PATH_SPINE: SpineGeneration = Object.freeze<SpineGeneration>({
   defaultOffsets: [-2, 2],
+  maxGrade: PATH_MAX_GRADE,
   prepare: (snapshot, port) => explicitSpineSnapshot(snapshot, port, [-2, 2]),
   regenerate: regeneratePathSpine,
 });

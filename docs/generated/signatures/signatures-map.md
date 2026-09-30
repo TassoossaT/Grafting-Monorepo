@@ -4530,11 +4530,20 @@ export interface ToolGesture {
 export interface ReleasedGesture extends ToolGesture {
   /** Whether the pointer travelled far enough to be a drag rather than a click -- decided once, by the dispatcher. */
   readonly moved: boolean;
+  /** Which click in a quick run this release ends -- 2 for a double-click -- or 0 for a drag. Counted once, by the dispatcher. */
+  readonly clicks?: number;
   }
 export interface PointerSlop {
   readonly pixels: number;
   readonly world: number;
   }
+export interface ClickRun {
+  readonly sample: PointerSample;
+  readonly at: number;
+  readonly count: number;
+  }
+export function nextClickRun(previous: ClickRun | undefined, sample: PointerSample, at: number): ClickRun {
+  const continues = previous !== undefined && at - previous.at <= MULTI_CLICK_MS && !gestureMoved(previous.sample, [sample]);
 export function gestureMoved(start: PointerSample, samples: readonly PointerSample[], slop: PointerSlop = CLICK_SLOP): boolean {
   return samples.some((sample) =>
   sample.screenX !== undefined && sample.screenY !== undefined && start.screenX !== undefined && start.screenY !== undefined
@@ -6049,6 +6058,10 @@ export interface SpineTransform {
   readonly rotation?: { readonly pivot: PlanPoint; readonly angle: number };
 export function planSpineTransform(graph: ConstructionGraphSnapshot, spine: Pick<SpineGlobalHandle, "nodeIds" | "edges">, transform: SpineTransform): ConstructionGraphPatch {
   const positions = new Map(graph.nodes.map((node) => [node.id, node.position]));
+
+// src/features/edit-construction/spine/spine-grade.ts
+export function holdSpineGrade(snapshot: ConstructionGraphSnapshot, nodeId: string, position: ConstructionPosition, maxGrade: number): ConstructionPosition {
+  const positions = new Map(snapshot.nodes.map((node) => [node.id, node.position]));
 
 // src/features/edit-construction/spine/spine-graph.ts
 export interface SpineControlNode {

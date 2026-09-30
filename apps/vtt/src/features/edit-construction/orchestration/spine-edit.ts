@@ -1,6 +1,6 @@
 import type { ConstructionRegionTopology } from "@/ports";
 
-import { curvePick, planSpineEditPatch, spineOwnerAt, prospectiveGraph, type SpineEditInput } from "../spine/index.ts";
+import { curvePick, holdSpineGrade, planSpineEditPatch, spineOwnerAt, prospectiveGraph, type SpineEditInput } from "../spine/index.ts";
 import { structureTypeFor } from "../structure-types/index.ts";
 import { curveEdgesOf, curveSegments } from "../topology/curve-handles.ts";
 import type { FieldPort } from "../structure-types/path/contour/curve-projection.ts";
@@ -32,7 +32,10 @@ function editDraft(input: SpineEditInput) {
   const generation = owner === undefined ? undefined : structureTypeFor(owner)?.spine;
   if (generation === undefined) return undefined;
   const snapshot = generation.prepare?.(input.snapshot, input.port) ?? input.snapshot;
-  const edit = planSpineEditPatch({ ...input, snapshot, weld: generation.planOnly !== true });
+  // The owner's grade is a law of the spine: a moved anchor stops where its spans can climb to.
+  const anchor = curvePick(input.targetId) === undefined;
+  const position = anchor && generation.maxGrade !== undefined ? holdSpineGrade(snapshot, input.targetId, input.position, generation.maxGrade) : input.position;
+  const edit = planSpineEditPatch({ ...input, position, snapshot, weld: generation.planOnly !== true });
   return edit && { snapshot, edit, generation };
 }
 
