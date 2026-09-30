@@ -271,7 +271,14 @@ pub fn insert_vertex<N, E>(
     if graph.node(&node_id).is_none() {
         graph.add_node(node)?;
     }
-    let (first, second) = original.split(from, to, at, node_id.clone(), first_fragment, second_fragment);
+    let (first, second) = original.split(
+        from,
+        to,
+        at,
+        node_id.clone(),
+        first_fragment,
+        second_fragment,
+    );
     let first_id = first.id().clone();
     let second_id = second.id().clone();
     topology.add_edge(graph, first)?;

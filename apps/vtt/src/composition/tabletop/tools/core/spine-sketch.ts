@@ -31,11 +31,15 @@ export interface SpineSketchOptions<Id extends ConstructionToolId> {
   readonly defaultParams: () => ToolParamsFor<Id>;
   /** Where a press or a click lands on a standing structure. */
   readonly snap: AnchorSnap;
-  /** Shows the pending origin, and the straight span to `to` when there is a pointer to reach. */
-  readonly showSpan: (ctx: ToolContext, from: ConstructionPosition, to: ConstructionPosition | undefined, params: ToolParamsFor<Id>) => void;
+  /**
+   * Shows the pending origin, and the straight span toward `to` when there is
+   * a pointer to reach; answers where that span ends -- short of `to` when
+   * the structure's own laws stop it there.
+   */
+  readonly showSpan: (ctx: ToolContext, from: ConstructionPosition, to: ConstructionPosition | undefined, params: ToolParamsFor<Id>) => ConstructionPosition | undefined;
   readonly clearSpan: (ctx: ToolContext) => void;
-  /** Lays one straight span; false when it was refused, which keeps the origin. */
-  readonly commitSpan: (ctx: ToolContext, from: ConstructionPosition, to: ConstructionPosition, params: ToolParamsFor<Id>) => boolean;
+  /** Lays one straight span toward `to`, answering where it ends; `undefined` when it was refused, which keeps the origin. */
+  readonly commitSpan: (ctx: ToolContext, from: ConstructionPosition, to: ConstructionPosition, params: ToolParamsFor<Id>) => ConstructionPosition | undefined;
   readonly stroke: SpineSketchStroke<Id>;
 }
 
@@ -99,15 +103,18 @@ export function createSpineSketchTool<Id extends ConstructionToolId>(options: Sp
       ctx.reportFeedback({ tone: "error", message: "O alvo de encaixe mudou. Aproxime o mouse novamente antes de confirmar." });
       return;
     }
-    if (!options.commitSpan(ctx, origin.point, press.at.point, params)) {
+    const reached = options.commitSpan(ctx, origin.point, press.at.point, params);
+    if (!reached) {
       options.showSpan(ctx, origin.point, undefined, params);
       return;
     }
-    // Joining a standing structure ends the run; open ground carries it on.
-    if (press.target) { end(ctx); return; }
-    origins.set(ctx.runtime, press.at);
+    // Joining a standing structure ends the run; open ground -- or a span
+    // stopped short of what it was aimed at -- carries it on from its end.
+    if (press.target && samePlace(reached, press.at.point)) { end(ctx); return; }
+    const next = { ...press.at, point: reached };
+    origins.set(ctx.runtime, next);
     snap.show(ctx);
-    options.showSpan(ctx, press.at.point, undefined, params);
+    options.showSpan(ctx, reached, undefined, params);
   }
 
   return {
@@ -119,8 +126,9 @@ export function createSpineSketchTool<Id extends ConstructionToolId>(options: Sp
       const origin = origins.get(ctx.runtime);
       if (origin && !presses.has(ctx.runtime)) {
         const target = snap.find(ctx, gesture.current);
-        snap.show(ctx, target);
-        options.showSpan(ctx, origin.point, (target ?? gesture.current).point, params);
+        const reached = options.showSpan(ctx, origin.point, (target ?? gesture.current).point, params);
+        // A target the span cannot reach is not shown as joined.
+        snap.show(ctx, target && reached && samePlace(reached, target.point) ? target : undefined);
       }
       return undefined;
     },

@@ -2719,17 +2719,19 @@ own creation gesture, unchanged -- the spine counterpart of
 
 ### `property vtt.spine-sketch.SpineSketchOptions.clearSpan: (ctx: ToolContext) => void`
 
-### `property vtt.spine-sketch.SpineSketchOptions.commitSpan: (ctx: ToolContext, from: ConstructionPosition, to: ConstructionPosition, params: ToolParamsFor<Id>) => boolean`
+### `property vtt.spine-sketch.SpineSketchOptions.commitSpan: (ctx: ToolContext, from: ConstructionPosition, to: ConstructionPosition, params: ToolParamsFor<Id>) => ConstructionPosition | undefined`
 
-Lays one straight span; false when it was refused, which keeps the origin.
+Lays one straight span toward `to`, answering where it ends; `undefined` when it was refused, which keeps the origin.
 
 ### `property vtt.spine-sketch.SpineSketchOptions.defaultParams: () => ToolParamsFor<Id>`
 
 ### `property vtt.spine-sketch.SpineSketchOptions.id: Id`
 
-### `property vtt.spine-sketch.SpineSketchOptions.showSpan: (ctx: ToolContext, from: ConstructionPosition, to: ConstructionPosition | undefined, params: ToolParamsFor<Id>) => void`
+### `property vtt.spine-sketch.SpineSketchOptions.showSpan: (ctx: ToolContext, from: ConstructionPosition, to: ConstructionPosition | undefined, params: ToolParamsFor<Id>) => ConstructionPosition | undefined`
 
-Shows the pending origin, and the straight span to `to` when there is a pointer to reach.
+Shows the pending origin, and the straight span toward `to` when there is
+a pointer to reach; answers where that span ends -- short of `to` when
+the structure's own laws stop it there.
 
 ### `property vtt.spine-sketch.SpineSketchOptions.snap: AnchorSnap`
 
@@ -6707,6 +6709,12 @@ One VTT-owned sample of the cross-section the generic Rust sweep executes.
 
 ### `property vtt.path-recipe.PathProfilePoint.lateralOffset: number`
 
+### `variable vtt.path-recipe.PATH_MAX_GRADE: 0.2`
+
+The steepest a road climbs, as rise per plan length -- the road-building
+games' ceiling for a local road (Transport Fever keeps roads to 20 %). A
+road drawn to meet one higher than that allows stops short of it.
+
 ### `variable vtt.path-recipe.PATH_SPINE_OFFSET: 0`
 
 The lateral offset the spine sits at.
@@ -6746,6 +6754,12 @@ Read off the profile rather than recomputed from the parameters, so the
 width the brush is sized against and the width actually swept can never
 drift apart. A `street` has no shoulder and a `road` does; that difference
 lives in one place, and this follows it.
+
+### `function vtt.path-recipe.pathMinRadius(params: PathBrushParams): number`
+
+The tightest a road turns, as the radius of its centre line: its own
+width. Tighter, the inner edge folds over itself -- it must stay clear of
+half the width -- and the curve reads as a knot, not a road.
 
 ### `function vtt.path-recipe.pathSpineSlot(profile: readonly PathProfilePoint[]): number`
 
@@ -9582,7 +9596,7 @@ The structure type generated along this spine span; a span with no owner generat
 
 ### `property vtt.bezier-port.CurveResult.samples: readonly (readonly { position: CurvePoint; t: number }[])[]`
 
-### `type vtt.bezier-port.CurveCommand = { correction: number; curved: boolean; kind: "interpretStroke"; points: readonly CurvePoint[] } | { kind: "automatic"; points: readonly CurvePoint[] } | { cornerDegrees?: number; kind: "fit"; points: readonly CurvePoint[] } | { kind: "join"; sections: readonly (readonly [CurvePoint, CurvePoint])[] } | { curve: CubicBezier; endOffsets?: readonly [number, number]; kind: "ribbon"; offsets: readonly [number, number]; parameters?: readonly number[] } | { curves: readonly CubicBezier[]; kind: "sample" } | { curve: CubicBezier; kind: "split"; profile?: CurveHandles; t: number } | { curve: CubicBezier; kind: "merge"; next: CubicBezier } | { curve: CubicBezier; kind: "pull"; t: number; target: CurvePoint } | { curve: CubicBezier; index: 1 | 2; kind: "handle"; mode: CurveHandleMode; opposite: CurvePoint | null; target: CurvePoint } | { curve: CubicBezier; kind: "nearest"; point: CurvePoint } | { end: CurvePoint; handles: CurveHandles; kind: "resolve"; start: CurvePoint } | { center: CurvePoint; kind: "helix"; radius: number; rise: number; startAngle: number; sweep: number } | { end: CurvePoint; kind: "arcThrough"; start: CurvePoint; through: CurvePoint } | { curves: readonly CubicBezier[]; end: number; kind: "grade"; start: number }`
+### `type vtt.bezier-port.CurveCommand = { correction: number; curved: boolean; kind: "interpretStroke"; maxGrade?: number; minRadius?: number; points: readonly CurvePoint[] } | { kind: "automatic"; points: readonly CurvePoint[] } | { cornerDegrees?: number; kind: "fit"; points: readonly CurvePoint[] } | { kind: "join"; sections: readonly (readonly [CurvePoint, CurvePoint])[] } | { curve: CubicBezier; endOffsets?: readonly [number, number]; kind: "ribbon"; offsets: readonly [number, number]; parameters?: readonly number[] } | { curves: readonly CubicBezier[]; kind: "sample" } | { curve: CubicBezier; kind: "split"; profile?: CurveHandles; t: number } | { curve: CubicBezier; kind: "merge"; next: CubicBezier } | { curve: CubicBezier; kind: "pull"; t: number; target: CurvePoint } | { curve: CubicBezier; index: 1 | 2; kind: "handle"; mode: CurveHandleMode; opposite: CurvePoint | null; target: CurvePoint } | { curve: CubicBezier; kind: "nearest"; point: CurvePoint } | { end: CurvePoint; handles: CurveHandles; kind: "resolve"; start: CurvePoint } | { center: CurvePoint; kind: "helix"; radius: number; rise: number; startAngle: number; sweep: number } | { end: CurvePoint; kind: "arcThrough"; start: CurvePoint; through: CurvePoint } | { curves: readonly CubicBezier[]; end: number; kind: "grade"; start: number }`
 
 ### `type vtt.bezier-port.CurveHandleMode = "automatic" | "aligned" | "mirrored" | "free"`
 

@@ -71,6 +71,22 @@ export function pathSpineSlot(profile: readonly PathProfilePoint[]): number {
 }
 
 /**
+ * The steepest a road climbs, as rise per plan length -- the road-building
+ * games' ceiling for a local road (Transport Fever keeps roads to 20 %). A
+ * road drawn to meet one higher than that allows stops short of it.
+ */
+export const PATH_MAX_GRADE = 0.2;
+
+/**
+ * The tightest a road turns, as the radius of its centre line: its own
+ * width. Tighter, the inner edge folds over itself -- it must stay clear of
+ * half the width -- and the curve reads as a knot, not a road.
+ */
+export function pathMinRadius(params: PathBrushParams): number {
+  return pathHalfWidth(params) * 2;
+}
+
+/**
  * How far this recipe's own product reaches from the reference line -- the
  * outermost lateral offset of the profile it produces.
  *

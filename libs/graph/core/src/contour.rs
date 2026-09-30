@@ -260,7 +260,13 @@ fn cubic_bezier_tessellate(
     p3: ContourPoint,
     tolerance: f32,
 ) -> Vec<ContourPoint> {
-    fn flat_enough(p0: ContourPoint, p1: ContourPoint, p2: ContourPoint, p3: ContourPoint, tolerance: f32) -> bool {
+    fn flat_enough(
+        p0: ContourPoint,
+        p1: ContourPoint,
+        p2: ContourPoint,
+        p3: ContourPoint,
+        tolerance: f32,
+    ) -> bool {
         perpendicular_distance(p1, p0, p3).max(perpendicular_distance(p2, p0, p3)) <= tolerance
     }
     fn recurse(
@@ -277,8 +283,24 @@ fn cubic_bezier_tessellate(
             return;
         }
         let (left, right) = cubic_bezier_subdivide(p0, p1, p2, p3, 0.5);
-        recurse(left[0], left[1], left[2], left[3], tolerance, depth + 1, out);
-        recurse(right[0], right[1], right[2], right[3], tolerance, depth + 1, out);
+        recurse(
+            left[0],
+            left[1],
+            left[2],
+            left[3],
+            tolerance,
+            depth + 1,
+            out,
+        );
+        recurse(
+            right[0],
+            right[1],
+            right[2],
+            right[3],
+            tolerance,
+            depth + 1,
+            out,
+        );
     }
     let tolerance = tolerance.max(f32::EPSILON);
     let mut out = vec![p0];
@@ -294,7 +316,12 @@ const BEZIER_DEFAULT_TOLERANCE: f32 = 1e-3;
 
 /// Arc length of the cubic Bézier `p0 p1 p2 p3`, by summing its own adaptive
 /// polyline -- there is no closed form for a cubic's arc length.
-fn cubic_bezier_length(p0: ContourPoint, p1: ContourPoint, p2: ContourPoint, p3: ContourPoint) -> f32 {
+fn cubic_bezier_length(
+    p0: ContourPoint,
+    p1: ContourPoint,
+    p2: ContourPoint,
+    p3: ContourPoint,
+) -> f32 {
     let points = cubic_bezier_tessellate(p0, p1, p2, p3, BEZIER_DEFAULT_TOLERANCE);
     let mut total = 0.0;
     let mut previous = p0;
@@ -437,7 +464,9 @@ impl ContourEdge {
                     center[1] + radius * angle.sin(),
                 ]
             }
-            ContourGeometry::Bezier { handle1, handle2 } => cubic_bezier_eval(from, handle1, handle2, to, t),
+            ContourGeometry::Bezier { handle1, handle2 } => {
+                cubic_bezier_eval(from, handle1, handle2, to, t)
+            }
         }
     }
 
@@ -460,7 +489,9 @@ impl ContourEdge {
                     [-radial[1], radial[0]]
                 }
             }
-            ContourGeometry::Bezier { handle1, handle2 } => cubic_bezier_tangent(from, handle1, handle2, to, t),
+            ContourGeometry::Bezier { handle1, handle2 } => {
+                cubic_bezier_tangent(from, handle1, handle2, to, t)
+            }
         }
     }
 
@@ -474,7 +505,9 @@ impl ContourEdge {
                 let end_angle = angle_of(center, to);
                 radius * sweep(start_angle, end_angle, clockwise)
             }
-            ContourGeometry::Bezier { handle1, handle2 } => cubic_bezier_length(from, handle1, handle2, to),
+            ContourGeometry::Bezier { handle1, handle2 } => {
+                cubic_bezier_length(from, handle1, handle2, to)
+            }
         }
     }
 
@@ -560,7 +593,9 @@ impl ContourEdge {
                 };
                 (t, self.evaluate(from, to, t))
             }
-            ContourGeometry::Bezier { handle1, handle2 } => cubic_bezier_closest(from, handle1, handle2, to, point),
+            ContourGeometry::Bezier { handle1, handle2 } => {
+                cubic_bezier_closest(from, handle1, handle2, to, point)
+            }
         }
     }
 
@@ -590,13 +625,19 @@ impl ContourEdge {
                 first_id,
                 self.start_node.clone(),
                 new_node.clone(),
-                ContourGeometry::Bezier { handle1: left[1], handle2: left[2] },
+                ContourGeometry::Bezier {
+                    handle1: left[1],
+                    handle2: left[2],
+                },
             );
             let second = ContourEdge::new(
                 second_id,
                 new_node,
                 self.end_node.clone(),
-                ContourGeometry::Bezier { handle1: right[1], handle2: right[2] },
+                ContourGeometry::Bezier {
+                    handle1: right[1],
+                    handle2: right[2],
+                },
             );
             return (first, second);
         }
@@ -633,7 +674,9 @@ impl ContourEdge {
                     .map(|i| self.evaluate(from, to, i as f32 / steps as f32))
                     .collect()
             }
-            ContourGeometry::Bezier { handle1, handle2 } => cubic_bezier_tessellate(from, handle1, handle2, to, tolerance),
+            ContourGeometry::Bezier { handle1, handle2 } => {
+                cubic_bezier_tessellate(from, handle1, handle2, to, tolerance)
+            }
         }
     }
 
@@ -1002,8 +1045,12 @@ pub enum ContourError {
 impl fmt::Display for ContourError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidProfile { id } => write!(formatter, "invalid sheet profile for region {id}"),
-            Self::ProfileRequiresRegeneration { id } => write!(formatter, "profiled region {id} requires regeneration"),
+            Self::InvalidProfile { id } => {
+                write!(formatter, "invalid sheet profile for region {id}")
+            }
+            Self::ProfileRequiresRegeneration { id } => {
+                write!(formatter, "profiled region {id} requires regeneration")
+            }
             Self::NoOuterLoop => {
                 formatter.write_str("a region must declare at least one outer loop")
             }
@@ -1085,7 +1132,10 @@ impl ContourTopology {
         }
         let id = edge.id.clone();
         for node in [&edge.start_node, &edge.end_node] {
-            self.edges_at_node.entry(node.clone()).or_default().insert(id.clone());
+            self.edges_at_node
+                .entry(node.clone())
+                .or_default()
+                .insert(id.clone());
         }
         self.edges.insert(id.clone(), edge);
         Ok(id)
@@ -1256,18 +1306,22 @@ impl ContourTopology {
         id: &RegionId,
         profile: Option<crate::profile_surface::SheetProfile>,
     ) -> Result<(), ContourError> {
-        let region = self.regions.get_mut(id)
+        let region = self
+            .regions
+            .get_mut(id)
             .ok_or_else(|| ContourError::UnknownRegion { id: id.clone() })?;
         if let Some(value) = profile {
-            if value.validate().is_err() || region.outer_loops.len() != 1
-                || !region.holes.is_empty() || !(3..=4).contains(&region.outer_loops[0].len()) {
+            if value.validate().is_err()
+                || region.outer_loops.len() != 1
+                || !region.holes.is_empty()
+                || !(3..=4).contains(&region.outer_loops[0].len())
+            {
                 return Err(ContourError::InvalidProfile { id: id.clone() });
             }
         }
         region.profile = profile;
         Ok(())
     }
-
 
     /// Removes a region, releasing its edge usages. Edges themselves stay
     /// registered (another region may still reference them).
@@ -1567,8 +1621,13 @@ impl ContourTopology {
 
         let affected = self.regions_using_edge(id);
         for region_id in &affected {
-            if self.region(region_id).is_some_and(|r| r.profile().is_some()) {
-                return Err(ContourError::ProfileRequiresRegeneration { id: region_id.clone() });
+            if self
+                .region(region_id)
+                .is_some_and(|r| r.profile().is_some())
+            {
+                return Err(ContourError::ProfileRequiresRegeneration {
+                    id: region_id.clone(),
+                });
             }
         }
         for region_id in &affected {
@@ -1622,7 +1681,9 @@ impl ContourTopology {
     ) -> Result<(), ContourError> {
         if let Some(region) = self.region(id) {
             if region.profile.is_some() {
-                if region.outer_loops == outer_loops && region.holes == holes { return Ok(()); }
+                if region.outer_loops == outer_loops && region.holes == holes {
+                    return Ok(());
+                }
                 return Err(ContourError::ProfileRequiresRegeneration { id: id.clone() });
             }
         }
@@ -2036,7 +2097,14 @@ mod tests {
                 clockwise: false,
             },
         );
-        let (first, second) = arc.split([1.0, 0.0], [-1.0, 0.0], [0.0, 1.0], nid("mid"), eid("arc-1"), eid("arc-2"));
+        let (first, second) = arc.split(
+            [1.0, 0.0],
+            [-1.0, 0.0],
+            [0.0, 1.0],
+            nid("mid"),
+            eid("arc-1"),
+            eid("arc-2"),
+        );
         assert_eq!(first.geometry(), arc.geometry());
         assert_eq!(second.geometry(), arc.geometry());
         assert_eq!(first.start_node(), &nid("a"));
@@ -2046,7 +2114,12 @@ mod tests {
     }
 
     fn bezier_edge(handle1: ContourPoint, handle2: ContourPoint) -> ContourEdge {
-        ContourEdge::new(eid("bezier"), nid("a"), nid("b"), ContourGeometry::Bezier { handle1, handle2 })
+        ContourEdge::new(
+            eid("bezier"),
+            nid("a"),
+            nid("b"),
+            ContourGeometry::Bezier { handle1, handle2 },
+        )
     }
 
     #[test]
@@ -2072,7 +2145,10 @@ mod tests {
         let bezier = bezier_edge([1.0, 2.0], [3.0, 2.0]);
         assert_eq!(
             bezier.reversed_geometry(),
-            ContourGeometry::Bezier { handle1: [3.0, 2.0], handle2: [1.0, 2.0] }
+            ContourGeometry::Bezier {
+                handle1: [3.0, 2.0],
+                handle2: [1.0, 2.0]
+            }
         );
     }
 
@@ -2080,7 +2156,10 @@ mod tests {
     fn bezier_length_exceeds_the_chord_for_a_curved_span() {
         let bezier = bezier_edge([1.0, 3.0], [3.0, 3.0]);
         let length = bezier.length([0.0, 0.0], [4.0, 0.0]);
-        assert!(length > 4.0, "a curved span is longer than its own chord, got {length}");
+        assert!(
+            length > 4.0,
+            "a curved span is longer than its own chord, got {length}"
+        );
     }
 
     #[test]
@@ -2091,7 +2170,10 @@ mod tests {
         let points = bezier.tessellate(start, end, 0.01);
         assert_eq!(points[0], start);
         assert_eq!(*points.last().unwrap(), end);
-        assert!(points.len() > 2, "a curved span needs interior points to read as a curve");
+        assert!(
+            points.len() > 2,
+            "a curved span needs interior points to read as a curve"
+        );
     }
 
     #[test]
@@ -2100,7 +2182,14 @@ mod tests {
         let end = [4.0, 0.0];
         let bezier = bezier_edge([1.0, 3.0], [3.0, -3.0]);
         let split_point = bezier.evaluate(start, end, 0.4);
-        let (first, second) = bezier.split(start, end, split_point, nid("mid"), eid("bezier-1"), eid("bezier-2"));
+        let (first, second) = bezier.split(
+            start,
+            end,
+            split_point,
+            nid("mid"),
+            eid("bezier-1"),
+            eid("bezier-2"),
+        );
 
         for step in 0..=10 {
             let t = step as f32 / 10.0;
@@ -2129,9 +2218,16 @@ mod tests {
         // at its midpoint -- a horizontal line at z=1 crosses it twice.
         let bezier = bezier_edge([1.0, 3.0], [3.0, 3.0]);
         let points = line.intersections([-1.0, 1.0], [5.0, 1.0], &bezier, [0.0, 0.0], [4.0, 0.0]);
-        assert_eq!(points.len(), 2, "a line through the middle of a symmetric hump crosses it twice, got {points:?}");
+        assert_eq!(
+            points.len(),
+            2,
+            "a line through the middle of a symmetric hump crosses it twice, got {points:?}"
+        );
         for point in &points {
-            assert!((point[1] - 1.0).abs() < 0.05, "every crossing sits on the queried line: {point:?}");
+            assert!(
+                (point[1] - 1.0).abs() < 0.05,
+                "every crossing sits on the queried line: {point:?}"
+            );
         }
     }
 
@@ -2145,12 +2241,21 @@ mod tests {
             eid("vertical"),
             nid("v1"),
             nid("v2"),
-            ContourGeometry::Bezier { handle1: [2.0, -1.0], handle2: [2.0, 4.0] },
+            ContourGeometry::Bezier {
+                handle1: [2.0, -1.0],
+                handle2: [2.0, 4.0],
+            },
         );
         let points = hump.intersections([0.0, 0.0], [4.0, 0.0], &vertical, [2.0, -2.0], [2.0, 5.0]);
-        assert!(!points.is_empty(), "two curves crossing through the same region must report a crossing");
+        assert!(
+            !points.is_empty(),
+            "two curves crossing through the same region must report a crossing"
+        );
         for point in &points {
-            assert!((point[0] - 2.0).abs() < 0.2, "the crossing sits near the vertical run's own x, got {point:?}");
+            assert!(
+                (point[0] - 2.0).abs() < 0.2,
+                "the crossing sits near the vertical run's own x, got {point:?}"
+            );
         }
     }
 

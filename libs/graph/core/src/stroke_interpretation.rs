@@ -122,10 +122,31 @@ fn fit_height(curve: &mut CubicBezier, points: &[CurvePoint], parameters: &[f64]
 
 /// Returns cubic spans and their straight/curved classification. The correction
 /// budget measures captured XZ samples, not tessellation density or mesh validity.
+/// What a stroke is held to before it is fitted -- see `stroke_shaping`.
+#[derive(Debug, Clone, Copy, Default)]
+pub(crate) struct StrokeShape {
+    /// The tightest turn, in plan, the swept structure can make.
+    pub min_radius: Option<f64>,
+    /// The steepest rise per plan length it may climb.
+    pub max_grade: Option<f64>,
+}
+
+#[cfg(test)]
 pub(crate) fn interpret(
     points: &[CurvePoint],
     correction: f64,
     curved: bool,
+) -> Result<Vec<(CubicBezier, bool)>, String> {
+    interpret_shaped(points, correction, curved, StrokeShape::default())
+}
+
+/// `interpret`, the stroke first held to `shape`: loops cut out, turns
+/// eased to the minimum radius, the climb held to the grade.
+pub(crate) fn interpret_shaped(
+    points: &[CurvePoint],
+    correction: f64,
+    curved: bool,
+    shape: StrokeShape,
 ) -> Result<Vec<(CubicBezier, bool)>, String> {
     if !correction.is_finite() || correction < 0. {
         return Err("stroke correction must be finite and non-negative".into());
@@ -136,6 +157,21 @@ pub(crate) fn interpret(
     if points.iter().flatten().any(|v| !v.is_finite()) {
         return Err("stroke coordinates must be finite".into());
     }
+    if [shape.min_radius, shape.max_grade]
+        .into_iter()
+        .flatten()
+        .any(|v| !v.is_finite() || v < 0.)
+    {
+        return Err("stroke shape limits must be finite and non-negative".into());
+    }
+    let mut shaped = crate::stroke_shaping::remove_loops(points);
+    if let Some(radius) = shape.min_radius {
+        shaped = crate::stroke_shaping::limit_curvature(&shaped, radius);
+    }
+    if let Some(grade) = shape.max_grade {
+        shaped = crate::stroke_shaping::limit_grade(&shaped, grade);
+    }
+    let points = shaped.as_slice();
     let min_step = if correction > 0.0 {
         (correction * 0.08).clamp(0.06, 0.20)
     } else {

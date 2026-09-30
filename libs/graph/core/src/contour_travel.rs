@@ -99,12 +99,22 @@ pub fn sub_geometry(
         return *edge.geometry();
     }
     let (_, right) = subdivide(from, handle1, handle2, to, t0);
-    let local = if t0 <= 1e-9 { t1 } else { (t1 - t0) / (1.0 - t0) };
+    let local = if t0 <= 1e-9 {
+        t1
+    } else {
+        (t1 - t0) / (1.0 - t0)
+    };
     if local >= 1.0 - 1e-9 {
-        return ContourGeometry::Bezier { handle1: right[1], handle2: right[2] };
+        return ContourGeometry::Bezier {
+            handle1: right[1],
+            handle2: right[2],
+        };
     }
     let (left, _) = subdivide(right[0], right[1], right[2], right[3], local);
-    ContourGeometry::Bezier { handle1: left[1], handle2: left[2] }
+    ContourGeometry::Bezier {
+        handle1: left[1],
+        handle2: left[2],
+    }
 }
 
 /// The signed sweep an arc turns through, positive counter-clockwise.
@@ -117,11 +127,7 @@ pub fn arc_sweep(edge: &ContourEdge, from: ContourPoint, to: ContourPoint) -> f3
         return 0.0;
     }
     let turned = edge.length(from, to) / radius;
-    if clockwise {
-        -turned
-    } else {
-        turned
-    }
+    if clockwise { -turned } else { turned }
 }
 
 fn hypot(a: ContourPoint, b: ContourPoint) -> f32 {
@@ -136,7 +142,8 @@ fn subdivide(
     p3: ContourPoint,
     t: f32,
 ) -> ([ContourPoint; 4], [ContourPoint; 4]) {
-    let mix = |a: ContourPoint, b: ContourPoint| [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+    let mix =
+        |a: ContourPoint, b: ContourPoint| [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
     let a = mix(p0, p1);
     let b = mix(p1, p2);
     let c = mix(p2, p3);
@@ -218,6 +225,9 @@ mod tests {
     #[test]
     fn a_line_and_an_arc_keep_their_own_geometry_for_any_span() {
         let edge = line();
-        assert_eq!(sub_geometry(&edge, [0.0, 0.0], [4.0, 0.0], 0.2, 0.6), ContourGeometry::Line);
+        assert_eq!(
+            sub_geometry(&edge, [0.0, 0.0], [4.0, 0.0], 0.2, 0.6),
+            ContourGeometry::Line
+        );
     }
 }

@@ -16,6 +16,13 @@ pub enum CurveCommand {
         correction: f64,
         /// Allow cubic approximation in addition to straight spans.
         curved: bool,
+        /// The tightest turn, in plan, the stroke is eased to; absent, any.
+        #[cfg_attr(feature = "curve-serde", serde(default, rename = "minRadius"))]
+        min_radius: Option<f64>,
+        /// The steepest rise per plan length it may climb; absent, any.
+        /// Its end stops short where the climb to it is steeper.
+        #[cfg_attr(feature = "curve-serde", serde(default, rename = "maxGrade"))]
+        max_grade: Option<f64>,
     },
     /// Convert a legacy/automatic anchor chain.
     Automatic {
@@ -202,8 +209,16 @@ pub fn execute(batch: CurveBatch) -> Result<Vec<CurveResult>, String> {
                 points,
                 correction,
                 curved,
+                min_radius,
+                max_grade,
             } => {
-                let spans = crate::stroke_interpretation::interpret(&points, correction, curved)?;
+                let shape = crate::stroke_interpretation::StrokeShape {
+                    min_radius,
+                    max_grade,
+                };
+                let spans = crate::stroke_interpretation::interpret_shaped(
+                    &points, correction, curved, shape,
+                )?;
                 linear = spans.iter().map(|(_, straight)| *straight).collect();
                 spans.into_iter().map(|(curve, _)| curve).collect()
             }

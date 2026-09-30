@@ -883,7 +883,10 @@ mod tests {
         // has no break anywhere, because it cannot make one.
         let rounded = fit_path(&drawn_l(), 0.05).unwrap();
         for pair in rounded.windows(2) {
-            let (a, b) = (norm(pair[0].derivative(1.).unwrap()), norm(pair[1].derivative(0.).unwrap()));
+            let (a, b) = (
+                norm(pair[0].derivative(1.).unwrap()),
+                norm(pair[1].derivative(0.).unwrap()),
+            );
             assert!(a[0] * b[0] + a[1] * b[1] > 0.9);
         }
     }

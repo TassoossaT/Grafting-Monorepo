@@ -97,14 +97,33 @@ impl CurveAabb {
         let mut min_z = c.points[0][2];
         let mut max_z = c.points[0][2];
         for p in &c.points[1..] {
-            if p[0] < min_x { min_x = p[0]; }
-            if p[0] > max_x { max_x = p[0]; }
-            if p[1] < min_y { min_y = p[1]; }
-            if p[1] > max_y { max_y = p[1]; }
-            if p[2] < min_z { min_z = p[2]; }
-            if p[2] > max_z { max_z = p[2]; }
+            if p[0] < min_x {
+                min_x = p[0];
+            }
+            if p[0] > max_x {
+                max_x = p[0];
+            }
+            if p[1] < min_y {
+                min_y = p[1];
+            }
+            if p[1] > max_y {
+                max_y = p[1];
+            }
+            if p[2] < min_z {
+                min_z = p[2];
+            }
+            if p[2] > max_z {
+                max_z = p[2];
+            }
         }
-        Self { min_x, max_x, min_y, max_y, min_z, max_z }
+        Self {
+            min_x,
+            max_x,
+            min_y,
+            max_y,
+            min_z,
+            max_z,
+        }
     }
 
     #[inline]
@@ -255,11 +274,7 @@ fn authoring_root(edge_id: &str) -> &str {
     }
 }
 
-fn smooth_welds(
-    output: &mut Vec<CurveEdge>,
-    all_edges: &[CurveEdge],
-    old_ids: &BTreeSet<String>,
-) {
+fn smooth_welds(output: &mut Vec<CurveEdge>, all_edges: &[CurveEdge], old_ids: &BTreeSet<String>) {
     let emitted: BTreeSet<String> = output.iter().map(|e| e.edge_id.clone()).collect();
     // The originals the patch would otherwise leave untouched, carried along
     // so a weld onto one can still be smoothed. Each is re-emitted only if
@@ -315,28 +330,33 @@ fn smooth_welds(
             if is_start { handles.start } else { handles.end }
         };
         let (u, v) = (near(first, first_start), near(second, second_start));
-        let (Some(u_hat), Some(v_hat)) = (norm(u), norm(v)) else {
+        // In plan only: each curve keeps its own climb at the anchor. Sharing
+        // the whole 3D tangent lent one road the other's grade, and a flat
+        // road welded to a climbing one bulged past the anchor's height.
+        let flat = |w: CurvePoint| -> CurvePoint { [w[0], 0., w[2]] };
+        let (Some(u_hat), Some(v_hat)) = (norm(flat(u)), norm(flat(v))) else {
             continue;
         };
         // The two near controls should sit on opposite sides of the anchor,
         // so `u` is compared against the reverse of `v`.
         let opposed: CurvePoint = std::array::from_fn(|i| -v_hat[i]);
-        let deviation = u_hat[0] * opposed[0] + u_hat[1] * opposed[1] + u_hat[2] * opposed[2];
+        let deviation = u_hat[0] * opposed[0] + u_hat[2] * opposed[2];
         if deviation < limit {
             continue; // a corner, not a continuation.
         }
         let Some(shared) = norm(std::array::from_fn(|i| u_hat[i] + opposed[i])) else {
             continue;
         };
+        let (u_plan, v_plan) = (length_of(flat(u)), length_of(flat(v)));
         alignments.push((
             first,
             first_start,
-            std::array::from_fn(|i| shared[i] * length_of(u)),
+            [shared[0] * u_plan, u[1], shared[2] * u_plan],
         ));
         alignments.push((
             second,
             second_start,
-            std::array::from_fn(|i| -shared[i] * length_of(v)),
+            [-shared[0] * v_plan, v[1], -shared[2] * v_plan],
         ));
         touched[first] = true;
         touched[second] = true;
@@ -499,7 +519,8 @@ pub fn plan(request: NetworkRequest) -> Result<NetworkPatch, String> {
                 || edges[i].end_node_id == edges[j].start_node_id
                 || edges[i].end_node_id == edges[j].end_node_id;
             // Endpoint-on-curve snapping also covers T junctions where there is no proper crossing.
-            let both_added = !old_ids.contains(&edges[i].edge_id) && !old_ids.contains(&edges[j].edge_id);
+            let both_added =
+                !old_ids.contains(&edges[i].edge_id) && !old_ids.contains(&edges[j].edge_id);
             if !shares_node && !both_added {
                 for (a, b, reverse) in [(i, j, false), (j, i, true)] {
                     for t in [0., 1.] {
@@ -672,7 +693,10 @@ mod tests {
         crate::bezier::automatic_path(&[a, b]).unwrap()[0]
     }
     fn node(id: &str, position: CurvePoint) -> CurveNode {
-        CurveNode { id: id.into(), position }
+        CurveNode {
+            id: id.into(),
+            position,
+        }
     }
 
     fn edge(id: &str, from: &str, to: &str, a: CurvePoint, b: CurvePoint) -> CurveEdge {
@@ -680,7 +704,11 @@ mod tests {
             edge_id: id.into(),
             start_node_id: from.into(),
             end_node_id: to.into(),
-            curve: CurveHandles::from_curve(line(a, b), crate::bezier::HandleMode::Aligned, vec![-2., 2.]),
+            curve: CurveHandles::from_curve(
+                line(a, b),
+                crate::bezier::HandleMode::Aligned,
+                vec![-2., 2.],
+            ),
         }
     }
 
@@ -699,7 +727,11 @@ mod tests {
 
     /// The near control of `edge` at the anchor it shares, as a unit vector.
     fn near_direction(patch: &NetworkPatch, edge_id: &str, at_start: bool) -> CurvePoint {
-        let e = patch.edges.iter().find(|e| e.edge_id == edge_id).expect("edge in patch");
+        let e = patch
+            .edges
+            .iter()
+            .find(|e| e.edge_id == edge_id)
+            .expect("edge in patch");
         let v = if at_start { e.curve.start } else { e.curve.end };
         norm(v).expect("a handle with length")
     }
@@ -718,7 +750,10 @@ mod tests {
         .expect("the weld plans");
 
         let fresh = near_direction(&patch, "second", true);
-        assert!(fresh[2] > 0.999, "the stroke was bent off the corner: {fresh:?}");
+        assert!(
+            fresh[2] > 0.999,
+            "the stroke was bent off the corner: {fresh:?}"
+        );
         // The standing run is not re-emitted at all, because nothing about it
         // changed: a corner costs neither side anything.
         assert!(patch.edges.iter().all(|e| e.edge_id != "first"));
@@ -741,10 +776,16 @@ mod tests {
         let fresh = near_direction(&patch, "second", true);
         // Opposite sides of the shared anchor is what makes the join smooth.
         let dot = standing[0] * fresh[0] + standing[1] * fresh[1] + standing[2] * fresh[2];
-        assert!(dot < -0.999, "controls are not collinear through the anchor: {dot}");
+        assert!(
+            dot < -0.999,
+            "controls are not collinear through the anchor: {dot}"
+        );
         // Half each: the standing run gave way as much as the new one did, so
         // the shared tangent bisects the bend rather than adopting a side.
-        assert!(fresh[2] > 0. && fresh[2] < 0.5, "the tangent did not bisect: {fresh:?}");
+        assert!(
+            fresh[2] > 0. && fresh[2] < 0.5,
+            "the tangent did not bisect: {fresh:?}"
+        );
     }
 
     #[test]
@@ -773,8 +814,14 @@ mod tests {
 
         let incoming = near_direction(&patch, "run:0", false);
         let outgoing = near_direction(&patch, "run:1", true);
-        assert!(incoming[0] < -0.999, "the incoming run was bent: {incoming:?}");
-        assert!(outgoing[2] > 0.999, "the outgoing run was bent: {outgoing:?}");
+        assert!(
+            incoming[0] < -0.999,
+            "the incoming run was bent: {incoming:?}"
+        );
+        assert!(
+            outgoing[2] > 0.999,
+            "the outgoing run was bent: {outgoing:?}"
+        );
     }
 
     #[test]
@@ -788,7 +835,10 @@ mod tests {
         ))
         .expect("the weld plans");
         let fresh = near_direction(&patch, "second", true);
-        assert!(fresh[0] < -0.9, "the stroke was bent away from where it was drawn: {fresh:?}");
+        assert!(
+            fresh[0] < -0.9,
+            "the stroke was bent away from where it was drawn: {fresh:?}"
+        );
     }
 
     #[test]
@@ -801,7 +851,10 @@ mod tests {
         ))
         .expect("the weld plans");
         let fresh = near_direction(&patch, "second", true);
-        assert!((fresh[0] - 1.).abs() < 1e-6, "a straight run was bent: {fresh:?}");
+        assert!(
+            (fresh[0] - 1.).abs() < 1e-6,
+            "a straight run was bent: {fresh:?}"
+        );
     }
 
     #[test]

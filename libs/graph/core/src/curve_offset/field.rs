@@ -178,16 +178,23 @@ impl ReferenceField {
     /// this can. Empty when no single curve accounts for the whole face, as
     /// at a road junction, where every curve reaching it is legitimately in
     /// play.
-    pub fn owners_of_all<'p>(&self, points: impl IntoIterator<Item = &'p [f32; 3]> + Clone, slack: f32) -> Vec<usize> {
+    pub fn owners_of_all<'p>(
+        &self,
+        points: impl IntoIterator<Item = &'p [f32; 3]> + Clone,
+        slack: f32,
+    ) -> Vec<usize> {
         (0..self.curves.len())
             .filter(|&index| {
                 let curve = &self.curves[index];
                 let mut any = false;
                 let all = points.clone().into_iter().all(|point| {
                     any = true;
-                    curve.project(index, point[0], point[2]).is_some_and(|(_, sample)| {
-                        sample.t.abs() <= curve.reach * slack.max(1.0) && (sample.y - point[1]).abs() <= LEVEL_BAND
-                    })
+                    curve
+                        .project(index, point[0], point[2])
+                        .is_some_and(|(_, sample)| {
+                            sample.t.abs() <= curve.reach * slack.max(1.0)
+                                && (sample.y - point[1]).abs() <= LEVEL_BAND
+                        })
                 });
                 any && all
             })
@@ -196,7 +203,12 @@ impl ReferenceField {
 
     /// A field holding only the curves at `indices`, in that order.
     pub fn subset(&self, indices: &[usize]) -> ReferenceField {
-        ReferenceField { curves: indices.iter().filter_map(|&index| self.curves.get(index).cloned()).collect() }
+        ReferenceField {
+            curves: indices
+                .iter()
+                .filter_map(|&index| self.curves.get(index).cloned())
+                .collect(),
+        }
     }
 
     fn nearest_on_level(&self, x: f32, z: f32, y: f32) -> Option<FieldSample> {
@@ -334,7 +346,8 @@ impl CurveData {
             if length_squared < 1e-12 {
                 continue;
             }
-            let along = (((x - from[0]) * dx + (z - from[2]) * dz) / length_squared).clamp(0.0, 1.0);
+            let along =
+                (((x - from[0]) * dx + (z - from[2]) * dz) / length_squared).clamp(0.0, 1.0);
             let projected_x = from[0] + dx * along;
             let projected_z = from[2] + dz * along;
             let distance = ((x - projected_x).powi(2) + (z - projected_z).powi(2)).sqrt();
@@ -461,8 +474,14 @@ mod tests {
         assert_eq!(points.len(), 11 * 9);
         for point in &points {
             let sample = field.sample(point[0], point[1]).expect("on the field");
-            assert!((sample.s - sample.s.round()).abs() < 1e-4, "off station: {sample:?}");
-            assert!((sample.t - sample.t.round()).abs() < 1e-4, "off rung: {sample:?}");
+            assert!(
+                (sample.s - sample.s.round()).abs() < 1e-4,
+                "off station: {sample:?}"
+            );
+            assert!(
+                (sample.t - sample.t.round()).abs() < 1e-4,
+                "off rung: {sample:?}"
+            );
             assert!(sample.t.abs() <= 4.0);
         }
     }
@@ -478,7 +497,10 @@ mod tests {
         }]);
         for point in field.lattice(1.0, 10_000) {
             let sample = field.sample(point[0], point[1]).expect("on the field");
-            assert!((sample.y - point[0] * 0.5).abs() < 1e-3, "height left the curve: {sample:?}");
+            assert!(
+                (sample.y - point[0] * 0.5).abs() < 1e-3,
+                "height left the curve: {sample:?}"
+            );
         }
     }
 
@@ -496,12 +518,21 @@ mod tests {
     fn stacked_curves_are_told_apart_by_the_height_asked_about() {
         // Two turns of a climb over the same ground, three metres apart.
         let field = ReferenceField::new([
-            ReferenceCurve { points: vec![[0.0, 0.0, 0.0], [10.0, 0.0, 0.0]], reach: 2.0 },
-            ReferenceCurve { points: vec![[0.0, 3.0, 0.0], [10.0, 3.0, 0.0]], reach: 2.0 },
+            ReferenceCurve {
+                points: vec![[0.0, 0.0, 0.0], [10.0, 0.0, 0.0]],
+                reach: 2.0,
+            },
+            ReferenceCurve {
+                points: vec![[0.0, 3.0, 0.0], [10.0, 3.0, 0.0]],
+                reach: 2.0,
+            },
         ]);
         assert_eq!(field.sample_near(5.0, 1.0, 0.2).unwrap().curve, 0);
         assert_eq!(field.sample_near(5.0, 1.0, 2.9).unwrap().curve, 1);
-        assert!(field.sample_owned_near(5.0, 1.0, 1.6, 1.0).is_none(), "a level between both claims nothing");
+        assert!(
+            field.sample_owned_near(5.0, 1.0, 1.6, 1.0).is_none(),
+            "a level between both claims nothing"
+        );
         // Nothing on the asked level falls back to plain plan-view nearest.
         assert!(field.sample_near(5.0, 1.0, 50.0).is_some());
     }
@@ -510,10 +541,21 @@ mod tests {
     fn a_face_belongs_to_the_curve_that_claims_all_of_it_not_to_one_crossing_it() {
         // Curve 0 runs along x; curve 1 crosses it along z at the same height.
         let field = ReferenceField::new([
-            ReferenceCurve { points: vec![[0.0, 1.0, 0.0], [10.0, 1.0, 0.0]], reach: 1.0 },
-            ReferenceCurve { points: vec![[5.0, 1.0, -10.0], [5.0, 1.0, 10.0]], reach: 1.0 },
+            ReferenceCurve {
+                points: vec![[0.0, 1.0, 0.0], [10.0, 1.0, 0.0]],
+                reach: 1.0,
+            },
+            ReferenceCurve {
+                points: vec![[5.0, 1.0, -10.0], [5.0, 1.0, 10.0]],
+                reach: 1.0,
+            },
         ]);
-        let face = [[0.0, 1.0, -1.0], [10.0, 1.0, -1.0], [10.0, 1.0, 1.0], [0.0, 1.0, 1.0]];
+        let face = [
+            [0.0, 1.0, -1.0],
+            [10.0, 1.0, -1.0],
+            [10.0, 1.0, 1.0],
+            [0.0, 1.0, 1.0],
+        ];
         assert_eq!(field.owners_of_all(&face, 1.0), vec![0]);
         assert_eq!(field.subset(&[0]).len(), 1);
         // A patch between both, as at a junction, belongs to neither alone.

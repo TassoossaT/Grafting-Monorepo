@@ -163,9 +163,10 @@ test("junction geometry: acute branch on sloped road refines cleanly", () => {
 
 test("junction geometry: Y-fork on slope refines into continuous strip mesh", () => {
   const res = runScenario((f, sample) => {
-    f.click(sample(0, -10, 0)); f.click(sample(0, 0, 2.5)); f.finish();
-    f.click(sample(-4, 7, 5)); clickBody(f, 0, 0, 2.5);
-    f.click(sample(4, 7, 5)); clickBody(f, 0, 0, 2.5);
+    f.click(sample(0, -15, 0)); f.click(sample(0, 0, 2.5)); f.finish();
+    // Each fork climbs 1.5 m over 8 m, within the road's grade.
+    f.click(sample(-4, 7, 4)); clickBody(f, 0, 0, 2.5);
+    f.click(sample(4, 7, 4)); clickBody(f, 0, 0, 2.5);
   });
   assert.equal(res.errors.length, 0);
   assert.equal(res.topologies.length, 1);

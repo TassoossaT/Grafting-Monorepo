@@ -48,7 +48,9 @@ for (const way of ["click", "drag"]) for (const pathKind of ["street", "road"]) 
       const half=pathHalfWidth(params);
       const ribbons=f.runtime.curveBatch({tolerance:0.025,commands:curves.map(curve=>({kind:"ribbon",curve,offsets:[-half,half]}))});
       const expected=createRoadMeshPreview({ribbons,anchors,bedWidth:half*2});
-      assert.deepEqual(preview.positions,expected.positions);
+      // Graph node positions are stored as f32; heights the grade shaped round there.
+      assert.equal(preview.positions.length,expected.positions.length);
+      preview.positions.forEach((v,i)=>assert.ok(Math.abs(v-expected.positions[i])<1e-5,`${i}: ${v} != ${expected.positions[i]}`));
       assert.deepEqual(preview.indices,expected.indices);
     }finally{tool.onCancel(f.ctx);f.session.free();}
   });
@@ -147,21 +149,20 @@ test("the road tool previews the span to the pointer while an origin waits", () 
   }
 });
 
-test("invalid hover displays an error preview without changing the waiting origin",()=>{
+test("a hover too steep to climb previews the span stopping short, never an error",()=>{
   const f=sessionFixture(),previews=new Map();
   f.runtime.showPreview=(d,c)=>previews.set(c,d);
   f.runtime.clearPreview=c=>previews.delete(c);
   const params={...tool.defaultParams(),bedWidth:0.6};
-  const a={point:{x:-4,y:0,z:0}},invalid={point:{x:-4,y:4,z:0}},valid={point:{x:4,y:4,z:0}};
+  const a={point:{x:-4,y:0,z:0}},steep={point:{x:4,y:4,z:0}};
   try {
     tool.onPointerDown(f.ctx,a,params);
     tool.onPointerUp(f.ctx,{start:a,current:a,samples:[a]},params);
     const before=f.session.snapshot_json();
-    tool.previewFor({start:invalid,current:invalid,samples:[invalid]},params,f.ctx);
-    assert.equal(previews.get("road-span").color,ROAD_ERROR_COLOR);
-    assert.equal(f.session.snapshot_json(),before);
-    tool.previewFor({start:valid,current:valid,samples:[valid]},params,f.ctx);
+    tool.previewFor({start:steep,current:steep,samples:[steep]},params,f.ctx);
     assert.equal(previews.get("road-span").color,ROAD_PREVIEW_COLOR);
+    const spine=previews.get("road-draft-spine").positions;
+    assert.ok(Math.abs(spine[spine.length-2]-(1.6+0.09))<1e-4,"the spine stops at 1.6 m, what 8 m climbs at 20 %");
     assert.equal(f.session.snapshot_json(),before);
   } finally {tool.onCancel(f.ctx);f.session.free();}
 });

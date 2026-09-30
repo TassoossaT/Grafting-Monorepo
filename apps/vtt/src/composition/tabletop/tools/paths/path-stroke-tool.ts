@@ -1,6 +1,6 @@
 import { roadSnapTarget, showRoadSnap } from "./road-body-target.ts";
 import { createRoadMeshPreview, showRoadSpinePreview, ROAD_PREVIEW_COLOR, ROAD_PREVIEW_OPACITY, ROAD_ERROR_COLOR, ROAD_ERROR_OPACITY } from "./road-preview-mesh.ts";
-import { createPathBrushEffect, pathFormationFor, pathHalfWidth } from "../../../../features/edit-construction/index.ts";
+import { createPathBrushEffect, pathFormationFor, pathHalfWidth, pathMinRadius, PATH_MAX_GRADE } from "../../../../features/edit-construction/index.ts";
 import type { PathBrushParams } from "../../../../features/edit-construction/index.ts";
 import { commitPathCloudIntent } from "../../path/path-cloud-transaction.ts";
 import { scopedToolId, type ToolContext, type ToolGesture, type PointerSample } from "../core/tool-context.ts";
@@ -19,10 +19,17 @@ function draft(ctx: ToolContext,g: ToolGesture,params: PathBrushParams) {
   });
   const target = roadSnapTarget(ctx, g.current);
   if (target) samples[samples.length - 1] = target;
-  showRoadSnap(ctx, target);
 
-  // Whatever the road's width: tied to it, a wide road had no wobble left and kept every sample as an anchor.
-  const fitted=ctx.runtime.curveBatch({tolerance:0.025,commands:[{kind:"interpretStroke",points:samples.map(point),correction:HAND_WOBBLE,curved:true}]})[0]!;
+  // Held to the road's laws in Rust: no loops, no turn tighter than its
+  // width, no climb past its grade. Wobble is smoothed whatever the width --
+  // tied to it, a wide road had none left and kept every sample as an anchor.
+  const fitted=ctx.runtime.curveBatch({tolerance:0.025,commands:[{kind:"interpretStroke",points:samples.map(point),correction:HAND_WOBBLE,curved:true,minRadius:pathMinRadius(params),maxGrade:PATH_MAX_GRADE}]})[0]!;
+  // A road too steep to climb to the target stops short of it, and does not join it.
+  const last=fitted.curves.at(-1)?.points[3];
+  const reached=last&&{x:last[0],y:last[1],z:last[2]};
+  const joins=target!==undefined&&reached!==undefined&&Math.abs(reached.y-target.point.y)<1e-6;
+  if(reached&&!joins)samples[samples.length-1]={...g.current,point:reached};
+  showRoadSnap(ctx, joins ? target : undefined);
   const halfWidth=pathHalfWidth(params);
   const ribbons=ctx.runtime.curveBatch({tolerance:0.025,commands:fitted.curves.map(curve=>({kind:"ribbon" as const,curve,offsets:[-halfWidth,halfWidth] as const}))});
   return {fitted,ribbons,samples};
@@ -74,7 +81,8 @@ function finishPathStroke(ctx: ToolContext, g: ToolGesture, params: PathBrushPar
       const operationId=scopedToolId(ctx,"road-stroke",ctx.nextSequence());
       const effect=createPathBrushEffect({
         brushShape:{kind:"circle",radius:0.025},
-        brushRegion:{samples:d.samples.map(s=>s.point)},
+        // The anchors of the road as shaped, never the raw input it was shaped from: a cut-out loop is not laid.
+        brushRegion:{samples:[d.fitted.curves[0]!.points[0],...d.fitted.curves.map(c=>c.points[3])].map(([x,y,z])=>({x,y,z}))},
         authoredCurves:d.fitted.curves,parameters:pathFormationFor(params),
       },{operationId,tableId:ctx.tableId,initiatedBy:"road-stroke"});
       const committed=commitPathCloudIntent(ctx,effect,0.025);

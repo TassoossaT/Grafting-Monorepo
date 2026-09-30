@@ -4477,9 +4477,9 @@ export interface SpineSketchOptions<Id extends ConstructionToolId> {
   readonly defaultParams: () => ToolParamsFor<Id>;
   /** Where a press or a click lands on a standing structure. */
   readonly snap: AnchorSnap;
-  /** Shows the pending origin, and the straight span to `to` when there is a pointer to reach. */
-  readonly showSpan: (ctx: ToolContext, from: ConstructionPosition, to: ConstructionPosition | undefined, params: ToolParamsFor<Id>) => void;
-  readonly clearSpan: (ctx: ToolContext) => void;
+  /**
+  * Shows the pending origin, and the straight span toward `to` when there is
+  * a pointer to reach; answers where that span ends -- short of `to` when
 export interface SpineSketchTool<Id extends ConstructionToolId> extends ConstructionTool<Id> {
   /** Whether a straight run is waiting for its next click -- presses then belong to it, even on a handle. */
   readonly drafting: (ctx: ToolContext) => boolean;
@@ -6579,6 +6579,10 @@ export function pathFormationFor(params: PathBrushParams): PathFormationRecipe {
   ];
 export function pathSpineSlot(profile: readonly PathProfilePoint[]): number {
   return profile.findIndex((point) => point.lateralOffset === PATH_SPINE_OFFSET);
+export const PATH_MAX_GRADE = 0.2;
+export function pathMinRadius(params: PathBrushParams): number {
+  return pathHalfWidth(params) * 2;
+  }
 export function pathHalfWidth(params: PathBrushParams): number {
   return pathFormationFor(params).profile.reduce(
   (widest, point) => Math.max(widest, Math.abs(point.lateralOffset)),

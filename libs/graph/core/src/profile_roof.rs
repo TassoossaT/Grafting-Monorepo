@@ -270,15 +270,25 @@ const TIED: &str = "the roof skeleton did not close";
 /// The skeleton of `rings`, its ties broken: where events meet at one point
 /// and instant and cannot be resolved in order, the slopes are nudged by a
 /// part in a million -- far below where the weld tells corners apart.
-fn skeleton_untied(rings: &[Vec<Point>], speeds: &[f64], sides: &[usize]) -> Result<Skeleton, String> {
+fn skeleton_untied(
+    rings: &[Vec<Point>],
+    speeds: &[f64],
+    sides: &[usize],
+) -> Result<Skeleton, String> {
     let mut last = Err(TIED.to_string());
     for attempt in 0..4 {
-        let nudged: Vec<f64> = speeds.iter().enumerate().map(|(k, s)| {
-            if attempt == 0 { return *s; }
-            // A fixed, uneven nudge per side, different each attempt.
-            let h = ((k * 2_654_435_761 + attempt * 40_503) % 1000) as f64 / 1000.0 - 0.5;
-            s * (1.0 + 2e-6 * h * attempt as f64)
-        }).collect();
+        let nudged: Vec<f64> = speeds
+            .iter()
+            .enumerate()
+            .map(|(k, s)| {
+                if attempt == 0 {
+                    return *s;
+                }
+                // A fixed, uneven nudge per side, different each attempt.
+                let h = ((k * 2_654_435_761 + attempt * 40_503) % 1000) as f64 / 1000.0 - 0.5;
+                s * (1.0 + 2e-6 * h * attempt as f64)
+            })
+            .collect();
         last = skeleton(rings, &nudged, sides);
         match &last {
             Err(e) if e == TIED => continue,
@@ -473,8 +483,13 @@ fn skeleton(rings: &[Vec<Point>], speeds: &[f64], sides: &[usize]) -> Result<Ske
                 // The same corner splitting the same front again at the same
                 // instant only parts and rejoins the wavefront: a tie the
                 // caller breaks by nudging the slopes.
-                if !((now - split_at).abs() < 1e-9) { splits.clear(); split_at = now; }
-                if splits.contains(&(r.left, r.right, e)) { return Err(TIED.into()); }
+                if !((now - split_at).abs() < 1e-9) {
+                    splits.clear();
+                    split_at = now;
+                }
+                if splits.contains(&(r.left, r.right, e)) {
+                    return Err(TIED.into());
+                }
                 splits.push((r.left, r.right, e));
                 let at = r.at(now);
                 let node = sk.node(at, now);
@@ -531,18 +546,29 @@ fn pass_over_gables(sk: &mut Skeleton, lavs: &mut [Vec<Corner>], now: f64) {
                 let c = lav[i];
                 let (l, r) = (sk.fronts[c.left], sk.fronts[c.right]);
                 let level = |f: &Front| f.line + f.speed * now;
-                let together = dot(l.normal, r.normal) > 1.0 - 1e-9 && (level(&l) - level(&r)).abs() < 1e-7;
-                if !together || (l.speed - r.speed).abs() < 1e-12 { return None; }
+                let together =
+                    dot(l.normal, r.normal) > 1.0 - 1e-9 && (level(&l) - level(&r)).abs() < 1e-7;
+                if !together || (l.speed - r.speed).abs() < 1e-12 {
+                    return None;
+                }
                 Some((i, r.speed < l.speed))
             });
-            let Some((i, gable_right)) = found else { break; };
+            let Some((i, gable_right)) = found else {
+                break;
+            };
             // The gable runs from `c` to `n`; the pitched front keeps `c`'s other side.
-            let (ci, ni) = if gable_right { (i, (i + 1) % m) } else { ((i + m - 1) % m, i) };
+            let (ci, ni) = if gable_right {
+                (i, (i + 1) % m)
+            } else {
+                ((i + m - 1) % m, i)
+            };
             let (c, n) = (lav[ci], lav[ni]);
             let gable = c.right;
             let (c_end, n_end) = (sk.end(&c, now), sk.end(&n, now));
             let pitched = if gable_right { c.left } else { n.right };
-            if c_end != n_end { sk.arcs.push((c_end, n_end, gable, pitched)); }
+            if c_end != n_end {
+                sk.arcs.push((c_end, n_end, gable, pitched));
+            }
             let (at, left, right, node) = if gable_right {
                 (n.at(now), c.left, n.right, n_end)
             } else {
@@ -729,7 +755,13 @@ fn inside(polygon: &[Point], x: Point) -> bool {
 
 /// The part of the upright ring `ring` below height `y` -- or above it, `above`.
 fn level_part(ring: &[[f64; 3]], y: f64, above: bool) -> Vec<[f64; 3]> {
-    let keeps = |p: &[f64; 3]| if above { p[1] >= y - 1e-9 } else { p[1] <= y + 1e-9 };
+    let keeps = |p: &[f64; 3]| {
+        if above {
+            p[1] >= y - 1e-9
+        } else {
+            p[1] <= y + 1e-9
+        }
+    };
     let mut out = Vec::with_capacity(ring.len() + 2);
     for i in 0..ring.len() {
         let (p, q) = (ring[i], ring[(i + 1) % ring.len()]);
@@ -862,7 +894,11 @@ fn dormer_block(
         let d = sub(b, a);
         let length = d[0].hypot(d[1]);
         let normal = [-d[1] / length, d[0] / length];
-        let slope = if dormer.absolute { dormer.slopes[i] } else { dormer.slopes[i] * scale };
+        let slope = if dormer.absolute {
+            dormer.slopes[i]
+        } else {
+            dormer.slopes[i] * scale
+        };
         planes.push(Plane {
             grad: [slope * normal[0], slope * normal[1]],
             base: elevation - slope * dot(normal, a),
@@ -920,19 +956,36 @@ fn minus(subject: &[Point], covers: &[PlanFace]) -> Result<Vec<PlanFace>, String
     )?;
     let mut faces = Vec::new();
     for shape in shapes {
-        let mut rings = shape.into_iter().map(|ring| ring.into_iter().map(|p| [f64::from(p[0]), f64::from(p[1])]).collect::<Vec<Point>>());
-        let Some(outer) = rings.next() else { continue; };
+        let mut rings = shape.into_iter().map(|ring| {
+            ring.into_iter()
+                .map(|p| [f64::from(p[0]), f64::from(p[1])])
+                .collect::<Vec<Point>>()
+        });
+        let Some(outer) = rings.next() else {
+            continue;
+        };
         let sign = area(&outer).signum();
         // An outline pinched through one corner is as many outlines; a loop
         // turning the other way inside it is a hole.
         let (mut outers, mut holes): (Vec<Vec<Point>>, Vec<Vec<Point>>) = (Vec::new(), Vec::new());
         for part in loops(outer) {
-            if area(&part).signum() == sign { outers.push(part); } else { holes.push(part); }
+            if area(&part).signum() == sign {
+                outers.push(part);
+            } else {
+                holes.push(part);
+            }
         }
         holes.extend(rings.flat_map(loops));
         for outer in outers.into_iter().filter(|ring| area(ring).abs() > 1e-6) {
-            let mine = holes.iter().filter(|hole| inside(&outer, hole[0]) || inside(&outer, centroid(hole))).cloned();
-            faces.push(std::iter::once(outer.clone()).chain(mine).collect::<PlanFace>());
+            let mine = holes
+                .iter()
+                .filter(|hole| inside(&outer, hole[0]) || inside(&outer, centroid(hole)))
+                .cloned();
+            faces.push(
+                std::iter::once(outer.clone())
+                    .chain(mine)
+                    .collect::<PlanFace>(),
+            );
         }
     }
     Ok(faces)
@@ -940,15 +993,21 @@ fn minus(subject: &[Point], covers: &[PlanFace]) -> Result<Vec<PlanFace>, String
 
 fn centroid(ring: &[Point]) -> Point {
     let n = ring.len().max(1) as f64;
-    ring.iter().fold([0.0, 0.0], |s, p| [s[0] + p[0] / n, s[1] + p[1] / n])
+    ring.iter()
+        .fold([0.0, 0.0], |s, p| [s[0] + p[0] / n, s[1] + p[1] / n])
 }
 
 /// A ring's simple loops: split wherever it passes a corner twice, each loop
 /// rid of spikes, and loops with no area -- a side walked there and back -- dropped.
 fn loops(ring: Vec<Point>) -> Vec<Vec<Point>> {
     let ring = without_spikes(ring);
-    let extent = ring.iter().flat_map(|p| p.iter().map(|v| v.abs())).fold(1.0_f64, f64::max);
-    let same = |a: Point, b: Point| (a[0] - b[0]).abs() < 5e-6 * extent && (a[1] - b[1]).abs() < 5e-6 * extent;
+    let extent = ring
+        .iter()
+        .flat_map(|p| p.iter().map(|v| v.abs()))
+        .fold(1.0_f64, f64::max);
+    let same = |a: Point, b: Point| {
+        (a[0] - b[0]).abs() < 5e-6 * extent && (a[1] - b[1]).abs() < 5e-6 * extent
+    };
     let mut found = Vec::new();
     let mut path: Vec<Point> = Vec::new();
     for p in ring {
@@ -958,7 +1017,11 @@ fn loops(ring: Vec<Point>) -> Vec<Vec<Point>> {
         path.push(p);
     }
     found.push(path);
-    found.into_iter().map(without_spikes).filter(|part| part.len() >= 3 && area(part).abs() > 1e-9).collect()
+    found
+        .into_iter()
+        .map(without_spikes)
+        .filter(|part| part.len() >= 3 && area(part).abs() > 1e-9)
+        .collect()
 }
 
 /// A ring without repeated corners, nor spikes that run out along a side and
@@ -966,8 +1029,13 @@ fn loops(ring: Vec<Point>) -> Vec<Vec<Point>> {
 /// which would use that side twice from the same face.
 fn without_spikes(mut ring: Vec<Point>) -> Vec<Point> {
     // As close as `weld` later makes one corner of two: nearer, a spike would come back.
-    let extent = ring.iter().flat_map(|p| p.iter().map(|v| v.abs())).fold(1.0_f64, f64::max);
-    let same = |a: Point, b: Point| (a[0] - b[0]).abs() < 5e-6 * extent && (a[1] - b[1]).abs() < 5e-6 * extent;
+    let extent = ring
+        .iter()
+        .flat_map(|p| p.iter().map(|v| v.abs()))
+        .fold(1.0_f64, f64::max);
+    let same = |a: Point, b: Point| {
+        (a[0] - b[0]).abs() < 5e-6 * extent && (a[1] - b[1]).abs() < 5e-6 * extent
+    };
     loop {
         let n = ring.len();
         if n < 3 {
@@ -1394,7 +1462,10 @@ fn generate_single_roof_patch(request: RoofRequest) -> Result<RoofPatch, String>
         .collect();
     // Where each side starts, as the caller drew it: a ring the skeleton
     // walks the other way round runs each of its fronts backwards.
-    let side_starts: Vec<Point> = authored.iter().flat_map(|(_, _, ring)| ring.iter().copied()).collect();
+    let side_starts: Vec<Point> = authored
+        .iter()
+        .flat_map(|(_, _, ring)| ring.iter().copied())
+        .collect();
     let mut dormers = Vec::new();
     for dormer in &request.dormers {
         let (front, leaf) = leaves
@@ -1408,7 +1479,14 @@ fn generate_single_roof_patch(request: RoofRequest) -> Result<RoofPatch, String>
         // `along` runs the way the caller drew the side.
         let start = side_starts.get(dormer.side).copied().unwrap_or(front.a);
         let turned = (front.a[0] - start[0]).hypot(front.a[1] - start[1]) > 1e-9;
-        let placed = RoofDormer { along: if turned { 1.0 - dormer.along } else { dormer.along }, ..dormer.clone() };
+        let placed = RoofDormer {
+            along: if turned {
+                1.0 - dormer.along
+            } else {
+                dormer.along
+            },
+            ..dormer.clone()
+        };
         dormers.push(dormer_block(&front, leaf, &placed, scale)?);
     }
     // Main leaves, opened where a dormer stands higher.
@@ -1518,14 +1596,18 @@ fn generate_single_roof_patch(request: RoofRequest) -> Result<RoofPatch, String>
                 // A front set apart from its gable: the wall up to the eaves, the gable over them.
                 let parts = if request.dormers[k].gable_apart && dormer.roles[side] == 0 {
                     vec![
-                        (dormer.roles[side], level_part(&ring, dormer.elevation, false)),
+                        (
+                            dormer.roles[side],
+                            level_part(&ring, dormer.elevation, false),
+                        ),
                         (GABLE_OVER_FRONT, level_part(&ring, dormer.elevation, true)),
                     ]
                 } else {
                     vec![(dormer.roles[side], ring)]
                 };
                 for (role, part) in parts {
-                    let span = part.iter().map(|p| p[1]).fold(f64::NEG_INFINITY, f64::max) - part.iter().map(|p| p[1]).fold(f64::INFINITY, f64::min);
+                    let span = part.iter().map(|p| p[1]).fold(f64::NEG_INFINITY, f64::max)
+                        - part.iter().map(|p| p[1]).fold(f64::INFINITY, f64::min);
                     if part.len() < 3 || span < 1e-9 {
                         continue;
                     }
@@ -1557,25 +1639,33 @@ fn patch_faces(patch: &RoofPatch, subroof: Option<usize>) -> Vec<Face3> {
             })
             .collect::<Vec<_>>()
     };
-    patch.faces.iter().map(|face| {
-        let rings = std::iter::once(ring(&face.boundary))
-            .chain(face.holes.iter().map(|hole| ring(hole)))
-            .collect::<Vec<_>>();
-        let n = normal(&rings[0]);
-        Face3 {
-            side: face.side,
-            dormer: face.dormer,
-            subroof: subroof.or(face.subroof),
-            outward: face.upright.then_some([-n[0], -n[2]]),
-            rings,
-        }
-    }).collect()
+    patch
+        .faces
+        .iter()
+        .map(|face| {
+            let rings = std::iter::once(ring(&face.boundary))
+                .chain(face.holes.iter().map(|hole| ring(hole)))
+                .collect::<Vec<_>>();
+            let n = normal(&rings[0]);
+            Face3 {
+                side: face.side,
+                dormer: face.dormer,
+                subroof: subroof.or(face.subroof),
+                outward: face.upright.then_some([-n[0], -n[2]]),
+                rings,
+            }
+        })
+        .collect()
 }
 
 fn face_plane(face: &Face3) -> Option<Plane> {
-    if face.outward.is_some() { return None; }
+    if face.outward.is_some() {
+        return None;
+    }
     let n = normal(&face.rings[0]);
-    if n[1].abs() < 1e-9 { return None; }
+    if n[1].abs() < 1e-9 {
+        return None;
+    }
     let p = face.rings[0][0];
     Some(Plane {
         grad: [-n[0] / n[1], -n[2] / n[1]],
@@ -1592,23 +1682,54 @@ fn visible_roof_faces(groups: &[Vec<Face3>]) -> Result<Vec<Face3>, String> {
                 visible.extend(visible_upright(face, groups, owner)?);
                 continue;
             };
-            let mut covers: Vec<PlanFace> = face.rings.iter().skip(1).map(|ring| vec![ring.iter().map(|p| [p[0], p[2]]).collect()]).collect();
-            for (other_owner, others) in groups.iter().enumerate().filter(|(index, _)| *index != owner) {
+            let mut covers: Vec<PlanFace> = face
+                .rings
+                .iter()
+                .skip(1)
+                .map(|ring| vec![ring.iter().map(|p| [p[0], p[2]]).collect()])
+                .collect();
+            for (other_owner, others) in groups
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| *index != owner)
+            {
                 for other in others {
-                    let Some(higher) = face_plane(other) else { continue; };
-                    let rings = other.rings.iter().map(|ring| at_or_below(
-                        &ring.iter().map(|p| [p[0], p[2]]).collect::<Vec<_>>(),
-                        &plane, &higher, other_owner > owner,
-                    )).enumerate().filter_map(|(index, ring)| (index == 0 || ring.len() >= 3).then_some(ring)).collect::<PlanFace>();
-                    if rings.first().is_some_and(|ring| ring.len() >= 3) { covers.push(rings); }
+                    let Some(higher) = face_plane(other) else {
+                        continue;
+                    };
+                    let rings = other
+                        .rings
+                        .iter()
+                        .map(|ring| {
+                            at_or_below(
+                                &ring.iter().map(|p| [p[0], p[2]]).collect::<Vec<_>>(),
+                                &plane,
+                                &higher,
+                                other_owner > owner,
+                            )
+                        })
+                        .enumerate()
+                        .filter_map(|(index, ring)| (index == 0 || ring.len() >= 3).then_some(ring))
+                        .collect::<PlanFace>();
+                    if rings.first().is_some_and(|ring| ring.len() >= 3) {
+                        covers.push(rings);
+                    }
                 }
             }
-            let subject = face.rings[0].iter().map(|p| [p[0], p[2]]).collect::<Vec<_>>();
+            let subject = face.rings[0]
+                .iter()
+                .map(|p| [p[0], p[2]])
+                .collect::<Vec<_>>();
             for shape in minus(&subject, &covers)? {
                 visible.push(Face3 {
-                    side: face.side, dormer: face.dormer, subroof: face.subroof,
+                    side: face.side,
+                    dormer: face.dormer,
+                    subroof: face.subroof,
                     outward: None,
-                    rings: shape.into_iter().map(|ring| ring.into_iter().map(|p| [p[0], plane.z(p), p[1]]).collect()).collect(),
+                    rings: shape
+                        .into_iter()
+                        .map(|ring| ring.into_iter().map(|p| [p[0], plane.z(p), p[1]]).collect())
+                        .collect(),
                 });
             }
         }
@@ -1619,57 +1740,138 @@ fn visible_roof_faces(groups: &[Vec<Face3>]) -> Result<Vec<Face3>, String> {
 /// The part of upright face `face` of roof `owner` standing above the other
 /// roofs' surfaces: a gable or a closure is hidden where it runs inside them.
 /// Worked in the face's own plane -- along its line in plan, and up.
-fn visible_upright(face: &Face3, groups: &[Vec<Face3>], owner: usize) -> Result<Vec<Face3>, String> {
+fn visible_upright(
+    face: &Face3,
+    groups: &[Vec<Face3>],
+    owner: usize,
+) -> Result<Vec<Face3>, String> {
     let ring = &face.rings[0];
     let plan = ring.iter().map(|p| [p[0], p[2]]).collect::<Vec<_>>();
     let origin = plan[0];
-    let Some(far) = plan.iter().copied().max_by(|a, b| sub(*a, origin).map(f64::abs).iter().sum::<f64>().total_cmp(&sub(*b, origin).map(f64::abs).iter().sum::<f64>())) else {
+    let Some(far) = plan.iter().copied().max_by(|a, b| {
+        sub(*a, origin)
+            .map(f64::abs)
+            .iter()
+            .sum::<f64>()
+            .total_cmp(&sub(*b, origin).map(f64::abs).iter().sum::<f64>())
+    }) else {
         return Ok(vec![face.clone()]);
     };
     let length = (far[0] - origin[0]).hypot(far[1] - origin[1]);
-    if length < 1e-9 { return Ok(vec![face.clone()]); }
+    if length < 1e-9 {
+        return Ok(vec![face.clone()]);
+    }
     let dir = [(far[0] - origin[0]) / length, (far[1] - origin[1]) / length];
     let along = |p: Point| dot(sub(p, origin), dir);
     let at = |s: f64| [origin[0] + dir[0] * s, origin[1] + dir[1] * s];
-    let subject = ring.iter().map(|p| [along([p[0], p[2]]), p[1]]).collect::<Vec<_>>();
-    let (lo, hi) = subject.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), p| (lo.min(p[0]), hi.max(p[0])));
+    let subject = ring
+        .iter()
+        .map(|p| [along([p[0], p[2]]), p[1]])
+        .collect::<Vec<_>>();
+    let (lo, hi) = subject
+        .iter()
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), p| {
+            (lo.min(p[0]), hi.max(p[0]))
+        });
     let floor = subject.iter().map(|p| p[1]).fold(f64::INFINITY, f64::min) - 1.0;
     let (a, c) = (at(lo), at(hi));
     // Under every other roof's leaf the face crosses: from below the face up to that leaf.
     let mut covers: Vec<PlanFace> = Vec::new();
     // An earlier roof's upright face in the same plane, facing the same way,
     // is that face already: two gables on one wall are one gable.
-    let on_line = |p: &[f64; 3]| { let d = sub([p[0], p[2]], origin); (d[0] * dir[1] - d[1] * dir[0]).abs() < 1e-6 };
+    let on_line = |p: &[f64; 3]| {
+        let d = sub([p[0], p[2]], origin);
+        (d[0] * dir[1] - d[1] * dir[0]).abs() < 1e-6
+    };
     for other in groups.iter().take(owner).flatten() {
-        let (Some(mine), Some(theirs)) = (face.outward, other.outward) else { continue; };
-        if face_plane(other).is_some() || dot(mine, theirs) <= 0.0 || !other.rings[0].iter().all(on_line) { continue; }
-        covers.push(other.rings.iter().map(|r| r.iter().map(|p| [along([p[0], p[2]]), p[1]]).collect()).collect());
+        let (Some(mine), Some(theirs)) = (face.outward, other.outward) else {
+            continue;
+        };
+        if face_plane(other).is_some()
+            || dot(mine, theirs) <= 0.0
+            || !other.rings[0].iter().all(on_line)
+        {
+            continue;
+        }
+        covers.push(
+            other
+                .rings
+                .iter()
+                .map(|r| r.iter().map(|p| [along([p[0], p[2]]), p[1]]).collect())
+                .collect(),
+        );
     }
-    for other in groups.iter().enumerate().filter(|(index, _)| *index != owner).flat_map(|(_, faces)| faces) {
-        let Some(plane) = face_plane(other) else { continue; };
-        let rings = other.rings.iter().map(|r| r.iter().map(|q| [q[0], q[2]]).collect::<Vec<_>>()).collect::<Vec<_>>();
+    for other in groups
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| *index != owner)
+        .flat_map(|(_, faces)| faces)
+    {
+        let Some(plane) = face_plane(other) else {
+            continue;
+        };
+        let rings = other
+            .rings
+            .iter()
+            .map(|r| r.iter().map(|q| [q[0], q[2]]).collect::<Vec<_>>())
+            .collect::<Vec<_>>();
         let mut stops = vec![0.0, 1.0];
         for r in &rings {
-            for j in 0..r.len() { stops.extend(crossing(a, c, r[j], r[(j + 1) % r.len()])); }
+            for j in 0..r.len() {
+                stops.extend(crossing(a, c, r[j], r[(j + 1) % r.len()]));
+            }
         }
         stops.sort_by(f64::total_cmp);
         stops.dedup_by(|x, y| (*x - *y).abs() < 1e-9);
         for pair in stops.windows(2) {
             let (s0, s1) = (lo + (hi - lo) * pair[0], lo + (hi - lo) * pair[1]);
-            if s1 - s0 < 1e-9 { continue; }
+            if s1 - s0 < 1e-9 {
+                continue;
+            }
             // Looked at from the side it faces: a leaf whose rim runs along
             // the face -- one the face holds up -- does not hide it.
-            let out = face.outward.map_or([0.0, 0.0], |o| { let l = o[0].hypot(o[1]).max(1e-12); [o[0] / l * 1e-4, o[1] / l * 1e-4] });
-            let middle = { let m = at((s0 + s1) / 2.0); [m[0] + out[0], m[1] + out[1]] };
-            if !inside(&rings[0], middle) || rings.iter().skip(1).any(|hole| inside(hole, middle)) { continue; }
-            covers.push(vec![vec![[s0, floor], [s1, floor], [s1, plane.z(at(s1))], [s0, plane.z(at(s0))]]]);
+            let out = face.outward.map_or([0.0, 0.0], |o| {
+                let l = o[0].hypot(o[1]).max(1e-12);
+                [o[0] / l * 1e-4, o[1] / l * 1e-4]
+            });
+            let middle = {
+                let m = at((s0 + s1) / 2.0);
+                [m[0] + out[0], m[1] + out[1]]
+            };
+            if !inside(&rings[0], middle) || rings.iter().skip(1).any(|hole| inside(hole, middle)) {
+                continue;
+            }
+            covers.push(vec![vec![
+                [s0, floor],
+                [s1, floor],
+                [s1, plane.z(at(s1))],
+                [s0, plane.z(at(s0))],
+            ]]);
         }
     }
-    if covers.is_empty() { return Ok(vec![face.clone()]); }
-    Ok(minus(&subject, &covers)?.into_iter().map(|shape| Face3 {
-        side: face.side, dormer: face.dormer, subroof: face.subroof, outward: face.outward,
-        rings: shape.into_iter().map(|r| r.into_iter().map(|[s, y]| { let p = at(s); [p[0], y, p[1]] }).collect()).collect(),
-    }).collect())
+    if covers.is_empty() {
+        return Ok(vec![face.clone()]);
+    }
+    Ok(minus(&subject, &covers)?
+        .into_iter()
+        .map(|shape| Face3 {
+            side: face.side,
+            dormer: face.dormer,
+            subroof: face.subroof,
+            outward: face.outward,
+            rings: shape
+                .into_iter()
+                .map(|r| {
+                    r.into_iter()
+                        .map(|[s, y]| {
+                            let p = at(s);
+                            [p[0], y, p[1]]
+                        })
+                        .collect()
+                })
+                .collect(),
+        })
+        .collect())
 }
 
 fn in_footprint(footprint: &RoofFootprint, point: Point) -> bool {
@@ -1678,13 +1880,28 @@ fn in_footprint(footprint: &RoofFootprint, point: Point) -> bool {
 
 /// Close the gap from a subroof's eaves down to the parent roof or a platform
 /// that has already cut it. The roof planes themselves meet through clipping.
-fn subroof_uprights(child: &RoofRequest, parent: &RoofRequest, parent_faces: &[Face3], index: usize) -> Vec<Face3> {
-    let surfaces = parent_faces.iter().filter_map(|face| face_plane(face).map(|plane| (face, plane))).collect::<Vec<_>>();
+fn subroof_uprights(
+    child: &RoofRequest,
+    parent: &RoofRequest,
+    parent_faces: &[Face3],
+    index: usize,
+) -> Vec<Face3> {
+    let surfaces = parent_faces
+        .iter()
+        .filter_map(|face| face_plane(face).map(|plane| (face, plane)))
+        .collect::<Vec<_>>();
     let mut result = Vec::new();
     let mut side = 0;
     for footprint in &child.footprints {
-        for (ring_index, ring) in std::iter::once(&footprint.outer).chain(&footprint.holes).enumerate() {
-            let toward_inside = if (area(ring) > 0.0) == (ring_index == 0) { 1.0 } else { -1.0 };
+        for (ring_index, ring) in std::iter::once(&footprint.outer)
+            .chain(&footprint.holes)
+            .enumerate()
+        {
+            let toward_inside = if (area(ring) > 0.0) == (ring_index == 0) {
+                1.0
+            } else {
+                -1.0
+            };
             for i in 0..ring.len() {
                 let (a, b) = (ring[i], ring[(i + 1) % ring.len()]);
                 let d = sub(b, a);
@@ -1699,9 +1916,16 @@ fn subroof_uprights(child: &RoofRequest, parent: &RoofRequest, parent_faces: &[F
                     }
                 }
                 for cut in &parent.platform_cuts {
-                    for boundary in std::iter::once(&cut.footprint.outer).chain(&cut.footprint.holes) {
+                    for boundary in
+                        std::iter::once(&cut.footprint.outer).chain(&cut.footprint.holes)
+                    {
                         for j in 0..boundary.len() {
-                            stops.extend(crossing(a, b, boundary[j], boundary[(j + 1) % boundary.len()]));
+                            stops.extend(crossing(
+                                a,
+                                b,
+                                boundary[j],
+                                boundary[(j + 1) % boundary.len()],
+                            ));
                         }
                     }
                 }
@@ -1709,30 +1933,65 @@ fn subroof_uprights(child: &RoofRequest, parent: &RoofRequest, parent_faces: &[F
                 stops.dedup_by(|x, y| (*x - *y).abs() < 1e-9);
                 for pair in stops.windows(2) {
                     let (t0, t1) = (pair[0], pair[1]);
-                    if t1 - t0 < 1e-9 { continue; }
+                    if t1 - t0 < 1e-9 {
+                        continue;
+                    }
                     let middle = at((t0 + t1) / 2.0);
-                    let under = surfaces.iter().filter(|(face, _)| {
-                        let outer = face.rings[0].iter().map(|p| [p[0], p[2]]).collect::<Vec<_>>();
-                        inside(&outer, middle) && !face.rings.iter().skip(1).any(|hole| inside(&hole.iter().map(|p| [p[0], p[2]]).collect::<Vec<_>>(), middle))
-                    }).map(|(_, plane)| *plane).max_by(|left, right| left.z(middle).total_cmp(&right.z(middle)));
-                    let floor = parent.platform_cuts.iter().filter(|cut| in_footprint(&cut.footprint, middle))
-                        .map(|cut| cut.elevation).fold(f64::NEG_INFINITY, f64::max);
-                    let bottom = |t: f64| under.map_or(parent.elevation, |plane| plane.z(at(t))).max(floor);
+                    let under = surfaces
+                        .iter()
+                        .filter(|(face, _)| {
+                            let outer = face.rings[0]
+                                .iter()
+                                .map(|p| [p[0], p[2]])
+                                .collect::<Vec<_>>();
+                            inside(&outer, middle)
+                                && !face.rings.iter().skip(1).any(|hole| {
+                                    inside(
+                                        &hole.iter().map(|p| [p[0], p[2]]).collect::<Vec<_>>(),
+                                        middle,
+                                    )
+                                })
+                        })
+                        .map(|(_, plane)| *plane)
+                        .max_by(|left, right| left.z(middle).total_cmp(&right.z(middle)));
+                    let floor = parent
+                        .platform_cuts
+                        .iter()
+                        .filter(|cut| in_footprint(&cut.footprint, middle))
+                        .map(|cut| cut.elevation)
+                        .fold(f64::NEG_INFINITY, f64::max);
+                    let bottom = |t: f64| {
+                        under
+                            .map_or(parent.elevation, |plane| plane.z(at(t)))
+                            .max(floor)
+                    };
                     let (mut lo, mut hi) = (t0, t1);
                     let (g0, g1) = (child.elevation - bottom(t0), child.elevation - bottom(t1));
-                    if g0 <= 1e-7 && g1 <= 1e-7 { continue; }
+                    if g0 <= 1e-7 && g1 <= 1e-7 {
+                        continue;
+                    }
                     if g0 * g1 < 0.0 {
                         let crossing = t0 + (t1 - t0) * g0 / (g0 - g1);
-                        if g0 > 0.0 { hi = crossing; } else { lo = crossing; }
+                        if g0 > 0.0 {
+                            hi = crossing;
+                        } else {
+                            lo = crossing;
+                        }
                     }
-                    if hi - lo < 1e-9 { continue; }
+                    if hi - lo < 1e-9 {
+                        continue;
+                    }
                     let (p, q) = (at(lo), at(hi));
                     result.push(Face3 {
-                        side, dormer: None, subroof: Some(index),
+                        side,
+                        dormer: None,
+                        subroof: Some(index),
                         outward: Some([d[1] * toward_inside, -d[0] * toward_inside]),
                         rings: vec![vec![
-                            [p[0], bottom(lo), p[1]], [q[0], bottom(hi), q[1]],
-                            [q[0], child.elevation, q[1]], [p[0], child.elevation, p[1]],
+                            [p[0], bottom(lo), p[1]],
+                            [q[0], bottom(hi), q[1]],
+                            [q[0], child.elevation, q[1]],
+                            [p[0], child.elevation, p[1]],
                         ]],
                     });
                 }
@@ -1747,10 +2006,14 @@ fn subroof_uprights(child: &RoofRequest, parent: &RoofRequest, parent_faces: &[F
 pub fn generate_roof_patch(mut request: RoofRequest) -> Result<RoofPatch, String> {
     let subroofs = std::mem::take(&mut request.subroofs);
     let main = generate_single_roof_patch(request.clone())?;
-    if subroofs.is_empty() { return Ok(main); }
+    if subroofs.is_empty() {
+        return Ok(main);
+    }
     let mut groups = vec![patch_faces(&main, None)];
     for (index, mut child) in subroofs.into_iter().enumerate() {
-        if !child.subroofs.is_empty() { return Err("a subroof cannot contain another subroof".into()); }
+        if !child.subroofs.is_empty() {
+            return Err("a subroof cannot contain another subroof".into());
+        }
         child.subroofs.clear();
         let patch = generate_single_roof_patch(child.clone())?;
         let mut faces = patch_faces(&patch, Some(index));
@@ -1835,8 +2098,14 @@ fn weld(faces: Vec<Face3>) -> Result<RoofPatch, String> {
         for ring in rings.iter_mut() {
             loop {
                 let n = ring.len();
-                if n < 3 { break; }
-                let Some(i) = (0..n).find(|&i| ring[i] == ring[(i + 1) % n] || ring[(i + n - 1) % n] == ring[(i + 1) % n]) else { break; };
+                if n < 3 {
+                    break;
+                }
+                let Some(i) = (0..n).find(|&i| {
+                    ring[i] == ring[(i + 1) % n] || ring[(i + n - 1) % n] == ring[(i + 1) % n]
+                }) else {
+                    break;
+                };
                 if ring[i] == ring[(i + 1) % n] {
                     ring.remove(i);
                 } else {
@@ -1849,7 +2118,9 @@ fn weld(faces: Vec<Face3>) -> Result<RoofPatch, String> {
         }
         let outer_kept = rings.first().is_some_and(|ring| ring.len() >= 3);
         rings.retain(|ring| ring.len() >= 3);
-        if !outer_kept { rings.clear(); }
+        if !outer_kept {
+            rings.clear();
+        }
     }
     indexed.retain(|(_, rings)| !rings.is_empty());
     let mut edges: Vec<CapEdge> = Vec::new();
@@ -1936,17 +2207,43 @@ mod tests {
             vec![[0.0, 0.0], [0.0, 4.0], [8.0, 4.0], [8.0, 0.0]],
         ] {
             // The side from (0,0) running along x is side 0 in the first ring, side 3 -- drawn from (8,0) -- in the second.
-            let (side, along) = if outer[1][0] > 0.0 { (0, 0.25) } else { (3, 0.75) };
+            let (side, along) = if outer[1][0] > 0.0 {
+                (0, 0.25)
+            } else {
+                (3, 0.75)
+            };
             let mut slopes = vec![0.0; 4];
             slopes[side] = 1.0;
             slopes[(side + 2) % 4] = 1.0;
             let mut request = roof(outer.clone(), vec![], slopes);
-            request.dormers = vec![RoofDormer { side, along, setback: 1.0, width: 1.0, front: 0.5, slopes: [0.0, 1.0, 0.0, 1.0], absolute: false, gable_apart: false }];
+            request.dormers = vec![RoofDormer {
+                side,
+                along,
+                setback: 1.0,
+                width: 1.0,
+                front: 0.5,
+                slopes: [0.0, 1.0, 0.0, 1.0],
+                absolute: false,
+                gable_apart: false,
+            }];
             let patch = generate_roof_patch(request).unwrap_or_else(|e| panic!("{outer:?}: {e}"));
-            let front = patch.faces.iter().find(|f| f.dormer == Some(0) && f.upright && f.side == 0).expect("a front");
-            let xs: Vec<f64> = front.boundary.iter().map(|(e, _)| patch.nodes[patch.edges[*e].start][0]).collect();
-            let middle = (xs.iter().copied().fold(f64::INFINITY, f64::min) + xs.iter().copied().fold(f64::NEG_INFINITY, f64::max)) / 2.0;
-            assert!((middle - 2.0).abs() < 1e-6, "{outer:?}: its front's middle at x = {middle}, not 2");
+            let front = patch
+                .faces
+                .iter()
+                .find(|f| f.dormer == Some(0) && f.upright && f.side == 0)
+                .expect("a front");
+            let xs: Vec<f64> = front
+                .boundary
+                .iter()
+                .map(|(e, _)| patch.nodes[patch.edges[*e].start][0])
+                .collect();
+            let middle = (xs.iter().copied().fold(f64::INFINITY, f64::min)
+                + xs.iter().copied().fold(f64::NEG_INFINITY, f64::max))
+                / 2.0;
+            assert!(
+                (middle - 2.0).abs() < 1e-6,
+                "{outer:?}: its front's middle at x = {middle}, not 2"
+            );
         }
     }
 
@@ -1955,12 +2252,108 @@ mod tests {
     #[test]
     fn a_reflex_corner_landing_on_a_corner_closes_the_skeleton() {
         let cases: Vec<(Vec<[f64; 2]>, Vec<f64>)> = vec![
-            (vec![[4.,0.],[5.,2.],[1.,2.],[0.,3.],[-1.,2.],[-2.,2.],[-3.,1.],[-3.,-1.],[-3.,-2.],[-3.,-5.],[1.,-5.],[1.,-2.],[3.,-2.]],
-             vec![0.9367653311230242,1.,2.1598419638350608,0.,0.,1.0612861400470137,1.,0.,0.9891455749049782,1.,2.0597839414142074,2.1776038066484036,0.3200293707661331]),
-            (vec![[3.,0.],[2.5,1.],[3.,4.5],[1.,5.],[-1.,5.5],[-3.,3.],[-4.,2.],[-2.5,0.],[-5.,-2.],[-3.5,-4.],[-1.,-5.],[1.,-6.],[2.,-2.],[2.,-1.]],
-             vec![1.6112339597195386,1.,0.304359517339617,1.1410708020441234,0.,0.8817245054990053,1.2556521965190768,1.5376726023852825,1.8549506234005093,1.,1.,0.,1.4373796277679503,1.3197040225379169]),
-            (vec![[2.,0.],[5.,2.],[2.,2.],[1.,5.],[0.,5.],[-2.,4.],[-4.,3.],[-5.,1.],[-6.,-1.],[-4.,-3.],[-2.,-3.],[0.,-3.],[2.,-5.],[4.,-4.],[5.,-2.]],
-             vec![1.,1.7528951520100235,1.0216088656336069,1.,1.6503604979254305,2.077596903126687,0.4171107758767903,1.,0.7263207470998168,0.,1.,1.8246315846219658,0.,2.1540795772336425,1.]),
+            (
+                vec![
+                    [4., 0.],
+                    [5., 2.],
+                    [1., 2.],
+                    [0., 3.],
+                    [-1., 2.],
+                    [-2., 2.],
+                    [-3., 1.],
+                    [-3., -1.],
+                    [-3., -2.],
+                    [-3., -5.],
+                    [1., -5.],
+                    [1., -2.],
+                    [3., -2.],
+                ],
+                vec![
+                    0.9367653311230242,
+                    1.,
+                    2.1598419638350608,
+                    0.,
+                    0.,
+                    1.0612861400470137,
+                    1.,
+                    0.,
+                    0.9891455749049782,
+                    1.,
+                    2.0597839414142074,
+                    2.1776038066484036,
+                    0.3200293707661331,
+                ],
+            ),
+            (
+                vec![
+                    [3., 0.],
+                    [2.5, 1.],
+                    [3., 4.5],
+                    [1., 5.],
+                    [-1., 5.5],
+                    [-3., 3.],
+                    [-4., 2.],
+                    [-2.5, 0.],
+                    [-5., -2.],
+                    [-3.5, -4.],
+                    [-1., -5.],
+                    [1., -6.],
+                    [2., -2.],
+                    [2., -1.],
+                ],
+                vec![
+                    1.6112339597195386,
+                    1.,
+                    0.304359517339617,
+                    1.1410708020441234,
+                    0.,
+                    0.8817245054990053,
+                    1.2556521965190768,
+                    1.5376726023852825,
+                    1.8549506234005093,
+                    1.,
+                    1.,
+                    0.,
+                    1.4373796277679503,
+                    1.3197040225379169,
+                ],
+            ),
+            (
+                vec![
+                    [2., 0.],
+                    [5., 2.],
+                    [2., 2.],
+                    [1., 5.],
+                    [0., 5.],
+                    [-2., 4.],
+                    [-4., 3.],
+                    [-5., 1.],
+                    [-6., -1.],
+                    [-4., -3.],
+                    [-2., -3.],
+                    [0., -3.],
+                    [2., -5.],
+                    [4., -4.],
+                    [5., -2.],
+                ],
+                vec![
+                    1.,
+                    1.7528951520100235,
+                    1.0216088656336069,
+                    1.,
+                    1.6503604979254305,
+                    2.077596903126687,
+                    0.4171107758767903,
+                    1.,
+                    0.7263207470998168,
+                    0.,
+                    1.,
+                    1.8246315846219658,
+                    0.,
+                    2.1540795772336425,
+                    1.,
+                ],
+            ),
         ];
         for (outer, slopes) in cases {
             let patch = generate_roof_patch(roof(outer.clone(), vec![], slopes))
@@ -2028,13 +2421,15 @@ mod tests {
     fn a_subroof_in_the_middle_replaces_hidden_parent_leaves_and_closes_its_eaves() {
         let mut parent = roof(
             vec![[0.0, 0.0], [8.0, 0.0], [8.0, 6.0], [0.0, 6.0]],
-            Vec::new(), vec![1.0; 4],
+            Vec::new(),
+            vec![1.0; 4],
         );
         parent.elevation = 0.0;
         parent.height = 2.0;
         let mut child = roof(
             vec![[2.0, 2.0], [6.0, 2.0], [6.0, 4.0], [2.0, 4.0]],
-            Vec::new(), vec![1.0; 4],
+            Vec::new(),
+            vec![1.0; 4],
         );
         child.elevation = 1.5;
         child.height = 2.0;
@@ -2042,12 +2437,33 @@ mod tests {
         let patch = generate_roof_patch(parent).unwrap();
         let faces = patch_faces(&patch, None);
         let at_center = |face: &Face3| {
-            let plan = face.rings[0].iter().map(|p| [p[0], p[2]]).collect::<Vec<_>>();
-            inside(&plan, [3.5, 2.5]) && !face.rings.iter().skip(1).any(|ring| inside(&ring.iter().map(|p| [p[0], p[2]]).collect::<Vec<_>>(), [3.5, 2.5]))
+            let plan = face.rings[0]
+                .iter()
+                .map(|p| [p[0], p[2]])
+                .collect::<Vec<_>>();
+            inside(&plan, [3.5, 2.5])
+                && !face.rings.iter().skip(1).any(|ring| {
+                    inside(
+                        &ring.iter().map(|p| [p[0], p[2]]).collect::<Vec<_>>(),
+                        [3.5, 2.5],
+                    )
+                })
         };
-        assert!(faces.iter().any(|face| face.subroof == Some(0) && face.outward.is_none() && at_center(face)));
-        assert!(!faces.iter().any(|face| face.subroof.is_none() && face.outward.is_none() && at_center(face)));
-        assert!(faces.iter().any(|face| face.subroof == Some(0) && face.outward.is_some()));
+        assert!(
+            faces
+                .iter()
+                .any(|face| face.subroof == Some(0) && face.outward.is_none() && at_center(face))
+        );
+        assert!(
+            !faces
+                .iter()
+                .any(|face| face.subroof.is_none() && face.outward.is_none() && at_center(face))
+        );
+        assert!(
+            faces
+                .iter()
+                .any(|face| face.subroof == Some(0) && face.outward.is_some())
+        );
     }
 
     #[test]
@@ -2428,17 +2844,54 @@ mod tests {
     fn a_dormer_front_set_apart_from_its_gable_is_a_plain_wall_to_its_eaves() {
         let mut request = rectangle([1.0, 0.0, 1.0, 0.0]);
         request.height = 4.0;
-        request.dormers.push(RoofDormer { gable_apart: true, ..dormer([0.0, 1.0, 0.0, 1.0]) });
+        request.dormers.push(RoofDormer {
+            gable_apart: true,
+            ..dormer([0.0, 1.0, 0.0, 1.0])
+        });
         let patch = generate_roof_patch(request).unwrap();
-        let ring = |f: &RoofFace| f.boundary.iter().map(|(e, rev)| patch.nodes[if *rev { patch.edges[*e].end } else { patch.edges[*e].start }]).collect::<Vec<_>>();
-        let front = patch.faces.iter().find(|f| f.dormer == Some(0) && f.upright && f.side == 0).expect("a front");
-        let gable = patch.faces.iter().find(|f| f.dormer == Some(0) && f.upright && f.side == GABLE_OVER_FRONT).expect("a gable apart");
+        let ring = |f: &RoofFace| {
+            f.boundary
+                .iter()
+                .map(|(e, rev)| {
+                    patch.nodes[if *rev {
+                        patch.edges[*e].end
+                    } else {
+                        patch.edges[*e].start
+                    }]
+                })
+                .collect::<Vec<_>>()
+        };
+        let front = patch
+            .faces
+            .iter()
+            .find(|f| f.dormer == Some(0) && f.upright && f.side == 0)
+            .expect("a front");
+        let gable = patch
+            .faces
+            .iter()
+            .find(|f| f.dormer == Some(0) && f.upright && f.side == GABLE_OVER_FRONT)
+            .expect("a gable apart");
         let ys = ring(front).iter().map(|p| p[1]).collect::<Vec<_>>();
-        let (low, high) = (ys.iter().copied().fold(f64::INFINITY, f64::min), ys.iter().copied().fold(f64::NEG_INFINITY, f64::max));
+        let (low, high) = (
+            ys.iter().copied().fold(f64::INFINITY, f64::min),
+            ys.iter().copied().fold(f64::NEG_INFINITY, f64::max),
+        );
         // Its foot may be split where the leaf's cut meets it; it stands only at its foot and its eaves.
-        assert!(ring(front).iter().all(|p| (p[1] - low).abs() < 1e-6 || (p[1] - high).abs() < 1e-6), "the front is a rectangle: {:?}", ring(front));
-        assert!((high - low - 1.0).abs() < 1e-6, "as high as the dormer's front: {low}..{high}");
-        assert!(ring(gable).iter().all(|p| p[1] >= high - 1e-6), "the gable stands over it");
+        assert!(
+            ring(front)
+                .iter()
+                .all(|p| (p[1] - low).abs() < 1e-6 || (p[1] - high).abs() < 1e-6),
+            "the front is a rectangle: {:?}",
+            ring(front)
+        );
+        assert!(
+            (high - low - 1.0).abs() < 1e-6,
+            "as high as the dormer's front: {low}..{high}"
+        );
+        assert!(
+            ring(gable).iter().all(|p| p[1] >= high - 1e-6),
+            "the gable stands over it"
+        );
         assert!(closed(&patch, 3.0));
     }
 

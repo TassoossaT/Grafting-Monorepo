@@ -9,7 +9,6 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 
 pub mod bezier;
-mod stroke_interpretation;
 pub mod bezier_commands;
 pub mod bezier_network;
 pub mod bezier_ramp;
@@ -24,10 +23,12 @@ mod motion;
 mod planar;
 pub mod profile_cap;
 pub mod profile_cap_patch;
-pub mod profile_roof;
-pub mod profile_surface;
 #[cfg(test)]
 mod profile_graph_tests;
+pub mod profile_roof;
+pub mod profile_surface;
+mod stroke_interpretation;
+mod stroke_shaping;
 pub use contour_travel::{arc_sweep, distance_at_parameter, parameter_at_distance, sub_geometry};
 pub use planar::{PlanarBoolean, PlanarShape, planar_boolean};
 mod region_edit;

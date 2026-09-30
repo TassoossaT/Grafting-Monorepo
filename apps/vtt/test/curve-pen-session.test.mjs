@@ -128,17 +128,44 @@ test("a duplicate click, Backspace, and a cancelled press lay nothing",()=>{
   }finally{f.close();}
 });
 
-test("an invalid vertical span reports an error and keeps its origin",()=>{
+test("a span straight up lays nothing and keeps its origin; one too steep stops at the grade it can climb",()=>{
   const f=fixture();
   try {
     const before=state(f);
     f.click({point:{x:-4,y:0,z:0}});
     f.click({point:{x:-4,y:4,z:0}});
     assert.deepEqual(state(f),before);
-    assert.equal(f.calls.feedback.at(-1)?.tone,"error");
+    assert.equal(errors(f).length,0,"a limit is a stop, never an error");
+    assert.ok(f.previews.has("road-span"),"the origin still waits");
     f.click({point:{x:4,y:4,z:0}});
-    assert.deepEqual(f.runtime.getGraphSnapshot().nodes.filter(n=>n.id.startsWith("spine:")).map(n=>n.position),[{x:-4,y:0,z:0},{x:4,y:4,z:0}]);
     assert.equal(edges(f).length,1);
+    const end=f.runtime.getGraphSnapshot().nodes.find(n=>n.id.startsWith("spine:")&&n.position.x===4);
+    assert.ok(Math.abs(end.position.y-1.6)<1e-6,`8 m climbs 1.6 m at 20 %, not 4 m: ${end.position.y}`);
+  } finally {f.close();}
+});
+
+test("a span aimed at a road higher than the grade reaches stops short and does not join it",()=>{
+  const f=fixture();
+  try {
+    lay(f,[[0,4,10],[10,4,10]]);
+    f.click(sample(-3,10));f.click({...bodyOf(f,0.1,10),point:{x:0,y:4,z:10}});f.end();
+    assert.equal(errors(f).length,0,JSON.stringify(f.calls.feedback));
+    const ys=f.runtime.getAllRegionTopologies().flatMap(t=>t.nodes.map(n=>n.position.y));
+    assert.ok(Math.max(...ys)<=4+1e-6,"nothing climbs past the higher road");
+    assert.equal(f.runtime.getGraphSnapshot().nodes.filter(n=>n.id.startsWith("spine:")&&Math.hypot(n.position.x,n.position.z-10)<0.02).length,2,"3 m cannot climb 4 m: the new road stops short at 0.6 m, not joined");
+  } finally {f.close();}
+});
+
+test("a freehand loop is cut out and a tight scribble eased to the road's width",()=>{
+  const f=fixture();
+  try {
+    const wide={...params,bedWidth:3};
+    const loop=[...Array.from({length:21},(_,i)=>sample(i*0.5,0)),...Array.from({length:31},(_,i)=>{const a=-Math.PI/2+2*Math.PI*i/30;return sample(10+2*Math.cos(a),2+2*Math.sin(a));}),...Array.from({length:21},(_,i)=>sample(10+i*0.5,0))];
+    const g={start:loop[0],current:loop.at(-1),samples:loop};
+    tool.onPointerDown(f.ctx,g.start,wide);tool.onPointerMove(f.ctx,g,wide);tool.onPointerUp(f.ctx,g,wide);
+    assert.equal(errors(f).length,0,JSON.stringify(f.calls.feedback));
+    assert.ok(f.runtime.getGraphSnapshot().nodes.filter(n=>n.id.startsWith("spine:")).every(n=>n.position.z<1),"the loop drawn above the line is gone");
+    for(const e of edges(f))for(const p of resolve(f,e).points)assert.ok(p[2]<1);
   } finally {f.close();}
 });
 
@@ -449,7 +476,7 @@ test("a wide road's freehand stroke keeps a few anchors, never one per sample",(
   }finally{f.close();}
 });
 
-test("freehand road retains a hill between endpoints at zero elevation",()=>{
+test("freehand road keeps a hill between its ends, held to the road's grade",()=>{
   const f=fixture();
   try {
     const samples=Array.from({length:41},(_,i)=>{const t=i/40;return {point:{x:20*t,y:12*t*(1-t),z:0}};});
@@ -458,8 +485,8 @@ test("freehand road retains a hill between endpoints at zero elevation",()=>{
     assert.equal(edges(f).length,1,JSON.stringify(f.calls.feedback));
     const c=resolve(f,edges(f)[0]);
     const middle=f.runtime.curveBatch({tolerance:0.025,commands:[{kind:"split",curve:c,t:0.5}]})[0].curves[0].points[3];
-    assert.ok(Math.abs(middle[1]-3)<1e-5,"road hill must survive fitting and commit");
-    assert.ok(f.runtime.getAllRegionTopologies().some(t=>t.nodes.some(n=>n.position.y>2.9)),"the generated surface must retain the hill too");
+    assert.ok(middle[1]>1.5&&middle[1]<=2+1e-5,`a 3 m hill 10 m from each end is climbed at 20 %: ${middle[1]}`);
+    assert.ok(f.runtime.getAllRegionTopologies().some(t=>t.nodes.some(n=>n.position.y>1.5)),"the generated surface keeps the rise too");
   }finally{f.close();}
 });
 
