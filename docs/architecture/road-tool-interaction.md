@@ -1,6 +1,6 @@
 # Interação da ferramenta de rua (modelo Tiny Glade)
 
-Status: decidido com o dono em 2026-09-29; não implementado. Substitui a proposta anterior baseada no Planet Coaster 2 (menu família → subitem → ajustes).
+Status: decidido com o dono em 2026-09-29; implementado no PR #341. Substitui a proposta anterior baseada no Planet Coaster 2 (menu família → subitem → ajustes).
 Escopo: somente rua. Fora: carimbos, área pavimentada/praça, inspetor, submenu Editar, ajuda por etapa, demais famílias.
 
 ## Regras centrais
@@ -22,7 +22,7 @@ Escopo: somente rua. Fora: carimbos, área pavimentada/praça, inspetor, submenu
 - Esc cancela o arraste ou a origem pendente da reta. Cada confirmação é uma operação de desfazer.
 - Sem seletor Reta/Curva/Livre, sem cliques de guia de curva.
 
-**Capacidade genérica.** A inferência é uma capacidade única de criação de espinha, não código da rua. Hoje a mesma escolha existe de três formas: ferramentas `wall-brush`/`wall-line`, `PathBrushParams.creationMode` e `slope-curve.mode`. A rua é a primeira consumidora; parede e rampa migram para a mesma capacidade depois.
+**Capacidade genérica.** A inferência é `createSpineSketchTool` (`composition/tabletop/tools/core/spine-sketch.ts`), com uma única tolerância de movimento (`isStroke`: 5 px ou 0,15 m). A rua é a primeira consumidora; `PathBrushParams.creationMode` foi removido. Parede (`wall-brush`/`wall-line`) e rampa (`slope-curve.mode`) ainda escolhem o modo do jeito antigo e migram depois.
 
 ## Onde o traço começa
 
@@ -42,16 +42,16 @@ O **+ verde é removido**. Ele existia porque pressionar o corpo editava em vez 
 | Âncora | Pontos da espinha | Mover o ponto |
 | Curvatura | Meio de cada trecho entre âncoras | Arrastar entorta o trecho; duplo clique insere uma âncora ali |
 | Largura | Borda da faixa | Alargar ou estreitar |
-| Altura | Vertical sobre a espinha | Subir ou descer o trecho |
+| Altura | Eixo vertical do manipulador da âncora selecionada | Subir ou descer o ponto e os trechos que ele toca |
 
-- O handle de curvatura substitui o arraste do corpo, que deixa de existir. É genérico: parede e rampa, que também são espinha, usam o mesmo.
+- O handle de curvatura substitui o arraste do corpo, que deixa de existir. Largura e duplo clique vivem em `spine-edit-behavior.ts`: toda ferramenta de espinha (rua, rampa curva, espiral) os ganha, e nenhuma edita pelo corpo.
 - O handle age no trecho onde está. Não há escolha de alcance (trecho/construção/rede).
 
 ## Perfil e ponte
 
 - **O perfil estrutural da rua é só a largura.** Meio-fio (`shoulderHeight`, já desligado) é detalhe de asset.
 - `trail`, `street` e `road` diferem apenas em largura/acostamento: são parâmetros, não tipos.
-- **Ponte não é escolhida.** Surge quando o handle de altura tira um trecho do chão, pela lei de contato com o chão: até 1,5 m o trecho se apoia e acompanha o terreno; acima disso fica nivelado entre as pontas e não corta o chão. `bridge` passa de `pathKind` escolhido a estado derivado pela lei do tipo, a cada criação e edição.
+- **Ponte não é escolhida.** A rua nunca amostra o terreno entre as âncoras: a altura vem da espinha. A lei de contato com o chão (`topology/ground-contact.ts`, 1,5 m) já corta o terreno só onde a rua se apoia; um trecho erguido acima disso deixa o chão inteiro sob ele, e isso é a ponte. O subtipo `bridge` foi removido de `PathKind`.
 
 ## Aceite
 

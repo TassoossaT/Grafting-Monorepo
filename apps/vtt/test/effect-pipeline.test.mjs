@@ -57,15 +57,13 @@ test("an effect reaches only what the changed type's interaction cuts, one call 
   assert.deepEqual(calls, [["ground", ["terrain-grass", "terrain"]]], "a platform cuts ground only, and ground answers once for both of its types");
 });
 
-test("a cut reaches only what the structure touches: one high over the ground reaches nothing, a deck included", () => {
+test("a cut reaches only what the structure touches: a road high over the ground -- a deck -- reaches nothing", () => {
   let called = 0;
   const reactions = { ground: () => { called += 1; return done(); } };
-  for (const options of [{ y: 3 }, { y: 3, subtype: "bridge" }]) {
-    runEffects(undefined, sourceOf([face("t", "terrain")]), [effect("cut", "path", options)], reactions, declaredBy({ "terrain/cut": "ground" }));
-  }
+  runEffects(undefined, sourceOf([face("t", "terrain")]), [effect("cut", "path", { y: 3 })], reactions, declaredBy({ "terrain/cut": "ground" }));
   assert.equal(called, 0, "high over it");
   // Just above it, within the clearance, it touches.
-  runEffects(undefined, sourceOf([face("t", "terrain")]), [effect("cut", "path", { y: 0.1, subtype: "bridge" })], reactions, declaredBy({ "terrain/cut": "ground" }));
+  runEffects(undefined, sourceOf([face("t", "terrain")]), [effect("cut", "path", { y: 0.1 })], reactions, declaredBy({ "terrain/cut": "ground" }));
   assert.equal(called, 1, "resting on it");
 });
 

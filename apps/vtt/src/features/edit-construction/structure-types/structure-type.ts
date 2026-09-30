@@ -541,8 +541,8 @@ export interface StructureTypeDefinition {
    *
    * `paintedSubtype` is the preset the run being painted was built from,
    * when its type has subtypes at all. It is what lets one type vary a
-   * declared behaviour -- a bridge deck consuming nothing where a road
-   * carves -- without splitting into a second type with its own role table
+   * declared behaviour -- a trail treading lighter than a road, say --
+   * without splitting into a second type with its own role table
    * and its own logic to keep in step.
    */
   readonly interactionOver: (

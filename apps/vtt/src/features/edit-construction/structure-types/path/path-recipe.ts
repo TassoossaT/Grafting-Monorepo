@@ -71,20 +71,6 @@ export function pathSpineSlot(profile: readonly PathProfilePoint[]): number {
 }
 
 /**
- * Whether this subtype's stations take their height from the ground beneath
- * them.
- *
- * A deck does not: it spans, so its height comes from its own ends and the
- * middle stays level instead of sagging onto whatever it crosses. That is the
- * whole of what makes a subtype a bridge -- no separate type, no separate
- * role table, no separate logic. What it cuts is the ground's own law: only
- * where it touches it.
- */
-export function pathRidesTerrain(kind: PathKind): boolean {
-  return kind !== "bridge";
-}
-
-/**
  * How far this recipe's own product reaches from the reference line -- the
  * outermost lateral offset of the profile it produces.
  *

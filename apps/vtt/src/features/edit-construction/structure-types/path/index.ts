@@ -2,7 +2,6 @@ export {
   PATH_SPINE_OFFSET,
   pathFormationFor,
   pathHalfWidth,
-  pathRidesTerrain,
   pathSpineSlot,
 } from "./path-recipe.ts";
 export type { PathFormationRecipe, PathProfilePoint } from "./path-recipe.ts";

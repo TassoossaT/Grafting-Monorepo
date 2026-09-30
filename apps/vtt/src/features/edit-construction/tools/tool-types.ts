@@ -57,7 +57,7 @@ export interface PathBrushParams extends BrushShapeParams {
  * behaviours. Adding one is adding a preset -- never a second set of type
  * logic to keep in step with the first.
  */
-export type PathKind = "trail" | "street" | "road" | "bridge";
+export type PathKind = "trail" | "street" | "road";
 
 /**
  * What every wall-producing tool needs and nothing else: which wall type,

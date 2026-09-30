@@ -91,14 +91,10 @@ function BrushShapeFields<Params extends BrushShapeParams>(props: {
 }
 
 /**
- * Every path a player draws is a `street` -- `PathKind` still carries
- * `"trail" | "street" | "road" | "bridge"` for the engine and for corridors
- * committed before this panel stopped exposing the other three, but the
- * brush itself only ever writes `"street"` now. `pathFormationFor` only
- * adds a shoulder to a road's width for the other three kinds and never
- * reads `shoulderHeight` at all (no raised rim exists yet), so this only
- * shows the one slider `street`'s own profile actually answers to: bed
- * width.
+ * Every road a player draws is a `street`, and its only structural profile
+ * is its width -- a raised rim is an asset's detail, not the structure's --
+ * so this sets up the width of the next road and nothing else. A standing
+ * road is widened by its own width handles.
  */
 function PathBrushFields(props: { readonly params: PathBrushParams; readonly onChange: (next: PathBrushParams) => void }) {
   const { params, onChange } = props;

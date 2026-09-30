@@ -5,8 +5,7 @@ import type { PathKind } from "../../tools/tool-types.ts";
  * that built it survives.
  *
  * Every path collapses to the single `path` surface type on purpose, so the
- * surface itself cannot say whether it came from a road, a trail or a bridge
- * deck. Something has to, or a later regeneration has no recipe to re-run and
+ * surface itself cannot say whether it came from a road or a trail. Something has to, or a later regeneration has no recipe to re-run and
  * a junction cannot tell what it is joining. The id is that something --
  * carried, not inferred, exactly as a station and its slot are.
  *
@@ -26,7 +25,7 @@ export function pathSubtypeOf(corridorId: string): PathKind | undefined {
   const at = corridorId.lastIndexOf(MARKER);
   if (at < 0) return undefined;
   const kind = corridorId.slice(at + MARKER.length);
-  return kind === "trail" || kind === "street" || kind === "road" || kind === "bridge"
+  return kind === "trail" || kind === "street" || kind === "road"
     ? kind
     : undefined;
 }
