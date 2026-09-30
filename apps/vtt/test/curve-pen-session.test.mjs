@@ -263,6 +263,26 @@ test("an automatic road reinterpolates moved anchors, with reversible automatic 
   } finally {f.close();}
 });
 
+test("continuing a road from its end keeps its contour on its spine: only the new run bends to meet it",()=>{
+  const f=fixture();
+  try {
+    const wide={...params,bedWidth:3};
+    const draw=pts=>{const s=pts.map(([x,z])=>sample(x,z));const g={start:s[0],current:s.at(-1),samples:s};tool.onPointerDown(f.ctx,s[0],wide);tool.onPointerMove(f.ctx,g,wide);tool.onPointerUp(f.ctx,g,wide);};
+    draw(Array.from({length:101},(_,i)=>[30*i/100,8*Math.sin(Math.PI*i/100)]));
+    const standing=structuredClone(edges(f)[0].curve);
+    draw([[29.9,0.05],...Array.from({length:59},(_,i)=>[30.4+i*0.4,-(i+1)*0.15])]);
+    assert.equal(errors(f).length,0,JSON.stringify(f.calls.feedback));
+    assert.deepEqual(edges(f).find(e=>e.curve.start[0]===standing.start[0]&&e.curve.start[2]===standing.start[2])?.curve,standing,"the standing road keeps its controls");
+    const dense=edges(f).flatMap(e=>{const c=resolve(f,e);return f.runtime.curveBatch({tolerance:0.005,commands:[{kind:"sample",curves:[c]}]})[0].samples[0].map(s=>s.position);});
+    const ends=f.runtime.getGraphSnapshot().nodes.filter(n=>n.id.startsWith("spine:")).map(n=>n.position);
+    for(const t of f.runtime.getAllRegionTopologies())for(const n of t.nodes){
+      if(ends.some(q=>Math.hypot(q.x-n.position.x,q.z-n.position.z)<4))continue;
+      const d=Math.min(...dense.map(p=>Math.hypot(p[0]-n.position.x,p[2]-n.position.z)));
+      assert.ok(Math.abs(d-1.5)<0.05,`a contour node stands ${d.toFixed(3)} m off the spine`);
+    }
+  }finally{f.close();}
+});
+
 test("a freehand road keeps explicit controls",()=>{
   const f=fixture();
   try {

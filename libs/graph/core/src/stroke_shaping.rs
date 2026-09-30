@@ -135,7 +135,8 @@ pub(crate) fn limit_grade(points: &[CurvePoint], max_grade: f64) -> Vec<CurvePoi
     for (i, point) in out.iter_mut().enumerate() {
         let low = (start - max_grade * along[i]).max(end - max_grade * (total - along[i]));
         let high = (start + max_grade * along[i]).min(end + max_grade * (total - along[i]));
-        point[1] = point[1].clamp(low, high);
+        // At a steepest-possible end the two bounds meet, and rounding can cross them.
+        point[1] = point[1].clamp(low.min(high), high.max(low));
     }
     for i in 1..out.len() {
         let step = max_grade * (along[i] - along[i - 1]);
@@ -183,6 +184,23 @@ mod tests {
         assert!((steep[1][1] - 0.6).abs() < 1e-9);
         let gentle = limit_grade(&[[0., 0., 0.], [10., 1., 0.]], 0.2);
         assert_eq!(gentle[1][1], 1.);
+    }
+
+    #[test]
+    fn an_end_at_exactly_the_steepest_reach_never_crosses_its_bounds() {
+        let points: Vec<_> = (0..=97)
+            .map(|i| {
+                [
+                    i as f64 * 0.137,
+                    3.2082262 * (i as f64 / 97.),
+                    0.3 * i as f64,
+                ]
+            })
+            .collect();
+        for grade in [0.2, 0.1, 0.05, 0.333] {
+            let path = limit_grade(&points, grade);
+            assert!(path.iter().all(|p| p[1].is_finite()));
+        }
     }
 
     #[test]
