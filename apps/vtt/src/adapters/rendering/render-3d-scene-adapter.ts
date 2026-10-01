@@ -178,7 +178,7 @@ export class Render3dSceneAdapter implements SceneRenderPort {
       kind: NODE_HANDLE_VISUAL_KIND,
       describe: (params) => ({
         geometry: { shape: "sprite" },
-        material: { surface: "unlit", color: 0xffffff, texture: glyphTextures[params.glyph] },
+        material: { surface: "unlit", color: 0xffffff, texture: glyphTextures[params.glyph], clippable: true },
       }),
       equals: (left, right) => left.glyph === right.glyph,
     });
@@ -211,6 +211,9 @@ export class Render3dSceneAdapter implements SceneRenderPort {
           opacity: 0,
           doubleSided: true,
           depthWrite: false,
+          // Cut with the surface it stands for, so a surface the height cut
+          // hides cannot be picked through the cut.
+          clippable: true,
         },
       }),
       equals: (left, right) => left.mesh === right.mesh,

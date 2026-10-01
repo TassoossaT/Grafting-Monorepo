@@ -30,6 +30,9 @@ export function buildVisual(descriptor: VisualDescriptor, clipPlane?: THREE.Plan
   // Picking is resolved by raycasting against the live object graph, so the
   // flag has to live on the object rather than beside it.
   object.userData.pickable = descriptor.pickable ?? true;
+  // The same reason: a ray ignores the material's clipping planes, so the
+  // picker needs to know which hits the active clip plane has cut away.
+  object.userData.clippable = "clippable" in descriptor.material && descriptor.material.clippable === true;
 
   return {
     object,
@@ -182,6 +185,7 @@ function buildMaterial(descriptor: VisualDescriptor, clipPlane?: THREE.Plane): T
       depthWrite: material.depthWrite ?? true,
       map: texture,
       alphaTest: texture ? 0.01 : 0,
+      clippingPlanes: material.clippable === true && clipPlane ? [clipPlane] : null,
     });
   }
 

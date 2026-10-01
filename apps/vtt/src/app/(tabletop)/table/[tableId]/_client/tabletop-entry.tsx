@@ -129,6 +129,9 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     try { window.localStorage.setItem(graphOverlayKey, visible ? "on" : "off"); } catch { /* the choice lasts this session only */ }
   }, [graphOverlayKey]);
   useEffect(() => { runtime.setGraphOverlay?.(graphOverlay); }, [runtime, graphOverlay]);
+  // The height cut is a view of the table, not a setting kept with it: it starts off every visit, so a table never opens with part of its map hidden.
+  const [heightCut, setHeightCut] = useState<number | undefined>(undefined);
+  useEffect(() => { runtime.setHeightCut?.(heightCut); }, [runtime, heightCut]);
   const [rulerReadout, setRulerReadout] = useState<RulerReadoutState | undefined>(undefined);
   const [editorMode, setEditorMode] = useState<"gm" | "player">("gm");
   const [selectedNodeInfo, setSelectedNodeInfo] = useState<SelectedNodeInfo | null>(null);
@@ -372,6 +375,8 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           onRulerSettingsChange={handleRulerSettingsChange}
           graphOverlay={graphOverlay}
           onGraphOverlayChange={handleGraphOverlayChange}
+          heightCut={heightCut}
+          onHeightCutChange={setHeightCut}
         />
 
         {rulerReadout ? <RulerReadout labels={rulerReadout.labels} x={rulerReadout.x} y={rulerReadout.y} /> : null}

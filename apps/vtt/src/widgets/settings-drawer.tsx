@@ -15,6 +15,11 @@ export interface SelectedNodeInfo {
 
 const PANEL_WIDTH = 280;
 
+/** How high the cut slider reaches, in metres, and the step it moves by; the first height it offers when the cut is switched on. */
+const HEIGHT_CUT_MAX = 30;
+const HEIGHT_CUT_STEP = 0.25;
+const HEIGHT_CUT_DEFAULT = 3;
+
 const selectStyle = { background: "#0f172a", color: "inherit", border: "1px solid #1e293b", borderRadius: "0.25rem", padding: "0.15rem 0.3rem" } as const;
 
 /** What each way the ruler catches is called, and what it does. */
@@ -48,6 +53,9 @@ export interface SettingsDrawerProps {
   /** Whether the dots on the graph's nodes are drawn: a debug view, which changes no tool. */
   readonly graphOverlay: boolean;
   readonly onGraphOverlayChange: (visible: boolean) => void;
+  /** The height above which the map is hidden, to see and edit inside roofed or upper-floored structures; `undefined` shows it all. */
+  readonly heightCut: number | undefined;
+  readonly onHeightCutChange: (height: number | undefined) => void;
   readonly open?: boolean;
   readonly onOpenChange?: (open: boolean) => void;
 }
@@ -64,6 +72,9 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
   const isOpen = props.open ?? uncontrolledOpen;
   const setOpen = props.onOpenChange ?? setUncontrolledOpen;
+  // The slider remembers where it was left when the cut is switched off and on again.
+  const [cutHeight, setCutHeight] = useState(props.heightCut ?? HEIGHT_CUT_DEFAULT);
+  const cutOn = props.heightCut !== undefined;
 
   return (
     <SlidingPanel open={isOpen} onOpenChange={setOpen} edge="right" width={PANEL_WIDTH}>
@@ -120,6 +131,36 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
             {Object.values(MEASURE_UNITS).map((unit) => <option key={unit.id} value={unit.id}>{unit.label}</option>)}
           </select>
         </label>
+      </Card>
+
+      <Card className="gm-panel-card" backgroundColor="#182234" accentColor="#1e293b">
+        <span className="gm-panel-card-title">Corte de altura</span>
+        <div style={{ display: "grid", gap: "0.3rem", fontSize: "0.78rem" }}>
+          <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+            <input type="checkbox" checked={cutOn} onChange={(event) => props.onHeightCutChange(event.target.checked ? cutHeight : undefined)} />
+            <span>Esconder o que passa da altura</span>
+          </label>
+          <label className="gm-stat-row" style={{ alignItems: "center" }}>
+            <input
+              type="range"
+              min={0}
+              max={HEIGHT_CUT_MAX}
+              step={HEIGHT_CUT_STEP}
+              value={cutHeight}
+              disabled={!cutOn}
+              onChange={(event) => {
+                const height = Number(event.target.value);
+                setCutHeight(height);
+                props.onHeightCutChange(height);
+              }}
+              style={{ flex: 1 }}
+            />
+            <span className="gm-stat-value">{formatLength(cutHeight, props.measureUnit)}</span>
+          </label>
+          <p style={{ margin: "0.2rem 0 0", color: "#64748b", fontSize: "0.72rem" }}>
+            Só a visão: esconde telhados e andares de cima para editar dentro. Não muda a construção.
+          </p>
+        </div>
       </Card>
 
       <Card className="gm-panel-card" backgroundColor="#182234" accentColor="#1e293b">

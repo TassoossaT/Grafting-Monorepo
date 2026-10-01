@@ -2530,6 +2530,11 @@ export function applyTransform(object: THREE.Object3D, transform: Transform | un
 export function toVec3(vector: THREE.Vector3): Vec3 {
   return { x: vector.x, y: vector.y, z: vector.z };
 
+// src/backend/three/clip-hit.ts
+export function cutAwayByClip(plane: THREE.Plane, enabled: boolean, object: THREE.Object3D, point: THREE.Vector3): boolean {
+  return enabled && object.userData.clippable === true && plane.distanceToPoint(point) < 0;
+  }
+
 // src/backend/three/create-backend.ts
 export interface ThreeBackendOptions {
   readonly maxPixelRatio?: number;

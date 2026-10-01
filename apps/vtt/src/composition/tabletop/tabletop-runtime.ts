@@ -241,6 +241,11 @@ export interface TabletopRuntime extends BezierPort {
   setHandleFocus?(focus: HandleFocus | undefined): void;
   /** Shows or hides the dots drawn on the graph's nodes -- a visualization with no function: no tool reads from them. */
   setGraphOverlay?(visible: boolean): void;
+  /**
+   * Hides everything of the map above `height`, picking included, so what is
+   * inside a roofed or upper-floored structure can be seen and edited; `undefined` shows it all. A view of the table, not an edit: nothing here reaches the graph or the history.
+   */
+  setHeightCut?(height: number | undefined): void;
   /** Shows a handle at `position` while a gesture carries it; `undefined` puts it back where it stands. */
   previewNodeHandle?(nodeId: string, position: ConstructionPosition | undefined): void;
   setPointManipulator?(viewId: RenderViewId, target: RenderPointManipulator | undefined): void;
@@ -1286,6 +1291,10 @@ export class AppTabletopRuntime implements TabletopRuntime {
       for (const id of [...this.#nodeHandleRevisions.keys()]) if (!this.#sceneHandleIds.has(id)) this.#removeNodeHandle(id, "programmatic", "graph-overlay", this.#generation);
     }
     this.#syncSceneHandles("programmatic", "graph-overlay", this.#generation);
+  }
+
+  setHeightCut(height: number | undefined): void {
+    this.#render.setFloorClipHeight(height);
   }
 
   setConstructionHandlePresentation(mode: "all" | "spine-points"): void {

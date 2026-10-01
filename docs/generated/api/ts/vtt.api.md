@@ -855,6 +855,11 @@ Shows or hides the dots drawn on the graph's nodes -- a visualization with no fu
 
 Shows only the focused structure's handles -- the one under the pointer; `undefined` shows every one.
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.setHeightCut(height: number | undefined): void`
+
+Hides everything of the map above `height`, picking included, so what is
+inside a roofed or upper-floored structure can be seen and edited; `undefined` shows it all. A view of the table, not an edit: nothing here reaches the graph or the history.
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.setPointManipulator(viewId: string, target: RenderPointManipulator | undefined): void`
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): RegionEditOutcome`
@@ -1056,6 +1061,11 @@ Shows or hides the dots drawn on the graph's nodes -- a visualization with no fu
 ### `method vtt.tabletop-runtime.TabletopRuntime.setHandleFocus(focus: HandleFocus | undefined): void`
 
 Shows only the focused structure's handles -- the one under the pointer; `undefined` shows every one.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.setHeightCut(height: number | undefined): void`
+
+Hides everything of the map above `height`, picking included, so what is
+inside a roofed or upper-floored structure can be seen and edited; `undefined` shows it all. A view of the table, not an edit: nothing here reaches the graph or the history.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.setPointManipulator(viewId: string, target: RenderPointManipulator | undefined): void`
 
@@ -13169,11 +13179,17 @@ A plain `{x,y,z}` shape rather than importing `ConstructionPosition` -- `widgets
 
 Whether the dots on the graph's nodes are drawn: a debug view, which changes no tool.
 
+### `property vtt.widgets.SettingsDrawerProps.heightCut: number | undefined`
+
+The height above which the map is hidden, to see and edit inside roofed or upper-floored structures; `undefined` shows it all.
+
 ### `property vtt.widgets.SettingsDrawerProps.measureUnit: MeasureUnitId`
 
 The unit the table writes every distance in.
 
 ### `property vtt.widgets.SettingsDrawerProps.onGraphOverlayChange: (visible: boolean) => void`
+
+### `property vtt.widgets.SettingsDrawerProps.onHeightCutChange: (height: number | undefined) => void`
 
 ### `property vtt.widgets.SettingsDrawerProps.onMeasureUnitChange: (unit: MeasureUnitId) => void`
 
