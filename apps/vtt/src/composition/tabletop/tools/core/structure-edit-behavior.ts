@@ -76,9 +76,11 @@ function grabbedTarget(ctx: ToolContext, sample: PointerSample, ownsType: Struct
     return topology === undefined ? undefined : { seedKey: topology.surfaceKey, target };
   }
 
-  if (sample.nodeId !== undefined) {
-    const target: EditTarget = { kind: "vertex", nodeId: sample.nodeId };
-    const incident = topologies.filter((candidate) => candidate.nodes.some((node) => node.id === sample.nodeId));
+  // The vertex under the pointer: the one a picked dot named, else the node geometry finds -- it grabs the same with the dots off.
+  const vertexId = sample.nodeId ?? sample.node?.id;
+  if (vertexId !== undefined) {
+    const target: EditTarget = { kind: "vertex", nodeId: vertexId };
+    const incident = topologies.filter((candidate) => candidate.nodes.some((node) => node.id === vertexId));
     let topology: ConstructionRegionTopology | undefined = incident.find((candidate) => sample.surfaceRef === surfaceRefFromNodeSet(candidate.surfaceKey))
       ?? (elevation ? incident.find((candidate) => resolvePolicy(candidate, target).axes.includes("y")) : undefined)
       ?? incident[0];

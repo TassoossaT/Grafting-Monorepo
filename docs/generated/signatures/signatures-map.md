@@ -4356,7 +4356,7 @@ export function floorsOf(ctx: ToolContext): readonly ConstructionRegionTopology[
 export function floorUnder(floors: readonly ConstructionRegionTopology[], sample: PointerSample): ConstructionRegionTopology | undefined {
   return floors.find((topology) => sample.surfaceRef
   ? surfaceRefFromNodeSet(topology.surfaceKey) === sample.surfaceRef
-  : sample.nodeId !== undefined && topology.nodes.some((node) => node.id === sample.nodeId));
+  : graphNodeOf(sample) !== undefined && topology.nodes.some((node) => node.id === graphNodeOf(sample)));
 export function floorLandingAt(floors: readonly ConstructionRegionTopology[], sample: PointerSample): FloorLanding | undefined {
   const under = floorUnder(floors, sample);
 export function floorLandingToward(floors: readonly ConstructionRegionTopology[], sample: PointerSample, from: ConstructionPosition | undefined): FloorLanding | undefined {
@@ -4404,6 +4404,22 @@ export const navigateTool: ConstructionTool<"navigate"> = {
   id: "navigate",
   defaultParams: () => ({}),
   };
+
+// src/composition/tabletop/tools/core/node-identity.ts
+export const NODE_PIXELS = 12;
+export interface NodeAt {
+  readonly id: string;
+  readonly position: ConstructionPosition;
+  }
+export function nodeByGeometry(hit: Pick<PointerSample, "point" | "ray">, nodes: readonly NodeAt[], metersPerPixel: number | undefined): NodeAt | undefined {
+  const reach = metersPerPixel !== undefined && metersPerPixel > 0 ? metersPerPixel * NODE_PIXELS : NODE_FALLBACK;
+  const { ray, point } = hit;
+  let best: { node: NodeAt; distance: number } | undefined;
+  if (ray) {
+  const d = ray.direction;
+  const length = Math.hypot(d.x, d.y, d.z) || 1;
+  const u = { x: d.x / length, y: d.y / length, z: d.z / length };
+export const graphNodeOf = (sample: Pick<PointerSample, "node" | "nodeId">): string | undefined => sample.node?.id ?? sample.nodeId;
 
 // src/composition/tabletop/tools/core/pointer-ray.ts
 export function pointerAtHeight(sample: PointerSample, y: number): ConstructionPosition {
@@ -4547,7 +4563,7 @@ export function spineBodyTarget(ctx: ToolContext, sample: PointerSample, exclude
   const hit = ctx.runtime.getAllRegionTopologies().find((t) =>
   structureTypeFor(t.surfaceType)?.spine && ownsSpine(t.surfaceType) && (sample.surfaceRef
   ? surfaceRefFromNodeSet(t.surfaceKey) === sample.surfaceRef
-  : t.nodes.some((n) => n.id === sample.nodeId)));
+  : t.nodes.some((n) => n.id === graphNodeOf(sample))));
 
 // src/composition/tabletop/tools/core/spine-commit.ts
 export function regenerateSpine(ctx: ToolContext, snapshot: ConstructionGraphSnapshot, owner: string | undefined, graphPatch: ConstructionGraphPatch, operationId: string, options: { readonly keepsWelds?: boolean } = {}): SpineRegeneration | undefined {
@@ -4694,7 +4710,7 @@ export interface PointerSample {
   readonly screenX?: number;
   readonly shiftKey?: boolean;
   readonly nodeId?: string;
-  readonly surfaceRef?: string;
+  /** The graph node the pointer is on, by geometry -- never by which sprite the pick met (`node-identity.ts`). What a tool reads "the node here" from; the drawn dots have no function. */
 export interface ToolGesture {
   readonly start: PointerSample;
   readonly current: PointerSample;
@@ -5020,7 +5036,7 @@ export interface RoofBase {
   }
 export function roofBaseAt(topologies: readonly ConstructionRegionTopology[], sample: PointerSample): RoofBase {
   const clicked = topologies.find((face) => (
-  sample.surfaceRef ? surfaceRefFromNodeSet(face.surfaceKey) === sample.surfaceRef : sample.nodeId !== undefined && face.nodes.some((node) => node.id === sample.nodeId)));
+  sample.surfaceRef ? surfaceRefFromNodeSet(face.surfaceKey) === sample.surfaceRef : graphNodeOf(sample) !== undefined && face.nodes.some((node) => node.id === graphNodeOf(sample))));
 export function roofBaseOf(topologies: readonly ConstructionRegionTopology[], ref: RoofBaseRef): RoofBase | undefined {
   const key = ref.surfaceKey.join("\u0000");
 
@@ -5272,8 +5288,7 @@ export interface SlopeParams {
   readonly turns?: number;
   }
 export function slopeControlPoint(ctx: ToolContext, sample: PointerSample): ConstructionPosition {
-  const node = sample.nodeId ? ctx.runtime.getGraphSnapshot().nodes.find((n) => n.id === sample.nodeId) : undefined;
-  return { ...sample.point, y: node?.position.y ?? sample.point.y };
+  const nodeId = graphNodeOf(sample);
 export interface PlannedSpan {
   readonly curve: CubicBezier;
   readonly handles: CurveHandles;

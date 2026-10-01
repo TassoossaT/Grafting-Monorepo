@@ -12,6 +12,8 @@ export interface PointerSample {
   readonly screenX?: number;
   readonly shiftKey?: boolean;
   readonly nodeId?: string;
+  /** The graph node the pointer is on, by geometry -- never by which sprite the pick met (`node-identity.ts`). What a tool reads "the node here" from; the drawn dots have no function. */
+  readonly node?: { readonly id: string; readonly position: ConstructionPosition };
   readonly surfaceRef?: string;
   /** The pointer's ray from the camera, when the view gave one -- see `pointer-ray.ts`. */
   readonly ray?: { readonly origin: ConstructionPosition; readonly direction: ConstructionPosition };

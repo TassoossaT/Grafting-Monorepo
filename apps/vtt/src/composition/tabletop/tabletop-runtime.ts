@@ -239,6 +239,8 @@ export interface TabletopRuntime extends BezierPort {
   setGlobalHandleOwners?(owns: ((surfaceType: string) => boolean) | undefined): void;
   /** Shows only the focused structure's handles -- the one under the pointer; `undefined` shows every one. */
   setHandleFocus?(focus: HandleFocus | undefined): void;
+  /** Shows or hides the dots drawn on the graph's nodes -- a visualization with no function: no tool reads from them. */
+  setGraphOverlay?(visible: boolean): void;
   /** Shows a handle at `position` while a gesture carries it; `undefined` puts it back where it stands. */
   previewNodeHandle?(nodeId: string, position: ConstructionPosition | undefined): void;
   setPointManipulator?(viewId: RenderViewId, target: RenderPointManipulator | undefined): void;
@@ -338,6 +340,8 @@ export class AppTabletopRuntime implements TabletopRuntime {
   readonly #surfacePickRevisions = new Map<string, number>();
   /** Last uploaded revision per node handle, mirroring `#chunkRevisions` but for the `"handles"` render layer. */
   readonly #nodeHandleRevisions = new Map<string, number>();
+  /** Whether the graph's own dots are drawn; the edit handles are drawn either way. */
+  #graphOverlay = true;
   /** Monotonic across hide/show cycles so renderer revision guards accept restored controls. */
   #handleRevision = 0;
   /** The construction transaction under way, which a nested commit of the same id joins. */
@@ -629,8 +633,11 @@ export class AppTabletopRuntime implements TabletopRuntime {
     causeId: string,
     generation: number,
     glyph?: RenderHandleGlyph,
+    /** A dot of the graph's own, which hides with the overlay -- as against an edit handle, which stays. */
+    dot = false,
   ): void {
     if (this.#pointHandlesOnly && !this.#pointHandleIds.has(nodeId)) return;
+    if (dot && !this.#graphOverlay && !this.#sceneHandleIds.has(nodeId)) return;
     const revision = ++this.#handleRevision;
     this.#nodeHandleRevisions.set(nodeId, revision);
     this.#render.applyConfirmed({
@@ -749,7 +756,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
         position: node.position,
         revision: (previous?.revision ?? 0) + 1,
       });
-      this.#uploadNodeHandle(node.id, node.position, origin, causeId, generation, HANDLE_GLYPHS.vertex);
+      this.#uploadNodeHandle(node.id, node.position, origin, causeId, generation, HANDLE_GLYPHS.vertex, true);
     }
     this.#syncSceneHandles(origin, causeId, generation);
     return applyMapProjectionDeltas(map, deltas);
@@ -780,7 +787,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
         position,
         revision: (previous?.revision ?? 0) + 1,
       });
-      this.#uploadNodeHandle(nodeId, position, origin, causeId, generation, HANDLE_GLYPHS.vertex);
+      this.#uploadNodeHandle(nodeId, position, origin, causeId, generation, HANDLE_GLYPHS.vertex, true);
     }
     // Curve handles sit off the anchors and follow a reshaped edge too, so
     // they are re-placed whatever the edit moved or retyped. Height widgets
@@ -1268,13 +1275,26 @@ export class AppTabletopRuntime implements TabletopRuntime {
     this.#uploadNodeHandle(nodeId, position, "local", "handle-preview", this.#generation, this.#sceneHandleGlyphs.get(nodeId));
   }
 
+  setGraphOverlay(visible: boolean): void {
+    if (this.#graphOverlay === visible) return;
+    this.#graphOverlay = visible;
+    if (this.#snapshot.status !== "ready") return;
+    if (visible) {
+      for (const node of this.#construction.getNodePositions()) this.#uploadNodeHandle(node.id, node.position, "programmatic", "graph-overlay", this.#generation, HANDLE_GLYPHS.vertex, true);
+    } else {
+      // Every dot that is not an edit handle goes.
+      for (const id of [...this.#nodeHandleRevisions.keys()]) if (!this.#sceneHandleIds.has(id)) this.#removeNodeHandle(id, "programmatic", "graph-overlay", this.#generation);
+    }
+    this.#syncSceneHandles("programmatic", "graph-overlay", this.#generation);
+  }
+
   setConstructionHandlePresentation(mode: "all" | "spine-points"): void {
     const points = mode === "spine-points";
     if (this.#pointHandlesOnly === points) return;
     this.#pointHandlesOnly = points;
     if (this.#snapshot.status !== "ready") return;
     if (!points) {
-      for (const node of this.#construction.getNodePositions()) this.#uploadNodeHandle(node.id,node.position,"programmatic","handle-presentation",this.#generation,HANDLE_GLYPHS.vertex);
+      for (const node of this.#construction.getNodePositions()) this.#uploadNodeHandle(node.id,node.position,"programmatic","handle-presentation",this.#generation,HANDLE_GLYPHS.vertex, true);
     }
     this.#syncSceneHandles("programmatic","handle-presentation",this.#generation);
   }

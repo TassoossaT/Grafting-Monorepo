@@ -2,6 +2,7 @@ import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import { hasTrait, outlineOf, uprightPosts, type RoofBaseRef } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionPosition, ConstructionRegionEdge, ConstructionRegionTopology } from "@/ports";
 import type { RoofFootprint } from "../../../../ports/cap-port.ts";
+import { graphNodeOf } from "../core/node-identity.ts";
 import type { PointerSample } from "../core/tool-context.ts";
 
 /** What a roof stands on: a footprint at one elevation, and how to find it again. */
@@ -21,7 +22,7 @@ const LEVEL = 1e-3;
  */
 export function roofBaseAt(topologies: readonly ConstructionRegionTopology[], sample: PointerSample): RoofBase {
   const clicked = topologies.find((face) => (
-    sample.surfaceRef ? surfaceRefFromNodeSet(face.surfaceKey) === sample.surfaceRef : sample.nodeId !== undefined && face.nodes.some((node) => node.id === sample.nodeId)));
+    sample.surfaceRef ? surfaceRefFromNodeSet(face.surfaceKey) === sample.surfaceRef : graphNodeOf(sample) !== undefined && face.nodes.some((node) => node.id === graphNodeOf(sample))));
   if (clicked && hasTrait(clicked.surfaceType, "floor")) return floorBase(clicked);
   if (clicked && hasTrait(clicked.surfaceType, "partition")) {
     try { return wallLoopBase(topologies, clicked); }

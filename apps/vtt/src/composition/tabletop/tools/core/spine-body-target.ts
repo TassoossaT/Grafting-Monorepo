@@ -2,6 +2,7 @@ import { curveEdgesOf, curvePickId, structureTypeFor } from "../../../../feature
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import type { CurveGestureOptions } from "./curve-edit-gesture.ts";
 import { rulerOf } from "./ruler.ts";
+import { graphNodeOf } from "./node-identity.ts";
 import type { PointerSample, ToolContext } from "./tool-context.ts";
 
 /**
@@ -18,7 +19,7 @@ export function spineBodyTarget(ctx: ToolContext, sample: PointerSample, exclude
   const hit = ctx.runtime.getAllRegionTopologies().find((t) =>
     structureTypeFor(t.surfaceType)?.spine && ownsSpine(t.surfaceType) && (sample.surfaceRef
       ? surfaceRefFromNodeSet(t.surfaceKey) === sample.surfaceRef
-      : t.nodes.some((n) => n.id === sample.nodeId)));
+      : t.nodes.some((n) => n.id === graphNodeOf(sample))));
   const owner = hit && structureTypeFor(hit.surfaceType)?.spine;
   const snapshot = ctx.runtime.getGraphSnapshot();
   const ownedEdges = snapshot.edges.filter((e) =>

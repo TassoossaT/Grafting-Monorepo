@@ -858,3 +858,22 @@ test("a roof's handle follows the result of its edit, and its ruler reads the pe
     assert.ok(Math.abs(height.foot.x - rise.pivot.x) < 1e-6 && Math.abs(height.foot.z - rise.pivot.z) < 1e-6, "the ruler stands under the peak");
   } finally { session.free(); }
 });
+
+test("a roof begun on another structure's corner takes that corner's height from the geometry alone -- no dot picked, none drawn", () => {
+  const value = fixture();
+  const { runtime, session, ctx } = value;
+  try {
+    addFace(runtime, "wall", "wall-white", [
+      { id: "g:a", position: { x: 0, y: 0, z: 0 } }, { id: "g:b", position: { x: 6, y: 0, z: 0 } },
+      { id: "g:c", position: { x: 6, y: 4, z: 0 } }, { id: "g:d", position: { x: 0, y: 4, z: 0 } },
+    ]);
+    const params = { ...DEFAULT_TOOL_PARAMS.roof, waters: 2, height: 2 };
+    // The pointer is on the wall's top corner by geometry: the dispatcher names it as `node`, and no sprite named anything.
+    const start = { point: { x: 6, y: 0, z: 0 }, node: { id: "g:c", position: { x: 6, y: 4, z: 0 } } };
+    const current = { point: { x: 9, y: 0, z: 3 } };
+    roofTool.onPointerDown(ctx, start, params);
+    roofTool.onPointerUp(ctx, { start, current, samples: [start, current] }, params);
+    const low = Math.min(...roofs(runtime).flatMap((f) => f.nodes.map((n) => n.position.y)));
+    assert.ok(Math.abs(low - 4) < 1e-6, `the roof stands on the corner's height: ${low}`);
+  } finally { session.free(); }
+});

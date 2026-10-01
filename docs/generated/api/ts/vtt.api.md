@@ -847,6 +847,10 @@ Local editing presentation; never changes the graph or persistence.
 Which types' whole-structure handles the scene shows -- the active tool's
 own; `undefined` shows none.
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.setGraphOverlay(visible: boolean): void`
+
+Shows or hides the dots drawn on the graph's nodes -- a visualization with no function: no tool reads from them.
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.setHandleFocus(focus: HandleFocus | undefined): void`
 
 Shows only the focused structure's handles -- the one under the pointer; `undefined` shows every one.
@@ -1044,6 +1048,10 @@ Local editing presentation; never changes the graph or persistence.
 
 Which types' whole-structure handles the scene shows -- the active tool's
 own; `undefined` shows none.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.setGraphOverlay(visible: boolean): void`
+
+Shows or hides the dots drawn on the graph's nodes -- a visualization with no function: no tool reads from them.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.setHandleFocus(focus: HandleFocus | undefined): void`
 
@@ -2292,6 +2300,10 @@ The face under the pointer, when it is on one: its slope through the exact point
 
 The way the camera looks, when the view gave it -- see `build-frame.ts`.
 
+### `property vtt.curve-edit-gesture.AnchorTarget.node?: { id: string; position: ConstructionPosition }`
+
+The graph node the pointer is on, by geometry -- never by which sprite the pick met (`node-identity.ts`). What a tool reads "the node here" from; the drawn dots have no function.
+
 ### `property vtt.curve-edit-gesture.AnchorTarget.nodeId?: string`
 
 ### `property vtt.curve-edit-gesture.AnchorTarget.point: ConstructionPosition`
@@ -2491,6 +2503,25 @@ No-op: in `navigate` mode the pointer drives camera orbit/pan
 not any construction effect. Exists so `tool-registry.ts` has an entry for
 every `ConstructionToolId` and `use-construction-pointer.ts` never needs a
 "no tool selected" special case.
+
+### `interface vtt.node-identity.NodeAt`
+
+### `property vtt.node-identity.NodeAt.id: string`
+
+### `property vtt.node-identity.NodeAt.position: ConstructionPosition`
+
+### `variable vtt.node-identity.NODE_PIXELS: 12`
+
+How near the pointer's ray must pass to a node, on the screen, for the node to be what is there.
+
+### `function vtt.node-identity.graphNodeOf(sample: Pick<PointerSample, "node" | "nodeId">): string | undefined`
+
+The graph node `sample` is on: the one geometry finds, else the one a picked dot named.
+
+### `function vtt.node-identity.nodeByGeometry(hit: Pick<PointerSample, "point" | "ray">, nodes: readonly NodeAt[], metersPerPixel: number | undefined): NodeAt | undefined`
+
+The node of `nodes` nearest the pointer, within NODE_PIXELS of its
+ray -- or of the point it hit, with no ray -- and not behind what was hit.
 
 ### `function vtt.pointer-ray.pointerAtHeight(sample: PointerSample, y: number): ConstructionPosition`
 
@@ -3468,6 +3499,10 @@ The face under the pointer, when it is on one: its slope through the exact point
 
 The way the camera looks, when the view gave it -- see `build-frame.ts`.
 
+### `property vtt.tool-context.PointerSample.node?: { id: string; position: ConstructionPosition }`
+
+The graph node the pointer is on, by geometry -- never by which sprite the pick met (`node-identity.ts`). What a tool reads "the node here" from; the drawn dots have no function.
+
 ### `property vtt.tool-context.PointerSample.nodeId?: string`
 
 ### `property vtt.tool-context.PointerSample.point: ConstructionPosition`
@@ -3880,6 +3915,10 @@ The face under the pointer, when it is on one: its slope through the exact point
 ### `property vtt.road-body-target.RoadSnapTarget.forward?: ConstructionPosition`
 
 The way the camera looks, when the view gave it -- see `build-frame.ts`.
+
+### `property vtt.road-body-target.RoadSnapTarget.node?: { id: string; position: ConstructionPosition }`
+
+The graph node the pointer is on, by geometry -- never by which sprite the pick met (`node-identity.ts`). What a tool reads "the node here" from; the drawn dots have no function.
 
 ### `property vtt.road-body-target.RoadSnapTarget.nodeId?: string`
 

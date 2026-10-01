@@ -10,6 +10,7 @@ import type { SelectedNodeInfo } from "@/widgets";
 
 import { VIEW_FOV_DEGREES } from "../../adapters/rendering/index.ts";
 import type { TabletopRuntime } from "./tabletop-runtime.ts";
+import { nodeByGeometry } from "./tools/core/node-identity.ts";
 import { metersPerPixelAt } from "./tools/core/pointer-scale.ts";
 import { createRulerSession } from "./tools/core/ruler-session.ts";
 import { NO_FEEDBACK, rulerOf, type RulerFeedback } from "./tools/core/ruler.ts";
@@ -467,7 +468,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       if (typed) ruled = typed;
       feedbackRef.current = ruled.feedback;
       pointerAtRef.current = { clientX: event.clientX, clientY: event.clientY };
-      return { ...ruled.sample, screenY: event.clientY, screenX: event.clientX, shiftKey: event.shiftKey };
+      // The node under the pointer, by geometry: what a tool reads "the node here" from, drawn dots or not.
+      const node = nodeByGeometry(placed, runtime.getGraphSnapshot().nodes, metersPerPixelRef.current);
+      return { ...ruled.sample, ...(node ? { node } : {}), screenY: event.clientY, screenX: event.clientX, shiftKey: event.shiftKey };
     },
     [ruler, typedLengthAt, ctx],
   );
