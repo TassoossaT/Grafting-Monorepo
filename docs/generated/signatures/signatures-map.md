@@ -4873,6 +4873,8 @@ export interface OpeningStand {
 // src/composition/tabletop/tools/openings/opening-tool.ts
 export const openingTool: ConstructionTool<"opening"> = {
   ...openingToolBase,
+  // Its selected opening shows corner and side handles, drawn like every other handle's.
+  editsType: (surfaceType) => surfaceType === openingStructureType.surfaceType,
   previewFor(gesture: ToolGesture, params: OpeningParams, ctx: ToolContext) {
   const ghost = openingToolBase.previewFor?.(gesture, params, ctx);
 
@@ -8001,6 +8003,29 @@ export type { CurveEdge, CurveHandleIndex, CurveMidframe, CurveStore } from "./c
 export type { PanelHeightWidgetZone } from "./panel-height-widget.ts";
 export type { ContourPort, ContourSpan } from "./contour-geometry.ts";
 export type { EndJoint, FloorEdge, FloorLanding, PlanDirection, Rewelding, WeldChanges, WeldRung } from "./floor-weld.ts";
+export type { OpeningHandle, OpeningHandlePart } from "./opening-handles.ts";
+
+// src/features/edit-construction/topology/opening-handles.ts
+export type OpeningHandlePart = "left" | "right" | "top" | "bottom" | "top-left" | "top-right" | "bottom-left" | "bottom-right";
+export interface OpeningHandle {
+  readonly id: string;
+  readonly part: OpeningHandlePart;
+  /** A corner moves two sides at once; a side, one. */
+  readonly kind: "corner" | "side";
+  readonly position: ConstructionPosition;
+  /** The node the handle is named after -- one of the opening's own -- by which the opening is found again. */
+  readonly nodeId: string;
+export const openingHandleId = (part: OpeningHandlePart, nodeId: string): string => `${PREFIX}${part}:${nodeId}`;
+export function openingHandlePick(id: string): { readonly part: OpeningHandlePart; readonly nodeId: string } | undefined {
+  if (!id.startsWith(PREFIX)) return undefined;
+  const rest = id.slice(PREFIX.length);
+export function openingHandles(
+  topologies: readonly ConstructionRegionTopology[],
+  focus: ReadonlySet<string> | undefined,
+  isOpening: (surfaceType: string) => boolean,
+  ): readonly OpeningHandle[] {
+  if (!focus) return [];
+  const groups = new Map<string, ConstructionRegionTopology[]>();
 
 // src/features/edit-construction/topology/panel-height-widget.ts
 export type PanelHeightWidgetZone = "group" | "single";

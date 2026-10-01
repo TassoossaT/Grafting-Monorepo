@@ -433,3 +433,34 @@ test("an opening's sizes are drawn as rulers on the wall, and one being dragged 
     openingTool.onCancel(ctx);
   } finally { session.free(); }
 });
+
+test("the selected opening shows a handle on each corner and the middle of each side, and a corner handle resizes it in width and height together", async () => {
+  const { openingHandles } = await import("../src/features/edit-construction/index.ts");
+  const { runtime, session, ctx } = fixture();
+  const focused = [];
+  ctx.runtime.setHandleFocus = (focus) => focused.push(focus);
+  try {
+    wall(runtime);
+    click(ctx, { point: { x: 4, y: 1.2, z: 0 } }, { ...WINDOW, width: 1, height: 1 });
+    // Pressing the window selects it, and with it its handles show.
+    gesture(ctx, WINDOW, { x: 4, y: 1.2, z: 0 });
+    assert.ok(focused.filter(Boolean).at(-1)?.faces.size > 0, "selecting an opening gives its handles the focus");
+    const window = openingsOf(runtime).find((t) => t.nodes.some((n) => Math.abs(n.position.x - 4) < 0.6));
+    const keys = new Set([window.surfaceKey.join("\u0000")]);
+    const handles = openingHandles(runtime.getAllRegionTopologies(), keys, (type) => type === window.surfaceType);
+    assert.equal(handles.filter((h) => h.kind === "corner").length, 4, "a window has all four corners");
+    assert.equal(handles.filter((h) => h.kind === "side").length, 4);
+    const box = (axis) => extent(openingsOf(runtime).find((t) => t.nodes.some((n) => Math.abs(n.position.x - 4) < 0.7)), axis);
+    const [w0, h0] = [box("x").size, box("y").size];
+    const corner = handles.find((h) => h.part === "top-right");
+    // A press on the corner handle, dragged out along the wall and up.
+    const start = { point: corner.position, nodeId: corner.id };
+    dispatchGesture(openingTool, ctx, WINDOW, [start, { point: { x: corner.position.x + 0.5, y: corner.position.y + 0.4, z: 0 } }]);
+    assert.ok(box("x").size > w0 + 0.3 && box("y").size > h0 + 0.2, `${box("x").size} x ${box("y").size} from ${w0} x ${h0}`);
+    // A door stands on the floor: no handle on its bottom.
+    click(ctx, { point: { x: 1, y: 0, z: 0 } }, { openingKind: "door", width: 0.9, height: 2 });
+    const doorPiece = openingsOf(runtime).find((t) => t.nodes.some((n) => Math.abs(n.position.x - 1) < 0.6));
+    const doorHandles = openingHandles(runtime.getAllRegionTopologies(), new Set([doorPiece.surfaceKey.join(" ")]), (type) => type === doorPiece.surfaceType);
+    assert.ok(doorHandles.length > 0 && doorHandles.every((h) => !h.part.includes("bottom")), doorHandles.map((h) => h.part).join());
+  } finally { session.free(); }
+});

@@ -6218,6 +6218,8 @@ handles, and are not here.)
 - midpoint: a span's midpoint -- bend it, or double-click to insert a point;
 - width: on the edge of a spine span's band -- widen or narrow the span;
 - panelHeight: a wall run's own height widget;
+- corner and side: the corners and sides of the focused opening, which
+  resize it (`topology/opening-handles.ts`);
 - every whole-structure handle, by its own kind (`global-handles/`).
 
 ### `function vtt.scene-handles.sceneHandles(input: SceneHandleInput): readonly SceneHandle[]`
@@ -10204,6 +10206,41 @@ over at all: the structure touches it now (`after`), touched it before
 joined to it by a node. The ground's height is read from the ground alone,
 never from the structure's nodes it shares. A structure built, moved or
 deleted high over the ground is none of these.
+
+### `interface vtt.opening-handles.OpeningHandle`
+
+### `property vtt.opening-handles.OpeningHandle.id: string`
+
+### `property vtt.opening-handles.OpeningHandle.kind: "side" | "corner"`
+
+A corner moves two sides at once; a side, one.
+
+### `property vtt.opening-handles.OpeningHandle.nodeId: string`
+
+The node the handle is named after -- one of the opening's own -- by which the opening is found again.
+
+### `property vtt.opening-handles.OpeningHandle.part: OpeningHandlePart`
+
+### `property vtt.opening-handles.OpeningHandle.position: ConstructionPosition`
+
+### `type vtt.opening-handles.OpeningHandlePart = "left" | "right" | "top" | "bottom" | "top-left" | "top-right" | "bottom-left" | "bottom-right"`
+
+The handles of an opening laid on a wall: one on each corner -- which
+resizes it in width and height at once, keeping its shape -- and one on the
+middle of each side, which moves that side alone. Read off the nodes the
+opening's pieces are pinned with, on the wall they are pinned to: where
+along it, and how high -- never off what shape the opening is. A door
+stands on the floor, so its bottom has none.
+
+### `function vtt.opening-handles.openingHandleId(part: OpeningHandlePart, nodeId: string): string`
+
+### `function vtt.opening-handles.openingHandlePick(id: string): { nodeId: string; part: OpeningHandlePart } | undefined`
+
+Which opening handle `id` names, and after which node; `undefined` for any other id.
+
+### `function vtt.opening-handles.openingHandles(topologies: readonly ConstructionRegionTopology[], focus: ReadonlySet<string> | undefined, isOpening: (surfaceType: string) => boolean): readonly OpeningHandle[]`
+
+The handles of every opening group among `topologies` that `focus` holds a piece of; none without a focus.
 
 ### `type vtt.panel-height-widget.PanelHeightWidgetZone = "group" | "single"`
 

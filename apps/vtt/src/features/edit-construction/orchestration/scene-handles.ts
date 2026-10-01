@@ -4,6 +4,7 @@ import type { GlobalHandleKind } from "../global-handles/index.ts";
 import { spineWidthHandles } from "../spine/spine-handles.ts";
 import { spineDefaultOffsets } from "../structure-types/index.ts";
 import { curveEdgesOf, curveHandles, curveMidframes } from "../topology/curve-handles.ts";
+import { openingHandles } from "../topology/opening-handles.ts";
 import { panelHeightWidgets } from "../topology/panel-height-widget.ts";
 import { shownGlobalHandles } from "./global-handles/index.ts";
 
@@ -18,6 +19,8 @@ import { shownGlobalHandles } from "./global-handles/index.ts";
  * - midpoint: a span's midpoint -- bend it, or double-click to insert a point;
  * - width: on the edge of a spine span's band -- widen or narrow the span;
  * - panelHeight: a wall run's own height widget;
+ * - corner and side: the corners and sides of the focused opening, which
+ *   resize it (`topology/opening-handles.ts`);
  * - every whole-structure handle, by its own kind (`global-handles/`).
  */
 export type SceneHandleKind = "anchor" | "midpoint" | "width" | "panelHeight" | GlobalHandleKind;
@@ -80,6 +83,10 @@ export function sceneHandles(input: SceneHandleInput): readonly SceneHandle[] {
     // With a focus, only the focused structure's own.
     const widgetFaces = input.focus ? input.topologies.filter((topology) => input.focus!.faces.has(topology.surfaceKey.join("\u0000"))) : input.topologies;
     for (const widget of panelHeightWidgets(widgetFaces)) handles.push({ id: widget.id, kind: "panelHeight", position: widget.position });
+  }
+  // The focused opening's own: a corner resizes it in both, a side moves that side.
+  if (input.owns && input.focus) {
+    for (const handle of openingHandles(input.topologies, input.focus.faces, input.owns)) handles.push({ id: handle.id, kind: handle.kind, position: handle.position });
   }
   if (input.owns) {
     for (const handle of shownGlobalHandles({ graph: input.graph, topologies: input.topologies, cloudFor: input.cloudFor }, input.owns)) {
