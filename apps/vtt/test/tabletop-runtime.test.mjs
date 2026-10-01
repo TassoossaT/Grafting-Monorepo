@@ -39,6 +39,7 @@ function createTabletopRuntime(options) {
 
 function createFakeRenderPort() {
   const changes = [];
+  const clipHeights = [];
   let started = false;
   let creates = 0;
   let disposes = 0;
@@ -66,7 +67,12 @@ function createFakeRenderPort() {
     pick() {
       return undefined;
     },
-    setFloorClipHeight() {},
+    // Like the real adapter: there is no engine to cut before `start`.
+    clipHeights,
+    setFloorClipHeight(height) {
+      if (!started) throw new Error("scene renderer is not started");
+      clipHeights.push(height);
+    },
     getMetrics() {
       return {
         rendererCreates: creates,
@@ -311,6 +317,27 @@ test("keeps a cached immutable snapshot and publishes lifecycle transitions", as
   assert.deepEqual(observed, ["starting", "ready"]);
   assert.equal(runtime.getSnapshot().status, "ready");
   await assert.rejects(runtime.start(), /already ready/);
+});
+
+test("a height cut asked for before the renderer starts is kept and applied once it has", async () => {
+  const renderPort = createFakeRenderPort();
+  const runtime = createTabletopRuntime({
+    tableId: "table-1",
+    renderPort,
+    constructionPort: createFakeConstructionPort(),
+  });
+
+  // What the view does on mount, before `start` has finished: nothing may reach the renderer yet.
+  runtime.setHeightCut(undefined);
+  runtime.setHeightCut(4);
+  assert.deepEqual(renderPort.clipHeights, []);
+
+  await runtime.start();
+  assert.deepEqual(renderPort.clipHeights, [4]);
+
+  runtime.setHeightCut(4);
+  runtime.setHeightCut(undefined);
+  assert.deepEqual(renderPort.clipHeights, [4, undefined]);
 });
 
 test("by default, starting a tabletop runtime initializes a clean, empty board", async () => {

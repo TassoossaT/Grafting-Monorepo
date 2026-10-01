@@ -347,6 +347,8 @@ export class AppTabletopRuntime implements TabletopRuntime {
   readonly #nodeHandleRevisions = new Map<string, number>();
   /** Whether the graph's own dots are drawn; the edit handles are drawn either way. */
   #graphOverlay = true;
+  /** The height the map is cut at, if it is: kept here so a cut asked for before the renderer starts is not lost. */
+  #heightCut: number | undefined;
   /** Monotonic across hide/show cycles so renderer revision guards accept restored controls. */
   #handleRevision = 0;
   /** The construction transaction under way, which a nested commit of the same id joins. */
@@ -425,6 +427,7 @@ export class AppTabletopRuntime implements TabletopRuntime {
       createMapProjection(),
     );
     this.#publishLifecycle("ready");
+    if (this.#heightCut !== undefined) this.#render.setFloorClipHeight(this.#heightCut);
   }
 
   /** Upserts one surface's invisible pick proxy. `meshData` is the surface's whole pick geometry -- already merged across every mesh piece the surface currently has, if more than one. */
@@ -1294,7 +1297,10 @@ export class AppTabletopRuntime implements TabletopRuntime {
   }
 
   setHeightCut(height: number | undefined): void {
-    this.#render.setFloorClipHeight(height);
+    if (this.#heightCut === height) return;
+    this.#heightCut = height;
+    // The renderer is not there before `start` finishes; `start` applies what was asked meanwhile.
+    if (this.#snapshot.status === "ready") this.#render.setFloorClipHeight(height);
   }
 
   setConstructionHandlePresentation(mode: "all" | "spine-points"): void {
