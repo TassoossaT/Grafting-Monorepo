@@ -144,7 +144,7 @@ export function contourStroke<K extends ConstructionToolId, P extends ContourStr
         const points = samples.map((s) => s.point);
         const first = points[0]!, last = points.at(-1)!;
         if (Math.hypot(first.x - last.x, first.z - last.z) > 1e-5) points.push(first);
-        options.commit(ctx, fitPath(points, own.tolerance ?? 0.15, { curves: ctx.snapToGrid ? "none" : "arc" }), level, own, samples);
+        options.commit(ctx, fitPath(points, own.tolerance ?? 0.15, { curves: "arc" }), level, own, samples);
       }
       drafts.delete(ctx.runtime);
     },

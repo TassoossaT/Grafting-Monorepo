@@ -6,7 +6,7 @@ import {
   rejoinNodes,
   releasePart,
   snapAnchorsOf,
-  snapMagnetsOf,
+  snapLinksOf,
   snapToOutlines,
   type OutlineSnap,
   reshapedWelds,
@@ -373,14 +373,14 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
   let ended = false;
   // Snapping onto the other structures' outlines, as they stood when the drag began -- never while lifting.
   const snap = handle.snaps === true && handle.faces !== undefined && params?.mode !== "elevation"
-    ? { anchors: snapAnchorsOf(scene, handle), magnets: snapMagnetsOf(scene, handle) }
+    ? { anchors: snapAnchorsOf(scene, handle), links: snapLinksOf(scene, handle) }
     : undefined;
   let snapped: OutlineSnap | undefined;
 
   /** Where the handle stands on its path, and what that asks of the structure. */
   function intentOf(gesture: ToolGesture): { readonly intent: GlobalHandleIntent; readonly at: ConstructionPosition; readonly readout?: string } {
     const { position: free, angle = 0 } = drag.at(gesture);
-    snapped = snap && snapToOutlines(snap.anchors, { x: free.x - handle!.position.x, y: free.y - handle!.position.y, z: free.z - handle!.position.z }, handle!.motion, snap.magnets);
+    snapped = snap && snapToOutlines(snap.anchors, { x: free.x - handle!.position.x, y: free.y - handle!.position.y, z: free.z - handle!.position.z }, handle!.motion, snap.links);
     const at = snapped ? { x: handle!.position.x + snapped.delta.x, y: handle!.position.y + snapped.delta.y, z: handle!.position.z + snapped.delta.z } : free;
     const delta = { x: at.x - handle!.position.x, y: at.y - handle!.position.y, z: at.z - handle!.position.z };
     switch (handle!.kind) {
@@ -480,7 +480,7 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
       if (!edit) return;
       try {
         if (paused) commitPaused(ctx, handle, paused, scene, operationId);
-        else if (!((release || snapped) && commitJoining(ctx, handle, edit, scene, operationId, release, snapped?.magnet ?? []))) commitEdit(ctx, handle, edit, scene, operationId);
+        else if (!((release || snapped?.joins) && commitJoining(ctx, handle, edit, scene, operationId, release, snapped?.magnet ?? []))) commitEdit(ctx, handle, edit, scene, operationId);
         // Named after a node the edit keeps, so the same id finds it where it now stands.
         const moved = shownGlobalHandleAt(sceneOf(ctx), handle.id);
         ctx.reportSelection(moved ? { id: moved.id, point: moved.position } : undefined);

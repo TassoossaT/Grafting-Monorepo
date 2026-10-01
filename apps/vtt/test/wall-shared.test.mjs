@@ -357,25 +357,18 @@ test("three panels may meet at one column", () => {
   assert.equal(topologies.length, 4, "four panels now meet at that column");
 });
 
-test("with the grid magnet on, a staircase of snapped samples commits only straight runs", () => {
-  const { ctx, patches } = contextFor([], true);
-  // Exactly what the dispatcher hands over once every ground point is
-  // rounded to an intersection: a staircase, whose every three points sit
-  // on some circle nobody drew.
-  const staircase = [
-    { x: 0, y: 0, z: 0 },
-    { x: 1, y: 0, z: 0 },
-    { x: 1, y: 0, z: 1 },
-    { x: 2, y: 0, z: 1 },
-    { x: 2, y: 0, z: 2 },
-    { x: 3, y: 0, z: 2 },
-  ];
+test("a freehand stroke is a curve whatever the context's snap says -- the wall brush is not a ruler", () => {
+  for (const snapped of [false, true]) {
+    const { ctx, patches } = contextFor([], snapped);
+    const arc = Array.from({ length: 13 }, (_, i) => {
+      const angle = (i / 12) * (Math.PI / 2);
+      return { x: 4 * Math.sin(angle), y: 0, z: 4 - 4 * Math.cos(angle) };
+    });
 
-  commitWallStroke(ctx, staircase, 0.3, PARAMS, "wall-brush");
+    commitWallStroke(ctx, arc, 0.3, PARAMS, "wall-brush");
 
-  const { patch } = patches[0];
-  for (const edge of patch.edges) {
-    assert.equal(geometryOf(edge).kind, "line", "a snapped stroke has no hand in it to read curvature out of");
+    const kinds = new Set(patches[0].patch.edges.map((edge) => geometryOf(edge).kind));
+    assert.ok(kinds.has("bezier"), `a drawn arc keeps its curve (snap ${snapped}): ${[...kinds]}`);
   }
 });
 
