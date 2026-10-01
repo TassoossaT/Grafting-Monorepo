@@ -17,6 +17,7 @@ import {
   spineOwnerAt,
   structureTypeFor,
 } from "../../../../features/edit-construction/index.ts";
+import { facesOfNodes } from "../../../../features/edit-construction/index.ts";
 import type { AtomicEditOp, StructureEditParams } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionCurvedEdge, ConstructionEdgeGeometry, ConstructionPosition, ConstructionSurfaceKey, CubicBezier } from "../../../../ports/index.ts";
 import type { PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
@@ -200,7 +201,7 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params: CurveGest
       // Raised or lowered, a point lands on the heights other structures stand at, or on a round number above the ground -- the ruler's lift, as every height handle has.
       lifted = [];
       if (!isWidthDrag && Math.abs(target.y - sample.point.y) > 1e-4) {
-        const lift = rulerOf(ctx).lift({ dragged: target, standing: target.y, base: 0, links: rulerOf(ctx).linksWithout(new Set()), rounds: true });
+        const lift = rulerOf(ctx).lift({ dragged: target, standing: target.y, base: 0, links: rulerOf(ctx).linksWithout(facesOfNodes(ctx.runtime.getAllRegionTopologies(), [targetId])), rounds: true });
         target = { ...target, y: lift.y };
         lifted = [...lift.guides];
       }

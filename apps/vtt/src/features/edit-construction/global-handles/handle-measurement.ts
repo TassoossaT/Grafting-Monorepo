@@ -46,9 +46,13 @@ export const HANDLE_MEASUREMENT: Readonly<Record<GlobalHandleKind, EditMeasureNa
  *   as it moves.
  * - `"grade"`: the runs beside it, in height. A top is read by how steeply
  *   the run to each neighbour climbs.
+ * - `"sides"`: the sides beside the one it pushes: how long each becomes,
+ *   from its far end, which stays.
+ * - `"pitch"`: the lowest edge of what it edits -- its eave: how steeply the
+ *   run from there climbs to it.
  * - `"none"`: nothing near it -- a height, a turn, a radius, a click.
  */
-export type HandleReference = "grab" | "edges" | "grade" | "none";
+export type HandleReference = "grab" | "edges" | "sides" | "grade" | "pitch" | "none";
 
 export const HANDLE_REFERENCE: Readonly<Record<GlobalHandleKind, HandleReference>> = {
   pivot: "grab",
@@ -60,13 +64,13 @@ export const HANDLE_REFERENCE: Readonly<Record<GlobalHandleKind, HandleReference
   destination: "grab",
   originHeight: "none",
   destinationHeight: "none",
-  side: "none",
+  side: "sides",
   corner: "edges",
   foot: "edges",
   top: "grade",
   detach: "none",
-  rise: "none",
-  slope: "none",
-  seam: "none",
+  rise: "pitch",
+  slope: "pitch",
+  seam: "pitch",
   insert: "edges",
 };

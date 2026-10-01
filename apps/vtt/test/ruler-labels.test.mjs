@@ -127,3 +127,23 @@ test("an edit's difference is drawn from where it began to where it stands, with
   const flat = linesOf({ guides: [], measures: [{ kind: "change", name: "desloc.", meters: 2, from: at(0, 0), to: at(2, 0) }] })[0];
   assert.equal(flat.vertical, undefined);
 });
+
+test("a size lying on a slanted face is counted by its real length, not by its length in plan", async () => {
+  const { linesOf, frameOf } = await import("../src/composition/tabletop/tools/core/ruler-preview.ts");
+  // 3 along, 4 up the slope: 5 on the face, 3 in plan.
+  const feedback = { guides: [], measures: [{ kind: "size", name: "altura", meters: 5, from: at(0, 0, 0), to: at(3, 0, 4) }] };
+  const [line] = linesOf(feedback);
+  assert.equal(line.solid, true);
+  near(frameOf(line).length, 5);
+  assert.deepEqual(mapLabelsOf(feedback, 0.02, only).filter((l) => /altura/.test(l.text)).map((l) => l.text), ["altura 5.00 m"]);
+  // A line on level ground stays counted in plan.
+  near(frameOf({ anchor: at(0, 0), tip: at(3, 4), zero: 0, protractor: false, stroke: true }).length, 5);
+});
+
+test("a move across the ground keeps its protractor, and a turn says which way it faced before and after", async () => {
+  const { linesOf, rulerLabels } = await import("../src/composition/tabletop/tools/core/ruler-preview.ts");
+  const [line] = linesOf({ guides: [], measures: [{ kind: "change", name: "desloc.", meters: 2, from: at(0, 0), to: at(2, 0), arc: true }] });
+  assert.equal(line.protractor, true);
+  assert.equal(linesOf({ guides: [], measures: [{ kind: "change", name: "lado", meters: 2, from: at(0, 0), to: at(2, 0) }] })[0].protractor, false);
+  assert.ok(rulerLabels({ guides: [], measures: [{ kind: "was", name: "direção", was: 30, now: 45, degrees: true }] }, "m")[0].startsWith("direção 30.0° → 45.0°"));
+});

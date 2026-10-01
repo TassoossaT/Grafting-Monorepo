@@ -35,4 +35,4 @@ export { joinWhereLanded, partNodes, releasePart, snapAnchorsOf, snapLinksOf } f
 export { joinedStructures, standingOn, standsOn } from "./rigid-carry.ts";
 export { rejoinNodes, reshapedWelds, reweld, unweld, endJoinsOf, type WeldLink } from "./weld-pause.ts";
 export { sceneHandles, type HandleFocus, type SceneHandle, type SceneHandleInput, type SceneHandleKind } from "./scene-handles.ts";
-export { editNeighbours, type EditNeighbours } from "./handle-neighbors.ts";
+export { adjacentSides, eavesOf, editNeighbours, facesOfNodes, type AdjacentSide, type EditNeighbours } from "./handle-neighbors.ts";

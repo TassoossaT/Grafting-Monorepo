@@ -5715,7 +5715,7 @@ export const HANDLE_MEASUREMENT: Readonly<Record<GlobalHandleKind, EditMeasureNa
   radius: "radius",
   origin: "move",
   destination: "move",
-export type HandleReference = "grab" | "edges" | "grade" | "none";
+export type HandleReference = "grab" | "edges" | "sides" | "grade" | "pitch" | "none";
 export const HANDLE_REFERENCE: Readonly<Record<GlobalHandleKind, HandleReference>> = {
   pivot: "grab",
   rotate: "none",
@@ -6062,6 +6062,19 @@ export interface EditNeighbours {
   }
 export function editNeighbours(topologies: readonly ConstructionRegionTopology[], handle: GlobalHandle): EditNeighbours {
   const edited = new Set(editedNodes(handle, topologies));
+export function facesOfNodes(topologies: readonly ConstructionRegionTopology[], nodeIds: readonly string[]): ReadonlySet<string> {
+  const wanted = new Set(nodeIds);
+export interface AdjacentSide {
+  readonly far: LinkPoint;
+  readonly near: ConstructionPosition;
+  }
+export function adjacentSides(topologies: readonly ConstructionRegionTopology[], handle: GlobalHandle): readonly AdjacentSide[] {
+  const target = handle.target;
+  if (target?.kind !== "edge") return [];
+  const ends = new Set(editedNodes(handle, topologies));
+export function eavesOf(topologies: readonly ConstructionRegionTopology[], handle: GlobalHandle): readonly LinkPoint[] {
+  const faces = handle.faces ? new Set(handle.faces) : undefined;
+  const nodes = topologies.filter((topology) => !faces || faces.has(faceKey(topology))).flatMap((topology) => topology.nodes);
 
 // src/features/edit-construction/orchestration/handle-release.ts
 export function partNodes(topologies: readonly ConstructionRegionTopology[], target: GlobalHandle["target"]): readonly string[] {

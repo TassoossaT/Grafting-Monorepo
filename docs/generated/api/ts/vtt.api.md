@@ -2680,6 +2680,10 @@ What the line measures, written before its length: "largura 1.20 m".
 
 Whether the protractor is drawn round its anchor.
 
+### `property vtt.ruler-preview.RulerLine.solid?: boolean`
+
+A line lying on a slanted face, counted by its real length rather than its length in plan.
+
 ### `property vtt.ruler-preview.RulerLine.stroke: boolean`
 
 Whether the line itself is drawn: not for the line being drawn, which is the tool's own ghost -- it only takes the teeth and the protractor.
@@ -5273,7 +5277,7 @@ their ids are made or read.
 
 Which global handle `id` names, and after which node; `undefined` for anything else.
 
-### `type vtt.handle-measurement.HandleReference = "grab" | "edges" | "grade" | "none"`
+### `type vtt.handle-measurement.HandleReference = "grab" | "edges" | "sides" | "grade" | "pitch" | "none"`
 
 What a handle is measured against while it is dragged -- declared with its
 kind, as HANDLE_MEASUREMENT is:
@@ -5287,6 +5291,10 @@ kind, as HANDLE_MEASUREMENT is:
   as it moves.
 - `"grade"`: the runs beside it, in height. A top is read by how steeply
   the run to each neighbour climbs.
+- `"sides"`: the sides beside the one it pushes: how long each becomes,
+  from its far end, which stays.
+- `"pitch"`: the lowest edge of what it edits -- its eave: how steeply the
+  run from there climbs to it.
 - `"none"`: nothing near it -- a height, a turn, a radius, a click.
 
 ### `variable vtt.handle-measurement.HANDLE_MEASUREMENT: Readonly<Record<GlobalHandleKind, EditMeasureName | "none">>`
@@ -6046,6 +6054,14 @@ The posts of an upright face: edges rising more than half the face's own
 height, and steeply -- far more up than across -- each as its foot and top.
 A sloped face (a ramp) has none; a leaning post is still found.
 
+### `interface vtt.handle-neighbors.AdjacentSide`
+
+A side next to the one edited: its far end stays, its near end is the edited side's end, which moves with it.
+
+### `property vtt.handle-neighbors.AdjacentSide.far: LinkPoint`
+
+### `property vtt.handle-neighbors.AdjacentSide.near: ConstructionPosition`
+
 ### `interface vtt.handle-neighbors.EditNeighbours`
 
 What a handle that edits a vertex edits against: the vertex's neighbours,
@@ -6063,9 +6079,21 @@ The vertices joined to the one edited, level or not, each at the plan distance t
 
 The structure's own level sides that do not touch the vertex: the directions its angles are read against -- parallel to them, square to them.
 
+### `function vtt.handle-neighbors.adjacentSides(topologies: readonly ConstructionRegionTopology[], handle: GlobalHandle): readonly AdjacentSide[]`
+
+The level sides that leave the two ends of the side `handle` edits, other than it -- the ones that grow or shrink as it is pushed.
+
+### `function vtt.handle-neighbors.eavesOf(topologies: readonly ConstructionRegionTopology[], handle: GlobalHandle): readonly LinkPoint[]`
+
+The lowest nodes of what `handle` edits, the nearest to it in plan: the eave a pitch is read from.
+
 ### `function vtt.handle-neighbors.editNeighbours(topologies: readonly ConstructionRegionTopology[], handle: GlobalHandle): EditNeighbours`
 
 The neighbours and the own sides of what `handle` edits, among `topologies`; empty when it edits no vertex.
+
+### `function vtt.handle-neighbors.facesOfNodes(topologies: readonly ConstructionRegionTopology[], nodeIds: readonly string[]): ReadonlySet<string>`
+
+The keys of the faces any of `nodeIds` belongs to: the whole structure a handle without faces edits, so it never links to itself.
 
 ### `function vtt.handle-release.joinWhereLanded(topologies: readonly ConstructionRegionTopology[], ids: readonly string[], operationId: string): ApplyPatchReplacementRequest | undefined`
 
@@ -6564,7 +6592,7 @@ Where the point stands: snapped when `snap` was asked for and something caught, 
 
 ### `type vtt.resolve.RulerKind = typeof RULER_KINDS[number]`
 
-### `type vtt.resolve.RulerMeasure = { from: ConstructionPosition; kind: "length" | "gap"; meters: number; to: ConstructionPosition } | { foot?: ConstructionPosition; kind: "height"; level: number; meters: number; top?: ConstructionPosition } | { kind: "grade"; rise: number; run: number } | { from?: ConstructionPosition; kind: "size"; meters: number; name: string; to?: ConstructionPosition } | { kind: "was"; name: string; now: number; was: number } | { from?: ConstructionPosition; kind: "change"; meters: number; name: string; to?: ConstructionPosition } | { degrees: number; kind: "angle"; name?: string; reference?: { relation: "parallel" | "perpendicular"; run: readonly [ConstructionPosition, ConstructionPosition] } }`
+### `type vtt.resolve.RulerMeasure = { from: ConstructionPosition; kind: "length" | "gap"; meters: number; to: ConstructionPosition } | { foot?: ConstructionPosition; kind: "height"; level: number; meters: number; top?: ConstructionPosition } | { kind: "grade"; rise: number; run: number } | { from?: ConstructionPosition; kind: "size"; meters: number; name: string; to?: ConstructionPosition } | { degrees?: boolean; kind: "was"; name: string; now: number; was: number } | { arc?: boolean; from?: ConstructionPosition; kind: "change"; meters: number; name: string; to?: ConstructionPosition } | { degrees: number; kind: "angle"; name?: string; reference?: { relation: "parallel" | "perpendicular"; run: readonly [ConstructionPosition, ConstructionPosition] } }`
 
 Something worth saying about what is built or edited. Distances are always
 in metres -- `formatLength` writes them in the table's unit.

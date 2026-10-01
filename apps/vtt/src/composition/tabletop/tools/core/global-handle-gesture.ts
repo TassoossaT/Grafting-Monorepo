@@ -8,6 +8,9 @@ import {
   HANDLE_MEASUREMENT,
   HANDLE_REFERENCE,
   editNeighbours,
+  adjacentSides,
+  eavesOf,
+  facesOfNodes,
   rotateInPlan,
   snapAnchorsOf,
   snapLinksOf,
@@ -384,7 +387,7 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
   // Lifting lands on the heights other structures stand at -- the ruler's levels -- whatever lifts: a top, a ridge, an end.
   // A handle declared as a height lifts whether or not it belongs to faces: a road's end, a ramp's rise.
   const lifts = measurement === "height" || handle.motion.kind === "vertical" || params?.mode === "elevation";
-  const lifting = lifts ? (handle.faces !== undefined ? snapLinksOf(scene, handle) : ruler.linksWithout(new Set())) : undefined;
+  const lifting = lifts ? (handle.faces !== undefined ? snapLinksOf(scene, handle) : ruler.linksWithout(facesOfNodes(scene.topologies, handle.nodeIds))) : undefined;
   let snapped: OutlineSnap | undefined;
   // The height the structure rises from, as it stood when the drag began: the lowest of its nodes.
   const base = ruler.base(
@@ -395,7 +398,11 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
   const reference = HANDLE_REFERENCE[handle.kind];
   // The sides it edits are read from their far ends -- which stay -- never from where the vertex began, which is gone as soon as it moves.
   // Taken as the structure stood when the drag began.
-  const neighbours = reference === "edges" || reference === "grade" ? editNeighbours(scene.topologies, handle) : undefined;
+  const neighbours = reference === "edges" || reference === "grade" ? editNeighbours(scene.topologies, handle)
+    : reference === "pitch" ? { fixed: eavesOf(scene.topologies, handle), own: [] }
+    : undefined;
+  /** The sides beside a pushed side: they grow and shrink with it. */
+  const sides = reference === "sides" ? adjacentSides(scene.topologies, handle) : undefined;
   const edgeLinks = reference === "edges" && neighbours && neighbours.fixed.length > 0 ? snap?.links ?? ruler.linksWithout(new Set(handle.faces ?? [])) : undefined;
   /** A handle that turns about a centre: its orbit. */
   const orbit = handle.motion.kind === "orbit" ? handle.motion : undefined;
@@ -431,7 +438,16 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
       const moved = Math.hypot(ruled.position.x - pivot.x, ruled.position.z - pivot.z);
       made = [...ruled.measures, ...was, ...(moved > 1e-4 ? [{ kind: "change" as const, name: "desloc.", meters: moved, from: pivot, to: { x: ruled.position.x, y: pivot.y, z: ruled.position.z } }] : [])];
       edgeGuides = ruled.guides;
-    } else if (reference === "grade" && neighbours) {
+    } else if (sides && sides.length > 0) {
+      // A side pushed: the sides beside it, from their far ends -- which stay -- to where its ends now stand, and what each was.
+      const shift = { x: at.x - handle!.position.x, z: at.z - handle!.position.z };
+      const pushed = sides.map(({ far, near }) => ({ far, was: Math.hypot(near.x - far.position.x, near.z - far.position.z), now: { x: near.x + shift.x, y: near.y, z: near.z + shift.z } }));
+      made = [
+        ...ruler.measure(ruler.named(measurement === "none" ? "side" : measurement, { direction, base, angle }), pivot, standingAt(at)),
+        ...pushed.map(({ far, now }) => ({ kind: "size" as const, name: "lado", meters: Math.hypot(now.x - far.position.x, now.z - far.position.z), from: far.position, to: now })),
+        ...pushed.map(({ far, was, now }) => ({ kind: "was" as const, name: "lado", was, now: Math.hypot(now.x - far.position.x, now.z - far.position.z) })),
+      ];
+    } else if ((reference === "grade" || reference === "pitch") && neighbours) {
       // A top against the runs beside it: how high it stands, and how steeply each run climbs to it.
       made = [...ruler.measure(ruler.named(measurement === "none" ? "height" : measurement, { direction, base, angle }), pivot, standingAt(at)), ...ruler.grades(standingAt(at), neighbours.fixed)];
     } else {
@@ -445,6 +461,9 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
       const start = Math.atan2(handle!.position.z - orbit.center.z, handle!.position.x - orbit.center.x);
       turning.guides.push({ kind: "polar", origin: centre, to: at, degrees: (((angle * 180) / Math.PI) % 360 + 360) % 360, from: "start", zero: start });
       turning.measures.push({ kind: "length", from: centre, to: at, meters: radius });
+      // Which way it faces, before and after: the handle's heading about its centre, in the world.
+      const heading = (radians: number) => ((((radians * 180) / Math.PI) % 360) + 360) % 360;
+      turning.measures.push({ kind: "was", name: "direção", was: heading(start), now: heading(start + angle), degrees: true });
     }
     // What the ruler caught shows whether or not the snap took it.
     guidesNow = [...lifted.guides, ...turning.guides, ...(snapped?.guides ?? []), ...edgeGuides];

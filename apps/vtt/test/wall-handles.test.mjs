@@ -376,3 +376,40 @@ test("dragging a wall's top says the height it was and the height it is", () => 
     assert.ok(was && close(was.now - was.was, 1, 0.2), JSON.stringify(shown.filter(Boolean).at(-1).measures));
   } finally { f.session.free(); }
 });
+
+test("pushing a wall's side says how long each side beside it becomes, from its far end, and what it was", () => {
+  const f = fixture();
+  const shown = [];
+  f.ctx.showRuler = (feedback) => shown.push(feedback);
+  try {
+    const handle = wallHandles(f.runtime).find((h) => h.kind === "side");
+    assert.ok(handle, "a wall has a side handle");
+    drag(f, handle, { x: 0, y: 0, z: 1 });
+    const measures = shown.filter(Boolean).at(-1).measures;
+    const sizes = measures.filter((m) => m.kind === "size" && m.name === "lado");
+    const was = measures.filter((m) => m.kind === "was" && m.name === "lado");
+    // The wall's sides beside a pushed one are its posts, which are upright: nothing runs level beside it, so nothing is claimed.
+    assert.equal(sizes.length, was.length, JSON.stringify(measures));
+    assert.ok(measures.some((m) => m.kind === "change" && m.name === "lado" && m.from && m.to), "and the push itself is a line from where it began");
+  } finally { f.session.free(); }
+});
+
+test("pushing a platform's side says how long each side beside it becomes and what it was,", () => {
+  const f = fixture(true);
+  const shown = [];
+  f.ctx.showRuler = (feedback) => shown.push(feedback);
+  try {
+    const floor = shownGlobalHandles(scene(f.runtime)).filter((h) => hasTrait(h.owner, "floor") && h.kind === "side");
+    assert.ok(floor.length > 0, "a platform has side handles");
+    const handle = floor.find((h) => h.motion.kind === "line") ?? floor[0];
+    const direction = handle.motion.kind === "line" ? handle.motion.direction : { x: 0, z: 1 };
+    drag(f, handle, { x: direction.x * 0.5, y: 0, z: direction.z * 0.5 }, 0, platformContourTool, platformContourTool.defaultParams());
+    const measures = shown.filter(Boolean).at(-1).measures;
+    const sizes = measures.filter((m) => m.kind === "size" && m.name === "lado");
+    const was = measures.filter((m) => m.kind === "was" && m.name === "lado");
+    assert.equal(sizes.length, 2, JSON.stringify(measures));
+    assert.equal(was.length, 2);
+    assert.ok(sizes.every((m) => m.from && m.to), "each is a ruler from its far end");
+    assert.ok(was.some((m) => Math.abs(m.now - m.was) > 0.1), "and they grew: the near ends moved with the pushed side");
+  } finally { f.session.free(); }
+});

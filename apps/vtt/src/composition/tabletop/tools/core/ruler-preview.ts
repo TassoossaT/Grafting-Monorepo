@@ -85,6 +85,8 @@ export interface RulerLine {
   readonly stroke: boolean;
   /** An upright line -- a height -- counted in height, its teeth and numbers standing off to the side. */
   readonly vertical?: boolean;
+  /** A line lying on a slanted face, counted by its real length rather than its length in plan. */
+  readonly solid?: boolean;
   /** Whether the teeth are drawn along it; on unless said otherwise. */
   readonly teeth?: boolean;
   /** What the line measures, written before its length: "largura 1.20 m". */
@@ -99,10 +101,13 @@ export function frameOf(line: RulerLine): { readonly length: number; readonly u:
     const dy = line.tip.y - line.anchor.y;
     return { length: Math.abs(dy), u: { x: 0, y: dy < 0 ? -1 : 1, z: 0 }, n: { x: 1, y: 0, z: 0 } };
   }
-  const dx = line.tip.x - line.anchor.x, dz = line.tip.z - line.anchor.z;
-  const length = Math.hypot(dx, dz);
-  const u = length < 1e-12 ? { x: 1, y: 0, z: 0 } : { x: dx / length, y: 0, z: dz / length };
-  return { length, u, n: { x: -u.z, y: 0, z: u.x } };
+  const dx = line.tip.x - line.anchor.x, dz = line.tip.z - line.anchor.z, dy = line.solid ? line.tip.y - line.anchor.y : 0;
+  const plan = Math.hypot(dx, dz);
+  const length = Math.hypot(plan, dy);
+  const u = length < 1e-12 ? { x: 1, y: 0, z: 0 } : { x: dx / length, y: dy / length, z: dz / length };
+  // A tooth stands across the line, level: square to its way in plan.
+  const n = plan < 1e-12 ? { x: 1, y: 0, z: 0 } : { x: -dz / plan, y: 0, z: dx / plan };
+  return { length, u, n };
 }
 
 const headingOf = (a: Point, b: Point): number => Math.atan2(b.z - a.z, b.x - a.x);
@@ -133,12 +138,12 @@ export function linesOf(feedback: RulerFeedback): readonly RulerLine[] {
     // A size laid out in the world -- a width, a sill, the room left to a corner: the ruler along it, its value written.
     else if (measure.kind === "size" && measure.from && measure.to) {
       const upright = Math.hypot(measure.to.x - measure.from.x, measure.to.z - measure.from.z) < 1e-6;
-      add({ anchor: measure.from, tip: measure.to, zero: 0, protractor: false, stroke: true, named: measure.name, ...(upright ? { vertical: true } : {}) });
+      add({ anchor: measure.from, tip: measure.to, zero: 0, protractor: false, stroke: true, named: measure.name, ...(upright ? { vertical: true } : { solid: true }) });
     }
     // What an edit changed: the line from where it began to where it stands, its difference written along it.
     else if (measure.kind === "change" && measure.from && measure.to) {
       const upright = Math.hypot(measure.to.x - measure.from.x, measure.to.z - measure.from.z) < 1e-6;
-      add({ anchor: measure.from, tip: measure.to, zero: 0, protractor: false, stroke: true, teeth: false, change: { name: measure.name, meters: measure.meters }, ...(upright ? { vertical: true } : {}) });
+      add({ anchor: measure.from, tip: measure.to, zero: zeroOfDrawn, protractor: measure.arc === true && !upright, stroke: true, teeth: false, change: { name: measure.name, meters: measure.meters }, ...(upright ? { vertical: true } : { solid: true }) });
     }
     // The side an angle is measured from is drawn, so what it is measured against is never a guess.
     else if (measure.kind === "angle" && measure.reference) edge(measure.reference.run[0], measure.reference.run[1]);
@@ -303,7 +308,9 @@ function measureLabel(measure: RulerMeasure, unit: MeasureUnitId): string {
       const degreesOf = (Math.atan2(Math.abs(measure.rise), measure.run) * 180) / Math.PI;
       return `inclinação ${percent >= 0 ? "+" : "−"}${Math.abs(percent).toFixed(1)}% · ${degreesOf.toFixed(1)}°`;
     }
-    case "was": return `${measure.name} ${formatLength(measure.was, unit)} → ${formatLength(measure.now, unit)} (${signed(measure.now - measure.was, (v) => formatLength(v, unit))})`;
+    case "was":
+      if (measure.degrees) return `${measure.name} ${degrees(measure.was)} → ${degrees(measure.now)} (${signed(measure.now - measure.was, degrees)})`;
+      return `${measure.name} ${formatLength(measure.was, unit)} → ${formatLength(measure.now, unit)} (${signed(measure.now - measure.was, (v) => formatLength(v, unit))})`;
     case "change": return `${measure.name} ${signed(measure.meters, (v) => formatLength(v, unit))}`;
     case "angle": {
       const value = `${measure.name ?? "∠"} ${measure.degrees < 0 ? "−" : ""}${degrees(measure.degrees)}`;

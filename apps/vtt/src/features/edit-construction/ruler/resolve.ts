@@ -102,9 +102,9 @@ export type RulerMeasure =
   /** How big something is now -- a road's width, say; `name` says what. */
   | { readonly kind: "size"; readonly name: string; readonly meters: number; /** Where it runs from and to: the ruler is drawn along it, with its teeth and its value. */ readonly from?: ConstructionPosition; readonly to?: ConstructionPosition }
   /** What a size or a distance was before the edit and is now: the difference from where the edit began. */
-  | { readonly kind: "was"; readonly name: string; readonly was: number; readonly now: number }
+  | { readonly kind: "was"; readonly name: string; readonly was: number; readonly now: number; /** The values are headings in degrees, not lengths. */ readonly degrees?: boolean }
   /** How much an edit changes a size or a distance, with its sign; `name` says which. */
-  | { readonly kind: "change"; readonly name: string; readonly meters: number; /** Where the edit began and where it stands: the difference is drawn between them. */ readonly from?: ConstructionPosition; readonly to?: ConstructionPosition }
+  | { readonly kind: "change"; readonly name: string; readonly meters: number; /** Where the edit began and where it stands: the difference is drawn between them. */ readonly from?: ConstructionPosition; readonly to?: ConstructionPosition; /** Whether the line carries the protractor round where it began: a move across the ground reads by the way it went. */ readonly arc?: boolean }
   /** An angle, in degrees: how far a line runs from the nearest standing side's direction, or a turn. `name` says which. */
   | { readonly kind: "angle"; readonly degrees: number; readonly name?: string; readonly reference?: { readonly run: readonly [ConstructionPosition, ConstructionPosition]; readonly relation: "parallel" | "perpendicular" } };
 
