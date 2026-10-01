@@ -91,3 +91,17 @@ test("guides draw as segments on their own channel, and distances read in the ta
   assert.ok(rulerLabels(feedback, "ft").some((label) => label.endsWith("ft")));
   assert.equal(rulerPreview(NO_FEEDBACK), undefined);
 });
+
+test("labels write every kind of measure in the table's unit, with signs where a change has one", () => {
+  const feedback = {
+    guides: [{ kind: "angle", origin: at(0, 0), to: at(1, 0), run: [at(0, 0), at(4, 0)], relation: "parallel" }],
+    measures: [
+      { kind: "height", meters: 3.048, level: 3.048 },
+      { kind: "change", name: "lado", meters: -0.3048 },
+      { kind: "angle", degrees: -12.34 },
+    ],
+  };
+  const labels = rulerLabels(feedback, "ft");
+  assert.deepEqual(labels, ["altura 10.0 ft · nível 10.0 ft", "lado −1.0 ft", "∠ −12.3°", "∥ paralelo"]);
+  assert.deepEqual(rulerLabels({ guides: [], measures: [{ kind: "change", name: "Δ", meters: 1 }] }, "m"), ["Δ +1.00 m"]);
+});

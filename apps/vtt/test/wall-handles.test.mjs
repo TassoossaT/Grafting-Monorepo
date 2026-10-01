@@ -99,6 +99,23 @@ test("a wall's foot handle moves where the post stands, its top following straig
   } finally { f.session.free(); }
 });
 
+test("dragging a wall's top says exactly how high the wall stands now, and how much that changed", () => {
+  const f = fixture();
+  const shown = [];
+  f.ctx.showRuler = (feedback) => shown.push(feedback);
+  try {
+    const standing = posts(f.runtime)[1];
+    const handle = wallHandles(f.runtime).find((h) => h.kind === "top" && close(h.pivot.x, 5));
+    drag(f, handle, { x: 0, y: 1, z: 0 }, 1);
+    const measures = shown.filter(Boolean).at(-1).measures;
+    const height = measures.find((m) => m.kind === "height");
+    // As high as the wall stood from its foot, plus the one it is lifted by: its exact height, not only the change.
+    assert.ok(close(height.meters, standing.top.y - standing.foot.y + 1), JSON.stringify(measures));
+    assert.ok(close(height.level, standing.top.y + 1));
+    assert.ok(close(measures.find((m) => m.kind === "change").meters, 1));
+  } finally { f.session.free(); }
+});
+
 test("a wall's top handle changes only how high its side rises, never where it stands", () => {
   const f = fixture();
   try {

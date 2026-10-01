@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { collectLinks, formatLength, fromMetres, resolveLevel, resolveRuler, toMetres } from "../src/features/edit-construction/ruler/index.ts";
+import { baseHeight, collectLinks, formatLength, measuresOfEdit, fromMetres, resolveLevel, resolveRuler, toMetres } from "../src/features/edit-construction/ruler/index.ts";
 
 const at = (x, z, y = 0) => ({ x, y, z });
 const near = (actual, expected, message) => assert.ok(Math.abs(actual - expected) < 1e-9, message ?? `${actual} != ${expected}`);
@@ -82,9 +82,48 @@ test("a skipped node is never joined to", () => {
 });
 
 test("a length matching a standing run is landed on", () => {
-  const result = resolveRuler({ point: at(14.1, 0.01), origin: at(10, 0), links: { points: [], runs: links.runs, levels: [] } });
+  // Far from every side's direction (45 degrees off), so only the length can catch.
+  const result = resolveRuler({ point: at(12.85, 2.85), origin: at(10, 0), links: { points: [], runs: links.runs, levels: [] } });
   assert.equal(result.caught, "length");
   near(Math.hypot(result.position.x - 10, result.position.z), 4);
+});
+
+test("a line near a standing side's direction is turned onto it, keeping its length", () => {
+  // Drawn on a free line, away from every corner's axis, so only the direction can catch.
+  const result = resolveRuler({ point: at(16, 6.3), origin: at(10, 6), links });
+  assert.equal(result.caught, "angle");
+  near(result.position.z, 6);
+  near(result.position.x - 10, Math.hypot(6, 0.3));
+  const guide = result.guides.find((g) => g.kind === "angle");
+  assert.equal(guide.relation, "parallel");
+});
+
+test("square to a standing side counts too, and is named perpendicular", () => {
+  // Only the side along x stands near, so running along z is square to it.
+  const result = resolveRuler({ point: at(10.2, 6), origin: at(10, 0), links: { ...links, runs: [links.runs[0]] } });
+  assert.equal(result.caught, "angle");
+  near(result.position.x, 10);
+  assert.equal(result.guides.find((g) => g.kind === "angle").relation, "perpendicular");
+});
+
+test("a line turned onto a direction can also match a standing length, both holding", () => {
+  // Along the side's direction and 4.05 long: the 4 m run matches too.
+  const result = resolveRuler({ point: at(14.05, 6.1), origin: at(10, 6), links });
+  assert.equal(result.caught, "angle");
+  assert.ok(result.guides.some((g) => g.kind === "length"));
+  near(Math.hypot(result.position.x - 10, result.position.z - 6), 4);
+});
+
+test("the way a line runs is measured from the nearest side, 0 meaning the same way or square to it", () => {
+  const result = resolveRuler({ point: at(16, 2), origin: at(10, 0), links, snap: false });
+  const angle = result.measures.find((m) => m.kind === "angle");
+  near(angle.degrees, (Math.atan2(2, 6) * 180) / Math.PI);
+  assert.equal(result.caught, undefined);
+});
+
+test("a line that runs far from every direction is not turned", () => {
+  const result = resolveRuler({ point: at(14, 4), origin: at(10, 0), links });
+  assert.notEqual(result.caught, "angle");
 });
 
 test("measures give the length drawn and the gap to the nearest corner", () => {
@@ -108,4 +147,24 @@ test("units convert both ways and write themselves", () => {
   near(toMetres(5, "ft"), 1.524);
   assert.equal(formatLength(3.048, "ft"), "10.0 ft");
   assert.equal(formatLength(3.048), "3.05 m");
+});
+
+test("an edit measures the exact size it leaves, not only the change", () => {
+  const from = at(0, 0, 3), to = at(0, 0, 4.5);
+  const [height, change] = measuresOfEdit({ kind: "height", base: 0 }, from, to);
+  assert.deepEqual(height, { kind: "height", meters: 4.5, level: 4.5 });
+  assert.deepEqual(change, { kind: "change", name: "Δ", meters: 1.5 });
+  // A side pushed out reads along its own direction, signed.
+  assert.deepEqual(measuresOfEdit({ kind: "side", direction: { x: 1, z: 0 } }, at(2, 0), at(0.5, 3)), [{ kind: "change", name: "lado", meters: -1.5 }]);
+  // A move says how far it went across the ground and how much it went up, and nothing when it did not move.
+  const moved = measuresOfEdit({ kind: "move" }, at(0, 0), at(3, 4, 1));
+  assert.equal(moved[0].meters, 5);
+  assert.deepEqual(moved[1], { kind: "change", name: "Δ altura", meters: 1 });
+  assert.deepEqual(measuresOfEdit({ kind: "move" }, at(1, 1), at(1, 1)), []);
+  assert.deepEqual(measuresOfEdit({ kind: "turn", angle: Math.PI / 2 }, at(0, 0), at(0, 0)), [{ kind: "angle", degrees: 90, name: "giro" }]);
+});
+
+test("the base a structure rises from is its lowest node", () => {
+  assert.equal(baseHeight([3, 0.5, 2], 9), 0.5);
+  assert.equal(baseHeight([], 9), 9);
 });

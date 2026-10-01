@@ -5,7 +5,12 @@ import {
   joinWhereLanded,
   rejoinNodes,
   releasePart,
+  baseHeight,
+  measuresOfEdit,
   resolveLevel,
+  type EditMeasureKind,
+  type RulerGuide,
+  type RulerMeasure,
   snapAnchorsOf,
   snapLinksOf,
   snapToOutlines,
@@ -34,7 +39,7 @@ import { floorsOf, floorUnder } from "./floor-landing.ts";
 import { commitPatchReplacement, commitRegionEdit, commitStagedRegionEdit } from "../../effects/effect-commit.ts";
 import type { PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
 import { HANDLE_DONE } from "../../handle-glyphs.ts";
-import { surfaceKeyText } from "../../../../features/edit-construction/index.ts";
+import { faceKey, surfaceKeyText } from "../../../../features/edit-construction/index.ts";
 import { keepFaceProps, pinnedToRoles } from "./face-props.ts";
 
 const CHANNEL = "global-handle";
@@ -379,45 +384,54 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
   // Lifting lands on the heights other structures stand at -- the ruler's levels -- whatever lifts: a top, a ridge, an end.
   const lifting = handle.faces !== undefined && (handle.motion.kind === "vertical" || params?.mode === "elevation") ? snapLinksOf(scene, handle) : undefined;
   let snapped: OutlineSnap | undefined;
+  // The height the structure rises from, as it stood when the drag began: the lowest of its nodes.
+  const base = baseHeight(
+    (handle.faces ? scene.topologies.filter((topology) => handle.faces!.includes(faceKey(topology))).flatMap((topology) => topology.nodes.map((node) => node.position.y)) : scene.graph.nodes.filter((node) => handle.nodeIds.includes(node.id)).map((node) => node.position.y)),
+    handle.pivot.y,
+  );
+  /** The guides the ruler is drawing for the drag now. */
+  let guidesNow: readonly RulerGuide[] = [];
 
-  /** Where the handle stands on its path, and what that asks of the structure. */
-  function intentOf(gesture: ToolGesture): { readonly intent: GlobalHandleIntent; readonly at: ConstructionPosition; readonly readout?: string } {
+  /** Where the handle stands on its path, what that asks of the structure, and what it measures. */
+  function intentOf(gesture: ToolGesture): { readonly intent: GlobalHandleIntent; readonly at: ConstructionPosition; readonly measures?: readonly RulerMeasure[] } {
     const { position: dragged, angle = 0 } = drag.at(gesture);
     const level = lifting && resolveLevel(dragged.y, lifting, dragged, { snap: ctx.rulerSnap });
     const free = level ? { ...dragged, y: level.y } : dragged;
-    if (lifting) ctx.showRuler?.(level?.guide ? { guides: [level.guide], measures: [] } : undefined);
     snapped = snap && snapToOutlines(snap.anchors, { x: free.x - handle!.position.x, y: free.y - handle!.position.y, z: free.z - handle!.position.z }, handle!.motion, snap.links, { snap: ctx.rulerSnap });
     // What the ruler caught shows whether or not the snap took it.
-    if (snap) ctx.showRuler?.(snapped ? { guides: snapped.guides, measures: snapped.measures } : undefined);
+    guidesNow = [...(level?.guide ? [level.guide] : []), ...(snapped?.guides ?? [])];
     const at = snapped ? { x: handle!.position.x + snapped.delta.x, y: handle!.position.y + snapped.delta.y, z: handle!.position.z + snapped.delta.z } : free;
     const delta = { x: at.x - handle!.position.x, y: at.y - handle!.position.y, z: at.z - handle!.position.z };
+    const direction = handle!.motion.kind === "line" ? handle!.motion.direction : { x: 0, z: 0 };
+    // Measured where the structure stands -- its pivot -- not where the handle is drawn, which stands off it.
+    const pivot = handle!.pivot;
+    const measured = (what: EditMeasureKind) => measuresOfEdit(what, pivot, { x: pivot.x + delta.x, y: pivot.y + delta.y, z: pivot.z + delta.z });
     switch (handle!.kind) {
-      case "pivot": return { intent: { kind: "move", delta }, at };
-      case "side": return { intent: { kind: "move", delta }, at, readout: `lado ${(delta.x * (handle!.motion.kind === "line" ? handle!.motion.direction.x : 0) + delta.z * (handle!.motion.kind === "line" ? handle!.motion.direction.z : 0)).toFixed(2)} m` };
-      case "corner": return { intent: { kind: "move", delta }, at };
-      case "foot": return { intent: { kind: "move", delta }, at };
-      case "top": return { intent: { kind: "move", delta }, at, readout: `altura ${delta.y >= 0 ? "+" : ""}${delta.y.toFixed(2)} m` };
+      case "pivot": return { intent: { kind: "move", delta }, at, measures: measured({ kind: "move" }) };
+      case "side": return { intent: { kind: "move", delta }, at, measures: measured({ kind: "side", direction }) };
+      case "corner": return { intent: { kind: "move", delta }, at, measures: measured({ kind: "move" }) };
+      case "foot": return { intent: { kind: "move", delta }, at, measures: measured({ kind: "move" }) };
+      case "top": return { intent: { kind: "move", delta }, at, measures: measured({ kind: "height", base }) };
       case "detach": return { intent: { kind: "detach" }, at };
-      case "rise": return { intent: { kind: "height", dy: delta.y }, at, readout: `altura ${delta.y >= 0 ? "+" : ""}${delta.y.toFixed(2)} m` };
+      case "rise": return { intent: { kind: "height", dy: delta.y }, at, measures: measured({ kind: "height", base }) };
       case "slope":
       case "seam":
-        return { intent: { kind: "height", dy: delta.y }, at, readout: `inclinação ${delta.y >= 0 ? "+" : ""}${delta.y.toFixed(2)} m` };
-      case "insert": return { intent: { kind: "move", delta }, at };
-      case "height": return { intent: { kind: "height", dy: delta.y }, at, readout: `altura ${delta.y >= 0 ? "+" : ""}${delta.y.toFixed(2)} m` };
-      case "rotate": return { intent: { kind: "rotate", angle }, at, readout: `rotação ${((angle * 180) / Math.PI).toFixed(0)}°` };
-      case "turns": return { intent: { kind: "wind", angle }, at, readout: `voltas ${angle >= 0 ? "+" : ""}${(angle / (2 * Math.PI)).toFixed(2)}` };
+        return { intent: { kind: "height", dy: delta.y }, at, measures: measured({ kind: "slope" }) };
+      case "insert": return { intent: { kind: "move", delta }, at, measures: measured({ kind: "move" }) };
+      case "height": return { intent: { kind: "height", dy: delta.y }, at, measures: measured({ kind: "height", base }) };
+      case "rotate": return { intent: { kind: "rotate", angle }, at, measures: measured({ kind: "turn", angle }) };
+      case "turns": return { intent: { kind: "wind", angle }, at, measures: measured({ kind: "turn", angle }) };
       case "radius": {
-        const direction = handle!.motion.kind === "line" ? handle!.motion.direction : { x: 0, z: 0 };
         const push = delta.x * direction.x + delta.z * direction.z;
-        return { intent: { kind: "radius", delta: push }, at, readout: `raio ${push >= 0 ? "+" : ""}${push.toFixed(2)} m` };
+        return { intent: { kind: "radius", delta: push }, at, measures: measured({ kind: "radius", direction }) };
       }
       case "originHeight":
       case "destinationHeight":
-        return { intent: { kind: "lift", dy: delta.y }, at, readout: `ponta ${delta.y >= 0 ? "+" : ""}${delta.y.toFixed(2)} m` };
+        return { intent: { kind: "lift", dy: delta.y }, at, measures: measured({ kind: "height", base }) };
       case "origin":
       case "destination": {
         const under = floorUnder(floorsOf(ctx), gesture.current)?.surfaceKey;
-        return { intent: { kind: "place", at, ...(under ? { under } : {}) }, at };
+        return { intent: { kind: "place", at, ...(under ? { under } : {}) }, at, measures: measured({ kind: "move" }) };
       }
     }
   }
@@ -428,7 +442,8 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
       if (params?.dragThreshold && sample.screenX !== undefined && gesture.current.screenX !== undefined && sample.screenY !== undefined && gesture.current.screenY !== undefined
         && Math.hypot(gesture.current.screenX - sample.screenX, gesture.current.screenY - sample.screenY) < params.dragThreshold) return;
       try {
-        const { intent, at, readout } = intentOf(gesture);
+        const { intent, at, measures } = intentOf(gesture);
+        ctx.showRuler?.({ guides: guidesNow, measures: [...(measures ?? []), ...(snapped?.measures ?? [])] });
         ctx.runtime.previewNodeHandle?.(handle.id, at);
         const planned = planGlobalHandle((pause ?? released)?.was ?? scene, handle, intent, ctx.runtime, operationId);
         if (planned?.kind === "region-part") {
@@ -463,7 +478,6 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
         } else {
           edit = planned && resolvedPart(ctx, planned, scene);
         }
-        if (readout) ctx.reportFeedback({ tone: "info", message: readout });
         const preview = edit && previewOf(ctx, handle, edit, scene, operationId);
         if (preview) ctx.runtime.showPreview({ kind: "segments", positions: preview, color: PREVIEW_COLOR, opacity: 0.9 }, CHANNEL);
       } catch (error) {

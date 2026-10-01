@@ -1,4 +1,4 @@
-import { formatLength, type MeasureUnitId, type RulerGuide } from "../../../../features/edit-construction/index.ts";
+import { formatLength, type MeasureUnitId, type RulerGuide, type RulerMeasure } from "../../../../features/edit-construction/index.ts";
 import type { PreviewDescriptor } from "../../../../features/edit-construction/index.ts";
 import type { RulerFeedback } from "./ruler-session.ts";
 
@@ -30,6 +30,11 @@ function drawGuide(out: number[], guide: RulerGuide): void {
     case "length":
       segment(out, guide.run[0], guide.run[1]);
       return;
+    case "angle":
+      // The side it follows, and the line running its way.
+      segment(out, guide.run[0], guide.run[1]);
+      segment(out, guide.origin, guide.to);
+      return;
     case "level":
       segment(out, { ...guide.at, y: guide.y, x: guide.at.x - TICK }, { ...guide.at, y: guide.y, x: guide.at.x + TICK });
       return;
@@ -44,13 +49,27 @@ export function rulerPreview(feedback: RulerFeedback): PreviewDescriptor | undef
   return positions.length === 0 ? undefined : { kind: "segments", positions: Float32Array.from(positions), color: GUIDE_COLOR, opacity: GUIDE_OPACITY };
 }
 
-/** What `feedback` says in words, in the table's `unit`: the length drawn, the gap to the nearest corner, a matched length or level. */
+const signed = (value: number, write: (value: number) => string): string => `${value >= 0 ? "+" : "−"}${write(Math.abs(value))}`;
+const degrees = (value: number): string => `${Math.abs(value).toFixed(1)}°`;
+
+function measureLabel(measure: RulerMeasure, unit: MeasureUnitId): string {
+  switch (measure.kind) {
+    case "length": return formatLength(measure.meters, unit);
+    case "gap": return `↔ ${formatLength(measure.meters, unit)}`;
+    case "height": return `altura ${formatLength(measure.meters, unit)} · nível ${formatLength(measure.level, unit)}`;
+    case "size": return `${measure.name} ${formatLength(measure.meters, unit)}`;
+    case "change": return `${measure.name} ${signed(measure.meters, (v) => formatLength(v, unit))}`;
+    case "angle": return `${measure.name ?? "∠"} ${measure.degrees < 0 ? "−" : ""}${degrees(measure.degrees)}`;
+  }
+}
+
+/** What `feedback` says in words, in the table's `unit`: lengths, gaps, heights, changes and angles, and the length, direction or level it matched. */
 export function rulerLabels(feedback: RulerFeedback, unit: MeasureUnitId): readonly string[] {
-  const labels: string[] = [];
-  for (const measure of feedback.measures) labels.push(measure.kind === "length" ? formatLength(measure.meters, unit) : `↔ ${formatLength(measure.meters, unit)}`);
+  const labels = feedback.measures.map((measure) => measureLabel(measure, unit));
   for (const guide of feedback.guides) {
     if (guide.kind === "length") labels.push(`= ${formatLength(guide.meters, unit)}`);
     else if (guide.kind === "level") labels.push(`altura ${formatLength(guide.y, unit)}`);
+    else if (guide.kind === "angle") labels.push(guide.relation === "parallel" ? "∥ paralelo" : "⊥ perpendicular");
   }
   return labels;
 }

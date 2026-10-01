@@ -55,23 +55,32 @@ export type RulerGuide =
   | { readonly kind: "align"; readonly from: ConstructionPosition; readonly to: ConstructionPosition; readonly node: string }
   /** As long as a standing side. */
   | { readonly kind: "length"; readonly run: readonly [ConstructionPosition, ConstructionPosition]; readonly meters: number }
+  /** Running the same way as a standing side, or square to it. */
+  | { readonly kind: "angle"; readonly origin: ConstructionPosition; readonly to: ConstructionPosition; readonly run: readonly [ConstructionPosition, ConstructionPosition]; readonly relation: "parallel" | "perpendicular" }
   /** At the height of a standing level. */
   | { readonly kind: "level"; readonly y: number; readonly at: ConstructionPosition };
 
-/** A distance worth showing, always in metres -- {@link formatLength} writes it in the table's unit. */
-export interface RulerMeasure {
+/**
+ * Something worth saying about what is built or edited. Distances are always
+ * in metres -- `formatLength` writes them in the table's unit.
+ */
+export type RulerMeasure =
   /** `"length"` is what is being drawn; `"gap"` is the way to the nearest corner. */
-  readonly kind: "length" | "gap";
-  readonly from: ConstructionPosition;
-  readonly to: ConstructionPosition;
-  readonly meters: number;
-}
+  | { readonly kind: "length" | "gap"; readonly from: ConstructionPosition; readonly to: ConstructionPosition; readonly meters: number }
+  /** How high what is being edited stands: above its own base, and at what level of the table. */
+  | { readonly kind: "height"; readonly meters: number; readonly level: number }
+  /** How big something is now -- a road's width, say; `name` says what. */
+  | { readonly kind: "size"; readonly name: string; readonly meters: number }
+  /** How much an edit changes a size or a distance, with its sign; `name` says which. */
+  | { readonly kind: "change"; readonly name: string; readonly meters: number }
+  /** An angle, in degrees: how far a line runs from the nearest standing side's direction, or a turn. `name` says which. */
+  | { readonly kind: "angle"; readonly degrees: number; readonly name?: string };
 
 export interface RulerResult {
   /** Where the point stands: snapped when `snap` was asked for and something caught, else as it came. */
   readonly position: ConstructionPosition;
   /** What caught, whether or not it was taken. */
-  readonly caught: "point" | "run" | "align" | "length" | undefined;
+  readonly caught: "point" | "run" | "align" | "angle" | "length" | undefined;
   readonly guides: readonly RulerGuide[];
   readonly measures: readonly RulerMeasure[];
 }
@@ -185,18 +194,71 @@ function lengthFix(query: RulerQuery, p: ConstructionPosition, reach: number): F
   return best;
 }
 
+/** How far from a standing side's direction, or square to it, a line may run and still be taken as running that way. */
+const ANGLE_REACH = (3 * Math.PI) / 180;
+/** How far from where a line begins a standing side may lie and still be one to follow. */
+const ANGLE_RANGE = 12;
+const QUARTER_TURN = Math.PI / 2;
+
+interface Heading {
+  /** How far the line runs from the side's direction -- or from square to it -- in radians, within a quarter turn either way. */
+  readonly deviation: number;
+  readonly relation: "parallel" | "perpendicular";
+  readonly run: LinkRun;
+}
+
+/** The standing side, near `origin`, whose direction -- or the square to it -- the line at `heading` runs closest to. */
+function nearestHeading(query: RulerQuery, origin: ConstructionPosition, heading: number): Heading | undefined {
+  let best: Heading | undefined;
+  for (const run of query.links.runs) {
+    if (nearestOnSegment(origin, run.a.position, run.b.position).distance > ANGLE_RANGE) continue;
+    const away = heading - Math.atan2(run.b.position.z - run.a.position.z, run.b.position.x - run.a.position.x);
+    const turns = Math.round(away / QUARTER_TURN);
+    const deviation = away - turns * QUARTER_TURN;
+    const relation = Math.abs(turns) % 2 === 0 ? "parallel" : "perpendicular";
+    const better = !best || Math.abs(deviation) < Math.abs(best.deviation) - 1e-9
+      // A tie -- a square corner offers both -- names the side it runs along, not the one square to it.
+      || (Math.abs(Math.abs(deviation) - Math.abs(best.deviation)) <= 1e-9 && relation === "parallel" && best.relation === "perpendicular");
+    if (better) best = { deviation, relation, run };
+  }
+  return best;
+}
+
+/** The line from where the drawing began, turned about that point onto a standing side's direction -- or square to it -- keeping its length. */
+function angleFix(query: RulerQuery, p: ConstructionPosition): Fix | undefined {
+  const origin = query.origin;
+  if (!origin || query.motion?.kind === "line") return undefined;
+  const dx = p.x - origin.x, dz = p.z - origin.z;
+  const length = Math.hypot(dx, dz);
+  if (length < 1e-6) return undefined;
+  const found = nearestHeading(query, origin, Math.atan2(dz, dx));
+  if (!found || Math.abs(found.deviation) > ANGLE_REACH) return undefined;
+  const target = Math.atan2(dz, dx) - found.deviation;
+  const to = { x: origin.x + Math.cos(target) * length, y: p.y, z: origin.z + Math.sin(target) * length };
+  const fix = { x: to.x - p.x, z: to.z - p.z };
+  return { ...fix, distance: Math.hypot(fix.x, fix.z), guides: [{ kind: "angle", origin, to, run: [found.run.a.position, found.run.b.position], relation: found.relation }] };
+}
+
 /** What the ruler says of a point on the ground: where it lands, what to draw and what to measure. */
 export function resolveRuler(query: RulerQuery): RulerResult {
   const reach = query.reach ?? RULER_REACH;
   const p = query.point;
-  // A corner beats a side, a side beats a line-up, a line-up beats a matched length.
+  // A corner beats a side, a side beats a line-up, a line-up beats a direction, a direction beats a matched length.
   const picks: readonly (readonly [RulerResult["caught"], Fix | undefined])[] = [
     ["point", cornerFix(query, p, reach)],
     ["run", sideFix(query, p, reach)],
     ["align", alignFix(query, p, reach)],
+    ["angle", angleFix(query, p)],
     ["length", lengthFix(query, p, reach)],
   ];
-  const [caught, fix] = picks.find(([, candidate]) => candidate) ?? [undefined, undefined];
+  const [caught, first] = picks.find(([, candidate]) => candidate) ?? [undefined, undefined];
+  let fix = first;
+  // A line turned onto a direction can still be as long as a standing side: both hold at once.
+  if (caught === "angle" && fix) {
+    const turned = { x: p.x + fix.x, y: p.y, z: p.z + fix.z };
+    const matched = lengthFix(query, turned, reach);
+    if (matched) fix = { x: fix.x + matched.x, z: fix.z + matched.z, distance: fix.distance + matched.distance, guides: [...fix.guides, ...matched.guides] };
+  }
   const position = fix && query.snap !== false ? { x: p.x + fix.x, y: p.y, z: p.z + fix.z } : p;
   return { position, caught: fix ? caught : undefined, guides: fix?.guides ?? [], measures: measuresAt(query, position) };
 }
@@ -206,7 +268,12 @@ function measuresAt(query: RulerQuery, position: ConstructionPosition): readonly
   const measures: RulerMeasure[] = [];
   if (query.origin) {
     const meters = Math.hypot(position.x - query.origin.x, position.z - query.origin.z);
-    if (meters > 1e-6) measures.push({ kind: "length", from: query.origin, to: position, meters });
+    if (meters > 1e-6) {
+      measures.push({ kind: "length", from: query.origin, to: position, meters });
+      // Which way it runs, against the nearest standing side: 0 is the same way, or square to it.
+      const heading = nearestHeading(query, query.origin, Math.atan2(position.z - query.origin.z, position.x - query.origin.x));
+      if (heading) measures.push({ kind: "angle", degrees: (heading.deviation * 180) / Math.PI });
+    }
   }
   let nearest: { link: LinkPoint; meters: number } | undefined;
   for (const link of query.links.points) {
