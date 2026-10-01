@@ -337,7 +337,7 @@ function OpeningShapeFields(props: { readonly params: OpeningParams; readonly on
           onBlur={commitDraft}
         />
       </label>
-      <p style={{ margin: 0, fontSize: "0.72rem", color: "#94a3b8" }}>Clique num lado do quadrado e ajuste o raio (0 = reto). Com uma abertura selecionada, o formato muda nela; sem seleção, vale para a próxima.</p>
+      <p style={{ margin: 0, fontSize: "0.72rem", color: "#ffffff" }}>Clique num lado do quadrado e ajuste o raio (0 = reto). Com uma abertura selecionada, o formato muda nela; sem seleção, vale para a próxima.</p>
     </div>
   );
 }
@@ -401,7 +401,7 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
     return (
       <Card className="gm-panel-card" backgroundColor="#182234" accentColor="#1e293b">
         <span className="gm-panel-card-title">Parâmetros</span>
-        <p style={{ margin: 0, fontSize: "0.75rem", color: "#64748b" }}>
+        <p style={{ margin: 0, fontSize: "0.75rem", color: "#ffffff" }}>
           Selecione uma ferramenta de construção (Caminho, Parede ou Escultura de Terreno) no hotbar
           para ajustar seus parâmetros.
         </p>

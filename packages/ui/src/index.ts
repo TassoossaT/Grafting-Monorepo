@@ -2,6 +2,7 @@ export type { CardShape, UiMountHandle, UiStatus } from "./shared-types.js";
 
 export { Text, type TextProps, type TextTone } from "./atoms/text.js";
 export { StatusBadge, type StatusBadgeProps } from "./atoms/status-badge.js";
+export { UiThemeProvider, type UiThemeProviderProps } from "./atoms/ui-theme-provider.js";
 export { Button, type ButtonProps } from "./atoms/button.js";
 export { Card, type CardProps } from "./atoms/card.js";
 export { IconButton, type IconButtonProps } from "./atoms/icon-button.js";

@@ -52,6 +52,7 @@ test("exports only the deliberate Grafting component surface", async () => {
     "SlidingPanel",
     "StatusBadge",
     "Text",
+    "UiThemeProvider",
     "createCanvas",
     "createGeometryCanvas",
     "createHeightfieldCanvas",
@@ -68,6 +69,18 @@ test("renders a bounded surface built on Ant Design's Card (DEC: card-antd-rebui
   assert.match(markup, /class="ant-card/);
   assert.match(markup, /aria-label="Panel"/);
   assert.match(markup, /Content/);
+});
+
+test("a UiThemeProvider renders its children inside a theme scope of its own, apart from the default light one", async () => {
+  const { UiThemeProvider } = await import("../dist/index.js");
+  const card = createElement(Card, { ariaLabel: "Panel", children: createElement("span", null, "Content") });
+  const plain = renderToStaticMarkup(card);
+  const themed = renderToStaticMarkup(createElement(UiThemeProvider, null, card));
+
+  assert.match(themed, /Content/);
+  // The default theme's variables live on the shared `css-var-root`; a themed tree gets a scope of its own, which is where the dark tokens are written.
+  assert.match(plain, /css-var-root/);
+  assert.doesNotMatch(themed, /css-var-root/);
 });
 
 test("renders an EdgeHandle fused to the requested edge, flat on the panel side and rounded on the other", () => {

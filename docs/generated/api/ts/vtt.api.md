@@ -12946,6 +12946,14 @@ Human-readable status label.
 
 Semantic state to present.
 
+### `interface vtt.ui.UiThemeProviderProps`
+
+Public inputs for UiThemeProvider.
+
+### `property vtt.ui.UiThemeProviderProps.children: ReactNode`
+
+The UI below, whose components take the dark theme.
+
 ### `type vtt.ui.FloatButtonTreeNode = FloatButtonTreeLeaf | FloatButtonTreeBranch`
 
 One node of a FloatButtonTree: either a leaf action or a branch with its own nested children.
@@ -13100,6 +13108,12 @@ its edge as the drag/toggle control.
 ### `function vtt.ui.StatusBadge(props: StatusBadgeProps): ReactElement`
 
 Semantic status marker with Grafting-owned status names.
+
+### `function vtt.ui.UiThemeProvider(props: UiThemeProviderProps): ReactElement`
+
+Gives every component of this package below it a dark theme with white
+text, for an application whose page is dark. Wrap the UI once, near its
+root; a component outside it keeps the default light theme.
 
 ### `interface vtt.widgets.ConstructionDockProps`
 
