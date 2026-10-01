@@ -14,8 +14,10 @@ export const HANDLE_GLYPHS: Readonly<Record<SceneHandleKind | "vertex", RenderHa
   vertex: "point",
   /** A control point of a spine. */
   anchor: "point",
-  /** A span's midpoint: bend it, or click to insert a point. */
+  /** A span's midpoint: bend it, or double-click to insert a point. */
   midpoint: "midpoint",
+  /** On the edge of a span's band: push it out or in. */
+  width: "side",
   /** A wall run's own height widget. */
   panelHeight: "height",
   /** Whole-structure handles. */

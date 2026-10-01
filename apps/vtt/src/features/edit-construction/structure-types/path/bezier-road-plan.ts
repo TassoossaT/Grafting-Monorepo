@@ -43,7 +43,10 @@ export function bezierChains(
       sections.set(id, [...(sections.get(id) ?? []), { chain: i, points }]);
     }
     const ribbons = [{ bandIndex: 0, outer: [...outer] }];
-    return { chainId: e.edgeId, controlPoints: samples, sampledPoints: samples, ribbons,
+    return { chainId: e.edgeId,
+      source: { startNodeId: e.startNodeId, endNodeId: e.endNodeId,
+        curve: swept[i]!.resolved.curves[0]!, profile: e.curve!, stations: swept[i]!.resolved.samples[0]! },
+      controlPoints: samples, sampledPoints: samples, ribbons,
       bandOffsets: e.curve!.bandOffsets.length ? e.curve!.bandOffsets : offsets, miterLimit, tolerance: 0.025 };
   });
   // Connectivity, not proximity: disconnected or grade-separated anchors never join.

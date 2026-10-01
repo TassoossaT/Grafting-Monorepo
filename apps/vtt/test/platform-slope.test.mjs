@@ -136,7 +136,7 @@ test("a spiral is one spine, one face per span, meshed on its own turn", () => {
 });
 
 test("a spiral is edited by its spine points exactly as a road is: drag a point, delete a point", async () => {
-  const { pathPointsTool } = await import("../src/composition/tabletop/tools/paths/path-points-tool.ts");
+  const { pathBrushTool: roadTool } = await import("../src/composition/tabletop/tools/paths/path-brush-tool.ts");
   const { ctx, runtime, session, calls } = sessionFixture();
   Object.assign(runtime, { showPreview() {}, clearPreview() {} });
   try {
@@ -147,8 +147,8 @@ test("a spiral is edited by its spine points exactly as a road is: drag a point,
     const target = { point: { x: start.point.x + 1, y: 0, z: start.point.z + 0.5 } };
 
     const blank = session.snapshot_json();
-    pathPointsTool.onPointerDown(ctx, start, pathPointsTool.defaultParams());
-    pathPointsTool.onCancel(ctx);
+    roadTool.onPointerDown(ctx, start, roadTool.defaultParams());
+    roadTool.onCancel(ctx);
     assert.equal(session.snapshot_json(), blank, "the road tool leaves a spiral's spine alone");
 
     slopeSpiralTool.onPointerDown(ctx, start, params);

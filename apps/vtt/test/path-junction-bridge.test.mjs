@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { pathCorridorId, pathSubtypeOf } from "../src/features/edit-construction/structure-types/path/path-corridor.ts";
-import { pathRidesTerrain } from "../src/features/edit-construction/structure-types/path/path-recipe.ts";
 import { parseStationNodeId, stationNodeId } from "../src/features/edit-construction/structure-types/path/station-node-id.ts";
 import { resolveCreationInteraction } from "../src/features/edit-construction/structure-types/index.ts";
 
@@ -16,8 +15,8 @@ import { resolveCreationInteraction } from "../src/features/edit-construction/st
 // `station-node-id.ts` itself is still real code -- `path-structure.ts`'s
 // edit-role model still reads it for interactive dragging of an
 // already-committed road (a still-open gap the new engine's own commits
-// don't yet address; see `commitPathContour`'s doc) -- so these three tests
-// of subtype/interaction declarations stay exactly as they were.
+// don't yet address; see `commitPathContour`'s doc) -- so these tests of
+// subtype/interaction declarations stay.
 
 test("a corridor id carries its subtype without disturbing station addressing", () => {
   const corridor = pathCorridorId("table-1:path-brush:3", "road");
@@ -35,14 +34,9 @@ test("a corridor id carries its subtype without disturbing station addressing", 
   assert.equal(pathSubtypeOf("some-wall-node"), undefined);
 });
 
-test("a deck spans; every other subtype rides the terrain", () => {
-  assert.equal(pathRidesTerrain("bridge"), false);
-  for (const kind of ["road", "street", "trail"]) assert.equal(pathRidesTerrain(kind), true, kind);
-});
-
-test("every path subtype may cut the ground -- a deck too, where it touches it", () => {
-  // Height, not the subtype, tells an overpass from a crossing (`topology/ground-contact.ts`).
+test("every path subtype may cut the ground, where it touches it", () => {
+  // Height, not a subtype, tells an overpass from a crossing (`topology/ground-contact.ts`).
   assert.equal(resolveCreationInteraction("path", "terrain", "road").kind, "cut");
-  assert.equal(resolveCreationInteraction("path", "terrain", "bridge").kind, "cut");
+  assert.equal(resolveCreationInteraction("path", "terrain", "trail").kind, "cut");
   assert.equal(resolveCreationInteraction("path", "terrain").kind, "cut");
 });

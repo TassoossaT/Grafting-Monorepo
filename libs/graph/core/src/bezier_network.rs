@@ -61,17 +61,11 @@ pub struct NetworkPatch {
 fn near(a: CurvePoint, b: CurvePoint, xy: f64, height: f64) -> bool {
     (a[0] - b[0]).hypot(a[2] - b[2]) <= xy && (a[1] - b[1]).abs() <= height
 }
-fn crossing(a: CurvePoint, b: CurvePoint, c: CurvePoint, d: CurvePoint) -> Option<(f64, f64)> {
-    let x = b[0] - a[0];
-    let z = b[2] - a[2];
-    let u = d[0] - c[0];
-    let v = d[2] - c[2];
-    let det = x * v - z * u;
-    if det.abs() < 1e-14 {
-        return None;
-    }
-    let t = ((c[0] - a[0]) * v - (c[2] - a[2]) * u) / det;
-    let s = ((c[0] - a[0]) * z - (c[2] - a[2]) * x) / det;
+/// Where the plan segments `a`-`b` and `c`-`d` meet, ends included, as the
+/// parameter along each.
+pub(crate) fn segment_crossing(a: CurvePoint, b: CurvePoint, c: CurvePoint, d: CurvePoint) -> Option<(f64, f64)> {
+    let plan = |p: CurvePoint| [p[0], p[2]];
+    let (t, s) = crate::plan_lines::line_parameters(plan(a), plan(b), plan(c), plan(d), 1e-14)?;
     if (-1e-9..=1. + 1e-9).contains(&t) && (-1e-9..=1. + 1e-9).contains(&s) {
         Some((t.clamp(0., 1.), s.clamp(0., 1.)))
     } else {
@@ -158,7 +152,7 @@ pub fn intersections(
             {
                 continue;
             }
-            let Some((x, y)) = crossing(
+            let Some((x, y)) = segment_crossing(
                 aa[0].position,
                 aa[1].position,
                 bb[0].position,
@@ -221,30 +215,6 @@ fn length_of(v: CurvePoint) -> f64 {
     (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt()
 }
 
-/// Gives the two curves meeting at a freshly welded anchor a shared tangent.
-///
-/// **Why the tool needs this.** Snapping a new stroke onto a standing anchor
-/// joins the two runs in position and stops there: each edge keeps whatever
-/// controls its own fit produced, so the pair meets at whatever angle the
-/// hand happened to leave and the road has a crease in it. The machinery to
-/// avoid that already existed for dragging a handle by hand
-/// ([`crate::bezier::constrain_handle`]) and was simply never reached at the
-/// moment the weld is made.
-///
-/// Both sides give way, half each, so the join is symmetric: the standing run
-/// bends as much toward the new one as the new one bends toward it. That does
-/// alter a run already committed, which is the deliberate trade -- a weld the
-/// user asked for is a change to both roads, and a join that only the newer
-/// road respects still looks like a crease from the older one's side.
-///
-/// Only welds this call actually made are touched, and only where exactly two
-/// curves meet. A junction of three or more has no continuation to be
-/// continuous with, and an anchor whose curves were both already standing was
-/// accepted in its current shape long ago.
-///
-/// Idempotent: a joint already sharing a tangent averages to the direction it
-/// is already pointing, so regenerating a cloud over and over cannot make it
-/// drift.
 /// The identity an output edge descends from -- a split piece carries its
 /// parent's id with a suffix, and is the same authored curve for the purpose
 /// of deciding who authored it.
@@ -255,15 +225,32 @@ fn authoring_root(edge_id: &str) -> &str {
     }
 }
 
+/// Carries a freshly welded run on in line with the run it was welded to.
+///
+/// **Why the tool needs this.** Snapping a new stroke onto a standing anchor
+/// joins the two runs in position and stops there: each edge keeps whatever
+/// controls its own fit produced, so the pair meets at whatever angle the
+/// hand happened to leave and the road has a crease in it.
+///
+/// Only the new run gives way: it leaves the anchor in line with the standing
+/// run, in plan, keeping its own climb. The standing run keeps its controls,
+/// so its contour is swept from the very controls its spine keeps -- a patch
+/// never re-authors a standing edge -- and a flat run welded to a climbing
+/// one never bulges past the anchor's height.
+///
+/// Only welds this call made are touched, and only where exactly two curves
+/// meet and carry on rather than turn a corner. A junction of three or more
+/// has no continuation to be continuous with.
+///
+/// Idempotent: a run already in line is left pointing where it points.
 fn smooth_welds(
     output: &mut Vec<CurveEdge>,
     all_edges: &[CurveEdge],
     old_ids: &BTreeSet<String>,
 ) {
     let emitted: BTreeSet<String> = output.iter().map(|e| e.edge_id.clone()).collect();
-    // The originals the patch would otherwise leave untouched, carried along
-    // so a weld onto one can still be smoothed. Each is re-emitted only if
-    // this pass actually changes it.
+    // The standing edges the patch leaves untouched, read only as the side a
+    // new run is aligned to: they never change, so they are never re-emitted.
     let carried: Vec<CurveEdge> = all_edges
         .iter()
         .filter(|e| old_ids.contains(&e.edge_id) && !emitted.contains(&e.edge_id))
@@ -288,58 +275,37 @@ fn smooth_welds(
             .push((index, false));
     }
 
+    let standing = |e: &CurveEdge| old_ids.contains(&e.edge_id) || old_ids.contains(authoring_root(&e.edge_id));
     let limit = MAX_SMOOTHED_WELD_DEGREES.to_radians().cos();
-    let mut touched = vec![false; work.len()];
     let mut alignments: Vec<(usize, bool, CurvePoint)> = Vec::new();
     for uses in incident.values() {
         let [(first, first_start), (second, second_start)] = uses[..] else {
             continue; // not a two-curve joint.
         };
-        if first >= emitted_count && second >= emitted_count {
-            continue; // nothing here was welded by this call.
-        }
-        // Both sides authored by this same call: not a weld at all, but an
-        // interior joint of the run being inserted. Its tangent is already
-        // the caller's own answer -- a corner the fit deliberately broke, or
-        // a bend it deliberately carried through -- and there is no second
-        // opinion here to reconcile it with. Smoothing it would overwrite an
-        // authored corner with a tangent nobody asked for, which is exactly
-        // what a weld threshold exists to avoid doing to standing geometry.
-        if !old_ids.contains(authoring_root(&work[first].edge_id))
-            && !old_ids.contains(authoring_root(&work[second].edge_id))
-        {
-            continue;
-        }
+        let (new, new_start, old, old_start) = match (standing(&work[first]), standing(&work[second])) {
+            (false, true) => (first, first_start, second, second_start),
+            (true, false) => (second, second_start, first, first_start),
+            // Both authored here: an interior joint, the caller's own answer --
+            // a corner the fit broke, or a bend it carried through.
+            // Both standing: a split of one standing run, already in line.
+            _ => continue,
+        };
         let near = |index: usize, is_start: bool| {
             let handles = &work[index].curve;
             if is_start { handles.start } else { handles.end }
         };
-        let (u, v) = (near(first, first_start), near(second, second_start));
-        let (Some(u_hat), Some(v_hat)) = (norm(u), norm(v)) else {
+        let (u, v) = (near(new, new_start), near(old, old_start));
+        // In plan only: the new run keeps its own climb at the anchor.
+        let flat = |w: CurvePoint| -> CurvePoint { [w[0], 0., w[2]] };
+        let (Some(u_hat), Some(v_hat)) = (norm(flat(u)), norm(flat(v))) else {
             continue;
         };
-        // The two near controls should sit on opposite sides of the anchor,
-        // so `u` is compared against the reverse of `v`.
-        let opposed: CurvePoint = std::array::from_fn(|i| -v_hat[i]);
-        let deviation = u_hat[0] * opposed[0] + u_hat[1] * opposed[1] + u_hat[2] * opposed[2];
-        if deviation < limit {
+        // The two near controls should sit on opposite sides of the anchor.
+        if -(u_hat[0] * v_hat[0] + u_hat[2] * v_hat[2]) < limit {
             continue; // a corner, not a continuation.
         }
-        let Some(shared) = norm(std::array::from_fn(|i| u_hat[i] + opposed[i])) else {
-            continue;
-        };
-        alignments.push((
-            first,
-            first_start,
-            std::array::from_fn(|i| shared[i] * length_of(u)),
-        ));
-        alignments.push((
-            second,
-            second_start,
-            std::array::from_fn(|i| -shared[i] * length_of(v)),
-        ));
-        touched[first] = true;
-        touched[second] = true;
+        let reach = length_of(flat(u));
+        alignments.push((new, new_start, [-v_hat[0] * reach, u[1], -v_hat[2] * reach]));
     }
 
     for (index, is_start, handle) in alignments {
@@ -350,12 +316,9 @@ fn smooth_welds(
             handles.end = handle;
         }
     }
-
-    for (index, edge) in work.into_iter().enumerate() {
-        if index < emitted_count || touched[index] {
-            output.push(edge);
-        }
-    }
+    // Every aligned run is one this call emitted; the standing ones only lent their tangent.
+    work.truncate(emitted_count);
+    *output = work;
 }
 
 /// Inserts and splits curves transactionally, enforcing independent height tolerance.
@@ -737,14 +700,12 @@ mod tests {
         ))
         .expect("the weld plans");
 
-        let standing = near_direction(&patch, "first", false);
+        // The new run leaves in line with the standing one, which runs +x.
         let fresh = near_direction(&patch, "second", true);
-        // Opposite sides of the shared anchor is what makes the join smooth.
-        let dot = standing[0] * fresh[0] + standing[1] * fresh[1] + standing[2] * fresh[2];
-        assert!(dot < -0.999, "controls are not collinear through the anchor: {dot}");
-        // Half each: the standing run gave way as much as the new one did, so
-        // the shared tangent bisects the bend rather than adopting a side.
-        assert!(fresh[2] > 0. && fresh[2] < 0.5, "the tangent did not bisect: {fresh:?}");
+        assert!(fresh[0] > 0.999 && fresh[2].abs() < 1e-9, "the new run did not carry the standing tangent on: {fresh:?}");
+        // Only the new run gives way: the standing one keeps its controls,
+        // so its contour is swept from the very controls its spine keeps.
+        assert!(patch.edges.iter().all(|e| e.edge_id != "first"));
     }
 
     #[test]

@@ -1,8 +1,10 @@
 export {
+  PATH_MAX_GRADE,
   PATH_SPINE_OFFSET,
   pathFormationFor,
   pathHalfWidth,
-  pathRidesTerrain,
+  pathMinRadius,
+  pathStrokeShape,
   pathSpineSlot,
 } from "./path-recipe.ts";
 export type { PathFormationRecipe, PathProfilePoint } from "./path-recipe.ts";

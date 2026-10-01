@@ -21,7 +21,17 @@ export interface CurveHandles {
   readonly geometry?: SpanGeometry;
 }
 export type CurveCommand =
-  | { readonly kind: "interpretStroke"; readonly points: readonly CurvePoint[]; readonly correction: number; readonly curved: boolean }
+  | {
+      readonly kind: "interpretStroke"; readonly points: readonly CurvePoint[]; readonly correction: number; readonly curved: boolean;
+      /** Whether loops the stroke draws over itself are cut out. */
+      readonly simple?: boolean;
+      /** How far the fitted height may stray from the drawn one before a span is split. */
+      readonly heightTolerance?: number;
+      /** The tightest turn, in plan, the stroke is eased to. */
+      readonly minRadius?: number;
+      /** The steepest rise per plan length it may climb; its end stops short where the climb is steeper. */
+      readonly maxGrade?: number;
+    }
   | { readonly kind: "automatic"; readonly points: readonly CurvePoint[] }
   | { readonly kind: "fit"; readonly points: readonly CurvePoint[]; readonly cornerDegrees?: number }
   | { readonly kind: "join"; readonly sections: readonly (readonly [CurvePoint, CurvePoint])[] }

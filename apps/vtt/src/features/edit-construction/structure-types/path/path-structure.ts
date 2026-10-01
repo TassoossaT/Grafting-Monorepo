@@ -7,6 +7,7 @@ import { isSpineControlNodeId } from "../../spine/spine-node-id.ts";
 import type { CascadeContext, EditRole, RolePolicy, SpineGeneration, StructureTrait, StructureTypeDefinition, StructureView } from "../structure-type.ts";
 import { regeneratePathSpine } from "./bezier-road-edit.ts";
 import { explicitSpineSnapshot } from "./bezier-road-plan.ts";
+import { PATH_MAX_GRADE } from "./path-recipe.ts";
 import { allowed, denied } from "../structure-type.ts";
 import type { CreationInteraction } from "../creation-interaction.ts";
 
@@ -208,8 +209,8 @@ function outwardOfGrabbed(context: CascadeContext): readonly AtomicEditOp[] {
 
 export function pathPolicyFor(role: EditRole): RolePolicy {
   switch (role) {
-    // Height included on purpose: lifting a spine station off the ground is
-    // how a run stops riding the terrain, which is the whole of a bridge deck.
+    // Height included on purpose: lifting a spine station clear of the
+    // ground frees the ground under it, which is the whole of a bridge deck.
     //
     // Scope is `"surface"` for every part-level role here, and it is not a
     // hedge: the primary op names one node or one edge, and the reach past
@@ -240,6 +241,7 @@ export function pathPolicyFor(role: EditRole): RolePolicy {
 /** A road on the shared spine: legacy spans get automatic handles, and an edit regenerates the unioned contour. */
 const PATH_SPINE: SpineGeneration = Object.freeze<SpineGeneration>({
   defaultOffsets: [-2, 2],
+  maxGrade: PATH_MAX_GRADE,
   prepare: (snapshot, port) => explicitSpineSnapshot(snapshot, port, [-2, 2]),
   regenerate: regeneratePathSpine,
 });
@@ -259,8 +261,9 @@ export function pathStructureType(
     roleFor: pathRoleFor,
     policyFor: pathPolicyFor,
     interactionOver,
-    // A deck spans instead of riding what is under it.
-    conformsTo: (support: ReadonlySet<StructureTrait>, subtype?: string) => support.has("ground") && subtype !== "bridge",
+    // Every road rides the ground; one lifted clear of it is a deck by its
+    // height alone -- the ground contact law frees the ground under it.
+    conformsTo: (support: ReadonlySet<StructureTrait>) => support.has("ground"),
     spine: PATH_SPINE,
   });
 }

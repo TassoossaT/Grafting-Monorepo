@@ -26,6 +26,12 @@ export interface SpineRibbon {
   readonly outline: readonly ConstructionPosition[];
 }
 
+// Derived samples belong to this port's lifetime, never to confirmed graph
+// state. Exact authoring/profile inputs name a reusable segment; a change to
+// either anchor, handles, profile or resolution asks Rust to sweep it again.
+const derivedSegments = new WeakMap<object, Map<string, SpineRibbon>>();
+const MAX_DERIVED_SEGMENTS = 256;
+
 /**
  * The lateral extent `[min, max]` a span's profile reaches at its start and
  * its end, falling back to `defaults` where the span authored none.
@@ -52,11 +58,27 @@ export function spineRibbons(
   tolerance: number,
   parametersFor?: (resolved: CurveResult, index: number) => readonly number[] | undefined,
 ): readonly SpineRibbon[] {
-  const resolved = resolveCurves(port, spans, tolerance);
-  const outlines = sampleRibbons(port, spans.map((span, i) => ({
-    curve: resolved[i]!.curves[0]!,
+  const cache = derivedSegments.get(port) ?? new Map<string, SpineRibbon>();
+  derivedSegments.set(port, cache);
+  const keys = spans.map((span) => JSON.stringify([span, defaults, tolerance]));
+  // Custom station policies can depend on consumer state. Their output is not
+  // inferred from authoring inputs and therefore is evaluated on every call.
+  const missing = spans.map((span, i) => ({ span, i }))
+    .filter(({ i }) => parametersFor !== undefined || !cache.has(keys[i]!));
+  const resolved = resolveCurves(port, missing.map(({ span }) => span), tolerance);
+  const outlines = sampleRibbons(port, missing.map(({ span, i }, j) => ({
+    curve: resolved[j]!.curves[0]!,
     ...spanOffsets(span.handles, defaults),
-    parameters: parametersFor?.(resolved[i]!, i),
+    parameters: parametersFor?.(resolved[j]!, i),
   })), tolerance);
-  return spans.map((_, i) => ({ resolved: resolved[i]!, outline: outlines[i]! }));
+  const generated = new Map(missing.map(({ i }, j) => [i, { resolved: resolved[j]!, outline: outlines[j]! }]));
+  const result = spans.map((_, i) => generated.get(i) ?? cache.get(keys[i]!)!);
+  if (parametersFor === undefined) {
+    result.forEach((segment, i) => {
+      cache.delete(keys[i]!);
+      cache.set(keys[i]!, segment);
+    });
+    while (cache.size > MAX_DERIVED_SEGMENTS) cache.delete(cache.keys().next().value!);
+  }
+  return result;
 }

@@ -286,6 +286,12 @@ export interface SpineGeneration {
    */
   readonly windKeeps?: "grade" | "height";
   /**
+   * The steepest the spine may climb, as rise per plan length -- a law held
+   * on every edit: an anchor moved up or down stops at the height its spans
+   * can climb to. Absent, a spine climbs as steep as it is drawn.
+   */
+  readonly maxGrade?: number;
+  /**
    * The edge a chain end's cross-section makes -- what a floor that end
    * lands on shares (`topology/floor-weld.ts`). Declaring it makes the
    * spine's free ends connect to a floor edge they are moved onto, and come
@@ -541,8 +547,8 @@ export interface StructureTypeDefinition {
    *
    * `paintedSubtype` is the preset the run being painted was built from,
    * when its type has subtypes at all. It is what lets one type vary a
-   * declared behaviour -- a bridge deck consuming nothing where a road
-   * carves -- without splitting into a second type with its own role table
+   * declared behaviour -- a trail treading lighter than a road, say --
+   * without splitting into a second type with its own role table
    * and its own logic to keep in step.
    */
   readonly interactionOver: (

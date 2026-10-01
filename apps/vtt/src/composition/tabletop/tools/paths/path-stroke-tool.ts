@@ -1,84 +1,50 @@
-import { roadSnapTarget, showRoadSnap } from "./road-body-target.ts";
-import { createRoadMeshPreview, ROAD_PREVIEW_COLOR, ROAD_PREVIEW_OPACITY, ROAD_ERROR_COLOR, ROAD_ERROR_OPACITY } from "./road-preview-mesh.ts";
-import { createPathBrushEffect, pathFormationFor, DEFAULT_TOOL_PARAMS } from "../../../../features/edit-construction/index.ts";
 import type { PathBrushParams } from "../../../../features/edit-construction/index.ts";
-import { commitPathCloudIntent } from "../../path/path-cloud-transaction.ts";
-import { scopedToolId, type ConstructionTool, type ToolContext, type ToolGesture, type PointerSample } from "../core/tool-context.ts";
+import type { ToolContext, ToolGesture } from "../core/tool-context.ts";
+import { samePlace, type SpineDraftStroke } from "../core/spine-draft.ts";
+import { roadSnapTarget, showRoadSnap } from "./road-body-target.ts";
+import { clearRoadPreview, layRoad, previewRoad, previewRoadError, shapeRoad, type ShapedRoad } from "./road-lay.ts";
 
 const CHANNEL = "road-stroke";
-const active = new WeakMap<ToolContext["runtime"], PointerSample>();
-const point = (p: PointerSample) => [p.point.x,p.point.y,p.point.z] as const;
 
-/** Product gesture threshold; fitting and curve geometry stay behind the Rust port. */
-function meaningful(g: ToolGesture): boolean {
-  return g.samples.some(s => g.start.screenX !== undefined && s.screenX !== undefined && g.start.screenY !== undefined && s.screenY !== undefined
-    ? Math.hypot(s.screenX-g.start.screenX,s.screenY-g.start.screenY) >= 5
-    : Math.hypot(s.point.x-g.start.point.x,s.point.z-g.start.point.z) >= 0.15);
-}
-function draft(ctx: ToolContext,g: ToolGesture,params: PathBrushParams) {
-  const samples = [...g.samples, g.current].filter((sample, index, all) => {
-    const previous = all[index - 1];
-    return !previous || sample.point.x !== previous.point.x || sample.point.y !== previous.point.y || sample.point.z !== previous.point.z;
-  });
+/**
+ * The road a stroke draws, its last sample snapped onto a road it ends on.
+ * A road too steep to climb to that target stops short of it and does not
+ * join it, so the snap only shows when the road reaches it.
+ */
+function draft(ctx: ToolContext, g: ToolGesture, params: PathBrushParams): ShapedRoad {
+  const samples = [...g.samples, g.current].filter((sample, index, all) => index === 0 || !samePlace(sample.point, all[index - 1]!.point));
   const target = roadSnapTarget(ctx, g.current);
   if (target) samples[samples.length - 1] = target;
-  showRoadSnap(ctx, target);
-
-  // The brush reserves half the road width; the remaining area may correct hand wobble.
-  const correction=Math.max(0,params.radius-params.bedWidth/2);
-  const fitted=ctx.runtime.curveBatch({tolerance:0.025,commands:[{kind:"interpretStroke",points:samples.map(point),correction,curved:true}]})[0]!;
-  const ribbons=ctx.runtime.curveBatch({tolerance:0.05,commands:fitted.curves.map(curve=>({kind:"ribbon" as const,curve,offsets:[-params.bedWidth/2,params.bedWidth/2] as const}))});
-  return {fitted,ribbons,samples};
+  const road = shapeRoad(ctx, samples.map((sample) => sample.point), params, true);
+  showRoadSnap(ctx, target && road.end && samePlace(road.end, target.point) ? target : undefined);
+  return road;
 }
-/** Drag to sketch the centerline. Release commits one fitted curve transaction. */
-export const pathStrokeTool: ConstructionTool<"path-brush"> = {
-  id:"path-brush",defaultParams:()=>DEFAULT_TOOL_PARAMS["path-brush"],
-  onPointerDown(ctx,sample){showRoadSnap(ctx);active.set(ctx.runtime,sample);},
-  onPointerMove(ctx,g,params) {
-    if(!active.has(ctx.runtime)||!meaningful(g))return;
+
+/**
+ * A road's centre line drawn by dragging, laid on release as one fitted
+ * curve transaction. The sketch owns the gesture; this only shapes, shows
+ * and lays what it is handed.
+ */
+export const pathStroke: SpineDraftStroke<"path-brush"> = {
+  begin(ctx) { showRoadSnap(ctx); },
+  move(ctx, g, params) {
     try {
-      const d=draft(ctx,g,params);
-      const anchors = [d.samples[0]!.point];
-      if (d.samples.length > 1) anchors.push(d.samples[d.samples.length - 1]!.point);
-      ctx.runtime.showPreview(createRoadMeshPreview({
-        ribbons: d.ribbons,
-        anchors,
-        bedWidth: params.bedWidth,
-        color: ROAD_PREVIEW_COLOR,
-        opacity: ROAD_PREVIEW_OPACITY,
-      }), CHANNEL);
+      previewRoad(ctx, draft(ctx, g, params).curves, params, CHANNEL);
     } catch {
       showRoadSnap(ctx);
-      // Red raw input is presentation only, never a candidate for confirmation.
-      const points=g.samples.filter(s=>Object.values(s.point).every(Number.isFinite)).map(s=>s.point);
-      ctx.runtime.showPreview(createRoadMeshPreview({
-        fallbackPoints: points,
-        anchors: points.length > 0 ? [points[0]!, points[points.length - 1]!] : [],
-        bedWidth: params.bedWidth,
-        color: ROAD_ERROR_COLOR,
-        opacity: ROAD_ERROR_OPACITY,
-      }), CHANNEL);
+      previewRoadError(ctx, g.samples.map((sample) => sample.point).filter((p) => Object.values(p).every(Number.isFinite)), params, CHANNEL);
     }
   },
-  onPointerUp(ctx,g,params) {
-    if(!active.delete(ctx.runtime))return;
-    ctx.runtime.clearPreview(CHANNEL);
-    const final={...g,samples:[...g.samples,g.current]};
-    if(!meaningful(final)){showRoadSnap(ctx);return;}
+  finish(ctx, g, params) {
+    clearRoadPreview(ctx, CHANNEL);
     try {
-      const d=draft(ctx,final,params);
-      const operationId=scopedToolId(ctx,"road-stroke",ctx.nextSequence());
-      const effect=createPathBrushEffect({
-        brushShape:{kind:"circle",radius:0.025},
-        brushRegion:{samples:d.samples.map(s=>s.point)},
-        authoredCurves:d.fitted.curves,parameters:pathFormationFor(params),
-      },{operationId,tableId:ctx.tableId,initiatedBy:"road-stroke"});
-      commitPathCloudIntent(ctx,effect,0.025);
+      return layRoad(ctx, draft(ctx, g, params).curves, params, "road-stroke");
+    } catch (error) {
+      ctx.reportFeedback({ tone: "error", message: `Traçado não aplicado: ${String(error)}` });
+      return false;
+    } finally {
       showRoadSnap(ctx);
-    } catch(error) {
-      showRoadSnap(ctx);
-      ctx.reportFeedback({tone:"error",message:`Traçado não aplicado: ${String(error)}`});
     }
   },
-  onCancel(ctx){active.delete(ctx.runtime);ctx.runtime.clearPreview(CHANNEL);showRoadSnap(ctx);},
+  cancel(ctx) { clearRoadPreview(ctx, CHANNEL); showRoadSnap(ctx); },
 };

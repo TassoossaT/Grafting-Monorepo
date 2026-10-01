@@ -6,6 +6,7 @@ import {
   contourGeometry,
   curveEdgesOf,
   curveHandles,
+  curveMidframes,
   curvePick,
   curvePickId,
   isBezierEditTarget,
@@ -53,7 +54,7 @@ test("a curved contour edge gets the same handles and picks a spine span does", 
 
     const edges = curveEdgesOf(runtime.getGraphSnapshot(), contour, runtime);
     assert.ok(edges.every((edge) => edge.store === "contour"));
-    const handles = curveHandles(edges, runtime);
+    const handles = curveHandles(curveMidframes(edges, runtime));
     assert.equal(handles.length, 2, "one midpoint handle per curve");
 
     const first = handles.find((handle) => handle.id === curvePickId("bottom", "midpoint"));

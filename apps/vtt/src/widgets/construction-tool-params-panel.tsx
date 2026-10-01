@@ -91,28 +91,17 @@ function BrushShapeFields<Params extends BrushShapeParams>(props: {
 }
 
 /**
- * Every path a player draws is a `street` -- `PathKind` still carries
- * `"trail" | "street" | "road" | "bridge"` for the engine and for corridors
- * committed before this panel stopped exposing the other three, but the
- * brush itself only ever writes `"street"` now. `pathFormationFor` only
- * adds a shoulder to a road's width for the other three kinds and never
- * reads `shoulderHeight` at all (no raised rim exists yet), so this only
- * shows the one slider `street`'s own profile actually answers to: bed
- * width.
+ * Every road a player draws is a `street`, and its only structural profile
+ * is its width -- a raised rim is an asset's detail, not the structure's --
+ * so this sets up the width of the next road and nothing else. A standing
+ * road is widened by its own width handles.
  */
 function PathBrushFields(props: { readonly params: PathBrushParams; readonly onChange: (next: PathBrushParams) => void }) {
   const { params, onChange } = props;
   return (
     <div style={{ display: "grid", gap: "0.6rem" }}>
-      <label>Construção <select value={params.creationMode === "pen" ? "points" : params.creationMode ?? "brush"} onChange={(event) => onChange({ ...params, creationMode: event.currentTarget.value as "brush" | "points" })}>
-        <option value="brush">Desenho livre</option>
-        <option value="points">Por pontos</option>
-      </select></label>
-      {(!params.creationMode || params.creationMode === "brush")
-        ? <p>Arraste pelo terreno e solte para construir o caminho.</p>
-        : <p>Clique por onde o caminho deve passar. Enter constrói; Backspace retira o último ponto.</p>}
-      <p>Clique no + verde junto ao ponto selecionado para ramificar. O alvo azul indica o encaixe com outra rua: clique nele para confirmar e encerrar. Arraste os pontos da espinha para editar; use o eixo Y para altura. Clique em um trecho para inserir um ponto, ou arraste o trecho para curvar. Segure Shift ao iniciar num ponto ou trecho para criar uma ramificacao (por desenho ou por pontos). Delete remove o ponto selecionado; Esc cancela.</p>
-      {sliderRow("Largura do leito", params.bedWidth, 0.5, 12, 0.25, (bedWidth) => onChange({ ...params, bedWidth }))}
+      <strong>Rua</strong>
+      {sliderRow("Largura da próxima rua", params.bedWidth, 0.5, 12, 0.25, (bedWidth) => onChange({ ...params, bedWidth }))}
     </div>
   );
 }
@@ -509,7 +498,7 @@ export function ConstructionToolParamsPanel(props: ConstructionToolParamsPanelPr
   // pattern, not a drag) now also grabs and edits whatever it owns
   // (`structure-edit-behavior.ts`), so this stays a second, always-present
   // panel rather than a per-tool branch.
-  const panels = activeTool === "opening" ? [panel] : [panel, {
+  const panels = activeTool === "opening" || activeTool === "path-brush" ? [panel] : [panel, {
     key: "structure-edit",
     header: "Editar estrutura existente",
     content: <StructureEditFields params={structureEditParams} onChange={onStructureEditParamsChange} />,

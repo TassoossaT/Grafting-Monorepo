@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sessionFixture } from "./platform-session-fixture.mjs";
 import { createPathBrushEffect, pathFormationFor, planPathCloudMutation } from "../src/features/edit-construction/index.ts";
-import { pathPointsTool } from "../src/composition/tabletop/tools/paths/path-points-tool.ts";
+import { pathBrushTool as pathPointsTool } from "../src/composition/tabletop/tools/paths/path-brush-tool.ts";
 import { roadSnapTarget } from "../src/composition/tabletop/tools/paths/road-body-target.ts";
 import { commitPatchReplacement } from "../src/composition/tabletop/effects/effect-commit.ts";
 

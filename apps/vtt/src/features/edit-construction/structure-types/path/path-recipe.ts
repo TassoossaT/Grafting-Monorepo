@@ -71,17 +71,31 @@ export function pathSpineSlot(profile: readonly PathProfilePoint[]): number {
 }
 
 /**
- * Whether this subtype's stations take their height from the ground beneath
- * them.
- *
- * A deck does not: it spans, so its height comes from its own ends and the
- * middle stays level instead of sagging onto whatever it crosses. That is the
- * whole of what makes a subtype a bridge -- no separate type, no separate
- * role table, no separate logic. What it cuts is the ground's own law: only
- * where it touches it.
+ * The steepest a road climbs, as rise per plan length -- the road-building
+ * games' ceiling for a local road (Transport Fever keeps roads to 20 %). A
+ * road drawn to meet one higher than that allows stops short of it.
  */
-export function pathRidesTerrain(kind: PathKind): boolean {
-  return kind !== "bridge";
+export const PATH_MAX_GRADE = 0.2;
+
+/**
+ * The tightest a road turns, as the radius of its centre line: its own
+ * width. Tighter, the inner edge folds over itself -- it must stay clear of
+ * half the width -- and the curve reads as a knot, not a road.
+ */
+export function pathMinRadius(params: PathBrushParams): number {
+  return pathHalfWidth(params) * 2;
+}
+
+/**
+ * How far a road's fitted height may stray from the ground it was drawn over
+ * before a span is split: the ground rises or falls to meet a road where it
+ * rests on it, so a road need not trace every bump -- only a hill.
+ */
+export const PATH_HEIGHT_TOLERANCE = 0.5;
+
+/** Everything a drawn road is held to before it is laid, as the engine's stroke shape. */
+export function pathStrokeShape(params: PathBrushParams): { readonly simple: true; readonly minRadius: number; readonly maxGrade: number; readonly heightTolerance: number } {
+  return { simple: true, minRadius: pathMinRadius(params), maxGrade: PATH_MAX_GRADE, heightTolerance: PATH_HEIGHT_TOLERANCE };
 }
 
 /**

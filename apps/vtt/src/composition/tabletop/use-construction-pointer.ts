@@ -13,7 +13,7 @@ import type { TabletopRuntime } from "./tabletop-runtime.ts";
 import { toolFor } from "./tools/index.ts";
 import { beginCurveGesture, type CurveGesture } from "./tools/core/curve-edit-gesture.ts";
 import { carriesArrows, globalHandleOf, handleMotionAt, shownGlobalHandleAt } from "../../features/edit-construction/index.ts";
-import { gestureMoved } from "./tools/core/tool-context.ts";
+import { gestureMoved, nextClickRun, type ClickRun } from "./tools/core/tool-context.ts";
 import { withFacePlane } from "./tools/core/pointer-ray.ts";
 import { handleFocusAt, NO_FOCUS, sameFocus } from "./tools/core/handle-focus.ts";
 import type { HandleFocus } from "../../features/edit-construction/index.ts";
@@ -78,7 +78,6 @@ function applySnap(sample: PointerSample, snapToGrid: boolean): PointerSample {
 }
 
 export interface ConstructionPointerHandlers {
-  readonly onSelectionAction: (action: string) => void;
   readonly onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
   readonly onPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
   readonly onPointerUp: (event: ReactPointerEvent<HTMLDivElement>) => void;
@@ -113,6 +112,8 @@ function pointerOffset(event: { currentTarget: HTMLElement; clientX: number; cli
 export function useConstructionPointer(options: UseConstructionPointerOptions): ConstructionPointerHandlers {
   const gestureRef = useRef<ActiveGesture | null>(null);
   const suppressClickRef = useRef(false);
+  /** The run of quick clicks the last releases made -- what tells a double-click. */
+  const clickRunRef = useRef<ClickRun | undefined>(undefined);
   const sequenceRef = useRef(0);
   const lastCommitAtRef = useRef(0);
   const lastPreviewAtRef = useRef(0);
@@ -124,10 +125,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
   /** Channels the edge overlay currently occupies, so a redraw clears exactly what it drew. */
   const shownEdgeChannels = useRef(new Set<string>());
   const manipulatorGesture = useRef<CurveGesture | undefined>(undefined);
-  const branchModifier = useRef(false);
   const selectedPoint = useRef<string | undefined>(undefined);
-  /** Whatever was last reported picked, of any kind -- what a selection action acts on. */
-  const selectedId = useRef<string | undefined>(undefined);
 
   const nextSequence = useCallback(() => ++sequenceRef.current, []);
 
@@ -163,14 +161,12 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       nextSequence,
       reportSelection: (info) => {
         const { runtime, viewId, activeTool } = optionsRef.current;
-        selectedId.current = info?.id;
         optionsRef.current.onSelectionChange(info);
         if (viewId === undefined) return;
         const node = info && toolFor(activeTool).handlePresentation === "spine-points" ? spineHandleAt(runtime, info.id) : undefined;
         selectedPoint.current = node?.id;
-        runtime.setPointManipulator?.(viewId, node && !branchModifier.current ? {
-          // Branching starts a new structure from the point, which only a tool that handles the action can do.
-          id: node.id, position: node.position, branchAction: toolFor(activeTool).selectionActions?.(ctx, node.id).some((action) => action.id === "branch") === true,
+        runtime.setPointManipulator?.(viewId, node ? {
+          id: node.id, position: node.position,
           onChange(phase, position) {
             if (phase === "start") {
               manipulatorGesture.current?.cancel();
@@ -257,11 +253,6 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     const keydown = (event: KeyboardEvent) => {
       if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
       if (event.target instanceof HTMLElement && (event.target.isContentEditable || event.target.closest("input, textarea, select"))) return;
-      if (event.key === "Shift" && tool.handlePresentation === "spine-points" && !manipulatorGesture.current) {
-        branchModifier.current = true;
-        if (options.viewId !== undefined) options.runtime.setPointManipulator?.(options.viewId, undefined);
-        return;
-      }
       if (event.key === "Escape" && tool.onCancel) {
         tool.onCancel(ownedContext); release(); event.preventDefault(); return;
       }
@@ -275,22 +266,10 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
         refreshEdgeOverlay();
       }
     };
-    const restoreManipulator = () => {
-      if (!branchModifier.current) return;
-      branchModifier.current = false;
-      const node = selectedPoint.current === undefined ? undefined : spineHandleAt(options.runtime, selectedPoint.current);
-      if (node) ctx.reportSelection({ id: node.id, point: node.position });
-    };
-    const keyup = (event: KeyboardEvent) => { if (event.key === "Shift") restoreManipulator(); };
     refreshEdgeOverlay();
-    window.addEventListener("keyup", keyup);
-    window.addEventListener("blur", restoreManipulator);
     window.addEventListener("keydown", keydown);
     return () => {
       window.removeEventListener("keydown", keydown);
-      window.removeEventListener("keyup", keyup);
-      window.removeEventListener("blur", restoreManipulator);
-      branchModifier.current = false;
       selectedPoint.current = undefined;
       manipulatorGesture.current?.cancel();
       manipulatorGesture.current = undefined;
@@ -415,7 +394,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
             }
           }
         }
-        event.currentTarget.style.cursor = sample?.constructionAction ? "pointer" : sample?.nodeId ? "grab" : "";
+        event.currentTarget.style.cursor = sample?.nodeId ? "grab" : "";
         const descriptor = sample ? tool.previewFor?.({ start: sample,current: sample,samples: [sample] },params,ctx) : undefined;
         if (descriptor) optionsRef.current.runtime.showPreview(descriptor,TOOL_GHOST_PREVIEW_CHANNEL);
         else optionsRef.current.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
@@ -459,7 +438,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       }
       const moved = gestureMoved(gesture.start, gesture.samples);
       suppressClickRef.current = moved;
-      tool.onPointerUp?.(ctx, { start: gesture.start, current: gesture.last, samples: gesture.samples, moved }, params);
+      clickRunRef.current = moved ? undefined : nextClickRun(clickRunRef.current, gesture.start, performance.now());
+      const clicks = clickRunRef.current?.count ?? 0;
+      tool.onPointerUp?.(ctx, { start: gesture.start, current: gesture.last, samples: gesture.samples, moved, clicks }, params);
       gestureRef.current = null;
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId);
@@ -495,14 +476,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     [ctx, refreshEdgeOverlay, sampleAt],
   );
 
-  const onSelectionAction = useCallback((action: string) => {
-    if (gestureRef.current || manipulatorGesture.current) return;
-    const { activeTool, toolParams } = optionsRef.current;
-    if (toolFor(activeTool).onSelectionAction?.(ctx, action, toolParams[activeTool] as never, selectedId.current)) refreshEdgeOverlay();
-  }, [ctx, refreshEdgeOverlay]);
-
   return {
-    onSelectionAction,
     onPointerDown,
     onPointerMove,
     onPointerUp: finishGesture,

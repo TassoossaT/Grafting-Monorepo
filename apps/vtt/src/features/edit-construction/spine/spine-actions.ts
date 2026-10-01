@@ -1,5 +1,6 @@
 import type { BezierPort, ConstructionGraphPatch, ConstructionGraphSnapshot, ConstructionEdgeSnapshot } from "@/ports";
 import { automaticCurve, resolveCurves } from "../topology/bezier-curve.ts";
+import { withSpanWidth } from "./spine-profile.ts";
 import { spineComponent } from "./spine-owner.ts";
 
 /** Structural edits on a spine, the same for every structure generated along one. */
@@ -51,11 +52,14 @@ export function planSpineAction(snapshot: ConstructionGraphSnapshot, port: Bezie
     return {nodes:[nodes.get(targetId)!,nodes.get(other)!],edges:[{edgeId:"spine-edge:"+operationId+":close",startNodeId:targetId,endNodeId:other,curve:{...c.handles[0]!,bandOffsets:incident[0]!.curve!.bandOffsets,surfaceType:incident[0]!.curve!.surfaceType}}]};
   }
   const edge=snapshot.edges.find((e)=>e.edgeId===edgeId && e.curve);
-  if(!edge)throw Error("Selecione o ponto central de um trecho.");
-  if(action==="delete-segment") return {nodes:seed([edge]),removedEdgeIds:[edge.edgeId],edges:[]};
   if(action==="width") {
     if(width===undefined || !Number.isFinite(width) || width<=0 || (endWidth!==undefined && (!Number.isFinite(endWidth) || endWidth<=0)))throw Error("Informe uma largura positiva.");
-    return {nodes:seed([edge]),removedEdgeIds:[edge.edgeId],edges:[{...edge,curve:{...edge.curve!,bandOffsets:[-width/2,width/2],endBandOffsets:endWidth===undefined || endWidth===width?undefined:[-endWidth/2,endWidth/2]}}]};
+    const owner = edge?.curve?.surfaceType ?? incident[0]?.curve?.surfaceType;
+    const targets = edge ? [edge] : spineComponent({ ...snapshot, edges: snapshot.edges.filter(e => e.curve?.surfaceType === owner) }, [targetId]).edges.filter(e => e.curve);
+    if (!targets.length) throw Error("Selecione uma espinha ou um trecho.");
+    return {nodes:seed(targets),removedEdgeIds:targets.map(e=>e.edgeId),edges:targets.map(e=>({...e,curve:withSpanWidth(e.curve!,width,endWidth)}))};
   }
+  if(!edge)throw Error("Selecione o ponto central de um trecho.");
+  if(action==="delete-segment") return {nodes:seed([edge]),removedEdgeIds:[edge.edgeId],edges:[]};
   throw Error("Ação de curva desconhecida.");
 }

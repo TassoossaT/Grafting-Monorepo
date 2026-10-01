@@ -12,6 +12,18 @@ const topology = (t) => {
 };
 const wirePatch = (p) => ({ ...p, nodes: p.nodes.map((n) => ({ ...n, position: vector(n.position) })) });
 
+/**
+ * `f` with the previews its tools show kept in `f.previews`, by channel, and
+ * an empty coverage answer -- what a tool test drives a construction tool against.
+ */
+export function capturePreviews(f) {
+  f.previews = new Map();
+  f.runtime.showPreview = (descriptor, channel) => f.previews.set(channel, descriptor);
+  f.runtime.clearPreview = (channel) => f.previews.delete(channel);
+  f.runtime.getFootprintCoverage = () => [];
+  return f;
+}
+
 /** A real WASM session behind the narrow source used by tools and the planner. */
 export function sessionFixture() {
   const session = new ConstructionSession();

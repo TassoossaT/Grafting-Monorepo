@@ -6,7 +6,6 @@ import type { TabletopRuntime } from "../../tabletop-runtime.ts";
 
 /** What the pointer resolved to at one instant -- `nodeId` present only when it hit a node handle. */
 export interface PointerSample {
-  readonly constructionAction?: { readonly kind: "branch"; readonly nodeId: string };
   readonly point: ConstructionPosition;
   /** Screen coordinate used by explicit elevation gestures. */
   readonly screenY?: number;
@@ -34,18 +33,41 @@ export interface ToolGesture {
 export interface ReleasedGesture extends ToolGesture {
   /** Whether the pointer travelled far enough to be a drag rather than a click -- decided once, by the dispatcher. */
   readonly moved: boolean;
+  /** Which click in a quick run this release ends -- 2 for a double-click -- or 0 for a drag. Counted once, by the dispatcher. */
+  readonly clicks?: number;
 }
 
-/** How far the pointer may wander, in screen pixels (or world units when a sample has no screen position), and still count as a click. */
-const CLICK_SLOP_PIXELS = 3;
-const CLICK_SLOP_WORLD = 0.05;
+/** How far the pointer may wander, in screen pixels -- or world units when a sample has no screen position -- and still count as not having moved. */
+export interface PointerSlop {
+  readonly pixels: number;
+  readonly world: number;
+}
 
-/** Whether any of `samples` strayed from `start` past the click slop. */
-export function gestureMoved(start: PointerSample, samples: readonly PointerSample[]): boolean {
+/** A click: the pointer barely stirred. */
+const CLICK_SLOP: PointerSlop = { pixels: 3, world: 0.05 };
+
+/** How soon a click must follow the last, in milliseconds, to count as the next in a run. */
+const MULTI_CLICK_MS = 400;
+
+/** A run of quick clicks in one place: where and when the last landed, and how many it has been. */
+export interface ClickRun {
+  readonly sample: PointerSample;
+  readonly at: number;
+  readonly count: number;
+}
+
+/** The run a click at `sample`, at time `at`, makes: the next in `previous` when soon and near enough, else a first click. */
+export function nextClickRun(previous: ClickRun | undefined, sample: PointerSample, at: number): ClickRun {
+  const continues = previous !== undefined && at - previous.at <= MULTI_CLICK_MS && !gestureMoved(previous.sample, [sample]);
+  return { sample, at, count: continues ? previous.count + 1 : 1 };
+}
+
+/** Whether any of `samples` strayed from `start` past `slop` -- a click's, unless said otherwise. */
+export function gestureMoved(start: PointerSample, samples: readonly PointerSample[], slop: PointerSlop = CLICK_SLOP): boolean {
   return samples.some((sample) =>
     sample.screenX !== undefined && sample.screenY !== undefined && start.screenX !== undefined && start.screenY !== undefined
-      ? Math.hypot(sample.screenX - start.screenX, sample.screenY - start.screenY) > CLICK_SLOP_PIXELS
-      : Math.hypot(sample.point.x - start.point.x, sample.point.y - start.point.y, sample.point.z - start.point.z) > CLICK_SLOP_WORLD,
+      ? Math.hypot(sample.screenX - start.screenX, sample.screenY - start.screenY) > slop.pixels
+      : Math.hypot(sample.point.x - start.point.x, sample.point.y - start.point.y, sample.point.z - start.point.z) > slop.world,
   );
 }
 
@@ -138,10 +160,6 @@ export interface ConstructionTool<Id extends ConstructionToolId> {
   onPointerUp?(ctx: ToolContext, gesture: ReleasedGesture, params: ToolParamsFor<Id>): void;
   /** Discards an unfinished tool draft on Escape, cancellation or tool switch. */
   onCancel?(ctx: ToolContext): void;
-  /** What the picked `selectedId` offers besides dragging it -- shown as buttons; `id` is what `onSelectionAction` receives. */
-  selectionActions?(ctx: ToolContext, selectedId: string): readonly { readonly id: string; readonly label: string }[];
-  /** Runs an explicit action on the current selection, `selectedId` when something is picked. */
-  onSelectionAction?(ctx: ToolContext, action: string, params: ToolParamsFor<Id>, selectedId?: string): boolean;
   /** Handles a tool key outside text controls; true prevents the browser default. */
   onKeyDown?(ctx: ToolContext, key: string, params: ToolParamsFor<Id>): boolean;
   /** Delete/Backspace with the tool active -- a tool holding a selection (an opening picked for editing, say) removes it here. */

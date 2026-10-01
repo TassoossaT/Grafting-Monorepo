@@ -79,3 +79,48 @@ test("surface draw hides its helper for other views and updates the active camer
     assert.ok(proxy.position.equals(new Vector3(3,1,2)));
   } finally {f.manipulator.dispose();}
 });
+
+for(const eventType of ["pointercancel","lostpointercapture"]) test(`${eventType} restores the target and ignores late release`,()=>{
+  const f=fixture();
+  try {
+    const hit=f.start();
+    f.element.pointer("pointermove",hit.x+40,hit.y+16);
+    f.element.pointer(eventType,hit.x+40,hit.y+16);
+    assert.equal(f.events.filter(e=>e.phase==="cancel").length,1);
+    assert.deepEqual(f.events.at(-1).position,f.target.position);
+    assert.equal(f.element.captures.size,0);
+    assert.equal(f.element.style.touchAction,"pan-y");
+    f.element.pointer("pointerup",hit.x+40,hit.y+16);
+    assert.equal(f.events.some(e=>e.phase==="end"),false);
+  } finally {f.manipulator.dispose();}
+  assert.equal(f.scene.children.length,0);
+});
+
+test("replacing a target cancels its drag before attaching the replacement",()=>{
+  const f=fixture();
+  try {
+    const hit=f.start();
+    f.element.pointer("pointermove",hit.x+40,hit.y+16);
+    const position={x:3,y:1,z:2};
+    f.manipulator.update({...f.target,id:"replacement",position});
+    assert.equal(f.events.filter(e=>e.phase==="cancel").length,1);
+    assert.equal(f.events.some(e=>e.phase==="end"),false);
+    assert.equal(f.element.captures.size,0);
+    assert.deepEqual(f.events.at(-1).position,f.target.position);
+    const proxy=f.scene.children.find(c=>c.type==="Object3D");
+    assert.ok(proxy.position.equals(new Vector3(position.x,position.y,position.z)));
+    f.element.pointer("pointerup",hit.x+40,hit.y+16);
+    assert.equal(f.events.some(e=>e.phase==="end"),false);
+  } finally {f.manipulator.dispose();}
+});
+
+test("duplicate release never confirms twice",()=>{
+  const f=fixture();
+  try {
+    const hit=f.start();
+    f.element.pointer("pointerup",hit.x+40,hit.y+16);
+    f.element.pointer("pointerup",hit.x+40,hit.y+16);
+    assert.equal(f.events.filter(e=>e.phase==="end").length,1);
+    assert.equal(f.element.captures.size,0);
+  } finally {f.manipulator.dispose();}
+});

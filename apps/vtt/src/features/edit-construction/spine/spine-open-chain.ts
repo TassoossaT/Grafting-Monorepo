@@ -7,6 +7,7 @@ import type {
   CurvePoint,
 } from "@/ports";
 
+import { withSpanWidth } from "./spine-profile.ts";
 import { spineMemberOf } from "./spine-handle-ids.ts";
 import { spineComponent, spineOwnerOf } from "./spine-owner.ts";
 
@@ -139,7 +140,7 @@ export function planSpineChainEdit(graph: ConstructionGraphSnapshot, port: Pick<
         { id: lastId, position: { ...positions.get(lastId)!, y: next.endHeight } },
       ],
       removedEdgeIds: chain.spans.map(({ span }) => span.edgeId),
-      edges: chain.spans.map(({ span }) => ({ ...span, curve: { ...span.curve!, bandOffsets, endBandOffsets: undefined } })),
+      edges: chain.spans.map(({ span }) => ({ ...span, curve: withSpanWidth(span.curve!, next.width) })),
     };
   }
 
