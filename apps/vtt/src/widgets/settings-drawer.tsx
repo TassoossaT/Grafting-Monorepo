@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { Card, SlidingPanel } from "@/ui";
-import type { ConstructionToolId, StructureEditParams, ToolParamsByTool } from "@/features/edit-construction";
+import { MEASURE_UNITS, formatLength, isMeasureUnitId, type ConstructionToolId, type MeasureUnitId, type StructureEditParams, type ToolParamsByTool } from "@/features/edit-construction";
 
 import { ConstructionToolParamsPanel } from "./construction-tool-params-panel.tsx";
 
@@ -23,6 +23,9 @@ export interface SettingsDrawerProps {
   readonly structureEditParams: StructureEditParams;
   readonly onStructureEditParamsChange: (next: StructureEditParams) => void;
   readonly tokenCount: number;
+  /** The unit the table writes every distance in. */
+  readonly measureUnit: MeasureUnitId;
+  readonly onMeasureUnitChange: (unit: MeasureUnitId) => void;
   readonly open?: boolean;
   readonly onOpenChange?: (open: boolean) => void;
 }
@@ -56,15 +59,15 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
             </div>
             <div className="gm-stat-row">
               <span>Posição X:</span>
-              <span className="gm-stat-value">{props.selectedNodeInfo.point.x.toFixed(2)}m</span>
+              <span className="gm-stat-value">{formatLength(props.selectedNodeInfo.point.x, props.measureUnit)}</span>
             </div>
             <div className="gm-stat-row">
               <span>Posição Y:</span>
-              <span className="gm-stat-value">{props.selectedNodeInfo.point.y.toFixed(2)}m</span>
+              <span className="gm-stat-value">{formatLength(props.selectedNodeInfo.point.y, props.measureUnit)}</span>
             </div>
             <div className="gm-stat-row">
               <span>Posição Z:</span>
-              <span className="gm-stat-value">{props.selectedNodeInfo.point.z.toFixed(2)}m</span>
+              <span className="gm-stat-value">{formatLength(props.selectedNodeInfo.point.z, props.measureUnit)}</span>
             </div>
           </div>
         ) : (
@@ -84,14 +87,24 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
       />
 
       <Card className="gm-panel-card" backgroundColor="#182234" accentColor="#1e293b">
+        <span className="gm-panel-card-title">Mesa</span>
+        <label className="gm-stat-row" style={{ alignItems: "center" }}>
+          <span>Unidade de medida:</span>
+          <select
+            value={props.measureUnit}
+            onChange={(event) => { if (isMeasureUnitId(event.target.value)) props.onMeasureUnitChange(event.target.value); }}
+            style={{ background: "#0f172a", color: "inherit", border: "1px solid #1e293b", borderRadius: "0.25rem", padding: "0.15rem 0.3rem" }}
+          >
+            {Object.values(MEASURE_UNITS).map((unit) => <option key={unit.id} value={unit.id}>{unit.label}</option>)}
+          </select>
+        </label>
+      </Card>
+
+      <Card className="gm-panel-card" backgroundColor="#182234" accentColor="#1e293b">
         <span className="gm-panel-card-title">Métricas da Cena</span>
         <div className="gm-stat-row">
           <span>Tokens no Mapa:</span>
           <span className="gm-stat-value">{props.tokenCount}</span>
-        </div>
-        <div className="gm-stat-row">
-          <span>Snap ao Grid:</span>
-          <span className="gm-stat-value">Ativado (1.0m)</span>
         </div>
         <div className="gm-stat-row">
           <span>Iluminação:</span>

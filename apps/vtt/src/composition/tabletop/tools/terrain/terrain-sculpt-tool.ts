@@ -163,6 +163,7 @@ function boundsOf(swept: PlanarArea): TerrainStrokeBounds {
 /** Terrain-sculpt's own effect: the brush hands over the whole gesture, once, on release. */
 export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   id: "terrain-sculpt",
+  usesRuler: false,
   defaultParams: () => DEFAULT_TOOL_PARAMS["terrain-sculpt"],
 
   previewFor(gesture: ToolGesture, params: TerrainSculptParams, ctx: ToolContext) {

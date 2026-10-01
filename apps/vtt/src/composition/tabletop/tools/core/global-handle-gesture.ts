@@ -5,6 +5,7 @@ import {
   joinWhereLanded,
   rejoinNodes,
   releasePart,
+  resolveLevel,
   snapAnchorsOf,
   snapLinksOf,
   snapToOutlines,
@@ -375,12 +376,19 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
   const snap = handle.snaps === true && handle.faces !== undefined && params?.mode !== "elevation"
     ? { anchors: snapAnchorsOf(scene, handle), links: snapLinksOf(scene, handle) }
     : undefined;
+  // Lifting lands on the heights other structures stand at -- the ruler's levels -- whatever lifts: a top, a ridge, an end.
+  const lifting = handle.faces !== undefined && (handle.motion.kind === "vertical" || params?.mode === "elevation") ? snapLinksOf(scene, handle) : undefined;
   let snapped: OutlineSnap | undefined;
 
   /** Where the handle stands on its path, and what that asks of the structure. */
   function intentOf(gesture: ToolGesture): { readonly intent: GlobalHandleIntent; readonly at: ConstructionPosition; readonly readout?: string } {
-    const { position: free, angle = 0 } = drag.at(gesture);
-    snapped = snap && snapToOutlines(snap.anchors, { x: free.x - handle!.position.x, y: free.y - handle!.position.y, z: free.z - handle!.position.z }, handle!.motion, snap.links);
+    const { position: dragged, angle = 0 } = drag.at(gesture);
+    const level = lifting && resolveLevel(dragged.y, lifting, dragged, { snap: ctx.rulerSnap });
+    const free = level ? { ...dragged, y: level.y } : dragged;
+    if (lifting) ctx.showRuler?.(level?.guide ? { guides: [level.guide], measures: [] } : undefined);
+    snapped = snap && snapToOutlines(snap.anchors, { x: free.x - handle!.position.x, y: free.y - handle!.position.y, z: free.z - handle!.position.z }, handle!.motion, snap.links, { snap: ctx.rulerSnap });
+    // What the ruler caught shows whether or not the snap took it.
+    if (snap) ctx.showRuler?.(snapped ? { guides: snapped.guides, measures: snapped.measures } : undefined);
     const at = snapped ? { x: handle!.position.x + snapped.delta.x, y: handle!.position.y + snapped.delta.y, z: handle!.position.z + snapped.delta.z } : free;
     const delta = { x: at.x - handle!.position.x, y: at.y - handle!.position.y, z: at.z - handle!.position.z };
     switch (handle!.kind) {

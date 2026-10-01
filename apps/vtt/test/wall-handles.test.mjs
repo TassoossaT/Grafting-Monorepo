@@ -20,6 +20,8 @@ const params = { wallType: "wall-white", height: 3 };
 function fixture(onPlatform = false) {
   const f = sessionFixture();
   Object.assign(f.runtime, { showPreview() {}, clearPreview() {} });
+  // As the table plays: the ruler's snap is on.
+  Object.assign(f.ctx, { rulerSnap: true });
   if (onPlatform) commitPlatformContour(f.ctx, [[0, 0], [6, 0], [6, 4], [0, 4]].map(([x, z]) => ({ point: { x, y: 2, z } })), { mode: "create", elevation: 2, support: "floating", shape: "rectangle" });
   const y = onPlatform ? 2 : 0;
   const start = { point: { x: 1, y, z: 0 } }, end = { point: { x: 5, y, z: 0 } };
@@ -214,6 +216,8 @@ test("a wall's foot on a platform dragged in off its side stands loose there, th
 test("a loose wall moved whole snaps onto a platform's side and is joined to it along it", () => {
   const f = sessionFixture();
   Object.assign(f.runtime, { showPreview() {}, clearPreview() {} });
+  // As the table plays: the ruler's snap is on.
+  Object.assign(f.ctx, { rulerSnap: true });
   try {
     commitPlatformContour(f.ctx, [[0, 0], [6, 0], [6, 4], [0, 4]].map(([x, z]) => ({ point: { x, y: 2, z } })), { mode: "create", elevation: 2, support: "floating", shape: "rectangle" });
     const start = { point: { x: 1, y: 2, z: 1 } }, end = { point: { x: 5, y: 2, z: 1 } };
@@ -231,6 +235,8 @@ test("a loose wall moved whole snaps onto a platform's side and is joined to it 
 test("a platform's side pushed out snaps onto the run a wall beside it stands on, and takes the wall's feet into its outline", () => {
   const f = sessionFixture();
   Object.assign(f.runtime, { showPreview() {}, clearPreview() {} });
+  // As the table plays: the ruler's snap is on.
+  Object.assign(f.ctx, { rulerSnap: true });
   try {
     commitPlatformContour(f.ctx, [[0, 0], [6, 0], [6, 4], [0, 4]].map(([x, z]) => ({ point: { x, y: 0, z } })), { mode: "create", elevation: 0, support: "floating", shape: "rectangle" });
     const start = { point: { x: 1, y: 0, z: 5 } }, end = { point: { x: 5, y: 0, z: 5 } };

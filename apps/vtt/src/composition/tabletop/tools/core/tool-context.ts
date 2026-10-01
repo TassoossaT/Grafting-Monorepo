@@ -90,6 +90,8 @@ export interface ToolContext {
    * rather than re-deriving a link.
    */
   readonly rulerSnap: boolean;
+  /** Shows what the ruler caught for a point a tool ruled itself -- a handle dragged onto a corner -- until the gesture ends; `undefined` clears it. */
+  readonly showRuler?: (feedback: import("./ruler-session.ts").RulerFeedback | undefined) => void;
   /**
    * How a grab on an existing structure behaves -- shape/elevation mode and
    * the bezier handle options (`curveMode`/`curveAction`/`curveWidth`).
@@ -132,6 +134,7 @@ export interface ConstructionTool<Id extends ConstructionToolId> {
   readonly handlesOnHover?: boolean;
   /** How this tool's dragged spine anchors snap -- the scene manipulator uses it too. */
   readonly anchorSnap?: import("./curve-edit-gesture.ts").AnchorSnap;
+  /** `false` for a tool the ruler leaves alone: terrain is what is built on, and a tool laying itself out in a frame of its own rules its points itself. */
   readonly usesRuler?: boolean;
   defaultParams(): ToolParamsFor<Id>;
   /** Opt in to a stationary drawing preview between gestures. */

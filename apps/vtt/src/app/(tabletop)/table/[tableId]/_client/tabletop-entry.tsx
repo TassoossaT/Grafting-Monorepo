@@ -15,6 +15,7 @@ import {
   type EditHistoryStack,
   type OpeningParams,
   type RenderViewId,
+  type RulerReadout as RulerReadoutState,
   type StructureEditParams,
   type TabletopRuntime,
   type TabletopRuntimeStatus,
@@ -24,10 +25,14 @@ import { StatusBadge } from "@/ui";
 import {
   ConstructionDock,
   ConstructionHotbar,
+  DEFAULT_MEASURE_UNIT,
+  isMeasureUnitId,
+  RulerReadout,
   SettingsDrawer,
   ToolRail,
   useKeyboardShortcuts,
   type EditTool,
+  type MeasureUnitId,
   type SelectedNodeInfo,
 } from "@/widgets";
 
@@ -83,6 +88,20 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
   const [toolParams, setToolParams] = useState<ToolParamsByTool>(DEFAULT_TOOL_PARAMS);
   const [structureEditParams, setStructureEditParams] = useState<StructureEditParams>(DEFAULT_STRUCTURE_EDIT_PARAMS);
   const [rulerSnap, setRulerSnap] = useState(true);
+  // The unit is the table's own choice. Kept in this browser per table until the map's persistence (epic #239) carries it with the table.
+  const [measureUnit, setMeasureUnit] = useState<MeasureUnitId>(DEFAULT_MEASURE_UNIT);
+  const measureUnitKey = `grafting:table:${tableId}:measure-unit`;
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(measureUnitKey);
+      setMeasureUnit(isMeasureUnitId(saved) ? saved : DEFAULT_MEASURE_UNIT);
+    } catch { /* storage blocked: the default stands */ }
+  }, [measureUnitKey]);
+  const handleMeasureUnitChange = useCallback((unit: MeasureUnitId) => {
+    setMeasureUnit(unit);
+    try { window.localStorage.setItem(measureUnitKey, unit); } catch { /* the choice lasts this session only */ }
+  }, [measureUnitKey]);
+  const [rulerReadout, setRulerReadout] = useState<RulerReadoutState | undefined>(undefined);
   const [editorMode, setEditorMode] = useState<"gm" | "player">("gm");
   const [selectedNodeInfo, setSelectedNodeInfo] = useState<SelectedNodeInfo | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -182,6 +201,8 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     tableId,
     viewId: viewIdRef.current,
     rulerSnap,
+    measureUnit,
+    onRulerReadout: setRulerReadout,
     structureEditParams,
     onSelectionChange: (info) => setSelectedNodeInfo(info ?? null),
     onFeedbackChange: handleFeedbackChange,
@@ -323,7 +344,11 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           structureEditParams={structureEditParams}
           onStructureEditParamsChange={setStructureEditParams}
           tokenCount={current.tokens.byId.size}
+          measureUnit={measureUnit}
+          onMeasureUnitChange={handleMeasureUnitChange}
         />
+
+        {rulerReadout ? <RulerReadout labels={rulerReadout.labels} x={rulerReadout.x} y={rulerReadout.y} /> : null}
       </section>
 
       {/* Bottom Bar -- thin, crops the map on purpose */}

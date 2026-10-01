@@ -75,8 +75,9 @@ export function snapToOutlines(anchors: readonly SnapAnchor[], delta: Constructi
     const distance = Math.hypot(fix.x, fix.z);
     const rank = PRIORITY[result.caught];
     if (best && (rank > best.rank || (rank === best.rank && distance >= best.distance))) continue;
-    const joins = result.caught === "point" || result.caught === "run";
-    const magnet = result.caught === "run" ? runNodes(links, result) : landedOn(result);
+    // Off, it only reports: nothing is landed on, so nothing is joined.
+    const joins = options.snap !== false && (result.caught === "point" || result.caught === "run");
+    const magnet = !joins ? [] : result.caught === "run" ? runNodes(links, result) : landedOn(result);
     const taken = options.snap === false ? delta : { x: delta.x + fix.x, y: delta.y, z: delta.z + fix.z };
     best = { rank, distance, snap: { delta: taken, anchor: anchor.id, magnet, joins, guides: result.guides, measures: result.measures } };
   }

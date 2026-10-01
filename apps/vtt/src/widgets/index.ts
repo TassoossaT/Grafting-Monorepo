@@ -11,3 +11,6 @@ export { useKeyboardShortcuts, type KeyboardShortcutsOptions } from "./use-keybo
 // `TabletopEntry` (via this barrel) share one tool vocabulary.
 export { DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
 export type { ConstructionToolId, ToolParamsByTool, ToolParamsFor } from "@/features/edit-construction";
+export { RulerReadout, type RulerReadoutProps } from "./ruler-readout.tsx";
+export { DEFAULT_MEASURE_UNIT, MEASURE_UNITS, isMeasureUnitId } from "@/features/edit-construction";
+export type { MeasureUnitId } from "@/features/edit-construction";

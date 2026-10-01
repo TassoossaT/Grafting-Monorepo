@@ -3,13 +3,14 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 
-import type { ConstructionToolId, EditHistoryStack, StructureEditParams, ToolParamsByTool } from "@/features/edit-construction";
+import type { ConstructionToolId, EditHistoryStack, MeasureUnitId, StructureEditParams, ToolParamsByTool } from "@/features/edit-construction";
 import { TOOL_GHOST_PREVIEW_CHANNEL } from "@/ports";
 import type { RenderViewId } from "@/ports";
 import type { SelectedNodeInfo } from "@/widgets";
 
 import type { TabletopRuntime } from "./tabletop-runtime.ts";
 import { createRulerSession, NO_FEEDBACK, type RulerFeedback } from "./tools/core/ruler-session.ts";
+import { RULER_PREVIEW_CHANNEL, rulerLabels, rulerPreview } from "./tools/core/ruler-preview.ts";
 import { toolFor } from "./tools/index.ts";
 import { beginCurveGesture, type CurveGesture } from "./tools/core/curve-edit-gesture.ts";
 import { carriesArrows, globalHandleOf, handleMotionAt, shownGlobalHandleAt } from "../../features/edit-construction/index.ts";
@@ -47,6 +48,16 @@ const PREVIEW_THROTTLE_MS = 32;
 /** How often hovering re-reads which structure's handles show. */
 const FOCUS_THROTTLE_MS = 50;
 
+/** The ruler's words for the point under the pointer, with where the pointer is on screen. */
+export interface RulerReadout {
+  readonly labels: readonly string[];
+  readonly x: number;
+  readonly y: number;
+}
+
+/** How soon the ruler is asked again while the pointer merely hovers, in milliseconds. */
+const RULER_HOVER_MS = 32;
+
 export interface UseConstructionPointerOptions {
   readonly activeTool: ConstructionToolId;
   readonly toolParams: ToolParamsByTool;
@@ -56,6 +67,10 @@ export interface UseConstructionPointerOptions {
   readonly viewId: RenderViewId | undefined;
   /** Whether what the ruler catches is taken: a resolved point (other than an existing node handle -- those stay precise) lands on the corner, side or line-up it is near before any tool sees it. The ruler's guides and measures show either way. */
   readonly rulerSnap: boolean;
+  /** The unit the ruler writes its distances in -- the table's own choice. */
+  readonly measureUnit: MeasureUnitId;
+  /** What the ruler says in words, and where the pointer is on screen; `undefined` when there is nothing to say. */
+  readonly onRulerReadout?: (readout: RulerReadout | undefined) => void;
   /** How a grab on an existing structure behaves -- ambient across every construction tool, not one tool's own params. See `ToolContext.structureEditParams`. */
   readonly structureEditParams: StructureEditParams;
   readonly onSelectionChange: (info: SelectedNodeInfo | undefined) => void;
@@ -114,6 +129,26 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
   /** What the ruler shows for the point it last ruled. */
   const feedbackRef = useRef<RulerFeedback>(NO_FEEDBACK);
   useEffect(() => ruler.invalidate(), [ruler, options.runtime]);
+  const lastRulerAtRef = useRef(0);
+  /** Where the pointer last was on screen, for what a tool asks the ruler to show. */
+  const pointerAtRef = useRef({ clientX: 0, clientY: 0 });
+
+  /** Draws what the ruler caught for the last point it ruled, and says its distances. */
+  const showRuler = useCallback((event: { clientX: number; clientY: number }): void => {
+    const { runtime, measureUnit, onRulerReadout } = optionsRef.current;
+    const feedback = feedbackRef.current;
+    const descriptor = rulerPreview(feedback);
+    if (descriptor) runtime.showPreview(descriptor, RULER_PREVIEW_CHANNEL);
+    else runtime.clearPreview(RULER_PREVIEW_CHANNEL);
+    const labels = rulerLabels(feedback, measureUnit);
+    onRulerReadout?.(labels.length > 0 ? { labels, x: event.clientX, y: event.clientY } : undefined);
+  }, []);
+
+  const clearRuler = useCallback((): void => {
+    feedbackRef.current = NO_FEEDBACK;
+    optionsRef.current.runtime.clearPreview(RULER_PREVIEW_CHANNEL);
+    optionsRef.current.onRulerReadout?.(undefined);
+  }, []);
   /** Channels the edge overlay currently occupies, so a redraw clears exactly what it drew. */
   const shownEdgeChannels = useRef(new Set<string>());
   const manipulatorGesture = useRef<CurveGesture | undefined>(undefined);
@@ -128,7 +163,8 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     lastCommitAtRef.current = 0;
     lastPreviewAtRef.current = 0;
     options.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
-  }, [options.activeTool, options.runtime]);
+    clearRuler();
+  }, [options.activeTool, options.runtime, clearRuler]);
 
 
 
@@ -150,6 +186,10 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
         return optionsRef.current.structureEditParams;
       },
       nextSequence,
+      showRuler: (feedback) => {
+        feedbackRef.current = feedback ?? NO_FEEDBACK;
+        showRuler(pointerAtRef.current);
+      },
       reportSelection: (info) => {
         const { runtime, viewId, activeTool } = optionsRef.current;
         optionsRef.current.onSelectionChange(info);
@@ -309,6 +349,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
         ? { sample: placed, feedback: NO_FEEDBACK }
         : ruler.ruleSample(placed, { snap: rulerSnap, ...(gestureRef.current ? { origin: gestureRef.current.start.point } : {}) });
       feedbackRef.current = ruled.feedback;
+      pointerAtRef.current = { clientX: event.clientX, clientY: event.clientY };
       return { ...ruled.sample, screenY: event.clientY, screenX: event.clientX, shiftKey: event.shiftKey };
     },
     [ruler],
@@ -380,6 +421,15 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       if (gesture === null || gesture.pointerId !== event.pointerId) {
         const hover = typeof tool.previewOnHover === "function" ? tool.previewOnHover(params) : tool.previewOnHover;
         const sample = hover || tool.handlesOnHover ? sampleAt(event) : undefined;
+        // The ruler is there whenever something is being built, hovering or not.
+        if (activeTool !== "navigate" && !tool.snapsToSurface && tool.usesRuler !== false) {
+          const at = performance.now();
+          if (at - lastRulerAtRef.current >= RULER_HOVER_MS) {
+            lastRulerAtRef.current = at;
+            if (!sample) sampleAt(event);
+            showRuler(event);
+          }
+        }
         // The structure under the pointer shows its handles.
         if (tool.handlesOnHover && tool.editsType && focusRef.current) {
           const now = performance.now();
@@ -401,6 +451,8 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
 
       const sample = sampleAt(event);
       if (sample === undefined) return; // pointer strayed off pickable geometry -- freeze at the last resolved position, same posture as before this refactor.
+      // A handle dragged shows its own guides -- through `ctx.showRuler` -- so the pointer's do not wipe them.
+      if (gesture.start.nodeId === undefined) showRuler(event);
       gesture.last = sample;
       const previous = gesture.samples[gesture.samples.length - 1];
       if (previous === undefined || previous.point.x !== sample.point.x || previous.point.y !== sample.point.y || previous.point.z !== sample.point.z) {
@@ -419,7 +471,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       lastCommitAtRef.current = now;
       tool.onPointerMove?.(ctx, activeGesture, params);
     },
-    [ctx, sampleAt],
+    [ctx, sampleAt, showRuler],
   );
 
   const finishGesture = useCallback(
@@ -444,9 +496,10 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
         event.currentTarget.releasePointerCapture(event.pointerId);
       }
       optionsRef.current.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
+      clearRuler();
       refreshEdgeOverlay();
     },
-    [ctx, refreshEdgeOverlay, sampleAt],
+    [ctx, refreshEdgeOverlay, sampleAt, clearRuler],
   );
 
   const cancelGesture = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
@@ -459,7 +512,8 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     optionsRef.current.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
-  }, [ctx]);
+    clearRuler();
+  }, [ctx, clearRuler]);
   const onClick = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
       if (suppressClickRef.current) { suppressClickRef.current = false; return; }
