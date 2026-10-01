@@ -112,6 +112,13 @@ export type GlobalHandleEdit =
       readonly request: ApplyPatchReplacementRequest;
       /** Properties each new face keeps, by region id -- a structure regenerated from a recipe keeps it this way. */
       readonly faceProps?: ReadonlyMap<string, Readonly<Record<string, unknown>>>;
+      /**
+       * Where the handle stands on what the edit makes -- drawn, and the
+       * structural point it edits. The handle follows the result, never the
+       * pointer, so it keeps to the item's contour whatever the pointer does and
+       * stops where the edit stops.
+       */
+      readonly settled?: { readonly position: ConstructionPosition; readonly at: ConstructionPosition };
     };
 
 /**

@@ -5212,7 +5212,7 @@ Which surfaces form one cloud with `seed` (`ADR-0022`) -- the engine decides, ne
 
 ### `property vtt.global-handle.GlobalHandleScene.topologies: readonly ConstructionRegionTopology[]`
 
-### `type vtt.global-handle.GlobalHandleEdit = { carries?: readonly ConstructionSurfaceKey[]; graphPatch: ConstructionGraphPatch; kind: "spine"; owner: string } | { delta: ConstructionPosition; kind: "region-move"; seed: ConstructionSurfaceKey } | { delta: ConstructionPosition; kind: "region-part"; seed: ConstructionSurfaceKey; target: HandlePart } | { kind: "vertices"; moves: readonly { nodeId: string; position: ConstructionPosition }[]; retypes: readonly { edgeId: string; geometry: ConstructionEdgeGeometry }[] } | { faceProps?: ReadonlyMap<string, Readonly<Record<string, unknown>>>; kind: "replace"; request: ApplyPatchReplacementRequest }`
+### `type vtt.global-handle.GlobalHandleEdit = { carries?: readonly ConstructionSurfaceKey[]; graphPatch: ConstructionGraphPatch; kind: "spine"; owner: string } | { delta: ConstructionPosition; kind: "region-move"; seed: ConstructionSurfaceKey } | { delta: ConstructionPosition; kind: "region-part"; seed: ConstructionSurfaceKey; target: HandlePart } | { kind: "vertices"; moves: readonly { nodeId: string; position: ConstructionPosition }[]; retypes: readonly { edgeId: string; geometry: ConstructionEdgeGeometry }[] } | { faceProps?: ReadonlyMap<string, Readonly<Record<string, unknown>>>; kind: "replace"; request: ApplyPatchReplacementRequest; settled?: { at: ConstructionPosition; position: ConstructionPosition } }`
 
 What a provider makes of an intent, in the terms the edit is carried out
 in:
@@ -6094,6 +6094,11 @@ The neighbours and the own sides of what `handle` edits, among `topologies`; emp
 ### `function vtt.handle-neighbors.facesOfNodes(topologies: readonly ConstructionRegionTopology[], nodeIds: readonly string[]): ReadonlySet<string>`
 
 The keys of the faces any of `nodeIds` belongs to: the whole structure a handle without faces edits, so it never links to itself.
+
+### `function vtt.handle-neighbors.topologiesOfPatch(patch: ConstructionPatch, faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>> | undefined): readonly ConstructionRegionTopology[]`
+
+The faces `patch` would make, as topologies: what a handle provider reads a structure from, before the structure exists. Each face's loops are
+resolved the way a region reports them; a face over a node the patch does not give is left out.
 
 ### `function vtt.handle-release.joinWhereLanded(topologies: readonly ConstructionRegionTopology[], ids: readonly string[], operationId: string): ApplyPatchReplacementRequest | undefined`
 
@@ -8817,6 +8822,10 @@ One handle of a recipe structure, as its type places it.
 ### `property vtt.structure-type.RecipeHandle.anchor: string`
 
 Names the handle within its structure.
+
+### `property vtt.structure-type.RecipeHandle.at?: ConstructionPosition`
+
+The point of the structure it edits -- a ridge's peak, a leaf's centre -- which its glyph stands off from. Absent: the structure's own centre.
 
 ### `property vtt.structure-type.RecipeHandle.facing?: { x: number; z: number }`
 

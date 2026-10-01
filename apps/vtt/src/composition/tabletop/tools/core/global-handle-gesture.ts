@@ -410,7 +410,7 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
   let guidesNow: readonly RulerGuide[] = [];
 
   /** Where the handle stands on its path, what that asks of the structure, and what it measures. */
-  function intentOf(gesture: ToolGesture): { readonly intent: GlobalHandleIntent; readonly at: ConstructionPosition; readonly measures: readonly RulerMeasure[] } {
+  function intentOf(gesture: ToolGesture, settled?: { readonly position: ConstructionPosition; readonly at: ConstructionPosition }): { readonly intent: GlobalHandleIntent; readonly at: ConstructionPosition; readonly measures: readonly RulerMeasure[] } {
     const raw = drag.at(gesture);
     // A turn lands on a step of the protractor -- the table's, or the finer one with Shift -- and the handle is drawn where it landed.
     const radius = orbit ? Math.hypot(handle!.position.x - orbit.center.x, handle!.position.z - orbit.center.z) : 0;
@@ -426,7 +426,9 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
     const direction = handle!.motion.kind === "line" ? handle!.motion.direction : { x: 0, z: 0 };
     // Measured where the structure stands -- its pivot -- not where the handle is drawn.
     const pivot = handle!.pivot;
-    const standingAt = (position: { readonly x: number; readonly y: number; readonly z: number }) => ({ x: pivot.x + position.x - handle!.position.x, y: pivot.y + position.y - handle!.position.y, z: pivot.z + position.z - handle!.position.z });
+    // Read where the edit left it, when it says: the handle follows the result, not the pointer.
+    const standingAt = (position: { readonly x: number; readonly y: number; readonly z: number }) => settled ? settled.at : ({ x: pivot.x + position.x - handle!.position.x, y: pivot.y + position.y - handle!.position.y, z: pivot.z + position.z - handle!.position.z });
+    if (settled) at = settled.position;
     let made: readonly RulerMeasure[];
     let edgeGuides: readonly RulerGuide[] = [];
     if (edgeLinks && neighbours) {
@@ -540,6 +542,12 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
           }
         } else {
           edit = planned && resolvedPart(ctx, planned, scene);
+        }
+        // The edit says where the handle stands on what it makes: drawn there, and measured there.
+        const settled = edit?.kind === "replace" ? edit.settled : undefined;
+        if (settled) {
+          ruler.show({ guides: guidesNow, measures: intentOf(gesture, settled).measures });
+          ctx.runtime.previewNodeHandle?.(handle.id, settled.position);
         }
         const preview = edit && previewOf(ctx, handle, edit, scene, operationId);
         if (preview) ctx.runtime.showPreview({ kind: "segments", positions: preview, color: PREVIEW_COLOR, opacity: 0.9 }, CHANNEL);

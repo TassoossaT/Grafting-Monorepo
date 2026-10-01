@@ -1,4 +1,4 @@
-import type { ConstructionPosition, ConstructionRegionTopology } from "@/ports";
+import type { ConstructionPatch, ConstructionPosition, ConstructionRegionEdge, ConstructionRegionTopology } from "@/ports";
 
 import type { GlobalHandle } from "../global-handles/index.ts";
 import type { LinkPoint, LinkRun } from "../ruler/index.ts";
@@ -114,4 +114,33 @@ export function eavesOf(topologies: readonly ConstructionRegionTopology[], handl
   const plan = (p: ConstructionPosition) => Math.hypot(p.x - handle.pivot.x, p.z - handle.pivot.z);
   const nearest = eaves.reduce((best, node) => (plan(node.position) < plan(best.position) ? node : best));
   return Math.hypot(nearest.position.x - handle.pivot.x, nearest.position.z - handle.pivot.z) < SAME_PLACE ? [] : [{ id: nearest.id, position: nearest.position }];
+}
+
+/**
+ * The faces `patch` would make, as topologies: what a handle provider reads a structure from, before the structure exists. Each face's loops are
+ * resolved the way a region reports them; a face over a node the patch does not give is left out.
+ */
+export function topologiesOfPatch(patch: ConstructionPatch, faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>> | undefined): readonly ConstructionRegionTopology[] {
+  const nodes = new Map(patch.nodes.map((node) => [node.id, node.position]));
+  const edges = new Map(patch.edges.map((edge) => [edge.edgeId, edge]));
+  const resolve = (loop: readonly { readonly edgeId: string; readonly reversed: boolean }[]): ConstructionRegionEdge[] | undefined => {
+    const out: ConstructionRegionEdge[] = [];
+    for (const use of loop) {
+      const edge = edges.get(use.edgeId);
+      if (!edge) return undefined;
+      out.push({ edgeId: use.edgeId, reversed: use.reversed, startNodeId: use.reversed ? edge.endNodeId : edge.startNodeId, endNodeId: use.reversed ? edge.startNodeId : edge.endNodeId, geometry: edge.geometry ?? { kind: "line" } } as ConstructionRegionEdge);
+    }
+    return out;
+  };
+  const faces: ConstructionRegionTopology[] = [];
+  for (const region of patch.regions) {
+    const outer = resolve(region.boundary);
+    const holes = (region.holes ?? []).map(resolve);
+    if (!outer || holes.some((hole) => hole === undefined)) continue;
+    const ids = new Set([...outer, ...holes.flatMap((hole) => hole!)].flatMap((use) => [use.startNodeId, use.endNodeId]));
+    const found = [...ids].flatMap((id) => (nodes.has(id) ? [{ id, position: nodes.get(id)! }] : []));
+    if (found.length !== ids.size) continue;
+    faces.push({ surfaceKey: [region.regionId] as unknown as ConstructionRegionTopology["surfaceKey"], surfaceType: region.surfaceType, physical: region.physical, outerLoops: [outer], holes: holes as ConstructionRegionEdge[][], nodes: found, ...(faceProps?.get(region.regionId) ? { props: faceProps.get(region.regionId)! } : {}) });
+  }
+  return faces;
 }

@@ -6075,6 +6075,8 @@ export function adjacentSides(topologies: readonly ConstructionRegionTopology[],
 export function eavesOf(topologies: readonly ConstructionRegionTopology[], handle: GlobalHandle): readonly LinkPoint[] {
   const faces = handle.faces ? new Set(handle.faces) : undefined;
   const nodes = topologies.filter((topology) => !faces || faces.has(faceKey(topology))).flatMap((topology) => topology.nodes);
+export function topologiesOfPatch(patch: ConstructionPatch, faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>> | undefined): readonly ConstructionRegionTopology[] {
+  const nodes = new Map(patch.nodes.map((node) => [node.id, node.position]));
 
 // src/features/edit-construction/orchestration/handle-release.ts
 export function partNodes(topologies: readonly ConstructionRegionTopology[], target: GlobalHandle["target"]): readonly string[] {

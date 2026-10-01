@@ -833,3 +833,28 @@ test("a roof drawn over a floor's outline lands on it, stands at its height and 
     assert.ok(["p0", "p1", "p2", "p3"].every((id) => nodes.has(id)));
   } finally { session.free(); }
 });
+
+test("a roof's handle follows the result of its edit, and its ruler reads the peak it raises -- not the roof's centre", () => {
+  const value = roofed();
+  const { runtime, session, ctx } = value;
+  const standing = [];
+  const shown = [];
+  runtime.previewNodeHandle = (id, at) => standing.push({ id, at });
+  ctx.showRuler = (feedback) => shown.push(feedback);
+  try {
+    const rise = shownGlobalHandles(scene(runtime)).find((h) => h.kind === "rise" && h.recipeHandle.anchor === "rise");
+    // The handle's structural point is the peak, not the roof's centre.
+    assert.ok(Math.abs(rise.pivot.y - 5) < 1e-6, `pivot y ${rise.pivot.y}`);
+    dragHandle(value, rise, rise.position, 220);
+    // Drawn where the type would place it on the roof the edit makes: the new peak, stood off.
+    const drawn = standing.filter((s) => s.at !== undefined).at(-1).at;
+    const after = shownGlobalHandles(scene(runtime)).find((h) => h.kind === "rise" && h.recipeHandle.anchor === "rise");
+    assert.ok(Math.abs(drawn.y - after.position.y) < 1e-6 && Math.abs(drawn.x - after.position.x) < 1e-6, `${JSON.stringify(drawn)} vs ${JSON.stringify(after.position)}`);
+    // And measured there: the height it was and the height it is, from the roof's own base.
+    const measures = shown.filter(Boolean).at(-1).measures;
+    const was = measures.find((m) => m.kind === "was" && m.name === "altura");
+    assert.ok(was && Math.abs(was.was - 2) < 1e-6 && Math.abs(was.now - 4) < 1e-6, JSON.stringify(measures));
+    const height = measures.find((m) => m.kind === "height");
+    assert.ok(Math.abs(height.foot.x - rise.pivot.x) < 1e-6 && Math.abs(height.foot.z - rise.pivot.z) < 1e-6, "the ruler stands under the peak");
+  } finally { session.free(); }
+});

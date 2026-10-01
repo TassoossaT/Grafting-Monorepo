@@ -2,6 +2,7 @@ import type { ConstructionRegionTopology } from "@/ports";
 
 import { globalHandleId } from "../../global-handles/index.ts";
 import type { GlobalHandle, GlobalHandleProvider, GlobalHandleScene } from "../../global-handles/index.ts";
+import { topologiesOfPatch } from "../handle-neighbors.ts";
 import { structureTypeFor, type RecipeGeneration, type RecipeHandle } from "../../structure-types/index.ts";
 
 /** A handle of a structure regenerated from a recipe: the generic handle, with its type's own reading of it. */
@@ -50,7 +51,7 @@ export const recipeHandleProvider: GlobalHandleProvider = {
         id: globalHandleId(recipeHandle.kind, `${group}:${recipeHandle.anchor}`),
         kind: recipeHandle.kind, position: recipeHandle.position, motion: recipeHandle.motion,
         ...(recipeHandle.facing ? { facing: recipeHandle.facing } : {}),
-        pivot, owner: structure.owner, provider: "recipe", nodeIds, faces, group, recipeHandle,
+        pivot: recipeHandle.at ?? pivot, owner: structure.owner, provider: "recipe", nodeIds, faces, group, recipeHandle,
       }));
     });
   },
@@ -64,6 +65,18 @@ export const recipeHandleProvider: GlobalHandleProvider = {
     // Removed whole: no face succeeds any, so what was pinned to them goes with them.
     if (next === null) return { kind: "replace", request: { operationId, sourceSurfaceKeys, patch: { nodes: [], edges: [], regions: [] } }, faceProps: new Map() };
     const { patch, faceProps } = structure.type.generate(port, next, operationId, scene.topologies);
-    return { kind: "replace", request: { operationId, sourceSurfaceKeys, patch }, faceProps };
+    return { kind: "replace", request: { operationId, sourceSurfaceKeys, patch }, faceProps, ...settledOn(structure.type, next, patch, faceProps, handle.recipeHandle.anchor) };
   },
 };
+
+/** Where the handle named `anchor` stands on the structure `patch` makes of `next`: read by the type's own placing, as it would be once the edit lands. */
+function settledOn(type: RecipeGeneration, next: unknown, patch: Parameters<typeof topologiesOfPatch>[0], faceProps: Parameters<typeof topologiesOfPatch>[1], anchor: string): { readonly settled?: { readonly position: GlobalHandle["position"]; readonly at: GlobalHandle["position"] } } {
+  try {
+    const members = topologiesOfPatch(patch, faceProps);
+    if (members.length === 0) return {};
+    const after = type.handles([...members], next).find((candidate) => candidate.anchor === anchor);
+    return after ? { settled: { position: after.position, at: after.at ?? after.position } } : {};
+  } catch {
+    return {};
+  }
+}

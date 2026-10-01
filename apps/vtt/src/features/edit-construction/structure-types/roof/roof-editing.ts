@@ -73,14 +73,14 @@ function roofHandles(members: readonly ConstructionRegionTopology[], generic: un
   const handles: RecipeHandle[] = [
     { kind: "pivot", anchor: "pivot", position: pivot, motion: { kind: "free" }, part: whole },
     { kind: "rotate", anchor: "rotate", position: outward(pivot, peak.position, reach), motion: { kind: "orbit", center: pivot }, part: whole },
-    { kind: "rise", anchor: "rise", position: { ...peak.position, y: peak.position.y + STAND_OFF }, motion: { kind: "vertical" }, part: whole },
+    { kind: "rise", anchor: "rise", position: { ...peak.position, y: peak.position.y + STAND_OFF }, at: peak.position, motion: { kind: "vertical" }, part: whole },
   ];
   // Each subroof rises from its own tip, the larger roof keeping its height.
   (recipe.subroofs ?? []).forEach((_, k) => {
     const faces = members.filter((face) => roofRoleOf(face)?.subroof === k);
     if (faces.length === 0) return;
     const tip = peakOf(faces);
-    handles.push({ kind: "rise", anchor: `subroof:${k}:rise`, position: { ...tip.position, y: tip.position.y + STAND_OFF }, motion: { kind: "vertical" }, part: { kind: "whole", subroof: k } satisfies RoofPart });
+    handles.push({ kind: "rise", anchor: `subroof:${k}:rise`, position: { ...tip.position, y: tip.position.y + STAND_OFF }, at: tip.position, motion: { kind: "vertical" }, part: { kind: "whole", subroof: k } satisfies RoofPart });
   });
   // One slope handle per side, off its largest leaf -- or, a gable having none, off its upright face.
   const bySide = new Map<string, { readonly face: ConstructionRegionTopology; readonly ref: SideRef; readonly rank: number }>();
@@ -98,6 +98,7 @@ function roofHandles(members: readonly ConstructionRegionTopology[], generic: un
     handles.push({
       kind: "slope", anchor: `slope:${key}`, motion: { kind: "vertical" },
       position: { x: centre.x - normal.x * STAND_OFF, y: centre.y - normal.y * STAND_OFF, z: centre.z - normal.z * STAND_OFF },
+      at: centre,
       part: { kind: "leaf", of: ref } satisfies RoofPart,
     });
   }
@@ -123,6 +124,7 @@ function roofHandles(members: readonly ConstructionRegionTopology[], generic: un
     handles.push({
       kind: "seam", anchor: `seam:${key}`, motion: { kind: "vertical" },
       position: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 + STAND_OFF, z: (a.z + b.z) / 2 },
+      at: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 },
       part: { kind: "seam", leaves: pair } satisfies RoofPart,
     });
   }
@@ -157,7 +159,7 @@ function roofHandles(members: readonly ConstructionRegionTopology[], generic: un
     const [low, high] = [Math.min(...ys), Math.max(...ys)];
     const part: RoofPart = { kind: "dormer", dormer: k, along: u, into: n };
     handles.push({ kind: "pivot", anchor: `dormer:${k}:move`, motion: { kind: "plane" }, position: { x: front[0] - n[0] * STAND_OFF, y: low, z: front[1] - n[1] * STAND_OFF }, part });
-    handles.push({ kind: "rise", anchor: `dormer:${k}:front`, motion: { kind: "vertical" }, position: { x: front[0] - n[0] * STAND_OFF, y: high + STAND_OFF, z: front[1] - n[1] * STAND_OFF }, part });
+    handles.push({ kind: "rise", anchor: `dormer:${k}:front`, motion: { kind: "vertical" }, at: { x: front[0], y: high, z: front[1] }, position: { x: front[0] - n[0] * STAND_OFF, y: high + STAND_OFF, z: front[1] - n[1] * STAND_OFF }, part });
     for (const right of [true, false]) {
       const sign = right ? 1 : -1;
       const reachOut = dormer.width / 2 + STAND_OFF;
