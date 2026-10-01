@@ -2229,166 +2229,6 @@ began in -- a structure's own sides next to it, else the way the camera
 looks (`build-frame.ts`) -- never the world's fixed axes. What the
 outline becomes is the tool's own business.
 
-### `interface vtt.curve-draft.CurveDraftOptions`
-
-### `property vtt.curve-draft.CurveDraftOptions.color: number`
-
-### `property vtt.curve-draft.CurveDraftOptions.commit: (ctx: ToolContext, draft: FinishedCurveDraft, params: ToolParamsFor<Id>) => void`
-
-### `property vtt.curve-draft.CurveDraftOptions.defaultParams: () => ToolParamsFor<Id>`
-
-### `property vtt.curve-draft.CurveDraftOptions.id: Id`
-
-### `property vtt.curve-draft.CurveDraftOptions.modeOf: (params: ToolParamsFor<Id>) => CurveDraftMode`
-
-The mode this tool draws in now.
-
-### `property vtt.curve-draft.CurveDraftOptions.riseOf: (params: ToolParamsFor<Id>) => number`
-
-The default climb from start to end when the end is not on a floor.
-
-### `property vtt.curve-draft.CurveDraftOptions.widthOf: (params: ToolParamsFor<Id>) => number`
-
-The width the preview band is drawn at.
-
-### `property vtt.curve-draft.CurveDraftOptions.withMode?: (params: ToolParamsFor<Id>, mode: CurveDraftMode) => ToolParamsFor<Id>`
-
-Whether R cycles the mode, and how the tool stores the next one.
-
-### `interface vtt.curve-draft.CurveDraftTool`
-
-One construction tool's behavior, generic over its own parameter shape.
-Every hook is optional -- a tool implements only the lifecycle stages it
-actually uses (a click-only tool has no `onPointerUp`, it commits
-on `onClick`). `composition/tabletop/use-construction-pointer.ts` is the
-only caller and never branches on `id` -- it just invokes whichever hook
-the active tool defines.
-
-### `property vtt.curve-draft.CurveDraftTool.anchorSnap?: AnchorSnap`
-
-How this tool's dragged spine anchors snap -- the scene manipulator uses it too.
-
-### `property vtt.curve-draft.CurveDraftTool.editsType?: (surfaceType: string) => boolean`
-
-The types this tool edits once they stand -- the scene shows their whole-structure handles while it is active.
-
-### `property vtt.curve-draft.CurveDraftTool.handlePresentation?: "spine-points"`
-
-Presentation and sampling policy while this tool is active.
-
-### `property vtt.curve-draft.CurveDraftTool.handlesOnHover?: boolean`
-
-What this tool edits is edited only by its handles, never by grabbing
-its geometry -- so a press on it builds against it -- and those handles
-show only on the structure under the pointer.
-
-### `property vtt.curve-draft.CurveDraftTool.id: Id`
-
-### `property vtt.curve-draft.CurveDraftTool.previewOnHover?: boolean | ((params: ToolParamsFor<Id>) => boolean)`
-
-Opt in to a stationary drawing preview between gestures.
-
-### `property vtt.curve-draft.CurveDraftTool.snapsToSurface?: boolean`
-
-This tool always projects the pointer onto an existing surface's own
-parametrization (a wall's rail, say) rather than reading raw world X/Z --
-so the dispatcher's world-space grid magnet, applied before any tool
-ever sees the point, is redundant at best. At worst it is actively
-harmful: rounding X/Z to a world grid *before* a nonlinear projection
-(onto a rotated or curved rail) can jump the projected result across
-much more than one grid cell, which reads as the pointer "teleporting"
-rather than the smooth follow every other tool gets from the same
-magnet. A tool that opts in reads its own samples unsnapped and is
-responsible for whatever continuity it wants.
-
-### `property vtt.curve-draft.CurveDraftTool.useGridSnap?: boolean`
-
-### `method vtt.curve-draft.CurveDraftTool.defaultParams(): ToolParamsFor<Id>`
-
-### `method vtt.curve-draft.CurveDraftTool.drafting(ctx: ToolContext): boolean`
-
-Whether a draft is under way -- presses then belong to drawing, not to editing what stands.
-
-### `method vtt.curve-draft.CurveDraftTool.onCancel(ctx: ToolContext): void`
-
-Discards an unfinished tool draft on Escape, cancellation or tool switch.
-
-### `method vtt.curve-draft.CurveDraftTool.onClick(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void`
-
-A press+release with no intervening drag. Batch/stamp tools (room) commit here instead of `onPointerUp`.
-
-### `method vtt.curve-draft.CurveDraftTool.onDeleteKey(ctx: ToolContext): void`
-
-Delete/Backspace with the tool active -- a tool holding a selection (an opening picked for editing, say) removes it here.
-
-### `method vtt.curve-draft.CurveDraftTool.onKeyDown(ctx: ToolContext, key: string, params: ToolParamsFor<Id>): boolean`
-
-Handles a tool key outside text controls; true prevents the browser default.
-
-### `method vtt.curve-draft.CurveDraftTool.onParamsChange(ctx: ToolContext, next: ToolParamsFor<Id>, previous: ToolParamsFor<Id>): void`
-
-The active tool's params changed (the panel, or `updateToolParams`) -- a tool holding a selection may apply them to it.
-
-### `method vtt.curve-draft.CurveDraftTool.onPointerDown(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void`
-
-Left-button press. Continuous tools (brushes, move-node) start their gesture here.
-
-### `method vtt.curve-draft.CurveDraftTool.onPointerMove(ctx: ToolContext, gesture: ToolGesture, params: ToolParamsFor<Id>): void`
-
-Called while a gesture is active (left button held). Brushes that paint continuously (terrain) commit here, throttled by the dispatcher.
-
-### `method vtt.curve-draft.CurveDraftTool.onPointerUp(ctx: ToolContext, gesture: ReleasedGesture, params: ToolParamsFor<Id>): void`
-
-Gesture end. Tools that commit a single shape from a drag (wall, move-node's history entry) act here.
-
-### `method vtt.curve-draft.CurveDraftTool.previewFor(gesture: ToolGesture, params: ToolParamsFor<Id>, ctx: ToolContext): PreviewDescriptor | undefined`
-
-The tool's not-yet-committed ghost for the current gesture (or stationary hover, when `gesture.start === gesture.current`).
-
-### `type vtt.curve-draft.CurveDraftMode = "straight" | "arc" | "points" | "connect" | "spiral"`
-
-Drawing a new spine-built structure, one way of laying out its plan per
-mode -- the same modes whatever the spine generates:
-
-- `straight`: start, end;
-- `arc`: start, end, then the bulge pulled out from the chord (a two-point
-  arc tool);
-- `points`: clicks the curve passes through, drawn live up to the pointer
-  (a curvature tool); the last point clicked again, or Enter, ends it;
-- `connect`: two ends, each leaving square to the floor edge it lands on,
-  and the curve between them follows (a curve build mode between
-  oriented ends);
-- `spiral`: start -- on a floor's edge or a ramp's end, as any start --
-  then the pointer taken aside picks the side it curves to and its radius,
-  the circle it leaves on square to that edge (or straight on from that
-  end); then turned round -- every full circle adds a turn -- to the end.
-
-Heights are never drawn point by point: the start takes the height of
-what it was clicked on, and the end the height of the floor it is clicked
-on, or the tool's rise above the start. Shift and a vertical pointer move
-change that rise in quarter steps. Everything between is the owner's to
-derive. Live readouts say the length, rise, grade, and -- for arcs and
-spirals -- the radius and turns.
-
-All the geometry is computed in Rust through the curve batch; this module
-only keeps the gesture's state.
-
-### `type vtt.curve-draft.FinishedCurveDraft = { kind: "spans"; spans: readonly { curve: CubicBezier; handles: CurveHandles }[] } | { kind: "points"; points: readonly ConstructionPosition[] }`
-
-A finished draft: laid-out spans, or -- for `points` -- the points a smooth curve passes through. Ends carry their heights.
-
-### `variable vtt.curve-draft.CURVE_DRAFT_MODES: readonly CurveDraftMode[]`
-
-Every mode a multi-mode tool cycles through with R, in order.
-
-### `variable vtt.curve-draft.MODE_LABELS: Record<CurveDraftMode, string>`
-
-How each mode is named to the person drawing.
-
-### `function vtt.curve-draft.createCurveDraftTool(options: CurveDraftOptions<Id>): CurveDraftTool<Id>`
-
-A creation tool drawing spine plans in the modes above; its owner only commits what it is handed.
-
 ### `interface vtt.curve-edit-gesture.AnchorSnap`
 
 How a dragged spine anchor snaps onto something else -- a road onto another
@@ -2396,10 +2236,6 @@ road's node or span, say -- and how the snap is shown. A tool supplies its
 own; the gesture only asks it.
 
 ### `method vtt.curve-edit-gesture.AnchorSnap.find(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): PointerSample | undefined`
-
-### `method vtt.curve-edit-gesture.AnchorSnap.isCurrent(ctx: ToolContext, target: PointerSample): boolean`
-
-Whether `target`, found earlier, still stands as it was found; absent, a target never goes stale.
 
 ### `method vtt.curve-edit-gesture.AnchorSnap.show(ctx: ToolContext, target?: PointerSample): void`
 
@@ -2616,6 +2452,355 @@ Commits `request` -- its effects dispatched, faces it `carries` along answering 
 
 What `owner` makes of `graphPatch` applied to `snapshot`; `undefined` when it has no spine or makes nothing.
 
+### `interface vtt.spine-draft.DraftEnd`
+
+A laid-down end: where it stands, the click that put it there, and what it landed on.
+
+### `property vtt.spine-draft.DraftEnd.joint?: boolean`
+
+Whether it runs on from another structure's end: `out` is then the way on, never turned back.
+
+### `property vtt.spine-draft.DraftEnd.out?: { x: number; z: number }`
+
+Plan direction it leaves square to the edge it landed on -- a floor's -- pointing off it.
+
+### `property vtt.spine-draft.DraftEnd.point: ConstructionPosition`
+
+### `property vtt.spine-draft.DraftEnd.sample: PointerSample`
+
+### `property vtt.spine-draft.DraftEnd.target?: PointerSample`
+
+The standing structure it snapped onto, as found when it was placed.
+
+### `interface vtt.spine-draft.DraftKit`
+
+What a mode and a tool's hooks are handed: the draft, and the tool's own answers about ends and heights.
+
+### `property vtt.spine-draft.DraftKit.ctx: ToolContext`
+
+### `property vtt.spine-draft.DraftKit.draft: SpineDraft<S>`
+
+### `property vtt.spine-draft.DraftKit.mode: SpineDraftMode<Id, S>`
+
+### `property vtt.spine-draft.DraftKit.params: ToolParamsFor<Id>`
+
+### `method vtt.spine-draft.DraftKit.endAt(sample: PointerSample, height: number, from?: ConstructionPosition): DraftEnd`
+
+Where a click at `sample` lands at `height`, coming from `from`.
+
+### `method vtt.spine-draft.DraftKit.endHeight(sample: PointerSample): number`
+
+The height an end clicked at `sample` takes when it is an end the structure climbs to.
+
+### `method vtt.spine-draft.DraftKit.startHeight(): number`
+
+The height the draft started at.
+
+### `interface vtt.spine-draft.SpineDraft`
+
+One draft under way: its mode, its ends, the tool's own state for it, and the mode's.
+
+### `property vtt.spine-draft.SpineDraft.ends: DraftEnd[]`
+
+### `property vtt.spine-draft.SpineDraft.mode: string`
+
+### `property vtt.spine-draft.SpineDraft.modeState?: unknown`
+
+### `property vtt.spine-draft.SpineDraft.tool: S`
+
+### `interface vtt.spine-draft.SpineDraftMode`
+
+One way of laying a spine out from clicks.
+
+### `property vtt.spine-draft.SpineDraftMode.beforeFinish?: (kit: DraftKit<Id, S>, sample: PointerSample) => void`
+
+Runs just before a click finishes the draft.
+
+### `property vtt.spine-draft.SpineDraftMode.clickHeight?: (kit: DraftKit<Id, S>, sample: PointerSample) => number`
+
+The height a click past the first lands at; the start's, absent.
+
+### `property vtt.spine-draft.SpineDraftMode.hints?: readonly string[]`
+
+What each click asks for, in order -- the last repeats; absent, nothing is said.
+
+### `property vtt.spine-draft.SpineDraftMode.hover?: (kit: DraftKit<Id, S>, cursor: PointerSample) => void`
+
+Follows the pointer between clicks -- what a spiral counts its turns by.
+
+### `property vtt.spine-draft.SpineDraftMode.key?: (kit: DraftKit<Id, S>) => string`
+
+What, beyond the pointer and the ends, changes the preview -- so an unchanged one is not redrawn.
+
+### `property vtt.spine-draft.SpineDraftMode.label: string`
+
+How it is named to the person drawing.
+
+### `property vtt.spine-draft.SpineDraftMode.needs: number`
+
+How many ends it takes before the next click finishes it; `Infinity` finishes on demand.
+
+### `property vtt.spine-draft.SpineDraftMode.place?: (kit: DraftKit<Id, S>, sample: PointerSample) => DraftEnd | null | undefined`
+
+A click this mode places its own way -- `null` ignores it, `undefined` leaves it to the tool's landing.
+
+### `property vtt.spine-draft.SpineDraftMode.plan: (kit: DraftKit<Id, S>, cursor: PointerSample) => FinishedSpineDraft | undefined`
+
+What finishing now would build, with `cursor` as the last click; `undefined` when it would build nothing.
+
+### `property vtt.spine-draft.SpineDraftMode.readout?: (kit: DraftKit<Id, S>) => readonly string[] | undefined`
+
+What the mode adds to a readout of the draft; `undefined` when there is nothing to read out yet.
+
+### `property vtt.spine-draft.SpineDraftMode.sketch?: (kit: DraftKit<Id, S>, cursor: PointerSample) => readonly CubicBezier[] | undefined`
+
+What to preview before the plan can say -- curves, or `undefined` to preview the plan.
+
+### `interface vtt.spine-draft.SpineDraftOptions`
+
+### `property vtt.spine-draft.SpineDraftOptions.begin: (ctx: ToolContext) => S`
+
+The tool's own state for a new draft -- what it reads of the table.
+
+### `property vtt.spine-draft.SpineDraftOptions.chain?: boolean`
+
+Whether a finished span's end begins the next, until Enter or a join -- a road run on click by click.
+
+### `property vtt.spine-draft.SpineDraftOptions.cleared?: (ctx: ToolContext) => void`
+
+Clears whatever the tool shows on its own channels when a draft ends.
+
+### `property vtt.spine-draft.SpineDraftOptions.commit: (ctx: ToolContext, finished: FinishedSpineDraft, params: ToolParamsFor<Id>) => { end: ConstructionPosition; joined: boolean } | undefined`
+
+Commits a finished draft and answers where it ended and whether it
+joined what it was aimed at; `undefined` when nothing was laid.
+
+### `property vtt.spine-draft.SpineDraftOptions.cycle?: { modes: readonly string[]; withMode: (params: ToolParamsFor<Id>, mode: string) => ToolParamsFor<Id> }`
+
+The modes R steps through, and how the tool stores the next; absent, R does nothing.
+
+### `property vtt.spine-draft.SpineDraftOptions.defaultParams: () => ToolParamsFor<Id>`
+
+### `property vtt.spine-draft.SpineDraftOptions.endAt: (ctx: ToolContext, state: S, sample: PointerSample, height: number, from?: ConstructionPosition) => DraftEnd`
+
+Where a click lands, at `height`, coming from `from`.
+
+### `property vtt.spine-draft.SpineDraftOptions.endHeight?: (kit: Omit<DraftKit<Id, S>, "endHeight">, sample: PointerSample) => number`
+
+The height an end the structure climbs to takes; the start's, absent.
+
+### `property vtt.spine-draft.SpineDraftOptions.holds?: (ctx: ToolContext, end: DraftEnd) => boolean`
+
+Whether an end placed on a press still stands as found when the click lands; absent, always.
+
+### `property vtt.spine-draft.SpineDraftOptions.id: Id`
+
+### `property vtt.spine-draft.SpineDraftOptions.idle?: (ctx: ToolContext, cursor: PointerSample, params: ToolParamsFor<Id>) => PreviewDescriptor | undefined`
+
+The preview before the first click; absent, none.
+
+### `property vtt.spine-draft.SpineDraftOptions.modeOf: (params: ToolParamsFor<Id>) => string`
+
+The mode a click draws in now.
+
+### `property vtt.spine-draft.SpineDraftOptions.modes: Readonly<Record<string, SpineDraftMode<Id, S>>>`
+
+### `property vtt.spine-draft.SpineDraftOptions.preview: (kit: DraftKit<Id, S>, cursor: PointerSample) => PreviewDescriptor | undefined`
+
+The preview between clicks, once a draft has an end.
+
+### `property vtt.spine-draft.SpineDraftOptions.refresh?: (ctx: ToolContext, state: S) => void`
+
+Rereads the table before each click; absent, the state stays as begun.
+
+### `property vtt.spine-draft.SpineDraftOptions.shown?: (kit: DraftKit<Id, S>) => void`
+
+Shows a draft just placed an end, on the tool's own channels; absent, the next hover does.
+
+### `property vtt.spine-draft.SpineDraftOptions.stroke?: SpineDraftStroke<Id>`
+
+What a press dragged away draws; absent, the tool only clicks.
+
+### `property vtt.spine-draft.SpineDraftOptions.tooShort?: string`
+
+Said when a click would finish a draft that builds nothing; absent, the click is ignored.
+
+### `interface vtt.spine-draft.SpineDraftStroke`
+
+A tool's own answer for where a draft is and what it would build.
+
+### `method vtt.spine-draft.SpineDraftStroke.begin(ctx: ToolContext, origin: PointerSample, params: ToolParamsFor<Id>): void`
+
+### `method vtt.spine-draft.SpineDraftStroke.cancel(ctx: ToolContext): void`
+
+### `method vtt.spine-draft.SpineDraftStroke.finish(ctx: ToolContext, gesture: ToolGesture, params: ToolParamsFor<Id>): boolean`
+
+Lays the finished stroke; false when nothing was laid.
+
+### `method vtt.spine-draft.SpineDraftStroke.move(ctx: ToolContext, gesture: ToolGesture, params: ToolParamsFor<Id>): void`
+
+The stroke so far, once it is one (isStroke) -- its first sample is the origin.
+
+### `interface vtt.spine-draft.SpineDraftTool`
+
+One construction tool's behavior, generic over its own parameter shape.
+Every hook is optional -- a tool implements only the lifecycle stages it
+actually uses (a click-only tool has no `onPointerUp`, it commits
+on `onClick`). `composition/tabletop/use-construction-pointer.ts` is the
+only caller and never branches on `id` -- it just invokes whichever hook
+the active tool defines.
+
+### `property vtt.spine-draft.SpineDraftTool.anchorSnap?: AnchorSnap`
+
+How this tool's dragged spine anchors snap -- the scene manipulator uses it too.
+
+### `property vtt.spine-draft.SpineDraftTool.drafting: (ctx: ToolContext) => boolean`
+
+Whether a draft is under way -- presses then belong to drawing, though a handle still edits and drops it.
+
+### `property vtt.spine-draft.SpineDraftTool.editsType?: (surfaceType: string) => boolean`
+
+The types this tool edits once they stand -- the scene shows their whole-structure handles while it is active.
+
+### `property vtt.spine-draft.SpineDraftTool.handlePresentation?: "spine-points"`
+
+Presentation and sampling policy while this tool is active.
+
+### `property vtt.spine-draft.SpineDraftTool.handlesOnHover?: boolean`
+
+What this tool edits is edited only by its handles, never by grabbing
+its geometry -- so a press on it builds against it -- and those handles
+show only on the structure under the pointer.
+
+### `property vtt.spine-draft.SpineDraftTool.id: Id`
+
+### `property vtt.spine-draft.SpineDraftTool.previewOnHover?: boolean | ((params: ToolParamsFor<Id>) => boolean)`
+
+Opt in to a stationary drawing preview between gestures.
+
+### `property vtt.spine-draft.SpineDraftTool.snapsToSurface?: boolean`
+
+This tool always projects the pointer onto an existing surface's own
+parametrization (a wall's rail, say) rather than reading raw world X/Z --
+so the dispatcher's world-space grid magnet, applied before any tool
+ever sees the point, is redundant at best. At worst it is actively
+harmful: rounding X/Z to a world grid *before* a nonlinear projection
+(onto a rotated or curved rail) can jump the projected result across
+much more than one grid cell, which reads as the pointer "teleporting"
+rather than the smooth follow every other tool gets from the same
+magnet. A tool that opts in reads its own samples unsnapped and is
+responsible for whatever continuity it wants.
+
+### `property vtt.spine-draft.SpineDraftTool.useGridSnap?: boolean`
+
+### `method vtt.spine-draft.SpineDraftTool.defaultParams(): ToolParamsFor<Id>`
+
+### `method vtt.spine-draft.SpineDraftTool.onCancel(ctx: ToolContext): void`
+
+Discards an unfinished tool draft on Escape, cancellation or tool switch.
+
+### `method vtt.spine-draft.SpineDraftTool.onClick(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void`
+
+A press+release with no intervening drag. Batch/stamp tools (room) commit here instead of `onPointerUp`.
+
+### `method vtt.spine-draft.SpineDraftTool.onDeleteKey(ctx: ToolContext): void`
+
+Delete/Backspace with the tool active -- a tool holding a selection (an opening picked for editing, say) removes it here.
+
+### `method vtt.spine-draft.SpineDraftTool.onKeyDown(ctx: ToolContext, key: string, params: ToolParamsFor<Id>): boolean`
+
+Handles a tool key outside text controls; true prevents the browser default.
+
+### `method vtt.spine-draft.SpineDraftTool.onParamsChange(ctx: ToolContext, next: ToolParamsFor<Id>, previous: ToolParamsFor<Id>): void`
+
+The active tool's params changed (the panel, or `updateToolParams`) -- a tool holding a selection may apply them to it.
+
+### `method vtt.spine-draft.SpineDraftTool.onPointerDown(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void`
+
+Left-button press. Continuous tools (brushes, move-node) start their gesture here.
+
+### `method vtt.spine-draft.SpineDraftTool.onPointerMove(ctx: ToolContext, gesture: ToolGesture, params: ToolParamsFor<Id>): void`
+
+Called while a gesture is active (left button held). Brushes that paint continuously (terrain) commit here, throttled by the dispatcher.
+
+### `method vtt.spine-draft.SpineDraftTool.onPointerUp(ctx: ToolContext, gesture: ReleasedGesture, params: ToolParamsFor<Id>): void`
+
+Gesture end. Tools that commit a single shape from a drag (wall, move-node's history entry) act here.
+
+### `method vtt.spine-draft.SpineDraftTool.previewFor(gesture: ToolGesture, params: ToolParamsFor<Id>, ctx: ToolContext): PreviewDescriptor | undefined`
+
+The tool's not-yet-committed ghost for the current gesture (or stationary hover, when `gesture.start === gesture.current`).
+
+### `type vtt.spine-draft.FinishedSpineDraft = { joins?: PointerSample; kind: "spans"; spans: readonly { curve: CubicBezier; handles: CurveHandles }[] } | { joins?: PointerSample; kind: "points"; points: readonly ConstructionPosition[] }`
+
+A finished draft: laid-out spans, or the points a smooth run passes through. Ends carry their heights.
+
+### `function vtt.spine-draft.createSpineDraftTool(options: SpineDraftOptions<Id, S>): SpineDraftTool<Id>`
+
+### `function vtt.spine-draft.isStroke(gesture: ToolGesture): boolean`
+
+Whether the pointer has travelled far enough from the press to be drawing a stroke rather than clicking.
+
+### `function vtt.spine-draft.samePlace(a: ConstructionPosition, b: ConstructionPosition): boolean`
+
+Whether two positions are the same place, to within rounding through the engine.
+
+### `interface vtt.spine-draft-modes.SpiralState`
+
+What a spiral keeps between clicks: how far the pointer has turned round the centre, and which way it must.
+
+### `property vtt.spine-draft-modes.SpiralState.sign?: 1 | -1`
+
+The way round it must turn to leave its start the way the start faces -- absent for a start that faces nowhere.
+
+### `property vtt.spine-draft-modes.SpiralState.turning?: { turned: number; turn: any }`
+
+### `type vtt.spine-draft-modes.SpineDraftModeName = "straight" | "arc" | "points" | "connect" | "spiral"`
+
+The ways of laying a spine's plan out from clicks, for any tool that
+draws spines (`spine-draft.ts`) -- the same modes whatever the spine
+generates:
+
+- `straight`: start, end;
+- `arc`: start, end, then the bulge pulled out from the chord;
+- `points`: clicks the curve passes through, drawn live up to the pointer;
+  the last point clicked again, or Enter, ends it;
+- `connect`: two ends, each leaving square to the edge it lands on, and
+  the curve between them follows;
+- `spiral`: start, then the pointer taken aside picks the side it curves
+  to and its radius, the circle it leaves on square to the start's edge
+  (or straight on from a structure's end); then turned round -- every
+  full circle adds a turn -- to the end.
+
+Heights are never drawn point by point: the start takes the height of
+what it was clicked on, and the end the tool's end height. All geometry
+is computed in Rust through the curve batch.
+
+### `variable vtt.spine-draft-modes.SPINE_DRAFT_MODES: readonly SpineDraftModeName[]`
+
+Every mode a multi-mode tool cycles through with R, in order.
+
+### `function vtt.spine-draft-modes.spineDraftModes(): Readonly<Record<SpineDraftModeName, SpineDraftMode<Id, S>>>`
+
+The shared modes, for a tool whose state is `S`.
+
+### `function vtt.spine-draft-modes.spiralCircle(start: DraftEnd, aimed: ConstructionPosition): { center: ConstructionPosition; radius: number; sign?: 1 | -1 } | undefined`
+
+The circle a spiral begun at `start` runs round, the pointer at `aimed`:
+a start facing some way -- square off a floor's edge, or straight on from
+a structure's end -- leaves that way, so the circle touches that line at
+the start, on the side the pointer is, as wide as the pointer is off the
+line; a start facing nowhere has the pointer for its centre. With the way
+round it must turn to leave as it faces.
+
+### `function vtt.spine-draft-modes.spiralOf(kit: { draft: { modeState?: unknown } }): SpiralState`
+
+The spiral's own state on a draft.
+
+### `function vtt.spine-draft-modes.spiralSweep(state: SpiralState): number`
+
+How far the spiral has been turned, counted the way it leaves its start when that is set.
+
 ### `interface vtt.spine-edit-behavior.SpineEditOptions`
 
 Editing an existing spine by its points -- the one editor every
@@ -2658,158 +2843,6 @@ Composes a creation tool with the spine editor above: a press on
 a spine this tool owns edits it, and a press anywhere else is the tool's
 own creation gesture, unchanged -- the spine counterpart of
 `withStructureEditing`.
-
-### `interface vtt.spine-sketch.SpineSketchOptions`
-
-### `property vtt.spine-sketch.SpineSketchOptions.clearSpan: (ctx: ToolContext) => void`
-
-### `property vtt.spine-sketch.SpineSketchOptions.commitSpan: (ctx: ToolContext, from: ConstructionPosition, to: ConstructionPosition, params: ToolParamsFor<Id>) => ConstructionPosition | undefined`
-
-Lays one straight span toward `to`, answering where it ends; `undefined` when it was refused, which keeps the origin.
-
-### `property vtt.spine-sketch.SpineSketchOptions.defaultParams: () => ToolParamsFor<Id>`
-
-### `property vtt.spine-sketch.SpineSketchOptions.id: Id`
-
-### `property vtt.spine-sketch.SpineSketchOptions.showSpan: (ctx: ToolContext, from: ConstructionPosition, to: ConstructionPosition | undefined, params: ToolParamsFor<Id>) => ConstructionPosition | undefined`
-
-Shows the pending origin, and the straight span toward `to` when there is
-a pointer to reach; answers where that span ends -- short of `to` when
-the structure's own laws stop it there.
-
-### `property vtt.spine-sketch.SpineSketchOptions.snap: AnchorSnap`
-
-Where a press or a click lands on a standing structure.
-
-### `property vtt.spine-sketch.SpineSketchOptions.stroke: SpineSketchStroke<Id>`
-
-### `interface vtt.spine-sketch.SpineSketchStroke`
-
-Laying a new spine by gesture alone -- there is no mode to pick:
-
-- a click sets an origin, and the next click lays a straight span to it;
-  that end becomes the next origin, until Enter, Esc, Backspace, or a
-  click landing on another structure, where the run joins it and ends;
-- a press dragged away draws a freehand stroke, laid on release.
-
-Either begins wherever the press lands. On another structure's body the
-snap moves it onto that structure, so the new spine connects there: at an
-end it runs on, inside it branches. The tool says how a span looks, how it
-is laid and how a stroke is drawn; this module only keeps the gesture.
-
-### `method vtt.spine-sketch.SpineSketchStroke.begin(ctx: ToolContext, origin: PointerSample, params: ToolParamsFor<Id>): void`
-
-A press that may become a stroke, at `origin`.
-
-### `method vtt.spine-sketch.SpineSketchStroke.cancel(ctx: ToolContext): void`
-
-### `method vtt.spine-sketch.SpineSketchStroke.finish(ctx: ToolContext, gesture: ToolGesture, params: ToolParamsFor<Id>): boolean`
-
-Lays the finished stroke; false when nothing was laid.
-
-### `method vtt.spine-sketch.SpineSketchStroke.move(ctx: ToolContext, gesture: ToolGesture, params: ToolParamsFor<Id>): void`
-
-The stroke so far, once it is one (isStroke) -- its first sample is the origin.
-
-### `interface vtt.spine-sketch.SpineSketchTool`
-
-One construction tool's behavior, generic over its own parameter shape.
-Every hook is optional -- a tool implements only the lifecycle stages it
-actually uses (a click-only tool has no `onPointerUp`, it commits
-on `onClick`). `composition/tabletop/use-construction-pointer.ts` is the
-only caller and never branches on `id` -- it just invokes whichever hook
-the active tool defines.
-
-### `property vtt.spine-sketch.SpineSketchTool.anchorSnap?: AnchorSnap`
-
-How this tool's dragged spine anchors snap -- the scene manipulator uses it too.
-
-### `property vtt.spine-sketch.SpineSketchTool.drafting: (ctx: ToolContext) => boolean`
-
-Whether a straight run is waiting for its next click -- presses then belong to it, though a handle still edits and drops the run.
-
-### `property vtt.spine-sketch.SpineSketchTool.editsType?: (surfaceType: string) => boolean`
-
-The types this tool edits once they stand -- the scene shows their whole-structure handles while it is active.
-
-### `property vtt.spine-sketch.SpineSketchTool.handlePresentation?: "spine-points"`
-
-Presentation and sampling policy while this tool is active.
-
-### `property vtt.spine-sketch.SpineSketchTool.handlesOnHover?: boolean`
-
-What this tool edits is edited only by its handles, never by grabbing
-its geometry -- so a press on it builds against it -- and those handles
-show only on the structure under the pointer.
-
-### `property vtt.spine-sketch.SpineSketchTool.id: Id`
-
-### `property vtt.spine-sketch.SpineSketchTool.previewOnHover?: boolean | ((params: ToolParamsFor<Id>) => boolean)`
-
-Opt in to a stationary drawing preview between gestures.
-
-### `property vtt.spine-sketch.SpineSketchTool.snapsToSurface?: boolean`
-
-This tool always projects the pointer onto an existing surface's own
-parametrization (a wall's rail, say) rather than reading raw world X/Z --
-so the dispatcher's world-space grid magnet, applied before any tool
-ever sees the point, is redundant at best. At worst it is actively
-harmful: rounding X/Z to a world grid *before* a nonlinear projection
-(onto a rotated or curved rail) can jump the projected result across
-much more than one grid cell, which reads as the pointer "teleporting"
-rather than the smooth follow every other tool gets from the same
-magnet. A tool that opts in reads its own samples unsnapped and is
-responsible for whatever continuity it wants.
-
-### `property vtt.spine-sketch.SpineSketchTool.useGridSnap?: boolean`
-
-### `method vtt.spine-sketch.SpineSketchTool.defaultParams(): ToolParamsFor<Id>`
-
-### `method vtt.spine-sketch.SpineSketchTool.onCancel(ctx: ToolContext): void`
-
-Discards an unfinished tool draft on Escape, cancellation or tool switch.
-
-### `method vtt.spine-sketch.SpineSketchTool.onClick(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void`
-
-A press+release with no intervening drag. Batch/stamp tools (room) commit here instead of `onPointerUp`.
-
-### `method vtt.spine-sketch.SpineSketchTool.onDeleteKey(ctx: ToolContext): void`
-
-Delete/Backspace with the tool active -- a tool holding a selection (an opening picked for editing, say) removes it here.
-
-### `method vtt.spine-sketch.SpineSketchTool.onKeyDown(ctx: ToolContext, key: string, params: ToolParamsFor<Id>): boolean`
-
-Handles a tool key outside text controls; true prevents the browser default.
-
-### `method vtt.spine-sketch.SpineSketchTool.onParamsChange(ctx: ToolContext, next: ToolParamsFor<Id>, previous: ToolParamsFor<Id>): void`
-
-The active tool's params changed (the panel, or `updateToolParams`) -- a tool holding a selection may apply them to it.
-
-### `method vtt.spine-sketch.SpineSketchTool.onPointerDown(ctx: ToolContext, sample: PointerSample, params: ToolParamsFor<Id>): void`
-
-Left-button press. Continuous tools (brushes, move-node) start their gesture here.
-
-### `method vtt.spine-sketch.SpineSketchTool.onPointerMove(ctx: ToolContext, gesture: ToolGesture, params: ToolParamsFor<Id>): void`
-
-Called while a gesture is active (left button held). Brushes that paint continuously (terrain) commit here, throttled by the dispatcher.
-
-### `method vtt.spine-sketch.SpineSketchTool.onPointerUp(ctx: ToolContext, gesture: ReleasedGesture, params: ToolParamsFor<Id>): void`
-
-Gesture end. Tools that commit a single shape from a drag (wall, move-node's history entry) act here.
-
-### `method vtt.spine-sketch.SpineSketchTool.previewFor(gesture: ToolGesture, params: ToolParamsFor<Id>, ctx: ToolContext): PreviewDescriptor | undefined`
-
-The tool's not-yet-committed ghost for the current gesture (or stationary hover, when `gesture.start === gesture.current`).
-
-### `function vtt.spine-sketch.createSpineSketchTool(options: SpineSketchOptions<Id>): SpineSketchTool<Id>`
-
-### `function vtt.spine-sketch.isStroke(gesture: ToolGesture): boolean`
-
-Whether the pointer has travelled far enough from the press to be drawing a stroke rather than clicking.
-
-### `function vtt.spine-sketch.samePlace(a: ConstructionPosition, b: ConstructionPosition): boolean`
-
-Whether two positions are the same place, to within rounding through the engine.
 
 ### `interface vtt.structure-edit-behavior.StructureEditBehavior`
 
@@ -3321,7 +3354,7 @@ drag for a freehand one -- beginning wherever the press lands, a standing
 road included. It is edited only by its handles; the panel only sets up
 the next road.
 
-### `variable vtt.path-stroke-tool.pathStroke: SpineSketchStroke<"path-brush">`
+### `variable vtt.path-stroke-tool.pathStroke: SpineDraftStroke<"path-brush">`
 
 A road's centre line drawn by dragging, laid on release as one fitted
 curve transaction. The sketch owns the gesture; this only shapes, shows
@@ -3878,6 +3911,41 @@ The straight boundary edge of a flat platform at `point`'s height that `point` l
 ### `function vtt.slope-commit.slopeControlPoint(ctx: ToolContext, sample: PointerSample): ConstructionPosition`
 
 A control point's height comes from what the pointer actually touched: a node's own height, else the picked surface.
+
+### `interface vtt.slope-draft.SlopeDraftOptions`
+
+A sloped platform drawn as a spine, in the shared draft modes
+(`core/spine-draft.ts`): its ends land on floors' edges and on the free
+ends of structures that take ends over, its end climbs a set rise above
+its start unless it lands on a floor -- Shift and a vertical pointer move
+change that rise in quarter steps -- and live readouts say the length,
+rise, grade, and what the mode adds.
+
+### `property vtt.slope-draft.SlopeDraftOptions.color: number`
+
+### `property vtt.slope-draft.SlopeDraftOptions.commit: (ctx: ToolContext, draft: FinishedSpineDraft, params: ToolParamsFor<Id>) => void`
+
+### `property vtt.slope-draft.SlopeDraftOptions.defaultParams: () => ToolParamsFor<Id>`
+
+### `property vtt.slope-draft.SlopeDraftOptions.id: Id`
+
+### `property vtt.slope-draft.SlopeDraftOptions.modeOf: (params: ToolParamsFor<Id>) => SpineDraftModeName`
+
+The mode this tool draws in now.
+
+### `property vtt.slope-draft.SlopeDraftOptions.riseOf: (params: ToolParamsFor<Id>) => number`
+
+The default climb from start to end when the end is not on a floor.
+
+### `property vtt.slope-draft.SlopeDraftOptions.widthOf: (params: ToolParamsFor<Id>) => number`
+
+The width the preview band is drawn at.
+
+### `property vtt.slope-draft.SlopeDraftOptions.withMode?: (params: ToolParamsFor<Id>, mode: SpineDraftModeName) => ToolParamsFor<Id>`
+
+Whether R cycles the mode, and how the tool stores the next one.
+
+### `function vtt.slope-draft.createSlopeDraftTool(options: SlopeDraftOptions<Id>): SpineDraftTool<Id>`
 
 ### `variable vtt.slope-tools.slopeCurveTool: ConstructionTool<"slope-curve">`
 

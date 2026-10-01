@@ -1,6 +1,6 @@
 import type { PathBrushParams } from "../../../../features/edit-construction/index.ts";
 import type { ToolContext, ToolGesture } from "../core/tool-context.ts";
-import { samePlace, type SpineSketchStroke } from "../core/spine-sketch.ts";
+import { samePlace, type SpineDraftStroke } from "../core/spine-draft.ts";
 import { roadSnapTarget, showRoadSnap } from "./road-body-target.ts";
 import { clearRoadPreview, layRoad, previewRoad, previewRoadError, shapeRoad, type ShapedRoad } from "./road-lay.ts";
 
@@ -25,7 +25,7 @@ function draft(ctx: ToolContext, g: ToolGesture, params: PathBrushParams): Shape
  * curve transaction. The sketch owns the gesture; this only shapes, shows
  * and lays what it is handed.
  */
-export const pathStroke: SpineSketchStroke<"path-brush"> = {
+export const pathStroke: SpineDraftStroke<"path-brush"> = {
   begin(ctx) { showRoadSnap(ctx); },
   move(ctx, g, params) {
     try {

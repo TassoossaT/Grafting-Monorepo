@@ -4257,32 +4257,6 @@ export interface ContourStrokeOptions<P extends ContourStrokeParams> {
 export function contourStroke<K extends ConstructionToolId, P extends ContourStrokeParams>(options: ContourStrokeOptions<P>): Pick<ConstructionTool<K>, "previewFor" | "onClick" | "onPointerUp" | "onCancel"> {
   const drafts = new WeakMap<object, { key: string; points: PointerSample[]; frame?: BuildFrame }>();
 
-// src/composition/tabletop/tools/core/curve-draft.ts
-export type CurveDraftMode = "straight" | "arc" | "points" | "connect" | "spiral";
-export const CURVE_DRAFT_MODES: readonly CurveDraftMode[] = Object.freeze(["points", "straight", "arc", "connect", "spiral"]);
-export type FinishedCurveDraft =
-export interface CurveDraftOptions<Id extends ConstructionToolId> {
-  readonly id: Id;
-  readonly defaultParams: () => ToolParamsFor<Id>;
-  /** The mode this tool draws in now. */
-  readonly modeOf: (params: ToolParamsFor<Id>) => CurveDraftMode;
-  /** Whether R cycles the mode, and how the tool stores the next one. */
-  readonly withMode?: (params: ToolParamsFor<Id>, mode: CurveDraftMode) => ToolParamsFor<Id>;
-  /** The default climb from start to end when the end is not on a floor. */
-export interface CurveDraftTool<Id extends ConstructionToolId> extends ConstructionTool<Id> {
-  /** Whether a draft is under way -- presses then belong to drawing, not to editing what stands. */
-  drafting(ctx: ToolContext): boolean;
-  }
-export function createCurveDraftTool<Id extends ConstructionToolId>(options: CurveDraftOptions<Id>): CurveDraftTool<Id> {
-  const states = new WeakMap<ToolContext["runtime"], DraftState>();
-export const MODE_LABELS: Record<CurveDraftMode, string> = {
-  straight: "Reta",
-  arc: "Arco",
-  points: "Por pontos",
-  connect: "Ligar pontas",
-  spiral: "Espiral",
-  };
-
 // src/composition/tabletop/tools/core/curve-edit-gesture.ts
 export interface CurveGesture {
   move(gesture: ToolGesture): void;
@@ -4293,8 +4267,6 @@ export interface AnchorSnap {
   find(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): PointerSample | undefined;
   /** Shows `target` as the snap, or clears it when absent. */
   show(ctx: ToolContext, target?: PointerSample): void;
-  /** Whether `target`, found earlier, still stands as it was found; absent, a target never goes stale. */
-  isCurrent?(ctx: ToolContext, target: PointerSample): boolean;
   }
 export type CurveGestureOptions = StructureEditParams & {
   /** How a dragged anchor snaps; absent, it never does. */
@@ -4437,6 +4409,88 @@ export function regenerateSpine(ctx: ToolContext, snapshot: ConstructionGraphSna
 export function commitSpineRegeneration(ctx: ToolContext, request: ApplyPatchReplacementRequest, operationId: string, carries: readonly ConstructionSurfaceKey[] = []): void {
   const { recorded } = commitPatchReplacement(ctx.runtime, request, { transactionId: operationId, carries });
 
+// src/composition/tabletop/tools/core/spine-draft-modes.ts
+export type SpineDraftModeName = "straight" | "arc" | "points" | "connect" | "spiral";
+export const SPINE_DRAFT_MODES: readonly SpineDraftModeName[] = Object.freeze(["points", "straight", "arc", "connect", "spiral"]);
+export function spiralCircle(start: DraftEnd, aimed: ConstructionPosition): { readonly center: ConstructionPosition; readonly radius: number; readonly sign?: 1 | -1 } | undefined {
+  const s = start.point;
+  const d = { x: aimed.x - s.x, z: aimed.z - s.z };
+export interface SpiralState {
+  turning?: ReturnType<typeof createAngleTracker>;
+  /** The way round it must turn to leave its start the way the start faces -- absent for a start that faces nowhere. */
+  sign?: 1 | -1;
+  }
+export function spiralOf(kit: { readonly draft: { modeState?: unknown } }): SpiralState {
+  kit.draft.modeState ??= {};
+export function spiralSweep(state: SpiralState): number {
+  const tracked = state.turning?.turned ?? 0;
+  return state.sign === undefined ? tracked : state.sign * Math.abs(tracked);
+export function spineDraftModes<Id extends ConstructionToolId, S>(): Readonly<Record<SpineDraftModeName, SpineDraftMode<Id, S>>> {
+  const straight: SpineDraftMode<Id, S> = {
+  label: "Reta",
+  hints: ["Clique o início.", "Clique o fim."],
+  needs: 1,
+  plan(kit, cursor) {
+  const { ends } = kit.draft;
+  if (ends.length < 1) return undefined;
+
+// src/composition/tabletop/tools/core/spine-draft.ts
+export interface DraftEnd {
+  readonly point: ConstructionPosition;
+  readonly sample: PointerSample;
+  /** Plan direction it leaves square to the edge it landed on -- a floor's -- pointing off it. */
+  readonly out?: { readonly x: number; readonly z: number };
+export type FinishedSpineDraft =
+export interface SpineDraft<S> {
+  readonly mode: string;
+  readonly ends: DraftEnd[];
+  readonly tool: S;
+  modeState?: unknown;
+  }
+export interface DraftKit<Id extends ConstructionToolId, S> {
+  readonly ctx: ToolContext;
+  readonly draft: SpineDraft<S>;
+  readonly params: ToolParamsFor<Id>;
+  readonly mode: SpineDraftMode<Id, S>;
+  /** Where a click at `sample` lands at `height`, coming from `from`. */
+  endAt(sample: PointerSample, height: number, from?: ConstructionPosition): DraftEnd;
+  /** The height an end clicked at `sample` takes when it is an end the structure climbs to. */
+export interface SpineDraftMode<Id extends ConstructionToolId, S> {
+  /** How it is named to the person drawing. */
+  readonly label: string;
+  /** What each click asks for, in order -- the last repeats; absent, nothing is said. */
+  readonly hints?: readonly string[];
+  /** How many ends it takes before the next click finishes it; `Infinity` finishes on demand. */
+  readonly needs: number;
+  /** The height a click past the first lands at; the start's, absent. */
+export interface SpineDraftStroke<Id extends ConstructionToolId> {
+  begin(ctx: ToolContext, origin: PointerSample, params: ToolParamsFor<Id>): void;
+  /** The stroke so far, once it is one ({@link isStroke}) -- its first sample is the origin. */
+  move(ctx: ToolContext, gesture: ToolGesture, params: ToolParamsFor<Id>): void;
+  /** Lays the finished stroke; false when nothing was laid. */
+  finish(ctx: ToolContext, gesture: ToolGesture, params: ToolParamsFor<Id>): boolean;
+  cancel(ctx: ToolContext): void;
+  }
+export interface SpineDraftOptions<Id extends ConstructionToolId, S> {
+  readonly id: Id;
+  readonly defaultParams: () => ToolParamsFor<Id>;
+  readonly modes: Readonly<Record<string, SpineDraftMode<Id, S>>>;
+  /** The mode a click draws in now. */
+  readonly modeOf: (params: ToolParamsFor<Id>) => string;
+  /** The modes R steps through, and how the tool stores the next; absent, R does nothing. */
+  readonly cycle?: { readonly modes: readonly string[]; readonly withMode: (params: ToolParamsFor<Id>, mode: string) => ToolParamsFor<Id> };
+export interface SpineDraftTool<Id extends ConstructionToolId> extends ConstructionTool<Id> {
+  /** Whether a draft is under way -- presses then belong to drawing, though a handle still edits and drops it. */
+  readonly drafting: (ctx: ToolContext) => boolean;
+  }
+export function isStroke(gesture: ToolGesture): boolean {
+  return gestureMoved(gesture.start, gesture.samples, STROKE_SLOP) || gestureMoved(gesture.start, [gesture.current], STROKE_SLOP);
+export function samePlace(a: ConstructionPosition, b: ConstructionPosition): boolean {
+  return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z) < 1e-6;
+  }
+export function createSpineDraftTool<Id extends ConstructionToolId, S>(options: SpineDraftOptions<Id, S>): SpineDraftTool<Id> {
+  const drafts = new WeakMap<ToolContext["runtime"], SpineDraft<S>>();
+
 // src/composition/tabletop/tools/core/spine-edit-behavior.ts
 export interface SpineEditOptions {
   /** Only spines owned by a type this accepts are edited; anything else falls through to the tool. */
@@ -4448,35 +4502,6 @@ export interface SpineEditOptions {
   /** Whether this tool reads the ambient legacy curve-action panel. */
 export function withSpineEditing<Id extends ConstructionToolId>(tool: ConstructionTool<Id>, options: SpineEditOptions): ConstructionTool<Id> {
   const spine = createSpineEditBehavior(options);
-
-// src/composition/tabletop/tools/core/spine-sketch.ts
-export interface SpineSketchStroke<Id extends ConstructionToolId> {
-  /** A press that may become a stroke, at `origin`. */
-  begin(ctx: ToolContext, origin: PointerSample, params: ToolParamsFor<Id>): void;
-  /** The stroke so far, once it is one ({@link isStroke}) -- its first sample is the origin. */
-  move(ctx: ToolContext, gesture: ToolGesture, params: ToolParamsFor<Id>): void;
-  /** Lays the finished stroke; false when nothing was laid. */
-  finish(ctx: ToolContext, gesture: ToolGesture, params: ToolParamsFor<Id>): boolean;
-  cancel(ctx: ToolContext): void;
-export interface SpineSketchOptions<Id extends ConstructionToolId> {
-  readonly id: Id;
-  readonly defaultParams: () => ToolParamsFor<Id>;
-  /** Where a press or a click lands on a standing structure. */
-  readonly snap: AnchorSnap;
-  /**
-  * Shows the pending origin, and the straight span toward `to` when there is
-  * a pointer to reach; answers where that span ends -- short of `to` when
-export interface SpineSketchTool<Id extends ConstructionToolId> extends ConstructionTool<Id> {
-  /** Whether a straight run is waiting for its next click -- presses then belong to it, though a handle still edits and drops the run. */
-  readonly drafting: (ctx: ToolContext) => boolean;
-  }
-export function isStroke(gesture: ToolGesture): boolean {
-  return gestureMoved(gesture.start, gesture.samples, STROKE_SLOP) || gestureMoved(gesture.start, [gesture.current], STROKE_SLOP);
-export function samePlace(a: ConstructionPosition, b: ConstructionPosition): boolean {
-  return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z) < 1e-6;
-  }
-export function createSpineSketchTool<Id extends ConstructionToolId>(options: SpineSketchOptions<Id>): SpineSketchTool<Id> {
-  const origins = new WeakMap<ToolContext["runtime"], PointerSample>();
 
 // src/composition/tabletop/tools/core/stroke-fitting.ts
 export type { FittedEdge, FitOptions } from "../../../../features/edit-construction/index.ts";
@@ -4695,17 +4720,15 @@ export const openingTool: ConstructionTool<"opening"> = {
 
 
 // src/composition/tabletop/tools/paths/path-brush-tool.ts
-export const pathBrushTool = withSpineEditing({
-  ...sketch,
-  useGridSnap: false,
-  onCancel(ctx) { sketch.onCancel?.(ctx); showRoadSnap(ctx); },
-  }, {
+export const pathBrushTool = withSpineEditing({ ...draft, useGridSnap: false }, {
   ownsSpine: (surfaceType) => surfaceType === PATH_SURFACE_TYPE,
   snap: roadAnchorSnap,
   panelActions: false,
+  drafting: draft.drafting,
+  });
 
 // src/composition/tabletop/tools/paths/path-stroke-tool.ts
-export const pathStroke: SpineSketchStroke<"path-brush"> = {
+export const pathStroke: SpineDraftStroke<"path-brush"> = {
   begin(ctx) { showRoadSnap(ctx); },
   move(ctx, g, params) {
   try {
@@ -4723,7 +4746,7 @@ export function roadSnapIsCurrent(ctx: ToolContext, target: RoadSnapTarget): boo
 export function showRoadSnap(ctx: ToolContext, target?: PointerSample): void {
   if (!target) { snapLocks.delete(ctx.runtime); ctx.runtime.clearPreview("road-snap"); return; }
   ctx.runtime.showPreview(createSnapMeshPreview(target.point), "road-snap");
-export const roadAnchorSnap: AnchorSnap = { find: roadSnapTarget, show: showRoadSnap, isCurrent: roadSnapIsCurrent };
+export const roadAnchorSnap: AnchorSnap = { find: roadSnapTarget, show: showRoadSnap };
 
 // src/composition/tabletop/tools/paths/road-lay.ts
 export const ROAD_SPINE_CHANNEL = "road-draft-spine";
@@ -5118,6 +5141,18 @@ export function commitPlatformSlope(ctx: ToolContext, controlPoints: readonly Co
   try {
   const width = params.width ?? 1.5;
   if (!(width > 0)) throw new Error("A largura deve ser positiva.");
+
+// src/composition/tabletop/tools/slope/slope-draft.ts
+export interface SlopeDraftOptions<Id extends ConstructionToolId> {
+  readonly id: Id;
+  readonly defaultParams: () => ToolParamsFor<Id>;
+  /** The mode this tool draws in now. */
+  readonly modeOf: (params: ToolParamsFor<Id>) => SpineDraftModeName;
+  /** Whether R cycles the mode, and how the tool stores the next one. */
+  readonly withMode?: (params: ToolParamsFor<Id>, mode: SpineDraftModeName) => ToolParamsFor<Id>;
+  /** The default climb from start to end when the end is not on a floor. */
+export function createSlopeDraftTool<Id extends ConstructionToolId>(options: SlopeDraftOptions<Id>): SpineDraftTool<Id> {
+  const widthOf = (params: ToolParamsFor<Id>) => Math.max(0.1, options.widthOf(params));
 
 // src/composition/tabletop/tools/slope/slope-tools.ts
 export const slopeRampTool = withStructureEditing(rawSlopeRampTool, { ownsType: ownsRamp, drafting: (ctx) => rampDrafts.has(ctx.runtime), handlesOnly: true });

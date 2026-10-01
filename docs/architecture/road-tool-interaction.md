@@ -22,7 +22,7 @@ Escopo: somente rua. Fora: carimbos, área pavimentada/praça, inspetor, submenu
 - Esc cancela o arraste ou a origem pendente da reta. Cada confirmação é uma operação de desfazer.
 - Sem seletor Reta/Curva/Livre, sem cliques de guia de curva.
 
-**Capacidade genérica.** A inferência é `createSpineSketchTool` (`composition/tabletop/tools/core/spine-sketch.ts`), com uma única tolerância de movimento (`isStroke`: 5 px ou 0,15 m). A rua é a primeira consumidora; `PathBrushParams.creationMode` foi removido. Parede (`wall-brush`/`wall-line`) e rampa (`slope-curve.mode`) ainda escolhem o modo do jeito antigo e migram depois.
+**Capacidade genérica.** Toda ferramenta de espinha usa a mesma base, `createSpineDraftTool` (`composition/tabletop/tools/core/spine-draft.ts`); os modos são peças (`spine-draft-modes.ts`: reta, arco, pontos, ligar pontas, espiral) e cada ferramenta só configura quais usa, como escolhe o modo, onde a ponta pousa e o que grava. A rua usa um modo de trecho em cadeia mais o traço por arraste (`isStroke`: 5 px ou 0,15 m); a rampa usa os cinco modos com seletor e R (`slope/slope-draft.ts`). A parede ainda não migrou.
 
 ## Onde o traço começa
 

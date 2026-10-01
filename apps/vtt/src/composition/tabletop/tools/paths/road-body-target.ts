@@ -70,4 +70,4 @@ export function showRoadSnap(ctx: ToolContext, target?: PointerSample): void {
 }
 
 /** The road network's anchor snap -- onto another road's node or span -- for a spine gesture. */
-export const roadAnchorSnap: AnchorSnap = { find: roadSnapTarget, show: showRoadSnap, isCurrent: roadSnapIsCurrent };
+export const roadAnchorSnap: AnchorSnap = { find: roadSnapTarget, show: showRoadSnap };
