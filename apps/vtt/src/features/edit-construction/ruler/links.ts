@@ -24,7 +24,10 @@ export interface LinkRun {
 
 /** Everything a construction can be joined to, lined up with or matched in height to. */
 export interface RulerLinks {
+  /** The corners: real nodes, which a structure can be joined to. */
   readonly points: readonly LinkPoint[];
+  /** The middle of every level run: a place to line up with or land on, never a node to join. */
+  readonly midpoints?: readonly LinkPoint[];
   readonly runs: readonly LinkRun[];
   /** The distinct heights at which something stands, ascending. */
   readonly levels: readonly number[];
@@ -48,6 +51,7 @@ export interface CollectOptions {
 export function collectLinks(topologies: readonly ConstructionRegionTopology[], options: CollectOptions): RulerLinks {
   const points = new Map<string, LinkPoint>();
   const runs = new Map<string, LinkRun>();
+  const midpoints: LinkPoint[] = [];
   const heights: number[] = [];
   for (const topology of topologies) {
     if (options.skip?.has(faceKey(topology)) || options.isGround(topology.surfaceType)) continue;
@@ -64,9 +68,10 @@ export function collectLinks(topologies: readonly ConstructionRegionTopology[], 
       const key = runKey(use.startNodeId, use.endNodeId);
       if (runs.has(key) || Math.abs(a.y - b.y) > LEVEL_RUN || Math.hypot(b.x - a.x, b.z - a.z) < 1e-6) continue;
       runs.set(key, { a: points.get(use.startNodeId)!, b: points.get(use.endNodeId)! });
+      midpoints.push({ id: `mid:${key}`, position: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 } });
     }
   }
   const levels: number[] = [];
   for (const y of heights.sort((p, q) => p - q)) if (levels.length === 0 || y - levels[levels.length - 1]! > LEVEL_MERGE) levels.push(y);
-  return { points: [...points.values()], runs: [...runs.values()], levels };
+  return { points: [...points.values()], midpoints, runs: [...runs.values()], levels };
 }

@@ -1,7 +1,7 @@
 import type { ConstructionPosition } from "@/ports";
 
 import type { HandleMotion } from "../global-handles/index.ts";
-import { RULER_REACH, resolveRuler, type RulerGuide, type RulerLinks, type RulerMeasure, type RulerMotion, type RulerResult } from "../ruler/index.ts";
+import { RULER_REACH, resolveRuler, type RulerGuide, type RulerKind, type RulerLinks, type RulerMeasure, type RulerMotion, type RulerResult } from "../ruler/index.ts";
 import { segmentGap } from "../topology/plan-geometry.ts";
 
 /**
@@ -34,7 +34,7 @@ export interface OutlineSnap {
   readonly measures: readonly RulerMeasure[];
 }
 
-const PRIORITY = { point: 0, run: 1, square: 2, align: 3, angle: 4, length: 5 } as const;
+const PRIORITY = { point: 0, run: 1, intersection: 2, square: 3, align: 4, angle: 5, polar: 6, length: 7 } as const;
 
 const motionOf = (motion: HandleMotion): RulerMotion | undefined => {
   if (motion.kind === "line") return { kind: "line", direction: motion.direction };
@@ -44,7 +44,8 @@ const motionOf = (motion: HandleMotion): RulerMotion | undefined => {
 /** The node ids of what a result landed on: a corner's own, or a side's two ends. */
 function landedOn(result: RulerResult): readonly string[] {
   const guide = result.guides.find((candidate) => candidate.kind === "point" || candidate.kind === "run");
-  if (guide?.kind === "point") return [guide.node];
+  // Only a corner is a node to join; the middle of a side is a place, never one.
+  if (guide?.kind === "point" && guide.role === "corner") return [guide.node];
   return [];
 }
 
@@ -54,7 +55,7 @@ function landedOn(result: RulerResult): readonly string[] {
  * `undefined` when nothing is within reach. `snap: false` leaves `delta` as
  * it is and only reports what was near, for the guides.
  */
-export function snapToOutlines(anchors: readonly SnapAnchor[], delta: ConstructionPosition, motion: HandleMotion, links: RulerLinks, options: { readonly reach?: number; readonly snap?: boolean; readonly origin?: ConstructionPosition } = {}): OutlineSnap | undefined {
+export function snapToOutlines(anchors: readonly SnapAnchor[], delta: ConstructionPosition, motion: HandleMotion, links: RulerLinks, options: { readonly reach?: number; readonly snap?: boolean; readonly origin?: ConstructionPosition; readonly disabled?: ReadonlySet<RulerKind> } = {}): OutlineSnap | undefined {
   const ruled = motionOf(motion);
   if (!ruled) return undefined;
   let best: { readonly snap: OutlineSnap; readonly rank: number; readonly distance: number } | undefined;
@@ -62,6 +63,7 @@ export function snapToOutlines(anchors: readonly SnapAnchor[], delta: Constructi
     const point = { x: anchor.position.x + delta.x, y: anchor.position.y + delta.y, z: anchor.position.z + delta.z };
     const result = resolveRuler({
       point, links, motion: ruled, skip: new Set([anchor.id]), reach: options.reach, snap: true,
+      ...(options.disabled ? { disabled: options.disabled } : {}),
       ...(options.origin ? { origin: options.origin } : {}),
       // Onto a side only as long as what the handle drags then meets that side itself.
       accept: (landing, run) => {
@@ -76,7 +78,8 @@ export function snapToOutlines(anchors: readonly SnapAnchor[], delta: Constructi
     const rank = PRIORITY[result.caught];
     if (best && (rank > best.rank || (rank === best.rank && distance >= best.distance))) continue;
     // Off, it only reports: nothing is landed on, so nothing is joined.
-    const joins = options.snap !== false && (result.caught === "point" || result.caught === "run");
+    const middle = result.guides.some((guide) => guide.kind === "point" && guide.role === "midpoint");
+    const joins = options.snap !== false && !middle && (result.caught === "point" || result.caught === "run");
     const magnet = !joins ? [] : result.caught === "run" ? runNodes(links, result) : landedOn(result);
     const taken = options.snap === false ? delta : { x: delta.x + fix.x, y: delta.y, z: delta.z + fix.z };
     best = { rank, distance, snap: { delta: taken, anchor: anchor.id, magnet, joins, guides: result.guides, measures: result.measures } };

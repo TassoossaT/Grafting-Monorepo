@@ -103,7 +103,8 @@ test("labels write every kind of measure in the table's unit, with signs where a
     ],
   };
   const labels = rulerLabels(feedback, "ft");
-  assert.deepEqual(labels, ["altura 10.0 ft · nível 10.0 ft", "lado −1.0 ft", "∠ −12.3°", "∥ paralelo"]);
+  // What is catching comes first, then what is measured.
+  assert.deepEqual(labels, ["∥ paralelo", "altura 10.0 ft · nível 10.0 ft", "lado −1.0 ft", "∠ −12.3°"]);
   assert.deepEqual(rulerLabels({ guides: [], measures: [{ kind: "change", name: "Δ", meters: 1 }] }, "m"), ["Δ +1.00 m"]);
 });
 
@@ -128,8 +129,35 @@ test("an angle's label says what it is from, and a square's says it is 90 degree
     guides: [{ kind: "square", run, from: at(4, 0), to: at(4, 5), relation: "perpendicular" }, { kind: "square", run, from: at(4, 0), to: at(8, 0), relation: "collinear" }],
     measures: [{ kind: "angle", degrees: 12.34, reference: { run, relation: "parallel" } }, { kind: "angle", degrees: 0, reference: { run, relation: "perpendicular" } }],
   }, "m");
-  assert.deepEqual(labels, ["∠ 12.3° da aresta", "∠ 0.0° do esquadro (90°) da aresta", "⊥ 90° da aresta", "prolonga a aresta"]);
+  assert.deepEqual(labels, ["⊥ 90° da aresta", "prolonga a aresta", "∠ 12.3° da aresta", "∠ 0.0° do esquadro (90°) da aresta"]);
   // The side an angle is measured from is drawn with the guides.
   const ghost = rulerPreview({ guides: [], measures: [{ kind: "angle", degrees: 5, reference: { run, relation: "parallel" } }] });
   assert.deepEqual([...ghost.positions], [0, 0, 0, 4, 0, 0]);
+});
+
+test("each thing the ruler can be on has its own marker, drawn at the size of a few pixels, whatever the zoom", () => {
+  const at0 = { x: 5, y: 0, z: 5 };
+  const draw = (guide, scale) => rulerPreview({ guides: [guide], measures: [] }, scale).positions;
+  const corner = draw({ kind: "point", at: at0, node: "n", role: "corner" }, 0.01);
+  const middle = draw({ kind: "point", at: at0, node: "m", role: "midpoint" }, 0.01);
+  const cross = draw({ kind: "cross", at: at0 }, 0.01);
+  // A square has four sides, a triangle three, a diamond four: told apart by shape.
+  assert.equal(corner.length / 6, 4);
+  assert.equal(middle.length / 6, 3);
+  assert.equal(cross.length / 6, 4);
+  assert.notDeepEqual([...corner], [...cross]);
+  // Six pixels at a hundredth of a metre a pixel is 0.06 m from the centre: the marker is the same on the screen at any zoom.
+  const half = (positions) => Math.max(...positions.filter((_, i) => i % 3 === 0).map((x) => Math.abs(x - at0.x)));
+  assert.ok(Math.abs(half(corner) - 0.06) < 1e-6, String(half(corner)));
+  const farther = draw({ kind: "point", at: at0, node: "n", role: "corner" }, 0.04);
+  assert.ok(Math.abs(half(farther) - 0.24) < 1e-6, "zoomed out, the marker grows in the world to stay as big on the screen");
+});
+
+test("labels name what catches before what is measured, each thing said once", () => {
+  const corner = { kind: "point", at: at(0, 0), node: "a", role: "corner" };
+  const labels = rulerLabels({
+    guides: [corner, { kind: "point", at: at(4, 0), node: "b", role: "midpoint" }, { kind: "cross", at: at(1, 1) }, { kind: "align", from: at(0, 0), to: at(5, 0), node: "a" }, { kind: "align", from: at(0, 0), to: at(0, 5), node: "a" }, { kind: "polar", origin: at(0, 0), to: at(3, 3), degrees: 45 }],
+    measures: [{ kind: "length", from: at(0, 0), to: at(3, 0), meters: 3 }],
+  }, "m");
+  assert.deepEqual(labels, ["canto", "meio da aresta", "interseção", "alinhado", "45° polar", "3.00 m"]);
 });

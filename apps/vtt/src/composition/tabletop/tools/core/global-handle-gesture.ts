@@ -6,7 +6,9 @@ import {
   rejoinNodes,
   releasePart,
   baseHeight,
+  LEVEL_REACH,
   measuresOfEdit,
+  SNAP_REACH,
   resolveLevel,
   type EditMeasureKind,
   type RulerGuide,
@@ -37,6 +39,7 @@ import { commitSpineRegeneration, regenerateSpine } from "./spine-commit.ts";
 import { createConstrainedDrag } from "./constrained-drag.ts";
 import { floorsOf, floorUnder } from "./floor-landing.ts";
 import { commitPatchReplacement, commitRegionEdit, commitStagedRegionEdit } from "../../effects/effect-commit.ts";
+import { reachFor } from "./ruler-session.ts";
 import type { PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
 import { HANDLE_DONE } from "../../handle-glyphs.ts";
 import { faceKey, surfaceKeyText } from "../../../../features/edit-construction/index.ts";
@@ -395,9 +398,10 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
   /** Where the handle stands on its path, what that asks of the structure, and what it measures. */
   function intentOf(gesture: ToolGesture): { readonly intent: GlobalHandleIntent; readonly at: ConstructionPosition; readonly measures?: readonly RulerMeasure[] } {
     const { position: dragged, angle = 0 } = drag.at(gesture);
-    const level = lifting && resolveLevel(dragged.y, lifting, dragged, { snap: ctx.rulerSnap });
+    // The reach is a few pixels of the screen, so lifting catches as easily zoomed in as out.
+    const level = lifting && resolveLevel(dragged.y, lifting, dragged, { snap: ctx.rulerSnap, reach: reachFor(ctx, 10, LEVEL_REACH), ...(ctx.rulerDisabled ? { disabled: ctx.rulerDisabled } : {}) });
     const free = level ? { ...dragged, y: level.y } : dragged;
-    snapped = snap && snapToOutlines(snap.anchors, { x: free.x - handle!.position.x, y: free.y - handle!.position.y, z: free.z - handle!.position.z }, handle!.motion, snap.links, { snap: ctx.rulerSnap });
+    snapped = snap && snapToOutlines(snap.anchors, { x: free.x - handle!.position.x, y: free.y - handle!.position.y, z: free.z - handle!.position.z }, handle!.motion, snap.links, { snap: ctx.rulerSnap, reach: reachFor(ctx, 14, SNAP_REACH), ...(ctx.rulerDisabled ? { disabled: ctx.rulerDisabled } : {}) });
     // What the ruler caught shows whether or not the snap took it.
     guidesNow = [...(level?.guide ? [level.guide] : []), ...(snapped?.guides ?? [])];
     const at = snapped ? { x: handle!.position.x + snapped.delta.x, y: handle!.position.y + snapped.delta.y, z: handle!.position.z + snapped.delta.z } : free;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { baseHeight, catchOnAxis, collectLinks, gapCenter, gapsAround, holdsOnAxis, formatLength, measuresOfEdit, fromMetres, resolveLevel, resolveRuler, toMetres } from "../src/features/edit-construction/ruler/index.ts";
+import { baseHeight, catchOnAxis, dimensionsOf, collectLinks, gapCenter, gapsAround, holdsOnAxis, formatLength, measuresOfEdit, fromMetres, resolveLevel, resolveRuler, toMetres } from "../src/features/edit-construction/ruler/index.ts";
 
 const at = (x, z, y = 0) => ({ x, y, z });
 const near = (actual, expected, message) => assert.ok(Math.abs(actual - expected) < 1e-9, message ?? `${actual} != ${expected}`);
@@ -41,10 +41,11 @@ test("a corner within reach is taken, and beats a side", () => {
 });
 
 test("a side within reach is landed on", () => {
-  const result = resolveRuler({ point: at(2, 0.15), links });
+  // Off the middle and the corners, so only the side itself can catch.
+  const result = resolveRuler({ point: at(1, 0.15), links });
   assert.equal(result.caught, "run");
   near(result.position.z, 0);
-  near(result.position.x, 2);
+  near(result.position.x, 1);
 });
 
 test("a point in line with a corner is lined up, and both axes cross on one point", () => {
@@ -53,7 +54,9 @@ test("a point in line with a corner is lined up, and both axes cross on one poin
   near(one.position.z, 0);
   const corners = [{ id: "a", position: at(0, 10) }, { id: "b", position: at(10, 3) }];
   const both = resolveRuler({ point: at(0.1, 3.1), links: { points: corners, runs: [], levels: [] } });
-  assert.equal(both.guides.length, 2);
+  assert.equal(both.caught, "intersection");
+  assert.equal(both.guides.filter((g) => g.kind === "align").length, 2);
+  assert.ok(both.guides.some((g) => g.kind === "cross"), "the crossing is marked");
   near(both.position.x, 0);
   near(both.position.z, 3);
 });
@@ -247,4 +250,107 @@ test("the room on either side of a box is measured to what stands, or to the lin
 test("the line-ups that already hold are the ones to draw", () => {
   const held = holdsOnAxis(1, 2, [edge(2), center(1.5), edge(3), center(9)]);
   assert.deepEqual(held.map((h) => h.part).sort(), ["center", "end"]);
+});
+
+test("the middle of a side catches, is not a node to join, and loses a tie to a corner", () => {
+  const result = resolveRuler({ point: at(2.1, 0.1), links });
+  assert.equal(result.caught, "point");
+  const guide = result.guides.find((g) => g.kind === "point");
+  assert.equal(guide.role, "midpoint");
+  near(result.position.x, 2);
+  near(result.position.z, 0);
+  // A corner as near as a middle wins.
+  const tie = resolveRuler({ point: at(0.05, 0.05), links });
+  assert.equal(tie.guides.find((g) => g.kind === "point").role, "corner");
+});
+
+test("a point square to one edge and in line with another's corner lands on where they cross", () => {
+  // Square out of the end of the 0..10 side at x = 10, and in line with a corner at z = 6.
+  const a = { id: "a", position: at(0, 0) }, b = { id: "b", position: at(10, 0) }, c = { id: "c", position: at(30, 6) };
+  const world = { points: [a, b, c], runs: [{ a, b }], levels: [] };
+  const result = resolveRuler({ point: at(10.1, 6.08), links: world });
+  assert.equal(result.caught, "intersection");
+  near(result.position.x, 10);
+  near(result.position.z, 6);
+  assert.ok(result.guides.some((g) => g.kind === "square") && result.guides.some((g) => g.kind === "align"));
+});
+
+test("a catch already held stays on past the reach, up to the hold factor, and is let go beyond", () => {
+  const world = { points: [{ id: "c", position: at(0, 0) }], runs: [], levels: [] };
+  // Only the corner is asked about: a point on a corner's axis would rightly catch a line-up too.
+  const only = new Set(["align", "square", "intersection", "midpoint"]);
+  const near1 = resolveRuler({ point: at(0.2, 0), links: world, disabled: only, reach: 0.1 });
+  assert.equal(near1.caught, undefined, "out of reach on the first approach");
+  const first = resolveRuler({ point: at(0.08, 0), links: world, disabled: only, reach: 0.1 });
+  assert.equal(first.caught, "point");
+  // Drifting out: past the reach, but inside the held reach, it stays.
+  const held = resolveRuler({ point: at(0.14, 0), links: world, disabled: only, reach: 0.1, holding: first.key });
+  assert.equal(held.caught, "point");
+  near(held.position.x, 0);
+  // Well beyond, it lets go.
+  assert.equal(resolveRuler({ point: at(0.3, 0), links: world, disabled: only, reach: 0.1, holding: first.key }).caught, undefined);
+  // Held only by its own name: another corner does not borrow the wider reach.
+  assert.equal(resolveRuler({ point: at(0.14, 0), links: world, disabled: only, reach: 0.1, holding: "corner:other" }).caught, undefined);
+});
+
+test("polar tracking catches the steps from where the line began, keeping its length", () => {
+  const empty = { points: [], runs: [], levels: [] };
+  const step = Math.PI / 4;
+  // 44 degrees off the x axis, 10 long: the 45 degree step is within three degrees.
+  const heading = (44 * Math.PI) / 180;
+  const result = resolveRuler({ point: at(10 * Math.cos(heading), 10 * Math.sin(heading)), origin: at(0, 0), links: empty, polar: step });
+  assert.equal(result.caught, "polar");
+  near(Math.hypot(result.position.x, result.position.z), 10);
+  near(Math.atan2(result.position.z, result.position.x), step);
+  assert.equal(result.guides.find((g) => g.kind === "polar").degrees.toFixed(0), "45");
+  // 20 degrees is on no step.
+  const off = (20 * Math.PI) / 180;
+  assert.equal(resolveRuler({ point: at(10 * Math.cos(off), 10 * Math.sin(off)), origin: at(0, 0), links: empty, polar: step }).caught, undefined);
+  // Without steps asked for, nothing is tracked.
+  assert.equal(resolveRuler({ point: at(10 * Math.cos(heading), 10 * Math.sin(heading)), origin: at(0, 0), links: empty }).caught, undefined);
+});
+
+test("the ways of catching the table left out do not catch, and the rest still do", () => {
+  const off = (kinds) => new Set(kinds);
+  assert.equal(resolveRuler({ point: at(4.1, 0.05), links, disabled: off(["corner", "midpoint"]) }).guides.some((g) => g.kind === "point"), false);
+  // Without corners the point is still on the side it is near.
+  assert.equal(resolveRuler({ point: at(1, 0.1), links, disabled: off(["side"]) }).caught !== "run", true);
+  assert.equal(resolveRuler({ point: at(6.1, 0.15), links, disabled: off(["square"]) }).caught !== "square", true);
+  const heading = (44 * Math.PI) / 180;
+  const empty = { points: [], runs: [], levels: [] };
+  assert.equal(resolveRuler({ point: at(10 * Math.cos(heading), 10 * Math.sin(heading)), origin: at(0, 0), links: empty, polar: Math.PI / 4, disabled: off(["polar"]) }).caught, undefined);
+  assert.equal(resolveLevel(1.9, links, at(0, 0, 1.9), { disabled: off(["level"]) }).y, 1.9);
+});
+
+test("only what is near is offered a line: a corner far from the pointer draws no guide", () => {
+  const far = { id: "far", position: at(100, 0) };
+  const world = { points: [far], runs: [], levels: [] };
+  // In line with a corner 100 away, but it is not acquired.
+  assert.equal(resolveRuler({ point: at(0, 0.1), links: world, acquire: 5 }).caught, undefined);
+  // Left unlimited, it would be.
+  assert.equal(resolveRuler({ point: at(0, 0.1), links: world }).caught, "align");
+});
+
+test("a structure says how big it is without being touched: its length and depth along its own run, and its height", () => {
+  // The floor of the tests above leans: n3 stands 2 high, the rest at the ground.
+  const sizes = Object.fromEntries(dimensionsOf([square]).map((m) => [m.name, m.meters]));
+  near(sizes.comprimento, 4);
+  near(sizes.profundidade, 3);
+  near(sizes.altura, 2);
+});
+
+test("a thin wall has no depth to speak of, and a flat floor no height", () => {
+  const wall = { ...square, nodes: [
+    { id: "w1", position: at(0, 0, 0) }, { id: "w2", position: at(6, 0, 0) }, { id: "w3", position: at(6, 0, 3) }, { id: "w4", position: at(0, 0, 3) },
+  ], outerLoops: [[
+    { startNodeId: "w1", endNodeId: "w2", geometry: { kind: "line" } }, { startNodeId: "w2", endNodeId: "w3", geometry: { kind: "line" } },
+    { startNodeId: "w3", endNodeId: "w4", geometry: { kind: "line" } }, { startNodeId: "w4", endNodeId: "w1", geometry: { kind: "line" } },
+  ]] };
+  const sizes = Object.fromEntries(dimensionsOf([wall]).map((m) => [m.name, m.meters]));
+  near(sizes.comprimento, 6);
+  near(sizes.altura, 3);
+  assert.equal(sizes.profundidade, undefined);
+  const flat = Object.fromEntries(dimensionsOf([{ ...square, nodes: square.nodes.map((n) => ({ ...n, position: { ...n.position, y: 1 } })) }]).map((m) => [m.name, m.meters]));
+  assert.equal(flat.altura, undefined);
+  assert.deepEqual(dimensionsOf([]), []);
 });

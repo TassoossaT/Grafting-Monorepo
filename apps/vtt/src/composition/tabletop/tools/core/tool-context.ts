@@ -1,5 +1,5 @@
 import type { EditHistoryStack } from "@/features/edit-construction";
-import type { ConstructionToolId, PreviewDescriptor, StructureEditParams, ToolParamsFor } from "@/features/edit-construction";
+import type { ConstructionToolId, PreviewDescriptor, RulerKind, StructureEditParams, ToolParamsFor } from "@/features/edit-construction";
 import type { ConstructionPosition } from "@/ports";
 
 import type { TabletopRuntime } from "../../tabletop-runtime.ts";
@@ -86,12 +86,16 @@ export interface ToolContext {
   /**
    * Whether what the ruler catches is taken. The ruler is always there while
    * building -- its guides and measures show either way -- and its catch is
-   * taken, but for as long as Alt is held, which places freely. The
+   * taken, but for as long as Ctrl is held, which places freely. The
    * dispatcher has already ruled every ground point by the time a tool sees
    * it, and a tool that rules a point of its own (a build frame's corner, a
    * far side) asks `ruler-session.ts` rather than re-deriving a link.
    */
   readonly rulerSnap: boolean;
+  /** How many metres one pixel of the screen is at the pointer: the ruler's reach is worked out from it, so it feels the same at every zoom. Unknown until the view gives a ray. */
+  readonly rulerMetersPerPixel?: number;
+  /** Ways of catching the table left out of its ruler. */
+  readonly rulerDisabled?: ReadonlySet<RulerKind>;
   /** Shows what the ruler caught for a point a tool ruled itself -- a handle dragged onto a corner -- until the gesture ends; `undefined` clears it. */
   readonly showRuler?: (feedback: import("./ruler-session.ts").RulerFeedback | undefined) => void;
   /**

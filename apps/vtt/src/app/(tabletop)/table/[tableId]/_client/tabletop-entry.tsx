@@ -27,12 +27,14 @@ import {
   ConstructionHotbar,
   DEFAULT_MEASURE_UNIT,
   isMeasureUnitId,
+  RULER_KINDS,
   RulerReadout,
   SettingsDrawer,
   ToolRail,
   useKeyboardShortcuts,
   type EditTool,
   type MeasureUnitId,
+  type RulerKind,
   type SelectedNodeInfo,
 } from "@/widgets";
 
@@ -100,6 +102,20 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     setMeasureUnit(unit);
     try { window.localStorage.setItem(measureUnitKey, unit); } catch { /* the choice lasts this session only */ }
   }, [measureUnitKey]);
+  // What the ruler catches is the table's own choice too; kept the same way.
+  const [rulerDisabled, setRulerDisabled] = useState<ReadonlySet<RulerKind>>(new Set());
+  const rulerKey = `grafting:table:${tableId}:ruler-disabled`;
+  useEffect(() => {
+    try {
+      const saved: unknown = JSON.parse(window.localStorage.getItem(rulerKey) ?? "[]");
+      const known = new Set<string>(RULER_KINDS);
+      setRulerDisabled(new Set(Array.isArray(saved) ? saved.filter((kind): kind is RulerKind => typeof kind === "string" && known.has(kind)) : []));
+    } catch { /* storage blocked or unreadable: everything catches */ }
+  }, [rulerKey]);
+  const handleRulerDisabledChange = useCallback((next: ReadonlySet<RulerKind>) => {
+    setRulerDisabled(next);
+    try { window.localStorage.setItem(rulerKey, JSON.stringify([...next])); } catch { /* the choice lasts this session only */ }
+  }, [rulerKey]);
   const [rulerReadout, setRulerReadout] = useState<RulerReadoutState | undefined>(undefined);
   const [editorMode, setEditorMode] = useState<"gm" | "player">("gm");
   const [selectedNodeInfo, setSelectedNodeInfo] = useState<SelectedNodeInfo | null>(null);
@@ -200,6 +216,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     tableId,
     viewId: viewIdRef.current,
     measureUnit,
+    rulerDisabled,
     onRulerReadout: setRulerReadout,
     structureEditParams,
     onSelectionChange: (info) => setSelectedNodeInfo(info ?? null),
@@ -338,6 +355,8 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           tokenCount={current.tokens.byId.size}
           measureUnit={measureUnit}
           onMeasureUnitChange={handleMeasureUnitChange}
+          rulerDisabled={rulerDisabled}
+          onRulerDisabledChange={handleRulerDisabledChange}
         />
 
         {rulerReadout ? <RulerReadout labels={rulerReadout.labels} x={rulerReadout.x} y={rulerReadout.y} /> : null}

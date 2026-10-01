@@ -11,14 +11,20 @@ import type { LinkPoint, LinkRun, RulerLinks } from "./links.ts";
  * only an option.
  */
 
-/** How close, in plan, a point must come to a link for it to catch. */
+/** How close, in plan, a point must come to a link for it to catch -- when the caller knows no better, in metres. */
 export const RULER_REACH = 0.2;
 /** How close, in height, a level must come to catch. */
 export const LEVEL_REACH = 0.15;
+/** A catch already held stays until the point is this many times further than the reach: no flicker at the edge. */
+export const HOLD_FACTOR = 1.6;
 /** How far a gap is measured to the nearest link. */
 const MEASURE_REACH = 4;
 /** How near a straight line a position must be for a drag along it to count as on it. */
 const ON_PATH = 1e-3;
+
+/** Every way the ruler can catch, so a table can say which it wants. */
+export const RULER_KINDS = ["corner", "midpoint", "side", "square", "align", "intersection", "angle", "polar", "length", "level"] as const;
+export type RulerKind = (typeof RULER_KINDS)[number];
 
 export interface PlanVector {
   readonly x: number;
@@ -43,22 +49,35 @@ export interface RulerQuery {
   readonly accept?: (landing: ConstructionPosition, run: LinkRun) => boolean;
   /** Whether the answer is taken. Off, the position stays and the guides still say what was near. */
   readonly snap?: boolean;
+  /** How close a link must come to catch, in metres. The caller works it out from the screen, so the feel does not change with the zoom. */
   readonly reach?: number;
+  /** How far from the point a link may stand and still offer its lines: what is not near is not acquired, so a full map does not draw a lattice. */
+  readonly acquire?: number;
+  /** The catch held last time -- its {@link RulerResult.key} -- which stays on past the reach, up to {@link HOLD_FACTOR} times it. */
+  readonly holding?: string;
+  /** Steps of the polar tracking from `origin`, in radians; none when absent. */
+  readonly polar?: number;
+  /** Ways of catching left out. */
+  readonly disabled?: ReadonlySet<RulerKind>;
 }
 
 export type RulerGuide =
-  /** Onto a corner. */
-  | { readonly kind: "point"; readonly at: ConstructionPosition; readonly node: string }
+  /** Onto a corner, or the middle of a side. */
+  | { readonly kind: "point"; readonly at: ConstructionPosition; readonly node: string; readonly role: "corner" | "midpoint" }
   /** Onto a side. */
   | { readonly kind: "run"; readonly a: ConstructionPosition; readonly b: ConstructionPosition; readonly at: ConstructionPosition }
   /** Square to a standing side at one of its ends -- 90 degrees off it -- or in line with it, beyond its end. */
   | { readonly kind: "square"; readonly run: readonly [ConstructionPosition, ConstructionPosition]; readonly from: ConstructionPosition; readonly to: ConstructionPosition; readonly relation: "perpendicular" | "collinear" }
-  /** In line with a corner, along one of the axes. */
+  /** In line with a corner or a middle, along one of the axes. */
   | { readonly kind: "align"; readonly from: ConstructionPosition; readonly to: ConstructionPosition; readonly node: string }
+  /** Where two of those lines cross. */
+  | { readonly kind: "cross"; readonly at: ConstructionPosition }
   /** As long as a standing side. */
   | { readonly kind: "length"; readonly run: readonly [ConstructionPosition, ConstructionPosition]; readonly meters: number }
   /** Running the same way as a standing side, or square to it. */
   | { readonly kind: "angle"; readonly origin: ConstructionPosition; readonly to: ConstructionPosition; readonly run: readonly [ConstructionPosition, ConstructionPosition]; readonly relation: "parallel" | "perpendicular" }
+  /** On one of the polar steps from where the line began; `degrees` is the heading, from the world's x axis. */
+  | { readonly kind: "polar"; readonly origin: ConstructionPosition; readonly to: ConstructionPosition; readonly degrees: number }
   /** At the height of a standing level. */
   | { readonly kind: "level"; readonly y: number; readonly at: ConstructionPosition };
 
@@ -82,7 +101,9 @@ export interface RulerResult {
   /** Where the point stands: snapped when `snap` was asked for and something caught, else as it came. */
   readonly position: ConstructionPosition;
   /** What caught, whether or not it was taken. */
-  readonly caught: "point" | "run" | "square" | "align" | "angle" | "length" | undefined;
+  readonly caught: "point" | "run" | "intersection" | "square" | "align" | "angle" | "polar" | "length" | undefined;
+  /** Names the catch, to be handed back as {@link RulerQuery.holding} on the next question. */
+  readonly key: string | undefined;
   readonly guides: readonly RulerGuide[];
   readonly measures: readonly RulerMeasure[];
 }
@@ -92,6 +113,16 @@ interface Fix {
   readonly z: number;
   readonly distance: number;
   readonly guides: readonly RulerGuide[];
+  readonly key: string;
+}
+
+/** The reach, and who is allowed past it: only the catch being held. */
+interface Reach {
+  readonly reach: number;
+  /** Whether a catch `distance` away, named `key`, is close enough. */
+  within(distance: number, key: string): boolean;
+  /** The reach `key` gets: wider while it is the one held. */
+  of(key: string): number;
 }
 
 const WORLD_AXES: readonly [PlanVector, PlanVector] = [{ x: 1, z: 0 }, { x: 0, z: 1 }];
@@ -106,21 +137,31 @@ function alongPath(fix: PlanVector, direction: PlanVector | undefined): PlanVect
   return { x: direction.x * along, z: direction.z * along };
 }
 
-function cornerFix(query: RulerQuery, p: ConstructionPosition, reach: number): Fix | undefined {
-  const direction = query.motion?.kind === "line" ? query.motion.direction : undefined;
+const on = (query: RulerQuery, kind: RulerKind): boolean => !query.disabled?.has(kind);
+const pathOf = (query: RulerQuery): PlanVector | undefined => (query.motion?.kind === "line" ? query.motion.direction : undefined);
+const runKeyOf = (run: LinkRun): string => (run.a.id < run.b.id ? `${run.a.id}|${run.b.id}` : `${run.b.id}|${run.a.id}`);
+
+/** Onto a corner -- a node to join -- or the middle of a side. A corner beats a middle when both are as near. */
+function cornerFix(query: RulerQuery, p: ConstructionPosition, rc: Reach): Fix | undefined {
+  const direction = pathOf(query);
   let best: Fix | undefined;
-  for (const link of query.links.points) {
-    if (query.skip?.has(link.id) || Math.abs(link.position.y - p.y) > LEVEL_REACH) continue;
+  const consider = (link: LinkPoint, role: "corner" | "midpoint"): void => {
+    if (query.skip?.has(link.id) || Math.abs(link.position.y - p.y) > LEVEL_REACH) return;
     const fix = alongPath({ x: link.position.x - p.x, z: link.position.z - p.z }, direction);
-    if (!fix) continue;
+    if (!fix) return;
     const distance = Math.hypot(fix.x, fix.z);
-    if (distance <= reach) best = nearer(best, { ...fix, distance, guides: [{ kind: "point", at: link.position, node: link.id }] });
-  }
+    const key = `${role}:${link.id}`;
+    // A middle yields to a corner at the same distance: a corner is a node, a middle only a place.
+    if (rc.within(distance, key)) best = nearer(best, { ...fix, distance: distance + (role === "midpoint" ? 1e-9 : 0), guides: [{ kind: "point", at: link.position, node: link.id, role }], key });
+  };
+  if (on(query, "corner")) for (const link of query.links.points) consider(link, "corner");
+  if (on(query, "midpoint")) for (const link of query.links.midpoints ?? []) consider(link, "midpoint");
   return best;
 }
 
-function sideFix(query: RulerQuery, p: ConstructionPosition, reach: number): Fix | undefined {
-  const direction = query.motion?.kind === "line" ? query.motion.direction : undefined;
+function sideFix(query: RulerQuery, p: ConstructionPosition, rc: Reach): Fix | undefined {
+  if (!on(query, "side")) return undefined;
+  const direction = pathOf(query);
   let best: Fix | undefined;
   for (const run of query.links.runs) {
     if (Math.abs(run.a.position.y - p.y) > LEVEL_REACH) continue;
@@ -138,98 +179,153 @@ function sideFix(query: RulerQuery, p: ConstructionPosition, reach: number): Fix
       fix = { x: q.x - p.x, z: q.z - p.z };
     }
     const distance = Math.hypot(fix.x, fix.z);
-    if (distance > reach) continue;
+    const key = `side:${runKeyOf(run)}`;
+    if (!rc.within(distance, key)) continue;
     const landing = { x: p.x + fix.x, y: p.y, z: p.z + fix.z };
     if (query.accept && !query.accept(landing, run)) continue;
-    best = nearer(best, { ...fix, distance, guides: [{ kind: "run", a, b, at: landing }] });
+    best = nearer(best, { ...fix, distance, guides: [{ kind: "run", a, b, at: landing }], key });
   }
   return best;
 }
 
-/** How near, in plan, a side's end must be to the point to offer its square and its extension. */
-const SQUARE_RANGE = 40;
+/** One straight line the point may be on: through `origin`, running along `dir` (unit length). */
+interface Line {
+  readonly origin: ConstructionPosition;
+  readonly dir: PlanVector;
+  readonly kind: "square" | "align";
+  readonly key: string;
+  /** Standing `landed`, the guide that draws this line. */
+  readonly guide: (landed: ConstructionPosition) => RulerGuide;
+}
 
 /**
- * Square to a standing side at either end -- 90 degrees off it -- or in line
- * with it beyond its end: what lets a wall start out perfectly square from an
- * edge, or run on from one. Every side offers both, whatever it belongs to.
+ * Every line near `p` the point can be on. Each corner and middle offers one
+ * along each of the axes; each side, at each end, offers the one square to it
+ * and the one running on from it. What is further than `acquire` is not
+ * offered: a map full of structures would otherwise be one lattice of guides.
  */
-function squareFix(query: RulerQuery, p: ConstructionPosition, reach: number): Fix | undefined {
-  const direction = query.motion?.kind === "line" ? query.motion.direction : undefined;
-  let best: Fix | undefined;
-  for (const run of query.links.runs) {
-    const a = run.a.position, b = run.b.position;
-    if (Math.abs(a.y - p.y) > LEVEL_REACH || Math.hypot(a.x - p.x, a.z - p.z) > SQUARE_RANGE) continue;
-    const length = Math.hypot(b.x - a.x, b.z - a.z);
-    const d = { x: (b.x - a.x) / length, z: (b.z - a.z) / length };
-    const normal = { x: -d.z, z: d.x };
-    for (const end of [run.a, run.b]) {
-      if (query.skip?.has(end.id)) continue;
-      // The point is on the line when its offset along `across` is nil: square to the side when `across` runs along it, in line with it when `across` is its normal.
-      for (const [across, relation] of [[d, "perpendicular"], [normal, "collinear"]] as const) {
-        const offset = (p.x - end.position.x) * across.x + (p.z - end.position.z) * across.z;
-        let fix: PlanVector;
-        if (direction) {
-          const rate = direction.x * across.x + direction.z * across.z;
-          if (Math.abs(rate) < 1e-6) continue;
-          const s = -offset / rate;
-          fix = { x: direction.x * s, z: direction.z * s };
-        } else fix = { x: -across.x * offset, z: -across.z * offset };
-        const distance = Math.hypot(fix.x, fix.z);
-        if (distance > reach) continue;
-        best = nearer(best, { ...fix, distance, guides: [{ kind: "square", run: [a, b], from: end.position, to: { x: p.x + fix.x, y: p.y, z: p.z + fix.z }, relation }] });
+function linesNear(query: RulerQuery, p: ConstructionPosition): readonly Line[] {
+  const lines: Line[] = [];
+  const acquire = query.acquire ?? Infinity;
+  const axes = query.axes ?? WORLD_AXES;
+  const near = (link: LinkPoint): boolean => !query.skip?.has(link.id) && Math.abs(link.position.y - p.y) <= LEVEL_REACH && Math.hypot(link.position.x - p.x, link.position.z - p.z) <= acquire;
+  const anchors: { readonly link: LinkPoint; readonly role: "corner" | "midpoint" }[] = [];
+  if (on(query, "align")) {
+    for (const link of query.links.points) if (near(link)) anchors.push({ link, role: "corner" });
+    for (const link of query.links.midpoints ?? []) if (near(link)) anchors.push({ link, role: "midpoint" });
+  }
+  for (const { link } of anchors) {
+    axes.forEach((axis, index) => lines.push({
+      origin: link.position, dir: axis, kind: "align", key: `align:${link.id}:${index}`,
+      guide: (landed) => ({ kind: "align", from: link.position, to: landed, node: link.id }),
+    }));
+  }
+  if (on(query, "square")) {
+    for (const run of query.links.runs) {
+      const a = run.a.position, b = run.b.position;
+      if (Math.abs(a.y - p.y) > LEVEL_REACH || nearestOnSegment(p, a, b).distance > acquire) continue;
+      const length = Math.hypot(b.x - a.x, b.z - a.z);
+      const d = { x: (b.x - a.x) / length, z: (b.z - a.z) / length };
+      const normal = { x: -d.z, z: d.x };
+      for (const end of [run.a, run.b]) {
+        if (query.skip?.has(end.id)) continue;
+        for (const [dir, relation] of [[normal, "perpendicular"], [d, "collinear"]] as const) {
+          lines.push({
+            origin: end.position, dir, kind: "square", key: `square:${runKeyOf(run)}:${end.id}:${relation}`,
+            guide: (landed) => ({ kind: "square", run: [a, b], from: end.position, to: landed, relation }),
+          });
+        }
       }
     }
   }
-  return best;
+  return lines;
 }
 
-/** In line with a corner along an axis; a free point takes one of each axis at once, and so lands on their crossing. */
-function alignFix(query: RulerQuery, p: ConstructionPosition, reach: number): Fix | undefined {
-  const axes = query.axes ?? WORLD_AXES;
-  const direction = query.motion?.kind === "line" ? query.motion.direction : undefined;
-  const perAxis: (Fix | undefined)[] = [undefined, undefined];
-  axes.forEach((axis, i) => {
-    // The line through a corner along `axis`: the point is on it when its offset along the axis' normal is nil.
-    const normal = { x: -axis.z, z: axis.x };
-    for (const link of query.links.points) {
-      if (query.skip?.has(link.id) || Math.abs(link.position.y - p.y) > LEVEL_REACH) continue;
-      const offset = (p.x - link.position.x) * normal.x + (p.z - link.position.z) * normal.z;
-      let fix: PlanVector;
-      if (direction) {
-        const rate = direction.x * normal.x + direction.z * normal.z;
-        if (Math.abs(rate) < 1e-6) continue;
-        const s = -offset / rate;
-        fix = { x: direction.x * s, z: direction.z * s };
-      } else fix = { x: -normal.x * offset, z: -normal.z * offset };
-      const distance = Math.hypot(fix.x, fix.z);
-      if (distance > reach) continue;
-      perAxis[i] = nearer(perAxis[i], { ...fix, distance, guides: [{ kind: "align", from: link.position, to: { x: p.x + fix.x, y: p.y, z: p.z + fix.z }, node: link.id }] });
-    }
-  });
-  const [first, second] = perAxis;
-  if (first && second && !direction) {
-    return { x: first.x + second.x, z: first.z + second.z, distance: Math.hypot(first.x + second.x, first.z + second.z), guides: [...first.guides, ...second.guides] };
+/** The same line is the same wherever its guide starts: two corners on one axis line offer it once. */
+function lineIdentity(line: Line): string {
+  const n = { x: -line.dir.z, z: line.dir.x };
+  const flip = n.x < -1e-9 || (Math.abs(n.x) <= 1e-9 && n.z < 0) ? -1 : 1;
+  const angle = Math.round(Math.atan2(n.z * flip, n.x * flip) * 1e4);
+  const offset = Math.round(((line.origin.x * n.x + line.origin.z * n.z) * flip) * 1e3);
+  return `${angle}:${offset}`;
+}
+
+interface Candidate extends Fix {
+  readonly line: Line;
+}
+
+/**
+ * On a line, or where two lines cross: lines are caught one at a time, and
+ * two that are not parallel and both near land on their crossing -- a point
+ * that is square to this edge and in line with that corner. A crossing beats
+ * a line; a side's square or run-on beats an axis.
+ */
+function lineFix(query: RulerQuery, p: ConstructionPosition, rc: Reach): { readonly fix: Fix; readonly caught: "intersection" | "square" | "align" } | undefined {
+  const direction = pathOf(query);
+  const seen = new Map<string, Candidate>();
+  for (const line of linesNear(query, p)) {
+    const n = { x: -line.dir.z, z: line.dir.x };
+    const offset = (p.x - line.origin.x) * n.x + (p.z - line.origin.z) * n.z;
+    let fix: PlanVector;
+    if (direction) {
+      const rate = direction.x * n.x + direction.z * n.z;
+      if (Math.abs(rate) < 1e-6) continue;
+      const s = -offset / rate;
+      fix = { x: direction.x * s, z: direction.z * s };
+    } else fix = { x: -n.x * offset, z: -n.z * offset };
+    const distance = Math.hypot(fix.x, fix.z);
+    if (!rc.within(distance, line.key)) continue;
+    const landed = { x: p.x + fix.x, y: p.y, z: p.z + fix.z };
+    // A side's lines win a tie against an axis through a corner.
+    const candidate: Candidate = { ...fix, distance: distance + (line.kind === "square" ? 0 : 1e-9), guides: [line.guide(landed)], key: line.key, line };
+    const identity = lineIdentity(line);
+    const held = seen.get(identity);
+    if (!held || candidate.distance < held.distance) seen.set(identity, candidate);
   }
-  return nearer(first, second);
+  const candidates = [...seen.values()].sort((a, b) => a.distance - b.distance);
+  if (candidates.length === 0) return undefined;
+
+  if (!direction && on(query, "intersection")) {
+    let crossing: { fix: Fix } | undefined;
+    const pool = candidates.slice(0, 8);
+    for (let i = 0; i < pool.length; i += 1) {
+      for (let j = i + 1; j < pool.length; j += 1) {
+        const a = pool[i]!.line, b = pool[j]!.line;
+        const det = a.dir.x * b.dir.z - a.dir.z * b.dir.x;
+        // Nearly parallel lines cross far away, and by no steady reading.
+        if (Math.abs(det) < 0.3) continue;
+        const t = ((b.origin.x - a.origin.x) * b.dir.z - (b.origin.z - a.origin.z) * b.dir.x) / det;
+        const at = { x: a.origin.x + a.dir.x * t, y: p.y, z: a.origin.z + a.dir.z * t };
+        const fix = { x: at.x - p.x, z: at.z - p.z };
+        const distance = Math.hypot(fix.x, fix.z);
+        const key = `cross:${pool[i]!.key}|${pool[j]!.key}`;
+        if (distance > rc.of(key) * HOLD_FACTOR || (crossing && distance >= crossing.fix.distance)) continue;
+        crossing = { fix: { ...fix, distance, key, guides: [a.guide(at), b.guide(at), { kind: "cross", at }] } };
+      }
+    }
+    if (crossing) return { fix: crossing.fix, caught: "intersection" };
+  }
+  const best = candidates[0]!;
+  return { fix: best, caught: best.line.kind };
 }
 
 /** As long as a standing run, measured from where the drawing began. */
-function lengthFix(query: RulerQuery, p: ConstructionPosition, reach: number): Fix | undefined {
+function lengthFix(query: RulerQuery, p: ConstructionPosition, rc: Reach): Fix | undefined {
   const origin = query.origin;
-  if (!origin) return undefined;
+  if (!origin || !on(query, "length")) return undefined;
   const dx = p.x - origin.x, dz = p.z - origin.z;
   const length = Math.hypot(dx, dz);
   if (length < 1e-6) return undefined;
   const u = { x: dx / length, z: dz / length };
-  const direction = query.motion?.kind === "line" ? query.motion.direction : undefined;
+  const direction = pathOf(query);
   if (direction && Math.abs(u.x * direction.z - u.z * direction.x) > ON_PATH) return undefined;
   let best: Fix | undefined;
   for (const run of query.links.runs) {
     const standing = Math.hypot(run.b.position.x - run.a.position.x, run.b.position.z - run.a.position.z);
     const gap = standing - length;
-    if (Math.abs(gap) > reach) continue;
-    best = nearer(best, { x: u.x * gap, z: u.z * gap, distance: Math.abs(gap), guides: [{ kind: "length", run: [run.a.position, run.b.position], meters: standing }] });
+    const key = `length:${runKeyOf(run)}`;
+    if (!rc.within(Math.abs(gap), key)) continue;
+    best = nearer(best, { x: u.x * gap, z: u.z * gap, distance: Math.abs(gap), guides: [{ kind: "length", run: [run.a.position, run.b.position], meters: standing }], key });
   }
   return best;
 }
@@ -265,43 +361,69 @@ function nearestHeading(query: RulerQuery, origin: ConstructionPosition, heading
 }
 
 /** The line from where the drawing began, turned about that point onto a standing side's direction -- or square to it -- keeping its length. */
-function angleFix(query: RulerQuery, p: ConstructionPosition): Fix | undefined {
+function angleFix(query: RulerQuery, p: ConstructionPosition, rc: Reach): Fix | undefined {
   const origin = query.origin;
-  if (!origin || query.motion?.kind === "line") return undefined;
+  if (!origin || query.motion?.kind === "line" || !on(query, "angle")) return undefined;
   const dx = p.x - origin.x, dz = p.z - origin.z;
   const length = Math.hypot(dx, dz);
   if (length < 1e-6) return undefined;
   const found = nearestHeading(query, origin, Math.atan2(dz, dx));
-  if (!found || Math.abs(found.deviation) > ANGLE_REACH) return undefined;
+  if (!found) return undefined;
+  const key = `angle:${runKeyOf(found.run)}:${found.relation}`;
+  if (Math.abs(found.deviation) > ANGLE_REACH * (rc.of(key) / rc.reach)) return undefined;
   const target = Math.atan2(dz, dx) - found.deviation;
   const to = { x: origin.x + Math.cos(target) * length, y: p.y, z: origin.z + Math.sin(target) * length };
   const fix = { x: to.x - p.x, z: to.z - p.z };
-  return { ...fix, distance: Math.hypot(fix.x, fix.z), guides: [{ kind: "angle", origin, to, run: [found.run.a.position, found.run.b.position], relation: found.relation }] };
+  return { ...fix, distance: Math.hypot(fix.x, fix.z), guides: [{ kind: "angle", origin, to, run: [found.run.a.position, found.run.b.position], relation: found.relation }], key };
+}
+
+/** The line from where the drawing began, turned onto the nearest step of the polar tracking, keeping its length. */
+function polarFix(query: RulerQuery, p: ConstructionPosition, rc: Reach): Fix | undefined {
+  const origin = query.origin, step = query.polar;
+  if (!origin || !step || step <= 0 || query.motion?.kind === "line" || !on(query, "polar")) return undefined;
+  const dx = p.x - origin.x, dz = p.z - origin.z;
+  const length = Math.hypot(dx, dz);
+  if (length < 1e-6) return undefined;
+  const heading = Math.atan2(dz, dx);
+  const turns = Math.round(heading / step);
+  const key = `polar:${turns}`;
+  if (Math.abs(heading - turns * step) > ANGLE_REACH * (rc.of(key) / rc.reach)) return undefined;
+  const to = { x: origin.x + Math.cos(turns * step) * length, y: p.y, z: origin.z + Math.sin(turns * step) * length };
+  const fix = { x: to.x - p.x, z: to.z - p.z };
+  const degrees = (((turns * step * 180) / Math.PI) % 360 + 360) % 360;
+  return { ...fix, distance: Math.hypot(fix.x, fix.z), guides: [{ kind: "polar", origin, to, degrees }], key };
+}
+
+function reachOf(query: RulerQuery): Reach {
+  const reach = query.reach ?? RULER_REACH;
+  const of = (key: string): number => (query.holding === key ? reach * HOLD_FACTOR : reach);
+  return { reach, of, within: (distance, key) => distance <= of(key) };
 }
 
 /** What the ruler says of a point on the ground: where it lands, what to draw and what to measure. */
 export function resolveRuler(query: RulerQuery): RulerResult {
-  const reach = query.reach ?? RULER_REACH;
+  const rc = reachOf(query);
   const p = query.point;
-  // A corner beats a side, a side beats a line-up, a line-up beats a direction, a direction beats a matched length.
+  const lines = lineFix(query, p, rc);
+  // A corner beats a side, a side beats a crossing, a crossing beats a line, a line beats a direction, a direction beats a matched length.
   const picks: readonly (readonly [RulerResult["caught"], Fix | undefined])[] = [
-    ["point", cornerFix(query, p, reach)],
-    ["run", sideFix(query, p, reach)],
-    ["square", squareFix(query, p, reach)],
-    ["align", alignFix(query, p, reach)],
-    ["angle", angleFix(query, p)],
-    ["length", lengthFix(query, p, reach)],
+    ["point", cornerFix(query, p, rc)],
+    ["run", sideFix(query, p, rc)],
+    [lines?.caught, lines?.fix],
+    ["angle", angleFix(query, p, rc)],
+    ["polar", polarFix(query, p, rc)],
+    ["length", lengthFix(query, p, rc)],
   ];
   const [caught, first] = picks.find(([, candidate]) => candidate) ?? [undefined, undefined];
   let fix = first;
   // A line turned onto a direction can still be as long as a standing side: both hold at once.
-  if (caught === "angle" && fix) {
+  if ((caught === "angle" || caught === "polar") && fix) {
     const turned = { x: p.x + fix.x, y: p.y, z: p.z + fix.z };
-    const matched = lengthFix(query, turned, reach);
-    if (matched) fix = { x: fix.x + matched.x, z: fix.z + matched.z, distance: fix.distance + matched.distance, guides: [...fix.guides, ...matched.guides] };
+    const matched = lengthFix(query, turned, rc);
+    if (matched) fix = { x: fix.x + matched.x, z: fix.z + matched.z, distance: fix.distance + matched.distance, guides: [...fix.guides, ...matched.guides], key: fix.key };
   }
   const position = fix && query.snap !== false ? { x: p.x + fix.x, y: p.y, z: p.z + fix.z } : p;
-  return { position, caught: fix ? caught : undefined, guides: fix?.guides ?? [], measures: measuresAt(query, position) };
+  return { position, caught: fix ? caught : undefined, key: fix?.key, guides: fix?.guides ?? [], measures: measuresAt(query, position) };
 }
 
 /** What is being drawn, and the way from the point to the nearest corner it is not on. */
@@ -327,7 +449,8 @@ function measuresAt(query: RulerQuery, position: ConstructionPosition): readonly
 }
 
 /** `y` landed on the nearest standing level within reach, when the snap is on; else as it came. */
-export function resolveLevel(y: number, links: RulerLinks, at: ConstructionPosition, options: { readonly snap?: boolean; readonly reach?: number } = {}): { readonly y: number; readonly guide?: RulerGuide } {
+export function resolveLevel(y: number, links: RulerLinks, at: ConstructionPosition, options: { readonly snap?: boolean; readonly reach?: number; readonly disabled?: ReadonlySet<RulerKind> } = {}): { readonly y: number; readonly guide?: RulerGuide } {
+  if (options.disabled?.has("level")) return { y };
   const reach = options.reach ?? LEVEL_REACH;
   let best: number | undefined;
   for (const level of links.levels) if (Math.abs(level - y) <= reach && (best === undefined || Math.abs(level - y) < Math.abs(best - y))) best = level;

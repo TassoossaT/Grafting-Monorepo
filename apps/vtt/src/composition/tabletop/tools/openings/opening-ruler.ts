@@ -12,7 +12,7 @@ import {
   type RulerMeasure,
 } from "../../../../features/edit-construction/index.ts";
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
-import type { RulerFeedback } from "../core/ruler-session.ts";
+import { reachFor, type RulerFeedback } from "../core/ruler-session.ts";
 import type { ToolContext } from "../core/tool-context.ts";
 import { MARGIN, openingSpansOn, settleRect, type RunFrame, type RunRect } from "./opening-shared.ts";
 
@@ -88,7 +88,7 @@ export function alignRect(ctx: ToolContext, run: RunFrame, rect: RunRect, moving
   if (!ctx.rulerSnap) return rect;
   const spans = openingSpansOn(ctx, run, excluded);
   let { s0, s1, v0, v1 } = rect;
-  const along = catchOnAxis(s0, s1, moving.s, alongTargets(run, rect, spans), RULER_REACH);
+  const along = catchOnAxis(s0, s1, moving.s, alongTargets(run, rect, spans), reachFor(ctx, 14, RULER_REACH));
   if (along) {
     if (moving.s === "both") { s0 += along.shift; s1 += along.shift; }
     else if (moving.s === "start") s0 += along.shift;
@@ -97,7 +97,7 @@ export function alignRect(ctx: ToolContext, run: RunFrame, rect: RunRect, moving
   const middle = (s0 + s1) / 2;
   const height = run.heightAt(Math.max(run.start, Math.min(run.end, middle)));
   if (!(height > 0)) return { s0, s1, v0, v1 };
-  const up = catchOnAxis(run.resolveAt(middle, v0).y, run.resolveAt(middle, v1).y, moving.v, upTargets(ctx, run, spans, excluded), LEVEL_REACH);
+  const up = catchOnAxis(run.resolveAt(middle, v0).y, run.resolveAt(middle, v1).y, moving.v, upTargets(ctx, run, spans, excluded), reachFor(ctx, 10, LEVEL_REACH));
   if (up) {
     const dv = up.shift / height;
     if (moving.v === "both") { v0 += dv; v1 += dv; }

@@ -81,8 +81,11 @@ interface AttachedView {
   readonly initialCamera: { readonly position: { x: number; y: number; z: number }; readonly target: { x: number; y: number; z: number } };
 }
 
+/** The camera's vertical field of view, in degrees -- fixed: orbiting and zooming move the camera, never the lens. */
+export const VIEW_FOV_DEGREES = 38;
+
 const INITIAL_VIEW_CAMERA = {
-  fov: 38,
+  fov: VIEW_FOV_DEGREES,
   near: 0.1,
   far: 200,
   position: { x: 6, y: 4.5, z: 7 },

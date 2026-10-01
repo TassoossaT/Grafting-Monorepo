@@ -301,7 +301,7 @@ test("an opening between two others is centred in the room left: the same gap on
   } finally { session.free(); }
 });
 
-test("with the ruler's snap off (Alt held) the opening stays exactly where it was put, whatever stands near", () => {
+test("with the ruler's snap off (Ctrl held) the opening stays exactly where it was put, whatever stands near", () => {
   const { session, ctx, openings } = sessionWith(STRAIGHT);
   ctx.rulerSnap = false;
   try {
