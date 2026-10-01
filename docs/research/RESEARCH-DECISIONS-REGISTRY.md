@@ -350,3 +350,13 @@ format that is a real future candidate.
 | Babylon.js `AssetsManager`/`AssetContainer` | Apache-2.0 | Reference only | Per-item load state is worth copying; `AssetContainer`'s scene coupling is explicitly rejected |
 | three.js `Cache`/`LoadingManager` | MIT | Reference only — cautionary | Opt-in per-loader caching and manual scattered disposal; the `ImageBitmap` leak (issue #23953) is the failure mode `@grafting/assets` exists to prevent. Already an indirect dependency via `@grafting/render-3d` |
 | KTX2 / Basis Universal (`KHR_texture_basisu`) | Khronos ratified spec | Standby (deferred) | 4–8× VRAM reduction by staying compressed into GPU memory; gated on a measured need. `ImageResource` must stay open to compressed textures so adopting it later is not a breaking change |
+
+## VTT modular assembly, joints, and procedural tech-art patterns
+
+Full reasoning: `docs/research/vtt-procedural-tech-art-patterns-skylark-grot.md`, `docs/research/vtt-modular-joints-and-procedural-surfacing-synthesis.md`, and `docs/research/vtt-asset-facets-physics-and-interaction-architecture.md`
+
+| Candidate | License | Status | Note |
+| --- | --- | --- | --- |
+| 3DCoat Make Joints & Joints Tool (Pilgway) | Proprietary | Reference only — concept | Model for asset-declared socket connectors (position, normal, up, gender, category) and magnetic alignment; eliminates hardcoded procedural offsets |
+| Julian Bragagna / Project Skylark & GROT (Houdini) | N/A — workflow reference | Reference only — concept | 3D spline discretization, Rotation Minimizing Frames (RMF), clearance raycasting for adaptive piers/supports, point cloud instancing, and contact erosion/decay |
+| Decoupled Asset Facet Architecture (Grafting Pattern) | Architecture pattern | Reference only — concept | 4-facet orthogonal model (Render, Physics/Hitboxes, Joints, Environmental Reactivity) separating external assets from engine consumers |
