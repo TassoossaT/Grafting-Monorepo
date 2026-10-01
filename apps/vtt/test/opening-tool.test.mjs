@@ -232,3 +232,23 @@ test("the hover preview on a slanted-top wall shows the opening deformed by the 
     assert.ok(topAt(right) - topAt(left) > 1e-3, `the lintel follows the slanted top: ${topAt(left)} vs ${topAt(right)}`);
   } finally { session.free(); }
 });
+
+test("an opening measures itself as it is placed: how wide, how high, and how high its sill stands above the wall's foot", () => {
+  const { session, ctx } = sessionWith(STRAIGHT);
+  const shown = [];
+  ctx.showRuler = (feedback) => shown.push(feedback);
+  try {
+    const point = { x: 3, y: 0.5, z: 0 };
+    const params = { openingKind: "window", width: 1.5, height: 1.2 };
+    openingTool.previewFor({ start: { point }, current: { point }, samples: [{ point }] }, params, ctx);
+    const measures = shown.filter(Boolean).at(-1).measures;
+    const size = (name) => measures.find((m) => m.kind === "size" && m.name === name)?.meters;
+    assert.ok(Math.abs(size("largura") - 1.5) < 1e-6, JSON.stringify(measures));
+    assert.ok(Math.abs(size("altura") - 1.2) < 1e-6, JSON.stringify(measures));
+    // It stands on the height the pointer is at: its sill, above the foot.
+    assert.ok(size("peitoril") > 0.4 && size("peitoril") < 0.6, JSON.stringify(measures));
+    // A door stands on the floor: no sill to say.
+    openingTool.previewFor({ start: { point }, current: { point }, samples: [{ point }] }, { openingKind: "door", width: 1, height: 2 }, ctx);
+    assert.equal(shown.filter(Boolean).at(-1).measures.find((m) => m.name === "peitoril"), undefined);
+  } finally { session.free(); }
+});

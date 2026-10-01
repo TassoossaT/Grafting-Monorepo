@@ -85,3 +85,24 @@ test("a spine's curve handle is grabbed only by a tool owning the spine's type",
   assert.equal(createStructureEditBehavior({ ownsType: (t) => t === "wall-white" }).tryGrab(ctx, sample, { mode: "shape" }), false);
   assert.equal(createStructureEditBehavior({ ownsType: (t) => t === "road" }).tryGrab(ctx, sample, { mode: "shape" }), true);
 });
+
+test("lifting a wall's top says exactly how high the wall stands now, in the ruler -- not only that something moved", () => {
+  const { runtime, session, ctx } = sessionFixture();
+  const shown = [];
+  ctx.showRuler = (feedback) => shown.push(feedback);
+  try {
+    wallAndPlatform(runtime);
+    const behavior = createStructureEditBehavior({ ownsType: (t) => t === "wall-white" });
+    const start = { point: { x: 0, y: 3, z: 0 }, nodeId: "w:a-top", screenX: 100, screenY: 300 };
+    assert.equal(behavior.tryGrab(ctx, start, { mode: "elevation" }), true);
+    // One metre up the screen is one metre up: the pixels a metre takes are the gesture's own.
+    const current = { point: start.point, screenX: 100, screenY: 300 - 40 };
+    behavior.onPointerMove(ctx, { start, current, samples: [start, current] }, { mode: "elevation" });
+    const measures = shown.filter(Boolean).at(-1)?.measures ?? [];
+    const height = measures.find((m) => m.kind === "height");
+    assert.ok(height, JSON.stringify(measures));
+    // The wall stood 3 high above its foot; its top is a metre higher.
+    assert.ok(Math.abs(height.meters - 4) < 1e-6 && Math.abs(height.level - 4) < 1e-6, JSON.stringify(measures));
+    assert.ok(Math.abs(measures.find((m) => m.kind === "change").meters - 1) < 1e-6);
+  } finally { session.free(); }
+});

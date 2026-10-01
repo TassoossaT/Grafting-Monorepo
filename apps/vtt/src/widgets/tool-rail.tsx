@@ -13,13 +13,10 @@ export interface ToolRailProps {
   readonly canRedo: boolean;
   readonly onUndo: () => void;
   readonly onRedo: () => void;
-  readonly rulerSnap: boolean;
-  readonly onRulerSnapChange: (snap: boolean) => void;
 }
 
 /**
- * The left rail: navigate/move-node tool selection, the grid-snap toggle,
- * and undo/redo -- always visible as a plain button column (no separate
+ * The left rail: navigate/move-node tool selection, and undo/redo -- always visible as a plain button column (no separate
  * open/close trigger), edit-mode only. Grid snap sits here (not in the
  * construction hotbar) because it is not itself a tool -- it modifies every
  * construction tool's resolved point the same way, via
@@ -43,13 +40,6 @@ export function ToolRail(props: ToolRailProps) {
           tooltip: "Navegar / Pan (tecla N)",
           tone: props.tool === "navigate" ? "primary" : "default",
           onClick: () => props.onToolChange("navigate"),
-        },
-        {
-          key: "ruler-snap",
-          icon: "🧲",
-          tooltip: props.rulerSnap ? "Régua: encaixe ligado (tecla G)" : "Régua: encaixe desligado (tecla G)",
-          tone: props.rulerSnap ? "primary" : "default",
-          onClick: () => props.onRulerSnapChange(!props.rulerSnap),
         },
         {
           key: "undo",

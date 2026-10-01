@@ -84,12 +84,12 @@ export interface ToolContext {
   readonly history: EditHistoryStack;
   readonly tableId: string;
   /**
-   * Whether the ruler's snap is on. The ruler itself is always there while
-   * building -- its guides and measures show either way; this only says
-   * whether what it catches is taken. The dispatcher has already ruled every
-   * ground point by the time a tool sees it, and a tool that rules a point of
-   * its own (a build frame's corner, a far side) asks `ruler-session.ts`
-   * rather than re-deriving a link.
+   * Whether what the ruler catches is taken. The ruler is always there while
+   * building -- its guides and measures show either way -- and its catch is
+   * taken, but for as long as Alt is held, which places freely. The
+   * dispatcher has already ruled every ground point by the time a tool sees
+   * it, and a tool that rules a point of its own (a build frame's corner, a
+   * far side) asks `ruler-session.ts` rather than re-deriving a link.
    */
   readonly rulerSnap: boolean;
   /** Shows what the ruler caught for a point a tool ruled itself -- a handle dragged onto a corner -- until the gesture ends; `undefined` clears it. */

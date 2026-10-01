@@ -347,7 +347,6 @@ async function createTestContext() {
   return {
     runtime,
     tableId: "table-1",
-    rulerSnap: false,
     history: createEditHistoryStack(),
     nextSequence: () => (sequence += 1),
     reportSelection() {},

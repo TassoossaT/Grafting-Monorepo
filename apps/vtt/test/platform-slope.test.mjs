@@ -199,7 +199,7 @@ test("a road drawn across a ramp's spine never welds into it", () => {
     const road = { shape: "circle", radius: 0.5, rotationDegrees: 0, pathKind: "road", bedWidth: 0.6, shoulderWidth: 0.1, shoulderHeight: 0, miterLimit: 4 };
     const effect = createPathBrushEffect({ brushShape: { kind: "circle", radius: 0.5 }, brushRegion: { samples: [{ x: 5, y: 0, z: -6 }, { x: 5, y: 0, z: 6 }] }, parameters: pathFormationFor(road) },
       { operationId: "road:cross", tableId: "platform-test", initiatedBy: "path-brush" });
-    const plan = planPathCloudMutation({ bezier: runtime, field: runtime, tableId: "platform-test", rulerSnap: false, graphSnapshot: runtime.getGraphSnapshot(),
+    const plan = planPathCloudMutation({ bezier: runtime, field: runtime, tableId: "platform-test", graphSnapshot: runtime.getGraphSnapshot(),
       regionTopologies: runtime.getAllRegionTopologies(), coverageFor: () => [], effect, tolerance: 0.025 });
     assert.equal(plan.kind, "ready");
     runtime.applyPatchReplacement(plan.request);

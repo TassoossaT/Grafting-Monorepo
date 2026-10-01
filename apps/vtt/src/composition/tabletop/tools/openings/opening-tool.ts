@@ -400,6 +400,17 @@ function piecesPreview(pieces: readonly OpeningPiece[], color: number): ReturnTy
 function rectPreview(ctx: ToolContext, run: RunFrame, rect: RunRect, shape: OpeningShape, color: number, excluded?: ReadonlySet<string>): ReturnType<typeof segmentsPreview> | undefined {
   const pieces = run.pieces(rect, shape);
   if (pieces === undefined || pieces.length === 0) return undefined;
+  // What the opening measures, in the table's unit: how wide and high it is, and how high its sill stands above the wall's foot.
+  const wall = run.heightAt((rect.s0 + rect.s1) / 2);
+  const sill = rect.v0 * wall;
+  ctx.showRuler?.({
+    guides: [],
+    measures: [
+      { kind: "size", name: "largura", meters: rect.s1 - rect.s0 },
+      { kind: "size", name: "altura", meters: (rect.v1 - rect.v0) * wall },
+      ...(sill > 1e-4 ? [{ kind: "size" as const, name: "peitoril", meters: sill }] : []),
+    ],
+  });
   return piecesPreview(pieces, overlapsOther(ctx, run, rect, excluded) ? OVERLAP_COLOR : color);
 }
 
@@ -515,7 +526,7 @@ function releaseOnWall(ctx: ToolContext, gesture: ReleasedGesture, anchor: Creat
   placeNew(ctx, anchor.run, drawnRect(params.openingKind === "door", anchor, at), params);
 }
 
-export const openingTool: ConstructionTool<"opening"> = {
+const openingToolBase: ConstructionTool<"opening"> = {
   id: "opening",
   defaultParams: () => DEFAULT_TOOL_PARAMS.opening,
   previewOnHover: true,
@@ -663,3 +674,13 @@ function resolvePlacement(
   const v0 = isDoor ? 0 : snapped(at.v * height) / height;
   return { run, rect: settleRect(run, { s0: at.s - params.width / 2, s1: at.s + params.width / 2, v0, v1: v0 + dv }, isDoor) };
 }
+
+/** The opening tool: where nothing is previewed there is nothing to measure, so the ruler's readout goes with the ghost. */
+export const openingTool: ConstructionTool<"opening"> = {
+  ...openingToolBase,
+  previewFor(gesture: ToolGesture, params: OpeningParams, ctx: ToolContext) {
+    const ghost = openingToolBase.previewFor?.(gesture, params, ctx);
+    if (ghost === undefined) ctx.showRuler?.(undefined);
+    return ghost;
+  },
+};

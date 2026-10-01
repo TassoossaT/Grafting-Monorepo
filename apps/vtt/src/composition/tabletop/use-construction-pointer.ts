@@ -65,8 +65,6 @@ export interface UseConstructionPointerOptions {
   readonly history: EditHistoryStack;
   readonly tableId: string;
   readonly viewId: RenderViewId | undefined;
-  /** Whether what the ruler catches is taken: a resolved point (other than an existing node handle -- those stay precise) lands on the corner, side or line-up it is near before any tool sees it. The ruler's guides and measures show either way. */
-  readonly rulerSnap: boolean;
   /** The unit the ruler writes its distances in -- the table's own choice. */
   readonly measureUnit: MeasureUnitId;
   /** What the ruler says in words, and where the pointer is on screen; `undefined` when there is nothing to say. */
@@ -130,6 +128,8 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
   const feedbackRef = useRef<RulerFeedback>(NO_FEEDBACK);
   useEffect(() => ruler.invalidate(), [ruler, options.runtime]);
   const lastRulerAtRef = useRef(0);
+  /** Alt held: the pointer places freely, what the ruler catches shown but not taken. */
+  const altHeldRef = useRef(false);
   /** Where the pointer last was on screen, for what a tool asks the ruler to show. */
   const pointerAtRef = useRef({ clientX: 0, clientY: 0 });
 
@@ -179,8 +179,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       get tableId() {
         return optionsRef.current.tableId;
       },
+      // The ruler is always on while building and what it catches is taken; holding Alt places freely.
       get rulerSnap() {
-        return optionsRef.current.rulerSnap;
+        return !altHeldRef.current;
       },
       get structureEditParams() {
         return optionsRef.current.structureEditParams;
@@ -336,8 +337,8 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
   }, [options.runtime, refreshEdgeOverlay, ctx, ruler]);
 
   const sampleAt = useCallback(
-    (event: { currentTarget: HTMLElement; clientX: number; clientY: number; shiftKey?: boolean }): PointerSample | undefined => {
-      const { viewId, runtime, rulerSnap, activeTool } = optionsRef.current;
+    (event: { currentTarget: HTMLElement; clientX: number; clientY: number; shiftKey?: boolean; altKey?: boolean }): PointerSample | undefined => {
+      const { viewId, runtime, activeTool } = optionsRef.current;
       if (viewId === undefined) return undefined;
       const { x, y } = pointerOffset(event);
       const hit = runtime.pick(viewId, x, y);
@@ -347,9 +348,10 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       // A tool that lays itself out on a surface, or in a frame of its own, is not ruled by position here.
       const ruled = tool.snapsToSurface || tool.usesRuler === false
         ? { sample: placed, feedback: NO_FEEDBACK }
-        : ruler.ruleSample(placed, { snap: rulerSnap, ...(gestureRef.current ? { origin: gestureRef.current.start.point } : {}) });
+        : ruler.ruleSample(placed, { snap: !event.altKey, ...(gestureRef.current ? { origin: gestureRef.current.start.point } : {}) });
       feedbackRef.current = ruled.feedback;
       pointerAtRef.current = { clientX: event.clientX, clientY: event.clientY };
+      altHeldRef.current = event.altKey === true;
       return { ...ruled.sample, screenY: event.clientY, screenX: event.clientX, shiftKey: event.shiftKey };
     },
     [ruler],

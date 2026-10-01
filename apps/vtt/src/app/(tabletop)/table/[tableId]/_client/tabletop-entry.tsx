@@ -87,7 +87,6 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
   const [tool, setTool] = useState<EditTool>("navigate");
   const [toolParams, setToolParams] = useState<ToolParamsByTool>(DEFAULT_TOOL_PARAMS);
   const [structureEditParams, setStructureEditParams] = useState<StructureEditParams>(DEFAULT_STRUCTURE_EDIT_PARAMS);
-  const [rulerSnap, setRulerSnap] = useState(true);
   // The unit is the table's own choice. Kept in this browser per table until the map's persistence (epic #239) carries it with the table.
   const [measureUnit, setMeasureUnit] = useState<MeasureUnitId>(DEFAULT_MEASURE_UNIT);
   const measureUnitKey = `grafting:table:${tableId}:measure-unit`;
@@ -200,7 +199,6 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     history,
     tableId,
     viewId: viewIdRef.current,
-    rulerSnap,
     measureUnit,
     onRulerReadout: setRulerReadout,
     structureEditParams,
@@ -216,8 +214,6 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     onRedo: handleRedo,
     onToolChange: setTool,
     ready: current.status === "ready",
-    rulerSnap,
-    onRulerSnapChange: setRulerSnap,
   });
 
   return (
@@ -312,8 +308,6 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           canRedo={historyState.canRedo}
           onUndo={handleUndo}
           onRedo={handleRedo}
-          rulerSnap={rulerSnap}
-          onRulerSnapChange={setRulerSnap}
         />
 
         <ConstructionDock
@@ -326,8 +320,6 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           canRedo={historyState.canRedo}
           onUndo={handleUndo}
           onRedo={handleRedo}
-          rulerSnap={rulerSnap}
-          onRulerSnapChange={setRulerSnap}
           onToggleSettings={() => setSettingsOpen((prev) => !prev)}
           settingsOpen={settingsOpen}
         />
