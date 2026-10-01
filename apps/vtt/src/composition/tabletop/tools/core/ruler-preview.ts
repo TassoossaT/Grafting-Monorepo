@@ -30,6 +30,11 @@ function drawGuide(out: number[], guide: RulerGuide): void {
     case "length":
       segment(out, guide.run[0], guide.run[1]);
       return;
+    case "square":
+      // The side it is square to, and the line standing out from its end.
+      segment(out, guide.run[0], guide.run[1]);
+      segment(out, guide.from, guide.to);
+      return;
     case "angle":
       // The side it follows, and the line running its way.
       segment(out, guide.run[0], guide.run[1]);
@@ -45,7 +50,11 @@ function drawGuide(out: number[], guide: RulerGuide): void {
 export function rulerPreview(feedback: RulerFeedback): PreviewDescriptor | undefined {
   const positions: number[] = [];
   for (const guide of feedback.guides) drawGuide(positions, guide);
-  for (const measure of feedback.measures) if (measure.kind === "gap") segment(positions, measure.from, measure.to);
+  for (const measure of feedback.measures) {
+    if (measure.kind === "gap") segment(positions, measure.from, measure.to);
+    // The side an angle is measured from is drawn, so what it is measured against is never a guess.
+    else if (measure.kind === "angle" && measure.reference) segment(positions, measure.reference.run[0], measure.reference.run[1]);
+  }
   return positions.length === 0 ? undefined : { kind: "segments", positions: Float32Array.from(positions), color: GUIDE_COLOR, opacity: GUIDE_OPACITY };
 }
 
@@ -59,7 +68,11 @@ function measureLabel(measure: RulerMeasure, unit: MeasureUnitId): string {
     case "height": return `altura ${formatLength(measure.meters, unit)} · nível ${formatLength(measure.level, unit)}`;
     case "size": return `${measure.name} ${formatLength(measure.meters, unit)}`;
     case "change": return `${measure.name} ${signed(measure.meters, (v) => formatLength(v, unit))}`;
-    case "angle": return `${measure.name ?? "∠"} ${measure.degrees < 0 ? "−" : ""}${degrees(measure.degrees)}`;
+    case "angle": {
+      const value = `${measure.name ?? "∠"} ${measure.degrees < 0 ? "−" : ""}${degrees(measure.degrees)}`;
+      if (!measure.reference) return value;
+      return `${value} ${measure.reference.relation === "parallel" ? "da aresta" : "do esquadro (90°) da aresta"}`;
+    }
   }
 }
 
@@ -70,6 +83,7 @@ export function rulerLabels(feedback: RulerFeedback, unit: MeasureUnitId): reado
     if (guide.kind === "length") labels.push(`= ${formatLength(guide.meters, unit)}`);
     else if (guide.kind === "level") labels.push(`altura ${formatLength(guide.y, unit)}`);
     else if (guide.kind === "angle") labels.push(guide.relation === "parallel" ? "∥ paralelo" : "⊥ perpendicular");
+    else if (guide.kind === "square") labels.push(guide.relation === "perpendicular" ? "⊥ 90° da aresta" : "prolonga a aresta");
   }
   return labels;
 }

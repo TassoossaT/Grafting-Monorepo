@@ -17,6 +17,8 @@ export interface PointerSample {
   readonly ray?: { readonly origin: ConstructionPosition; readonly direction: ConstructionPosition };
   /** The face under the pointer, when it is on one: its slope through the exact point hit -- see `pointer-ray.ts`. */
   readonly face?: { readonly normal: ConstructionPosition; readonly centre: ConstructionPosition };
+  /** How far the ruler moved the hit, in plan, to land it on a corner, side or line-up -- `pointerAtHeight` carries it onto the ray, so a tool reading the ray is ruled like one reading the point. */
+  readonly ruled?: { readonly x: number; readonly z: number };
   /** The way the camera looks, when the view gave it -- see `build-frame.ts`. */
   readonly forward?: ConstructionPosition;
 }

@@ -96,7 +96,7 @@ const draft = createSpineDraftTool<"path-brush", RoadDraftState>({
  * road included. It is edited only by its handles; the panel only sets up
  * the next road.
  */
-export const pathBrushTool = withSpineEditing({ ...draft, usesRuler: false }, {
+export const pathBrushTool = withSpineEditing(draft, {
   ownsSpine: (surfaceType) => surfaceType === PATH_SURFACE_TYPE,
   snap: roadAnchorSnap,
   panelActions: false,

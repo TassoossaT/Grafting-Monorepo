@@ -286,7 +286,6 @@ const rawRoofTool: ConstructionTool<"roof"> = {
   id: "roof",
   previewOnHover: true,
   // Squared in the frame each shape is built in, never to the world's fixed grid.
-  usesRuler: false,
   defaultParams: () => DEFAULT_TOOL_PARAMS.roof,
   onCancel: stroke.onCancel,
   previewFor(gesture, params, ctx) {

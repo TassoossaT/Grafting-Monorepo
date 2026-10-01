@@ -63,7 +63,10 @@ export function createRulerSession(topologies: () => readonly ConstructionRegion
       // A node handle stays precise: moving an existing node is never ruled by position.
       if (sample.nodeId !== undefined) return { sample, feedback: NO_FEEDBACK };
       const ruled = rulePoint(sample.point, options);
-      return { sample: { ...sample, point: ruled.point }, feedback: ruled.feedback };
+      // How far the ruler moved the hit travels with the sample, for a tool that reads the pointer's ray instead of its point.
+      const moved = { x: ruled.point.x - sample.point.x, z: ruled.point.z - sample.point.z };
+      const caught = Math.abs(moved.x) > 1e-9 || Math.abs(moved.z) > 1e-9;
+      return { sample: { ...sample, point: ruled.point, ...(caught ? { ruled: moved } : {}) }, feedback: ruled.feedback };
     },
   };
 }

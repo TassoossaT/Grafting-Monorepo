@@ -82,8 +82,8 @@ test("a skipped node is never joined to", () => {
 });
 
 test("a length matching a standing run is landed on", () => {
-  // Far from every side's direction (45 degrees off), so only the length can catch.
-  const result = resolveRuler({ point: at(12.85, 2.85), origin: at(10, 0), links: { points: [], runs: links.runs, levels: [] } });
+  // Far from every side's direction and from every edge's square, so only the length can catch.
+  const result = resolveRuler({ point: at(12.02, 3.5), origin: at(10, 0), links: { points: [], runs: links.runs, levels: [] } });
   assert.equal(result.caught, "length");
   near(Math.hypot(result.position.x - 10, result.position.z), 4);
 });
@@ -167,4 +167,34 @@ test("an edit measures the exact size it leaves, not only the change", () => {
 test("the base a structure rises from is its lowest node", () => {
   assert.equal(baseHeight([3, 0.5, 2], 9), 0.5);
   assert.equal(baseHeight([], 9), 9);
+});
+
+test("a point square to a side at its end is landed on the 90 degree line, whatever the world's axes say", () => {
+  // A side running at 30 degrees: its square stands out of its end at 120 degrees -- on no axis of the world.
+  const t = Math.PI / 6, d = { x: Math.cos(t), z: Math.sin(t) };
+  const a = { id: "a", position: at(0, 0) }, b = { id: "b", position: at(10 * d.x, 10 * d.z) };
+  const edge = { points: [a, b], runs: [{ a, b }], levels: [] };
+  // 6 along the square from the end b, a hair off it.
+  const out = { x: b.position.x - d.z * 6, z: b.position.z + d.x * 6 };
+  const result = resolveRuler({ point: at(out.x + d.x * 0.1, out.z + d.z * 0.1), links: edge });
+  assert.equal(result.caught, "square");
+  const guide = result.guides.find((g) => g.kind === "square");
+  assert.equal(guide.relation, "perpendicular");
+  near(result.position.x, out.x);
+  near(result.position.z, out.z);
+});
+
+test("a point in line with a side, beyond its end, is landed on its extension", () => {
+  const result = resolveRuler({ point: at(6.1, 0.15), links });
+  assert.equal(result.caught, "square");
+  assert.equal(result.guides.find((g) => g.kind === "square").relation, "collinear");
+  near(result.position.z, 0);
+});
+
+test("an angle names the side it is measured from, and whether it is from its direction or its square", () => {
+  const along = resolveRuler({ point: at(16, 2), origin: at(10, 0), links, snap: false }).measures.find((m) => m.kind === "angle");
+  assert.equal(along.reference.relation, "parallel");
+  assert.equal(along.reference.run.length, 2);
+  const across = resolveRuler({ point: at(10.5, 6), origin: at(10, 0), links: { ...links, runs: [links.runs[0]] }, snap: false }).measures.find((m) => m.kind === "angle");
+  assert.equal(across.reference.relation, "perpendicular");
 });

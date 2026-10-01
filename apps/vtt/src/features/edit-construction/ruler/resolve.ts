@@ -51,6 +51,8 @@ export type RulerGuide =
   | { readonly kind: "point"; readonly at: ConstructionPosition; readonly node: string }
   /** Onto a side. */
   | { readonly kind: "run"; readonly a: ConstructionPosition; readonly b: ConstructionPosition; readonly at: ConstructionPosition }
+  /** Square to a standing side at one of its ends -- 90 degrees off it -- or in line with it, beyond its end. */
+  | { readonly kind: "square"; readonly run: readonly [ConstructionPosition, ConstructionPosition]; readonly from: ConstructionPosition; readonly to: ConstructionPosition; readonly relation: "perpendicular" | "collinear" }
   /** In line with a corner, along one of the axes. */
   | { readonly kind: "align"; readonly from: ConstructionPosition; readonly to: ConstructionPosition; readonly node: string }
   /** As long as a standing side. */
@@ -74,13 +76,13 @@ export type RulerMeasure =
   /** How much an edit changes a size or a distance, with its sign; `name` says which. */
   | { readonly kind: "change"; readonly name: string; readonly meters: number }
   /** An angle, in degrees: how far a line runs from the nearest standing side's direction, or a turn. `name` says which. */
-  | { readonly kind: "angle"; readonly degrees: number; readonly name?: string };
+  | { readonly kind: "angle"; readonly degrees: number; readonly name?: string; readonly reference?: { readonly run: readonly [ConstructionPosition, ConstructionPosition]; readonly relation: "parallel" | "perpendicular" } };
 
 export interface RulerResult {
   /** Where the point stands: snapped when `snap` was asked for and something caught, else as it came. */
   readonly position: ConstructionPosition;
   /** What caught, whether or not it was taken. */
-  readonly caught: "point" | "run" | "align" | "angle" | "length" | undefined;
+  readonly caught: "point" | "run" | "square" | "align" | "angle" | "length" | undefined;
   readonly guides: readonly RulerGuide[];
   readonly measures: readonly RulerMeasure[];
 }
@@ -140,6 +142,44 @@ function sideFix(query: RulerQuery, p: ConstructionPosition, reach: number): Fix
     const landing = { x: p.x + fix.x, y: p.y, z: p.z + fix.z };
     if (query.accept && !query.accept(landing, run)) continue;
     best = nearer(best, { ...fix, distance, guides: [{ kind: "run", a, b, at: landing }] });
+  }
+  return best;
+}
+
+/** How near, in plan, a side's end must be to the point to offer its square and its extension. */
+const SQUARE_RANGE = 40;
+
+/**
+ * Square to a standing side at either end -- 90 degrees off it -- or in line
+ * with it beyond its end: what lets a wall start out perfectly square from an
+ * edge, or run on from one. Every side offers both, whatever it belongs to.
+ */
+function squareFix(query: RulerQuery, p: ConstructionPosition, reach: number): Fix | undefined {
+  const direction = query.motion?.kind === "line" ? query.motion.direction : undefined;
+  let best: Fix | undefined;
+  for (const run of query.links.runs) {
+    const a = run.a.position, b = run.b.position;
+    if (Math.abs(a.y - p.y) > LEVEL_REACH || Math.hypot(a.x - p.x, a.z - p.z) > SQUARE_RANGE) continue;
+    const length = Math.hypot(b.x - a.x, b.z - a.z);
+    const d = { x: (b.x - a.x) / length, z: (b.z - a.z) / length };
+    const normal = { x: -d.z, z: d.x };
+    for (const end of [run.a, run.b]) {
+      if (query.skip?.has(end.id)) continue;
+      // The point is on the line when its offset along `across` is nil: square to the side when `across` runs along it, in line with it when `across` is its normal.
+      for (const [across, relation] of [[d, "perpendicular"], [normal, "collinear"]] as const) {
+        const offset = (p.x - end.position.x) * across.x + (p.z - end.position.z) * across.z;
+        let fix: PlanVector;
+        if (direction) {
+          const rate = direction.x * across.x + direction.z * across.z;
+          if (Math.abs(rate) < 1e-6) continue;
+          const s = -offset / rate;
+          fix = { x: direction.x * s, z: direction.z * s };
+        } else fix = { x: -across.x * offset, z: -across.z * offset };
+        const distance = Math.hypot(fix.x, fix.z);
+        if (distance > reach) continue;
+        best = nearer(best, { ...fix, distance, guides: [{ kind: "square", run: [a, b], from: end.position, to: { x: p.x + fix.x, y: p.y, z: p.z + fix.z }, relation }] });
+      }
+    }
   }
   return best;
 }
@@ -247,6 +287,7 @@ export function resolveRuler(query: RulerQuery): RulerResult {
   const picks: readonly (readonly [RulerResult["caught"], Fix | undefined])[] = [
     ["point", cornerFix(query, p, reach)],
     ["run", sideFix(query, p, reach)],
+    ["square", squareFix(query, p, reach)],
     ["align", alignFix(query, p, reach)],
     ["angle", angleFix(query, p)],
     ["length", lengthFix(query, p, reach)],
@@ -272,7 +313,7 @@ function measuresAt(query: RulerQuery, position: ConstructionPosition): readonly
       measures.push({ kind: "length", from: query.origin, to: position, meters });
       // Which way it runs, against the nearest standing side: 0 is the same way, or square to it.
       const heading = nearestHeading(query, query.origin, Math.atan2(position.z - query.origin.z, position.x - query.origin.x));
-      if (heading) measures.push({ kind: "angle", degrees: (heading.deviation * 180) / Math.PI });
+      if (heading) measures.push({ kind: "angle", degrees: (heading.deviation * 180) / Math.PI, reference: { run: [heading.run.a.position, heading.run.b.position], relation: heading.relation } });
     }
   }
   let nearest: { link: LinkPoint; meters: number } | undefined;

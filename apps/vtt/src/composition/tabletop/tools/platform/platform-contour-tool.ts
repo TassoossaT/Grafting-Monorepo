@@ -316,7 +316,6 @@ export function commitPlatformContour(ctx: ToolContext, samples: readonly Pointe
 const rawPlatformContourTool: ConstructionTool<"platform-contour"> = {
   id: "platform-contour",
   // Snapped in the frame each shape is built in, never to the world's fixed grid.
-  usesRuler: false,
   previewOnHover: true,
   defaultParams: () => DEFAULT_TOOL_PARAMS["platform-contour"],
   ...contourStroke<"platform-contour", Params>({

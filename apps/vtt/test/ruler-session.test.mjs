@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createRulerSession, rulePointFor, NO_FEEDBACK } from "../src/composition/tabletop/tools/core/ruler-session.ts";
 import { RULER_PREVIEW_CHANNEL, rulerLabels, rulerPreview } from "../src/composition/tabletop/tools/core/ruler-preview.ts";
+import { pointerAtHeight } from "../src/composition/tabletop/tools/core/pointer-ray.ts";
 import { snapToOutlines } from "../src/features/edit-construction/index.ts";
 import { collectLinks } from "../src/features/edit-construction/ruler/index.ts";
 
@@ -104,4 +105,31 @@ test("labels write every kind of measure in the table's unit, with signs where a
   const labels = rulerLabels(feedback, "ft");
   assert.deepEqual(labels, ["altura 10.0 ft · nível 10.0 ft", "lado −1.0 ft", "∠ −12.3°", "∥ paralelo"]);
   assert.deepEqual(rulerLabels({ guides: [], measures: [{ kind: "change", name: "Δ", meters: 1 }] }, "m"), ["Δ +1.00 m"]);
+});
+
+test("a tool that reads the pointer's ray is ruled like one that reads its point -- the ruler is for every tool", () => {
+  const camera = at(4, 0, 12), hit = at(4.1, 0.05);
+  const d = { x: hit.x - camera.x, y: hit.y - camera.y, z: hit.z - camera.z };
+  const n = Math.hypot(d.x, d.y, d.z);
+  const raw = { point: hit, ray: { origin: camera, direction: { x: d.x / n, y: d.y / n, z: d.z / n } } };
+  const { sample } = createRulerSession(() => [floor]).ruleSample(raw, { snap: true });
+  // The point is on the corner, and so is where the ray reads at the ground's height -- for a tool drawing there.
+  assert.deepEqual(sample.point, at(4, 0));
+  const read = pointerAtHeight(sample, 0);
+  assert.ok(Math.abs(read.x - 4) < 1e-6 && Math.abs(read.z) < 1e-6, JSON.stringify(read));
+  // Unruled, the ray stays exact: nothing is rounded for a pointer that caught nothing.
+  const free = createRulerSession(() => [floor]).ruleSample({ ...raw, point: at(40, 40) }, { snap: true }).sample;
+  assert.equal(free.ruled, undefined);
+});
+
+test("an angle's label says what it is from, and a square's says it is 90 degrees off an edge", () => {
+  const run = [at(0, 0), at(4, 0)];
+  const labels = rulerLabels({
+    guides: [{ kind: "square", run, from: at(4, 0), to: at(4, 5), relation: "perpendicular" }, { kind: "square", run, from: at(4, 0), to: at(8, 0), relation: "collinear" }],
+    measures: [{ kind: "angle", degrees: 12.34, reference: { run, relation: "parallel" } }, { kind: "angle", degrees: 0, reference: { run, relation: "perpendicular" } }],
+  }, "m");
+  assert.deepEqual(labels, ["∠ 12.3° da aresta", "∠ 0.0° do esquadro (90°) da aresta", "⊥ 90° da aresta", "prolonga a aresta"]);
+  // The side an angle is measured from is drawn with the guides.
+  const ghost = rulerPreview({ guides: [], measures: [{ kind: "angle", degrees: 5, reference: { run, relation: "parallel" } }] });
+  assert.deepEqual([...ghost.positions], [0, 0, 0, 4, 0, 0]);
 });
