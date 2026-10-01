@@ -83,12 +83,31 @@ export interface RulerLine {
   readonly protractor: boolean;
   /** Whether the line itself is drawn: not for the line being drawn, which is the tool's own ghost -- it only takes the teeth and the protractor. */
   readonly stroke: boolean;
+  /** An upright line -- a height -- counted in height, its teeth and numbers standing off to the side. */
+  readonly vertical?: boolean;
+  /** Whether the teeth are drawn along it; on unless said otherwise. */
+  readonly teeth?: boolean;
+  /** An edit's difference, written along the line instead of its length. */
+  readonly change?: { readonly name: string; readonly meters: number };
+}
+
+/** How a line lies: its length as it is counted -- in height for an upright one, in plan else -- the way along it, and the way a tooth stands across it. */
+export function frameOf(line: RulerLine): { readonly length: number; readonly u: Point; readonly n: Point } {
+  if (line.vertical) {
+    const dy = line.tip.y - line.anchor.y;
+    return { length: Math.abs(dy), u: { x: 0, y: dy < 0 ? -1 : 1, z: 0 }, n: { x: 1, y: 0, z: 0 } };
+  }
+  const dx = line.tip.x - line.anchor.x, dz = line.tip.z - line.anchor.z;
+  const length = Math.hypot(dx, dz);
+  const u = length < 1e-12 ? { x: 1, y: 0, z: 0 } : { x: dx / length, y: 0, z: dz / length };
+  return { length, u, n: { x: -u.z, y: 0, z: u.x } };
 }
 
 const headingOf = (a: Point, b: Point): number => Math.atan2(b.z - a.z, b.x - a.x);
 const sameLine = (a: RulerLine, b: RulerLine): boolean => {
   const near = (p: Point, q: Point): boolean => Math.abs(p.x - q.x) < 1e-6 && Math.abs(p.z - q.z) < 1e-6;
-  return (near(a.anchor, b.anchor) && near(a.tip, b.tip)) || (near(a.anchor, b.tip) && near(a.tip, b.anchor));
+  const alike = (p: Point, q: Point): boolean => near(p, q) && Math.abs(p.y - q.y) < 1e-6;
+  return (alike(a.anchor, b.anchor) && alike(a.tip, b.tip)) || (alike(a.anchor, b.tip) && alike(a.tip, b.anchor));
 };
 
 /** Every line `feedback` has to draw, in one list: guides and measures alike. */
@@ -107,6 +126,13 @@ export function linesOf(feedback: RulerFeedback): readonly RulerLine[] {
     if (measure.kind === "length") add({ anchor: measure.from, tip: measure.to, zero: zeroOfDrawn, protractor: true, stroke: false });
     // The way to the nearest corner comes out of the corner.
     else if (measure.kind === "gap") add({ anchor: measure.to, tip: measure.from, zero: reference ?? 0, protractor: true, stroke: true });
+    // How high it stands: the ruler itself, upright, from where it rises up to the handle -- teeth counted in height.
+    else if (measure.kind === "height" && measure.foot && measure.top) add({ anchor: measure.foot, tip: measure.top, zero: 0, protractor: false, stroke: true, vertical: true });
+    // What an edit changed: the line from where it began to where it stands, its difference written along it.
+    else if (measure.kind === "change" && measure.from && measure.to) {
+      const upright = Math.hypot(measure.to.x - measure.from.x, measure.to.z - measure.from.z) < 1e-6;
+      add({ anchor: measure.from, tip: measure.to, zero: 0, protractor: false, stroke: true, teeth: false, change: { name: measure.name, meters: measure.meters }, ...(upright ? { vertical: true } : {}) });
+    }
     // The side an angle is measured from is drawn, so what it is measured against is never a guess.
     else if (measure.kind === "angle" && measure.reference) edge(measure.reference.run[0], measure.reference.run[1]);
   }
@@ -155,17 +181,14 @@ export function teethSpacing(metersPerPixel: number | undefined, unit: MeasureUn
 }
 
 /** The ruler's teeth along the line from `from` to `to`: a tick at every `spacing`, longer at every fifth. */
-function drawTeeth(out: number[], from: Point, to: Point, spacing: number, metersPerPixel: number | undefined): void {
-  const dx = to.x - from.x, dz = to.z - from.z;
-  const length = Math.hypot(dx, dz);
+function drawTeeth(out: number[], line: RulerLine, spacing: number, metersPerPixel: number | undefined): void {
+  const { length, u, n } = frameOf(line);
   if (length < spacing * 0.999 || !(spacing > 0)) return;
-  const u = { x: dx / length, z: dz / length };
-  const n = { x: -u.z, z: u.x };
   const minor = metersFor(metersPerPixel, 3, 0.1, [0.02, 0.4]);
   const count = Math.min(MAX_TEETH, Math.floor(length / spacing + 1e-9));
   for (let i = 1; i <= count; i += 1) {
     const reach = i % 5 === 0 ? minor * 2 : minor;
-    const at = { x: from.x + u.x * spacing * i, y: from.y, z: from.z + u.z * spacing * i };
+    const at = { x: line.anchor.x + u.x * spacing * i, y: line.anchor.y + u.y * spacing * i, z: line.anchor.z + u.z * spacing * i };
     segment(out, around(at, -n.x * reach, -n.z * reach), around(at, n.x * reach, n.z * reach));
   }
 }
@@ -239,7 +262,7 @@ export const MAX_ITEM_PROTRACTORS = 2;
 function drawLine(out: number[], line: RulerLine, view: RulerView | undefined, metersPerPixel: number | undefined, protractor: boolean): void {
   if (line.stroke) segment(out, line.anchor, line.tip);
   if (!view) return;
-  drawTeeth(out, line.anchor, line.tip, teethSpacing(metersPerPixel, view.unit, view.lengthStep), metersPerPixel);
+  if (line.teeth !== false) drawTeeth(out, line, teethSpacing(metersPerPixel, view.unit, view.lengthStep), metersPerPixel);
   if (protractor && view.protractor) drawProtractor(out, line.anchor, line.tip, line.zero, view.angleStep, metersPerPixel);
 }
 
@@ -248,6 +271,8 @@ export function rulerPreview(feedback: RulerFeedback, metersPerPixel?: number, v
   const positions: number[] = [];
   const h = metersFor(metersPerPixel, MARKER_PX, MARKER_FALLBACK, [0.04, 0.6]);
   for (const guide of feedback.guides) drawMarker(positions, guide, h);
+  // Where an edit began: a small square, so the difference reads from its origin to where it stands.
+  for (const measure of feedback.measures) if (measure.kind === "change" && measure.from) outline(positions, measure.from, [[-h * 0.7, -h * 0.7], [h * 0.7, -h * 0.7], [h * 0.7, h * 0.7], [-h * 0.7, h * 0.7]]);
   let itemProtractors = 0;
   for (const line of linesOf(feedback)) {
     // The line being drawn always has its protractor; a line out of an item, only the first few.

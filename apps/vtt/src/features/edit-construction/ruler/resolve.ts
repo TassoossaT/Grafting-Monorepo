@@ -96,7 +96,7 @@ export type RulerMeasure =
   /** `"length"` is what is being drawn; `"gap"` is the way to the nearest corner. */
   | { readonly kind: "length" | "gap"; readonly from: ConstructionPosition; readonly to: ConstructionPosition; readonly meters: number }
   /** How high what is being edited stands: above its own base, and at what level of the table. */
-  | { readonly kind: "height"; readonly meters: number; readonly level: number }
+  | { readonly kind: "height"; readonly meters: number; readonly level: number; /** Where it rises from, under it, and where it stands: the ruler is drawn between them, upright. */ readonly foot?: ConstructionPosition; readonly top?: ConstructionPosition }
   /** How steeply a run climbs: `rise` over `run`, both in metres and signed by the way it goes. */
   | { readonly kind: "grade"; readonly rise: number; readonly run: number }
   /** How big something is now -- a road's width, say; `name` says what. */
@@ -104,7 +104,7 @@ export type RulerMeasure =
   /** What a size or a distance was before the edit and is now: the difference from where the edit began. */
   | { readonly kind: "was"; readonly name: string; readonly was: number; readonly now: number }
   /** How much an edit changes a size or a distance, with its sign; `name` says which. */
-  | { readonly kind: "change"; readonly name: string; readonly meters: number }
+  | { readonly kind: "change"; readonly name: string; readonly meters: number; /** Where the edit began and where it stands: the difference is drawn between them. */ readonly from?: ConstructionPosition; readonly to?: ConstructionPosition }
   /** An angle, in degrees: how far a line runs from the nearest standing side's direction, or a turn. `name` says which. */
   | { readonly kind: "angle"; readonly degrees: number; readonly name?: string; readonly reference?: { readonly run: readonly [ConstructionPosition, ConstructionPosition]; readonly relation: "parallel" | "perpendicular" } };
 

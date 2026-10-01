@@ -4446,6 +4446,10 @@ export interface RulerLine {
   /** Whether the protractor is drawn round its anchor. */
   readonly protractor: boolean;
   /** Whether the line itself is drawn: not for the line being drawn, which is the tool's own ghost -- it only takes the teeth and the protractor. */
+export function frameOf(line: RulerLine): { readonly length: number; readonly u: Point; readonly n: Point } {
+  if (line.vertical) {
+  const dy = line.tip.y - line.anchor.y;
+  return { length: Math.abs(dy), u: { x: 0, y: dy < 0 ? -1 : 1, z: 0 }, n: { x: 1, y: 0, z: 0 } };
 export function linesOf(feedback: RulerFeedback): readonly RulerLine[] {
   const lines: RulerLine[] = [];
   const add = (line: RulerLine): void => { if (!lines.some((held) => sameLine(held, line))) lines.push(line); };

@@ -156,10 +156,10 @@ test("an edit measures the exact size it leaves, not only the change", () => {
   const from = at(0, 0, 3), to = at(0, 0, 4.5);
   const [height, was, change] = measuresOfEdit({ kind: "height", base: 0 }, from, to);
   assert.deepEqual(was, { kind: "was", name: "altura", was: 3, now: 4.5 }, "and what it was, so the edit reads as a difference");
-  assert.deepEqual(height, { kind: "height", meters: 4.5, level: 4.5 });
-  assert.deepEqual(change, { kind: "change", name: "Δ", meters: 1.5 });
+  assert.deepEqual(height, { kind: "height", meters: 4.5, level: 4.5, foot: at(0, 0, 0), top: to });
+  assert.deepEqual(change, { kind: "change", name: "Δ", meters: 1.5, from, to });
   // A side pushed out reads along its own direction, signed.
-  assert.deepEqual(measuresOfEdit({ kind: "side", direction: { x: 1, z: 0 } }, at(2, 0), at(0.5, 3)), [{ kind: "change", name: "lado", meters: -1.5 }]);
+  assert.deepEqual(measuresOfEdit({ kind: "side", direction: { x: 1, z: 0 } }, at(2, 0), at(0.5, 3)), [{ kind: "change", name: "lado", meters: -1.5, from: at(2, 0), to: at(0.5, 3) }]);
   // A move says how far it went across the ground and how much it went up, and nothing when it did not move.
   const moved = measuresOfEdit({ kind: "move" }, at(0, 0), at(3, 4, 1));
   assert.equal(moved[0].meters, 5);

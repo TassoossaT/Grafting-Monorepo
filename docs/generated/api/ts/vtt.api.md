@@ -2668,6 +2668,10 @@ item, and -- where it comes out of an item -- the protractor round it.
 
 ### `property vtt.ruler-preview.RulerLine.anchor: Point`
 
+### `property vtt.ruler-preview.RulerLine.change?: { meters: number; name: string }`
+
+An edit's difference, written along the line instead of its length.
+
 ### `property vtt.ruler-preview.RulerLine.protractor: boolean`
 
 Whether the protractor is drawn round its anchor.
@@ -2676,7 +2680,15 @@ Whether the protractor is drawn round its anchor.
 
 Whether the line itself is drawn: not for the line being drawn, which is the tool's own ghost -- it only takes the teeth and the protractor.
 
+### `property vtt.ruler-preview.RulerLine.teeth?: boolean`
+
+Whether the teeth are drawn along it; on unless said otherwise.
+
 ### `property vtt.ruler-preview.RulerLine.tip: Point`
+
+### `property vtt.ruler-preview.RulerLine.vertical?: boolean`
+
+An upright line -- a height -- counted in height, its teeth and numbers standing off to the side.
 
 ### `property vtt.ruler-preview.RulerLine.zero: number`
 
@@ -2717,6 +2729,10 @@ The most teeth drawn along one line.
 ### `variable vtt.ruler-preview.RULER_PREVIEW_CHANNEL: "ruler-guides"`
 
 The channel the ruler draws its guides on, apart from any tool's own ghost.
+
+### `function vtt.ruler-preview.frameOf(line: RulerLine): { length: number; n: Point; u: Point }`
+
+How a line lies: its length as it is counted -- in height for an upright one, in plan else -- the way along it, and the way a tooth stands across it.
 
 ### `function vtt.ruler-preview.linesOf(feedback: RulerFeedback): readonly RulerLine[]`
 
@@ -6544,7 +6560,7 @@ Where the point stands: snapped when `snap` was asked for and something caught, 
 
 ### `type vtt.resolve.RulerKind = typeof RULER_KINDS[number]`
 
-### `type vtt.resolve.RulerMeasure = { from: ConstructionPosition; kind: "length" | "gap"; meters: number; to: ConstructionPosition } | { kind: "height"; level: number; meters: number } | { kind: "grade"; rise: number; run: number } | { kind: "size"; meters: number; name: string } | { kind: "was"; name: string; now: number; was: number } | { kind: "change"; meters: number; name: string } | { degrees: number; kind: "angle"; name?: string; reference?: { relation: "parallel" | "perpendicular"; run: readonly [ConstructionPosition, ConstructionPosition] } }`
+### `type vtt.resolve.RulerMeasure = { from: ConstructionPosition; kind: "length" | "gap"; meters: number; to: ConstructionPosition } | { foot?: ConstructionPosition; kind: "height"; level: number; meters: number; top?: ConstructionPosition } | { kind: "grade"; rise: number; run: number } | { kind: "size"; meters: number; name: string } | { kind: "was"; name: string; now: number; was: number } | { from?: ConstructionPosition; kind: "change"; meters: number; name: string; to?: ConstructionPosition } | { degrees: number; kind: "angle"; name?: string; reference?: { relation: "parallel" | "perpendicular"; run: readonly [ConstructionPosition, ConstructionPosition] } }`
 
 Something worth saying about what is built or edited. Distances are always
 in metres -- `formatLength` writes them in the table's unit.

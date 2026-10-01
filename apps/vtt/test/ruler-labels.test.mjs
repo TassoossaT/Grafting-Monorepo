@@ -97,3 +97,33 @@ test("a line of no length writes nothing, and a very short one only its length",
   const labels = mapLabelsOf({ guides: [], measures: [lengthOf(at(0, 0), at(0.5, 0))] }, 0.01, only);
   assert.deepEqual(texts(labels), ["0.50 m"]);
 });
+
+test("a height is a ruler too: upright, with its teeth counted in height and its numbers beside it", async () => {
+  const { linesOf, rulerPreview } = await import("../src/composition/tabletop/tools/core/ruler-preview.ts");
+  const feedback = { guides: [], measures: [{ kind: "height", meters: 4, level: 4, foot: at(2, 3, 0), top: at(2, 3, 4) }] };
+  const [line] = linesOf(feedback);
+  assert.equal(line.vertical, true);
+  assert.deepEqual([line.anchor.y, line.tip.y], [0, 4]);
+  // Teeth stand up the line, at every metre -- the y of the segments climbs.
+  const ghost = rulerPreview(feedback, 0.02, only);
+  const ys = new Set();
+  for (let i = 1; i < ghost.positions.length; i += 3) ys.add(Math.round(ghost.positions[i]));
+  assert.ok([1, 2, 3].every((y) => ys.has(y)), [...ys].join());
+  // Numbers beside the line, at the height of their tooth.
+  const labels = mapLabelsOf(feedback, 0.02, only);
+  assert.ok(labels.some((label) => label.text === "4.00 m" && Math.abs(label.position.y - 2) < 1e-6), JSON.stringify(labels));
+});
+
+test("an edit's difference is drawn from where it began to where it stands, with its value written along it and a mark at the origin", async () => {
+  const { linesOf, rulerPreview } = await import("../src/composition/tabletop/tools/core/ruler-preview.ts");
+  const feedback = { guides: [], measures: [{ kind: "change", name: "Δ", meters: 1.5, from: at(0, 0, 3), to: at(0, 0, 4.5) }] };
+  const [line] = linesOf(feedback);
+  assert.equal(line.vertical, true);
+  assert.equal(line.teeth, false);
+  const labels = mapLabelsOf(feedback, 0.02, only);
+  assert.ok(labels.some((label) => label.text === "Δ +1.50 m"), JSON.stringify(labels));
+  assert.ok(rulerPreview(feedback, 0.02, only).positions.length > 6, "the line and the origin's mark");
+  // On the ground the same: from the old place to the new.
+  const flat = linesOf({ guides: [], measures: [{ kind: "change", name: "desloc.", meters: 2, from: at(0, 0), to: at(2, 0) }] })[0];
+  assert.equal(flat.vertical, undefined);
+});

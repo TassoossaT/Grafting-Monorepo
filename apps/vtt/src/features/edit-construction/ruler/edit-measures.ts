@@ -52,13 +52,13 @@ export function measuresOfEdit(what: EditMeasureKind, from: ConstructionPosition
       return measures;
     }
     case "side":
-      return [{ kind: "change", name: "lado", meters: delta.x * what.direction.x + delta.z * what.direction.z }];
+      return [{ kind: "change", name: "lado", meters: delta.x * what.direction.x + delta.z * what.direction.z, from, to: at }];
     case "height":
-      return [{ kind: "height", meters: at.y - what.base, level: at.y }, { kind: "was", name: "altura", was: from.y - what.base, now: at.y - what.base }, { kind: "change", name: "Δ", meters: delta.y }];
+      return [{ kind: "height", meters: at.y - what.base, level: at.y, foot: { x: at.x, y: what.base, z: at.z }, top: at }, { kind: "was", name: "altura", was: from.y - what.base, now: at.y - what.base }, { kind: "change", name: "Δ", meters: delta.y, from, to: at }];
     case "slope":
-      return [{ kind: "change", name: "inclinação", meters: delta.y }];
+      return [{ kind: "change", name: "inclinação", meters: delta.y, from, to: at }];
     case "radius":
-      return [{ kind: "change", name: "raio", meters: delta.x * what.direction.x + delta.z * what.direction.z }];
+      return [{ kind: "change", name: "raio", meters: delta.x * what.direction.x + delta.z * what.direction.z, from, to: at }];
     case "turn":
       return [{ kind: "angle", degrees: toDegrees(what.angle), name: "giro" }];
   }

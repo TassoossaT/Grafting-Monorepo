@@ -429,7 +429,7 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
       // And what each side was, so the edit reads as a difference from where it began, not only as what it left.
       const was = neighbours.fixed.map((n) => ({ kind: "was" as const, name: "lado", was: Math.hypot(pivot.x - n.position.x, pivot.z - n.position.z), now: Math.hypot(ruled.position.x - n.position.x, ruled.position.z - n.position.z) }));
       const moved = Math.hypot(ruled.position.x - pivot.x, ruled.position.z - pivot.z);
-      made = [...ruled.measures, ...was, ...(moved > 1e-4 ? [{ kind: "change" as const, name: "desloc.", meters: moved }] : [])];
+      made = [...ruled.measures, ...was, ...(moved > 1e-4 ? [{ kind: "change" as const, name: "desloc.", meters: moved, from: pivot, to: { x: ruled.position.x, y: pivot.y, z: ruled.position.z } }] : [])];
       edgeGuides = ruled.guides;
     } else if (reference === "grade" && neighbours) {
       // A top against the runs beside it: how high it stands, and how steeply each run climbs to it.

@@ -1,5 +1,5 @@
 import { formatLength, fromMetres } from "../../../../features/edit-construction/index.ts";
-import { MAX_ITEM_PROTRACTORS, MAX_TEETH, PROTRACTOR_STEP_DEGREES, linesOf, protractorOf, teethSpacing, type RulerLine, type RulerView } from "./ruler-preview.ts";
+import { MAX_ITEM_PROTRACTORS, MAX_TEETH, PROTRACTOR_STEP_DEGREES, frameOf, linesOf, protractorOf, teethSpacing, type RulerLine, type RulerView } from "./ruler-preview.ts";
 import { metersFor, type RulerFeedback } from "./ruler-session.ts";
 
 /**
@@ -48,19 +48,18 @@ export function mapLabelsOf(feedback: RulerFeedback, metersPerPixel: number | un
   const every = EVERY.find((k) => metersPerPixel === undefined || (k * spacing) / metersPerPixel >= NUMBER_PX) ?? EVERY[EVERY.length - 1]!;
   let itemProtractors = 0;
   for (const line of linesOf(feedback)) {
-    const length = Math.hypot(line.tip.x - line.anchor.x, line.tip.z - line.anchor.z);
+    const { length, u, n } = frameOf(line);
     if (length < 1e-6) continue;
-    const u = { x: (line.tip.x - line.anchor.x) / length, z: (line.tip.z - line.anchor.z) / length };
     // Numbers stand off to one side of the line, never on it.
-    const n = { x: -u.z, z: u.x };
-    const side = (at: number, away: number): Point => ({ x: line.anchor.x + u.x * at + n.x * away, y: line.anchor.y, z: line.anchor.z + u.z * at + n.z * away });
+    const side = (at: number, away: number): Point => ({ x: line.anchor.x + u.x * at + n.x * away, y: line.anchor.y + u.y * at, z: line.anchor.z + u.z * at + n.z * away });
     const toothReach = metersFor(metersPerPixel, 6, 0.2, [0.04, 0.8]);
 
     // The value at the teeth: every few, counted out from the item the line comes out of.
     const teeth = Math.min(MAX_TEETH, Math.floor(length / spacing + 1e-9));
-    for (let i = every; i <= teeth; i += every) write(side(spacing * i, toothReach + height * 0.8), compact(fromMetres(spacing * i, view.unit)));
+    if (line.teeth !== false) for (let i = every; i <= teeth; i += every) write(side(spacing * i, toothReach + height * 0.8), compact(fromMetres(spacing * i, view.unit)));
     // How long it is, along it.
-    write(side(length / 2, toothReach + height * 1.6), formatLength(length, view.unit));
+    const said = line.change ? `${line.change.name} ${line.change.meters >= 0 ? "+" : "−"}${formatLength(Math.abs(line.change.meters), view.unit)}` : formatLength(length, view.unit);
+    write(side(length / 2, toothReach + height * 1.6), said);
 
     // The angles of the protractor round its item: at the quarter turns of the eighths, and at the line itself.
     const wanted = line.protractor && view.protractor !== false && (!line.stroke || itemProtractors++ < MAX_ITEM_PROTRACTORS);
