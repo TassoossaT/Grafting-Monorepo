@@ -34,6 +34,7 @@ import {
   type RunFrame,
   type RunRect,
 } from "./opening-shared.ts";
+import { rectFeedback, settleAligned, type Moving } from "./opening-ruler.ts";
 
 const OVERLAP_COLOR = 0xef4444;
 
@@ -127,6 +128,15 @@ function handleAt(run: RunFrame, span: RunRect, at: RunPoint): GrabHandle {
 
 function isBody(handle: GrabHandle): boolean {
   return handle.s === undefined && handle.v === undefined;
+}
+
+/** Which edges a grab moves: the body slides whole, an edge moves that edge alone, and a door's floor never moves. */
+function movingOf(handle: GrabHandle, isDoor: boolean): Moving {
+  if (isBody(handle)) return { s: "both", v: isDoor ? "none" : "both" };
+  return {
+    s: handle.s === "left" ? "start" : handle.s === "right" ? "end" : "none",
+    v: isDoor ? "none" : handle.v === "bottom" ? "start" : handle.v === "top" ? "end" : "none",
+  };
 }
 
 interface Drag {
@@ -400,24 +410,15 @@ function piecesPreview(pieces: readonly OpeningPiece[], color: number): ReturnTy
 function rectPreview(ctx: ToolContext, run: RunFrame, rect: RunRect, shape: OpeningShape, color: number, excluded?: ReadonlySet<string>): ReturnType<typeof segmentsPreview> | undefined {
   const pieces = run.pieces(rect, shape);
   if (pieces === undefined || pieces.length === 0) return undefined;
-  // What the opening measures, in the table's unit: how wide and high it is, and how high its sill stands above the wall's foot.
-  const wall = run.heightAt((rect.s0 + rect.s1) / 2);
-  const sill = rect.v0 * wall;
-  ctx.showRuler?.({
-    guides: [],
-    measures: [
-      { kind: "size", name: "largura", meters: rect.s1 - rect.s0 },
-      { kind: "size", name: "altura", meters: (rect.v1 - rect.v0) * wall },
-      ...(sill > 1e-4 ? [{ kind: "size" as const, name: "peitoril", meters: sill }] : []),
-    ],
-  });
+  // What the ruler says of it: what it lines up with, how big it is, and the room on either side.
+  ctx.showRuler?.(rectFeedback(ctx, run, rect, excluded));
   return piecesPreview(pieces, overlapsOther(ctx, run, rect, excluded) ? OVERLAP_COLOR : color);
 }
 
 function dragPreview(gesture: ToolGesture, ctx: ToolContext, active: Drag): ReturnType<typeof segmentsPreview> | undefined {
   const at = active.run.project(gesture.current.point);
   if (at === undefined) return undefined;
-  const rect = settleRect(active.run, rawRectFor(active, at), active.isDoor, isBody(active.handle));
+  const rect = settleAligned(ctx, active.run, rawRectFor(active, at), active.isDoor, isBody(active.handle), movingOf(active.handle, active.isDoor), active.pieceRefs);
   if (rect === undefined) return undefined;
   return rectPreview(ctx, active.run, rect, active.shape, OPENING_KIND_COLOR[active.isDoor ? "door" : "window"], active.pieceRefs);
 }
@@ -437,8 +438,8 @@ const SELECTED_MESSAGE =
   "Abertura selecionada. Arraste o meio para mover, uma borda ou um canto para redimensionar; clique de novo para aplicar largura e altura; Delete apaga.";
 
 /** Replaces `active`'s group with `raw` settled on the run; `keepWidth` settles by shifting rather than trimming. */
-function commitEdit(ctx: ToolContext, active: Drag, raw: RunRect, keepWidth: boolean, success: string): void {
-  const rect = sameRect(raw, active.originalSpan) ? active.originalSpan : settleRect(active.run, raw, active.isDoor, keepWidth);
+function commitEdit(ctx: ToolContext, active: Drag, raw: RunRect, keepWidth: boolean, success: string, moving?: Moving): void {
+  const rect = sameRect(raw, active.originalSpan) ? active.originalSpan : (moving === undefined ? settleRect(active.run, raw, active.isDoor, keepWidth) : settleAligned(ctx, active.run, raw, active.isDoor, keepWidth, moving, active.pieceRefs));
   const pieces = rect === undefined ? undefined : active.run.pieces(rect, active.shape);
   if (rect === undefined || pieces === undefined || pieces.length === 0) {
     ctx.reportFeedback({ tone: "error", message: NO_FIT_MESSAGE });
@@ -474,21 +475,23 @@ function releaseGrab(ctx: ToolContext, gesture: ReleasedGesture, active: Drag, p
     ctx.reportFeedback({ tone: "error", message: NO_FIT_MESSAGE });
     return;
   }
-  commitEdit(ctx, active, rawRectFor(active, at), isBody(active.handle), isBody(active.handle) ? "Abertura movida." : "Abertura redimensionada.");
+  commitEdit(ctx, active, rawRectFor(active, at), isBody(active.handle), isBody(active.handle) ? "Abertura movida." : "Abertura redimensionada.", movingOf(active.handle, active.isDoor));
 }
 
 /** The rect drawn from `anchor` to `at`, both read as opposite corners. */
-function drawnRect(isDoor: boolean, anchor: CreateAnchor, at: RunPoint): RunRect | undefined {
+function drawnRect(ctx: ToolContext, isDoor: boolean, anchor: CreateAnchor, at: RunPoint): RunRect | undefined {
   const s0 = Math.min(anchor.s, at.s), s1 = Math.max(anchor.s, at.s);
   const v0 = Math.min(anchor.v, at.v), v1 = Math.max(anchor.v, at.v);
   if (s1 - s0 < MIN_OPENING_SIZE) return undefined;
   if ((v1 - v0) * anchor.run.heightAt((s0 + s1) / 2) < MIN_OPENING_SIZE) return undefined;
-  return settleRect(anchor.run, isDoor ? { s0, s1, v0: 0, v1: v1 - v0 } : { s0, s1, v0, v1 }, isDoor, false);
+  // Only the corner the pointer is at moves: the anchor it was drawn from is held.
+  const moving: Moving = { s: at.s >= anchor.s ? "end" : "start", v: isDoor ? "none" : at.v >= anchor.v ? "end" : "start" };
+  return settleAligned(ctx, anchor.run, isDoor ? { s0, s1, v0: 0, v1: v1 - v0 } : { s0, s1, v0, v1 }, isDoor, false, moving);
 }
 
 function createPreview(gesture: ToolGesture, params: OpeningParams, ctx: ToolContext, anchor: CreateAnchor): ReturnType<typeof segmentsPreview> | undefined {
   const at = anchor.run.project(gesture.current.point, anchor.hostSurfaceKey);
-  const rect = at === undefined ? undefined : drawnRect(params.openingKind === "door", anchor, at);
+  const rect = at === undefined ? undefined : drawnRect(ctx, params.openingKind === "door", anchor, at);
   return rect === undefined ? undefined : rectPreview(ctx, anchor.run, rect, shapeOf(params), OPENING_KIND_COLOR[params.openingKind]);
 }
 
@@ -523,7 +526,7 @@ function releaseOnWall(ctx: ToolContext, gesture: ReleasedGesture, anchor: Creat
   }
   const at = anchor?.run.project(gesture.current.point, anchor.hostSurfaceKey);
   if (anchor === undefined || at === undefined) return;
-  placeNew(ctx, anchor.run, drawnRect(params.openingKind === "door", anchor, at), params);
+  placeNew(ctx, anchor.run, drawnRect(ctx, params.openingKind === "door", anchor, at), params);
 }
 
 const openingToolBase: ConstructionTool<"opening"> = {
@@ -672,7 +675,7 @@ function resolvePlacement(
   const dv = params.height / height;
   const isDoor = params.openingKind === "door";
   const v0 = isDoor ? 0 : snapped(at.v * height) / height;
-  return { run, rect: settleRect(run, { s0: at.s - params.width / 2, s1: at.s + params.width / 2, v0, v1: v0 + dv }, isDoor) };
+  return { run, rect: settleAligned(ctx, run, { s0: at.s - params.width / 2, s1: at.s + params.width / 2, v0, v1: v0 + dv }, isDoor, true, { s: "both", v: isDoor ? "none" : "both" }) };
 }
 
 /** The opening tool: where nothing is previewed there is nothing to measure, so the ruler's readout goes with the ghost. */

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { baseHeight, collectLinks, formatLength, measuresOfEdit, fromMetres, resolveLevel, resolveRuler, toMetres } from "../src/features/edit-construction/ruler/index.ts";
+import { baseHeight, catchOnAxis, collectLinks, gapCenter, gapsAround, holdsOnAxis, formatLength, measuresOfEdit, fromMetres, resolveLevel, resolveRuler, toMetres } from "../src/features/edit-construction/ruler/index.ts";
 
 const at = (x, z, y = 0) => ({ x, y, z });
 const near = (actual, expected, message) => assert.ok(Math.abs(actual - expected) < 1e-9, message ?? `${actual} != ${expected}`);
@@ -197,4 +197,54 @@ test("an angle names the side it is measured from, and whether it is from its di
   assert.equal(along.reference.run.length, 2);
   const across = resolveRuler({ point: at(10.5, 6), origin: at(10, 0), links: { ...links, runs: [links.runs[0]] }, snap: false }).measures.find((m) => m.kind === "angle");
   assert.equal(across.reference.relation, "perpendicular");
+});
+
+const edge = (value) => ({ value, part: "edge" });
+const center = (value) => ({ value, part: "center" });
+
+test("along a line, a box's edge lands flush on another edge, and its centre on a centre", () => {
+  const flush = catchOnAxis(1.05, 2.05, "both", [edge(2), center(9)], 0.1);
+  assert.equal(flush.part, "end");
+  near(flush.shift, -0.05);
+  const centred = catchOnAxis(1, 2, "both", [center(1.6)], 0.2);
+  assert.equal(centred.part, "center");
+  near(centred.shift, 0.1);
+  // An edge never lines up with a centre, nor a centre with an edge.
+  assert.equal(catchOnAxis(1, 2, "both", [center(2.02), edge(1.5)], 0.1), undefined);
+  assert.equal(catchOnAxis(1, 2, "both", [edge(5)], 0.1), undefined);
+});
+
+test("only the edge that moves lines up; a held box catches nothing", () => {
+  const targets = [edge(1), edge(2.05)];
+  assert.equal(catchOnAxis(1, 2, "end", targets, 0.1).part, "end");
+  assert.equal(catchOnAxis(1, 2, "start", targets, 0.1).part, "start");
+  assert.equal(catchOnAxis(1, 2, "none", targets, 0.1), undefined);
+});
+
+test("flush beats centred when both are equally near", () => {
+  const caught = catchOnAxis(0, 2, "both", [center(1.1), edge(0.1)], 0.2);
+  assert.equal(caught.target.part, "edge");
+});
+
+test("a box is centred in the room between what stands on either side", () => {
+  // Bounds at 2 and 4 around a box 1 wide near 3.1: the middle of that room is 3.
+  near(gapCenter(2.6, 3.6, [[1, 2], [4, 5]], [0, 6]), 3);
+  // The line's own ends count: nothing else stands, so the middle of the whole line.
+  near(gapCenter(0.5, 1.5, [], [0, 6]), 3);
+  // A room too small for the box gives no middle.
+  assert.equal(gapCenter(2.1, 3.1, [[1, 2], [2.9, 5]], [0, 6]), undefined);
+});
+
+test("the room on either side of a box is measured to what stands, or to the line's end", () => {
+  const room = gapsAround(2.5, 3.5, [[1, 2], [4.5, 5]], [0, 6]);
+  near(room.before, 0.5);
+  near(room.after, 1);
+  const open = gapsAround(2.5, 3.5, [], [0, 6]);
+  near(open.before, 2.5);
+  near(open.after, 2.5);
+});
+
+test("the line-ups that already hold are the ones to draw", () => {
+  const held = holdsOnAxis(1, 2, [edge(2), center(1.5), edge(3), center(9)]);
+  assert.deepEqual(held.map((h) => h.part).sort(), ["center", "end"]);
 });

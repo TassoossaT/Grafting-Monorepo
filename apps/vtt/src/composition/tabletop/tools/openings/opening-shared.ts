@@ -438,14 +438,22 @@ export function overlapsOther(ctx: ToolContext, run: RunFrame, rect: RunRect, ex
   const EPS = 1e-9;
   const period = run.end - run.start;
   const shifts = run.closed ? [-period, 0, period] : [0];
-  return ctx.runtime.getAllRegionTopologies().some((region) => {
-    if (!hasTrait(region.surfaceType, "cuts") || excluded.has(surfaceRefFromNodeSet(region.surfaceKey))) return false;
-    if (!region.nodes.some((node) => node.pin !== undefined && run.panelOf(node.pin.hostSurfaceKey) !== undefined)) return false;
-    const other = regionRunSpan(run, region);
-    if (other === undefined) return false;
+  return openingSpansOn(ctx, run, excluded).some((other) => {
     if (!(rect.v0 < other.v1 - EPS && rect.v1 > other.v0 + EPS)) return false;
     return shifts.some((shift) => rect.s0 < other.s1 + shift - EPS && rect.s1 > other.s0 + shift + EPS);
   });
+}
+
+/** The run-space box of every region that cuts and is pinned to the run, but those of `excluded` (surface refs) -- what stands on the wall already. */
+export function openingSpansOn(ctx: ToolContext, run: RunFrame, excluded: ReadonlySet<string> = new Set()): readonly RunRect[] {
+  const spans: RunRect[] = [];
+  for (const region of ctx.runtime.getAllRegionTopologies()) {
+    if (!hasTrait(region.surfaceType, "cuts") || excluded.has(surfaceRefFromNodeSet(region.surfaceKey))) continue;
+    if (!region.nodes.some((node) => node.pin !== undefined && run.panelOf(node.pin.hostSurfaceKey) !== undefined)) continue;
+    const span = regionRunSpan(run, region);
+    if (span !== undefined) spans.push(span);
+  }
+  return spans;
 }
 
 const CURVE_TOLERANCE = 1e-3;

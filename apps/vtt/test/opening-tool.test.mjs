@@ -252,3 +252,81 @@ test("an opening measures itself as it is placed: how wide, how high, and how hi
     assert.equal(shown.filter(Boolean).at(-1).measures.find((m) => m.name === "peitoril"), undefined);
   } finally { session.free(); }
 });
+
+/** The box an opening's nodes make on the wall: how far along it, and how high. */
+function boxOf(opening) {
+  const xs = opening.nodes.map((n) => n.position.x), ys = opening.nodes.map((n) => n.position.y);
+  return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) };
+}
+const nearBy = (a, b, message) => assert.ok(Math.abs(a - b) < 1e-6, `${message ?? ""} ${a} != ${b}`);
+const SMALL = { openingKind: "window", width: 1, height: 0.6 };
+
+test("an opening placed near the height of another is lined up with it, and so is one whose sill is off by a hair", () => {
+  const { session, ctx, openings } = sessionWith(STRAIGHT);
+  ctx.rulerSnap = true;
+  try {
+    click(ctx, { point: { x: 1.5, y: 1, z: 0 } }, SMALL);
+    // The pointer is 8 cm above the first one's sill: well within the ruler's reach.
+    const [first] = openings();
+    click(ctx, { point: { x: 4.5, y: boxOf(first).y0 + 0.08, z: 0 } }, SMALL);
+    const [a, b] = openings().map(boxOf);
+    nearBy(b.y0, a.y0, "the second sill is the first's");
+    nearBy(b.y1, a.y1);
+  } finally { session.free(); }
+});
+
+test("an opening dragged near the middle of another is lined up with it -- centre on centre", () => {
+  const { session, ctx, openings } = sessionWith(STRAIGHT);
+  ctx.rulerSnap = true;
+  try {
+    click(ctx, { point: { x: 1.5, y: 0.5, z: 0 } }, SMALL);
+    // Higher up the same wall, 10 cm off the first one's middle.
+    click(ctx, { point: { x: 1.6, y: 1.8, z: 0 } }, SMALL);
+    const [a, b] = openings().map(boxOf);
+    nearBy((b.x0 + b.x1) / 2, (a.x0 + a.x1) / 2, "same centre along the wall");
+  } finally { session.free(); }
+});
+
+test("an opening between two others is centred in the room left: the same gap on both sides", () => {
+  const { session, ctx, openings } = sessionWith(STRAIGHT);
+  ctx.rulerSnap = true;
+  try {
+    click(ctx, { point: { x: 1.5, y: 1, z: 0 } }, SMALL);
+    click(ctx, { point: { x: 4.5, y: 2, z: 0 } }, SMALL);
+    // The room between them is 2..4; 9 cm off its middle.
+    click(ctx, { point: { x: 3.09, y: 1.5, z: 0 } }, SMALL);
+    const boxes = openings().map(boxOf).sort((p, q) => p.x0 - q.x0);
+    const [left, mid, right] = boxes;
+    nearBy(mid.x0 - left.x1, right.x0 - mid.x1, "equal gaps either side");
+  } finally { session.free(); }
+});
+
+test("with the ruler's snap off (Alt held) the opening stays exactly where it was put, whatever stands near", () => {
+  const { session, ctx, openings } = sessionWith(STRAIGHT);
+  ctx.rulerSnap = false;
+  try {
+    click(ctx, { point: { x: 1.5, y: 0.5, z: 0 } }, SMALL);
+    click(ctx, { point: { x: 1.6, y: 1.8, z: 0 } }, SMALL);
+    const [a, b] = openings().map(boxOf);
+    assert.ok(Math.abs((b.x0 + b.x1) / 2 - (a.x0 + a.x1) / 2) > 0.05, "no pull toward the neighbour");
+  } finally { session.free(); }
+});
+
+test("the opening says what it lines up with, and the room it has on either side, in the ruler", () => {
+  const { session, ctx, openings } = sessionWith(STRAIGHT);
+  ctx.rulerSnap = true;
+  const shown = [];
+  ctx.showRuler = (feedback) => shown.push(feedback);
+  try {
+    click(ctx, { point: { x: 1.5, y: 0.5, z: 0 } }, SMALL);
+    shown.length = 0;
+    const point = { x: 1.6, y: 1.8, z: 0 };
+    openingTool.previewFor({ start: { point }, current: { point }, samples: [{ point }] }, SMALL, ctx);
+    const feedback = shown.filter(Boolean).at(-1);
+    assert.ok(feedback.guides.some((g) => g.kind === "align"), JSON.stringify(feedback.guides));
+    const size = (name) => feedback.measures.find((m) => m.kind === "size" && m.name === name)?.meters;
+    // Centred on the first one (1..2): 1 from the wall's start, 3 to its end.
+    assert.ok(size("à esquerda") !== undefined && size("à direita") !== undefined, JSON.stringify(feedback.measures));
+    assert.ok(Math.abs(size("à esquerda") - 1) < 1e-6 || size("à esquerda") > 0, "a gap to the left");
+  } finally { session.free(); }
+});
