@@ -9,6 +9,7 @@ import type {
   CurvePoint,
 } from "../../../../ports/index.ts";
 import { scopedToolId, type PointerSample, type ToolContext } from "../core/tool-context.ts";
+import { graphNodeOf } from "../core/node-identity.ts";
 import { commitPatchReplacement } from "../../effects/effect-commit.ts";
 
 const position = (p: CurvePoint): ConstructionPosition => ({ x: p[0], y: p[1], z: p[2] });
@@ -26,7 +27,8 @@ const WELD_TOLERANCE = 0.25;
 
 /** A control point's height comes from what the pointer actually touched: a node's own height, else the picked surface. */
 export function slopeControlPoint(ctx: ToolContext, sample: PointerSample): ConstructionPosition {
-  const node = sample.nodeId ? ctx.runtime.getGraphSnapshot().nodes.find((n) => n.id === sample.nodeId) : undefined;
+  const nodeId = graphNodeOf(sample);
+  const node = nodeId ? ctx.runtime.getGraphSnapshot().nodes.find((n) => n.id === nodeId) : undefined;
   return { ...sample.point, y: node?.position.y ?? sample.point.y };
 }
 

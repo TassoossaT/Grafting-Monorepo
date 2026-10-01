@@ -1,3 +1,5 @@
+import { rulerLabelAspect } from "./ruler-label-scene-item.ts";
+
 /** Draws the sprite texture for a placed token marker: a filled circle with a small pointer tail. */
 export function createMarkerTexture(): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
@@ -190,5 +192,34 @@ export function createMidpointHandleTexture(): HTMLCanvasElement {
   context.lineWidth = 4;
   context.beginPath(); context.moveTo(32, 12); context.lineTo(52, 32); context.lineTo(32, 52); context.lineTo(12, 32); context.closePath();
   context.fill(); context.stroke();
+  return canvas;
+}
+
+/** The pixels a ruler label's texture is tall: the sprite is as wide as its text asks, by {@link rulerLabelAspect}. */
+const RULER_LABEL_PX = 48;
+
+/** A number the ruler writes on the map: the text, in the ruler's colour, on a dark pill so it reads over anything. */
+export function createRulerLabelTexture(text: string): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.height = RULER_LABEL_PX;
+  canvas.width = Math.ceil(RULER_LABEL_PX * rulerLabelAspect(text));
+  const context = canvas.getContext("2d");
+  if (context === null) throw new Error("ruler label texture needs a 2D canvas context");
+  context.fillStyle = "rgba(15, 23, 42, 0.78)";
+  context.beginPath();
+  context.roundRect(1, 1, canvas.width - 2, canvas.height - 2, 12);
+  context.fill();
+  context.fillStyle = "#7dd3fc";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  // Shrunk to fit, so a long text never runs off the pill the sprite is sized to.
+  let size = 28;
+  context.font = `600 ${size}px system-ui, sans-serif`;
+  const room = canvas.width - 12;
+  while (size > 10 && context.measureText(text).width > room) {
+    size -= 2;
+    context.font = `600 ${size}px system-ui, sans-serif`;
+  }
+  context.fillText(text, canvas.width / 2, canvas.height / 2 + 1);
   return canvas;
 }

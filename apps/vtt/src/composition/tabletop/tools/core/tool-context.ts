@@ -1,5 +1,5 @@
 import type { EditHistoryStack } from "@/features/edit-construction";
-import type { ConstructionToolId, PreviewDescriptor, StructureEditParams, ToolParamsFor } from "@/features/edit-construction";
+import type { ConstructionToolId, PreviewDescriptor, RulerKind, StructureEditParams, ToolParamsFor } from "@/features/edit-construction";
 import type { ConstructionPosition } from "@/ports";
 
 import type { TabletopRuntime } from "../../tabletop-runtime.ts";
@@ -12,11 +12,15 @@ export interface PointerSample {
   readonly screenX?: number;
   readonly shiftKey?: boolean;
   readonly nodeId?: string;
+  /** The graph node the pointer is on, by geometry -- never by which sprite the pick met (`node-identity.ts`). What a tool reads "the node here" from; the drawn dots have no function. */
+  readonly node?: { readonly id: string; readonly position: ConstructionPosition };
   readonly surfaceRef?: string;
   /** The pointer's ray from the camera, when the view gave one -- see `pointer-ray.ts`. */
   readonly ray?: { readonly origin: ConstructionPosition; readonly direction: ConstructionPosition };
   /** The face under the pointer, when it is on one: its slope through the exact point hit -- see `pointer-ray.ts`. */
   readonly face?: { readonly normal: ConstructionPosition; readonly centre: ConstructionPosition };
+  /** How far the ruler moved the hit, in plan, to land it on a corner, side or line-up -- `pointerAtHeight` carries it onto the ray, so a tool reading the ray is ruled like one reading the point. */
+  readonly ruled?: { readonly x: number; readonly z: number };
   /** The way the camera looks, when the view gave it -- see `build-frame.ts`. */
   readonly forward?: ConstructionPosition;
 }
@@ -82,19 +86,28 @@ export interface ToolContext {
   readonly history: EditHistoryStack;
   readonly tableId: string;
   /**
-   * Whether the grid magnet is on. A fact about the session, not a
-   * behaviour: the dispatcher has already rounded every ground point to a
-   * grid intersection by the time a tool sees it, and this only says so, so
-   * a tool that reads meaning into where its samples came from can. What
-   * any tool does with it is that tool's own business.
+   * Whether what the ruler catches is taken. The ruler is always there while
+   * building -- its guides and measures show either way -- and its catch is
+   * taken, but for as long as Ctrl is held, which places freely. The
+   * dispatcher has already ruled every ground point by the time a tool sees
+   * it, and a tool that rules a point of its own (a build frame's corner, a
+   * far side) asks `ruler-session.ts` rather than re-deriving a link.
    */
-  readonly snapToGrid: boolean;
-  /** The grid's step, when snapping; 1 when absent. */
-  readonly gridUnit?: number;
+  readonly rulerSnap: boolean;
+  /** How many metres one pixel of the screen is at the pointer: the ruler's reach is worked out from it, so it feels the same at every zoom. Unknown until the view gives a ray. */
+  readonly rulerMetersPerPixel?: number;
+  /** Ways of catching the table left out of its ruler. */
+  readonly rulerDisabled?: ReadonlySet<RulerKind>;
+  /** The round number, in metres, a length or a height lands on when near one; none when the table chose none. */
+  readonly rulerLengthStep?: number;
+  /** The angular step, in radians, the protractor offers now: the table's, or the finer one while Shift is held. None until the dispatcher knows. */
+  readonly rulerAngleStep?: number;
+  /** Shows what the ruler caught for a point a tool ruled itself -- a handle dragged onto a corner -- until the gesture ends; `undefined` clears it. */
+  readonly showRuler?: (feedback: import("./ruler-session.ts").RulerFeedback | undefined) => void;
   /**
    * How a grab on an existing structure behaves -- shape/elevation mode and
    * the bezier handle options (`curveMode`/`curveAction`/`curveWidth`).
-   * Ambient like `snapToGrid`: every construction tool can grab and edit
+   * Ambient like `rulerSnap`: every construction tool can grab and edit
    * whatever it owns (`structure-edit-behavior.ts`), so this is no longer
    * one tool's own params.
    */
@@ -133,7 +146,16 @@ export interface ConstructionTool<Id extends ConstructionToolId> {
   readonly handlesOnHover?: boolean;
   /** How this tool's dragged spine anchors snap -- the scene manipulator uses it too. */
   readonly anchorSnap?: import("./curve-edit-gesture.ts").AnchorSnap;
-  readonly useGridSnap?: boolean;
+  /** `false` for a tool the ruler leaves alone: terrain is what is built on, and a tool laying itself out in a frame of its own rules its points itself. */
+  readonly usesRuler?: boolean;
+  /**
+   * Where the line this tool is drawing begins, while it waits for its next
+   * point: the last corner clicked, the last end of a draft. The ruler counts
+   * from it -- its length, its angle, the teeth and the protractor round it --
+   * whether or not a button is down, so the line that follows the pointer
+   * between clicks is ruled like one dragged. Absent while nothing is begun.
+   */
+  readonly rulerAnchor?: (ctx: ToolContext, params: ToolParamsFor<Id>) => ConstructionPosition | undefined;
   defaultParams(): ToolParamsFor<Id>;
   /** Opt in to a stationary drawing preview between gestures. */
   readonly previewOnHover?: boolean | ((params: ToolParamsFor<Id>) => boolean);

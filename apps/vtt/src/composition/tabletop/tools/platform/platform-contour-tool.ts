@@ -8,6 +8,7 @@ import { scopedToolId, type ConstructionTool, type PointerSample, type ToolConte
 import { withStructureEditing } from "../core/structure-edit-behavior.ts";
 import { contourStroke } from "../core/contour-stroke.ts";
 import { polylineSegmentsPreview, segmentsPreview } from "../shapes/preview-shapes.ts";
+import { graphNodeOf } from "../core/node-identity.ts";
 import { groupLoopsByContainment, splitContourAtPoints, weldedMerge, windLoop, type DirectedContourEdge } from "./platform-contour-merge.ts";
 type Params = ToolParamsByTool["platform-contour"];
 const COLOR = 0x79b8e8;
@@ -28,9 +29,9 @@ const surfaceTypeOf = (_params: Params): string => platformStructureType.surface
 function parametersAt(ctx: ToolContext, first: PointerSample | undefined, params: Params): Params {
   if (!first) return params;
   const target = params.mode === "create" ? undefined : ctx.runtime.getAllRegionTopologies().find((t) => t.surfaceType === surfaceTypeOf(params) &&
-    (first.surfaceRef ? surfaceRefFromNodeSet(t.surfaceKey) === first.surfaceRef : first.nodeId && t.nodes.some((n) => n.id === first.nodeId)));
+    (first.surfaceRef ? surfaceRefFromNodeSet(t.surfaceKey) === first.surfaceRef : graphNodeOf(first) && t.nodes.some((n) => n.id === graphNodeOf(first))));
   if (target?.nodes[0]) return { ...params, elevation: target.nodes[0].position.y };
-  const node = first.nodeId ? ctx.runtime.getGraphSnapshot().nodes.find((n) => n.id === first.nodeId) : undefined;
+  const node = graphNodeOf(first) ? ctx.runtime.getGraphSnapshot().nodes.find((n) => n.id === graphNodeOf(first)) : undefined;
   if (node) return { ...params, elevation: node.position.y };
   if (params.mode === "create" && Number.isFinite(first.point?.y) && params.elevation === DEFAULT_TOOL_PARAMS["platform-contour"].elevation) {
     return { ...params, elevation: first.point.y };
@@ -74,7 +75,7 @@ export function commitPlatformShape(ctx: ToolContext, contour: readonly FittedEd
     const all = ctx.runtime.getAllRegionTopologies();
     const graph = ctx.runtime.getGraphSnapshot();
     // Picking the terrain below a drawing plane is not an instruction to weld floors.
-    const picked = new Set(pickedSamples.flatMap((s) => s.nodeId ? [s.nodeId] : []));
+    const picked = new Set(pickedSamples.flatMap((s) => graphNodeOf(s) ? [graphNodeOf(s)!] : []));
     const level = all.filter((t) => t.surfaceType === surfaceTypeOf(params) && t.nodes.every((n) => Math.abs(n.position.y - params.elevation) < 1e-4));
     // One cloud's faces never lie over each other: they mesh with holes where
     // they cross. A floor drawn over one of its own kind at its height is
@@ -316,7 +317,6 @@ export function commitPlatformContour(ctx: ToolContext, samples: readonly Pointe
 const rawPlatformContourTool: ConstructionTool<"platform-contour"> = {
   id: "platform-contour",
   // Snapped in the frame each shape is built in, never to the world's fixed grid.
-  useGridSnap: false,
   previewOnHover: true,
   defaultParams: () => DEFAULT_TOOL_PARAMS["platform-contour"],
   ...contourStroke<"platform-contour", Params>({

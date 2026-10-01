@@ -1,5 +1,6 @@
 import type { ConstructionToolId, PreviewDescriptor, ToolParamsFor } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionPosition, CubicBezier, CurveHandles } from "../../../../ports/index.ts";
+import { graphNodeOf } from "./node-identity.ts";
 import { gestureMoved, type ConstructionTool, type PointerSample, type PointerSlop, type ToolContext, type ToolGesture } from "./tool-context.ts";
 
 /**
@@ -244,7 +245,8 @@ export function createSpineDraftTool<Id extends ConstructionToolId, S>(options: 
       if (placed === null) return;
       if (placed === undefined) {
         // The first click takes the height of what it hit; later ones, the mode's.
-        const node = sample.nodeId ? ctx.runtime.getGraphSnapshot().nodes.find((n) => n.id === sample.nodeId) : undefined;
+        const nodeId = graphNodeOf(sample);
+        const node = nodeId ? ctx.runtime.getGraphSnapshot().nodes.find((n) => n.id === nodeId) : undefined;
         const height = draft.ends.length === 0 ? node?.position.y ?? sample.point.y : mode.clickHeight?.(kit, sample) ?? kit.startHeight();
         if (last && planDistance(sample.point, last.point) < 0.1) return;
         placed = pressed ?? kit.endAt(sample, height, last?.point);
@@ -263,6 +265,8 @@ export function createSpineDraftTool<Id extends ConstructionToolId, S>(options: 
     previewOnHover: true,
     defaultParams: options.defaultParams,
     drafting: (ctx) => (drafts.get(ctx.runtime)?.ends.length ?? 0) > 0,
+    // The next stretch runs from the last end clicked.
+    rulerAnchor: (ctx) => drafts.get(ctx.runtime)?.ends.at(-1)?.point,
     previewFor(gesture, params, ctx) {
       if (presses.has(ctx.runtime)) return undefined;
       const draft = draftOf(ctx, params);

@@ -10,6 +10,7 @@
  * - `spine/`: Bezier spines shared by every structure generated along a curve.
  * - `structure-types/`: Semantic structure families (panel, organic, path) & interaction policies.
  * - `effects/`: What happens to a cloud, whom it reaches, and the pipeline dispatching declared reactions.
+ * - `ruler/`: The one place a point is joined to, lined up with or measured against what stands, and the table's length unit.
  */
 
 export { planBezierEdit, previewBezierEdit } from "./orchestration/spine-edit.ts";
@@ -22,3 +23,4 @@ export * from "./tools/index.ts";
 export * from "./structure-types/index.ts";
 export * from "./global-handles/index.ts";
 export * from "./effects/index.ts";
+export * from "./ruler/index.ts";

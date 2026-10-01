@@ -2,6 +2,7 @@ import { floorLandingNear, hasTrait, insideFace, nearestOnSegment, type FloorLan
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import type { ConstructionNodeId, ConstructionPosition, ConstructionRegionTopology, ConstructionSurfaceKey } from "../../../../ports/index.ts";
 import { pointerAtHeight } from "./pointer-ray.ts";
+import { graphNodeOf } from "./node-identity.ts";
 import type { PointerSample, ToolContext } from "./tool-context.ts";
 
 /**
@@ -20,7 +21,7 @@ export function floorsOf(ctx: ToolContext): readonly ConstructionRegionTopology[
 export function floorUnder(floors: readonly ConstructionRegionTopology[], sample: PointerSample): ConstructionRegionTopology | undefined {
   return floors.find((topology) => sample.surfaceRef
     ? surfaceRefFromNodeSet(topology.surfaceKey) === sample.surfaceRef
-    : sample.nodeId !== undefined && topology.nodes.some((node) => node.id === sample.nodeId));
+    : graphNodeOf(sample) !== undefined && topology.nodes.some((node) => node.id === graphNodeOf(sample)));
 }
 
 /**

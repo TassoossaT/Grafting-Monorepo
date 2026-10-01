@@ -113,7 +113,7 @@ export function sessionFixture() {
       return { ...wire.outcome, skippedRegionIds: wire.skippedRegionIds, skippedRegionReasons: wire.skippedRegionReasons ?? [] };
     },
   };
-  const ctx = { runtime, history: createEditHistoryStack(), tableId: "platform-test", snapToGrid: false, structureEditParams: { mode: "shape" }, nextSequence: () => ++sequence, reportSelection() {}, reportFeedback: (f) => calls.feedback.push(f) };
+  const ctx = { runtime, history: createEditHistoryStack(), tableId: "platform-test", rulerSnap: false, structureEditParams: { mode: "shape" }, nextSequence: () => ++sequence, reportSelection() {}, reportFeedback: (f) => calls.feedback.push(f) };
   return { session, runtime, ctx, calls };
 }
 

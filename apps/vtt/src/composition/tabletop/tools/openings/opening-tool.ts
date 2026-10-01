@@ -9,7 +9,7 @@ import type {
 // test reaches has to spell out any import it needs at run time. A
 // type-only `@/` import is fine -- those are erased.
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
-import { DEFAULT_TOOL_PARAMS, OPENING_KIND_COLOR, RECTANGLE_OPENING_SHAPE, hasTrait, openingStructureType, sameShape } from "../../../../features/edit-construction/index.ts";
+import { DEFAULT_TOOL_PARAMS, OPENING_KIND_COLOR, RECTANGLE_OPENING_SHAPE, hasTrait, openingHandlePick, openingHandles, openingStructureType, sameShape } from "../../../../features/edit-construction/index.ts";
 
 import { gestureMoved, scopedToolId, type ConstructionTool, type PointerSample, type ReleasedGesture, type ToolContext, type ToolGesture } from "../core/tool-context.ts";
 import { polylineSegmentsPreview, segmentsPreview } from "../shapes/preview-shapes.ts";
@@ -34,6 +34,8 @@ import {
   type RunFrame,
   type RunRect,
 } from "./opening-shared.ts";
+import { rulerOf } from "../core/ruler.ts";
+import { rectFeedback, settleAligned, type Moving } from "./opening-ruler.ts";
 
 const OVERLAP_COLOR = 0xef4444;
 
@@ -87,11 +89,18 @@ function forNew(params: OpeningParams): OpeningParams {
 function select(ctx: ToolContext, next: Selected, look: OpeningLook, params: OpeningParams): void {
   lookForNew ??= lookOf(params);
   selected = next;
+  showHandlesOf(ctx, next.pieceKeys);
   if (!sameLook(lookOf(params), look)) ctx.updateToolParams?.("opening", (current) => ({ ...current, ...look }));
+}
+
+/** The selected opening's own handles show -- its corners and sides -- and nothing else's; none once nothing is selected. */
+function showHandlesOf(ctx: ToolContext, pieceKeys: readonly ConstructionSurfaceKey[] | undefined): void {
+  ctx.runtime.setHandleFocus?.(pieceKeys === undefined ? undefined : { faces: new Set(pieceKeys.map((key) => key.join("\u0000"))), spineNodes: new Set() });
 }
 
 function clearSelection(ctx: ToolContext): void {
   selected = undefined;
+  showHandlesOf(ctx, undefined);
   ctx.reportSelection(undefined);
   const restore = lookForNew;
   lookForNew = undefined;
@@ -127,6 +136,15 @@ function handleAt(run: RunFrame, span: RunRect, at: RunPoint): GrabHandle {
 
 function isBody(handle: GrabHandle): boolean {
   return handle.s === undefined && handle.v === undefined;
+}
+
+/** Which edges a grab moves: the body slides whole, an edge moves that edge alone, and a door's floor never moves. */
+function movingOf(handle: GrabHandle, isDoor: boolean): Moving {
+  if (isBody(handle)) return { s: "both", v: isDoor ? "none" : "both" };
+  return {
+    s: handle.s === "left" ? "start" : handle.s === "right" ? "end" : "none",
+    v: isDoor ? "none" : handle.v === "bottom" ? "start" : handle.v === "top" ? "end" : "none",
+  };
 }
 
 interface Drag {
@@ -193,6 +211,15 @@ function openingNear(ctx: ToolContext, point: ConstructionPosition): Constructio
     if (best === undefined || distance < best.distance) best = { topology, distance };
   }
   return best?.topology;
+}
+
+/** The opening a handle belongs to, and where the handle stands now; `undefined` when it is gone. */
+function openingOfHandle(ctx: ToolContext, nodeId: string, handleId: string): { readonly opening: ConstructionRegionTopology; readonly position: ConstructionPosition } | undefined {
+  const topologies = ctx.runtime.getAllRegionTopologies();
+  const opening = topologies.find((topology) => isOpening(topology) && topology.nodes.some((node) => node.id === nodeId));
+  if (opening === undefined) return undefined;
+  const handle = openingHandles(topologies, new Set([opening.surfaceKey.join("\u0000")]), (type) => type === opening.surfaceType).find((candidate) => candidate.id === handleId);
+  return handle && { opening, position: handle.position };
 }
 
 /** The opening under the pointer: the pick, then `openingNear`. */
@@ -397,18 +424,20 @@ function piecesPreview(pieces: readonly OpeningPiece[], color: number): ReturnTy
 }
 
 /** The ghost of `rect` outlined by `shape`, red where it would overlap another opening. */
-function rectPreview(ctx: ToolContext, run: RunFrame, rect: RunRect, shape: OpeningShape, color: number, excluded?: ReadonlySet<string>): ReturnType<typeof segmentsPreview> | undefined {
+function rectPreview(ctx: ToolContext, run: RunFrame, rect: RunRect, shape: OpeningShape, color: number, excluded?: ReadonlySet<string>, was?: RunRect): ReturnType<typeof segmentsPreview> | undefined {
   const pieces = run.pieces(rect, shape);
   if (pieces === undefined || pieces.length === 0) return undefined;
+  // What the ruler says of it: what it lines up with, how big it is, and the room on either side.
+  rulerOf(ctx).show(rectFeedback(ctx, run, rect, excluded, was));
   return piecesPreview(pieces, overlapsOther(ctx, run, rect, excluded) ? OVERLAP_COLOR : color);
 }
 
 function dragPreview(gesture: ToolGesture, ctx: ToolContext, active: Drag): ReturnType<typeof segmentsPreview> | undefined {
   const at = active.run.project(gesture.current.point);
   if (at === undefined) return undefined;
-  const rect = settleRect(active.run, rawRectFor(active, at), active.isDoor, isBody(active.handle));
+  const rect = settleAligned(ctx, active.run, rawRectFor(active, at), active.isDoor, isBody(active.handle), movingOf(active.handle, active.isDoor), active.pieceRefs);
   if (rect === undefined) return undefined;
-  return rectPreview(ctx, active.run, rect, active.shape, OPENING_KIND_COLOR[active.isDoor ? "door" : "window"], active.pieceRefs);
+  return rectPreview(ctx, active.run, rect, active.shape, OPENING_KIND_COLOR[active.isDoor ? "door" : "window"], active.pieceRefs, active.originalSpan);
 }
 
 function reportCommit(ctx: ToolContext, causeId: string, result: { readonly recorded: boolean; readonly error?: string }, success: string): void {
@@ -426,8 +455,8 @@ const SELECTED_MESSAGE =
   "Abertura selecionada. Arraste o meio para mover, uma borda ou um canto para redimensionar; clique de novo para aplicar largura e altura; Delete apaga.";
 
 /** Replaces `active`'s group with `raw` settled on the run; `keepWidth` settles by shifting rather than trimming. */
-function commitEdit(ctx: ToolContext, active: Drag, raw: RunRect, keepWidth: boolean, success: string): void {
-  const rect = sameRect(raw, active.originalSpan) ? active.originalSpan : settleRect(active.run, raw, active.isDoor, keepWidth);
+function commitEdit(ctx: ToolContext, active: Drag, raw: RunRect, keepWidth: boolean, success: string, moving?: Moving): void {
+  const rect = sameRect(raw, active.originalSpan) ? active.originalSpan : (moving === undefined ? settleRect(active.run, raw, active.isDoor, keepWidth) : settleAligned(ctx, active.run, raw, active.isDoor, keepWidth, moving, active.pieceRefs));
   const pieces = rect === undefined ? undefined : active.run.pieces(rect, active.shape);
   if (rect === undefined || pieces === undefined || pieces.length === 0) {
     ctx.reportFeedback({ tone: "error", message: NO_FIT_MESSAGE });
@@ -463,21 +492,23 @@ function releaseGrab(ctx: ToolContext, gesture: ReleasedGesture, active: Drag, p
     ctx.reportFeedback({ tone: "error", message: NO_FIT_MESSAGE });
     return;
   }
-  commitEdit(ctx, active, rawRectFor(active, at), isBody(active.handle), isBody(active.handle) ? "Abertura movida." : "Abertura redimensionada.");
+  commitEdit(ctx, active, rawRectFor(active, at), isBody(active.handle), isBody(active.handle) ? "Abertura movida." : "Abertura redimensionada.", movingOf(active.handle, active.isDoor));
 }
 
 /** The rect drawn from `anchor` to `at`, both read as opposite corners. */
-function drawnRect(isDoor: boolean, anchor: CreateAnchor, at: RunPoint): RunRect | undefined {
+function drawnRect(ctx: ToolContext, isDoor: boolean, anchor: CreateAnchor, at: RunPoint): RunRect | undefined {
   const s0 = Math.min(anchor.s, at.s), s1 = Math.max(anchor.s, at.s);
   const v0 = Math.min(anchor.v, at.v), v1 = Math.max(anchor.v, at.v);
   if (s1 - s0 < MIN_OPENING_SIZE) return undefined;
   if ((v1 - v0) * anchor.run.heightAt((s0 + s1) / 2) < MIN_OPENING_SIZE) return undefined;
-  return settleRect(anchor.run, isDoor ? { s0, s1, v0: 0, v1: v1 - v0 } : { s0, s1, v0, v1 }, isDoor, false);
+  // Only the corner the pointer is at moves: the anchor it was drawn from is held.
+  const moving: Moving = { s: at.s >= anchor.s ? "end" : "start", v: isDoor ? "none" : at.v >= anchor.v ? "end" : "start" };
+  return settleAligned(ctx, anchor.run, isDoor ? { s0, s1, v0: 0, v1: v1 - v0 } : { s0, s1, v0, v1 }, isDoor, false, moving);
 }
 
 function createPreview(gesture: ToolGesture, params: OpeningParams, ctx: ToolContext, anchor: CreateAnchor): ReturnType<typeof segmentsPreview> | undefined {
   const at = anchor.run.project(gesture.current.point, anchor.hostSurfaceKey);
-  const rect = at === undefined ? undefined : drawnRect(params.openingKind === "door", anchor, at);
+  const rect = at === undefined ? undefined : drawnRect(ctx, params.openingKind === "door", anchor, at);
   return rect === undefined ? undefined : rectPreview(ctx, anchor.run, rect, shapeOf(params), OPENING_KIND_COLOR[params.openingKind]);
 }
 
@@ -512,10 +543,10 @@ function releaseOnWall(ctx: ToolContext, gesture: ReleasedGesture, anchor: Creat
   }
   const at = anchor?.run.project(gesture.current.point, anchor.hostSurfaceKey);
   if (anchor === undefined || at === undefined) return;
-  placeNew(ctx, anchor.run, drawnRect(params.openingKind === "door", anchor, at), params);
+  placeNew(ctx, anchor.run, drawnRect(ctx, params.openingKind === "door", anchor, at), params);
 }
 
-export const openingTool: ConstructionTool<"opening"> = {
+const openingToolBase: ConstructionTool<"opening"> = {
   id: "opening",
   defaultParams: () => DEFAULT_TOOL_PARAMS.opening,
   previewOnHover: true,
@@ -552,9 +583,12 @@ export const openingTool: ConstructionTool<"opening"> = {
 
   onPointerDown(ctx: ToolContext, sample: PointerSample, params: OpeningParams): void {
     press = undefined;
-    const opening = openingUnder(ctx, sample);
+    // A press on one of the opening's own handles grabs it there: at the handle, whatever the pointer's pick met.
+    const pick = sample.nodeId === undefined ? undefined : openingHandlePick(sample.nodeId);
+    const handled = pick === undefined ? undefined : openingOfHandle(ctx, pick.nodeId, sample.nodeId!);
+    const opening = handled?.opening ?? openingUnder(ctx, sample);
     if (opening !== undefined) {
-      const drag = beginGrab(ctx, opening, sample, params);
+      const drag = beginGrab(ctx, opening, handled === undefined ? sample : { ...sample, point: handled.position }, params);
       if (drag !== undefined) press = { kind: "grab", drag };
       else ctx.reportFeedback({ tone: "error", message: "Nao foi possivel identificar a parede desta abertura." });
       return;
@@ -615,7 +649,7 @@ function reshapeSelected(ctx: ToolContext, current: Selected, shape: OpeningShap
     const look = { width: span.s1 - span.s0, height: (span.v1 - span.v0) * run!.heightAt((span.s0 + span.s1) / 2), shape, isDoor: isDoorRect(span) };
     const causeId = scopedToolId(ctx, "opening-edit-shape", ctx.nextSequence());
     const result = stand.refit(ctx, causeId, current.pieceKeys, hostKey!, look, { x: 0, z: 0 });
-    if (result.created !== undefined) selected = { groupKey: result.created.group, pieceKeys: result.created.surfaceKeys, shape };
+    if (result.created !== undefined) { selected = { groupKey: result.created.group, pieceKeys: result.created.surfaceKeys, shape }; showHandlesOf(ctx, selected.pieceKeys); }
     reportCommit(ctx, causeId, result, "Formato da abertura alterado.");
     return;
   }
@@ -626,7 +660,7 @@ function reshapeSelected(ctx: ToolContext, current: Selected, shape: OpeningShap
   }
   const causeId = scopedToolId(ctx, "opening-edit-shape", ctx.nextSequence());
   const result = commitOpeningGroup(ctx, causeId, current.pieceKeys, split, shape);
-  if (result.created !== undefined) selected = { groupKey: result.created.group, pieceKeys: result.created.surfaceKeys, shape };
+  if (result.created !== undefined) { selected = { groupKey: result.created.group, pieceKeys: result.created.surfaceKeys, shape }; showHandlesOf(ctx, selected.pieceKeys); }
   reportCommit(ctx, causeId, result, "Formato da abertura alterado.");
 }
 
@@ -661,5 +695,17 @@ function resolvePlacement(
   const dv = params.height / height;
   const isDoor = params.openingKind === "door";
   const v0 = isDoor ? 0 : snapped(at.v * height) / height;
-  return { run, rect: settleRect(run, { s0: at.s - params.width / 2, s1: at.s + params.width / 2, v0, v1: v0 + dv }, isDoor) };
+  return { run, rect: settleAligned(ctx, run, { s0: at.s - params.width / 2, s1: at.s + params.width / 2, v0, v1: v0 + dv }, isDoor, true, { s: "both", v: isDoor ? "none" : "both" }) };
 }
+
+/** The opening tool: where nothing is previewed there is nothing to measure, so the ruler's readout goes with the ghost. */
+export const openingTool: ConstructionTool<"opening"> = {
+  ...openingToolBase,
+  // Its selected opening shows corner and side handles, drawn like every other handle's.
+  editsType: (surfaceType) => surfaceType === openingStructureType.surfaceType,
+  previewFor(gesture: ToolGesture, params: OpeningParams, ctx: ToolContext) {
+    const ghost = openingToolBase.previewFor?.(gesture, params, ctx);
+    if (ghost === undefined) rulerOf(ctx).show(undefined);
+    return ghost;
+  },
+};

@@ -554,11 +554,11 @@ test("a roof holding a subroof keeps it when a wing is fused onto it, and loses 
 });
 
 for (const camera of [{ x: 4, y: 14, z: -10 }, { x: 4, y: 8, z: -8 }, { x: -4, y: 10, z: -6 }]) {
-  test(`a roof drawn over a leaf lands under the cursor, snapped as on the ground, whatever the camera (${JSON.stringify(camera)})`, () => {
+  test(`a roof drawn over a leaf lands exactly under the cursor, whatever the camera (${JSON.stringify(camera)})`, () => {
     const value = roofed(2);
     const { ctx, runtime, session } = value;
-    // As the table plays: grid snapping on, one-metre cells; the pointer's hit snapped, its ray not.
-    Object.assign(ctx, { snapToGrid: true, gridUnit: 1 });
+    // As the table plays: the ruler has nothing near to catch, so the pointer is as it is.
+    Object.assign(ctx, { rulerSnap: true });
     try {
       const leaf = roofs(runtime).find((face) => !face.props.roofFace.upright && face.nodes.some((node) => node.position.z < 1e-6));
       const over = (x, z) => {
@@ -578,7 +578,7 @@ for (const camera of [{ x: 4, y: 14, z: -10 }, { x: 4, y: 8, z: -8 }, { x: -4, y
       assert.equal(groups(runtime).size, 1, "a roof on the roof, never a wing slid out behind it");
       const outline = roofs(runtime)[0].props.roof.subroofs?.[0]?.footprints[0].outer ?? [];
       const xs = outline.map(([x]) => x), zs = outline.map(([, z]) => z);
-      assert.deepEqual([Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs)].map((v) => Math.round(v * 1e6) / 1e6), [3, 6, 1, 3], `drawn where the cursor was: ${JSON.stringify(outline)}`);
+      assert.deepEqual([Math.min(...xs), Math.max(...xs), Math.min(...zs), Math.max(...zs)].map((v) => Math.round(v * 1e6) / 1e6), [3, 6, 1, 2.9], `drawn where the cursor was: ${JSON.stringify(outline)}`);
     } finally { session.free(); }
   });
 }
@@ -831,5 +831,49 @@ test("a roof drawn over a floor's outline lands on it, stands at its height and 
     assert.equal(recipe.base?.kind, "floor");
     const nodes = new Set(roofs(runtime).flatMap((f) => f.nodes.map((n) => n.id)));
     assert.ok(["p0", "p1", "p2", "p3"].every((id) => nodes.has(id)));
+  } finally { session.free(); }
+});
+
+test("a roof's handle follows the result of its edit, and its ruler reads the peak it raises -- not the roof's centre", () => {
+  const value = roofed();
+  const { runtime, session, ctx } = value;
+  const standing = [];
+  const shown = [];
+  runtime.previewNodeHandle = (id, at) => standing.push({ id, at });
+  ctx.showRuler = (feedback) => shown.push(feedback);
+  try {
+    const rise = shownGlobalHandles(scene(runtime)).find((h) => h.kind === "rise" && h.recipeHandle.anchor === "rise");
+    // The handle's structural point is the peak, not the roof's centre.
+    assert.ok(Math.abs(rise.pivot.y - 5) < 1e-6, `pivot y ${rise.pivot.y}`);
+    dragHandle(value, rise, rise.position, 220);
+    // Drawn where the type would place it on the roof the edit makes: the new peak, stood off.
+    const drawn = standing.filter((s) => s.at !== undefined).at(-1).at;
+    const after = shownGlobalHandles(scene(runtime)).find((h) => h.kind === "rise" && h.recipeHandle.anchor === "rise");
+    assert.ok(Math.abs(drawn.y - after.position.y) < 1e-6 && Math.abs(drawn.x - after.position.x) < 1e-6, `${JSON.stringify(drawn)} vs ${JSON.stringify(after.position)}`);
+    // And measured there: the height it was and the height it is, from the roof's own base.
+    const measures = shown.filter(Boolean).at(-1).measures;
+    const was = measures.find((m) => m.kind === "was" && m.name === "altura");
+    assert.ok(was && Math.abs(was.was - 2) < 1e-6 && Math.abs(was.now - 4) < 1e-6, JSON.stringify(measures));
+    const height = measures.find((m) => m.kind === "height");
+    assert.ok(Math.abs(height.foot.x - rise.pivot.x) < 1e-6 && Math.abs(height.foot.z - rise.pivot.z) < 1e-6, "the ruler stands under the peak");
+  } finally { session.free(); }
+});
+
+test("a roof begun on another structure's corner takes that corner's height from the geometry alone -- no dot picked, none drawn", () => {
+  const value = fixture();
+  const { runtime, session, ctx } = value;
+  try {
+    addFace(runtime, "wall", "wall-white", [
+      { id: "g:a", position: { x: 0, y: 0, z: 0 } }, { id: "g:b", position: { x: 6, y: 0, z: 0 } },
+      { id: "g:c", position: { x: 6, y: 4, z: 0 } }, { id: "g:d", position: { x: 0, y: 4, z: 0 } },
+    ]);
+    const params = { ...DEFAULT_TOOL_PARAMS.roof, waters: 2, height: 2 };
+    // The pointer is on the wall's top corner by geometry: the dispatcher names it as `node`, and no sprite named anything.
+    const start = { point: { x: 6, y: 0, z: 0 }, node: { id: "g:c", position: { x: 6, y: 4, z: 0 } } };
+    const current = { point: { x: 9, y: 0, z: 3 } };
+    roofTool.onPointerDown(ctx, start, params);
+    roofTool.onPointerUp(ctx, { start, current, samples: [start, current] }, params);
+    const low = Math.min(...roofs(runtime).flatMap((f) => f.nodes.map((n) => n.position.y)));
+    assert.ok(Math.abs(low - 4) < 1e-6, `the roof stands on the corner's height: ${low}`);
   } finally { session.free(); }
 });

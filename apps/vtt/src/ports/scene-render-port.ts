@@ -209,6 +209,13 @@ export interface ScenePickResult {
  */
 export const TOOL_GHOST_PREVIEW_CHANNEL = "active";
 
+/** One number written on the map: where it stands, what it says and how tall it is written, in world metres. */
+export interface RenderPreviewLabel {
+  readonly position: { readonly x: number; readonly y: number; readonly z: number };
+  readonly text: string;
+  readonly height: number;
+}
+
 export type RenderPreviewDescriptor =
   | { readonly kind: "segments"; readonly positions: Float32Array; readonly color: number; readonly opacity?: number }
   | { readonly kind: "quad"; readonly positions: Float32Array; readonly color: number; readonly opacity?: number }
@@ -278,6 +285,13 @@ export interface SceneRenderPort {
    * single-ghost behaviour every tool already relies on.
    */
   showPreview(descriptor: RenderPreviewDescriptor, channel?: string): void;
+  /**
+   * Writes numbers on the map -- each a camera-facing label, drawn above
+   * everything and never pickable -- on a named channel of their own. A set
+   * shorter than the channel's last takes the surplus down; `clearPreview` of
+   * the channel takes them all down.
+   */
+  showLabels(labels: readonly RenderPreviewLabel[], channel: string): void;
   /** Hides the active preview, if any. A no-op when nothing is shown. */
   /** Hides one channel, or every channel when none is named. */
   clearPreview(channel?: string): void;

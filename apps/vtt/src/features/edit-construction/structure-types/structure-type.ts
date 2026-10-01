@@ -448,6 +448,8 @@ export interface RecipeHandle {
   /** Names the handle within its structure. */
   readonly anchor: string;
   readonly position: ConstructionPosition;
+  /** The point of the structure it edits -- a ridge's peak, a leaf's centre -- which its glyph stands off from. Absent: the structure's own centre. */
+  readonly at?: ConstructionPosition;
   readonly motion: HandleMotion;
   readonly facing?: { readonly x: number; readonly z: number };
   /** What part of the recipe it stands for -- the type's own reading. */

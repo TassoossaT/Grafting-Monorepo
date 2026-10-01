@@ -1153,3 +1153,37 @@ test("a spine tool's point presentation shows each ramp's pivot on its first syn
     );
   } finally { session.free(); }
 });
+
+test("the graph overlay switches off and on without touching an edit handle: only the dots with no function go", async () => {
+  const { sessionFixture } = await import("./platform-session-fixture.mjs");
+  const { curvePickId } = await import("../src/features/edit-construction/index.ts");
+  const real = sessionFixture(), render = createFakeRenderPort(), construction = createFakeConstructionPort();
+  const graph = {
+    nodes: [{ id: "spine:a", position: { x: 0, y: 0, z: 0 } }, { id: "spine:b", position: { x: 10, y: 0, z: 0 } }, { id: "mesh:vertex", position: { x: 5, y: 0, z: 1 } }],
+    edges: [{ edgeId: "spine-edge:a", startNodeId: "spine:a", endNodeId: "spine:b", curve: { start: [3, 0, 0], end: [-3, 0, 0], mode: "free", bandOffsets: [-1, 1], surfaceType: "path" } }],
+  };
+  Object.assign(construction, { getGraphSnapshot: () => graph, getNodePositions: () => graph.nodes, getCurvedEdges: () => [], curveBatch: real.runtime.curveBatch });
+  const runtime = createTabletopRuntime({ tableId: "overlay", renderPort: render, constructionPort: construction });
+  const shown = () => {
+    const ids = new Set(), revisions = new Map();
+    for (const c of render.changes) {
+      const key = c.dependency.layer + ":" + c.dependency.scopeId;
+      if (c.dependency.revision <= (revisions.get(key) ?? -1)) continue;
+      revisions.set(key, c.dependency.revision);
+      if (c.type === "node-handle-upserted") ids.add(c.handle.nodeId);
+      if (c.type === "node-handle-removed") ids.delete(c.nodeId);
+    }
+    return ids;
+  };
+  try {
+    await runtime.start();
+    runtime.setConstructionHandlePresentation("spine-points");
+    runtime.setConstructionHandlePresentation("all");
+    assert.ok(shown().has("mesh:vertex"), "the graph's dot on a plain vertex is drawn");
+    runtime.setGraphOverlay(false);
+    assert.ok(!shown().has("mesh:vertex"), "off: the dot is gone");
+    assert.ok(shown().has(curvePickId("spine-edge:a", "midpoint")), "an edit handle stays");
+    runtime.setGraphOverlay(true);
+    assert.ok(shown().has("mesh:vertex"), "on: it is back");
+  } finally { await runtime.dispose(); real.session.free(); }
+});

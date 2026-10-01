@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { Card, SlidingPanel } from "@/ui";
-import type { ConstructionToolId, StructureEditParams, ToolParamsByTool } from "@/features/edit-construction";
+import { ANGLE_STEPS, AUTO_LENGTH_STEP, LENGTH_STEPS, MEASURE_UNITS, RULER_KINDS, formatLength, isMeasureUnitId, type ConstructionToolId, type MeasureUnitId, type RulerKind, type RulerSettings, type StructureEditParams, type ToolParamsByTool } from "@/features/edit-construction";
 
 import { ConstructionToolParamsPanel } from "./construction-tool-params-panel.tsx";
 
@@ -15,6 +15,22 @@ export interface SelectedNodeInfo {
 
 const PANEL_WIDTH = 280;
 
+const selectStyle = { background: "#0f172a", color: "inherit", border: "1px solid #1e293b", borderRadius: "0.25rem", padding: "0.15rem 0.3rem" } as const;
+
+/** What each way the ruler catches is called, and what it does. */
+const RULER_KIND_LABELS: Readonly<Record<RulerKind, string>> = {
+  corner: "Cantos",
+  midpoint: "Meio das arestas",
+  side: "Ao longo das arestas",
+  square: "90° e prolongamento das arestas",
+  align: "Alinhar com cantos",
+  intersection: "Cruzamento de guias",
+  angle: "Mesma direção das arestas",
+  polar: "Transferidor (marcas de 5°)",
+  length: "Comprimento igual ao de uma aresta",
+  level: "Alturas iguais",
+};
+
 export interface SettingsDrawerProps {
   readonly selectedNodeInfo: SelectedNodeInfo | null;
   readonly activeTool: ConstructionToolId;
@@ -23,6 +39,15 @@ export interface SettingsDrawerProps {
   readonly structureEditParams: StructureEditParams;
   readonly onStructureEditParamsChange: (next: StructureEditParams) => void;
   readonly tokenCount: number;
+  /** The unit the table writes every distance in. */
+  readonly measureUnit: MeasureUnitId;
+  readonly onMeasureUnitChange: (unit: MeasureUnitId) => void;
+  /** What the table asks of its ruler: what catches, the angle's step and the round number a length lands on. */
+  readonly rulerSettings: RulerSettings;
+  readonly onRulerSettingsChange: (settings: RulerSettings) => void;
+  /** Whether the dots on the graph's nodes are drawn: a debug view, which changes no tool. */
+  readonly graphOverlay: boolean;
+  readonly onGraphOverlayChange: (visible: boolean) => void;
   readonly open?: boolean;
   readonly onOpenChange?: (open: boolean) => void;
 }
@@ -56,15 +81,15 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
             </div>
             <div className="gm-stat-row">
               <span>Posição X:</span>
-              <span className="gm-stat-value">{props.selectedNodeInfo.point.x.toFixed(2)}m</span>
+              <span className="gm-stat-value">{formatLength(props.selectedNodeInfo.point.x, props.measureUnit)}</span>
             </div>
             <div className="gm-stat-row">
               <span>Posição Y:</span>
-              <span className="gm-stat-value">{props.selectedNodeInfo.point.y.toFixed(2)}m</span>
+              <span className="gm-stat-value">{formatLength(props.selectedNodeInfo.point.y, props.measureUnit)}</span>
             </div>
             <div className="gm-stat-row">
               <span>Posição Z:</span>
-              <span className="gm-stat-value">{props.selectedNodeInfo.point.z.toFixed(2)}m</span>
+              <span className="gm-stat-value">{formatLength(props.selectedNodeInfo.point.z, props.measureUnit)}</span>
             </div>
           </div>
         ) : (
@@ -84,14 +109,72 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
       />
 
       <Card className="gm-panel-card" backgroundColor="#182234" accentColor="#1e293b">
+        <span className="gm-panel-card-title">Mesa</span>
+        <label className="gm-stat-row" style={{ alignItems: "center" }}>
+          <span>Unidade de medida:</span>
+          <select
+            value={props.measureUnit}
+            onChange={(event) => { if (isMeasureUnitId(event.target.value)) props.onMeasureUnitChange(event.target.value); }}
+            style={{ background: "#0f172a", color: "inherit", border: "1px solid #1e293b", borderRadius: "0.25rem", padding: "0.15rem 0.3rem" }}
+          >
+            {Object.values(MEASURE_UNITS).map((unit) => <option key={unit.id} value={unit.id}>{unit.label}</option>)}
+          </select>
+        </label>
+      </Card>
+
+      <Card className="gm-panel-card" backgroundColor="#182234" accentColor="#1e293b">
+        <span className="gm-panel-card-title">Depuração</span>
+        <label style={{ display: "flex", gap: "0.5rem", alignItems: "center", fontSize: "0.78rem" }}>
+          <input type="checkbox" checked={props.graphOverlay} onChange={(event) => props.onGraphOverlayChange(event.target.checked)} />
+          <span>Pontos do grafo (só visualização)</span>
+        </label>
+      </Card>
+
+      <Card className="gm-panel-card" backgroundColor="#182234" accentColor="#1e293b">
+        <span className="gm-panel-card-title">Régua: o que encaixa</span>
+        <div style={{ display: "grid", gap: "0.3rem", fontSize: "0.78rem" }}>
+          <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+            <input type="checkbox" checked={props.rulerSettings.numbers} onChange={(event) => props.onRulerSettingsChange({ ...props.rulerSettings, numbers: event.target.checked })} />
+            <span>Números no mapa</span>
+          </label>
+          <label className="gm-stat-row" style={{ alignItems: "center" }}>
+            <span>Passo do ângulo:</span>
+            <select value={props.rulerSettings.angleStep} onChange={(event) => props.onRulerSettingsChange({ ...props.rulerSettings, angleStep: Number(event.target.value) })} style={selectStyle}>
+              {ANGLE_STEPS.map((step) => <option key={step} value={step}>{step}°</option>)}
+            </select>
+          </label>
+          <label className="gm-stat-row" style={{ alignItems: "center" }}>
+            <span>Número fechado:</span>
+            <select value={props.rulerSettings.lengthStep} onChange={(event) => props.onRulerSettingsChange({ ...props.rulerSettings, lengthStep: event.target.value === AUTO_LENGTH_STEP ? AUTO_LENGTH_STEP : Number(event.target.value) })} style={selectStyle}>
+              <option value={AUTO_LENGTH_STEP}>Automático (segue o zoom)</option>
+              {LENGTH_STEPS.map((step) => <option key={step} value={step}>{step === 0 ? "Desligado" : `de ${step} em ${step} ${MEASURE_UNITS[props.measureUnit].symbol}`}</option>)}
+            </select>
+          </label>
+          {RULER_KINDS.map((kind) => (
+            <label key={kind} style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+              <input
+                type="checkbox"
+                checked={!props.rulerSettings.disabled.has(kind)}
+                onChange={(event) => {
+                  const next = new Set(props.rulerSettings.disabled);
+                  if (event.target.checked) next.delete(kind); else next.add(kind);
+                  props.onRulerSettingsChange({ ...props.rulerSettings, disabled: next });
+                }}
+              />
+              <span>{RULER_KIND_LABELS[kind]}</span>
+            </label>
+          ))}
+          <p style={{ margin: "0.2rem 0 0", color: "#64748b", fontSize: "0.72rem" }}>
+            Ctrl: posiciona sem encaixe. Shift: marcas de 5°. Digite um número ao desenhar para fixar o comprimento.
+          </p>
+        </div>
+      </Card>
+
+      <Card className="gm-panel-card" backgroundColor="#182234" accentColor="#1e293b">
         <span className="gm-panel-card-title">Métricas da Cena</span>
         <div className="gm-stat-row">
           <span>Tokens no Mapa:</span>
           <span className="gm-stat-value">{props.tokenCount}</span>
-        </div>
-        <div className="gm-stat-row">
-          <span>Snap ao Grid:</span>
-          <span className="gm-stat-value">Ativado (1.0m)</span>
         </div>
         <div className="gm-stat-row">
           <span>Iluminação:</span>

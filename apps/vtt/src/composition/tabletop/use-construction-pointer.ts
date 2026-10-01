@@ -3,16 +3,22 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 
-import type { ConstructionToolId, EditHistoryStack, StructureEditParams, ToolParamsByTool } from "@/features/edit-construction";
+import type { ConstructionToolId, EditHistoryStack, MeasureUnitId, RulerSettings, StructureEditParams, ToolParamsByTool } from "@/features/edit-construction";
 import { TOOL_GHOST_PREVIEW_CHANNEL } from "@/ports";
-import type { RenderViewId } from "@/ports";
+import type { ConstructionPosition, RenderViewId } from "@/ports";
 import type { SelectedNodeInfo } from "@/widgets";
 
-import { GRID_SNAP_UNIT } from "../../adapters/rendering/index.ts";
+import { VIEW_FOV_DEGREES } from "../../adapters/rendering/index.ts";
 import type { TabletopRuntime } from "./tabletop-runtime.ts";
+import { nodeByGeometry } from "./tools/core/node-identity.ts";
+import { metersPerPixelAt } from "./tools/core/pointer-scale.ts";
+import { createRulerSession } from "./tools/core/ruler-session.ts";
+import { NO_FEEDBACK, rulerOf, type RulerFeedback } from "./tools/core/ruler.ts";
+import { RULER_PREVIEW_CHANNEL, rulerLabels, rulerPreview } from "./tools/core/ruler-preview.ts";
+import { mapLabelsOf } from "./tools/core/ruler-labels.ts";
 import { toolFor } from "./tools/index.ts";
 import { beginCurveGesture, type CurveGesture } from "./tools/core/curve-edit-gesture.ts";
-import { carriesArrows, globalHandleOf, handleMotionAt, shownGlobalHandleAt } from "../../features/edit-construction/index.ts";
+import { DEFAULT_RULER_SETTINGS, FINE_ANGLE_STEP, HANDLE_REFERENCE, MEASURE_UNITS, lengthStepOf, carriesArrows, faceKey, globalHandleOf, handleMotionAt, shownGlobalHandleAt, toMetres } from "../../features/edit-construction/index.ts";
 import { gestureMoved, nextClickRun, type ClickRun } from "./tools/core/tool-context.ts";
 import { withFacePlane } from "./tools/core/pointer-ray.ts";
 import { handleFocusAt, NO_FOCUS, sameFocus } from "./tools/core/handle-focus.ts";
@@ -31,7 +37,7 @@ import type { ConstructionToolFeedback, PointerSample, ToolContext } from "./too
 function spineHandleAt(runtime: Pick<TabletopRuntime, "getGraphSnapshot" | "getAllRegionTopologies" | "cloudFor">, id: string): { readonly id: string; readonly position: { x: number; y: number; z: number } } | undefined {
   const graph = runtime.getGraphSnapshot();
   const scene = { graph, topologies: runtime.getAllRegionTopologies(), cloudFor: (request: Parameters<TabletopRuntime["cloudFor"]>[0]) => runtime.cloudFor(request) };
-  const motion = handleMotionAt(scene, id);
+  const motion = handleMotionOf(runtime, id);
   if (!motion || !carriesArrows(motion)) return undefined;
   if (globalHandleOf(id)) {
     const handle = shownGlobalHandleAt(scene, id);
@@ -41,11 +47,38 @@ function spineHandleAt(runtime: Pick<TabletopRuntime, "getGraphSnapshot" | "getA
   return node && { id: node.id, position: node.position };
 }
 
+/** How the handle `id` may move, as the scene stands. */
+function handleMotionOf(runtime: Pick<TabletopRuntime, "getGraphSnapshot" | "getAllRegionTopologies" | "cloudFor">, id: string): ReturnType<typeof handleMotionAt> {
+  const scene = { graph: runtime.getGraphSnapshot(), topologies: runtime.getAllRegionTopologies(), cloudFor: (request: Parameters<TabletopRuntime["cloudFor"]>[0]) => runtime.cloudFor(request) };
+  return handleMotionAt(scene, id);
+}
+
 /** Caps how often a continuous tool's `onPointerMove` commits during an active drag -- the preview ghost still updates on every raw event, only the (comparatively expensive) generate/mutate call is rate-limited. */
 const MOVE_COMMIT_THROTTLE_MS = 32;
 const PREVIEW_THROTTLE_MS = 32;
 /** How often hovering re-reads which structure's handles show. */
 const FOCUS_THROTTLE_MS = 50;
+
+/** The ruler's words for the point under the pointer, with where the pointer is on screen. */
+export interface RulerReadout {
+  readonly labels: readonly string[];
+  readonly x: number;
+  readonly y: number;
+}
+
+/** How soon the ruler is asked again while the pointer merely hovers, in milliseconds. */
+const RULER_HOVER_MS = 32;
+const DEGREE = Math.PI / 180;
+/** The round number as a ruling option -- nothing when the table chose none. */
+const lengthStepOption = (setting: typeof DEFAULT_RULER_SETTINGS.lengthStep, metersPerPixel: number | undefined, unit: MeasureUnitId): { lengthStep?: number } => {
+  const step = lengthStepOf(setting, metersPerPixel, unit);
+  return step === undefined ? {} : { lengthStep: step };
+};
+
+/** What the ruler offers when no settings are given: the table's defaults, but no round number -- the app always gives settings, so this is the harness. */
+const UNSET_RULER_SETTINGS = { ...DEFAULT_RULER_SETTINGS, lengthStep: 0 } as const;
+/** The channel the numbers written on the map go to, beside the ruler's lines. */
+const RULER_LABELS_CHANNEL = "ruler-labels";
 
 export interface UseConstructionPointerOptions {
   readonly activeTool: ConstructionToolId;
@@ -54,27 +87,18 @@ export interface UseConstructionPointerOptions {
   readonly history: EditHistoryStack;
   readonly tableId: string;
   readonly viewId: RenderViewId | undefined;
-  /** When true, a resolved point (other than an existing node handle -- those stay precise) snaps to the nearest grid intersection before any tool sees it, so a new terrain cell/wall/room lands centered on the grid instead of wherever the pointer happened to be. */
-  readonly snapToGrid: boolean;
+  /** The unit the ruler writes its distances in -- the table's own choice. */
+  readonly measureUnit: MeasureUnitId;
+  /** What the table asks of its ruler: what catches, the angle's step and the round number a length lands on. */
+  readonly rulerSettings?: RulerSettings;
+  /** What the ruler says in words, and where the pointer is on screen; `undefined` when there is nothing to say. */
+  readonly onRulerReadout?: (readout: RulerReadout | undefined) => void;
   /** How a grab on an existing structure behaves -- ambient across every construction tool, not one tool's own params. See `ToolContext.structureEditParams`. */
   readonly structureEditParams: StructureEditParams;
   readonly onSelectionChange: (info: SelectedNodeInfo | undefined) => void;
   readonly onFeedbackChange: (feedback: ConstructionToolFeedback | undefined) => void;
   /** Lets a tool rewrite its own params, e.g. to show its selection's settings in the panel. */
   readonly onToolParamsUpdate?: <Id extends ConstructionToolId>(toolId: Id, update: (current: ToolParamsByTool[Id]) => ToolParamsByTool[Id]) => void;
-}
-
-function snappedTo(value: number, unit: number): number {
-  return Math.round(value / unit) * unit;
-}
-
-/** A node-handle hit is never snapped -- moving an existing node stays precise; only newly-resolved ground points snap. */
-function applySnap(sample: PointerSample, snapToGrid: boolean): PointerSample {
-  if (!snapToGrid || sample.nodeId !== undefined) return sample;
-  return {
-    ...sample,
-    point: { x: snappedTo(sample.point.x, GRID_SNAP_UNIT), y: sample.point.y, z: snappedTo(sample.point.z, GRID_SNAP_UNIT) },
-  };
 }
 
 export interface ConstructionPointerHandlers {
@@ -89,6 +113,8 @@ interface ActiveGesture {
   readonly pointerId: number;
   readonly captureTarget: HTMLElement;
   readonly start: PointerSample;
+  /** Whether the ruler counts from where this gesture began: yes for a line drawn, and for a handle that moves freely; no for one held to a line. */
+  readonly rulesFrom: boolean;
   last: PointerSample;
   readonly samples: PointerSample[];
 }
@@ -122,6 +148,68 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
   const lastFocusAtRef = useRef(0);
   const optionsRef = useRef(options);
   optionsRef.current = options;
+  /** What stands, as links -- read once until the table changes. */
+  const ruler = useMemo(() => createRulerSession(() => optionsRef.current.runtime.getAllRegionTopologies()), []);
+  /** What the ruler shows for the point it last ruled. */
+  const feedbackRef = useRef<RulerFeedback>(NO_FEEDBACK);
+  useEffect(() => ruler.invalidate(), [ruler, options.runtime]);
+  const lastRulerAtRef = useRef(0);
+  /** Ctrl held: the pointer places freely, what the ruler catches shown but not taken. */
+  const freeHandRef = useRef(false);
+  /** How many metres a pixel of the screen is at the pointer: what the ruler's reach is worked out from. */
+  const metersPerPixelRef = useRef<number | undefined>(undefined);
+  /** The angular step the protractor is offering now, in radians: the table's, or the finer one while Shift is held. */
+  const angleStepRef = useRef(DEFAULT_RULER_SETTINGS.angleStep * DEGREE);
+  /** The length typed while drawing, as the digits written so far. */
+  const typedRef = useRef("");
+  /** Takes a key as a digit of that length; `true` when it was one. Set below, where the pointer's own move is known. */
+  const typeKeyRef = useRef<(event: KeyboardEvent) => boolean>(() => false);
+  /** Where the pointer last was on screen, for what a tool asks the ruler to show. */
+  const pointerAtRef = useRef({ clientX: 0, clientY: 0 });
+
+  /** Draws what the ruler caught for the last point it ruled, and says its distances. */
+  const showRuler = useCallback((event: { clientX: number; clientY: number }): void => {
+    try {
+      drawRuler(event);
+    } catch (error) {
+      // What the ruler shows is never worth the gesture: say so, and carry on.
+      console.error("ruler: could not be drawn", error);
+    }
+  }, []);
+
+  const drawRuler = (event: { clientX: number; clientY: number }): void => {
+    const { runtime, measureUnit, onRulerReadout } = optionsRef.current;
+    const feedback = feedbackRef.current;
+    const settings = optionsRef.current.rulerSettings ?? UNSET_RULER_SETTINGS;
+    const step = lengthStepOf(settings.lengthStep, metersPerPixelRef.current, measureUnit);
+    const view = {
+      unit: measureUnit,
+      ...(step !== undefined ? { lengthStep: step } : {}),
+      angleStep: angleStepRef.current,
+      protractor: !settings.disabled.has("polar"),
+      numbers: settings.numbers,
+    };
+    const descriptor = rulerPreview(feedback, metersPerPixelRef.current, view);
+    if (descriptor) runtime.showPreview(descriptor, RULER_PREVIEW_CHANNEL);
+    else runtime.clearPreview(RULER_PREVIEW_CHANNEL);
+    // The same lines, numbered where they are: the values at the teeth, along the line, round the protractor.
+    const written = mapLabelsOf(feedback, metersPerPixelRef.current, view);
+    if (written.length > 0) runtime.showLabels?.(written, RULER_LABELS_CHANNEL);
+    else runtime.clearPreview(RULER_LABELS_CHANNEL);
+    // What is being typed leads: it is what the next release will draw.
+    const typed = typedRef.current === "" ? [] : [`digitando ${typedRef.current}${(MEASURE_UNITS[measureUnit] ?? MEASURE_UNITS.m).symbol}`];
+    const labels = [...typed, ...rulerLabels(feedback, measureUnit)];
+    onRulerReadout?.(labels.length > 0 ? { labels, x: event.clientX, y: event.clientY } : undefined);
+  };
+
+  const clearRuler = useCallback((): void => {
+    feedbackRef.current = NO_FEEDBACK;
+    typedRef.current = "";
+    ruler.release();
+    optionsRef.current.runtime.clearPreview(RULER_PREVIEW_CHANNEL);
+    optionsRef.current.runtime.clearPreview(RULER_LABELS_CHANNEL);
+    optionsRef.current.onRulerReadout?.(undefined);
+  }, [ruler]);
   /** Channels the edge overlay currently occupies, so a redraw clears exactly what it drew. */
   const shownEdgeChannels = useRef(new Set<string>());
   const manipulatorGesture = useRef<CurveGesture | undefined>(undefined);
@@ -136,7 +224,8 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     lastCommitAtRef.current = 0;
     lastPreviewAtRef.current = 0;
     options.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
-  }, [options.activeTool, options.runtime]);
+    clearRuler();
+  }, [options.activeTool, options.runtime, clearRuler]);
 
 
 
@@ -151,14 +240,31 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       get tableId() {
         return optionsRef.current.tableId;
       },
-      gridUnit: GRID_SNAP_UNIT,
-      get snapToGrid() {
-        return optionsRef.current.snapToGrid;
+      // The ruler is always on while building and what it catches is taken; holding Ctrl places freely.
+      get rulerSnap() {
+        return !freeHandRef.current;
+      },
+      get rulerMetersPerPixel() {
+        return metersPerPixelRef.current;
+      },
+      get rulerDisabled() {
+        return optionsRef.current.rulerSettings?.disabled;
+      },
+      get rulerAngleStep() {
+        return angleStepRef.current;
+      },
+      get rulerLengthStep() {
+        const { rulerSettings, measureUnit } = optionsRef.current;
+        return rulerSettings ? lengthStepOf(rulerSettings.lengthStep, metersPerPixelRef.current, measureUnit) : undefined;
       },
       get structureEditParams() {
         return optionsRef.current.structureEditParams;
       },
       nextSequence,
+      showRuler: (feedback) => {
+        feedbackRef.current = feedback ?? NO_FEEDBACK;
+        showRuler(pointerAtRef.current);
+      },
       reportSelection: (info) => {
         const { runtime, viewId, activeTool } = optionsRef.current;
         optionsRef.current.onSelectionChange(info);
@@ -253,6 +359,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     const keydown = (event: KeyboardEvent) => {
       if (event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
       if (event.target instanceof HTMLElement && (event.target.isContentEditable || event.target.closest("input, textarea, select"))) return;
+      // While a line is being drawn, digits are its length -- and come before the tool's own keys.
+      // (A line begun by a click is as much under way as one dragged: the tool says so by giving its anchor.)
+      if ((gestureRef.current !== null || tool.rulerAnchor?.(ownedContext, optionsRef.current.toolParams[optionsRef.current.activeTool] as never) !== undefined) && typeKeyRef.current(event)) return;
       if (event.key === "Escape" && tool.onCancel) {
         tool.onCancel(ownedContext); release(); event.preventDefault(); return;
       }
@@ -292,6 +401,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     refreshEdgeOverlay();
     let drawn = runtime.getSnapshot().status === "ready";
     const unsubscribe = runtime.subscribe(() => {
+      ruler.invalidate();
       if (selectedPoint.current && !manipulatorGesture.current) {
         const node = spineHandleAt(runtime, selectedPoint.current);
         ctx.reportSelection(node ? { id: node.id, point: node.position } : undefined);
@@ -301,19 +411,68 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       refreshEdgeOverlay();
     });
     return unsubscribe;
-  }, [options.runtime, refreshEdgeOverlay, ctx]);
+  }, [options.runtime, refreshEdgeOverlay, ctx, ruler]);
+
+  /**
+   * `ruledSample` with the length typed so far: from where the drawing began,
+   * the way the pointer points -- already turned onto whatever it caught -- and
+   * exactly that long, in the table's unit. `undefined` while nothing is typed.
+   */
+  const typedLengthAt = useCallback((ruledSample: PointerSample, origin: ConstructionPosition, raw: PointerSample): { readonly sample: PointerSample; readonly feedback: RulerFeedback } | undefined => {
+    const value = Number.parseFloat(typedRef.current);
+    if (!(value > 0)) return undefined;
+    const meters = toMetres(value, optionsRef.current.measureUnit);
+    const dx = ruledSample.point.x - origin.x, dz = ruledSample.point.z - origin.z;
+    const length = Math.hypot(dx, dz);
+    const direction = length > 1e-9 ? { x: dx / length, z: dz / length } : { x: 1, z: 0 };
+    const point = { x: origin.x + direction.x * meters, y: ruledSample.point.y, z: origin.z + direction.z * meters };
+    return {
+      sample: { ...ruledSample, point, ruled: { x: point.x - raw.point.x, z: point.z - raw.point.z } },
+      feedback: { guides: [], measures: [{ kind: "length", from: origin, to: point, meters }] },
+    };
+  }, []);
 
   const sampleAt = useCallback(
-    (event: { currentTarget: HTMLElement; clientX: number; clientY: number; shiftKey?: boolean }): PointerSample | undefined => {
-      const { viewId, runtime, snapToGrid, activeTool } = optionsRef.current;
+    (event: { currentTarget: HTMLElement; clientX: number; clientY: number; shiftKey?: boolean; ctrlKey?: boolean; metaKey?: boolean }): PointerSample | undefined => {
+      const { viewId, runtime, activeTool, rulerSettings, measureUnit } = optionsRef.current;
+      const settings = rulerSettings ?? UNSET_RULER_SETTINGS;
       if (viewId === undefined) return undefined;
       const { x, y } = pointerOffset(event);
       const hit = runtime.pick(viewId, x, y);
       if (hit === undefined) return undefined;
-      const snap = snapToGrid && !toolFor(activeTool).snapsToSurface && toolFor(activeTool).useGridSnap !== false;
-      return { ...applySnap(withFacePlane(hit, runtime.getAllRegionTopologies()), snap), screenY: event.clientY, screenX: event.clientX, shiftKey: event.shiftKey };
+      const tool = toolFor(activeTool);
+      const placed = withFacePlane(hit, runtime.getAllRegionTopologies());
+      // Ctrl (Cmd) places freely: what the ruler catches is shown, not taken.
+      const free = event.ctrlKey === true || event.metaKey === true;
+      freeHandRef.current = free;
+      // Shift asks for the protractor's own graduation: five degrees.
+      angleStepRef.current = (event.shiftKey ? FINE_ANGLE_STEP : settings.angleStep) * DEGREE;
+      metersPerPixelRef.current = metersPerPixelAt(placed, event.currentTarget.getBoundingClientRect().height, VIEW_FOV_DEGREES);
+      // A tool that lays itself out on a surface, or in a frame of its own, is not ruled by position here.
+      // The line being drawn runs from where the tool says it begins -- the last corner or end it was given, so the line that follows
+      // the pointer between clicks is ruled like one dragged -- else from where the gesture began. A handle is moved, not drawn from:
+      // only one that moves freely is ruled from where it was grabbed, for how far and which way it goes.
+      const drawing = gestureRef.current;
+      const anchor = tool.rulerAnchor?.(ctx, optionsRef.current.toolParams[activeTool] as never);
+      const origin = anchor ?? (drawing && drawing.rulesFrom ? drawing.start.point : undefined);
+      let ruled = tool.snapsToSurface || tool.usesRuler === false
+        ? { sample: placed, feedback: NO_FEEDBACK }
+        : ruler.ruleSample(placed, {
+          snap: !free,
+          ...(origin ? { origin, polar: angleStepRef.current, ...lengthStepOption(settings.lengthStep, metersPerPixelRef.current, measureUnit) } : {}),
+          ...(metersPerPixelRef.current !== undefined ? { metersPerPixel: metersPerPixelRef.current } : {}),
+          ...(settings.disabled.size > 0 ? { disabled: settings.disabled } : {}),
+        });
+      // A length typed while drawing wins over every catch: the line runs where the pointer points, exactly that long.
+      const typed = origin && !(tool.snapsToSurface || tool.usesRuler === false) ? typedLengthAt(ruled.sample, origin, placed) : undefined;
+      if (typed) ruled = typed;
+      feedbackRef.current = ruled.feedback;
+      pointerAtRef.current = { clientX: event.clientX, clientY: event.clientY };
+      // The node under the pointer, by geometry: what a tool reads "the node here" from, drawn dots or not.
+      const node = nodeByGeometry(placed, runtime.getGraphSnapshot().nodes, metersPerPixelRef.current);
+      return { ...ruled.sample, ...(node ? { node } : {}), screenY: event.clientY, screenX: event.clientX, shiftKey: event.shiftKey };
     },
-    [],
+    [ruler, typedLengthAt, ctx],
   );
 
   /**
@@ -361,7 +520,11 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       // Only tools that actually react to a drag capture the pointer --
       // a click-only tool leaves the native click gesture alone.
       if (tool.onPointerMove !== undefined || tool.onPointerUp !== undefined) {
-        gestureRef.current = { pointerId: event.pointerId, captureTarget: event.currentTarget, start: sample, last: sample, samples: [sample] };
+        const motion = sample.nodeId === undefined ? undefined : handleMotionOf(optionsRef.current.runtime, sample.nodeId);
+        // The ruler counts from where a handle was grabbed only for one that declares it is read by how far it went: a vertex is read by the sides it edits instead.
+        const declared = sample.nodeId === undefined ? undefined : globalHandleOf(sample.nodeId);
+        const rulesFrom = sample.nodeId === undefined || ((declared === undefined || HANDLE_REFERENCE[declared.kind] === "grab") && (motion?.kind === "free" || motion?.kind === "plane"));
+        gestureRef.current = { pointerId: event.pointerId, captureTarget: event.currentTarget, start: sample, rulesFrom, last: sample, samples: [sample] };
         event.currentTarget.setPointerCapture(event.pointerId);
       }
       tool.onPointerDown?.(ctx, sample, params);
@@ -370,8 +533,12 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
     [ctx, sampleAt, showStartPreview],
   );
 
+  /** The last pointer move, kept so a length typed while the pointer is still can be applied at once. */
+  const lastMoveRef = useRef<ReactPointerEvent<HTMLDivElement> | undefined>(undefined);
+
   const onPointerMove = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
+      lastMoveRef.current = { currentTarget: event.currentTarget, clientX: event.clientX, clientY: event.clientY, shiftKey: event.shiftKey, ctrlKey: event.ctrlKey, metaKey: event.metaKey, pointerId: event.pointerId } as unknown as ReactPointerEvent<HTMLDivElement>;
       const gesture = gestureRef.current;
       const { activeTool, toolParams } = optionsRef.current;
       const tool = toolFor(activeTool);
@@ -382,6 +549,21 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       if (gesture === null || gesture.pointerId !== event.pointerId) {
         const hover = typeof tool.previewOnHover === "function" ? tool.previewOnHover(params) : tool.previewOnHover;
         const sample = hover || tool.handlesOnHover ? sampleAt(event) : undefined;
+        // The ruler is there whenever something is being built, hovering or not.
+        if (activeTool !== "navigate" && !tool.snapsToSurface && tool.usesRuler !== false) {
+          const at = performance.now();
+          if (at - lastRulerAtRef.current >= RULER_HOVER_MS) {
+            lastRulerAtRef.current = at;
+            if (!sample) sampleAt(event);
+            // What is pointed at says how big it is, without being touched: its height and its extent.
+            const focus = tool.handlesOnHover ? focusRef.current : undefined;
+            if (focus && focus.faces.size > 0) {
+              const faces = optionsRef.current.runtime.getAllRegionTopologies().filter((topology) => focus.faces.has(faceKey(topology)));
+              feedbackRef.current = { guides: feedbackRef.current.guides, measures: [...feedbackRef.current.measures, ...rulerOf(ctx).dimensions(faces)] };
+            }
+            showRuler(event);
+          }
+        }
         // The structure under the pointer shows its handles.
         if (tool.handlesOnHover && tool.editsType && focusRef.current) {
           const now = performance.now();
@@ -403,6 +585,8 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
 
       const sample = sampleAt(event);
       if (sample === undefined) return; // pointer strayed off pickable geometry -- freeze at the last resolved position, same posture as before this refactor.
+      // A handle dragged shows its own guides -- through `ctx.showRuler` -- so the pointer's do not wipe them.
+      if (gesture.start.nodeId === undefined) showRuler(event);
       gesture.last = sample;
       const previous = gesture.samples[gesture.samples.length - 1];
       if (previous === undefined || previous.point.x !== sample.point.x || previous.point.y !== sample.point.y || previous.point.z !== sample.point.z) {
@@ -421,8 +605,26 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       lastCommitAtRef.current = now;
       tool.onPointerMove?.(ctx, activeGesture, params);
     },
-    [ctx, sampleAt],
+    [ctx, sampleAt, showRuler],
   );
+
+  // Digits typed while drawing set the exact length of what is being drawn, in the table's unit -- SketchUp's measurements box.
+  // Read by the tool's own key handler, ahead of its keys: Backspace here edits the number and Escape clears it.
+  typeKeyRef.current = (event) => {
+    const typed = typedRef.current;
+    let next: string | undefined;
+    if (/^[0-9]$/.test(event.key)) next = typed + event.key;
+    else if ((event.key === "." || event.key === ",") && !typed.includes(".")) next = `${typed === "" ? "0" : typed}.`;
+    else if (event.key === "Backspace" && typed !== "") next = typed.slice(0, -1);
+    else if (event.key === "Escape" && typed !== "") next = "";
+    if (next === undefined) return false;
+    event.preventDefault();
+    typedRef.current = next;
+    // Applied at once, to where the pointer stands: no need to move it to see the number take.
+    const move = lastMoveRef.current;
+    if (move) onPointerMove(move);
+    return true;
+  };
 
   const finishGesture = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -446,9 +648,10 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
         event.currentTarget.releasePointerCapture(event.pointerId);
       }
       optionsRef.current.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
+      clearRuler();
       refreshEdgeOverlay();
     },
-    [ctx, refreshEdgeOverlay, sampleAt],
+    [ctx, refreshEdgeOverlay, sampleAt, clearRuler],
   );
 
   const cancelGesture = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
@@ -461,7 +664,8 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
     optionsRef.current.runtime.clearPreview(TOOL_GHOST_PREVIEW_CHANNEL);
-  }, [ctx]);
+    clearRuler();
+  }, [ctx, clearRuler]);
   const onClick = useCallback(
     (event: ReactMouseEvent<HTMLDivElement>) => {
       if (suppressClickRef.current) { suppressClickRef.current = false; return; }

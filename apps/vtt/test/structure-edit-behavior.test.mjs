@@ -85,3 +85,54 @@ test("a spine's curve handle is grabbed only by a tool owning the spine's type",
   assert.equal(createStructureEditBehavior({ ownsType: (t) => t === "wall-white" }).tryGrab(ctx, sample, { mode: "shape" }), false);
   assert.equal(createStructureEditBehavior({ ownsType: (t) => t === "road" }).tryGrab(ctx, sample, { mode: "shape" }), true);
 });
+
+test("lifting a wall's top says exactly how high the wall stands now, in the ruler -- not only that something moved", () => {
+  const { runtime, session, ctx } = sessionFixture();
+  const shown = [];
+  ctx.showRuler = (feedback) => shown.push(feedback);
+  try {
+    wallAndPlatform(runtime);
+    const behavior = createStructureEditBehavior({ ownsType: (t) => t === "wall-white" });
+    const start = { point: { x: 0, y: 3, z: 0 }, nodeId: "w:a-top", screenX: 100, screenY: 300 };
+    assert.equal(behavior.tryGrab(ctx, start, { mode: "elevation" }), true);
+    // One metre up the screen is one metre up: the pixels a metre takes are the gesture's own.
+    const current = { point: start.point, screenX: 100, screenY: 300 - 40 };
+    behavior.onPointerMove(ctx, { start, current, samples: [start, current] }, { mode: "elevation" });
+    const measures = shown.filter(Boolean).at(-1)?.measures ?? [];
+    const height = measures.find((m) => m.kind === "height");
+    assert.ok(height, JSON.stringify(measures));
+    // The wall stood 3 high above its foot; its top is a metre higher.
+    assert.ok(Math.abs(height.meters - 4) < 1e-6 && Math.abs(height.level - 4) < 1e-6, JSON.stringify(measures));
+    assert.ok(Math.abs(measures.find((m) => m.kind === "change").meters - 1) < 1e-6);
+  } finally { session.free(); }
+});
+
+test("the height widget lands the wall's top on a round number, like every other lift -- and leaves it as dragged with the snap off", async () => {
+  const { panelHeightWidgetPickId } = await import("../src/features/edit-construction/index.ts");
+  for (const snap of [true, false]) {
+    const { runtime, session, ctx } = sessionFixture();
+    const shown = [];
+    Object.assign(ctx, { showRuler: (feedback) => shown.push(feedback), rulerSnap: snap, rulerLengthStep: 0.5 });
+    try {
+      const { wall } = wallAndPlatform(runtime);
+      const topEdge = wall.outerLoops[0][2].edgeId;
+      const behavior = createStructureEditBehavior({ ownsType: (t) => t === "wall-white" });
+      const start = { point: { x: 2, y: 3, z: 0 }, nodeId: panelHeightWidgetPickId(topEdge, "group"), screenX: 100, screenY: 300 };
+      assert.equal(behavior.tryGrab(ctx, start, { mode: "elevation" }), true);
+      // 41.6 pixels up the screen: the pointer has the top 1.04 higher.
+      const current = { point: start.point, screenX: 100, screenY: 300 - 41.6 };
+      behavior.onPointerMove(ctx, { start, current, samples: [start, current] }, { mode: "elevation" });
+      const last = shown.filter(Boolean).at(-1);
+      const height = last.measures.find((m) => m.kind === "height").meters;
+      const tops = runtime.getGraphSnapshot().nodes.filter((n) => n.id.endsWith("-top")).map((n) => n.position.y);
+      if (snap) {
+        assert.ok(Math.abs(height - 4) < 1e-6, `4 m, not 4.04: ${height}`);
+        assert.ok(last.guides.some((g) => g.kind === "step"), "the round number is marked");
+        assert.ok(tops.every((y) => Math.abs(y - 4) < 1e-6), JSON.stringify(tops));
+      } else {
+        assert.ok(Math.abs(height - 4.04) < 1e-6, `as dragged: ${height}`);
+        assert.equal(last.guides.length, 0);
+      }
+    } finally { session.free(); }
+  }
+});

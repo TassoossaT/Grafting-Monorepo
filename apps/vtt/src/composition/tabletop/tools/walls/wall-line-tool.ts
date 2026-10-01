@@ -31,6 +31,7 @@ let anchor: ConstructionPosition | undefined;
 const rawWallLineTool: ConstructionTool<"wall-line"> = {
   id: "wall-line",
   defaultParams: () => DEFAULT_TOOL_PARAMS["wall-line"],
+  rulerAnchor: () => anchor,
 
   previewFor(gesture: ToolGesture, params: WallParams, ctx: ToolContext) {
     if (anchor === undefined) return undefined;

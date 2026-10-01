@@ -12,10 +12,17 @@ import type { PointerSample } from "./tool-context.ts";
  * Anywhere else, the ray crossing `y` itself, so something drawn at `y`
  * sits right under the cursor rather than above or below whatever the ray
  * hit. Without a ray -- or one that never reaches there in front of the
- * camera -- the hit point, at `y`. Always exact: the hit point may be
- * snapped to the grid, the ray never is.
+ * camera -- the hit point, at `y`. Exact but for what the ruler caught
+ * (`sample.ruled`): the pointer's own ray is never rounded, only ruled.
  */
 export function pointerAtHeight(sample: PointerSample, y: number): ConstructionPosition {
+  const exact = exactAtHeight(sample, y);
+  // The ruler's catch -- how far it moved the hit -- is carried onto the ray: every tool reads the pointer here, so every tool is ruled.
+  const ruled = sample.ruled;
+  return ruled ? { x: exact.x + ruled.x, y, z: exact.z + ruled.z } : exact;
+}
+
+function exactAtHeight(sample: PointerSample, y: number): ConstructionPosition {
   const ray = sample.ray;
   if (!ray) return { ...sample.point, y };
   const face = sample.face;

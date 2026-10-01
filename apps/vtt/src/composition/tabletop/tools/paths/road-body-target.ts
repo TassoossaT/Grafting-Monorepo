@@ -1,13 +1,17 @@
 import { curvePick, structureTypeFor } from "../../../../features/edit-construction/index.ts";
 import { spineBodyTarget } from "../core/spine-body-target.ts";
 import type { PointerSample, ToolContext } from "../core/tool-context.ts";
-import type { AnchorSnap } from "../core/curve-edit-gesture.ts";
+import type { AnchorSnap, AnchorTarget } from "../core/curve-edit-gesture.ts";
+import { rulerOf } from "../core/ruler.ts";
 import { createSnapMeshPreview } from "./road-preview-mesh.ts";
 
-export interface RoadSnapTarget extends PointerSample {
+export interface RoadSnapTarget extends AnchorTarget {
   readonly snapSignature?: string;
   readonly snapEdge?: { readonly edgeId: string; readonly parameter: number };
 }
+/** How near a road's node, on the screen, a dragged anchor must come to join it -- and the same in metres while the scale is unknown. */
+const ROAD_SNAP_PIXELS = 40;
+const ROAD_SNAP_FALLBACK = 0.55;
 const snapLocks = new WeakMap<ToolContext["runtime"], { target: RoadSnapTarget; signature: string; exitReach: number }>();
 function targetSignature(ctx: ToolContext, target: RoadSnapTarget): string | undefined {
   const graph = ctx.runtime.getGraphSnapshot();
@@ -34,7 +38,9 @@ export function roadSnapTarget(ctx: ToolContext, sample: PointerSample, excludeN
   if (target) {
     const signature = targetSignature(ctx, target);
     if (signature) target = { ...target, snapSignature: signature };
-    if (signature) snapLocks.set(ctx.runtime, { target, signature, exitReach: Math.max(0.9,
+    // Held past the reach that took it, by the ruler's own hold: no flicker at the edge.
+    const ruler = rulerOf(ctx);
+    if (signature) snapLocks.set(ctx.runtime, { target, signature, exitReach: Math.max(ruler.held(ruler.reach(ROAD_SNAP_PIXELS, ROAD_SNAP_FALLBACK)),
       Math.hypot(target.point.x - sample.point.x, target.point.z - sample.point.z) + 0.3) });
   }
   return target;
@@ -49,18 +55,19 @@ export function roadSnapIsCurrent(ctx: ToolContext, target: RoadSnapTarget): boo
 function acquireRoadSnap(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): RoadSnapTarget | undefined {
   const graph = ctx.runtime.getGraphSnapshot();
   const ids = new Set(graph.edges.filter(e => e.curve?.surfaceType && structureTypeFor(e.curve.surfaceType)?.spine).flatMap(e => [e.startNodeId, e.endNodeId]));
+  const reach = rulerOf(ctx).reach(ROAD_SNAP_PIXELS, ROAD_SNAP_FALLBACK);
   let best: { node: (typeof graph.nodes)[number]; distance: number } | undefined;
   for (const node of graph.nodes) {
     if (excludeNodeId && node.id === excludeNodeId) continue;
     if (!ids.has(node.id) || Math.abs(node.position.y - sample.point.y) > 1.5) continue;
     const distance = Math.hypot(node.position.x - sample.point.x, node.position.z - sample.point.z);
-    if (distance <= 0.55 && (!best || distance < best.distance)) best = { node, distance };
+    if (distance <= reach && (!best || distance < best.distance)) best = { node, distance };
   }
   if (best) return { ...sample, nodeId: best.node.id, point: best.node.position };
   const body = spineBodyTarget(ctx, sample, excludeNodeId);
   if (!body) return;
   const edge = curvePick(body.sample.nodeId!);
-  return { ...body.sample, snapEdge: edge ? { edgeId: edge.edgeId, parameter: body.options.parameter! } : undefined };
+  return { ...body.sample, span: true, snapEdge: edge ? { edgeId: edge.edgeId, parameter: body.options.parameter! } : undefined };
 }
 
 /** Highlight the exact prospective junction without changing the graph. */

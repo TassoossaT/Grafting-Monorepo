@@ -28,6 +28,7 @@ import { withStructureEditing } from "../core/structure-edit-behavior.ts";
 import { contourStroke } from "../core/contour-stroke.ts";
 import { segmentsPreview } from "../shapes/preview-shapes.ts";
 import { roofBaseAt } from "./roof-base.ts";
+import { graphNodeOf } from "../core/node-identity.ts";
 import { commitRoofRecipes } from "./roof-commit.ts";
 
 type Params = ToolParamsByTool["roof"];
@@ -74,7 +75,8 @@ function floorsOf(ctx: ToolContext) {
 
 /** Where a roof begun at `start` stands: on its snapped support or hit point. */
 function startElevation(ctx: ToolContext, start: PointerSample): number {
-  const picked = start.nodeId ? ctx.runtime.getGraphSnapshot().nodes.find((node) => node.id === start.nodeId) : undefined;
+  const nodeId = graphNodeOf(start);
+  const picked = nodeId ? ctx.runtime.getGraphSnapshot().nodes.find((node) => node.id === nodeId) : undefined;
   if (picked) return picked.position.y;
   const floor = start.surfaceRef ? floorsOf(ctx).find((face) => surfaceRefFromNodeSet(face.surfaceKey) === start.surfaceRef) : undefined;
   if (floor) return floor.nodes[0]!.position.y;
@@ -286,7 +288,6 @@ const rawRoofTool: ConstructionTool<"roof"> = {
   id: "roof",
   previewOnHover: true,
   // Squared in the frame each shape is built in, never to the world's fixed grid.
-  useGridSnap: false,
   defaultParams: () => DEFAULT_TOOL_PARAMS.roof,
   onCancel: stroke.onCancel,
   previewFor(gesture, params, ctx) {

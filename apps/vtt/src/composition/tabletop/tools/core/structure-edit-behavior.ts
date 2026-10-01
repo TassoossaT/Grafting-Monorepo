@@ -4,9 +4,11 @@ import { beginCurveGesture } from "./curve-edit-gesture.ts";
 import { pointerAtHeight } from "./pointer-ray.ts";
 import { commitRegionEdit } from "../../effects/effect-commit.ts";
 import { beginGlobalHandleGesture } from "./global-handle-gesture.ts";
+import { rulerOf, type Ruler, type RulerGuide, type RulerLinks, type RulerMeasure } from "./ruler.ts";
 import {
   cloudNodes,
   curvePick,
+  faceKey,
   globalHandleOf,
   panelHeightWidgetPick,
   planEdit,
@@ -74,9 +76,11 @@ function grabbedTarget(ctx: ToolContext, sample: PointerSample, ownsType: Struct
     return topology === undefined ? undefined : { seedKey: topology.surfaceKey, target };
   }
 
-  if (sample.nodeId !== undefined) {
-    const target: EditTarget = { kind: "vertex", nodeId: sample.nodeId };
-    const incident = topologies.filter((candidate) => candidate.nodes.some((node) => node.id === sample.nodeId));
+  // The vertex under the pointer: the one a picked dot named, else the node geometry finds -- it grabs the same with the dots off.
+  const vertexId = sample.nodeId ?? sample.node?.id;
+  if (vertexId !== undefined) {
+    const target: EditTarget = { kind: "vertex", nodeId: vertexId };
+    const incident = topologies.filter((candidate) => candidate.nodes.some((node) => node.id === vertexId));
     let topology: ConstructionRegionTopology | undefined = incident.find((candidate) => sample.surfaceRef === surfaceRefFromNodeSet(candidate.surfaceKey))
       ?? (elevation ? incident.find((candidate) => resolvePolicy(candidate, target).axes.includes("y")) : undefined)
       ?? incident[0];
@@ -172,6 +176,29 @@ const aimOf = (sample: PointerSample, height: number): ConstructionPosition => (
 const aimAt = (active: { readonly height: number; readonly rises: boolean }, sample: PointerSample): ConstructionPosition =>
   (active.rises ? sample.point : aimOf(sample, active.height));
 
+/**
+ * What the drag so far says, in the ruler's measures: how high the structure
+ * stands now -- above its base -- when it was raised or lowered, else how far
+ * what was grabbed went. Read off the nodes the drag has moved, as they stand
+ * now against where they began.
+ */
+function dragMeasures(ruler: Ruler, active: Pick<ActiveDrag, "before" | "base">, snapshot: ConstructionGraphSnapshot): readonly RulerMeasure[] {
+  const now = new Map(snapshot.nodes.map((node) => [node.id, node.position]));
+  let top: { was: ConstructionPosition; now: ConstructionPosition } | undefined;
+  let first: { was: ConstructionPosition; now: ConstructionPosition } | undefined;
+  for (const [id, was] of active.before) {
+    const stands = now.get(id);
+    if (!stands) continue;
+    first ??= { was, now: stands };
+    if (!top || stands.y > top.now.y) top = { was, now: stands };
+  }
+  if (!top || !first) return [];
+  const lifted = [...active.before].some(([id, was]) => Math.abs((now.get(id)?.y ?? was.y) - was.y) > 1e-4);
+  return lifted
+    ? ruler.measure({ kind: "height", base: active.base }, top.was, top.now)
+    : ruler.measure({ kind: "move" }, first.was, first.now);
+}
+
 function delta(from: ConstructionPosition, to: ConstructionPosition): ConstructionPosition {
   return { x: to.x - from.x, y: to.y - from.y, z: to.z - from.z };
 }
@@ -209,6 +236,16 @@ interface ActiveDrag {
   readonly height: number;
   /** Whether what was grabbed may move up or down -- a wall's top, its height widget: the pointer is then read where it points, never flattened onto the grab's level. */
   readonly rises: boolean;
+  /** The height the structure rises from, as it stood when grabbed: the lowest of its nodes -- what its height is measured above. */
+  readonly base: number;
+  /**
+   * Set for the height widget, whose drag raises the whole top: the standing
+   * levels it may land on, where the top stood, how far the pointer has raised
+   * it and how far it has actually been raised -- the ruler lands the top on a
+   * level or a round number, and this keeps the two apart so a snap never
+   * drifts the pointer from what it drags.
+   */
+  lifting?: { readonly links: RulerLinks; readonly top: number; raw: number; applied: number; guides: readonly RulerGuide[] };
   screenY?: number;
 }
 
@@ -264,8 +301,14 @@ export function createStructureEditBehavior(options: StructureEditOptions): Stru
       previous: sample.point,
       height: sample.point.y,
       rises: resolvePolicy(cloud.seed, grabbed.target).axes.includes("y"),
+      base: rulerOf(ctx).base(cloud.members.flatMap((member) => member.nodes.map((node) => node.position.y)), sample.point.y),
       screenY: sample.screenY,
     };
+    // The height widget raises the whole top: it lands on the levels that stand, and on round numbers, like every other lift.
+    if (grabbed.target.kind === "edge-zone") {
+      const heights = cloud.members.flatMap((member) => member.nodes.map((node) => node.position.y));
+      active.lifting = { links: rulerOf(ctx).linksWithout(new Set(cloud.members.map(faceKey))), top: Math.max(...heights), raw: 0, applied: 0, guides: [] };
+    }
     if (grabbed.target.kind === "vertex") {
       ctx.reportSelection({ id: grabbed.target.nodeId, point: sample.point });
     }
@@ -279,10 +322,21 @@ export function createStructureEditBehavior(options: StructureEditOptions): Stru
     // Per-tick delta, not gesture-total: every op the plan produces applies
     // on top of the cloud's *current* state, so a cumulative delta would
     // move everything again on each tick.
-    const step = editParams.mode === "elevation" && active.screenY !== undefined && gesture.current.screenY !== undefined
+    let step = editParams.mode === "elevation" && active.screenY !== undefined && gesture.current.screenY !== undefined
       ? { x: 0, y: (active.screenY - gesture.current.screenY) / 40, z: 0 }
       : delta(active.previous, aimAt(active, gesture.current));
     active.screenY = gesture.current.screenY;
+    if (active.lifting && step.y !== 0) {
+      const { lifting } = active;
+      // Where the pointer has the top; where the ruler lands it; the step is only what is left to reach it.
+      lifting.raw += step.y;
+      const wanted = lifting.top + lifting.raw;
+      const lifted = rulerOf(ctx).lift({ dragged: { x: 0, y: wanted, z: 0 }, standing: wanted, base: active.base, links: lifting.links, rounds: true });
+      const reached = lifted.y - (lifting.top + lifting.applied);
+      lifting.applied += reached;
+      lifting.guides = lifted.guides;
+      step = { ...step, y: reached };
+    }
     if (step.x === 0 && step.y === 0 && step.z === 0) return;
     active.previous = aimAt(active, gesture.current);
 
@@ -317,6 +371,8 @@ export function createStructureEditBehavior(options: StructureEditOptions): Stru
       const original = beforeTick.get(op.nodeId);
       if (original) active.before.set(op.nodeId, original);
     }
+    const ruler = rulerOf(ctx);
+    ruler.show({ guides: active.lifting?.guides ?? [], measures: dragMeasures(ruler, active, ctx.runtime.getGraphSnapshot()) });
 
     // The handle-design notes call out that a drag gives no signal of how
     // much it is about to affect. The plan already knows, so say it.

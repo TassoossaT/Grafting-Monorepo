@@ -17,12 +17,14 @@ import {
   spineOwnerAt,
   structureTypeFor,
 } from "../../../../features/edit-construction/index.ts";
+import { facesOfNodes } from "../../../../features/edit-construction/index.ts";
 import type { AtomicEditOp, StructureEditParams } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionCurvedEdge, ConstructionEdgeGeometry, ConstructionPosition, ConstructionSurfaceKey, CubicBezier } from "../../../../ports/index.ts";
 import type { PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
 import { commitPatchReplacement } from "../../effects/effect-commit.ts";
 import { commitSpineRegeneration } from "./spine-commit.ts";
 import { pointerAtHeight } from "./pointer-ray.ts";
+import { rulerOf, type RulerGuide } from "./ruler.ts";
 import { beginGlobalHandleGesture } from "./global-handle-gesture.ts";
 
 /**
@@ -50,8 +52,13 @@ export interface CurveGesture {
  * road's node or span, say -- and how the snap is shown. A tool supplies its
  * own; the gesture only asks it.
  */
+/** What an anchor snap lands on: a point, and whether it is a place along a span rather than a node. */
+export interface AnchorTarget extends PointerSample {
+  readonly span?: boolean;
+}
+
 export interface AnchorSnap {
-  find(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): PointerSample | undefined;
+  find(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): AnchorTarget | undefined;
   /** Shows `target` as the snap, or clears it when absent. */
   show(ctx: ToolContext, target?: PointerSample): void;
 }
@@ -133,6 +140,9 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params: CurveGest
   const pick = curvePick(targetId);
   const isWidthDrag = params?.curveAction === "width";
   let currentWidth = params?.curveWidth ?? 4;
+  /** The width the road had when the drag began, and the line across it where the width is read: the ruler is drawn along it. */
+  const startWidth = currentWidth;
+  let widthAcross: { readonly from: ConstructionPosition; readonly to: ConstructionPosition } | undefined;
   let resolvedCurve: CubicBezier | undefined;
 
   if (isWidthDrag && pick) {
@@ -165,6 +175,11 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params: CurveGest
     endWidth: params?.curveEndWidth,
   });
 
+  /** What the drag joined on its last move: shown with its measures. */
+  let joined: RulerGuide[] = [];
+  /** What the lift caught on its last move. */
+  let lifted: RulerGuide[] = [];
+
   return {
     move(gesture) {
       if (ended) return;
@@ -175,10 +190,20 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params: CurveGest
       // its own height, under the cursor. The scene manipulator's vertical
       // arrow and elevation mode move it on purpose.
       if (planOnly && params?.mode !== "elevation" && !params?.spatialTarget) target = pointerAtHeight(gesture.current, sample.point.y);
+      joined = [];
       if (!curvePick(targetId) && !planOnly && params?.snap) {
         const snap = params.snap.find(ctx, { point: target }, targetId);
         if (snap) target = snap.point;
         params.snap.show(ctx, snap);
+        // What it joined is named, like everything else the ruler catches: the road's node, or a place along its span.
+        if (snap) joined = [{ kind: "point", at: snap.point, node: snap.nodeId ?? "", role: snap.span ? "span" : "node" }];
+      }
+      // Raised or lowered, a point lands on the heights other structures stand at, or on a round number above the ground -- the ruler's lift, as every height handle has.
+      lifted = [];
+      if (!isWidthDrag && Math.abs(target.y - sample.point.y) > 1e-4) {
+        const lift = rulerOf(ctx).lift({ dragged: target, standing: target.y, base: 0, links: rulerOf(ctx).linksWithout(facesOfNodes(ctx.runtime.getAllRegionTopologies(), [targetId])), rounds: true });
+        target = { ...target, y: lift.y };
+        lifted = [...lift.guides];
       }
       moved = target.x !== sample.point.x || target.y !== sample.point.y || target.z !== sample.point.z;
       dragged ||= moved;
@@ -197,10 +222,24 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params: CurveGest
           const pt = ev?.curves[0]?.points[3];
           if (pt) {
             const dist = Math.hypot(target.x - pt[0], target.z - pt[2]);
-            currentWidth = Math.max(0.5, Math.round(dist * 2 * 4) / 4);
+            // The road's width lands on the table's round number when near one -- the ruler's, not a step of this handle's own.
+            currentWidth = Math.max(0.5, rulerOf(ctx).round(dist * 2));
+            // Across the road, centred on its spine, as wide as it now is.
+            const run = Math.hypot(target.x - pt[0], target.z - pt[2]) || 1;
+            const u = { x: (target.x - pt[0]) / run, z: (target.z - pt[2]) / run };
+            widthAcross = { from: { x: pt[0] - u.x * currentWidth / 2, y: pt[1], z: pt[2] - u.z * currentWidth / 2 }, to: { x: pt[0] + u.x * currentWidth / 2, y: pt[1], z: pt[2] + u.z * currentWidth / 2 } };
           }
         }
       }
+
+      // What the drag measures, in the table's unit: a road's width, or how far a point went and how high it stands.
+      const ruler = rulerOf(ctx);
+      const rose = !isWidthDrag && Math.abs(target.y - sample.point.y) > 1e-4;
+      ruler.show({
+        guides: [...joined, ...lifted],
+        measures: isWidthDrag ? [{ kind: "size", name: "largura", meters: currentWidth, ...(widthAcross ?? {}) }, ...(Math.abs(currentWidth - startWidth) > 1e-4 ? [{ kind: "was" as const, name: "largura", was: startWidth, now: currentWidth }] : [])]
+          : [...ruler.measure({ kind: "move" }, sample.point, target), ...(rose ? ruler.measure({ kind: "height", base: 0 }, sample.point, target) : [])],
+      });
 
       try {
         if (isWidthDrag && resolvedCurve) {

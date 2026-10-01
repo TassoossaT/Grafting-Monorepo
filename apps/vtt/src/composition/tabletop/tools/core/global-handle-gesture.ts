@@ -5,10 +5,15 @@ import {
   joinWhereLanded,
   rejoinNodes,
   releasePart,
+  HANDLE_MEASUREMENT,
+  HANDLE_REFERENCE,
+  editNeighbours,
+  adjacentSides,
+  eavesOf,
+  facesOfNodes,
+  rotateInPlan,
   snapAnchorsOf,
-  snapMagnetsOf,
-  snapToOutlines,
-  type OutlineSnap,
+  snapLinksOf,
   reshapedWelds,
   reweld,
   unweld,
@@ -31,9 +36,10 @@ import { commitSpineRegeneration, regenerateSpine } from "./spine-commit.ts";
 import { createConstrainedDrag } from "./constrained-drag.ts";
 import { floorsOf, floorUnder } from "./floor-landing.ts";
 import { commitPatchReplacement, commitRegionEdit, commitStagedRegionEdit } from "../../effects/effect-commit.ts";
+import { rulerOf, type OutlineSnap, type RulerGuide, type RulerMeasure } from "./ruler.ts";
 import type { PointerSample, ToolContext, ToolGesture } from "./tool-context.ts";
 import { HANDLE_DONE } from "../../handle-glyphs.ts";
-import { surfaceKeyText } from "../../../../features/edit-construction/index.ts";
+import { faceKey, surfaceKeyText } from "../../../../features/edit-construction/index.ts";
 import { keepFaceProps, pinnedToRoles } from "./face-props.ts";
 
 const CHANNEL = "global-handle";
@@ -371,45 +377,126 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
   });
   let edit: GlobalHandleEdit | undefined;
   let ended = false;
+  const ruler = rulerOf(ctx);
   // Snapping onto the other structures' outlines, as they stood when the drag began -- never while lifting.
   const snap = handle.snaps === true && handle.faces !== undefined && params?.mode !== "elevation"
-    ? { anchors: snapAnchorsOf(scene, handle), magnets: snapMagnetsOf(scene, handle) }
+    ? { anchors: snapAnchorsOf(scene, handle), links: snapLinksOf(scene, handle) }
     : undefined;
+  /** What this kind of handle measures: declared with the kind, so no gesture carries its own list. */
+  const measurement = HANDLE_MEASUREMENT[handle.kind];
+  // Lifting lands on the heights other structures stand at -- the ruler's levels -- whatever lifts: a top, a ridge, an end.
+  // A handle declared as a height lifts whether or not it belongs to faces: a road's end, a ramp's rise.
+  const lifts = measurement === "height" || handle.motion.kind === "vertical" || params?.mode === "elevation";
+  const lifting = lifts ? (handle.faces !== undefined ? snapLinksOf(scene, handle) : ruler.linksWithout(facesOfNodes(scene.topologies, handle.nodeIds))) : undefined;
   let snapped: OutlineSnap | undefined;
+  // The height the structure rises from, as it stood when the drag began: the lowest of its nodes.
+  const base = ruler.base(
+    (handle.faces ? scene.topologies.filter((topology) => handle.faces!.includes(faceKey(topology))).flatMap((topology) => topology.nodes.map((node) => node.position.y)) : scene.graph.nodes.filter((node) => handle.nodeIds.includes(node.id)).map((node) => node.position.y)),
+    handle.pivot.y,
+  );
+  /** What it is read against, declared the same way: where it was grabbed, the sides it edits, the runs beside it, or nothing. */
+  const reference = HANDLE_REFERENCE[handle.kind];
+  // The sides it edits are read from their far ends -- which stay -- never from where the vertex began, which is gone as soon as it moves.
+  // Taken as the structure stood when the drag began.
+  const neighbours = reference === "edges" || reference === "grade" ? editNeighbours(scene.topologies, handle)
+    : reference === "pitch" ? { fixed: eavesOf(scene.topologies, handle), own: [] }
+    : undefined;
+  /** The sides beside a pushed side: they grow and shrink with it. */
+  const sides = reference === "sides" ? adjacentSides(scene.topologies, handle) : undefined;
+  const edgeLinks = reference === "edges" && neighbours && neighbours.fixed.length > 0 ? snap?.links ?? ruler.linksWithout(new Set(handle.faces ?? [])) : undefined;
+  /** A handle that turns about a centre: its orbit. */
+  const orbit = handle.motion.kind === "orbit" ? handle.motion : undefined;
+  /** The guides the ruler is drawing for the drag now. */
+  let guidesNow: readonly RulerGuide[] = [];
 
-  /** Where the handle stands on its path, and what that asks of the structure. */
-  function intentOf(gesture: ToolGesture): { readonly intent: GlobalHandleIntent; readonly at: ConstructionPosition; readonly readout?: string } {
-    const { position: free, angle = 0 } = drag.at(gesture);
-    snapped = snap && snapToOutlines(snap.anchors, { x: free.x - handle!.position.x, y: free.y - handle!.position.y, z: free.z - handle!.position.z }, handle!.motion, snap.magnets);
-    const at = snapped ? { x: handle!.position.x + snapped.delta.x, y: handle!.position.y + snapped.delta.y, z: handle!.position.z + snapped.delta.z } : free;
+  /** Where the handle stands on its path, what that asks of the structure, and what it measures. */
+  function intentOf(gesture: ToolGesture, settled?: { readonly position: ConstructionPosition; readonly at: ConstructionPosition }): { readonly intent: GlobalHandleIntent; readonly at: ConstructionPosition; readonly measures: readonly RulerMeasure[] } {
+    const raw = drag.at(gesture);
+    // A turn lands on a step of the protractor -- the table's, or the finer one with Shift -- and the handle is drawn where it landed.
+    const radius = orbit ? Math.hypot(handle!.position.x - orbit.center.x, handle!.position.z - orbit.center.z) : 0;
+    const turn = orbit ? ruler.turn(raw.angle ?? 0, radius) : undefined;
+    const angle = turn ? turn.angle : raw.angle ?? 0;
+    const dragged = orbit && turn?.turns !== undefined ? rotateInPlan(handle!.position, orbit.center, angle) : raw.position;
+    // Read where the structure stands -- its pivot -- not where the handle is drawn, which stands off it.
+    const standing = handle!.pivot.y + (dragged.y - handle!.position.y);
+    const lifted = ruler.lift({ dragged, standing, base, ...(lifting ? { links: lifting } : {}), rounds: measurement === "height" });
+    const free = { ...dragged, y: lifted.y };
+    snapped = snap ? ruler.drag(snap.anchors, { x: free.x - handle!.position.x, y: free.y - handle!.position.y, z: free.z - handle!.position.z }, handle!.motion, snap.links) : undefined;
+    let at = snapped ? { x: handle!.position.x + snapped.delta.x, y: handle!.position.y + snapped.delta.y, z: handle!.position.z + snapped.delta.z } : free;
+    const direction = handle!.motion.kind === "line" ? handle!.motion.direction : { x: 0, z: 0 };
+    // Measured where the structure stands -- its pivot -- not where the handle is drawn.
+    const pivot = handle!.pivot;
+    // Read where the edit left it, when it says: the handle follows the result, not the pointer.
+    const standingAt = (position: { readonly x: number; readonly y: number; readonly z: number }) => settled ? settled.at : ({ x: pivot.x + position.x - handle!.position.x, y: pivot.y + position.y - handle!.position.y, z: pivot.z + position.z - handle!.position.z });
+    if (settled) at = settled.position;
+    let made: readonly RulerMeasure[];
+    let edgeGuides: readonly RulerGuide[] = [];
+    if (edgeLinks && neighbours) {
+      // The vertex against the sides it edits: ruled from their fixed ends to where it now stands, unless something already joined it.
+      const ruled = ruler.edge({ at: standingAt(at), fixed: neighbours.fixed, own: neighbours.own, links: edgeLinks, rule: !snapped?.joins });
+      at = { x: handle!.position.x + ruled.position.x - pivot.x, y: at.y, z: handle!.position.z + ruled.position.z - pivot.z };
+      // And what each side was, so the edit reads as a difference from where it began, not only as what it left.
+      const was = neighbours.fixed.map((n) => ({ kind: "was" as const, name: "lado", was: Math.hypot(pivot.x - n.position.x, pivot.z - n.position.z), now: Math.hypot(ruled.position.x - n.position.x, ruled.position.z - n.position.z) }));
+      const moved = Math.hypot(ruled.position.x - pivot.x, ruled.position.z - pivot.z);
+      made = [...ruled.measures, ...was, ...(moved > 1e-4 ? [{ kind: "change" as const, name: "desloc.", meters: moved, from: pivot, to: { x: ruled.position.x, y: pivot.y, z: ruled.position.z } }] : [])];
+      edgeGuides = ruled.guides;
+    } else if (sides && sides.length > 0) {
+      // A side pushed: the sides beside it, from their far ends -- which stay -- to where its ends now stand, and what each was.
+      const shift = { x: at.x - handle!.position.x, z: at.z - handle!.position.z };
+      const pushed = sides.map(({ far, near }) => ({ far, was: Math.hypot(near.x - far.position.x, near.z - far.position.z), now: { x: near.x + shift.x, y: near.y, z: near.z + shift.z } }));
+      made = [
+        ...ruler.measure(ruler.named(measurement === "none" ? "side" : measurement, { direction, base, angle }), pivot, standingAt(at)),
+        ...pushed.map(({ far, now }) => ({ kind: "size" as const, name: "lado", meters: Math.hypot(now.x - far.position.x, now.z - far.position.z), from: far.position, to: now })),
+        ...pushed.map(({ far, was, now }) => ({ kind: "was" as const, name: "lado", was, now: Math.hypot(now.x - far.position.x, now.z - far.position.z) })),
+      ];
+    } else if ((reference === "grade" || reference === "pitch") && neighbours) {
+      // A top against the runs beside it: how high it stands, and how steeply each run climbs to it.
+      made = [...ruler.measure(ruler.named(measurement === "none" ? "height" : measurement, { direction, base, angle }), pivot, standingAt(at)), ...ruler.grades(standingAt(at), neighbours.fixed)];
+    } else {
+      made = measurement === "none" ? [] : ruler.measure(ruler.named(measurement, { direction, base, angle }), pivot, standingAt(at));
+    }
     const delta = { x: at.x - handle!.position.x, y: at.y - handle!.position.y, z: at.z - handle!.position.z };
+    // A turn is drawn round its centre: the line out to the handle, and the protractor from where it began.
+    const turning: { guides: RulerGuide[]; measures: RulerMeasure[] } = { guides: [], measures: [] };
+    if (orbit) {
+      const centre = { x: orbit.center.x, y: handle!.position.y, z: orbit.center.z };
+      const start = Math.atan2(handle!.position.z - orbit.center.z, handle!.position.x - orbit.center.x);
+      turning.guides.push({ kind: "polar", origin: centre, to: at, degrees: (((angle * 180) / Math.PI) % 360 + 360) % 360, from: "start", zero: start });
+      turning.measures.push({ kind: "length", from: centre, to: at, meters: radius });
+      // Which way it faces, before and after: the handle's heading about its centre, in the world.
+      const heading = (radians: number) => ((((radians * 180) / Math.PI) % 360) + 360) % 360;
+      turning.measures.push({ kind: "was", name: "direção", was: heading(start), now: heading(start + angle), degrees: true });
+    }
+    // What the ruler caught shows whether or not the snap took it.
+    guidesNow = [...lifted.guides, ...turning.guides, ...(snapped?.guides ?? []), ...edgeGuides];
+    const measures = [...made, ...turning.measures, ...(snapped?.measures ?? [])];
     switch (handle!.kind) {
-      case "pivot": return { intent: { kind: "move", delta }, at };
-      case "side": return { intent: { kind: "move", delta }, at, readout: `lado ${(delta.x * (handle!.motion.kind === "line" ? handle!.motion.direction.x : 0) + delta.z * (handle!.motion.kind === "line" ? handle!.motion.direction.z : 0)).toFixed(2)} m` };
-      case "corner": return { intent: { kind: "move", delta }, at };
-      case "foot": return { intent: { kind: "move", delta }, at };
-      case "top": return { intent: { kind: "move", delta }, at, readout: `altura ${delta.y >= 0 ? "+" : ""}${delta.y.toFixed(2)} m` };
-      case "detach": return { intent: { kind: "detach" }, at };
-      case "rise": return { intent: { kind: "height", dy: delta.y }, at, readout: `altura ${delta.y >= 0 ? "+" : ""}${delta.y.toFixed(2)} m` };
+      case "pivot":
+      case "corner":
+      case "foot":
+      case "top":
+      case "side":
+      case "insert":
+        return { intent: { kind: "move", delta }, at, measures };
+      case "detach": return { intent: { kind: "detach" }, at, measures };
+      case "rise":
+      case "height":
       case "slope":
       case "seam":
-        return { intent: { kind: "height", dy: delta.y }, at, readout: `inclinação ${delta.y >= 0 ? "+" : ""}${delta.y.toFixed(2)} m` };
-      case "insert": return { intent: { kind: "move", delta }, at };
-      case "height": return { intent: { kind: "height", dy: delta.y }, at, readout: `altura ${delta.y >= 0 ? "+" : ""}${delta.y.toFixed(2)} m` };
-      case "rotate": return { intent: { kind: "rotate", angle }, at, readout: `rotação ${((angle * 180) / Math.PI).toFixed(0)}°` };
-      case "turns": return { intent: { kind: "wind", angle }, at, readout: `voltas ${angle >= 0 ? "+" : ""}${(angle / (2 * Math.PI)).toFixed(2)}` };
+        return { intent: { kind: "height", dy: delta.y }, at, measures };
+      case "rotate": return { intent: { kind: "rotate", angle }, at, measures };
+      case "turns": return { intent: { kind: "wind", angle }, at, measures };
       case "radius": {
-        const direction = handle!.motion.kind === "line" ? handle!.motion.direction : { x: 0, z: 0 };
         const push = delta.x * direction.x + delta.z * direction.z;
-        return { intent: { kind: "radius", delta: push }, at, readout: `raio ${push >= 0 ? "+" : ""}${push.toFixed(2)} m` };
+        return { intent: { kind: "radius", delta: push }, at, measures };
       }
       case "originHeight":
       case "destinationHeight":
-        return { intent: { kind: "lift", dy: delta.y }, at, readout: `ponta ${delta.y >= 0 ? "+" : ""}${delta.y.toFixed(2)} m` };
+        return { intent: { kind: "lift", dy: delta.y }, at, measures };
       case "origin":
       case "destination": {
         const under = floorUnder(floorsOf(ctx), gesture.current)?.surfaceKey;
-        return { intent: { kind: "place", at, ...(under ? { under } : {}) }, at };
+        return { intent: { kind: "place", at, ...(under ? { under } : {}) }, at, measures };
       }
     }
   }
@@ -420,7 +507,8 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
       if (params?.dragThreshold && sample.screenX !== undefined && gesture.current.screenX !== undefined && sample.screenY !== undefined && gesture.current.screenY !== undefined
         && Math.hypot(gesture.current.screenX - sample.screenX, gesture.current.screenY - sample.screenY) < params.dragThreshold) return;
       try {
-        const { intent, at, readout } = intentOf(gesture);
+        const { intent, at, measures } = intentOf(gesture);
+        ruler.show({ guides: guidesNow, measures });
         ctx.runtime.previewNodeHandle?.(handle.id, at);
         const planned = planGlobalHandle((pause ?? released)?.was ?? scene, handle, intent, ctx.runtime, operationId);
         if (planned?.kind === "region-part") {
@@ -455,7 +543,12 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
         } else {
           edit = planned && resolvedPart(ctx, planned, scene);
         }
-        if (readout) ctx.reportFeedback({ tone: "info", message: readout });
+        // The edit says where the handle stands on what it makes: drawn there, and measured there.
+        const settled = edit?.kind === "replace" ? edit.settled : undefined;
+        if (settled) {
+          ruler.show({ guides: guidesNow, measures: intentOf(gesture, settled).measures });
+          ctx.runtime.previewNodeHandle?.(handle.id, settled.position);
+        }
         const preview = edit && previewOf(ctx, handle, edit, scene, operationId);
         if (preview) ctx.runtime.showPreview({ kind: "segments", positions: preview, color: PREVIEW_COLOR, opacity: 0.9 }, CHANNEL);
       } catch (error) {
@@ -480,7 +573,7 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
       if (!edit) return;
       try {
         if (paused) commitPaused(ctx, handle, paused, scene, operationId);
-        else if (!((release || snapped) && commitJoining(ctx, handle, edit, scene, operationId, release, snapped?.magnet ?? []))) commitEdit(ctx, handle, edit, scene, operationId);
+        else if (!((release || snapped?.joins) && commitJoining(ctx, handle, edit, scene, operationId, release, snapped?.magnet ?? []))) commitEdit(ctx, handle, edit, scene, operationId);
         // Named after a node the edit keeps, so the same id finds it where it now stands.
         const moved = shownGlobalHandleAt(sceneOf(ctx), handle.id);
         ctx.reportSelection(moved ? { id: moved.id, point: moved.position } : undefined);

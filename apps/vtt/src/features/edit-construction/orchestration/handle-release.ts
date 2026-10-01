@@ -4,7 +4,8 @@ import type { GlobalHandle, GlobalHandleEdit, GlobalHandleScene } from "../globa
 import { hasTrait, isGroundType, isSolidType } from "../structure-types/index.ts";
 import { faceKey, surfaceKeyText } from "../topology/plan-geometry.ts";
 import { releaseFromSolid } from "./detach.ts";
-import { outlineMagnets, type Magnet, type SnapAnchor } from "./outline-snap.ts";
+import { collectLinks, type RulerLinks } from "../ruler/index.ts";
+import type { SnapAnchor } from "../ruler/index.ts";
 import { joinedStructures } from "./rigid-carry.ts";
 import { rejoinNodes, endJoinsOf } from "./weld-pause.ts";
 
@@ -38,10 +39,10 @@ export function snapAnchorsOf(scene: GlobalHandleScene, handle: GlobalHandle): r
 }
 
 /** What `handle`'s drag snaps onto: every other structure's outline -- but, dragging the whole, not what goes with it. */
-export function snapMagnetsOf(scene: GlobalHandleScene, handle: GlobalHandle): readonly Magnet[] {
+export function snapLinksOf(scene: GlobalHandleScene, handle: GlobalHandle): RulerLinks {
   const faces = scene.topologies.filter((topology) => handle.faces?.includes(faceKey(topology)));
   const moving = handle.target === undefined ? joinedStructures(scene.topologies, faces, isGroundType) : faces;
-  return outlineMagnets(scene.topologies, new Set(moving.map(faceKey)), isGroundType);
+  return collectLinks(scene.topologies, { skip: new Set(moving.map(faceKey)), isGround: isGroundType });
 }
 
 /**

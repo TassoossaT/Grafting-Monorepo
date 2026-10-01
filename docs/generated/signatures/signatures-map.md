@@ -3523,6 +3523,8 @@ export function createUnlinkHandleTexture(): HTMLCanvasElement {
   context.save();
 export function createMidpointHandleTexture(): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
+export function createRulerLabelTexture(text: string): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
 
 // src/adapters/rendering/node-handle-scene-item.ts
 export const NODE_HANDLE_LAYER_ID = "construction-handles";
@@ -3549,10 +3551,31 @@ export function nodeHandleSceneItem(
   layer: NODE_HANDLE_LAYER_ID,
 
 // src/adapters/rendering/render-3d-scene-adapter.ts
+export const VIEW_FOV_DEGREES = 38;
 export class Render3dSceneAdapter implements SceneRenderPort {
   readonly #views = new Map<RenderViewId, AttachedView>();
 export function createRender3dSceneAdapter(): SceneRenderPort {
   return new Render3dSceneAdapter();
+
+// src/adapters/rendering/ruler-label-scene-item.ts
+export const RULER_LABEL_LAYER_ID = "construction-preview";
+export const RULER_LABEL_VISUAL_KIND = "vtt-ruler-label";
+export function rulerLabelSceneItemId(channel: string, index: number): string {
+  return `ruler-label:${channel}:${index}`;
+  }
+export interface RulerLabelVisualParams {
+  readonly text: string;
+  }
+export function rulerLabelAspect(text: string): number {
+  return Math.max(1.2, text.length * 0.62 + 0.7);
+export function rulerLabelSceneItem(label: RenderPreviewLabel, index: number, channel: string): SceneItem<RulerLabelVisualParams> {
+  return {
+  id: rulerLabelSceneItemId(channel, index),
+  layer: RULER_LABEL_LAYER_ID,
+  visual: { kind: RULER_LABEL_VISUAL_KIND, params: { text: label.text } },
+  transform: { position: label.position, scale: { x: label.height * rulerLabelAspect(label.text), y: label.height, z: 1 } },
+  data: Object.freeze({ entity: "construction-preview" }),
+  };
 
 // src/adapters/rendering/token-scene-item.ts
 export const TOKEN_LAYER_ID = "tokens";
@@ -4166,19 +4189,13 @@ export interface BuildFrame {
 export function buildFrameAt(ctx: ToolContext, sample: PointerSample): BuildFrame {
   const side = sideNear(ctx, sample);
 export function snappedInFrame(ctx: ToolContext, frame: BuildFrame, p: ConstructionPosition): ConstructionPosition {
-  if (!ctx.snapToGrid) return p;
-  const unit = ctx.gridUnit ?? WORLD_UNIT;
-  const dx = p.x - frame.origin.x, dz = p.z - frame.origin.z;
-  const along = Math.round((dx * frame.u.x + dz * frame.u.z) / unit) * unit;
-  const across = Math.round((dx * frame.v.x + dz * frame.v.z) / unit) * unit;
-  return { x: frame.origin.x + frame.u.x * along + frame.v.x * across, y: p.y, z: frame.origin.z + frame.u.z * along + frame.v.z * across };
+  return rulerOf(ctx).point(p, { axes: [frame.u, frame.v] });
 export function pointerOnLevel(sample: PointerSample, y: number): ConstructionPosition {
   return sample.ray ? pointerAtHeight(sample, y) : { ...sample.point, y };
 export function frameStart(ctx: ToolContext, frame: BuildFrame, sample: PointerSample, y: number = sample.point.y): ConstructionPosition {
-  return frame.start ?? snappedInFrame(ctx, frame, pointerOnLevel(sample, y));
+  return snappedInFrame(ctx, frame, pointerOnLevel(sample, y));
 export function frameRectangle(ctx: ToolContext, frame: BuildFrame, a: ConstructionPosition, b: ConstructionPosition, elevation: number): readonly ConstructionPosition[] | undefined {
-  const dx = b.x - a.x, dz = b.z - a.z;
-  const limits = limitsNear(ctx, frame, a, b);
+  const far = snappedInFrame(ctx, frame, b);
 
 // src/composition/tabletop/tools/core/constrained-drag.ts
 export interface ConstrainedPosition {
@@ -4254,7 +4271,7 @@ export interface ContourStrokeOptions<P extends ContourStrokeParams> {
   /** A preview of a closed outline, when the tool shows more than the outline itself. */
   readonly previewClosed?: (ctx: ToolContext, outline: readonly ConstructionPosition[], level: number, params: P) => PreviewDescriptor | undefined;
   readonly color: number;
-export function contourStroke<K extends ConstructionToolId, P extends ContourStrokeParams>(options: ContourStrokeOptions<P>): Pick<ConstructionTool<K>, "previewFor" | "onClick" | "onPointerUp" | "onCancel"> {
+export function contourStroke<K extends ConstructionToolId, P extends ContourStrokeParams>(options: ContourStrokeOptions<P>): Pick<ConstructionTool<K>, "previewFor" | "onClick" | "onPointerUp" | "onCancel" | "rulerAnchor"> {
   const drafts = new WeakMap<object, { key: string; points: PointerSample[]; frame?: BuildFrame }>();
 
 // src/composition/tabletop/tools/core/curve-edit-gesture.ts
@@ -4263,8 +4280,11 @@ export interface CurveGesture {
   commit(): void;
   cancel(): void;
   }
+export interface AnchorTarget extends PointerSample {
+  readonly span?: boolean;
+  }
 export interface AnchorSnap {
-  find(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): PointerSample | undefined;
+  find(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): AnchorTarget | undefined;
   /** Shows `target` as the snap, or clears it when absent. */
   show(ctx: ToolContext, target?: PointerSample): void;
   }
@@ -4336,7 +4356,7 @@ export function floorsOf(ctx: ToolContext): readonly ConstructionRegionTopology[
 export function floorUnder(floors: readonly ConstructionRegionTopology[], sample: PointerSample): ConstructionRegionTopology | undefined {
   return floors.find((topology) => sample.surfaceRef
   ? surfaceRefFromNodeSet(topology.surfaceKey) === sample.surfaceRef
-  : sample.nodeId !== undefined && topology.nodes.some((node) => node.id === sample.nodeId));
+  : graphNodeOf(sample) !== undefined && topology.nodes.some((node) => node.id === graphNodeOf(sample)));
 export function floorLandingAt(floors: readonly ConstructionRegionTopology[], sample: PointerSample): FloorLanding | undefined {
   const under = floorUnder(floors, sample);
 export function floorLandingToward(floors: readonly ConstructionRegionTopology[], sample: PointerSample, from: ConstructionPosition | undefined): FloorLanding | undefined {
@@ -4385,20 +4405,165 @@ export const navigateTool: ConstructionTool<"navigate"> = {
   defaultParams: () => ({}),
   };
 
+// src/composition/tabletop/tools/core/node-identity.ts
+export const NODE_PIXELS = 12;
+export interface NodeAt {
+  readonly id: string;
+  readonly position: ConstructionPosition;
+  }
+export function nodeByGeometry(hit: Pick<PointerSample, "point" | "ray">, nodes: readonly NodeAt[], metersPerPixel: number | undefined): NodeAt | undefined {
+  const reach = metersPerPixel !== undefined && metersPerPixel > 0 ? metersPerPixel * NODE_PIXELS : NODE_FALLBACK;
+  const { ray, point } = hit;
+  let best: { node: NodeAt; distance: number } | undefined;
+  if (ray) {
+  const d = ray.direction;
+  const length = Math.hypot(d.x, d.y, d.z) || 1;
+  const u = { x: d.x / length, y: d.y / length, z: d.z / length };
+export const graphNodeOf = (sample: Pick<PointerSample, "node" | "nodeId">): string | undefined => sample.node?.id ?? sample.nodeId;
+
 // src/composition/tabletop/tools/core/pointer-ray.ts
 export function pointerAtHeight(sample: PointerSample, y: number): ConstructionPosition {
-  const ray = sample.ray;
-  if (!ray) return { ...sample.point, y };
+  const exact = exactAtHeight(sample, y);
 export function withFacePlane(sample: PointerSample, topologies: readonly ConstructionRegionTopology[]): PointerSample {
   if (sample.surfaceRef === undefined) return sample;
   const topology = topologies.find((candidate) => surfaceRefFromNodeSet(candidate.surfaceKey) === sample.surfaceRef);
+
+// src/composition/tabletop/tools/core/pointer-scale.ts
+export function metersPerPixelAt(hit: Pick<PointerSample, "point" | "ray">, viewportHeight: number, fovDegrees: number): number | undefined {
+  const ray = hit.ray;
+  if (!ray || !(viewportHeight > 0)) return undefined;
+  const distance = distanceBetween(ray.origin, hit.point);
+
+// src/composition/tabletop/tools/core/ruler-labels.ts
+export interface MapLabel {
+  readonly position: { readonly x: number; readonly y: number; readonly z: number };
+export const MAX_MAP_LABELS = 48;
+export const compact = (value: number): string => value.toFixed(2).replace(/\.?0+$/, "");
+export function mapLabelsOf(feedback: RulerFeedback, metersPerPixel: number | undefined, view: RulerView | undefined): readonly MapLabel[] {
+  if (!view || view.numbers === false) return [];
+  const height = metersFor(metersPerPixel, LABEL_PX, LABEL_FALLBACK, [0.06, 0.9]);
+export type { RulerLine };
+
+// src/composition/tabletop/tools/core/ruler-preview.ts
+export const RULER_PREVIEW_CHANNEL = "ruler-guides";
+export interface RulerView {
+  readonly unit: MeasureUnitId;
+  /** The round number a length lands on, in metres; the teeth stand at every one. */
+  readonly lengthStep?: number;
+  /** The angular step the protractor offers, in radians; its larger marks stand at every one. */
+  readonly angleStep?: number;
+  /** Whether the protractor is drawn at all. */
+  readonly protractor?: boolean;
+export interface RulerLine {
+  readonly anchor: Point;
+  readonly tip: Point;
+  /** The direction the protractor counts from, in radians. */
+  readonly zero: number;
+  /** Whether the protractor is drawn round its anchor. */
+  readonly protractor: boolean;
+  /** Whether the line itself is drawn: not for the line being drawn, which is the tool's own ghost -- it only takes the teeth and the protractor. */
+export function frameOf(line: RulerLine): { readonly length: number; readonly u: Point; readonly n: Point } {
+  if (line.vertical) {
+  const dy = line.tip.y - line.anchor.y;
+  return { length: Math.abs(dy), u: { x: 0, y: dy < 0 ? -1 : 1, z: 0 }, n: { x: 1, y: 0, z: 0 } };
+export function linesOf(feedback: RulerFeedback): readonly RulerLine[] {
+  const lines: RulerLine[] = [];
+  const add = (line: RulerLine): void => { if (!lines.some((held) => sameLine(held, line))) lines.push(line); };
+export const MAX_TEETH = 200;
+export function teethSpacing(metersPerPixel: number | undefined, unit: MeasureUnitId, lengthStep?: number): number {
+  // A drawing never brings a gesture down: no unit named is the default one.
+  const unitMeters = (MEASURE_UNITS[unit] ?? MEASURE_UNITS[DEFAULT_MEASURE_UNIT]).metres;
+  const fits = (spacing: number): boolean => metersPerPixel === undefined || spacing / metersPerPixel >= TOOTH_MIN_PX;
+  if (lengthStep && lengthStep > 0) {
+  for (const k of [1, 2, 5, 10, 20, 50, 100, 200, 500]) if (fits(lengthStep * k)) return lengthStep * k;
+  return lengthStep * 1000;
+  }
+export interface ProtractorGeometry {
+  readonly origin: Point;
+  readonly zero: number;
+  readonly radius: number;
+  /** The first and last mark of the window, in graduations from the zero. */
+  readonly first: number;
+  readonly last: number;
+  /** Where the mark at `degrees` from the zero stands, at distance `r` from the origin. */
+export function protractorOf(origin: Point, to: Point, zero: number, metersPerPixel: number | undefined): ProtractorGeometry | undefined {
+  const length = Math.hypot(to.x - origin.x, to.z - origin.z);
+export const PROTRACTOR_STEP_DEGREES = PROTRACTOR_GRADUATION;
+export const MAX_ITEM_PROTRACTORS = 2;
+export function rulerPreview(feedback: RulerFeedback, metersPerPixel?: number, view?: RulerView): PreviewDescriptor | undefined {
+  const positions: number[] = [];
+  const h = metersFor(metersPerPixel, MARKER_PX, MARKER_FALLBACK, [0.04, 0.6]);
+export function rulerLabels(feedback: RulerFeedback, unit: MeasureUnitId): readonly string[] {
+  const caught = new Set<string>();
+
+// src/composition/tabletop/tools/core/ruler-session.ts
+export interface RulerFeedback {
+  readonly guides: readonly RulerGuide[];
+  readonly measures: readonly RulerMeasure[];
+  }
+export const RULER_REACH_PX = 14;
+export const RULER_ACQUIRE_PX = 160;
+export function metersFor(metersPerPixel: number | undefined, pixels: number, fallback: number, limits: readonly [number, number] = REACH_LIMITS): number {
+  if (metersPerPixel === undefined || !(metersPerPixel > 0)) return fallback;
+  return Math.max(limits[0], Math.min(limits[1], pixels * metersPerPixel));
+export interface RulePointOptions {
+  /** Whether what the ruler catches is taken. */
+  readonly snap: boolean;
+  /** Where what is being drawn began, to measure its length from. */
+  readonly origin?: ConstructionPosition;
+  /** The directions to line up along -- a build frame's. */
+  readonly axes?: readonly [PlanVector, PlanVector];
+  /** How many metres a pixel of the screen is here: the reach and the acquiring are worked out from it. */
+export interface RulerSession {
+  /** What stands changed: the links are read again on the next question. */
+  invalidate(): void;
+  /** The pointer is done with this catch -- a gesture ended: the next one starts free. */
+  release(): void;
+  links(): RulerLinks;
+  rulePoint(point: ConstructionPosition, options: RulePointOptions): { readonly point: ConstructionPosition; readonly feedback: RulerFeedback };
+export const NO_FEEDBACK: RulerFeedback = { guides: [], measures: [] };
+export function createRulerSession(topologies: () => readonly ConstructionRegionTopology[]): RulerSession {
+  let cached: RulerLinks | undefined;
+  /** The catch last held: it stays on a little past the reach, so the point does not flicker at the edge. */
+  let holding: string | undefined;
+  const links = (): RulerLinks => (cached ??= collectLinks(topologies(), { isGround: isGroundType }));
+export interface RulerHost {
+  readonly runtime: { getAllRegionTopologies(): readonly ConstructionRegionTopology[] };
+export function reachFor(host: Pick<RulerHost, "rulerMetersPerPixel">, pixels: number, fallback: number): number {
+  return metersFor(host.rulerMetersPerPixel, pixels, fallback);
+export function rulePointFor(host: RulerHost, point: ConstructionPosition, options: Pick<RulePointOptions, "origin" | "axes"> = {}): ConstructionPosition {
+  const links = collectLinks(host.runtime.getAllRegionTopologies(), { isGround: isGroundType });
+export function ruleLineFor(host: RulerHost, point: ConstructionPosition, options: { readonly origin: ConstructionPosition; readonly links: RulerLinks; readonly skip?: ReadonlySet<string> }): RulerResult {
+  return resolveRuler(queryOf(point, options.links, {
+  snap: host.rulerSnap,
+  origin: options.origin,
+  ...(options.skip ? { skip: options.skip } : {}),
+  ...(host.rulerAngleStep !== undefined ? { polar: host.rulerAngleStep } : {}),
+  ...(host.rulerLengthStep !== undefined ? { lengthStep: host.rulerLengthStep } : {}),
+  ...(host.rulerMetersPerPixel !== undefined ? { metersPerPixel: host.rulerMetersPerPixel } : {}),
+
+// src/composition/tabletop/tools/core/ruler.ts
+export type { AxisCatch, AxisMoving, AxisPart, AxisTarget, EditMeasureKind, EditMeasureName, OutlineSnap, RulerGuide, RulerLinks, RulerMeasure, SnapAnchor };
+export interface Ruler {
+  /** Whether what the ruler catches is taken (Ctrl held places freely). */
+  readonly snap: boolean;
+  /** The round number, in metres, a length or a height lands on; none when the table chose none. */
+  readonly step: number | undefined;
+  /** `pixels` of the screen as metres; `fallback` when the scale is not known. For a reach that is not a catch -- how near a side a shape is built beside -- but should feel the same at every zoom. */
+  reach(pixels: number, fallback: number): number;
+
+export function rulerOf(ctx: ToolContext): Ruler {
+  const snap = ctx.rulerSnap;
+  const disabled = ctx.rulerDisabled;
+  /** How near a round number a value must come to land on it: stronger than a join's reach, never beyond a share of the step. */
+  const roundReachOf = (step: number): number => roundReach(step, reachFor(ctx, ROUND_REACH_PIXELS, 0.34));
 
 // src/composition/tabletop/tools/core/spine-body-target.ts
 export function spineBodyTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string, ownsSpine: (surfaceType: string) => boolean = () => true): { sample: PointerSample; options: CurveGestureOptions } | undefined {
   const hit = ctx.runtime.getAllRegionTopologies().find((t) =>
   structureTypeFor(t.surfaceType)?.spine && ownsSpine(t.surfaceType) && (sample.surfaceRef
   ? surfaceRefFromNodeSet(t.surfaceKey) === sample.surfaceRef
-  : t.nodes.some((n) => n.id === sample.nodeId)));
+  : t.nodes.some((n) => n.id === graphNodeOf(sample))));
 
 // src/composition/tabletop/tools/core/spine-commit.ts
 export function regenerateSpine(ctx: ToolContext, snapshot: ConstructionGraphSnapshot, owner: string | undefined, graphPatch: ConstructionGraphPatch, operationId: string, options: { readonly keepsWelds?: boolean } = {}): SpineRegeneration | undefined {
@@ -4545,7 +4710,7 @@ export interface PointerSample {
   readonly screenX?: number;
   readonly shiftKey?: boolean;
   readonly nodeId?: string;
-  readonly surfaceRef?: string;
+  /** The graph node the pointer is on, by geometry -- never by which sprite the pick met (`node-identity.ts`). What a tool reads "the node here" from; the drawn dots have no function. */
 export interface ToolGesture {
   readonly start: PointerSample;
   readonly current: PointerSample;
@@ -4585,9 +4750,9 @@ export interface ToolContext {
   readonly history: EditHistoryStack;
   readonly tableId: string;
   /**
-  * Whether the grid magnet is on. A fact about the session, not a
-  * behaviour: the dispatcher has already rounded every ground point to a
-  * grid intersection by the time a tool sees it, and this only says so, so
+  * Whether what the ruler catches is taken. The ruler is always there while
+  * building -- its guides and measures show either way -- and its catch is
+  * taken, but for as long as Ctrl is held, which places freely. The
 export interface ConstructionTool<Id extends ConstructionToolId> {
   readonly id: Id;
   /** Presentation and sampling policy while this tool is active. */
@@ -4632,6 +4797,19 @@ export function toolFor<Id extends ConstructionToolId>(id: Id): ConstructionTool
 
 // src/composition/tabletop/tools/opening-stands.ts
 export const openingStands: readonly OpeningStand[] = [roofOpeningStand];
+
+// src/composition/tabletop/tools/openings/opening-ruler.ts
+export interface Moving {
+  readonly s: AxisMoving;
+  readonly v: AxisMoving;
+  }
+export function alignRect(ctx: ToolContext, run: RunFrame, rect: RunRect, moving: Moving, excluded: ReadonlySet<string> = new Set()): RunRect {
+  if (!ctx.rulerSnap) return rect;
+  const spans = openingSpansOn(ctx, run, excluded);
+export function settleAligned(ctx: ToolContext, run: RunFrame, rect: RunRect, isDoor: boolean, keepWidth: boolean, moving: Moving, excluded?: ReadonlySet<string>): RunRect | undefined {
+  return settleRect(run, alignRect(ctx, run, rect, moving, excluded), isDoor, keepWidth);
+export function rectFeedback(ctx: ToolContext, run: RunFrame, rect: RunRect, excluded: ReadonlySet<string> = new Set(), was?: RunRect): RulerFeedback {
+  const spans = openingSpansOn(ctx, run, excluded);
 
 // src/composition/tabletop/tools/openings/opening-shared.ts
 export const MARGIN = 0.15;
@@ -4684,10 +4862,9 @@ export function overlapsOther(ctx: ToolContext, run: RunFrame, rect: RunRect, ex
   const EPS = 1e-9;
   const period = run.end - run.start;
   const shifts = run.closed ? [-period, 0, period] : [0];
-  return ctx.runtime.getAllRegionTopologies().some((region) => {
-  if (!hasTrait(region.surfaceType, "cuts") || excluded.has(surfaceRefFromNodeSet(region.surfaceKey))) return false;
-  if (!region.nodes.some((node) => node.pin !== undefined && run.panelOf(node.pin.hostSurfaceKey) !== undefined)) return false;
-  const other = regionRunSpan(run, region);
+  return openingSpansOn(ctx, run, excluded).some((other) => {
+  if (!(rect.v0 < other.v1 - EPS && rect.v1 > other.v0 + EPS)) return false;
+  return shifts.some((shift) => rect.s0 < other.s1 + shift - EPS && rect.s1 > other.s0 + shift + EPS);
 
 // src/composition/tabletop/tools/openings/opening-stand.ts
 export interface StandLook {
@@ -4711,16 +4888,14 @@ export interface OpeningStand {
 
 // src/composition/tabletop/tools/openings/opening-tool.ts
 export const openingTool: ConstructionTool<"opening"> = {
-  id: "opening",
-  defaultParams: () => DEFAULT_TOOL_PARAMS.opening,
-  previewOnHover: true,
-  // Placement is read in the run's own frame, never off raw world X/Z, so
-  // the dispatcher's world-grid magnet must not round the pointer first.
-  snapsToSurface: true,
-
+  ...openingToolBase,
+  // Its selected opening shows corner and side handles, drawn like every other handle's.
+  editsType: (surfaceType) => surfaceType === openingStructureType.surfaceType,
+  previewFor(gesture: ToolGesture, params: OpeningParams, ctx: ToolContext) {
+  const ghost = openingToolBase.previewFor?.(gesture, params, ctx);
 
 // src/composition/tabletop/tools/paths/path-brush-tool.ts
-export const pathBrushTool = withSpineEditing({ ...draft, useGridSnap: false }, {
+export const pathBrushTool = withSpineEditing(draft, {
   ownsSpine: (surfaceType) => surfaceType === PATH_SURFACE_TYPE,
   snap: roadAnchorSnap,
   panelActions: false,
@@ -4735,7 +4910,7 @@ export const pathStroke: SpineDraftStroke<"path-brush"> = {
   previewRoad(ctx, draft(ctx, g, params).curves, params, CHANNEL);
 
 // src/composition/tabletop/tools/paths/road-body-target.ts
-export interface RoadSnapTarget extends PointerSample {
+export interface RoadSnapTarget extends AnchorTarget {
   readonly snapSignature?: string;
   readonly snapEdge?: { readonly edgeId: string; readonly parameter: number };
 export function roadSnapTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): RoadSnapTarget | undefined {
@@ -4861,7 +5036,7 @@ export interface RoofBase {
   }
 export function roofBaseAt(topologies: readonly ConstructionRegionTopology[], sample: PointerSample): RoofBase {
   const clicked = topologies.find((face) => (
-  sample.surfaceRef ? surfaceRefFromNodeSet(face.surfaceKey) === sample.surfaceRef : sample.nodeId !== undefined && face.nodes.some((node) => node.id === sample.nodeId)));
+  sample.surfaceRef ? surfaceRefFromNodeSet(face.surfaceKey) === sample.surfaceRef : graphNodeOf(sample) !== undefined && face.nodes.some((node) => node.id === graphNodeOf(sample))));
 export function roofBaseOf(topologies: readonly ConstructionRegionTopology[], ref: RoofBaseRef): RoofBase | undefined {
   const key = ref.surfaceKey.join("\u0000");
 
@@ -5113,8 +5288,7 @@ export interface SlopeParams {
   readonly turns?: number;
   }
 export function slopeControlPoint(ctx: ToolContext, sample: PointerSample): ConstructionPosition {
-  const node = sample.nodeId ? ctx.runtime.getGraphSnapshot().nodes.find((n) => n.id === sample.nodeId) : undefined;
-  return { ...sample.point, y: node?.position.y ?? sample.point.y };
+  const nodeId = graphNodeOf(sample);
 export interface PlannedSpan {
   readonly curve: CubicBezier;
   readonly handles: CurveHandles;
@@ -5162,12 +5336,12 @@ export const slopeCurveTool = withSpineEditing(rawSlopeCurveTool, { ownsSpine: o
 // src/composition/tabletop/tools/terrain/terrain-sculpt-tool.ts
 export const terrainSculptTool: ConstructionTool<"terrain-sculpt"> = {
   id: "terrain-sculpt",
+  usesRuler: false,
   defaultParams: () => DEFAULT_TOOL_PARAMS["terrain-sculpt"],
 
   previewFor(gesture: ToolGesture, params: TerrainSculptParams, ctx: ToolContext) {
   const targetSurface = hasTrait(params.targetSurface, "ground") ? params.targetSurface : "terrain";
   const color = TERRAIN_COLOR[targetSurface as "terrain" | "terrain-grass"] ?? 0x334155;
-  return brushSweptRegionFill(
 
 // src/composition/tabletop/tools/tower/tower-geometry.ts
 export function circleContour(center: ConstructionPosition, radius: number): readonly FittedEdge[] {
@@ -5232,7 +5406,7 @@ export function correctedWallCorners(
   tolerance = 0,
   ): readonly ConstructionPosition[] {
   if (samples.length === 0) return [];
-  const fitted = fitPath(samples, tolerance, { curves: ctx.snapToGrid ? "none" : "bezier", port: ctx.runtime });
+  const fitted = fitPath(samples, tolerance, { curves: "bezier", port: ctx.runtime });
 export function wallCorrectionPreview(
   ctx: ToolContext,
   samples: readonly ConstructionPosition[],
@@ -5273,6 +5447,11 @@ export function wallSpans(ctx: ToolContext): readonly WallSpan[] {
   .filter((span): span is WallSpan => span !== undefined);
 
 // src/composition/tabletop/use-construction-pointer.ts
+export interface RulerReadout {
+  readonly labels: readonly string[];
+  readonly x: number;
+  readonly y: number;
+  }
 export interface UseConstructionPointerOptions {
   readonly activeTool: ConstructionToolId;
   readonly toolParams: ToolParamsByTool;
@@ -5280,7 +5459,7 @@ export interface UseConstructionPointerOptions {
   readonly history: EditHistoryStack;
   readonly tableId: string;
   readonly viewId: RenderViewId | undefined;
-  /** When true, a resolved point (other than an existing node handle -- those stay precise) snaps to the nearest grid intersection before any tool sees it, so a new terrain cell/wall/room lands centered on the grid instead of wherever the pointer happened to be. */
+  /** The unit the ruler writes its distances in -- the table's own choice. */
 export interface ConstructionPointerHandlers {
   readonly onPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
   readonly onPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void;
@@ -5543,6 +5722,25 @@ export interface GlobalHandleProvider {
   plan(scene: GlobalHandleScene, handle: GlobalHandle, intent: GlobalHandleIntent, port: GlobalHandlePort, operationId: string): GlobalHandleEdit | undefined;
   }
 export type GlobalHandlePort = Pick<BezierPort, "curveBatch"> & Pick<RoofPort, "generateRoof">;
+
+// src/features/edit-construction/global-handles/handle-measurement.ts
+export const HANDLE_MEASUREMENT: Readonly<Record<GlobalHandleKind, EditMeasureName | "none">> = {
+  pivot: "move",
+  rotate: "turn",
+  height: "height",
+  turns: "turn",
+  radius: "radius",
+  origin: "move",
+  destination: "move",
+export type HandleReference = "grab" | "edges" | "sides" | "grade" | "pitch" | "none";
+export const HANDLE_REFERENCE: Readonly<Record<GlobalHandleKind, HandleReference>> = {
+  pivot: "grab",
+  rotate: "none",
+  height: "none",
+  turns: "none",
+  radius: "none",
+  origin: "grab",
+  destination: "grab",
 
 // src/features/edit-construction/global-handles/handle-motion.ts
 export type HandleMotion =
@@ -5872,6 +6070,31 @@ export const uprightHandleProvider: GlobalHandleProvider = {
   const candidates = scene.topologies.filter((topology) => {
   const type = structureTypeFor(topology.surfaceType);
 
+// src/features/edit-construction/orchestration/handle-neighbors.ts
+export interface EditNeighbours {
+  /** The vertices joined to the one edited, level or not, each at the plan distance that makes it a real neighbour: where the vertex is moved against. */
+  readonly fixed: readonly LinkPoint[];
+  /** The structure's own level sides that do not touch the vertex: the directions its angles are read against -- parallel to them, square to them. */
+  readonly own: readonly LinkRun[];
+  }
+export function editNeighbours(topologies: readonly ConstructionRegionTopology[], handle: GlobalHandle): EditNeighbours {
+  const edited = new Set(editedNodes(handle, topologies));
+export function facesOfNodes(topologies: readonly ConstructionRegionTopology[], nodeIds: readonly string[]): ReadonlySet<string> {
+  const wanted = new Set(nodeIds);
+export interface AdjacentSide {
+  readonly far: LinkPoint;
+  readonly near: ConstructionPosition;
+  }
+export function adjacentSides(topologies: readonly ConstructionRegionTopology[], handle: GlobalHandle): readonly AdjacentSide[] {
+  const target = handle.target;
+  if (target?.kind !== "edge") return [];
+  const ends = new Set(editedNodes(handle, topologies));
+export function eavesOf(topologies: readonly ConstructionRegionTopology[], handle: GlobalHandle): readonly LinkPoint[] {
+  const faces = handle.faces ? new Set(handle.faces) : undefined;
+  const nodes = topologies.filter((topology) => !faces || faces.has(faceKey(topology))).flatMap((topology) => topology.nodes);
+export function topologiesOfPatch(patch: ConstructionPatch, faceProps: ReadonlyMap<string, Readonly<Record<string, unknown>>> | undefined): readonly ConstructionRegionTopology[] {
+  const nodes = new Map(patch.nodes.map((node) => [node.id, node.position]));
+
 // src/features/edit-construction/orchestration/handle-release.ts
 export function partNodes(topologies: readonly ConstructionRegionTopology[], target: GlobalHandle["target"]): readonly string[] {
   if (target?.kind === "vertex") return [target.nodeId];
@@ -5879,7 +6102,7 @@ export function partNodes(topologies: readonly ConstructionRegionTopology[], tar
   const use = topologies.flatMap((topology) => topology.outerLoops.flat()).find((candidate) => candidate.edgeId === target.edgeId);
 export function snapAnchorsOf(scene: GlobalHandleScene, handle: GlobalHandle): readonly SnapAnchor[] {
   const at = new Map(scene.graph.nodes.map((node) => [node.id, node.position]));
-export function snapMagnetsOf(scene: GlobalHandleScene, handle: GlobalHandle): readonly Magnet[] {
+export function snapLinksOf(scene: GlobalHandleScene, handle: GlobalHandle): RulerLinks {
   const faces = scene.topologies.filter((topology) => handle.faces?.includes(faceKey(topology)));
 export function releasePart(topologies: readonly ConstructionRegionTopology[], graph: GlobalHandleScene["graph"], part: RegionPart, operationId: string): ApplyPatchReplacementRequest | undefined {
   const face = topologies.find((topology) => faceKey(topology) === surfaceKeyText(part.seed));
@@ -5897,29 +6120,6 @@ export type {
 
 export type { EditOpSink, EditPlan } from "./edit-orchestrator.ts";
 export type { CloudGlobalHandle } from "./global-handles/cloud-handle-provider.ts";
-
-// src/features/edit-construction/orchestration/outline-snap.ts
-export const SNAP_REACH = 0.2;
-export interface Magnet {
-  readonly a: { readonly id: string; readonly position: ConstructionPosition };
-export interface SnapAnchor {
-  readonly id: string;
-  readonly position: ConstructionPosition;
-  }
-export interface OutlineSnap {
-  readonly delta: ConstructionPosition;
-  readonly anchor: string;
-  readonly magnet: readonly string[];
-  }
-export function outlineMagnets(topologies: readonly ConstructionRegionTopology[], skip: ReadonlySet<string>, isGround: (surfaceType: string) => boolean): readonly Magnet[] {
-  const seen = new Set<string>();
-export function snapToOutlines(anchors: readonly SnapAnchor[], delta: ConstructionPosition, motion: HandleMotion, magnets: readonly Magnet[], reach = SNAP_REACH): OutlineSnap | undefined {
-  const line = motion.kind === "line" ? motion.direction : undefined;
-  if (!line && motion.kind !== "plane" && motion.kind !== "free") return undefined;
-  let corner: (OutlineSnap & { readonly distance: number }) | undefined;
-  let side: (OutlineSnap & { readonly distance: number }) | undefined;
-  for (const anchor of anchors) {
-  const p = { x: anchor.position.x + delta.x, y: anchor.position.y + delta.y, z: anchor.position.z + delta.z };
 
 // src/features/edit-construction/orchestration/rigid-carry.ts
 export function standsOn(upper: ConstructionRegionTopology, base: ConstructionRegionTopology): boolean {
@@ -6024,6 +6224,220 @@ export function reweld(topologies: readonly ConstructionRegionTopology[], links:
   const positions = new Map(topologies.flatMap((topology) => topology.nodes.map((node) => [node.id, node.position] as const)));
 export function rejoinNodes(topologies: readonly ConstructionRegionTopology[], links: readonly WeldLink[], operationId: string): { readonly request: ApplyPatchReplacementRequest | undefined; readonly joined: number } {
   const floorKeys = new Set(links.flatMap((link) => link.floors.map(surfaceKeyText)));
+
+// src/features/edit-construction/ruler/anchors.ts
+export const SNAP_REACH = RULER_REACH;
+export interface SnapAnchor {
+  readonly id: string;
+  readonly position: ConstructionPosition;
+  }
+export interface OutlineSnap {
+  readonly delta: ConstructionPosition;
+  readonly anchor: string;
+  /** The nodes of the corner or side it landed on; empty for a line-up or a matched length. */
+  readonly magnet: readonly string[];
+  /** Whether it landed on an outline -- a corner or a side -- and is to be joined there. */
+  readonly joins: boolean;
+  readonly guides: readonly RulerGuide[];
+export function snapToOutlines(anchors: readonly SnapAnchor[], delta: ConstructionPosition, motion: HandleMotion, links: RulerLinks, options: { readonly reach?: number; readonly snap?: boolean; readonly origin?: ConstructionPosition; readonly disabled?: ReadonlySet<RulerKind> } = {}): OutlineSnap | undefined {
+  const ruled = motionOf(motion);
+
+// src/features/edit-construction/ruler/axis.ts
+export type AxisPart = "start" | "center" | "end";
+export type AxisMoving = "both" | "start" | "end" | "none";
+export interface AxisTarget {
+  readonly value: number;
+  /** An edge lines up with an edge, a centre with a centre. */
+  readonly part: "edge" | "center";
+  /** Where, in the caller's own frame, the target stands -- for drawing the guide to it. */
+  readonly at?: { readonly s: number; readonly v: number };
+export interface AxisCatch {
+  /** How far the moving part goes to land on `target`. */
+  readonly shift: number;
+  readonly part: AxisPart;
+  readonly target: AxisTarget;
+  }
+export function catchOnAxis(start: number, end: number, moving: AxisMoving, targets: readonly AxisTarget[], reach: number): AxisCatch | undefined {
+  let best: AxisCatch | undefined;
+  for (const { part, value } of partsOf(start, end, moving)) {
+  const kind = part === "center" ? "center" : "edge";
+  for (const target of targets) {
+  if (target.part !== kind) continue;
+  const shift = target.value - value;
+  if (Math.abs(shift) > reach) continue;
+export function holdsOnAxis(start: number, end: number, targets: readonly AxisTarget[], tolerance = 1e-6): readonly { readonly part: AxisPart; readonly target: AxisTarget }[] {
+  const held: { part: AxisPart; target: AxisTarget }[] = [];
+  for (const { part, value } of partsOf(start, end, "both")) {
+  const kind = part === "center" ? "center" : "edge";
+  for (const target of targets) if (target.part === kind && Math.abs(target.value - value) <= tolerance) held.push({ part, target });
+export function gapCenter(start: number, end: number, bounds: readonly (readonly [number, number])[], limits: readonly [number, number]): number | undefined {
+  const middle = (start + end) / 2;
+  let low = limits[0], high = limits[1];
+  for (const [from, to] of bounds) {
+  if (to <= middle && to > low) low = to;
+  if (from >= middle && from < high) high = from;
+  }
+export function gapsAround(start: number, end: number, bounds: readonly (readonly [number, number])[], limits: readonly [number, number]): { readonly before: number; readonly after: number } {
+  let low = limits[0], high = limits[1];
+  const middle = (start + end) / 2;
+  for (const [from, to] of bounds) {
+  if (to <= middle && to > low) low = to;
+  if (from >= middle && from < high) high = from;
+  }
+
+// src/features/edit-construction/ruler/edit-measures.ts
+export type EditMeasureKind =
+export type EditMeasureName = EditMeasureKind["kind"];
+export function editMeasureOf(name: EditMeasureName, using: { readonly direction: PlanVector; readonly base: number; readonly angle: number }): EditMeasureKind {
+  switch (name) {
+  case "move": return { kind: "move" };
+export function measuresOfEdit(what: EditMeasureKind, from: ConstructionPosition, at: ConstructionPosition): readonly RulerMeasure[] {
+  const delta = { x: at.x - from.x, y: at.y - from.y, z: at.z - from.z };
+export function baseHeight(heights: Iterable<number>, fallback: number): number {
+  let low = Infinity;
+  for (const y of heights) if (y < low) low = y;
+  return Number.isFinite(low) ? low : fallback;
+  }
+
+// src/features/edit-construction/ruler/index.ts
+export type { CollectOptions, LinkPoint, LinkRun, RulerLinks } from "./links.ts";
+export type { MeasureUnit, MeasureUnitId } from "./measure-unit.ts";
+export type { PlanVector, RulerGuide, RulerKind, RulerMeasure, RulerMotion, RulerQuery, RulerResult } from "./resolve.ts";
+export type { EditMeasureKind, EditMeasureName } from "./edit-measures.ts";
+export type { AxisCatch, AxisMoving, AxisPart, AxisTarget } from "./axis.ts";
+export type { RulerSettings } from "./settings.ts";
+export type { OutlineSnap, SnapAnchor } from "./anchors.ts";
+export type { LengthStepSetting } from "./steps.ts";
+
+// src/features/edit-construction/ruler/links.ts
+export interface LinkPoint {
+  readonly id: string;
+  readonly position: ConstructionPosition;
+  }
+export interface LinkRun {
+  readonly a: LinkPoint;
+  readonly b: LinkPoint;
+  }
+export interface RulerLinks {
+  /** The corners: real nodes, which a structure can be joined to. */
+  readonly points: readonly LinkPoint[];
+  /** The middle of every level run: a place to line up with or land on, never a node to join. */
+  readonly midpoints?: readonly LinkPoint[];
+  readonly runs: readonly LinkRun[];
+  /** The distinct heights at which something stands, ascending. */
+  readonly levels: readonly number[];
+export interface CollectOptions {
+  /** Faces left out by key -- what is being dragged never links to itself. */
+  readonly skip?: ReadonlySet<string>;
+  /** Whether a `surfaceType` is ground, which has no links. */
+  readonly isGround: (surfaceType: string) => boolean;
+  }
+export function collectLinks(topologies: readonly ConstructionRegionTopology[], options: CollectOptions): RulerLinks {
+  const points = new Map<string, LinkPoint>();
+
+// src/features/edit-construction/ruler/measure-unit.ts
+export type MeasureUnitId = "m" | "ft" | "sq";
+export interface MeasureUnit {
+  readonly id: MeasureUnitId;
+  readonly label: string;
+  readonly symbol: string;
+  /** How many metres one of this unit is. */
+  readonly metres: number;
+  /** Digits shown after the point. */
+  readonly digits: number;
+export const MEASURE_UNITS: Readonly<Record<MeasureUnitId, MeasureUnit>> = {
+  m: { id: "m", label: "Metros", symbol: "m", metres: 1, digits: 2 },
+  ft: { id: "ft", label: "Pés", symbol: "ft", metres: 0.3048, digits: 1 },
+  sq: { id: "sq", label: "Quadrados", symbol: "q", metres: 1.524, digits: 1 },
+  };
+export const DEFAULT_MEASURE_UNIT: MeasureUnitId = "m";
+export const isMeasureUnitId = (value: unknown): value is MeasureUnitId => typeof value === "string" && Object.hasOwn(MEASURE_UNITS, value);
+export const fromMetres = (metres: number, unit?: MeasureUnitId): number => metres / specOf(unit).metres;
+export const toMetres = (value: number, unit?: MeasureUnitId): number => value * specOf(unit).metres;
+export function formatLength(metres: number, unit: MeasureUnitId = DEFAULT_MEASURE_UNIT): string {
+  const spec = specOf(unit);
+
+// src/features/edit-construction/ruler/resolve.ts
+export const RULER_REACH = 0.2;
+export const LEVEL_REACH = 0.15;
+export const HOLD_FACTOR = 1.6;
+export const RULER_KINDS = ["corner", "midpoint", "side", "square", "align", "intersection", "angle", "polar", "length", "level"] as const;
+export type RulerKind = (typeof RULER_KINDS)[number];
+export interface PlanVector {
+  readonly x: number;
+  readonly z: number;
+  }
+export type RulerMotion = { readonly kind: "free" } | { readonly kind: "line"; readonly direction: PlanVector };
+export interface RulerQuery {
+  /** Where the point would stand with no ruler. */
+  readonly point: ConstructionPosition;
+  readonly links: RulerLinks;
+  readonly motion?: RulerMotion;
+  /** Where what is being drawn began: its length is measured from here, and may match a standing run's. */
+  readonly origin?: ConstructionPosition;
+  /** The two directions lines are lined up along -- a build frame's, else the world's. Unit length, square to each other. */
+export type RulerGuide =
+export type RulerMeasure =
+export interface RulerResult {
+  /** Where the point stands: snapped when `snap` was asked for and something caught, else as it came. */
+  readonly position: ConstructionPosition;
+  /** What caught, whether or not it was taken. */
+  readonly caught: "point" | "run" | "intersection" | "square" | "align" | "angle" | "polar" | "length" | "step" | undefined;
+  /** Names the catch, to be handed back as {@link RulerQuery.holding} on the next question. */
+  readonly key: string | undefined;
+  readonly guides: readonly RulerGuide[];
+export function resolveRuler(query: RulerQuery): RulerResult {
+  const rc = reachOf(query);
+export function resolveLevel(y: number, links: RulerLinks, at: ConstructionPosition, options: { readonly snap?: boolean; readonly reach?: number; readonly disabled?: ReadonlySet<RulerKind> } = {}): { readonly y: number; readonly guide?: RulerGuide } {
+  if (options.disabled?.has("level")) return { y };
+export function roundWithin(value: number, step: number, reach: number): number | undefined {
+  if (!(step > 0)) return undefined;
+  const rounded = Math.round(value / step) * step;
+  return Math.abs(rounded - value) <= reach ? rounded : undefined;
+  }
+export function snapTurn(angle: number, step: number, reach: number, radius: number): { readonly angle: number; readonly turns: number } | undefined {
+  if (!(step > 0) || !(radius > 0)) return undefined;
+  const turns = Math.round(angle / step);
+
+// src/features/edit-construction/ruler/settings.ts
+export interface RulerSettings {
+  /** Ways of catching left out. */
+  readonly disabled: ReadonlySet<RulerKind>;
+  /** The angular step of the protractor, in degrees: a direction lands on a multiple of it. */
+  readonly angleStep: number;
+  /** The round number a length lands on: a step in the table's unit (1 means whole units), 0 to leave lengths as they are, or "auto", which follows the zoom. */
+  readonly lengthStep: LengthStepSetting;
+  /** Whether the numbers are written on the map -- at the teeth, along the lines, round the protractor -- besides the one at the pointer. */
+export const ANGLE_STEPS: readonly number[] = [5, 10, 15, 30, 45, 90];
+export const LENGTH_STEPS: readonly number[] = [0, 0.1, 0.25, 0.5, 1, 2, 5, 10];
+export const FINE_ANGLE_STEP = 5;
+export const DEFAULT_RULER_SETTINGS: RulerSettings = { disabled: new Set(), angleStep: 15, lengthStep: AUTO_LENGTH_STEP, numbers: true };
+export function parseRulerSettings(raw: unknown): RulerSettings {
+  const disabledOf = (value: unknown): ReadonlySet<RulerKind> =>
+  new Set(Array.isArray(value) ? value.filter((kind): kind is RulerKind => typeof kind === "string" && known.has(kind)) : []);
+export function serializeRulerSettings(settings: RulerSettings): unknown {
+  return { disabled: [...settings.disabled], angleStep: settings.angleStep, lengthStep: settings.lengthStep, numbers: settings.numbers };
+
+// src/features/edit-construction/ruler/steps.ts
+export const AUTO_LENGTH_STEP = "auto" as const;
+export type LengthStepSetting = number | typeof AUTO_LENGTH_STEP;
+export const NICE_STEPS: readonly number[] = [0.1, 0.25, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
+export const AUTO_STEP_PIXELS = 30;
+export const ROUND_REACH_PIXELS = 24;
+export const ROUND_REACH_SHARE = 0.4;
+export function niceStep(metersPerPixel: number | undefined, unit: MeasureUnitId | undefined, minPixels: number): number {
+  const unitMeters = (MEASURE_UNITS[unit ?? DEFAULT_MEASURE_UNIT] ?? MEASURE_UNITS[DEFAULT_MEASURE_UNIT]).metres;
+  if (metersPerPixel === undefined || !(metersPerPixel > 0)) return unitMeters;
+  for (const step of NICE_STEPS) if ((step * unitMeters) / metersPerPixel >= minPixels) return step * unitMeters;
+  return NICE_STEPS[NICE_STEPS.length - 1]! * unitMeters;
+  }
+export function lengthStepOf(setting: LengthStepSetting, metersPerPixel: number | undefined, unit: MeasureUnitId | undefined): number | undefined {
+  if (setting === AUTO_LENGTH_STEP) return niceStep(metersPerPixel, unit, AUTO_STEP_PIXELS);
+export const roundReach = (step: number, reach: number): number => Math.min(reach, step * ROUND_REACH_SHARE);
+
+// src/features/edit-construction/ruler/structure-dims.ts
+export function dimensionsOf(faces: readonly ConstructionRegionTopology[]): readonly RulerMeasure[] {
+  const positions = faces.flatMap((face) => face.nodes.map((node) => node.position));
 
 // src/features/edit-construction/spine/index.ts
 export type { SpineChain } from "./spine-chains.ts";
@@ -7604,6 +8018,29 @@ export type { CurveEdge, CurveHandleIndex, CurveMidframe, CurveStore } from "./c
 export type { PanelHeightWidgetZone } from "./panel-height-widget.ts";
 export type { ContourPort, ContourSpan } from "./contour-geometry.ts";
 export type { EndJoint, FloorEdge, FloorLanding, PlanDirection, Rewelding, WeldChanges, WeldRung } from "./floor-weld.ts";
+export type { OpeningHandle, OpeningHandlePart } from "./opening-handles.ts";
+
+// src/features/edit-construction/topology/opening-handles.ts
+export type OpeningHandlePart = "left" | "right" | "top" | "bottom" | "top-left" | "top-right" | "bottom-left" | "bottom-right";
+export interface OpeningHandle {
+  readonly id: string;
+  readonly part: OpeningHandlePart;
+  /** A corner moves two sides at once; a side, one. */
+  readonly kind: "corner" | "side";
+  readonly position: ConstructionPosition;
+  /** The node the handle is named after -- one of the opening's own -- by which the opening is found again. */
+  readonly nodeId: string;
+export const openingHandleId = (part: OpeningHandlePart, nodeId: string): string => `${PREFIX}${part}:${nodeId}`;
+export function openingHandlePick(id: string): { readonly part: OpeningHandlePart; readonly nodeId: string } | undefined {
+  if (!id.startsWith(PREFIX)) return undefined;
+  const rest = id.slice(PREFIX.length);
+export function openingHandles(
+  topologies: readonly ConstructionRegionTopology[],
+  focus: ReadonlySet<string> | undefined,
+  isOpening: (surfaceType: string) => boolean,
+  ): readonly OpeningHandle[] {
+  if (!focus) return [];
+  const groups = new Map<string, ConstructionRegionTopology[]>();
 
 // src/features/edit-construction/topology/panel-height-widget.ts
 export type PanelHeightWidgetZone = "group" | "single";
@@ -8128,6 +8565,7 @@ export interface TerrainNoisePort {
 
 // src/widgets/index.ts
 export type { ConstructionToolId, ToolParamsByTool, ToolParamsFor } from "@/features/edit-construction";
+export type { MeasureUnitId, RulerKind, RulerSettings } from "@/features/edit-construction";
 
 // src/widgets/use-keyboard-shortcuts.ts
 export interface KeyboardShortcutsOptions {
@@ -8137,9 +8575,9 @@ export interface KeyboardShortcutsOptions {
   readonly onRedo: () => void;
   readonly onToolChange: (tool: ConstructionToolId) => void;
   readonly ready: boolean;
-  readonly snapToGrid: boolean;
+  }
 export function useKeyboardShortcuts(options: KeyboardShortcutsOptions): void {
-  const { canUndo, canRedo, onUndo, onRedo, onToolChange, ready, snapToGrid, onSnapToGridChange } = options;
+  const { canUndo, canRedo, onUndo, onRedo, onToolChange, ready } = options;
 
   useEffect(() => {
   const handleKeyDown = (event: KeyboardEvent) => {

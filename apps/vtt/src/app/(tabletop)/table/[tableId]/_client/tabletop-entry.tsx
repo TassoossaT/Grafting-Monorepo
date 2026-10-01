@@ -15,6 +15,7 @@ import {
   type EditHistoryStack,
   type OpeningParams,
   type RenderViewId,
+  type RulerReadout as RulerReadoutState,
   type StructureEditParams,
   type TabletopRuntime,
   type TabletopRuntimeStatus,
@@ -24,10 +25,18 @@ import { StatusBadge } from "@/ui";
 import {
   ConstructionDock,
   ConstructionHotbar,
+  DEFAULT_MEASURE_UNIT,
+  DEFAULT_RULER_SETTINGS,
+  isMeasureUnitId,
+  parseRulerSettings,
+  RulerReadout,
+  serializeRulerSettings,
   SettingsDrawer,
   ToolRail,
   useKeyboardShortcuts,
   type EditTool,
+  type MeasureUnitId,
+  type RulerSettings,
   type SelectedNodeInfo,
 } from "@/widgets";
 
@@ -82,7 +91,45 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
   const [tool, setTool] = useState<EditTool>("navigate");
   const [toolParams, setToolParams] = useState<ToolParamsByTool>(DEFAULT_TOOL_PARAMS);
   const [structureEditParams, setStructureEditParams] = useState<StructureEditParams>(DEFAULT_STRUCTURE_EDIT_PARAMS);
-  const [snapToGrid, setSnapToGrid] = useState(true);
+  // The unit is the table's own choice. Kept in this browser per table until the map's persistence (epic #239) carries it with the table.
+  const [measureUnit, setMeasureUnit] = useState<MeasureUnitId>(DEFAULT_MEASURE_UNIT);
+  const measureUnitKey = `grafting:table:${tableId}:measure-unit`;
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(measureUnitKey);
+      setMeasureUnit(isMeasureUnitId(saved) ? saved : DEFAULT_MEASURE_UNIT);
+    } catch { /* storage blocked: the default stands */ }
+  }, [measureUnitKey]);
+  const handleMeasureUnitChange = useCallback((unit: MeasureUnitId) => {
+    setMeasureUnit(unit);
+    try { window.localStorage.setItem(measureUnitKey, unit); } catch { /* the choice lasts this session only */ }
+  }, [measureUnitKey]);
+  // What the ruler catches, how it counts angles and the round number it lands on are the table's own choice too; kept the same way.
+  const [rulerSettings, setRulerSettings] = useState<RulerSettings>(DEFAULT_RULER_SETTINGS);
+  const rulerKey = `grafting:table:${tableId}:ruler`;
+  useEffect(() => {
+    try {
+      // The old key held only the list of what is off; it still reads.
+      const saved = window.localStorage.getItem(rulerKey) ?? window.localStorage.getItem(`grafting:table:${tableId}:ruler-disabled`);
+      setRulerSettings(parseRulerSettings(saved === null ? null : JSON.parse(saved)));
+    } catch { /* storage blocked or unreadable: the default stands */ }
+  }, [rulerKey, tableId]);
+  const handleRulerSettingsChange = useCallback((next: RulerSettings) => {
+    setRulerSettings(next);
+    try { window.localStorage.setItem(rulerKey, JSON.stringify(serializeRulerSettings(next))); } catch { /* the choice lasts this session only */ }
+  }, [rulerKey]);
+  // The dots drawn on the graph's nodes are a debug view with no function: shown or hidden, no tool changes. Kept per table, on by default as it has always been.
+  const [graphOverlay, setGraphOverlay] = useState(true);
+  const graphOverlayKey = `grafting:table:${tableId}:graph-overlay`;
+  useEffect(() => {
+    try { setGraphOverlay(window.localStorage.getItem(graphOverlayKey) !== "off"); } catch { /* storage blocked: the default stands */ }
+  }, [graphOverlayKey]);
+  const handleGraphOverlayChange = useCallback((visible: boolean) => {
+    setGraphOverlay(visible);
+    try { window.localStorage.setItem(graphOverlayKey, visible ? "on" : "off"); } catch { /* the choice lasts this session only */ }
+  }, [graphOverlayKey]);
+  useEffect(() => { runtime.setGraphOverlay?.(graphOverlay); }, [runtime, graphOverlay]);
+  const [rulerReadout, setRulerReadout] = useState<RulerReadoutState | undefined>(undefined);
   const [editorMode, setEditorMode] = useState<"gm" | "player">("gm");
   const [selectedNodeInfo, setSelectedNodeInfo] = useState<SelectedNodeInfo | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -181,7 +228,9 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     history,
     tableId,
     viewId: viewIdRef.current,
-    snapToGrid,
+    measureUnit,
+    rulerSettings,
+    onRulerReadout: setRulerReadout,
     structureEditParams,
     onSelectionChange: (info) => setSelectedNodeInfo(info ?? null),
     onFeedbackChange: handleFeedbackChange,
@@ -195,8 +244,6 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     onRedo: handleRedo,
     onToolChange: setTool,
     ready: current.status === "ready",
-    snapToGrid,
-    onSnapToGridChange: setSnapToGrid,
   });
 
   return (
@@ -291,8 +338,6 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           canRedo={historyState.canRedo}
           onUndo={handleUndo}
           onRedo={handleRedo}
-          snapToGrid={snapToGrid}
-          onSnapToGridChange={setSnapToGrid}
         />
 
         <ConstructionDock
@@ -305,8 +350,6 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           canRedo={historyState.canRedo}
           onUndo={handleUndo}
           onRedo={handleRedo}
-          snapToGrid={snapToGrid}
-          onSnapToGridChange={setSnapToGrid}
           onToggleSettings={() => setSettingsOpen((prev) => !prev)}
           settingsOpen={settingsOpen}
         />
@@ -323,7 +366,15 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           structureEditParams={structureEditParams}
           onStructureEditParamsChange={setStructureEditParams}
           tokenCount={current.tokens.byId.size}
+          measureUnit={measureUnit}
+          onMeasureUnitChange={handleMeasureUnitChange}
+          rulerSettings={rulerSettings}
+          onRulerSettingsChange={handleRulerSettingsChange}
+          graphOverlay={graphOverlay}
+          onGraphOverlayChange={handleGraphOverlayChange}
         />
+
+        {rulerReadout ? <RulerReadout labels={rulerReadout.labels} x={rulerReadout.x} y={rulerReadout.y} /> : null}
       </section>
 
       {/* Bottom Bar -- thin, crops the map on purpose */}

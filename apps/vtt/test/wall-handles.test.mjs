@@ -20,6 +20,8 @@ const params = { wallType: "wall-white", height: 3 };
 function fixture(onPlatform = false) {
   const f = sessionFixture();
   Object.assign(f.runtime, { showPreview() {}, clearPreview() {} });
+  // As the table plays: the ruler's snap is on.
+  Object.assign(f.ctx, { rulerSnap: true });
   if (onPlatform) commitPlatformContour(f.ctx, [[0, 0], [6, 0], [6, 4], [0, 4]].map(([x, z]) => ({ point: { x, y: 2, z } })), { mode: "create", elevation: 2, support: "floating", shape: "rectangle" });
   const y = onPlatform ? 2 : 0;
   const start = { point: { x: 1, y, z: 0 } }, end = { point: { x: 5, y, z: 0 } };
@@ -94,6 +96,23 @@ test("a wall's foot handle moves where the post stands, its top following straig
     assert.ok(close(after[0].top.x, after[0].foot.x) && close(after[0].top.z, after[0].foot.z), "the top straight above");
     assert.ok(close(after[0].top.y - after[0].foot.y, before[0].top.y - before[0].foot.y), "the same height");
     assert.deepEqual(after[1], before[1], "the other post stays");
+  } finally { f.session.free(); }
+});
+
+test("dragging a wall's top says exactly how high the wall stands now, and how much that changed", () => {
+  const f = fixture();
+  const shown = [];
+  f.ctx.showRuler = (feedback) => shown.push(feedback);
+  try {
+    const standing = posts(f.runtime)[1];
+    const handle = wallHandles(f.runtime).find((h) => h.kind === "top" && close(h.pivot.x, 5));
+    drag(f, handle, { x: 0, y: 1, z: 0 }, 1);
+    const measures = shown.filter(Boolean).at(-1).measures;
+    const height = measures.find((m) => m.kind === "height");
+    // As high as the wall stood from its foot, plus the one it is lifted by: its exact height, not only the change.
+    assert.ok(close(height.meters, standing.top.y - standing.foot.y + 1), JSON.stringify(measures));
+    assert.ok(close(height.level, standing.top.y + 1));
+    assert.ok(close(measures.find((m) => m.kind === "change").meters, 1));
   } finally { f.session.free(); }
 });
 
@@ -199,6 +218,8 @@ test("a wall's foot on a platform slides along its side without moving it, snaps
 test("a wall's foot on a platform dragged in off its side stands loose there, the platform left as it was", () => {
   const f = fixture(true);
   try {
+    // Placed freely (Ctrl): the ruler would otherwise square the foot to the wall's other end.
+    f.ctx.rulerSnap = false;
     const corners = platformCorners(f.runtime);
     const handle = wallHandles(f.runtime).find((h) => h.kind === "foot" && close(h.pivot.x, 1));
     drag(f, handle, { x: 0.5, y: 0, z: 1.5 });
@@ -214,6 +235,8 @@ test("a wall's foot on a platform dragged in off its side stands loose there, th
 test("a loose wall moved whole snaps onto a platform's side and is joined to it along it", () => {
   const f = sessionFixture();
   Object.assign(f.runtime, { showPreview() {}, clearPreview() {} });
+  // As the table plays: the ruler's snap is on.
+  Object.assign(f.ctx, { rulerSnap: true });
   try {
     commitPlatformContour(f.ctx, [[0, 0], [6, 0], [6, 4], [0, 4]].map(([x, z]) => ({ point: { x, y: 2, z } })), { mode: "create", elevation: 2, support: "floating", shape: "rectangle" });
     const start = { point: { x: 1, y: 2, z: 1 } }, end = { point: { x: 5, y: 2, z: 1 } };
@@ -231,6 +254,8 @@ test("a loose wall moved whole snaps onto a platform's side and is joined to it 
 test("a platform's side pushed out snaps onto the run a wall beside it stands on, and takes the wall's feet into its outline", () => {
   const f = sessionFixture();
   Object.assign(f.runtime, { showPreview() {}, clearPreview() {} });
+  // As the table plays: the ruler's snap is on.
+  Object.assign(f.ctx, { rulerSnap: true });
   try {
     commitPlatformContour(f.ctx, [[0, 0], [6, 0], [6, 4], [0, 4]].map(([x, z]) => ({ point: { x, y: 0, z } })), { mode: "create", elevation: 0, support: "floating", shape: "rectangle" });
     const start = { point: { x: 1, y: 0, z: 5 } }, end = { point: { x: 5, y: 0, z: 5 } };
@@ -272,4 +297,119 @@ test("a wall standing in the middle of a platform, joined to it by no node, goes
       if (kind === "rotate") assert.ok(after.some((post, i) => Math.hypot(post.foot.x - before[i].foot.x, post.foot.z - before[i].foot.z) > 0.5), "turned with it");
     } finally { f.session.free(); }
   }
+});
+
+test("with a round number chosen, dragging a wall's top lands its height on a whole number above its foot", () => {
+  const f = fixture();
+  const shown = [];
+  f.ctx.showRuler = (feedback) => shown.push(feedback);
+  f.ctx.rulerLengthStep = 0.5;
+  try {
+    const standing = posts(f.runtime)[1];
+    const wall = standing.top.y - standing.foot.y;
+    const handle = wallHandles(f.runtime).find((h) => h.kind === "top" && close(h.pivot.x, 5));
+    // Lifted to a hair off a half: 1.02 above where it stood.
+    const target = Math.round((wall + 1.02) / 0.5) * 0.5;
+    drag(f, handle, { x: 0, y: target - wall + 0.03, z: 0 }, 1);
+    const height = shown.filter(Boolean).at(-1).measures.find((m) => m.kind === "height");
+    assert.ok(Math.abs(height.meters - target) < 1e-6, `rounded to ${target}, not left at ${target + 0.03}: ${JSON.stringify(shown.filter(Boolean).at(-1))}`);
+    assert.ok(shown.filter(Boolean).at(-1).guides.some((g) => g.kind === "step"), "the round number is marked");
+    // With the ruler's snap off, it is as dragged.
+    f.ctx.rulerSnap = false;
+  } finally { f.session.free(); }
+});
+
+test("dragging a wall's foot measures the side from the neighbour that stays, never from the vertex that left", () => {
+  const f = fixture();
+  const shown = [];
+  f.ctx.showRuler = (feedback) => shown.push(feedback);
+  try {
+    const [left, right] = posts(f.runtime).map((p) => p.foot);
+    const handle = wallHandles(f.runtime).find((h) => h.kind === "foot" && close(h.pivot.x, right.x));
+    drag(f, handle, { x: 0.3, y: 0, z: 2 });
+    const measures = shown.filter(Boolean).at(-1).measures;
+    const lengths = measures.filter((m) => m.kind === "length");
+    assert.ok(lengths.length > 0, JSON.stringify(measures));
+    assert.ok(lengths.every((m) => close(m.from.x, left.x, 1e-4) && close(m.from.z, left.z, 1e-4)), `anchored at the fixed end: ${JSON.stringify(lengths)}`);
+    assert.ok(!lengths.some((m) => close(m.from.x, right.x, 1e-4) && close(m.from.z, right.z, 1e-4)), "none starts at the old vertex");
+  } finally { f.session.free(); }
+});
+
+test("dragging a wall's top shows the grade of the run beside it", () => {
+  const f = fixture();
+  const shown = [];
+  f.ctx.showRuler = (feedback) => shown.push(feedback);
+  try {
+    const handle = wallHandles(f.runtime).find((h) => h.kind === "top" && close(h.pivot.x, 5));
+    drag(f, handle, { x: 0, y: 1, z: 0 }, 1);
+    const grade = shown.filter(Boolean).at(-1).measures.find((m) => m.kind === "grade");
+    assert.ok(grade && grade.rise > 0 && grade.run > 0, JSON.stringify(shown.filter(Boolean).at(-1).measures));
+  } finally { f.session.free(); }
+});
+
+test("dragging a wall's foot also says what its side was and what it is now, and how far the vertex went", () => {
+  const f = fixture();
+  const shown = [];
+  f.ctx.showRuler = (feedback) => shown.push(feedback);
+  try {
+    const [left, right] = posts(f.runtime).map((p) => p.foot);
+    const handle = wallHandles(f.runtime).find((h) => h.kind === "foot" && close(h.pivot.x, right.x));
+    drag(f, handle, { x: 0.3, y: 0, z: 2 });
+    const measures = shown.filter(Boolean).at(-1).measures;
+    const was = measures.find((m) => m.kind === "was");
+    assert.ok(was, JSON.stringify(measures));
+    assert.ok(close(was.was, Math.hypot(right.x - left.x, right.z - left.z), 1e-4), "what the side was before the edit");
+    assert.ok(was.now > was.was, "and what it is now");
+    assert.ok(measures.some((m) => m.kind === "change" && m.name === "desloc." && m.meters > 0));
+  } finally { f.session.free(); }
+});
+
+test("dragging a wall's top says the height it was and the height it is", () => {
+  const f = fixture();
+  const shown = [];
+  f.ctx.showRuler = (feedback) => shown.push(feedback);
+  try {
+    const standing = posts(f.runtime)[1];
+    const handle = wallHandles(f.runtime).find((h) => h.kind === "top" && close(h.pivot.x, 5));
+    drag(f, handle, { x: 0, y: 1, z: 0 }, 1);
+    const was = shown.filter(Boolean).at(-1).measures.find((m) => m.kind === "was");
+    assert.ok(was && close(was.now - was.was, 1, 0.2), JSON.stringify(shown.filter(Boolean).at(-1).measures));
+  } finally { f.session.free(); }
+});
+
+test("pushing a wall's side says how long each side beside it becomes, from its far end, and what it was", () => {
+  const f = fixture();
+  const shown = [];
+  f.ctx.showRuler = (feedback) => shown.push(feedback);
+  try {
+    const handle = wallHandles(f.runtime).find((h) => h.kind === "side");
+    assert.ok(handle, "a wall has a side handle");
+    drag(f, handle, { x: 0, y: 0, z: 1 });
+    const measures = shown.filter(Boolean).at(-1).measures;
+    const sizes = measures.filter((m) => m.kind === "size" && m.name === "lado");
+    const was = measures.filter((m) => m.kind === "was" && m.name === "lado");
+    // The wall's sides beside a pushed one are its posts, which are upright: nothing runs level beside it, so nothing is claimed.
+    assert.equal(sizes.length, was.length, JSON.stringify(measures));
+    assert.ok(measures.some((m) => m.kind === "change" && m.name === "lado" && m.from && m.to), "and the push itself is a line from where it began");
+  } finally { f.session.free(); }
+});
+
+test("pushing a platform's side says how long each side beside it becomes and what it was,", () => {
+  const f = fixture(true);
+  const shown = [];
+  f.ctx.showRuler = (feedback) => shown.push(feedback);
+  try {
+    const floor = shownGlobalHandles(scene(f.runtime)).filter((h) => hasTrait(h.owner, "floor") && h.kind === "side");
+    assert.ok(floor.length > 0, "a platform has side handles");
+    const handle = floor.find((h) => h.motion.kind === "line") ?? floor[0];
+    const direction = handle.motion.kind === "line" ? handle.motion.direction : { x: 0, z: 1 };
+    drag(f, handle, { x: direction.x * 0.5, y: 0, z: direction.z * 0.5 }, 0, platformContourTool, platformContourTool.defaultParams());
+    const measures = shown.filter(Boolean).at(-1).measures;
+    const sizes = measures.filter((m) => m.kind === "size" && m.name === "lado");
+    const was = measures.filter((m) => m.kind === "was" && m.name === "lado");
+    assert.equal(sizes.length, 2, JSON.stringify(measures));
+    assert.equal(was.length, 2);
+    assert.ok(sizes.every((m) => m.from && m.to), "each is a ruler from its far end");
+    assert.ok(was.some((m) => Math.abs(m.now - m.was) > 0.1), "and they grew: the near ends moved with the pushed side");
+  } finally { f.session.free(); }
 });

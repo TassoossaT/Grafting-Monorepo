@@ -11,7 +11,7 @@ const hookUrl=new URL("../src/composition/tabletop/use-construction-pointer.ts",
 const modules={
   react: "export const useRef=(v)=>({current:v}); export const useCallback=(f)=>f; export const useMemo=(f)=>f(); export const useEffect=(f)=>globalThis.__platformHook.effects.push(f);",
   "@/ports": 'export const TOOL_GHOST_PREVIEW_CHANNEL="ghost";',
-  "../../adapters/rendering/index.ts": "export const GRID_SNAP_UNIT=1;",
+  "../../adapters/rendering/index.ts": "export const VIEW_FOV_DEGREES=38;",
   "./tools/index.ts": "export const toolFor=()=>globalThis.__platformHook.tool;",
   "./tools/core/edge-overlay.ts": "export const edgeOverlayOf=()=>[]; export const edgeOverlayChannel=(v)=>v; export const edgeOverlayDescriptor=(v)=>v;",
 };
@@ -47,7 +47,7 @@ test("real pointer lifecycle: final release sample, one drag commit, Escape and 
   const cleanups=[];
   try {
     const handlers=useConstructionPointer({
-      activeTool:"platform-contour",toolParams:params,runtime,history:fixture.ctx.history,tableId:"pointer",viewId:"view",snapToGrid:false,
+      activeTool:"platform-contour",toolParams:params,runtime,history:fixture.ctx.history,tableId:"pointer",viewId:"view",
       structureEditParams:{mode:"shape"},
       onSelectionChange(){},onFeedbackChange:(f)=>calls.feedback.push(f),
     });
@@ -110,7 +110,7 @@ test("road pointer lifecycle: one selected tool creates and edits the curve, and
   const target={getBoundingClientRect:()=>({left:0,top:0}),setPointerCapture:id=>captures.add(id),hasPointerCapture:id=>captures.has(id),releasePointerCapture:id=>captures.delete(id)};
   const params={...DEFAULT_TOOL_PARAMS,"path-brush":{...DEFAULT_TOOL_PARAMS["path-brush"],bedWidth:0.6}};
   try {
-    const handlers=useConstructionPointer({activeTool:"path-brush",toolParams:params,runtime:f.runtime,history:f.ctx.history,tableId:"pointer-road",viewId:"view",snapToGrid:false,onSelectionChange(){},onFeedbackChange:v=>f.calls.feedback.push(v)});
+    const handlers=useConstructionPointer({activeTool:"path-brush",toolParams:params,runtime:f.runtime,history:f.ctx.history,tableId:"pointer-road",viewId:"view",onSelectionChange(){},onFeedbackChange:v=>f.calls.feedback.push(v)});
     for(const effect of effects)cleanups.push(effect());
     const event=(x,z)=>({button:0,pointerId:1,currentTarget:target,clientX:x,clientY:z});
     const draw=(a,b)=>{handlers.onPointerDown(event(...a));handlers.onPointerUp(event(...b));handlers.onClick(event(...b));};

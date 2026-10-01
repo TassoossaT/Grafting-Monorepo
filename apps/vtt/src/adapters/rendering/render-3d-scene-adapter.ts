@@ -18,6 +18,7 @@ import type {
   ChangeOrigin,
   ConfirmedRenderChange,
   RenderPreviewDescriptor,
+  RenderPreviewLabel,
   RenderToken,
   RenderViewId,
   ScenePickResult,
@@ -56,7 +57,8 @@ import {
   type MapSurfacePickVisualParams,
 } from "./map-surface-pick-scene-item.ts";
 import { clipPlaneForCameraHeight } from "./map-chunk-key.ts";
-import { createHeightHandleTexture, createMarkerTexture, createMidpointHandleTexture, createMoveHandleTexture, createNodeHandleTexture, createRotateHandleTexture, createTurnsHandleTexture, createLinkHandleTexture, createRadiusHandleTexture, createTiltHandleTexture, createSideHandleTexture, createCornerHandleTexture, createUnlinkHandleTexture } from "./marker-textures.ts";
+import { createHeightHandleTexture, createMarkerTexture, createMidpointHandleTexture, createMoveHandleTexture, createNodeHandleTexture, createRotateHandleTexture, createTurnsHandleTexture, createLinkHandleTexture, createRadiusHandleTexture, createTiltHandleTexture, createSideHandleTexture, createCornerHandleTexture, createUnlinkHandleTexture, createRulerLabelTexture } from "./marker-textures.ts";
+import { RULER_LABEL_VISUAL_KIND, rulerLabelSceneItem, rulerLabelSceneItemId, type RulerLabelVisualParams } from "./ruler-label-scene-item.ts";
 import {
   NODE_HANDLE_LAYER_ID,
   NODE_HANDLE_VISUAL_KIND,
@@ -81,8 +83,11 @@ interface AttachedView {
   readonly initialCamera: { readonly position: { x: number; y: number; z: number }; readonly target: { x: number; y: number; z: number } };
 }
 
+/** The camera's vertical field of view, in degrees -- fixed: orbiting and zooming move the camera, never the lens. */
+export const VIEW_FOV_DEGREES = 38;
+
 const INITIAL_VIEW_CAMERA = {
-  fov: 38,
+  fov: VIEW_FOV_DEGREES,
   near: 0.1,
   far: 200,
   position: { x: 6, y: 4.5, z: 7 },
@@ -123,6 +128,8 @@ export class Render3dSceneAdapter implements SceneRenderPort {
   readonly #nodeHandleGlyphs = new Map<string, import("@/ports").RenderHandleGlyph>();
   /** Which preview channels currently have something on them, so an unnamed clear can empty them all. */
   readonly #previewChannels = new Set<string>();
+  /** How many labels each preview channel has put up, so a shorter set takes the surplus down. */
+  readonly #labelCounts = new Map<string, number>();
   // Keyed by `${layer}:${scopeId}` (not scopeId alone) so a terrain chunk id
   // and a token id can never collide, even though both are caller-chosen
   // strings that share no coordination.
@@ -219,6 +226,26 @@ export class Render3dSceneAdapter implements SceneRenderPort {
         material: { surface: "unlit", color: 0x000000, opacity: 0 },
       }),
       equals: () => true,
+    });
+    // A texture per text, kept: the same few numbers come round again and again.
+    const labelTextures = new Map<string, HTMLCanvasElement>();
+    registry.register<RulerLabelVisualParams>({
+      kind: RULER_LABEL_VISUAL_KIND,
+      describe: (params) => {
+        let texture = labelTextures.get(params.text);
+        if (texture === undefined) {
+          if (labelTextures.size >= 256) labelTextures.clear();
+          texture = createRulerLabelTexture(params.text);
+          labelTextures.set(params.text, texture);
+        }
+        return {
+          geometry: { shape: "sprite" },
+          // On top of everything, like the ruler's own lines; never pickable.
+          material: { surface: "unlit", color: 0xffffff, texture, depthTest: false, depthWrite: false },
+          pickable: false,
+        };
+      },
+      equals: (left, right) => left.text === right.text,
     });
     registry.register<ConstructionPreviewVisualParams>({
       kind: CONSTRUCTION_PREVIEW_VISUAL_KIND,
@@ -451,10 +478,20 @@ export class Render3dSceneAdapter implements SceneRenderPort {
 
   showPreview(descriptor: RenderPreviewDescriptor, channel = DEFAULT_PREVIEW_CHANNEL): void {
     const engine = this.#requireEngine();
+
     // `put` on a channel's own id always replaces whatever that channel had.
     // Channels never collide, so a diagnostic overlay and a tool ghost coexist
     // without either knowing about the other.
     engine.scene.put(constructionPreviewSceneItem(descriptor, channel), "engine");
+    this.#previewChannels.add(channel);
+  }
+
+  showLabels(labels: readonly RenderPreviewLabel[], channel: string): void {
+    const engine = this.#requireEngine();
+    // Each number is an item of its own, on the channel's ids: a set shorter than the last takes the surplus down.
+    labels.forEach((label, index) => engine.scene.put(rulerLabelSceneItem(label, index, channel), "engine"));
+    for (let index = labels.length; index < (this.#labelCounts.get(channel) ?? 0); index += 1) engine.scene.remove(rulerLabelSceneItemId(channel, index), "engine");
+    this.#labelCounts.set(channel, labels.length);
     this.#previewChannels.add(channel);
   }
 
@@ -469,6 +506,8 @@ export class Render3dSceneAdapter implements SceneRenderPort {
     const channels = channel === undefined ? [...this.#previewChannels] : [channel];
     for (const name of channels) {
       engine.scene.remove(constructionPreviewSceneItemId(name), "engine");
+      for (let index = 0; index < (this.#labelCounts.get(name) ?? 0); index += 1) engine.scene.remove(rulerLabelSceneItemId(name, index), "engine");
+      this.#labelCounts.delete(name);
       this.#previewChannels.delete(name);
     }
   }

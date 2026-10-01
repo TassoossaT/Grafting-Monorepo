@@ -30,7 +30,7 @@ export { attachCameraNavigation } from "../../features/navigate-camera/index.ts"
 export { DEFAULT_STRUCTURE_EDIT_PARAMS, DEFAULT_TOOL_PARAMS, withOpeningKind } from "../../features/edit-construction/index.ts";
 export type { ConstructionToolId, OpeningParams, StructureEditParams, ToolParamsByTool, ToolParamsFor } from "../../features/edit-construction/index.ts";
 
-export { useConstructionPointer } from "./use-construction-pointer.ts";
+export { useConstructionPointer, type RulerReadout } from "./use-construction-pointer.ts";
 export type { ConstructionPointerHandlers, UseConstructionPointerOptions } from "./use-construction-pointer.ts";
 
 export type { ConstructionToolFeedback } from "./tools/index.ts";

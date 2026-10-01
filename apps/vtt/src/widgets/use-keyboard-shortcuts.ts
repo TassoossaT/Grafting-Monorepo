@@ -11,8 +11,6 @@ export interface KeyboardShortcutsOptions {
   readonly onRedo: () => void;
   readonly onToolChange: (tool: ConstructionToolId) => void;
   readonly ready: boolean;
-  readonly snapToGrid: boolean;
-  readonly onSnapToGridChange: (snap: boolean) => void;
 }
 
 /**
@@ -24,7 +22,7 @@ export interface KeyboardShortcutsOptions {
  * triggers a shortcut.
  */
 export function useKeyboardShortcuts(options: KeyboardShortcutsOptions): void {
-  const { canUndo, canRedo, onUndo, onRedo, onToolChange, ready, snapToGrid, onSnapToGridChange } = options;
+  const { canUndo, canRedo, onUndo, onRedo, onToolChange, ready } = options;
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -41,11 +39,9 @@ export function useKeyboardShortcuts(options: KeyboardShortcutsOptions): void {
         if (ready) onToolChange("wall-brush");
       } else if (event.key.toLowerCase() === "i") {
         if (ready) onToolChange("terrain-sculpt");
-      } else if (event.key.toLowerCase() === "g") {
-        onSnapToGridChange(!snapToGrid);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [canUndo, canRedo, onUndo, onRedo, onToolChange, ready, snapToGrid, onSnapToGridChange]);
+  }, [canUndo, canRedo, onUndo, onRedo, onToolChange, ready]);
 }
