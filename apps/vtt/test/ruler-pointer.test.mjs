@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { registerHooks } from "node:module";
 import { addFace, sessionFixture } from "./platform-session-fixture.mjs";
-import { DEFAULT_TOOL_PARAMS } from "../src/features/edit-construction/index.ts";
+import { DEFAULT_RULER_SETTINGS, DEFAULT_TOOL_PARAMS } from "../src/features/edit-construction/index.ts";
 
 // The real pointer hook, mounted without a DOM renderer -- the same harness as `platform-pointer.test.mjs`.
 const hookUrl = new URL("../src/composition/tabletop/use-construction-pointer.ts", import.meta.url).href;
@@ -111,7 +111,7 @@ test("the reach is a few pixels of the screen: the same spot catches zoomed out 
   } finally { far.done(); }
 });
 
-test("a line drawn near a polar step is turned onto it, keeping its length; Shift makes the steps finer", () => {
+test("a line drawn near a step of the protractor is turned onto it, keeping its length; Shift offers the finer five degrees", () => {
   const t = table();
   try {
     const heading = (44 * Math.PI) / 180;
@@ -121,17 +121,17 @@ test("a line drawn near a polar step is turned onto it, keeping its length; Shif
     t.handlers.onPointerMove(t.event(end.x, end.z));
     t.handlers.onPointerUp(t.event(end.x, end.z));
     const made = t.seen.up[0].point;
-    near(Math.atan2(made.z - 10, made.x - 10), Math.PI / 4, "on the 45 degree step");
+    near(Math.atan2(made.z - 10, made.x - 10), Math.PI / 4, "on a step of 15 degrees: 45");
     near(Math.hypot(made.x - 10, made.z - 10), 10, "as long as it was");
-    // 29 degrees is on no 45 degree step; with Shift the steps are 15, and 30 is one.
-    const off = (29 * Math.PI) / 180;
+    // 20.8 degrees is on no step of 15; with Shift the steps are 5, and 20 is one.
+    const off = (20.8 * Math.PI) / 180;
     const aim = { x: 10 + 10 * Math.cos(off), z: 10 + 10 * Math.sin(off) };
     t.handlers.onPointerDown(t.event(10, 10));
     t.handlers.onPointerUp(t.event(aim.x, aim.z));
-    near(Math.atan2(t.seen.up[1].point.z - 10, t.seen.up[1].point.x - 10), off, "no step near 29 degrees");
+    near(Math.atan2(t.seen.up[1].point.z - 10, t.seen.up[1].point.x - 10), off, "no step of 15 near 20.8 degrees");
     t.handlers.onPointerDown(t.event(10, 10));
     t.handlers.onPointerUp(t.event(aim.x, aim.z, { shiftKey: true }));
-    near(Math.atan2(t.seen.up[2].point.z - 10, t.seen.up[2].point.x - 10), Math.PI / 6, "Shift: the 30 degree step");
+    near(Math.atan2(t.seen.up[2].point.z - 10, t.seen.up[2].point.x - 10), (20 * Math.PI) / 180, "Shift: the 20 degree step");
   } finally { t.done(); }
 });
 
@@ -193,9 +193,52 @@ test("the table's unit is what a typed number means", () => {
 });
 
 test("a way of catching the table left out does not catch", () => {
-  const t = table({ rulerDisabled: new Set(["corner", "midpoint", "side", "square", "align", "intersection"]) });
+  const t = table({ rulerSettings: { ...DEFAULT_RULER_SETTINGS, disabled: new Set(["corner", "midpoint", "side", "square", "align", "intersection"]) } });
   try {
     t.handlers.onPointerDown(t.event(4.05, 0.04));
     near(t.seen.down[0].point.x, 4.05, "no corner, no side, no lines: the pointer stays");
   } finally { t.done(); }
+});
+
+test("the table's angle step is what the protractor offers: five degrees catches what fifteen does not", () => {
+  const aim = (degrees) => ({ x: 10 + 10 * Math.cos((degrees * Math.PI) / 180), z: 10 + 10 * Math.sin((degrees * Math.PI) / 180) });
+  const by15 = table();
+  try {
+    by15.handlers.onPointerDown(by15.event(10, 10));
+    by15.handlers.onPointerUp(by15.event(aim(20.2).x, aim(20.2).z));
+    near(Math.atan2(by15.seen.up[0].point.z - 10, by15.seen.up[0].point.x - 10), (20.2 * Math.PI) / 180, "20 is no step of 15");
+  } finally { by15.done(); }
+  const by5 = table({ rulerSettings: { ...DEFAULT_RULER_SETTINGS, angleStep: 5 } });
+  try {
+    by5.handlers.onPointerDown(by5.event(10, 10));
+    by5.handlers.onPointerUp(by5.event(aim(20.2).x, aim(20.2).z));
+    near(Math.atan2(by5.seen.up[0].point.z - 10, by5.seen.up[0].point.x - 10), (20 * Math.PI) / 180, "but it is one of 5");
+  } finally { by5.done(); }
+});
+
+test("a round number chosen by the table is what a length lands on: whole units, or fives, in the table's unit", () => {
+  const whole = table({ rulerSettings: { ...DEFAULT_RULER_SETTINGS, lengthStep: 1 } });
+  try {
+    whole.handlers.onPointerDown(whole.event(10, 10));
+    // Far from the floor's own sides (3 and 4 m), so only the round number can catch.
+    whole.handlers.onPointerUp(whole.event(16.04, 10));
+    near(whole.seen.up[0].point.x, 16, "6.04 m lands on 6");
+    whole.handlers.onPointerDown(whole.event(10, 10));
+    whole.handlers.onPointerUp(whole.event(16.5, 10));
+    near(whole.seen.up[1].point.x, 16.5, "6.5 m is no whole number: left alone");
+  } finally { whole.done(); }
+  // In feet, by fives: 19.97 ft is a hair short of twenty.
+  const feet = table({ measureUnit: "ft", rulerSettings: { ...DEFAULT_RULER_SETTINGS, lengthStep: 5 } });
+  try {
+    feet.handlers.onPointerDown(feet.event(10, 10));
+    feet.handlers.onPointerUp(feet.event(10 + 19.97 * 0.3048, 10));
+    near(feet.seen.up[0].point.x, 10 + 20 * 0.3048, "twenty feet, by fives");
+  } finally { feet.done(); }
+  // Off: lengths are as drawn.
+  const off = table();
+  try {
+    off.handlers.onPointerDown(off.event(10, 10));
+    off.handlers.onPointerUp(off.event(16.04, 10));
+    near(off.seen.up[0].point.x, 16.04);
+  } finally { off.done(); }
 });

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { baseHeight, catchOnAxis, dimensionsOf, collectLinks, gapCenter, gapsAround, holdsOnAxis, formatLength, measuresOfEdit, fromMetres, resolveLevel, resolveRuler, toMetres } from "../src/features/edit-construction/ruler/index.ts";
+import { ANGLE_STEPS, DEFAULT_RULER_SETTINGS, LENGTH_STEPS, parseRulerSettings, roundWithin, serializeRulerSettings, baseHeight, catchOnAxis, dimensionsOf, collectLinks, gapCenter, gapsAround, holdsOnAxis, formatLength, measuresOfEdit, fromMetres, resolveLevel, resolveRuler, toMetres } from "../src/features/edit-construction/ruler/index.ts";
 
 const at = (x, z, y = 0) => ({ x, y, z });
 const near = (actual, expected, message) => assert.ok(Math.abs(actual - expected) < 1e-9, message ?? `${actual} != ${expected}`);
@@ -93,17 +93,17 @@ test("a length matching a standing run is landed on", () => {
 
 test("a line near a standing side's direction is turned onto it, keeping its length", () => {
   // Drawn on a free line, away from every corner's axis, so only the direction can catch.
-  const result = resolveRuler({ point: at(16, 6.3), origin: at(10, 6), links });
+  const result = resolveRuler({ point: at(16, 6.15), origin: at(10, 6), links });
   assert.equal(result.caught, "angle");
   near(result.position.z, 6);
-  near(result.position.x - 10, Math.hypot(6, 0.3));
+  near(result.position.x - 10, Math.hypot(6, 0.15));
   const guide = result.guides.find((g) => g.kind === "angle");
   assert.equal(guide.relation, "parallel");
 });
 
 test("square to a standing side counts too, and is named perpendicular", () => {
   // Only the side along x stands near, so running along z is square to it.
-  const result = resolveRuler({ point: at(10.2, 6), origin: at(10, 0), links: { ...links, runs: [links.runs[0]] } });
+  const result = resolveRuler({ point: at(10.1, 6), origin: at(10, 0), links: { ...links, runs: [links.runs[0]] } });
   assert.equal(result.caught, "angle");
   near(result.position.x, 10);
   assert.equal(result.guides.find((g) => g.kind === "angle").relation, "perpendicular");
@@ -353,4 +353,112 @@ test("a thin wall has no depth to speak of, and a flat floor no height", () => {
   const flat = Object.fromEntries(dimensionsOf([{ ...square, nodes: square.nodes.map((n) => ({ ...n, position: { ...n.position, y: 1 } })) }]).map((m) => [m.name, m.meters]));
   assert.equal(flat.altura, undefined);
   assert.deepEqual(dimensionsOf([]), []);
+});
+
+const deg = (n) => (n * Math.PI) / 180;
+const empty = { points: [], runs: [], levels: [] };
+
+test("the protractor counts from the nearest side: 0 is along it, and 90 square to it, in steps of five degrees", () => {
+  // One side runs 30 degrees off the world's x axis; the line starts beside it.
+  const a = { id: "a", position: at(0, 0) }, b = { id: "b", position: at(10 * Math.cos(deg(30)), 10 * Math.sin(deg(30))) };
+  const edge = { points: [a, b], runs: [{ a, b }], levels: [] };
+  const origin = at(3, 2);
+  // 30 + 40 = 70 degrees from the world, 40 from the side: a step of 5 -- but 41.2 is not near one.
+  const aim = (fromSide, length = 6) => ({ x: origin.x + length * Math.cos(deg(30 + fromSide)), z: origin.z + length * Math.sin(deg(30 + fromSide)) });
+  const on40 = resolveRuler({ point: at(aim(40.4).x, aim(40.4).z), origin, links: edge, polar: deg(5), disabled: new Set(["angle"]) });
+  assert.equal(on40.caught, "polar");
+  assert.equal(on40.guides.find((g) => g.kind === "polar").from, "edge");
+  near(Math.atan2(on40.position.z - origin.z, on40.position.x - origin.x), deg(70));
+  near(Math.hypot(on40.position.x - origin.x, on40.position.z - origin.z), 6);
+  // Its degrees are from the side, not the world.
+  near(on40.guides.find((g) => g.kind === "polar").degrees, 40);
+  // With no side near, it counts from the world.
+  const world = resolveRuler({ point: at(6 * Math.cos(deg(40.4)), 6 * Math.sin(deg(40.4))), origin: at(0, 0), links: empty, polar: deg(5) });
+  assert.equal(world.guides.find((g) => g.kind === "polar").from, "world");
+  near(Math.atan2(world.position.z, world.position.x), deg(40));
+});
+
+test("a finer step catches more steps: five degrees offers what fifteen does not", () => {
+  const point = at(10 * Math.cos(deg(20.2)), 10 * Math.sin(deg(20.2)));
+  assert.equal(resolveRuler({ point, origin: at(0, 0), links: empty, polar: deg(15) }).caught, undefined, "20 is no step of 15");
+  assert.equal(resolveRuler({ point, origin: at(0, 0), links: empty, polar: deg(5) }).caught, "polar", "but it is one of 5");
+});
+
+test("the angle's reach is a few pixels seen from the line's end: a long line is held to a finer angle than a short one", () => {
+  // The same 2 degrees off the 15 degree step: caught at 2 m, not at 20 m.
+  const off = deg(15 + 2);
+  const at2 = resolveRuler({ point: at(2 * Math.cos(off), 2 * Math.sin(off)), origin: at(0, 0), links: empty, polar: deg(15), reach: 0.2 });
+  const at20 = resolveRuler({ point: at(20 * Math.cos(off), 20 * Math.sin(off)), origin: at(0, 0), links: empty, polar: deg(15), reach: 0.2 });
+  assert.equal(at2.caught, "polar");
+  assert.equal(at20.caught, undefined);
+});
+
+test("a length near a round number lands on it, in whole units or whatever step is chosen", () => {
+  const near1 = resolveRuler({ point: at(3.07, 0), origin: at(0, 0), links: empty, lengthStep: 1, reach: 0.1 });
+  assert.equal(near1.caught, "step");
+  near(near1.position.x, 3);
+  assert.equal(near1.guides.find((g) => g.kind === "step").meters, 3);
+  // Five by five.
+  near(resolveRuler({ point: at(9.95, 0), origin: at(0, 0), links: empty, lengthStep: 5, reach: 0.1 }).position.x, 10);
+  // Far from a round number it is left alone, and so with no step.
+  assert.equal(resolveRuler({ point: at(3.5, 0), origin: at(0, 0), links: empty, lengthStep: 1, reach: 0.1 }).caught, undefined);
+  assert.equal(resolveRuler({ point: at(3.07, 0), origin: at(0, 0), links: empty, reach: 0.1 }).caught, undefined);
+  // Not zero: a line of no length is nothing to round.
+  assert.equal(resolveRuler({ point: at(0.03, 0), origin: at(0, 0), links: empty, lengthStep: 1, reach: 0.1 }).caught, undefined);
+});
+
+test("a round length and a direction hold together: the line is on a step of the protractor and a whole number long", () => {
+  const heading = deg(44.6);
+  const result = resolveRuler({ point: at(5.06 * Math.cos(heading), 5.06 * Math.sin(heading)), origin: at(0, 0), links: empty, polar: deg(15), lengthStep: 1, reach: 0.1 });
+  assert.equal(result.caught, "polar");
+  near(Math.atan2(result.position.z, result.position.x), deg(45));
+  near(Math.hypot(result.position.x, result.position.z), 5);
+  assert.ok(result.guides.some((g) => g.kind === "step"));
+});
+
+test("a side's length wins a tie against a round number: it is something that stands", () => {
+  const a = { id: "a", position: at(0, 0) }, b = { id: "b", position: at(5, 0) };
+  const result = resolveRuler({ point: at(25 + 5.04, 0), origin: at(25, 0), links: { points: [a, b], runs: [{ a, b }], levels: [] }, lengthStep: 1, reach: 0.1, disabled: new Set(["align", "square", "intersection", "angle", "polar", "midpoint", "corner"]) });
+  assert.equal(result.guides[0].kind, "length", "the side's 5 m, and not the round 5 m beside it");
+});
+
+test("a value is rounded to a step only when it is near one", () => {
+  near(roundWithin(4.97, 5, 0.1), 5);
+  assert.equal(roundWithin(4.5, 5, 0.1), undefined);
+  assert.equal(roundWithin(4.97, 0, 0.1), undefined);
+  near(roundWithin(2.04, 0.5, 0.1), 2);
+});
+
+test("what a table asks of its ruler is read back whole, and an old or odd record reads as far as it can", () => {
+  const settings = { disabled: new Set(["polar", "midpoint"]), angleStep: 5, lengthStep: 0.5 };
+  const back = parseRulerSettings(JSON.parse(JSON.stringify(serializeRulerSettings(settings))));
+  assert.deepEqual([...back.disabled].sort(), ["midpoint", "polar"]);
+  assert.equal(back.angleStep, 5);
+  assert.equal(back.lengthStep, 0.5);
+  // The old form: only the list of what is off.
+  assert.deepEqual([...parseRulerSettings(["corner", "nonsense"]).disabled], ["corner"]);
+  assert.equal(parseRulerSettings(["corner"]).angleStep, DEFAULT_RULER_SETTINGS.angleStep);
+  // Nothing readable, or a step that is not on offer: the default.
+  assert.deepEqual(parseRulerSettings(null), DEFAULT_RULER_SETTINGS);
+  assert.equal(parseRulerSettings({ angleStep: 7, lengthStep: 3 }).angleStep, DEFAULT_RULER_SETTINGS.angleStep);
+  assert.equal(parseRulerSettings({ angleStep: 7, lengthStep: 3 }).lengthStep, DEFAULT_RULER_SETTINGS.lengthStep);
+  assert.ok(ANGLE_STEPS.includes(5) && LENGTH_STEPS.includes(0));
+});
+
+test("the protractor offers the side and the world at once, and the guide says which one caught", () => {
+  // A side 30 degrees off the world's axis, beside the line's start.
+  const a = { id: "a", position: at(0, 0) }, b = { id: "b", position: at(10 * Math.cos(deg(30)), 10 * Math.sin(deg(30))) };
+  const edge = { points: [a, b], runs: [{ a, b }], levels: [] };
+  const origin = at(3, 2);
+  const only = new Set(["angle"]);
+  const toward = (worldDegrees) => at(origin.x + 6 * Math.cos(deg(worldDegrees)), origin.z + 6 * Math.sin(deg(worldDegrees)));
+  // 100.3 from the world is 70.3 from the side, and a step of 5 of both: the side, which comes first, wins the tie.
+  const bySide = resolveRuler({ point: toward(100.3), origin, links: edge, polar: deg(5), disabled: only });
+  assert.equal(bySide.guides.find((g) => g.kind === "polar").from, "edge");
+  // 45.2 from the world's axis is a step of the world's, and is 15.2 from the side: a step of the side's too, so the side's, which comes first, wins a tie.
+  const byWorld = resolveRuler({ point: toward(90.2), origin, links: edge, polar: deg(45), disabled: only });
+  assert.equal(byWorld.guides.find((g) => g.kind === "polar").from, "world", "90 is a step of the world, and 60 off the side is none of 45");
+  // The zero of the count is where the guide says it stands.
+  near(bySide.guides.find((g) => g.kind === "polar").zero, deg(30));
+  near(byWorld.guides.find((g) => g.kind === "polar").zero, 0);
 });

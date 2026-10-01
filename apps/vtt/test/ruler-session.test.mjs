@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createRulerSession, rulePointFor, NO_FEEDBACK } from "../src/composition/tabletop/tools/core/ruler-session.ts";
-import { RULER_PREVIEW_CHANNEL, rulerLabels, rulerPreview } from "../src/composition/tabletop/tools/core/ruler-preview.ts";
+import { RULER_PREVIEW_CHANNEL, rulerLabels, rulerPreview, teethSpacing } from "../src/composition/tabletop/tools/core/ruler-preview.ts";
 import { pointerAtHeight } from "../src/composition/tabletop/tools/core/pointer-ray.ts";
 import { snapToOutlines } from "../src/features/edit-construction/index.ts";
 import { collectLinks } from "../src/features/edit-construction/ruler/index.ts";
 
+const near = (a, b, message) => assert.ok(Math.abs(a - b) < 1e-6, `${message ?? ""} ${a} != ${b}`);
 const at = (x, z, y = 0) => ({ x, y, z });
 const floor = {
   surfaceKey: ["floor", "a"],
@@ -156,8 +157,77 @@ test("each thing the ruler can be on has its own marker, drawn at the size of a 
 test("labels name what catches before what is measured, each thing said once", () => {
   const corner = { kind: "point", at: at(0, 0), node: "a", role: "corner" };
   const labels = rulerLabels({
-    guides: [corner, { kind: "point", at: at(4, 0), node: "b", role: "midpoint" }, { kind: "cross", at: at(1, 1) }, { kind: "align", from: at(0, 0), to: at(5, 0), node: "a" }, { kind: "align", from: at(0, 0), to: at(0, 5), node: "a" }, { kind: "polar", origin: at(0, 0), to: at(3, 3), degrees: 45 }],
+    guides: [corner, { kind: "point", at: at(4, 0), node: "b", role: "midpoint" }, { kind: "cross", at: at(1, 1) }, { kind: "align", from: at(0, 0), to: at(5, 0), node: "a" }, { kind: "align", from: at(0, 0), to: at(0, 5), node: "a" }, { kind: "polar", origin: at(0, 0), to: at(3, 3), degrees: 45, from: "world", zero: 0 }, { kind: "polar", origin: at(0, 0), to: at(3, 3), degrees: 30, from: "edge", zero: 0.5 }, { kind: "step", at: at(3, 0), meters: 3 }],
     measures: [{ kind: "length", from: at(0, 0), to: at(3, 0), meters: 3 }],
   }, "m");
-  assert.deepEqual(labels, ["canto", "meio da aresta", "interseção", "alinhado", "45° polar", "3.00 m"]);
+  // Which reference an angle counts from is said in the label: the side, or the world.
+  assert.deepEqual(labels, ["canto", "meio da aresta", "interseção", "alinhado", "45° do mundo", "30° da aresta", "3.00 m fechado", "3.00 m"]);
+});
+
+const lengthOf = (from, to) => ({ kind: "length", from, to, meters: Math.hypot(to.x - from.x, to.z - from.z) });
+const segmentsOf = (descriptor) => { if (!descriptor) return []; const p = descriptor.positions, out = []; for (let i = 0; i < p.length; i += 6) out.push([[p[i], p[i + 2]], [p[i + 3], p[i + 5]]]); return out; };
+
+test("the teeth stand at round numbers of the table's unit, finer as it is zoomed in and coarser as it is zoomed out", () => {
+  // A tooth needs ten pixels of its own: at a centimetre a pixel that is a tenth of a metre; at a decimetre a pixel, a metre.
+  assert.equal(teethSpacing(0.01, "m"), 0.1);
+  assert.equal(teethSpacing(0.1, "m"), 1);
+  assert.equal(teethSpacing(1, "m"), 10);
+  // The same screen, in feet: the teeth are feet.
+  assert.ok(Math.abs(teethSpacing(0.01, "ft") - 0.5 * 0.3048) < 1e-9 || Math.abs(teethSpacing(0.01, "ft") - 0.3048) < 1e-9, String(teethSpacing(0.01, "ft")));
+  // A round number the table chose is the spacing -- or a multiple of it when that would be a smear.
+  assert.equal(teethSpacing(0.01, "m", 1), 1);
+  assert.equal(teethSpacing(0.5, "m", 1), 5);
+});
+
+test("the teeth are drawn along the line, a tick at every spacing and longer at every fifth, and not on a line shorter than one", () => {
+  const view = { unit: "m", lengthStep: 1 };
+  const ticks = (to) => segmentsOf(rulerPreview({ guides: [], measures: [lengthOf(at(0, 0), to)] }, 0.01, view));
+  // 5.5 m: five teeth, at 1..5 m, each across the line (here square to x).
+  const five = ticks(at(5.5, 0));
+  assert.equal(five.length, 5);
+  five.forEach(([a, b], i) => { near(a[0], i + 1); near(b[0], i + 1); assert.ok(a[1] !== b[1], "across the line"); });
+  // The fifth is the longer.
+  const reach = ([a, b]) => Math.abs(a[1] - b[1]);
+  assert.ok(reach(five[4]) > reach(five[0]) * 1.5);
+  assert.equal(ticks(at(0.5, 0)).length, 0, "less than one step: no tooth");
+  // Without a view, nothing is drawn but the guides.
+  assert.equal(rulerPreview({ guides: [], measures: [lengthOf(at(0, 0), at(5, 0))] }, 0.01), undefined);
+});
+
+test("the protractor has a mark every five degrees, longer at the table's step and at the quarter turns, with the zero line", () => {
+  const to = at(10 * Math.cos(Math.PI / 6), 10 * Math.sin(Math.PI / 6));
+  const view = { unit: "m", angleStep: (15 * Math.PI) / 180, protractor: true };
+  const lines = segmentsOf(rulerPreview({ guides: [], measures: [lengthOf(at(0, 0), to)] }, 0.01, view));
+  const length = ([a, b]) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+  // Radial marks start on the circle of radius 0.7 m (70 px at a centimetre a pixel); the arc between them lies on it.
+  const radial = lines.filter(([a, b]) => Math.abs(Math.hypot(a[0], a[1]) - 0.7) < 1e-6 && Math.hypot(b[0], b[1]) > 0.7 + 1e-6);
+  // A window of 45 degrees either side of the line, every 5: 19 marks.
+  assert.equal(radial.length, 19);
+  const longest = Math.max(...radial.map(length)), shortest = Math.min(...radial.map(length));
+  assert.ok(longest > shortest * 2, "the quarter turn and the steps stand out from the plain five degrees");
+  // The zero line runs from where the line began along the axis the angles count from: the world's x axis, here.
+  assert.ok(lines.some(([a, b]) => Math.abs(a[0]) < 1e-9 && Math.abs(a[1]) < 1e-9 && Math.abs(b[1]) < 1e-9 && b[0] > 0.7), "the zero line along x");
+  // Not drawn when the table turned the protractor off, nor for a line too short to hold one.
+  assert.equal(segmentsOf(rulerPreview({ guides: [], measures: [lengthOf(at(0, 0), to)] }, 0.01, { unit: "m", protractor: false })).filter(([a, b]) => Math.abs(Math.hypot(a[0], a[1]) - 0.7) < 1e-6).length, 0);
+});
+
+test("the protractor counts from where the catch says: a side, not the world, when the line follows one", () => {
+  const zero = Math.PI / 6;
+  const to = at(10 * Math.cos(zero + 0.3), 10 * Math.sin(zero + 0.3));
+  const polar = { kind: "polar", origin: at(0, 0), to, degrees: 17, from: "edge", zero };
+  const lines = segmentsOf(rulerPreview({ guides: [polar], measures: [lengthOf(at(0, 0), to)] }, 0.01, { unit: "m", protractor: true }));
+  // The zero line points along the side: 30 degrees round, not along x.
+  const zeroLine = lines.find(([a, b]) => Math.abs(a[0]) < 1e-9 && Math.abs(a[1]) < 1e-9 && Math.abs(Math.hypot(b[0], b[1]) - 0.86) < 1e-6);
+  assert.ok(zeroLine, "a zero line");
+  near(Math.atan2(zeroLine[1][1], zeroLine[1][0]), zero);
+});
+
+test("a round number is marked with a small x where the line ends", () => {
+  const lines = segmentsOf(rulerPreview({ guides: [{ kind: "step", at: at(3, 0), meters: 3 }], measures: [] }, 0.01));
+  assert.equal(lines.length, 2);
+});
+
+test("a drawing never brings a gesture down: a view with no unit named draws its teeth in the default one", () => {
+  assert.equal(teethSpacing(0.01, undefined), teethSpacing(0.01, "m"));
+  assert.doesNotThrow(() => rulerPreview({ guides: [], measures: [lengthOf(at(0, 0), at(5, 0))] }, 0.01, { unit: undefined, protractor: true }));
 });

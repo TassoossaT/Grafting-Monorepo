@@ -38,8 +38,10 @@ export interface RulePointOptions {
   readonly axes?: readonly [PlanVector, PlanVector];
   /** How many metres a pixel of the screen is here: the reach and the acquiring are worked out from it. */
   readonly metersPerPixel?: number;
-  /** The steps of the polar tracking from the origin, in radians. */
+  /** The steps of the protractor from the origin, in radians. */
   readonly polar?: number;
+  /** The round number, in metres, a length from the origin lands on; none when absent. */
+  readonly lengthStep?: number;
   /** Ways of catching the table left out. */
   readonly disabled?: ReadonlySet<RulerKind>;
 }
@@ -65,6 +67,7 @@ function queryOf(point: ConstructionPosition, links: RulerLinks, options: RulePo
     ...(scale !== undefined ? { reach: metersFor(scale, RULER_REACH_PX, 0.2), acquire: metersFor(scale, RULER_ACQUIRE_PX, 8, [1, 40]) } : {}),
     ...(holding !== undefined ? { holding } : {}),
     ...(options.polar !== undefined ? { polar: options.polar } : {}),
+    ...(options.lengthStep !== undefined && options.lengthStep > 0 ? { lengthStep: options.lengthStep } : {}),
     ...(options.disabled ? { disabled: options.disabled } : {}),
   };
 }

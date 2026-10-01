@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { Card, SlidingPanel } from "@/ui";
-import { MEASURE_UNITS, RULER_KINDS, formatLength, isMeasureUnitId, type ConstructionToolId, type MeasureUnitId, type RulerKind, type StructureEditParams, type ToolParamsByTool } from "@/features/edit-construction";
+import { ANGLE_STEPS, LENGTH_STEPS, MEASURE_UNITS, RULER_KINDS, formatLength, isMeasureUnitId, type ConstructionToolId, type MeasureUnitId, type RulerKind, type RulerSettings, type StructureEditParams, type ToolParamsByTool } from "@/features/edit-construction";
 
 import { ConstructionToolParamsPanel } from "./construction-tool-params-panel.tsx";
 
@@ -15,6 +15,8 @@ export interface SelectedNodeInfo {
 
 const PANEL_WIDTH = 280;
 
+const selectStyle = { background: "#0f172a", color: "inherit", border: "1px solid #1e293b", borderRadius: "0.25rem", padding: "0.15rem 0.3rem" } as const;
+
 /** What each way the ruler catches is called, and what it does. */
 const RULER_KIND_LABELS: Readonly<Record<RulerKind, string>> = {
   corner: "Cantos",
@@ -24,7 +26,7 @@ const RULER_KIND_LABELS: Readonly<Record<RulerKind, string>> = {
   align: "Alinhar com cantos",
   intersection: "Cruzamento de guias",
   angle: "Mesma direção das arestas",
-  polar: "Passos de 45° (Shift: 15°)",
+  polar: "Transferidor (marcas de 5°)",
   length: "Comprimento igual ao de uma aresta",
   level: "Alturas iguais",
 };
@@ -40,9 +42,9 @@ export interface SettingsDrawerProps {
   /** The unit the table writes every distance in. */
   readonly measureUnit: MeasureUnitId;
   readonly onMeasureUnitChange: (unit: MeasureUnitId) => void;
-  /** The ways of catching the table leaves out of its ruler. */
-  readonly rulerDisabled: ReadonlySet<RulerKind>;
-  readonly onRulerDisabledChange: (disabled: ReadonlySet<RulerKind>) => void;
+  /** What the table asks of its ruler: what catches, the angle's step and the round number a length lands on. */
+  readonly rulerSettings: RulerSettings;
+  readonly onRulerSettingsChange: (settings: RulerSettings) => void;
   readonly open?: boolean;
   readonly onOpenChange?: (open: boolean) => void;
 }
@@ -120,22 +122,34 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
       <Card className="gm-panel-card" backgroundColor="#182234" accentColor="#1e293b">
         <span className="gm-panel-card-title">Régua: o que encaixa</span>
         <div style={{ display: "grid", gap: "0.3rem", fontSize: "0.78rem" }}>
+          <label className="gm-stat-row" style={{ alignItems: "center" }}>
+            <span>Passo do ângulo:</span>
+            <select value={props.rulerSettings.angleStep} onChange={(event) => props.onRulerSettingsChange({ ...props.rulerSettings, angleStep: Number(event.target.value) })} style={selectStyle}>
+              {ANGLE_STEPS.map((step) => <option key={step} value={step}>{step}°</option>)}
+            </select>
+          </label>
+          <label className="gm-stat-row" style={{ alignItems: "center" }}>
+            <span>Número fechado:</span>
+            <select value={props.rulerSettings.lengthStep} onChange={(event) => props.onRulerSettingsChange({ ...props.rulerSettings, lengthStep: Number(event.target.value) })} style={selectStyle}>
+              {LENGTH_STEPS.map((step) => <option key={step} value={step}>{step === 0 ? "Desligado" : `de ${step} em ${step} ${MEASURE_UNITS[props.measureUnit].symbol}`}</option>)}
+            </select>
+          </label>
           {RULER_KINDS.map((kind) => (
             <label key={kind} style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
               <input
                 type="checkbox"
-                checked={!props.rulerDisabled.has(kind)}
+                checked={!props.rulerSettings.disabled.has(kind)}
                 onChange={(event) => {
-                  const next = new Set(props.rulerDisabled);
+                  const next = new Set(props.rulerSettings.disabled);
                   if (event.target.checked) next.delete(kind); else next.add(kind);
-                  props.onRulerDisabledChange(next);
+                  props.onRulerSettingsChange({ ...props.rulerSettings, disabled: next });
                 }}
               />
               <span>{RULER_KIND_LABELS[kind]}</span>
             </label>
           ))}
           <p style={{ margin: "0.2rem 0 0", color: "#64748b", fontSize: "0.72rem" }}>
-            Segure Ctrl para posicionar sem encaixe. Digite um número ao desenhar para fixar o comprimento.
+            Ctrl: posiciona sem encaixe. Shift: marcas de 5°. Digite um número ao desenhar para fixar o comprimento.
           </p>
         </div>
       </Card>

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 
-import type { ConstructionToolId, EditHistoryStack, MeasureUnitId, RulerKind, StructureEditParams, ToolParamsByTool } from "@/features/edit-construction";
+import type { ConstructionToolId, EditHistoryStack, MeasureUnitId, RulerSettings, StructureEditParams, ToolParamsByTool } from "@/features/edit-construction";
 import { TOOL_GHOST_PREVIEW_CHANNEL } from "@/ports";
 import type { ConstructionPosition, RenderViewId } from "@/ports";
 import type { SelectedNodeInfo } from "@/widgets";
@@ -15,7 +15,7 @@ import { createRulerSession, NO_FEEDBACK, type RulerFeedback } from "./tools/cor
 import { RULER_PREVIEW_CHANNEL, rulerLabels, rulerPreview } from "./tools/core/ruler-preview.ts";
 import { toolFor } from "./tools/index.ts";
 import { beginCurveGesture, type CurveGesture } from "./tools/core/curve-edit-gesture.ts";
-import { MEASURE_UNITS, carriesArrows, dimensionsOf, faceKey, globalHandleOf, handleMotionAt, shownGlobalHandleAt, toMetres } from "../../features/edit-construction/index.ts";
+import { DEFAULT_RULER_SETTINGS, FINE_ANGLE_STEP, MEASURE_UNITS, carriesArrows, dimensionsOf, faceKey, globalHandleOf, handleMotionAt, shownGlobalHandleAt, toMetres } from "../../features/edit-construction/index.ts";
 import { gestureMoved, nextClickRun, type ClickRun } from "./tools/core/tool-context.ts";
 import { withFacePlane } from "./tools/core/pointer-ray.ts";
 import { handleFocusAt, NO_FOCUS, sameFocus } from "./tools/core/handle-focus.ts";
@@ -59,9 +59,7 @@ export interface RulerReadout {
 
 /** How soon the ruler is asked again while the pointer merely hovers, in milliseconds. */
 const RULER_HOVER_MS = 32;
-/** The steps of the ruler's polar tracking: a quarter turn's half, or -- with Shift held -- a twelfth of a half turn. */
-const POLAR_STEP = Math.PI / 4;
-const POLAR_STEP_FINE = Math.PI / 12;
+const DEGREE = Math.PI / 180;
 
 export interface UseConstructionPointerOptions {
   readonly activeTool: ConstructionToolId;
@@ -72,8 +70,8 @@ export interface UseConstructionPointerOptions {
   readonly viewId: RenderViewId | undefined;
   /** The unit the ruler writes its distances in -- the table's own choice. */
   readonly measureUnit: MeasureUnitId;
-  /** Ways of catching the table left out of its ruler. */
-  readonly rulerDisabled?: ReadonlySet<RulerKind>;
+  /** What the table asks of its ruler: what catches, the angle's step and the round number a length lands on. */
+  readonly rulerSettings?: RulerSettings;
   /** What the ruler says in words, and where the pointer is on screen; `undefined` when there is nothing to say. */
   readonly onRulerReadout?: (readout: RulerReadout | undefined) => void;
   /** How a grab on an existing structure behaves -- ambient across every construction tool, not one tool's own params. See `ToolContext.structureEditParams`. */
@@ -139,6 +137,8 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
   const freeHandRef = useRef(false);
   /** How many metres a pixel of the screen is at the pointer: what the ruler's reach is worked out from. */
   const metersPerPixelRef = useRef<number | undefined>(undefined);
+  /** The angular step the protractor is offering now, in radians: the table's, or the finer one while Shift is held. */
+  const angleStepRef = useRef(DEFAULT_RULER_SETTINGS.angleStep * DEGREE);
   /** The length typed while drawing, as the digits written so far. */
   const typedRef = useRef("");
   /** Takes a key as a digit of that length; `true` when it was one. Set below, where the pointer's own move is known. */
@@ -150,7 +150,13 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
   const showRuler = useCallback((event: { clientX: number; clientY: number }): void => {
     const { runtime, measureUnit, onRulerReadout } = optionsRef.current;
     const feedback = feedbackRef.current;
-    const descriptor = rulerPreview(feedback, metersPerPixelRef.current);
+    const settings = optionsRef.current.rulerSettings ?? DEFAULT_RULER_SETTINGS;
+    const descriptor = rulerPreview(feedback, metersPerPixelRef.current, {
+      unit: measureUnit,
+      ...(settings.lengthStep > 0 ? { lengthStep: toMetres(settings.lengthStep, measureUnit) } : {}),
+      angleStep: angleStepRef.current,
+      protractor: !settings.disabled.has("polar"),
+    });
     if (descriptor) runtime.showPreview(descriptor, RULER_PREVIEW_CHANNEL);
     else runtime.clearPreview(RULER_PREVIEW_CHANNEL);
     // What is being typed leads: it is what the next release will draw.
@@ -204,7 +210,11 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
         return metersPerPixelRef.current;
       },
       get rulerDisabled() {
-        return optionsRef.current.rulerDisabled;
+        return optionsRef.current.rulerSettings?.disabled;
+      },
+      get rulerLengthStep() {
+        const { rulerSettings, measureUnit } = optionsRef.current;
+        return rulerSettings && rulerSettings.lengthStep > 0 ? toMetres(rulerSettings.lengthStep, measureUnit) : undefined;
       },
       get structureEditParams() {
         return optionsRef.current.structureEditParams;
@@ -382,7 +392,8 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
 
   const sampleAt = useCallback(
     (event: { currentTarget: HTMLElement; clientX: number; clientY: number; shiftKey?: boolean; ctrlKey?: boolean; metaKey?: boolean }): PointerSample | undefined => {
-      const { viewId, runtime, activeTool, rulerDisabled } = optionsRef.current;
+      const { viewId, runtime, activeTool, rulerSettings, measureUnit } = optionsRef.current;
+      const settings = rulerSettings ?? DEFAULT_RULER_SETTINGS;
       if (viewId === undefined) return undefined;
       const { x, y } = pointerOffset(event);
       const hit = runtime.pick(viewId, x, y);
@@ -392,6 +403,8 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       // Ctrl (Cmd) places freely: what the ruler catches is shown, not taken.
       const free = event.ctrlKey === true || event.metaKey === true;
       freeHandRef.current = free;
+      // Shift asks for the protractor's own graduation: five degrees.
+      angleStepRef.current = (event.shiftKey ? FINE_ANGLE_STEP : settings.angleStep) * DEGREE;
       metersPerPixelRef.current = metersPerPixelAt(placed, event.currentTarget.getBoundingClientRect().height, VIEW_FOV_DEGREES);
       // A tool that lays itself out on a surface, or in a frame of its own, is not ruled by position here.
       // The line being drawn runs from where the gesture began -- unless it began on a handle, which is moved, not drawn from.
@@ -401,9 +414,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
         ? { sample: placed, feedback: NO_FEEDBACK }
         : ruler.ruleSample(placed, {
           snap: !free,
-          ...(origin ? { origin, polar: event.shiftKey ? POLAR_STEP_FINE : POLAR_STEP } : {}),
+          ...(origin ? { origin, polar: angleStepRef.current, ...(settings.lengthStep > 0 ? { lengthStep: toMetres(settings.lengthStep, measureUnit) } : {}) } : {}),
           ...(metersPerPixelRef.current !== undefined ? { metersPerPixel: metersPerPixelRef.current } : {}),
-          ...(rulerDisabled ? { disabled: rulerDisabled } : {}),
+          ...(settings.disabled.size > 0 ? { disabled: settings.disabled } : {}),
         });
       // A length typed while drawing wins over every catch: the line runs where the pointer points, exactly that long.
       const typed = origin && !(tool.snapsToSurface || tool.usesRuler === false) ? typedLengthAt(ruled.sample, origin, placed) : undefined;

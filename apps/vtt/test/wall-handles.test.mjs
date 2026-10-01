@@ -296,3 +296,23 @@ test("a wall standing in the middle of a platform, joined to it by no node, goes
     } finally { f.session.free(); }
   }
 });
+
+test("with a round number chosen, dragging a wall's top lands its height on a whole number above its foot", () => {
+  const f = fixture();
+  const shown = [];
+  f.ctx.showRuler = (feedback) => shown.push(feedback);
+  f.ctx.rulerLengthStep = 0.5;
+  try {
+    const standing = posts(f.runtime)[1];
+    const wall = standing.top.y - standing.foot.y;
+    const handle = wallHandles(f.runtime).find((h) => h.kind === "top" && close(h.pivot.x, 5));
+    // Lifted to a hair off a half: 1.02 above where it stood.
+    const target = Math.round((wall + 1.02) / 0.5) * 0.5;
+    drag(f, handle, { x: 0, y: target - wall + 0.03, z: 0 }, 1);
+    const height = shown.filter(Boolean).at(-1).measures.find((m) => m.kind === "height");
+    assert.ok(Math.abs(height.meters - target) < 1e-6, `rounded to ${target}, not left at ${target + 0.03}: ${JSON.stringify(shown.filter(Boolean).at(-1))}`);
+    assert.ok(shown.filter(Boolean).at(-1).guides.some((g) => g.kind === "step"), "the round number is marked");
+    // With the ruler's snap off, it is as dragged.
+    f.ctx.rulerSnap = false;
+  } finally { f.session.free(); }
+});

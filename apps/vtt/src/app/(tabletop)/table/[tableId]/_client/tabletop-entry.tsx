@@ -26,15 +26,17 @@ import {
   ConstructionDock,
   ConstructionHotbar,
   DEFAULT_MEASURE_UNIT,
+  DEFAULT_RULER_SETTINGS,
   isMeasureUnitId,
-  RULER_KINDS,
+  parseRulerSettings,
   RulerReadout,
+  serializeRulerSettings,
   SettingsDrawer,
   ToolRail,
   useKeyboardShortcuts,
   type EditTool,
   type MeasureUnitId,
-  type RulerKind,
+  type RulerSettings,
   type SelectedNodeInfo,
 } from "@/widgets";
 
@@ -102,19 +104,19 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     setMeasureUnit(unit);
     try { window.localStorage.setItem(measureUnitKey, unit); } catch { /* the choice lasts this session only */ }
   }, [measureUnitKey]);
-  // What the ruler catches is the table's own choice too; kept the same way.
-  const [rulerDisabled, setRulerDisabled] = useState<ReadonlySet<RulerKind>>(new Set());
-  const rulerKey = `grafting:table:${tableId}:ruler-disabled`;
+  // What the ruler catches, how it counts angles and the round number it lands on are the table's own choice too; kept the same way.
+  const [rulerSettings, setRulerSettings] = useState<RulerSettings>(DEFAULT_RULER_SETTINGS);
+  const rulerKey = `grafting:table:${tableId}:ruler`;
   useEffect(() => {
     try {
-      const saved: unknown = JSON.parse(window.localStorage.getItem(rulerKey) ?? "[]");
-      const known = new Set<string>(RULER_KINDS);
-      setRulerDisabled(new Set(Array.isArray(saved) ? saved.filter((kind): kind is RulerKind => typeof kind === "string" && known.has(kind)) : []));
-    } catch { /* storage blocked or unreadable: everything catches */ }
-  }, [rulerKey]);
-  const handleRulerDisabledChange = useCallback((next: ReadonlySet<RulerKind>) => {
-    setRulerDisabled(next);
-    try { window.localStorage.setItem(rulerKey, JSON.stringify([...next])); } catch { /* the choice lasts this session only */ }
+      // The old key held only the list of what is off; it still reads.
+      const saved = window.localStorage.getItem(rulerKey) ?? window.localStorage.getItem(`grafting:table:${tableId}:ruler-disabled`);
+      setRulerSettings(parseRulerSettings(saved === null ? null : JSON.parse(saved)));
+    } catch { /* storage blocked or unreadable: the default stands */ }
+  }, [rulerKey, tableId]);
+  const handleRulerSettingsChange = useCallback((next: RulerSettings) => {
+    setRulerSettings(next);
+    try { window.localStorage.setItem(rulerKey, JSON.stringify(serializeRulerSettings(next))); } catch { /* the choice lasts this session only */ }
   }, [rulerKey]);
   const [rulerReadout, setRulerReadout] = useState<RulerReadoutState | undefined>(undefined);
   const [editorMode, setEditorMode] = useState<"gm" | "player">("gm");
@@ -216,7 +218,7 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
     tableId,
     viewId: viewIdRef.current,
     measureUnit,
-    rulerDisabled,
+    rulerSettings,
     onRulerReadout: setRulerReadout,
     structureEditParams,
     onSelectionChange: (info) => setSelectedNodeInfo(info ?? null),
@@ -355,8 +357,8 @@ export function TabletopEntry({ tableId }: TabletopEntryProps) {
           tokenCount={current.tokens.byId.size}
           measureUnit={measureUnit}
           onMeasureUnitChange={handleMeasureUnitChange}
-          rulerDisabled={rulerDisabled}
-          onRulerDisabledChange={handleRulerDisabledChange}
+          rulerSettings={rulerSettings}
+          onRulerSettingsChange={handleRulerSettingsChange}
         />
 
         {rulerReadout ? <RulerReadout labels={rulerReadout.labels} x={rulerReadout.x} y={rulerReadout.y} /> : null}

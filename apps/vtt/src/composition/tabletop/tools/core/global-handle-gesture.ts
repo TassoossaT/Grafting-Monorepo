@@ -10,6 +10,7 @@ import {
   measuresOfEdit,
   SNAP_REACH,
   resolveLevel,
+  roundWithin,
   type EditMeasureKind,
   type RulerGuide,
   type RulerMeasure,
@@ -400,10 +401,18 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
     const { position: dragged, angle = 0 } = drag.at(gesture);
     // The reach is a few pixels of the screen, so lifting catches as easily zoomed in as out.
     const level = lifting && resolveLevel(dragged.y, lifting, dragged, { snap: ctx.rulerSnap, reach: reachFor(ctx, 10, LEVEL_REACH), ...(ctx.rulerDisabled ? { disabled: ctx.rulerDisabled } : {}) });
-    const free = level ? { ...dragged, y: level.y } : dragged;
+    // A height lands on a whole number of the table's step above where the structure rises from, when no standing level is nearer.
+    const heightKind = handle!.kind === "top" || handle!.kind === "rise" || handle!.kind === "height" || handle!.kind === "originHeight" || handle!.kind === "destinationHeight";
+    const step = ctx.rulerLengthStep;
+    // Read where the structure stands -- its pivot -- not where the handle is drawn, which stands off it.
+    const standing = handle!.pivot.y + (dragged.y - handle!.position.y);
+    const rounded = heightKind && step !== undefined && ctx.rulerSnap && !level?.guide && (handle!.motion.kind === "vertical" || params?.mode === "elevation")
+      ? roundWithin(standing - base, step, reachFor(ctx, 10, LEVEL_REACH))
+      : undefined;
+    const free = level ? { ...dragged, y: level.y } : rounded !== undefined ? { ...dragged, y: dragged.y + (base + rounded - standing) } : dragged;
     snapped = snap && snapToOutlines(snap.anchors, { x: free.x - handle!.position.x, y: free.y - handle!.position.y, z: free.z - handle!.position.z }, handle!.motion, snap.links, { snap: ctx.rulerSnap, reach: reachFor(ctx, 14, SNAP_REACH), ...(ctx.rulerDisabled ? { disabled: ctx.rulerDisabled } : {}) });
     // What the ruler caught shows whether or not the snap took it.
-    guidesNow = [...(level?.guide ? [level.guide] : []), ...(snapped?.guides ?? [])];
+    guidesNow = [...(level?.guide ? [level.guide] : []), ...(rounded !== undefined ? [{ kind: "step" as const, at: free, meters: rounded }] : []), ...(snapped?.guides ?? [])];
     const at = snapped ? { x: handle!.position.x + snapped.delta.x, y: handle!.position.y + snapped.delta.y, z: handle!.position.z + snapped.delta.z } : free;
     const delta = { x: at.x - handle!.position.x, y: at.y - handle!.position.y, z: at.z - handle!.position.z };
     const direction = handle!.motion.kind === "line" ? handle!.motion.direction : { x: 0, z: 0 };

@@ -96,6 +96,8 @@ export interface ToolContext {
   readonly rulerMetersPerPixel?: number;
   /** Ways of catching the table left out of its ruler. */
   readonly rulerDisabled?: ReadonlySet<RulerKind>;
+  /** The round number, in metres, a length or a height lands on when near one; none when the table chose none. */
+  readonly rulerLengthStep?: number;
   /** Shows what the ruler caught for a point a tool ruled itself -- a handle dragged onto a corner -- until the gesture ends; `undefined` clears it. */
   readonly showRuler?: (feedback: import("./ruler-session.ts").RulerFeedback | undefined) => void;
   /**

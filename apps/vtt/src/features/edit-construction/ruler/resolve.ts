@@ -55,8 +55,10 @@ export interface RulerQuery {
   readonly acquire?: number;
   /** The catch held last time -- its {@link RulerResult.key} -- which stays on past the reach, up to {@link HOLD_FACTOR} times it. */
   readonly holding?: string;
-  /** Steps of the polar tracking from `origin`, in radians; none when absent. */
+  /** Steps of the protractor from `origin`, in radians; none when absent. They count from the nearest standing side, or the world's x axis when none is near. */
   readonly polar?: number;
+  /** The round number, in metres, a length from `origin` lands on when near one: 1 for whole metres. None when absent. */
+  readonly lengthStep?: number;
   /** Ways of catching left out. */
   readonly disabled?: ReadonlySet<RulerKind>;
 }
@@ -76,8 +78,10 @@ export type RulerGuide =
   | { readonly kind: "length"; readonly run: readonly [ConstructionPosition, ConstructionPosition]; readonly meters: number }
   /** Running the same way as a standing side, or square to it. */
   | { readonly kind: "angle"; readonly origin: ConstructionPosition; readonly to: ConstructionPosition; readonly run: readonly [ConstructionPosition, ConstructionPosition]; readonly relation: "parallel" | "perpendicular" }
-  /** On one of the polar steps from where the line began; `degrees` is the heading, from the world's x axis. */
-  | { readonly kind: "polar"; readonly origin: ConstructionPosition; readonly to: ConstructionPosition; readonly degrees: number }
+  /** On one of the protractor's steps from where the line began; `degrees` is the heading from the nearest side, or from the world's x axis when none is near. */
+  | { readonly kind: "polar"; readonly origin: ConstructionPosition; readonly to: ConstructionPosition; readonly degrees: number; readonly from: "edge" | "world"; /** The direction the count starts from, in radians: where the protractor's zero stands. */ readonly zero: number }
+  /** As long as a round number: `meters` is that number, and the line ends at `at`. */
+  | { readonly kind: "step"; readonly at: ConstructionPosition; readonly meters: number }
   /** At the height of a standing level. */
   | { readonly kind: "level"; readonly y: number; readonly at: ConstructionPosition };
 
@@ -101,7 +105,7 @@ export interface RulerResult {
   /** Where the point stands: snapped when `snap` was asked for and something caught, else as it came. */
   readonly position: ConstructionPosition;
   /** What caught, whether or not it was taken. */
-  readonly caught: "point" | "run" | "intersection" | "square" | "align" | "angle" | "polar" | "length" | undefined;
+  readonly caught: "point" | "run" | "intersection" | "square" | "align" | "angle" | "polar" | "length" | "step" | undefined;
   /** Names the catch, to be handed back as {@link RulerQuery.holding} on the next question. */
   readonly key: string | undefined;
   readonly guides: readonly RulerGuide[];
@@ -327,11 +331,36 @@ function lengthFix(query: RulerQuery, p: ConstructionPosition, rc: Reach): Fix |
     if (!rc.within(Math.abs(gap), key)) continue;
     best = nearer(best, { x: u.x * gap, z: u.z * gap, distance: Math.abs(gap), guides: [{ kind: "length", run: [run.a.position, run.b.position], meters: standing }], key });
   }
+  // A round number, when no side's length is as near: whole metres, or whatever step the table chose.
+  const step = query.lengthStep;
+  if (step && step > 0) {
+    const turns = Math.round(length / step);
+    const gap = turns * step - length;
+    const key = `step:${turns}`;
+    if (turns >= 1 && rc.within(Math.abs(gap), key)) {
+      const at = { x: origin.x + u.x * turns * step, y: p.y, z: origin.z + u.z * turns * step };
+      // A side's length wins a tie: it is something standing; a round number is only a convenience.
+      best = nearer(best, { x: u.x * gap, z: u.z * gap, distance: Math.abs(gap) + 1e-9, guides: [{ kind: "step", at, meters: turns * step }], key });
+    }
+  }
   return best;
 }
 
-/** How far from a standing side's direction, or square to it, a line may run and still be taken as running that way. */
-const ANGLE_REACH = (3 * Math.PI) / 180;
+const DEGREE = Math.PI / 180;
+/** The widest a line may run from a direction and still be taken as running that way. */
+const ANGLE_REACH = 3 * DEGREE;
+/** The narrowest: however long the line, a catch is never finer than this. */
+const ANGLE_FLOOR = 1.5 * DEGREE;
+
+/**
+ * How far, in radians, a line of `length` may run from a direction and still be
+ * on it: the same few pixels of the screen as every other catch, seen from the
+ * line's own end -- so a long line is held to a finer angle than a short one --
+ * kept within `cap`, and never finer than {@link ANGLE_FLOOR}.
+ */
+function angularReach(reach: number, length: number, cap: number): number {
+  return Math.max(Math.min(ANGLE_FLOOR, cap), Math.min(cap, Math.atan2(reach, length)));
+}
 /** How far from where a line begins a standing side may lie and still be one to follow. */
 const ANGLE_RANGE = 12;
 const QUARTER_TURN = Math.PI / 2;
@@ -370,14 +399,39 @@ function angleFix(query: RulerQuery, p: ConstructionPosition, rc: Reach): Fix | 
   const found = nearestHeading(query, origin, Math.atan2(dz, dx));
   if (!found) return undefined;
   const key = `angle:${runKeyOf(found.run)}:${found.relation}`;
-  if (Math.abs(found.deviation) > ANGLE_REACH * (rc.of(key) / rc.reach)) return undefined;
+  if (Math.abs(found.deviation) > angularReach(rc.of(key), length, ANGLE_REACH)) return undefined;
   const target = Math.atan2(dz, dx) - found.deviation;
   const to = { x: origin.x + Math.cos(target) * length, y: p.y, z: origin.z + Math.sin(target) * length };
   const fix = { x: to.x - p.x, z: to.z - p.z };
   return { ...fix, distance: Math.hypot(fix.x, fix.z), guides: [{ kind: "angle", origin, to, run: [found.run.a.position, found.run.b.position], relation: found.relation }], key };
 }
 
-/** The line from where the drawing began, turned onto the nearest step of the polar tracking, keeping its length. */
+/** What the protractor counts from. */
+interface Reference {
+  readonly heading: number;
+  /** The side it is the direction of; absent for the world's x axis. */
+  readonly run?: LinkRun;
+}
+
+/**
+ * The directions the protractor offers at once: the side standing nearest
+ * where the line began, when one is near, and the world's x axis. Both are
+ * there -- a line may follow the wall beside it or the compass -- and the
+ * guide names the one that caught, so which is which is never a guess.
+ */
+function protractorReferences(query: RulerQuery, origin: ConstructionPosition): readonly Reference[] {
+  let best: { run: LinkRun; distance: number } | undefined;
+  for (const run of query.links.runs) {
+    const distance = nearestOnSegment(origin, run.a.position, run.b.position).distance;
+    if (distance <= ANGLE_RANGE && (!best || distance < best.distance)) best = { run, distance };
+  }
+  const world: Reference = { heading: 0 };
+  if (!best) return [world];
+  const { a, b } = best.run;
+  return [{ heading: Math.atan2(b.position.z - a.position.z, b.position.x - a.position.x), run: best.run }, world];
+}
+
+/** The line from where the drawing began, turned onto the nearest step of the protractor -- from a side or from the world -- keeping its length. */
 function polarFix(query: RulerQuery, p: ConstructionPosition, rc: Reach): Fix | undefined {
   const origin = query.origin, step = query.polar;
   if (!origin || !step || step <= 0 || query.motion?.kind === "line" || !on(query, "polar")) return undefined;
@@ -385,13 +439,20 @@ function polarFix(query: RulerQuery, p: ConstructionPosition, rc: Reach): Fix | 
   const length = Math.hypot(dx, dz);
   if (length < 1e-6) return undefined;
   const heading = Math.atan2(dz, dx);
-  const turns = Math.round(heading / step);
-  const key = `polar:${turns}`;
-  if (Math.abs(heading - turns * step) > ANGLE_REACH * (rc.of(key) / rc.reach)) return undefined;
-  const to = { x: origin.x + Math.cos(turns * step) * length, y: p.y, z: origin.z + Math.sin(turns * step) * length };
-  const fix = { x: to.x - p.x, z: to.z - p.z };
-  const degrees = (((turns * step * 180) / Math.PI) % 360 + 360) % 360;
-  return { ...fix, distance: Math.hypot(fix.x, fix.z), guides: [{ kind: "polar", origin, to, degrees }], key };
+  let best: Fix | undefined;
+  // The side comes first: it wins a tie against the world.
+  for (const reference of protractorReferences(query, origin)) {
+    const turns = Math.round((heading - reference.heading) / step);
+    const key = `polar:${reference.run ? runKeyOf(reference.run) : "world"}:${turns}`;
+    const target = reference.heading + turns * step;
+    if (Math.abs(heading - target) > angularReach(rc.of(key), length, Math.min(ANGLE_REACH, step / 3))) continue;
+    const to = { x: origin.x + Math.cos(target) * length, y: p.y, z: origin.z + Math.sin(target) * length };
+    const fix = { x: to.x - p.x, z: to.z - p.z };
+    const degrees = ((((turns * step) / DEGREE) % 360) + 360) % 360;
+    // The side wins a tie, not floating-point luck: the world only when it is truly nearer.
+    best = nearer(best, { ...fix, distance: Math.hypot(fix.x, fix.z) + (reference.run ? 0 : 1e-9), guides: [{ kind: "polar", origin, to, degrees, from: reference.run ? "edge" : "world", zero: reference.heading }], key });
+  }
+  return best;
 }
 
 function reachOf(query: RulerQuery): Reach {
@@ -414,7 +475,9 @@ export function resolveRuler(query: RulerQuery): RulerResult {
     ["polar", polarFix(query, p, rc)],
     ["length", lengthFix(query, p, rc)],
   ];
-  const [caught, first] = picks.find(([, candidate]) => candidate) ?? [undefined, undefined];
+  const [picked, first] = picks.find(([, candidate]) => candidate) ?? [undefined, undefined];
+  // A length that is a round number is said so: it is not a side's length.
+  const caught = picked === "length" && first?.guides[0]?.kind === "step" ? "step" : picked;
   let fix = first;
   // A line turned onto a direction can still be as long as a standing side: both hold at once.
   if ((caught === "angle" || caught === "polar") && fix) {
@@ -456,4 +519,15 @@ export function resolveLevel(y: number, links: RulerLinks, at: ConstructionPosit
   for (const level of links.levels) if (Math.abs(level - y) <= reach && (best === undefined || Math.abs(level - y) < Math.abs(best - y))) best = level;
   if (best === undefined) return { y };
   return { y: options.snap === false ? y : best, guide: { kind: "level", y: best, at } };
+}
+
+/**
+ * `value` rounded to a multiple of `step` when within `reach` of one; `undefined`
+ * when it is not near one, or there is no step. What makes a height, a length or
+ * a size land on a whole number of the table's unit.
+ */
+export function roundWithin(value: number, step: number, reach: number): number | undefined {
+  if (!(step > 0)) return undefined;
+  const rounded = Math.round(value / step) * step;
+  return Math.abs(rounded - value) <= reach ? rounded : undefined;
 }

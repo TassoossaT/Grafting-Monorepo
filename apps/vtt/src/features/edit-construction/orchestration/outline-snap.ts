@@ -34,7 +34,7 @@ export interface OutlineSnap {
   readonly measures: readonly RulerMeasure[];
 }
 
-const PRIORITY = { point: 0, run: 1, intersection: 2, square: 3, align: 4, angle: 5, polar: 6, length: 7 } as const;
+const PRIORITY = { point: 0, run: 1, intersection: 2, square: 3, align: 4, angle: 5, polar: 6, length: 7, step: 8 } as const;
 
 const motionOf = (motion: HandleMotion): RulerMotion | undefined => {
   if (motion.kind === "line") return { kind: "line", direction: motion.direction };
