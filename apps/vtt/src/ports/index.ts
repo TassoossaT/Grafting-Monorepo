@@ -16,6 +16,7 @@ export type {
   RenderMeshData,
   RenderHandleGlyph, RenderNodeHandle,
   RenderPreviewDescriptor,
+  RenderPreviewLabel,
   RenderSurfacePickTarget,
   RenderToken,
   RenderViewId,

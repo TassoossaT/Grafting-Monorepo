@@ -21,10 +21,10 @@ const RESOLVERS = [
   "LEVEL_REACH", "RULER_REACH", "SNAP_REACH",
 ];
 /** The ruler's own session and presenter: only the door and the dispatcher that draws it may reach them. */
-const INTERNALS = ["ruler-session.ts", "ruler-preview.ts"];
+const INTERNALS = ["ruler-session.ts", "ruler-preview.ts", "ruler-labels.ts"];
 
 const inside = (path) => path.split(sep).join("/");
-const rulerModules = (path) => path.startsWith("features/edit-construction/ruler/") || /^composition\/tabletop\/tools\/core\/ruler(-session|-preview)?\.ts$/.test(path);
+const rulerModules = (path) => path.startsWith("features/edit-construction/ruler/") || /^composition\/tabletop\/tools\/core\/ruler(-session|-preview|-labels)?\.ts$/.test(path);
 /** The dispatcher draws the ruler for every pointer sample, so it may hold the session and the presenter -- not the resolvers. */
 const dispatcher = (path) => path === "composition/tabletop/use-construction-pointer.ts";
 

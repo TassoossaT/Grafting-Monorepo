@@ -122,6 +122,10 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
       <Card className="gm-panel-card" backgroundColor="#182234" accentColor="#1e293b">
         <span className="gm-panel-card-title">Régua: o que encaixa</span>
         <div style={{ display: "grid", gap: "0.3rem", fontSize: "0.78rem" }}>
+          <label style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+            <input type="checkbox" checked={props.rulerSettings.numbers} onChange={(event) => props.onRulerSettingsChange({ ...props.rulerSettings, numbers: event.target.checked })} />
+            <span>Números no mapa</span>
+          </label>
           <label className="gm-stat-row" style={{ alignItems: "center" }}>
             <span>Passo do ângulo:</span>
             <select value={props.rulerSettings.angleStep} onChange={(event) => props.onRulerSettingsChange({ ...props.rulerSettings, angleStep: Number(event.target.value) })} style={selectStyle}>

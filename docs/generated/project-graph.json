@@ -2852,6 +2852,7 @@
                 "generation-wasm:build",
                 "ui:compile"
               ],
+              "continuous": true,
               "cache": false,
               "options": {
                 "command": "pnpm --filter @grafting/vtt dev"

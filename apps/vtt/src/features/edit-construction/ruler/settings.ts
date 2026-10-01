@@ -12,6 +12,8 @@ export interface RulerSettings {
   readonly angleStep: number;
   /** The round number a length lands on, in the table's unit: 1 means whole units. 0 leaves lengths as they are. */
   readonly lengthStep: number;
+  /** Whether the numbers are written on the map -- at the teeth, along the lines, round the protractor -- besides the one at the pointer. */
+  readonly numbers: boolean;
 }
 
 /** The angular steps the table can choose, in degrees. */
@@ -21,7 +23,7 @@ export const LENGTH_STEPS: readonly number[] = [0, 0.1, 0.25, 0.5, 1, 2, 5, 10];
 /** The finer angular step held with Shift, in degrees: the protractor's own graduation. */
 export const FINE_ANGLE_STEP = 5;
 
-export const DEFAULT_RULER_SETTINGS: RulerSettings = { disabled: new Set(), angleStep: 15, lengthStep: 0 };
+export const DEFAULT_RULER_SETTINGS: RulerSettings = { disabled: new Set(), angleStep: 15, lengthStep: 0, numbers: true };
 
 const known = new Set<string>(RULER_KINDS);
 
@@ -36,10 +38,11 @@ export function parseRulerSettings(raw: unknown): RulerSettings {
     disabled: disabledOf(record.disabled),
     angleStep: typeof record.angleStep === "number" && ANGLE_STEPS.includes(record.angleStep) ? record.angleStep : DEFAULT_RULER_SETTINGS.angleStep,
     lengthStep: typeof record.lengthStep === "number" && LENGTH_STEPS.includes(record.lengthStep) ? record.lengthStep : DEFAULT_RULER_SETTINGS.lengthStep,
+    numbers: typeof record.numbers === "boolean" ? record.numbers : DEFAULT_RULER_SETTINGS.numbers,
   };
 }
 
 /** The settings as they are stored. */
 export function serializeRulerSettings(settings: RulerSettings): unknown {
-  return { disabled: [...settings.disabled], angleStep: settings.angleStep, lengthStep: settings.lengthStep };
+  return { disabled: [...settings.disabled], angleStep: settings.angleStep, lengthStep: settings.lengthStep, numbers: settings.numbers };
 }

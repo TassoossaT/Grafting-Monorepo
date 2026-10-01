@@ -443,6 +443,11 @@ test("what a table asks of its ruler is read back whole, and an old or odd recor
   assert.equal(parseRulerSettings({ angleStep: 7, lengthStep: 3 }).angleStep, DEFAULT_RULER_SETTINGS.angleStep);
   assert.equal(parseRulerSettings({ angleStep: 7, lengthStep: 3 }).lengthStep, DEFAULT_RULER_SETTINGS.lengthStep);
   assert.ok(ANGLE_STEPS.includes(5) && LENGTH_STEPS.includes(0));
+  // The numbers on the map are on unless the table turned them off, and the choice is kept.
+  assert.equal(parseRulerSettings({}).numbers, true);
+  assert.equal(parseRulerSettings(JSON.parse(JSON.stringify(serializeRulerSettings({ ...DEFAULT_RULER_SETTINGS, numbers: false })))).numbers, false);
+  assert.equal(parseRulerSettings({ numbers: "no" }).numbers, true, "an unreadable choice is the default");
+  assert.equal(parseRulerSettings(["corner"]).numbers, true, "the old form carries none");
 });
 
 test("the protractor offers the side and the world at once, and the guide says which one caught", () => {

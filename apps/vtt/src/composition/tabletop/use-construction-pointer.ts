@@ -14,6 +14,7 @@ import { metersPerPixelAt } from "./tools/core/pointer-scale.ts";
 import { createRulerSession } from "./tools/core/ruler-session.ts";
 import { NO_FEEDBACK, rulerOf, type RulerFeedback } from "./tools/core/ruler.ts";
 import { RULER_PREVIEW_CHANNEL, rulerLabels, rulerPreview } from "./tools/core/ruler-preview.ts";
+import { mapLabelsOf } from "./tools/core/ruler-labels.ts";
 import { toolFor } from "./tools/index.ts";
 import { beginCurveGesture, type CurveGesture } from "./tools/core/curve-edit-gesture.ts";
 import { DEFAULT_RULER_SETTINGS, FINE_ANGLE_STEP, MEASURE_UNITS, carriesArrows, faceKey, globalHandleOf, handleMotionAt, shownGlobalHandleAt, toMetres } from "../../features/edit-construction/index.ts";
@@ -67,6 +68,8 @@ export interface RulerReadout {
 /** How soon the ruler is asked again while the pointer merely hovers, in milliseconds. */
 const RULER_HOVER_MS = 32;
 const DEGREE = Math.PI / 180;
+/** The channel the numbers written on the map go to, beside the ruler's lines. */
+const RULER_LABELS_CHANNEL = "ruler-labels";
 
 export interface UseConstructionPointerOptions {
   readonly activeTool: ConstructionToolId;
@@ -157,28 +160,44 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
 
   /** Draws what the ruler caught for the last point it ruled, and says its distances. */
   const showRuler = useCallback((event: { clientX: number; clientY: number }): void => {
+    try {
+      drawRuler(event);
+    } catch (error) {
+      // What the ruler shows is never worth the gesture: say so, and carry on.
+      console.error("ruler: could not be drawn", error);
+    }
+  }, []);
+
+  const drawRuler = (event: { clientX: number; clientY: number }): void => {
     const { runtime, measureUnit, onRulerReadout } = optionsRef.current;
     const feedback = feedbackRef.current;
     const settings = optionsRef.current.rulerSettings ?? DEFAULT_RULER_SETTINGS;
-    const descriptor = rulerPreview(feedback, metersPerPixelRef.current, {
+    const view = {
       unit: measureUnit,
       ...(settings.lengthStep > 0 ? { lengthStep: toMetres(settings.lengthStep, measureUnit) } : {}),
       angleStep: angleStepRef.current,
       protractor: !settings.disabled.has("polar"),
-    });
+      numbers: settings.numbers,
+    };
+    const descriptor = rulerPreview(feedback, metersPerPixelRef.current, view);
     if (descriptor) runtime.showPreview(descriptor, RULER_PREVIEW_CHANNEL);
     else runtime.clearPreview(RULER_PREVIEW_CHANNEL);
+    // The same lines, numbered where they are: the values at the teeth, along the line, round the protractor.
+    const written = mapLabelsOf(feedback, metersPerPixelRef.current, view);
+    if (written.length > 0) runtime.showLabels?.(written, RULER_LABELS_CHANNEL);
+    else runtime.clearPreview(RULER_LABELS_CHANNEL);
     // What is being typed leads: it is what the next release will draw.
-    const typed = typedRef.current === "" ? [] : [`digitando ${typedRef.current}${MEASURE_UNITS[measureUnit].symbol}`];
+    const typed = typedRef.current === "" ? [] : [`digitando ${typedRef.current}${(MEASURE_UNITS[measureUnit] ?? MEASURE_UNITS.m).symbol}`];
     const labels = [...typed, ...rulerLabels(feedback, measureUnit)];
     onRulerReadout?.(labels.length > 0 ? { labels, x: event.clientX, y: event.clientY } : undefined);
-  }, []);
+  };
 
   const clearRuler = useCallback((): void => {
     feedbackRef.current = NO_FEEDBACK;
     typedRef.current = "";
     ruler.release();
     optionsRef.current.runtime.clearPreview(RULER_PREVIEW_CHANNEL);
+    optionsRef.current.runtime.clearPreview(RULER_LABELS_CHANNEL);
     optionsRef.current.onRulerReadout?.(undefined);
   }, [ruler]);
   /** Channels the edge overlay currently occupies, so a redraw clears exactly what it drew. */

@@ -34,7 +34,7 @@ function table({ camera = 10, anchor, ...options } = {}) {
     { id: "f:0", position: { x: 0, y: 0, z: 0 } }, { id: "f:1", position: { x: 4, y: 0, z: 0 } },
     { id: "f:2", position: { x: 4, y: 0, z: 3 } }, { id: "f:3", position: { x: 0, y: 0, z: 3 } },
   ]);
-  const effects = [], listeners = new Map(), seen = { down: [], up: [], hover: [], shown: [], cancelled: 0, scale: [] };
+  const effects = [], listeners = new Map(), seen = { down: [], up: [], hover: [], shown: [], labels: [], cleared: [], cancelled: 0, scale: [] };
   // Where the tool's own line begins while it waits for its next point; settable, like a draft growing.
   const state = { anchor };
   const oldWindow = globalThis.window, oldHTMLElement = globalThis.HTMLElement;
@@ -57,7 +57,8 @@ function table({ camera = 10, anchor, ...options } = {}) {
     subscribe: () => () => {},
     // The ground under a camera `camera` metres straight above the pointer: a pixel is as many metres as the lens makes it.
     pick: (_view, x, z) => ({ point: { x: x * mpp, y: 0, z: z * mpp }, ray: { origin: { x: x * mpp, y: camera, z: z * mpp }, direction: { x: 0, y: -1, z: 0 } } }),
-    clearPreview() {}, showPreview(descriptor, channel) { seen.shown.push({ descriptor, channel }); },
+    clearPreview(channel) { seen.cleared.push(channel); }, showPreview(descriptor, channel) { seen.shown.push({ descriptor, channel }); },
+    showLabels(labels, channel) { seen.labels.push({ labels, channel }); },
   });
   const target = {
     style: {},
@@ -79,7 +80,7 @@ function table({ camera = 10, anchor, ...options } = {}) {
     globalThis.window = oldWindow; globalThis.HTMLElement = oldHTMLElement; delete globalThis.__rulerHook;
     session.free();
   };
-  return { handlers, event, key, seen, readouts, done, mpp, state };
+  return { handlers, event, key, seen, readouts, done, mpp, state, runtimeOf: () => runtime };
 }
 
 const near = (a, b, message) => assert.ok(Math.abs(a - b) < 1e-6, `${message ?? ""} ${a} != ${b}`);
@@ -298,4 +299,68 @@ test("with the tool's anchor gone, the line is no longer counted from it, and di
     near(Math.atan2(t.seen.hover.at(-1).point.z - 10, t.seen.hover.at(-1).point.x - 10), heading, "no step: nothing to count from");
     assert.equal(t.key("5"), false);
   } finally { t.done(); }
+});
+
+test("the numbers are written on the map, beside the one at the pointer: the value at the teeth, the length along the line", () => {
+  const t = table({ anchor: { x: 10, y: 0, z: 10 }, rulerSettings: { ...DEFAULT_RULER_SETTINGS, lengthStep: 1 } });
+  try {
+    t.handlers.onPointerMove(t.event(16.5, 10));
+    const written = t.seen.labels.at(-1);
+    assert.equal(written.channel, "ruler-labels");
+    const texts = written.labels.map((label) => label.text);
+    // 6.5 m: a number at the fifth tooth, and the length along the line -- which the pointer's readout says as well.
+    assert.ok(texts.includes("5"), texts.join(" "));
+    assert.ok(texts.some((text) => text.includes("6.50 m")), texts.join(" "));
+    // They are on the map, in the same few pixels of height at any zoom.
+    for (const label of written.labels) assert.ok(label.height > 0);
+    assert.ok(t.readouts.filter(Boolean).some((r) => r.labels.some((label) => label.includes("6.50 m"))), "and the readout at the pointer still says it");
+  } finally { t.done(); }
+});
+
+test("with the numbers turned off the map carries none -- and the pointer's readout stays", () => {
+  const t = table({ anchor: { x: 10, y: 0, z: 10 }, rulerSettings: { ...DEFAULT_RULER_SETTINGS, numbers: false } });
+  try {
+    t.handlers.onPointerMove(t.event(16.5, 10));
+    assert.equal(t.seen.labels.length, 0);
+    assert.ok(t.seen.cleared.includes("ruler-labels"));
+    assert.ok(t.readouts.filter(Boolean).length > 0);
+  } finally { t.done(); }
+});
+
+test("the numbers come down with the ruler: when the gesture ends, and when the tool changes", () => {
+  const t = table({ anchor: { x: 10, y: 0, z: 10 } });
+  try {
+    t.handlers.onPointerMove(t.event(16.5, 10));
+    t.seen.cleared.length = 0;
+    t.handlers.onPointerDown(t.event(16.5, 10));
+    t.handlers.onPointerUp(t.event(16.5, 10));
+    assert.ok(t.seen.cleared.includes("ruler-labels"), "taken down with the gesture");
+  } finally { t.done(); }
+});
+
+test("what the ruler shows is never worth the gesture: if drawing it fails, the tool still gets the pointer", () => {
+  const t = table();
+  const oldError = console.error;
+  const errors = [];
+  console.error = (...args) => errors.push(args);
+  try {
+    t.handlers.onPointerDown(t.event(10, 10));
+    // From here on, the ruler's lines cannot be put up.
+    t.seen.shown.length = 0;
+    // The runtime is the fixture's: make its preview refuse the ruler's channel.
+    const refuse = (descriptor, channel) => { if (channel === "ruler-guides") throw new Error("the renderer is gone"); };
+    t.runtimeOf().showPreview = refuse;
+    t.handlers.onPointerMove(t.event(13, 10));
+    t.handlers.onPointerUp(t.event(13, 10));
+    near(t.seen.up[0].point.x, 13, "the release still reached the tool");
+    assert.ok(errors.length > 0, "and the failure was said, not swallowed");
+  } finally { console.error = oldError; t.done(); }
+});
+
+test("a unit left unnamed is the default one in every figure the ruler writes, and nothing throws", async () => {
+  const { formatLength, fromMetres, toMetres } = await import("../src/features/edit-construction/index.ts");
+  assert.equal(formatLength(3.048, undefined), "3.05 m");
+  near(fromMetres(2, undefined), 2);
+  near(toMetres(2, undefined), 2);
+  near(fromMetres(1.524, "sq"), 1);
 });

@@ -284,6 +284,10 @@ Widens or narrows something round its centre: a double arrow across.
 
 Turns a whole structure round: two arrows chasing each other round a circle.
 
+### `function vtt.marker-textures.createRulerLabelTexture(text: string): HTMLCanvasElement`
+
+A number the ruler writes on the map: the text, in the ruler's colour, on a dark pill so it reads over anything.
+
 ### `function vtt.marker-textures.createSideHandleTexture(): HTMLCanvasElement`
 
 Pushes one side out or in: the side, and a double arrow square to it.
@@ -361,6 +365,13 @@ Sets the floor-cutaway height in continuous world-space Y. `undefined` disables 
 
 ### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.setPointManipulator(viewId: string, target: RenderPointManipulator | undefined): void`
 
+### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.showLabels(labels: readonly RenderPreviewLabel[], channel: string): void`
+
+Writes numbers on the map -- each a camera-facing label, drawn above
+everything and never pickable -- on a named channel of their own. A set
+shorter than the channel's last takes the surplus down; `clearPreview` of
+the channel takes them all down.
+
 ### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.showPreview(descriptor: RenderPreviewDescriptor, channel: string): void`
 
 Shows (or replaces) one preview overlay.
@@ -373,7 +384,35 @@ single-ghost behaviour every tool already relies on.
 
 ### `method vtt.render-3d-scene-adapter.Render3dSceneAdapter.start(runtimeGeneration: number): Promise<void>`
 
+### `variable vtt.render-3d-scene-adapter.VIEW_FOV_DEGREES: 38`
+
+The camera's vertical field of view, in degrees -- fixed: orbiting and zooming move the camera, never the lens.
+
 ### `function vtt.render-3d-scene-adapter.createRender3dSceneAdapter(): SceneRenderPort`
+
+### `interface vtt.ruler-label-scene-item.RulerLabelVisualParams`
+
+### `property vtt.ruler-label-scene-item.RulerLabelVisualParams.text: string`
+
+### `variable vtt.ruler-label-scene-item.RULER_LABEL_LAYER_ID: "construction-preview"`
+
+A number the ruler writes on the map: a camera-facing sprite on the preview
+layer -- never pickable, drawn above everything, like the ruler's own lines
+-- whose texture is the text. This module is only the item: where it stands
+and how big it is. The texture is drawn in `marker-textures.ts`, from the
+same rulerLabelAspect, so the sprite is never stretched.
+
+### `variable vtt.ruler-label-scene-item.RULER_LABEL_VISUAL_KIND: "vtt-ruler-label"`
+
+### `function vtt.ruler-label-scene-item.rulerLabelAspect(text: string): number`
+
+How wide a written text is against its height: the one rule the sprite's size and its texture both follow.
+
+### `function vtt.ruler-label-scene-item.rulerLabelSceneItem(label: RenderPreviewLabel, index: number, channel: string): SceneItem<RulerLabelVisualParams>`
+
+`label` as a scene item: standing where it is written, as tall as it is asked and as wide as its text.
+
+### `function vtt.ruler-label-scene-item.rulerLabelSceneItemId(channel: string, index: number): string`
 
 ### `interface vtt.token-scene-item.TokenVisualParams`
 
@@ -818,6 +857,10 @@ Shows only the focused structure's handles -- the one under the pointer; `undefi
 
 Replaces the regions' property bag (`null` clears). See `ConstructionSessionPort.setRegionProps`.
 
+### `method vtt.tabletop-runtime.AppTabletopRuntime.showLabels(labels: readonly RenderPreviewLabel[], channel: string): void`
+
+Writes numbers on the map, on a channel of their own -- see `SceneRenderPort.showLabels`.
+
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.showPreview(descriptor: RenderPreviewDescriptor, channel?: string): void`
 
 Shows a construction tool's not-yet-committed ghost. Purely visual -- passthrough to `SceneRenderPort`, never touches the construction session.
@@ -1011,6 +1054,10 @@ Shows only the focused structure's handles -- the one under the pointer; `undefi
 ### `method vtt.tabletop-runtime.TabletopRuntime.setRegionProps(surfaceKeys: readonly ConstructionSurfaceKey[], props: Readonly<Record<string, unknown>> | null): RegionEditOutcome`
 
 Replaces the regions' property bag (`null` clears). See `ConstructionSessionPort.setRegionProps`.
+
+### `method vtt.tabletop-runtime.TabletopRuntime.showLabels(labels: readonly RenderPreviewLabel[], channel: string): void`
+
+Writes numbers on the map, on a channel of their own -- see `SceneRenderPort.showLabels`.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.showPreview(descriptor: RenderPreviewDescriptor, channel?: string): void`
 
@@ -2038,10 +2085,6 @@ asks for one; what a frame is and where it comes from lives only here.
 
 Where the frame's grid is anchored: a corner of the structure it follows, or the world's origin.
 
-### `property vtt.build-frame.BuildFrame.start?: ConstructionPosition`
-
-A point of a structure's side or corner `start` was drawn to, when it was near one -- the shape starts there, against it.
-
 ### `property vtt.build-frame.BuildFrame.u: { x: number; z: number }`
 
 The frame's first direction in plan, unit length; `v` is square to it.
@@ -2055,14 +2098,14 @@ The frame a shape begun at `sample` is built in.
 ### `function vtt.build-frame.frameRectangle(ctx: ToolContext, frame: BuildFrame, a: ConstructionPosition, b: ConstructionPosition, elevation: number): readonly ConstructionPosition[] | undefined`
 
 The rectangle from `a` to the pointer's `b`, its sides along the frame:
-the pointer gives the far corner. A far side that comes near a built side
-lying the same way lands on it -- the shape is flush with what stands,
-never a sliver over or short of it -- else its size along each direction
-is whole grid steps when the table snaps. `undefined` when it has no area.
+the pointer gives the far corner, ruled along the frame like every other
+point -- so a far side that comes near a built side lying the same way lands
+on it, flush with what stands and never a sliver over or short of it, by the
+same catch as anything else. `undefined` when it has no area.
 
 ### `function vtt.build-frame.frameStart(ctx: ToolContext, frame: BuildFrame, sample: PointerSample, y: number): ConstructionPosition`
 
-Where a shape begun at `sample`, on the level `y`, starts: on the side it was drawn next to, else on the frame's grid.
+Where a shape begun at `sample`, on the level `y`, starts: ruled along the frame -- on a side it was drawn next to, at a corner, or in line with one.
 
 ### `function vtt.build-frame.pointerOnLevel(sample: PointerSample, y: number): ConstructionPosition`
 
@@ -2070,7 +2113,7 @@ Where the pointer is on the level `y` a shape is drawn at -- see pointerAtHeight
 
 ### `function vtt.build-frame.snappedInFrame(ctx: ToolContext, frame: BuildFrame, p: ConstructionPosition): ConstructionPosition`
 
-`p` on the frame's grid, when the table snaps to one; unchanged otherwise.
+`p` ruled along the frame's own directions -- on a corner, a side, or in line with one -- when the ruler's snap is on; unchanged otherwise.
 
 ### `interface vtt.constrained-drag.ConstrainedDragOptions`
 
@@ -2219,7 +2262,7 @@ What the stroke reads of a tool's parameters.
 
 The shapes a closed outline is drawn as.
 
-### `function vtt.contour-stroke.contourStroke(options: ContourStrokeOptions<P>): Pick<ConstructionTool<K>, "previewFor" | "onClick" | "onPointerUp" | "onCancel">`
+### `function vtt.contour-stroke.contourStroke(options: ContourStrokeOptions<P>): Pick<ConstructionTool<K>, "previewFor" | "onClick" | "onPointerUp" | "onCancel" | "rulerAnchor">`
 
 A closed outline drawn on one level, as any tool that lays out an area
 draws it: a rectangle dragged corner to corner, a polygon clicked corner
@@ -2231,15 +2274,47 @@ outline becomes is the tool's own business.
 
 ### `interface vtt.curve-edit-gesture.AnchorSnap`
 
-How a dragged spine anchor snaps onto something else -- a road onto another
-road's node or span, say -- and how the snap is shown. A tool supplies its
-own; the gesture only asks it.
-
-### `method vtt.curve-edit-gesture.AnchorSnap.find(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): PointerSample | undefined`
+### `method vtt.curve-edit-gesture.AnchorSnap.find(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): AnchorTarget | undefined`
 
 ### `method vtt.curve-edit-gesture.AnchorSnap.show(ctx: ToolContext, target?: PointerSample): void`
 
 Shows `target` as the snap, or clears it when absent.
+
+### `interface vtt.curve-edit-gesture.AnchorTarget`
+
+What an anchor snap lands on: a point, and whether it is a place along a span rather than a node.
+
+### `property vtt.curve-edit-gesture.AnchorTarget.face?: { centre: ConstructionPosition; normal: ConstructionPosition }`
+
+The face under the pointer, when it is on one: its slope through the exact point hit -- see `pointer-ray.ts`.
+
+### `property vtt.curve-edit-gesture.AnchorTarget.forward?: ConstructionPosition`
+
+The way the camera looks, when the view gave it -- see `build-frame.ts`.
+
+### `property vtt.curve-edit-gesture.AnchorTarget.nodeId?: string`
+
+### `property vtt.curve-edit-gesture.AnchorTarget.point: ConstructionPosition`
+
+### `property vtt.curve-edit-gesture.AnchorTarget.ray?: { direction: ConstructionPosition; origin: ConstructionPosition }`
+
+The pointer's ray from the camera, when the view gave one -- see `pointer-ray.ts`.
+
+### `property vtt.curve-edit-gesture.AnchorTarget.ruled?: { x: number; z: number }`
+
+How far the ruler moved the hit, in plan, to land it on a corner, side or line-up -- `pointerAtHeight` carries it onto the ray, so a tool reading the ray is ruled like one reading the point.
+
+### `property vtt.curve-edit-gesture.AnchorTarget.screenX?: number`
+
+### `property vtt.curve-edit-gesture.AnchorTarget.screenY?: number`
+
+Screen coordinate used by explicit elevation gestures.
+
+### `property vtt.curve-edit-gesture.AnchorTarget.shiftKey?: boolean`
+
+### `property vtt.curve-edit-gesture.AnchorTarget.span?: boolean`
+
+### `property vtt.curve-edit-gesture.AnchorTarget.surfaceRef?: string`
 
 ### `interface vtt.curve-edit-gesture.CurveGesture`
 
@@ -2427,8 +2502,8 @@ carried on down the ray it would land far behind what the cursor is on.
 Anywhere else, the ray crossing `y` itself, so something drawn at `y`
 sits right under the cursor rather than above or below whatever the ray
 hit. Without a ray -- or one that never reaches there in front of the
-camera -- the hit point, at `y`. Always exact: the hit point may be
-snapped to the grid, the ray never is.
+camera -- the hit point, at `y`. Exact but for what the ruler caught
+(`sample.ruled`): the pointer's own ray is never rounded, only ruled.
 
 ### `function vtt.pointer-ray.withFacePlane(sample: PointerSample, topologies: readonly ConstructionRegionTopology[]): PointerSample`
 
@@ -2437,12 +2512,320 @@ point the pointer hit -- read before the hit is snapped to the grid, and
 right on uneven faces too, the ground or a road, whose slope differs from
 place to place. The pointer gives every sample this.
 
-### `function vtt.spine-body-target.spineBodyTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string, ownsSpine: (surfaceType: string) => boolean): { options: CurveGestureOptions; sample: PointerSample } | undefined`
+### `function vtt.pointer-scale.metersPerPixelAt(hit: Pick<PointerSample, "point" | "ray">, viewportHeight: number, fovDegrees: number): number | undefined`
 
-A pick on a spine-built body, projected onto its spine through the
-canonical curve query: the nearest control point when the pick is close
-to one, else the span's midpoint handle at the projected parameter.
-`ownsSpine` limits it to the spines of the types a tool edits.
+How many metres one pixel of the screen is where the pointer is: the camera
+looks through a lens of fixed field of view, so a pixel spans
+`2 * distance * tan(fov / 2) / height` metres at `distance` from it. What
+the ruler needs to measure its reach in pixels -- the same feel at every
+zoom -- rather than in metres, which would snap everything together zoomed
+out and nothing zoomed in. `undefined` when the view gave no ray to take the
+distance along, or has no height.
+
+### `interface vtt.ruler.Ruler`
+
+### `property vtt.ruler.Ruler.axis: { catch: any; center: any; gaps: any; holds: any }`
+
+A box on a line of its own -- an opening along its wall, or up it: the line-ups along that line.
+
+### `property vtt.ruler.Ruler.snap: boolean`
+
+Whether what the ruler catches is taken (Ctrl held places freely).
+
+### `property vtt.ruler.Ruler.step: number | undefined`
+
+The round number, in metres, a length or a height lands on; none when the table chose none.
+
+### `method vtt.ruler.Ruler.base(heights: Iterable<number>, fallback: number): number`
+
+The height a structure rises from: the lowest of `heights`.
+
+### `method vtt.ruler.Ruler.dimensions(faces: readonly ConstructionRegionTopology[]): readonly RulerMeasure[]`
+
+How big the structure `faces` make is.
+
+### `method vtt.ruler.Ruler.drag(anchors: readonly SnapAnchor[], delta: ConstructionPosition, motion: HandleMotion, links: RulerLinks): OutlineSnap | undefined`
+
+Anchors dragged by `delta` along `motion`, ruled onto `links`: where they land and what they caught; `undefined` when nothing is near.
+
+### `method vtt.ruler.Ruler.held(reach: number): number`
+
+The reach a catch already held keeps: wider than the one that took it, so it does not flicker at the edge.
+
+### `method vtt.ruler.Ruler.lift(request: { base: number; dragged: ConstructionPosition; links?: RulerLinks; rounds: boolean; standing: number }): { guides: readonly RulerGuide[]; y: number }`
+
+A handle lifted: its drawn position `dragged`, while the structure stands
+at `standing` on a `base` it rises from. Lands the structure's height on a
+level that stands, else on a round number above its base -- and says where
+the handle must then be drawn.
+
+### `method vtt.ruler.Ruler.linksWithout(skip: ReadonlySet<string>): RulerLinks`
+
+Everything that stands and can be lined up with or snapped onto, but the faces named (by their keys): what is being edited never links to itself.
+
+### `method vtt.ruler.Ruler.measure(what: EditMeasureKind, from: ConstructionPosition, at: ConstructionPosition): readonly RulerMeasure[]`
+
+What an edit that moved something from `from` to `at` measures.
+
+### `method vtt.ruler.Ruler.named(name: "move" | "height" | "radius" | "side" | "slope" | "turn", using: { angle: number; base: number; direction: { x: number; z: number } }): EditMeasureKind`
+
+The measurement a handle declares it makes (`HANDLE_MEASUREMENT`), with what it needs.
+
+### `method vtt.ruler.Ruler.point(point: ConstructionPosition, options?: Pick<RulePointOptions, "origin" | "axes">): ConstructionPosition`
+
+A point a tool lays out itself, on the ground: where it lands ruled.
+
+### `method vtt.ruler.Ruler.reach(pixels: number, fallback: number): number`
+
+`pixels` of the screen as metres; `fallback` when the scale is not known. For a reach that is not a catch -- how near a side a shape is built beside -- but should feel the same at every zoom.
+
+### `method vtt.ruler.Ruler.round(value: number): number`
+
+`value` landed on a multiple of the table's round number when near one; as it is otherwise or with the snap off.
+
+### `method vtt.ruler.Ruler.show(feedback: { guides: readonly RulerGuide[]; measures: readonly RulerMeasure[] } | undefined): void`
+
+The one place a ruler is shown; `undefined` takes it down.
+
+### `method vtt.ruler.Ruler.turn(angle: number, radius: number): { angle: number; turns: number | undefined }`
+
+A turn of `angle` radians, `radius` out from what it turns about, landed on
+a step of the protractor when near one -- the table's angle step, or the
+finer one while Shift is held. The same reach as every other catch.
+
+### `function vtt.ruler.rulerOf(ctx: ToolContext): Ruler`
+
+The ruler of `ctx`: made of what the context says -- stateless, so cheap to ask for wherever it is needed.
+
+### `interface vtt.ruler-labels.MapLabel`
+
+One number to write on the map.
+
+### `property vtt.ruler-labels.MapLabel.height: number`
+
+How tall it is written, in metres: the same few pixels at every zoom.
+
+### `property vtt.ruler-labels.MapLabel.position: { x: number; y: number; z: number }`
+
+### `property vtt.ruler-labels.MapLabel.text: string`
+
+### `variable vtt.ruler-labels.MAX_MAP_LABELS: 48`
+
+The most numbers written at once: more is a page of figures, not a ruler.
+
+### `function vtt.ruler-labels.compact(value: number): string`
+
+A value in the table's unit with no trailing zeros: 5, 0.5, 12.25.
+
+### `function vtt.ruler-labels.mapLabelsOf(feedback: RulerFeedback, metersPerPixel: number | undefined, view: RulerView | undefined): readonly MapLabel[]`
+
+Every number the ruler writes for `feedback`, nearest the line being drawn first, no more than MAX_MAP_LABELS.
+
+### `interface vtt.ruler-preview.ProtractorGeometry`
+
+Where the protractor's marks stand, for one line: its radius, and the window of marks either side of the line. Shared by what draws it and what writes its numbers.
+
+### `property vtt.ruler-preview.ProtractorGeometry.at: (degrees: number, r: number) => Point`
+
+Where the mark at `degrees` from the zero stands, at distance `r` from the origin.
+
+### `property vtt.ruler-preview.ProtractorGeometry.first: number`
+
+The first and last mark of the window, in graduations from the zero.
+
+### `property vtt.ruler-preview.ProtractorGeometry.last: number`
+
+### `property vtt.ruler-preview.ProtractorGeometry.origin: Point`
+
+### `property vtt.ruler-preview.ProtractorGeometry.radius: number`
+
+### `property vtt.ruler-preview.ProtractorGeometry.tick: (px: number) => number`
+
+How long a mark of `px` pixels is, in metres.
+
+### `property vtt.ruler-preview.ProtractorGeometry.zero: number`
+
+### `interface vtt.ruler-preview.RulerLine`
+
+One line the ruler draws, whatever it is: a guide out of a corner, a side
+it follows or is square to, the way to the nearest corner, the line being
+drawn. It starts at `anchor` -- the item it comes out of -- and ends at `tip`.
+Every one is drawn alike: the line, the ruler's teeth counted out from the
+item, and -- where it comes out of an item -- the protractor round it.
+
+### `property vtt.ruler-preview.RulerLine.anchor: Point`
+
+### `property vtt.ruler-preview.RulerLine.protractor: boolean`
+
+Whether the protractor is drawn round its anchor.
+
+### `property vtt.ruler-preview.RulerLine.stroke: boolean`
+
+Whether the line itself is drawn: not for the line being drawn, which is the tool's own ghost -- it only takes the teeth and the protractor.
+
+### `property vtt.ruler-preview.RulerLine.tip: Point`
+
+### `property vtt.ruler-preview.RulerLine.zero: number`
+
+The direction the protractor counts from, in radians.
+
+### `interface vtt.ruler-preview.RulerView`
+
+How the ruler is drawn for a table: the unit its teeth count in, the round number and the angle it offers.
+
+### `property vtt.ruler-preview.RulerView.angleStep?: number`
+
+The angular step the protractor offers, in radians; its larger marks stand at every one.
+
+### `property vtt.ruler-preview.RulerView.lengthStep?: number`
+
+The round number a length lands on, in metres; the teeth stand at every one.
+
+### `property vtt.ruler-preview.RulerView.numbers?: boolean`
+
+Whether the numbers are written on the map (`ruler-labels.ts`); on unless said otherwise.
+
+### `property vtt.ruler-preview.RulerView.protractor?: boolean`
+
+Whether the protractor is drawn at all.
+
+### `property vtt.ruler-preview.RulerView.unit: MeasureUnitId`
+
+### `variable vtt.ruler-preview.MAX_ITEM_PROTRACTORS: 2`
+
+The most protractors drawn round lines that come out of items, besides the line being drawn: more would be a clutter of arcs.
+
+### `variable vtt.ruler-preview.MAX_TEETH: 200`
+
+The most teeth drawn along one line.
+
+### `variable vtt.ruler-preview.PROTRACTOR_STEP_DEGREES: 5`
+
+### `variable vtt.ruler-preview.RULER_PREVIEW_CHANNEL: "ruler-guides"`
+
+The channel the ruler draws its guides on, apart from any tool's own ghost.
+
+### `function vtt.ruler-preview.linesOf(feedback: RulerFeedback): readonly RulerLine[]`
+
+Every line `feedback` has to draw, in one list: guides and measures alike.
+
+### `function vtt.ruler-preview.protractorOf(origin: Point, to: Point, zero: number, metersPerPixel: number | undefined): ProtractorGeometry | undefined`
+
+The protractor round `origin` for the line to `to`; `undefined` when the line is too short to hold one.
+
+### `function vtt.ruler-preview.rulerLabels(feedback: RulerFeedback, unit: MeasureUnitId): readonly string[]`
+
+What `feedback` says in words, in the table's `unit`: first what is
+catching -- a corner, a middle, a crossing, a direction -- then the lengths,
+gaps, heights, changes and angles. The same thing is said once.
+
+### `function vtt.ruler-preview.rulerPreview(feedback: RulerFeedback, metersPerPixel?: number, view?: RulerView): PreviewDescriptor | undefined`
+
+What `feedback` draws, as one ghost: its markers, and every line -- guides, sides, the way to a corner, the line being drawn -- alike, with the ruler's teeth and protractor. `undefined` when there is nothing.
+
+### `function vtt.ruler-preview.teethSpacing(metersPerPixel: number | undefined, unit: MeasureUnitId, lengthStep?: number): number`
+
+The distance between the ruler's teeth, in metres: every round number the
+table chose, else a round number of its unit as fine as the screen lets the
+teeth be told apart -- finer as it is zoomed in, coarser as it is zoomed out.
+
+### `interface vtt.ruler-session.RulePointOptions`
+
+### `property vtt.ruler-session.RulePointOptions.axes?: readonly [PlanVector, PlanVector]`
+
+The directions to line up along -- a build frame's.
+
+### `property vtt.ruler-session.RulePointOptions.disabled?: ReadonlySet<"midpoint" | "side" | "corner" | "length" | "square" | "align" | "intersection" | "angle" | "polar" | "level">`
+
+Ways of catching the table left out.
+
+### `property vtt.ruler-session.RulePointOptions.lengthStep?: number`
+
+The round number, in metres, a length from the origin lands on; none when absent.
+
+### `property vtt.ruler-session.RulePointOptions.metersPerPixel?: number`
+
+How many metres a pixel of the screen is here: the reach and the acquiring are worked out from it.
+
+### `property vtt.ruler-session.RulePointOptions.origin?: ConstructionPosition`
+
+Where what is being drawn began, to measure its length from.
+
+### `property vtt.ruler-session.RulePointOptions.polar?: number`
+
+The steps of the protractor from the origin, in radians.
+
+### `property vtt.ruler-session.RulePointOptions.snap: boolean`
+
+Whether what the ruler catches is taken.
+
+### `interface vtt.ruler-session.RulerFeedback`
+
+What the ruler shows for the point it last ruled -- always while building, whether or not the snap is on.
+
+### `property vtt.ruler-session.RulerFeedback.guides: readonly RulerGuide[]`
+
+### `property vtt.ruler-session.RulerFeedback.measures: readonly RulerMeasure[]`
+
+### `interface vtt.ruler-session.RulerHost`
+
+What a tool's own context offers the ruler: the table to read, whether the snap is on, and the screen's scale.
+
+### `property vtt.ruler-session.RulerHost.rulerDisabled?: ReadonlySet<"midpoint" | "side" | "corner" | "length" | "square" | "align" | "intersection" | "angle" | "polar" | "level">`
+
+Ways of catching the table left out.
+
+### `property vtt.ruler-session.RulerHost.rulerMetersPerPixel?: number`
+
+How many metres a pixel of the screen is at the pointer, when the dispatcher knows.
+
+### `property vtt.ruler-session.RulerHost.rulerSnap: boolean`
+
+### `property vtt.ruler-session.RulerHost.runtime: { getAllRegionTopologies: any }`
+
+### `interface vtt.ruler-session.RulerSession`
+
+### `method vtt.ruler-session.RulerSession.invalidate(): void`
+
+What stands changed: the links are read again on the next question.
+
+### `method vtt.ruler-session.RulerSession.links(): RulerLinks`
+
+### `method vtt.ruler-session.RulerSession.release(): void`
+
+The pointer is done with this catch -- a gesture ended: the next one starts free.
+
+### `method vtt.ruler-session.RulerSession.rulePoint(point: ConstructionPosition, options: RulePointOptions): { feedback: RulerFeedback; point: ConstructionPosition }`
+
+### `method vtt.ruler-session.RulerSession.ruleSample(sample: PointerSample, options: RulePointOptions): { feedback: RulerFeedback; sample: PointerSample }`
+
+### `variable vtt.ruler-session.NO_FEEDBACK: RulerFeedback`
+
+### `variable vtt.ruler-session.RULER_ACQUIRE_PX: 160`
+
+How far, on the screen, a link may stand and still offer its lines.
+
+### `variable vtt.ruler-session.RULER_REACH_PX: 14`
+
+How close, on the screen, a link must come to catch. In pixels, so the feel is the same at every zoom.
+
+### `function vtt.ruler-session.createRulerSession(topologies: () => readonly ConstructionRegionTopology[]): RulerSession`
+
+A session reading the links from `topologies()` -- once, until something stands differently.
+
+### `function vtt.ruler-session.metersFor(metersPerPixel: number | undefined, pixels: number, fallback: number, limits: readonly [number, number]): number`
+
+`pixels` of the screen as metres, given the metres a pixel is; `fallback` when the scale is unknown.
+
+### `function vtt.ruler-session.reachFor(host: Pick<RulerHost, "rulerMetersPerPixel">, pixels: number, fallback: number): number`
+
+The reach, in metres, that `pixels` of the screen make for `host`; `fallback` when its scale is unknown.
+
+### `function vtt.ruler-session.rulePointFor(host: RulerHost, point: ConstructionPosition, options: Pick<RulePointOptions, "origin" | "axes">): ConstructionPosition`
+
+A point a tool lays out itself -- a frame's corner -- ruled like every other, by the table as it stands now.
+
+### `function vtt.spine-body-target.spineBodyTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string, ownsSpine: (surfaceType: string) => boolean): { options: CurveGestureOptions; sample: PointerSample } | undefined`
 
 ### `function vtt.spine-commit.commitSpineRegeneration(ctx: ToolContext, request: ApplyPatchReplacementRequest, operationId: string, carries: readonly ConstructionSurfaceKey[]): void`
 
@@ -2678,6 +3061,14 @@ show only on the structure under the pointer.
 
 Opt in to a stationary drawing preview between gestures.
 
+### `property vtt.spine-draft.SpineDraftTool.rulerAnchor?: (ctx: ToolContext, params: ToolParamsFor<Id>) => ConstructionPosition | undefined`
+
+Where the line this tool is drawing begins, while it waits for its next
+point: the last corner clicked, the last end of a draft. The ruler counts
+from it -- its length, its angle, the teeth and the protractor round it --
+whether or not a button is down, so the line that follows the pointer
+between clicks is ruled like one dragged. Absent while nothing is begun.
+
 ### `property vtt.spine-draft.SpineDraftTool.snapsToSurface?: boolean`
 
 This tool always projects the pointer onto an existing surface's own
@@ -2691,7 +3082,9 @@ rather than the smooth follow every other tool gets from the same
 magnet. A tool that opts in reads its own samples unsnapped and is
 responsible for whatever continuity it wants.
 
-### `property vtt.spine-draft.SpineDraftTool.useGridSnap?: boolean`
+### `property vtt.spine-draft.SpineDraftTool.usesRuler?: boolean`
+
+`false` for a tool the ruler leaves alone: terrain is what is built on, and a tool laying itself out in a frame of its own rules its points itself.
 
 ### `method vtt.spine-draft.SpineDraftTool.defaultParams(): ToolParamsFor<Id>`
 
@@ -2936,6 +3329,14 @@ show only on the structure under the pointer.
 
 Opt in to a stationary drawing preview between gestures.
 
+### `property vtt.tool-context.ConstructionTool.rulerAnchor?: (ctx: ToolContext, params: ToolParamsFor<Id>) => ConstructionPosition | undefined`
+
+Where the line this tool is drawing begins, while it waits for its next
+point: the last corner clicked, the last end of a draft. The ruler counts
+from it -- its length, its angle, the teeth and the protractor round it --
+whether or not a button is down, so the line that follows the pointer
+between clicks is ruled like one dragged. Absent while nothing is begun.
+
 ### `property vtt.tool-context.ConstructionTool.snapsToSurface?: boolean`
 
 This tool always projects the pointer onto an existing surface's own
@@ -2949,7 +3350,9 @@ rather than the smooth follow every other tool gets from the same
 magnet. A tool that opts in reads its own samples unsnapped and is
 responsible for whatever continuity it wants.
 
-### `property vtt.tool-context.ConstructionTool.useGridSnap?: boolean`
+### `property vtt.tool-context.ConstructionTool.usesRuler?: boolean`
+
+`false` for a tool the ruler leaves alone: terrain is what is built on, and a tool laying itself out in a frame of its own rules its points itself.
 
 ### `method vtt.tool-context.ConstructionTool.defaultParams(): ToolParamsFor<Id>`
 
@@ -3017,6 +3420,10 @@ The way the camera looks, when the view gave it -- see `build-frame.ts`.
 
 The pointer's ray from the camera, when the view gave one -- see `pointer-ray.ts`.
 
+### `property vtt.tool-context.PointerSample.ruled?: { x: number; z: number }`
+
+How far the ruler moved the hit, in plan, to land it on a corner, side or line-up -- `pointerAtHeight` carries it onto the ray, so a tool reading the ray is ruled like one reading the point.
+
 ### `property vtt.tool-context.PointerSample.screenX?: number`
 
 ### `property vtt.tool-context.PointerSample.screenY?: number`
@@ -3059,27 +3466,44 @@ Ordered samples accumulated by the dispatcher; preview-only until pointer releas
 
 What every tool implementation is handed to act -- the runtime to call, undo/redo history for the one tool that uses it, and a salt generator so repeated commits never collide (mirrors `tabletop-entry.tsx`'s retired `generateCountRef`).
 
-### `property vtt.tool-context.ToolContext.gridUnit?: number`
-
-The grid's step, when snapping; 1 when absent.
-
 ### `property vtt.tool-context.ToolContext.history: EditHistoryStack`
+
+### `property vtt.tool-context.ToolContext.rulerAngleStep?: number`
+
+The angular step, in radians, the protractor offers now: the table's, or the finer one while Shift is held. None until the dispatcher knows.
+
+### `property vtt.tool-context.ToolContext.rulerDisabled?: ReadonlySet<"midpoint" | "side" | "corner" | "length" | "square" | "align" | "intersection" | "angle" | "polar" | "level">`
+
+Ways of catching the table left out of its ruler.
+
+### `property vtt.tool-context.ToolContext.rulerLengthStep?: number`
+
+The round number, in metres, a length or a height lands on when near one; none when the table chose none.
+
+### `property vtt.tool-context.ToolContext.rulerMetersPerPixel?: number`
+
+How many metres one pixel of the screen is at the pointer: the ruler's reach is worked out from it, so it feels the same at every zoom. Unknown until the view gives a ray.
+
+### `property vtt.tool-context.ToolContext.rulerSnap: boolean`
+
+Whether what the ruler catches is taken. The ruler is always there while
+building -- its guides and measures show either way -- and its catch is
+taken, but for as long as Ctrl is held, which places freely. The
+dispatcher has already ruled every ground point by the time a tool sees
+it, and a tool that rules a point of its own (a build frame's corner, a
+far side) asks `ruler-session.ts` rather than re-deriving a link.
 
 ### `property vtt.tool-context.ToolContext.runtime: TabletopRuntime`
 
-### `property vtt.tool-context.ToolContext.snapToGrid: boolean`
+### `property vtt.tool-context.ToolContext.showRuler?: (feedback: RulerFeedback | undefined) => void`
 
-Whether the grid magnet is on. A fact about the session, not a
-behaviour: the dispatcher has already rounded every ground point to a
-grid intersection by the time a tool sees it, and this only says so, so
-a tool that reads meaning into where its samples came from can. What
-any tool does with it is that tool's own business.
+Shows what the ruler caught for a point a tool ruled itself -- a handle dragged onto a corner -- until the gesture ends; `undefined` clears it.
 
 ### `property vtt.tool-context.ToolContext.structureEditParams: StructureEditParams`
 
 How a grab on an existing structure behaves -- shape/elevation mode and
 the bezier handle options (`curveMode`/`curveAction`/`curveWidth`).
-Ambient like `snapToGrid`: every construction tool can grab and edit
+Ambient like `rulerSnap`: every construction tool can grab and edit
 whatever it owns (`structure-edit-behavior.ts`), so this is no longer
 one tool's own params.
 
@@ -3150,6 +3574,29 @@ Something a commit survived but should not have had to.
 ### `variable vtt.opening-stands.openingStands: readonly OpeningStand[]`
 
 Every kind of face that raises an upright stand to hold an opening -- the opening tool asks each in turn.
+
+### `interface vtt.opening-ruler.Moving`
+
+Which edges of a rect the gesture moves: only those line up; the rest are held.
+
+### `property vtt.opening-ruler.Moving.s: AxisMoving`
+
+### `property vtt.opening-ruler.Moving.v: AxisMoving`
+
+### `function vtt.opening-ruler.alignRect(ctx: ToolContext, run: RunFrame, rect: RunRect, moving: Moving, excluded: ReadonlySet<string>): RunRect`
+
+`rect` slid, never resized, onto what it lines up with -- along the wall
+and up it -- for the edges `moving` lets move: an edge flush with another,
+a centre on a centre, or centred in the room between. A rect that nothing
+is near is returned as it is. With the ruler's snap off it always is.
+
+### `function vtt.opening-ruler.rectFeedback(ctx: ToolContext, run: RunFrame, rect: RunRect, excluded: ReadonlySet<string>): RulerFeedback`
+
+What the ruler says of `rect` as it stands: the line-ups that hold, how big it is, and the room on either side of it.
+
+### `function vtt.opening-ruler.settleAligned(ctx: ToolContext, run: RunFrame, rect: RunRect, isDoor: boolean, keepWidth: boolean, moving: Moving, excluded?: ReadonlySet<string>): RunRect | undefined`
+
+`rect` aligned for the edges that move, then settled on the run -- the one fit a preview and its commit both read.
 
 ### `interface vtt.opening-shared.OpeningCommit`
 
@@ -3245,6 +3692,10 @@ A region's `(u, v)` box on one host: its pins there and any cubic bulging past t
 ### `function vtt.opening-shared.isDoorRect(rect: { v0: number }): boolean`
 
 Whether `rect` reads as a door: a door is the only opening standing on the floor.
+
+### `function vtt.opening-shared.openingSpansOn(ctx: ToolContext, run: RunFrame, excluded: ReadonlySet<string>): readonly RunRect[]`
+
+The run-space box of every region that cuts and is pinned to the run, but those of `excluded` (surface refs) -- what stands on the wall already.
 
 ### `function vtt.opening-shared.overlapsOther(ctx: ToolContext, run: RunFrame, rect: RunRect, excluded: ReadonlySet<string>): boolean`
 
@@ -3347,6 +3798,8 @@ An opening as its stand will hold it: where its front's middle stands, and its s
 
 ### `variable vtt.opening-tool.openingTool: ConstructionTool<"opening">`
 
+The opening tool: where nothing is previewed there is nothing to measure, so the ruler's readout goes with the ghost.
+
 ### `variable vtt.path-brush-tool.pathBrushTool: ConstructionTool<"path-brush">`
 
 A road is laid by gesture -- a click and a click for a straight span, a
@@ -3362,7 +3815,7 @@ and lays what it is handed.
 
 ### `interface vtt.road-body-target.RoadSnapTarget`
 
-What the pointer resolved to at one instant -- `nodeId` present only when it hit a node handle.
+What an anchor snap lands on: a point, and whether it is a place along a span rather than a node.
 
 ### `property vtt.road-body-target.RoadSnapTarget.face?: { centre: ConstructionPosition; normal: ConstructionPosition }`
 
@@ -3380,6 +3833,10 @@ The way the camera looks, when the view gave it -- see `build-frame.ts`.
 
 The pointer's ray from the camera, when the view gave one -- see `pointer-ray.ts`.
 
+### `property vtt.road-body-target.RoadSnapTarget.ruled?: { x: number; z: number }`
+
+How far the ruler moved the hit, in plan, to land it on a corner, side or line-up -- `pointerAtHeight` carries it onto the ray, so a tool reading the ray is ruled like one reading the point.
+
 ### `property vtt.road-body-target.RoadSnapTarget.screenX?: number`
 
 ### `property vtt.road-body-target.RoadSnapTarget.screenY?: number`
@@ -3391,6 +3848,8 @@ Screen coordinate used by explicit elevation gestures.
 ### `property vtt.road-body-target.RoadSnapTarget.snapEdge?: { edgeId: string; parameter: number }`
 
 ### `property vtt.road-body-target.RoadSnapTarget.snapSignature?: string`
+
+### `property vtt.road-body-target.RoadSnapTarget.span?: boolean`
 
 ### `property vtt.road-body-target.RoadSnapTarget.surfaceRef?: string`
 
@@ -4203,13 +4662,31 @@ Boundary edges running along the top, the paired half of the same subdivision.
 
 ### `property vtt.use-construction-pointer.ConstructionPointerHandlers.onPointerUp: (event: PointerEvent<HTMLDivElement>) => void`
 
+### `interface vtt.use-construction-pointer.RulerReadout`
+
+The ruler's words for the point under the pointer, with where the pointer is on screen.
+
+### `property vtt.use-construction-pointer.RulerReadout.labels: readonly string[]`
+
+### `property vtt.use-construction-pointer.RulerReadout.x: number`
+
+### `property vtt.use-construction-pointer.RulerReadout.y: number`
+
 ### `interface vtt.use-construction-pointer.UseConstructionPointerOptions`
 
 ### `property vtt.use-construction-pointer.UseConstructionPointerOptions.activeTool: ConstructionToolId`
 
 ### `property vtt.use-construction-pointer.UseConstructionPointerOptions.history: EditHistoryStack`
 
+### `property vtt.use-construction-pointer.UseConstructionPointerOptions.measureUnit: MeasureUnitId`
+
+The unit the ruler writes its distances in -- the table's own choice.
+
 ### `property vtt.use-construction-pointer.UseConstructionPointerOptions.onFeedbackChange: (feedback: ConstructionToolFeedback | undefined) => void`
+
+### `property vtt.use-construction-pointer.UseConstructionPointerOptions.onRulerReadout?: (readout: RulerReadout | undefined) => void`
+
+What the ruler says in words, and where the pointer is on screen; `undefined` when there is nothing to say.
 
 ### `property vtt.use-construction-pointer.UseConstructionPointerOptions.onSelectionChange: (info: SelectedNodeInfo | undefined) => void`
 
@@ -4217,11 +4694,11 @@ Boundary edges running along the top, the paired half of the same subdivision.
 
 Lets a tool rewrite its own params, e.g. to show its selection's settings in the panel.
 
+### `property vtt.use-construction-pointer.UseConstructionPointerOptions.rulerSettings?: RulerSettings`
+
+What the table asks of its ruler: what catches, the angle's step and the round number a length lands on.
+
 ### `property vtt.use-construction-pointer.UseConstructionPointerOptions.runtime: TabletopRuntime`
-
-### `property vtt.use-construction-pointer.UseConstructionPointerOptions.snapToGrid: boolean`
-
-When true, a resolved point (other than an existing node handle -- those stay precise) snaps to the nearest grid intersection before any tool sees it, so a new terrain cell/wall/room lands centered on the grid instead of wherever the pointer happened to be.
 
 ### `property vtt.use-construction-pointer.UseConstructionPointerOptions.structureEditParams: StructureEditParams`
 
@@ -4743,6 +5220,18 @@ their ids are made or read.
 ### `function vtt.global-handle-ids.globalHandleOf(id: string): { kind: GlobalHandleKind; nodeId: string } | undefined`
 
 Which global handle `id` names, and after which node; `undefined` for anything else.
+
+### `variable vtt.handle-measurement.HANDLE_MEASUREMENT: Readonly<Record<GlobalHandleKind, EditMeasureName | "none">>`
+
+What a handle measures while it is dragged -- declared here with its kind,
+so the ruler reads it off the handle and no gesture carries a `switch` of
+its own. Its movement (`HandleMotion`) says how it moves; this says what is
+worth knowing of that move: how far it went, how long a side became, how
+high the structure stands, how much it climbs, how far it turned. `"none"`
+is a handle that is clicked, not dragged.
+
+A height is also what the table's round number lands on: a handle measured
+as `"height"` is one the ruler rounds.
 
 ### `type vtt.handle-motion.HandleMotion = { kind: "free" } | { kind: "plane" } | { kind: "vertical" } | { center: PlanPoint; kind: "orbit" } | { direction: PlanPoint; kind: "line" } | { kind: "fixed" }`
 
@@ -5511,49 +6000,9 @@ nothing to let go.
 
 What of `handle`'s drag snaps: the nodes of the part it drags, or -- dragging the whole -- the lowest of its structure's.
 
-### `function vtt.handle-release.snapMagnetsOf(scene: GlobalHandleScene, handle: GlobalHandle): readonly Magnet[]`
+### `function vtt.handle-release.snapLinksOf(scene: GlobalHandleScene, handle: GlobalHandle): RulerLinks`
 
 What `handle`'s drag snaps onto: every other structure's outline -- but, dragging the whole, not what goes with it.
-
-### `interface vtt.outline-snap.Magnet`
-
-A level run of another structure's outline, by its two nodes.
-
-### `property vtt.outline-snap.Magnet.a: { id: string; position: ConstructionPosition }`
-
-### `property vtt.outline-snap.Magnet.b: { id: string; position: ConstructionPosition }`
-
-### `interface vtt.outline-snap.OutlineSnap`
-
-The snapped displacement, which anchor snapped, and the nodes of what it snapped onto.
-
-### `property vtt.outline-snap.OutlineSnap.anchor: string`
-
-### `property vtt.outline-snap.OutlineSnap.delta: ConstructionPosition`
-
-### `property vtt.outline-snap.OutlineSnap.magnet: readonly string[]`
-
-### `interface vtt.outline-snap.SnapAnchor`
-
-A node the handle drags that may snap, where it stood when the drag began.
-
-### `property vtt.outline-snap.SnapAnchor.id: string`
-
-### `property vtt.outline-snap.SnapAnchor.position: ConstructionPosition`
-
-### `variable vtt.outline-snap.SNAP_REACH: 0.2`
-
-How close, in plan, an anchor must come to a magnet to snap onto it.
-
-### `function vtt.outline-snap.outlineMagnets(topologies: readonly ConstructionRegionTopology[], skip: ReadonlySet<string>, isGround: (surfaceType: string) => boolean): readonly Magnet[]`
-
-Every level run of the outlines of `topologies` but those `skip` names, and the ground's -- what a dragged structure snaps onto.
-
-### `function vtt.outline-snap.snapToOutlines(anchors: readonly SnapAnchor[], delta: ConstructionPosition, motion: HandleMotion, magnets: readonly Magnet[], reach: number): OutlineSnap | undefined`
-
-`delta` snapped: the anchors, moved by it, onto the nearest magnet corner
-within SNAP_REACH, else onto the nearest magnet run -- only ever
-along the handle's own `motion`; `undefined` when none is within reach.
 
 ### `function vtt.rigid-carry.fitRigidMotion(pairs: readonly { from: ConstructionPosition; to: ConstructionPosition }[]): Place`
 
@@ -5732,6 +6181,387 @@ Every end among `links` taken off its floors -- and the ground against
 them -- as one replacement; `undefined` when none holds it. A floor drawn
 along the end walks the end's very edge: it is given an edge of its own
 there first, so the end keeps its edge and the floor lets go of it.
+
+### `interface vtt.anchors.OutlineSnap`
+
+The snapped displacement, which anchor snapped, and what it caught.
+
+### `property vtt.anchors.OutlineSnap.anchor: string`
+
+### `property vtt.anchors.OutlineSnap.delta: ConstructionPosition`
+
+### `property vtt.anchors.OutlineSnap.guides: readonly RulerGuide[]`
+
+### `property vtt.anchors.OutlineSnap.joins: boolean`
+
+Whether it landed on an outline -- a corner or a side -- and is to be joined there.
+
+### `property vtt.anchors.OutlineSnap.magnet: readonly string[]`
+
+The nodes of the corner or side it landed on; empty for a line-up or a matched length.
+
+### `property vtt.anchors.OutlineSnap.measures: readonly RulerMeasure[]`
+
+### `interface vtt.anchors.SnapAnchor`
+
+A node the handle drags that may snap, where it stood when the drag began.
+
+### `property vtt.anchors.SnapAnchor.id: string`
+
+### `property vtt.anchors.SnapAnchor.position: ConstructionPosition`
+
+### `variable vtt.anchors.SNAP_REACH: 0.2`
+
+How close, in plan, an anchor must come to a link to snap onto it.
+
+### `function vtt.anchors.snapToOutlines(anchors: readonly SnapAnchor[], delta: ConstructionPosition, motion: HandleMotion, links: RulerLinks, options: { disabled?: ReadonlySet<"midpoint" | "side" | "corner" | "length" | "square" | "align" | "intersection" | "angle" | "polar" | "level">; origin?: ConstructionPosition; reach?: number; snap?: boolean }): OutlineSnap | undefined`
+
+`delta` ruled: each anchor, moved by it, asked of the ruler -- the nearest
+catch of the best kind wins -- only ever along the handle's own `motion`;
+`undefined` when nothing is within reach. `snap: false` leaves `delta` as
+it is and only reports what was near, for the guides.
+
+### `interface vtt.axis.AxisCatch`
+
+### `property vtt.axis.AxisCatch.part: AxisPart`
+
+### `property vtt.axis.AxisCatch.shift: number`
+
+How far the moving part goes to land on `target`.
+
+### `property vtt.axis.AxisCatch.target: AxisTarget`
+
+### `interface vtt.axis.AxisTarget`
+
+What a coordinate on the line can be lined up with.
+
+### `property vtt.axis.AxisTarget.at?: { s: number; v: number }`
+
+Where, in the caller's own frame, the target stands -- for drawing the guide to it.
+
+### `property vtt.axis.AxisTarget.part: "center" | "edge"`
+
+An edge lines up with an edge, a centre with a centre.
+
+### `property vtt.axis.AxisTarget.value: number`
+
+### `type vtt.axis.AxisMoving = "both" | "start" | "end" | "none"`
+
+What of the box may move to be lined up. `both` slides the whole box; `start`/`end` move that edge alone; `none` is held.
+
+### `type vtt.axis.AxisPart = "start" | "center" | "end"`
+
+Which part of the box is the one a coordinate belongs to.
+
+### `function vtt.axis.catchOnAxis(start: number, end: number, moving: AxisMoving, targets: readonly AxisTarget[], reach: number): AxisCatch | undefined`
+
+The nearest line-up within `reach` for a box from `start` to `end`: an edge
+on a target edge, or its centre on a target centre. `undefined` when
+nothing is near. Ties go to the edge: flush beats centred.
+
+### `function vtt.axis.gapCenter(start: number, end: number, bounds: readonly (readonly [number, number])[], limits: readonly [number, number]): number | undefined`
+
+The middle of the free stretch the box `start`..`end` sits in, between what
+stands on either side -- `bounds` are the edges of what stands (the line's
+own ends included), as `[low, high]` pairs. A box centred there has the
+same gap on both sides. `undefined` when it lies in no free stretch.
+
+### `function vtt.axis.gapsAround(start: number, end: number, bounds: readonly (readonly [number, number])[], limits: readonly [number, number]): { after: number; before: number }`
+
+The free room on each side of the box: how far to what stands, or to the line's end.
+
+### `function vtt.axis.holdsOnAxis(start: number, end: number, targets: readonly AxisTarget[], tolerance: number): readonly { part: AxisPart; target: AxisTarget }[]`
+
+Every line-up that already holds, within `tolerance` -- what to draw as guides whether or not the snap was taken.
+
+### `type vtt.edit-measures.EditMeasureKind = { kind: "move" } | { direction: PlanVector; kind: "side" } | { base: number; kind: "height" } | { kind: "slope" } | { direction: PlanVector; kind: "radius" } | { angle: number; kind: "turn" }`
+
+What an edit by a handle is measured as. Every handle of every structure
+says which of these it is -- never a type -- and the ruler writes the
+numbers: the exact size an edit leaves, not only how much it changed, so
+what is dragged can be set to a size, not guessed at.
+
+### `type vtt.edit-measures.EditMeasureName = EditMeasureKind["kind"]`
+
+The kinds of measurement, by name: what a handle declares it measures.
+
+### `function vtt.edit-measures.baseHeight(heights: Iterable<number>, fallback: number): number`
+
+The lowest height among `heights` -- the base a structure rises from; `fallback` when there are none.
+
+### `function vtt.edit-measures.editMeasureOf(name: "move" | "height" | "radius" | "side" | "slope" | "turn", using: { angle: number; base: number; direction: PlanVector }): EditMeasureKind`
+
+The measurement named `name`, with what it needs: the direction a side or a radius is pushed along, the base a height is above, the angle turned.
+
+### `function vtt.edit-measures.measuresOfEdit(what: EditMeasureKind, from: ConstructionPosition, at: ConstructionPosition): readonly RulerMeasure[]`
+
+What to say of an edit that moved a handle from `from` to `at`, as the ruler's measures.
+
+### `interface vtt.links.CollectOptions`
+
+### `property vtt.links.CollectOptions.isGround: (surfaceType: string) => boolean`
+
+Whether a `surfaceType` is ground, which has no links.
+
+### `property vtt.links.CollectOptions.skip?: ReadonlySet<string>`
+
+Faces left out by key -- what is being dragged never links to itself.
+
+### `interface vtt.links.LinkPoint`
+
+A node of a standing outline: a corner something can be joined to.
+
+### `property vtt.links.LinkPoint.id: string`
+
+### `property vtt.links.LinkPoint.position: ConstructionPosition`
+
+### `interface vtt.links.LinkRun`
+
+A level run of a standing outline, by its two nodes: a side something can lie along.
+
+### `property vtt.links.LinkRun.a: LinkPoint`
+
+### `property vtt.links.LinkRun.b: LinkPoint`
+
+### `interface vtt.links.RulerLinks`
+
+Everything a construction can be joined to, lined up with or matched in height to.
+
+### `property vtt.links.RulerLinks.levels: readonly number[]`
+
+The distinct heights at which something stands, ascending.
+
+### `property vtt.links.RulerLinks.midpoints?: readonly LinkPoint[]`
+
+The middle of every level run: a place to line up with or land on, never a node to join.
+
+### `property vtt.links.RulerLinks.points: readonly LinkPoint[]`
+
+The corners: real nodes, which a structure can be joined to.
+
+### `property vtt.links.RulerLinks.runs: readonly LinkRun[]`
+
+### `function vtt.links.collectLinks(topologies: readonly ConstructionRegionTopology[], options: CollectOptions): RulerLinks`
+
+The links of every standing face of `topologies` but the ones `options` leave out.
+
+### `interface vtt.measure-unit.MeasureUnit`
+
+### `property vtt.measure-unit.MeasureUnit.digits: number`
+
+Digits shown after the point.
+
+### `property vtt.measure-unit.MeasureUnit.id: MeasureUnitId`
+
+### `property vtt.measure-unit.MeasureUnit.label: string`
+
+### `property vtt.measure-unit.MeasureUnit.metres: number`
+
+How many metres one of this unit is.
+
+### `property vtt.measure-unit.MeasureUnit.symbol: string`
+
+### `type vtt.measure-unit.MeasureUnitId = "m" | "ft" | "sq"`
+
+The unit every length is shown in -- the table's own choice. Lengths are
+kept in metres everywhere else; this is the only place that knows any other
+unit, so a measure, a panel and a tool all read one answer.
+
+### `variable vtt.measure-unit.DEFAULT_MEASURE_UNIT: MeasureUnitId`
+
+### `variable vtt.measure-unit.MEASURE_UNITS: Readonly<Record<MeasureUnitId, MeasureUnit>>`
+
+A square is 5 ft -- the tabletop's usual cell.
+
+### `function vtt.measure-unit.formatLength(metres: number, unit: MeasureUnitId): string`
+
+`metres` written in `unit`: "3.05 m", "10.0 ft". A trailing zero fraction is kept so a changing length does not jitter in width.
+
+### `function vtt.measure-unit.fromMetres(metres: number, unit?: MeasureUnitId): number`
+
+`metres` in `unit`.
+
+### `function vtt.measure-unit.isMeasureUnitId(value: unknown): value is MeasureUnitId`
+
+### `function vtt.measure-unit.toMetres(value: number, unit?: MeasureUnitId): number`
+
+`value` of `unit`, in metres.
+
+### `interface vtt.resolve.PlanVector`
+
+### `property vtt.resolve.PlanVector.x: number`
+
+### `property vtt.resolve.PlanVector.z: number`
+
+### `interface vtt.resolve.RulerQuery`
+
+### `property vtt.resolve.RulerQuery.accept?: (landing: ConstructionPosition, run: LinkRun) => boolean`
+
+Refuses a snap onto a run the caller knows would not hold. Gets where the point would land.
+
+### `property vtt.resolve.RulerQuery.acquire?: number`
+
+How far from the point a link may stand and still offer its lines: what is not near is not acquired, so a full map does not draw a lattice.
+
+### `property vtt.resolve.RulerQuery.axes?: readonly [PlanVector, PlanVector]`
+
+The two directions lines are lined up along -- a build frame's, else the world's. Unit length, square to each other.
+
+### `property vtt.resolve.RulerQuery.disabled?: ReadonlySet<"midpoint" | "side" | "corner" | "length" | "square" | "align" | "intersection" | "angle" | "polar" | "level">`
+
+Ways of catching left out.
+
+### `property vtt.resolve.RulerQuery.holding?: string`
+
+The catch held last time -- its RulerResult.key -- which stays on past the reach, up to HOLD_FACTOR times it.
+
+### `property vtt.resolve.RulerQuery.lengthStep?: number`
+
+The round number, in metres, a length from `origin` lands on when near one: 1 for whole metres. None when absent.
+
+### `property vtt.resolve.RulerQuery.links: RulerLinks`
+
+### `property vtt.resolve.RulerQuery.motion?: RulerMotion`
+
+### `property vtt.resolve.RulerQuery.origin?: ConstructionPosition`
+
+Where what is being drawn began: its length is measured from here, and may match a standing run's.
+
+### `property vtt.resolve.RulerQuery.point: ConstructionPosition`
+
+Where the point would stand with no ruler.
+
+### `property vtt.resolve.RulerQuery.polar?: number`
+
+Steps of the protractor from `origin`, in radians; none when absent. They count from the nearest standing side, or the world's x axis when none is near.
+
+### `property vtt.resolve.RulerQuery.reach?: number`
+
+How close a link must come to catch, in metres. The caller works it out from the screen, so the feel does not change with the zoom.
+
+### `property vtt.resolve.RulerQuery.skip?: ReadonlySet<string>`
+
+Links by node id the point never joins -- itself, where it began.
+
+### `property vtt.resolve.RulerQuery.snap?: boolean`
+
+Whether the answer is taken. Off, the position stays and the guides still say what was near.
+
+### `interface vtt.resolve.RulerResult`
+
+### `property vtt.resolve.RulerResult.caught: "point" | "length" | "square" | "step" | "align" | "intersection" | "angle" | "polar" | "run" | undefined`
+
+What caught, whether or not it was taken.
+
+### `property vtt.resolve.RulerResult.guides: readonly RulerGuide[]`
+
+### `property vtt.resolve.RulerResult.key: string | undefined`
+
+Names the catch, to be handed back as RulerQuery.holding on the next question.
+
+### `property vtt.resolve.RulerResult.measures: readonly RulerMeasure[]`
+
+### `property vtt.resolve.RulerResult.position: ConstructionPosition`
+
+Where the point stands: snapped when `snap` was asked for and something caught, else as it came.
+
+### `type vtt.resolve.RulerGuide = { at: ConstructionPosition; kind: "point"; node: string; role: "corner" | "midpoint" | "node" | "span" } | { a: ConstructionPosition; at: ConstructionPosition; b: ConstructionPosition; kind: "run" } | { from: ConstructionPosition; kind: "square"; relation: "perpendicular" | "collinear"; run: readonly [ConstructionPosition, ConstructionPosition]; to: ConstructionPosition } | { from: ConstructionPosition; kind: "align"; node: string; to: ConstructionPosition } | { at: ConstructionPosition; kind: "cross" } | { kind: "length"; meters: number; run: readonly [ConstructionPosition, ConstructionPosition] } | { kind: "angle"; origin: ConstructionPosition; relation: "parallel" | "perpendicular"; run: readonly [ConstructionPosition, ConstructionPosition]; to: ConstructionPosition } | { degrees: number; from: "edge" | "world" | "start"; kind: "polar"; origin: ConstructionPosition; to: ConstructionPosition; zero: number } | { at: ConstructionPosition; kind: "step"; meters: number } | { at: ConstructionPosition; kind: "level"; y: number }`
+
+### `type vtt.resolve.RulerKind = typeof RULER_KINDS[number]`
+
+### `type vtt.resolve.RulerMeasure = { from: ConstructionPosition; kind: "length" | "gap"; meters: number; to: ConstructionPosition } | { kind: "height"; level: number; meters: number } | { kind: "size"; meters: number; name: string } | { kind: "change"; meters: number; name: string } | { degrees: number; kind: "angle"; name?: string; reference?: { relation: "parallel" | "perpendicular"; run: readonly [ConstructionPosition, ConstructionPosition] } }`
+
+Something worth saying about what is built or edited. Distances are always
+in metres -- `formatLength` writes them in the table's unit.
+
+### `type vtt.resolve.RulerMotion = { kind: "free" } | { direction: PlanVector; kind: "line" }`
+
+What moves the point: anywhere on the ground, or only along `direction` (unit length).
+
+### `variable vtt.resolve.HOLD_FACTOR: 1.6`
+
+A catch already held stays until the point is this many times further than the reach: no flicker at the edge.
+
+### `variable vtt.resolve.LEVEL_REACH: 0.15`
+
+How close, in height, a level must come to catch.
+
+### `variable vtt.resolve.RULER_KINDS: readonly ["corner", "midpoint", "side", "square", "align", "intersection", "angle", "polar", "length", "level"]`
+
+Every way the ruler can catch, so a table can say which it wants.
+
+### `variable vtt.resolve.RULER_REACH: 0.2`
+
+How close, in plan, a point must come to a link for it to catch -- when the caller knows no better, in metres.
+
+### `function vtt.resolve.resolveLevel(y: number, links: RulerLinks, at: ConstructionPosition, options: { disabled?: ReadonlySet<"midpoint" | "side" | "corner" | "length" | "square" | "align" | "intersection" | "angle" | "polar" | "level">; reach?: number; snap?: boolean }): { guide?: RulerGuide; y: number }`
+
+`y` landed on the nearest standing level within reach, when the snap is on; else as it came.
+
+### `function vtt.resolve.resolveRuler(query: RulerQuery): RulerResult`
+
+What the ruler says of a point on the ground: where it lands, what to draw and what to measure.
+
+### `function vtt.resolve.roundWithin(value: number, step: number, reach: number): number | undefined`
+
+`value` rounded to a multiple of `step` when within `reach` of one; `undefined`
+when it is not near one, or there is no step. What makes a height, a length or
+a size land on a whole number of the table's unit.
+
+### `function vtt.resolve.snapTurn(angle: number, step: number, reach: number, radius: number): { angle: number; turns: number } | undefined`
+
+`angle` -- a turn, in radians -- landed on the nearest multiple of `step` when
+within a few pixels of one, seen from `radius` away: the same reach as every
+other catch, so a wide turn is held to a finer angle than a tight one.
+`undefined` when it is near none, or there is no step.
+
+### `interface vtt.settings.RulerSettings`
+
+What a table asks of its ruler: which ways of catching are on, how coarse
+the angles it offers are, and the round number lengths are made to land on.
+The table's own choice, so one value read by every tool and every readout.
+
+### `property vtt.settings.RulerSettings.angleStep: number`
+
+The angular step of the protractor, in degrees: a direction lands on a multiple of it.
+
+### `property vtt.settings.RulerSettings.disabled: ReadonlySet<"midpoint" | "side" | "corner" | "length" | "square" | "align" | "intersection" | "angle" | "polar" | "level">`
+
+Ways of catching left out.
+
+### `property vtt.settings.RulerSettings.lengthStep: number`
+
+The round number a length lands on, in the table's unit: 1 means whole units. 0 leaves lengths as they are.
+
+### `property vtt.settings.RulerSettings.numbers: boolean`
+
+Whether the numbers are written on the map -- at the teeth, along the lines, round the protractor -- besides the one at the pointer.
+
+### `variable vtt.settings.ANGLE_STEPS: readonly number[]`
+
+The angular steps the table can choose, in degrees.
+
+### `variable vtt.settings.DEFAULT_RULER_SETTINGS: RulerSettings`
+
+### `variable vtt.settings.FINE_ANGLE_STEP: 5`
+
+The finer angular step held with Shift, in degrees: the protractor's own graduation.
+
+### `variable vtt.settings.LENGTH_STEPS: readonly number[]`
+
+The round numbers the table can choose, in its unit; 0 is none.
+
+### `function vtt.settings.parseRulerSettings(raw: unknown): RulerSettings`
+
+The settings read back from what was stored; anything unreadable is the default, a value out of range is too. The old form -- only the list of what is off -- still reads.
+
+### `function vtt.settings.serializeRulerSettings(settings: RulerSettings): unknown`
+
+The settings as they are stored.
+
+### `function vtt.structure-dims.dimensionsOf(faces: readonly ConstructionRegionTopology[]): readonly RulerMeasure[]`
+
+The structure `faces` make: how high it is, and how long and deep -- along its own running direction.
 
 ### `reference vtt.spine.spineGlobalHandleId -> vtt.global-handle-ids.globalHandleId`
 
@@ -10952,6 +11782,16 @@ How the handle is drawn; absent is a plain point.
 
 ### `property vtt.scene-render-port.RenderPointManipulator.position: { x: number; y: number; z: number }`
 
+### `interface vtt.scene-render-port.RenderPreviewLabel`
+
+One number written on the map: where it stands, what it says and how tall it is written, in world metres.
+
+### `property vtt.scene-render-port.RenderPreviewLabel.height: number`
+
+### `property vtt.scene-render-port.RenderPreviewLabel.position: { x: number; y: number; z: number }`
+
+### `property vtt.scene-render-port.RenderPreviewLabel.text: string`
+
 ### `interface vtt.scene-render-port.RenderSurfacePickTarget`
 
 ### `property vtt.scene-render-port.RenderSurfacePickTarget.mesh: RenderMeshData`
@@ -11037,6 +11877,13 @@ Resolves a pointer position (in the view's CSS pixels) to what it hit, or `undef
 Sets the floor-cutaway height in continuous world-space Y. `undefined` disables cutaway.
 
 ### `method vtt.scene-render-port.SceneRenderPort.setPointManipulator(viewId: string, target: RenderPointManipulator | undefined): void`
+
+### `method vtt.scene-render-port.SceneRenderPort.showLabels(labels: readonly RenderPreviewLabel[], channel: string): void`
+
+Writes numbers on the map -- each a camera-facing label, drawn above
+everything and never pickable -- on a named channel of their own. A set
+shorter than the channel's last takes the surplus down; `clearPreview` of
+the channel takes them all down.
 
 ### `method vtt.scene-render-port.SceneRenderPort.showPreview(descriptor: RenderPreviewDescriptor, channel?: string): void`
 
@@ -11400,7 +12247,7 @@ Invoked when the drawer requests to close, e.g. its own close button or Escape.
 
 Whether the drawer is currently shown.
 
-### `property vtt.ui.DrawerProps.placement?: "top" | "right" | "left" | "bottom"`
+### `property vtt.ui.DrawerProps.placement?: "left" | "right" | "bottom" | "top"`
 
 Which screen edge the drawer slides in from.
 
@@ -11420,7 +12267,7 @@ Public inputs for a small handle fused to one edge of a panel, toggling it open/
 
 Optional caller-owned class name for layout composition.
 
-### `property vtt.ui.EdgeHandleProps.edge: "right" | "left"`
+### `property vtt.ui.EdgeHandleProps.edge: "left" | "right"`
 
 Which edge of the panel the handle protrudes from -- `"right"` bulges
 rightward (for a panel anchored to the screen's left edge), `"left"`
@@ -11491,7 +12338,7 @@ Ant Design does not do that on its own. Uncontrolled (starts collapsed,
 closes only on its own trigger/outside click) when omitted. Ignored
 when `alwaysExpanded` is set.
 
-### `property vtt.ui.FloatButtonGroupProps.placement?: "top" | "right" | "left" | "bottom"`
+### `property vtt.ui.FloatButtonGroupProps.placement?: "left" | "right" | "bottom" | "top"`
 
 Which side the group expands toward from the trigger -- `"top"`/`"bottom"`
 stack items in a vertical column, `"left"`/`"right"` lay them out in a
@@ -11749,7 +12596,7 @@ Invoked when the popover requests to close, e.g. an outside click or Escape.
 
 Whether the popover is currently shown.
 
-### `property vtt.ui.PopoverProps.placement?: "top" | "right" | "left" | "bottom"`
+### `property vtt.ui.PopoverProps.placement?: "left" | "right" | "bottom" | "top"`
 
 Which side of `anchor` the popover opens toward.
 
@@ -11793,7 +12640,7 @@ The panel's own content.
 
 Caller-owned class name for the panel's own container (use this for background, shadows, borders).
 
-### `property vtt.ui.SlidingPanelProps.edge: "right" | "left"`
+### `property vtt.ui.SlidingPanelProps.edge: "left" | "right"`
 
 Which screen edge the panel is anchored to.
 
@@ -12010,8 +12857,6 @@ Picks the opening preset and activates the opening tool.
 
 ### `property vtt.widgets.ConstructionDockProps.onRedo: () => void`
 
-### `property vtt.widgets.ConstructionDockProps.onSnapToGridChange: (snap: boolean) => void`
-
 ### `property vtt.widgets.ConstructionDockProps.onToggleSettings?: () => void`
 
 ### `property vtt.widgets.ConstructionDockProps.onToolChange: (tool: ConstructionToolId) => void`
@@ -12025,8 +12870,6 @@ Which opening preset the Aberturas blocks show as picked.
 ### `property vtt.widgets.ConstructionDockProps.ready: boolean`
 
 ### `property vtt.widgets.ConstructionDockProps.settingsOpen?: boolean`
-
-### `property vtt.widgets.ConstructionDockProps.snapToGrid: boolean`
 
 ### `interface vtt.widgets.ConstructionHotbarProps`
 
@@ -12050,6 +12893,18 @@ Which opening preset the Aberturas blocks show as picked.
 
 How a grab on an existing structure behaves -- ambient, not tied to `activeTool`, since every construction tool can now grab and edit whatever it owns.
 
+### `interface vtt.widgets.RulerReadoutProps`
+
+### `property vtt.widgets.RulerReadoutProps.labels: readonly string[]`
+
+What the ruler says, one line each -- already written in the table's unit.
+
+### `property vtt.widgets.RulerReadoutProps.x: number`
+
+Where the pointer is, in viewport pixels.
+
+### `property vtt.widgets.RulerReadoutProps.y: number`
+
 ### `interface vtt.widgets.SelectedNodeInfo`
 
 ### `property vtt.widgets.SelectedNodeInfo.id: string`
@@ -12062,13 +12917,25 @@ A plain `{x,y,z}` shape rather than importing `ConstructionPosition` -- `widgets
 
 ### `property vtt.widgets.SettingsDrawerProps.activeTool: ConstructionToolId`
 
+### `property vtt.widgets.SettingsDrawerProps.measureUnit: MeasureUnitId`
+
+The unit the table writes every distance in.
+
+### `property vtt.widgets.SettingsDrawerProps.onMeasureUnitChange: (unit: MeasureUnitId) => void`
+
 ### `property vtt.widgets.SettingsDrawerProps.onOpenChange?: (open: boolean) => void`
+
+### `property vtt.widgets.SettingsDrawerProps.onRulerSettingsChange: (settings: RulerSettings) => void`
 
 ### `property vtt.widgets.SettingsDrawerProps.onStructureEditParamsChange: (next: StructureEditParams) => void`
 
 ### `property vtt.widgets.SettingsDrawerProps.onToolParamsChange: (toolId: Id, next: ToolParamsByTool[Id]) => void`
 
 ### `property vtt.widgets.SettingsDrawerProps.open?: boolean`
+
+### `property vtt.widgets.SettingsDrawerProps.rulerSettings: RulerSettings`
+
+What the table asks of its ruler: what catches, the angle's step and the round number a length lands on.
 
 ### `property vtt.widgets.SettingsDrawerProps.selectedNodeInfo: SelectedNodeInfo | null`
 
@@ -12086,13 +12953,9 @@ A plain `{x,y,z}` shape rather than importing `ConstructionPosition` -- `widgets
 
 ### `property vtt.widgets.ToolRailProps.onRedo: () => void`
 
-### `property vtt.widgets.ToolRailProps.onSnapToGridChange: (snap: boolean) => void`
-
 ### `property vtt.widgets.ToolRailProps.onToolChange: (tool: ConstructionToolId) => void`
 
 ### `property vtt.widgets.ToolRailProps.onUndo: () => void`
-
-### `property vtt.widgets.ToolRailProps.snapToGrid: boolean`
 
 ### `property vtt.widgets.ToolRailProps.tool: ConstructionToolId`
 
@@ -12139,6 +13002,10 @@ editing a field here only ever updates `params[activeTool]` -- it never
 knows how a tool turns its own parameters into geometry, that lives in
 `composition/tabletop/tools/*.ts`.
 
+### `function vtt.widgets.RulerReadout(props: RulerReadoutProps): Element`
+
+The ruler's distances, written next to the pointer while something is being built.
+
 ### `function vtt.widgets.SettingsDrawer(props: SettingsDrawerProps): Element`
 
 The right-side settings/inspector drawer: selection inspector, the active
@@ -12150,8 +13017,7 @@ product-specific content.
 
 ### `function vtt.widgets.ToolRail(props: ToolRailProps): Element`
 
-The left rail: navigate/move-node tool selection, the grid-snap toggle,
-and undo/redo -- always visible as a plain button column (no separate
+The left rail: navigate/move-node tool selection, and undo/redo -- always visible as a plain button column (no separate
 open/close trigger), edit-mode only. Grid snap sits here (not in the
 construction hotbar) because it is not itself a tool -- it modifies every
 construction tool's resolved point the same way, via
@@ -12165,15 +13031,11 @@ construction tool's resolved point the same way, via
 
 ### `property vtt.use-keyboard-shortcuts.KeyboardShortcutsOptions.onRedo: () => void`
 
-### `property vtt.use-keyboard-shortcuts.KeyboardShortcutsOptions.onSnapToGridChange: (snap: boolean) => void`
-
 ### `property vtt.use-keyboard-shortcuts.KeyboardShortcutsOptions.onToolChange: (tool: ConstructionToolId) => void`
 
 ### `property vtt.use-keyboard-shortcuts.KeyboardShortcutsOptions.onUndo: () => void`
 
 ### `property vtt.use-keyboard-shortcuts.KeyboardShortcutsOptions.ready: boolean`
-
-### `property vtt.use-keyboard-shortcuts.KeyboardShortcutsOptions.snapToGrid: boolean`
 
 ### `function vtt.use-keyboard-shortcuts.useKeyboardShortcuts(options: KeyboardShortcutsOptions): void`
 

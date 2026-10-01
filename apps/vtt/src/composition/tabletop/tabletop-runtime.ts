@@ -61,6 +61,7 @@ import type {
   RemoveSurfaceRequest,
   RenderMeshData,
   RenderPreviewDescriptor,
+  RenderPreviewLabel,
   RenderViewId,
   ScenePickResult,
   SceneRenderMetrics,
@@ -244,6 +245,8 @@ export interface TabletopRuntime extends BezierPort {
   pick(viewId: RenderViewId, x: number, y: number): ScenePickResult | undefined;
   /** Shows a construction tool's not-yet-committed ghost. Purely visual -- passthrough to `SceneRenderPort`, never touches the construction session. */
   showPreview(descriptor: RenderPreviewDescriptor, channel?: string): void;
+  /** Writes numbers on the map, on a channel of their own -- see `SceneRenderPort.showLabels`. */
+  showLabels(labels: readonly RenderPreviewLabel[], channel: string): void;
   /** Hides the active tool preview, if any. */
   clearPreview(channel?: string): void;
   attachView(target: HTMLElement): RenderViewId;
@@ -1282,6 +1285,10 @@ export class AppTabletopRuntime implements TabletopRuntime {
 
   setPointManipulator(viewId: RenderViewId, target: RenderPointManipulator | undefined): void {
     this.#render.setPointManipulator?.(viewId, target);
+  }
+
+  showLabels(labels: readonly RenderPreviewLabel[], channel: string): void {
+    this.#render.showLabels(labels, channel);
   }
 
   showPreview(descriptor: RenderPreviewDescriptor, channel?: string): void {

@@ -21,6 +21,8 @@ export interface RulerView {
   readonly angleStep?: number;
   /** Whether the protractor is drawn at all. */
   readonly protractor?: boolean;
+  /** Whether the numbers are written on the map (`ruler-labels.ts`); on unless said otherwise. */
+  readonly numbers?: boolean;
 }
 
 type Point = { readonly x: number; readonly y: number; readonly z: number };
@@ -72,7 +74,7 @@ function drawMarker(out: number[], guide: RulerGuide, h: number): void {
  * Every one is drawn alike: the line, the ruler's teeth counted out from the
  * item, and -- where it comes out of an item -- the protractor round it.
  */
-interface RulerLine {
+export interface RulerLine {
   readonly anchor: Point;
   readonly tip: Point;
   /** The direction the protractor counts from, in radians. */
@@ -90,7 +92,7 @@ const sameLine = (a: RulerLine, b: RulerLine): boolean => {
 };
 
 /** Every line `feedback` has to draw, in one list: guides and measures alike. */
-function linesOf(feedback: RulerFeedback): readonly RulerLine[] {
+export function linesOf(feedback: RulerFeedback): readonly RulerLine[] {
   const lines: RulerLine[] = [];
   const add = (line: RulerLine): void => { if (!lines.some((held) => sameLine(held, line))) lines.push(line); };
   const edge = (a: Point, b: Point): void => add({ anchor: a, tip: b, zero: headingOf(a, b), protractor: false, stroke: true });
@@ -133,7 +135,7 @@ const NICE_SPACINGS = [0.1, 0.25, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000]
 /** Teeth closer than this, on the screen, are a smear: the next spacing is taken. */
 const TOOTH_MIN_PX = 10;
 /** The most teeth drawn along one line. */
-const MAX_TEETH = 200;
+export const MAX_TEETH = 200;
 
 /**
  * The distance between the ruler's teeth, in metres: every round number the
@@ -173,6 +175,39 @@ const DEGREE = Math.PI / 180;
 const PROTRACTOR_GRADUATION = 5;
 const PROTRACTOR_HALF_SPAN = 45;
 
+/** Where the protractor's marks stand, for one line: its radius, and the window of marks either side of the line. Shared by what draws it and what writes its numbers. */
+export interface ProtractorGeometry {
+  readonly origin: Point;
+  readonly zero: number;
+  readonly radius: number;
+  /** The first and last mark of the window, in graduations from the zero. */
+  readonly first: number;
+  readonly last: number;
+  /** Where the mark at `degrees` from the zero stands, at distance `r` from the origin. */
+  readonly at: (degrees: number, r: number) => Point;
+  /** How long a mark of `px` pixels is, in metres. */
+  readonly tick: (px: number) => number;
+}
+
+/** The protractor round `origin` for the line to `to`; `undefined` when the line is too short to hold one. */
+export function protractorOf(origin: Point, to: Point, zero: number, metersPerPixel: number | undefined): ProtractorGeometry | undefined {
+  const length = Math.hypot(to.x - origin.x, to.z - origin.z);
+  if (length < 0.3) return undefined;
+  const radius = Math.min(metersFor(metersPerPixel, 70, 0.8, [0.15, 6]), length * 0.9);
+  const heading = Math.atan2(to.z - origin.z, to.x - origin.x);
+  const relative = (heading - zero) / DEGREE;
+  return {
+    origin, zero, radius,
+    // A hair of slack, so a mark exactly at the window's edge is not lost to rounding.
+    first: Math.ceil((relative - PROTRACTOR_HALF_SPAN) / PROTRACTOR_GRADUATION - 1e-9),
+    last: Math.floor((relative + PROTRACTOR_HALF_SPAN) / PROTRACTOR_GRADUATION + 1e-9),
+    at: (degrees, r) => ({ x: origin.x + Math.cos(zero + degrees * DEGREE) * r, y: origin.y, z: origin.z + Math.sin(zero + degrees * DEGREE) * r }),
+    tick: (px) => metersFor(metersPerPixel, px, 0.1, [0.02, 0.5]),
+  };
+}
+
+export const PROTRACTOR_STEP_DEGREES = PROTRACTOR_GRADUATION;
+
 /**
  * The protractor round where the line began: a mark every five degrees, from
  * `zero` -- the side the angles count from, or the world's axis -- longer at
@@ -180,16 +215,9 @@ const PROTRACTOR_HALF_SPAN = 45;
  * window either side of the line, so it reads and does not fill the screen.
  */
 function drawProtractor(out: number[], origin: Point, to: Point, zero: number, angleStep: number | undefined, metersPerPixel: number | undefined): void {
-  const length = Math.hypot(to.x - origin.x, to.z - origin.z);
-  if (length < 0.3) return;
-  const radius = Math.min(metersFor(metersPerPixel, 70, 0.8, [0.15, 6]), length * 0.9);
-  const tick = (px: number): number => metersFor(metersPerPixel, px, 0.1, [0.02, 0.5]);
-  const heading = Math.atan2(to.z - origin.z, to.x - origin.x);
-  const relative = (heading - zero) / DEGREE;
-  // A hair of slack, so a mark exactly at the window's edge is not lost to rounding.
-  const first = Math.ceil((relative - PROTRACTOR_HALF_SPAN) / PROTRACTOR_GRADUATION - 1e-9);
-  const last = Math.floor((relative + PROTRACTOR_HALF_SPAN) / PROTRACTOR_GRADUATION + 1e-9);
-  const at = (degrees: number, r: number): Point => ({ x: origin.x + Math.cos(zero + degrees * DEGREE) * r, y: origin.y, z: origin.z + Math.sin(zero + degrees * DEGREE) * r });
+  const geometry = protractorOf(origin, to, zero, metersPerPixel);
+  if (!geometry) return;
+  const { radius, first, last, at, tick } = geometry;
   const stepDegrees = angleStep ? angleStep / DEGREE : undefined;
   for (let k = first; k <= last; k += 1) {
     const degrees = k * PROTRACTOR_GRADUATION;
@@ -205,7 +233,7 @@ function drawProtractor(out: number[], origin: Point, to: Point, zero: number, a
 }
 
 /** The most protractors drawn round lines that come out of items, besides the line being drawn: more would be a clutter of arcs. */
-const MAX_ITEM_PROTRACTORS = 2;
+export const MAX_ITEM_PROTRACTORS = 2;
 
 /** One line, drawn one way: the line, the teeth out from its item, and the protractor when it comes out of one. */
 function drawLine(out: number[], line: RulerLine, view: RulerView | undefined, metersPerPixel: number | undefined, protractor: boolean): void {
