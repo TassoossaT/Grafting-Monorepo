@@ -1,4 +1,4 @@
-import { collectLinks, isGroundType, resolveRuler, type PlanVector, type RulerGuide, type RulerKind, type RulerLinks, type RulerMeasure } from "../../../../features/edit-construction/index.ts";
+import { ROUND_REACH_PIXELS, collectLinks, isGroundType, resolveRuler, type PlanVector, type RulerGuide, type RulerKind, type RulerLinks, type RulerMeasure } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionPosition, ConstructionRegionTopology } from "../../../../ports/index.ts";
 import type { PointerSample } from "./tool-context.ts";
 
@@ -67,7 +67,7 @@ function queryOf(point: ConstructionPosition, links: RulerLinks, options: RulePo
     ...(scale !== undefined ? { reach: metersFor(scale, RULER_REACH_PX, 0.2), acquire: metersFor(scale, RULER_ACQUIRE_PX, 8, [1, 40]) } : {}),
     ...(holding !== undefined ? { holding } : {}),
     ...(options.polar !== undefined ? { polar: options.polar } : {}),
-    ...(options.lengthStep !== undefined && options.lengthStep > 0 ? { lengthStep: options.lengthStep } : {}),
+    ...(options.lengthStep !== undefined && options.lengthStep > 0 ? { lengthStep: options.lengthStep, ...(scale !== undefined ? { stepReach: metersFor(scale, ROUND_REACH_PIXELS, 0.34) } : {}) } : {}),
     ...(options.disabled ? { disabled: options.disabled } : {}),
   };
 }

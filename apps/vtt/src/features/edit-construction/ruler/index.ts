@@ -13,3 +13,5 @@ export { ANGLE_STEPS, DEFAULT_RULER_SETTINGS, FINE_ANGLE_STEP, LENGTH_STEPS, par
 export type { RulerSettings } from "./settings.ts";
 export { SNAP_REACH, snapToOutlines } from "./anchors.ts";
 export type { OutlineSnap, SnapAnchor } from "./anchors.ts";
+export { AUTO_LENGTH_STEP, AUTO_STEP_PIXELS, NICE_STEPS, ROUND_REACH_PIXELS, lengthStepOf, niceStep, roundReach } from "./steps.ts";
+export type { LengthStepSetting } from "./steps.ts";

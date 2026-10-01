@@ -1,6 +1,7 @@
 import {
   HOLD_FACTOR,
   LEVEL_REACH,
+  ROUND_REACH_PIXELS,
   RULER_REACH,
   SNAP_REACH,
   baseHeight,
@@ -14,6 +15,7 @@ import {
   isGroundType,
   measuresOfEdit,
   resolveLevel,
+  roundReach,
   roundWithin,
   snapToOutlines,
   snapTurn,
@@ -120,6 +122,8 @@ export interface Ruler {
 export function rulerOf(ctx: ToolContext): Ruler {
   const snap = ctx.rulerSnap;
   const disabled = ctx.rulerDisabled;
+  /** How near a round number a value must come to land on it: stronger than a join's reach, never beyond a share of the step. */
+  const roundReachOf = (step: number): number => roundReach(step, reachFor(ctx, ROUND_REACH_PIXELS, 0.34));
   const reachOf = (way: "along" | "up"): number => (way === "along" ? reachFor(ctx, PLAN_PIXELS, RULER_REACH) : reachFor(ctx, LEVEL_PIXELS, LEVEL_REACH));
   return {
     snap,
@@ -127,7 +131,7 @@ export function rulerOf(ctx: ToolContext): Ruler {
     reach: (pixels, fallback) => reachFor(ctx, pixels, fallback),
     round: (value) => {
       const step = ctx.rulerLengthStep;
-      return snap && step !== undefined ? roundWithin(value, step, reachOf("up")) ?? value : value;
+      return snap && step !== undefined ? roundWithin(value, step, roundReachOf(step)) ?? value : value;
     },
     held: (reach) => reach * HOLD_FACTOR,
 
@@ -144,7 +148,7 @@ export function rulerOf(ctx: ToolContext): Ruler {
       if (level?.guide) return { y: snap ? dragged.y + (level.y - standing) : dragged.y, guides: [level.guide] };
       // Else a round number above where it rises from.
       const step = ctx.rulerLengthStep;
-      const rounded = rounds && snap && step !== undefined ? roundWithin(standing - base, step, reach) : undefined;
+      const rounded = rounds && snap && step !== undefined ? roundWithin(standing - base, step, roundReachOf(step)) : undefined;
       if (rounded === undefined) return { y: dragged.y, guides: [] };
       const y = dragged.y + (base + rounded - standing);
       return { y, guides: [{ kind: "step", at: { ...dragged, y }, meters: rounded }] };

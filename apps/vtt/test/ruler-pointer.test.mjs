@@ -364,3 +364,41 @@ test("a unit left unnamed is the default one in every figure the ruler writes, a
   near(toMetres(2, undefined), 2);
   near(fromMetres(1.524, "sq"), 1);
 });
+
+test("by default the table rounds a length to an easy number that follows the zoom: no 2.99, no 2.97", () => {
+  // The defaults the app starts with: the automatic step. A camera ten metres up makes it a quarter of a metre.
+  const t = table({ rulerSettings: DEFAULT_RULER_SETTINGS });
+  try {
+    t.handlers.onPointerDown(t.event(10, 10));
+    // Far from the floor's own sides (3 and 4 m): 5.91 m out lands on 6; 5.97 as well; and 6.12 -- between two quarters -- is left as drawn.
+    t.handlers.onPointerUp(t.event(15.91, 10));
+    near(t.seen.up[0].point.x, 16, "5.91 m is 6");
+    t.handlers.onPointerDown(t.event(10, 10));
+    t.handlers.onPointerUp(t.event(15.97, 10));
+    near(t.seen.up[1].point.x, 16, "5.97 m is 6");
+    t.handlers.onPointerDown(t.event(10, 10));
+    t.handlers.onPointerUp(t.event(16.12, 10));
+    near(t.seen.up[2].point.x, 16.12, "6.12 m, between two quarters, stays free");
+    // Zoomed out the step is coarser: from forty metres up it is a metre -- 5.9 lands on 6, and 5.6 does not.
+    const far = table({ camera: 40, rulerSettings: DEFAULT_RULER_SETTINGS });
+    try {
+      far.handlers.onPointerDown(far.event(10, 10));
+      far.handlers.onPointerUp(far.event(15.9, 10));
+      near(far.seen.up[0].point.x, 16);
+      far.handlers.onPointerDown(far.event(10, 10));
+      far.handlers.onPointerUp(far.event(15.55, 10));
+      near(far.seen.up[1].point.x, 15.55, "not near a round number");
+    } finally { far.done(); }
+  } finally { t.done(); }
+});
+
+test("a table that turned the round number off, or never gave settings, gets lengths as drawn", () => {
+  for (const options of [{ rulerSettings: { ...DEFAULT_RULER_SETTINGS, lengthStep: 0 } }, {}]) {
+    const t = table(options);
+    try {
+      t.handlers.onPointerDown(t.event(10, 10));
+      t.handlers.onPointerUp(t.event(16.04, 10));
+      near(t.seen.up[0].point.x, 16.04);
+    } finally { t.done(); }
+  }
+});

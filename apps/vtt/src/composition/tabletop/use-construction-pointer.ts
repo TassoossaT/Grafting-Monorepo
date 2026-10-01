@@ -17,7 +17,7 @@ import { RULER_PREVIEW_CHANNEL, rulerLabels, rulerPreview } from "./tools/core/r
 import { mapLabelsOf } from "./tools/core/ruler-labels.ts";
 import { toolFor } from "./tools/index.ts";
 import { beginCurveGesture, type CurveGesture } from "./tools/core/curve-edit-gesture.ts";
-import { DEFAULT_RULER_SETTINGS, FINE_ANGLE_STEP, MEASURE_UNITS, carriesArrows, faceKey, globalHandleOf, handleMotionAt, shownGlobalHandleAt, toMetres } from "../../features/edit-construction/index.ts";
+import { DEFAULT_RULER_SETTINGS, FINE_ANGLE_STEP, MEASURE_UNITS, lengthStepOf, carriesArrows, faceKey, globalHandleOf, handleMotionAt, shownGlobalHandleAt, toMetres } from "../../features/edit-construction/index.ts";
 import { gestureMoved, nextClickRun, type ClickRun } from "./tools/core/tool-context.ts";
 import { withFacePlane } from "./tools/core/pointer-ray.ts";
 import { handleFocusAt, NO_FOCUS, sameFocus } from "./tools/core/handle-focus.ts";
@@ -68,6 +68,14 @@ export interface RulerReadout {
 /** How soon the ruler is asked again while the pointer merely hovers, in milliseconds. */
 const RULER_HOVER_MS = 32;
 const DEGREE = Math.PI / 180;
+/** The round number as a ruling option -- nothing when the table chose none. */
+const lengthStepOption = (setting: typeof DEFAULT_RULER_SETTINGS.lengthStep, metersPerPixel: number | undefined, unit: MeasureUnitId): { lengthStep?: number } => {
+  const step = lengthStepOf(setting, metersPerPixel, unit);
+  return step === undefined ? {} : { lengthStep: step };
+};
+
+/** What the ruler offers when no settings are given: the table's defaults, but no round number -- the app always gives settings, so this is the harness. */
+const UNSET_RULER_SETTINGS = { ...DEFAULT_RULER_SETTINGS, lengthStep: 0 } as const;
 /** The channel the numbers written on the map go to, beside the ruler's lines. */
 const RULER_LABELS_CHANNEL = "ruler-labels";
 
@@ -171,10 +179,11 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
   const drawRuler = (event: { clientX: number; clientY: number }): void => {
     const { runtime, measureUnit, onRulerReadout } = optionsRef.current;
     const feedback = feedbackRef.current;
-    const settings = optionsRef.current.rulerSettings ?? DEFAULT_RULER_SETTINGS;
+    const settings = optionsRef.current.rulerSettings ?? UNSET_RULER_SETTINGS;
+    const step = lengthStepOf(settings.lengthStep, metersPerPixelRef.current, measureUnit);
     const view = {
       unit: measureUnit,
-      ...(settings.lengthStep > 0 ? { lengthStep: toMetres(settings.lengthStep, measureUnit) } : {}),
+      ...(step !== undefined ? { lengthStep: step } : {}),
       angleStep: angleStepRef.current,
       protractor: !settings.disabled.has("polar"),
       numbers: settings.numbers,
@@ -245,7 +254,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       },
       get rulerLengthStep() {
         const { rulerSettings, measureUnit } = optionsRef.current;
-        return rulerSettings && rulerSettings.lengthStep > 0 ? toMetres(rulerSettings.lengthStep, measureUnit) : undefined;
+        return rulerSettings ? lengthStepOf(rulerSettings.lengthStep, metersPerPixelRef.current, measureUnit) : undefined;
       },
       get structureEditParams() {
         return optionsRef.current.structureEditParams;
@@ -425,7 +434,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
   const sampleAt = useCallback(
     (event: { currentTarget: HTMLElement; clientX: number; clientY: number; shiftKey?: boolean; ctrlKey?: boolean; metaKey?: boolean }): PointerSample | undefined => {
       const { viewId, runtime, activeTool, rulerSettings, measureUnit } = optionsRef.current;
-      const settings = rulerSettings ?? DEFAULT_RULER_SETTINGS;
+      const settings = rulerSettings ?? UNSET_RULER_SETTINGS;
       if (viewId === undefined) return undefined;
       const { x, y } = pointerOffset(event);
       const hit = runtime.pick(viewId, x, y);
@@ -449,7 +458,7 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
         ? { sample: placed, feedback: NO_FEEDBACK }
         : ruler.ruleSample(placed, {
           snap: !free,
-          ...(origin ? { origin, polar: angleStepRef.current, ...(settings.lengthStep > 0 ? { lengthStep: toMetres(settings.lengthStep, measureUnit) } : {}) } : {}),
+          ...(origin ? { origin, polar: angleStepRef.current, ...lengthStepOption(settings.lengthStep, metersPerPixelRef.current, measureUnit) } : {}),
           ...(metersPerPixelRef.current !== undefined ? { metersPerPixel: metersPerPixelRef.current } : {}),
           ...(settings.disabled.size > 0 ? { disabled: settings.disabled } : {}),
         });

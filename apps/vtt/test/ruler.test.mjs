@@ -385,8 +385,8 @@ test("a finer step catches more steps: five degrees offers what fifteen does not
 });
 
 test("the angle's reach is a few pixels seen from the line's end: a long line is held to a finer angle than a short one", () => {
-  // The same 2 degrees off the 15 degree step: caught at 2 m, not at 20 m.
-  const off = deg(15 + 2);
+  // The same 3 degrees off the 15 degree step: caught at 2 m, not at 20 m.
+  const off = deg(15 + 3);
   const at2 = resolveRuler({ point: at(2 * Math.cos(off), 2 * Math.sin(off)), origin: at(0, 0), links: empty, polar: deg(15), reach: 0.2 });
   const at20 = resolveRuler({ point: at(20 * Math.cos(off), 20 * Math.sin(off)), origin: at(0, 0), links: empty, polar: deg(15), reach: 0.2 });
   assert.equal(at2.caught, "polar");

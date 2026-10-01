@@ -1,4 +1,4 @@
-import { DEFAULT_MEASURE_UNIT, MEASURE_UNITS, formatLength, type MeasureUnitId, type RulerGuide, type RulerMeasure } from "../../../../features/edit-construction/index.ts";
+import { DEFAULT_MEASURE_UNIT, MEASURE_UNITS, NICE_STEPS, formatLength, type MeasureUnitId, type RulerGuide, type RulerMeasure } from "../../../../features/edit-construction/index.ts";
 import type { PreviewDescriptor } from "../../../../features/edit-construction/index.ts";
 import { metersFor, type RulerFeedback } from "./ruler-session.ts";
 
@@ -131,7 +131,7 @@ export function linesOf(feedback: RulerFeedback): readonly RulerLine[] {
 }
 
 /** The spacings the teeth choose from, in the table's unit. */
-const NICE_SPACINGS = [0.1, 0.25, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
+const NICE_SPACINGS = NICE_STEPS;
 /** Teeth closer than this, on the screen, are a smear: the next spacing is taken. */
 const TOOTH_MIN_PX = 10;
 /** The most teeth drawn along one line. */

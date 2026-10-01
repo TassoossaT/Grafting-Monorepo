@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { Card, SlidingPanel } from "@/ui";
-import { ANGLE_STEPS, LENGTH_STEPS, MEASURE_UNITS, RULER_KINDS, formatLength, isMeasureUnitId, type ConstructionToolId, type MeasureUnitId, type RulerKind, type RulerSettings, type StructureEditParams, type ToolParamsByTool } from "@/features/edit-construction";
+import { ANGLE_STEPS, AUTO_LENGTH_STEP, LENGTH_STEPS, MEASURE_UNITS, RULER_KINDS, formatLength, isMeasureUnitId, type ConstructionToolId, type MeasureUnitId, type RulerKind, type RulerSettings, type StructureEditParams, type ToolParamsByTool } from "@/features/edit-construction";
 
 import { ConstructionToolParamsPanel } from "./construction-tool-params-panel.tsx";
 
@@ -134,7 +134,8 @@ export function SettingsDrawer(props: SettingsDrawerProps) {
           </label>
           <label className="gm-stat-row" style={{ alignItems: "center" }}>
             <span>Número fechado:</span>
-            <select value={props.rulerSettings.lengthStep} onChange={(event) => props.onRulerSettingsChange({ ...props.rulerSettings, lengthStep: Number(event.target.value) })} style={selectStyle}>
+            <select value={props.rulerSettings.lengthStep} onChange={(event) => props.onRulerSettingsChange({ ...props.rulerSettings, lengthStep: event.target.value === AUTO_LENGTH_STEP ? AUTO_LENGTH_STEP : Number(event.target.value) })} style={selectStyle}>
+              <option value={AUTO_LENGTH_STEP}>Automático (segue o zoom)</option>
               {LENGTH_STEPS.map((step) => <option key={step} value={step}>{step === 0 ? "Desligado" : `de ${step} em ${step} ${MEASURE_UNITS[props.measureUnit].symbol}`}</option>)}
             </select>
           </label>

@@ -2,6 +2,7 @@ import type { ConstructionPosition } from "@/ports";
 
 import { nearestOnSegment } from "../topology/plan-geometry.ts";
 import type { LinkPoint, LinkRun, RulerLinks } from "./links.ts";
+import { ROUND_REACH_SHARE } from "./steps.ts";
 
 /**
  * The one place a point is joined to, lined up with or measured against what
@@ -59,6 +60,8 @@ export interface RulerQuery {
   readonly polar?: number;
   /** The round number, in metres, a length from `origin` lands on when near one: 1 for whole metres. None when absent. */
   readonly lengthStep?: number;
+  /** How near a round number a length must come to land on it, in metres: stronger than the reach of a join. Held to a share of the step, so a length between two round numbers stays free. */
+  readonly stepReach?: number;
   /** Ways of catching left out. */
   readonly disabled?: ReadonlySet<RulerKind>;
 }
@@ -337,7 +340,9 @@ function lengthFix(query: RulerQuery, p: ConstructionPosition, rc: Reach): Fix |
     const turns = Math.round(length / step);
     const gap = turns * step - length;
     const key = `step:${turns}`;
-    if (turns >= 1 && rc.within(Math.abs(gap), key)) {
+    // Stronger than a join's reach, yet never more than a share of the step: what lies between two round numbers is left free.
+    const reach = Math.min(query.stepReach ?? rc.reach * 1.7, step * ROUND_REACH_SHARE);
+    if (turns >= 1 && Math.abs(gap) <= (query.holding === key ? reach * HOLD_FACTOR : reach)) {
       const at = { x: origin.x + u.x * turns * step, y: p.y, z: origin.z + u.z * turns * step };
       // A side's length wins a tie: it is something standing; a round number is only a convenience.
       best = nearer(best, { x: u.x * gap, z: u.z * gap, distance: Math.abs(gap) + 1e-9, guides: [{ kind: "step", at, meters: turns * step }], key });
@@ -348,9 +353,11 @@ function lengthFix(query: RulerQuery, p: ConstructionPosition, rc: Reach): Fix |
 
 const DEGREE = Math.PI / 180;
 /** The widest a line may run from a direction and still be taken as running that way. */
-const ANGLE_REACH = 3 * DEGREE;
+const ANGLE_REACH = 5 * DEGREE;
 /** The narrowest: however long the line, a catch is never finer than this. */
-const ANGLE_FLOOR = 1.5 * DEGREE;
+const ANGLE_FLOOR = 2.5 * DEGREE;
+/** An angle's reach is a longer one than a point's, seen from the line's end: a direction is easy to miss by a hair and hard to put right by hand. */
+const ANGLE_PIXEL_FACTOR = 1.6;
 
 /**
  * How far, in radians, a line of `length` may run from a direction and still be
@@ -359,7 +366,7 @@ const ANGLE_FLOOR = 1.5 * DEGREE;
  * kept within `cap`, and never finer than {@link ANGLE_FLOOR}.
  */
 function angularReach(reach: number, length: number, cap: number): number {
-  return Math.max(Math.min(ANGLE_FLOOR, cap), Math.min(cap, Math.atan2(reach, length)));
+  return Math.max(Math.min(ANGLE_FLOOR, cap), Math.min(cap, Math.atan2(reach * ANGLE_PIXEL_FACTOR, length)));
 }
 /** How far from where a line begins a standing side may lie and still be one to follow. */
 const ANGLE_RANGE = 12;
@@ -445,7 +452,7 @@ function polarFix(query: RulerQuery, p: ConstructionPosition, rc: Reach): Fix | 
     const turns = Math.round((heading - reference.heading) / step);
     const key = `polar:${reference.run ? runKeyOf(reference.run) : "world"}:${turns}`;
     const target = reference.heading + turns * step;
-    if (Math.abs(heading - target) > angularReach(rc.of(key), length, Math.min(ANGLE_REACH, step / 3))) continue;
+    if (Math.abs(heading - target) > angularReach(rc.of(key), length, Math.min(ANGLE_REACH, step / 2.5))) continue;
     const to = { x: origin.x + Math.cos(target) * length, y: p.y, z: origin.z + Math.sin(target) * length };
     const fix = { x: to.x - p.x, z: to.z - p.z };
     const degrees = ((((turns * step) / DEGREE) % 360) + 360) % 360;
@@ -542,5 +549,5 @@ export function snapTurn(angle: number, step: number, reach: number, radius: num
   if (!(step > 0) || !(radius > 0)) return undefined;
   const turns = Math.round(angle / step);
   const target = turns * step;
-  return Math.abs(angle - target) <= angularReach(reach, radius, Math.min(ANGLE_REACH, step / 3)) ? { angle: target, turns } : undefined;
+  return Math.abs(angle - target) <= angularReach(reach, radius, Math.min(ANGLE_REACH, step / 2.5)) ? { angle: target, turns } : undefined;
 }

@@ -12,5 +12,5 @@ export { useKeyboardShortcuts, type KeyboardShortcutsOptions } from "./use-keybo
 export { DEFAULT_TOOL_PARAMS } from "@/features/edit-construction";
 export type { ConstructionToolId, ToolParamsByTool, ToolParamsFor } from "@/features/edit-construction";
 export { RulerReadout, type RulerReadoutProps } from "./ruler-readout.tsx";
-export { DEFAULT_MEASURE_UNIT, DEFAULT_RULER_SETTINGS, MEASURE_UNITS, RULER_KINDS, isMeasureUnitId, parseRulerSettings, serializeRulerSettings } from "@/features/edit-construction";
+export { AUTO_LENGTH_STEP, DEFAULT_MEASURE_UNIT, DEFAULT_RULER_SETTINGS, MEASURE_UNITS, RULER_KINDS, isMeasureUnitId, parseRulerSettings, serializeRulerSettings } from "@/features/edit-construction";
 export type { MeasureUnitId, RulerKind, RulerSettings } from "@/features/edit-construction";
