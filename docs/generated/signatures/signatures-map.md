@@ -4792,7 +4792,7 @@ export function alignRect(ctx: ToolContext, run: RunFrame, rect: RunRect, moving
   const spans = openingSpansOn(ctx, run, excluded);
 export function settleAligned(ctx: ToolContext, run: RunFrame, rect: RunRect, isDoor: boolean, keepWidth: boolean, moving: Moving, excluded?: ReadonlySet<string>): RunRect | undefined {
   return settleRect(run, alignRect(ctx, run, rect, moving, excluded), isDoor, keepWidth);
-export function rectFeedback(ctx: ToolContext, run: RunFrame, rect: RunRect, excluded: ReadonlySet<string> = new Set()): RulerFeedback {
+export function rectFeedback(ctx: ToolContext, run: RunFrame, rect: RunRect, excluded: ReadonlySet<string> = new Set(), was?: RunRect): RulerFeedback {
   const spans = openingSpansOn(ctx, run, excluded);
 
 // src/composition/tabletop/tools/openings/opening-shared.ts

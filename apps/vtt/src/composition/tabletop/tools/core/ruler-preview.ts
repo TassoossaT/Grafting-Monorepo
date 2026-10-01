@@ -87,6 +87,8 @@ export interface RulerLine {
   readonly vertical?: boolean;
   /** Whether the teeth are drawn along it; on unless said otherwise. */
   readonly teeth?: boolean;
+  /** What the line measures, written before its length: "largura 1.20 m". */
+  readonly named?: string;
   /** An edit's difference, written along the line instead of its length. */
   readonly change?: { readonly name: string; readonly meters: number };
 }
@@ -128,6 +130,11 @@ export function linesOf(feedback: RulerFeedback): readonly RulerLine[] {
     else if (measure.kind === "gap") add({ anchor: measure.to, tip: measure.from, zero: reference ?? 0, protractor: true, stroke: true });
     // How high it stands: the ruler itself, upright, from where it rises up to the handle -- teeth counted in height.
     else if (measure.kind === "height" && measure.foot && measure.top) add({ anchor: measure.foot, tip: measure.top, zero: 0, protractor: false, stroke: true, vertical: true });
+    // A size laid out in the world -- a width, a sill, the room left to a corner: the ruler along it, its value written.
+    else if (measure.kind === "size" && measure.from && measure.to) {
+      const upright = Math.hypot(measure.to.x - measure.from.x, measure.to.z - measure.from.z) < 1e-6;
+      add({ anchor: measure.from, tip: measure.to, zero: 0, protractor: false, stroke: true, named: measure.name, ...(upright ? { vertical: true } : {}) });
+    }
     // What an edit changed: the line from where it began to where it stands, its difference written along it.
     else if (measure.kind === "change" && measure.from && measure.to) {
       const upright = Math.hypot(measure.to.x - measure.from.x, measure.to.z - measure.from.z) < 1e-6;

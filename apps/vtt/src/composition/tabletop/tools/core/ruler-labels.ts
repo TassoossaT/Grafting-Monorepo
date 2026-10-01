@@ -58,7 +58,7 @@ export function mapLabelsOf(feedback: RulerFeedback, metersPerPixel: number | un
     const teeth = Math.min(MAX_TEETH, Math.floor(length / spacing + 1e-9));
     if (line.teeth !== false) for (let i = every; i <= teeth; i += every) write(side(spacing * i, toothReach + height * 0.8), compact(fromMetres(spacing * i, view.unit)));
     // How long it is, along it.
-    const said = line.change ? `${line.change.name} ${line.change.meters >= 0 ? "+" : "−"}${formatLength(Math.abs(line.change.meters), view.unit)}` : formatLength(length, view.unit);
+    const said = line.change ? `${line.change.name} ${line.change.meters >= 0 ? "+" : "−"}${formatLength(Math.abs(line.change.meters), view.unit)}` : line.named ? `${line.named} ${formatLength(length, view.unit)}` : formatLength(length, view.unit);
     write(side(length / 2, toothReach + height * 1.6), said);
 
     // The angles of the protractor round its item: at the quarter turns of the eighths, and at the line itself.

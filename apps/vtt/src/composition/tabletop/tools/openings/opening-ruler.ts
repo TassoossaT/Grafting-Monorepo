@@ -102,7 +102,7 @@ export function settleAligned(ctx: ToolContext, run: RunFrame, rect: RunRect, is
 }
 
 /** What the ruler says of `rect` as it stands: the line-ups that hold, how big it is, and the room on either side of it. */
-export function rectFeedback(ctx: ToolContext, run: RunFrame, rect: RunRect, excluded: ReadonlySet<string> = new Set()): RulerFeedback {
+export function rectFeedback(ctx: ToolContext, run: RunFrame, rect: RunRect, excluded: ReadonlySet<string> = new Set(), was?: RunRect): RulerFeedback {
   const spans = openingSpansOn(ctx, run, excluded);
   const m = mid(rect);
   const guides: RulerGuide[] = [];
@@ -123,14 +123,31 @@ export function rectFeedback(ctx: ToolContext, run: RunFrame, rect: RunRect, exc
 
   const wall = run.heightAt(m.s);
   const sill = rect.v0 * wall;
+  // Each size is a ruler along what it measures, on the wall: the width along its sill, the height up its middle, the sill from the ground, the room from each side to the wall's end.
+  const at = (s: number, v: number) => run.resolveAt(s, v);
   const measures: RulerMeasure[] = [
-    { kind: "size", name: "largura", meters: rect.s1 - rect.s0 },
-    { kind: "size", name: "altura", meters: (rect.v1 - rect.v0) * wall },
-    ...(sill > 1e-4 ? [{ kind: "size" as const, name: "peitoril", meters: sill }] : []),
+    { kind: "size", name: "largura", meters: rect.s1 - rect.s0, from: at(rect.s0, rect.v0), to: at(rect.s1, rect.v0) },
+    { kind: "size", name: "altura", meters: (rect.v1 - rect.v0) * wall, from: at(m.s, rect.v0), to: at(m.s, rect.v1) },
+    ...(sill > 1e-4 ? [{ kind: "size" as const, name: "peitoril", meters: sill, from: at(m.s, 0), to: at(m.s, rect.v0) }] : []),
   ];
   if (!run.closed) {
     const room = ruler.axis.gaps(rect.s0, rect.s1, spans.map((span) => [span.s0, span.s1] as const), [run.start, run.end]);
-    measures.push({ kind: "size", name: "à esquerda", meters: room.before }, { kind: "size", name: "à direita", meters: room.after });
+    measures.push(
+      { kind: "size", name: "à esquerda", meters: room.before, from: at(rect.s0 - room.before, m.v), to: at(rect.s0, m.v) },
+      { kind: "size", name: "à direita", meters: room.after, from: at(rect.s1, m.v), to: at(rect.s1 + room.after, m.v) },
+    );
+  }
+  // An opening being edited also says what it was: how far it slid along and up the wall, and how its size changed -- from where it began.
+  if (was) {
+    const before = mid(was);
+    const slid = m.s - before.s;
+    if (Math.abs(slid) > 1e-4) measures.push({ kind: "change", name: "deslocou", meters: slid, from: at(before.s, before.v), to: at(m.s, before.v) });
+    const rose = (m.v - before.v) * wall;
+    if (Math.abs(rose) > 1e-4) measures.push({ kind: "change", name: "subiu", meters: rose, from: at(m.s, before.v), to: at(m.s, m.v) });
+    const wide = (rect.s1 - rect.s0) - (was.s1 - was.s0);
+    if (Math.abs(wide) > 1e-4) measures.push({ kind: "was", name: "largura", was: was.s1 - was.s0, now: rect.s1 - rect.s0 });
+    const tall = (rect.v1 - rect.v0 - (was.v1 - was.v0)) * wall;
+    if (Math.abs(tall) > 1e-4) measures.push({ kind: "was", name: "altura", was: (was.v1 - was.v0) * wall, now: (rect.v1 - rect.v0) * wall });
   }
   return { guides, measures };
 }

@@ -47,7 +47,7 @@ export function measuresOfEdit(what: EditMeasureKind, from: ConstructionPosition
     case "move": {
       const measures: RulerMeasure[] = [];
       const meters = Math.hypot(delta.x, delta.z);
-      if (meters > EPSILON) measures.push({ kind: "length", from, to: at, meters });
+      if (meters > EPSILON) measures.push({ kind: "change", name: "desloc.", meters, from, to: at });
       if (Math.abs(delta.y) > EPSILON) measures.push({ kind: "change", name: "Δ altura", meters: delta.y });
       return measures;
     }

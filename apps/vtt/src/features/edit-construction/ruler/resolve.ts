@@ -100,7 +100,7 @@ export type RulerMeasure =
   /** How steeply a run climbs: `rise` over `run`, both in metres and signed by the way it goes. */
   | { readonly kind: "grade"; readonly rise: number; readonly run: number }
   /** How big something is now -- a road's width, say; `name` says what. */
-  | { readonly kind: "size"; readonly name: string; readonly meters: number }
+  | { readonly kind: "size"; readonly name: string; readonly meters: number; /** Where it runs from and to: the ruler is drawn along it, with its teeth and its value. */ readonly from?: ConstructionPosition; readonly to?: ConstructionPosition }
   /** What a size or a distance was before the edit and is now: the difference from where the edit began. */
   | { readonly kind: "was"; readonly name: string; readonly was: number; readonly now: number }
   /** How much an edit changes a size or a distance, with its sign; `name` says which. */

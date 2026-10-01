@@ -408,11 +408,11 @@ function piecesPreview(pieces: readonly OpeningPiece[], color: number): ReturnTy
 }
 
 /** The ghost of `rect` outlined by `shape`, red where it would overlap another opening. */
-function rectPreview(ctx: ToolContext, run: RunFrame, rect: RunRect, shape: OpeningShape, color: number, excluded?: ReadonlySet<string>): ReturnType<typeof segmentsPreview> | undefined {
+function rectPreview(ctx: ToolContext, run: RunFrame, rect: RunRect, shape: OpeningShape, color: number, excluded?: ReadonlySet<string>, was?: RunRect): ReturnType<typeof segmentsPreview> | undefined {
   const pieces = run.pieces(rect, shape);
   if (pieces === undefined || pieces.length === 0) return undefined;
   // What the ruler says of it: what it lines up with, how big it is, and the room on either side.
-  rulerOf(ctx).show(rectFeedback(ctx, run, rect, excluded));
+  rulerOf(ctx).show(rectFeedback(ctx, run, rect, excluded, was));
   return piecesPreview(pieces, overlapsOther(ctx, run, rect, excluded) ? OVERLAP_COLOR : color);
 }
 
@@ -421,7 +421,7 @@ function dragPreview(gesture: ToolGesture, ctx: ToolContext, active: Drag): Retu
   if (at === undefined) return undefined;
   const rect = settleAligned(ctx, active.run, rawRectFor(active, at), active.isDoor, isBody(active.handle), movingOf(active.handle, active.isDoor), active.pieceRefs);
   if (rect === undefined) return undefined;
-  return rectPreview(ctx, active.run, rect, active.shape, OPENING_KIND_COLOR[active.isDoor ? "door" : "window"], active.pieceRefs);
+  return rectPreview(ctx, active.run, rect, active.shape, OPENING_KIND_COLOR[active.isDoor ? "door" : "window"], active.pieceRefs, active.originalSpan);
 }
 
 function reportCommit(ctx: ToolContext, causeId: string, result: { readonly recorded: boolean; readonly error?: string }, success: string): void {

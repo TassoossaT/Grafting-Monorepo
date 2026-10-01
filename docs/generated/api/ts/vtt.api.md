@@ -2672,6 +2672,10 @@ item, and -- where it comes out of an item -- the protractor round it.
 
 An edit's difference, written along the line instead of its length.
 
+### `property vtt.ruler-preview.RulerLine.named?: string`
+
+What the line measures, written before its length: "largura 1.20 m".
+
 ### `property vtt.ruler-preview.RulerLine.protractor: boolean`
 
 Whether the protractor is drawn round its anchor.
@@ -3638,7 +3642,7 @@ and up it -- for the edges `moving` lets move: an edge flush with another,
 a centre on a centre, or centred in the room between. A rect that nothing
 is near is returned as it is. With the ruler's snap off it always is.
 
-### `function vtt.opening-ruler.rectFeedback(ctx: ToolContext, run: RunFrame, rect: RunRect, excluded: ReadonlySet<string>): RulerFeedback`
+### `function vtt.opening-ruler.rectFeedback(ctx: ToolContext, run: RunFrame, rect: RunRect, excluded: ReadonlySet<string>, was?: RunRect): RulerFeedback`
 
 What the ruler says of `rect` as it stands: the line-ups that hold, how big it is, and the room on either side of it.
 
@@ -6560,7 +6564,7 @@ Where the point stands: snapped when `snap` was asked for and something caught, 
 
 ### `type vtt.resolve.RulerKind = typeof RULER_KINDS[number]`
 
-### `type vtt.resolve.RulerMeasure = { from: ConstructionPosition; kind: "length" | "gap"; meters: number; to: ConstructionPosition } | { foot?: ConstructionPosition; kind: "height"; level: number; meters: number; top?: ConstructionPosition } | { kind: "grade"; rise: number; run: number } | { kind: "size"; meters: number; name: string } | { kind: "was"; name: string; now: number; was: number } | { from?: ConstructionPosition; kind: "change"; meters: number; name: string; to?: ConstructionPosition } | { degrees: number; kind: "angle"; name?: string; reference?: { relation: "parallel" | "perpendicular"; run: readonly [ConstructionPosition, ConstructionPosition] } }`
+### `type vtt.resolve.RulerMeasure = { from: ConstructionPosition; kind: "length" | "gap"; meters: number; to: ConstructionPosition } | { foot?: ConstructionPosition; kind: "height"; level: number; meters: number; top?: ConstructionPosition } | { kind: "grade"; rise: number; run: number } | { from?: ConstructionPosition; kind: "size"; meters: number; name: string; to?: ConstructionPosition } | { kind: "was"; name: string; now: number; was: number } | { from?: ConstructionPosition; kind: "change"; meters: number; name: string; to?: ConstructionPosition } | { degrees: number; kind: "angle"; name?: string; reference?: { relation: "parallel" | "perpendicular"; run: readonly [ConstructionPosition, ConstructionPosition] } }`
 
 Something worth saying about what is built or edited. Distances are always
 in metres -- `formatLength` writes them in the table's unit.

@@ -410,3 +410,26 @@ test("a door can never be dragged off the floor, even grabbed right where its ow
     assert.ok(Math.abs(y.max - 2) < 1e-6, "a door's height must stay put when its (non-existent) bottom handle is dragged");
   } finally { session.free(); }
 });
+
+test("an opening's sizes are drawn as rulers on the wall, and one being dragged also draws how far it slid from where it was", () => {
+  const { runtime, session, ctx } = fixture();
+  const shown = [];
+  try {
+    wall(runtime);
+    click(ctx, { point: { x: 1.5, y: 0, z: 0 } }, WINDOW);
+    ctx.showRuler = (feedback) => shown.push(feedback);
+    const opening = openingAt(ctx, 1.5);
+    const start = { point: { x: 1.5, y: 0, z: 0 }, surfaceRef: surfaceRefFromNodeSet(opening.surfaceKey) };
+    const current = { point: { x: 4, y: 0, z: 0 } };
+    openingTool.onPointerDown(ctx, start, WINDOW);
+    openingTool.previewFor({ start, current, samples: [start, current] }, WINDOW, ctx);
+    const measures = shown.filter(Boolean).at(-1).measures;
+    const width = measures.find((m) => m.kind === "size" && m.name === "largura");
+    assert.ok(width?.from && width?.to && Math.abs(width.to.x - width.from.x - 1) < 1e-6, JSON.stringify(measures));
+    const height = measures.find((m) => m.kind === "size" && m.name === "altura");
+    assert.ok(height?.from && height?.to && Math.abs(height.to.y - height.from.y - 1) < 1e-6, "the height is an upright ruler");
+    const slid = measures.find((m) => m.kind === "change" && m.name === "deslocou");
+    assert.ok(slid && slid.meters > 2 && slid.from && slid.to, JSON.stringify(measures));
+    openingTool.onCancel(ctx);
+  } finally { session.free(); }
+});
