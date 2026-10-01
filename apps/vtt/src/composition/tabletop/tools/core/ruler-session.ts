@@ -1,4 +1,4 @@
-import { ROUND_REACH_PIXELS, collectLinks, isGroundType, resolveRuler, type PlanVector, type RulerGuide, type RulerKind, type RulerLinks, type RulerMeasure } from "../../../../features/edit-construction/index.ts";
+import { ROUND_REACH_PIXELS, collectLinks, isGroundType, resolveRuler, type PlanVector, type RulerGuide, type RulerKind, type RulerLinks, type RulerMeasure, type RulerResult } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionPosition, ConstructionRegionTopology } from "../../../../ports/index.ts";
 import type { PointerSample } from "./tool-context.ts";
 
@@ -44,6 +44,8 @@ export interface RulePointOptions {
   readonly lengthStep?: number;
   /** Ways of catching the table left out. */
   readonly disabled?: ReadonlySet<RulerKind>;
+  /** Links by node id the point never joins. */
+  readonly skip?: ReadonlySet<string>;
 }
 
 export interface RulerSession {
@@ -69,6 +71,7 @@ function queryOf(point: ConstructionPosition, links: RulerLinks, options: RulePo
     ...(options.polar !== undefined ? { polar: options.polar } : {}),
     ...(options.lengthStep !== undefined && options.lengthStep > 0 ? { lengthStep: options.lengthStep, ...(scale !== undefined ? { stepReach: metersFor(scale, ROUND_REACH_PIXELS, 0.34) } : {}) } : {}),
     ...(options.disabled ? { disabled: options.disabled } : {}),
+    ...(options.skip ? { skip: options.skip } : {}),
   };
 }
 
@@ -108,6 +111,10 @@ export interface RulerHost {
   readonly rulerMetersPerPixel?: number;
   /** Ways of catching the table left out. */
   readonly rulerDisabled?: ReadonlySet<RulerKind>;
+  /** The angular step the protractor offers now, in radians. */
+  readonly rulerAngleStep?: number;
+  /** The round number a length lands on, in metres. */
+  readonly rulerLengthStep?: number;
 }
 
 /** The reach, in metres, that `pixels` of the screen make for `host`; `fallback` when its scale is unknown. */
@@ -119,4 +126,22 @@ export function reachFor(host: Pick<RulerHost, "rulerMetersPerPixel">, pixels: n
 export function rulePointFor(host: RulerHost, point: ConstructionPosition, options: Pick<RulePointOptions, "origin" | "axes"> = {}): ConstructionPosition {
   const links = collectLinks(host.runtime.getAllRegionTopologies(), { isGround: isGroundType });
   return resolveRuler(queryOf(point, links, { snap: host.rulerSnap, ...options, ...(host.rulerMetersPerPixel !== undefined ? { metersPerPixel: host.rulerMetersPerPixel } : {}), ...(host.rulerDisabled ? { disabled: host.rulerDisabled } : {}) })).position;
+}
+
+/**
+ * A line from `origin` to `point`, ruled by the host's choices: its angle on
+ * the protractor's steps -- or parallel and square to the sides of `links` --
+ * and its length on the round number, with what caught and what to say of it.
+ * The one answer for any line drawn or edited, from wherever it starts.
+ */
+export function ruleLineFor(host: RulerHost, point: ConstructionPosition, options: { readonly origin: ConstructionPosition; readonly links: RulerLinks; readonly skip?: ReadonlySet<string> }): RulerResult {
+  return resolveRuler(queryOf(point, options.links, {
+    snap: host.rulerSnap,
+    origin: options.origin,
+    ...(options.skip ? { skip: options.skip } : {}),
+    ...(host.rulerAngleStep !== undefined ? { polar: host.rulerAngleStep } : {}),
+    ...(host.rulerLengthStep !== undefined ? { lengthStep: host.rulerLengthStep } : {}),
+    ...(host.rulerMetersPerPixel !== undefined ? { metersPerPixel: host.rulerMetersPerPixel } : {}),
+    ...(host.rulerDisabled ? { disabled: host.rulerDisabled } : {}),
+  }));
 }

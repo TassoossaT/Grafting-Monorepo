@@ -266,6 +266,11 @@ function measureLabel(measure: RulerMeasure, unit: MeasureUnitId): string {
     case "gap": return `↔ ${formatLength(measure.meters, unit)}`;
     case "height": return `altura ${formatLength(measure.meters, unit)} · nível ${formatLength(measure.level, unit)}`;
     case "size": return `${measure.name} ${formatLength(measure.meters, unit)}`;
+    case "grade": {
+      const percent = (measure.rise / measure.run) * 100;
+      const degreesOf = (Math.atan2(Math.abs(measure.rise), measure.run) * 180) / Math.PI;
+      return `inclinação ${percent >= 0 ? "+" : "−"}${Math.abs(percent).toFixed(1)}% · ${degreesOf.toFixed(1)}°`;
+    }
     case "change": return `${measure.name} ${signed(measure.meters, (v) => formatLength(v, unit))}`;
     case "angle": {
       const value = `${measure.name ?? "∠"} ${measure.degrees < 0 ? "−" : ""}${degrees(measure.degrees)}`;

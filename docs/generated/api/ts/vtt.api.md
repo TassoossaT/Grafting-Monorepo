@@ -2548,6 +2548,19 @@ How big the structure `faces` make is.
 
 Anchors dragged by `delta` along `motion`, ruled onto `links`: where they land and what they caught; `undefined` when nothing is near.
 
+### `method vtt.ruler.Ruler.edge(request: { at: ConstructionPosition; fixed: readonly LinkPoint[]; links: RulerLinks; own: readonly LinkRun[]; rule?: boolean }): { caught: boolean; guides: readonly RulerGuide[]; measures: readonly RulerMeasure[]; position: ConstructionPosition }`
+
+A vertex moved to `at`, read against the sides it edits: ruled from each
+of their fixed far ends -- `fixed` -- to where it now stands, its angles
+parallel and square to the structure's other sides (`own`) and to what
+stands (`links`), its lengths on the round number. Where it lands, what
+caught, and the length of every side with the angle of the one that caught.
+Never read from where the vertex began: that place is gone.
+
+### `method vtt.ruler.Ruler.grades(at: ConstructionPosition, fixed: readonly LinkPoint[]): readonly RulerMeasure[]`
+
+How steeply the run to each of `fixed` climbs, to a top now at `at`.
+
 ### `method vtt.ruler.Ruler.held(reach: number): number`
 
 The reach a catch already held keeps: wider than the one that took it, so it does not flicker at the edge.
@@ -2755,6 +2768,10 @@ Where what is being drawn began, to measure its length from.
 
 The steps of the protractor from the origin, in radians.
 
+### `property vtt.ruler-session.RulePointOptions.skip?: ReadonlySet<string>`
+
+Links by node id the point never joins.
+
 ### `property vtt.ruler-session.RulePointOptions.snap: boolean`
 
 Whether what the ruler catches is taken.
@@ -2771,9 +2788,17 @@ What the ruler shows for the point it last ruled -- always while building, wheth
 
 What a tool's own context offers the ruler: the table to read, whether the snap is on, and the screen's scale.
 
+### `property vtt.ruler-session.RulerHost.rulerAngleStep?: number`
+
+The angular step the protractor offers now, in radians.
+
 ### `property vtt.ruler-session.RulerHost.rulerDisabled?: ReadonlySet<"midpoint" | "side" | "corner" | "length" | "square" | "align" | "intersection" | "angle" | "polar" | "level">`
 
 Ways of catching the table left out.
+
+### `property vtt.ruler-session.RulerHost.rulerLengthStep?: number`
+
+The round number a length lands on, in metres.
 
 ### `property vtt.ruler-session.RulerHost.rulerMetersPerPixel?: number`
 
@@ -2820,6 +2845,13 @@ A session reading the links from `topologies()` -- once, until something stands 
 ### `function vtt.ruler-session.reachFor(host: Pick<RulerHost, "rulerMetersPerPixel">, pixels: number, fallback: number): number`
 
 The reach, in metres, that `pixels` of the screen make for `host`; `fallback` when its scale is unknown.
+
+### `function vtt.ruler-session.ruleLineFor(host: RulerHost, point: ConstructionPosition, options: { links: RulerLinks; origin: ConstructionPosition; skip?: ReadonlySet<string> }): RulerResult`
+
+A line from `origin` to `point`, ruled by the host's choices: its angle on
+the protractor's steps -- or parallel and square to the sides of `links` --
+and its length on the round number, with what caught and what to say of it.
+The one answer for any line drawn or edited, from wherever it starts.
 
 ### `function vtt.ruler-session.rulePointFor(host: RulerHost, point: ConstructionPosition, options: Pick<RulePointOptions, "origin" | "axes">): ConstructionPosition`
 
@@ -5221,6 +5253,22 @@ their ids are made or read.
 
 Which global handle `id` names, and after which node; `undefined` for anything else.
 
+### `type vtt.handle-measurement.HandleReference = "grab" | "edges" | "grade" | "none"`
+
+What a handle is measured against while it is dragged -- declared with its
+kind, as HANDLE_MEASUREMENT is:
+
+- `"grab"`: where it was grabbed. A whole structure carried across the
+  ground is read by how far, and which way, it went.
+- `"edges"`: the sides it edits. A vertex is read by the sides that leave
+  it, from their far ends -- which stay -- to where the vertex now stands:
+  their lengths, their angles, parallel to the structure's other sides,
+  square to them. Never from where the vertex began, which is gone as soon
+  as it moves.
+- `"grade"`: the runs beside it, in height. A top is read by how steeply
+  the run to each neighbour climbs.
+- `"none"`: nothing near it -- a height, a turn, a radius, a click.
+
 ### `variable vtt.handle-measurement.HANDLE_MEASUREMENT: Readonly<Record<GlobalHandleKind, EditMeasureName | "none">>`
 
 What a handle measures while it is dragged -- declared here with its kind,
@@ -5232,6 +5280,8 @@ is a handle that is clicked, not dragged.
 
 A height is also what the table's round number lands on: a handle measured
 as `"height"` is one the ruler rounds.
+
+### `variable vtt.handle-measurement.HANDLE_REFERENCE: Readonly<Record<GlobalHandleKind, HandleReference>>`
 
 ### `type vtt.handle-motion.HandleMotion = { kind: "free" } | { kind: "plane" } | { kind: "vertical" } | { center: PlanPoint; kind: "orbit" } | { direction: PlanPoint; kind: "line" } | { kind: "fixed" }`
 
@@ -5976,6 +6026,27 @@ The posts of an upright face: edges rising more than half the face's own
 height, and steeply -- far more up than across -- each as its foot and top.
 A sloped face (a ramp) has none; a leaning post is still found.
 
+### `interface vtt.handle-neighbors.EditNeighbours`
+
+What a handle that edits a vertex edits against: the vertex's neighbours,
+which stay where they are, and the structure's other sides, which are what
+its angles are read from. The ruler measures an edited side from a fixed
+neighbour to where the vertex now stands -- never from where the vertex
+began, which is gone the moment it moves. Read off the topology alone, for
+any structure: nothing here asks what it is.
+
+### `property vtt.handle-neighbors.EditNeighbours.fixed: readonly LinkPoint[]`
+
+The vertices joined to the one edited, level or not, each at the plan distance that makes it a real neighbour: where the vertex is moved against.
+
+### `property vtt.handle-neighbors.EditNeighbours.own: readonly LinkRun[]`
+
+The structure's own level sides that do not touch the vertex: the directions its angles are read against -- parallel to them, square to them.
+
+### `function vtt.handle-neighbors.editNeighbours(topologies: readonly ConstructionRegionTopology[], handle: GlobalHandle): EditNeighbours`
+
+The neighbours and the own sides of what `handle` edits, among `topologies`; empty when it edits no vertex.
+
 ### `function vtt.handle-release.joinWhereLanded(topologies: readonly ConstructionRegionTopology[], ids: readonly string[], operationId: string): ApplyPatchReplacementRequest | undefined`
 
 The nodes among `ids` that stand on a floor's outline without being its,
@@ -6447,6 +6518,10 @@ Links by node id the point never joins -- itself, where it began.
 
 Whether the answer is taken. Off, the position stays and the guides still say what was near.
 
+### `property vtt.resolve.RulerQuery.stepReach?: number`
+
+How near a round number a length must come to land on it, in metres: stronger than the reach of a join. Held to a share of the step, so a length between two round numbers stays free.
+
 ### `interface vtt.resolve.RulerResult`
 
 ### `property vtt.resolve.RulerResult.caught: "point" | "length" | "square" | "step" | "align" | "intersection" | "angle" | "polar" | "run" | undefined`
@@ -6469,7 +6544,7 @@ Where the point stands: snapped when `snap` was asked for and something caught, 
 
 ### `type vtt.resolve.RulerKind = typeof RULER_KINDS[number]`
 
-### `type vtt.resolve.RulerMeasure = { from: ConstructionPosition; kind: "length" | "gap"; meters: number; to: ConstructionPosition } | { kind: "height"; level: number; meters: number } | { kind: "size"; meters: number; name: string } | { kind: "change"; meters: number; name: string } | { degrees: number; kind: "angle"; name?: string; reference?: { relation: "parallel" | "perpendicular"; run: readonly [ConstructionPosition, ConstructionPosition] } }`
+### `type vtt.resolve.RulerMeasure = { from: ConstructionPosition; kind: "length" | "gap"; meters: number; to: ConstructionPosition } | { kind: "height"; level: number; meters: number } | { kind: "grade"; rise: number; run: number } | { kind: "size"; meters: number; name: string } | { kind: "change"; meters: number; name: string } | { degrees: number; kind: "angle"; name?: string; reference?: { relation: "parallel" | "perpendicular"; run: readonly [ConstructionPosition, ConstructionPosition] } }`
 
 Something worth saying about what is built or edited. Distances are always
 in metres -- `formatLength` writes them in the table's unit.
@@ -6529,9 +6604,9 @@ The angular step of the protractor, in degrees: a direction lands on a multiple 
 
 Ways of catching left out.
 
-### `property vtt.settings.RulerSettings.lengthStep: number`
+### `property vtt.settings.RulerSettings.lengthStep: LengthStepSetting`
 
-The round number a length lands on, in the table's unit: 1 means whole units. 0 leaves lengths as they are.
+The round number a length lands on: a step in the table's unit (1 means whole units), 0 to leave lengths as they are, or "auto", which follows the zoom.
 
 ### `property vtt.settings.RulerSettings.numbers: boolean`
 
@@ -6558,6 +6633,46 @@ The settings read back from what was stored; anything unreadable is the default,
 ### `function vtt.settings.serializeRulerSettings(settings: RulerSettings): unknown`
 
 The settings as they are stored.
+
+### `type vtt.steps.LengthStepSetting = number | typeof AUTO_LENGTH_STEP`
+
+What the table asks of its round number: a step in its unit, 0 for none, or `"auto"`.
+
+### `variable vtt.steps.AUTO_LENGTH_STEP: "auto"`
+
+The easy numbers a length lands on, so nothing is left at 2.99, 2.98 or
+2.97. The step is the table's choice -- a fixed one, or `"auto"`, which
+follows the zoom: the coarsest round number that still stands well apart on
+the screen. A step is never a grid: it catches within a reach, softer than
+a join, so what is placed by joining to something keeps its own distances.
+
+### `variable vtt.steps.AUTO_STEP_PIXELS: 30`
+
+How far apart, on the screen, two neighbouring round numbers are at least, when the step follows the zoom: close enough to be strong, far enough to be told apart.
+
+### `variable vtt.steps.NICE_STEPS: readonly number[]`
+
+The round numbers a step may be, in the table's unit.
+
+### `variable vtt.steps.ROUND_REACH_PIXELS: 24`
+
+How near, on the screen, a length must come to a round number to land on it: stronger than any join's reach.
+
+### `variable vtt.steps.ROUND_REACH_SHARE: 0.4`
+
+What a round number's reach never exceeds, as a share of the step: a length between two of them stays free.
+
+### `function vtt.steps.lengthStepOf(setting: LengthStepSetting, metersPerPixel: number | undefined, unit: MeasureUnitId | undefined): number | undefined`
+
+The step, in metres, `setting` asks for at this zoom; `undefined` when the table chose none.
+
+### `function vtt.steps.niceStep(metersPerPixel: number | undefined, unit: MeasureUnitId | undefined, minPixels: number): number`
+
+The smallest round number, in metres, that stands at least `minPixels` apart on the screen; one unit when the scale is unknown.
+
+### `function vtt.steps.roundReach(step: number, reach: number): number`
+
+How near a round number of `step` a length must come to land on it, given what `reach` metres is on the screen.
 
 ### `function vtt.structure-dims.dimensionsOf(faces: readonly ConstructionRegionTopology[]): readonly RulerMeasure[]`
 

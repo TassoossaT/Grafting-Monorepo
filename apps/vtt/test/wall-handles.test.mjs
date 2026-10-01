@@ -218,6 +218,8 @@ test("a wall's foot on a platform slides along its side without moving it, snaps
 test("a wall's foot on a platform dragged in off its side stands loose there, the platform left as it was", () => {
   const f = fixture(true);
   try {
+    // Placed freely (Ctrl): the ruler would otherwise square the foot to the wall's other end.
+    f.ctx.rulerSnap = false;
     const corners = platformCorners(f.runtime);
     const handle = wallHandles(f.runtime).find((h) => h.kind === "foot" && close(h.pivot.x, 1));
     drag(f, handle, { x: 0.5, y: 0, z: 1.5 });
@@ -314,5 +316,33 @@ test("with a round number chosen, dragging a wall's top lands its height on a wh
     assert.ok(shown.filter(Boolean).at(-1).guides.some((g) => g.kind === "step"), "the round number is marked");
     // With the ruler's snap off, it is as dragged.
     f.ctx.rulerSnap = false;
+  } finally { f.session.free(); }
+});
+
+test("dragging a wall's foot measures the side from the neighbour that stays, never from the vertex that left", () => {
+  const f = fixture();
+  const shown = [];
+  f.ctx.showRuler = (feedback) => shown.push(feedback);
+  try {
+    const [left, right] = posts(f.runtime).map((p) => p.foot);
+    const handle = wallHandles(f.runtime).find((h) => h.kind === "foot" && close(h.pivot.x, right.x));
+    drag(f, handle, { x: 0.3, y: 0, z: 2 });
+    const measures = shown.filter(Boolean).at(-1).measures;
+    const lengths = measures.filter((m) => m.kind === "length");
+    assert.ok(lengths.length > 0, JSON.stringify(measures));
+    assert.ok(lengths.every((m) => close(m.from.x, left.x, 1e-4) && close(m.from.z, left.z, 1e-4)), `anchored at the fixed end: ${JSON.stringify(lengths)}`);
+    assert.ok(!lengths.some((m) => close(m.from.x, right.x, 1e-4) && close(m.from.z, right.z, 1e-4)), "none starts at the old vertex");
+  } finally { f.session.free(); }
+});
+
+test("dragging a wall's top shows the grade of the run beside it", () => {
+  const f = fixture();
+  const shown = [];
+  f.ctx.showRuler = (feedback) => shown.push(feedback);
+  try {
+    const handle = wallHandles(f.runtime).find((h) => h.kind === "top" && close(h.pivot.x, 5));
+    drag(f, handle, { x: 0, y: 1, z: 0 }, 1);
+    const grade = shown.filter(Boolean).at(-1).measures.find((m) => m.kind === "grade");
+    assert.ok(grade && grade.rise > 0 && grade.run > 0, JSON.stringify(shown.filter(Boolean).at(-1).measures));
   } finally { f.session.free(); }
 });

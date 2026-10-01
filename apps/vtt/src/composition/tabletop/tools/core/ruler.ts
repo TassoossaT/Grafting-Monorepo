@@ -26,6 +26,8 @@ import {
   type EditMeasureKind,
   type EditMeasureName,
   type HandleMotion,
+  type LinkPoint,
+  type LinkRun,
   type OutlineSnap,
   type RulerGuide,
   type RulerLinks,
@@ -33,7 +35,7 @@ import {
   type SnapAnchor,
 } from "../../../../features/edit-construction/index.ts";
 import type { ConstructionPosition, ConstructionRegionTopology } from "../../../../ports/index.ts";
-import { reachFor, rulePointFor, type RulePointOptions } from "./ruler-session.ts";
+import { reachFor, ruleLineFor, rulePointFor, type RulePointOptions } from "./ruler-session.ts";
 import type { ToolContext } from "./tool-context.ts";
 
 export { NO_FEEDBACK, type RulerFeedback } from "./ruler-session.ts";
@@ -102,6 +104,18 @@ export interface Ruler {
   /** How big the structure `faces` make is. */
   dimensions(faces: readonly ConstructionRegionTopology[]): readonly RulerMeasure[];
 
+  /**
+   * A vertex moved to `at`, read against the sides it edits: ruled from each
+   * of their fixed far ends -- `fixed` -- to where it now stands, its angles
+   * parallel and square to the structure's other sides (`own`) and to what
+   * stands (`links`), its lengths on the round number. Where it lands, what
+   * caught, and the length of every side with the angle of the one that caught.
+   * Never read from where the vertex began: that place is gone.
+   */
+  edge(request: { readonly at: ConstructionPosition; readonly fixed: readonly LinkPoint[]; readonly own: readonly LinkRun[]; readonly links: RulerLinks; /** False when something already joined the vertex: it stays where it is and the sides are only measured. */ readonly rule?: boolean }): { readonly position: ConstructionPosition; readonly caught: boolean; readonly guides: readonly RulerGuide[]; readonly measures: readonly RulerMeasure[] };
+  /** How steeply the run to each of `fixed` climbs, to a top now at `at`. */
+  grades(at: ConstructionPosition, fixed: readonly LinkPoint[]): readonly RulerMeasure[];
+
   /** A box on a line of its own -- an opening along its wall, or up it: the line-ups along that line. */
   axis: {
     /** The nearest line-up for the box `start`..`end`; `along` is the way a box slides, `up` the way it rises. */
@@ -161,6 +175,21 @@ export function rulerOf(ctx: ToolContext): Ruler {
     },
 
     named: (name, using) => editMeasureOf(name, using),
+    edge({ at, fixed, own, links, rule = true }) {
+      const merged: RulerLinks = { ...links, runs: [...links.runs, ...own] };
+      const ruled = fixed.map((neighbour) => ({ neighbour, result: ruleLineFor(ctx, at, { origin: neighbour.position, links: merged, skip: new Set([neighbour.id]) }) }));
+      // The side that catches nearest is the one the vertex is taken to; none caught leaves it where it is.
+      const correction = (position: ConstructionPosition): number => Math.hypot(position.x - at.x, position.z - at.z);
+      const chosen = ruled.filter(({ result }) => result.caught !== undefined).sort((a, b) => correction(a.result.position) - correction(b.result.position))[0] ?? ruled[0];
+      const position = rule && chosen && chosen.result.caught !== undefined && snap ? chosen.result.position : at;
+      const lengths: RulerMeasure[] = fixed.map((neighbour) => ({ kind: "length", from: neighbour.position, to: position, meters: Math.hypot(position.x - neighbour.position.x, position.z - neighbour.position.z) }));
+      const angles = chosen ? chosen.result.measures.filter((measure) => measure.kind === "angle") : [];
+      return { position, caught: chosen?.result.caught !== undefined, guides: chosen?.result.guides ?? [], measures: [...lengths, ...angles] };
+    },
+    grades: (at, fixed) => fixed.flatMap((neighbour) => {
+      const run = Math.hypot(at.x - neighbour.position.x, at.z - neighbour.position.z);
+      return run > 1e-6 ? [{ kind: "grade" as const, rise: at.y - neighbour.position.y, run }] : [];
+    }),
     measure: (what, from, at) => measuresOfEdit(what, from, at),
     base: (heights, fallback) => baseHeight(heights, fallback),
     dimensions: (faces) => dimensionsOf(faces),

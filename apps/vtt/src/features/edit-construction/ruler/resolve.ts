@@ -97,6 +97,8 @@ export type RulerMeasure =
   | { readonly kind: "length" | "gap"; readonly from: ConstructionPosition; readonly to: ConstructionPosition; readonly meters: number }
   /** How high what is being edited stands: above its own base, and at what level of the table. */
   | { readonly kind: "height"; readonly meters: number; readonly level: number }
+  /** How steeply a run climbs: `rise` over `run`, both in metres and signed by the way it goes. */
+  | { readonly kind: "grade"; readonly rise: number; readonly run: number }
   /** How big something is now -- a road's width, say; `name` says what. */
   | { readonly kind: "size"; readonly name: string; readonly meters: number }
   /** How much an edit changes a size or a distance, with its sign; `name` says which. */

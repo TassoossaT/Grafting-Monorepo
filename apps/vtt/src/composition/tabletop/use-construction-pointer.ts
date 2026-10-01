@@ -17,7 +17,7 @@ import { RULER_PREVIEW_CHANNEL, rulerLabels, rulerPreview } from "./tools/core/r
 import { mapLabelsOf } from "./tools/core/ruler-labels.ts";
 import { toolFor } from "./tools/index.ts";
 import { beginCurveGesture, type CurveGesture } from "./tools/core/curve-edit-gesture.ts";
-import { DEFAULT_RULER_SETTINGS, FINE_ANGLE_STEP, MEASURE_UNITS, lengthStepOf, carriesArrows, faceKey, globalHandleOf, handleMotionAt, shownGlobalHandleAt, toMetres } from "../../features/edit-construction/index.ts";
+import { DEFAULT_RULER_SETTINGS, FINE_ANGLE_STEP, HANDLE_REFERENCE, MEASURE_UNITS, lengthStepOf, carriesArrows, faceKey, globalHandleOf, handleMotionAt, shownGlobalHandleAt, toMetres } from "../../features/edit-construction/index.ts";
 import { gestureMoved, nextClickRun, type ClickRun } from "./tools/core/tool-context.ts";
 import { withFacePlane } from "./tools/core/pointer-ray.ts";
 import { handleFocusAt, NO_FOCUS, sameFocus } from "./tools/core/handle-focus.ts";
@@ -518,7 +518,9 @@ export function useConstructionPointer(options: UseConstructionPointerOptions): 
       // a click-only tool leaves the native click gesture alone.
       if (tool.onPointerMove !== undefined || tool.onPointerUp !== undefined) {
         const motion = sample.nodeId === undefined ? undefined : handleMotionOf(optionsRef.current.runtime, sample.nodeId);
-        const rulesFrom = sample.nodeId === undefined || motion?.kind === "free" || motion?.kind === "plane";
+        // The ruler counts from where a handle was grabbed only for one that declares it is read by how far it went: a vertex is read by the sides it edits instead.
+        const declared = sample.nodeId === undefined ? undefined : globalHandleOf(sample.nodeId);
+        const rulesFrom = sample.nodeId === undefined || ((declared === undefined || HANDLE_REFERENCE[declared.kind] === "grab") && (motion?.kind === "free" || motion?.kind === "plane"));
         gestureRef.current = { pointerId: event.pointerId, captureTarget: event.currentTarget, start: sample, rulesFrom, last: sample, samples: [sample] };
         event.currentTarget.setPointerCapture(event.pointerId);
       }

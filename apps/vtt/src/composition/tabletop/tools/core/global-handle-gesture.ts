@@ -6,6 +6,8 @@ import {
   rejoinNodes,
   releasePart,
   HANDLE_MEASUREMENT,
+  HANDLE_REFERENCE,
+  editNeighbours,
   rotateInPlan,
   snapAnchorsOf,
   snapLinksOf,
@@ -387,6 +389,12 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
   );
   /** What this kind of handle measures: declared with the kind, so no gesture carries its own list. */
   const measurement = HANDLE_MEASUREMENT[handle.kind];
+  /** What it is read against, declared the same way: where it was grabbed, the sides it edits, the runs beside it, or nothing. */
+  const reference = HANDLE_REFERENCE[handle.kind];
+  // The sides it edits are read from their far ends -- which stay -- never from where the vertex began, which is gone as soon as it moves.
+  // Taken as the structure stood when the drag began.
+  const neighbours = reference === "edges" || reference === "grade" ? editNeighbours(scene.topologies, handle) : undefined;
+  const edgeLinks = reference === "edges" && neighbours && neighbours.fixed.length > 0 ? snap?.links ?? ruler.linksWithout(new Set(handle.faces ?? [])) : undefined;
   /** A handle that turns about a centre: its orbit. */
   const orbit = handle.motion.kind === "orbit" ? handle.motion : undefined;
   /** The guides the ruler is drawing for the drag now. */
@@ -405,12 +413,26 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
     const lifted = ruler.lift({ dragged, standing, base, ...(lifting ? { links: lifting } : {}), rounds: measurement === "height" && (handle!.motion.kind === "vertical" || params?.mode === "elevation") });
     const free = { ...dragged, y: lifted.y };
     snapped = snap ? ruler.drag(snap.anchors, { x: free.x - handle!.position.x, y: free.y - handle!.position.y, z: free.z - handle!.position.z }, handle!.motion, snap.links) : undefined;
-    const at = snapped ? { x: handle!.position.x + snapped.delta.x, y: handle!.position.y + snapped.delta.y, z: handle!.position.z + snapped.delta.z } : free;
-    const delta = { x: at.x - handle!.position.x, y: at.y - handle!.position.y, z: at.z - handle!.position.z };
+    let at = snapped ? { x: handle!.position.x + snapped.delta.x, y: handle!.position.y + snapped.delta.y, z: handle!.position.z + snapped.delta.z } : free;
     const direction = handle!.motion.kind === "line" ? handle!.motion.direction : { x: 0, z: 0 };
     // Measured where the structure stands -- its pivot -- not where the handle is drawn.
     const pivot = handle!.pivot;
-    const made = measurement === "none" ? [] : ruler.measure(ruler.named(measurement, { direction, base, angle }), pivot, { x: pivot.x + delta.x, y: pivot.y + delta.y, z: pivot.z + delta.z });
+    const standingAt = (position: { readonly x: number; readonly y: number; readonly z: number }) => ({ x: pivot.x + position.x - handle!.position.x, y: pivot.y + position.y - handle!.position.y, z: pivot.z + position.z - handle!.position.z });
+    let made: readonly RulerMeasure[];
+    let edgeGuides: readonly RulerGuide[] = [];
+    if (edgeLinks && neighbours) {
+      // The vertex against the sides it edits: ruled from their fixed ends to where it now stands, unless something already joined it.
+      const ruled = ruler.edge({ at: standingAt(at), fixed: neighbours.fixed, own: neighbours.own, links: edgeLinks, rule: !snapped?.joins });
+      at = { x: handle!.position.x + ruled.position.x - pivot.x, y: at.y, z: handle!.position.z + ruled.position.z - pivot.z };
+      made = ruled.measures;
+      edgeGuides = ruled.guides;
+    } else if (reference === "grade" && neighbours) {
+      // A top against the runs beside it: how high it stands, and how steeply each run climbs to it.
+      made = [...ruler.measure(ruler.named(measurement === "none" ? "height" : measurement, { direction, base, angle }), pivot, standingAt(at)), ...ruler.grades(standingAt(at), neighbours.fixed)];
+    } else {
+      made = measurement === "none" ? [] : ruler.measure(ruler.named(measurement, { direction, base, angle }), pivot, standingAt(at));
+    }
+    const delta = { x: at.x - handle!.position.x, y: at.y - handle!.position.y, z: at.z - handle!.position.z };
     // A turn is drawn round its centre: the line out to the handle, and the protractor from where it began.
     const turning: { guides: RulerGuide[]; measures: RulerMeasure[] } = { guides: [], measures: [] };
     if (orbit) {
@@ -420,7 +442,7 @@ export function beginGlobalHandleGesture(ctx: ToolContext, sample: PointerSample
       turning.measures.push({ kind: "length", from: centre, to: at, meters: radius });
     }
     // What the ruler caught shows whether or not the snap took it.
-    guidesNow = [...lifted.guides, ...turning.guides, ...(snapped?.guides ?? [])];
+    guidesNow = [...lifted.guides, ...turning.guides, ...(snapped?.guides ?? []), ...edgeGuides];
     const measures = [...made, ...turning.measures, ...(snapped?.measures ?? [])];
     switch (handle!.kind) {
       case "pivot":

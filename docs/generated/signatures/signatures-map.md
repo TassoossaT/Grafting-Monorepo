@@ -4513,6 +4513,14 @@ export function reachFor(host: Pick<RulerHost, "rulerMetersPerPixel">, pixels: n
   return metersFor(host.rulerMetersPerPixel, pixels, fallback);
 export function rulePointFor(host: RulerHost, point: ConstructionPosition, options: Pick<RulePointOptions, "origin" | "axes"> = {}): ConstructionPosition {
   const links = collectLinks(host.runtime.getAllRegionTopologies(), { isGround: isGroundType });
+export function ruleLineFor(host: RulerHost, point: ConstructionPosition, options: { readonly origin: ConstructionPosition; readonly links: RulerLinks; readonly skip?: ReadonlySet<string> }): RulerResult {
+  return resolveRuler(queryOf(point, options.links, {
+  snap: host.rulerSnap,
+  origin: options.origin,
+  ...(options.skip ? { skip: options.skip } : {}),
+  ...(host.rulerAngleStep !== undefined ? { polar: host.rulerAngleStep } : {}),
+  ...(host.rulerLengthStep !== undefined ? { lengthStep: host.rulerLengthStep } : {}),
+  ...(host.rulerMetersPerPixel !== undefined ? { metersPerPixel: host.rulerMetersPerPixel } : {}),
 
 // src/composition/tabletop/tools/core/ruler.ts
 export type { AxisCatch, AxisMoving, AxisPart, AxisTarget, EditMeasureKind, EditMeasureName, OutlineSnap, RulerGuide, RulerLinks, RulerMeasure, SnapAnchor };
@@ -4527,7 +4535,8 @@ export interface Ruler {
 export function rulerOf(ctx: ToolContext): Ruler {
   const snap = ctx.rulerSnap;
   const disabled = ctx.rulerDisabled;
-  const reachOf = (way: "along" | "up"): number => (way === "along" ? reachFor(ctx, PLAN_PIXELS, RULER_REACH) : reachFor(ctx, LEVEL_PIXELS, LEVEL_REACH));
+  /** How near a round number a value must come to land on it: stronger than a join's reach, never beyond a share of the step. */
+  const roundReachOf = (step: number): number => roundReach(step, reachFor(ctx, ROUND_REACH_PIXELS, 0.34));
 
 // src/composition/tabletop/tools/core/spine-body-target.ts
 export function spineBodyTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string, ownsSpine: (surfaceType: string) => boolean = () => true): { sample: PointerSample; options: CurveGestureOptions } | undefined {
@@ -5702,6 +5711,15 @@ export const HANDLE_MEASUREMENT: Readonly<Record<GlobalHandleKind, EditMeasureNa
   radius: "radius",
   origin: "move",
   destination: "move",
+export type HandleReference = "grab" | "edges" | "grade" | "none";
+export const HANDLE_REFERENCE: Readonly<Record<GlobalHandleKind, HandleReference>> = {
+  pivot: "grab",
+  rotate: "none",
+  height: "none",
+  turns: "none",
+  radius: "none",
+  origin: "grab",
+  destination: "grab",
 
 // src/features/edit-construction/global-handles/handle-motion.ts
 export type HandleMotion =
@@ -6031,6 +6049,16 @@ export const uprightHandleProvider: GlobalHandleProvider = {
   const candidates = scene.topologies.filter((topology) => {
   const type = structureTypeFor(topology.surfaceType);
 
+// src/features/edit-construction/orchestration/handle-neighbors.ts
+export interface EditNeighbours {
+  /** The vertices joined to the one edited, level or not, each at the plan distance that makes it a real neighbour: where the vertex is moved against. */
+  readonly fixed: readonly LinkPoint[];
+  /** The structure's own level sides that do not touch the vertex: the directions its angles are read against -- parallel to them, square to them. */
+  readonly own: readonly LinkRun[];
+  }
+export function editNeighbours(topologies: readonly ConstructionRegionTopology[], handle: GlobalHandle): EditNeighbours {
+  const edited = new Set(editedNodes(handle, topologies));
+
 // src/features/edit-construction/orchestration/handle-release.ts
 export function partNodes(topologies: readonly ConstructionRegionTopology[], target: GlobalHandle["target"]): readonly string[] {
   if (target?.kind === "vertex") return [target.nodeId];
@@ -6243,6 +6271,7 @@ export type { EditMeasureKind, EditMeasureName } from "./edit-measures.ts";
 export type { AxisCatch, AxisMoving, AxisPart, AxisTarget } from "./axis.ts";
 export type { RulerSettings } from "./settings.ts";
 export type { OutlineSnap, SnapAnchor } from "./anchors.ts";
+export type { LengthStepSetting } from "./steps.ts";
 
 // src/features/edit-construction/ruler/links.ts
 export interface LinkPoint {
@@ -6340,18 +6369,35 @@ export interface RulerSettings {
   readonly disabled: ReadonlySet<RulerKind>;
   /** The angular step of the protractor, in degrees: a direction lands on a multiple of it. */
   readonly angleStep: number;
-  /** The round number a length lands on, in the table's unit: 1 means whole units. 0 leaves lengths as they are. */
-  readonly lengthStep: number;
+  /** The round number a length lands on: a step in the table's unit (1 means whole units), 0 to leave lengths as they are, or "auto", which follows the zoom. */
+  readonly lengthStep: LengthStepSetting;
   /** Whether the numbers are written on the map -- at the teeth, along the lines, round the protractor -- besides the one at the pointer. */
 export const ANGLE_STEPS: readonly number[] = [5, 10, 15, 30, 45, 90];
 export const LENGTH_STEPS: readonly number[] = [0, 0.1, 0.25, 0.5, 1, 2, 5, 10];
 export const FINE_ANGLE_STEP = 5;
-export const DEFAULT_RULER_SETTINGS: RulerSettings = { disabled: new Set(), angleStep: 15, lengthStep: 0, numbers: true };
+export const DEFAULT_RULER_SETTINGS: RulerSettings = { disabled: new Set(), angleStep: 15, lengthStep: AUTO_LENGTH_STEP, numbers: true };
 export function parseRulerSettings(raw: unknown): RulerSettings {
   const disabledOf = (value: unknown): ReadonlySet<RulerKind> =>
   new Set(Array.isArray(value) ? value.filter((kind): kind is RulerKind => typeof kind === "string" && known.has(kind)) : []);
 export function serializeRulerSettings(settings: RulerSettings): unknown {
   return { disabled: [...settings.disabled], angleStep: settings.angleStep, lengthStep: settings.lengthStep, numbers: settings.numbers };
+
+// src/features/edit-construction/ruler/steps.ts
+export const AUTO_LENGTH_STEP = "auto" as const;
+export type LengthStepSetting = number | typeof AUTO_LENGTH_STEP;
+export const NICE_STEPS: readonly number[] = [0.1, 0.25, 0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000];
+export const AUTO_STEP_PIXELS = 30;
+export const ROUND_REACH_PIXELS = 24;
+export const ROUND_REACH_SHARE = 0.4;
+export function niceStep(metersPerPixel: number | undefined, unit: MeasureUnitId | undefined, minPixels: number): number {
+  const unitMeters = (MEASURE_UNITS[unit ?? DEFAULT_MEASURE_UNIT] ?? MEASURE_UNITS[DEFAULT_MEASURE_UNIT]).metres;
+  if (metersPerPixel === undefined || !(metersPerPixel > 0)) return unitMeters;
+  for (const step of NICE_STEPS) if ((step * unitMeters) / metersPerPixel >= minPixels) return step * unitMeters;
+  return NICE_STEPS[NICE_STEPS.length - 1]! * unitMeters;
+  }
+export function lengthStepOf(setting: LengthStepSetting, metersPerPixel: number | undefined, unit: MeasureUnitId | undefined): number | undefined {
+  if (setting === AUTO_LENGTH_STEP) return niceStep(metersPerPixel, unit, AUTO_STEP_PIXELS);
+export const roundReach = (step: number, reach: number): number => Math.min(reach, step * ROUND_REACH_SHARE);
 
 // src/features/edit-construction/ruler/structure-dims.ts
 export function dimensionsOf(faces: readonly ConstructionRegionTopology[]): readonly RulerMeasure[] {
