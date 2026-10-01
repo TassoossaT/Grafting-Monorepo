@@ -29,6 +29,11 @@ export interface TerrainNeighbourhoodRuntime {
  */
 export interface TerrainCutRuntime extends TerrainFillRuntime, PlanarPort {
   getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined;
+  applyVolumetricCut?(
+    request: import("@/ports").VolumetricCutRequest,
+    origin?: import("../tabletop-runtime.ts").ChangeOrigin,
+    causeId?: string,
+  ): import("@/ports").VolumetricCutResponse;
 }
 
 /**

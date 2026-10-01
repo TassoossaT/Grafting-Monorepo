@@ -211,6 +211,8 @@ function sculptStroke(ctx: ToolContext, gesture: ToolGesture, params: TerrainScu
   const isAdd = mode === "add" || mode === "elevate";
   const isDig = mode === "dig" || mode === "lower";
   const isFlatten = mode === "flatten";
+  const isExcavate = mode === "excavate";
+  const isTunnel = mode === "tunnel";
   const elevationStep = params.elevationStep ?? 2.0;
   const covered = coveredByStroke(ctx, swept);
   const coveredTerrain = covered.find((c) => hasTrait(c.surfaceType, "ground"));
@@ -240,6 +242,113 @@ function sculptStroke(ctx: ToolContext, gesture: ToolGesture, params: TerrainScu
   }
 
   const strokePoints = gesture.samples.map((sample) => sample.point);
+
+  if (isExcavate) {
+    if (strokePoints.length === 0) return;
+    const minStep = Math.max(1.0, brushRadius * 0.8);
+    const sampledPoints: { x: number; y: number; z: number }[] = [strokePoints[0]!];
+    for (let i = 1; i < strokePoints.length; i++) {
+      const prev = sampledPoints[sampledPoints.length - 1]!;
+      const curr = strokePoints[i]!;
+      const dist = Math.hypot(curr.x - prev.x, curr.y - prev.y, curr.z - prev.z);
+      if (dist >= minStep) {
+        sampledPoints.push(curr);
+      }
+    }
+
+    let affectedTotal = 0;
+    let holesTotal = 0;
+    let liningTotal = 0;
+
+    for (const pt of sampledPoints) {
+      const cutResp = ctx.runtime.applyVolumetricCut(
+        {
+          volume: {
+            type: "sphere",
+            center: [pt.x, pt.y - (elevationStep > 0 ? elevationStep * 0.5 : 0), pt.z],
+            radius: brushRadius,
+          },
+          liningSurfaceType: params.liningSurfaceType ?? targetSurface,
+          generateLining: true,
+        },
+        "local",
+        causeId,
+      );
+      affectedTotal += cutResp.affectedRegions.length;
+      holesTotal += cutResp.holesInserted;
+      liningTotal += cutResp.liningRegions.length;
+    }
+
+    if (affectedTotal === 0 && liningTotal === 0) {
+      ctx.reportFeedback({ tone: "info", message: "Nenhum terreno atingido pela escavação 3D." });
+      return;
+    }
+    ctx.reportFeedback({
+      tone: "success",
+      message: `Escavação 3D: ${holesTotal} furos abertos, ${liningTotal} faces de cavidade interna criadas.`,
+    });
+    return;
+  }
+
+  if (isTunnel) {
+    if (strokePoints.length === 0) return;
+    if (strokePoints.length < 2) {
+      const pt = strokePoints[0]!;
+      const cutResp = ctx.runtime.applyVolumetricCut(
+        {
+          volume: {
+            type: "sphere",
+            center: [pt.x, pt.y, pt.z],
+            radius: brushRadius,
+          },
+          liningSurfaceType: params.liningSurfaceType ?? targetSurface,
+          generateLining: true,
+        },
+        "local",
+        causeId,
+      );
+      ctx.reportFeedback({
+        tone: "success",
+        message: `Entrada de túnel aberta (${cutResp.holesInserted} furos, ${cutResp.liningRegions.length} faces de forro).`,
+      });
+      return;
+    }
+
+    let affectedTotal = 0;
+    let holesTotal = 0;
+    let liningTotal = 0;
+
+    for (let i = 0; i < strokePoints.length - 1; i++) {
+      const p0 = strokePoints[i]!;
+      const p1 = strokePoints[i + 1]!;
+      const segLen = Math.hypot(p1.x - p0.x, p1.y - p0.y, p1.z - p0.z);
+      if (segLen < 0.1) continue;
+
+      const cutResp = ctx.runtime.applyVolumetricCut(
+        {
+          volume: {
+            type: "cylinder",
+            start: [p0.x, p0.y, p0.z],
+            end: [p1.x, p1.y, p1.z],
+            radius: brushRadius,
+          },
+          liningSurfaceType: params.liningSurfaceType ?? targetSurface,
+          generateLining: true,
+        },
+        "local",
+        causeId,
+      );
+      affectedTotal += cutResp.affectedRegions.length;
+      holesTotal += cutResp.holesInserted;
+      liningTotal += cutResp.liningRegions.length;
+    }
+
+    ctx.reportFeedback({
+      tone: "success",
+      message: `Túnel 3D: ${holesTotal} aberturas perfuradas, ${liningTotal} faces da manga tubular criadas.`,
+    });
+    return;
+  }
 
   if (isDig) {
     const coveredTerrainRegions = covered.filter((c) => hasTrait(c.surfaceType, "ground"));

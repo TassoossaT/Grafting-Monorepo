@@ -32,6 +32,7 @@ mod session_cost_probe;
 #[cfg(test)]
 mod session_tests;
 pub(crate) mod spatial_index;
+pub(crate) mod volumetric_cut;
 #[cfg(test)]
 mod test_support;
 

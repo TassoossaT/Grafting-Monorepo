@@ -633,7 +633,37 @@ export interface ConstructionPlanarRequest {
   readonly clip: readonly ConstructionPlanarShape[];
   readonly operation: "union" | "difference" | "extend";
 }
+
+/** A 3D geometric volume for spatial excavation, tunnel boring, and structural cutting. */
+export type VolumetricShape =
+  | { readonly type: "sphere"; readonly center: readonly [number, number, number]; readonly radius: number }
+  | { readonly type: "box"; readonly min: readonly [number, number, number]; readonly max: readonly [number, number, number] }
+  | { readonly type: "cylinder"; readonly start: readonly [number, number, number]; readonly end: readonly [number, number, number]; readonly radius: number };
+
+/** Request to cut 3D volume out of session surface regions. */
+export interface VolumetricCutRequest {
+  /** 3D volume shape (Sphere, Box, Cylinder). */
+  readonly volume: VolumetricShape;
+  /** Surface type applied to newly created interior cavity / tunnel lining faces. Defaults to "stone". */
+  readonly liningSurfaceType?: string;
+  /** Optional candidate region IDs to test. If omitted, spatial index bounds query is used. */
+  readonly candidateRegions?: readonly string[];
+  /** Whether to generate interior lining faces for excavation cavity or tunnel passage. */
+  readonly generateLining?: boolean;
+}
+
+/** Result of a 3D volumetric cut. */
+export interface VolumetricCutResponse {
+  readonly affectedRegions: readonly string[];
+  readonly createdRegions: readonly string[];
+  readonly removedRegions: readonly string[];
+  readonly liningRegions: readonly string[];
+  readonly holesInserted: number;
+}
+
 export interface ConstructionSessionPort extends BezierPort {
+  /** Executes a 3D volumetric cut (Sphere, Box, Cylinder) across surface regions, piercing holes, splitting disconnected parts, and generating interior cavity / tunnel lining faces. */
+  applyVolumetricCut(request: VolumetricCutRequest): VolumetricCutResponse;
   generateRoof(request: import("./cap-port.ts").RoofRequest): import("./cap-port.ts").RoofPatch;
   planarBoolean(request: ConstructionPlanarRequest): readonly ConstructionPlanarShape[];
   /** Pure cascade resolution, using one consistent engine state. */

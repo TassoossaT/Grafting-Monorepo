@@ -87,4 +87,7 @@ export type {
   SurfaceMeshResult,
   SurfaceTransformationInvalidation,
   TransformationIdentityDelta,
+  VolumetricCutRequest,
+  VolumetricCutResponse,
+  VolumetricShape,
 } from "./construction-session-port.ts";

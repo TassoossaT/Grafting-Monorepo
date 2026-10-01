@@ -39,6 +39,11 @@ export type CutProfile =
     }
   | {
       readonly kind: "hole";
+    }
+  | {
+      readonly kind: "volumetric";
+      readonly generateLining?: boolean;
+      readonly liningSurfaceType?: string;
     };
 
 
@@ -53,6 +58,8 @@ export interface StructuralCutArea {
   readonly path?: readonly { readonly x: number; readonly y?: number; readonly z: number }[];
   /** Radius of influence around center or stroke path. */
   readonly radius?: number;
+  /** Optional 3D volume for precise spatial/volumetric cutting without Delaunay artifacts. */
+  readonly volume?: import("@/ports").VolumetricShape;
 }
 
 export interface StructuralCutRequest {

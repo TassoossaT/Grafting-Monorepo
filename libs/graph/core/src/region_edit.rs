@@ -60,13 +60,13 @@ pub enum RegionEditError {
         /// The node whose two neighbors disagree.
         node: NodeId,
     },
-    /// [`cut_region`] was given a cut path whose endpoints are not both on
+    /// `cut_region` was given a cut path whose endpoints are not both on
     /// the region's single outer loop.
     CutEndpointsNotOnBoundary {
         /// The region that could not be cut.
         region: RegionId,
     },
-    /// [`cut_region`] currently supports exactly one outer loop and no
+    /// `cut_region` currently supports exactly one outer loop and no
     /// holes -- a multi-loop or holed region has no unambiguous assignment
     /// of the leftover loops to either side of the cut.
     CutShapeUnsupported {

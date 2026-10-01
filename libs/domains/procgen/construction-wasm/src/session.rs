@@ -26,6 +26,7 @@ use crate::region_annotations::RegionAnnotations;
 use crate::region_editing;
 use crate::region_overlay;
 use crate::region_props;
+use crate::volumetric_cut;
 
 fn parse<T: serde::de::DeserializeOwned>(json: &str) -> Result<T, JsValue> {
     serde_json::from_str(json)
@@ -49,6 +50,7 @@ struct ConstructionState {
     known_regions: HashSet<RegionId>,
     spatial_index: crate::spatial_index::UniformGridIndex,
     annotations: RegionAnnotations,
+    id_sequence: usize,
 }
 
 /// One undoable replacement, holding the *other* state: the one before it
@@ -89,6 +91,7 @@ pub struct ConstructionSession {
     pub(crate) annotations: RegionAnnotations,
     /// Session configuration rather than edit state: undo never touches it.
     pub(crate) surface_capabilities: SurfaceCapabilities,
+    pub(crate) id_sequence: usize,
     region_overlay_undo: Vec<RegionOverlayHistoryEntry>,
     region_overlay_redo: Vec<RegionOverlayHistoryEntry>,
     open_transaction: Option<OpenTransaction>,
@@ -103,6 +106,7 @@ impl ConstructionSession {
             known_regions: self.known_regions.clone(),
             spatial_index: self.spatial_index.clone(),
             annotations: self.annotations.clone(),
+            id_sequence: self.id_sequence,
         }
     }
 
@@ -220,6 +224,7 @@ impl ConstructionSession {
             region_overlay_undo: Vec::new(),
             region_overlay_redo: Vec::new(),
             open_transaction: None,
+            id_sequence: 0,
         }
     }
 
@@ -334,6 +339,7 @@ impl ConstructionSession {
         std::mem::swap(&mut self.known_regions, &mut state.known_regions);
         std::mem::swap(&mut self.spatial_index, &mut state.spatial_index);
         std::mem::swap(&mut self.annotations, &mut state.annotations);
+        std::mem::swap(&mut self.id_sequence, &mut state.id_sequence);
     }
 
     // ---- Bootstrapping ----
@@ -647,6 +653,7 @@ impl ConstructionSession {
                 known_regions: previous.known_regions,
                 spatial_index,
                 annotations,
+                id_sequence: self.id_sequence,
             },
         );
         serialize(&response)
@@ -795,6 +802,47 @@ impl ConstructionSession {
         if let Some(before) = before {
             self.record_history(operation_id, before);
         }
+        serialize(&response)
+    }
+
+    /// Executes a volumetric 3D spatial cut (Sphere, Box, Cylinder) against session
+    /// surface regions, piercing holes, splitting disconnected parts, and generating
+    /// interior cavity / tunnel lining faces.
+    pub fn apply_volumetric_cut_json(&mut self, request_json: &str) -> Result<String, JsValue> {
+        let request: volumetric_cut::VolumetricCutRequest = parse(request_json)?;
+        let before = self
+            .open_transaction
+            .is_none()
+            .then(|| self.current_state());
+        let mut id_seq = self.id_sequence.max(
+            self.graph.node_count()
+                + self.topology.edge_ids().len()
+                + self.topology.region_ids().len()
+                + 100,
+        );
+        let next_id = |prefix: &str| {
+            id_seq += 1;
+            format!("{prefix}_{id_seq}")
+        };
+        let response = volumetric_cut::apply_volumetric_cut(
+            &mut self.graph,
+            &mut self.topology,
+            &mut self.surfaces,
+            &mut self.spatial_index,
+            &mut self.known_regions,
+            request,
+            next_id,
+        )
+        .map_err(to_js_error)?;
+        self.id_sequence = id_seq;
+
+        if let Some(open) = &mut self.open_transaction {
+            open.mutated = true;
+        } else if let Some(before) = before {
+            let op_id = format!("volumetric_cut_{}", self.graph.node_count());
+            self.record_history(op_id, before);
+        }
+
         serialize(&response)
     }
 

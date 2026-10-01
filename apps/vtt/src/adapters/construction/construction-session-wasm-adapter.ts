@@ -50,6 +50,8 @@ import type {
   RegionEditOutcome,
   RemoveSurfaceRequest,
   SurfaceMeshResult,
+  VolumetricCutRequest,
+  VolumetricCutResponse,
 } from "@/ports";
 
 function curvatureToWire(curvature: "straight" | "arc-left" | "arc-right"): string {
@@ -645,6 +647,11 @@ class ConstructionSessionWasmAdapter implements ConstructionSessionPort {
       patch,
     }))) as { readonly outcome: RegionEditOutcomeWire; readonly skippedRegionIds: readonly string[]; readonly skippedRegionReasons?: readonly string[] };
     return { ...fromWireOutcome(wire.outcome), skippedRegionIds: wire.skippedRegionIds, skippedRegionReasons: wire.skippedRegionReasons ?? [] };
+  }
+
+  applyVolumetricCut(request: VolumetricCutRequest): VolumetricCutResponse {
+    const session = this.#require();
+    return JSON.parse(session.apply_volumetric_cut_json(JSON.stringify(request))) as VolumetricCutResponse;
   }
 
   beginTransaction(transactionId: string): void {

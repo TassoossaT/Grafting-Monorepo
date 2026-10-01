@@ -83,9 +83,9 @@ export interface WallParams {
 export interface WallBrushParams extends WallParams, BrushShapeParams {}
 
 /**
- * Sculpt mode determining whether a stroke adds terrain/height ("add"), digs/removes terrain ("dig"), or flattens ("flatten").
+ * Sculpt mode determining whether a stroke adds terrain/height ("add"), digs/removes terrain ("dig"), flattens ("flatten"), excavates a 3D subterranean cavity ("excavate"), or carves a 3D tunnel ("tunnel").
  */
-export type TerrainSculptMode = "add" | "dig" | "flatten" | "elevate" | "lower";
+export type TerrainSculptMode = "add" | "dig" | "flatten" | "elevate" | "lower" | "excavate" | "tunnel";
 
 /**
  * Derives a recommended face size proportionally from the brush radius.
@@ -120,8 +120,14 @@ export interface TerrainSculptParams {
    * - `"elevate"`: smoothly adds height (+Y) under the brush.
    * - `"lower"`: smoothly subtracts height (-Y) under the brush.
    * - `"flatten"`: normalizes / levels height toward the local average under the brush.
+   * - `"excavate"`: pierces the surface and generates a 3D subterranean cavity lining.
+   * - `"tunnel"`: pierces entrance/exit and carves a 3D cylindrical tunnel sleeve through geometry.
    */
   readonly mode?: TerrainSculptMode;
+  /**
+   * Surface type used for cavity lining or tunnel interior (defaults to "terrain" or "terrain-rock").
+   */
+  readonly liningSurfaceType?: string;
   /**
    * Height step / intensity applied per stroke (in world Y units). Defaults to 0.5.
    */
@@ -283,6 +289,7 @@ export const DEFAULT_TOOL_PARAMS: ToolParamsByTool = Object.freeze({
     heightScale: 1.5,
     noiseScale: 0.15,
     targetSurface: "terrain",
+    liningSurfaceType: "terrain",
     seed: 1,
   }),
 });

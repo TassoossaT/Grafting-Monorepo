@@ -943,3 +943,25 @@ fn transactions_do_not_nest_and_must_be_named_to_end() {
     );
     assert!(session.commit("outer").is_err());
 }
+
+#[test]
+fn volumetric_cut_via_session_json_pierces_hole_and_creates_lining() {
+    let mut session = ConstructionSession::new();
+    terrain_cell(&mut session, 0, 2, 0.0, ["n0", "n1", "n2", "n3"]);
+
+    let request = json!({
+        "volume": {
+            "type": "sphere",
+            "center": [0.5, 0.0, 0.5],
+            "radius": 0.3
+        },
+        "liningSurfaceType": "cave_floor",
+        "generateLining": true
+    });
+
+    let res_json = session.apply_volumetric_cut_json(&request.to_string()).unwrap();
+    let res: serde_json::Value = serde_json::from_str(&res_json).unwrap();
+    assert_eq!(res["affectedRegions"].as_array().unwrap().len(), 1);
+    assert_eq!(res["holesInserted"].as_u64().unwrap(), 1);
+    assert!(!res["liningRegions"].as_array().unwrap().is_empty());
+}

@@ -28,6 +28,7 @@ pub mod profile_cap;
 pub mod profile_cap_patch;
 pub mod profile_roof;
 pub mod profile_surface;
+pub mod spatial_cut;
 #[cfg(test)]
 mod profile_graph_tests;
 pub use contour_travel::{arc_sweep, distance_at_parameter, parameter_at_distance, sub_geometry};
@@ -57,4 +58,7 @@ pub use region_edit::{
 };
 pub use surface::{
     ArcBulge, RegionSurface, SurfaceCurvature, SurfaceError, SurfaceRegistry, SurfaceType,
+};
+pub use spatial_cut::{
+    SpatialCutOutcome, SurfacePlane, VolumeShape, cut_surface_region, generate_cavity_lining,
 };

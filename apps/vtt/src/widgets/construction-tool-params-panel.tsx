@@ -203,17 +203,22 @@ function TerrainSculptFields(props: {
   readonly params: TerrainSculptParams;
   readonly onChange: (next: TerrainSculptParams) => void;
 }) {
-  const { params, onChange } = props;
   const currentMode = params.mode ?? "add";
   const isDig = currentMode === "dig" || currentMode === "lower";
   const isAdd = currentMode === "add" || currentMode === "elevate";
+  const isExcavate = currentMode === "excavate";
+  const isTunnel = currentMode === "tunnel";
   const elevationStep = params.elevationStep ?? 2.0;
 
   const elevationLabel = isAdd
     ? "Incremento de altura (+m)"
     : isDig
       ? "Profundidade do corte (-m)"
-      : "Intensidade do nivelamento";
+      : isExcavate
+        ? "Afundamento do centro (-m)"
+        : isTunnel
+          ? "Raio do túnel (m)"
+          : "Intensidade do nivelamento";
 
   return (
     <div style={{ display: "grid", gap: "0.6rem" }}>
@@ -225,7 +230,7 @@ function TerrainSculptFields(props: {
           onSelect={() => onChange({ ...params, mode: "add" })}
         />
         <SelectableChip
-          label="Cavar (-)"
+          label="Rebaixar (-)"
           swatchColor="#ef4444"
           selected={isDig}
           onSelect={() => onChange({ ...params, mode: "dig" })}
@@ -237,16 +242,30 @@ function TerrainSculptFields(props: {
           onSelect={() => onChange({ ...params, mode: "flatten" })}
         />
       </div>
-      {sliderRow("Alcance da pincelada", params.brushRadius, 1.5, 20, 0.5, (brushRadius) =>
+      <div className="gm-material-grid" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
+        <SelectableChip
+          label="Escavar (Buraco 3D)"
+          swatchColor="#f59e0b"
+          selected={isExcavate}
+          onSelect={() => onChange({ ...params, mode: "excavate" })}
+        />
+        <SelectableChip
+          label="Túnel (3D)"
+          swatchColor="#8b5cf6"
+          selected={isTunnel}
+          onSelect={() => onChange({ ...params, mode: "tunnel" })}
+        />
+      </div>
+      {sliderRow("Alcance da pincelada / Raio", params.brushRadius, 1.5, 20, 0.5, (brushRadius) =>
         onChange({ ...params, brushRadius, faceSize: deriveFaceSize(brushRadius) }),
       )}
       {sliderRow(elevationLabel, elevationStep, 0.2, 20.0, 0.2, (step) =>
         onChange({ ...params, elevationStep: step }),
       )}
-      {sliderRow("Rugosidade do chão novo (ruído)", params.heightScale, 0, 5, 0.25, (heightScale) =>
+      {!isExcavate && !isTunnel && sliderRow("Rugosidade do chão novo (ruído)", params.heightScale, 0, 5, 0.25, (heightScale) =>
         onChange({ ...params, heightScale }),
       )}
-      {sliderRow("Suavidade do relevo", params.noiseScale, 0.02, 0.4, 0.01, (noiseScale) =>
+      {!isExcavate && !isTunnel && sliderRow("Suavidade do relevo", params.noiseScale, 0.02, 0.4, 0.01, (noiseScale) =>
         onChange({ ...params, noiseScale }),
       )}
     </div>

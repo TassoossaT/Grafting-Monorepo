@@ -68,6 +68,8 @@ import type {
   SceneRenderPort,
   SurfaceMeshResult,
   TerrainNoisePort,
+  VolumetricCutRequest,
+  VolumetricCutResponse,
 } from "@/ports";
 
 import {
@@ -196,6 +198,12 @@ export interface TabletopRuntime extends BezierPort {
   queryField(query: ConstructionFieldQuery): readonly ConstructionFieldSample[];
   /** Generic graph primitives, including edges not owned by a region boundary. */
   getGraphSnapshot(): ConstructionGraphSnapshot;
+  /** Executes a 3D volumetric cut (Sphere, Box, Cylinder) across surface regions and generates interior cavity / tunnel lining faces. */
+  applyVolumetricCut(
+    request: VolumetricCutRequest,
+    origin: ChangeOrigin,
+    causeId: string,
+  ): VolumetricCutResponse;
   applyRegionOverlay(
     request: ApplyRegionOverlayRequest,
     origin: ChangeOrigin,
@@ -1153,6 +1161,27 @@ export class AppTabletopRuntime implements TabletopRuntime {
         : new Map(request.patch.nodes.map((node) => [node.id, node.position])),
     );
     return outcome;
+  }
+
+  applyVolumetricCut(
+    request: VolumetricCutRequest,
+    origin: ChangeOrigin,
+    causeId: string,
+  ): VolumetricCutResponse {
+    this.#requireReady("applying volumetric cut");
+    const response = this.#construction.applyVolumetricCut(request);
+    const outcome: RegionEditOutcome = {
+      affectedSurfaceKeys: response.affectedRegions.map((id) => ["@region", id]),
+      createdSurfaceKeys: [
+        ...response.createdRegions.map((id) => ["@region", id]),
+        ...response.liningRegions.map((id) => ["@region", id]),
+      ],
+      removedSurfaceKeys: response.removedRegions.map((id) => ["@region", id]),
+      createdNodeIds: [],
+      removedNodeIds: [],
+    };
+    this.#foldRegionEditOutcome(outcome, origin, causeId);
+    return response;
   }
 
   /**

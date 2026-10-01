@@ -256,7 +256,20 @@ export function executeTerrainCut(
   runtime: TerrainCutRuntime,
   request: StructuralCutRequest,
 ): StructuralCutOutcome {
-  const rawOutline = request.area.outline ?? request.area.sweptPolygon?.[0]?.[0] ?? [];
+  let rawOutline = request.area.outline ?? request.area.sweptPolygon?.[0]?.[0] ?? [];
+  if (rawOutline.length < 3 && request.area.center && request.area.radius) {
+    const segments = 16;
+    const circle: [number, number][] = [];
+    for (let i = 0; i < segments; i++) {
+      const angle = (i / segments) * Math.PI * 2;
+      circle.push([
+        request.area.center.x + Math.cos(angle) * request.area.radius,
+        request.area.center.z + Math.sin(angle) * request.area.radius,
+      ]);
+    }
+    circle.push([circle[0]![0], circle[0]![1]]);
+    rawOutline = circle;
+  }
   const outline = rawOutline.length >= 3 ? rawOutline : [];
 
   const closedOutlineRing: [number, number][] = outline.map(([x, z]) => [x, z]);
@@ -275,7 +288,9 @@ export function executeTerrainCut(
         ? [[closedOutlineRing]]
         : [];
 
-  if (outlineMultiPolygon.length === 0 && outline.length < 3) {
+  const hasVolumetricArea = Boolean(request.area.volume || (request.area.center && request.area.radius));
+
+  if (outlineMultiPolygon.length === 0 && outline.length < 3 && !hasVolumetricArea) {
     return { builtFaces: 0, removedFaces: 0, refusedFaces: 0, success: false, message: "Área de corte inválida." };
   }
 
@@ -355,8 +370,52 @@ export function executeTerrainCut(
   let affectedKeys = new Set(affected.map((t) => t.surfaceKey.join(" ")));
   let retained = terrainStanding.filter((t) => !affectedKeys.has(t.surfaceKey.join(" ")));
 
-  // If hole profile: simply delete affected faces
-  if (request.profile.kind === "hole") {
+  // If volumetric or hole profile: use 3D spatial boolean cutting when available
+  if (request.profile.kind === "volumetric" || request.profile.kind === "hole") {
+    if (typeof runtime.applyVolumetricCut === "function") {
+      const isVolumetric = request.profile.kind === "volumetric";
+      const affectedNodes = affected.flatMap((t) => t.nodes);
+      const center3D = request.area.center ?? centroidOf(affectedNodes.length > 0 ? affectedNodes : []);
+      const radius = request.area.radius ?? Math.max((coveredExtent.maxX - coveredExtent.minX) / 2, (coveredExtent.maxZ - coveredExtent.minZ) / 2, effectiveFaceSide);
+
+      const volume: import("@/ports").VolumetricShape = request.area.volume ?? (
+        isVolumetric
+          ? {
+              type: "sphere",
+              center: [center3D.x, center3D.y, center3D.z],
+              radius,
+            }
+          : {
+              type: "cylinder",
+              start: [center3D.x, center3D.y - 100, center3D.z],
+              end: [center3D.x, center3D.y + 100, center3D.z],
+              radius,
+            }
+      );
+
+      const candidateRegions = affected.map((t) => (t.surfaceKey.length > 1 ? t.surfaceKey[1]! : t.surfaceKey[0]!));
+      const cutResp = runtime.applyVolumetricCut(
+        {
+          volume,
+          candidateRegions: candidateRegions.length > 0 ? candidateRegions : undefined,
+          generateLining: isVolumetric ? (request.profile.generateLining ?? true) : false,
+          liningSurfaceType: isVolumetric ? (request.profile.liningSurfaceType ?? targetSurfaceType) : undefined,
+        },
+        "local",
+        request.causeId,
+      );
+
+      return {
+        builtFaces: cutResp.liningRegions.length,
+        removedFaces: cutResp.affectedRegions.length,
+        refusedFaces: 0,
+        success: cutResp.affectedRegions.length > 0 || cutResp.liningRegions.length > 0,
+        message: isVolumetric
+          ? `Escavação 3D: ${cutResp.holesInserted} furos abertos, ${cutResp.liningRegions.length} faces de revestimento criadas.`
+          : `Furo 3D: ${cutResp.holesInserted} aberturas recortadas com corte booleano.`,
+      };
+    }
+
     if (affected.length === 0) {
       return { builtFaces: 0, removedFaces: 0, refusedFaces: 0, success: false, message: "Nada a furar aqui." };
     }
