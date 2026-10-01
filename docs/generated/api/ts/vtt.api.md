@@ -522,6 +522,8 @@ What committing needs of the runtime.
 
 ### `method vtt.effect-commit.EffectCommitRuntime.applyRegionEdit(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
+### `method vtt.effect-commit.EffectCommitRuntime.applyVolumetricCut(request: VolumetricCutRequest, origin?: ChangeOrigin, causeId?: string): VolumetricCutResponse`
+
 ### `method vtt.effect-commit.EffectCommitRuntime.generateIrregularQuadGrid(request: ConstructionIrregularQuadGridRequest): ConstructionIrregularQuadGrid | undefined`
 
 ### `method vtt.effect-commit.EffectCommitRuntime.generateRoof(request: RoofRequest): RoofPatch`
@@ -707,6 +709,10 @@ it only performs what was already decided -- see
 `docs/architecture/vtt-atomic-edit-and-cloud-policy-design.md`.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.applyRegionOverlay(request: ApplyRegionOverlayRequest, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome`
+
+### `method vtt.tabletop-runtime.AppTabletopRuntime.applyVolumetricCut(request: VolumetricCutRequest, origin: ChangeOrigin, causeId: string): VolumetricCutResponse`
+
+Executes a 3D volumetric cut (Sphere, Box, Cylinder) across surface regions and generates interior cavity / tunnel lining faces.
 
 ### `method vtt.tabletop-runtime.AppTabletopRuntime.attachCameraControls(viewId: string, element: HTMLElement, options?: CameraControlOptions): CameraControlHandle`
 
@@ -909,6 +915,10 @@ the faces over them -- in one transaction. See `ConstructionPatch`.
 ### `method vtt.tabletop-runtime.TabletopRuntime.applyRegionEdit(ops: readonly AtomicEditOp[], origin: ChangeOrigin, causeId: string): RegionEditOutcome`
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.applyRegionOverlay(request: ApplyRegionOverlayRequest, origin: ChangeOrigin, causeId: string): ConstructionPatchOutcome`
+
+### `method vtt.tabletop-runtime.TabletopRuntime.applyVolumetricCut(request: VolumetricCutRequest, origin: ChangeOrigin, causeId: string): VolumetricCutResponse`
+
+Executes a 3D volumetric cut (Sphere, Box, Cylinder) across surface regions and generates interior cavity / tunnel lining faces.
 
 ### `method vtt.tabletop-runtime.TabletopRuntime.attachCameraControls(viewId: string, element: HTMLElement, options?: CameraControlOptions): CameraControlHandle`
 
@@ -1831,6 +1841,8 @@ What regenerating ground needs of the runtime, read and written inside the pipel
 
 ### `method vtt.terrain-lattice-reaction.LatticeReactionRuntime.applyRegionEdit(ops: readonly AtomicEditOp[], origin: "local", causeId: string): unknown`
 
+### `method vtt.terrain-lattice-reaction.LatticeReactionRuntime.applyVolumetricCut(request: VolumetricCutRequest, origin?: ChangeOrigin, causeId?: string): VolumetricCutResponse`
+
 ### `method vtt.terrain-lattice-reaction.LatticeReactionRuntime.generateIrregularQuadGrid(request: ConstructionIrregularQuadGridRequest): ConstructionIrregularQuadGrid | undefined`
 
 ### `method vtt.terrain-lattice-reaction.LatticeReactionRuntime.getFootprintCoverage(polygon: readonly (readonly [number, number])[]): readonly ConstructionCoveredRegion[]`
@@ -1885,6 +1897,8 @@ reads the neighbourhood.
 ### `method vtt.terrain-neighborhood.TerrainCutRuntime.applyPatchReplacement(request: ApplyPatchReplacementRequest, origin: "local", causeId: string): ConstructionPatchOutcome`
 
 ### `method vtt.terrain-neighborhood.TerrainCutRuntime.applyRegionEdit(ops: readonly AtomicEditOp[], origin: "local", causeId: string): unknown`
+
+### `method vtt.terrain-neighborhood.TerrainCutRuntime.applyVolumetricCut(request: VolumetricCutRequest, origin?: ChangeOrigin, causeId?: string): VolumetricCutResponse`
 
 ### `method vtt.terrain-neighborhood.TerrainCutRuntime.generateIrregularQuadGrid(request: ConstructionIrregularQuadGridRequest): ConstructionIrregularQuadGrid | undefined`
 
@@ -8600,6 +8614,10 @@ Radius of influence around center or stroke path.
 
 Optional pre-computed PlanarArea for the cut or brush area.
 
+### `property vtt.structural-cut.StructuralCutArea.volume?: VolumetricShape`
+
+Optional 3D volume for precise spatial/volumetric cutting without Delaunay artifacts.
+
 ### `interface vtt.structural-cut.StructuralCutOutcome`
 
 ### `property vtt.structural-cut.StructuralCutOutcome.builtFaces: number`
@@ -8646,7 +8664,7 @@ Covered regions whose own shape is stale -- dragged out of place by an edit: rep
 
 Ground vacated by an acting structure (e.g. road moved off) to be restored as terrain.
 
-### `type vtt.structural-cut.CutProfile = { curvature?: number; depth: number; kind: "concave" } | { curvature?: number; height: number; kind: "convex" } | { connectTo?: { surfaceKeys?: readonly string[]; surfaceType: string }; kind: "regenerate" } | { kind: "hole" }`
+### `type vtt.structural-cut.CutProfile = { curvature?: number; depth: number; kind: "concave" } | { curvature?: number; height: number; kind: "convex" } | { connectTo?: { surfaceKeys?: readonly string[]; surfaceType: string }; kind: "regenerate" } | { kind: "hole" } | { generateLining?: boolean; kind: "volumetric"; liningSurfaceType?: string }`
 
 Generic Structural Cut & Regeneration Operations
 
@@ -9485,12 +9503,18 @@ variety the random rhombus merge produces. The generator's own relaxation
 step is what pulls cells toward square in the first place; this is its
 `strength`, handed across the port as `relaxStrength`.
 
+### `property vtt.tool-types.TerrainSculptParams.liningSurfaceType?: string`
+
+Surface type used for cavity lining or tunnel interior (defaults to "terrain" or "terrain-rock").
+
 ### `property vtt.tool-types.TerrainSculptParams.mode?: TerrainSculptMode`
 
 Relief manipulation mode:
 - `"elevate"`: smoothly adds height (+Y) under the brush.
 - `"lower"`: smoothly subtracts height (-Y) under the brush.
 - `"flatten"`: normalizes / levels height toward the local average under the brush.
+- `"excavate"`: pierces the surface and generates a 3D subterranean cavity lining.
+- `"tunnel"`: pierces entrance/exit and carves a 3D cylindrical tunnel sleeve through geometry.
 
 ### `property vtt.tool-types.TerrainSculptParams.noiseScale: number`
 
@@ -9624,9 +9648,9 @@ open polyline (a wall's centerline while dragging); `"quad"` draws a
 filled footprint (a terrain brush's reach, a room stamp's proposed
 outline) as two triangles over 4 corner points.
 
-### `type vtt.tool-types.TerrainSculptMode = "add" | "dig" | "flatten" | "elevate" | "lower"`
+### `type vtt.tool-types.TerrainSculptMode = "add" | "dig" | "flatten" | "elevate" | "lower" | "excavate" | "tunnel"`
 
-Sculpt mode determining whether a stroke adds terrain/height ("add"), digs/removes terrain ("dig"), or flattens ("flatten").
+Sculpt mode determining whether a stroke adds terrain/height ("add"), digs/removes terrain ("dig"), flattens ("flatten"), excavates a 3D subterranean cavity ("excavate"), or carves a 3D tunnel ("tunnel").
 
 ### `type vtt.tool-types.ToolParamsFor = ToolParamsByTool[Id]`
 
@@ -11514,6 +11538,10 @@ Atomically replaces exact source regions with an application-generated patch.
 
 Atomically overlays an application-generated patch onto exact source regions.
 
+### `method vtt.construction-session-port.ConstructionSessionPort.applyVolumetricCut(request: VolumetricCutRequest): VolumetricCutResponse`
+
+Executes a 3D volumetric cut (Sphere, Box, Cylinder) across surface regions, piercing holes, splitting disconnected parts, and generating interior cavity / tunnel lining faces.
+
 ### `method vtt.construction-session-port.ConstructionSessionPort.beginTransaction(transactionId: string): void`
 
 Starts one atomic unit of work. Mutations until the matching commit or
@@ -11889,6 +11917,40 @@ Identity lifecycle emitted by an atomic surface transformation.
 
 ### `property vtt.construction-session-port.TransformationIdentityDelta.replaced: readonly TIdentity[]`
 
+### `interface vtt.construction-session-port.VolumetricCutRequest`
+
+Request to cut 3D volume out of session surface regions.
+
+### `property vtt.construction-session-port.VolumetricCutRequest.candidateRegions?: readonly string[]`
+
+Optional candidate region IDs to test. If omitted, spatial index bounds query is used.
+
+### `property vtt.construction-session-port.VolumetricCutRequest.generateLining?: boolean`
+
+Whether to generate interior lining faces for excavation cavity or tunnel passage.
+
+### `property vtt.construction-session-port.VolumetricCutRequest.liningSurfaceType?: string`
+
+Surface type applied to newly created interior cavity / tunnel lining faces. Defaults to "stone".
+
+### `property vtt.construction-session-port.VolumetricCutRequest.volume: VolumetricShape`
+
+3D volume shape (Sphere, Box, Cylinder).
+
+### `interface vtt.construction-session-port.VolumetricCutResponse`
+
+Result of a 3D volumetric cut.
+
+### `property vtt.construction-session-port.VolumetricCutResponse.affectedRegions: readonly string[]`
+
+### `property vtt.construction-session-port.VolumetricCutResponse.createdRegions: readonly string[]`
+
+### `property vtt.construction-session-port.VolumetricCutResponse.holesInserted: number`
+
+### `property vtt.construction-session-port.VolumetricCutResponse.liningRegions: readonly string[]`
+
+### `property vtt.construction-session-port.VolumetricCutResponse.removedRegions: readonly string[]`
+
 ### `type vtt.construction-session-port.ConstructionContourAnswer = { kind: "points"; points: readonly (readonly [number, number])[] } | { kind: "scalars"; values: readonly number[] } | { geometry: ConstructionEdgeGeometry; kind: "geometry" } | { kind: "closest"; position: readonly [number, number]; t: number }`
 
 One answer, in the same order the questions were asked.
@@ -11923,6 +11985,10 @@ Where one point projected, or `null` when there was no curve to project onto.
 ### `type vtt.construction-session-port.ConstructionSurfaceKey = readonly ConstructionNodeId[]`
 
 A construction surface's canonical node-set identity, unordered.
+
+### `type vtt.construction-session-port.VolumetricShape = { center: readonly [number, number, number]; radius: number; type: "sphere" } | { max: readonly [number, number, number]; min: readonly [number, number, number]; type: "box" } | { end: readonly [number, number, number]; radius: number; start: readonly [number, number, number]; type: "cylinder" }`
+
+A 3D geometric volume for spatial excavation, tunnel boring, and structural cutting.
 
 ### `interface vtt.scene-render-port.CameraControlHandle`
 

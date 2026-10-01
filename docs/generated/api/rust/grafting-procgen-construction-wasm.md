@@ -31,6 +31,12 @@ Applies an application-generated patch over an exact, already-resolved
 set of source regions. Geometry and product policy are caller-owned;
 this method only executes the generic overlay atomically.
 
+### `pub fn grafting_procgen_construction_wasm::ConstructionSession::apply_volumetric_cut_json(&mut self, request_json: &str) -> core::result::Result<alloc::string::String, wasm_bindgen::JsValue>`
+
+Executes a volumetric 3D spatial cut (Sphere, Box, Cylinder) against session
+surface regions, piercing holes, splitting disconnected parts, and generating
+interior cavity / tunnel lining faces.
+
 ### `pub fn grafting_procgen_construction_wasm::ConstructionSession::begin_transaction(&mut self, id: &str) -> core::result::Result<(), wasm_bindgen::JsValue>`
 
 Starts one atomic unit of work. See `OpenTransaction`.

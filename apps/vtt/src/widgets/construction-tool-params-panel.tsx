@@ -203,6 +203,7 @@ function TerrainSculptFields(props: {
   readonly params: TerrainSculptParams;
   readonly onChange: (next: TerrainSculptParams) => void;
 }) {
+  const { params, onChange } = props;
   const currentMode = params.mode ?? "add";
   const isDig = currentMode === "dig" || currentMode === "lower";
   const isAdd = currentMode === "add" || currentMode === "elevate";

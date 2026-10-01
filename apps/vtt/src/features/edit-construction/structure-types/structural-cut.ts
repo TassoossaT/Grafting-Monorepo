@@ -191,7 +191,7 @@ export function calculateProfileDisplacement(
 
   const normalized = dist / radius;
   const rawFalloff = (Math.cos(normalized * Math.PI) + 1) / 2;
-  const curvature = profile.curvature ?? 1;
+  const curvature = "curvature" in profile && profile.curvature !== undefined ? profile.curvature : 1;
   const falloff = curvature === 1 ? rawFalloff : Math.pow(rawFalloff, Math.max(0.1, curvature));
 
   const magnitude =

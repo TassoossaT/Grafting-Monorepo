@@ -163,6 +163,12 @@ pub fn is_empty(&self) -> bool
 pub fn bounds_of(&self, region_id: &RegionId) -> Option<&RegionBounds>
 pub fn insert(&mut self, region_id: RegionId, bounds: RegionBounds)
 pub fn remove(&mut self, region_id: &RegionId) -> Option<RegionBounds>
+
+// src/volumetric_cut.rs
+pub enum VolumetricShapeDto
+pub struct VolumetricCutRequest
+pub struct VolumetricCutResponse
+pub fn apply_volumetric_cut(
 ```
 
 ### `discretize` (`libs/domains/procgen/discretize`)
@@ -3972,10 +3978,10 @@ export function executeTerrainCut(
   runtime: TerrainCutRuntime,
   request: StructuralCutRequest,
   ): StructuralCutOutcome {
-  const rawOutline = request.area.outline ?? request.area.sweptPolygon?.[0]?.[0] ?? [];
-  const outline = rawOutline.length >= 3 ? rawOutline : [];
-
-  const closedOutlineRing: [number, number][] = outline.map(([x, z]) => [x, z]);
+  let rawOutline = request.area.outline ?? request.area.sweptPolygon?.[0]?.[0] ?? [];
+  if (rawOutline.length < 3 && request.area.center && request.area.radius) {
+  const segments = 16;
+  const circle: [number, number][] = [];
 
 // src/composition/tabletop/terrain/terrain-diagnostics.ts
 export interface TerrainCommitReport {
@@ -4092,6 +4098,11 @@ export interface TerrainNeighbourhoodRuntime {
   }
 export interface TerrainCutRuntime extends TerrainFillRuntime, PlanarPort {
   getRegionTopology(surfaceKey: ConstructionSurfaceKey): ConstructionRegionTopology | undefined;
+  applyVolumetricCut?(
+  request: import("@/ports").VolumetricCutRequest,
+  origin?: import("@/ports").ChangeOrigin,
+  causeId?: string,
+  ): import("@/ports").VolumetricCutResponse;
   }
 export function terrainStandingAround(
   runtime: TerrainNeighbourhoodRuntime,
@@ -7627,9 +7638,9 @@ export interface WallParams {
 export interface WallBrushParams extends WallParams, BrushShapeParams {}
 
   /**
-  * Sculpt mode determining whether a stroke adds terrain/height ("add"), digs/removes terrain ("dig"), or flattens ("flatten").
+  * Sculpt mode determining whether a stroke adds terrain/height ("add"), digs/removes terrain ("dig"), flattens ("flatten"), excavates a 3D subterranean cavity ("excavate"), or carves a 3D tunnel ("tunnel").
   */
-export type TerrainSculptMode = "add" | "dig" | "flatten" | "elevate" | "lower";
+export type TerrainSculptMode = "add" | "dig" | "flatten" | "elevate" | "lower" | "excavate" | "tunnel";
 export function deriveFaceSize(brushRadius: number, faceSizeOverride?: number): number {
   if (faceSizeOverride !== undefined && faceSizeOverride > 0) {
   return faceSizeOverride;

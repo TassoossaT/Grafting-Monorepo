@@ -68,6 +68,10 @@ Structural failure of an atomic region edit.
 
 Structural error from surface registration or lookup.
 
+### `pub enum grafting_graph_core::VolumeShape`
+
+A 3D geometric volume for spatial operations (excavation, tunnels, carving, destruction).
+
 ### `pub enum grafting_graph_core::bezier::HandleMode`
 
 Handle continuity policy.
@@ -91,6 +95,10 @@ Analytic base shape for a four-sheet cap.
 ### `pub enum grafting_graph_core::profile_surface::Section`
 
 An analytic horizontal cross-section, in XYZ coordinates.
+
+### `pub enum grafting_graph_core::spatial_cut::VolumeShape`
+
+A 3D geometric volume for spatial operations (excavation, tunnels, carving, destruction).
 
 ### `pub fn grafting_graph_core::ContourEdge::bounds(&self, from: grafting_graph_core::ContourPoint, to: grafting_graph_core::ContourPoint) -> grafting_graph_core::ContourBounds`
 
@@ -1057,6 +1065,16 @@ Unions contours and triangulates their interiors, leaving holes empty.
 
 Unions oriented outer rings and holes, preserving the resulting holes.
 
+### `pub fn grafting_graph_core::cut_surface_region<E: core::clone::Clone + core::default::Default>(graph: &mut grafting_graph_core::Graph<[f32; 3], E>, topology: &mut grafting_graph_core::ContourTopology, surfaces: &mut grafting_graph_core::SurfaceRegistry, region_id: &grafting_graph_core::RegionId, plane: &grafting_graph_core::spatial_cut::SurfacePlane, cut_contour: &[[f32; 2]], next_id: impl core::ops::function::FnMut(&str) -> alloc::string::String) -> core::result::Result<grafting_graph_core::spatial_cut::SpatialCutOutcome, alloc::string::String>`
+
+Executes a deterministic boolean cut on a single [`SurfaceRegion`](crate::SurfaceRegion).
+
+Cuts the region with `cut_contour` (defined in the surface's local 2D plane).
+- If the cut is entirely within the region: inserts a new hole in `region.holes()`.
+- If the cut crosses boundary edges: notches the outer loop and trims boundary edges.
+- If the cut splits the region into disconnected parts: creates sibling regions inheriting `SurfaceType`.
+- If the cut completely covers the region: deletes the region via [`delete_region`].
+
 ### `pub fn grafting_graph_core::delete_region<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, surfaces: &mut grafting_graph_core::SurfaceRegistry, region: &grafting_graph_core::RegionId) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
 
 `DeleteRegion` for a single region -- [`delete_regions`] with one entry,
@@ -1086,6 +1104,14 @@ Distance along the edge from its start to parameter `t`.
 `DuplicateRegion`: mints a parallel copy of a region -- one new node per
 boundary node, one new edge per boundary edge, the same loop structure,
 and its own registered surface.
+
+### `pub fn grafting_graph_core::generate_cavity_lining<E: core::clone::Clone + core::default::Default>(graph: &mut grafting_graph_core::Graph<[f32; 3], E>, topology: &mut grafting_graph_core::ContourTopology, surfaces: &mut grafting_graph_core::SurfaceRegistry, volume: &grafting_graph_core::spatial_cut::VolumeShape, lining_surface_type: grafting_graph_core::SurfaceType, next_id: impl core::ops::function::FnMut(&str) -> alloc::string::String) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::RegionId>, alloc::string::String>`
+
+Generates a 3D polygonal lining representing the internal cavity or tunnel wall
+carved by a [`VolumeShape::Sphere`] or [`VolumeShape::Cylinder`].
+
+Creates the floor and walls of the excavation inside `graph` and registers
+them in `topology` and `surfaces` under `lining_surface_type`.
 
 ### `pub fn grafting_graph_core::insert_vertex<N, E>(graph: &mut grafting_graph_core::Graph<N, E>, topology: &mut grafting_graph_core::ContourTopology, edge: &grafting_graph_core::ContourEdgeId, node: grafting_graph_core::Node<N>, from: grafting_graph_core::ContourPoint, to: grafting_graph_core::ContourPoint, at: grafting_graph_core::ContourPoint, first_fragment: grafting_graph_core::ContourEdgeId, second_fragment: grafting_graph_core::ContourEdgeId) -> core::result::Result<grafting_graph_core::RegionEditOutcome, grafting_graph_core::RegionEditError>`
 
@@ -1284,6 +1310,45 @@ both replaced edges are gone when this returns.
 
 `RetypeEdge`: swaps one boundary edge's geometry -- `Line` for `Arc`, or
 an arc's own center/sweep -- without touching either endpoint.
+
+### `pub fn grafting_graph_core::spatial_cut::SurfacePlane::from_points(points: &[[f32; 3]]) -> core::option::Option<Self>`
+
+Fits a local plane from a collection of 3D points.
+
+### `pub fn grafting_graph_core::spatial_cut::SurfacePlane::intersect_volume(&self, volume: &grafting_graph_core::spatial_cut::VolumeShape, segments: usize) -> core::option::Option<alloc::vec::Vec<[f32; 2]>>`
+
+Intersects a 3D volume shape with this plane, producing a 2D closed polygon contour
+in local plane coordinates, if an intersection exists.
+
+### `pub fn grafting_graph_core::spatial_cut::SurfacePlane::project_to_2d(&self, p: [f32; 3]) -> [f32; 2]`
+
+Projects a 3D point onto the 2D local plane coordinates `[u, v]`.
+
+### `pub fn grafting_graph_core::spatial_cut::SurfacePlane::unproject_to_3d(&self, uv: [f32; 2]) -> [f32; 3]`
+
+Lifts a 2D local plane coordinate `[u, v]` back into 3D world space.
+
+### `pub fn grafting_graph_core::spatial_cut::VolumeShape::contains_point(&self, point: [f32; 3]) -> bool`
+
+Tests whether a 3D point lies inside or on the surface of the volume.
+
+### `pub fn grafting_graph_core::spatial_cut::cut_surface_region<E: core::clone::Clone + core::default::Default>(graph: &mut grafting_graph_core::Graph<[f32; 3], E>, topology: &mut grafting_graph_core::ContourTopology, surfaces: &mut grafting_graph_core::SurfaceRegistry, region_id: &grafting_graph_core::RegionId, plane: &grafting_graph_core::spatial_cut::SurfacePlane, cut_contour: &[[f32; 2]], next_id: impl core::ops::function::FnMut(&str) -> alloc::string::String) -> core::result::Result<grafting_graph_core::spatial_cut::SpatialCutOutcome, alloc::string::String>`
+
+Executes a deterministic boolean cut on a single [`SurfaceRegion`](crate::SurfaceRegion).
+
+Cuts the region with `cut_contour` (defined in the surface's local 2D plane).
+- If the cut is entirely within the region: inserts a new hole in `region.holes()`.
+- If the cut crosses boundary edges: notches the outer loop and trims boundary edges.
+- If the cut splits the region into disconnected parts: creates sibling regions inheriting `SurfaceType`.
+- If the cut completely covers the region: deletes the region via [`delete_region`].
+
+### `pub fn grafting_graph_core::spatial_cut::generate_cavity_lining<E: core::clone::Clone + core::default::Default>(graph: &mut grafting_graph_core::Graph<[f32; 3], E>, topology: &mut grafting_graph_core::ContourTopology, surfaces: &mut grafting_graph_core::SurfaceRegistry, volume: &grafting_graph_core::spatial_cut::VolumeShape, lining_surface_type: grafting_graph_core::SurfaceType, next_id: impl core::ops::function::FnMut(&str) -> alloc::string::String) -> core::result::Result<alloc::vec::Vec<grafting_graph_core::RegionId>, alloc::string::String>`
+
+Generates a 3D polygonal lining representing the internal cavity or tunnel wall
+carved by a [`VolumeShape::Sphere`] or [`VolumeShape::Cylinder`].
+
+Creates the floor and walls of the excavation inside `graph` and registers
+them in `topology` and `surfaces` under `lining_surface_type`.
 
 ### `pub fn grafting_graph_core::straight_cycle_region<N, E>(topology: &mut grafting_graph_core::ContourTopology, graph: &grafting_graph_core::Graph<N, E>, id: grafting_graph_core::RegionId, cycle: &[grafting_graph_core::NodeId]) -> core::result::Result<grafting_graph_core::RegionId, grafting_graph_core::ContourError>`
 
@@ -1713,7 +1778,7 @@ The underlying contour topology rejected the mutation.
 
 ### `pub grafting_graph_core::RegionEditError::CutEndpointsNotOnBoundary`
 
-[`cut_region`] was given a cut path whose endpoints are not both on
+`cut_region` was given a cut path whose endpoints are not both on
 the region's single outer loop.
 
 ### `pub grafting_graph_core::RegionEditError::CutEndpointsNotOnBoundary::region: grafting_graph_core::RegionId`
@@ -1722,7 +1787,7 @@ The region that could not be cut.
 
 ### `pub grafting_graph_core::RegionEditError::CutShapeUnsupported`
 
-[`cut_region`] currently supports exactly one outer loop and no
+`cut_region` currently supports exactly one outer loop and no
 holes -- a multi-loop or holed region has no unambiguous assignment
 of the leftover loops to either side of the cut.
 
@@ -1828,6 +1893,22 @@ Displacement from the consistent input state.
 
 Existing graph identity.
 
+### `pub grafting_graph_core::SpatialCutOutcome::affected_regions: alloc::vec::Vec<grafting_graph_core::RegionId>`
+
+Regions whose boundaries or holes were altered.
+
+### `pub grafting_graph_core::SpatialCutOutcome::created_regions: alloc::vec::Vec<grafting_graph_core::RegionId>`
+
+Sibling regions created when a cut partitioned a region into disjoint parts.
+
+### `pub grafting_graph_core::SpatialCutOutcome::holes_inserted: usize`
+
+Number of topological holes inserted directly inside regions.
+
+### `pub grafting_graph_core::SpatialCutOutcome::removed_regions: alloc::vec::Vec<grafting_graph_core::RegionId>`
+
+Regions completely covered and deleted by the cut volume.
+
 ### `pub grafting_graph_core::SurfaceCurvature::bulge: grafting_graph_core::ArcBulge`
 
 Which of the two arcs a shared center and two endpoints could
@@ -1863,6 +1944,22 @@ registered in this registry.
 
 Stable region identity that could not be resolved.
 
+### `pub grafting_graph_core::SurfacePlane::bitangent: [f32; 3]`
+
+Unit bitangent vector (local 2D Y-axis).
+
+### `pub grafting_graph_core::SurfacePlane::normal: [f32; 3]`
+
+Unit normal vector perpendicular to the plane.
+
+### `pub grafting_graph_core::SurfacePlane::origin: [f32; 3]`
+
+Origin point of the plane in 3D space.
+
+### `pub grafting_graph_core::SurfacePlane::tangent: [f32; 3]`
+
+Unit tangent vector (local 2D X-axis).
+
 ### `pub grafting_graph_core::SurfaceSpec::curvature: core::option::Option<grafting_graph_core::SurfaceCurvature>`
 
 The new surface's own curvature, if any -- see [`SurfaceCurvature`]'s
@@ -1879,6 +1976,46 @@ Whether the new surface blocks movement or acts as ground.
 ### `pub grafting_graph_core::SurfaceSpec::surface_type: grafting_graph_core::SurfaceType`
 
 The new surface's open, extensible type identifier.
+
+### `pub grafting_graph_core::VolumeShape::Box`
+
+An axis-aligned 3D bounding box.
+
+### `pub grafting_graph_core::VolumeShape::Box::max: [f32; 3]`
+
+Maximum corner `[max_x, max_y, max_z]`.
+
+### `pub grafting_graph_core::VolumeShape::Box::min: [f32; 3]`
+
+Minimum corner `[min_x, min_y, min_z]`.
+
+### `pub grafting_graph_core::VolumeShape::Cylinder`
+
+A 3D cylinder or capsule, ideal for boring tunnels, paths through hills, and pipes.
+
+### `pub grafting_graph_core::VolumeShape::Cylinder::end: [f32; 3]`
+
+End of the central axis in world space.
+
+### `pub grafting_graph_core::VolumeShape::Cylinder::radius: f32`
+
+Radius around the central axis.
+
+### `pub grafting_graph_core::VolumeShape::Cylinder::start: [f32; 3]`
+
+Start of the central axis in world space.
+
+### `pub grafting_graph_core::VolumeShape::Sphere`
+
+A 3D sphere defined by world-space center and radius.
+
+### `pub grafting_graph_core::VolumeShape::Sphere::center: [f32; 3]`
+
+World-space center point `[x, y, z]`.
+
+### `pub grafting_graph_core::VolumeShape::Sphere::radius: f32`
+
+Radius of the sphere in world units.
 
 ### `pub grafting_graph_core::bezier::CubicBezier::points: [grafting_graph_core::bezier::CurvePoint; 4]`
 
@@ -2652,6 +2789,78 @@ Curvature in the middle of this sheet.
 
 Curvature at the first shared side.
 
+### `pub grafting_graph_core::spatial_cut::SpatialCutOutcome::affected_regions: alloc::vec::Vec<grafting_graph_core::RegionId>`
+
+Regions whose boundaries or holes were altered.
+
+### `pub grafting_graph_core::spatial_cut::SpatialCutOutcome::created_regions: alloc::vec::Vec<grafting_graph_core::RegionId>`
+
+Sibling regions created when a cut partitioned a region into disjoint parts.
+
+### `pub grafting_graph_core::spatial_cut::SpatialCutOutcome::holes_inserted: usize`
+
+Number of topological holes inserted directly inside regions.
+
+### `pub grafting_graph_core::spatial_cut::SpatialCutOutcome::removed_regions: alloc::vec::Vec<grafting_graph_core::RegionId>`
+
+Regions completely covered and deleted by the cut volume.
+
+### `pub grafting_graph_core::spatial_cut::SurfacePlane::bitangent: [f32; 3]`
+
+Unit bitangent vector (local 2D Y-axis).
+
+### `pub grafting_graph_core::spatial_cut::SurfacePlane::normal: [f32; 3]`
+
+Unit normal vector perpendicular to the plane.
+
+### `pub grafting_graph_core::spatial_cut::SurfacePlane::origin: [f32; 3]`
+
+Origin point of the plane in 3D space.
+
+### `pub grafting_graph_core::spatial_cut::SurfacePlane::tangent: [f32; 3]`
+
+Unit tangent vector (local 2D X-axis).
+
+### `pub grafting_graph_core::spatial_cut::VolumeShape::Box`
+
+An axis-aligned 3D bounding box.
+
+### `pub grafting_graph_core::spatial_cut::VolumeShape::Box::max: [f32; 3]`
+
+Maximum corner `[max_x, max_y, max_z]`.
+
+### `pub grafting_graph_core::spatial_cut::VolumeShape::Box::min: [f32; 3]`
+
+Minimum corner `[min_x, min_y, min_z]`.
+
+### `pub grafting_graph_core::spatial_cut::VolumeShape::Cylinder`
+
+A 3D cylinder or capsule, ideal for boring tunnels, paths through hills, and pipes.
+
+### `pub grafting_graph_core::spatial_cut::VolumeShape::Cylinder::end: [f32; 3]`
+
+End of the central axis in world space.
+
+### `pub grafting_graph_core::spatial_cut::VolumeShape::Cylinder::radius: f32`
+
+Radius around the central axis.
+
+### `pub grafting_graph_core::spatial_cut::VolumeShape::Cylinder::start: [f32; 3]`
+
+Start of the central axis in world space.
+
+### `pub grafting_graph_core::spatial_cut::VolumeShape::Sphere`
+
+A 3D sphere defined by world-space center and radius.
+
+### `pub grafting_graph_core::spatial_cut::VolumeShape::Sphere::center: [f32; 3]`
+
+World-space center point `[x, y, z]`.
+
+### `pub grafting_graph_core::spatial_cut::VolumeShape::Sphere::radius: f32`
+
+Radius of the sphere in world units.
+
 ### `pub mod grafting_graph_core`
 
 Generic graph structures and deterministic algorithms owned by Grafting.
@@ -2725,6 +2934,17 @@ Curved sheets between two analytic cross-sections.
 The source sections and profile are authoritative; tessellation is only a
 derived approximation. Adjacent sheets share endpoint profile values, so
 independently authored interiors do not open cracks along their seam.
+
+### `pub mod grafting_graph_core::spatial_cut`
+
+3D spatial cutting and volumetric operations for [`SurfaceRegion`](crate::SurfaceRegion).
+
+Provides deterministic 3D volume projection onto planar surface regions,
+boolean cutting (hole insertion, boundary notching, and region splitting via `i_overlay`),
+and interior cavity/tunnel lining generation.
+
+Conforms to `ADR-0022` and DEC-051: core geometry and topological cuts belong
+strictly to `grafting-graph-core`.
 
 ### `pub struct grafting_graph_core::ContourBounds`
 
@@ -2852,6 +3072,10 @@ nodes that boundary happens to touch.
 
 A seed displacement. Zero axes carry no displacement demand.
 
+### `pub struct grafting_graph_core::SpatialCutOutcome`
+
+The result of a spatial boolean cut operation on a surface region.
+
 ### `pub struct grafting_graph_core::SurfaceCurvature`
 
 The curvature a *generator* reports for one face it produced: the face's
@@ -2870,6 +3094,10 @@ reaches graph state: whatever applies the spec turns it into a
 edge that is actually curved, which is where curvature belongs. It
 mints no extra nodes either -- a curved panel's corners are its four
 flat corners, the same as a straight one.
+
+### `pub struct grafting_graph_core::SurfacePlane`
+
+An orthonormal reference frame defining a 2D local plane embedded in 3D space.
 
 ### `pub struct grafting_graph_core::SurfaceRegion`
 
@@ -3023,6 +3251,14 @@ A sheet whose lateral boundaries can be shared by neighboring sheets.
 A monotone elevation profile with independent interior and seam controls.
 Values in `[-1, 1]` bend the sheet without moving either cross-section or
 overshooting their elevations. Zero describes a straight profile.
+
+### `pub struct grafting_graph_core::spatial_cut::SpatialCutOutcome`
+
+The result of a spatial boolean cut operation on a surface region.
+
+### `pub struct grafting_graph_core::spatial_cut::SurfacePlane`
+
+An orthonormal reference frame defining a 2D local plane embedded in 3D space.
 
 ### `pub trait grafting_graph_core::GraphOps<N, E>`
 
