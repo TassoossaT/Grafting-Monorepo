@@ -239,3 +239,61 @@ test("what a road's anchor joined is named and marked as the ruler's own: a node
   assert.equal(rulerPreview({ guides: [node], measures: [] }, 0.01).positions.length / 6, 4);
   assert.equal(rulerPreview({ guides: [span], measures: [] }, 0.01).positions.length / 6, 3);
 });
+
+// The ruler has ONE kind of line. A guide out of a corner, a side it follows, the way to the nearest corner and the line being
+// drawn are drawn alike: the line, the teeth counted out from the item, and the protractor round the item.
+const view = { unit: "m", lengthStep: 1, angleStep: (15 * Math.PI) / 180, protractor: true };
+const teethAt = (descriptor, count) => {
+  // A tooth stands across a line along x: both its ends at the same x, one either side of z = 0.
+  const found = segmentsOf(descriptor).filter(([a, b]) => Math.abs(a[0] - b[0]) < 1e-9 && a[1] !== b[1] && Math.abs(a[1] + b[1]) < 1e-9 && a[0] > 0.5);
+  return count === undefined ? found : found.length;
+};
+const roundAround = (descriptor, centre, radius) => segmentsOf(descriptor).filter(([a, b]) => Math.abs(Math.hypot(a[0] - centre[0], a[1] - centre[1]) - radius) < 1e-6 && Math.hypot(b[0] - centre[0], b[1] - centre[1]) > radius + 1e-6);
+
+test("a guide that comes out of a corner has the ruler's teeth counted out from the corner, and the protractor round it", () => {
+  const guide = { kind: "align", from: at(0, 0), to: at(5, 0), node: "corner" };
+  const drawn = rulerPreview({ guides: [guide], measures: [] }, 0.01, view);
+  // The line itself, one tooth to each metre out from the corner, and the protractor's marks round the corner.
+  assert.ok(segmentsOf(drawn).some(([a, b]) => a[0] === 0 && b[0] === 5 && a[1] === 0 && b[1] === 0), "the line");
+  assert.equal(teethAt(drawn, "count"), 5);
+  assert.ok(roundAround(drawn, [0, 0], 0.7).length >= 18, "the protractor");
+  // Without a view -- no table to count in -- it is the line alone, as before.
+  assert.equal(segmentsOf(rulerPreview({ guides: [guide], measures: [] }, 0.01)).length, 1);
+});
+
+test("the way to the nearest corner comes out of the corner: teeth from it, protractor round it", () => {
+  const gap = { kind: "gap", from: at(3, 0), to: at(0, 0), meters: 3 };
+  const drawn = rulerPreview({ guides: [], measures: [gap] }, 0.01, view);
+  assert.equal(teethAt(drawn, "count"), 3);
+  assert.ok(roundAround(drawn, [0, 0], 0.7).length >= 18, "round the corner, not the pointer");
+  assert.equal(roundAround(drawn, [3, 0], 0.7).length, 0);
+});
+
+test("a side the ruler follows or is square to is a line like any other: it has its teeth", () => {
+  const run = { kind: "run", a: at(0, 0), b: at(4, 0), at: at(2, 0) };
+  assert.equal(teethAt(rulerPreview({ guides: [run], measures: [] }, 0.01, view), "count"), 4);
+  const square = { kind: "square", run: [at(0, 0), at(4, 0)], from: at(4, 0), to: at(4, 3), relation: "perpendicular" };
+  const drawn = rulerPreview({ guides: [square], measures: [] }, 0.01, view);
+  // The side (4 teeth along x) and the line out of its end, square to it (3 teeth along z, counted from the end).
+  assert.equal(teethAt(drawn, "count"), 4);
+  assert.ok(segmentsOf(drawn).filter(([a, b]) => Math.abs(a[1] - b[1]) < 1e-9 && a[1] > 0.5 && Math.abs(a[0] + b[0] - 8) < 1e-5).length === 3, "teeth across the square line");
+  // Its protractor counts from the side: the zero line runs along it.
+  assert.ok(segmentsOf(drawn).some(([a, b]) => Math.abs(a[0] - 4) < 1e-9 && Math.abs(a[1]) < 1e-9 && Math.abs(Math.hypot(b[0] - 4, b[1]) - 0.86) < 1e-6 && b[1] === 0), "zero along the side");
+});
+
+test("every line is drawn once, however many of a feedback's parts name it", () => {
+  const run = [at(0, 0), at(4, 0)];
+  const lines = segmentsOf(rulerPreview({
+    guides: [{ kind: "run", a: run[0], b: run[1], at: at(2, 0) }, { kind: "length", run, meters: 4 }],
+    measures: [{ kind: "angle", degrees: 0, reference: { run, relation: "parallel" } }],
+  }, 0.01));
+  assert.equal(lines.length, 1, "the same side, named three ways, is one line");
+});
+
+test("protractors round lines that come out of items are few: the line being drawn always has one, the rest at most two", () => {
+  const rays = [1, 2, 3, 4, 5].map((n) => ({ kind: "align", from: at(0, n * 3), to: at(8, n * 3), node: `c${n}` }));
+  const drawn = rulerPreview({ guides: rays, measures: [lengthOf(at(20, 0), at(26, 0))] }, 0.01, view);
+  const circles = [[20, 0], ...rays.map((r) => [r.from.x, r.from.z])].map((centre) => roundAround(drawn, centre, 0.7).length);
+  assert.ok(circles[0] >= 18, "the line being drawn has its protractor");
+  assert.equal(circles.slice(1).filter((count) => count >= 18).length, 2, "and only two of the five lines out of items");
+});

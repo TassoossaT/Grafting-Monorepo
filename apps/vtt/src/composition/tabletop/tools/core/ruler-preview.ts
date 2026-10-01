@@ -39,9 +39,10 @@ function outline(out: number[], c: Point, corners: readonly (readonly [number, n
 /**
  * One marker shape for each thing the ruler can be on, so what is catching is
  * read at a glance, as in SketchUp's inference: a square on a corner, a
- * triangle on the middle of a side, a diamond where two lines cross.
+ * triangle on the middle of a side, a diamond where two lines cross. Markers
+ * only: every LINE the ruler draws goes through {@link drawLine}, one way.
  */
-function drawGuide(out: number[], guide: RulerGuide, h: number): void {
+function drawMarker(out: number[], guide: RulerGuide, h: number): void {
   switch (guide.kind) {
     case "point":
       // A square on what can be joined (a corner, a road's node); a triangle on a place along something (a middle, a road's span).
@@ -56,32 +57,75 @@ function drawGuide(out: number[], guide: RulerGuide, h: number): void {
       segment(out, around(guide.at, -h / 2, -h / 2), around(guide.at, h / 2, h / 2));
       segment(out, around(guide.at, -h / 2, h / 2), around(guide.at, h / 2, -h / 2));
       return;
-    case "run":
-      segment(out, guide.a, guide.b);
-      return;
-    case "align":
-      segment(out, guide.from, guide.to);
-      return;
-    case "length":
-      segment(out, guide.run[0], guide.run[1]);
-      return;
-    case "square":
-      // The side it is square to, and the line standing out from its end.
-      segment(out, guide.run[0], guide.run[1]);
-      segment(out, guide.from, guide.to);
-      return;
-    case "angle":
-      // The side it follows, and the line running its way.
-      segment(out, guide.run[0], guide.run[1]);
-      segment(out, guide.origin, guide.to);
-      return;
-    case "polar":
-      segment(out, guide.origin, guide.to);
-      return;
     case "level":
       segment(out, around({ ...guide.at, y: guide.y }, -h, 0), around({ ...guide.at, y: guide.y }, h, 0));
       return;
+    default:
+      return;
   }
+}
+
+/**
+ * One line the ruler draws, whatever it is: a guide out of a corner, a side
+ * it follows or is square to, the way to the nearest corner, the line being
+ * drawn. It starts at `anchor` -- the item it comes out of -- and ends at `tip`.
+ * Every one is drawn alike: the line, the ruler's teeth counted out from the
+ * item, and -- where it comes out of an item -- the protractor round it.
+ */
+interface RulerLine {
+  readonly anchor: Point;
+  readonly tip: Point;
+  /** The direction the protractor counts from, in radians. */
+  readonly zero: number;
+  /** Whether the protractor is drawn round its anchor. */
+  readonly protractor: boolean;
+  /** Whether the line itself is drawn: not for the line being drawn, which is the tool's own ghost -- it only takes the teeth and the protractor. */
+  readonly stroke: boolean;
+}
+
+const headingOf = (a: Point, b: Point): number => Math.atan2(b.z - a.z, b.x - a.x);
+const sameLine = (a: RulerLine, b: RulerLine): boolean => {
+  const near = (p: Point, q: Point): boolean => Math.abs(p.x - q.x) < 1e-6 && Math.abs(p.z - q.z) < 1e-6;
+  return (near(a.anchor, b.anchor) && near(a.tip, b.tip)) || (near(a.anchor, b.tip) && near(a.tip, b.anchor));
+};
+
+/** Every line `feedback` has to draw, in one list: guides and measures alike. */
+function linesOf(feedback: RulerFeedback): readonly RulerLine[] {
+  const lines: RulerLine[] = [];
+  const add = (line: RulerLine): void => { if (!lines.some((held) => sameLine(held, line))) lines.push(line); };
+  const edge = (a: Point, b: Point): void => add({ anchor: a, tip: b, zero: headingOf(a, b), protractor: false, stroke: true });
+  let reference: number | undefined;
+  for (const measure of feedback.measures) {
+    if (measure.kind === "angle" && measure.reference) reference = headingOf(measure.reference.run[0], measure.reference.run[1]);
+  }
+  const polar = feedback.guides.find((guide): guide is Extract<RulerGuide, { kind: "polar" }> => guide.kind === "polar");
+  // The count starts from what caught, else from the side the angle is read against, else the world's axis.
+  const zeroOfDrawn = polar ? polar.zero : reference ?? 0;
+  for (const measure of feedback.measures) {
+    if (measure.kind === "length") add({ anchor: measure.from, tip: measure.to, zero: zeroOfDrawn, protractor: true, stroke: false });
+    // The way to the nearest corner comes out of the corner.
+    else if (measure.kind === "gap") add({ anchor: measure.to, tip: measure.from, zero: reference ?? 0, protractor: true, stroke: true });
+    // The side an angle is measured from is drawn, so what it is measured against is never a guess.
+    else if (measure.kind === "angle" && measure.reference) edge(measure.reference.run[0], measure.reference.run[1]);
+  }
+  for (const guide of feedback.guides) {
+    switch (guide.kind) {
+      case "run": edge(guide.a, guide.b); break;
+      case "length": edge(guide.run[0], guide.run[1]); break;
+      case "align": add({ anchor: guide.from, tip: guide.to, zero: reference ?? 0, protractor: true, stroke: true }); break;
+      case "square":
+        edge(guide.run[0], guide.run[1]);
+        add({ anchor: guide.from, tip: guide.to, zero: headingOf(guide.run[0], guide.run[1]), protractor: true, stroke: true });
+        break;
+      case "angle":
+        edge(guide.run[0], guide.run[1]);
+        add({ anchor: guide.origin, tip: guide.to, zero: headingOf(guide.run[0], guide.run[1]), protractor: false, stroke: true });
+        break;
+      case "polar": add({ anchor: guide.origin, tip: guide.to, zero: guide.zero, protractor: false, stroke: true }); break;
+      default: break;
+    }
+  }
+  return lines;
 }
 
 /** The spacings the teeth choose from, in the table's unit. */
@@ -160,27 +204,27 @@ function drawProtractor(out: number[], origin: Point, to: Point, zero: number, a
   segment(out, origin, at(0, radius + tick(16)));
 }
 
-/** The guides, the teeth along the line being drawn, and the protractor round where it began, as one ghost; `undefined` when there is nothing to draw. */
+/** The most protractors drawn round lines that come out of items, besides the line being drawn: more would be a clutter of arcs. */
+const MAX_ITEM_PROTRACTORS = 2;
+
+/** One line, drawn one way: the line, the teeth out from its item, and the protractor when it comes out of one. */
+function drawLine(out: number[], line: RulerLine, view: RulerView | undefined, metersPerPixel: number | undefined, protractor: boolean): void {
+  if (line.stroke) segment(out, line.anchor, line.tip);
+  if (!view) return;
+  drawTeeth(out, line.anchor, line.tip, teethSpacing(metersPerPixel, view.unit, view.lengthStep), metersPerPixel);
+  if (protractor && view.protractor) drawProtractor(out, line.anchor, line.tip, line.zero, view.angleStep, metersPerPixel);
+}
+
+/** What `feedback` draws, as one ghost: its markers, and every line -- guides, sides, the way to a corner, the line being drawn -- alike, with the ruler's teeth and protractor. `undefined` when there is nothing. */
 export function rulerPreview(feedback: RulerFeedback, metersPerPixel?: number, view?: RulerView): PreviewDescriptor | undefined {
   const positions: number[] = [];
   const h = metersFor(metersPerPixel, MARKER_PX, MARKER_FALLBACK, [0.04, 0.6]);
-  for (const guide of feedback.guides) drawGuide(positions, guide, h);
-  let drawn: { from: Point; to: Point } | undefined;
-  let reference: { run: readonly [Point, Point] } | undefined;
-  for (const measure of feedback.measures) {
-    if (measure.kind === "gap") segment(positions, measure.from, measure.to);
-    // The side an angle is measured from is drawn, so what it is measured against is never a guess.
-    else if (measure.kind === "angle" && measure.reference) { segment(positions, measure.reference.run[0], measure.reference.run[1]); reference = measure.reference; }
-    else if (measure.kind === "length") drawn = { from: measure.from, to: measure.to };
-  }
-  if (view && drawn) {
-    drawTeeth(positions, drawn.from, drawn.to, teethSpacing(metersPerPixel, view.unit, view.lengthStep), metersPerPixel);
-    if (view.protractor) {
-      const polar = feedback.guides.find((guide): guide is Extract<RulerGuide, { kind: "polar" }> => guide.kind === "polar");
-      // The count starts from what caught, else from the side the angle is read against, else the world's axis.
-      const zero = polar ? polar.zero : reference ? Math.atan2(reference.run[1].z - reference.run[0].z, reference.run[1].x - reference.run[0].x) : 0;
-      drawProtractor(positions, drawn.from, drawn.to, zero, view.angleStep, metersPerPixel);
-    }
+  for (const guide of feedback.guides) drawMarker(positions, guide, h);
+  let itemProtractors = 0;
+  for (const line of linesOf(feedback)) {
+    // The line being drawn always has its protractor; a line out of an item, only the first few.
+    const wanted = line.protractor && (!line.stroke || itemProtractors++ < MAX_ITEM_PROTRACTORS);
+    drawLine(positions, line, view, metersPerPixel, wanted);
   }
   return positions.length === 0 ? undefined : { kind: "segments", positions: Float32Array.from(positions), color: GUIDE_COLOR, opacity: GUIDE_OPACITY };
 }
