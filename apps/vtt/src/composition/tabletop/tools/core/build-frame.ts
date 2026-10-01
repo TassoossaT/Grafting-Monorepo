@@ -18,27 +18,30 @@ export interface BuildFrame {
   /** The frame's first direction in plan, unit length; `v` is square to it. */
   readonly u: { readonly x: number; readonly z: number };
   readonly v: { readonly x: number; readonly z: number };
-  /** A point of a structure's side or corner `start` was drawn to, when it was near one -- the shape starts there, against it. */
-  readonly start?: ConstructionPosition;
 }
 
-/** How near a side, in plan, a press counts as building next to it -- and lands on it. */
-const SIDE_REACH = 0.6;
-/** How near a corner a press starts at that corner exactly. */
-const CORNER_REACH = 0.35;
+/**
+ * How near a side, on the screen, a press counts as building next to it: the
+ * shape is then laid out along that side. Only which way it is laid out --
+ * where it starts, against the side or a corner of it, is the ruler's.
+ */
+const SIDE_PIXELS = 60;
+/** The same reach in metres, while the screen's scale is not known. */
+const SIDE_FALLBACK = 0.6;
 /** The camera's heading is taken in steps of this much, so shapes drawn apart from each other still line up. */
 const HEADING_STEP = Math.PI / 12;
 
-const frameAlong = (origin: ConstructionPosition, dx: number, dz: number, start?: ConstructionPosition): BuildFrame => {
+const frameAlong = (origin: ConstructionPosition, dx: number, dz: number): BuildFrame => {
   const length = Math.hypot(dx, dz) || 1;
   const u = { x: dx / length, z: dz / length };
-  return { origin, u, v: { x: -u.z, z: u.x }, ...(start ? { start } : {}) };
+  return { origin, u, v: { x: -u.z, z: u.x } };
 };
 
 /** The straight side of any built structure nearest `sample` within reach -- the one under the pointer first. */
 function sideNear(ctx: ToolContext, sample: PointerSample): { readonly a: ConstructionPosition; readonly b: ConstructionPosition; readonly at: ConstructionPosition; readonly distance: number } | undefined {
   const built = ctx.runtime.getAllRegionTopologies().filter((topology) => !hasTrait(topology.surfaceType, "ground"));
   const under = sample.surfaceRef === undefined ? undefined : built.find((topology) => surfaceRefFromNodeSet(topology.surfaceKey) === sample.surfaceRef);
+  const reach = rulerOf(ctx).reach(SIDE_PIXELS, SIDE_FALLBACK);
   let best: { a: ConstructionPosition; b: ConstructionPosition; at: ConstructionPosition; distance: number } | undefined;
   for (const topology of under ? [under] : built) {
     const positions = new Map(topology.nodes.map((node) => [node.id, node.position]));
@@ -52,7 +55,7 @@ function sideNear(ctx: ToolContext, sample: PointerSample): { readonly a: Constr
       const nearest = nearestOnSegment(point, a, b);
       const at = { x: nearest.x, y: a.y + (b.y - a.y) * nearest.t, z: nearest.z };
       const distance = nearest.distance;
-      if ((!under && distance > SIDE_REACH) || (best && best.distance <= distance)) continue;
+      if ((!under && distance > reach) || (best && best.distance <= distance)) continue;
       best = { a, b, at, distance };
     }
   }
@@ -62,12 +65,8 @@ function sideNear(ctx: ToolContext, sample: PointerSample): { readonly a: Constr
 /** The frame a shape begun at `sample` is built in. */
 export function buildFrameAt(ctx: ToolContext, sample: PointerSample): BuildFrame {
   const side = sideNear(ctx, sample);
-  if (side) {
-    // Next to a side: start on it -- at its corner when that is near -- so the new shape is flush with it.
-    const corner = [side.a, side.b].find((p) => Math.hypot(p.x - side.at.x, p.z - side.at.z) <= CORNER_REACH);
-    const start = side.distance <= SIDE_REACH ? corner ?? side.at : undefined;
-    return frameAlong(side.a, side.b.x - side.a.x, side.b.z - side.a.z, start);
-  }
+  // Next to a side: laid out along it. Where it starts -- on the side, or at its corner -- is the ruler's catch, not this frame's.
+  if (side) return frameAlong(side.a, side.b.x - side.a.x, side.b.z - side.a.z);
   const look = sample.forward ?? sample.ray?.direction;
   if (!look || Math.hypot(look.x, look.z) < 1e-6) return frameAlong({ x: 0, y: 0, z: 0 }, 1, 0);
   const heading = Math.round(Math.atan2(look.z, look.x) / HEADING_STEP) * HEADING_STEP;
@@ -84,61 +83,22 @@ export function pointerOnLevel(sample: PointerSample, y: number): ConstructionPo
   return sample.ray ? pointerAtHeight(sample, y) : { ...sample.point, y };
 }
 
-/** Where a shape begun at `sample`, on the level `y`, starts: on the side it was drawn next to, else on the frame's grid. */
+/** Where a shape begun at `sample`, on the level `y`, starts: ruled along the frame -- on a side it was drawn next to, at a corner, or in line with one. */
 export function frameStart(ctx: ToolContext, frame: BuildFrame, sample: PointerSample, y: number = sample.point.y): ConstructionPosition {
-  return frame.start ?? snappedInFrame(ctx, frame, pointerOnLevel(sample, y));
-}
-
-/** How near a built side, lying square across the frame, a shape's own side comes to before it lands on it. */
-const LIMIT_REACH = 0.45;
-/** How far from square to the frame a built side may lie and still be one to land on. */
-const PARALLEL = 0.02;
-
-/**
- * Where the built sides near the box from `a` to `b` lie, as distances from
- * `a` along each of the frame's directions: a side square across `u` is a
- * limit for how far the shape reaches along `u`, and likewise for `v`.
- */
-function limitsNear(ctx: ToolContext, frame: BuildFrame, a: ConstructionPosition, b: ConstructionPosition): { readonly along: readonly number[]; readonly across: readonly number[] } {
-  const along: number[] = [], across: number[] = [];
-  const minX = Math.min(a.x, b.x) - 1, maxX = Math.max(a.x, b.x) + 1, minZ = Math.min(a.z, b.z) - 1, maxZ = Math.max(a.z, b.z) + 1;
-  for (const topology of ctx.runtime.getAllRegionTopologies()) {
-    if (hasTrait(topology.surfaceType, "ground")) continue;
-    const at = new Map(topology.nodes.map((node) => [node.id, node.position]));
-    for (const use of [...topology.outerLoops, ...topology.holes].flat()) {
-      if (use.geometry.kind === "arc") continue;
-      const p = at.get(use.startNodeId)!, q = at.get(use.endNodeId)!;
-      if (Math.max(p.x, q.x) < minX || Math.min(p.x, q.x) > maxX || Math.max(p.z, q.z) < minZ || Math.min(p.z, q.z) > maxZ) continue;
-      const length = Math.hypot(q.x - p.x, q.z - p.z);
-      if (length < 1e-6) continue;
-      const d = { x: (q.x - p.x) / length, z: (q.z - p.z) / length };
-      const offset = { x: p.x - a.x, z: p.z - a.z };
-      // Square across u -- it runs along v -- so it limits how far along u; and the other way round.
-      if (Math.abs(d.x * frame.u.x + d.z * frame.u.z) < PARALLEL) along.push(offset.x * frame.u.x + offset.z * frame.u.z);
-      if (Math.abs(d.x * frame.v.x + d.z * frame.v.z) < PARALLEL) across.push(offset.x * frame.v.x + offset.z * frame.v.z);
-    }
-  }
-  return { along, across };
-}
-
-/** `length` landed on the nearest built side within reach -- flush with what stands, whatever the ruler's snap says -- else as it is. */
-function landed(length: number, limits: readonly number[]): number {
-  let best: number | undefined;
-  for (const limit of limits) if (Math.abs(limit - length) <= LIMIT_REACH && Math.abs(limit) > 1e-6 && (best === undefined || Math.abs(limit - length) < Math.abs(best - length))) best = limit;
-  return best ?? length;
+  return snappedInFrame(ctx, frame, pointerOnLevel(sample, y));
 }
 
 /**
  * The rectangle from `a` to the pointer's `b`, its sides along the frame:
- * the pointer gives the far corner. A far side that comes near a built side
- * lying the same way lands on it -- the shape is flush with what stands,
- * never a sliver over or short of it -- else its size along each direction
- * is whole grid steps when the table snaps. `undefined` when it has no area.
+ * the pointer gives the far corner, ruled along the frame like every other
+ * point -- so a far side that comes near a built side lying the same way lands
+ * on it, flush with what stands and never a sliver over or short of it, by the
+ * same catch as anything else. `undefined` when it has no area.
  */
 export function frameRectangle(ctx: ToolContext, frame: BuildFrame, a: ConstructionPosition, b: ConstructionPosition, elevation: number): readonly ConstructionPosition[] | undefined {
-  const dx = b.x - a.x, dz = b.z - a.z;
-  const limits = limitsNear(ctx, frame, a, b);
-  const along = landed(dx * frame.u.x + dz * frame.u.z, limits.along), across = landed(dx * frame.v.x + dz * frame.v.z, limits.across);
+  const far = snappedInFrame(ctx, frame, b);
+  const dx = far.x - a.x, dz = far.z - a.z;
+  const along = dx * frame.u.x + dz * frame.u.z, across = dx * frame.v.x + dz * frame.v.z;
   if (Math.abs(along) < 1e-5 || Math.abs(across) < 1e-5) return undefined;
   const at = (s: number, t: number) => ({ x: a.x + frame.u.x * s + frame.v.x * t, y: elevation, z: a.z + frame.u.z * s + frame.v.z * t });
   return [at(0, 0), at(along, 0), at(along, across), at(0, across)];

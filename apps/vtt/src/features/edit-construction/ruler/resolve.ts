@@ -65,7 +65,7 @@ export interface RulerQuery {
 
 export type RulerGuide =
   /** Onto a corner, or the middle of a side. */
-  | { readonly kind: "point"; readonly at: ConstructionPosition; readonly node: string; readonly role: "corner" | "midpoint" }
+  | { readonly kind: "point"; readonly at: ConstructionPosition; readonly node: string; readonly role: "corner" | "midpoint" | "node" | "span" }
   /** Onto a side. */
   | { readonly kind: "run"; readonly a: ConstructionPosition; readonly b: ConstructionPosition; readonly at: ConstructionPosition }
   /** Square to a standing side at one of its ends -- 90 degrees off it -- or in line with it, beyond its end. */

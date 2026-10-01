@@ -44,7 +44,8 @@ function outline(out: number[], c: Point, corners: readonly (readonly [number, n
 function drawGuide(out: number[], guide: RulerGuide, h: number): void {
   switch (guide.kind) {
     case "point":
-      if (guide.role === "corner") outline(out, guide.at, [[-h, -h], [h, -h], [h, h], [-h, h]]);
+      // A square on what can be joined (a corner, a road's node); a triangle on a place along something (a middle, a road's span).
+      if (guide.role === "corner" || guide.role === "node") outline(out, guide.at, [[-h, -h], [h, -h], [h, h], [-h, h]]);
       else outline(out, guide.at, [[-h, h], [h, h], [0, -h]]);
       return;
     case "cross":
@@ -205,7 +206,7 @@ function measureLabel(measure: RulerMeasure, unit: MeasureUnitId): string {
 /** What a guide is, in a word: what is catching -- and, for an angle, what it counts from. */
 function guideLabel(guide: RulerGuide, unit: MeasureUnitId): string | undefined {
   switch (guide.kind) {
-    case "point": return guide.role === "corner" ? "canto" : "meio da aresta";
+    case "point": return guide.role === "corner" ? "canto" : guide.role === "node" ? "nó da rua" : guide.role === "span" ? "sobre a rua" : "meio da aresta";
     case "run": return "na aresta";
     case "square": return guide.relation === "perpendicular" ? "⊥ 90° da aresta" : "prolonga a aresta";
     case "align": return "alinhado";

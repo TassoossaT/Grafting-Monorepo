@@ -23,7 +23,7 @@ import type { PointerSample, ToolContext, ToolGesture } from "./tool-context.ts"
 import { commitPatchReplacement } from "../../effects/effect-commit.ts";
 import { commitSpineRegeneration } from "./spine-commit.ts";
 import { pointerAtHeight } from "./pointer-ray.ts";
-import { rulerOf } from "./ruler.ts";
+import { rulerOf, type RulerGuide } from "./ruler.ts";
 import { beginGlobalHandleGesture } from "./global-handle-gesture.ts";
 
 /**
@@ -51,8 +51,13 @@ export interface CurveGesture {
  * road's node or span, say -- and how the snap is shown. A tool supplies its
  * own; the gesture only asks it.
  */
+/** What an anchor snap lands on: a point, and whether it is a place along a span rather than a node. */
+export interface AnchorTarget extends PointerSample {
+  readonly span?: boolean;
+}
+
 export interface AnchorSnap {
-  find(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): PointerSample | undefined;
+  find(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string): AnchorTarget | undefined;
   /** Shows `target` as the snap, or clears it when absent. */
   show(ctx: ToolContext, target?: PointerSample): void;
 }
@@ -166,6 +171,9 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params: CurveGest
     endWidth: params?.curveEndWidth,
   });
 
+  /** What the drag joined on its last move: shown with its measures. */
+  let joined: RulerGuide[] = [];
+
   return {
     move(gesture) {
       if (ended) return;
@@ -176,10 +184,13 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params: CurveGest
       // its own height, under the cursor. The scene manipulator's vertical
       // arrow and elevation mode move it on purpose.
       if (planOnly && params?.mode !== "elevation" && !params?.spatialTarget) target = pointerAtHeight(gesture.current, sample.point.y);
+      joined = [];
       if (!curvePick(targetId) && !planOnly && params?.snap) {
         const snap = params.snap.find(ctx, { point: target }, targetId);
         if (snap) target = snap.point;
         params.snap.show(ctx, snap);
+        // What it joined is named, like everything else the ruler catches: the road's node, or a place along its span.
+        if (snap) joined = [{ kind: "point", at: snap.point, node: snap.nodeId ?? "", role: snap.span ? "span" : "node" }];
       }
       moved = target.x !== sample.point.x || target.y !== sample.point.y || target.z !== sample.point.z;
       dragged ||= moved;
@@ -198,14 +209,15 @@ function spineGesture(ctx: ToolContext, sample: PointerSample, params: CurveGest
           const pt = ev?.curves[0]?.points[3];
           if (pt) {
             const dist = Math.hypot(target.x - pt[0], target.z - pt[2]);
-            currentWidth = Math.max(0.5, Math.round(dist * 2 * 4) / 4);
+            // The road's width lands on the table's round number when near one -- the ruler's, not a step of this handle's own.
+            currentWidth = Math.max(0.5, rulerOf(ctx).round(dist * 2));
           }
         }
       }
 
       // What the drag measures, in the table's unit: a road's width, or how far a point went and how high it stands.
       const ruler = rulerOf(ctx);
-      ruler.show({ guides: [], measures: isWidthDrag ? [{ kind: "size", name: "largura", meters: currentWidth }] : ruler.measure({ kind: "move" }, sample.point, target) });
+      ruler.show({ guides: joined, measures: isWidthDrag ? [{ kind: "size", name: "largura", meters: currentWidth }] : ruler.measure({ kind: "move" }, sample.point, target) });
 
       try {
         if (isWidthDrag && resolvedCurve) {

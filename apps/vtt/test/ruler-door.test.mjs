@@ -86,3 +86,25 @@ test("the handle that is named measures what it declares", () => {
   const heights = Object.entries(HANDLE_MEASUREMENT).filter(([, what]) => what === "height").map(([kind]) => kind).sort();
   assert.deepEqual(heights, ["destinationHeight", "height", "originHeight", "rise", "top"]);
 });
+
+test("a value lands on the table's round number when near one, and the road's width is no step of its own", () => {
+  const ruler = (extra) => rulerOf(context({ rulerLengthStep: 0.5, ...extra }));
+  near(ruler().round(2.04), 2);
+  near(ruler().round(2.3), 2.3, "far from a round number: as it is");
+  near(ruler({ rulerSnap: false }).round(2.04), 2.04);
+  near(rulerOf(context()).round(2.04), 2.04, "no round number chosen: as it is");
+  // A step chosen by the table is the step: whole units.
+  near(rulerOf(context({ rulerLengthStep: 1 })).round(3.07), 3);
+});
+
+test("a catch already held reaches further than the one that took it, by the ruler's own hold", () => {
+  const ruler = rulerOf(context());
+  assert.ok(ruler.held(0.1) > 0.1 && ruler.held(0.1) < 0.25);
+  near(ruler.held(0.5), ruler.held(0.1) * 5);
+});
+
+test("the reach of what is built beside, and of what is joined, is the screen's: the same pixels at every zoom", () => {
+  near(rulerOf(context({ rulerMetersPerPixel: 0.01 })).reach(40, 0.55), 0.4);
+  near(rulerOf(context({ rulerMetersPerPixel: 0.04 })).reach(40, 0.55), 1.2, "limited, however far the camera");
+  near(rulerOf(context()).reach(40, 0.55), 0.55, "unknown scale: the fallback in metres");
+});

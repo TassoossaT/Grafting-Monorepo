@@ -1,4 +1,5 @@
 import {
+  HOLD_FACTOR,
   LEVEL_REACH,
   RULER_REACH,
   SNAP_REACH,
@@ -58,9 +59,16 @@ export interface Ruler {
   readonly snap: boolean;
   /** The round number, in metres, a length or a height lands on; none when the table chose none. */
   readonly step: number | undefined;
+  /** `pixels` of the screen as metres; `fallback` when the scale is not known. For a reach that is not a catch -- how near a side a shape is built beside -- but should feel the same at every zoom. */
+  reach(pixels: number, fallback: number): number;
 
   /** Everything that stands and can be lined up with or snapped onto, but the faces named (by their keys): what is being edited never links to itself. */
   linksWithout(skip: ReadonlySet<string>): RulerLinks;
+
+  /** `value` landed on a multiple of the table's round number when near one; as it is otherwise or with the snap off. */
+  round(value: number): number;
+  /** The reach a catch already held keeps: wider than the one that took it, so it does not flicker at the edge. */
+  held(reach: number): number;
 
   /** A point a tool lays out itself, on the ground: where it lands ruled. */
   point(point: ConstructionPosition, options?: Pick<RulePointOptions, "origin" | "axes">): ConstructionPosition;
@@ -116,6 +124,12 @@ export function rulerOf(ctx: ToolContext): Ruler {
   return {
     snap,
     step: ctx.rulerLengthStep,
+    reach: (pixels, fallback) => reachFor(ctx, pixels, fallback),
+    round: (value) => {
+      const step = ctx.rulerLengthStep;
+      return snap && step !== undefined ? roundWithin(value, step, reachOf("up")) ?? value : value;
+    },
+    held: (reach) => reach * HOLD_FACTOR,
 
     linksWithout: (skip) => collectLinks(ctx.runtime.getAllRegionTopologies(), { skip, isGround: isGroundType }),
 

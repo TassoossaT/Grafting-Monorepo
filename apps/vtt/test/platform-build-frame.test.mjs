@@ -33,9 +33,11 @@ test("a platform begun next to a turned platform's side is built along that side
   const { runtime, session, ctx, calls } = sessionFixture();
   Object.assign(runtime, { showPreview() {}, clearPreview() {} });
   try {
+    // The table plays with the ruler's snap on: where the shape starts -- against the side -- is the ruler's catch.
+    ctx.rulerSnap = true;
     addFace(runtime, "old", "platform", [[0, 0], [4, 0], [4, 4], [0, 4]].map(([x, z], i) => ({ id: `old:${i}`, position: { ...turned(x, z), y: 2 } })));
-    // Just off the turned platform's east side, dragged out and across -- in world terms, diagonally.
-    const start = { point: { ...turned(4.2, 1), y: 2 } }, end = { point: { ...turned(7, 3), y: 2 } };
+    // A hair off the turned platform's east side, dragged out and across -- in world terms, diagonally.
+    const start = { point: { ...turned(4.12, 1), y: 2 } }, end = { point: { ...turned(7, 3), y: 2 } };
     drawRectangle(ctx, start, end, { support: "floating" });
     assert.ok(!calls.feedback.some((f) => f.tone === "error"), JSON.stringify(calls.feedback));
     const faces = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform");
@@ -224,13 +226,14 @@ test("a rectangle's side that comes near a built side lying the same way lands o
   const { runtime, session, ctx, calls } = sessionFixture();
   Object.assign(runtime, { showPreview() {}, clearPreview() {} });
   try {
+    ctx.rulerSnap = true;
     addFace(runtime, "old", "platform", [[0, 0], [4, 0], [4, 4], [0, 4]].map(([x, z], i) => ({ id: `old:${i}`, position: { x, y: 2, z } })));
     const forward = { x: 1, y: -1, z: 0.001 };
     // From beside the old floor, its far side dragged a little past the old floor's far side.
-    drawRectangle(ctx, { point: { x: 4, y: 2, z: 0 }, forward }, { point: { x: 7, y: 2, z: 4.3 }, forward }, { support: "floating", elevation: 2 });
+    drawRectangle(ctx, { point: { x: 4, y: 2, z: 0 }, forward }, { point: { x: 7, y: 2, z: 4.12 }, forward }, { support: "floating", elevation: 2 });
     assert.ok(!calls.feedback.some((f) => f.tone === "error"), JSON.stringify(calls.feedback));
     const zs = runtime.getAllRegionTopologies().filter((t) => t.surfaceType === "platform").flatMap((t) => t.nodes.map((n) => n.position.z));
-    assert.equal(Math.max(...zs), 4, "landed on the old floor's far side, not 4.3");
+    assert.equal(Math.max(...zs), 4, "landed on the old floor's far side, not 4.12");
   } finally { session.free(); }
 });
 

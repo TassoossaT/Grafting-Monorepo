@@ -1,6 +1,7 @@
 import { curveEdgesOf, curvePickId, structureTypeFor } from "../../../../features/edit-construction/index.ts";
 import { surfaceRefFromNodeSet } from "../../../../entities/map/index.ts";
 import type { CurveGestureOptions } from "./curve-edit-gesture.ts";
+import { rulerOf } from "./ruler.ts";
 import type { PointerSample, ToolContext } from "./tool-context.ts";
 
 /**
@@ -9,6 +10,10 @@ import type { PointerSample, ToolContext } from "./tool-context.ts";
  * to one, else the span's midpoint handle at the projected parameter.
  * `ownsSpine` limits it to the spines of the types a tool edits.
  */
+/** How near a span's end, on the screen, a press counts as on that end and not along the span -- and the same in metres while the scale is unknown. */
+const END_PIXELS = 40;
+const END_FALLBACK = 0.6;
+
 export function spineBodyTarget(ctx: ToolContext, sample: PointerSample, excludeNodeId?: string, ownsSpine: (surfaceType: string) => boolean = () => true): { sample: PointerSample; options: CurveGestureOptions } | undefined {
   const hit = ctx.runtime.getAllRegionTopologies().find((t) =>
     structureTypeFor(t.surfaceType)?.spine && ownsSpine(t.surfaceType) && (sample.surfaceRef
@@ -40,7 +45,8 @@ export function spineBodyTarget(ctx: ToolContext, sample: PointerSample, exclude
   // Reuse anchors by world distance, not a percentage of arbitrarily long spans.
   const nearStart = Math.hypot(...projected.map((v, axis) => v - edge.curve.points[0][axis]!));
   const nearEnd = Math.hypot(...projected.map((v, axis) => v - edge.curve.points[3][axis]!));
-  const endpoint = nearStart <= 0.6 && nearStart <= nearEnd ? 0 : nearEnd <= 0.6 ? 3 : undefined;
+  const endReach = rulerOf(ctx).reach(END_PIXELS, END_FALLBACK);
+  const endpoint = nearStart <= endReach && nearStart <= nearEnd ? 0 : nearEnd <= endReach ? 3 : undefined;
   const p = endpoint === undefined ? evaluated[i]!.curves[0]!.points[3] : edge.curve.points[endpoint];
   return {
     sample: { ...sample, nodeId: endpoint === 0 ? edge.startNodeId : endpoint === 3 ? edge.endNodeId : curvePickId(edge.edgeId, "midpoint"), point: { x: p[0], y: p[1], z: p[2] } },

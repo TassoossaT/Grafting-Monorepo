@@ -231,3 +231,11 @@ test("a drawing never brings a gesture down: a view with no unit named draws its
   assert.equal(teethSpacing(0.01, undefined), teethSpacing(0.01, "m"));
   assert.doesNotThrow(() => rulerPreview({ guides: [], measures: [lengthOf(at(0, 0), at(5, 0))] }, 0.01, { unit: undefined, protractor: true }));
 });
+
+test("what a road's anchor joined is named and marked as the ruler's own: a node is a square, a span a triangle", () => {
+  const node = { kind: "point", at: at(5, 5), node: "n", role: "node" }, span = { kind: "point", at: at(5, 5), node: "e", role: "span" };
+  assert.deepEqual(rulerLabels({ guides: [node], measures: [] }, "m"), ["nó da rua"]);
+  assert.deepEqual(rulerLabels({ guides: [span], measures: [] }, "m"), ["sobre a rua"]);
+  assert.equal(rulerPreview({ guides: [node], measures: [] }, 0.01).positions.length / 6, 4);
+  assert.equal(rulerPreview({ guides: [span], measures: [] }, 0.01).positions.length / 6, 3);
+});
